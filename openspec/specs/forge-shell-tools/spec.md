@@ -49,6 +49,12 @@ The forge image MUST include sensible default configs for bash, fish, and zsh wi
 - **WHEN** zoxide is installed and the shell config is loaded
 - **THEN** `z` command MUST be available for smart directory navigation
 
+#### Scenario: Fish helper startup
+- **WHEN** fish starts in the forge container
+- **THEN** it MUST source fish-native helper functions, not the POSIX
+  `shell-helpers.sh` file
+- **AND** startup MUST NOT print syntax errors from bash/zsh helper syntax
+
 
 ## Sources of Truth
 
@@ -56,6 +62,8 @@ The forge image MUST include sensible default configs for bash, fish, and zsh wi
 - `images/default/shell/bashrc` — bash shell startup and PATH/tool integration
 - `images/default/shell/zshrc` — zsh shell startup and PATH/tool integration
 - `images/default/shell/config.fish` — fish shell startup and PATH/tool integration
+- `images/default/config-overlay/shell-helpers.sh` — bash/zsh helper functions
+- `images/default/config-overlay/shell-helpers.fish` — fish-native helper functions
 - `images/default/forge-welcome.sh` — the tool tips surfaced to interactive shells
 - `cheatsheets/languages/bash.md` — bash shell reference and patterns
 

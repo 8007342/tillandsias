@@ -78,7 +78,7 @@ Accountability windows are a separate layer on top of the normal log levels. The
 Accountability output format:
 ```
 [secrets] v0.1.97.76 | GitHub token retrieved from OS keyring
-  -> Never written to disk, injected via GIT_ASKPASS
+  -> Never written to disk, injected into the git service as a podman secret
   @trace https://github.com/8007342/tillandsias/search?q=%40trace+spec%3Anative-secrets-store&type=code
 ```
 

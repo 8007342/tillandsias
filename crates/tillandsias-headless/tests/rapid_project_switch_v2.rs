@@ -710,5 +710,15 @@ fn test_lifecycle_state_guards_enforce_transitions() {
         assert!(result.is_err(), "Cannot re-attach once already initialized");
     }
 
+    // Error state allows recovery.
+    {
+        let mut proj = project.lock().unwrap();
+        proj.lifecycle = LifecycleState::Error;
+        assert!(
+            proj.can_start_project(),
+            "Should be able to restart from Error"
+        );
+    }
+
     eprintln!("Lifecycle guard test: all transitions enforced correctly");
 }

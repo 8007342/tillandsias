@@ -152,16 +152,16 @@ pub struct SecretMount {
 /// The types of secrets a profile can request.
 ///
 /// Tokens live exclusively in the host OS keyring (Linux Secret Service,
-/// macOS Keychain, Windows Credential Manager). The host reads the keyring
-/// at container launch, writes the token to an ephemeral file, and bind-
-/// mounts it read-only into the container. The container never sees D-Bus,
-/// the keyring, or any host credential beyond this one file.
+/// macOS Keychain, Windows Credential Manager). The host resolves the token
+/// into a podman secret before launch. The container never sees D-Bus, the
+/// keyring, or any host credential beyond the mounted secret file.
 /// @trace spec:secrets-management, spec:native-secrets-store
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SecretKind {
-    /// Bind-mount the GitHub OAuth token at `/run/secrets/github_token:ro`.
-    /// The host writes the token from the OS keyring to `ctx.token_file_path`
-    /// before launch and unlinks it when the container stops.
+    /// Mount the GitHub OAuth token secret at
+    /// `/run/secrets/tillandsias-github-token`.
+    /// The host creates the podman secret from the OS keyring before launch
+    /// and removes it when the tray shuts down.
     /// @trace spec:git-mirror-service, spec:secrets-management, spec:native-secrets-store
     GitHubToken,
 }
@@ -213,13 +213,8 @@ pub struct LaunchContext {
     /// Read from `~/.cache/tillandsias/secrets/git/.gitconfig` at launch time.
     pub git_author_email: String,
 
-    /// Absolute host path to an ephemeral file holding the GitHub OAuth token.
-    ///
-    /// Populated by the orchestrator when the profile includes
-    /// `SecretKind::GitHubToken` and the host keyring has a token. `None`
-    /// means no token is available (login required) or the profile does
-    /// not request one. The host is responsible for writing this file with
-    /// mode 0600 before launch and unlinking it on container stop.
+    /// Legacy compatibility field for callers that still stage a token file.
+    /// The podman-secret path does not require this to be populated.
     /// @trace spec:secrets-management, spec:native-secrets-store
     pub token_file_path: Option<PathBuf>,
 
@@ -515,16 +510,16 @@ pub fn inference_profile() -> ContainerProfile {
     }
 }
 
-/// Git service container — bare mirror + git daemon + tmpfs GitHub token.
+/// Git service container — bare mirror + git daemon + podman GitHub secret.
 ///
 /// Runs a local git daemon inside the enclave network. Forge containers clone
 /// and fetch from this service instead of hitting the internet directly.
 ///
 /// Mounts: log dir always; mirror volume added dynamically per-project.
-/// Credentials: the host writes the GitHub OAuth token (from the OS keyring)
-/// to an ephemeral file and bind-mounts it read-only at
-/// `/run/secrets/github_token`. The container never sees D-Bus, the host
-/// keyring, or any other host secret.
+/// Credentials: the host creates a podman secret named
+/// `tillandsias-github-token` from the OS keyring and mounts it into the
+/// container at `/run/secrets/tillandsias-github-token`. The container never
+/// sees D-Bus, the host keyring, or any other host secret.
 ///
 /// @trace spec:git-mirror-service, spec:secrets-management, spec:native-secrets-store
 pub fn git_service_profile() -> ContainerProfile {

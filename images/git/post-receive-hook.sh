@@ -45,18 +45,12 @@ if [ -z "$REMOTE_URL" ]; then
 fi
 
 # @trace spec:secrets-management, spec:cross-platform, spec:git-mirror-service
-# Construct an EPHEMERAL auth URL by injecting $GH_TOKEN at push time.
-# The token is inherited from the parent process (git-daemon spawned with
-# GH_TOKEN env on Windows; bind-mounted /run/secrets/github_token on Linux).
+# Construct an EPHEMERAL auth URL by injecting the podman secret at push time.
+# The token is read directly from /run/secrets/tillandsias-github-token.
 # Mirror's stored config has CLEAN URL only — no token persisted to disk.
-#
-# Linux flow uses /run/secrets/github_token; Windows flow uses GH_TOKEN env.
-# Try env first (works on both); fall back to the secrets file (Linux).
 TOKEN=""
-if [ -n "${GH_TOKEN:-}" ]; then
-    TOKEN="$GH_TOKEN"
-elif [ -r /run/secrets/github_token ]; then
-    TOKEN="$(cat /run/secrets/github_token 2>/dev/null || true)"
+if [ -r /run/secrets/tillandsias-github-token ]; then
+    TOKEN="$(cat /run/secrets/tillandsias-github-token 2>/dev/null || true)"
 fi
 
 # Redact for log output. Always.

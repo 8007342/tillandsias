@@ -25,7 +25,8 @@ When the tray is launched with `--debug`, diagnostic streaming MUST be enabled a
 
 #### Scenario: Debug flag activates streaming
 - **WHEN** the user runs `tillandsias --debug`
-- **THEN** the tray MUST parse the `--debug` flag
+- **THEN** the first Tillandsias debug line MUST include the running version
+- **AND** the tray MUST parse the `--debug` flag
 - **AND** MUST initialize the diagnostic event stream
 - **AND** MUST connect the stream to the terminal
 
@@ -42,6 +43,39 @@ When the tray is launched with `--debug`, diagnostic streaming MUST be enabled a
 ### Requirement: Event structure and formatting
 
 Each diagnostic event MUST have a consistent, parseable structure with timestamp, event type, container, and payload.
+
+#### Scenario: Launch stage event
+- **WHEN** the runtime starts a container through an observed launch helper
+- **THEN** stderr MUST include a compact line:
+  ```
+  event:container_launch stage=opencode-proxy state=starting container=tillandsias-proxy
+  ```
+- **AND** when the container reaches the expected post-launch state the stream
+  MUST include `state=running` for detached containers or `state=exited` for a
+  completed attached foreground forge
+- **AND** failed launch lines MUST include only a short `detail=` summary, not
+  an entire multi-line podman argv dump
+
+#### Scenario: Actionable launch failure body
+- **WHEN** a container launch fails before the foreground tool starts
+- **THEN** the user-facing error body MUST include:
+  - the failed stage and container name
+  - the short cause
+  - a `next:` hint for the likely action
+  - a redacted `podman run` argv for reproduction
+- **AND** if the launch used `TILLANDSIAS_PROJECT_HOST_MOUNT=1`, the hint MUST
+  remind maintainers that the mounted project is protected and MUST NOT be
+  wiped or cloned over
+
+#### Scenario: Attached foreground tool exit body
+- **WHEN** an attached forge container launches successfully and the foreground
+  tool exits non-zero
+- **THEN** the user-facing error body MUST identify the stage, container, and
+  exit status as an attached command exit
+- **AND** the body MUST include a `next:` hint that directs the user to the
+  foreground tool output immediately above
+- **AND** the body MUST NOT dump the full Podman argv by default because the
+  failure is in the agent/runtime layer, not in Podman launch construction
 
 #### Scenario: Container start event
 - **WHEN** a container transitions to running state

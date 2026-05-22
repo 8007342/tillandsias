@@ -32,6 +32,9 @@ proximity:
       positive_litmus_signal: 80
       negative_litmus_signal: 100
       runtime_trace_signal: 60
+      rust_signature_match: 25
+      rust_param_usage_match: 35
+      rust_semantic_resolution_match: 50
       cheatsheet_provenance_binding: 30
       methodology_provenance_binding: 30
       environment_assumption_declared: 25
@@ -52,9 +55,11 @@ proximity:
       litmus_positive_passes: 0.20
       litmus_negative_passes: 0.20
       runtime_trace_observed: 0.15
+      rust_source_relevance_passes: 0.10
       provenance_current: 0.10
     cap_rules:
       - no_requirement_can_exceed_50_percent_without_litmus_signal
+      - no_rust_source_relevance_signal_can_replace_behavioral_litmus_evidence
       - no_requirement_can_exceed_70_percent_without_negative_case_if_must_or_must_not
       - no_security_boundary_can_exceed_80_percent_without_runtime_trace_or_manual_evidence_bundle
       - stale_or_missing_provenance_caps_related_obligation_at_85_percent
@@ -69,6 +74,13 @@ proximity:
     litmus_flaky: -80
     untested_must_requirement: -70
     missing_negative_case: -50
+    missing_required_rust_query: -35
+    wrong_method_match: -35
+    missing_required_param: -35
+    param_unused: -25
+    meaningless_param_name: -15
+    processor_unavailable: -20
+    query_ambiguous: -20
     stale_cheatsheet_provenance: -20
     methodology_claim_without_provenance: -30
     open_high_uncertainty_event: -60

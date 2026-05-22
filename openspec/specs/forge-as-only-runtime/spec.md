@@ -20,10 +20,13 @@ The host's role is limited to:
 3. Managing podman itself (process supervision, image builds, secrets).
 
 Every developer-facing tool — `claude`, `codex`, `opencode`, `opencode serve`
-(OpenCode Web), and the maintenance `bash` — runs **inside** the forge. The
+(OpenCode Web), and the maintenance shell — runs **inside** the forge. The
 host never invokes those binaries directly. The forge image is the only place
 where agent CLIs live, and the idiomatic podman layer
-(`crates/tillandsias-podman`) is the only path that launches them.
+(`crates/tillandsias-podman`) is the only path that launches them. Direct CLI
+flags (`--codex`, `--claude`, `--bash`, `--opencode`) attach the current
+terminal to the forge; tray launches spawn a host terminal whose child is the
+same forge `podman run`.
 
 ## Purpose
 
@@ -136,8 +139,29 @@ stores MUST be unreachable from inside the forge.
   the four categories above
 - **AND** no path under the user's `$HOME` outside the project workspace
   MUST appear as a bind-mount source
+- **AND** host-mounted project launches MUST set
+  `TILLANDSIAS_PROJECT_HOST_MOUNT=1`
+- **AND** forge entrypoints MUST treat that mount as authoritative project
+  state and MUST NOT remove or clone over `/home/forge/src/<project>`
 - **AND** the `launch_forge_agent_does_not_mount_user_home` regression test
   MUST hold
+
+### Requirement: Attached forge exit cleans idle stacks
+
+Foreground forge launches SHALL not leave proxy, git, inference, or status
+check containers running after the attached forge exits. The cleanup pass MUST
+first check whether any `tillandsias-*-forge` container remains active; shared
+stack containers are removed only when no active forge containers remain.
+
+#### Scenario: User exits the maintenance shell
+
+- **WHEN** `tillandsias --bash <project> --debug` starts proxy, git,
+  inference, and a forge shell
+- **AND** the user exits the forge shell
+- **THEN** the parent process SHALL remove the project git container
+- **AND** it SHALL remove shared proxy and inference containers when no other
+  forge container remains active
+- **AND** a debug line SHALL state that no active forge containers remain
 
 ### Requirement: Host Terminal Is the Only Host-Side Process
 
@@ -191,9 +215,10 @@ This spec explicitly forbids:
 - `crates/tillandsias-headless/src/main.rs` —
   - `launch_forge_agent` (interactive Claude / Codex / OpenCode /
     Maintenance launches)
+  - `run_forge_agent_cli_mode` (direct `--codex`, `--claude`, `--bash`)
   - `run_opencode_web_mode` (OpenCode Web launch)
-  - `build_forge_agent_run_argv` and `detect_host_terminal` (the host
-    terminal seam)
+  - `build_forge_agent_run_args`, `build_forge_agent_run_argv`, and
+    `detect_host_terminal` (the host terminal seam)
 - `crates/tillandsias-podman/src/client.rs` and `container_spec.rs` —
   the idiomatic podman boundary that every launch flows through.
 - `cheatsheets/runtime/podman-control-plane.md` — the broader "one throat

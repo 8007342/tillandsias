@@ -31,8 +31,8 @@ end
 
 # ── Shell helper functions (ls-projects, clone-fresh, cheatsheet, etc.) ─
 # @trace spec:forge-shell-tools, spec:forge-environment-discoverability
-if test -f /etc/tillandsias/shell-helpers.sh
-    source /etc/tillandsias/shell-helpers.sh
+if test -f /etc/tillandsias/shell-helpers.fish
+    source /etc/tillandsias/shell-helpers.fish
 end
 
 # Welcome message on interactive login

@@ -2,7 +2,7 @@
 tags: [podman, containers, runtime, events]
 languages: [bash, rust]
 since: 2026-05-12
-last_verified: 2026-05-12
+last_verified: 2026-05-20
 sources:
   - https://docs.podman.io/en/stable/
   - https://www.redhat.com/en/blog/rootless-podman
@@ -16,7 +16,7 @@ committed_for_project: false
 ---
 # Podman Idiomatic Patterns
 
-**Use when**: Building container orchestration logic, integrating container events, optimizing performance, securing container deployments
+**Use when**: Building container orchestration logic, integrating container events, optimizing performance, securing container deployments, or debugging Tillandsias launch failures
 
 ## Provenance
 
@@ -61,6 +61,33 @@ Tillandsias uses three distinct runtime lanes on Linux:
 - If a launch path needs a fake runtime dir to pass tests, that is a test-only contract and must be documented as such.
 
 ---
+
+## Observed Launch Helpers
+
+User-visible launch paths should use the observed helpers in
+`tillandsias-podman::PodmanClient`:
+
+```rust
+client
+    .run_container_observed("opencode-proxy", "tillandsias-proxy", &args, debug)
+    .await?;
+
+client
+    .run_container_attached_observed("codex", "tillandsias-myproj-forge", &args, debug)
+    .await?;
+```
+
+When `debug` is enabled they emit compact state lines:
+
+```text
+event:container_launch stage=opencode-proxy state=starting container=tillandsias-proxy
+event:container_launch stage=opencode-proxy state=running container=tillandsias-proxy
+```
+
+On failure the returned error should start with the failed stage and container,
+then include `cause:`, `next:`, and a redacted reproduction argv. Keep the
+event `detail=` field to a one-line summary; the full argv belongs in the
+error body.
 
 ## Event Streaming (Non-Polling)
 
@@ -203,6 +230,25 @@ podman run --userns=keep-id --rm alpine id
 ```
 
 ---
+
+## Network Identity
+
+The Linux user-runtime stack uses the shared `tillandsias-enclave` network and
+service DNS aliases (`proxy`, `git-service`, `inference`, `router`). Do not pin
+static IP addresses in launch args. Podman IPAM owns addresses; Tillandsias owns
+names.
+
+```bash
+# Good: DNS alias + dynamic IPAM
+podman run --network tillandsias-enclave --network-alias git-service ...
+
+# Bad: stale allocations and IPAM races
+podman run --network tillandsias-enclave --ip 10.0.42.3 ...
+```
+
+Treat IPAM allocation failures, "already allocated", and netavark cleanup
+errors as permanent launch failures. Retrying the same static allocation just
+burns time; fix the stale container/network state or remove the static IP.
 
 ## Storage Isolation (Enclave Model)
 

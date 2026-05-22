@@ -85,7 +85,7 @@ fn test_window_created_not_immediately_timed_out() {
 #[test]
 fn test_window_seconds_until_timeout_decreases() {
     // @trace spec:browser-window-timeout
-    let mut window = TestWindowEntry::new("win-2", "test-proj");
+    let window = TestWindowEntry::new("win-2", "test-proj");
     let initial = window.seconds_until_idle_timeout();
 
     // Simulate time passage (we'll just trust the calculation is correct)

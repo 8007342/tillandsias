@@ -16,9 +16,7 @@ use std::time::{Duration, Instant};
 /// Mock container state for stress testing.
 #[derive(Debug, Clone)]
 struct MockContainer {
-    id: String,
     state: ContainerState,
-    created_at: Instant,
 }
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -30,11 +28,9 @@ enum ContainerState {
 }
 
 impl MockContainer {
-    fn new(id: &str) -> Self {
+    fn new(_id: &str) -> Self {
         Self {
-            id: id.to_string(),
             state: ContainerState::Creating,
-            created_at: Instant::now(),
         }
     }
 
@@ -55,16 +51,11 @@ impl MockContainer {
             (from, to) => Err(format!("Invalid transition: {:?} → {:?}", from, to)),
         }
     }
-
-    fn age(&self) -> Duration {
-        self.created_at.elapsed()
-    }
 }
 
 /// Mock project with container collection.
 #[derive(Debug, Clone)]
 struct MockProject {
-    id: String,
     containers: Vec<MockContainer>,
     attached: bool,
 }
@@ -76,7 +67,6 @@ impl MockProject {
             .collect();
 
         Self {
-            id: id.to_string(),
             containers,
             attached: false,
         }
@@ -117,7 +107,6 @@ impl MockProject {
 /// Benchmark result for a single stress operation.
 #[derive(Debug, Clone)]
 struct StressBenchmark {
-    operation: String,
     duration_ms: f64,
     success: bool,
 }
@@ -133,7 +122,7 @@ fn test_stress_concurrent_attach_detach() {
 
     let overall_start = Instant::now();
 
-    for thread_id in 0..thread_count {
+    for _thread_id in 0..thread_count {
         let proj_clone = Arc::clone(&project);
 
         let handle = thread::spawn(move || {
@@ -156,11 +145,6 @@ fn test_stress_concurrent_attach_detach() {
                 let success = result.is_ok();
 
                 benchmarks.push(StressBenchmark {
-                    operation: format!(
-                        "T{}-{}",
-                        thread_id,
-                        if is_attach { "attach" } else { "detach" }
-                    ),
                     duration_ms: duration.as_secs_f64() * 1000.0,
                     success,
                 });

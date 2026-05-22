@@ -15,13 +15,13 @@ critical_path:
     phase: post-build
     command: "bash -lc 'FORGE_IMG=$(podman images --format \"{{.Repository}}:{{.Tag}}\" | grep -E \"^localhost/tillandsias-forge:v\" | head -1) && [ -n \"$FORGE_IMG\" ] && podman run --rm --entrypoint /bin/sh \"$FORGE_IMG\" -c \"command -v claude codex opencode bash\"'"
     timeout_ms: 15000
-    expected_behavior: "stdout lists four absolute paths (one per binary) and the command exits 0"
+    expected_behavior: "succeeds"
 
   - step: "no raw 'podman run' shell-outs outside the idiomatic layer"
     phase: pre-build
-    command: "bash -lc '! grep -RIn \"Command::new(\\\"podman\\\")\" crates/tillandsias-headless/src/ scripts/tillandsias-podman scripts/build-image.sh build.sh 2>/dev/null | grep -v \"tillandsias-podman\" | grep -v \"allowed-bootstrap\"'"
+    command: "bash -lc '! grep -RIn \"Command::new(\\\"podman\\\")\" crates/tillandsias-headless/src/ scripts/tillandsias-podman scripts/build-image.sh build.sh 2>/dev/null | grep -v \"tillandsias-podman\" | grep -v \"allowed-bootstrap\" && echo OK'"
     timeout_ms: 5000
-    expected_behavior: "zero matches — every podman invocation routes through tillandsias-podman or carries an 'allowed-bootstrap' annotation"
+    expected_behavior: "succeeds"
 
 observability:
   traces:

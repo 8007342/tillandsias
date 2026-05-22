@@ -474,6 +474,37 @@ behavior_matches_output() {
     return 1
 }
 
+run_rust_queries_for_litmus() {
+    local test_file="$1"
+
+    if ! grep -qE '^rust_queries:' "$test_file"; then
+        return 0
+    fi
+
+    # @trace spec:spec-traceability
+    local output=""
+    local status=0
+    printf '  [RUST QUERIES] %s...' "$(basename "$test_file")" >&2
+
+    if command -v tillandsias-litmus-rust >/dev/null 2>&1; then
+        output="$(tillandsias-litmus-rust check --litmus "$test_file" 2>&1)" || status=$?
+    elif [[ -x "$PROJECT_ROOT/target/debug/tillandsias-litmus-rust" ]]; then
+        output="$("$PROJECT_ROOT/target/debug/tillandsias-litmus-rust" check --litmus "$test_file" 2>&1)" || status=$?
+    else
+        output="$(cargo run --quiet -p tillandsias-litmus-rust -- check --litmus "$test_file" 2>&1)" || status=$?
+    fi
+
+    if [[ "$status" -ne 0 ]]; then
+        printf ' %b[FAIL]%b\n' "${RED}" "${NC}" >&2
+        printf '%s\n' "$output" >&2
+        return 1
+    fi
+
+    printf ' %b[OK]%b\n' "${GREEN}" "${NC}" >&2
+    [[ -n "$output" ]] && printf '%s\n' "$output" >&2
+    return 0
+}
+
 normalize_spec_list() {
     local raw="${1:-}"
     raw="${raw//:/ }"
@@ -519,6 +550,10 @@ run_litmus_test_file() {
     local spec_id="${2:-}"
 
     if [[ ! -f "$test_file" ]]; then
+        return 1
+    fi
+
+    if ! run_rust_queries_for_litmus "$test_file"; then
         return 1
     fi
 

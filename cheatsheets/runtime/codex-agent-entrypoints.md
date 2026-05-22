@@ -1,82 +1,101 @@
 ---
-tags: [agents, codex, entrypoints, tray-launcher, environment]
-languages: []
+tags: [agents, codex, claude, opencode, entrypoints, tray-launcher]
+languages: [bash, rust]
 since: 2026-05-04
-last_verified: 2026-05-04
+last_verified: 2026-05-20
 sources:
   - https://github.com/8007342/tillandsias
 authority: high
 status: current
 tier: bundled
-summary_generated_by: implementation
+summary_generated_by: hand-curated
 bundled_into_image: true
 committed_for_project: false
 ---
 
-# Codex Agent Entrypoints
+# Forge Agent Entrypoints
 
-@trace spec:codex-tray-launcher @cheatsheet runtime/codex-agent-entrypoints.md
+@trace spec:codex-tray-launcher @trace spec:forge-as-only-runtime
 
-**Version baseline**: Tillandsias v0.1.170+
-**Use when**: Launching Codex agent from tray menu, configuring environment variables, or invoking the codex binary from scripts.
+**Use when**: Launching Codex, Claude, OpenCode, or the maintenance shell from
+the tray or direct CLI flags.
 
-## Provenance
+## Current Contract
 
-- <https://github.com/8007342/tillandsias> — Tillandsias tray launcher and Codex integration
-- **Last updated:** 2026-05-04
+All agent CLIs run inside `tillandsias-forge:v<VERSION>`. The host never runs
+`codex`, `claude`, or `opencode` directly.
 
-## Overview
+| Mode | Direct CLI | Forge entrypoint | Binary inside forge |
+|---|---|---|---|
+| Codex | `tillandsias --codex <project> --debug` | `/usr/local/bin/entrypoint-forge-codex.sh` | `codex` |
+| Claude | `tillandsias --claude <project> --debug` | `/usr/local/bin/entrypoint-forge-claude.sh` | `claude` |
+| OpenCode TUI | `tillandsias --opencode <project> --debug` | `/usr/local/bin/entrypoint-forge-opencode.sh` | `opencode` |
+| Maintenance | `tillandsias --bash <project> --debug` | `/usr/local/bin/entrypoint-terminal.sh` | `fish`, then `bash` if requested |
 
-Codex is a specialized AI agent invoked from the Tillandsias tray menu. It runs inside an inference container with access to local language models and forge state.
+The tray path uses `launch_forge_agent()` to open the user's terminal emulator
+and run the same forge image. Direct CLI flags attach the current terminal via
+`run_forge_agent_cli_mode()`.
 
-## Binary Path & Invocation
+## Required Environment
 
-| Location | Context |
-|----------|---------|
-| `/opt/codex/bin/codex` | Inside forge container (baked at image build) |
-| `tillandsias codex launch` | Tray subprocess call (Unix socket dispatch) |
-| Menu: "Codex" (tray) | User-facing entry point |
+Every host-mounted project launch must include:
 
-## Bootstrap Command
-
-| Command | Effect |
-|---------|--------|
-## Environment Variables
-
-| Variable | Set By | Used For |
-|----------|--------|----------|
-| `CODEX_FORGE_NAME` | Tray handler | Current forge container name |
-| `CODEX_PROJECT_ROOT` | Tray handler | Bind mount path (project directory) |
-| `CODEX_MODEL_ENDPOINT` | Inference container | Ollama socket (via unix:///run/user/1000/ollama.sock) |
-| `CODEX_LOG_LEVEL` | User config (~/.config/tillandsias/config.toml) | Debug/info/warn/error |
-
-## Entrypoint Script
-
-**Location**: `images/codex/entrypoint.sh`
-**Called by**: Tray handler `launch_codex()` in `src-tauri/src/handlers.rs`
-
-```bash
-#!/usr/bin/env bash
-set -eu
-# @trace spec:codex-tray-launcher
-
-# Read environment, validate model endpoint health, launch agent
-export CODEX_READY=1
-exec /opt/codex/bin/codex "$@"
+```text
+PROJECT=<project>
+TILLANDSIAS_PROJECT=<project>
+TILLANDSIAS_PROJECT_HOST_MOUNT=1
+HOME=/home/forge
+USER=forge
+PATH=/usr/local/bin:/usr/bin
 ```
 
-## Tray Handler Flow
+`TILLANDSIAS_PROJECT_HOST_MOUNT=1` is the safety latch. When it is set, shared
+entrypoint code must `cd /home/forge/src/<project>` and skip mirror cloning.
+It must not remove that directory; it is the user's real checkout.
 
-**File**: `src-tauri/src/handlers.rs`
-**Annotation**: `// @trace spec:codex-tray-launcher`
+Git identity is injected from GitHub Login as `GIT_AUTHOR_*` and
+`GIT_COMMITTER_*`. The entrypoint writes repo-local `git config user.name` and
+`user.email` after entering the project.
 
-1. User clicks "Codex" menu item
-2. Tray calls `handle_codex_launch()`
-3. Handler creates subprocess: `podman exec tillandsias-<project>-forge /entrypoint.sh`
-4. Codex binary receives `CODEX_FORGE_NAME`, `CODEX_PROJECT_ROOT` env vars
-5. Codex connects to inference container socket for model queries
+## Launch Diagnostics
+
+With `--debug`, every stack stage emits compact launch events:
+
+```text
+[tillandsias] version: 0.2.260520.2
+event:container_launch stage=forge-launch-proxy state=starting container=tillandsias-proxy
+event:container_launch stage=codex state=starting container=tillandsias-myproj-forge detail=attached=true
+```
+
+Failure bodies should show:
+
+1. failed stage and container
+2. short cause
+3. `next:` hint
+4. redacted `podman run` argv
+
+## Cleanup Rule
+
+After an attached forge exits, the parent checks for active
+`tillandsias-*-forge` containers. If none remain, it removes the project git
+container plus shared proxy and inference containers. If another forge is still
+active, shared services stay up.
+
+## Verification
+
+```bash
+cargo test -p tillandsias-headless forge_agent_run_args_export_debug_when_requested -- --exact
+cargo test -p tillandsias-headless forge_agent_run_argv_exports_project_selection -- --exact
+scripts/local-ci.sh --phase runtime
+```
 
 ## Sources of Truth
 
-- `cheatsheets/runtime/agent-startup-skills.md` — Agent routing and skill dispatch patterns
-- `cheatsheets/runtime/local-inference.md` — Ollama model endpoints and UNIX socket paths
+- `crates/tillandsias-headless/src/main.rs` —
+  `ForgeAgentMode`, `run_forge_agent_cli_mode`, `launch_forge_agent`,
+  `build_forge_agent_run_args`
+- `images/default/lib-common.sh` — protected host-mount clone discipline
+- `images/default/entrypoint-forge-codex.sh`
+- `images/default/entrypoint-forge-claude.sh`
+- `images/default/entrypoint-forge-opencode.sh`
+- `images/default/entrypoint-terminal.sh`

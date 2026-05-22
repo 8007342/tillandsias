@@ -16,6 +16,7 @@ fn main() {
 
     let mut assets = Vec::new();
     collect_files(&repo_root.join("images"), &mut assets);
+    collect_files(&repo_root.join("observatorium"), &mut assets);
     for rel in ["scripts/manage-cache.sh", "scripts/run-observatorium.sh"] {
         let path = repo_root.join(rel);
         if path.is_file() {
@@ -33,6 +34,10 @@ fn main() {
     println!(
         "cargo:rerun-if-changed={}",
         repo_root.join("images").display()
+    );
+    println!(
+        "cargo:rerun-if-changed={}",
+        repo_root.join("observatorium").display()
     );
     println!(
         "cargo:rerun-if-changed={}",
@@ -55,6 +60,7 @@ fn main() {
         "images/chromium/Containerfile.core",
         "images/chromium/Containerfile.framework",
         "images/web/Containerfile",
+        "observatorium/index.html",
         "scripts/manage-cache.sh",
         "scripts/run-observatorium.sh",
     ];

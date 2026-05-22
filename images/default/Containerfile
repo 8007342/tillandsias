@@ -98,6 +98,7 @@ RUN chmod +x /usr/local/share/tillandsias/help*.sh || true
 # @trace spec:forge-shell-tools, spec:forge-environment-discoverability
 RUN mkdir -p /etc/tillandsias
 COPY config-overlay/shell-helpers.sh /etc/tillandsias/shell-helpers.sh
+COPY config-overlay/shell-helpers.fish /etc/tillandsias/shell-helpers.fish
 RUN chmod +x /etc/tillandsias/shell-helpers.sh || true
 
 # ── Locale files ───────────────────────────────────────────────

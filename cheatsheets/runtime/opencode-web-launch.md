@@ -2,7 +2,7 @@
 tags: [opencode, chromium, router, tray, readiness]
 languages: [bash, rust]
 since: 2026-05-19
-last_verified: 2026-05-19
+last_verified: 2026-05-20
 sources:
   - https://opencode.dev/
   - https://caddyserver.com/docs/caddyfile/directives/forward_auth
@@ -36,6 +36,13 @@ action, router auth, or the isolated Chromium app window.
   `~/.cache/tillandsias/secrets/git/.gitconfig`; the launcher injects
   `GIT_AUTHOR_*`/`GIT_COMMITTER_*`, and the entrypoint writes repo-local
   `user.name`/`user.email`.
+- Project bind mounts are protected with `TILLANDSIAS_PROJECT_HOST_MOUNT=1`.
+  Forge entrypoints must use `/home/forge/src/<project>` in place and must
+  never wipe or clone over that path.
+- Stack containers rely on Podman DNS aliases and dynamic IPAM. Do not add
+  hard-coded `--ip 10.0.42.x` launch args.
+- Debug launches emit `event:container_launch stage=... state=...` lines plus
+  an initial `[tillandsias] version: ...` line for log correlation.
 
 ## Common Fixes
 
@@ -49,8 +56,9 @@ action, router auth, or the isolated Chromium app window.
   `configure_git_identity` after entering the project directory.
 - Unauthorized landing page means `IssueWebSession` was not acknowledged or
   the sidecar never received the session before Chromium loaded the data URL.
-- `--no-sandbox` belongs to the Chromium framework entrypoint only. It is not a
-  top-level `tillandsias` option.
+- `--no-sandbox` belongs to the Chromium framework entrypoint only. The
+  entrypoint probes whether the selected Chromium binary supports the switch
+  before appending it. It is not a top-level `tillandsias` option.
 
 ## Verification
 

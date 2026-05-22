@@ -252,6 +252,9 @@ pub fn classify_retry(output: &CommandOutput) -> RetryClass {
         || text.contains("permission denied")
         || text.contains("no such image")
         || text.contains("not found")
+        || text.contains("ipam error")
+        || text.contains("already allocated")
+        || text.contains("netlink error")
     {
         RetryClass::Permanent
     } else {
@@ -286,5 +289,20 @@ mod tests {
         };
         assert_eq!(failure.retry, RetryClass::Unknown);
         assert!(failure.to_string().contains("no stdout/stderr captured"));
+    }
+
+    #[test]
+    fn classifies_ipam_allocation_failures_as_permanent() {
+        let out = CommandOutput {
+            operation: OperationKind::Container,
+            argv: vec!["run".into()],
+            redacted_argv: vec!["run".into()],
+            status: Some(126),
+            stdout: String::new(),
+            stderr: "IPAM error: requested ip address is already allocated".into(),
+            duration: Duration::ZERO,
+        };
+
+        assert_eq!(classify_retry(&out), RetryClass::Permanent);
     }
 }

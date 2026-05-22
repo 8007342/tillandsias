@@ -51,6 +51,29 @@ When shutdown begins, all tillandsias-managed containers MUST be stopped gracefu
 - **THEN** containers MUST exit within 5 seconds of receiving the stop signal
 - **AND** no SIGKILL MUST be needed for idle containers
 
+### Requirement: Foreground forge exits clean idle stacks
+
+Foreground CLI agent launches (`--opencode`, `--codex`, `--claude`, `--bash`)
+and status-check probes MUST remove their supporting stack after the attached
+forge process exits when no other forge container remains active.
+
+#### Scenario: Attached forge exits
+
+- **WHEN** a foreground forge launched by a direct CLI flag exits
+- **THEN** Tillandsias MUST inspect whether any `tillandsias-*-forge`
+  container is still running
+- **AND** if none are running, it MUST remove proxy, inference, and the
+  project git container created for that launch
+- **AND** debug output MUST state that no active forge containers remain
+
+#### Scenario: Another forge remains active
+
+- **WHEN** one foreground forge exits while another `tillandsias-*-forge`
+  container is still running
+- **THEN** Tillandsias MUST leave the shared proxy and inference containers
+  running
+- **AND** debug output MUST state how many forge containers are still active
+
 ### Requirement: Graceful shutdown has a configurable timeout with force-kill fallback
 
 The default graceful shutdown timeout is 30 seconds. This timeout is overridable via `--shutdown-timeout <seconds>` CLI flag. If any container does not exit within the timeout, it MUST be force-killed.

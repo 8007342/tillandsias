@@ -118,7 +118,7 @@
 <div class="shell">
   <header>
     <h1>Observatorium</h1>
-    <div class="subtitle">Live local trace graph for specs, code, and cheatsheets. Minimal UI, no cache, current checkout only.</div>
+    <div class="subtitle">Live local trace graph for specs, code, and cheatsheets. Minimal UI, no cache, project source mounted read-only.</div>
     <div class="toolbar">
       <input id="search" class="search" placeholder="Filter specs, code hits, or cheatsheets">
       <button id="refresh">Refresh</button>
@@ -156,6 +156,7 @@
 </div>
 
 <script>
+const SOURCE_ROOT = (window.OBSERVATORIUM_SOURCE_ROOT || '/source').replace(/\/+$/, '') || '';
 const state = {
   traces: [],
   sheets: [],
@@ -182,6 +183,28 @@ async function fetchText(path) {
   const res = await fetch(path, { cache: 'no-store' });
   if (!res.ok) throw new Error(`${path}: ${res.status}`);
   return res.text();
+}
+
+async function fetchFirst(paths) {
+  let lastError = null;
+  for (const path of paths) {
+    try {
+      return { path, text: await fetchText(path) };
+    } catch (err) {
+      lastError = err;
+    }
+  }
+  return { path: null, text: '', error: lastError };
+}
+
+function sourcePath(path) {
+  const clean = String(path).replace(/^\/+/, '');
+  return SOURCE_ROOT ? `${SOURCE_ROOT}/${clean}` : `/${clean}`;
+}
+
+function sourceHref(href) {
+  if (/^(https?:|data:|#)/i.test(href)) return href;
+  return sourcePath(href);
 }
 
 function parseTraces(markdown) {
@@ -242,7 +265,10 @@ function scoreSheet(sheet, specId) {
 async function loadSheetAnnotations(sheet) {
   if (state.sheetCache.has(sheet.path)) return state.sheetCache.get(sheet.path);
   try {
-    const text = await fetchText(`/cheatsheets/${sheet.path}`);
+    const { text } = await fetchFirst([
+      sourcePath(`cheatsheets/${sheet.path}`),
+      `/cheatsheets/${sheet.path}`,
+    ]);
     const traces = [...text.matchAll(/@trace\s+spec:([a-z0-9-]+)/gi)].map(m => m[1]);
     const parsed = { text, traces };
     state.sheetCache.set(sheet.path, parsed);
@@ -348,7 +374,7 @@ function renderCode() {
         <ul class="code-list">
           ${hits.map(src => {
             const [path, line] = src.href.split('#L');
-            return `<li><a href="/${escapeAttr(src.href)}">${escapeHtml(src.label)}</a><div class="block">${escapeHtml(path)} ${line ? `line ${escapeHtml(line)}` : ''}</div></li>`;
+            return `<li><a href="${escapeAttr(sourceHref(src.href))}">${escapeHtml(src.label)}</a><div class="block">${escapeHtml(path)} ${line ? `line ${escapeHtml(line)}` : ''}</div></li>`;
           }).join('')}
         </ul>
       </div>
@@ -409,14 +435,15 @@ async function renderSheets() {
 
 async function loadAll() {
   setStatus('Loading TRACES.md');
-  const [tracesText, sheetsText] = await Promise.all([
-    fetchText('/TRACES.md'),
-    fetchText('/cheatsheets/INDEX.md'),
+  const [tracesResult, sheetsResult] = await Promise.all([
+    fetchFirst([sourcePath('TRACES.md'), '/TRACES.md']),
+    fetchFirst([sourcePath('cheatsheets/INDEX.md'), '/cheatsheets/INDEX.md']),
   ]);
-  state.traces = parseTraces(tracesText);
-  state.sheets = parseCheatsheetIndex(sheetsText);
+  state.traces = tracesResult.text ? parseTraces(tracesResult.text) : [];
+  state.sheets = sheetsResult.text ? parseCheatsheetIndex(sheetsResult.text) : [];
   setStatus(`${state.traces.length} trace bucket(s), ${state.sheets.length} cheatsheet entries`);
-  setFooter('Source snapshot loaded from the current checkout.');
+  const loadedFrom = tracesResult.path || sheetsResult.path || SOURCE_ROOT || '/source';
+  setFooter(`Source snapshot loaded from ${loadedFrom}.`);
 }
 
 function selectFromHash() {

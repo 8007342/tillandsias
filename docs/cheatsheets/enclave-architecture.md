@@ -57,7 +57,7 @@ Tillandsias isolates development environments using a 4-container enclave behind
 | Container | Image | Network | Credentials | Lifecycle | Purpose |
 |-----------|-------|---------|-------------|-----------|---------|
 | **proxy** | `tillandsias-proxy:v{VER}` (~15MB, Alpine + squid) | enclave + bridge (dual-homed) | None | Tray-session-scoped (started on first attach, stopped on tray exit) | Caching HTTP/HTTPS proxy, domain allowlist, egress firewall |
-| **git** | `tillandsias-git:v{VER}` | enclave only | `/run/secrets/github_token` (`:ro` tmpfs from host keyring) | Tray-session + per-project (one per project, persists across forge stops within a tray session) | Git mirror, credential-isolated push/pull |
+| **git** | `tillandsias-git:v{VER}` | enclave only | `--secret=tillandsias-github-token` mounted at `/run/secrets/tillandsias-github-token` | Tray-session + per-project (one per project, persists across forge stops within a tray session) | Git mirror, credential-isolated push/pull |
 | **forge** | `tillandsias-forge:v{VER}` | enclave only | **None** | Per-project, user-initiated (each "Attach Here" click) | Development environment, AI agent workspace |
 | **inference** | `tillandsias-inference:v{VER}` | enclave only | None | Tray-session-scoped; started asynchronously off the critical path | Local AI model serving via ollama |
 

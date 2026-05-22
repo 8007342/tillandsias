@@ -22,8 +22,6 @@ echo "========================================"
 # The tray creates tillandsias-github-token secret if a token is available
 # in the OS keyring. Read it from /run/secrets/ (podman's standard location).
 if [ -f /run/secrets/tillandsias-github-token ]; then
-    export GITHUB_TOKEN
-    GITHUB_TOKEN=$(cat /run/secrets/tillandsias-github-token)
     echo "GitHub token loaded from podman secret."
 else
     echo "No GitHub token available; authenticated git operations will fail."

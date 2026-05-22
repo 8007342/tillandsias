@@ -19,7 +19,7 @@ critical_path:
     expected_behavior: "forge shell package set present"
 
   - step: "verify the shell configs wire the expected interactive helpers"
-    command: "grep -Fq '@trace spec:forge-shell-tools' images/default/shell/bashrc && grep -Fq 'alias ll=' images/default/shell/bashrc && grep -Fq 'zoxide init bash' images/default/shell/bashrc && grep -Fq '@trace spec:forge-shell-tools' images/default/shell/zshrc && grep -Fq 'alias ll=' images/default/shell/zshrc && grep -Fq 'zoxide init zsh' images/default/shell/zshrc && grep -Fq '@trace spec:forge-shell-tools' images/default/shell/config.fish && grep -Fq 'fish_greeting' images/default/shell/config.fish && grep -Fq 'direnv hook fish' images/default/shell/config.fish && echo 'forge shell configs present'"
+    command: "grep -Fq '@trace spec:forge-shell-tools' images/default/shell/bashrc && grep -Fq 'alias ll=' images/default/shell/bashrc && grep -Fq 'zoxide init bash' images/default/shell/bashrc && grep -Fq '@trace spec:forge-shell-tools' images/default/shell/zshrc && grep -Fq 'alias ll=' images/default/shell/zshrc && grep -Fq 'zoxide init zsh' images/default/shell/zshrc && grep -Fq '@trace spec:forge-shell-tools' images/default/shell/config.fish && grep -Fq 'fish_greeting' images/default/shell/config.fish && grep -Fq 'direnv hook fish' images/default/shell/config.fish && grep -Fq 'shell-helpers.fish' images/default/shell/config.fish && grep -Fq 'shell-helpers.fish' images/default/Containerfile && grep -Fq '@trace spec:forge-shell-tools' images/default/config-overlay/shell-helpers.fish && grep -Fq 'function tgs' images/default/config-overlay/shell-helpers.fish && echo 'forge shell configs present'"
     timeout_ms: 10000
     expected_behavior: "forge shell configs present"
 

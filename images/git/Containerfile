@@ -48,12 +48,6 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 # Copy git post-receive hook (for push notifications to remote)
 COPY post-receive-hook.sh /usr/local/share/git-service/post-receive-hook.sh
 
-# @trace spec:secrets-management, spec:native-secrets-store
-# GIT_ASKPASS helper — transparent credential injection for HTTPS git operations.
-# Reads OAuth token from /run/secrets/tillandsias-github-token (ephemeral podman secret).
-# Credentials never stored on disk, never visible in logs/ps.
-COPY git-askpass-tillandsias.sh /usr/local/bin/git-askpass-tillandsias.sh
-
 # @trace spec:observability-convergence, spec:external-logs-layer
 # Log manifest: lists all files this image writes to syslog/stdout.
 # Tray auditor checks this every 60s; unlisted files trigger LEAK events.
@@ -64,8 +58,7 @@ COPY external-logs.yaml /etc/tillandsias/external-logs.yaml
 # @trace spec:user-runtime-lifecycle
 # Make scripts executable (security: chmod only what's needed)
 RUN chmod +x /usr/local/bin/entrypoint.sh \
-              /usr/local/share/git-service/post-receive-hook.sh \
-              /usr/local/bin/git-askpass-tillandsias.sh
+              /usr/local/share/git-service/post-receive-hook.sh
 
 USER git
 

@@ -101,8 +101,8 @@ TRACES_COVERAGE_FILE="$BUNDLE_STAGING/traces-coverage.json"
 
 # Run trace validator and capture results
 TRACE_OUTPUT=$("$SCRIPT_DIR/validate-traces.sh" 2>&1 || true)
-TRACE_ERRORS=$(echo "$TRACE_OUTPUT" | grep -c "^ERROR:" || echo "0")
-TRACE_WARNINGS=$(echo "$TRACE_OUTPUT" | grep -c "^WARN:" || echo "0")
+TRACE_ERRORS=$(printf '%s\n' "$TRACE_OUTPUT" | grep -c "^ERROR:" || true)
+TRACE_WARNINGS=$(printf '%s\n' "$TRACE_OUTPUT" | grep -c "^WARN:" || true)
 
 cat > "$TRACES_COVERAGE_FILE" <<EOF
 {

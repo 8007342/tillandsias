@@ -73,7 +73,7 @@ All credential material MUST be mounted into containers using podman's `--secret
 - **WHEN** the git service container is launched and `tillandsias-github-token` secret exists
 - **THEN** the tray MUST add `--secret=tillandsias-github-token` to the `podman run` command
 - **AND** the container's entrypoint MUST read the token from `/run/secrets/tillandsias-github-token`
-- **AND** the `GIT_ASKPASS` environment variable MUST point to a script that reads the token from the secret
+- **AND** the container MUST NOT receive the token via environment variables or bind mounts
 
 #### Scenario: Forge containers receive no credentials
 - **WHEN** a forge container (opencode, claude) is launched

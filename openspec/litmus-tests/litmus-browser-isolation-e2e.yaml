@@ -18,7 +18,7 @@ critical_path:
     expected_behavior: "TEST_PROJECT=/tmp/tillandsias-e2e-test"
 
   - step: "launch proxy container (Squid forward proxy)"
-    command: "export PROXY_IMG=$(podman images --format '{{.Repository}}:{{.Tag}}' | grep tillandsias-proxy | head -1) && [ -n \"$PROXY_IMG\" ] || { echo 'Proxy image not found'; exit 1; } && podman rm -f tillandsias-test-proxy-e2e 2>/dev/null; podman run -d --name tillandsias-test-proxy-e2e --hostname proxy --network tillandsias-test-enclave-e2e --ip 10.0.43.2 --cap-drop=ALL --security-opt=no-new-privileges --security-opt=label=disable --userns=keep-id -v /tmp/tillandsias-e2e-ca/intermediate.crt:/etc/squid/certs/intermediate.crt:ro -v /tmp/tillandsias-e2e-ca/intermediate.key:/etc/squid/certs/intermediate.key:ro \"$PROXY_IMG\" 2>&1 | tee /tmp/litmus-proxy-e2e.log | head -1"
+    command: "export PROXY_IMG=$(podman images --format '{{.Repository}}:{{.Tag}}' | grep tillandsias-proxy | head -1) && [ -n \"$PROXY_IMG\" ] || { echo 'Proxy image not found'; exit 1; } && podman rm -f tillandsias-test-proxy-e2e 2>/dev/null; podman run -d --name tillandsias-test-proxy-e2e --hostname proxy --network tillandsias-test-enclave-e2e --cap-drop=ALL --security-opt=no-new-privileges --security-opt=label=disable --userns=keep-id -v /tmp/tillandsias-e2e-ca/intermediate.crt:/etc/squid/certs/intermediate.crt:ro -v /tmp/tillandsias-e2e-ca/intermediate.key:/etc/squid/certs/intermediate.key:ro \"$PROXY_IMG\" 2>&1 | tee /tmp/litmus-proxy-e2e.log | head -1"
     timeout_ms: 10000
     expected_behavior: "container id returned"
 
@@ -28,12 +28,12 @@ critical_path:
     expected_behavior: "OK"
 
   - step: "launch router container (Caddy reverse proxy)"
-    command: "export ROUTER_IMG=$(podman images --format '{{.Repository}}:{{.Tag}}' | grep tillandsias-router | head -1) && [ -n \"$ROUTER_IMG\" ] || { echo 'Router image not found'; exit 1; } && podman rm -f tillandsias-test-router-e2e 2>/dev/null; mkdir -p /tmp/tillandsias-router-e2e && : > /tmp/tillandsias-router-e2e/dynamic.Caddyfile && podman run -d --name tillandsias-test-router-e2e --hostname router --network tillandsias-test-enclave-e2e --ip 10.0.43.3 --cap-drop=ALL --security-opt=no-new-privileges --security-opt=label=disable --userns=keep-id -p 127.0.0.1:8080:80 -v /tmp/tillandsias-router-e2e:/run/router:rw \"$ROUTER_IMG\" 2>&1 | tee /tmp/litmus-router-e2e.log | head -1"
+    command: "export ROUTER_IMG=$(podman images --format '{{.Repository}}:{{.Tag}}' | grep tillandsias-router | head -1) && [ -n \"$ROUTER_IMG\" ] || { echo 'Router image not found'; exit 1; } && podman rm -f tillandsias-test-router-e2e 2>/dev/null; mkdir -p /tmp/tillandsias-router-e2e && : > /tmp/tillandsias-router-e2e/dynamic.Caddyfile && podman run -d --name tillandsias-test-router-e2e --hostname router --network tillandsias-test-enclave-e2e --cap-drop=ALL --security-opt=no-new-privileges --security-opt=label=disable --userns=keep-id -p 127.0.0.1:8080:80 -v /tmp/tillandsias-router-e2e:/run/router:rw \"$ROUTER_IMG\" 2>&1 | tee /tmp/litmus-router-e2e.log | head -1"
     timeout_ms: 10000
     expected_behavior: "container id returned"
 
   - step: "launch forge container (dev environment)"
-    command: "export FORGE_IMG=$(podman images --format '{{.Repository}}:{{.Tag}}' | grep '^localhost/tillandsias-forge:v' | head -1) && [ -n \"$FORGE_IMG\" ] || { echo 'Forge image not found'; exit 1; } && podman rm -f tillandsias-test-forge-e2e 2>/dev/null; podman run -d --name tillandsias-test-forge-e2e --hostname forge --network tillandsias-test-enclave-e2e --ip 10.0.43.5 --cap-drop=ALL --security-opt=no-new-privileges --security-opt=label=disable --userns=keep-id --entrypoint=/bin/sleep -w /workspace --env HTTP_PROXY=http://proxy:3128 --env HTTPS_PROXY=http://proxy:3128 --env NO_PROXY=localhost,127.0.0.1,proxy,router -v /tmp/tillandsias-e2e-test:/workspace:rw \"$FORGE_IMG\" 3600 2>&1 | tee /tmp/litmus-forge-e2e.log | head -1"
+    command: "export FORGE_IMG=$(podman images --format '{{.Repository}}:{{.Tag}}' | grep '^localhost/tillandsias-forge:v' | head -1) && [ -n \"$FORGE_IMG\" ] || { echo 'Forge image not found'; exit 1; } && podman rm -f tillandsias-test-forge-e2e 2>/dev/null; podman run -d --name tillandsias-test-forge-e2e --hostname forge --network tillandsias-test-enclave-e2e --cap-drop=ALL --security-opt=no-new-privileges --security-opt=label=disable --userns=keep-id --entrypoint=/bin/sleep -w /workspace --env HTTP_PROXY=http://proxy:3128 --env HTTPS_PROXY=http://proxy:3128 --env NO_PROXY=localhost,127.0.0.1,proxy,router -v /tmp/tillandsias-e2e-test:/workspace:rw \"$FORGE_IMG\" 3600 2>&1 | tee /tmp/litmus-forge-e2e.log | head -1"
     timeout_ms: 15000
     expected_behavior: "container id returned"
 

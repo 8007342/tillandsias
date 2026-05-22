@@ -205,11 +205,10 @@ configure_git_identity() {
 #   - filesystem  : TILLANDSIAS_GIT_MIRROR_PATH=/path/to/bare/mirror (Windows/WSL)
 #   - git daemon  : TILLANDSIAS_GIT_SERVICE=host:port (Linux/podman)
 #
-# Idempotent: if /home/forge/src/<project> already exists with a valid clone,
-# wipe it first so re-attaches don't fail with "destination already exists".
-# This matches the ephemeral-working-tree contract — on Linux/podman the dir
-# is tmpfs and wiped per launch; on WSL the distro fs persists, so we wipe
-# explicitly here.
+# Idempotent: if /home/forge/src/<project> is a host-mounted project selected
+# by the launcher, use it in place and never wipe it. Otherwise, if a stale
+# ephemeral working tree exists, wipe it before cloning so re-attaches don't
+# fail with "destination already exists".
 #
 # Returns 0 on successful clone, exits 1 on hard failure.
 clone_project_from_mirror() {
@@ -219,10 +218,25 @@ clone_project_from_mirror() {
     fi
     clone_dir="/home/forge/src/${TILLANDSIAS_PROJECT}"
 
+    # Direct CLI/tray launches bind-mount the real host checkout at the same
+    # path the mirror clone would normally occupy. Treat that as authoritative
+    # project state. Wiping it would delete the user's checkout through the
+    # bind mount.
+    if [[ "${TILLANDSIAS_PROJECT_HOST_MOUNT:-}" == "1" ]] && [[ -d "$clone_dir" ]]; then
+        trace_lifecycle "git-mirror" "using mounted project ${clone_dir}; mirror clone skipped"
+        cd "$clone_dir" || return 1
+        configure_git_identity
+        return 0
+    fi
+
     # Wipe stale working tree (ephemeral-tree contract).
     if [[ -d "$clone_dir" ]]; then
         trace_lifecycle "git-mirror" "wiping stale working tree ${clone_dir}"
-        rm -rf "$clone_dir"
+        if ! rm -rf "$clone_dir"; then
+            echo "[forge] FATAL: refusing to continue after failing to remove stale working tree: ${clone_dir}" >&2
+            echo "[forge] If this path is a mounted project, the launcher must set TILLANDSIAS_PROJECT_HOST_MOUNT=1." >&2
+            exit 1
+        fi
     fi
 
     # Filesystem transport (Windows/WSL).

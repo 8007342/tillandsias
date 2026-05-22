@@ -24,7 +24,7 @@ Running `tillandsias <path>` SHALL launch an interactive container for the proje
 - **THEN** usage information SHALL be printed and the process SHALL exit
 
 ### Requirement: Runtime paths are compiled Rust
-The user-facing runtime paths `--init`, `--status-check`, `--github-login`, and `--opencode` SHALL be implemented in compiled Rust and SHALL invoke Podman or other stable Unix tools directly. They SHALL NOT shell out to repository scripts during normal runtime operation.
+The user-facing runtime paths `--init`, `--status-check`, `--github-login`, `--opencode`, `--codex`, `--claude`, `--bash`, `--opencode-web`, and `--observatorium` SHALL be implemented in compiled Rust and SHALL invoke Podman or other stable Unix tools directly. They SHALL NOT shell out to repository scripts during normal runtime operation.
 
 On Linux desktop sessions, these runtime paths MUST run under the current user's logind-managed session and rootless Podman state. They MUST NOT create a synthetic `/run/user/<uid>` or rely on a helper runtime wrapper in production.
 
@@ -39,17 +39,33 @@ On Linux desktop sessions, these runtime paths MUST run under the current user's
 - **THEN** the binary SHALL orchestrate the enclave stack directly from Rust
 - **AND** it SHALL use Podman commands plus the embedded health probe
 - **AND** it SHALL not call `scripts/orchestrate-enclave.sh`
+- **AND** after the probe exits, proxy, git, inference, and forge containers created for the status check SHALL be removed when no forge container remains active
 
-### Requirement: Observatorium launcher alias
-The binary MUST accept `--observatorium` as a user-facing launcher alias for the local observatorium viewer. The alias MAY invoke the repo-local observatorium launcher script, but the invocation MUST remain deterministic and must serve the current checkout without external dependencies.
+#### Scenario: Direct agent flags attach to the current terminal
+- **WHEN** the user runs `tillandsias --codex <project> --debug`, `tillandsias --claude <project> --debug`, or `tillandsias --bash <project> --debug`
+- **THEN** the binary SHALL start the shared enclave stack from Rust
+- **AND** it SHALL run the corresponding forge entrypoint attached to the current terminal
+- **AND** it SHALL set `TILLANDSIAS_PROJECT_HOST_MOUNT=1` when the selected project is bind-mounted
+- **AND** the forge entrypoint SHALL use the mounted project in place and MUST NOT wipe or clone over it
+- **AND** after the attached forge exits, the project stack SHALL be cleaned up if no forge containers remain active
+
+### Requirement: Observatorium project view
+The binary MUST accept `--observatorium <project>` as a user-facing launcher for the project Observatorium viewer. The runtime MUST launch the web container, router route, and safe browser directly from compiled Rust, without invoking the repo-local dev wrapper during normal runtime operation.
 
 #### Scenario: Observatorium launch alias
-- **WHEN** the user runs `tillandsias --observatorium`
-- **THEN** the local observatorium SHALL be launched from the current checkout
-- **AND** the `tillandsias-web:v<VERSION>` image SHALL be preflighted before launch
+- **WHEN** the user runs `tillandsias --observatorium ~/src/my-project`
+- **THEN** the project observatorium SHALL be launched for `~/src/my-project`
+- **AND** the project SHALL be mounted read-only under `/source`
+- **AND** the route SHALL be `observatorium.my-project.localhost`
+- **AND** the `tillandsias-web:v<VERSION>`, router, and Chromium framework images SHALL be preflighted before launch
 - **AND** the launcher SHALL not fall into interactive short-name resolution for missing images
-- **AND** a safe browser SHALL open against `https://observatorium.tillandsias.localhost`
+- **AND** a safe browser SHALL open against the private router route
 - **AND** the command SHALL remain compatible with tray-aware CLI invocation
+
+#### Scenario: Observatorium requires a project path
+- **WHEN** the user runs `tillandsias --observatorium` without a project path
+- **THEN** the binary SHALL exit with status 2
+- **AND** stderr SHALL state that `--observatorium` requires a project path
 
 ### Requirement: OpenCode Web launch reuses the router when already present
 The `--opencode-web` launch path SHALL reuse an already-running router container when one exists, and SHALL only probe host ports after confirming the router is not already published.
@@ -79,7 +95,9 @@ The `--debug` flag SHALL enable verbose output showing podman commands and inter
 
 #### Scenario: Debug mode
 - **WHEN** `--debug` is provided
-- **THEN** output SHALL include the full podman command line and additional diagnostic details
+- **THEN** the first Tillandsias debug line SHALL include the running version
+- **AND** output SHALL include stage-scoped container launch events and additional diagnostic details
+- **AND** failure output SHALL include a short actionable next step before verbose redacted argv details
 
 ### Requirement: User-friendly output
 CLI mode SHALL print formatted progress messages using println!, not raw tracing output.

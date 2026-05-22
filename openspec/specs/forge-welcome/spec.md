@@ -35,8 +35,13 @@ The Terminal menu item and `--bash` CLI flag MUST launch the fish shell instead 
 - **THEN** the container MUST start with fish as the entrypoint, landing in the project directory
 
 #### Scenario: CLI --bash flag
-- **WHEN** the user runs `tillandsias ../project/ --bash`
+- **WHEN** the user runs `tillandsias --bash ../project/ --debug`
 - **THEN** the container MUST start with fish as the entrypoint, landing in the project directory
+- **AND** the launcher MUST set `TILLANDSIAS_PROJECT_HOST_MOUNT=1`
+- **AND** the entrypoint MUST use the mounted project directly without
+  removing `/home/forge/src/<project>`
+- **AND** when the user exits fish, the parent process MUST clean the idle
+  stack if no forge containers remain active
 
 #### Scenario: Switch to bash
 - **WHEN** the user types `bash` inside the fish shell

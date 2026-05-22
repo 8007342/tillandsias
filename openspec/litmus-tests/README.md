@@ -122,11 +122,18 @@ done
 Each test is a self-contained YAML file with:
 
 1. **Metadata**: name, spec linkage, description, severity
-2. **Preconditions**: what must be true before test runs
-3. **Critical path**: ordered steps with timeouts and expected behavior
-4. **Gating points**: success/failure criteria
-5. **Observability**: @trace annotations, expected logs, log fields
-6. **Rollback**: cleanup on failure
+2. **Rust queries**: optional `rust_queries` blocks that prove source relevance before command execution
+3. **Preconditions**: what must be true before test runs
+4. **Critical path**: ordered steps with timeouts and expected behavior
+5. **Gating points**: success/failure criteria
+6. **Observability**: @trace annotations, expected logs, log fields
+7. **Rollback**: cleanup on failure
+
+`rust_queries` are opt-in. Each query names a stable `id`, governed `spec`,
+Rust `file`, `method`, expected `param`, optional `type`, `processor`
+(`syn`, `tree_sitter`, or `rust_analyzer`), and optional `usage` check such as
+`param_used` or `{ kind: contains, text: podman_command() }`. Required query
+failures gate the litmus before the critical path runs.
 
 ## Key Principles
 

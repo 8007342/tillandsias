@@ -11,8 +11,10 @@ annotation-count: 11
 
 Enable stable, port-agnostic URLs for all web services spawned in the enclave via a reverse-proxy listener that maps `<service>.<project>.localhost` hostnames to internal container ports, while maintaining RFC 6761 loopback-only binding.
 
-The browser-facing observatorium success path uses
-`https://observatorium.tillandsias.localhost` as the canonical entrypoint.
+Project-local web views use named hosts in the form
+`<service>.<project>.localhost`; the Observatorium view uses
+`observatorium.<project>.localhost` and keeps source access private behind the
+same router/session gate as OpenCode Web.
 
 ## Requirements
 
@@ -41,6 +43,7 @@ Service-to-port conventions:
 | Service | Internal port | Notes |
 |---------|---------------|-------|
 | `opencode` | 4096 | OpenCode Web |
+| `observatorium` | 8080 | Read-only project source viewer |
 | `flutter` | 8080 | Flutter web-server |
 | `vite` | 5173 | Vite dev server |
 | `next` | 3000 | Next.js dev server |
@@ -57,9 +60,10 @@ Service-to-port conventions:
 
 #### Scenario: Multiple services per project coexist
 
-- **WHEN** a forge runs both OpenCode Web and Flutter
-- **THEN** the Caddyfile MUST contain two stanzas: `opencode.java.localhost:80` and `flutter.java.localhost:80`
-- **AND** both MUST route to the same forge container but different internal ports
+- **WHEN** a project runs OpenCode Web, Observatorium, and Flutter
+- **THEN** the dynamic Caddyfile MUST contain stanzas for `opencode.java.localhost`, `observatorium.java.localhost`, and `flutter.java.localhost`
+- **AND** routes SHALL be upserted without dropping previously registered services
+- **AND** OpenCode and Flutter MAY route to the forge container while Observatorium routes to its project web container
 
 ### Requirement: Forward-proxy integration
 

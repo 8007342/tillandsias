@@ -6,25 +6,36 @@ RECREATE=0
 PORT_OVERRIDE="${OBSERVATORIUM_PORT:-}"
 if [[ "${1:-}" == "--help" || "${1:-}" == "-h" ]]; then
     cat <<'EOF'
-Usage: scripts/run-observatorium.sh [--recreate] [--port PORT]
+Usage: scripts/run-observatorium.sh [--project PATH] [--recreate] [--port PORT]
 
-Launch a small local observatorium container serving the current checkout and
-open it in Chromium-first mode, with a host browser fallback.
+Launch a small local observatorium container serving a project checkout and
+open it in Chromium-first mode, with a host browser fallback. This script is
+the dev/litmus wrapper; the main CLI uses the router-gated enclave path.
 
 Options:
+  --project PATH  Project checkout to serve read-only (default: repo root)
   --recreate   Remove any existing observatorium container before starting
   --port PORT  Explicit host port escape hatch when 80 and 8080 are occupied
 
 Environment:
   OBSERVATORIUM_BROWSER=auto|chromium|host|none
   OBSERVATORIUM_PORT=8787
-  OBSERVATORIUM_BROWSER_URL=https://observatorium.tillandsias.localhost
+  OBSERVATORIUM_BROWSER_URL=http://127.0.0.1:<port>/observatorium/
 EOF
     exit 0
 fi
 
+PROJECT_PATH=""
 while [[ $# -gt 0 ]]; do
     case "$1" in
+        --project)
+            shift
+            if [[ -z "${1:-}" ]]; then
+                echo "error: --project requires a path" >&2
+                exit 2
+            fi
+            PROJECT_PATH="$1"
+            ;;
         --recreate)
             RECREATE=1
             ;;
@@ -36,9 +47,16 @@ while [[ $# -gt 0 ]]; do
             fi
             PORT_OVERRIDE="$1"
             ;;
-        *)
+        --*)
             echo "error: unknown option: $1" >&2
             exit 2
+            ;;
+        *)
+            if [[ -n "$PROJECT_PATH" ]]; then
+                echo "error: unexpected argument: $1" >&2
+                exit 2
+            fi
+            PROJECT_PATH="$1"
             ;;
     esac
     shift
@@ -49,11 +67,19 @@ source "$SCRIPT_DIR/common.sh"
 require_podman
 
 ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
+PROJECT_PATH="${PROJECT_PATH:-$ROOT}"
+if [[ ! -d "$PROJECT_PATH" ]]; then
+    echo "error: project path not found or not a directory: $PROJECT_PATH" >&2
+    exit 2
+fi
+PROJECT_ROOT="$(cd "$PROJECT_PATH" && pwd)"
+PROJECT_NAME="$(basename "$PROJECT_ROOT")"
+PROJECT_LABEL="$(printf '%s' "$PROJECT_NAME" | tr '[:upper:]' '[:lower:]' | sed 's/[^a-z0-9_-]/-/g')"
 PODMAN_CLI="$ROOT/scripts/tillandsias-podman"
 VERSION="$(tr -d '[:space:]' < "$ROOT/VERSION")"
-NAME="${OBSERVATORIUM_CONTAINER_NAME:-tillandsias-observatorium}"
+NAME="${OBSERVATORIUM_CONTAINER_NAME:-tillandsias-observatorium-${PROJECT_LABEL}}"
 SERVICE_PORT="${OBSERVATORIUM_SERVICE_PORT:-8080}"
-BROWSER_URL="${OBSERVATORIUM_BROWSER_URL:-https://observatorium.tillandsias.localhost}"
+BROWSER_URL="${OBSERVATORIUM_BROWSER_URL:-}"
 BROWSER_MODE="${OBSERVATORIUM_BROWSER:-auto}"
 IMAGE="${OBSERVATORIUM_IMAGE:-tillandsias-web:v${VERSION}}"
 HOST_PORT=""
@@ -80,9 +106,11 @@ create_container_with_userns() {
     local create_error_file
     create_error_file="$(mktemp /tmp/run-observatorium-create.XXXXXX)"
 
-    local candidates=(80 8080)
+    local candidates=()
     if [[ -n "$PORT_OVERRIDE" ]]; then
-        candidates+=("$PORT_OVERRIDE")
+        candidates=("$PORT_OVERRIDE")
+    else
+        candidates=(80 8080)
     fi
 
     for candidate in "${candidates[@]}"; do
@@ -100,7 +128,8 @@ create_container_with_userns() {
             --tmpfs /tmp:rw,size=64m \
             --tmpfs /var/cache:rw,size=16m \
             --publish "127.0.0.1:${candidate}:8080" \
-            --volume "${ROOT}:/var/www:ro" \
+            --volume "${ROOT}/observatorium:/var/www/observatorium:ro" \
+            --volume "${PROJECT_ROOT}:/var/www/source:ro" \
             "$IMAGE" >/dev/null 2>"$create_error_file"; then
             HOST_PORT="$candidate"
             CONTAINER_STARTED_BY_CREATE=1
@@ -241,10 +270,14 @@ launch_host_browser() {
 }
 
 echo "[run-observatorium] Launching observatorium for VERSION=$VERSION"
+echo "[run-observatorium] Project: $PROJECT_ROOT"
 ensure_container
 start_container
 if [[ -z "$HOST_PORT" ]]; then
     HOST_PORT="$(resolve_host_port)" || true
+fi
+if [[ -z "$BROWSER_URL" ]]; then
+    BROWSER_URL="http://127.0.0.1:${HOST_PORT}/observatorium/"
 fi
 
 if ! wait_for_http; then

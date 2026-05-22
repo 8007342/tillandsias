@@ -62,7 +62,7 @@ critical_path:
     timeout_ms: 2000
 
   - step: "assert proxy container run shape"
-    command: "grep -F 'run --detach --name tillandsias-proxy --hostname proxy --network tillandsias-enclave --ip 10.0.42.2' target/litmus-podman/headless-init-status-check.calls.log"
+    command: "grep -F 'run --detach --name tillandsias-proxy --hostname proxy --network tillandsias-enclave' target/litmus-podman/headless-init-status-check.calls.log && ! grep -F -- '--ip' target/litmus-podman/headless-init-status-check.calls.log"
     timeout_ms: 2000
 
   - step: "assert git container run shape"
@@ -70,7 +70,7 @@ critical_path:
     timeout_ms: 2000
 
   - step: "assert inference container run shape"
-    command: "grep -F 'run --detach --rm --name tillandsias-inference --hostname inference --network-alias inference --network tillandsias-enclave --ip 10.0.42.4' target/litmus-podman/headless-init-status-check.calls.log && grep -F 'tillandsias-inference:v' target/litmus-podman/headless-init-status-check.calls.log && grep -F '/usr/bin/ollama serve' target/litmus-podman/headless-init-status-check.calls.log"
+    command: "grep -F 'run --detach --rm --name tillandsias-inference --hostname inference --network-alias inference --network tillandsias-enclave' target/litmus-podman/headless-init-status-check.calls.log && grep -F 'tillandsias-inference:v' target/litmus-podman/headless-init-status-check.calls.log && grep -F '/usr/bin/ollama serve' target/litmus-podman/headless-init-status-check.calls.log && ! grep -F -- '--ip' target/litmus-podman/headless-init-status-check.calls.log"
     timeout_ms: 2000
 
   - step: "assert status-check plan was emitted"

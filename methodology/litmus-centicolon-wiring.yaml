@@ -77,6 +77,7 @@ litmus_centicolon_wiring:
       positive_test_passes: 0.20  # 20% of obligation for each passing positive test
       negative_test_passes: 0.20  # 20% of obligation for each passing negative test
       runtime_trace_observed: 0.15  # 15% of obligation for observed runtime trace
+      rust_source_relevance_passes: 0.10  # 10% max for Rust AST/query relevance gates
       cap: "Earned never exceeds obligation_budget"
 
     aggregation: |
@@ -111,6 +112,34 @@ litmus_centicolon_wiring:
       missing_negative_case: -50
         condition: "MUST_NOT requirement has no passing negative litmus test"
         remediation: "Create error-path signal that validates MUST_NOT"
+
+      missing_required_rust_query: -35
+        condition: "Litmus claims Rust source relevance but has no required rust_queries entry"
+        remediation: "Add a stable rust_queries obligation for the governed method or function"
+
+      wrong_method_match: -35
+        condition: "Rust query cannot find the specified method or function"
+        remediation: "Update the query target or restore the expected method boundary"
+
+      missing_required_param: -35
+        condition: "Rust query cannot find a required parameter on the specified method"
+        remediation: "Restore the parameter or update the spec/litmus if the interface changed"
+
+      param_unused: -25
+        condition: "Required parameter exists but is not meaningfully used in the method body"
+        remediation: "Wire the parameter into behavior or remove it from the spec contract"
+
+      meaningless_param_name: -15
+        condition: "Required parameter uses a placeholder or non-semantic name"
+        remediation: "Rename the parameter to describe the contract it carries"
+
+      processor_unavailable: -20
+        condition: "A required Rust processor such as rust-analyzer is unavailable"
+        remediation: "Install the processor or downgrade the query to syn/tree_sitter if sufficient"
+
+      query_ambiguous: -20
+        condition: "Rust query is too broad or underspecified to prove the claimed relevance"
+        remediation: "Tighten the query to a method, parameter, type, and usage signal"
 
       flaky_signal: -80
         condition: "Same signal produces different results on repeated runs (≥2 differ)"

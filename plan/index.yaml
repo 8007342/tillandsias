@@ -1266,6 +1266,40 @@ plan_index:
           checkpoint_required: true
           handoff_note: "README, specs, cheatsheets, and plan evidence updated; v0.2.260520.1 release workflow/readback passed on main."
 
+    - id: launcher-terminal-litmus
+      order: 18
+      title: Launcher terminal litmus and foreground stack cleanup
+      status: completed
+      deliverable: plan/steps/19-launcher-terminal-litmus.md
+      depends_on: [user-runtime-checkout-free]
+      specs:
+        - cli-mode
+        - forge-as-only-runtime
+        - forge-welcome
+        - podman-idiomatic-patterns
+        - runtime-diagnostics-stream
+        - graceful-shutdown
+      exit_criteria:
+        - "./build.sh --ci-full --install passes"
+        - "tillandsias --init --debug passes"
+        - "Direct --opencode/--codex/--claude/--bash foreground launches reach their forge entrypoints"
+        - "No idle proxy/git/inference stack remains after foreground forge exit"
+      tasks:
+        - id: launcher-terminal-litmus/code-and-docs
+          status: completed
+          depends_on: []
+          owned_files:
+            - crates/tillandsias-headless/src/main.rs
+            - crates/tillandsias-podman/src
+            - images/default
+            - images/chromium/chromium-framework-launch.sh
+            - openspec/specs
+            - openspec/litmus-tests
+            - cheatsheets/runtime
+            - plan/steps/19-launcher-terminal-litmus.md
+          checkpoint_required: true
+          handoff_note: "Completed on v0.2.260520.7: foreground launcher safety, dynamic IPAM, observed diagnostics, direct terminal litmus, and idle stack cleanup verified."
+
     - id: post-release-polish
       order: 17
       title: Wave 25 — Post-Release Polish & P1 Consolidation

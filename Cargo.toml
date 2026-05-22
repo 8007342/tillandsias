@@ -4,6 +4,7 @@ members = [
     "crates/tillandsias-control-wire",
     "crates/tillandsias-core",
     "crates/tillandsias-headless",
+    "crates/tillandsias-litmus-rust",
     "crates/tillandsias-logging",
     "crates/tillandsias-metrics",
     "crates/tillandsias-otp",

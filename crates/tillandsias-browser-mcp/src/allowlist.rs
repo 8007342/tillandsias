@@ -154,12 +154,10 @@ impl BrowserAllowlist {
         // If no active routes are registered yet (first-use scenario), allow any properly
         // formatted .localhost:8080 URL. The reverse-proxy validates at the network layer.
         if !self.active_routes.is_empty() {
-            let route_key = if port == 8080 {
-                format!("{}:8080", host_str)
-            } else {
-                format!("{}:80", host_str)
-            };
-            return self.active_routes.contains(&route_key);
+            let route_8080 = format!("{}:8080", host_str);
+            let route_80 = format!("{}:80", host_str);
+            return self.active_routes.contains(&route_8080)
+                || self.active_routes.contains(&route_80);
         }
 
         // No active routes registered yet: allow properly formatted localhost URLs
@@ -212,7 +210,11 @@ pub fn validate(url: &str, project_label: &str) -> Result<AllowedUrl, AllowlistD
         });
     }
 
-    if parsed.port() != Some(8080) {
+    let port = parsed.port().unwrap_or(match parsed.scheme() {
+        "https" => 443,
+        _ => 80,
+    });
+    if port != 8080 && port != 80 {
         return Err(AllowlistDeny::WrongPort {
             expected: 8080,
             actual: parsed.port(),
@@ -269,6 +271,14 @@ mod tests {
     }
 
     #[test]
+    fn accepts_project_observatorium_url_on_router_default_port() {
+        let allowed =
+            validate("http://observatorium.acme.localhost/observatorium/", "acme").unwrap();
+        assert_eq!(allowed.host, "observatorium.acme.localhost");
+        assert_eq!(allowed.service_label, "observatorium");
+    }
+
+    #[test]
     fn rejects_opencode_self() {
         let err = validate("http://opencode.acme.localhost:8080/", "acme").unwrap_err();
         assert!(matches!(err, AllowlistDeny::OpencodeSelf));
@@ -287,6 +297,7 @@ mod tests {
         let mut routes = vec![];
         routes.push("web.acme.localhost:8080".to_string());
         routes.push("api.acme.localhost:8080".to_string());
+        routes.push("observatorium.acme.localhost:8080".to_string());
         routes.push("ui.beta.localhost:8080".to_string());
 
         let allowlist = BrowserAllowlist::new(&routes);
@@ -295,6 +306,7 @@ mod tests {
         assert!(allowlist.is_allowed("http://web.acme.localhost:8080/"));
         assert!(allowlist.is_allowed("http://api.acme.localhost:8080/path"));
         assert!(allowlist.is_allowed("http://ui.beta.localhost:8080/?query=value"));
+        assert!(allowlist.is_allowed("http://observatorium.acme.localhost/observatorium/"));
 
         // HTTPS variant should be allowed
         assert!(allowlist.is_allowed("https://web.acme.localhost:8080/"));

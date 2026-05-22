@@ -2024,6 +2024,7 @@ version = "1.0.149"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "83fc039473c5595ace860d8c4fafa220ff474b3fc6bfdb4293327f1a37e94d86"
 dependencies = [
+ "indexmap",
  "itoa",
  "memchr",
  "serde",
@@ -2217,6 +2218,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
+name = "streaming-iterator"
+version = "0.1.9"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "2b2231b7c3057d5e4ad0156fb3dc807d900806020c5ffa3ee6ff2c8c76fb8520"
+
+[[package]]
 name = "strict-num"
 version = "0.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2383,7 +2390,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-core"
-version = "0.2.260520"
+version = "0.2.260522"
 dependencies = [
  "async-trait",
  "dirs",
@@ -2403,7 +2410,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-headless"
-version = "0.2.260520"
+version = "0.2.260522"
 dependencies = [
  "bytes",
  "chrono",
@@ -2429,6 +2436,20 @@ dependencies = [
  "tracing-subscriber",
  "zbus",
  "zvariant",
+]
+
+[[package]]
+name = "tillandsias-litmus-rust"
+version = "0.1.260521"
+dependencies = [
+ "quote",
+ "regex",
+ "serde",
+ "serde_json",
+ "serde_yaml",
+ "syn",
+ "tree-sitter",
+ "tree-sitter-rust",
 ]
 
 [[package]]
@@ -2480,7 +2501,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-podman"
-version = "0.2.260520"
+version = "0.2.260522"
 dependencies = [
  "async-trait",
  "libc",
@@ -2531,7 +2552,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-scanner"
-version = "0.2.260520"
+version = "0.2.260522"
 dependencies = [
  "dirs",
  "notify",
@@ -2817,6 +2838,36 @@ dependencies = [
  "tracing",
  "tracing-core",
  "tracing-log",
+]
+
+[[package]]
+name = "tree-sitter"
+version = "0.25.10"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "78f873475d258561b06f1c595d93308a7ed124d9977cb26b148c2084a4a3cc87"
+dependencies = [
+ "cc",
+ "regex",
+ "regex-syntax",
+ "serde_json",
+ "streaming-iterator",
+ "tree-sitter-language",
+]
+
+[[package]]
+name = "tree-sitter-language"
+version = "0.1.7"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "009994f150cc0cd50ff54917d5bc8bffe8cad10ca10d81c34da2ec421ae61782"
+
+[[package]]
+name = "tree-sitter-rust"
+version = "0.24.2"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "439e577dbe07423ec2582ac62c7531120dbfccfa6e5f92406f93dd271a120e45"
+dependencies = [
+ "cc",
+ "tree-sitter-language",
 ]
 
 [[package]]

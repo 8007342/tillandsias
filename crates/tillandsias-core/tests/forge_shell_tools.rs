@@ -19,7 +19,7 @@ fn read_helper(path: &str) -> String {
     fs::read_to_string(&full).unwrap_or_else(|e| panic!("read {}: {}", full.display(), e))
 }
 
-/// Shell helpers source ships every shortcut the task requires.
+/// POSIX shell helpers source ships every shortcut the task requires.
 #[test]
 fn shell_helpers_defines_tgs_tgp_and_cache_report() {
     let src = read_helper("images/default/config-overlay/shell-helpers.sh");
@@ -40,6 +40,36 @@ fn shell_helpers_defines_tgs_tgp_and_cache_report() {
         src.contains("cache-report()"),
         "shell-helpers.sh should define `cache-report()`"
     );
+}
+
+/// Fish uses native helper syntax and must not source the POSIX helper file.
+#[test]
+fn fish_config_uses_native_helpers() {
+    let config = read_helper("images/default/shell/config.fish");
+    let helpers = read_helper("images/default/config-overlay/shell-helpers.fish");
+
+    assert!(
+        config.contains("shell-helpers.fish"),
+        "fish config should source the native fish helper file"
+    );
+    assert!(
+        !config.contains("shell-helpers.sh"),
+        "fish config should not source the POSIX helper file"
+    );
+
+    for needle in [
+        "function tgs",
+        "function tgp",
+        "function tgpull",
+        "function cache-report",
+        "function tillandsias-help",
+    ] {
+        assert!(
+            helpers.contains(needle),
+            "shell-helpers.fish should define `{}`",
+            needle
+        );
+    }
 }
 
 /// The Wave-7 cache constants are the only allowed source of cache tier paths.
@@ -111,6 +141,7 @@ fn mcp_git_tools_lists_new_tools() {
 fn forge_shell_tools_trace_present() {
     for path in [
         "images/default/config-overlay/shell-helpers.sh",
+        "images/default/config-overlay/shell-helpers.fish",
         "images/default/config-overlay/mcp/git-tools.sh",
         "images/default/config-overlay/opencode/instructions/cache-discipline.md",
     ] {

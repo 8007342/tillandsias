@@ -126,6 +126,13 @@ Code that invokes Podman SHALL classify errors as transient (network unreachable
 - **WHEN** `podman run` fails with exit code 125 (invalid flags) or permission denied
 - **THEN** the runtime immediately reports the configuration error and does not retry
 
+#### Scenario: IPAM allocation failures abort without retry
+- **WHEN** `podman run` fails with an IPAM allocation error, an "already
+  allocated" address, or a netavark cleanup error
+- **THEN** the runtime MUST classify the failure as permanent
+- **AND** the launch output MUST surface an actionable diagnostic instead of
+  retrying the same stale network allocation
+
 ### Requirement: Rootless-first execution with keep-id mapping
 - **ID**: podman-idiomatic-patterns.rootless.keep-id-first@v1
 - **Modality**: MUST
@@ -149,18 +156,31 @@ All Tillandsias container operations SHALL execute in rootless Podman mode. `--u
 - **THEN** the escaped process runs as the invoking user's UID on the host, not as root
 - **AND** it has access only to `$HOME` and user-owned resources, not `/etc`, `/root`, or system directories
 
-### Requirement: Enclave network per project with internal DNS
+### Requirement: Enclave network with internal DNS and dynamic IPAM
 - **ID**: podman-idiomatic-patterns.network.enclave-per-project@v1
 - **Modality**: MUST
 - **Measurable**: true
 - **Invariants**: [podman-idiomatic-patterns.invariant.enclave-network-isolated]
 
-Each project SHALL have exactly one Podman bridge network named `tillandsias-<project>-enclave`. Containers within the enclave SHALL resolve each other by container name via internal DNS. The enclave network MUST be created before any enclave container launches and deleted on enclave shutdown.
+Tillandsias user-runtime launches SHALL use the `tillandsias-enclave` Podman
+bridge network with container DNS aliases (`proxy`, `git-service`,
+`inference`, `router`) instead of static IP assignments. Containers within the
+enclave SHALL resolve each other by container name or network alias via
+internal DNS. The enclave network MUST be created before any enclave container
+launches.
 
 #### Scenario: Containers resolve peers by name
 - **WHEN** containers `proxy`, `git`, `forge`, and `inference` are all on the enclave network
 - **THEN** `forge` can reach `proxy` at `http://proxy:3128` using the container name as hostname
 - **AND** no manual `/etc/hosts` entries are needed
+
+#### Scenario: Launch args do not pin static IPs
+- **WHEN** proxy, git, inference, router, browser, or forge container args are
+  constructed
+- **THEN** the argv MUST NOT contain `--ip`
+- **AND** Podman IPAM SHALL allocate addresses dynamically
+- **AND** service discovery SHALL depend on names and aliases, not hard-coded
+  `10.0.42.x` addresses
 
 #### Scenario: Network isolation from other projects
 - **WHEN** two projects have active enclaves simultaneously
@@ -168,9 +188,29 @@ Each project SHALL have exactly one Podman bridge network named `tillandsias-<pr
 - **AND** the isolation is enforced at the Podman bridge level, not by application-level filtering
 
 #### Scenario: Network cleanup on enclave shutdown
-- **WHEN** the enclave for a project is shut down
-- **THEN** `podman network rm tillandsias-<project>-enclave` is called after all containers are stopped
-- **AND** the network does not persist after shutdown
+- **WHEN** the user-runtime stack has no active forge containers
+- **THEN** proxy, git, and inference containers created for foreground launch
+  SHALL be removed
+- **AND** the shared enclave network MAY remain for tray/router reuse
+
+### Requirement: Observed launch helpers produce actionable failures
+
+Container launches that are user-visible SHALL use observed Podman helpers so
+debug output reports the launch stage, container name, state transition, and a
+short next-step hint before redacted argv details.
+
+#### Scenario: Debug container launch line
+- **WHEN** a debug launch starts a stack service
+- **THEN** stderr SHALL include
+  `event:container_launch stage=<stage> state=starting container=<name>`
+- **AND** successful start SHALL include `state=running`
+- **AND** attached foreground forge exit SHALL include `state=exited`
+
+#### Scenario: Debug container failure line
+- **WHEN** a launch fails
+- **THEN** stderr SHALL include `state=failed`
+- **AND** the error body SHALL include a one-line cause, a `next:` hint, and
+  a redacted `podman run` argv
 
 ## Invariants
 

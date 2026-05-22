@@ -320,6 +320,7 @@ struct ProjectEntry {
 enum LaunchKind {
     OpenCode,
     OpenCodeWeb,
+    Observatorium,
     Claude,
     /// Codex CLI agent — launches `entrypoint-forge-codex.sh` in the host
     /// terminal. @trace spec:tray-ux
@@ -911,6 +912,7 @@ fn action_slug(kind: LaunchKind) -> &'static str {
     match kind {
         LaunchKind::OpenCode => "opencode",
         LaunchKind::OpenCodeWeb => "opencode-web",
+        LaunchKind::Observatorium => "observatorium",
         LaunchKind::Claude => "claude",
         LaunchKind::Codex => "codex",
         LaunchKind::Maintenance => "terminal",
@@ -1021,6 +1023,10 @@ fn build_launch_spec(project: &ProjectEntry, kind: LaunchKind, image: &str) -> C
             .detached()
             .persistent()
             .entrypoint("/usr/local/bin/entrypoint-forge-opencode-web.sh"),
+        LaunchKind::Observatorium => spec
+            .detached()
+            .persistent()
+            .entrypoint("/usr/local/bin/entrypoint.sh"),
         LaunchKind::Claude => spec
             .interactive()
             .tty()
@@ -1114,6 +1120,10 @@ fn launch_project_action(
             // browser surface. Untouched per the per-project-action contract.
             let project_path = project.path.display().to_string();
             super::run_opencode_web_mode(&project_path, None, None, false)
+        }
+        LaunchKind::Observatorium => {
+            let project_path = project.path.display().to_string();
+            super::run_observatorium_mode(&project_path, None, false)
         }
         LaunchKind::Claude | LaunchKind::Codex | LaunchKind::OpenCode | LaunchKind::Maintenance => {
             // @trace spec:tray-ux, spec:browser-isolation-tray-integration
@@ -1576,8 +1586,9 @@ fn build_separator_item(id: i32) -> MenuNode {
 // | +1     | Codex           | 🏗️      |
 // | +2     | OpenCode        | 💻      |
 // | +3     | OpenCode Web    | 📐      |
-// | +4     | Maintenance     | 🔧      |
-// | +5     | (submenu node)  | —       |
+// | +4     | Observatorium   | 🔭      |
+// | +5     | Maintenance     | 🔧      |
+// | +6     | (submenu node)  | —       |
 //
 // Helpers: [`local_project_base`], [`cloud_project_base`], and
 // [`project_action_from_id`] are the only place this layout is encoded.
@@ -1587,15 +1598,17 @@ enum LeafAction {
     Codex,
     OpenCode,
     OpenCodeWeb,
+    Observatorium,
     Maintenance,
 }
 
 impl LeafAction {
-    const ALL: [LeafAction; 5] = [
+    const ALL: [LeafAction; 6] = [
         LeafAction::Claude,
         LeafAction::Codex,
         LeafAction::OpenCode,
         LeafAction::OpenCodeWeb,
+        LeafAction::Observatorium,
         LeafAction::Maintenance,
     ];
 
@@ -1605,7 +1618,8 @@ impl LeafAction {
             LeafAction::Codex => 1,
             LeafAction::OpenCode => 2,
             LeafAction::OpenCodeWeb => 3,
-            LeafAction::Maintenance => 4,
+            LeafAction::Observatorium => 4,
+            LeafAction::Maintenance => 5,
         }
     }
 
@@ -1615,6 +1629,7 @@ impl LeafAction {
             LeafAction::Codex => "\u{1F3D7}\u{FE0F} Codex",
             LeafAction::OpenCode => "\u{1F4BB} OpenCode",
             LeafAction::OpenCodeWeb => "\u{1F4D0} OpenCode Web",
+            LeafAction::Observatorium => "\u{1F52D} Observatorium",
             LeafAction::Maintenance => "\u{1F527} Maintenance",
         }
     }
@@ -1637,8 +1652,8 @@ const CLOUD_BASE_LO: i32 = 0x5000_0000;
 const CLOUD_BASE_HI: i32 = 0x7FFF_FFF0;
 const LOADING_LOCAL_ID: i32 = 0x7FFF_FFFD;
 const LOADING_CLOUD_ID: i32 = 0x7FFF_FFFE;
-const PROJECT_LEAF_COUNT: i32 = 5;
-const PROJECT_SUBMENU_OFFSET: i32 = 5;
+const PROJECT_LEAF_COUNT: i32 = 6;
+const PROJECT_SUBMENU_OFFSET: i32 = 6;
 
 fn project_base(name: &str, scope: ProjectScope) -> i32 {
     use std::hash::Hash;
@@ -1701,7 +1716,7 @@ fn project_action_from_id(
 }
 
 // @trace spec:tray-minimal-ux
-/// Build the per-project submenu (five leaves, no nesting).
+/// Build the per-project submenu (six leaves, no nesting).
 ///
 /// The submenu node's id is `base + PROJECT_SUBMENU_OFFSET`; each leaf is
 /// `base + LeafAction::offset()`. All leaves are emitted with `enabled=true`
@@ -2415,6 +2430,7 @@ impl DbusMenuIface {
                         // list so the submenu populates without waiting for
                         // the next AboutToShow.
                         if authed {
+                            remote_projects::invalidate_github_projects_cache();
                             let _ = cloud::refresh_cloud_projects_if_stale(
                                 service_for_task.state_handle(),
                                 true,
@@ -2446,6 +2462,7 @@ impl DbusMenuIface {
                             LeafAction::Claude => LaunchKind::Claude,
                             LeafAction::OpenCode => LaunchKind::OpenCode,
                             LeafAction::OpenCodeWeb => LaunchKind::OpenCodeWeb,
+                            LeafAction::Observatorium => LaunchKind::Observatorium,
                             LeafAction::Maintenance => LaunchKind::Maintenance,
                             LeafAction::Codex => LaunchKind::Codex,
                         };
@@ -2986,9 +3003,9 @@ mod tests {
     }
 
     #[test]
-    fn project_submenu_has_five_leaves_in_order() {
-        // Per-project submenus are 5-leaf flat menus: Claude, Codex,
-        // OpenCode, OpenCode Web, Maintenance. Order is locked by
+    fn project_submenu_has_six_leaves_in_order() {
+        // Per-project submenus are 6-leaf flat menus: Claude, Codex,
+        // OpenCode, OpenCode Web, Observatorium, Maintenance. Order is locked by
         // `LeafAction::offset`.
         let project = ProjectEntry {
             name: "alpha".to_string(),
@@ -3003,17 +3020,18 @@ mod tests {
             .build();
         let submenu = build_project_submenu(&state, &project, ProjectScope::Local);
 
-        // Five leaves, no sub-submenus.
-        assert_eq!(submenu.2.len(), 5);
+        // Six leaves, no sub-submenus.
+        assert_eq!(submenu.2.len(), 6);
         let leaf_labels = labels(&submenu);
         // labels() walks the layout depth-first; index 0 is the submenu
-        // container, indices 1..=5 are the leaves in offset order.
+        // container, indices 1..=6 are the leaves in offset order.
         assert_eq!(leaf_labels[0], "alpha");
         assert!(leaf_labels[1].contains("Claude"));
         assert!(leaf_labels[2].contains("Codex"));
         assert!(leaf_labels[3].contains("OpenCode") && !leaf_labels[3].contains("Web"));
         assert!(leaf_labels[4].contains("OpenCode Web"));
-        assert!(leaf_labels[5].contains("Maintenance"));
+        assert!(leaf_labels[5].contains("Observatorium"));
+        assert!(leaf_labels[6].contains("Maintenance"));
     }
 
     #[test]

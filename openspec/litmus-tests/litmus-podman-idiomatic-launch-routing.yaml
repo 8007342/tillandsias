@@ -6,6 +6,32 @@ description: Verify headless and observatorium launch paths cannot bypass the sh
 severity: critical
 size: instant
 
+rust_queries:
+  - id: podman-idiomatic-patterns.rust.run-opencode-web-debug-param@v1
+    spec: podman-idiomatic-patterns
+    processor: syn
+    file: crates/tillandsias-headless/src/main.rs
+    method: run_opencode_web_mode
+    param: debug
+    type: bool
+    usage: param_used
+    required: true
+    score: rust_signature_match
+    name_quality: required
+  - id: podman-idiomatic-patterns.rust.caddy-reload-shared-podman-command@v1
+    spec: podman-idiomatic-patterns
+    processor: tree_sitter
+    file: crates/tillandsias-headless/src/main.rs
+    method: caddy_reload_routes
+    param: debug
+    type: bool
+    usage:
+      kind: contains
+      text: podman_command()
+    required: true
+    score: rust_param_usage_match
+    name_quality: required
+
 preconditions:
   - workspace contains crates/tillandsias-headless
   - cargo is available in PATH

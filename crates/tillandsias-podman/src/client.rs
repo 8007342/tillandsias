@@ -1,9 +1,10 @@
 // @trace spec:security-privacy-isolation, spec:podman-idiomatic-patterns
+use std::process::Stdio;
 use std::sync::Arc;
 
 use tracing::{debug, info, instrument, warn};
 
-use crate::backend::{BackendRef, CommandFailure, OperationKind, RealBackend};
+use crate::backend::{BackendRef, CommandFailure, OperationKind, RealBackend, redact_argv};
 use crate::diagnostics::{ContainerDiagnostics, LogTail};
 
 /// Output from executing a command in a container (podman or WSL).
@@ -800,6 +801,140 @@ impl PodmanClient {
         }
     }
 
+    /// Run a detached/background container and render user-actionable
+    /// diagnostics on failure.
+    ///
+    /// @trace spec:podman-idiomatic-patterns, spec:runtime-diagnostics-stream
+    pub async fn run_container_observed(
+        &self,
+        stage: &str,
+        container_name: &str,
+        args: &[String],
+        debug_enabled: bool,
+    ) -> Result<String, String> {
+        emit_launch_event(debug_enabled, stage, container_name, "starting", None);
+        match self.run_container(args).await {
+            Ok(output) => {
+                emit_launch_event(debug_enabled, stage, container_name, "running", None);
+                Ok(output)
+            }
+            Err(err) => {
+                let detail = self
+                    .format_observed_launch_failure(stage, container_name, args, &err)
+                    .await;
+                emit_launch_event(
+                    debug_enabled,
+                    stage,
+                    container_name,
+                    "failed",
+                    Some(summary_line(&detail)),
+                );
+                Err(detail)
+            }
+        }
+    }
+
+    /// Run an interactive container attached to the current terminal.
+    ///
+    /// This inherits stdio so TUI agents receive a real terminal, while still
+    /// reporting structured launch events and post-failure diagnostics.
+    /// @trace spec:podman-idiomatic-patterns, spec:runtime-diagnostics-stream
+    pub async fn run_container_attached_observed(
+        &self,
+        stage: &str,
+        container_name: &str,
+        args: &[String],
+        debug_enabled: bool,
+    ) -> Result<(), String> {
+        emit_launch_event(
+            debug_enabled,
+            stage,
+            container_name,
+            "starting",
+            Some("attached=true"),
+        );
+
+        let mut full_args = vec!["run".to_string()];
+        full_args.extend_from_slice(args);
+        let status = crate::podman_cmd()
+            .args(&full_args)
+            .stdin(Stdio::inherit())
+            .stdout(Stdio::inherit())
+            .stderr(Stdio::inherit())
+            .status()
+            .await
+            .map_err(|err| {
+                let message = format!(
+                    "stage '{stage}' could not spawn attached container {container_name}: {err}\nnext: verify podman is available in this desktop session\nredacted argv: podman {}",
+                    redact_argv(&full_args).join(" ")
+                );
+                emit_launch_event(
+                    debug_enabled,
+                    stage,
+                    container_name,
+                    "failed",
+                    Some(summary_line(&message)),
+                );
+                message
+            })?;
+
+        if status.success() {
+            emit_launch_event(
+                debug_enabled,
+                stage,
+                container_name,
+                "exited",
+                Some("status=0"),
+            );
+            return Ok(());
+        }
+
+        let status_code = status
+            .code()
+            .map(|code| code.to_string())
+            .unwrap_or_else(|| "signal".to_string());
+        let detail = format_attached_command_failure(stage, container_name, &status_code);
+        emit_launch_event(
+            debug_enabled,
+            stage,
+            container_name,
+            "failed",
+            Some(summary_line(&detail)),
+        );
+        Err(detail)
+    }
+
+    async fn format_observed_launch_failure(
+        &self,
+        stage: &str,
+        container_name: &str,
+        args: &[String],
+        err: &PodmanError,
+    ) -> String {
+        let mut diagnostics = self.diagnostics_snapshot(container_name).await;
+        if let PodmanError::CommandFailure(failure) = err {
+            diagnostics.failure = Some(failure.clone());
+        }
+
+        let mut full_args = vec!["run".to_string()];
+        full_args.extend_from_slice(args);
+
+        let mut parts = vec![
+            format!("stage '{stage}' failed for container {container_name}"),
+            format!("cause: {err}"),
+            observed_failure_hint(stage, container_name, args),
+            format!(
+                "redacted argv: podman {}",
+                redact_argv(&full_args).join(" ")
+            ),
+        ];
+        let rendered = diagnostics.render_human();
+        if !rendered.trim().is_empty() {
+            parts.push(rendered);
+        }
+        parts.join("\n")
+    }
+
     pub async fn wait_healthy(&self, name: &str) -> Result<(), PodmanError> {
         let args = vec![
             "wait".into(),
@@ -1367,6 +1502,99 @@ impl PodmanError {
             PodmanError::NotFound(_) | PodmanError::ParseError(_) => false,
         }
     }
+}
+
+fn emit_launch_event(
+    enabled: bool,
+    stage: &str,
+    container_name: &str,
+    state: &str,
+    detail: Option<&str>,
+) {
+    if !enabled {
+        return;
+    }
+
+    let mut line = format!(
+        "event:container_launch stage={} state={} container={}",
+        shell_escape_field(stage),
+        shell_escape_field(state),
+        shell_escape_field(container_name)
+    );
+    if let Some(detail) = detail {
+        line.push_str(" detail=");
+        line.push_str(&shell_escape_field(detail));
+    }
+    eprintln!("{line}");
+}
+
+fn summary_line(value: &str) -> &str {
+    value.lines().next().unwrap_or(value)
+}
+
+fn observed_failure_hint(stage: &str, _container_name: &str, args: &[String]) -> String {
+    let joined = args.join(" ");
+    if joined.contains("TILLANDSIAS_PROJECT_HOST_MOUNT=1") {
+        return "next: check the entrypoint logs above; this launch uses a protected host-mounted project and must not wipe or clone over it".to_string();
+    }
+    if stage.contains("git") {
+        return "next: inspect the git mirror container logs and verify the project mirror exists"
+            .to_string();
+    }
+    if stage.contains("inference") {
+        return "next: inspect the inference container logs; local models may still be starting"
+            .to_string();
+    }
+    if stage.contains("proxy") {
+        return "next: inspect the proxy container logs and CA bundle mounts".to_string();
+    }
+    "next: inspect the entrypoint lines immediately above and the rendered container diagnostics below".to_string()
+}
+
+fn format_attached_command_failure(stage: &str, container_name: &str, status_code: &str) -> String {
+    let mut lines = vec![
+        format!("stage '{stage}' attached command exited with status {status_code}"),
+        format!("container: {container_name}"),
+        "cause: the container launched and the foreground tool exited non-zero".to_string(),
+    ];
+
+    if matches!(stage, "claude" | "codex" | "opencode") {
+        lines.push(
+            "next: read the agent output immediately above; auth, upstream service, or model availability errors are agent/runtime issues, not podman launch failures"
+                .to_string(),
+        );
+    } else {
+        lines.push(
+            "next: read the terminal output immediately above; the runtime stack was started and the foreground command returned this status"
+                .to_string(),
+        );
+    }
+
+    lines.join("\n")
+}
+
+fn shell_escape_field(value: &str) -> String {
+    if value
+        .chars()
+        .all(|ch| ch.is_ascii_alphanumeric() || matches!(ch, '-' | '_' | '.' | '/' | ':' | '='))
+    {
+        return value.to_string();
+    }
+
+    let mut escaped = String::from("\"");
+    for ch in value.chars() {
+        match ch {
+            '\\' => escaped.push_str("\\\\"),
+            '"' => escaped.push_str("\\\""),
+            '\n' => escaped.push_str("\\n"),
+            '\r' => escaped.push_str("\\r"),
+            '\t' => escaped.push_str("\\t"),
+            c if c.is_control() => escaped.push_str(&format!("\\u{:04x}", c as u32)),
+            c => escaped.push(c),
+        }
+    }
+    escaped.push('"');
+    escaped
 }
 
 /// Information about a container in the enclave.

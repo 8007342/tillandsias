@@ -1,7 +1,8 @@
 #!/usr/bin/env bash
 # @trace spec:forge-shell-tools, spec:forge-environment-discoverability, spec:forge-cache-dual
 # Shell helper functions for Tillandsias forge container
-# Source this file from bashrc, zshrc, or config.fish
+# Source this POSIX shell file from bashrc or zshrc.
+# Fish uses /etc/tillandsias/shell-helpers.fish.
 #
 # Shortcuts (paired with MCP tools in config-overlay/mcp/git-tools.sh):
 #   tgs           — tillandsias git status (mirror-aware short status)

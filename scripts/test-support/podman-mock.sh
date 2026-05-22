@@ -61,6 +61,16 @@ case "$subcommand" in
                 printf '[status-check] forge online\n'
                 exit 0
             fi
+            if [[ "$cmd_string" == *"gh api user/repos"* ]]; then
+                printf '[{"name":"forge","owner":{"login":"8007342"},"description":"Mock repo","url":"https://github.com/8007342/forge","archived":false}]\n'
+                exit 0
+            fi
+            if [[ "$cmd_string" == *"gh repo clone"* ]]; then
+                target_path="${@: -1}"
+                mkdir -p "$target_path/.git"
+                printf 'mock-clone-ok\n'
+                exit 0
+            fi
             if [[ "$cmd_string" == *"/run/secrets/"* ]]; then
                 for arg in "$@"; do
                     case "$arg" in

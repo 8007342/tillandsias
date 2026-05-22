@@ -2,7 +2,7 @@
 name: litmus:clickable-trace-index-observatorium-skeleton
 spec: clickable-trace-index
 phase: pre-build
-description: Verify the local observatorium launcher serves the current checkout and exposes the minimal three-pane shell
+description: Verify the local observatorium launcher serves project source under /source and exposes the minimal three-pane shell
 severity: medium
 size: quick
 
@@ -12,21 +12,25 @@ preconditions:
 
 critical_path:
   - step: "launch observatorium without browser automation"
-    command: "OBSERVATORIUM_BROWSER=none ./scripts/run-observatorium.sh --recreate"
+    command: "OBSERVATORIUM_BROWSER=none OBSERVATORIUM_PORT=8787 ./scripts/run-observatorium.sh --project . --recreate"
     timeout_ms: 120000
 
   - step: "verify the page is reachable"
     command: "curl -fsS http://127.0.0.1:8787/observatorium/ | grep -F 'Observatorium' && curl -fsS http://127.0.0.1:8787/observatorium/ | grep -F 'Specs' && curl -fsS http://127.0.0.1:8787/observatorium/ | grep -F 'Cheatsheets'"
     timeout_ms: 120000
 
+  - step: "verify project source is mounted below /source"
+    command: "curl -fsS http://127.0.0.1:8787/source/TRACES.md | grep -F 'Trace | Spec | Source Files'"
+    timeout_ms: 120000
+
   - step: "verify the launcher stays idempotent"
-    command: "OBSERVATORIUM_BROWSER=none ./scripts/run-observatorium.sh"
+    command: "OBSERVATORIUM_BROWSER=none OBSERVATORIUM_PORT=8787 ./scripts/run-observatorium.sh --project ."
     timeout_ms: 120000
 
 observability:
   traces:
     - "@trace spec:clickable-trace-index"
-  expected_log: "Observatorium launcher reuses or recreates the container and serves the current checkout"
+  expected_log: "Observatorium launcher reuses or recreates the container and serves project source under /source"
   log_fields:
     spec: "clickable-trace-index"
     test: "clickable-trace-index-observatorium-skeleton"

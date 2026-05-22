@@ -1,13 +1,15 @@
 // @trace spec:remote-projects, spec:gh-auth-script
 //! GitHub project discovery and caching for tray's "Clone Project" feature.
 //!
-//! Queries GitHub API via `gh`, filters projects based on access, and caches
-//! results with 5-minute TTL to avoid rate limiting.
+//! Queries GitHub API via `gh` inside the git image, filters projects based on
+//! access, and caches results in memory with a 5-minute TTL to avoid repeated
+//! container launches.
 
 use serde::{Deserialize, Serialize};
-use std::fs;
-use std::path::{Path, PathBuf};
+use std::env;
+use std::path::Path;
 use std::process::Command;
+use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::{debug, warn};
 
@@ -21,143 +23,209 @@ pub struct GitHubProject {
     pub archived: bool,
 }
 
-/// Cache entry with timestamp for TTL management.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 struct CacheEntry {
     projects: Vec<GitHubProject>,
     cached_at: u64,
 }
 
-/// Cache TTL in seconds (5 minutes).
+#[derive(Debug, Clone, Deserialize)]
+struct GhRepoOwner {
+    login: String,
+}
+
+#[derive(Debug, Clone, Deserialize)]
+struct GhRepo {
+    name: String,
+    owner: GhRepoOwner,
+    description: Option<String>,
+    url: String,
+    archived: bool,
+}
+
 const CACHE_TTL_SECS: u64 = 300;
 
-/// Get the cache file path: ~/.tillandsias/cache/projects.json
-fn cache_path() -> Option<PathBuf> {
-    std::env::var("HOME").ok().map(|home| {
-        PathBuf::from(home)
-            .join(".tillandsias")
-            .join("cache")
-            .join("projects.json")
-    })
+static REMOTE_PROJECT_CACHE: OnceLock<Mutex<Option<CacheEntry>>> = OnceLock::new();
+
+fn cache() -> &'static Mutex<Option<CacheEntry>> {
+    REMOTE_PROJECT_CACHE.get_or_init(|| Mutex::new(None))
 }
 
-/// Check if cache is still valid (within TTL).
-fn is_cache_valid(cached_at: u64) -> bool {
-    let now = SystemTime::now()
+fn now_secs() -> u64 {
+    SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .map(|d| d.as_secs())
-        .unwrap_or(0);
-    now.saturating_sub(cached_at) < CACHE_TTL_SECS
+        .unwrap_or(0)
 }
 
-/// Discover GitHub projects using `gh api`.
-///
-/// Queries authenticated repositories, filters out archived and private repos
-/// (unless user has access), and returns top projects by recent activity.
-/// Results are cached in ~/.tillandsias/cache/projects.json with 5-minute TTL.
-///
-/// # Returns
-/// A vector of discovered projects, or empty vec if gh is unavailable.
-pub fn discover_github_projects() -> Vec<GitHubProject> {
-    // Try to load from cache first
-    if let Some(cache_path) = cache_path()
-        && let Ok(content) = fs::read_to_string(&cache_path)
-        && let Ok(entry) = serde_json::from_str::<CacheEntry>(&content)
+fn is_cache_valid(cached_at: u64) -> bool {
+    now_secs().saturating_sub(cached_at) < CACHE_TTL_SECS
+}
+
+fn git_image_tag() -> String {
+    env::var("TILLANDSIAS_GIT_IMAGE").unwrap_or_else(|_| "tillandsias-git:latest".to_string())
+}
+
+fn run_git_image_shell(script: &str, extra_args: &[&str]) -> Result<String, String> {
+    let image = git_image_tag();
+    let mut command = Command::new("podman");
+    command.args([
+        "run",
+        "--rm",
+        "--secret",
+        "tillandsias-github-token",
+        "--entrypoint",
+        "/bin/sh",
+        &image,
+        "-ceu",
+        script,
+        "gh",
+    ]);
+    command.args(extra_args);
+
+    let output = command
+        .output()
+        .map_err(|err| format!("failed to spawn containerized gh: {err}"))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!(
+            "containerized gh exited with status {}: {}",
+            output.status,
+            stderr.trim()
+        ));
+    }
+
+    Ok(String::from_utf8_lossy(&output.stdout).to_string())
+}
+
+fn fetch_github_projects() -> Result<Vec<GitHubProject>, String> {
+    let script = r#"
+set -eu
+export GH_PAGER=cat
+cat /run/secrets/tillandsias-github-token 2>/dev/null | gh auth login --hostname github.com --with-token >/dev/null 2>&1
+exec gh api user/repos?per_page=100\&sort=pushed\&type=owner
+"#;
+
+    let stdout = run_git_image_shell(script, &[])?;
+    let repos: Vec<GhRepo> =
+        serde_json::from_str(&stdout).map_err(|err| format!("invalid gh JSON: {err}"))?;
+
+    Ok(repos
+        .into_iter()
+        .filter(|repo| !repo.archived)
+        .map(|repo| GitHubProject {
+            name: repo.name,
+            owner: repo.owner.login,
+            description: repo.description,
+            url: repo.url,
+            archived: repo.archived,
+        })
+        .collect())
+}
+
+fn discover_github_projects_inner() -> Result<Vec<GitHubProject>, String> {
+    if let Ok(guard) = cache().lock()
+        && let Some(entry) = guard.as_ref()
         && is_cache_valid(entry.cached_at)
     {
         debug!(
-            "github_projects: loaded from cache ({} projects)",
+            "github_projects: loaded from in-memory cache ({} projects)",
             entry.projects.len()
         );
-        return entry.projects;
+        return Ok(entry.projects.clone());
     }
 
-    // Query GitHub API via `gh`
-    let output = Command::new("gh")
-        .args([
-            "api",
-            "user/repos",
-            "--jq",
-            ".[] | {name, owner: .owner.login, description, url: .html_url, archived} | select(.archived == false)",
-        ])
-        .output();
+    let projects = fetch_github_projects()?;
+    debug!("github_projects: discovered {} projects", projects.len());
 
-    let projects = match output {
-        Ok(output) if output.status.success() => {
-            let stdout = String::from_utf8_lossy(&output.stdout);
-            let mut projects = Vec::new();
-
-            for line in stdout.lines() {
-                if let Ok(project) = serde_json::from_str::<GitHubProject>(line) {
-                    projects.push(project);
-                }
-            }
-
-            debug!("github_projects: discovered {} projects", projects.len());
-            projects
-        }
-        Ok(output) => {
-            let stderr = String::from_utf8_lossy(&output.stderr);
-            warn!("github_projects: gh api failed: {}", stderr);
-            Vec::new()
-        }
-        Err(err) => {
-            debug!("github_projects: gh not available: {}", err);
-            Vec::new()
-        }
-    };
-
-    // Cache the results
-    if let Some(cache_path) = cache_path() {
-        if let Some(parent) = cache_path.parent() {
-            let _ = fs::create_dir_all(parent);
-        }
-        let entry = CacheEntry {
+    if let Ok(mut guard) = cache().lock() {
+        *guard = Some(CacheEntry {
             projects: projects.clone(),
-            cached_at: SystemTime::now()
-                .duration_since(UNIX_EPOCH)
-                .map(|d| d.as_secs())
-                .unwrap_or(0),
-        };
-        if let Ok(json) = serde_json::to_string(&entry) {
-            let _ = fs::write(&cache_path, json);
-        }
+            cached_at: now_secs(),
+        });
     }
 
-    projects
+    Ok(projects)
+}
+
+/// Discover GitHub projects using `gh` inside the git image.
+///
+/// Queries authenticated repositories, filters out archived repos, and
+/// returns top projects by recent activity. Results are cached in memory with
+/// a 5-minute TTL.
+pub fn discover_github_projects() -> Vec<GitHubProject> {
+    match discover_github_projects_inner() {
+        Ok(projects) => projects,
+        Err(err) => {
+            warn!("github_projects: containerized gh failed: {}", err);
+            Vec::new()
+        }
+    }
+}
+
+/// Discover GitHub projects and preserve the fetch error for callers that
+/// need to surface it in the UI.
+pub fn discover_github_projects_result() -> Result<Vec<GitHubProject>, String> {
+    discover_github_projects_inner()
+}
+
+/// Clear the cached remote project list.
+pub fn invalidate_github_projects_cache() {
+    if let Ok(mut guard) = cache().lock() {
+        *guard = None;
+    }
 }
 
 /// Clone a project from a GitHub repository URL to a target directory.
 ///
-/// Uses the git mirror service (offline) to avoid exposing credentials to the forge.
-/// Creates a basic `.tillandsias/config.toml` in the cloned project.
-///
-/// # Arguments
-/// * `repo_url` - Full GitHub repository URL (e.g., https://github.com/owner/repo)
-/// * `target_path` - Target directory to clone into
-///
-/// # Returns
-/// Ok(()) if clone succeeds, Err otherwise.
+/// Uses the git image so clone/auth flows remain inside the container that
+/// owns GitHub credentials.
 pub fn clone_project_from_github(repo_url: &str, target_path: &Path) -> Result<(), String> {
-    // Create parent directory
     if let Some(parent) = target_path.parent() {
-        fs::create_dir_all(parent).map_err(|e| format!("failed to create parent dir: {}", e))?;
+        std::fs::create_dir_all(parent)
+            .map_err(|err| format!("failed to create parent dir: {}", err))?;
     }
 
-    // Clone using git (via enclave mirror in production, direct for testing)
-    let status = Command::new("git")
-        .args(["clone", repo_url, target_path.to_string_lossy().as_ref()])
-        .status()
-        .map_err(|e| format!("git clone failed: {}", e))?;
+    let image = git_image_tag();
+    let repo_dir = target_path.to_string_lossy().to_string();
+    let script = r#"
+set -eu
+export GH_PAGER=cat
+cat /run/secrets/tillandsias-github-token 2>/dev/null | gh auth login --hostname github.com --with-token >/dev/null 2>&1
+exec gh repo clone "$1" "$2"
+"#;
 
-    if !status.success() {
-        return Err("git clone exited with error".to_string());
+    let output = Command::new("podman")
+        .args([
+            "run",
+            "--rm",
+            "--secret",
+            "tillandsias-github-token",
+            "--entrypoint",
+            "/bin/sh",
+            &image,
+            "-ceu",
+            script,
+            "gh",
+            repo_url,
+            &repo_dir,
+        ])
+        .output()
+        .map_err(|err| format!("git clone failed: {}", err))?;
+
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!(
+            "containerized gh repo clone exited with status {}: {}",
+            output.status,
+            stderr.trim()
+        ));
     }
 
-    // Create basic .tillandsias/config.toml
     let tillandsias_dir = target_path.join(".tillandsias");
-    fs::create_dir_all(&tillandsias_dir)
-        .map_err(|e| format!("failed to create .tillandsias dir: {}", e))?;
+    std::fs::create_dir_all(&tillandsias_dir)
+        .map_err(|err| format!("failed to create .tillandsias dir: {}", err))?;
 
     let config_path = tillandsias_dir.join("config.toml");
     let config_content = r#"# Tillandsias project configuration
@@ -170,8 +238,8 @@ agent = "opencode-web"
 image = "tillandsias-forge"
 "#;
 
-    fs::write(&config_path, config_content)
-        .map_err(|e| format!("failed to write config.toml: {}", e))?;
+    std::fs::write(&config_path, config_content)
+        .map_err(|err| format!("failed to write config.toml: {}", err))?;
 
     debug!(
         "github_project_clone: cloned {} to {:?}",
@@ -183,23 +251,113 @@ image = "tillandsias-forge"
 #[cfg(test)]
 mod tests {
     use super::*;
+    #[cfg(unix)]
+    use std::os::unix::fs::symlink;
+    use std::sync::Mutex;
+    use tempfile::tempdir;
 
-    #[test]
-    fn test_cache_path() {
-        let path = cache_path();
-        assert!(path.is_some());
-        let path = path.unwrap();
-        assert!(path.to_string_lossy().contains(".tillandsias/cache"));
+    static TEST_LOCK: Mutex<()> = Mutex::new(());
+
+    fn install_podman_mock() -> tempfile::TempDir {
+        let dir = tempdir().expect("tempdir");
+        #[cfg(unix)]
+        {
+            let mock = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                .join("../../scripts/test-support/podman-mock.sh");
+            symlink(&mock, dir.path().join("podman")).expect("podman symlink");
+        }
+        dir
     }
 
     #[test]
     fn test_is_cache_valid() {
-        let now = SystemTime::now()
-            .duration_since(UNIX_EPOCH)
-            .unwrap()
-            .as_secs();
+        let now = now_secs();
         assert!(is_cache_valid(now));
-        assert!(is_cache_valid(now - 100)); // < 5 min old
-        assert!(!is_cache_valid(now - 600)); // > 5 min old
+        assert!(is_cache_valid(now - 100));
+        assert!(!is_cache_valid(now - 600));
+    }
+
+    #[test]
+    fn test_cache_invalidation() {
+        let _guard = TEST_LOCK.lock().expect("test lock");
+        invalidate_github_projects_cache();
+        let mut guard = cache().lock().expect("cache lock");
+        *guard = Some(CacheEntry {
+            projects: vec![GitHubProject {
+                name: "cached".to_string(),
+                owner: "owner".to_string(),
+                description: None,
+                url: "https://github.com/owner/cached".to_string(),
+                archived: false,
+            }],
+            cached_at: now_secs(),
+        });
+        drop(guard);
+
+        invalidate_github_projects_cache();
+        assert!(cache().lock().expect("cache lock").is_none());
+    }
+
+    #[test]
+    fn discover_projects_uses_containerized_gh() {
+        let _guard = TEST_LOCK.lock().expect("test lock");
+        let podman_dir = install_podman_mock();
+        let original_path = std::env::var_os("PATH");
+        let mock_path = format!(
+            "{}:{}",
+            podman_dir.path().display(),
+            original_path
+                .as_ref()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default()
+        );
+        unsafe { std::env::set_var("PATH", mock_path) };
+        unsafe { std::env::set_var("TILLANDSIAS_GIT_IMAGE", "mock-image") };
+        invalidate_github_projects_cache();
+
+        let projects = discover_github_projects_result().expect("containerized gh fetch");
+        assert_eq!(projects.len(), 1);
+        assert_eq!(projects[0].name, "forge");
+        assert_eq!(projects[0].owner, "8007342");
+        assert!(!projects[0].archived);
+
+        if let Some(path) = original_path {
+            unsafe { std::env::set_var("PATH", path) };
+        }
+        unsafe { std::env::remove_var("TILLANDSIAS_GIT_IMAGE") };
+        invalidate_github_projects_cache();
+    }
+
+    #[test]
+    fn clone_project_uses_containerized_gh() {
+        let _guard = TEST_LOCK.lock().expect("test lock");
+        let podman_dir = install_podman_mock();
+        let original_path = std::env::var_os("PATH");
+        let mock_path = format!(
+            "{}:{}",
+            podman_dir.path().display(),
+            original_path
+                .as_ref()
+                .map(|p| p.to_string_lossy().to_string())
+                .unwrap_or_default()
+        );
+        unsafe { std::env::set_var("PATH", mock_path) };
+        unsafe { std::env::set_var("TILLANDSIAS_GIT_IMAGE", "mock-image") };
+
+        let clone_root = tempdir().expect("clone tempdir");
+        let target = clone_root.path().join("forge");
+        clone_project_from_github("https://github.com/8007342/forge", &target)
+            .expect("containerized clone");
+
+        assert!(
+            target.join(".git").exists(),
+            "mock clone should create .git"
+        );
+        assert!(target.join(".tillandsias/config.toml").exists());
+
+        if let Some(path) = original_path {
+            unsafe { std::env::set_var("PATH", path) };
+        }
+        unsafe { std::env::remove_var("TILLANDSIAS_GIT_IMAGE") };
     }
 }

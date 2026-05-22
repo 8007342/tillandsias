@@ -142,6 +142,36 @@ that resume the convergence loop without rediscovery.
 - **AND** the chain SHOULD include a scoped CI step and a runtime entry boundary
 - **AND** the chain SHOULD be actionable by an agent without additional context
 
+### Requirement: Rust source relevance queries gate opt-in litmus tests
+- **ID**: spec-traceability.litmus.rust-source-query@v1
+- **Modality**: SHOULD
+- **Measurable**: true
+- **Invariants**: [spec-traceability.invariant.rust-query-stable-id, spec-traceability.invariant.rust-query-failure-traced]
+
+Litmus tests that claim Rust source relevance SHOULD declare `rust_queries`
+entries. Each entry names a stable `id`, governed `spec`, Rust `file`,
+`method`, expected `param`, optional `type`, `processor`, `usage`, and `score`
+bucket. Required query failures SHALL gate that litmus before its critical path
+runs.
+
+#### Scenario: Required Rust query gates a litmus
+- **WHEN** a litmus file contains a `rust_queries` entry with `required: true`
+- **THEN** the litmus runner SHALL execute `tillandsias-litmus-rust check --litmus <file>` before `critical_path`
+- **AND** a missing method, missing parameter, wrong type, unused parameter, unavailable required processor, or ambiguous query SHALL fail the litmus
+
+#### Scenario: Non-required Rust query records relevance drift without gating
+- **WHEN** a `rust_queries` entry omits `required: true`
+- **THEN** query failures SHALL be emitted as `RUST_QUERY WARN`
+- **AND** the warning MAY contribute a named CentiColon residual without blocking the litmus command path
+
+#### Scenario: Processor choice is explicit and least-powerful
+- **WHEN** a Rust query validates only signatures and parameter types
+- **THEN** it SHOULD use `processor: syn`
+- **WHEN** it validates method-body source shape
+- **THEN** it SHOULD use `processor: tree_sitter`
+- **WHEN** it requires cross-file semantic resolution
+- **THEN** it MAY use `processor: rust_analyzer` and declare the processor as an environment precondition
+
 ## Invariants
 
 ### Invariant: Architectural decisions are annotated
@@ -202,6 +232,16 @@ that resume the convergence loop without rediscovery.
 ### Invariant: Litmus chain reference is present
 - **ID**: spec-traceability.invariant.litmus-chain-reference-present
 - **Expression**: `updated_spec HAS '## Litmus Chain' AND chain_mentions_filter_strict_and_runtime_entry`
+- **Measurable**: true
+
+### Invariant: Rust query IDs are stable
+- **ID**: spec-traceability.invariant.rust-query-stable-id
+- **Expression**: `rust_queries[*].id IS stable AND includes @vN version suffix`
+- **Measurable**: true
+
+### Invariant: Rust query failures are traced
+- **ID**: spec-traceability.invariant.rust-query-failure-traced
+- **Expression**: `required_rust_query_failure EMITS 'RUST_QUERY FAIL' AND @trace spec:<governed-spec>`
 - **Measurable**: true
 
 ## Litmus Tests

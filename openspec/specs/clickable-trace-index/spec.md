@@ -101,16 +101,22 @@ For each active spec that has at least one `@trace` annotation in the codebase, 
 - **THEN** `generate-traces.sh` SHALL NOT run
 - **AND** the existing `TRACES.md` SHALL remain unchanged
 
-### Requirement: Local observatorium v0
+### Requirement: Project observatorium view
 
-The repository SHALL provide `scripts/run-observatorium.sh`, a local launcher
-for a minimal observability viewer. The launcher SHALL serve the current
-checkout directly, SHOULD prefer a private Chromium sandbox when available, and
-MUST fall back to a host browser command when the sandbox path is unstable.
-The browser-facing canonical hostname SHALL be
-`https://observatorium.tillandsias.localhost`.
-The launcher MUST support `--recreate` to force container recreation and MUST
-short-circuit idempotently when the container already exists.
+The runtime SHALL provide `--observatorium <project-path>` as a project view
+parallel to `--bash`, `--opencode`, and `--opencode-web`. The runtime SHALL
+serve the selected checkout read-only under `/source` through the Observatorium
+viewer at `/observatorium/`, and SHALL expose it through the private router host
+`observatorium.<project>.localhost`. The repository SHALL retain
+`scripts/run-observatorium.sh` as a dev/litmus wrapper that accepts
+`--project PATH`, defaults to the current Tillandsias checkout, and can run with
+browser launch disabled.
+
+The project Observatorium MUST reuse the safe browser architecture and router
+session gate rather than exposing source code on a public interface. The
+launcher MUST support `--recreate` in the dev wrapper to force container
+recreation and MUST short-circuit idempotently when the wrapper container
+already exists.
 
 The viewer SHALL expose three primary panes:
 - left: specs
@@ -129,11 +135,12 @@ other two panes, with compact metadata for path, kind, and trace provenance.
 - **WHEN** `scripts/run-observatorium.sh --recreate` is invoked
 - **THEN** any existing observatorium container SHALL be removed and recreated
 
-#### Scenario: Observatorium serves the current checkout
-- **WHEN** the observatorium starts
-- **THEN** it SHALL serve the current repository checkout directly
-- **AND** browser clicks SHALL resolve against the local source tree without a
-  separate release artifact
+#### Scenario: Observatorium serves the selected project
+- **WHEN** the user runs `tillandsias --observatorium ~/src/my-project`
+- **THEN** the runtime SHALL mount `~/src/my-project` read-only at `/source`
+- **AND** the Observatorium UI SHALL be served at `/observatorium/`
+- **AND** browser clicks SHALL resolve against files under `/source`
+- **AND** the route SHALL be `observatorium.my-project.localhost`
 
 #### Scenario: Browser fallback is available
 - **WHEN** the private Chromium launch path fails
@@ -151,9 +158,9 @@ other two panes, with compact metadata for path, kind, and trace provenance.
 ## Litmus Tests
 
 ### test_observatorium_launch_skeleton (binding: litmus:clickable-trace-index-observatorium-skeleton)
-**Setup**: Run `scripts/run-observatorium.sh --recreate` with browser launch disabled
-**Signal**: The launcher recreates or reuses the podman container, serves the repo root, and the page contains the three-pane observatorium shell
-**Pass**: The launcher exits cleanly, the observatorium page is reachable, and the shell shows specs, code, and cheatsheets panes
+**Setup**: Run `scripts/run-observatorium.sh --project . --recreate` with browser launch disabled
+**Signal**: The launcher recreates or reuses the podman container, serves project source under `/source`, and the page contains the three-pane observatorium shell
+**Pass**: The launcher exits cleanly, the observatorium page is reachable, `/source/TRACES.md` is reachable, and the shell shows specs, code, and cheatsheets panes
 **Fail**: The container cannot be created, the page does not load, or the three-pane shell is missing
 
 ### test_traces_script_exists (binding: litmus:clickable-trace-index-generation)

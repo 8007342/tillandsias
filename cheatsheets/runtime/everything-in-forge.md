@@ -2,7 +2,7 @@
 tags: [forge, runtime, podman, agents, contract]
 languages: [bash, rust]
 since: 2026-05-19
-last_verified: 2026-05-19
+last_verified: 2026-05-20
 sources:
   - https://docs.podman.io/en/stable/
   - https://github.com/containers/podman/docs
@@ -27,14 +27,14 @@ Every coding agent, every maintenance shell, and every runtime utility
 executes inside the project's forge container. There is no host-side
 execution surface for developer-facing tooling. The host only does three
 things: it operates the Tillandsias tray/headless orchestrator, it spawns
-the user's default terminal emulator as a TTY window for an interactive
-`podman run -it`, and it manages podman itself. Everything else — Claude,
-Codex, OpenCode, OpenCode Web, and the maintenance `bash` — lives in one
-image and is reached through one launcher seam.
+the user's default terminal emulator as a TTY window when needed, and it
+manages podman itself. Everything else — Claude, Codex, OpenCode, OpenCode
+Web, and the maintenance shell — lives in one image and is reached through one
+launcher seam.
 
 ## Forge-Resident Binaries
 
-Baked into `tillandsias-forge:latest` (`images/default/Containerfile`):
+Baked into `tillandsias-forge:v<VERSION>` (`images/default/Containerfile`):
 
 | Binary     | Source                                            | Entrypoint                                          | Launch mode                |
 |------------|---------------------------------------------------|-----------------------------------------------------|----------------------------|
@@ -47,7 +47,7 @@ Baked into `tillandsias-forge:latest` (`images/default/Containerfile`):
 Verify from outside the forge:
 
 ```bash
-podman run --rm --entrypoint /bin/sh tillandsias-forge:latest \
+podman run --rm --entrypoint /bin/sh tillandsias-forge:v<VERSION> \
     -c 'command -v claude codex opencode bash'
 # expect 4 absolute paths
 ```
@@ -83,7 +83,7 @@ categories. Anything else is a spec violation.
 | Category        | Source                                         | Mount point                       | Discipline               |
 |-----------------|------------------------------------------------|-----------------------------------|--------------------------|
 | Project workspace | the user-selected project root              | `/home/forge/src/<project>`       | RW, the only durable mount |
-| CA certs        | `ensure_enclave_for_project(...)` certs dir    | `/etc/pki/tls/certs/tillandsias`  | RO, ephemeral per launch |
+| CA certs        | `ensure_enclave_for_project(...)` certs dir    | `/etc/tillandsias/ca.crt`         | RO, ephemeral per launch |
 | `tmpfs`         | declared via `--tmpfs`                         | e.g. `/tmp`, `/run/user/1000`     | RW, dies with container  |
 | `mktemp -d`     | fresh host tempdir per launch                  | control sockets, short-lived state | RW, removed on exit     |
 
@@ -100,6 +100,11 @@ A forge that needs a credential gets it via an ephemeral podman secret
 through the git-service container (see
 `runtime/dedicated-service-account-podman.md`). The forge itself stays
 fully offline and credential-free.
+
+Host-mounted project launches must also set
+`TILLANDSIAS_PROJECT_HOST_MOUNT=1`. That flag tells shared entrypoint code the
+directory at `/home/forge/src/<project>` is the user's real checkout. It must
+be used in place, never wiped, and never replaced with a mirror clone.
 
 ## The Host Terminal Seam
 
@@ -121,6 +126,10 @@ tray (Rust)
   application logic, environment overrides, or per-distro behavior.
 - The terminal is the **only** host-side child the tray spawns on the
   interactive path. No editor, no LSP, no agent CLI.
+- Direct CLI flags (`--codex`, `--claude`, `--opencode`, `--bash`) attach the
+  current terminal to the forge instead of opening a new terminal emulator.
+- After an attached forge exits, Tillandsias removes proxy, git, and inference
+  containers when no `tillandsias-*-forge` container remains active.
 
 OpenCode Web is the one exception in shape — it uses
 `run_opencode_web_mode` rather than `launch_forge_agent` because it is

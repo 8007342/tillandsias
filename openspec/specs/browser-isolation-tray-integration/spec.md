@@ -83,14 +83,23 @@ The browser window launched for OpenCode Web SHALL use safe window type:
 - Remote debugging port NOT exposed (port 9222 is internal only)
 - Security flags applied: CAP_DROP=ALL, no new privileges, read-only root
 - Chromium's own `--no-sandbox` flag MAY appear only inside the Chromium
-  framework image entrypoint. It is not a Tillandsias CLI flag and MUST NOT be
-  accepted by the top-level `tillandsias` parser.
+  framework image entrypoint, and only after that entrypoint verifies the
+  Chromium binary accepts the flag. It is not a Tillandsias CLI flag and MUST
+  NOT be accepted by the top-level `tillandsias` parser.
 
 #### Scenario: Safe browser launch
 - **WHEN** 🌐 OpenCode Web is clicked
 - **THEN** the browser launches with `--app=http://opencode.<project>.localhost/`
 - **AND** no remote debugging port is exposed
 - **AND** all OWASP Top 10 security flags are applied
+
+#### Scenario: Chromium sandbox flag is probed
+- **WHEN** the Chromium framework entrypoint starts
+- **THEN** it SHALL locate `chromium` or `chromium-browser`
+- **AND** it SHALL add `--no-sandbox` only if the selected binary advertises
+  support for that switch
+- **AND** wrapper-level "unknown flag" warnings SHALL NOT be emitted for
+  Chromium builds that reject the switch
 
 ### Requirement: Browser launcher uses the secure OpenCode Web session
 The browser launcher SHALL reach OpenCode Web through the published

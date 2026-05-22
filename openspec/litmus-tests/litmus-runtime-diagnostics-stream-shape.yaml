@@ -13,9 +13,9 @@ preconditions:
 
 critical_path:
   - step: "verify stream annotations and stderr capture hooks"
-    command: "grep -F 'runtime-diagnostics-stream' images/default/lib-common.sh && grep -F 'runtime-diagnostics-stream' images/git/post-receive-hook.sh && grep -F 'always echo to stderr' images/git/post-receive-hook.sh"
+    command: "grep -F 'runtime-diagnostics-stream' images/default/lib-common.sh && grep -F 'runtime-diagnostics-stream' images/git/post-receive-hook.sh && grep -F 'always echo to stderr' images/git/post-receive-hook.sh && grep -F 'format_attached_command_failure' crates/tillandsias-podman/src/client.rs && grep -F 'attached command exited' crates/tillandsias-podman/src/client.rs && grep -F 'not podman launch failures' crates/tillandsias-podman/src/client.rs"
     timeout_ms: 5000
-    expected_behavior: "runtime-diagnostics-stream"
+    expected_behavior: "attached command exited"
 
 observability:
   traces:

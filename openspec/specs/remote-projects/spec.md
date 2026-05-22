@@ -10,11 +10,11 @@ TBD - created by archiving change remote-project-clone. Update Purpose after arc
 ## Requirements
 ### Requirement: Fetch remote repository list
 
-The application SHALL fetch the authenticated user's GitHub repositories using the `gh` CLI inside a forge container. When credentials are missing or the API call fails, the failure SHALL be reflected in the contextual status line at the top of the tray menu (per `tray-app` spec) — there SHALL NOT be a disabled placeholder row inside `Remote Projects ▸`.
+The application SHALL fetch the authenticated user's GitHub repositories using the `gh` CLI inside the git image. When credentials are missing or the API call fails, the failure SHALL be reflected in the contextual status line at the top of the tray menu (per `tray-app` spec) — there SHALL NOT be a disabled placeholder row inside `Remote Projects ▸`.
 
 #### Scenario: Authenticated user with repos
 - **WHEN** the remote projects list is requested and valid GitHub credentials exist
-- **THEN** the application runs `gh repo list --json name,url --limit 100` in a forge container and returns the parsed list
+- **THEN** the application runs `gh api user/repos?per_page=100&sort=pushed&type=owner` in the git image and returns the parsed list
 
 #### Scenario: No GitHub credentials
 - **WHEN** the remote projects list is requested and no GitHub credentials exist
@@ -23,7 +23,7 @@ The application SHALL fetch the authenticated user's GitHub repositories using t
 - **AND** the `🔑 Sign in to GitHub` action SHALL be visible at the top of the menu (per `tray-app` spec) so the user can resolve the missing credential
 
 #### Scenario: GitHub API error
-- **WHEN** the `gh repo list` command fails (network error, token expired)
+- **WHEN** the containerized `gh` command fails (network error, token expired)
 - **THEN** the `Remote Projects ▸` submenu SHALL NOT appear in the tray menu (no `Could not fetch repos` placeholder)
 - **AND** the contextual status line at the top of the menu MAY surface the network/auth condition (e.g., `GitHub unreachable — using cached list` when the cause is a network failure with cached projects available)
 
@@ -58,11 +58,11 @@ The fetched repository list SHALL be cached in memory with a 5-minute TTL to avo
 - **THEN** the remote repo cache is invalidated and refreshed on next submenu open
 
 ### Requirement: Clone remote project
-Clicking a remote project in the submenu SHALL clone it into the scanner's watched directory using the forge container.
+Clicking a remote project in the submenu SHALL clone it into the scanner's watched directory using the git image.
 
 #### Scenario: Successful clone
 - **WHEN** the user clicks a remote project named "new-project"
-- **THEN** `gh repo clone <owner>/new-project ~/src/new-project` runs inside a forge container
+- **THEN** `gh repo clone <owner>/new-project ~/src/new-project` runs inside the git image
 - **AND** the scanner detects the new directory and adds it to the project list
 - **AND** the tray menu is rebuilt with the new project
 

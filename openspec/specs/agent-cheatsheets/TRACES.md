@@ -5,10 +5,10 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [images/default/config-overlay/shell-helpers.sh#L139](../../../images/default/config-overlay/shell-helpers.sh#L139)
+- [images/default/config-overlay/shell-helpers.sh#L140](../../../images/default/config-overlay/shell-helpers.sh#L140)
 - [images/default/entrypoint-forge-claude.sh#L19](../../../images/default/entrypoint-forge-claude.sh#L19)
 - [images/default/entrypoint-forge-codex.sh#L18](../../../images/default/entrypoint-forge-codex.sh#L18)
 - [images/default/entrypoint-forge-opencode.sh#L19](../../../images/default/entrypoint-forge-opencode.sh#L19)
 - [images/default/entrypoint-terminal.sh#L27](../../../images/default/entrypoint-terminal.sh#L27)
 - [images/default/forge-welcome.sh#L178](../../../images/default/forge-welcome.sh#L178)
-- [images/default/lib-common.sh#L546](../../../images/default/lib-common.sh#L546)
+- [images/default/lib-common.sh#L560](../../../images/default/lib-common.sh#L560)
