@@ -98,11 +98,55 @@ pub(super) fn refresh_cloud_projects_if_stale(
         guard.cloud_refresh_in_flight = true;
     }
 
-    let result = remote_projects::discover_github_projects_result();
+    let result = remote_projects::discover_github_projects_result_with_debug(debug);
     let entries = match result {
-        Ok(projects) => github_projects_to_entries(projects),
+        Ok(projects) => {
+            // Successful fetch -> reset the one-shot "no secret" warning so
+            // the next time the user logs out / rotates the token we'll
+            // re-warn cleanly. @trace spec:remote-projects
+            if let Ok(mut guard) = state.lock() {
+                guard.cloud_no_secret_warned = false;
+            }
+            github_projects_to_entries(projects)
+        }
         Err(err) => {
             clear_cloud_refresh_in_flight(&state);
+            // Friendly path for the "no podman secret" case which fires
+            // every time on first launch before `tillandsias --github-login`
+            // has been run. AboutToShow can refresh from several entry
+            // points (initial fetch, root-menu, Cloud submenu) — gate the
+            // user-facing line behind a per-session one-shot flag so the
+            // stderr isn't spammed.
+            //
+            // We match on the secret *name* rather than the full podman
+            // error text because podman's exact wording has churned
+            // ("no secret with name or id", "no such secret", etc.) but the
+            // name `tillandsias-github-token` is stable.
+            //
+            // @trace spec:remote-projects, spec:tray-ux
+            if err.contains("tillandsias-github-token") {
+                let should_warn = match state.lock() {
+                    Ok(mut guard) => {
+                        let first = !guard.cloud_no_secret_warned;
+                        guard.cloud_no_secret_warned = true;
+                        first
+                    }
+                    Err(_) => true,
+                };
+                if should_warn {
+                    eprintln!(
+                        "[tillandsias] cloud refresh: no GitHub credentials yet — \
+                         run `tillandsias --github-login` to enable cloud projects"
+                    );
+                }
+                // Keep tracing channel intact for log scrapers but stay
+                // off stderr so the user gets exactly one helpful line.
+                warn!(
+                    error = %err,
+                    "cloud refresh: github secret missing; preserving cached list"
+                );
+                return Err(err);
+            }
             eprintln!("[tillandsias] cloud refresh: gh invocation failed: {err}");
             warn!(
                 error = %err,

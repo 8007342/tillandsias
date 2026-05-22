@@ -856,27 +856,37 @@ impl PodmanClient {
 
         let mut full_args = vec!["run".to_string()];
         full_args.extend_from_slice(args);
-        let status = crate::podman_cmd()
-            .args(&full_args)
+        let mut cmd = crate::podman_cmd();
+        cmd.args(&full_args)
             .stdin(Stdio::inherit())
             .stdout(Stdio::inherit())
-            .stderr(Stdio::inherit())
-            .status()
-            .await
-            .map_err(|err| {
-                let message = format!(
-                    "stage '{stage}' could not spawn attached container {container_name}: {err}\nnext: verify podman is available in this desktop session\nredacted argv: podman {}",
-                    redact_argv(&full_args).join(" ")
-                );
-                emit_launch_event(
-                    debug_enabled,
-                    stage,
-                    container_name,
-                    "failed",
-                    Some(summary_line(&message)),
-                );
-                message
-            })?;
+            .stderr(Stdio::inherit());
+        // User-visible --debug log; honors TILLANDSIAS_DEBUG or the per-launch
+        // debug_enabled flag passed in by the caller.
+        crate::log_podman_invocation_with_flag(
+            &format!("run-attached:{stage}"),
+            cmd.as_std(),
+            debug_enabled,
+        );
+        let status = cmd.status().await.map_err(|err| {
+            let message = format!(
+                "stage '{stage}' could not spawn attached container {container_name}: {err}\nnext: verify podman is available in this desktop session\nredacted argv: podman {}",
+                redact_argv(&full_args).join(" ")
+            );
+            crate::log_podman_failure(
+                &format!("run-attached:{stage}"),
+                "spawn-error",
+                &err.to_string(),
+            );
+            emit_launch_event(
+                debug_enabled,
+                stage,
+                container_name,
+                "failed",
+                Some(summary_line(&message)),
+            );
+            message
+        })?;
 
         if status.success() {
             emit_launch_event(
@@ -893,6 +903,11 @@ impl PodmanClient {
             .code()
             .map(|code| code.to_string())
             .unwrap_or_else(|| "signal".to_string());
+        crate::log_podman_failure(
+            &format!("run-attached:{stage}"),
+            &status_code,
+            "(stderr inherited to terminal)",
+        );
         let detail = format_attached_command_failure(stage, container_name, &status_code);
         emit_launch_event(
             debug_enabled,
@@ -1186,47 +1201,79 @@ impl Default for PodmanClient {
 /// Check if a podman network exists (sync, for CLI mode).
 /// @trace spec:enclave-network
 pub fn network_exists_sync(name: &str) -> bool {
-    crate::podman_cmd_sync()
-        .args(["network", "exists", name])
-        .output()
-        .is_ok_and(|o| o.status.success())
+    let mut cmd = crate::podman_cmd_sync();
+    cmd.args(["network", "exists", name]);
+    crate::log_podman_invocation("network-exists", &cmd);
+    let out = cmd.output();
+    if let Ok(ref o) = out
+        && !o.status.success()
+    {
+        crate::log_podman_failure(
+            "network-exists",
+            &o.status.code().map(|c| c.to_string()).unwrap_or_else(|| "signal".into()),
+            &String::from_utf8_lossy(&o.stderr),
+        );
+    }
+    out.is_ok_and(|o| o.status.success())
 }
 
 /// Check whether podman is available in the current environment (sync).
 pub fn podman_available_sync() -> bool {
-    crate::podman_cmd_sync()
-        .arg("--version")
-        .output()
-        .is_ok_and(|o| o.status.success())
+    let mut cmd = crate::podman_cmd_sync();
+    cmd.arg("--version");
+    crate::log_podman_invocation("available", &cmd);
+    let out = cmd.output();
+    if let Ok(ref o) = out
+        && !o.status.success()
+    {
+        crate::log_podman_failure(
+            "available",
+            &o.status.code().map(|c| c.to_string()).unwrap_or_else(|| "signal".into()),
+            &String::from_utf8_lossy(&o.stderr),
+        );
+    }
+    out.is_ok_and(|o| o.status.success())
 }
 
 /// Check whether an image exists locally (sync).
 pub fn image_exists_sync(image: &str) -> bool {
-    crate::podman_cmd_sync()
-        .args(["image", "exists", image])
-        .output()
-        .is_ok_and(|o| o.status.success())
+    let mut cmd = crate::podman_cmd_sync();
+    cmd.args(["image", "exists", image]);
+    crate::log_podman_invocation("image-exists", &cmd);
+    // Non-existence is the common case; do not log a failure line for it.
+    cmd.output().is_ok_and(|o| o.status.success())
 }
 
 /// Check whether a container exists locally (sync).
 pub fn container_exists_sync(name: &str) -> bool {
-    crate::podman_cmd_sync()
-        .args(["inspect", name])
-        .output()
-        .is_ok_and(|o| o.status.success())
+    let mut cmd = crate::podman_cmd_sync();
+    cmd.args(["inspect", name]);
+    crate::log_podman_invocation("container-exists", &cmd);
+    // Non-existence is the common case; do not log a failure line for it.
+    cmd.output().is_ok_and(|o| o.status.success())
 }
 
 /// Stop a container gracefully (sync).
 pub fn stop_container_sync(name: &str, timeout_secs: u32) -> Result<(), PodmanError> {
-    let output = crate::podman_cmd_sync()
-        .args(["stop", "-t", &timeout_secs.to_string(), name])
+    let mut cmd = crate::podman_cmd_sync();
+    cmd.args(["stop", "-t", &timeout_secs.to_string(), name]);
+    crate::log_podman_invocation("stop", &cmd);
+    let output = cmd
         .output()
-        .map_err(|e| PodmanError::CommandFailed(format!("stop: {e}")))?;
+        .map_err(|e| {
+            crate::log_podman_failure("stop", "spawn-error", &e.to_string());
+            PodmanError::CommandFailed(format!("stop: {e}"))
+        })?;
 
     if output.status.success() {
         Ok(())
     } else {
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
+        crate::log_podman_failure(
+            "stop",
+            &output.status.code().map(|c| c.to_string()).unwrap_or_else(|| "signal".into()),
+            &stderr,
+        );
         Err(PodmanError::CommandFailed(if stderr.is_empty() {
             format!("stop failed for {name} with status {}", output.status)
         } else {

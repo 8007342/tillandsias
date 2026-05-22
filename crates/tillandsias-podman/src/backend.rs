@@ -107,7 +107,13 @@ impl PodmanBackend for RealBackend {
         argv: &[String],
     ) -> Result<CommandOutput, CommandFailure> {
         let started = Instant::now();
-        let result = crate::podman_cmd().args(argv).output().await;
+        let mut cmd = crate::podman_cmd();
+        cmd.args(argv);
+        // User-visible debug log (only when --debug / TILLANDSIAS_DEBUG=1). See
+        // crate::log_podman_invocation for the format and redaction rules.
+        let label = format!("{:?}", operation).to_ascii_lowercase();
+        crate::log_podman_invocation(&label, cmd.as_std());
+        let result = cmd.output().await;
         let output = match result {
             Ok(output) => CommandOutput {
                 operation,
@@ -132,6 +138,13 @@ impl PodmanBackend for RealBackend {
         if output.success() {
             Ok(output)
         } else {
+            // Emit the structured failure line so `grep '[tillandsias] podman'`
+            // surfaces both invocation + outcome in the user's session.
+            let status_str = output
+                .status
+                .map(|c| c.to_string())
+                .unwrap_or_else(|| "spawn-error".to_string());
+            crate::log_podman_failure(&label, &status_str, &output.stderr);
             Err(CommandFailure {
                 retry: classify_retry(&output),
                 output: Box::new(output),

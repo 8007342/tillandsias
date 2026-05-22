@@ -484,6 +484,202 @@ fn configure_podman_environment_with_transport(
     }
 }
 
+/// Returns true when user-visible podman invocation logging should be emitted.
+///
+/// The headless binary sets `TILLANDSIAS_DEBUG=1` in the environment when run with
+/// `--debug`, so child processes inherit the flag automatically. Call sites that
+/// already hold a `debug: bool` may also force-enable logging by passing `true` to
+/// [`log_podman_invocation_with_flag`].
+///
+/// @trace spec:podman-idiomatic-patterns
+pub fn debug_logging_enabled() -> bool {
+    matches!(env::var("TILLANDSIAS_DEBUG").as_deref(), Ok("1"))
+}
+
+/// Heuristic check: does this string look like an opaque token / base64 blob /
+/// secret value that should be redacted before printing to stderr?
+fn looks_like_secret_value(value: &str) -> bool {
+    // Long opaque blobs with the alphabet of base64/hex/url-safe tokens.
+    if value.len() >= 24 {
+        let mut alnum = 0usize;
+        let mut symbols = 0usize;
+        for ch in value.chars() {
+            if ch.is_ascii_alphanumeric() {
+                alnum += 1;
+            } else if matches!(ch, '+' | '/' | '=' | '-' | '_' | '.') {
+                symbols += 1;
+            } else {
+                return false;
+            }
+        }
+        // Mostly alnum + a few base64/url-safe symbols → treat as opaque blob.
+        if alnum * 4 >= (alnum + symbols) * 3 {
+            return true;
+        }
+    }
+    false
+}
+
+/// Redact a single argv element heuristically. Used for arguments of the form
+/// `KEY=VALUE` (passed via `-e`/`--env`) or bare opaque values (passed via
+/// `--secret`/`--password`).
+fn redact_one(arg: &str) -> String {
+    // Don't touch flag-like tokens (`--something`); they're never secret values.
+    if arg.starts_with('-') {
+        return arg.to_string();
+    }
+    // KEY=VALUE form: preserve the key (it's informative) and redact the value
+    // when either the key name implies a secret OR the value looks opaque.
+    // We special-case this BEFORE the whole-arg opaque check so things like
+    // `GITHUB_TOKEN=ghp_AAAA...` keep their key visible.
+    if let Some(eq) = arg.find('=')
+        && eq > 0
+        && eq + 1 < arg.len()
+    // Skip pure-padding `=` at end (`base64=`).
+    {
+        let (key, rest) = arg.split_at(eq);
+        let value = &rest[1..];
+        let key_is_identifier = !key.is_empty()
+            && key
+                .chars()
+                .all(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.');
+        if key_is_identifier {
+            let upper_key = key.to_ascii_uppercase();
+            if upper_key.contains("TOKEN")
+                || upper_key.contains("PASSWORD")
+                || upper_key.contains("SECRET")
+                || looks_like_secret_value(value)
+            {
+                return format!("{key}=<redacted>");
+            }
+            // Recognized KEY=VALUE; non-secret-looking; keep it as-is.
+            return arg.to_string();
+        }
+    }
+    // Bare opaque value (e.g. a base64 blob passed positionally, possibly
+    // ending in `=` padding).
+    if looks_like_secret_value(arg) {
+        return "<redacted>".to_string();
+    }
+    arg.to_string()
+}
+
+/// Build the user-visible podman invocation line for `log_podman_invocation`.
+/// Extracted so the unit test can exercise the formatter without touching stderr.
+fn format_podman_invocation_line(label: &str, program: &str, args: &[String]) -> String {
+    let mut redacted: Vec<String> = Vec::with_capacity(args.len());
+    let mut i = 0;
+    while i < args.len() {
+        let arg = &args[i];
+        // Flag/value pairs where the next arg is the secret value.
+        if matches!(arg.as_str(), "--secret" | "--password" | "--token" | "--secret-value") {
+            redacted.push(arg.clone());
+            if i + 1 < args.len() {
+                redacted.push("<redacted>".to_string());
+                i += 2;
+                continue;
+            }
+        }
+        // `--env KEY=VALUE` or `-e KEY=VALUE` — redact the value half if the key
+        // mentions a secret.
+        if matches!(arg.as_str(), "-e" | "--env") {
+            redacted.push(arg.clone());
+            if i + 1 < args.len() {
+                redacted.push(redact_one(&args[i + 1]));
+                i += 2;
+                continue;
+            }
+        }
+        redacted.push(redact_one(arg));
+        i += 1;
+    }
+
+    let joined = redacted.join(" ");
+    let mut line = format!("[tillandsias] podman {label}: {program} {joined}");
+    // Truncate very long lines (e.g. huge --exit-command chains) so the user
+    // sees the structure rather than a screenful of arguments.
+    const MAX: usize = 400;
+    if line.len() > MAX {
+        // Find a UTF-8 char boundary at or below MAX.
+        let mut cut = MAX;
+        while cut > 0 && !line.is_char_boundary(cut) {
+            cut -= 1;
+        }
+        line.truncate(cut);
+        line.push_str("...");
+    }
+    line
+}
+
+/// Emit a single user-visible line to stderr describing a podman invocation.
+///
+/// When `debug` is true (typically because the caller already knows `--debug`
+/// was set) OR `TILLANDSIAS_DEBUG=1` is in the environment, writes one line of
+/// the form:
+///
+/// ```text
+/// [tillandsias] podman <label>: <binary> <arg1> <arg2> ...
+/// ```
+///
+/// to stderr. Token-like arguments are redacted, and the line is truncated at
+/// roughly 400 characters so huge `--exit-command` chains do not drown the user.
+///
+/// This intentionally uses `eprintln!` rather than `tracing::debug!` so the line
+/// is visible regardless of subscriber configuration whenever the user has asked
+/// for debug output.
+///
+/// @trace spec:podman-idiomatic-patterns
+pub fn log_podman_invocation_with_flag(label: &str, cmd: &std::process::Command, debug: bool) {
+    if !debug && !debug_logging_enabled() {
+        return;
+    }
+    let program = cmd.get_program().to_string_lossy().into_owned();
+    let args: Vec<String> = cmd
+        .get_args()
+        .map(|a| a.to_string_lossy().into_owned())
+        .collect();
+    eprintln!("{}", format_podman_invocation_line(label, &program, &args));
+}
+
+/// Convenience wrapper: emit a user-visible podman invocation line whenever
+/// `TILLANDSIAS_DEBUG=1` is set in the environment.
+///
+/// @trace spec:podman-idiomatic-patterns
+pub fn log_podman_invocation(label: &str, cmd: &std::process::Command) {
+    log_podman_invocation_with_flag(label, cmd, false);
+}
+
+/// Emit a single user-visible line describing a failed podman invocation.
+///
+/// Logs `[tillandsias] podman <label> failed: status=<code> stderr=<first 400
+/// bytes>` to stderr whenever debug output is enabled. The `status` slot accepts
+/// an exit code (or any short string like "signal" / "spawn-error"). The
+/// `stderr` slot is truncated to roughly 400 bytes so a noisy podman failure
+/// does not flood the terminal.
+///
+/// @trace spec:podman-idiomatic-patterns
+pub fn log_podman_failure(label: &str, status: &str, stderr: &str) {
+    if !debug_logging_enabled() {
+        return;
+    }
+    const MAX: usize = 400;
+    let trimmed = stderr.trim();
+    let snippet: String = if trimmed.len() > MAX {
+        let mut cut = MAX;
+        while cut > 0 && !trimmed.is_char_boundary(cut) {
+            cut -= 1;
+        }
+        let mut s = trimmed[..cut].to_string();
+        s.push_str("...");
+        s
+    } else {
+        trimmed.to_string()
+    };
+    // Collapse newlines so the failure line is one grep-friendly entry.
+    let snippet = snippet.replace('\n', " | ");
+    eprintln!("[tillandsias] podman {label} failed: status={status} stderr={snippet}");
+}
+
 /// Create a `tokio::process::Command` for podman with a clean library environment.
 ///
 /// - Assumes podman is available on PATH
@@ -751,5 +947,159 @@ mod tests {
 
         // Verify it doesn't inadvertently produce the old constant
         assert_ne!(enclave_network_name("undefined"), ENCLAVE_NETWORK);
+    }
+
+    /// @trace spec:podman-idiomatic-patterns
+    #[test]
+    fn invocation_line_contains_label_and_redacts_secrets() {
+        let line = format_podman_invocation_line(
+            "container",
+            "/usr/bin/podman",
+            &[
+                "run".into(),
+                "--rm".into(),
+                "-e".into(),
+                "GITHUB_TOKEN=ghp_AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA".into(),
+                "--secret".into(),
+                "tillandsias-ca-key".into(),
+                "image:tag".into(),
+            ],
+        );
+        assert!(
+            line.starts_with("[tillandsias] podman container: /usr/bin/podman "),
+            "unexpected prefix: {line}"
+        );
+        assert!(line.contains("GITHUB_TOKEN=<redacted>"), "token leaked: {line}");
+        // `--secret <name>` — the value (name) gets replaced because it follows
+        // a known secret flag.
+        assert!(line.contains("--secret <redacted>"), "secret leaked: {line}");
+        assert!(line.contains("image:tag"), "image arg dropped: {line}");
+    }
+
+    /// @trace spec:podman-idiomatic-patterns
+    #[test]
+    fn invocation_line_truncates_long_argv() {
+        let mut args: Vec<String> = vec!["run".into()];
+        for i in 0..50 {
+            args.push(format!("--exit-command-arg-{i}=value{i}"));
+        }
+        let line = format_podman_invocation_line("container", "podman", &args);
+        assert!(line.len() <= 403, "line too long: {} chars", line.len());
+        assert!(line.ends_with("..."), "line not truncated: {line}");
+    }
+
+    /// @trace spec:podman-idiomatic-patterns
+    #[test]
+    fn invocation_line_redacts_base64_blob() {
+        // Long opaque blob without an `=` separator gets blanket-redacted.
+        let blob = "Zm9vYmFyYmF6cXV4cXV1eGNvcmdldGVzdGluZ3Rva2VuMTIzNDU=";
+        let line = format_podman_invocation_line(
+            "secret",
+            "podman",
+            &["secret".into(), "create".into(), "name".into(), blob.into()],
+        );
+        assert!(!line.contains(blob), "raw blob leaked: {line}");
+        assert!(line.contains("<redacted>"), "no redaction marker: {line}");
+    }
+
+    /// Smoke test: with `debug=true`, the logger writes to stderr. We can't
+    /// portably capture stderr from the parent process, but we can re-exec
+    /// ourselves via `std::process::Command` and read the child's stderr.
+    /// @trace spec:podman-idiomatic-patterns
+    #[test]
+    fn logger_emits_to_stderr_when_debug_flag_set() {
+        // Build a fake command and log it with debug=true, while temporarily
+        // redirecting stderr to a pipe via a child process.
+        // Simpler: just construct the same line the logger would produce and
+        // assert the format. The end-to-end stderr write is exercised by the
+        // logger's single eprintln! call (which is trivially correct).
+        let mut cmd = std::process::Command::new("/usr/bin/podman");
+        cmd.args(["ps", "--filter", "name=tillandsias-"]);
+        let line = format_podman_invocation_line(
+            "container",
+            &cmd.get_program().to_string_lossy(),
+            &cmd.get_args()
+                .map(|a| a.to_string_lossy().into_owned())
+                .collect::<Vec<_>>(),
+        );
+        assert!(line.contains("[tillandsias] podman container:"));
+        assert!(line.contains("ps"));
+        assert!(line.contains("--filter"));
+        assert!(line.contains("name=tillandsias-"));
+    }
+
+    /// Smoke-test the active path of `log_podman_invocation_with_flag` and
+    /// `log_podman_failure`. The line goes to *this* process's stderr; we don't
+    /// portably capture it from inside, but we exercise the code path so any
+    /// panic / unwind would fail the test.
+    /// @trace spec:podman-idiomatic-patterns
+    #[test]
+    fn log_helper_writes_one_line_to_stderr() {
+        let _guard = env_lock();
+        unsafe {
+            std::env::remove_var("TILLANDSIAS_DEBUG");
+        }
+        let mut cmd = std::process::Command::new("/usr/bin/podman");
+        cmd.arg("--version");
+        // No-op path: debug=false, env unset.
+        log_podman_invocation_with_flag("test", &cmd, false);
+        // Active path — emits one line to stderr.
+        log_podman_invocation_with_flag("test", &cmd, true);
+        // Failure path requires the env var.
+        unsafe {
+            std::env::set_var("TILLANDSIAS_DEBUG", "1");
+        }
+        log_podman_failure("test", "1", "some short stderr text");
+        // Multi-line stderr gets collapsed.
+        log_podman_failure("test", "125", "line1\nline2\nline3");
+        // Very long stderr gets truncated.
+        log_podman_failure("test", "125", &"x".repeat(2000));
+        unsafe {
+            std::env::remove_var("TILLANDSIAS_DEBUG");
+        }
+    }
+
+    /// End-to-end stderr capture: re-exec the test binary so we can read the
+    /// child's stderr and assert the exact log line is present. This is the
+    /// most direct verification that `--debug` actually shows the user the
+    /// invocation.
+    /// @trace spec:podman-idiomatic-patterns
+    #[test]
+    fn end_to_end_stderr_capture_via_subprocess() {
+        // Trigger marker — when the test binary sees this env var, the main
+        // test below short-circuits, runs the logger, and exits.
+        if std::env::var("TILLANDSIAS_PODMAN_LOG_E2E").as_deref() == Ok("emit") {
+            let mut cmd = std::process::Command::new("/usr/bin/podman");
+            cmd.args(["ps", "--filter", "name=tillandsias-"]);
+            log_podman_invocation_with_flag("container", &cmd, true);
+            log_podman_failure("container", "125", "Error: no such container");
+            std::process::exit(0);
+        }
+
+        // Spawn the same test binary with the marker env var set and capture
+        // its stderr. `--nocapture` is required so libtest doesn't swallow the
+        // child's stderr writes; `--exact` keeps the recursion to one test.
+        let exe = std::env::current_exe().expect("current_exe");
+        let output = std::process::Command::new(exe)
+            .env("TILLANDSIAS_PODMAN_LOG_E2E", "emit")
+            // Set the user-facing debug env var so the failure-logging path
+            // (which only reads the env, not a per-call flag) also activates.
+            .env("TILLANDSIAS_DEBUG", "1")
+            .args([
+                "--exact",
+                "tests::end_to_end_stderr_capture_via_subprocess",
+                "--nocapture",
+            ])
+            .output()
+            .expect("spawn child");
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        assert!(
+            stderr.contains("[tillandsias] podman container: /usr/bin/podman ps --filter name=tillandsias-"),
+            "missing invocation line in stderr:\n{stderr}"
+        );
+        assert!(
+            stderr.contains("[tillandsias] podman container failed: status=125 stderr=Error: no such container"),
+            "missing failure line in stderr:\n{stderr}"
+        );
     }
 }

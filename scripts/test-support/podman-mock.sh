@@ -67,6 +67,12 @@ case "$subcommand" in
             fi
             if [[ "$cmd_string" == *"gh repo clone"* ]]; then
                 target_path="${@: -1}"
+                # Tail args after the "gh" sentinel are the positional
+                # `gh repo clone <repo> <target>` arguments. The two
+                # immediately before $target_path are the repo identifier.
+                repo_arg="${@: -2:1}"
+                printf '%s\n' "$repo_arg" >"$state_dir/last_clone_repo_arg"
+                printf '%s\n' "$target_path" >"$state_dir/last_clone_target_arg"
                 mkdir -p "$target_path/.git"
                 printf 'mock-clone-ok\n'
                 exit 0

@@ -297,7 +297,7 @@ fn main() {
             // @trace spec:linux-native-portable-executable, spec:transparent-mode-detection, spec:singleton-guard
             // Native tray support is available — launch tray mode.
             if cfg!(feature = "tray") {
-                if let Err(e) = launch_tray_mode(config_path) {
+                if let Err(e) = launch_tray_mode(config_path, debug) {
                     eprintln!("Error launching tray mode: {}", e);
                     std::process::exit(1);
                 }
@@ -320,7 +320,7 @@ fn main() {
     // @trace spec:singleton-guard
     if tray {
         if cfg!(feature = "tray") {
-            if let Err(e) = launch_tray_mode(config_path) {
+            if let Err(e) = launch_tray_mode(config_path, debug) {
                 eprintln!("Error launching tray mode: {}", e);
                 std::process::exit(1);
             }
@@ -2220,18 +2220,21 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
     ];
 
     // @trace spec:forge-staleness, spec:forge-cache-dual
-    // Check cache integrity before loading state
+    // Check cache integrity before loading state. A cache version mismatch is
+    // expected after any version bump and is safely recoverable by rebuilding;
+    // treat it as if the user had passed --force so initialization just works.
+    let mut force = force;
     let cache_status = check_cache_integrity(version)?;
     if !force && cache_status.version_mismatch {
-        eprintln!("WARNING: Cache version mismatch detected");
-        if let Some(cached) = &cache_status.cached_version {
-            eprintln!("  Cached version: {}", cached);
-        } else {
-            eprintln!("  No cached version found");
-        }
-        eprintln!("  Current version: {}", version);
-        eprintln!("  Suggestion: Use --force to rebuild, or --cache-clear to start fresh");
-        return Err("Cache version mismatch. Run with --force or --cache-clear.".to_string());
+        let cached_display = cache_status
+            .cached_version
+            .clone()
+            .unwrap_or_else(|| "<unset>".to_string());
+        eprintln!(
+            "[tillandsias] init: stale cache (cached {}, current {}); rebuilding all images",
+            cached_display, version
+        );
+        force = true;
     }
 
     // @trace spec:cache-recovery-mechanism
@@ -2657,7 +2660,7 @@ fn run_cache_verify(debug: bool) -> Result<(), String> {
             } else {
                 println!("    No cached version found");
             }
-            println!("    Suggestion: Run 'tillandsias --init --force' to rebuild");
+            println!("    Suggestion: Run 'tillandsias --init' to auto-rebuild");
         }
 
         if status.missing_state_file {
@@ -3388,10 +3391,10 @@ fn maybe_spawn_detached_tray_for_cli(explicit_tray: bool, debug: bool) {
 
 /// Phase 3, Task 12 & Phase 4: Launch in tray mode with headless subprocess.
 /// @trace spec:linux-native-portable-executable, spec:transparent-mode-detection, spec:tray-subprocess-management
-fn launch_tray_mode(_config_path: Option<String>) -> Result<(), String> {
+fn launch_tray_mode(_config_path: Option<String>, _debug: bool) -> Result<(), String> {
     #[cfg(feature = "tray")]
     {
-        crate::tray::run_tray_mode(_config_path)
+        crate::tray::run_tray_mode_with_debug(_config_path, _debug)
     }
 
     #[cfg(not(feature = "tray"))]

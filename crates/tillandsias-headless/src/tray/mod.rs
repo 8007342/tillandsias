@@ -352,6 +352,19 @@ struct TrayUiState {
     /// guard prevents duplicate refresh/layout-update races while expanding.
     /// @trace spec:no-terminal-flicker, spec:remote-projects
     pub(super) cloud_refresh_in_flight: bool,
+    /// One-shot "we already told the user to run --github-login this session"
+    /// guard. Cloud refresh fires from multiple paths on startup (initial
+    /// fetch + AboutToShow on the root menu + AboutToShow on the Cloud
+    /// submenu) and without this flag we print the same "no GitHub
+    /// credentials yet" stderr line N times before the user has any chance
+    /// to react. Reset on successful auth (see GitHubLogin click handler).
+    /// @trace spec:tray-ux, spec:remote-projects
+    pub(super) cloud_no_secret_warned: bool,
+    /// True when `--debug` is set on the binary. Threaded into the cloud
+    /// refresh / clone helpers so the containerized-gh subprocess shape is
+    /// visible on stderr instead of disappearing behind `tracing` debug
+    /// filtering. @trace spec:remote-projects
+    pub(super) debug: bool,
     selected_agent: SelectedAgent,
     forge_available: bool,
     podman_available: bool,
@@ -590,7 +603,17 @@ struct StatusNotifierItemIface(Arc<TrayService>);
 struct DbusMenuIface(Arc<TrayService>);
 
 impl TrayUiState {
+    #[allow(dead_code)] // retained for the cloud.rs unit-test fixture
     fn new(root: PathBuf, version: String, projects: Vec<ProjectEntry>) -> Self {
+        Self::new_with_debug(root, version, projects, false)
+    }
+
+    fn new_with_debug(
+        root: PathBuf,
+        version: String,
+        projects: Vec<ProjectEntry>,
+        debug: bool,
+    ) -> Self {
         let podman_available = podman_available();
         let selected_agent = config::load_global_config().agent.selected;
         let forge_image = format!("tillandsias-forge:v{version}");
@@ -630,6 +653,8 @@ impl TrayUiState {
             cloud_projects: Vec::new(),
             last_fetched: None,
             cloud_refresh_in_flight: false,
+            cloud_no_secret_warned: false,
+            debug,
             selected_agent,
             forge_available,
             podman_available,
@@ -1305,15 +1330,22 @@ fn handle_launch_cloud_project(service: Arc<TrayService>, cloud: ProjectEntry, k
                 // The cloud entry doesn't carry the owner directly — discover
                 // from the cached GitHub project list. The user contract
                 // example (`8007342/forge`) lives in that cache.
+                //
+                // IMPORTANT: prefer `GitHubProject::nwo()` (`owner/name`).
+                // `project.url` is the *API* URL from `gh api user/repos`
+                // (`https://api.github.com/repos/<owner>/<name>`) and is NOT
+                // a valid argument to `gh repo clone` — passing it produces
+                // `invalid path: /repos/<owner>/<name>`.
+                // @trace spec:remote-projects
                 let projects = remote_projects::discover_github_projects();
-                let repo_url = projects
+                let repo_id = projects
                     .iter()
                     .find(|p| p.name == cloud.name)
-                    .map(|p| p.url.clone())
+                    .map(|p| p.nwo())
                     .unwrap_or_else(|| {
                         // Fallback: best-effort guess so empty owner cases at
                         // least surface a sane git error.
-                        format!("https://github.com/{}", cloud.name)
+                        cloud.name.clone()
                     });
 
                 let _ = futures::executor::block_on(service_for_emit.set_status(
@@ -1322,7 +1354,7 @@ fn handle_launch_cloud_project(service: Arc<TrayService>, cloud: ProjectEntry, k
                     None,
                 ));
                 if let Err(err) =
-                    remote_projects::clone_project_from_github(&repo_url, &target_path)
+                    remote_projects::clone_project_from_github(&repo_id, &target_path)
                 {
                     eprintln!("error: cloud clone failed for '{}': {}", cloud.name, err);
                     let _ = futures::executor::block_on(service_for_emit.set_status(
@@ -2368,10 +2400,11 @@ impl DbusMenuIface {
             let service = self.0.clone();
             let service_for_task = service.clone();
             let state_handle = service.state_handle();
+            let debug = service.snapshot().debug;
             if service
                 .task_executor
                 .spawn_task(move || {
-                    match cloud::refresh_cloud_projects_if_stale(state_handle, false, false) {
+                    match cloud::refresh_cloud_projects_if_stale(state_handle, false, debug) {
                         Ok(outcome) if outcome.menu_changed() => {
                             let _ = futures::executor::block_on(
                                 service_for_task.rebuild_after_state_change(),
@@ -2431,10 +2464,17 @@ impl DbusMenuIface {
                         // the next AboutToShow.
                         if authed {
                             remote_projects::invalidate_github_projects_cache();
+                            // The user just authenticated; reset the
+                            // "we already warned about missing secrets"
+                            // one-shot so future logouts re-warn cleanly.
+                            service_for_task.with_state(|state| {
+                                state.cloud_no_secret_warned = false;
+                            });
+                            let debug = service_for_task.snapshot().debug;
                             let _ = cloud::refresh_cloud_projects_if_stale(
                                 service_for_task.state_handle(),
                                 true,
-                                false,
+                                debug,
                             );
                         }
                         let _ = futures::executor::block_on(
@@ -2648,6 +2688,8 @@ mod tests {
             cloud_projects: Vec::new(),
             last_fetched: None,
             cloud_refresh_in_flight: false,
+            cloud_no_secret_warned: false,
+            debug: false,
             selected_agent,
             forge_available,
             podman_available: true,
@@ -2785,6 +2827,8 @@ mod tests {
                 cloud_projects: self.cloud_projects,
                 last_fetched: self.last_fetched,
                 cloud_refresh_in_flight: false,
+                cloud_no_secret_warned: false,
+                debug: false,
                 selected_agent: self.agent,
                 forge_available: self.forge_available,
                 podman_available: self.podman_available,
@@ -3666,10 +3710,22 @@ mod tests {
 /// Run native tray mode using a pure D-Bus StatusNotifierItem path.
 ///
 /// @trace spec:tray-app, spec:tray-ux, spec:tray-progress-and-icon-states, spec:tray-icon-lifecycle
+#[allow(dead_code)] // kept as the no-debug shim for external callers/tests
 pub fn run_tray_mode(config_path: Option<String>) -> Result<(), String> {
+    run_tray_mode_with_debug(config_path, false)
+}
+
+/// Same as [`run_tray_mode`] but with the `--debug` flag plumbed through so
+/// the containerized-gh / cloud-refresh paths can emit `[tillandsias] gh: …`
+/// stderr breadcrumbs. @trace spec:remote-projects
+pub fn run_tray_mode_with_debug(
+    config_path: Option<String>,
+    debug: bool,
+) -> Result<(), String> {
     let version = super::VERSION.trim().to_string();
-    let root = super::resolve_runtime_asset_root(&version, false)?;
-    let state = TrayUiState::new(root.clone(), version.clone(), discover_projects());
+    let root = super::resolve_runtime_asset_root(&version, debug)?;
+    let state =
+        TrayUiState::new_with_debug(root.clone(), version.clone(), discover_projects(), debug);
     let service = Arc::new(TrayService::new(state));
     start_control_socket_server()?;
 
@@ -3680,10 +3736,11 @@ pub fn run_tray_mode(config_path: Option<String>) -> Result<(), String> {
     if service.snapshot().is_authenticated {
         let service_for_init = service.clone();
         let state_handle = service.state_handle();
+        let debug = service.snapshot().debug;
         if service
             .task_executor
             .spawn_task(move || {
-                match cloud::refresh_cloud_projects_if_stale(state_handle, false, false) {
+                match cloud::refresh_cloud_projects_if_stale(state_handle, false, debug) {
                     Ok(outcome) if outcome.menu_changed() => {
                         let _ = futures::executor::block_on(
                             service_for_init.rebuild_after_state_change(),

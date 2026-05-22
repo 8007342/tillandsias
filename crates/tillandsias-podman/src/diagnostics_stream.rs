@@ -29,11 +29,13 @@ pub(crate) fn spawn_podman_stream(
         argv = ?redact_argv(&argv),
         "Spawning live podman stream"
     );
-    crate::podman_cmd()
-        .args(&argv)
+    let mut cmd = crate::podman_cmd();
+    cmd.args(&argv)
         .stdout(Stdio::piped())
-        .stderr(Stdio::null())
-        .spawn()
+        .stderr(Stdio::null());
+    let label = format!("stream:{:?}", operation).to_ascii_lowercase();
+    crate::log_podman_invocation(&label, cmd.as_std());
+    cmd.spawn()
 }
 
 /// A single log stream from `podman logs -f <container>`.

@@ -20,6 +20,7 @@ RUN microdnf install -y \
         fish zsh \
         git gh curl wget jq ripgrep \
         nodejs npm \
+        java-25-openjdk-headless maven \
     && microdnf clean all
 
 # ── Agent binaries ─────────────────────────────────────────────

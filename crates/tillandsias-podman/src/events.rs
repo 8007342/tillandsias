@@ -251,30 +251,29 @@ impl PodmanEventStream {
 
             // Try to reconnect — `podman info` actually connects to the podman
             // service, unlike `--help` which succeeds even when the machine is down.
-            if crate::podman_cmd()
+            let mut info_cmd = crate::podman_cmd();
+            info_cmd
                 .args(["info", "--format", "json"])
                 .stdout(std::process::Stdio::null())
-                .stderr(std::process::Stdio::null())
-                .output()
-                .await
-                .is_ok_and(|o| o.status.success())
-            {
+                .stderr(std::process::Stdio::null());
+            crate::log_podman_invocation("events:info-probe", info_cmd.as_std());
+            if info_cmd.output().await.is_ok_and(|o| o.status.success()) {
                 info!("Podman service available again, switching to event stream");
                 return Ok(()); // Will restart stream_events in outer loop
             }
 
             // Inspect containers as fallback
-            let output = crate::podman_cmd()
-                .args([
-                    "ps",
-                    "-a",
-                    "--filter",
-                    &format!("name=^{}", self.prefix),
-                    "--format",
-                    "json",
-                ])
-                .output()
-                .await;
+            let mut ps_cmd = crate::podman_cmd();
+            ps_cmd.args([
+                "ps",
+                "-a",
+                "--filter",
+                &format!("name=^{}", self.prefix),
+                "--format",
+                "json",
+            ]);
+            crate::log_podman_invocation("events:ps-fallback", ps_cmd.as_std());
+            let output = ps_cmd.output().await;
 
             if let Ok(o) = output
                 && o.status.success()

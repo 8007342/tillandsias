@@ -218,22 +218,34 @@ impl ContainerLauncher {
 /// tillandsias containers on the host. Falls back to an empty list if
 /// podman is unavailable or returns an error.
 pub fn query_occupied_ports() -> Vec<(u16, u16)> {
-    let output = crate::podman_cmd_sync()
-        .args([
-            "ps",
-            "--filter",
-            "name=tillandsias-",
-            "--format",
-            "{{.Ports}}",
-        ])
-        .output();
+    let mut cmd = crate::podman_cmd_sync();
+    cmd.args([
+        "ps",
+        "--filter",
+        "name=tillandsias-",
+        "--format",
+        "{{.Ports}}",
+    ]);
+    crate::log_podman_invocation("ports-query", &cmd);
+    let output = cmd.output();
 
     match output {
         Ok(out) if out.status.success() => {
             let stdout = String::from_utf8_lossy(&out.stdout);
             parse_port_output(&stdout)
         }
-        _ => vec![],
+        Ok(out) => {
+            crate::log_podman_failure(
+                "ports-query",
+                &out.status.code().map(|c| c.to_string()).unwrap_or_else(|| "signal".into()),
+                &String::from_utf8_lossy(&out.stderr),
+            );
+            vec![]
+        }
+        Err(e) => {
+            crate::log_podman_failure("ports-query", "spawn-error", &e.to_string());
+            vec![]
+        }
     }
 }
 
