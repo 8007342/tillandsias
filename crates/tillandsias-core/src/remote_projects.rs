@@ -62,8 +62,17 @@ fn is_cache_valid(cached_at: u64) -> bool {
     now_secs().saturating_sub(cached_at) < CACHE_TTL_SECS
 }
 
+const RUNTIME_VERSION: &str = include_str!("../../../VERSION");
+
 fn git_image_tag() -> String {
-    env::var("TILLANDSIAS_GIT_IMAGE").unwrap_or_else(|_| "tillandsias-git:latest".to_string())
+    env::var("TILLANDSIAS_GIT_IMAGE").unwrap_or_else(|_| {
+        // Fully-qualified, versioned tag matching what `tillandsias --init`
+        // produces. A bare short name like `tillandsias-git:latest` would fail
+        // under podman's `short-name-mode=enforcing` (e.g. Fedora Silverblue)
+        // because there's no TTY to prompt for registry selection and no
+        // `:latest` tag is ever produced.
+        format!("localhost/tillandsias-git:v{}", RUNTIME_VERSION.trim())
+    })
 }
 
 fn run_git_image_shell(script: &str, extra_args: &[&str]) -> Result<String, String> {
@@ -267,6 +276,23 @@ mod tests {
             symlink(&mock, dir.path().join("podman")).expect("podman symlink");
         }
         dir
+    }
+
+    #[test]
+    fn git_image_tag_defaults_to_fully_qualified_versioned_tag() {
+        let _guard = TEST_LOCK.lock().expect("test lock");
+        // Ensure no override is leaking from a previous test.
+        unsafe { std::env::remove_var("TILLANDSIAS_GIT_IMAGE") };
+        let tag = git_image_tag();
+        // Fully qualified to dodge podman's short-name resolution prompt on
+        // hosts (e.g. Silverblue) that enforce short-name-mode without a TTY.
+        assert!(
+            tag.starts_with("localhost/tillandsias-git:v"),
+            "expected fully-qualified versioned git image tag, got {tag}"
+        );
+        // Versioned: must match what `tillandsias --init` produces.
+        assert_ne!(tag, "localhost/tillandsias-git:v", "missing version suffix");
+        assert_ne!(tag, "tillandsias-git:latest", "regressed to short name");
     }
 
     #[test]
