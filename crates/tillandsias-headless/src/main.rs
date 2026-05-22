@@ -1226,8 +1226,49 @@ fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
     ]
 }
 
-fn build_git_run_args(project_name: &str, certs_dir: &Path, image: &str) -> Vec<String> {
-    vec![
+/// Read the host's `remote.origin.url` from a project's git config.
+///
+/// Used by `build_git_run_args` to inform the enclave mirror about the
+/// project's GitHub upstream. The mirror's post-receive hook uses this URL
+/// (combined with the podman secret token) to push outbound to GitHub.
+///
+/// Returns `None` for projects that aren't git repos, have no `origin`
+/// configured, or where the git invocation fails for any reason. A missing
+/// origin is benign — the mirror still serves the bare repo, and the
+/// post-receive hook logs "no remote configured, skipping push".
+///
+/// @trace spec:git-mirror-service, spec:enclave-network
+fn read_host_project_origin_url(project_path: &Path) -> Option<String> {
+    let output = std::process::Command::new("git")
+        .arg("-C")
+        .arg(project_path)
+        .args(["config", "--get", "remote.origin.url"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let url = String::from_utf8(output.stdout).ok()?;
+    let trimmed = url.trim();
+    if trimmed.is_empty() {
+        None
+    } else {
+        Some(trimmed.to_string())
+    }
+}
+
+fn build_git_run_args(
+    project_name: &str,
+    certs_dir: &Path,
+    image: &str,
+    project_remote_url: Option<&str>,
+) -> Vec<String> {
+    // Named podman volume for the bare repo. Persists across container
+    // restarts so the mirror's "startup retry-push" loop has stranded commits
+    // to flush. `/srv/git` is the base-path served by `git daemon` inside the
+    // image's entrypoint.
+    let mirror_volume = format!("tillandsias-mirror-{project_name}");
+    let mut args = vec![
         "--detach".into(),
         "--rm".into(),
         "--name".into(),
@@ -1244,22 +1285,29 @@ fn build_git_run_args(project_name: &str, certs_dir: &Path, image: &str) -> Vec<
         "--userns=keep-id".into(),
         "--pids-limit=64".into(),
         "--read-only".into(),
+        "--volume".into(),
+        format!("{mirror_volume}:/srv/git"),
         "--env".into(),
         format!("PROJECT={project_name}"),
         "--env".into(),
         "GIT_TRACE=1".into(),
-        "--mount".into(),
-        format!(
-            "type=bind,source={},target=/etc/tillandsias/ca.crt,readonly=true",
-            certs_dir.join("intermediate.crt").display()
-        ),
-        image.into(),
-        "/usr/bin/git".into(),
-        "daemon".into(),
-        "--verbose".into(),
-        "--listen=0.0.0.0".into(),
-        "--base-path=/var/lib/git".into(),
-    ]
+    ];
+    if let Some(url) = project_remote_url
+        && !url.is_empty()
+    {
+        args.push("--env".into());
+        args.push(format!("TILLANDSIAS_PROJECT_REMOTE_URL={url}"));
+    }
+    args.push("--mount".into());
+    args.push(format!(
+        "type=bind,source={},target=/etc/tillandsias/ca.crt,readonly=true",
+        certs_dir.join("intermediate.crt").display()
+    ));
+    args.push(image.into());
+    // Image ENTRYPOINT is /usr/local/bin/entrypoint.sh which runs the right
+    // `git daemon` invocation (base-path /srv/git, --enable=receive-pack,
+    // --reuseaddr, --export-all). Do NOT override it here.
+    args
 }
 
 fn build_inference_run_args(
@@ -2733,7 +2781,9 @@ fn run_status_check(debug: bool) -> Result<(), String> {
             .run_container_observed(
                 "status-git",
                 &git_container_name,
-                &build_git_run_args(project_name, &certs_dir, &git_image),
+                // Status-check has no real project — there is no host origin
+                // URL to forward and the bare repo is throwaway.
+                &build_git_run_args(project_name, &certs_dir, &git_image, None),
                 debug,
             )
             .await
@@ -3738,6 +3788,17 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
         eprintln!("[tillandsias] [OpenCode] Launching full-stack OpenCode session");
     }
 
+    // Read the host's `remote.origin.url` so the mirror's post-receive hook
+    // knows where to forward pushes. None when the project has no origin —
+    // the mirror still works, the hook just logs "skipping push".
+    let project_remote_url = read_host_project_origin_url(&project_path_resolved);
+    if debug {
+        match &project_remote_url {
+            Some(url) => eprintln!("[tillandsias] [OpenCode] Host origin URL: {url}"),
+            None => eprintln!("[tillandsias] [OpenCode] No host origin URL configured"),
+        }
+    }
+
     let rt = podman_runtime()?;
     let client = PodmanClient::new();
     rt.block_on(async {
@@ -3761,6 +3822,7 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
                     project_name,
                     &certs_dir,
                     &versioned_image_tag("git", version),
+                    project_remote_url.as_deref(),
                 ),
                 debug,
             )
@@ -4516,6 +4578,15 @@ pub(crate) fn run_opencode_web_mode(
         "starting",
         Some("proxy git inference forge"),
     )?;
+    // Read the host's `remote.origin.url` so the mirror's post-receive hook
+    // knows where to forward pushes.
+    let project_remote_url = read_host_project_origin_url(&project_path_resolved);
+    if debug {
+        match &project_remote_url {
+            Some(url) => eprintln!("[tillandsias] [OpenCode Web] Host origin URL: {url}"),
+            None => eprintln!("[tillandsias] [OpenCode Web] No host origin URL configured"),
+        }
+    }
     rt.block_on(async {
         cleanup_stack_containers(&client, project_name).await;
 
@@ -4543,6 +4614,7 @@ pub(crate) fn run_opencode_web_mode(
                     project_name,
                     &certs_dir,
                     &versioned_image_tag("git", version),
+                    project_remote_url.as_deref(),
                 ),
                 debug,
             )
@@ -4838,11 +4910,18 @@ fn executable_on_path(name: &str) -> bool {
 /// the certs directory. Shared by `run_opencode_web_mode` (web) and
 /// `launch_forge_agent` (Claude/Codex/OpenCode/Maintenance terminal launches).
 ///
+/// `project_path` is the host's canonical project path. It is read with `git
+/// -C <path> config remote.origin.url` so the mirror's post-receive hook
+/// knows where to forward pushes. Passing `None` (or a path with no origin
+/// configured) leaves the mirror without an upstream; the hook will log
+/// "skipping push" but the bare repo still serves clones and accepts pushes.
+///
 /// Idempotent: if containers already exist they are removed first, matching
 /// the existing `run_opencode_web_mode` discipline.
 #[cfg_attr(not(feature = "tray"), allow(dead_code))]
 pub(crate) fn ensure_enclave_for_project(
     project_name: &str,
+    project_path: Option<&Path>,
     debug: bool,
 ) -> Result<PathBuf, String> {
     let version = VERSION.trim();
@@ -4852,6 +4931,14 @@ pub(crate) fn ensure_enclave_for_project(
 
     let images = ["proxy", "git", "inference", "forge"];
     ensure_versioned_images(&root, &images, version, debug)?;
+
+    let project_remote_url = project_path.and_then(read_host_project_origin_url);
+    if debug {
+        match &project_remote_url {
+            Some(url) => eprintln!("[tillandsias] [forge-launch] Host origin URL: {url}"),
+            None => eprintln!("[tillandsias] [forge-launch] No host origin URL configured"),
+        }
+    }
 
     let rt = podman_runtime()?;
     let client = PodmanClient::new();
@@ -4876,6 +4963,7 @@ pub(crate) fn ensure_enclave_for_project(
                     project_name,
                     &certs_dir,
                     &versioned_image_tag("git", version),
+                    project_remote_url.as_deref(),
                 ),
                 debug,
             )
@@ -5027,7 +5115,7 @@ fn run_forge_agent_cli_mode(
     }
 
     let version = VERSION.trim();
-    let certs_dir = ensure_enclave_for_project(project_name, debug)?;
+    let certs_dir = ensure_enclave_for_project(project_name, Some(&canonical), debug)?;
     let forge_args =
         build_forge_agent_run_args(&canonical, project_name, &certs_dir, version, mode, debug);
 
@@ -5084,7 +5172,7 @@ pub(crate) fn launch_forge_agent(
         );
     }
 
-    let certs_dir = ensure_enclave_for_project(project_name, debug)?;
+    let certs_dir = ensure_enclave_for_project(project_name, Some(&canonical), debug)?;
 
     let argv =
         build_forge_agent_run_argv(&canonical, project_name, &certs_dir, version, mode, debug);
@@ -6123,7 +6211,7 @@ mod tests {
     fn stack_service_args_do_not_pin_static_ips() {
         let certs = PathBuf::from("/tmp/ca");
         let proxy = build_proxy_run_args(&certs, "tillandsias-proxy:v1");
-        let git = build_git_run_args("alpha", &certs, "tillandsias-git:v1");
+        let git = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None);
         let inference = build_inference_run_args(&certs, "tillandsias-inference:v1", false);
         let router = build_router_run_args(&certs, "tillandsias-router:v1", 8080);
 
@@ -6133,6 +6221,50 @@ mod tests {
                 "stack launch must let podman IPAM allocate addresses: {args:?}"
             );
         }
+    }
+
+    #[test]
+    fn git_run_args_use_image_entrypoint_and_persist_srv_git() {
+        // The image's ENTRYPOINT runs `git daemon --base-path=/srv/git
+        // --enable=receive-pack`; the launcher must NOT override CMD.
+        // /srv/git must be writable (named volume) so the bare repo persists
+        // and the post-receive hook can be installed.
+        let certs = PathBuf::from("/tmp/ca");
+        let args = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None);
+
+        // No `--base-path=...` override appended after the image — confirms
+        // we let the image entrypoint take over.
+        assert!(
+            !args.iter().any(|a| a.starts_with("--base-path=")),
+            "must not override base-path: {args:?}"
+        );
+        // Named volume for the bare repo storage.
+        assert!(
+            args.iter().any(|a| a == "tillandsias-mirror-alpha:/srv/git"),
+            "expected mirror volume mount in args: {args:?}"
+        );
+        assert!(has_arg(&args, "PROJECT=alpha"));
+    }
+
+    #[test]
+    fn git_run_args_forward_project_remote_url_when_present() {
+        let certs = PathBuf::from("/tmp/ca");
+        let url = "https://github.com/example/repo.git";
+        let with_url = build_git_run_args("alpha", &certs, "tillandsias-git:v1", Some(url));
+        assert!(
+            with_url
+                .iter()
+                .any(|a| a == &format!("TILLANDSIAS_PROJECT_REMOTE_URL={url}")),
+            "expected upstream URL env var: {with_url:?}"
+        );
+
+        let without_url = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None);
+        assert!(
+            !without_url
+                .iter()
+                .any(|a| a.starts_with("TILLANDSIAS_PROJECT_REMOTE_URL=")),
+            "expected no upstream URL env var: {without_url:?}"
+        );
     }
 
     #[test]

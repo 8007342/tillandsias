@@ -5,8 +5,8 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [images/default/Containerfile#L68](../../../images/default/Containerfile#L68)
-- [images/default/Containerfile#L120](../../../images/default/Containerfile#L120)
+- [images/default/Containerfile#L69](../../../images/default/Containerfile#L69)
+- [images/default/Containerfile#L121](../../../images/default/Containerfile#L121)
 - [images/default/entrypoint-forge-claude.sh#L53](../../../images/default/entrypoint-forge-claude.sh#L53)
 - [images/default/entrypoint-forge-codex.sh#L52](../../../images/default/entrypoint-forge-codex.sh#L52)
 - [images/default/entrypoint-forge-opencode.sh#L53](../../../images/default/entrypoint-forge-opencode.sh#L53)
@@ -14,3 +14,5 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/entrypoint-terminal.sh#L61](../../../images/default/entrypoint-terminal.sh#L61)
 - [images/default/forge-welcome.sh#L132](../../../images/default/forge-welcome.sh#L132)
 - [images/default/lib-common.sh#L202](../../../images/default/lib-common.sh#L202)
+- [images/default/lib-common.sh#L285](../../../images/default/lib-common.sh#L285)
+- [images/default/lib-common.sh#L312](../../../images/default/lib-common.sh#L312)

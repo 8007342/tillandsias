@@ -113,12 +113,33 @@ but the forge has no DNS for github.com and no credentials. Without intervention
 `git push origin <branch>` fails inside the forge with `Could not resolve host:
 github.com`.
 
-`clone_project_from_mirror()` in `images/default/lib-common.sh` resolves this
-by calling `rewrite_origin_for_enclave_push()` on the host-mount path. That
-helper installs `url.git://git-service/<project>.insteadOf <host-origin-url>`
-in the container-ephemeral `~/.gitconfig` (**NOT** in the bind-mounted
-`.git/config`, which must stay pristine so the host's normal workflow keeps
-working unchanged).
+End-to-end round-trip (forge → mirror → GitHub) is wired through these pieces:
+
+1. **Forge-side rewrite.** `clone_project_from_mirror()` in
+   `images/default/lib-common.sh` calls `rewrite_origin_for_enclave_push()`
+   on the host-mount path. That helper installs
+   `url.git://git-service/<project>.insteadOf <host-origin-url>` in the
+   container-ephemeral `~/.gitconfig` (**NOT** in the bind-mounted
+   `.git/config`, which must stay pristine). The forge's `git push origin`
+   silently routes to the enclave mirror.
+2. **Mirror startup.** The git service container's entrypoint
+   (`images/git/entrypoint.sh`) reads `PROJECT` and `TILLANDSIAS_PROJECT_REMOTE_URL`,
+   seeds a bare repo at `/srv/git/<project>` (named podman volume
+   `tillandsias-mirror-<project>` so committed objects survive container
+   restarts), points its `origin` at the host's upstream, and installs
+   `post-receive-hook.sh` at `hooks/post-receive`. The daemon then runs with
+   `--enable=receive-pack --base-path=/srv/git` (the image's default `CMD`;
+   the launcher must NOT override it).
+3. **Launcher wiring.** `build_git_run_args` in
+   `crates/tillandsias-headless/src/main.rs` mounts the persistent volume at
+   `/srv/git`, sets `PROJECT=<name>`, and forwards the host's
+   `remote.origin.url` (read via `read_host_project_origin_url`) as
+   `TILLANDSIAS_PROJECT_REMOTE_URL`. It does NOT override the image's
+   entrypoint/CMD.
+4. **Outbound push.** When the mirror receives a push, its post-receive hook
+   reads the podman secret `tillandsias-github-token`, injects it ephemerally
+   into the upstream URL, and runs `git push --mirror`. The token never lands
+   on disk; the bare repo's stored `origin` URL is clean.
 
 User-visible behavior inside the forge:
 
@@ -126,7 +147,7 @@ User-visible behavior inside the forge:
 git remote -v                         # shows git://git-service/<project>
 git config remote.origin.url          # shows the original https://github.com/...
 git config --global tillandsias.original-origin  # forensic copy of the original
-git push origin <branch>              # routes through git-service:9418
+git push origin <branch>              # routes through git-service:9418 → GitHub
 ```
 
 The host can still `git push origin <branch>` directly to GitHub from outside
