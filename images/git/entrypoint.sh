@@ -82,16 +82,17 @@ if [ -n "$PROJECT" ]; then
 fi
 
 # @trace spec:git-mirror-service
-# Retry-on-startup: flush any commits that landed in the mirror while the
-# previous session couldn't reach GitHub (e.g. the mirror had no HTTP_PROXY,
-# or GitHub was transiently down). Each push is `--mirror origin` so it's
-# idempotent — if mirror and remote are already in sync the push is a no-op.
-# Errors are logged but don't block the daemon; the push is also rerun by
-# the post-receive hook on the next forge commit.
+# Retry-on-startup: re-push refs that may have been stranded from a previous
+# session (e.g. GitHub was transiently down when the post-receive hook ran).
 #
-# Bind-mounted mirror at /var/home/machiyotl/.cache/tillandsias/mirrors/<proj>
-# persists across container lifecycles, so stranded commits from a prior
-# session DO accumulate here — this sweep is their exit hatch.
+# CRITICAL: We push EACH LOCAL BRANCH and EACH LOCAL TAG by name, NOT with
+# `git push --mirror`. The mirror is a sparse cache holding only refs the
+# forge has touched — `--mirror` would delete every branch and tag upstream
+# that this enclave doesn't have, which nearly destroyed the upstream repo
+# before wave 24. Always use the explicit per-ref form here.
+#
+# Errors are logged but don't block the daemon; the next forge commit will
+# trigger the post-receive hook which re-attempts the upstream push.
 # Pick a writable log path. Under --read-only the bind-mounted /var/log/...
 # isn't always available; fall through to /tmp (the image's tmpfs) or skip.
 GIT_RETRY_LOG=""
@@ -113,12 +114,34 @@ retry_msg() {
     echo "$1"
 }
 # Only do this on a real mirror tree (skip empty/init'ing service).
+#
+# Safety: build an explicit refspec list from this mirror's local refs.
+# Anything not in /srv/git/<project>/refs/ is NOT touched upstream. We never
+# pass `--mirror` or `--all` here because the mirror is sparse by design.
 for mirror in /srv/git/*; do
     [ -d "$mirror" ] || continue
     REMOTE="$(git -C "$mirror" remote get-url origin 2>/dev/null || true)"
     [ -n "$REMOTE" ] || continue
-    retry_msg "[git-mirror] Startup retry-push: $mirror -> $REMOTE"
-    if OUTPUT="$(git -C "$mirror" push --mirror origin 2>&1)"; then
+
+    # Skip mirrors that have no refs yet (freshly seeded, nothing to push).
+    if ! git -C "$mirror" rev-parse --quiet --verify HEAD >/dev/null 2>&1 \
+       && [ -z "$(git -C "$mirror" for-each-ref --format='%(refname)' refs/heads refs/tags 2>/dev/null)" ]; then
+        retry_msg "[git-mirror] Startup retry-push: $mirror has no refs yet, skipping"
+        continue
+    fi
+
+    # Build refspecs: "refs/heads/<name>:refs/heads/<name>" for each branch,
+    # "refs/tags/<name>:refs/tags/<name>" for each tag.
+    REFSPECS=""
+    for ref in $(git -C "$mirror" for-each-ref --format='%(refname)' refs/heads refs/tags 2>/dev/null); do
+        REFSPECS="$REFSPECS $ref:$ref"
+    done
+    if [ -z "$REFSPECS" ]; then
+        continue
+    fi
+    retry_msg "[git-mirror] Startup retry-push: $mirror -> $REMOTE (refspecs=$(echo "$REFSPECS" | wc -w))"
+    # shellcheck disable=SC2086
+    if OUTPUT="$(git -C "$mirror" push origin $REFSPECS 2>&1)"; then
         retry_msg "[git-mirror] Startup retry-push OK"
     else
         retry_msg "[git-mirror] Startup retry-push FAILED: $OUTPUT"

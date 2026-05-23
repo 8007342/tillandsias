@@ -2,8 +2,15 @@
 # @trace spec:git-mirror-service, spec:cross-platform, spec:windows-wsl-runtime
 # Template post-receive hook for git mirrors managed by Tillandsias.
 # Installed into each mirror's hooks/post-receive directory.
-# Pushes to the configured origin remote after receiving from a forge container.
-# Always exits 0 — never blocks the forge's push even if the remote push fails.
+#
+# Pushes JUST THE REFS THAT WERE UPDATED in this forge push to the configured
+# origin remote. Always exits 0 — never blocks the forge's push even if the
+# remote push fails.
+#
+# DO NOT USE `git push --mirror` HERE. The enclave mirror is a sparse cache
+# that only contains refs the forge has pushed; `--mirror` would instruct
+# GitHub to delete every other branch and tag (it nearly destroyed the
+# upstream repo before this safer hook landed — see wave 24).
 #
 # Two host environments:
 #   - Linux/podman: hook runs inside tillandsias-git container; /var/log/tillandsias/
@@ -44,6 +51,51 @@ if [ -z "$REMOTE_URL" ]; then
     exit 0
 fi
 
+# Read the refs that were just updated in this push from stdin. Git invokes
+# post-receive with one line per ref: `<oldsha> <newsha> <refname>`. We push
+# exactly those refs upstream — nothing more, nothing less.
+#
+# Build a list of refspecs:
+#   - `<newsha>:<refname>` to create/update the ref upstream
+#   - `:<refname>` (with a leading colon) to delete the ref upstream when
+#     the forge explicitly deleted it (newsha is the 40-zero string)
+#
+# A forge that pushes one branch produces exactly one refspec. We NEVER touch
+# refs the forge didn't mention. This is the critical safety property.
+REFSPECS=""
+DELETE_COUNT=0
+CREATE_UPDATE_COUNT=0
+ZERO_SHA="0000000000000000000000000000000000000000"
+
+while read -r OLDSHA NEWSHA REFNAME; do
+    if [ -z "$REFNAME" ]; then
+        continue
+    fi
+    if [ "$NEWSHA" = "$ZERO_SHA" ]; then
+        REFSPECS="$REFSPECS :$REFNAME"
+        DELETE_COUNT=$((DELETE_COUNT + 1))
+    else
+        REFSPECS="$REFSPECS $NEWSHA:$REFNAME"
+        CREATE_UPDATE_COUNT=$((CREATE_UPDATE_COUNT + 1))
+    fi
+done
+
+if [ -z "$REFSPECS" ]; then
+    log_msg "[git-mirror] No refs updated, skipping upstream push"
+    exit 0
+fi
+
+# Safety guard: refuse to forward more than 10 deletions in a single push.
+# If the forge somehow tries to mass-delete (or a buggy launcher feeds us a
+# bogus ref list), fail loud rather than silently destroy upstream refs.
+# Override with TILLANDSIAS_ALLOW_BULK_DELETE=1 if you really want it.
+if [ "$DELETE_COUNT" -gt 10 ] && [ "${TILLANDSIAS_ALLOW_BULK_DELETE:-0}" != "1" ]; then
+    log_msg "[git-mirror] SAFETY: refusing to forward $DELETE_COUNT deletions to upstream (set TILLANDSIAS_ALLOW_BULK_DELETE=1 to override)"
+    exit 0
+fi
+
+log_msg "[git-mirror] Forwarding $CREATE_UPDATE_COUNT update(s) and $DELETE_COUNT deletion(s) to upstream"
+
 # @trace spec:secrets-management, spec:cross-platform, spec:git-mirror-service
 # Construct an EPHEMERAL auth URL by injecting the podman secret at push time.
 # The token is read directly from /run/secrets/tillandsias-github-token.
@@ -69,7 +121,10 @@ fi
 
 REMOTE_URL_REDACTED="$(redact_url "$REMOTE_URL")"
 
-if OUTPUT="$(git push --mirror "$PUSH_URL" 2>&1)"; then
+# Run the push with the explicit refspec list. Word-splitting on $REFSPECS is
+# intended — each refspec is a single shell word with no whitespace inside it.
+# shellcheck disable=SC2086
+if OUTPUT="$(git push "$PUSH_URL" $REFSPECS 2>&1)"; then
     log_msg "[git-mirror] Push to origin ($REMOTE_URL_REDACTED): success"
 else
     OUTPUT_REDACTED="$(redact_output "$OUTPUT")"
