@@ -55,6 +55,19 @@ Plan reference: `~/.claude/plans/partitioned-wobbling-babbage.md`.
 ## Status updates
 
 - 2026-05-24: Step opened; Phase 0 in progress. Three opsx:proposes already pushed in commit `37b36cd4`. 4th proposal `macos-tray-build-and-release` to follow shortly.
+- 2026-05-24 (later): **Phase 0 complete** (commit `527ee207`). 4th proposal pushed; plan/steps/20 visible to other hosts. Phase 1 starting.
+- 2026-05-24 (later still): **Phase 1 grounded, scoped, scheduled for next session.** Cheatsheets `runtime/vz-framework-provisioning.md`, `runtime/vsock-transport.md`, `runtime/macos-vz-gui-research-v2.md` confirm the architecture. `objc2-virtualization 0.2.2` API surveyed: `VZVirtioSocketConnection::fileDescriptor() -> c_int` is the macOS-host-side bridge hook for the vsock connector; wrap with `tokio::io::unix::AsyncFd`. Required features: `VZSocketDeviceConfiguration`, `VZSocketDevice`, `VZVirtioSocketListener`, plus the bootloader/storage/network feature flags. Phase 1 implementation order (committed individually for FF-pull granularity):
+  1. `crates/tillandsias-vm-layer/examples/vz-spike.rs` — minimal VZVirtualMachineConfiguration that calls `validate()`. Proves the toolchain + entitlement story end-to-end before the larger refactor.
+  2. `crates/tillandsias-control-wire/src/transport_vsock_macos.rs` — `VZVirtioSocketDevice::connectToPort:completionHandler:` → `Retained<VZVirtioSocketConnection>` → `fileDescriptor()` → `AsyncFd<RawFd>` → `(impl AsyncRead, impl AsyncWrite)`. Documented as "macOS host always *connects*; never *binds* — guest binds VMADDR_CID_ANY:42420 inside its own kernel."
+  3. Refactor `VzRuntime` to hold an `Arc<RwLock<Option<Retained<VZVirtualMachine>>>>` for VM-handle storage across `&self` method calls.
+  4. Implement `VzRuntime::start` — full config builder (EFI + NVRAM, virtio-blk root disk, virtio-net NAT, virtio-console serial → host stdout, **virtio-vsock with guest_cid**, virtio-fs share, entropy, balloon), `validate()`, `start(completionHandler:)`.
+  5. Implement `VzRuntime::stop` — `requestStop` then force-stop after `drain_timeout`.
+  6. Implement `VzRuntime::wait_ready` — host-side polls `VZVirtioSocketDevice::connectToPort(42420)` with the existing 250ms/500ms/1s/2s/4s backoff; success once the connection lands and the Hello/HelloAck handshake completes.
+  7. Leave `VzRuntime::exec` as a clear "Phase 5" stub (PTY-over-vsock).
+  8. Update `crates/tillandsias-vm-layer/Cargo.toml` to pin `objc2-virtualization` to `=0.2.2` exact.
+  9. Tests: `examples/vz-spike.rs` smoke (boots placeholder image, console log written); unit tests for the AsyncFd wrapper (loopback unix pair stand-in on Linux).
+
+  Phase 1 is **not single-session work**. Estimated 3 working days as planned. Next session continues here.
 
 ## Done-when
 
