@@ -227,6 +227,41 @@ The tray's `🔵 Setting up Fedora Linux…` status text rolls through one of th
 
 Each failure shows "Retry" and "Open log" sub-items. The log path is `%LOCALAPPDATA%\tillandsias\logs\provisioning-<timestamp>.log`.
 
+## Manual repro on a Win11 box
+
+Phase-4 ships the Win32 NotifyIcon + WSL lifecycle wiring. The Linux dev box can only `cargo check --target x86_64-pc-windows-gnu` it. To exercise the full path on a Win11 machine:
+
+```powershell
+# 1. Build the tray (MSVC toolchain).
+cargo build --release -p tillandsias-windows-tray --target x86_64-pc-windows-msvc
+
+# 2. Stage a Fedora rootfs + tillandsias binary into the cache.
+mkdir "$env:LOCALAPPDATA\tillandsias\cache\rootfs"
+mkdir "$env:LOCALAPPDATA\tillandsias\cache\bin"
+# Drop a Fedora-Container-Base-Generic.44-*.tar.xz at:
+#   $env:LOCALAPPDATA\tillandsias\cache\rootfs\fedora-44-rootfs.tar.xz
+# Drop the matching tillandsias-headless binary at:
+#   $env:LOCALAPPDATA\tillandsias\cache\bin\tillandsias-headless-<host-version>
+
+# 3. Launch the tray.
+.\target\x86_64-pc-windows-msvc\release\tillandsias-tray.exe
+
+# 4. Verify the tray icon appears, hover for the tooltip; rotate through phases:
+#    "Setting up Fedora Linux..." → "Installing Tillandsias..." → "Starting Fedora Linux..." → ready menu.
+
+# 5. Verify `wsl --list --quiet` now lists `tillandsias`.
+
+# 6. Verify `wsl --distribution tillandsias --user root -- systemctl is-enabled tillandsias-headless.service` returns `enabled`.
+
+# 7. Right-click the tray icon and walk every submenu — expect the 7-item top-level + footer (status + ~/src + Cloud + Agents + Observatorium + OpenCode Web + GitHub login + version + quit).
+
+# 8. Quit the tray. Verify the distro shuts down via the graceful drain (~30s budget):
+#    Get-Process wslhost  # should disappear
+#    wsl --list --running   # should not list `tillandsias`
+```
+
+Each of these is an unattended manual gate; CI does not run them today.
+
 ## See also
 
 - `runtime/wsl2-isolation-boundary.md` — the hardening profile baked into `/etc/wsl.conf`

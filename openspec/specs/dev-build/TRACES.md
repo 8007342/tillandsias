@@ -8,6 +8,6 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [build.sh#L27](../../../build.sh#L27)
 - [build.sh#L227](../../../build.sh#L227)
 - [build.sh#L342](../../../build.sh#L342)
-- [crates/tillandsias-headless/src/main.rs#L2753](../../../crates/tillandsias-headless/src/main.rs#L2753)
+- [crates/tillandsias-headless/src/main.rs#L2784](../../../crates/tillandsias-headless/src/main.rs#L2784)
 - [scripts/build-image.sh#L18](../../../scripts/build-image.sh#L18)
 - [scripts/local-ci.sh#L836](../../../scripts/local-ci.sh#L836)

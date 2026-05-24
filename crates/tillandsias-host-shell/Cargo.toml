@@ -11,8 +11,17 @@ publish = false
 tillandsias-core = { path = "../tillandsias-core" }
 tillandsias-control-wire = { path = "../tillandsias-control-wire" }
 tillandsias-vm-layer = { path = "../tillandsias-vm-layer" }
-tillandsias-vault-client = { path = "../tillandsias-vault-client" }
+# tillandsias-vault-client is wired in Phase 6 when vault gets surfaced in the
+# tray UI. Until then it stays out of the host-shell dep graph so the Windows
+# cross-build does not pull reqwest + ring (which need mingw on Linux).
+# tillandsias-vault-client = { path = "../tillandsias-vault-client" }
 tillandsias-scanner = { path = "../tillandsias-scanner" }
 tokio = { workspace = true, features = ["full"] }
 serde = { workspace = true }
 tracing = { workspace = true }
+postcard = { workspace = true }
+async-trait = { workspace = true }
+
+[dev-dependencies]
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "io-util", "net"] }

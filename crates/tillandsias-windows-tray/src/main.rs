@@ -8,12 +8,29 @@
 //! @trace spec:windows-native-tray
 
 #![allow(dead_code)]
-#![allow(unused)]
+// Tell Windows this is a GUI subsystem binary — no console window pops up
+// on tray launch. Non-Windows builds ignore this attribute entirely.
+#![cfg_attr(
+    all(target_os = "windows", not(debug_assertions)),
+    windows_subsystem = "windows"
+)]
 
+#[cfg(target_os = "windows")]
+mod installation_uuid;
 #[cfg(target_os = "windows")]
 mod notify_icon;
-
 #[cfg(target_os = "windows")]
+mod wsl_lifecycle;
+
+// Linux stub modules so unit tests + portable code paths compile cleanly.
+#[cfg(not(target_os = "windows"))]
+#[path = "stubs/installation_uuid.rs"]
+mod installation_uuid;
+#[cfg(not(target_os = "windows"))]
+#[path = "stubs/notify_icon.rs"]
+mod notify_icon;
+#[cfg(not(target_os = "windows"))]
+#[path = "stubs/wsl_lifecycle.rs"]
 mod wsl_lifecycle;
 
 #[cfg(target_os = "windows")]
@@ -23,6 +40,9 @@ fn main() {
 
 #[cfg(not(target_os = "windows"))]
 fn main() {
-    eprintln!("tillandsias-windows-tray runs on Windows only");
+    eprintln!(
+        "tillandsias-windows-tray runs on Windows only \
+         — see openspec/specs/windows-native-tray/spec.md"
+    );
     std::process::exit(1);
 }

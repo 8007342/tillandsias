@@ -13,11 +13,39 @@ path = "src/main.rs"
 
 [dependencies]
 tillandsias-host-shell = { path = "../tillandsias-host-shell" }
+tillandsias-vm-layer = { path = "../tillandsias-vm-layer" }
 tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2 = "0.5"
-objc2-app-kit = { version = "0.2", features = ["NSStatusBar", "NSStatusItem", "NSMenu"] }
-objc2-foundation = "0.2"
+objc2-app-kit = { version = "0.2", features = [
+    "NSApplication",
+    "NSResponder",
+    "NSRunningApplication",
+    "NSStatusBar",
+    "NSStatusItem",
+    "NSStatusBarButton",
+    "NSButton",
+    "NSControl",
+    "NSMenu",
+    "NSMenuItem",
+    "NSImage",
+    "NSWorkspace",
+    "NSEvent",
+] }
+objc2-foundation = { version = "0.2", features = [
+    "NSString",
+    "NSURL",
+    "NSArray",
+    "NSDictionary",
+    "NSUUID",
+    "NSThread",
+    "NSRunLoop",
+    "NSDate",
+    "NSGeometry",
+] }
 objc2-virtualization = "0.2"
+
+[dev-dependencies]
+tempfile = "3"

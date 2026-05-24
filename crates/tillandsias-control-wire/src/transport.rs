@@ -20,6 +20,7 @@ use std::io;
 use std::path::PathBuf;
 
 use tokio::io::{AsyncRead, AsyncWrite};
+#[cfg(unix)]
 use tokio::net::{UnixListener, UnixStream};
 
 /// Stable vsock port used by the control wire for the primary channel.
@@ -50,7 +51,8 @@ impl<T: AsyncRead + AsyncWrite + ?Sized> AsyncReadWrite for T {}
 
 /// A bound listener that yields connections framed for the control wire.
 pub enum Listener {
-    /// Unix-socket listener (Linux only).
+    /// Unix-socket listener (Unix-family only).
+    #[cfg(unix)]
     Unix(UnixListener),
     /// Vsock listener (Linux only, behind the `vsock` feature).
     #[cfg(all(target_os = "linux", feature = "vsock"))]
@@ -70,6 +72,7 @@ impl Listener {
         &mut self,
     ) -> io::Result<Box<dyn AsyncReadWrite + Unpin + Send>> {
         match self {
+            #[cfg(unix)]
             Listener::Unix(listener) => {
                 let (stream, _addr) = listener.accept().await?;
                 Ok(Box::new(stream))
@@ -97,10 +100,16 @@ pub async fn connect(
     transport: &Transport,
 ) -> io::Result<Box<dyn AsyncReadWrite + Unpin + Send>> {
     match transport {
+        #[cfg(unix)]
         Transport::Unix(path) => {
             let stream = UnixStream::connect(path).await?;
             Ok(Box::new(stream))
         }
+        #[cfg(not(unix))]
+        Transport::Unix(_) => Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "Unix-socket transport is only available on Unix-family targets",
+        )),
         Transport::Vsock { cid, port } => connect_vsock(*cid, *port).await,
     }
 }
@@ -114,10 +123,16 @@ pub async fn connect(
 /// @trace spec:vsock-transport
 pub async fn bind(transport: &Transport) -> io::Result<Listener> {
     match transport {
+        #[cfg(unix)]
         Transport::Unix(path) => {
             let listener = UnixListener::bind(path)?;
             Ok(Listener::Unix(listener))
         }
+        #[cfg(not(unix))]
+        Transport::Unix(_) => Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "Unix-socket transport is only available on Unix-family targets",
+        )),
         Transport::Vsock { cid, port } => bind_vsock(*cid, *port).await,
     }
 }
@@ -204,6 +219,7 @@ mod tests {
     /// encode/decode pair.
     ///
     /// @trace spec:vsock-transport
+    #[cfg(unix)]
     #[tokio::test]
     async fn unix_roundtrip_via_transport_module() {
         let dir = tempfile::tempdir().expect("tempdir");

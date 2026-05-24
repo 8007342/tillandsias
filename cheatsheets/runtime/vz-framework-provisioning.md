@@ -87,6 +87,40 @@ hdiutil attach -nomount "$ROOT_IMG"             # macOS — yields /dev/diskX
 
 The "macOS cannot mount ext4" problem is real; the production flow uses a tiny Apple `Containerization`-style or `virtio-fs`-only installer-VM to do the mkfs + populate step inside Linux, then writes the resulting raw image to the host filesystem. This is research item #5 in the plan (`openspec/specs/vm-provisioning-lifecycle/spec.md`).
 
+### Phase 5 implementation status (rootfs conversion)
+
+`crates/tillandsias-vm-layer/src/vz.rs::vz_real::convert_rootfs_to_disk_image` and `extract_kernel_artifacts` are intentionally `unimplemented!()` in Phase 5. Three viable production paths, ranked by Tillandsias preference:
+
+1. **CI-baked image (preferred for v1)** — bake the populated `rootfs.img` + `vmlinuz` + `initramfs.img` triplet into a release asset published alongside the `tillandsias-linux-x86_64` binary. Provisioning then becomes a plain HTTP fetch + SHA verify, no mkfs at all on the user's machine. Costs: one extra GitHub Actions runner step (linux-arm64) producing the ext4 image inside a Fedora container.
+2. **Installer-VM sidecar (fallback)** — on first run, spin up a tiny rust-vmm or `Containerization.framework` Linux VM that mounts the tarball, runs `mkfs.ext4 -F /dev/vda && tar -xf /work/rootfs.tar.xz -C /mnt`, then writes the resulting `rootfs.img` back to the host. Adds 2-3 GB to first-run download (`fedora-minimal` initramfs + kernel for the installer).
+3. **`hdiutil` + helper container** — `hdiutil create -fs ExFAT` does not get us ext4. macOS ships `newfs_exfat` and `newfs_msdos` only. Treat this option as not viable for ext4.
+
+The Phase 5 macOS-host follow-up wave wires option #1 by extending `.github/workflows/release.yml`'s release job. Until then, the `unimplemented!()` call in `vz.rs` is the explicit signal that nobody can boot a VZ guest on macOS yet.
+
+### Phase 5 implementation status (status item)
+
+`crates/tillandsias-macos-tray/src/status_item.rs` implements the real `NSStatusItem` + `NSMenu` wiring against `objc2 0.5` + `objc2-app-kit 0.2`. The key surface:
+
+- `install_status_item(mtm, structure) -> Retained<NSStatusItem>` — constructs the bar item, sets its title to the placeholder "T" (replaced by `assets/icon.pdf` at packaging time), and sets the tooltip from the menu's `status` line so the user sees the current condensed phase on hover.
+- `build_menu(mtm, structure) -> Retained<NSMenu>` — walks `menu_disabled_v2::render(structure)` and produces one `NSMenuItem` per spec. Disabled items get `setEnabled(false)` + `setToolTip(reason)`; checked items get `setState(NSControlStateValueOn)`; nested children become a recursive `NSMenu` submenu.
+- All AppKit calls are gated by a `MainThreadMarker` obtained at entry; off-thread calls panic with a clear message.
+
+The Linux dev box cannot validate the AppKit run-loop end-to-end; manual repro on a macOS 14+ box is:
+
+```bash
+# On a macOS 14+ host with Xcode CLT installed:
+git checkout main
+cargo build -p tillandsias-macos-tray --release --target aarch64-apple-darwin
+./target/aarch64-apple-darwin/release/tillandsias-tray
+# Expect: menu-bar icon (the "T" placeholder) appears within 500ms.
+# Click → menu opens with:
+#   Setting up Fedora Linux… (disabled, italic)
+#   ❌ Quit Tillandsias
+# Click Quit → process exits cleanly.
+```
+
+A more complete macOS pilot will land in the Phase 5 macOS-host follow-up — at that point, the placeholder icon is replaced with the real green tillandsia, and the provisioning thread starts feeding the menu state machine.
+
 ## `VZVirtualMachineConfiguration` shape
 
 Tillandsias' VM config is built once at provision time and persisted as a serialized blob. On each tray launch the config is reconstructed and handed to `VZVirtualMachine::new`.

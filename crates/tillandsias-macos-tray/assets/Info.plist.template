@@ -1,0 +1,69 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<!--
+  Template for the tillandsias-tray.app bundle Info.plist.
+
+  At packaging time the build script substitutes:
+    @VERSION@                — value from VERSION file (e.g. 0.2.260523.4)
+    @VERSION_SHORT@          — major.minor (e.g. 0.2)
+    @MIN_MACOS@              — 14.0 (per macos-native-tray spec)
+
+  The LSUIElement=true key is mandatory per spec invariant
+  `lsuielement-true`: the binary must NOT appear in the Dock or the
+  Cmd-Tab application switcher.
+
+  The com.apple.security.virtualization entitlement is required at sign
+  time for Virtualization.framework access; it lives in the .entitlements
+  file (sibling), not in Info.plist.
+
+  @trace spec:macos-native-tray.invariant.lsuielement-true,
+         spec:macos-native-tray.ui.nsstatusitem-only@v1
+-->
+<plist version="1.0">
+<dict>
+    <key>CFBundleName</key>
+    <string>Tillandsias</string>
+
+    <key>CFBundleDisplayName</key>
+    <string>Tillandsias</string>
+
+    <key>CFBundleIdentifier</key>
+    <string>com.tlatoani.tillandsias.tray</string>
+
+    <key>CFBundleVersion</key>
+    <string>@VERSION@</string>
+
+    <key>CFBundleShortVersionString</key>
+    <string>@VERSION_SHORT@</string>
+
+    <key>CFBundlePackageType</key>
+    <string>APPL</string>
+
+    <key>CFBundleExecutable</key>
+    <string>tillandsias-tray</string>
+
+    <key>CFBundleIconFile</key>
+    <string>icon</string>
+
+    <key>LSMinimumSystemVersion</key>
+    <string>@MIN_MACOS@</string>
+
+    <!--
+      Accessory app: no Dock icon, no menu bar, no Cmd-Tab presence. The
+      NSStatusItem in the system status bar is the only user surface.
+      This is non-negotiable per macos-native-tray.invariant.lsuielement-true.
+    -->
+    <key>LSUIElement</key>
+    <true/>
+
+    <key>NSHighResolutionCapable</key>
+    <true/>
+
+    <!--
+      We do not request any privacy-sensitive entitlements here. The
+      installation UUID lives in the user's keychain via the standard
+      `security` CLI shell-out which does not require additional Info.plist
+      keys.
+    -->
+</dict>
+</plist>
