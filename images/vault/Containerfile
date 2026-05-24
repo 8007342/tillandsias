@@ -1,0 +1,52 @@
+# @trace spec:tillandsias-vault
+# @cheatsheet runtime/hashicorp-vault-tillandsias.md
+#
+# HashiCorp Vault container for the Tillandsias enclave.
+#
+# Phase 3 POC — runs inside the in-VM (or, transitionally, host-podman)
+# enclave on hostname `vault` with the file storage backend. Auto-unseals
+# transparently using a 32-byte HKDF-derived key delivered as a podman
+# secret at /run/secrets/tillandsias-vault-unseal.
+#
+# Build:
+#   scripts/build-image.sh vault
+#
+# This image is self-contained and uses a pinned base; no `latest` tags
+# anywhere.
+FROM docker.io/hashicorp/vault:1.18
+
+# Add bash, jq, curl on top of the upstream Alpine-based vault image.
+# `--no-cache` keeps the layer deterministic.
+USER root
+RUN apk add --no-cache bash jq curl coreutils \
+    && mkdir -p /vault/data /vault/config /vault/audit /run/secrets \
+    && chown -R vault:vault /vault/data /vault/config /vault/audit
+
+# Vault config: enclave-only listener, file backend, audit device.
+COPY vault.hcl /vault/config/vault.hcl
+
+# Policy templates — read by the entrypoint after Vault is unsealed and
+# loaded as ACL policies. The Rust client embeds these same files via
+# include_str! so client and server stay in lock-step.
+COPY policies/git-mirror.hcl   /vault/config/policies/git-mirror.hcl
+COPY policies/forge.hcl        /vault/config/policies/forge.hcl
+COPY policies/tray.hcl         /vault/config/policies/tray.hcl
+COPY policies/inference.hcl    /vault/config/policies/inference.hcl
+
+# External logs manifest (audited by the tray).
+RUN mkdir -p /etc/tillandsias
+COPY external-logs.yaml /etc/tillandsias/external-logs.yaml
+
+# Entrypoint: derives state on first boot, unseals on every boot, loads
+# policies, then execs `vault server`.
+COPY entrypoint.sh /usr/local/bin/tillandsias-vault-entrypoint.sh
+RUN chmod +x /usr/local/bin/tillandsias-vault-entrypoint.sh
+
+USER vault
+
+EXPOSE 8200
+
+HEALTHCHECK --interval=2s --timeout=5s --start-period=5s --retries=15 \
+    CMD curl -fsS http://127.0.0.1:8200/v1/sys/health?standbyok=true || exit 1
+
+ENTRYPOINT ["/usr/local/bin/tillandsias-vault-entrypoint.sh"]

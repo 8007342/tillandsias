@@ -34,6 +34,12 @@ tracing-subscriber = { workspace = true }
 tempfile = "3"
 reqwest = { workspace = true }
 
+# @trace spec:tillandsias-vault — Phase 3 POC, opt-in via `--features vault`.
+tillandsias-vault-client = { path = "../tillandsias-vault-client", optional = true }
+uuid = { workspace = true, optional = true }
+zeroize = { version = "1", optional = true }
+dirs = { workspace = true, optional = true }
+
 # Phase 4: Native tray UI (optional)
 image = { version = "0.25", default-features = false, features = ["png"], optional = true }
 zbus = { version = "4.4.0", default-features = false, features = ["tokio"], optional = true }
@@ -46,5 +52,12 @@ tokio-vsock = { workspace = true, optional = true }
 default = []
 # @trace spec:linux-native-portable-executable, spec:tray-ui-integration, spec:tray-app
 tray = ["image", "zbus", "zvariant"]
-# @trace spec:vsock-transport — wave 26 will wire `--listen-vsock` for the in-VM headless.
-listen-vsock = ["tokio-vsock"]
+# @trace spec:vsock-transport — in-VM headless binds the control wire on vsock
+# instead of the host Unix socket. Pulls in tokio-vsock and the control-wire
+# crate's parallel `vsock` feature.
+listen-vsock = ["tokio-vsock", "tillandsias-control-wire/vsock"]
+# @trace spec:tillandsias-vault — Phase 3 POC: `tillandsias --init --with-vault`
+# builds the vault image, derives the unseal key on the host, launches the
+# vault container, and migrates the github token from the host keyring into
+# vault. This is an OPT-IN PREVIEW; the existing keyring flow is untouched.
+vault = ["tillandsias-vault-client", "uuid", "zeroize", "dirs"]

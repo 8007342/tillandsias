@@ -60,6 +60,9 @@ use tracing::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 
 mod runtime_assets;
+#[cfg(feature = "vault")]
+// @trace spec:tillandsias-vault — Phase 3 POC opt-in bootstrap
+mod vault_bootstrap;
 
 const VERSION: &str = include_str!("../../../VERSION");
 
@@ -80,10 +83,20 @@ fn main() {
         return;
     }
 
-    // TODO(@vsock-transport): --listen-vsock mode landing in wave 26 — see
-    // openspec/specs/vsock-transport/spec.md and feature flag `listen-vsock`
-    // on this crate's Cargo.toml. The flag will accept a u32 port and bind
-    // a tokio-vsock listener instead of the Unix socket.
+    // @trace spec:vsock-transport — `--listen-vsock <PORT>` switches the
+    // headless service from binding the Linux Unix control socket to
+    // binding a vsock listener on `VMADDR_CID_ANY:<PORT>`. Only available
+    // when the binary was compiled with `--features listen-vsock`.
+    let listen_vsock_port: Option<u32> = match user_args.iter().position(|a| a == "--listen-vsock") {
+        Some(i) => match user_args.get(i + 1).and_then(|p| p.parse::<u32>().ok()) {
+            Some(port) => Some(port),
+            None => {
+                eprintln!("Error: --listen-vsock requires a numeric port value");
+                std::process::exit(2);
+            }
+        },
+        None => None,
+    };
     let debug = user_args.iter().any(|a| a == "--debug");
     let diagnostics = user_args.iter().any(|a| a == "--diagnostics");
     let init = user_args.iter().any(|a| a == "--init");
@@ -98,6 +111,8 @@ fn main() {
     let observatorium = user_args.iter().any(|a| a == "--observatorium");
     let cache_clear = user_args.iter().any(|a| a == "--cache-clear");
     let cache_verify = user_args.iter().any(|a| a == "--cache-verify");
+    // @trace spec:tillandsias-vault — Phase 3 POC opt-in
+    let with_vault = user_args.iter().any(|a| a == "--with-vault");
     let port_override = match user_args.iter().position(|a| a == "--port") {
         Some(i) => match user_args.get(i + 1).and_then(|p| p.parse::<u16>().ok()) {
             Some(port) => Some(port),
@@ -150,6 +165,8 @@ fn main() {
         "--prompt",
         "--cache-clear",
         "--cache-verify",
+        "--listen-vsock",
+        "--with-vault",
     ];
     if let Some(unsupported) = user_args
         .iter()
@@ -157,9 +174,9 @@ fn main() {
         .find(|(i, a)| {
             a.starts_with('-')
                 && !known_flags.contains(&a.as_str())
-                && user_args
-                    .get(i.saturating_sub(1))
-                    .is_none_or(|prev| prev != "--prompt")
+                && user_args.get(i.saturating_sub(1)).is_none_or(|prev| {
+                    prev != "--prompt" && prev != "--listen-vsock" && prev != "--port"
+                })
         })
         .map(|(_, a)| a)
     {
@@ -174,10 +191,9 @@ fn main() {
         if a.starts_with('-') {
             return None;
         }
-        if user_args
-            .get(i.saturating_sub(1))
-            .is_some_and(|prev| prev == "--prompt" || prev == "--port")
-        {
+        if user_args.get(i.saturating_sub(1)).is_some_and(|prev| {
+            prev == "--prompt" || prev == "--port" || prev == "--listen-vsock"
+        }) {
             return None;
         }
         Some(a.to_string())
@@ -212,6 +228,25 @@ fn main() {
             eprintln!("Error: {}", e);
             std::process::exit(1);
         }
+        // @trace spec:tillandsias-vault — opt-in preview, must come AFTER
+        // the standard image builds so the proxy/git/forge images exist
+        // for the rest of the enclave.
+        if with_vault {
+            #[cfg(feature = "vault")]
+            {
+                if let Err(e) = vault_bootstrap::run_with_vault_init(debug) {
+                    eprintln!("Error in --with-vault bootstrap: {}", e);
+                    std::process::exit(1);
+                }
+            }
+            #[cfg(not(feature = "vault"))]
+            {
+                eprintln!(
+                    "Error: --with-vault requires the `vault` cargo feature; rebuild with `cargo build --features vault`."
+                );
+                std::process::exit(2);
+            }
+        }
         if status_check && let Err(e) = run_status_check(debug) {
             eprintln!("Error: {}", e);
             std::process::exit(1);
@@ -219,6 +254,9 @@ fn main() {
         if !opencode {
             return;
         }
+    } else if with_vault {
+        eprintln!("Error: --with-vault must be combined with --init (preview only).");
+        std::process::exit(2);
     }
 
     if status_check && !init {
@@ -332,7 +370,7 @@ fn main() {
         } else {
             eprintln!("Native tray wrapper is not packaged in this launcher yet.");
             eprintln!("Continuing with the headless app lifecycle for now.");
-            if let Err(e) = run_headless(config_path) {
+            if let Err(e) = run_headless(config_path, listen_vsock_port) {
                 eprintln!("Error: {}", e);
                 std::process::exit(1);
             }
@@ -342,7 +380,7 @@ fn main() {
 
     // Headless mode (explicit --headless or auto-detected)
     if (headless || !cfg!(feature = "tray"))
-        && let Err(e) = run_headless(config_path)
+        && let Err(e) = run_headless(config_path, listen_vsock_port)
     {
         eprintln!("Error: {}", e);
         std::process::exit(1);
@@ -367,6 +405,9 @@ fn print_usage(version: &str) {
     println!("       tillandsias --observatorium <project> [--port <port>]");
     println!("  --headless     Run in headless mode (no UI)");
     println!("  --tray         Run in tray mode (requires native tray support)");
+    println!(
+        "  --listen-vsock PORT   Bind the control wire on vsock (in-VM headless; requires feature `listen-vsock`)"
+    );
     println!("  --opencode     Enable LLM code analysis mode");
     println!("  --codex        Launch Codex inside the forge for a project");
     println!("  --claude       Launch Claude Code inside the forge for a project");
@@ -381,6 +422,9 @@ fn print_usage(version: &str) {
     println!("  --force        Rebuild all images even if cached (use with --init)");
     println!("  --cache-verify Check cache integrity and report status");
     println!("  --cache-clear  Clear the initialization cache and build state");
+    println!(
+        "  --with-vault   Phase 3 POC opt-in: also build/launch the vault container during --init (requires `vault` cargo feature)"
+    );
     println!("  --status-check Verify services are online through a representative stack smoke");
     println!("  --github-login Authenticate GitHub and create ephemeral Podman secret");
     println!("  --debug        Show command-level diagnostics and capture build logs");
@@ -5236,21 +5280,74 @@ mod metrics_server;
 #[cfg(feature = "tray")]
 mod tray;
 
+#[cfg(feature = "listen-vsock")]
+mod vsock_server;
+
+/// Spawn the vsock control-wire listener when `--listen-vsock <port>` was
+/// passed AND the binary was compiled with `--features listen-vsock`. Returns
+/// the join handle so the shutdown path can drain it.
+///
+/// If the feature is missing, prints a one-line error to stderr and skips —
+/// the headless service still starts so signal handling and metrics keep
+/// working.
+///
+/// @trace spec:vsock-transport
+#[cfg(feature = "listen-vsock")]
+fn maybe_spawn_vsock_listener(
+    listen_vsock_port: Option<u32>,
+    shutdown: Arc<AtomicBool>,
+) -> Option<tokio::task::JoinHandle<()>> {
+    let port = listen_vsock_port?;
+    Some(tokio::spawn(async move {
+        match vsock_server::run_vsock_listener(port, shutdown).await {
+            Ok(()) => {}
+            Err(err) => {
+                eprintln!(
+                    "[tillandsias] vsock listener on port {port} failed: {err}"
+                );
+            }
+        }
+    }))
+}
+
+/// Stub when the `listen-vsock` feature is disabled at compile time. Emits a
+/// friendly error on stderr if the user passed `--listen-vsock` anyway.
+///
+/// @trace spec:vsock-transport
+#[cfg(not(feature = "listen-vsock"))]
+fn maybe_spawn_vsock_listener(
+    listen_vsock_port: Option<u32>,
+    _shutdown: Arc<AtomicBool>,
+) -> Option<tokio::task::JoinHandle<()>> {
+    if listen_vsock_port.is_some() {
+        eprintln!(
+            "[tillandsias] --listen-vsock requires the binary to be built with --features listen-vsock"
+        );
+    }
+    None
+}
+
 /// Run in headless mode — no tray, no UI.
 ///
 /// @trace spec:linux-native-portable-executable, spec:headless-mode
-fn run_headless(config_path: Option<String>) -> Result<(), String> {
+fn run_headless(
+    config_path: Option<String>,
+    listen_vsock_port: Option<u32>,
+) -> Result<(), String> {
     // Create a Tokio runtime for async operations
     let rt = tokio::runtime::Runtime::new()
         .map_err(|e| format!("Failed to create async runtime: {}", e))?;
 
     // Run the async headless mode
-    rt.block_on(run_headless_async(config_path))
+    rt.block_on(run_headless_async(config_path, listen_vsock_port))
 }
 
 /// Phase 5: Async implementation of headless mode.
-/// @trace spec:linux-native-portable-executable, spec:headless-mode, spec:signal-handling, spec:resource-metric-collection
-async fn run_headless_async(config_path: Option<String>) -> Result<(), String> {
+/// @trace spec:linux-native-portable-executable, spec:headless-mode, spec:signal-handling, spec:resource-metric-collection, spec:vsock-transport
+async fn run_headless_async(
+    config_path: Option<String>,
+    listen_vsock_port: Option<u32>,
+) -> Result<(), String> {
     require_headless_service_account("tillandsias --headless")?;
     let shutdown_signal = install_shutdown_signal_handlers()?;
 
@@ -5307,6 +5404,12 @@ async fn run_headless_async(config_path: Option<String>) -> Result<(), String> {
 
     let metrics_handle = spawn_metrics_sampler();
 
+    // @trace spec:vsock-transport — when `--listen-vsock <PORT>` was supplied,
+    // bind the control wire on virtio-vsock instead of the Linux Unix
+    // socket. The vsock listener is the in-VM service the host-side
+    // tray talks to on Windows / macOS.
+    let vsock_handle = maybe_spawn_vsock_listener(listen_vsock_port, shutdown_signal.clone());
+
     // Main event loop: wait for application shutdown signal.
     wait_for_shutdown_signal(shutdown_signal).await?;
     eprintln!("Received shutdown signal");
@@ -5316,6 +5419,13 @@ async fn run_headless_async(config_path: Option<String>) -> Result<(), String> {
     if let Some(handle) = metrics_handle {
         handle.abort();
         // Drain the join future; aborted tasks yield JoinError(cancelled).
+        let _ = handle.await;
+    }
+
+    // Drain the vsock listener if it was spawned. The serve loop returns
+    // once the shutdown atomic flips, so this just collects the JoinHandle.
+    if let Some(handle) = vsock_handle {
+        handle.abort();
         let _ = handle.await;
     }
 

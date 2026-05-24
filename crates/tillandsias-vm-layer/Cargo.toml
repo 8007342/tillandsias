@@ -17,3 +17,14 @@ windows = { version = "0.58", features = ["Win32_System_Console", "Win32_System_
 
 [target.'cfg(target_os = "macos")'.dependencies]
 objc2-virtualization = "0.2"
+
+[dev-dependencies]
+tokio = { workspace = true, features = ["macros", "rt-multi-thread", "process", "io-util", "rt"] }
+tempfile = "3"
+
+[features]
+default = []
+# @trace spec:vm-idiomatic-layer — host-side fake (Linux dev loop) runs the
+# requested argv directly via tokio::process so unit tests can validate the
+# trait + the WSL/VZ exec semantics without a real VM.
+fake = []

@@ -3,7 +3,7 @@
 
 ## Status
 
-proposed
+active
 phase: 3
 
 ## Purpose

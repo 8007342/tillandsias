@@ -5,24 +5,32 @@
 //! shells out to `wsl --exec`; the macOS backend spawns
 //! `Virtualization.framework` guests directly.
 //!
-//! This crate is a SCAFFOLD ONLY — every method returns `todo!()` pending
-//! implementation. See `openspec/specs/vm-idiomatic-layer/spec.md` for the
-//! design contract.
+//! Phase-2 status: trait + provisioning manifest are real. The Windows
+//! `WslRuntime` and macOS `VzRuntime` impls are cfg-gated skeletons whose
+//! methods are marked `unimplemented!` rather than `todo!()` — call sites
+//! need real symbols to link against during cross-platform header-only
+//! compilation passes. The Linux `FakeVmRuntime` (behind the `fake` feature)
+//! mocks the VM by running argv directly on the host so unit tests can
+//! exercise the trait contract without a real VM.
+//!
+//! See `openspec/specs/vm-idiomatic-layer/spec.md` for the design contract.
 //!
 //! @trace spec:vm-idiomatic-layer
 
 #![allow(dead_code)]
-#![allow(unused)]
 
 use std::time::Duration;
 
 use serde::{Deserialize, Serialize};
 
-#[cfg(target_os = "windows")]
+// Both wsl and vz modules compile on every target so call sites can hold
+// `WslRuntime` / `VzRuntime` symbols and tests can verify the trait impl
+// shape on Linux. Real backend bodies are cfg-gated inside the modules.
 pub mod wsl;
-
-#[cfg(target_os = "macos")]
 pub mod vz;
+
+#[cfg(all(target_os = "linux", feature = "fake"))]
+pub mod fake;
 
 /// Provisioning manifest passed to `VmRuntime::provision`.
 ///
@@ -45,9 +53,19 @@ pub struct ProvisionManifest {
     pub shared_host_dir: std::path::PathBuf,
 }
 
+/// Structured error returned by every `VmRuntime` operation.
+///
+/// Strings rather than typed wrappers around `io::Error` for now — the
+/// host shell wants a single status line on the tray and benefits from
+/// already-rendered context. Future iterations may add categorical
+/// variants if the host shell starts branching on them.
+///
+/// @trace spec:vm-idiomatic-layer
+pub type VmError = String;
+
 /// Portable VM runtime contract.
 ///
-/// Every method is async and returns `Result<_, String>`. Concrete backends
+/// Every method is async and returns `Result<_, VmError>`. Concrete backends
 /// must NOT panic on caller-recoverable errors; they propagate them through
 /// the result type so the tray's status line can render them.
 ///
@@ -56,21 +74,21 @@ pub struct ProvisionManifest {
 pub trait VmRuntime: Send + Sync {
     /// First-run install: import the rootfs, install the tillandsias binary,
     /// register the VM with the host's VM framework. Idempotent.
-    async fn provision(&self, manifest: &ProvisionManifest) -> Result<(), String>;
+    async fn provision(&self, manifest: &ProvisionManifest) -> Result<(), VmError>;
 
     /// Boot the VM. No-op if already running.
-    async fn start(&self) -> Result<(), String>;
+    async fn start(&self) -> Result<(), VmError>;
 
     /// Graceful shutdown with bounded drain window. After `drain_timeout`
     /// the backend MAY force-stop.
-    async fn stop(&self, drain_timeout: Duration) -> Result<(), String>;
+    async fn stop(&self, drain_timeout: Duration) -> Result<(), VmError>;
 
     /// Run a command inside the VM, blocking until completion. Returns the
     /// exit status. stdout/stderr inherit from the caller for tray
     /// diagnostics; structured stdio capture is a follow-up.
-    async fn exec(&self, argv: &[&str]) -> Result<std::process::ExitStatus, String>;
+    async fn exec(&self, argv: &[&str]) -> Result<std::process::ExitStatus, VmError>;
 
     /// Block until the guest reaches the "tillandsias-ready" milestone (the
     /// in-VM headless has bound the vsock listener). Returns `Err` on timeout.
-    async fn wait_ready(&self, timeout: Duration) -> Result<(), String>;
+    async fn wait_ready(&self, timeout: Duration) -> Result<(), VmError>;
 }

@@ -1,0 +1,25 @@
+# @trace spec:external-logs-layer, spec:tillandsias-vault
+# Manifest of curated external log files published by the vault container.
+# The tray-side auditor reads this manifest every 60 s and flags any file
+# in ~/.local/state/tillandsias/external-logs/vault/ that is NOT listed
+# here with a WARN+accountability "[external-logs] LEAK: ..." event.
+role: vault
+files:
+  - name: audit.json
+    purpose: |
+      Vault audit device output — every API request/response in JSON form
+      (token accessor only, never raw tokens). CONSUMERS use this to
+      verify policy enforcement (e.g. forge-policy 403 on github/token).
+      One JSON object per line.
+    format: jsonl
+    rotate_at_mb: 10
+    written_by: vault audit device (file driver) at /vault/audit/audit.json
+  - name: entrypoint.log
+    purpose: |
+      Entrypoint script output — init/unseal/policy-load lifecycle. Plain
+      text, one line per step. Used by the tray to surface vault startup
+      progress (the "🔵 Setting up Vault…" status line) and to debug
+      unseal failures.
+    format: text
+    rotate_at_mb: 5
+    written_by: tillandsias-vault-entrypoint.sh

@@ -71,7 +71,7 @@ FLAG_TAG=""
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        forge|web|proxy|git|inference|router|chromium-core|chromium-framework)
+        forge|web|proxy|git|inference|router|chromium-core|chromium-framework|vault)
             IMAGE_NAME="$1"
             ;;
         --force)
@@ -94,6 +94,7 @@ while [[ $# -gt 0 ]]; do
             echo "  inference          Build the local LLM inference image"
             echo "  chromium-core      Build the secure browser container (minimal)"
             echo "  chromium-framework Build the debug browser container (with Node.js+Playwright)"
+            echo "  vault              Build the HashiCorp Vault enclave container (Phase 3 POC)"
             echo "  --force            Rebuild even if sources haven't changed"
             echo "  --tag <tag>        Override the canonical image tag (default: content hash)"
             echo "                     Human aliases still track v$(cat "$ROOT/VERSION") and :latest"
@@ -138,6 +139,7 @@ case "$IMAGE_NAME" in
     router)    CONTAINERFILE="$ROOT/images/router/Containerfile" ;;
     chromium-core) CONTAINERFILE="$ROOT/images/chromium/Containerfile.core" ;;
     chromium-framework) CONTAINERFILE="$ROOT/images/chromium/Containerfile.framework" ;;
+    vault)     CONTAINERFILE="$ROOT/images/vault/Containerfile" ;;
     *)         CONTAINERFILE="$ROOT/images/default/Containerfile" ;;
 esac
 
