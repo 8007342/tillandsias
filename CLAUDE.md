@@ -116,13 +116,27 @@ The inference container (ollama-based) supports both baked and lazy-pulled model
 
 **If ollama missing**: Logs `DEGRADED: host-side ollama not found`, skips all pulls. T0/T1 baked models are still available.
 
-## Secrets Architecture — Ephemeral-First Security
+## Secrets Architecture — Vault-First (Phase 6 default)
 
-@trace spec:podman-secrets-integration, spec:secrets-management
+@trace spec:tillandsias-vault, spec:podman-secrets-integration, spec:secrets-management
 
-Tillandsias uses **ephemeral podman secrets** for credential isolation in rootless containers. Secrets are never stored on disk and never appear in logs, ps output, or `podman inspect` output.
+Tillandsias now uses an **in-enclave HashiCorp Vault** container (`tillandsias-vault`) as the authoritative store for long-lived credentials. The Vault container is launched automatically by `tillandsias --init`. The host generates a per-installation UUID, combines it with `/etc/machine-id`, and derives the unseal key via HKDF — the user never sees a passphrase prompt.
 
-**Flow:**
+**Default Vault flow:**
+1. **`tillandsias --init`** brings up the Vault container (idempotent; persists across restarts via the `tillandsias-vault-data` volume), loads the four shipped policies (`git-mirror-policy`, `forge-policy`, `tray-policy`, `inference-policy`), and provisions matching AppRole roles (token TTL 1h, max 24h).
+2. **`tillandsias --github-login`** harvests the OAuth token via `gh auth login` and writes it to Vault at `secret/github/token` (policy: `git-mirror-policy`).
+3. **Per-container launch** mints a fresh AppRole token via the tray, stores it as a short-lived podman secret named `tillandsias-vault-token-<role>-<container-instance>`, and mounts it inside the container at `/run/secrets/vault-token`. The container reads the GitHub token (or any policy-permitted secret) on demand via a baked `vault-cli` helper.
+4. **Tray shutdown** revokes every per-container token. The Vault container persists.
+
+**Backwards compatibility:**
+- `tillandsias --init --without-vault` — DEPRECATED: skips the Vault container launch.
+- `tillandsias --github-login --legacy-keyring-secrets` — DEPRECATED: writes the token to a `tillandsias-github-token` podman secret instead of Vault.
+- `cargo build --no-default-features` — DEPRECATED: builds without the `vault` feature.
+- Removal target: v0.3.
+
+The historical ephemeral-podman-secrets-from-keyring flow described below remains available for one release behind these flags.
+
+**Flow (legacy):**
 1. **Host keyring** — GitHub tokens and CA certificates stored in Linux Secret Service (GNOME Keyring / pass)
 2. **Headless/Tray creates secrets** — At startup, `handlers::setup_secrets()` reads credentials from keyring and creates podman secrets via `podman secret create --driver=file`
 3. **Containers mount secrets** — Container launch passes `--secret <name>` flags; secrets appear at `/run/secrets/<name>` inside container with no world-readable file on disk

@@ -3,7 +3,13 @@
 
 ## Status
 
-active
+superseded (Phase 6 — see `tillandsias-vault` spec)
+
+Phase 6 promoted the in-enclave HashiCorp Vault container to be the default
+Linux secrets backend. The OS-native-keyring path described below is retained
+for one release behind the deprecated `--legacy-keyring-secrets` flag and
+will be removed in v0.3. New work should follow
+`openspec/specs/tillandsias-vault/spec.md`.
 
 ## Purpose
 

@@ -34,7 +34,10 @@ tracing-subscriber = { workspace = true }
 tempfile = "3"
 reqwest = { workspace = true }
 
-# @trace spec:tillandsias-vault — Phase 3 POC, opt-in via `--features vault`.
+# @trace spec:tillandsias-vault — Phase 6: Vault is now the default secrets
+# backend for Linux. The `vault` feature is enabled by default; the
+# `--legacy-keyring-secrets` runtime flag still routes through the old
+# podman-secret-from-keyring path for backwards compatibility.
 tillandsias-vault-client = { path = "../tillandsias-vault-client", optional = true }
 uuid = { workspace = true, optional = true }
 zeroize = { version = "1", optional = true }
@@ -48,16 +51,28 @@ zvariant = { version = "4.2.0", optional = true }
 [target.'cfg(target_os = "linux")'.dependencies]
 tokio-vsock = { workspace = true, optional = true }
 
+[dev-dependencies]
+# @trace spec:tillandsias-vault — integration tests use wiremock to exercise
+# the AppRole + KV write paths without a real Vault binary. The
+# vault-client crate is also imported here unconditionally so tests can
+# drive the policy/role provisioning surface even when the headless
+# binary is compiled without the `vault` cargo feature.
+wiremock = "0.6"
+tillandsias-vault-client = { path = "../tillandsias-vault-client" }
+
 [features]
-default = []
+# @trace spec:tillandsias-vault — Phase 6: Vault is now the default Linux
+# secrets backend. Building without the `vault` feature falls back to the
+# legacy keyring path unconditionally (`--legacy-keyring-secrets` becomes
+# implicit). The feature is part of `default` so a stock `cargo build` ships
+# the Vault flow.
+default = ["vault"]
 # @trace spec:linux-native-portable-executable, spec:tray-ui-integration, spec:tray-app
 tray = ["image", "zbus", "zvariant"]
 # @trace spec:vsock-transport — in-VM headless binds the control wire on vsock
 # instead of the host Unix socket. Pulls in tokio-vsock and the control-wire
 # crate's parallel `vsock` feature.
 listen-vsock = ["tokio-vsock", "tillandsias-control-wire/vsock"]
-# @trace spec:tillandsias-vault — Phase 3 POC: `tillandsias --init --with-vault`
-# builds the vault image, derives the unseal key on the host, launches the
-# vault container, and migrates the github token from the host keyring into
-# vault. This is an OPT-IN PREVIEW; the existing keyring flow is untouched.
+# @trace spec:tillandsias-vault — Phase 6 default-on. Build with
+# `--no-default-features` to ship the legacy keyring-only binary.
 vault = ["tillandsias-vault-client", "uuid", "zeroize", "dirs"]

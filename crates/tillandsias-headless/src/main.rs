@@ -61,7 +61,7 @@ use serde::{Deserialize, Serialize};
 
 mod runtime_assets;
 #[cfg(feature = "vault")]
-// @trace spec:tillandsias-vault — Phase 3 POC opt-in bootstrap
+// @trace spec:tillandsias-vault — Phase 6 default bootstrap (was Phase 3 opt-in).
 mod vault_bootstrap;
 
 const VERSION: &str = include_str!("../../../VERSION");
@@ -111,8 +111,15 @@ fn main() {
     let observatorium = user_args.iter().any(|a| a == "--observatorium");
     let cache_clear = user_args.iter().any(|a| a == "--cache-clear");
     let cache_verify = user_args.iter().any(|a| a == "--cache-verify");
-    // @trace spec:tillandsias-vault — Phase 3 POC opt-in
+    // @trace spec:tillandsias-vault — Phase 6 promoted Vault to default. The
+    // historical `--with-vault` opt-in flag still parses (we route it to the
+    // same code path as a default init), `--without-vault` is the deprecated
+    // escape hatch, and `--legacy-keyring-secrets` re-enables the old
+    // podman-secret-from-keyring flow for backwards compatibility.
     let with_vault = user_args.iter().any(|a| a == "--with-vault");
+    let without_vault = user_args.iter().any(|a| a == "--without-vault");
+    let legacy_keyring_secrets =
+        user_args.iter().any(|a| a == "--legacy-keyring-secrets");
     let port_override = match user_args.iter().position(|a| a == "--port") {
         Some(i) => match user_args.get(i + 1).and_then(|p| p.parse::<u16>().ok()) {
             Some(port) => Some(port),
@@ -167,6 +174,8 @@ fn main() {
         "--cache-verify",
         "--listen-vsock",
         "--with-vault",
+        "--without-vault",
+        "--legacy-keyring-secrets",
     ];
     if let Some(unsupported) = user_args
         .iter()
@@ -200,7 +209,10 @@ fn main() {
     });
 
     if github_login {
-        if let Err(e) = run_github_login(debug) {
+        // @trace spec:tillandsias-vault, spec:secrets-management
+        // Phase 6: the default flow stores the token in Vault. The legacy
+        // podman-secret path is reachable via `--legacy-keyring-secrets`.
+        if let Err(e) = run_github_login(debug, legacy_keyring_secrets) {
             eprintln!("Error: {}", e);
             std::process::exit(1);
         }
@@ -228,24 +240,44 @@ fn main() {
             eprintln!("Error: {}", e);
             std::process::exit(1);
         }
-        // @trace spec:tillandsias-vault — opt-in preview, must come AFTER
-        // the standard image builds so the proxy/git/forge images exist
-        // for the rest of the enclave.
-        if with_vault {
+        // @trace spec:tillandsias-vault, spec:secrets-management
+        // Phase 6: Vault is the default secrets backend on Linux. The
+        // `--with-vault` opt-in flag is preserved as a no-op alias; the
+        // `--without-vault` escape hatch is honored only for debugging
+        // (logged as deprecated). The `--legacy-keyring-secrets` flag
+        // *additionally* keeps the keyring path live — Vault still comes
+        // up so containers minted with AppRole tokens succeed.
+        if with_vault && debug {
+            eprintln!(
+                "[tillandsias] --with-vault is now a no-op (Vault is the default backend)"
+            );
+        }
+        if !without_vault {
             #[cfg(feature = "vault")]
             {
-                if let Err(e) = vault_bootstrap::run_with_vault_init(debug) {
-                    eprintln!("Error in --with-vault bootstrap: {}", e);
+                if let Err(e) = vault_bootstrap::ensure_vault_running(debug) {
+                    eprintln!("Error bringing Vault up: {}", e);
                     std::process::exit(1);
                 }
             }
             #[cfg(not(feature = "vault"))]
             {
-                eprintln!(
-                    "Error: --with-vault requires the `vault` cargo feature; rebuild with `cargo build --features vault`."
-                );
-                std::process::exit(2);
+                if debug {
+                    eprintln!(
+                        "[tillandsias] vault feature not compiled; continuing without Vault (legacy keyring only)"
+                    );
+                }
             }
+        } else {
+            eprintln!(
+                "[tillandsias] --without-vault is DEPRECATED and will be removed in v0.3; \
+                 the keyring-only path remains available via `--legacy-keyring-secrets`"
+            );
+        }
+        if legacy_keyring_secrets {
+            eprintln!(
+                "[tillandsias] --legacy-keyring-secrets is DEPRECATED and will be removed in v0.3"
+            );
         }
         if status_check && let Err(e) = run_status_check(debug) {
             eprintln!("Error: {}", e);
@@ -254,9 +286,8 @@ fn main() {
         if !opencode {
             return;
         }
-    } else if with_vault {
-        eprintln!("Error: --with-vault must be combined with --init (preview only).");
-        std::process::exit(2);
+    } else if with_vault && debug {
+        eprintln!("[tillandsias] --with-vault has no effect outside --init (Vault is auto-started)");
     }
 
     if status_check && !init {
@@ -423,10 +454,18 @@ fn print_usage(version: &str) {
     println!("  --cache-verify Check cache integrity and report status");
     println!("  --cache-clear  Clear the initialization cache and build state");
     println!(
-        "  --with-vault   Phase 3 POC opt-in: also build/launch the vault container during --init (requires `vault` cargo feature)"
+        "  --with-vault   DEPRECATED no-op: Vault is now the default secrets backend (Phase 6)"
+    );
+    println!(
+        "  --without-vault DEPRECATED escape hatch: skip launching the Vault container during --init"
+    );
+    println!(
+        "  --legacy-keyring-secrets DEPRECATED: keep the legacy keyring-based podman-secret flow alive"
     );
     println!("  --status-check Verify services are online through a representative stack smoke");
-    println!("  --github-login Authenticate GitHub and create ephemeral Podman secret");
+    println!(
+        "  --github-login Authenticate GitHub and store the token in Vault (or, with --legacy-keyring-secrets, a podman secret)"
+    );
     println!("  --debug        Show command-level diagnostics and capture build logs");
     println!(
         "  --diagnostics  Stream real-time logs from all enclave containers (implies --debug)"
@@ -1305,11 +1344,55 @@ fn read_host_project_origin_url(project_path: &Path) -> Option<String> {
     }
 }
 
+/// Best-effort mint of a Vault AppRole token for a git-mirror container.
+///
+/// Returns `Some(secret_name)` when Vault is up and the AppRole login
+/// succeeds; the caller passes that name to `build_git_run_args` to mount
+/// the token into the container. Returns `None` on any failure or when the
+/// `vault` feature is not compiled — the caller then falls back to the
+/// legacy `tillandsias-github-token` podman secret.
+///
+/// @trace spec:tillandsias-vault, spec:secrets-management
+#[allow(unused_variables)]
+fn mint_git_mirror_vault_token(project_name: &str, debug: bool) -> Option<String> {
+    #[cfg(feature = "vault")]
+    {
+        let instance = format!("{project_name}-{}", std::process::id());
+        match vault_bootstrap::mint_approle_token_for_container("git-mirror", &instance, debug) {
+            Ok((_token, secret_name)) => Some(secret_name),
+            Err(e) => {
+                if debug {
+                    eprintln!(
+                        "[tillandsias] vault AppRole mint failed ({e}); falling back to legacy keyring secret"
+                    );
+                }
+                None
+            }
+        }
+    }
+    #[cfg(not(feature = "vault"))]
+    {
+        None
+    }
+}
+
+/// Build the podman launch args for the per-project git-mirror container.
+///
+/// `vault_token_secret` is the name of the podman secret holding a fresh
+/// AppRole-issued Vault token scoped to `git-mirror-policy`. When supplied
+/// (the Phase 6 default flow), the container mounts it at
+/// `/run/secrets/vault-token` and reads the GitHub token from Vault at hook
+/// time via `vault-cli`. When `None`, the launcher is running in legacy
+/// keyring mode: the container instead mounts `tillandsias-github-token`
+/// and the hook reads it directly from disk.
+///
+/// @trace spec:tillandsias-vault, spec:secrets-management, spec:git-mirror-service
 fn build_git_run_args(
     project_name: &str,
     certs_dir: &Path,
     image: &str,
     project_remote_url: Option<&str>,
+    vault_token_secret: Option<&str>,
 ) -> Vec<String> {
     // Named podman volume for the bare repo. Persists across container
     // restarts so the mirror's "startup retry-push" loop has stranded commits
@@ -1346,6 +1429,25 @@ fn build_git_run_args(
         args.push("--env".into());
         args.push(format!("TILLANDSIAS_PROJECT_REMOTE_URL={url}"));
     }
+    if let Some(secret_name) = vault_token_secret {
+        // @trace spec:tillandsias-vault — git-mirror reads the GitHub token
+        // via vault-cli using this short-lived AppRole token at hook time.
+        // The token is mounted as a podman secret (mode 0400) at the
+        // stable path /run/secrets/vault-token regardless of the per-launch
+        // secret name; podman's --secret target= rewrites the mount.
+        args.push("--secret".into());
+        args.push(format!("{secret_name},target=vault-token,mode=0400"));
+        args.push("--env".into());
+        args.push("VAULT_ADDR=http://vault:8200".into());
+        args.push("--env".into());
+        args.push("VAULT_ROLE=git-mirror".into());
+    }
+    // Legacy fallback: when no vault secret is supplied AND the launcher is
+    // configured to fall back to the keyring path, the runtime layer pushes
+    // the token via a separate `SecretKind::GitHubToken` mount in
+    // `container_profile`. We do NOT attach the legacy secret here because
+    // it may not exist on a fresh install — the post-receive hook tolerates
+    // a missing token by failing the upstream push and exiting 0.
     args.push("--mount".into());
     args.push(format!(
         "type=bind,source={},target=/etc/tillandsias/ca.crt,readonly=true",
@@ -2825,13 +2927,20 @@ fn run_status_check(debug: bool) -> Result<(), String> {
             .map_err(|e| e.to_string())?;
 
         let git_container_name = format!("tillandsias-git-{project_name}");
+        let git_vault_secret = mint_git_mirror_vault_token(project_name, debug);
         client
             .run_container_observed(
                 "status-git",
                 &git_container_name,
                 // Status-check has no real project — there is no host origin
                 // URL to forward and the bare repo is throwaway.
-                &build_git_run_args(project_name, &certs_dir, &git_image, None),
+                &build_git_run_args(
+                    project_name,
+                    &certs_dir,
+                    &git_image,
+                    None,
+                    git_vault_secret.as_deref(),
+                ),
                 debug,
             )
             .await
@@ -2977,8 +3086,8 @@ fn podman_command() -> Command {
 /// image; the host only captures the token in memory and creates the Podman
 /// secret over stdin.
 ///
-/// @trace spec:gh-auth-script, spec:secrets-management, spec:podman-secrets-integration, spec:secret-rotation
-fn run_github_login(debug: bool) -> Result<(), String> {
+/// @trace spec:gh-auth-script, spec:secrets-management, spec:podman-secrets-integration, spec:secret-rotation, spec:tillandsias-vault
+fn run_github_login(debug: bool, legacy_keyring_secrets: bool) -> Result<(), String> {
     require_desktop_user_session("tillandsias --github-login")?;
     report_runtime_lane("--github-login", debug);
 
@@ -3070,7 +3179,49 @@ fn run_github_login(debug: bool) -> Result<(), String> {
         "GitHub token retrieved successfully; initiating secret rotation"
     );
 
-    create_github_podman_secret(&token, debug)?;
+    // @trace spec:tillandsias-vault, spec:secrets-management
+    // Phase 6: write to Vault by default. The legacy podman-secret path is
+    // available via --legacy-keyring-secrets and remains supported until
+    // v0.3.
+    #[cfg(feature = "vault")]
+    let (vault_attempted, vault_failed): (bool, Option<String>) = {
+        if legacy_keyring_secrets {
+            (false, None)
+        } else {
+            match vault_bootstrap::write_github_token_to_vault(&token, debug) {
+                Ok(()) => {
+                    info!(
+                        accountability = true,
+                        category = "secrets",
+                        spec = "tillandsias-vault",
+                        operation = "gh_auth_vault_write",
+                        "GitHub token stored in Vault at secret/github/token"
+                    );
+                    (true, None)
+                }
+                Err(e) => (true, Some(e)),
+            }
+        }
+    };
+    #[cfg(not(feature = "vault"))]
+    let (vault_attempted, vault_failed): (bool, Option<String>) = (false, None);
+
+    if let Some(reason) = vault_failed {
+        return Err(format!(
+            "vault write failed: {reason}\n\
+             Hint: run `tillandsias --init` to bring Vault up, or pass \
+             `--legacy-keyring-secrets` to use the deprecated keyring path."
+        ));
+    }
+
+    if !vault_attempted || legacy_keyring_secrets {
+        if vault_attempted && debug {
+            eprintln!(
+                "[tillandsias] also creating legacy podman secret (--legacy-keyring-secrets)"
+            );
+        }
+        create_github_podman_secret(&token, debug)?;
+    }
     drop(cleanup);
 
     info!(
@@ -3862,6 +4013,7 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
             .await
             .map_err(|e| format!("[OpenCode] failed to start proxy: {e}"))?;
         let git_container_name = format!("tillandsias-git-{project_name}");
+        let git_vault_secret = mint_git_mirror_vault_token(project_name, debug);
         client
             .run_container_observed(
                 "opencode-git",
@@ -3871,6 +4023,7 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
                     &certs_dir,
                     &versioned_image_tag("git", version),
                     project_remote_url.as_deref(),
+                    git_vault_secret.as_deref(),
                 ),
                 debug,
             )
@@ -4654,6 +4807,7 @@ pub(crate) fn run_opencode_web_mode(
             Some(&versioned_image_tag("proxy", version)),
         )?;
         let git_container_name = format!("tillandsias-git-{project_name}");
+        let git_vault_secret = mint_git_mirror_vault_token(project_name, debug);
         client
             .run_container_observed(
                 "opencode-web-git",
@@ -4663,6 +4817,7 @@ pub(crate) fn run_opencode_web_mode(
                     &certs_dir,
                     &versioned_image_tag("git", version),
                     project_remote_url.as_deref(),
+                    git_vault_secret.as_deref(),
                 ),
                 debug,
             )
@@ -5003,6 +5158,7 @@ pub(crate) fn ensure_enclave_for_project(
             .await
             .map_err(|e| format!("[forge-launch] failed to start proxy: {e}"))?;
         let git_container_name = format!("tillandsias-git-{project_name}");
+        let git_vault_secret = mint_git_mirror_vault_token(project_name, debug);
         client
             .run_container_observed(
                 "forge-launch-git",
@@ -5012,6 +5168,7 @@ pub(crate) fn ensure_enclave_for_project(
                     &certs_dir,
                     &versioned_image_tag("git", version),
                     project_remote_url.as_deref(),
+                    git_vault_secret.as_deref(),
                 ),
                 debug,
             )
@@ -5431,6 +5588,15 @@ async fn run_headless_async(
 
     // Phase 5, Task 21: Graceful shutdown with timeout
     graceful_shutdown_async().await?;
+
+    // @trace spec:tillandsias-vault — revoke per-container AppRole tokens
+    // before exit so vault audit reflects clean shutdown. The Vault
+    // container itself is preserved across tray restarts (data lives on the
+    // `tillandsias-vault-data` named volume).
+    #[cfg(feature = "vault")]
+    {
+        vault_bootstrap::revoke_pending_container_tokens(false);
+    }
 
     // Emit stopped event
     let now = chrono::Local::now();
@@ -6325,7 +6491,7 @@ mod tests {
     fn stack_service_args_do_not_pin_static_ips() {
         let certs = PathBuf::from("/tmp/ca");
         let proxy = build_proxy_run_args(&certs, "tillandsias-proxy:v1");
-        let git = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None);
+        let git = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None);
         let inference = build_inference_run_args(&certs, "tillandsias-inference:v1", false);
         let router = build_router_run_args(&certs, "tillandsias-router:v1", 8080);
 
@@ -6344,7 +6510,7 @@ mod tests {
         // /srv/git must be writable (named volume) so the bare repo persists
         // and the post-receive hook can be installed.
         let certs = PathBuf::from("/tmp/ca");
-        let args = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None);
+        let args = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None);
 
         // No `--base-path=...` override appended after the image — confirms
         // we let the image entrypoint take over.
@@ -6364,7 +6530,8 @@ mod tests {
     fn git_run_args_forward_project_remote_url_when_present() {
         let certs = PathBuf::from("/tmp/ca");
         let url = "https://github.com/example/repo.git";
-        let with_url = build_git_run_args("alpha", &certs, "tillandsias-git:v1", Some(url));
+        let with_url =
+            build_git_run_args("alpha", &certs, "tillandsias-git:v1", Some(url), None);
         assert!(
             with_url
                 .iter()
@@ -6372,12 +6539,81 @@ mod tests {
             "expected upstream URL env var: {with_url:?}"
         );
 
-        let without_url = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None);
+        let without_url = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None);
         assert!(
             !without_url
                 .iter()
                 .any(|a| a.starts_with("TILLANDSIAS_PROJECT_REMOTE_URL=")),
             "expected no upstream URL env var: {without_url:?}"
+        );
+    }
+
+    #[test]
+    fn git_run_args_mount_vault_token_when_supplied() {
+        // @trace spec:tillandsias-vault — Phase 6 default flow
+        let certs = PathBuf::from("/tmp/ca");
+        let secret = "tillandsias-vault-token-git-mirror-alpha-1234";
+        let args = build_git_run_args(
+            "alpha",
+            &certs,
+            "tillandsias-git:v1",
+            None,
+            Some(secret),
+        );
+
+        // The vault token secret MUST be mounted at the stable path
+        // /run/secrets/vault-token so the in-container vault-cli helper
+        // reads it without knowing the per-launch secret name.
+        let secret_arg = format!("{secret},target=vault-token,mode=0400");
+        assert!(
+            args.iter().any(|a| a == &secret_arg),
+            "expected vault token secret arg `{secret_arg}` in args: {args:?}"
+        );
+
+        // The container needs VAULT_ADDR + VAULT_ROLE to know how to talk
+        // to Vault and which role to authenticate as.
+        assert!(
+            has_arg(&args, "VAULT_ADDR=http://vault:8200"),
+            "missing VAULT_ADDR env: {args:?}"
+        );
+        assert!(
+            has_arg(&args, "VAULT_ROLE=git-mirror"),
+            "missing VAULT_ROLE env: {args:?}"
+        );
+
+        // The legacy github-token podman secret MUST NOT be mounted in the
+        // Vault flow — that's the whole point of Phase 6.
+        assert!(
+            !args.iter().any(|a| a == "tillandsias-github-token,mode=0400"),
+            "legacy github-token secret must not be mounted in vault flow: {args:?}"
+        );
+    }
+
+    #[test]
+    fn git_run_args_emit_no_vault_env_in_legacy_path() {
+        // @trace spec:secrets-management — legacy fallback path
+        // When no vault token is supplied (e.g. vault feature disabled or
+        // bootstrap failed), the launcher MUST NOT inject vault env vars.
+        // The runtime layer's container_profile attaches the legacy
+        // github-token mount via a separate code path that gracefully
+        // tolerates a missing secret.
+        let certs = PathBuf::from("/tmp/ca");
+        let args = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None);
+
+        assert!(
+            !args.iter().any(|a| a.starts_with("VAULT_ADDR=")),
+            "VAULT_ADDR must not leak into legacy launches: {args:?}"
+        );
+        assert!(
+            !args.iter().any(|a| a.starts_with("VAULT_ROLE=")),
+            "VAULT_ROLE must not leak into legacy launches: {args:?}"
+        );
+        // No per-launch vault token secret should be mounted either.
+        assert!(
+            !args
+                .iter()
+                .any(|a| a.contains("tillandsias-vault-token-")),
+            "no vault token podman secret should appear: {args:?}"
         );
     }
 
@@ -6654,7 +6890,10 @@ mod tests {
             "run_status_check must route through the shared podman layer"
         );
 
-        let login_window = source_window(source, "fn run_github_login(debug: bool)");
+        let login_window = source_window(
+            source,
+            "fn run_github_login(debug: bool, legacy_keyring_secrets: bool)",
+        );
         assert!(
             login_window.contains("podman_command()"),
             "run_github_login must use the shared podman command constructor"

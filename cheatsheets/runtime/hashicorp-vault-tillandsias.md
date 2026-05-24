@@ -1,5 +1,5 @@
 ---
-tags: [vault, hashicorp, secrets, enclave, auto-unseal, policy, poc, research]
+tags: [vault, hashicorp, secrets, enclave, auto-unseal, policy, default, approle]
 languages: [bash, hcl, rust]
 since: 2026-05-23
 last_verified: 2026-05-23
@@ -13,16 +13,36 @@ sources:
   - https://developer.hashicorp.com/vault/docs/auth/approle
   - https://developer.hashicorp.com/vault/docs/audit
 authority: medium
-status: proposed
+status: active
 tier: bundled
 ---
 
-# HashiCorp Vault inside the Tillandsias enclave (POC)
+# HashiCorp Vault inside the Tillandsias enclave (default backend)
 
 @trace spec:tillandsias-vault
 @cheatsheet runtime/vsock-transport.md, runtime/vm-provisioning-lifecycle if available
 
-**Use when**: implementing the Phase-3 Vault POC, debugging an unseal failure, writing a new policy file, or evaluating whether to migrate Linux off the host keyring onto Vault (Phase 6).
+**Use when**: debugging Vault unseal/auth on a Linux host, writing a new policy file, adding a new AppRole role for a container kind, or interpreting `vault-cli` output inside the git-mirror container.
+
+## Phase 6 — Vault is the default Linux secrets backend
+
+The Vault POC is no longer opt-in. `tillandsias --init` always brings the Vault container up on Linux; `tillandsias --github-login` stores tokens in Vault at `secret/github/token`; per-container AppRole tokens are minted for `git-mirror`, `forge`, `tray`, and `inference` roles (1h TTL, 24h max). The legacy keyring path is reachable via the deprecated `--legacy-keyring-secrets` flag and will be removed in v0.3.
+
+### Opting out (deprecated)
+
+```bash
+# Skip Vault entirely on --init; relies on the keyring-backed podman secret.
+# Will print a deprecation warning. Removed in v0.3.
+tillandsias --init --without-vault
+
+# Force --github-login to write to the legacy podman secret instead of Vault.
+# Will print a deprecation warning. Removed in v0.3.
+tillandsias --github-login --legacy-keyring-secrets
+
+# Build without the `vault` cargo feature for a leaner binary that NEVER
+# touches Vault. Same removal timeline.
+cargo build --no-default-features
+```
 
 ## Provenance
 
@@ -349,15 +369,18 @@ Vsock not up yet (race) — Vault helper's 30s wait covers this. If the timeout 
 
 If `/vault/data/core` is corrupted (kernel panic mid-write), Vault refuses to start. The recovery flow is the same as the lost-installation-uuid path: wipe volume, re-init, lose secrets.
 
-## Linux migration outlook (Phase 6)
+## Linux migration outcome (Phase 6 — landed)
 
-Today Linux Tillandsias uses the host's Secret Service (GNOME Keyring) for `github-token`, `ca-cert`, `ca-key`. The migration:
+Linux now runs Vault directly under host-rootless podman, treating the host as the "VM" for the POC. The host generates a per-installation UUID (`~/.config/tillandsias/installation-uuid`), combines it with `/etc/machine-id`, derives the unseal key via HKDF, and passes it to the Vault container via a tmpfs-only podman secret. The Vault container persists across tray restarts via the `tillandsias-vault-data` volume.
 
-1. After Phase 4-5 Windows/macOS ship, audit Vault for stability (latency, audit log size, unseal robustness over months).
-2. If green: author `linux-tray-vault-migration` spec.
-3. Linux runs the same Fedora-VM-equivalent (or simply runs Vault in a host-side rootless podman) and migrates flows one at a time.
+`tillandsias --github-login` writes the token to `secret/github/token`. The git-mirror container mounts a short-lived AppRole token at `/run/secrets/vault-token` and uses the baked `vault-cli` helper to read the token at push time:
 
-Until Phase 6 lands, Linux **keeps** the existing keyring flow. There is no dual-write.
+```sh
+# images/git/post-receive-hook.sh
+TOKEN="$(vault-cli read -field=token secret/github/token)"
+```
+
+The legacy keyring + `tillandsias-github-token` podman secret path is preserved for one release behind the deprecated `--legacy-keyring-secrets` flag. The keyring path will be removed in v0.3.
 
 ## Common pitfalls
 

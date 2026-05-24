@@ -211,6 +211,89 @@ impl VaultClient {
         Ok(out)
     }
 
+    /// Write an HCL policy at the given name. Idempotent — Vault overwrites
+    /// the policy body on every call. Used by the tray's vault bootstrap
+    /// path to load each `Policy::hcl()` body without shelling out to the
+    /// `vault` CLI.
+    pub async fn write_policy(&self, name: &str, hcl: &str) -> Result<(), VaultError> {
+        let url = self.url(&format!("sys/policies/acl/{name}"));
+        let body = serde_json::json!({ "policy": hcl });
+        let resp = self
+            .client
+            .post(&url)
+            .header("X-Vault-Token", &self.token)
+            .json(&body)
+            .send()
+            .await?;
+        let status = resp.status();
+        if status.is_success() || status == StatusCode::NO_CONTENT {
+            Ok(())
+        } else {
+            let body = resp.text().await.unwrap_or_default();
+            Err(Self::map_status(status, body))
+        }
+    }
+
+    /// Enable the AppRole auth backend. Idempotent: a 400 "path is already
+    /// in use" is squashed to `Ok(())` so callers can call this on every
+    /// boot.
+    pub async fn enable_approle(&self) -> Result<(), VaultError> {
+        let url = self.url("sys/auth/approle");
+        let body = serde_json::json!({ "type": "approle" });
+        let resp = self
+            .client
+            .post(&url)
+            .header("X-Vault-Token", &self.token)
+            .json(&body)
+            .send()
+            .await?;
+        let status = resp.status();
+        if status.is_success() || status == StatusCode::NO_CONTENT {
+            return Ok(());
+        }
+        if status == StatusCode::BAD_REQUEST {
+            // Vault returns 400 when the auth method already exists. Treat
+            // as success.
+            return Ok(());
+        }
+        let body = resp.text().await.unwrap_or_default();
+        Err(Self::map_status(status, body))
+    }
+
+    /// Create an AppRole role bound to the named policies with the supplied
+    /// TTLs (seconds). Idempotent — Vault overwrites the role config on
+    /// repeated calls.
+    pub async fn create_approle_role(
+        &self,
+        role: &str,
+        policies: &[&str],
+        token_ttl_secs: u64,
+        token_max_ttl_secs: u64,
+    ) -> Result<(), VaultError> {
+        let url = self.url(&format!("auth/approle/role/{role}"));
+        let body = serde_json::json!({
+            "token_policies": policies.join(","),
+            "token_ttl": format!("{token_ttl_secs}s"),
+            "token_max_ttl": format!("{token_max_ttl_secs}s"),
+            "secret_id_num_uses": 1,
+            "secret_id_ttl": "30s",
+        });
+        let resp = self
+            .client
+            .post(&url)
+            .header("X-Vault-Token", &self.token)
+            .json(&body)
+            .send()
+            .await?;
+        let status = resp.status();
+        if status.is_success() || status == StatusCode::NO_CONTENT {
+            Ok(())
+        } else {
+            let body = resp.text().await.unwrap_or_default();
+            Err(Self::map_status(status, body))
+        }
+    }
+
     /// Revoke the supplied token (lease + accessor + children).
     pub async fn revoke_token(&self, token: &str) -> Result<(), VaultError> {
         let url = self.url("auth/token/revoke");

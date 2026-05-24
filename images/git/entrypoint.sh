@@ -19,14 +19,24 @@ echo "  listening on :9418"
 echo "  base-path: /srv/git"
 echo "========================================"
 
-# GitHub token from podman secret.
-# @trace spec:podman-secrets-integration, spec:git-mirror-service
-# The tray creates tillandsias-github-token secret if a token is available
-# in the OS keyring. Read it from /run/secrets/ (podman's standard location).
-if [ -f /run/secrets/tillandsias-github-token ]; then
-    echo "GitHub token loaded from podman secret."
+# GitHub token credential discovery.
+# @trace spec:tillandsias-vault, spec:podman-secrets-integration, spec:git-mirror-service
+# Phase 6 default: the launcher mints a short-lived AppRole token scoped to
+# `git-mirror-policy` and mounts it at /run/secrets/vault-token. The
+# post-receive hook calls `vault-cli read -field=token secret/github/token`
+# at push time to fetch the real GitHub token. The token never lives on
+# disk; it is read into a process-scoped variable, consumed by `git push`,
+# and unset.
+#
+# Legacy path: when --legacy-keyring-secrets is in effect the tray instead
+# mounts the keyring-backed `tillandsias-github-token` podman secret at
+# /run/secrets/tillandsias-github-token. The hook honors either path.
+if [ -r /run/secrets/vault-token ]; then
+    echo "Vault AppRole token loaded; GitHub token will be read at push time via vault-cli."
+elif [ -f /run/secrets/tillandsias-github-token ]; then
+    echo "Legacy GitHub token loaded from podman secret (deprecated path)."
 else
-    echo "No GitHub token available; authenticated git operations will fail."
+    echo "No credential source available; authenticated git operations will fail."
 fi
 
 # CA certificate from podman secret.

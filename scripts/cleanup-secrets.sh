@@ -53,11 +53,22 @@ done
 _step "Removing ephemeral podman secrets..."
 
 # List of secrets to remove
-# @trace spec:podman-secrets-integration
+# @trace spec:podman-secrets-integration, spec:tillandsias-vault
 SECRETS=(
     "tillandsias-ca-cert"
     "tillandsias-github-token"
+    "tillandsias-vault-unseal"
 )
+
+# @trace spec:tillandsias-vault — the tray normally drains per-container
+# AppRole tokens on shutdown via the in-process revocation registry, but
+# CTRL-C / SIGKILL paths can leave stragglers. Walk every secret matching
+# the per-container naming pattern and remove it here.
+while IFS= read -r leftover; do
+    case "$leftover" in
+        tillandsias-vault-token-*) SECRETS+=("$leftover") ;;
+    esac
+done < <("$PODMAN" secret ls --format '{{.Name}}' 2>/dev/null || true)
 
 REMOVED_COUNT=0
 FAILED_COUNT=0

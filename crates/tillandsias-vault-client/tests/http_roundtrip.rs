@@ -153,6 +153,62 @@ async fn revoke_token_handles_204_no_content() {
 }
 
 #[tokio::test]
+async fn write_policy_uses_acl_endpoint() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/sys/policies/acl/git-mirror-policy"))
+        .and(header("X-Vault-Token", "tray-root"))
+        .respond_with(ResponseTemplate::new(204))
+        .mount(&server)
+        .await;
+
+    let client = VaultClient::new(server.uri(), "tray-root");
+    client
+        .write_policy("git-mirror-policy", "path \"secret/data/github/token\" {}\n")
+        .await
+        .expect("write_policy should accept 204");
+}
+
+#[tokio::test]
+async fn enable_approle_swallows_already_in_use_400() {
+    // Vault returns 400 with "path is already in use" when the auth method
+    // is already enabled. The client must treat that as success so callers
+    // can call enable_approle on every boot.
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/sys/auth/approle"))
+        .respond_with(
+            ResponseTemplate::new(400)
+                .set_body_string("{\"errors\":[\"path is already in use\"]}"),
+        )
+        .mount(&server)
+        .await;
+
+    let client = VaultClient::new(server.uri(), "tray-root");
+    client
+        .enable_approle()
+        .await
+        .expect("enable_approle must squash already-enabled 400");
+}
+
+#[tokio::test]
+async fn create_approle_role_posts_policies_and_ttls() {
+    let server = MockServer::start().await;
+    Mock::given(method("POST"))
+        .and(path("/v1/auth/approle/role/git-mirror"))
+        .and(header("X-Vault-Token", "tray-root"))
+        .respond_with(ResponseTemplate::new(204))
+        .mount(&server)
+        .await;
+
+    let client = VaultClient::new(server.uri(), "tray-root");
+    client
+        .create_approle_role("git-mirror", &["git-mirror-policy"], 3_600, 86_400)
+        .await
+        .expect("create_approle_role should accept 204");
+}
+
+#[tokio::test]
 async fn health_reports_sealed_state() {
     let server = MockServer::start().await;
     Mock::given(method("GET"))
