@@ -1,0 +1,80 @@
+# @trace spec:vm-idiomatic-layer
+name: litmus:cross-platform-terminal-attach
+spec: vm-idiomatic-layer, windows-native-tray, macos-native-tray
+phase: 4
+description: >
+  Trigger "Attach Here" on a forge from the host tray. The host must spawn
+  a terminal (Windows Terminal / Terminal.app / iTerm2) hosting
+  `vm-exec podman exec -it <forge> bash` and the user (or test driver)
+  must see an interactive shell prompt. Exercises the exec-tty-passthrough
+  invariant and the no-SSH terminal-attach contract on both Windows and macOS.
+severity: major
+size: e2e
+
+preconditions:
+  - "VM is provisioned and running"
+  - "at least one forge container is running for project 'litmus-attach'"
+  - "host has a terminal program installed (wt.exe on Windows; Terminal.app on macOS)"
+  - "on Windows tillandsias-tray.exe is present; on macOS tillandsias-tray.app is present"
+  - "test driver can introspect spawned-process command lines (Windows Get-CimInstance; macOS ps -ef)"
+
+caveats:
+  - requires_host_terminal: "Skip with 77 in fully headless environments where no GUI terminal can be spawned"
+  - placeholders: "<windows-host-name> and <macos-host-name> may be set via TILLANDSIAS_LITMUS_TARGET_HOST"
+
+critical_path:
+  - step: "skip on hosts without a GUI terminal"
+    phase: pre-run
+    command: "bash -lc 'case \"$(uname -s)\" in MINGW*|MSYS*|CYGWIN*) command -v wt.exe >/dev/null 2>&1 || command -v cmd.exe >/dev/null 2>&1 || (echo SKIP; exit 77) ;; Darwin) [ -d /Applications/Terminal.app ] || (echo SKIP; exit 77) ;; *) echo \"SKIP: cross-platform-only test\"; exit 77 ;; esac && echo OK'"
+    timeout_ms: 3000
+    expected_behavior: "succeeds on Windows or macOS with a terminal; skips elsewhere"
+
+  - step: "ensure a forge container is running for project litmus-attach"
+    phase: setup
+    command: "cargo run -p tillandsias-host-shell --example send-control -- --kind LaunchForge --project litmus-attach --agent bash"
+    timeout_ms: 30000
+    expected_behavior: "succeeds; forge 'tillandsias-litmus-attach-forge' is running"
+
+  - step: "trigger Attach Here via the host shell control surface"
+    phase: runtime
+    command: "cargo run -p tillandsias-host-shell --example attach-here -- --project litmus-attach 2>&1 | tee /tmp/litmus-attach.log"
+    timeout_ms: 15000
+    expected_behavior: "succeeds; log indicates a terminal process was spawned with vm-exec podman exec -it"
+
+  - step: "verify the spawned process command line matches the contract"
+    phase: runtime
+    command: "bash -lc 'case \"$(uname -s)\" in MINGW*|MSYS*|CYGWIN*) powershell.exe -NoProfile -Command \"Get-CimInstance Win32_Process -Filter \\\"Name='WindowsTerminal.exe' OR Name='cmd.exe'\\\" | Where-Object { $_.CommandLine -match 'vm-exec podman exec -it tillandsias-litmus-attach' } | Measure-Object | %{ exit (1 - [int]($_.Count -gt 0)) }\" ;; Darwin) ps -ef | grep -E \"vm-exec podman exec -it tillandsias-litmus-attach\" | grep -v grep ;; esac'"
+    timeout_ms: 10000
+    expected_behavior: "succeeds (matching process visible)"
+
+  - step: "verify no ssh invocation in the spawned tree"
+    phase: runtime
+    command: "bash -lc 'case \"$(uname -s)\" in MINGW*|MSYS*|CYGWIN*) powershell.exe -NoProfile -Command \"Get-CimInstance Win32_Process -Filter \\\"Name='ssh.exe' OR Name='plink.exe'\\\" | Where-Object { $_.CommandLine -match 'tillandsias' } | Measure-Object | %{ exit ([int]($_.Count -gt 0)) }\" ;; Darwin) ! ps -ef | grep -E \"ssh.*tillandsias\" | grep -v grep ;; esac'"
+    timeout_ms: 8000
+    expected_behavior: "succeeds (no ssh found targeting tillandsias)"
+
+  - step: "drive a keystroke into the attached shell and read back the prompt"
+    phase: runtime
+    command: "cargo run -p tillandsias-host-shell --example pty-probe -- --attach-handle $(cat /tmp/litmus-attach.handle) --type-then-read 'echo LITMUS_PROMPT_OK' --expect-substr 'LITMUS_PROMPT_OK'"
+    timeout_ms: 15000
+    expected_behavior: "succeeds (terminal is interactive and echoes the typed string)"
+
+  - step: "close the terminal window cleanly"
+    phase: post-run
+    command: "cargo run -p tillandsias-host-shell --example pty-probe -- --attach-handle $(cat /tmp/litmus-attach.handle) --close"
+    timeout_ms: 8000
+    expected_behavior: "succeeds"
+
+observability:
+  traces:
+    - "@trace spec:vm-idiomatic-layer"
+    - "@trace spec:windows-native-tray"
+    - "@trace spec:macos-native-tray"
+  expected_log: "Host spawns native terminal hosting vm-exec podman exec -it; TTY is interactive; no SSH involved"
+  log_fields:
+    spec: "vm-idiomatic-layer,windows-native-tray,macos-native-tray"
+    test: "cross-platform-terminal-attach"
+
+rollback:
+  on_failure: "if step 4 finds no matching process, the host shell did not use vm-exec / podman exec -it — inspect attach_here handler. If step 5 finds ssh, the no-SSH invariant is broken — remove the ssh code path. If step 6 cannot type, the PTY is not allocated — check VmRuntime::exec(tty=true) wiring."
+  command: "bash -lc 'cat /tmp/litmus-attach.log; case \"$(uname -s)\" in MINGW*|MSYS*|CYGWIN*) powershell.exe -NoProfile -Command \"Get-CimInstance Win32_Process | Where-Object CommandLine -match tillandsias\" ;; Darwin) ps -ef | grep tillandsias | grep -v grep ;; esac'"

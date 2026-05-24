@@ -28,7 +28,18 @@ use serde::{Deserialize, Serialize};
 /// (renaming `seq`, adding a required field). Adding a new `ControlMessage`
 /// variant does NOT bump this — postcard's additive enum encoding handles
 /// that case as `Error::UnknownVariant` on older readers.
-pub const WIRE_VERSION: u16 = 1;
+///
+/// **Version 2** (this revision): introduces the `transport` module + new
+/// VM-lifecycle / remote-enumeration variants required by the cross-platform
+/// host shells. Breaking because new consumers will reject older `Hello`
+/// frames carrying `wire_version: 1`; the upgrade is gated on the
+/// Windows/macOS host-shell wave landing simultaneously with the in-VM
+/// headless's `--listen-vsock` mode.
+///
+/// @trace spec:vsock-transport, spec:host-shell-architecture
+pub const WIRE_VERSION: u16 = 2;
+
+pub mod transport;
 
 /// Maximum permitted single-message length on the wire. Length prefixes
 /// greater than this trigger an `Error::PayloadTooLarge` response and the
@@ -114,6 +125,81 @@ pub enum ControlMessage {
     ///
     /// @trace spec:host-browser-mcp, spec:tray-host-control-socket
     McpFrame { session_id: u64, payload: Vec<u8> },
+    /// Host → in-VM headless: request the current VM lifecycle phase.
+    ///
+    /// @trace spec:vsock-transport, spec:host-shell-architecture
+    VmStatusRequest { seq: u64 },
+    /// In-VM headless → host: current lifecycle phase + readiness summary.
+    ///
+    /// @trace spec:vsock-transport, spec:host-shell-architecture
+    VmStatusReply {
+        seq_in_reply_to: u64,
+        phase: VmPhase,
+        podman_ready: bool,
+        last_event: Option<String>,
+    },
+    /// Host → in-VM headless: drain forges, then exit the headless cleanly
+    /// (the host will follow with `wsl --terminate` / `VZ.requestStop`).
+    ///
+    /// @trace spec:vsock-transport, spec:vm-provisioning-lifecycle
+    VmShutdownRequest { seq: u64, drain_timeout_ms: u32 },
+    /// Host → in-VM headless: enumerate projects mounted into the VM.
+    ///
+    /// @trace spec:host-shell-architecture
+    EnumerateLocalProjects { seq: u64 },
+    /// In-VM headless → host: response with each visible project.
+    ///
+    /// @trace spec:host-shell-architecture
+    LocalProjectsReply {
+        seq_in_reply_to: u64,
+        entries: Vec<LocalProjectEntry>,
+    },
+    /// Host → in-VM headless: refresh the cloud-side project list (`gh` is
+    /// invoked inside the VM where the GitHub token lives).
+    ///
+    /// @trace spec:host-shell-architecture, spec:tillandsias-vault
+    CloudRefreshRequest { seq: u64 },
+    /// In-VM headless → host: cloud project list response.
+    ///
+    /// @trace spec:host-shell-architecture
+    CloudRefreshReply {
+        seq_in_reply_to: u64,
+        projects: Vec<CloudProjectEntry>,
+    },
+}
+
+/// Coarse VM lifecycle phase reported in `VmStatusReply`.
+///
+/// @trace spec:vsock-transport, spec:vm-provisioning-lifecycle
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum VmPhase {
+    Provisioning,
+    Starting,
+    Ready,
+    Draining,
+    Stopping,
+    Failed,
+}
+
+/// A single VM-visible project entry returned by `LocalProjectsReply`.
+///
+/// @trace spec:host-shell-architecture
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct LocalProjectEntry {
+    pub label: String,
+    pub guest_path: String,
+    pub last_seen_unix: u64,
+}
+
+/// A single cloud-side project entry returned by `CloudRefreshReply`.
+///
+/// @trace spec:host-shell-architecture
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct CloudProjectEntry {
+    pub label: String,
+    pub owner: String,
+    pub repo: String,
+    pub default_branch: String,
 }
 
 /// Error categories the tray emits on the control socket.
@@ -253,10 +339,14 @@ mod tests {
     }
 
     #[test]
-    fn wire_version_constant_is_one() {
-        // Locked at v1. Bumping requires an additive OpenSpec change with
-        // a tombstoned-compat shim per project convention.
-        assert_eq!(WIRE_VERSION, 1);
+    fn wire_version_constant_is_two() {
+        // Bumped to v2 when the `transport` module + VM-lifecycle / remote
+        // enumeration variants landed for the cross-platform host shells.
+        // Further bumps require an additive OpenSpec change with a
+        // tombstoned-compat shim per project convention.
+        //
+        // @trace spec:vsock-transport, spec:host-shell-architecture
+        assert_eq!(WIRE_VERSION, 2);
     }
 
     #[test]

@@ -1,0 +1,65 @@
+# @trace spec:vm-provisioning-lifecycle
+name: litmus:vm-provisioning-idempotent
+spec: vm-provisioning-lifecycle
+phase: 2
+description: >
+  Provisioning the VM twice on the same host must be a no-op on the second run:
+  no re-download of the Fedora rootfs or tillandsias binary, no re-import of the
+  WSL distro / re-creation of the VZ disk. Exercises the provision-idempotent and
+  cache-keyed-by-sha invariants.
+severity: critical
+size: e2e
+
+preconditions:
+  - host shell built with provisioning support
+  - assets/provisioning-manifest.json present and pins SHA256s for the target version
+  - host has network access for the FIRST run only (second run is offline)
+  - on Linux dev hosts, a LocalLinuxRuntime fake is acceptable in place of WSL/VZ
+
+caveats:
+  - requires_disk_space: "~500MB for the Fedora rootfs cache"
+  - skip_on_unsupported: "Skip with exit 77 on hosts without WSL2 / VZ / fake runtime"
+
+critical_path:
+  - step: "first provision succeeds and downloads artifacts"
+    phase: runtime
+    command: "bash -lc 'rm -rf \"${TILLANDSIAS_DATA_DIR:-$HOME/.local/share/tillandsias}\"/rootfs-* \"${TILLANDSIAS_DATA_DIR:-$HOME/.local/share/tillandsias}\"/tillandsias-linux-x86_64 2>/dev/null; cargo run -p tillandsias-host-shell --example provision-once -- --manifest assets/provisioning-manifest.json --backend ${TILLANDSIAS_VM_BACKEND:-fake} 2>&1 | tee /tmp/litmus-provision-first.log | grep -qE \"phase=Provisioning.*ok=true|provision.*ok\"'"
+    timeout_ms: 600000
+    expected_behavior: "succeeds; log mentions download phases"
+
+  - step: "verify rootfs cache exists with SHA-keyed name"
+    phase: runtime
+    command: "bash -lc 'ls \"${TILLANDSIAS_DATA_DIR:-$HOME/.local/share/tillandsias}\"/rootfs-fedora-44-*.tar.xz | grep -E \"rootfs-fedora-44-[0-9a-f]{64}\\.tar\\.xz\"'"
+    timeout_ms: 5000
+    expected_behavior: "succeeds; exactly one matching path"
+
+  - step: "second provision is a no-op (no network, completes in <2s)"
+    phase: runtime
+    command: "bash -lc 'TILLANDSIAS_HTTP_DENY_ALL=1 timeout 5 cargo run -p tillandsias-host-shell --example provision-once -- --manifest assets/provisioning-manifest.json --backend ${TILLANDSIAS_VM_BACKEND:-fake} 2>&1 | tee /tmp/litmus-provision-second.log'"
+    timeout_ms: 8000
+    expected_behavior: "succeeds within 2s wall; never opens a network socket (TILLANDSIAS_HTTP_DENY_ALL panics on any HTTP attempt)"
+
+  - step: "verify no network requests on the second run"
+    phase: runtime
+    command: "bash -lc '! grep -qE \"GET https://dl\\.fedoraproject|GET https://github\\.com\" /tmp/litmus-provision-second.log'"
+    timeout_ms: 3000
+    expected_behavior: "succeeds (no GET lines in the second-run log)"
+
+  - step: "verify no wsl --import / VZ disk-creation on the second run"
+    phase: runtime
+    command: "bash -lc '! grep -qE \"wsl --import|VZDiskImageStorageDeviceAttachment.*create\" /tmp/litmus-provision-second.log'"
+    timeout_ms: 3000
+    expected_behavior: "succeeds (no import or disk-create operations)"
+
+observability:
+  traces:
+    - "@trace spec:vm-provisioning-lifecycle"
+    - "@trace spec:vm-idiomatic-layer"
+  expected_log: "Second provision call is a no-op; cache hits skip all network and import work"
+  log_fields:
+    spec: "vm-provisioning-lifecycle"
+    test: "vm-provisioning-idempotent"
+
+rollback:
+  on_failure: "if step 1 fails, check network reachability to dl.fedoraproject.org and the GitHub release asset. If step 2 fails, the cache path is not SHA-keyed — check host_shell::provisioning::cache_path. If step 3 takes > 5s, the cache-hit fast path is broken — inspect the cache-hit-detection code in host_shell::provisioning."
+  command: "bash -lc 'cat /tmp/litmus-provision-first.log | tail -50 && echo --- && cat /tmp/litmus-provision-second.log | tail -50'"

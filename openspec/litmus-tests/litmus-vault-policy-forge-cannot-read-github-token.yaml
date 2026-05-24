@@ -1,0 +1,61 @@
+# @trace spec:tillandsias-vault
+name: litmus:vault-policy-forge-cannot-read-github-token
+spec: tillandsias-vault
+phase: 3
+description: >
+  A vault token scoped to forge-policy must receive HTTP 403 when it tries to
+  read secret/data/github/token. Exercises the forge-policy-has-no-token-read
+  invariant and the least-privilege contract for forge containers.
+severity: critical
+size: instant
+
+preconditions:
+  - VM is up; vault container is unsealed
+  - vault policies git-mirror-policy, forge-policy, tray-policy, inference-policy are loaded
+  - secret/github/token has a value (it is read by git-mirror-policy in normal operation)
+
+caveats:
+  - requires_provisioned_vault: "Run after litmus:vault-auto-unseal-no-prompt"
+
+critical_path:
+  - step: "tray-policy token writes a fixture GitHub token"
+    phase: setup
+    command: "bash -lc 'cargo run -p tillandsias-host-shell --example vm-exec -- bash -c \"vault login -no-print -policy=tray-policy && vault kv put secret/github/token value=ghp_litmusFIXTURE0000000000000000000000\"' "
+    timeout_ms: 10000
+    expected_behavior: "succeeds (fixture token written)"
+
+  - step: "issue a forge-policy-scoped token"
+    phase: setup
+    command: "bash -lc 'FORGE_TOKEN=$(cargo run -p tillandsias-host-shell --example vm-exec -- vault token create -policy=forge-policy -ttl=300s -format=json | python3 -c \"import sys,json; print(json.load(sys.stdin)[\\\"auth\\\"][\\\"client_token\\\"])\"); echo \"$FORGE_TOKEN\" > /tmp/litmus-forge-token'"
+    timeout_ms: 10000
+    expected_behavior: "succeeds; /tmp/litmus-forge-token contains a valid forge-policy token"
+
+  - step: "forge-policy token gets 403 on secret/github/token"
+    phase: runtime
+    command: "bash -lc 'FORGE_TOKEN=$(cat /tmp/litmus-forge-token); STATUS=$(cargo run -p tillandsias-host-shell --example vm-exec -- bash -c \"VAULT_TOKEN='$FORGE_TOKEN' vault kv get -format=json secret/github/token 2>&1 | grep -oE 'Code: [0-9]+' | head -1 || curl -sS -o /dev/null -w '%{http_code}' -H 'X-Vault-Token: '$FORGE_TOKEN http://vault:8200/v1/secret/data/github/token\"); echo \"STATUS=$STATUS\"; echo \"$STATUS\" | grep -qE \"403\"'"
+    timeout_ms: 15000
+    expected_behavior: "succeeds (status is 403 / permission denied)"
+
+  - step: "forge-policy token CAN read secret/ca/proxy-cert (positive control)"
+    phase: runtime
+    command: "bash -lc 'FORGE_TOKEN=$(cat /tmp/litmus-forge-token); cargo run -p tillandsias-host-shell --example vm-exec -- bash -c \"VAULT_TOKEN='$FORGE_TOKEN' vault kv get secret/ca/proxy-cert 2>&1\" | grep -qE \"value\\s+=\"'"
+    timeout_ms: 10000
+    expected_behavior: "succeeds (positive control: forge-policy CAN read proxy-cert; confirms the deny is path-specific, not blanket-deny)"
+
+  - step: "audit log records the denied access"
+    phase: post-run
+    command: "bash -lc 'cargo run -p tillandsias-host-shell --example vm-exec -- tail -200 /vault/audit/audit.log | grep -E \"secret/data/github/token.*permission denied\" | grep -q \"forge-policy\"'"
+    timeout_ms: 5000
+    expected_behavior: "succeeds (audit log records denied attempt with policy=forge-policy)"
+
+observability:
+  traces:
+    - "@trace spec:tillandsias-vault"
+  expected_log: "forge-policy token receives 403 on secret/github/token; audit log captures the denial"
+  log_fields:
+    spec: "tillandsias-vault"
+    test: "vault-policy-forge-cannot-read-github-token"
+
+rollback:
+  on_failure: "if step 3 fails (forge can read the token), the forge-policy is misconfigured. Inspect the policy HCL in images/vault/policies/forge.hcl and re-apply with 'vault policy write forge-policy …'. If step 4 fails, blanket-deny is in effect — forge-policy should still be able to read proxy-cert."
+  command: "bash -lc 'cargo run -p tillandsias-host-shell --example vm-exec -- vault policy read forge-policy'"

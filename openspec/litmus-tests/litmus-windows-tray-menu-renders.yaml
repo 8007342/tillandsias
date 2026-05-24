@@ -1,0 +1,74 @@
+# @trace spec:windows-native-tray
+name: litmus:windows-tray-menu-renders
+spec: windows-native-tray, host-shell-architecture
+phase: 4
+description: >
+  On a Windows 11 host, spawn tillandsias-tray.exe. Assert the NotifyIcon is
+  registered via Shell_NotifyIcon, and the right-click menu items match the
+  parity contract: status_text, projects, agents (claude/codex/opencode),
+  observatorium, opencode-web, github-login. Exercises notify-icon-only and
+  menu-parity invariants.
+severity: major
+size: e2e
+
+preconditions:
+  - Windows 11 host (build 22000+) with a desktop session
+  - tillandsias-tray.exe built and present at the install path
+  - VM 'tillandsias' provisioned OR a stub VmRuntime backend configured
+  - Powershell or pwsh available for AccessibleObjectFromWindow / UI Automation probing
+  - the test runner is allowed to interact with the user's desktop session
+
+caveats:
+  - requires_windows_host: "This litmus only runs on Windows 11. On Linux/macOS dev machines, skip with exit 77."
+  - skip_on_unsupported: "if [[ $(uname -s) != 'MINGW'* && $(uname -s) != 'MSYS'* ]]; then echo 'SKIP: not Windows'; exit 77; fi"
+  - placeholders: "<windows-host-name> may be set via TILLANDSIAS_LITMUS_WIN_HOST env if the test is driven from a remote orchestrator"
+
+critical_path:
+  - step: "skip cleanly on non-Windows hosts"
+    phase: pre-run
+    command: "bash -lc 'case \"$(uname -s)\" in MINGW*|MSYS*|CYGWIN*) echo OK ;; *) echo \"SKIP: not Windows\"; exit 77 ;; esac'"
+    timeout_ms: 3000
+    expected_behavior: "succeeds on Windows; exits 77 (skip) elsewhere"
+
+  - step: "spawn tillandsias-tray.exe in the background"
+    phase: runtime
+    command: "powershell.exe -NoProfile -Command \"Start-Process -FilePath '$env:LOCALAPPDATA\\tillandsias\\tillandsias-tray.exe' -ArgumentList '--vm-backend','stub' -PassThru | Select-Object -ExpandProperty Id | Out-File /tmp/litmus-win-tray-pid\""
+    timeout_ms: 10000
+    expected_behavior: "succeeds; PID written to /tmp/litmus-win-tray-pid"
+
+  - step: "verify NotifyIcon registered (Shell_NotifyIcon_GetRect or UI Automation probe)"
+    phase: runtime
+    command: "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/litmus/win-probe-notify-icon.ps1 -ProcessName tillandsias-tray -TimeoutSec 10"
+    timeout_ms: 15000
+    expected_behavior: "succeeds; script prints 'NotifyIcon: present' and exits 0"
+
+  - step: "open menu and capture items via UI Automation"
+    phase: runtime
+    command: "powershell.exe -NoProfile -ExecutionPolicy Bypass -File ./scripts/litmus/win-probe-menu-items.ps1 -ProcessName tillandsias-tray -OutFile /tmp/litmus-win-menu.json"
+    timeout_ms: 15000
+    expected_behavior: "succeeds; /tmp/litmus-win-menu.json contains a JSON array of menu items"
+
+  - step: "assert parity contract: status_text, projects, agents (claude/codex/opencode), observatorium, opencode-web, github-login"
+    phase: runtime
+    command: "python3 -c \"import json; m=json.load(open('/tmp/litmus-win-menu.json')); ids={i['id'] for i in m}; need={'status_text','projects','agents.claude','agents.codex','agents.opencode','observatorium','opencode_web','github_login'}; missing=need-ids; assert not missing, f'missing: {missing}'; print('OK')\""
+    timeout_ms: 5000
+    expected_behavior: "succeeds; prints OK"
+
+  - step: "shut down tray cleanly"
+    phase: post-run
+    command: "powershell.exe -NoProfile -Command \"Stop-Process -Id (Get-Content /tmp/litmus-win-tray-pid) -Force\""
+    timeout_ms: 5000
+    expected_behavior: "succeeds"
+
+observability:
+  traces:
+    - "@trace spec:windows-native-tray"
+    - "@trace spec:host-shell-architecture"
+  expected_log: "Tray spawns; Shell_NotifyIcon registered; menu items match the Linux parity contract"
+  log_fields:
+    spec: "windows-native-tray"
+    test: "windows-tray-menu-renders"
+
+rollback:
+  on_failure: "if step 3 fails, the binary did not call Shell_NotifyIconW(NIM_ADD, …) — inspect crates/tillandsias-windows-tray/src/notify_icon.rs. If step 5 fails, the MenuStructure → Win32 menu mapping is dropping items — inspect the parity test in host-shell."
+  command: "powershell.exe -NoProfile -Command 'Get-Process tillandsias-tray | Format-List; Get-Content /tmp/litmus-win-menu.json'"

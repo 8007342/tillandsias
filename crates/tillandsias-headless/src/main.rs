@@ -80,6 +80,10 @@ fn main() {
         return;
     }
 
+    // TODO(@vsock-transport): --listen-vsock mode landing in wave 26 — see
+    // openspec/specs/vsock-transport/spec.md and feature flag `listen-vsock`
+    // on this crate's Cargo.toml. The flag will accept a u32 port and bind
+    // a tokio-vsock listener instead of the Unix socket.
     let debug = user_args.iter().any(|a| a == "--debug");
     let diagnostics = user_args.iter().any(|a| a == "--diagnostics");
     let init = user_args.iter().any(|a| a == "--init");

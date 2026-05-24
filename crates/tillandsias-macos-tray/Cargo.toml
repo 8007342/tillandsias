@@ -1,0 +1,23 @@
+[package]
+name = "tillandsias-macos-tray"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Native AppKit NSStatusItem tray for Tillandsias on macOS; drives a Virtualization.framework-hosted headless tillandsias VM."
+publish = false
+
+[[bin]]
+name = "tillandsias-tray"
+path = "src/main.rs"
+
+[dependencies]
+tillandsias-host-shell = { path = "../tillandsias-host-shell" }
+tokio = { workspace = true, features = ["full"] }
+tracing = { workspace = true }
+
+[target.'cfg(target_os = "macos")'.dependencies]
+objc2 = "0.5"
+objc2-app-kit = { version = "0.2", features = ["NSStatusBar", "NSStatusItem", "NSMenu"] }
+objc2-foundation = "0.2"
+objc2-virtualization = "0.2"

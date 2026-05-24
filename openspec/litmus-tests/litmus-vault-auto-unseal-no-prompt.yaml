@@ -1,0 +1,67 @@
+# @trace spec:tillandsias-vault
+name: litmus:vault-auto-unseal-no-prompt
+spec: tillandsias-vault
+phase: 3
+description: >
+  VM boots, vault container auto-unseals from machine-id + installation-uuid,
+  and 'vault status' reports sealed=false within 5s of vault container start.
+  At no point may a user-visible prompt (NSWindow, MessageBox, terminal
+  password prompt, file dialog) surface. Exercises the no-passphrase-prompt-ever
+  invariant.
+severity: critical
+size: e2e
+
+preconditions:
+  - VM is provisioned with the vault container image present (tillandsias-vault)
+  - host has the installation-uuid stored in the OS keychain (tillandsias-vm-uuid)
+  - test runs in a non-interactive environment (no TTY by default) — any prompt will surface as a hang or error
+  - the host shell pushes installation-uuid via vsock at VM start
+
+caveats:
+  - requires_provisioned_vault: "Run after the vault POC is built into the in-VM enclave"
+  - skip_on_unsupported: "Skip with exit 77 on hosts where vault container is unavailable"
+
+critical_path:
+  - step: "start the VM with no TTY attached (any prompt will hang)"
+    phase: runtime
+    command: "bash -lc 'cargo run -p tillandsias-host-shell --example start-vm-headless 2>&1 | tee /tmp/litmus-vault-boot.log &'"
+    timeout_ms: 5000
+    run_in_background: true
+    expected_behavior: "background start; the foreground assertion immediately measures unseal latency"
+
+  - step: "wait up to 60s for VM ready (vsock handshake)"
+    phase: runtime
+    command: "cargo run -p tillandsias-host-shell --example wait-vm-ready -- --timeout-secs 60"
+    timeout_ms: 65000
+    expected_behavior: "succeeds (VM is up and tillandsias-headless is listening on vsock)"
+
+  - step: "vault is sealed=false within 5s of container start"
+    phase: runtime
+    command: "bash -lc 'T_CONTAINER_START=$(cargo run -p tillandsias-host-shell --example replay-audit-log -- --grep \"container=tillandsias-vault.*started\" --format ts); T_UNSEAL=$(cargo run -p tillandsias-host-shell --example vm-exec -- vault status -format=json 2>/dev/null | python3 -c \"import sys,json,time; d=json.load(sys.stdin); print(int(time.time())) if not d.get(\\\"sealed\\\", True) else sys.exit(1)\"); DELTA=$((T_UNSEAL-T_CONTAINER_START)); [[ $DELTA -le 5 ]] && echo \"OK: unseal in ${DELTA}s\" || (echo \"FAIL: unseal took ${DELTA}s > 5s\"; exit 1)'"
+    timeout_ms: 15000
+    expected_behavior: "succeeds; delta <= 5s"
+
+  - step: "no passphrase prompt surfaced (host process did not block on TTY or window)"
+    phase: runtime
+    command: "bash -lc '! grep -qiE \"passphrase|password|unseal key|enter unseal\" /tmp/litmus-vault-boot.log && ! pgrep -af \"^(pinentry|ssh-askpass|/usr/lib/seahorse|osascript.*password)\" >/dev/null && echo \"OK: no prompt\"'"
+    timeout_ms: 5000
+    expected_behavior: "succeeds (no prompt-related processes, no prompt strings in log)"
+
+  - step: "unseal key is on tmpfs and absent from disk"
+    phase: runtime
+    command: "bash -lc 'cargo run -p tillandsias-host-shell --example vm-exec -- bash -c \"findmnt /run/secrets | grep -q tmpfs && ! find /vault /etc -type f -exec grep -l 'unseal' {} + 2>/dev/null | grep -v audit\" && echo \"OK\"'"
+    timeout_ms: 10000
+    expected_behavior: "succeeds (unseal key path on tmpfs; no persistent file contains the key)"
+
+observability:
+  traces:
+    - "@trace spec:tillandsias-vault"
+    - "@trace spec:host-shell-architecture"
+  expected_log: "Vault unseals within 5s of container start with no user prompt; unseal key never touches disk"
+  log_fields:
+    spec: "tillandsias-vault"
+    test: "vault-auto-unseal-no-prompt"
+
+rollback:
+  on_failure: "if vault stays sealed, inspect the in-VM init script that derives the HKDF key (check /etc/machine-id readability and the vsock-delivered installation-uuid). If a prompt surfaces, the auto-unseal flow is broken — VAULT_TOKEN env or vault init script may be requesting interactive input."
+  command: "bash -lc 'cargo run -p tillandsias-host-shell --example vm-exec -- vault status; cat /tmp/litmus-vault-boot.log'"

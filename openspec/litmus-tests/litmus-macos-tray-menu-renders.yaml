@@ -1,0 +1,86 @@
+# @trace spec:macos-native-tray
+name: litmus:macos-tray-menu-renders
+spec: macos-native-tray, host-shell-architecture
+phase: 5
+description: >
+  On a macOS 14+ host, launch tillandsias-tray.app. Assert NSStatusItem
+  exists in the menu bar, menu items match the parity contract, and the
+  GUI-passthrough items (observatorium, opencode-web) are rendered but
+  marked disabled with reason "v2 — terminal-only in v1". Exercises the
+  nsstatusitem-only and gui-items-deferred-to-v2 invariants.
+severity: major
+size: e2e
+
+preconditions:
+  - macOS 14+ (Sonoma or later) on Apple Silicon or Intel
+  - tillandsias-tray.app built and present at /Applications or ~/Applications
+  - VM 'tillandsias' provisioned OR a stub VmRuntime backend configured
+  - test runner has Accessibility permissions granted to the test driver (osascript / cliclick / Accessibility API)
+  - Info.plist sets LSUIElement = true (asserted by step 3)
+
+caveats:
+  - requires_macos_host: "This litmus only runs on macOS. On Linux/Windows dev machines, skip with exit 77."
+  - skip_on_unsupported: "if [[ $(uname -s) != 'Darwin' ]]; then echo 'SKIP: not macOS'; exit 77; fi"
+  - placeholders: "<macos-host-name> may be set via TILLANDSIAS_LITMUS_MAC_HOST env if the test is driven from a remote orchestrator"
+
+critical_path:
+  - step: "skip cleanly on non-macOS hosts"
+    phase: pre-run
+    command: "bash -lc '[[ \"$(uname -s)\" == \"Darwin\" ]] && echo OK || (echo \"SKIP: not macOS\"; exit 77)'"
+    timeout_ms: 3000
+    expected_behavior: "succeeds on macOS; exits 77 (skip) elsewhere"
+
+  - step: "launch tillandsias-tray.app in the background"
+    phase: runtime
+    command: "bash -lc 'open -a /Applications/tillandsias-tray.app --args --vm-backend stub & echo $! > /tmp/litmus-mac-tray-pid; sleep 2'"
+    timeout_ms: 10000
+    expected_behavior: "succeeds; tray app is running"
+
+  - step: "verify Info.plist has LSUIElement = true"
+    phase: runtime
+    command: "bash -lc '/usr/libexec/PlistBuddy -c \"Print :LSUIElement\" /Applications/tillandsias-tray.app/Contents/Info.plist | grep -qE \"^true$\"'"
+    timeout_ms: 3000
+    expected_behavior: "succeeds (no Dock entry)"
+
+  - step: "verify NSStatusItem exists in system menu bar"
+    phase: runtime
+    command: "osascript ./scripts/litmus/mac-probe-status-item.scpt tillandsias-tray"
+    timeout_ms: 15000
+    expected_behavior: "succeeds; AppleScript reports the status item is present"
+
+  - step: "open menu and capture items"
+    phase: runtime
+    command: "osascript ./scripts/litmus/mac-probe-menu-items.scpt tillandsias-tray /tmp/litmus-mac-menu.json"
+    timeout_ms: 15000
+    expected_behavior: "succeeds; /tmp/litmus-mac-menu.json contains a JSON array of menu items"
+
+  - step: "assert parity contract present"
+    phase: runtime
+    command: "python3 -c \"import json; m=json.load(open('/tmp/litmus-mac-menu.json')); ids={i['id'] for i in m}; need={'status_text','projects','agents.claude','agents.codex','agents.opencode','observatorium','opencode_web','github_login'}; missing=need-ids; assert not missing, f'missing: {missing}'; print('OK')\""
+    timeout_ms: 5000
+    expected_behavior: "succeeds"
+
+  - step: "assert observatorium and opencode_web are disabled with v2 reason"
+    phase: runtime
+    command: "python3 -c \"import json; m={i['id']:i for i in json.load(open('/tmp/litmus-mac-menu.json'))}; assert m['observatorium']['disabled'] is True, 'observatorium not disabled'; assert 'v2' in m['observatorium']['disabled_reason'], 'no v2 marker'; assert m['opencode_web']['disabled'] is True; assert 'v2' in m['opencode_web']['disabled_reason']; print('OK')\""
+    timeout_ms: 5000
+    expected_behavior: "succeeds (both items disabled with v2 reason)"
+
+  - step: "shut down tray cleanly"
+    phase: post-run
+    command: "bash -lc 'osascript -e \\'tell application \"tillandsias-tray\" to quit\\' 2>/dev/null || killall tillandsias-tray 2>/dev/null; true'"
+    timeout_ms: 10000
+    expected_behavior: "succeeds"
+
+observability:
+  traces:
+    - "@trace spec:macos-native-tray"
+    - "@trace spec:host-shell-architecture"
+  expected_log: "NSStatusItem present; menu parity holds; observatorium and opencode_web disabled with v2 marker"
+  log_fields:
+    spec: "macos-native-tray"
+    test: "macos-tray-menu-renders"
+
+rollback:
+  on_failure: "if step 4 fails, NSStatusItem was not registered — inspect crates/tillandsias-macos-tray/src/status_item.rs. If step 7 fails, the v1 disabled-with-reason marker is missing — check MenuStructure builder for macOS gating."
+  command: "bash -lc 'cat /tmp/litmus-mac-menu.json; ps -ef | grep tillandsias-tray | grep -v grep'"

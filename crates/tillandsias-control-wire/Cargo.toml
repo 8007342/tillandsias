@@ -9,3 +9,11 @@ description = "Postcard-framed wire schema for the tray-host control socket (sha
 [dependencies]
 serde = { workspace = true }
 postcard = { workspace = true }
+
+[target.'cfg(target_os = "linux")'.dependencies]
+tokio-vsock = { workspace = true, optional = true }
+
+[features]
+default = []
+# @trace spec:vsock-transport — Linux-only async vsock binding for the in-VM headless.
+vsock = ["tokio-vsock"]

@@ -1,0 +1,71 @@
+# @trace spec:vm-provisioning-lifecycle
+name: litmus:vm-shutdown-drains-forges
+spec: vm-provisioning-lifecycle, vm-idiomatic-layer
+phase: 2
+description: >
+  Start a forge container inside the VM, then signal shutdown via
+  VmShutdownRequest. The forge must die cleanly within 10s, all per-container
+  vault tokens must be revoked, and the VM must stop within 30s wall clock.
+  Exercises the forge-drain-budget-10s-each and vm-hard-stop-30s invariants.
+severity: critical
+size: e2e
+
+preconditions:
+  - VM is provisioned and running with the enclave brought up
+  - at least one forge container is launchable (tillandsias-forge image present in the VM)
+  - vsock connection from host to VM is healthy
+  - timing measurements assume host monotonic clock
+
+caveats:
+  - requires_provisioned_vm: "Run after litmus:vm-provisioning-idempotent or after a manual /opsx:bulk-archive provision"
+  - skip_on_unsupported: "Skip with exit 77 on hosts without WSL2 / VZ / fake runtime"
+
+critical_path:
+  - step: "launch a forge container inside the VM"
+    phase: runtime
+    command: "bash -lc 'cargo run -p tillandsias-host-shell --example send-control -- --kind LaunchForge --project litmus-shutdown --agent bash 2>&1 | grep -qE \"launch.*ok|forge.*started\"'"
+    timeout_ms: 30000
+    expected_behavior: "succeeds; forge container 'tillandsias-litmus-shutdown-forge' running in VM"
+
+  - step: "verify forge is running"
+    phase: runtime
+    command: "bash -lc 'cargo run -p tillandsias-host-shell --example vm-exec -- podman ps --format \"{{.Names}}\" | grep -qE \"tillandsias-litmus-shutdown-.*forge\"'"
+    timeout_ms: 10000
+    expected_behavior: "succeeds (forge container visible)"
+
+  - step: "issue VmShutdownRequest and measure drain time"
+    phase: runtime
+    command: "bash -lc 'T0=$(date +%s%N); cargo run -p tillandsias-host-shell --example send-control -- --kind VmShutdownRequest --drain-timeout-ms 10000; T1=$(date +%s%N); echo \"WALL_NS=$((T1-T0))\" | tee /tmp/litmus-shutdown-timing.log'"
+    timeout_ms: 35000
+    expected_behavior: "succeeds; WALL_NS < 30_000_000_000 (30s); connection closes (no reply expected)"
+
+  - step: "verify forge container is gone within 10s of shutdown signal"
+    phase: runtime
+    command: "bash -lc 'WALL_NS=$(grep -oE \"[0-9]+\" /tmp/litmus-shutdown-timing.log | head -1); [[ $WALL_NS -le 30000000000 ]] && echo \"OK: wall=${WALL_NS}ns\" || (echo \"FAIL: wall=${WALL_NS}ns > 30s\"; exit 1)'"
+    timeout_ms: 5000
+    expected_behavior: "succeeds (30s wall budget honoured)"
+
+  - step: "verify the VM is stopped"
+    phase: runtime
+    command: "bash -lc 'sleep 1; (wsl --list --running --quiet 2>/dev/null | grep -qv tillandsias) || (! cargo run -p tillandsias-host-shell --example vm-status 2>&1 | grep -qE \"phase=Ready\") && echo \"VM stopped\"'"
+    timeout_ms: 10000
+    expected_behavior: "succeeds (VM is no longer in Ready phase)"
+
+  - step: "verify per-container vault tokens were revoked (from audit log)"
+    phase: post-shutdown
+    command: "bash -lc 'cargo run -p tillandsias-host-shell --example replay-audit-log -- --last-shutdown 2>&1 | grep -qE \"token.revoke.*policy=git-mirror-policy\"'"
+    timeout_ms: 10000
+    expected_behavior: "succeeds (audit log confirms revocations)"
+
+observability:
+  traces:
+    - "@trace spec:vm-provisioning-lifecycle"
+    - "@trace spec:vm-idiomatic-layer"
+  expected_log: "Forge SIGTERM within 100ms, exit within 10s, VM stops within 30s wall, vault tokens revoked"
+  log_fields:
+    spec: "vm-provisioning-lifecycle"
+    test: "vm-shutdown-drains-forges"
+
+rollback:
+  on_failure: "if forge does not exit within 10s, inspect tillandsias-headless logs inside the VM for SIGTERM dispatch and the 'shutdown_all' code path. If WALL_NS > 30s, the hard-stop fallback (wsl --terminate / vz_force_stop) did not fire — inspect VmRuntime::stop(force=true)."
+  command: "bash -lc 'cat /tmp/litmus-shutdown-timing.log && cargo run -p tillandsias-host-shell --example tail-vm-logs -- --since shutdown'"

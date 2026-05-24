@@ -1,0 +1,18 @@
+[package]
+name = "tillandsias-host-shell"
+version = "0.1.0"
+edition.workspace = true
+license.workspace = true
+authors.workspace = true
+description = "Portable host-side logic shared by the Windows and macOS native trays — project discovery, menu state, vsock client, VM orchestration."
+publish = false
+
+[dependencies]
+tillandsias-core = { path = "../tillandsias-core" }
+tillandsias-control-wire = { path = "../tillandsias-control-wire" }
+tillandsias-vm-layer = { path = "../tillandsias-vm-layer" }
+tillandsias-vault-client = { path = "../tillandsias-vault-client" }
+tillandsias-scanner = { path = "../tillandsias-scanner" }
+tokio = { workspace = true, features = ["full"] }
+serde = { workspace = true }
+tracing = { workspace = true }

@@ -39,7 +39,12 @@ image = { version = "0.25", default-features = false, features = ["png"], option
 zbus = { version = "4.4.0", default-features = false, features = ["tokio"], optional = true }
 zvariant = { version = "4.2.0", optional = true }
 
+[target.'cfg(target_os = "linux")'.dependencies]
+tokio-vsock = { workspace = true, optional = true }
+
 [features]
 default = []
 # @trace spec:linux-native-portable-executable, spec:tray-ui-integration, spec:tray-app
 tray = ["image", "zbus", "zvariant"]
+# @trace spec:vsock-transport — wave 26 will wire `--listen-vsock` for the in-VM headless.
+listen-vsock = ["tokio-vsock"]

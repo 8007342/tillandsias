@@ -4,8 +4,10 @@ members = [
     "crates/tillandsias-control-wire",
     "crates/tillandsias-core",
     "crates/tillandsias-headless",
+    "crates/tillandsias-host-shell",
     "crates/tillandsias-litmus-rust",
     "crates/tillandsias-logging",
+    "crates/tillandsias-macos-tray",
     "crates/tillandsias-metrics",
     "crates/tillandsias-otp",
     "crates/tillandsias-podman",
@@ -13,6 +15,9 @@ members = [
     "crates/tillandsias-repeat-graph",
     "crates/tillandsias-router-sidecar",
     "crates/tillandsias-scanner",
+    "crates/tillandsias-vault-client",
+    "crates/tillandsias-vm-layer",
+    "crates/tillandsias-windows-tray",
 ]
 resolver = "3"
 
@@ -44,6 +49,8 @@ base64 = "0.22"
 reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-features = false }
 uuid = { version = "1", features = ["v4", "serde"] }
 regex = "1"
+serde_json = "1"
+tokio-vsock = "0.6"
 
 # Internal crates
 tillandsias-browser-mcp = { path = "crates/tillandsias-browser-mcp" }
