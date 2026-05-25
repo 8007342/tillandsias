@@ -234,6 +234,52 @@ windows-next Phase-4 model-independent slice is already landed (menu_action
 resolver, ~/src scanner, embedded manifest); the vsock-E2E tail awaits a
 booted VM or `control-wire-pty-attach`.
 
+### CLAIM — 2026-05-25: windows-next owns the vm-recipe-provisioning D8 amendment
+
+Per owner directive (2026-05-25), windows-next CLAIMS ownership of the
+`vm-recipe-provisioning` dual-path distribution amendment that the linux-host
+requested (CI-materialized rootfs as a first-class design, due 2026-05-31).
+This lifts windows-next's earlier "do not edit the change-owner's artifact"
+self-restriction FOR THIS AMENDMENT ONLY.
+
+- LEASE: windows-next will edit `openspec/changes/vm-recipe-provisioning/`
+  {design.md (add D8), proposal.md, specs/vm-provisioning-lifecycle/spec.md,
+  tasks.md}. linux-next / macos-next: please do NOT concurrently edit those
+  files until this claim is released (avoid stomping; tombstone/supersede if
+  you must). The recipe/parser/materializer CODE is still unclaimed shared work.
+- SCOPE: documentation amendment only (no code). Promotes the CI-materialized,
+  SHA-pinned rootfs (recipe-derived — NOT a shipped binary) from R1-future to a
+  first-class decision; keeps on-host materialization as the audit/dev path.
+- Does NOT change the frozen contracts, the "no shipped Linux binaries"
+  principle, or the recipe trust root.
+
+STATUS — SUPERSEDED + RECONCILED 2026-05-25 (lease released):
+
+A COLLISION occurred: the macOS host (who authored the proposal) landed the
+same dual-path amendment as **D6** ("CI-materialized rootfs as first-class dual
+path", commit `70c7c2a0`) on linux-next CONCURRENTLY with my windows-next **D8**
+draft (`f0dde8bc`). Their D6 reached the integration branch first and is
+canonical. Resolved by merging linux-next into windows-next and:
+
+- design.md / proposal.md / tasks.md: my redundant **D8** edits DROPPED;
+  restored to linux-next's canonical **D6** (their dual-path decision + §2b
+  CI-fetch tasks + format-matrix `[output]` schema). One amendment, not two.
+- spec delta (`specs/vm-provisioning-lifecycle/spec.md`): RETAINED my unique
+  contribution — the macOS D6 did NOT touch the spec delta, so it still
+  contradicted itself (strict "no binary / no GitHub-Releases" vs the dual
+  path). My added Requirement "First-run obtains the rootfs by fetch (default)
+  or local materialization" (+3 scenarios) and the reconciled binary clause
+  FIX that contradiction; references re-pointed D8 → **D6**. So: their D6
+  (design/proposal/tasks) + my spec-delta reconciliation = one coherent
+  amendment, zero duplication.
+- windows-next build + tests green post-merge (host-shell 17, vm-layer 11,
+  windows-tray 4).
+
+Lease on `vm-recipe-provisioning` RELEASED. Net windows-next ownership of this
+change is now just the spec-delta reconciliation. Lesson for the loop: claims
+must be checked against the integration branch before drafting — macOS and I
+drafted the same amendment in parallel.
+
 ## Near-term windows-next path (decided 2026-05-24)
 
 Advance MODEL-INDEPENDENT Phase 4 next (tray actions + vsock host↔in-VM E2E via

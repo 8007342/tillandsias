@@ -85,6 +85,15 @@ headless over vsock. Podman never on the Windows host. Older 6-distro
     EnumerateLocalProjects (merge with scanned local list), Quit→graceful VM
     drain (VmShutdownRequest then stop), route Attach/GitHubLogin/agents over
     the wire (control-wire-pty-attach for Open Shell + login).
+  - WIRE-DISPATCH CONTRACT (advisory from `plan/issues/control-socket-protocol-
+    convergence-2026-05-25.md`): when the Win32 tray finally calls into the
+    control wire, target the SAME `ControlMessage` variants over both transports
+    (unix on Linux, vsock on Windows-in-WSL); the in-VM headless will dispatch
+    via a shared `control_dispatch.rs` and reply `Error{Unsupported}` (not a
+    silent drop) for unhandled variants. If a needed variant isn't shared-
+    implemented yet, file it in that doc — do NOT fork a Windows-local handler.
+    The shared `tillandsias-control-wire` enum is unchanged; dispatcher work is
+    Linux-side (PR #2).
   - DONE (2026-05-25): added `assets/tillandsias.rc` embedding the existing
     `tillandsias.manifest` (per-monitor-v2 DPI awareness + requireAdministrator
     =false) — previously NOT embedded (no .rc), so the tray ran DPI-unaware.
