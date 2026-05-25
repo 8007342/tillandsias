@@ -1,9 +1,27 @@
-# `osx-next` tombstoned (aligned to linux-next) — 2026-05-25
+# `osx-next` aligned to linux-next — 2026-05-25  *(NOT "tombstoned" — see SUPERSEDED note)*
 
-trace: plan/issues/multi-host-integration-loop-2026-05-24.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md
+> **⚠ SUPERSEDED IN PART 2026-05-25T06Z by `plan/issues/branch-and-coordination-canon-2026-05-25.md`.**
+> The owner canon ratifies `osx-next` as the canonical macOS branch name
+> (rejecting `macos-next`) and rules that **macOS code commits SHOULD route
+> through `osx-next` first**, with the integration loop merging into
+> `linux-next`. The original "tombstone osx-next, remove it from the observed
+> set" recommendation in this doc is **overruled**.
+>
+> What still holds: the **fast-forward alignment of `origin/osx-next` to the
+> current `linux-next` tip** (this doc's primary action) was correct and
+> useful — it gives the macOS worker a current launchpad for subsequent
+> code pushes to `osx-next` per the canon. From 2026-05-25 onward the
+> macOS worker:
+>   - pushes **code** to `origin/osx-next` (integration loop merges to linux-next),
+>   - pushes **`plan/` / `methodology/` / `openspec/`** directly to `origin/linux-next` per the canon's §2 table.
+>
+> The local branch name on the macOS host should also rename `macos-next` → `osx-next`.
+
+trace: plan/issues/multi-host-integration-loop-2026-05-24.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, plan/issues/branch-and-coordination-canon-2026-05-25.md
 
 Author: macos-next worker on `Tlatoanis-MacBook-Air` (Apple Silicon).
 Authority: owner directive 2026-05-25 ("Tombstone osx-next: force-align it to linux-next periodically; remove from integration loop's observed set").
+Status: *partially* superseded by the canon doc landed same day — see header.
 
 ## What happened
 
