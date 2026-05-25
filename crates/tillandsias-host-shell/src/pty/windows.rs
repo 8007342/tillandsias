@@ -16,6 +16,9 @@
 
 #![cfg(windows)]
 
+use tokio::io::{AsyncReadExt, AsyncWriteExt, DuplexStream};
+use tokio::runtime::Handle;
+
 // `use windows::…` resolves to the `windows` *crate* (extern), not this module.
 use windows::core::{PCWSTR, PWSTR};
 use windows::Win32::Foundation::{CloseHandle, HANDLE};
@@ -229,6 +232,90 @@ impl Drop for ConPtyChild {
     }
 }
 
+/// Send wrapper so a raw Win32 handle can move onto a bridge thread.
+struct SendPtr<T>(T);
+unsafe impl<T> Send for SendPtr<T> {}
+
+/// Bridge the blocking ConPTY pipes to tokio async halves (for `pump_io`).
+///
+/// `split` hands ownership of the pipe handles to two dedicated blocking
+/// threads (Win32 anonymous-pipe I/O has no native async on Windows):
+/// - read thread: `ReadFile(output_read)` → a duplex → the returned `Reader`;
+/// - write thread: the returned `Writer` → a duplex → `WriteFile(input_write)`.
+///
+/// `ManuallyDrop` suppresses `ConPtyMaster::drop` so the handles are closed
+/// exactly once, by the threads, when their loops end.
+///
+/// Runtime behaviour is validated at VM end-to-end: a unit test can't exercise
+/// the read bridge because `ReadFile` blocks until a process produces output.
+impl super::PtyMaster for ConPtyMaster {
+    type Reader = DuplexStream;
+    type Writer = DuplexStream;
+
+    fn split(self) -> (DuplexStream, DuplexStream) {
+        let handle = Handle::current();
+        // Take the handles; suppress Drop so they're not double-closed.
+        let me = std::mem::ManuallyDrop::new(self);
+        let hpc = SendPtr(me.hpc);
+        let input_write = SendPtr(me.input_write);
+        let output_read = SendPtr(me.output_read);
+
+        // Read bridge: ConPTY output → Reader.
+        let (reader_host, mut reader_side) = tokio::io::duplex(64 * 1024);
+        let h_read = handle.clone();
+        std::thread::spawn(move || {
+            // Rebind the whole wrappers so the closure captures `SendPtr`
+            // (Send), not the bare inner `HANDLE` (edition-2021 disjoint
+            // captures would otherwise capture the field and break `Send`).
+            let output_read = output_read;
+            let hpc = hpc;
+            let out = output_read.0;
+            let pc = hpc.0;
+            let mut buf = [0u8; 16 * 1024];
+            loop {
+                let mut read = 0u32;
+                let ok = unsafe { ReadFile(out, Some(&mut buf), Some(&mut read), None) };
+                if ok.is_err() || read == 0 {
+                    break;
+                }
+                if h_read
+                    .block_on(reader_side.write_all(&buf[..read as usize]))
+                    .is_err()
+                {
+                    break;
+                }
+            }
+            unsafe {
+                ClosePseudoConsole(pc);
+                let _ = CloseHandle(out);
+            }
+        });
+
+        // Write bridge: Writer → ConPTY input.
+        let (writer_host, mut writer_side) = tokio::io::duplex(64 * 1024);
+        std::thread::spawn(move || {
+            let input_write = input_write; // whole-SendPtr capture (see read thread)
+            let inp = input_write.0;
+            let mut buf = [0u8; 16 * 1024];
+            loop {
+                let n = match handle.block_on(writer_side.read(&mut buf)) {
+                    Ok(0) | Err(_) => break,
+                    Ok(n) => n,
+                };
+                let mut written = 0u32;
+                if unsafe { WriteFile(inp, Some(&buf[..n]), Some(&mut written), None) }.is_err() {
+                    break;
+                }
+            }
+            unsafe {
+                let _ = CloseHandle(inp);
+            }
+        });
+
+        (reader_host, writer_host)
+    }
+}
+
 impl Drop for ConPtyMaster {
     fn drop(&mut self) {
         unsafe {
@@ -270,5 +357,15 @@ mod tests {
             .expect("spawn into conpty");
         let code = child.wait().expect("wait");
         assert_eq!(code, 7, "ConPTY child exit code should propagate");
+    }
+
+    /// Compile-time check that ConPtyMaster satisfies the cross-platform
+    /// PtyMaster trait (so pump_io can drive it). Does NOT call `split` —
+    /// the read bridge blocks on ReadFile without a producing process, so its
+    /// runtime behaviour is validated at VM end-to-end, not here.
+    #[test]
+    fn conpty_master_satisfies_pty_master_trait() {
+        fn assert_impl<M: crate::pty::PtyMaster>() {}
+        assert_impl::<ConPtyMaster>();
     }
 }
