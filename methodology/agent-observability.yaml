@@ -24,11 +24,15 @@ agent_observability_protocol:
       - summary
       - evidence_refs
       - timestamp
+      - host_id
+      - platform
       - branch
       - worktree_path
       - lease_id
       - graph_node_id
       - owned_file_scope
+      - upstream_commit
+      - observed_sibling_heads
       - checkpoint_commit
     optional_metadata_fields:
       - tokens_spent
@@ -98,7 +102,7 @@ agent_observability_protocol:
       Agents communicate by appending events and by sending compact task handoffs.
       Handoffs must not depend on hidden conversational memory.
       If a meaningful substep completes or a blocker appears, write a compact
-      refinement note under ./methodology/events/ or ./plan/issues/ so the next
+      refinement note under ./methodology/event/ or ./plan/issues/ so the next
       agent can resume without chat history.
     handoff_schema:
       lease_id: string
@@ -112,9 +116,13 @@ agent_observability_protocol:
       blockers: list
       evidence_refs: list
       next_action: string
+      host_id: string
+      platform: string
       branch: string
       worktree_path: string
       owned_file_scope: list
+      upstream_commit: string
+      observed_sibling_heads: object
       checkpoint_commit: string
 
   repeat_progress_report:
@@ -158,7 +166,7 @@ agent_observability_protocol:
       - "Show the last N progress points as a trend bar and an average delta."
       - "Render only active work and its dependency tail as a compact tree with one line per node."
       - "Treat anonymous stream events as evidence only; they may advance the current focus bar but must not become standalone tree nodes."
-      - "Ask agents to file an immediate bootstrap refinement note to ./methodology/events/ or ./plan/issues/ before edits begin, then refresh it after each meaningful substep so live progress is visible before the session ends."
+      - "Ask agents to file an immediate bootstrap refinement note to ./methodology/event/ or ./plan/issues/ before edits begin, then refresh it after each meaningful substep so live progress is visible before the session ends."
       - "Keep progress notes modest and portable; use plain repo paths instead of @-prefixed file references."
       - "Show token-spend metadata only when cheaply available from existing metadata; do not issue extra API calls to fetch it."
       - "If token metadata exists, surface both per-task token spend and the remaining percentage until rate limiting."
@@ -181,16 +189,21 @@ agent_observability_protocol:
       - "Repeated claim events with the same lease_id are no-ops."
       - "A conflicting claim on the same file scope becomes blocked until reconciled."
       - "A claim that goes stale must be revalidated by the next agent before editing."
+      - "A cross-host claim touching plan, methodology, OpenSpec, or shared crates must record observed sibling branch heads."
     lease_fields:
       - lease_id
       - claimant_agent_id
       - graph_node_id
       - owned_file_scope
       - branch
+      - host_id
+      - platform
       - worktree_path
       - claimed_at
       - expires_at
       - last_heartbeat_at
+      - upstream_commit
+      - observed_sibling_heads
       - checkpoint_commit
     stale_recovery:
       - "A stale lease is not a failure; it is a cue to reload the plan and emit a fresh reading event."

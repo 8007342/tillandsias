@@ -42,7 +42,7 @@ fi
 # CA certificate from podman secret.
 # @trace spec:podman-secrets-integration, spec:git-mirror-service
 # Git CLI uses GIT_SSL_CAINFO to trust custom CA certificates.
-# This allows git push --mirror to work through the enclave proxy.
+# This allows explicit-refspec git pushes to work through the enclave proxy.
 if [ -f /run/secrets/tillandsias-ca-cert ]; then
     export GIT_SSL_CAINFO
     GIT_SSL_CAINFO=/run/secrets/tillandsias-ca-cert
@@ -69,8 +69,8 @@ if [ -n "$PROJECT" ]; then
         git init --bare "$PROJECT_REPO"
         # Accept whatever the forge pushes — initial syncs from a host clone
         # often look like force-pushes from the bare repo's perspective. The
-        # post-receive hook downstream does `--mirror` to upstream which
-        # already forces; locally we just accept the push.
+        # post-receive hook forwards only the changed refs upstream; locally we
+        # just accept the forge's update into the sparse mirror.
         git -C "$PROJECT_REPO" config receive.denyNonFastforwards false
         git -C "$PROJECT_REPO" config receive.denyDeletes false
     fi

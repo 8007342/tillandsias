@@ -10,17 +10,23 @@ completed_by: "claude-haiku (phase-4-validation)"
 title: "Phase 4: Litmus tests written and verified"
 
 tests_added:
-  - minimal_menu_has_exactly_4_items_at_launch() ✓
-    - Validates 4-item launch contract when forge_available=false
-    - Checks for status, separator, version, quit
+  - name: "minimal_menu_has_exactly_4_items_at_launch()"
+    result: "pass"
+    validates:
+      - "4-item launch contract when forge_available=false"
+      - "status, separator, version, quit"
 
-  - menu_expands_when_forge_available() ✓
-    - Validates 6+ item expansion when forge_available=true
-    - Checks for Seedlings and project submenus
+  - name: "menu_expands_when_forge_available()"
+    result: "pass"
+    validates:
+      - "6+ item expansion when forge_available=true"
+      - "Seedlings and project submenus"
 
-  - status_text_reflects_enclave_status() ✓
-    - NEW: Validates EnclaveStatus mapping to status text
-    - Checks emoji prefixes (☐, ✓)
+  - name: "status_text_reflects_enclave_status()"
+    result: "pass"
+    validates:
+      - "EnclaveStatus mapping to status text"
+      - "emoji prefixes"
 
 traces_verified: |
   9 @trace spec:tray-minimal-ux annotations found in:

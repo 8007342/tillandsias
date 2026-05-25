@@ -17,44 +17,48 @@ test_harness_components:
     - No real podman/containers needed
 
 tests_added:
-  - state_transition_forge_false_to_true() ✓
-    - Simulates forge becoming available
-    - Verifies menu transitions from 4 → 6+ items
-    - Validates status text changes (☐ → ✓)
+  - name: "state_transition_forge_false_to_true()"
+    result: "pass"
+    validates:
+      - "Simulates forge becoming available"
+      - "Verifies menu transitions from 4 to 6+ items"
+      - "Validates status text changes"
 
-  - enclave_status_all_states() ✓
-    - Verifies all 5 EnclaveStatus values have correct emoji
-    - Checks: Verifying (☐), ProxyReady (☐🌐), GitReady (☐🌐🪞), AllHealthy (✓), Failed (🥀)
+  - name: "enclave_status_all_states()"
+    result: "pass"
+    validates:
+      - "Verifies all 5 EnclaveStatus values have correct emoji"
+      - "Checks Verifying, ProxyReady, GitReady, AllHealthy, and Failed states"
 
 implementation_metrics:
   lines_added: 342
-  lines_changed: 73 (total diff 415)
-  phases_completed: 5 of 5 ✓
+  lines_changed: "73 (total diff 415)"
+  phases_completed: "5 of 5"
   trace_annotations: 11 total @trace spec:tray-minimal-ux
   test_helpers: TrayStateBuilder (new)
   test_coverage:
-    - 4-item launch contract: ✓
-    - Menu expansion (4→6+): ✓
-    - Status text emoji mapping: ✓
-    - State transitions: ✓
-    - EnclaveStatus enum: ✓
+    - "4-item launch contract"
+    - "Menu expansion"
+    - "Status text emoji mapping"
+    - "State transitions"
+    - "EnclaveStatus enum"
 
 architectural_notes:
-  - Tray module is fully testable in isolation ✓
-  - No headless daemon required for UX testing ✓
-  - No real podman containers needed ✓
-  - Boundary separation maintained (tray ≠ daemon) ✓
+  - "Tray module is fully testable in isolation"
+  - "No headless daemon required for UX testing"
+  - "No real podman containers needed"
+  - "Boundary separation maintained"
 
 documentation_gaps_found:
   - 020-tray-binary-test-discovery.yaml (test discovery in binary crate)
   - 021-status-icon-mapping-gap.yaml (DBusMenu icon support)
-  - Recommendation: Future phase to move tray to separate lib crate for full test discovery
+  - "Recommendation: Future phase to move tray to separate lib crate for full test discovery"
 
 ready_for_production: true
 ready_for_spec_sync: true
 
 next_steps:
-  1. Run final cargo check --workspace ✓
-  2. Archive tray-minimal-ux change in OpenSpec
-  3. Sync delta specs to main specs
-  4. Document in commit message with GitHub search URL for traces
+  - "Run final cargo check --workspace"
+  - "Archive tray-minimal-ux change in OpenSpec"
+  - "Sync delta specs to main specs"
+  - "Document in commit message with GitHub search URL for traces"

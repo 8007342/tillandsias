@@ -50,6 +50,8 @@ bootstrap_router:
         why: "It selects exactly one intent and prevents scattershot work."
       - step: "If present, read plan.yaml and plan/index.yaml next."
         why: "The repo-local plan queue is the current work graph, claim map, and checkpoint contract."
+      - step: "If platform branches or multiple hosts are active, read methodology/multi-host-development.yaml."
+        why: "The Linux, Windows, and macOS workflow depends on explicit branch, lease, and pull/merge cadence."
       - step: "If present, read plan/steps/README.md before any step file."
         why: "The step template defines the cold-start handoff format and idempotent update expectations."
       - step: "Read the intent-specific methodology files listed below."
@@ -95,6 +97,9 @@ bootstrap_router:
       - missing_or_conflicting_references
       - intended_change_scope
       - verification_plan
+      - host_id
+      - platform
+      - observed_sibling_heads
 
   intent_options:
     code_implementation:
@@ -203,6 +208,7 @@ bootstrap_router:
         - event_recorder
       read:
         - methodology/between-commits-work-discipline.yaml
+        - methodology/multi-host-development.yaml
         - methodology/agent-observability.yaml
         - methodology/ci.yaml
         - plan.yaml
@@ -233,6 +239,7 @@ bootstrap_router:
         - math_reviewer
       read:
         - methodology/catalog.yaml
+        - methodology/multi-host-development.yaml
         - methodology/philosophy.yaml
         - methodology/provenance.yaml
         - methodology/math-foundations.yaml

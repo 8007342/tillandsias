@@ -8,10 +8,10 @@ ephemeral_work_problem:
     remote copy never receives the real work before an ephemeral host is lost.
 
   constraints:
-    - Agent runs in isolated VCS worktree (one per agent, siblings in <worktree-dir>/)
-    - Agent iterates freely in local worktree; no coordination with other agents during work
-    - Agents checkpoint frequently to the active integration branch before the host or worktree can be lost
-    - The active integration branch for this repository is `linux-next` unless a task explicitly says otherwise
+    - Agent runs in isolated VCS worktree or on an owning platform host
+    - Linux, Windows, and macOS hosts may work concurrently on linux-next, windows-next, and osx-next
+    - Agents checkpoint frequently to the owning platform branch before the host or worktree can be lost
+    - Agents pull and merge from durable remote state before starting, before long verification, and before checkpoint pushes
     - Checkpoint commits may be incomplete, failing, or temporary as long as they preserve a coherent state
     - Commit notes and plan updates MUST be written for a different future agent, not for the same process returning
     - Commit and plan updates MUST be idempotent: repeating the same checkpoint event or step update must not create semantic drift
@@ -33,9 +33,13 @@ handoff_contract:
     with no access to hidden conversational memory.
   required_fields:
     - current_branch
+    - host_id
+    - platform
     - worktree_path
     - owned_file_scope
     - checkpoint_commit
+    - upstream_commit
+    - observed_sibling_heads
     - residual_risks
     - blockers
     - next_action
@@ -75,11 +79,15 @@ checkpoint_and_push_policy:
     window of local edits.
 
   branch_policy:
-    active_checkpoint_branch: linux-next
+    active_checkpoint_branches:
+      linux: linux-next
+      windows: windows-next
+      macos: osx-next
     release_branch: main
     rule: >
-      Use `linux-next` for incomplete or temporary work, and reserve `main` for
-      release-grade squashed merges. Do not let a useful local state live only on disk.
+      Use the owning platform branch for incomplete or temporary work, and
+      reserve `main` for release-grade or reconciled shared batches. Do not let
+      a useful local state live only on disk.
 
   cadence:
     commit_when:
@@ -108,9 +116,17 @@ checkpoint_and_push_policy:
   remote_policy:
     default_remote: origin
     first_push: "git push -u origin <branch>"
+    start_of_session: "git fetch origin && git pull --ff-only"
+    sibling_heads: "git ls-remote origin refs/heads/main refs/heads/linux-next refs/heads/windows-next refs/heads/osx-next"
+    fast_forward_guard: "git merge-base --is-ancestor origin/<platform-branch> <source-ref>"
     expectation: >
       Treat local state as ephemeral. Remote origin is the durable backup of current
       progress, not just the place for finished code.
+    multi_host_rule: >
+      Cross-cutting work lands on main or a declared shared branch, then
+      fast-forwards to platform branches only when the current remote platform
+      head is an ancestor. If ancestry fails, stop and record a coordination
+      issue in plan/issues before pushing.
 
   trusted_authority_baseline:
     github:

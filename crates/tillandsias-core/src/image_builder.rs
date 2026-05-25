@@ -172,9 +172,15 @@ impl PodmanDirect {
 
     /// Compute cache mount arguments based on detected distro.
     fn cache_mount_args(&self, distro: &str) -> Result<Vec<(String, String)>, ImageBuilderError> {
+        // Resolve the home dir at runtime. `HOME` is the Linux/macOS norm
+        // (and is where image builds actually run — inside the VM on
+        // Windows hosts); `USERPROFILE` keeps this crate compiling and
+        // sane on a Windows host. A compile-time `env!("HOME")` would break
+        // the MSVC build since Windows has no `HOME` at compile time.
         let home_dir = std::env::var_os("HOME")
+            .or_else(|| std::env::var_os("USERPROFILE"))
             .map(std::path::PathBuf::from)
-            .unwrap_or_else(|| std::path::PathBuf::from(env!("HOME")));
+            .unwrap_or_else(std::env::temp_dir);
         let cache_dir = home_dir.join(".cache/tillandsias/packages");
         std::fs::create_dir_all(&cache_dir)
             .map_err(|e| ImageBuilderError::Io(format!("create cache dir: {e}")))?;

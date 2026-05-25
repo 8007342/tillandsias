@@ -1,0 +1,21 @@
+// Win32 resource script for tillandsias-tray.exe.
+//
+// Compiled + linked by build.rs via the `embed-resource` crate on Windows
+// targets. Embeds the application manifest so the tray declares per-monitor-v2
+// DPI awareness and requireAdministrator=false (otherwise Windows runs the GUI
+// DPI-unaware / blurry on HiDPI).
+//
+// Resource type 24 is RT_MANIFEST; id 1 is CREATEPROCESS_MANIFEST_RESOURCE_ID
+// (the manifest the loader applies to the process). Numeric forms are used so
+// the script needs no SDK headers (portable across rc.exe and windres).
+//
+// ICON: real tillandsia art is still SVG-only (assets/icons/<genus>/*.svg) and
+// the host has no SVG->ICO rasterizer yet, so the runtime falls back to
+// IDI_APPLICATION. When a tillandsias.ico lands, uncomment the line below and
+// load it via LoadIconW(GetModuleHandle, MAKEINTRESOURCE(1)) in notify_icon.rs.
+//
+// @trace spec:windows-native-tray
+
+1 24 "tillandsias.manifest"
+
+// 1 ICON "tillandsias.ico"

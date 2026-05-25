@@ -181,7 +181,11 @@ pub async fn connect_with_handshake(
     }
 }
 
-#[cfg(test)]
+// These round-trip tests drive the `Transport::Unix` path, which only exists
+// on Unix (production Windows/macOS use `Transport::Vsock`). Gate the module
+// on `unix` so `cargo test` compiles on the Windows host; Linux + macOS still
+// run them.
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use tokio::net::UnixListener;

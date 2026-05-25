@@ -1,0 +1,121 @@
+trace: spec:methodology-accountability
+
+multi_host_development:
+  version: v0.1
+  purpose: >
+    Coordinate Linux, Windows, and macOS hosts working on sibling branches while
+    `plan/` remains the durable inter-agent ledger for long-running work,
+    failures, restarts, and idempotent recovery.
+
+  platform_branches:
+    linux: linux-next
+    windows: windows-next
+    macos: osx-next
+    release: main
+    rule: >
+      Each host checkpoints to its platform branch. Platform-specific work stays
+      on that branch until stable, then merges back to main. Cross-cutting work
+      lands on main or the selected shared integration branch and is
+      fast-forwarded to all platform branches only after ancestry is verified.
+
+  branch_convention:
+    shared_logic:
+      - crates/tillandsias-host-shell
+      - crates/tillandsias-core
+      - crates/tillandsias-headless
+      - images
+      - openspec
+      - methodology
+      - plan
+    platform_splits:
+      - crates/tillandsias-host-shell-linux
+      - crates/tillandsias-host-shell-macos
+      - crates/tillandsias-host-shell-windows
+      - cfg_target_os_modules
+    separation_rule: >
+      Keep protocol and shared orchestration in `tillandsias-host-shell` and
+      platform-agnostic crates. Keep thin tray wrappers and OS API calls on the
+      owning platform branch unless the shared API contract changes.
+
+  host_identity:
+    required_fields:
+      - host_id
+      - platform
+      - branch
+      - worktree_path
+      - agent_id
+      - lease_id
+      - last_seen_commit
+      - upstream_commit
+      - observed_sibling_heads
+    rule: >
+      Every plan lease, agent event, and handoff touching shared files includes
+      host_id and platform so a cold-start agent can distinguish Linux local
+      state from Windows/macOS remote progress.
+
+  start_of_session:
+    required_checks:
+      - "git fetch origin"
+      - "git pull --ff-only"
+      - "git ls-remote origin refs/heads/main refs/heads/linux-next refs/heads/windows-next refs/heads/osx-next"
+      - "git status --short --branch"
+    rule: >
+      Before editing, absorb the current remote head for the active platform
+      branch and record sibling branch heads in the plan issue or event that
+      governs the work.
+
+  fast_forward_guard:
+    before_updating_platform_branch:
+      - "git merge-base --is-ancestor origin/<platform-branch> <source-ref>"
+      - "git diff --name-only origin/<platform-branch>..<source-ref>"
+    rule: >
+      A platform branch may be fast-forwarded from main or another shared
+      source only when its current remote head is an ancestor. If the ancestry
+      check fails, another host has independent work; stop and coordinate
+      through `plan/` before pushing.
+
+  pull_merge_cadence:
+    before_start: true
+    before_long_verification: true
+    before_checkpoint_push: true
+    during_long_work: "at each meaningful checkpoint or before touching shared files"
+    merge_order:
+      - own_platform_branch_from_origin
+      - main
+      - sibling_platform_branches_that_touch_shared_files
+    conflict_policy:
+      - "Spec, methodology, and plan conflicts block until explicitly reconciled."
+      - "Platform crate conflicts stay on the owning platform branch unless a shared API contract changed."
+      - "Never resolve conflicts by deleting another host's plan notes; tombstone, supersede, or merge by stable ID."
+
+  plan_ledger:
+    canonical_files:
+      - plan.yaml
+      - plan/index.yaml
+      - plan/steps
+      - plan/issues
+    scratch_root: plan/localwork
+    rules:
+      - "Long-running module builds get durable step or issue files before implementation begins."
+      - "Agents update the same stable graph node rather than creating host-specific duplicates unless scopes are independent."
+      - "Repeated plan updates are semantic upserts keyed by stable IDs."
+      - "Each checkpoint records sibling heads observed and whether they were merged, skipped, or blocked."
+      - "A failed or restarted agent can reclaim a stale lease only after re-reading plan.yaml, plan/index.yaml, and the governing issue/step."
+
+  markdown_distillation:
+    rule: >
+      Ad hoc Markdown is intake only. Durable knowledge belongs in methodology,
+      OpenSpec specs, provenance-backed cheatsheets, or plan issues/steps.
+      Tool-local `CLAUDE.md` files may contain only pointers and local command
+      affordances; they must not be a hidden architecture or process source of
+      truth.
+    intake_paths:
+      - CLAUDE.md
+      - .claude/*.md
+      - top-level *.md reports
+    closure_steps:
+      - "Distill requirements into openspec/specs."
+      - "Distill process rules into methodology."
+      - "Distill operational facts into cheatsheets with provenance."
+      - "Distill long-running work state into plan/steps or plan/issues."
+      - "Replace the source Markdown with a tombstone pointer when retained for compatibility."
