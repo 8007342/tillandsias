@@ -598,7 +598,8 @@ mod tests {
     /// collide with system messages.
     #[test]
     fn wm_trayicon_is_in_app_range() {
-        assert!(WM_TRAYICON >= WM_APP);
+        // Both are consts, so enforce the invariant at compile time.
+        const { assert!(WM_TRAYICON >= WM_APP) };
     }
 
     use std::path::PathBuf;
