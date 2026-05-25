@@ -2,8 +2,9 @@
 
 trace: methodology/distributed-work.yaml, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
-Status: **OPEN** as of 2026-05-25T14:00Z. Authored by linux-host while
-sibling laptops dormant.
+Status: **OPEN** as of 2026-05-25T17:10Z. macOS m1, m2, and m3 are done;
+m1b is the next clean macOS-owned ready item. m4 and m5 remain gated on Linux
+PTY/materializer deliverables.
 
 ## How to use this file
 
@@ -31,13 +32,35 @@ checks. Advisory only; both flows still work.
 
 ## Currently unblocked (pick these first)
 
+### Item: m1b/transport-macos-vsock-connector
+
+- id: `m1b/transport-macos-vsock-connector`
+- type: feature
+- owner_host: macos
+- capability_tags: [rust, vfr, objc2-virtualization, vsock, tokio, async-fd]
+- status: ready
+- depends_on: []
+- blocks: [m4/pty-attach-appkit-terminal, m5/vfr-image-via-ci-rootfs]
+- owned_files:
+  - `crates/tillandsias-vm-layer/src/transport_macos.rs` (new)
+  - `crates/tillandsias-vm-layer/src/vz.rs` (extend `wait_ready` to call the connector)
+- summary: >
+    Expose a macOS VZ vsock connector and extend `wait_ready` from structural
+    Running-state polling to a real Hello/HelloAck readiness check. See the
+    append-only event for the original enqueue rationale.
+- estimated_effort: 1 day.
+- evidence_on_done:
+  - `cargo test -p tillandsias-control-wire --features vsock` remains green.
+  - On macOS, vz-spike or an equivalent smoke connects to the booted Fedora VM
+    over vsock and receives `HelloAck`.
+
 ### Item: m1/vmruntime-stop-and-wait-ready
 
 - id: `m1/vmruntime-stop-and-wait-ready`
 - type: feature
 - owner_host: macos
 - capability_tags: [rust, vfr, objc2-virtualization, vm-layer]
-- status: pending
+- status: done
 - depends_on: []
 - blocks: []
 - owned_files:
@@ -50,10 +73,11 @@ checks. Advisory only; both flows still work.
     `VZVirtioSocketDevice::connectToPort(42420)` with the existing
     250ms/500ms/1s/2s/4s backoff; success once the connection lands and
     the Hello/HelloAck handshake completes).
-- estimated_effort: 1 day.
+- completed_at: 2026-05-25T16:45Z
 - evidence_on_done:
-  - vz-spike refactored to drive VzRuntime::start + stop + wait_ready
-  - End-to-end smoke: boot → handshake → graceful stop in ≤30s
+  - `VmRuntime::stop(drain_timeout)` and structural `wait_ready(timeout)` landed on osx-next.
+  - `VmRuntime::exec` now returns an explicit Phase 5 deferral instead of panicking.
+  - 10/10 unit tests passed on macOS.
 
 ### Item: m2/refactor-vz-spike-via-vmruntime
 
@@ -61,7 +85,7 @@ checks. Advisory only; both flows still work.
 - type: feature
 - owner_host: macos
 - capability_tags: [rust, vfr, testing]
-- status: pending
+- status: done
 - depends_on: [m1/vmruntime-stop-and-wait-ready]
 - owned_files:
   - `crates/tillandsias-vm-layer/examples/vz-spike.rs`
@@ -70,7 +94,10 @@ checks. Advisory only; both flows still work.
     to driving `VzRuntime::start()` + `stop()` + `wait_ready()`. Acts as
     the regression smoke for the production code path. Per plan/steps/20
     Phase 1 list, this is the natural follow-on to m1.
-- estimated_effort: 2–3 h.
+- completed_at: 2026-05-25T16:50Z
+- evidence_on_done:
+  - `vz-spike --boot` now drives `VzRuntime::start -> wait_ready -> stop`.
+  - Apple Silicon smoke booted Fedora 44 and exercised the drain-then-force stop path.
 
 ### Item: m3/macos-scoped-clippy-cleanup
 
@@ -78,7 +105,7 @@ checks. Advisory only; both flows still work.
 - type: housekeeping
 - owner_host: macos
 - capability_tags: [rust, clippy, hygiene]
-- status: pending
+- status: done
 - depends_on: []
 - blocks: []
 - owned_files:
@@ -89,7 +116,9 @@ checks. Advisory only; both flows still work.
     warnings` on the macOS host. There's at least one pre-existing
     `manual_clamp` lint in `vz.rs:113` (`host_cores.min(4).max(1)` →
     `host_cores.clamp(1, 4)`). Fix in place; trivial.
-- estimated_effort: 30 min.
+- completed_at: 2026-05-25T16:45Z
+- evidence_on_done:
+  - macOS-scoped clippy cleanup landed; the `manual_clamp` finding in `vz.rs` was fixed.
 
 ## Gated on Linux deliverables (queued for after Linux lands)
 
@@ -181,11 +210,12 @@ checks. Advisory only; both flows still work.
 
 | Linux item | Status | Blocks macOS item |
 |---|---|---|
-| `l1/control-wire-pty-attach-tasks-1` | in_progress (this session) | m4 |
-| `l2/recipe-shared-modules` | pending | m5 |
+| `l1/control-wire-pty-attach-tasks-1` | done (`b345ae68`; §1 enum/capability tasks complete) | m4 still gated on l3 |
+| `l2/recipe-shared-modules` | done (`a7af0ed`; parser tests green on Linux) | m5 still gated on l7 + l5 |
 | `l3/in-vm-headless-pty-handler` | pending (after l1) | m4 |
 | `l4/replace-vsock-stub-handlers` | pending | (informational only for macOS) |
-| `l5/recipe-smoke-ci-publish` | pending (gated on l2) | m5 |
+| `l5/recipe-smoke-ci-publish` | macOS-owned claim; pending l7/materializer | m5 |
+| `l7/§3-materializer-driver` | claimed by Linux (`linux-l-mat-2026-05-25T15Z`) | m5 |
 
 ## Events
 
@@ -228,7 +258,7 @@ checks. Advisory only; both flows still work.
     and `vz_exec_returns_phase5_deferral`. Total 10/10 unit tests pass.
 - lease released.
 
-### Item: m1b/transport-macos-vsock-connector (new, enqueued)
+### Item: m1b/transport-macos-vsock-connector (new, enqueued; mirrored above as ready)
 
 - id: `m1b/transport-macos-vsock-connector`
 - type: feature

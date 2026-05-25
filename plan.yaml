@@ -20,7 +20,7 @@ plan:
   current_state:
     last_completed_step: recent-work-spec-doc-methodology-audit (step 20)
     next_step: multi-host-plan-ledger-adoption (step 21)
-    next_graph_node: multi-host-plan-ledger-adoption (ready)
+    next_graph_node: multi-host-plan-ledger-adoption (in_progress)
     plan_index: plan/index.yaml
     step_directory: plan/steps
     checkpoint_branch: linux-next
@@ -35,7 +35,7 @@ plan:
     p3_backlog_status: "24/27 gaps implemented across Waves 17-24; 3 undocumented gaps remain (non-blocking)"
     doc_debt_payoff_status: "Completed 2026-05-16; plan/index stale status corrected 2026-05-24"
     recent_work_audit_status: "Completed and verified 2026-05-24: git-mirror safe refspec spec/litmus, Vault Phase 6 default spec, multi-host methodology, and Markdown distillation refreshed"
-    multi_host_coordination_status: "Active 2026-05-24: linux-next/windows-next/osx-next platform branches require start-of-session pull, sibling-head recording, and ancestry checks before fast-forwarding"
+    multi_host_coordination_status: "Active 2026-05-25: linux-next integrates sibling code; Windows w1-w3 and macOS m1-m3 are done; current gates are Linux l7 materializer, Linux l3 PTY handler, Linux l4 vsock handlers, and macOS-owned l5 recipe-publish/CI-fetch work"
     markdown_distillation_status: "Active 2026-05-24: ad hoc Markdown is intake only; retained top-level/tool-local reports must be tombstone pointers to specs, cheatsheets, methodology, or plan"
     methodology_reconciliation_status: "Completed 2026-05-19: OpenCode Web launch specs, cheatsheets, CA generation, overlay/theme proxy, project selection, and auth-gated readiness reconciled"
     git_identity_propagation_status: "Completed 2026-05-19: GitHub Login identity now propagates to forge env and repo-local git config for Codex/OpenCode/OpenCode Web/Claude/maintenance"

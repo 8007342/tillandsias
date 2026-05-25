@@ -1432,7 +1432,7 @@ plan_index:
       status: in_progress
       deliverable: plan/issues/multi-host-coordination-2026-05-24.md
       depends_on: [recent-work-spec-doc-methodology-audit]
-      progress_note: "linux-next + windows-next are actively recording host_id/upstream_commit/observed_sibling_heads in their ledger updates as of 2026-05-25. osx-next has not yet engaged. Integration loop ledger lives at plan/issues/multi-host-integration-loop-2026-05-24.md."
+      progress_note: "linux-next, windows-next, and osx-next are all active as of 2026-05-25. The integration loop ledger at plan/issues/multi-host-integration-loop-2026-05-24.md records sibling heads; per-host queues record item-level leases/events. Queue headers were reconciled 2026-05-25 so Windows w1-w3 and macOS m1-m3 are done, macOS m1b is ready, and further Windows work is gated on Linux l3/l4/l7 plus macOS-owned l5."
       specs:
         - methodology-accountability
         - host-shell-architecture
@@ -1442,11 +1442,11 @@ plan_index:
         - "A failed ancestry check creates a plan issue instead of a blind fast-forward."
       tasks:
         - id: multi-host-ledger/adopt-fields
-          status: ready
+          status: in_progress
           depends_on: []
           owned_files:
             - plan/issues/multi-host-coordination-2026-05-24.md
             - plan.yaml
             - plan/index.yaml
           checkpoint_required: true
-          handoff_note: "Next platform sessions should append their observed sibling heads and branch status here before touching shared files."
+          handoff_note: "Platform sessions are using shared queues; keep queue item headers synchronized with terminal events, append stale/ping notes for missed leases, and record sibling branch heads in the integration-loop ledger before shared-file merges."

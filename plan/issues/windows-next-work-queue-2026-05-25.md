@@ -2,8 +2,9 @@
 
 trace: methodology/distributed-work.yaml, plan/steps/windows-next-thin-tray.md, plan/issues/tray-convergence-coordination.md, plan/issues/control-socket-protocol-convergence-2026-05-25.md, openspec/changes/control-wire-pty-attach/
 
-Status: **OPEN** as of 2026-05-25T14:00Z. Authored by linux-host while
-sibling laptops dormant.
+Status: **OPEN** as of 2026-05-25T17:10Z. Windows w1, w2, and w3 are done;
+remaining Windows tray work is gated on Linux materializer / PTY / vsock
+deliverables.
 
 ## How to use this file
 
@@ -23,17 +24,20 @@ a stable ID. When the Windows host wakes:
 Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`):
 *plan/* writes go to **linux-next**; *code* commits go to **windows-next**.
 
-## Currently unblocked (pick these first)
+## Currently unblocked
 
-### Item: w1/tray-icon-rc-and-ico (CORRECTED 2026-05-25T15:15Z)
+None. Do not re-claim w1, w2, or w3; their terminal events are recorded below.
+The next Windows work is w4/w5/w6 after their Linux gates clear, or a newly
+filed ready item with a stable ID.
+
+### Item: w1/tray-icon-rc-and-ico
 
 - id: `w1/tray-icon-rc-and-ico`
 - type: feature
 - owner_host: windows
 - capability_tags: [win32, rc]
-- status: blocked
-- depends_on: [`l6/linux-rasterize-svg-to-ico`] (NEW Linux deliverable
-  — see below; ETA same as item, done in this loop turn)
+- status: done
+- depends_on: [`l6/linux-rasterize-svg-to-ico`]
 - blocks: []
 - owned_files:
   - `crates/tillandsias-windows-tray/assets/tillandsias.rc`
@@ -56,7 +60,7 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
     `crates/tillandsias-windows-tray/assets/tillandsias.ico`. Then
     Windows wires `tillandsias.rc` to reference that path + the
     `build.rs` resource-compile step. See `l6` below.
-- estimated_effort: 30 min Linux + 30 min Windows.
+- completed_at: 2026-05-25
 - evidence_on_done:
   - placeholder warning gone from `cargo build -p tillandsias-windows-tray`
   - `tillandsias-tray.exe` shows the right icon on the taskbar
@@ -67,7 +71,7 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
 - type: feature
 - owner_host: windows
 - capability_tags: [win32, host-shell-menu, dispatch]
-- status: pending
+- status: done
 - depends_on: []
 - blocks: [w4/pty-attach-conpty]
 - owned_files:
@@ -87,11 +91,11 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
       - `GithubLogin` → log + queue for PTY iteration
     Leave PTY-gated actions as logged-only until w4 lands. This unblocks
     immediate UI polish without waiting on the vsock-E2E tail.
-- estimated_effort: 4–6 h.
+- completed_at: 2026-05-25
 - evidence_on_done:
-  - Clicking Retry / OpenLog / OpenObservatorium produces visible effect
-    in a Windows session.
-  - Unit tests in `notify_icon` exercising the dispatch table.
+  - SelectAgent state update and dispatch table slice landed at windows-next `832871d9`.
+  - Retry/OpenLog/OpenObservatorium/OpenCodeWeb were explicitly re-pinned to their true runtime gates instead of faking effects.
+  - Unit tests in `notify_icon` exercise the dispatch table.
 
 ### Item: w3/scoped-windows-clippy-cleanup
 
@@ -99,7 +103,7 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
 - type: housekeeping
 - owner_host: windows
 - capability_tags: [rust, clippy, hygiene]
-- status: pending
+- status: done
 - depends_on: []
 - blocks: []
 - owned_files:
@@ -109,7 +113,9 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
     -- -D warnings` on the MSVC host. There's an existing workspace-wide
     `manual_clamp` lint in `crates/tillandsias-vm-layer/src/vz.rs:113` but
     that's macOS-owned; skip it. Focus on the windows-tray crate.
-- estimated_effort: 30 min – 1 h.
+- completed_at: 2026-05-25
+- evidence_on_done:
+  - `cargo clippy -p tillandsias-windows-tray --target x86_64-pc-windows-msvc -- -D warnings` passed at windows-next `d3d4cede`.
 
 ## Gated on Linux deliverables (queued for after Linux lands)
 
@@ -182,11 +188,11 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
 | Linux item | Status | Blocks Windows item |
 |---|---|---|
 | `l1/control-wire-pty-attach-tasks-1` | **done** (shipped `b345ae68`; 23/23 control-wire tests pass on Linux; 22/22 on Windows per `47d91d11`) | w4 (now soft-unblocked; gated on l3) |
-| `l2/recipe-shared-modules` | **done** (windows authored §2 parser `26afb76a` integrated `a7af0ed`; 16/16 recipe tests green on Linux) | w5 (still gated on l5) |
+| `l2/recipe-shared-modules` | **done** (windows authored §2 parser `26afb76a` integrated `a7af0ed`; 16/16 recipe tests green on Linux) | w5 (still gated on l7 + l5) |
 | `l3/in-vm-headless-pty-handler` | pending (after l1; tasks 4.x of pty-attach proposal) | w4 |
 | `l4/replace-vsock-stub-handlers` | pending | w6 |
 | `l5/recipe-smoke-ci-publish` | **macOS-owned** per their CLAIM in cross-host-blocker-roundup (`§2b` host-side + CI artifacts) | w5 |
-| `l6/linux-rasterize-svg-to-ico` | **claimed by Linux** (lease `linux-l-ico-2026-05-25T15Z`); ETA same loop turn | w1 |
+| `l6/linux-rasterize-svg-to-ico` | **done** (`ea13ba20`) | w1 done |
 | `l7/§3-materializer-driver` | **claimed by Linux** (lease `linux-l-mat-2026-05-25T15Z`); ETA 2 cron iters (~4h) | unblocks w5 + macOS m5 |
 
 ## Events
