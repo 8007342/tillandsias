@@ -18,6 +18,9 @@ pub mod lifecycle;
 pub mod menu_action;
 pub mod menu_state;
 pub mod provisioning;
+/// Host-side PTY-over-vsock session multiplexing (control-wire-pty-attach §3),
+/// cross-platform core. OS backends (ConPTY / openpty) layer on top.
+pub mod pty;
 pub mod scanner;
 pub mod vsock_client;
 
