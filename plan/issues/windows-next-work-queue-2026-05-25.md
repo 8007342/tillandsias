@@ -181,3 +181,23 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
 ## Events
 
 <!-- Append events here when claiming/progressing items. Append-only. -->
+
+### Event: 2026-05-25 — windows host triage + w2 claim
+
+- **w1/tray-icon-rc-and-ico → BLOCKED (correction).** The queue says the
+  rasterizer "is now landed (assets/tillandsias-svg/ + tray-svg-rasterizer
+  proposal)". Verified on windows-next `5ce63303`: neither exists in the tree
+  — no `assets/tillandsias-svg/`, no `tray-svg-rasterizer` proposal in
+  `openspec/changes/`, no `.ico`, and no SVG rasterizer on the Windows host
+  (magick/rsvg/inkscape/resvg all absent). w1 stays BLOCKED until the rasterizer
+  pipeline + SVG source actually land in-tree (or a prebuilt `.ico` is committed).
+- **claim w2/menu-action-dispatch-wiring** — lease `7ba01212fad7`,
+  agent `windows-bullo-claudia-cli-2026-05-25`, host windows, status in_progress.
+  Doing the cleanly-completable slice now: SelectAgent state update + honest
+  dispatch for every other arm. NOTE: Retry/OpenLog/OpenObservatorium/OpenCodeWeb
+  need plumbing not yet present on windows (provisioning-retry hook, host log-file
+  path, observatorium/router URL), so those arms log a specific reason rather
+  than fake behaviour — full "visible effect" evidence completes when that
+  plumbing lands. Code → windows-next; this event → linux-next.
+- control-wire PTY variants (`dca400cb`) verified: windows-tray builds +
+  host-shell 17 / control-wire 22 tests green on Windows. Additive, no break.
