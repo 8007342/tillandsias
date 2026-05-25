@@ -2866,7 +2866,10 @@ version = "0.1.0"
 dependencies = [
  "async-trait",
  "objc2-virtualization",
+ "reqwest",
  "serde",
+ "serde_json",
+ "sha2",
  "tempfile",
  "tokio",
  "windows 0.58.0",

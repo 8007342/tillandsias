@@ -43,9 +43,20 @@ headless over vsock. Podman never on the Windows host. Older 6-distro
   Liveness smoke: launched the exe, message loop + NotifyIcon stayed up 3s,
   stopped cleanly. NOTE: non-fatal build warning — `assets/tillandsias.rc`
   missing, so a placeholder icon is used (follow-up: ship the .rc + icon).
-- Phase 2 — Real provisioning: replace placeholder downloads with reqwest+rustls
-  fetch + SHA-256 verify against a pinned assets/provisioning-manifest.json;
-  wire into WslRuntime::provision.
+- Phase 2 — Real provisioning (DONE 2026-05-24): verified, resumable downloader
+  landed in `tillandsias-vm-layer::fetch` (behind a `download` feature; shared
+  with the macOS tray). `crates/tillandsias-windows-tray/assets/provisioning-
+  manifest.json` is the committed source of truth (resolves the version() gap):
+  Fedora 44 Generic Base OCI archive (sha 75200f57…, 70 MB) + headless binary
+  `tillandsias-linux-x86_64` @ v0.2.260523.6 (sha 5734e74f…). `wsl_lifecycle.rs`
+  bootstrap now fetches+verifies both. Tests: 10 unit pass (sha-hex validation,
+  cache-hit-skips-network, unpinned-sha-refused, pins-parse) + 1 live test that
+  downloads the REAL release binary and verifies its SHA (passed, 2s).
+- Phase 2b — OCI flatten + real import (NEXT): the pinned rootfs is a Fedora
+  OCI *image archive*, not a flat rootfs. `WslRuntime::provision` must flatten
+  the layer(s) (parse index.json -> manifest -> layer blob -> extract) into a
+  rootfs tar before `wsl --import`. Until then, bootstrap downloads+verifies
+  both artifacts but the import step will reject the OCI archive.
 - Phase 3 — Snapshot / fast-boot: extend VmRuntime (seal_base +
   clone_from_base/reset_to_base); implement on WslRuntime via VHDX clone +
   `wsl --import-in-place`; update vm-idiomatic-layer + vm-provisioning-lifecycle
@@ -65,26 +76,24 @@ headless over vsock. Podman never on the Windows host. Older 6-distro
 - podman: not on host (correct).
 - Present: git-bash (C:\Program Files\Git\bin\bash.exe), winget.
 
-## NEXT ACTION (resume here — Phase 2: real provisioning)
+## NEXT ACTION (resume here — Phase 2b: OCI flatten + real `wsl --import`)
 
-Phase 0 + Phase 1 are DONE (toolchain in place; tray builds + launches).
-Cargo is at `%USERPROFILE%\.cargo\bin` — prepend it to PATH each PowerShell
-session: `$env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"`.
+Phase 0/1/2 are DONE (toolchain; tray builds + launches; verified downloads).
+Cargo is at `%USERPROFILE%\.cargo\bin` — prepend it each PowerShell session:
+`$env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"`.
 
-Phase 2 — make a real Fedora VM come up. Order of attack:
-1. `wsl_lifecycle.rs` `download_fedora_rootfs_if_missing` /
-   `download_tillandsias_binary_if_missing` are placeholders returning fixed
-   paths — replace with real reqwest+rustls fetch + SHA-256 verify against a
-   pinned `assets/provisioning-manifest.json` (rootfs URL+SHA, headless
-   binary URL+SHA).
-2. GAP to resolve: `tillandsias_host_shell::version()` returns the host-shell
-   crate version (0.1.0), not a real tillandsias release tag — so the GitHub
-   release asset URL won't resolve. Decide the version/source-of-truth for
-   the in-VM headless binary (pin in the manifest, or derive from a release
-   channel). The in-VM binary is the linux musl `tillandsias-linux-x86_64`.
-3. Then run `WslRuntime::provision` for real: `wsl --import` the rootfs into
-   `%LOCALAPPDATA%\tillandsias\wsl`, wsl.conf+systemd unit, drop binary,
-   terminate. Verify with `wsl --list --verbose`.
+Phase 2b — turn the verified OCI archive into a real running VM:
+1. Add an OCI-flatten step (in `tillandsias-vm-layer`, likely a `rootfs`
+   module): open the downloaded `*.oci.tar.xz`, read `index.json` ->
+   manifest -> layer digests, extract+concatenate the layer tar(s) into a
+   single flat rootfs tar. Fedora Generic Base is typically one layer.
+2. Feed the flattened rootfs tar to `WslRuntime::provision` (`wsl --import`
+   into `%LOCALAPPDATA%\tillandsias\wsl`, wsl.conf+systemd, drop headless
+   binary, terminate). Verify `wsl --list --verbose` shows `tillandsias`.
+3. Smoke: tray launch -> provision -> the in-VM headless systemd unit binds
+   the vsock listener -> host handshake succeeds (ties into Phase 4).
 
-Phase 3 (snapshot), Phase 4 (wire tray actions + vsock E2E), Phase 5 (smoke)
-follow. Checkpoint to origin/windows-next after each meaningful batch.
+Then Phase 3 (snapshot: sealed golden VHDX + fast clone), Phase 4 (wire tray
+actions + vsock E2E), Phase 5 (smoke). Checkpoint to origin/windows-next after
+each meaningful batch. WATCH ./plan for linux-next / macos-next feedback (see
+plan/issues/tray-convergence-coordination.md).

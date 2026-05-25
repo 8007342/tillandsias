@@ -12,12 +12,19 @@
 
 #![allow(dead_code)]
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
 use tillandsias_host_shell::provisioning::{ProvisionPhase, ProvisionProgress};
+use tillandsias_vm_layer::fetch::{download_verified, ProvisioningPins};
 use tillandsias_vm_layer::{ProvisionManifest, VmRuntime, wsl::WslRuntime};
+
+/// Committed per-release pins (rootfs + headless binary URLs and checksums).
+/// Embedded so an installed, checkout-free tray still provisions correctly.
+///
+/// @trace spec:vm-provisioning-lifecycle
+const PROVISIONING_MANIFEST: &str = include_str!("../assets/provisioning-manifest.json");
 
 /// Convenience wrapper around `tillandsias-vm-layer::wsl::WslRuntime` that
 /// carries the tray's preferred defaults (distro name `tillandsias`,
@@ -108,16 +115,13 @@ impl WslLifecycle {
             .await
             .map_err(|e| format!("create install_root failed: {e}"))?;
 
+        let pins = ProvisioningPins::from_json(PROVISIONING_MANIFEST)?;
+
         progress.report_phase(ProvisionPhase::DownloadingRootfs);
-        // The actual HTTP download lives in `WslRuntime::provision` once
-        // wired through `assets/provisioning-manifest.json`. The tray
-        // surfaces the phase string; the network work happens below.
-        let rootfs = download_fedora_rootfs_if_missing(&Self::cache_root()).await?;
+        let rootfs = download_rootfs(&Self::cache_root(), &pins).await?;
 
         progress.report_phase(ProvisionPhase::DownloadingTillandsias);
-        let host_version = tillandsias_host_shell::version();
-        let binary =
-            download_tillandsias_binary_if_missing(&Self::cache_root(), host_version).await?;
+        let binary = download_headless_binary(&Self::cache_root(), &pins).await?;
 
         progress.report_phase(ProvisionPhase::InstallingTillandsias);
         let manifest = ProvisionManifest {
@@ -144,27 +148,35 @@ fn user_src_dir() -> PathBuf {
     base.join("src")
 }
 
-async fn download_fedora_rootfs_if_missing(cache_root: &PathBuf) -> Result<PathBuf, String> {
-    let dir = cache_root.join("rootfs");
-    tokio::fs::create_dir_all(&dir)
-        .await
-        .map_err(|e| format!("create rootfs cache dir failed: {e}"))?;
-    // For now, return a deterministic placeholder path. Wave 4 ships the
-    // download orchestration sketch; the real HTTP fetch + SHA verify
-    // lands with the manifest pin (DEFERRED: needs assets/provisioning-
-    // manifest.json + reqwest plumbing wired into vm-layer).
-    Ok(dir.join("fedora-44-rootfs.tar.xz"))
+/// Download + SHA-verify the pinned Fedora rootfs archive into the cache.
+///
+/// Returns the local path to the verified archive. NOTE: this is a Fedora
+/// **OCI image archive**, not a flat rootfs — `WslRuntime::provision` must
+/// flatten its layer(s) into a rootfs tar before `wsl --import` (Phase 2b).
+///
+/// @trace spec:vm-provisioning-lifecycle.provision.first-run-downloads@v1
+async fn download_rootfs(cache_root: &Path, pins: &ProvisioningPins) -> Result<PathBuf, String> {
+    let short = &pins.rootfs.sha256[..pins.rootfs.sha256.len().min(12)];
+    let dest = cache_root
+        .join("rootfs")
+        .join(format!("rootfs-fedora-44-{short}.oci.tar.xz"));
+    download_verified(&pins.rootfs, &dest, &|_, _| {}).await?;
+    Ok(dest)
 }
 
-async fn download_tillandsias_binary_if_missing(
-    cache_root: &PathBuf,
-    version: &str,
+/// Download + SHA-verify the pinned `tillandsias-linux-x86_64` headless
+/// binary (the in-VM process) into the cache.
+///
+/// @trace spec:vm-provisioning-lifecycle.provision.first-run-downloads@v1
+async fn download_headless_binary(
+    cache_root: &Path,
+    pins: &ProvisioningPins,
 ) -> Result<PathBuf, String> {
-    let dir = cache_root.join("bin");
-    tokio::fs::create_dir_all(&dir)
-        .await
-        .map_err(|e| format!("create bin cache dir failed: {e}"))?;
-    Ok(dir.join(format!("tillandsias-headless-{}", version)))
+    let dest = cache_root
+        .join("bin")
+        .join(format!("tillandsias-headless-{}", pins.headless_release_tag));
+    download_verified(&pins.headless_binary, &dest, &|_, _| {}).await?;
+    Ok(dest)
 }
 
 #[cfg(test)]
