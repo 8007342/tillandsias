@@ -296,3 +296,32 @@ w4 (PTY/ConPTY) needs l3 (in-VM pty handler); w5 (wsl import via CI rootfs)
 needs l2 (recipe shared modules — parser landed, materializer pending) + l5
 (recipe-smoke CI publish); w6 needs l4 (real vsock handlers). Windows is now
 blocked on Linux deliverables for further tray progress.
+
+### Event: 2026-05-25 — w4 finding: needs shared host-shell::pty (Task 3.1/3.2/3.4–3.8) first
+
+Verified after l3/l4 cleared: w4 (windows ConPTY = control-wire-pty-attach
+**Task 3.3**) is NOT buildable in isolation yet. Task 3.3 is only the
+`#[cfg(windows)] PtySession::new_windows` impl — it plugs into the shared
+host-side library `tillandsias-host-shell::pty` (Tasks 3.1 PtySession::open +
+PtyOpenOpts, 3.2 unix path, 3.4 pump_io session-mux, 3.5 resize, 3.6 close,
+3.7 per-session bounded channel, 3.8 FakeConnection tests). That module is
+UNCLAIMED and unbuilt (no `host-shell/src/pty/` exists; all §3 boxes `[ ]`).
+Also unclear: the `Connection` type 3.1 takes (session-id-routed mux) — may
+need defining as part of §3.
+
+So w4 is gated on §3.1/3.2/3.4–3.8, not just l1+l3. The integration ledger's
+"w4 unblocked" is optimistic on this point.
+
+Most of §3 is CROSS-PLATFORM and Windows-testable (3.1 dispatch, 3.4 pump_io,
+3.5/3.6/3.7, 3.8 FakeConnection tests) + the windows 3.3 ConPTY. Only 3.2
+(unix `nix::pty::openpty`) is Unix-only / untestable on Windows.
+
+PROPOSAL (windows offers): windows-next claims §3 and builds the cross-platform
+PtySession + windows ConPTY (3.1, 3.3–3.8) with FakeConnection tests, leaving
+3.2 as a `#[cfg(unix)]` stub for the Linux host to fill+test. This unblocks
+both Windows w4 AND macOS m4. Alternatively, Linux (host-shell owner) builds
+§3.1/3.2 and windows does only 3.3. Awaiting owner/Linux nod before touching
+shared host-shell pty scaffolding (avoiding a D6/D8-style parallel-build collision).
+
+w6 note: verify-only, but needs a live VM (gated on l7 materializer) to actually
+verify — so not actionable until provisioning works.
