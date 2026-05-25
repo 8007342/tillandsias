@@ -338,3 +338,36 @@ For future iterations / production tray:
   `ControlMessage::VmShutdownRequest { drain_timeout_ms }`, calls
   `systemctl --no-wall poweroff`. That skips ACPI handshake latency.
   Requires `control-wire-pty-attach` adjacent code to land first.
+
+### event: m1b sub-task A claimed + done — 2026-05-25T17:00Z
+
+- item: `m1b/transport-macos-vsock-connector` (3 sub-tasks: A=connect+fd,
+  B=AsyncRead/AsyncWrite wrap, C=wait_ready handshake verify)
+- agent_id: `osx-next-claude-opus-4-7` on `Tlatoanis-MacBook-Air`
+- lease_id: `7c2a9f1eb083`
+- action: sub-task A — claim → done.
+- evidence:
+  - NEW `crates/tillandsias-vm-layer/src/transport_macos.rs` (~200 lines).
+    Public surface: `connect_to_vm_vsock(vm, port, timeout) -> Result<VsockFd, ConnectError>`.
+  - Walks VM's socketDevices, downcasts via `isKindOfClass:` guard,
+    `connectToPort:completionHandler:` bridged through mpsc + CFRunLoop
+    pump (50 ms slices).
+  - `VsockFd { fd, _connection }` holds the Retained connection so the fd
+    stays valid for the lifetime of the wrapper; `Send + Sync` per
+    documented unsafe-impl (established vsock sockets are POSIX
+    thread-safe; VZ's dispatch-queue gate is for VM-management ObjC).
+  - Module is `#![cfg(target_os = "macos")]`; lib.rs registers it under
+    `#[cfg(target_os = "macos")] pub mod transport_macos`.
+  - Per branch canon: shared `control-wire::transport::connect(Vsock{cid,
+    port})` path UNCHANGED — that's Linux+Windows. macOS uses this
+    private connector because VFR needs the in-process VM handle which
+    the shared Transport enum can't carry.
+  - 2 new tests: `connect_error_implements_error`, `vsock_fd_is_send`.
+    12/12 unit tests pass.
+- Sub-task B (next): wrap VsockFd in `tokio::io::unix::AsyncFd<RawFd>`
+  with `AsyncRead + AsyncWrite` so host-shell `vsock_client::handshake`
+  can ride it. ~2 h.
+- Sub-task C (after B): extend `VzRuntime::wait_ready` to invoke
+  `connect_to_vm_vsock + handshake` after the state-poll succeeds. ~1 h.
+- Lease NOT released — sub-tasks B + C still under same lease until full
+  m1b is done.
