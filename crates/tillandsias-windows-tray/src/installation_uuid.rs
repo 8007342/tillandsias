@@ -67,7 +67,7 @@ pub fn write_installation_uuid(uuid: Uuid) -> Result<(), String> {
     let value = uuid.to_string();
     let value_bytes = value.as_bytes();
 
-    let mut cred = CREDENTIALW {
+    let cred = CREDENTIALW {
         Flags: CRED_FLAGS(0),
         Type: CRED_TYPE_GENERIC,
         TargetName: PWSTR(target.as_ptr() as *mut _),
@@ -82,7 +82,7 @@ pub fn write_installation_uuid(uuid: Uuid) -> Result<(), String> {
         UserName: PWSTR::null(),
     };
     let _ = size_of::<CREDENTIALW>();
-    let result = unsafe { CredWriteW(&mut cred, 0) };
+    let result = unsafe { CredWriteW(&cred, 0) };
     result.map_err(|err| format!("CredWriteW failed: {err:?}"))
 }
 

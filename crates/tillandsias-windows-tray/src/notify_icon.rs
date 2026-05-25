@@ -271,7 +271,10 @@ unsafe fn add_tray_icon(hwnd: HWND) -> windows::core::Result<()> {
     // tray always has a glyph. @trace spec:windows-native-tray (w1)
     let instance = GetModuleHandleW(None)?;
     let hinst: HINSTANCE = instance.into();
-    let icon = LoadIconW(hinst, PCWSTR(1 as *const u16))
+    // MAKEINTRESOURCE(1): an integer resource id encoded as a pointer-sized
+    // sentinel (never dereferenced by the loader). `without_provenance`
+    // expresses that precisely and avoids clippy's manual-dangling-ptr lint.
+    let icon = LoadIconW(hinst, PCWSTR(std::ptr::without_provenance::<u16>(1)))
         .or_else(|_| LoadIconW(None, IDI_APPLICATION))?;
     let mut nid: NOTIFYICONDATAW = std::mem::zeroed();
     nid.cbSize = std::mem::size_of::<NOTIFYICONDATAW>() as u32;

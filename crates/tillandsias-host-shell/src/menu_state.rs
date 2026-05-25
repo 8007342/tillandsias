@@ -309,7 +309,7 @@ fn truncate_80(s: &str) -> String {
         s.to_string()
     } else {
         let mut out: String = s.chars().take(77).collect();
-        out.push_str("\u{2026}");
+        out.push('\u{2026}');
         out
     }
 }
