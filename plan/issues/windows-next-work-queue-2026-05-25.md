@@ -418,3 +418,16 @@ builds; clippy clean.
 bridging ConPtyMaster ↔ PtySession write_to_guest/recv) — NEXT, mine; §3.2 unix
 openpty stub for Linux. THEN w4 (tray OpenShell/GithubLogin → PtySession::open
 + wt.exe). Full E2E (terminal shows the in-VM shell) needs a booted VM to verify.
+
+### Event: 2026-05-25 — pty §3.4 pump_io bidirectional bridge done
+
+pump_io + PtyMaster trait landed @ windows-next `1cd1e7de` (host-shell pty/mod.rs):
+local terminal reader → PtyData{ToGuest} (chunked); inbound PtyData{ToHost} →
+terminal writer; PtyClose/conn-drop ends the pump. Cross-platform, fake-master
+test (pump_bridges_both_directions_and_closes); host-shell 26 tests green on
+Windows; windows-tray builds; clippy clean.
+
+§3 lease remaining: ConPtyMaster impl PtyMaster (Win32 async pipe I/O + process
+attach so the real Windows terminal flows through pump_io) — NEXT, mine; §3.2
+unix openpty stub for Linux. THEN w4 (tray OpenShell/GithubLogin →
+PtySession::open + pump_io + wt.exe). Full terminal-attach E2E needs a booted VM.
