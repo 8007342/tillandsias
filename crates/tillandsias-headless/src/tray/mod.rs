@@ -29,7 +29,7 @@ use zvariant::{OwnedObjectPath, OwnedValue, Value};
 
 use crate::ENCLAVE_NO_PROXY;
 use tillandsias_control_wire::{
-    ControlEnvelope, ControlMessage, MAX_MESSAGE_BYTES, WIRE_VERSION, decode, encode,
+    ControlEnvelope, ControlMessage, ErrorCode, MAX_MESSAGE_BYTES, WIRE_VERSION, decode, encode,
 };
 use tillandsias_core::config::{self, SelectedAgent};
 use tillandsias_core::genus::TrayIconState;
@@ -542,7 +542,48 @@ fn handle_control_connection(mut stream: UnixStream, subscribers: ControlSubscri
             };
             let _ = write_control_envelope(&mut stream, &ack);
         }
-        _ => {}
+        // Per plan/issues/control-socket-protocol-convergence-2026-05-25.md:
+        // any other variant that the unix-socket dispatcher does not handle
+        // (e.g. VmStatusRequest, EnumerateLocalProjects) must reply with an
+        // explicit Error frame rather than silently dropping. Silent drops
+        // hang clients waiting for a reply they will never receive.
+        other => {
+            let err = ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: first.seq,
+                body: ControlMessage::Error {
+                    seq_in_reply_to: Some(first.seq),
+                    code: ErrorCode::Unsupported,
+                    message: format!(
+                        "variant {} not handled by the unix-socket dispatcher",
+                        control_message_kind(&other)
+                    ),
+                },
+            };
+            let _ = write_control_envelope(&mut stream, &err);
+        }
+    }
+}
+
+/// Short stable name for a `ControlMessage` variant, used in `Error` frame
+/// messages so clients can log which request they sent that was rejected.
+fn control_message_kind(msg: &ControlMessage) -> &'static str {
+    match msg {
+        ControlMessage::Hello { .. } => "Hello",
+        ControlMessage::HelloAck { .. } => "HelloAck",
+        ControlMessage::IssueWebSession { .. } => "IssueWebSession",
+        ControlMessage::IssueAck { .. } => "IssueAck",
+        ControlMessage::Error { .. } => "Error",
+        ControlMessage::EvictProject { .. } => "EvictProject",
+        ControlMessage::McpFrame { .. } => "McpFrame",
+        ControlMessage::VmStatusRequest { .. } => "VmStatusRequest",
+        ControlMessage::VmStatusReply { .. } => "VmStatusReply",
+        ControlMessage::VmShutdownRequest { .. } => "VmShutdownRequest",
+        ControlMessage::EnumerateLocalProjects { .. } => "EnumerateLocalProjects",
+        ControlMessage::LocalProjectsReply { .. } => "LocalProjectsReply",
+        ControlMessage::CloudRefreshRequest { .. } => "CloudRefreshRequest",
+        ControlMessage::CloudRefreshReply { .. } => "CloudRefreshReply",
+        _ => "Unknown",
     }
 }
 
@@ -2803,6 +2844,70 @@ async fn register_with_watcher(connection: &Connection, service_name: &str) {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Regression: a `ControlMessage` variant that the unix-socket dispatcher
+    /// does not handle (e.g. `VmStatusRequest`, which today is vsock-only)
+    /// must reply with an explicit `Error { Unsupported }` frame, not be
+    /// silently dropped. Silent drops hang clients indefinitely.
+    ///
+    /// @trace plan/issues/control-socket-protocol-convergence-2026-05-25.md,
+    ///        spec:tray-host-control-socket
+    #[test]
+    fn unsupported_variant_on_unix_socket_replies_with_error() {
+        use std::io::{Read, Write};
+        use std::os::unix::net::UnixStream;
+        use std::sync::Mutex;
+        use std::thread;
+
+        let (server_side, mut client_side) =
+            UnixStream::pair().expect("UnixStream::pair available on linux");
+        let subscribers: ControlSubscribers = Arc::new(Mutex::new(Vec::new()));
+
+        let req = ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 42,
+            body: ControlMessage::VmStatusRequest { seq: 42 },
+        };
+        let payload = encode(&req).expect("encode");
+        client_side
+            .write_all(&(payload.len() as u32).to_be_bytes())
+            .expect("write len");
+        client_side.write_all(&payload).expect("write body");
+        client_side.flush().expect("flush");
+
+        let server_thread = thread::spawn(move || {
+            handle_control_connection(server_side, subscribers);
+        });
+
+        let mut len_buf = [0_u8; 4];
+        client_side.read_exact(&mut len_buf).expect("read len");
+        let len = u32::from_be_bytes(len_buf) as usize;
+        let mut reply_bytes = vec![0_u8; len];
+        client_side
+            .read_exact(&mut reply_bytes)
+            .expect("read reply body");
+        let reply: ControlEnvelope = decode(&reply_bytes).expect("decode reply");
+
+        server_thread.join().expect("server thread joined");
+
+        assert_eq!(reply.wire_version, WIRE_VERSION);
+        assert_eq!(reply.seq, 42);
+        match reply.body {
+            ControlMessage::Error {
+                seq_in_reply_to,
+                code,
+                message,
+            } => {
+                assert_eq!(seq_in_reply_to, Some(42));
+                assert_eq!(code, ErrorCode::Unsupported);
+                assert!(
+                    message.contains("VmStatusRequest"),
+                    "error message should name the rejected variant; got {message:?}"
+                );
+            }
+            other => panic!("expected Error variant, got {other:?}"),
+        }
+    }
 
     fn test_state(selected_agent: SelectedAgent, forge_available: bool) -> TrayUiState {
         let enclave_status = if forge_available {

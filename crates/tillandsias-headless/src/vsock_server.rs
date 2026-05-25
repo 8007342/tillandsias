@@ -23,7 +23,8 @@ use tillandsias_control_wire::transport::{
     AsyncReadWrite, CONTROL_WIRE_VSOCK_PORT, Listener, Transport, bind,
 };
 use tillandsias_control_wire::{
-    ControlEnvelope, ControlMessage, MAX_MESSAGE_BYTES, VmPhase, WIRE_VERSION, decode, encode,
+    ControlEnvelope, ControlMessage, ErrorCode, MAX_MESSAGE_BYTES, VmPhase, WIRE_VERSION, decode,
+    encode,
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tracing::{debug, info, warn};
@@ -196,8 +197,27 @@ async fn handle_connection(mut stream: Box<dyn AsyncReadWrite + Unpin + Send>) {
                 );
                 return;
             }
+            // Per plan/issues/control-socket-protocol-convergence-2026-05-25.md:
+            // unhandled variants must reply with an explicit Error frame
+            // (Unsupported) instead of silently logging and continuing.
+            // Clients otherwise hang waiting for a reply they will never get.
             other => {
-                debug!(spec = "vsock-transport", msg = ?other, "ignored vsock frame");
+                debug!(spec = "vsock-transport", msg = ?other, "rejecting unsupported vsock frame");
+                let err = ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: env.seq,
+                    body: ControlMessage::Error {
+                        seq_in_reply_to: Some(env.seq),
+                        code: ErrorCode::Unsupported,
+                        message: format!(
+                            "variant {:?} not handled by the in-VM vsock dispatcher",
+                            std::mem::discriminant(&other),
+                        ),
+                    },
+                };
+                if write_envelope(&mut stream, &err).await.is_err() {
+                    return;
+                }
             }
         }
     }
