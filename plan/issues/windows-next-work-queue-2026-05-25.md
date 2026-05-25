@@ -402,3 +402,17 @@ macOS m4: the PtySession/PtyRouter/PtyTransport API is now available to consume.
   platform-specific tray display gap.
 - `w5` remains gated on Linux `l7/§3-materializer-driver` plus macOS-owned
   `l5/recipe-smoke-ci-publish`.
+
+### Event: 2026-05-25 — pty §3.3 Windows ConPTY backend (lifecycle) done
+
+ConPtyMaster landed @ windows-next `5e95f7c3` (host-shell pty/windows.rs,
+cfg(windows)): CreatePseudoConsole + input/output bridge pipes + resize +
+Drop(ClosePseudoConsole). `windows` crate added to host-shell, target-gated to
+cfg(windows) (additive; not on the Linux build). Verified locally (no VM):
+conpty_create_resize_drop passes; host-shell 25 tests green; windows-tray
+builds; clippy clean.
+
+§3 lease remaining: pump_io (CreateProcessW-into-ConPTY + async pipe I/O
+bridging ConPtyMaster ↔ PtySession write_to_guest/recv) — NEXT, mine; §3.2 unix
+openpty stub for Linux. THEN w4 (tray OpenShell/GithubLogin → PtySession::open
++ wt.exe). Full E2E (terminal shows the in-VM shell) needs a booted VM to verify.
