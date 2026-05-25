@@ -2663,6 +2663,7 @@ dependencies = [
  "hyper 1.9.0",
  "image",
  "libc",
+ "nix 0.29.0",
  "reqwest",
  "serde",
  "serde_json",
