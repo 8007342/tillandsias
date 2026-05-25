@@ -12,9 +12,9 @@ summary: >
   runtime repair or a test-scope distillation.
 
 evidence:
-  - build: ./build.sh --ci-full --install
-  - litmus: scripts/run-litmus-test.sh --phase runtime
-  - error: newuidmap write to uid_map failed: Operation not permitted
+  - build: "./build.sh --ci-full --install"
+  - litmus: "scripts/run-litmus-test.sh --phase runtime"
+  - error: "newuidmap write to uid_map failed: Operation not permitted"
 
 affected_contracts:
   - litmus:environment-isolation
@@ -28,5 +28,6 @@ decision_needed:
 
 notes:
   - init-log-cleanup and socket-cleanup were validated and now pass.
-  - The browser-ephemeral test also needs semantic correction: the current
+  - >
+    The browser-ephemeral test also needs semantic correction: the current
     container command does not make the asserted temp directory observable.
