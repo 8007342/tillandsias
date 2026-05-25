@@ -28,6 +28,66 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-25T15:00Z–15:30Z — MASSIVE: sibling laptops woke; CRDT methodology fully exercised
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit (cycle end): `ba97741` (merge of w2 from windows-next)
+- observed_sibling_heads (cycle start vs end):
+  - main: ddf52dff → ddf52dff (unchanged)
+  - linux-next: 66291d0a → ea13ba20 → ba97741 (10+ commits this cycle)
+  - windows-next: 266c4edc → 26afb76a → 832871d9 (3 new commits)
+  - osx-next: ddf52dff → b09bcb2b (FIRST advance since 2026-05-24 alignment)
+
+- **METHODOLOGY VALIDATED end-to-end:** the CRDT-inspired distributed-work
+  primitives + per-host work queues + lease pattern + branch canon all
+  exercised in a single 30-minute window:
+  1. Linux published per-host work queues with stable IDs + capability_tags
+     + leases (commits `15a1ab38`, `f2277998`).
+  2. Windows host read the queue, **claimed w2** with lease `7ba01212fad7`
+     using the documented event syntax (commit `47d91d11`).
+  3. Windows did the work on `windows-next`, pushed to `origin/windows-next`
+     (commit `832871d9`).
+  4. Linux integration cycle pulled it into `linux-next` (merge `ba97741`),
+     ran `./build.sh --check` + `--test` GREEN, finalized + pushed.
+  5. Windows host ALSO surfaced a real correction: my w1 description
+     claimed a rasterizer was in-tree; Windows verified it was NOT and
+     flagged the item as blocked. Linux (this turn) produced the rasterized
+     `.ico` from `assets/icons/xerographica/bloom.svg` using ImageMagick
+     (commit `5a4025d0`), shrinking w1 to a 30-minute Windows wiring task.
+  6. macOS host responded to the cross-host blocker roundup with claims
+     on §3.7.1 + §2b host-side + claim-with-conditions on §3
+     (commit `b09bcb2b`). Linux took §3 explicitly (lease
+     `linux-l-mat-2026-05-25T15Z`), resolving macOS's conditional fallback.
+
+- **Cross-host work integrated this cycle:**
+  - `vm-recipe-provisioning §2 recipe parser` (windows-next `26afb76a`) →
+    merged at `a7af0ed`. 16/16 recipe tests pass on Linux.
+  - `w2 menu-action dispatch wiring` (windows-next `832871d9`) → merged
+    at `ba97741`. Honesty-over-fake-effect split correct.
+
+- **Linux deliverables shipped this cycle:**
+  - `l1/control-wire-pty-attach-tasks-1` (`b345ae68`) — PTY enum variants
+    + constants + 7 roundtrip tests. 23/23 control-wire tests pass on
+    Linux; 22/22 on Windows per `47d91d11`. Phase 5 unblocked on both
+    sibling trays (still gated on l3).
+  - `l6/linux-rasterize-svg-to-ico` (`5a4025d0`) — 7-size Windows ICO
+    rasterized from xerographica/bloom.svg; w1 unblocked.
+
+- **Open Linux claims (continuing into next cron iter):**
+  - `l7/§3-materializer-driver` (lease `linux-l-mat-2026-05-25T15Z`) —
+    `crates/tillandsias-vm-layer/src/materialize/mod.rs` with
+    `Materializer::run`. ETA 2 cron iters (~4 h). Unblocks
+    macOS m5 + windows w5.
+
+- **Methodology weak point surfaced + recorded:** both sibling hosts
+  perceived the 4-cycle no-op streak (07:43Z – 13:43Z) as evidence of a
+  dormant cron, even though it was real sibling inactivity. Linux
+  response in the cross-host blocker roundup clarifies (a) cron is
+  alive, (b) cron ID is `a98ef6e2` (older `7ed95aed` was replaced),
+  (c) no-op ledger entries could include a "next expected sibling
+  activity" hint to reduce false-dormant signals. Filed as a non-
+  blocking loop enhancement candidate.
+
 ### Interlude 2026-05-25T14:00Z–14:45Z — Sibling triage + unblocker landed
 
 User directive: while sibling laptops still dormant, triage pending work
