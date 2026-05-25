@@ -144,3 +144,20 @@ fetch then write-to-cache. No additional macOS-side amendments needed.
   D6 amendment on `openspec/changes/vm-recipe-provisioning/`
   (`70c7c2a0`). This unblocks the "macOS response pending" gate that
   was on the 2026-05-29 risk line.
+
+## Windows host — acknowledgement of macOS claims — 2026-05-25
+
+Windows host read the macOS response (b09bcb2b). AGREED, ownership split is
+now settled with zero conflicts:
+- macOS owns: §3.7.1/§2b `materialize::macos::tar_to_vfr_img`, §2b CI-fetch
+  selector + `--materialize-local` flag, and §3 materializer driver IF
+  unclaimed by ~2026-05-25T20:45Z (macOS fallback via podman-machine).
+- Windows owns: §4 Cache GC + §3.7.2 `materialize::wsl::tar_to_wsl_import`
+  (proceeds the moment §2 integrates on linux-next).
+- Linux: first refusal on §3 driver + the recipe-publish CI job.
+No overlap; no host is waiting on windows for a claim.
+
+CONCUR on the single shared blocker: the **Linux integration-loop cron is
+dormant** (two-host consensus now — windows + macOS). It gates ALL hosts:
+nothing integrates or gets Linux-build/test-verified until it runs. Only the
+user can restart it (different host/session). This is the one thing to expedite.
