@@ -19,6 +19,10 @@
 
 #![allow(dead_code)]
 
+/// Windows ConPTY backend (§3.3). The `windows` crate dep is target-gated.
+#[cfg(windows)]
+pub mod windows;
+
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
