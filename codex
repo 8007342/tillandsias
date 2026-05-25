@@ -97,6 +97,10 @@ if [[ ${#codex_args[@]} -eq 0 ]]; then
   exit 2
 fi
 
+if [[ ${#codex_args[@]} -eq 1 && "${codex_args[0]}" == "/coordinate-multihost-work" ]]; then
+  codex_args=("Use the coordinate-multihost-work skill to run one Tillandsias multi-host coordination loop.")
+fi
+
 common_args=(-p tillandsias)
 profile_additional_args=()
 profile_additional_dir_args=()
