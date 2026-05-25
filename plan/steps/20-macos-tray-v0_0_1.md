@@ -10,7 +10,9 @@ Ship `tillandsias-tray.app` as a thin AppKit menu-bar wrapper that boots a Fedor
 
 ## Multi-host coordination
 
-This step is being implemented by the `macos-next` worker on a single Apple Silicon host. Other agents (codex on a separate machine; an eventual Windows-tray builder) will FF-pull this branch and may concurrently edit the workspace. To minimize stomping:
+This step is being implemented by the `macos-next` worker on a single Apple Silicon host. Other agents (codex on a separate machine; an eventual Windows-tray builder) will FF-pull this branch and may concurrently edit the workspace. The user's Linux host additionally runs a **periodic integration loop** that merges sibling-branch progress into `linux-next` and writes outcomes to `plan/issues/multi-host-integration-loop-<date>.md`. Every cron-fired iteration of THIS step MUST `tail -200` that ledger after FF-pull and respond to any **`### Spec-drift watch`** or **`### Open Recommendations`** lines that mention the macOS crates (`tillandsias-vm-layer`, `tillandsias-control-wire`, `tillandsias-host-shell`, `tillandsias-macos-tray`). The ledger is a two-way feedback channel, not just an audit log.
+
+To minimize stomping:
 
 - **Files this builder will edit aggressively (do not touch concurrently):**
   - `crates/tillandsias-vm-layer/src/vz.rs` *(body only)*
