@@ -88,7 +88,15 @@ mod macos_main {
     }
 
     pub fn run() {
-        let args = parse_args();
+        let mut args = parse_args();
+        // EFI bootloader requires a persistent variable store. If the user
+        // didn't pass --nvram, drop one at target/vz-spike-nvram.bin so the
+        // default smoke test (`cargo run --example vz-spike`) reaches and
+        // passes validate() up to the next missing-device blocker.
+        if args.nvram.is_none() {
+            let default = PathBuf::from("target/vz-spike-nvram.bin");
+            args.nvram = Some(default);
+        }
         println!(
             "[vz-spike] start: disk={:?} nvram={:?} boot={} cid={}",
             args.disk, args.nvram, args.boot, args.vsock_cid
