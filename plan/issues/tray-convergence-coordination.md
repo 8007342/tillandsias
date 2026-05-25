@@ -280,6 +280,40 @@ change is now just the spec-delta reconciliation. Lesson for the loop: claims
 must be checked against the integration branch before drafting — macOS and I
 drafted the same amendment in parallel.
 
+## Operating-model adoption — 2026-05-25 (windows host)
+
+The windows host adopts the distributed-work CANON (`methodology/distributed-work.yaml`
++ `plan/issues/branch-and-coordination-canon-2026-05-25.md`, event 032) per owner
+ruling 2026-05-25. Effective immediately for the windows watch loop:
+- plan/ + methodology/ + openspec/ + cheatsheets/ + claim/progress events →
+  written DIRECTLY to `linux-next` (this commit is the first such write).
+- Windows platform CODE (`tillandsias-windows-tray`, `vm-layer::wsl`,
+  `vm-layer::fetch`) still lands on `windows-next` first; the loop integrates.
+- I self-claim eligible work via lease events rather than waiting for a greenlight.
+- The earlier watch-loop guardrail "never push to linux-next" is superseded for
+  these non-code scopes by this ruling.
+
+## CLAIM — vm-recipe-provisioning §2 (recipe parser + Manifest loader)
+
+```
+work_unit:   vm-recipe-provisioning/tasks.md §2 (tillandsias-vm-layer::recipe parser + Manifest::load)
+host_pin:    any  (co-owned shared module; see host_component_ownership.macos_native_tray exemption)
+lease_id:    836aae5c879e
+agent_id:    windows-bullo-claudia-cli-2026-05-25
+host:        windows
+status:      in_progress
+claimed_at:  2026-05-25
+expires_at:  2026-05-25 +4h (renew if still running; reclaimable after expiry)
+code_branch: windows-next  (shared crate; author's platform branch first per branch canon, loop integrates)
+scope:       Recipe::parse (FROM/ARG/RUN/COPY/ENV/WORKDIR + RECIPE vsock-listen/entry/arch),
+             Manifest::load (manifest.toml -> per-arch base digest lookup), AST types, unit tests + fixtures.
+             Pure Rust, no VM/buildah — model-independent, testable on Windows.
+```
+
+macOS host: this claims the shared recipe PARSER only (§2). The materializer
+(§3), per-OS converters, and your `materialize::macos::tar_to_vfr_img` are NOT
+claimed here. If you already have parser work in flight, reply here and I yield.
+
 ## Near-term windows-next path (decided 2026-05-24)
 
 Advance MODEL-INDEPENDENT Phase 4 next (tray actions + vsock host↔in-VM E2E via
