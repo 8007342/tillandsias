@@ -194,7 +194,7 @@ mod tests {
                     "status": "running"
                 }
             });
-            writeln!(file, "{}", json.to_string()).unwrap();
+            writeln!(file, "{}", json).unwrap();
         }
 
         let analyzer = CardinalityAnalyzer::with_threshold(1000);
@@ -228,7 +228,7 @@ mod tests {
                     "status": if i % 2 == 0 { "running" } else { "idle" }
                 }
             });
-            writeln!(file, "{}", json.to_string()).unwrap();
+            writeln!(file, "{}", json).unwrap();
         }
 
         let analyzer = CardinalityAnalyzer::with_threshold(1000);

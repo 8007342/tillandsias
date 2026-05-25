@@ -47,8 +47,7 @@ pub fn read_installation_uuid() -> Result<Option<Uuid>, String> {
 /// Persist `uuid` to the keychain (Windows) or tempdir file (Linux stub).
 pub fn write_installation_uuid(uuid: Uuid) -> Result<(), String> {
     let path = stub_path();
-    std::fs::write(&path, uuid.to_string())
-        .map_err(|e| format!("write {}: {e}", path.display()))
+    std::fs::write(&path, uuid.to_string()).map_err(|e| format!("write {}: {e}", path.display()))
 }
 
 /// Read-or-generate convenience used by the tray bootstrap.

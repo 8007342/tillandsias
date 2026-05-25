@@ -755,6 +755,60 @@ fn true_val() -> bool {
     true
 }
 
+/// Detect the host operating system.
+/// Returns a human-readable string like "Fedora Silverblue 43" or "macOS 15.4".
+pub fn detect_host_os() -> String {
+    if cfg!(target_os = "macos") {
+        // macOS has no /etc/os-release — use sw_vers instead
+        if let Ok(output) = std::process::Command::new("sw_vers")
+            .arg("-productVersion")
+            .output()
+        {
+            let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !version.is_empty() {
+                return format!("macOS {version}");
+            }
+        }
+        return "macOS".to_string();
+    }
+
+    if cfg!(target_os = "windows") {
+        // Windows: use `ver` or environment variables
+        if let Ok(output) = std::process::Command::new("cmd")
+            .args(["/c", "ver"])
+            .output()
+        {
+            let ver = String::from_utf8_lossy(&output.stdout).trim().to_string();
+            if !ver.is_empty() {
+                return ver;
+            }
+        }
+        return "Windows".to_string();
+    }
+
+    if let Ok(content) = std::fs::read_to_string("/etc/os-release") {
+        let mut name = String::new();
+        let mut version = String::new();
+        let mut variant = String::new();
+        for line in content.lines() {
+            if let Some(val) = line.strip_prefix("NAME=") {
+                name = val.trim_matches('"').to_string();
+            } else if let Some(val) = line.strip_prefix("VERSION_ID=") {
+                version = val.trim_matches('"').to_string();
+            } else if let Some(val) = line.strip_prefix("VARIANT=") {
+                variant = val.trim_matches('"').to_string();
+            }
+        }
+        if !variant.is_empty() {
+            format!("{name} {variant} {version}")
+        } else {
+            format!("{name} {version}")
+        }
+    } else {
+        "Unknown OS".to_string()
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1059,59 +1113,5 @@ debounce_ms = 5000
         assert_eq!(loaded.agent.selected.as_env_str(), "opencode-web");
 
         std::fs::remove_dir_all(&dir).ok();
-    }
-}
-
-/// Detect the host operating system.
-/// Returns a human-readable string like "Fedora Silverblue 43" or "macOS 15.4".
-pub fn detect_host_os() -> String {
-    if cfg!(target_os = "macos") {
-        // macOS has no /etc/os-release — use sw_vers instead
-        if let Ok(output) = std::process::Command::new("sw_vers")
-            .arg("-productVersion")
-            .output()
-        {
-            let version = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !version.is_empty() {
-                return format!("macOS {version}");
-            }
-        }
-        return "macOS".to_string();
-    }
-
-    if cfg!(target_os = "windows") {
-        // Windows: use `ver` or environment variables
-        if let Ok(output) = std::process::Command::new("cmd")
-            .args(["/c", "ver"])
-            .output()
-        {
-            let ver = String::from_utf8_lossy(&output.stdout).trim().to_string();
-            if !ver.is_empty() {
-                return ver;
-            }
-        }
-        return "Windows".to_string();
-    }
-
-    if let Ok(content) = std::fs::read_to_string("/etc/os-release") {
-        let mut name = String::new();
-        let mut version = String::new();
-        let mut variant = String::new();
-        for line in content.lines() {
-            if let Some(val) = line.strip_prefix("NAME=") {
-                name = val.trim_matches('"').to_string();
-            } else if let Some(val) = line.strip_prefix("VERSION_ID=") {
-                version = val.trim_matches('"').to_string();
-            } else if let Some(val) = line.strip_prefix("VARIANT=") {
-                variant = val.trim_matches('"').to_string();
-            }
-        }
-        if !variant.is_empty() {
-            format!("{name} {variant} {version}")
-        } else {
-            format!("{name} {version}")
-        }
-    } else {
-        "Unknown OS".to_string()
     }
 }

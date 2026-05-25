@@ -229,10 +229,7 @@ pub enum ControlMessage {
     /// requested early termination (the guest then SIGKILLs the child).
     ///
     /// @trace openspec/changes/control-wire-pty-attach/proposal.md
-    PtyClose {
-        session_id: u32,
-        exit: PtyExit,
-    },
+    PtyClose { session_id: u32, exit: PtyExit },
 }
 
 /// Direction tag for `PtyData` frames.
@@ -449,7 +446,10 @@ mod tests {
         // Invariant: a single PtyData chunk must always fit in one wire
         // envelope so the framing layer never has to fragment. See
         // openspec/changes/control-wire-pty-attach/proposal.md Task 1.3.
-        assert!(MAX_PTY_FRAME_BYTES <= MAX_MESSAGE_BYTES);
+        // (Both are compile-time constants — clippy's "always-true" lint
+        // is the point: this test is a guard for whoever raises the limit.)
+        #[allow(clippy::assertions_on_constants)]
+        const _: () = assert!(MAX_PTY_FRAME_BYTES <= MAX_MESSAGE_BYTES);
     }
 
     #[test]

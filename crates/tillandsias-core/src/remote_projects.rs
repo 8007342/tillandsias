@@ -93,10 +93,7 @@ fn git_image_tag() -> String {
 /// `eprintln!` debug trace. Keeps roughly 80 chars so the diagnostic stays
 /// glanceable.
 fn debug_script_preview(script: &str) -> String {
-    let flat: String = script
-        .split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ");
+    let flat: String = script.split_whitespace().collect::<Vec<_>>().join(" ");
     if flat.len() > 80 {
         // Walk back to the nearest char boundary so we never split a
         // multi-byte UTF-8 sequence. Our scripts are ASCII today, but
@@ -153,11 +150,7 @@ fn debug_log_podman_result(op: &str, status: &std::process::ExitStatus, stderr: 
     }
 }
 
-fn run_git_image_shell(
-    script: &str,
-    extra_args: &[&str],
-    debug: bool,
-) -> Result<String, String> {
+fn run_git_image_shell(script: &str, extra_args: &[&str], debug: bool) -> Result<String, String> {
     let image = git_image_tag();
     if debug {
         debug_log_podman_invocation("run_git_image_shell", &image, true, script, extra_args);
@@ -313,9 +306,7 @@ fn normalize_repo_identifier(repo: &str) -> String {
         .strip_prefix("https://github.com/")
         .or_else(|| repo.strip_prefix("http://github.com/"))
     {
-        let stripped = rest
-            .trim_end_matches('/')
-            .trim_end_matches(".git");
+        let stripped = rest.trim_end_matches('/').trim_end_matches(".git");
         return stripped.to_string();
     }
     repo.to_string()
@@ -368,9 +359,7 @@ exec gh repo clone "$1" "$2"
 
     if debug {
         if nwo != repo_url {
-            eprintln!(
-                "[tillandsias] gh: normalized repo identifier {repo_url:?} -> {nwo:?}"
-            );
+            eprintln!("[tillandsias] gh: normalized repo identifier {repo_url:?} -> {nwo:?}");
         }
         eprintln!(
             "[tillandsias] gh: clone bind-mount {parent_str:?} (identity-mapped, rw) target={repo_dir:?}"
@@ -407,11 +396,7 @@ exec gh repo clone "$1" "$2"
         .map_err(|err| format!("git clone failed: {}", err))?;
 
     if debug {
-        debug_log_podman_result(
-            "clone_project_from_github",
-            &output.status,
-            &output.stderr,
-        );
+        debug_log_podman_result("clone_project_from_github", &output.status, &output.stderr);
     }
 
     if !output.status.success() {
@@ -645,15 +630,11 @@ mod tests {
 
         let clone_root = tempdir().expect("clone tempdir");
         let target = clone_root.path().join("lakanoa");
-        clone_project_from_github(
-            "https://api.github.com/repos/8007342/lakanoa",
-            &target,
-        )
-        .expect("containerized clone with API URL");
+        clone_project_from_github("https://api.github.com/repos/8007342/lakanoa", &target)
+            .expect("containerized clone with API URL");
 
-        let captured_repo =
-            std::fs::read_to_string(state_dir.path().join("last_clone_repo_arg"))
-                .expect("mock should record repo arg");
+        let captured_repo = std::fs::read_to_string(state_dir.path().join("last_clone_repo_arg"))
+            .expect("mock should record repo arg");
         assert_eq!(
             captured_repo.trim(),
             "8007342/lakanoa",
@@ -707,9 +688,8 @@ mod tests {
         clone_project_from_github("8007342/lakanoa", &target)
             .expect("containerized clone with bind-mount");
 
-        let captured_args =
-            std::fs::read_to_string(state_dir.path().join("last_clone_run_args"))
-                .expect("mock should record full arg vector");
+        let captured_args = std::fs::read_to_string(state_dir.path().join("last_clone_run_args"))
+            .expect("mock should record full arg vector");
         let args: Vec<&str> = captured_args.lines().collect();
 
         assert!(
@@ -721,10 +701,9 @@ mod tests {
             "podman run must disable SELinux label relabeling on the bind-mount; got args: {args:?}"
         );
         // `-v` is followed by the bind-mount spec as the next arg.
-        let v_index = args
-            .iter()
-            .position(|a| *a == "-v")
-            .unwrap_or_else(|| panic!("podman run must include `-v` bind-mount flag; got args: {args:?}"));
+        let v_index = args.iter().position(|a| *a == "-v").unwrap_or_else(|| {
+            panic!("podman run must include `-v` bind-mount flag; got args: {args:?}")
+        });
         let bind_spec = args
             .get(v_index + 1)
             .unwrap_or_else(|| panic!("`-v` must be followed by a mount spec; got args: {args:?}"));

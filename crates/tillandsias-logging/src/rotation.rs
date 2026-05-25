@@ -151,8 +151,10 @@ mod tests {
         let dir = tempdir().unwrap();
         let log_file = dir.path().join("test.log");
 
-        let mut policy = RotationPolicy::default();
-        policy.max_size = 100;
+        let policy = RotationPolicy {
+            max_size: 100,
+            ..RotationPolicy::default()
+        };
 
         // Small file
         fs::write(&log_file, "small").await.unwrap();

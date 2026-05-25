@@ -132,7 +132,11 @@ impl VmRuntime for FakeVmRuntime {
 mod tests {
     use super::*;
 
-    fn manifest_with_paths(rootfs: &PathBuf, binary: &PathBuf, shared: &PathBuf) -> ProvisionManifest {
+    fn manifest_with_paths(
+        rootfs: &PathBuf,
+        binary: &PathBuf,
+        shared: &PathBuf,
+    ) -> ProvisionManifest {
         ProvisionManifest {
             rootfs_tarball: rootfs.clone(),
             tillandsias_binary: binary.clone(),

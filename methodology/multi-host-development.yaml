@@ -63,6 +63,12 @@ multi_host_development:
       Before editing, absorb the current remote head for the active platform
       branch and record sibling branch heads in the plan issue or event that
       governs the work.
+    remote_progress_rule: >
+      A recurrent agent should normally find `origin/linux-next` ahead of its
+      local checkout. Treat that as healthy remote progress and fresh-read the
+      changed ledgers. The warning condition is repeated lack of remote progress
+      across the expected cadence, or remote-ahead combined with a local dirty
+      tree, conflict, sandbox, or credential issue that prevents reconciliation.
 
   fast_forward_guard:
     before_updating_platform_branch:

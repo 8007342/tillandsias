@@ -36,9 +36,7 @@ use std::time::{Duration, Instant};
 
 use objc2::rc::Retained;
 use objc2_foundation::NSError;
-use objc2_virtualization::{
-    VZVirtioSocketConnection, VZVirtioSocketDevice, VZVirtualMachine,
-};
+use objc2_virtualization::{VZVirtioSocketConnection, VZVirtioSocketDevice, VZVirtualMachine};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf, unix::AsyncFd};
 
 use crate::vz::boot::pump_cf_loop_for;
@@ -178,23 +176,19 @@ impl AsyncWrite for VsockStream {
         }
     }
 
-    fn poll_flush(
-        self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-    ) -> Poll<io::Result<()>> {
+    fn poll_flush(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         // No userspace buffering — every poll_write hits the kernel.
         Poll::Ready(Ok(()))
     }
 
-    fn poll_shutdown(
-        self: Pin<&mut Self>,
-        _cx: &mut Context<'_>,
-    ) -> Poll<io::Result<()>> {
+    fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
         // VZ closes the underlying socket when the connection's retain
         // count hits zero (= VsockStream::drop). Tell the kernel to
         // half-close the write side immediately so the peer gets EOF.
         let fd = self.fd.get_ref().as_raw_fd();
-        let rc = unsafe { libc_shutdown(fd, 1 /* SHUT_WR */) };
+        let rc = unsafe {
+            libc_shutdown(fd, 1 /* SHUT_WR */)
+        };
         if rc < 0 {
             Poll::Ready(Err(io::Error::last_os_error()))
         } else {
@@ -235,13 +229,7 @@ fn set_nonblocking(fd: RawFd) -> io::Result<()> {
 
 /// SAFETY: caller guarantees `buf` is valid for writes of `buf.len()` bytes.
 unsafe fn read_fd(fd: RawFd, buf: &mut [std::mem::MaybeUninit<u8>]) -> io::Result<usize> {
-    let n = unsafe {
-        read(
-            fd,
-            buf.as_mut_ptr() as *mut std::ffi::c_void,
-            buf.len(),
-        )
-    };
+    let n = unsafe { read(fd, buf.as_mut_ptr() as *mut std::ffi::c_void, buf.len()) };
     if n < 0 {
         Err(io::Error::last_os_error())
     } else {
@@ -251,13 +239,7 @@ unsafe fn read_fd(fd: RawFd, buf: &mut [std::mem::MaybeUninit<u8>]) -> io::Resul
 
 /// SAFETY: caller guarantees `buf` is valid for reads of `buf.len()` bytes.
 unsafe fn write_fd(fd: RawFd, buf: &[u8]) -> io::Result<usize> {
-    let n = unsafe {
-        write(
-            fd,
-            buf.as_ptr() as *const std::ffi::c_void,
-            buf.len(),
-        )
-    };
+    let n = unsafe { write(fd, buf.as_ptr() as *const std::ffi::c_void, buf.len()) };
     if n < 0 {
         Err(io::Error::last_os_error())
     } else {
@@ -348,25 +330,28 @@ pub fn connect_to_vm_vsock(
     // Bridge VZ's dispatch-queue completion handler to this thread via a
     // mpsc channel; pump CFRunLoop until the result arrives or `timeout`
     // elapses.
-    let (tx, rx) = std::sync::mpsc::channel::<Result<Retained<VZVirtioSocketConnection>, ConnectError>>();
-    let handler = RcBlock::new(move |conn_ptr: *mut VZVirtioSocketConnection, err_ptr: *mut NSError| {
-        let result = if !err_ptr.is_null() {
-            let desc = unsafe { (*err_ptr).localizedDescription() }.to_string();
-            Err(ConnectError::VzError(desc))
-        } else if conn_ptr.is_null() {
-            Err(ConnectError::NullConnection)
-        } else {
-            // SAFETY: VZ delivers an owned reference per documented
-            // semantics; we wrap it in `Retained` so the retain count
-            // is balanced when `Retained` drops.
-            let conn = unsafe { Retained::retain(conn_ptr) };
-            match conn {
-                Some(c) => Ok(c),
-                None => Err(ConnectError::NullConnection),
-            }
-        };
-        let _ = tx.send(result);
-    });
+    let (tx, rx) =
+        std::sync::mpsc::channel::<Result<Retained<VZVirtioSocketConnection>, ConnectError>>();
+    let handler = RcBlock::new(
+        move |conn_ptr: *mut VZVirtioSocketConnection, err_ptr: *mut NSError| {
+            let result = if !err_ptr.is_null() {
+                let desc = unsafe { (*err_ptr).localizedDescription() }.to_string();
+                Err(ConnectError::VzError(desc))
+            } else if conn_ptr.is_null() {
+                Err(ConnectError::NullConnection)
+            } else {
+                // SAFETY: VZ delivers an owned reference per documented
+                // semantics; we wrap it in `Retained` so the retain count
+                // is balanced when `Retained` drops.
+                let conn = unsafe { Retained::retain(conn_ptr) };
+                match conn {
+                    Some(c) => Ok(c),
+                    None => Err(ConnectError::NullConnection),
+                }
+            };
+            let _ = tx.send(result);
+        },
+    );
     unsafe { vsock_dev.connectToPort_completionHandler(port, &handler) };
 
     let deadline = Instant::now() + timeout;

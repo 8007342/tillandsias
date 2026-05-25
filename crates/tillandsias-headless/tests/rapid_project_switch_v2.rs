@@ -103,7 +103,7 @@ struct SwitchBenchmark {
 /// @trace gap:TR-007
 #[test]
 fn test_stress_20_rapid_switches_under_500ms() {
-    let projects = vec![
+    let projects = [
         MockProjectState::new("proj-a", "Project A"),
         MockProjectState::new("proj-b", "Project B"),
         MockProjectState::new("proj-c", "Project C"),
@@ -186,7 +186,7 @@ fn test_stress_20_rapid_switches_under_500ms() {
 /// @trace gap:TR-007
 #[test]
 fn test_menu_consistency_with_varied_projects() {
-    let mut projects = vec![
+    let mut projects = [
         MockProjectState::new("proj-1", "Project 1"),
         MockProjectState::new("proj-2", "Project 2"),
         MockProjectState::new("proj-3", "Project 3"),
@@ -264,7 +264,7 @@ fn test_menu_consistency_with_varied_projects() {
 /// @trace gap:TR-007
 #[test]
 fn test_no_stale_cache_across_rapid_switches() {
-    let projects = vec![
+    let projects = [
         MockProjectState::new("proj-x", "Project X"),
         MockProjectState::new("proj-y", "Project Y"),
         MockProjectState::new("proj-z", "Project Z"),
@@ -421,7 +421,7 @@ fn test_concurrent_rapid_switches_thread_safe() {
 /// @trace gap:TR-007
 #[test]
 fn test_menu_item_integrity_across_switches() {
-    let mut projects = vec![
+    let mut projects = [
         MockProjectState::new("proj-alpha", "Alpha"),
         MockProjectState::new("proj-beta", "Beta"),
         MockProjectState::new("proj-gamma", "Gamma"),

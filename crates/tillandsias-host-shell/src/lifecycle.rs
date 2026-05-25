@@ -18,11 +18,11 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
 use tillandsias_control_wire::transport::Transport;
+use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
 use tillandsias_vm_layer::VmRuntime;
 
-use crate::vsock_client::{connect_with_handshake, DEFAULT_HANDSHAKE_TIMEOUT};
+use crate::vsock_client::{DEFAULT_HANDSHAKE_TIMEOUT, connect_with_handshake};
 
 /// Default per-forge graceful drain budget passed to the in-VM headless.
 pub const DEFAULT_FORGE_DRAIN_TIMEOUT_MS: u32 = 10_000;
@@ -142,7 +142,10 @@ impl VmLifecycle {
             match connect_with_handshake(self.transport.clone(), DEFAULT_HANDSHAKE_TIMEOUT).await {
                 Ok(c) => c,
                 Err(err) => {
-                    tracing::warn!(?err, "drain: control wire unreachable, skipping VmShutdownRequest");
+                    tracing::warn!(
+                        ?err,
+                        "drain: control wire unreachable, skipping VmShutdownRequest"
+                    );
                     return Ok(());
                 }
             };
@@ -161,7 +164,10 @@ impl VmLifecycle {
         match client.request(&envelope).await {
             Ok(_reply) => Ok(()),
             Err(err) => {
-                tracing::warn!(?err, "drain: VmShutdownRequest send failed (expected if VM already exited)");
+                tracing::warn!(
+                    ?err,
+                    "drain: VmShutdownRequest send failed (expected if VM already exited)"
+                );
                 Ok(())
             }
         }

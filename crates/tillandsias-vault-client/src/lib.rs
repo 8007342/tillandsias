@@ -107,10 +107,9 @@ impl VaultClient {
         let status = resp.status();
         if status.is_success() {
             let value: Value = resp.json().await?;
-            value
-                .get("data")
-                .cloned()
-                .ok_or_else(|| VaultError::Other(format!("missing data field in response: {value}")))
+            value.get("data").cloned().ok_or_else(|| {
+                VaultError::Other(format!("missing data field in response: {value}"))
+            })
         } else {
             let body = resp.text().await.unwrap_or_default();
             Err(Self::map_status(status, body))
@@ -325,7 +324,10 @@ impl VaultClient {
         let resp = self.client.get(&url).send().await?;
         let v: Value = resp.json().await?;
         Ok(HealthStatus {
-            initialized: v.get("initialized").and_then(Value::as_bool).unwrap_or(false),
+            initialized: v
+                .get("initialized")
+                .and_then(Value::as_bool)
+                .unwrap_or(false),
             sealed: v.get("sealed").and_then(Value::as_bool).unwrap_or(true),
             standby: v.get("standby").and_then(Value::as_bool).unwrap_or(false),
             version: v

@@ -1,6 +1,6 @@
 # windows-next work queue — 2026-05-25
 
-trace: methodology/distributed-work.yaml, plan/steps/windows-next-thin-tray.md, plan/issues/tray-convergence-coordination.md, plan/issues/control-socket-protocol-convergence-2026-05-25.md, openspec/changes/control-wire-pty-attach/
+trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/windows-next-thin-tray.md, plan/issues/tray-convergence-coordination.md, plan/issues/control-socket-protocol-convergence-2026-05-25.md, openspec/changes/control-wire-pty-attach/
 
 Status: **OPEN** as of 2026-05-25T18:54Z. Windows w1, w2, and w3 are done.
 Linux l3 shipped the in-VM PTY handler at `f770e013`/`8dc0d129` and l4 shipped
@@ -17,13 +17,15 @@ a stable ID. When the Windows host wakes:
 
 1. `git fetch origin --prune && git checkout linux-next && git pull --ff-only`
 2. Read this file top-to-bottom.
-3. Pick the earliest item whose status is `pending`, whose `gated_on` field
-   is empty (or every dependency is `done`), and whose `capability_tags`
-   match your skills.
+3. Pick the highest-impact ready packet whose `gated_on` field is empty (or
+   every dependency is `done`), whose `capability_tags` match your skills, and
+   whose acceptance evidence fits one or two recurrent iterations. Prefer
+   packets that unblock another host over tiny cleanup.
 4. Append a `claim` event to the item with your `lease_id` and `agent_id`.
 5. Commit + push to `linux-next`.
-6. Switch to `windows-next` and execute. Report progress via further events
-   in this file (commits pushed to `linux-next`).
+6. Switch to `windows-next` and execute. Report progress, blockers, errors,
+   dependencies, and handoffs as status packets in this file (commits pushed to
+   `linux-next`; format in `plan/issues/multi-agent-work-shaping-2026-05-25.md`).
 
 Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`):
 *plan/* writes go to **linux-next**; *code* commits go to **windows-next**.
@@ -35,6 +37,9 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
 - `w4/pty-attach-conpty` is active through the Windows claim on the shared
   `host-shell::pty` layer and ConPTY follow-up. Do not create a competing
   claim; see lease `8a3307907d94` in the Events section.
+- If w4 stalls or w5 remains gated, Windows should claim a larger independent
+  fallback packet rather than idling: w6 verification first, then cache/diagnostic
+  work that can complete without the CI rootfs artifact.
 
 Do not re-claim w1, w2, or w3; their terminal events are recorded below. The
 next gated Windows implementation item is w5 after Linux l7 plus macOS-owned
@@ -496,7 +501,7 @@ items can land + be unit-tested before the VM path exists.
 | sub-task | what | owner | verifiable now? | status |
 |---|---|---|---|---|
 | w4a launch-spec | PtyIntent → PtyOpenOpts argv mapping | shared (win authored) | YES (pure) | DONE `af03de7e` |
-| w4b channel-transport | `ChannelPtyTransport`: PtyTransport that enqueues outbound ControlMessages to a bounded mpsc (the §D3 writer queue), decoupled from the Client | windows (pty, co-owned) | YES (enqueue→drain test) | pending |
+| w4b channel-transport | `ChannelPtyTransport`: PtyTransport that enqueues outbound ControlMessages to a bounded mpsc (the §D3 writer queue), decoupled from the Client | windows (pty, co-owned) | YES (enqueue→drain test) | DONE `7dc11bea` |
 | w4c connection-mux | own the vsock `Client` (split); writer task drains the w4b queue → Client.send; reader task reads envelopes → routes PtyData/PtyClose to PtyRouter, other replies elsewhere | shared host-shell (coordinate; touches vsock_client) | PARTIAL (routing tested; Client glue = VM E2E) | pending |
 | w4d open-shell-menu | add an "Open Shell" item to the shared `menu_state` + `menu_action` (resolve to PtyIntent::Shell) | shared menu_state (coordinate w/ macOS+linux) | YES (menu build + dispatch test) | pending |
 | w4e wt-attach | spawn Windows Terminal (`wt.exe`) hosting the ConPtyMaster pseudoconsole | windows | NO (GUI/VM visual check) | pending |

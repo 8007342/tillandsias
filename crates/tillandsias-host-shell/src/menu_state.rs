@@ -117,11 +117,7 @@ impl MenuItem {
         }
     }
 
-    pub fn checkmark(
-        id: impl Into<String>,
-        label: impl Into<String>,
-        checked: bool,
-    ) -> Self {
+    pub fn checkmark(id: impl Into<String>, label: impl Into<String>, checked: bool) -> Self {
         Self {
             id: id.into(),
             label: label.into(),
@@ -421,7 +417,11 @@ fn build_cloud_projects(state: &MenuState) -> MenuItem {
 
 fn build_agents(state: &MenuState) -> MenuItem {
     let mut children = Vec::new();
-    for agent in [SelectedAgent::Claude, SelectedAgent::Codex, SelectedAgent::OpenCode] {
+    for agent in [
+        SelectedAgent::Claude,
+        SelectedAgent::Codex,
+        SelectedAgent::OpenCode,
+    ] {
         children.push(MenuItem::checkmark(
             agent.id(),
             agent.display_name(),
@@ -469,9 +469,7 @@ fn build_opencode_web(state: &MenuState) -> MenuItem {
 
 fn build_github_login(state: &MenuState) -> MenuItem {
     match &state.login {
-        GithubLoginState::LoggedOut => {
-            MenuItem::leaf(ids::GITHUB_LOGIN, "\u{1F511} GitHub Login")
-        }
+        GithubLoginState::LoggedOut => MenuItem::leaf(ids::GITHUB_LOGIN, "\u{1F511} GitHub Login"),
         GithubLoginState::LoggedIn { handle } => MenuItem::disabled(
             ids::GITHUB_LOGIN,
             format!("GitHub: {}", handle),
@@ -688,9 +686,7 @@ mod tests {
     #[test]
     fn empty_local_projects_renders_placeholder() {
         let state = MenuState {
-            login: GithubLoginState::LoggedIn {
-                handle: "u".into(),
-            },
+            login: GithubLoginState::LoggedIn { handle: "u".into() },
             ..MenuState::initial()
         };
         let menu = build(&state);
@@ -733,7 +729,10 @@ mod tests {
             status.label.chars().count(),
         );
         // Full reason is preserved in disabled_reason for the tooltip.
-        assert_eq!(status.disabled_reason.as_deref(), Some(long_reason.as_str()));
+        assert_eq!(
+            status.disabled_reason.as_deref(),
+            Some(long_reason.as_str())
+        );
     }
 
     #[test]
@@ -755,9 +754,11 @@ mod tests {
         };
         let cloud = &items[2];
         assert_eq!(cloud.children.len(), 3);
-        assert!(cloud
-            .children
-            .iter()
-            .all(|c| c.id != ids::CLOUD_PROJECTS_OVERFLOW));
+        assert!(
+            cloud
+                .children
+                .iter()
+                .all(|c| c.id != ids::CLOUD_PROJECTS_OVERFLOW)
+        );
     }
 }

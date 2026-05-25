@@ -34,7 +34,7 @@ use std::sync::Mutex;
 use tillandsias_host_shell::menu_action::{self, MenuAction};
 use tillandsias_host_shell::menu_state::{self, MenuItem, MenuState, MenuStructure, ProjectEntry};
 use tillandsias_host_shell::provisioning::{ProvisionPhase, ProvisionProgress};
-use tillandsias_host_shell::scanner::{watch_projects, ProjectEvent};
+use tillandsias_host_shell::scanner::{ProjectEvent, watch_projects};
 
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::Graphics::Gdi::HBRUSH;
@@ -46,10 +46,10 @@ use windows::Win32::UI::Shell::{
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu, DispatchMessageW,
     GetCursorPos, GetMessageW, HMENU, IDI_APPLICATION, LoadIconW, MF_CHECKED, MF_DISABLED,
-    MF_GRAYED, MF_POPUP, MF_STRING, MSG, PostMessageW, PostQuitMessage,
-    RegisterClassExW, RegisterWindowMessageW, SetForegroundWindow, TPM_BOTTOMALIGN, TPM_LEFTALIGN,
-    TPM_RIGHTBUTTON, TrackPopupMenu, TranslateMessage, WM_APP, WM_COMMAND, WM_DESTROY,
-    WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSEXW, WS_EX_TOOLWINDOW,
+    MF_GRAYED, MF_POPUP, MF_STRING, MSG, PostMessageW, PostQuitMessage, RegisterClassExW,
+    RegisterWindowMessageW, SetForegroundWindow, TPM_BOTTOMALIGN, TPM_LEFTALIGN, TPM_RIGHTBUTTON,
+    TrackPopupMenu, TranslateMessage, WM_APP, WM_COMMAND, WM_DESTROY, WM_LBUTTONUP, WM_RBUTTONUP,
+    WNDCLASSEXW, WS_EX_TOOLWINDOW,
 };
 use windows::core::{PCWSTR, w};
 
@@ -93,7 +93,9 @@ unsafe impl Sync for HwndHandle {}
 
 impl TrayProgress {
     pub fn new(hwnd: HWND) -> Self {
-        Self { hwnd: HwndHandle(hwnd) }
+        Self {
+            hwnd: HwndHandle(hwnd),
+        }
     }
 }
 
@@ -133,7 +135,10 @@ fn update_status_text(text: &str, hwnd: HWND) {
 
 fn write_utf16_into<const N: usize>(buf: &mut [u16; N], text: &str) {
     let encoded: Vec<u16> = OsString::from(text).encode_wide().take(N - 1).collect();
-    for (slot, value) in buf.iter_mut().zip(encoded.iter().chain(std::iter::once(&0))) {
+    for (slot, value) in buf
+        .iter_mut()
+        .zip(encoded.iter().chain(std::iter::once(&0)))
+    {
         *slot = *value;
     }
 }
@@ -421,7 +426,10 @@ unsafe fn append_item(
 }
 
 fn to_utf16(s: &str) -> Vec<u16> {
-    OsString::from(s).encode_wide().chain(std::iter::once(0)).collect()
+    OsString::from(s)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect()
 }
 
 unsafe fn handle_menu_command(hwnd: HWND, cmd_id: u16) {
@@ -512,10 +520,15 @@ fn dispatch_action(hwnd: HWND, action: MenuAction) {
         MenuAction::OpenObservatorium | MenuAction::OpenOpenCodeWeb => {
             // ShellExecute to the observatorium / OpenCode-Web URL lands with
             // the router/VM (gui-passthrough); there is no URL until then.
-            tracing::info!(?action, "browser action: no URL until the VM + router are up (gui-passthrough pending)");
+            tracing::info!(
+                ?action,
+                "browser action: no URL until the VM + router are up (gui-passthrough pending)"
+            );
         }
         MenuAction::Retry => {
-            tracing::info!("retry requested: provisioning-retry hook wires with the lifecycle iteration");
+            tracing::info!(
+                "retry requested: provisioning-retry hook wires with the lifecycle iteration"
+            );
         }
         MenuAction::OpenLog => {
             tracing::info!("open log requested: host-side log-file path not wired yet");
@@ -559,7 +572,9 @@ mod tests {
     use std::path::PathBuf;
 
     fn added(p: &str) -> ProjectEvent {
-        ProjectEvent::Added { path: PathBuf::from(p) }
+        ProjectEvent::Added {
+            path: PathBuf::from(p),
+        }
     }
 
     #[test]
@@ -570,7 +585,11 @@ mod tests {
         // Duplicate basename is ignored.
         apply_project_event_to(&mut state, &added("C:\\Users\\u\\src\\apple"));
 
-        let names: Vec<&str> = state.local_projects.iter().map(|p| p.name.as_str()).collect();
+        let names: Vec<&str> = state
+            .local_projects
+            .iter()
+            .map(|p| p.name.as_str())
+            .collect();
         assert_eq!(names, vec!["apple", "zebra"], "name-sorted, deduped");
         assert!(state.local_projects.iter().all(|p| !p.ready));
     }
@@ -607,9 +626,15 @@ mod tests {
         apply_project_event_to(&mut state, &added("C:\\Users\\u\\src\\drop"));
         apply_project_event_to(
             &mut state,
-            &ProjectEvent::Removed { path: PathBuf::from("C:\\Users\\u\\src\\drop") },
+            &ProjectEvent::Removed {
+                path: PathBuf::from("C:\\Users\\u\\src\\drop"),
+            },
         );
-        let names: Vec<&str> = state.local_projects.iter().map(|p| p.name.as_str()).collect();
+        let names: Vec<&str> = state
+            .local_projects
+            .iter()
+            .map(|p| p.name.as_str())
+            .collect();
         assert_eq!(names, vec!["keep"]);
     }
 }

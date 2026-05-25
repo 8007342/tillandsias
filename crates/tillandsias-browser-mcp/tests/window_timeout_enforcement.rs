@@ -59,11 +59,7 @@ impl TestWindowEntry {
     fn seconds_until_idle_timeout(&self) -> u64 {
         const IDLE_TIMEOUT_SECS: u64 = 24 * 60 * 60;
         let elapsed = self.last_activity.elapsed().as_secs();
-        if elapsed > IDLE_TIMEOUT_SECS {
-            0
-        } else {
-            IDLE_TIMEOUT_SECS - elapsed
-        }
+        IDLE_TIMEOUT_SECS.saturating_sub(elapsed)
     }
 }
 
@@ -146,10 +142,13 @@ fn test_window_timeout_constants_reasonable() {
     const IDLE_TIMEOUT_SECS: u64 = 24 * 60 * 60; // 24 hours
     const MAX_LIFETIME_SECS: u64 = 48 * 60 * 60; // 48 hours
 
-    assert!(
-        IDLE_TIMEOUT_SECS < MAX_LIFETIME_SECS,
-        "Idle timeout should be less than max lifetime"
-    );
+    #[allow(clippy::assertions_on_constants)]
+    {
+        assert!(
+            IDLE_TIMEOUT_SECS < MAX_LIFETIME_SECS,
+            "Idle timeout should be less than max lifetime"
+        );
+    }
     assert_eq!(IDLE_TIMEOUT_SECS, 86400, "Idle timeout should be 24 hours");
     assert_eq!(MAX_LIFETIME_SECS, 172800, "Max lifetime should be 48 hours");
 }

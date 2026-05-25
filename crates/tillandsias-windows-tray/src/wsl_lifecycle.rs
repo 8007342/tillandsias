@@ -17,7 +17,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use tillandsias_host_shell::provisioning::{ProvisionPhase, ProvisionProgress};
-use tillandsias_vm_layer::fetch::{download_verified, ProvisioningPins};
+use tillandsias_vm_layer::fetch::{ProvisioningPins, download_verified};
 use tillandsias_vm_layer::{ProvisionManifest, VmRuntime, wsl::WslRuntime};
 
 /// Committed per-release pins (rootfs + headless binary URLs and checksums).
@@ -62,8 +62,7 @@ impl WslLifecycle {
     }
 
     pub fn rootfs_cache_path(sha256_short: &str) -> PathBuf {
-        Self::cache_root()
-            .join(format!("rootfs-fedora-44-{}.tar.xz", sha256_short))
+        Self::cache_root().join(format!("rootfs-fedora-44-{}.tar.xz", sha256_short))
     }
 
     pub fn binary_cache_path(version: &str) -> PathBuf {
@@ -82,9 +81,7 @@ impl WslLifecycle {
     /// `VmLifecycle::stop` is the production entry point; this wrapper
     /// exists for callers that don't want the full `VmLifecycle` machinery.
     pub async fn graceful_shutdown(&self) -> Result<(), String> {
-        self.runtime
-            .stop(Duration::from_secs(30))
-            .await
+        self.runtime.stop(Duration::from_secs(30)).await
     }
 
     /// Full first-run bootstrap. Reports progress through the
@@ -103,10 +100,7 @@ impl WslLifecycle {
     /// 6. `Connecting` — the caller's vsock handshake step.
     ///
     /// @trace spec:vm-provisioning-lifecycle
-    pub async fn bootstrap(
-        &self,
-        progress: Arc<dyn ProvisionProgress>,
-    ) -> Result<(), String> {
+    pub async fn bootstrap(&self, progress: Arc<dyn ProvisionProgress>) -> Result<(), String> {
         progress.report_phase(ProvisionPhase::SettingUp);
         tokio::fs::create_dir_all(Self::cache_root())
             .await
@@ -172,9 +166,10 @@ async fn download_headless_binary(
     cache_root: &Path,
     pins: &ProvisioningPins,
 ) -> Result<PathBuf, String> {
-    let dest = cache_root
-        .join("bin")
-        .join(format!("tillandsias-headless-{}", pins.headless_release_tag));
+    let dest = cache_root.join("bin").join(format!(
+        "tillandsias-headless-{}",
+        pins.headless_release_tag
+    ));
     download_verified(&pins.headless_binary, &dest, &|_, _| {}).await?;
     Ok(dest)
 }

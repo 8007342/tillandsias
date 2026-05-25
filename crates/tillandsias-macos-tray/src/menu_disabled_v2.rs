@@ -78,8 +78,8 @@ pub fn render(structure: &MenuStructure) -> Vec<MacMenuItemSpec> {
 mod tests {
     use super::*;
     use tillandsias_host_shell::menu_state::{
-        build, GithubLoginState, MenuState, MenuStructure, ProjectEntry, SelectedAgent,
-        TargetSurface, ids,
+        GithubLoginState, MenuState, MenuStructure, ProjectEntry, SelectedAgent, TargetSurface,
+        build, ids,
     };
 
     fn macos_ready_menu() -> MenuStructure {

@@ -68,9 +68,7 @@ impl Listener {
     /// `AsyncReadWrite`. The framing layer is shared with the Unix path.
     ///
     /// @trace spec:vsock-transport
-    pub async fn accept(
-        &mut self,
-    ) -> io::Result<Box<dyn AsyncReadWrite + Unpin + Send>> {
+    pub async fn accept(&mut self) -> io::Result<Box<dyn AsyncReadWrite + Unpin + Send>> {
         match self {
             #[cfg(unix)]
             Listener::Unix(listener) => {
@@ -96,9 +94,7 @@ impl Listener {
 /// `io::ErrorKind::Unsupported`.
 ///
 /// @trace spec:vsock-transport
-pub async fn connect(
-    transport: &Transport,
-) -> io::Result<Box<dyn AsyncReadWrite + Unpin + Send>> {
+pub async fn connect(transport: &Transport) -> io::Result<Box<dyn AsyncReadWrite + Unpin + Send>> {
     match transport {
         #[cfg(unix)]
         Transport::Unix(path) => {
@@ -138,10 +134,7 @@ pub async fn bind(transport: &Transport) -> io::Result<Listener> {
 }
 
 #[cfg(all(target_os = "linux", feature = "vsock"))]
-async fn connect_vsock(
-    cid: u32,
-    port: u32,
-) -> io::Result<Box<dyn AsyncReadWrite + Unpin + Send>> {
+async fn connect_vsock(cid: u32, port: u32) -> io::Result<Box<dyn AsyncReadWrite + Unpin + Send>> {
     use tokio_vsock::{VsockAddr, VsockStream};
     let addr = VsockAddr::new(cid, port);
     let stream = VsockStream::connect(addr).await?;
@@ -178,17 +171,14 @@ async fn bind_vsock(_cid: u32, _port: u32) -> io::Result<Listener> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::{
-        ControlEnvelope, ControlMessage, MAX_MESSAGE_BYTES, WIRE_VERSION, decode, encode,
-    };
+    use crate::{ControlEnvelope, ControlMessage, MAX_MESSAGE_BYTES, WIRE_VERSION, decode, encode};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
     async fn write_envelope<W>(stream: &mut W, env: &ControlEnvelope) -> io::Result<()>
     where
         W: AsyncWrite + Unpin,
     {
-        let bytes = encode(env)
-            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        let bytes = encode(env).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
         stream
             .write_all(&(bytes.len() as u32).to_be_bytes())
             .await?;

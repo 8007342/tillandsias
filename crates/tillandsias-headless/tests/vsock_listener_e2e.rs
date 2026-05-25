@@ -41,8 +41,7 @@ async fn write_envelope<W>(stream: &mut W, env: &ControlEnvelope) -> std::io::Re
 where
     W: AsyncWriteExt + Unpin,
 {
-    let bytes = encode(env)
-        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+    let bytes = encode(env).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
     stream
         .write_all(&(bytes.len() as u32).to_be_bytes())
         .await?;

@@ -30,8 +30,7 @@ async fn vault_bootstrap_mints_approle_tokens_for_each_role() {
     Mock::given(method("POST"))
         .and(path("/v1/sys/auth/approle"))
         .respond_with(
-            ResponseTemplate::new(400)
-                .set_body_string("{\"errors\":[\"path is already in use\"]}"),
+            ResponseTemplate::new(400).set_body_string("{\"errors\":[\"path is already in use\"]}"),
         )
         .mount(&server)
         .await;

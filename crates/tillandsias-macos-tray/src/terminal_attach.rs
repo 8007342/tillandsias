@@ -25,6 +25,11 @@ pub mod bundle_ids {
 }
 
 /// Which terminal the tray decided to use for this attach.
+///
+/// `TerminalApp` is named after macOS's built-in Terminal.app — renaming
+/// to satisfy `clippy::enum_variant_names` would lose the bundle-id
+/// signal, so the lint is allowed for this enum specifically.
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Terminal {
     ITerm2,
@@ -109,9 +114,7 @@ pub fn applescript_escape(input: &str) -> String {
 /// @trace spec:macos-native-tray.lifecycle.terminal-attach@v1
 pub fn applescript_for_terminal_app(command: &str) -> String {
     let escaped = applescript_escape(command);
-    format!(
-        "tell application \"Terminal\"\n    do script \"{escaped}\"\n    activate\nend tell"
-    )
+    format!("tell application \"Terminal\"\n    do script \"{escaped}\"\n    activate\nend tell")
 }
 
 /// AppleScript snippet for iTerm2 — Cocoa Scripting API creates a new
@@ -139,11 +142,7 @@ pub fn spawn_argv_for_warp(command: &str) -> Vec<String> {
     // Equivalent to `open -na "Warp" --args` would be ideal but Warp lacks
     // a documented launch-with-argv. For v1 we just open Warp and let the
     // user paste the command, which we put on the clipboard via osascript.
-    vec![
-        "open".to_string(),
-        "-a".to_string(),
-        "Warp".to_string(),
-    ]
+    vec!["open".to_string(), "-a".to_string(), "Warp".to_string()]
 }
 
 // ---------------------------------------------------------------------------
@@ -204,7 +203,9 @@ mod live {
             }
             Terminal::Warp => {
                 let argv = spawn_argv_for_warp(&command);
-                std::process::Command::new(&argv[0]).args(&argv[1..]).spawn()?;
+                std::process::Command::new(&argv[0])
+                    .args(&argv[1..])
+                    .spawn()?;
                 Ok(())
             }
         }
@@ -212,7 +213,7 @@ mod live {
 }
 
 #[cfg(target_os = "macos")]
-pub use live::{spawn_terminal, LiveInstalledTerminals};
+pub use live::{LiveInstalledTerminals, spawn_terminal};
 
 #[cfg(test)]
 mod tests {
@@ -265,10 +266,7 @@ mod tests {
     fn applescript_escape_doubles_backslashes_and_quotes() {
         assert_eq!(applescript_escape(r#"no specials"#), "no specials");
         assert_eq!(applescript_escape(r#"with "quotes""#), r#"with \"quotes\""#);
-        assert_eq!(
-            applescript_escape(r#"path\to\thing"#),
-            r#"path\\to\\thing"#
-        );
+        assert_eq!(applescript_escape(r#"path\to\thing"#), r#"path\\to\\thing"#);
         assert_eq!(
             applescript_escape(r#"mixed "back\slash""#),
             r#"mixed \"back\\slash\""#
