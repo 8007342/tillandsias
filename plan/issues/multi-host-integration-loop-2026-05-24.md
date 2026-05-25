@@ -28,6 +28,37 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-25T17:43Z — INTEGRATED (windows w1 + w3; queue burndown)
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit (post-merge): `f63b510`
+- observed_sibling_heads:
+  - main: ddf52dff (unchanged)
+  - linux-next: c04077de → `f63b510` (post-merge)
+  - windows-next: d3d4cede
+  - osx-next: 201c76ea (advanced from b09bcb2b earlier between cycles; already in linux-next via the integration sequence)
+
+- windows-next: **merged + tested + pushed**. 5 commits absorbed; key items:
+  - `cef326e1 feat(windows-tray): w1 — load embedded tillandsias.ico in the tray (windows wiring)` — closes Linux deliverable l6's Windows side; the tray now displays the rasterized icon.
+  - `d3d4cede chore(windows-tray): w3 — clippy -D warnings clean across the windows-tray build` — w3 complete.
+  - Plus 2 merge-from-linux-next commits keeping windows-next current.
+  - `./build.sh --check` + `./build.sh --test`: PASSED.
+- osx-next: no-op (delta already absorbed via the linux-next history between cycles).
+
+- **Queue burndown:** with `f63b510` Windows has shipped w1, w2, w3 from
+  the linux-authored work queue — all three "currently unblocked" items
+  done in roughly 3 cron cycles. The Windows queue's remaining items are
+  gated on Linux deliverables (w4 on l3 in-VM PTY handler, w5 on §3
+  materializer + l5 CI publish, w6 on l4 real vsock backing data).
+
+- **Linux open work-in-flight:**
+  - `l7/§3-materializer-driver` (lease `linux-l-mat-2026-05-25T15Z`) —
+    still claimed; code work not yet started. Unblocks macOS m5 +
+    Windows w5 once it lands.
+  - `l3/in-vm-headless-pty-handler` (Tasks 4.x of control-wire-pty-attach) —
+    not yet claimed; unblocks Windows w4 + macOS m4.
+  - `l4/replace-vsock-stub-handlers` — not yet claimed; unblocks Windows w6.
+
 ### Cycle 2026-05-25T16:00Z — NO-OP (both siblings already absorbed last cycle)
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
