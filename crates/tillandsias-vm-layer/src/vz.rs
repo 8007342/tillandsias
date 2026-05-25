@@ -42,6 +42,35 @@ pub struct VzRuntime {
     pub guest_cid: u32,
     /// On-disk root for VM artifacts (`~/Library/Application Support/tillandsias/vm/`).
     pub image_root: PathBuf,
+    /// VM handle storage (macOS-only). `Some` between `start()` and `stop()`.
+    /// Wrapped in a Mutex so multiple `&self` callers (start/stop/wait_ready)
+    /// can coordinate on the same VZVirtualMachine.
+    #[cfg(target_os = "macos")]
+    vm: std::sync::Mutex<Option<vm_handle::VmHandle>>,
+}
+
+/// Send+Sync wrapper around `Retained<VZVirtualMachine>` so `VzRuntime` can
+/// satisfy `Send + Sync` (required by the `VmRuntime` trait).
+///
+/// SAFETY: `Virtualization.framework` documents that a single
+/// `VZVirtualMachine` must be operated on a single dispatch queue. `VzRuntime`
+/// serialises all VZ method calls through `self.vm` (Mutex), and every
+/// invocation must run on a thread that is currently pumping
+/// `CFRunLoopRunInMode(kCFRunLoopDefaultMode, ...)` — typically the main
+/// thread of the tray binary or the dispatch queue created by
+/// `VZVirtualMachine`'s own infrastructure. The `unsafe impl` reflects that
+/// VZRuntime's API surface (not the bindings) enforces single-queue access.
+#[cfg(target_os = "macos")]
+mod vm_handle {
+    use objc2::rc::Retained;
+    use objc2_virtualization::VZVirtualMachine;
+
+    pub(crate) struct VmHandle(pub Retained<VZVirtualMachine>);
+
+    // SAFETY: see module docstring.
+    unsafe impl Send for VmHandle {}
+    // SAFETY: see module docstring.
+    unsafe impl Sync for VmHandle {}
 }
 
 impl VzRuntime {
@@ -50,6 +79,8 @@ impl VzRuntime {
         Self {
             guest_cid,
             image_root,
+            #[cfg(target_os = "macos")]
+            vm: std::sync::Mutex::new(None),
         }
     }
 
@@ -443,16 +474,87 @@ impl VmRuntime for VzRuntime {
     }
 
     async fn start(&self) -> Result<(), VmError> {
-        // Real VZVirtualMachine.start with completion handler lands in the
-        // macOS-host follow-up. The skeleton verifies that provisioning
-        // ran first so callers get a clear error if they skip it.
-        if !self.is_provisioned() {
-            return Err("VzRuntime::start called before provision".into());
+        use std::time::Instant;
+        use objc2::ClassType;
+        use objc2_foundation::NSError;
+        use objc2_virtualization::VZVirtualMachine;
+
+        // Phase 1 interim: VzRuntime::start expects the rootfs.img path
+        // already populated at `<image_root>/rootfs.img`. Phase 4 will
+        // materialize via recipe per D6; for now callers point image_root
+        // at a manually-built rootfs (qemu-img convert of a Fedora cloud
+        // image — same path vz-spike uses).
+        let rootfs = self.rootfs_image_path();
+        if !rootfs.exists() {
+            return Err(format!(
+                "VzRuntime::start: rootfs not found at {} \
+                 (Phase 4 / D6 amendment will materialize via recipe)",
+                rootfs.display()
+            ));
         }
-        unimplemented!(
-            "VZVirtualMachine.start with completion handler — \
-             tracked at openspec/specs/macos-native-tray/spec.md"
-        )
+
+        // Refuse double-start.
+        {
+            let slot = self
+                .vm
+                .lock()
+                .map_err(|e| format!("vm lock poisoned: {e}"))?;
+            if slot.is_some() {
+                return Err("VzRuntime::start: VM already running".into());
+            }
+        }
+
+        let spec = boot::VzBootConfig {
+            cpu_count: std::thread::available_parallelism()
+                .map(|n| n.get().min(4))
+                .unwrap_or(2),
+            memory_bytes: 4 * 1024 * 1024 * 1024,
+            root_disk: Some(rootfs),
+            nvram: Some(self.image_root.join("nvram.bin")),
+            serial_writer_fd: None,
+        };
+
+        let cfg = boot::build_vm_configuration(&spec)?;
+        unsafe { cfg.validateWithError() }
+            .map_err(|e| format!("validate: {}", e.localizedDescription()))?;
+
+        let alloc = VZVirtualMachine::alloc();
+        let vm = unsafe { VZVirtualMachine::initWithConfiguration(alloc, &cfg) };
+
+        // Bridge VZ's dispatch-queue completion handler to this thread via a
+        // mpsc channel, then pump CFRunLoop until the result arrives or 30s
+        // elapses. The pump blocks this thread; the caller must run start()
+        // on `tokio::task::spawn_blocking` if invoked from an async runtime.
+        let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
+        let handler = block2::RcBlock::new(move |err: *mut NSError| {
+            let result = if err.is_null() {
+                Ok(())
+            } else {
+                Err(unsafe { (*err).localizedDescription() }.to_string())
+            };
+            let _ = tx.send(result);
+        });
+        unsafe { vm.startWithCompletionHandler(&handler) };
+
+        let deadline = Instant::now() + Duration::from_secs(30);
+        loop {
+            if let Ok(result) = rx.try_recv() {
+                result.map_err(|e| format!("VM start failed: {e}"))?;
+                break;
+            }
+            if Instant::now() >= deadline {
+                return Err("VzRuntime::start: VM start timed out after 30s".into());
+            }
+            boot::pump_cf_loop_for(Duration::from_millis(250));
+        }
+
+        // Persist the handle so stop()/wait_ready() can address the same VM.
+        let mut slot = self
+            .vm
+            .lock()
+            .map_err(|e| format!("vm lock poisoned: {e}"))?;
+        *slot = Some(vm_handle::VmHandle(vm));
+        Ok(())
     }
 
     async fn stop(&self, _drain_timeout: Duration) -> Result<(), VmError> {
@@ -567,5 +669,37 @@ mod tests {
         assert!(rt.kernel_path().starts_with(tmp.path()));
         assert!(rt.initrd_path().starts_with(tmp.path()));
         assert!(rt.console_log_path().starts_with(tmp.path()));
+    }
+
+    /// `VzRuntime` must be `Send + Sync` to satisfy the `VmRuntime` trait
+    /// bound. This compile-time check ensures the `VmHandle` Send/Sync
+    /// `unsafe impl` (vm_handle module) keeps the struct portable across
+    /// async runtimes.
+    ///
+    /// @trace spec:vm-idiomatic-layer
+    #[test]
+    fn vz_runtime_is_send_and_sync() {
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<VzRuntime>();
+    }
+
+    /// `VzRuntime::start` must surface a clear error when rootfs.img is
+    /// missing — Phase 4 will materialize it via the recipe, but until then
+    /// the spike/test path expects the caller to point at a pre-built image.
+    ///
+    /// @trace spec:vm-idiomatic-layer, spec:vm-provisioning-lifecycle
+    #[cfg(target_os = "macos")]
+    #[tokio::test]
+    async fn vz_start_fails_clean_when_rootfs_missing() {
+        let tmp = tempfile::tempdir().unwrap();
+        let rt = VzRuntime::new(42, tmp.path().to_path_buf());
+        let err = rt
+            .start()
+            .await
+            .expect_err("start without rootfs.img must fail");
+        assert!(
+            err.contains("rootfs not found"),
+            "unexpected error message: {err}"
+        );
     }
 }
