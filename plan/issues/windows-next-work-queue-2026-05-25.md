@@ -347,3 +347,19 @@ Increment plan (code → windows-next; loop integrates):
 3. THEN w4 — wire tray OpenShell/GithubLogin to PtySession::open + spawn wt.exe.
 
 macOS m4 (AppKit Terminal) consumes the same PtySession; coordinate via this file.
+
+### Event: 2026-05-25 — pty §3 CORE done (PtySession cross-platform layer)
+
+control-wire-pty-attach §3 cross-platform core landed @ windows-next `a57983b6`
+(crates/tillandsias-host-shell/src/pty/mod.rs):
+- §3.1 PtySession::open + PtyOpenOpts; §3.5 resize; §3.6 close; §3.7 per-session
+  bounded channel (cap 256); §D2 SessionIdAllocator; §D5 chunk_to_guest framing;
+  §3.4 (data side) PtyRouter session-id routing; §3.8 FakeTransport tests (8).
+- host-shell 24 tests green on Windows; windows-tray builds; clippy clean.
+STILL OPEN under this lease (816... see prior claim event):
+- §3.2 unix openpty path → left for Linux (#[cfg(unix)], untestable on Windows).
+- §3.3 Windows ConPTY (pty/windows.rs, CreatePseudoConsole) — NEXT, mine.
+- §3.4 (real bridge) pump_io tasks tying a live PTY master ↔ write_to_guest/recv.
+Then w4 wires tray OpenShell/GithubLogin → PtySession::open + wt.exe.
+
+macOS m4: the PtySession/PtyRouter/PtyTransport API is now available to consume.
