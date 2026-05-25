@@ -450,3 +450,20 @@ I/O via spawn_blocking/threads → tokio AsyncRead/AsyncWrite halves) so the rea
 terminal flows through pump_io — NEXT, mine; §3.2 unix openpty stub for Linux.
 THEN w4 (tray OpenShell/GithubLogin → PtySession::open + ConPtyMaster + pump_io
 + wt.exe). Full terminal-attach E2E needs a booted VM.
+
+### Event: 2026-05-25 — pty §3 ConPtyMaster impl PtyMaster done (async bridge)
+
+ConPtyMaster now satisfies PtyMaster @ windows-next `e1a26e6b`: split() bridges
+the blocking Win32 pipes ↔ tokio duplex via two dedicated threads (read:
+ReadFile→Reader, closes hpc+output_read; write: Writer→WriteFile, closes
+input_write); ManuallyDrop avoids double-close; whole-SendPtr rebind fixes the
+edition-2021 disjoint-capture Send break. host-shell 28 tests green
+(conpty_master_satisfies_pty_master_trait compile-time check; runtime via VM
+E2E — split's read bridge blocks on ReadFile without a producing process, so
+not unit-run). windows-tray builds; clippy clean.
+
+§3 status: core ✓, ConPTY lifecycle ✓, pump_io ✓, ConPTY spawn+I/O ✓,
+ConPtyMaster→PtyMaster ✓. The Windows host-side PTY stack is complete +
+compiles; full terminal-attach behaviour verified at VM E2E.
+§3 lease remaining: §3.2 unix openpty stub (Linux's to fill). THEN w4 — tray
+OpenShell/GithubLogin → PtySession::open + ConPtyMaster + pump_io + wt.exe.
