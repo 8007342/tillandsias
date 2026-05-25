@@ -481,16 +481,56 @@ fn apply_project_event_to(state: &mut MenuState, ev: &ProjectEvent) {
 ///
 /// @trace spec:windows-native-tray
 fn dispatch_action(hwnd: HWND, action: MenuAction) {
-    match action {
+    match &action {
         MenuAction::Quit => unsafe {
             let _ = PostMessageW(hwnd, WM_DESTROY, WPARAM(0), LPARAM(0));
         },
-        other => {
-            tracing::info!(
-                action = ?other,
-                "menu action resolved but not yet wired to the in-VM control wire"
-            );
+        // Agent selection is fully wired: update the shared menu state so the
+        // checkmark moves on the next paint.
+        MenuAction::SelectAgent(agent) => {
+            if let Ok(mut guard) = MENU_STATE.lock() {
+                let state = guard.get_or_insert_with(MenuState::initial);
+                if apply_menu_action_state(state, &action) {
+                    tracing::info!(?agent, "selected agent updated");
+                }
+            }
         }
+        // The remaining arms are resolved + handled honestly, but their real
+        // effect needs plumbing that is not present on Windows yet. Each logs
+        // a specific reason rather than faking behaviour (w2 work queue).
+        MenuAction::OpenObservatorium | MenuAction::OpenOpenCodeWeb => {
+            // ShellExecute to the observatorium / OpenCode-Web URL lands with
+            // the router/VM (gui-passthrough); there is no URL until then.
+            tracing::info!(?action, "browser action: no URL until the VM + router are up (gui-passthrough pending)");
+        }
+        MenuAction::Retry => {
+            tracing::info!("retry requested: provisioning-retry hook wires with the lifecycle iteration");
+        }
+        MenuAction::OpenLog => {
+            tracing::info!("open log requested: host-side log-file path not wired yet");
+        }
+        MenuAction::Attach { scope, name } | MenuAction::Maintain { scope, name } => {
+            tracing::info!(?scope, %name, "project action queued for the post-PTY (vsock-E2E) iteration");
+        }
+        MenuAction::GithubLogin => {
+            tracing::info!("github login queued for the PTY iteration (control-wire-pty-attach)");
+        }
+        MenuAction::CloudOverflow | MenuAction::Inert => {}
+    }
+}
+
+/// Apply the state-mutating effect of a menu action to the menu state.
+/// Currently only agent selection mutates state; returns `true` if `state`
+/// changed. Factored out of the global `MENU_STATE` so the rule is unit-testable.
+///
+/// @trace spec:windows-native-tray
+fn apply_menu_action_state(state: &mut MenuState, action: &MenuAction) -> bool {
+    match action {
+        MenuAction::SelectAgent(agent) if state.selected_agent != *agent => {
+            state.selected_agent = *agent;
+            true
+        }
+        _ => false,
     }
 }
 
@@ -522,6 +562,31 @@ mod tests {
         let names: Vec<&str> = state.local_projects.iter().map(|p| p.name.as_str()).collect();
         assert_eq!(names, vec!["apple", "zebra"], "name-sorted, deduped");
         assert!(state.local_projects.iter().all(|p| !p.ready));
+    }
+
+    #[test]
+    fn select_agent_updates_state_idempotently() {
+        use tillandsias_host_shell::menu_state::SelectedAgent;
+        let mut state = MenuState::initial();
+        assert_eq!(state.selected_agent, SelectedAgent::Claude); // initial
+
+        // Selecting a different agent mutates state.
+        assert!(apply_menu_action_state(
+            &mut state,
+            &MenuAction::SelectAgent(SelectedAgent::Codex)
+        ));
+        assert_eq!(state.selected_agent, SelectedAgent::Codex);
+
+        // Re-selecting the same agent is a no-op.
+        assert!(!apply_menu_action_state(
+            &mut state,
+            &MenuAction::SelectAgent(SelectedAgent::Codex)
+        ));
+
+        // A non-state action never mutates state.
+        assert!(!apply_menu_action_state(&mut state, &MenuAction::Quit));
+        assert!(!apply_menu_action_state(&mut state, &MenuAction::OpenLog));
+        assert_eq!(state.selected_agent, SelectedAgent::Codex);
     }
 
     #[test]
