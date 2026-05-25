@@ -28,6 +28,52 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Interlude 2026-05-25T14:00Z–14:45Z — Sibling triage + unblocker landed
+
+User directive: while sibling laptops still dormant, triage pending work
+into per-host queues and land the highest-priority headless deliverable
+that unblocks both siblings' Phase 5 work.
+
+- **Per-host triage queues published** (commit `15a1ab38`):
+  - `plan/issues/windows-next-work-queue-2026-05-25.md` — items w1..w6
+    with stable IDs, capability_tags, gated_on, owned_files. Currently
+    unblocked: w1 (tray icon RC+ICO), w2 (menu-action dispatch wiring),
+    w3 (scoped clippy). Gated on Linux: w4 (PTY ConPTY), w5 (WSL import
+    via CI rootfs), w6 (vsock-handler verification).
+  - `plan/issues/osx-next-work-queue-2026-05-25.md` — items m1..m7
+    similarly schemed. Currently unblocked: m1 (VmRuntime::stop +
+    wait_ready), m2 (refactor vz-spike), m3 (scoped clippy). Gated on
+    Linux: m4 (PTY AppKit Terminal), m5 (VFR image via CI rootfs), m6
+    (.app bundle + codesign), m7 (macOS CI job).
+
+- **Linux deliverable `l1/control-wire-pty-attach-tasks-1` LANDED**
+  (commit `b345ae68`): added `ControlMessage::{PtyOpen, PtyData,
+  PtyResize, PtyClose}` + `PtyDirection` + `PtyExit` +
+  `MAX_PTY_FRAME_BYTES` + `CAP_PTY_ATTACH_V1` to
+  `tillandsias-control-wire`. 7 new roundtrip tests (PtyOpen full,
+  PtyData empty + full chunk, PtyResize, PtyClose normal + signal, size
+  invariant, capability constant). `cargo test -p
+  tillandsias-control-wire`: 23/23 pass. `./build.sh --check` +
+  `./build.sh --test`: passed. Tasks 1.1-1.5 of
+  `openspec/changes/control-wire-pty-attach/tasks.md` checked.
+
+- **Effect on siblings:** w4 (Windows ConPTY) and m4 (macOS AppKit
+  Terminal) are now SOFT-UNBLOCKED on the control-wire side. They are
+  STILL gated on Linux deliverables l3 (in-VM headless PTY handler) +
+  the host-shell pty submodule (Tasks 3.x of the proposal). When
+  siblings wake, they can start their host-side wiring against the
+  shipped enum variants while Linux lands l3.
+
+- **Remaining Linux deliverables for full sibling unblock:**
+  - l2/recipe-shared-modules (scaffold `tillandsias-vm-layer::{recipe,
+    materialize, cache}` modules + `Manifest::load`).
+  - l3/in-vm-headless-pty-handler (Tasks 4.x — PTY allocation + fork on
+    `PtyOpen`, byte pump, `PtyClose` on child exit).
+  - l4/replace-vsock-stub-handlers (replace `Vec::new()` stubs in
+    vsock_server.rs with real backing data).
+  - l5/recipe-smoke-ci-publish (CI publishes rootfs `.tar` + `.img` per
+    arch per D6 amendment).
+
 ### Cycle 2026-05-25T13:43Z — NO-OP (siblings dormant, 4th consecutive)
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next

@@ -1,10 +1,10 @@
 ## 1. Control wire enum + constants
 
-- [ ] 1.1 Add `PtyDirection { ToGuest, ToHost }` and `PtyExit { code: i32, signal: Option<i32> }` types to `crates/tillandsias-control-wire/src/lib.rs`.
-- [ ] 1.2 Add four `ControlMessage` variants: `PtyOpen`, `PtyData`, `PtyResize`, `PtyClose` per `proposal.md`.
-- [ ] 1.3 Add `pub const MAX_PTY_FRAME_BYTES: usize = 65_536` next to `MAX_MESSAGE_BYTES`; add a debug_assert that `MAX_PTY_FRAME_BYTES < MAX_MESSAGE_BYTES`.
-- [ ] 1.4 Update postcard roundtrip tests in `lib.rs#tests` to cover each new variant (PtyOpen full, PtyData empty + full chunk, PtyResize, PtyClose normal + signal).
-- [ ] 1.5 Add a `Hello.capabilities` constant `pub const CAP_PTY_ATTACH_V1: &str = "pty.attach@v1";` and reference it in tests.
+- [x] 1.1 Add `PtyDirection { ToGuest, ToHost }` and `PtyExit { code: i32, signal: Option<i32> }` types to `crates/tillandsias-control-wire/src/lib.rs`.
+- [x] 1.2 Add four `ControlMessage` variants: `PtyOpen`, `PtyData`, `PtyResize`, `PtyClose` per `proposal.md`.
+- [x] 1.3 Add `pub const MAX_PTY_FRAME_BYTES: usize = 65_536` next to `MAX_MESSAGE_BYTES`. (Invariant enforced by `max_pty_frame_fits_under_max_message` test rather than module-scope `debug_assert!`, which Rust doesn't support at that position.)
+- [x] 1.4 Update postcard roundtrip tests in `lib.rs#tests` to cover each new variant (PtyOpen full, PtyData empty + full chunk, PtyResize, PtyClose normal + signal). Done in commit landing alongside this checkmark.
+- [x] 1.5 Add a `Hello.capabilities` constant `pub const CAP_PTY_ATTACH_V1: &str = "pty.attach@v1";` and reference it in tests.
 
 ## 2. Capability gating + session id allocator
 

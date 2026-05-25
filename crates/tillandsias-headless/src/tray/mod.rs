@@ -583,6 +583,10 @@ fn control_message_kind(msg: &ControlMessage) -> &'static str {
         ControlMessage::LocalProjectsReply { .. } => "LocalProjectsReply",
         ControlMessage::CloudRefreshRequest { .. } => "CloudRefreshRequest",
         ControlMessage::CloudRefreshReply { .. } => "CloudRefreshReply",
+        ControlMessage::PtyOpen { .. } => "PtyOpen",
+        ControlMessage::PtyData { .. } => "PtyData",
+        ControlMessage::PtyResize { .. } => "PtyResize",
+        ControlMessage::PtyClose { .. } => "PtyClose",
         _ => "Unknown",
     }
 }

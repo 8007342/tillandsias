@@ -50,6 +50,24 @@ pub mod transport;
 /// framing layer; see design.md Q-OPEN (size-cap reconciliation).
 pub const MAX_MESSAGE_BYTES: usize = 65_536;
 
+/// Maximum permitted `PtyData` frame payload size (for `PtyData` variant only).
+/// Larger streams MUST chunk transparently at the sender — see
+/// openspec/changes/control-wire-pty-attach/proposal.md Task 1.3.
+///
+/// Invariant: `MAX_PTY_FRAME_BYTES <= MAX_MESSAGE_BYTES` so the framing layer
+/// always accepts a single full chunk.
+///
+/// @trace openspec/changes/control-wire-pty-attach/proposal.md
+pub const MAX_PTY_FRAME_BYTES: usize = 65_536;
+
+/// Capability advertised in `Hello.capabilities` when the peer implements
+/// the `control-wire-pty-attach` PTY-over-vsock multiplexing protocol.
+/// A connection without this capability advertised on both sides MUST NOT
+/// receive `PtyOpen` / `PtyData` / `PtyResize` / `PtyClose` envelopes.
+///
+/// @trace openspec/changes/control-wire-pty-attach/proposal.md, spec:vsock-transport
+pub const CAP_PTY_ATTACH_V1: &str = "pty.attach@v1";
+
 /// Maximum permitted MCP frame payload size (for McpFrame variant only).
 /// Screenshots and large tool responses may require multi-MB capacity.
 ///
@@ -166,6 +184,78 @@ pub enum ControlMessage {
         seq_in_reply_to: u64,
         projects: Vec<CloudProjectEntry>,
     },
+    /// Host → guest: start a PTY-attached subprocess inside the VM.
+    /// `session_id` is allocated by the host from a per-connection monotonic
+    /// counter (starting at 1). The guest echoes it on every reply for this
+    /// session. Sessions are scoped to the vsock connection — a reconnect
+    /// terminates all in-flight sessions.
+    ///
+    /// `env` REPLACES the in-VM process environment (no host-env inheritance);
+    /// `cwd` sets the initial working directory if `Some`. `argv[0]` is the
+    /// executable path; `argv[1..]` are the arguments.
+    ///
+    /// @trace openspec/changes/control-wire-pty-attach/proposal.md, spec:vsock-transport
+    PtyOpen {
+        session_id: u32,
+        rows: u16,
+        cols: u16,
+        argv: Vec<String>,
+        env: Vec<(String, String)>,
+        cwd: Option<String>,
+    },
+    /// Bidirectional: raw terminal bytes for the named session.
+    /// `direction` distinguishes host→guest stdin from guest→host stdout/stderr.
+    /// `bytes.len()` MUST NOT exceed `MAX_PTY_FRAME_BYTES`; sender chunks larger
+    /// streams transparently.
+    ///
+    /// @trace openspec/changes/control-wire-pty-attach/proposal.md
+    PtyData {
+        session_id: u32,
+        direction: PtyDirection,
+        bytes: Vec<u8>,
+    },
+    /// Host → guest: relay `SIGWINCH` semantics. Issued when the host PTY
+    /// receives its own `SIGWINCH` or when the user resizes the attached
+    /// terminal window.
+    ///
+    /// @trace openspec/changes/control-wire-pty-attach/proposal.md
+    PtyResize {
+        session_id: u32,
+        rows: u16,
+        cols: u16,
+    },
+    /// Terminal event in either direction. From guest: child process exited
+    /// with `exit.code` (or was killed by `exit.signal`). From host: caller
+    /// requested early termination (the guest then SIGKILLs the child).
+    ///
+    /// @trace openspec/changes/control-wire-pty-attach/proposal.md
+    PtyClose {
+        session_id: u32,
+        exit: PtyExit,
+    },
+}
+
+/// Direction tag for `PtyData` frames.
+///
+/// @trace openspec/changes/control-wire-pty-attach/proposal.md
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub enum PtyDirection {
+    /// Host → guest (stdin to the in-VM child).
+    ToGuest,
+    /// Guest → host (stdout/stderr from the in-VM child, multiplexed).
+    ToHost,
+}
+
+/// Terminal exit status for a PTY session, mirroring Unix
+/// `waitpid()` semantics: a process exits cleanly with `code` OR is killed
+/// by a `signal` (then `code` is the conventional 128 + signal number on
+/// Unix, and irrelevant on Windows).
+///
+/// @trace openspec/changes/control-wire-pty-attach/proposal.md
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+pub struct PtyExit {
+    pub code: i32,
+    pub signal: Option<i32>,
 }
 
 /// Coarse VM lifecycle phase reported in `VmStatusReply`.
@@ -352,6 +442,120 @@ mod tests {
     #[test]
     fn max_message_bytes_is_64_kib() {
         assert_eq!(MAX_MESSAGE_BYTES, 64 * 1024);
+    }
+
+    #[test]
+    fn max_pty_frame_fits_under_max_message() {
+        // Invariant: a single PtyData chunk must always fit in one wire
+        // envelope so the framing layer never has to fragment. See
+        // openspec/changes/control-wire-pty-attach/proposal.md Task 1.3.
+        assert!(MAX_PTY_FRAME_BYTES <= MAX_MESSAGE_BYTES);
+    }
+
+    #[test]
+    fn cap_pty_attach_v1_constant_is_stable() {
+        // Capability strings are part of the wire contract. Changing this
+        // breaks Hello capability negotiation across hosts; bump WIRE_VERSION
+        // and tombstone in that case.
+        assert_eq!(CAP_PTY_ATTACH_V1, "pty.attach@v1");
+    }
+
+    /// @trace openspec/changes/control-wire-pty-attach/proposal.md Task 1.4
+    #[test]
+    fn pty_open_roundtrip() {
+        roundtrip(&ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 100,
+            body: ControlMessage::PtyOpen {
+                session_id: 1,
+                rows: 80,
+                cols: 200,
+                argv: vec!["/bin/bash".to_string(), "-l".to_string()],
+                env: vec![
+                    ("TERM".to_string(), "xterm-256color".to_string()),
+                    ("LANG".to_string(), "en_US.UTF-8".to_string()),
+                ],
+                cwd: Some("/home/forge/src".to_string()),
+            },
+        });
+    }
+
+    /// @trace openspec/changes/control-wire-pty-attach/proposal.md Task 1.4
+    #[test]
+    fn pty_data_empty_roundtrip() {
+        roundtrip(&ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 101,
+            body: ControlMessage::PtyData {
+                session_id: 1,
+                direction: PtyDirection::ToGuest,
+                bytes: Vec::new(),
+            },
+        });
+    }
+
+    /// @trace openspec/changes/control-wire-pty-attach/proposal.md Task 1.4
+    #[test]
+    fn pty_data_full_chunk_roundtrip() {
+        // A full MAX_PTY_FRAME_BYTES chunk must roundtrip without losing
+        // bytes — the chunking layer relies on this.
+        let bytes = (0..MAX_PTY_FRAME_BYTES).map(|i| (i % 256) as u8).collect();
+        roundtrip(&ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 102,
+            body: ControlMessage::PtyData {
+                session_id: 7,
+                direction: PtyDirection::ToHost,
+                bytes,
+            },
+        });
+    }
+
+    /// @trace openspec/changes/control-wire-pty-attach/proposal.md Task 1.4
+    #[test]
+    fn pty_resize_roundtrip() {
+        roundtrip(&ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 103,
+            body: ControlMessage::PtyResize {
+                session_id: 1,
+                rows: 50,
+                cols: 132,
+            },
+        });
+    }
+
+    /// @trace openspec/changes/control-wire-pty-attach/proposal.md Task 1.4
+    #[test]
+    fn pty_close_normal_exit_roundtrip() {
+        roundtrip(&ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 104,
+            body: ControlMessage::PtyClose {
+                session_id: 1,
+                exit: PtyExit {
+                    code: 0,
+                    signal: None,
+                },
+            },
+        });
+    }
+
+    /// @trace openspec/changes/control-wire-pty-attach/proposal.md Task 1.4
+    #[test]
+    fn pty_close_killed_by_signal_roundtrip() {
+        // Killed by SIGTERM (15) — Unix convention: code = 128 + signal.
+        roundtrip(&ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 105,
+            body: ControlMessage::PtyClose {
+                session_id: 1,
+                exit: PtyExit {
+                    code: 128 + 15,
+                    signal: Some(15),
+                },
+            },
+        });
     }
 
     #[test]

@@ -301,9 +301,13 @@ host_pin:    any  (co-owned shared module; see host_component_ownership.macos_na
 lease_id:    836aae5c879e
 agent_id:    windows-bullo-claudia-cli-2026-05-25
 host:        windows
-status:      in_progress
+status:      done
 claimed_at:  2026-05-25
-expires_at:  2026-05-25 +4h (renew if still running; reclaimable after expiry)
+done_at:     2026-05-25
+checkpoint:  recipe parser + Manifest loader implemented on windows-next @ 26afb76a
+             (crates/tillandsias-vm-layer/src/recipe/mod.rs, behind the `recipe`
+             feature; 16 unit tests green on Windows). The integration loop will
+             pull the code into linux-next. Lease 836aae5c879e released.
 code_branch: windows-next  (shared crate; author's platform branch first per branch canon, loop integrates)
 scope:       Recipe::parse (FROM/ARG/RUN/COPY/ENV/WORKDIR + RECIPE vsock-listen/entry/arch),
              Manifest::load (manifest.toml -> per-arch base digest lookup), AST types, unit tests + fixtures.
