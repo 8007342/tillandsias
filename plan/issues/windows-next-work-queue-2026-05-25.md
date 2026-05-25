@@ -253,3 +253,19 @@ w2/menu-action-dispatch-wiring implemented on windows-next @ `832871d9`:
 Remaining cleanly-unblocked windows item: w3 (windows-tray clippy: the
 pre-existing `installation_uuid.rs:85` CredWriteW `&mut`→`&` warning). w1
 stays blocked (rasterizer absent in-tree, see prior event).
+
+### Event: 2026-05-25 — w1 windows-wiring DONE (after linux l6 rasterization)
+
+w1/tray-icon-rc-and-ico is now COMPLETE end-to-end:
+- linux host (l6, ea13ba20): rasterized assets/icons/xerographica/bloom.svg →
+  7-size tillandsias.ico + `1 ICON "tillandsias.ico"` in tillandsias.rc.
+- windows host (cef326e1): add_tray_icon loads resource ID 1 via
+  LoadIconW(GetModuleHandleW, MAKEINTRESOURCE(1)), IDI_APPLICATION fallback.
+- Verified on Windows: build clean (embed-resource compiled the .rc; placeholder
+  warning gone); liveness smoke launches with the embedded icon, stops clean.
+Earlier "w1 blocked (rasterizer absent)" note is now resolved — the linux host
+supplied the rasterizer/ICO via l6. w1 status → done.
+
+Remaining cleanly-unblocked windows item: w3 (windows-tray clippy —
+installation_uuid.rs:85 CredWriteW &mut→& + any others). w4/w5/w6 still gated
+on linux deliverables (l1 PTY enum landed; l3/l2/l5/l4 pending).
