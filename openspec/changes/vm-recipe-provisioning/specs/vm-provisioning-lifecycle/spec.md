@@ -169,7 +169,7 @@ The release workflow SHALL NOT publish any artifact of the form `tillandsias-lin
 - **AND** the only Linux artifact MAY be the canonical `tillandsias-headless` for direct Linux usage (separate from the host-shell flow)
 
 #### Scenario: in-VM binary is never a downloaded prebuilt binary
-- **WHEN** the in-VM `tillandsias-headless` arrives on the user's host by either D8 path
+- **WHEN** the in-VM `tillandsias-headless` arrives on the user's host by either D6 path
 - **THEN** it SHALL have originated from `images/vm/bootstrap/20-tillandsias.sh`'s build step (executed on-host for local materialization, or in CI for the fetch path)
 - **AND** the host SHALL NOT download a standalone prebuilt `tillandsias-*` binary asset
-- **AND** any download on the fetch path SHALL be a recipe-derived, SHA-verified **rootfs** (content-addressed per D8), not a binary
+- **AND** any download on the fetch path SHALL be a recipe-derived, SHA-verified **rootfs** (content-addressed per D6), not a binary

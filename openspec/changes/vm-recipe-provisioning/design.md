@@ -14,13 +14,12 @@ The repo already has a Containerfile-per-service convention (`images/forge`, `im
 - Host-side materializer reads the recipe + the host arch and produces a bootable rootfs cached locally.
 - Reproducibility: identical recipe + identical host arch → identical rootfs SHA (modulo timestamps in metadata).
 - Layer-level caching: changing only `bootstrap/30-enclave.sh` re-runs only that step.
-- Zero Linux **binaries** shipped from our release pipeline.
+- Zero Linux binaries shipped from our release pipeline.
 - Works for both WSL2 (x86_64) and VFR (aarch64). One recipe, two materializations.
-- Dual distribution (D8): a CI-materialized, SHA-pinned **rootfs** as the default fast install path, with on-host materialization as the audit/dev path. The rootfs is a reproducible *output* of the recipe, so the recipe stays the trust root.
 
 **Non-Goals:**
 - Replacing OCI / Containerfile syntax wholesale — we extend it with three `RECIPE` directives, not a new DSL.
-- Shipping opaque prebuilt per-arch **binaries** (`tillandsias-linux-*`) — the trust root is always the checked-in recipe. (NOTE: distributing a *recipe-materialized, SHA-pinned rootfs* built in CI is explicitly IN scope as the default fast path — see D8 — because it is a reproducible recipe output, not a hand-built binary.)
+- Distributing prebuilt cached rootfs blobs from our infra — the user's host always materializes locally. (May revisit for "offline install" UX later.)
 - Running the recipe inside the in-VM headless (it could in principle, for "rebuild the VM from inside the VM" — out of scope).
 - Multi-arch cross-materialization (e.g. building an aarch64 rootfs on an x86_64 host). v1 host arch == VM arch.
 
@@ -162,31 +161,9 @@ falsifiability check.
 
 For first-run UX, the build step is by far the slowest (~2 minutes on a modern host). Caching D3 makes subsequent re-materializations skip it if `crates/tillandsias-headless/` source is unchanged.
 
-### D8: Distribution — CI-materialized rootfs is the default install path; on-host materialization is the audit/dev path
-
-*(Added 2026-05-25 by the windows-next host per owner directive + the linux-host amendment request in `plan/issues/linux-recipe-convergence-response-2026-05-24.md`. Cross-ref: `plan/issues/tray-convergence-coordination.md`.)*
-
-Materialization (D4+D7) is the **trust root**, but it is not the only way a user's host can *obtain* the rootfs. Two paths produce a byte-identical (modulo metadata) result; both are first-class:
-
-1. **Fetch (default).** CI runs the recipe (`recipe-smoke`) for each supported arch, producing a rootfs whose SHA-256 is recorded in `manifest.toml`'s `[output] expected_rootfs_sha.<arch>` and published to a **content-addressed distribution surface** (an OCI registry artifact, or a content-addressed URL recorded alongside the SHA in `manifest.toml`). On first run the host downloads that rootfs and verifies it against the pinned SHA via `tillandsias-vm-layer::fetch::download_verified` (resumable, SHA-checked — the function `tillandsias-windows-tray` already shipped in Phase 2). This is **NOT** "shipping a Linux binary": the artifact is a reproducible *output* of the checked-in recipe, content-addressed and recipe-version-stamped, exactly as auditable as the recipe that produced it.
-
-2. **Materialize-local (opt-in, audit/dev).** A `--materialize-local` flag (or env) bypasses the fetch and runs the full on-host materialization (D4). This is the path a recipe contributor uses to validate a change before pushing, and the path any user can use to independently reproduce and compare against the pinned SHA. It is always supported, never removed.
-
-**Per-OS default:**
-
-| Host | Default | Why |
-|---|---|---|
-| Windows (WSL2) | **Fetch** | On-host materialization needs buildah/podman + Fedora base + Rust toolchain *inside WSL* purely to build the rootfs — a heavy chicken-and-egg first run. Fetch+verify is far lighter. |
-| macOS (VFR) | **Fetch** (offered) | On-host materialization runs inside the `podman machine` Linux VM (~2 min cargo build per R1). Fetch is the fast path; the macOS host may confirm/adjust this default in its own response file. |
-| Linux | n/a at runtime; **materialize in CI + for dev** | The Linux tray runs `tillandsias-headless` natively with NO VM, so Linux needs no rootfs at runtime. Linux CI is where the canonical per-arch rootfs + `expected_rootfs_sha` are produced; Linux contributors materialize locally to validate recipe changes. |
-
-**Why this is safe relative to the "no shipped binaries" principle:** the rejected model shipped opaque, hand-built per-arch `tillandsias-linux-*` binaries with no in-tree description. A CI-materialized rootfs is the deterministic result of running an in-tree recipe against pinned base digests; its SHA is checked in; anyone can rebuild it with `--materialize-local` and compare. The trust boundary is the recipe + `manifest.toml`, not a release blob.
-
-**Why first-class, not R1-future:** without it, every Windows user pays the buildah-in-WSL bootstrap on first run, which is the single heaviest UX cost in this design. Promoting fetch to the default makes the common path fast while preserving full reproducibility.
-
 ## Risks / Trade-offs
 
-- **[R1] First-run wall-clock is dominated by cargo build (~2 min).** → Mitigation: cache hit on re-materialization; UX condensed-status surface already covers "this takes a few minutes" per the spec. **Now first-class as D8:** the default install path fetches a CI-materialized, SHA-pinned rootfs (a recipe output, not a binary), so most users never pay the build cost; on-host materialization stays available via `--materialize-local` as the audit/dev path.
+- **[R1] First-run wall-clock is dominated by cargo build (~2 min).** → Mitigation: cache hit on re-materialization; UX condensed-status surface already covers "this takes a few minutes" per the spec. Future: explore distributing a CI-built rootfs blob via OCI registry as an optional fast path, while keeping recipe materialization as the trust root.
 - **[R2] `buildah` is a host dependency.** → Mitigation: it's already a transitive dep of `podman`, which the macOS and Windows trays expect to be available on the host for the same reason. If absent, the materializer surfaces a friendly install hint.
 - **[R3] Recipe drift between CI and user can be subtle (different glibc, different microdnf cache).** → Mitigation: D2's `expected_rootfs_sha` field is the canary; the materializer warns on mismatch but does not fail (the recipe is the contract; minor SHA drift is acceptable as long as the recipe ran to completion).
 - **[R4] Cross-platform `buildah` availability: it runs natively on Linux but on macOS requires `podman machine` which is itself a VM.** → Mitigation: on macOS, the materializer detects `podman machine` and reuses it — same VM that holds the materialized rootfs cache later.
