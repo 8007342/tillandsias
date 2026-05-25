@@ -27,6 +27,7 @@ use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};
 
+use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::mpsc;
 
 use tillandsias_control_wire::{ControlMessage, PtyDirection, PtyExit, MAX_PTY_FRAME_BYTES};
@@ -226,6 +227,65 @@ impl PtySession {
     }
 }
 
+/// A host-side PTY master (the local terminal end). The OS backends —
+/// `pty::windows::ConPtyMaster` and the Unix `openpty` master — implement this
+/// by yielding an async read half (local keystrokes → guest stdin) and an
+/// async write half (guest output → local terminal). Splitting up front lets
+/// [`pump_io`] drive both directions concurrently.
+pub trait PtyMaster: Send + 'static {
+    type Reader: tokio::io::AsyncRead + Send + Unpin + 'static;
+    type Writer: tokio::io::AsyncWrite + Send + Unpin + 'static;
+    fn split(self) -> (Self::Reader, Self::Writer);
+}
+
+/// Bridge a host PTY `master` to a `session` over vsock (§3.4):
+/// - local terminal input (master reader) → `PtyData{ToGuest}` frames;
+/// - inbound `PtyData{ToHost}` / `PtyClose` → master writer (terminal output).
+///
+/// Consumes both. Returns the join handle of the output→terminal task; it
+/// completes when the session closes (guest `PtyClose`) or the connection
+/// drops, at which point the input task is aborted.
+pub fn pump_io<M: PtyMaster>(session: PtySession, master: M) -> tokio::task::JoinHandle<()> {
+    let (mut reader, mut writer) = master.split();
+    let PtySession {
+        session_id,
+        transport,
+        mut inbound,
+    } = session;
+
+    // Input task: local keystrokes → guest stdin (chunked at MAX_PTY_FRAME_BYTES).
+    let input_task = tokio::spawn(async move {
+        let mut buf = vec![0u8; MAX_PTY_FRAME_BYTES];
+        loop {
+            match reader.read(&mut buf).await {
+                Ok(0) | Err(_) => break, // EOF / closed terminal
+                Ok(n) => {
+                    for body in chunk_to_guest(session_id, &buf[..n]) {
+                        if transport.send(body).is_err() {
+                            return;
+                        }
+                    }
+                }
+            }
+        }
+    });
+
+    // Output task: guest output → local terminal; terminal close ends both.
+    tokio::spawn(async move {
+        while let Some(ev) = inbound.recv().await {
+            match ev {
+                SessionEvent::Data(bytes) => {
+                    if writer.write_all(&bytes).await.is_err() {
+                        break;
+                    }
+                }
+                SessionEvent::Closed(_) => break,
+            }
+        }
+        input_task.abort();
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -390,5 +450,72 @@ mod tests {
             bytes: b"x".to_vec(),
         };
         assert!(r.route(&ok).is_ok());
+    }
+
+    /// Fake PTY master backed by two in-memory duplex pipes — no real terminal.
+    struct FakeMaster {
+        reader: tokio::io::DuplexStream,
+        writer: tokio::io::DuplexStream,
+    }
+    impl PtyMaster for FakeMaster {
+        type Reader = tokio::io::DuplexStream;
+        type Writer = tokio::io::DuplexStream;
+        fn split(self) -> (Self::Reader, Self::Writer) {
+            (self.reader, self.writer)
+        }
+    }
+
+    /// §3.4: pump_io bridges both directions and exits on guest close.
+    #[tokio::test]
+    async fn pump_bridges_both_directions_and_closes() {
+        use std::time::Duration;
+
+        // in_writer -> (pump reads as keystrokes); (pump writes output) -> out_reader.
+        let (mut in_writer, in_reader) = tokio::io::duplex(4096);
+        let (out_writer, mut out_reader) = tokio::io::duplex(4096);
+        let master = FakeMaster {
+            reader: in_reader,
+            writer: out_writer,
+        };
+
+        let t = Arc::new(FakeTransport::default());
+        let r = PtyRouter::new();
+        let a = SessionIdAllocator::new();
+        let session = PtySession::open(t.clone(), &a, &r, &opts("/bin/bash")).unwrap();
+        let sid = session.session_id;
+
+        let handle = pump_io(session, master);
+
+        // Local keystrokes flow to the guest as PtyData{ToGuest}.
+        in_writer.write_all(b"ls\n").await.unwrap();
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        assert!(
+            t.sent.lock().unwrap().iter().any(|m| matches!(
+                m,
+                ControlMessage::PtyData { session_id, direction: PtyDirection::ToGuest, bytes }
+                    if *session_id == sid && bytes == b"ls\n"
+            )),
+            "keystrokes should be forwarded as ToGuest"
+        );
+
+        // Guest output flows to the local terminal.
+        r.route(&ControlMessage::PtyData {
+            session_id: sid,
+            direction: PtyDirection::ToHost,
+            bytes: b"file1\n".to_vec(),
+        })
+        .unwrap();
+        let mut buf = [0u8; 6];
+        out_reader.read_exact(&mut buf).await.unwrap();
+        assert_eq!(&buf, b"file1\n");
+
+        // Guest close ends the pump.
+        r.route(&ControlMessage::PtyClose {
+            session_id: sid,
+            exit: PtyExit { code: 0, signal: None },
+        })
+        .unwrap();
+        let joined = tokio::time::timeout(Duration::from_secs(2), handle).await;
+        assert!(joined.is_ok(), "pump output task should finish after close");
     }
 }
