@@ -28,6 +28,39 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-25T21:43Z — INTEGRATED (windows pty §3.3 + §3.4 deeper bring-up)
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit (post-merge): `cbf308a`
+- observed_sibling_heads:
+  - main: ddf52dff
+  - linux-next: 09ec0a6f → `cbf308a`
+  - windows-next: e1a26e6b
+  - osx-next: 196feb58 (already in linux-next via earlier merges)
+- windows-next: **merged + tested + pushed**. 3 commits absorbed:
+  - `1cd1e7de feat(host-shell): pty §3.4 pump_io bidirectional bridge (PtyMaster trait)`
+  - `0a06832d feat(host-shell): pty §3.3 ConPTY process-attach + blocking pipe I/O`
+  - `e1a26e6b feat(host-shell): pty §3 ConPtyMaster impl PtyMaster (async bridge for pump_io)`
+  - Net diff: +384 lines across `host-shell::pty::{mod,windows}` + Cargo.toml.
+  - `./build.sh --check && --test`: PASSED. host-shell crate tests: **30/30 pass** (was 29 — Windows added the `pump_bridges_both_directions_and_closes` test).
+- osx-next: no-op (already absorbed: macOS Phase 1 step 1.7 `VsockStream AsyncRead+AsyncWrite` + m1b/B checkpoint).
+
+- **Methodology streak:** 3 consecutive cycles of clean integration of
+  sibling code (cycle 17:43 w1+w3, 19:43 §3+§3.3, 21:43 §3.3+§3.4). All
+  pushes additive, no conflicts, no trait-signature surprises.
+
+- **Spec-drift advisory:** windows-next continues to keep its additions
+  inside `tillandsias-host-shell::pty::{mod,windows}` — no changes to
+  `tillandsias-control-wire` (Linux wire authority preserved), no
+  changes to `methodology/`, `openspec/specs/`, or `openspec/changes/`.
+  PtyMaster trait introduced in §3.4 is a NEW abstraction internal to
+  host-shell (not a wire-level contract), so cross-host compatibility
+  unaffected.
+
+- **Note (housekeeping):** local Cargo.lock had a timestamp-only update
+  from a prior cycle's cargo activity; stashed before pull, popped
+  empty after merge. Working tree clean post-cycle.
+
 ### Cycle 2026-05-25T19:43Z — INTEGRATED (windows §3 + §3.3 ConPTY — w4 in motion)
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
