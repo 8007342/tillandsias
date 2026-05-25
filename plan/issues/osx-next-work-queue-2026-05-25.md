@@ -448,3 +448,39 @@ For future iterations / production tray:
   (mirror of `windows.rs` but using `nix::pty::openpty`) + wiring in
   `crates/tillandsias-macos-tray/src/terminal_attach.rs` that opens
   Terminal.app with the host PTY master fd.
+
+### event: m1b sub-task C + m1b COMPLETE — 2026-05-25T20:00Z
+
+- item: `m1b/transport-macos-vsock-connector` (ALL THREE sub-tasks done)
+- agent_id: `osx-next-claude-opus-4-7` on `Tlatoanis-MacBook-Air`
+- lease_id: `7c2a9f1eb083` → RELEASED
+- evidence (sub-task C):
+  - VmRuntime::wait_ready now does structural state-poll + functional
+    vsock-probe. Connects via transport_macos::connect_to_vm_vsock at
+    CONTROL_WIRE_VSOCK_PORT (42420) with 1s per-probe budget; retries
+    on transient errors with the 250..4000ms backoff cadence.
+  - Added tillandsias-control-wire as a vm-layer dep purely for the
+    port constant (no cycle).
+  - 14/14 unit tests pass.
+- m1b totals: ~430 lines across transport_macos.rs (connect, VsockFd,
+  VsockStream w/ AsyncRead+AsyncWrite, ConnectError) + extended vz.rs
+  wait_ready. Unblocks m4 (PTY attach can ride VsockStream end-to-end
+  once host-shell's vsock_client uses it) and turns wait_ready from
+  "structural readiness only" into "guest is reachable on the control
+  wire."
+
+### Phase 1 status — 2026-05-25T20:00Z
+
+With m1, m1b, m2, m3 all done, **Phase 1 (the technical core of the
+macOS tray) is essentially complete** modulo polish. Remaining macOS
+queue items:
+- `m4/pty-attach-appkit-terminal` — unblocked (Linux l1+l3 done).
+- `m5/vfr-image-via-ci-rootfs` — gated on Linux l2 (recipe shared
+  modules) and l5 (recipe-smoke CI publish). Linux owns §3 materializer
+  driver; not yet integrated.
+- `m6/macos-installer-pkg-and-codesign` — unblocked; doesn't depend on
+  PTY or recipe.
+- `m7/macos-ci-job-and-tarball` — depends on m6.
+
+Recommended next: m4 (user-facing terminal-attach UX) OR m6 (gets a
+clickable .app artifact for smoke). User priority signal welcome.
