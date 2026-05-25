@@ -231,3 +231,25 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
   deliverables table updated to reflect both as done. See main response
   in `plan/issues/cross-host-blocker-roundup-2026-05-25.md` for the
   full Linux status.
+
+### Event: 2026-05-25 — w2 unblocked-scope DONE (lease released)
+
+w2/menu-action-dispatch-wiring implemented on windows-next @ `832871d9`:
+- DONE: `SelectAgent` fully wired (updates `MENU_STATE.selected_agent`;
+  checkmark moves) via testable `apply_menu_action_state`; new unit test.
+  All other arms dispatch with a specific honest log (no faked behaviour).
+  5 unit + 3 portable_smoke tests green on Windows; new code clippy-clean.
+- RE-PINNED (these w2 sub-actions were NOT actually unblocked — they need
+  plumbing absent on windows today; tracking them under their real gates):
+    * `Retry` → needs a provisioning-retry hook (lifecycle iteration).
+    * `OpenLog` → needs a host-side log-file path (none wired yet).
+    * `OpenObservatorium`/`OpenOpenCodeWeb` → need the observatorium/router URL
+      (gui-passthrough; arrives with the VM + router, i.e. w5 + tray runtime).
+    * `Attach`/`Maintain`/`GithubLogin` → post-PTY (w4) per the queue.
+- Lease released. The genuinely-unblocked slice of w2 is complete; the
+  remaining sub-actions are gated and will land with w4/w5 + the runtime
+  plumbing, not as standalone w2 work.
+
+Remaining cleanly-unblocked windows item: w3 (windows-tray clippy: the
+pre-existing `installation_uuid.rs:85` CredWriteW `&mut`→`&` warning). w1
+stays blocked (rasterizer absent in-tree, see prior event).
