@@ -32,6 +32,8 @@ use tokio::sync::mpsc;
 
 use tillandsias_control_wire::{ControlMessage, PtyDirection, PtyExit, MAX_PTY_FRAME_BYTES};
 
+use crate::menu_state::SelectedAgent;
+
 /// Already-rendered error context — matches the crate's String-error idiom.
 pub type PtyError = String;
 
@@ -49,6 +51,56 @@ pub struct PtyOpenOpts {
     pub argv: Vec<String>,
     pub env: Vec<(String, String)>,
     pub cwd: Option<String>,
+}
+
+/// What a tray menu action wants to run in the in-VM PTY. Shared across the
+/// Windows (ConPTY) and macOS (AppKit Terminal) trays so the OpenShell /
+/// GitHub-login / agent commands stay identical everywhere.
+///
+/// PROPOSED cross-host contract (windows-next, 2026-05-25) — see
+/// plan/issues/tray-convergence-coordination.md; macOS m4 should adopt or amend
+/// the argv mapping rather than diverge.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PtyIntent {
+    /// "Open Shell" — an interactive login shell in the forge.
+    Shell,
+    /// "GitHub login" — the `gh` device-code flow inside the VM.
+    GithubLogin,
+    /// Launch the selected coding agent via the forge entrypoint.
+    Agent(SelectedAgent),
+}
+
+fn agent_flag(agent: SelectedAgent) -> &'static str {
+    match agent {
+        SelectedAgent::Claude => "--claude",
+        SelectedAgent::Codex => "--codex",
+        SelectedAgent::OpenCode => "--opencode",
+    }
+}
+
+/// Build the [`PtyOpenOpts`] for a tray PTY `intent` at the given terminal
+/// size. `env` carries only `TERM` (the in-VM handler `env_clear`s before
+/// applying it, so no host env leaks); the login shell + forge set `PATH` etc.
+/// `cwd` is left to the in-VM default (the project working tree).
+///
+/// @trace openspec/changes/control-wire-pty-attach/proposal.md (§3, host launch mapping)
+pub fn launch_spec(intent: &PtyIntent, rows: u16, cols: u16) -> PtyOpenOpts {
+    let argv = match intent {
+        PtyIntent::Shell => vec!["/bin/bash".to_string(), "-l".to_string()],
+        PtyIntent::GithubLogin => {
+            vec!["gh".to_string(), "auth".to_string(), "login".to_string()]
+        }
+        PtyIntent::Agent(agent) => {
+            vec!["tillandsias".to_string(), agent_flag(*agent).to_string()]
+        }
+    };
+    PtyOpenOpts {
+        rows,
+        cols,
+        argv,
+        env: vec![("TERM".to_string(), "xterm-256color".to_string())],
+        cwd: None,
+    }
 }
 
 /// Outbound side of the control wire: wrap `body` in a `ControlEnvelope`
@@ -438,6 +490,31 @@ mod tests {
             bytes: vec![0u8; MAX_PTY_FRAME_BYTES + 1],
         };
         assert!(r.route(&oversized).is_err());
+    }
+
+    #[test]
+    fn launch_spec_maps_intents_to_in_vm_argv() {
+        assert_eq!(
+            launch_spec(&PtyIntent::Shell, 24, 80).argv,
+            vec!["/bin/bash", "-l"]
+        );
+        assert_eq!(
+            launch_spec(&PtyIntent::GithubLogin, 24, 80).argv,
+            vec!["gh", "auth", "login"]
+        );
+        assert_eq!(
+            launch_spec(&PtyIntent::Agent(SelectedAgent::OpenCode), 24, 80).argv,
+            vec!["tillandsias", "--opencode"]
+        );
+        assert_eq!(
+            launch_spec(&PtyIntent::Agent(SelectedAgent::Claude), 24, 80).argv,
+            vec!["tillandsias", "--claude"]
+        );
+        // Size is carried; TERM is set; cwd left to the in-VM default.
+        let s = launch_spec(&PtyIntent::Shell, 30, 100);
+        assert_eq!((s.rows, s.cols), (30, 100));
+        assert!(s.env.iter().any(|(k, v)| k == "TERM" && v == "xterm-256color"));
+        assert!(s.cwd.is_none());
     }
 
     /// An unknown session id is ignored, not an error.
