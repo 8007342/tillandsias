@@ -69,6 +69,8 @@ then `Stop-Process -Force`.
 | clippy: `CredWriteW` needless `&mut` | passing `&mut cred` where `*const` suffices | pass `&cred`; drop the binding's `mut` |
 | Linux workspace build suddenly pulls reqwest/ring | a Windows-only feature enabled unconditionally | target-gate it: enable `vm-layer/download` (and `recipe`) only under `[target.'cfg(windows)'.dependencies]` so the linux-next integration build stays lean |
 | `assets/tillandsias.rc missing` warning / no icon | build.rs uses `embed-resource`; needs the `.rc` (+ `.ico`) | `.rc` embeds the manifest (DPI awareness) via `1 24 "tillandsias.manifest"` and the icon via `1 ICON "tillandsias.ico"`; load it with `LoadIconW(hinst, without_provenance(1))`, fall back to `IDI_APPLICATION` |
+| `cargo test` HANGS forever (test never returns; orphan test-runner + `cmd.exe` procs linger) | a unit test does a blocking Win32 `ReadFile` on a ConPTY / anonymous pipe — it blocks until data or all write-ends close, which never happens with no producing process | never unit-test blocking pipe reads; assert on something deterministic (spawn `cmd /c exit 7` → `child.wait()==7`), NOT on rendered output. Validate real pipe I/O at VM E2E. Kill stuck runners: `Get-Process tillandsias_* \| Stop-Process -Force` |
+| `*mut c_void cannot be sent between threads` on `std::thread::spawn` of a closure holding a Win32-handle wrapper | edition-2021 *disjoint closure captures*: `let Wrapper(h) = w;` inside the closure captures `w.0` (the bare non-`Send` `HANDLE`), bypassing `unsafe impl Send for Wrapper` | rebind the whole wrapper first — `let w = w;` as the closure's first line, THEN `let h = w.0;` — so the `Send` wrapper is captured, not its field |
 
 ## Multi-host workflow (critical)
 

@@ -467,3 +467,22 @@ ConPtyMaster→PtyMaster ✓. The Windows host-side PTY stack is complete +
 compiles; full terminal-attach behaviour verified at VM E2E.
 §3 lease remaining: §3.2 unix openpty stub (Linux's to fill). THEN w4 — tray
 OpenShell/GithubLogin → PtySession::open + ConPtyMaster + pump_io + wt.exe.
+
+### Event: 2026-05-25 — §3 Windows host-side PTY stack COMPLETE + integrated
+
+All §3 windows-owned pieces are integrated into linux-next (cycle 21:43Z,
+cbf308af; ./build.sh --check && --test PASSED, host-shell 30/30 on Linux):
+core PtySession/PtyRouter/chunking ✓, pump_io ✓, ConPTY lifecycle ✓, ConPTY
+process-attach + pipe I/O ✓, ConPtyMaster impl PtyMaster ✓. The Windows
+host-side PTY pipeline compiles + type-checks + unit-tests green.
+
+w4 (live tray wiring) is now VM-GATED for verification: wiring OpenShell/
+GithubLogin → PtySession::open + ConPtyMaster + pump_io + spawn wt.exe needs a
+live vsock connection to the in-VM headless (the connection-mux: a reader task
+feeding PtyRouter + a PtyTransport over the vsock Client). That can't be
+end-to-end verified without a booted VM, which is gated on the recipe (l7
+materializer). §3.2 unix openpty stub remains Linux's.
+
+Captured this session's gotchas (blocking-pipe-ReadFile hangs unit tests;
+edition-2021 disjoint-capture breaks Send for handle wrappers) in
+cheatsheets/runtime/windows-tray-dev.md.
