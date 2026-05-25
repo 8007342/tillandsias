@@ -28,6 +28,13 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-25T13:43Z — NO-OP (siblings dormant, 4th consecutive)
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: 28602340c03cbdd81a5124243a52a8c630d78465
+- observed_sibling_heads: main=ddf52dff · linux-next=28602340 · windows-next=266c4edc (since 05:43Z) · osx-next=ddf52dff (frozen since 2026-05-24 alignment)
+- windows-next: no-op. osx-next: no-op. Tests: n/a. Working tree clean.
+
 ### Cycle 2026-05-25T11:43Z — NO-OP (siblings dormant, 3rd consecutive)
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
