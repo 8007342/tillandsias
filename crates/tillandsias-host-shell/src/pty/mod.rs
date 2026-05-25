@@ -111,6 +111,36 @@ pub trait PtyTransport: Send + Sync {
     fn send(&self, body: ControlMessage) -> Result<(), PtyError>;
 }
 
+/// A [`PtyTransport`] that enqueues outbound control messages onto a bounded
+/// channel — the per-connection writer queue from §D3. The connection's writer
+/// task drains the paired receiver and sends each via the vsock `Client`,
+/// interleaving with control traffic. A full queue surfaces as a backpressure
+/// error so the host PTY reader slows (rather than blocking the connection).
+///
+/// @trace openspec/changes/control-wire-pty-attach/proposal.md (§D3)
+pub struct ChannelPtyTransport {
+    tx: mpsc::Sender<ControlMessage>,
+}
+
+impl ChannelPtyTransport {
+    /// Create the transport and the receiver the connection writer task drains.
+    pub fn new(capacity: usize) -> (Self, mpsc::Receiver<ControlMessage>) {
+        let (tx, rx) = mpsc::channel(capacity);
+        (Self { tx }, rx)
+    }
+}
+
+impl PtyTransport for ChannelPtyTransport {
+    fn send(&self, body: ControlMessage) -> Result<(), PtyError> {
+        self.tx.try_send(body).map_err(|e| match e {
+            mpsc::error::TrySendError::Full(_) => {
+                "pty outbound queue full (backpressure)".to_string()
+            }
+            mpsc::error::TrySendError::Closed(_) => "pty connection closed".to_string(),
+        })
+    }
+}
+
 /// Host-allocated, per-connection monotonic `session_id`s, starting at 1 (§D2).
 #[derive(Debug, Default)]
 pub struct SessionIdAllocator(AtomicU32);
@@ -515,6 +545,37 @@ mod tests {
         assert_eq!((s.rows, s.cols), (30, 100));
         assert!(s.env.iter().any(|(k, v)| k == "TERM" && v == "xterm-256color"));
         assert!(s.cwd.is_none());
+    }
+
+    #[tokio::test]
+    async fn channel_transport_enqueues_outbound_in_order() {
+        let (t, mut rx) = ChannelPtyTransport::new(8);
+        t.send(ControlMessage::PtyResize { session_id: 1, rows: 24, cols: 80 })
+            .unwrap();
+        t.send(ControlMessage::PtyClose {
+            session_id: 1,
+            exit: PtyExit { code: 0, signal: None },
+        })
+        .unwrap();
+        assert!(matches!(
+            rx.recv().await.unwrap(),
+            ControlMessage::PtyResize { session_id: 1, .. }
+        ));
+        assert!(matches!(
+            rx.recv().await.unwrap(),
+            ControlMessage::PtyClose { session_id: 1, .. }
+        ));
+    }
+
+    #[tokio::test]
+    async fn channel_transport_full_is_backpressure_error() {
+        let (t, _rx) = ChannelPtyTransport::new(1);
+        t.send(ControlMessage::PtyResize { session_id: 1, rows: 1, cols: 1 })
+            .unwrap(); // fills the single slot
+        let err = t
+            .send(ControlMessage::PtyResize { session_id: 1, rows: 2, cols: 2 })
+            .unwrap_err();
+        assert!(err.contains("full"), "expected backpressure error, got: {err}");
     }
 
     /// An unknown session id is ignored, not an error.
