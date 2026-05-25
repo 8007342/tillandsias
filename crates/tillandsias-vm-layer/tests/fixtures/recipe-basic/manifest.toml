@@ -1,0 +1,20 @@
+# Fixture manifest for tillandsias-vm-layer::recipe parser tests (§2.5).
+# Placeholder digests/SHAs — hermetic, no network. Shape matches design D2 +
+# the D6 format-matrix [output] keying (<arch>.<format>).
+recipe_version = 1
+recipe_sha = "auto"
+
+[[base]]
+arch = "x86_64"
+ref = "registry.fedoraproject.org/fedora:44"
+digest = "sha256:1111111111111111111111111111111111111111111111111111111111111111"
+manifest_size_bytes = 524288
+
+[[base]]
+arch = "aarch64"
+ref = "registry.fedoraproject.org/fedora:44"
+digest = "sha256:2222222222222222222222222222222222222222222222222222222222222222"
+manifest_size_bytes = 524288
+
+[output]
+expected_rootfs_sha = { "x86_64.tar" = "aaaa", "aarch64.tar" = "bbbb", "aarch64.img" = "cccc" }

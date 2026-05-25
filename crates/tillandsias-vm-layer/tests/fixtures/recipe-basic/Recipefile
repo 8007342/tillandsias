@@ -1,0 +1,13 @@
+# Fixture recipe for tillandsias-vm-layer::recipe parser tests (vm-recipe-provisioning §2.5).
+# Mirrors the shape of the real images/vm/Recipefile (tasks.md §1.1) but with a
+# placeholder digest so the parser tests stay hermetic (no network).
+ARG TARGETARCH
+FROM registry.fedoraproject.org/fedora:44@sha256:deadbeef
+RUN dnf install -y systemd systemd-resolved openssh-server podman git rustup
+COPY bootstrap/ /opt/bootstrap/
+RUN /opt/bootstrap/10-systemd.sh
+RUN /opt/bootstrap/20-tillandsias.sh
+RUN /opt/bootstrap/30-enclave.sh
+RECIPE vsock-listen 42420
+RECIPE entry /usr/local/bin/tillandsias-headless
+RECIPE arch x86_64,aarch64
