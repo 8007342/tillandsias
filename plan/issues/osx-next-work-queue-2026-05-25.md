@@ -190,3 +190,71 @@ checks. Advisory only; both flows still work.
 ## Events
 
 <!-- Append events here when claiming/progressing items. Append-only. -->
+
+### event: m3 claimed + done — 2026-05-25T16:45Z
+
+- item: `m3/macos-scoped-clippy-cleanup`
+- agent_id: `osx-next-claude-opus-4-7` on `Tlatoanis-MacBook-Air`
+- lease_id: `6e47f3d51c87`
+- action: claim → done (single iteration)
+- evidence: `vz.rs:144` `host_cores.min(4).max(1)` → `host_cores.clamp(1, 4)`.
+  `cargo clippy -p tillandsias-vm-layer --lib` no longer flags `manual_clamp`.
+  10/10 unit tests pass (was 6/6 before m1+m3 changes).
+- lease released.
+
+### event: m1 claimed + done — 2026-05-25T16:45Z
+
+- item: `m1/vmruntime-stop-and-wait-ready`
+- agent_id: `osx-next-claude-opus-4-7` on `Tlatoanis-MacBook-Air`
+- lease_id: `4b14d0b05fff`
+- action: claim → done (single iteration)
+- evidence:
+  - `VmRuntime::stop(drain_timeout)`: takes the handle out of `vm.lock`,
+    calls `requestStopWithError`, polls `VZVirtualMachine.state` in 250 ms
+    CFRunLoop slices until state == Stopped(0); on drain_timeout expiry
+    dispatches `stopWithCompletionHandler` (hard force-stop, 5 s grace)
+    and returns a clear timeout error.
+  - `VmRuntime::wait_ready(timeout)`: polls `VZVirtualMachine.state` with
+    the `host-shell::vsock_client` backoff cadence (250 ms / 500 ms / 1 s /
+    2 s / 4 s, capped) until state == Running(1); on state == Error(3)
+    aborts immediately; on timeout returns a structured error including
+    the final state value. NOTE: this is the STRUCTURAL readiness check
+    only; vsock handshake (per the queue's spec text) lands with the
+    forthcoming `transport_macos.rs` connector (m1b below — newly enqueued).
+  - `VmRuntime::exec`: replaced `unimplemented!()` with an explicit
+    "deferred to Phase 5 (gated on control-wire-pty-attach merging)"
+    `Err`, so callers can't silently panic on it during this gap.
+  - Two new tests added: `vz_stop_and_wait_ready_fail_clean_before_start`
+    and `vz_exec_returns_phase5_deferral`. Total 10/10 unit tests pass.
+- lease released.
+
+### Item: m1b/transport-macos-vsock-connector (new, enqueued)
+
+- id: `m1b/transport-macos-vsock-connector`
+- type: feature
+- owner_host: macos
+- capability_tags: [rust, vfr, objc2-virtualization, vsock, tokio, async-fd]
+- status: pending
+- depends_on: []
+- blocks: [m4, m5]  (and a future "wait_ready actually verifies vsock handshake")
+- owned_files:
+  - `crates/tillandsias-vm-layer/src/transport_macos.rs` (NEW)
+  - `crates/tillandsias-vm-layer/src/vz.rs` (extend `wait_ready` to call the connector)
+- summary: >
+    New file `transport_macos.rs` exposing `connect_to_vm_vsock(vm: &VZVirtualMachine, port: u32) -> Result<impl AsyncReadWrite>`. Walks the VM's `socketDevices()` list, downcasts the first `VZVirtioSocketDevice`, calls `connectToPort:completionHandler:`, wraps `VZVirtioSocketConnection.fileDescriptor()` in `tokio::io::unix::AsyncFd<RawFd>` with an `AsyncRead + AsyncWrite` impl that delegates to the fd. Then extend `wait_ready` to call this with port `CONTROL_WIRE_VSOCK_PORT` and confirm Hello/HelloAck handshake.
+- estimated_effort: 1 day.
+- evidence_on_done:
+  - `cargo test -p tillandsias-control-wire --features vsock` still green on Linux.
+  - On macOS, a small smoke test (extension of vz-spike) connects vsock to the booted Fedora and sends a `Hello`; receives `HelloAck` from the in-VM headless's vsock_server (already implemented).
+
+### event: m4 + m5 gating recheck — 2026-05-25T16:45Z
+
+Re-read of `openspec/changes/control-wire-pty-attach/tasks.md`:
+- `§1` (1.1–1.5): **all 5 items DONE** (PtyDirection, PtyExit, the four ControlMessage variants, MAX_PTY_FRAME_BYTES, CAP_PTY_ATTACH_V1).
+- `§2`–`§9`: pending.
+
+Interpretation: linux deliverable `l1/control-wire-pty-attach-tasks-1` is
+**DONE on linux-next** (the macOS host's wait, queue-item m4, can advance
+sub-tasks that only depend on the §1 enum + capability — but it still
+needs `l3/in-vm-headless-pty-handler` (= pty-attach §4) for the round-trip
+to work end-to-end). m4 stays gated on l3.
