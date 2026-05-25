@@ -5456,7 +5456,11 @@ fn maybe_spawn_vsock_listener(
 ) -> Option<tokio::task::JoinHandle<()>> {
     let port = listen_vsock_port?;
     Some(tokio::spawn(async move {
-        match vsock_server::run_vsock_listener(port, shutdown).await {
+        // Default VmStateHandle: phase=Ready, podman socket at the
+        // conventional path. Real lifecycle hooks update this when
+        // provisioning + drain wiring lands.
+        let state = vsock_server::VmStateHandle::new();
+        match vsock_server::run_vsock_listener(port, shutdown, state).await {
             Ok(()) => {}
             Err(err) => {
                 eprintln!(
