@@ -258,3 +258,53 @@ Interpretation: linux deliverable `l1/control-wire-pty-attach-tasks-1` is
 sub-tasks that only depend on the §1 enum + capability — but it still
 needs `l3/in-vm-headless-pty-handler` (= pty-attach §4) for the round-trip
 to work end-to-end). m4 stays gated on l3.
+
+### event: m2 claimed + done — 2026-05-25T16:50Z
+
+- item: `m2/refactor-vz-spike-via-vmruntime`
+- agent_id: `osx-next-claude-opus-4-7` on `Tlatoanis-MacBook-Air`
+- lease_id: `e4f1a7b903c2`
+- action: claim → done (single iteration)
+- evidence:
+  - `crates/tillandsias-vm-layer/examples/vz-spike.rs` rewritten: the
+    `--boot` path now drives `VzRuntime::start → wait_ready → stop`
+    instead of hand-rolling `VZVirtualMachine::initWithConfiguration` +
+    `startWithCompletionHandler` + `requestStopWithError`. The
+    validate-only path (default, no `--boot`) still bypasses the runtime
+    so config-shape errors are inspectable.
+  - The spike sets up `image_root` as a tempdir with a symlink
+    `rootfs.img → <user --disk>` so `VzRuntime` finds the rootfs at the
+    path it expects (Phase 4 / D6 materializer will populate this
+    automatically in production).
+  - New flag `--observe-secs N` (default 5) controls how long to pump
+    CFRunLoop between `wait_ready` and `stop`.
+  - End-to-end smoke on Apple Silicon macOS 26.5 with the cached
+    Fedora 44 raw image:
+    - `VzRuntime::start`: ok in **267 ms**
+    - `VzRuntime::wait_ready` (state == Running): ok in **0 ms** (was
+      already Running by the time the poll ran)
+    - Fedora kernel boots, NAT brings up `192.168.64.5/6`, vsock
+      device negotiated CID 3, login prompt reached
+    - `VzRuntime::stop(30s drain)`: **drain timeout expired** because
+      Fedora 44 cloud's ACPI shutdown via `requestStop` takes >30 s for
+      systemd to drain (journald flush + cgroups teardown). Force-stop
+      `stopWithCompletionHandler` fallback dispatched within the same
+      call — production tray code can pass a longer drain (60s) for
+      friendlier shutdowns. The structural contract (drain THEN force)
+      is verified.
+  - 10/10 unit tests still pass; spike still validates clean.
+- lease released.
+
+### event: drain-timeout finding (sub-item m2.a) — 2026-05-25T16:50Z
+
+For future iterations / production tray:
+
+- Fedora 44 Cloud's stock systemd takes ~30–60 s to honor the ACPI
+  shutdown request VZ issues via `requestStop`. The macOS tray should
+  default `drain_timeout` to **60 s** so the graceful path completes
+  rather than always triggering force-stop.
+- Faster alternative if 60 s is too slow for UX: have the in-VM
+  tillandsias-headless register a vsock listener that, on receiving
+  `ControlMessage::VmShutdownRequest { drain_timeout_ms }`, calls
+  `systemctl --no-wall poweroff`. That skips ACPI handshake latency.
+  Requires `control-wire-pty-attach` adjacent code to land first.
