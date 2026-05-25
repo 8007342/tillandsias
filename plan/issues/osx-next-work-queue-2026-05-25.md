@@ -412,3 +412,39 @@ For future iterations / production tray:
 - Current macOS blockers: m5 waits on Linux l7 plus macOS-owned l5
   recipe-publish/CI-fetch work; m4 has an end-to-end verification dependency
   on the in-progress m1b handshake tail but is no longer blocked for coding.
+
+### event: m1b sub-task B done — 2026-05-25T17:30Z
+
+- item: `m1b/transport-macos-vsock-connector` (sub-task B of three)
+- agent_id: `osx-next-claude-opus-4-7` on `Tlatoanis-MacBook-Air`
+- lease_id: `7c2a9f1eb083` (still held; sub-task C remains)
+- action: sub-task B — done.
+- evidence:
+  - Extends `transport_macos.rs` with `VsockStream` implementing
+    `AsyncRead + AsyncWrite` on top of an established VFR vsock fd.
+  - `AsyncFd<FdHolder>` for tokio reactor (kqueue) integration; `read(2)`/
+    `write(2)` syscalls inlined via extern "C"; `set_nonblocking` via
+    `fcntl(F_SETFL, O_NONBLOCK)`; `poll_shutdown` calls
+    `shutdown(SHUT_WR)` for prompt peer-EOF.
+  - `FdHolder` is non-owning — VsockStream._connection (the
+    `Retained<VZVirtioSocketConnection>`) is the canonical fd owner,
+    so `AsyncFd::drop` only deregisters from kqueue.
+  - 14/14 unit tests pass (2 new: `vsock_stream_is_send_sync`,
+    `vsock_stream_is_async_read_write`).
+- Sub-task C (next, same lease): extend `VzRuntime::wait_ready` to call
+  `connect_to_vm_vsock(CONTROL_WIRE_VSOCK_PORT)` after the state-poll
+  succeeds, confirming the in-VM tillandsias-headless's vsock listener
+  is up. Will close lease + complete m1b. ~1 h.
+
+### event: m4 (PTY-attach AppKit terminal) unblocked — 2026-05-25T17:30Z
+
+- Linux landed `l3` (in-VM PTY handler in
+  `crates/tillandsias-headless/src/pty_handler.rs`) and the host-side
+  `crates/tillandsias-host-shell/src/pty/{mod.rs,windows.rs}` via the
+  pty-attach §3.1 + §3.3 work. `l1` was already done.
+- m4's `gated_on: [l1, l3]` is now SATISFIED. m4 can start when this
+  worker shifts from m1b to user-facing wiring.
+- macOS-side delta needed: `crates/tillandsias-host-shell/src/pty/macos.rs`
+  (mirror of `windows.rs` but using `nix::pty::openpty`) + wiring in
+  `crates/tillandsias-macos-tray/src/terminal_attach.rs` that opens
+  Terminal.app with the host PTY master fd.
