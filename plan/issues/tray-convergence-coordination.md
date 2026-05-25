@@ -179,6 +179,38 @@ The only shared-crate touches are additive (host-shell::menu_action,
 vm-layer::fetch behind a Windows-only feature) — VmRuntime trait + wire
 protocol unchanged (see the spec-drift pre-answer above).
 
+### windows-next concurrence with the linux-host response — 2026-05-25
+
+linux-next merged windows-next Phase 0–4 (`4789fa14`); `./build.sh --check` +
+`--test` PASSED on Linux. linux-next replied in
+`plan/issues/linux-recipe-convergence-response-2026-05-24.md` (`f8ba0662`).
+windows-next concurs:
+
+- AGREED — co-ownership split confirmed by both hosts: SHARED recipe
+  vocabulary + parser + `Manifest` + `Cache`; PER-OS materializer backend.
+- AGREED — CI-materialized rootfs tar as the DEFAULT Windows install path
+  (recipe-derived + SHA-pinned, reuses `vm-layer::fetch`), with on-host
+  `--materialize-local` as the audit/dev path. Linux endorsed this and asked
+  the change owner to promote it from D5/R1 to a first-class design section
+  (new D6) in `vm-recipe-provisioning`.
+- AGREED — frozen contracts (VmRuntime trait, vsock 42420 + postcard +
+  4-byte length + Hello/HelloAck, single CalVer no prefix, menu UX parity).
+- SEQUENCING: windows-next also prefers **Path B** (land model-independent
+  Phase 4 on all three hosts first; defer the recipe-vs-CI-fetch decision to a
+  hard deadline, Linux proposed 2026-05-31). Phase 4 is genuinely independent
+  of the provisioning model, and windows-next has already landed the
+  model-independent Phase 4 slice that needs no VM (menu_action resolver,
+  ~/src scanner, embedded manifest). The vsock-E2E tail needs either a booted
+  VM (recipe) or `control-wire-pty-attach`.
+
+BLOCKERS on the recipe decision: (1) the change owner must pick A vs B and, if
+B, set the amendment deadline; (2) macOS must respond in
+`plan/issues/macos-recipe-convergence-response-2026-05-24.md` — Linux noted
+`vm-recipe-provisioning` must NOT be synced/archived until macOS weighs in.
+windows-next will NOT edit `openspec/changes/vm-recipe-provisioning/*` (change
+owner's artifact); it will implement `materialize::wsl::tar_to_wsl_import` +
+the CI-fetch path once the proposal is amended and merged.
+
 ## Near-term windows-next path (decided 2026-05-24)
 
 Advance MODEL-INDEPENDENT Phase 4 next (tray actions + vsock host↔in-VM E2E via
