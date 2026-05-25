@@ -668,9 +668,7 @@ impl VmRuntime for VzRuntime {
                 let vm = match guard.as_ref() {
                     Some(h) => &h.0,
                     None => {
-                        return Err(
-                            "VzRuntime::wait_ready: VM not running (start() first)".into(),
-                        );
+                        return Err("VzRuntime::wait_ready: VM not running (start() first)".into());
                     }
                 };
                 unsafe { vm.state() }.0
@@ -724,9 +722,7 @@ impl VmRuntime for VzRuntime {
                 let vm = match guard.as_ref() {
                     Some(h) => &h.0,
                     None => {
-                        return Err(
-                            "VzRuntime::wait_ready: VM stopped during stage 2".into(),
-                        );
+                        return Err("VzRuntime::wait_ready: VM stopped during stage 2".into());
                     }
                 };
                 crate::transport_macos::connect_to_vm_vsock(

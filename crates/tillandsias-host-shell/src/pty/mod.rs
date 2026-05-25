@@ -553,18 +553,29 @@ mod tests {
         // Size is carried; TERM is set; cwd left to the in-VM default.
         let s = launch_spec(&PtyIntent::Shell, 30, 100);
         assert_eq!((s.rows, s.cols), (30, 100));
-        assert!(s.env.iter().any(|(k, v)| k == "TERM" && v == "xterm-256color"));
+        assert!(
+            s.env
+                .iter()
+                .any(|(k, v)| k == "TERM" && v == "xterm-256color")
+        );
         assert!(s.cwd.is_none());
     }
 
     #[tokio::test]
     async fn channel_transport_enqueues_outbound_in_order() {
         let (t, mut rx) = ChannelPtyTransport::new(8);
-        t.send(ControlMessage::PtyResize { session_id: 1, rows: 24, cols: 80 })
-            .unwrap();
+        t.send(ControlMessage::PtyResize {
+            session_id: 1,
+            rows: 24,
+            cols: 80,
+        })
+        .unwrap();
         t.send(ControlMessage::PtyClose {
             session_id: 1,
-            exit: PtyExit { code: 0, signal: None },
+            exit: PtyExit {
+                code: 0,
+                signal: None,
+            },
         })
         .unwrap();
         assert!(matches!(
@@ -580,12 +591,23 @@ mod tests {
     #[tokio::test]
     async fn channel_transport_full_is_backpressure_error() {
         let (t, _rx) = ChannelPtyTransport::new(1);
-        t.send(ControlMessage::PtyResize { session_id: 1, rows: 1, cols: 1 })
-            .unwrap(); // fills the single slot
+        t.send(ControlMessage::PtyResize {
+            session_id: 1,
+            rows: 1,
+            cols: 1,
+        })
+        .unwrap(); // fills the single slot
         let err = t
-            .send(ControlMessage::PtyResize { session_id: 1, rows: 2, cols: 2 })
+            .send(ControlMessage::PtyResize {
+                session_id: 1,
+                rows: 2,
+                cols: 2,
+            })
             .unwrap_err();
-        assert!(err.contains("full"), "expected backpressure error, got: {err}");
+        assert!(
+            err.contains("full"),
+            "expected backpressure error, got: {err}"
+        );
     }
 
     /// An unknown session id is ignored, not an error.
