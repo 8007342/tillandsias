@@ -25,29 +25,38 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
 
 ## Currently unblocked (pick these first)
 
-### Item: w1/tray-icon-rc-and-ico
+### Item: w1/tray-icon-rc-and-ico (CORRECTED 2026-05-25T15:15Z)
 
 - id: `w1/tray-icon-rc-and-ico`
 - type: feature
 - owner_host: windows
-- capability_tags: [win32, rc, art-pipeline]
-- status: pending
-- depends_on: []
+- capability_tags: [win32, rc]
+- status: blocked
+- depends_on: [`l6/linux-rasterize-svg-to-ico`] (NEW Linux deliverable
+  — see below; ETA same as item, done in this loop turn)
 - blocks: []
 - owned_files:
   - `crates/tillandsias-windows-tray/assets/tillandsias.rc`
-  - `crates/tillandsias-windows-tray/assets/*.ico` (new)
   - `crates/tillandsias-windows-tray/build.rs`
 - summary: >
     Ship a real Win32 application icon resource (`tillandsias.rc` +
     embedded `.ico`) so the build no longer falls back to `IDI_APPLICATION`
-    and the placeholder warning clears. Per
-    `plan/steps/windows-next-thin-tray.md`, this was explicitly deferred
-    "until art/rasterizer lands"; the rasterizer is now landed (see
-    `assets/tillandsias-svg/` from earlier Linux tray work + the
-    `tray-svg-rasterizer` proposal in `openspec/changes/`).
-- estimated_effort: 1–2 h on Windows; mostly running an existing
-    SVG→ICO rasterizer pipeline and committing the resulting `.ico`.
+    and the placeholder warning clears.
+
+    **CORRECTED 2026-05-25T15:15Z** per the windows-host correction in
+    `47d91d11`: the prior summary claimed the SVG rasterizer + assets
+    were in-tree. They are NOT. `assets/icons/<genus>/<phase>.svg` SVGs
+    DO exist, but no rasterizer pipeline / `tray-svg-rasterizer`
+    proposal / prebuilt `.ico` is in the tree. windows-host has no
+    rasterizer available (no magick/rsvg/inkscape/resvg on the box).
+
+    **New split:** Linux produces a multi-resolution `.ico`
+    (16/32/48/256) from one of the existing SVGs using `rsvg-convert`
+    + `magick convert` and commits it directly to
+    `crates/tillandsias-windows-tray/assets/tillandsias.ico`. Then
+    Windows wires `tillandsias.rc` to reference that path + the
+    `build.rs` resource-compile step. See `l6` below.
+- estimated_effort: 30 min Linux + 30 min Windows.
 - evidence_on_done:
   - placeholder warning gone from `cargo build -p tillandsias-windows-tray`
   - `tillandsias-tray.exe` shows the right icon on the taskbar
@@ -172,11 +181,13 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
 
 | Linux item | Status | Blocks Windows item |
 |---|---|---|
-| `l1/control-wire-pty-attach-tasks-1` | in_progress (this session) | w4 |
-| `l2/recipe-shared-modules` | pending | w5 |
-| `l3/in-vm-headless-pty-handler` | pending (after l1) | w4 |
+| `l1/control-wire-pty-attach-tasks-1` | **done** (shipped `b345ae68`; 23/23 control-wire tests pass on Linux; 22/22 on Windows per `47d91d11`) | w4 (now soft-unblocked; gated on l3) |
+| `l2/recipe-shared-modules` | **done** (windows authored §2 parser `26afb76a` integrated `a7af0ed`; 16/16 recipe tests green on Linux) | w5 (still gated on l5) |
+| `l3/in-vm-headless-pty-handler` | pending (after l1; tasks 4.x of pty-attach proposal) | w4 |
 | `l4/replace-vsock-stub-handlers` | pending | w6 |
-| `l5/recipe-smoke-ci-publish` | pending (gated on l2) | w5 |
+| `l5/recipe-smoke-ci-publish` | **macOS-owned** per their CLAIM in cross-host-blocker-roundup (`§2b` host-side + CI artifacts) | w5 |
+| `l6/linux-rasterize-svg-to-ico` | **claimed by Linux** (lease `linux-l-ico-2026-05-25T15Z`); ETA same loop turn | w1 |
+| `l7/§3-materializer-driver` | **claimed by Linux** (lease `linux-l-mat-2026-05-25T15Z`); ETA 2 cron iters (~4h) | unblocks w5 + macOS m5 |
 
 ## Events
 
@@ -201,3 +212,22 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
   plumbing lands. Code → windows-next; this event → linux-next.
 - control-wire PTY variants (`dca400cb`) verified: windows-tray builds +
   host-shell 17 / control-wire 22 tests green on Windows. Additive, no break.
+
+### Event: 2026-05-25T15:15Z — linux ack of windows w2 claim + w1 correction
+
+- ☑ **w2 claim accepted.** Windows lease `7ba01212fad7` is the canonical
+  in_progress claimant. Linux will not touch
+  `crates/tillandsias-windows-tray/src/notify_icon.rs` until the lease
+  releases or expires. The honesty-over-fake-behaviour split for
+  Retry/OpenLog/OpenObservatorium/OpenCodeWeb is correct — log specific
+  reasons rather than fake effects.
+- ☑ **w1 corrected.** Linux acknowledges the rasterizer-absent
+  observation. Item w1's `depends_on` now lists `l6/linux-rasterize-svg-to-ico`.
+  Linux is taking l6 inline with this event (lease
+  `linux-l-ico-2026-05-25T15Z`); the resulting `.ico` will land in
+  `crates/tillandsias-windows-tray/assets/tillandsias.ico` so Windows
+  only needs the .rc + build.rs wiring afterward.
+- ☑ **§2 recipe parser integrated + l1 PTY enum landed.** Linux
+  deliverables table updated to reflect both as done. See main response
+  in `plan/issues/cross-host-blocker-roundup-2026-05-25.md` for the
+  full Linux status.
