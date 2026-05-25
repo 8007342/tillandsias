@@ -87,11 +87,76 @@ To avoid polluting the host's package manager state, the materializer:
 
 Both flow from the same intermediate `.tar` of the rootfs. The VFR converter wraps it in a partition table + EFI System Partition + ext4 (or btrfs) rootfs. The WSL2 converter passes the tar directly to `wsl --import`. Per-platform conversion lives in `tillandsias-vm-layer::materialize::{vfr,wsl}`.
 
-### D6: Recipe version stamp lives in `Hello.capabilities`
+### D6: CI-materialized rootfs as first-class dual path, default for non-Linux hosts
+
+Amended 2026-05-25 (Path B owner decision; macOS host authoring per co-owner
+mandate). Both non-Linux hosts (macOS, Windows) hit a chicken-and-egg with
+the local-only model in D4: local materialization needs `buildah` inside a
+Linux environment, which itself needs a Linux VM — *the very thing we're
+trying to provision*. macOS gets `buildah` only inside `podman machine`'s
+Linux VM (another VFR guest); Windows gets it inside WSL.
+
+The dual-path resolution: every release publishes **CI-materialized,
+SHA-pinned, recipe-derived rootfs artifacts** alongside the recipe. The host
+fetches the artifact via `tillandsias-vm-layer::fetch` (verified +
+resumable), bypassing local materialization entirely. This is NOT a return
+to shipping opaque binaries: the recipe is the source of truth, CI is just
+a deterministic materializer. The output is reproducible by anyone who
+re-runs the recipe locally and compares SHAs.
+
+**Path matrix:**
+
+| Host | Default path | Opt-in dev path |
+|---|---|---|
+| Linux | local materialization (`buildah` native) | n/a — Linux is the materializer |
+| macOS | CI-fetch (`.img` for VFR + `.tar` audit copy) | `--materialize-local` via `podman machine` |
+| Windows | CI-fetch (`.tar` for `wsl --import`) | `--materialize-local` via buildah-in-WSL |
+
+**CI placement (per owner decision 2026-05-25): Linux CI builds both
+formats.** `materialize::macos::tar_to_vfr_img` is deterministic
+(parted/sgdisk + mkfs.ext4 + copy-in) and runs fine on the Linux runner;
+no macOS runner minutes are consumed for the rootfs artifact. macOS CI
+remains reserved for `Tillandsias.app` bundle builds.
+
+**Format-matrix in `manifest.toml`** (extends D2):
+
+```toml
+[output]
+expected_rootfs_sha = {
+    "x86_64.tar"   = "<sha>",   # Linux dev, WSL2 import
+    "aarch64.tar"  = "<sha>",   # CI audit, Linux ARM dev
+    "aarch64.img"  = "<sha>",   # macOS Apple Silicon → VFR
+    # x86_64.img omitted: no x86_64 VFR consumer in v0.0.1
+}
+```
+
+The local materialization path (D4) still produces only `.tar`; the
+`.img` is a Linux-CI-only emission for the macOS consumer's default path.
+
+**Why over alternatives:**
+- "Force local materialization everywhere" — collapses on the chicken-
+  and-egg above; punishes macOS + Windows users with a 5+ minute first-run
+  bootstrap of a separate Linux VM to build a Linux VM.
+- "Ship pre-built binaries, no recipe" — owner explicitly rejected.
+- "OCI registry distribution" — heavier infra; can revisit later as a
+  CDN-friendly cache layer in front of the CI-built artifact.
+
+**Trust model:** the recipe + manifest is the canonical source. CI
+artifacts are caches; `--materialize-local` is the audit. Three-way SHA
+agreement (CI build + local rebuild + manifest pin) is the
+falsifiability check.
+
+@trace spec:vm-recipe-provisioning, spec:ci-release
+
+### D7: Recipe version stamp lives in `Hello.capabilities`
+
+(was D6 pre-2026-05-25 amendment)
 
 `Hello { capabilities: [..., "vm.recipe@<recipe_sha>"] }` lets the host shell detect "in-VM headless built from a stale recipe" — useful for prompting the user to re-materialize after a `git pull`.
 
-### D7: `tillandsias-headless` builds from source inside the recipe
+### D8: `tillandsias-headless` builds from source inside the recipe
+
+(was D7 pre-2026-05-25 amendment)
 
 `bootstrap/20-tillandsias.sh` runs `cargo install --path crates/tillandsias-headless --target $TARGETARCH-unknown-linux-musl`. The recipe-build container has the full Rust toolchain; the resulting binary is the only piece that ships in the rootfs. This is what enables "no shipped Linux binaries" — the binary is materialized, not downloaded.
 

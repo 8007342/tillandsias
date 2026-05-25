@@ -19,8 +19,62 @@ serde_json = { workspace = true, optional = true }
 [target.'cfg(target_os = "windows")'.dependencies]
 windows = { version = "0.58", features = ["Win32_System_Console", "Win32_System_Threading", "Win32_Foundation"] }
 
+# @trace spec:vm-idiomatic-layer, spec:macos-native-tray, spec:vsock-transport
+# Pin exact patch so CI + dev hosts resolve identically. Generous feature set
+# enables the Virtualization.framework surface VzRuntime needs: bootloader,
+# storage, network, serial, entropy, balloon, vsock, and virtio-fs.
 [target.'cfg(target_os = "macos")'.dependencies]
-objc2-virtualization = "0.2"
+objc2-virtualization = { version = "=0.2.2", features = [
+  "VZVirtualMachine",
+  "VZVirtualMachineConfiguration",
+  "VZVirtualMachineDelegate",
+  "VZBootLoader",
+  "VZEFIBootLoader",
+  "VZEFIVariableStore",
+  "VZStorageDeviceConfiguration",
+  "VZStorageDeviceAttachment",
+  "VZVirtioBlockDeviceConfiguration",
+  "VZDiskImageStorageDeviceAttachment",
+  "VZNetworkDeviceConfiguration",
+  "VZNetworkDeviceAttachment",
+  "VZVirtioNetworkDeviceConfiguration",
+  "VZNATNetworkDeviceAttachment",
+  "VZMACAddress",
+  "VZSerialPortConfiguration",
+  "VZSerialPortAttachment",
+  "VZVirtioConsoleDeviceSerialPortConfiguration",
+  "VZFileHandleSerialPortAttachment",
+  "VZEntropyDeviceConfiguration",
+  "VZVirtioEntropyDeviceConfiguration",
+  "VZMemoryBalloonDeviceConfiguration",
+  "VZVirtioTraditionalMemoryBalloonDeviceConfiguration",
+  "VZSocketDevice",
+  "VZSocketDeviceConfiguration",
+  "VZVirtioSocketDeviceConfiguration",
+  "VZVirtioSocketDevice",
+  "VZVirtioSocketConnection",
+  "VZVirtioSocketListener",
+  "VZDirectorySharingDeviceConfiguration",
+  "VZVirtioFileSystemDeviceConfiguration",
+  "VZDirectoryShare",
+  "VZSharedDirectory",
+  "VZSingleDirectoryShare",
+  "VZGenericPlatformConfiguration",
+  "VZPlatformConfiguration",
+  "VZError",
+  "block2",
+] }
+objc2 = "0.5"
+objc2-foundation = { version = "0.2", features = [
+  "NSError",
+  "NSURL",
+  "NSString",
+  "NSObject",
+  "NSFileHandle",
+  "NSArray",
+  "NSData",
+] }
+block2 = "0.5"
 
 [dev-dependencies]
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "process", "io-util", "rt", "fs"] }

@@ -14,6 +14,14 @@
 - [ ] 2.4 Add `Manifest::load(path: &Path) -> Result<Manifest>` that parses `manifest.toml` and exposes per-arch base digest lookup.
 - [ ] 2.5 Unit tests with a fixture recipe under `crates/tillandsias-vm-layer/tests/fixtures/recipe-basic/`.
 
+## 2b. CI-fetch path artifacts (D6 amendment 2026-05-25)
+
+- [ ] 2b.1 Update `images/vm/manifest.toml` `[output].expected_rootfs_sha` schema to key on `<arch>.<format>` (e.g. `"aarch64.tar"`, `"aarch64.img"`, `"x86_64.tar"`).
+- [ ] 2b.2 Add `materialize::macos::tar_to_vfr_img(tar: &Path, dst: &Path) -> Result<()>`: parted/sgdisk on a sparse `.img`, mkfs.ext4 the root partition, mount loop, copy the `.tar` contents in, sync, detach. Works on Linux (CI) without macOS-specific tooling.
+- [ ] 2b.3 Add a CI job `recipe-publish` (on tagged releases): materializes recipe → `.tar`, runs `tar_to_vfr_img` → `.img`, uploads both to the GitHub release with their SHA-256.
+- [ ] 2b.4 Host-side `provision()` selects CI-fetch by default on macOS + Windows; falls back to local materialization if `--materialize-local` is set or if the GitHub release is unreachable. Reuses `tillandsias-vm-layer::fetch::download_verified` (the windows-next-added module).
+- [ ] 2b.5 Add `--materialize-local` CLI flag to the tray binaries and document the trust model (recipe is canon; CI is cache; local is audit).
+
 ## 3. `tillandsias-vm-layer::materialize` driver
 
 - [ ] 3.1 Create `crates/tillandsias-vm-layer/src/materialize/mod.rs` with `Materializer::run(recipe: &Recipe, manifest: &Manifest, host_arch: HostArch) -> Result<MaterializedRootfs>`.
