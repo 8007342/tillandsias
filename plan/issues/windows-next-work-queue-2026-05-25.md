@@ -496,7 +496,7 @@ items can land + be unit-tested before the VM path exists.
 | sub-task | what | owner | verifiable now? | status |
 |---|---|---|---|---|
 | w4a launch-spec | PtyIntent → PtyOpenOpts argv mapping | shared (win authored) | YES (pure) | DONE `af03de7e` |
-| w4b channel-transport | `ChannelPtyTransport`: PtyTransport that enqueues outbound ControlMessages to a bounded mpsc (the §D3 writer queue), decoupled from the Client | windows (pty, co-owned) | YES (enqueue→drain test) | pending |
+| w4b channel-transport | `ChannelPtyTransport`: PtyTransport that enqueues outbound ControlMessages to a bounded mpsc (the §D3 writer queue), decoupled from the Client | windows (pty, co-owned) | YES (enqueue→drain test) | DONE `7dc11bea` |
 | w4c connection-mux | own the vsock `Client` (split); writer task drains the w4b queue → Client.send; reader task reads envelopes → routes PtyData/PtyClose to PtyRouter, other replies elsewhere | shared host-shell (coordinate; touches vsock_client) | PARTIAL (routing tested; Client glue = VM E2E) | pending |
 | w4d open-shell-menu | add an "Open Shell" item to the shared `menu_state` + `menu_action` (resolve to PtyIntent::Shell) | shared menu_state (coordinate w/ macOS+linux) | YES (menu build + dispatch test) | pending |
 | w4e wt-attach | spawn Windows Terminal (`wt.exe`) hosting the ConPtyMaster pseudoconsole | windows | NO (GUI/VM visual check) | pending |
