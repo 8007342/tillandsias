@@ -27,7 +27,11 @@
 
 #![cfg(target_os = "macos")]
 
+use std::io;
 use std::os::raw::c_int;
+use std::os::unix::io::{AsRawFd, RawFd};
+use std::pin::Pin;
+use std::task::{Context, Poll};
 use std::time::{Duration, Instant};
 
 use objc2::rc::Retained;
@@ -35,6 +39,7 @@ use objc2_foundation::NSError;
 use objc2_virtualization::{
     VZVirtioSocketConnection, VZVirtioSocketDevice, VZVirtualMachine,
 };
+use tokio::io::{AsyncRead, AsyncWrite, ReadBuf, unix::AsyncFd};
 
 use crate::vz::boot::pump_cf_loop_for;
 
@@ -59,6 +64,206 @@ pub struct VsockFd {
 // behind an `AsyncFd` shared across tokio tasks.
 unsafe impl Send for VsockFd {}
 unsafe impl Sync for VsockFd {}
+
+/// Tokio-friendly wrapper around `VsockFd` that implements
+/// `AsyncRead + AsyncWrite` so the host-shell can drive the postcard
+/// framing layer (`tillandsias-control-wire`) directly on top of an
+/// established VZ vsock connection.
+///
+/// The fd's lifecycle is governed by the held `VZVirtioSocketConnection`
+/// `Retained` (`_connection`) — dropping the stream releases the ObjC
+/// retain, which closes the underlying socket via VZ's destructor.
+/// `AsyncFd` registers the fd with the tokio reactor (kqueue on macOS)
+/// for readiness notifications; the closure invoked from `try_io`
+/// performs the actual `read(2)`/`write(2)` syscall.
+///
+/// @trace spec:vsock-transport, spec:vm-idiomatic-layer
+pub struct VsockStream {
+    fd: AsyncFd<FdHolder>,
+    _connection: Retained<VZVirtioSocketConnection>,
+}
+
+/// Borrowed `RawFd` wrapper. Owned semantically by the held
+/// `VZVirtioSocketConnection`; this struct exists only so `AsyncFd` has
+/// an `AsRawFd` value to register with the reactor.
+///
+/// `AsyncFd<T>` does NOT close the fd on drop — it just deregisters; the
+/// VZ connection's destructor is what actually closes the socket. So
+/// double-close is not a concern.
+struct FdHolder(RawFd);
+
+impl AsRawFd for FdHolder {
+    fn as_raw_fd(&self) -> RawFd {
+        self.0
+    }
+}
+
+impl VsockStream {
+    /// Convert a `VsockFd` (from `connect_to_vm_vsock`) into a
+    /// `VsockStream`. Sets the fd to non-blocking so tokio's reactor can
+    /// dispatch readiness events instead of blocking the runtime thread.
+    ///
+    /// @trace spec:vsock-transport
+    pub fn from_vsock_fd(v: VsockFd) -> io::Result<Self> {
+        // Toggle O_NONBLOCK on the fd. POSIX read/write under non-blocking
+        // mode return EAGAIN/EWOULDBLOCK when no data is ready / no buffer
+        // space available; AsyncFd::try_io maps that to "not ready" and
+        // re-registers for the next readiness edge.
+        set_nonblocking(v.fd)?;
+        let fd = AsyncFd::new(FdHolder(v.fd))?;
+        Ok(Self {
+            fd,
+            _connection: v._connection,
+        })
+    }
+}
+
+// SAFETY: same justification as VsockFd (established vsock fd is POSIX
+// thread-safe; VZ doesn't gate established sockets to a dispatch queue).
+// AsyncFd<FdHolder> is itself Send+Sync iff FdHolder is, and FdHolder
+// holds only a primitive c_int.
+unsafe impl Send for VsockStream {}
+unsafe impl Sync for VsockStream {}
+
+impl AsyncRead for VsockStream {
+    fn poll_read(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &mut ReadBuf<'_>,
+    ) -> Poll<io::Result<()>> {
+        let this = self.get_mut();
+        loop {
+            let mut guard = match this.fd.poll_read_ready(cx) {
+                Poll::Ready(Ok(g)) => g,
+                Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+                Poll::Pending => return Poll::Pending,
+            };
+            let unfilled = unsafe { buf.unfilled_mut() };
+            let fd = guard.get_ref().as_raw_fd();
+            let res = guard.try_io(|_| unsafe { read_fd(fd, unfilled) });
+            match res {
+                Ok(Ok(n)) => {
+                    unsafe { buf.assume_init(n) };
+                    buf.advance(n);
+                    return Poll::Ready(Ok(()));
+                }
+                Ok(Err(e)) => return Poll::Ready(Err(e)),
+                // try_io returned WouldBlock; loop back to re-arm.
+                Err(_would_block) => continue,
+            }
+        }
+    }
+}
+
+impl AsyncWrite for VsockStream {
+    fn poll_write(
+        self: Pin<&mut Self>,
+        cx: &mut Context<'_>,
+        buf: &[u8],
+    ) -> Poll<io::Result<usize>> {
+        let this = self.get_mut();
+        loop {
+            let mut guard = match this.fd.poll_write_ready(cx) {
+                Poll::Ready(Ok(g)) => g,
+                Poll::Ready(Err(e)) => return Poll::Ready(Err(e)),
+                Poll::Pending => return Poll::Pending,
+            };
+            let fd = guard.get_ref().as_raw_fd();
+            let res = guard.try_io(|_| unsafe { write_fd(fd, buf) });
+            match res {
+                Ok(Ok(n)) => return Poll::Ready(Ok(n)),
+                Ok(Err(e)) => return Poll::Ready(Err(e)),
+                Err(_would_block) => continue,
+            }
+        }
+    }
+
+    fn poll_flush(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+    ) -> Poll<io::Result<()>> {
+        // No userspace buffering — every poll_write hits the kernel.
+        Poll::Ready(Ok(()))
+    }
+
+    fn poll_shutdown(
+        self: Pin<&mut Self>,
+        _cx: &mut Context<'_>,
+    ) -> Poll<io::Result<()>> {
+        // VZ closes the underlying socket when the connection's retain
+        // count hits zero (= VsockStream::drop). Tell the kernel to
+        // half-close the write side immediately so the peer gets EOF.
+        let fd = self.fd.get_ref().as_raw_fd();
+        let rc = unsafe { libc_shutdown(fd, 1 /* SHUT_WR */) };
+        if rc < 0 {
+            Poll::Ready(Err(io::Error::last_os_error()))
+        } else {
+            Poll::Ready(Ok(()))
+        }
+    }
+}
+
+// ─── inline libc bindings (avoid pulling the `libc` crate as a direct
+// dep just for three syscalls; objc2 already pulls it transitively but
+// we don't want to declare it in our Cargo.toml unnecessarily) ────────
+
+#[link(name = "c")]
+unsafe extern "C" {
+    fn read(fd: c_int, buf: *mut std::ffi::c_void, count: usize) -> isize;
+    fn write(fd: c_int, buf: *const std::ffi::c_void, count: usize) -> isize;
+    #[link_name = "shutdown"]
+    fn libc_shutdown(fd: c_int, how: c_int) -> c_int;
+    fn fcntl(fd: c_int, cmd: c_int, ...) -> c_int;
+}
+
+const F_GETFL: c_int = 3;
+const F_SETFL: c_int = 4;
+const O_NONBLOCK: c_int = 0o4;
+
+fn set_nonblocking(fd: RawFd) -> io::Result<()> {
+    let flags = unsafe { fcntl(fd, F_GETFL) };
+    if flags < 0 {
+        return Err(io::Error::last_os_error());
+    }
+    let rc = unsafe { fcntl(fd, F_SETFL, flags | O_NONBLOCK) };
+    if rc < 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(())
+    }
+}
+
+/// SAFETY: caller guarantees `buf` is valid for writes of `buf.len()` bytes.
+unsafe fn read_fd(fd: RawFd, buf: &mut [std::mem::MaybeUninit<u8>]) -> io::Result<usize> {
+    let n = unsafe {
+        read(
+            fd,
+            buf.as_mut_ptr() as *mut std::ffi::c_void,
+            buf.len(),
+        )
+    };
+    if n < 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(n as usize)
+    }
+}
+
+/// SAFETY: caller guarantees `buf` is valid for reads of `buf.len()` bytes.
+unsafe fn write_fd(fd: RawFd, buf: &[u8]) -> io::Result<usize> {
+    let n = unsafe {
+        write(
+            fd,
+            buf.as_ptr() as *const std::ffi::c_void,
+            buf.len(),
+        )
+    };
+    if n < 0 {
+        Err(io::Error::last_os_error())
+    } else {
+        Ok(n as usize)
+    }
+}
 
 /// Errors from the connect path.
 #[derive(Debug)]
@@ -206,5 +411,27 @@ mod tests {
     fn vsock_fd_is_send() {
         fn assert_send<T: Send>() {}
         assert_send::<VsockFd>();
+    }
+
+    /// `VsockStream` must be `Send + Sync` so the host-shell can park it
+    /// in an `Arc<Mutex<VsockStream>>` shared across tokio tasks. Compile-
+    /// time check.
+    ///
+    /// @trace spec:vsock-transport
+    #[test]
+    fn vsock_stream_is_send_sync() {
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<VsockStream>();
+    }
+
+    /// `VsockStream` must implement both `AsyncRead` and `AsyncWrite` so
+    /// the postcard framing layer can frame envelopes directly on top of
+    /// it without a UnixStream-style adapter.
+    ///
+    /// @trace spec:vsock-transport
+    #[test]
+    fn vsock_stream_is_async_read_write() {
+        fn assert_read_write<T: tokio::io::AsyncRead + tokio::io::AsyncWrite>() {}
+        assert_read_write::<VsockStream>();
     }
 }
