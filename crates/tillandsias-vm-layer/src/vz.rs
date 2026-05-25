@@ -141,7 +141,7 @@ impl VzGuestConfig {
             .map(|n| n.get() as u32)
             .unwrap_or(2);
         Self {
-            cpu_count: host_cores.min(4).max(1),
+            cpu_count: host_cores.clamp(1, 4),
             memory_bytes: 4 * 1024 * 1024 * 1024,
             vsock_cid: manifest.vsock_cid,
             vsock_port: manifest.vsock_port,
@@ -557,19 +557,135 @@ impl VmRuntime for VzRuntime {
         Ok(())
     }
 
-    async fn stop(&self, _drain_timeout: Duration) -> Result<(), VmError> {
-        unimplemented!("VZVirtualMachine.requestStop + force-stop fallback")
+    async fn stop(&self, drain_timeout: Duration) -> Result<(), VmError> {
+        use std::time::Instant;
+
+        // Take the handle for the duration of the stop dance so a concurrent
+        // start() can't race (and so we drop it at the end → ref-count → 0 →
+        // VZ frees the runtime objects).
+        let handle = {
+            let mut slot = self
+                .vm
+                .lock()
+                .map_err(|e| format!("vm lock poisoned: {e}"))?;
+            slot.take()
+                .ok_or_else(|| "VzRuntime::stop: VM not running".to_string())?
+        };
+        let vm = &handle.0;
+
+        // Phase 1 cut: requestStop is synchronous-ish (returns immediately;
+        // the actual stop happens on the VZ dispatch queue). We pump CFRunLoop
+        // for up to `drain_timeout` waiting for the VM state to transition to
+        // Stopped via a delegate-equivalent poll, then call hard stop() on
+        // timeout to guarantee bounded shutdown.
+        //
+        // We don't yet observe VZVirtualMachineDelegate.guestDidStop — the
+        // delegate plumbing is a follow-on iteration. Instead we poll
+        // `state` (== `VZVirtualMachineStateStopped` = 4) every 250 ms while
+        // pumping the runloop so VZ callbacks can fire.
+        let request_result = unsafe { vm.requestStopWithError() };
+        if let Err(e) = request_result {
+            // The VM may already be stopped or in an invalid state for stop;
+            // log + fall through to force-stop to honor the drain_timeout
+            // contract.
+            let msg = e.localizedDescription().to_string();
+            // Returning here would leak the VM in a weird state; better to
+            // surface and let the caller decide.
+            return Err(format!("VzRuntime::stop: requestStop failed: {msg}"));
+        }
+
+        let deadline = Instant::now() + drain_timeout;
+        loop {
+            // VZ state enum: 0=Stopped, 1=Running, 2=Paused, 3=Error, 4=Starting,
+            // 5=Pausing, 6=Resuming, 7=Stopping, 8=Saving, 9=Restoring.
+            let state = unsafe { vm.state() }.0;
+            if state == 0 {
+                // Stopped cleanly.
+                return Ok(());
+            }
+            if Instant::now() >= deadline {
+                // Drain timeout — try a hard stop. `stop:completionHandler:`
+                // is the force-stop variant; we wait briefly for it then
+                // return regardless.
+                let (tx, rx) = std::sync::mpsc::channel::<()>();
+                let handler = block2::RcBlock::new(move |_err: *mut objc2_foundation::NSError| {
+                    let _ = tx.send(());
+                });
+                unsafe { vm.stopWithCompletionHandler(&handler) };
+                let force_deadline = Instant::now() + Duration::from_secs(5);
+                while Instant::now() < force_deadline {
+                    if rx.try_recv().is_ok() {
+                        break;
+                    }
+                    boot::pump_cf_loop_for(Duration::from_millis(100));
+                }
+                return Err(format!(
+                    "VzRuntime::stop: drain_timeout ({}s) expired; force-stop dispatched",
+                    drain_timeout.as_secs()
+                ));
+            }
+            boot::pump_cf_loop_for(Duration::from_millis(250));
+        }
     }
 
     async fn exec(&self, _argv: &[&str]) -> Result<ExitStatus, VmError> {
-        unimplemented!(
-            "VZ exec — host opens vsock to the in-VM headless and \
-             forwards the argv; see cheatsheets/runtime/idiomatic-vm-exec.md"
+        // Phase 5 work (gated on control-wire-pty-attach merging). Returns
+        // a clear error so callers don't silently swallow the gap.
+        Err(
+            "VzRuntime::exec: deferred to Phase 5 (gated on \
+             control-wire-pty-attach merging). See plan/steps/20-macos-tray-v0_0_1.md."
+                .into(),
         )
     }
 
-    async fn wait_ready(&self, _timeout: Duration) -> Result<(), VmError> {
-        unimplemented!("VZ wait_ready — poll vsock handshake on guest_cid:vsock_port")
+    async fn wait_ready(&self, timeout: Duration) -> Result<(), VmError> {
+        use std::time::Instant;
+
+        // Phase 1 (this iter): poll VZVirtualMachine.state until Running OR
+        // timeout. This is the structural readiness check: VZ accepted the
+        // start and the guest kernel is executing. It does NOT verify the
+        // in-VM tillandsias-headless has bound the vsock listener — that
+        // check arrives with transport_macos.rs (m5/transport-macos-vsock-
+        // connector, queued as Phase 1 step 1.6).
+        //
+        // The backoff cadence (250ms → 500ms → 1s → 2s → 4s, capped) matches
+        // the host-shell `vsock_client::BACKOFF_SCHEDULE` precedent so the
+        // full chain (start → wait_ready → vsock connect) has consistent
+        // perceived latency in the tray.
+        let handle_guard = self
+            .vm
+            .lock()
+            .map_err(|e| format!("vm lock poisoned: {e}"))?;
+        let vm = match handle_guard.as_ref() {
+            Some(h) => &h.0,
+            None => {
+                return Err("VzRuntime::wait_ready: VM not running (start() first)".into());
+            }
+        };
+
+        let deadline = Instant::now() + timeout;
+        let backoff_ms = [250u64, 500, 1000, 2000, 4000];
+        let mut step = 0usize;
+        loop {
+            let state = unsafe { vm.state() }.0;
+            // 1 = VZVirtualMachineStateRunning.
+            if state == 1 {
+                return Ok(());
+            }
+            // 3 = Error; abort immediately.
+            if state == 3 {
+                return Err(format!("VzRuntime::wait_ready: VM state Error (={state})"));
+            }
+            if Instant::now() >= deadline {
+                return Err(format!(
+                    "VzRuntime::wait_ready: timeout after {}s; final state={state}",
+                    timeout.as_secs()
+                ));
+            }
+            let wait_ms = backoff_ms[step.min(backoff_ms.len() - 1)];
+            step = step.saturating_add(1);
+            boot::pump_cf_loop_for(Duration::from_millis(wait_ms));
+        }
     }
 }
 
@@ -681,6 +797,55 @@ mod tests {
     fn vz_runtime_is_send_and_sync() {
         fn assert_send_sync<T: Send + Sync>() {}
         assert_send_sync::<VzRuntime>();
+    }
+
+    /// `VzRuntime::stop` and `wait_ready` must surface a clear error when
+    /// called before `start()` populated the handle slot.
+    ///
+    /// @trace spec:vm-idiomatic-layer
+    #[cfg(target_os = "macos")]
+    #[tokio::test]
+    async fn vz_stop_and_wait_ready_fail_clean_before_start() {
+        let tmp = tempfile::tempdir().unwrap();
+        let rt = VzRuntime::new(42, tmp.path().to_path_buf());
+
+        let stop_err = rt
+            .stop(Duration::from_secs(1))
+            .await
+            .expect_err("stop without start must fail");
+        assert!(
+            stop_err.contains("VM not running"),
+            "unexpected stop error: {stop_err}"
+        );
+
+        let wait_err = rt
+            .wait_ready(Duration::from_secs(1))
+            .await
+            .expect_err("wait_ready without start must fail");
+        assert!(
+            wait_err.contains("VM not running"),
+            "unexpected wait_ready error: {wait_err}"
+        );
+    }
+
+    /// `VzRuntime::exec` is explicitly deferred to Phase 5; returns a clear
+    /// "deferred" message rather than `unimplemented!()` so callers don't
+    /// silently panic.
+    ///
+    /// @trace spec:vm-idiomatic-layer
+    #[cfg(target_os = "macos")]
+    #[tokio::test]
+    async fn vz_exec_returns_phase5_deferral() {
+        let tmp = tempfile::tempdir().unwrap();
+        let rt = VzRuntime::new(42, tmp.path().to_path_buf());
+        let err = rt
+            .exec(&["/bin/true"])
+            .await
+            .expect_err("exec should not silently succeed in Phase 1");
+        assert!(
+            err.contains("Phase 5"),
+            "unexpected exec error: {err}"
+        );
     }
 
     /// `VzRuntime::start` must surface a clear error when rootfs.img is
