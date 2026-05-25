@@ -28,6 +28,79 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-25T05:43Z — INTEGRATED (clean tree, on-cron)
+
+- host_id: linux-tlatoani-fedora (macuahuitl.ayahuitlcalpan.com)
+- platform: linux
+- branch: linux-next
+- upstream_commit (post-pull pre-merge): b0951b7cd55c451d696d87703f541d18b1135b10
+- observed_sibling_heads:
+  - main: ddf52dffcda4f5d32104179cdaf7e4b87221300d
+  - linux-next: b0951b7cd55c451d696d87703f541d18b1135b10
+  - windows-next: 266c4edc0af76d76da8a0a88612c351e1ac95192
+  - osx-next: ddf52dffcda4f5d32104179cdaf7e4b87221300d
+
+- windows-next: **merged + tested + pushed** (`59706e19`). 4 commits absorbed:
+  - `266c4edc` docs(windows-next): capture shared wire-dispatch contract for the vsock-E2E tail
+  - `0d7a32cf` docs(vm-recipe-provisioning): supersede windows D8 with macOS-authored D6; keep spec-delta reconciliation
+  - `42479788` Merge remote-tracking branch 'origin/linux-next' into windows-next
+  - `f0dde8bc` docs(vm-recipe-provisioning): amend with D8 dual-path distribution (owner-assigned)
+  - Net diff: +90 lines across `openspec/changes/vm-recipe-provisioning/specs/vm-provisioning-lifecycle/spec.md`, `plan/issues/tray-convergence-coordination.md`, `plan/steps/windows-next-thin-tray.md`. Docs/spec only — zero code.
+  - `./build.sh --check`: PASSED. `./build.sh --test`: PASSED.
+- osx-next: no-op — still at `ddf52dff` (= `main`). **But see drift advisory below.**
+
+- **Methodology drift spotted (high signal for the user):**
+  1. **macOS host is committing DIRECTLY to `linux-next`, not pushing through
+     `osx-next`.** Recent macOS commits like `74f0ebd2 plan(macos-tray)`,
+     `70c7c2a0 amend(vm-recipe-provisioning): D6`, `3db11291 feat(macos-tray)
+     Phase 1 step 1.3`, `3cd90335 feat(macos-tray) Phase 1 step 1.4` are
+     authored as `Tlatoani <bulloncito@gmail.com>` (same email as
+     linux-host, different macron-less name) and land on `linux-next`
+     without ever passing through `origin/osx-next`. The `osx-next` branch
+     has been frozen at `ddf52dff` since the 2026-05-24 alignment.
+     - **Effect:** the integration loop's `osx-next` arm is a permanent
+       no-op; macOS work bypasses the platform-branch model entirely.
+     - **Author identities now in play:** `Tlatoāni` (linux, macron),
+       `Tlatoani` (macOS, no macron), `bullo` (windows host, e.g. commit
+       `266c4edc`). All share `bulloncito@gmail.com`. Same human, three
+       host identities.
+     - **Methodology question (for the user / change owner):** is direct
+       commit-to-linux-next by macOS the new intentional model (in which
+       case the loop's `osx-next` arm can be dropped, the
+       `methodology/multi-host-development.yaml` `platform_branches.macos`
+       value retired, and the integration loop refactored), OR is this a
+       drift to correct (in which case macOS host should be reminded to
+       push to `osx-next` and let the loop integrate)? Linux host has no
+       preference; raising for explicit decision.
+  2. **Concurrent-drafting collision risk surfaced.** Windows-host commit
+     `0d7a32cf` reconciled a collision: macOS authored D6 amendment while
+     Windows authored D8 (same amendment, different letter), both
+     converging on integration branch within minutes. Windows reconciled
+     cleanly (dropped redundant D8 design, kept unique spec-delta fix).
+     **Lesson Windows recorded in `tray-convergence-coordination.md`:**
+     "claims must be checked against the integration branch before
+     drafting — macOS and I drafted the same amendment in parallel."
+     Loop should consider surfacing claim-collision warnings (currently it
+     does not).
+  3. **Win/Mac CONFIRMED the protocol-convergence plan** from
+     `plan/issues/control-socket-protocol-convergence-2026-05-25.md`:
+     Windows-host commit `266c4edc` explicitly states it will use the same
+     ControlMessage variants over both transports, route through the
+     shared Linux-authored dispatcher (PR #2 Slice 1 already landed:
+     commit `a9adf59f` `feat(control-socket): reply Error{Unsupported}
+     instead of silently dropping unhandled variants`), and file new
+     variants in the convergence doc rather than fork local handlers. The
+     control-wire enum stays unchanged. Slice 2 (full shared dispatcher
+     extraction) remains gated on sibling answers to Q1-Q4.
+
+- **Spec/methodology delta this cycle:**
+  - `openspec/changes/vm-recipe-provisioning/specs/vm-provisioning-lifecycle/spec.md`
+    +40 lines — Windows-authored requirement "First-run obtains the rootfs
+    by fetch (default) or local materialization" + 3 scenarios + reconciled
+    binary clause + reference updates D8→D6. Fixes a contradiction the
+    macOS D6 left in the spec delta. Advisory only — change-owner artifact,
+    no Linux-side action required.
+
 ### Cycle 2026-05-25T03:43Z — INTEGRATED (clean tree, on-cron)
 
 - host_id: linux-tlatoani-fedora (macuahuitl.ayahuitlcalpan.com)
@@ -197,15 +270,22 @@ three consecutive same-cause failures.
 
 ## Open Recommendations
 
-- **DEADLINE 2026-05-31** — `vm-recipe-provisioning` must be amended (D6:
-  CI-materialized-rootfs as first-class dual path) or explicitly replaced.
-  Recipe implementation is blocked on this AND on macOS response. No host
-  has claimed the amendment yet.
-- **macOS host: please respond** in
-  `plan/issues/macos-recipe-convergence-response-2026-05-24.md`. The other
-  two hosts have aligned; macOS has not engaged on osx-next since the
-  alignment to `ddf52dff`. Without a macOS response by ~2026-05-29 the
-  2026-05-31 deadline is at risk.
+- **CLEARED 2026-05-25T~05Z** — `vm-recipe-provisioning` D6 amendment landed
+  on linux-next (`70c7c2a0`, macOS-authored). Windows-host spec-delta
+  reconciliation also landed (`0d7a32cf`). Recipe implementation is now
+  unblocked. macOS Phase 1 vz-spike is progressing
+  (`3716dd40`, `3db11291`, `3cd90335`).
+- **USER DECISION REQUESTED** — should `osx-next` be retired as a
+  platform branch, since macOS host is committing directly to `linux-next`?
+  See cycle `05:43Z` drift advisory item 1. If retired: simplify the loop
+  (drop `osx-next` from `git ls-remote` + merge attempt), update
+  `methodology/multi-host-development.yaml`, and tombstone the branch
+  reference. If kept: notify macOS host of the convention.
+- **Loop enhancement candidate** — surface claim-collision warnings before
+  drafting cross-host artifacts (cycle 05:43Z drift advisory item 2).
+  Implementation: at start of cycle, scan `plan/issues/` for unresolved
+  CLAIM blocks and warn if any sibling has also touched the claimed scope
+  in their last 3 commits.
 - **Backlog cleared** as of `2026-05-25T02:00Z` — `windows-next` Phase 0–4
   integrated cleanly, tests passed. As of `2026-05-25T03:43Z` the Windows
   Phase-4 model-independent slice is fully landed on linux-next.
