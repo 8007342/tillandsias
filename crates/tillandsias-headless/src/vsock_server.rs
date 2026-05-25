@@ -25,11 +25,15 @@ use tillandsias_control_wire::transport::{
     AsyncReadWrite, CONTROL_WIRE_VSOCK_PORT, Listener, Transport, bind,
 };
 use tillandsias_control_wire::{
-    ControlEnvelope, ControlMessage, ErrorCode, LocalProjectEntry, MAX_MESSAGE_BYTES, VmPhase,
-    WIRE_VERSION, decode, encode,
+    CAP_PTY_ATTACH_V1, ControlEnvelope, ControlMessage, ErrorCode, LocalProjectEntry,
+    MAX_MESSAGE_BYTES, VmPhase, WIRE_VERSION, decode, encode,
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
+use tokio::sync::mpsc;
 use tracing::{debug, info, warn};
+
+#[cfg(unix)]
+use crate::pty_handler::PtySessionStore;
 
 const SERVER_NAME: &str = "tillandsias-in-vm";
 
@@ -87,6 +91,7 @@ impl VmStateHandle {
 
     /// Override the podman socket path; useful in tests or for VMs that
     /// publish podman elsewhere.
+    #[allow(dead_code)]
     pub fn set_podman_socket(&mut self, path: PathBuf) {
         self.podman_socket = path;
     }
@@ -219,6 +224,7 @@ async fn handle_connection(
                 "EnumerateLocalProjects".into(),
                 "CloudRefreshRequest".into(),
                 "VmShutdownRequest".into(),
+                CAP_PTY_ATTACH_V1.into(),
             ],
         },
     };
@@ -227,15 +233,45 @@ async fn handle_connection(
         return;
     }
 
+    // Per-connection PTY session store (l3: control-wire-pty-attach Tasks 4.x).
+    // The pump tasks for each PTY session push envelopes into `pty_outbound`;
+    // the main read loop interleaves those writes with normal request/reply
+    // traffic via tokio::select!. When this function returns, dropping
+    // `pty_store` cascades into `shutdown_all` so children are reaped on
+    // disconnect.
+    let (pty_tx, mut pty_rx) = mpsc::unbounded_channel::<ControlEnvelope>();
+    #[cfg(unix)]
+    let mut pty_store = PtySessionStore::new(pty_tx.clone());
+    // Hold a tx clone so the sender side stays open for the lifetime of
+    // the connection even if `pty_store` empties (which would otherwise
+    // close pty_rx).
+    let _pty_tx_keepalive = pty_tx;
+
     loop {
-        let env = match read_envelope(&mut stream).await {
-            Ok(env) => env,
-            Err(err) => {
-                debug!(spec = "vsock-transport", error = %err, "vsock connection closed");
-                return;
+        tokio::select! {
+            // Outbound PTY frame (PtyData{ToHost} from a pump or PtyClose
+            // from child reap).
+            Some(env) = pty_rx.recv() => {
+                if write_envelope(&mut stream, &env).await.is_err() {
+                    debug!(spec = "vsock-transport", "vsock write failed during PTY outbound; closing connection");
+                    #[cfg(unix)]
+                    pty_store.shutdown_all().await;
+                    return;
+                }
+                continue;
             }
-        };
-        match env.body {
+            // Inbound frame.
+            result = read_envelope(&mut stream) => {
+                let env = match result {
+                    Ok(env) => env,
+                    Err(err) => {
+                        debug!(spec = "vsock-transport", error = %err, "vsock connection closed");
+                        #[cfg(unix)]
+                        pty_store.shutdown_all().await;
+                        return;
+                    }
+                };
+                match env.body {
             ControlMessage::VmStatusRequest { seq } => {
                 // l4: read real lifecycle phase + check podman socket.
                 let reply = ControlEnvelope {
@@ -300,7 +336,78 @@ async fn handle_connection(
                     spec = "vsock-transport",
                     "VmShutdownRequest received; phase=Draining; closing connection (drain happens via signal path)"
                 );
+                #[cfg(unix)]
+                pty_store.shutdown_all().await;
                 return;
+            }
+            // l3: PTY-attach variants (control-wire-pty-attach Tasks 4.x).
+            // The handler module owns the PtySessionStore lifecycle; this
+            // dispatch just routes inbound envelopes by variant + session
+            // id. Outbound PtyData{ToHost} and child-exit PtyClose travel
+            // through `pty_rx` per the select! arm above.
+            #[cfg(unix)]
+            ControlMessage::PtyOpen {
+                session_id,
+                rows,
+                cols,
+                argv,
+                env: pty_env,
+                cwd,
+            } => {
+                if let Err(err) = pty_store
+                    .open(session_id, rows, cols, argv, pty_env, cwd)
+                    .await
+                {
+                    let err_env = ControlEnvelope {
+                        wire_version: WIRE_VERSION,
+                        seq: env.seq,
+                        body: ControlMessage::Error {
+                            seq_in_reply_to: Some(env.seq),
+                            code: ErrorCode::Internal,
+                            message: format!("PtyOpen rejected: {err}"),
+                        },
+                    };
+                    if write_envelope(&mut stream, &err_env).await.is_err() {
+                        pty_store.shutdown_all().await;
+                        return;
+                    }
+                }
+            }
+            #[cfg(unix)]
+            ControlMessage::PtyData {
+                session_id,
+                direction: tillandsias_control_wire::PtyDirection::ToGuest,
+                bytes,
+            } => {
+                pty_store.write_to_guest(session_id, &bytes).await;
+            }
+            #[cfg(unix)]
+            ControlMessage::PtyData {
+                direction: tillandsias_control_wire::PtyDirection::ToHost,
+                ..
+            } => {
+                // ToHost direction is server → host only; receiving one
+                // inbound is a protocol violation, but we don't need to
+                // tear down — just ignore.
+                debug!(
+                    spec = "vsock-transport",
+                    "inbound PtyData{{ToHost}} ignored (server-only direction)"
+                );
+            }
+            #[cfg(unix)]
+            ControlMessage::PtyResize {
+                session_id,
+                rows,
+                cols,
+            } => {
+                pty_store.resize(session_id, rows, cols);
+            }
+            #[cfg(unix)]
+            ControlMessage::PtyClose { session_id, .. } => {
+                // Host-initiated close: SIGTERM + 2s grace + SIGKILL.
+                // The terminal PtyClose envelope back to the host is
+                // emitted by the pump task on child exit.
+                pty_store.close_host_initiated(session_id).await;
             }
             // Per plan/issues/control-socket-protocol-convergence-2026-05-25.md:
             // unhandled variants must reply with an explicit Error frame
@@ -321,7 +428,11 @@ async fn handle_connection(
                     },
                 };
                 if write_envelope(&mut stream, &err).await.is_err() {
+                    #[cfg(unix)]
+                    pty_store.shutdown_all().await;
                     return;
+                }
+            }
                 }
             }
         }

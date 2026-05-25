@@ -5439,6 +5439,8 @@ mod tray;
 
 #[cfg(feature = "listen-vsock")]
 mod vsock_server;
+#[cfg(all(feature = "listen-vsock", unix))]
+mod pty_handler;
 
 /// Spawn the vsock control-wire listener when `--listen-vsock <port>` was
 /// passed AND the binary was compiled with `--features listen-vsock`. Returns
