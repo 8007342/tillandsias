@@ -641,50 +641,127 @@ impl VmRuntime for VzRuntime {
     async fn wait_ready(&self, timeout: Duration) -> Result<(), VmError> {
         use std::time::Instant;
 
-        // Phase 1 (this iter): poll VZVirtualMachine.state until Running OR
-        // timeout. This is the structural readiness check: VZ accepted the
-        // start and the guest kernel is executing. It does NOT verify the
-        // in-VM tillandsias-headless has bound the vsock listener — that
-        // check arrives with transport_macos.rs (m5/transport-macos-vsock-
-        // connector, queued as Phase 1 step 1.6).
+        // Two-stage readiness check (Phase 1 step 1.8 — m1b sub-task C):
+        //   1. Structural: poll VZVirtualMachineState until Running. Means
+        //      VZ accepted the start and the guest kernel is executing.
+        //   2. Functional: connect_to_vm_vsock(CONTROL_WIRE_VSOCK_PORT)
+        //      until success. Means the in-VM tillandsias-headless's
+        //      vsock_server has actually bound the port and is accepting
+        //      connections.
         //
-        // The backoff cadence (250ms → 500ms → 1s → 2s → 4s, capped) matches
-        // the host-shell `vsock_client::BACKOFF_SCHEDULE` precedent so the
-        // full chain (start → wait_ready → vsock connect) has consistent
-        // perceived latency in the tray.
-        let handle_guard = self
-            .vm
-            .lock()
-            .map_err(|e| format!("vm lock poisoned: {e}"))?;
-        let vm = match handle_guard.as_ref() {
-            Some(h) => &h.0,
-            None => {
-                return Err("VzRuntime::wait_ready: VM not running (start() first)".into());
-            }
-        };
+        // The full Hello/HelloAck handshake check is the next layer up —
+        // belongs in tillandsias-host-shell::vsock_client, not in
+        // VmRuntime::wait_ready. A successful TCP-equivalent connect is
+        // enough to say "the listener is alive."
+        //
+        // Backoff cadence matches host-shell::vsock_client::BACKOFF_SCHEDULE
+        // (250 → 500 → 1000 → 2000 → 4000 ms, capped) so the chain
+        // start → wait_ready → vsock connect has consistent perceived
+        // latency in the tray.
 
+        // ── Stage 1: structural state-poll ────────────────────────────
         let deadline = Instant::now() + timeout;
         let backoff_ms = [250u64, 500, 1000, 2000, 4000];
         let mut step = 0usize;
         loop {
-            let state = unsafe { vm.state() }.0;
-            // 1 = VZVirtualMachineStateRunning.
+            // Re-acquire the lock briefly each iteration so we don't hold
+            // it across the multi-second CFRunLoop pump (would block
+            // concurrent stop()).
+            let state = {
+                let guard = self
+                    .vm
+                    .lock()
+                    .map_err(|e| format!("vm lock poisoned: {e}"))?;
+                let vm = match guard.as_ref() {
+                    Some(h) => &h.0,
+                    None => {
+                        return Err(
+                            "VzRuntime::wait_ready: VM not running (start() first)".into(),
+                        );
+                    }
+                };
+                unsafe { vm.state() }.0
+            };
+            // 1 = VZVirtualMachineStateRunning → proceed to stage 2.
             if state == 1 {
-                return Ok(());
+                break;
             }
             // 3 = Error; abort immediately.
             if state == 3 {
-                return Err(format!("VzRuntime::wait_ready: VM state Error (={state})"));
+                return Err(format!(
+                    "VzRuntime::wait_ready: VM state Error (={state}) during stage 1"
+                ));
             }
             if Instant::now() >= deadline {
                 return Err(format!(
-                    "VzRuntime::wait_ready: timeout after {}s; final state={state}",
+                    "VzRuntime::wait_ready: stage 1 timeout after {}s; final state={state}",
                     timeout.as_secs()
                 ));
             }
             let wait_ms = backoff_ms[step.min(backoff_ms.len() - 1)];
             step = step.saturating_add(1);
             boot::pump_cf_loop_for(Duration::from_millis(wait_ms));
+        }
+
+        // ── Stage 2: functional vsock-probe ───────────────────────────
+        // CONTROL_WIRE_VSOCK_PORT comes from tillandsias-control-wire (the
+        // shared canonical constant). The in-VM headless's vsock_server
+        // binds (VMADDR_CID_ANY, 42420) on startup; we treat a successful
+        // host-side connect as proof the listener is up.
+        use tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
+        let mut step = 0usize;
+        loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Err(format!(
+                    "VzRuntime::wait_ready: stage 2 timeout after {}s (vsock listener \
+                     never came up at port {CONTROL_WIRE_VSOCK_PORT})",
+                    timeout.as_secs()
+                ));
+            }
+            // Cap per-probe budget at 1s so we don't burn the whole
+            // remaining timeout in a single connect attempt that hits
+            // VFR-internal slow paths.
+            let probe_timeout = remaining.min(Duration::from_secs(1));
+            let connect_result = {
+                let guard = self
+                    .vm
+                    .lock()
+                    .map_err(|e| format!("vm lock poisoned: {e}"))?;
+                let vm = match guard.as_ref() {
+                    Some(h) => &h.0,
+                    None => {
+                        return Err(
+                            "VzRuntime::wait_ready: VM stopped during stage 2".into(),
+                        );
+                    }
+                };
+                crate::transport_macos::connect_to_vm_vsock(
+                    vm,
+                    CONTROL_WIRE_VSOCK_PORT,
+                    probe_timeout,
+                )
+            };
+            match connect_result {
+                Ok(_vsock_fd) => {
+                    // Drop immediately — the probe is success-on-connect.
+                    // Hello/HelloAck handshake is the host-shell's job.
+                    return Ok(());
+                }
+                Err(crate::transport_macos::ConnectError::NoSocketDevice)
+                | Err(crate::transport_macos::ConnectError::UnexpectedSocketDeviceKind) => {
+                    // Structural config error — no point retrying.
+                    return Err(format!(
+                        "VzRuntime::wait_ready: VM config missing virtio-vsock device"
+                    ));
+                }
+                Err(_transient) => {
+                    // Timeout / VzError / NullConnection — keep retrying.
+                    let wait_ms = backoff_ms[step.min(backoff_ms.len() - 1)];
+                    step = step.saturating_add(1);
+                    boot::pump_cf_loop_for(Duration::from_millis(wait_ms));
+                }
+            }
         }
     }
 }

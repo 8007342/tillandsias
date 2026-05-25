@@ -2876,6 +2876,7 @@ dependencies = [
  "serde_json",
  "sha2",
  "tempfile",
+ "tillandsias-control-wire",
  "tokio",
  "toml 0.8.2",
  "windows 0.58.0",
