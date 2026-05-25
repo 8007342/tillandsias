@@ -7,8 +7,8 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 - [crates/tillandsias-core/src/config.rs#L435](../../../crates/tillandsias-core/src/config.rs#L435)
 - [crates/tillandsias-core/src/config.rs#L447](../../../crates/tillandsias-core/src/config.rs#L447)
-- [crates/tillandsias-core/src/config.rs#L774](../../../crates/tillandsias-core/src/config.rs#L774)
-- [crates/tillandsias-core/src/config.rs#L782](../../../crates/tillandsias-core/src/config.rs#L782)
+- [crates/tillandsias-core/src/config.rs#L828](../../../crates/tillandsias-core/src/config.rs#L828)
+- [crates/tillandsias-core/src/config.rs#L836](../../../crates/tillandsias-core/src/config.rs#L836)
 - [crates/tillandsias-logging/src/lib.rs#L1](../../../crates/tillandsias-logging/src/lib.rs#L1)
 - [crates/tillandsias-logging/src/logger.rs#L1](../../../crates/tillandsias-logging/src/logger.rs#L1)
 - [crates/tillandsias-logging/src/rotation.rs#L1](../../../crates/tillandsias-logging/src/rotation.rs#L1)

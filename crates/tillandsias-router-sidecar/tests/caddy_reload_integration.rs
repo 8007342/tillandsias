@@ -173,7 +173,7 @@ async fn router_caddy_admin_api_reload() {
 
     loop {
         match SimpleHttpClient::get(&format!("{}/config/apps/http/servers", &admin_url)).await {
-            Ok((status, _)) if status == 200 => {
+            Ok((200, _)) => {
                 eprintln!("[caddy_reload] admin API is responding");
                 break;
             }
@@ -188,8 +188,8 @@ async fn router_caddy_admin_api_reload() {
     }
 
     eprintln!(
-        "[caddy_reload] Step 1: verify Caddy admin API responds on {}:{}",
-        "127.0.0.1", admin_port
+        "[caddy_reload] Step 1: verify Caddy admin API responds on 127.0.0.1:{}",
+        admin_port
     );
     let (status, _body) =
         SimpleHttpClient::get(&format!("{}/config/apps/http/servers", &admin_url))
