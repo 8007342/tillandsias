@@ -1420,8 +1420,7 @@ fn handle_launch_cloud_project(service: Arc<TrayService>, cloud: ProjectEntry, k
                     TrayIconState::Building,
                     None,
                 ));
-                if let Err(err) =
-                    remote_projects::clone_project_from_github(&repo_id, &target_path)
+                if let Err(err) = remote_projects::clone_project_from_github(&repo_id, &target_path)
                 {
                     eprintln!("error: cloud clone failed for '{}': {}", cloud.name, err);
                     let _ = futures::executor::block_on(service_for_emit.set_status(
@@ -2028,10 +2027,7 @@ fn build_cloud_projects_submenu(state: &TrayUiState) -> MenuNode {
     // overflow item is the standard pattern for native indicator menus and
     // resolves the user-visible clipping bug on its own.
     if total > visible_count {
-        let label = format!(
-            "\u{2026} All cloud projects ({})\u{2026}",
-            total
-        );
+        let label = format!("\u{2026} All cloud projects ({})\u{2026}", total);
         children.push(child(node(
             CLOUD_OVERFLOW_ID,
             props(vec![
@@ -3535,8 +3531,7 @@ mod tests {
         // into super::launch_forge_agent / run_opencode_web_mode /
         // run_observatorium_mode (not hardcoded `false`).
         assert!(
-            source.contains("fn launch_project_action(")
-                && source.contains("    debug: bool,"),
+            source.contains("fn launch_project_action(") && source.contains("    debug: bool,"),
             "launch_project_action must take debug: bool"
         );
         assert!(
@@ -4153,10 +4148,7 @@ pub fn run_tray_mode(config_path: Option<String>) -> Result<(), String> {
 /// Same as [`run_tray_mode`] but with the `--debug` flag plumbed through so
 /// the containerized-gh / cloud-refresh paths can emit `[tillandsias] gh: …`
 /// stderr breadcrumbs. @trace spec:remote-projects
-pub fn run_tray_mode_with_debug(
-    config_path: Option<String>,
-    debug: bool,
-) -> Result<(), String> {
+pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Result<(), String> {
     let version = super::VERSION.trim().to_string();
     let root = super::resolve_runtime_asset_root(&version, debug)?;
     let state =

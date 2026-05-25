@@ -30,7 +30,7 @@ use std::sync::{Arc, Mutex};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::mpsc;
 
-use tillandsias_control_wire::{ControlMessage, PtyDirection, PtyExit, MAX_PTY_FRAME_BYTES};
+use tillandsias_control_wire::{ControlMessage, MAX_PTY_FRAME_BYTES, PtyDirection, PtyExit};
 
 /// Already-rendered error context — matches the crate's String-error idiom.
 pub type PtyError = String;
@@ -376,12 +376,22 @@ mod tests {
         assert_eq!(s.recv().await, Some(SessionEvent::Data(b"hi\n".to_vec())));
 
         // Guest close yields a terminal Closed event.
-        let exit = PtyExit { code: 0, signal: None };
-        r.route(&ControlMessage::PtyClose { session_id: 1, exit }).unwrap();
+        let exit = PtyExit {
+            code: 0,
+            signal: None,
+        };
+        r.route(&ControlMessage::PtyClose {
+            session_id: 1,
+            exit,
+        })
+        .unwrap();
         assert_eq!(s.recv().await, Some(SessionEvent::Closed(exit)));
 
         let sent = t.sent.lock().unwrap();
-        assert!(matches!(sent[0], ControlMessage::PtyOpen { session_id: 1, .. }));
+        assert!(matches!(
+            sent[0],
+            ControlMessage::PtyOpen { session_id: 1, .. }
+        ));
         assert!(matches!(
             sent[1],
             ControlMessage::PtyData {
@@ -512,7 +522,10 @@ mod tests {
         // Guest close ends the pump.
         r.route(&ControlMessage::PtyClose {
             session_id: sid,
-            exit: PtyExit { code: 0, signal: None },
+            exit: PtyExit {
+                code: 0,
+                signal: None,
+            },
         })
         .unwrap();
         let joined = tokio::time::timeout(Duration::from_secs(2), handle).await;

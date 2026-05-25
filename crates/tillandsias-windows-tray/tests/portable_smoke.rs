@@ -10,7 +10,7 @@
 //! @trace spec:windows-native-tray
 
 use tillandsias_host_shell::menu_state::{
-    build, GithubLoginState, MenuState, MenuStructure, ProjectEntry, SelectedAgent, TargetSurface,
+    GithubLoginState, MenuState, MenuStructure, ProjectEntry, SelectedAgent, TargetSurface, build,
 };
 
 /// The Windows tray paints the host-shell `MenuStructure` verbatim. Build
@@ -50,7 +50,10 @@ fn agent_picker_lists_three_agents_in_canonical_order() {
         MenuStructure::Ready { items } => items,
         _ => panic!("expected Ready"),
     };
-    let agents = items.iter().find(|i| i.id == "agents").expect("agents present");
+    let agents = items
+        .iter()
+        .find(|i| i.id == "agents")
+        .expect("agents present");
     let ids: Vec<&str> = agents.children.iter().map(|c| c.id.as_str()).collect();
     assert_eq!(ids, vec!["agent.claude", "agent.codex", "agent.opencode"]);
     // Codex selected → middle is checked.
@@ -79,7 +82,10 @@ fn logged_in_state_renders_github_user_disabled() {
         MenuStructure::Ready { items } => items,
         _ => panic!("expected Ready"),
     };
-    let github = items.iter().find(|i| i.id == "github-login").expect("github");
+    let github = items
+        .iter()
+        .find(|i| i.id == "github-login")
+        .expect("github");
     assert!(!github.enabled);
     assert!(github.label.contains("bulloncito"));
 }

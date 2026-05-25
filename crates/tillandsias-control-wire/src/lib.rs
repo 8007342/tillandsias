@@ -229,10 +229,7 @@ pub enum ControlMessage {
     /// requested early termination (the guest then SIGKILLs the child).
     ///
     /// @trace openspec/changes/control-wire-pty-attach/proposal.md
-    PtyClose {
-        session_id: u32,
-        exit: PtyExit,
-    },
+    PtyClose { session_id: u32, exit: PtyExit },
 }
 
 /// Direction tag for `PtyData` frames.

@@ -212,7 +212,9 @@ impl VmRuntime for WslRuntime {
             .await
             .map_err(|e| format!("install tillandsias binary wait failed: {e}"))?;
         if !install_status.success() {
-            return Err(format!("install tillandsias binary exited {install_status}"));
+            return Err(format!(
+                "install tillandsias binary exited {install_status}"
+            ));
         }
 
         // Step 4: install the systemd unit + enable it.

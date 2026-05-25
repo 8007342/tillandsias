@@ -36,7 +36,7 @@ use objc2_app_kit::{
 };
 use objc2_foundation::{MainThreadMarker, NSString};
 
-use crate::menu_disabled_v2::{render, MacMenuItemSpec};
+use crate::menu_disabled_v2::{MacMenuItemSpec, render};
 use tillandsias_host_shell::menu_state::MenuStructure;
 
 /// Entry point invoked from `main`. Blocks until the user picks "Quit" on
@@ -48,8 +48,8 @@ pub fn run() -> ! {
     // SAFETY: We MUST be on the main thread for any AppKit object. AppKit
     // panics with a clear message if `MainThreadMarker::new()` is called
     // off-thread.
-    let mtm = MainThreadMarker::new()
-        .expect("tillandsias-tray must be invoked from the main OS thread");
+    let mtm =
+        MainThreadMarker::new().expect("tillandsias-tray must be invoked from the main OS thread");
     let app = NSApplication::sharedApplication(mtm);
 
     // LSUIElement (accessory app, no Dock icon) — matches Info.plist.
@@ -81,12 +81,14 @@ pub fn run() -> ! {
 /// status item alive for the process lifetime.
 ///
 /// @trace spec:macos-native-tray.ui.nsstatusitem-only@v1
-pub fn install_status_item(mtm: MainThreadMarker, structure: &MenuStructure) -> Retained<NSStatusItem> {
+pub fn install_status_item(
+    mtm: MainThreadMarker,
+    structure: &MenuStructure,
+) -> Retained<NSStatusItem> {
     // SAFETY: AppKit class methods that touch shared singletons must run
     // on the main thread; the marker proves we are.
     let status_bar = unsafe { NSStatusBar::systemStatusBar() };
-    let status_item =
-        unsafe { status_bar.statusItemWithLength(NSVariableStatusItemLength) };
+    let status_item = unsafe { status_bar.statusItemWithLength(NSVariableStatusItemLength) };
 
     // Set initial tooltip from the provisioning status text so the user
     // sees the condensed phase string on hover.

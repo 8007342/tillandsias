@@ -149,11 +149,7 @@ fn vmaddr_cid_any() -> u32 {
     u32::MAX
 }
 
-async fn serve_listener(
-    listener: &mut Listener,
-    shutdown: Arc<AtomicBool>,
-    state: VmStateHandle,
-) {
+async fn serve_listener(listener: &mut Listener, shutdown: Arc<AtomicBool>, state: VmStateHandle) {
     loop {
         if shutdown.load(Ordering::SeqCst) {
             info!(
@@ -461,9 +457,10 @@ async fn write_envelope<W>(stream: &mut W, env: &ControlEnvelope) -> io::Result<
 where
     W: AsyncWriteExt + Unpin,
 {
-    let bytes =
-        encode(env).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
-    stream.write_all(&(bytes.len() as u32).to_be_bytes()).await?;
+    let bytes = encode(env).map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+    stream
+        .write_all(&(bytes.len() as u32).to_be_bytes())
+        .await?;
     stream.write_all(&bytes).await?;
     stream.flush().await
 }

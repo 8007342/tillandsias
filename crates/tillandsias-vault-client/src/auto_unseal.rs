@@ -97,6 +97,9 @@ mod tests {
         let machine_id = b"abcdef0123456789abcdef0123456789";
         let installation_uuid = b"550e8400-e29b-41d4-a716-446655440000";
         let k = derive_unseal_key(machine_id, installation_uuid);
-        assert!(k.iter().any(|&b| b != 0), "HKDF output must not be all-zero");
+        assert!(
+            k.iter().any(|&b| b != 0),
+            "HKDF output must not be all-zero"
+        );
     }
 }

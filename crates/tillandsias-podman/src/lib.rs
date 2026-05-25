@@ -572,7 +572,10 @@ fn format_podman_invocation_line(label: &str, program: &str, args: &[String]) ->
     while i < args.len() {
         let arg = &args[i];
         // Flag/value pairs where the next arg is the secret value.
-        if matches!(arg.as_str(), "--secret" | "--password" | "--token" | "--secret-value") {
+        if matches!(
+            arg.as_str(),
+            "--secret" | "--password" | "--token" | "--secret-value"
+        ) {
             redacted.push(arg.clone());
             if i + 1 < args.len() {
                 redacted.push("<redacted>".to_string());
@@ -969,10 +972,16 @@ mod tests {
             line.starts_with("[tillandsias] podman container: /usr/bin/podman "),
             "unexpected prefix: {line}"
         );
-        assert!(line.contains("GITHUB_TOKEN=<redacted>"), "token leaked: {line}");
+        assert!(
+            line.contains("GITHUB_TOKEN=<redacted>"),
+            "token leaked: {line}"
+        );
         // `--secret <name>` — the value (name) gets replaced because it follows
         // a known secret flag.
-        assert!(line.contains("--secret <redacted>"), "secret leaked: {line}");
+        assert!(
+            line.contains("--secret <redacted>"),
+            "secret leaked: {line}"
+        );
         assert!(line.contains("image:tag"), "image arg dropped: {line}");
     }
 
@@ -1094,11 +1103,15 @@ mod tests {
             .expect("spawn child");
         let stderr = String::from_utf8_lossy(&output.stderr);
         assert!(
-            stderr.contains("[tillandsias] podman container: /usr/bin/podman ps --filter name=tillandsias-"),
+            stderr.contains(
+                "[tillandsias] podman container: /usr/bin/podman ps --filter name=tillandsias-"
+            ),
             "missing invocation line in stderr:\n{stderr}"
         );
         assert!(
-            stderr.contains("[tillandsias] podman container failed: status=125 stderr=Error: no such container"),
+            stderr.contains(
+                "[tillandsias] podman container failed: status=125 stderr=Error: no such container"
+            ),
             "missing failure line in stderr:\n{stderr}"
         );
     }

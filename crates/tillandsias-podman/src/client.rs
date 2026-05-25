@@ -1210,7 +1210,10 @@ pub fn network_exists_sync(name: &str) -> bool {
     {
         crate::log_podman_failure(
             "network-exists",
-            &o.status.code().map(|c| c.to_string()).unwrap_or_else(|| "signal".into()),
+            &o.status
+                .code()
+                .map(|c| c.to_string())
+                .unwrap_or_else(|| "signal".into()),
             &String::from_utf8_lossy(&o.stderr),
         );
     }
@@ -1228,7 +1231,10 @@ pub fn podman_available_sync() -> bool {
     {
         crate::log_podman_failure(
             "available",
-            &o.status.code().map(|c| c.to_string()).unwrap_or_else(|| "signal".into()),
+            &o.status
+                .code()
+                .map(|c| c.to_string())
+                .unwrap_or_else(|| "signal".into()),
             &String::from_utf8_lossy(&o.stderr),
         );
     }
@@ -1258,12 +1264,10 @@ pub fn stop_container_sync(name: &str, timeout_secs: u32) -> Result<(), PodmanEr
     let mut cmd = crate::podman_cmd_sync();
     cmd.args(["stop", "-t", &timeout_secs.to_string(), name]);
     crate::log_podman_invocation("stop", &cmd);
-    let output = cmd
-        .output()
-        .map_err(|e| {
-            crate::log_podman_failure("stop", "spawn-error", &e.to_string());
-            PodmanError::CommandFailed(format!("stop: {e}"))
-        })?;
+    let output = cmd.output().map_err(|e| {
+        crate::log_podman_failure("stop", "spawn-error", &e.to_string());
+        PodmanError::CommandFailed(format!("stop: {e}"))
+    })?;
 
     if output.status.success() {
         Ok(())
@@ -1271,7 +1275,11 @@ pub fn stop_container_sync(name: &str, timeout_secs: u32) -> Result<(), PodmanEr
         let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
         crate::log_podman_failure(
             "stop",
-            &output.status.code().map(|c| c.to_string()).unwrap_or_else(|| "signal".into()),
+            &output
+                .status
+                .code()
+                .map(|c| c.to_string())
+                .unwrap_or_else(|| "signal".into()),
             &stderr,
         );
         Err(PodmanError::CommandFailed(if stderr.is_empty() {

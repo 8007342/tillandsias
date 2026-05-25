@@ -26,8 +26,8 @@ use serde::{Deserialize, Serialize};
 // Both wsl and vz modules compile on every target so call sites can hold
 // `WslRuntime` / `VzRuntime` symbols and tests can verify the trait impl
 // shape on Linux. Real backend bodies are cfg-gated inside the modules.
-pub mod wsl;
 pub mod vz;
+pub mod wsl;
 
 // macOS host-side vsock connector. Declared at this level so callers can
 // import `tillandsias_vm_layer::transport_macos::connect_to_vm_vsock` from

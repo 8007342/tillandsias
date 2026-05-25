@@ -161,7 +161,12 @@ impl PtySessionStore {
         let master_arc = Arc::new(Mutex::new(master_async));
 
         // 5) Spawn the pump task.
-        let pump = spawn_pump_task(session_id, child_pid, master_arc.clone(), self.outbound.clone());
+        let pump = spawn_pump_task(
+            session_id,
+            child_pid,
+            master_arc.clone(),
+            self.outbound.clone(),
+        );
 
         self.sessions.insert(
             session_id,
@@ -218,7 +223,8 @@ impl PtySessionStore {
                 Err(_) => {
                     debug!(
                         spec = "vsock-transport",
-                        session_id, "PtyResize: master busy, retrying via try_lock would race; dropping"
+                        session_id,
+                        "PtyResize: master busy, retrying via try_lock would race; dropping"
                     );
                     return;
                 }
@@ -389,7 +395,8 @@ fn spawn_pump_task(
         let _ = outbound.send(env);
         info!(
             spec = "vsock-transport",
-            session_id, pid = child_pid.as_raw(),
+            session_id,
+            pid = child_pid.as_raw(),
             ?exit,
             "PtyClose: pump emitted child exit"
         );
@@ -404,10 +411,7 @@ async fn reap_child(pid: Pid) -> PtyExit {
         .ok()
         .and_then(|r| r.ok());
     match status {
-        Some(WaitStatus::Exited(_, code)) => PtyExit {
-            code,
-            signal: None,
-        },
+        Some(WaitStatus::Exited(_, code)) => PtyExit { code, signal: None },
         Some(WaitStatus::Signaled(_, signal, _)) => PtyExit {
             code: 128 + signal as i32,
             signal: Some(signal as i32),
@@ -448,7 +452,11 @@ mod tests {
                 7,
                 24,
                 80,
-                vec!["/bin/sh".to_string(), "-c".to_string(), "echo hi".to_string()],
+                vec![
+                    "/bin/sh".to_string(),
+                    "-c".to_string(),
+                    "echo hi".to_string(),
+                ],
                 vec![],
                 None,
             )
@@ -508,7 +516,11 @@ mod tests {
                 42,
                 24,
                 80,
-                vec!["/bin/sh".to_string(), "-c".to_string(), "sleep 30".to_string()],
+                vec![
+                    "/bin/sh".to_string(),
+                    "-c".to_string(),
+                    "sleep 30".to_string(),
+                ],
                 vec![],
                 None,
             )
@@ -545,7 +557,11 @@ mod tests {
                 99,
                 24,
                 80,
-                vec!["/bin/sh".to_string(), "-c".to_string(), "sleep 30".to_string()],
+                vec![
+                    "/bin/sh".to_string(),
+                    "-c".to_string(),
+                    "sleep 30".to_string(),
+                ],
                 vec![],
                 None,
             )

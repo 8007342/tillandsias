@@ -13,7 +13,7 @@
 
 #![allow(dead_code)]
 
-use crate::menu_state::{ids, SelectedAgent};
+use crate::menu_state::{SelectedAgent, ids};
 
 /// Which project list a clicked project entry came from.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -111,7 +111,10 @@ mod tests {
         assert_eq!(resolve(ids::GITHUB_LOGIN), MenuAction::GithubLogin);
         assert_eq!(resolve(ids::OBSERVATORIUM), MenuAction::OpenObservatorium);
         assert_eq!(resolve(ids::OPENCODE_WEB), MenuAction::OpenOpenCodeWeb);
-        assert_eq!(resolve(ids::CLOUD_PROJECTS_OVERFLOW), MenuAction::CloudOverflow);
+        assert_eq!(
+            resolve(ids::CLOUD_PROJECTS_OVERFLOW),
+            MenuAction::CloudOverflow
+        );
         assert_eq!(resolve("retry"), MenuAction::Retry);
         assert_eq!(resolve("open-log"), MenuAction::OpenLog);
     }

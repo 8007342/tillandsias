@@ -190,10 +190,7 @@ mod macos_main {
                 );
             }
 
-            println!(
-                "[vz-spike] observing serial for {} s",
-                observe.as_secs()
-            );
+            println!("[vz-spike] observing serial for {} s", observe.as_secs());
             // Observe by pumping the runloop (the serial writer fd is host
             // stderr; bytes flow as the guest produces them).
             tillandsias_vm_layer::vz::boot::pump_cf_loop_for(observe);
@@ -219,7 +216,10 @@ mod macos_main {
     /// tempdir is leaked on purpose — `VzRuntime` reads from it for the
     /// lifetime of the process, and a real tray persists `image_root` at
     /// `~/Library/Application Support/tillandsias/vm/`.
-    fn make_image_root(disk: &std::path::Path, nvram: Option<&std::path::Path>) -> std::io::Result<PathBuf> {
+    fn make_image_root(
+        disk: &std::path::Path,
+        nvram: Option<&std::path::Path>,
+    ) -> std::io::Result<PathBuf> {
         let base = std::env::temp_dir().join(format!("vz-spike-{}", std::process::id()));
         std::fs::create_dir_all(&base)?;
 

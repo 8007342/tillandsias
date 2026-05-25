@@ -174,17 +174,15 @@ pub mod boot {
     use objc2::rc::Retained;
     use objc2_foundation::{NSArray, NSFileHandle, NSString, NSURL};
     use objc2_virtualization::{
-        VZBootLoader, VZDiskImageStorageDeviceAttachment, VZEFIBootLoader,
-        VZEFIVariableStore, VZEFIVariableStoreInitializationOptions,
-        VZEntropyDeviceConfiguration, VZFileHandleSerialPortAttachment,
-        VZGenericPlatformConfiguration, VZMemoryBalloonDeviceConfiguration,
-        VZNATNetworkDeviceAttachment, VZNetworkDeviceConfiguration,
-        VZPlatformConfiguration, VZSerialPortAttachment, VZSerialPortConfiguration,
-        VZSocketDeviceConfiguration, VZStorageDeviceConfiguration,
+        VZBootLoader, VZDiskImageStorageDeviceAttachment, VZEFIBootLoader, VZEFIVariableStore,
+        VZEFIVariableStoreInitializationOptions, VZEntropyDeviceConfiguration,
+        VZFileHandleSerialPortAttachment, VZGenericPlatformConfiguration,
+        VZMemoryBalloonDeviceConfiguration, VZNATNetworkDeviceAttachment,
+        VZNetworkDeviceConfiguration, VZPlatformConfiguration, VZSerialPortAttachment,
+        VZSerialPortConfiguration, VZSocketDeviceConfiguration, VZStorageDeviceConfiguration,
         VZVirtioBlockDeviceConfiguration, VZVirtioConsoleDeviceSerialPortConfiguration,
         VZVirtioEntropyDeviceConfiguration, VZVirtioNetworkDeviceConfiguration,
-        VZVirtioSocketDeviceConfiguration,
-        VZVirtioTraditionalMemoryBalloonDeviceConfiguration,
+        VZVirtioSocketDeviceConfiguration, VZVirtioTraditionalMemoryBalloonDeviceConfiguration,
         VZVirtualMachineConfiguration,
     };
 
@@ -298,8 +296,8 @@ pub mod boot {
 
             // virtio-console serial: guest writes → host stderr (or override),
             // host reads /dev/null (no input forwarded).
-            let null_fd = open_read_only_devnull()
-                .ok_or_else(|| "open(/dev/null) failed".to_string())?;
+            let null_fd =
+                open_read_only_devnull().ok_or_else(|| "open(/dev/null) failed".to_string())?;
             let writer_fd = match spec.serial_writer_fd {
                 Some(fd) => fd,
                 None => dup_fd(2).ok_or_else(|| "dup(stderr) failed".to_string())?,
@@ -377,9 +375,7 @@ pub mod boot {
             if remaining <= 0.0 {
                 break;
             }
-            let _rc = unsafe {
-                CFRunLoopRunInMode(kCFRunLoopDefaultMode, remaining.min(1.0), 0)
-            };
+            let _rc = unsafe { CFRunLoopRunInMode(kCFRunLoopDefaultMode, remaining.min(1.0), 0) };
         }
     }
 
@@ -394,7 +390,9 @@ pub mod boot {
         unsafe extern "C" {
             fn open(path: *const std::os::raw::c_char, oflag: c_int) -> c_int;
         }
-        let fd = unsafe { open(b"/dev/null\0".as_ptr() as _, 0 /* O_RDONLY */) };
+        let fd = unsafe {
+            open(b"/dev/null\0".as_ptr() as _, 0 /* O_RDONLY */)
+        };
         if fd < 0 { None } else { Some(fd) }
     }
 
@@ -466,18 +464,15 @@ impl VmRuntime for VzRuntime {
         // the cheatsheet for the production approach (installer-VM sidecar
         // or hdiutil + mkfs via a helper container).
         vz_real::extract_kernel_artifacts(&manifest.rootfs_tarball, &self.image_root)?;
-        vz_real::convert_rootfs_to_disk_image(
-            &manifest.rootfs_tarball,
-            &self.rootfs_image_path(),
-        )?;
+        vz_real::convert_rootfs_to_disk_image(&manifest.rootfs_tarball, &self.rootfs_image_path())?;
         Ok(())
     }
 
     async fn start(&self) -> Result<(), VmError> {
-        use std::time::Instant;
         use objc2::ClassType;
         use objc2_foundation::NSError;
         use objc2_virtualization::VZVirtualMachine;
+        use std::time::Instant;
 
         // Phase 1 interim: VzRuntime::start expects the rootfs.img path
         // already populated at `<image_root>/rootfs.img`. Phase 4 will
@@ -631,11 +626,9 @@ impl VmRuntime for VzRuntime {
     async fn exec(&self, _argv: &[&str]) -> Result<ExitStatus, VmError> {
         // Phase 5 work (gated on control-wire-pty-attach merging). Returns
         // a clear error so callers don't silently swallow the gap.
-        Err(
-            "VzRuntime::exec: deferred to Phase 5 (gated on \
+        Err("VzRuntime::exec: deferred to Phase 5 (gated on \
              control-wire-pty-attach merging). See plan/steps/20-macos-tray-v0_0_1.md."
-                .into(),
-        )
+            .into())
     }
 
     async fn wait_ready(&self, timeout: Duration) -> Result<(), VmError> {
@@ -850,7 +843,10 @@ mod tests {
         std::fs::write(rt.kernel_path(), b"").unwrap();
         assert!(!rt.is_provisioned(), "rootfs+kernel is not enough");
         std::fs::write(rt.initrd_path(), b"").unwrap();
-        assert!(rt.is_provisioned(), "all three artifacts make it provisioned");
+        assert!(
+            rt.is_provisioned(),
+            "all three artifacts make it provisioned"
+        );
     }
 
     /// @trace spec:macos-native-tray.lifecycle.vz-guest@v1
@@ -919,10 +915,7 @@ mod tests {
             .exec(&["/bin/true"])
             .await
             .expect_err("exec should not silently succeed in Phase 1");
-        assert!(
-            err.contains("Phase 5"),
-            "unexpected exec error: {err}"
-        );
+        assert!(err.contains("Phase 5"), "unexpected exec error: {err}");
     }
 
     /// `VzRuntime::start` must surface a clear error when rootfs.img is
