@@ -78,8 +78,16 @@ single-run facts here; put those in `plan/loop_status.md` or the owning
 
 - Validate touched YAML with a focused parser check.
 - For Markdown-only changes, run `git diff --check` on touched files.
-- Commit and push to `origin/linux-next` only when durable coordination files
-  changed.
+- If any durable coordination file changed (`plan/**`, `methodology/**`,
+  `openspec/**`, `cheatsheets/**`, `.codex/skills/**`, or `codex`), commit and
+  push those changes to `origin/linux-next` before ending the loop.
+- Plan updates are not useful until remote agents can pull them. Every loop
+  that edits `plan/**` MUST push the resulting commit to `origin/linux-next`.
+- If the push is rejected because `origin/linux-next` advanced, fetch, rebase,
+  re-run focused validation, and retry the push. If still blocked, write the
+  blocker into `plan/loop_status.md` and report it in the final response.
+- If no durable coordination files changed, do not create an empty commit; say
+  that no push was needed.
 - Use a clear checkpoint-style commit message that states what changed, what
   remains, what was verified, current blockers, and next action.
 
