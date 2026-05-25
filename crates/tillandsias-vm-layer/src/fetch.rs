@@ -117,12 +117,12 @@ pub async fn download_verified(
     let expected = artifact.sha256.to_ascii_lowercase();
 
     // Cache hit: a fully-downloaded, verified artifact already on disk.
-    if let Some(existing) = file_sha256(dest).await? {
-        if existing == expected {
-            let len = tokio::fs::metadata(dest).await.map(|m| m.len()).unwrap_or(0);
-            on_progress(len, Some(len));
-            return Ok(());
-        }
+    if let Some(existing) = file_sha256(dest).await?
+        && existing == expected
+    {
+        let len = tokio::fs::metadata(dest).await.map(|m| m.len()).unwrap_or(0);
+        on_progress(len, Some(len));
+        return Ok(());
     }
 
     if let Some(parent) = dest.parent() {

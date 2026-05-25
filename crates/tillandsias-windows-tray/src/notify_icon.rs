@@ -36,7 +36,7 @@ use tillandsias_host_shell::menu_state::{self, MenuItem, MenuState, MenuStructur
 use tillandsias_host_shell::provisioning::{ProvisionPhase, ProvisionProgress};
 use tillandsias_host_shell::scanner::{watch_projects, ProjectEvent};
 
-use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, WPARAM};
+use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::Graphics::Gdi::HBRUSH;
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Shell::{
@@ -264,7 +264,18 @@ unsafe fn create_message_window() -> windows::core::Result<HWND> {
 }
 
 unsafe fn add_tray_icon(hwnd: HWND) -> windows::core::Result<()> {
-    let icon = LoadIconW(None, IDI_APPLICATION)?;
+    // Load the embedded tillandsias icon: resource ID 1 (`1 ICON
+    // "tillandsias.ico"` in assets/tillandsias.rc, compiled by build.rs via
+    // embed-resource). Fall back to the generic application icon if the
+    // resource is absent (e.g. a build where the .rc was not compiled), so the
+    // tray always has a glyph. @trace spec:windows-native-tray (w1)
+    let instance = GetModuleHandleW(None)?;
+    let hinst: HINSTANCE = instance.into();
+    // MAKEINTRESOURCE(1): an integer resource id encoded as a pointer-sized
+    // sentinel (never dereferenced by the loader). `without_provenance`
+    // expresses that precisely and avoids clippy's manual-dangling-ptr lint.
+    let icon = LoadIconW(hinst, PCWSTR(std::ptr::without_provenance::<u16>(1)))
+        .or_else(|_| LoadIconW(None, IDI_APPLICATION))?;
     let mut nid: NOTIFYICONDATAW = std::mem::zeroed();
     nid.cbSize = std::mem::size_of::<NOTIFYICONDATAW>() as u32;
     nid.hWnd = hwnd;
