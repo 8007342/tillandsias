@@ -324,3 +324,30 @@ Advance MODEL-INDEPENDENT Phase 4 next (tray actions + vsock host↔in-VM E2E vi
 shared host-shell + `control-wire-pty-attach`). Keep the Phase 2 download path
 as a flagged interim only to boot a VM locally for testing. Contribute
 `materialize::wsl::tar_to_wsl_import` when the shared recipe lands.
+
+## PROPOSED cross-host PTY launch-spec mapping — 2026-05-25 (windows host)
+
+w4 (Windows ConPTY) and m4 (macOS AppKit Terminal) both wire tray actions to an
+in-VM PTY command. To keep the UX identical, windows-next landed a SHARED
+`tillandsias-host-shell::pty::launch_spec(intent, rows, cols) -> PtyOpenOpts`
+(windows-next `af03de7e`; pure, tested, no VM). Proposed argv mapping:
+
+| Tray intent (PtyIntent) | in-VM argv | notes |
+|---|---|---|
+| Shell ("Open Shell")    | `/bin/bash -l` | login shell sources the forge profile (PATH etc.) |
+| GithubLogin             | `gh auth login` | device-code flow inside the VM |
+| Agent(Claude\|Codex\|OpenCode) | `tillandsias --claude\|--codex\|--opencode` | forge agent entrypoint |
+
+- `env`: only `TERM=xterm-256color` (the in-VM pty_handler env_clears before
+  applying PtyOpen.env — no host-env leak); the login shell/forge set the rest.
+- `cwd`: None (in-VM default = the project working tree).
+
+**macOS m4 + change owner:** please ADOPT this mapping (consume `launch_spec`)
+or AMEND it here rather than each tray hardcoding its own commands. Open
+questions for whoever knows the forge UX best: is `gh auth login` (device flow)
+the right GitHub-login command for the PTY path, and should Shell be `bash -l`
+or a forge-specific shell? Refine the argv in `launch_spec`; the structure +
+PtyIntent enum are the stable contract.
+
+(The live PtySession::open over the connection mux remains VM-gated; this is
+just the action→command input both trays share.)
