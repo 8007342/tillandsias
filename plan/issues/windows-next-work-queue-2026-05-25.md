@@ -2,12 +2,13 @@
 
 trace: methodology/distributed-work.yaml, plan/steps/windows-next-thin-tray.md, plan/issues/tray-convergence-coordination.md, plan/issues/control-socket-protocol-convergence-2026-05-25.md, openspec/changes/control-wire-pty-attach/
 
-Status: **OPEN** as of 2026-05-25T18:45Z. Windows w1, w2, and w3 are done.
+Status: **OPEN** as of 2026-05-25T18:54Z. Windows w1, w2, and w3 are done.
 Linux l3 shipped the in-VM PTY handler at `f770e013`/`8dc0d129` and l4 shipped
 real vsock handlers at `6956c825`. Windows w4 is now in progress through the
-shared host-shell `PtySession` / ConPTY path; w6 is ready for verification.
-Remaining WSL rootfs work is gated on Linux materializer plus macOS-owned
-recipe-publish deliverables.
+shared host-shell `PtySession` / ConPTY path; the cross-platform core landed at
+windows-next `a57983b6` and the ConPTY lifecycle landed at windows-next
+`5e95f7c3`. w6 is ready for verification. Remaining WSL rootfs work is gated
+on Linux materializer plus macOS-owned recipe-publish deliverables.
 
 ## How to use this file
 
@@ -157,9 +158,10 @@ l5 land, unless a newly filed ready item with a stable ID appears first.
     to the host-side pseudo-tty file descriptor.
 - estimated_effort: 1–2 days.
 - progress:
-  - Cross-platform `PtySession` core landed at windows-next `a57983b6`;
-    Windows ConPTY, real pump_io bridge, and tray menu wiring remain under the
-    same lease.
+  - Cross-platform `PtySession` core landed at windows-next `a57983b6`.
+  - Windows §3.3 ConPTY lifecycle landed at windows-next `5e95f7c3`; real
+    `CreateProcessW` attach, async pipe pump_io bridge, and tray menu wiring
+    remain under the same lease.
 
 ### Item: w5/wsl-import-via-ci-rootfs
 
