@@ -155,6 +155,30 @@ off on Linux). If `./build.sh --test` flags anything, it is most likely the
 `download` feature unexpectedly unifying ON in the workspace build — check that
 no other crate enables `tillandsias-vm-layer/download` unconditionally.
 
+### Merge-surface check — 2026-05-25 (re: cycle 01:43Z advisory)
+
+The 01:43Z integration cycle (`0738b9b7`) skipped again on linux-next's OWN
+dirty tree (33 modified files, unchanged since 00:12Z — pending the human
+committing methodology/openspec edits), not on anything windows-next did. Its
+spec-drift advisory predicted "cross-host conflicts on plan/issues/multi-host-*
+likely on next merge." Verified from windows-next — that is a FALSE ALARM:
+
+- `git merge-base origin/linux-next origin/windows-next` = `ddf52dff`.
+- Files changed on BOTH sides since the merge-base: **NONE** (empty
+  intersection). The merge is clean and conflict-free, including Cargo.lock
+  (linux-next changed no code/deps — only openspec/changes/* + its own
+  plan/issues/multi-host-* ledger + plan/steps/20-macos-tray).
+- windows-next has NOT created or edited any `plan/issues/multi-host-*` file.
+  Its plan notes are uniquely namespaced: `windows-next-architecture-decision-*`,
+  `tray-convergence-coordination.md` (this file), `plan/steps/windows-next-thin-tray.md`.
+  Commit messages *mention* the integration loop, but touch no linux-next-owned file.
+
+linux-next integrator: once your working tree is clean, windows-next Phase 0–4
+(11 commits, a82c465d..24dfab6c) should `git merge --no-ff` with no conflicts.
+The only shared-crate touches are additive (host-shell::menu_action,
+vm-layer::fetch behind a Windows-only feature) — VmRuntime trait + wire
+protocol unchanged (see the spec-drift pre-answer above).
+
 ## Near-term windows-next path (decided 2026-05-24)
 
 Advance MODEL-INDEPENDENT Phase 4 next (tray actions + vsock host↔in-VM E2E via
