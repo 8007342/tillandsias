@@ -1,0 +1,344 @@
+trace: spec:methodology-accountability, plan/issues/branch-and-coordination-canon-2026-05-25.md
+
+distributed_work:
+  version: v0.1
+  purpose: >
+    Define the CRDT-inspired primitives that let any agent on any host
+    discover, claim, execute, checkpoint, hand off, and complete units of
+    work from a shared `plan/` ledger — without a central coordinator and
+    without requiring the originating agent or session to still exist.
+  authority:
+    - Cited from methodology.yaml entrypoints.
+    - Citable by plan/steps, plan/issues, and openspec/changes.
+    - Subordinate to methodology.yaml, methodology/multi-host-development.yaml,
+      and methodology/versioning.yaml when they conflict.
+
+  crdt_principles:
+    rationale: >
+      Multi-host, multi-agent, multi-session work has the same shape as a
+      distributed system: writers are independent, partitions are common
+      (laptops sleep, sessions die, agents are killed mid-task), and we
+      cannot rely on a coordinator. We borrow patterns from conflict-free
+      replicated data types so that any agent can act on its local view
+      and produce updates that merge deterministically with any other
+      agent's updates.
+    invariants:
+      stable_ids:
+        rule: >
+          Every claimable unit of work has a globally unique, content-derived
+          stable ID. Two agents producing the "same" unit produce the same
+          ID. IDs MUST NOT embed agent identity, host, or timestamp.
+        encoding: >
+          `<kind>/<short-kebab-summary>` for human-written items;
+          `<kind>/<sha256-prefix-12>` when minted from content.
+        examples:
+          - step/multi-host-plan-ledger-adoption
+          - issue/control-socket-protocol-convergence-2026-05-25
+          - change/vm-recipe-provisioning
+      append_only_history:
+        rule: >
+          Plan-ledger files are append-only. Agents add events to the end of
+          a log section; they do not rewrite earlier entries. Current state
+          is the fold (left-fold) of the event sequence keyed by stable ID.
+        why: >
+          Two agents racing to update the same item produce two appends
+          rather than a write-write conflict.
+        exceptions:
+          - "Status fields in YAML index files (plan/index.yaml) ARE
+            last-writer-wins; this is the trade-off for queryability.
+            Agents updating a status SHOULD include a progress_note
+            describing what changed."
+          - "Tombstones supersede prior content; never DELETE — write a
+            tombstone block that points at the canonical replacement."
+      idempotent_operations:
+        rule: >
+          Re-running the same claim, the same checkpoint write, or the same
+          completion event MUST yield the same observable state. Agents
+          MUST be safe to retry on failure without checking 'did I already
+          do this'.
+        mechanism: >
+          Stable-ID + event-type + lease_id + monotonic seq within the
+          agent's claim. A second `claim` event for the same lease_id is a
+          no-op upsert.
+      commutative_writes:
+        rule: >
+          Writes from different agents to different stable IDs commute.
+          Writes from different agents to the SAME stable ID are reconciled
+          by stable-ID-keyed semantic merge (see [[merge_policy]]).
+        ordering: >
+          When ordering matters, agents tag the event with their host
+          identity and a UTC ISO-8601 timestamp; the fold is timestamp-major
+          host-minor.
+      no_central_coordinator:
+        rule: >
+          No agent waits for another agent's permission to start, claim,
+          or finish work. Conflict detection happens at merge time
+          (`git pull --rebase` or `git merge`) — not at action time.
+        consequence: >
+          Two agents may race on the same claim; one wins the lease
+          (whoever's commit pushed first), the other notices on its next
+          fetch and either piggybacks (if its work is additive) or yields
+          (releases its claim, picks a different item).
+      lease_with_ttl:
+        rule: >
+          A claim is a lease, not a lock. Leases carry a TTL (default 4
+          hours) and an expires_at. An agent that intends to keep working
+          past expires_at MUST renew by re-emitting the claim event.
+          Other agents MAY reclaim an expired lease.
+        why: >
+          Agents die (process killed, laptop sleeps, network drops).
+          Without TTL, dead agents would block forever.
+
+  work_item_schema:
+    rule: >
+      Each claimable unit of work is described by one YAML or Markdown
+      block bearing this schema. Stored under plan/steps/, plan/issues/,
+      or openspec/changes/.
+    fields:
+      id:
+        kind: required
+        format: "<kind>/<slug>"
+        note: "Globally unique, content-stable per [[crdt_principles.invariants.stable_ids]]."
+      type:
+        kind: required
+        enum: [spec, feature, fix, docs, methodology, integration, housekeeping]
+      title:
+        kind: required
+        format: "one-line human summary"
+      owner_host:
+        kind: required
+        enum: [linux, windows, macos, any, none]
+        note: >
+          `any` = any host can pick it up. `none` = informational only,
+          not claimable. `linux`/`windows`/`macos` = host-pinned.
+      capability_tags:
+        kind: optional
+        type: list-of-string
+        examples:
+          - rust
+          - gtk
+          - win32
+          - appkit
+          - docs
+          - testing
+        note: >
+          Agents filter eligible work by intersecting their declared
+          capabilities with these tags.
+      status:
+        kind: required
+        enum: [pending, claimed, in_progress, blocked, done, failed]
+        rule: "Last-writer-wins per [[append_only_history.exceptions]]."
+      lease:
+        kind: present_when_claimed
+        fields:
+          lease_id: "<sha256-prefix-12> minted by claimant"
+          agent_id: "free-form identifier (e.g. 'linux-tlatoani-fedora-claudia-cli-2026-05-25T06')"
+          host: "linux | windows | macos"
+          acquired_at: "UTC ISO-8601"
+          expires_at: "UTC ISO-8601, default acquired_at + 4h"
+      events:
+        kind: append_only
+        type: list-of-event-block
+        event_types:
+          claim:
+            fields: [ts, agent_id, host, lease_id]
+            idempotent: true
+          progress:
+            fields: [ts, agent_id, host, lease_id, note, partial_artifact_refs]
+            idempotent: false
+          blocked:
+            fields: [ts, agent_id, host, lease_id, reason, blocker_refs]
+            idempotent: false
+          checkpoint:
+            fields: [ts, agent_id, host, lease_id, commit_sha, summary]
+            idempotent: false
+          released:
+            fields: [ts, agent_id, host, lease_id, reason]
+            idempotent: true
+            note: "Voluntary release before completion; another agent may claim."
+          failed:
+            fields: [ts, agent_id, host, lease_id, reason, retryable]
+            idempotent: true
+            note: "Terminal-for-this-attempt; retryable=true means a future agent may re-claim."
+          completed:
+            fields: [ts, agent_id, host, lease_id, evidence_refs]
+            idempotent: true
+            note: "Terminal. Status flips to `done`. Lease is implicitly released."
+      depends_on:
+        kind: optional
+        type: list-of-id
+      blocks:
+        kind: optional
+        type: list-of-id
+      owned_files:
+        kind: optional
+        type: list-of-path
+        note: >
+          Hint for agents to detect collisions: if two work items list
+          overlapping owned_files and both have active leases, surface a
+          warning before either's checkpoint commit.
+
+  host_component_ownership:
+    rule: >
+      Each component declares which host owns its primary implementation.
+      Agents on other hosts MAY contribute (especially to shared protocol
+      and documentation) but the owning host is responsible for keeping it
+      green.
+    matrix:
+      shared_protocol_and_orchestration:
+        crates:
+          - tillandsias-control-wire
+          - tillandsias-host-shell
+          - tillandsias-core
+          - tillandsias-headless
+          - tillandsias-podman
+          - tillandsias-podman-cli
+          - tillandsias-vault-client
+          - tillandsias-logging
+          - tillandsias-metrics
+          - tillandsias-otp
+          - tillandsias-litmus-rust
+          - tillandsias-repeat-graph
+          - tillandsias-scanner
+          - tillandsias-browser-mcp
+        owner_host: linux
+        contribution_policy: >
+          Any host may propose changes via PR or via plan/issues. Linux host
+          owns the green-build invariant on `linux-next`.
+      linux_native_tray:
+        crates:
+          - tillandsias-headless (the `--tray` GTK feature)
+        owner_host: linux
+        notes: >
+          The Linux native tray is in-process; no separate crate, just the
+          `tray` feature module under `tillandsias-headless`.
+      macos_native_tray:
+        crates:
+          - tillandsias-macos-tray
+          - tillandsias-vm-layer (the `vz`/`virtualization.framework` modules)
+        owner_host: macos
+        contribution_policy: >
+          Other hosts MUST NOT edit AppKit/VFR-specific code paths without
+          coordinating in plan/. The shared `vm-layer::recipe`/`materialize`/
+          `cache` modules are exempt — they are co-owned per
+          plan/issues/tray-convergence-coordination.md.
+      windows_native_tray:
+        crates:
+          - tillandsias-windows-tray
+          - tillandsias-vm-layer (the `wsl` modules)
+          - tillandsias-vm-layer's `fetch` module (download feature)
+        owner_host: windows
+        contribution_policy: >
+          Other hosts MUST NOT edit Win32/WSL-specific code paths without
+          coordinating in plan/.
+      cross_cutting_documentation_and_methodology:
+        scopes:
+          - methodology/**
+          - openspec/changes/**
+          - openspec/specs/**
+          - plan/**
+          - cheatsheets/**
+          - docs/cheatsheets/**
+          - top-level *.md tombstones
+        owner_host: any
+        contribution_policy: >
+          Any agent on any host may write here. ALL writes go to
+          `linux-next` per [[crdt_principles.invariants.stable_ids]] and the
+          plan-write discipline. Conflicts reconciled by stable-ID upsert.
+
+  agent_self_assignment_protocol:
+    overview: >
+      Agents start cold (no memory of prior session) and need a
+      deterministic way to find work eligible for their host + capabilities.
+    steps:
+      - id: 0_orient
+        action: >
+          Read methodology.yaml, methodology/distributed-work.yaml (this
+          file), methodology/multi-host-development.yaml, plan.yaml,
+          plan/index.yaml, and the integration-loop ledger
+          (plan/issues/multi-host-integration-loop-2026-05-24.md if active).
+      - id: 1_identify_self
+        action: >
+          Determine host (uname/$OS), agent identity, intended capabilities.
+          Compose agent_id = "<host>-<workstation>-<harness>-<utc-stamp>".
+      - id: 2_fetch_canonical_state
+        action: >
+          `git fetch origin --prune` then `git checkout linux-next && git
+          pull --ff-only`. Plan ledger reads must come from the latest
+          origin/linux-next.
+      - id: 3_filter_eligible
+        action: >
+          Walk plan/steps + plan/issues + openspec/changes. Filter where
+          owner_host ∈ {own_host, any} AND status ∈ {pending, blocked,
+          failed-retryable} AND capability_tags ∩ own_capabilities is
+          non-empty AND no overlapping live lease.
+      - id: 4_pick_one
+        action: >
+          Prefer (a) blocked items where the blocker is now resolved,
+          (b) failed-retryable items, (c) pending items with earliest
+          order. Tie-break: smallest stable-ID lexicographic.
+      - id: 5_claim
+        action: >
+          Mint lease_id, write a `claim` event to the work item's events
+          list, commit + push to linux-next. If the push rebases reveal a
+          competing claim, yield (release your local lease, re-filter).
+      - id: 6_execute
+        action: >
+          Switch to the appropriate code branch if needed (windows-next,
+          osx-next, or stay on linux-next). Implement. At each meaningful
+          checkpoint, emit a `progress` or `checkpoint` event back to the
+          work item (commit to linux-next), then resume code work.
+      - id: 7_terminal
+        action: >
+          On success: emit `completed` event + commit_sha evidence; update
+          item status to `done`.
+          On voluntary stop: emit `released` event with reason; status
+          returns to `pending` or `blocked`.
+          On failure: emit `failed` event with `retryable: true|false` and
+          reason.
+      - id: 8_push_ledger
+        action: >
+          ALL plan/ writes push to linux-next, even if the code work is on
+          another branch. Per
+          [[plan/issues/branch-and-coordination-canon-2026-05-25.md §2]].
+
+  failure_and_handoff:
+    rule: >
+      Any agent at any time may resume an item left `in_progress` by another
+      agent IFF the lease has expired (now > expires_at) OR the prior agent
+      emitted a `failed` or `released` event.
+    resumption:
+      - "Re-read the entire events list for the item — do NOT rely on
+        agent memory."
+      - "If the prior agent emitted `progress` events with partial_artifact_refs,
+        read those artifacts before deciding what's left."
+      - "Mint a new lease_id; emit a `claim` event. The previous agent's
+        events stay in the log untouched (append-only)."
+      - "If the partial work is unrecoverable, emit a `released` event for
+        the unrecoverable portion citing the prior lease_id, then claim
+        the item fresh."
+
+  merge_policy:
+    rule: >
+      When two agents push concurrent edits to the same plan/ file, the
+      integration loop reconciles by:
+    steps:
+      - "git merge: if no textual conflict (different sections of the
+        same file), accept the merge."
+      - "If textual conflict on the same stable-ID block: prefer
+        timestamp-major ordering of the embedded events. If both blocks
+        added events to the same items list, concatenate and sort by ts."
+      - "If textual conflict on a YAML status field: prefer the
+        later-timestamped progress_note; record the earlier value in an
+        appended event."
+      - "NEVER resolve conflict by deletion. Tombstone the superseded
+        block and point at the canonical replacement."
+    enforcement:
+      - "The integration loop ledger
+        (plan/issues/multi-host-integration-loop-2026-05-24.md) records
+        every conflict resolution it performs."
+
+  cheatsheet_index:
+    - cheatsheets/concurrent-git/branches.md
+    - cheatsheets/concurrent-git/agent-handoff.md
+    - cheatsheets/concurrent-git/plan-discipline.md

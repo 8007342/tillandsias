@@ -1,0 +1,102 @@
+trace: spec:methodology-accountability
+
+event_id: methodology.event.032-distributed-work-methodology-refresh@v1
+status: distilled
+observed_at: "2026-05-25T06:00:00Z"
+reporter: "linux-tlatoani-fedora-claudia-cli-2026-05-25T06"
+summary: >
+  The 2026-05-24 multi-host development methodology (event 030) was correct
+  in shape but lacked CRDT-inspired primitives needed for the level of
+  concurrency seen on 2026-05-25: three hosts, multiple agents per host,
+  parallel drafting collisions, dormant sibling laptops, direct-to-integration
+  branch commits bypassing the platform-branch model, and an integration loop
+  that needed to absorb sibling work without a central coordinator.
+
+observed_signal:
+  description: >
+    Between 2026-05-24T22Z and 2026-05-25T06Z the integration loop observed:
+    (a) macOS and Windows hosts independently drafting the same proposal
+    amendment (D6 vs D8) within minutes of each other and having to reconcile;
+    (b) macOS host committing platform-flagged work directly to linux-next
+    rather than osx-next, leaving osx-next frozen since the 2026-05-24
+    alignment; (c) the unix-socket control dispatcher silently dropping
+    variants the vsock dispatcher handled, with no Error frame; (d) recurrent
+    confusion between `macos-next` and `osx-next` as the canonical macOS
+    branch name; (e) sibling laptops going dormant for hours, leaving the
+    Linux workstation as the only active integrator with no protocol for
+    self-paced work pickup.
+  signal_type: "methodology"
+
+expected_model:
+  description: >
+    Distributed multi-host, multi-agent, multi-session work needs CRDT-style
+    primitives: stable IDs, append-only event history, lease+TTL claims,
+    idempotent operations, commutative writes, no central coordinator.
+    Plan-class state (plan/, methodology/, openspec/, cheatsheets/) needs a
+    single-branch destination (linux-next) so cross-host coordination
+    converges without conflict resolution. Cheatsheets need to translate the
+    methodology into agent-actionable shell snippets so cold-start agents
+    can self-assign work in minutes, not hours.
+  source_refs:
+    - methodology/multi-host-development.yaml
+    - methodology/event/030-multi-host-branch-coordination.yaml
+
+violated_or_missing_claims:
+  methodology_claim_ids:
+    - distributed_work_primitives_unspecified
+    - plan_write_destination_branch_unspecified
+    - branch_name_canonicalization_unspecified
+    - host_component_ownership_matrix_unspecified
+    - agent_self_assignment_protocol_unspecified
+  spec_requirement_ids: []
+  litmus_ids: []
+  cheatsheet_refs: []
+
+affected_artifacts:
+  specs: []
+  methodology_files:
+    - methodology/distributed-work.yaml
+    - methodology/multi-host-development.yaml
+    - methodology.yaml
+  code_paths:
+    - crates/tillandsias-headless/src/tray/mod.rs
+    - crates/tillandsias-headless/src/vsock_server.rs
+  scripts: []
+  dashboards: []
+
+evidence_refs:
+  commits:
+    - a9adf59f
+    - 59706e19
+    - 3d2802f7
+  files:
+    - plan/issues/branch-and-coordination-canon-2026-05-25.md
+    - plan/issues/control-socket-protocol-convergence-2026-05-25.md
+    - plan/issues/multi-host-integration-loop-2026-05-24.md
+    - plan/issues/tray-convergence-coordination.md
+    - cheatsheets/concurrent-git/branches.md
+    - cheatsheets/concurrent-git/agent-handoff.md
+    - cheatsheets/concurrent-git/plan-discipline.md
+  logs: []
+  ci_runs: []
+  external_sources: []
+
+uncertainty_delta: medium
+
+provisional_classification: methodology_claim_unproven
+
+next_distillation_step:
+  owner: "next-multi-host-agent"
+  action: >
+    Implement the loop enhancement called out in
+    plan/issues/multi-host-integration-loop-2026-05-24.md "Loop enhancement
+    candidate" — claim-collision warnings at start of cycle. The methodology
+    now describes the primitives; the loop's STEP 2 should add a pre-check
+    that scans plan/issues/ for unresolved CLAIM blocks and warns when a
+    sibling's last 3 commits touch the claimed scope.
+  target_artifact: "code:integration-loop-cron-prompt"
+
+closure_criteria:
+  - learned_distinction_preserved_in_durable_artifact
+  - evidence_refs_are_queryable
+  - cheatsheets_index_regenerated_to_include_concurrent_git_category

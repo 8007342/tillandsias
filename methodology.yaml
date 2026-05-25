@@ -22,6 +22,7 @@ methodology:
     component_catalog: methodology/catalog.yaml
     agent_observability: methodology/agent-observability.yaml
     multi_host_development: methodology/multi-host-development.yaml
+    distributed_work: methodology/distributed-work.yaml
     plan_root: plan.yaml
     plan_index: plan/index.yaml
     plan_step_notes: plan/steps/README.md

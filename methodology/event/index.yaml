@@ -230,3 +230,14 @@ unknown_event_register:
       distilled_into:
         - methodology/multi-host-development.yaml
         - plan/issues/markdown-distillation-audit-2026-05-24.md
+    - file: methodology/event/032-distributed-work-methodology-refresh.yaml
+      status: distilled
+      distilled_into:
+        - methodology/distributed-work.yaml
+        - methodology/multi-host-development.yaml
+        - methodology.yaml
+        - cheatsheets/concurrent-git/branches.md
+        - cheatsheets/concurrent-git/agent-handoff.md
+        - cheatsheets/concurrent-git/plan-discipline.md
+        - plan/issues/branch-and-coordination-canon-2026-05-25.md
+      architectural_decision: "Plan/-class writes (plan/, methodology/, openspec/, cheatsheets/) ALWAYS land on linux-next regardless of authoring host. Branch canon is linux-next / windows-next / osx-next; macos-next is incorrect. CRDT-inspired primitives govern claim/handoff between agents."
