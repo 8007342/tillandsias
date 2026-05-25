@@ -351,3 +351,30 @@ PtyIntent enum are the stable contract.
 
 (The live PtySession::open over the connection mux remains VM-gated; this is
 just the action→command input both trays share.)
+
+### Companion: MenuAction → PtyIntent (which click opens which PTY) — 2026-05-25 (windows host)
+
+`launch_spec` answers "intent → argv". This answers the step before it:
+"clicked menu item → intent". Landed as a pure, tested helper on windows-next
+`e5ad2295`:
+
+`tillandsias-host-shell::pty::intent_for_action(&MenuAction, SelectedAgent) -> Option<PtyIntent>`
+
+| MenuAction        | PtyIntent              | rationale |
+|-------------------|------------------------|-----------|
+| `GithubLogin`     | `GithubLogin`          | 1:1 — the gh device flow |
+| `Attach{..}`      | `Agent(selected_agent)`| attaching launches the *currently selected* coding agent in the project tree |
+| `Maintain{..}`    | `Shell`                | maintenance = a plain `bash -l` login shell |
+| everything else   | `None`                 | Quit / agent-radio select / browser / Retry / OpenLog / overflow / Inert open no PTY |
+
+Design note: this deliberately gives every `PtyIntent` variant a menu source
+**without adding a new `MenuAction` enum variant** — so the shared
+`menu_action::resolve` table and both trays' `match`es stay intact (no
+"Open Shell" id needed; Maintain covers Shell). The Windows tray already wires
+`dispatch_action` through this helper (resolves end-to-end host-side; only the
+vsock `PtyOpen` send is VM-gated, w4f).
+
+**macOS m4 + change owner:** ADOPT `intent_for_action` in the AppKit dispatch
+path, or AMEND the table here. Open question: is Maintain→Shell the right home
+for the maintenance shell, or do you want a distinct "Open Shell" menu id (which
+WOULD add a `MenuAction` variant + a `resolve` arm for both trays)?
