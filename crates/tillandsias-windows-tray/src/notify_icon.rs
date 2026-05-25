@@ -32,8 +32,11 @@ use std::os::windows::ffi::OsStrExt;
 use std::sync::Mutex;
 
 use tillandsias_host_shell::menu_action::{self, MenuAction};
-use tillandsias_host_shell::menu_state::{self, MenuItem, MenuState, MenuStructure, ProjectEntry};
+use tillandsias_host_shell::menu_state::{
+    self, MenuItem, MenuState, MenuStructure, ProjectEntry, SelectedAgent,
+};
 use tillandsias_host_shell::provisioning::{ProvisionPhase, ProvisionProgress};
+use tillandsias_host_shell::pty::{intent_for_action, launch_spec};
 use tillandsias_host_shell::scanner::{ProjectEvent, watch_projects};
 
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
@@ -533,14 +536,43 @@ fn dispatch_action(hwnd: HWND, action: MenuAction) {
         MenuAction::OpenLog => {
             tracing::info!("open log requested: host-side log-file path not wired yet");
         }
-        MenuAction::Attach { scope, name } | MenuAction::Maintain { scope, name } => {
-            tracing::info!(?scope, %name, "project action queued for the post-PTY (vsock-E2E) iteration");
-        }
-        MenuAction::GithubLogin => {
-            tracing::info!("github login queued for the PTY iteration (control-wire-pty-attach)");
+        // Attach / Maintain / GitHub-login all open an in-VM PTY. The click is
+        // resolved end-to-end on the host side here — `intent_for_action` picks
+        // the `PtyIntent`, `launch_spec` produces the exact in-VM argv — leaving
+        // only the vsock `PtyOpen` send for the VM-E2E iteration.
+        MenuAction::Attach { .. } | MenuAction::Maintain { .. } | MenuAction::GithubLogin => {
+            resolve_and_log_pty_launch(&action);
         }
         MenuAction::CloudOverflow | MenuAction::Inert => {}
     }
+}
+
+/// The currently selected coding agent, read from the shared menu state.
+/// Defaults to the menu's initial agent if the state is not yet populated.
+fn selected_agent() -> SelectedAgent {
+    MENU_STATE
+        .lock()
+        .ok()
+        .and_then(|g| g.as_ref().map(|s| s.selected_agent))
+        .unwrap_or_else(|| MenuState::initial().selected_agent)
+}
+
+/// Resolve a PTY-opening menu action to its in-VM launch spec and log it. The
+/// resolution (`MenuAction` → [`intent_for_action`] → [`launch_spec`]) is the
+/// full host-side path; the remaining step — sending the `PtyOpen` frame over
+/// vsock and pumping the ConPTY — lands with the VM-E2E iteration (w4f).
+fn resolve_and_log_pty_launch(action: &MenuAction) {
+    let Some(intent) = intent_for_action(action, selected_agent()) else {
+        tracing::warn!(?action, "no PTY intent for action (unexpected in this arm)");
+        return;
+    };
+    // Default geometry until the tray owns a real terminal surface to size from.
+    let spec = launch_spec(&intent, 24, 80);
+    tracing::info!(
+        ?intent,
+        argv = ?spec.argv,
+        "resolved tray click to in-VM PTY launch; vsock attach pending VM-E2E (w4f)"
+    );
 }
 
 /// Apply the state-mutating effect of a menu action to the menu state.

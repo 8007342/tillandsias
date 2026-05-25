@@ -32,6 +32,7 @@ use tokio::sync::mpsc;
 
 use tillandsias_control_wire::{ControlMessage, MAX_PTY_FRAME_BYTES, PtyDirection, PtyExit};
 
+use crate::menu_action::MenuAction;
 use crate::menu_state::SelectedAgent;
 
 /// Already-rendered error context — matches the crate's String-error idiom.
@@ -75,6 +76,32 @@ fn agent_flag(agent: SelectedAgent) -> &'static str {
         SelectedAgent::Claude => "--claude",
         SelectedAgent::Codex => "--codex",
         SelectedAgent::OpenCode => "--opencode",
+    }
+}
+
+/// Resolve a clicked [`MenuAction`] to the in-VM PTY [`PtyIntent`] it should
+/// launch, or `None` for actions that open no terminal (Quit, agent-radio
+/// selection, browser links, log/retry, overflow, inert).
+///
+/// The mapping gives every `PtyIntent` variant a menu source WITHOUT adding a
+/// new `MenuAction` variant, so the shared resolution table stays stable for
+/// every tray:
+/// - [`MenuAction::GithubLogin`] → [`PtyIntent::GithubLogin`]
+/// - [`MenuAction::Attach`] → [`PtyIntent::Agent`] with the currently selected
+///   agent (attaching launches the chosen coding agent in the project tree)
+/// - [`MenuAction::Maintain`] → [`PtyIntent::Shell`] (a maintenance login shell)
+///
+/// PROPOSED cross-host contract (windows-next, 2026-05-25) — see
+/// plan/issues/tray-convergence-coordination.md; macOS m4 should adopt or amend
+/// this table rather than diverge.
+///
+/// @trace openspec/changes/control-wire-pty-attach/proposal.md (§3, host launch mapping)
+pub fn intent_for_action(action: &MenuAction, selected_agent: SelectedAgent) -> Option<PtyIntent> {
+    match action {
+        MenuAction::GithubLogin => Some(PtyIntent::GithubLogin),
+        MenuAction::Attach { .. } => Some(PtyIntent::Agent(selected_agent)),
+        MenuAction::Maintain { .. } => Some(PtyIntent::Shell),
+        _ => None,
     }
 }
 
@@ -559,6 +586,58 @@ mod tests {
                 .any(|(k, v)| k == "TERM" && v == "xterm-256color")
         );
         assert!(s.cwd.is_none());
+    }
+
+    #[test]
+    fn intent_for_action_maps_clickable_menu_items() {
+        use crate::menu_action::ProjectScope;
+        // GitHub login → gh auth login.
+        assert_eq!(
+            intent_for_action(&MenuAction::GithubLogin, SelectedAgent::Claude),
+            Some(PtyIntent::GithubLogin)
+        );
+        // Attach launches the *currently selected* agent in the project tree.
+        assert_eq!(
+            intent_for_action(
+                &MenuAction::Attach {
+                    scope: ProjectScope::Local,
+                    name: "myapp".to_string(),
+                },
+                SelectedAgent::Codex,
+            ),
+            Some(PtyIntent::Agent(SelectedAgent::Codex))
+        );
+        // Maintenance opens a plain login shell, regardless of selected agent.
+        assert_eq!(
+            intent_for_action(
+                &MenuAction::Maintain {
+                    scope: ProjectScope::Cloud,
+                    name: "repo".to_string(),
+                },
+                SelectedAgent::OpenCode,
+            ),
+            Some(PtyIntent::Shell)
+        );
+        // Non-terminal actions open no PTY.
+        assert_eq!(
+            intent_for_action(&MenuAction::Quit, SelectedAgent::Claude),
+            None
+        );
+        assert_eq!(
+            intent_for_action(
+                &MenuAction::SelectAgent(SelectedAgent::Codex),
+                SelectedAgent::Claude
+            ),
+            None
+        );
+        assert_eq!(
+            intent_for_action(&MenuAction::OpenLog, SelectedAgent::Claude),
+            None
+        );
+        assert_eq!(
+            intent_for_action(&MenuAction::Inert, SelectedAgent::Claude),
+            None
+        );
     }
 
     #[tokio::test]
