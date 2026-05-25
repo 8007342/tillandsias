@@ -124,6 +124,37 @@ If linux/macos prefer local materialization as the universal default, the
 Windows wrinkle (buildah-in-WSL bootstrap) must be designed explicitly — at
 minimum a documented "ensure a builder WSL distro with podman" preflight.
 
+## Integration-loop awareness (windows-next side)
+
+linux-next runs an automated integration loop every ~2h (cron `7ed95aed`,
+ledger: `plan/issues/multi-host-integration-loop-2026-05-24.md`): fetch, merge
+`--no-ff --no-commit` each sibling, `./build.sh --check` + `--test`, push on
+success, log per cycle.
+
+- Cycle 2026-05-25T00:12Z SKIPPED — *linux-next's own* working tree was dirty
+  (user methodology/spec edits in progress), NOT a windows-next problem. It
+  saw windows-next at `c43390b4` (Phase 2); windows-next has since advanced to
+  the Phase 4 head. Next clean cycle will integrate Phase 0–4.
+
+Pre-answer to the loop's spec-drift watch — shared-crate touches in
+windows-next Phase 2 + 4, all additive + contract-preserving:
+- `vm-layer`: NEW `fetch` module + `download` feature (optional reqwest/sha2/
+  serde_json). Feature is enabled ONLY on the Windows target by `windows-tray`
+  (target-gated 2026-05-25), so the Linux integration build does NOT pull
+  reqwest through this crate. `VmRuntime` trait signatures UNCHANGED.
+- `host-shell`: NEW `menu_action` module (additive). Two test modules
+  (`vsock_client`, `provisioning`) re-gated `#[cfg(test)]` ->
+  `#[cfg(all(test, unix))]` — they exercise the Unix-only `Transport::Unix`
+  round-trip; Linux + macOS still compile and run them, Windows skips. No
+  behavior change.
+- Wire protocol (`control-wire`): UNTOUCHED. vsock port 42420 contract intact.
+- `windows-tray`, `vm-layer/src/wsl.rs`: windows-next-owned; no sibling overlap.
+
+Expected Linux merge result: clean (no trait/protocol change; download feature
+off on Linux). If `./build.sh --test` flags anything, it is most likely the
+`download` feature unexpectedly unifying ON in the workspace build — check that
+no other crate enables `tillandsias-vm-layer/download` unconditionally.
+
 ## Near-term windows-next path (decided 2026-05-24)
 
 Advance MODEL-INDEPENDENT Phase 4 next (tray actions + vsock host↔in-VM E2E via
