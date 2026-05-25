@@ -325,3 +325,25 @@ shared host-shell pty scaffolding (avoiding a D6/D8-style parallel-build collisi
 
 w6 note: verify-only, but needs a live VM (gated on l7 materializer) to actually
 verify — so not actionable until provisioning works.
+
+### Event: 2026-05-25 — windows CLAIMS pty-attach §3 (shared host-side PtySession)
+
+Per owner decision, windows-next claims **control-wire-pty-attach §3**
+(shared host-side `tillandsias-host-shell::pty`). lease `8a3307907d94`,
+agent windows-bullo-claudia-cli-2026-05-25, host windows, status in_progress.
+
+Increment plan (code → windows-next; loop integrates):
+1. THIS increment — cross-platform PtySession CORE (all Windows-testable, no
+   real PTY/VM): PtyOpenOpts, SessionIdAllocator (§D2), chunk-to-guest framing
+   (§D5 ≤MAX_PTY_FRAME_BYTES), PtyRouter inbound session-id routing + per-session
+   bounded channel cap 256 (§3.7/D3), PtySession open/write/resize/close
+   (§3.1/3.5/3.6) over a PtyTransport trait, + FakeTransport unit tests (§3.8:
+   open/write/resize/close roundtrip, two-session interleave, oversized-frame
+   reject).
+2. NEXT — OS backends + pump_io: §3.3 Windows ConPTY (CreatePseudoConsole) in
+   pty/windows.rs (the heavy Win32 piece) + pump_io tasks bridging the real
+   PTY master ↔ write/recv. §3.2 unix (nix::pty::openpty) left as a
+   `#[cfg(unix)]` stub for the Linux host to fill+test.
+3. THEN w4 — wire tray OpenShell/GithubLogin to PtySession::open + spawn wt.exe.
+
+macOS m4 (AppKit Terminal) consumes the same PtySession; coordinate via this file.
