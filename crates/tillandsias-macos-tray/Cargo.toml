@@ -33,6 +33,11 @@ objc2-app-kit = { version = "0.2", features = [
     "NSImage",
     "NSWorkspace",
     "NSEvent",
+    # Required by src/status_item.rs: NSStatusItem::button returns
+    # NSStatusBarButton (an NSView subclass) gated on NSView; NSMenuItem::
+    # setState + NSControlStateValueOn live in the NSCell feature.
+    "NSView",
+    "NSCell",
 ] }
 objc2-foundation = { version = "0.2", features = [
     "NSString",
