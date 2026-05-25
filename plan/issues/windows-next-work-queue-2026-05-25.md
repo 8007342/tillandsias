@@ -486,3 +486,22 @@ materializer). §3.2 unix openpty stub remains Linux's.
 Captured this session's gotchas (blocking-pipe-ReadFile hangs unit tests;
 edition-2021 disjoint-capture breaks Send for handle wrappers) in
 cheatsheets/runtime/windows-tray-dev.md.
+
+### w4 decomposition — claimable backlog (proposed 2026-05-25, windows host)
+
+Being greedy on task proposal: w4 (PTY tray wiring) split into sub-tasks so
+there's always something claimable instead of waiting on the VM. Verifiable-now
+items can land + be unit-tested before the VM path exists.
+
+| sub-task | what | owner | verifiable now? | status |
+|---|---|---|---|---|
+| w4a launch-spec | PtyIntent → PtyOpenOpts argv mapping | shared (win authored) | YES (pure) | DONE `af03de7e` |
+| w4b channel-transport | `ChannelPtyTransport`: PtyTransport that enqueues outbound ControlMessages to a bounded mpsc (the §D3 writer queue), decoupled from the Client | windows (pty, co-owned) | YES (enqueue→drain test) | pending |
+| w4c connection-mux | own the vsock `Client` (split); writer task drains the w4b queue → Client.send; reader task reads envelopes → routes PtyData/PtyClose to PtyRouter, other replies elsewhere | shared host-shell (coordinate; touches vsock_client) | PARTIAL (routing tested; Client glue = VM E2E) | pending |
+| w4d open-shell-menu | add an "Open Shell" item to the shared `menu_state` + `menu_action` (resolve to PtyIntent::Shell) | shared menu_state (coordinate w/ macOS+linux) | YES (menu build + dispatch test) | pending |
+| w4e wt-attach | spawn Windows Terminal (`wt.exe`) hosting the ConPtyMaster pseudoconsole | windows | NO (GUI/VM visual check) | pending |
+| w4f integration | tray dispatch(OpenShell/GithubLogin/Agent) → connection → PtySession::open + ConPtyMaster + pump_io + wt.exe | windows | NO (VM E2E) | pending |
+
+Next greedy pickups (no VM needed): **w4b** (windows-ownable, pure) and **w4d**
+(needs cross-tray sign-off on adding "Open Shell" to the shared menu — macOS m4
++ linux GTK tray also gain the item). w4c/w4e/w4f are VM-gated for verification.
