@@ -211,6 +211,29 @@ windows-next will NOT edit `openspec/changes/vm-recipe-provisioning/*` (change
 owner's artifact); it will implement `materialize::wsl::tar_to_wsl_import` +
 the CI-fetch path once the proposal is amended and merged.
 
+### OWNER DECISION — 2026-05-25: Path B, deadline 2026-05-31
+
+The change owner (cross-host) signaled **Path B** in answer to the linux-host
+response's A-vs-B question:
+
+- Land model-independent Phase 4 (tray + `control-wire-pty-attach`) on all
+  three hosts FIRST. Defer the recipe-vs-CI-fetch decision.
+- **Hard deadline: 2026-05-31** — by which `vm-recipe-provisioning` must be
+  amended (promote CI-materialized-rootfs dual-path to a first-class design,
+  per the linux-host amendment request) or explicitly replaced.
+- The owner also approved syncing windows-next with linux-next's shared
+  methodology/specs (done: merge commit on windows-next absorbing linux-next
+  multi-host discipline + the recipe/pty-attach proposals; build + tests green
+  on Windows post-merge).
+
+Still pending before recipe implementation can start: macOS must respond in
+`plan/issues/macos-recipe-convergence-response-2026-05-24.md`. Until the
+proposal is amended + macOS responds, no host implements the materializer.
+
+windows-next Phase-4 model-independent slice is already landed (menu_action
+resolver, ~/src scanner, embedded manifest); the vsock-E2E tail awaits a
+booted VM or `control-wire-pty-attach`.
+
 ## Near-term windows-next path (decided 2026-05-24)
 
 Advance MODEL-INDEPENDENT Phase 4 next (tray actions + vsock host↔in-VM E2E via
