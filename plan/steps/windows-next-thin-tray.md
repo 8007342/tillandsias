@@ -84,8 +84,15 @@ headless over vsock. Podman never on the Windows host. Older 6-distro
     headless, flip menu Provisioning→Ready from a real handshake +
     EnumerateLocalProjects (merge with scanned local list), Quit→graceful VM
     drain (VmShutdownRequest then stop), route Attach/GitHubLogin/agents over
-    the wire (control-wire-pty-attach for Open Shell + login). Also: ship a
-    real tray .rc/.ico icon (clears the build.rs placeholder warning).
+    the wire (control-wire-pty-attach for Open Shell + login).
+  - DONE (2026-05-25): added `assets/tillandsias.rc` embedding the existing
+    `tillandsias.manifest` (per-monitor-v2 DPI awareness + requireAdministrator
+    =false) — previously NOT embedded (no .rc), so the tray ran DPI-unaware.
+    Build warning cleared, no duplicate-manifest link error, liveness smoke
+    clean. ICON line is present-but-commented: real genus art is SVG-only
+    (assets/icons/<genus>/*.svg) and the host has no SVG->ICO rasterizer, so
+    the .ico is DEFERRED until art/rasterizer lands (runtime falls back to
+    IDI_APPLICATION; build tolerates it).
 - Phase 5 — Smoke + checkpoint to origin/windows-next.
 - Paperwork (woven in): archive superseded windows-wsl-runtime / windows-native-build
   changes with tombstone → decision note; keep OpenSpec/litmus bindings clean.
