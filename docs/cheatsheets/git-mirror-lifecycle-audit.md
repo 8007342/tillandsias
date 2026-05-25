@@ -1,32 +1,36 @@
 ---
-tags: [git, mirror, forge, enclave, push, github, wave-22]
+tags: [git, mirror, forge, enclave, push, github, wave-24, vault]
 languages: [bash, rust, sh]
 since: 2026-05-23
-last_verified: 2026-05-23
+last_verified: 2026-05-24
 sources:
   - crates/tillandsias-headless/src/main.rs
   - images/git/entrypoint.sh
   - images/git/post-receive-hook.sh
   - images/default/lib-common.sh
   - openspec/specs/git-mirror-service/spec.md
+  - openspec/specs/tillandsias-vault/spec.md
   - openspec/specs/podman-secrets-integration/spec.md
+  - cheatsheets/runtime/hashicorp-vault-tillandsias.md
 authority: high
 status: current
 tier: bundled
 ---
 
-# Git Mirror Push Lifecycle — Audit (2026-05-23, v0.2.260522.9)
+# Git Mirror Push Lifecycle — Audit (2026-05-24, v0.2.260523.6)
 
-**Audit date:** 2026-05-23  
-**Version audited:** v0.2.260522.9 (wave 22 — final)  
+**Audit date:** 2026-05-24
+**Version audited:** v0.2.260523.6 (wave 24/Phase 6 — safe refspec forwarding + Vault default)
 **Auditor scope:** Full read-only lifecycle trace from forge `git push origin <branch>` through GitHub commit.
 
 ---
 
 ## TL;DR
 
-- **Push lands at GitHub:** YES (design complete; implemented in wave 22)
-- **Top breakages found:** 0 (code-implemented; no container/network issues observed)
+- **Push lands at GitHub:** YES (design complete; implemented in wave 24)
+- **Top breakages found:** 0 critical after the wave 24 safety fix
+- **Safety invariant:** NEVER use `git push --mirror` from the sparse enclave mirror; forward only refs provided to `post-receive`
+- **Credential source:** Vault AppRole token at `/run/secrets/vault-token` by default; legacy `tillandsias-github-token` only behind `--legacy-keyring-secrets`
 - **Key divergence:** User's mental model (bind-mounted filesystem) differs from actual implementation (named podman volume + git daemon TCP protocol)
 - **Certificate status:** Proxy allowlist includes `.github.com` (✓), no HTTPS interception issues expected
 
@@ -41,7 +45,7 @@ tier: bundled
 1. **Forge container** clones from **enclave-scoped git daemon** over TCP (port 9418) via `git://git-service/<project>`
 2. **Git daemon** runs inside a separate `tillandsias-git-<project>` container
 3. **Bare repo** lives on a **named podman volume** (`tillandsias-mirror-<project>`) mounted at `/srv/git/<project>`
-4. **Post-receive hook** reads the GitHub token from **podman secret** (`/run/secrets/tillandsias-github-token`) and pushes outbound
+4. **Post-receive hook** reads a short-lived Vault AppRole token from **podman secret** (`/run/secrets/vault-token`), fetches the GitHub token from Vault at push time, and pushes outbound with explicit refspecs
 
 **Why the divergence matters:** 
 - User assumes the forge has direct filesystem access to the bare repo, so they expect `ls -la .git/objects/pack/` to show what the mirror has. It won't — the mirror's storage is in a named volume on the host, not visible inside the forge.
@@ -72,7 +76,7 @@ tier: bundled
 │ │            • PROJECT=<name>                                         │ │
 │ │            • TILLANDSIAS_PROJECT_REMOTE_URL=<github-url>            │ │
 │ │            • --volume tillandsias-mirror-<name>:/srv/git            │ │
-│ │            • --secret=tillandsias-github-token (if exists)          │ │
+│ │            • --secret=<vault-token>,target=vault-token              │ │
 │ │        ↳ podman run tillandsias-git-<name>                         │ │
 │ │        ↳ build_inference_run_args() → podman run tillandsias-inference
 │ │    - build_forge_agent_run_args(project_path, name):               │ │
@@ -112,8 +116,8 @@ tier: bundled
 │ │        <github-url>      │  │      hooks/post-receive  │             │
 │ │    - configure_git_      │  │    - Startup retry-push: │             │
 │ │      identity()          │  │      for each mirror,    │             │
-│ │                          │  │      git push --mirror   │             │
-│ │ 4. Inside Claude:        │  │      origin (flush       │             │
+│ │                          │  │      explicit branch/tag │             │
+│ │ 4. Inside Claude:        │  │      refspecs (flush     │             │
 │ │    $ git push origin     │  │      stranded commits)   │             │
 │ │      <branch>            │  │    - git daemon --port   │             │
 │ │                          │  │      9418 --base-path    │             │
@@ -123,13 +127,13 @@ tier: bundled
 │ │                          │  │                          │             │
 │ │ 5. Git protocol:         │  │ 6. Post-receive fires:   │             │
 │ │    push to              │  │    - Read /run/secrets/  │             │
-│ │    git://git-service/   │  │      tillandsias-github- │             │
-│ │    <PROJECT> →          │  │      token               │             │
+│ │    git://git-service/   │  │      vault-token         │             │
+│ │    <PROJECT> →          │  │    - Read GitHub token   │             │
 │ │    rewritten to         │  │    - Construct HTTPS URL:│             │
 │ │    git-service:9418     │  │      https://oauth2:     │             │
 │ │    (via ~/.gitconfig    │  │      $TOKEN@github.com/…│             │
-│ │     insteadOf rule)     │  │    - git push --mirror   │             │
-│ │                          │  │      <PUSH_URL>          │             │
+│ │     insteadOf rule)     │  │    - git push <PUSH_URL> │             │
+│ │                          │  │      <changed refspecs> │             │
 │ │                          │  │    - Log result (no      │             │
 │ │                          │  │      credentials shown)  │             │
 │ └──────────────────────────┘  └──────────────────────────┘             │
@@ -160,7 +164,8 @@ tier: bundled
 │    - hooks/post-receive (executable copy)                              │
 │                                                                         │
 │ 8. Secrets (ephemeral, created at tray startup):                       │
-│    - tillandsias-github-token (→ /run/secrets inside git container)    │
+│    - tillandsias-vault-token-* (→ /run/secrets/vault-token in git)     │
+│    - tillandsias-github-token only with --legacy-keyring-secrets        │
 │    - tillandsias-ca-cert, tillandsias-ca-key (for proxy + forge)       │
 └─────────────────────────────────────────────────────────────────────────┘
 
@@ -228,7 +233,7 @@ podman run \
   --network tillandsias-enclave \
   -v /tmp/tillandsias-ca/intermediate.crt:/etc/squid/certs/intermediate.crt:ro \
   -v /tmp/tillandsias-ca/intermediate.key:/etc/squid/certs/intermediate.key:ro \
-  tillandsias-proxy:v0.2.260522.9
+  tillandsias-proxy:v0.2.260523.6
 ```
 Function: `build_proxy_run_args()` (line 1199)
 
@@ -237,7 +242,7 @@ Proxy config:
 - Allowlist: `/etc/squid/allowlist.txt` (includes `.github.com`)
 - SSL bump: NO_BUMP for `.github.com` (passthrough, certificate pinning safe)
 
-**b) Git mirror container** — **WAVE 22 FIX**
+**b) Git mirror container** — **WAVE 24 + Phase 6 state**
 ```bash
 podman run \
   --detach --rm \
@@ -249,20 +254,26 @@ podman run \
   --env PROJECT=<PROJECT> \
   --env TILLANDSIAS_PROJECT_REMOTE_URL="https://github.com/user/repo.git" \
   --env GIT_TRACE=1 \
-  --secret=tillandsias-github-token \
+  --secret=tillandsias-vault-token-git-mirror-<instance>,target=vault-token,mode=0400 \
+  --env VAULT_ADDR=http://vault:8200 \
+  --env VAULT_ROLE=git-mirror \
   --read-only \
   --cap-drop=ALL \
   --security-opt=no-new-privileges \
   --userns=keep-id \
-  tillandsias-git:v0.2.260522.9
+  tillandsias-git:v0.2.260523.6
   # ENTRYPOINT=/usr/local/bin/entrypoint.sh (NOT CMD; image has no default CMD)
 ```
 Function: `build_git_run_args()` (line 1260)
 
-**Key wave 22 changes:**
+**Key wave 24 / Phase 6 changes:**
 - Line 1289: Named volume `tillandsias-mirror-<PROJECT>:/srv/git` (not bind-mount; persists across restarts)
 - Line 1299: Forward `TILLANDSIAS_PROJECT_REMOTE_URL` from host origin (read in step 2)
 - Image ENTRYPOINT (line 1307-1309): Runs `/usr/local/bin/entrypoint.sh`, does NOT override with CMD
+- Hook safety: post-receive and startup retry use explicit refspecs, never
+  `--mirror` or `--all`
+- Credential path: git service mounts a short-lived Vault AppRole token at
+  `/run/secrets/vault-token` by default
 
 **c) Inference container**
 ```bash
@@ -275,7 +286,7 @@ podman run \
   --env OLLAMA_DEBUG=1 \
   --env OLLAMA_KEEP_ALIVE=24h \
   -v ~/.cache/tillandsias/models:/home/ollama/.ollama/models:rw \
-  tillandsias-inference:v0.2.260522.9 \
+  tillandsias-inference:v0.2.260523.6 \
   /usr/bin/ollama serve
 ```
 Function: `build_inference_run_args()` (line 1313)
@@ -286,12 +297,14 @@ Function: `build_inference_run_args()` (line 1313)
 
 **Actions (lines 22–82, idempotent on each restart):**
 
-1. **Load token secret** (lines 26–30):
+1. **Load credential source**:
    ```bash
-   if [ -f /run/secrets/tillandsias-github-token ]; then
-       echo "GitHub token loaded from podman secret."
+   if [ -r /run/secrets/vault-token ]; then
+       echo "Vault AppRole token loaded; GitHub token will be read at push time via vault-cli."
+   elif [ -f /run/secrets/tillandsias-github-token ]; then
+       echo "Legacy GitHub token loaded from podman secret (deprecated path)."
    else
-       echo "No GitHub token available; authenticated git operations will fail."
+       echo "No credential source available; authenticated git operations will fail."
    fi
    ```
 
@@ -328,7 +341,10 @@ Function: `build_inference_run_args()` (line 1313)
    fi
    ```
 
-6. **Retry-push sweep** (lines 116–126): For each existing mirror, attempt `git push --mirror origin` to flush stranded commits from prior sessions.
+6. **Retry-push sweep** (lines 116–126): For each existing mirror, push
+   explicit branch/tag refspecs to flush stranded commits from prior sessions.
+   The startup path MUST NOT use `--mirror` or `--all` because the mirror is a
+   sparse cache and may not contain every upstream branch or tag.
 
 7. **Start git daemon** (lines 131–138):
    ```bash
@@ -450,13 +466,17 @@ forge:$ git push origin main
    fi
    ```
 
-4. **Read GitHub token from podman secret** (lines 52–54):
+4. **Read GitHub token through Vault by default**:
    ```bash
    TOKEN=""
-   if [ -r /run/secrets/tillandsias-github-token ]; then
+   if [ -r /run/secrets/vault-token ] && command -v vault-cli >/dev/null 2>&1; then
+       TOKEN="$(vault-cli read -field=token secret/github/token 2>/dev/null || true)"
+   fi
+   if [ -z "$TOKEN" ] && [ -r /run/secrets/tillandsias-github-token ]; then
        TOKEN="$(cat /run/secrets/tillandsias-github-token 2>/dev/null || true)"
    fi
    ```
+   The second branch is the deprecated `--legacy-keyring-secrets` fallback.
 
 5. **Construct push URL in memory** (lines 60–68):
    ```bash
@@ -468,16 +488,19 @@ forge:$ git push origin main
    ```
    Result: `https://oauth2:$TOKEN@github.com/user/repo.git` (in memory only)
 
-6. **Push to upstream** (lines 72–80):
+6. **Push only changed refs to upstream**:
    ```bash
-   if OUTPUT="$(git push --mirror "$PUSH_URL" 2>&1)"; then
+   if OUTPUT="$(git push "$PUSH_URL" $REFSPECS 2>&1)"; then
        log_msg "[git-mirror] Push to origin ($REMOTE_URL_REDACTED): success"
    else
        OUTPUT_REDACTED="$(redact_output "$OUTPUT")"
        log_msg "[git-mirror] WARNING: Push to origin ($REMOTE_URL_REDACTED) FAILED"
    fi
    ```
-   - `git push --mirror` pushes all refs (branches, tags) to the URL
+   - `$REFSPECS` is built from the post-receive stdin records
+   - create/update uses `<newsha>:<refname>`
+   - delete uses `:<refname>` only for refs explicitly deleted by the forge push
+   - bulk deletes above 10 refs are refused unless `TILLANDSIAS_ALLOW_BULK_DELETE=1`
    - Outbound HTTPS traffic goes through proxy (port 3128) due to env `https_proxy=http://proxy:3128`
    - Proxy's allowlist permits `.github.com`; SSL bump disabled for `.github.com`
    - Result: commits land on GitHub
@@ -506,7 +529,7 @@ All design requirements from `openspec/specs/git-mirror-service/spec.md` and `po
 | 1 | Bare repo seeding | "Mirror SHALL be created on first launch" | `entrypoint.sh` line 57: `git init --bare` (idempotent) | ✓ Implemented |
 | 2 | Hook installation | "Post-receive hook SHALL be installed per-project" | `entrypoint.sh` line 78: `cp post-receive-hook.sh hooks/post-receive` | ✓ Implemented |
 | 3 | Volume persistence | "Named volume persists across container restarts" | `build_git_run_args()` line 1289: `--volume tillandsias-mirror-<PROJECT>:/srv/git` | ✓ Implemented |
-| 4 | Token delivery | "Token mounts via `--secret` flag, not bind mounts" | `build_git_run_args()` implicit; `entrypoint.sh` line 26 reads `/run/secrets/tillandsias-github-token` | ✓ Implemented |
+| 4 | Token delivery | "Vault AppRole token mounts via `--secret` flag, not bind mounts" | `build_git_run_args()` mounts generated secret at `/run/secrets/vault-token`; hook reads GitHub token through `vault-cli` | ✓ Implemented |
 | 5 | Forge rewrite | "`url.<mirror>.insteadOf` installed in ~/.gitconfig" | `lib-common.sh` line 269: `git config --global --replace-all url.\${mirror_url}.insteadOf` | ✓ Implemented |
 | 6 | CA cert usage | "Git daemon uses `GIT_SSL_CAINFO` for HTTPS to GitHub" | `entrypoint.sh` line 37: `export GIT_SSL_CAINFO=/run/secrets/tillandsias-ca-cert` | ✓ Implemented |
 | 7 | Proxy routing | "Post-receive's `git push` uses enclave proxy (port 3128)" | Forge env `https_proxy=http://proxy:3128` inherited by daemon + post-receive | ✓ Implemented (via env inheritance) |
@@ -517,7 +540,7 @@ All design requirements from `openspec/specs/git-mirror-service/spec.md` and `po
 
 ### Forge Container (`tillandsias-forge-<PROJECT>`)
 
-**Image:** `tillandsias-forge:v0.2.260522.9` (Fedora minimal, ~1.2GB uncompressed)
+**Image:** `tillandsias-forge:v0.2.260523.6` (Fedora minimal, ~1.2GB uncompressed)
 
 **Launch args:** Constructed by `build_forge_agent_run_args()` (line 5003)
 
@@ -562,7 +585,7 @@ git push git://git-service/<PROJECT> <branch>
 
 ### Git Mirror Container (`tillandsias-git-<PROJECT>`)
 
-**Image:** `tillandsias-git:v0.2.260522.9` (Alpine 3.20, ~40MB)
+**Image:** `tillandsias-git:v0.2.260523.6` (Alpine 3.20, ~40MB)
 
 **Launch args:** Constructed by `build_git_run_args()` (line 1260)
 
@@ -585,7 +608,7 @@ git push git://git-service/<PROJECT> <branch>
 **Post-receive hook:** `/srv/git/<PROJECT>/hooks/post-receive`
 - **Present on startup:** Yes (installed by `entrypoint.sh`)
 - **Executable:** Yes (`chmod +x` applied)
-- **Token-aware:** Yes (reads `/run/secrets/tillandsias-github-token`)
+- **Token-aware:** Yes (reads `/run/secrets/vault-token` by default, deprecated `/run/secrets/tillandsias-github-token` fallback only)
 - **Redaction:** Yes (credentials stripped from logs)
 
 **Reachable from forge by hostname `git-service`:**
@@ -609,7 +632,7 @@ podman logs tillandsias-git-<PROJECT> --tail 30
 
 ### Proxy Container (`tillandsias-proxy`)
 
-**Image:** `tillandsias-proxy:v0.2.260522.9` (Fedora, Squid 6.x, ~150MB)
+**Image:** `tillandsias-proxy:v0.2.260523.6` (Fedora, Squid 6.x, ~150MB)
 
 **Network:** `--network tillandsias-enclave`, `--hostname proxy`
 
@@ -618,7 +641,7 @@ podman logs tillandsias-git-<PROJECT> --tail 30
 - **Contains `.github.com`:** Yes (line 53)
 - **Forge traffic:** `https_proxy=http://proxy:3128` → allowlist check → `.github.com` matches
 - **Git daemon traffic:** Git daemon inherits `https_proxy=http://proxy:3128` from container entrypoint env
-  - Post-receive's `git push --mirror <https-url>` uses proxy
+  - Post-receive's explicit-refspec HTTPS push uses proxy
   - Outbound: proxy:3128 → GitHub.com HTTPS
 
 **SSL bump configuration:**
@@ -646,26 +669,37 @@ ssl_bump bump all
 
 **Source of truth:** `openspec/specs/podman-secrets-integration/spec.md` (active)
 
-### `tillandsias-github-token`
+### Vault AppRole token (default)
 
-**Creation:** Tray startup, if GitHub token exists in OS keyring
+**Creation:** Per git service launch, when Vault is running
 
-**When created:** Before any containers launch (in `ensure_enclave_for_project()`)
+**When created:** Before the git service container starts
 
-**Source:** Host OS keyring (Linux Secret Service, macOS Keychain, Windows Credential Manager)
+**Source:** `tillandsias-vault` AppRole flow, scoped to `git-mirror-policy`
 
-**Retrieval:** `crates/tillandsias-headless/src/main.rs:3100` → `read_git_identity_defaults()` (also retrieves git identity)
+**Retrieval:** git container reads `/run/secrets/vault-token`, then runs
+`vault-cli read -field=token secret/github/token` at push time
 
 **Mounted into:**
-- **Git mirror container:** `tillandsias-git-<PROJECT>` (via `--secret=tillandsias-github-token`)
+- **Git mirror container:** `tillandsias-git-<PROJECT>` (via
+  `--secret=<generated>,target=vault-token,mode=0400`)
 - **Forge container:** NOT mounted (forge is credential-free)
 - **Proxy container:** NOT mounted (proxy does not use secrets directly)
 
-**Readable at:** `/run/secrets/tillandsias-github-token` inside git container (read-only, tmpfs)
+**Readable at:** `/run/secrets/vault-token` inside git container (read-only, tmpfs)
 
-**Token rotation cadence:** Created once per tray session, destroyed on tray shutdown. User must re-run `--github-login` to refresh if token expires.
+**Token rotation cadence:** Short-lived AppRole token (1h TTL, 24h max). The
+GitHub token itself is stored in Vault at `secret/github/token` by
+`tillandsias --github-login`.
 
-**Cleanup:** On tray shutdown, `podman secret rm tillandsias-github-token` (if exists)
+**Cleanup:** Tray shutdown revokes minted Vault tokens and removes the generated
+podman secret. The Vault container and its encrypted volume persist.
+
+### `tillandsias-github-token` (deprecated fallback)
+
+The legacy keyring-backed podman secret is mounted only when
+`--legacy-keyring-secrets` is selected. It remains for one release as a
+compatibility bridge and is expected to disappear in v0.3.
 
 ### `tillandsias-ca-cert` and `tillandsias-ca-key`
 
@@ -743,7 +777,8 @@ podman run --rm -v tillandsias-mirror-tillandsias:/srv/git \
 **To inspect after tray startup:**
 ```bash
 podman secret list
-# Expect: tillandsias-ca-cert, tillandsias-ca-key, tillandsias-github-token (if keyring has token)
+# Expect: tillandsias-ca-cert, tillandsias-ca-key, tillandsias-vault-token-* for git launches.
+# Deprecated fallback: tillandsias-github-token only when --legacy-keyring-secrets is selected.
 ```
 
 ---
@@ -756,24 +791,31 @@ podman secret list
 
 | # | Scenario | Evidence | Mitigation |
 |---|----------|----------|-----------|
-| 1 | **No GitHub token in keyring** | `read_host_project_origin_url()` still reads the origin URL and passes it to git container; `entrypoint.sh` logs "No GitHub token available" | Post-receive hook attempt to push fails with "could not read Username for 'https://github.com'" — expected and logged. User must run `--github-login` to authenticate. |
-| 2 | **Token expired between tray startup and push** | Token is created once per tray session; no refresh on-the-fly | Post-receive hook's `git push` fails with "401 Unauthorized". Logged as `[git-mirror] WARNING: Push to origin ... FAILED`. User must restart tray (killing token secret and re-reading from keyring). |
+| 1 | **No GitHub token in Vault** | `read_host_project_origin_url()` still reads the origin URL and passes it to git container; `entrypoint.sh` logs no credential source or Vault read failure | Post-receive hook attempt to push fails with "could not read Username for 'https://github.com'" or a Vault read error. User must run `--github-login` to authenticate. |
+| 2 | **Vault AppRole token expired between launch and push** | Token TTL is 1h, renewable up to 24h | Post-receive hook's Vault read fails, then legacy fallback is tried if mounted. User can restart the git service/tray to mint a fresh AppRole token. |
 | 3 | **Forge's `.git/config` is read-only (unusual)** | Bind-mount with `ro` flag (user misconfiguration) | Wave 20's rewrite installs rule in `~/.gitconfig` (global, not `.git/config`), so read-only `.git/config` does not block the push. Design handles this. |
-| 4 | **GitHub is down or unreachable** | Post-receive hook times out or receives 5xx from GitHub | Logged as failure; commits remain safe in bare repo. Retry on next push or manual `git push --mirror` inside git container. |
-| 5 | **Proxy is down** | Git daemon's `https_proxy=http://proxy:3128` points to dead container | `git push --mirror` hangs (TCP connection timeout). Retry-push sweep on next git container restart. Not a code bug; transient infrastructure failure. |
+| 4 | **GitHub is down or unreachable** | Post-receive hook times out or receives 5xx from GitHub | Logged as failure; commits remain safe in bare repo. Retry on next push or restart the git service to trigger the explicit-refspec startup sweep. |
+| 5 | **Proxy is down** | Git daemon's `https_proxy=http://proxy:3128` points to dead container | Explicit-refspec HTTPS push times out. Retry-push sweep on next git container restart. Not a code bug; transient infrastructure failure. |
 
 ---
 
 ## Open Questions / Spec Drift
 
-**None identified.** Code and specs are aligned.
+2026-05-24 drift found and fixed in this pass:
+
+- `openspec/specs/git-mirror-service/spec.md` still required
+  `git push --mirror origin`; it now requires explicit changed-ref refspecs.
+- This cheatsheet still documented the wave 22 keyring secret path; it now
+  documents Vault AppRole as default and the keyring path as a deprecated
+  fallback.
 
 ### Verification checklist (from `openspec/specs/git-mirror-service/spec.md`):
 
 - [x] Bare mirror created at `/srv/git/<PROJECT>` on first launch (entrypoint.sh line 57)
 - [x] Git daemon serves clones from enclave network only (git daemon port 9418 bound to enclave network alias `git-service`)
-- [x] Post-receive hook auto-pushes to remote if configured (post-receive-hook.sh line 72)
-- [x] Token mounted via podman secret, never environment variable (entrypoint.sh line 26, no env export)
+- [x] Post-receive hook forwards only changed refs to remote if configured
+- [x] Vault AppRole token mounted via podman secret, never environment variable
+- [x] Legacy `tillandsias-github-token` path is explicit and deprecated
 - [x] Forge containers cannot access credentials (build_forge_agent_run_args does not mount secret)
 - [x] Forge's origin rewritten to `git://git-service/<PROJECT>` (lib-common.sh line 269)
 
@@ -796,7 +838,7 @@ podman secret list
 
 **Prerequisites:**
 1. Tillandsias binary built: `/home/tlatoani/src/tillandsias/target/release/tillandsias`
-2. GitHub token in OS keyring (from previous `--github-login`)
+2. GitHub token stored in Vault from previous `tillandsias --github-login`
 3. Project path: `/home/tlatoani/src/tillandsias` (self-push to verify)
 
 **Commands:**
@@ -810,11 +852,11 @@ podman logs tillandsias-git-tillandsias --follow &
 sleep 2  # Let the container start
 
 # Terminal 3 (inside forge from Terminal 1):
-$ git checkout -b test-wave-22
-$ echo "test content" > wave-22-test.txt
-$ git add wave-22-test.txt
-$ git commit -m "test: wave 22 push lifecycle"
-$ git push origin test-wave-22
+$ git checkout -b test-git-mirror-safe-refspec
+$ echo "test content" > git-mirror-safe-refspec.txt
+$ git add git-mirror-safe-refspec.txt
+$ git commit -m "test: git mirror safe refspec lifecycle"
+$ git push origin test-git-mirror-safe-refspec
 
 # Expected output on host (Terminal 2):
 # [git-mirror] Push to origin (https://redacted@github.com/...): success
@@ -822,22 +864,22 @@ $ git push origin test-wave-22
 
 **Validation:**
 1. Check `podman logs tillandsias-git-tillandsias` for hook output (success or failure + reason)
-2. Visit GitHub repo → Branches tab → look for `test-wave-22` branch (if push succeeded)
+2. Visit GitHub repo → Branches tab → look for `test-git-mirror-safe-refspec` branch (if push succeeded)
 3. If push failed, check post-receive log for error (auth, network, GitHub down, etc.)
 
 ---
 
 ## Summary
 
-The git mirror push lifecycle in v0.2.260522.9 is **fully implemented** and ready for user testing. Wave 22 completed all required components:
+The git mirror push lifecycle in v0.2.260523.6 is **fully implemented** and ready for user testing. Wave 24 plus Phase 6 completed the required safety and credential updates:
 
 1. ✓ Bare repo seeding (idempotent)
-2. ✓ Post-receive hook installation and execution
-3. ✓ GitHub token delivery via podman secret
+2. ✓ Post-receive hook installation and explicit-refspec execution
+3. ✓ GitHub token delivery via Vault AppRole token podman secret
 4. ✓ Forge-side origin rewrite (`url.insteadOf`)
 5. ✓ Named volume persistence
 6. ✓ CA certificate injection for HTTPS
 7. ✓ Proxy allowlist includes `.github.com`
+8. ✓ Sparse mirror safety guard forbids `--mirror` and bulk deletes by default
 
 **User mental model gap to note:** The implementation uses a **separate container + named volume** (not a bind-mount filesystem shared between forge and mirror). This affects debugging instincts but does not affect functionality. The push succeeds because the git daemon protocol handles the transport, and the named volume persists the commits.
-

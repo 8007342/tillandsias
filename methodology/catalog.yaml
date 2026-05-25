@@ -49,6 +49,9 @@ methodology_catalog:
     between_commits_work_discipline:
       file: methodology/between-commits-work-discipline.yaml
       provides: "Ephemeral agent work and merge discipline."
+    multi_host_development:
+      file: methodology/multi-host-development.yaml
+      provides: "Linux, Windows, and macOS branch coordination and plan-ledger rules."
     agent_observability:
       file: methodology/agent-observability.yaml
       provides: "Agent event stream and handoff protocol."

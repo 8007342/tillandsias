@@ -7,22 +7,34 @@ status: active
 
 ## Purpose
 
-Per-project bare mirror repositories with git daemon serving clones over the enclave network. Post-receive hooks auto-push to remote. GitHub credentials arrive only as a podman secret mounted read-only into the git service container.
+Per-project bare mirror repositories live inside a named Podman volume mounted
+at `/srv/git` in the git service container. Git daemon serves clones and pushes
+over the enclave network. Post-receive hooks forward only the refs changed by
+the forge push to the configured remote. GitHub credentials arrive through the
+Phase 6 Vault AppRole path by default, with the deprecated keyring-backed
+podman secret kept as a temporary fallback.
 ## Requirements
 ### Requirement: Bare mirror repository management
-The system SHALL create and maintain a bare mirror repository for each project at `~/.cache/tillandsias/mirrors/<project>/`. The mirror SHALL be initialized from the project directory on first launch and updated from remote (if configured) on subsequent launches.
+The system SHALL create and maintain a bare mirror repository for each project
+at `/srv/git/<project>` inside the git service container, backed by the named
+Podman volume `tillandsias-mirror-<project>`. The mirror SHALL be initialized
+idempotently, SHALL store the configured upstream URL as `origin` when one is
+available, and SHALL survive git service container restarts.
 
 @trace spec:git-mirror-service
 
 #### Scenario: Project with remote origin
 - **WHEN** a project directory is a git repo with a configured remote `origin`
 - **AND** no mirror exists for this project
-- **THEN** the system SHALL create a bare mirror via `git clone --mirror <remote-url>` into `~/.cache/tillandsias/mirrors/<project>/`
+- **THEN** the git service SHALL create `/srv/git/<project>` via `git init --bare`
+- **AND** SHALL configure the mirror's `origin` remote to the host project's remote URL
 
 #### Scenario: Project with local-only git repo
 - **WHEN** a project directory is a git repo without a remote `origin`
 - **AND** no mirror exists for this project
-- **THEN** the system SHALL create a bare mirror via `git clone --mirror <local-path>` into `~/.cache/tillandsias/mirrors/<project>/`
+- **THEN** the git service SHALL create `/srv/git/<project>` via `git init --bare`
+- **AND** the post-receive hook SHALL log "no remote configured, skipping push"
+- **AND** forge pushes SHALL remain persisted in the bare mirror volume
 
 #### Scenario: Project directory is not a git repo
 - **WHEN** a project directory does not contain a `.git` directory
@@ -31,7 +43,8 @@ The system SHALL create and maintain a bare mirror repository for each project a
 
 #### Scenario: Mirror already exists
 - **WHEN** a mirror already exists for the project
-- **THEN** the system SHALL fetch updates from remote (if configured) via `git fetch --all` in the mirror
+- **THEN** the git service SHALL preserve existing refs and objects
+- **AND** SHALL refresh the mirror's `origin` remote from the launcher-provided URL when one is available
 
 ### Requirement: Git daemon serves mirrors on enclave network
 The git service container SHALL run `git daemon` with `--export-all --enable=receive-pack` on the enclave network. Forge containers SHALL clone from `git://git-service/<project>` where `git-service` resolves via the enclave network DNS.
@@ -61,16 +74,36 @@ The git service container SHALL run `git daemon` with `--export-all --enable=rec
 - **THEN** each SHALL have an independent working tree
 - **AND** pushes from one SHALL be visible to the other after fetch
 
-### Requirement: Post-receive hook auto-pushes to remote
-The bare mirror SHALL contain a `post-receive` hook that automatically pushes to `origin` after receiving commits from forge containers. If no remote is configured, the hook SHALL be a no-op.
+### Requirement: Post-receive hook forwards only changed refs
+The bare mirror SHALL contain a `post-receive` hook that automatically pushes to
+`origin` after receiving refs from forge containers. The hook SHALL read the
+`oldsha newsha refname` records from stdin and SHALL construct an explicit
+refspec list for exactly those refs. The hook MUST NOT run `git push --mirror`,
+`git push --all`, or any other command that rewrites or deletes refs not present
+in the forge push. If no remote is configured, the hook SHALL be a no-op.
 
 @trace spec:git-mirror-service
 
 #### Scenario: Push triggers auto-push to remote
 - **WHEN** a forge container pushes to the mirror
 - **AND** the mirror has a remote `origin` configured
-- **THEN** the post-receive hook SHALL run `git push --mirror origin`
-- **AND** log the result via `--log-git`
+- **THEN** the post-receive hook SHALL push only the stdin-provided refs using
+  explicit `<newsha>:<refname>` refspecs
+- **AND** SHALL log the update/deletion counts and result via `--log-git`
+
+#### Scenario: Unmentioned upstream refs are never touched
+- **WHEN** a forge push updates `refs/heads/feature-a`
+- **AND** the upstream repository has `refs/heads/main`, `refs/heads/release`,
+  and tags that are absent from the sparse mirror
+- **THEN** the post-receive hook SHALL NOT delete, force-update, or rewrite any
+  upstream ref except `refs/heads/feature-a`
+- **AND** the hook source SHALL contain a guard explaining that `--mirror` is forbidden
+
+#### Scenario: Bulk deletes are guarded
+- **WHEN** a forge push deletes more than ten refs in one post-receive batch
+- **THEN** the hook SHALL refuse to forward those deletions unless
+  `TILLANDSIAS_ALLOW_BULK_DELETE=1`
+- **AND** the forge push SHALL remain accepted locally so user commits are not lost
 
 #### Scenario: Push to local-only mirror
 - **WHEN** a forge container pushes to the mirror
@@ -84,32 +117,43 @@ The bare mirror SHALL contain a `post-receive` hook that automatically pushes to
 - **AND** the commits SHALL remain safe in the local mirror
 - **AND** the user can refresh credentials via "GitHub Login" in the tray
 
-### Requirement: GitHub token delivery via podman secret
-The git service container SHALL receive GitHub credentials only as the podman
-secret `tillandsias-github-token`, mounted read-only at
-`/run/secrets/tillandsias-github-token`. The container SHALL read the secret
-directly when constructing HTTPS push credentials. No D-Bus socket, keyring
+### Requirement: GitHub token delivery uses Vault AppRole by default
+The git service container SHALL receive a short-lived Vault AppRole token scoped
+to `git-mirror-policy` by default. The launcher SHALL mount that token as a
+podman secret at `/run/secrets/vault-token`; the hook SHALL read the GitHub
+token from Vault at `secret/github/token` through `vault-cli` only at push time.
+The deprecated `tillandsias-github-token` podman secret MAY be mounted only when
+the user explicitly selects the legacy keyring path. No D-Bus socket, keyring
 API, bind-mounted token file, or askpass helper SHALL cross the enclave
 boundary.
 
 @trace spec:git-mirror-service, spec:secrets-management, spec:native-secrets-store
 
-#### Scenario: Token file mount on launch
-- **WHEN** the git service container is launched and the host keyring contains a GitHub token
-- **THEN** the host SHALL create the `tillandsias-github-token` podman secret before `build_podman_args`
-- **AND** the container SHALL receive `--secret=tillandsias-github-token`
-- **AND** the container SHALL read `/run/secrets/tillandsias-github-token`
+#### Scenario: Vault token mount on launch
+- **WHEN** the git service container is launched and Vault is running
+- **THEN** the launcher SHALL mint an AppRole token scoped to `git-mirror-policy`
+- **AND** the container SHALL receive `--secret=<generated>,target=vault-token,mode=0400`
+- **AND** the container SHALL read `/run/secrets/vault-token`
+- **AND** the container SHALL receive `VAULT_ADDR=http://vault:8200` and
+  `VAULT_ROLE=git-mirror`
 
 #### Scenario: No token means no credential mount
-- **WHEN** the host keyring has no GitHub token
+- **WHEN** Vault has no GitHub token and the legacy keyring path is not selected
 - **THEN** the git service container SHALL start without a token mount
 - **AND** authenticated pushes SHALL fail loudly until the user re-authenticates via "GitHub Login"
 
-#### Scenario: Askpass reads the mounted token file
+#### Scenario: Hook reads the GitHub token from Vault
 - **WHEN** the git service's post-receive hook pushes to an HTTPS origin
-- **THEN** the hook SHALL read `/run/secrets/tillandsias-github-token`
+- **AND** `/run/secrets/vault-token` is present
+- **THEN** the hook SHALL run `vault-cli read -field=token secret/github/token`
 - **AND** construct the HTTPS auth URL in memory only
 - **AND** the token SHALL not appear in process arguments, environment variables, or logs
+
+#### Scenario: Legacy keyring secret fallback
+- **WHEN** the git service starts with `--legacy-keyring-secrets`
+- **THEN** the container MAY receive `--secret=tillandsias-github-token`
+- **AND** the hook MAY read `/run/secrets/tillandsias-github-token`
+- **AND** no Vault env vars SHALL be injected for the legacy-only git launch
 
 ### Requirement: Git service container lifecycle
 The git service container SHALL be started per-project when the first forge container launches and stopped when all forge containers for that project stop. The container name SHALL be `tillandsias-git-<project>`.
@@ -245,13 +289,14 @@ event" and "gone container".
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
 - `litmus:enclave-isolation` — Verify git service is enclave-only and credentials never leak
-- pending — test binding required for S2→S3 progression
+- `litmus:git-mirror-safe-refspec-push` — Verify post-receive and startup retry paths forbid `--mirror`/`--all`, build explicit refspecs, and guard bulk deletes.
 
 Gating points:
-- Bare mirror created at `~/.cache/tillandsias/mirrors/<project>/` on first launch
+- Bare mirror created at `/srv/git/<project>` inside `tillandsias-mirror-<project>` on first launch
 - git daemon serves clones from enclave network only; external clones fail
-- Post-receive hook auto-pushes to remote if configured, logs result with no credentials
-- D-Bus forwarding allows `gh auth token` inside container via host keyring
+- Post-receive hook forwards only changed refs to remote if configured, logs result with no credentials
+- Startup retry-push uses explicit branch/tag refspecs, never `--mirror` or `--all`
+- Vault AppRole token allows the git service to read `secret/github/token`; legacy keyring secret is explicit and deprecated
 - Forge containers cannot access any credentials (no D-Bus, no token files, no git config)
 - Mirror sync event-driven by filesystem watcher, zero polling
 - Sync skips if host has uncommitted changes, diverged branch, or detached HEAD

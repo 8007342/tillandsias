@@ -1,0 +1,72 @@
+trace: spec:methodology-accountability
+
+event_id: methodology.event.031-markdown-sprawl-distillation@v1
+status: distilled
+observed_at: "2026-05-24T00:00:00-07:00"
+reporter: "codex"
+summary: >
+  Ad hoc top-level and tool-local Markdown files accumulated architecture,
+  process, and implementation claims outside the canonical methodology/spec
+  system.
+
+observed_signal:
+  description: >
+    Top-level implementation reports, CLAUDE.md, and .claude/*.md contained
+    stale or duplicate claims about host-shell, Vault, diagnostics, cache,
+    release, and convergence work. Several claims contradicted the current Phase
+    6 Vault default and multi-host branch model.
+  signal_type: "cheatsheet"
+
+expected_model:
+  description: >
+    Durable process belongs in methodology, intent in OpenSpec specs,
+    operational knowledge in provenance-backed cheatsheets, and long-running
+    work state in plan/ steps or issues.
+  source_refs:
+    - methodology.yaml
+    - methodology/cheatsheets.yaml
+    - methodology/spec-system.yaml
+
+violated_or_missing_claims:
+  methodology_claim_ids:
+    - ad_hoc_markdown_is_intake_not_authority
+  spec_requirement_ids: []
+  litmus_ids: []
+  cheatsheet_refs: []
+
+affected_artifacts:
+  specs:
+    - openspec/specs/tillandsias-vault/spec.md
+    - openspec/specs/git-mirror-service/spec.md
+  methodology_files:
+    - methodology/multi-host-development.yaml
+  code_paths: []
+  scripts: []
+  dashboards: []
+
+evidence_refs:
+  commits:
+    - ddf52dff
+  files:
+    - plan/issues/markdown-distillation-audit-2026-05-24.md
+    - CLAUDE.md
+    - .claude/IMPLEMENTATION_STATUS.md
+    - .claude/PHASES_3_5_IMPLEMENTATION.md
+  logs: []
+  ci_runs: []
+  external_sources: []
+
+uncertainty_delta: medium
+provisional_classification: stale_or_false_cheatsheet
+
+next_distillation_step:
+  owner: "next-doc-curator"
+  action: >
+    Keep retained ad hoc Markdown as tombstone pointers only and move any future
+    claims into the canonical artifact named by the distillation audit.
+  target_artifact: "methodology"
+
+closure_criteria:
+  - learned_distinction_preserved_in_durable_artifact
+  - evidence_refs_are_queryable
+  - old_false_claim_tombstoned_or_superseded_if_applicable
