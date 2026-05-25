@@ -37,6 +37,11 @@ pub mod fake;
 #[cfg(feature = "download")]
 pub mod fetch;
 
+/// Shared (co-owned) Recipefile + manifest.toml parser for the recipe
+/// materializer (vm-recipe-provisioning §2). Behind the `recipe` feature.
+#[cfg(feature = "recipe")]
+pub mod recipe;
+
 /// Provisioning manifest passed to `VmRuntime::provision`.
 ///
 /// Captures every input the backend needs to produce a working VM the first

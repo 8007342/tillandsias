@@ -2875,6 +2875,7 @@ dependencies = [
  "sha2",
  "tempfile",
  "tokio",
+ "toml 0.8.2",
  "windows 0.58.0",
 ]
 
