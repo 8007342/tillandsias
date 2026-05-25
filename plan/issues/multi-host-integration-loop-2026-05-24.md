@@ -28,6 +28,36 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Interlude 2026-05-25T06:00Z–06:45Z — Methodology refresh (no integration; sibling laptops dormant)
+
+User directive: while macOS and Windows hosts are dormant for several hours,
+use the time to land the multi-host methodology refactor that previous cycles
+surfaced as needed. NOT a cron tick; documented here for chronology.
+
+- Cumulative work landed on linux-next (commits `85b90af6`, `fc1b604e`):
+  - methodology/distributed-work.yaml (new) — CRDT-inspired primitives,
+    work-item schema, host-component ownership matrix, 8-step agent
+    self-assignment protocol, failure/handoff semantics, merge policy.
+  - methodology/multi-host-development.yaml — cross-references the new file,
+    formalizes plan-write-to-linux-next discipline, pins branch canon
+    (osx-next, NOT macos-next), documents 5 common pitfalls learned by
+    the loop.
+  - methodology.yaml entrypoint index updated.
+  - methodology/event/032-distributed-work-methodology-refresh.yaml +
+    event/index.yaml updated.
+  - plan/issues/branch-and-coordination-canon-2026-05-25.md (new) —
+    canonical decision record.
+  - cheatsheets/concurrent-git/{branches,agent-handoff,plan-discipline}.md
+    (new) — agent-facing translation of the methodology into copy-pasteable
+    git workflows.
+
+- **Loop enhancement spec is now durable** (the "claim-collision warning"
+  candidate from cycle 05:43Z is referenced from the new methodology;
+  implementation still pending on the next pass over the cron prompt).
+
+- No integration this interlude (no sibling commits to absorb; osx-next
+  and windows-next unchanged from cycle 05:43Z).
+
 ### Cycle 2026-05-25T05:43Z — INTEGRATED (clean tree, on-cron)
 
 - host_id: linux-tlatoani-fedora (macuahuitl.ayahuitlcalpan.com)
