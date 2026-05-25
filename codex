@@ -11,6 +11,9 @@ set -euo pipefail
 #
 # Unattended loop, sleeping after each completed round:
 #   ./codex --wait 3h "prompt"
+#
+# Trusted unattended coordination, required for git fetch/push:
+#   ./codex --wait 45m /coordinate-multihost-work
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(git -C "$script_dir" rev-parse --show-toplevel 2>/dev/null || printf '%s\n' "$script_dir")"
@@ -35,6 +38,7 @@ repo_codex_profile="$repo_root/.codex/tillandsias.profile.sh"
 QUIET=0
 WAIT_INTERVAL=""
 TIMES=""
+TRUSTED_EXEC="${CODEX_TRUSTED_EXEC:-0}"
 codex_args=()
 
 usage() {
@@ -48,6 +52,9 @@ Options:
   --wait <duration>   Run `codex exec`, then sleep duration, repeat forever.
   --repeat <duration> Compatibility alias for --wait.
   --times <n>         Limit --wait/--repeat to n rounds.
+  --trusted           Run `codex exec` without Codex's sandbox/approval layer.
+                      Intended for unattended coordination loops that must
+                      fetch, rebase, commit, and push.
   --                  End wrapper options.
 
 Duration examples: 30m, 2h, 2h30m, 45s.
@@ -76,6 +83,10 @@ while [[ $# -gt 0 ]]; do
       TIMES="$2"
       shift 2
       ;;
+    --trusted)
+      TRUSTED_EXEC=1
+      shift
+      ;;
     --help|-h)
       usage
       exit 0
@@ -98,7 +109,12 @@ if [[ ${#codex_args[@]} -eq 0 ]]; then
 fi
 
 if [[ ${#codex_args[@]} -eq 1 && "${codex_args[0]}" == "/coordinate-multihost-work" ]]; then
+  TRUSTED_EXEC=1
   codex_args=("Use the coordinate-multihost-work skill to run one Tillandsias multi-host coordination loop.")
+fi
+
+if [[ -n "$WAIT_INTERVAL" ]]; then
+  TRUSTED_EXEC=1
 fi
 
 common_args=(-p tillandsias)
@@ -168,9 +184,14 @@ run_tui_once() {
 }
 
 run_exec_once() {
+  local trusted_args=()
+  if [[ "$TRUSTED_EXEC" == "1" || "$TRUSTED_EXEC" == "true" || "$TRUSTED_EXEC" == "yes" ]]; then
+    trusted_args=(--dangerously-bypass-approvals-and-sandbox)
+  fi
   "$CODEX_BIN" \
     exec \
     --color never \
+    "${trusted_args[@]}" \
     "${common_args[@]}" \
     "${profile_additional_args[@]}" \
     "${profile_additional_dir_args[@]}" \
