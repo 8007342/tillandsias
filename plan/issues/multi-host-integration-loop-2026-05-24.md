@@ -28,6 +28,18 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-25T09:44Z — NO-OP (siblings dormant, 2nd consecutive)
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: 608c5ba2dca7ccf0d236630f007caa0340253b31
+- observed_sibling_heads:
+  - main: ddf52dff (unchanged)
+  - linux-next: 608c5ba2 (= our last ledger commit)
+  - windows-next: 266c4edc (unchanged since cycle 05:43Z)
+  - osx-next: ddf52dff (frozen since 2026-05-24 alignment)
+- windows-next: no-op (0 commits). osx-next: no-op (0 commits).
+- Tests: n/a (no merge attempted). Working tree clean.
+
 ### Cycle 2026-05-25T07:43Z — NO-OP (siblings dormant, clean tree)
 
 - host_id: linux-tlatoani-fedora (macuahuitl.ayahuitlcalpan.com)
