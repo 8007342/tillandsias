@@ -91,24 +91,30 @@ headless over vsock. Podman never on the Windows host. Older 6-distro
 - podman: not on host (correct).
 - Present: git-bash (C:\Program Files\Git\bin\bash.exe), winget.
 
-## NEXT ACTION (resume here — Phase 2b: OCI flatten + real `wsl --import`)
+## NEXT ACTION (resume here)
 
-Phase 0/1/2 are DONE (toolchain; tray builds + launches; verified downloads).
-Cargo is at `%USERPROFILE%\.cargo\bin` — prepend it each PowerShell session:
+Phase 0/1/2 DONE; Phase 4 portable slice DONE. Cargo at `%USERPROFILE%\.cargo\bin`
+— prepend each PowerShell session:
 `$env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"`.
 
-Phase 2b — turn the verified OCI archive into a real running VM:
-1. Add an OCI-flatten step (in `tillandsias-vm-layer`, likely a `rootfs`
-   module): open the downloaded `*.oci.tar.xz`, read `index.json` ->
-   manifest -> layer digests, extract+concatenate the layer tar(s) into a
-   single flat rootfs tar. Fedora Generic Base is typically one layer.
-2. Feed the flattened rootfs tar to `WslRuntime::provision` (`wsl --import`
-   into `%LOCALAPPDATA%\tillandsias\wsl`, wsl.conf+systemd, drop headless
-   binary, terminate). Verify `wsl --list --verbose` shows `tillandsias`.
-3. Smoke: tray launch -> provision -> the in-VM headless systemd unit binds
-   the vsock listener -> host handshake succeeds (ties into Phase 4).
+FIRST, re-sync shared ./plan: `git fetch --all`, then read
+`plan/issues/tray-convergence-coordination.md` and check origin/linux-next +
+origin/osx-next for responses to the windows-next recipe-convergence
+preferences (CI-materialized rootfs as the Windows default). The provisioning
+path depends on that cross-host decision.
 
-Then Phase 3 (snapshot: sealed golden VHDX + fast clone), Phase 4 (wire tray
-actions + vsock E2E), Phase 5 (smoke). Checkpoint to origin/windows-next after
-each meaningful batch. WATCH ./plan for linux-next / macos-next feedback (see
-plan/issues/tray-convergence-coordination.md).
+NOTE: Phase 2b OCI-flatten is DROPPED — the owner's vm-recipe-provisioning
+model exports a flat rootfs tar from the recipe (no shipped binary, no OCI
+flatten). Do NOT build OCI-flatten.
+
+Provisioning thread is BLOCKED on the cross-host recipe decision. While
+blocked, model-independent work available WITHOUT a booted VM:
+- Host-side `~/src` (USERPROFILE\src) project scan via host-shell `scanner` ->
+  populate menu local_projects before the VM is ready.
+- Ship a real tray icon (.rc + .ico) to clear the build.rs placeholder warning.
+
+Once a VM can boot (recipe lands, or interim path agreed): connect vsock client
+-> handshake -> flip menu Provisioning->Ready + EnumerateLocalProjects, Quit->
+graceful drain, route Attach/GitHubLogin over the wire (control-wire-pty-attach).
+Contribute `materialize::wsl::tar_to_wsl_import` to the shared recipe module.
+Checkpoint to origin/windows-next after each meaningful batch.
