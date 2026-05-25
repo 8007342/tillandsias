@@ -126,6 +126,256 @@ impl VzGuestConfig {
 // @trace spec:vm-idiomatic-layer, spec:vm-provisioning-lifecycle
 // ---------------------------------------------------------------------------
 
+/// Building blocks for VZ-backed Linux VMs. Public so the `vz-spike` example
+/// and the eventual `VmRuntime::start` impl share the same config-builder
+/// instead of forking parallel implementations.
+///
+/// macOS-only — the module isn't even defined on Linux/Windows.
+///
+/// @trace spec:vm-idiomatic-layer, spec:macos-native-tray
+#[cfg(target_os = "macos")]
+pub mod boot {
+    use std::os::raw::c_int;
+    use std::path::{Path, PathBuf};
+    use std::time::{Duration, Instant};
+
+    use objc2::ClassType;
+    use objc2::rc::Retained;
+    use objc2_foundation::{NSArray, NSFileHandle, NSString, NSURL};
+    use objc2_virtualization::{
+        VZBootLoader, VZDiskImageStorageDeviceAttachment, VZEFIBootLoader,
+        VZEFIVariableStore, VZEFIVariableStoreInitializationOptions,
+        VZEntropyDeviceConfiguration, VZFileHandleSerialPortAttachment,
+        VZGenericPlatformConfiguration, VZMemoryBalloonDeviceConfiguration,
+        VZNATNetworkDeviceAttachment, VZNetworkDeviceConfiguration,
+        VZPlatformConfiguration, VZSerialPortAttachment, VZSerialPortConfiguration,
+        VZSocketDeviceConfiguration, VZStorageDeviceConfiguration,
+        VZVirtioBlockDeviceConfiguration, VZVirtioConsoleDeviceSerialPortConfiguration,
+        VZVirtioEntropyDeviceConfiguration, VZVirtioNetworkDeviceConfiguration,
+        VZVirtioSocketDeviceConfiguration,
+        VZVirtioTraditionalMemoryBalloonDeviceConfiguration,
+        VZVirtualMachineConfiguration,
+    };
+
+    /// Inputs to [`build_vm_configuration`]. The builder consumes a borrow
+    /// and produces a retained `VZVirtualMachineConfiguration`; it does NOT
+    /// validate (callers do, so they can inspect intermediate state for
+    /// debugging).
+    ///
+    /// @trace spec:vm-idiomatic-layer
+    pub struct VzBootConfig {
+        pub cpu_count: usize,
+        pub memory_bytes: u64,
+        /// Raw root disk image (`.img`). `None` skips storage entirely —
+        /// useful for "does the framework accept the rest of my config"
+        /// smoke tests, but won't actually boot anything.
+        pub root_disk: Option<PathBuf>,
+        /// Persistent EFI variable store path. `None` skips NVRAM, which
+        /// makes the EFI bootloader invalid; callers should always pass
+        /// `Some(...)` for a bootable VM (the file is created if missing).
+        pub nvram: Option<PathBuf>,
+        /// Optional override for the serial writer fd. If `None`, the
+        /// builder dups `STDERR_FILENO` so guest serial flows to host
+        /// stderr for early-boot diagnostics.
+        pub serial_writer_fd: Option<c_int>,
+    }
+
+    impl VzBootConfig {
+        /// Modest defaults: 2 vCPU, 2 GiB RAM, no disk, no NVRAM. Useful
+        /// as a starting point for tests; production callers MUST set
+        /// `root_disk` and `nvram` for a bootable VM.
+        pub fn defaults() -> Self {
+            Self {
+                cpu_count: 2,
+                memory_bytes: 2 * 1024 * 1024 * 1024,
+                root_disk: None,
+                nvram: None,
+                serial_writer_fd: None,
+            }
+        }
+    }
+
+    /// Build a fully-wired `VZVirtualMachineConfiguration` from the spec:
+    /// EFI boot, optional virtio-blk root disk, virtio-net NAT,
+    /// virtio-console serial → host stderr (or `serial_writer_fd`),
+    /// virtio-entropy, virtio-balloon, virtio-vsock.
+    ///
+    /// The caller's next step is `cfg.validateWithError()`, then
+    /// `VZVirtualMachine::initWithConfiguration(alloc, &cfg)`.
+    ///
+    /// @trace spec:vm-idiomatic-layer, spec:macos-native-tray
+    pub fn build_vm_configuration(
+        spec: &VzBootConfig,
+    ) -> Result<Retained<VZVirtualMachineConfiguration>, String> {
+        unsafe {
+            let cfg = VZVirtualMachineConfiguration::new();
+            cfg.setCPUCount(spec.cpu_count);
+            cfg.setMemorySize(spec.memory_bytes);
+
+            // Generic platform — no Mac-host-specific requirements.
+            let platform = VZGenericPlatformConfiguration::new();
+            let plat_super: &VZPlatformConfiguration = &*platform;
+            cfg.setPlatform(plat_super);
+
+            // EFI bootloader with optional persistent NVRAM.
+            let efi = VZEFIBootLoader::new();
+            if let Some(path) = &spec.nvram {
+                let url = ns_url_for_path(path);
+                let alloc = VZEFIVariableStore::alloc();
+                let store = if path.exists() {
+                    VZEFIVariableStore::initWithURL(alloc, &url)
+                } else {
+                    VZEFIVariableStore::initCreatingVariableStoreAtURL_options_error(
+                        alloc,
+                        &url,
+                        VZEFIVariableStoreInitializationOptions::VZEFIVariableStoreInitializationOptionAllowOverwrite,
+                    )
+                    .map_err(|e| format!("create nvram: {}", e.localizedDescription()))?
+                };
+                efi.setVariableStore(Some(&store));
+            }
+            let efi_super: &VZBootLoader = &*efi;
+            cfg.setBootLoader(Some(efi_super));
+
+            // virtio-blk root disk (optional).
+            if let Some(path) = &spec.root_disk {
+                let url = ns_url_for_path(path);
+                let att = VZDiskImageStorageDeviceAttachment::initWithURL_readOnly_error(
+                    VZDiskImageStorageDeviceAttachment::alloc(),
+                    &url,
+                    false,
+                )
+                .map_err(|e| format!("disk attach: {}", e.localizedDescription()))?;
+                let blk = VZVirtioBlockDeviceConfiguration::initWithAttachment(
+                    VZVirtioBlockDeviceConfiguration::alloc(),
+                    &att,
+                );
+                let arr: Retained<NSArray<VZStorageDeviceConfiguration>> =
+                    NSArray::from_id_slice(&[Retained::cast(blk)]);
+                cfg.setStorageDevices(&arr);
+            }
+
+            // virtio-net + NAT.
+            let nat = VZNATNetworkDeviceAttachment::new();
+            let nat_super: &objc2_virtualization::VZNetworkDeviceAttachment = &nat;
+            let nic = VZVirtioNetworkDeviceConfiguration::new();
+            nic.setAttachment(Some(nat_super));
+            let nic_super: Retained<VZNetworkDeviceConfiguration> = Retained::into_super(nic);
+            let arr_n: Retained<NSArray<VZNetworkDeviceConfiguration>> =
+                NSArray::from_id_slice(&[nic_super]);
+            cfg.setNetworkDevices(&arr_n);
+
+            // virtio-console serial: guest writes → host stderr (or override),
+            // host reads /dev/null (no input forwarded).
+            let null_fd = open_read_only_devnull()
+                .ok_or_else(|| "open(/dev/null) failed".to_string())?;
+            let writer_fd = match spec.serial_writer_fd {
+                Some(fd) => fd,
+                None => dup_fd(2).ok_or_else(|| "dup(stderr) failed".to_string())?,
+            };
+            let read_fh = NSFileHandle::initWithFileDescriptor_closeOnDealloc(
+                NSFileHandle::alloc(),
+                null_fd,
+                true,
+            );
+            let write_fh = NSFileHandle::initWithFileDescriptor_closeOnDealloc(
+                NSFileHandle::alloc(),
+                writer_fd,
+                true,
+            );
+            let serial_att =
+                VZFileHandleSerialPortAttachment::initWithFileHandleForReading_fileHandleForWriting(
+                    VZFileHandleSerialPortAttachment::alloc(),
+                    Some(&read_fh),
+                    Some(&write_fh),
+                );
+            let serial = VZVirtioConsoleDeviceSerialPortConfiguration::new();
+            let att_super: &VZSerialPortAttachment = &*serial_att;
+            serial.setAttachment(Some(att_super));
+            let arr_s: Retained<NSArray<VZSerialPortConfiguration>> =
+                NSArray::from_id_slice(&[Retained::cast(serial)]);
+            cfg.setSerialPorts(&arr_s);
+
+            // virtio-entropy + virtio-balloon.
+            let entropy = VZVirtioEntropyDeviceConfiguration::new();
+            let arr_e: Retained<NSArray<objc2_virtualization::VZEntropyDeviceConfiguration>> =
+                NSArray::from_id_slice(&[Retained::cast(entropy)]);
+            let _: &VZEntropyDeviceConfiguration = &arr_e[0];
+            cfg.setEntropyDevices(&arr_e);
+
+            let balloon = VZVirtioTraditionalMemoryBalloonDeviceConfiguration::new();
+            let arr_b: Retained<NSArray<VZMemoryBalloonDeviceConfiguration>> =
+                NSArray::from_id_slice(&[Retained::cast(balloon)]);
+            cfg.setMemoryBalloonDevices(&arr_b);
+
+            // virtio-vsock — host connects later via VZVirtioSocketDevice
+            // (see crates/tillandsias-vm-layer/src/transport_macos.rs, TBD).
+            let sock = VZVirtioSocketDeviceConfiguration::new();
+            let arr_sd: Retained<NSArray<VZSocketDeviceConfiguration>> =
+                NSArray::from_id_slice(&[Retained::cast(sock)]);
+            cfg.setSocketDevices(&arr_sd);
+
+            Ok(cfg)
+        }
+    }
+
+    /// Pump CoreFoundation's main runloop for `dur`, letting VZ completion
+    /// handlers dispatched to the main queue fire. Returns when the
+    /// wall-clock deadline elapses (whether or not any sources fired).
+    ///
+    /// Without this, the main thread sleeping blocks dispatch delivery and
+    /// `startWithCompletionHandler` callbacks never run — confirmed
+    /// empirically (commit 3716dd40).
+    ///
+    /// @trace spec:vm-idiomatic-layer
+    pub fn pump_cf_loop_for(dur: Duration) {
+        #[link(name = "CoreFoundation", kind = "framework")]
+        unsafe extern "C" {
+            fn CFRunLoopRunInMode(
+                mode: *const std::ffi::c_void,
+                seconds: f64,
+                return_after_source_handled: u8,
+            ) -> i32;
+            static kCFRunLoopDefaultMode: *const std::ffi::c_void;
+        }
+        let deadline = Instant::now() + dur;
+        loop {
+            let remaining = deadline
+                .saturating_duration_since(Instant::now())
+                .as_secs_f64();
+            if remaining <= 0.0 {
+                break;
+            }
+            let _rc = unsafe {
+                CFRunLoopRunInMode(kCFRunLoopDefaultMode, remaining.min(1.0), 0)
+            };
+        }
+    }
+
+    // ─── small helpers ────────────────────────────────────────────────────
+
+    fn ns_url_for_path(p: &Path) -> Retained<NSURL> {
+        let s = NSString::from_str(p.to_string_lossy().as_ref());
+        unsafe { NSURL::fileURLWithPath(&s) }
+    }
+
+    fn open_read_only_devnull() -> Option<c_int> {
+        unsafe extern "C" {
+            fn open(path: *const std::os::raw::c_char, oflag: c_int) -> c_int;
+        }
+        let fd = unsafe { open(b"/dev/null\0".as_ptr() as _, 0 /* O_RDONLY */) };
+        if fd < 0 { None } else { Some(fd) }
+    }
+
+    fn dup_fd(fd: c_int) -> Option<c_int> {
+        unsafe extern "C" {
+            fn dup(fd: c_int) -> c_int;
+        }
+        let new_fd = unsafe { dup(fd) };
+        if new_fd < 0 { None } else { Some(new_fd) }
+    }
+}
+
 #[cfg(target_os = "macos")]
 mod vz_real {
     use super::*;
