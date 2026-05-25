@@ -22,6 +22,16 @@ tracing = { workspace = true }
 postcard = { workspace = true }
 async-trait = { workspace = true }
 
+# Windows-only: ConPTY backend for the host-side PTY (pty::windows, §3.3).
+# Additive + target-gated so the Linux integration build never pulls it.
+[target.'cfg(windows)'.dependencies]
+windows = { version = "0.58", features = [
+    "Win32_System_Console",
+    "Win32_System_Pipes",
+    "Win32_Foundation",
+    "Win32_Security",
+] }
+
 [dev-dependencies]
 tempfile = { workspace = true }
 tokio = { workspace = true, features = ["macros", "rt-multi-thread", "io-util", "net"] }
