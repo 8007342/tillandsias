@@ -81,14 +81,52 @@ terminate) is needed in BOTH models — both end in a rootfs `.tar`.
    host-shell + control-wire-pty-attach) converges with macOS through shared
    crates and is unblocked regardless of provisioning model.
 
-## Open question for owner / cross-host
+## Windows recipe-convergence: alternatives + preferences (for linux/macos)
 
-- Who drives the shared `vm-recipe-provisioning` (recipe/materialize/cache)?
-  macOS worker is heads-down on the VzRuntime vsock spike (~3 days) and hasn't
-  started it. windows-next can contribute `materialize::wsl::tar_to_wsl_import`
-  + drive the parser/cache, but materialization on a Windows host needs
-  buildah/podman inside WSL (the host has no native buildah) — a wrinkle the
-  proposal's "throwaway container" step should address for Windows.
-- Interim: keep the windows-next download path alive ONLY to reach a bootable
-  VM + vsock handshake for validating Windows-specific code, clearly flagged
-  superseded? Or pause provisioning and pivot straight to Phase 4?
+Owner steer (2026-05-24): no single owner of `vm-recipe-provisioning` — the
+recipe may differ slightly per-OS, so each host owns its own slice. State
+preferences here; linux-next / macos-next contribute accordingly.
+
+Proposed ownership split (windows-next preference):
+- SHARED / co-owned: the `RECIPE` directive vocabulary, the `Recipe`/`Manifest`
+  parser (`tillandsias-vm-layer::recipe`), and `images/vm/Recipefile` +
+  `images/vm/manifest.toml` + `images/vm/bootstrap/*.sh`. One recipe, parsed
+  identically everywhere.
+- PER-OS materializer backend (each host owns its own): the *environment* that
+  runs the recipe's `RUN` steps differs by host —
+    * Linux: native buildah/podman (and note: the Linux tray runs headless
+      NATIVELY with no VM, so Linux only needs the materializer for CI, not for
+      its own runtime).
+    * macOS: buildah/podman inside a podman-machine Linux VM; output → raw
+      `.img` (EFI + ext4) for Virtualization.framework.
+    * Windows: buildah/podman inside WSL; output → tar fed to `wsl --import`
+      (`materialize::wsl::tar_to_wsl_import`, proposal task 3.7.2).
+
+windows-next PREFERENCE on the Windows materialization environment:
+1. PRIMARY: **CI-materialized rootfs tar as the default Windows install path.**
+   Rationale: requiring every Windows user to bootstrap buildah/podman *inside
+   WSL* purely to build the VM rootfs is heavy and brittle (chicken-and-egg:
+   you need a Linux env to build the Linux env). A rootfs materialized in CI
+   *from the checked-in recipe*, SHA-pinned in `manifest.toml`'s
+   `[output] expected_rootfs_sha`, then downloaded + verified on the user host,
+   is reproducible and auditable — it does NOT reintroduce the thing the owner
+   rejected (shipping opaque per-arch *binaries*); it ships a *recipe-derived,
+   reproducible* rootfs. This REUSES `tillandsias-vm-layer::fetch`
+   (download_verified + SHA) — so Phase 2's work converges here rather than
+   being thrown away. The proposal already contemplates this ("may revisit for
+   offline install"); windows-next requests it be the Windows default, not an
+   afterthought.
+2. FALLBACK / dev path: local materialization inside WSL (buildah/podman) for
+   contributors hacking the recipe, gated behind a `--materialize-local` style
+   flag. Same `recipe`/`materialize` code; just runs on-host in WSL.
+
+If linux/macos prefer local materialization as the universal default, the
+Windows wrinkle (buildah-in-WSL bootstrap) must be designed explicitly — at
+minimum a documented "ensure a builder WSL distro with podman" preflight.
+
+## Near-term windows-next path (decided 2026-05-24)
+
+Advance MODEL-INDEPENDENT Phase 4 next (tray actions + vsock host↔in-VM E2E via
+shared host-shell + `control-wire-pty-attach`). Keep the Phase 2 download path
+as a flagged interim only to boot a VM locally for testing. Contribute
+`materialize::wsl::tar_to_wsl_import` when the shared recipe lands.
