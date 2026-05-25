@@ -28,6 +28,15 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-25T16:00Z — NO-OP (both siblings already absorbed last cycle)
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: 9f16f1adb249aea64131b76313abeadb7c667d71
+- observed_sibling_heads: main=ddf52dff · linux-next=9f16f1ad · windows-next=832871d9 (in linux-next via merge `ba97741`) · osx-next=b09bcb2b (in linux-next via earlier merge sequence)
+- windows-next: no-op (0 delta). osx-next: no-op (0 delta).
+- Tests: n/a. Working tree clean.
+- Linux open work-in-flight: `l7/§3-materializer-driver` (lease `linux-l-mat-2026-05-25T15Z`); not yet started in code.
+
 ### Cycle 2026-05-25T15:00Z–15:30Z — MASSIVE: sibling laptops woke; CRDT methodology fully exercised
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
