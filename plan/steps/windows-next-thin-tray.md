@@ -63,8 +63,23 @@ headless over vsock. Podman never on the Windows host. Older 6-distro
   specs + litmus. Default = sealed golden base VHDX + fast per-launch clone
   (WSL2 analog of macOS VZ snapshot). Ephemerality holds because user code is
   bind-mounted and secrets live in the Vault podman volume.
-- Phase 4 — Wire tray actions + vsock E2E: Attach Here, GitHub login,
-  Quit→graceful drain through host-shell to in-VM headless; prove Hello/HelloAck.
+- Phase 4 — Wire tray actions + vsock E2E (IN PROGRESS):
+  - DONE: portable menu-click resolver `tillandsias-host-shell::menu_action`
+    (`MenuAction` + `resolve()`, handles dynamic project.<scope>.<name>.<verb>
+    ids incl. dotted names) — SHARED with macOS tray, additive, no trait change.
+    Windows tray `handle_menu_command` now resolves to typed actions and
+    dispatches (Quit→WM_DESTROY wired; VM/control-wire actions logged pending
+    the vsock-attach slice). 5 new unit tests; 17/17 host-shell tests green ON
+    WINDOWS.
+  - Also fixed a pre-existing Windows portability gap: `vsock_client` +
+    `provisioning` test modules used tokio UnixListener (Unix-only) and broke
+    `cargo test` on Windows — now `#[cfg(all(test, unix))]`-gated (Linux/macOS
+    still run them).
+  - REMAINING: connect vsock client to a live in-VM headless (needs a booted
+    VM, i.e. Phase 2b/recipe), flip menu Provisioning→Ready from a real
+    handshake + EnumerateLocalProjects, Quit→graceful VM drain (VmShutdownRequest
+    then stop), and route Attach/GitHubLogin/agents over the wire
+    (control-wire-pty-attach for Open Shell + login).
 - Phase 5 — Smoke + checkpoint to origin/windows-next.
 - Paperwork (woven in): archive superseded windows-wsl-runtime / windows-native-build
   changes with tombstone → decision note; keep OpenSpec/litmus bindings clean.

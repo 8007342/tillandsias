@@ -15,6 +15,7 @@
 #![allow(dead_code)]
 
 pub mod lifecycle;
+pub mod menu_action;
 pub mod menu_state;
 pub mod provisioning;
 pub mod scanner;

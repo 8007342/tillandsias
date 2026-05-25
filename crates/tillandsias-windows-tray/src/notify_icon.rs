@@ -31,6 +31,7 @@ use std::ffi::OsString;
 use std::os::windows::ffi::OsStrExt;
 use std::sync::Mutex;
 
+use tillandsias_host_shell::menu_action::{self, MenuAction};
 use tillandsias_host_shell::menu_state::{self, MenuItem, MenuState, MenuStructure};
 use tillandsias_host_shell::provisioning::{ProvisionPhase, ProvisionProgress};
 
@@ -394,22 +395,43 @@ fn to_utf16(s: &str) -> Vec<u16> {
 }
 
 unsafe fn handle_menu_command(hwnd: HWND, cmd_id: u16) {
-    if cmd_id == MENU_ID_QUIT {
-        // Trigger graceful shutdown; the message loop exits next iteration.
-        let _ = PostMessageW(hwnd, WM_DESTROY, WPARAM(0), LPARAM(0));
-        return;
-    }
-    let logical_id =
-        MENU_ID_TABLE.with(|t| t.borrow().get(&cmd_id).cloned().unwrap_or_default());
+    // Recover the portable string id for this Win32 command id. The Quit
+    // leaf has a fixed command id and is not always present in the per-paint
+    // table, so map it explicitly.
+    let logical_id = if cmd_id == MENU_ID_QUIT {
+        menu_state::ids::QUIT.to_string()
+    } else {
+        MENU_ID_TABLE.with(|t| t.borrow().get(&cmd_id).cloned().unwrap_or_default())
+    };
     if logical_id.is_empty() {
         return;
     }
-    // Dispatch — for now we just log; click handlers are wired during the
-    // action-wiring phase.
-    tracing::info!(menu_id = %logical_id, "menu item clicked");
-    if logical_id == "github-login" {
-        // Future: open the GitHub device-flow URL.
-        eprintln!("[tillandsias] GitHub login click not yet wired");
+    let action = menu_action::resolve(&logical_id);
+    tracing::info!(menu_id = %logical_id, action = ?action, "tray menu click");
+    dispatch_action(hwnd, action);
+}
+
+/// Route a resolved [`MenuAction`] to its handler.
+///
+/// `Quit` posts `WM_DESTROY` so the message loop drains and exits on the next
+/// iteration. The remaining actions need the in-VM control wire (vsock) or a
+/// host-side spawn (GitHub device-flow terminal); those land in the
+/// vsock-attach phase. Until then they are logged with their resolved type —
+/// strictly better than the previous string special-casing, and the same
+/// resolver the macOS tray will consume.
+///
+/// @trace spec:windows-native-tray
+fn dispatch_action(hwnd: HWND, action: MenuAction) {
+    match action {
+        MenuAction::Quit => unsafe {
+            let _ = PostMessageW(hwnd, WM_DESTROY, WPARAM(0), LPARAM(0));
+        },
+        other => {
+            tracing::info!(
+                action = ?other,
+                "menu action resolved but not yet wired to the in-VM control wire"
+            );
+        }
     }
 }
 

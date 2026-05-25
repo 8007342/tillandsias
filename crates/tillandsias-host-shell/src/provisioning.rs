@@ -146,7 +146,11 @@ pub async fn ensure_vm_provisioned_with_timeout(
     }
 }
 
-#[cfg(test)]
+// These tests drive the `Transport::Unix` round-trip (Unix-only; production
+// Windows/macOS use `Transport::Vsock`). Gate on `unix` so `cargo test`
+// compiles on the Windows host. The portable `MenuAction`/`menu_state` and
+// phase-string coverage runs cross-platform in their own modules.
+#[cfg(all(test, unix))]
 mod tests {
     use super::*;
     use tillandsias_control_wire::{
