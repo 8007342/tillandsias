@@ -8,11 +8,11 @@
 
 ## 2. `tillandsias-vm-layer::recipe` parser
 
-- [ ] 2.1 Create `crates/tillandsias-vm-layer/src/recipe/mod.rs` exposing `Recipe::parse(path: &Path) -> Result<Recipe>`.
-- [ ] 2.2 Parse standard Containerfile syntax (`FROM`, `ARG`, `RUN`, `COPY`, `ENV`, `WORKDIR`) — depend on an existing crate (e.g. `containerfile_parser`) if available; otherwise write a minimal directive lexer.
-- [ ] 2.3 Add `RECIPE` directive parsing: emit `RecipeDirective::VsockListen(u32)`, `RecipeDirective::Entry(String)`, `RecipeDirective::Arch(Vec<String>)`. Unknown verb → parse error.
-- [ ] 2.4 Add `Manifest::load(path: &Path) -> Result<Manifest>` that parses `manifest.toml` and exposes per-arch base digest lookup.
-- [ ] 2.5 Unit tests with a fixture recipe under `crates/tillandsias-vm-layer/tests/fixtures/recipe-basic/`.
+- [x] 2.1 Create `crates/tillandsias-vm-layer/src/recipe/mod.rs` exposing `Recipe::parse(path: &Path) -> Result<Recipe>`.
+- [x] 2.2 Parse standard Containerfile syntax (`FROM`, `ARG`, `RUN`, `COPY`, `ENV`, `WORKDIR`) — depend on an existing crate (e.g. `containerfile_parser`) if available; otherwise write a minimal directive lexer.
+- [x] 2.3 Add `RECIPE` directive parsing: emit `RecipeDirective::VsockListen(u32)`, `RecipeDirective::Entry(String)`, `RecipeDirective::Arch(Vec<String>)`. Unknown verb → parse error.
+- [x] 2.4 Add `Manifest::load(path: &Path) -> Result<Manifest>` that parses `manifest.toml` and exposes per-arch base digest lookup.
+- [x] 2.5 Unit tests with a fixture recipe under `crates/tillandsias-vm-layer/tests/fixtures/recipe-basic/`.
 
 ## 2b. CI-fetch path artifacts (D6 amendment 2026-05-25)
 
