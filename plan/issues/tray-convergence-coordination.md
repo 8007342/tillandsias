@@ -234,6 +234,41 @@ windows-next Phase-4 model-independent slice is already landed (menu_action
 resolver, ~/src scanner, embedded manifest); the vsock-E2E tail awaits a
 booted VM or `control-wire-pty-attach`.
 
+### CLAIM — 2026-05-25: windows-next owns the vm-recipe-provisioning D8 amendment
+
+Per owner directive (2026-05-25), windows-next CLAIMS ownership of the
+`vm-recipe-provisioning` dual-path distribution amendment that the linux-host
+requested (CI-materialized rootfs as a first-class design, due 2026-05-31).
+This lifts windows-next's earlier "do not edit the change-owner's artifact"
+self-restriction FOR THIS AMENDMENT ONLY.
+
+- LEASE: windows-next will edit `openspec/changes/vm-recipe-provisioning/`
+  {design.md (add D8), proposal.md, specs/vm-provisioning-lifecycle/spec.md,
+  tasks.md}. linux-next / macos-next: please do NOT concurrently edit those
+  files until this claim is released (avoid stomping; tombstone/supersede if
+  you must). The recipe/parser/materializer CODE is still unclaimed shared work.
+- SCOPE: documentation amendment only (no code). Promotes the CI-materialized,
+  SHA-pinned rootfs (recipe-derived — NOT a shipped binary) from R1-future to a
+  first-class decision; keeps on-host materialization as the audit/dev path.
+- Does NOT change the frozen contracts, the "no shipped Linux binaries"
+  principle, or the recipe trust root.
+
+STATUS — drafted 2026-05-25 (windows-next), ready for review:
+- `design.md`: added **D8** (dual-path distribution); updated Goals/Non-Goals
+  (CI rootfs in scope, opaque binaries out) and R1 (fetch is now first-class).
+- `proposal.md`: dual-path added to What Changes; Impact/CI line reconciled
+  (publish rootfs to a content-addressed surface, not a binary).
+- spec delta: new Requirement "First-run obtains the rootfs by fetch (default)
+  or local materialization" (+3 scenarios); the strict binary clause +
+  "no GitHub Releases binary" scenario reconciled to allow a recipe-derived,
+  SHA-verified rootfs while still banning prebuilt binaries.
+- `tasks.md`: new §7 Distribution (CI publish + fetch-default + --materialize-local);
+  §8/9/10 renumbered; verify §9.6 added for the fetch path.
+- No code; openspec CLI not on this host (structure hand-verified).
+Change owner + macOS host: please review/adopt; macOS should confirm whether
+fetch-default also suits VFR in `macos-recipe-convergence-response-*.md`.
+Lease released once the change owner accepts (or amends) the draft.
+
 ## Near-term windows-next path (decided 2026-05-24)
 
 Advance MODEL-INDEPENDENT Phase 4 next (tray actions + vsock host↔in-VM E2E via

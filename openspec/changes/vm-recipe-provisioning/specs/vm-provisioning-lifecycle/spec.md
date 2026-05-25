@@ -18,7 +18,7 @@ On a fresh host with no cached rootfs for the current recipe + host-arch, the ho
 6. Convert to the platform-native VM image format (`.img` for VFR; importable tar for WSL2).
 7. Write to the platform cache at `~/Library/Application Support/tillandsias/vm-rootfs-<recipe-sha>-<arch>.{img,tar}` (macOS), `%LOCALAPPDATA%\tillandsias\vm-rootfs-…` (Windows), or `~/.local/share/tillandsias/vm-rootfs-…` (Linux fake / dev).
 
-The host SHALL NOT download a prebuilt `tillandsias-*` Linux binary from GitHub Releases or any other source. The in-VM headless binary SHALL come exclusively from materialization of `images/vm/bootstrap/20-tillandsias.sh`'s build step inside the recipe.
+The host SHALL NOT download a prebuilt, hand-built `tillandsias-*` Linux **binary** from GitHub Releases or any other source. The in-VM headless binary SHALL originate exclusively from `images/vm/bootstrap/20-tillandsias.sh`'s build step inside the recipe. That build step MAY be executed either on the user's host (local materialization) OR in CI, with the resulting recipe-derived rootfs fetched and SHA-verified on the host per the Requirement "First-run obtains the rootfs by fetch (default) or local materialization" below — a CI-materialized rootfs is a reproducible *output* of the recipe, content-addressed and recipe-version-stamped, and is NOT a "prebuilt binary" in the sense prohibited here.
 
 @trace spec:vm-provisioning-lifecycle
 
@@ -39,6 +39,35 @@ The host SHALL NOT download a prebuilt `tillandsias-*` Linux binary from GitHub 
 - **THEN** the recipe-version SHA SHALL be identical (the source is one file)
 - **AND** the two resulting rootfs blobs SHALL differ only in arch-dependent binaries
 - **AND** the materializer SHALL log the recipe-version SHA for both runs
+
+### Requirement: First-run obtains the rootfs by fetch (default) or local materialization
+
+The host SHALL obtain the VM rootfs for the current recipe-version + host-arch by exactly one of two equivalent paths:
+
+1. **Fetch (default).** Download the CI-materialized rootfs from the content-addressed distribution surface recorded in `images/vm/manifest.toml` and verify it against `[output] expected_rootfs_sha.<arch>` using a resumable, SHA-256-checked download. A checksum mismatch SHALL abort and fall back to local materialization (or surface a failure), never install an unverified rootfs.
+2. **Local materialization (`--materialize-local`).** Run the full on-host materialization described in "First-run materializes VM rootfs from recipe".
+
+Both paths SHALL yield a rootfs equivalent to running the recipe against the pinned base digests. The DEFAULT path SHALL be platform-appropriate: **fetch** on Windows (WSL2) and macOS (VFR); local materialization is always available as an explicit opt-in for audit/reproduction/dev. The Linux tray runs headless-native with no VM and SHALL NOT require either path at runtime; Linux performs materialization in CI (to produce `expected_rootfs_sha`) and on demand for recipe development.
+
+A fetched rootfs SHALL be treated as recipe-derived (its `expected_rootfs_sha` and recipe-version stamp tie it to the in-tree recipe); it SHALL NOT be treated as, or substitute for, a prohibited prebuilt `tillandsias-*` binary.
+
+@trace spec:vm-provisioning-lifecycle
+
+#### Scenario: Windows host fetches the CI-materialized rootfs by default
+- **WHEN** the Windows tray launches on a WSL2 host for the first time with no cached rootfs
+- **THEN** the host SHALL download the rootfs from the content-addressed surface in `manifest.toml`
+- **AND** SHALL verify it against `[output] expected_rootfs_sha.x86_64` before `wsl --import`
+- **AND** SHALL NOT require buildah/podman inside WSL for the default path
+
+#### Scenario: `--materialize-local` reproduces and bypasses fetch
+- **WHEN** a contributor runs the tray with `--materialize-local`
+- **THEN** the host SHALL run the full on-host materialization instead of fetching
+- **AND** the resulting rootfs SHA SHALL be comparable to the pinned `expected_rootfs_sha.<arch>` for audit
+
+#### Scenario: Checksum mismatch never installs an unverified rootfs
+- **WHEN** a fetched rootfs's SHA-256 does not match the pinned `expected_rootfs_sha.<arch>`
+- **THEN** the host SHALL NOT import or boot it
+- **AND** SHALL either fall back to local materialization or surface a clear failure
 
 ### Requirement: Layer-level caching keyed on directive content
 
@@ -139,7 +168,8 @@ The release workflow SHALL NOT publish any artifact of the form `tillandsias-lin
 - **THEN** no job SHALL upload an asset matching `tillandsias-linux-*` to the GitHub release
 - **AND** the only Linux artifact MAY be the canonical `tillandsias-headless` for direct Linux usage (separate from the host-shell flow)
 
-#### Scenario: macOS tray does not call GitHub Releases for in-VM binary
-- **WHEN** the macOS tray performs first-run materialization
-- **THEN** no HTTP request SHALL be made to `github.com` for `releases/download/`
-- **AND** the in-VM `tillandsias-headless` SHALL be present as a result of the recipe's `bootstrap/20-tillandsias.sh` `cargo install` step
+#### Scenario: in-VM binary is never a downloaded prebuilt binary
+- **WHEN** the in-VM `tillandsias-headless` arrives on the user's host by either D8 path
+- **THEN** it SHALL have originated from `images/vm/bootstrap/20-tillandsias.sh`'s build step (executed on-host for local materialization, or in CI for the fetch path)
+- **AND** the host SHALL NOT download a standalone prebuilt `tillandsias-*` binary asset
+- **AND** any download on the fetch path SHALL be a recipe-derived, SHA-verified **rootfs** (content-addressed per D8), not a binary

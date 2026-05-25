@@ -48,21 +48,30 @@
 - [ ] 6.4 Add a `recipe-smoke` job to `.github/workflows/ci.yml` (or release.yml): runs on `ubuntu-latest` (x86_64) and `macos-latest` (aarch64), materializes the recipe, boots the VM, asserts `tillandsias-headless --version` returns and vsock port 42420 is listening.
 - [ ] 6.5 On first successful `recipe-smoke` run, capture the rootfs SHA-256 and write it to `images/vm/manifest.toml` under `[output] expected_rootfs_sha.<arch>`; commit.
 
-## 7. Cross-reference updates
+## 7. Distribution: dual-path (per D8)
 
-- [ ] 7.1 Edit `openspec/specs/host-shell-architecture/spec.md` to reference recipe materialization (replace any text mentioning binary download).
-- [ ] 7.2 Edit `openspec/specs/macos-native-tray/spec.md` cross-references list to reflect the new flow.
-- [ ] 7.3 Edit `crates/tillandsias-headless/Cargo.toml` build-script to compute recipe SHA at build time when materializing inside the recipe.
+- [ ] 7.1 `recipe-smoke` (CI): after materializing each arch, publish the rootfs to a content-addressed distribution surface (OCI registry artifact OR content-addressed URL) and record that locator alongside `expected_rootfs_sha.<arch>` in `images/vm/manifest.toml [output]`. MUST NOT upload a `tillandsias-linux-*` binary.
+- [ ] 7.2 Host-shell fetch-default path: `tillandsias-vm-layer` obtains the rootfs via `fetch::download_verified` against the manifest locator + `expected_rootfs_sha.<arch>` (reuses the resumable SHA-checked downloader Windows shipped in Phase 2). On mismatch: fall back to local materialization or surface a clear failure — never import an unverified rootfs.
+- [ ] 7.3 `--materialize-local` flag (+ env equivalent): bypass fetch and run the full on-host materialization (§3). Default OFF on Windows/macOS; it is the path recipe-dev + Linux CI exercise.
+- [ ] 7.4 Per-OS default wiring: Windows + macOS trays default to fetch; `materialize::wsl::tar_to_wsl_import` (§3.7.2) and the VFR converter (§3.7.1) consume the fetched OR locally-materialized tar identically.
+- [ ] 7.5 Docs: cheatsheet on the dual path + how to reproduce/compare a fetched rootfs against `--materialize-local` for audit.
 
-## 8. Verify
+## 8. Cross-reference updates
 
-- [ ] 8.1 Run `openspec validate vm-recipe-provisioning` — expect "valid".
-- [ ] 8.2 Local materialization on a Linux dev host: `cargo run -p tillandsias-vm-layer --bin materialize-cli -- images/vm/Recipefile images/vm/manifest.toml` produces a valid rootfs.tar.
-- [ ] 8.3 Local materialization on macOS dev host: same command produces an aarch64 rootfs.tar; cached on second run (<5 s).
-- [ ] 8.4 Convert to VFR raw image; boot under `objc2-virtualization`; verify systemd init, vsock listener on 42420, `tillandsias-headless --version` works.
-- [ ] 8.5 Convert to WSL2 import tar; `wsl --import`; verify the same inside the WSL distro.
-- [ ] 8.6 CI `recipe-smoke` job green for both arches.
+- [ ] 8.1 Edit `openspec/specs/host-shell-architecture/spec.md` to reference recipe materialization (replace any text mentioning binary download).
+- [ ] 8.2 Edit `openspec/specs/macos-native-tray/spec.md` cross-references list to reflect the new flow.
+- [ ] 8.3 Edit `crates/tillandsias-headless/Cargo.toml` build-script to compute recipe SHA at build time when materializing inside the recipe.
 
-## 9. Archive
+## 9. Verify
 
-- [ ] 9.1 Once verified, run `/opsx:archive vm-recipe-provisioning`.
+- [ ] 9.1 Run `openspec validate vm-recipe-provisioning` — expect "valid".
+- [ ] 9.2 Local materialization on a Linux dev host: `cargo run -p tillandsias-vm-layer --bin materialize-cli -- images/vm/Recipefile images/vm/manifest.toml` produces a valid rootfs.tar.
+- [ ] 9.3 Local materialization on macOS dev host: same command produces an aarch64 rootfs.tar; cached on second run (<5 s).
+- [ ] 9.4 Convert to VFR raw image; boot under `objc2-virtualization`; verify systemd init, vsock listener on 42420, `tillandsias-headless --version` works.
+- [ ] 9.5 Convert to WSL2 import tar; `wsl --import`; verify the same inside the WSL distro.
+- [ ] 9.6 Fetch-default path (D8): on a clean Windows host, default first-run fetches + SHA-verifies the CI rootfs and `wsl --import`s it without buildah-in-WSL; `--materialize-local` reproduces an equivalent rootfs.
+- [ ] 9.7 CI `recipe-smoke` job green for both arches; rootfs published + SHA recorded in `manifest.toml [output]`.
+
+## 10. Archive
+
+- [ ] 10.1 Once verified, run `/opsx:archive vm-recipe-provisioning`.
