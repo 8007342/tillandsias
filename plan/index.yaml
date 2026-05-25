@@ -11,10 +11,13 @@ plan_index:
     - obsoleted
 
   selection_policy:
-    primary_rule: "Pick the earliest step whose status is ready."
+    primary_rule: >
+      Pick the highest-impact ready packet that matches the host's capability
+      and can produce coherent evidence in one or two recurrent iterations.
     fallback_rule: >
-      If the selected step is blocked or needs clarification, pick the next
-      independent ready step instead of waiting on the blocker.
+      If the selected packet is blocked or needs clarification, pick the named
+      fallback_when_blocked packet or the next independent ready packet instead
+      of waiting on the blocker.
     update_rule: >
       When a step completes, update its status, write the evidence summary to
       its deliverable, checkpoint the current state to origin/linux-next, and
@@ -23,10 +26,11 @@ plan_index:
   graph_policy:
     model: dag
     selection_rule: >
-      Pick the earliest ready leaf task whose claimed file scope is free.
-      If a leaf is claimed or overlaps a claim, skip to the next ready leaf
-      rather than waiting. Dependency tails should be preferred when they unlock
-      downstream work.
+      Pick the largest coherent ready leaf packet whose claimed file scope is
+      free and whose evidence can be produced by the current host. If a leaf is
+      claimed or overlaps a claim, skip to the next ready packet rather than
+      waiting. Dependency tails should be preferred when they unlock downstream
+      work on another host.
     claim_rule: >
       Claims are leases on file scope and graph node scope. Claims are
       idempotent by graph_node_id plus lease_id. Repeated claims must converge.

@@ -1,6 +1,6 @@
 # osx-next work queue — 2026-05-25
 
-trace: methodology/distributed-work.yaml, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
+trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
 Status: **OPEN** as of 2026-05-25T18:25Z. macOS m1, m2, and m3 are done;
 m1b is in progress under lease `7c2a9f1eb083` after sub-task A completed.
@@ -15,13 +15,15 @@ a stable ID. When the macOS host wakes:
 
 1. `git fetch origin --prune && git checkout linux-next && git pull --ff-only`
 2. Read this file top-to-bottom.
-3. Pick the earliest item whose status is `pending`, whose `gated_on` field
-   is empty (or every dependency is `done`), and whose `capability_tags`
-   match your skills.
+3. Pick the highest-impact ready packet whose `gated_on` field is empty (or
+   every dependency is `done`), whose `capability_tags` match your skills, and
+   whose acceptance evidence fits one or two recurrent iterations. Prefer
+   packets that unblock another host over tiny cleanup.
 4. Append a `claim` event to the item with your `lease_id` and `agent_id`.
 5. Commit + push to `linux-next`.
-6. Switch to `osx-next` and execute. Report progress via further events
-   in this file (commits pushed to `linux-next`).
+6. Switch to `osx-next` and execute. Report progress, blockers, errors,
+   dependencies, and handoffs as status packets in this file (commits pushed to
+   `linux-next`; format in `plan/issues/multi-agent-work-shaping-2026-05-25.md`).
 
 Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`):
 *plan/* writes go to **linux-next**; *code* commits go to **osx-next**.
@@ -31,6 +33,11 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
 Per branch canon §4, plan/-class writes directly are CORRECT; code commits
 SHOULD route through `osx-next` so the integration loop can run isolation
 checks. Advisory only; both flows still work.
+
+Work-shaping note: m4 and m6 are both intentionally large enough to occupy a
+macOS agent for one or two recurrent iterations. If m5 remains gated on the
+materializer/rootfs chain, do not idle; continue m4 host-side wiring or claim m6
+packaging/codesign and leave end-to-end recipe evidence for the later m5 packet.
 
 ## Currently unblocked / active
 

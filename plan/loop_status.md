@@ -1,37 +1,41 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-05-25T18:57Z
+LastExecutionTime: 2026-05-25T23:21Z
 
 ## This Loop
 
-- Audited the active Windows/macOS queues, cross-host blocker roundup, and
-  integration-loop ledger from local `linux-next`.
-- Observed remote heads with `git ls-remote`: `linux-next` advanced during
-  this loop to `2215447f`, `osx-next` remains integrated at `8f3db7f8`, and
-  `windows-next` is at `5e95f7c3`.
-- Reconciled the Windows queue header/progress with the w4 §3.3 ConPTY
-  lifecycle event already pushed at `2215447f`; w4 stays in progress for
-  `CreateProcessW`, async pump_io, and tray menu wiring.
-- First push rejected because `origin/linux-next` advanced; fetched, rebased
-  onto `2215447f`, and kept the remote's detailed ConPTY event.
+- Tuned `/coordinate-multihost-work`, `methodology/distributed-work.yaml`,
+  `plan/index.yaml`, and both active host queues for larger work packets,
+  eager fallback assignment, and structured status packets.
+- Added explicit remote-progress guidance: `origin/linux-next` being ahead of
+  a recurrent local checkout is expected and healthy; repeated no-progress is
+  the signal to document and investigate.
+- Added `plan/issues/multi-agent-work-shaping-2026-05-25.md` as the durable
+  guide for packet sizing, blocker/error/dependency reporting, coordinator
+  duties, and remote-progress health.
+- Preserved existing host ownership and active leases; this pass changed
+  coordination guidance only.
 
 ## Expected Next Loop
 
-- Merge/test the two Windows w4 commits currently ahead of `linux-next`
-  (`a57983b6`, `5e95f7c3`) if they are still absent from the integration
-  branch after a fresh fetch.
-- Check whether Linux l7 `§3-materializer-driver` checkpointed after its
-  default TTL boundary; ping or reclaim only after a fresh remote read.
-- Check whether Windows advances w4 into pump_io and tray menu wiring; check
-  whether macOS m1b finishes sub-tasks B/C and whether m4/m6 are claimed.
+- Apply the new packet rules while reconciling active leases: every host should
+  have one unblocked ready packet plus a fallback when its primary path gates.
+- Treat remote-ahead as expected; fresh-read/rebase and reconcile. Escalate only
+  for failed reconciliation or repeated lack of remote branch movement.
+- Expect future Windows/macOS/Linux events to use the status packet shape for
+  plans, blockers, errors, dependencies, evidence, and lease intent.
+- Check whether Linux l7 checkpointed, merge/test Windows w4a/w4b if still
+  ahead, reconcile macOS m1b completion, and decide the shared Open Shell menu /
+  `PtyIntent::Shell` sign-off.
 
 ## Resolved Since Previous Loop
 
-- Windows w4 made partial progress: §3.3 ConPTY lifecycle landed at
-  windows-next `5e95f7c3` and was folded into the queue header/events.
-- Previously recorded resolved blockers still stand: Linux l3 shipped at
-  `f770e013`/`8dc0d129`, Linux l4 shipped at `6956c825`, and Windows
-  `PtySession` core landed at windows-next `a57983b6`.
+- Coordination ambiguity reduced: task selection now prefers coherent packets
+  over earliest tiny pending items, and agents have a single status format for
+  errors, blockers, dependencies, plans, evidence, and handoffs.
+- The prior recurrent-run confusion is now addressed: remote advancement should
+  be recorded as progress, while repeated no-progress should be documented as a
+  health concern.
 
 ## Current Major Blockers
 
@@ -46,9 +50,13 @@ LastExecutionTime: 2026-05-25T18:57Z
 
 ## Validation
 
-- `git ls-remote origin refs/heads/main refs/heads/linux-next refs/heads/windows-next refs/heads/osx-next`: passed.
-- `git diff --check -- plan/loop_status.md plan/issues/windows-next-work-queue-2026-05-25.md`: passed.
-- `git diff --cached --check -- plan/loop_status.md plan/issues/windows-next-work-queue-2026-05-25.md`: passed.
-- YAML files were read but not modified.
-- Files changed: `plan/issues/windows-next-work-queue-2026-05-25.md`,
-  `plan/loop_status.md`.
+- `python` + PyYAML parse passed for `methodology/distributed-work.yaml`,
+  `methodology/multi-host-development.yaml`, and `plan/index.yaml`.
+- `git diff --check` passed for touched coordination files.
+- `ruby` YAML parser was unavailable in this sandbox (`ruby: command not found`);
+  PyYAML was used instead.
+- Files changed: `.codex/skills/coordinate-multihost-work/SKILL.md`,
+  `methodology/distributed-work.yaml`, `plan/index.yaml`,
+  `plan/issues/multi-agent-work-shaping-2026-05-25.md`,
+  `plan/issues/windows-next-work-queue-2026-05-25.md`,
+  `plan/issues/osx-next-work-queue-2026-05-25.md`, `plan/loop_status.md`.
