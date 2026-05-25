@@ -431,3 +431,22 @@ Windows; windows-tray builds; clippy clean.
 attach so the real Windows terminal flows through pump_io) — NEXT, mine; §3.2
 unix openpty stub for Linux. THEN w4 (tray OpenShell/GithubLogin →
 PtySession::open + pump_io + wt.exe). Full terminal-attach E2E needs a booted VM.
+
+### Event: 2026-05-25 — pty §3.3 ConPTY process-attach + pipe I/O done
+
+ConPtyMaster::spawn (CreateProcessW-into-pseudoconsole via proc-thread attribute
+list) + ConPtyChild wait()/Drop + blocking write_input/read_output landed @
+windows-next `0a06832d`. Added windows features Threading + Storage_FileSystem +
+System_IO (target-gated cfg(windows)). Verified locally (no VM):
+conpty_spawn_propagates_exit_code (cmd /c exit 7 → wait()==7) passes; host-shell
+27 tests green; windows-tray builds; clippy clean.
+
+Test note: removed an earlier echo-marker test that hung on a blocking ReadFile
+(ConPTY pipe blocks until data/EOF). Blocking pipe I/O is validated via the
+async PtyMaster bridge + VM E2E, not a hermetic unit test.
+
+§3 lease remaining: ConPtyMaster impl PtyMaster (async-wrap the blocking pipe
+I/O via spawn_blocking/threads → tokio AsyncRead/AsyncWrite halves) so the real
+terminal flows through pump_io — NEXT, mine; §3.2 unix openpty stub for Linux.
+THEN w4 (tray OpenShell/GithubLogin → PtySession::open + ConPtyMaster + pump_io
++ wt.exe). Full terminal-attach E2E needs a booted VM.
