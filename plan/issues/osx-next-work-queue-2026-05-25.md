@@ -2,9 +2,11 @@
 
 trace: methodology/distributed-work.yaml, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
-Status: **OPEN** as of 2026-05-25T17:10Z. macOS m1, m2, and m3 are done;
-m1b is the next clean macOS-owned ready item. m4 and m5 remain gated on Linux
-PTY/materializer deliverables.
+Status: **OPEN** as of 2026-05-25T18:25Z. macOS m1, m2, and m3 are done;
+m1b is in progress under lease `7c2a9f1eb083` after sub-task A completed.
+Linux l3 shipped the in-VM PTY handler at `f770e013`/`8dc0d129`, so m4
+host-side PTY wiring is ready; m6 packaging is also ready. m5 remains gated on
+Linux materializer plus macOS-owned recipe-publish deliverables.
 
 ## How to use this file
 
@@ -30,7 +32,7 @@ Per branch canon §4, plan/-class writes directly are CORRECT; code commits
 SHOULD route through `osx-next` so the integration loop can run isolation
 checks. Advisory only; both flows still work.
 
-## Currently unblocked (pick these first)
+## Currently unblocked / active
 
 ### Item: m1b/transport-macos-vsock-connector
 
@@ -38,9 +40,16 @@ checks. Advisory only; both flows still work.
 - type: feature
 - owner_host: macos
 - capability_tags: [rust, vfr, objc2-virtualization, vsock, tokio, async-fd]
-- status: ready
+- status: in_progress
+- lease:
+  - lease_id: `7c2a9f1eb083`
+  - agent_id: `osx-next-claude-opus-4-7` on `Tlatoanis-MacBook-Air`
+  - host: macos
+  - acquired_at: 2026-05-25T17:00Z
+  - expires_at: 2026-05-25T21:00Z (derived from default 4h TTL)
 - depends_on: []
-- blocks: [m4/pty-attach-appkit-terminal, m5/vfr-image-via-ci-rootfs]
+- blocks: [m5/vfr-image-via-ci-rootfs]
+- blocks_end_to_end: [m4/pty-attach-appkit-terminal]
 - owned_files:
   - `crates/tillandsias-vm-layer/src/transport_macos.rs` (new)
   - `crates/tillandsias-vm-layer/src/vz.rs` (extend `wait_ready` to call the connector)
@@ -53,6 +62,39 @@ checks. Advisory only; both flows still work.
   - `cargo test -p tillandsias-control-wire --features vsock` remains green.
   - On macOS, vz-spike or an equivalent smoke connects to the booted Fedora VM
     over vsock and receives `HelloAck`.
+- progress:
+  - Sub-task A (`connect_to_vm_vsock` + fd ownership) completed at
+    linux-next `d2eb5fcf`; sub-tasks B (`AsyncRead`/`AsyncWrite` wrapper) and
+    C (`wait_ready` Hello/HelloAck handshake) remain under the same lease.
+
+### Item: m4/pty-attach-appkit-terminal
+
+- id: `m4/pty-attach-appkit-terminal`
+- type: feature
+- owner_host: macos
+- capability_tags: [appkit, objc2, pty, vsock, terminal-app]
+- status: ready
+- gated_on: []
+- cleared_gates:
+  - linux deliverable `l1/control-wire-pty-attach-tasks-1` shipped at `b345ae68`
+  - linux deliverable `l3/in-vm-headless-pty-handler` shipped at
+    `f770e013`/`8dc0d129`
+- depends_on: [m1/vmruntime-stop-and-wait-ready]
+- owned_files:
+  - `crates/tillandsias-macos-tray/src/terminal_attach.rs`
+  - `crates/tillandsias-macos-tray/src/status_item.rs` (menu wiring)
+- summary: >
+    Implement the macOS side of `control-wire-pty-attach` Task 3.2
+    (Unix `nix::pty::openpty` + `tokio::process::Command`) and wire
+    "Open Shell" + "GitHub login" menu items to `PtySession::open(...)`,
+    then `NSWorkspace::open(Terminal.app, with: <master-fd-as-tty>)`.
+    Per plan/steps/20 Phase 5 and the macOS-tray spec's "Open Terminal"
+    UX requirement.
+- estimated_effort: 1–2 days.
+- verification_note: >
+    Host-side wiring can start now. End-to-end readiness smoke should wait
+    for m1b sub-tasks B/C to finish the AsyncRead/AsyncWrite wrapper and
+    Hello/HelloAck wait_ready handshake.
 
 ### Item: m1/vmruntime-stop-and-wait-ready
 
@@ -120,30 +162,7 @@ checks. Advisory only; both flows still work.
 - evidence_on_done:
   - macOS-scoped clippy cleanup landed; the `manual_clamp` finding in `vz.rs` was fixed.
 
-## Gated on Linux deliverables (queued for after Linux lands)
-
-### Item: m4/pty-attach-appkit-terminal
-
-- id: `m4/pty-attach-appkit-terminal`
-- type: feature
-- owner_host: macos
-- capability_tags: [appkit, objc2, pty, vsock, terminal-app]
-- status: pending
-- gated_on:
-  - linux deliverable `l1/control-wire-pty-attach-tasks-1` (control-wire enum + constants)
-  - linux deliverable `l3/in-vm-headless-pty-handler` (host-side library + in-VM handler)
-- depends_on: [m1/vmruntime-stop-and-wait-ready]
-- owned_files:
-  - `crates/tillandsias-macos-tray/src/terminal_attach.rs`
-  - `crates/tillandsias-macos-tray/src/status_item.rs` (menu wiring)
-- summary: >
-    Implement the macOS side of `control-wire-pty-attach` Task 3.2
-    (Unix `nix::pty::openpty` + `tokio::process::Command`) and wire
-    "Open Shell" + "GitHub login" menu items to `PtySession::open(...)`,
-    then `NSWorkspace::open(Terminal.app, with: <master-fd-as-tty>)`.
-    Per plan/steps/20 Phase 5 and the macOS-tray spec's "Open Terminal"
-    UX requirement.
-- estimated_effort: 1–2 days after Linux deliverables.
+## Linux-gated and recently unblocked deliverables
 
 ### Item: m5/vfr-image-via-ci-rootfs
 
@@ -175,9 +194,10 @@ checks. Advisory only; both flows still work.
 - type: feature
 - owner_host: macos
 - capability_tags: [macos-bundle, codesign, installer]
-- status: pending
-- gated_on:
-  - m1 + m2 (functional VM)
+- status: ready
+- gated_on: []
+- cleared_gates:
+  - m1 + m2 functional VM path completed at 2026-05-25T16:50Z
 - owned_files:
   - `scripts/build-macos-tray.sh`
   - `scripts/install-macos.sh`
@@ -210,10 +230,10 @@ checks. Advisory only; both flows still work.
 
 | Linux item | Status | Blocks macOS item |
 |---|---|---|
-| `l1/control-wire-pty-attach-tasks-1` | done (`b345ae68`; §1 enum/capability tasks complete) | m4 still gated on l3 |
+| `l1/control-wire-pty-attach-tasks-1` | done (`b345ae68`; §1 enum/capability tasks complete) | m4 ready with l3 also done |
 | `l2/recipe-shared-modules` | done (`a7af0ed`; parser tests green on Linux) | m5 still gated on l7 + l5 |
-| `l3/in-vm-headless-pty-handler` | pending (after l1) | m4 |
-| `l4/replace-vsock-stub-handlers` | pending | (informational only for macOS) |
+| `l3/in-vm-headless-pty-handler` | done (`f770e013`/`8dc0d129`; tasks 4.1-4.7, two pump tests ignored pending AsyncFd rewrite) | m4 ready for host-side wiring |
+| `l4/replace-vsock-stub-handlers` | done (`6956c825`; informational only for macOS) | (informational only for macOS) |
 | `l5/recipe-smoke-ci-publish` | macOS-owned claim; pending l7/materializer | m5 |
 | `l7/§3-materializer-driver` | claimed by Linux (`linux-l-mat-2026-05-25T15Z`) | m5 |
 
@@ -288,6 +308,9 @@ Interpretation: linux deliverable `l1/control-wire-pty-attach-tasks-1` is
 sub-tasks that only depend on the §1 enum + capability — but it still
 needs `l3/in-vm-headless-pty-handler` (= pty-attach §4) for the round-trip
 to work end-to-end). m4 stays gated on l3.
+Historical status above is superseded by the 18:25Z header reconciliation:
+l3 shipped, so m4 is ready for host-side wiring; m1b still gates end-to-end
+Hello/HelloAck smoke.
 
 ### event: m2 claimed + done — 2026-05-25T16:50Z
 
@@ -371,3 +394,21 @@ For future iterations / production tray:
   `connect_to_vm_vsock + handshake` after the state-poll succeeds. ~1 h.
 - Lease NOT released — sub-tasks B + C still under same lease until full
   m1b is done.
+
+### event: header reconciliation — 2026-05-25T18:25Z
+
+- Folded the m1b terminal event into the item header: m1b is not ready or
+  stalled; it is actively leased by `7c2a9f1eb083` until approximately
+  2026-05-25T21:00Z under the default 4h TTL. Sub-task A is done; sub-tasks
+  B and C remain.
+- Marked m6 `ready` because m1 + m2 completed and its bundle/codesign work can
+  proceed independently before m4/m5.
+- Mirrored Linux l4 as done at `6956c825`. It is informational for macOS but
+  removes one stale shared-gate signal from this queue.
+- `l3/in-vm-headless-pty-handler` shipped on linux-next at
+  `f770e013`/`8dc0d129`; m4 is now ready for host-side AppKit Terminal
+  wiring. End-to-end smoke remains limited until m1b sub-tasks B/C finish
+  the AsyncRead/AsyncWrite wrapper and wait_ready Hello/HelloAck handshake.
+- Current macOS blockers: m5 waits on Linux l7 plus macOS-owned l5
+  recipe-publish/CI-fetch work; m4 has an end-to-end verification dependency
+  on the in-progress m1b handshake tail but is no longer blocked for coding.

@@ -2,9 +2,12 @@
 
 trace: methodology/distributed-work.yaml, plan/steps/windows-next-thin-tray.md, plan/issues/tray-convergence-coordination.md, plan/issues/control-socket-protocol-convergence-2026-05-25.md, openspec/changes/control-wire-pty-attach/
 
-Status: **OPEN** as of 2026-05-25T17:10Z. Windows w1, w2, and w3 are done;
-remaining Windows tray work is gated on Linux materializer / PTY / vsock
-deliverables.
+Status: **OPEN** as of 2026-05-25T18:45Z. Windows w1, w2, and w3 are done.
+Linux l3 shipped the in-VM PTY handler at `f770e013`/`8dc0d129` and l4 shipped
+real vsock handlers at `6956c825`. Windows w4 is now in progress through the
+shared host-shell `PtySession` / ConPTY path; w6 is ready for verification.
+Remaining WSL rootfs work is gated on Linux materializer plus macOS-owned
+recipe-publish deliverables.
 
 ## How to use this file
 
@@ -24,11 +27,17 @@ a stable ID. When the Windows host wakes:
 Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`):
 *plan/* writes go to **linux-next**; *code* commits go to **windows-next**.
 
-## Currently unblocked
+## Currently unblocked / active
 
-None. Do not re-claim w1, w2, or w3; their terminal events are recorded below.
-The next Windows work is w4/w5/w6 after their Linux gates clear, or a newly
-filed ready item with a stable ID.
+- `w6/vm-status-and-enumerate-real-handlers` is ready for Windows
+  verification after Linux l4 shipped at `6956c825`.
+- `w4/pty-attach-conpty` is active through the Windows claim on the shared
+  `host-shell::pty` layer and ConPTY follow-up. Do not create a competing
+  claim; see lease `8a3307907d94` in the Events section.
+
+Do not re-claim w1, w2, or w3; their terminal events are recorded below. The
+next gated Windows implementation item is w5 after Linux l7 plus macOS-owned
+l5 land, unless a newly filed ready item with a stable ID appears first.
 
 ### Item: w1/tray-icon-rc-and-ico
 
@@ -117,7 +126,7 @@ filed ready item with a stable ID.
 - evidence_on_done:
   - `cargo clippy -p tillandsias-windows-tray --target x86_64-pc-windows-msvc -- -D warnings` passed at windows-next `d3d4cede`.
 
-## Gated on Linux deliverables (queued for after Linux lands)
+## Linux-gated and recently unblocked deliverables
 
 ### Item: w4/pty-attach-conpty
 
@@ -125,10 +134,17 @@ filed ready item with a stable ID.
 - type: feature
 - owner_host: windows
 - capability_tags: [win32, conpty, pty, vsock]
-- status: pending
-- gated_on:
-  - linux deliverable `l1/control-wire-pty-attach-tasks-1` (control-wire enum + constants) — see below
-  - linux deliverable `l3/in-vm-headless-pty-handler` (host-side library + in-VM handler)
+- status: in_progress
+- lease:
+  - lease_id: `8a3307907d94`
+  - agent_id: `windows-bullo-claudia-cli-2026-05-25`
+  - host: windows
+  - scope: "control-wire-pty-attach §3 shared host-side PtySession + Windows ConPTY"
+- gated_on: []
+- cleared_gates:
+  - linux deliverable `l1/control-wire-pty-attach-tasks-1` shipped at `b345ae68`
+  - linux deliverable `l3/in-vm-headless-pty-handler` shipped at
+    `f770e013`/`8dc0d129`
 - depends_on: [w2/menu-action-dispatch-wiring]
 - owned_files:
   - `crates/tillandsias-windows-tray/src/notify_icon.rs` (menu wiring)
@@ -140,6 +156,10 @@ filed ready item with a stable ID.
     `PtySession::open(...)` and spawn Windows Terminal (`wt.exe`) attached
     to the host-side pseudo-tty file descriptor.
 - estimated_effort: 1–2 days.
+- progress:
+  - Cross-platform `PtySession` core landed at windows-next `a57983b6`;
+    Windows ConPTY, real pump_io bridge, and tray menu wiring remain under the
+    same lease.
 
 ### Item: w5/wsl-import-via-ci-rootfs
 
@@ -171,10 +191,12 @@ filed ready item with a stable ID.
 - type: feature
 - owner_host: windows  (in-VM headless, but Windows-tray sees the effect)
 - capability_tags: [host-shell, vsock-client]
-- status: pending
-- gated_on:
-  - linux deliverable `l4/replace-vsock-stub-handlers` (real backing data for
-    VmStatusRequest, EnumerateLocalProjects, CloudRefreshRequest)
+- status: ready
+- gated_on: []
+- cleared_gates:
+  - linux deliverable `l4/replace-vsock-stub-handlers` shipped at `6956c825`
+    (real backing data for VmStatusRequest, EnumerateLocalProjects,
+    CloudRefreshRequest)
 - owned_files: (none on Windows side — Windows just verifies)
 - summary: >
     Once Linux replaces the vsock_server.rs stub handlers with real
@@ -187,10 +209,10 @@ filed ready item with a stable ID.
 
 | Linux item | Status | Blocks Windows item |
 |---|---|---|
-| `l1/control-wire-pty-attach-tasks-1` | **done** (shipped `b345ae68`; 23/23 control-wire tests pass on Linux; 22/22 on Windows per `47d91d11`) | w4 (now soft-unblocked; gated on l3) |
+| `l1/control-wire-pty-attach-tasks-1` | **done** (shipped `b345ae68`; 23/23 control-wire tests pass on Linux; 22/22 on Windows per `47d91d11`) | w4 active under Windows lease |
 | `l2/recipe-shared-modules` | **done** (windows authored §2 parser `26afb76a` integrated `a7af0ed`; 16/16 recipe tests green on Linux) | w5 (still gated on l7 + l5) |
-| `l3/in-vm-headless-pty-handler` | pending (after l1; tasks 4.x of pty-attach proposal) | w4 |
-| `l4/replace-vsock-stub-handlers` | pending | w6 |
+| `l3/in-vm-headless-pty-handler` | **done** (`f770e013`/`8dc0d129`; tasks 4.1-4.7, two pump tests ignored pending AsyncFd rewrite) | w4 active under Windows lease |
+| `l4/replace-vsock-stub-handlers` | **done** (`6956c825`; real VmStatus/EnumerateLocalProjects/CloudRefresh backing data) | w6 ready for verification |
 | `l5/recipe-smoke-ci-publish` | **macOS-owned** per their CLAIM in cross-host-blocker-roundup (`§2b` host-side + CI artifacts) | w5 |
 | `l6/linux-rasterize-svg-to-ico` | **done** (`ea13ba20`) | w1 done |
 | `l7/§3-materializer-driver` | **claimed by Linux** (lease `linux-l-mat-2026-05-25T15Z`); ETA 2 cron iters (~4h) | unblocks w5 + macOS m5 |
@@ -275,6 +297,8 @@ supplied the rasterizer/ICO via l6. w1 status → done.
 Remaining cleanly-unblocked windows item: w3 (windows-tray clippy —
 installation_uuid.rs:85 CredWriteW &mut→& + any others). w4/w5/w6 still gated
 on linux deliverables (l1 PTY enum landed; l3/l2/l5/l4 pending).
+Historical status above is superseded by the 18:25Z header reconciliation:
+l3 and l4 shipped, so w4 and w6 are ready.
 
 ### Event: 2026-05-25 — w3 clippy cleanup DONE
 
@@ -363,3 +387,18 @@ STILL OPEN under this lease (816... see prior claim event):
 Then w4 wires tray OpenShell/GithubLogin → PtySession::open + wt.exe.
 
 macOS m4: the PtySession/PtyRouter/PtyTransport API is now available to consume.
+
+### Event: 2026-05-25T18:25Z — linux coordinator header reconciliation
+
+- `l3/in-vm-headless-pty-handler` shipped on linux-next at
+  `f770e013`/`8dc0d129`. Queue mirror updated from pending to done. Later
+  Windows review found that w4 also needs the shared host-shell `PtySession`
+  layer; see the w4 finding and §3 claim events above.
+- `l4/replace-vsock-stub-handlers` shipped on linux-next at `6956c825`
+  (`feat(headless): l4 — real vsock handlers (VmStatus/EnumerateLocalProjects)`).
+  Queue mirror updated from pending to done.
+- `w6/vm-status-and-enumerate-real-handlers` is now ready for Windows
+  verification. No Windows code is expected unless verification finds a
+  platform-specific tray display gap.
+- `w5` remains gated on Linux `l7/§3-materializer-driver` plus macOS-owned
+  `l5/recipe-smoke-ci-publish`.

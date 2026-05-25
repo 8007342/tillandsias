@@ -96,10 +96,12 @@ Ledger corrections made in this audit:
 - `methodology/distributed-work.yaml` now defines explicit status transitions,
   stale/stalled handling, ping rules, prioritization, and completion hygiene.
 - `plan/issues/windows-next-work-queue-2026-05-25.md` now marks w1, w2, and
-  w3 as `done` in the item headers, matching their terminal events. Windows has
-  no cleanly unblocked tray item left; w4/w5/w6 are gated.
+  w3 as `done` in the item headers, matching their terminal events. At this
+  audit point Windows had no cleanly unblocked tray item left; the 18:25Z
+  audit below supersedes this after l3/l4 shipped.
 - `plan/issues/osx-next-work-queue-2026-05-25.md` now marks m1, m2, and m3 as
   `done` in the item headers and mirrors m1b as the next `ready` macOS item.
+  The 18:25Z audit below supersedes m1b to an active lease.
 - `plan.yaml` and `plan/index.yaml` now describe step 21 as active/in-progress
   rather than ready-but-unclaimed.
 
@@ -107,15 +109,51 @@ Current cross-host gates:
 
 - Linux l7 `§3-materializer-driver` is claimed by Linux and blocks Windows w5
   plus macOS m5.
-- Linux l3 `in-vm-headless-pty-handler` blocks Windows w4 and macOS m4.
-- Linux l4 `replace-vsock-stub-handlers` blocks Windows w6 verification.
+- Linux l3 `in-vm-headless-pty-handler` shipped after this audit and no
+  longer blocks Windows w4 or macOS m4; see 18:25Z below.
+- Linux l4 `replace-vsock-stub-handlers` shipped after this audit and no
+  longer blocks Windows w6 verification; see 18:25Z below.
 - macOS-owned l5 `recipe-smoke-ci-publish` / CI-fetch work blocks the final
   recipe artifact path after l7 lands.
-- macOS m1b `transport-macos-vsock-connector` is ready and should be claimed
-  by the macOS host before m4/m5 end-to-end work.
+- macOS m1b `transport-macos-vsock-connector` was ready at this audit point;
+  it is now in progress under lease `7c2a9f1eb083`.
 
 Next audit action:
 
 - If l7 has not produced a checkpoint by the next integration cycle, append a
   ping to `plan/issues/cross-host-blocker-roundup-2026-05-25.md` with the
   last known lease and the smallest reclaimable scope.
+
+## Coordination Audit - 2026-05-25T18:25Z
+
+host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+
+Observed remote heads via read-only remote query:
+
+- `main`: ddf52dff
+- `linux-next`: 8dc0d129
+- `windows-next`: d3d4cede
+- `osx-next`: 8f3db7f
+
+Ledger corrections made in this audit:
+
+- `plan/issues/windows-next-work-queue-2026-05-25.md` now mirrors Linux l3 and
+  l4 as done; Windows w4 is active under the shared PtySession/ConPTY lease
+  and w6 is ready for verification.
+- `plan/issues/osx-next-work-queue-2026-05-25.md` now folds the m1b sub-task A
+  terminal event into the item header as an active lease, marks macOS m4 ready
+  for host-side PTY wiring, and marks m6 ready after m1+m2 completion.
+- `plan/issues/cross-host-blocker-roundup-2026-05-25.md` now has a current
+  blocker fold: l3/l4 resolved; l7 and macOS-owned l5 remain the recipe gates.
+- `plan.yaml` and `plan/index.yaml` now describe step 21 with l3/l4 cleared
+  instead of treating PTY/vsock as current blockers.
+
+Current cross-host gates:
+
+- Linux l7 `§3-materializer-driver` is still claimed by Linux and blocks
+  Windows w5 plus macOS m5. Ping/reclaim decision is due around
+  2026-05-25T19:00Z if no checkpoint appears.
+- macOS-owned l5 `recipe-smoke-ci-publish` / CI-fetch work blocks the final
+  recipe artifact path after l7 lands.
+- macOS m1b remains in progress under lease `7c2a9f1eb083`; it no longer
+  blocks m4 coding, but it does block end-to-end wait_ready/HelloAck smoke.
