@@ -28,6 +28,75 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Interlude 2026-05-25T18:00Z–18:45Z — Linux gates l4 + l3 cleared; w4/w6 unblocked
+
+User directive: "Linux gate clears to ungate w4/w5/w6, can you unblock those?"
+Two Linux deliverables landed back-to-back to clear gates on sibling work.
+
+- **`l4/replace-vsock-stub-handlers` LANDED** (commits `af0e5528` /
+  `6956c825`): replaced 3 stub handlers in `vsock_server.rs`:
+  - `VmStatusRequest` now reads from a shared `VmStateHandle` (Arc-shared
+    phase + podman socket existence check on `/run/podman/podman.sock`).
+    Phase defaults to `Ready`; lifecycle hooks elsewhere can call
+    `set_phase` to flip through Provisioning/Starting/Draining/etc.
+  - `EnumerateLocalProjects` walks the in-VM bind-mount root
+    (`$TILLANDSIAS_IN_VM_PROJECT_ROOT` or `/home/forge/src`), skipping
+    hidden + non-directory entries, emits `LocalProjectEntry` per child
+    sorted by label with mtime as `last_seen_unix`.
+  - `CloudRefreshRequest` stays empty but ships an explicit comment
+    documenting the real implementation (`gh repo list --json` via
+    subprocess; token from `/run/secrets/vault-token`).
+  - `VmShutdownRequest` flips phase to `Draining` before close.
+  - 6 unit tests cover `VmStateHandle` + `enumerate_local_projects`.
+  - Tests pass: `./build.sh --check && --test` green;
+    `cargo test -p tillandsias-headless --features listen-vsock vsock_server`:
+    6/6. Windows w6 is now soft-unblocked (verify-only, no Windows code change).
+
+- **`l3/in-vm-headless-pty-handler` LANDED** (commits `f770e013` /
+  `8dc0d129`): new `crates/tillandsias-headless/src/pty_handler.rs`,
+  Unix-only, behind `listen-vsock`. Implements Tasks 4.1-4.7 of
+  `openspec/changes/control-wire-pty-attach/`:
+  - `PtySessionStore` keyed by session_id, one per vsock connection.
+  - `nix::pty::openpty` + `std::process::Command::pre_exec` (setsid +
+    dup2 + TIOCSCTTY) for fork+exec with the slave as controlling tty;
+    `env_clear` before applying `PtyOpen.env` (no host-env leak); `cwd`
+    applied if Some.
+  - Pump task reads master fd, emits `PtyData{ToHost}` envelopes via
+    per-connection mpsc; on master EOF runs `waitpid` to reap + emits
+    terminal `PtyClose` with code/signal populated.
+  - Host-initiated close: SIGTERM + 2s grace + SIGKILL via
+    `spawn_terminator`. On connection drop, `shutdown_all` reaps every
+    still-live session.
+  - `vsock_server.rs` refactored to `tokio::select!` over outbound PTY
+    mpsc OR inbound `read_envelope`, so `PtyData{ToHost}` interleaves
+    with normal request/reply traffic without splitting the stream.
+  - HelloAck capabilities now advertise `CAP_PTY_ATTACH_V1` so peer
+    trays can negotiate.
+  - Tests: 2 passing (empty-argv error, duplicate-session-id error) +
+    2 `#[ignore]` with documented follow-up. The ignored tests require
+    switching the master fd wrapper from `tokio::fs::File` (blocking
+    pool) to `tokio::io::unix::AsyncFd<OwnedFd>` (readiness-based);
+    captured in `openspec/changes/control-wire-pty-attach/tasks.md`
+    Task 4.3.
+  - **Unblocks Windows w4 (ConPTY)** and **macOS m4 (AppKit Terminal)** —
+    sibling agents can now wire their host-side `PtySession::open`
+    (proposal Tasks 3.x) against the shipped wire variants + the in-VM
+    handler.
+
+- **Status of w5 (Windows WSL import via CI rootfs):**
+  - Still gated on macOS-owned `l5/recipe-smoke-ci-publish` (recipe-publish
+    CI job + per-arch `.tar` / `.img` artifacts). Linux's `l7/§3
+    materializer driver` is the upstream that l5 will consume; l7 is
+    still claimed (lease `linux-l-mat-2026-05-25T15Z`) but NOT yet
+    started this session.
+
+- **Concurrent sibling activity caught up via rebase:**
+  - macOS host: Phase 1 step 1.6 `transport_macos` vsock connector
+    landed (commits `e3ea617d`, `d2eb5fcf`).
+  - Windows host: new `cheatsheets/runtime/windows-tray-dev.md` (commit
+    `104bb002`).
+  - All already on linux-next post-rebase.
+
 ### Cycle 2026-05-25T17:43Z — INTEGRATED (windows w1 + w3; queue burndown)
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
