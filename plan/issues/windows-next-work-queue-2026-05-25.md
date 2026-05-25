@@ -269,3 +269,24 @@ supplied the rasterizer/ICO via l6. w1 status → done.
 Remaining cleanly-unblocked windows item: w3 (windows-tray clippy —
 installation_uuid.rs:85 CredWriteW &mut→& + any others). w4/w5/w6 still gated
 on linux deliverables (l1 PTY enum landed; l3/l2/l5/l4 pending).
+
+### Event: 2026-05-25 — w3 clippy cleanup DONE
+
+w3/scoped-windows-clippy-cleanup complete @ windows-next `d3d4cede`.
+`cargo clippy -p tillandsias-windows-tray --target x86_64-pc-windows-msvc
+-- -D warnings` passes CLEAN. Fixes:
+- notify_icon.rs: MAKEINTRESOURCE via std::ptr::without_provenance (was
+  `1 as *const u16` → manual_dangling_ptr).
+- installation_uuid.rs: CredWriteW &cred (needless &mut).
+- vm-layer/fetch.rs (windows-owned): cache-hit if → let-chain (collapsible_if).
+- host-shell/menu_state.rs: truncate_80 push('…') not push_str (single-char
+  lint) — small shared-code contribution from windows; linux keeps the
+  green-build invariant.
+The macOS-owned vz.rs manual_clamp was already fixed by macOS's 5b8aceb9.
+
+Windows queue status: w1 DONE, w2 DONE (unblocked scope), w3 DONE. All three
+originally-unblocked items are complete. Remaining windows items are gated:
+w4 (PTY/ConPTY) needs l3 (in-VM pty handler); w5 (wsl import via CI rootfs)
+needs l2 (recipe shared modules — parser landed, materializer pending) + l5
+(recipe-smoke CI publish); w6 needs l4 (real vsock handlers). Windows is now
+blocked on Linux deliverables for further tray progress.
