@@ -29,6 +29,15 @@ use serde::{Deserialize, Serialize};
 pub mod wsl;
 pub mod vz;
 
+// macOS host-side vsock connector. Declared at this level so callers can
+// import `tillandsias_vm_layer::transport_macos::connect_to_vm_vsock` from
+// the macOS tray. The file is itself `#![cfg(target_os = "macos")]` so it
+// no-ops on Linux/Windows builds.
+//
+// @trace spec:vsock-transport, spec:vm-idiomatic-layer
+#[cfg(target_os = "macos")]
+pub mod transport_macos;
+
 #[cfg(all(target_os = "linux", feature = "fake"))]
 pub mod fake;
 
