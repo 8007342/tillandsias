@@ -28,6 +28,48 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-25T02:00Z — INTEGRATED (manual nudge, post-cleanup)
+
+- host_id: linux-tlatoani-fedora (macuahuitl.ayahuitlcalpan.com)
+- platform: linux
+- branch: linux-next
+- upstream_commit (pre-merge): a4c3c4665774adb411f9622bc73184deb4c23661
+- observed_sibling_heads:
+  - main: ddf52dffcda4f5d32104179cdaf7e4b87221300d
+  - linux-next: a4c3c4665774adb411f9622bc73184deb4c23661
+  - windows-next: 6d7d06a874cc3cc3d1491dbf9211087825053649
+  - osx-next: ddf52dffcda4f5d32104179cdaf7e4b87221300d
+
+- windows-next: **merged + tested + pushed** (`4789fa14`). 12 commits absorbed,
+  ranging from Phase 0 thin-tray bring-up through Phase 4 portable menu-action
+  resolver, Phase 2 resumable provisioning downloads, embedded app manifest
+  (DPI awareness), host-side ~/src project scan, gitignore for scheduler
+  state, and the response to my cycle 01:43Z conflict advisory (`6d7d06a8`).
+  - `./build.sh --check`: PASSED (all crates incl. tillandsias-windows-tray
+    and tillandsias-macos-tray type-check on Linux host).
+  - `./build.sh --test`: PASSED.
+- osx-next: no-op (still at `ddf52dff` = `main`).
+
+- Spec/methodology drift (advisory):
+  - Windows host added 3 NEW shared `plan/` files:
+    `plan/issues/tray-convergence-coordination.md` (187L),
+    `plan/issues/windows-next-architecture-decision-2026-05-24.md` (85L),
+    `plan/steps/windows-next-thin-tray.md` (133L).
+  - Zero modifications to existing `methodology/`, `openspec/specs/`, or
+    pre-existing `plan/` files — no merge conflict surface.
+  - Action: Linux host should read `plan/issues/tray-convergence-coordination.md`
+    to confirm shared tray-protocol decisions still hold; if any decision needs
+    a Linux-side spec/methodology amendment, file a NEW change rather than
+    editing the Windows-authored file (tombstone/supersede policy).
+
+- Methodology weak point spotted (feedback for next cron tick + other hosts):
+  - The `.claude/scheduled_tasks.lock` file is created by the cron scheduler
+    in EVERY session and is currently NOT in `.gitignore` on this branch
+    (Windows host added the ignore in commit `057c60f8`, which only landed now
+    on linux-next via this merge). Hosts running the loop before this commit
+    would have a permanently-dirty working tree if they ever staged `-A`.
+    Now resolved on linux-next.
+
 ### Cycle 2026-05-25T01:43:10Z — SKIPPED (dirty working tree, unchanged from prior cycle)
 
 - host_id: linux-tlatoani-fedora (macuahuitl.ayahuitlcalpan.com)
@@ -102,12 +144,21 @@ three consecutive same-cause failures.
 
 ## Open Recommendations
 
-- **Two consecutive dirty-tree skips.** The integration backlog from
-  `windows-next` is now 11 commits and growing. Commit (or stash) the
-  in-progress local methodology/openspec edits so the loop can absorb Windows
-  Phase 0–4 work.
-- Expect `plan/issues/multi-host-*` conflicts on the next merge attempt:
-  Windows host is also writing to shared `plan/`. Resolution policy is
-  tombstone/supersede, never delete.
+- **Backlog cleared** as of `2026-05-25T02:00Z` — `windows-next` Phase 0–4
+  integrated cleanly, tests passed.
+- **Methodology refinement for next iteration** (feedback to all three hosts):
+  - The "dirty working tree blocks merge" rule worked as intended, but the
+    backlog grew silently across two cycles before the human intervened.
+    Recommend adding a soft escalation in the loop: after 1 dirty-tree skip
+    with a >5-commit backlog, ping the user proactively rather than waiting
+    for the next cron tick. (Filed for follow-up.)
+  - Windows host's commit `057c60f8` (gitignore for scheduler state) should
+    have been a methodology-level decision so all three hosts adopt it
+    simultaneously. Now that it's on `linux-next`, Linux is covered. macOS
+    host will pick it up on the next merge of `linux-next` → `main` →
+    `osx-next` chain.
 - `osx-next` has not advanced since alignment; the macOS terminal will likely
   push Phase 5+ work soon — the loop will pick it up automatically.
+- Linux-host work-in-flight (separate from this loop): see
+  `plan/steps/20-recent-work-spec-doc-methodology-audit.md` and the existing
+  step backlog under `plan/steps/`.
