@@ -28,6 +28,59 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-25T03:43Z — INTEGRATED (clean tree, on-cron)
+
+- host_id: linux-tlatoani-fedora (macuahuitl.ayahuitlcalpan.com)
+- platform: linux
+- branch: linux-next
+- upstream_commit (pre-merge): f8ba066211df20befb31d0b87c497d5920229a6a
+- observed_sibling_heads:
+  - main: ddf52dffcda4f5d32104179cdaf7e4b87221300d
+  - linux-next: f8ba066211df20befb31d0b87c497d5920229a6a
+  - windows-next: b3ca27473d2340297ffc26f7d196ff6bbe994d09
+  - osx-next: ddf52dffcda4f5d32104179cdaf7e4b87221300d
+
+- windows-next: **merged + tested + pushed** (`7f8455f6`). 3 commits absorbed:
+  - `971bf9c6` docs(windows-next): concur with linux-host recipe-convergence response
+  - `7fd9d855` Merge remote-tracking branch 'origin/linux-next' into windows-next
+  - `b3ca2747` docs(windows-next): record owner Path-B decision + sync linux-next methodology
+  - Net diff: +55 lines in `plan/issues/tray-convergence-coordination.md`, zero
+    code changes.
+  - `./build.sh --check`: PASSED. `./build.sh --test`: PASSED.
+- osx-next: no-op (still at `ddf52dff` = `main`, no movement since alignment).
+
+- **Cross-host milestone (highest-signal item this cycle):**
+  - **Owner ruled Path B with hard deadline 2026-05-31.** Quoted from the
+    merged update to `plan/issues/tray-convergence-coordination.md`:
+    > Land model-independent Phase 4 (tray + `control-wire-pty-attach`) on all
+    > three hosts FIRST. Defer the recipe-vs-CI-fetch decision.
+    > Hard deadline: 2026-05-31 — by which `vm-recipe-provisioning` must be
+    > amended (promote CI-materialized-rootfs dual-path to a first-class
+    > design, per the linux-host amendment request) or explicitly replaced.
+  - Windows-host concurs with the linux-host response on every major point
+    (co-ownership split, CI-materialized-rootfs-as-Windows-default, frozen
+    contracts, Path-B sequencing).
+  - Owner also approved windows-next syncing linux-next methodology + the
+    recipe/pty-attach proposals into windows-next; that merge is green on
+    Windows.
+
+- **Spec-drift advisory:**
+  - Zero changes to `openspec/specs/`, `openspec/changes/`, `methodology/`
+    this cycle. Windows host is being disciplined: it explicitly will NOT edit
+    `openspec/changes/vm-recipe-provisioning/*` (change-owner's artifact).
+  - The amendment itself (D6 dual-path design section) is now scheduled work
+    that must land before 2026-05-31. No host has claimed ownership of the
+    amendment yet — likely candidates: the change owner directly, or linux-host
+    on the owner's behalf since linux-host raised the amendment request.
+
+- **Blockers cited by both hosts before recipe implementation can start:**
+  1. macOS must respond in
+     `plan/issues/macos-recipe-convergence-response-2026-05-24.md` (file does
+     not yet exist; osx-next branch unchanged since alignment).
+  2. `vm-recipe-provisioning` must be amended (promote D5/R1 fast-path to
+     first-class D6) or explicitly replaced.
+  3. Until both happen, no host implements the materializer.
+
 ### Cycle 2026-05-25T02:00Z — INTEGRATED (manual nudge, post-cleanup)
 
 - host_id: linux-tlatoani-fedora (macuahuitl.ayahuitlcalpan.com)
@@ -144,8 +197,18 @@ three consecutive same-cause failures.
 
 ## Open Recommendations
 
+- **DEADLINE 2026-05-31** — `vm-recipe-provisioning` must be amended (D6:
+  CI-materialized-rootfs as first-class dual path) or explicitly replaced.
+  Recipe implementation is blocked on this AND on macOS response. No host
+  has claimed the amendment yet.
+- **macOS host: please respond** in
+  `plan/issues/macos-recipe-convergence-response-2026-05-24.md`. The other
+  two hosts have aligned; macOS has not engaged on osx-next since the
+  alignment to `ddf52dff`. Without a macOS response by ~2026-05-29 the
+  2026-05-31 deadline is at risk.
 - **Backlog cleared** as of `2026-05-25T02:00Z` — `windows-next` Phase 0–4
-  integrated cleanly, tests passed.
+  integrated cleanly, tests passed. As of `2026-05-25T03:43Z` the Windows
+  Phase-4 model-independent slice is fully landed on linux-next.
 - **Methodology refinement for next iteration** (feedback to all three hosts):
   - The "dirty working tree blocks merge" rule worked as intended, but the
     backlog grew silently across two cycles before the human intervened.
