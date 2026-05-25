@@ -23,17 +23,35 @@ pub type RecipeError = String;
 /// One parsed Recipefile instruction.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum Instruction {
-    From { image: String },
-    Arg { name: String, default: Option<String> },
-    Run { script: String },
-    Copy { src: String, dest: String },
-    Env { key: String, value: String },
-    Workdir { path: String },
+    From {
+        image: String,
+    },
+    Arg {
+        name: String,
+        default: Option<String>,
+    },
+    Run {
+        script: String,
+    },
+    Copy {
+        src: String,
+        dest: String,
+    },
+    Env {
+        key: String,
+        value: String,
+    },
+    Workdir {
+        path: String,
+    },
     Recipe(RecipeDirective),
     /// A recognised-but-not-modelled Containerfile keyword (LABEL, USER,
     /// EXPOSE, …). Preserved verbatim so the parser is forward-compatible and
     /// does not reject otherwise-valid Containerfiles.
-    Other { keyword: String, args: String },
+    Other {
+        keyword: String,
+        args: String,
+    },
 }
 
 /// The three `RECIPE` directives layered on top of Containerfile syntax (D1).
@@ -181,7 +199,9 @@ fn parse_instruction(line: &str) -> Result<Instruction, RecipeError> {
                 None => match rest.split_once(char::is_whitespace) {
                     Some((k, v)) => (k.trim().to_string(), v.trim().to_string()),
                     None => {
-                        return Err(format!("ENV requires KEY=VALUE or KEY VALUE, got: {rest:?}"));
+                        return Err(format!(
+                            "ENV requires KEY=VALUE or KEY VALUE, got: {rest:?}"
+                        ));
                     }
                 },
             };
@@ -213,9 +233,10 @@ fn parse_recipe_directive(rest: &str) -> Result<RecipeDirective, RecipeError> {
     };
     match verb {
         "vsock-listen" => {
-            let port: u32 = args.trim().parse().map_err(|_| {
-                format!("RECIPE vsock-listen requires a u32 port, got: {args:?}")
-            })?;
+            let port: u32 = args
+                .trim()
+                .parse()
+                .map_err(|_| format!("RECIPE vsock-listen requires a u32 port, got: {args:?}"))?;
             Ok(RecipeDirective::VsockListen(port))
         }
         "entry" => {
@@ -345,15 +366,61 @@ mod tests {
             "FROM fedora:44\nARG TARGETARCH\nARG FOO=bar\nCOPY bootstrap/ /opt/bootstrap/\nENV KEY=val\nENV OTHER value2\nWORKDIR /src\nLABEL maintainer=me\n",
         )
         .unwrap();
-        assert_eq!(r.instructions[0], Instruction::From { image: "fedora:44".into() });
-        assert_eq!(r.instructions[1], Instruction::Arg { name: "TARGETARCH".into(), default: None });
-        assert_eq!(r.instructions[2], Instruction::Arg { name: "FOO".into(), default: Some("bar".into()) });
-        assert_eq!(r.instructions[3], Instruction::Copy { src: "bootstrap/".into(), dest: "/opt/bootstrap/".into() });
-        assert_eq!(r.instructions[4], Instruction::Env { key: "KEY".into(), value: "val".into() });
-        assert_eq!(r.instructions[5], Instruction::Env { key: "OTHER".into(), value: "value2".into() });
-        assert_eq!(r.instructions[6], Instruction::Workdir { path: "/src".into() });
+        assert_eq!(
+            r.instructions[0],
+            Instruction::From {
+                image: "fedora:44".into()
+            }
+        );
+        assert_eq!(
+            r.instructions[1],
+            Instruction::Arg {
+                name: "TARGETARCH".into(),
+                default: None
+            }
+        );
+        assert_eq!(
+            r.instructions[2],
+            Instruction::Arg {
+                name: "FOO".into(),
+                default: Some("bar".into())
+            }
+        );
+        assert_eq!(
+            r.instructions[3],
+            Instruction::Copy {
+                src: "bootstrap/".into(),
+                dest: "/opt/bootstrap/".into()
+            }
+        );
+        assert_eq!(
+            r.instructions[4],
+            Instruction::Env {
+                key: "KEY".into(),
+                value: "val".into()
+            }
+        );
+        assert_eq!(
+            r.instructions[5],
+            Instruction::Env {
+                key: "OTHER".into(),
+                value: "value2".into()
+            }
+        );
+        assert_eq!(
+            r.instructions[6],
+            Instruction::Workdir {
+                path: "/src".into()
+            }
+        );
         // Unknown-but-valid Containerfile keyword is preserved, not rejected.
-        assert_eq!(r.instructions[7], Instruction::Other { keyword: "LABEL".into(), args: "maintainer=me".into() });
+        assert_eq!(
+            r.instructions[7],
+            Instruction::Other {
+                keyword: "LABEL".into(),
+                args: "maintainer=me".into()
+            }
+        );
     }
 
     #[test]
@@ -379,7 +446,10 @@ mod tests {
     fn unknown_recipe_verb_errors() {
         let err = Recipe::parse_str("RECIPE teleport now\n").unwrap_err();
         assert!(err.contains("unknown RECIPE verb: teleport"), "got: {err}");
-        assert!(err.contains("vsock-listen"), "error lists valid verbs: {err}");
+        assert!(
+            err.contains("vsock-listen"),
+            "error lists valid verbs: {err}"
+        );
     }
 
     #[test]

@@ -2,8 +2,13 @@
 
 trace: methodology/distributed-work.yaml, plan/steps/windows-next-thin-tray.md, plan/issues/tray-convergence-coordination.md, plan/issues/control-socket-protocol-convergence-2026-05-25.md, openspec/changes/control-wire-pty-attach/
 
-Status: **OPEN** as of 2026-05-25T14:00Z. Authored by linux-host while
-sibling laptops dormant.
+Status: **OPEN** as of 2026-05-25T18:54Z. Windows w1, w2, and w3 are done.
+Linux l3 shipped the in-VM PTY handler at `f770e013`/`8dc0d129` and l4 shipped
+real vsock handlers at `6956c825`. Windows w4 is now in progress through the
+shared host-shell `PtySession` / ConPTY path; the cross-platform core landed at
+windows-next `a57983b6` and the ConPTY lifecycle landed at windows-next
+`5e95f7c3`. w6 is ready for verification. Remaining WSL rootfs work is gated
+on Linux materializer plus macOS-owned recipe-publish deliverables.
 
 ## How to use this file
 
@@ -23,17 +28,26 @@ a stable ID. When the Windows host wakes:
 Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`):
 *plan/* writes go to **linux-next**; *code* commits go to **windows-next**.
 
-## Currently unblocked (pick these first)
+## Currently unblocked / active
 
-### Item: w1/tray-icon-rc-and-ico (CORRECTED 2026-05-25T15:15Z)
+- `w6/vm-status-and-enumerate-real-handlers` is ready for Windows
+  verification after Linux l4 shipped at `6956c825`.
+- `w4/pty-attach-conpty` is active through the Windows claim on the shared
+  `host-shell::pty` layer and ConPTY follow-up. Do not create a competing
+  claim; see lease `8a3307907d94` in the Events section.
+
+Do not re-claim w1, w2, or w3; their terminal events are recorded below. The
+next gated Windows implementation item is w5 after Linux l7 plus macOS-owned
+l5 land, unless a newly filed ready item with a stable ID appears first.
+
+### Item: w1/tray-icon-rc-and-ico
 
 - id: `w1/tray-icon-rc-and-ico`
 - type: feature
 - owner_host: windows
 - capability_tags: [win32, rc]
-- status: blocked
-- depends_on: [`l6/linux-rasterize-svg-to-ico`] (NEW Linux deliverable
-  — see below; ETA same as item, done in this loop turn)
+- status: done
+- depends_on: [`l6/linux-rasterize-svg-to-ico`]
 - blocks: []
 - owned_files:
   - `crates/tillandsias-windows-tray/assets/tillandsias.rc`
@@ -56,7 +70,7 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
     `crates/tillandsias-windows-tray/assets/tillandsias.ico`. Then
     Windows wires `tillandsias.rc` to reference that path + the
     `build.rs` resource-compile step. See `l6` below.
-- estimated_effort: 30 min Linux + 30 min Windows.
+- completed_at: 2026-05-25
 - evidence_on_done:
   - placeholder warning gone from `cargo build -p tillandsias-windows-tray`
   - `tillandsias-tray.exe` shows the right icon on the taskbar
@@ -67,7 +81,7 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
 - type: feature
 - owner_host: windows
 - capability_tags: [win32, host-shell-menu, dispatch]
-- status: pending
+- status: done
 - depends_on: []
 - blocks: [w4/pty-attach-conpty]
 - owned_files:
@@ -87,11 +101,11 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
       - `GithubLogin` → log + queue for PTY iteration
     Leave PTY-gated actions as logged-only until w4 lands. This unblocks
     immediate UI polish without waiting on the vsock-E2E tail.
-- estimated_effort: 4–6 h.
+- completed_at: 2026-05-25
 - evidence_on_done:
-  - Clicking Retry / OpenLog / OpenObservatorium produces visible effect
-    in a Windows session.
-  - Unit tests in `notify_icon` exercising the dispatch table.
+  - SelectAgent state update and dispatch table slice landed at windows-next `832871d9`.
+  - Retry/OpenLog/OpenObservatorium/OpenCodeWeb were explicitly re-pinned to their true runtime gates instead of faking effects.
+  - Unit tests in `notify_icon` exercise the dispatch table.
 
 ### Item: w3/scoped-windows-clippy-cleanup
 
@@ -99,7 +113,7 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
 - type: housekeeping
 - owner_host: windows
 - capability_tags: [rust, clippy, hygiene]
-- status: pending
+- status: done
 - depends_on: []
 - blocks: []
 - owned_files:
@@ -109,9 +123,11 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
     -- -D warnings` on the MSVC host. There's an existing workspace-wide
     `manual_clamp` lint in `crates/tillandsias-vm-layer/src/vz.rs:113` but
     that's macOS-owned; skip it. Focus on the windows-tray crate.
-- estimated_effort: 30 min – 1 h.
+- completed_at: 2026-05-25
+- evidence_on_done:
+  - `cargo clippy -p tillandsias-windows-tray --target x86_64-pc-windows-msvc -- -D warnings` passed at windows-next `d3d4cede`.
 
-## Gated on Linux deliverables (queued for after Linux lands)
+## Linux-gated and recently unblocked deliverables
 
 ### Item: w4/pty-attach-conpty
 
@@ -119,10 +135,17 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
 - type: feature
 - owner_host: windows
 - capability_tags: [win32, conpty, pty, vsock]
-- status: pending
-- gated_on:
-  - linux deliverable `l1/control-wire-pty-attach-tasks-1` (control-wire enum + constants) — see below
-  - linux deliverable `l3/in-vm-headless-pty-handler` (host-side library + in-VM handler)
+- status: in_progress
+- lease:
+  - lease_id: `8a3307907d94`
+  - agent_id: `windows-bullo-claudia-cli-2026-05-25`
+  - host: windows
+  - scope: "control-wire-pty-attach §3 shared host-side PtySession + Windows ConPTY"
+- gated_on: []
+- cleared_gates:
+  - linux deliverable `l1/control-wire-pty-attach-tasks-1` shipped at `b345ae68`
+  - linux deliverable `l3/in-vm-headless-pty-handler` shipped at
+    `f770e013`/`8dc0d129`
 - depends_on: [w2/menu-action-dispatch-wiring]
 - owned_files:
   - `crates/tillandsias-windows-tray/src/notify_icon.rs` (menu wiring)
@@ -134,6 +157,11 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
     `PtySession::open(...)` and spawn Windows Terminal (`wt.exe`) attached
     to the host-side pseudo-tty file descriptor.
 - estimated_effort: 1–2 days.
+- progress:
+  - Cross-platform `PtySession` core landed at windows-next `a57983b6`.
+  - Windows §3.3 ConPTY lifecycle landed at windows-next `5e95f7c3`; real
+    `CreateProcessW` attach, async pipe pump_io bridge, and tray menu wiring
+    remain under the same lease.
 
 ### Item: w5/wsl-import-via-ci-rootfs
 
@@ -165,10 +193,12 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
 - type: feature
 - owner_host: windows  (in-VM headless, but Windows-tray sees the effect)
 - capability_tags: [host-shell, vsock-client]
-- status: pending
-- gated_on:
-  - linux deliverable `l4/replace-vsock-stub-handlers` (real backing data for
-    VmStatusRequest, EnumerateLocalProjects, CloudRefreshRequest)
+- status: ready
+- gated_on: []
+- cleared_gates:
+  - linux deliverable `l4/replace-vsock-stub-handlers` shipped at `6956c825`
+    (real backing data for VmStatusRequest, EnumerateLocalProjects,
+    CloudRefreshRequest)
 - owned_files: (none on Windows side — Windows just verifies)
 - summary: >
     Once Linux replaces the vsock_server.rs stub handlers with real
@@ -181,12 +211,12 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
 
 | Linux item | Status | Blocks Windows item |
 |---|---|---|
-| `l1/control-wire-pty-attach-tasks-1` | **done** (shipped `b345ae68`; 23/23 control-wire tests pass on Linux; 22/22 on Windows per `47d91d11`) | w4 (now soft-unblocked; gated on l3) |
-| `l2/recipe-shared-modules` | **done** (windows authored §2 parser `26afb76a` integrated `a7af0ed`; 16/16 recipe tests green on Linux) | w5 (still gated on l5) |
-| `l3/in-vm-headless-pty-handler` | pending (after l1; tasks 4.x of pty-attach proposal) | w4 |
-| `l4/replace-vsock-stub-handlers` | pending | w6 |
+| `l1/control-wire-pty-attach-tasks-1` | **done** (shipped `b345ae68`; 23/23 control-wire tests pass on Linux; 22/22 on Windows per `47d91d11`) | w4 active under Windows lease |
+| `l2/recipe-shared-modules` | **done** (windows authored §2 parser `26afb76a` integrated `a7af0ed`; 16/16 recipe tests green on Linux) | w5 (still gated on l7 + l5) |
+| `l3/in-vm-headless-pty-handler` | **done** (`f770e013`/`8dc0d129`; tasks 4.1-4.7, two pump tests ignored pending AsyncFd rewrite) | w4 active under Windows lease |
+| `l4/replace-vsock-stub-handlers` | **done** (`6956c825`; real VmStatus/EnumerateLocalProjects/CloudRefresh backing data) | w6 ready for verification |
 | `l5/recipe-smoke-ci-publish` | **macOS-owned** per their CLAIM in cross-host-blocker-roundup (`§2b` host-side + CI artifacts) | w5 |
-| `l6/linux-rasterize-svg-to-ico` | **claimed by Linux** (lease `linux-l-ico-2026-05-25T15Z`); ETA same loop turn | w1 |
+| `l6/linux-rasterize-svg-to-ico` | **done** (`ea13ba20`) | w1 done |
 | `l7/§3-materializer-driver` | **claimed by Linux** (lease `linux-l-mat-2026-05-25T15Z`); ETA 2 cron iters (~4h) | unblocks w5 + macOS m5 |
 
 ## Events
@@ -269,3 +299,209 @@ supplied the rasterizer/ICO via l6. w1 status → done.
 Remaining cleanly-unblocked windows item: w3 (windows-tray clippy —
 installation_uuid.rs:85 CredWriteW &mut→& + any others). w4/w5/w6 still gated
 on linux deliverables (l1 PTY enum landed; l3/l2/l5/l4 pending).
+Historical status above is superseded by the 18:25Z header reconciliation:
+l3 and l4 shipped, so w4 and w6 are ready.
+
+### Event: 2026-05-25 — w3 clippy cleanup DONE
+
+w3/scoped-windows-clippy-cleanup complete @ windows-next `d3d4cede`.
+`cargo clippy -p tillandsias-windows-tray --target x86_64-pc-windows-msvc
+-- -D warnings` passes CLEAN. Fixes:
+- notify_icon.rs: MAKEINTRESOURCE via std::ptr::without_provenance (was
+  `1 as *const u16` → manual_dangling_ptr).
+- installation_uuid.rs: CredWriteW &cred (needless &mut).
+- vm-layer/fetch.rs (windows-owned): cache-hit if → let-chain (collapsible_if).
+- host-shell/menu_state.rs: truncate_80 push('…') not push_str (single-char
+  lint) — small shared-code contribution from windows; linux keeps the
+  green-build invariant.
+The macOS-owned vz.rs manual_clamp was already fixed by macOS's 5b8aceb9.
+
+Windows queue status: w1 DONE, w2 DONE (unblocked scope), w3 DONE. All three
+originally-unblocked items are complete. Remaining windows items are gated:
+w4 (PTY/ConPTY) needs l3 (in-VM pty handler); w5 (wsl import via CI rootfs)
+needs l2 (recipe shared modules — parser landed, materializer pending) + l5
+(recipe-smoke CI publish); w6 needs l4 (real vsock handlers). Windows is now
+blocked on Linux deliverables for further tray progress.
+
+### Event: 2026-05-25 — w4 finding: needs shared host-shell::pty (Task 3.1/3.2/3.4–3.8) first
+
+Verified after l3/l4 cleared: w4 (windows ConPTY = control-wire-pty-attach
+**Task 3.3**) is NOT buildable in isolation yet. Task 3.3 is only the
+`#[cfg(windows)] PtySession::new_windows` impl — it plugs into the shared
+host-side library `tillandsias-host-shell::pty` (Tasks 3.1 PtySession::open +
+PtyOpenOpts, 3.2 unix path, 3.4 pump_io session-mux, 3.5 resize, 3.6 close,
+3.7 per-session bounded channel, 3.8 FakeConnection tests). That module is
+UNCLAIMED and unbuilt (no `host-shell/src/pty/` exists; all §3 boxes `[ ]`).
+Also unclear: the `Connection` type 3.1 takes (session-id-routed mux) — may
+need defining as part of §3.
+
+So w4 is gated on §3.1/3.2/3.4–3.8, not just l1+l3. The integration ledger's
+"w4 unblocked" is optimistic on this point.
+
+Most of §3 is CROSS-PLATFORM and Windows-testable (3.1 dispatch, 3.4 pump_io,
+3.5/3.6/3.7, 3.8 FakeConnection tests) + the windows 3.3 ConPTY. Only 3.2
+(unix `nix::pty::openpty`) is Unix-only / untestable on Windows.
+
+PROPOSAL (windows offers): windows-next claims §3 and builds the cross-platform
+PtySession + windows ConPTY (3.1, 3.3–3.8) with FakeConnection tests, leaving
+3.2 as a `#[cfg(unix)]` stub for the Linux host to fill+test. This unblocks
+both Windows w4 AND macOS m4. Alternatively, Linux (host-shell owner) builds
+§3.1/3.2 and windows does only 3.3. Awaiting owner/Linux nod before touching
+shared host-shell pty scaffolding (avoiding a D6/D8-style parallel-build collision).
+
+w6 note: verify-only, but needs a live VM (gated on l7 materializer) to actually
+verify — so not actionable until provisioning works.
+
+### Event: 2026-05-25 — windows CLAIMS pty-attach §3 (shared host-side PtySession)
+
+Per owner decision, windows-next claims **control-wire-pty-attach §3**
+(shared host-side `tillandsias-host-shell::pty`). lease `8a3307907d94`,
+agent windows-bullo-claudia-cli-2026-05-25, host windows, status in_progress.
+
+Increment plan (code → windows-next; loop integrates):
+1. THIS increment — cross-platform PtySession CORE (all Windows-testable, no
+   real PTY/VM): PtyOpenOpts, SessionIdAllocator (§D2), chunk-to-guest framing
+   (§D5 ≤MAX_PTY_FRAME_BYTES), PtyRouter inbound session-id routing + per-session
+   bounded channel cap 256 (§3.7/D3), PtySession open/write/resize/close
+   (§3.1/3.5/3.6) over a PtyTransport trait, + FakeTransport unit tests (§3.8:
+   open/write/resize/close roundtrip, two-session interleave, oversized-frame
+   reject).
+2. NEXT — OS backends + pump_io: §3.3 Windows ConPTY (CreatePseudoConsole) in
+   pty/windows.rs (the heavy Win32 piece) + pump_io tasks bridging the real
+   PTY master ↔ write/recv. §3.2 unix (nix::pty::openpty) left as a
+   `#[cfg(unix)]` stub for the Linux host to fill+test.
+3. THEN w4 — wire tray OpenShell/GithubLogin to PtySession::open + spawn wt.exe.
+
+macOS m4 (AppKit Terminal) consumes the same PtySession; coordinate via this file.
+
+### Event: 2026-05-25 — pty §3 CORE done (PtySession cross-platform layer)
+
+control-wire-pty-attach §3 cross-platform core landed @ windows-next `a57983b6`
+(crates/tillandsias-host-shell/src/pty/mod.rs):
+- §3.1 PtySession::open + PtyOpenOpts; §3.5 resize; §3.6 close; §3.7 per-session
+  bounded channel (cap 256); §D2 SessionIdAllocator; §D5 chunk_to_guest framing;
+  §3.4 (data side) PtyRouter session-id routing; §3.8 FakeTransport tests (8).
+- host-shell 24 tests green on Windows; windows-tray builds; clippy clean.
+STILL OPEN under this lease (816... see prior claim event):
+- §3.2 unix openpty path → left for Linux (#[cfg(unix)], untestable on Windows).
+- §3.3 Windows ConPTY (pty/windows.rs, CreatePseudoConsole) — NEXT, mine.
+- §3.4 (real bridge) pump_io tasks tying a live PTY master ↔ write_to_guest/recv.
+Then w4 wires tray OpenShell/GithubLogin → PtySession::open + wt.exe.
+
+macOS m4: the PtySession/PtyRouter/PtyTransport API is now available to consume.
+
+### Event: 2026-05-25T18:25Z — linux coordinator header reconciliation
+
+- `l3/in-vm-headless-pty-handler` shipped on linux-next at
+  `f770e013`/`8dc0d129`. Queue mirror updated from pending to done. Later
+  Windows review found that w4 also needs the shared host-shell `PtySession`
+  layer; see the w4 finding and §3 claim events above.
+- `l4/replace-vsock-stub-handlers` shipped on linux-next at `6956c825`
+  (`feat(headless): l4 — real vsock handlers (VmStatus/EnumerateLocalProjects)`).
+  Queue mirror updated from pending to done.
+- `w6/vm-status-and-enumerate-real-handlers` is now ready for Windows
+  verification. No Windows code is expected unless verification finds a
+  platform-specific tray display gap.
+- `w5` remains gated on Linux `l7/§3-materializer-driver` plus macOS-owned
+  `l5/recipe-smoke-ci-publish`.
+
+### Event: 2026-05-25 — pty §3.3 Windows ConPTY backend (lifecycle) done
+
+ConPtyMaster landed @ windows-next `5e95f7c3` (host-shell pty/windows.rs,
+cfg(windows)): CreatePseudoConsole + input/output bridge pipes + resize +
+Drop(ClosePseudoConsole). `windows` crate added to host-shell, target-gated to
+cfg(windows) (additive; not on the Linux build). Verified locally (no VM):
+conpty_create_resize_drop passes; host-shell 25 tests green; windows-tray
+builds; clippy clean.
+
+§3 lease remaining: pump_io (CreateProcessW-into-ConPTY + async pipe I/O
+bridging ConPtyMaster ↔ PtySession write_to_guest/recv) — NEXT, mine; §3.2 unix
+openpty stub for Linux. THEN w4 (tray OpenShell/GithubLogin → PtySession::open
++ wt.exe). Full E2E (terminal shows the in-VM shell) needs a booted VM to verify.
+
+### Event: 2026-05-25 — pty §3.4 pump_io bidirectional bridge done
+
+pump_io + PtyMaster trait landed @ windows-next `1cd1e7de` (host-shell pty/mod.rs):
+local terminal reader → PtyData{ToGuest} (chunked); inbound PtyData{ToHost} →
+terminal writer; PtyClose/conn-drop ends the pump. Cross-platform, fake-master
+test (pump_bridges_both_directions_and_closes); host-shell 26 tests green on
+Windows; windows-tray builds; clippy clean.
+
+§3 lease remaining: ConPtyMaster impl PtyMaster (Win32 async pipe I/O + process
+attach so the real Windows terminal flows through pump_io) — NEXT, mine; §3.2
+unix openpty stub for Linux. THEN w4 (tray OpenShell/GithubLogin →
+PtySession::open + pump_io + wt.exe). Full terminal-attach E2E needs a booted VM.
+
+### Event: 2026-05-25 — pty §3.3 ConPTY process-attach + pipe I/O done
+
+ConPtyMaster::spawn (CreateProcessW-into-pseudoconsole via proc-thread attribute
+list) + ConPtyChild wait()/Drop + blocking write_input/read_output landed @
+windows-next `0a06832d`. Added windows features Threading + Storage_FileSystem +
+System_IO (target-gated cfg(windows)). Verified locally (no VM):
+conpty_spawn_propagates_exit_code (cmd /c exit 7 → wait()==7) passes; host-shell
+27 tests green; windows-tray builds; clippy clean.
+
+Test note: removed an earlier echo-marker test that hung on a blocking ReadFile
+(ConPTY pipe blocks until data/EOF). Blocking pipe I/O is validated via the
+async PtyMaster bridge + VM E2E, not a hermetic unit test.
+
+§3 lease remaining: ConPtyMaster impl PtyMaster (async-wrap the blocking pipe
+I/O via spawn_blocking/threads → tokio AsyncRead/AsyncWrite halves) so the real
+terminal flows through pump_io — NEXT, mine; §3.2 unix openpty stub for Linux.
+THEN w4 (tray OpenShell/GithubLogin → PtySession::open + ConPtyMaster + pump_io
++ wt.exe). Full terminal-attach E2E needs a booted VM.
+
+### Event: 2026-05-25 — pty §3 ConPtyMaster impl PtyMaster done (async bridge)
+
+ConPtyMaster now satisfies PtyMaster @ windows-next `e1a26e6b`: split() bridges
+the blocking Win32 pipes ↔ tokio duplex via two dedicated threads (read:
+ReadFile→Reader, closes hpc+output_read; write: Writer→WriteFile, closes
+input_write); ManuallyDrop avoids double-close; whole-SendPtr rebind fixes the
+edition-2021 disjoint-capture Send break. host-shell 28 tests green
+(conpty_master_satisfies_pty_master_trait compile-time check; runtime via VM
+E2E — split's read bridge blocks on ReadFile without a producing process, so
+not unit-run). windows-tray builds; clippy clean.
+
+§3 status: core ✓, ConPTY lifecycle ✓, pump_io ✓, ConPTY spawn+I/O ✓,
+ConPtyMaster→PtyMaster ✓. The Windows host-side PTY stack is complete +
+compiles; full terminal-attach behaviour verified at VM E2E.
+§3 lease remaining: §3.2 unix openpty stub (Linux's to fill). THEN w4 — tray
+OpenShell/GithubLogin → PtySession::open + ConPtyMaster + pump_io + wt.exe.
+
+### Event: 2026-05-25 — §3 Windows host-side PTY stack COMPLETE + integrated
+
+All §3 windows-owned pieces are integrated into linux-next (cycle 21:43Z,
+cbf308af; ./build.sh --check && --test PASSED, host-shell 30/30 on Linux):
+core PtySession/PtyRouter/chunking ✓, pump_io ✓, ConPTY lifecycle ✓, ConPTY
+process-attach + pipe I/O ✓, ConPtyMaster impl PtyMaster ✓. The Windows
+host-side PTY pipeline compiles + type-checks + unit-tests green.
+
+w4 (live tray wiring) is now VM-GATED for verification: wiring OpenShell/
+GithubLogin → PtySession::open + ConPtyMaster + pump_io + spawn wt.exe needs a
+live vsock connection to the in-VM headless (the connection-mux: a reader task
+feeding PtyRouter + a PtyTransport over the vsock Client). That can't be
+end-to-end verified without a booted VM, which is gated on the recipe (l7
+materializer). §3.2 unix openpty stub remains Linux's.
+
+Captured this session's gotchas (blocking-pipe-ReadFile hangs unit tests;
+edition-2021 disjoint-capture breaks Send for handle wrappers) in
+cheatsheets/runtime/windows-tray-dev.md.
+
+### w4 decomposition — claimable backlog (proposed 2026-05-25, windows host)
+
+Being greedy on task proposal: w4 (PTY tray wiring) split into sub-tasks so
+there's always something claimable instead of waiting on the VM. Verifiable-now
+items can land + be unit-tested before the VM path exists.
+
+| sub-task | what | owner | verifiable now? | status |
+|---|---|---|---|---|
+| w4a launch-spec | PtyIntent → PtyOpenOpts argv mapping | shared (win authored) | YES (pure) | DONE `af03de7e` |
+| w4b channel-transport | `ChannelPtyTransport`: PtyTransport that enqueues outbound ControlMessages to a bounded mpsc (the §D3 writer queue), decoupled from the Client | windows (pty, co-owned) | YES (enqueue→drain test) | DONE `7dc11bea` |
+| w4c connection-mux | own the vsock `Client` (split); writer task drains the w4b queue → Client.send; reader task reads envelopes → routes PtyData/PtyClose to PtyRouter, other replies elsewhere | shared host-shell (coordinate; touches vsock_client) | PARTIAL (routing tested; Client glue = VM E2E) | pending |
+| w4d open-shell-menu | add an "Open Shell" item to the shared `menu_state` + `menu_action` (resolve to PtyIntent::Shell) | shared menu_state (coordinate w/ macOS+linux) | YES (menu build + dispatch test) | pending |
+| w4e wt-attach | spawn Windows Terminal (`wt.exe`) hosting the ConPtyMaster pseudoconsole | windows | NO (GUI/VM visual check) | pending |
+| w4f integration | tray dispatch(OpenShell/GithubLogin/Agent) → connection → PtySession::open + ConPtyMaster + pump_io + wt.exe | windows | NO (VM E2E) | pending |
+
+Next greedy pickups (no VM needed): **w4b** (windows-ownable, pure) and **w4d**
+(needs cross-tray sign-off on adding "Open Shell" to the shared menu — macOS m4
++ linux GTK tray also gain the item). w4c/w4e/w4f are VM-gated for verification.

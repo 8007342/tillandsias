@@ -178,6 +178,50 @@ distributed_work:
           overlapping owned_files and both have active leases, surface a
           warning before either's checkpoint commit.
 
+  status_transition_protocol:
+    purpose: >
+      Keep the top-level status line, event log, and downstream blockers in
+      sync so agents do not re-claim finished work or wait on stale blockers.
+    canonical_statuses:
+      pending: "Known work, unclaimed, dependencies not yet all satisfied."
+      ready: "Known work, unclaimed, dependencies satisfied, eligible for claim."
+      claimed: "A lease exists, but implementation has not yet produced code or docs."
+      in_progress: "A lease exists and the claimant has started implementation."
+      blocked: "Cannot progress without a named external dependency or decision."
+      stalled: "No heartbeat before expires_at; reclaimable after a fresh read."
+      done: "Completion event exists with evidence refs; do not re-claim."
+      failed: "Attempt ended; retryability must be explicit in the failed event."
+    rules:
+      - "A `claim` event changes status from ready/pending to claimed."
+      - "The first implementation `progress` or code checkpoint changes claimed to in_progress."
+      - "A `blocked` event must name the blocker, owner host if known, and the next ping time."
+      - "A lease with no heartbeat past expires_at folds to stalled; the next agent may reclaim after recording a fresh read."
+      - "A `completed` event changes status to done and must update dependency mirrors in every queue table that names the item."
+      - "A `released` event returns status to ready if dependencies are satisfied, otherwise pending or blocked with the blocker named."
+      - "A `failed` event sets status to failed and must include retryable: true|false plus the smallest next diagnostic chain."
+      - "When events and the status header disagree, the latest terminal event wins; immediately patch the header before claiming new work."
+
+  ping_and_triage_protocol:
+    purpose: >
+      Give agents a deterministic way to wake stale work, ask for help, and
+      prioritize without hidden chat state.
+    ping_pending_work:
+      - "If a ready item has not been claimed for one integration cycle, append a ping note to its Events section with why it matters and what it unlocks."
+      - "If an in_progress item misses one heartbeat but lease has not expired, ping the claimant by agent_id/host in the same Events section; do not take the work yet."
+      - "If the same blocker appears in two host queues, append or update a cross-host blocker note under plan/issues/cross-host-blocker-roundup-YYYY-MM-DD.md."
+    stalled_work:
+      - "After expires_at, mark status stalled and append the last known checkpoint, unresolved blocker, and a recommended reclaim scope."
+      - "A reclaiming agent must mint a new lease_id; never edit the old lease in place."
+    prioritization:
+      - "First: blockers that unlock another host's ready item."
+      - "Second: failed-retryable work with a narrow diagnostic chain."
+      - "Third: ready leaf work in the owning host queue."
+      - "Fourth: docs/spec cleanup only when it prevents wrong implementation."
+    completion_hygiene:
+      - "Mark done work in the item header, not only in the event log."
+      - "Update mirror tables such as 'Linux deliverables ... waiting on' in the same commit."
+      - "If only part of an item completed, split the remaining gated scope into a new stable ID instead of leaving the original status ambiguous."
+
   host_component_ownership:
     rule: >
       Each component declares which host owns its primary implementation.

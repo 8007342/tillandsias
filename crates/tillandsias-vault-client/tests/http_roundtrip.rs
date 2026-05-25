@@ -164,7 +164,10 @@ async fn write_policy_uses_acl_endpoint() {
 
     let client = VaultClient::new(server.uri(), "tray-root");
     client
-        .write_policy("git-mirror-policy", "path \"secret/data/github/token\" {}\n")
+        .write_policy(
+            "git-mirror-policy",
+            "path \"secret/data/github/token\" {}\n",
+        )
         .await
         .expect("write_policy should accept 204");
 }
@@ -178,8 +181,7 @@ async fn enable_approle_swallows_already_in_use_400() {
     Mock::given(method("POST"))
         .and(path("/v1/sys/auth/approle"))
         .respond_with(
-            ResponseTemplate::new(400)
-                .set_body_string("{\"errors\":[\"path is already in use\"]}"),
+            ResponseTemplate::new(400).set_body_string("{\"errors\":[\"path is already in use\"]}"),
         )
         .mount(&server)
         .await;

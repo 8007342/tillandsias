@@ -61,14 +61,9 @@ impl VzLifecycle {
     /// `host-shell` lifecycle module's phase-transition contract.
     ///
     /// @trace spec:macos-native-tray.lifecycle.vz-guest@v1
-    pub async fn ensure_started(
-        &self,
-        manifest: &ProvisionManifest,
-    ) -> Result<(), String> {
+    pub async fn ensure_started(&self, manifest: &ProvisionManifest) -> Result<(), String> {
         self.runtime.provision(manifest).await?;
         self.runtime.start().await?;
-        self.runtime
-            .wait_ready(Duration::from_secs(90))
-            .await
+        self.runtime.wait_ready(Duration::from_secs(90)).await
     }
 }

@@ -87,7 +87,8 @@ fn main() {
     // headless service from binding the Linux Unix control socket to
     // binding a vsock listener on `VMADDR_CID_ANY:<PORT>`. Only available
     // when the binary was compiled with `--features listen-vsock`.
-    let listen_vsock_port: Option<u32> = match user_args.iter().position(|a| a == "--listen-vsock") {
+    let listen_vsock_port: Option<u32> = match user_args.iter().position(|a| a == "--listen-vsock")
+    {
         Some(i) => match user_args.get(i + 1).and_then(|p| p.parse::<u32>().ok()) {
             Some(port) => Some(port),
             None => {
@@ -118,8 +119,7 @@ fn main() {
     // podman-secret-from-keyring flow for backwards compatibility.
     let with_vault = user_args.iter().any(|a| a == "--with-vault");
     let without_vault = user_args.iter().any(|a| a == "--without-vault");
-    let legacy_keyring_secrets =
-        user_args.iter().any(|a| a == "--legacy-keyring-secrets");
+    let legacy_keyring_secrets = user_args.iter().any(|a| a == "--legacy-keyring-secrets");
     let port_override = match user_args.iter().position(|a| a == "--port") {
         Some(i) => match user_args.get(i + 1).and_then(|p| p.parse::<u16>().ok()) {
             Some(port) => Some(port),
@@ -200,9 +200,10 @@ fn main() {
         if a.starts_with('-') {
             return None;
         }
-        if user_args.get(i.saturating_sub(1)).is_some_and(|prev| {
-            prev == "--prompt" || prev == "--port" || prev == "--listen-vsock"
-        }) {
+        if user_args
+            .get(i.saturating_sub(1))
+            .is_some_and(|prev| prev == "--prompt" || prev == "--port" || prev == "--listen-vsock")
+        {
             return None;
         }
         Some(a.to_string())
@@ -248,9 +249,7 @@ fn main() {
         // *additionally* keeps the keyring path live — Vault still comes
         // up so containers minted with AppRole tokens succeed.
         if with_vault && debug {
-            eprintln!(
-                "[tillandsias] --with-vault is now a no-op (Vault is the default backend)"
-            );
+            eprintln!("[tillandsias] --with-vault is now a no-op (Vault is the default backend)");
         }
         if !without_vault {
             #[cfg(feature = "vault")]
@@ -287,7 +286,9 @@ fn main() {
             return;
         }
     } else if with_vault && debug {
-        eprintln!("[tillandsias] --with-vault has no effect outside --init (Vault is auto-started)");
+        eprintln!(
+            "[tillandsias] --with-vault has no effect outside --init (Vault is auto-started)"
+        );
     }
 
     if status_check && !init {
@@ -5425,9 +5426,7 @@ pub(crate) fn launch_forge_agent(
             );
             Ok(())
         }
-        Err(e) => Err(format!(
-            "failed to spawn host terminal '{executable}': {e}"
-        )),
+        Err(e) => Err(format!("failed to spawn host terminal '{executable}': {e}")),
     }
 }
 
@@ -5437,6 +5436,8 @@ mod metrics_server;
 #[cfg(feature = "tray")]
 mod tray;
 
+#[cfg(all(feature = "listen-vsock", unix))]
+mod pty_handler;
 #[cfg(feature = "listen-vsock")]
 mod vsock_server;
 
@@ -5456,12 +5457,14 @@ fn maybe_spawn_vsock_listener(
 ) -> Option<tokio::task::JoinHandle<()>> {
     let port = listen_vsock_port?;
     Some(tokio::spawn(async move {
-        match vsock_server::run_vsock_listener(port, shutdown).await {
+        // Default VmStateHandle: phase=Ready, podman socket at the
+        // conventional path. Real lifecycle hooks update this when
+        // provisioning + drain wiring lands.
+        let state = vsock_server::VmStateHandle::new();
+        match vsock_server::run_vsock_listener(port, shutdown, state).await {
             Ok(()) => {}
             Err(err) => {
-                eprintln!(
-                    "[tillandsias] vsock listener on port {port} failed: {err}"
-                );
+                eprintln!("[tillandsias] vsock listener on port {port} failed: {err}");
             }
         }
     }))
@@ -5487,10 +5490,7 @@ fn maybe_spawn_vsock_listener(
 /// Run in headless mode — no tray, no UI.
 ///
 /// @trace spec:linux-native-portable-executable, spec:headless-mode
-fn run_headless(
-    config_path: Option<String>,
-    listen_vsock_port: Option<u32>,
-) -> Result<(), String> {
+fn run_headless(config_path: Option<String>, listen_vsock_port: Option<u32>) -> Result<(), String> {
     // Create a Tokio runtime for async operations
     let rt = tokio::runtime::Runtime::new()
         .map_err(|e| format!("Failed to create async runtime: {}", e))?;
@@ -6520,7 +6520,8 @@ mod tests {
         );
         // Named volume for the bare repo storage.
         assert!(
-            args.iter().any(|a| a == "tillandsias-mirror-alpha:/srv/git"),
+            args.iter()
+                .any(|a| a == "tillandsias-mirror-alpha:/srv/git"),
             "expected mirror volume mount in args: {args:?}"
         );
         assert!(has_arg(&args, "PROJECT=alpha"));
@@ -6530,8 +6531,7 @@ mod tests {
     fn git_run_args_forward_project_remote_url_when_present() {
         let certs = PathBuf::from("/tmp/ca");
         let url = "https://github.com/example/repo.git";
-        let with_url =
-            build_git_run_args("alpha", &certs, "tillandsias-git:v1", Some(url), None);
+        let with_url = build_git_run_args("alpha", &certs, "tillandsias-git:v1", Some(url), None);
         assert!(
             with_url
                 .iter()
@@ -6553,13 +6553,7 @@ mod tests {
         // @trace spec:tillandsias-vault — Phase 6 default flow
         let certs = PathBuf::from("/tmp/ca");
         let secret = "tillandsias-vault-token-git-mirror-alpha-1234";
-        let args = build_git_run_args(
-            "alpha",
-            &certs,
-            "tillandsias-git:v1",
-            None,
-            Some(secret),
-        );
+        let args = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, Some(secret));
 
         // The vault token secret MUST be mounted at the stable path
         // /run/secrets/vault-token so the in-container vault-cli helper
@@ -6584,7 +6578,9 @@ mod tests {
         // The legacy github-token podman secret MUST NOT be mounted in the
         // Vault flow — that's the whole point of Phase 6.
         assert!(
-            !args.iter().any(|a| a == "tillandsias-github-token,mode=0400"),
+            !args
+                .iter()
+                .any(|a| a == "tillandsias-github-token,mode=0400"),
             "legacy github-token secret must not be mounted in vault flow: {args:?}"
         );
     }
@@ -6610,9 +6606,7 @@ mod tests {
         );
         // No per-launch vault token secret should be mounted either.
         assert!(
-            !args
-                .iter()
-                .any(|a| a.contains("tillandsias-vault-token-")),
+            !args.iter().any(|a| a.contains("tillandsias-vault-token-")),
             "no vault token podman secret should appear: {args:?}"
         );
     }

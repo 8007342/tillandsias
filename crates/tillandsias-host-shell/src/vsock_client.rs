@@ -17,7 +17,7 @@ use std::time::Duration;
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
 use tillandsias_control_wire::transport::{
-    self, AsyncReadWrite, Transport, CONTROL_WIRE_VSOCK_PORT,
+    self, AsyncReadWrite, CONTROL_WIRE_VSOCK_PORT, Transport,
 };
 use tillandsias_control_wire::{
     ControlEnvelope, ControlMessage, MAX_MESSAGE_BYTES, WIRE_VERSION, decode, encode,
@@ -137,7 +137,9 @@ impl Client {
                 "control frame too large",
             ));
         }
-        self.stream.write_all(&(bytes.len() as u32).to_be_bytes()).await?;
+        self.stream
+            .write_all(&(bytes.len() as u32).to_be_bytes())
+            .await?;
         self.stream.write_all(&bytes).await?;
         self.stream.flush().await
     }
@@ -162,10 +164,7 @@ impl Client {
 /// operation. Returns `Ok(Client)` on success, an `io::Error` otherwise.
 ///
 /// @trace spec:host-shell-architecture.transport.vsock-client-lifecycle@v1
-pub async fn connect_with_handshake(
-    transport: Transport,
-    timeout: Duration,
-) -> io::Result<Client> {
+pub async fn connect_with_handshake(transport: Transport, timeout: Duration) -> io::Result<Client> {
     match tokio::time::timeout(timeout, async {
         let mut client = Client::connect(transport).await?;
         client.handshake().await?;
@@ -232,12 +231,9 @@ mod tests {
         // Give the listener a moment to bind.
         tokio::time::sleep(Duration::from_millis(50)).await;
 
-        let client = connect_with_handshake(
-            Transport::Unix(path),
-            DEFAULT_HANDSHAKE_TIMEOUT,
-        )
-        .await
-        .expect("handshake succeeds");
+        let client = connect_with_handshake(Transport::Unix(path), DEFAULT_HANDSHAKE_TIMEOUT)
+            .await
+            .expect("handshake succeeds");
         // After handshake the next seq is 2 (we consumed 1 for Hello).
         assert_eq!(client.next_seq.load(Ordering::Relaxed), 2);
     }
@@ -250,11 +246,8 @@ mod tests {
         // level (Unix), and the subsequent handshake read will block until
         // the timeout fires.
         let _listener = UnixListener::bind(&path).expect("bind");
-        let result = connect_with_handshake(
-            Transport::Unix(path),
-            Duration::from_millis(150),
-        )
-        .await;
+        let result =
+            connect_with_handshake(Transport::Unix(path), Duration::from_millis(150)).await;
         match result {
             Err(err) => assert_eq!(err.kind(), io::ErrorKind::TimedOut),
             Ok(_) => panic!("handshake against silent server must time out"),

@@ -174,17 +174,15 @@ pub mod boot {
     use objc2::rc::Retained;
     use objc2_foundation::{NSArray, NSFileHandle, NSString, NSURL};
     use objc2_virtualization::{
-        VZBootLoader, VZDiskImageStorageDeviceAttachment, VZEFIBootLoader,
-        VZEFIVariableStore, VZEFIVariableStoreInitializationOptions,
-        VZEntropyDeviceConfiguration, VZFileHandleSerialPortAttachment,
-        VZGenericPlatformConfiguration, VZMemoryBalloonDeviceConfiguration,
-        VZNATNetworkDeviceAttachment, VZNetworkDeviceConfiguration,
-        VZPlatformConfiguration, VZSerialPortAttachment, VZSerialPortConfiguration,
-        VZSocketDeviceConfiguration, VZStorageDeviceConfiguration,
+        VZBootLoader, VZDiskImageStorageDeviceAttachment, VZEFIBootLoader, VZEFIVariableStore,
+        VZEFIVariableStoreInitializationOptions, VZEntropyDeviceConfiguration,
+        VZFileHandleSerialPortAttachment, VZGenericPlatformConfiguration,
+        VZMemoryBalloonDeviceConfiguration, VZNATNetworkDeviceAttachment,
+        VZNetworkDeviceConfiguration, VZPlatformConfiguration, VZSerialPortAttachment,
+        VZSerialPortConfiguration, VZSocketDeviceConfiguration, VZStorageDeviceConfiguration,
         VZVirtioBlockDeviceConfiguration, VZVirtioConsoleDeviceSerialPortConfiguration,
         VZVirtioEntropyDeviceConfiguration, VZVirtioNetworkDeviceConfiguration,
-        VZVirtioSocketDeviceConfiguration,
-        VZVirtioTraditionalMemoryBalloonDeviceConfiguration,
+        VZVirtioSocketDeviceConfiguration, VZVirtioTraditionalMemoryBalloonDeviceConfiguration,
         VZVirtualMachineConfiguration,
     };
 
@@ -298,8 +296,8 @@ pub mod boot {
 
             // virtio-console serial: guest writes → host stderr (or override),
             // host reads /dev/null (no input forwarded).
-            let null_fd = open_read_only_devnull()
-                .ok_or_else(|| "open(/dev/null) failed".to_string())?;
+            let null_fd =
+                open_read_only_devnull().ok_or_else(|| "open(/dev/null) failed".to_string())?;
             let writer_fd = match spec.serial_writer_fd {
                 Some(fd) => fd,
                 None => dup_fd(2).ok_or_else(|| "dup(stderr) failed".to_string())?,
@@ -377,9 +375,7 @@ pub mod boot {
             if remaining <= 0.0 {
                 break;
             }
-            let _rc = unsafe {
-                CFRunLoopRunInMode(kCFRunLoopDefaultMode, remaining.min(1.0), 0)
-            };
+            let _rc = unsafe { CFRunLoopRunInMode(kCFRunLoopDefaultMode, remaining.min(1.0), 0) };
         }
     }
 
@@ -394,7 +390,9 @@ pub mod boot {
         unsafe extern "C" {
             fn open(path: *const std::os::raw::c_char, oflag: c_int) -> c_int;
         }
-        let fd = unsafe { open(b"/dev/null\0".as_ptr() as _, 0 /* O_RDONLY */) };
+        let fd = unsafe {
+            open(b"/dev/null\0".as_ptr() as _, 0 /* O_RDONLY */)
+        };
         if fd < 0 { None } else { Some(fd) }
     }
 
@@ -466,18 +464,15 @@ impl VmRuntime for VzRuntime {
         // the cheatsheet for the production approach (installer-VM sidecar
         // or hdiutil + mkfs via a helper container).
         vz_real::extract_kernel_artifacts(&manifest.rootfs_tarball, &self.image_root)?;
-        vz_real::convert_rootfs_to_disk_image(
-            &manifest.rootfs_tarball,
-            &self.rootfs_image_path(),
-        )?;
+        vz_real::convert_rootfs_to_disk_image(&manifest.rootfs_tarball, &self.rootfs_image_path())?;
         Ok(())
     }
 
     async fn start(&self) -> Result<(), VmError> {
-        use std::time::Instant;
         use objc2::ClassType;
         use objc2_foundation::NSError;
         use objc2_virtualization::VZVirtualMachine;
+        use std::time::Instant;
 
         // Phase 1 interim: VzRuntime::start expects the rootfs.img path
         // already populated at `<image_root>/rootfs.img`. Phase 4 will
@@ -631,60 +626,135 @@ impl VmRuntime for VzRuntime {
     async fn exec(&self, _argv: &[&str]) -> Result<ExitStatus, VmError> {
         // Phase 5 work (gated on control-wire-pty-attach merging). Returns
         // a clear error so callers don't silently swallow the gap.
-        Err(
-            "VzRuntime::exec: deferred to Phase 5 (gated on \
+        Err("VzRuntime::exec: deferred to Phase 5 (gated on \
              control-wire-pty-attach merging). See plan/steps/20-macos-tray-v0_0_1.md."
-                .into(),
-        )
+            .into())
     }
 
     async fn wait_ready(&self, timeout: Duration) -> Result<(), VmError> {
         use std::time::Instant;
 
-        // Phase 1 (this iter): poll VZVirtualMachine.state until Running OR
-        // timeout. This is the structural readiness check: VZ accepted the
-        // start and the guest kernel is executing. It does NOT verify the
-        // in-VM tillandsias-headless has bound the vsock listener — that
-        // check arrives with transport_macos.rs (m5/transport-macos-vsock-
-        // connector, queued as Phase 1 step 1.6).
+        // Two-stage readiness check (Phase 1 step 1.8 — m1b sub-task C):
+        //   1. Structural: poll VZVirtualMachineState until Running. Means
+        //      VZ accepted the start and the guest kernel is executing.
+        //   2. Functional: connect_to_vm_vsock(CONTROL_WIRE_VSOCK_PORT)
+        //      until success. Means the in-VM tillandsias-headless's
+        //      vsock_server has actually bound the port and is accepting
+        //      connections.
         //
-        // The backoff cadence (250ms → 500ms → 1s → 2s → 4s, capped) matches
-        // the host-shell `vsock_client::BACKOFF_SCHEDULE` precedent so the
-        // full chain (start → wait_ready → vsock connect) has consistent
-        // perceived latency in the tray.
-        let handle_guard = self
-            .vm
-            .lock()
-            .map_err(|e| format!("vm lock poisoned: {e}"))?;
-        let vm = match handle_guard.as_ref() {
-            Some(h) => &h.0,
-            None => {
-                return Err("VzRuntime::wait_ready: VM not running (start() first)".into());
-            }
-        };
+        // The full Hello/HelloAck handshake check is the next layer up —
+        // belongs in tillandsias-host-shell::vsock_client, not in
+        // VmRuntime::wait_ready. A successful TCP-equivalent connect is
+        // enough to say "the listener is alive."
+        //
+        // Backoff cadence matches host-shell::vsock_client::BACKOFF_SCHEDULE
+        // (250 → 500 → 1000 → 2000 → 4000 ms, capped) so the chain
+        // start → wait_ready → vsock connect has consistent perceived
+        // latency in the tray.
 
+        // ── Stage 1: structural state-poll ────────────────────────────
         let deadline = Instant::now() + timeout;
         let backoff_ms = [250u64, 500, 1000, 2000, 4000];
         let mut step = 0usize;
         loop {
-            let state = unsafe { vm.state() }.0;
-            // 1 = VZVirtualMachineStateRunning.
+            // Re-acquire the lock briefly each iteration so we don't hold
+            // it across the multi-second CFRunLoop pump (would block
+            // concurrent stop()).
+            let state = {
+                let guard = self
+                    .vm
+                    .lock()
+                    .map_err(|e| format!("vm lock poisoned: {e}"))?;
+                let vm = match guard.as_ref() {
+                    Some(h) => &h.0,
+                    None => {
+                        return Err(
+                            "VzRuntime::wait_ready: VM not running (start() first)".into(),
+                        );
+                    }
+                };
+                unsafe { vm.state() }.0
+            };
+            // 1 = VZVirtualMachineStateRunning → proceed to stage 2.
             if state == 1 {
-                return Ok(());
+                break;
             }
             // 3 = Error; abort immediately.
             if state == 3 {
-                return Err(format!("VzRuntime::wait_ready: VM state Error (={state})"));
+                return Err(format!(
+                    "VzRuntime::wait_ready: VM state Error (={state}) during stage 1"
+                ));
             }
             if Instant::now() >= deadline {
                 return Err(format!(
-                    "VzRuntime::wait_ready: timeout after {}s; final state={state}",
+                    "VzRuntime::wait_ready: stage 1 timeout after {}s; final state={state}",
                     timeout.as_secs()
                 ));
             }
             let wait_ms = backoff_ms[step.min(backoff_ms.len() - 1)];
             step = step.saturating_add(1);
             boot::pump_cf_loop_for(Duration::from_millis(wait_ms));
+        }
+
+        // ── Stage 2: functional vsock-probe ───────────────────────────
+        // CONTROL_WIRE_VSOCK_PORT comes from tillandsias-control-wire (the
+        // shared canonical constant). The in-VM headless's vsock_server
+        // binds (VMADDR_CID_ANY, 42420) on startup; we treat a successful
+        // host-side connect as proof the listener is up.
+        use tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
+        let mut step = 0usize;
+        loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Err(format!(
+                    "VzRuntime::wait_ready: stage 2 timeout after {}s (vsock listener \
+                     never came up at port {CONTROL_WIRE_VSOCK_PORT})",
+                    timeout.as_secs()
+                ));
+            }
+            // Cap per-probe budget at 1s so we don't burn the whole
+            // remaining timeout in a single connect attempt that hits
+            // VFR-internal slow paths.
+            let probe_timeout = remaining.min(Duration::from_secs(1));
+            let connect_result = {
+                let guard = self
+                    .vm
+                    .lock()
+                    .map_err(|e| format!("vm lock poisoned: {e}"))?;
+                let vm = match guard.as_ref() {
+                    Some(h) => &h.0,
+                    None => {
+                        return Err(
+                            "VzRuntime::wait_ready: VM stopped during stage 2".into(),
+                        );
+                    }
+                };
+                crate::transport_macos::connect_to_vm_vsock(
+                    vm,
+                    CONTROL_WIRE_VSOCK_PORT,
+                    probe_timeout,
+                )
+            };
+            match connect_result {
+                Ok(_vsock_fd) => {
+                    // Drop immediately — the probe is success-on-connect.
+                    // Hello/HelloAck handshake is the host-shell's job.
+                    return Ok(());
+                }
+                Err(crate::transport_macos::ConnectError::NoSocketDevice)
+                | Err(crate::transport_macos::ConnectError::UnexpectedSocketDeviceKind) => {
+                    // Structural config error — no point retrying.
+                    return Err(format!(
+                        "VzRuntime::wait_ready: VM config missing virtio-vsock device"
+                    ));
+                }
+                Err(_transient) => {
+                    // Timeout / VzError / NullConnection — keep retrying.
+                    let wait_ms = backoff_ms[step.min(backoff_ms.len() - 1)];
+                    step = step.saturating_add(1);
+                    boot::pump_cf_loop_for(Duration::from_millis(wait_ms));
+                }
+            }
         }
     }
 }
@@ -773,7 +843,10 @@ mod tests {
         std::fs::write(rt.kernel_path(), b"").unwrap();
         assert!(!rt.is_provisioned(), "rootfs+kernel is not enough");
         std::fs::write(rt.initrd_path(), b"").unwrap();
-        assert!(rt.is_provisioned(), "all three artifacts make it provisioned");
+        assert!(
+            rt.is_provisioned(),
+            "all three artifacts make it provisioned"
+        );
     }
 
     /// @trace spec:macos-native-tray.lifecycle.vz-guest@v1
@@ -842,10 +915,7 @@ mod tests {
             .exec(&["/bin/true"])
             .await
             .expect_err("exec should not silently succeed in Phase 1");
-        assert!(
-            err.contains("Phase 5"),
-            "unexpected exec error: {err}"
-        );
+        assert!(err.contains("Phase 5"), "unexpected exec error: {err}");
     }
 
     /// `VzRuntime::start` must surface a clear error when rootfs.img is

@@ -20,7 +20,7 @@ use serde::{Deserialize, Serialize};
 
 use tillandsias_control_wire::transport::Transport;
 
-use crate::vsock_client::{connect_with_handshake, DEFAULT_HANDSHAKE_TIMEOUT};
+use crate::vsock_client::{DEFAULT_HANDSHAKE_TIMEOUT, connect_with_handshake};
 
 /// Outcome of `ensure_vm_provisioned`.
 ///
@@ -153,9 +153,7 @@ pub async fn ensure_vm_provisioned_with_timeout(
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;
-    use tillandsias_control_wire::{
-        ControlEnvelope, ControlMessage, WIRE_VERSION, decode, encode,
-    };
+    use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION, decode, encode};
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
     use tokio::net::UnixListener;
 
@@ -211,12 +209,10 @@ mod tests {
     async fn ensure_vm_provisioned_returns_needs_when_no_server() {
         let dir = tempfile::tempdir().unwrap();
         let path = dir.path().join("missing.sock");
-        let report = ensure_vm_provisioned_with_timeout(
-            &Transport::Unix(path),
-            Duration::from_millis(200),
-        )
-        .await
-        .expect("returns Ok");
+        let report =
+            ensure_vm_provisioned_with_timeout(&Transport::Unix(path), Duration::from_millis(200))
+                .await
+                .expect("returns Ok");
         match report {
             ProvisionReport::NeedsProvisioning { reason } => {
                 assert!(!reason.is_empty(), "reason must be populated: {reason}");

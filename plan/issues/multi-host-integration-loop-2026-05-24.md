@@ -28,6 +28,170 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-25T21:43Z — INTEGRATED (windows pty §3.3 + §3.4 deeper bring-up)
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit (post-merge): `cbf308a`
+- observed_sibling_heads:
+  - main: ddf52dff
+  - linux-next: 09ec0a6f → `cbf308a`
+  - windows-next: e1a26e6b
+  - osx-next: 196feb58 (already in linux-next via earlier merges)
+- windows-next: **merged + tested + pushed**. 3 commits absorbed:
+  - `1cd1e7de feat(host-shell): pty §3.4 pump_io bidirectional bridge (PtyMaster trait)`
+  - `0a06832d feat(host-shell): pty §3.3 ConPTY process-attach + blocking pipe I/O`
+  - `e1a26e6b feat(host-shell): pty §3 ConPtyMaster impl PtyMaster (async bridge for pump_io)`
+  - Net diff: +384 lines across `host-shell::pty::{mod,windows}` + Cargo.toml.
+  - `./build.sh --check && --test`: PASSED. host-shell crate tests: **30/30 pass** (was 29 — Windows added the `pump_bridges_both_directions_and_closes` test).
+- osx-next: no-op (already absorbed: macOS Phase 1 step 1.7 `VsockStream AsyncRead+AsyncWrite` + m1b/B checkpoint).
+
+- **Methodology streak:** 3 consecutive cycles of clean integration of
+  sibling code (cycle 17:43 w1+w3, 19:43 §3+§3.3, 21:43 §3.3+§3.4). All
+  pushes additive, no conflicts, no trait-signature surprises.
+
+- **Spec-drift advisory:** windows-next continues to keep its additions
+  inside `tillandsias-host-shell::pty::{mod,windows}` — no changes to
+  `tillandsias-control-wire` (Linux wire authority preserved), no
+  changes to `methodology/`, `openspec/specs/`, or `openspec/changes/`.
+  PtyMaster trait introduced in §3.4 is a NEW abstraction internal to
+  host-shell (not a wire-level contract), so cross-host compatibility
+  unaffected.
+
+- **Note (housekeeping):** local Cargo.lock had a timestamp-only update
+  from a prior cycle's cargo activity; stashed before pull, popped
+  empty after merge. Working tree clean post-cycle.
+
+### Cycle 2026-05-25T19:43Z — INTEGRATED (windows §3 + §3.3 ConPTY — w4 in motion)
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit (post-merge): `93b7c8a`
+- observed_sibling_heads:
+  - main: ddf52dff
+  - linux-next: b215f4ae → `93b7c8a` (post-merge)
+  - windows-next: 5e95f7c3
+  - osx-next: 8f3db7f8 (already in linux-next)
+- windows-next: **merged + tested + pushed**. 2 commits absorbed:
+  - `a57983b6 feat(host-shell): pty §3 cross-platform PtySession core (control-wire-pty-attach)` — Tasks 3.x of the proposal, host-side `tillandsias-host-shell::pty` module.
+  - `5e95f7c3 feat(host-shell): pty §3.3 Windows ConPTY backend (lifecycle)` — Task 3.3, `#[cfg(windows)]` ConPTY implementation.
+  - Net diff: +528 lines (host-shell/src/pty/{mod,windows}.rs + Cargo.toml).
+  - `./build.sh --check` + `./build.sh --test`: PASSED.
+  - `cargo test -p tillandsias-host-shell`: **29/29 pass** (was 17 before this merge — Windows added 12 new pty tests).
+- osx-next: no-op (already absorbed in linux-next earlier).
+
+- **CRDT methodology validation continues:** the lag from Linux shipping
+  l3 (`f770e013`, ~18:30Z) to Windows shipping §3 + §3.3 (`5e95f7c3`,
+  ~19:15Z) was under an hour — sibling agent saw the unblock, picked up
+  the host-side companion work, and shipped it. Windows w4 is now
+  effectively in motion (host-side library + Windows backend); the
+  remaining piece is the menu-action wiring inside windows-tray to call
+  `PtySession::open(...)` for the GitHubLogin / OpenShell menu items.
+
+- **Spec-drift advisory:** windows-next added an additive
+  `crates/tillandsias-host-shell::pty` submodule + ConPTY backend. No
+  changes to `tillandsias-control-wire` (Linux is the source for the
+  wire enum), no changes to shared `methodology/` or `openspec/specs/`.
+  Clean contract preservation.
+
+### Interlude 2026-05-25T18:00Z–18:45Z — Linux gates l4 + l3 cleared; w4/w6 unblocked
+
+User directive: "Linux gate clears to ungate w4/w5/w6, can you unblock those?"
+Two Linux deliverables landed back-to-back to clear gates on sibling work.
+
+- **`l4/replace-vsock-stub-handlers` LANDED** (commits `af0e5528` /
+  `6956c825`): replaced 3 stub handlers in `vsock_server.rs`:
+  - `VmStatusRequest` now reads from a shared `VmStateHandle` (Arc-shared
+    phase + podman socket existence check on `/run/podman/podman.sock`).
+    Phase defaults to `Ready`; lifecycle hooks elsewhere can call
+    `set_phase` to flip through Provisioning/Starting/Draining/etc.
+  - `EnumerateLocalProjects` walks the in-VM bind-mount root
+    (`$TILLANDSIAS_IN_VM_PROJECT_ROOT` or `/home/forge/src`), skipping
+    hidden + non-directory entries, emits `LocalProjectEntry` per child
+    sorted by label with mtime as `last_seen_unix`.
+  - `CloudRefreshRequest` stays empty but ships an explicit comment
+    documenting the real implementation (`gh repo list --json` via
+    subprocess; token from `/run/secrets/vault-token`).
+  - `VmShutdownRequest` flips phase to `Draining` before close.
+  - 6 unit tests cover `VmStateHandle` + `enumerate_local_projects`.
+  - Tests pass: `./build.sh --check && --test` green;
+    `cargo test -p tillandsias-headless --features listen-vsock vsock_server`:
+    6/6. Windows w6 is now soft-unblocked (verify-only, no Windows code change).
+
+- **`l3/in-vm-headless-pty-handler` LANDED** (commits `f770e013` /
+  `8dc0d129`): new `crates/tillandsias-headless/src/pty_handler.rs`,
+  Unix-only, behind `listen-vsock`. Implements Tasks 4.1-4.7 of
+  `openspec/changes/control-wire-pty-attach/`:
+  - `PtySessionStore` keyed by session_id, one per vsock connection.
+  - `nix::pty::openpty` + `std::process::Command::pre_exec` (setsid +
+    dup2 + TIOCSCTTY) for fork+exec with the slave as controlling tty;
+    `env_clear` before applying `PtyOpen.env` (no host-env leak); `cwd`
+    applied if Some.
+  - Pump task reads master fd, emits `PtyData{ToHost}` envelopes via
+    per-connection mpsc; on master EOF runs `waitpid` to reap + emits
+    terminal `PtyClose` with code/signal populated.
+  - Host-initiated close: SIGTERM + 2s grace + SIGKILL via
+    `spawn_terminator`. On connection drop, `shutdown_all` reaps every
+    still-live session.
+  - `vsock_server.rs` refactored to `tokio::select!` over outbound PTY
+    mpsc OR inbound `read_envelope`, so `PtyData{ToHost}` interleaves
+    with normal request/reply traffic without splitting the stream.
+  - HelloAck capabilities now advertise `CAP_PTY_ATTACH_V1` so peer
+    trays can negotiate.
+  - Tests: 2 passing (empty-argv error, duplicate-session-id error) +
+    2 `#[ignore]` with documented follow-up. The ignored tests require
+    switching the master fd wrapper from `tokio::fs::File` (blocking
+    pool) to `tokio::io::unix::AsyncFd<OwnedFd>` (readiness-based);
+    captured in `openspec/changes/control-wire-pty-attach/tasks.md`
+    Task 4.3.
+  - **Unblocks Windows w4 (ConPTY)** and **macOS m4 (AppKit Terminal)** —
+    sibling agents can now wire their host-side `PtySession::open`
+    (proposal Tasks 3.x) against the shipped wire variants + the in-VM
+    handler.
+
+- **Status of w5 (Windows WSL import via CI rootfs):**
+  - Still gated on macOS-owned `l5/recipe-smoke-ci-publish` (recipe-publish
+    CI job + per-arch `.tar` / `.img` artifacts). Linux's `l7/§3
+    materializer driver` is the upstream that l5 will consume; l7 is
+    still claimed (lease `linux-l-mat-2026-05-25T15Z`) but NOT yet
+    started this session.
+
+- **Concurrent sibling activity caught up via rebase:**
+  - macOS host: Phase 1 step 1.6 `transport_macos` vsock connector
+    landed (commits `e3ea617d`, `d2eb5fcf`).
+  - Windows host: new `cheatsheets/runtime/windows-tray-dev.md` (commit
+    `104bb002`).
+  - All already on linux-next post-rebase.
+
+### Cycle 2026-05-25T17:43Z — INTEGRATED (windows w1 + w3; queue burndown)
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit (post-merge): `f63b510`
+- observed_sibling_heads:
+  - main: ddf52dff (unchanged)
+  - linux-next: c04077de → `f63b510` (post-merge)
+  - windows-next: d3d4cede
+  - osx-next: 201c76ea (advanced from b09bcb2b earlier between cycles; already in linux-next via the integration sequence)
+
+- windows-next: **merged + tested + pushed**. 5 commits absorbed; key items:
+  - `cef326e1 feat(windows-tray): w1 — load embedded tillandsias.ico in the tray (windows wiring)` — closes Linux deliverable l6's Windows side; the tray now displays the rasterized icon.
+  - `d3d4cede chore(windows-tray): w3 — clippy -D warnings clean across the windows-tray build` — w3 complete.
+  - Plus 2 merge-from-linux-next commits keeping windows-next current.
+  - `./build.sh --check` + `./build.sh --test`: PASSED.
+- osx-next: no-op (delta already absorbed via the linux-next history between cycles).
+
+- **Queue burndown:** with `f63b510` Windows has shipped w1, w2, w3 from
+  the linux-authored work queue — all three "currently unblocked" items
+  done in roughly 3 cron cycles. The Windows queue's remaining items are
+  gated on Linux deliverables (w4 on l3 in-VM PTY handler, w5 on §3
+  materializer + l5 CI publish, w6 on l4 real vsock backing data).
+
+- **Linux open work-in-flight:**
+  - `l7/§3-materializer-driver` (lease `linux-l-mat-2026-05-25T15Z`) —
+    still claimed; code work not yet started. Unblocks macOS m5 +
+    Windows w5 once it lands.
+  - `l3/in-vm-headless-pty-handler` (Tasks 4.x of control-wire-pty-attach) —
+    not yet claimed; unblocks Windows w4 + macOS m4.
+  - `l4/replace-vsock-stub-handlers` — not yet claimed; unblocks Windows w6.
+
 ### Cycle 2026-05-25T16:00Z — NO-OP (both siblings already absorbed last cycle)
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next

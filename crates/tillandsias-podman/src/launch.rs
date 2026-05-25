@@ -237,7 +237,10 @@ pub fn query_occupied_ports() -> Vec<(u16, u16)> {
         Ok(out) => {
             crate::log_podman_failure(
                 "ports-query",
-                &out.status.code().map(|c| c.to_string()).unwrap_or_else(|| "signal".into()),
+                &out.status
+                    .code()
+                    .map(|c| c.to_string())
+                    .unwrap_or_else(|| "signal".into()),
                 &String::from_utf8_lossy(&out.stderr),
             );
             vec![]

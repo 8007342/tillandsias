@@ -60,6 +60,12 @@ tokio-vsock = { workspace = true, optional = true }
 wiremock = "0.6"
 tillandsias-vault-client = { path = "../tillandsias-vault-client" }
 
+[target.'cfg(unix)'.dependencies]
+# Used by the in-VM PTY handler (control-wire-pty-attach Tasks 4.x):
+# openpty + ioctl(TIOCSWINSZ) + kill(SIGTERM/SIGKILL) + waitpid.
+# Pulled in only on Unix targets — Windows builds skip pty_handler entirely.
+nix = { version = "0.29", features = ["fs", "ioctl", "process", "signal", "term"] }
+
 [features]
 # @trace spec:tillandsias-vault — Phase 6: Vault is now the default Linux
 # secrets backend. Building without the `vault` feature falls back to the
@@ -71,7 +77,8 @@ default = ["vault"]
 tray = ["image", "zbus", "zvariant"]
 # @trace spec:vsock-transport — in-VM headless binds the control wire on vsock
 # instead of the host Unix socket. Pulls in tokio-vsock and the control-wire
-# crate's parallel `vsock` feature.
+# crate's parallel `vsock` feature. PTY handler (control-wire-pty-attach)
+# rides this feature since PTY-over-vsock is the only client today.
 listen-vsock = ["tokio-vsock", "tillandsias-control-wire/vsock"]
 # @trace spec:tillandsias-vault — Phase 6 default-on. Build with
 # `--no-default-features` to ship the legacy keyring-only binary.

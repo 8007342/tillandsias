@@ -120,7 +120,10 @@ pub async fn download_verified(
     if let Some(existing) = file_sha256(dest).await?
         && existing == expected
     {
-        let len = tokio::fs::metadata(dest).await.map(|m| m.len()).unwrap_or(0);
+        let len = tokio::fs::metadata(dest)
+            .await
+            .map(|m| m.len())
+            .unwrap_or(0);
         on_progress(len, Some(len));
         return Ok(());
     }
@@ -219,13 +222,9 @@ pub async fn download_verified(
         ));
     }
 
-    tokio::fs::rename(&part, dest).await.map_err(|e| {
-        format!(
-            "rename {} -> {}: {e}",
-            part.display(),
-            dest.display()
-        )
-    })?;
+    tokio::fs::rename(&part, dest)
+        .await
+        .map_err(|e| format!("rename {} -> {}: {e}", part.display(), dest.display()))?;
     Ok(())
 }
 

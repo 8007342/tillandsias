@@ -5,6 +5,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
+- [crates/tillandsias-host-shell/src/menu_action.rs#L12](../../../crates/tillandsias-host-shell/src/menu_action.rs#L12)
 - [crates/tillandsias-host-shell/src/menu_state.rs#L21](../../../crates/tillandsias-host-shell/src/menu_state.rs#L21)
 - [crates/tillandsias-host-shell/src/menu_state.rs#L188](../../../crates/tillandsias-host-shell/src/menu_state.rs#L188)
 - [crates/tillandsias-host-shell/src/menu_state.rs#L619](../../../crates/tillandsias-host-shell/src/menu_state.rs#L619)
@@ -45,9 +46,14 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-macos-tray/src/vz_lifecycle.rs#L8](../../../crates/tillandsias-macos-tray/src/vz_lifecycle.rs#L8)
 - [crates/tillandsias-macos-tray/src/vz_lifecycle.rs#L26](../../../crates/tillandsias-macos-tray/src/vz_lifecycle.rs#L26)
 - [crates/tillandsias-macos-tray/src/vz_lifecycle.rs#L63](../../../crates/tillandsias-macos-tray/src/vz_lifecycle.rs#L63)
+- [crates/tillandsias-vm-layer/Cargo.toml#L24](../../../crates/tillandsias-vm-layer/Cargo.toml#L24)
+- [crates/tillandsias-vm-layer/examples/vz-spike.rs#L23](../../../crates/tillandsias-vm-layer/examples/vz-spike.rs#L23)
+- [crates/tillandsias-vm-layer/src/transport_macos.rs#L26](../../../crates/tillandsias-vm-layer/src/transport_macos.rs#L26)
 - [crates/tillandsias-vm-layer/src/vz.rs#L20](../../../crates/tillandsias-vm-layer/src/vz.rs#L20)
-- [crates/tillandsias-vm-layer/src/vz.rs#L88](../../../crates/tillandsias-vm-layer/src/vz.rs#L88)
-- [crates/tillandsias-vm-layer/src/vz.rs#L266](../../../crates/tillandsias-vm-layer/src/vz.rs#L266)
-- [crates/tillandsias-vm-layer/src/vz.rs#L275](../../../crates/tillandsias-vm-layer/src/vz.rs#L275)
-- [crates/tillandsias-vm-layer/src/vz.rs#L282](../../../crates/tillandsias-vm-layer/src/vz.rs#L282)
-- [crates/tillandsias-vm-layer/src/vz.rs#L311](../../../crates/tillandsias-vm-layer/src/vz.rs#L311)
+- [crates/tillandsias-vm-layer/src/vz.rs#L119](../../../crates/tillandsias-vm-layer/src/vz.rs#L119)
+- [crates/tillandsias-vm-layer/src/vz.rs#L166](../../../crates/tillandsias-vm-layer/src/vz.rs#L166)
+- [crates/tillandsias-vm-layer/src/vz.rs#L237](../../../crates/tillandsias-vm-layer/src/vz.rs#L237)
+- [crates/tillandsias-vm-layer/src/vz.rs#L734](../../../crates/tillandsias-vm-layer/src/vz.rs#L734)
+- [crates/tillandsias-vm-layer/src/vz.rs#L743](../../../crates/tillandsias-vm-layer/src/vz.rs#L743)
+- [crates/tillandsias-vm-layer/src/vz.rs#L750](../../../crates/tillandsias-vm-layer/src/vz.rs#L750)
+- [crates/tillandsias-vm-layer/src/vz.rs#L779](../../../crates/tillandsias-vm-layer/src/vz.rs#L779)

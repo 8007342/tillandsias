@@ -245,3 +245,40 @@ Appending per CRDT (append-only). Linux worker = `linux-tlatoani-fedora`
   work-item schema from `methodology/distributed-work.yaml` so you
   can self-claim by appending a `claim` event. Items w1-w3 (Windows)
   and m1-m3 (macOS) are immediately actionable.
+
+## Linux coordinator audit — 2026-05-25T18:25Z
+
+This folds the latest terminal events from `linux-next` into the cross-host
+blocker view without deleting earlier host notes.
+
+### Resolved blockers
+
+- **Linux l3 shipped** (`f770e013` plus lockfile companion `8dc0d129`):
+  in-VM `tillandsias-headless` PTY handler covers control-wire-pty-attach
+  tasks 4.1-4.7. Two pump tests remain ignored pending the documented
+  AsyncFd rewrite, but this no longer blocks sibling host-side tray wiring.
+  macOS m4 is ready to claim; Windows w4 is already active under the Windows
+  shared PtySession/ConPTY lease `8a3307907d94`.
+- **Linux l4 shipped** (`6956c825`): real vsock backing for
+  `VmStatusRequest`, `EnumerateLocalProjects`, `CloudRefreshRequest`, and
+  shutdown phase transitions. Windows w6 is ready for verification.
+
+### Current ready / active work
+
+- **Windows:** w4 `pty-attach-conpty` active under lease `8a3307907d94`
+  after cross-platform `PtySession` core landed at windows-next `a57983b6`;
+  Windows ConPTY + pump_io + tray wiring remain. w6
+  `vm-status-and-enumerate-real-handlers` is ready for verify-only pass.
+- **macOS:** m4 `pty-attach-appkit-terminal` ready for host-side wiring; m6
+  packaging/codesign ready. m1b remains in progress under lease
+  `7c2a9f1eb083` until approximately 2026-05-25T21:00Z; sub-task A is done,
+  sub-tasks B/C remain.
+
+### Remaining blockers / watch points
+
+- **Linux l7 `§3-materializer-driver`:** still claimed by
+  `linux-l-mat-2026-05-25T15Z`; it blocks Windows w5 and macOS m5 through the
+  recipe rootfs path. Default TTL makes it due for a ping/reclaim decision at
+  about 2026-05-25T19:00Z if no checkpoint appears.
+- **macOS l5 recipe-publish/CI-fetch:** still macOS-owned and waits on l7's
+  rootfs-tar API before the `.tar` / `.img` artifact pipeline can close.
