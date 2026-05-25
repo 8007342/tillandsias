@@ -28,6 +28,37 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-25T19:43Z — INTEGRATED (windows §3 + §3.3 ConPTY — w4 in motion)
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit (post-merge): `93b7c8a`
+- observed_sibling_heads:
+  - main: ddf52dff
+  - linux-next: b215f4ae → `93b7c8a` (post-merge)
+  - windows-next: 5e95f7c3
+  - osx-next: 8f3db7f8 (already in linux-next)
+- windows-next: **merged + tested + pushed**. 2 commits absorbed:
+  - `a57983b6 feat(host-shell): pty §3 cross-platform PtySession core (control-wire-pty-attach)` — Tasks 3.x of the proposal, host-side `tillandsias-host-shell::pty` module.
+  - `5e95f7c3 feat(host-shell): pty §3.3 Windows ConPTY backend (lifecycle)` — Task 3.3, `#[cfg(windows)]` ConPTY implementation.
+  - Net diff: +528 lines (host-shell/src/pty/{mod,windows}.rs + Cargo.toml).
+  - `./build.sh --check` + `./build.sh --test`: PASSED.
+  - `cargo test -p tillandsias-host-shell`: **29/29 pass** (was 17 before this merge — Windows added 12 new pty tests).
+- osx-next: no-op (already absorbed in linux-next earlier).
+
+- **CRDT methodology validation continues:** the lag from Linux shipping
+  l3 (`f770e013`, ~18:30Z) to Windows shipping §3 + §3.3 (`5e95f7c3`,
+  ~19:15Z) was under an hour — sibling agent saw the unblock, picked up
+  the host-side companion work, and shipped it. Windows w4 is now
+  effectively in motion (host-side library + Windows backend); the
+  remaining piece is the menu-action wiring inside windows-tray to call
+  `PtySession::open(...)` for the GitHubLogin / OpenShell menu items.
+
+- **Spec-drift advisory:** windows-next added an additive
+  `crates/tillandsias-host-shell::pty` submodule + ConPTY backend. No
+  changes to `tillandsias-control-wire` (Linux is the source for the
+  wire enum), no changes to shared `methodology/` or `openspec/specs/`.
+  Clean contract preservation.
+
 ### Interlude 2026-05-25T18:00Z–18:45Z — Linux gates l4 + l3 cleared; w4/w6 unblocked
 
 User directive: "Linux gate clears to ungate w4/w5/w6, can you unblock those?"
