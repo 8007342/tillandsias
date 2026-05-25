@@ -262,8 +262,13 @@ mod macos_main {
         unsafe {
             vm.startWithCompletionHandler(&handler);
         }
-        println!("[vz-spike] startWithCompletionHandler dispatched; observing 10s of serial");
-        std::thread::sleep(Duration::from_secs(10));
+        println!("[vz-spike] startWithCompletionHandler dispatched; pumping CFRunLoop 10s");
+
+        // VZ delivers its completion handler on the dispatch queue we
+        // submitted the start from. With nothing pumping the main thread's
+        // CFRunLoop the callback never fires and the VM stays in "starting".
+        // Pump for 10 s, then attempt a graceful stop.
+        run_cf_loop_for(Duration::from_secs(10));
 
         println!("[vz-spike] requesting stop");
         match unsafe { vm.requestStopWithError() } {
@@ -273,8 +278,36 @@ mod macos_main {
                 e.localizedDescription()
             ),
         }
-        std::thread::sleep(Duration::from_secs(2));
+        run_cf_loop_for(Duration::from_secs(2));
         println!("[vz-spike] done");
+    }
+
+    /// Pump CoreFoundation's main runloop for `dur`, letting VZ completion
+    /// handlers dispatched to the main queue fire. Returns when the time
+    /// elapses (whether or not any sources fired).
+    fn run_cf_loop_for(dur: Duration) {
+        #[link(name = "CoreFoundation", kind = "framework")]
+        unsafe extern "C" {
+            fn CFRunLoopRunInMode(
+                mode: *const std::ffi::c_void,
+                seconds: f64,
+                return_after_source_handled: u8,
+            ) -> i32;
+            static kCFRunLoopDefaultMode: *const std::ffi::c_void;
+        }
+        let deadline = Instant::now() + dur;
+        loop {
+            let remaining = deadline.saturating_duration_since(Instant::now()).as_secs_f64();
+            if remaining <= 0.0 {
+                break;
+            }
+            let rc = unsafe {
+                CFRunLoopRunInMode(kCFRunLoopDefaultMode, remaining.min(1.0), 0)
+            };
+            // rc: 1=Finished (no sources), 2=Stopped, 3=TimedOut, 4=HandledSource
+            // We treat all as "loop again until our wall-clock deadline".
+            let _ = rc;
+        }
     }
 
     // ─── helpers ──────────────────────────────────────────────────────────
