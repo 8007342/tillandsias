@@ -32,8 +32,9 @@ use std::os::windows::ffi::OsStrExt;
 use std::sync::Mutex;
 
 use tillandsias_host_shell::menu_action::{self, MenuAction};
-use tillandsias_host_shell::menu_state::{self, MenuItem, MenuState, MenuStructure};
+use tillandsias_host_shell::menu_state::{self, MenuItem, MenuState, MenuStructure, ProjectEntry};
 use tillandsias_host_shell::provisioning::{ProvisionPhase, ProvisionProgress};
+use tillandsias_host_shell::scanner::{watch_projects, ProjectEvent};
 
 use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::Graphics::Gdi::HBRUSH;
@@ -164,6 +165,24 @@ pub fn run() -> ! {
         {
             let mut guard = MENU_STATE.lock().unwrap();
             *guard = Some(MenuState::initial());
+        }
+
+        // Host-side project discovery: scan %USERPROFILE%\src and keep the
+        // menu's local-projects list current. This runs entirely on the host
+        // and needs no VM, so the tray lists ~/src projects from first paint
+        // (the popup rebuilds from MENU_STATE on every right-click).
+        // @trace spec:host-shell-architecture.scanner.local-project-discovery@v1
+        match watch_projects(&crate::wsl_lifecycle::user_src_dir()) {
+            Ok(mut rx) => {
+                tokio::task::spawn_local(async move {
+                    while let Some(ev) = rx.recv().await {
+                        apply_project_event(ev);
+                    }
+                });
+            }
+            Err(err) => {
+                tracing::warn!(%err, "host-side ~/src project scan unavailable");
+            }
         }
 
         // Spawn the WSL provisioning + lifecycle task. Progress is reported
@@ -411,6 +430,46 @@ unsafe fn handle_menu_command(hwnd: HWND, cmd_id: u16) {
     dispatch_action(hwnd, action);
 }
 
+/// Apply a host-side project scan event to the shared menu state.
+fn apply_project_event(ev: ProjectEvent) {
+    if let Ok(mut guard) = MENU_STATE.lock() {
+        let state = guard.get_or_insert_with(MenuState::initial);
+        apply_project_event_to(state, &ev);
+    }
+}
+
+/// Pure update rule for a project scan event — factored out of the global so
+/// the dedup / sort / removal behaviour is unit-testable without Win32.
+///
+/// `Added` inserts a `local` [`ProjectEntry`] (deduped by directory basename,
+/// kept name-sorted); `Removed` drops it. Paths with no usable basename are
+/// ignored.
+///
+/// @trace spec:host-shell-architecture.scanner.local-project-discovery@v1
+fn apply_project_event_to(state: &mut MenuState, ev: &ProjectEvent) {
+    match ev {
+        ProjectEvent::Added { path } => {
+            let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+                return;
+            };
+            if name.is_empty() || state.local_projects.iter().any(|p| p.name == name) {
+                return;
+            }
+            state.local_projects.push(ProjectEntry {
+                name: name.to_string(),
+                path: path.to_string_lossy().into_owned(),
+                ready: false,
+            });
+            state.local_projects.sort_by(|a, b| a.name.cmp(&b.name));
+        }
+        ProjectEvent::Removed { path } => {
+            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                state.local_projects.retain(|p| p.name != name);
+            }
+        }
+    }
+}
+
 /// Route a resolved [`MenuAction`] to its handler.
 ///
 /// `Quit` posts `WM_DESTROY` so the message loop drains and exits on the next
@@ -444,5 +503,37 @@ mod tests {
     #[test]
     fn wm_trayicon_is_in_app_range() {
         assert!(WM_TRAYICON >= WM_APP);
+    }
+
+    use std::path::PathBuf;
+
+    fn added(p: &str) -> ProjectEvent {
+        ProjectEvent::Added { path: PathBuf::from(p) }
+    }
+
+    #[test]
+    fn project_added_inserts_sorted_and_deduped() {
+        let mut state = MenuState::initial();
+        apply_project_event_to(&mut state, &added("C:\\Users\\u\\src\\zebra"));
+        apply_project_event_to(&mut state, &added("C:\\Users\\u\\src\\apple"));
+        // Duplicate basename is ignored.
+        apply_project_event_to(&mut state, &added("C:\\Users\\u\\src\\apple"));
+
+        let names: Vec<&str> = state.local_projects.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names, vec!["apple", "zebra"], "name-sorted, deduped");
+        assert!(state.local_projects.iter().all(|p| !p.ready));
+    }
+
+    #[test]
+    fn project_removed_drops_entry() {
+        let mut state = MenuState::initial();
+        apply_project_event_to(&mut state, &added("C:\\Users\\u\\src\\keep"));
+        apply_project_event_to(&mut state, &added("C:\\Users\\u\\src\\drop"));
+        apply_project_event_to(
+            &mut state,
+            &ProjectEvent::Removed { path: PathBuf::from("C:\\Users\\u\\src\\drop") },
+        );
+        let names: Vec<&str> = state.local_projects.iter().map(|p| p.name.as_str()).collect();
+        assert_eq!(names, vec!["keep"]);
     }
 }

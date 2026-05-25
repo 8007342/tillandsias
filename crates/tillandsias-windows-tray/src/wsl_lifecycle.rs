@@ -141,7 +141,7 @@ impl WslLifecycle {
     }
 }
 
-fn user_src_dir() -> PathBuf {
+pub(crate) fn user_src_dir() -> PathBuf {
     let base = std::env::var_os("USERPROFILE")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("C:\\Users\\Public"));

@@ -75,11 +75,17 @@ headless over vsock. Podman never on the Windows host. Older 6-distro
     `provisioning` test modules used tokio UnixListener (Unix-only) and broke
     `cargo test` on Windows — now `#[cfg(all(test, unix))]`-gated (Linux/macOS
     still run them).
-  - REMAINING: connect vsock client to a live in-VM headless (needs a booted
-    VM, i.e. Phase 2b/recipe), flip menu Provisioning→Ready from a real
-    handshake + EnumerateLocalProjects, Quit→graceful VM drain (VmShutdownRequest
-    then stop), and route Attach/GitHubLogin/agents over the wire
-    (control-wire-pty-attach for Open Shell + login).
+  - DONE (2026-05-25): host-side `~/src` (USERPROFILE\src) project scan wired
+    into the tray via host-shell `scanner::watch_projects` — the menu lists
+    local projects from first paint, no VM needed. `apply_project_event_to`
+    (dedup by basename, name-sorted, removal) factored + unit-tested; tray
+    builds + launches clean with the live scanner. 2 new tray tests.
+  - REMAINING (needs a booted VM): connect vsock client to a live in-VM
+    headless, flip menu Provisioning→Ready from a real handshake +
+    EnumerateLocalProjects (merge with scanned local list), Quit→graceful VM
+    drain (VmShutdownRequest then stop), route Attach/GitHubLogin/agents over
+    the wire (control-wire-pty-attach for Open Shell + login). Also: ship a
+    real tray .rc/.ico icon (clears the build.rs placeholder warning).
 - Phase 5 — Smoke + checkpoint to origin/windows-next.
 - Paperwork (woven in): archive superseded windows-wsl-runtime / windows-native-build
   changes with tombstone → decision note; keep OpenSpec/litmus bindings clean.
