@@ -28,6 +28,25 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-25T07:43Z — NO-OP (siblings dormant, clean tree)
+
+- host_id: linux-tlatoani-fedora (macuahuitl.ayahuitlcalpan.com)
+- platform: linux
+- branch: linux-next
+- upstream_commit: 51448ca744ff13b149751043402bb0a49bef6ad2
+- observed_sibling_heads:
+  - main: ddf52dffcda4f5d32104179cdaf7e4b87221300d
+  - linux-next: 51448ca744ff13b149751043402bb0a49bef6ad2
+  - windows-next: 266c4edc0af76d76da8a0a88612c351e1ac95192 (unchanged since cycle 05:43Z absorbed it)
+  - osx-next: ddf52dffcda4f5d32104179cdaf7e4b87221300d (unchanged since 2026-05-24 alignment)
+
+- windows-next: **no-op** — 0 new commits beyond `linux-next`.
+- osx-next: **no-op** — 0 new commits; remains frozen at the alignment tip.
+- Tests: n/a (no merge attempted).
+
+- Working tree clean. Linux-host activity between this cycle and 05:43Z was
+  the methodology-refresh interlude documented above; everything pushed.
+
 ### Interlude 2026-05-25T06:00Z–06:45Z — Methodology refresh (no integration; sibling laptops dormant)
 
 User directive: while macOS and Windows hosts are dormant for several hours,
