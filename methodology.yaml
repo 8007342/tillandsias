@@ -1,5 +1,5 @@
 methodology:
-  version: v0.5
+  version: v0.6
   authority:
     source_of_truth: methodology.yaml
     rule: >
@@ -21,6 +21,7 @@ methodology:
     role_file_matrix: methodology/bootstrap/roles.yaml
     component_catalog: methodology/catalog.yaml
     agent_observability: methodology/agent-observability.yaml
+    multi_host_development: methodology/multi-host-development.yaml
     plan_root: plan.yaml
     plan_index: plan/index.yaml
     plan_step_notes: plan/steps/README.md
@@ -40,6 +41,8 @@ methodology:
     - plan_updates_are_idempotent_and_cold_start_friendly
     - agents_assume_next_step_may_be_claimed_by_a_different_agent
     - remote_checkpoints_are_durable_and_local_state_is_ephemeral
+    - platform_branches_pull_and_merge_from_durable_remote_before_checkpoints
+    - ad_hoc_markdown_is_intake_not_authority
 
   semantic_distillation:
     rule: >
