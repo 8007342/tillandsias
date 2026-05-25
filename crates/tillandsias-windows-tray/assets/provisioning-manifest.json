@@ -1,0 +1,15 @@
+{
+  "schema": 1,
+  "_comment": "Committed per release. Source of truth for first-run provisioning artifacts (vm-provisioning-lifecycle.provision.first-run-downloads@v1). The headless crate version is a build version, not a release tag, so the binary URL/tag are pinned here explicitly.",
+  "headless_release_tag": "v0.2.260523.6",
+  "rootfs": {
+    "url": "https://dl.fedoraproject.org/pub/fedora/linux/releases/44/Container/x86_64/images/Fedora-Container-Base-Generic-44-1.7.x86_64.oci.tar.xz",
+    "sha256": "75200f5752a74a21a616ca9a75e25beb594e2e117a0195c54f87c0b3e3974d1b",
+    "bytes": 70170200,
+    "_note": "OCI image archive, NOT a flat rootfs. WslRuntime::provision must flatten the layer(s) into a rootfs tar before `wsl --import` (see Phase 2b)."
+  },
+  "headless_binary": {
+    "url": "https://github.com/8007342/tillandsias/releases/download/v0.2.260523.6/tillandsias-linux-x86_64",
+    "sha256": "5734e74f527c346e88c881a02c46ee96c7316c7d03cd00b6d8120b4c578aa159"
+  }
+}

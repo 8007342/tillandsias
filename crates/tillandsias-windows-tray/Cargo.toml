@@ -14,12 +14,20 @@ path = "src/main.rs"
 
 [dependencies]
 tillandsias-host-shell = { path = "../tillandsias-host-shell" }
+# Base (no download): on non-Windows targets the wsl_lifecycle module is a stub
+# and never calls the fetch path, so Linux/macOS workspace builds must NOT pull
+# reqwest through this crate. The `download` feature is enabled only for the
+# Windows target below — keeps the linux-next integration build lean.
 tillandsias-vm-layer = { path = "../tillandsias-vm-layer" }
 tillandsias-control-wire = { path = "../tillandsias-control-wire" }
 tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
+# The real provisioning fetch path only compiles on Windows, so the download
+# feature (reqwest+rustls+sha2) is pulled only here. Cargo unions this with the
+# base [dependencies] entry above.
+tillandsias-vm-layer = { path = "../tillandsias-vm-layer", features = ["download"] }
 windows = { version = "0.58", features = [
     "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",

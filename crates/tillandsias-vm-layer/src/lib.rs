@@ -32,6 +32,11 @@ pub mod vz;
 #[cfg(all(target_os = "linux", feature = "fake"))]
 pub mod fake;
 
+/// HTTP fetch + SHA-256 verification for first-run provisioning. Behind the
+/// `download` feature so trait-only consumers stay reqwest-free.
+#[cfg(feature = "download")]
+pub mod fetch;
+
 /// Provisioning manifest passed to `VmRuntime::provision`.
 ///
 /// Captures every input the backend needs to produce a working VM the first
