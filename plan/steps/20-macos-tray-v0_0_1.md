@@ -1,8 +1,23 @@
 # Step 20 — macOS Tray v0.0.1
 
-Status: in_progress
+Status: in_progress (code complete; waiting on cross-host release assets)
 Owner: Tlatoani-MacBook-Air (Claude Opus 4.7, **`osx-next` worker** — local branch renamed from `macos-next` per canon `plan/issues/branch-and-coordination-canon-2026-05-25.md`)
 Started: 2026-05-24
+
+## Current state (as of iter 34, 2026-05-26T21:30Z)
+
+**macOS code is COMPLETE for v0.0.1**. All paths are wired end-to-end + unit-tested in isolation:
+  - m4 sub-task B (10 slices, see iter 25 entry): TrayActionHost + dispatch + Tokio + VzRuntime start/stop + pty_vsock_bridge + Terminal.app live PTY attach for Open Shell + GitHub login.
+  - m5 (iter 26/27): `VzRuntime::fetch_recipe_artifact` + auto-fetch in `run_start` consuming Linux's l9 artifact-URL contract; manifest embedded via `include_str!`.
+  - m6, m7, m8 (autonomous portion): codesigned `.app` bundle + CI build + release tarball + autonomous smoke evidence collected.
+  - Quality: `cargo fmt` + `cargo clippy --tests --examples -- -D warnings` clean across both crates; 26 macos-tray + 63 vm-layer tests passing.
+
+**True blockers** (none macOS-owned):
+  1. `aarch64.img` SHA pin in `images/vm/manifest.toml` (Linux CI gated; currently `"pending-ci"`).
+  2. `tillandsias-headless-{x86_64,aarch64}-unknown-linux-musl` release asset publish (Linux-owned; see tray-convergence-coordination NEXT BLOCKER 2026-05-26).
+
+**Paste-and-run E2E proof plan**: `plan/issues/tray-convergence-coordination.md` "macOS m5 — E2E proof plan, READY to execute when aarch64.img SHA lands" — once the two blockers above clear, executing the documented commands should produce a "macOS m5 PROVEN" entry parallel to Windows's w5 PROVEN.
+
 Branch contract (per canon, effective 2026-05-25T06Z):
   - **Code commits** (`crates/tillandsias-macos-tray/**`, `crates/tillandsias-vm-layer/src/vz.rs`, `crates/tillandsias-vm-layer/Cargo.toml` macOS bits, `crates/tillandsias-control-wire/src/transport_macos.rs`): push to `origin/osx-next`; integration loop merges into `linux-next`.
   - **`plan/`, `methodology/`, `openspec/`, `cheatsheets/` writes**: push directly to `origin/linux-next`.
@@ -112,3 +127,4 @@ Plan reference: `~/.claude/plans/partitioned-wobbling-babbage.md`.
 - 2026-05-26 (iter 25 — m4 sub-task B slice 5b + FULL m4 sub-task B COMPLETION): **`github_login` now uses the same live PTY-over-vsock attach chain (commit `41ea02e1`).** Refactored the shared composition out to `TrayActionHost::attach_pty(label, intent)`; both `open_shell` and `github_login` reduce to one-line calls. Renamed worker `run_open_shell_attach` → `run_pty_attach` parameterized on `PtyIntent`. **m4 sub-task B is now FULLY COMPLETE**: 10 slices landed (slices 1-5 + 4b + 4c-pre + 4c.1 + 4c.2 + 5b). All four interactive menu items (Start/Stop VM, Open Shell, GitHub login) are wired end-to-end and unit-tested in isolation. Start/Stop VM functional whenever a recipe artifact is present; Open Shell + GitHub login functional whenever the VM is booted with in-VM headless on vsock 42420 (gated on m5/l9 artifact URL). Tests: macos-tray 27/27, vm-layer 54/54.
 - 2026-05-26 (iter 26 — m5 primitive shipped): **`VzRuntime::fetch_recipe_artifact(manifest, tag)` landed (commit `ec76e63a`).** Consumes Linux's l9 artifact-URL contract (`manifest.artifact_url(arch, format, tag)` from commit 74b1d78d) + SHA pin lookup + `fetch::download_verified` to fetch the recipe-published .img on first launch. Arch = aarch64 on Apple Silicon, format = img for VFR. Cfg-gated on (recipe + download). Fails fast on missing template, missing SHA key, or placeholder pending-ci SHA (graceful gating until l9 step 5 — CI SHA pin commit — lands). 2 new unit tests cover the gating paths. Tests: vm-layer 60/60 (was 54; +6), macos-tray 27/27. Follow-up: wire into action_host's startVm: path for auto-fetch on first launch.
 - 2026-05-26 (iter 27 — m5 wiring complete): **Start VM now auto-fetches recipe artifact on first launch (commit `080a8e60`).** `Cargo.toml` enabled `(recipe, download)` features on vm-layer dep. `action_host.rs::run_start` pre-start gate calls `vz.fetch_recipe_artifact(&BUNDLED_MANIFEST, &tag).await` when `!is_provisioned()`. Manifest embedded via `include_str!` (.app needs network only for artifact bytes, not manifest). Tag derived from `CARGO_PKG_VERSION`. User-actionable error on fetch failure with l9-step-5 explanation. Test updated to assert the new SHA-gate path. Tests: macos-tray 27/27, vm-layer 60/60. **macOS owns ZERO remaining blocking work for v0.0.1** — true blockers are Linux l9 step 5 (CI SHA pin commit) + user interactive m8 smoke.
+- 2026-05-26 (iter 28 — clippy sweep): **Cleared 5 macOS-owned clippy warnings (commit `416fa83e`).** `vz.rs` (3 `&*x` auto-derefs + 1 nul-string `b" "` -> `c""` + 1 `format!()` no-args -> `.to_string()`) and `materialize/macos.rs` (5 overindented doc list items -> 4-space continuation). Tests: vm-layer 63/63, macos-tray 27/27. Flagged 3 Linux-owned warnings (`materialize/cache.rs` + `bin/materialize-cli.rs`) for the Linux host via integration-loop coordination request.

@@ -29,7 +29,7 @@
 
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, Sel};
-use objc2::{class, msg_send_id, sel, ClassType};
+use objc2::{ClassType, class, msg_send_id, sel};
 use objc2_app_kit::{
     NSApplication, NSApplicationActivationPolicy, NSMenu, NSMenuItem, NSStatusBar, NSStatusItem,
     NSVariableStatusItemLength,
@@ -227,10 +227,7 @@ fn append_footer(mtm: MainThreadMarker, menu: &NSMenu) {
     // package version so the user knows what they're running. Reads VERSION
     // baked in at build time via CARGO_PKG_VERSION (= the 3-component crate
     // version derived from the 4-component VERSION file via bump-version.sh).
-    let version_label = format!(
-        "Tillandsias v{} (alpha)",
-        env!("CARGO_PKG_VERSION")
-    );
+    let version_label = format!("Tillandsias v{} (alpha)", env!("CARGO_PKG_VERSION"));
     let header = NSMenuItem::new(mtm);
     unsafe {
         header.setTitle(&NSString::from_str(&version_label));

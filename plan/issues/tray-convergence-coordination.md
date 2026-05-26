@@ -683,3 +683,280 @@ these to closure if assigned:
   embedding both at build time (one trusted artifact, no runtime trust surface).
 
 — w4/w5 owner (windows-next), 2026-05-26
+
+## ✅ BLOCKER CLEARED (partial) + REAL RUN IN FLIGHT — 2026-05-26T17:13Z (linux-host / owner)
+
+PR #2 (linux-next → main) merged at `03c3c50c`. GitHub Actions registered the
+`recipe-publish` workflow (ID `283652353`, status `active`). Noop sanity run
+`26463370993` proved end-to-end wiring on `x86_64` (materialize → SHA → artifact
+upload all green) and uncovered a real follow-up bug on `aarch64`:
+
+**Noop-mode aarch64 bug (follow-up, not blocking the real run):**
+`scripts/materialize-macos-tar-to-img.sh` rejects the noop executor's stub
+output with `tar: This does not look like a tar archive` → exit 2 → the
+img conversion step fails on aarch64 only (x86_64 has no .img step). Fix
+options: (a) gate the img-conversion step on `executor == 'buildah'` in
+the workflow YAML, or (b) make the noop executor emit a valid empty tar.
+Path (a) is cleaner — the .img conversion is fundamentally about real
+rootfs content, not sanity-mode. Owner: l9 area; can wait for a slow loop.
+
+**Real-build run in flight:** `26463472551` (executor=buildah, both archs).
+This is the actual artifact-producing run. On success it will:
+- Upload `tillandsias-rootfs-x86_64.tar` + `tillandsias-rootfs-aarch64.tar`
+  + `tillandsias-rootfs-aarch64.img` as workflow artifacts.
+- Print paste-ready SHA256 TOML for `images/vm/manifest.toml`.
+
+Once green the SHAs get backfilled into `manifest.toml` via a PR off main
+(NOT a direct push — release artifacts are a load-bearing trust surface),
+and that PR cherry-picks back to `linux-next` so the multi-host queues stay
+aligned. Then w5 + m5 are fully unblocked.
+
+**Two consumer questions (a) tag source + (b) manifest delivery remain
+open** — happy to draft recommended answers separately on request.
+
+— linux-host / owner, 2026-05-26T17:13Z
+
+## l9 REAL RUN FAILED; FIX IS PR #3 — 2026-05-26T17:21Z (linux coordinator)
+
+The real `recipe-publish` run `26463472551` completed **failure** before any
+rootfs artifacts or manifest SHA lines were produced. Both `x86_64` and
+`aarch64` materializer jobs failed in the rootfs step with rootless Buildah
+overlay mount exit 125:
+
+- `buildah mount fedora-working-container`: cannot mount using driver overlay
+  in rootless mode; run inside `buildah unshare`.
+- Aggregate SHA failed secondarily because no per-arch artifacts existed.
+
+Fix status: the workflow fix exists on `linux-next` `a18bcbf3` and on open,
+mergeable PR #3 (`ci-recipe-publish-rootless-fix-2026-05-26` → `main`): wrap
+the materializer invocation in `buildah unshare` and skip `.img` conversion
+when a noop/sanity executor produces no real tar.
+
+Current l9 next action is no longer "register workflow"; it is:
+
+1. Land PR #3, or otherwise carry the rootless Buildah fix to `main`.
+2. Rerun `recipe-publish` on `main`.
+3. If green, backfill `images/vm/manifest.toml` SHAs from the aggregate output.
+
+Until that happens, w5 runtime provisioning and macOS live VM/PTY proof remain
+blocked on real artifacts and manifest SHA pins.
+
+## ⚠️ materialize must stay Windows-COMPILABLE — 2026-05-26 (windows host)
+
+`cda91b40` (materializer hydrate/COPY fix) added `std::os::unix::fs::PermissionsExt`
++ `.mode()` to `materialize/exec.rs` **without a cfg gate**, which broke
+`cargo test -p tillandsias-vm-layer --features materialize` on Windows
+(`E0433: cannot find unix in os`). Fixed on windows-next `d05e8945` — cfg(unix)-gated
+the rootfs mode-setting in `recreate_runtime_dirs` (create_dir_all stays
+cross-platform) + gated the two Unix-path/mode behavioral tests. Pure portability,
+Linux semantics + coverage unchanged.
+
+**Why this matters / recurrence guard:** CI is **Linux-only**, so a Windows-breaking
+unix-ism in the shared `materialize` module passes CI green — only the Windows host
+catches it. Windows enables the `recipe` feature today and may enable `materialize`
+for the local-materialization-in-WSL fallback (this doc's "FALLBACK / dev path"),
+so the `materialize` feature MUST keep compiling on Windows. **materialize owner:**
+when touching `materialize/**`, cfg-gate any `std::os::unix` / mode / symlink
+unix-isms (the converters `wsl`/`macos` already follow this — pure-arg builders +
+cfg-gated runtime). Cheap rule: no bare `std::os::unix` in shared vm-layer code.
+
+## ✅ w5 PROVEN — real Fedora VM boots on Windows from the recipe artifact — 2026-05-26 (windows host)
+
+l9 step 3 backfilled real SHAs (`a6163af2`) and the `v0.2.260526.1` release has the
+artifact live (293 MB). windows-next wired + **proved the full w5 flip end-to-end on
+a real Windows box**:
+
+- **Code** (windows-next): `WslLifecycle::provision_via_recipe` (`56760531`) chains
+  embedded manifest + tag → `recipe_rootfs_artifact` → `download_verified` →
+  `materialize::wsl::tar_to_wsl_import` (`wsl --import`) → start. Both w5 consumer
+  questions resolved: manifest delivery = `include_str!` at build, tag source =
+  build-time const (TODO: wire to CalVer). Resolver tests decoupled from the
+  now-real committed SHA (`5b459469`).
+- **Real E2E proof** (manual, this host, WSL2 2.7.3.0):
+  1. `recipe_rootfs_artifact` → `releases/download/v0.2.260526.1/tillandsias-rootfs-x86_64.tar`.
+  2. Downloaded 293,038,080 bytes; **SHA256 = `d940c3b9…1124cbad`, exact match** to the
+     manifest pin.
+  3. `wsl --import … --version 2` → **succeeded**.
+  4. `wsl -d … -- cat /etc/os-release` → **`Fedora Linux 44 (Container Image)`** — the
+     VM boots. (Test distro unregistered after; cached tar retained.)
+
+**The entire l9 → w5 chain is validated.** For **macOS m5**: the same contract path
+holds — your `tar_to_vfr_img` / `fetch_recipe_artifact` should consume the identical
+manifest `artifact_url` + SHA (aarch64.img); expect the same clean result once your
+`.img` artifact publishes.
+
+**Remaining for full "Ready" (next w-increment, not blocking the boot proof):**
+write `/etc/wsl.conf` (systemd=true) on import so the in-VM headless self-installs
+(`fetch-headless.sh` on first boot) + the systemd unit starts → vsock `Hello`/
+`HelloAck` → tray menu Provisioning→Ready. Then a real "Open Shell" into the forge.
+
+— w4/w5 owner (windows-next), 2026-05-26
+
+## 🚦 macOS m5 — E2E proof plan, READY to execute when aarch64.img SHA lands — 2026-05-26 (macOS host)
+
+Acking w5 PROVEN above. Same contract path holds for macOS, with the
+`aarch64.img` format substitution. Documenting the exact repro plan in
+advance so the moment `aarch64.img` is pinned to a real SHA in
+`images/vm/manifest.toml`, the proof is a paste-and-run exercise.
+
+**Pre-flight check** (run any time; currently fails on SHA gate):
+```bash
+# What the macOS tray's startVm flow does on first launch:
+cargo run -p tillandsias-macos-tray --bin tillandsias-tray
+# Click Start VM → expected stderr today:
+#   [tillandsias-tray] Start VM: rootfs.img missing at <image_root>/rootfs.img;
+#     attempting recipe-artifact fetch
+#   [tillandsias-tray] Start VM failed: recipe-artifact fetch failed (tag=…):
+#     artifact .../tillandsias-rootfs-aarch64.img has no pinned SHA-256
+#     (got "pending-ci"); refusing to fetch unverified
+#     If the SHA pin is still 'pending-ci', wait for the next recipe-publish
+#     CI run + the SHA-pin commit (l9 step 5).
+```
+
+**Once `aarch64.img` SHA is pinned**, the proof is structurally identical to
+Windows's w5:
+
+  1. `Manifest::artifact_url("aarch64", "img", "<tag>")` resolves to
+     `releases/download/<tag>/tillandsias-rootfs-aarch64.img`.
+  2. `download_verified` fetches; SHA-256 matches the pin.
+  3. `VzRuntime::start` boots the .img via Virtualization.framework
+     (EFI bootloader + raw ext4 root + virtio-vsock).
+  4. `wait_ready` completes the Hello/HelloAck handshake on
+     `CONTROL_WIRE_VSOCK_PORT` (= 42420).
+  5. Menu flips Provisioning→Ready.
+  6. Click Open Shell → live PTY-over-vsock attach (slice 4c.2 chain) →
+     Terminal.app opens with `screen /dev/ttysNN`.
+  7. Click GitHub login → same path with `gh auth login` (slice 5b chain).
+
+**Manual proof commands** (executable on Apple Silicon the moment SHA lands):
+```bash
+# 1. Fetch the .img directly to verify the URL + SHA contract before the tray
+#    tries it, so any mismatch surfaces in isolation:
+TAG="v0.2.260526.X"   # whichever release has the .img + pinned SHA
+gh release download "$TAG" -p 'tillandsias-rootfs-aarch64.img' -O /tmp/aarch64.img
+shasum -a 256 /tmp/aarch64.img
+# Expected: matches the pin in images/vm/manifest.toml [output.expected_rootfs_sha]
+#          "aarch64.img" entry.
+
+# 2. Stage the verified .img where VzRuntime expects it:
+mkdir -p ~/Library/Application\ Support/tillandsias/
+cp /tmp/aarch64.img ~/Library/Application\ Support/tillandsias/rootfs.img
+
+# 3. Launch the tray:
+./scripts/build-macos-tray.sh   # rebuild to embed the SHA-pinned manifest
+open dist/Tillandsias.app
+
+# 4. Click Start VM → expected stderr:
+#   [tillandsias-tray] Start VM: spawning worker (image_root=...)
+#   [tillandsias-tray] Start VM: VM is running
+#   (menu re-render shows Ready)
+
+# 5. Click Open Shell → expected stderr:
+#   [tillandsias-tray] Open Shell: spawning attach worker
+#   [tillandsias-tray] Open Shell: PTY attached at /dev/ttysNNN
+#   Terminal.app opens; `screen /dev/ttysNNN` running; in-VM bash prompt visible.
+
+# 6. Click GitHub login → expected stderr:
+#   [tillandsias-tray] GitHub login: spawning attach worker
+#   [tillandsias-tray] GitHub login: PTY attached at /dev/ttysNNN
+#   Terminal.app opens; `gh auth login` running inside the VM.
+
+# 7. Spec invariant check:
+pgrep -f ssh     # MUST return nothing (terminal-attach-no-ssh)
+```
+
+**Test sweep that will validate code state at SHA-pin moment**:
+```bash
+cargo test -p tillandsias-vm-layer --features recipe,download,materialize --lib
+cargo test -p tillandsias-macos-tray --bin tillandsias-tray
+# Expect: vm-layer 63/63 (or higher if Linux added more), macos-tray 26/26.
+# The `run_start_reports_pending_sha_until_l9_step5` test will FLIP from
+# "asserts SHA gate" to needing #[ignore] (needs network); update at that
+# moment.
+```
+
+**What macOS does NOT need to wait for** (i.e. the chain works the moment
+aarch64.img SHA lands — no additional code commits required):
+ - All 10 m4 sub-task B slices (TrayActionHost + dispatch + Tokio +
+   VzRuntime start/stop + PTY-over-vsock + Terminal.app spawn).
+ - m5 primitive + wiring (`VzRuntime::fetch_recipe_artifact` consuming
+   the l9 contract; `run_start` auto-fetches on first launch).
+ - Bundled manifest via `include_str!`.
+
+**Only remaining mechanical step on macOS**: a `cargo build --release` to
+pick up the new manifest SHA (since the manifest is embedded at build
+time). `scripts/build-macos-tray.sh` does this in ~3s on a warm cache.
+
+— osx-next-claude-opus-4-7, 2026-05-26T20:55Z
+
+## 🔴 NEXT BLOCKER (all hosts) — in-VM first-boot headless fetch 404s — 2026-05-26 (windows host, via deep E2E)
+
+windows-next ran the full real E2E (import `v0.2.260526.1` rootfs → wsl.conf
+systemd=true → boot). **systemd boots fine** under WSL2 (PID 1 = systemd,
+`systemctl is-system-running` → `degraded`). But the rootfs's **first-boot
+`tillandsias-headless-fetch.service` FAILS**, which is what gates the headless
+coming up (and therefore the vsock handshake → tray "Ready" on *both* Windows
+and macOS, since both boot the same recipe rootfs + units).
+
+**Exact cause** (journalctl): `fetch-headless.sh` does
+```
+curl --fail … https://github.com/8007342/tillandsias/releases/latest/download/tillandsias-headless-x86_64-unknown-linux-musl
+→ curl: (22) … 404
+```
+The rootfs ships the units + `fetch-headless.sh` correctly, but the
+**`tillandsias-headless-<arch>-unknown-linux-musl` asset is NOT published** at
+`releases/latest` (the release has the rootfs `.tar`, not the headless binary).
+
+**Ask (release/recipe owner, Linux):** publish the musl headless binary as a
+release asset named `tillandsias-headless-{x86_64,aarch64}-unknown-linux-musl`
+(the name `fetch-headless.sh` expects), OR fix the fetch URL/asset name to match
+what `release.yml` actually uploads. Until then the VM boots but the headless
+never installs → no vsock handshake → no "Ready" on Windows OR macOS.
+
+**Other finding (already fixed windows-side, `c5626532`):** the recipe rootfs has
+**no `forge` Linux user**, so `wsl.conf [user] default = forge` breaks default
+login. windows-next's `configure_recipe_distro` now omits it (default = root;
+Open Shell enters the forge *container* via `podman exec`). If macOS sets a
+default user in its VM config, same caveat applies.
+
+Windows host-side w5 is otherwise COMPLETE + proven: fetch rootfs → verify SHA →
+import → systemd boots. Only the in-VM headless self-install (above) remains, and
+it's cross-host + release-owned.
+
+— w4/w5 owner (windows-next), 2026-05-26
+
+## macOS host ACK 2026-05-26T21:00Z — headless 404 blocker confirmed cross-cutting; no macOS-specific config issues
+
+Acking `555e9257` (NEXT BLOCKER: in-VM headless fetch 404s). Confirmed
+cross-host impact + no additional macOS-specific findings:
+
+**macOS impact**: identical to Windows. Once `aarch64.img` SHA is pinned
++ a real release ships, the macOS VM will boot the same recipe rootfs +
+units, hit the same `tillandsias-headless-fetch.service` curl 404, and
+likewise never reach `Hello`/`HelloAck` → tray stays Provisioning forever
+on m4 sub-task B's pre-Open-Shell gate.
+
+**Verified no macOS-specific user-config issue**: `grep -rn
+'default.*user\|forge user\|default_user' crates/tillandsias-macos-tray/
+crates/tillandsias-vm-layer/src/vz.rs` returns nothing — macOS configures
+the VM via VZ boot args, not `/etc/wsl.conf`, so the
+"no `forge` Linux user in rootfs" gotcha that windows fixed at
+`c5626532` doesn't have a macOS analog. The in-VM `pty_handler` calls
+`podman exec -it tillandsias-${project}-forge` via the shared
+`launch_spec` (the convergence-coordinated argv shape), which runs as
+root in the VM and enters the forge container by name.
+
+**Verified release asset list** for `v0.2.260526.1`:
+```
+tillandsias-rootfs-aarch64.tar
+tillandsias-rootfs-x86_64.tar
+```
+No `tillandsias-headless-{x86_64,aarch64}-unknown-linux-musl` — the
+release/recipe owner ask above (Linux) is the unblock.
+
+**No code action required from macOS** — the in-VM headless lifecycle is
+release-asset + recipe-rootfs territory. Adding to the gate-summary:
+macOS first-Ready chain is now `aarch64.img SHA pin → headless binary
+release asset` (both Linux-owned).
+
+— osx-next-claude-opus-4-7, 2026-05-26T21:00Z

@@ -54,6 +54,33 @@ pub trait LayerExecutor {
 
 // -- Real production impl: `buildah` subprocess -----------------------------
 
+/// Virtual / runtime filesystem mount points that are excluded from each
+/// layer's snapshot tar (the guest re-populates them at boot, and copying
+/// the host's contents would bloat the tar). They must still EXIST as
+/// empty directories in every hydrated layer, otherwise build-time tools
+/// that write into them fail — e.g. dnf's librepo creating
+/// `/tmp/librepo-tmp-*`, which surfaces as
+/// `Cannot create temporary file ... No such file or directory`.
+/// We exclude-on-snapshot ([`BuildahExec::snapshot_tar`]) but
+/// recreate-on-hydrate ([`recreate_runtime_dirs`]) so the invariant holds.
+const RUNTIME_VIRTUAL_DIRS: &[&str] = &["proc", "sys", "dev", "run", "tmp"];
+
+/// Recreate the runtime virtual-fs mount points (excluded from snapshot
+/// tars) as empty directories with kernel-standard permissions. `/tmp`
+/// gets the sticky, world-writable mode `01777`; the rest `0755`.
+fn recreate_runtime_dirs(root: &Path) -> Result<(), ExecError> {
+    use std::os::unix::fs::PermissionsExt;
+    for dir in RUNTIME_VIRTUAL_DIRS {
+        let path = root.join(dir);
+        std::fs::create_dir_all(&path)
+            .map_err(|e| format!("recreate runtime dir {}: {e}", path.display()))?;
+        let mode = if *dir == "tmp" { 0o1777 } else { 0o755 };
+        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode))
+            .map_err(|e| format!("chmod runtime dir {} to {mode:o}: {e}", path.display()))?;
+    }
+    Ok(())
+}
+
 /// Production executor: shells out to `buildah` inside a throwaway
 /// working container. Linux-host only. Requires `buildah` on PATH; the
 /// materializer will surface a clear error if it isn't.
@@ -79,6 +106,12 @@ pub struct BuildahExec {
     binary: PathBuf,
     /// Optional `tar` binary path; defaults to `"tar"`.
     tar_binary: PathBuf,
+    /// Build context directory: relative `COPY`/`ADD` sources are resolved
+    /// against this, matching Containerfile semantics where source paths
+    /// are relative to the build context (conventionally the Recipefile's
+    /// directory), NOT the process CWD. `None` falls back to CWD-relative
+    /// resolution (buildah's default).
+    context_dir: Option<PathBuf>,
 }
 
 impl Default for BuildahExec {
@@ -86,6 +119,7 @@ impl Default for BuildahExec {
         Self {
             binary: PathBuf::from("buildah"),
             tar_binary: PathBuf::from("tar"),
+            context_dir: None,
         }
     }
 }
@@ -95,6 +129,7 @@ impl std::fmt::Debug for BuildahExec {
         f.debug_struct("BuildahExec")
             .field("binary", &self.binary)
             .field("tar_binary", &self.tar_binary)
+            .field("context_dir", &self.context_dir)
             .finish()
     }
 }
@@ -110,6 +145,28 @@ impl BuildahExec {
     pub fn with_tar(mut self, path: PathBuf) -> Self {
         self.tar_binary = path;
         self
+    }
+
+    /// Set the build-context directory for relative `COPY`/`ADD` source
+    /// resolution. Callers should pass the Recipefile's parent directory.
+    pub fn with_context(mut self, dir: PathBuf) -> Self {
+        self.context_dir = Some(dir);
+        self
+    }
+
+    /// Resolve a `COPY`/`ADD` source path against the build context.
+    /// Absolute sources are returned unchanged; relative sources are
+    /// joined onto `context_dir` when set, else returned as-is (CWD
+    /// relative).
+    fn resolve_copy_src(&self, src: &str) -> String {
+        let src_path = Path::new(src);
+        if src_path.is_absolute() {
+            return src.to_string();
+        }
+        match &self.context_dir {
+            Some(ctx) => ctx.join(src_path).to_string_lossy().into_owned(),
+            None => src.to_string(),
+        }
     }
 
     /// Run `buildah <args>` to completion, returning stdout (or the
@@ -163,6 +220,16 @@ impl BuildahExec {
             .arg(&mount_point)
             .status()
             .map_err(|e| format!("spawn tar -xf {}: {e}", tar_path.display()))?;
+        // Recreate the virtual-fs mount points excluded from the snapshot
+        // tar, while the container is still mounted. Without this a layer
+        // built `from scratch` lacks /tmp (etc.), and the next RUN's tools
+        // fail — e.g. `dnf` → `mkstemp '/tmp/librepo-tmp-*': No such file
+        // or directory`. Only attempt when the extraction succeeded.
+        let mkdir_result = if tar_status.success() {
+            recreate_runtime_dirs(Path::new(&mount_point))
+        } else {
+            Ok(())
+        };
         // Always umount (best-effort) before propagating an error.
         let _ = self.run_buildah(&["umount", ctr]);
         if !tar_status.success() {
@@ -172,7 +239,7 @@ impl BuildahExec {
                 mount_point
             ));
         }
-        Ok(())
+        mkdir_result
     }
 
     /// Apply `instruction` against the container.
@@ -183,7 +250,12 @@ impl BuildahExec {
                 .run_buildah(&["run", ctr, "--", "/bin/sh", "-c", script])
                 .map(|_| ()),
             Instruction::Copy { src, dest } => {
-                self.run_buildah(&["copy", ctr, src, dest]).map(|_| ())
+                // Resolve the source against the build context (Recipefile
+                // dir) so `COPY bootstrap/ ...` finds `images/vm/bootstrap/`
+                // regardless of the process CWD.
+                let resolved_src = self.resolve_copy_src(src);
+                self.run_buildah(&["copy", ctr, &resolved_src, dest])
+                    .map(|_| ())
             }
             Instruction::Env { key, value } => self
                 .run_buildah(&["config", "--env", &format!("{key}={value}"), ctr])
@@ -213,18 +285,17 @@ impl BuildahExec {
     /// need privileged tar invocations.
     fn snapshot_tar(&self, ctr: &str, dst: &Path) -> Result<(), ExecError> {
         let mount_point = self.run_buildah(&["mount", ctr])?.trim().to_string();
-        let tar_status = Command::new(&self.tar_binary)
-            .arg("-cf")
-            .arg(dst)
-            // Exclude virtual filesystems that have no business in a
-            // rootfs tar — they're mount points the guest re-populates
-            // at boot, and copying their host contents bloats the tar
-            // without value.
-            .arg("--exclude=./proc")
-            .arg("--exclude=./sys")
-            .arg("--exclude=./dev")
-            .arg("--exclude=./run")
-            .arg("--exclude=./tmp")
+        let mut cmd = Command::new(&self.tar_binary);
+        cmd.arg("-cf").arg(dst);
+        // Exclude virtual filesystems that have no business in a rootfs
+        // tar — they're mount points the guest re-populates at boot, and
+        // copying their host contents bloats the tar without value. They
+        // are recreated as empty dirs on the next hydrate via
+        // `recreate_runtime_dirs` so build-time tools still find them.
+        for dir in RUNTIME_VIRTUAL_DIRS {
+            cmd.arg(format!("--exclude=./{dir}"));
+        }
+        let tar_status = cmd
             .arg("-C")
             .arg(&mount_point)
             .arg(".")
@@ -354,6 +425,37 @@ impl LayerExecutor for NoopExec {
 mod tests {
     use super::*;
     use crate::materialize::layer_key::layer_key;
+
+    #[test]
+    fn recreate_runtime_dirs_makes_tmp_world_writable_sticky() {
+        use std::os::unix::fs::PermissionsExt;
+        let tmp = tempfile::tempdir().unwrap();
+        recreate_runtime_dirs(tmp.path()).unwrap();
+        for dir in RUNTIME_VIRTUAL_DIRS {
+            let p = tmp.path().join(dir);
+            assert!(p.is_dir(), "{dir} should exist as a directory");
+            let mode = std::fs::metadata(&p).unwrap().permissions().mode() & 0o7777;
+            let want = if *dir == "tmp" { 0o1777 } else { 0o755 };
+            assert_eq!(mode, want, "{dir} mode {mode:o} != {want:o}");
+        }
+    }
+
+    #[test]
+    fn resolve_copy_src_joins_relative_onto_context() {
+        let exec = BuildahExec::default().with_context(PathBuf::from("/repo/images/vm"));
+        assert_eq!(
+            exec.resolve_copy_src("bootstrap/"),
+            "/repo/images/vm/bootstrap/"
+        );
+        // Absolute sources pass through untouched.
+        assert_eq!(exec.resolve_copy_src("/etc/hosts"), "/etc/hosts");
+    }
+
+    #[test]
+    fn resolve_copy_src_without_context_is_cwd_relative() {
+        let exec = BuildahExec::default();
+        assert_eq!(exec.resolve_copy_src("bootstrap/"), "bootstrap/");
+    }
 
     #[test]
     fn noop_exec_increments_call_count() {

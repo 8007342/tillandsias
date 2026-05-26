@@ -45,7 +45,11 @@ impl std::fmt::Display for ConvertError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
             Self::ScriptNotFound(p) => {
-                write!(f, "materialize-macos-tar-to-img.sh not found at {}", p.display())
+                write!(
+                    f,
+                    "materialize-macos-tar-to-img.sh not found at {}",
+                    p.display()
+                )
             }
             Self::TarMissing(p) => write!(f, "rootfs tar missing at {}", p.display()),
             Self::ScriptFailed { exit_code, stderr } => write!(
@@ -62,14 +66,14 @@ impl std::error::Error for ConvertError {}
 /// Convert a materialized rootfs `.tar` into a VFR-bootable raw `.img`.
 ///
 /// Inputs:
-///   - `tar`:           absolute path to the materialized rootfs tar (the
-///                      output of `materialize::run` once Linux's §3
-///                      driver lands; or a hand-rolled tar for testing).
-///   - `out_img`:       absolute path to write the resulting `.img`. Will
-///                      be overwritten if it exists.
-///   - `script`:        absolute path to `scripts/materialize-macos-tar-to-img.sh`.
-///                      For most callers `script_for_repo_root(repo)`
-///                      derives this automatically.
+///   - `tar`: absolute path to the materialized rootfs tar (the
+///     output of `materialize::run` once Linux's §3 driver lands;
+///     or a hand-rolled tar for testing).
+///   - `out_img`: absolute path to write the resulting `.img`. Will
+///     be overwritten if it exists.
+///   - `script`: absolute path to `scripts/materialize-macos-tar-to-img.sh`.
+///     For most callers `script_for_repo_root(repo)` derives this
+///     automatically.
 ///
 /// Returns `Ok(())` on a successful conversion; the `.img` is written to
 /// `out_img` and is ready to be served as the `aarch64.img` artifact of
@@ -84,11 +88,7 @@ impl std::error::Error for ConvertError {}
 /// need `sudo`.
 ///
 /// @trace openspec/changes/vm-recipe-provisioning §3.7.1, §D6
-pub fn tar_to_vfr_img(
-    tar: &Path,
-    out_img: &Path,
-    script: &Path,
-) -> Result<(), ConvertError> {
+pub fn tar_to_vfr_img(tar: &Path, out_img: &Path, script: &Path) -> Result<(), ConvertError> {
     if !script.exists() {
         return Err(ConvertError::ScriptNotFound(script.to_path_buf()));
     }

@@ -1,18 +1,26 @@
 //! Idiomatic terminal attach for the macOS tray.
 //!
-//! When the user clicks "Attach Here" on a project, this module:
-//! 1. Detects which terminal is preferred (iTerm2 > Warp > Terminal.app).
-//! 2. Composes the right AppleScript snippet for that terminal to open a
-//!    new window/tab running `vm-exec podman exec -it tillandsias-<proj>-forge bash`.
-//! 3. Spawns `osascript -e '<snippet>'` (Warp uses `open -a` instead).
+//! Two flows live here:
 //!
-//! The AppleScript formatting and the detection ordering live in pure-Rust
-//! functions so the Linux dev box can run unit tests. The actual
-//! `NSWorkspace::URLForApplicationWithBundleIdentifier:` query and the
-//! `osascript` spawn are macOS-only and behind `#[cfg(target_os = "macos")]`.
+//! 1. **Live PTY attach** (production path, post-slice-4c.2): the
+//!    action-host opens a host-side `UnixPtyMaster`, `pump_io` bridges
+//!    it to the in-VM forge over vsock, and this module spawns
+//!    Terminal.app via `osascript "tell ... do script \"screen
+//!    <slave>\""` — the only way to point Terminal.app at an
+//!    external PTY device.
+//! 2. **Stub-window fallback** (pre-VM / error UX): the action-host
+//!    surfaces error context by spawning Terminal.app with an
+//!    `echo '<message>'` body so the user always sees concrete
+//!    feedback when the click can't reach the in-VM shell.
+//!
+//! `LiveInstalledTerminals` detects iTerm2 > Warp > Terminal.app via
+//! `NSWorkspace::URLForApplicationWithBundleIdentifier:` (macOS-only);
+//! all AppleScript formatters are pure-Rust functions so the Linux
+//! dev box can run unit tests against them.
 //!
 //! @trace spec:macos-native-tray.lifecycle.terminal-attach@v1,
-//!        spec:macos-native-tray.invariant.terminal-attach-no-ssh
+//!        spec:macos-native-tray.invariant.terminal-attach-no-ssh,
+//!        cheatsheets/runtime/macos-pty-attach.md
 
 #![allow(dead_code)]
 #![allow(unused)]
@@ -80,17 +88,6 @@ pub fn detect_terminal(installed: &dyn InstalledTerminals) -> Terminal {
     Terminal::TerminalApp
 }
 
-/// Build the shell command that launches the in-VM forge for a project.
-///
-/// Centralised so the AppleScript snippets and any future direct-spawn
-/// path render the same string. Per spec invariant
-/// `terminal-attach-no-ssh`, this never invokes `ssh`.
-///
-/// @trace spec:macos-native-tray.invariant.terminal-attach-no-ssh
-pub fn vm_exec_command(project: &str) -> String {
-    format!("tillandsias-vm-layer-exec podman exec -it tillandsias-{project}-forge bash")
-}
-
 /// AppleScript-quote a string by doubling embedded backslashes and double
 /// quotes. AppleScript string literals are `"…"` with `\\` and `\"` as the
 /// escape sequences for backslash and double-quote respectively.
@@ -124,7 +121,8 @@ pub fn applescript_for_open_shell_stub(message: &str) -> String {
     // Wrap in `echo '…'; sleep N` so the window stays open long enough
     // for the user to read the message before Terminal.app's "shell
     // exited" prompt appears.
-    let command = format!("echo '{shell_escaped}'; echo; echo '(window stays open — close with Cmd-W)'");
+    let command =
+        format!("echo '{shell_escaped}'; echo; echo '(window stays open — close with Cmd-W)'");
     applescript_for_terminal_app(&command)
 }
 
@@ -174,18 +172,6 @@ pub fn applescript_for_iterm2(command: &str) -> String {
          end tell\n    \
          activate\nend tell"
     )
-}
-
-/// Spawn instructions for Warp — Warp does not accept AppleScript for
-/// scripted commands, so we fall back to `open -a` and rely on Warp's
-/// URL scheme (or a "Warp Drive" launcher in a future iteration).
-///
-/// @trace spec:macos-native-tray.lifecycle.terminal-attach@v1
-pub fn spawn_argv_for_warp(command: &str) -> Vec<String> {
-    // Equivalent to `open -na "Warp" --args` would be ideal but Warp lacks
-    // a documented launch-with-argv. For v1 we just open Warp and let the
-    // user paste the command, which we put on the clipboard via osascript.
-    vec!["open".to_string(), "-a".to_string(), "Warp".to_string()]
 }
 
 // ---------------------------------------------------------------------------
@@ -277,45 +263,11 @@ mod live {
         Ok(())
     }
 
-    /// Spawn the chosen terminal via `osascript -e <snippet>` (or `open -a`
-    /// for Warp). Returns immediately; the terminal runs detached.
-    ///
-    /// @trace spec:macos-native-tray.lifecycle.terminal-attach@v1
-    pub fn spawn_terminal(terminal: Terminal, project: &str) -> std::io::Result<()> {
-        let command = vm_exec_command(project);
-        match terminal {
-            Terminal::ITerm2 => {
-                let snippet = applescript_for_iterm2(&command);
-                std::process::Command::new("osascript")
-                    .arg("-e")
-                    .arg(&snippet)
-                    .spawn()?
-                    .wait()?;
-                Ok(())
-            }
-            Terminal::TerminalApp => {
-                let snippet = applescript_for_terminal_app(&command);
-                std::process::Command::new("osascript")
-                    .arg("-e")
-                    .arg(&snippet)
-                    .spawn()?
-                    .wait()?;
-                Ok(())
-            }
-            Terminal::Warp => {
-                let argv = spawn_argv_for_warp(&command);
-                std::process::Command::new(&argv[0])
-                    .args(&argv[1..])
-                    .spawn()?;
-                Ok(())
-            }
-        }
-    }
 }
 
 #[cfg(target_os = "macos")]
 pub use live::{
-    spawn_terminal, spawn_terminal_pty_attach, spawn_terminal_stub_window, LiveInstalledTerminals,
+    LiveInstalledTerminals, spawn_terminal_pty_attach, spawn_terminal_stub_window,
 };
 
 #[cfg(test)]
@@ -398,13 +350,20 @@ mod tests {
         assert!(snippet.contains("tillandsias-foo-forge"));
     }
 
+    /// Spec invariant: the live PTY attach path (slice 4c.2) connects
+    /// via vsock + a host UnixPtyMaster + `screen <slave_path>` — no
+    /// SSH anywhere. Asserting on `applescript_for_screen_attach`
+    /// proves the user-facing osascript snippet doesn't sneak ssh in.
+    ///
     /// @trace spec:macos-native-tray.invariant.terminal-attach-no-ssh
     #[test]
-    fn vm_exec_command_never_invokes_ssh() {
-        let cmd = vm_exec_command("tillandsias");
-        assert!(!cmd.contains("ssh"), "vm_exec must never use ssh: {cmd}");
-        assert!(cmd.contains("podman exec -it"));
-        assert!(cmd.contains("tillandsias-tillandsias-forge"));
+    fn screen_attach_never_invokes_ssh() {
+        let snippet = applescript_for_screen_attach("/dev/ttys001");
+        assert!(
+            !snippet.contains("ssh"),
+            "live PTY attach must never use ssh: {snippet}"
+        );
+        assert!(snippet.contains("screen /dev/ttys001"));
     }
 
     /// @trace plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 4c.2)
@@ -440,13 +399,6 @@ mod tests {
         // gets a visible window.
         assert!(snippet.contains("tell application \"Terminal\""));
         assert!(snippet.contains("do script"));
-    }
-
-    /// @trace spec:macos-native-tray.lifecycle.terminal-attach@v1
-    #[test]
-    fn warp_spawn_uses_open_dash_a() {
-        let argv = spawn_argv_for_warp("any-command");
-        assert_eq!(argv, vec!["open", "-a", "Warp"]);
     }
 
     /// @trace spec:macos-native-tray.lifecycle.terminal-attach@v1

@@ -56,11 +56,11 @@ use std::time::Duration;
 
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, NSObject};
-use objc2::{declare_class, msg_send_id, mutability, ClassType, DeclaredClass};
+use objc2::{ClassType, DeclaredClass, declare_class, msg_send_id, mutability};
 use objc2_foundation::MainThreadMarker;
 
-use tillandsias_vm_layer::vz::VzRuntime;
 use tillandsias_vm_layer::VmRuntime;
+use tillandsias_vm_layer::vz::VzRuntime;
 
 use crate::main_thread::dispatch_to_main_thread;
 
@@ -218,9 +218,7 @@ impl TrayActionHost {
         let vz = match ivars.vm.lock().unwrap().clone() {
             Some(vz) => vz,
             None => {
-                eprintln!(
-                    "[tillandsias-tray] {label}: no VM running. Start VM first."
-                );
+                eprintln!("[tillandsias-tray] {label}: no VM running. Start VM first.");
                 return;
             }
         };
@@ -228,30 +226,22 @@ impl TrayActionHost {
         eprintln!("[tillandsias-tray] {label}: spawning attach worker");
         runtime.spawn(async move {
             let result = run_pty_attach(vz, intent).await;
-            dispatch_to_main_thread(move || {
-                match result {
-                    Ok(slave_path) => {
-                        eprintln!(
-                            "[tillandsias-tray] {label}: PTY attached at {slave_path}"
-                        );
-                        if let Err(e) =
-                            crate::terminal_attach::spawn_terminal_pty_attach(&slave_path)
-                        {
-                            eprintln!(
-                                "[tillandsias-tray] {label}: terminal spawn failed: {e}"
-                            );
-                        }
+            dispatch_to_main_thread(move || match result {
+                Ok(slave_path) => {
+                    eprintln!("[tillandsias-tray] {label}: PTY attached at {slave_path}");
+                    if let Err(e) = crate::terminal_attach::spawn_terminal_pty_attach(&slave_path) {
+                        eprintln!("[tillandsias-tray] {label}: terminal spawn failed: {e}");
                     }
-                    Err(e) => {
-                        eprintln!("[tillandsias-tray] {label} failed: {e}");
-                        let stub = format!(
-                            "Tillandsias — {label} could not attach. \
+                }
+                Err(e) => {
+                    eprintln!("[tillandsias-tray] {label} failed: {e}");
+                    let stub = format!(
+                        "Tillandsias — {label} could not attach. \
                              Error: {e}\n\nLive PTY attach needs a booted VM \
                              with a working in-VM headless on vsock port \
                              42420 (gated on m5 recipe-artifact fetch)."
-                        );
-                        let _ = crate::terminal_attach::spawn_terminal_stub_window(&stub);
-                    }
+                    );
+                    let _ = crate::terminal_attach::spawn_terminal_stub_window(&stub);
                 }
             });
         });
@@ -283,7 +273,7 @@ async fn run_pty_attach(
     use tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
     use tillandsias_host_shell::pty::unix::UnixPtyMaster;
     use tillandsias_host_shell::pty::{
-        launch_spec, pump_io, PtyRouter, PtySession, SessionIdAllocator,
+        PtyRouter, PtySession, SessionIdAllocator, launch_spec, pump_io,
     };
 
     let stream = vz
@@ -343,16 +333,16 @@ async fn run_start(
         let manifest = tillandsias_vm_layer::recipe::Manifest::from_toml(BUNDLED_MANIFEST_TOML)
             .map_err(|e| format!("bundled manifest parse: {e}"))?;
         let tag = format!("v{}", env!("CARGO_PKG_VERSION"));
-        vz.fetch_recipe_artifact(&manifest, &tag).await.map_err(|e| {
-            format!(
-                "recipe-artifact fetch failed (tag={tag}): {e}\n\n\
+        vz.fetch_recipe_artifact(&manifest, &tag)
+            .await
+            .map_err(|e| {
+                format!(
+                    "recipe-artifact fetch failed (tag={tag}): {e}\n\n\
                  If the SHA pin is still 'pending-ci', wait for the next \
                  recipe-publish CI run + the SHA-pin commit (l9 step 5)."
-            )
-        })?;
-        eprintln!(
-            "[tillandsias-tray] Start VM: rootfs.img fetched successfully"
-        );
+                )
+            })?;
+        eprintln!("[tillandsias-tray] Start VM: rootfs.img fetched successfully");
     }
 
     vz.start().await?;
@@ -366,8 +356,7 @@ async fn run_start(
 /// `images/vm/manifest.toml` at the commit the .app was built from.
 /// Updating the manifest (e.g. SHA pin after CI run) requires a
 /// rebuild of the macOS tray.
-const BUNDLED_MANIFEST_TOML: &str =
-    include_str!("../../../images/vm/manifest.toml");
+const BUNDLED_MANIFEST_TOML: &str = include_str!("../../../images/vm/manifest.toml");
 
 impl TrayActionHost {
     /// Construct on the AppKit main thread. `mtm` proves we're on the
@@ -429,8 +418,7 @@ mod tests {
             "expected fetch-failed error, got: {err}"
         );
         assert!(
-            err.contains("no pinned SHA-256")
-                || err.contains("pending-ci"),
+            err.contains("no pinned SHA-256") || err.contains("pending-ci"),
             "expected SHA-gate explanation, got: {err}"
         );
         assert!(vm_slot.lock().unwrap().is_none(), "slot should stay empty");

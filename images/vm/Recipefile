@@ -22,12 +22,13 @@ FROM registry.fedoraproject.org/fedora:44
 
 # Core OS packages: systemd init (replaces the container's default of just
 # running argv[0]), networking, sshd disabled in favor of vsock, podman for
-# the inner enclave, basic devtools the bootstrap scripts need.
+# the inner enclave, basic devtools the bootstrap scripts need. No compiler
+# toolchain: tillandsias-headless is NOT built here — it's curl-installed on
+# first boot from the GitHub release (see bootstrap/20-tillandsias.sh).
 RUN dnf install -y --setopt=install_weak_deps=False --setopt=tsflags=nodocs \
         systemd systemd-resolved openssh-server \
         podman \
         bash coreutils findutils grep sed gawk tar gzip xz curl ca-certificates \
-        rustup \
     && dnf clean all
 
 # Bootstrap scripts: each one runs at its own RUN step so D3 layer caching

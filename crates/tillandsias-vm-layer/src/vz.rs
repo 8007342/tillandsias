@@ -145,7 +145,7 @@ impl VzRuntime {
         manifest: &crate::recipe::Manifest,
         tag: &str,
     ) -> Result<(), String> {
-        use crate::fetch::{download_verified, RemoteArtifact};
+        use crate::fetch::{RemoteArtifact, download_verified};
 
         let arch = if cfg!(target_arch = "aarch64") {
             "aarch64"
@@ -155,18 +155,18 @@ impl VzRuntime {
         let format = "img";
         let key = format!("{arch}.{format}");
 
-        let url = manifest
-            .artifact_url(arch, format, tag)
-            .ok_or_else(|| format!(
-                "manifest has no [output].artifact_url_template; cannot resolve {key} URL"
-            ))?;
+        let url = manifest.artifact_url(arch, format, tag).ok_or_else(|| {
+            format!("manifest has no [output].artifact_url_template; cannot resolve {key} URL")
+        })?;
 
         let sha256 = manifest
             .expected_sha(&key)
-            .ok_or_else(|| format!(
-                "manifest [output.expected_rootfs_sha] missing key {key:?}; \
+            .ok_or_else(|| {
+                format!(
+                    "manifest [output.expected_rootfs_sha] missing key {key:?}; \
                  was the recipe-publish CI job run yet?"
-            ))?
+                )
+            })?
             .to_string();
 
         let artifact = RemoteArtifact {
@@ -398,7 +398,7 @@ pub mod boot {
 
             // Generic platform — no Mac-host-specific requirements.
             let platform = VZGenericPlatformConfiguration::new();
-            let plat_super: &VZPlatformConfiguration = &*platform;
+            let plat_super: &VZPlatformConfiguration = &platform;
             cfg.setPlatform(plat_super);
 
             // EFI bootloader with optional persistent NVRAM.
@@ -418,7 +418,7 @@ pub mod boot {
                 };
                 efi.setVariableStore(Some(&store));
             }
-            let efi_super: &VZBootLoader = &*efi;
+            let efi_super: &VZBootLoader = &efi;
             cfg.setBootLoader(Some(efi_super));
 
             // virtio-blk root disk (optional).
@@ -474,7 +474,7 @@ pub mod boot {
                     Some(&write_fh),
                 );
             let serial = VZVirtioConsoleDeviceSerialPortConfiguration::new();
-            let att_super: &VZSerialPortAttachment = &*serial_att;
+            let att_super: &VZSerialPortAttachment = &serial_att;
             serial.setAttachment(Some(att_super));
             let arr_s: Retained<NSArray<VZSerialPortConfiguration>> =
                 NSArray::from_id_slice(&[Retained::cast(serial)]);
@@ -546,7 +546,7 @@ pub mod boot {
             fn open(path: *const std::os::raw::c_char, oflag: c_int) -> c_int;
         }
         let fd = unsafe {
-            open(b"/dev/null\0".as_ptr() as _, 0 /* O_RDONLY */)
+            open(c"/dev/null".as_ptr(), 0 /* O_RDONLY */)
         };
         if fd < 0 { None } else { Some(fd) }
     }
@@ -895,9 +895,9 @@ impl VmRuntime for VzRuntime {
                 Err(crate::transport_macos::ConnectError::NoSocketDevice)
                 | Err(crate::transport_macos::ConnectError::UnexpectedSocketDeviceKind) => {
                     // Structural config error — no point retrying.
-                    return Err(format!(
-                        "VzRuntime::wait_ready: VM config missing virtio-vsock device"
-                    ));
+                    return Err(
+                        "VzRuntime::wait_ready: VM config missing virtio-vsock device".to_string(),
+                    );
                 }
                 Err(_transient) => {
                     // Timeout / VzError / NullConnection — keep retrying.
