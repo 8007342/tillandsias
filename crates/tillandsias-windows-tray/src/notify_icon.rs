@@ -583,14 +583,16 @@ fn selected_agent() -> SelectedAgent {
 /// full host-side path; the remaining step — sending the `PtyOpen` frame over
 /// vsock and pumping the ConPTY — lands with the VM-E2E iteration (w4f).
 fn resolve_and_log_pty_launch(action: &MenuAction) {
-    let Some(intent) = intent_for_action(action, selected_agent()) else {
+    let Some((intent, project)) = intent_for_action(action, selected_agent()) else {
         tracing::warn!(?action, "no PTY intent for action (unexpected in this arm)");
         return;
     };
     // Default geometry until the tray owns a real terminal surface to size from.
-    let spec = launch_spec(&intent, 24, 80);
+    // A project click forge-wraps the argv (podman exec); None runs in the VM.
+    let spec = launch_spec(&intent, project.as_deref(), 24, 80);
     tracing::info!(
         ?intent,
+        project = ?project,
         argv = ?spec.argv,
         "resolved tray click to in-VM PTY launch; vsock attach pending VM-E2E (w4f)"
     );
