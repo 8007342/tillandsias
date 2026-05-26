@@ -48,20 +48,26 @@ artifact_url_template = "https://github.com/8007342/tillandsias/releases/downloa
 # Format keys: "<arch>.<format>" — `tar` for Linux dev + WSL import,
 # `img` for macOS VFR (raw EFI+ext4 image).
 #
-# INTERIM (2026-05-26): the .tar SHAs below are from the FIRST local
-# materialization on the Linux host (buildah, rootless) from Recipefile
-# @ 27b55273, published as release v0.2.260526.1 so Windows w5 + macOS m5
-# can begin testing the fetch→verify→import→boot flow immediately. The
-# `recipe-publish` CI workflow will republish reproducible artifacts; when
-# that run is green these SHAs get replaced with CI's via PR (and the tag
-# in the consuming hosts' config bumped to the CI release).
+# Mixed provenance (2026-05-27), documented per key:
+# - The two .tar SHAs are the FIRST local materialization (buildah, rootless,
+#   Recipefile @ 27b55273), published in release v0.2.260526.1. Windows w5
+#   PROVED its end-to-end flow against the x86_64.tar SHA below, so these are
+#   intentionally LEFT AS-IS to avoid breaking that proof.
+# - aarch64.img is the official `recipe-publish` CI artifact (run 26480767287,
+#   reproducible). It is the uncompressed-image SHA — the published asset is
+#   `tillandsias-rootfs-aarch64.img.xz` (74 MB; the raw 8 GB sparse .img
+#   exceeds GitHub's 2 GiB release-asset limit). Consumers fetch the .img.xz,
+#   `xz -d`, then verify the decompressed .img against this SHA.
+#   Compressed-asset SHA (for .xz download integrity):
+#   f63afc7fe1704622ad275385021ca53fc7c3d03f74ce8c145acb685932c800c3
+# Reproducibility plan: a future release republishes ALL artifacts from CI
+# (official SHAs x86_64.tar=6408fcc8…f4607f, aarch64.tar=f75d5259…09ec6f) under
+# a fresh tag, at which point all three keys point at one reproducible build.
 [output.expected_rootfs_sha]
 "x86_64.tar"  = "d940c3b9a34c7791a5c4cae6ac7cbc5d6bd982722f249f3f6b0caf801124cbad"
 "aarch64.tar" = "5483d0fd9709f200028f09ccfddd8d221286c749ce39586ef92c5d8974cfd669"
-"aarch64.img" = "pending-ci"
+"aarch64.img" = "0e77d1a5273bafc92559ca568b62ea27b311275fdd43833c05ebe4e058b55b92"
 # x86_64.img omitted: no x86_64 VFR consumer in v0.0.1.
-# aarch64.img pending: the tar→.img conversion (materialize-macos-tar-to-img.sh)
-# runs in the recipe-publish CI job, not this local materialize pass.
 
 # Kernel command-line passed to the VM bootloader. Quiet boot + serial
 # console on hvc0 so the host can capture early-boot diagnostics.
