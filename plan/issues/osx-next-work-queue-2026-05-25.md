@@ -2,11 +2,13 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
-Status: **OPEN** as of 2026-05-26T00:18Z. macOS m1, m1b, m2, m3, and m6
-are done. m4 has its Unix PTY foundation (`0551a265`) and still needs the
-user-facing `terminal_attach` wiring. m7 is ready now that m6 produced the
-bundle/install scripts. m5 remains gated on the Linux materializer plus
-macOS-owned recipe-publish deliverables.
+Status: **OPEN** as of 2026-05-26T01:13Z. macOS m1, m1b, m2, m3, m6, and
+m7 are done. m4 has its Unix PTY foundation (`0551a265`) plus the Quit/version
+header slice (`79ff0571`) and still needs the user-facing action-host wiring
+for Start VM / Stop VM / Open Shell. Linux l7 materializer shipped at
+`9dca2c47`, so m5's converter/API work is no longer blocked by the Linux
+materializer; full recipe provisioning remains gated on macOS-owned
+recipe-publish/CI-fetch deliverables.
 
 ## How to use this file
 
@@ -34,10 +36,10 @@ Per branch canon §4, plan/-class writes directly are CORRECT; code commits
 SHOULD route through `osx-next` so the integration loop can run isolation
 checks. Advisory only; both flows still work.
 
-Work-shaping note: m4 user-facing wiring and m7 CI packaging are both large
-enough to occupy a macOS agent for one or two recurrent iterations. If m5
-remains gated on the materializer/rootfs chain, do not idle; continue m4 wiring
-or claim m7 and leave end-to-end recipe evidence for the later m5 packet.
+Work-shaping note: m4 action-host wiring and m5
+`materialize::macos::tar_to_vfr_img` / CI-fetch work are both large enough to
+occupy a macOS agent for one or two recurrent iterations. If recipe-publish
+artifacts are not ready yet, continue m4 wiring rather than idling.
 
 ## Currently unblocked / active
 
@@ -177,8 +179,10 @@ or claim m7 and leave end-to-end recipe evidence for the later m5 packet.
 - capability_tags: [vfr, vm-layer, fetch, provisioning]
 - status: pending
 - gated_on:
-  - linux deliverable `l2/recipe-shared-modules` (recipe parser + Manifest::load)
   - linux deliverable `l5/recipe-smoke-ci-publish` (CI publishes both `.tar` AND `.img` per arch per macOS preference)
+- cleared_gates:
+  - linux deliverable `l2/recipe-shared-modules` integrated at `a7af0ed`
+  - linux deliverable `l7/§3-materializer-driver` shipped at `9dca2c47`
 - depends_on: [m1/vmruntime-stop-and-wait-ready]
 - owned_files:
   - `crates/tillandsias-vm-layer/src/vz.rs` (provisioning slice)
@@ -227,7 +231,8 @@ or claim m7 and leave end-to-end recipe evidence for the later m5 packet.
 - type: feature
 - owner_host: macos (Linux user can author the YAML)
 - capability_tags: [ci, github-actions, macos-runner]
-- status: ready
+- status: done
+- completed_at: 2026-05-26T00:35Z
 - gated_on: []
 - cleared_gates:
   - m6 `macos-installer-pkg-and-codesign` completed at 2026-05-26T00:00Z
@@ -239,17 +244,23 @@ or claim m7 and leave end-to-end recipe evidence for the later m5 packet.
     `tillandsias-tray-<version>-macos-arm64.tar.gz`. Add additive
     macos-* jobs; do not touch Linux/Windows jobs.
 - estimated_effort: 1 day.
+- evidence_on_done:
+  - `.github/workflows/ci.yml` includes a macOS build job that builds the
+    app bundle, verifies plist/codesign/entitlements, runs macOS-cfg-gated
+    tests, and uploads a macOS tray artifact.
+  - `.github/workflows/release.yml` includes a macOS release job that builds,
+    signs, and uploads the macOS tarball and support files.
 
 ## Linux deliverables macOS is waiting on (status mirrors)
 
 | Linux item | Status | Blocks macOS item |
 |---|---|---|
 | `l1/control-wire-pty-attach-tasks-1` | done (`b345ae68`; §1 enum/capability tasks complete) | m4 ready with l3 also done |
-| `l2/recipe-shared-modules` | done (`a7af0ed`; parser tests green on Linux) | m5 still gated on l7 + l5 |
+| `l2/recipe-shared-modules` | done (`a7af0ed`; parser tests green on Linux) | m5 converter/API work unblocked; full provision still gated on l5 |
 | `l3/in-vm-headless-pty-handler` | done (`f770e013`/`8dc0d129`; tasks 4.1-4.7, two pump tests ignored pending AsyncFd rewrite) | m4 ready for host-side wiring |
 | `l4/replace-vsock-stub-handlers` | done (`6956c825`; informational only for macOS) | (informational only for macOS) |
-| `l5/recipe-smoke-ci-publish` | macOS-owned claim; pending l7/materializer | m5 |
-| `l7/§3-materializer-driver` | stale Linux lease `linux-l-mat-2026-05-25T15Z`; ping/reclaim due after fresh read | m5 |
+| `l5/recipe-smoke-ci-publish` | macOS-owned claim; pending recipe-publish/CI-fetch artifact work | m5 |
+| `l7/§3-materializer-driver` | done (`9dca2c47`; materializer feature and cache/export API shipped) | m5 converter/API work unblocked |
 
 ## Events
 
@@ -709,3 +720,24 @@ Asks back to other hosts:
   amend; tombstone if you supersede.
 
 Lease `7b3f1a9d8e02` released.
+
+### event: linux coordinator status reconciliation — 2026-05-26T01:13Z
+
+- Observed remote heads: `linux-next` `cabf9c9f`, `windows-next` `cb39cb7c`,
+  `osx-next` `4aa42c6a`, `main` `ddf52dff`.
+- Folded m7 completion into headers; m7 is done, while m4 remains ready for
+  the action-host sub-task B described above.
+- Folded Linux l7 completion into m5 mirrors. m5 is no longer blocked by the
+  materializer API/cache/export slice; remaining recipe gates are the
+  macOS-owned `recipe-smoke-ci-publish` / CI-fetch artifact path and the macOS
+  `tar_to_vfr_img` converter implementation.
+
+### event: m5 unblock convergence — 2026-05-26T01:35Z (post-merge)
+
+CRDT-merge of the two prior events: Linux confirms l7 (materializer driver)
+done, so m5 is now blocked ONLY on the macOS-owned recipe-publish CI workflow
+and tar_to_vfr_img. **tar_to_vfr_img landed in commit `a77fae00`** (this same
+post-merge cycle), so the remaining single blocker is `recipe-smoke-ci-
+publish` (§2b.3 — also mine). Plan: next eager iter wires the CI job that
+materializes the recipe → `.tar`, runs tar_to_vfr_img → `.img`, uploads both
+artifacts.

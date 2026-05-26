@@ -100,3 +100,9 @@ download = ["dep:reqwest", "dep:sha2", "dep:serde_json", "tokio/fs"]
 # @trace spec:vm-provisioning-lifecycle — shared (co-owned) Recipefile +
 # manifest.toml parser for the recipe materializer. Pure parsing, no VM.
 recipe = ["dep:toml"]
+# @trace spec:vm-provisioning-lifecycle §3-§4 — recipe materializer driver:
+# layer-key derivation, on-disk cache, executor trait, recipe-trace JSONL
+# ledger, GC. Linux-host owns the driver (lease linux-l-mat-2026-05-25T15Z);
+# per-OS converters (§3.7.1 macOS .img, §3.7.2 WSL --import) are sibling
+# claims and live in their own submodules.
+materialize = ["recipe", "dep:sha2", "dep:serde_json"]

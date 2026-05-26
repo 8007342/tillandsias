@@ -2,15 +2,15 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/windows-next-thin-tray.md, plan/issues/tray-convergence-coordination.md, plan/issues/control-socket-protocol-convergence-2026-05-25.md, openspec/changes/control-wire-pty-attach/
 
-Status: **OPEN** as of 2026-05-26T00:18Z. Windows w1, w2, and w3 are done.
-Linux l3 shipped the in-VM PTY handler at `f770e013`/`8dc0d129` and l4 shipped
-real vsock handlers at `6956c825`. Windows w4 is still the active Windows
-packet under lease `8a3307907d94`; the §3 host PTY stack is integrated through
-linux-next `cbf308a`, while w4a/w4b and menu-click launch wiring have advanced
-on `origin/windows-next` at `ae8789ff` (w4 code delta through `93427ed9`) and
-need the integration loop to merge/test them into `linux-next`.
-Remaining WSL rootfs work is gated on Linux materializer plus macOS-owned
-recipe-publish deliverables.
+Status: **OPEN** as of 2026-05-26T01:13Z. Windows w1, w2, w3, and w4 are
+done; w4 launch/menu wiring was merged and tested into `linux-next` at
+`95e4714`. Linux l3 shipped the in-VM PTY handler at `f770e013`/`8dc0d129`,
+l4 shipped real vsock handlers at `6956c825`, and l7 shipped the recipe
+materializer driver at `9dca2c47`. `origin/windows-next` is now ahead only with
+the w5 `materialize::wsl::tar_to_wsl_import` converter slice at `cb39cb7c`;
+the next integration loop should merge/test it into `linux-next`. Remaining
+WSL rootfs provisioning work is gated on macOS-owned recipe-publish/CI-fetch
+artifacts and the live VM artifact path.
 
 ## How to use this file
 
@@ -37,19 +37,19 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
 - `w6/vm-status-and-enumerate-real-handlers` is ready for Windows
   verification after Linux l4 shipped at `6956c825`; useful evidence still
   needs a live/provisioned VM, so it is a fallback behind the recipe path.
-- `w4/pty-attach-conpty` is active through the Windows claim on the shared
-  `host-shell::pty` layer and ConPTY follow-up. Do not create a competing
-  claim; see lease `8a3307907d94` in the Events section.
-- `origin/windows-next` is currently ahead of `linux-next` with w4 launch,
-  channel-transport, menu-click launch, and style commits. The next Linux
-  integration loop should merge/test these or report conflicts.
-- If w4 stalls or w5 remains gated, Windows should claim a larger independent
-  fallback packet rather than idling: w6 verification first, then cache/diagnostic
-  work that can complete without the CI rootfs artifact.
+- `w4/pty-attach-conpty` is done and integrated through `95e4714`. Do not
+  create a competing claim; use the completed lease `8a3307907d94` as history.
+- `origin/windows-next` is currently ahead of `linux-next` with the w5
+  `tar_to_wsl_import` code at `cb39cb7c`. The next Linux integration loop
+  should merge/test it or report exact conflicts.
+- If w5 remains gated on recipe-publish artifacts, Windows should claim a
+  larger independent fallback packet rather than idling: w6 verification first,
+  then cache/diagnostic work that can complete without the CI rootfs artifact.
 
-Do not re-claim w1, w2, or w3; their terminal events are recorded below. The
-next gated Windows implementation item is w5 after Linux l7 plus macOS-owned
-l5 land, unless a newly filed ready item with a stable ID appears first.
+Do not re-claim w1, w2, w3, or w4; their terminal events are recorded below.
+The next gated Windows implementation item is the remaining w5 provisioning
+flip after macOS-owned l5 recipe-publish/CI-fetch lands, unless a newly filed
+ready item with a stable ID appears first.
 
 ### Item: w1/tray-icon-rc-and-ico
 
@@ -146,7 +146,8 @@ l5 land, unless a newly filed ready item with a stable ID appears first.
 - type: feature
 - owner_host: windows
 - capability_tags: [win32, conpty, pty, vsock]
-- status: in_progress
+- status: done
+- completed_at: 2026-05-26T00:49Z
 - lease:
   - lease_id: `8a3307907d94`
   - agent_id: `windows-bullo-claudia-cli-2026-05-25`
@@ -173,11 +174,13 @@ l5 land, unless a newly filed ready item with a stable ID appears first.
   - Windows §3.3 ConPTY lifecycle, process attach, async bridge, and pump_io
     were integrated through linux-next `cbf308a`.
   - w4a launch-spec and w4b `ChannelPtyTransport` landed on windows-next
-    (`af03de7e`, `7dc11bea`) and still need integration into the current
-    `linux-next` tip.
+    (`af03de7e`, `7dc11bea`) and were later integrated into `linux-next`.
   - w4 menu-click launch wiring landed on windows-next `e5ad2295` with style
     cleanup `93427ed9`; it proposes `intent_for_action` as the cross-host
     menu-action-to-PTY-intent table for macOS m4 to adopt or amend.
+  - w4 launch/menu wiring, `ChannelPtyTransport`, launch_spec, and dev scripts
+    were merged/tested into `linux-next` at `95e4714`; host-shell tests were
+    37/37 pass in the integration-loop ledger.
 
 ### Item: w5/wsl-import-via-ci-rootfs
 
@@ -187,8 +190,10 @@ l5 land, unless a newly filed ready item with a stable ID appears first.
 - capability_tags: [wsl, vm-layer, fetch, provisioning]
 - status: pending
 - gated_on:
-  - linux deliverable `l2/recipe-shared-modules` (recipe parser + Manifest::load)
   - linux deliverable `l5/recipe-smoke-ci-publish` (CI publishes rootfs tar per arch)
+- cleared_gates:
+  - linux deliverable `l2/recipe-shared-modules` integrated at `a7af0ed`
+  - linux deliverable `l7/§3-materializer-driver` shipped at `9dca2c47`
 - depends_on: []
 - owned_files:
   - `crates/tillandsias-vm-layer/src/wsl.rs`
@@ -202,6 +207,12 @@ l5 land, unless a newly filed ready item with a stable ID appears first.
     `materialize::wsl::tar_to_wsl_import` (proposal task 3.7.2) once
     the shared `recipe`/`materialize`/`cache` modules exist.
 - estimated_effort: 1 day after Linux deliverables land.
+- progress:
+  - Windows-owned converter slice `materialize::wsl::tar_to_wsl_import`
+    landed on `origin/windows-next` at `cb39cb7c`; it still needs Linux
+    integration-loop merge/test before `linux-next` agents consume it.
+  - Full WSL provisioning flip remains gated on recipe-publish/CI-fetch
+    artifacts.
 
 ### Item: w6/vm-status-and-enumerate-real-handlers
 
@@ -227,13 +238,13 @@ l5 land, unless a newly filed ready item with a stable ID appears first.
 
 | Linux item | Status | Blocks Windows item |
 |---|---|---|
-| `l1/control-wire-pty-attach-tasks-1` | **done** (shipped `b345ae68`; 23/23 control-wire tests pass on Linux; 22/22 on Windows per `47d91d11`) | w4 active under Windows lease |
-| `l2/recipe-shared-modules` | **done** (windows authored §2 parser `26afb76a` integrated `a7af0ed`; 16/16 recipe tests green on Linux) | w5 (still gated on l7 + l5) |
-| `l3/in-vm-headless-pty-handler` | **done** (`f770e013`/`8dc0d129`; tasks 4.1-4.7, two pump tests ignored pending AsyncFd rewrite) | w4 active under Windows lease |
+| `l1/control-wire-pty-attach-tasks-1` | **done** (shipped `b345ae68`; 23/23 control-wire tests pass on Linux; 22/22 on Windows per `47d91d11`) | w4 done |
+| `l2/recipe-shared-modules` | **done** (windows authored §2 parser `26afb76a` integrated `a7af0ed`; 16/16 recipe tests green on Linux) | w5 converter slice done on windows-next; provision still gated on l5 |
+| `l3/in-vm-headless-pty-handler` | **done** (`f770e013`/`8dc0d129`; tasks 4.1-4.7, two pump tests ignored pending AsyncFd rewrite) | w4 done |
 | `l4/replace-vsock-stub-handlers` | **done** (`6956c825`; real VmStatus/EnumerateLocalProjects/CloudRefresh backing data) | w6 ready for verification |
 | `l5/recipe-smoke-ci-publish` | **macOS-owned** per their CLAIM in cross-host-blocker-roundup (`§2b` host-side + CI artifacts) | w5 |
 | `l6/linux-rasterize-svg-to-ico` | **done** (`ea13ba20`) | w1 done |
-| `l7/§3-materializer-driver` | **stale Linux lease** `linux-l-mat-2026-05-25T15Z`; ping/reclaim due after fresh read | unblocks w5 + macOS m5 |
+| `l7/§3-materializer-driver` | **done** (`9dca2c47`; materializer feature and cache/export API shipped) | w5 converter work unblocked; l7 clippy follow-up remains |
 
 ## Events
 
@@ -539,3 +550,14 @@ Next greedy pickups (no VM needed): **w4b** (windows-ownable, pure) and **w4d**
   TTL with no checkpoint found. Windows w5 and live-VM verification remain
   blocked until a Linux/materializer-capable agent renews, releases, or
   reclaims the materializer API/cache/export slice.
+
+### Event: 2026-05-26T01:13Z — linux coordinator status reconciliation
+
+- Observed remote heads: `linux-next` `cabf9c9f`, `windows-next` `cb39cb7c`,
+  `osx-next` `4aa42c6a`, `main` `ddf52dff`.
+- Folded terminal events into headers: w4 is done/integrated at `95e4714`;
+  l7 materializer driver is done at `9dca2c47`; w5 converter slice is done on
+  `origin/windows-next` at `cb39cb7c` and needs integration-loop merge/test.
+- Current Windows next action: do not duplicate w4 or the w5 converter. Either
+  wait for Linux to merge/test `cb39cb7c`, or claim w6/cache diagnostics that
+  do not require the recipe-publish artifact.

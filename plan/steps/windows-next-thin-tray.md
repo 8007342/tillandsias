@@ -131,9 +131,24 @@ flatten). Do NOT build OCI-flatten.
 
 Provisioning thread is BLOCKED on the cross-host recipe decision. While
 blocked, model-independent work available WITHOUT a booted VM:
-- Host-side `~/src` (USERPROFILE\src) project scan via host-shell `scanner` ->
-  populate menu local_projects before the VM is ready.
-- Ship a real tray icon (.rc + .ico) to clear the build.rs placeholder warning.
+- DONE (2026-05-25): Host-side `~/src` scan via host-shell `scanner` populates
+  menu local_projects from first paint (wired in `notify_icon::run`).
+- DONE (2026-05-25): real tray icon shipped (`assets/tillandsias.ico`, 7 sizes
+  from `bloom.svg`) + embedded via `.rc` — no more placeholder warning.
+- DONE (2026-05-25): **installable + interactively testable locally**.
+  `scripts/build-windows-tray.ps1` (release / `-DebugBuild`) +
+  `scripts/install-windows.ps1` (installs to `%LOCALAPPDATA%\Programs\Tillandsias`,
+  Start Menu shortcut, `-Startup`/`-Launch`/`-Uninstall`) — windows-owned
+  parallel to `scripts/install-macos.sh`, but builds from source (no published
+  Windows release artifact yet). A `--no-provision` / `TILLANDSIAS_NO_PROVISION`
+  dev-mode gate in `run()` skips WSL bootstrap so the menu comes up clean for
+  local testing; installer defaults to dev mode while provisioning is gated.
+  Verified end-to-end: built, installed, launched — tray icon + right-click
+  menu live (status line, ~/src projects, agent radio, GitHub login, Quit).
+- OBSERVED (2026-05-25): windows-host rustfmt produces drift on
+  `crates/tillandsias-host-shell/src/pty/unix.rs` (macOS-owned). Not touched
+  unilaterally — likely rustfmt-version skew or an unformatted landing; flag for
+  a linux/macOS fmt pass or a pinned-rustfmt reconciliation.
 
 Once a VM can boot (recipe lands, or interim path agreed): connect vsock client
 -> handshake -> flip menu Provisioning->Ready + EnumerateLocalProjects, Quit->

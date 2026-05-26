@@ -1436,7 +1436,7 @@ plan_index:
       status: in_progress
       deliverable: plan/issues/multi-host-coordination-2026-05-24.md
       depends_on: [recent-work-spec-doc-methodology-audit]
-      progress_note: "linux-next, windows-next, and osx-next are all active as of 2026-05-26. The integration loop ledger at plan/issues/multi-host-integration-loop-2026-05-24.md records sibling heads; per-host queues record item-level leases/events. Queue headers were reconciled so Windows w1-w3 and macOS m1/m1b/m2/m3/m6 are done, Linux l3 PTY and l4 vsock handlers shipped, Windows w4 is in progress and ahead on windows-next at ae8789ff pending integration, Windows w6 plus macOS m4/m7 are ready, and remaining recipe gates are stale Linux l7 plus macOS-owned l5."
+      progress_note: "linux-next, windows-next, and osx-next are all active as of 2026-05-26. The integration loop ledger at plan/issues/multi-host-integration-loop-2026-05-24.md records sibling heads; per-host queues record item-level leases/events. Queue headers were reconciled so Windows w1-w4 and macOS m1/m1b/m2/m3/m6/m7 are done, Linux l3 PTY, l4 vsock handlers, and l7 materializer driver shipped, origin/windows-next is ahead at cb39cb7c with w5 tar_to_wsl_import code needing merge/test, Windows w6 plus macOS m4 action-host/m5 converter work are ready, and remaining gates are macOS-owned recipe-publish/CI-fetch, l7 clippy follow-up, and cross-host rustfmt pinning."
       specs:
         - methodology-accountability
         - host-shell-architecture

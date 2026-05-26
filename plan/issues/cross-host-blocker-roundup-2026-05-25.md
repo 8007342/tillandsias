@@ -299,3 +299,22 @@ blocker view without deleting earlier host notes.
   checkpoint in the fetched ledgers after its default TTL. This is now the
   highest-impact stale dependency because it gates Windows w5, macOS m5, and
   useful live-VM verification for Windows w6 / PTY attach smoke.
+
+## Linux coordinator audit — 2026-05-26T01:13Z
+
+- Observed remote heads after fetch/pull: `linux-next` `cabf9c9f`,
+  `windows-next` `cb39cb7c`, `osx-next` `4aa42c6a`, `main` `ddf52dff`.
+- Resolved since the previous fold: l7 materializer driver shipped at
+  `9dca2c47`; Windows w4 launch/menu wiring was integrated and tested at
+  `95e4714`; macOS m7 CI/release work completed at `c9341fa6`.
+- New integration watch: `origin/windows-next` is ahead with
+  `materialize::wsl::tar_to_wsl_import` at `cb39cb7c`. The next integration
+  loop should merge/test it into `linux-next` or record exact conflicts.
+- Current high-impact blockers: macOS-owned recipe-publish/CI-fetch plus
+  `materialize::macos::tar_to_vfr_img` still gate the default non-Linux rootfs
+  path; l7 has a Linux-owned clippy follow-up at `materialize/cache.rs:134`;
+  recurring Windows/macOS rustfmt skew needs a workspace pin or agreed Linux
+  fmt pass.
+- Ready work: macOS m4 action-host wiring; macOS m5 converter/CI-fetch work;
+  Windows w6 verification or diagnostics that do not require the CI rootfs
+  artifact.

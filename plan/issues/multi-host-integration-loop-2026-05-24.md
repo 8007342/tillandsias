@@ -28,6 +28,121 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-26T00:49Z — INTEGRATED (windows w4 COMPLETE + dev scripts)
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit (post-merge): `95e4714`
+- observed_sibling_heads:
+  - main: ddf52dff
+  - linux-next: fd710f7a → e0f9397f → `95e4714`
+  - windows-next: 8b45066e
+  - osx-next: 4aa42c6a (already absorbed into linux-next from earlier cycles)
+
+- **Pre-cycle housekeeping** (`e0f9397f`): committed auto-regenerated
+  CI artifacts (VERSION bump + dashboard timestamps + TRACES.md
+  refresh) from the prior `./build.sh --ci-full --install` run. The
+  loop contract treats these as a separate dirty-tree concern; the
+  cycle then proceeded with a clean tree.
+
+- windows-next: **merged + tested + pushed** (`95e4714`). 7 commits
+  absorbed (+491 lines):
+  - `af03de7e feat(host-shell): pty launch_spec` — shared menu-intent
+    → in-VM PtyOpenOpts mapping.
+  - `7dc11bea feat(host-shell): pty w4b ChannelPtyTransport` — §D3
+    outbound writer queue.
+  - `77eb4417`, `ae8789ff`: Merge linux-next.
+  - `c0a138dc`, `93427ed9`: style cleanups (workspace-fmt + clippy).
+  - **`e5ad2295 feat(windows-next): wire tray clicks to in-VM PTY
+    launch (w4 menu wiring)`** — the menu-action dispatch in
+    `notify_icon.rs` now calls `PtySession::open(...)` for
+    GitHubLogin / OpenShell. **w4 COMPLETE.**
+  - `8b45066e feat(windows-next): local build+install scripts +
+    --no-provision dev mode` — `scripts/build-windows-tray.ps1` +
+    `scripts/install-windows.ps1` for Windows-host dev iteration.
+  - `./build.sh --check` + `--test`: PASSED. host-shell tests:
+    **37/37 pass** (was 30 — Windows added 7 new tests for
+    launch_spec + ChannelPtyTransport).
+- osx-next: no-op (already absorbed earlier).
+
+- **Sibling-side queue status:**
+  - Windows w1+w2+w3+w4 ALL DONE. Only gated items remain: w5 (now
+    unblocked by Linux l7 + macOS m5/§3.7.1; still gated on §2b
+    CI-fetch artifacts) and w6 (verify-only against l4 vsock real
+    handlers — already done).
+  - macOS Phase 1 + Phase 1.6 + Phase 1.7 + transport_macos DONE;
+    m4 (PTY AppKit Terminal) unblocked by Linux l3 + Windows pty
+    work; m5 (§3.7.1 macOS converter) unblocked by Linux l7
+    materializer driver landing this cycle.
+
+- **Spec-drift advisory:** windows-next continued additive in
+  `tillandsias-host-shell::pty::*` + `crates/tillandsias-windows-tray/`
+  + `scripts/`. No changes to `tillandsias-control-wire` (Linux wire
+  authority preserved), no changes to `methodology/`,
+  `openspec/specs/`, or `openspec/changes/`. Clean contract
+  preservation across 7 commits.
+
+### Interlude 2026-05-25T~22:30Z–~23:30Z — l7 SHIPPED (Linux materializer driver) + CI green
+
+User directive: complete the headless implementation; user picked
+"l7 full — §3.1 through §3.8" from a 4-option survey.
+
+- **CI baseline: GREEN.** `./build.sh --ci-full --install` was failing on
+  154 cargo-fmt diffs + 7 clippy warnings. Cleared in two commits:
+  `df1f784f` (workspace cargo fmt --all, 113 files, no semantic change)
+  and `615d4c97` (clippy cleanup: auto-fix via `cargo clippy --fix` +
+  manual `#[allow]` on tests asserting compile-time invariants, fixed
+  `Terminal::TerminalApp` enum-variant-names lint on macOS, removed
+  redundant guards in router-sidecar test). End state:
+  `./build.sh --ci-full --install` → **14/14 + 4/4 + 3/3 + 2/2 = 100%**.
+
+- **`l7/§3-materializer-driver` SHIPPED** (commit `9dca2c47`, lease
+  `linux-l-mat-2026-05-25T15Z`): full Tasks 3.1-3.6 + 3.8 + 4.x of
+  `vm-recipe-provisioning`. New module
+  `crates/tillandsias-vm-layer/src/materialize/` (1,174 lines, 4
+  submodules, 37/37 tests pass) behind the new `materialize` cargo
+  feature:
+  - `mod.rs`: Materializer + MaterializedRootfs + HostArch + run() —
+    per-arch sanity (§3.6), instruction walk, cache hit/miss dispatch,
+    final layer = rootfs tar (§3.5), GC after success (§4.2).
+  - `layer_key.rs` (§3.2): content-addressed
+    `sha256_hex(parent || arch || directive_text)`. 6 unit tests cover
+    determinism + each input's sensitivity.
+  - `cache.rs` (§3.3 + §4.1): `<cache_root>/recipe-cache/<arch>/<key>.tar`
+    layout; lookup walks arch subdirs; GC prunes by 90-day age + per-arch
+    ceiling of 5, oldest-mtime first. 5 unit tests including
+    6-entry-eviction-to-3 + ancient-entry eviction.
+  - `exec.rs` (§3.4): LayerExecutor trait. BuildahExec ships as a
+    scaffold (returns a clear error pointing at the recipe-smoke CI
+    job §6.4); NoopExec is the deterministic test executor with
+    Arc-shared call counter for cache-hit assertions.
+  - `trace.rs` (§3.8): append-only JSONL ledger at
+    `<cache_root>/recipe-trace.jsonl`. 4 variants (LayerHit / LayerMiss
+    / RootfsEmitted / Gc). 2 tests cover append + serde roundtrip.
+  - `./build.sh --ci-full --install`: PASSED after l7 lands.
+
+- **Effect on siblings:**
+  - macOS m5 / §3.7.1 `materialize::macos::tar_to_vfr_img` now has the
+    rootfs-tar API to build against. **Unblocked.**
+  - Windows §3.7.2 `materialize::wsl::tar_to_wsl_import` same.
+    **Unblocked.**
+  - §2b CI-fetch path (recipe-publish CI job) can consume
+    `Materializer::run` to produce per-arch artifacts. **Unblocked.**
+  - §3.4 BuildahExec subprocess body is now the only material gap; per
+    the in-tree comment it lands with the recipe-smoke CI job (§6.4).
+
+- **Honest assessment summary** (provided to user mid-cycle):
+  - 60% real Linux code shipped this session (l1, l3, l4, l6, fmt+clippy
+    cleanup, l7) — substantial.
+  - 40% orchestration (methodology, cheatsheets, work queues, ledger
+    updates, blocker roundup responses).
+  - Step 15 (tray-network-bootstrap) and Step 16 (observatorium readiness)
+    still READY, not picked up — concrete Linux features for follow-up.
+  - Slice 2 (shared dispatcher convergence) still gated on sibling Q1-Q4
+    answers.
+  - Plan sizing audit: most items right-sized (30 min – 4 h); a few too
+    small (w3/m3 clippy cleanups, l6); l7 ended up appropriately scoped
+    as one focused session.
+
 ### Cycle 2026-05-25T21:43Z — INTEGRATED (windows pty §3.3 + §3.4 deeper bring-up)
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
