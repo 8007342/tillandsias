@@ -101,6 +101,38 @@ impl WslRuntime {
         }
         Ok(())
     }
+
+    /// Post-import wiring for a RECIPE-materialized distro (w5 path): write
+    /// `/etc/wsl.conf` (systemd on, /mnt automount off, default user `forge`)
+    /// then `wsl --terminate` so the next start boots under systemd. Unlike
+    /// [`VmRuntime::provision`], it does NOT drop a binary or install the
+    /// systemd unit — the recipe rootfs already carries the unit and a
+    /// first-boot headless self-install (`images/vm/bootstrap/20-tillandsias.sh`).
+    ///
+    /// @trace spec:vm-provisioning-lifecycle.provision.first-run-downloads@v1
+    pub async fn configure_recipe_distro(&self) -> Result<(), VmError> {
+        self.wsl_root_sh(
+            "cat > /etc/wsl.conf << 'EOF'\n\
+             [boot]\n\
+             systemd = true\n\
+             [user]\n\
+             default = forge\n\
+             [interop]\n\
+             enabled = true\n\
+             appendWindowsPath = false\n\
+             [automount]\n\
+             enabled = false\n\
+             EOF",
+        )
+        .await?;
+        // Terminate so the next start picks up systemd + the new wsl.conf.
+        let _ = tokio::process::Command::new("wsl")
+            .arg("--terminate")
+            .arg(&self.distro_name)
+            .status()
+            .await;
+        Ok(())
+    }
 }
 
 #[cfg(target_os = "windows")]

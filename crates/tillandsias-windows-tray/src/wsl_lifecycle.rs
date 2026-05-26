@@ -200,6 +200,10 @@ impl WslLifecycle {
             &MaterializedRootfs::Tar(dest),
         )
         .await?;
+        // Enable systemd via /etc/wsl.conf + terminate, so the next start boots
+        // under systemd and the recipe rootfs's first-boot headless self-install
+        // (fetch-headless.sh) + systemd unit run. No binary drop / unit install.
+        self.runtime.configure_recipe_distro().await?;
 
         progress.report_phase(ProvisionPhase::StartingVm);
         self.runtime.start().await?;
