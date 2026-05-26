@@ -84,40 +84,59 @@ fn agent_flag(agent: SelectedAgent) -> &'static str {
     }
 }
 
-/// Resolve a clicked [`MenuAction`] to the in-VM PTY [`PtyIntent`] it should
-/// launch, or `None` for actions that open no terminal (Quit, agent-radio
-/// selection, browser links, log/retry, overflow, inert).
+/// Resolve a clicked [`MenuAction`] to the in-VM PTY [`PtyIntent`] **and the
+/// project it targets** (if any), or `None` for actions that open no terminal
+/// (Quit, agent-radio selection, browser links, log/retry, overflow, inert).
 ///
 /// The mapping gives every `PtyIntent` variant a menu source WITHOUT adding a
 /// new `MenuAction` variant, so the shared resolution table stays stable for
 /// every tray:
-/// - [`MenuAction::GithubLogin`] → [`PtyIntent::GithubLogin`]
-/// - [`MenuAction::Attach`] → [`PtyIntent::Agent`] with the currently selected
-///   agent (attaching launches the chosen coding agent in the project tree)
-/// - [`MenuAction::Maintain`] → [`PtyIntent::Shell`] (a maintenance login shell)
+/// - [`MenuAction::GithubLogin`] → [`PtyIntent::GithubLogin`], no project
+///   (gh's token is user-level, so login works pre-attach against the bare VM)
+/// - [`MenuAction::Attach`] → [`PtyIntent::Agent`] (currently selected agent) in
+///   the clicked project's forge container
+/// - [`MenuAction::Maintain`] → [`PtyIntent::Shell`] (maintenance login shell) in
+///   the clicked project's forge container
 ///
-/// PROPOSED cross-host contract (windows-next, 2026-05-25) — see
-/// plan/issues/tray-convergence-coordination.md; macOS m4 should adopt or amend
-/// this table rather than diverge.
+/// The project name is threaded so [`launch_spec`] can wrap the command in
+/// `podman exec` against `tillandsias-<project>-forge` — the host is the source
+/// of truth for "which project the user clicked" (the bare VM has no
+/// active-project state). Cross-host agreed target, 2026-05-26 — see
+/// plan/issues/tray-convergence-coordination.md.
 ///
 /// @trace openspec/changes/control-wire-pty-attach/proposal.md (§3, host launch mapping)
-pub fn intent_for_action(action: &MenuAction, selected_agent: SelectedAgent) -> Option<PtyIntent> {
+pub fn intent_for_action(
+    action: &MenuAction,
+    selected_agent: SelectedAgent,
+) -> Option<(PtyIntent, Option<String>)> {
     match action {
-        MenuAction::GithubLogin => Some(PtyIntent::GithubLogin),
-        MenuAction::Attach { .. } => Some(PtyIntent::Agent(selected_agent)),
-        MenuAction::Maintain { .. } => Some(PtyIntent::Shell),
+        MenuAction::GithubLogin => Some((PtyIntent::GithubLogin, None)),
+        MenuAction::Attach { name, .. } => {
+            Some((PtyIntent::Agent(selected_agent), Some(name.clone())))
+        }
+        MenuAction::Maintain { name, .. } => Some((PtyIntent::Shell, Some(name.clone()))),
         _ => None,
     }
 }
 
-/// Build the [`PtyOpenOpts`] for a tray PTY `intent` at the given terminal
-/// size. `env` carries only `TERM` (the in-VM handler `env_clear`s before
-/// applying it, so no host env leaks); the login shell + forge set `PATH` etc.
-/// `cwd` is left to the in-VM default (the project working tree).
+/// Build the [`PtyOpenOpts`] for a tray PTY `intent` at the given terminal size.
 ///
-/// @trace openspec/changes/control-wire-pty-attach/proposal.md (§3, host launch mapping)
-pub fn launch_spec(intent: &PtyIntent, rows: u16, cols: u16) -> PtyOpenOpts {
-    let argv = match intent {
+/// When `project` is `Some(p)`, the command is wrapped to run **inside that
+/// project's forge podman container** — `podman exec -it tillandsias-<p>-forge
+/// <cmd>` — the cross-host agreed target (2026-05-26): the user's files + dev
+/// tooling live in the forge, not on the bare VM rootfs. When `project` is
+/// `None` the bare command runs directly in the VM: for [`PtyIntent::Shell`]
+/// that's the deliberate VM-debug escape hatch, and `gh auth login` is
+/// user-level so it works pre-attach.
+///
+/// `env` carries only `TERM` (the in-VM handler `env_clear`s before applying it,
+/// so no host env leaks); the login shell + forge set `PATH` etc. `cwd` is left
+/// to the in-VM default (the forge's working tree).
+///
+/// @trace openspec/changes/control-wire-pty-attach/proposal.md (§3, host launch mapping),
+/// plan/issues/tray-convergence-coordination.md (Open Shell / agent target)
+pub fn launch_spec(intent: &PtyIntent, project: Option<&str>, rows: u16, cols: u16) -> PtyOpenOpts {
+    let inner: Vec<String> = match intent {
         PtyIntent::Shell => vec!["/bin/bash".to_string(), "-l".to_string()],
         PtyIntent::GithubLogin => {
             vec!["gh".to_string(), "auth".to_string(), "login".to_string()]
@@ -125,6 +144,21 @@ pub fn launch_spec(intent: &PtyIntent, rows: u16, cols: u16) -> PtyOpenOpts {
         PtyIntent::Agent(agent) => {
             vec!["tillandsias".to_string(), agent_flag(*agent).to_string()]
         }
+    };
+    let argv = match project {
+        Some(p) => {
+            // Run inside the project's forge container (cross-host agreed target).
+            let mut v = vec![
+                "podman".to_string(),
+                "exec".to_string(),
+                "-it".to_string(),
+                format!("tillandsias-{p}-forge"),
+            ];
+            v.extend(inner);
+            v
+        }
+        // No project: bare VM (Shell = debug escape hatch; gh login = user-level).
+        None => inner,
     };
     PtyOpenOpts {
         rows,
@@ -566,24 +600,25 @@ mod tests {
 
     #[test]
     fn launch_spec_maps_intents_to_in_vm_argv() {
+        // No project => bare VM command (debug escape hatch / pre-attach login).
         assert_eq!(
-            launch_spec(&PtyIntent::Shell, 24, 80).argv,
+            launch_spec(&PtyIntent::Shell, None, 24, 80).argv,
             vec!["/bin/bash", "-l"]
         );
         assert_eq!(
-            launch_spec(&PtyIntent::GithubLogin, 24, 80).argv,
+            launch_spec(&PtyIntent::GithubLogin, None, 24, 80).argv,
             vec!["gh", "auth", "login"]
         );
         assert_eq!(
-            launch_spec(&PtyIntent::Agent(SelectedAgent::OpenCode), 24, 80).argv,
+            launch_spec(&PtyIntent::Agent(SelectedAgent::OpenCode), None, 24, 80).argv,
             vec!["tillandsias", "--opencode"]
         );
         assert_eq!(
-            launch_spec(&PtyIntent::Agent(SelectedAgent::Claude), 24, 80).argv,
+            launch_spec(&PtyIntent::Agent(SelectedAgent::Claude), None, 24, 80).argv,
             vec!["tillandsias", "--claude"]
         );
         // Size is carried; TERM is set; cwd left to the in-VM default.
-        let s = launch_spec(&PtyIntent::Shell, 30, 100);
+        let s = launch_spec(&PtyIntent::Shell, None, 30, 100);
         assert_eq!((s.rows, s.cols), (30, 100));
         assert!(
             s.env
@@ -594,14 +629,48 @@ mod tests {
     }
 
     #[test]
+    fn launch_spec_wraps_in_forge_podman_exec_when_project_given() {
+        // Cross-host agreed target: a project click runs inside the forge.
+        assert_eq!(
+            launch_spec(&PtyIntent::Shell, Some("myapp"), 24, 80).argv,
+            vec![
+                "podman",
+                "exec",
+                "-it",
+                "tillandsias-myapp-forge",
+                "/bin/bash",
+                "-l"
+            ]
+        );
+        assert_eq!(
+            launch_spec(
+                &PtyIntent::Agent(SelectedAgent::Claude),
+                Some("octo-repo"),
+                24,
+                80
+            )
+            .argv,
+            vec![
+                "podman",
+                "exec",
+                "-it",
+                "tillandsias-octo-repo-forge",
+                "tillandsias",
+                "--claude"
+            ]
+        );
+    }
+
+    #[test]
     fn intent_for_action_maps_clickable_menu_items() {
         use crate::menu_action::ProjectScope;
-        // GitHub login → gh auth login.
+        // GitHub login → gh auth login, no project (user-level, pre-attach).
         assert_eq!(
             intent_for_action(&MenuAction::GithubLogin, SelectedAgent::Claude),
-            Some(PtyIntent::GithubLogin)
+            Some((PtyIntent::GithubLogin, None))
         );
-        // Attach launches the *currently selected* agent in the project tree.
+        // Attach launches the *currently selected* agent in the clicked
+        // project's forge (project name threaded through).
         assert_eq!(
             intent_for_action(
                 &MenuAction::Attach {
@@ -610,9 +679,12 @@ mod tests {
                 },
                 SelectedAgent::Codex,
             ),
-            Some(PtyIntent::Agent(SelectedAgent::Codex))
+            Some((
+                PtyIntent::Agent(SelectedAgent::Codex),
+                Some("myapp".to_string())
+            ))
         );
-        // Maintenance opens a plain login shell, regardless of selected agent.
+        // Maintenance opens a login shell in the clicked project's forge.
         assert_eq!(
             intent_for_action(
                 &MenuAction::Maintain {
@@ -621,7 +693,7 @@ mod tests {
                 },
                 SelectedAgent::OpenCode,
             ),
-            Some(PtyIntent::Shell)
+            Some((PtyIntent::Shell, Some("repo".to_string())))
         );
         // Non-terminal actions open no PTY.
         assert_eq!(
