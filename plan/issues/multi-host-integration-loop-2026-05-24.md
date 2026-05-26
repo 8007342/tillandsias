@@ -28,6 +28,33 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Dynamic-loop slice 2026-05-26T10:56Z — Step 15 slice 2: observatorium + forge router-before-project
+
+- Commit `4337f917`: reordered `ensure_router_running` to run BEFORE
+  per-project containers in `run_observatorium_mode` (previously
+  started after observatorium-web) and added the same preamble to
+  `ensure_enclave_for_project` (tray-driven Forge launches).
+- Together with slice 1 (`cf74e176`), all three project-spawn paths
+  now share the order: `enclave-network → cleanup → router →
+  containers → caddy-reload`.
+- Tests: CI 100%. Live podman smoke gated on user-driven tray actions.
+- Next: collapse exit-125 / network-not-found retry into one actionable
+  error message, then a litmus proving "router missing → one error not
+  cascade". Closes Step 15's remaining exit criteria.
+
+### Dynamic-loop slice 2026-05-26T10:18Z — Step 15 (slice 1): router-before-project in `run_opencode_mode`
+
+- Commit: `cf74e176` — `ensure_router_running` now runs BEFORE the
+  per-project proxy/git/inference/forge spawn in OpenCode launches.
+  Eliminates the 1-5s window where Squid's `cache_peer router` + git
+  HTTPS upstream resolve to a missing alias and retry-storm.
+- Tests: `./build.sh --ci-full --install` green @ 100% (14/14 + 4/4 +
+  3/3 + 2/2). Live podman smoke gated on developer running
+  `tillandsias --opencode <project>`.
+- Next slice: same fix in `run_observatorium_mode` (currently starts
+  router AFTER observatorium-web) and `ensure_enclave_for_project`
+  (tray-driven Forge launches).
+
 ### Cycle 2026-05-26T09:43Z — NO-OP (dynamic loop already integrated w5 13 min ago)
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next

@@ -3900,8 +3900,20 @@ fn run_observatorium_mode(
 
     let observatorium_name = observatorium_container_name(&project_name);
     let web_image = versioned_image_tag("web", version);
+    let router_image = versioned_image_tag("router", version);
     rt.block_on(async {
         client.remove_container(&observatorium_name).await.ok();
+
+        // Step 15 slice 2: bring the router up BEFORE the observatorium-web
+        // container so any startup-phase requests inside the enclave resolve
+        // the `router` alias to a live cache_peer. The previous ordering
+        // started the router AFTER observatorium-web, leaving a 1-3s
+        // exit-125-flavoured retry window. ensure_router_running is
+        // idempotent.
+        //
+        // @trace plan/steps/15-tray-network-bootstrap.md
+        ensure_router_running(&client, &certs_dir, &router_image, router_host_port, debug).await?;
+
         client
             .run_container_observed(
                 "observatorium-web",
@@ -3916,9 +3928,6 @@ fn run_observatorium_mode(
             )
             .await
             .map_err(|e| format!("[Observatorium] failed to start web container: {e}"))?;
-
-        let router_image = versioned_image_tag("router", version);
-        ensure_router_running(&client, &certs_dir, &router_image, router_host_port, debug).await?;
 
         let route = RouterRoute::new(
             format!("observatorium.{project_name}"),
@@ -4003,6 +4012,23 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
     let client = PodmanClient::new();
     rt.block_on(async {
         cleanup_stack_containers(&client, project_name).await;
+
+        // Step 15: bring the router up BEFORE any project containers so the
+        // enclave's `router` network alias is already resolvable when proxy /
+        // git / inference start. Squid's `cache_peer router` and the git
+        // service's HTTPS upstream both fail-and-retry if the alias resolves
+        // to nothing — that retry storm is exactly the "exit 125 cascade"
+        // Step 15 was filed to eliminate. ensure_router_running is idempotent
+        // (it short-circuits on a live container with the right image), so
+        // calling it here on every OpenCode launch is cheap on the warm path.
+        //
+        // @trace plan/steps/15-tray-network-bootstrap.md
+        let router_image = versioned_image_tag("router", version);
+        let router_host_port = match existing_router_host_port(&client, debug).await? {
+            Some(port) => port,
+            None => select_router_host_port(None, debug)?,
+        };
+        ensure_router_running(&client, &certs_dir, &router_image, router_host_port, debug).await?;
 
         client
             .run_container_observed(
@@ -5148,6 +5174,19 @@ pub(crate) fn ensure_enclave_for_project(
     let client = PodmanClient::new();
     rt.block_on(async {
         cleanup_stack_containers(&client, project_name).await;
+
+        // Step 15 slice 2: bring the router up BEFORE the per-project
+        // proxy/git/inference/forge spawn so the enclave's `router` alias
+        // is live by the time Squid's cache_peer / git-service HTTPS
+        // upstream try to resolve it. ensure_router_running is idempotent.
+        //
+        // @trace plan/steps/15-tray-network-bootstrap.md
+        let router_image = versioned_image_tag("router", version);
+        let router_host_port = match existing_router_host_port(&client, debug).await? {
+            Some(port) => port,
+            None => select_router_host_port(None, debug)?,
+        };
+        ensure_router_running(&client, &certs_dir, &router_image, router_host_port, debug).await?;
 
         client
             .run_container_observed(
