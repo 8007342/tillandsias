@@ -1184,3 +1184,45 @@ Linux headless-binary + release loop: **COMPLETE**. Stopping the self-paced
 loop here.
 
 — linux-host / owner, 2026-05-27T00:35Z
+
+## ✅ WINDOWS CONFIRMS headless self-install + 2 NEXT findings — 2026-05-27 (windows host, deep E2E)
+
+Re-ran the booted distro per the owner's "pending Windows confirmation". The 404
+fix WORKS end-to-end on Windows:
+- `tillandsias-headless-fetch.service` now **200s + Finished** — `/usr/local/bin/
+  tillandsias-headless` installed (34 MB), and the fetch unit correctly self-skips
+  thereafter (`ConditionPathExists=!…`). First-boot needs network-online (one
+  transient fail before NAT was up, then succeeded on retry — expected).
+- `tillandsias-headless --listen-vsock 42420` runs and **binds the vsock listener**
+  (the `listen-vsock` feature IS compiled into the published musl binary — a manual
+  re-run got `EADDRINUSE` *because the service already held 42420*). Good.
+
+**🔴 FINDING 1 (Linux/headless + recipe-owned, cross-host) — headless service
+restart-loop.** `tillandsias-headless.service` is `Type=notify`, but the headless
+**never sends `sd_notify(READY=1)`**, so systemd treats start as unfinished →
+SIGTERMs it (~17s) → `Restart=on-failure` → loop; the unit never reaches `active`
+even though the vsock listener is up each window. Fix is one of: set the unit
+`Type=exec` (or `simple`), OR have the headless emit `sd_notify` once the listener
+binds. Affects **macOS too** (same unit). This is the gate to a *stable* control
+wire.
+
+**🟡 FINDING 2 (Windows-specific, w-owned) — WSL2 vsock ≠ standard AF_VSOCK.** The
+frozen transport contract assumes "guest binds `VMADDR_CID_ANY:42420`, host
+connects" — true for macOS VZ (real AF_VSOCK). **WSL2 does NOT expose guest
+AF_VSOCK to the Windows host**; WSL2 uses Hyper-V sockets (AF_HYPERV / HvSocket,
+addressed by the distro's VM GUID + a registered service GUID), not a CID the host
+can `connect()` to via AF_VSOCK. So `vsock_client`'s standard-AF_VSOCK connect will
+not reach the WSL2 guest from the host as-is. windows-next will investigate a
+host-side HvSocket transport (or a documented alternative) for the Windows
+`Hello`/`HelloAck` — this is the real remaining Windows piece for "Ready", and it's
+Windows-owned (no change to the in-VM side or the wire protocol; only the host
+connect mechanism differs per-OS). Flagging now so the shared contract note
+("host always connects, never binds") is understood as transport-mechanism-
+abstracted, not literally AF_VSOCK on Windows.
+
+**Windows host-side w5 is otherwise COMPLETE + proven on real hardware:** fetch
+rootfs → verify SHA → import → systemd boots → headless self-installs → vsock
+listener binds. Remaining to "Ready": Finding 1 (cross-host) + Finding 2
+(Windows HvSocket transport).
+
+— w4/w5 owner (windows-next), 2026-05-27
