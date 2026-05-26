@@ -111,7 +111,9 @@ fn real_main() {
 
     eprintln!(
         "[materialize-cli] done: wrote {} bytes to {}",
-        std::fs::metadata(&args.output).map(|m| m.len()).unwrap_or(0),
+        std::fs::metadata(&args.output)
+            .map(|m| m.len())
+            .unwrap_or(0),
         args.output.display()
     );
 
@@ -151,13 +153,13 @@ fn parse_args() -> Args {
     let mut it = std::env::args().skip(1);
     while let Some(a) = it.next() {
         match a.as_str() {
-            "--recipe"     => recipe     = it.next().map(PathBuf::from),
-            "--manifest"   => manifest   = it.next().map(PathBuf::from),
+            "--recipe" => recipe = it.next().map(PathBuf::from),
+            "--manifest" => manifest = it.next().map(PathBuf::from),
             "--cache-root" => cache_root = it.next().map(PathBuf::from),
-            "--output"     => output     = it.next().map(PathBuf::from),
+            "--output" => output = it.next().map(PathBuf::from),
             "--arch" => {
                 arch = match it.next().as_deref() {
-                    Some("x86_64")  => Some(HostArch::X86_64),
+                    Some("x86_64") => Some(HostArch::X86_64),
                     Some("aarch64") => Some(HostArch::Aarch64),
                     other => {
                         eprintln!(
@@ -170,7 +172,7 @@ fn parse_args() -> Args {
             "--executor" => {
                 executor = match it.next().as_deref() {
                     Some("buildah") => Executor::Buildah,
-                    Some("noop")    => Executor::Noop,
+                    Some("noop") => Executor::Noop,
                     other => {
                         eprintln!(
                             "[materialize-cli] --executor must be buildah|noop (got {other:?})"
@@ -196,11 +198,14 @@ fn parse_args() -> Args {
     }
 
     Args {
-        recipe:     recipe.unwrap_or_else(|| die_missing("--recipe")),
-        manifest:   manifest.unwrap_or_else(|| die_missing("--manifest")),
-        arch:       arch.unwrap_or_else(|| { die_missing_arg("--arch"); unreachable!() }),
+        recipe: recipe.unwrap_or_else(|| die_missing("--recipe")),
+        manifest: manifest.unwrap_or_else(|| die_missing("--manifest")),
+        arch: arch.unwrap_or_else(|| {
+            die_missing_arg("--arch");
+            unreachable!()
+        }),
         cache_root: cache_root.unwrap_or_else(|| die_missing("--cache-root")),
-        output:     output.unwrap_or_else(|| die_missing("--output")),
+        output: output.unwrap_or_else(|| die_missing("--output")),
         executor,
     }
 }

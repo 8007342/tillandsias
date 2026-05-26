@@ -46,7 +46,7 @@ use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 use tokio::task::JoinHandle;
 
 use tillandsias_control_wire::{
-    decode, encode, ControlEnvelope, ControlMessage, MAX_MESSAGE_BYTES, WIRE_VERSION,
+    ControlEnvelope, ControlMessage, MAX_MESSAGE_BYTES, WIRE_VERSION, decode, encode,
 };
 use tillandsias_host_shell::pty::{ChannelPtyTransport, PtyRouter};
 
@@ -151,7 +151,8 @@ where
             capabilities,
         },
     };
-    let bytes = encode(&hello).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+    let bytes =
+        encode(&hello).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
     write_half
         .write_all(&(bytes.len() as u32).to_be_bytes())
         .await?;
@@ -177,9 +178,7 @@ where
             if wire_version != WIRE_VERSION {
                 return Err(std::io::Error::new(
                     std::io::ErrorKind::InvalidData,
-                    format!(
-                        "wire version mismatch: local={WIRE_VERSION} server={wire_version}"
-                    ),
+                    format!("wire version mismatch: local={WIRE_VERSION} server={wire_version}"),
                 ));
             }
             wire_version

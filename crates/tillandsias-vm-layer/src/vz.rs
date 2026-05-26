@@ -145,7 +145,7 @@ impl VzRuntime {
         manifest: &crate::recipe::Manifest,
         tag: &str,
     ) -> Result<(), String> {
-        use crate::fetch::{download_verified, RemoteArtifact};
+        use crate::fetch::{RemoteArtifact, download_verified};
 
         let arch = if cfg!(target_arch = "aarch64") {
             "aarch64"
@@ -155,18 +155,18 @@ impl VzRuntime {
         let format = "img";
         let key = format!("{arch}.{format}");
 
-        let url = manifest
-            .artifact_url(arch, format, tag)
-            .ok_or_else(|| format!(
-                "manifest has no [output].artifact_url_template; cannot resolve {key} URL"
-            ))?;
+        let url = manifest.artifact_url(arch, format, tag).ok_or_else(|| {
+            format!("manifest has no [output].artifact_url_template; cannot resolve {key} URL")
+        })?;
 
         let sha256 = manifest
             .expected_sha(&key)
-            .ok_or_else(|| format!(
-                "manifest [output.expected_rootfs_sha] missing key {key:?}; \
+            .ok_or_else(|| {
+                format!(
+                    "manifest [output.expected_rootfs_sha] missing key {key:?}; \
                  was the recipe-publish CI job run yet?"
-            ))?
+                )
+            })?
             .to_string();
 
         let artifact = RemoteArtifact {

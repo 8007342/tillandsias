@@ -83,11 +83,7 @@ where
     // - `F: Send` ensures crossing threads is sound; `F: 'static`
     //   ensures the captured references outlive the dispatch.
     unsafe {
-        dispatch_async_f(
-            &_dispatch_main_q as *const c_void,
-            ctx,
-            trampoline::<F>,
-        );
+        dispatch_async_f(&_dispatch_main_q as *const c_void, ctx, trampoline::<F>);
     }
 }
 

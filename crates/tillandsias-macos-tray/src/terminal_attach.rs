@@ -124,7 +124,8 @@ pub fn applescript_for_open_shell_stub(message: &str) -> String {
     // Wrap in `echo '…'; sleep N` so the window stays open long enough
     // for the user to read the message before Terminal.app's "shell
     // exited" prompt appears.
-    let command = format!("echo '{shell_escaped}'; echo; echo '(window stays open — close with Cmd-W)'");
+    let command =
+        format!("echo '{shell_escaped}'; echo; echo '(window stays open — close with Cmd-W)'");
     applescript_for_terminal_app(&command)
 }
 
@@ -315,7 +316,7 @@ mod live {
 
 #[cfg(target_os = "macos")]
 pub use live::{
-    spawn_terminal, spawn_terminal_pty_attach, spawn_terminal_stub_window, LiveInstalledTerminals,
+    LiveInstalledTerminals, spawn_terminal, spawn_terminal_pty_attach, spawn_terminal_stub_window,
 };
 
 #[cfg(test)]
