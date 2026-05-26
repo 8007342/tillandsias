@@ -28,6 +28,35 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### COORDINATION REQUEST 2026-05-26T16:02Z — macOS host: rustfmt drift blocking CI
+
+`./build.sh --ci-full --install` rust-formatting stage is RED on linux-next
+HEAD `51822550`. Linux host fixed the cross-platform file unilaterally
+(`ea4d6530`/`51822550` style: rustfmt unix.rs PTY backend) but the remaining
+diffs are in macOS-host-owned scopes that the Linux host must not unilaterally
+reformat per the multi-host guardrails:
+
+- `crates/tillandsias-macos-tray/src/action_host.rs` (5 sites)
+- `crates/tillandsias-macos-tray/src/main_thread.rs` (1 site)
+- `crates/tillandsias-macos-tray/src/pty_vsock_bridge.rs` (3+ sites)
+- `crates/tillandsias-macos-tray/src/status_item.rs` (1+ sites)
+- `crates/tillandsias-macos-tray/src/terminal_attach.rs` (1+ sites)
+- `crates/tillandsias-vm-layer/src/vz.rs`
+- `crates/tillandsias-vm-layer/src/materialize/macos.rs`
+- `crates/tillandsias-vm-layer/examples/materialize-cli.rs`
+
+Reproduce locally: `cargo fmt --all -- --check` from repo root.
+Fix: `cargo fmt -p tillandsias-macos-tray -p tillandsias-vm-layer` from the
+macOS host on `osx-next` (or directly to `linux-next` via the ratified
+direct-commit pattern for non-Rust-semantics work). The drift originates
+in commit `0551a265` (m4 foundation — Phase 1 step 1.9) and accumulated
+through subsequent macOS Phase commits that did not run `cargo fmt`
+pre-push.
+
+Until this is cleared the `--ci-full` gate stays red on rust-formatting.
+All other stages (clippy, 14/14 rust-test, 57/57 litmus, 3/3 windows-prereq,
+2/2 osx-prereq) are GREEN.
+
 ### Cycle 2026-05-26T15:44Z — NO-OP (both sibling deltas empty)
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
