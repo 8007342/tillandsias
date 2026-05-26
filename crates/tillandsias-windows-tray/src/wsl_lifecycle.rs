@@ -17,7 +17,10 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use tillandsias_host_shell::provisioning::{ProvisionPhase, ProvisionProgress};
-use tillandsias_vm_layer::fetch::{ProvisioningPins, download_verified};
+use tillandsias_vm_layer::fetch::{
+    ProvisioningPins, RemoteArtifact, download_verified, is_sha256_hex,
+};
+use tillandsias_vm_layer::recipe::Manifest;
 use tillandsias_vm_layer::{ProvisionManifest, VmRuntime, wsl::WslRuntime};
 
 /// Committed per-release pins (rootfs + headless binary URLs and checksums).
@@ -174,6 +177,46 @@ async fn download_headless_binary(
     Ok(dest)
 }
 
+/// Resolve the Windows rootfs artifact (`x86_64.tar`) to a verifiable download
+/// pin from the recipe `Manifest` (l9 contract) at the given release `tag`.
+///
+/// Bridges the recipe `[output]` block — `artifact_url_template` +
+/// `expected_rootfs_sha["x86_64.tar"]` — into the [`RemoteArtifact`] that
+/// [`download_verified`] consumes, so the recipe-provisioning path reuses the
+/// existing verified-download machinery. The trailing step is
+/// [`materialize::wsl::tar_to_wsl_import`] on the downloaded tar.
+///
+/// Returns an error (rather than an unverifiable pin) while the recipe-publish
+/// CI has not yet backfilled a real SHA — the manifest still carries the
+/// `pending-ci` placeholder, which is NOT 64 hex digits. This is the honest gate
+/// until §2b publishes the first artifacts; the URL contract itself is settled.
+///
+/// @trace plan/issues/tray-convergence-coordination.md (w5-flip consumer contract),
+/// spec:vm-provisioning-lifecycle.provision.first-run-downloads@v1
+pub fn recipe_rootfs_artifact(manifest: &Manifest, tag: &str) -> Result<RemoteArtifact, String> {
+    const ARCH: &str = "x86_64";
+    const FORMAT: &str = "tar";
+    const SHA_KEY: &str = "x86_64.tar";
+
+    let url = manifest
+        .artifact_url(ARCH, FORMAT, tag)
+        .ok_or_else(|| "manifest has no [output].artifact_url_template".to_string())?;
+    let sha = manifest
+        .expected_sha(SHA_KEY)
+        .ok_or_else(|| format!("manifest [output].expected_rootfs_sha has no \"{SHA_KEY}\" pin"))?;
+    if !is_sha256_hex(sha) {
+        return Err(format!(
+            "rootfs SHA for {SHA_KEY} not yet published (manifest pin = {sha:?}); \
+             the recipe-publish CI (§2b) must run + backfill a real SHA first"
+        ));
+    }
+    Ok(RemoteArtifact {
+        url,
+        sha256: sha.to_string(),
+        bytes: None,
+    })
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -187,5 +230,33 @@ mod tests {
         }
         let root = WslLifecycle::install_root();
         assert!(root.ends_with("tillandsias\\wsl") || root.ends_with("tillandsias/wsl"));
+    }
+
+    // The committed recipe manifest — tested against directly so the resolver
+    // tracks the real l9 `[output]` contract, not a mock.
+    const REAL_MANIFEST: &str = include_str!("../../../images/vm/manifest.toml");
+
+    #[test]
+    fn recipe_rootfs_artifact_gates_on_pending_ci_sha() {
+        let m = Manifest::from_toml(REAL_MANIFEST).expect("parse committed manifest");
+        // The committed manifest still carries `pending-ci`, so resolution must
+        // refuse rather than hand back an unverifiable pin.
+        let err = recipe_rootfs_artifact(&m, "v0.2.260526.1").expect_err("pending-ci must gate");
+        assert!(err.contains("not yet published"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn recipe_rootfs_artifact_resolves_url_and_sha_once_published() {
+        // Simulate the recipe-publish CI having backfilled a real SHA.
+        let fake_sha = "a".repeat(64);
+        let published = REAL_MANIFEST.replace("pending-ci", &fake_sha);
+        let m = Manifest::from_toml(&published).expect("parse manifest");
+        let art = recipe_rootfs_artifact(&m, "v0.2.260526.1").expect("resolves once SHA is real");
+        assert_eq!(art.sha256, fake_sha);
+        assert_eq!(
+            art.url,
+            "https://github.com/8007342/tillandsias/releases/download/\
+             v0.2.260526.1/tillandsias-rootfs-x86_64.tar"
+        );
     }
 }
