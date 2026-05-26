@@ -84,6 +84,23 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "spawn paths cite Step 15"
 
+  - step: "Slice 4 exit-125 classifier is wired into format_observed_launch_failure"
+    # The classify_typed_launch_failure call must appear inside (or syntactically
+    # right before the parts.extend in) format_observed_launch_failure. We grep
+    # for the function name on the same line range to ensure the cascade-collapse
+    # logic hasn't been silently removed from the launch-failure path.
+    command: |
+      awk '
+        /async fn format_observed_launch_failure/ {in_fn=1}
+        in_fn && /classify_typed_launch_failure/ {found=1; exit}
+        /^}$/ && in_fn {exit}
+      END {
+        if (found) print "ok: classify_typed_launch_failure threaded into format_observed_launch_failure";
+        else { print "FAIL: classify_typed_launch_failure missing from format_observed_launch_failure body"; exit 1 }
+      }' crates/tillandsias-podman/src/client.rs
+    timeout_ms: 5000
+    expected_behavior: "ok: classify_typed_launch_failure threaded into format_observed_launch_failure"
+
 observability:
   traces:
     - "@trace spec:tray-network-bootstrap"
