@@ -29,13 +29,14 @@
 
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, Sel};
-use objc2::{class, msg_send_id, sel};
+use objc2::{class, msg_send_id, sel, ClassType};
 use objc2_app_kit::{
     NSApplication, NSApplicationActivationPolicy, NSMenu, NSMenuItem, NSStatusBar, NSStatusItem,
     NSVariableStatusItemLength,
 };
 use objc2_foundation::{MainThreadMarker, NSString};
 
+use crate::action_host::TrayActionHost;
 use crate::menu_disabled_v2::{MacMenuItemSpec, render};
 use tillandsias_host_shell::menu_state::MenuStructure;
 
@@ -56,15 +57,22 @@ pub fn run() -> ! {
     // setActivationPolicy returns bool indicating acceptance.
     let _ = app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
 
+    // Build the action-host responder ONCE per process. Lives on the
+    // AppKit thread's stack for the duration of `NSApplication::run`;
+    // menu items target it via `setTarget:` so AppKit dispatches their
+    // selectors here. See `action_host.rs` for the declared class.
+    let action_host = TrayActionHost::new(mtm);
+
     // Build the initial provisioning menu so the user sees the condensed
     // status line right away, even before the VM thread reports anything.
     let initial = MenuStructure::initial_provisioning();
-    let status_item = install_status_item(mtm, &initial);
+    let status_item = install_status_item(mtm, &initial, &action_host);
 
     // Spawn the VM lifecycle on a background thread — see vz_lifecycle.
     // Skipped here pending the macOS-host integration in the follow-up
     // wave; the bin still produces a working menu bar UI for manual probe.
     let _ = &status_item;
+    let _ = &action_host;
 
     // SAFETY: NSApplication.run is the standard AppKit main loop. It only
     // returns when [NSApp terminate:] is called from a menu handler, which
@@ -84,6 +92,7 @@ pub fn run() -> ! {
 pub fn install_status_item(
     mtm: MainThreadMarker,
     structure: &MenuStructure,
+    action_host: &TrayActionHost,
 ) -> Retained<NSStatusItem> {
     // SAFETY: AppKit class methods that touch shared singletons must run
     // on the main thread; the marker proves we are.
@@ -104,7 +113,7 @@ pub fn install_status_item(
         unsafe { button.setToolTip(Some(&tooltip)) };
     }
 
-    let menu = build_menu(mtm, structure);
+    let menu = build_menu(mtm, structure, action_host);
     unsafe { status_item.setMenu(Some(&menu)) };
     status_item
 }
@@ -124,14 +133,66 @@ pub fn install_status_item(
 /// allocation + per-item method calls; no I/O or sleeps.
 ///
 /// @trace spec:macos-native-tray.ui.menu-parity@v1
-pub fn build_menu(mtm: MainThreadMarker, structure: &MenuStructure) -> Retained<NSMenu> {
+pub fn build_menu(
+    mtm: MainThreadMarker,
+    structure: &MenuStructure,
+    action_host: &TrayActionHost,
+) -> Retained<NSMenu> {
     let menu = NSMenu::new(mtm);
     for spec in render(structure) {
         let item = build_menu_item(mtm, &spec);
         menu.addItem(&item);
     }
+    append_actions(mtm, &menu, action_host);
     append_footer(mtm, &menu);
     menu
+}
+
+/// Append the four interactive items that drive the VM lifecycle and
+/// shell-attach UX. Sandwiched between the rendered portable menu items
+/// and the footer (separator + version header + Quit).
+///
+/// Each item's `target` is the shared `TrayActionHost` and its `action`
+/// is the matching ObjC selector declared in `action_host.rs`. AppKit
+/// dispatches on click; the Rust method runs on the main thread.
+///
+/// Slice 1 wires the selectors as eprintln stubs; subsequent slices
+/// (m4 sub-task B 2/3/4/5) replace each stub with real Tokio-task
+/// dispatch + main-thread UI feedback.
+///
+/// @trace plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 1)
+fn append_actions(mtm: MainThreadMarker, menu: &NSMenu, action_host: &TrayActionHost) {
+    // Separator above the action block so it's visually grouped distinct
+    // from the portable menu items above.
+    menu.addItem(&NSMenuItem::separatorItem(mtm));
+
+    // Coerce `&TrayActionHost` to `&AnyObject` for `setTarget:`. The
+    // declared class is `MainThreadOnly: NSObject` so the chain is
+    // TrayActionHost → NSObject → AnyObject; we walk it via `as_super`.
+    let host_any: &AnyObject = <TrayActionHost as ClassType>::as_super(action_host).as_ref();
+
+    add_action_item(mtm, menu, "Start VM", sel!(startVm:), host_any);
+    add_action_item(mtm, menu, "Stop VM", sel!(stopVm:), host_any);
+    add_action_item(mtm, menu, "Open Shell", sel!(openShell:), host_any);
+    add_action_item(mtm, menu, "GitHub login", sel!(githubLogin:), host_any);
+}
+
+/// Helper: construct an NSMenuItem with title + action + target wired
+/// up. Pulled out so `append_actions` reads as a table.
+fn add_action_item(
+    mtm: MainThreadMarker,
+    menu: &NSMenu,
+    title: &str,
+    action: Sel,
+    target: &AnyObject,
+) {
+    let item = NSMenuItem::new(mtm);
+    unsafe {
+        item.setTitle(&NSString::from_str(title));
+        item.setAction(Some(action));
+        item.setTarget(Some(target));
+    }
+    menu.addItem(&item);
 }
 
 /// Append the standard tray footer to the bottom of any menu:
