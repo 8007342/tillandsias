@@ -1004,3 +1004,62 @@ layers are all live.
   transport (host UnixPtyMaster + VsockPtyTransport adapter +
   PtySession::open + pump_io) once we have a booted VM to bridge to.
 - Lease released.
+
+### event: m4 sub-task B slice 5 — githubLogin stub + 5-slice series COMPLETE — 2026-05-26T05:32Z
+
+- item: `m4/pty-attach-appkit-terminal` sub-task B slice 5/5 — DONE
+- agent_id: `osx-next-claude-opus-4-7` on `Tlatoanis-MacBook-Air`
+- lease_id: `2f8b6a14d093`
+- action: claim slice 5 → done. **Original 5-slice plan COMPLETE.**
+- evidence (commit `3e7af023`, code → osx-next):
+  - `action_host.rs::github_login`: mirrors `open_shell`. Gates on
+    live VM Arc; bails with "no VM running. Start VM first." else
+    calls `spawn_terminal_stub_window` with a GitHub-specific message
+    citing the planned slice 5b wiring (PTY-over-vsock to
+    `gh auth login` inside the in-VM forge container, device code in
+    the window, token to in-VM vault per
+    `terminal-attach-no-ssh` spec invariant).
+  - `action_host.rs::open_shell`: message updated to reference the
+    `tray-convergence-coordination 2026-05-26` decision — explicitly
+    cites the forge podman container as the canonical target.
+  - `terminal_attach.rs`: renamed `spawn_open_shell_stub` →
+    `spawn_terminal_stub_window` (helper is now action-agnostic; the
+    caller picks the message). Re-export updated.
+- tests: macos-tray 22/22 still pass. vm-layer 50/50 still pass.
+
+### m4 sub-task B — STATUS: 5-slice plan COMPLETE — 2026-05-26T05:32Z
+
+Slices 1–5 done:
+  ✓ slice 1 (`38bd7669`) — TrayActionHost declared class + 4 wired menu items
+  ✓ slice 2 (`3c3b565f`) — main-thread dispatch helper + Tokio runtime
+                            + startVm worker (placeholder sleep)
+  ✓ slice 3 (`af7ba46a`) — real VzRuntime::start/stop wired to menu
+  ✓ slice 4 (`075465ce`) — openShell Terminal.app stub
+  ✓ slice 5 (`3e7af023`) — githubLogin Terminal.app stub + helper rename
+
+Start VM + Stop VM are now end-to-end functional whenever a recipe
+artifact is present at `$HOME/Library/Application Support/tillandsias/`.
+Open Shell + GitHub login open a Terminal.app stub window when a VM
+is running. The four interactive menu items are wired to a real
+responder object with real Tokio dispatch.
+
+### follow-ups identified during m4 sub-task B
+
+1. **slice 4b** (m4 owner): real PTY-over-vsock via `UnixPtyMaster`
+   + a new `VsockPtyTransport` adapter wrapping
+   `transport_macos::VsockStream` + `PtySession::open` + `pump_io`,
+   attaching the Terminal.app window to the live in-VM forge shell.
+   Gated on m5 (a booted VM with a forge container to target).
+2. **slice 5b** (m4 owner): same wiring with `gh auth login` as the
+   entrypoint.
+3. **launch_spec amendment** (LINUX-OWNED ASK — l-headless agent):
+   amend `tillandsias-host-shell::pty::launch_spec` to wrap the inner
+   argv in `podman exec -it tillandsias-${project}-forge ...` so the
+   Windows tray (which consumes launch_spec directly) lands in the
+   same forge container as the macOS path. Companion details in
+   `plan/issues/tray-convergence-coordination.md`.
+4. **menu structure integration** (m4 owner, low priority): the four
+   new menu items are currently appended in `status_item.rs::append_actions`
+   independent of the `MenuStructure` rendering. Consider folding them
+   into `MenuStructure` so the cross-OS menu spec is the single source
+   of truth.
