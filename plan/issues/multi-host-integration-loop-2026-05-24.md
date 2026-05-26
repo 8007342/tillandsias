@@ -28,6 +28,18 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Dynamic-loop slice 2026-05-26T12:10Z — Step 16 slice 1: observatorium HTTP readiness + log capture
+
+- Commit `3d75eeef`: `wait_for_observatorium_http_ready` polls the real
+  HTTPS page (20×500ms, accepts 2xx/3xx/4xx). On failure surfaces one
+  actionable error including `PodmanClient::log_tail` of the
+  observatorium container.
+- Caught and fixed idiomatic-podman-layer bypass (had directly invoked
+  `Command::new("podman") logs`); now routes through the shared layer.
+- CI: 100%. Live podman smoke gated on `tillandsias --observatorium`.
+- Next: Step 16 slice 2 (extend to OpenCode-web readiness pattern; or
+  clippy/podman hardening sweep).
+
 ### Cycle 2026-05-26T11:43Z — INTEGRATED (macOS m5 consumes l9 URL contract)
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
