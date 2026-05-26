@@ -2,15 +2,15 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
-Status: **OPEN** as of 2026-05-26T11:47Z. macOS m1, m1b, m2, m3, m6,
+Status: **OPEN** as of 2026-05-26T13:39Z. macOS m1, m1b, m2, m3, m6,
 m7, m4 sub-task B, and the m5 fetch primitive are done/integrated. The latest
 folded macOS code is `ec76e63a` / plan packet `f8a3ec07`, merged and tested
 into `linux-next` during the 11:43Z integration cycle. `osx-next` is at
-`bdb7f9cb` with no unmerged macOS delta and trails `linux-next` only by the
-latest integration ledger commit. Remaining macOS live-terminal proof is gated
-on recipe-publish workflow registration, first green artifacts, manifest SHA
-pins, and the macOS runtime provisioning flip away from the current deferred
-extraction/conversion stubs.
+`bdb7f9cb` with no unmerged macOS delta and trails `linux-next` `72aa7917` by
+the latest coordination, Step 16, and pty_handler commits. Remaining macOS
+live-terminal proof is gated on recipe-publish workflow registration, first
+green artifacts, manifest SHA pins, and the macOS runtime provisioning flip
+away from the current deferred extraction/conversion stubs.
 
 ## How to use this file
 
@@ -1572,3 +1572,14 @@ is booted with an in-VM headless on vsock 42420 (gated on m5/l9).
 - Current macOS next action: wire the m5 primitive into `startVm:` while
   preserving the recoverable `"pending-ci"` gate. Live PTY proof still waits
   for a provisioned VM.
+
+### event: linux coordinator status reconciliation — 2026-05-26T13:39Z
+
+- Observed remote heads after fast-forward: `linux-next` `72aa7917`,
+  `windows-next` `7e95c7e2`, `osx-next` `bdb7f9cb`, `main` `ddf52dff`.
+- No unmerged macOS code delta exists. `osx-next` trails current `linux-next`
+  by Step 16 slice 1, pty_handler AsyncFd, and coordination ledger commits.
+- Current macOS next action is unchanged: pull latest `linux-next`, wire
+  `VzRuntime::fetch_recipe_artifact` into `startVm:`, and preserve the
+  recoverable `"pending-ci"` gate until l9 publishes real artifacts and SHA
+  pins. Live PTY proof still waits for a provisioned VM.

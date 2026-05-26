@@ -2,13 +2,14 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/windows-next-thin-tray.md, plan/issues/tray-convergence-coordination.md, plan/issues/control-socket-protocol-convergence-2026-05-25.md, openspec/changes/control-wire-pty-attach/
 
-Status: **OPEN** as of 2026-05-26T11:47Z. Windows w1, w2, w3, w4, w6
+Status: **OPEN** as of 2026-05-26T13:39Z. Windows w1, w2, w3, w4, w6
 diagnostics, the w5 `materialize::wsl::tar_to_wsl_import` converter, the shared
 forge-container `launch_spec` / `intent_for_action` amendment, and the w5
 `RemoteArtifact` resolver for the l9 URL contract are done/integrated through
 `linux-next`. The integration-loop merge/test of `origin/windows-next`
 `83e2cd51` completed at `150d8a14`. `origin/windows-next` currently has no
-unmerged Windows delta and is 11 commits behind `linux-next` `1d8217d3`.
+unmerged Windows delta and is 2 commits behind `linux-next` `72aa7917`
+(the pty_handler AsyncFd rewrite plus its plan checkpoint).
 Remaining WSL rootfs provisioning work is gated on recipe-publish workflow
 registration, first green artifacts, manifest SHA pins, and the Windows tray
 runtime flip away from the older provisioning manifest.
@@ -36,9 +37,9 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
 ## Currently unblocked / active
 
 - `w7/recipe-diagnostics-and-branch-sync` remains ready as a no-VM fallback:
-  `origin/windows-next` has no unmerged delta, but it is behind `linux-next`
-  `1d8217d3`. The next useful packet is a Windows branch-sync pull/merge of
-  latest `linux-next`, then diagnostic output against the remaining
+  `origin/windows-next` has no unmerged delta, but it is behind current
+  `linux-next` `72aa7917`. The next useful packet is a Windows branch-sync
+  pull/merge of latest `linux-next`, then diagnostic output against the remaining
   recipe-publish workflow-registration/SHA-pin artifact gate.
 - `w6/vm-status-and-enumerate-real-handlers` is done as a no-VM diagnostics
   fallback through `948af711` / integration cycle `b3ae21a`. Live VM status
@@ -66,9 +67,9 @@ diagnostics and branch sync.
   - `scripts/diagnose-windows.ps1`
 - summary: >
     Keep the Windows no-VM diagnostic current while the recipe artifact path
-    finishes. `origin/windows-next` `83e2cd51` has already been merged/tested
-    into `linux-next`, but the branch now needs to absorb `linux-next`
-    `1d8217d3`. Report whether the script still accurately distinguishes the
+    finishes. `origin/windows-next` `7e95c7e2` has already absorbed Step 16
+    slice 1 and has no unmerged Windows delta, but the branch now needs to
+    absorb `linux-next` `72aa7917`. Report whether the script still accurately distinguishes the
     completed BuildahExec/materialize-cli implementation and URL resolver from
     the still-missing recipe-publish workflow registration and SHA pins. The
     forge-target `launch_spec` amendment is complete, so w7 should focus on
@@ -746,3 +747,15 @@ Next greedy pickups (no VM needed): **w4b** (windows-ownable, pure) and **w4d**
 - w5 remains blocked on real recipe-publish artifacts and SHA pins. Consumers
   should continue treating `"pending-ci"` SHA values as a recoverable
   not-yet-published state.
+
+### Event: 2026-05-26T13:39Z — linux coordinator status reconciliation
+
+- Observed remote heads after fast-forward: `linux-next` `72aa7917`,
+  `windows-next` `7e95c7e2`, `osx-next` `bdb7f9cb`, `main` `ddf52dff`.
+- No unmerged Windows code delta exists. `windows-next` already contains Step
+  16 slice 1 and trails current `linux-next` only by the pty_handler AsyncFd
+  rewrite (`65980b02`) and its plan checkpoint (`72aa7917`).
+- Keep w7 ready: branch-sync to `72aa7917`, run
+  `scripts/diagnose-windows.ps1`, and report whether diagnostics still name
+  recipe-publish workflow registration plus manifest SHA pins as the current
+  artifact gate.
