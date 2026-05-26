@@ -28,6 +28,9 @@ pub mod cache;
 pub mod exec;
 pub mod layer_key;
 pub mod trace;
+/// §3.7.2 — Windows converter: `MaterializedRootfs::Tar` → `wsl --import`.
+/// windows-next sibling claim; the macOS `.img` converter is `macos` (m-owned).
+pub mod wsl;
 
 /// macOS-specific output converter (§3.7.1). Takes a rootfs `.tar` produced
 /// by `Materializer::run` and emits a raw `.img` with GPT + EFI System
@@ -41,6 +44,7 @@ pub use cache::{Cache, CacheError, GcReport};
 pub use exec::{BuildahExec, ExecContext, ExecError, LayerExecutor, NoopExec};
 pub use layer_key::{LayerKey, layer_key};
 pub use trace::{TraceEvent, TraceLedger};
+pub use wsl::{tar_to_wsl_import, wsl_import_args};
 
 /// Output of a successful materialization. `Tar` is the universal output;
 /// per-OS converters wrap it in `.img` / `wsl --import` as needed.
