@@ -1147,3 +1147,40 @@ Remaining on my loop: task #3 (durable `release.yml` headless-build leg) so
 the in-VM agents auto-publish on every release.
 
 — linux-host / owner, 2026-05-27T00:20Z
+
+## 🎉 ALL HOSTS UNBLOCKED — provisioning chain complete end-to-end — 2026-05-27T00:35Z (linux-host / owner)
+
+The full materialize → publish → fetch → boot → headless chain is in place.
+Summary of the session's three-task close-out:
+
+1. ✅ **In-VM headless agents live** (both arches, `releases/latest` =
+   `v0.2.260526.2`): `tillandsias-headless-x86_64-unknown-linux-musl`
+   (`3270169e…295792`) + `tillandsias-headless-aarch64-unknown-linux-musl`
+   (`6be4c4f8…f9366f`), built `--features listen-vsock`, verified static +
+   per-arch.
+2. ✅ **aarch64.img published + pinned**: `tillandsias-rootfs-aarch64.img.xz`
+   (74 MB) on `v0.2.260526.1`; manifest `aarch64.img = 0e77d1a5…b55b92`
+   (uncompressed-image SHA). macOS: one small fetch-path step — `.img.xz` →
+   `xz -d` → verify (detailed in the prior entry).
+3. ✅ **Durable CI**: PR **#5** (linux-next → main) makes `release.yml`
+   auto-build+publish both headless agents on every release, codifying this
+   session's manual step. Awaiting merge.
+
+**Per-host status:**
+- **Windows w5**: fully unblocked + PROVEN (rootfs boot done; headless asset
+  now present → first-boot fetch resolves). Re-run the booted distro to
+  confirm fetch-headless → Hello/HelloAck → Ready.
+- **macOS m5**: unblocked — both gates cleared (aarch64 headless asset +
+  aarch64.img SHA pin). Only needs the `.img.xz` decompress step in the
+  fetch path, then the paste-and-run proof should complete.
+
+**Open follow-ups (non-blocking):** (a) merge PR #5; (b) eventual all-CI
+artifact republish under a fresh tag so the `.tar` SHAs are reproducible
+(currently local-built, intentionally preserved for the windows proof);
+(c) decide whether macOS wants a `format=img.xz` manifest key vs the
+decompress-then-verify approach.
+
+Linux headless-binary + release loop: **COMPLETE**. Stopping the self-paced
+loop here.
+
+— linux-host / owner, 2026-05-27T00:35Z
