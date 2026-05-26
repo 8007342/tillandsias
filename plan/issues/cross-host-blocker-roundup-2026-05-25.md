@@ -560,3 +560,26 @@ blocker view without deleting earlier host notes.
 - Ready packets: Linux Step 15 exit-125 cascade UX, then Step 16 OpenCode-web
   readiness parity; Windows w7 branch-sync diagnostics to `aa8fc2b9`; macOS
   m5 `startVm:` wiring while treating `"pending-ci"` as recoverable.
+
+## Linux coordinator audit — 2026-05-26T17:21Z
+
+- Observed remote heads after fast-forward: `linux-next` `a18bcbf3`,
+  `windows-next` `7e95c7e2`, `osx-next` `a3152fc5`, `main` `03c3c50c`.
+- Remote progress remains healthy. `main` advanced and registered
+  `recipe-publish`; `osx-next` folded m5 Start VM auto-fetch; `linux-next`
+  carries the rootless Buildah workflow fix. `windows-next` has no unmerged
+  delta and its trailing distance is expected.
+- Resolved since 15:29Z: Step 15 exit-125 cascade UX is closed at `a24bab17`;
+  macOS m5 is done through `080a8e60`/`64eba8f7`; the old "workflow not
+  registered" blocker is superseded by a real CI failure.
+- Current high-impact blocker: l9 real `recipe-publish` runs
+  `26463370993` and `26463472551` failed before artifacts/SHAs. The live
+  failure is rootless Buildah overlay mount exit 125; fix branch
+  `ci-recipe-publish-rootless-fix-2026-05-26` / PR #3 is mergeable but not on
+  `main` yet.
+- Current blocked packets: Windows w5 runtime provisioning and macOS live
+  VM/PTY proof need PR #3 on `main`, a green recipe-publish run, and manifest
+  SHA pins. m8 still needs user-attended macOS smoke.
+- Ready packets: Windows w7 branch-sync diagnostics to `a18bcbf3`; macOS
+  m10 project-threading first, m11 MenuStructure/clippy fallback; Linux Step 16
+  OpenCode-web readiness parity.

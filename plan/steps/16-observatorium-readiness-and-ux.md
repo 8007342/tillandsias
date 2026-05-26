@@ -29,8 +29,8 @@ and surface logs or inspect data when it is not.
 
 ## Next action
 
-- After the Step 15 exit-125 cascade UX residual is closed, extend the
-  readiness/log-capture pattern to OpenCode-web.
+- Extend the readiness/log-capture pattern to OpenCode-web now that the Step 15
+  exit-125 cascade UX residual is closed.
 - Add inspect data if log tail alone is not enough to distinguish route versus
   container startup failures.
 - Keep the browser and tray UX aligned with the same canonical hostname.
@@ -39,7 +39,7 @@ and surface logs or inspect data when it is not.
 
 - Branch: `linux-next`
 - Checkpoint: slice 1 pushed at `3d75eeef`; current coordination head
-  `aa8fc2b9`.
+  `a18bcbf3`.
 - Push: after OpenCode-web readiness parity or the next diagnostics slice.
 
 ## Handoff note

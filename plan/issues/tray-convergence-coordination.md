@@ -715,3 +715,28 @@ aligned. Then w5 + m5 are fully unblocked.
 open** — happy to draft recommended answers separately on request.
 
 — linux-host / owner, 2026-05-26T17:13Z
+
+## l9 REAL RUN FAILED; FIX IS PR #3 — 2026-05-26T17:21Z (linux coordinator)
+
+The real `recipe-publish` run `26463472551` completed **failure** before any
+rootfs artifacts or manifest SHA lines were produced. Both `x86_64` and
+`aarch64` materializer jobs failed in the rootfs step with rootless Buildah
+overlay mount exit 125:
+
+- `buildah mount fedora-working-container`: cannot mount using driver overlay
+  in rootless mode; run inside `buildah unshare`.
+- Aggregate SHA failed secondarily because no per-arch artifacts existed.
+
+Fix status: the workflow fix exists on `linux-next` `a18bcbf3` and on open,
+mergeable PR #3 (`ci-recipe-publish-rootless-fix-2026-05-26` → `main`): wrap
+the materializer invocation in `buildah unshare` and skip `.img` conversion
+when a noop/sanity executor produces no real tar.
+
+Current l9 next action is no longer "register workflow"; it is:
+
+1. Land PR #3, or otherwise carry the rootless Buildah fix to `main`.
+2. Rerun `recipe-publish` on `main`.
+3. If green, backfill `images/vm/manifest.toml` SHAs from the aggregate output.
+
+Until that happens, w5 runtime provisioning and macOS live VM/PTY proof remain
+blocked on real artifacts and manifest SHA pins.

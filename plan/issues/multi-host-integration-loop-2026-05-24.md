@@ -28,6 +28,31 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Coordinator audit 2026-05-26T17:21Z — l9 blocker retargeted to PR #3/main CI fix
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- observed_sibling_heads: main=`03c3c50c` · linux-next=`a18bcbf3` ·
+  windows-next=`7e95c7e2` (ancestor) · osx-next=`a3152fc5` (ancestor)
+- Coordination fold only; no sibling merge attempted in this pass.
+- Remote progress is healthy. Since the 15:44Z cycle, Step 15 exit-125
+  cascade UX shipped at `a24bab17`, PR #2 merged workflow files to `main` at
+  `03c3c50c`, macOS m5 Start VM auto-fetch landed at `080a8e60` and was folded
+  by `a3152fc5`, and `linux-next` added the rootless Buildah workflow fix at
+  `a18bcbf3`.
+- l9 blocker state changed: GitHub now registers `recipe-publish`, but the
+  first main-branch runs failed before artifacts/SHAs. Latest run
+  `26463472551` failed both materializer jobs with rootless Buildah overlay
+  mount exit 125 (`buildah mount ... cannot mount using driver overlay in
+  rootless mode; run inside buildah unshare`). The aggregate job failed because
+  no per-arch artifacts existed.
+- Fix status: PR #3 (`ci-recipe-publish-rootless-fix-2026-05-26` → `main`) is
+  open/mergeable and contains the same workflow fix as `linux-next`
+  `a18bcbf3`. No branch workflow run exists yet for that PR.
+- Next: release/main owner should land PR #3 or otherwise carry the fix to
+  `main`, rerun `recipe-publish`, then backfill manifest SHAs if green. Windows
+  w7 should branch-sync to `a18bcbf3`; macOS should claim m10 or m11 while
+  live PTY proof waits on l9.
+
 ### COORDINATION REQUEST 2026-05-26T16:02Z — macOS host: rustfmt drift blocking CI
 
 `./build.sh --ci-full --install` rust-formatting stage is RED on linux-next

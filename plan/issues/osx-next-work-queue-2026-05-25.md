@@ -2,16 +2,14 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
-Status: **OPEN** as of 2026-05-26T15:29Z. macOS m1, m1b, m2, m3, m6,
-m7, m4 sub-task B, and the m5 fetch primitive are done/integrated. The latest
-folded macOS code is `ec76e63a` / plan packet `f8a3ec07`, merged and tested
-into `linux-next` during the 11:43Z integration cycle. `osx-next` is at
-`bdb7f9cb` with no unmerged macOS delta and trails `linux-next` `aa8fc2b9` by
-10 commits: Step 16 slice 1, pty_handler AsyncFd and pump-cancel work, plus
-coordination checkpoints. Remaining macOS live-terminal proof is gated on
-recipe-publish workflow registration, first green artifacts, manifest SHA pins,
-and the macOS runtime provisioning flip away from the current deferred
-extraction/conversion stubs.
+Status: **OPEN** as of 2026-05-26T17:21Z. macOS m1, m1b, m2, m3, m6,
+m7, m4 sub-task B, m5 fetch primitive, and m5 Start VM auto-fetch wiring are
+done/integrated. The latest folded macOS code is `080a8e60` / plan packet
+`64eba8f7`, folded into `linux-next` through merge `a3152fc5`. `osx-next` is
+at `a3152fc5` with no unmerged macOS delta and trails `linux-next`
+`a18bcbf3` by 2 commits: PR #2 registration notes and the rootless Buildah
+recipe-publish fix. Remaining macOS live-terminal proof is gated on l9:
+PR #3/main recipe-publish fix, first green artifacts, and manifest SHA pins.
 
 ## How to use this file
 
@@ -39,14 +37,96 @@ Per branch canon §4, plan/-class writes directly are CORRECT; code commits
 SHOULD route through `osx-next` so the integration loop can run isolation
 checks. Advisory only; both flows still work.
 
-Work-shaping note: m5 runtime provisioning can be shaped against the artifact
+Work-shaping note: m5 runtime provisioning is now wired against the artifact
 contract, but E2E should wait for first green recipe-publish SHAs. m8 produced
 its autonomous no-VM build/process evidence and now waits on user-attended menu
 click smoke. The former m9 no-VM PTY adapter packet is superseded by m4 slices
-4c.1, 4c.2, and 5b; do not re-claim it. Current macOS implementation target is
-wiring the integrated m5 fetch primitive into `startVm:`.
+4c.1, 4c.2, and 5b; do not re-claim it. Current macOS implementation targets
+are optional follow-ups that do not require live artifacts: m10 project
+threading for PTY launch and m11 MenuStructure/clippy integration.
 
 ## Currently unblocked / active
+
+### Item: m10/menu-project-threading-for-pty-launch
+
+- id: `m10/menu-project-threading-for-pty-launch`
+- type: feature
+- owner_host: macos
+- capability_tags: [appkit, menu-structure, pty, host-shell]
+- status: ready
+- depends_on: [m4/pty-attach-appkit-terminal]
+- gated_on: []
+- blocks: []
+- owned_files:
+  - `crates/tillandsias-macos-tray/src/action_host.rs`
+  - `crates/tillandsias-macos-tray/src/status_item.rs`
+  - `crates/tillandsias-macos-tray/src/terminal_attach.rs`
+- summary: >
+    Thread the active project selected by the macOS menu into `attach_pty` so
+    `launch_spec(intent, project, rows, cols)` targets the same forge container
+    semantics as the Windows launch-spec amendment instead of bare-VM bash.
+    This is useful before l9 SHA pins because it is structurally testable
+    without a booted VM.
+- next_action: >
+    Inspect the current `MenuStructure`/status-item project state, pass an
+    `Option<ProjectRef>` or equivalent through `open_shell` / `github_login`
+    into `attach_pty`, and update unit tests to prove the launch spec receives
+    `Some(project)` when a project action is selected.
+- acceptance_evidence:
+  - `cargo test -p tillandsias-macos-tray --bin tillandsias-tray` on macOS.
+  - A no-VM action-host error path still reports the selected project without
+    panicking or bypassing the pending-artifact gate.
+- fallback_when_blocked: >
+    Claim `m11/menu-structure-action-integration-and-clippy` if project state is
+    not yet represented in the menu model.
+- agent_status_packet_expected:
+  - current plan
+  - dependencies and blockers
+  - files touched
+  - evidence produced
+  - next checkpoint
+  - lease intent
+
+### Item: m11/menu-structure-action-integration-and-clippy
+
+- id: `m11/menu-structure-action-integration-and-clippy`
+- type: housekeeping
+- owner_host: macos
+- capability_tags: [appkit, menu-structure, clippy, rust]
+- status: ready
+- depends_on: [m4/pty-attach-appkit-terminal, m5/vfr-image-via-ci-rootfs]
+- gated_on: []
+- blocks: []
+- owned_files:
+  - `crates/tillandsias-macos-tray/src/action_host.rs`
+  - `crates/tillandsias-macos-tray/src/status_item.rs`
+  - `crates/tillandsias-macos-tray/src/menu_disabled_v2.rs`
+  - `crates/tillandsias-macos-tray/src/pty_vsock_bridge.rs`
+- summary: >
+    Fold the four hand-wired AppKit action rows toward the portable
+    `MenuStructure` contract and run a focused lint/format sweep over the new
+    m4/m5 code. This keeps the macOS tray aligned while l9 artifacts are
+    pending, without touching release-lane workflow state.
+- next_action: >
+    Run focused macOS tray tests/lints, identify the smallest MenuStructure
+    adapter change that removes duplicate manual menu wiring, and checkpoint
+    only if the diff is semantic or needed to keep CI green.
+- acceptance_evidence:
+  - `cargo fmt --all -- --check` or a scoped rustfmt pass for macOS-owned
+    crates.
+  - `cargo clippy -p tillandsias-macos-tray -- -D warnings` if available on
+    macOS, or a documented platform/toolchain blocker.
+  - `cargo test -p tillandsias-macos-tray --bin tillandsias-tray`.
+- fallback_when_blocked: >
+    Leave a no-code agent_status_packet explaining which MenuStructure field is
+    missing, then wait on l9 SHA pins or user-attended m8 smoke.
+- agent_status_packet_expected:
+  - current plan
+  - dependencies and blockers
+  - files touched
+  - evidence produced
+  - next checkpoint
+  - lease intent
 
 ### Item: m1b/transport-macos-vsock-connector
 
@@ -295,11 +375,12 @@ wiring the integrated m5 fetch primitive into `startVm:`.
 - type: feature
 - owner_host: macos
 - capability_tags: [vfr, vm-layer, fetch, provisioning]
-- status: blocked
+- status: done
+- completed_at: 2026-05-26T16:21Z
+- acceptance_status: blocked_on_l9_sha_pins_for_live_boot
 - gated_on:
-  - linux deliverable `l9/recipe-artifact-url-and-publish-smoke`
-    (recipe-publish workflow registration, first green artifacts, and SHA pins)
-  - `images/vm/manifest.toml` SHA pins from first green recipe-publish run
+  - live boot smoke after linux deliverable `l9/recipe-artifact-url-and-publish-smoke`
+    publishes first green artifacts and `images/vm/manifest.toml` SHA pins
 - cleared_gates:
   - linux deliverable `l2/recipe-shared-modules` integrated at `a7af0ed`
   - linux deliverable `l7/§3-materializer-driver` shipped at `9dca2c47`
@@ -311,6 +392,8 @@ wiring the integrated m5 fetch primitive into `startVm:`.
   - l9 consumer contract documented at `74b1d78d`
   - m5 fetch primitive landed on `origin/osx-next` at `ec76e63a` and was
     merged/tested into `linux-next` during the 11:43Z integration cycle
+  - m5 Start VM auto-fetch wiring landed on `origin/osx-next` at `080a8e60`
+    and was folded into `linux-next` through `a3152fc5`
 - depends_on: [m1/vmruntime-stop-and-wait-ready]
 - owned_files:
   - `crates/tillandsias-vm-layer/src/vz.rs` (provisioning slice)
@@ -322,13 +405,11 @@ wiring the integrated m5 fetch primitive into `startVm:`.
     the raw EFI/ext4 image consumed directly by VFR; the .tar is the
     intermediate). Contribute `materialize::macos::tar_to_vfr_img`
     (Linux-runnable per D6 task 2b.2). The converter and workflow scaffold
-    are done, and the first macOS fetch primitive is integrated into
-    `linux-next`. Remaining m5 work is to wire it into the Start VM/provision
-    path, replace the deferred extract/convert
-    stubs in `vz.rs`, treat `"pending-ci"` SHA pins as a recoverable
-    not-yet-published state, and respect a `--materialize-local` dev path if
-    retained.
-- estimated_effort: 1-2 days after l9 SHA pins land.
+    are done, and the macOS fetch primitive is wired into `startVm:`. Fresh
+    installs now auto-fetch the `.img` before boot, treat `"pending-ci"` SHA
+    pins as a recoverable not-yet-published state, and preserve the live boot
+    path for the first green recipe-publish artifacts.
+- estimated_effort: done; live verification after l9 SHA pins land.
 
 ### Item: m6/macos-installer-pkg-and-codesign
 
@@ -1657,3 +1738,18 @@ step 5 lands.
   `VzRuntime::fetch_recipe_artifact` into `startVm:`, and preserve the
   recoverable `"pending-ci"` gate until l9 publishes real artifacts and SHA
   pins. Live PTY proof still waits for a provisioned VM.
+
+### event: linux coordinator status reconciliation — 2026-05-26T17:21Z
+
+- Observed remote heads after fast-forward: `linux-next` `a18bcbf3`,
+  `windows-next` `7e95c7e2`, `osx-next` `a3152fc5`, `main` `03c3c50c`.
+- `osx-next` is an ancestor of `linux-next` and trails by 2 commits. The m5
+  Start VM auto-fetch wiring (`080a8e60`) and its plan packet (`64eba8f7`) are
+  folded through `a3152fc5`; no macOS blocking implementation remains for
+  v0.0.1.
+- True live-VM blocker is l9: main-branch `recipe-publish` runs
+  `26463370993` and `26463472551` failed before real artifacts/SHAs. The
+  rootless Buildah fix is on `linux-next` `a18bcbf3` and PR #3
+  (`ci-recipe-publish-rootless-fix-2026-05-26`) targeting `main`.
+- Ready macOS work while waiting: claim `m10/menu-project-threading-for-pty-launch`
+  first; use `m11/menu-structure-action-integration-and-clippy` as fallback.
