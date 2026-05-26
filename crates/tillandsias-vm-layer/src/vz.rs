@@ -112,6 +112,79 @@ impl VzRuntime {
             && self.initrd_path().exists()
     }
 
+    /// Fetch the recipe-published rootfs artifact (per l9 URL contract)
+    /// and verify it against the manifest's pinned SHA-256, writing
+    /// the verified bytes to `self.rootfs_image_path()`. The macOS
+    /// tray calls this on first launch (and on any subsequent launch
+    /// where the image is absent) before `start()`.
+    ///
+    /// Arch is picked from `cfg!(target_arch = ...)` — Apple Silicon
+    /// gets `aarch64`, the (currently absent) Intel-Mac path would
+    /// get `x86_64`. Format is `"img"` for macOS since VFR boots a
+    /// raw EFI+ext4 disk image directly (Windows uses `"tar"` via
+    /// `wsl --import`).
+    ///
+    /// `tag` is the release tag (e.g. `"v0.2.260526.3"`) the caller
+    /// resolved from `CARGO_PKG_VERSION` or an explicit
+    /// `--release-tag` flag. Substituted into the manifest's
+    /// `[output].artifact_url_template`.
+    ///
+    /// Fails fast (without touching the network) if the manifest has
+    /// no `artifact_url_template`, no `expected_rootfs_sha` for the
+    /// chosen `<arch>.<format>` key, or the SHA-256 isn't a valid
+    /// 64-char hex string (which is how `download_verified` refuses
+    /// the placeholder `"pending-ci"` value until real CI publishes
+    /// pinned SHAs).
+    ///
+    /// @trace plan/issues/cross-host-blocker-roundup-2026-05-25.md
+    ///        l9 (artifact URL + SHA contract),
+    ///        plan/steps/20-macos-tray-v0_0_1.md (m5/vfr-image-via-ci-rootfs)
+    #[cfg(all(feature = "recipe", feature = "download"))]
+    pub async fn fetch_recipe_artifact(
+        &self,
+        manifest: &crate::recipe::Manifest,
+        tag: &str,
+    ) -> Result<(), String> {
+        use crate::fetch::{download_verified, RemoteArtifact};
+
+        let arch = if cfg!(target_arch = "aarch64") {
+            "aarch64"
+        } else {
+            "x86_64"
+        };
+        let format = "img";
+        let key = format!("{arch}.{format}");
+
+        let url = manifest
+            .artifact_url(arch, format, tag)
+            .ok_or_else(|| format!(
+                "manifest has no [output].artifact_url_template; cannot resolve {key} URL"
+            ))?;
+
+        let sha256 = manifest
+            .expected_sha(&key)
+            .ok_or_else(|| format!(
+                "manifest [output.expected_rootfs_sha] missing key {key:?}; \
+                 was the recipe-publish CI job run yet?"
+            ))?
+            .to_string();
+
+        let artifact = RemoteArtifact {
+            url,
+            sha256,
+            bytes: None,
+        };
+
+        // Ensure image_root exists; download_verified writes the
+        // dest path directly and won't create parent dirs.
+        if let Some(parent) = self.rootfs_image_path().parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
+        }
+
+        download_verified(&artifact, &self.rootfs_image_path(), &|_, _| {}).await
+    }
+
     /// Open a host-side vsock stream to the running VM on `port`. Returns
     /// an error if the VM hasn't been started (no handle in the slot) or
     /// if VZ's connect path fails.
@@ -1013,6 +1086,63 @@ mod tests {
         assert!(
             err.contains("rootfs not found"),
             "unexpected error message: {err}"
+        );
+    }
+
+    /// `fetch_recipe_artifact` must refuse the placeholder `"pending-ci"`
+    /// SHA value gracefully — that's the gating state until a real
+    /// recipe-publish CI run populates manifest.toml with pinned SHAs.
+    /// Verifies the macOS-side fetch path is plumbed end-to-end but
+    /// fails closed before touching the network.
+    ///
+    /// @trace plan/issues/cross-host-blocker-roundup-2026-05-25.md l9
+    #[cfg(all(target_os = "macos", feature = "recipe", feature = "download"))]
+    #[tokio::test]
+    async fn fetch_recipe_artifact_refuses_placeholder_sha() {
+        use crate::recipe::Manifest;
+        let toml = r#"
+recipe_version = 1
+[output]
+artifact_url_template = "https://example.invalid/{tag}/{arch}.{format}"
+[output.expected_rootfs_sha]
+"aarch64.img" = "pending-ci"
+"x86_64.img"  = "pending-ci"
+"#;
+        let manifest = Manifest::from_toml(toml).expect("parse test manifest");
+        let tmp = tempfile::tempdir().unwrap();
+        let rt = VzRuntime::new(3, tmp.path().to_path_buf());
+        let err = rt
+            .fetch_recipe_artifact(&manifest, "v0.0.0-test")
+            .await
+            .expect_err("placeholder SHA must be refused");
+        assert!(
+            err.contains("no pinned SHA-256"),
+            "expected SHA-refusal error, got: {err}"
+        );
+    }
+
+    /// `fetch_recipe_artifact` returns a clear error when the manifest
+    /// has no `artifact_url_template` (template absent → caller can't
+    /// resolve the URL).
+    #[cfg(all(target_os = "macos", feature = "recipe", feature = "download"))]
+    #[tokio::test]
+    async fn fetch_recipe_artifact_reports_missing_template() {
+        use crate::recipe::Manifest;
+        let toml = r#"
+recipe_version = 1
+[output.expected_rootfs_sha]
+"aarch64.img" = "0000000000000000000000000000000000000000000000000000000000000000"
+"#;
+        let manifest = Manifest::from_toml(toml).expect("parse test manifest");
+        let tmp = tempfile::tempdir().unwrap();
+        let rt = VzRuntime::new(3, tmp.path().to_path_buf());
+        let err = rt
+            .fetch_recipe_artifact(&manifest, "vX")
+            .await
+            .expect_err("missing template must error");
+        assert!(
+            err.contains("artifact_url_template"),
+            "expected template-missing error, got: {err}"
         );
     }
 
