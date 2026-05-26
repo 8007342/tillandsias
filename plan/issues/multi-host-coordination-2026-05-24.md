@@ -165,8 +165,8 @@ host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
 Observed remote heads after fetch/pull:
 
 - `main`: ddf52dff
-- `linux-next`: effbfbf4
-- `windows-next`: 93427ed9
+- `linux-next`: fd7d904e
+- `windows-next`: ae8789ff
 - `osx-next`: effbfbf4
 
 Ledger corrections made in this audit:
@@ -177,7 +177,8 @@ Ledger corrections made in this audit:
   Unix PTY foundation.
 - `plan/issues/windows-next-work-queue-2026-05-25.md` now records that
   `origin/windows-next` is ahead of `linux-next` with w4 launch/menu commits
-  through `93427ed9`, while `linux-next` has newer macOS PTY foundation work.
+  at `ae8789ff` (w4 code delta through `93427ed9`). The latest Windows merge
+  absorbed macOS PTY foundation work but not this coordination commit.
 - `plan/issues/cross-host-blocker-roundup-2026-05-25.md` now pings stale Linux
   l7 materializer lease `linux-l-mat-2026-05-25T15Z`.
 

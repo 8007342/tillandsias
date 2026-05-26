@@ -267,8 +267,9 @@ blocker view without deleting earlier host notes.
 
 - **Windows:** w4 `pty-attach-conpty` active under lease `8a3307907d94`.
   The §3 host PTY stack is integrated through `cbf308a`; w4a/w4b and
-  menu-click launch wiring are ahead on `origin/windows-next` through
-  `93427ed9` and need Linux integration-loop merge/test evidence.
+  menu-click launch wiring are ahead on `origin/windows-next` at `ae8789ff`
+  (w4 code delta through `93427ed9`) and need Linux integration-loop
+  merge/test evidence.
 - **macOS:** m1b and m6 are done. m4 has the Unix PTY foundation and is ready
   for the `terminal_attach` user-facing half; m7 is ready now that m6 produced
   bundle/install artifacts.
@@ -285,14 +286,15 @@ blocker view without deleting earlier host notes.
 
 ## Linux coordinator audit — 2026-05-26T00:18Z
 
-- Observed remote heads: `linux-next`/`osx-next` `effbfbf4`,
-  `windows-next` `93427ed9`, `main` `ddf52dff`.
+- Observed remote heads after post-push refresh: `linux-next` `fd7d904e`,
+  `windows-next` `ae8789ff`, `osx-next` `effbfbf4`, `main` `ddf52dff`.
 - Resolved since the previous blocker fold: macOS m1b completed its vsock
   connector + wait_ready Hello/HelloAck probe; macOS m6 produced and verified
   the `.app` bundle/install scripts; macOS m7 is now ready.
 - New integration watch: Windows is ahead of `linux-next` with w4 launch/menu
-  commits, while `linux-next` also has newer macOS PTY foundation work. The
-  next integration loop should merge/test Windows or record the exact conflict.
+  commits. Its latest merge absorbed the macOS PTY foundation (`effbfbf4`) but
+  not this coordination commit, so the next integration loop should merge/test
+  Windows or record the exact conflict.
 - Ping: Linux l7 materializer lease `linux-l-mat-2026-05-25T15Z` has no
   checkpoint in the fetched ledgers after its default TTL. This is now the
   highest-impact stale dependency because it gates Windows w5, macOS m5, and

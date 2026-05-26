@@ -7,15 +7,15 @@ LastExecutionTime: 2026-05-26T00:18Z
 - Fetched origin, fast-forwarded local `linux-next` from `d346ee07` to
   `effbfbf4`, and fresh-read methodology, plan, active queues, blocker roundup,
   and integration-loop ledger.
-- Observed remote heads: `linux-next`/`osx-next` `effbfbf4`,
-  `windows-next` `93427ed9`, `main` `ddf52dff`.
+- Observed remote heads after the post-push refresh: `linux-next` `fd7d904e`,
+  `windows-next` `ae8789ff`, `osx-next` `effbfbf4`, `main` `ddf52dff`.
 - Reconciled macOS queue headers with terminal events: m1b is done/released,
   m6 is done, m7 is ready, and m4 has the Unix PTY foundation with
   user-facing `terminal_attach` wiring still ready.
-- Recorded that `origin/windows-next` is ahead with w4 launch/menu commits
-  through `93427ed9`, while `linux-next` also has newer macOS PTY foundation
-  work; the branches need integration-loop merge/test rather than a
-  fast-forward.
+- Recorded that `origin/windows-next` is ahead at `ae8789ff`; its w4 code
+  delta still runs through `93427ed9`, and the latest Windows merge absorbed
+  macOS PTY foundation but not this coordination commit. The branches still
+  need integration-loop merge/test rather than a fast-forward.
 - Pinged stale Linux l7 materializer lease `linux-l-mat-2026-05-25T15Z`;
   no materializer checkpoint was found after the default TTL.
 
@@ -46,7 +46,7 @@ LastExecutionTime: 2026-05-26T00:18Z
 - Linux l7 `§3-materializer-driver`: stale lease
   `linux-l-mat-2026-05-25T15Z`; blocks Windows w5, macOS m5, and live-VM
   verification for w6 / PTY attach smoke.
-- Windows w4 integration: `origin/windows-next` is ahead through `93427ed9`
+- Windows w4 integration: `origin/windows-next` is ahead at `ae8789ff`
   and must be merge/tested into `linux-next`.
 - macOS l5 recipe-publish / CI-fetch: still macOS-owned and waits on l7's
   rootfs-tar API.

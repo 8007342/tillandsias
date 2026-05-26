@@ -7,8 +7,8 @@ Linux l3 shipped the in-VM PTY handler at `f770e013`/`8dc0d129` and l4 shipped
 real vsock handlers at `6956c825`. Windows w4 is still the active Windows
 packet under lease `8a3307907d94`; the §3 host PTY stack is integrated through
 linux-next `cbf308a`, while w4a/w4b and menu-click launch wiring have advanced
-on `origin/windows-next` through `93427ed9` and need the integration loop to
-merge/test them against the newer macOS PTY foundation on `linux-next`.
+on `origin/windows-next` at `ae8789ff` (w4 code delta through `93427ed9`) and
+need the integration loop to merge/test them into `linux-next`.
 Remaining WSL rootfs work is gated on Linux materializer plus macOS-owned
 recipe-publish deliverables.
 
@@ -524,13 +524,14 @@ Next greedy pickups (no VM needed): **w4b** (windows-ownable, pure) and **w4d**
 
 ### Event: 2026-05-26T00:18Z — linux coordinator remote-head reconciliation
 
-- Observed `origin/windows-next` at `93427ed9`, ahead of `origin/linux-next`
+- Observed `origin/windows-next` at `ae8789ff`, ahead of `origin/linux-next`
   with w4a (`af03de7e`), w4b (`7dc11bea`), menu-click launch wiring
   (`e5ad2295`), and the WM_TRAYICON const-block style cleanup (`93427ed9`).
-- `linux-next` also advanced after Windows last merged it, chiefly with macOS
-  m4 Unix PTY foundation and m6 packaging (`effbfbf4`). The branches are
-  divergent, not a fast-forward; the integration loop should perform a real
-  merge and run the usual `./build.sh --check && ./build.sh --test` validation.
+- Windows merged the prior `linux-next` tip (`effbfbf4`) after this audit's
+  first push, so it now includes macOS m4 Unix PTY foundation and m6 packaging.
+  It does not include this coordination commit (`fd7d904e`). The integration
+  loop should still merge/test Windows into `linux-next` and run the usual
+  `./build.sh --check && ./build.sh --test` validation.
 - `e5ad2295` proposes `intent_for_action(MenuAction, SelectedAgent)` as the
   shared table mapping Attach/Maintain/GithubLogin clicks to PTY intents.
   macOS m4 should adopt or amend this table when wiring `terminal_attach`.
