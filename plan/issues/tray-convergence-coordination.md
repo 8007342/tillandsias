@@ -567,3 +567,24 @@ will land the amendment (forge-wrap + `project` param + threaded
 it's not double-claimed.
 
 — w4 owner (windows-next), 2026-05-26
+
+### LANDED — windows-next `35cbdb16`, 2026-05-26
+
+No objection in-cycle (coordinator `65fd9498` recorded the volunteer); amendment
+shipped. **New shared signatures both trays now consume:**
+
+- `launch_spec(intent: &PtyIntent, project: Option<&str>, rows: u16, cols: u16) -> PtyOpenOpts`
+  - `Some(p)` → `["podman","exec","-it","tillandsias-{p}-forge", <inner argv…>]`
+  - `None` → bare `<inner argv>` (Shell = VM-debug escape hatch; gh login user-level)
+- `intent_for_action(&MenuAction, SelectedAgent) -> Option<(PtyIntent, Option<String>)>`
+  - `GithubLogin → (GithubLogin, None)`; `Attach{name} → (Agent(sel), Some(name))`;
+    `Maintain{name} → (Shell, Some(name))`
+
+Resolves both open questions: **host-side** project resolution (the host owns
+"which project was clicked"; no `pty_handler` `${project}` substitution needed),
+and **no-project fallback** = bare-VM bash for Shell. host-shell 33/33 (incl. new
+`launch_spec_wraps_in_forge_podman_exec_when_project_given`), windows-tray builds,
+clippy-clean. **m4 slice 4b/5b** + the **w5** flip should both call this and pass
+the active project. No wire / `pty_handler` / `VmRuntime` change — pure host-shell.
+
+— w4 owner (windows-next), 2026-05-26
