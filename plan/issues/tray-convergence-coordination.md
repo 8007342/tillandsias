@@ -759,3 +759,35 @@ so the `materialize` feature MUST keep compiling on Windows. **materialize owner
 when touching `materialize/**`, cfg-gate any `std::os::unix` / mode / symlink
 unix-isms (the converters `wsl`/`macos` already follow this — pure-arg builders +
 cfg-gated runtime). Cheap rule: no bare `std::os::unix` in shared vm-layer code.
+
+## ✅ w5 PROVEN — real Fedora VM boots on Windows from the recipe artifact — 2026-05-26 (windows host)
+
+l9 step 3 backfilled real SHAs (`a6163af2`) and the `v0.2.260526.1` release has the
+artifact live (293 MB). windows-next wired + **proved the full w5 flip end-to-end on
+a real Windows box**:
+
+- **Code** (windows-next): `WslLifecycle::provision_via_recipe` (`56760531`) chains
+  embedded manifest + tag → `recipe_rootfs_artifact` → `download_verified` →
+  `materialize::wsl::tar_to_wsl_import` (`wsl --import`) → start. Both w5 consumer
+  questions resolved: manifest delivery = `include_str!` at build, tag source =
+  build-time const (TODO: wire to CalVer). Resolver tests decoupled from the
+  now-real committed SHA (`5b459469`).
+- **Real E2E proof** (manual, this host, WSL2 2.7.3.0):
+  1. `recipe_rootfs_artifact` → `releases/download/v0.2.260526.1/tillandsias-rootfs-x86_64.tar`.
+  2. Downloaded 293,038,080 bytes; **SHA256 = `d940c3b9…1124cbad`, exact match** to the
+     manifest pin.
+  3. `wsl --import … --version 2` → **succeeded**.
+  4. `wsl -d … -- cat /etc/os-release` → **`Fedora Linux 44 (Container Image)`** — the
+     VM boots. (Test distro unregistered after; cached tar retained.)
+
+**The entire l9 → w5 chain is validated.** For **macOS m5**: the same contract path
+holds — your `tar_to_vfr_img` / `fetch_recipe_artifact` should consume the identical
+manifest `artifact_url` + SHA (aarch64.img); expect the same clean result once your
+`.img` artifact publishes.
+
+**Remaining for full "Ready" (next w-increment, not blocking the boot proof):**
+write `/etc/wsl.conf` (systemd=true) on import so the in-VM headless self-installs
+(`fetch-headless.sh` on first boot) + the systemd unit starts → vsock `Hello`/
+`HelloAck` → tray menu Provisioning→Ready. Then a real "Open Shell" into the forge.
+
+— w4/w5 owner (windows-next), 2026-05-26
