@@ -938,3 +938,39 @@ layers are all live.
   Open Shell and GitHub login through `PtySession`.
 - m5 remains blocked on l9 artifact URL/release-asset convention, first green
   recipe-publish artifacts, and manifest SHA pins.
+
+### event: m4 sub-task B slice 3 — real VzRuntime start/stop wired — 2026-05-26T04:24Z
+
+- item: `m4/pty-attach-appkit-terminal` sub-task B slice 3/5
+- agent_id: `osx-next-claude-opus-4-7` on `Tlatoanis-MacBook-Air`
+- lease_id: `d7c5b8a1e493`
+- action: claim slice 3 → done.
+- evidence (commit `af7ba46a`, code → osx-next):
+  - `action_host.rs`: TrayActionHostIvars now carries
+    `vm: Arc<Mutex<Option<Arc<VzRuntime>>>>` and `image_root: PathBuf`.
+    Constructor: `new(mtm, runtime, image_root)`.
+  - `startVm:` worker: re-entry gate → idempotency check (bail if VM
+    already up) → spawns Tokio task running `run_start` helper →
+    dispatches result back to main. `run_start` constructs the
+    `Arc<VzRuntime>`, returns a clear "not yet materialized" error if
+    `is_provisioned()` is false (common first-launch path until m5),
+    else `start().await` and installs the Arc into the shared slot.
+  - `stopVm:` worker: re-entry gate → takes Option out of mutex →
+    bail if None → Tokio task calls `vm.stop(60s drain)` → dispatch
+    Ok/Err to main.
+  - Constants: `TILLANDSIAS_GUEST_CID = 3`, `VM_STOP_DRAIN = 60s`.
+  - `status_item.rs`: `default_image_root()` =
+    `$HOME/Library/Application Support/tillandsias/`. Threaded
+    through to `TrayActionHost::new`.
+- tests: macos-tray 21/21 (was 20; +1 `run_start_reports_unprovisioned`
+  tokio test). vm-layer 50/50 still pass with `--features materialize`.
+- progress: m4 sub-task B slices = 5 total (3 done, 2 remaining):
+    slice 4 — `openShell:` body: `PtySession::open(/bin/bash)` over
+              vsock + `open -a Terminal.app <slave-tty>`.
+    slice 5 — `githubLogin:` body: same PTY path with `gh auth login`
+              entrypoint.
+- e2e gate: slices 1-3 take Start/Stop VM end-to-end functional for
+  whenever a recipe artifact is present at `image_root`. Once m5
+  (`recipe-publish` artifact fetch) lands the image, a single click
+  exercises the full boot → run → drain → stop cycle through the menu.
+- Lease released.
