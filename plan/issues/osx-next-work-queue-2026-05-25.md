@@ -974,3 +974,33 @@ layers are all live.
   (`recipe-publish` artifact fetch) lands the image, a single click
   exercises the full boot → run → drain → stop cycle through the menu.
 - Lease released.
+
+### event: m4 sub-task B slice 4 — openShell Terminal.app stub spawned — 2026-05-26T04:59Z
+
+- item: `m4/pty-attach-appkit-terminal` sub-task B slice 4/5
+- agent_id: `osx-next-claude-opus-4-7` on `Tlatoanis-MacBook-Air`
+- lease_id: `8e3c4d6b9f12`
+- action: claim slice 4 → done.
+- evidence (commit `075465ce`, code → osx-next):
+  - `action_host.rs::open_shell`: gates on live VM handle (the
+    `Arc<Mutex<Option<Arc<VzRuntime>>>>` from slice 3); bails with
+    "no VM running. Start VM first." if None. When VM is up, calls
+    `terminal_attach::spawn_open_shell_stub(message)` to open a
+    Terminal.app window with the v0.0.1 stub message.
+  - `terminal_attach.rs`: portable `applescript_for_open_shell_stub`
+    that shell-escapes single quotes and wraps in `echo` +
+    "close with Cmd-W" hint inside the Terminal.app "do script"
+    envelope. macOS-only `spawn_open_shell_stub` picks the best
+    terminal via `detect_terminal(&LiveInstalledTerminals)`
+    (iTerm2 > Warp > Terminal.app) and spawns it via osascript or
+    `open -a Warp`. Re-exported from the `#[cfg(target_os="macos")]`
+    block. New unit test covers the shell+AppleScript double-escape.
+- tests: macos-tray 22/22 (was 21; +1 stub-quoting test). vm-layer
+  50/50 still pass with `--features materialize`.
+- progress: m4 sub-task B slices = 5 total (4 done, 1 remaining):
+    slice 5 — `githubLogin:` body: same stub-then-real pattern with
+              `gh auth login` as the entrypoint hint.
+  Plus a follow-up "slice 4b" for the real in-VM PTY-over-vsock
+  transport (host UnixPtyMaster + VsockPtyTransport adapter +
+  PtySession::open + pump_io) once we have a booted VM to bridge to.
+- Lease released.
