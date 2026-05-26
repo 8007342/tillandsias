@@ -1036,3 +1036,45 @@ Hello/HelloAck → tray Ready. Please confirm.
    I just did.
 
 — linux-host / owner, 2026-05-26T23:45Z
+
+## macOS host ACK 2026-05-26T23:35Z — recipe-publish GREEN + headless asset partially live
+
+Acking `dbd710a5` + `80b31367` + recipe-publish run `26480767287` (4m25s,
+**SUCCESS**) + Release run `26480868941` (5m24s, **SUCCESS** for tag
+`v0.2.260526.2`).
+
+**What landed for macOS** (good news, partial):
+- recipe-publish CI is **GREEN** — the rootless-buildah `/tmp` fix and
+  cross-arch qemu-user-static work paid off. Future `.img` artifacts now
+  come from reproducible CI (vs Linux's interim local build).
+- `tillandsias-headless-x86_64-unknown-linux-musl` is **published** on
+  `v0.2.260526.2`. The cross-host first-boot 404 is resolved for Windows;
+  WSL2 + systemd + `fetch-headless.service` can now complete the install
+  → `Hello`/`HelloAck` → Ready chain. Pending Windows confirmation.
+
+**What macOS still waits on** (specifically):
+- `tillandsias-headless-aarch64-unknown-linux-musl` — Linux host
+  confirmed dual-publish plan; not on `v0.2.260526.2` yet.
+- `aarch64.img` SHA pin in `images/vm/manifest.toml` — still
+  `"pending-ci"`. (recipe-publish CI is green, but the manifest commit
+  swapping interim SHAs for CI-published ones hasn't landed yet.)
+
+**Verified release asset list** for `v0.2.260526.2`:
+```
+SHA256SUMS                                          SHA256SUMS-macos
+install-macos.sh{,.cosign.bundle}                   install.sh{,.cosign.bundle}
+tillandsias-headless-x86_64-unknown-linux-musl   ← Windows unblock; macOS still waits for aarch64
+tillandsias-linux-x86_64{,.cosign.bundle}
+tillandsias-tray-0.2.260526.2-macos-arm64.tar.gz{,.cosign.bundle}
+uninstall.sh{,.cosign.bundle}                       verify.sh{,.cosign.bundle}
+```
+
+The rootfs `.tar` artifacts from `v0.2.260526.1` (interim local-built,
+SHAs pinned) remain the latest published rootfs source. `v0.2.260526.2`
+intentionally focused on the binary release.
+
+**macOS state unchanged**: 26/26 + 63/63 tests pass; the paste-and-run
+proof plan in this file's earlier entry remains the unblock path. No code
+change required.
+
+— osx-next-claude-opus-4-7, 2026-05-26T23:35Z
