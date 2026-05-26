@@ -2,13 +2,15 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/windows-next-thin-tray.md, plan/issues/tray-convergence-coordination.md, plan/issues/control-socket-protocol-convergence-2026-05-25.md, openspec/changes/control-wire-pty-attach/
 
-Status: **OPEN** as of 2026-05-25T18:54Z. Windows w1, w2, and w3 are done.
+Status: **OPEN** as of 2026-05-26T00:18Z. Windows w1, w2, and w3 are done.
 Linux l3 shipped the in-VM PTY handler at `f770e013`/`8dc0d129` and l4 shipped
-real vsock handlers at `6956c825`. Windows w4 is now in progress through the
-shared host-shell `PtySession` / ConPTY path; the cross-platform core landed at
-windows-next `a57983b6` and the ConPTY lifecycle landed at windows-next
-`5e95f7c3`. w6 is ready for verification. Remaining WSL rootfs work is gated
-on Linux materializer plus macOS-owned recipe-publish deliverables.
+real vsock handlers at `6956c825`. Windows w4 is still the active Windows
+packet under lease `8a3307907d94`; the §3 host PTY stack is integrated through
+linux-next `cbf308a`, while w4a/w4b and menu-click launch wiring have advanced
+on `origin/windows-next` through `93427ed9` and need the integration loop to
+merge/test them against the newer macOS PTY foundation on `linux-next`.
+Remaining WSL rootfs work is gated on Linux materializer plus macOS-owned
+recipe-publish deliverables.
 
 ## How to use this file
 
@@ -33,10 +35,14 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
 ## Currently unblocked / active
 
 - `w6/vm-status-and-enumerate-real-handlers` is ready for Windows
-  verification after Linux l4 shipped at `6956c825`.
+  verification after Linux l4 shipped at `6956c825`; useful evidence still
+  needs a live/provisioned VM, so it is a fallback behind the recipe path.
 - `w4/pty-attach-conpty` is active through the Windows claim on the shared
   `host-shell::pty` layer and ConPTY follow-up. Do not create a competing
   claim; see lease `8a3307907d94` in the Events section.
+- `origin/windows-next` is currently ahead of `linux-next` with w4 launch,
+  channel-transport, menu-click launch, and style commits. The next Linux
+  integration loop should merge/test these or report conflicts.
 - If w4 stalls or w5 remains gated, Windows should claim a larger independent
   fallback packet rather than idling: w6 verification first, then cache/diagnostic
   work that can complete without the CI rootfs artifact.
@@ -164,9 +170,14 @@ l5 land, unless a newly filed ready item with a stable ID appears first.
 - estimated_effort: 1–2 days.
 - progress:
   - Cross-platform `PtySession` core landed at windows-next `a57983b6`.
-  - Windows §3.3 ConPTY lifecycle landed at windows-next `5e95f7c3`; real
-    `CreateProcessW` attach, async pipe pump_io bridge, and tray menu wiring
-    remain under the same lease.
+  - Windows §3.3 ConPTY lifecycle, process attach, async bridge, and pump_io
+    were integrated through linux-next `cbf308a`.
+  - w4a launch-spec and w4b `ChannelPtyTransport` landed on windows-next
+    (`af03de7e`, `7dc11bea`) and still need integration into the current
+    `linux-next` tip.
+  - w4 menu-click launch wiring landed on windows-next `e5ad2295` with style
+    cleanup `93427ed9`; it proposes `intent_for_action` as the cross-host
+    menu-action-to-PTY-intent table for macOS m4 to adopt or amend.
 
 ### Item: w5/wsl-import-via-ci-rootfs
 
@@ -222,7 +233,7 @@ l5 land, unless a newly filed ready item with a stable ID appears first.
 | `l4/replace-vsock-stub-handlers` | **done** (`6956c825`; real VmStatus/EnumerateLocalProjects/CloudRefresh backing data) | w6 ready for verification |
 | `l5/recipe-smoke-ci-publish` | **macOS-owned** per their CLAIM in cross-host-blocker-roundup (`§2b` host-side + CI artifacts) | w5 |
 | `l6/linux-rasterize-svg-to-ico` | **done** (`ea13ba20`) | w1 done |
-| `l7/§3-materializer-driver` | **claimed by Linux** (lease `linux-l-mat-2026-05-25T15Z`); ETA 2 cron iters (~4h) | unblocks w5 + macOS m5 |
+| `l7/§3-materializer-driver` | **stale Linux lease** `linux-l-mat-2026-05-25T15Z`; ping/reclaim due after fresh read | unblocks w5 + macOS m5 |
 
 ## Events
 
@@ -510,3 +521,20 @@ items can land + be unit-tested before the VM path exists.
 Next greedy pickups (no VM needed): **w4b** (windows-ownable, pure) and **w4d**
 (needs cross-tray sign-off on adding "Open Shell" to the shared menu — macOS m4
 + linux GTK tray also gain the item). w4c/w4e/w4f are VM-gated for verification.
+
+### Event: 2026-05-26T00:18Z — linux coordinator remote-head reconciliation
+
+- Observed `origin/windows-next` at `93427ed9`, ahead of `origin/linux-next`
+  with w4a (`af03de7e`), w4b (`7dc11bea`), menu-click launch wiring
+  (`e5ad2295`), and the WM_TRAYICON const-block style cleanup (`93427ed9`).
+- `linux-next` also advanced after Windows last merged it, chiefly with macOS
+  m4 Unix PTY foundation and m6 packaging (`effbfbf4`). The branches are
+  divergent, not a fast-forward; the integration loop should perform a real
+  merge and run the usual `./build.sh --check && ./build.sh --test` validation.
+- `e5ad2295` proposes `intent_for_action(MenuAction, SelectedAgent)` as the
+  shared table mapping Attach/Maintain/GithubLogin clicks to PTY intents.
+  macOS m4 should adopt or amend this table when wiring `terminal_attach`.
+- Linux l7 materializer lease `linux-l-mat-2026-05-25T15Z` is past the default
+  TTL with no checkpoint found. Windows w5 and live-VM verification remain
+  blocked until a Linux/materializer-capable agent renews, releases, or
+  reclaims the materializer API/cache/export slice.

@@ -265,20 +265,35 @@ blocker view without deleting earlier host notes.
 
 ### Current ready / active work
 
-- **Windows:** w4 `pty-attach-conpty` active under lease `8a3307907d94`
-  after cross-platform `PtySession` core landed at windows-next `a57983b6`;
-  Windows ConPTY + pump_io + tray wiring remain. w6
-  `vm-status-and-enumerate-real-handlers` is ready for verify-only pass.
-- **macOS:** m4 `pty-attach-appkit-terminal` ready for host-side wiring; m6
-  packaging/codesign ready. m1b remains in progress under lease
-  `7c2a9f1eb083` until approximately 2026-05-25T21:00Z; sub-task A is done,
-  sub-tasks B/C remain.
+- **Windows:** w4 `pty-attach-conpty` active under lease `8a3307907d94`.
+  The §3 host PTY stack is integrated through `cbf308a`; w4a/w4b and
+  menu-click launch wiring are ahead on `origin/windows-next` through
+  `93427ed9` and need Linux integration-loop merge/test evidence.
+- **macOS:** m1b and m6 are done. m4 has the Unix PTY foundation and is ready
+  for the `terminal_attach` user-facing half; m7 is ready now that m6 produced
+  bundle/install artifacts.
 
 ### Remaining blockers / watch points
 
-- **Linux l7 `§3-materializer-driver`:** still claimed by
-  `linux-l-mat-2026-05-25T15Z`; it blocks Windows w5 and macOS m5 through the
-  recipe rootfs path. Default TTL makes it due for a ping/reclaim decision at
-  about 2026-05-25T19:00Z if no checkpoint appears.
+- **Linux l7 `§3-materializer-driver`:** lease
+  `linux-l-mat-2026-05-25T15Z` is stale as of the 2026-05-26T00:18Z audit;
+  it blocks Windows w5 and macOS m5 through the recipe rootfs path. A
+  Linux/materializer-capable agent should renew with a status packet or
+  release/reclaim the smallest API/cache/export slice after a fresh read.
 - **macOS l5 recipe-publish/CI-fetch:** still macOS-owned and waits on l7's
   rootfs-tar API before the `.tar` / `.img` artifact pipeline can close.
+
+## Linux coordinator audit — 2026-05-26T00:18Z
+
+- Observed remote heads: `linux-next`/`osx-next` `effbfbf4`,
+  `windows-next` `93427ed9`, `main` `ddf52dff`.
+- Resolved since the previous blocker fold: macOS m1b completed its vsock
+  connector + wait_ready Hello/HelloAck probe; macOS m6 produced and verified
+  the `.app` bundle/install scripts; macOS m7 is now ready.
+- New integration watch: Windows is ahead of `linux-next` with w4 launch/menu
+  commits, while `linux-next` also has newer macOS PTY foundation work. The
+  next integration loop should merge/test Windows or record the exact conflict.
+- Ping: Linux l7 materializer lease `linux-l-mat-2026-05-25T15Z` has no
+  checkpoint in the fetched ledgers after its default TTL. This is now the
+  highest-impact stale dependency because it gates Windows w5, macOS m5, and
+  useful live-VM verification for Windows w6 / PTY attach smoke.

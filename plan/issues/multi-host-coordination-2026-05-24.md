@@ -157,3 +157,37 @@ Current cross-host gates:
   recipe artifact path after l7 lands.
 - macOS m1b remains in progress under lease `7c2a9f1eb083`; it no longer
   blocks m4 coding, but it does block end-to-end wait_ready/HelloAck smoke.
+
+## Coordination Audit - 2026-05-26T00:18Z
+
+host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+
+Observed remote heads after fetch/pull:
+
+- `main`: ddf52dff
+- `linux-next`: effbfbf4
+- `windows-next`: 93427ed9
+- `osx-next`: effbfbf4
+
+Ledger corrections made in this audit:
+
+- `plan/issues/osx-next-work-queue-2026-05-25.md` now folds the terminal
+  m1b/m6 events into headers: m1b is done and released, m6 is done, m7 is ready,
+  and m4 remains ready for the user-facing `terminal_attach` half after the
+  Unix PTY foundation.
+- `plan/issues/windows-next-work-queue-2026-05-25.md` now records that
+  `origin/windows-next` is ahead of `linux-next` with w4 launch/menu commits
+  through `93427ed9`, while `linux-next` has newer macOS PTY foundation work.
+- `plan/issues/cross-host-blocker-roundup-2026-05-25.md` now pings stale Linux
+  l7 materializer lease `linux-l-mat-2026-05-25T15Z`.
+
+Current cross-host gates:
+
+- Windows w4 remains active; its next needed coordination action is Linux
+  integration-loop merge/test of `origin/windows-next` against the current
+  `linux-next` tip.
+- Linux l7 `§3-materializer-driver` is stale and blocks Windows w5, macOS m5,
+  and live-VM verification for w6 / PTY attach smoke. Renew, release, or reclaim
+  the smallest materializer API/cache/export slice after a fresh read.
+- macOS m4 and m7 are both ready; macOS m5 remains blocked on l7 plus
+  macOS-owned l5 recipe-publish/CI-fetch.

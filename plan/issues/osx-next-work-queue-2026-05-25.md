@@ -2,11 +2,11 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
-Status: **OPEN** as of 2026-05-25T18:25Z. macOS m1, m2, and m3 are done;
-m1b is in progress under lease `7c2a9f1eb083` after sub-task A completed.
-Linux l3 shipped the in-VM PTY handler at `f770e013`/`8dc0d129`, so m4
-host-side PTY wiring is ready; m6 packaging is also ready. m5 remains gated on
-Linux materializer plus macOS-owned recipe-publish deliverables.
+Status: **OPEN** as of 2026-05-26T00:18Z. macOS m1, m1b, m2, m3, and m6
+are done. m4 has its Unix PTY foundation (`0551a265`) and still needs the
+user-facing `terminal_attach` wiring. m7 is ready now that m6 produced the
+bundle/install scripts. m5 remains gated on the Linux materializer plus
+macOS-owned recipe-publish deliverables.
 
 ## How to use this file
 
@@ -34,10 +34,10 @@ Per branch canon §4, plan/-class writes directly are CORRECT; code commits
 SHOULD route through `osx-next` so the integration loop can run isolation
 checks. Advisory only; both flows still work.
 
-Work-shaping note: m4 and m6 are both intentionally large enough to occupy a
-macOS agent for one or two recurrent iterations. If m5 remains gated on the
-materializer/rootfs chain, do not idle; continue m4 host-side wiring or claim m6
-packaging/codesign and leave end-to-end recipe evidence for the later m5 packet.
+Work-shaping note: m4 user-facing wiring and m7 CI packaging are both large
+enough to occupy a macOS agent for one or two recurrent iterations. If m5
+remains gated on the materializer/rootfs chain, do not idle; continue m4 wiring
+or claim m7 and leave end-to-end recipe evidence for the later m5 packet.
 
 ## Currently unblocked / active
 
@@ -47,16 +47,11 @@ packaging/codesign and leave end-to-end recipe evidence for the later m5 packet.
 - type: feature
 - owner_host: macos
 - capability_tags: [rust, vfr, objc2-virtualization, vsock, tokio, async-fd]
-- status: in_progress
-- lease:
-  - lease_id: `7c2a9f1eb083`
-  - agent_id: `osx-next-claude-opus-4-7` on `Tlatoanis-MacBook-Air`
-  - host: macos
-  - acquired_at: 2026-05-25T17:00Z
-  - expires_at: 2026-05-25T21:00Z (derived from default 4h TTL)
+- status: done
+- completed_at: 2026-05-25T20:00Z
 - depends_on: []
-- blocks: [m5/vfr-image-via-ci-rootfs]
-- blocks_end_to_end: [m4/pty-attach-appkit-terminal]
+- blocks: []
+- blocks_end_to_end: []
 - owned_files:
   - `crates/tillandsias-vm-layer/src/transport_macos.rs` (new)
   - `crates/tillandsias-vm-layer/src/vz.rs` (extend `wait_ready` to call the connector)
@@ -71,8 +66,11 @@ packaging/codesign and leave end-to-end recipe evidence for the later m5 packet.
     over vsock and receives `HelloAck`.
 - progress:
   - Sub-task A (`connect_to_vm_vsock` + fd ownership) completed at
-    linux-next `d2eb5fcf`; sub-tasks B (`AsyncRead`/`AsyncWrite` wrapper) and
-    C (`wait_ready` Hello/HelloAck handshake) remain under the same lease.
+    linux-next `d2eb5fcf`.
+  - Sub-task B (`VsockStream` AsyncRead/AsyncWrite wrapper) completed with
+    14/14 unit tests.
+  - Sub-task C extended `VzRuntime::wait_ready` to probe the control-wire vsock
+    port; lease `7c2a9f1eb083` released.
 
 ### Item: m4/pty-attach-appkit-terminal
 
@@ -99,9 +97,9 @@ packaging/codesign and leave end-to-end recipe evidence for the later m5 packet.
     UX requirement.
 - estimated_effort: 1–2 days.
 - verification_note: >
-    Host-side wiring can start now. End-to-end readiness smoke should wait
-    for m1b sub-tasks B/C to finish the AsyncRead/AsyncWrite wrapper and
-    Hello/HelloAck wait_ready handshake.
+    Host-side wiring can start now. m1b's AsyncRead/AsyncWrite wrapper and
+    Hello/HelloAck wait_ready handshake are done; full terminal-attach smoke
+    still needs a booted/provisioned VM path.
 
 ### Item: m1/vmruntime-stop-and-wait-ready
 
@@ -201,7 +199,8 @@ packaging/codesign and leave end-to-end recipe evidence for the later m5 packet.
 - type: feature
 - owner_host: macos
 - capability_tags: [macos-bundle, codesign, installer]
-- status: ready
+- status: done
+- completed_at: 2026-05-26T00:00Z
 - gated_on: []
 - cleared_gates:
   - m1 + m2 functional VM path completed at 2026-05-25T16:50Z
@@ -215,6 +214,12 @@ packaging/codesign and leave end-to-end recipe evidence for the later m5 packet.
     depend on PTY or recipe modules; the result will need re-signing
     once PTY/recipe land, but the bundle structure can be set up now.
 - estimated_effort: 1–2 days.
+- evidence_on_done:
+  - `scripts/build-macos-tray.sh` builds, assembles, ad-hoc signs, verifies,
+    archives, and writes SHA256SUMS for `Tillandsias.app`.
+  - `scripts/install-macos.sh` performs a SHA-verified install with
+    `/Applications` / `~/Applications` fallback and optional login item setup.
+  - macOS host verified the app launches and the menubar icon appears.
 
 ### Item: m7/macos-ci-job-and-tarball
 
@@ -222,8 +227,10 @@ packaging/codesign and leave end-to-end recipe evidence for the later m5 packet.
 - type: feature
 - owner_host: macos (Linux user can author the YAML)
 - capability_tags: [ci, github-actions, macos-runner]
-- status: pending
-- gated_on: [m6/macos-installer-pkg-and-codesign]
+- status: ready
+- gated_on: []
+- cleared_gates:
+  - m6 `macos-installer-pkg-and-codesign` completed at 2026-05-26T00:00Z
 - owned_files:
   - `.github/workflows/ci.yml`
   - `.github/workflows/release.yml`
@@ -242,7 +249,7 @@ packaging/codesign and leave end-to-end recipe evidence for the later m5 packet.
 | `l3/in-vm-headless-pty-handler` | done (`f770e013`/`8dc0d129`; tasks 4.1-4.7, two pump tests ignored pending AsyncFd rewrite) | m4 ready for host-side wiring |
 | `l4/replace-vsock-stub-handlers` | done (`6956c825`; informational only for macOS) | (informational only for macOS) |
 | `l5/recipe-smoke-ci-publish` | macOS-owned claim; pending l7/materializer | m5 |
-| `l7/§3-materializer-driver` | claimed by Linux (`linux-l-mat-2026-05-25T15Z`) | m5 |
+| `l7/§3-materializer-driver` | stale Linux lease `linux-l-mat-2026-05-25T15Z`; ping/reclaim due after fresh read | m5 |
 
 ## Events
 
@@ -565,3 +572,16 @@ Remaining macOS queue items:
     macos-build CI job + macos-release tarball upload. ~1 d.
 
 Recommended next: m7 (lock in CI green) or m4 user wiring (visible UX).
+
+### event: linux coordinator reconciliation — 2026-05-26T00:18Z
+
+- Folded terminal events into item headers: m1b is done and lease
+  `7c2a9f1eb083` is released; m6 is done and unlocks m7; m4 remains ready
+  for the user-facing `terminal_attach` half after the Unix PTY foundation
+  landed at `0551a265`.
+- Current macOS ready work: m4 terminal wiring or m7 macOS CI/tarball.
+- Current macOS blocker: m5 still waits on l7 materializer plus macOS-owned
+  l5 recipe-publish/CI-fetch. Linux lease `linux-l-mat-2026-05-25T15Z`
+  is past its default TTL with no checkpoint found in the ledgers, so the next
+  Linux/materializer-capable agent should either renew with a status packet or
+  release/reclaim the smallest materializer API/cache/export slice.
