@@ -27,7 +27,7 @@ use tillandsias_vm_layer::materialize::{BuildahExec, HostArch, MaterializedRootf
 use tillandsias_vm_layer::recipe::{Manifest, Recipe};
 
 const USAGE: &str = r#"USAGE:
-  materialize-cli <RECIPE> <MANIFEST> <ARCH> [--cache-root <DIR>] [--buildah <PATH>]
+  materialize-cli <RECIPE> <MANIFEST> <ARCH> [--cache-root <DIR>] [--buildah <PATH>] [--publish-tag <TAG>]
 
 ARGS:
   RECIPE          Path to images/vm/Recipefile (or any Containerfile-shape file).
@@ -38,6 +38,10 @@ OPTIONS:
   --cache-root    Cache directory; default: $XDG_CACHE_HOME/tillandsias/recipe-cache
                   or ~/.cache/tillandsias/recipe-cache.
   --buildah       Path to the buildah binary; default: buildah (PATH lookup).
+  --publish-tag   Release tag (e.g. v0.2.260526.X). When set, prints
+                  `would_publish_to_<fmt>=<url>` lines so devs can verify
+                  the manifest's artifact_url_template + the tag before
+                  shipping a release. Does NOT publish anything.
 
 OUTPUT:
   Prints two lines on success:
@@ -63,6 +67,29 @@ fn run() -> Result<(), String> {
         .map_err(|e| format!("parse recipe {}: {e}", args.recipe.display()))?;
     let manifest = Manifest::load(&args.manifest)
         .map_err(|e| format!("parse manifest {}: {e}", args.manifest.display()))?;
+
+    // l9 step 2: --publish-tag is a contract-verify mode. We print the
+    // resolved artifact URL(s) from the manifest's template + the
+    // requested tag BEFORE attempting materialization — that way the
+    // dev can validate the URL contract even on a host without buildah
+    // (e.g. CI dry-run, doc verification). The materialize pass still
+    // runs after; if it succeeds, the rootfs_tar + sha256 lines come
+    // out as normal.
+    if let Some(tag) = args.publish_tag.as_deref() {
+        let arch_str = args.arch.as_str();
+        match manifest.artifact_url(arch_str, "tar", tag) {
+            Some(url) => println!("would_publish_to_tar={url}"),
+            None => println!("would_publish_to_tar=<no artifact_url_template in manifest>"),
+        }
+        // aarch64 also ships an .img; x86_64 doesn't have a VFR consumer in v0.0.1.
+        if matches!(args.arch, HostArch::Aarch64) {
+            match manifest.artifact_url(arch_str, "img", tag) {
+                Some(url) => println!("would_publish_to_img={url}"),
+                None => println!("would_publish_to_img=<no artifact_url_template in manifest>"),
+            }
+        }
+        println!("publish_tag={tag}");
+    }
 
     let executor = if let Some(path) = args.buildah {
         BuildahExec::default().with_binary(path)
@@ -92,12 +119,18 @@ struct Args {
     arch: HostArch,
     cache_root: PathBuf,
     buildah: Option<PathBuf>,
+    /// l9: optional release tag. When set, the CLI also resolves the
+    /// per-(arch,format) artifact URL from the manifest's template and
+    /// prints `would_publish_to_<fmt>=<url>` lines. Lets devs verify the
+    /// URL contract before a release tag exists.
+    publish_tag: Option<String>,
 }
 
 fn parse_args<I: Iterator<Item = String>>(mut iter: I) -> Result<Args, String> {
     let mut positional: Vec<String> = Vec::new();
     let mut cache_root: Option<PathBuf> = None;
     let mut buildah: Option<PathBuf> = None;
+    let mut publish_tag: Option<String> = None;
 
     while let Some(arg) = iter.next() {
         match arg.as_str() {
@@ -112,6 +145,10 @@ fn parse_args<I: Iterator<Item = String>>(mut iter: I) -> Result<Args, String> {
             "--buildah" => {
                 let v = iter.next().ok_or("--buildah needs a value")?;
                 buildah = Some(PathBuf::from(v));
+            }
+            "--publish-tag" => {
+                let v = iter.next().ok_or("--publish-tag needs a value")?;
+                publish_tag = Some(v);
             }
             _ if arg.starts_with("--") => {
                 return Err(format!("unknown flag: {arg}"));
@@ -145,6 +182,7 @@ fn parse_args<I: Iterator<Item = String>>(mut iter: I) -> Result<Args, String> {
         arch,
         cache_root,
         buildah,
+        publish_tag,
     })
 }
 
