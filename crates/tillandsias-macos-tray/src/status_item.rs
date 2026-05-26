@@ -57,11 +57,24 @@ pub fn run() -> ! {
     // setActivationPolicy returns bool indicating acceptance.
     let _ = app.setActivationPolicy(NSApplicationActivationPolicy::Accessory);
 
+    // Per-process Tokio runtime, shared with the TrayActionHost so it
+    // can spawn worker tasks for VM lifecycle calls without blocking
+    // the AppKit main thread. Stays alive for the lifetime of the
+    // process via the Arc clones the action-host retains.
+    let tokio_runtime = std::sync::Arc::new(
+        tokio::runtime::Builder::new_multi_thread()
+            .worker_threads(2)
+            .thread_name("tillandsias-tray-worker")
+            .enable_all()
+            .build()
+            .expect("Tokio runtime build failed (tillandsias-tray slice 2)"),
+    );
+
     // Build the action-host responder ONCE per process. Lives on the
     // AppKit thread's stack for the duration of `NSApplication::run`;
     // menu items target it via `setTarget:` so AppKit dispatches their
     // selectors here. See `action_host.rs` for the declared class.
-    let action_host = TrayActionHost::new(mtm);
+    let action_host = TrayActionHost::new(mtm, tokio_runtime.clone());
 
     // Build the initial provisioning menu so the user sees the condensed
     // status line right away, even before the VM thread reports anything.

@@ -20,6 +20,8 @@ mod action_host;
 #[cfg(target_os = "macos")]
 mod installation_uuid;
 #[cfg(target_os = "macos")]
+mod main_thread;
+#[cfg(target_os = "macos")]
 mod status_item;
 #[cfg(target_os = "macos")]
 mod vz_lifecycle;
