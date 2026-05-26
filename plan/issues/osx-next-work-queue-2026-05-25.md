@@ -1163,3 +1163,84 @@ responder object with real Tokio dispatch.
 - Next macOS choices: claim m8 for no-VM AppKit action smoke, or prepare m4
   slice 4b/5b design against the shared `launch_spec` without claiming E2E
   until m5 lands.
+
+### event: m8 — no-VM AppKit action smoke — 2026-05-26T07:10Z
+
+- item: `m8/appkit-action-smoke-and-stub-polish`
+- agent_id: `osx-next-claude-opus-4-7` on `Tlatoanis-MacBook-Air`
+- lease_id: `c7e5b9a3d164`
+- action: claim → autonomous portion done; manual button-click smoke
+  deferred to interactive user verification (next user-attended window).
+
+#### agent_status_packet
+
+**current plan**
+Validate the macOS tray's no-VM unprovisioned behavior after the
+latest `linux-next` merge (HEAD `7fedd510`). Autonomous checks: unit
+tests, .app bundle build, process-launch + clean-shutdown smoke.
+Document residual interactive verification that needs a user click.
+
+**dependencies and blockers**
+None for the autonomous portion. Interactive Start VM / Stop VM /
+Open Shell / GitHub Login button-click smoke requires a logged-in
+user (AppKit responder chain only fires on real menu events; no
+reliable headless click path without Accessibility entitlements
+the agent doesn't hold).
+
+**files touched**
+Read-only inspection of:
+  - `crates/tillandsias-macos-tray/src/{action_host,terminal_attach,
+    main_thread,pty_vsock_bridge,status_item,main}.rs`
+  - `scripts/build-macos-tray.sh`
+  - `dist/Tillandsias.app` (build output)
+No source files modified for this packet.
+
+**evidence produced**
+
+  ✓ `cargo test -p tillandsias-macos-tray --bin tillandsias-tray`
+    → 24/24 tests pass (0 failed, 0 ignored).
+  ✓ `scripts/build-macos-tray.sh` → version 0.2.260525.3:
+      - `cargo build --release -p tillandsias-macos-tray` finished
+        in 2.52s.
+      - `codesign` (ad-hoc, with `Tillandsias.entitlements`):
+        replaced existing signature.
+      - `codesign --verify`: valid on disk; satisfies its
+        Designated Requirement.
+      - Tarball: `tillandsias-tray-0.2.260525.3-macos-arm64.tar.gz`
+        (0.27 MiB, sha256
+        `f520047fa0ed5175aebadf9c1a556ad0011795ef5c7d5c4d3e0104bcd862ab52`).
+  ✓ Process launch smoke: ran
+    `dist/Tillandsias.app/Contents/MacOS/tillandsias-tray` directly
+    (so stderr was captured); PID alive after 3s, no panics, no
+    unexpected stderr/stdout output (the AppKit run loop entered
+    cleanly).
+  ✓ Clean shutdown: SIGTERM produced clean exit (AppKit's `terminate:`
+    path completes within 1s).
+
+**residual interactive smoke (user-attended)** — open `dist/Tillandsias.app`
+in Finder and verify, with NO VM image present at
+`$HOME/Library/Application Support/tillandsias/`:
+  1. Menubar icon `T` appears within ~500ms.
+  2. Click the icon → menu reveals header items + separator + Start
+     VM / Stop VM / Open Shell / GitHub login + separator +
+     "Tillandsias v0.2.260525.3 (alpha)" disabled header + separator
+     + Quit Tillandsias (⌘Q).
+  3. Click Start VM → stderr (via `tail -f`) shows "Start VM:
+     spawning worker (image_root=...)" then after ~50ms "Start VM
+     failed: VM image not yet materialized at .../rootfs.img
+     (expected rootfs.img / kernel / initrd; run the recipe
+     materializer first)". No UI freeze.
+  4. Click Stop VM → "Stop VM: no live VM, ignoring".
+  5. Click Open Shell → "Open Shell: no VM running. Start VM first."
+  6. Click GitHub login → "GitHub login: no VM running. Start VM
+     first."
+  7. Click Quit Tillandsias (or ⌘Q) → process exits within 1s.
+
+**next checkpoint**
+Wait for user to perform interactive smoke OR for m5 (recipe artifact
+fetch) to land so the post-Start-VM path can be exercised end-to-end.
+Either trigger flips m8 from "autonomous-portion done" to
+"acceptance-evidence complete".
+
+**lease intent** — release. Other agents may claim follow-ups or
+re-claim if interactive smoke surfaces a regression.
