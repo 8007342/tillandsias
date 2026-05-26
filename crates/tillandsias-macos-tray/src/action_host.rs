@@ -325,19 +325,49 @@ async fn run_start(
 ) -> Result<(), String> {
     let vz = Arc::new(VzRuntime::new(TILLANDSIAS_GUEST_CID, image_root));
 
+    // First-launch flow (m5 integration): if no rootfs.img is present
+    // yet, fetch the recipe-published artifact via l9's artifact-URL
+    // contract before starting. The macOS tray bundles the manifest
+    // at build time (include_str!) so the .app doesn't need network
+    // for the manifest itself, only for the artifact bytes.
+    //
+    // Once a successful fetch lands, subsequent launches hit the
+    // cache (download_verified short-circuits when dest sha matches)
+    // so startup is fast.
     if !vz.is_provisioned() {
-        return Err(format!(
-            "VM image not yet materialized at {} \
-             (expected rootfs.img / kernel / initrd; run the recipe \
-              materializer first)",
+        eprintln!(
+            "[tillandsias-tray] Start VM: rootfs.img missing at {}; \
+             attempting recipe-artifact fetch",
             vz.rootfs_image_path().display()
-        ));
+        );
+        let manifest = tillandsias_vm_layer::recipe::Manifest::from_toml(BUNDLED_MANIFEST_TOML)
+            .map_err(|e| format!("bundled manifest parse: {e}"))?;
+        let tag = format!("v{}", env!("CARGO_PKG_VERSION"));
+        vz.fetch_recipe_artifact(&manifest, &tag).await.map_err(|e| {
+            format!(
+                "recipe-artifact fetch failed (tag={tag}): {e}\n\n\
+                 If the SHA pin is still 'pending-ci', wait for the next \
+                 recipe-publish CI run + the SHA-pin commit (l9 step 5)."
+            )
+        })?;
+        eprintln!(
+            "[tillandsias-tray] Start VM: rootfs.img fetched successfully"
+        );
     }
 
     vz.start().await?;
     *vm_slot.lock().unwrap() = Some(vz);
     Ok(())
 }
+
+/// Manifest bundled at build time so the .app doesn't depend on the
+/// repo or network presence to know its artifact-URL template + pinned
+/// SHAs. The compiled-in copy is what's checked into the repo at
+/// `images/vm/manifest.toml` at the commit the .app was built from.
+/// Updating the manifest (e.g. SHA pin after CI run) requires a
+/// rebuild of the macOS tray.
+const BUNDLED_MANIFEST_TOML: &str =
+    include_str!("../../../images/vm/manifest.toml");
 
 impl TrayActionHost {
     /// Construct on the AppKit main thread. `mtm` proves we're on the
@@ -378,19 +408,30 @@ mod tests {
     }
 
     /// run_start short-circuits with a clear error when the image
-    /// root is empty (the v0.0.1 expectation until the recipe
-    /// materializer populates it). This is the most common error
-    /// path for first-launch users.
+    /// root is empty AND the bundled manifest's SHA is still the
+    /// placeholder "pending-ci". This is the expected v0.0.1
+    /// first-launch path until l9 step 5 (CI SHA pin commit) lands.
+    /// After SHA pins are populated, this test would need a network
+    /// to exercise — the failure mode shifts from "no pinned SHA" to
+    /// the actual HTTP fetch.
     #[tokio::test]
-    async fn run_start_reports_unprovisioned() {
+    async fn run_start_reports_pending_sha_until_l9_step5() {
         let tmp = tempfile::tempdir().unwrap();
         let vm_slot = Arc::new(Mutex::new(None));
         let err = run_start(tmp.path().to_path_buf(), vm_slot.clone())
             .await
-            .expect_err("expected unprovisioned error");
+            .expect_err("expected pending-SHA fetch refusal");
+        // The fetch path engages first (image missing), then
+        // download_verified refuses the "pending-ci" placeholder.
+        // Error mentions both the fetch attempt and the SHA gate.
         assert!(
-            err.contains("not yet materialized"),
-            "unexpected error: {err}"
+            err.contains("recipe-artifact fetch failed"),
+            "expected fetch-failed error, got: {err}"
+        );
+        assert!(
+            err.contains("no pinned SHA-256")
+                || err.contains("pending-ci"),
+            "expected SHA-gate explanation, got: {err}"
         );
         assert!(vm_slot.lock().unwrap().is_none(), "slot should stay empty");
     }

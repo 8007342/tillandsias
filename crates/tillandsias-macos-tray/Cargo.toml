@@ -14,7 +14,7 @@ path = "src/main.rs"
 [dependencies]
 tillandsias-control-wire = { path = "../tillandsias-control-wire" }
 tillandsias-host-shell = { path = "../tillandsias-host-shell" }
-tillandsias-vm-layer = { path = "../tillandsias-vm-layer" }
+tillandsias-vm-layer = { path = "../tillandsias-vm-layer", features = ["recipe", "download"] }
 tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
 
