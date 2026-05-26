@@ -540,3 +540,23 @@ blocker view without deleting earlier host notes.
   pty_handler SIGTERM-HUP cancellation; Windows w7 branch-sync diagnostics to
   `72aa7917`; macOS m5 `startVm:` wiring while treating `"pending-ci"` as a
   recoverable artifact-not-yet-published state.
+
+## Linux coordinator audit — 2026-05-26T15:29Z
+
+- Observed remote heads after fast-forward: `linux-next` `aa8fc2b9`,
+  `windows-next` `7e95c7e2`, `osx-next` `bdb7f9cb`, `main` `ddf52dff`.
+- Remote progress is healthy. Since the 13:39Z fold, Linux shipped
+  pty_handler explicit pump-cancel work at `617a04b3`, and the dynamic-loop
+  ledger recorded it at `aa8fc2b9`.
+- No unmerged Windows or macOS code delta exists. Windows trails by 6 commits;
+  macOS trails by 10 commits.
+- Reconciled Step 15: router-before-container ordering remains complete, but
+  latest dynamic-loop intent reopens one residual UX slice to collapse exit-125
+  project-container cascades into a single actionable diagnostic before Step 16
+  OpenCode-web readiness parity.
+- Current blocked packets remain l9 workflow registration/first green
+  artifacts/SHA pins, Windows w5 live provisioning, macOS m5 live provisioning,
+  macOS live PTY proof after m5, and m8 user-attended smoke.
+- Ready packets: Linux Step 15 exit-125 cascade UX, then Step 16 OpenCode-web
+  readiness parity; Windows w7 branch-sync diagnostics to `aa8fc2b9`; macOS
+  m5 `startVm:` wiring while treating `"pending-ci"` as recoverable.
