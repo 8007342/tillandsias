@@ -30,6 +30,20 @@ arch   = "aarch64"
 ref    = "registry.fedoraproject.org/fedora:44"
 digest = "sha256:pending-first-pin"
 
+[output]
+# Artifact URL contract (l9): a templated locator that non-Linux hosts
+# resolve at fetch time. Variables: `{tag}` (release tag, e.g.
+# `v0.2.260526.X`), `{arch}` (`x86_64` / `aarch64`), `{format}`
+# (`tar` / `img`). The default GitHub-release-asset path matches
+# `.github/workflows/recipe-publish.yml`'s upload step.
+#
+# Hosts MAY override at install time via `--artifact-url-template`
+# (e.g. for an internal mirror) — the recipe stays the trust root
+# regardless; manifest SHAs are the verification gate.
+#
+# @trace plan/issues/cross-host-blocker-roundup-2026-05-25.md l9
+artifact_url_template = "https://github.com/8007342/tillandsias/releases/download/{tag}/tillandsias-rootfs-{arch}.{format}"
+
 # CI-published artifact SHAs (D6: dual-path materialization).
 # Format keys: "<arch>.<format>" — `tar` for Linux dev + WSL import,
 # `img` for macOS VFR (raw EFI+ext4 image). Populated by recipe-publish

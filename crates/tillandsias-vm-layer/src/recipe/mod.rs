@@ -297,6 +297,14 @@ pub struct BaseImage {
 pub struct OutputSpec {
     #[serde(default)]
     pub expected_rootfs_sha: HashMap<String, String>,
+    /// l9: artifact-URL contract. A template with `{tag}`, `{arch}`,
+    /// and `{format}` placeholders that non-Linux hosts resolve at
+    /// fetch time. The default points at the GitHub release asset
+    /// uploaded by `.github/workflows/recipe-publish.yml`. Hosts MAY
+    /// override at install time (e.g. internal mirror) — the recipe
+    /// stays the trust root, manifest SHAs are the verification gate.
+    #[serde(default)]
+    pub artifact_url_template: Option<String>,
 }
 
 impl Manifest {
@@ -323,6 +331,27 @@ impl Manifest {
             .as_ref()
             .and_then(|o| o.expected_rootfs_sha.get(key))
             .map(|s| s.as_str())
+    }
+
+    /// l9: resolve the artifact URL for `(arch, format, tag)`. Returns
+    /// `None` if no template is configured. Format is the trailing key
+    /// segment (`"tar"` or `"img"`), arch is `"x86_64"` / `"aarch64"`,
+    /// tag is the release tag (`"v0.2.260526.X"` etc.).
+    ///
+    /// Substitution is positional `replace`; we don't pull in a full
+    /// template engine because the variable surface is fixed.
+    ///
+    /// @trace plan/issues/cross-host-blocker-roundup-2026-05-25.md l9
+    pub fn artifact_url(&self, arch: &str, format: &str, tag: &str) -> Option<String> {
+        let tmpl = self
+            .output
+            .as_ref()
+            .and_then(|o| o.artifact_url_template.as_ref())?;
+        Some(
+            tmpl.replace("{arch}", arch)
+                .replace("{format}", format)
+                .replace("{tag}", tag),
+        )
     }
 }
 
@@ -488,5 +517,43 @@ mod tests {
     #[test]
     fn manifest_rejects_malformed_toml() {
         assert!(Manifest::from_toml("this is not = = toml").is_err());
+    }
+
+    /// @trace plan/issues/cross-host-blocker-roundup-2026-05-25.md l9
+    #[test]
+    fn artifact_url_resolves_with_substitution() {
+        let m = Manifest::from_toml(FIXTURE_MANIFEST).expect("parse fixture");
+        let url = m
+            .artifact_url("x86_64", "tar", "v0.2.260526.1")
+            .expect("template resolves");
+        assert_eq!(
+            url,
+            "https://example.test/releases/v0.2.260526.1/rootfs-x86_64.tar"
+        );
+    }
+
+    /// @trace plan/issues/cross-host-blocker-roundup-2026-05-25.md l9
+    #[test]
+    fn artifact_url_substitutes_macos_img_format() {
+        let m = Manifest::from_toml(FIXTURE_MANIFEST).expect("parse fixture");
+        let url = m
+            .artifact_url("aarch64", "img", "v0.2.260526.1")
+            .expect("template resolves");
+        assert!(url.contains("aarch64.img"), "got {url}");
+        assert!(url.contains("v0.2.260526.1"), "got {url}");
+    }
+
+    /// @trace plan/issues/cross-host-blocker-roundup-2026-05-25.md l9
+    #[test]
+    fn artifact_url_returns_none_when_template_absent() {
+        let m = Manifest::from_toml(
+            r#"
+recipe_version = 1
+[output]
+expected_rootfs_sha = { "x86_64.tar" = "x" }
+"#,
+        )
+        .unwrap();
+        assert!(m.artifact_url("x86_64", "tar", "v1").is_none());
     }
 }

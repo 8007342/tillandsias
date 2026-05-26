@@ -17,4 +17,5 @@ digest = "sha256:222222222222222222222222222222222222222222222222222222222222222
 manifest_size_bytes = 524288
 
 [output]
+artifact_url_template = "https://example.test/releases/{tag}/rootfs-{arch}.{format}"
 expected_rootfs_sha = { "x86_64.tar" = "aaaa", "aarch64.tar" = "bbbb", "aarch64.img" = "cccc" }
