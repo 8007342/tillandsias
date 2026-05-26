@@ -66,14 +66,14 @@ impl std::error::Error for ConvertError {}
 /// Convert a materialized rootfs `.tar` into a VFR-bootable raw `.img`.
 ///
 /// Inputs:
-///   - `tar`:           absolute path to the materialized rootfs tar (the
-///                      output of `materialize::run` once Linux's §3
-///                      driver lands; or a hand-rolled tar for testing).
-///   - `out_img`:       absolute path to write the resulting `.img`. Will
-///                      be overwritten if it exists.
-///   - `script`:        absolute path to `scripts/materialize-macos-tar-to-img.sh`.
-///                      For most callers `script_for_repo_root(repo)`
-///                      derives this automatically.
+///   - `tar`: absolute path to the materialized rootfs tar (the
+///     output of `materialize::run` once Linux's §3 driver lands;
+///     or a hand-rolled tar for testing).
+///   - `out_img`: absolute path to write the resulting `.img`. Will
+///     be overwritten if it exists.
+///   - `script`: absolute path to `scripts/materialize-macos-tar-to-img.sh`.
+///     For most callers `script_for_repo_root(repo)` derives this
+///     automatically.
 ///
 /// Returns `Ok(())` on a successful conversion; the `.img` is written to
 /// `out_img` and is ready to be served as the `aarch64.img` artifact of
