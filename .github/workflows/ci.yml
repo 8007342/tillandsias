@@ -65,3 +65,62 @@ jobs:
       # This is stricter than the pre-commit hook (non-blocking).
       - name: Verify spec-code drift (CI mode)
         run: bash scripts/hooks/pre-commit-openspec.sh --ci-mode
+
+  # @trace spec:macos-tray-build-and-release, spec:macos-native-tray
+  # macOS host build — produces Tillandsias.app + the release tarball on
+  # every push/dispatch so we catch regressions in the macOS-only crates
+  # (tillandsias-macos-tray, tillandsias-vm-layer::{vz, transport_macos},
+  # tillandsias-host-shell::pty::unix) that the Linux `check` job can't.
+  #
+  # Runs in parallel with `check`; independent failure boundary.
+  macos-build:
+    name: macOS tray build (Apple Silicon)
+    runs-on: macos-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # stable
+        with:
+          toolchain: stable
+          # macos-latest is Apple Silicon — host triple = aarch64-apple-darwin.
+          # No cross-target needed; cargo build --release suffices.
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2
+        with:
+          workspaces: . -> target
+
+      # Build + sign + tarball + SHA256SUMS in one shot.
+      - name: Build Tillandsias.app
+        run: scripts/build-macos-tray.sh
+
+      # Inspect the bundle so a CI failure points at exactly what broke.
+      - name: Verify bundle structure
+        run: |
+          test -f dist/Tillandsias.app/Contents/Info.plist
+          test -x dist/Tillandsias.app/Contents/MacOS/tillandsias-tray
+          test -f dist/SHA256SUMS
+          /usr/libexec/PlistBuddy -c "Print :LSUIElement" \
+              dist/Tillandsias.app/Contents/Info.plist | grep -q true
+          codesign --verify --deep --strict --verbose=2 dist/Tillandsias.app
+          codesign -d --entitlements - dist/Tillandsias.app 2>&1 \
+              | grep -q 'com.apple.security.virtualization'
+
+      # Run the macOS-cfg-gated unit tests so the AsyncFd / objc2 bindings
+      # are exercised on real macOS (the Linux `check` job skips these).
+      - name: Run macOS-only tests
+        run: |
+          cargo test -p tillandsias-vm-layer --lib
+          cargo test -p tillandsias-host-shell --lib pty::unix
+
+      - name: Upload Tillandsias.app tarball
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4
+        with:
+          name: macos-tray-build
+          path: |
+            dist/tillandsias-tray-*-macos-arm64.tar.gz
+            dist/SHA256SUMS
+          if-no-files-found: error
+          retention-days: 14
