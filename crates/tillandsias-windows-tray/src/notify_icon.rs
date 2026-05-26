@@ -193,15 +193,27 @@ pub fn run() -> ! {
             }
         }
 
-        // Spawn the WSL provisioning + lifecycle task. Progress is reported
-        // via the TrayProgress sink which updates the tooltip and menu.
-        let progress = std::sync::Arc::new(TrayProgress::new(hwnd));
-        let lifecycle = WslLifecycle::new();
-        tokio::task::spawn_local(async move {
-            if let Err(err) = lifecycle.bootstrap(progress).await {
-                eprintln!("WSL lifecycle bootstrap failed: {err}");
-            }
-        });
+        // Spawn the WSL provisioning + lifecycle task, UNLESS dev mode asked us
+        // to skip it. `--no-provision` (or TILLANDSIAS_NO_PROVISION=1) brings the
+        // tray up in a clean, interactive state — no rootfs download, no
+        // `wsl --import` — so the menu can be exercised locally before the VM /
+        // recipe path lands. Progress is reported via the TrayProgress sink
+        // which updates the tooltip and menu.
+        if provisioning_enabled() {
+            let progress = std::sync::Arc::new(TrayProgress::new(hwnd));
+            let lifecycle = WslLifecycle::new();
+            tokio::task::spawn_local(async move {
+                if let Err(err) = lifecycle.bootstrap(progress).await {
+                    eprintln!("WSL lifecycle bootstrap failed: {err}");
+                }
+            });
+        } else {
+            tracing::info!(
+                "provisioning skipped (--no-provision / TILLANDSIAS_NO_PROVISION); \
+                 tray running in menu-only dev mode"
+            );
+            update_status_text("\u{26AA} Dev mode \u{2014} VM provisioning skipped", hwnd);
+        }
 
         // Pump messages until WM_QUIT.
         let mut msg = MSG::default();
@@ -229,6 +241,15 @@ pub fn run() -> ! {
         msg.wParam.0 as i32
     });
     std::process::exit(exit_code);
+}
+
+/// Whether the tray should drive WSL provisioning on launch. Dev mode disables
+/// it via the `--no-provision` CLI flag or `TILLANDSIAS_NO_PROVISION` env var,
+/// so the menu can be exercised locally without a VM or any downloads.
+fn provisioning_enabled() -> bool {
+    let env_skip = std::env::var_os("TILLANDSIAS_NO_PROVISION").is_some();
+    let arg_skip = std::env::args().any(|a| a == "--no-provision");
+    !(env_skip || arg_skip)
 }
 
 unsafe fn create_message_window() -> windows::core::Result<HWND> {
