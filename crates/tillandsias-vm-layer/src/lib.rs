@@ -38,6 +38,14 @@ pub mod wsl;
 #[cfg(target_os = "macos")]
 pub mod transport_macos;
 
+/// Materializer per-OS converters (`vm-recipe-provisioning §3.7`). The
+/// `materialize::run` driver (Linux §3) goes here too once it lands.
+/// Compiled on every target so callers can hold the type symbols at trait
+/// level; the per-OS converter bodies live behind their own gates.
+///
+/// @trace openspec/changes/vm-recipe-provisioning §3, §D6
+pub mod materialize;
+
 #[cfg(all(target_os = "linux", feature = "fake"))]
 pub mod fake;
 

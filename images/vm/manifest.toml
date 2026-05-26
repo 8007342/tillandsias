@@ -1,0 +1,48 @@
+# Tillandsias VM materialization manifest — pinned inputs + expected outputs.
+#
+# Read by `tillandsias-vm-layer::recipe::Manifest::load`. Per-arch base
+# image digests pin the Containerfile's `FROM` so re-materialization is
+# reproducible regardless of when the upstream tag moves. `[output]
+# .expected_rootfs_sha` is populated by the `recipe-publish` CI job after
+# the first successful materialization on each arch; downstream hosts
+# verify the fetched artifact against these SHAs.
+#
+# @trace openspec/changes/vm-recipe-provisioning §D2 + §D6
+
+recipe_version = 1
+
+# Resolved at materialization time; emitted into Hello.capabilities as
+# `vm.recipe@<sha>` so the host shell can detect "in-VM headless built
+# from a stale recipe" (per D7).
+recipe_sha = "auto"
+
+# Pinned Fedora 44 Container Base digests. Refresh via:
+#   skopeo inspect docker://registry.fedoraproject.org/fedora:44 \
+#       --override-arch <arch> | jq -r .Digest
+# Pin manually and update by PR — never auto-update.
+[[base]]
+arch   = "x86_64"
+ref    = "registry.fedoraproject.org/fedora:44"
+digest = "sha256:pending-first-pin"
+
+[[base]]
+arch   = "aarch64"
+ref    = "registry.fedoraproject.org/fedora:44"
+digest = "sha256:pending-first-pin"
+
+# CI-published artifact SHAs (D6: dual-path materialization).
+# Format keys: "<arch>.<format>" — `tar` for Linux dev + WSL import,
+# `img` for macOS VFR (raw EFI+ext4 image). Populated by recipe-publish
+# CI job on first successful run; check-in via PR after merge.
+[output]
+expected_rootfs_sha = {
+    "x86_64.tar"  = "pending-ci",
+    "aarch64.tar" = "pending-ci",
+    "aarch64.img" = "pending-ci",
+    # x86_64.img omitted: no x86_64 VFR consumer in v0.0.1.
+}
+
+# Kernel command-line passed to the VM bootloader. Quiet boot + serial
+# console on hvc0 so the host can capture early-boot diagnostics.
+[boot]
+kernel_cmdline = "quiet console=hvc0 systemd.log_target=console"
