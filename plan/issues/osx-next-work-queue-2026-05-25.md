@@ -2,13 +2,15 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
-Status: **OPEN** as of 2026-05-26T01:13Z. macOS m1, m1b, m2, m3, m6, and
+Status: **OPEN** as of 2026-05-26T02:04Z. macOS m1, m1b, m2, m3, m6, and
 m7 are done. m4 has its Unix PTY foundation (`0551a265`) plus the Quit/version
 header slice (`79ff0571`) and still needs the user-facing action-host wiring
 for Start VM / Stop VM / Open Shell. Linux l7 materializer shipped at
-`9dca2c47`, so m5's converter/API work is no longer blocked by the Linux
-materializer; full recipe provisioning remains gated on macOS-owned
-recipe-publish/CI-fetch deliverables.
+`9dca2c47`; macOS then landed the recipe scaffold, `tar_to_vfr_img`, and
+recipe-publish workflow scaffolding through `55ff55c6`/`fad97244`. Full live
+recipe provisioning is still gated on Linux l8 production `BuildahExec`, first
+green recipe-publish artifacts + manifest SHAs, and the macOS runtime
+provisioning flip away from the current deferred extraction/conversion stubs.
 
 ## How to use this file
 
@@ -36,10 +38,10 @@ Per branch canon §4, plan/-class writes directly are CORRECT; code commits
 SHOULD route through `osx-next` so the integration loop can run isolation
 checks. Advisory only; both flows still work.
 
-Work-shaping note: m4 action-host wiring and m5
-`materialize::macos::tar_to_vfr_img` / CI-fetch work are both large enough to
-occupy a macOS agent for one or two recurrent iterations. If recipe-publish
-artifacts are not ready yet, continue m4 wiring rather than idling.
+Work-shaping note: m4 action-host wiring remains the best macOS packet while
+Linux l8 produces real recipe artifacts. m5 runtime provisioning can be shaped
+against the artifact contract, but E2E should wait for first green
+recipe-publish SHAs.
 
 ## Currently unblocked / active
 
@@ -177,25 +179,33 @@ artifacts are not ready yet, continue m4 wiring rather than idling.
 - type: feature
 - owner_host: macos
 - capability_tags: [vfr, vm-layer, fetch, provisioning]
-- status: pending
+- status: blocked
 - gated_on:
-  - linux deliverable `l5/recipe-smoke-ci-publish` (CI publishes both `.tar` AND `.img` per arch per macOS preference)
+  - linux deliverable `l8/buildah-exec-recipe-publish-smoke` (production
+    BuildahExec and first green recipe-publish artifacts)
+  - `images/vm/manifest.toml` SHA pins from first green recipe-publish run
 - cleared_gates:
   - linux deliverable `l2/recipe-shared-modules` integrated at `a7af0ed`
   - linux deliverable `l7/§3-materializer-driver` shipped at `9dca2c47`
+  - recipe scaffold landed at `a77fae00`
+  - `materialize::macos::tar_to_vfr_img` landed at `a77fae00`
+  - recipe-publish workflow scaffolding landed at `55ff55c6`
 - depends_on: [m1/vmruntime-stop-and-wait-ready]
 - owned_files:
   - `crates/tillandsias-vm-layer/src/vz.rs` (provisioning slice)
-  - `crates/tillandsias-vm-layer/src/materialize/macos.rs` (new — Linux-runnable per D6)
+  - `crates/tillandsias-vm-layer/src/materialize/macos.rs`
+  - `crates/tillandsias-macos-tray/src/vz_lifecycle.rs`
 - summary: >
     Per D6 amendment + macOS recipe-convergence response (request:
     CI-fetch publishes BOTH `.tar` AND `.img` per arch — the .img is
     the raw EFI/ext4 image consumed directly by VFR; the .tar is the
     intermediate). Contribute `materialize::macos::tar_to_vfr_img`
-    (Linux-runnable per D6 task 2b.2). Wire VzRuntime::provision to
-    fetch-and-verify the CI-published .img by default; respect
-    `--materialize-local` flag for the dev path.
-- estimated_effort: 2 days after Linux deliverables.
+    (Linux-runnable per D6 task 2b.2). The converter and workflow scaffold
+    are done; remaining m5 work is to wire VzRuntime::provision to fetch and
+    verify the CI-published `.img` by default, replace the deferred
+    extract/convert stubs in `vz.rs`, and respect a `--materialize-local` dev
+    path if retained.
+- estimated_effort: 1-2 days after l8 artifacts and SHA pins land.
 
 ### Item: m6/macos-installer-pkg-and-codesign
 
@@ -256,11 +266,12 @@ artifacts are not ready yet, continue m4 wiring rather than idling.
 | Linux item | Status | Blocks macOS item |
 |---|---|---|
 | `l1/control-wire-pty-attach-tasks-1` | done (`b345ae68`; §1 enum/capability tasks complete) | m4 ready with l3 also done |
-| `l2/recipe-shared-modules` | done (`a7af0ed`; parser tests green on Linux) | m5 converter/API work unblocked; full provision still gated on l5 |
+| `l2/recipe-shared-modules` | done (`a7af0ed`; parser tests green on Linux) | m5 converter/API work unblocked; full provision gated on l8/artifact SHAs |
 | `l3/in-vm-headless-pty-handler` | done (`f770e013`/`8dc0d129`; tasks 4.1-4.7, two pump tests ignored pending AsyncFd rewrite) | m4 ready for host-side wiring |
 | `l4/replace-vsock-stub-handlers` | done (`6956c825`; informational only for macOS) | (informational only for macOS) |
-| `l5/recipe-smoke-ci-publish` | macOS-owned claim; pending recipe-publish/CI-fetch artifact work | m5 |
+| `l5/recipe-smoke-ci-publish` | workflow scaffold landed (`55ff55c6`/`fad97244`), but production buildah artifacts not yet proven | m5 |
 | `l7/§3-materializer-driver` | done (`9dca2c47`; materializer feature and cache/export API shipped) | m5 converter/API work unblocked |
+| `l8/buildah-exec-recipe-publish-smoke` | ready, Linux-owned: BuildahExec still scaffold; first green artifact run + SHA pins pending | m5 runtime provision |
 
 ## Events
 
@@ -802,3 +813,18 @@ Windows host can claim w4c/e/f for live-VM verification on the next
 green workflow run. Macos can similarly start m4 sub-task B
 (`tillandsias-macos-tray::terminal_attach` action-host) since the lower
 layers are all live.
+
+### event: linux coordinator status reconciliation — 2026-05-26T02:04Z
+
+- Observed remote heads: `linux-next` `fad97244`, `windows-next` `d937e761`,
+  `osx-next` `fad97244`, `main` `ddf52dff`.
+- Folded the latest recipe events into headers, with one correction: the
+  recipe scaffold, `tar_to_vfr_img`, and `recipe-publish.yml` workflow file
+  have landed, but live m5 provisioning is not yet complete. Production
+  `BuildahExec` still returns its scaffold error, manifest SHAs are still
+  `pending-ci`, and `VzRuntime::provision` still calls deferred
+  extract/convert stubs.
+- Current macOS next action remains m4 action-host wiring for Start VM / Stop
+  VM / Open Shell. m5 runtime provisioning should wait for l8/first green
+  artifacts or explicitly use mock pins while recording that E2E remains
+  blocked.

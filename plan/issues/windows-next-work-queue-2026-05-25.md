@@ -2,15 +2,17 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/windows-next-thin-tray.md, plan/issues/tray-convergence-coordination.md, plan/issues/control-socket-protocol-convergence-2026-05-25.md, openspec/changes/control-wire-pty-attach/
 
-Status: **OPEN** as of 2026-05-26T01:13Z. Windows w1, w2, w3, and w4 are
-done; w4 launch/menu wiring was merged and tested into `linux-next` at
-`95e4714`. Linux l3 shipped the in-VM PTY handler at `f770e013`/`8dc0d129`,
-l4 shipped real vsock handlers at `6956c825`, and l7 shipped the recipe
-materializer driver at `9dca2c47`. `origin/windows-next` is now ahead only with
-the w5 `materialize::wsl::tar_to_wsl_import` converter slice at `cb39cb7c`;
-the next integration loop should merge/test it into `linux-next`. Remaining
-WSL rootfs provisioning work is gated on macOS-owned recipe-publish/CI-fetch
-artifacts and the live VM artifact path.
+Status: **OPEN** as of 2026-05-26T02:04Z. Windows w1, w2, w3, w4, w6
+diagnostics, and the w5 `materialize::wsl::tar_to_wsl_import` converter are
+done/integrated through `linux-next` cycle `b3ae21a`. Linux l3 shipped the
+in-VM PTY handler at `f770e013`/`8dc0d129`, l4 shipped real vsock handlers at
+`6956c825`, and l7 shipped the recipe materializer driver at `9dca2c47`.
+MacOS landed the recipe scaffold, `tar_to_vfr_img`, and recipe-publish workflow
+scaffolding through `55ff55c6`/`fad97244`. Remaining WSL rootfs provisioning
+work is still gated on the production artifact path: `BuildahExec` currently
+returns its scaffold error, `images/vm/manifest.toml` still has `pending-ci`
+SHAs, and the Windows tray runtime still fetches the older provisioning
+manifest instead of the recipe-published rootfs tar.
 
 ## How to use this file
 
@@ -34,22 +36,62 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
 
 ## Currently unblocked / active
 
-- `w6/vm-status-and-enumerate-real-handlers` is ready for Windows
-  verification after Linux l4 shipped at `6956c825`; useful evidence still
-  needs a live/provisioned VM, so it is a fallback behind the recipe path.
+- `w7/recipe-diagnostics-and-branch-sync` is ready: `origin/windows-next`
+  has diagnostic refinement `d937e761`, but that branch is behind latest
+  `linux-next` recipe-publish commits (`55ff55c6`/`fad97244`). Merge latest
+  `linux-next` into `windows-next` before adding more diagnostic work, or let
+  the Linux integration loop merge/test and record conflicts.
+- `w6/vm-status-and-enumerate-real-handlers` is done as a no-VM diagnostics
+  fallback through `948af711` / integration cycle `b3ae21a`. Live VM status
+  verification waits for the recipe artifact path.
 - `w4/pty-attach-conpty` is done and integrated through `95e4714`. Do not
   create a competing claim; use the completed lease `8a3307907d94` as history.
-- `origin/windows-next` is currently ahead of `linux-next` with the w5
-  `tar_to_wsl_import` code at `cb39cb7c`. The next Linux integration loop
-  should merge/test it or report exact conflicts.
-- If w5 remains gated on recipe-publish artifacts, Windows should claim a
-  larger independent fallback packet rather than idling: w6 verification first,
-  then cache/diagnostic work that can complete without the CI rootfs artifact.
+- `w5/wsl-import-via-ci-rootfs` has its converter slice done, but the runtime
+  provisioning flip remains blocked on Linux l8 / first green recipe-publish
+  artifacts and manifest SHA pins.
 
 Do not re-claim w1, w2, w3, or w4; their terminal events are recorded below.
-The next gated Windows implementation item is the remaining w5 provisioning
-flip after macOS-owned l5 recipe-publish/CI-fetch lands, unless a newly filed
-ready item with a stable ID appears first.
+The next Windows implementation item is the w5 runtime provisioning flip after
+real recipe artifacts exist; the independent ready fallback is w7 diagnostics
+and branch sync.
+
+### Item: w7/recipe-diagnostics-and-branch-sync
+
+- id: `w7/recipe-diagnostics-and-branch-sync`
+- type: diagnostics
+- owner_host: windows
+- capability_tags: [powershell, diagnostics, git, wsl]
+- status: ready
+- depends_on: []
+- owned_files:
+  - `scripts/diagnose-windows.ps1`
+- summary: >
+    Keep the Windows no-VM diagnostic current while the recipe artifact path
+    finishes. `origin/windows-next` commit `d937e761` improves
+    `diagnose-windows.ps1` for the recipe scaffold state, but the branch is
+    missing the latest `linux-next` recipe-publish commits. Merge or rebase
+    latest `linux-next` into `windows-next`, preserve the diagnostic
+    refinement, and report whether the script still accurately distinguishes
+    converter/workflow scaffolding from first green rootfs artifacts.
+- next_action: >
+    `git fetch origin`, merge `origin/linux-next` into `windows-next`, resolve
+    only `scripts/diagnose-windows.ps1` if needed, run the script on Windows,
+    and append an agent_status_packet here.
+- acceptance_evidence:
+  - `scripts/diagnose-windows.ps1` output on Windows, including WSL presence,
+    recipe input detection, and the current artifact gate.
+  - Pushed `windows-next` commit that contains latest `linux-next` ancestry or
+    a clear conflict packet if the merge cannot be completed.
+- fallback_when_blocked: >
+    Prepare w5 runtime-provisioning code against fake pins, but mark E2E
+    verification blocked until l8/recipe-publish emits real SHAs.
+- agent_status_packet_expected:
+  - current plan
+  - dependencies and blockers
+  - files touched
+  - evidence produced
+  - next checkpoint
+  - lease intent
 
 ### Item: w1/tray-icon-rc-and-ico
 
@@ -188,31 +230,41 @@ ready item with a stable ID appears first.
 - type: feature
 - owner_host: windows
 - capability_tags: [wsl, vm-layer, fetch, provisioning]
-- status: pending
+- status: blocked
 - gated_on:
-  - linux deliverable `l5/recipe-smoke-ci-publish` (CI publishes rootfs tar per arch)
+  - linux deliverable `l8/buildah-exec-recipe-publish-smoke` (production
+    BuildahExec and first green recipe-publish rootfs `.tar` artifacts)
+  - `images/vm/manifest.toml` SHA pins from first green recipe-publish run
 - cleared_gates:
   - linux deliverable `l2/recipe-shared-modules` integrated at `a7af0ed`
   - linux deliverable `l7/§3-materializer-driver` shipped at `9dca2c47`
+  - macOS-authored `§3.7.1` converter and `§2b.3` recipe-publish workflow
+    scaffolding landed through `55ff55c6`/`fad97244`
+  - Windows-owned `§3.7.2` converter integrated at `b3ae21a`
 - depends_on: []
 - owned_files:
   - `crates/tillandsias-vm-layer/src/wsl.rs`
-  - `crates/tillandsias-vm-layer/src/materialize/wsl.rs` (new)
+  - `crates/tillandsias-windows-tray/src/wsl_lifecycle.rs`
+  - `crates/tillandsias-windows-tray/assets/provisioning-manifest.json`
+  - `crates/tillandsias-vm-layer/src/materialize/wsl.rs`
 - summary: >
     Per D6 amendment to `vm-recipe-provisioning`, the Windows default
     install path is CI-materialized rootfs tar. Once Linux CI publishes
     the rootfs (per-arch, SHA-pinned in `images/vm/manifest.toml`),
     `WslRuntime::provision` flips from the placeholder OCI archive
-    fetch to the recipe-materialized rootfs tar. Contribute
-    `materialize::wsl::tar_to_wsl_import` (proposal task 3.7.2) once
-    the shared `recipe`/`materialize`/`cache` modules exist.
-- estimated_effort: 1 day after Linux deliverables land.
+    fetch to the recipe-materialized rootfs tar. The converter primitive is
+    done; the remaining Windows work is the runtime fetch/provisioning flip
+    from the legacy OCI provisioning manifest to the recipe-published tar
+    with SHA verification.
+- estimated_effort: 1 day after l8 artifacts and SHA pins land.
 - progress:
   - Windows-owned converter slice `materialize::wsl::tar_to_wsl_import`
-    landed on `origin/windows-next` at `cb39cb7c`; it still needs Linux
-    integration-loop merge/test before `linux-next` agents consume it.
-  - Full WSL provisioning flip remains gated on recipe-publish/CI-fetch
-    artifacts.
+    landed on `origin/windows-next` at `cb39cb7c` and was integrated/tested
+    into `linux-next` at `b3ae21a`.
+  - Full WSL provisioning flip remains gated on real recipe-publish artifacts.
+    As of 2026-05-26T02:04Z, `BuildahExec` still returns a scaffold error and
+    `wsl_lifecycle.rs` still downloads the older OCI-style provisioning
+    manifest.
 
 ### Item: w6/vm-status-and-enumerate-real-handlers
 
@@ -220,7 +272,8 @@ ready item with a stable ID appears first.
 - type: feature
 - owner_host: windows  (in-VM headless, but Windows-tray sees the effect)
 - capability_tags: [host-shell, vsock-client]
-- status: ready
+- status: done
+- completed_at: 2026-05-26T01:43Z
 - gated_on: []
 - cleared_gates:
   - linux deliverable `l4/replace-vsock-stub-handlers` shipped at `6956c825`
@@ -233,18 +286,24 @@ ready item with a stable ID appears first.
     EnumerateLocalProjects → host-side ~/src scan, CloudRefreshRequest →
     real GitHub fetch), verify the Windows tray surfaces the right
     state. No Windows code change expected; verification only.
+- progress:
+  - No-VM diagnostics fallback landed at `948af711` and was merged/tested into
+    `linux-next` at `b3ae21a`.
+  - Live VM surface verification still waits for the recipe artifact path; do
+    not re-open w6 for that smoke unless a specific display regression appears.
 
 ## Linux deliverables Windows is waiting on (status mirrors)
 
 | Linux item | Status | Blocks Windows item |
 |---|---|---|
 | `l1/control-wire-pty-attach-tasks-1` | **done** (shipped `b345ae68`; 23/23 control-wire tests pass on Linux; 22/22 on Windows per `47d91d11`) | w4 done |
-| `l2/recipe-shared-modules` | **done** (windows authored §2 parser `26afb76a` integrated `a7af0ed`; 16/16 recipe tests green on Linux) | w5 converter slice done on windows-next; provision still gated on l5 |
+| `l2/recipe-shared-modules` | **done** (windows authored §2 parser `26afb76a` integrated `a7af0ed`; 16/16 recipe tests green on Linux) | w5 converter slice done; provision gated on l8/artifact SHAs |
 | `l3/in-vm-headless-pty-handler` | **done** (`f770e013`/`8dc0d129`; tasks 4.1-4.7, two pump tests ignored pending AsyncFd rewrite) | w4 done |
-| `l4/replace-vsock-stub-handlers` | **done** (`6956c825`; real VmStatus/EnumerateLocalProjects/CloudRefresh backing data) | w6 ready for verification |
-| `l5/recipe-smoke-ci-publish` | **macOS-owned** per their CLAIM in cross-host-blocker-roundup (`§2b` host-side + CI artifacts) | w5 |
+| `l4/replace-vsock-stub-handlers` | **done** (`6956c825`; real VmStatus/EnumerateLocalProjects/CloudRefresh backing data) | w6 diagnostics done; live smoke waits on artifacts |
+| `l5/recipe-smoke-ci-publish` | **workflow scaffold landed** (`55ff55c6`/`fad97244`), but production buildah artifacts not yet proven | w5 |
 | `l6/linux-rasterize-svg-to-ico` | **done** (`ea13ba20`) | w1 done |
-| `l7/§3-materializer-driver` | **done** (`9dca2c47`; materializer feature and cache/export API shipped) | w5 converter work unblocked; l7 clippy follow-up remains |
+| `l7/§3-materializer-driver` | **done** (`9dca2c47`; materializer feature and cache/export API shipped) | w5 converter done; l8 production executor remains |
+| `l8/buildah-exec-recipe-publish-smoke` | **ready, Linux-owned**: BuildahExec still scaffold; first green artifact run + SHA pins pending | w5 runtime provisioning flip |
 
 ## Events
 
@@ -561,3 +620,20 @@ Next greedy pickups (no VM needed): **w4b** (windows-ownable, pure) and **w4d**
 - Current Windows next action: do not duplicate w4 or the w5 converter. Either
   wait for Linux to merge/test `cb39cb7c`, or claim w6/cache diagnostics that
   do not require the recipe-publish artifact.
+
+### Event: 2026-05-26T02:04Z — linux coordinator status reconciliation
+
+- Observed remote heads: `linux-next` `fad97244`, `windows-next` `d937e761`,
+  `osx-next` `fad97244`, `main` `ddf52dff`.
+- Folded terminal events into headers: w5 converter and w6 diagnostics are now
+  integrated/tested through `b3ae21a`; the old `cb39cb7c needs merge/test`
+  watch is resolved.
+- New Windows watch: `origin/windows-next` has diagnostic refinement
+  `d937e761`, but that branch is based before the latest `linux-next`
+  recipe-publish commits. Merge latest `linux-next` into `windows-next`, or
+  let the integration loop merge/test `d937e761` and record exact conflicts.
+- Current blocker for w5 is not the converter anymore. It is the production
+  artifact path: `BuildahExec` still returns its scaffold error, manifest SHAs
+  are `pending-ci`, and `wsl_lifecycle.rs` still consumes the legacy
+  provisioning manifest. Windows should use w7 diagnostics/branch-sync while
+  Linux l8 produces first real rootfs artifacts.

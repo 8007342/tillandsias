@@ -1,54 +1,64 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-05-26T01:13Z
+LastExecutionTime: 2026-05-26T02:04Z
 
 ## This Loop
 
-- Fetched origin, fast-forwarded local `linux-next` from `67ceab51` to
-  `cabf9c9f`, and fresh-read methodology, plan, active work queues, blocker
+- Fetched origin, fast-forwarded local `linux-next` from `fa39e95c` to
+  `fad97244`, and fresh-read methodology, plan, per-host queues, blocker
   roundup, and integration-loop ledgers.
-- Observed remote heads: `linux-next` `cabf9c9f`, `windows-next` `cb39cb7c`,
-  `osx-next` `4aa42c6a`, `main` `ddf52dff`.
-- Reconciled stale mirrors: Windows w4 is done/integrated at `95e4714`, Linux
-  l7 materializer shipped at `9dca2c47`, macOS m7 is done at `c9341fa6`, and
-  Windows w5 converter code is ahead on `origin/windows-next` at `cb39cb7c`.
-- Updated step-21 status, per-host queues, work-shaping notes, and blocker
-  roundup so fresh agents no longer chase stale l7/w4/m7 work.
+- Observed remote heads: `linux-next` `fad97244`, `osx-next` `fad97244`,
+  `windows-next` `d937e761`, `main` `ddf52dff`.
+- Remote progress is healthy: since the previous loop, Linux/macOS advanced
+  from `cabf9c9f`/`4aa42c6a` to `fad97244`, and Windows advanced from
+  `cb39cb7c` to `d937e761`.
+- Reconciled the dependency chain: Windows §3.7.2 and w6 were integrated at
+  `b3ae21a`; macOS recipe scaffold, `tar_to_vfr_img`, and recipe-publish
+  workflow scaffolding landed through `55ff55c6`/`fad97244`; Windows has one
+  diagnostic refinement ahead at `d937e761`.
+- Corrected the remaining recipe gate: `recipe-publish.yml` exists, but
+  production `BuildahExec` still returns the scaffold error, manifest SHAs are
+  `pending-ci`, and Windows/macOS runtime provisioning still need artifact
+  fetch flips before live VM provisioning is proven.
 
 ## Expected Next Loop
 
-- Merge/test `origin/windows-next` `cb39cb7c` into `linux-next` or record exact
-  conflicts for the w5 `tar_to_wsl_import` converter.
-- macOS should claim m4 action-host wiring or m5 `tar_to_vfr_img` /
-  recipe-publish/CI-fetch work; m4 is the visible UX path, m5 closes the VM
-  artifact path.
-- Linux should fix the reported l7 `materialize/cache.rs:134` clippy warning
-  and decide whether to pin rustfmt or run an agreed Linux fmt pass.
-- Windows should avoid duplicate w4/w5 converter work; w6 verification and
-  diagnostics remain useful fallbacks while CI rootfs artifacts are pending.
+- Linux should claim `l8/buildah-exec-recipe-publish-smoke`: implement or
+  narrow the BuildahExec subprocess body, run recipe-publish/buildah evidence,
+  fix the `materialize/cache.rs` clippy warning, and produce first artifact
+  SHAs for `images/vm/manifest.toml`.
+- Integration loop should merge/test `origin/windows-next` `d937e761` or record
+  exact conflicts; Windows should also merge latest `linux-next` before adding
+  more diagnostic work.
+- Windows should prepare the w5 runtime provisioning flip from the old OCI
+  manifest path to the recipe rootfs tar after artifact SHAs exist.
+- macOS should continue m4 action-host wiring; m5 runtime provisioning should
+  wait for the first green recipe-publish artifacts or explicitly mock pins.
 
 ## Resolved Since Previous Loop
 
-- Linux l7 materializer driver shipped and cleared the stale lease.
-- Windows w4 PTY launch/menu wiring merged and tested into `linux-next`.
-- macOS m7 CI/release job completed; m4 Quit/version header slice landed.
-- Windows completed the w5 `tar_to_wsl_import` converter on `windows-next`.
+- Windows `tar_to_wsl_import` and w6 diagnostics were merged/tested into
+  `linux-next`; vm-layer tests reached 43/43 in the integration ledger.
+- macOS recipe scaffold, `tar_to_vfr_img`, and recipe-publish workflow
+  scaffolding landed on `linux-next`/`osx-next`.
+- The old `origin/windows-next cb39cb7c needs merge/test` blocker is resolved.
 
 ## Current Major Blockers
 
-- `origin/windows-next` `cb39cb7c` needs integration-loop merge/test.
-- macOS-owned recipe-publish/CI-fetch plus `tar_to_vfr_img` gate m5/w5
-  end-to-end provisioning.
-- Linux l7 clippy follow-up and cross-host rustfmt skew need cleanup before
-  strict multi-host CI can be treated as stable.
+- Linux l8: production BuildahExec / first green recipe-publish artifact run.
+- Manifest SHA pins still read `pending-ci`, so release-fetch verification is
+  not yet real.
+- Windows/macOS runtime provisioning flips are not complete: Windows still uses
+  the old provisioning manifest path, and macOS `VzRuntime::provision` still
+  calls deferred extraction/conversion stubs.
+- macOS m4 action-host wiring remains ready but unfinished.
+- `origin/windows-next` `d937e761` needs merge/test after reconciling with
+  latest `linux-next`.
 
 ## Validation
 
 - PyYAML parsed `plan.yaml` and `plan/index.yaml`.
 - `git diff --check` passed for touched coordination files.
 - Files changed this pass: `plan/loop_status.md`, `plan.yaml`,
-  `plan/index.yaml`, `plan/issues/multi-agent-work-shaping-2026-05-25.md`,
-  `plan/issues/multi-host-coordination-2026-05-24.md`,
-  `plan/issues/cross-host-blocker-roundup-2026-05-25.md`,
-  `plan/issues/windows-next-work-queue-2026-05-25.md`,
-  `plan/issues/osx-next-work-queue-2026-05-25.md`.
+  `plan/index.yaml`, per-host queues, blocker/work-shaping ledgers, and the
+  multi-host coordination audit.

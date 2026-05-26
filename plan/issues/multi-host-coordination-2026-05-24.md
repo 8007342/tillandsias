@@ -227,3 +227,40 @@ Current cross-host gates:
   `collapsible_if` and record strict clippy evidence.
 - Recurring rustfmt version skew between Windows and macOS-owned files needs a
   workspace pin or agreed Linux fmt pass.
+
+## Coordination Audit - 2026-05-26T02:04Z
+
+host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+
+Observed remote heads after fetch/pull:
+
+- `main`: ddf52dff
+- `linux-next`: fad97244
+- `windows-next`: d937e761
+- `osx-next`: fad97244
+
+Ledger corrections made in this audit:
+
+- Folded integration-loop cycle `b3ae21a`: Windows §3.7.2
+  `tar_to_wsl_import` and w6 diagnostics are now integrated/tested into
+  `linux-next`; the stale `cb39cb7c needs merge/test` blocker is closed.
+- Folded macOS recipe events through `55ff55c6`/`fad97244`: recipe scaffold,
+  `tar_to_vfr_img`, and `recipe-publish.yml` scaffolding landed.
+- Corrected the live provisioning status in the Windows/macOS queues: the
+  workflow scaffold exists, but production artifact generation is still blocked
+  because `BuildahExec` returns its scaffold error, manifest SHAs are
+  `pending-ci`, and runtime provisioning paths have not flipped to the
+  recipe-published artifacts.
+- Added/surfaced `l8/buildah-exec-recipe-publish-smoke` in the blocker roundup
+  as the Linux-owned packet that unblocks first real rootfs artifacts.
+
+Current cross-host gates:
+
+- Linux l8 should implement or narrow production `BuildahExec`, run
+  recipe-publish/buildah evidence, fix the materialize cache clippy warning,
+  and produce first artifact SHAs for `images/vm/manifest.toml`.
+- Windows should sync `origin/windows-next` `d937e761` with latest
+  `linux-next`, or the integration loop should merge/test it and record
+  conflicts. This is diagnostic-only and should not block l8.
+- Windows w5 and macOS m5 runtime provisioning flips remain blocked on l8
+  artifact SHAs; m4 action-host wiring remains ready for macOS.

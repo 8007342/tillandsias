@@ -2,7 +2,7 @@
 
 trace: methodology/distributed-work.yaml, methodology/multi-host-development.yaml, .codex/skills/coordinate-multihost-work/SKILL.md
 
-Status: **ACTIVE CANON** as of 2026-05-26T01:13Z. This issue is the durable
+Status: **ACTIVE CANON** as of 2026-05-26T02:04Z. This issue is the durable
 coordination note for making recurrent Linux, Windows, and macOS agents work in
 larger, evidence-producing packets instead of tiny sequential chores.
 
@@ -36,17 +36,18 @@ Windows or macOS sit idle merely because a Linux dependency is still in flight.
 
 Current fallback intent:
 
-- Windows: w4 is done/integrated. `origin/windows-next` is ahead with the
-  w5 `tar_to_wsl_import` converter slice at `cb39cb7c`; until that is
-  merge/tested and recipe-publish artifacts exist, use w6 verification or
-  cache/diagnostics work that does not depend on the rootfs artifact.
-- macOS: m7 is done. m4 action-host wiring and the m5
-  `tar_to_vfr_img`/CI-fetch path are the next useful packets; m4 can still
-  proceed before the full VM artifact smoke.
-- Linux: l7 materializer shipped at `9dca2c47`. The next Linux-sized packet is
-  a materializer follow-up that fixes the reported `cache.rs:134`
-  `collapsible_if`, confirms strict clippy, and records whether the buildah
-  subprocess body remains deferred to recipe-smoke CI.
+- Windows: w5 converter and w6 diagnostics are done/integrated. The ready
+  fallback is `w7/recipe-diagnostics-and-branch-sync`: preserve diagnostic
+  commit `d937e761`, merge latest `linux-next`, and report the current
+  artifact gate. The main w5 runtime provisioning flip waits for l8 artifact
+  SHAs.
+- macOS: m7 plus recipe scaffold / `tar_to_vfr_img` / recipe-publish workflow
+  scaffolding are done. m4 action-host wiring is the best ready packet while
+  m5 runtime provisioning waits for l8 artifact SHAs.
+- Linux: l8 `buildah-exec-recipe-publish-smoke` is the next Linux-sized packet.
+  It should implement or narrow production `BuildahExec`, fix the
+  `materialize/cache.rs` clippy `collapsible_if`, produce first recipe-publish
+  artifact evidence, and generate SHA pins for `images/vm/manifest.toml`.
 
 ## Remote Progress Health
 
