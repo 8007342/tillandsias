@@ -89,20 +89,127 @@ pub fn spawn_pty_bridge<S>(
 where
     S: AsyncRead + AsyncWrite + Send + Unpin + 'static,
 {
+    // Default: bridge starts at seq=1. Callers that did a separate
+    // handshake before handing the stream over should use
+    // `spawn_pty_bridge_with_seq` instead so seq numbering stays
+    // monotonic per-connection.
+    spawn_pty_bridge_with_seq(stream, router, capacity, 1)
+}
+
+/// Same as [`spawn_pty_bridge`] but lets the caller pick the starting
+/// `seq` for the writer task. Used by [`connect_pty_bridge`], which
+/// does the `Hello`/`HelloAck` handshake at seq=1 before delegating
+/// here at seq=2.
+pub fn spawn_pty_bridge_with_seq<S>(
+    stream: S,
+    router: Arc<PtyRouter>,
+    capacity: usize,
+    starting_seq: u64,
+) -> (ChannelPtyTransport, BridgeJoin)
+where
+    S: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+{
     let (transport, rx) = ChannelPtyTransport::new(capacity);
     let (read_half, write_half) = tokio::io::split(stream);
 
-    let writer = tokio::spawn(writer_task(write_half, rx));
+    let writer = tokio::spawn(writer_task(write_half, rx, starting_seq));
     let reader = tokio::spawn(reader_task(read_half, router));
 
     (transport, BridgeJoin { writer, reader })
 }
 
-async fn writer_task<W>(mut writer: W, mut rx: tokio::sync::mpsc::Receiver<ControlMessage>)
+/// Connect: do the `Hello`/`HelloAck` handshake on `stream`, then
+/// spawn the framing tasks with `seq` advanced past the handshake.
+/// One-shot composition so callers don't have to coordinate seq
+/// numbers manually.
+///
+/// `hello_from` and `capabilities` are sent in the outgoing Hello so
+/// the in-VM headless can log which side connected with which
+/// feature set.
+///
+/// Returns the established transport, the bridge join handle, AND
+/// the wire_version the peer reported (so the caller can log/assert
+/// version compatibility).
+pub async fn connect_pty_bridge<S>(
+    stream: S,
+    router: Arc<PtyRouter>,
+    capacity: usize,
+    hello_from: String,
+    capabilities: Vec<String>,
+) -> std::io::Result<(ChannelPtyTransport, BridgeJoin, u16)>
 where
+    S: AsyncRead + AsyncWrite + Send + Unpin + 'static,
+{
+    let (mut read_half, mut write_half) = tokio::io::split(stream);
+
+    // Send Hello (seq=1).
+    let hello = ControlEnvelope {
+        wire_version: WIRE_VERSION,
+        seq: 1,
+        body: ControlMessage::Hello {
+            from: hello_from,
+            capabilities,
+        },
+    };
+    let bytes = encode(&hello).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+    write_half
+        .write_all(&(bytes.len() as u32).to_be_bytes())
+        .await?;
+    write_half.write_all(&bytes).await?;
+    write_half.flush().await?;
+
+    // Read HelloAck.
+    let mut len_buf = [0u8; 4];
+    read_half.read_exact(&mut len_buf).await?;
+    let len = u32::from_be_bytes(len_buf) as usize;
+    if len > MAX_MESSAGE_BYTES {
+        return Err(std::io::Error::new(
+            std::io::ErrorKind::InvalidData,
+            format!("HelloAck frame too large ({len} > {MAX_MESSAGE_BYTES})"),
+        ));
+    }
+    let mut body = vec![0u8; len];
+    read_half.read_exact(&mut body).await?;
+    let envelope =
+        decode(&body).map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?;
+    let wire_version = match envelope.body {
+        ControlMessage::HelloAck { wire_version, .. } => {
+            if wire_version != WIRE_VERSION {
+                return Err(std::io::Error::new(
+                    std::io::ErrorKind::InvalidData,
+                    format!(
+                        "wire version mismatch: local={WIRE_VERSION} server={wire_version}"
+                    ),
+                ));
+            }
+            wire_version
+        }
+        other => {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidData,
+                format!("expected HelloAck, got {other:?}"),
+            ));
+        }
+    };
+
+    // Rejoin halves into Send-friendly task spawns. We can't put them
+    // back into a single `S` (tokio::io::split is one-way), so we
+    // spawn writer/reader directly with the halves we already have.
+    let (transport, rx) = ChannelPtyTransport::new(capacity);
+    let writer = tokio::spawn(writer_task(write_half, rx, 2));
+    let reader = tokio::spawn(reader_task(read_half, router));
+
+    Ok((transport, BridgeJoin { writer, reader }, wire_version))
+}
+
+async fn writer_task<W>(
+    mut writer: W,
+    mut rx: tokio::sync::mpsc::Receiver<ControlMessage>,
+    starting_seq: u64,
+) where
     W: AsyncWrite + Unpin + Send + 'static,
 {
-    let seq = AtomicU64::new(1);
+    let seq = AtomicU64::new(starting_seq);
     while let Some(body) = rx.recv().await {
         let envelope = ControlEnvelope {
             wire_version: WIRE_VERSION,
@@ -223,6 +330,85 @@ mod tests {
         // Close the test's side of the duplex so the reader task EOFs
         // and the .join() can complete (otherwise it blocks forever).
         drop(b);
+        join.join().await;
+    }
+
+    /// `connect_pty_bridge` performs the Hello/HelloAck handshake on
+    /// the supplied stream, then resumes framing at seq=2. Simulates
+    /// the in-VM headless on the other half of the duplex.
+    #[tokio::test]
+    async fn connect_pty_bridge_does_handshake_then_starts_framing() {
+        let (host_side, peer_side) = tokio::io::duplex(8192);
+        let router = Arc::new(PtyRouter::new());
+
+        // Spawn the "in-VM headless" side: read Hello, send HelloAck,
+        // then read the next outbound frame to assert seq=2.
+        let peer = tokio::spawn(async move {
+            let (mut r, mut w) = tokio::io::split(peer_side);
+            // Read Hello length + body.
+            let mut len_buf = [0u8; 4];
+            r.read_exact(&mut len_buf).await.expect("read hello len");
+            let len = u32::from_be_bytes(len_buf) as usize;
+            let mut buf = vec![0u8; len];
+            r.read_exact(&mut buf).await.expect("read hello body");
+            let env = decode(&buf).expect("decode hello");
+            assert_eq!(env.seq, 1);
+            match env.body {
+                ControlMessage::Hello { from, .. } => assert_eq!(from, "test-host"),
+                other => panic!("expected Hello, got {other:?}"),
+            }
+
+            // Send HelloAck (seq=1 from the peer's seq space).
+            let ack = ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: 1,
+                body: ControlMessage::HelloAck {
+                    wire_version: WIRE_VERSION,
+                    server_caps: vec!["pty.attach@v1".into()],
+                },
+            };
+            let ab = encode(&ack).expect("encode ack");
+            w.write_all(&(ab.len() as u32).to_be_bytes())
+                .await
+                .expect("write ack len");
+            w.write_all(&ab).await.expect("write ack body");
+            w.flush().await.expect("flush ack");
+
+            // Read the first POST-handshake frame and assert seq=2.
+            let mut lb = [0u8; 4];
+            r.read_exact(&mut lb).await.expect("read post-hs len");
+            let l = u32::from_be_bytes(lb) as usize;
+            let mut pb = vec![0u8; l];
+            r.read_exact(&mut pb).await.expect("read post-hs body");
+            let post = decode(&pb).expect("decode post-hs");
+            assert_eq!(post.seq, 2, "post-handshake seq should be 2");
+            // Drop w to EOF the host bridge's reader.
+            drop(w);
+            drop(r);
+        });
+
+        let (transport, join, wire_version) = connect_pty_bridge(
+            host_side,
+            router,
+            8,
+            "test-host".to_string(),
+            vec!["pty.attach@v1".to_string()],
+        )
+        .await
+        .expect("handshake completes");
+        assert_eq!(wire_version, WIRE_VERSION);
+
+        // Send a frame; the peer will assert it carries seq=2.
+        transport
+            .send(ControlMessage::PtyResize {
+                session_id: 99,
+                rows: 24,
+                cols: 80,
+            })
+            .expect("send into mpsc");
+
+        peer.await.expect("peer task finishes cleanly");
+        drop(transport);
         join.join().await;
     }
 
