@@ -1390,3 +1390,46 @@ re-claim if interactive smoke surfaces a regression.
     attach to external PTY device). Each layer is now testable in
     isolation; full E2E remains gated on m5.
 - Lease released.
+
+### event: m4 sub-task B slice 4c.2 — live PTY-over-vsock Open Shell — 2026-05-26T09:01Z
+
+- item: `m4/pty-attach-appkit-terminal` sub-task B slice 4c.2
+- agent_id: `osx-next-claude-opus-4-7` on `Tlatoanis-MacBook-Air`
+- lease_id: `f29e4b3a8c61`
+- action: claim slice 4c.2 → done. **m4 sub-task B "Open Shell"
+  composition complete** (slice 5b adds GitHub login + project param).
+- evidence (commit `d45d6216`, code → osx-next):
+  - `action_host.rs::open_shell` rewritten: clones the live
+    `Arc<VzRuntime>`, spawns Tokio worker `run_open_shell_attach`,
+    dispatches result back to main with either
+    `spawn_terminal_pty_attach(slave_path)` (Ok) or
+    `spawn_terminal_stub_window(error)` (Err, visible fallback so the
+    user always sees concrete UX feedback).
+  - `run_open_shell_attach(vz)` async helper composes:
+    `open_vsock_stream(CONTROL_WIRE_VSOCK_PORT, 30s)` →
+    `connect_pty_bridge(stream, router, 32, "tillandsias-macos-tray",
+    [pty.attach@v1])` →
+    `UnixPtyMaster::open(24, 80)` (capture slave_path) →
+    `launch_spec(Shell, None, 24, 80)` →
+    `PtySession::open(transport, alloc, router, opts)` →
+    `pump_io(session, master)` (detached). Each fallible step
+    String-formats its error.
+  - `terminal_attach.rs`: portable
+    `applescript_for_screen_attach(slave_path)` wraps the slave device
+    path in a Terminal.app `do script "screen <path>"` envelope.
+    macOS `spawn_terminal_pty_attach(slave_path)` osascript spawns
+    Terminal with the screen attach (`screen` preinstalled on macOS).
+    2 new unit tests cover do-script envelope shape + escape of paths
+    with embedded quotes/backslashes.
+  - `launch_spec(Shell, None, …)` deliberately uses project=None →
+    bare-VM `/bin/bash -l` per convergence-coordination fallback.
+    Slice 5b will surface the project selection from MenuStructure.
+- tests: macos-tray 27/27 (was 25; +2 screen-attach AppleScript tests).
+  vm-layer 54/54 with `--features materialize` (was 51; +3 from
+  upstream launch_spec amendment merge).
+- progress: m4 sub-task B "Open Shell" path is now end-to-end
+  composed. Functional under booted VM (slice 4c.2 manual smoke
+  gated on m5 recipe artifact). Remaining: slice 5b (githubLogin:
+  same composition with `gh auth login` intent) and project-from-
+  MenuStructure threading once the menu carries project selection.
+- Lease released.
