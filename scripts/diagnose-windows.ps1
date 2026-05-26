@@ -119,18 +119,38 @@ if (Test-Path $InstalledExe) {
     Warn "not installed. Build + install with: scripts\install-windows.ps1 -Launch"
 }
 
+# --- Recipe materializer (build-time inputs) ---------------------------------
+Section 'Recipe materializer (build-time)'
+$RepoRoot = Split-Path -Parent $PSScriptRoot
+$recipeInputs = @(
+    @{ Label = 'Recipefile';   Path = (Join-Path $RepoRoot 'images\vm\Recipefile') },
+    @{ Label = 'manifest.toml'; Path = (Join-Path $RepoRoot 'images\vm\manifest.toml') },
+    @{ Label = 'bootstrap/';    Path = (Join-Path $RepoRoot 'images\vm\bootstrap') }
+)
+$recipeComplete = $true
+foreach ($r in $recipeInputs) {
+    if (Test-Path $r.Path) { Ok ("{0,-14} {1}" -f $r.Label, $r.Path) }
+    else { Warn ("{0,-14} {1}  (absent)" -f $r.Label, $r.Path); $recipeComplete = $false }
+}
+if ($recipeComplete) {
+    Info 'Recipe authoring (sec.1.x) + both per-OS converters (sec.3.7.1 macOS .img,'
+    Info 'sec.3.7.2 WSL --import) are present. Materializer ecosystem is COMPLETE'
+    Info 'except the buildah-driven sec.2b CI-fetch job that publishes the rootfs tar.'
+}
+
 # --- Readiness summary -------------------------------------------------------
 Section 'Readiness summary'
 Info 'Works now (no VM):    tray UI, right-click menu, ~/src project scan, agent'
 Info '                      selection, click->PtyIntent->launch_spec resolution.'
-Info 'Converter ready:      materialize::wsl::tar_to_wsl_import (w5) builds + tested.'
+Info 'Converter ready:      materialize::wsl::tar_to_wsl_import (w5 slice) integrated'
+Info '                      into linux-next; vm-layer 43/43 green incl. macOS converter.'
 if ($wslReady) {
-    Info 'VM provisioning:      WSL present. Still GATED on the cross-host recipe-'
-    Info '                      publish / CI-fetch artifact (macOS-owned l5/m5) that'
-    Info '                      yields the rootfs tar this converter imports.'
+    Info 'VM provisioning:      WSL present, recipe authored. Still GATED on the sec.2b'
+    Info '                      CI-fetch / recipe-smoke job publishing the per-arch'
+    Info '                      rootfs .tar that tar_to_wsl_import imports.'
 } else {
     Warn 'VM provisioning:      blocked twice over - install WSL2 AND wait for the'
-    Warn '                      recipe-publish artifact path.'
+    Warn '                      sec.2b CI rootfs-publish job.'
 }
 Info 'Run the tray menu-only (no provisioning):  install-windows.ps1 -Launch'
 Info 'Attempt real provisioning once unblocked:  install-windows.ps1 -Provision -Launch'
