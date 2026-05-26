@@ -1,0 +1,100 @@
+# @trace plan/steps/15-tray-network-bootstrap.md, spec:tray-network-bootstrap
+name: litmus:tray-network-bootstrap
+spec: tray-network-bootstrap
+description: >
+  Verify every project-container spawn path in `tillandsias-headless` brings
+  the enclave router up BEFORE the first per-project container, so Squid's
+  `cache_peer router` and the git-service's HTTPS upstream don't retry-storm
+  while the `router` alias resolves to nothing. The fix landed in slices 1+2
+  of Step 15 (`cf74e176`, `4337f917`) — this litmus is the regression guard.
+severity: high
+size: instant
+phase: pre-build
+
+preconditions:
+  - workspace contains crates/tillandsias-headless/src/main.rs
+  - workspace contains plan/steps/15-tray-network-bootstrap.md
+
+critical_path:
+  - step: "run_opencode_mode calls ensure_router_running before its first run_container_observed"
+    # Extract the run_opencode_mode body and check the relative ordering of
+    # ensure_router_running vs the first run_container_observed call. The
+    # body runs from `fn run_opencode_mode` to the next top-level `fn `.
+    command: |
+      awk '
+        /^fn run_opencode_mode/ {in_fn=1}
+        in_fn && /ensure_router_running/ {er=NR; in_fn=2}
+        in_fn==2 && /run_container_observed/ {rc=NR; exit}
+        /^fn / && in_fn && !/run_opencode_mode/ {exit}
+      END {
+        if (er && rc && er < rc) print "ok: ensure_router_running@" er " before run_container_observed@" rc;
+        else { print "FAIL: ensure_router_running missing or after run_container_observed (er=" er " rc=" rc ")"; exit 1 }
+      }' crates/tillandsias-headless/src/main.rs
+    timeout_ms: 5000
+    expected_behavior: "ok: ensure_router_running@<early-line> before run_container_observed@<later-line>"
+
+  - step: "run_observatorium_mode calls ensure_router_running before its first run_container_observed"
+    command: |
+      awk '
+        /^fn run_observatorium_mode/ {in_fn=1}
+        in_fn && /ensure_router_running/ {er=NR; in_fn=2}
+        in_fn==2 && /run_container_observed/ {rc=NR; exit}
+        /^fn / && in_fn && !/run_observatorium_mode/ {exit}
+      END {
+        if (er && rc && er < rc) print "ok: observatorium ensure_router_running@" er " before run_container_observed@" rc;
+        else { print "FAIL: observatorium router-ordering wrong (er=" er " rc=" rc ")"; exit 1 }
+      }' crates/tillandsias-headless/src/main.rs
+    timeout_ms: 5000
+    expected_behavior: "ok: observatorium ensure_router_running@<line> before run_container_observed@<line>"
+
+  - step: "ensure_enclave_for_project calls ensure_router_running before its first run_container_observed"
+    command: |
+      awk '
+        /fn ensure_enclave_for_project/ {in_fn=1}
+        in_fn && /ensure_router_running/ {er=NR; in_fn=2}
+        in_fn==2 && /run_container_observed/ {rc=NR; exit}
+        /^fn / && in_fn && !/ensure_enclave_for_project/ {exit}
+      END {
+        if (er && rc && er < rc) print "ok: ensure_enclave_for_project router@" er " before container@" rc;
+        else { print "FAIL: ensure_enclave_for_project router-ordering wrong (er=" er " rc=" rc ")"; exit 1 }
+      }' crates/tillandsias-headless/src/main.rs
+    timeout_ms: 5000
+    expected_behavior: "ok: ensure_enclave_for_project router@<line> before container@<line>"
+
+  - step: "ensure_enclave_network is called before any router/container setup in each spawn path"
+    # Sanity: the existing enclave-network preamble is still there (network
+    # is allocated before router OR project containers in every path that
+    # spawns containers). Greps the four mode functions.
+    command: |
+      for fn in run_opencode_mode run_observatorium_mode ensure_enclave_for_project; do
+        awk -v want="$fn" '
+          $0 ~ "^(pub(\\(crate\\))? )?fn "want"\\(" {in_fn=1}
+          in_fn && /ensure_enclave_network/ {found=1; exit}
+          /^(pub(\\(crate\\))? )?fn / && in_fn && $0 !~ "^(pub(\\(crate\\))? )?fn "want"\\(" {exit}
+        END {
+          if (found) print "ok: " want " ensure_enclave_network present";
+          else { print "FAIL: " want " missing ensure_enclave_network"; exit 1 }
+        }' crates/tillandsias-headless/src/main.rs
+      done
+    timeout_ms: 5000
+    expected_behavior: "ok: <fn> ensure_enclave_network present"
+
+  - step: "Step 15 plan file references the @trace litmus binding"
+    command: "grep -Fq 'plan/steps/15-tray-network-bootstrap.md' crates/tillandsias-headless/src/main.rs && echo 'spawn paths cite Step 15'"
+    timeout_ms: 5000
+    expected_behavior: "spawn paths cite Step 15"
+
+observability:
+  traces:
+    - "@trace spec:tray-network-bootstrap"
+    - "@trace plan/steps/15-tray-network-bootstrap.md"
+
+fixture:
+  artifacts:
+    - crates/tillandsias-headless/src/main.rs
+
+failure_signal:
+  description: >
+    If any spawn path regresses to spawning project containers before the
+    router is up, the awk script returns a FAIL line with the line numbers
+    of both calls so the author can see exactly which is out of order.

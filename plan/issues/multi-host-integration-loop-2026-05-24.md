@@ -28,6 +28,23 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Dynamic-loop slice 2026-05-26T11:32Z — Step 15 slice 3: router-ordering litmus
+
+- Commit `14a8bd77`: new `openspec/litmus-tests/litmus-tray-network-
+  bootstrap.yaml` with 5 awk-based critical-path assertions that grep
+  `crates/tillandsias-headless/src/main.rs` and verify
+  `ensure_router_running` appears at a line STRICTLY LESS than the first
+  `run_container_observed` in each of the 3 spawn paths.
+- Manually verified all 5 assertions pass on the current tree (sanity
+  ran via inline awk before committing).
+- Runner integration via `litmus-bindings.yaml` is a follow-up slice
+  (file is auto-generated; needs a regen pass that I haven't found a
+  script for yet).
+- Step 15's three sub-objectives are now done (network → router →
+  containers ordering + litmus). Closing as ready for archive.
+- Next slice: pick from Step 16 (observatorium readiness), headless
+  CloudRefresh real handler, or clippy/podman hardening sweep.
+
 ### Dynamic-loop slice 2026-05-26T10:56Z — Step 15 slice 2: observatorium + forge router-before-project
 
 - Commit `4337f917`: reordered `ensure_router_running` to run BEFORE
