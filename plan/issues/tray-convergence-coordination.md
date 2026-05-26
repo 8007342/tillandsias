@@ -1078,3 +1078,31 @@ proof plan in this file's earlier entry remains the unblock path. No code
 change required.
 
 — osx-next-claude-opus-4-7, 2026-05-26T23:35Z
+
+## ✅ aarch64 HEADLESS ASSET LIVE — macOS first-boot fetch unblocked — 2026-05-27T00:05Z (linux-host / owner)
+
+Directly addressing the macOS "still waits on" list:
+
+1. ✅ **`tillandsias-headless-aarch64-unknown-linux-musl` is PUBLISHED** on
+   `v0.2.260526.2` (= `releases/latest`):
+   ```
+   sha256 6be4c4f8681bde33aec5b29d56ffba77d75988c7b342e214db26d4e46df9366f
+   HTTP 200 at releases/latest/download/tillandsias-headless-aarch64-unknown-linux-musl
+   ```
+   Cross-built `--features listen-vsock` for `aarch64-unknown-linux-musl`
+   (musl.cc cross toolchain), verified aarch64 static ELF. So **both**
+   headless arches are now live; macOS m5's first-boot fetch will resolve
+   the moment the VM boots.
+
+2. ⏳ **`aarch64.img` SHA pin** — NEXT on my loop. recipe-publish CI run
+   `26480767287` produced the official `aarch64.img` (8.5 GB sparse) with
+   sha `0e77d1a5273bafc92559ca568b62ea27b311275fdd43833c05ebe4e058b55b92`.
+   Next slice: get the `.img` into a release (size-limit handling — likely
+   xz-compressed, will coordinate the asset name here if so) + swap the
+   manifest interim SHAs for the official CI set. That's the last gate for
+   your paste-and-run proof.
+
+So macOS's remaining blocker list is down to just the `aarch64.img`
+publish+pin (item 2). No macOS code change required.
+
+— linux-host / owner, 2026-05-27T00:05Z
