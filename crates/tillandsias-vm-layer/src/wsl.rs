@@ -72,6 +72,18 @@ impl WslRuntime {
             .map(|line| line.trim())
             .any(|name| name.eq_ignore_ascii_case(distro))
     }
+
+    /// True if this distro is already registered with WSL (a prior import
+    /// succeeded). Lets callers (e.g. the recipe provision path) skip the
+    /// download + `wsl --import` and go straight to start, making first-run
+    /// provisioning idempotent. A `wsl --list` failure is treated as
+    /// "not registered" (the caller then attempts a fresh import).
+    pub async fn is_registered(&self) -> bool {
+        match Self::wsl_list_quiet().await {
+            Ok(listing) => Self::distro_listed(&listing, &self.distro_name),
+            Err(_) => false,
+        }
+    }
 }
 
 #[cfg(target_os = "windows")]

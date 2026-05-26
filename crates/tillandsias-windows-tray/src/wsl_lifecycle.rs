@@ -182,6 +182,15 @@ impl WslLifecycle {
             .await
             .map_err(|e| format!("create install_root failed: {e}"))?;
 
+        // Idempotent: if a prior run already imported the distro, skip the
+        // download + `wsl --import` and just (re)start it.
+        if self.runtime.is_registered().await {
+            progress.report_phase(ProvisionPhase::StartingVm);
+            self.runtime.start().await?;
+            progress.report_phase(ProvisionPhase::Connecting);
+            return Ok(());
+        }
+
         let manifest = Manifest::from_toml(RECIPE_MANIFEST)
             .map_err(|e| format!("parse embedded recipe manifest: {e}"))?;
         let artifact = recipe_rootfs_artifact(&manifest, RECIPE_RELEASE_TAG)?;
