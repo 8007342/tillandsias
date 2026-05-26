@@ -28,6 +28,21 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-26T15:44Z — NO-OP (both sibling deltas empty)
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `a24bab17`
+- observed_sibling_heads: main=`ddf52dff` · linux-next=`a24bab17` · windows-next=`7e95c7e2` (ancestor) · osx-next=`bdb7f9cb` (ancestor)
+- windows-next: no-op (HEAD `7e95c7e2` is already an ancestor of linux-next).
+- osx-next: no-op (HEAD `bdb7f9cb` is already an ancestor of linux-next).
+- Tests: n/a (no merge attempted).
+- Sibling cron at 15:29Z (`8fb7a211`) and the dynamic-loop slice 4 work
+  (`a24bab17` — typed exit-125 classifier collapses the spawn-failure
+  cascade per Step 15) were both reconciled cleanly via rebase before
+  this cycle. CI was green on `a24bab17` immediately prior to push
+  (`./build.sh --ci-full --install` 100% across all stages).
+- Spec drift: none (sibling deltas empty).
+
 ### Cycle 2026-05-26T13:43Z — NO-OP (both sibling deltas empty)
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
