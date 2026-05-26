@@ -883,3 +883,43 @@ layers are all live.
   candidate for a future iter (probably switch `recipe-publish.yml` to
   use the bin path to pick up Linux's BuildahExec).
 - Lease released.
+
+### event: m4 sub-task B slice 2 — main-thread dispatch + Tokio runtime + startVm worker — 2026-05-26T03:49Z
+
+- item: `m4/pty-attach-appkit-terminal` sub-task B slice 2/5
+- agent_id: `osx-next-claude-opus-4-7` on `Tlatoanis-MacBook-Air`
+- lease_id: `b6d92a4c1f37`
+- action: claim slice 2 → done.
+- evidence (commit `3c3b565f`, code → osx-next):
+  - NEW `crates/tillandsias-macos-tray/src/main_thread.rs` (~75 lines)
+    — `dispatch_to_main_thread<F>` via libdispatch FFI
+    (`dispatch_async_f` + `_dispatch_main_q`). Closure marshaled
+    through a Box trampoline; fire-and-forget; `F: Send + 'static`.
+    No `block2` dependency.
+  - `action_host.rs`: added `TrayActionHostIvars { runtime: Arc<
+    tokio::runtime::Runtime>, vm_busy: Arc<Mutex<bool>> }` via
+    `DeclaredClass::Ivars`. Constructor signature `new(mtm, runtime)`.
+    `startVm:` body now gates re-entry on the busy flag, spawns a
+    Tokio task with the cloned Arcs, the task sleeps 300ms
+    (placeholder for `VzRuntime::start.await` — slice 3), then
+    `dispatch_to_main_thread` clears the flag and logs.
+  - `status_item.rs`: builds the shared 2-worker Tokio runtime once
+    in `run()` (named `tillandsias-tray-worker`); threads
+    `Arc<Runtime>` through to `TrayActionHost::new`.
+  - `main.rs`: registered `mod main_thread`.
+  - Rust 2024 fix: `extern "C"` block must be `unsafe extern "C"`.
+- tests: macos-tray 20/20 still pass. vm-layer 50/50 still pass with
+  `--features materialize`. The dispatch round-trip is exercised in
+  production (no unit test — needs a live `NSApplication.run` loop to
+  verify visually; manual repro: launch the .app, click Start VM,
+  stderr shows the round-trip lines).
+- progress: m4 sub-task B slices = 5 total (2 done, 3 remaining):
+    slice 3 — replace 300ms sleep with `VzRuntime::new(3, image_root)
+              .start().await` + add `stopVm:` body
+              `VzRuntime::stop(60s drain)`. Introduces
+              `Arc<Mutex<Option<Arc<VzRuntime>>>>` ivar.
+    slice 4 — `openShell:` body via `PtySession::open(/bin/bash)` +
+              `open -a Terminal.app <slave-tty>`.
+    slice 5 — `githubLogin:` body via same PTY path with
+              `gh auth login` as entrypoint.
+- Lease released.
