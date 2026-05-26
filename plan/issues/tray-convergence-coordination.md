@@ -438,3 +438,34 @@ AND the post-import unit install — it only needs `wsl --import` + `wsl.conf` +
 start. windows-next will add a recipe-path provision variant (Windows-owned, in
 `wsl.rs`/`wsl_lifecycle.rs`) the moment the URL contract above is set; no
 shared-trait change required.
+
+## Open Shell / agent target — divergence to ALIGN — 2026-05-26 (windows host)
+
+Observed while m4 sub-task B wired the macOS tray's interactive actions
+(slices 1–4, up to `075465ce`). The two trays now resolve "Open Shell" to
+**different in-VM targets** — fine on transport, but they must agree on *which
+environment the user lands in*:
+
+| tray | mechanism | command that runs |
+|---|---|---|
+| macOS (m4) | native Terminal.app window | `tillandsias-vm-layer-exec podman exec -it tillandsias-<proj>-forge bash` — a shell **inside the forge podman container** (`terminal_attach.rs::vm_exec_command`) |
+| Windows (w4) | vsock PTY-attach in-tray | `launch_spec(Shell)` = `/bin/bash -l` — a shell handed to the in-VM `pty_handler` (lands in the **VM**, not explicitly the forge container) |
+
+Two independent axes:
+1. **Transport / UX** (native Terminal.app vs in-tray vsock PTY): legitimately
+   per-OS — each tray uses its native terminal affordance. No need to converge.
+2. **Target environment** (forge podman container vs bare VM): **MUST align.**
+   Per the architecture (headless + podman enclave *inside* the VM), "Open
+   Shell" and the agents almost certainly belong **inside the forge container**
+   (macOS's `podman exec … forge`), not the bare VM. If so, the shared
+   `pty::launch_spec` argv is incomplete: Shell/Agent/GithubLogin should target
+   the forge (e.g. wrap argv as `podman exec -it tillandsias-<proj>-forge <cmd>`
+   or have the in-VM `pty_handler` exec into the forge), so the Windows
+   vsock-PTY path and the macOS Terminal path drop the user in the *same* shell.
+
+**Ask (change owner / m4 + l-headless):** confirm the canonical target — forge
+container vs VM — and the exact `podman exec` wrapping. Then `launch_spec` is
+amended once (shared) and both trays consume it; windows-next will update the
+argv mapping to match. Flagging now, while the macOS dispatch is still a stub
+(`075465ce` openShell is an eprintln/Terminal stub) and my argv is equally
+pre-E2E — cheap to align before either wires the real in-VM exec.
