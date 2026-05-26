@@ -28,6 +28,34 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-26T05:43Z — NO-OP (in-cycle pull absorbed all sibling work; both deltas empty)
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `0aff8003`
+- observed_sibling_heads:
+  - main: ddf52dff
+  - linux-next: c4cc3ba6 → `0aff8003` (pulled 10 commits in-cycle)
+  - windows-next: 042bf22a (no delta — last w-work `881306a` already integrated last cycle)
+  - osx-next: 0aff8003 (mirrors linux-next; macOS direct-pushed)
+- windows-next: no-op (0 commits ahead).
+- osx-next: no-op (0 commits ahead).
+- Tests: n/a (no merge attempted). Working tree clean.
+
+- **What pulled in-cycle:** macOS m4 sub-task B slice 2 work (TrayActionHost
+  + `crates/tillandsias-macos-tray/src/main_thread.rs` new file, +851 lines
+  net across 14 files including the new module). Coordinator audit
+  `04:11Z` already noted in the ledger.
+
+- **State of the world post-l8:**
+  - **All Linux gates clearing sibling code remain DONE.** l1, l3, l4, l6,
+    l7, l8 done. l9 (recipe-smoke CI + SHA backfill + release.yml drop +
+    recipe-publish job) is the only outstanding Linux work; it's CI-level,
+    not a sibling-code blocker.
+  - Windows queue: post-w4 + §3.7.2 + w6 + diagnostics, all done.
+    Awaiting l9 CI output for w5.
+  - macOS queue: m4 slice 2 just landed (TrayActionHost wired). Next:
+    m4 slice 3 (real start/stop wiring), then m6/m7 bundle+CI.
+
 ### Coordinator audit 2026-05-26T04:11Z — post-m4 slice2 fold
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
