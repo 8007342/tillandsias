@@ -2,16 +2,16 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/windows-next-thin-tray.md, plan/issues/tray-convergence-coordination.md, plan/issues/control-socket-protocol-convergence-2026-05-25.md, openspec/changes/control-wire-pty-attach/
 
-Status: **OPEN** as of 2026-05-26T07:54Z. Windows w1, w2, w3, w4, w6
-diagnostics, the w5 `materialize::wsl::tar_to_wsl_import` converter, and the
-shared forge-container `launch_spec` / `intent_for_action` amendment are
-done/integrated through `linux-next`; the integration-loop merge/test of
-`origin/windows-next` `35cbdb16` completed at `a1e1df1`. `origin/windows-next`
-currently has no unmerged Windows delta and is 10 commits behind `linux-next`
-`89de6219`. Remaining WSL rootfs provisioning work is gated on l9: the artifact
-URL/release-asset contract, first green recipe-publish artifacts, manifest SHA
-pins, and the Windows tray runtime flip away from the older provisioning
-manifest.
+Status: **OPEN** as of 2026-05-26T09:47Z. Windows w1, w2, w3, w4, w6
+diagnostics, the w5 `materialize::wsl::tar_to_wsl_import` converter, the shared
+forge-container `launch_spec` / `intent_for_action` amendment, and the w5
+`RemoteArtifact` resolver for the l9 URL contract are done/integrated through
+`linux-next`. The integration-loop merge/test of `origin/windows-next`
+`83e2cd51` completed at `150d8a14`. `origin/windows-next` currently has no
+unmerged Windows delta and is 9 commits behind `linux-next` `e60afe93`.
+Remaining WSL rootfs provisioning work is gated on first green
+`recipe-publish` artifacts, manifest SHA pins, and the Windows tray runtime
+flip away from the older provisioning manifest.
 
 ## How to use this file
 
@@ -37,21 +37,22 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
 
 - `w7/recipe-diagnostics-and-branch-sync` remains ready as a no-VM fallback:
   `origin/windows-next` has no unmerged delta, but it is behind `linux-next`
-  `89de6219`. The next useful packet is a Windows branch-sync pull/merge of
-  latest `linux-next`, then diagnostic output against the l9 artifact gate.
+  `e60afe93`. The next useful packet is a Windows branch-sync pull/merge of
+  latest `linux-next`, then diagnostic output against the remaining
+  recipe-publish/SHA-pin artifact gate.
 - `w6/vm-status-and-enumerate-real-handlers` is done as a no-VM diagnostics
   fallback through `948af711` / integration cycle `b3ae21a`. Live VM status
   verification waits for the recipe artifact path.
 - `w4/pty-attach-conpty` is done and integrated through `95e4714`. Do not
   create a competing claim; use the completed lease `8a3307907d94` as history.
-- `w5/wsl-import-via-ci-rootfs` has its converter slice done, but the runtime
-  provisioning flip remains blocked on l9 artifact URL/SHA pins and first
+- `w5/wsl-import-via-ci-rootfs` has its converter slice and URL resolver done,
+  but the runtime provisioning flip remains blocked on real SHA pins and first
   green recipe-publish artifacts.
 
 Do not re-claim w1, w2, w3, or w4; their terminal events are recorded below.
 The next Windows implementation item is the w5 runtime provisioning flip after
-real recipe artifacts exist; the independent ready fallback is w7 diagnostics
-and branch sync.
+real recipe artifacts and SHA pins exist; the independent ready fallback is w7
+diagnostics and branch sync.
 
 ### Item: w7/recipe-diagnostics-and-branch-sync
 
@@ -65,25 +66,26 @@ and branch sync.
   - `scripts/diagnose-windows.ps1`
 - summary: >
     Keep the Windows no-VM diagnostic current while the recipe artifact path
-    finishes. `origin/windows-next` `35cbdb16` has already been merged/tested
+    finishes. `origin/windows-next` `83e2cd51` has already been merged/tested
     into `linux-next`, but the branch now needs to absorb `linux-next`
-    `89de6219`. Report whether the script still accurately distinguishes the
-    completed BuildahExec/materialize-cli implementation from the still-missing
-    l9 artifact URL/SHA pins. The forge-target `launch_spec` amendment is now
-    complete at `35cbdb16`, so w7 should focus on branch-sync diagnostics unless
+    `e60afe93`. Report whether the script still accurately distinguishes the
+    completed BuildahExec/materialize-cli implementation and URL resolver from
+    the still-missing recipe-publish SHA pins. The forge-target `launch_spec`
+    amendment is complete, so w7 should focus on branch-sync diagnostics unless
     the latest `linux-next` exposes a Windows-specific regression.
 - next_action: >
     Pull or merge latest `origin/linux-next` into `windows-next`, run
     `scripts/diagnose-windows.ps1` on Windows, and append an
-    agent_status_packet here with branch-sync result plus l9 artifact-gate
-    diagnostics.
+    agent_status_packet here with branch-sync result plus remaining
+    recipe-publish/SHA-pin artifact-gate diagnostics.
 - acceptance_evidence:
   - `scripts/diagnose-windows.ps1` output on Windows, including WSL presence,
     recipe input detection, and the current artifact gate.
   - Pushed `windows-next` status/diagnostic commit if the script needs changes,
-    or a no-code agent_status_packet if `35cbdb16` is sufficient.
+    or a no-code agent_status_packet if `83e2cd51` is sufficient.
 - fallback_when_blocked: >
     Prepare w5 runtime-provisioning code against the l9 artifact contract, but
+    treat `"pending-ci"` SHA pins as a recoverable not-yet-published state and
     mark E2E verification blocked until recipe-publish emits real SHAs.
 - agent_status_packet_expected:
   - current plan
@@ -232,9 +234,8 @@ and branch sync.
 - capability_tags: [wsl, vm-layer, fetch, provisioning]
 - status: blocked
 - gated_on:
-  - linux deliverable `l9/recipe-artifact-url-and-publish-smoke` (artifact
-    URL/release-asset contract, first green recipe-publish rootfs `.tar`
-    artifacts, and SHA pins)
+  - linux deliverable `l9/recipe-artifact-url-and-publish-smoke` (first green
+    recipe-publish rootfs `.tar` artifacts and SHA pins)
   - `images/vm/manifest.toml` SHA pins from first green recipe-publish run
 - cleared_gates:
   - linux deliverable `l2/recipe-shared-modules` integrated at `a7af0ed`
@@ -242,6 +243,10 @@ and branch sync.
   - macOS-authored `§3.7.1` converter and `§2b.3` recipe-publish workflow
     scaffolding landed through `55ff55c6`/`fad97244`
   - Windows-owned `§3.7.2` converter integrated at `b3ae21a`
+  - l9 artifact URL template + `Manifest::artifact_url` resolver landed at
+    `963baeb1`
+  - Windows-owned `RemoteArtifact` resolver for the l9 URL contract landed at
+    `83e2cd51` and was integrated/tested at `150d8a14`
 - depends_on: []
 - owned_files:
   - `crates/tillandsias-vm-layer/src/wsl.rs`
@@ -253,18 +258,22 @@ and branch sync.
     install path is CI-materialized rootfs tar. Once Linux CI publishes
     the rootfs (per-arch, SHA-pinned in `images/vm/manifest.toml`),
     `WslRuntime::provision` flips from the placeholder OCI archive
-    fetch to the recipe-materialized rootfs tar. The converter primitive is
-    done; the remaining Windows work is the runtime fetch/provisioning flip
-    from the legacy OCI provisioning manifest to the recipe-published tar
-    with SHA verification.
-- estimated_effort: 1 day after l9 artifact URL/SHA pins land.
+    fetch to the recipe-materialized rootfs tar. The converter primitive and
+    URL resolver are done; the remaining Windows work is the runtime
+    fetch/provisioning flip from the legacy OCI provisioning manifest to the
+    recipe-published tar with SHA verification and a recoverable
+    `"pending-ci"` state before the first artifact run.
+- estimated_effort: 1 day after l9 SHA pins land.
 - progress:
   - Windows-owned converter slice `materialize::wsl::tar_to_wsl_import`
     landed on `origin/windows-next` at `cb39cb7c` and was integrated/tested
     into `linux-next` at `b3ae21a`.
   - Linux l8 real `BuildahExec` + `materialize-cli` landed at `6aeae3a7`.
-    Full WSL provisioning flip remains gated on l9 real recipe-publish
-    artifacts, manifest SHA pins, and the artifact URL/release-asset contract.
+  - Windows-owned `RemoteArtifact` resolver for the l9 URL contract landed on
+    `origin/windows-next` at `83e2cd51` and was integrated/tested into
+    `linux-next` at `150d8a14`.
+  - Full WSL provisioning flip remains gated on l9 real recipe-publish
+    artifacts and manifest SHA pins.
 
 ### Item: w6/vm-status-and-enumerate-real-handlers
 
@@ -297,14 +306,14 @@ and branch sync.
 | Linux item | Status | Blocks Windows item |
 |---|---|---|
 | `l1/control-wire-pty-attach-tasks-1` | **done** (shipped `b345ae68`; 23/23 control-wire tests pass on Linux; 22/22 on Windows per `47d91d11`) | w4 done |
-| `l2/recipe-shared-modules` | **done** (windows authored §2 parser `26afb76a` integrated `a7af0ed`; 16/16 recipe tests green on Linux) | w5 converter slice done; provision gated on l9 artifact URL/SHA pins |
+| `l2/recipe-shared-modules` | **done** (windows authored §2 parser `26afb76a` integrated `a7af0ed`; 16/16 recipe tests green on Linux) | w5 converter slice done; provision gated on l9 SHA pins |
 | `l3/in-vm-headless-pty-handler` | **done** (`f770e013`/`8dc0d129`; tasks 4.1-4.7, two pump tests ignored pending AsyncFd rewrite) | w4 done |
 | `l4/replace-vsock-stub-handlers` | **done** (`6956c825`; real VmStatus/EnumerateLocalProjects/CloudRefresh backing data) | w6 diagnostics done; live smoke waits on artifacts |
 | `l5/recipe-smoke-ci-publish` | **workflow scaffold landed** (`55ff55c6`/`fad97244`), but first release artifacts and SHA pins not yet proven | w5 |
 | `l6/linux-rasterize-svg-to-ico` | **done** (`ea13ba20`) | w1 done |
-| `l7/§3-materializer-driver` | **done** (`9dca2c47`; materializer feature and cache/export API shipped) | w5 converter done; l9 artifact URL/SHA pins remain |
-| `l8/buildah-exec-recipe-publish-smoke` | **done** (`6aeae3a7`; real BuildahExec + `materialize-cli`; 43/43 vm-layer materialize tests, full CI/install pass in ledger) | w5 runtime provisioning flip now waits on l9 artifact URL/SHA pins |
-| `l9/recipe-artifact-url-and-publish-smoke` | **ready**; artifact URL/release-asset contract, first green recipe-publish artifacts, and manifest SHA pins still needed | w5 runtime provisioning flip |
+| `l7/§3-materializer-driver` | **done** (`9dca2c47`; materializer feature and cache/export API shipped) | w5 converter done; l9 SHA pins remain |
+| `l8/buildah-exec-recipe-publish-smoke` | **done** (`6aeae3a7`; real BuildahExec + `materialize-cli`; 43/43 vm-layer materialize tests, full CI/install pass in ledger) | w5 runtime provisioning flip now waits on l9 SHA pins |
+| `l9/recipe-artifact-url-and-publish-smoke` | **blocked on CI/SHA pins**; artifact URL contract done (`963baeb1`, `9db73978`, `74b1d78d`), Windows URL resolver done (`83e2cd51`/`150d8a14`), first green recipe-publish artifacts and manifest SHA pins still needed | w5 runtime provisioning flip |
 
 ## Events
 
@@ -699,3 +708,21 @@ Next greedy pickups (no VM needed): **w4b** (windows-ownable, pure) and **w4d**
   unless the branch-sync exposes a regression.
 - w5 remains blocked on l9: artifact URL/release-asset contract, first green
   recipe-publish artifacts, and manifest SHA pins.
+
+### Event: 2026-05-26T09:47Z — linux coordinator status reconciliation
+
+- Observed remote heads: `linux-next` `e60afe93`, `windows-next` `83e2cd51`,
+  `osx-next` `dddd3eb8`, `main` `ddf52dff`.
+- The w5 artifact URL consumer slice is resolved: Windows commit `83e2cd51`
+  added the `RemoteArtifact` resolver for the l9 URL contract and the
+  integration loop merged/tested it at `150d8a14`.
+- No unmerged Windows code delta exists. `windows-next` trails current
+  `linux-next` by 9 commits, including macOS m4 live attach completion and
+  Linux coordination commits.
+- Keep w7 as the ready Windows packet: branch-sync to `e60afe93`, run
+  `scripts/diagnose-windows.ps1`, and report whether diagnostics identify the
+  remaining gate as first green recipe-publish artifacts plus manifest SHA
+  pins. The URL contract itself should no longer be reported as missing.
+- w5 remains blocked on real recipe-publish artifacts and SHA pins. Consumers
+  should treat `"pending-ci"` SHA values as a recoverable not-yet-published
+  state, not as a crash or permanent failure.

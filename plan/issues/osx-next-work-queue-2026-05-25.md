@@ -2,18 +2,18 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
-Status: **OPEN** as of 2026-05-26T07:54Z. macOS m1, m1b, m2, m3, m6,
-m7, and the original m4 sub-task B 5-slice action-host plan are done. The
-latest folded macOS code is `9578691d` / plan packet `8e563a45`, aligned with
-`linux-next` and `osx-next` at `89de6219`: real Start/Stop VM wiring exists,
-Open Shell and GitHub Login open Terminal stub windows, `pty_vsock_bridge`
-exists, and `VzRuntime::open_vsock_stream` exists for the next live attach
-slice. The shared forge-container target is settled and landed in
+Status: **OPEN** as of 2026-05-26T09:47Z. macOS m1, m1b, m2, m3, m6,
+m7, and m4 sub-task B are done. The latest folded macOS code is `41ea02e1` /
+plan packet `0d48ca31`, with `osx-next` at `dddd3eb8` and no unmerged delta
+into `linux-next`: real Start/Stop VM wiring exists, Open Shell and GitHub
+Login now compose the live PTY-over-vsock attach chain, `pty_vsock_bridge`
+exists, and `VzRuntime::open_vsock_stream` is wired through the tray action
+host. The shared forge-container target is settled and landed in
 `tillandsias-host-shell::pty::launch_spec` through Windows commit `35cbdb16`,
-integrated by the Linux loop at `a1e1df1`. Remaining macOS live-terminal work
-is the real PTY-over-vsock attach tail, gated on l9 artifact URL/SHA pins, first
-green recipe-publish artifacts, and the macOS runtime provisioning flip away
-from the current deferred extraction/conversion stubs.
+integrated by the Linux loop at `a1e1df1`. Remaining macOS live-terminal proof
+is gated on first green recipe-publish artifacts, manifest SHA pins, and the
+macOS runtime provisioning flip away from the current deferred
+extraction/conversion stubs.
 
 ## How to use this file
 
@@ -44,9 +44,8 @@ checks. Advisory only; both flows still work.
 Work-shaping note: m5 runtime provisioning can be shaped against the artifact
 contract, but E2E should wait for first green recipe-publish SHAs. m8 produced
 its autonomous no-VM build/process evidence and now waits on user-attended menu
-click smoke. While Linux l9 is pending, the best macOS-owned ready packet is m9
-below: wire the no-VM-testable PTY adapter path around the existing
-`open_vsock_stream` and bridge pieces without claiming live VM proof.
+click smoke. The former m9 no-VM PTY adapter packet is superseded by m4 slices
+4c.1, 4c.2, and 5b; do not re-claim it.
 
 ## Currently unblocked / active
 
@@ -87,9 +86,11 @@ below: wire the no-VM-testable PTY adapter path around the existing
 - type: feature
 - owner_host: macos
 - capability_tags: [appkit, objc2, pty, vsock, terminal-app]
-- status: blocked
+- status: done
+- completed_at: 2026-05-26T09:35Z
+- acceptance_status: live_vm_smoke_blocked_on_m5
 - gated_on:
-  - `m5/vfr-image-via-ci-rootfs`
+  - live VM smoke after `m5/vfr-image-via-ci-rootfs`
 - cleared_gates:
   - linux deliverable `l1/control-wire-pty-attach-tasks-1` shipped at `b345ae68`
   - linux deliverable `l3/in-vm-headless-pty-handler` shipped at
@@ -103,6 +104,9 @@ below: wire the no-VM-testable PTY adapter path around the existing
   - shared forge-target `launch_spec` amendment (`35cbdb16`, integrated at
     `a1e1df1`)
   - m4 sub-task B slice 4c precursor (`9578691d`) `VzRuntime::open_vsock_stream`
+  - m4 slice 4c.1 (`6d9a2201`) `connect_pty_bridge`
+  - m4 slice 4c.2 (`d45d6216`) Open Shell live PTY-over-vsock attach
+  - m4 slice 5b (`41ea02e1`) GitHub Login live PTY-over-vsock attach
 - depends_on: [m1/vmruntime-stop-and-wait-ready]
 - owned_files:
   - `crates/tillandsias-macos-tray/src/terminal_attach.rs`
@@ -113,16 +117,16 @@ below: wire the no-VM-testable PTY adapter path around the existing
     "Open Shell" + "GitHub login" menu items to `PtySession::open(...)`,
     then `NSWorkspace::open(Terminal.app, with: <master-fd-as-tty>)`. The
     action-host class, four menu items, main-thread dispatch helper, Tokio
-    worker, real VzRuntime start/stop, stub Terminal windows, pty-vsock bridge,
-    and the `open_vsock_stream` adapter are in-tree. Remaining live attach work
-    replaces the stubs with real PTY-over-vsock once m5 provides a booted
-    forge-container VM. Use m9 for no-VM adapter wiring that can progress before
-    l9/m5.
+    worker, real VzRuntime start/stop, stub fallback windows, pty-vsock bridge,
+    `open_vsock_stream`, `connect_pty_bridge`, and both live intent attach
+    paths are in-tree. Remaining work is not another m4 code packet; it is live
+    smoke once m5 provides a booted forge-container VM.
 - estimated_effort: 1–2 days.
 - verification_note: >
-    Full terminal-attach smoke needs a booted/provisioned VM path. Until l9/m5
-    lands, use m9 for adapter wiring that can be compile/unit tested without
-    claiming live attach E2E.
+    Full terminal-attach smoke needs a booted/provisioned VM path. Until m5
+    lands, treat the m4 implementation as structurally done and record any live
+    VM failures as m5/runtime provisioning evidence unless the tray attach code
+    itself regresses.
 
 ### Item: m8/appkit-action-smoke-and-stub-polish
 
@@ -172,7 +176,9 @@ below: wire the no-VM-testable PTY adapter path around the existing
 - type: feature
 - owner_host: macos
 - capability_tags: [appkit, pty, vsock, tokio, host-shell]
-- status: ready
+- status: done
+- completed_at: 2026-05-26T09:35Z
+- superseded_by: `m4/pty-attach-appkit-terminal` slices 4c.1, 4c.2, and 5b
 - depends_on: []
 - cleared_gates:
   - m4 sub-task B slices 1-5 are complete through `3e7af023`
@@ -194,10 +200,10 @@ below: wire the no-VM-testable PTY adapter path around the existing
     macOS attach adapter that preserves explicit no-VM/no-project errors and
     leaves the final `pump_io` + Terminal.app live session behind the m5 gate.
 - next_action: >
-    Claim this packet, sync `osx-next` to `linux-next` `89de6219`, add the
-    adapter wiring and unit tests for no-VM / missing-project / forge-wrap
-    argument behavior, then append an agent_status_packet with evidence and
-    whether live E2E remains blocked on m5.
+    Do not claim separately. The scope was completed inside m4 with
+    `connect_pty_bridge`, `run_pty_attach`, and Terminal.app screen-attach
+    wiring through `41ea02e1`. Keep future work on m5 runtime provisioning or
+    project threading.
 - acceptance_evidence:
   - `cargo test -p tillandsias-macos-tray --bin tillandsias-tray` on macOS.
   - `cargo test -p tillandsias-vm-layer --features materialize` if `vz.rs`
@@ -292,9 +298,8 @@ below: wire the no-VM-testable PTY adapter path around the existing
 - capability_tags: [vfr, vm-layer, fetch, provisioning]
 - status: blocked
 - gated_on:
-  - linux deliverable `l9/recipe-artifact-url-and-publish-smoke` (artifact
-    URL/release-asset contract, first green recipe-publish artifacts, and SHA
-    pins)
+  - linux deliverable `l9/recipe-artifact-url-and-publish-smoke` (first green
+    recipe-publish artifacts and SHA pins)
   - `images/vm/manifest.toml` SHA pins from first green recipe-publish run
 - cleared_gates:
   - linux deliverable `l2/recipe-shared-modules` integrated at `a7af0ed`
@@ -302,6 +307,9 @@ below: wire the no-VM-testable PTY adapter path around the existing
   - recipe scaffold landed at `a77fae00`
   - `materialize::macos::tar_to_vfr_img` landed at `a77fae00`
   - recipe-publish workflow scaffolding landed at `55ff55c6`
+  - l9 artifact URL template + `Manifest::artifact_url` resolver landed at
+    `963baeb1`
+  - l9 consumer contract documented at `74b1d78d`
 - depends_on: [m1/vmruntime-stop-and-wait-ready]
 - owned_files:
   - `crates/tillandsias-vm-layer/src/vz.rs` (provisioning slice)
@@ -315,9 +323,10 @@ below: wire the no-VM-testable PTY adapter path around the existing
     (Linux-runnable per D6 task 2b.2). The converter and workflow scaffold
     are done; remaining m5 work is to wire VzRuntime::provision to fetch and
     verify the CI-published `.img` by default, replace the deferred
-    extract/convert stubs in `vz.rs`, and respect a `--materialize-local` dev
-    path if retained.
-- estimated_effort: 1-2 days after l9 artifact URL/SHA pins land.
+    extract/convert stubs in `vz.rs`, treat `"pending-ci"` SHA pins as a
+    recoverable not-yet-published state, and respect a `--materialize-local`
+    dev path if retained.
+- estimated_effort: 1-2 days after l9 SHA pins land.
 
 ### Item: m6/macos-installer-pkg-and-codesign
 
@@ -378,13 +387,13 @@ below: wire the no-VM-testable PTY adapter path around the existing
 | Linux item | Status | Blocks macOS item |
 |---|---|---|
 | `l1/control-wire-pty-attach-tasks-1` | done (`b345ae68`; §1 enum/capability tasks complete) | m4 ready with l3 also done |
-| `l2/recipe-shared-modules` | done (`a7af0ed`; parser tests green on Linux) | m5 converter/API work unblocked; full provision gated on l9 artifact URL/SHA pins |
+| `l2/recipe-shared-modules` | done (`a7af0ed`; parser tests green on Linux) | m5 converter/API work unblocked; full provision gated on l9 SHA pins |
 | `l3/in-vm-headless-pty-handler` | done (`f770e013`/`8dc0d129`; tasks 4.1-4.7, two pump tests ignored pending AsyncFd rewrite) | m4 ready for host-side wiring |
 | `l4/replace-vsock-stub-handlers` | done (`6956c825`; informational only for macOS) | (informational only for macOS) |
 | `l5/recipe-smoke-ci-publish` | workflow scaffold landed (`55ff55c6`/`fad97244`), but first release artifacts and SHA pins not yet proven | m5 |
 | `l7/§3-materializer-driver` | done (`9dca2c47`; materializer feature and cache/export API shipped) | m5 converter/API work unblocked |
-| `l8/buildah-exec-recipe-publish-smoke` | done (`6aeae3a7`; real BuildahExec + `materialize-cli`; 43/43 vm-layer materialize tests, full CI/install pass in ledger) | m5 runtime provision now waits on l9 artifact URL/SHA pins |
-| `l9/recipe-artifact-url-and-publish-smoke` | ready; artifact URL/release-asset contract, first green recipe-publish artifacts, and manifest SHA pins still needed | m5 runtime provisioning flip |
+| `l8/buildah-exec-recipe-publish-smoke` | done (`6aeae3a7`; real BuildahExec + `materialize-cli`; 43/43 vm-layer materialize tests, full CI/install pass in ledger) | m5 runtime provision now waits on l9 SHA pins |
+| `l9/recipe-artifact-url-and-publish-smoke` | blocked on CI/SHA pins; artifact URL contract done (`963baeb1`, `9db73978`, `74b1d78d`), first green recipe-publish artifacts and manifest SHA pins still needed | m5 runtime provisioning flip |
 
 ## Events
 
@@ -1484,10 +1493,10 @@ is booted with an in-VM headless on vsock 42420 (gated on m5/l9).
 
 ### follow-ups after m4 sub-task B completion
 
-1. **m5/vfr-image-via-ci-rootfs** (gated on Linux l9 artifact URL
-   contract): macOS-owned converter (tar_to_vfr_img) already shipped;
-   waiting on l9 for the URL + SHA pins so VzRuntime::provision can
-   fetch the published .img.
+1. **m5/vfr-image-via-ci-rootfs** (gated on Linux l9 SHA pins):
+   macOS-owned converter (tar_to_vfr_img) and the artifact URL contract
+   already shipped; waiting on l9 for first green recipe-publish artifacts
+   and real SHA pins so VzRuntime::provision can fetch the published .img.
 2. **m8 interactive smoke** (user-attended): once m5 lands, run the
    7-step manual checklist from the m8 agent_status_packet to
    exercise the full happy path via real button clicks.
@@ -1498,3 +1507,19 @@ is booted with an in-VM headless on vsock 42420 (gated on m5/l9).
 4. **MenuStructure integration** (low priority): fold the four manual
    menu items in status_item::append_actions into the portable
    MenuStructure spec.
+
+### event: linux coordinator status reconciliation — 2026-05-26T09:47Z
+
+- Observed remote heads: `linux-next` `e60afe93`, `windows-next` `83e2cd51`,
+  `osx-next` `dddd3eb8`, `main` `ddf52dff`.
+- Folded terminal events into headers: m4 sub-task B is structurally complete
+  through `41ea02e1`; m9 is superseded by the m4 live attach slices and should
+  not be re-claimed.
+- `osx-next` has no unmerged macOS delta into `linux-next`; it trails by two
+  coordination commits (`18761eb2`, `e60afe93`).
+- l9's artifact URL contract is no longer the macOS blocker. The remaining m5
+  gate is first green recipe-publish artifacts plus manifest SHA pins.
+- Current macOS next action: wait for or help diagnose the l9 SHA-pin run, then
+  wire m5 fetch/provision behavior against `Manifest::artifact_url`. Treat
+  `"pending-ci"` SHA pins as recoverable while preserving the m4 attach path
+  for live smoke after m5.

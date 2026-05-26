@@ -299,3 +299,39 @@ Current cross-host gates:
 - macOS m9 remains ready: wire no-VM-testable PTY attach adapters without
   claiming live E2E. macOS m4 live attach remains blocked on m5, and m8's
   residual acceptance is user-attended interactive smoke.
+
+## Coordination Audit - 2026-05-26T09:47Z
+
+host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+
+Observed remote heads after fetch/pull:
+
+- `main`: ddf52dff
+- `linux-next`: e60afe93
+- `windows-next`: 83e2cd51
+- `osx-next`: dddd3eb8
+
+Ledger corrections made in this audit:
+
+- Folded l9 dynamic-loop slices through `74b1d78d`: artifact URL template,
+  `Manifest::artifact_url`, `materialize-cli --publish-tag`, and the w5/m5
+  consumer contract are done.
+- Folded Windows w5 `RemoteArtifact` resolver: `83e2cd51` has been
+  merged/tested into `linux-next` at `150d8a14`, so there is no unmerged
+  Windows delta.
+- Folded macOS m4 terminal events through `41ea02e1`: Open Shell and GitHub
+  Login live PTY-over-vsock attach paths are structurally complete. The m9
+  no-VM adapter packet is superseded and should not be re-claimed.
+- Updated `plan.yaml`, `plan/index.yaml`, the per-host queues, blocker roundup,
+  and `plan/loop_status.md` to current heads.
+
+Current cross-host gates:
+
+- Linux l9 is narrowed to first green `recipe-publish` artifacts plus real
+  manifest SHA pins. The URL contract is done; `"pending-ci"` SHA pins should
+  be treated as recoverable by consumers.
+- Windows w7 remains ready: branch-sync `windows-next` to `linux-next`
+  `e60afe93` and run diagnostics against the remaining SHA-pin gate.
+- macOS m5 remains blocked on SHA pins before live provisioning; macOS live PTY
+  proof remains blocked on m5, not on another m4/m9 implementation packet.
+- m8's residual acceptance remains user-attended interactive smoke.

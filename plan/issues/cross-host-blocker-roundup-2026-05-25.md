@@ -386,10 +386,18 @@ blocker view without deleting earlier host notes.
 - type: integration
 - owner_host: linux
 - capability_tags: [buildah, github-actions, release, provisioning]
-- status: ready
+- status: blocked
 - depends_on:
   - `l8/buildah-exec-recipe-publish-smoke`
   - `m5/§2b.3-recipe-publish-workflow`
+- cleared_gates:
+  - artifact URL template + `Manifest::artifact_url` resolver shipped at
+    `963baeb1`
+  - `materialize-cli --publish-tag` URL verification shipped at `9db73978`
+  - consumer contract documented in `tray-convergence-coordination.md` at
+    `74b1d78d`
+  - Windows w5 `RemoteArtifact` resolver consumed the contract at `83e2cd51`
+    and was integrated into `linux-next` at `150d8a14`
 - blocks:
   - `w5/wsl-import-via-ci-rootfs`
   - `m5/vfr-image-via-ci-rootfs`
@@ -399,22 +407,22 @@ blocker view without deleting earlier host notes.
   - `crates/tillandsias-vm-layer/src/bin/materialize-cli.rs`
   - `plan/issues/tray-convergence-coordination.md`
 - next_action: >
-    Settle the artifact locator contract requested by Windows: either add
-    `url`/`url_template` data to `images/vm/manifest.toml` or document a fixed
-    GitHub release-asset convention with tag source. Then run local
-    `materialize-cli`/recipe-publish evidence and write first real SHA pins.
+    Trigger or inspect the first green `recipe-publish` workflow/tag run,
+    capture the emitted SHA256SUMS / manifest-pin block, and replace the
+    `"pending-ci"` placeholders in `images/vm/manifest.toml`. If the workflow
+    fails, append the exact job/log failure and leave the URL contract plus
+    recoverable pending-SHA behavior intact for Windows/macOS consumers.
 - expected_evidence:
-  - local buildah-backed `materialize-cli` output or a recipe-publish workflow
-    run that emits `tillandsias-rootfs-x86_64.tar`,
+  - recipe-publish workflow run that emits `tillandsias-rootfs-x86_64.tar`,
     `tillandsias-rootfs-aarch64.tar`, and `tillandsias-rootfs-aarch64.img`
-  - manifest SHA pins and artifact URL/release-asset convention usable by
-    Windows w5 and macOS m5
+  - manifest SHA pins usable by Windows w5 and macOS m5 through
+    `Manifest::artifact_url`
   - agent_status_packet with files touched, artifact refs, errors, next
     checkpoint, and lease intent
 - fallback_when_blocked: >
     If live Buildah or GitHub release publishing fails, commit a diagnostic
-    packet with the exact failing command/log and preserve enough manifest
-    shape for Windows/macOS to build against mocked pins without claiming E2E.
+    packet with the exact failing command/log and preserve the manifest URL
+    shape plus `"pending-ci"` recoverable-error contract without claiming E2E.
 
 ## Linux coordinator audit — 2026-05-26T04:11Z
 
@@ -470,3 +478,25 @@ blocker view without deleting earlier host notes.
   `89de6219`; macOS m9 no-VM PTY adapter unit wiring. Blocked packets:
   Windows w5 and macOS m5 on l9, macOS m4 live attach on m5, and m8 residual
   smoke on user-attended interactive verification.
+
+## Linux coordinator audit — 2026-05-26T09:47Z
+
+- Observed remote heads after fetch/pull: `linux-next` `e60afe93`,
+  `windows-next` `83e2cd51`, `osx-next` `dddd3eb8`, `main` `ddf52dff`.
+- Resolved since the previous fold: l9 steps 1, 2, and 4 shipped. The artifact
+  URL template and `Manifest::artifact_url` resolver landed at `963baeb1`,
+  `materialize-cli --publish-tag` URL verification landed at `9db73978`, and
+  the consumer contract was documented at `74b1d78d`.
+- Windows w5 consumed that contract via `RemoteArtifact` at `83e2cd51`; the
+  integration loop merged/tested it into `linux-next` at `150d8a14`.
+- macOS m4 sub-task B completed live PTY-over-vsock wiring for Open Shell and
+  GitHub Login through `41ea02e1`. The m9 no-VM adapter packet is now
+  superseded by those m4 slices and should not be re-claimed.
+- Current high-impact blocker is narrower: l9 is waiting on first green
+  `recipe-publish` artifacts and manifest SHA pins. Windows w5 and macOS m5
+  runtime provisioning should treat `"pending-ci"` SHA pins as recoverable
+  until that run succeeds.
+- Ready packets: Windows w7 branch-sync diagnostics against `e60afe93`; Linux
+  recipe-publish CI/SHA-pin follow-up; macOS m5 fetch/provision wiring after
+  SHAs exist. Blocked packets: Windows w5 and macOS m5 on SHA pins, macOS live
+  PTY proof on m5, and m8 residual smoke on user-attended verification.
