@@ -28,6 +28,19 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Dynamic-loop slice 2026-05-26T10:18Z — Step 15 (slice 1): router-before-project in `run_opencode_mode`
+
+- Commit: `cf74e176` — `ensure_router_running` now runs BEFORE the
+  per-project proxy/git/inference/forge spawn in OpenCode launches.
+  Eliminates the 1-5s window where Squid's `cache_peer router` + git
+  HTTPS upstream resolve to a missing alias and retry-storm.
+- Tests: `./build.sh --ci-full --install` green @ 100% (14/14 + 4/4 +
+  3/3 + 2/2). Live podman smoke gated on developer running
+  `tillandsias --opencode <project>`.
+- Next slice: same fix in `run_observatorium_mode` (currently starts
+  router AFTER observatorium-web) and `ensure_enclave_for_project`
+  (tray-driven Forge launches).
+
 ### Cycle 2026-05-26T09:43Z — NO-OP (dynamic loop already integrated w5 13 min ago)
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
