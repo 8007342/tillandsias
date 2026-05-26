@@ -318,3 +318,61 @@ blocker view without deleting earlier host notes.
 - Ready work: macOS m4 action-host wiring; macOS m5 converter/CI-fetch work;
   Windows w6 verification or diagnostics that do not require the CI rootfs
   artifact.
+
+## Linux coordinator audit — 2026-05-26T02:04Z
+
+- Observed remote heads after fetch/pull: `linux-next` `fad97244`,
+  `windows-next` `d937e761`, `osx-next` `fad97244`, `main` `ddf52dff`.
+- Resolved since the previous fold: Windows §3.7.2 `tar_to_wsl_import` and
+  w6 diagnostics were merged/tested into `linux-next` at `b3ae21a`; macOS
+  recipe scaffold, `tar_to_vfr_img`, and `recipe-publish.yml` scaffolding
+  landed through `55ff55c6`/`fad97244`.
+- Correction to the "Windows E2E unblocked" wording: the workflow file exists,
+  but production artifact generation is not yet proven. `BuildahExec` still
+  returns its scaffold error, `images/vm/manifest.toml` still has `pending-ci`
+  output SHAs, Windows `wsl_lifecycle.rs` still consumes the legacy
+  provisioning manifest, and macOS `VzRuntime::provision` still calls deferred
+  extract/convert stubs.
+- New integration watch: `origin/windows-next` is ahead with diagnostic commit
+  `d937e761` while also missing latest `linux-next` recipe-publish commits.
+  Integration loop should merge/test it or record exact conflicts; Windows
+  should merge latest `linux-next` before stacking more work.
+- Current high-impact blocker: l8 below. It gates first real rootfs `.tar` /
+  `.img` artifacts and therefore the Windows/macOS runtime provisioning flips.
+
+### Item: l8/buildah-exec-recipe-publish-smoke
+
+- id: `l8/buildah-exec-recipe-publish-smoke`
+- type: integration
+- owner_host: linux
+- capability_tags: [rust, buildah, github-actions, ci, provisioning]
+- status: ready
+- depends_on:
+  - `l7/§3-materializer-driver`
+  - `m5/§2b.3-recipe-publish-workflow`
+- blocks:
+  - `w5/wsl-import-via-ci-rootfs`
+  - `m5/vfr-image-via-ci-rootfs`
+- owned_files:
+  - `crates/tillandsias-vm-layer/src/materialize/exec.rs`
+  - `crates/tillandsias-vm-layer/examples/materialize-cli.rs`
+  - `.github/workflows/recipe-publish.yml`
+  - `images/vm/manifest.toml`
+  - `crates/tillandsias-vm-layer/src/materialize/cache.rs`
+- next_action: >
+    On Linux, run the materialize CLI with `--executor noop` to confirm the
+    shape, then implement or deliberately narrow the `BuildahExec` subprocess
+    body enough for recipe-publish to produce a real rootfs tar. Fix the
+    `materialize/cache.rs` clippy `collapsible_if` while in this area.
+- expected_evidence:
+  - `cargo test -p tillandsias-vm-layer --features materialize`
+  - a local buildah-backed `materialize-cli` run or a recipe-publish workflow
+    run producing `tillandsias-rootfs-x86_64.tar`,
+    `tillandsias-rootfs-aarch64.tar`, and `tillandsias-rootfs-aarch64.img`
+  - SHA block ready to paste into `images/vm/manifest.toml`
+  - agent_status_packet with files touched, artifact refs, errors, and lease
+    intent
+- fallback_when_blocked: >
+    If Buildah requires a larger design than one recurrent iteration, commit a
+    narrower diagnostic packet that proves the exact failing buildah command and
+    leaves the workflow runnable with `--executor noop` only.
