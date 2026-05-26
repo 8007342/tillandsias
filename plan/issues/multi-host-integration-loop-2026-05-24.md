@@ -28,6 +28,53 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-26T03:43Z — INTEGRATED (windows diagnose-windows.ps1 refinement)
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit (post-merge): `881306a`
+- observed_sibling_heads:
+  - main: ddf52dff
+  - linux-next: e58723bb → 0164e579 → `881306a`
+  - windows-next: 042bf22a
+  - osx-next: 0164e579 (already absorbed into linux-next via earlier in-cycle pull)
+
+- **Massive in-cycle pull from origin/linux-next** (4 commits): coordinator
+  audit folded l8 into the host queues + split out `l9/recipe-artifact-url-
+  and-publish-smoke` (the remaining CI-side work). macOS shipped Phase 1
+  m4-sub-task-B-slice-1 (TrayActionHost class + 4 menu actions wired —
+  `38bd7669`, `0164e579`). Windows authored a w5-flip consumer-contract
+  doc for l8 (`f2546427`).
+
+- **Pre-pull stash:** working tree had stale local edits to sibling-owned
+  files (pty/unix.rs, status_item.rs, materialize/macos.rs) from prior
+  `cargo clippy --fix` + fmt sweeps. Stashed before pull, then dropped
+  after pull (the upstream versions are canonical; my stashed copies
+  were stale).
+
+- windows-next: **merged + tested + pushed** (`881306a`). 3 commits absorbed
+  (+25 lines after dedup):
+  - `4d515c69` Merge linux-next.
+  - `d937e761 chore(windows-next): diagnose-windows.ps1 reports recipe
+    scaffold + ecosystem state` — the diagnostics PowerShell script now
+    surfaces recipe + materializer presence checks.
+  - `042bf22a` Merge linux-next.
+  - `./build.sh --check` + `--test`: PASSED.
+- osx-next: no-op (already absorbed via the in-cycle pull).
+
+- **Cross-host status post-l8:**
+  - **All Linux gates blocking sibling code are CLEAR.** l1, l3, l4, l6,
+    l7, l8 done. l9 (recipe artifact URL + recipe-publish smoke) is
+    CI-side work, not a sibling-code blocker.
+  - Windows queue: w1-w4 + §3.7.2 + w6 done. w5 awaits l9 CI output
+    (artifact URL).
+  - macOS queue: Phase 1 core + transport_macos + §1.x + §3.7.1 script
+    done; m4 progressing (sub-task B slice 1 just landed); m6/m7
+    bundle+CI work pending.
+
+- **Spec-drift advisory:** windows-next added 25 lines to
+  `scripts/diagnose-windows.ps1`. No methodology / openspec / control-wire
+  changes. Clean contract preservation.
+
 ### Coordinator audit 2026-05-26T02:59Z — l8 folded, l9 gate split
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
