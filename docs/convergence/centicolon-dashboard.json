@@ -1,20 +1,20 @@
 {
-  "generated_at": "2026-05-25T23:25:28Z",
+  "generated_at": "2026-05-26T00:47:11Z",
   "title": "Progression Trends",
   "series_namespace": "local_development",
   "series_label": "Local Development",
   "source_file": "target/convergence/centicolon-signature.jsonl",
-  "record_count": 56,
-  "sparkline_closed": "██▁█▁▁██████████████████████████████████████████▇▇██████",
-  "sparkline_residual": "▁▁█▁██▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▂▂▁▁▁▁▁▁",
+  "record_count": 59,
+  "sparkline_closed": "██▁█▁▁██████████████████████████████████████████▇▇█████████",
+  "sparkline_residual": "▁▁█▁██▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▂▂▁▁▁▁▁▁▁▁▁",
   "alert_level": "green",
   "alert_thresholds": {
     "red_below_percent_closed": 90,
     "yellow_below_percent_closed": 95
   },
   "trend_metrics": {
-    "pass_rate_7d_percent": 71.42857142857143,
-    "coverage_avg_7d_percent": 97.33333333333334
+    "pass_rate_7d_percent": 100,
+    "coverage_avg_7d_percent": 100
   },
   "metrics": {"cpu_percent":0.0,"memory_percent":0.0,"disk_percent":0.0,"disk_read_bytes_per_sec":0.0,"disk_write_bytes_per_sec":0.0,"disk_iops":0.0,"disk_io_percent":0.0,"cpu_psi_percent":0.0,"memory_psi_percent":0.0,"io_psi_percent":0.0,"psi_available":false,"sample_timestamp":"1970-01-01T00:00:00Z","source":"tillandsias-metrics::DashboardSnapshot"},
   "dashboard_contract": {
@@ -72,17 +72,17 @@
     "kind": "closed",
     "start_release": "0.2.260520.8",
     "start_commit": "6ace26e5456e",
-    "end_release": "0.2.260525.2",
-    "end_commit": "35e871851f22",
-    "count": 24,
-    "closed": "████████████████▇▇██████",
-    "residual": "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▂▂▁▁▁▁▁▁"
+    "end_release": "0.2.260525.3",
+    "end_commit": "8745e2962fbc",
+    "count": 27,
+    "closed": "████████████████▇▇█████████",
+    "residual": "▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▂▂▁▁▁▁▁▁▁▁▁"
   }
 ],
   "latest": {
-  "release": "0.2.260525.2",
-  "date": "2026-05-25T23:25:27Z",
-  "commit": "35e871851f22",
+  "release": "0.2.260525.3",
+  "date": "2026-05-26T00:47:09Z",
+  "commit": "8745e2962fbc",
   "total_cc": 120,
   "earned_cc": 120,
   "residual_cc": 0,
@@ -92,7 +92,7 @@
   "evidence": "target/convergence/evidence-bundle.json",
   "projection": "docs/convergence/centicolon-dashboard.md",
   "ci_result": "PASS",
-  "ci_run_id": "local-ci-20260525T232527Z",
+  "ci_run_id": "local-ci-20260526T004709Z",
   "trend_glyph": ""
 },
   "history": [
@@ -990,6 +990,54 @@
     "projection": "docs/convergence/centicolon-dashboard.md",
     "ci_result": "PASS",
     "ci_run_id": "local-ci-20260525T232527Z",
+    "trend_glyph": ""
+  },
+  {
+    "release": "0.2.260525.2",
+    "date": "2026-05-25T23:25:28Z",
+    "commit": "35e871851f22",
+    "total_cc": 140,
+    "earned_cc": 140,
+    "residual_cc": 0,
+    "percent_closed": 100,
+    "worst_spec": "n/a",
+    "worst_reason": "n/a",
+    "evidence": "target/convergence/evidence-bundle.json",
+    "projection": "docs/convergence/centicolon-dashboard.md",
+    "ci_result": "PASS",
+    "ci_run_id": "local-ci-20260525T232528Z",
+    "trend_glyph": ""
+  },
+  {
+    "release": "0.2.260525.2",
+    "date": "2026-05-26T00:45:10Z",
+    "commit": "8745e2962fbc",
+    "total_cc": 750,
+    "earned_cc": 750,
+    "residual_cc": 0,
+    "percent_closed": 100,
+    "worst_spec": "n/a",
+    "worst_reason": "n/a",
+    "evidence": "target/convergence/evidence-bundle.json",
+    "projection": "docs/convergence/centicolon-dashboard.md",
+    "ci_result": "PASS",
+    "ci_run_id": "local-ci-20260526T004510Z",
+    "trend_glyph": ""
+  },
+  {
+    "release": "0.2.260525.3",
+    "date": "2026-05-26T00:47:09Z",
+    "commit": "8745e2962fbc",
+    "total_cc": 120,
+    "earned_cc": 120,
+    "residual_cc": 0,
+    "percent_closed": 100,
+    "worst_spec": "n/a",
+    "worst_reason": "n/a",
+    "evidence": "target/convergence/evidence-bundle.json",
+    "projection": "docs/convergence/centicolon-dashboard.md",
+    "ci_result": "PASS",
+    "ci_run_id": "local-ci-20260526T004709Z",
     "trend_glyph": ""
   }
 ]
