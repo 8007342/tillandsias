@@ -69,14 +69,23 @@ const RUNTIME_VIRTUAL_DIRS: &[&str] = &["proc", "sys", "dev", "run", "tmp"];
 /// tars) as empty directories with kernel-standard permissions. `/tmp`
 /// gets the sticky, world-writable mode `01777`; the rest `0755`.
 fn recreate_runtime_dirs(root: &Path) -> Result<(), ExecError> {
-    use std::os::unix::fs::PermissionsExt;
     for dir in RUNTIME_VIRTUAL_DIRS {
         let path = root.join(dir);
         std::fs::create_dir_all(&path)
             .map_err(|e| format!("recreate runtime dir {}: {e}", path.display()))?;
-        let mode = if *dir == "tmp" { 0o1777 } else { 0o755 };
-        std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode))
-            .map_err(|e| format!("chmod runtime dir {} to {mode:o}: {e}", path.display()))?;
+        // Kernel-standard rootfs modes (sticky+world-writable /tmp, 0755 rest)
+        // are a Unix concept; the buildah materializer only runs on a Unix host.
+        // cfg-gate so vm-layer still COMPILES on Windows (cargo test / cross
+        // build) — there the dir is created but the mode is a no-op, which is
+        // fine because the materialize feature isn't exercised at runtime on
+        // Windows (it downloads the CI-published rootfs instead).
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = if *dir == "tmp" { 0o1777 } else { 0o755 };
+            std::fs::set_permissions(&path, std::fs::Permissions::from_mode(mode))
+                .map_err(|e| format!("chmod runtime dir {} to {mode:o}: {e}", path.display()))?;
+        }
     }
     Ok(())
 }
@@ -426,6 +435,10 @@ mod tests {
     use super::*;
     use crate::materialize::layer_key::layer_key;
 
+    // Mode bits are Unix-only; on Windows `recreate_runtime_dirs` creates the
+    // dirs but applies no mode (the materialize feature isn't used at runtime
+    // there), so this assertion only holds — and `.mode()` only exists — on Unix.
+    #[cfg(unix)]
     #[test]
     fn recreate_runtime_dirs_makes_tmp_world_writable_sticky() {
         use std::os::unix::fs::PermissionsExt;
@@ -440,6 +453,11 @@ mod tests {
         }
     }
 
+    // Asserts forward-slash Linux build-context path joining; `PathBuf::join`
+    // yields backslashes on Windows, and the buildah materializer is Linux-only,
+    // so this is a Unix-only behavioral test (the feature still compiles on
+    // Windows — see the cfg-gate in `recreate_runtime_dirs`).
+    #[cfg(unix)]
     #[test]
     fn resolve_copy_src_joins_relative_onto_context() {
         let exec = BuildahExec::default().with_context(PathBuf::from("/repo/images/vm"));
