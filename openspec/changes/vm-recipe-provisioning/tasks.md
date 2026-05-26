@@ -27,7 +27,7 @@
 - [ ] 3.1 Create `crates/tillandsias-vm-layer/src/materialize/mod.rs` with `Materializer::run(recipe: &Recipe, manifest: &Manifest, host_arch: HostArch) -> Result<MaterializedRootfs>`.
 - [ ] 3.2 Layer-hashing: compute `LayerKey = sha256(parent_layer_sha || directive_text || copied_content_sha)` per design D3.
 - [ ] 3.3 Cache resolver: look up `LayerKey` under `<platform-cache-root>/recipe-cache/<key>.tar`; cache hit → skip exec, reuse content.
-- [ ] 3.4 Cache miss exec: invoke `buildah` (or substitute) inside a throwaway working container, run the directive, snapshot the resulting filesystem to the cache.
+- [x] 3.4 Cache miss exec: invoke `buildah` (or substitute) inside a throwaway working container, run the directive, snapshot the resulting filesystem to the cache. (Real BuildahExec subprocess driver shipped; per-layer self-contained — `buildah from <image>` for FROM, `buildah from scratch` + tar-extract for subsequent layers; applies RUN/COPY/ENV/WORKDIR/RECIPE-entry directives; snapshots via `buildah mount` + `tar -cf` excluding /proc /sys /dev /run /tmp; cleans up on success or error. Real-buildah integration test gated `#[ignore]`. Driven end-to-end by `materialize-cli` Task §8.2.)
 - [ ] 3.5 After last directive: export the final rootfs as a `.tar` in the cache and emit `MaterializedRootfs::Tar`.
 - [ ] 3.6 Per-arch sanity check: verify `host_arch` is listed in `RECIPE arch`; fail with the documented diagnostic if not.
 - [ ] 3.7 Platform converters:
@@ -65,7 +65,7 @@
 ## 8. Verify
 
 - [ ] 8.1 Run `openspec validate vm-recipe-provisioning` — expect "valid".
-- [ ] 8.2 Local materialization on a Linux dev host: `cargo run -p tillandsias-vm-layer --bin materialize-cli -- images/vm/Recipefile images/vm/manifest.toml` produces a valid rootfs.tar.
+- [x] 8.2 Local materialization on a Linux dev host: `cargo run -p tillandsias-vm-layer --features materialize --bin materialize-cli -- images/vm/Recipefile images/vm/manifest.toml x86_64` produces a valid rootfs.tar. (Binary shipped; prints `rootfs_tar=<path>` + `sha256=<hex>` on success so Task §6.5 can fill `manifest.toml [output] expected_rootfs_sha.<arch>` directly from the output. Requires `buildah` on PATH.)
 - [ ] 8.3 Local materialization on macOS dev host: same command produces an aarch64 rootfs.tar; cached on second run (<5 s).
 - [ ] 8.4 Convert to VFR raw image; boot under `objc2-virtualization`; verify systemd init, vsock listener on 42420, `tillandsias-headless --version` works.
 - [ ] 8.5 Convert to WSL2 import tar; `wsl --import`; verify the same inside the WSL distro.

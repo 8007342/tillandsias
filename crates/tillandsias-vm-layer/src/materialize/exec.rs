@@ -13,13 +13,14 @@
 //!
 //! @trace spec:vm-provisioning-lifecycle (§3.4)
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
+use std::process::Command;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::{Arc, Mutex};
 
 use super::HostArch;
 use super::layer_key::LayerKey;
-use crate::recipe::Instruction;
+use crate::recipe::{Instruction, RecipeDirective};
 
 pub type ExecError = String;
 
@@ -57,28 +58,244 @@ pub trait LayerExecutor {
 /// working container. Linux-host only. Requires `buildah` on PATH; the
 /// materializer will surface a clear error if it isn't.
 ///
-/// The current scaffold focuses on the abstraction and the cache/key
-/// plumbing; the real subprocess driving (`buildah from <base>`, `buildah
-/// run <ctr> <argv>`, `buildah commit`, `tar` export) will be wired in a
-/// follow-on once the recipe-smoke CI job exists to validate it against
-/// a real Fedora base. The struct exists today so call sites and feature
-/// flags settle.
-#[derive(Debug, Clone, Default)]
+/// Production executor: drives a real `buildah` subprocess to produce
+/// one layer tar per `execute()` call.
+///
+/// Per-layer semantics: each call is self-contained — it spins up a
+/// throwaway working container that starts from the parent layer's
+/// state (or from the FROM image for the first layer), applies the
+/// single instruction, snapshots the resulting rootfs to a tar, and
+/// destroys the container. This means cache-miss-mid-recipe is correct
+/// at the cost of re-extracting the parent tar each cold layer; on
+/// repeat runs the materializer's cache layer skips this executor
+/// entirely so the cost is paid once.
+///
+/// Requires `buildah` on PATH (or [`BuildahExec::with_binary`]).
+/// Rootless usage on Fedora / Ubuntu CI works out of the box.
+#[derive(Clone)]
 pub struct BuildahExec {
     /// Optional path to the `buildah` binary; defaults to `"buildah"`
     /// (resolved through PATH).
-    pub binary: Option<PathBuf>,
+    binary: PathBuf,
+    /// Optional `tar` binary path; defaults to `"tar"`.
+    tar_binary: PathBuf,
+}
+
+impl Default for BuildahExec {
+    fn default() -> Self {
+        Self {
+            binary: PathBuf::from("buildah"),
+            tar_binary: PathBuf::from("tar"),
+        }
+    }
+}
+
+impl std::fmt::Debug for BuildahExec {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("BuildahExec")
+            .field("binary", &self.binary)
+            .field("tar_binary", &self.tar_binary)
+            .finish()
+    }
+}
+
+impl BuildahExec {
+    /// Override the buildah binary path.
+    pub fn with_binary(mut self, path: PathBuf) -> Self {
+        self.binary = path;
+        self
+    }
+
+    /// Override the tar binary path.
+    pub fn with_tar(mut self, path: PathBuf) -> Self {
+        self.tar_binary = path;
+        self
+    }
+
+    /// Run `buildah <args>` to completion, returning stdout (or the
+    /// stderr-bearing error if the exit status was non-zero).
+    fn run_buildah(&self, args: &[&str]) -> Result<String, ExecError> {
+        run_capture(&self.binary, args)
+    }
+
+    /// Create a fresh working container. For the first layer this comes
+    /// from the FROM image; for subsequent layers it starts from
+    /// `scratch` and we hydrate the rootfs by extracting the parent
+    /// tar into the mount point.
+    fn new_container(
+        &self,
+        instruction: &Instruction,
+        ctx: &ExecContext,
+    ) -> Result<String, ExecError> {
+        match (&ctx.parent_layer, instruction) {
+            (None, Instruction::From { image }) => {
+                // First layer of the chain: pull/import the base image.
+                let ctr = self.run_buildah(&["from", "--", image])?.trim().to_string();
+                Ok(ctr)
+            }
+            (None, _) => Err(format!(
+                "first instruction must be FROM (got {})",
+                describe_instr(instruction)
+            )),
+            (Some(parent), _) => {
+                // Subsequent layer: scratch container, mount, extract
+                // parent tar into mount, unmount. Cheaper variants
+                // (e.g. `buildah from <committed-layer-image>`) require
+                // a buildah-image-storage cache; we ship the tar-based
+                // variant for portability + simplicity.
+                let ctr = self.run_buildah(&["from", "scratch"])?.trim().to_string();
+                self.hydrate_from_tar(&ctr, parent).inspect_err(|_| {
+                    // Best-effort cleanup; ignore the rm error.
+                    let _ = self.run_buildah(&["rm", &ctr]);
+                })?;
+                Ok(ctr)
+            }
+        }
+    }
+
+    /// Extract `tar_path` into the working container's mount point.
+    fn hydrate_from_tar(&self, ctr: &str, tar_path: &Path) -> Result<(), ExecError> {
+        let mount_point = self.run_buildah(&["mount", ctr])?.trim().to_string();
+        let tar_status = Command::new(&self.tar_binary)
+            .arg("-xf")
+            .arg(tar_path)
+            .arg("-C")
+            .arg(&mount_point)
+            .status()
+            .map_err(|e| format!("spawn tar -xf {}: {e}", tar_path.display()))?;
+        // Always umount (best-effort) before propagating an error.
+        let _ = self.run_buildah(&["umount", ctr]);
+        if !tar_status.success() {
+            return Err(format!(
+                "tar -xf {} into {} failed with status {tar_status}",
+                tar_path.display(),
+                mount_point
+            ));
+        }
+        Ok(())
+    }
+
+    /// Apply `instruction` against the container.
+    fn apply_instruction(&self, ctr: &str, instr: &Instruction) -> Result<(), ExecError> {
+        match instr {
+            Instruction::From { .. } => Ok(()), // Already handled by new_container.
+            Instruction::Run { script } => self
+                .run_buildah(&["run", ctr, "--", "/bin/sh", "-c", script])
+                .map(|_| ()),
+            Instruction::Copy { src, dest } => {
+                self.run_buildah(&["copy", ctr, src, dest]).map(|_| ())
+            }
+            Instruction::Env { key, value } => self
+                .run_buildah(&["config", "--env", &format!("{key}={value}"), ctr])
+                .map(|_| ()),
+            Instruction::Workdir { path } => self
+                .run_buildah(&["config", "--workingdir", path, ctr])
+                .map(|_| ()),
+            Instruction::Arg { .. } => Ok(()), // ARG defaults are picked up at parse time.
+            Instruction::Recipe(RecipeDirective::Entry(cmd)) => self
+                .run_buildah(&["config", "--entrypoint", cmd, ctr])
+                .map(|_| ()),
+            Instruction::Recipe(RecipeDirective::VsockListen(_))
+            | Instruction::Recipe(RecipeDirective::Arch(_))
+            | Instruction::Other { .. } => {
+                // VsockListen/Arch are recipe-only metadata applied via
+                // bootstrap scripts (`images/vm/bootstrap/*.sh`); the
+                // materializer doesn't need to touch buildah for them.
+                // Unknown directives are ignored to keep the parser
+                // forward-compatible.
+                Ok(())
+            }
+        }
+    }
+
+    /// Snapshot the container's filesystem to `<dst>` as a flat rootfs
+    /// tar. Uses `buildah unshare ... tar -C $mnt -cf $dst .` so we don't
+    /// need privileged tar invocations.
+    fn snapshot_tar(&self, ctr: &str, dst: &Path) -> Result<(), ExecError> {
+        let mount_point = self.run_buildah(&["mount", ctr])?.trim().to_string();
+        let tar_status = Command::new(&self.tar_binary)
+            .arg("-cf")
+            .arg(dst)
+            // Exclude virtual filesystems that have no business in a
+            // rootfs tar — they're mount points the guest re-populates
+            // at boot, and copying their host contents bloats the tar
+            // without value.
+            .arg("--exclude=./proc")
+            .arg("--exclude=./sys")
+            .arg("--exclude=./dev")
+            .arg("--exclude=./run")
+            .arg("--exclude=./tmp")
+            .arg("-C")
+            .arg(&mount_point)
+            .arg(".")
+            .status()
+            .map_err(|e| format!("spawn tar -cf {}: {e}", dst.display()))?;
+        let _ = self.run_buildah(&["umount", ctr]);
+        if !tar_status.success() {
+            return Err(format!(
+                "tar -cf {} from {} failed with status {tar_status}",
+                dst.display(),
+                mount_point
+            ));
+        }
+        Ok(())
+    }
 }
 
 impl LayerExecutor for BuildahExec {
-    fn execute(
-        &self,
-        _instruction: &Instruction,
-        _ctx: &ExecContext,
-    ) -> Result<PathBuf, ExecError> {
-        Err(
-            "BuildahExec is a scaffold; real subprocess wiring lands with the recipe-smoke CI job (§6.4 of vm-recipe-provisioning)".into()
-        )
+    fn execute(&self, instruction: &Instruction, ctx: &ExecContext) -> Result<PathBuf, ExecError> {
+        let dst_dir = ctx.cache_dir.join(ctx.host_arch.as_str());
+        std::fs::create_dir_all(&dst_dir)
+            .map_err(|e| format!("create cache dir {}: {e}", dst_dir.display()))?;
+        let dst = dst_dir.join(format!("{}.tar.tmp", ctx.layer_key.as_str()));
+
+        let ctr = self.new_container(instruction, ctx)?;
+
+        // Helper closure so cleanup is guaranteed across the apply +
+        // snapshot path.
+        let outcome = (|| {
+            self.apply_instruction(&ctr, instruction)?;
+            self.snapshot_tar(&ctr, &dst)
+        })();
+
+        // Best-effort container cleanup; report it only if everything
+        // else succeeded but rm failed (rare).
+        let rm_result = self.run_buildah(&["rm", &ctr]);
+
+        outcome?;
+        let _ = rm_result;
+        Ok(dst)
+    }
+}
+
+fn run_capture(binary: &Path, args: &[&str]) -> Result<String, ExecError> {
+    let output = Command::new(binary)
+        .args(args)
+        .output()
+        .map_err(|e| format!("spawn {} {}: {e}", binary.display(), args.join(" ")))?;
+    if !output.status.success() {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        return Err(format!(
+            "{} {} exited {}: {}",
+            binary.display(),
+            args.join(" "),
+            output.status,
+            stderr.trim()
+        ));
+    }
+    Ok(String::from_utf8_lossy(&output.stdout).into_owned())
+}
+
+fn describe_instr(instr: &Instruction) -> &'static str {
+    match instr {
+        Instruction::From { .. } => "FROM",
+        Instruction::Arg { .. } => "ARG",
+        Instruction::Run { .. } => "RUN",
+        Instruction::Copy { .. } => "COPY",
+        Instruction::Env { .. } => "ENV",
+        Instruction::Workdir { .. } => "WORKDIR",
+        Instruction::Recipe(_) => "RECIPE",
+        Instruction::Other { .. } => "OTHER",
     }
 }
 
@@ -160,9 +377,16 @@ mod tests {
     }
 
     #[test]
-    fn buildah_exec_scaffold_returns_clear_unimplemented() {
+    fn buildah_exec_rejects_non_from_as_first_instruction() {
+        // Unit-level check that doesn't invoke buildah: if the parent
+        // layer is None, the first instruction must be FROM. We point
+        // BuildahExec at a missing binary so any subprocess invocation
+        // would surface as an error — proving the early-validate path
+        // catches the bug before reaching the subprocess.
         let tmp = tempfile::tempdir().unwrap();
-        let exec = BuildahExec::default();
+        let exec = BuildahExec::default().with_binary(PathBuf::from(
+            "/this/binary/intentionally/does/not/exist/buildah",
+        ));
         let key = layer_key(
             None,
             &Instruction::Run { script: "x".into() },
@@ -176,7 +400,61 @@ mod tests {
         };
         let err = exec
             .execute(&Instruction::Run { script: "x".into() }, &ctx)
-            .expect_err("scaffold should error");
-        assert!(err.contains("recipe-smoke"), "got {err:?}");
+            .expect_err("first instruction must be FROM");
+        assert!(
+            err.contains("must be FROM"),
+            "expected FROM-required error; got {err:?}",
+        );
+    }
+
+    /// Real-buildah integration smoke: builds a 3-layer recipe end-to-end
+    /// and asserts the resulting tar contains a known file. `#[ignore]`
+    /// because it requires `buildah` on PATH and pulls a Fedora base
+    /// image (~70 MB). To run:
+    ///
+    /// ```bash
+    /// cargo test -p tillandsias-vm-layer --features materialize \
+    ///   --lib materialize::exec::tests::buildah_exec_live -- --ignored --nocapture
+    /// ```
+    ///
+    /// CI's `recipe-smoke` job (§6.4 of vm-recipe-provisioning) drives
+    /// this path against the real Recipefile under `images/vm/`.
+    #[test]
+    #[ignore = "requires buildah on PATH + network for Fedora base image"]
+    fn buildah_exec_live_three_layer_recipe() {
+        use crate::recipe::Recipe;
+
+        let tmp = tempfile::tempdir().unwrap();
+        let cache_root = tmp.path().to_path_buf();
+        let recipe = Recipe::parse_str(
+            r#"
+FROM registry.fedoraproject.org/fedora:44
+RUN echo "hello from layer 2" > /etc/tillandsias-smoke
+RECIPE arch x86_64,aarch64
+"#,
+        )
+        .unwrap();
+        let manifest = crate::recipe::Manifest::from_toml(
+            r#"
+recipe_version = 1
+[[base]]
+arch = "x86_64"
+ref = "registry.fedoraproject.org/fedora:44"
+digest = "sha256:placeholder"
+"#,
+        )
+        .unwrap();
+        let mat = crate::materialize::Materializer::new(BuildahExec::default(), cache_root);
+        let result = mat
+            .run(&recipe, &manifest, HostArch::X86_64)
+            .expect("buildah live run succeeds");
+        match result {
+            crate::materialize::MaterializedRootfs::Tar(path) => {
+                assert!(path.exists(), "final rootfs tar should exist");
+                // Tar should be non-trivial (Fedora base + one file).
+                let meta = std::fs::metadata(&path).unwrap();
+                assert!(meta.len() > 10_000_000, "rootfs tar suspiciously small");
+            }
+        }
     }
 }
