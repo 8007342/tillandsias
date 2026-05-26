@@ -2,15 +2,16 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
-Status: **OPEN** as of 2026-05-26T02:04Z. macOS m1, m1b, m2, m3, m6, and
+Status: **OPEN** as of 2026-05-26T02:59Z. macOS m1, m1b, m2, m3, m6, and
 m7 are done. m4 has its Unix PTY foundation (`0551a265`) plus the Quit/version
 header slice (`79ff0571`) and still needs the user-facing action-host wiring
 for Start VM / Stop VM / Open Shell. Linux l7 materializer shipped at
 `9dca2c47`; macOS then landed the recipe scaffold, `tar_to_vfr_img`, and
-recipe-publish workflow scaffolding through `55ff55c6`/`fad97244`. Full live
-recipe provisioning is still gated on Linux l8 production `BuildahExec`, first
-green recipe-publish artifacts + manifest SHAs, and the macOS runtime
-provisioning flip away from the current deferred extraction/conversion stubs.
+recipe-publish workflow scaffolding through `55ff55c6`/`fad97244`; Linux l8
+then shipped real `BuildahExec` + `materialize-cli` at `6aeae3a7`. Full live
+recipe provisioning is still gated on l9 artifact URL/SHA pins, first green
+recipe-publish artifacts, and the macOS runtime provisioning flip away from the
+current deferred extraction/conversion stubs.
 
 ## How to use this file
 
@@ -39,9 +40,9 @@ SHOULD route through `osx-next` so the integration loop can run isolation
 checks. Advisory only; both flows still work.
 
 Work-shaping note: m4 action-host wiring remains the best macOS packet while
-Linux l8 produces real recipe artifacts. m5 runtime provisioning can be shaped
-against the artifact contract, but E2E should wait for first green
-recipe-publish SHAs.
+Linux l9 produces a fetchable artifact contract and SHA pins. m5 runtime
+provisioning can be shaped against the artifact contract, but E2E should wait
+for first green recipe-publish SHAs.
 
 ## Currently unblocked / active
 
@@ -181,8 +182,9 @@ recipe-publish SHAs.
 - capability_tags: [vfr, vm-layer, fetch, provisioning]
 - status: blocked
 - gated_on:
-  - linux deliverable `l8/buildah-exec-recipe-publish-smoke` (production
-    BuildahExec and first green recipe-publish artifacts)
+  - linux deliverable `l9/recipe-artifact-url-and-publish-smoke` (artifact
+    URL/release-asset contract, first green recipe-publish artifacts, and SHA
+    pins)
   - `images/vm/manifest.toml` SHA pins from first green recipe-publish run
 - cleared_gates:
   - linux deliverable `l2/recipe-shared-modules` integrated at `a7af0ed`
@@ -205,7 +207,7 @@ recipe-publish SHAs.
     verify the CI-published `.img` by default, replace the deferred
     extract/convert stubs in `vz.rs`, and respect a `--materialize-local` dev
     path if retained.
-- estimated_effort: 1-2 days after l8 artifacts and SHA pins land.
+- estimated_effort: 1-2 days after l9 artifact URL/SHA pins land.
 
 ### Item: m6/macos-installer-pkg-and-codesign
 
@@ -266,12 +268,12 @@ recipe-publish SHAs.
 | Linux item | Status | Blocks macOS item |
 |---|---|---|
 | `l1/control-wire-pty-attach-tasks-1` | done (`b345ae68`; §1 enum/capability tasks complete) | m4 ready with l3 also done |
-| `l2/recipe-shared-modules` | done (`a7af0ed`; parser tests green on Linux) | m5 converter/API work unblocked; full provision gated on l8/artifact SHAs |
+| `l2/recipe-shared-modules` | done (`a7af0ed`; parser tests green on Linux) | m5 converter/API work unblocked; full provision gated on l9 artifact URL/SHA pins |
 | `l3/in-vm-headless-pty-handler` | done (`f770e013`/`8dc0d129`; tasks 4.1-4.7, two pump tests ignored pending AsyncFd rewrite) | m4 ready for host-side wiring |
 | `l4/replace-vsock-stub-handlers` | done (`6956c825`; informational only for macOS) | (informational only for macOS) |
-| `l5/recipe-smoke-ci-publish` | workflow scaffold landed (`55ff55c6`/`fad97244`), but production buildah artifacts not yet proven | m5 |
+| `l5/recipe-smoke-ci-publish` | workflow scaffold landed (`55ff55c6`/`fad97244`), but first release artifacts and SHA pins not yet proven | m5 |
 | `l7/§3-materializer-driver` | done (`9dca2c47`; materializer feature and cache/export API shipped) | m5 converter/API work unblocked |
-| `l8/buildah-exec-recipe-publish-smoke` | ready, Linux-owned: BuildahExec still scaffold; first green artifact run + SHA pins pending | m5 runtime provision |
+| `l8/buildah-exec-recipe-publish-smoke` | done (`6aeae3a7`; real BuildahExec + `materialize-cli`; 43/43 vm-layer materialize tests, full CI/install pass in ledger) | m5 runtime provision now waits on l9 artifact URL/SHA pins |
 
 ## Events
 
@@ -828,3 +830,17 @@ layers are all live.
   VM / Open Shell. m5 runtime provisioning should wait for l8/first green
   artifacts or explicitly use mock pins while recording that E2E remains
   blocked.
+
+### event: linux coordinator status reconciliation — 2026-05-26T02:59Z
+
+- Observed remote heads: `linux-next` `f2546427`, `windows-next` `042bf22a`,
+  `osx-next` `fad97244`, `main` `ddf52dff`.
+- Folded terminal events into headers: Linux l8 real `BuildahExec` +
+  `materialize-cli` shipped at `6aeae3a7`; the stale "BuildahExec scaffold"
+  blocker is resolved.
+- The remaining m5 blocker is l9: artifact URL/release-asset convention,
+  first green recipe-publish artifacts, and manifest SHA pins. `VzRuntime`
+  provisioning should not claim live E2E until those pins are real.
+- Current macOS next action remains m4 action-host wiring for Start VM / Stop
+  VM / Open Shell. m5 can prepare the fetch path against l9, but must label
+  any mock pins as non-E2E evidence.

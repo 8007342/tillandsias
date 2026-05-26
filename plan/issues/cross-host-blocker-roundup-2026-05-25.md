@@ -346,33 +346,72 @@ blocker view without deleting earlier host notes.
 - type: integration
 - owner_host: linux
 - capability_tags: [rust, buildah, github-actions, ci, provisioning]
-- status: ready
+- status: done
 - depends_on:
   - `l7/§3-materializer-driver`
+  - `m5/§2b.3-recipe-publish-workflow`
+- blocks:
+  - `l9/recipe-artifact-url-and-publish-smoke`
+- owned_files:
+  - `crates/tillandsias-vm-layer/src/materialize/exec.rs`
+  - `crates/tillandsias-vm-layer/src/bin/materialize-cli.rs`
+  - `.github/workflows/recipe-publish.yml`
+- completed_at: 2026-05-26T02:30Z
+- evidence_on_done:
+  - `6aeae3a7` implements real `BuildahExec` subprocess execution and ships
+    `materialize-cli`.
+  - `cargo test -p tillandsias-vm-layer --features materialize`: 43/43 pass.
+  - `./build.sh --ci-full --install`: passed after workspace fmt settle.
+  - Remaining artifact publication/SHA work split to
+    `l9/recipe-artifact-url-and-publish-smoke`.
+
+## Linux coordinator audit — 2026-05-26T02:59Z
+
+- Observed remote heads after fetch/pull: `linux-next` `f2546427`,
+  `windows-next` `042bf22a`, `osx-next` `fad97244`, `main` `ddf52dff`.
+- Resolved since the previous fold: Linux l8 real `BuildahExec` +
+  `materialize-cli` shipped at `6aeae3a7`; the stale "BuildahExec scaffold"
+  blocker is resolved.
+- Windows branch sync advanced: `origin/windows-next` merged latest
+  `linux-next` at `042bf22a`, so the old "d937e761 is behind latest
+  linux-next" warning is resolved. Integration still needs to merge/test
+  `042bf22a` into `linux-next`.
+- Current high-impact blocker is l9 below. It gates fetchable release
+  artifacts, manifest SHA pins, and the Windows/macOS runtime provisioning
+  flips.
+
+### Item: l9/recipe-artifact-url-and-publish-smoke
+
+- id: `l9/recipe-artifact-url-and-publish-smoke`
+- type: integration
+- owner_host: linux
+- capability_tags: [buildah, github-actions, release, provisioning]
+- status: ready
+- depends_on:
+  - `l8/buildah-exec-recipe-publish-smoke`
   - `m5/§2b.3-recipe-publish-workflow`
 - blocks:
   - `w5/wsl-import-via-ci-rootfs`
   - `m5/vfr-image-via-ci-rootfs`
 - owned_files:
-  - `crates/tillandsias-vm-layer/src/materialize/exec.rs`
-  - `crates/tillandsias-vm-layer/examples/materialize-cli.rs`
-  - `.github/workflows/recipe-publish.yml`
   - `images/vm/manifest.toml`
-  - `crates/tillandsias-vm-layer/src/materialize/cache.rs`
+  - `.github/workflows/recipe-publish.yml`
+  - `crates/tillandsias-vm-layer/src/bin/materialize-cli.rs`
+  - `plan/issues/tray-convergence-coordination.md`
 - next_action: >
-    On Linux, run the materialize CLI with `--executor noop` to confirm the
-    shape, then implement or deliberately narrow the `BuildahExec` subprocess
-    body enough for recipe-publish to produce a real rootfs tar. Fix the
-    `materialize/cache.rs` clippy `collapsible_if` while in this area.
+    Settle the artifact locator contract requested by Windows: either add
+    `url`/`url_template` data to `images/vm/manifest.toml` or document a fixed
+    GitHub release-asset convention with tag source. Then run local
+    `materialize-cli`/recipe-publish evidence and write first real SHA pins.
 - expected_evidence:
-  - `cargo test -p tillandsias-vm-layer --features materialize`
-  - a local buildah-backed `materialize-cli` run or a recipe-publish workflow
-    run producing `tillandsias-rootfs-x86_64.tar`,
+  - local buildah-backed `materialize-cli` output or a recipe-publish workflow
+    run that emits `tillandsias-rootfs-x86_64.tar`,
     `tillandsias-rootfs-aarch64.tar`, and `tillandsias-rootfs-aarch64.img`
-  - SHA block ready to paste into `images/vm/manifest.toml`
-  - agent_status_packet with files touched, artifact refs, errors, and lease
-    intent
+  - manifest SHA pins and artifact URL/release-asset convention usable by
+    Windows w5 and macOS m5
+  - agent_status_packet with files touched, artifact refs, errors, next
+    checkpoint, and lease intent
 - fallback_when_blocked: >
-    If Buildah requires a larger design than one recurrent iteration, commit a
-    narrower diagnostic packet that proves the exact failing buildah command and
-    leaves the workflow runnable with `--executor noop` only.
+    If live Buildah or GitHub release publishing fails, commit a diagnostic
+    packet with the exact failing command/log and preserve enough manifest
+    shape for Windows/macOS to build against mocked pins without claiming E2E.

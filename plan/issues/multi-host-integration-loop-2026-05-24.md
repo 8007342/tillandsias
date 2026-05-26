@@ -28,6 +28,23 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Coordinator audit 2026-05-26T02:59Z — l8 folded, l9 gate split
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- observed_sibling_heads:
+  - main: ddf52dff
+  - linux-next: f2546427
+  - windows-next: 042bf22a
+  - osx-next: fad97244
+- Coordination fold only; no sibling merge attempted in this pass.
+- l8 real BuildahExec + `materialize-cli` from `6aeae3a7` is now folded into
+  the per-host queues as done. The remaining release artifact URL, first green
+  recipe-publish run, and manifest SHA pins are split to
+  `l9/recipe-artifact-url-and-publish-smoke`.
+- `origin/windows-next` has merged latest `linux-next` at `042bf22a` and still
+  contains the diagnostic refinement `d937e761` ahead of `linux-next`. Next
+  integration cycle should merge/test `042bf22a` or record exact conflicts.
+
 ### Interlude 2026-05-26T~02:30Z — l8 SHIPPED (real BuildahExec + materialize-cli)
 
 User-relayed: "windows is waiting on you again 😅 … the entire Windows
