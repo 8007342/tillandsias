@@ -2,16 +2,14 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
-Status: **OPEN** as of 2026-05-26T02:59Z. macOS m1, m1b, m2, m3, m6, and
-m7 are done. m4 has its Unix PTY foundation (`0551a265`) plus the Quit/version
-header slice (`79ff0571`) and still needs the user-facing action-host wiring
-for Start VM / Stop VM / Open Shell. Linux l7 materializer shipped at
-`9dca2c47`; macOS then landed the recipe scaffold, `tar_to_vfr_img`, and
-recipe-publish workflow scaffolding through `55ff55c6`/`fad97244`; Linux l8
-then shipped real `BuildahExec` + `materialize-cli` at `6aeae3a7`. Full live
-recipe provisioning is still gated on l9 artifact URL/SHA pins, first green
-recipe-publish artifacts, and the macOS runtime provisioning flip away from the
-current deferred extraction/conversion stubs.
+Status: **OPEN** as of 2026-05-26T04:11Z. macOS m1, m1b, m2, m3, m6, and
+m7 are done. m4 has its Unix PTY foundation (`0551a265`), Quit/version header
+slice (`79ff0571`), TrayActionHost menu wiring (`38bd7669`), and main-thread
+dispatch + Tokio startVm worker scaffold (`3c3b565f` / integrated at
+`18405840`). Remaining m4 slices are real start/stop, Open Shell, and GitHub
+login. Full live recipe provisioning is still gated on l9 artifact URL/SHA
+pins, first green recipe-publish artifacts, and the macOS runtime provisioning
+flip away from the current deferred extraction/conversion stubs.
 
 ## How to use this file
 
@@ -98,8 +96,10 @@ for first green recipe-publish SHAs.
     (Unix `nix::pty::openpty` + `tokio::process::Command`) and wire
     "Open Shell" + "GitHub login" menu items to `PtySession::open(...)`,
     then `NSWorkspace::open(Terminal.app, with: <master-fd-as-tty>)`.
-    Per plan/steps/20 Phase 5 and the macOS-tray spec's "Open Terminal"
-    UX requirement.
+    The action-host class, four menu items, main-thread dispatch helper, and
+    Tokio worker scaffold are in-tree. Next slices replace the startVm
+    placeholder with real `VzRuntime` start/stop and wire Open Shell/GitHub
+    login through `PtySession`.
 - estimated_effort: 1–2 days.
 - verification_note: >
     Host-side wiring can start now. m1b's AsyncRead/AsyncWrite wrapper and
@@ -274,6 +274,7 @@ for first green recipe-publish SHAs.
 | `l5/recipe-smoke-ci-publish` | workflow scaffold landed (`55ff55c6`/`fad97244`), but first release artifacts and SHA pins not yet proven | m5 |
 | `l7/§3-materializer-driver` | done (`9dca2c47`; materializer feature and cache/export API shipped) | m5 converter/API work unblocked |
 | `l8/buildah-exec-recipe-publish-smoke` | done (`6aeae3a7`; real BuildahExec + `materialize-cli`; 43/43 vm-layer materialize tests, full CI/install pass in ledger) | m5 runtime provision now waits on l9 artifact URL/SHA pins |
+| `l9/recipe-artifact-url-and-publish-smoke` | ready; artifact URL/release-asset contract, first green recipe-publish artifacts, and manifest SHA pins still needed | m5 runtime provisioning flip |
 
 ## Events
 
@@ -923,3 +924,17 @@ layers are all live.
     slice 5 — `githubLogin:` body via same PTY path with
               `gh auth login` as entrypoint.
 - Lease released.
+
+### event: linux coordinator status reconciliation — 2026-05-26T04:11Z
+
+- Observed remote heads: `linux-next` `18405840`, `windows-next` `042bf22a`,
+  `osx-next` `18405840`, `main` `ddf52dff`.
+- Folded m4 sub-task B slice 2 into the header: the action-host menu wiring,
+  main-thread dispatch helper, and Tokio worker scaffold are done and aligned
+  into `linux-next`/`osx-next`.
+- Current macOS next action is m4 slice 3: replace the startVm placeholder with
+  real `VzRuntime::start`, add `stopVm:` with a 60s drain, and report an
+  agent_status_packet with files touched and smoke evidence. Slices 4-5 remain
+  Open Shell and GitHub login through `PtySession`.
+- m5 remains blocked on l9 artifact URL/release-asset convention, first green
+  recipe-publish artifacts, and manifest SHA pins.

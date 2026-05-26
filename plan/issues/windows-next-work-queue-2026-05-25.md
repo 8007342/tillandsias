@@ -2,17 +2,15 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/windows-next-thin-tray.md, plan/issues/tray-convergence-coordination.md, plan/issues/control-socket-protocol-convergence-2026-05-25.md, openspec/changes/control-wire-pty-attach/
 
-Status: **OPEN** as of 2026-05-26T02:59Z. Windows w1, w2, w3, w4, w6
+Status: **OPEN** as of 2026-05-26T04:11Z. Windows w1, w2, w3, w4, w6
 diagnostics, and the w5 `materialize::wsl::tar_to_wsl_import` converter are
-done/integrated through `linux-next` cycle `b3ae21a`. Linux l3 shipped the
-in-VM PTY handler at `f770e013`/`8dc0d129`, l4 shipped real vsock handlers at
-`6956c825`, and l7 shipped the recipe materializer driver at `9dca2c47`.
-MacOS landed the recipe scaffold, `tar_to_vfr_img`, and recipe-publish workflow
-scaffolding through `55ff55c6`/`fad97244`; Linux l8 then shipped real
-`BuildahExec` + `materialize-cli` at `6aeae3a7`. Remaining WSL rootfs
-provisioning work is gated on l9: the artifact URL/release-asset contract,
-first green recipe-publish artifacts, manifest SHA pins, and the Windows tray
-runtime flip away from the older provisioning manifest.
+done/integrated through `linux-next`; the integration-loop merge/test of
+`origin/windows-next` `042bf22a` completed at `881306a`. `origin/windows-next`
+currently has no unmerged Windows delta and is 7 commits behind `linux-next`
+`18405840`. Remaining WSL rootfs provisioning work is gated on l9: the artifact
+URL/release-asset contract, first green recipe-publish artifacts, manifest SHA
+pins, and the Windows tray runtime flip away from the older provisioning
+manifest.
 
 ## How to use this file
 
@@ -37,10 +35,9 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
 ## Currently unblocked / active
 
 - `w7/recipe-diagnostics-and-branch-sync` remains ready as a no-VM fallback:
-  `origin/windows-next` merged latest `linux-next` at `042bf22a` and still
-  carries the diagnostic refinement `d937e761` ahead of `linux-next`. The next
-  useful packet is Windows diagnostic output against the l8/l9 split, or the
-  integration loop merge/test of `042bf22a`.
+  `origin/windows-next` has no unmerged delta, but it is behind `linux-next`
+  `18405840`. The next useful packet is a Windows branch-sync pull/merge of
+  latest `linux-next`, then diagnostic output against the l9 artifact gate.
 - `w6/vm-status-and-enumerate-real-handlers` is done as a no-VM diagnostics
   fallback through `948af711` / integration cycle `b3ae21a`. Live VM status
   verification waits for the recipe artifact path.
@@ -67,15 +64,16 @@ and branch sync.
   - `scripts/diagnose-windows.ps1`
 - summary: >
     Keep the Windows no-VM diagnostic current while the recipe artifact path
-    finishes. `origin/windows-next` commit `d937e761` improves
-    `diagnose-windows.ps1` for the recipe scaffold state, and `042bf22a`
-    merged latest `linux-next` after l8 shipped. Report whether the script
-    now accurately distinguishes the completed BuildahExec/materialize-cli
-    implementation from the still-missing l9 artifact URL/SHA pins.
+    finishes. `origin/windows-next` `042bf22a` has already been merged/tested
+    into `linux-next`, but the branch now needs to absorb `linux-next`
+    `18405840`. Report whether the script still accurately distinguishes the
+    completed BuildahExec/materialize-cli implementation from the still-missing
+    l9 artifact URL/SHA pins.
 - next_action: >
-    Pull `origin/windows-next` at `042bf22a`, run `scripts/diagnose-windows.ps1`
-    on Windows, and append an agent_status_packet here. If the integration loop
-    runs first, record the `042bf22a` merge/test outcome instead.
+    Pull or merge latest `origin/linux-next` into `windows-next`, run
+    `scripts/diagnose-windows.ps1` on Windows, and append an
+    agent_status_packet here with branch-sync result plus l9 artifact-gate
+    diagnostics.
 - acceptance_evidence:
   - `scripts/diagnose-windows.ps1` output on Windows, including WSL presence,
     recipe input detection, and the current artifact gate.
@@ -303,6 +301,7 @@ and branch sync.
 | `l6/linux-rasterize-svg-to-ico` | **done** (`ea13ba20`) | w1 done |
 | `l7/§3-materializer-driver` | **done** (`9dca2c47`; materializer feature and cache/export API shipped) | w5 converter done; l9 artifact URL/SHA pins remain |
 | `l8/buildah-exec-recipe-publish-smoke` | **done** (`6aeae3a7`; real BuildahExec + `materialize-cli`; 43/43 vm-layer materialize tests, full CI/install pass in ledger) | w5 runtime provisioning flip now waits on l9 artifact URL/SHA pins |
+| `l9/recipe-artifact-url-and-publish-smoke` | **ready**; artifact URL/release-asset contract, first green recipe-publish artifacts, and manifest SHA pins still needed | w5 runtime provisioning flip |
 
 ## Events
 
@@ -651,3 +650,15 @@ Next greedy pickups (no VM needed): **w4b** (windows-ownable, pure) and **w4d**
 - Current blocker for w5 is l9: settle the artifact URL/release-asset contract,
   get first green recipe-publish artifacts, and write manifest SHA pins before
   flipping `wsl_lifecycle.rs` from the legacy provisioning manifest.
+
+### Event: 2026-05-26T04:11Z — linux coordinator status reconciliation
+
+- Observed remote heads: `linux-next` `18405840`, `windows-next` `042bf22a`,
+  `osx-next` `18405840`, `main` `ddf52dff`.
+- The `042bf22a` integration watch is resolved: Linux integrated and tested
+  that Windows diagnostics refinement at `881306a`.
+- `origin/windows-next` now has no unmerged Windows delta, but it is 7 commits
+  behind latest `linux-next`. Windows should branch-sync before stacking new
+  code, then run w7 diagnostics against the l9 artifact gate.
+- w5 remains blocked on l9: artifact URL/release-asset contract, first green
+  recipe-publish artifacts, and manifest SHA pins.

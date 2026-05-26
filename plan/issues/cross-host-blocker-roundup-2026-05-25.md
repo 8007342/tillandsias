@@ -415,3 +415,19 @@ blocker view without deleting earlier host notes.
     If live Buildah or GitHub release publishing fails, commit a diagnostic
     packet with the exact failing command/log and preserve enough manifest
     shape for Windows/macOS to build against mocked pins without claiming E2E.
+
+## Linux coordinator audit — 2026-05-26T04:11Z
+
+- Observed remote heads after fetch/pull: `linux-next` `18405840`,
+  `windows-next` `042bf22a`, `osx-next` `18405840`, `main` `ddf52dff`.
+- Resolved since the previous fold: the integration loop merged/tested
+  `origin/windows-next` `042bf22a` at `881306a`; the old "merge/test
+  Windows diagnostics" watch is closed. macOS m4 sub-task B slice 2 landed and
+  is aligned into `linux-next`/`osx-next`.
+- Current high-impact blocker remains l9. It gates Windows w5, macOS m5, and
+  any live runtime provisioning flip that needs real release artifacts and SHA
+  pins.
+- Ready packets: Linux l9; Windows w7 branch-sync diagnostics after merging
+  latest `linux-next`; macOS m4 slice 3 real start/stop wiring. If l9 cannot
+  publish live artifacts, record the exact Buildah/GitHub failure and preserve
+  a manifest shape Windows/macOS can mock against without claiming E2E.

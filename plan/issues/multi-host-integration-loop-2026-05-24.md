@@ -28,6 +28,24 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Coordinator audit 2026-05-26T04:11Z — post-m4 slice2 fold
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- observed_sibling_heads:
+  - main: ddf52dff
+  - linux-next: 18405840
+  - windows-next: 042bf22a
+  - osx-next: 18405840
+- Coordination fold only; no sibling merge attempted in this pass.
+- `origin/osx-next` is aligned with `origin/linux-next` at `18405840` after
+  macOS m4 sub-task B slice 2. `origin/windows-next` has no unmerged Windows
+  delta, but is 7 commits behind latest `linux-next`.
+- Resolved watch: Windows diagnostics refinement `042bf22a` was merged/tested
+  into `linux-next` at `881306a`.
+- Next expected work: Linux l9 should settle the artifact locator contract and
+  first SHA pins; Windows should branch-sync then run w7 diagnostics; macOS
+  should continue m4 slice 3 real start/stop wiring.
+
 ### Cycle 2026-05-26T03:43Z — INTEGRATED (windows diagnose-windows.ps1 refinement)
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
