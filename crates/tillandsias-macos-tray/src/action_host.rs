@@ -199,9 +199,12 @@ declare_class!(
             }
             let message =
                 "Tillandsias — Open Shell stub (m4 sub-task B slice 4). \
-                 In-VM /bin/bash bridge via PTY-over-vsock lands in slice 4b; \
-                 next click then attaches this window to the live VM shell.";
-            match crate::terminal_attach::spawn_open_shell_stub(message) {
+                 Per tray-convergence-coordination 2026-05-26, the canonical \
+                 target is the in-VM forge podman container (not the bare \
+                 VM). Slice 4b wires this window to: \
+                 `podman exec -it tillandsias-<project>-forge bash` over \
+                 PTY-over-vsock via the in-VM headless's pty_handler.";
+            match crate::terminal_attach::spawn_terminal_stub_window(message) {
                 Ok(()) => eprintln!("[tillandsias-tray] Open Shell: stub window spawned"),
                 Err(e) => eprintln!("[tillandsias-tray] Open Shell failed: {e}"),
             }
@@ -209,14 +212,31 @@ declare_class!(
 
         #[method(githubLogin:)]
         fn github_login(&self, _sender: Option<&AnyObject>) {
-            // Slice 5 wires this to the same PTY-over-vsock path as
-            // openShell:, but with the entrypoint set to
-            // `gh auth login` so the device-code flow renders in
-            // Terminal.app. The token lands in the in-VM vault,
-            // never on the host.
-            eprintln!(
-                "[tillandsias-tray] GitHub login clicked (slice 3 stub — wiring lands in slice 5)"
-            );
+            // Slice 5: opens a Terminal.app window with a stub message
+            // mentioning the gh auth device-code flow. Real wiring
+            // (slice 5b) attaches the window to a PtySession::open
+            // launching `gh auth login` inside the in-VM forge
+            // container; the device code renders in this window and
+            // the resulting token lands in the in-VM vault, never on
+            // the host (per spec invariant `terminal-attach-no-ssh`).
+            let ivars = self.ivars();
+            if ivars.vm.lock().unwrap().is_none() {
+                eprintln!(
+                    "[tillandsias-tray] GitHub login: no VM running. Start VM first."
+                );
+                return;
+            }
+            let message =
+                "Tillandsias — GitHub login stub (m4 sub-task B slice 5). \
+                 Slice 5b launches `gh auth login` inside the in-VM forge \
+                 container via PTY-over-vsock; the device-code URL and \
+                 paste prompt will render in this window. The resulting \
+                 OAuth token is written to the in-VM vault and is never \
+                 visible to the host (spec invariant `terminal-attach-no-ssh`).";
+            match crate::terminal_attach::spawn_terminal_stub_window(message) {
+                Ok(()) => eprintln!("[tillandsias-tray] GitHub login: stub window spawned"),
+                Err(e) => eprintln!("[tillandsias-tray] GitHub login failed: {e}"),
+            }
         }
     }
 );

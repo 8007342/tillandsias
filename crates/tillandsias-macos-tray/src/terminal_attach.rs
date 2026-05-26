@@ -196,18 +196,20 @@ mod live {
         }
     }
 
-    /// Spawn a Terminal.app window with the v0.0.1 "Open Shell" stub
-    /// message. Detects the best terminal via `LiveInstalledTerminals`
-    /// (iTerm2 > Warp > Terminal.app) and uses the matching AppleScript
-    /// formatter. Returns immediately; the spawned `osascript` waits
-    /// for the AppleScript to apply (a few hundred ms) before exiting.
+    /// Spawn a Terminal.app window that displays `message` and waits
+    /// for the user to close it (Cmd-W). Detects the best terminal
+    /// via `LiveInstalledTerminals` (iTerm2 > Warp > Terminal.app)
+    /// and uses the matching AppleScript formatter. Returns
+    /// immediately; the spawned `osascript` waits for the AppleScript
+    /// to apply (a few hundred ms) before exiting.
     ///
-    /// Slice 4b will replace the echo-and-wait body with a real PTY
-    /// attach pointing the spawned window at the host PTY master that
-    /// bridges to the in-VM `/bin/bash` over vsock.
+    /// Used by the v0.0.1 Open Shell + GitHub login menu actions as
+    /// placeholder UX before the in-VM PTY-over-vsock transport
+    /// lands (slice 4b). The same helper backs both actions; the
+    /// caller picks the message content.
     ///
-    /// @trace plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 4)
-    pub fn spawn_open_shell_stub(message: &str) -> std::io::Result<()> {
+    /// @trace plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slices 4, 5)
+    pub fn spawn_terminal_stub_window(message: &str) -> std::io::Result<()> {
         let snippet = match detect_terminal(&LiveInstalledTerminals) {
             Terminal::ITerm2 => applescript_for_iterm2(&format!(
                 "echo '{}' && echo && echo '(close with Cmd-W)'",
@@ -269,7 +271,7 @@ mod live {
 }
 
 #[cfg(target_os = "macos")]
-pub use live::{spawn_open_shell_stub, spawn_terminal, LiveInstalledTerminals};
+pub use live::{spawn_terminal, spawn_terminal_stub_window, LiveInstalledTerminals};
 
 #[cfg(test)]
 mod tests {
