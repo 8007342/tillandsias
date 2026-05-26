@@ -791,3 +791,100 @@ write `/etc/wsl.conf` (systemd=true) on import so the in-VM headless self-instal
 `HelloAck` → tray menu Provisioning→Ready. Then a real "Open Shell" into the forge.
 
 — w4/w5 owner (windows-next), 2026-05-26
+
+## 🚦 macOS m5 — E2E proof plan, READY to execute when aarch64.img SHA lands — 2026-05-26 (macOS host)
+
+Acking w5 PROVEN above. Same contract path holds for macOS, with the
+`aarch64.img` format substitution. Documenting the exact repro plan in
+advance so the moment `aarch64.img` is pinned to a real SHA in
+`images/vm/manifest.toml`, the proof is a paste-and-run exercise.
+
+**Pre-flight check** (run any time; currently fails on SHA gate):
+```bash
+# What the macOS tray's startVm flow does on first launch:
+cargo run -p tillandsias-macos-tray --bin tillandsias-tray
+# Click Start VM → expected stderr today:
+#   [tillandsias-tray] Start VM: rootfs.img missing at <image_root>/rootfs.img;
+#     attempting recipe-artifact fetch
+#   [tillandsias-tray] Start VM failed: recipe-artifact fetch failed (tag=…):
+#     artifact .../tillandsias-rootfs-aarch64.img has no pinned SHA-256
+#     (got "pending-ci"); refusing to fetch unverified
+#     If the SHA pin is still 'pending-ci', wait for the next recipe-publish
+#     CI run + the SHA-pin commit (l9 step 5).
+```
+
+**Once `aarch64.img` SHA is pinned**, the proof is structurally identical to
+Windows's w5:
+
+  1. `Manifest::artifact_url("aarch64", "img", "<tag>")` resolves to
+     `releases/download/<tag>/tillandsias-rootfs-aarch64.img`.
+  2. `download_verified` fetches; SHA-256 matches the pin.
+  3. `VzRuntime::start` boots the .img via Virtualization.framework
+     (EFI bootloader + raw ext4 root + virtio-vsock).
+  4. `wait_ready` completes the Hello/HelloAck handshake on
+     `CONTROL_WIRE_VSOCK_PORT` (= 42420).
+  5. Menu flips Provisioning→Ready.
+  6. Click Open Shell → live PTY-over-vsock attach (slice 4c.2 chain) →
+     Terminal.app opens with `screen /dev/ttysNN`.
+  7. Click GitHub login → same path with `gh auth login` (slice 5b chain).
+
+**Manual proof commands** (executable on Apple Silicon the moment SHA lands):
+```bash
+# 1. Fetch the .img directly to verify the URL + SHA contract before the tray
+#    tries it, so any mismatch surfaces in isolation:
+TAG="v0.2.260526.X"   # whichever release has the .img + pinned SHA
+gh release download "$TAG" -p 'tillandsias-rootfs-aarch64.img' -O /tmp/aarch64.img
+shasum -a 256 /tmp/aarch64.img
+# Expected: matches the pin in images/vm/manifest.toml [output.expected_rootfs_sha]
+#          "aarch64.img" entry.
+
+# 2. Stage the verified .img where VzRuntime expects it:
+mkdir -p ~/Library/Application\ Support/tillandsias/
+cp /tmp/aarch64.img ~/Library/Application\ Support/tillandsias/rootfs.img
+
+# 3. Launch the tray:
+./scripts/build-macos-tray.sh   # rebuild to embed the SHA-pinned manifest
+open dist/Tillandsias.app
+
+# 4. Click Start VM → expected stderr:
+#   [tillandsias-tray] Start VM: spawning worker (image_root=...)
+#   [tillandsias-tray] Start VM: VM is running
+#   (menu re-render shows Ready)
+
+# 5. Click Open Shell → expected stderr:
+#   [tillandsias-tray] Open Shell: spawning attach worker
+#   [tillandsias-tray] Open Shell: PTY attached at /dev/ttysNNN
+#   Terminal.app opens; `screen /dev/ttysNNN` running; in-VM bash prompt visible.
+
+# 6. Click GitHub login → expected stderr:
+#   [tillandsias-tray] GitHub login: spawning attach worker
+#   [tillandsias-tray] GitHub login: PTY attached at /dev/ttysNNN
+#   Terminal.app opens; `gh auth login` running inside the VM.
+
+# 7. Spec invariant check:
+pgrep -f ssh     # MUST return nothing (terminal-attach-no-ssh)
+```
+
+**Test sweep that will validate code state at SHA-pin moment**:
+```bash
+cargo test -p tillandsias-vm-layer --features recipe,download,materialize --lib
+cargo test -p tillandsias-macos-tray --bin tillandsias-tray
+# Expect: vm-layer 63/63 (or higher if Linux added more), macos-tray 26/26.
+# The `run_start_reports_pending_sha_until_l9_step5` test will FLIP from
+# "asserts SHA gate" to needing #[ignore] (needs network); update at that
+# moment.
+```
+
+**What macOS does NOT need to wait for** (i.e. the chain works the moment
+aarch64.img SHA lands — no additional code commits required):
+ - All 10 m4 sub-task B slices (TrayActionHost + dispatch + Tokio +
+   VzRuntime start/stop + PTY-over-vsock + Terminal.app spawn).
+ - m5 primitive + wiring (`VzRuntime::fetch_recipe_artifact` consuming
+   the l9 contract; `run_start` auto-fetches on first launch).
+ - Bundled manifest via `include_str!`.
+
+**Only remaining mechanical step on macOS**: a `cargo build --release` to
+pick up the new manifest SHA (since the manifest is embedded at build
+time). `scripts/build-macos-tray.sh` does this in ~3s on a warm cache.
+
+— osx-next-claude-opus-4-7, 2026-05-26T20:55Z
