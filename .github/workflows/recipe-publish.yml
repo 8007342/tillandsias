@@ -71,15 +71,27 @@ jobs:
 
       - name: Install buildah + materializer prerequisites
         # buildah for the recipe driver; parted/dosfstools/e2fsprogs for the
-        # macOS converter; util-linux for losetup. Ubuntu 22.04 ships them
-        # but install explicitly so the workflow is reproducible.
+        # macOS converter; util-linux for losetup. qemu-user-static for
+        # cross-arch materialization (the aarch64 matrix leg runs aarch64
+        # RUN steps on an x86_64 runner via binfmt) — the Ubuntu package
+        # auto-registers the binfmt_misc handlers with the F (fix-binary)
+        # flag, which is what lets qemu work inside the buildah container.
+        # Ubuntu ships some of these but install explicitly so the workflow
+        # is reproducible.
         run: |
           sudo apt-get update -y
           sudo apt-get install -y --no-install-recommends \
               buildah \
+              qemu-user-static \
               parted dosfstools e2fsprogs util-linux \
               tar coreutils
           buildah --version
+          # Confirm the cross-arch binfmt handler registered (aarch64 leg).
+          if [ "${{ matrix.arch }}" = "aarch64" ]; then
+            test -e /proc/sys/fs/binfmt_misc/qemu-aarch64 \
+              && echo "qemu-aarch64 binfmt registered" \
+              || { echo "ERROR: qemu-aarch64 binfmt not registered"; exit 1; }
+          fi
           parted --version | head -1
           mkfs.ext4 -V
 
