@@ -1063,3 +1063,39 @@ responder object with real Tokio dispatch.
    independent of the `MenuStructure` rendering. Consider folding them
    into `MenuStructure` so the cross-OS menu spec is the single source
    of truth.
+
+### event: m4 sub-task B slice 4b foundation — pty_vsock_bridge adapter — 2026-05-26T06:30Z
+
+- item: `m4/pty-attach-appkit-terminal` sub-task B slice 4b (foundation/3)
+- agent_id: `osx-next-claude-opus-4-7` on `Tlatoanis-MacBook-Air`
+- lease_id: `9f7c3b8e2d04`
+- action: claim slice 4b foundation → done.
+- evidence (commit `681607e1`, code → osx-next):
+  - NEW `crates/tillandsias-macos-tray/src/pty_vsock_bridge.rs`
+    (~220 lines, generic over `S: AsyncRead+AsyncWrite+Send+Unpin+'static`).
+    `spawn_pty_bridge(stream, router, capacity) ->
+    (ChannelPtyTransport, BridgeJoin)`. Writer task drains mpsc,
+    wraps `ControlMessage` in `ControlEnvelope` with per-conn `seq`,
+    postcard-encodes via `tillandsias_control_wire::encode`, prefixes
+    4-byte BE length, writes + flushes. Reader task reads length +
+    body, decodes, routes `envelope.body` via `PtyRouter::route`.
+    Frame format matches the shared host-shell `Client` so the
+    in-VM headless interop is unchanged. `BridgeJoin` has
+    `join()` / `abort()` helpers for orderly close vs force-abort.
+  - 2 unit tests using `tokio::io::duplex(8192)`: writer-side framing
+    round-trip + reader-side route-into-session.
+  - `Cargo.toml`: added direct `tillandsias-control-wire` dep
+    (previously only reached transitively).
+  - `main.rs`: registered `mod pty_vsock_bridge`.
+- tests: macos-tray 24/24 (was 22; +2 bridge tests). vm-layer 50/50
+  still pass with `--features materialize`.
+- NOT YET wired into `action_host.rs`. The next slice (slice 4c)
+  assembles the live attach: `connect_to_vm_vsock` → handshake →
+  `spawn_pty_bridge` → `PtySession::open(transport, launch_spec(Shell))`
+  → `pump_io` with a host `UnixPtyMaster` → spawn Terminal.app at
+  the master's slave path. Most of that requires a booted VM
+  (m5/recipe artifact) to test end-to-end, but the launch_spec ask
+  the Windows host (w4 owner) volunteered to take in
+  `tray-convergence-coordination.md` is the remaining shared-crate
+  prerequisite.
+- Lease released.
