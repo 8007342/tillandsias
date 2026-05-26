@@ -186,106 +186,104 @@ declare_class!(
 
         #[method(openShell:)]
         fn open_shell(&self, _sender: Option<&AnyObject>) {
-            // Slice 4c.2: full live PTY-over-vsock attach. Composes
-            // open_vsock_stream → connect_pty_bridge → UnixPtyMaster
-            // → PtySession::open → pump_io → spawn_terminal_pty_attach.
-            // Any step failure falls back to a stub Terminal window so
-            // the user always sees concrete UX feedback.
-            let ivars = self.ivars();
-            let vz = match ivars.vm.lock().unwrap().clone() {
-                Some(vz) => vz,
-                None => {
-                    eprintln!(
-                        "[tillandsias-tray] Open Shell: no VM running. Start VM first."
-                    );
-                    return;
-                }
-            };
-            let runtime = ivars.runtime.clone();
-            eprintln!("[tillandsias-tray] Open Shell: spawning attach worker");
-            runtime.spawn(async move {
-                let result = run_open_shell_attach(vz).await;
-                dispatch_to_main_thread(move || {
-                    match result {
-                        Ok(slave_path) => {
-                            eprintln!(
-                                "[tillandsias-tray] Open Shell: PTY attached at {slave_path}"
-                            );
-                            if let Err(e) =
-                                crate::terminal_attach::spawn_terminal_pty_attach(&slave_path)
-                            {
-                                eprintln!(
-                                    "[tillandsias-tray] Open Shell: terminal spawn failed: {e}"
-                                );
-                            }
-                        }
-                        Err(e) => {
-                            eprintln!("[tillandsias-tray] Open Shell failed: {e}");
-                            // Visible fallback so the user knows the
-                            // click registered + why the live attach
-                            // didn't happen.
-                            let stub = format!(
-                                "Tillandsias — Open Shell could not attach. \
-                                 Error: {e}\n\nLive PTY attach needs a booted VM \
-                                 with a working in-VM headless on vsock port \
-                                 42420 (gated on m5 recipe-artifact fetch)."
-                            );
-                            let _ = crate::terminal_attach::spawn_terminal_stub_window(&stub);
-                        }
-                    }
-                });
-            });
+            self.attach_pty(
+                "Open Shell",
+                tillandsias_host_shell::pty::PtyIntent::Shell,
+            );
         }
 
         #[method(githubLogin:)]
         fn github_login(&self, _sender: Option<&AnyObject>) {
-            // Slice 5: opens a Terminal.app window with a stub message
-            // mentioning the gh auth device-code flow. Real wiring
-            // (slice 5b) attaches the window to a PtySession::open
-            // launching `gh auth login` inside the in-VM forge
-            // container; the device code renders in this window and
-            // the resulting token lands in the in-VM vault, never on
-            // the host (per spec invariant `terminal-attach-no-ssh`).
-            let ivars = self.ivars();
-            if ivars.vm.lock().unwrap().is_none() {
-                eprintln!(
-                    "[tillandsias-tray] GitHub login: no VM running. Start VM first."
-                );
-                return;
-            }
-            let message =
-                "Tillandsias — GitHub login stub (m4 sub-task B slice 5). \
-                 Slice 5b launches `gh auth login` inside the in-VM forge \
-                 container via PTY-over-vsock; the device-code URL and \
-                 paste prompt will render in this window. The resulting \
-                 OAuth token is written to the in-VM vault and is never \
-                 visible to the host (spec invariant `terminal-attach-no-ssh`).";
-            match crate::terminal_attach::spawn_terminal_stub_window(message) {
-                Ok(()) => eprintln!("[tillandsias-tray] GitHub login: stub window spawned"),
-                Err(e) => eprintln!("[tillandsias-tray] GitHub login failed: {e}"),
-            }
+            self.attach_pty(
+                "GitHub login",
+                tillandsias_host_shell::pty::PtyIntent::GithubLogin,
+            );
         }
     }
 );
 
-/// Worker body for `openShell:`. Composes the PTY-over-vsock chain:
-/// open vsock stream → handshake + framing → host PTY master →
-/// PtySession::open → pump_io. Returns the slave PTY path so the
-/// main-thread dispatch can spawn Terminal.app pointed at it via
-/// `screen`. Each error path returns a `String` so the dispatch can
-/// surface it via the stub-window fallback.
+impl TrayActionHost {
+    /// Shared composition body for the PTY-attach selectors
+    /// (`openShell:` and `githubLogin:`). Gates on a live VM handle,
+    /// spawns a Tokio worker that runs `run_pty_attach`, and
+    /// dispatches the result back to the main thread to either
+    /// spawn Terminal.app on the slave PTY path or pop a stub
+    /// window with the error.
+    ///
+    /// `label` is the user-facing action name used in stderr logs
+    /// and the stub fallback message. `intent` is the canonical
+    /// `PtyIntent` consumed by `launch_spec`.
+    fn attach_pty(&self, label: &'static str, intent: tillandsias_host_shell::pty::PtyIntent) {
+        let ivars = self.ivars();
+        let vz = match ivars.vm.lock().unwrap().clone() {
+            Some(vz) => vz,
+            None => {
+                eprintln!(
+                    "[tillandsias-tray] {label}: no VM running. Start VM first."
+                );
+                return;
+            }
+        };
+        let runtime = ivars.runtime.clone();
+        eprintln!("[tillandsias-tray] {label}: spawning attach worker");
+        runtime.spawn(async move {
+            let result = run_pty_attach(vz, intent).await;
+            dispatch_to_main_thread(move || {
+                match result {
+                    Ok(slave_path) => {
+                        eprintln!(
+                            "[tillandsias-tray] {label}: PTY attached at {slave_path}"
+                        );
+                        if let Err(e) =
+                            crate::terminal_attach::spawn_terminal_pty_attach(&slave_path)
+                        {
+                            eprintln!(
+                                "[tillandsias-tray] {label}: terminal spawn failed: {e}"
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        eprintln!("[tillandsias-tray] {label} failed: {e}");
+                        let stub = format!(
+                            "Tillandsias — {label} could not attach. \
+                             Error: {e}\n\nLive PTY attach needs a booted VM \
+                             with a working in-VM headless on vsock port \
+                             42420 (gated on m5 recipe-artifact fetch)."
+                        );
+                        let _ = crate::terminal_attach::spawn_terminal_stub_window(&stub);
+                    }
+                }
+            });
+        });
+    }
+}
+
+/// Shared worker body for the PTY-attach selectors. Composes the
+/// PTY-over-vsock chain: open vsock stream → handshake + framing →
+/// host PTY master → PtySession::open(launch_spec(intent, ...)) →
+/// pump_io. Returns the slave PTY path so the main-thread dispatch
+/// can spawn Terminal.app pointed at it via `screen`.
+///
+/// `intent` selects the in-VM command — `Shell` for /bin/bash -l,
+/// `GithubLogin` for `gh auth login`, etc. With project=None the
+/// command targets the bare VM per the convergence-coordination
+/// fallback (slice 5b' will surface project selection from
+/// MenuStructure once it carries that state).
 ///
 /// Each spawned tokio task (the bridge writer/reader, pump_io's two
 /// halves) runs detached for v0.0.1; they unwind naturally when the
 /// session closes (PTY EOF, vsock drop, or Terminal.app `screen`
 /// session exits).
-async fn run_open_shell_attach(vz: std::sync::Arc<VzRuntime>) -> Result<String, String> {
+async fn run_pty_attach(
+    vz: std::sync::Arc<VzRuntime>,
+    intent: tillandsias_host_shell::pty::PtyIntent,
+) -> Result<String, String> {
     use std::sync::Arc;
     use std::time::Duration;
     use tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
     use tillandsias_host_shell::pty::unix::UnixPtyMaster;
     use tillandsias_host_shell::pty::{
-        launch_spec, pump_io, PtyIntent, PtyRouter, PtySession, SessionIdAllocator,
+        launch_spec, pump_io, PtyRouter, PtySession, SessionIdAllocator,
     };
 
     let stream = vz
@@ -305,11 +303,10 @@ async fn run_open_shell_attach(vz: std::sync::Arc<VzRuntime>) -> Result<String, 
     .await
     .map_err(|e| format!("control-wire handshake: {e}"))?;
 
-    let master =
-        UnixPtyMaster::open(24, 80).map_err(|e| format!("openpty: {e}"))?;
+    let master = UnixPtyMaster::open(24, 80).map_err(|e| format!("openpty: {e}"))?;
     let slave_path = master.slave_path().to_string();
 
-    let opts = launch_spec(&PtyIntent::Shell, None, 24, 80);
+    let opts = launch_spec(&intent, None, 24, 80);
     let session = PtySession::open(Arc::new(transport), &alloc, &router, &opts)
         .map_err(|e| format!("PtyOpen: {e}"))?;
 
