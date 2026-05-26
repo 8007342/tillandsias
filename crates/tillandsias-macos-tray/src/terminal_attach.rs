@@ -108,6 +108,26 @@ pub fn applescript_escape(input: &str) -> String {
     out
 }
 
+/// AppleScript that opens a Terminal.app window and echos a stub message.
+/// Used by the v0.0.1 "Open Shell" action before the in-VM PTY-over-vsock
+/// transport (slice 4b) lands; gives the user concrete UX feedback (a
+/// new window opens with the message visible) while the underlying
+/// bridge is still being built. `message` is single-quoted-then-escaped
+/// for `echo` to avoid shell-injection surprises from any text we
+/// surface back.
+///
+/// @trace plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 4)
+pub fn applescript_for_open_shell_stub(message: &str) -> String {
+    // Escape the message for safe inclusion inside a single-quoted shell
+    // string: convert each ' to '\''.
+    let shell_escaped: String = message.replace('\'', "'\\''");
+    // Wrap in `echo '…'; sleep N` so the window stays open long enough
+    // for the user to read the message before Terminal.app's "shell
+    // exited" prompt appears.
+    let command = format!("echo '{shell_escaped}'; echo; echo '(window stays open — close with Cmd-W)'");
+    applescript_for_terminal_app(&command)
+}
+
 /// AppleScript snippet for Terminal.app — `do script` opens a new window
 /// and runs the command interactively.
 ///
@@ -176,6 +196,42 @@ mod live {
         }
     }
 
+    /// Spawn a Terminal.app window with the v0.0.1 "Open Shell" stub
+    /// message. Detects the best terminal via `LiveInstalledTerminals`
+    /// (iTerm2 > Warp > Terminal.app) and uses the matching AppleScript
+    /// formatter. Returns immediately; the spawned `osascript` waits
+    /// for the AppleScript to apply (a few hundred ms) before exiting.
+    ///
+    /// Slice 4b will replace the echo-and-wait body with a real PTY
+    /// attach pointing the spawned window at the host PTY master that
+    /// bridges to the in-VM `/bin/bash` over vsock.
+    ///
+    /// @trace plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 4)
+    pub fn spawn_open_shell_stub(message: &str) -> std::io::Result<()> {
+        let snippet = match detect_terminal(&LiveInstalledTerminals) {
+            Terminal::ITerm2 => applescript_for_iterm2(&format!(
+                "echo '{}' && echo && echo '(close with Cmd-W)'",
+                message.replace('\'', "'\\''"),
+            )),
+            Terminal::Warp => {
+                // Warp doesn't honor osascript snippets; open the app
+                // and let the user paste the next step. For the stub
+                // message we just open Warp.
+                std::process::Command::new("open")
+                    .arg("-a")
+                    .arg("Warp")
+                    .spawn()?;
+                return Ok(());
+            }
+            Terminal::TerminalApp => applescript_for_open_shell_stub(message),
+        };
+        std::process::Command::new("osascript")
+            .arg("-e")
+            .arg(&snippet)
+            .spawn()?;
+        Ok(())
+    }
+
     /// Spawn the chosen terminal via `osascript -e <snippet>` (or `open -a`
     /// for Warp). Returns immediately; the terminal runs detached.
     ///
@@ -213,7 +269,7 @@ mod live {
 }
 
 #[cfg(target_os = "macos")]
-pub use live::{LiveInstalledTerminals, spawn_terminal};
+pub use live::{spawn_open_shell_stub, spawn_terminal, LiveInstalledTerminals};
 
 #[cfg(test)]
 mod tests {
@@ -302,6 +358,23 @@ mod tests {
         assert!(!cmd.contains("ssh"), "vm_exec must never use ssh: {cmd}");
         assert!(cmd.contains("podman exec -it"));
         assert!(cmd.contains("tillandsias-tillandsias-forge"));
+    }
+
+    /// @trace plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 4)
+    #[test]
+    fn open_shell_stub_quotes_message_safely() {
+        let snippet = applescript_for_open_shell_stub("hi 'there'");
+        // The shell-escape sequence `'\''` is then AppleScript-escaped
+        // (backslashes doubled), so the literal in the final snippet
+        // shows as `'\\''` per single-quote in the original message.
+        assert!(
+            snippet.contains("hi '\\\\''there'\\\\''"),
+            "expected shell+applescript-escaped single quotes; got: {snippet}"
+        );
+        // And it MUST go through the Terminal.app envelope so the user
+        // gets a visible window.
+        assert!(snippet.contains("tell application \"Terminal\""));
+        assert!(snippet.contains("do script"));
     }
 
     /// @trace spec:macos-native-tray.lifecycle.terminal-attach@v1

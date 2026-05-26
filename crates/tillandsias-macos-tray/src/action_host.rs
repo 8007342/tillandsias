@@ -186,12 +186,25 @@ declare_class!(
 
         #[method(openShell:)]
         fn open_shell(&self, _sender: Option<&AnyObject>) {
-            // Slice 4 wires this to `PtySession::open(/bin/bash)`
-            // over the vsock control-wire + `open -a Terminal.app`
-            // with the PTY's slave path. Matches Linux tray UX.
-            eprintln!(
-                "[tillandsias-tray] Open Shell clicked (slice 3 stub — wiring lands in slice 4)"
-            );
+            // Slice 4: open a Terminal.app window with a stub message
+            // (in-VM PTY-over-vsock transport lands in slice 4b).
+            // Gate on VM being up: opening a shell to a dead VM is a
+            // user-facing footgun.
+            let ivars = self.ivars();
+            if ivars.vm.lock().unwrap().is_none() {
+                eprintln!(
+                    "[tillandsias-tray] Open Shell: no VM running. Start VM first."
+                );
+                return;
+            }
+            let message =
+                "Tillandsias — Open Shell stub (m4 sub-task B slice 4). \
+                 In-VM /bin/bash bridge via PTY-over-vsock lands in slice 4b; \
+                 next click then attaches this window to the live VM shell.";
+            match crate::terminal_attach::spawn_open_shell_stub(message) {
+                Ok(()) => eprintln!("[tillandsias-tray] Open Shell: stub window spawned"),
+                Err(e) => eprintln!("[tillandsias-tray] Open Shell failed: {e}"),
+            }
         }
 
         #[method(githubLogin:)]
