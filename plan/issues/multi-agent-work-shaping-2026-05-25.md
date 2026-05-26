@@ -2,7 +2,7 @@
 
 trace: methodology/distributed-work.yaml, methodology/multi-host-development.yaml, .codex/skills/coordinate-multihost-work/SKILL.md
 
-Status: **ACTIVE CANON** as of 2026-05-25T19:30Z. This issue is the durable
+Status: **ACTIVE CANON** as of 2026-05-26T01:13Z. This issue is the durable
 coordination note for making recurrent Linux, Windows, and macOS agents work in
 larger, evidence-producing packets instead of tiny sequential chores.
 
@@ -36,13 +36,17 @@ Windows or macOS sit idle merely because a Linux dependency is still in flight.
 
 Current fallback intent:
 
-- Windows: if w4 ConPTY stalls or w5 remains gated, claim w6 verification or
+- Windows: w4 is done/integrated. `origin/windows-next` is ahead with the
+  w5 `tar_to_wsl_import` converter slice at `cb39cb7c`; until that is
+  merge/tested and recipe-publish artifacts exist, use w6 verification or
   cache/diagnostics work that does not depend on the rootfs artifact.
-- macOS: m4 and m6 are both ready while m5 waits for the materializer/rootfs
-  chain; m4 host-side wiring can proceed before the full Hello/HelloAck smoke.
-- Linux: l7 materializer remains the highest-impact dependency tail; if it
-  stalls, publish its narrowest failed diagnostic chain and split only by
-  materializer API, cache/export, and CI evidence boundaries.
+- macOS: m7 is done. m4 action-host wiring and the m5
+  `tar_to_vfr_img`/CI-fetch path are the next useful packets; m4 can still
+  proceed before the full VM artifact smoke.
+- Linux: l7 materializer shipped at `9dca2c47`. The next Linux-sized packet is
+  a materializer follow-up that fixes the reported `cache.rs:134`
+  `collapsible_if`, confirms strict clippy, and records whether the buildah
+  subprocess body remains deferred to recipe-smoke CI.
 
 ## Remote Progress Health
 

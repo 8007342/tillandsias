@@ -192,3 +192,38 @@ Current cross-host gates:
   the smallest materializer API/cache/export slice after a fresh read.
 - macOS m4 and m7 are both ready; macOS m5 remains blocked on l7 plus
   macOS-owned l5 recipe-publish/CI-fetch.
+
+## Coordination Audit - 2026-05-26T01:13Z
+
+host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+
+Observed remote heads after fetch/pull:
+
+- `main`: ddf52dff
+- `linux-next`: cabf9c9f
+- `windows-next`: cb39cb7c
+- `osx-next`: 4aa42c6a
+
+Ledger corrections made in this audit:
+
+- Folded terminal events into `plan/issues/windows-next-work-queue-2026-05-25.md`:
+  Windows w4 is done/integrated at `95e4714`, l7 is done at `9dca2c47`, and
+  `origin/windows-next` is now ahead only with the w5 `tar_to_wsl_import`
+  converter slice at `cb39cb7c`.
+- Folded terminal events into `plan/issues/osx-next-work-queue-2026-05-25.md`:
+  macOS m7 is done at `c9341fa6`, m4 remains ready for action-host wiring, and
+  m5 is unblocked from the Linux materializer API but still waits on
+  recipe-publish/CI-fetch plus the macOS converter.
+- Updated `plan.yaml`, `plan/index.yaml`, and the work-shaping note so fresh
+  agents no longer treat l7 as stale or w4/m7 as ready work.
+
+Current cross-host gates:
+
+- `origin/windows-next` commit `cb39cb7c` needs Linux integration-loop
+  merge/test before its w5 converter code is consumed from `linux-next`.
+- macOS-owned recipe-publish/CI-fetch and `tar_to_vfr_img` work gate the
+  default non-Linux rootfs path and the final m5/w5 provisioning smoke.
+- Linux materializer follow-up should fix the reported `cache.rs:134`
+  `collapsible_if` and record strict clippy evidence.
+- Recurring rustfmt version skew between Windows and macOS-owned files needs a
+  workspace pin or agreed Linux fmt pass.

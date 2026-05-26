@@ -1,63 +1,54 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-05-26T00:18Z
+LastExecutionTime: 2026-05-26T01:13Z
 
 ## This Loop
 
-- Fetched origin, fast-forwarded local `linux-next` from `d346ee07` to
-  `effbfbf4`, and fresh-read methodology, plan, active queues, blocker roundup,
-  and integration-loop ledger.
-- Observed remote heads after the post-push refresh: `linux-next` `fd7d904e`,
-  `windows-next` `ae8789ff`, `osx-next` `effbfbf4`, `main` `ddf52dff`.
-- Reconciled macOS queue headers with terminal events: m1b is done/released,
-  m6 is done, m7 is ready, and m4 has the Unix PTY foundation with
-  user-facing `terminal_attach` wiring still ready.
-- Recorded that `origin/windows-next` is ahead at `ae8789ff`; its w4 code
-  delta still runs through `93427ed9`, and the latest Windows merge absorbed
-  macOS PTY foundation but not this coordination commit. The branches still
-  need integration-loop merge/test rather than a fast-forward.
-- Pinged stale Linux l7 materializer lease `linux-l-mat-2026-05-25T15Z`;
-  no materializer checkpoint was found after the default TTL.
+- Fetched origin, fast-forwarded local `linux-next` from `67ceab51` to
+  `cabf9c9f`, and fresh-read methodology, plan, active work queues, blocker
+  roundup, and integration-loop ledgers.
+- Observed remote heads: `linux-next` `cabf9c9f`, `windows-next` `cb39cb7c`,
+  `osx-next` `4aa42c6a`, `main` `ddf52dff`.
+- Reconciled stale mirrors: Windows w4 is done/integrated at `95e4714`, Linux
+  l7 materializer shipped at `9dca2c47`, macOS m7 is done at `c9341fa6`, and
+  Windows w5 converter code is ahead on `origin/windows-next` at `cb39cb7c`.
+- Updated step-21 status, per-host queues, work-shaping notes, and blocker
+  roundup so fresh agents no longer chase stale l7/w4/m7 work.
 
 ## Expected Next Loop
 
-- Merge/test `origin/windows-next` into `linux-next` or record exact conflicts;
-  pay attention to `host-shell::pty` because Windows menu launch work and macOS
-  Unix PTY foundation both touched that area.
-- A Linux/materializer-capable agent should renew, release, or reclaim l7 with
-  a status packet covering plan, blockers, files touched, evidence, and next
-  checkpoint.
-- macOS should pick m4 terminal wiring or m7 CI/tarball; m5 waits for l7 plus
-  l5 recipe-publish/CI-fetch.
-- Windows should avoid duplicate w4 claims; w5 and useful live-VM w6 evidence
-  remain blocked on the recipe/materializer path.
+- Merge/test `origin/windows-next` `cb39cb7c` into `linux-next` or record exact
+  conflicts for the w5 `tar_to_wsl_import` converter.
+- macOS should claim m4 action-host wiring or m5 `tar_to_vfr_img` /
+  recipe-publish/CI-fetch work; m4 is the visible UX path, m5 closes the VM
+  artifact path.
+- Linux should fix the reported l7 `materialize/cache.rs:134` clippy warning
+  and decide whether to pin rustfmt or run an agreed Linux fmt pass.
+- Windows should avoid duplicate w4/w5 converter work; w6 verification and
+  diagnostics remain useful fallbacks while CI rootfs artifacts are pending.
 
 ## Resolved Since Previous Loop
 
-- macOS m1b completed the VZ vsock connector, `VsockStream`, and wait_ready
-  Hello/HelloAck probe; lease `7c2a9f1eb083` released.
-- macOS m6 completed build/install scripts and verified the signed app bundle
-  launches; m7 is now ready.
-- macOS m4 foundation landed as `pty::unix`; remaining m4 work is scoped to
-  user-facing Terminal.app wiring.
+- Linux l7 materializer driver shipped and cleared the stale lease.
+- Windows w4 PTY launch/menu wiring merged and tested into `linux-next`.
+- macOS m7 CI/release job completed; m4 Quit/version header slice landed.
+- Windows completed the w5 `tar_to_wsl_import` converter on `windows-next`.
 
 ## Current Major Blockers
 
-- Linux l7 `§3-materializer-driver`: stale lease
-  `linux-l-mat-2026-05-25T15Z`; blocks Windows w5, macOS m5, and live-VM
-  verification for w6 / PTY attach smoke.
-- Windows w4 integration: `origin/windows-next` is ahead at `ae8789ff`
-  and must be merge/tested into `linux-next`.
-- macOS l5 recipe-publish / CI-fetch: still macOS-owned and waits on l7's
-  rootfs-tar API.
+- `origin/windows-next` `cb39cb7c` needs integration-loop merge/test.
+- macOS-owned recipe-publish/CI-fetch plus `tar_to_vfr_img` gate m5/w5
+  end-to-end provisioning.
+- Linux l7 clippy follow-up and cross-host rustfmt skew need cleanup before
+  strict multi-host CI can be treated as stable.
 
 ## Validation
 
-- `git ls-remote origin refs/heads/main refs/heads/linux-next refs/heads/windows-next refs/heads/osx-next`: passed.
 - PyYAML parsed `plan.yaml` and `plan/index.yaml`.
 - `git diff --check` passed for touched coordination files.
 - Files changed this pass: `plan/loop_status.md`, `plan.yaml`,
-  `plan/index.yaml`, `plan/issues/multi-host-coordination-2026-05-24.md`,
+  `plan/index.yaml`, `plan/issues/multi-agent-work-shaping-2026-05-25.md`,
+  `plan/issues/multi-host-coordination-2026-05-24.md`,
   `plan/issues/cross-host-blocker-roundup-2026-05-25.md`,
   `plan/issues/windows-next-work-queue-2026-05-25.md`,
   `plan/issues/osx-next-work-queue-2026-05-25.md`.
