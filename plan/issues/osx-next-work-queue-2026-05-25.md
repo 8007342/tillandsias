@@ -1572,3 +1572,65 @@ is booted with an in-VM headless on vsock 42420 (gated on m5/l9).
 - Current macOS next action: wire the m5 primitive into `startVm:` while
   preserving the recoverable `"pending-ci"` gate. Live PTY proof still waits
   for a provisioned VM.
+
+### event: m5 wiring — auto-fetch on Start VM first launch — 2026-05-26T16:21Z
+
+- item: `m5/vfr-image-via-ci-rootfs` (wiring complete)
+- agent_id: `osx-next-claude-opus-4-7` on `Tlatoanis-MacBook-Air`
+- lease_id: `3f8b4a2c9e51`
+- action: claim → done. **m5 plumbing complete end-to-end** —
+  Start VM auto-fetches the recipe artifact before booting on first
+  launch. Only remaining gate: l9 step 5 (CI SHA pin commit).
+- evidence (commit `080a8e60`, code → osx-next):
+  - `Cargo.toml`: enabled `(recipe, download)` features on the
+    `tillandsias-vm-layer` dep.
+  - `action_host.rs::run_start`: pre-start gate now calls
+    `vz.fetch_recipe_artifact(&BUNDLED_MANIFEST, &tag).await` when
+    `!vz.is_provisioned()`. `BUNDLED_MANIFEST_TOML` is the repo's
+    `images/vm/manifest.toml` embedded via `include_str!` (the .app
+    needs no network for the manifest itself, only the artifact bytes).
+    `tag = format!("v{CARGO_PKG_VERSION}")`.
+  - User-actionable error on fetch failure: "If the SHA pin is still
+    'pending-ci', wait for the next recipe-publish CI run + the
+    SHA-pin commit (l9 step 5)."
+  - Test renamed `run_start_reports_unprovisioned` →
+    `run_start_reports_pending_sha_until_l9_step5`; asserts the
+    fetch-path engages first + the SHA gate refuses gracefully.
+- tests: macos-tray 27/27 (same count, updated assertion). vm-layer
+  60/60 with `--features recipe,download,materialize`.
+- behavior matrix:
+    - Before l9 step 5 (today): fresh install → fetch attempts →
+      SHA gate refuses → user-visible error with l9-step-5
+      explanation. No state change. UI stays Provisioning.
+    - After l9 step 5: fresh install → fetch downloads + verifies →
+      start() boots → wait_ready completes handshake → menu flips
+      Ready → Open Shell + GitHub login exercise the live
+      PTY-over-vsock path.
+- Lease released.
+
+### macOS-side gate summary — 2026-05-26T16:21Z
+
+After this commit, macOS owns ZERO remaining blocking work for
+v0.0.1. Pending macOS work all has clear plumbing:
+  - m4 sub-task B (Open Shell, GitHub login, Start/Stop VM, Quit): DONE
+  - m5 (recipe artifact fetch): DONE pending l9 step 5
+  - m7 (CI build + release tarball): DONE
+  - m8 (autonomous smoke portion): DONE; manual click-through awaits user
+
+True remaining blockers (NOT macOS-owned):
+  - Linux l9 step 5: CI SHA pin commit (recipe-publish CI run +
+    follow-up PR with real SHAs replacing "pending-ci")
+  - User interactive m8 smoke (7-step checklist)
+
+Optional next-iter productive macOS work that's NOT blocked:
+  1. MenuStructure project threading — surface active project from
+     MenuStructure to `attach_pty`, so `launch_spec(intent, project,
+     ...)` lands in the forge container instead of bare-VM bash.
+  2. Clippy sweep on the new code (m4 sub-task B + m5 ~600 LOC).
+  3. MenuStructure integration — fold the four manual menu items in
+     `status_item::append_actions` into the portable MenuStructure
+     spec.
+
+After 1-3 are done, the macOS loop will trend toward noop and the
+adaptive cadence will stretch 30m → 1h → 2h → 4h → 6h cap until l9
+step 5 lands.
