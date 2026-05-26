@@ -2,14 +2,16 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
-Status: **OPEN** as of 2026-05-26T04:11Z. macOS m1, m1b, m2, m3, m6, and
-m7 are done. m4 has its Unix PTY foundation (`0551a265`), Quit/version header
-slice (`79ff0571`), TrayActionHost menu wiring (`38bd7669`), and main-thread
-dispatch + Tokio startVm worker scaffold (`3c3b565f` / integrated at
-`18405840`). Remaining m4 slices are real start/stop, Open Shell, and GitHub
-login. Full live recipe provisioning is still gated on l9 artifact URL/SHA
-pins, first green recipe-publish artifacts, and the macOS runtime provisioning
-flip away from the current deferred extraction/conversion stubs.
+Status: **OPEN** as of 2026-05-26T06:02Z. macOS m1, m1b, m2, m3, m6,
+m7, and the original m4 sub-task B 5-slice action-host plan are done. The
+latest folded macOS code is `3e7af023` / plan packet `0aff8003`, absorbed by
+`linux-next` by `fcebc98d`: real Start/Stop VM wiring exists, Open Shell and
+GitHub Login now open Terminal stub windows, and the shared forge-container
+target is recorded in `plan/issues/tray-convergence-coordination.md`.
+Remaining macOS live-terminal work is m4 slice 4b/5b (real PTY-over-vsock
+instead of stubs), gated on l9 artifact URL/SHA pins, first green
+recipe-publish artifacts, and the macOS runtime provisioning flip away from
+the current deferred extraction/conversion stubs.
 
 ## How to use this file
 
@@ -37,10 +39,10 @@ Per branch canon §4, plan/-class writes directly are CORRECT; code commits
 SHOULD route through `osx-next` so the integration loop can run isolation
 checks. Advisory only; both flows still work.
 
-Work-shaping note: m4 action-host wiring remains the best macOS packet while
-Linux l9 produces a fetchable artifact contract and SHA pins. m5 runtime
-provisioning can be shaped against the artifact contract, but E2E should wait
-for first green recipe-publish SHAs.
+Work-shaping note: m5 runtime provisioning can be shaped against the artifact
+contract, but E2E should wait for first green recipe-publish SHAs. While Linux
+l9 is pending, the best macOS fallback is m8 below: no-VM AppKit action smoke,
+stub polish, and branch-sync evidence.
 
 ## Currently unblocked / active
 
@@ -81,12 +83,20 @@ for first green recipe-publish SHAs.
 - type: feature
 - owner_host: macos
 - capability_tags: [appkit, objc2, pty, vsock, terminal-app]
-- status: ready
-- gated_on: []
+- status: blocked
+- gated_on:
+  - `m5/vfr-image-via-ci-rootfs`
+  - shared forge-target `launch_spec` amendment in
+    `plan/issues/tray-convergence-coordination.md`
 - cleared_gates:
   - linux deliverable `l1/control-wire-pty-attach-tasks-1` shipped at `b345ae68`
   - linux deliverable `l3/in-vm-headless-pty-handler` shipped at
     `f770e013`/`8dc0d129`
+  - m4 sub-task B slice 1 (`38bd7669`) TrayActionHost class + four menu items
+  - m4 sub-task B slice 2 (`3c3b565f`) main-thread dispatch + Tokio runtime
+  - m4 sub-task B slice 3 (`af7ba46a`) VzRuntime start/stop menu wiring
+  - m4 sub-task B slice 4 (`075465ce`) Open Shell Terminal stub
+  - m4 sub-task B slice 5 (`3e7af023`) GitHub Login Terminal stub
 - depends_on: [m1/vmruntime-stop-and-wait-ready]
 - owned_files:
   - `crates/tillandsias-macos-tray/src/terminal_attach.rs`
@@ -95,16 +105,54 @@ for first green recipe-publish SHAs.
     Implement the macOS side of `control-wire-pty-attach` Task 3.2
     (Unix `nix::pty::openpty` + `tokio::process::Command`) and wire
     "Open Shell" + "GitHub login" menu items to `PtySession::open(...)`,
-    then `NSWorkspace::open(Terminal.app, with: <master-fd-as-tty>)`.
-    The action-host class, four menu items, main-thread dispatch helper, and
-    Tokio worker scaffold are in-tree. Next slices replace the startVm
-    placeholder with real `VzRuntime` start/stop and wire Open Shell/GitHub
-    login through `PtySession`.
+    then `NSWorkspace::open(Terminal.app, with: <master-fd-as-tty>)`. The
+    action-host class, four menu items, main-thread dispatch helper, Tokio
+    worker, real VzRuntime start/stop, and stub Terminal windows are in-tree.
+    Remaining slices 4b/5b replace the stubs with real PTY-over-vsock once m5
+    provides a booted forge-container VM and the shared `launch_spec` amendment
+    settles forge targeting.
 - estimated_effort: 1–2 days.
 - verification_note: >
-    Host-side wiring can start now. m1b's AsyncRead/AsyncWrite wrapper and
-    Hello/HelloAck wait_ready handshake are done; full terminal-attach smoke
-    still needs a booted/provisioned VM path.
+    Full terminal-attach smoke needs a booted/provisioned VM path. Until l9/m5
+    lands, use m8 for no-VM AppKit action smoke and stub-window regression
+    evidence.
+
+### Item: m8/appkit-action-smoke-and-stub-polish
+
+- id: `m8/appkit-action-smoke-and-stub-polish`
+- type: diagnostics
+- owner_host: macos
+- capability_tags: [appkit, macos-bundle, diagnostics]
+- status: ready
+- depends_on: []
+- cleared_gates:
+  - m4 sub-task B slices 1-5 are complete through `3e7af023`
+- blocks: []
+- owned_files:
+  - `crates/tillandsias-macos-tray/src/action_host.rs`
+  - `crates/tillandsias-macos-tray/src/terminal_attach.rs`
+  - `scripts/build-macos-tray.sh`
+- summary: >
+    No-VM fallback while l9/m5 gate real PTY attach: sync latest `linux-next`,
+    rebuild the macOS tray, launch the app bundle, and verify Start VM,
+    Stop VM, Open Shell, GitHub Login, and Quit behavior in the unprovisioned
+    state. Preserve the expected "not yet materialized" Start VM error and
+    Terminal stub-window messages without panic, deadlock, or menu regression.
+- next_action: >
+    Claim this packet, merge latest `linux-next` into `osx-next`, run the
+    macOS tray build/tests, perform a short manual menu smoke, and append an
+    agent_status_packet with screenshots or log snippets if available.
+- acceptance_evidence:
+  - `cargo test -p tillandsias-macos-tray` result on macOS.
+  - `scripts/build-macos-tray.sh` or equivalent app-bundle build result.
+  - Manual no-VM menu smoke notes for the four action-host menu items.
+- agent_status_packet_expected:
+  - current plan
+  - dependencies and blockers
+  - files touched
+  - evidence produced
+  - next checkpoint
+  - lease intent
 
 ### Item: m1/vmruntime-stop-and-wait-ready
 
@@ -1063,3 +1111,20 @@ responder object with real Tokio dispatch.
    independent of the `MenuStructure` rendering. Consider folding them
    into `MenuStructure` so the cross-OS menu spec is the single source
    of truth.
+
+### event: linux coordinator status reconciliation — 2026-05-26T06:02Z
+
+- Observed remote heads: `linux-next` `fcebc98d`, `windows-next` `042bf22a`,
+  `osx-next` `0aff8003`, `main` `ddf52dff`.
+- Folded the latest terminal events into the header: m4 sub-task B slices 3,
+  4, and 5 completed, and `linux-next` has absorbed the full five-slice
+  action-host series through `fcebc98d`.
+- Reclassified m4 from ready to blocked for its remaining real PTY-over-vsock
+  slices 4b/5b, because those need a booted recipe-provisioned VM (m5) and the
+  shared forge-target `launch_spec` amendment recorded in
+  `plan/issues/tray-convergence-coordination.md`.
+- Added ready fallback `m8/appkit-action-smoke-and-stub-polish` so macOS has a
+  useful no-VM packet while l9/m5 remain gated.
+- Next macOS choices: claim m8 for no-VM AppKit action smoke, or prepare m4
+  slice 4b/5b design against the shared `launch_spec` without claiming E2E
+  until m5 lands.

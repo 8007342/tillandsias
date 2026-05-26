@@ -2,15 +2,17 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/windows-next-thin-tray.md, plan/issues/tray-convergence-coordination.md, plan/issues/control-socket-protocol-convergence-2026-05-25.md, openspec/changes/control-wire-pty-attach/
 
-Status: **OPEN** as of 2026-05-26T04:11Z. Windows w1, w2, w3, w4, w6
+Status: **OPEN** as of 2026-05-26T06:02Z. Windows w1, w2, w3, w4, w6
 diagnostics, and the w5 `materialize::wsl::tar_to_wsl_import` converter are
 done/integrated through `linux-next`; the integration-loop merge/test of
 `origin/windows-next` `042bf22a` completed at `881306a`. `origin/windows-next`
-currently has no unmerged Windows delta and is 7 commits behind `linux-next`
-`18405840`. Remaining WSL rootfs provisioning work is gated on l9: the artifact
+currently has no unmerged Windows delta and is 17 commits behind `linux-next`
+`fcebc98d`. Remaining WSL rootfs provisioning work is gated on l9: the artifact
 URL/release-asset contract, first green recipe-publish artifacts, manifest SHA
 pins, and the Windows tray runtime flip away from the older provisioning
-manifest.
+manifest. Windows also volunteered to amend shared `launch_spec` /
+`intent_for_action` for forge-container targeting unless l-headless or m4
+objects in the next cycle.
 
 ## How to use this file
 
@@ -36,7 +38,7 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
 
 - `w7/recipe-diagnostics-and-branch-sync` remains ready as a no-VM fallback:
   `origin/windows-next` has no unmerged delta, but it is behind `linux-next`
-  `18405840`. The next useful packet is a Windows branch-sync pull/merge of
+  `fcebc98d`. The next useful packet is a Windows branch-sync pull/merge of
   latest `linux-next`, then diagnostic output against the l9 artifact gate.
 - `w6/vm-status-and-enumerate-real-handlers` is done as a no-VM diagnostics
   fallback through `948af711` / integration cycle `b3ae21a`. Live VM status
@@ -66,9 +68,11 @@ and branch sync.
     Keep the Windows no-VM diagnostic current while the recipe artifact path
     finishes. `origin/windows-next` `042bf22a` has already been merged/tested
     into `linux-next`, but the branch now needs to absorb `linux-next`
-    `18405840`. Report whether the script still accurately distinguishes the
+    `fcebc98d`. Report whether the script still accurately distinguishes the
     completed BuildahExec/materialize-cli implementation from the still-missing
-    l9 artifact URL/SHA pins.
+    l9 artifact URL/SHA pins. If no one objects to the
+    `tray-convergence-coordination.md` proposal, the same branch-sync packet may
+    carry the pure host-shell `launch_spec` forge-target amendment and tests.
 - next_action: >
     Pull or merge latest `origin/linux-next` into `windows-next`, run
     `scripts/diagnose-windows.ps1` on Windows, and append an
@@ -660,5 +664,22 @@ Next greedy pickups (no VM needed): **w4b** (windows-ownable, pure) and **w4d**
 - `origin/windows-next` now has no unmerged Windows delta, but it is 7 commits
   behind latest `linux-next`. Windows should branch-sync before stacking new
   code, then run w7 diagnostics against the l9 artifact gate.
+- w5 remains blocked on l9: artifact URL/release-asset contract, first green
+  recipe-publish artifacts, and manifest SHA pins.
+
+### Event: 2026-05-26T06:02Z — linux coordinator status reconciliation
+
+- Observed remote heads: `linux-next` `fcebc98d`, `windows-next` `042bf22a`,
+  `osx-next` `0aff8003`, `main` `ddf52dff`.
+- No unmerged Windows code delta exists, but `windows-next` now trails latest
+  `linux-next` by 17 commits after macOS m4 slices 3-5 and two coordination
+  commits landed.
+- Keep w7 as the ready Windows fallback: merge or pull latest `linux-next`,
+  run `scripts/diagnose-windows.ps1`, and append an agent_status_packet showing
+  whether diagnostics still identify l9 as the artifact gate.
+- Windows volunteered in `plan/issues/tray-convergence-coordination.md` to
+  land the pure host-shell `launch_spec` forge-target amendment. Treat that as
+  available Windows-owned follow-up unless l-headless or m4 objects in the next
+  cycle.
 - w5 remains blocked on l9: artifact URL/release-asset contract, first green
   recipe-publish artifacts, and manifest SHA pins.
