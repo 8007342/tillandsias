@@ -4004,6 +4004,23 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
     rt.block_on(async {
         cleanup_stack_containers(&client, project_name).await;
 
+        // Step 15: bring the router up BEFORE any project containers so the
+        // enclave's `router` network alias is already resolvable when proxy /
+        // git / inference start. Squid's `cache_peer router` and the git
+        // service's HTTPS upstream both fail-and-retry if the alias resolves
+        // to nothing — that retry storm is exactly the "exit 125 cascade"
+        // Step 15 was filed to eliminate. ensure_router_running is idempotent
+        // (it short-circuits on a live container with the right image), so
+        // calling it here on every OpenCode launch is cheap on the warm path.
+        //
+        // @trace plan/steps/15-tray-network-bootstrap.md
+        let router_image = versioned_image_tag("router", version);
+        let router_host_port = match existing_router_host_port(&client, debug).await? {
+            Some(port) => port,
+            None => select_router_host_port(None, debug)?,
+        };
+        ensure_router_running(&client, &certs_dir, &router_image, router_host_port, debug).await?;
+
         client
             .run_container_observed(
                 "opencode-proxy",
