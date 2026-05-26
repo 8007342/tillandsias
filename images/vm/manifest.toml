@@ -34,13 +34,11 @@ digest = "sha256:pending-first-pin"
 # Format keys: "<arch>.<format>" — `tar` for Linux dev + WSL import,
 # `img` for macOS VFR (raw EFI+ext4 image). Populated by recipe-publish
 # CI job on first successful run; check-in via PR after merge.
-[output]
-expected_rootfs_sha = {
-    "x86_64.tar"  = "pending-ci",
-    "aarch64.tar" = "pending-ci",
-    "aarch64.img" = "pending-ci",
-    # x86_64.img omitted: no x86_64 VFR consumer in v0.0.1.
-}
+[output.expected_rootfs_sha]
+"x86_64.tar"  = "pending-ci"
+"aarch64.tar" = "pending-ci"
+"aarch64.img" = "pending-ci"
+# x86_64.img omitted: no x86_64 VFR consumer in v0.0.1.
 
 # Kernel command-line passed to the VM bootloader. Quiet boot + serial
 # console on hvc0 so the host can capture early-boot diagnostics.
