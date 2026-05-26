@@ -42,6 +42,12 @@ three consecutive same-cause failures.
   - `./build.sh --check` + `--test`: PASSED.
 - Pre-cycle stash: working tree dirty from prior CI regen (Cargo.lock + TRACES + dashboard); stashed → merged cleanly → dropped (regenerated next CI run).
 - Spec-drift advisory: macOS added `crates/tillandsias-vm-layer/src/vz.rs` (130 lines) consuming the l9 contract. `vz.rs` is macOS-owned per the branch canon; this is additive to sibling-owned scope. No methodology / openspec changes.
+- GitHub Actions check: `.github/workflows/recipe-publish.yml` is present on
+  `linux-next` but not registered by GitHub Actions because it is absent from
+  default branch `main`. `gh run list --workflow recipe-publish.yml` returned
+  404, and `gh run list --branch linux-next` showed no runs. l9's next action
+  is therefore workflow registration/release-path diagnosis before SHA pins.
+- Next local dynamic-loop packet: Step 16 observatorium readiness diagnostics.
 
 ### Dynamic-loop slice 2026-05-26T11:32Z — Step 15 slice 3: router-ordering litmus
 

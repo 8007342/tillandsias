@@ -2,16 +2,16 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/windows-next-thin-tray.md, plan/issues/tray-convergence-coordination.md, plan/issues/control-socket-protocol-convergence-2026-05-25.md, openspec/changes/control-wire-pty-attach/
 
-Status: **OPEN** as of 2026-05-26T09:47Z. Windows w1, w2, w3, w4, w6
+Status: **OPEN** as of 2026-05-26T11:47Z. Windows w1, w2, w3, w4, w6
 diagnostics, the w5 `materialize::wsl::tar_to_wsl_import` converter, the shared
 forge-container `launch_spec` / `intent_for_action` amendment, and the w5
 `RemoteArtifact` resolver for the l9 URL contract are done/integrated through
 `linux-next`. The integration-loop merge/test of `origin/windows-next`
 `83e2cd51` completed at `150d8a14`. `origin/windows-next` currently has no
-unmerged Windows delta and is 9 commits behind `linux-next` `e60afe93`.
-Remaining WSL rootfs provisioning work is gated on first green
-`recipe-publish` artifacts, manifest SHA pins, and the Windows tray runtime
-flip away from the older provisioning manifest.
+unmerged Windows delta and is 11 commits behind `linux-next` `1d8217d3`.
+Remaining WSL rootfs provisioning work is gated on recipe-publish workflow
+registration, first green artifacts, manifest SHA pins, and the Windows tray
+runtime flip away from the older provisioning manifest.
 
 ## How to use this file
 
@@ -37,9 +37,9 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
 
 - `w7/recipe-diagnostics-and-branch-sync` remains ready as a no-VM fallback:
   `origin/windows-next` has no unmerged delta, but it is behind `linux-next`
-  `e60afe93`. The next useful packet is a Windows branch-sync pull/merge of
+  `1d8217d3`. The next useful packet is a Windows branch-sync pull/merge of
   latest `linux-next`, then diagnostic output against the remaining
-  recipe-publish/SHA-pin artifact gate.
+  recipe-publish workflow-registration/SHA-pin artifact gate.
 - `w6/vm-status-and-enumerate-real-handlers` is done as a no-VM diagnostics
   fallback through `948af711` / integration cycle `b3ae21a`. Live VM status
   verification waits for the recipe artifact path.
@@ -68,19 +68,20 @@ diagnostics and branch sync.
     Keep the Windows no-VM diagnostic current while the recipe artifact path
     finishes. `origin/windows-next` `83e2cd51` has already been merged/tested
     into `linux-next`, but the branch now needs to absorb `linux-next`
-    `e60afe93`. Report whether the script still accurately distinguishes the
+    `1d8217d3`. Report whether the script still accurately distinguishes the
     completed BuildahExec/materialize-cli implementation and URL resolver from
-    the still-missing recipe-publish SHA pins. The forge-target `launch_spec`
-    amendment is complete, so w7 should focus on branch-sync diagnostics unless
-    the latest `linux-next` exposes a Windows-specific regression.
+    the still-missing recipe-publish workflow registration and SHA pins. The
+    forge-target `launch_spec` amendment is complete, so w7 should focus on
+    branch-sync diagnostics unless the latest `linux-next` exposes a
+    Windows-specific regression.
 - next_action: >
     Pull or merge latest `origin/linux-next` into `windows-next`, run
     `scripts/diagnose-windows.ps1` on Windows, and append an
     agent_status_packet here with branch-sync result plus remaining
-    recipe-publish/SHA-pin artifact-gate diagnostics.
+    recipe-publish registration/SHA-pin artifact-gate diagnostics.
 - acceptance_evidence:
   - `scripts/diagnose-windows.ps1` output on Windows, including WSL presence,
-    recipe input detection, and the current artifact gate.
+    recipe input detection, and the current workflow/artifact gate.
   - Pushed `windows-next` status/diagnostic commit if the script needs changes,
     or a no-code agent_status_packet if `83e2cd51` is sufficient.
 - fallback_when_blocked: >
@@ -313,7 +314,7 @@ diagnostics and branch sync.
 | `l6/linux-rasterize-svg-to-ico` | **done** (`ea13ba20`) | w1 done |
 | `l7/§3-materializer-driver` | **done** (`9dca2c47`; materializer feature and cache/export API shipped) | w5 converter done; l9 SHA pins remain |
 | `l8/buildah-exec-recipe-publish-smoke` | **done** (`6aeae3a7`; real BuildahExec + `materialize-cli`; 43/43 vm-layer materialize tests, full CI/install pass in ledger) | w5 runtime provisioning flip now waits on l9 SHA pins |
-| `l9/recipe-artifact-url-and-publish-smoke` | **blocked on CI/SHA pins**; artifact URL contract done (`963baeb1`, `9db73978`, `74b1d78d`), Windows URL resolver done (`83e2cd51`/`150d8a14`), first green recipe-publish artifacts and manifest SHA pins still needed | w5 runtime provisioning flip |
+| `l9/recipe-artifact-url-and-publish-smoke` | **blocked on workflow registration + CI/SHA pins**; artifact URL contract done (`963baeb1`, `9db73978`, `74b1d78d`), Windows URL resolver done (`83e2cd51`/`150d8a14`), recipe-publish workflow is not registered from default branch `main`, and first green artifacts/manifest SHA pins are still needed | w5 runtime provisioning flip |
 
 ## Events
 
@@ -726,3 +727,22 @@ Next greedy pickups (no VM needed): **w4b** (windows-ownable, pure) and **w4d**
 - w5 remains blocked on real recipe-publish artifacts and SHA pins. Consumers
   should treat `"pending-ci"` SHA values as a recoverable not-yet-published
   state, not as a crash or permanent failure.
+
+### Event: 2026-05-26T11:47Z — linux coordinator status reconciliation
+
+- Observed remote heads after rebase: `linux-next` `1d8217d3`,
+  `windows-next` `a675e814`, `osx-next` `bdb7f9cb`, `main` `ddf52dff`.
+- No unmerged Windows code delta exists. `windows-next` trails current
+  `linux-next` by 11 commits, including Step 15 router-before-project code,
+  the tray-network-bootstrap litmus, macOS m5 integration, and coordination
+  ledger updates.
+- Keep w7 as the ready Windows packet: branch-sync to `1d8217d3`, run
+  `scripts/diagnose-windows.ps1`, and report whether diagnostics identify the
+  current gate as recipe-publish workflow registration plus manifest SHA pins.
+- New l9 detail for Windows diagnostics: GitHub Actions does not register
+  `.github/workflows/recipe-publish.yml` while it is absent from default branch
+  `main`; `gh run list --workflow recipe-publish.yml` returns 404. Do not
+  report this as a missing URL contract; that contract is complete.
+- w5 remains blocked on real recipe-publish artifacts and SHA pins. Consumers
+  should continue treating `"pending-ci"` SHA values as a recoverable
+  not-yet-published state.

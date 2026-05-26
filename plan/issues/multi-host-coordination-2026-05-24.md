@@ -335,3 +335,39 @@ Current cross-host gates:
 - macOS m5 remains blocked on SHA pins before live provisioning; macOS live PTY
   proof remains blocked on m5, not on another m4/m9 implementation packet.
 - m8's residual acceptance remains user-attended interactive smoke.
+
+## Coordination Audit - 2026-05-26T11:47Z
+
+host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+
+Observed remote heads after rebase:
+
+- `main`: ddf52dff
+- `linux-next`: 1d8217d3
+- `windows-next`: a675e814
+- `osx-next`: bdb7f9cb
+
+Ledger corrections made in this audit:
+
+- Folded Step 15 dynamic-loop slices through `14a8bd77`: OpenCode,
+  observatorium, and tray Forge launch paths now start router before project
+  containers, and the new tray-network-bootstrap litmus asserts the ordering.
+  Step 15 is marked complete; Step 16 observatorium readiness is ready.
+- Folded macOS m5 terminal evidence from `origin/osx-next`: `ec76e63a`
+  implements `VzRuntime::fetch_recipe_artifact` against the l9 artifact URL
+  contract, and `f8a3ec07` recorded the status packet. The integration loop
+  merged/tested both into `linux-next` during the 11:43Z cycle.
+- Checked GitHub Actions for l9: `recipe-publish.yml` is not registered because
+  it is absent from default branch `main`; `gh run list --workflow
+  recipe-publish.yml` returns 404 and there are no `linux-next` runs.
+
+Current cross-host gates:
+
+- l9 is now blocked first on workflow registration/release-path diagnosis,
+  then on first green recipe-publish artifacts and manifest SHA pins.
+- Windows w7 remains ready: branch-sync `windows-next` to `linux-next`
+  `1d8217d3` and run diagnostics against the workflow/SHA-pin gate.
+- macOS m5 has useful fetch code integrated; the next macOS packet is wiring
+  that primitive into `startVm:` without claiming live E2E until SHA pins.
+- Step 16 is the next Linux dynamic-loop packet: observatorium readiness should
+  prove the real page and surface logs/inspect data on failure.

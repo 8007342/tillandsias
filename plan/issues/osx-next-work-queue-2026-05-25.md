@@ -2,17 +2,14 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
-Status: **OPEN** as of 2026-05-26T09:47Z. macOS m1, m1b, m2, m3, m6,
-m7, and m4 sub-task B are done. The latest folded macOS code is `41ea02e1` /
-plan packet `0d48ca31`, with `osx-next` at `dddd3eb8` and no unmerged delta
-into `linux-next`: real Start/Stop VM wiring exists, Open Shell and GitHub
-Login now compose the live PTY-over-vsock attach chain, `pty_vsock_bridge`
-exists, and `VzRuntime::open_vsock_stream` is wired through the tray action
-host. The shared forge-container target is settled and landed in
-`tillandsias-host-shell::pty::launch_spec` through Windows commit `35cbdb16`,
-integrated by the Linux loop at `a1e1df1`. Remaining macOS live-terminal proof
-is gated on first green recipe-publish artifacts, manifest SHA pins, and the
-macOS runtime provisioning flip away from the current deferred
+Status: **OPEN** as of 2026-05-26T11:47Z. macOS m1, m1b, m2, m3, m6,
+m7, m4 sub-task B, and the m5 fetch primitive are done/integrated. The latest
+folded macOS code is `ec76e63a` / plan packet `f8a3ec07`, merged and tested
+into `linux-next` during the 11:43Z integration cycle. `osx-next` is at
+`bdb7f9cb` with no unmerged macOS delta and trails `linux-next` only by the
+latest integration ledger commit. Remaining macOS live-terminal proof is gated
+on recipe-publish workflow registration, first green artifacts, manifest SHA
+pins, and the macOS runtime provisioning flip away from the current deferred
 extraction/conversion stubs.
 
 ## How to use this file
@@ -45,7 +42,8 @@ Work-shaping note: m5 runtime provisioning can be shaped against the artifact
 contract, but E2E should wait for first green recipe-publish SHAs. m8 produced
 its autonomous no-VM build/process evidence and now waits on user-attended menu
 click smoke. The former m9 no-VM PTY adapter packet is superseded by m4 slices
-4c.1, 4c.2, and 5b; do not re-claim it.
+4c.1, 4c.2, and 5b; do not re-claim it. Current macOS implementation target is
+wiring the integrated m5 fetch primitive into `startVm:`.
 
 ## Currently unblocked / active
 
@@ -298,8 +296,8 @@ click smoke. The former m9 no-VM PTY adapter packet is superseded by m4 slices
 - capability_tags: [vfr, vm-layer, fetch, provisioning]
 - status: blocked
 - gated_on:
-  - linux deliverable `l9/recipe-artifact-url-and-publish-smoke` (first green
-    recipe-publish artifacts and SHA pins)
+  - linux deliverable `l9/recipe-artifact-url-and-publish-smoke`
+    (recipe-publish workflow registration, first green artifacts, and SHA pins)
   - `images/vm/manifest.toml` SHA pins from first green recipe-publish run
 - cleared_gates:
   - linux deliverable `l2/recipe-shared-modules` integrated at `a7af0ed`
@@ -310,6 +308,8 @@ click smoke. The former m9 no-VM PTY adapter packet is superseded by m4 slices
   - l9 artifact URL template + `Manifest::artifact_url` resolver landed at
     `963baeb1`
   - l9 consumer contract documented at `74b1d78d`
+  - m5 fetch primitive landed on `origin/osx-next` at `ec76e63a` and was
+    merged/tested into `linux-next` during the 11:43Z integration cycle
 - depends_on: [m1/vmruntime-stop-and-wait-ready]
 - owned_files:
   - `crates/tillandsias-vm-layer/src/vz.rs` (provisioning slice)
@@ -321,11 +321,12 @@ click smoke. The former m9 no-VM PTY adapter packet is superseded by m4 slices
     the raw EFI/ext4 image consumed directly by VFR; the .tar is the
     intermediate). Contribute `materialize::macos::tar_to_vfr_img`
     (Linux-runnable per D6 task 2b.2). The converter and workflow scaffold
-    are done; remaining m5 work is to wire VzRuntime::provision to fetch and
-    verify the CI-published `.img` by default, replace the deferred
-    extract/convert stubs in `vz.rs`, treat `"pending-ci"` SHA pins as a
-    recoverable not-yet-published state, and respect a `--materialize-local`
-    dev path if retained.
+    are done, and the first macOS fetch primitive is integrated into
+    `linux-next`. Remaining m5 work is to wire it into the Start VM/provision
+    path, replace the deferred extract/convert
+    stubs in `vz.rs`, treat `"pending-ci"` SHA pins as a recoverable
+    not-yet-published state, and respect a `--materialize-local` dev path if
+    retained.
 - estimated_effort: 1-2 days after l9 SHA pins land.
 
 ### Item: m6/macos-installer-pkg-and-codesign
@@ -393,7 +394,7 @@ click smoke. The former m9 no-VM PTY adapter packet is superseded by m4 slices
 | `l5/recipe-smoke-ci-publish` | workflow scaffold landed (`55ff55c6`/`fad97244`), but first release artifacts and SHA pins not yet proven | m5 |
 | `l7/§3-materializer-driver` | done (`9dca2c47`; materializer feature and cache/export API shipped) | m5 converter/API work unblocked |
 | `l8/buildah-exec-recipe-publish-smoke` | done (`6aeae3a7`; real BuildahExec + `materialize-cli`; 43/43 vm-layer materialize tests, full CI/install pass in ledger) | m5 runtime provision now waits on l9 SHA pins |
-| `l9/recipe-artifact-url-and-publish-smoke` | blocked on CI/SHA pins; artifact URL contract done (`963baeb1`, `9db73978`, `74b1d78d`), first green recipe-publish artifacts and manifest SHA pins still needed | m5 runtime provisioning flip |
+| `l9/recipe-artifact-url-and-publish-smoke` | blocked on workflow registration + CI/SHA pins; artifact URL contract done (`963baeb1`, `9db73978`, `74b1d78d`), recipe-publish workflow is not registered from default branch `main`, and first green artifacts/manifest SHA pins are still needed | m5 runtime provisioning flip |
 
 ## Events
 
@@ -1555,3 +1556,19 @@ is booted with an in-VM headless on vsock 42420 (gated on m5/l9).
   `startVm:` path so a click → "image not yet materialized" error →
   auto-fetch → boot flow works on first launch.
 - Lease released.
+
+### event: linux coordinator status reconciliation — 2026-05-26T11:47Z
+
+- Observed remote heads after rebase: `linux-next` `1d8217d3`,
+  `windows-next` `a675e814`, `osx-next` `bdb7f9cb`, `main` `ddf52dff`.
+- The integration loop merged/tested the m5 primitive: `ec76e63a` and
+  `f8a3ec07` were absorbed into `linux-next` during the 11:43Z cycle, with
+  `./build.sh --check` and `./build.sh --test` passing.
+- New l9 detail for macOS: GitHub Actions does not register
+  `.github/workflows/recipe-publish.yml` while it is absent from default branch
+  `main`; `gh run list --workflow recipe-publish.yml` returns 404, and there
+  are no `linux-next` runs. Treat workflow registration/release-path diagnosis
+  as the next blocker before waiting for SHA pins.
+- Current macOS next action: wire the m5 primitive into `startVm:` while
+  preserving the recoverable `"pending-ci"` gate. Live PTY proof still waits
+  for a provisioned VM.

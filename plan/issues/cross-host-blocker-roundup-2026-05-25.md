@@ -407,11 +407,14 @@ blocker view without deleting earlier host notes.
   - `crates/tillandsias-vm-layer/src/bin/materialize-cli.rs`
   - `plan/issues/tray-convergence-coordination.md`
 - next_action: >
-    Trigger or inspect the first green `recipe-publish` workflow/tag run,
-    capture the emitted SHA256SUMS / manifest-pin block, and replace the
-    `"pending-ci"` placeholders in `images/vm/manifest.toml`. If the workflow
-    fails, append the exact job/log failure and leave the URL contract plus
-    recoverable pending-SHA behavior intact for Windows/macOS consumers.
+    First resolve workflow registration: `recipe-publish.yml` is not registered
+    by GitHub Actions while it is absent from default branch `main`, so there
+    is no first green run to inspect yet. Decide whether to land/trigger the
+    workflow from an Actions-recognized branch/release path, then capture the
+    emitted SHA256SUMS / manifest-pin block and replace the `"pending-ci"`
+    placeholders in `images/vm/manifest.toml`. If registration or the workflow
+    fails, append the exact command/job/log failure and leave the URL contract
+    plus recoverable pending-SHA behavior intact for Windows/macOS consumers.
 - expected_evidence:
   - recipe-publish workflow run that emits `tillandsias-rootfs-x86_64.tar`,
     `tillandsias-rootfs-aarch64.tar`, and `tillandsias-rootfs-aarch64.img`
@@ -500,3 +503,22 @@ blocker view without deleting earlier host notes.
   recipe-publish CI/SHA-pin follow-up; macOS m5 fetch/provision wiring after
   SHAs exist. Blocked packets: Windows w5 and macOS m5 on SHA pins, macOS live
   PTY proof on m5, and m8 residual smoke on user-attended verification.
+
+## Linux coordinator audit — 2026-05-26T11:47Z
+
+- Observed remote heads after rebase: `linux-next` `1d8217d3`,
+  `windows-next` `a675e814`, `osx-next` `bdb7f9cb`, `main` `ddf52dff`.
+- Resolved since the previous fold: Step 15 tray-network-bootstrap closed via
+  router-before-project fixes and litmus evidence; macOS m5
+  `VzRuntime::fetch_recipe_artifact` was merged/tested into `linux-next` by the
+  11:43Z integration cycle. Step 16 observatorium readiness is the next Linux
+  dynamic-loop packet.
+- New l9 blocker detail: GitHub Actions does not currently register
+  `.github/workflows/recipe-publish.yml` because it is not present on default
+  branch `main`. `gh run list --workflow recipe-publish.yml` returns 404, and
+  `gh run list --branch linux-next` shows no runs. Treat workflow
+  registration/release-path diagnosis as the next l9 action before waiting on
+  SHA pins.
+- Current blocked packets: Windows w5 and macOS m5 live provisioning remain
+  blocked on real recipe-publish artifacts and manifest SHA pins; macOS live
+  PTY proof remains blocked on m5; m8 remains user-attended.
