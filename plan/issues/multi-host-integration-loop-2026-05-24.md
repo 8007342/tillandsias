@@ -28,6 +28,65 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-26T01:43Z — INTEGRATED (windows §3.7.2 + w6; recipe-materializer ecosystem completes)
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit (post-merge): `b3ae21a`
+- observed_sibling_heads:
+  - main: ddf52dff
+  - linux-next: dc589126 → 5c74402d → `b3ae21a`
+  - windows-next: 948af711
+  - osx-next: 5c74402d (mirrors linux-next mid-cycle; macOS continues direct-to-linux-next pattern)
+
+- **Massive in-cycle pull from origin/linux-next** (5 commits, fast-forwarded
+  via `git pull`): macOS landed §1.x recipe-authoring tasks +
+  `scripts/materialize-macos-tar-to-img.sh` (§3.7.1 / §2b CI converter).
+  Files added: `images/vm/Recipefile`, `images/vm/manifest.toml`,
+  `images/vm/bootstrap/{10-systemd,20-tillandsias,30-enclave}.sh`,
+  `scripts/materialize-macos-tar-to-img.sh`.
+
+- windows-next: **merged + tested + pushed** (`b3ae21a`). 3 commits absorbed
+  (+263 lines):
+  - `af668bf3` Merge linux-next.
+  - **`cb39cb7c feat(windows-next): materialize::wsl::tar_to_wsl_import
+    (recipe §3.7.2 Windows slice)`** — Windows shipped its declared
+    §3.7.2 claim against the l7 materializer landed earlier this session.
+  - `948af711 feat(windows-next): diagnose-windows.ps1 (w6
+    cache/diagnostics fallback, no VM)` — w6 unblocked.
+  - The mod.rs auto-merge added `pub mod wsl` + `pub mod macos` lines
+    without conflict — Linux's l7 module structure absorbed the sibling
+    converter additions cleanly.
+  - `./build.sh --check` + `--test`: PASSED. vm-layer tests:
+    **43/43 pass** (was 37 — Windows added 6 new wsl-import tests).
+- osx-next: no-op (now mirrors linux-next; macOS work landed directly).
+
+- **MAJOR MILESTONE — recipe materializer ecosystem COMPLETE except buildah
+  exec body:**
+  - §2: parser (Windows, already shipped) ✓
+  - §3.1-§3.6 + §3.8: driver (Linux l7) ✓
+  - §3.7.1: macOS converter (`scripts/materialize-macos-tar-to-img.sh`
+    + planned `materialize::macos` module) ✓
+  - §3.7.2: Windows converter (`materialize::wsl::tar_to_wsl_import`) ✓
+  - §4: cache GC (Linux l7) ✓
+  - §1.x: recipe authoring (Recipefile + manifest + bootstrap) ✓
+  - **Remaining:** §3.4 BuildahExec subprocess body (deferred to §6.4
+    recipe-smoke CI job), §2b §6.x release-workflow CI hooks.
+
+- **Cross-host queue burndown:**
+  - Windows queue: w1+w2+w3+w4 done + §3.7.2 + w6 done. Only w5 remains
+    (gated on §2b CI-fetch artifacts publishing rootfs `.tar` per arch —
+    needs §6.4 recipe-smoke CI to run first).
+  - macOS queue: Phase 1 core done + transport_macos + §1.x recipe
+    authoring + §3.7.1 converter script done. Remaining: m4 (PTY AppKit
+    terminal — unblocked by l3 + Windows pty work), m6 (.app bundle +
+    codesign + install-macos.sh), m7 (macOS CI job).
+
+- **Spec-drift advisory:** windows-next continues additive in
+  `materialize::wsl` (new module — declared sibling-owned, no conflict
+  with Linux-owned `materialize::{mod,layer_key,cache,exec,trace}`).
+  Plus PowerShell scripts in `scripts/`. No methodology / openspec
+  changes. Clean contract preservation.
+
 ### Cycle 2026-05-26T00:49Z — INTEGRATED (windows w4 COMPLETE + dev scripts)
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
