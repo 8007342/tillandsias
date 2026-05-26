@@ -111,7 +111,89 @@ impl VzRuntime {
             && self.kernel_path().exists()
             && self.initrd_path().exists()
     }
+
+    /// Open a host-side vsock stream to the running VM on `port`. Returns
+    /// an error if the VM hasn't been started (no handle in the slot) or
+    /// if VZ's connect path fails.
+    ///
+    /// Async wrapper around the blocking `connect_to_vm_vsock` (which
+    /// must pump the CFRunLoop for VZ's completion handler). We spawn it
+    /// on a blocking-friendly Tokio worker so the calling task isn't
+    /// blocked. The returned `VsockStream` is `AsyncRead + AsyncWrite`
+    /// and ready to hand to `pty_vsock_bridge::spawn_pty_bridge` in the
+    /// macOS tray.
+    ///
+    /// @trace spec:vsock-transport, spec:macos-native-tray,
+    ///        plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 4c)
+    #[cfg(target_os = "macos")]
+    pub async fn open_vsock_stream(
+        &self,
+        port: u32,
+        timeout: std::time::Duration,
+    ) -> Result<crate::transport_macos::VsockStream, OpenVsockError> {
+        // Take a clone of the existing VmHandle so we can use it from
+        // the spawn_blocking thread without holding the mutex. The
+        // module-level `vm_handle::VmHandle` already wraps the
+        // Retained<VZVirtualMachine> with the unsafe Send+Sync impl
+        // and a documented single-queue-access SAFETY rationale.
+        let send_handle = {
+            let slot = self
+                .vm
+                .lock()
+                .map_err(|e| OpenVsockError::LockPoisoned(e.to_string()))?;
+            let handle = slot.as_ref().ok_or(OpenVsockError::VmNotStarted)?;
+            vm_handle::VmHandle(handle.0.clone())
+        };
+
+        let fd = tokio::task::spawn_blocking(move || {
+            // Rust 2021 closures do per-field disjoint capture, which
+            // would project send_handle.0 (the bare Retained, NOT Send)
+            // instead of moving the whole VmHandle (which IS Send via
+            // the unsafe impl). Forcing a borrow of the whole struct
+            // disables that projection and captures the wrapper as a
+            // unit. See rust-lang/rust#73214.
+            let _force_full_capture = &send_handle;
+            crate::transport_macos::connect_to_vm_vsock(&send_handle.0, port, timeout)
+        })
+        .await
+        .map_err(|e| OpenVsockError::Join(e.to_string()))?
+        .map_err(OpenVsockError::Connect)?;
+
+        crate::transport_macos::VsockStream::from_vsock_fd(fd).map_err(OpenVsockError::Stream)
+    }
 }
+
+/// Errors returned by [`VzRuntime::open_vsock_stream`].
+#[cfg(target_os = "macos")]
+#[derive(Debug)]
+pub enum OpenVsockError {
+    /// `start()` hasn't installed a VM handle yet (or `stop()` cleared it).
+    VmNotStarted,
+    /// Internal Mutex was poisoned by an earlier panic.
+    LockPoisoned(String),
+    /// `spawn_blocking` task panicked or was cancelled.
+    Join(String),
+    /// VZ-level connect error (see `transport_macos::ConnectError`).
+    Connect(crate::transport_macos::ConnectError),
+    /// Wrapping the raw fd into `VsockStream` (fcntl/AsyncFd) failed.
+    Stream(std::io::Error),
+}
+
+#[cfg(target_os = "macos")]
+impl std::fmt::Display for OpenVsockError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::VmNotStarted => f.write_str("VM not started (call start() first)"),
+            Self::LockPoisoned(s) => write!(f, "VzRuntime vm lock poisoned: {s}"),
+            Self::Join(s) => write!(f, "spawn_blocking failure: {s}"),
+            Self::Connect(e) => write!(f, "{e}"),
+            Self::Stream(e) => write!(f, "VsockStream wrap: {e}"),
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+impl std::error::Error for OpenVsockError {}
 
 /// Default values for the VZ guest config; surfaced as a struct so tests can
 /// assert on them without spinning up a real VM.
@@ -932,5 +1014,27 @@ mod tests {
             err.contains("rootfs not found"),
             "unexpected error message: {err}"
         );
+    }
+
+    /// `open_vsock_stream` must return `VmNotStarted` when no VM handle
+    /// has been installed yet (the common pre-start state). The happy
+    /// path requires a booted VM and is exercised by the macOS tray's
+    /// manual smoke once m5 lands; here we only verify the gating.
+    ///
+    /// @trace plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 4c)
+    #[cfg(target_os = "macos")]
+    #[tokio::test]
+    async fn open_vsock_stream_errors_when_vm_not_started() {
+        use std::time::Duration;
+        let tmp = tempfile::tempdir().unwrap();
+        let rt = VzRuntime::new(3, tmp.path().to_path_buf());
+        // VsockStream doesn't impl Debug (it wraps a raw fd + a
+        // retained ObjC connection), so we match on the Result
+        // directly instead of using `.expect_err`.
+        match rt.open_vsock_stream(42420, Duration::from_millis(50)).await {
+            Err(OpenVsockError::VmNotStarted) => {}
+            Err(other) => panic!("unexpected error variant: {other}"),
+            Ok(_) => panic!("expected error, got an open stream"),
+        }
     }
 }
