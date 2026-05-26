@@ -103,7 +103,14 @@ jobs:
       - name: Materialize ${{ matrix.arch }} → rootfs.tar
         run: |
           mkdir -p dist out-cache
-          ./target/release/examples/materialize-cli \
+          # Rootless buildah needs `buildah unshare` to mount overlay
+          # storage (the materializer's snapshot step calls `buildah
+          # mount`). Without unshare, mount fails with exit 125:
+          # "cannot mount using driver overlay in rootless mode". For
+          # the `noop` executor the cli never invokes buildah; running
+          # it under `unshare` is harmless either way, so we wrap
+          # unconditionally to keep the command shape uniform.
+          buildah unshare ./target/release/examples/materialize-cli \
               --recipe   images/vm/Recipefile \
               --manifest images/vm/manifest.toml \
               --arch     ${{ matrix.arch }} \
@@ -113,7 +120,7 @@ jobs:
           ls -la dist/
 
       - name: Convert tar → .img (aarch64 only, for VFR)
-        if: matrix.arch == 'aarch64'
+        if: matrix.arch == 'aarch64' && steps.exec.outputs.executor == 'buildah'
         # tar_to_vfr_img needs root for losetup + mount. The runner has
         # sudo available; the script gates on EUID==0 so we re-invoke.
         run: |
