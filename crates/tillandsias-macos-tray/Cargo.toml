@@ -12,6 +12,7 @@ name = "tillandsias-tray"
 path = "src/main.rs"
 
 [dependencies]
+tillandsias-control-wire = { path = "../tillandsias-control-wire" }
 tillandsias-host-shell = { path = "../tillandsias-host-shell" }
 tillandsias-vm-layer = { path = "../tillandsias-vm-layer" }
 tokio = { workspace = true, features = ["full"] }
