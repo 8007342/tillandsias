@@ -1523,3 +1523,35 @@ is booted with an in-VM headless on vsock 42420 (gated on m5/l9).
   wire m5 fetch/provision behavior against `Manifest::artifact_url`. Treat
   `"pending-ci"` SHA pins as recoverable while preserving the m4 attach path
   for live smoke after m5.
+
+### event: m5 primitive — fetch_recipe_artifact (l9 consumer) — 2026-05-26T11:12Z
+
+- item: `m5/vfr-image-via-ci-rootfs` (primitive, not yet wired into Start VM)
+- agent_id: `osx-next-claude-opus-4-7` on `Tlatoanis-MacBook-Air`
+- lease_id: `8c4f1e2d6b73`
+- action: claim → primitive done. (Caller integration into action_host's
+  startVm path is a follow-up slice.)
+- evidence (commit `ec76e63a`, code → osx-next):
+  - `VzRuntime::fetch_recipe_artifact(manifest, tag) -> Result<(), String>`,
+    cfg-gated on `(recipe + download)` features.
+  - Arch = aarch64 on Apple Silicon, x86_64 otherwise. Format = "img"
+    (VFR boots raw EFI+ext4). URL via `manifest.artifact_url(arch,
+    "img", tag)` (l9 step 4 contract). SHA via
+    `manifest.expected_sha("<arch>.img")`. RemoteArtifact → `fetch::
+    download_verified`. Ensures `image_root` parent dir exists.
+  - Fails fast on: missing artifact_url_template, missing SHA key,
+    placeholder SHA ("pending-ci" — download_verified gating).
+  - 2 new unit tests cover the placeholder-SHA refusal + missing-
+    template paths; verifies the plumbing is end-to-end + gating is
+    graceful.
+- tests: vm-layer 60/60 with `--features recipe,download,materialize`
+  (was 54; +6 from this + upstream test growth). macos-tray 27/27
+  unchanged.
+- m5 status: plumbing complete; succeeds end-to-end as soon as l9
+  step 5 (CI SHA pin commit) replaces "pending-ci" in
+  `images/vm/manifest.toml`. Linux confirms l9 is 3/4 done (artifact
+  URL contract shipped; remaining is the CI-gated SHA pin commit).
+- Follow-up: wire `fetch_recipe_artifact` into action_host's
+  `startVm:` path so a click → "image not yet materialized" error →
+  auto-fetch → boot flow works on first launch.
+- Lease released.
