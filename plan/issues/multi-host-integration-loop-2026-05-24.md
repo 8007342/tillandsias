@@ -28,6 +28,18 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Dynamic-loop slice 2026-05-26T09:30Z — l9 step 4 SHIPPED + w5 resolver integrated
+
+- Commits: `150d8a1` (merge windows w5 RemoteArtifact resolver — consumes
+  my l9 step 1 URL contract; host-shell 33/33 + windows-tray 3/3 tests
+  pass) and `74b1d78d` (l9 step 4: consumer-contract doc appended to
+  `tray-convergence-coordination.md`).
+- Effect: l9 is now 3/4 done. Step 3 (SHA pins) is gated on first green
+  `recipe-publish` CI run — the only remaining l9 work has no sibling
+  code dependency.
+- Next slice: Step 15 tray-network-bootstrap (Linux GTK tray hardening
+  — `ensure_router_running` audit + cascade collapse + litmus).
+
 ### Dynamic-loop slice 2026-05-26T08:30Z — l9 step 1 + 2 SHIPPED
 
 - Commits: `963baeb1` (l9 step 1: artifact URL template contract +
