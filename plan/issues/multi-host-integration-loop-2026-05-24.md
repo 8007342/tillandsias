@@ -28,6 +28,23 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Dynamic-loop slice 2026-05-26T08:30Z — l9 step 1 + 2 SHIPPED
+
+- Commits: `963baeb1` (l9 step 1: artifact URL template contract +
+  `Manifest::artifact_url` resolver, 3 new tests) and `9db73978` (l9
+  step 2: `materialize-cli --publish-tag` prints `would_publish_to_<fmt>=<url>`
+  lines for contract verification without buildah).
+- Tests: `cargo test -p tillandsias-vm-layer --features recipe`: 3/3 new
+  artifact_url tests pass. `./build.sh --ci-full --install` 100% across
+  all 4 gates.
+- Effect: Windows w5 + macOS m5 now have a stable, testable URL contract
+  to branch their fetch logic against. Step 3 (SHA pin after first green
+  CI run) is the only remaining l9 work that has an external dependency.
+- Next slice: l9 step 4 — document the contract in
+  `plan/issues/tray-convergence-coordination.md` for sibling consumers,
+  then look at Step 15 (tray-network-bootstrap) or headless CloudRefresh
+  real-handler work.
+
 ### Coordinator audit 2026-05-26T07:54Z — post-launch_spec and m4 adapter fold
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
