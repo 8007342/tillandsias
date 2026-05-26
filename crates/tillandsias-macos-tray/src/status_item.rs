@@ -110,7 +110,15 @@ pub fn install_status_item(
 }
 
 /// Build an `NSMenu` from a host-shell `MenuStructure`. Walks the tree once
-/// and produces `NSMenuItem` instances per the `MacMenuItemSpec` adapter.
+/// and produces `NSMenuItem` instances per the `MacMenuItemSpec` adapter,
+/// then appends the standard footer (separator + version disabled header +
+/// separator + Quit).
+///
+/// The Quit item uses the standard AppKit `terminate:` action with a nil
+/// target — AppKit walks the responder chain and `NSApplication` handles
+/// it. Cmd-Q keyboard shortcut is wired so power users don't even need to
+/// open the menu. Without this item the binary is unkillable from the UI
+/// (the v0.0.1 / iter-12 "stuck" issue the user hit on first launch).
 ///
 /// Per spec invariant `menu-renders-in-50ms`, the construction is purely
 /// allocation + per-item method calls; no I/O or sleeps.
@@ -122,7 +130,54 @@ pub fn build_menu(mtm: MainThreadMarker, structure: &MenuStructure) -> Retained<
         let item = build_menu_item(mtm, &spec);
         menu.addItem(&item);
     }
+    append_footer(mtm, &menu);
     menu
+}
+
+/// Append the standard tray footer to the bottom of any menu:
+///
+///   ───────────────
+///   Tillandsias v<…>  (disabled header for identity)
+///   ───────────────
+///   Quit Tillandsias  ⌘Q
+///
+/// Idempotent: appended ONCE per menu construction (callers rebuild the
+/// menu from scratch when state changes). The Quit item is what stops the
+/// `NSApplication::run` loop in `super::run()`.
+fn append_footer(mtm: MainThreadMarker, menu: &NSMenu) {
+    let sep1 = NSMenuItem::separatorItem(mtm);
+    menu.addItem(&sep1);
+
+    // Identity header — disabled so it can't be selected; carries the
+    // package version so the user knows what they're running. Reads VERSION
+    // baked in at build time via CARGO_PKG_VERSION (= the 3-component crate
+    // version derived from the 4-component VERSION file via bump-version.sh).
+    let version_label = format!(
+        "Tillandsias v{} (alpha)",
+        env!("CARGO_PKG_VERSION")
+    );
+    let header = NSMenuItem::new(mtm);
+    unsafe {
+        header.setTitle(&NSString::from_str(&version_label));
+        header.setEnabled(false);
+    }
+    menu.addItem(&header);
+
+    let sep2 = NSMenuItem::separatorItem(mtm);
+    menu.addItem(&sep2);
+
+    // Quit — AppKit's standard responder-chain pattern. Target = nil so
+    // [NSApp terminate:] gets dispatched via the chain. Cmd-Q for the
+    // keyboard shortcut.
+    let quit = NSMenuItem::new(mtm);
+    unsafe {
+        quit.setTitle(&NSString::from_str("Quit Tillandsias"));
+        quit.setKeyEquivalent(&NSString::from_str("q"));
+        quit.setAction(Some(sel!(terminate:)));
+        // Explicit nil target → responder chain → NSApplication handles it.
+        quit.setTarget(None);
+    }
+    menu.addItem(&quit);
 }
 
 fn build_menu_item(mtm: MainThreadMarker, spec: &MacMenuItemSpec) -> Retained<NSMenuItem> {

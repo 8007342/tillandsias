@@ -1,77 +1,63 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-05-25T23:47Z
+LastExecutionTime: 2026-05-26T00:18Z
 
 ## This Loop
 
-- Fixed `./codex` repeat/coordination execution: `--wait` loops and the
-  `/coordinate-multihost-work` alias now run `codex exec` with Codex's trusted
-  unsandboxed mode so unattended agents can fetch, rebase, commit, and push.
-- Added an explicit `--trusted` wrapper flag and `CODEX_TRUSTED_EXEC=1`
-  override for one-shot unattended diagnostics that need the same privileges.
-- Verified the patched repeat path with `./codex --wait 1s --times 1`: nested
-  Codex reported `sandbox: danger-full-access`, and `git fetch --dry-run origin
-  linux-next` succeeded.
-- Tuned `/coordinate-multihost-work`, `methodology/distributed-work.yaml`,
-  `plan/index.yaml`, and both active host queues for larger work packets,
-  eager fallback assignment, and structured status packets.
-- Added explicit remote-progress guidance: `origin/linux-next` being ahead of
-  a recurrent local checkout is expected and healthy; repeated no-progress is
-  the signal to document and investigate.
-- Added `plan/issues/multi-agent-work-shaping-2026-05-25.md` as the durable
-  guide for packet sizing, blocker/error/dependency reporting, coordinator
-  duties, and remote-progress health.
-- Preserved existing host ownership and active leases; this pass changed
-  coordination guidance only.
+- Fetched origin, fast-forwarded local `linux-next` from `d346ee07` to
+  `effbfbf4`, and fresh-read methodology, plan, active queues, blocker roundup,
+  and integration-loop ledger.
+- Observed remote heads after the post-push refresh: `linux-next` `fd7d904e`,
+  `windows-next` `ae8789ff`, `osx-next` `effbfbf4`, `main` `ddf52dff`.
+- Reconciled macOS queue headers with terminal events: m1b is done/released,
+  m6 is done, m7 is ready, and m4 has the Unix PTY foundation with
+  user-facing `terminal_attach` wiring still ready.
+- Recorded that `origin/windows-next` is ahead at `ae8789ff`; its w4 code
+  delta still runs through `93427ed9`, and the latest Windows merge absorbed
+  macOS PTY foundation but not this coordination commit. The branches still
+  need integration-loop merge/test rather than a fast-forward.
+- Pinged stale Linux l7 materializer lease `linux-l-mat-2026-05-25T15Z`;
+  no materializer checkpoint was found after the default TTL.
 
 ## Expected Next Loop
 
-- Apply the new packet rules while reconciling active leases: every host should
-  have one unblocked ready packet plus a fallback when its primary path gates.
-- Treat remote-ahead as expected; fresh-read/rebase and reconcile. Escalate only
-  for failed reconciliation or repeated lack of remote branch movement.
-- Restart or let the existing 45m recurrent `./codex --wait ...` loop pick up
-  this wrapper change; future cycles should no longer misreport `git fetch` as
-  blocked by the local sandbox.
-- Expect future Windows/macOS/Linux events to use the status packet shape for
-  plans, blockers, errors, dependencies, evidence, and lease intent.
-- Check whether Linux l7 checkpointed, merge/test Windows w4a/w4b if still
-  ahead, reconcile macOS m1b completion, and decide the shared Open Shell menu /
-  `PtyIntent::Shell` sign-off.
+- Merge/test `origin/windows-next` into `linux-next` or record exact conflicts;
+  pay attention to `host-shell::pty` because Windows menu launch work and macOS
+  Unix PTY foundation both touched that area.
+- A Linux/materializer-capable agent should renew, release, or reclaim l7 with
+  a status packet covering plan, blockers, files touched, evidence, and next
+  checkpoint.
+- macOS should pick m4 terminal wiring or m7 CI/tarball; m5 waits for l7 plus
+  l5 recipe-publish/CI-fetch.
+- Windows should avoid duplicate w4 claims; w5 and useful live-VM w6 evidence
+  remain blocked on the recipe/materializer path.
 
 ## Resolved Since Previous Loop
 
-- Coordination ambiguity reduced: task selection now prefers coherent packets
-  over earliest tiny pending items, and agents have a single status format for
-  errors, blockers, dependencies, plans, evidence, and handoffs.
-- The prior recurrent-run confusion is now addressed: remote advancement should
-  be recorded as progress, while repeated no-progress should be documented as a
-  health concern.
-- The wrapper sandbox fault is fixed and verified: repeat-mode coordination now
-  has the Git/network privileges the skill requires.
+- macOS m1b completed the VZ vsock connector, `VsockStream`, and wait_ready
+  Hello/HelloAck probe; lease `7c2a9f1eb083` released.
+- macOS m6 completed build/install scripts and verified the signed app bundle
+  launches; m7 is now ready.
+- macOS m4 foundation landed as `pty::unix`; remaining m4 work is scoped to
+  user-facing Terminal.app wiring.
 
 ## Current Major Blockers
 
-- Linux l7 `§3-materializer-driver`: assigned to Linux lease
-  `linux-l-mat-2026-05-25T15Z`; blocks Windows w5 and macOS m5.
-- Windows w4 tail is split: w4a/w4b progressed on `windows-next`; w4c/w4e/w4f
-  are VM-gated, and w4d needs shared Open Shell menu / `PtyIntent::Shell`
-  agreement.
-- macOS l5 recipe-publish / CI-fetch: assigned to macOS after l7 rootfs-tar
-  API exists; blocks final recipe artifact path.
-- macOS m1b completed at 2026-05-25T20:00Z and released lease
-  `7c2a9f1eb083`; queue headers still need reconciliation if not already
-  updated by the latest remote cycle.
+- Linux l7 `§3-materializer-driver`: stale lease
+  `linux-l-mat-2026-05-25T15Z`; blocks Windows w5, macOS m5, and live-VM
+  verification for w6 / PTY attach smoke.
+- Windows w4 integration: `origin/windows-next` is ahead at `ae8789ff`
+  and must be merge/tested into `linux-next`.
+- macOS l5 recipe-publish / CI-fetch: still macOS-owned and waits on l7's
+  rootfs-tar API.
 
 ## Validation
 
-- `python` + PyYAML parse passed for `methodology/distributed-work.yaml`,
-  `methodology/multi-host-development.yaml`, and `plan/index.yaml`.
+- `git ls-remote origin refs/heads/main refs/heads/linux-next refs/heads/windows-next refs/heads/osx-next`: passed.
+- PyYAML parsed `plan.yaml` and `plan/index.yaml`.
 - `git diff --check` passed for touched coordination files.
-- `bash -n codex` passed.
-- `./codex --help` showed the new `--trusted` option.
-- `./codex --wait 1s --times 1 "<diagnostics>"` passed outside this meta-sandbox
-  and confirmed nested Git network access.
-- `ruby` YAML parser was unavailable in this sandbox (`ruby: command not found`);
-  PyYAML was used instead.
-- Files changed this pass: `codex`, `plan/loop_status.md`.
+- Files changed this pass: `plan/loop_status.md`, `plan.yaml`,
+  `plan/index.yaml`, `plan/issues/multi-host-coordination-2026-05-24.md`,
+  `plan/issues/cross-host-blocker-roundup-2026-05-25.md`,
+  `plan/issues/windows-next-work-queue-2026-05-25.md`,
+  `plan/issues/osx-next-work-queue-2026-05-25.md`.
