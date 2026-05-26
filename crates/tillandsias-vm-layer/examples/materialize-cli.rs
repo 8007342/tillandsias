@@ -81,7 +81,16 @@ fn real_main() {
     // multi-minute buildah pull/build cycle.
     let rootfs: Result<MaterializedRootfs, _> = match args.executor {
         Executor::Buildah => {
-            let m = Materializer::new(BuildahExec::default(), args.cache_root.clone());
+            // Build context = the Recipefile's parent dir, so relative
+            // `COPY bootstrap/ ...` sources resolve against
+            // `images/vm/bootstrap/` regardless of the process CWD.
+            let context_dir = args
+                .recipe
+                .parent()
+                .map(|p| p.to_path_buf())
+                .unwrap_or_else(|| std::path::PathBuf::from("."));
+            let exec = BuildahExec::default().with_context(context_dir);
+            let m = Materializer::new(exec, args.cache_root.clone());
             m.run(&recipe, &manifest, args.arch)
         }
         Executor::Noop => {

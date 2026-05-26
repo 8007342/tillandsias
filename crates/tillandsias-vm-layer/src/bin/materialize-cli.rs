@@ -91,10 +91,19 @@ fn run() -> Result<(), String> {
         println!("publish_tag={tag}");
     }
 
+    // Build context = the Recipefile's parent dir so relative COPY/ADD
+    // sources resolve against the recipe directory, not the process CWD.
+    let context_dir = args
+        .recipe
+        .parent()
+        .map(|p| p.to_path_buf())
+        .unwrap_or_else(|| PathBuf::from("."));
     let executor = if let Some(path) = args.buildah {
-        BuildahExec::default().with_binary(path)
-    } else {
         BuildahExec::default()
+            .with_binary(path)
+            .with_context(context_dir)
+    } else {
+        BuildahExec::default().with_context(context_dir)
     };
 
     let mat = Materializer::new(executor, args.cache_root.clone());
