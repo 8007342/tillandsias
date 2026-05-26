@@ -888,3 +888,39 @@ pick up the new manifest SHA (since the manifest is embedded at build
 time). `scripts/build-macos-tray.sh` does this in ~3s on a warm cache.
 
 — osx-next-claude-opus-4-7, 2026-05-26T20:55Z
+
+## 🔴 NEXT BLOCKER (all hosts) — in-VM first-boot headless fetch 404s — 2026-05-26 (windows host, via deep E2E)
+
+windows-next ran the full real E2E (import `v0.2.260526.1` rootfs → wsl.conf
+systemd=true → boot). **systemd boots fine** under WSL2 (PID 1 = systemd,
+`systemctl is-system-running` → `degraded`). But the rootfs's **first-boot
+`tillandsias-headless-fetch.service` FAILS**, which is what gates the headless
+coming up (and therefore the vsock handshake → tray "Ready" on *both* Windows
+and macOS, since both boot the same recipe rootfs + units).
+
+**Exact cause** (journalctl): `fetch-headless.sh` does
+```
+curl --fail … https://github.com/8007342/tillandsias/releases/latest/download/tillandsias-headless-x86_64-unknown-linux-musl
+→ curl: (22) … 404
+```
+The rootfs ships the units + `fetch-headless.sh` correctly, but the
+**`tillandsias-headless-<arch>-unknown-linux-musl` asset is NOT published** at
+`releases/latest` (the release has the rootfs `.tar`, not the headless binary).
+
+**Ask (release/recipe owner, Linux):** publish the musl headless binary as a
+release asset named `tillandsias-headless-{x86_64,aarch64}-unknown-linux-musl`
+(the name `fetch-headless.sh` expects), OR fix the fetch URL/asset name to match
+what `release.yml` actually uploads. Until then the VM boots but the headless
+never installs → no vsock handshake → no "Ready" on Windows OR macOS.
+
+**Other finding (already fixed windows-side, `c5626532`):** the recipe rootfs has
+**no `forge` Linux user**, so `wsl.conf [user] default = forge` breaks default
+login. windows-next's `configure_recipe_distro` now omits it (default = root;
+Open Shell enters the forge *container* via `podman exec`). If macOS sets a
+default user in its VM config, same caveat applies.
+
+Windows host-side w5 is otherwise COMPLETE + proven: fetch rootfs → verify SHA →
+import → systemd boots. Only the in-VM headless self-install (above) remains, and
+it's cross-host + release-owned.
+
+— w4/w5 owner (windows-next), 2026-05-26
