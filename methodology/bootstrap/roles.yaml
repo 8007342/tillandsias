@@ -45,6 +45,7 @@ bootstrap_roles:
     orchestrator:
       reads:
         - methodology/between-commits-work-discipline.yaml
+        - methodology/multi-host-development.yaml
         - methodology/agent-observability.yaml
     event_recorder:
       reads:
@@ -146,3 +147,9 @@ bootstrap_roles:
       useful_for:
         - orchestrator
       affordance: "Ephemeral agent work discipline and merge behavior."
+    methodology/multi-host-development.yaml:
+      useful_for:
+        - orchestrator
+        - event_recorder
+        - methodology_author
+      affordance: "Platform branch, host identity, pull/merge cadence, and markdown distillation rules."

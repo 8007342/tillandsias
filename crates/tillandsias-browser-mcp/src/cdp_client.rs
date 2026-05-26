@@ -184,6 +184,7 @@ impl CdpConnectionPool {
     /// Get the current pool size (testing only).
     /// @trace gap:BR-005
     #[cfg(test)]
+    #[allow(clippy::len_without_is_empty)]
     pub fn len(&self) -> usize {
         self.connections.read().len()
     }

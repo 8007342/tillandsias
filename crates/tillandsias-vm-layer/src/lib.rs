@@ -26,11 +26,42 @@ use serde::{Deserialize, Serialize};
 // Both wsl and vz modules compile on every target so call sites can hold
 // `WslRuntime` / `VzRuntime` symbols and tests can verify the trait impl
 // shape on Linux. Real backend bodies are cfg-gated inside the modules.
-pub mod wsl;
 pub mod vz;
+pub mod wsl;
+
+// macOS host-side vsock connector. Declared at this level so callers can
+// import `tillandsias_vm_layer::transport_macos::connect_to_vm_vsock` from
+// the macOS tray. The file is itself `#![cfg(target_os = "macos")]` so it
+// no-ops on Linux/Windows builds.
+//
+// @trace spec:vsock-transport, spec:vm-idiomatic-layer
+#[cfg(target_os = "macos")]
+pub mod transport_macos;
 
 #[cfg(all(target_os = "linux", feature = "fake"))]
 pub mod fake;
+
+/// HTTP fetch + SHA-256 verification for first-run provisioning. Behind the
+/// `download` feature so trait-only consumers stay reqwest-free.
+#[cfg(feature = "download")]
+pub mod fetch;
+
+/// Shared (co-owned) Recipefile + manifest.toml parser for the recipe
+/// materializer (vm-recipe-provisioning §2). Behind the `recipe` feature.
+#[cfg(feature = "recipe")]
+pub mod recipe;
+
+/// Recipe materializer driver (vm-recipe-provisioning §3 + §4). Reads the
+/// parsed `Recipe` + `Manifest` from `recipe::`, walks each instruction,
+/// derives a content-addressed `LayerKey`, looks up the on-disk cache,
+/// invokes a `LayerExecutor` on cache miss (production: `buildah`
+/// subprocess), and emits a final rootfs `.tar`. Linux-host owns this
+/// driver (lease `linux-l-mat-2026-05-25T15Z`); per-OS converters
+/// (§3.7.1 / §3.7.2) live in their own submodules under sibling claims.
+///
+/// Behind the `materialize` feature.
+#[cfg(feature = "materialize")]
+pub mod materialize;
 
 /// Provisioning manifest passed to `VmRuntime::provision`.
 ///

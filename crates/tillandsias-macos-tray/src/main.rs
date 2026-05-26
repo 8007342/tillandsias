@@ -16,7 +16,13 @@
 // re-export functions from sub-modules that compile everywhere — see
 // `terminal_attach` and `menu_disabled_v2` for the pattern.
 #[cfg(target_os = "macos")]
+mod action_host;
+#[cfg(target_os = "macos")]
 mod installation_uuid;
+#[cfg(target_os = "macos")]
+mod main_thread;
+#[cfg(target_os = "macos")]
+mod pty_vsock_bridge;
 #[cfg(target_os = "macos")]
 mod status_item;
 #[cfg(target_os = "macos")]

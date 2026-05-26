@@ -64,3 +64,8 @@ cheatsheet-sources/
 /smoke*.err
 /err*.log
 /out*.log
+
+# Session-local cron scheduler runtime state (not source)
+.claude/scheduled_tasks.lock
+.claude/scheduled_tasks.json
+/dist

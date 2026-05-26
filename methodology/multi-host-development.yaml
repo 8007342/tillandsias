@@ -1,0 +1,247 @@
+trace: spec:methodology-accountability
+
+multi_host_development:
+  version: v0.1
+  purpose: >
+    Coordinate Linux, Windows, and macOS hosts working on sibling branches while
+    `plan/` remains the durable inter-agent ledger for long-running work,
+    failures, restarts, and idempotent recovery.
+
+  platform_branches:
+    linux: linux-next
+    windows: windows-next
+    macos: osx-next
+    release: main
+    rule: >
+      Each host checkpoints to its platform branch. Platform-specific work stays
+      on that branch until stable, then merges back to main. Cross-cutting work
+      lands on main or the selected shared integration branch and is
+      fast-forwarded to all platform branches only after ancestry is verified.
+
+  branch_convention:
+    shared_logic:
+      - crates/tillandsias-host-shell
+      - crates/tillandsias-core
+      - crates/tillandsias-headless
+      - images
+      - openspec
+      - methodology
+      - plan
+    platform_splits:
+      - crates/tillandsias-host-shell-linux
+      - crates/tillandsias-host-shell-macos
+      - crates/tillandsias-host-shell-windows
+      - cfg_target_os_modules
+    separation_rule: >
+      Keep protocol and shared orchestration in `tillandsias-host-shell` and
+      platform-agnostic crates. Keep thin tray wrappers and OS API calls on the
+      owning platform branch unless the shared API contract changes.
+
+  host_identity:
+    required_fields:
+      - host_id
+      - platform
+      - branch
+      - worktree_path
+      - agent_id
+      - lease_id
+      - last_seen_commit
+      - upstream_commit
+      - observed_sibling_heads
+    rule: >
+      Every plan lease, agent event, and handoff touching shared files includes
+      host_id and platform so a cold-start agent can distinguish Linux local
+      state from Windows/macOS remote progress.
+
+  start_of_session:
+    required_checks:
+      - "git fetch origin"
+      - "git pull --ff-only"
+      - "git ls-remote origin refs/heads/main refs/heads/linux-next refs/heads/windows-next refs/heads/osx-next"
+      - "git status --short --branch"
+    rule: >
+      Before editing, absorb the current remote head for the active platform
+      branch and record sibling branch heads in the plan issue or event that
+      governs the work.
+    remote_progress_rule: >
+      A recurrent agent should normally find `origin/linux-next` ahead of its
+      local checkout. Treat that as healthy remote progress and fresh-read the
+      changed ledgers. The warning condition is repeated lack of remote progress
+      across the expected cadence, or remote-ahead combined with a local dirty
+      tree, conflict, sandbox, or credential issue that prevents reconciliation.
+
+  fast_forward_guard:
+    before_updating_platform_branch:
+      - "git merge-base --is-ancestor origin/<platform-branch> <source-ref>"
+      - "git diff --name-only origin/<platform-branch>..<source-ref>"
+    rule: >
+      A platform branch may be fast-forwarded from main or another shared
+      source only when its current remote head is an ancestor. If the ancestry
+      check fails, another host has independent work; stop and coordinate
+      through `plan/` before pushing.
+
+  pull_merge_cadence:
+    before_start: true
+    before_long_verification: true
+    before_checkpoint_push: true
+    during_long_work: "at each meaningful checkpoint or before touching shared files"
+    merge_order:
+      - own_platform_branch_from_origin
+      - main
+      - sibling_platform_branches_that_touch_shared_files
+    conflict_policy:
+      - "Spec, methodology, and plan conflicts block until explicitly reconciled."
+      - "Platform crate conflicts stay on the owning platform branch unless a shared API contract changed."
+      - "Never resolve conflicts by deleting another host's plan notes; tombstone, supersede, or merge by stable ID."
+
+  plan_ledger:
+    canonical_files:
+      - plan.yaml
+      - plan/index.yaml
+      - plan/steps
+      - plan/issues
+    scratch_root: plan/localwork
+    rules:
+      - "Long-running module builds get durable step or issue files before implementation begins."
+      - "Agents update the same stable graph node rather than creating host-specific duplicates unless scopes are independent."
+      - "Repeated plan updates are semantic upserts keyed by stable IDs."
+      - "Each checkpoint records sibling heads observed and whether they were merged, skipped, or blocked."
+      - "A failed or restarted agent can reclaim a stale lease only after re-reading plan.yaml, plan/index.yaml, and the governing issue/step."
+
+  markdown_distillation:
+    rule: >
+      Ad hoc Markdown is intake only. Durable knowledge belongs in methodology,
+      OpenSpec specs, provenance-backed cheatsheets, or plan issues/steps.
+      Tool-local `CLAUDE.md` files may contain only pointers and local command
+      affordances; they must not be a hidden architecture or process source of
+      truth.
+    intake_paths:
+      - CLAUDE.md
+      - .claude/*.md
+      - top-level *.md reports
+    closure_steps:
+      - "Distill requirements into openspec/specs."
+      - "Distill process rules into methodology."
+      - "Distill operational facts into cheatsheets with provenance."
+      - "Distill long-running work state into plan/steps or plan/issues."
+      - "Replace the source Markdown with a tombstone pointer when retained for compatibility."
+
+  distributed_work:
+    rule: >
+      The CRDT-inspired primitives for cross-host, cross-agent,
+      cross-session work — stable IDs, append-only events, lease+TTL,
+      idempotent operations — are defined in
+      `methodology/distributed-work.yaml`. That file is the authority for
+      the work-item schema, host-component ownership matrix, and the
+      agent self-assignment protocol. This section is its index.
+    references:
+      - methodology/distributed-work.yaml
+      - plan/issues/branch-and-coordination-canon-2026-05-25.md
+    cheatsheet_index:
+      - cheatsheets/concurrent-git/branches.md
+      - cheatsheets/concurrent-git/agent-handoff.md
+      - cheatsheets/concurrent-git/plan-discipline.md
+
+  plan_write_discipline:
+    rule: >
+      ALL writes to `plan/`, `methodology/`, `openspec/`, and `cheatsheets/`
+      land on `linux-next` regardless of which host or agent authored them.
+      The integration loop merges sibling-branch CODE work into
+      `linux-next`; SHARED-state writes go directly. See §2 of
+      `plan/issues/branch-and-coordination-canon-2026-05-25.md` for the
+      full destination matrix.
+    rationale: >
+      One ledger branch eliminates merge conflicts on coordination state.
+      Sibling branches stay focused on platform-specific code, not on
+      cross-host narrative.
+    procedure:
+      - "git fetch origin && git checkout linux-next && git pull --ff-only"
+      - "Edit target plan/methodology/openspec file using stable-ID-keyed semantic upsert."
+      - "git add ONLY the intended files (never `git add -A` from a dirty tree)."
+      - "git commit with `chore(plan): <subject>` or `docs(plan): <subject>`."
+      - "git push origin linux-next. On rejection: `git fetch && git rebase origin/linux-next` and retry up to 3 times."
+      - "Switch back to your code branch (windows-next / osx-next) when done."
+
+  branch_canon:
+    rule: >
+      Branch names are CANONICAL — `osx-next`, not `macos-next`. The
+      branch predates the Apple branding shift from OS X → macOS and is
+      grandfathered for stability.
+    canonical:
+      linux: linux-next
+      windows: windows-next
+      macos: osx-next
+      release: main
+    common_mistakes:
+      - "Saying `macos-next` — wrong. Always `osx-next`."
+      - "Pushing platform code to `linux-next` directly — should route through the platform branch unless the file is shared (plan/, methodology/, openspec/, cheatsheets/)."
+
+  common_pitfalls:
+    rule: >
+      Learned by the integration loop between 2026-05-24 and 2026-05-25.
+      Reading this section before starting a multi-host work session saves
+      you from re-experiencing them.
+    items:
+      - id: dirty-tree-blocks-integration
+        symptom: >
+          The integration loop skips with "dirty-tree-skipped"; sibling
+          backlog grows silently.
+        cause: >
+          Linux-host had uncommitted edits to methodology/openspec/plan
+          (intake docs in flight); STEP 1 of the loop refuses to merge
+          onto an uncommitted base.
+        mitigation: >
+          Commit (or stash) before stepping away. The loop's STEP 1 now
+          notes a dirty-tree skip in the ledger; treat 2 consecutive
+          dirty-tree skips as a soft escalation.
+      - id: claim-collision-on-parallel-amendment
+        symptom: >
+          Two hosts independently draft the same amendment (e.g. macOS D6
+          and Windows D8 of `vm-recipe-provisioning`), and the later
+          author has to drop redundant work.
+        cause: >
+          Neither agent checked the integration branch for a competing
+          claim before drafting.
+        mitigation: >
+          Before starting work on a cross-cutting amendment, look for
+          recent commits and open claims on the same scope. Add a CLAIM
+          block to the relevant `plan/issues/` file FIRST, push, then
+          start drafting. If the claim push reveals a competing claim,
+          coordinate before continuing.
+      - id: silent-drop-on-unhandled-control-variant
+        symptom: >
+          Tray sends a control-wire message and never gets a reply; hangs.
+        cause: >
+          The dispatcher on the receiving transport (unix-socket OR vsock)
+          had no arm for that variant and fell through to a silent
+          `_ => {}`.
+        mitigation: >
+          As of commit `a9adf59f`, both dispatchers reply with
+          `Error { code: Unsupported }`. New variants must be added to
+          the shared dispatcher (see Slice 2 in
+          plan/issues/control-socket-protocol-convergence-2026-05-25.md);
+          DO NOT fork local handlers.
+      - id: macos-direct-commit-to-linux-next
+        symptom: >
+          `origin/osx-next` is frozen while macOS-authored commits land
+          directly on `linux-next`.
+        cause: >
+          macOS host bypassed its platform branch.
+        decision: >
+          Ratified for `plan/` writes (canonical per branch-canon issue
+          §4). For CODE work, still SHOULD route through `osx-next` so
+          the integration loop can run isolation checks. Advisory only;
+          the loop notes drift in its ledger.
+      - id: gitignore-drift-across-hosts
+        symptom: >
+          A file like `.claude/scheduled_tasks.lock` is session-state on
+          host A, untracked on host B (which adds it to `.gitignore`),
+          but the gitignore change only lands on a sibling branch.
+        cause: >
+          Session-local artifacts vary by harness; one host added the
+          ignore on its branch but the other hosts didn't.
+        mitigation: >
+          When a host adds an entry to `.gitignore` covering a
+          cross-platform session artifact, file a plan/ note so the
+          integration loop's ledger surfaces the methodology-level
+          implication.

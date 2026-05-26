@@ -1,0 +1,24 @@
+// Win32 resource script for tillandsias-tray.exe.
+//
+// Compiled + linked by build.rs via the `embed-resource` crate on Windows
+// targets. Embeds the application manifest so the tray declares per-monitor-v2
+// DPI awareness and requireAdministrator=false (otherwise Windows runs the GUI
+// DPI-unaware / blurry on HiDPI).
+//
+// Resource type 24 is RT_MANIFEST; id 1 is CREATEPROCESS_MANIFEST_RESOURCE_ID
+// (the manifest the loader applies to the process). Numeric forms are used so
+// the script needs no SDK headers (portable across rc.exe and windres).
+//
+// ICON: rasterized from assets/icons/xerographica/bloom.svg by the linux host
+// 2026-05-25 using ImageMagick (`magick <svg> -density 384 -background none
+// -resize 256x256 -define icon:auto-resize=256,128,96,64,48,32,16
+// tillandsias.ico`). The .ico carries 7 sizes (16,32,48,64,96,128,256) so
+// Windows picks the right one for taskbar / notification area / Alt-Tab.
+// Windows-tray w1: wire the ICON entry below by loading
+// LoadIconW(GetModuleHandle, MAKEINTRESOURCE(1)) in notify_icon.rs.
+//
+// @trace spec:windows-native-tray, plan/issues/windows-next-work-queue-2026-05-25.md w1+l6
+
+1 24 "tillandsias.manifest"
+
+1 ICON "tillandsias.ico"

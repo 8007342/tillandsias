@@ -325,8 +325,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:enclave-isolation
-  coverage_ratio: 33
-  last_verified: '2026-05-03'
+  - litmus:git-mirror-safe-refspec-push
+  coverage_ratio: 67
+  last_verified: '2026-05-24'
 - spec_id: github-credential-health
   status: active
   litmus_tests:
@@ -737,6 +738,14 @@ specs:
   - litmus:credential-isolation
   coverage_ratio: 33
   last_verified: '2026-05-03'
+- spec_id: tillandsias-vault
+  status: active
+  litmus_tests:
+  - litmus:vault-auto-unseal-no-prompt
+  - litmus:vault-policy-forge-cannot-read-github-token
+  - litmus:git-mirror-safe-refspec-push
+  coverage_ratio: 75
+  last_verified: '2026-05-24'
 - spec_id: headless-mode
   status: active
   litmus_tests:

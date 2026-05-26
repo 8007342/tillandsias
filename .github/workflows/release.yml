@@ -209,3 +209,94 @@ jobs:
           git push origin refs/tags/stable --force
           git push origin refs/tags/latest --force
           echo "Updated rolling tags: stable, latest -> ${GITHUB_SHA}"
+
+  # @trace spec:macos-tray-build-and-release, spec:macos-native-tray
+  # macOS Apple-Silicon tray release: builds Tillandsias.app via the same
+  # scripts/build-macos-tray.sh used by CI + dev hosts, Cosign-signs the
+  # tarball with the same OIDC pattern as the Linux artifact, and uploads
+  # the tarball + .cosign.bundle + install-macos.sh + SHA256SUMS to the
+  # same GitHub release.
+  #
+  # Sequenced after `release` (the Linux job) so the GitHub release exists
+  # by the time we call `gh release upload`. The Linux job creates the
+  # release; this job adds the macOS assets via --clobber.
+  macos-release:
+    name: Build, sign, and publish macOS tray (Apple Silicon)
+    runs-on: macos-latest
+    needs: release
+    permissions:
+      contents: write
+      id-token: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+        with:
+          fetch-depth: 0
+
+      - name: Install Rust stable
+        uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # stable
+        with:
+          toolchain: stable
+
+      - name: Rust cache
+        uses: swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2
+        with:
+          workspaces: . -> target
+
+      - name: Resolve version (same as Linux job)
+        id: version
+        run: |
+          INPUT_VERSION="${{ inputs.version }}"
+          if [[ -n "${INPUT_VERSION:-}" ]]; then
+            VERSION="${INPUT_VERSION#v}"
+          else
+            VERSION="$(cat VERSION | tr -d '[:space:]')"
+          fi
+          echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
+          echo "Resolved macOS release version: v${VERSION}"
+
+      - name: Build Tillandsias.app + tarball
+        run: scripts/build-macos-tray.sh
+
+      - name: Verify bundle (sanity checks before signing)
+        run: |
+          codesign --verify --deep --strict --verbose=2 dist/Tillandsias.app
+          codesign -d --entitlements - dist/Tillandsias.app 2>&1 \
+              | grep -q 'com.apple.security.virtualization'
+          ls -la dist/
+
+      - name: Stage release artifacts
+        run: |
+          mkdir -p release-artifacts
+          cp dist/tillandsias-tray-*-macos-arm64.tar.gz release-artifacts/
+          install -m 0755 scripts/install-macos.sh release-artifacts/install-macos.sh
+          # The macOS SHA256SUMS uses a distinct filename so it doesn't
+          # collide with the Linux job's SHA256SUMS in the GitHub release.
+          mv dist/SHA256SUMS release-artifacts/SHA256SUMS-macos
+          ls -la release-artifacts/
+
+      - name: Install Cosign
+        uses: sigstore/cosign-installer@cad07c2e89fa2edd6e2d7bab4c1aa38e53f76003 # v4.1.1
+
+      - name: Sign macOS artifacts with Cosign bundles
+        run: |
+          cd release-artifacts
+          for artifact in tillandsias-tray-*-macos-arm64.tar.gz install-macos.sh; do
+            echo "::group::Signing ${artifact}"
+            cosign sign-blob \
+              --yes \
+              --bundle "${artifact}.cosign.bundle" \
+              "${artifact}"
+            test -f "${artifact}.cosign.bundle"
+            echo "::endgroup::"
+          done
+
+      - name: Upload macOS assets to release
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          VERSION="${{ steps.version.outputs.version }}"
+          # Release was created by the Linux `release` job (needs:); we just
+          # add the macOS assets via --clobber so a re-run is idempotent.
+          gh release upload "v${VERSION}" release-artifacts/* --clobber
+          echo "Uploaded macOS assets to v${VERSION}"

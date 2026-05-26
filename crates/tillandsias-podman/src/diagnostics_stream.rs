@@ -30,9 +30,7 @@ pub(crate) fn spawn_podman_stream(
         "Spawning live podman stream"
     );
     let mut cmd = crate::podman_cmd();
-    cmd.args(&argv)
-        .stdout(Stdio::piped())
-        .stderr(Stdio::null());
+    cmd.args(&argv).stdout(Stdio::piped()).stderr(Stdio::null());
     let label = format!("stream:{:?}", operation).to_ascii_lowercase();
     crate::log_podman_invocation(&label, cmd.as_std());
     cmd.spawn()

@@ -1,0 +1,71 @@
+trace: spec:methodology-accountability
+
+event_id: methodology.event.030-multi-host-branch-coordination@v1
+status: distilled
+observed_at: "2026-05-24T00:00:00-07:00"
+reporter: "codex"
+summary: >
+  The methodology assumed a single Linux integration host, but active work now
+  spans Linux, Windows, and macOS hosts on sibling platform branches.
+
+observed_signal:
+  description: >
+    Claudia aligned origin/linux-next, origin/windows-next, and origin/osx-next
+    to the Phase 6 Vault tip ddf52dff, then documented a cross-terminal cadence
+    in local memory. That cadence was not durable in repo-local methodology.
+  signal_type: "merge"
+
+expected_model:
+  description: >
+    Existing methodology only named linux-next as the active integration branch
+    and did not require host_id, platform, sibling-head observation, or ancestry
+    checks before platform branch fast-forwards.
+  source_refs:
+    - methodology/between-commits-work-discipline.yaml
+    - methodology/agent-observability.yaml
+
+violated_or_missing_claims:
+  methodology_claim_ids:
+    - active_integration_branch_single_linux_next
+    - hidden_memory_not_required_for_handoff
+  spec_requirement_ids: []
+  litmus_ids: []
+  cheatsheet_refs: []
+
+affected_artifacts:
+  specs: []
+  methodology_files:
+    - methodology/multi-host-development.yaml
+    - methodology.yaml
+    - methodology/bootstrap/router.yaml
+    - methodology/bootstrap/roles.yaml
+    - methodology/catalog.yaml
+    - methodology/agent-observability.yaml
+    - methodology/between-commits-work-discipline.yaml
+  code_paths: []
+  scripts: []
+  dashboards: []
+
+evidence_refs:
+  commits:
+    - ddf52dff
+  files:
+    - plan/issues/multi-host-coordination-2026-05-24.md
+  logs: []
+  ci_runs: []
+  external_sources: []
+
+uncertainty_delta: medium
+provisional_classification: concurrency_or_merge_anomaly
+
+next_distillation_step:
+  owner: "next-orchestrator"
+  action: >
+    Ensure future platform-branch plan updates include host_id, platform,
+    upstream_commit, and observed_sibling_heads.
+  target_artifact: "plan"
+
+closure_criteria:
+  - learned_distinction_preserved_in_durable_artifact
+  - evidence_refs_are_queryable
+  - old_single_host_claim_tombstoned_or_superseded

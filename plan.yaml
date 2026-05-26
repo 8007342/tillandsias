@@ -18,17 +18,25 @@ plan:
     verification: methodology/verification.yaml
 
   current_state:
-    last_completed_step: user-runtime-checkout-free (step 18)
-    next_step: post-release-polish (step 17)
-    next_graph_node: post-release-polish (pending)
+    last_completed_step: recent-work-spec-doc-methodology-audit (step 20)
+    next_step: multi-host-plan-ledger-adoption (step 21)
+    next_graph_node: multi-host-plan-ledger-adoption (in_progress)
     plan_index: plan/index.yaml
     step_directory: plan/steps
     checkpoint_branch: linux-next
-    platform_focus: linux-only
-    cross_platform_deferred: "2026-05-14 — see plan/issues/deferral-windows-macos-2026-05-14.md"
+    platform_branches:
+      linux: linux-next
+      windows: windows-next
+      macos: osx-next
+      release: main
+    platform_focus: multi-host linux/windows/macos
+    cross_platform_deferred: "Superseded 2026-05-24 by active host-shell Windows/macOS branch work; see plan/issues/multi-host-coordination-2026-05-24.md"
     wave_18_status: "All 6 automated tests passing (53/56 CI, 3 pre-existing tray UI timeouts)"
     p3_backlog_status: "24/27 gaps implemented across Waves 17-24; 3 undocumented gaps remain (non-blocking)"
-    doc_debt_payoff_status: "Waves A-D in progress: 3 events + 3 specs + 1 litmus test + 2 spec updates"
+    doc_debt_payoff_status: "Completed 2026-05-16; plan/index stale status corrected 2026-05-24"
+    recent_work_audit_status: "Completed and verified 2026-05-24: git-mirror safe refspec spec/litmus, Vault Phase 6 default spec, multi-host methodology, and Markdown distillation refreshed"
+    multi_host_coordination_status: "Active 2026-05-26T15:29Z: linux-next is at aa8fc2b9 after Step 16 slice 1, pty_handler AsyncFd, and explicit pump-cancel work. windows-next is at 7e95c7e2 with no unmerged Windows delta and trails linux-next by 6 commits; osx-next is at bdb7f9cb with no unmerged macOS delta and trails linux-next by 10 commits. Current gates are l9 recipe-publish workflow registration/first green artifacts/manifest SHA pins, Windows w7 branch-sync diagnostics to aa8fc2b9, macOS m5 startVm/provision wiring and live PTY proof after m5, m8 user-attended smoke, reopened Step 15 exit-125 cascade UX, and Step 16 OpenCode-web readiness parity."
+    markdown_distillation_status: "Active 2026-05-24: ad hoc Markdown is intake only; retained top-level/tool-local reports must be tombstone pointers to specs, cheatsheets, methodology, or plan"
     methodology_reconciliation_status: "Completed 2026-05-19: OpenCode Web launch specs, cheatsheets, CA generation, overlay/theme proxy, project selection, and auth-gated readiness reconciled"
     git_identity_propagation_status: "Completed 2026-05-19: GitHub Login identity now propagates to forge env and repo-local git config for Codex/OpenCode/OpenCode Web/Claude/maintenance"
     release_recovery_status: "Completed 2026-05-19: local build/init/tray chain passed, static-only GitHub convergence passed, v0.2.260519.3 musl release published, and Fedora Silverblue curl installer docs updated"
@@ -62,7 +70,8 @@ plan:
       needs_clarification, write the exact question and recommended default in
       the step file, and continue with another ready step if one exists.
     checkpoint_rule: >
-      Every meaningful batch ends with a checkpoint commit and push to origin/linux-next.
+      Every meaningful batch ends with a checkpoint commit and push to the owning
+      platform branch on origin.
       It is acceptable for that checkpoint to contain incomplete work if the state is coherent.
       Use a meaningful checkpoint-style commit message that records remaining work and the next action.
     handoff_rule: >
@@ -99,6 +108,9 @@ plan:
     - "The quiet repeat supervisor is tokio-driven and should wake on child stdout, note-file changes, and a low-frequency heartbeat instead of shell polling."
     - "Anonymous stream events may advance the current focus bar, but they must not create standalone tasks in the tree."
     - "When a task uncovers ambiguity or a useful refinement, file an immediate bootstrap note in `./plan/issues/` or `./methodology/events/` before edits begin, then refresh it after each meaningful substep so future agents can pick up the thread without chat history."
+    - "When a task uncovers ambiguity or a useful refinement, file an immediate bootstrap note in `./plan/issues/` or `./methodology/event/` before edits begin, then refresh it after each meaningful substep so future agents can pick up the thread without chat history."
+    - "Before platform-branch work, fetch/pull the active branch, record sibling heads for main/linux-next/windows-next/osx-next, and merge shared changes before long verification or checkpoint pushes."
+    - "Do not put durable architecture, process, or release claims in ad hoc top-level Markdown or CLAUDE files; distill them to OpenSpec, methodology, cheatsheets, or plan and leave only tombstone pointers."
     - "plan/localwork is disposable scratch, not canonical state."
     - "Repeat-mode agents should end with a compact JSON progress report, not a raw reasoning stream."
     - "Repeat-mode output must distinguish between waiting on the agent process and sleeping until the next iteration."

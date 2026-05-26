@@ -31,7 +31,14 @@ pub const TARGET_NAME: &str = "tillandsias-vm-uuid";
 pub fn read_installation_uuid() -> Result<Option<Uuid>, String> {
     let target = to_pwstr(TARGET_NAME);
     let mut cred_ptr = std::ptr::null_mut::<CREDENTIALW>();
-    let result = unsafe { CredReadW(PWSTR(target.as_ptr() as *mut _), CRED_TYPE_GENERIC, 0, &mut cred_ptr) };
+    let result = unsafe {
+        CredReadW(
+            PWSTR(target.as_ptr() as *mut _),
+            CRED_TYPE_GENERIC,
+            0,
+            &mut cred_ptr,
+        )
+    };
     if let Err(err) = result {
         // ERROR_NOT_FOUND (1168) = no credential, which is normal pre-bootstrap.
         if err.code().0 as u32 == 0x80070490 {
@@ -44,15 +51,14 @@ pub fn read_installation_uuid() -> Result<Option<Uuid>, String> {
     }
     let cred = unsafe { &*cred_ptr };
     let blob = unsafe {
-        std::slice::from_raw_parts(
-            cred.CredentialBlob,
-            cred.CredentialBlobSize as usize,
-        )
+        std::slice::from_raw_parts(cred.CredentialBlob, cred.CredentialBlobSize as usize)
     };
     let text = std::str::from_utf8(blob)
         .map_err(|e| format!("credential blob is not UTF-8: {e}"))?
         .to_string();
-    unsafe { CredFree(cred_ptr as *mut _); }
+    unsafe {
+        CredFree(cred_ptr as *mut _);
+    }
     Uuid::parse_str(text.trim())
         .map(Some)
         .map_err(|e| format!("credential blob is not a UUID: {e}"))
@@ -67,7 +73,7 @@ pub fn write_installation_uuid(uuid: Uuid) -> Result<(), String> {
     let value = uuid.to_string();
     let value_bytes = value.as_bytes();
 
-    let mut cred = CREDENTIALW {
+    let cred = CREDENTIALW {
         Flags: CRED_FLAGS(0),
         Type: CRED_TYPE_GENERIC,
         TargetName: PWSTR(target.as_ptr() as *mut _),
@@ -82,7 +88,7 @@ pub fn write_installation_uuid(uuid: Uuid) -> Result<(), String> {
         UserName: PWSTR::null(),
     };
     let _ = size_of::<CREDENTIALW>();
-    let result = unsafe { CredWriteW(&mut cred, 0) };
+    let result = unsafe { CredWriteW(&cred, 0) };
     result.map_err(|err| format!("CredWriteW failed: {err:?}"))
 }
 

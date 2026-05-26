@@ -1,0 +1,51 @@
+# Tillandsias VM rootfs recipe
+# =============================
+#
+# Source-of-truth for the in-VM environment that runs `tillandsias-headless`
+# on non-Linux hosts. Materialized to a rootfs `.tar` by
+# `tillandsias-vm-layer::materialize` (Linux: native buildah; macOS: buildah
+# inside podman-machine; Windows: buildah inside WSL). CI publishes
+# `.tar` + `.img` per-arch artifacts so non-Linux hosts can default to
+# CI-fetch (per D6 amendment).
+#
+# Standard Containerfile syntax extended with three RECIPE directives —
+# see openspec/changes/vm-recipe-provisioning/design.md §D1 + §D6.
+#
+# @trace spec:vm-provisioning-lifecycle, openspec/changes/vm-recipe-provisioning
+
+ARG TARGETARCH
+
+# Fedora 44 Container Base — pinned digests in images/vm/manifest.toml per
+# arch. The base SHA selected at materialize time so the recipe is one file
+# but the resolved input is reproducible.
+FROM registry.fedoraproject.org/fedora:44
+
+# Core OS packages: systemd init (replaces the container's default of just
+# running argv[0]), networking, sshd disabled in favor of vsock, podman for
+# the inner enclave, basic devtools the bootstrap scripts need.
+RUN dnf install -y --setopt=install_weak_deps=False --setopt=tsflags=nodocs \
+        systemd systemd-resolved openssh-server \
+        podman \
+        bash coreutils findutils grep sed gawk tar gzip xz curl ca-certificates \
+        rustup \
+    && dnf clean all
+
+# Bootstrap scripts: each one runs at its own RUN step so D3 layer caching
+# can skip unchanged ones. Numbered for predictable order.
+COPY bootstrap/ /opt/bootstrap/
+RUN chmod +x /opt/bootstrap/*.sh
+
+RUN /opt/bootstrap/10-systemd.sh
+RUN /opt/bootstrap/20-tillandsias.sh
+RUN /opt/bootstrap/30-enclave.sh
+
+# RECIPE directives — interpreted by tillandsias-vm-layer::recipe::parse.
+# vsock-listen: writes a systemd unit that runs tillandsias-headless with
+#   --listen-vsock <port> on boot. The port matches
+#   tillandsias-control-wire::transport::CONTROL_WIRE_VSOCK_PORT.
+# entry: informational — declares the user-facing entrypoint.
+# arch: supported materialization targets; the materializer fails fast on
+#   an unsupported host arch.
+RECIPE vsock-listen 42420
+RECIPE entry /usr/local/bin/tillandsias-headless
+RECIPE arch x86_64,aarch64

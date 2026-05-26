@@ -167,11 +167,8 @@ pub fn write_github_token_to_vault(token: &str, debug: bool) -> Result<(), Strin
             token.len()
         );
     }
-    rt.block_on(client.write_secret(
-        "secret/github/token",
-        serde_json::json!({ "token": token }),
-    ))
-    .map_err(|e| format!("vault write_secret failed: {e}"))?;
+    rt.block_on(client.write_secret("secret/github/token", serde_json::json!({ "token": token })))
+        .map_err(|e| format!("vault write_secret failed: {e}"))?;
     // Round-trip verification so the user sees a hard failure if the policy
     // changed under them.
     let read_back = rt
@@ -248,9 +245,7 @@ pub fn revoke_pending_container_tokens(debug: bool) {
         Ok(t) => t,
         Err(e) => {
             if debug {
-                eprintln!(
-                    "[tillandsias-vault] revoke: cannot read root token: {e}; skipping"
-                );
+                eprintln!("[tillandsias-vault] revoke: cannot read root token: {e}; skipping");
             }
             return;
         }
@@ -260,10 +255,7 @@ pub fn revoke_pending_container_tokens(debug: bool) {
         if let Err(e) = rt.block_on(client.revoke_token(&token))
             && debug
         {
-            eprintln!(
-                "[tillandsias-vault] revoke {} failed: {e}",
-                secret_name
-            );
+            eprintln!("[tillandsias-vault] revoke {} failed: {e}", secret_name);
         }
         let _ = Command::new("podman")
             .args(["secret", "rm", &secret_name])
@@ -401,7 +393,10 @@ fn create_token_podman_secret(name: &str, token: &str, debug: bool) -> Result<()
         .stderr(Stdio::null())
         .status();
     if debug {
-        eprintln!("[tillandsias-vault] creating podman secret {name} ({} chars)", token.len());
+        eprintln!(
+            "[tillandsias-vault] creating podman secret {name} ({} chars)",
+            token.len()
+        );
     }
     let mut child = Command::new("podman")
         .args(["secret", "create", "--driver=file", name, "-"])
@@ -536,9 +531,7 @@ fn container_running(name: &str) -> bool {
         .args(["inspect", "--format", "{{.State.Running}}", name])
         .output();
     match out {
-        Ok(o) if o.status.success() => {
-            String::from_utf8_lossy(&o.stdout).trim() == "true"
-        }
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).trim() == "true",
         _ => false,
     }
 }
@@ -640,10 +633,7 @@ async fn migrate_legacy_github_token(client: &VaultClient, debug: bool) -> Resul
         );
     }
     client
-        .write_secret(
-            "secret/github/token",
-            serde_json::json!({ "token": token }),
-        )
+        .write_secret("secret/github/token", serde_json::json!({ "token": token }))
         .await
         .map_err(|e| format!("vault write_secret: {e}"))?;
     let read_back = client
@@ -658,9 +648,7 @@ async fn migrate_legacy_github_token(client: &VaultClient, debug: bool) -> Resul
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status();
-    eprintln!(
-        "[tillandsias-vault] github token migrated to vault (old podman secret removed)"
-    );
+    eprintln!("[tillandsias-vault] github token migrated to vault (old podman secret removed)");
     Ok(())
 }
 

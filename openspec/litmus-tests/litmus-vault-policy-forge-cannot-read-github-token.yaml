@@ -1,7 +1,7 @@
 # @trace spec:tillandsias-vault
 name: litmus:vault-policy-forge-cannot-read-github-token
 spec: tillandsias-vault
-phase: 3
+phase: 6
 description: >
   A vault token scoped to forge-policy must receive HTTP 403 when it tries to
   read secret/data/github/token. Exercises the forge-policy-has-no-token-read

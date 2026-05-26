@@ -294,11 +294,12 @@ mod tests {
 
     #[test]
     fn allowlist_allows_active_localhost_routes() {
-        let mut routes = vec![];
-        routes.push("web.acme.localhost:8080".to_string());
-        routes.push("api.acme.localhost:8080".to_string());
-        routes.push("observatorium.acme.localhost:8080".to_string());
-        routes.push("ui.beta.localhost:8080".to_string());
+        let routes = vec![
+            "web.acme.localhost:8080".to_string(),
+            "api.acme.localhost:8080".to_string(),
+            "observatorium.acme.localhost:8080".to_string(),
+            "ui.beta.localhost:8080".to_string(),
+        ];
 
         let allowlist = BrowserAllowlist::new(&routes);
 

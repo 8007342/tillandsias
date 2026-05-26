@@ -12,12 +12,22 @@
 
 #![allow(dead_code)]
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
 use tillandsias_host_shell::provisioning::{ProvisionPhase, ProvisionProgress};
+use tillandsias_vm_layer::fetch::{
+    ProvisioningPins, RemoteArtifact, download_verified, is_sha256_hex,
+};
+use tillandsias_vm_layer::recipe::Manifest;
 use tillandsias_vm_layer::{ProvisionManifest, VmRuntime, wsl::WslRuntime};
+
+/// Committed per-release pins (rootfs + headless binary URLs and checksums).
+/// Embedded so an installed, checkout-free tray still provisions correctly.
+///
+/// @trace spec:vm-provisioning-lifecycle
+const PROVISIONING_MANIFEST: &str = include_str!("../assets/provisioning-manifest.json");
 
 /// Convenience wrapper around `tillandsias-vm-layer::wsl::WslRuntime` that
 /// carries the tray's preferred defaults (distro name `tillandsias`,
@@ -55,8 +65,7 @@ impl WslLifecycle {
     }
 
     pub fn rootfs_cache_path(sha256_short: &str) -> PathBuf {
-        Self::cache_root()
-            .join(format!("rootfs-fedora-44-{}.tar.xz", sha256_short))
+        Self::cache_root().join(format!("rootfs-fedora-44-{}.tar.xz", sha256_short))
     }
 
     pub fn binary_cache_path(version: &str) -> PathBuf {
@@ -75,9 +84,7 @@ impl WslLifecycle {
     /// `VmLifecycle::stop` is the production entry point; this wrapper
     /// exists for callers that don't want the full `VmLifecycle` machinery.
     pub async fn graceful_shutdown(&self) -> Result<(), String> {
-        self.runtime
-            .stop(Duration::from_secs(30))
-            .await
+        self.runtime.stop(Duration::from_secs(30)).await
     }
 
     /// Full first-run bootstrap. Reports progress through the
@@ -96,10 +103,7 @@ impl WslLifecycle {
     /// 6. `Connecting` — the caller's vsock handshake step.
     ///
     /// @trace spec:vm-provisioning-lifecycle
-    pub async fn bootstrap(
-        &self,
-        progress: Arc<dyn ProvisionProgress>,
-    ) -> Result<(), String> {
+    pub async fn bootstrap(&self, progress: Arc<dyn ProvisionProgress>) -> Result<(), String> {
         progress.report_phase(ProvisionPhase::SettingUp);
         tokio::fs::create_dir_all(Self::cache_root())
             .await
@@ -108,16 +112,13 @@ impl WslLifecycle {
             .await
             .map_err(|e| format!("create install_root failed: {e}"))?;
 
+        let pins = ProvisioningPins::from_json(PROVISIONING_MANIFEST)?;
+
         progress.report_phase(ProvisionPhase::DownloadingRootfs);
-        // The actual HTTP download lives in `WslRuntime::provision` once
-        // wired through `assets/provisioning-manifest.json`. The tray
-        // surfaces the phase string; the network work happens below.
-        let rootfs = download_fedora_rootfs_if_missing(&Self::cache_root()).await?;
+        let rootfs = download_rootfs(&Self::cache_root(), &pins).await?;
 
         progress.report_phase(ProvisionPhase::DownloadingTillandsias);
-        let host_version = tillandsias_host_shell::version();
-        let binary =
-            download_tillandsias_binary_if_missing(&Self::cache_root(), host_version).await?;
+        let binary = download_headless_binary(&Self::cache_root(), &pins).await?;
 
         progress.report_phase(ProvisionPhase::InstallingTillandsias);
         let manifest = ProvisionManifest {
@@ -137,34 +138,83 @@ impl WslLifecycle {
     }
 }
 
-fn user_src_dir() -> PathBuf {
+pub(crate) fn user_src_dir() -> PathBuf {
     let base = std::env::var_os("USERPROFILE")
         .map(PathBuf::from)
         .unwrap_or_else(|| PathBuf::from("C:\\Users\\Public"));
     base.join("src")
 }
 
-async fn download_fedora_rootfs_if_missing(cache_root: &PathBuf) -> Result<PathBuf, String> {
-    let dir = cache_root.join("rootfs");
-    tokio::fs::create_dir_all(&dir)
-        .await
-        .map_err(|e| format!("create rootfs cache dir failed: {e}"))?;
-    // For now, return a deterministic placeholder path. Wave 4 ships the
-    // download orchestration sketch; the real HTTP fetch + SHA verify
-    // lands with the manifest pin (DEFERRED: needs assets/provisioning-
-    // manifest.json + reqwest plumbing wired into vm-layer).
-    Ok(dir.join("fedora-44-rootfs.tar.xz"))
+/// Download + SHA-verify the pinned Fedora rootfs archive into the cache.
+///
+/// Returns the local path to the verified archive. NOTE: this is a Fedora
+/// **OCI image archive**, not a flat rootfs — `WslRuntime::provision` must
+/// flatten its layer(s) into a rootfs tar before `wsl --import` (Phase 2b).
+///
+/// @trace spec:vm-provisioning-lifecycle.provision.first-run-downloads@v1
+async fn download_rootfs(cache_root: &Path, pins: &ProvisioningPins) -> Result<PathBuf, String> {
+    let short = &pins.rootfs.sha256[..pins.rootfs.sha256.len().min(12)];
+    let dest = cache_root
+        .join("rootfs")
+        .join(format!("rootfs-fedora-44-{short}.oci.tar.xz"));
+    download_verified(&pins.rootfs, &dest, &|_, _| {}).await?;
+    Ok(dest)
 }
 
-async fn download_tillandsias_binary_if_missing(
-    cache_root: &PathBuf,
-    version: &str,
+/// Download + SHA-verify the pinned `tillandsias-linux-x86_64` headless
+/// binary (the in-VM process) into the cache.
+///
+/// @trace spec:vm-provisioning-lifecycle.provision.first-run-downloads@v1
+async fn download_headless_binary(
+    cache_root: &Path,
+    pins: &ProvisioningPins,
 ) -> Result<PathBuf, String> {
-    let dir = cache_root.join("bin");
-    tokio::fs::create_dir_all(&dir)
-        .await
-        .map_err(|e| format!("create bin cache dir failed: {e}"))?;
-    Ok(dir.join(format!("tillandsias-headless-{}", version)))
+    let dest = cache_root.join("bin").join(format!(
+        "tillandsias-headless-{}",
+        pins.headless_release_tag
+    ));
+    download_verified(&pins.headless_binary, &dest, &|_, _| {}).await?;
+    Ok(dest)
+}
+
+/// Resolve the Windows rootfs artifact (`x86_64.tar`) to a verifiable download
+/// pin from the recipe `Manifest` (l9 contract) at the given release `tag`.
+///
+/// Bridges the recipe `[output]` block — `artifact_url_template` +
+/// `expected_rootfs_sha["x86_64.tar"]` — into the [`RemoteArtifact`] that
+/// [`download_verified`] consumes, so the recipe-provisioning path reuses the
+/// existing verified-download machinery. The trailing step is
+/// [`materialize::wsl::tar_to_wsl_import`] on the downloaded tar.
+///
+/// Returns an error (rather than an unverifiable pin) while the recipe-publish
+/// CI has not yet backfilled a real SHA — the manifest still carries the
+/// `pending-ci` placeholder, which is NOT 64 hex digits. This is the honest gate
+/// until §2b publishes the first artifacts; the URL contract itself is settled.
+///
+/// @trace plan/issues/tray-convergence-coordination.md (w5-flip consumer contract),
+/// spec:vm-provisioning-lifecycle.provision.first-run-downloads@v1
+pub fn recipe_rootfs_artifact(manifest: &Manifest, tag: &str) -> Result<RemoteArtifact, String> {
+    const ARCH: &str = "x86_64";
+    const FORMAT: &str = "tar";
+    const SHA_KEY: &str = "x86_64.tar";
+
+    let url = manifest
+        .artifact_url(ARCH, FORMAT, tag)
+        .ok_or_else(|| "manifest has no [output].artifact_url_template".to_string())?;
+    let sha = manifest
+        .expected_sha(SHA_KEY)
+        .ok_or_else(|| format!("manifest [output].expected_rootfs_sha has no \"{SHA_KEY}\" pin"))?;
+    if !is_sha256_hex(sha) {
+        return Err(format!(
+            "rootfs SHA for {SHA_KEY} not yet published (manifest pin = {sha:?}); \
+             the recipe-publish CI (§2b) must run + backfill a real SHA first"
+        ));
+    }
+    Ok(RemoteArtifact {
+        url,
+        sha256: sha.to_string(),
+        bytes: None,
+    })
 }
 
 #[cfg(test)]
@@ -180,5 +230,33 @@ mod tests {
         }
         let root = WslLifecycle::install_root();
         assert!(root.ends_with("tillandsias\\wsl") || root.ends_with("tillandsias/wsl"));
+    }
+
+    // The committed recipe manifest — tested against directly so the resolver
+    // tracks the real l9 `[output]` contract, not a mock.
+    const REAL_MANIFEST: &str = include_str!("../../../images/vm/manifest.toml");
+
+    #[test]
+    fn recipe_rootfs_artifact_gates_on_pending_ci_sha() {
+        let m = Manifest::from_toml(REAL_MANIFEST).expect("parse committed manifest");
+        // The committed manifest still carries `pending-ci`, so resolution must
+        // refuse rather than hand back an unverifiable pin.
+        let err = recipe_rootfs_artifact(&m, "v0.2.260526.1").expect_err("pending-ci must gate");
+        assert!(err.contains("not yet published"), "unexpected error: {err}");
+    }
+
+    #[test]
+    fn recipe_rootfs_artifact_resolves_url_and_sha_once_published() {
+        // Simulate the recipe-publish CI having backfilled a real SHA.
+        let fake_sha = "a".repeat(64);
+        let published = REAL_MANIFEST.replace("pending-ci", &fake_sha);
+        let m = Manifest::from_toml(&published).expect("parse manifest");
+        let art = recipe_rootfs_artifact(&m, "v0.2.260526.1").expect("resolves once SHA is real");
+        assert_eq!(art.sha256, fake_sha);
+        assert_eq!(
+            art.url,
+            "https://github.com/8007342/tillandsias/releases/download/\
+             v0.2.260526.1/tillandsias-rootfs-x86_64.tar"
+        );
     }
 }

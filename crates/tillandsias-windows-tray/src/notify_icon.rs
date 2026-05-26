@@ -31,10 +31,15 @@ use std::ffi::OsString;
 use std::os::windows::ffi::OsStrExt;
 use std::sync::Mutex;
 
-use tillandsias_host_shell::menu_state::{self, MenuItem, MenuState, MenuStructure};
+use tillandsias_host_shell::menu_action::{self, MenuAction};
+use tillandsias_host_shell::menu_state::{
+    self, MenuItem, MenuState, MenuStructure, ProjectEntry, SelectedAgent,
+};
 use tillandsias_host_shell::provisioning::{ProvisionPhase, ProvisionProgress};
+use tillandsias_host_shell::pty::{intent_for_action, launch_spec};
+use tillandsias_host_shell::scanner::{ProjectEvent, watch_projects};
 
-use windows::Win32::Foundation::{HWND, LPARAM, LRESULT, POINT, WPARAM};
+use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
 use windows::Win32::Graphics::Gdi::HBRUSH;
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Shell::{
@@ -44,10 +49,10 @@ use windows::Win32::UI::Shell::{
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu, DispatchMessageW,
     GetCursorPos, GetMessageW, HMENU, IDI_APPLICATION, LoadIconW, MF_CHECKED, MF_DISABLED,
-    MF_GRAYED, MF_POPUP, MF_STRING, MSG, PostMessageW, PostQuitMessage,
-    RegisterClassExW, RegisterWindowMessageW, SetForegroundWindow, TPM_BOTTOMALIGN, TPM_LEFTALIGN,
-    TPM_RIGHTBUTTON, TrackPopupMenu, TranslateMessage, WM_APP, WM_COMMAND, WM_DESTROY,
-    WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSEXW, WS_EX_TOOLWINDOW,
+    MF_GRAYED, MF_POPUP, MF_STRING, MSG, PostMessageW, PostQuitMessage, RegisterClassExW,
+    RegisterWindowMessageW, SetForegroundWindow, TPM_BOTTOMALIGN, TPM_LEFTALIGN, TPM_RIGHTBUTTON,
+    TrackPopupMenu, TranslateMessage, WM_APP, WM_COMMAND, WM_DESTROY, WM_LBUTTONUP, WM_RBUTTONUP,
+    WNDCLASSEXW, WS_EX_TOOLWINDOW,
 };
 use windows::core::{PCWSTR, w};
 
@@ -91,7 +96,9 @@ unsafe impl Sync for HwndHandle {}
 
 impl TrayProgress {
     pub fn new(hwnd: HWND) -> Self {
-        Self { hwnd: HwndHandle(hwnd) }
+        Self {
+            hwnd: HwndHandle(hwnd),
+        }
     }
 }
 
@@ -131,7 +138,10 @@ fn update_status_text(text: &str, hwnd: HWND) {
 
 fn write_utf16_into<const N: usize>(buf: &mut [u16; N], text: &str) {
     let encoded: Vec<u16> = OsString::from(text).encode_wide().take(N - 1).collect();
-    for (slot, value) in buf.iter_mut().zip(encoded.iter().chain(std::iter::once(&0))) {
+    for (slot, value) in buf
+        .iter_mut()
+        .zip(encoded.iter().chain(std::iter::once(&0)))
+    {
         *slot = *value;
     }
 }
@@ -165,15 +175,45 @@ pub fn run() -> ! {
             *guard = Some(MenuState::initial());
         }
 
-        // Spawn the WSL provisioning + lifecycle task. Progress is reported
-        // via the TrayProgress sink which updates the tooltip and menu.
-        let progress = std::sync::Arc::new(TrayProgress::new(hwnd));
-        let lifecycle = WslLifecycle::new();
-        tokio::task::spawn_local(async move {
-            if let Err(err) = lifecycle.bootstrap(progress).await {
-                eprintln!("WSL lifecycle bootstrap failed: {err}");
+        // Host-side project discovery: scan %USERPROFILE%\src and keep the
+        // menu's local-projects list current. This runs entirely on the host
+        // and needs no VM, so the tray lists ~/src projects from first paint
+        // (the popup rebuilds from MENU_STATE on every right-click).
+        // @trace spec:host-shell-architecture.scanner.local-project-discovery@v1
+        match watch_projects(&crate::wsl_lifecycle::user_src_dir()) {
+            Ok(mut rx) => {
+                tokio::task::spawn_local(async move {
+                    while let Some(ev) = rx.recv().await {
+                        apply_project_event(ev);
+                    }
+                });
             }
-        });
+            Err(err) => {
+                tracing::warn!(%err, "host-side ~/src project scan unavailable");
+            }
+        }
+
+        // Spawn the WSL provisioning + lifecycle task, UNLESS dev mode asked us
+        // to skip it. `--no-provision` (or TILLANDSIAS_NO_PROVISION=1) brings the
+        // tray up in a clean, interactive state — no rootfs download, no
+        // `wsl --import` — so the menu can be exercised locally before the VM /
+        // recipe path lands. Progress is reported via the TrayProgress sink
+        // which updates the tooltip and menu.
+        if provisioning_enabled() {
+            let progress = std::sync::Arc::new(TrayProgress::new(hwnd));
+            let lifecycle = WslLifecycle::new();
+            tokio::task::spawn_local(async move {
+                if let Err(err) = lifecycle.bootstrap(progress).await {
+                    eprintln!("WSL lifecycle bootstrap failed: {err}");
+                }
+            });
+        } else {
+            tracing::info!(
+                "provisioning skipped (--no-provision / TILLANDSIAS_NO_PROVISION); \
+                 tray running in menu-only dev mode"
+            );
+            update_status_text("\u{26AA} Dev mode \u{2014} VM provisioning skipped", hwnd);
+        }
 
         // Pump messages until WM_QUIT.
         let mut msg = MSG::default();
@@ -201,6 +241,15 @@ pub fn run() -> ! {
         msg.wParam.0 as i32
     });
     std::process::exit(exit_code);
+}
+
+/// Whether the tray should drive WSL provisioning on launch. Dev mode disables
+/// it via the `--no-provision` CLI flag or `TILLANDSIAS_NO_PROVISION` env var,
+/// so the menu can be exercised locally without a VM or any downloads.
+fn provisioning_enabled() -> bool {
+    let env_skip = std::env::var_os("TILLANDSIAS_NO_PROVISION").is_some();
+    let arg_skip = std::env::args().any(|a| a == "--no-provision");
+    !(env_skip || arg_skip)
 }
 
 unsafe fn create_message_window() -> windows::core::Result<HWND> {
@@ -244,7 +293,18 @@ unsafe fn create_message_window() -> windows::core::Result<HWND> {
 }
 
 unsafe fn add_tray_icon(hwnd: HWND) -> windows::core::Result<()> {
-    let icon = LoadIconW(None, IDI_APPLICATION)?;
+    // Load the embedded tillandsias icon: resource ID 1 (`1 ICON
+    // "tillandsias.ico"` in assets/tillandsias.rc, compiled by build.rs via
+    // embed-resource). Fall back to the generic application icon if the
+    // resource is absent (e.g. a build where the .rc was not compiled), so the
+    // tray always has a glyph. @trace spec:windows-native-tray (w1)
+    let instance = GetModuleHandleW(None)?;
+    let hinst: HINSTANCE = instance.into();
+    // MAKEINTRESOURCE(1): an integer resource id encoded as a pointer-sized
+    // sentinel (never dereferenced by the loader). `without_provenance`
+    // expresses that precisely and avoids clippy's manual-dangling-ptr lint.
+    let icon = LoadIconW(hinst, PCWSTR(std::ptr::without_provenance::<u16>(1)))
+        .or_else(|_| LoadIconW(None, IDI_APPLICATION))?;
     let mut nid: NOTIFYICONDATAW = std::mem::zeroed();
     nid.cbSize = std::mem::size_of::<NOTIFYICONDATAW>() as u32;
     nid.hWnd = hwnd;
@@ -390,26 +450,166 @@ unsafe fn append_item(
 }
 
 fn to_utf16(s: &str) -> Vec<u16> {
-    OsString::from(s).encode_wide().chain(std::iter::once(0)).collect()
+    OsString::from(s)
+        .encode_wide()
+        .chain(std::iter::once(0))
+        .collect()
 }
 
 unsafe fn handle_menu_command(hwnd: HWND, cmd_id: u16) {
-    if cmd_id == MENU_ID_QUIT {
-        // Trigger graceful shutdown; the message loop exits next iteration.
-        let _ = PostMessageW(hwnd, WM_DESTROY, WPARAM(0), LPARAM(0));
-        return;
-    }
-    let logical_id =
-        MENU_ID_TABLE.with(|t| t.borrow().get(&cmd_id).cloned().unwrap_or_default());
+    // Recover the portable string id for this Win32 command id. The Quit
+    // leaf has a fixed command id and is not always present in the per-paint
+    // table, so map it explicitly.
+    let logical_id = if cmd_id == MENU_ID_QUIT {
+        menu_state::ids::QUIT.to_string()
+    } else {
+        MENU_ID_TABLE.with(|t| t.borrow().get(&cmd_id).cloned().unwrap_or_default())
+    };
     if logical_id.is_empty() {
         return;
     }
-    // Dispatch — for now we just log; click handlers are wired during the
-    // action-wiring phase.
-    tracing::info!(menu_id = %logical_id, "menu item clicked");
-    if logical_id == "github-login" {
-        // Future: open the GitHub device-flow URL.
-        eprintln!("[tillandsias] GitHub login click not yet wired");
+    let action = menu_action::resolve(&logical_id);
+    tracing::info!(menu_id = %logical_id, action = ?action, "tray menu click");
+    dispatch_action(hwnd, action);
+}
+
+/// Apply a host-side project scan event to the shared menu state.
+fn apply_project_event(ev: ProjectEvent) {
+    if let Ok(mut guard) = MENU_STATE.lock() {
+        let state = guard.get_or_insert_with(MenuState::initial);
+        apply_project_event_to(state, &ev);
+    }
+}
+
+/// Pure update rule for a project scan event — factored out of the global so
+/// the dedup / sort / removal behaviour is unit-testable without Win32.
+///
+/// `Added` inserts a `local` [`ProjectEntry`] (deduped by directory basename,
+/// kept name-sorted); `Removed` drops it. Paths with no usable basename are
+/// ignored.
+///
+/// @trace spec:host-shell-architecture.scanner.local-project-discovery@v1
+fn apply_project_event_to(state: &mut MenuState, ev: &ProjectEvent) {
+    match ev {
+        ProjectEvent::Added { path } => {
+            let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
+                return;
+            };
+            if name.is_empty() || state.local_projects.iter().any(|p| p.name == name) {
+                return;
+            }
+            state.local_projects.push(ProjectEntry {
+                name: name.to_string(),
+                path: path.to_string_lossy().into_owned(),
+                ready: false,
+            });
+            state.local_projects.sort_by(|a, b| a.name.cmp(&b.name));
+        }
+        ProjectEvent::Removed { path } => {
+            if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
+                state.local_projects.retain(|p| p.name != name);
+            }
+        }
+    }
+}
+
+/// Route a resolved [`MenuAction`] to its handler.
+///
+/// `Quit` posts `WM_DESTROY` so the message loop drains and exits on the next
+/// iteration. The remaining actions need the in-VM control wire (vsock) or a
+/// host-side spawn (GitHub device-flow terminal); those land in the
+/// vsock-attach phase. Until then they are logged with their resolved type —
+/// strictly better than the previous string special-casing, and the same
+/// resolver the macOS tray will consume.
+///
+/// @trace spec:windows-native-tray
+fn dispatch_action(hwnd: HWND, action: MenuAction) {
+    match &action {
+        MenuAction::Quit => unsafe {
+            let _ = PostMessageW(hwnd, WM_DESTROY, WPARAM(0), LPARAM(0));
+        },
+        // Agent selection is fully wired: update the shared menu state so the
+        // checkmark moves on the next paint.
+        MenuAction::SelectAgent(agent) => {
+            if let Ok(mut guard) = MENU_STATE.lock() {
+                let state = guard.get_or_insert_with(MenuState::initial);
+                if apply_menu_action_state(state, &action) {
+                    tracing::info!(?agent, "selected agent updated");
+                }
+            }
+        }
+        // The remaining arms are resolved + handled honestly, but their real
+        // effect needs plumbing that is not present on Windows yet. Each logs
+        // a specific reason rather than faking behaviour (w2 work queue).
+        MenuAction::OpenObservatorium | MenuAction::OpenOpenCodeWeb => {
+            // ShellExecute to the observatorium / OpenCode-Web URL lands with
+            // the router/VM (gui-passthrough); there is no URL until then.
+            tracing::info!(
+                ?action,
+                "browser action: no URL until the VM + router are up (gui-passthrough pending)"
+            );
+        }
+        MenuAction::Retry => {
+            tracing::info!(
+                "retry requested: provisioning-retry hook wires with the lifecycle iteration"
+            );
+        }
+        MenuAction::OpenLog => {
+            tracing::info!("open log requested: host-side log-file path not wired yet");
+        }
+        // Attach / Maintain / GitHub-login all open an in-VM PTY. The click is
+        // resolved end-to-end on the host side here — `intent_for_action` picks
+        // the `PtyIntent`, `launch_spec` produces the exact in-VM argv — leaving
+        // only the vsock `PtyOpen` send for the VM-E2E iteration.
+        MenuAction::Attach { .. } | MenuAction::Maintain { .. } | MenuAction::GithubLogin => {
+            resolve_and_log_pty_launch(&action);
+        }
+        MenuAction::CloudOverflow | MenuAction::Inert => {}
+    }
+}
+
+/// The currently selected coding agent, read from the shared menu state.
+/// Defaults to the menu's initial agent if the state is not yet populated.
+fn selected_agent() -> SelectedAgent {
+    MENU_STATE
+        .lock()
+        .ok()
+        .and_then(|g| g.as_ref().map(|s| s.selected_agent))
+        .unwrap_or_else(|| MenuState::initial().selected_agent)
+}
+
+/// Resolve a PTY-opening menu action to its in-VM launch spec and log it. The
+/// resolution (`MenuAction` → [`intent_for_action`] → [`launch_spec`]) is the
+/// full host-side path; the remaining step — sending the `PtyOpen` frame over
+/// vsock and pumping the ConPTY — lands with the VM-E2E iteration (w4f).
+fn resolve_and_log_pty_launch(action: &MenuAction) {
+    let Some((intent, project)) = intent_for_action(action, selected_agent()) else {
+        tracing::warn!(?action, "no PTY intent for action (unexpected in this arm)");
+        return;
+    };
+    // Default geometry until the tray owns a real terminal surface to size from.
+    // A project click forge-wraps the argv (podman exec); None runs in the VM.
+    let spec = launch_spec(&intent, project.as_deref(), 24, 80);
+    tracing::info!(
+        ?intent,
+        project = ?project,
+        argv = ?spec.argv,
+        "resolved tray click to in-VM PTY launch; vsock attach pending VM-E2E (w4f)"
+    );
+}
+
+/// Apply the state-mutating effect of a menu action to the menu state.
+/// Currently only agent selection mutates state; returns `true` if `state`
+/// changed. Factored out of the global `MENU_STATE` so the rule is unit-testable.
+///
+/// @trace spec:windows-native-tray
+fn apply_menu_action_state(state: &mut MenuState, action: &MenuAction) -> bool {
+    match action {
+        MenuAction::SelectAgent(agent) if state.selected_agent != *agent => {
+            state.selected_agent = *agent;
+            true
+        }
+        _ => false,
     }
 }
 
@@ -421,6 +621,76 @@ mod tests {
     /// collide with system messages.
     #[test]
     fn wm_trayicon_is_in_app_range() {
-        assert!(WM_TRAYICON >= WM_APP);
+        // Both are consts, so enforce the invariant at compile time.
+        const { assert!(WM_TRAYICON >= WM_APP) };
+    }
+
+    use std::path::PathBuf;
+
+    fn added(p: &str) -> ProjectEvent {
+        ProjectEvent::Added {
+            path: PathBuf::from(p),
+        }
+    }
+
+    #[test]
+    fn project_added_inserts_sorted_and_deduped() {
+        let mut state = MenuState::initial();
+        apply_project_event_to(&mut state, &added("C:\\Users\\u\\src\\zebra"));
+        apply_project_event_to(&mut state, &added("C:\\Users\\u\\src\\apple"));
+        // Duplicate basename is ignored.
+        apply_project_event_to(&mut state, &added("C:\\Users\\u\\src\\apple"));
+
+        let names: Vec<&str> = state
+            .local_projects
+            .iter()
+            .map(|p| p.name.as_str())
+            .collect();
+        assert_eq!(names, vec!["apple", "zebra"], "name-sorted, deduped");
+        assert!(state.local_projects.iter().all(|p| !p.ready));
+    }
+
+    #[test]
+    fn select_agent_updates_state_idempotently() {
+        use tillandsias_host_shell::menu_state::SelectedAgent;
+        let mut state = MenuState::initial();
+        assert_eq!(state.selected_agent, SelectedAgent::Claude); // initial
+
+        // Selecting a different agent mutates state.
+        assert!(apply_menu_action_state(
+            &mut state,
+            &MenuAction::SelectAgent(SelectedAgent::Codex)
+        ));
+        assert_eq!(state.selected_agent, SelectedAgent::Codex);
+
+        // Re-selecting the same agent is a no-op.
+        assert!(!apply_menu_action_state(
+            &mut state,
+            &MenuAction::SelectAgent(SelectedAgent::Codex)
+        ));
+
+        // A non-state action never mutates state.
+        assert!(!apply_menu_action_state(&mut state, &MenuAction::Quit));
+        assert!(!apply_menu_action_state(&mut state, &MenuAction::OpenLog));
+        assert_eq!(state.selected_agent, SelectedAgent::Codex);
+    }
+
+    #[test]
+    fn project_removed_drops_entry() {
+        let mut state = MenuState::initial();
+        apply_project_event_to(&mut state, &added("C:\\Users\\u\\src\\keep"));
+        apply_project_event_to(&mut state, &added("C:\\Users\\u\\src\\drop"));
+        apply_project_event_to(
+            &mut state,
+            &ProjectEvent::Removed {
+                path: PathBuf::from("C:\\Users\\u\\src\\drop"),
+            },
+        );
+        let names: Vec<&str> = state
+            .local_projects
+            .iter()
+            .map(|p| p.name.as_str())
+            .collect();
+        assert_eq!(names, vec!["keep"]);
     }
 }

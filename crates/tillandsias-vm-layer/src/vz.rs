@@ -42,6 +42,35 @@ pub struct VzRuntime {
     pub guest_cid: u32,
     /// On-disk root for VM artifacts (`~/Library/Application Support/tillandsias/vm/`).
     pub image_root: PathBuf,
+    /// VM handle storage (macOS-only). `Some` between `start()` and `stop()`.
+    /// Wrapped in a Mutex so multiple `&self` callers (start/stop/wait_ready)
+    /// can coordinate on the same VZVirtualMachine.
+    #[cfg(target_os = "macos")]
+    vm: std::sync::Mutex<Option<vm_handle::VmHandle>>,
+}
+
+/// Send+Sync wrapper around `Retained<VZVirtualMachine>` so `VzRuntime` can
+/// satisfy `Send + Sync` (required by the `VmRuntime` trait).
+///
+/// SAFETY: `Virtualization.framework` documents that a single
+/// `VZVirtualMachine` must be operated on a single dispatch queue. `VzRuntime`
+/// serialises all VZ method calls through `self.vm` (Mutex), and every
+/// invocation must run on a thread that is currently pumping
+/// `CFRunLoopRunInMode(kCFRunLoopDefaultMode, ...)` — typically the main
+/// thread of the tray binary or the dispatch queue created by
+/// `VZVirtualMachine`'s own infrastructure. The `unsafe impl` reflects that
+/// VZRuntime's API surface (not the bindings) enforces single-queue access.
+#[cfg(target_os = "macos")]
+mod vm_handle {
+    use objc2::rc::Retained;
+    use objc2_virtualization::VZVirtualMachine;
+
+    pub(crate) struct VmHandle(pub Retained<VZVirtualMachine>);
+
+    // SAFETY: see module docstring.
+    unsafe impl Send for VmHandle {}
+    // SAFETY: see module docstring.
+    unsafe impl Sync for VmHandle {}
 }
 
 impl VzRuntime {
@@ -50,6 +79,8 @@ impl VzRuntime {
         Self {
             guest_cid,
             image_root,
+            #[cfg(target_os = "macos")]
+            vm: std::sync::Mutex::new(None),
         }
     }
 
@@ -80,7 +111,162 @@ impl VzRuntime {
             && self.kernel_path().exists()
             && self.initrd_path().exists()
     }
+
+    /// Fetch the recipe-published rootfs artifact (per l9 URL contract)
+    /// and verify it against the manifest's pinned SHA-256, writing
+    /// the verified bytes to `self.rootfs_image_path()`. The macOS
+    /// tray calls this on first launch (and on any subsequent launch
+    /// where the image is absent) before `start()`.
+    ///
+    /// Arch is picked from `cfg!(target_arch = ...)` — Apple Silicon
+    /// gets `aarch64`, the (currently absent) Intel-Mac path would
+    /// get `x86_64`. Format is `"img"` for macOS since VFR boots a
+    /// raw EFI+ext4 disk image directly (Windows uses `"tar"` via
+    /// `wsl --import`).
+    ///
+    /// `tag` is the release tag (e.g. `"v0.2.260526.3"`) the caller
+    /// resolved from `CARGO_PKG_VERSION` or an explicit
+    /// `--release-tag` flag. Substituted into the manifest's
+    /// `[output].artifact_url_template`.
+    ///
+    /// Fails fast (without touching the network) if the manifest has
+    /// no `artifact_url_template`, no `expected_rootfs_sha` for the
+    /// chosen `<arch>.<format>` key, or the SHA-256 isn't a valid
+    /// 64-char hex string (which is how `download_verified` refuses
+    /// the placeholder `"pending-ci"` value until real CI publishes
+    /// pinned SHAs).
+    ///
+    /// @trace plan/issues/cross-host-blocker-roundup-2026-05-25.md
+    ///        l9 (artifact URL + SHA contract),
+    ///        plan/steps/20-macos-tray-v0_0_1.md (m5/vfr-image-via-ci-rootfs)
+    #[cfg(all(feature = "recipe", feature = "download"))]
+    pub async fn fetch_recipe_artifact(
+        &self,
+        manifest: &crate::recipe::Manifest,
+        tag: &str,
+    ) -> Result<(), String> {
+        use crate::fetch::{download_verified, RemoteArtifact};
+
+        let arch = if cfg!(target_arch = "aarch64") {
+            "aarch64"
+        } else {
+            "x86_64"
+        };
+        let format = "img";
+        let key = format!("{arch}.{format}");
+
+        let url = manifest
+            .artifact_url(arch, format, tag)
+            .ok_or_else(|| format!(
+                "manifest has no [output].artifact_url_template; cannot resolve {key} URL"
+            ))?;
+
+        let sha256 = manifest
+            .expected_sha(&key)
+            .ok_or_else(|| format!(
+                "manifest [output.expected_rootfs_sha] missing key {key:?}; \
+                 was the recipe-publish CI job run yet?"
+            ))?
+            .to_string();
+
+        let artifact = RemoteArtifact {
+            url,
+            sha256,
+            bytes: None,
+        };
+
+        // Ensure image_root exists; download_verified writes the
+        // dest path directly and won't create parent dirs.
+        if let Some(parent) = self.rootfs_image_path().parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
+        }
+
+        download_verified(&artifact, &self.rootfs_image_path(), &|_, _| {}).await
+    }
+
+    /// Open a host-side vsock stream to the running VM on `port`. Returns
+    /// an error if the VM hasn't been started (no handle in the slot) or
+    /// if VZ's connect path fails.
+    ///
+    /// Async wrapper around the blocking `connect_to_vm_vsock` (which
+    /// must pump the CFRunLoop for VZ's completion handler). We spawn it
+    /// on a blocking-friendly Tokio worker so the calling task isn't
+    /// blocked. The returned `VsockStream` is `AsyncRead + AsyncWrite`
+    /// and ready to hand to `pty_vsock_bridge::spawn_pty_bridge` in the
+    /// macOS tray.
+    ///
+    /// @trace spec:vsock-transport, spec:macos-native-tray,
+    ///        plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 4c)
+    #[cfg(target_os = "macos")]
+    pub async fn open_vsock_stream(
+        &self,
+        port: u32,
+        timeout: std::time::Duration,
+    ) -> Result<crate::transport_macos::VsockStream, OpenVsockError> {
+        // Take a clone of the existing VmHandle so we can use it from
+        // the spawn_blocking thread without holding the mutex. The
+        // module-level `vm_handle::VmHandle` already wraps the
+        // Retained<VZVirtualMachine> with the unsafe Send+Sync impl
+        // and a documented single-queue-access SAFETY rationale.
+        let send_handle = {
+            let slot = self
+                .vm
+                .lock()
+                .map_err(|e| OpenVsockError::LockPoisoned(e.to_string()))?;
+            let handle = slot.as_ref().ok_or(OpenVsockError::VmNotStarted)?;
+            vm_handle::VmHandle(handle.0.clone())
+        };
+
+        let fd = tokio::task::spawn_blocking(move || {
+            // Rust 2021 closures do per-field disjoint capture, which
+            // would project send_handle.0 (the bare Retained, NOT Send)
+            // instead of moving the whole VmHandle (which IS Send via
+            // the unsafe impl). Forcing a borrow of the whole struct
+            // disables that projection and captures the wrapper as a
+            // unit. See rust-lang/rust#73214.
+            let _force_full_capture = &send_handle;
+            crate::transport_macos::connect_to_vm_vsock(&send_handle.0, port, timeout)
+        })
+        .await
+        .map_err(|e| OpenVsockError::Join(e.to_string()))?
+        .map_err(OpenVsockError::Connect)?;
+
+        crate::transport_macos::VsockStream::from_vsock_fd(fd).map_err(OpenVsockError::Stream)
+    }
 }
+
+/// Errors returned by [`VzRuntime::open_vsock_stream`].
+#[cfg(target_os = "macos")]
+#[derive(Debug)]
+pub enum OpenVsockError {
+    /// `start()` hasn't installed a VM handle yet (or `stop()` cleared it).
+    VmNotStarted,
+    /// Internal Mutex was poisoned by an earlier panic.
+    LockPoisoned(String),
+    /// `spawn_blocking` task panicked or was cancelled.
+    Join(String),
+    /// VZ-level connect error (see `transport_macos::ConnectError`).
+    Connect(crate::transport_macos::ConnectError),
+    /// Wrapping the raw fd into `VsockStream` (fcntl/AsyncFd) failed.
+    Stream(std::io::Error),
+}
+
+#[cfg(target_os = "macos")]
+impl std::fmt::Display for OpenVsockError {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match self {
+            Self::VmNotStarted => f.write_str("VM not started (call start() first)"),
+            Self::LockPoisoned(s) => write!(f, "VzRuntime vm lock poisoned: {s}"),
+            Self::Join(s) => write!(f, "spawn_blocking failure: {s}"),
+            Self::Connect(e) => write!(f, "{e}"),
+            Self::Stream(e) => write!(f, "VsockStream wrap: {e}"),
+        }
+    }
+}
+
+#[cfg(target_os = "macos")]
+impl std::error::Error for OpenVsockError {}
 
 /// Default values for the VZ guest config; surfaced as a struct so tests can
 /// assert on them without spinning up a real VM.
@@ -110,7 +296,7 @@ impl VzGuestConfig {
             .map(|n| n.get() as u32)
             .unwrap_or(2);
         Self {
-            cpu_count: host_cores.min(4).max(1),
+            cpu_count: host_cores.clamp(1, 4),
             memory_bytes: 4 * 1024 * 1024 * 1024,
             vsock_cid: manifest.vsock_cid,
             vsock_port: manifest.vsock_port,
@@ -125,6 +311,254 @@ impl VzGuestConfig {
 // idempotency dance; boot/exec are still stubbed pending a macOS host.
 // @trace spec:vm-idiomatic-layer, spec:vm-provisioning-lifecycle
 // ---------------------------------------------------------------------------
+
+/// Building blocks for VZ-backed Linux VMs. Public so the `vz-spike` example
+/// and the eventual `VmRuntime::start` impl share the same config-builder
+/// instead of forking parallel implementations.
+///
+/// macOS-only — the module isn't even defined on Linux/Windows.
+///
+/// @trace spec:vm-idiomatic-layer, spec:macos-native-tray
+#[cfg(target_os = "macos")]
+pub mod boot {
+    use std::os::raw::c_int;
+    use std::path::{Path, PathBuf};
+    use std::time::{Duration, Instant};
+
+    use objc2::ClassType;
+    use objc2::rc::Retained;
+    use objc2_foundation::{NSArray, NSFileHandle, NSString, NSURL};
+    use objc2_virtualization::{
+        VZBootLoader, VZDiskImageStorageDeviceAttachment, VZEFIBootLoader, VZEFIVariableStore,
+        VZEFIVariableStoreInitializationOptions, VZEntropyDeviceConfiguration,
+        VZFileHandleSerialPortAttachment, VZGenericPlatformConfiguration,
+        VZMemoryBalloonDeviceConfiguration, VZNATNetworkDeviceAttachment,
+        VZNetworkDeviceConfiguration, VZPlatformConfiguration, VZSerialPortAttachment,
+        VZSerialPortConfiguration, VZSocketDeviceConfiguration, VZStorageDeviceConfiguration,
+        VZVirtioBlockDeviceConfiguration, VZVirtioConsoleDeviceSerialPortConfiguration,
+        VZVirtioEntropyDeviceConfiguration, VZVirtioNetworkDeviceConfiguration,
+        VZVirtioSocketDeviceConfiguration, VZVirtioTraditionalMemoryBalloonDeviceConfiguration,
+        VZVirtualMachineConfiguration,
+    };
+
+    /// Inputs to [`build_vm_configuration`]. The builder consumes a borrow
+    /// and produces a retained `VZVirtualMachineConfiguration`; it does NOT
+    /// validate (callers do, so they can inspect intermediate state for
+    /// debugging).
+    ///
+    /// @trace spec:vm-idiomatic-layer
+    pub struct VzBootConfig {
+        pub cpu_count: usize,
+        pub memory_bytes: u64,
+        /// Raw root disk image (`.img`). `None` skips storage entirely —
+        /// useful for "does the framework accept the rest of my config"
+        /// smoke tests, but won't actually boot anything.
+        pub root_disk: Option<PathBuf>,
+        /// Persistent EFI variable store path. `None` skips NVRAM, which
+        /// makes the EFI bootloader invalid; callers should always pass
+        /// `Some(...)` for a bootable VM (the file is created if missing).
+        pub nvram: Option<PathBuf>,
+        /// Optional override for the serial writer fd. If `None`, the
+        /// builder dups `STDERR_FILENO` so guest serial flows to host
+        /// stderr for early-boot diagnostics.
+        pub serial_writer_fd: Option<c_int>,
+    }
+
+    impl VzBootConfig {
+        /// Modest defaults: 2 vCPU, 2 GiB RAM, no disk, no NVRAM. Useful
+        /// as a starting point for tests; production callers MUST set
+        /// `root_disk` and `nvram` for a bootable VM.
+        pub fn defaults() -> Self {
+            Self {
+                cpu_count: 2,
+                memory_bytes: 2 * 1024 * 1024 * 1024,
+                root_disk: None,
+                nvram: None,
+                serial_writer_fd: None,
+            }
+        }
+    }
+
+    /// Build a fully-wired `VZVirtualMachineConfiguration` from the spec:
+    /// EFI boot, optional virtio-blk root disk, virtio-net NAT,
+    /// virtio-console serial → host stderr (or `serial_writer_fd`),
+    /// virtio-entropy, virtio-balloon, virtio-vsock.
+    ///
+    /// The caller's next step is `cfg.validateWithError()`, then
+    /// `VZVirtualMachine::initWithConfiguration(alloc, &cfg)`.
+    ///
+    /// @trace spec:vm-idiomatic-layer, spec:macos-native-tray
+    pub fn build_vm_configuration(
+        spec: &VzBootConfig,
+    ) -> Result<Retained<VZVirtualMachineConfiguration>, String> {
+        unsafe {
+            let cfg = VZVirtualMachineConfiguration::new();
+            cfg.setCPUCount(spec.cpu_count);
+            cfg.setMemorySize(spec.memory_bytes);
+
+            // Generic platform — no Mac-host-specific requirements.
+            let platform = VZGenericPlatformConfiguration::new();
+            let plat_super: &VZPlatformConfiguration = &*platform;
+            cfg.setPlatform(plat_super);
+
+            // EFI bootloader with optional persistent NVRAM.
+            let efi = VZEFIBootLoader::new();
+            if let Some(path) = &spec.nvram {
+                let url = ns_url_for_path(path);
+                let alloc = VZEFIVariableStore::alloc();
+                let store = if path.exists() {
+                    VZEFIVariableStore::initWithURL(alloc, &url)
+                } else {
+                    VZEFIVariableStore::initCreatingVariableStoreAtURL_options_error(
+                        alloc,
+                        &url,
+                        VZEFIVariableStoreInitializationOptions::VZEFIVariableStoreInitializationOptionAllowOverwrite,
+                    )
+                    .map_err(|e| format!("create nvram: {}", e.localizedDescription()))?
+                };
+                efi.setVariableStore(Some(&store));
+            }
+            let efi_super: &VZBootLoader = &*efi;
+            cfg.setBootLoader(Some(efi_super));
+
+            // virtio-blk root disk (optional).
+            if let Some(path) = &spec.root_disk {
+                let url = ns_url_for_path(path);
+                let att = VZDiskImageStorageDeviceAttachment::initWithURL_readOnly_error(
+                    VZDiskImageStorageDeviceAttachment::alloc(),
+                    &url,
+                    false,
+                )
+                .map_err(|e| format!("disk attach: {}", e.localizedDescription()))?;
+                let blk = VZVirtioBlockDeviceConfiguration::initWithAttachment(
+                    VZVirtioBlockDeviceConfiguration::alloc(),
+                    &att,
+                );
+                let arr: Retained<NSArray<VZStorageDeviceConfiguration>> =
+                    NSArray::from_id_slice(&[Retained::cast(blk)]);
+                cfg.setStorageDevices(&arr);
+            }
+
+            // virtio-net + NAT.
+            let nat = VZNATNetworkDeviceAttachment::new();
+            let nat_super: &objc2_virtualization::VZNetworkDeviceAttachment = &nat;
+            let nic = VZVirtioNetworkDeviceConfiguration::new();
+            nic.setAttachment(Some(nat_super));
+            let nic_super: Retained<VZNetworkDeviceConfiguration> = Retained::into_super(nic);
+            let arr_n: Retained<NSArray<VZNetworkDeviceConfiguration>> =
+                NSArray::from_id_slice(&[nic_super]);
+            cfg.setNetworkDevices(&arr_n);
+
+            // virtio-console serial: guest writes → host stderr (or override),
+            // host reads /dev/null (no input forwarded).
+            let null_fd =
+                open_read_only_devnull().ok_or_else(|| "open(/dev/null) failed".to_string())?;
+            let writer_fd = match spec.serial_writer_fd {
+                Some(fd) => fd,
+                None => dup_fd(2).ok_or_else(|| "dup(stderr) failed".to_string())?,
+            };
+            let read_fh = NSFileHandle::initWithFileDescriptor_closeOnDealloc(
+                NSFileHandle::alloc(),
+                null_fd,
+                true,
+            );
+            let write_fh = NSFileHandle::initWithFileDescriptor_closeOnDealloc(
+                NSFileHandle::alloc(),
+                writer_fd,
+                true,
+            );
+            let serial_att =
+                VZFileHandleSerialPortAttachment::initWithFileHandleForReading_fileHandleForWriting(
+                    VZFileHandleSerialPortAttachment::alloc(),
+                    Some(&read_fh),
+                    Some(&write_fh),
+                );
+            let serial = VZVirtioConsoleDeviceSerialPortConfiguration::new();
+            let att_super: &VZSerialPortAttachment = &*serial_att;
+            serial.setAttachment(Some(att_super));
+            let arr_s: Retained<NSArray<VZSerialPortConfiguration>> =
+                NSArray::from_id_slice(&[Retained::cast(serial)]);
+            cfg.setSerialPorts(&arr_s);
+
+            // virtio-entropy + virtio-balloon.
+            let entropy = VZVirtioEntropyDeviceConfiguration::new();
+            let arr_e: Retained<NSArray<objc2_virtualization::VZEntropyDeviceConfiguration>> =
+                NSArray::from_id_slice(&[Retained::cast(entropy)]);
+            let _: &VZEntropyDeviceConfiguration = &arr_e[0];
+            cfg.setEntropyDevices(&arr_e);
+
+            let balloon = VZVirtioTraditionalMemoryBalloonDeviceConfiguration::new();
+            let arr_b: Retained<NSArray<VZMemoryBalloonDeviceConfiguration>> =
+                NSArray::from_id_slice(&[Retained::cast(balloon)]);
+            cfg.setMemoryBalloonDevices(&arr_b);
+
+            // virtio-vsock — host connects later via VZVirtioSocketDevice
+            // (see crates/tillandsias-vm-layer/src/transport_macos.rs, TBD).
+            let sock = VZVirtioSocketDeviceConfiguration::new();
+            let arr_sd: Retained<NSArray<VZSocketDeviceConfiguration>> =
+                NSArray::from_id_slice(&[Retained::cast(sock)]);
+            cfg.setSocketDevices(&arr_sd);
+
+            Ok(cfg)
+        }
+    }
+
+    /// Pump CoreFoundation's main runloop for `dur`, letting VZ completion
+    /// handlers dispatched to the main queue fire. Returns when the
+    /// wall-clock deadline elapses (whether or not any sources fired).
+    ///
+    /// Without this, the main thread sleeping blocks dispatch delivery and
+    /// `startWithCompletionHandler` callbacks never run — confirmed
+    /// empirically (commit 3716dd40).
+    ///
+    /// @trace spec:vm-idiomatic-layer
+    pub fn pump_cf_loop_for(dur: Duration) {
+        #[link(name = "CoreFoundation", kind = "framework")]
+        unsafe extern "C" {
+            fn CFRunLoopRunInMode(
+                mode: *const std::ffi::c_void,
+                seconds: f64,
+                return_after_source_handled: u8,
+            ) -> i32;
+            static kCFRunLoopDefaultMode: *const std::ffi::c_void;
+        }
+        let deadline = Instant::now() + dur;
+        loop {
+            let remaining = deadline
+                .saturating_duration_since(Instant::now())
+                .as_secs_f64();
+            if remaining <= 0.0 {
+                break;
+            }
+            let _rc = unsafe { CFRunLoopRunInMode(kCFRunLoopDefaultMode, remaining.min(1.0), 0) };
+        }
+    }
+
+    // ─── small helpers ────────────────────────────────────────────────────
+
+    fn ns_url_for_path(p: &Path) -> Retained<NSURL> {
+        let s = NSString::from_str(p.to_string_lossy().as_ref());
+        unsafe { NSURL::fileURLWithPath(&s) }
+    }
+
+    fn open_read_only_devnull() -> Option<c_int> {
+        unsafe extern "C" {
+            fn open(path: *const std::os::raw::c_char, oflag: c_int) -> c_int;
+        }
+        let fd = unsafe {
+            open(b"/dev/null\0".as_ptr() as _, 0 /* O_RDONLY */)
+        };
+        if fd < 0 { None } else { Some(fd) }
+    }
+
+    fn dup_fd(fd: c_int) -> Option<c_int> {
+        unsafe extern "C" {
+            fn dup(fd: c_int) -> c_int;
+        }
+        let new_fd = unsafe { dup(fd) };
+        if new_fd < 0 { None } else { Some(new_fd) }
+    }
+}
 
 #[cfg(target_os = "macos")]
 mod vz_real {
@@ -185,39 +619,294 @@ impl VmRuntime for VzRuntime {
         // the cheatsheet for the production approach (installer-VM sidecar
         // or hdiutil + mkfs via a helper container).
         vz_real::extract_kernel_artifacts(&manifest.rootfs_tarball, &self.image_root)?;
-        vz_real::convert_rootfs_to_disk_image(
-            &manifest.rootfs_tarball,
-            &self.rootfs_image_path(),
-        )?;
+        vz_real::convert_rootfs_to_disk_image(&manifest.rootfs_tarball, &self.rootfs_image_path())?;
         Ok(())
     }
 
     async fn start(&self) -> Result<(), VmError> {
-        // Real VZVirtualMachine.start with completion handler lands in the
-        // macOS-host follow-up. The skeleton verifies that provisioning
-        // ran first so callers get a clear error if they skip it.
-        if !self.is_provisioned() {
-            return Err("VzRuntime::start called before provision".into());
+        use objc2::ClassType;
+        use objc2_foundation::NSError;
+        use objc2_virtualization::VZVirtualMachine;
+        use std::time::Instant;
+
+        // Phase 1 interim: VzRuntime::start expects the rootfs.img path
+        // already populated at `<image_root>/rootfs.img`. Phase 4 will
+        // materialize via recipe per D6; for now callers point image_root
+        // at a manually-built rootfs (qemu-img convert of a Fedora cloud
+        // image — same path vz-spike uses).
+        let rootfs = self.rootfs_image_path();
+        if !rootfs.exists() {
+            return Err(format!(
+                "VzRuntime::start: rootfs not found at {} \
+                 (Phase 4 / D6 amendment will materialize via recipe)",
+                rootfs.display()
+            ));
         }
-        unimplemented!(
-            "VZVirtualMachine.start with completion handler — \
-             tracked at openspec/specs/macos-native-tray/spec.md"
-        )
+
+        // Refuse double-start.
+        {
+            let slot = self
+                .vm
+                .lock()
+                .map_err(|e| format!("vm lock poisoned: {e}"))?;
+            if slot.is_some() {
+                return Err("VzRuntime::start: VM already running".into());
+            }
+        }
+
+        let spec = boot::VzBootConfig {
+            cpu_count: std::thread::available_parallelism()
+                .map(|n| n.get().min(4))
+                .unwrap_or(2),
+            memory_bytes: 4 * 1024 * 1024 * 1024,
+            root_disk: Some(rootfs),
+            nvram: Some(self.image_root.join("nvram.bin")),
+            serial_writer_fd: None,
+        };
+
+        let cfg = boot::build_vm_configuration(&spec)?;
+        unsafe { cfg.validateWithError() }
+            .map_err(|e| format!("validate: {}", e.localizedDescription()))?;
+
+        let alloc = VZVirtualMachine::alloc();
+        let vm = unsafe { VZVirtualMachine::initWithConfiguration(alloc, &cfg) };
+
+        // Bridge VZ's dispatch-queue completion handler to this thread via a
+        // mpsc channel, then pump CFRunLoop until the result arrives or 30s
+        // elapses. The pump blocks this thread; the caller must run start()
+        // on `tokio::task::spawn_blocking` if invoked from an async runtime.
+        let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
+        let handler = block2::RcBlock::new(move |err: *mut NSError| {
+            let result = if err.is_null() {
+                Ok(())
+            } else {
+                Err(unsafe { (*err).localizedDescription() }.to_string())
+            };
+            let _ = tx.send(result);
+        });
+        unsafe { vm.startWithCompletionHandler(&handler) };
+
+        let deadline = Instant::now() + Duration::from_secs(30);
+        loop {
+            if let Ok(result) = rx.try_recv() {
+                result.map_err(|e| format!("VM start failed: {e}"))?;
+                break;
+            }
+            if Instant::now() >= deadline {
+                return Err("VzRuntime::start: VM start timed out after 30s".into());
+            }
+            boot::pump_cf_loop_for(Duration::from_millis(250));
+        }
+
+        // Persist the handle so stop()/wait_ready() can address the same VM.
+        let mut slot = self
+            .vm
+            .lock()
+            .map_err(|e| format!("vm lock poisoned: {e}"))?;
+        *slot = Some(vm_handle::VmHandle(vm));
+        Ok(())
     }
 
-    async fn stop(&self, _drain_timeout: Duration) -> Result<(), VmError> {
-        unimplemented!("VZVirtualMachine.requestStop + force-stop fallback")
+    async fn stop(&self, drain_timeout: Duration) -> Result<(), VmError> {
+        use std::time::Instant;
+
+        // Take the handle for the duration of the stop dance so a concurrent
+        // start() can't race (and so we drop it at the end → ref-count → 0 →
+        // VZ frees the runtime objects).
+        let handle = {
+            let mut slot = self
+                .vm
+                .lock()
+                .map_err(|e| format!("vm lock poisoned: {e}"))?;
+            slot.take()
+                .ok_or_else(|| "VzRuntime::stop: VM not running".to_string())?
+        };
+        let vm = &handle.0;
+
+        // Phase 1 cut: requestStop is synchronous-ish (returns immediately;
+        // the actual stop happens on the VZ dispatch queue). We pump CFRunLoop
+        // for up to `drain_timeout` waiting for the VM state to transition to
+        // Stopped via a delegate-equivalent poll, then call hard stop() on
+        // timeout to guarantee bounded shutdown.
+        //
+        // We don't yet observe VZVirtualMachineDelegate.guestDidStop — the
+        // delegate plumbing is a follow-on iteration. Instead we poll
+        // `state` (== `VZVirtualMachineStateStopped` = 4) every 250 ms while
+        // pumping the runloop so VZ callbacks can fire.
+        let request_result = unsafe { vm.requestStopWithError() };
+        if let Err(e) = request_result {
+            // The VM may already be stopped or in an invalid state for stop;
+            // log + fall through to force-stop to honor the drain_timeout
+            // contract.
+            let msg = e.localizedDescription().to_string();
+            // Returning here would leak the VM in a weird state; better to
+            // surface and let the caller decide.
+            return Err(format!("VzRuntime::stop: requestStop failed: {msg}"));
+        }
+
+        let deadline = Instant::now() + drain_timeout;
+        loop {
+            // VZ state enum: 0=Stopped, 1=Running, 2=Paused, 3=Error, 4=Starting,
+            // 5=Pausing, 6=Resuming, 7=Stopping, 8=Saving, 9=Restoring.
+            let state = unsafe { vm.state() }.0;
+            if state == 0 {
+                // Stopped cleanly.
+                return Ok(());
+            }
+            if Instant::now() >= deadline {
+                // Drain timeout — try a hard stop. `stop:completionHandler:`
+                // is the force-stop variant; we wait briefly for it then
+                // return regardless.
+                let (tx, rx) = std::sync::mpsc::channel::<()>();
+                let handler = block2::RcBlock::new(move |_err: *mut objc2_foundation::NSError| {
+                    let _ = tx.send(());
+                });
+                unsafe { vm.stopWithCompletionHandler(&handler) };
+                let force_deadline = Instant::now() + Duration::from_secs(5);
+                while Instant::now() < force_deadline {
+                    if rx.try_recv().is_ok() {
+                        break;
+                    }
+                    boot::pump_cf_loop_for(Duration::from_millis(100));
+                }
+                return Err(format!(
+                    "VzRuntime::stop: drain_timeout ({}s) expired; force-stop dispatched",
+                    drain_timeout.as_secs()
+                ));
+            }
+            boot::pump_cf_loop_for(Duration::from_millis(250));
+        }
     }
 
     async fn exec(&self, _argv: &[&str]) -> Result<ExitStatus, VmError> {
-        unimplemented!(
-            "VZ exec — host opens vsock to the in-VM headless and \
-             forwards the argv; see cheatsheets/runtime/idiomatic-vm-exec.md"
-        )
+        // Phase 5 work (gated on control-wire-pty-attach merging). Returns
+        // a clear error so callers don't silently swallow the gap.
+        Err("VzRuntime::exec: deferred to Phase 5 (gated on \
+             control-wire-pty-attach merging). See plan/steps/20-macos-tray-v0_0_1.md."
+            .into())
     }
 
-    async fn wait_ready(&self, _timeout: Duration) -> Result<(), VmError> {
-        unimplemented!("VZ wait_ready — poll vsock handshake on guest_cid:vsock_port")
+    async fn wait_ready(&self, timeout: Duration) -> Result<(), VmError> {
+        use std::time::Instant;
+
+        // Two-stage readiness check (Phase 1 step 1.8 — m1b sub-task C):
+        //   1. Structural: poll VZVirtualMachineState until Running. Means
+        //      VZ accepted the start and the guest kernel is executing.
+        //   2. Functional: connect_to_vm_vsock(CONTROL_WIRE_VSOCK_PORT)
+        //      until success. Means the in-VM tillandsias-headless's
+        //      vsock_server has actually bound the port and is accepting
+        //      connections.
+        //
+        // The full Hello/HelloAck handshake check is the next layer up —
+        // belongs in tillandsias-host-shell::vsock_client, not in
+        // VmRuntime::wait_ready. A successful TCP-equivalent connect is
+        // enough to say "the listener is alive."
+        //
+        // Backoff cadence matches host-shell::vsock_client::BACKOFF_SCHEDULE
+        // (250 → 500 → 1000 → 2000 → 4000 ms, capped) so the chain
+        // start → wait_ready → vsock connect has consistent perceived
+        // latency in the tray.
+
+        // ── Stage 1: structural state-poll ────────────────────────────
+        let deadline = Instant::now() + timeout;
+        let backoff_ms = [250u64, 500, 1000, 2000, 4000];
+        let mut step = 0usize;
+        loop {
+            // Re-acquire the lock briefly each iteration so we don't hold
+            // it across the multi-second CFRunLoop pump (would block
+            // concurrent stop()).
+            let state = {
+                let guard = self
+                    .vm
+                    .lock()
+                    .map_err(|e| format!("vm lock poisoned: {e}"))?;
+                let vm = match guard.as_ref() {
+                    Some(h) => &h.0,
+                    None => {
+                        return Err("VzRuntime::wait_ready: VM not running (start() first)".into());
+                    }
+                };
+                unsafe { vm.state() }.0
+            };
+            // 1 = VZVirtualMachineStateRunning → proceed to stage 2.
+            if state == 1 {
+                break;
+            }
+            // 3 = Error; abort immediately.
+            if state == 3 {
+                return Err(format!(
+                    "VzRuntime::wait_ready: VM state Error (={state}) during stage 1"
+                ));
+            }
+            if Instant::now() >= deadline {
+                return Err(format!(
+                    "VzRuntime::wait_ready: stage 1 timeout after {}s; final state={state}",
+                    timeout.as_secs()
+                ));
+            }
+            let wait_ms = backoff_ms[step.min(backoff_ms.len() - 1)];
+            step = step.saturating_add(1);
+            boot::pump_cf_loop_for(Duration::from_millis(wait_ms));
+        }
+
+        // ── Stage 2: functional vsock-probe ───────────────────────────
+        // CONTROL_WIRE_VSOCK_PORT comes from tillandsias-control-wire (the
+        // shared canonical constant). The in-VM headless's vsock_server
+        // binds (VMADDR_CID_ANY, 42420) on startup; we treat a successful
+        // host-side connect as proof the listener is up.
+        use tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
+        let mut step = 0usize;
+        loop {
+            let remaining = deadline.saturating_duration_since(Instant::now());
+            if remaining.is_zero() {
+                return Err(format!(
+                    "VzRuntime::wait_ready: stage 2 timeout after {}s (vsock listener \
+                     never came up at port {CONTROL_WIRE_VSOCK_PORT})",
+                    timeout.as_secs()
+                ));
+            }
+            // Cap per-probe budget at 1s so we don't burn the whole
+            // remaining timeout in a single connect attempt that hits
+            // VFR-internal slow paths.
+            let probe_timeout = remaining.min(Duration::from_secs(1));
+            let connect_result = {
+                let guard = self
+                    .vm
+                    .lock()
+                    .map_err(|e| format!("vm lock poisoned: {e}"))?;
+                let vm = match guard.as_ref() {
+                    Some(h) => &h.0,
+                    None => {
+                        return Err("VzRuntime::wait_ready: VM stopped during stage 2".into());
+                    }
+                };
+                crate::transport_macos::connect_to_vm_vsock(
+                    vm,
+                    CONTROL_WIRE_VSOCK_PORT,
+                    probe_timeout,
+                )
+            };
+            match connect_result {
+                Ok(_vsock_fd) => {
+                    // Drop immediately — the probe is success-on-connect.
+                    // Hello/HelloAck handshake is the host-shell's job.
+                    return Ok(());
+                }
+                Err(crate::transport_macos::ConnectError::NoSocketDevice)
+                | Err(crate::transport_macos::ConnectError::UnexpectedSocketDeviceKind) => {
+                    // Structural config error — no point retrying.
+                    return Err(format!(
+                        "VzRuntime::wait_ready: VM config missing virtio-vsock device"
+                    ));
+                }
+                Err(_transient) => {
+                    // Timeout / VzError / NullConnection — keep retrying.
+                    let wait_ms = backoff_ms[step.min(backoff_ms.len() - 1)];
+                    step = step.saturating_add(1);
+                    boot::pump_cf_loop_for(Duration::from_millis(wait_ms));
+                }
+            }
+        }
     }
 }
 
@@ -305,7 +994,10 @@ mod tests {
         std::fs::write(rt.kernel_path(), b"").unwrap();
         assert!(!rt.is_provisioned(), "rootfs+kernel is not enough");
         std::fs::write(rt.initrd_path(), b"").unwrap();
-        assert!(rt.is_provisioned(), "all three artifacts make it provisioned");
+        assert!(
+            rt.is_provisioned(),
+            "all three artifacts make it provisioned"
+        );
     }
 
     /// @trace spec:macos-native-tray.lifecycle.vz-guest@v1
@@ -317,5 +1009,162 @@ mod tests {
         assert!(rt.kernel_path().starts_with(tmp.path()));
         assert!(rt.initrd_path().starts_with(tmp.path()));
         assert!(rt.console_log_path().starts_with(tmp.path()));
+    }
+
+    /// `VzRuntime` must be `Send + Sync` to satisfy the `VmRuntime` trait
+    /// bound. This compile-time check ensures the `VmHandle` Send/Sync
+    /// `unsafe impl` (vm_handle module) keeps the struct portable across
+    /// async runtimes.
+    ///
+    /// @trace spec:vm-idiomatic-layer
+    #[test]
+    fn vz_runtime_is_send_and_sync() {
+        fn assert_send_sync<T: Send + Sync>() {}
+        assert_send_sync::<VzRuntime>();
+    }
+
+    /// `VzRuntime::stop` and `wait_ready` must surface a clear error when
+    /// called before `start()` populated the handle slot.
+    ///
+    /// @trace spec:vm-idiomatic-layer
+    #[cfg(target_os = "macos")]
+    #[tokio::test]
+    async fn vz_stop_and_wait_ready_fail_clean_before_start() {
+        let tmp = tempfile::tempdir().unwrap();
+        let rt = VzRuntime::new(42, tmp.path().to_path_buf());
+
+        let stop_err = rt
+            .stop(Duration::from_secs(1))
+            .await
+            .expect_err("stop without start must fail");
+        assert!(
+            stop_err.contains("VM not running"),
+            "unexpected stop error: {stop_err}"
+        );
+
+        let wait_err = rt
+            .wait_ready(Duration::from_secs(1))
+            .await
+            .expect_err("wait_ready without start must fail");
+        assert!(
+            wait_err.contains("VM not running"),
+            "unexpected wait_ready error: {wait_err}"
+        );
+    }
+
+    /// `VzRuntime::exec` is explicitly deferred to Phase 5; returns a clear
+    /// "deferred" message rather than `unimplemented!()` so callers don't
+    /// silently panic.
+    ///
+    /// @trace spec:vm-idiomatic-layer
+    #[cfg(target_os = "macos")]
+    #[tokio::test]
+    async fn vz_exec_returns_phase5_deferral() {
+        let tmp = tempfile::tempdir().unwrap();
+        let rt = VzRuntime::new(42, tmp.path().to_path_buf());
+        let err = rt
+            .exec(&["/bin/true"])
+            .await
+            .expect_err("exec should not silently succeed in Phase 1");
+        assert!(err.contains("Phase 5"), "unexpected exec error: {err}");
+    }
+
+    /// `VzRuntime::start` must surface a clear error when rootfs.img is
+    /// missing — Phase 4 will materialize it via the recipe, but until then
+    /// the spike/test path expects the caller to point at a pre-built image.
+    ///
+    /// @trace spec:vm-idiomatic-layer, spec:vm-provisioning-lifecycle
+    #[cfg(target_os = "macos")]
+    #[tokio::test]
+    async fn vz_start_fails_clean_when_rootfs_missing() {
+        let tmp = tempfile::tempdir().unwrap();
+        let rt = VzRuntime::new(42, tmp.path().to_path_buf());
+        let err = rt
+            .start()
+            .await
+            .expect_err("start without rootfs.img must fail");
+        assert!(
+            err.contains("rootfs not found"),
+            "unexpected error message: {err}"
+        );
+    }
+
+    /// `fetch_recipe_artifact` must refuse the placeholder `"pending-ci"`
+    /// SHA value gracefully — that's the gating state until a real
+    /// recipe-publish CI run populates manifest.toml with pinned SHAs.
+    /// Verifies the macOS-side fetch path is plumbed end-to-end but
+    /// fails closed before touching the network.
+    ///
+    /// @trace plan/issues/cross-host-blocker-roundup-2026-05-25.md l9
+    #[cfg(all(target_os = "macos", feature = "recipe", feature = "download"))]
+    #[tokio::test]
+    async fn fetch_recipe_artifact_refuses_placeholder_sha() {
+        use crate::recipe::Manifest;
+        let toml = r#"
+recipe_version = 1
+[output]
+artifact_url_template = "https://example.invalid/{tag}/{arch}.{format}"
+[output.expected_rootfs_sha]
+"aarch64.img" = "pending-ci"
+"x86_64.img"  = "pending-ci"
+"#;
+        let manifest = Manifest::from_toml(toml).expect("parse test manifest");
+        let tmp = tempfile::tempdir().unwrap();
+        let rt = VzRuntime::new(3, tmp.path().to_path_buf());
+        let err = rt
+            .fetch_recipe_artifact(&manifest, "v0.0.0-test")
+            .await
+            .expect_err("placeholder SHA must be refused");
+        assert!(
+            err.contains("no pinned SHA-256"),
+            "expected SHA-refusal error, got: {err}"
+        );
+    }
+
+    /// `fetch_recipe_artifact` returns a clear error when the manifest
+    /// has no `artifact_url_template` (template absent → caller can't
+    /// resolve the URL).
+    #[cfg(all(target_os = "macos", feature = "recipe", feature = "download"))]
+    #[tokio::test]
+    async fn fetch_recipe_artifact_reports_missing_template() {
+        use crate::recipe::Manifest;
+        let toml = r#"
+recipe_version = 1
+[output.expected_rootfs_sha]
+"aarch64.img" = "0000000000000000000000000000000000000000000000000000000000000000"
+"#;
+        let manifest = Manifest::from_toml(toml).expect("parse test manifest");
+        let tmp = tempfile::tempdir().unwrap();
+        let rt = VzRuntime::new(3, tmp.path().to_path_buf());
+        let err = rt
+            .fetch_recipe_artifact(&manifest, "vX")
+            .await
+            .expect_err("missing template must error");
+        assert!(
+            err.contains("artifact_url_template"),
+            "expected template-missing error, got: {err}"
+        );
+    }
+
+    /// `open_vsock_stream` must return `VmNotStarted` when no VM handle
+    /// has been installed yet (the common pre-start state). The happy
+    /// path requires a booted VM and is exercised by the macOS tray's
+    /// manual smoke once m5 lands; here we only verify the gating.
+    ///
+    /// @trace plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 4c)
+    #[cfg(target_os = "macos")]
+    #[tokio::test]
+    async fn open_vsock_stream_errors_when_vm_not_started() {
+        use std::time::Duration;
+        let tmp = tempfile::tempdir().unwrap();
+        let rt = VzRuntime::new(3, tmp.path().to_path_buf());
+        // VsockStream doesn't impl Debug (it wraps a raw fd + a
+        // retained ObjC connection), so we match on the Result
+        // directly instead of using `.expect_err`.
+        match rt.open_vsock_stream(42420, Duration::from_millis(50)).await {
+            Err(OpenVsockError::VmNotStarted) => {}
+            Err(other) => panic!("unexpected error variant: {other}"),
+            Ok(_) => panic!("expected error, got an open stream"),
+        }
     }
 }

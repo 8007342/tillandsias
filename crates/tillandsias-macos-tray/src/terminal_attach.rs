@@ -25,6 +25,11 @@ pub mod bundle_ids {
 }
 
 /// Which terminal the tray decided to use for this attach.
+///
+/// `TerminalApp` is named after macOS's built-in Terminal.app — renaming
+/// to satisfy `clippy::enum_variant_names` would lose the bundle-id
+/// signal, so the lint is allowed for this enum specifically.
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Terminal {
     ITerm2,
@@ -103,14 +108,55 @@ pub fn applescript_escape(input: &str) -> String {
     out
 }
 
+/// AppleScript that opens a Terminal.app window and echos a stub message.
+/// Used by the v0.0.1 "Open Shell" action before the in-VM PTY-over-vsock
+/// transport (slice 4b) lands; gives the user concrete UX feedback (a
+/// new window opens with the message visible) while the underlying
+/// bridge is still being built. `message` is single-quoted-then-escaped
+/// for `echo` to avoid shell-injection surprises from any text we
+/// surface back.
+///
+/// @trace plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 4)
+pub fn applescript_for_open_shell_stub(message: &str) -> String {
+    // Escape the message for safe inclusion inside a single-quoted shell
+    // string: convert each ' to '\''.
+    let shell_escaped: String = message.replace('\'', "'\\''");
+    // Wrap in `echo '…'; sleep N` so the window stays open long enough
+    // for the user to read the message before Terminal.app's "shell
+    // exited" prompt appears.
+    let command = format!("echo '{shell_escaped}'; echo; echo '(window stays open — close with Cmd-W)'");
+    applescript_for_terminal_app(&command)
+}
+
 /// AppleScript snippet for Terminal.app — `do script` opens a new window
 /// and runs the command interactively.
 ///
 /// @trace spec:macos-native-tray.lifecycle.terminal-attach@v1
 pub fn applescript_for_terminal_app(command: &str) -> String {
     let escaped = applescript_escape(command);
+    format!("tell application \"Terminal\"\n    do script \"{escaped}\"\n    activate\nend tell")
+}
+
+/// AppleScript that opens a Terminal.app window and attaches it to
+/// the external PTY device at `slave_path` via GNU `screen`. The
+/// macOS host's `UnixPtyMaster` owns the master fd; the bytes that
+/// `pump_io` writes to the master surface as bytes readable on
+/// `slave_path`. By running `screen <slave>` inside Terminal.app,
+/// the user's keystrokes go INTO the slave (read by pump_io on the
+/// master, forwarded over vsock to the in-VM shell) and the in-VM
+/// shell's output comes back via pump_io → master → slave → screen
+/// → Terminal.app.
+///
+/// This is the v0.0.1 macOS answer to "attach Terminal.app to an
+/// external PTY device" — AppleScript can't do `tty=<path>; exec
+/// <$tty >$tty` directly. `screen` is preinstalled on every macOS
+/// since at least 10.6, so no extra dependency.
+///
+/// @trace plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 4c.2)
+pub fn applescript_for_screen_attach(slave_path: &str) -> String {
+    let escaped = applescript_escape(slave_path);
     format!(
-        "tell application \"Terminal\"\n    do script \"{escaped}\"\n    activate\nend tell"
+        "tell application \"Terminal\"\n    do script \"screen {escaped}\"\n    activate\nend tell"
     )
 }
 
@@ -139,11 +185,7 @@ pub fn spawn_argv_for_warp(command: &str) -> Vec<String> {
     // Equivalent to `open -na "Warp" --args` would be ideal but Warp lacks
     // a documented launch-with-argv. For v1 we just open Warp and let the
     // user paste the command, which we put on the clipboard via osascript.
-    vec![
-        "open".to_string(),
-        "-a".to_string(),
-        "Warp".to_string(),
-    ]
+    vec!["open".to_string(), "-a".to_string(), "Warp".to_string()]
 }
 
 // ---------------------------------------------------------------------------
@@ -177,6 +219,64 @@ mod live {
         }
     }
 
+    /// Spawn a Terminal.app window that displays `message` and waits
+    /// for the user to close it (Cmd-W). Detects the best terminal
+    /// via `LiveInstalledTerminals` (iTerm2 > Warp > Terminal.app)
+    /// and uses the matching AppleScript formatter. Returns
+    /// immediately; the spawned `osascript` waits for the AppleScript
+    /// to apply (a few hundred ms) before exiting.
+    ///
+    /// Used by the v0.0.1 Open Shell + GitHub login menu actions as
+    /// placeholder UX before the in-VM PTY-over-vsock transport
+    /// lands (slice 4b). The same helper backs both actions; the
+    /// caller picks the message content.
+    ///
+    /// @trace plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slices 4, 5)
+    pub fn spawn_terminal_stub_window(message: &str) -> std::io::Result<()> {
+        let snippet = match detect_terminal(&LiveInstalledTerminals) {
+            Terminal::ITerm2 => applescript_for_iterm2(&format!(
+                "echo '{}' && echo && echo '(close with Cmd-W)'",
+                message.replace('\'', "'\\''"),
+            )),
+            Terminal::Warp => {
+                // Warp doesn't honor osascript snippets; open the app
+                // and let the user paste the next step. For the stub
+                // message we just open Warp.
+                std::process::Command::new("open")
+                    .arg("-a")
+                    .arg("Warp")
+                    .spawn()?;
+                return Ok(());
+            }
+            Terminal::TerminalApp => applescript_for_open_shell_stub(message),
+        };
+        std::process::Command::new("osascript")
+            .arg("-e")
+            .arg(&snippet)
+            .spawn()?;
+        Ok(())
+    }
+
+    /// Spawn Terminal.app and attach it to the host PTY at `slave_path`
+    /// via `screen`. The attached session reads + writes the device,
+    /// which on the host side is the master fd that pump_io drives
+    /// against the vsock-bridged in-VM shell.
+    ///
+    /// macOS only; spec invariant `terminal-attach-no-ssh` honored
+    /// (no SSH, no podman exec — the bytes flow via vsock + the
+    /// in-VM `pty_handler` per control-wire-pty-attach §3.2).
+    ///
+    /// @trace plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 4c.2),
+    ///        spec:macos-native-tray.invariant.terminal-attach-no-ssh
+    pub fn spawn_terminal_pty_attach(slave_path: &str) -> std::io::Result<()> {
+        let snippet = applescript_for_screen_attach(slave_path);
+        std::process::Command::new("osascript")
+            .arg("-e")
+            .arg(&snippet)
+            .spawn()?;
+        Ok(())
+    }
+
     /// Spawn the chosen terminal via `osascript -e <snippet>` (or `open -a`
     /// for Warp). Returns immediately; the terminal runs detached.
     ///
@@ -204,7 +304,9 @@ mod live {
             }
             Terminal::Warp => {
                 let argv = spawn_argv_for_warp(&command);
-                std::process::Command::new(&argv[0]).args(&argv[1..]).spawn()?;
+                std::process::Command::new(&argv[0])
+                    .args(&argv[1..])
+                    .spawn()?;
                 Ok(())
             }
         }
@@ -212,7 +314,9 @@ mod live {
 }
 
 #[cfg(target_os = "macos")]
-pub use live::{spawn_terminal, LiveInstalledTerminals};
+pub use live::{
+    spawn_terminal, spawn_terminal_pty_attach, spawn_terminal_stub_window, LiveInstalledTerminals,
+};
 
 #[cfg(test)]
 mod tests {
@@ -265,10 +369,7 @@ mod tests {
     fn applescript_escape_doubles_backslashes_and_quotes() {
         assert_eq!(applescript_escape(r#"no specials"#), "no specials");
         assert_eq!(applescript_escape(r#"with "quotes""#), r#"with \"quotes\""#);
-        assert_eq!(
-            applescript_escape(r#"path\to\thing"#),
-            r#"path\\to\\thing"#
-        );
+        assert_eq!(applescript_escape(r#"path\to\thing"#), r#"path\\to\\thing"#);
         assert_eq!(
             applescript_escape(r#"mixed "back\slash""#),
             r#"mixed \"back\\slash\""#
@@ -304,6 +405,41 @@ mod tests {
         assert!(!cmd.contains("ssh"), "vm_exec must never use ssh: {cmd}");
         assert!(cmd.contains("podman exec -it"));
         assert!(cmd.contains("tillandsias-tillandsias-forge"));
+    }
+
+    /// @trace plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 4c.2)
+    #[test]
+    fn screen_attach_wraps_slave_path_in_do_script() {
+        let snippet = applescript_for_screen_attach("/dev/ttys005");
+        assert!(snippet.contains("tell application \"Terminal\""));
+        assert!(snippet.contains("do script \"screen /dev/ttys005\""));
+        assert!(snippet.contains("activate"));
+    }
+
+    /// @trace plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 4c.2)
+    #[test]
+    fn screen_attach_escapes_path_with_specials() {
+        // Unrealistic path with embedded quotes — verify AppleScript
+        // escaping survives so the `do script` literal parses.
+        let snippet = applescript_for_screen_attach(r#"/tmp/with"weird\path"#);
+        assert!(snippet.contains(r#"do script "screen /tmp/with\"weird\\path""#));
+    }
+
+    /// @trace plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 4)
+    #[test]
+    fn open_shell_stub_quotes_message_safely() {
+        let snippet = applescript_for_open_shell_stub("hi 'there'");
+        // The shell-escape sequence `'\''` is then AppleScript-escaped
+        // (backslashes doubled), so the literal in the final snippet
+        // shows as `'\\''` per single-quote in the original message.
+        assert!(
+            snippet.contains("hi '\\\\''there'\\\\''"),
+            "expected shell+applescript-escaped single quotes; got: {snippet}"
+        );
+        // And it MUST go through the Terminal.app envelope so the user
+        // gets a visible window.
+        assert!(snippet.contains("tell application \"Terminal\""));
+        assert!(snippet.contains("do script"));
     }
 
     /// @trace spec:macos-native-tray.lifecycle.terminal-attach@v1

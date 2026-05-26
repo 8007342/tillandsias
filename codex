@@ -1,45 +1,95 @@
 #!/usr/bin/env bash
 set -euo pipefail
 
-CODEX_BIN="${CODEX_BIN:-${HOME}/.npm-global/bin/codex}"
-if [[ ! -x "$CODEX_BIN" ]]; then
-  CODEX_BIN="$(command -v codex)"
+# Repo-local Codex launcher for Tillandsias.
+#
+# One-shot TUI:
+#   ./codex "prompt"
+#
+# One-shot unattended:
+#   ./codex --quiet "prompt"
+#
+# Unattended loop, sleeping after each completed round:
+#   ./codex --wait 3h "prompt"
+#
+# Trusted unattended coordination, required for git fetch/push:
+#   ./codex --wait 45m /coordinate-multihost-work
+
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(git -C "$script_dir" rev-parse --show-toplevel 2>/dev/null || printf '%s\n' "$script_dir")"
+cd "$repo_root"
+
+CODEX_BIN="${CODEX_BIN:-}"
+if [[ -z "$CODEX_BIN" ]]; then
+  if [[ -x "${HOME}/.npm-global/bin/codex" ]]; then
+    CODEX_BIN="${HOME}/.npm-global/bin/codex"
+  else
+    CODEX_BIN="$(command -v codex 2>/dev/null || true)"
+  fi
+fi
+if [[ -z "$CODEX_BIN" || ! -x "$CODEX_BIN" ]]; then
+  printf 'codex: unable to find executable codex binary. Set CODEX_BIN=/path/to/codex.\n' >&2
+  exit 127
 fi
 
-repo_root="$(git rev-parse --show-toplevel 2>/dev/null || pwd)"
-repo_codex_profile="$repo_root/.codex/tillandsias.profile.sh"
 export CODEX_PROJECT_ROOT="$repo_root"
+repo_codex_profile="$repo_root/.codex/tillandsias.profile.sh"
 
 QUIET=0
-QUIT=0
-REPEAT_INTERVAL=""
-REPEAT_TIMES=""
+WAIT_INTERVAL=""
+TIMES=""
+TRUSTED_EXEC="${CODEX_TRUSTED_EXEC:-0}"
 codex_args=()
+
+usage() {
+  cat >&2 <<'EOF'
+Usage:
+  ./codex [--quiet] "prompt"
+  ./codex --wait <duration> [--times <n>] "prompt"
+
+Options:
+  --quiet, -q          Run `codex exec` once instead of launching the TUI.
+  --wait <duration>   Run `codex exec`, then sleep duration, repeat forever.
+  --repeat <duration> Compatibility alias for --wait.
+  --times <n>         Limit --wait/--repeat to n rounds.
+  --trusted           Run `codex exec` without Codex's sandbox/approval layer.
+                      Intended for unattended coordination loops that must
+                      fetch, rebase, commit, and push.
+  --                  End wrapper options.
+
+Duration examples: 30m, 2h, 2h30m, 45s.
+EOF
+}
+
 while [[ $# -gt 0 ]]; do
   case "$1" in
     --quiet|-q)
       QUIET=1
       shift
       ;;
-    --quit|-v|--verbose)
-      QUIT=1
-      shift
+    --wait|--repeat)
+      if [[ $# -lt 2 ]]; then
+        printf 'codex: %s requires a duration such as 30m, 2h, or 2h30m\n' "$1" >&2
+        exit 2
+      fi
+      WAIT_INTERVAL="$2"
+      shift 2
       ;;
     --times)
-      if [[ $# -lt 2 ]]; then
-        printf 'codex: --times requires a count such as 10\n' >&2
+      if [[ $# -lt 2 || ! "$2" =~ ^[0-9]+$ || "$2" -lt 1 ]]; then
+        printf 'codex: --times requires a positive integer\n' >&2
         exit 2
       fi
-      REPEAT_TIMES="$2"
+      TIMES="$2"
       shift 2
       ;;
-    --repeat)
-      if [[ $# -lt 2 ]]; then
-        printf 'codex: --repeat requires an interval such as 30m or 2h30m\n' >&2
-        exit 2
-      fi
-      REPEAT_INTERVAL="$2"
-      shift 2
+    --trusted)
+      TRUSTED_EXEC=1
+      shift
+      ;;
+    --help|-h)
+      usage
+      exit 0
       ;;
     --)
       shift
@@ -53,81 +103,76 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-common_args=(
-  -p tillandsias
-)
+if [[ ${#codex_args[@]} -eq 0 ]]; then
+  usage
+  exit 2
+fi
 
+if [[ ${#codex_args[@]} -eq 1 && "${codex_args[0]}" == "/coordinate-multihost-work" ]]; then
+  TRUSTED_EXEC=1
+  codex_args=("Use the coordinate-multihost-work skill to run one Tillandsias multi-host coordination loop.")
+fi
+
+if [[ -n "$WAIT_INTERVAL" ]]; then
+  TRUSTED_EXEC=1
+fi
+
+common_args=(-p tillandsias)
 profile_additional_args=()
 profile_additional_dir_args=()
 codex_profile_args=()
 codex_profile_add_dirs=()
+
 if [[ -f "$repo_codex_profile" ]]; then
   # shellcheck disable=SC1090
   source "$repo_codex_profile"
 fi
-
 if (( ${#codex_profile_args[@]} > 0 )); then
   profile_additional_args+=("${codex_profile_args[@]}")
 fi
-
 if (( ${#codex_profile_add_dirs[@]} > 0 )); then
   for dir in "${codex_profile_add_dirs[@]}"; do
     profile_additional_dir_args+=(--add-dir "$dir")
   done
 fi
 
-progress_bar() {
-  local value="${1:-0}"
-  local width="${2:-10}"
-  local filled=$(( value * width / 100 ))
-  local empty=$(( width - filled ))
-  local bar=""
-  local i
-  for ((i = 0; i < filled; i++)); do
-    bar+="█"
-  done
-  for ((i = 0; i < empty; i++)); do
-    bar+="░"
-  done
-  printf '%s' "$bar"
-}
+duration_to_seconds() {
+  local input="$1"
+  local rest="$input"
+  local total=0
+  local number unit
 
-sparkline_char() {
-  local value="${1:-0}"
-  case $(( value * 7 / 100 )) in
-    0) printf '▁' ;;
-    1) printf '▂' ;;
-    2) printf '▃' ;;
-    3) printf '▄' ;;
-    4) printf '▅' ;;
-    5) printf '▆' ;;
-    6) printf '▇' ;;
-    *) printf '█' ;;
-  esac
-}
-
-sparkline_for_values() {
-  local value
-  for value in "$@"; do
-    sparkline_char "$value"
-  done
-}
-
-format_elapsed() {
-  local total="${1:-0}"
-  local hours=$(( total / 3600 ))
-  local minutes=$(( (total % 3600) / 60 ))
-  local seconds=$(( total % 60 ))
-  if [[ "$hours" -gt 0 ]]; then
-    printf '%02d:%02d:%02d' "$hours" "$minutes" "$seconds"
-  else
-    printf '%02d:%02d' "$minutes" "$seconds"
+  if [[ "$rest" =~ ^[0-9]+$ ]]; then
+    printf '%s\n' "$rest"
+    return 0
   fi
+
+  while [[ -n "$rest" ]]; do
+    if [[ "$rest" =~ ^([0-9]+)([smhd])(.*)$ ]]; then
+      number="${BASH_REMATCH[1]}"
+      unit="${BASH_REMATCH[2]}"
+      rest="${BASH_REMATCH[3]}"
+      case "$unit" in
+        s) total=$((total + number)) ;;
+        m) total=$((total + number * 60)) ;;
+        h) total=$((total + number * 3600)) ;;
+        d) total=$((total + number * 86400)) ;;
+      esac
+    else
+      printf 'codex: invalid duration %q. Use forms like 30m, 2h, 2h30m, or 45s.\n' "$input" >&2
+      return 2
+    fi
+  done
+
+  if [[ "$total" -lt 1 ]]; then
+    printf 'codex: duration must be greater than zero\n' >&2
+    return 2
+  fi
+  printf '%s\n' "$total"
 }
 
-format_timestamp() {
-  local epoch="${1:-0}"
-  date -d "@$epoch" '+%H:%M:%S'
+timestamp_utc() {
+  date -u '+%Y-%m-%dT%H:%M:%SZ'
 }
 
 run_tui_once() {
@@ -138,122 +183,43 @@ run_tui_once() {
     "${codex_args[@]}"
 }
 
-run_quiet_once() {
+run_exec_once() {
+  local trusted_args=()
+  if [[ "$TRUSTED_EXEC" == "1" || "$TRUSTED_EXEC" == "true" || "$TRUSTED_EXEC" == "yes" ]]; then
+    trusted_args=(--dangerously-bypass-approvals-and-sandbox)
+  fi
   "$CODEX_BIN" \
     exec \
     --color never \
+    "${trusted_args[@]}" \
     "${common_args[@]}" \
     "${profile_additional_args[@]}" \
     "${profile_additional_dir_args[@]}" \
     "${codex_args[@]}"
 }
 
-run_repeat_quiet() {
-  REPEAT_SUPERVISOR_BIN="$PWD/target/debug/tillandsias-repeat-loop"
-  REPEAT_RENDERER_BIN="$PWD/target/debug/tillandsias-repeat-graph"
-  if [[ ! -x "$REPEAT_SUPERVISOR_BIN" || ! -x "$REPEAT_RENDERER_BIN" ]]; then
-    cargo build --quiet --offline --manifest-path "$PWD/crates/tillandsias-repeat-graph/Cargo.toml"
-  fi
-  if [[ ! -x "$REPEAT_SUPERVISOR_BIN" ]]; then
-    printf '[codex-repeat] unable to locate repeat supervisor binary: %s\n' "$REPEAT_SUPERVISOR_BIN" >&2
-    exit 2
-  fi
-  local repeat_args=(
-    --prompt "${codex_args[*]}"
-    --interval "$REPEAT_INTERVAL"
-    --codex-bin "$CODEX_BIN"
-    --renderer-bin "$REPEAT_RENDERER_BIN"
-    --state-root "${AGENT_STATE_DIR:-${PWD}/plan/localwork/agents}"
-    --plan-root "$PWD/plan"
-    --trend-window "${CODEX_REPEAT_TREND_WINDOW:-5}"
-    --refresh-secs "${CODEX_REPEAT_REFRESH_SECS:-2}"
-  )
-  if [[ -n "$REPEAT_TIMES" ]]; then
-    repeat_args+=(--times "$REPEAT_TIMES")
-  fi
-  exec "$REPEAT_SUPERVISOR_BIN" "${repeat_args[@]}"
-}
-
-run_repeat_quit() {
-  local cycle=0
-  local max_cycles="${REPEAT_TIMES:-0}"
+if [[ -n "$WAIT_INTERVAL" ]]; then
+  wait_seconds="$(duration_to_seconds "$WAIT_INTERVAL")"
+  cycle=0
   while :; do
     cycle=$((cycle + 1))
-    printf '[codex-repeat] cycle %02d start | waiting on agent | interval=%s | elapsed=%s\n' \
-      "$cycle" "$REPEAT_INTERVAL" "$(format_elapsed 0)"
-    run_tui_once
-    local status=$?
-    printf '[codex-repeat] cycle %02d complete | exit=%d\n' "$cycle" "$status"
+    printf '[codex-wait] %s cycle %d start repo=%s wait=%s\n' "$(timestamp_utc)" "$cycle" "$repo_root" "$WAIT_INTERVAL" >&2
+    run_exec_once
+    status=$?
+    printf '[codex-wait] %s cycle %d complete exit=%d\n' "$(timestamp_utc)" "$cycle" "$status" >&2
     if [[ "$status" -ne 0 ]]; then
       exit "$status"
     fi
-    if [[ -n "$REPEAT_INTERVAL" ]]; then
-      if [[ "${CODEX_REPEAT_SKIP_BUILD:-0}" != 1 && -x "$PWD/build.sh" ]]; then
-        build_log="$(mktemp /tmp/codex-repeat-build.XXXXXX)"
-        if "$PWD/build.sh" --ci-full --graphs >"$build_log" 2>&1; then
-          if [[ -f "$PWD/docs/convergence/centicolon-dashboard.md" ]]; then
-            cat "$PWD/docs/convergence/centicolon-dashboard.md"
-          else
-            cat "$build_log"
-          fi
-        else
-          cat "$build_log" >&2 || true
-          rm -f "$build_log"
-          exit 1
-        fi
-        rm -f "$build_log"
-      fi
-      if [[ "$max_cycles" -gt 0 && "$cycle" -ge "$max_cycles" ]]; then
-        exit 0
-      fi
-      printf '[codex-repeat] cycle %02d sleeping until next iteration | sleep=%s\n' "$cycle" "$REPEAT_INTERVAL"
-      sleep "$REPEAT_INTERVAL"
-    else
+    if [[ -n "$TIMES" && "$cycle" -ge "$TIMES" ]]; then
       exit 0
     fi
+    printf '[codex-wait] %s sleeping %s before next cycle\n' "$(timestamp_utc)" "$WAIT_INTERVAL" >&2
+    sleep "$wait_seconds"
   done
-}
-
-if [[ -n "$REPEAT_INTERVAL" ]]; then
-  if [[ "$QUIET" -eq 1 ]]; then
-    if [[ -n "$REPEAT_TIMES" ]]; then
-      cycle=0
-      while :; do
-        cycle=$((cycle + 1))
-        run_quiet_once
-        status=$?
-        if [[ "$status" -ne 0 ]]; then
-          exit "$status"
-        fi
-        if [[ "${CODEX_REPEAT_SKIP_BUILD:-0}" != 1 && -x "$PWD/build.sh" ]]; then
-          build_log="$(mktemp /tmp/codex-repeat-build.XXXXXX)"
-          if "$PWD/build.sh" --ci-full --graphs >"$build_log" 2>&1; then
-            if [[ -f "$PWD/docs/convergence/centicolon-dashboard.md" ]]; then
-              cat "$PWD/docs/convergence/centicolon-dashboard.md"
-            else
-              cat "$build_log"
-            fi
-          else
-            cat "$build_log" >&2 || true
-            rm -f "$build_log"
-            exit 1
-          fi
-          rm -f "$build_log"
-        fi
-        if [[ "$cycle" -ge "$REPEAT_TIMES" ]]; then
-          exit 0
-        fi
-        sleep "$REPEAT_INTERVAL"
-      done
-    fi
-    run_repeat_quiet
-  fi
-  run_repeat_quit
 fi
 
 if [[ "$QUIET" -eq 1 ]]; then
-  run_quiet_once
-  exit $?
+  run_exec_once
+else
+  run_tui_once
 fi
-
-run_tui_once

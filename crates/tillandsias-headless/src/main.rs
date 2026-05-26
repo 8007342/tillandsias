@@ -87,7 +87,8 @@ fn main() {
     // headless service from binding the Linux Unix control socket to
     // binding a vsock listener on `VMADDR_CID_ANY:<PORT>`. Only available
     // when the binary was compiled with `--features listen-vsock`.
-    let listen_vsock_port: Option<u32> = match user_args.iter().position(|a| a == "--listen-vsock") {
+    let listen_vsock_port: Option<u32> = match user_args.iter().position(|a| a == "--listen-vsock")
+    {
         Some(i) => match user_args.get(i + 1).and_then(|p| p.parse::<u32>().ok()) {
             Some(port) => Some(port),
             None => {
@@ -118,8 +119,7 @@ fn main() {
     // podman-secret-from-keyring flow for backwards compatibility.
     let with_vault = user_args.iter().any(|a| a == "--with-vault");
     let without_vault = user_args.iter().any(|a| a == "--without-vault");
-    let legacy_keyring_secrets =
-        user_args.iter().any(|a| a == "--legacy-keyring-secrets");
+    let legacy_keyring_secrets = user_args.iter().any(|a| a == "--legacy-keyring-secrets");
     let port_override = match user_args.iter().position(|a| a == "--port") {
         Some(i) => match user_args.get(i + 1).and_then(|p| p.parse::<u16>().ok()) {
             Some(port) => Some(port),
@@ -200,9 +200,10 @@ fn main() {
         if a.starts_with('-') {
             return None;
         }
-        if user_args.get(i.saturating_sub(1)).is_some_and(|prev| {
-            prev == "--prompt" || prev == "--port" || prev == "--listen-vsock"
-        }) {
+        if user_args
+            .get(i.saturating_sub(1))
+            .is_some_and(|prev| prev == "--prompt" || prev == "--port" || prev == "--listen-vsock")
+        {
             return None;
         }
         Some(a.to_string())
@@ -248,9 +249,7 @@ fn main() {
         // *additionally* keeps the keyring path live — Vault still comes
         // up so containers minted with AppRole tokens succeed.
         if with_vault && debug {
-            eprintln!(
-                "[tillandsias] --with-vault is now a no-op (Vault is the default backend)"
-            );
+            eprintln!("[tillandsias] --with-vault is now a no-op (Vault is the default backend)");
         }
         if !without_vault {
             #[cfg(feature = "vault")]
@@ -287,7 +286,9 @@ fn main() {
             return;
         }
     } else if with_vault && debug {
-        eprintln!("[tillandsias] --with-vault has no effect outside --init (Vault is auto-started)");
+        eprintln!(
+            "[tillandsias] --with-vault has no effect outside --init (Vault is auto-started)"
+        );
     }
 
     if status_check && !init {
@@ -3899,8 +3900,20 @@ fn run_observatorium_mode(
 
     let observatorium_name = observatorium_container_name(&project_name);
     let web_image = versioned_image_tag("web", version);
+    let router_image = versioned_image_tag("router", version);
     rt.block_on(async {
         client.remove_container(&observatorium_name).await.ok();
+
+        // Step 15 slice 2: bring the router up BEFORE the observatorium-web
+        // container so any startup-phase requests inside the enclave resolve
+        // the `router` alias to a live cache_peer. The previous ordering
+        // started the router AFTER observatorium-web, leaving a 1-3s
+        // exit-125-flavoured retry window. ensure_router_running is
+        // idempotent.
+        //
+        // @trace plan/steps/15-tray-network-bootstrap.md
+        ensure_router_running(&client, &certs_dir, &router_image, router_host_port, debug).await?;
+
         client
             .run_container_observed(
                 "observatorium-web",
@@ -3916,9 +3929,6 @@ fn run_observatorium_mode(
             .await
             .map_err(|e| format!("[Observatorium] failed to start web container: {e}"))?;
 
-        let router_image = versioned_image_tag("router", version);
-        ensure_router_running(&client, &certs_dir, &router_image, router_host_port, debug).await?;
-
         let route = RouterRoute::new(
             format!("observatorium.{project_name}"),
             observatorium_name.clone(),
@@ -3930,6 +3940,14 @@ fn run_observatorium_mode(
 
         Ok::<(), String>(())
     })?;
+
+    // Step 16: probe the actual HTTPS page before launching the browser,
+    // so a router/web mismatch surfaces ONE actionable error here instead
+    // of the user seeing a broken page after the browser opens. Failure
+    // includes the observatorium container's recent logs.
+    //
+    // @trace plan/steps/16-observatorium-readiness-and-ux.md
+    wait_for_observatorium_http_ready(&project_name, router_host_port, debug)?;
 
     if std::env::var("OBSERVATORIUM_BROWSER").ok().as_deref() == Some("none") {
         return Ok(());
@@ -4002,6 +4020,23 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
     let client = PodmanClient::new();
     rt.block_on(async {
         cleanup_stack_containers(&client, project_name).await;
+
+        // Step 15: bring the router up BEFORE any project containers so the
+        // enclave's `router` network alias is already resolvable when proxy /
+        // git / inference start. Squid's `cache_peer router` and the git
+        // service's HTTPS upstream both fail-and-retry if the alias resolves
+        // to nothing — that retry storm is exactly the "exit 125 cascade"
+        // Step 15 was filed to eliminate. ensure_router_running is idempotent
+        // (it short-circuits on a live container with the right image), so
+        // calling it here on every OpenCode launch is cheap on the warm path.
+        //
+        // @trace plan/steps/15-tray-network-bootstrap.md
+        let router_image = versioned_image_tag("router", version);
+        let router_host_port = match existing_router_host_port(&client, debug).await? {
+            Some(port) => port,
+            None => select_router_host_port(None, debug)?,
+        };
+        ensure_router_running(&client, &certs_dir, &router_image, router_host_port, debug).await?;
 
         client
             .run_container_observed(
@@ -4093,6 +4128,123 @@ fn observatorium_app_url(project_name: &str, host_port: u16) -> String {
         "{}observatorium/",
         observatorium_origin_url(project_name, host_port)
     )
+}
+
+/// Step 16: real HTTP readiness probe for the observatorium URL. Polls
+/// up to 20 × 500ms (10s) for any non-5xx response on the app URL —
+/// matching the established wait-for-opencode-web-route cadence.
+/// `2xx` / `3xx` / `4xx` all count as "router + container alive enough
+/// to talk back"; a 5xx, a connection refused, or a 10s timeout returns
+/// an `Err` carrying the last status / error AND a tail of the
+/// observatorium container's podman logs so the user sees one
+/// actionable failure instead of a "browser opened to broken page".
+///
+/// Cert validation is permissive (`danger_accept_invalid_certs`) because
+/// the Caddy router serves a Tillandsias-signed cert that the host
+/// trust store doesn't (and shouldn't) carry. The probe targets
+/// `localhost:<router-port>` exclusively; the rfc-2119 risk surface
+/// is bounded.
+///
+/// @trace plan/steps/16-observatorium-readiness-and-ux.md
+fn wait_for_observatorium_http_ready(
+    project_name: &str,
+    host_port: u16,
+    debug: bool,
+) -> Result<(), String> {
+    let url = observatorium_app_url(project_name, host_port);
+    let mut last_outcome = String::from("no HTTP probe attempted");
+    for attempt in 1..=20 {
+        match observatorium_probe_status(&url) {
+            Ok(code) if (200..500).contains(&code) => {
+                if debug {
+                    eprintln!(
+                        "[tillandsias] [observatorium] readiness OK on attempt {attempt}/20 (status {code})"
+                    );
+                }
+                return Ok(());
+            }
+            Ok(code) => {
+                last_outcome = format!("status {code}");
+                if debug {
+                    eprintln!(
+                        "[tillandsias] [observatorium] waiting: attempt {attempt}/20 ({last_outcome})"
+                    );
+                }
+            }
+            Err(err) => {
+                last_outcome = err;
+                if debug {
+                    eprintln!(
+                        "[tillandsias] [observatorium] waiting: attempt {attempt}/20 ({last_outcome})"
+                    );
+                }
+            }
+        }
+        std::thread::sleep(Duration::from_millis(500));
+    }
+
+    let logs_tail = observatorium_logs_tail(project_name, 50);
+    Err(format!(
+        "Observatorium readiness probe did not succeed in 10s.\n\
+         URL: {url}\n\
+         Last outcome: {last_outcome}\n\
+         Container logs (last ≤50 lines):\n{logs_tail}\n\
+         Next: inspect `podman logs {observatorium_container}` for the\n\
+         full transcript, then verify the enclave network + router are\n\
+         healthy via `tillandsias --status`.",
+        observatorium_container = observatorium_container_name(project_name),
+    ))
+}
+
+fn observatorium_probe_status(url: &str) -> Result<u16, String> {
+    let url = url.to_string();
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|e| format!("probe runtime: {e}"))?;
+    rt.block_on(async move {
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(2))
+            .redirect(reqwest::redirect::Policy::limited(3))
+            .danger_accept_invalid_certs(true)
+            .build()
+            .map_err(|e| format!("probe client: {e}"))?;
+        client
+            .get(&url)
+            .send()
+            .await
+            .map(|response| response.status().as_u16())
+            .map_err(|e| format!("probe send: {e}"))
+    })
+}
+
+/// Best-effort tail of the observatorium container's podman logs. Used
+/// in the readiness-probe failure message so the user has something
+/// actionable to look at without having to know the container name.
+/// Routes through `tillandsias-podman::PodmanClient::log_tail` to honour
+/// the idiomatic-podman layer contract (`tests::idiomatic_podman_launch_
+/// paths_do_not_bypass_shared_layer`).
+fn observatorium_logs_tail(project_name: &str, lines: usize) -> String {
+    let container = observatorium_container_name(project_name);
+    let rt = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(rt) => rt,
+        Err(e) => return format!("    (could not build log-tail runtime: {e})"),
+    };
+    let client = PodmanClient::new();
+    let tail = rt.block_on(async move { client.log_tail(&container, lines).await });
+    match tail {
+        Ok(t) if t.lines.is_empty() => "    (container logs are empty)".into(),
+        Ok(t) => t
+            .lines
+            .iter()
+            .map(|l| format!("    {l}"))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        Err(e) => format!("    (podman log_tail failed: {e})"),
+    }
 }
 
 #[cfg(test)]
@@ -5148,6 +5300,19 @@ pub(crate) fn ensure_enclave_for_project(
     rt.block_on(async {
         cleanup_stack_containers(&client, project_name).await;
 
+        // Step 15 slice 2: bring the router up BEFORE the per-project
+        // proxy/git/inference/forge spawn so the enclave's `router` alias
+        // is live by the time Squid's cache_peer / git-service HTTPS
+        // upstream try to resolve it. ensure_router_running is idempotent.
+        //
+        // @trace plan/steps/15-tray-network-bootstrap.md
+        let router_image = versioned_image_tag("router", version);
+        let router_host_port = match existing_router_host_port(&client, debug).await? {
+            Some(port) => port,
+            None => select_router_host_port(None, debug)?,
+        };
+        ensure_router_running(&client, &certs_dir, &router_image, router_host_port, debug).await?;
+
         client
             .run_container_observed(
                 "forge-launch-proxy",
@@ -5425,9 +5590,7 @@ pub(crate) fn launch_forge_agent(
             );
             Ok(())
         }
-        Err(e) => Err(format!(
-            "failed to spawn host terminal '{executable}': {e}"
-        )),
+        Err(e) => Err(format!("failed to spawn host terminal '{executable}': {e}")),
     }
 }
 
@@ -5437,6 +5600,8 @@ mod metrics_server;
 #[cfg(feature = "tray")]
 mod tray;
 
+#[cfg(all(feature = "listen-vsock", unix))]
+mod pty_handler;
 #[cfg(feature = "listen-vsock")]
 mod vsock_server;
 
@@ -5456,12 +5621,14 @@ fn maybe_spawn_vsock_listener(
 ) -> Option<tokio::task::JoinHandle<()>> {
     let port = listen_vsock_port?;
     Some(tokio::spawn(async move {
-        match vsock_server::run_vsock_listener(port, shutdown).await {
+        // Default VmStateHandle: phase=Ready, podman socket at the
+        // conventional path. Real lifecycle hooks update this when
+        // provisioning + drain wiring lands.
+        let state = vsock_server::VmStateHandle::new();
+        match vsock_server::run_vsock_listener(port, shutdown, state).await {
             Ok(()) => {}
             Err(err) => {
-                eprintln!(
-                    "[tillandsias] vsock listener on port {port} failed: {err}"
-                );
+                eprintln!("[tillandsias] vsock listener on port {port} failed: {err}");
             }
         }
     }))
@@ -5487,10 +5654,7 @@ fn maybe_spawn_vsock_listener(
 /// Run in headless mode — no tray, no UI.
 ///
 /// @trace spec:linux-native-portable-executable, spec:headless-mode
-fn run_headless(
-    config_path: Option<String>,
-    listen_vsock_port: Option<u32>,
-) -> Result<(), String> {
+fn run_headless(config_path: Option<String>, listen_vsock_port: Option<u32>) -> Result<(), String> {
     // Create a Tokio runtime for async operations
     let rt = tokio::runtime::Runtime::new()
         .map_err(|e| format!("Failed to create async runtime: {}", e))?;
@@ -6520,7 +6684,8 @@ mod tests {
         );
         // Named volume for the bare repo storage.
         assert!(
-            args.iter().any(|a| a == "tillandsias-mirror-alpha:/srv/git"),
+            args.iter()
+                .any(|a| a == "tillandsias-mirror-alpha:/srv/git"),
             "expected mirror volume mount in args: {args:?}"
         );
         assert!(has_arg(&args, "PROJECT=alpha"));
@@ -6530,8 +6695,7 @@ mod tests {
     fn git_run_args_forward_project_remote_url_when_present() {
         let certs = PathBuf::from("/tmp/ca");
         let url = "https://github.com/example/repo.git";
-        let with_url =
-            build_git_run_args("alpha", &certs, "tillandsias-git:v1", Some(url), None);
+        let with_url = build_git_run_args("alpha", &certs, "tillandsias-git:v1", Some(url), None);
         assert!(
             with_url
                 .iter()
@@ -6553,13 +6717,7 @@ mod tests {
         // @trace spec:tillandsias-vault — Phase 6 default flow
         let certs = PathBuf::from("/tmp/ca");
         let secret = "tillandsias-vault-token-git-mirror-alpha-1234";
-        let args = build_git_run_args(
-            "alpha",
-            &certs,
-            "tillandsias-git:v1",
-            None,
-            Some(secret),
-        );
+        let args = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, Some(secret));
 
         // The vault token secret MUST be mounted at the stable path
         // /run/secrets/vault-token so the in-container vault-cli helper
@@ -6584,7 +6742,9 @@ mod tests {
         // The legacy github-token podman secret MUST NOT be mounted in the
         // Vault flow — that's the whole point of Phase 6.
         assert!(
-            !args.iter().any(|a| a == "tillandsias-github-token,mode=0400"),
+            !args
+                .iter()
+                .any(|a| a == "tillandsias-github-token,mode=0400"),
             "legacy github-token secret must not be mounted in vault flow: {args:?}"
         );
     }
@@ -6610,9 +6770,7 @@ mod tests {
         );
         // No per-launch vault token secret should be mounted either.
         assert!(
-            !args
-                .iter()
-                .any(|a| a.contains("tillandsias-vault-token-")),
+            !args.iter().any(|a| a.contains("tillandsias-vault-token-")),
             "no vault token podman secret should appear: {args:?}"
         );
     }

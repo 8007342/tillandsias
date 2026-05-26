@@ -12,8 +12,9 @@ name = "tillandsias-tray"
 path = "src/main.rs"
 
 [dependencies]
+tillandsias-control-wire = { path = "../tillandsias-control-wire" }
 tillandsias-host-shell = { path = "../tillandsias-host-shell" }
-tillandsias-vm-layer = { path = "../tillandsias-vm-layer" }
+tillandsias-vm-layer = { path = "../tillandsias-vm-layer", features = ["recipe", "download"] }
 tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
 
@@ -33,6 +34,11 @@ objc2-app-kit = { version = "0.2", features = [
     "NSImage",
     "NSWorkspace",
     "NSEvent",
+    # Required by src/status_item.rs: NSStatusItem::button returns
+    # NSStatusBarButton (an NSView subclass) gated on NSView; NSMenuItem::
+    # setState + NSControlStateValueOn live in the NSCell feature.
+    "NSView",
+    "NSCell",
 ] }
 objc2-foundation = { version = "0.2", features = [
     "NSString",
