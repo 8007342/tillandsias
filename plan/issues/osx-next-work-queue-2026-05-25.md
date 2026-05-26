@@ -1353,3 +1353,40 @@ re-claim if interactive smoke surfaces a regression.
 - Current macOS choices: claim m9 for adapter/unit wiring, or wait for l9/m5
   before claiming live Terminal.app PTY attach E2E. Do not duplicate m8 unless
   interactive smoke exposes a regression.
+
+### event: m4 sub-task B slice 4c.1 — connect_pty_bridge handshake helper — 2026-05-26T08:26Z
+
+- item: `m4/pty-attach-appkit-terminal` sub-task B slice 4c.1
+- agent_id: `osx-next-claude-opus-4-7` on `Tlatoanis-MacBook-Air`
+- lease_id: `7a4b3e8c5d12`
+- action: claim slice 4c.1 → done.
+- evidence (commit `6d9a2201`, code → osx-next):
+  - `pty_vsock_bridge.rs`: refactored writer_task to take a
+    `starting_seq: u64` parameter. Added
+    `spawn_pty_bridge_with_seq(stream, router, capacity, starting_seq)`
+    so callers that did a separate handshake can resume seq at 2.
+    The existing `spawn_pty_bridge` now delegates with `starting_seq=1`.
+  - NEW `async fn connect_pty_bridge<S>(stream, router, capacity,
+    hello_from, capabilities) -> io::Result<(ChannelPtyTransport,
+    BridgeJoin, u16)>`: splits the stream, writes Hello (seq=1),
+    reads HelloAck, validates wire_version, spawns writer at seq=2 +
+    reader. One-shot composition so slice 4c.2 doesn't have to
+    coordinate seq numbers.
+  - New unit test `connect_pty_bridge_does_handshake_then_starts_framing`
+    via `tokio::io::duplex`: the peer half simulates the in-VM
+    headless (reads Hello/asserts seq=1, sends HelloAck with
+    `server_caps`, reads the first post-handshake frame and asserts
+    seq=2). Picked up the correct `HelloAck.server_caps` field name
+    from the host-shell merge.
+- tests: macos-tray 25/25 (was 24; +1). vm-layer 51/51 still pass
+  with `--features materialize`.
+- progress: composition path for slice 4c.2:
+    `vz.open_vsock_stream(CONTROL_WIRE_VSOCK_PORT, 30s)` →
+    `connect_pty_bridge(stream, router, 32, ...)` →
+    `PtySession::open(transport, alloc, router,
+                       &launch_spec(Shell, project, 24, 80))` →
+    `UnixPtyMaster::open(24, 80)` + `pump_io(session, master)` →
+    `osascript do script "screen <master.slave_path>"` (Terminal.app
+    attach to external PTY device). Each layer is now testable in
+    isolation; full E2E remains gated on m5.
+- Lease released.
