@@ -111,12 +111,15 @@ impl WslRuntime {
     ///
     /// @trace spec:vm-provisioning-lifecycle.provision.first-run-downloads@v1
     pub async fn configure_recipe_distro(&self) -> Result<(), VmError> {
+        // NOTE: no `[user] default = forge` here (unlike `provision`): the recipe
+        // rootfs does NOT create a `forge` Linux user (verified via E2E import,
+        // 2026-05-26), so defaulting to it would break `wsl -d tillandsias` login.
+        // Default user stays root; "Open Shell" enters the forge *podman
+        // container* via `podman exec`, not a forge Linux login.
         self.wsl_root_sh(
             "cat > /etc/wsl.conf << 'EOF'\n\
              [boot]\n\
              systemd = true\n\
-             [user]\n\
-             default = forge\n\
              [interop]\n\
              enabled = true\n\
              appendWindowsPath = false\n\
