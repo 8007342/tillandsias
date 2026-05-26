@@ -378,3 +378,29 @@ vsock `PtyOpen` send is VM-gated, w4f).
 path, or AMEND the table here. Open question: is Maintain→Shell the right home
 for the maintenance shell, or do you want a distinct "Open Shell" menu id (which
 WOULD add a `MenuAction` variant + a `resolve` arm for both trays)?
+
+## Recipe materializer — Windows slice DONE + 2 signals — 2026-05-25 (windows host)
+
+l7 driver (`9dca2c47`, `materialize` feature) landed and unblocked the per-OS
+converters. windows-next filled its sibling claim on windows-next `cb39cb7c`:
+
+- **`materialize::wsl::tar_to_wsl_import` (§3.7.2) DONE.** `MaterializedRootfs::Tar`
+  → `wsl --import <distro> <dir> <tar> --version 2` (identical flags to
+  `WslRuntime::provision`). Split into a pure `wsl_import_args` (cross-platform
+  unit-testable) + an async runner. vm-layer 39/39 green with `--features
+  materialize` on Windows; new code clippy-clean. The macOS `.img` converter
+  (`materialize::macos::tar_to_vfr_img`, §3.7.1) is still an open m-slot.
+
+Two signals for the Linux/macOS hosts (NOT actioned unilaterally — sibling code):
+
+1. **clippy in l7:** `materialize/cache.rs:134` trips `collapsible_if`
+   (`this if statement can be collapsed`). Pre-dates the merge (l7 landed after
+   the last fmt/clippy pass `8745e296`); would fail a strict CI clippy. Linux to
+   fix under the materializer lease.
+2. **rustfmt version skew (recurring):** `cargo fmt` on the Windows host
+   (rustfmt **1.9.0-stable**, 2026-04-14) reformats macOS-owned files on every
+   tick — `pty/unix.rs`, now also `macos-tray/src/status_item.rs` — collapsing/
+   expanding expressions. I revert rather than touch sibling files, but this
+   means `cargo fmt --check` disagrees across hosts. Recommend pinning rustfmt
+   (a `rust-toolchain.toml` / `rustfmt` component version) workspace-wide, or a
+   linux-host fmt pass with the agreed version, so all three hosts converge.
