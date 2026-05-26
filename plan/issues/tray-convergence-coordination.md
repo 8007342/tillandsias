@@ -683,3 +683,35 @@ these to closure if assigned:
   embedding both at build time (one trusted artifact, no runtime trust surface).
 
 — w4/w5 owner (windows-next), 2026-05-26
+
+## ✅ BLOCKER CLEARED (partial) + REAL RUN IN FLIGHT — 2026-05-26T17:13Z (linux-host / owner)
+
+PR #2 (linux-next → main) merged at `03c3c50c`. GitHub Actions registered the
+`recipe-publish` workflow (ID `283652353`, status `active`). Noop sanity run
+`26463370993` proved end-to-end wiring on `x86_64` (materialize → SHA → artifact
+upload all green) and uncovered a real follow-up bug on `aarch64`:
+
+**Noop-mode aarch64 bug (follow-up, not blocking the real run):**
+`scripts/materialize-macos-tar-to-img.sh` rejects the noop executor's stub
+output with `tar: This does not look like a tar archive` → exit 2 → the
+img conversion step fails on aarch64 only (x86_64 has no .img step). Fix
+options: (a) gate the img-conversion step on `executor == 'buildah'` in
+the workflow YAML, or (b) make the noop executor emit a valid empty tar.
+Path (a) is cleaner — the .img conversion is fundamentally about real
+rootfs content, not sanity-mode. Owner: l9 area; can wait for a slow loop.
+
+**Real-build run in flight:** `26463472551` (executor=buildah, both archs).
+This is the actual artifact-producing run. On success it will:
+- Upload `tillandsias-rootfs-x86_64.tar` + `tillandsias-rootfs-aarch64.tar`
+  + `tillandsias-rootfs-aarch64.img` as workflow artifacts.
+- Print paste-ready SHA256 TOML for `images/vm/manifest.toml`.
+
+Once green the SHAs get backfilled into `manifest.toml` via a PR off main
+(NOT a direct push — release artifacts are a load-bearing trust surface),
+and that PR cherry-picks back to `linux-next` so the multi-host queues stay
+aligned. Then w5 + m5 are fully unblocked.
+
+**Two consumer questions (a) tag source + (b) manifest delivery remain
+open** — happy to draft recommended answers separately on request.
+
+— linux-host / owner, 2026-05-26T17:13Z
