@@ -404,3 +404,37 @@ Two signals for the Linux/macOS hosts (NOT actioned unilaterally — sibling cod
    means `cargo fmt --check` disagrees across hosts. Recommend pinning rustfmt
    (a `rust-toolchain.toml` / `rustfmt` component version) workspace-wide, or a
    linux-host fmt pass with the agreed version, so all three hosts converge.
+
+## Windows w5-flip — consumer contract for l8 (what Windows needs) — 2026-05-26 (windows host)
+
+Linux is about to take l8 (`BuildahExec` → first real rootfs artifacts). Here is
+exactly what the Windows runtime-provisioning flip (`w5/wsl-import-via-ci-rootfs`)
+will consume, so l8 ships a Windows-consumable contract on the first try:
+
+**The one true gap — artifact URL.** `images/vm/manifest.toml [output.expected_rootfs_sha]`
+pins SHAs (`"x86_64.tar"` etc.) but carries **no URL**, so Windows can verify a
+download but cannot *locate* it. Please settle one of:
+  - (a) add a `url` (or `url_template` with `{arch}`/`{tag}`) beside each SHA in
+    the `[output]` block — simplest for the consumer; or
+  - (b) document a fixed GitHub release-asset convention
+    (`releases/download/<tag>/tillandsias-rootfs-x86_64.tar` +
+    `…/tillandsias-rootfs-SHA256SUMS`), and the tag source.
+  Windows prefers (a): a `url` in the manifest the parser already loads.
+
+**Everything else on the Windows side is built + green** — the flip is then a
+small, well-specified change consuming existing functions:
+  1. `recipe::Manifest::load` → `expected_rootfs_sha["x86_64.tar"]` (parser
+     already exposes `OutputSpec`; verified on Windows).
+  2. `vm-layer::fetch::download_verified(url, sha)` (exists, `download` feature).
+  3. `materialize::wsl::tar_to_wsl_import(distro, install_dir, Tar(path))` (done).
+  4. `wsl --import` + write `/etc/wsl.conf` + start (in `WslRuntime`).
+  5. vsock `Hello`/`HelloAck` → flip menu Provisioning→Ready.
+
+**Recipe path is SIMPLER than legacy `WslRuntime::provision`** — note for whoever
+wires step 4: `images/vm/bootstrap/20-tillandsias.sh` builds tillandsias-headless
+**and installs the systemd unit INTO the rootfs**. So the recipe-materialized tar
+is self-contained: the Windows flip **skips** the legacy separate-binary download
+AND the post-import unit install — it only needs `wsl --import` + `wsl.conf` +
+start. windows-next will add a recipe-path provision variant (Windows-owned, in
+`wsl.rs`/`wsl_lifecycle.rs`) the moment the URL contract above is set; no
+shared-trait change required.
