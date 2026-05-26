@@ -137,6 +137,29 @@ pub fn applescript_for_terminal_app(command: &str) -> String {
     format!("tell application \"Terminal\"\n    do script \"{escaped}\"\n    activate\nend tell")
 }
 
+/// AppleScript that opens a Terminal.app window and attaches it to
+/// the external PTY device at `slave_path` via GNU `screen`. The
+/// macOS host's `UnixPtyMaster` owns the master fd; the bytes that
+/// `pump_io` writes to the master surface as bytes readable on
+/// `slave_path`. By running `screen <slave>` inside Terminal.app,
+/// the user's keystrokes go INTO the slave (read by pump_io on the
+/// master, forwarded over vsock to the in-VM shell) and the in-VM
+/// shell's output comes back via pump_io → master → slave → screen
+/// → Terminal.app.
+///
+/// This is the v0.0.1 macOS answer to "attach Terminal.app to an
+/// external PTY device" — AppleScript can't do `tty=<path>; exec
+/// <$tty >$tty` directly. `screen` is preinstalled on every macOS
+/// since at least 10.6, so no extra dependency.
+///
+/// @trace plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 4c.2)
+pub fn applescript_for_screen_attach(slave_path: &str) -> String {
+    let escaped = applescript_escape(slave_path);
+    format!(
+        "tell application \"Terminal\"\n    do script \"screen {escaped}\"\n    activate\nend tell"
+    )
+}
+
 /// AppleScript snippet for iTerm2 — Cocoa Scripting API creates a new
 /// window and writes the command into the active session.
 ///
@@ -234,6 +257,26 @@ mod live {
         Ok(())
     }
 
+    /// Spawn Terminal.app and attach it to the host PTY at `slave_path`
+    /// via `screen`. The attached session reads + writes the device,
+    /// which on the host side is the master fd that pump_io drives
+    /// against the vsock-bridged in-VM shell.
+    ///
+    /// macOS only; spec invariant `terminal-attach-no-ssh` honored
+    /// (no SSH, no podman exec — the bytes flow via vsock + the
+    /// in-VM `pty_handler` per control-wire-pty-attach §3.2).
+    ///
+    /// @trace plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 4c.2),
+    ///        spec:macos-native-tray.invariant.terminal-attach-no-ssh
+    pub fn spawn_terminal_pty_attach(slave_path: &str) -> std::io::Result<()> {
+        let snippet = applescript_for_screen_attach(slave_path);
+        std::process::Command::new("osascript")
+            .arg("-e")
+            .arg(&snippet)
+            .spawn()?;
+        Ok(())
+    }
+
     /// Spawn the chosen terminal via `osascript -e <snippet>` (or `open -a`
     /// for Warp). Returns immediately; the terminal runs detached.
     ///
@@ -271,7 +314,9 @@ mod live {
 }
 
 #[cfg(target_os = "macos")]
-pub use live::{spawn_terminal, spawn_terminal_stub_window, LiveInstalledTerminals};
+pub use live::{
+    spawn_terminal, spawn_terminal_pty_attach, spawn_terminal_stub_window, LiveInstalledTerminals,
+};
 
 #[cfg(test)]
 mod tests {
@@ -360,6 +405,24 @@ mod tests {
         assert!(!cmd.contains("ssh"), "vm_exec must never use ssh: {cmd}");
         assert!(cmd.contains("podman exec -it"));
         assert!(cmd.contains("tillandsias-tillandsias-forge"));
+    }
+
+    /// @trace plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 4c.2)
+    #[test]
+    fn screen_attach_wraps_slave_path_in_do_script() {
+        let snippet = applescript_for_screen_attach("/dev/ttys005");
+        assert!(snippet.contains("tell application \"Terminal\""));
+        assert!(snippet.contains("do script \"screen /dev/ttys005\""));
+        assert!(snippet.contains("activate"));
+    }
+
+    /// @trace plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 4c.2)
+    #[test]
+    fn screen_attach_escapes_path_with_specials() {
+        // Unrealistic path with embedded quotes — verify AppleScript
+        // escaping survives so the `do script` literal parses.
+        let snippet = applescript_for_screen_attach(r#"/tmp/with"weird\path"#);
+        assert!(snippet.contains(r#"do script "screen /tmp/with\"weird\\path""#));
     }
 
     /// @trace plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 4)

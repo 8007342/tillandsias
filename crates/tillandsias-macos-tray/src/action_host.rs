@@ -186,28 +186,55 @@ declare_class!(
 
         #[method(openShell:)]
         fn open_shell(&self, _sender: Option<&AnyObject>) {
-            // Slice 4: open a Terminal.app window with a stub message
-            // (in-VM PTY-over-vsock transport lands in slice 4b).
-            // Gate on VM being up: opening a shell to a dead VM is a
-            // user-facing footgun.
+            // Slice 4c.2: full live PTY-over-vsock attach. Composes
+            // open_vsock_stream → connect_pty_bridge → UnixPtyMaster
+            // → PtySession::open → pump_io → spawn_terminal_pty_attach.
+            // Any step failure falls back to a stub Terminal window so
+            // the user always sees concrete UX feedback.
             let ivars = self.ivars();
-            if ivars.vm.lock().unwrap().is_none() {
-                eprintln!(
-                    "[tillandsias-tray] Open Shell: no VM running. Start VM first."
-                );
-                return;
-            }
-            let message =
-                "Tillandsias — Open Shell stub (m4 sub-task B slice 4). \
-                 Per tray-convergence-coordination 2026-05-26, the canonical \
-                 target is the in-VM forge podman container (not the bare \
-                 VM). Slice 4b wires this window to: \
-                 `podman exec -it tillandsias-<project>-forge bash` over \
-                 PTY-over-vsock via the in-VM headless's pty_handler.";
-            match crate::terminal_attach::spawn_terminal_stub_window(message) {
-                Ok(()) => eprintln!("[tillandsias-tray] Open Shell: stub window spawned"),
-                Err(e) => eprintln!("[tillandsias-tray] Open Shell failed: {e}"),
-            }
+            let vz = match ivars.vm.lock().unwrap().clone() {
+                Some(vz) => vz,
+                None => {
+                    eprintln!(
+                        "[tillandsias-tray] Open Shell: no VM running. Start VM first."
+                    );
+                    return;
+                }
+            };
+            let runtime = ivars.runtime.clone();
+            eprintln!("[tillandsias-tray] Open Shell: spawning attach worker");
+            runtime.spawn(async move {
+                let result = run_open_shell_attach(vz).await;
+                dispatch_to_main_thread(move || {
+                    match result {
+                        Ok(slave_path) => {
+                            eprintln!(
+                                "[tillandsias-tray] Open Shell: PTY attached at {slave_path}"
+                            );
+                            if let Err(e) =
+                                crate::terminal_attach::spawn_terminal_pty_attach(&slave_path)
+                            {
+                                eprintln!(
+                                    "[tillandsias-tray] Open Shell: terminal spawn failed: {e}"
+                                );
+                            }
+                        }
+                        Err(e) => {
+                            eprintln!("[tillandsias-tray] Open Shell failed: {e}");
+                            // Visible fallback so the user knows the
+                            // click registered + why the live attach
+                            // didn't happen.
+                            let stub = format!(
+                                "Tillandsias — Open Shell could not attach. \
+                                 Error: {e}\n\nLive PTY attach needs a booted VM \
+                                 with a working in-VM headless on vsock port \
+                                 42420 (gated on m5 recipe-artifact fetch)."
+                            );
+                            let _ = crate::terminal_attach::spawn_terminal_stub_window(&stub);
+                        }
+                    }
+                });
+            });
         }
 
         #[method(githubLogin:)]
@@ -240,6 +267,55 @@ declare_class!(
         }
     }
 );
+
+/// Worker body for `openShell:`. Composes the PTY-over-vsock chain:
+/// open vsock stream → handshake + framing → host PTY master →
+/// PtySession::open → pump_io. Returns the slave PTY path so the
+/// main-thread dispatch can spawn Terminal.app pointed at it via
+/// `screen`. Each error path returns a `String` so the dispatch can
+/// surface it via the stub-window fallback.
+///
+/// Each spawned tokio task (the bridge writer/reader, pump_io's two
+/// halves) runs detached for v0.0.1; they unwind naturally when the
+/// session closes (PTY EOF, vsock drop, or Terminal.app `screen`
+/// session exits).
+async fn run_open_shell_attach(vz: std::sync::Arc<VzRuntime>) -> Result<String, String> {
+    use std::sync::Arc;
+    use std::time::Duration;
+    use tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
+    use tillandsias_host_shell::pty::unix::UnixPtyMaster;
+    use tillandsias_host_shell::pty::{
+        launch_spec, pump_io, PtyIntent, PtyRouter, PtySession, SessionIdAllocator,
+    };
+
+    let stream = vz
+        .open_vsock_stream(CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(30))
+        .await
+        .map_err(|e| format!("vsock connect: {e}"))?;
+
+    let router = Arc::new(PtyRouter::new());
+    let alloc = SessionIdAllocator::default();
+    let (transport, _bridge_join, _wire_version) = crate::pty_vsock_bridge::connect_pty_bridge(
+        stream,
+        router.clone(),
+        32,
+        "tillandsias-macos-tray".to_string(),
+        vec!["pty.attach@v1".to_string()],
+    )
+    .await
+    .map_err(|e| format!("control-wire handshake: {e}"))?;
+
+    let master =
+        UnixPtyMaster::open(24, 80).map_err(|e| format!("openpty: {e}"))?;
+    let slave_path = master.slave_path().to_string();
+
+    let opts = launch_spec(&PtyIntent::Shell, None, 24, 80);
+    let session = PtySession::open(Arc::new(transport), &alloc, &router, &opts)
+        .map_err(|e| format!("PtyOpen: {e}"))?;
+
+    let _pump_join = pump_io(session, master);
+    Ok(slave_path)
+}
 
 /// Worker body for `startVm:`. Constructs the VzRuntime, fails fast
 /// if its required image files are missing (recipe materializer not
