@@ -28,6 +28,21 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-26T11:43Z — INTEGRATED (macOS m5 consumes l9 URL contract)
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit (post-merge): `d0f627b`
+- observed_sibling_heads:
+  - main: ddf52dff · linux-next: 35c45822 → `d0f627b` · windows-next: a675e814 (already integrated) · osx-next: f8a3ec07
+- windows-next: no-op.
+- osx-next: **merged + tested + pushed**. 2 commits absorbed (+163 lines):
+  - `ec76e63a feat(vm-layer): m5 — VzRuntime::fetch_recipe_artifact (l9 artifact-URL contract consumer)`
+  - `f8a3ec07 plan(macos-tray): m5 primitive done — fetch_recipe_artifact consumes l9 contract`
+  - macOS m5 primitive done within 2h of l9 step 1+2 shipping — same flywheel as Windows w5 yesterday.
+  - `./build.sh --check` + `--test`: PASSED.
+- Pre-cycle stash: working tree dirty from prior CI regen (Cargo.lock + TRACES + dashboard); stashed → merged cleanly → dropped (regenerated next CI run).
+- Spec-drift advisory: macOS added `crates/tillandsias-vm-layer/src/vz.rs` (130 lines) consuming the l9 contract. `vz.rs` is macOS-owned per the branch canon; this is additive to sibling-owned scope. No methodology / openspec changes.
+
 ### Dynamic-loop slice 2026-05-26T11:32Z — Step 15 slice 3: router-ordering litmus
 
 - Commit `14a8bd77`: new `openspec/litmus-tests/litmus-tray-network-
