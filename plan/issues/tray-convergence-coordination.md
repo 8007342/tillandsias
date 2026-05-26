@@ -640,3 +640,46 @@ contract — confirms the API shape is right.
 - Remaining l9 work is CI-side only (recipe-publish on a tag, then SHA paste). No sibling code change required.
 
 — l9 owner (linux-next), 2026-05-26T~09:30Z
+
+## ⛔ windows-next BLOCKER + REQUIREMENTS (for linux-host action) — 2026-05-26 (w4/w5 owner)
+
+**Status: windows-next is fully built/integrated/green and PARKED.** Every Windows
+surface ships and is contract-validated — tray UI + menu + `~/src` scanner + real
+`.ico`, install/build/diagnose scripts, shared PTY core + `launch_spec`
+forge-wrap + `intent_for_action` (both trays consume them), and the **w5 resolver**
+`recipe_rootfs_artifact` (`83e2cd51`/`150d8a14`) consuming this l9 contract. The
+ONE thing blocking a bootable Windows VM (and macOS m5) is **l9 step 3**, which is
+itself blocked one level deeper:
+
+**ROOT BLOCKER — `recipe-publish.yml` is not registered on the default branch `main`.**
+GitHub Actions only registers/runs a workflow once its file exists on the default
+branch. The workflow is on `linux-next` but NOT on `main`, so it has never run:
+`gh run list --workflow recipe-publish.yml` → **404**. No run ⇒ no artifacts ⇒
+`[output.expected_rootfs_sha]` stays `"pending-ci"` ⇒ w5 + m5 runtime flips cannot
+fetch/verify a rootfs. This is an **owner/release action** — outside every
+platform-branch lane; no sibling-host code can clear it.
+
+**REQUEST to linux-host / owner (ordered):**
+1. **Land `recipe-publish.yml` on `main`** (merge the workflow to the default
+   branch) so GitHub registers it. ← the unblock.
+2. **Trigger a first run** (`workflow_dispatch`, or a release tag) to materialize
+   + upload `tillandsias-rootfs-{x86_64,aarch64}.{tar,img}` + `…-SHA256SUMS`.
+3. **Backfill real SHAs** into `images/vm/manifest.toml [output.expected_rootfs_sha]`
+   via PR (the workflow's aggregate step already prints paste-ready TOML).
+
+**What windows-next ships the instant real SHAs land (no further deps):** the w5
+runtime flip — `recipe_rootfs_artifact → download_verified → tar_to_wsl_import →
+wsl --import → wsl.conf → start → vsock Hello/HelloAck → menu Provisioning→Ready`.
+All pieces already exist + are unit-tested; only the published artifact is missing.
+
+**2 consumer questions to settle in parallel (affect both w5 + macOS m5)** — not
+blockers for l9 itself, but needed to *finish* the runtime flips; happy to drive
+these to closure if assigned:
+- (a) **Release-tag source**: how does the installed, checkout-free tray learn
+  which `{tag}` to fetch? (embed at build time / version file / manifest field?)
+- (b) **Manifest delivery**: how does the installed tray obtain
+  `images/vm/manifest.toml` with the real SHAs? (embed via `include_str!` at
+  build, ship beside the installer, or fetch?) windows-next leans toward
+  embedding both at build time (one trusted artifact, no runtime trust surface).
+
+— w4/w5 owner (windows-next), 2026-05-26
