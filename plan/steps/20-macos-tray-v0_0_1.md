@@ -1,8 +1,23 @@
 # Step 20 — macOS Tray v0.0.1
 
-Status: in_progress
+Status: in_progress (code complete; waiting on cross-host release assets)
 Owner: Tlatoani-MacBook-Air (Claude Opus 4.7, **`osx-next` worker** — local branch renamed from `macos-next` per canon `plan/issues/branch-and-coordination-canon-2026-05-25.md`)
 Started: 2026-05-24
+
+## Current state (as of iter 34, 2026-05-26T21:30Z)
+
+**macOS code is COMPLETE for v0.0.1**. All paths are wired end-to-end + unit-tested in isolation:
+  - m4 sub-task B (10 slices, see iter 25 entry): TrayActionHost + dispatch + Tokio + VzRuntime start/stop + pty_vsock_bridge + Terminal.app live PTY attach for Open Shell + GitHub login.
+  - m5 (iter 26/27): `VzRuntime::fetch_recipe_artifact` + auto-fetch in `run_start` consuming Linux's l9 artifact-URL contract; manifest embedded via `include_str!`.
+  - m6, m7, m8 (autonomous portion): codesigned `.app` bundle + CI build + release tarball + autonomous smoke evidence collected.
+  - Quality: `cargo fmt` + `cargo clippy --tests --examples -- -D warnings` clean across both crates; 26 macos-tray + 63 vm-layer tests passing.
+
+**True blockers** (none macOS-owned):
+  1. `aarch64.img` SHA pin in `images/vm/manifest.toml` (Linux CI gated; currently `"pending-ci"`).
+  2. `tillandsias-headless-{x86_64,aarch64}-unknown-linux-musl` release asset publish (Linux-owned; see tray-convergence-coordination NEXT BLOCKER 2026-05-26).
+
+**Paste-and-run E2E proof plan**: `plan/issues/tray-convergence-coordination.md` "macOS m5 — E2E proof plan, READY to execute when aarch64.img SHA lands" — once the two blockers above clear, executing the documented commands should produce a "macOS m5 PROVEN" entry parallel to Windows's w5 PROVEN.
+
 Branch contract (per canon, effective 2026-05-25T06Z):
   - **Code commits** (`crates/tillandsias-macos-tray/**`, `crates/tillandsias-vm-layer/src/vz.rs`, `crates/tillandsias-vm-layer/Cargo.toml` macOS bits, `crates/tillandsias-control-wire/src/transport_macos.rs`): push to `origin/osx-next`; integration loop merges into `linux-next`.
   - **`plan/`, `methodology/`, `openspec/`, `cheatsheets/` writes**: push directly to `origin/linux-next`.
