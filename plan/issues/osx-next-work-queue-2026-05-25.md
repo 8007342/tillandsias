@@ -1244,3 +1244,36 @@ Either trigger flips m8 from "autonomous-portion done" to
 
 **lease intent** — release. Other agents may claim follow-ups or
 re-claim if interactive smoke surfaces a regression.
+
+### event: m4 sub-task B slice 4c precursor — VzRuntime::open_vsock_stream — 2026-05-26T07:48Z
+
+- item: `m4/pty-attach-appkit-terminal` sub-task B slice 4c (precursor)
+- agent_id: `osx-next-claude-opus-4-7` on `Tlatoanis-MacBook-Air`
+- lease_id: `5b8e2c4f9a17`
+- action: claim slice 4c precursor → done.
+- evidence (commit `9578691d`, code → osx-next):
+  - `crates/tillandsias-vm-layer/src/vz.rs`: added
+    `VzRuntime::open_vsock_stream(port, timeout) -> Result<VsockStream,
+    OpenVsockError>` (macOS-only). Async wrapper around the blocking
+    `connect_to_vm_vsock`; clones the existing `vm_handle::VmHandle`
+    out of the `Mutex<Option<>>` slot (Send via the wrapper's unsafe
+    impl), moves into `spawn_blocking`, wraps the resulting VsockFd
+    via `VsockStream::from_vsock_fd`. Workaround for Rust 2021
+    closure field-projection via `let _force_full_capture =
+    &send_handle` (documented + linked to rust-lang/rust#73214).
+  - New error enum `OpenVsockError`: VmNotStarted (most common
+    first-launch path before m5), LockPoisoned(String), Join(String),
+    Connect(ConnectError), Stream(io::Error). Implements Display +
+    Error.
+  - New test `open_vsock_stream_errors_when_vm_not_started` covers
+    the gating path. Happy path requires a booted VM (manual smoke
+    once m5 lands).
+- tests: vm-layer 51/51 pass with `--features materialize` (was 50; +1
+  gating test). macos-tray 24/24 unchanged.
+- progress: slice 4c proper (next macOS code slice) integrates
+  `open_vsock_stream` → `spawn_pty_bridge` → handshake →
+  `PtySession::open(launch_spec(Shell))` → `pump_io` with a host
+  `UnixPtyMaster` → `spawn -a Terminal.app` pointed at the master's
+  slave path. End-to-end gated on m5 (booted VM with forge container)
+  but each adapter piece is now testable in isolation.
+- Lease released.
