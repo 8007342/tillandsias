@@ -27,7 +27,12 @@ tracing = { workspace = true }
 # The real provisioning fetch path only compiles on Windows, so the download
 # feature (reqwest+rustls+sha2) is pulled only here. Cargo unions this with the
 # base [dependencies] entry above.
-tillandsias-vm-layer = { path = "../tillandsias-vm-layer", features = ["download"] }
+# `recipe` adds the Manifest parser so the recipe-artifact resolver can read
+# the l9 `[output]` URL template + expected SHA. `download` is the fetch path.
+tillandsias-vm-layer = { path = "../tillandsias-vm-layer", features = [
+    "download",
+    "recipe",
+] }
 windows = { version = "0.58", features = [
     "Win32_UI_Shell",
     "Win32_UI_WindowsAndMessaging",

@@ -588,3 +588,55 @@ clippy-clean. **m4 slice 4b/5b** + the **w5** flip should both call this and pas
 the active project. No wire / `pty_handler` / `VmRuntime` change — pure host-shell.
 
 — w4 owner (windows-next), 2026-05-26
+
+### l9 artifact-URL contract — linux-host announcement, 2026-05-26T~09:30Z
+
+Shipped on `linux-next` at `963baeb1` (manifest + parser) and `9db73978`
+(materialize-cli `--publish-tag` verifier). This section is the
+consumer-side reference for **w5** (Windows wsl-import-via-CI-rootfs) and
+**m5** (macOS vfr-image-via-CI-rootfs) flips.
+
+**Contract:**
+
+```toml
+# images/vm/manifest.toml
+[output]
+artifact_url_template = "https://github.com/8007342/tillandsias/releases/download/{tag}/tillandsias-rootfs-{arch}.{format}"
+
+[output.expected_rootfs_sha]
+"x86_64.tar"  = "<sha256-from-first-green-CI-run>"
+"aarch64.tar" = "<sha256-from-first-green-CI-run>"
+"aarch64.img" = "<sha256-from-first-green-CI-run>"
+# x86_64.img omitted: no x86_64 VFR consumer in v0.0.1.
+```
+
+**Consumer API** (already in tree):
+
+```rust
+let url = manifest.artifact_url(arch, format, tag)
+    .expect("manifest has artifact_url_template");
+// arch:   "x86_64" | "aarch64"
+// format: "tar" | "img"
+// tag:    "v0.2.260526.X" (the release tag carrying the artifacts)
+let sha = manifest.expected_sha(&format!("{arch}.{format}"))
+    .expect("manifest has SHA pin for this arch+format");
+```
+
+**Variable surface (fixed):** `{tag}`, `{arch}`, `{format}`. Hosts MAY
+override the entire template at install time via `--artifact-url-template`
+(e.g. internal mirror); the recipe stays the trust root regardless,
+manifest SHAs are the verification gate.
+
+**Resolved windows-next reference** (`83e2cd51 w5 recipe-artifact
+resolver`) already lands a `RemoteArtifact` type that consumes this
+contract — confirms the API shape is right.
+
+**State summary for w5 / m5:**
+
+- l9 step 1: artifact URL template + `Manifest::artifact_url` resolver — **DONE** (`963baeb1`).
+- l9 step 2: `materialize-cli --publish-tag` prints `would_publish_to_<fmt>=<url>` for contract-verify without buildah — **DONE** (`9db73978`).
+- l9 step 3 (SHA pins): pending first green `recipe-publish` CI run. Until then `[output.expected_rootfs_sha]` carries `"pending-ci"` placeholders. Once CI succeeds: aggregate-step prints paste-ready TOML lines (already in `.github/workflows/recipe-publish.yml`); paste into `manifest.toml` via a single PR. w5/m5 fetch logic SHOULD treat `"pending-ci"` as a recoverable error ("artifact not yet published"), not crash.
+- l9 step 4 (this section): **DONE** — contract is documented.
+- Remaining l9 work is CI-side only (recipe-publish on a tag, then SHA paste). No sibling code change required.
+
+— l9 owner (linux-next), 2026-05-26T~09:30Z
