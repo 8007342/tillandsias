@@ -28,6 +28,34 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-26T18:26Z — NO-OP (both siblings at-or-behind linux-next)
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `7e44ece2`
+- observed_sibling_heads: main=`00aa4010` · linux-next=`7e44ece2` · windows-next=`7e44ece2` (equal) · osx-next=`a3152fc5` (ancestor)
+- windows-next: no-op (HEAD equals linux-next — orchestrator fast-forwarded).
+- osx-next: no-op (HEAD is an ancestor).
+- Tests: n/a.
+- Out-of-band activity this 2h window (not from this cron):
+  - PR #2 (linux-next → main) merged at `03c3c50c` — recipe-publish.yml +
+    ci.yml + release.yml now on main; GitHub Actions registered the workflow
+    (ID `283652353`).
+  - Noop sanity run `26463370993` — x86_64 green, aarch64 exposed a follow-up
+    bug in `materialize-macos-tar-to-img.sh` rejecting noop stub output.
+  - PR #3 (`fix(ci): rootless buildah unshare + noop img-skip`) merged at
+    `00aa4010` — both follow-ups landed on main.
+  - Real-build run `26464386747` — past the mount issue (unshare worked),
+    failed at `dnf install` step inside the buildah container with
+    `Cannot create temporary file - mkstemp '/tmp/...': No such file or
+    directory`. Driver-level / recipe-level issue. Owner-authorized bypass
+    path in flight: materialize locally on this Fedora host.
+- Local-materialize attempt: toolbox approach failed (nested rootless
+  `newuidmap`/`newgidmap` not setuid in the toolbox); user installed buildah
+  directly on the host. Awaiting `qemu-user-static qemu-user-binfmt parted
+  dosfstools e2fsprogs fuse-overlayfs` + `systemctl restart systemd-binfmt`
+  before retrying local materialize.
+- Spec drift: none (sibling deltas empty).
+
 ### Coordinator audit 2026-05-26T17:21Z — l9 blocker retargeted to PR #3/main CI fix
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
