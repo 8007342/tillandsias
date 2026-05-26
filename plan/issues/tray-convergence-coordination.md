@@ -740,3 +740,22 @@ Current l9 next action is no longer "register workflow"; it is:
 
 Until that happens, w5 runtime provisioning and macOS live VM/PTY proof remain
 blocked on real artifacts and manifest SHA pins.
+
+## ⚠️ materialize must stay Windows-COMPILABLE — 2026-05-26 (windows host)
+
+`cda91b40` (materializer hydrate/COPY fix) added `std::os::unix::fs::PermissionsExt`
++ `.mode()` to `materialize/exec.rs` **without a cfg gate**, which broke
+`cargo test -p tillandsias-vm-layer --features materialize` on Windows
+(`E0433: cannot find unix in os`). Fixed on windows-next `d05e8945` — cfg(unix)-gated
+the rootfs mode-setting in `recreate_runtime_dirs` (create_dir_all stays
+cross-platform) + gated the two Unix-path/mode behavioral tests. Pure portability,
+Linux semantics + coverage unchanged.
+
+**Why this matters / recurrence guard:** CI is **Linux-only**, so a Windows-breaking
+unix-ism in the shared `materialize` module passes CI green — only the Windows host
+catches it. Windows enables the `recipe` feature today and may enable `materialize`
+for the local-materialization-in-WSL fallback (this doc's "FALLBACK / dev path"),
+so the `materialize` feature MUST keep compiling on Windows. **materialize owner:**
+when touching `materialize/**`, cfg-gate any `std::os::unix` / mode / symlink
+unix-isms (the converters `wsl`/`macos` already follow this — pure-arg builders +
+cfg-gated runtime). Cheap rule: no bare `std::os::unix` in shared vm-layer code.

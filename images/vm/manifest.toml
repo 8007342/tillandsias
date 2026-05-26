@@ -44,15 +44,24 @@ digest = "sha256:pending-first-pin"
 # @trace plan/issues/cross-host-blocker-roundup-2026-05-25.md l9
 artifact_url_template = "https://github.com/8007342/tillandsias/releases/download/{tag}/tillandsias-rootfs-{arch}.{format}"
 
-# CI-published artifact SHAs (D6: dual-path materialization).
+# Artifact SHAs (D6: dual-path materialization).
 # Format keys: "<arch>.<format>" — `tar` for Linux dev + WSL import,
-# `img` for macOS VFR (raw EFI+ext4 image). Populated by recipe-publish
-# CI job on first successful run; check-in via PR after merge.
+# `img` for macOS VFR (raw EFI+ext4 image).
+#
+# INTERIM (2026-05-26): the .tar SHAs below are from the FIRST local
+# materialization on the Linux host (buildah, rootless) from Recipefile
+# @ 27b55273, published as release v0.2.260526.1 so Windows w5 + macOS m5
+# can begin testing the fetch→verify→import→boot flow immediately. The
+# `recipe-publish` CI workflow will republish reproducible artifacts; when
+# that run is green these SHAs get replaced with CI's via PR (and the tag
+# in the consuming hosts' config bumped to the CI release).
 [output.expected_rootfs_sha]
-"x86_64.tar"  = "pending-ci"
-"aarch64.tar" = "pending-ci"
+"x86_64.tar"  = "d940c3b9a34c7791a5c4cae6ac7cbc5d6bd982722f249f3f6b0caf801124cbad"
+"aarch64.tar" = "5483d0fd9709f200028f09ccfddd8d221286c749ce39586ef92c5d8974cfd669"
 "aarch64.img" = "pending-ci"
 # x86_64.img omitted: no x86_64 VFR consumer in v0.0.1.
+# aarch64.img pending: the tar→.img conversion (materialize-macos-tar-to-img.sh)
+# runs in the recipe-publish CI job, not this local materialize pass.
 
 # Kernel command-line passed to the VM bootloader. Quiet boot + serial
 # console on hvc0 so the host can capture early-boot diagnostics.
