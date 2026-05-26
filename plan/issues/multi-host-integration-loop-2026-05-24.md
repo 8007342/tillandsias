@@ -28,6 +28,21 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Dynamic-loop slice 2026-05-26T13:00Z — pty_handler AsyncFd<OwnedFd> rewrite
+
+- Commit `65980b02`: replaces `tokio::fs::File` master-fd wrapper with
+  `tokio::io::unix::AsyncFd<OwnedFd>` + non-blocking + readiness-based
+  read/write via `try_io(libc::read/write)`. Un-ignores
+  `open_runs_echo_and_emits_data_then_close` (now passing
+  deterministically; was the follow-up flagged when l3 landed).
+- pty_handler tests: 3/4 pass (was 2/4 with 2 ignored); 1 remaining
+  `#[ignore]` is the SIGTERM-HUP corner — needs explicit cancellation
+  token in the pump task as the next follow-up.
+- CI: 100%.
+- Next: pump cancellation token to close the SIGTERM-HUP gap (final
+  pty_handler ignore), or Step 16 slice 2 (OpenCode-web parity), or
+  Linux clippy/podman hardening sweep.
+
 ### Dynamic-loop slice 2026-05-26T12:10Z — Step 16 slice 1: observatorium HTTP readiness + log capture
 
 - Commit `3d75eeef`: `wait_for_observatorium_http_ready` polls the real
