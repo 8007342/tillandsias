@@ -28,6 +28,68 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Interlude 2026-05-25T~22:30Z–~23:30Z — l7 SHIPPED (Linux materializer driver) + CI green
+
+User directive: complete the headless implementation; user picked
+"l7 full — §3.1 through §3.8" from a 4-option survey.
+
+- **CI baseline: GREEN.** `./build.sh --ci-full --install` was failing on
+  154 cargo-fmt diffs + 7 clippy warnings. Cleared in two commits:
+  `df1f784f` (workspace cargo fmt --all, 113 files, no semantic change)
+  and `615d4c97` (clippy cleanup: auto-fix via `cargo clippy --fix` +
+  manual `#[allow]` on tests asserting compile-time invariants, fixed
+  `Terminal::TerminalApp` enum-variant-names lint on macOS, removed
+  redundant guards in router-sidecar test). End state:
+  `./build.sh --ci-full --install` → **14/14 + 4/4 + 3/3 + 2/2 = 100%**.
+
+- **`l7/§3-materializer-driver` SHIPPED** (commit `9dca2c47`, lease
+  `linux-l-mat-2026-05-25T15Z`): full Tasks 3.1-3.6 + 3.8 + 4.x of
+  `vm-recipe-provisioning`. New module
+  `crates/tillandsias-vm-layer/src/materialize/` (1,174 lines, 4
+  submodules, 37/37 tests pass) behind the new `materialize` cargo
+  feature:
+  - `mod.rs`: Materializer + MaterializedRootfs + HostArch + run() —
+    per-arch sanity (§3.6), instruction walk, cache hit/miss dispatch,
+    final layer = rootfs tar (§3.5), GC after success (§4.2).
+  - `layer_key.rs` (§3.2): content-addressed
+    `sha256_hex(parent || arch || directive_text)`. 6 unit tests cover
+    determinism + each input's sensitivity.
+  - `cache.rs` (§3.3 + §4.1): `<cache_root>/recipe-cache/<arch>/<key>.tar`
+    layout; lookup walks arch subdirs; GC prunes by 90-day age + per-arch
+    ceiling of 5, oldest-mtime first. 5 unit tests including
+    6-entry-eviction-to-3 + ancient-entry eviction.
+  - `exec.rs` (§3.4): LayerExecutor trait. BuildahExec ships as a
+    scaffold (returns a clear error pointing at the recipe-smoke CI
+    job §6.4); NoopExec is the deterministic test executor with
+    Arc-shared call counter for cache-hit assertions.
+  - `trace.rs` (§3.8): append-only JSONL ledger at
+    `<cache_root>/recipe-trace.jsonl`. 4 variants (LayerHit / LayerMiss
+    / RootfsEmitted / Gc). 2 tests cover append + serde roundtrip.
+  - `./build.sh --ci-full --install`: PASSED after l7 lands.
+
+- **Effect on siblings:**
+  - macOS m5 / §3.7.1 `materialize::macos::tar_to_vfr_img` now has the
+    rootfs-tar API to build against. **Unblocked.**
+  - Windows §3.7.2 `materialize::wsl::tar_to_wsl_import` same.
+    **Unblocked.**
+  - §2b CI-fetch path (recipe-publish CI job) can consume
+    `Materializer::run` to produce per-arch artifacts. **Unblocked.**
+  - §3.4 BuildahExec subprocess body is now the only material gap; per
+    the in-tree comment it lands with the recipe-smoke CI job (§6.4).
+
+- **Honest assessment summary** (provided to user mid-cycle):
+  - 60% real Linux code shipped this session (l1, l3, l4, l6, fmt+clippy
+    cleanup, l7) — substantial.
+  - 40% orchestration (methodology, cheatsheets, work queues, ledger
+    updates, blocker roundup responses).
+  - Step 15 (tray-network-bootstrap) and Step 16 (observatorium readiness)
+    still READY, not picked up — concrete Linux features for follow-up.
+  - Slice 2 (shared dispatcher convergence) still gated on sibling Q1-Q4
+    answers.
+  - Plan sizing audit: most items right-sized (30 min – 4 h); a few too
+    small (w3/m3 clippy cleanups, l6); l7 ended up appropriately scoped
+    as one focused session.
+
 ### Cycle 2026-05-25T21:43Z — INTEGRATED (windows pty §3.3 + §3.4 deeper bring-up)
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
