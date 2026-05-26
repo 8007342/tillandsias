@@ -1,38 +1,39 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-05-26T06:02Z
+LastExecutionTime: 2026-05-26T07:54Z
 
 ## This Loop
 
-- Fetched origin and fast-forwarded local `linux-next` from `e2c21f3b` to
-  `fcebc98d`.
-- Observed remote heads: `linux-next` `fcebc98d`, `osx-next` `0aff8003`,
-  `windows-next` `042bf22a`, `main` `ddf52dff`.
-- Remote progress is healthy: `linux-next` absorbed the macOS m4 slice 3-5
-  series and the 05:43 integration cycle; no sibling branch has unmerged code.
-- Reconciled the macOS queue header: m4 sub-task B's five-slice action-host
-  plan is complete; remaining real PTY attach work is now gated on l9/m5.
-- Surfaced a macOS no-VM fallback packet for AppKit action smoke/stub polish.
+- Fetched origin and fast-forwarded local `linux-next` from `65fd9498` to
+  `89de6219`.
+- Observed remote heads: `linux-next` `89de6219`, `osx-next` `89de6219`,
+  `windows-next` `35cbdb16`, `main` `ddf52dff`.
+- Remote progress is healthy: Windows launch_spec forge-container work was
+  integrated at `a1e1df1`, macOS landed m4 bridge/open_vsock foundations, and
+  `osx-next` is aligned with `linux-next`.
+- Reconciled stale queue headers and plan summaries from the previous
+  `fcebc98d` fold to current `89de6219`.
+- Added macOS `m9/pty-attach-adapter-unit-wiring` as the ready no-VM packet
+  after m8's autonomous smoke completed.
 
 ## Expected Next Loop
 
-- Linux should claim/execute `l9/recipe-artifact-url-and-publish-smoke`:
-  settle artifact URL/release-asset convention, run local or workflow-backed
-  materialization, and write real manifest SHA pins.
-- Windows should merge latest `linux-next` `fcebc98d` into `windows-next`, run
-  w7 diagnostics, and, unless challenged, land the host-shell `launch_spec`
-  forge-target amendment it volunteered for.
-- macOS should either take the new m8 no-VM smoke packet or prepare m4 slice
-  4b/5b against the shared `launch_spec`, while keeping E2E blocked on m5.
+- Linux should claim or explicitly diagnose `l9/recipe-artifact-url-and-publish-smoke`.
+  If Buildah or GitHub release publishing fails, preserve exact logs plus a
+  manifest shape Windows/macOS can build against.
+- Windows should branch-sync `windows-next` to `linux-next` `89de6219`, run
+  w7 diagnostics, and confirm l9 remains the only artifact gate.
+- macOS should claim m9 for no-VM PTY adapter wiring, or wait for l9/m5 before
+  claiming live Terminal.app PTY attach E2E. m8 only needs user-attended smoke.
 
 ## Resolved Since Previous Loop
 
-- MacOS m4 sub-task B slices 3-5 landed and were absorbed into `linux-next`:
-  real VzRuntime start/stop, Open Shell stub, and GitHub Login stub.
-- The 05:43 integration loop no-oped cleanly after its in-cycle pull; no
-  `windows-next` or `osx-next` code remained ahead of `linux-next`.
-- Windows answered the Open Shell target questions and volunteered to amend
-  `launch_spec` so forge-container targeting is shared.
+- Windows forge-container `launch_spec` / `intent_for_action` amendment landed
+  at `35cbdb16` and was merged/tested into `linux-next` at `a1e1df1`.
+- macOS m4 gained `pty_vsock_bridge` (`681607e1`) and
+  `VzRuntime::open_vsock_stream` (`9578691d`).
+- macOS m8 produced autonomous no-VM build/process smoke evidence; only manual
+  menu-click verification remains.
 
 ## Current Major Blockers
 
@@ -40,21 +41,21 @@ LastExecutionTime: 2026-05-26T06:02Z
   green recipe-publish artifacts, and manifest SHA pins.
 - Windows w5 and macOS m5 runtime provisioning flips remain blocked until l9
   produces fetchable artifacts and SHAs.
-- Real macOS Open Shell/GitHub Login PTY attach (m4 slice 4b/5b) waits for a
-  bootable recipe-provisioned VM and the shared forge-target `launch_spec`.
-- Windows w7 is ready but should branch-sync because `windows-next` trails
-  `linux-next` by 17 commits.
+- Real macOS live PTY attach remains blocked on m5. m9 can progress adapter
+  wiring without claiming live E2E.
+- m8 acceptance remains blocked on a user-attended macOS interactive menu smoke.
 
 ## Stale Or Pending Pings
 
-- No expired leases found in the active queues.
-- Linux l9 is still unclaimed and is the highest-impact ready packet.
-- MacOS now has m8 as a ready fallback while l9/m5 gates live VM work.
+- No expired leases found in active queues.
+- Linux l9 is still unclaimed across several folds and is the highest-impact
+  ready packet.
+- Windows w7 and macOS m9 are ready fallbacks while l9/m5 gates remain.
 
 ## Validation
 
 - PyYAML parsed `plan.yaml` and `plan/index.yaml`.
 - `git diff --check` passed for touched coordination files.
 - Files changed this pass: `plan/loop_status.md`, `plan.yaml`,
-  `plan/index.yaml`, per-host queues, blocker roundup, and the integration
-  loop ledger.
+  `plan/index.yaml`, per-host queues, blocker roundup, integration loop ledger,
+  and the step-21 coordination issue.

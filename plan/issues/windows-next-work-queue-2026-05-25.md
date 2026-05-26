@@ -2,17 +2,16 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/windows-next-thin-tray.md, plan/issues/tray-convergence-coordination.md, plan/issues/control-socket-protocol-convergence-2026-05-25.md, openspec/changes/control-wire-pty-attach/
 
-Status: **OPEN** as of 2026-05-26T06:02Z. Windows w1, w2, w3, w4, w6
-diagnostics, and the w5 `materialize::wsl::tar_to_wsl_import` converter are
+Status: **OPEN** as of 2026-05-26T07:54Z. Windows w1, w2, w3, w4, w6
+diagnostics, the w5 `materialize::wsl::tar_to_wsl_import` converter, and the
+shared forge-container `launch_spec` / `intent_for_action` amendment are
 done/integrated through `linux-next`; the integration-loop merge/test of
-`origin/windows-next` `042bf22a` completed at `881306a`. `origin/windows-next`
-currently has no unmerged Windows delta and is 17 commits behind `linux-next`
-`fcebc98d`. Remaining WSL rootfs provisioning work is gated on l9: the artifact
+`origin/windows-next` `35cbdb16` completed at `a1e1df1`. `origin/windows-next`
+currently has no unmerged Windows delta and is 10 commits behind `linux-next`
+`89de6219`. Remaining WSL rootfs provisioning work is gated on l9: the artifact
 URL/release-asset contract, first green recipe-publish artifacts, manifest SHA
 pins, and the Windows tray runtime flip away from the older provisioning
-manifest. Windows also volunteered to amend shared `launch_spec` /
-`intent_for_action` for forge-container targeting unless l-headless or m4
-objects in the next cycle.
+manifest.
 
 ## How to use this file
 
@@ -38,7 +37,7 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
 
 - `w7/recipe-diagnostics-and-branch-sync` remains ready as a no-VM fallback:
   `origin/windows-next` has no unmerged delta, but it is behind `linux-next`
-  `fcebc98d`. The next useful packet is a Windows branch-sync pull/merge of
+  `89de6219`. The next useful packet is a Windows branch-sync pull/merge of
   latest `linux-next`, then diagnostic output against the l9 artifact gate.
 - `w6/vm-status-and-enumerate-real-handlers` is done as a no-VM diagnostics
   fallback through `948af711` / integration cycle `b3ae21a`. Live VM status
@@ -66,13 +65,13 @@ and branch sync.
   - `scripts/diagnose-windows.ps1`
 - summary: >
     Keep the Windows no-VM diagnostic current while the recipe artifact path
-    finishes. `origin/windows-next` `042bf22a` has already been merged/tested
+    finishes. `origin/windows-next` `35cbdb16` has already been merged/tested
     into `linux-next`, but the branch now needs to absorb `linux-next`
-    `fcebc98d`. Report whether the script still accurately distinguishes the
+    `89de6219`. Report whether the script still accurately distinguishes the
     completed BuildahExec/materialize-cli implementation from the still-missing
-    l9 artifact URL/SHA pins. If no one objects to the
-    `tray-convergence-coordination.md` proposal, the same branch-sync packet may
-    carry the pure host-shell `launch_spec` forge-target amendment and tests.
+    l9 artifact URL/SHA pins. The forge-target `launch_spec` amendment is now
+    complete at `35cbdb16`, so w7 should focus on branch-sync diagnostics unless
+    the latest `linux-next` exposes a Windows-specific regression.
 - next_action: >
     Pull or merge latest `origin/linux-next` into `windows-next`, run
     `scripts/diagnose-windows.ps1` on Windows, and append an
@@ -82,7 +81,7 @@ and branch sync.
   - `scripts/diagnose-windows.ps1` output on Windows, including WSL presence,
     recipe input detection, and the current artifact gate.
   - Pushed `windows-next` status/diagnostic commit if the script needs changes,
-    or a no-code agent_status_packet if `042bf22a` is sufficient.
+    or a no-code agent_status_packet if `35cbdb16` is sufficient.
 - fallback_when_blocked: >
     Prepare w5 runtime-provisioning code against the l9 artifact contract, but
     mark E2E verification blocked until recipe-publish emits real SHAs.
@@ -681,5 +680,22 @@ Next greedy pickups (no VM needed): **w4b** (windows-ownable, pure) and **w4d**
   land the pure host-shell `launch_spec` forge-target amendment. Treat that as
   available Windows-owned follow-up unless l-headless or m4 objects in the next
   cycle.
+- w5 remains blocked on l9: artifact URL/release-asset contract, first green
+  recipe-publish artifacts, and manifest SHA pins.
+
+### Event: 2026-05-26T07:54Z — linux coordinator status reconciliation
+
+- Observed remote heads: `linux-next` `89de6219`, `windows-next` `35cbdb16`,
+  `osx-next` `89de6219`, `main` `ddf52dff`.
+- The Windows forge-container `launch_spec` / `intent_for_action` amendment is
+  resolved and integrated: `35cbdb16` merged/tested into `linux-next` at
+  `a1e1df1`, with `host-shell` tests 38/38 in the integration ledger.
+- No unmerged Windows code delta exists. `windows-next` trails current
+  `linux-next` by 10 commits, mostly macOS m4 adapter/fallback work plus
+  coordination ledger updates.
+- Keep w7 as the ready Windows packet: branch-sync to `89de6219`, run
+  `scripts/diagnose-windows.ps1`, and report whether diagnostics still
+  identify l9 as the only artifact gate. Do not reopen the launch_spec work
+  unless the branch-sync exposes a regression.
 - w5 remains blocked on l9: artifact URL/release-asset contract, first green
   recipe-publish artifacts, and manifest SHA pins.

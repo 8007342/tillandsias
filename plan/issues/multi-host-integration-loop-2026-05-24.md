@@ -28,6 +28,33 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Coordinator audit 2026-05-26T07:54Z — post-launch_spec and m4 adapter fold
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- observed_sibling_heads:
+  - main: ddf52dff
+  - linux-next: 89de6219
+  - windows-next: 35cbdb16
+  - osx-next: 89de6219
+- Coordination fold only; no sibling merge attempted in this pass.
+- Remote progress since the previous coordinator fold is healthy:
+  `linux-next` advanced from `fcebc98d` to `89de6219`, `osx-next` advanced
+  from `0aff8003` to `89de6219`, and `windows-next` advanced from `042bf22a`
+  to `35cbdb16`. `origin/windows-next` and `origin/osx-next` both have no
+  unmerged code delta into `linux-next`; Windows trails only the latest macOS
+  adapter and coordination commits.
+- Resolved since 06:02Z: Windows' forge-container `launch_spec` /
+  `intent_for_action` amendment landed at `35cbdb16` and was integrated/tested
+  at `a1e1df1`; host-shell tests are 38/38 in the 07:43 cycle. The old
+  launch_spec volunteer watch is closed.
+- macOS m4 progressed without claiming live E2E: `pty_vsock_bridge` landed at
+  `681607e1`, m8 autonomous no-VM smoke completed at `38364754`, and
+  `VzRuntime::open_vsock_stream` landed at `9578691d`. m8 now waits on
+  user-attended interactive smoke.
+- Current high-impact blocker remains l9. It gates Windows w5, macOS m5, and
+  live PTY proof for macOS m4. Ready packets: Linux l9; Windows w7 branch-sync
+  diagnostics against `89de6219`; macOS m9 no-VM PTY adapter unit wiring.
+
 ### Cycle 2026-05-26T07:43Z — INTEGRATED (windows launch_spec forge-container wrap)
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next

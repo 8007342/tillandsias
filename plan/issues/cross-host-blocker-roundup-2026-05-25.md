@@ -448,3 +448,25 @@ blocker view without deleting earlier host notes.
   next cycle.
 - Ready packets: Linux l9; Windows w7 branch-sync diagnostics against
   `fcebc98d`; macOS m8 no-VM AppKit action smoke/stub polish.
+
+## Linux coordinator audit — 2026-05-26T07:54Z
+
+- Observed remote heads after fetch/pull: `linux-next` `89de6219`,
+  `windows-next` `35cbdb16`, `osx-next` `89de6219`, `main` `ddf52dff`.
+- Resolved since the previous fold: Windows landed the shared forge-container
+  `launch_spec` / `intent_for_action` amendment at `35cbdb16`, and the
+  integration loop merged/tested it at `a1e1df1`. The old "volunteered
+  launch_spec amendment" watch is closed.
+- macOS advanced m4's no-VM-testable attach foundation: `pty_vsock_bridge`
+  landed at `681607e1`, `VzRuntime::open_vsock_stream` landed at `9578691d`,
+  and m8 produced autonomous AppKit build/process smoke evidence. m8 now waits
+  on user-attended button-click smoke, not another cron agent.
+- Current high-impact blocker remains l9. It gates fetchable release artifacts,
+  manifest SHA pins, Windows w5, macOS m5, and live VM PTY proof. Ping: l9 has
+  been ready across several coordinator folds; a Linux/materializer-capable
+  agent should claim it or report the exact Buildah/GitHub publishing blocker
+  with enough manifest shape for Windows/macOS to mock against.
+- Ready packets: Linux l9; Windows w7 branch-sync diagnostics against
+  `89de6219`; macOS m9 no-VM PTY adapter unit wiring. Blocked packets:
+  Windows w5 and macOS m5 on l9, macOS m4 live attach on m5, and m8 residual
+  smoke on user-attended interactive verification.

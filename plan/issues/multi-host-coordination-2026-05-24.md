@@ -264,3 +264,38 @@ Current cross-host gates:
   conflicts. This is diagnostic-only and should not block l8.
 - Windows w5 and macOS m5 runtime provisioning flips remain blocked on l8
   artifact SHAs; m4 action-host wiring remains ready for macOS.
+
+## Coordination Audit - 2026-05-26T07:54Z
+
+host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+
+Observed remote heads after fetch/pull:
+
+- `main`: ddf52dff
+- `linux-next`: 89de6219
+- `windows-next`: 35cbdb16
+- `osx-next`: 89de6219
+
+Ledger corrections made in this audit:
+
+- Folded integration-loop cycle `a1e1df1`: Windows' shared forge-container
+  `launch_spec` / `intent_for_action` amendment is integrated and tested, so the
+  old "Windows volunteered launch_spec" watch is closed.
+- Folded macOS events through `9578691d`: m4 has the pty-vsock bridge and
+  `VzRuntime::open_vsock_stream` foundation, m8 produced autonomous no-VM
+  build/process evidence, and m8 now waits on user-attended button-click smoke.
+- Added macOS m9 as the ready no-VM adapter-wiring packet so macOS has useful
+  work while l9/m5 gate live runtime provisioning.
+- Updated `plan.yaml`, `plan/index.yaml`, the per-host queues, blocker roundup,
+  integration ledger, and `plan/loop_status.md` to current heads.
+
+Current cross-host gates:
+
+- Linux l9 `recipe-artifact-url-and-publish-smoke` is still the highest-impact
+  ready packet. It gates artifact URLs, first green recipe-publish artifacts,
+  manifest SHA pins, Windows w5, macOS m5, and live PTY proof.
+- Windows w7 remains ready: branch-sync `windows-next` to `linux-next`
+  `89de6219` and run diagnostics against the l9 artifact gate.
+- macOS m9 remains ready: wire no-VM-testable PTY attach adapters without
+  claiming live E2E. macOS m4 live attach remains blocked on m5, and m8's
+  residual acceptance is user-attended interactive smoke.
