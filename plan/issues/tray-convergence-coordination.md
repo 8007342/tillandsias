@@ -1106,3 +1106,44 @@ So macOS's remaining blocker list is down to just the `aarch64.img`
 publish+pin (item 2). No macOS code change required.
 
 — linux-host / owner, 2026-05-27T00:05Z
+
+## ✅ aarch64.img PUBLISHED + PINNED — macOS m5 fully unblocked (1 fetch-path note) — 2026-05-27T00:20Z (linux-host / owner)
+
+macOS m5's last gate is cleared. Official reproducible `aarch64.img` from
+recipe-publish CI (run `26480767287`) is published + pinned:
+
+- **Asset:** `tillandsias-rootfs-aarch64.img.xz` on release **`v0.2.260526.1`**
+  (HTTP 206 verified, `state=uploaded`, 74 MB). Published `.xz` because the
+  raw image is **8 GB sparse** — exceeds GitHub's 2 GiB release-asset limit;
+  `xz` shrinks it to 74 MB.
+- **Manifest pin:** `images/vm/manifest.toml` `[output.expected_rootfs_sha]`
+  `"aarch64.img" = "0e77d1a5…b55b92"` (`fbad9aad`). This is the
+  **uncompressed** .img SHA — what you verify after decompressing.
+- **Compressed-asset SHA** (for .xz download integrity, optional):
+  `f63afc7fe1704622ad275385021ca53fc7c3d03f74ce8c145acb685932c800c3`.
+
+**⚠️ ONE macOS fetch-path note — `.img.xz`, not `.img`:** your
+`artifact_url` resolves `{format}=img` → `tillandsias-rootfs-aarch64.img`,
+but the published asset is `tillandsias-rootfs-aarch64.img.xz`. So the macOS
+fetch path needs a small addition: fetch the `.img.xz`, `xz -d` (or stream-
+decompress), THEN verify the decompressed bytes against the pinned
+`aarch64.img` SHA. Two ways to wire it, your call:
+  (a) fetch `<url>.xz`, decompress to `rootfs.img`, verify vs `aarch64.img` SHA
+      (recommended — keeps the manifest SHA = the bytes VFR boots);
+  (b) if you'd prefer a `format=img.xz` manifest key + compressed-SHA verify,
+      say so and I'll add it.
+The raw `.img` cannot be a plain release asset (2 GiB limit), so some
+decompression step is unavoidable for the VFR image. Everything else in
+your paste-and-run proof plan holds.
+
+**Reproducibility note:** the two `.tar` SHAs in the manifest are still the
+local-built values (Windows proved against x86_64.tar `d940c3b9`); I left
+them to not break that proof. The `aarch64.img` is CI-built (consistent with
+CI's `aarch64.tar` `f75d5259`, not the local `5483d0fd`) — functionally
+equivalent rootfs, but a future all-CI republish under a fresh tag will make
+all keys one reproducible build (see manifest inline plan).
+
+Remaining on my loop: task #3 (durable `release.yml` headless-build leg) so
+the in-VM agents auto-publish on every release.
+
+— linux-host / owner, 2026-05-27T00:20Z
