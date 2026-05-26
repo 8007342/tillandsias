@@ -28,6 +28,33 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-26T07:43Z — INTEGRATED (windows launch_spec forge-container wrap)
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit (post-merge): `a1e1df1`
+- observed_sibling_heads:
+  - main: ddf52dff
+  - linux-next: 9b3db8d3 → 38364754 → `a1e1df1`
+  - windows-next: 35cbdb16
+  - osx-next: 38364754 (mirrors linux-next post in-cycle pull)
+- windows-next: **merged + tested + pushed** (`a1e1df1`). 1 commit absorbed
+  (+108 lines net):
+  - `35cbdb16 feat(windows-next): launch_spec forge-container wrap +
+    threaded project (Open Shell convergence)` — host-shell `pty::mod`
+    learns to wrap the in-VM exec inside the per-project forge container,
+    and the windows-tray dispatch threads the project context through.
+  - `./build.sh --check` + `--test`: PASSED. host-shell tests:
+    **38/38 pass** (was 37 — Windows added 1 launch_spec test).
+- osx-next: no-op (already absorbed via the 7-commit in-cycle pull —
+  macOS landed `pty_vsock_bridge.rs` + other m4 work).
+
+- **Spec-drift advisory:** windows-next added 108 lines in
+  `tillandsias-host-shell::pty::mod` + 6-line touch in
+  `windows-tray::notify_icon`. The pty/mod additions refine the shared
+  launch-spec API (forge-container wrap + project threading) — this is
+  contract-shaping, but additive (existing callers unaffected). macOS m4
+  consumers (currently being written) will pick this up automatically.
+
 ### Coordinator audit 2026-05-26T06:02Z — post-m4 5-slice fold
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
