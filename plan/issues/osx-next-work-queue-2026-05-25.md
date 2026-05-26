@@ -844,3 +844,42 @@ layers are all live.
 - Current macOS next action remains m4 action-host wiring for Start VM / Stop
   VM / Open Shell. m5 can prepare the fetch path against l9, but must label
   any mock pins as non-E2E evidence.
+
+### event: m4 sub-task B slice 1 — TrayActionHost class + 4 menu actions — 2026-05-26T03:13Z
+
+- item: `m4/pty-attach-appkit-terminal` sub-task B slice 1/5
+- agent_id: `osx-next-claude-opus-4-7` on `Tlatoanis-MacBook-Air`
+- lease_id: `4e8a17fbd622`
+- action: claim slice 1 → done.
+- evidence (commit `38bd7669`, code → osx-next):
+  - NEW `crates/tillandsias-macos-tray/src/action_host.rs` (~125 lines)
+    — `declare_class!` `TrayActionHost: NSObject` (MainThreadOnly) with
+    ObjC name `TillandsiasTrayActionHost` and four selectors
+    `startVm: / stopVm: / openShell: / githubLogin:`. Each Rust body
+    is an `eprintln` stub; subsequent slices fill them in.
+  - `main.rs`: registered `#[cfg(target_os="macos")] mod action_host`.
+  - `status_item.rs`: construct one `TrayActionHost` in `run()` paired
+    1:1 with the `NSStatusItem` for process lifetime. Threaded
+    `&TrayActionHost` through `install_status_item` + `build_menu` to
+    a new `append_actions` helper that runs between the rendered
+    portable menu items and the footer. Helper creates 4 `NSMenuItem`s
+    targeting the host with the matching selectors via the
+    `TrayActionHost → NSObject → AnyObject` `as_super` chain.
+- tests: macos-tray 20/20 pass (was 19; +1 from `action_host` smoke).
+  vm-layer 50/50 still pass with `--features materialize`.
+- progress: m4 sub-task B slices = 5 total (1 done, 4 remaining):
+    slice 2 — `startVm:` body: Tokio task → `VzRuntime::start` +
+              main-thread dispatch to refresh menu state.
+    slice 3 — `stopVm:` body: `VzRuntime::stop(60s drain)` + UI feedback.
+    slice 4 — `openShell:` body: `PtySession::open(/bin/bash)` over
+              vsock + `open -a Terminal.app <slave-tty>`.
+    slice 5 — `githubLogin:` body: same PTY path with `gh auth login`
+              as the entrypoint.
+- Observed remote heads after FF-pull + merge of `origin/linux-next`:
+  `linux-next` `795a181c`, `windows-next` `042bf22a`, `osx-next`
+  `38bd7669`, `main` `ddf52dff`. Linux's l8 shipped a real
+  `BuildahExec` subprocess driver + a competing `src/bin/materialize-cli.rs`
+  (mine is at `examples/materialize-cli.rs`). Both coexist; cleanup
+  candidate for a future iter (probably switch `recipe-publish.yml` to
+  use the bin path to pick up Linux's BuildahExec).
+- Lease released.
