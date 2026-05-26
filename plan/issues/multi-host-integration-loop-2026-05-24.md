@@ -28,6 +28,59 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-26T00:49Z — INTEGRATED (windows w4 COMPLETE + dev scripts)
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit (post-merge): `95e4714`
+- observed_sibling_heads:
+  - main: ddf52dff
+  - linux-next: fd710f7a → e0f9397f → `95e4714`
+  - windows-next: 8b45066e
+  - osx-next: 4aa42c6a (already absorbed into linux-next from earlier cycles)
+
+- **Pre-cycle housekeeping** (`e0f9397f`): committed auto-regenerated
+  CI artifacts (VERSION bump + dashboard timestamps + TRACES.md
+  refresh) from the prior `./build.sh --ci-full --install` run. The
+  loop contract treats these as a separate dirty-tree concern; the
+  cycle then proceeded with a clean tree.
+
+- windows-next: **merged + tested + pushed** (`95e4714`). 7 commits
+  absorbed (+491 lines):
+  - `af03de7e feat(host-shell): pty launch_spec` — shared menu-intent
+    → in-VM PtyOpenOpts mapping.
+  - `7dc11bea feat(host-shell): pty w4b ChannelPtyTransport` — §D3
+    outbound writer queue.
+  - `77eb4417`, `ae8789ff`: Merge linux-next.
+  - `c0a138dc`, `93427ed9`: style cleanups (workspace-fmt + clippy).
+  - **`e5ad2295 feat(windows-next): wire tray clicks to in-VM PTY
+    launch (w4 menu wiring)`** — the menu-action dispatch in
+    `notify_icon.rs` now calls `PtySession::open(...)` for
+    GitHubLogin / OpenShell. **w4 COMPLETE.**
+  - `8b45066e feat(windows-next): local build+install scripts +
+    --no-provision dev mode` — `scripts/build-windows-tray.ps1` +
+    `scripts/install-windows.ps1` for Windows-host dev iteration.
+  - `./build.sh --check` + `--test`: PASSED. host-shell tests:
+    **37/37 pass** (was 30 — Windows added 7 new tests for
+    launch_spec + ChannelPtyTransport).
+- osx-next: no-op (already absorbed earlier).
+
+- **Sibling-side queue status:**
+  - Windows w1+w2+w3+w4 ALL DONE. Only gated items remain: w5 (now
+    unblocked by Linux l7 + macOS m5/§3.7.1; still gated on §2b
+    CI-fetch artifacts) and w6 (verify-only against l4 vsock real
+    handlers — already done).
+  - macOS Phase 1 + Phase 1.6 + Phase 1.7 + transport_macos DONE;
+    m4 (PTY AppKit Terminal) unblocked by Linux l3 + Windows pty
+    work; m5 (§3.7.1 macOS converter) unblocked by Linux l7
+    materializer driver landing this cycle.
+
+- **Spec-drift advisory:** windows-next continued additive in
+  `tillandsias-host-shell::pty::*` + `crates/tillandsias-windows-tray/`
+  + `scripts/`. No changes to `tillandsias-control-wire` (Linux wire
+  authority preserved), no changes to `methodology/`,
+  `openspec/specs/`, or `openspec/changes/`. Clean contract
+  preservation across 7 commits.
+
 ### Interlude 2026-05-25T~22:30Z–~23:30Z — l7 SHIPPED (Linux materializer driver) + CI green
 
 User directive: complete the headless implementation; user picked
