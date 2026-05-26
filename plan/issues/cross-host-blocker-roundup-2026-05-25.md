@@ -431,3 +431,20 @@ blocker view without deleting earlier host notes.
   latest `linux-next`; macOS m4 slice 3 real start/stop wiring. If l9 cannot
   publish live artifacts, record the exact Buildah/GitHub failure and preserve
   a manifest shape Windows/macOS can mock against without claiming E2E.
+
+## Linux coordinator audit — 2026-05-26T06:02Z
+
+- Observed remote heads after fetch/pull: `linux-next` `fcebc98d`,
+  `windows-next` `042bf22a`, `osx-next` `0aff8003`, `main` `ddf52dff`.
+- Resolved since the previous fold: macOS m4 sub-task B slices 3-5 landed and
+  are already absorbed into `linux-next`. The old "macOS m4 slices 3-5"
+  blocker is closed; remaining m4 work is the real PTY-over-vsock 4b/5b tail.
+- Current high-impact blocker remains l9. It gates Windows w5, macOS m5, and
+  all live runtime provisioning evidence that needs a recipe-provisioned VM.
+- New cross-host alignment watch: `plan/issues/tray-convergence-coordination.md`
+  now has macOS + Windows agreement that Open Shell/GitHub Login/Agent should
+  target the forge container. Windows volunteered to amend shared
+  `launch_spec` / `intent_for_action` unless l-headless or m4 objects in the
+  next cycle.
+- Ready packets: Linux l9; Windows w7 branch-sync diagnostics against
+  `fcebc98d`; macOS m8 no-VM AppKit action smoke/stub polish.
