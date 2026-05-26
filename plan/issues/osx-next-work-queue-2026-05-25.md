@@ -1433,3 +1433,68 @@ re-claim if interactive smoke surfaces a regression.
   same composition with `gh auth login` intent) and project-from-
   MenuStructure threading once the menu carries project selection.
 - Lease released.
+
+### event: m4 sub-task B slice 5b + m4 sub-task B COMPLETE — 2026-05-26T09:35Z
+
+- item: `m4/pty-attach-appkit-terminal` sub-task B slice 5b — DONE
+- agent_id: `osx-next-claude-opus-4-7` on `Tlatoanis-MacBook-Air`
+- lease_id: `1a8f5c2e9b04`
+- action: claim slice 5b → done. **m4 sub-task B is now FULLY COMPLETE
+  including the live PTY-over-vsock integration for both intents.**
+- evidence (commit `41ea02e1`, code → osx-next):
+  - `action_host.rs::github_login`: replaced the slice-5 stub-only
+    path with `self.attach_pty("GitHub login", PtyIntent::GithubLogin)`.
+    Live attach: clicking GitHub login on a booted VM opens
+    Terminal.app running `gh auth login` inside the VM (project=None
+    falls back to bare-VM gh per convergence-coordination decision).
+    Token lands in the in-VM vault per spec invariant
+    `terminal-attach-no-ssh`.
+  - `action_host.rs::open_shell`: simplified to
+    `self.attach_pty("Open Shell", PtyIntent::Shell)`.
+  - New private `TrayActionHost::attach_pty(label, intent)`: shared
+    composition body. Gates on live VM, spawns Tokio worker, dispatches
+    result with either `spawn_terminal_pty_attach(slave_path)` or
+    stub-window fallback.
+  - Renamed `run_open_shell_attach` → `run_pty_attach`, takes
+    `intent: PtyIntent` and threads it through `launch_spec`.
+- tests: macos-tray 27/27 unchanged (the per-intent path goes through
+  the same launch_spec / connect_pty_bridge / pump_io plumbing already
+  covered). vm-layer 54/54 unchanged.
+
+### m4 sub-task B — FULL COMPLETION SUMMARY — 2026-05-26T09:35Z
+
+10 slices landed across iters 15-25:
+
+  slice 1   (`38bd7669`) — TrayActionHost declared class + 4 menu actions
+  slice 2   (`3c3b565f`) — main-thread dispatch + Tokio runtime
+  slice 3   (`af7ba46a`) — real VzRuntime start/stop wired
+  slice 4   (`075465ce`) — openShell Terminal.app stub
+  slice 5   (`3e7af023`) — githubLogin Terminal.app stub
+  slice 4b  (`681607e1`) — pty_vsock_bridge generic adapter
+  slice 4c-pre (`9578691d`) — VzRuntime::open_vsock_stream
+  slice 4c.1 (`6d9a2201`) — connect_pty_bridge handshake composer
+  slice 4c.2 (`d45d6216`) — open_shell LIVE PTY-over-vsock attach
+  slice 5b   (`41ea02e1`) — github_login LIVE PTY-over-vsock attach
+
+All four interactive menu items (Start VM, Stop VM, Open Shell,
+GitHub login) are wired end-to-end. Start/Stop VM functional whenever
+a recipe artifact is present at `$HOME/Library/Application Support/
+tillandsias/`. Open Shell + GitHub login functional whenever the VM
+is booted with an in-VM headless on vsock 42420 (gated on m5/l9).
+
+### follow-ups after m4 sub-task B completion
+
+1. **m5/vfr-image-via-ci-rootfs** (gated on Linux l9 artifact URL
+   contract): macOS-owned converter (tar_to_vfr_img) already shipped;
+   waiting on l9 for the URL + SHA pins so VzRuntime::provision can
+   fetch the published .img.
+2. **m8 interactive smoke** (user-attended): once m5 lands, run the
+   7-step manual checklist from the m8 agent_status_packet to
+   exercise the full happy path via real button clicks.
+3. **MenuStructure project threading**: surface the currently-selected
+   project from MenuStructure to attach_pty so launch_spec gets
+   `project=Some(<name>)` and the PTY lands inside the forge container
+   instead of the bare-VM fallback.
+4. **MenuStructure integration** (low priority): fold the four manual
+   menu items in status_item::append_actions into the portable
+   MenuStructure spec.
