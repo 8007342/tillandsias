@@ -741,3 +741,64 @@ post-merge cycle), so the remaining single blocker is `recipe-smoke-ci-
 publish` (§2b.3 — also mine). Plan: next eager iter wires the CI job that
 materializes the recipe → `.tar`, runs tar_to_vfr_img → `.img`, uploads both
 artifacts.
+
+### event: §2b.3 recipe-publish CI workflow — Windows E2E unblocked — 2026-05-26T02:00Z
+
+- item: `§2b.3` recipe-publish CI workflow (mine)
+- agent_id: `osx-next-claude-opus-4-7` on `Tlatoanis-MacBook-Air`
+- lease_id: `9c8d4a2f7b15`
+- action: claim → done in single iter.
+- evidence (commit `55ff55c6`, code → osx-next):
+  - `crates/tillandsias-vm-layer/examples/materialize-cli.rs` (~200 lines)
+    — CI-friendly front-end for `Materializer<E>`. Args: `--recipe /
+    --manifest / --arch / --cache-root / --output / --executor
+    buildah|noop`. Default `buildah` (production); `noop` for
+    smoke-testing the recipe parse + driver shape without the
+    multi-minute buildah pull/build cycle. Tested locally with `noop`
+    on both arches — produces a 10-byte placeholder `.tar`.
+  - `.github/workflows/recipe-publish.yml` (~165 lines) — triggered by
+    `workflow_dispatch` (manual) or `release.published` (auto). Matrix
+    job for both arches on ubuntu-22.04: installs buildah + parted +
+    dosfstools + e2fsprogs + util-linux; builds + runs `materialize-cli`;
+    aarch64 also runs `sudo scripts/materialize-macos-tar-to-img.sh` →
+    `.img`. Per-arch SHA256SUMS computed; per-arch workflow artifact
+    uploaded (30d retention); conditional GitHub-release upload on
+    release/dispatch-with-tag. Aggregator job concats SHA256SUMS into a
+    `[output.expected_rootfs_sha]` block the maintainer pastes into
+    `images/vm/manifest.toml`.
+  - `images/vm/manifest.toml` fix: replaced the multi-line inline-table
+    `[output] expected_rootfs_sha = { … }` (TOML doesn't allow line
+    breaks inside `{}`) with a proper `[output.expected_rootfs_sha]`
+    subtable. Materializer parser now consumes the manifest without
+    error.
+- 50/50 tests still pass (added 0 unit tests this iter; new code is
+  the CLI binary + workflow YAML which are runtime-verified via the
+  workflow itself).
+- Lease released.
+
+### Windows E2E unblock — COMPLETE — 2026-05-26T02:00Z
+
+All 5 of the dependencies for Windows' E2E recipe verification are now
+landed:
+
+  ✓ Linux §3 materializer driver (merge `5c74402d`)
+  ✓ macOS §3.7.1 `tar_to_vfr_img` (`a77fae00`)
+  ✓ Windows §3.7.2 `tar_to_wsl_import` (`cb39cb7c`)
+  ✓ §1 recipe scaffold (`a77fae00`)
+  ✓ §2b.3 recipe-publish CI workflow (this commit `55ff55c6`)
+
+End-to-end happy path:
+  1. Maintainer publishes a release: `gh release create vX.Y.Z`.
+  2. `recipe-publish` workflow fires; materializes both arches; aarch64
+     gets the `.img` conversion; both arches' artifacts uploaded to the
+     release.
+  3. macOS tray on first launch: fetch `tillandsias-rootfs-aarch64.img`
+     via `tillandsias-vm-layer::fetch` (downloads + SHA-verifies);
+     `VzRuntime::start` boots it.
+  4. Windows tray on first launch: fetch `tillandsias-rootfs-x86_64.tar`;
+     `materialize::wsl::tar_to_wsl_import` + `wsl --import`.
+
+Windows host can claim w4c/e/f for live-VM verification on the next
+green workflow run. Macos can similarly start m4 sub-task B
+(`tillandsias-macos-tray::terminal_attach` action-host) since the lower
+layers are all live.
