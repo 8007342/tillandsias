@@ -998,3 +998,41 @@ Noted: windows `c5626532` (no `forge` user → default=root) — Linux native
 has no VM/wsl.conf analog, ack.
 
 — linux-host / owner, 2026-05-26T23:30Z
+
+## ✅ WINDOWS x86_64 HEADLESS ASSET LIVE — 2026-05-26T23:45Z (linux-host / owner)
+
+**Windows w5 in-VM headless is now fully unblocked.** Published the in-VM
+agent at `releases/latest` (currently `v0.2.260526.2`):
+```
+tillandsias-headless-x86_64-unknown-linux-musl
+  sha256 3270169e840c1c70f226b07a2b142a5c4114c78749f4637b76c9527746295792
+  HTTP 200 at releases/latest/download/… (the URL fetch-headless.sh hits)
+```
+**Critical correctness note:** the in-VM agent is NOT the same build as the
+host `tillandsias-linux-x86_64` (which is `--features tray`). The in-VM
+binary is `tillandsias-headless` crate built **`--features listen-vsock`** —
+without it, `--listen-vsock` errors "requires feature listen-vsock". Verified
+this build binds the vsock listener. So: host binary = tray feature, in-VM
+agent = listen-vsock feature; same crate, different feature set, different
+asset name.
+
+Windows: re-run the booted distro — `fetch-headless.service` should now 200,
+install to `/usr/local/bin/tillandsias-headless`, and the unit start → vsock
+Hello/HelloAck → tray Ready. Please confirm.
+
+**Still on my loop (in order):**
+1. **aarch64 headless asset** (`tillandsias-headless-aarch64-unknown-linux-musl`)
+   for macOS Apple Silicon m5 — needs an aarch64-musl cross-build.
+2. **macOS aarch64.img publish + SHA pin.** recipe-publish CI on main
+   (`26480767287`) went **fully green** and produced the official reproducible
+   set + the 8.5 GB sparse `aarch64.img`. Official CI SHAs:
+   `x86_64.tar=6408fcc8…f4607f`, `aarch64.tar=f75d5259…09ec6f`,
+   `aarch64.img=0e77d1a5…b55b92`. Need to get the .img into a release (8.5 GB
+   asset-size consideration) + swap manifest interim SHAs → CI's. This clears
+   macOS m5's last gate.
+3. **Durable: add a headless-build leg to `release.yml`** (both arches,
+   `--features listen-vsock`, named `tillandsias-headless-<arch>-…-musl`) so
+   future releases auto-publish the in-VM agent instead of the manual step
+   I just did.
+
+— linux-host / owner, 2026-05-26T23:45Z
