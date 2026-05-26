@@ -10,10 +10,10 @@
 //!
 //! This file declares one such class with `objc2::declare_class!`:
 //!
-//!   Selector           Rust method     Slice 2 behavior
-//!   -----------------  --------------  ----------------------------
-//!   startVm:           start_vm        spawn tokio task → main-thread dispatch
-//!   stopVm:            stop_vm         eprintln stub (slice 3)
+//!   Selector           Rust method     Slice 3 behavior
+//!   -----------------  --------------  -------------------------------
+//!   startVm:           start_vm        Tokio task → VzRuntime::start
+//!   stopVm:            stop_vm         Tokio task → VzRuntime::stop(60s)
 //!   openShell:         open_shell      eprintln stub (slice 4)
 //!   githubLogin:       github_login    eprintln stub (slice 5)
 //!
@@ -22,20 +22,25 @@
 //! `TrayActionHostIvars` carries the host's shared state:
 //!   - `runtime`: `Arc<tokio::runtime::Runtime>` — the per-process
 //!     Tokio runtime used to spawn async VM work without blocking the
-//!     AppKit main thread. The host clones the Arc when spawning so
-//!     the runtime outlives each individual task.
-//!   - `vm_busy`: `Arc<Mutex<bool>>` — gate flag so repeated Start VM
-//!     clicks don't overlap. Slice 3 will replace this with a richer
-//!     `Arc<Mutex<Option<Arc<VzRuntime>>>>` once we hold a live VM
-//!     handle worth referencing.
+//!     AppKit main thread.
+//!   - `vm`: `Arc<Mutex<Option<Arc<VzRuntime>>>>` — the live VM handle
+//!     when `start` has succeeded, `None` otherwise. Shared with the
+//!     Tokio task so it can install/take the handle around the async
+//!     start/stop calls.
+//!   - `vm_busy`: `Arc<Mutex<bool>>` — re-entry gate so a repeated
+//!     click during an in-flight start/stop is a no-op.
+//!   - `image_root`: `PathBuf` — directory under which `VzRuntime`
+//!     looks for `rootfs.img` / `kernel` / `initrd`. Slice 3 just
+//!     reports "not provisioned" if the files are absent; the recipe
+//!     materializer (m5) eventually populates this directory.
 //!
 //! ## Lifetime
 //!
 //! Created once in `status_item::run()` and stored on the AppKit
-//! thread's stack for the lifetime of `NSApplication.run` (which only
-//! returns when the user picks Quit). The `Retained<TrayActionHost>`
-//! is paired 1:1 with the `Retained<NSStatusItem>` so they're released
-//! together when the process exits.
+//! thread's stack for the lifetime of `NSApplication.run`. The
+//! `Retained<TrayActionHost>` is paired 1:1 with the
+//! `Retained<NSStatusItem>` so they're released together when the
+//! process exits.
 //!
 //! macOS-only. The non-macOS branch of the crate never compiles this
 //! module.
@@ -45,6 +50,7 @@
 
 #![cfg(target_os = "macos")]
 
+use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
@@ -53,13 +59,29 @@ use objc2::runtime::{AnyObject, NSObject};
 use objc2::{declare_class, msg_send_id, mutability, ClassType, DeclaredClass};
 use objc2_foundation::MainThreadMarker;
 
+use tillandsias_vm_layer::vz::VzRuntime;
+use tillandsias_vm_layer::VmRuntime;
+
 use crate::main_thread::dispatch_to_main_thread;
+
+/// Default vsock CID for the Tillandsias guest. Matches what the
+/// in-VM headless binds; the host always connects to this CID.
+const TILLANDSIAS_GUEST_CID: u32 = 3;
+
+/// How long `VzRuntime::stop` waits for an orderly drain before
+/// escalating to a force-stop. Documented in
+/// `cheatsheets/runtime/tray-state-machine.md` as 60s for the
+/// production tray; the spike used 30s and hit the force-path on
+/// Fedora's ACPI shutdown.
+const VM_STOP_DRAIN: Duration = Duration::from_secs(60);
 
 /// State shared across the host's selector handlers. Lives inside
 /// the declared class via `DeclaredClass::Ivars`.
 pub struct TrayActionHostIvars {
     runtime: Arc<tokio::runtime::Runtime>,
+    vm: Arc<Mutex<Option<Arc<VzRuntime>>>>,
     vm_busy: Arc<Mutex<bool>>,
+    image_root: PathBuf,
 }
 
 declare_class!(
@@ -80,11 +102,11 @@ declare_class!(
     unsafe impl TrayActionHost {
         #[method(startVm:)]
         fn start_vm(&self, _sender: Option<&AnyObject>) {
-            // Lock-check the busy flag from the main thread (we're in
-            // the ObjC dispatch, which AppKit invokes on main). If
-            // already busy, ignore the click; otherwise mark busy and
-            // spawn a worker.
             let ivars = self.ivars();
+
+            // Re-entry gate: ignore the click if a start/stop is
+            // already in flight. We run on the main thread; the
+            // worker clears the flag via dispatch_to_main_thread.
             {
                 let mut busy = ivars.vm_busy.lock().unwrap();
                 if *busy {
@@ -93,45 +115,73 @@ declare_class!(
                 }
                 *busy = true;
             }
+            // Idempotency: if we already hold a live VM handle, just
+            // log and bail (without touching the busy flag race).
+            if ivars.vm.lock().unwrap().is_some() {
+                *ivars.vm_busy.lock().unwrap() = false;
+                eprintln!("[tillandsias-tray] Start VM: VM already running, ignoring");
+                return;
+            }
 
-            // Clone the Arcs we'll hand into the Tokio task. The
-            // runtime stays alive as long as any clone exists; the
-            // busy mutex is shared with the main thread so the
-            // completion callback can clear it.
             let runtime = ivars.runtime.clone();
+            let vm_slot = ivars.vm.clone();
             let vm_busy = ivars.vm_busy.clone();
+            let image_root = ivars.image_root.clone();
 
-            eprintln!("[tillandsias-tray] Start VM: spawning worker (slice 2 — placeholder sleep)");
+            eprintln!(
+                "[tillandsias-tray] Start VM: spawning worker (image_root={})",
+                image_root.display()
+            );
             runtime.spawn(async move {
-                // Slice 3 replaces this sleep with the real
-                // VzRuntime::new(...).start().await call. The sleep
-                // is here so slice 2's commit demonstrates the full
-                // round-trip (main → tokio → main) without yet
-                // taking on VzRuntime's failure modes.
-                tokio::time::sleep(Duration::from_millis(300)).await;
-
-                // Hop back to the AppKit main thread to log
-                // completion and clear the busy flag. In slice 3+
-                // this callback also refreshes the status item title
-                // and re-renders the menu to reflect the new state.
+                let result = run_start(image_root, vm_slot).await;
                 dispatch_to_main_thread(move || {
                     *vm_busy.lock().unwrap() = false;
-                    eprintln!(
-                        "[tillandsias-tray] Start VM: worker returned (slice 2 stub); back on main"
-                    );
+                    match result {
+                        Ok(()) => eprintln!("[tillandsias-tray] Start VM: VM is running"),
+                        Err(e) => eprintln!("[tillandsias-tray] Start VM failed: {e}"),
+                    }
                 });
             });
         }
 
         #[method(stopVm:)]
         fn stop_vm(&self, _sender: Option<&AnyObject>) {
-            // Slice 3 wires this to `VzRuntime::stop(drain_timeout)`
-            // with a 60s drain. Until then, the menu item is
-            // unconditionally present (UI gating to "disable when no
-            // live VM" is a slice 3 concern too).
+            let ivars = self.ivars();
+
+            // Re-entry gate (shared with startVm).
+            {
+                let mut busy = ivars.vm_busy.lock().unwrap();
+                if *busy {
+                    eprintln!("[tillandsias-tray] Stop VM: already in progress, ignoring");
+                    return;
+                }
+                *busy = true;
+            }
+            // No-op if no live VM handle.
+            let vm_taken = ivars.vm.lock().unwrap().take();
+            let Some(vm) = vm_taken else {
+                *ivars.vm_busy.lock().unwrap() = false;
+                eprintln!("[tillandsias-tray] Stop VM: no live VM, ignoring");
+                return;
+            };
+
+            let runtime = ivars.runtime.clone();
+            let vm_busy = ivars.vm_busy.clone();
+
             eprintln!(
-                "[tillandsias-tray] Stop VM clicked (slice 2 stub — wiring lands in slice 3)"
+                "[tillandsias-tray] Stop VM: spawning worker (drain={}s)",
+                VM_STOP_DRAIN.as_secs()
             );
+            runtime.spawn(async move {
+                let result = vm.stop(VM_STOP_DRAIN).await;
+                dispatch_to_main_thread(move || {
+                    *vm_busy.lock().unwrap() = false;
+                    match result {
+                        Ok(()) => eprintln!("[tillandsias-tray] Stop VM: VM stopped"),
+                        Err(e) => eprintln!("[tillandsias-tray] Stop VM failed: {e}"),
+                    }
+                });
+            });
         }
 
         #[method(openShell:)]
@@ -140,7 +190,7 @@ declare_class!(
             // over the vsock control-wire + `open -a Terminal.app`
             // with the PTY's slave path. Matches Linux tray UX.
             eprintln!(
-                "[tillandsias-tray] Open Shell clicked (slice 2 stub — wiring lands in slice 4)"
+                "[tillandsias-tray] Open Shell clicked (slice 3 stub — wiring lands in slice 4)"
             );
         }
 
@@ -152,24 +202,53 @@ declare_class!(
             // Terminal.app. The token lands in the in-VM vault,
             // never on the host.
             eprintln!(
-                "[tillandsias-tray] GitHub login clicked (slice 2 stub — wiring lands in slice 5)"
+                "[tillandsias-tray] GitHub login clicked (slice 3 stub — wiring lands in slice 5)"
             );
         }
     }
 );
 
+/// Worker body for `startVm:`. Constructs the VzRuntime, fails fast
+/// if its required image files are missing (recipe materializer not
+/// yet run), then drives `VmRuntime::start`. On success, installs the
+/// `Arc<VzRuntime>` into the shared slot so subsequent `stopVm:` can
+/// take it. On failure, leaves the slot empty so a retry click works.
+async fn run_start(
+    image_root: PathBuf,
+    vm_slot: Arc<Mutex<Option<Arc<VzRuntime>>>>,
+) -> Result<(), String> {
+    let vz = Arc::new(VzRuntime::new(TILLANDSIAS_GUEST_CID, image_root));
+
+    if !vz.is_provisioned() {
+        return Err(format!(
+            "VM image not yet materialized at {} \
+             (expected rootfs.img / kernel / initrd; run the recipe \
+              materializer first)",
+            vz.rootfs_image_path().display()
+        ));
+    }
+
+    vz.start().await?;
+    *vm_slot.lock().unwrap() = Some(vz);
+    Ok(())
+}
+
 impl TrayActionHost {
     /// Construct on the AppKit main thread. `mtm` proves we're on the
     /// right OS thread for the `MainThreadOnly` mutability contract.
-    /// The Tokio `runtime` is shared across the process so the host
-    /// can `runtime.spawn(...)` worker tasks for VM lifecycle calls.
+    /// The Tokio `runtime` is shared across the process. `image_root`
+    /// is where `VzRuntime` looks for the boot artifacts produced by
+    /// the recipe materializer.
     pub fn new(
         mtm: MainThreadMarker,
         runtime: Arc<tokio::runtime::Runtime>,
+        image_root: PathBuf,
     ) -> Retained<Self> {
         let ivars = TrayActionHostIvars {
             runtime,
+            vm: Arc::new(Mutex::new(None)),
             vm_busy: Arc::new(Mutex::new(false)),
+            image_root,
         };
         // SAFETY: `mtm` proves main-thread; allocation + init is the
         // standard ObjC two-step. `set_ivars` populates the declared
@@ -190,5 +269,23 @@ mod tests {
     fn tray_action_host_class_registers() {
         let cls = TrayActionHost::class();
         assert_eq!(cls.name(), "TillandsiasTrayActionHost");
+    }
+
+    /// run_start short-circuits with a clear error when the image
+    /// root is empty (the v0.0.1 expectation until the recipe
+    /// materializer populates it). This is the most common error
+    /// path for first-launch users.
+    #[tokio::test]
+    async fn run_start_reports_unprovisioned() {
+        let tmp = tempfile::tempdir().unwrap();
+        let vm_slot = Arc::new(Mutex::new(None));
+        let err = run_start(tmp.path().to_path_buf(), vm_slot.clone())
+            .await
+            .expect_err("expected unprovisioned error");
+        assert!(
+            err.contains("not yet materialized"),
+            "unexpected error: {err}"
+        );
+        assert!(vm_slot.lock().unwrap().is_none(), "slot should stay empty");
     }
 }

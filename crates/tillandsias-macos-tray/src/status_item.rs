@@ -74,7 +74,8 @@ pub fn run() -> ! {
     // AppKit thread's stack for the duration of `NSApplication::run`;
     // menu items target it via `setTarget:` so AppKit dispatches their
     // selectors here. See `action_host.rs` for the declared class.
-    let action_host = TrayActionHost::new(mtm, tokio_runtime.clone());
+    let image_root = default_image_root();
+    let action_host = TrayActionHost::new(mtm, tokio_runtime.clone(), image_root);
 
     // Build the initial provisioning menu so the user sees the condensed
     // status line right away, even before the VM thread reports anything.
@@ -294,3 +295,18 @@ fn status_tooltip(structure: &MenuStructure) -> String {
 // expects this exact symbol when calling setState — re-exported here for
 // clarity at the call site above.
 use objc2_app_kit::NSControlStateValueOn as _;
+
+/// Where the recipe materializer publishes the per-arch boot artifacts
+/// (rootfs.img / kernel / initrd) on a macOS host. Follows Apple's
+/// Application Support convention; the inner `tillandsias/` is the
+/// canonical Tillandsias app-data subdirectory shared with
+/// `installation_uuid.rs`.
+///
+/// VzRuntime joins `<image_root>/rootfs.img` etc., so this is one
+/// level above the file basenames.
+fn default_image_root() -> std::path::PathBuf {
+    let home = std::env::var_os("HOME")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| std::path::PathBuf::from("/tmp"));
+    home.join("Library/Application Support/tillandsias")
+}
