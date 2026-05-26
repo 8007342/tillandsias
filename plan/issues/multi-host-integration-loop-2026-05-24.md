@@ -28,6 +28,14 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-26T13:43Z — NO-OP (both sibling deltas empty)
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `74ae165c`
+- observed_sibling_heads: main=ddf52dff · linux-next=74ae165c · windows-next=7e95c7e2 (integrated) · osx-next=bdb7f9cb (integrated)
+- windows-next: no-op. osx-next: no-op. Tests: n/a.
+- In-cycle pull absorbed 1 orchestrator audit commit. Dynamic loop covered the substantive Linux work this cycle (pty_handler AsyncFd rewrite at 13:00Z).
+
 ### Dynamic-loop slice 2026-05-26T13:00Z — pty_handler AsyncFd<OwnedFd> rewrite
 
 - Commit `65980b02`: replaces `tokio::fs::File` master-fd wrapper with
