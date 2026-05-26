@@ -7,6 +7,14 @@ authors.workspace = true
 description = "Idiomatic VM-exec abstraction: wsl --exec on Windows, Virtualization.framework spawn on macOS. Mirrors the discipline of tillandsias-podman."
 publish = false
 
+# Drive the recipe materializer end-to-end from the command line — Task §8.2
+# of vm-recipe-provisioning. Requires the `materialize` feature for the
+# subprocess + sha2 + recipe parser imports.
+[[bin]]
+name = "materialize-cli"
+path = "src/bin/materialize-cli.rs"
+required-features = ["materialize"]
+
 [dependencies]
 tokio = { workspace = true, features = ["process", "io-util", "rt"] }
 serde = { workspace = true }

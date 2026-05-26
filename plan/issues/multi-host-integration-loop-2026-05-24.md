@@ -28,6 +28,60 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Interlude 2026-05-26T~02:30Z — l8 SHIPPED (real BuildahExec + materialize-cli)
+
+User-relayed: "windows is waiting on you again 😅 … the entire Windows
+surface (converter, import, lifecycle, install/diagnostics) is built,
+integrated, and green. The one remaining gate to a bootable Windows VM
+is Linux l8 (implement BuildahExec → first real rootfs .tar → fill
+manifest.toml SHAs → settle the artifact URL)."
+
+- **`l8/buildah-exec + materialize-cli` SHIPPED** (commit `6aeae3a7`,
+  497 lines):
+  - `BuildahExec` is no longer a scaffold; it drives a per-layer
+    subprocess pipeline. First instruction: `buildah from <image>`.
+    Subsequent: `buildah from scratch` + mount + `tar -xf <parent>.tar`
+    to hydrate parent state. Applies RUN / COPY / ENV / WORKDIR /
+    RECIPE-Entry directives via `buildah run` / `buildah copy` /
+    `buildah config --…`. Snapshots via `buildah mount` + `tar -cf`
+    excluding `./proc ./sys ./dev ./run ./tmp`. Always cleans up the
+    working container (umount + rm), even on the error path.
+  - `BuildahExec::with_binary(path)` and `with_tar(path)` give tests
+    a way to point at missing binaries to exercise the early-validate
+    path without invoking subprocesses.
+  - New binary `materialize-cli` (Task §8.2): driven by
+    `cargo run -p tillandsias-vm-layer --features materialize --bin
+    materialize-cli -- <recipe> <manifest> <arch>`. Prints
+    `rootfs_tar=<path>` + `sha256=<hex>` on success. Gated via
+    `Cargo.toml [[bin]] required-features = ["materialize"]`.
+  - Tests: 43/43 pass on `cargo test -p tillandsias-vm-layer
+    --features materialize`; 1 `#[ignore]` live-buildah integration
+    smoke. CI's `recipe-smoke` job (§6.4) is the canonical home for
+    the live test.
+  - `./build.sh --ci-full --install`: 100% across all 4 gates after
+    a workspace `cargo fmt` settle.
+  - Tasks §3.4 + §8.2 of `openspec/changes/vm-recipe-provisioning/`
+    marked done with the implementation notes inline.
+
+- **Effect on siblings (the windows-relayed gate is now CLEAR):**
+  - Windows w5 (wsl-import via CI rootfs): the upstream Linux
+    materializer + CLI exist. Once CI publishes per-arch artifacts
+    (§2b §6.4 jobs), Windows just imports the tar via the existing
+    `materialize::wsl::tar_to_wsl_import`.
+  - macOS m5 / §3.7.1: same — `Materializer::run` now produces real
+    tars that `scripts/materialize-macos-tar-to-img.sh` converts.
+  - Manifest SHA backfill (§6.5): the user (or CI) can run
+    `materialize-cli` against `images/vm/Recipefile` +
+    `images/vm/manifest.toml`, capture the printed sha256, and
+    populate `[output] expected_rootfs_sha.<arch>`.
+
+- **Remaining gates** (none of them block sibling code):
+  - §6.4 `recipe-smoke` CI job — the live-buildah validator.
+  - §6.5 SHA backfill (one-time, after §6.4 succeeds the first time).
+  - §6.3 release.yml job removal (drop the `tillandsias-linux-*` upload).
+  - §2b.3 `recipe-publish` CI job (publishes per-arch .tar + .img to
+    the GitHub release).
+
 ### Cycle 2026-05-26T01:43Z — INTEGRATED (windows §3.7.2 + w6; recipe-materializer ecosystem completes)
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
