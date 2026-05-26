@@ -232,31 +232,60 @@ mod tests {
         assert!(root.ends_with("tillandsias\\wsl") || root.ends_with("tillandsias/wsl"));
     }
 
-    // The committed recipe manifest — tested against directly so the resolver
-    // tracks the real l9 `[output]` contract, not a mock.
+    // The committed recipe manifest — used for a live-contract integration check.
     const REAL_MANIFEST: &str = include_str!("../../../images/vm/manifest.toml");
+
+    // A minimal synthetic manifest with a caller-chosen x86_64.tar SHA, so the
+    // resolver tests are robust to the committed manifest's SHA rolling per
+    // release (l9 step 3 backfilled real SHAs at a6163af2). Literal `{tag}` /
+    // `{arch}` / `{format}` braces are left for `artifact_url` to substitute.
+    fn manifest_with_x86_tar_sha(sha: &str) -> Manifest {
+        const TMPL: &str = r#"recipe_version = 1
+[output]
+artifact_url_template = "https://github.com/8007342/tillandsias/releases/download/{tag}/tillandsias-rootfs-{arch}.{format}"
+[output.expected_rootfs_sha]
+"x86_64.tar" = "__SHA__"
+"#;
+        Manifest::from_toml(&TMPL.replace("__SHA__", sha)).expect("parse inline manifest")
+    }
 
     #[test]
     fn recipe_rootfs_artifact_gates_on_pending_ci_sha() {
-        let m = Manifest::from_toml(REAL_MANIFEST).expect("parse committed manifest");
-        // The committed manifest still carries `pending-ci`, so resolution must
-        // refuse rather than hand back an unverifiable pin.
+        let m = manifest_with_x86_tar_sha("pending-ci");
+        // A non-64-hex placeholder must refuse rather than hand back an
+        // unverifiable pin.
         let err = recipe_rootfs_artifact(&m, "v0.2.260526.1").expect_err("pending-ci must gate");
         assert!(err.contains("not yet published"), "unexpected error: {err}");
     }
 
     #[test]
-    fn recipe_rootfs_artifact_resolves_url_and_sha_once_published() {
-        // Simulate the recipe-publish CI having backfilled a real SHA.
-        let fake_sha = "a".repeat(64);
-        let published = REAL_MANIFEST.replace("pending-ci", &fake_sha);
-        let m = Manifest::from_toml(&published).expect("parse manifest");
-        let art = recipe_rootfs_artifact(&m, "v0.2.260526.1").expect("resolves once SHA is real");
-        assert_eq!(art.sha256, fake_sha);
+    fn recipe_rootfs_artifact_resolves_url_and_sha() {
+        let sha = "a".repeat(64);
+        let m = manifest_with_x86_tar_sha(&sha);
+        let art = recipe_rootfs_artifact(&m, "v0.2.260526.1").expect("resolves with a real SHA");
+        assert_eq!(art.sha256, sha);
         assert_eq!(
             art.url,
             "https://github.com/8007342/tillandsias/releases/download/\
              v0.2.260526.1/tillandsias-rootfs-x86_64.tar"
+        );
+    }
+
+    /// Live-contract check: since l9 step 3 backfilled real SHAs, the COMMITTED
+    /// manifest now resolves to a verifiable artifact. Asserts shape (64-hex +
+    /// URL), not the exact SHA (which rolls per release) — and guards against a
+    /// regression back to `pending-ci`.
+    #[test]
+    fn recipe_rootfs_artifact_resolves_against_committed_manifest() {
+        let m = Manifest::from_toml(REAL_MANIFEST).expect("parse committed manifest");
+        let art = recipe_rootfs_artifact(&m, "v0.2.260526.1")
+            .expect("committed manifest carries a real x86_64.tar SHA (l9 step 3)");
+        assert_eq!(art.sha256.len(), 64, "expected a 64-hex SHA, got {:?}", art.sha256);
+        assert!(
+            art.url
+                .ends_with("/v0.2.260526.1/tillandsias-rootfs-x86_64.tar"),
+            "unexpected url: {}",
+            art.url
         );
     }
 }
