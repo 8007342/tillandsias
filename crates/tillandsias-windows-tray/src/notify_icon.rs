@@ -32,8 +32,11 @@ use std::os::windows::ffi::OsStrExt;
 use std::sync::Mutex;
 
 use tillandsias_host_shell::menu_action::{self, MenuAction};
-use tillandsias_host_shell::menu_state::{self, MenuItem, MenuState, MenuStructure, ProjectEntry};
+use tillandsias_host_shell::menu_state::{
+    self, MenuItem, MenuState, MenuStructure, ProjectEntry, SelectedAgent,
+};
 use tillandsias_host_shell::provisioning::{ProvisionPhase, ProvisionProgress};
+use tillandsias_host_shell::pty::{intent_for_action, launch_spec};
 use tillandsias_host_shell::scanner::{ProjectEvent, watch_projects};
 
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
@@ -190,15 +193,27 @@ pub fn run() -> ! {
             }
         }
 
-        // Spawn the WSL provisioning + lifecycle task. Progress is reported
-        // via the TrayProgress sink which updates the tooltip and menu.
-        let progress = std::sync::Arc::new(TrayProgress::new(hwnd));
-        let lifecycle = WslLifecycle::new();
-        tokio::task::spawn_local(async move {
-            if let Err(err) = lifecycle.bootstrap(progress).await {
-                eprintln!("WSL lifecycle bootstrap failed: {err}");
-            }
-        });
+        // Spawn the WSL provisioning + lifecycle task, UNLESS dev mode asked us
+        // to skip it. `--no-provision` (or TILLANDSIAS_NO_PROVISION=1) brings the
+        // tray up in a clean, interactive state — no rootfs download, no
+        // `wsl --import` — so the menu can be exercised locally before the VM /
+        // recipe path lands. Progress is reported via the TrayProgress sink
+        // which updates the tooltip and menu.
+        if provisioning_enabled() {
+            let progress = std::sync::Arc::new(TrayProgress::new(hwnd));
+            let lifecycle = WslLifecycle::new();
+            tokio::task::spawn_local(async move {
+                if let Err(err) = lifecycle.bootstrap(progress).await {
+                    eprintln!("WSL lifecycle bootstrap failed: {err}");
+                }
+            });
+        } else {
+            tracing::info!(
+                "provisioning skipped (--no-provision / TILLANDSIAS_NO_PROVISION); \
+                 tray running in menu-only dev mode"
+            );
+            update_status_text("\u{26AA} Dev mode \u{2014} VM provisioning skipped", hwnd);
+        }
 
         // Pump messages until WM_QUIT.
         let mut msg = MSG::default();
@@ -226,6 +241,15 @@ pub fn run() -> ! {
         msg.wParam.0 as i32
     });
     std::process::exit(exit_code);
+}
+
+/// Whether the tray should drive WSL provisioning on launch. Dev mode disables
+/// it via the `--no-provision` CLI flag or `TILLANDSIAS_NO_PROVISION` env var,
+/// so the menu can be exercised locally without a VM or any downloads.
+fn provisioning_enabled() -> bool {
+    let env_skip = std::env::var_os("TILLANDSIAS_NO_PROVISION").is_some();
+    let arg_skip = std::env::args().any(|a| a == "--no-provision");
+    !(env_skip || arg_skip)
 }
 
 unsafe fn create_message_window() -> windows::core::Result<HWND> {
@@ -533,14 +557,43 @@ fn dispatch_action(hwnd: HWND, action: MenuAction) {
         MenuAction::OpenLog => {
             tracing::info!("open log requested: host-side log-file path not wired yet");
         }
-        MenuAction::Attach { scope, name } | MenuAction::Maintain { scope, name } => {
-            tracing::info!(?scope, %name, "project action queued for the post-PTY (vsock-E2E) iteration");
-        }
-        MenuAction::GithubLogin => {
-            tracing::info!("github login queued for the PTY iteration (control-wire-pty-attach)");
+        // Attach / Maintain / GitHub-login all open an in-VM PTY. The click is
+        // resolved end-to-end on the host side here — `intent_for_action` picks
+        // the `PtyIntent`, `launch_spec` produces the exact in-VM argv — leaving
+        // only the vsock `PtyOpen` send for the VM-E2E iteration.
+        MenuAction::Attach { .. } | MenuAction::Maintain { .. } | MenuAction::GithubLogin => {
+            resolve_and_log_pty_launch(&action);
         }
         MenuAction::CloudOverflow | MenuAction::Inert => {}
     }
+}
+
+/// The currently selected coding agent, read from the shared menu state.
+/// Defaults to the menu's initial agent if the state is not yet populated.
+fn selected_agent() -> SelectedAgent {
+    MENU_STATE
+        .lock()
+        .ok()
+        .and_then(|g| g.as_ref().map(|s| s.selected_agent))
+        .unwrap_or_else(|| MenuState::initial().selected_agent)
+}
+
+/// Resolve a PTY-opening menu action to its in-VM launch spec and log it. The
+/// resolution (`MenuAction` → [`intent_for_action`] → [`launch_spec`]) is the
+/// full host-side path; the remaining step — sending the `PtyOpen` frame over
+/// vsock and pumping the ConPTY — lands with the VM-E2E iteration (w4f).
+fn resolve_and_log_pty_launch(action: &MenuAction) {
+    let Some(intent) = intent_for_action(action, selected_agent()) else {
+        tracing::warn!(?action, "no PTY intent for action (unexpected in this arm)");
+        return;
+    };
+    // Default geometry until the tray owns a real terminal surface to size from.
+    let spec = launch_spec(&intent, 24, 80);
+    tracing::info!(
+        ?intent,
+        argv = ?spec.argv,
+        "resolved tray click to in-VM PTY launch; vsock attach pending VM-E2E (w4f)"
+    );
 }
 
 /// Apply the state-mutating effect of a menu action to the menu state.
@@ -566,7 +619,8 @@ mod tests {
     /// collide with system messages.
     #[test]
     fn wm_trayicon_is_in_app_range() {
-        assert!(WM_TRAYICON >= WM_APP);
+        // Both are consts, so enforce the invariant at compile time.
+        const { assert!(WM_TRAYICON >= WM_APP) };
     }
 
     use std::path::PathBuf;

@@ -37,6 +37,9 @@ use tokio::sync::mpsc;
 
 use tillandsias_control_wire::{ControlMessage, MAX_PTY_FRAME_BYTES, PtyDirection, PtyExit};
 
+use crate::menu_action::MenuAction;
+use crate::menu_state::SelectedAgent;
+
 /// Already-rendered error context — matches the crate's String-error idiom.
 pub type PtyError = String;
 
@@ -56,12 +59,118 @@ pub struct PtyOpenOpts {
     pub cwd: Option<String>,
 }
 
+/// What a tray menu action wants to run in the in-VM PTY. Shared across the
+/// Windows (ConPTY) and macOS (AppKit Terminal) trays so the OpenShell /
+/// GitHub-login / agent commands stay identical everywhere.
+///
+/// PROPOSED cross-host contract (windows-next, 2026-05-25) — see
+/// plan/issues/tray-convergence-coordination.md; macOS m4 should adopt or amend
+/// the argv mapping rather than diverge.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum PtyIntent {
+    /// "Open Shell" — an interactive login shell in the forge.
+    Shell,
+    /// "GitHub login" — the `gh` device-code flow inside the VM.
+    GithubLogin,
+    /// Launch the selected coding agent via the forge entrypoint.
+    Agent(SelectedAgent),
+}
+
+fn agent_flag(agent: SelectedAgent) -> &'static str {
+    match agent {
+        SelectedAgent::Claude => "--claude",
+        SelectedAgent::Codex => "--codex",
+        SelectedAgent::OpenCode => "--opencode",
+    }
+}
+
+/// Resolve a clicked [`MenuAction`] to the in-VM PTY [`PtyIntent`] it should
+/// launch, or `None` for actions that open no terminal (Quit, agent-radio
+/// selection, browser links, log/retry, overflow, inert).
+///
+/// The mapping gives every `PtyIntent` variant a menu source WITHOUT adding a
+/// new `MenuAction` variant, so the shared resolution table stays stable for
+/// every tray:
+/// - [`MenuAction::GithubLogin`] → [`PtyIntent::GithubLogin`]
+/// - [`MenuAction::Attach`] → [`PtyIntent::Agent`] with the currently selected
+///   agent (attaching launches the chosen coding agent in the project tree)
+/// - [`MenuAction::Maintain`] → [`PtyIntent::Shell`] (a maintenance login shell)
+///
+/// PROPOSED cross-host contract (windows-next, 2026-05-25) — see
+/// plan/issues/tray-convergence-coordination.md; macOS m4 should adopt or amend
+/// this table rather than diverge.
+///
+/// @trace openspec/changes/control-wire-pty-attach/proposal.md (§3, host launch mapping)
+pub fn intent_for_action(action: &MenuAction, selected_agent: SelectedAgent) -> Option<PtyIntent> {
+    match action {
+        MenuAction::GithubLogin => Some(PtyIntent::GithubLogin),
+        MenuAction::Attach { .. } => Some(PtyIntent::Agent(selected_agent)),
+        MenuAction::Maintain { .. } => Some(PtyIntent::Shell),
+        _ => None,
+    }
+}
+
+/// Build the [`PtyOpenOpts`] for a tray PTY `intent` at the given terminal
+/// size. `env` carries only `TERM` (the in-VM handler `env_clear`s before
+/// applying it, so no host env leaks); the login shell + forge set `PATH` etc.
+/// `cwd` is left to the in-VM default (the project working tree).
+///
+/// @trace openspec/changes/control-wire-pty-attach/proposal.md (§3, host launch mapping)
+pub fn launch_spec(intent: &PtyIntent, rows: u16, cols: u16) -> PtyOpenOpts {
+    let argv = match intent {
+        PtyIntent::Shell => vec!["/bin/bash".to_string(), "-l".to_string()],
+        PtyIntent::GithubLogin => {
+            vec!["gh".to_string(), "auth".to_string(), "login".to_string()]
+        }
+        PtyIntent::Agent(agent) => {
+            vec!["tillandsias".to_string(), agent_flag(*agent).to_string()]
+        }
+    };
+    PtyOpenOpts {
+        rows,
+        cols,
+        argv,
+        env: vec![("TERM".to_string(), "xterm-256color".to_string())],
+        cwd: None,
+    }
+}
+
 /// Outbound side of the control wire: wrap `body` in a `ControlEnvelope`
 /// (assigning the connection's monotonic `seq`) and send it to the in-VM
 /// headless. Abstracted so the session logic is testable without a real
 /// vsock connection.
 pub trait PtyTransport: Send + Sync {
     fn send(&self, body: ControlMessage) -> Result<(), PtyError>;
+}
+
+/// A [`PtyTransport`] that enqueues outbound control messages onto a bounded
+/// channel — the per-connection writer queue from §D3. The connection's writer
+/// task drains the paired receiver and sends each via the vsock `Client`,
+/// interleaving with control traffic. A full queue surfaces as a backpressure
+/// error so the host PTY reader slows (rather than blocking the connection).
+///
+/// @trace openspec/changes/control-wire-pty-attach/proposal.md (§D3)
+pub struct ChannelPtyTransport {
+    tx: mpsc::Sender<ControlMessage>,
+}
+
+impl ChannelPtyTransport {
+    /// Create the transport and the receiver the connection writer task drains.
+    pub fn new(capacity: usize) -> (Self, mpsc::Receiver<ControlMessage>) {
+        let (tx, rx) = mpsc::channel(capacity);
+        (Self { tx }, rx)
+    }
+}
+
+impl PtyTransport for ChannelPtyTransport {
+    fn send(&self, body: ControlMessage) -> Result<(), PtyError> {
+        self.tx.try_send(body).map_err(|e| match e {
+            mpsc::error::TrySendError::Full(_) => {
+                "pty outbound queue full (backpressure)".to_string()
+            }
+            mpsc::error::TrySendError::Closed(_) => "pty connection closed".to_string(),
+        })
+    }
 }
 
 /// Host-allocated, per-connection monotonic `session_id`s, starting at 1 (§D2).
@@ -453,6 +562,136 @@ mod tests {
             bytes: vec![0u8; MAX_PTY_FRAME_BYTES + 1],
         };
         assert!(r.route(&oversized).is_err());
+    }
+
+    #[test]
+    fn launch_spec_maps_intents_to_in_vm_argv() {
+        assert_eq!(
+            launch_spec(&PtyIntent::Shell, 24, 80).argv,
+            vec!["/bin/bash", "-l"]
+        );
+        assert_eq!(
+            launch_spec(&PtyIntent::GithubLogin, 24, 80).argv,
+            vec!["gh", "auth", "login"]
+        );
+        assert_eq!(
+            launch_spec(&PtyIntent::Agent(SelectedAgent::OpenCode), 24, 80).argv,
+            vec!["tillandsias", "--opencode"]
+        );
+        assert_eq!(
+            launch_spec(&PtyIntent::Agent(SelectedAgent::Claude), 24, 80).argv,
+            vec!["tillandsias", "--claude"]
+        );
+        // Size is carried; TERM is set; cwd left to the in-VM default.
+        let s = launch_spec(&PtyIntent::Shell, 30, 100);
+        assert_eq!((s.rows, s.cols), (30, 100));
+        assert!(
+            s.env
+                .iter()
+                .any(|(k, v)| k == "TERM" && v == "xterm-256color")
+        );
+        assert!(s.cwd.is_none());
+    }
+
+    #[test]
+    fn intent_for_action_maps_clickable_menu_items() {
+        use crate::menu_action::ProjectScope;
+        // GitHub login → gh auth login.
+        assert_eq!(
+            intent_for_action(&MenuAction::GithubLogin, SelectedAgent::Claude),
+            Some(PtyIntent::GithubLogin)
+        );
+        // Attach launches the *currently selected* agent in the project tree.
+        assert_eq!(
+            intent_for_action(
+                &MenuAction::Attach {
+                    scope: ProjectScope::Local,
+                    name: "myapp".to_string(),
+                },
+                SelectedAgent::Codex,
+            ),
+            Some(PtyIntent::Agent(SelectedAgent::Codex))
+        );
+        // Maintenance opens a plain login shell, regardless of selected agent.
+        assert_eq!(
+            intent_for_action(
+                &MenuAction::Maintain {
+                    scope: ProjectScope::Cloud,
+                    name: "repo".to_string(),
+                },
+                SelectedAgent::OpenCode,
+            ),
+            Some(PtyIntent::Shell)
+        );
+        // Non-terminal actions open no PTY.
+        assert_eq!(
+            intent_for_action(&MenuAction::Quit, SelectedAgent::Claude),
+            None
+        );
+        assert_eq!(
+            intent_for_action(
+                &MenuAction::SelectAgent(SelectedAgent::Codex),
+                SelectedAgent::Claude
+            ),
+            None
+        );
+        assert_eq!(
+            intent_for_action(&MenuAction::OpenLog, SelectedAgent::Claude),
+            None
+        );
+        assert_eq!(
+            intent_for_action(&MenuAction::Inert, SelectedAgent::Claude),
+            None
+        );
+    }
+
+    #[tokio::test]
+    async fn channel_transport_enqueues_outbound_in_order() {
+        let (t, mut rx) = ChannelPtyTransport::new(8);
+        t.send(ControlMessage::PtyResize {
+            session_id: 1,
+            rows: 24,
+            cols: 80,
+        })
+        .unwrap();
+        t.send(ControlMessage::PtyClose {
+            session_id: 1,
+            exit: PtyExit {
+                code: 0,
+                signal: None,
+            },
+        })
+        .unwrap();
+        assert!(matches!(
+            rx.recv().await.unwrap(),
+            ControlMessage::PtyResize { session_id: 1, .. }
+        ));
+        assert!(matches!(
+            rx.recv().await.unwrap(),
+            ControlMessage::PtyClose { session_id: 1, .. }
+        ));
+    }
+
+    #[tokio::test]
+    async fn channel_transport_full_is_backpressure_error() {
+        let (t, _rx) = ChannelPtyTransport::new(1);
+        t.send(ControlMessage::PtyResize {
+            session_id: 1,
+            rows: 1,
+            cols: 1,
+        })
+        .unwrap(); // fills the single slot
+        let err = t
+            .send(ControlMessage::PtyResize {
+                session_id: 1,
+                rows: 2,
+                cols: 2,
+            })
+            .unwrap_err();
+        assert!(
+            err.contains("full"),
+            "expected backpressure error, got: {err}"
+        );
     }
 
     /// An unknown session id is ignored, not an error.
