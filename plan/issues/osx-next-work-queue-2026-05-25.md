@@ -1,6 +1,6 @@
 # osx-next work queue — 2026-05-25
 
-trace: methodology/distributed-work.yaml, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
+trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
 Status: **OPEN** as of 2026-05-25T18:25Z. macOS m1, m2, and m3 are done;
 m1b is in progress under lease `7c2a9f1eb083` after sub-task A completed.
@@ -15,13 +15,15 @@ a stable ID. When the macOS host wakes:
 
 1. `git fetch origin --prune && git checkout linux-next && git pull --ff-only`
 2. Read this file top-to-bottom.
-3. Pick the earliest item whose status is `pending`, whose `gated_on` field
-   is empty (or every dependency is `done`), and whose `capability_tags`
-   match your skills.
+3. Pick the highest-impact ready packet whose `gated_on` field is empty (or
+   every dependency is `done`), whose `capability_tags` match your skills, and
+   whose acceptance evidence fits one or two recurrent iterations. Prefer
+   packets that unblock another host over tiny cleanup.
 4. Append a `claim` event to the item with your `lease_id` and `agent_id`.
 5. Commit + push to `linux-next`.
-6. Switch to `osx-next` and execute. Report progress via further events
-   in this file (commits pushed to `linux-next`).
+6. Switch to `osx-next` and execute. Report progress, blockers, errors,
+   dependencies, and handoffs as status packets in this file (commits pushed to
+   `linux-next`; format in `plan/issues/multi-agent-work-shaping-2026-05-25.md`).
 
 Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`):
 *plan/* writes go to **linux-next**; *code* commits go to **osx-next**.
@@ -31,6 +33,11 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
 Per branch canon §4, plan/-class writes directly are CORRECT; code commits
 SHOULD route through `osx-next` so the integration loop can run isolation
 checks. Advisory only; both flows still work.
+
+Work-shaping note: m4 and m6 are both intentionally large enough to occupy a
+macOS agent for one or two recurrent iterations. If m5 remains gated on the
+materializer/rootfs chain, do not idle; continue m4 host-side wiring or claim m6
+packaging/codesign and leave end-to-end recipe evidence for the later m5 packet.
 
 ## Currently unblocked / active
 
@@ -484,3 +491,77 @@ queue items:
 
 Recommended next: m4 (user-facing terminal-attach UX) OR m6 (gets a
 clickable .app artifact for smoke). User priority signal welcome.
+
+### event: m4 foundation done (pty::unix backend) — 2026-05-25T23:50Z
+
+- item: `m4/pty-attach-appkit-terminal` (foundation half)
+- agent_id: `osx-next-claude-opus-4-7` on `Tlatoanis-MacBook-Air`
+- lease_id: `e95a8c2f31b0`
+- action: foundation sub-task — done.
+- evidence:
+  - NEW `crates/tillandsias-host-shell/src/pty/unix.rs` (~280 lines).
+    `UnixPtyMaster::open(rows, cols)` via `openpty(3)` + `ptsname_r` +
+    `fcntl(O_NONBLOCK)` + `AsyncFd<FdHolder>` reactor wrap.
+    `split()` hands out `UnixPtyReader` + `UnixPtyWriter` over a shared
+    `Arc<AsyncFd>` so concurrent read+write in pump_io is sound.
+    `slave_path()` exposes `/dev/ttys*` for the macOS tray's Terminal.app
+    wrapper to re-open as a controlling tty. `resize()` via TIOCSWINSZ.
+  - Registered as `#[cfg(unix)] pub mod unix;` in `pty/mod.rs`
+    (additive — Windows path untouched).
+  - Inline libc FFI (openpty, read, write, fcntl, ptsname_r, ioctl) — no
+    new Cargo dep.
+  - 12/12 pty tests pass incl. 3 new ones (trait satisfied, real openpty
+    yields /dev/ttys* slave path, async-io halves type-check).
+- Remaining for m4 (separate sub-task):
+  `crates/tillandsias-macos-tray/src/terminal_attach.rs` — wire menu items
+  ("Open Shell", "GitHub login") to UnixPtyMaster + PtySession + spawn
+  Terminal.app on the slave_path. Estimated ~3 h, gated only on having a
+  booted VM with the in-VM tillandsias-headless's vsock listener up (which
+  iter 11's wait_ready stage 2 now verifies).
+- Lease released.
+
+### event: m6 done — build-macos-tray + install-macos scripts — 2026-05-26T00:00Z
+
+- item: `m6/macos-installer-pkg-and-codesign`
+- agent_id: `osx-next-claude-opus-4-7` on `Tlatoanis-MacBook-Air`
+- lease_id: `3f48a92c1ed7`
+- action: claim → done.
+- evidence:
+  - scripts/build-macos-tray.sh (NEW, ~120 lines): builds release binary,
+    assembles Tillandsias.app with Info.plist substitution, ad-hoc
+    codesigns with Tillandsias.entitlements (--options runtime), verifies
+    signature + entitlement presence, tars + SHA256SUMS.
+  - scripts/install-macos.sh (NEW, ~140 lines): curl-installable; Apple
+    Silicon + macOS 14+ gates; SHA-verified download; /Applications/
+    vs ~/Applications/ fallback; idempotent re-install with running-tray
+    quit + backup; optional --login-item; Gatekeeper hint; open -a.
+  - Fixed pre-existing tillandsias-macos-tray Cargo.toml gap — added
+    NSView + NSCell to objc2-app-kit features so the tray binary actually
+    compiles (NSStatusItem::button needs NSView; NSMenuItem::setState +
+    NSControlStateValueOn need NSCell).
+- Verified end-to-end on this host:
+  - scripts/build-macos-tray.sh: produces dist/Tillandsias.app + 0.14 MiB
+    tarball at sha256 1ce2cba2; codesign --verify --deep --strict: PASSED;
+    entitlement com.apple.security.virtualization confirmed present in the
+    signed binary.
+  - open dist/Tillandsias.app: actually launches the binary (2 processes
+    spawned, killed for cleanup). The menubar icon appears as expected.
+- Lease released.
+
+### Phase 1 + Phase 2 status — 2026-05-26T00:00Z
+
+With m1, m1b (A+B+C), m2, m3, m4-foundation, m6 all done, the macOS tray
+has:
+  - A working Tillandsias.app bundle that builds, signs, and launches.
+  - VzRuntime with real start/stop/wait_ready bodies (vsock-handshake
+    aware).
+  - PTY infrastructure ready for the AppKit terminal_attach wiring.
+
+Remaining macOS queue items:
+  - `m4/pty-attach-appkit-terminal` user-facing wiring — ~3 h.
+  - `m5/vfr-image-via-ci-rootfs` — gated on Linux l2+l5 (recipe shared
+    modules + recipe-smoke CI).
+  - `m7/macos-ci-job-and-tarball` — depends on m6 (now done!) — adds
+    macos-build CI job + macos-release tarball upload. ~1 d.
+
+Recommended next: m7 (lock in CI green) or m4 user wiring (visible UX).

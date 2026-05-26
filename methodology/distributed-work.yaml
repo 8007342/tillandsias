@@ -222,6 +222,86 @@ distributed_work:
       - "Update mirror tables such as 'Linux deliverables ... waiting on' in the same commit."
       - "If only part of an item completed, split the remaining gated scope into a new stable ID instead of leaving the original status ambiguous."
 
+  remote_progress_health:
+    purpose: >
+      Prevent recurrent agents from misclassifying normal remote advancement as
+      a coordination problem.
+    rules:
+      - "Expect `origin/linux-next` to be ahead of a recurrent local checkout on most cycles; that usually means another agent or the integration loop made progress."
+      - "Remote-ahead is a blocker only when local dirty state, conflicts, sandbox limits, or missing credentials prevent a fresh fetch/rebase and ledger update."
+      - "A repeated no-progress streak on `origin/linux-next` or active sibling branches is the suspicious signal; document it with observed heads, expected cadence, and the host/job that should be checked."
+      - "When remote advanced, fresh-read changed plan/methodology ledgers before making assignment decisions."
+      - "Do not recommend that the user fix remote-ahead. Recommend action only for stale remote heads, failed pushes, conflicts, or leases that have expired without status packets."
+
+  work_shaping_protocol:
+    purpose: >
+      Keep multi-agent work large enough to make progress between recurrent
+      prompts while still being safe to claim, checkpoint, review, and hand off.
+    packet_size:
+      preferred: >
+        A normal implementation packet should take roughly one or two recurrent
+        agent iterations, produce a coherent commit or verification result, and
+        unblock a user-visible path, another host, or a release gate.
+      too_small: >
+        A task is too small when it is just a single obvious edit, local
+        cleanup, or one file move that does not independently unblock anything.
+        Fold it into the nearest feature, verification, packaging, or CI packet.
+      too_large: >
+        A task is too large when it cannot be described with one owner_host, one
+        expected evidence set, and a plausible next checkpoint. Split by
+        platform boundary, protocol boundary, or evidence boundary.
+    packet_fields:
+      next_action:
+        kind: required
+        note: "The first concrete command/edit the next agent should perform."
+      acceptance_evidence:
+        kind: required
+        note: "Tests, smoke evidence, commit refs, screenshots, or logs proving done."
+      fallback_when_blocked:
+        kind: recommended
+        note: "The next useful packet this same host should claim if this item blocks."
+      dependency_contract:
+        kind: recommended
+        note: "Exact API/artifact/commit expected from upstream work, not just a prose dependency."
+    eager_assignment:
+      - "Every active platform queue SHOULD expose at least one unblocked ready packet per host."
+      - "If a host's primary path is gated, coordinators SHOULD publish a fallback packet in verification, packaging, diagnostics, docs-distillation, or CI plumbing."
+      - "Prefer bundling serial micro-tasks under one claim when they touch the same owned_files and share the same evidence."
+      - "Do not split a packet merely to create more ledger entries; split only at ownership, dependency, or evidence boundaries."
+
+  agent_status_packet:
+    purpose: >
+      Give implementation agents a compact, copyable event shape for progress,
+      blockers, errors, dependency requests, and handoffs without relying on
+      chat history.
+    required_when:
+      - "claiming or renewing a lease"
+      - "ending a recurrent prompt iteration with unfinished work"
+      - "hitting an error, blocker, or dependency gap"
+      - "completing or releasing a packet"
+    fields:
+      item: "stable work item id"
+      ts: "UTC ISO-8601"
+      agent_id: "host/workstation/harness identifier"
+      lease_id: "current lease"
+      state: "claim | plan | progress | blocked | failed | released | completed"
+      current_plan: "1-4 bullets describing the intended implementation path"
+      dependencies:
+        - "upstream item, artifact, API, branch, or decision needed"
+      blockers:
+        - "named blocker with owner_host if known and next ping/check time"
+      errors:
+        - "command/error summary plus smallest useful diagnostic chain"
+      files_touched:
+        - "paths or globs touched so collision checks are possible"
+      evidence:
+        - "commit shas, test commands, logs, screenshots, or smoke results"
+      next_checkpoint: "expected next action and ETA/trigger"
+      lease_intent: "continue | release | reclaimable_after:<UTC> | done"
+    formatting_rule: >
+      Append status packets under the owning item's Events section. Keep packets
+      short enough that another agent can read the whole item before claiming.
+
   host_component_ownership:
     rule: >
       Each component declares which host owns its primary implementation.
@@ -313,14 +393,18 @@ distributed_work:
       - id: 3_filter_eligible
         action: >
           Walk plan/steps + plan/issues + openspec/changes. Filter where
-          owner_host ∈ {own_host, any} AND status ∈ {pending, blocked,
-          failed-retryable} AND capability_tags ∩ own_capabilities is
-          non-empty AND no overlapping live lease.
+          owner_host ∈ {own_host, any} AND status ∈ {ready, pending,
+          blocked, failed-retryable} AND capability_tags ∩ own_capabilities
+          is non-empty AND no overlapping live lease. Treat blocked items as
+          eligible only if the blocker is resolved or the item names an
+          independent fallback_when_blocked packet.
       - id: 4_pick_one
         action: >
-          Prefer (a) blocked items where the blocker is now resolved,
-          (b) failed-retryable items, (c) pending items with earliest
-          order. Tie-break: smallest stable-ID lexicographic.
+          Prefer (a) packets that unblock another host, (b) blocked items
+          where the blocker is now resolved, (c) failed-retryable items with a
+          narrow diagnostic chain, (d) the largest coherent ready packet that
+          fits the host capability and lease window. Tie-break by dependency
+          depth, then stable-ID lexicographic order.
       - id: 5_claim
         action: >
           Mint lease_id, write a `claim` event to the work item's events
@@ -330,8 +414,9 @@ distributed_work:
         action: >
           Switch to the appropriate code branch if needed (windows-next,
           osx-next, or stay on linux-next). Implement. At each meaningful
-          checkpoint, emit a `progress` or `checkpoint` event back to the
-          work item (commit to linux-next), then resume code work.
+          checkpoint, emit a compact agent_status_packet as a `progress`,
+          `blocked`, or `checkpoint` event back to the work item (commit to
+          linux-next), then resume code work.
       - id: 7_terminal
         action: >
           On success: emit `completed` event + commit_sha evidence; update

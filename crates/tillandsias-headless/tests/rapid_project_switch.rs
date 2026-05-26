@@ -59,7 +59,7 @@ impl MenuConsistency {
 #[test]
 fn test_rapid_project_switch_no_panics() {
     // @trace spec:project-management
-    let projects = vec![
+    let projects = [
         MockProjectState::new("proj-a", "Project A"),
         MockProjectState::new("proj-b", "Project B"),
         MockProjectState::new("proj-c", "Project C"),
@@ -125,7 +125,7 @@ fn test_rapid_switch_menu_item_count_stable() {
 #[test]
 fn test_rapid_switch_no_stale_menu_data() {
     // @trace spec:project-management
-    let mut projects = vec![
+    let mut projects = [
         MockProjectState::new("proj-1", "Project 1"),
         MockProjectState::new("proj-2", "Project 2"),
     ];

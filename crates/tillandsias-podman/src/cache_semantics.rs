@@ -292,11 +292,11 @@ mod tests {
 
         // Per-project cache (RW)
         assert_eq!(mounts[0].1, "/home/forge/.cache/tillandsias-project");
-        assert_eq!(mounts[0].2, false); // RW
+        assert!(!mounts[0].2); // RW
 
         // Shared nix store (RO)
         assert_eq!(mounts[1].1, "/nix/store");
-        assert_eq!(mounts[1].2, true); // RO
+        assert!(mounts[1].2); // RO
     }
 
     #[test]

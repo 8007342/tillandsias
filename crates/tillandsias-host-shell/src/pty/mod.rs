@@ -23,6 +23,11 @@
 #[cfg(windows)]
 pub mod windows;
 
+/// Unix `openpty(3)` backend (§3.2). Shared by macOS + Linux native trays.
+/// No external crate dep — uses inline libc FFI.
+#[cfg(unix)]
+pub mod unix;
+
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicU32, Ordering};
 use std::sync::{Arc, Mutex};

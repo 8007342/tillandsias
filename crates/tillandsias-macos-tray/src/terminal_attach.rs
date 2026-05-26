@@ -25,6 +25,11 @@ pub mod bundle_ids {
 }
 
 /// Which terminal the tray decided to use for this attach.
+///
+/// `TerminalApp` is named after macOS's built-in Terminal.app — renaming
+/// to satisfy `clippy::enum_variant_names` would lose the bundle-id
+/// signal, so the lint is allowed for this enum specifically.
+#[allow(clippy::enum_variant_names)]
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Terminal {
     ITerm2,

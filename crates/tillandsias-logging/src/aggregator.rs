@@ -406,7 +406,7 @@ mod tests {
             .await
             .unwrap();
 
-        now = now + chrono::Duration::seconds(1);
+        now += chrono::Duration::seconds(1);
         aggregator
             .add_log(
                 "tillandsias-proxy",
@@ -422,7 +422,7 @@ mod tests {
             .unwrap();
 
         // Git service logs
-        now = now + chrono::Duration::seconds(1);
+        now += chrono::Duration::seconds(1);
         aggregator
             .add_log(
                 "tillandsias-git",
@@ -438,7 +438,7 @@ mod tests {
             .unwrap();
 
         // Forge logs
-        now = now + chrono::Duration::seconds(1);
+        now += chrono::Duration::seconds(1);
         aggregator
             .add_log(
                 "tillandsias-forge",
