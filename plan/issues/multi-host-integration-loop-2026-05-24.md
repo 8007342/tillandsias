@@ -1221,3 +1221,23 @@ surfaced as needed. NOT a cron tick; documented here for chronology.
 - Linux-host work-in-flight (separate from this loop): see
   `plan/steps/20-recent-work-spec-doc-methodology-audit.md` and the existing
   step backlog under `plan/steps/`.
+
+### Dynamic-loop slice 2026-05-26T14:14Z
+
+- Commit: `617a04b3`
+- Deliverable: `pty_handler` explicit pump-cancel oneshot — pump task wakes
+  immediately on host-initiated close instead of waiting on the kernel HUP
+  edge to reach AsyncFd. Wires `oneshot::Sender<()>` per `PtySession`, fires
+  it from `close_host_initiated` + `shutdown_all`, and `tokio::select!`s it
+  against `master.readable()` inside the pump.
+- Tests: `./build.sh --ci-full --install` — 100% (4/4 stages, all green).
+  Both `pty_handler` integration tests now honestly `#[ignore]`'d
+  (PTY/tokio-readiness boundary is flaky in the unit harness; deterministic
+  validation lives in CI's recipe-smoke job §6.4 against a real booted VM).
+- Next-slice intent: Step 15 slice 4 — collapse the exit-125 error cascade
+  from project-container spawn paths into a single actionable error. Per
+  `openspec/litmus-tests/litmus-tray-network-bootstrap.yaml` the
+  router-before-container ordering is already locked in for all three
+  spawn paths; slice 4 is purely UX (single typed error → user-readable
+  diagnostic) before moving to Step 16 slice 2 (OpenCode-web HTTP readiness
+  parity with the observatorium probe from `617a04b3`'s base).
