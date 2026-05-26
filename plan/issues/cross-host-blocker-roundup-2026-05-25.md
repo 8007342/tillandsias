@@ -522,3 +522,41 @@ blocker view without deleting earlier host notes.
 - Current blocked packets: Windows w5 and macOS m5 live provisioning remain
   blocked on real recipe-publish artifacts and manifest SHA pins; macOS live
   PTY proof remains blocked on m5; m8 remains user-attended.
+
+## Linux coordinator audit — 2026-05-26T13:39Z
+
+- Observed remote heads after fast-forward: `linux-next` `72aa7917`,
+  `windows-next` `7e95c7e2`, `osx-next` `bdb7f9cb`, `main` `ddf52dff`.
+- Remote progress is healthy. Since the 11:47Z fold, Step 16 slice 1 shipped
+  real observatorium HTTPS readiness plus log capture (`3d75eeef`), and the
+  pty_handler AsyncFd rewrite un-ignored the echo-pump test (`65980b02`).
+- No unmerged Windows or macOS code delta exists. Windows trails by the
+  pty_handler slice; macOS trails by Step 16, pty_handler, and coordination
+  commits.
+- Current blocked packets remain l9 workflow registration/first green
+  artifacts/SHA pins, Windows w5 live provisioning, macOS m5 live provisioning,
+  macOS live PTY proof after m5, and m8 user-attended smoke.
+- Ready packets: Linux Step 16 OpenCode-web readiness parity or final
+  pty_handler SIGTERM-HUP cancellation; Windows w7 branch-sync diagnostics to
+  `72aa7917`; macOS m5 `startVm:` wiring while treating `"pending-ci"` as a
+  recoverable artifact-not-yet-published state.
+
+## Linux coordinator audit — 2026-05-26T15:29Z
+
+- Observed remote heads after fast-forward: `linux-next` `aa8fc2b9`,
+  `windows-next` `7e95c7e2`, `osx-next` `bdb7f9cb`, `main` `ddf52dff`.
+- Remote progress is healthy. Since the 13:39Z fold, Linux shipped
+  pty_handler explicit pump-cancel work at `617a04b3`, and the dynamic-loop
+  ledger recorded it at `aa8fc2b9`.
+- No unmerged Windows or macOS code delta exists. Windows trails by 6 commits;
+  macOS trails by 10 commits.
+- Reconciled Step 15: router-before-container ordering remains complete, but
+  latest dynamic-loop intent reopens one residual UX slice to collapse exit-125
+  project-container cascades into a single actionable diagnostic before Step 16
+  OpenCode-web readiness parity.
+- Current blocked packets remain l9 workflow registration/first green
+  artifacts/SHA pins, Windows w5 live provisioning, macOS m5 live provisioning,
+  macOS live PTY proof after m5, and m8 user-attended smoke.
+- Ready packets: Linux Step 15 exit-125 cascade UX, then Step 16 OpenCode-web
+  readiness parity; Windows w7 branch-sync diagnostics to `aa8fc2b9`; macOS
+  m5 `startVm:` wiring while treating `"pending-ci"` as recoverable.

@@ -985,7 +985,7 @@ plan_index:
     - id: tray-network-bootstrap
       order: 15
       title: Tray Network Bootstrap — Ensure Enclave Readiness Before Launch
-      status: completed
+      status: in_progress
       deliverable: plan/steps/15-tray-network-bootstrap.md
       depends_on: [router-observatorium-routing, user-runtime-port-selection]
       specs: []
@@ -995,19 +995,19 @@ plan_index:
         - "Tray startup waits for the router before launching project containers"
       tasks:
         - id: tray-network-bootstrap/enclave-network
-          status: completed
+          status: in_progress
           depends_on: [user-runtime-port-selection/fallback-chain]
           owned_files:
             - crates/tillandsias-headless/src/main.rs
             - crates/tillandsias-podman/src/client.rs
             - plan/steps/15-tray-network-bootstrap.md
           checkpoint_required: true
-          handoff_note: "Completed on linux-next: OpenCode, observatorium, and tray Forge launch paths now run enclave network + cleanup + router before project containers; litmus-tray-network-bootstrap asserts that ordering."
+          handoff_note: "Router-before-container ordering is complete on linux-next, and litmus-tray-network-bootstrap asserts that ordering. Latest dynamic-loop intent reopens one Step 15 residual: collapse exit-125 project-container cascades into a single actionable diagnostic before continuing Step 16 OpenCode-web readiness parity."
 
     - id: observatorium-readiness-and-ux
       order: 16
       title: Observatorium Readiness and UX — Fail Loudly With Logs
-      status: ready
+      status: in_progress
       deliverable: plan/steps/16-observatorium-readiness-and-ux.md
       depends_on: [router-observatorium-routing, user-runtime-port-selection, tray-network-bootstrap]
       specs: []
@@ -1017,7 +1017,7 @@ plan_index:
         - "Tray and observatorium errors resolve to one actionable path"
       tasks:
         - id: observatorium-readiness-and-ux/readiness-check
-          status: ready
+          status: in_progress
           depends_on: [tray-network-bootstrap/enclave-network]
           owned_files:
             - crates/tillandsias-headless/src/main.rs
@@ -1025,7 +1025,7 @@ plan_index:
             - openspec/specs/clickable-trace-index/spec.md
             - openspec/specs/cli-mode/spec.md
           checkpoint_required: true
-          handoff_note: "Step 15 is complete; tighten the observatorium readiness check and surface container diagnostics on failure so the browser path can distinguish bootstrap from route breakage."
+          handoff_note: "Step 16 slice 1 shipped on linux-next: observatorium readiness polls the real HTTPS page and includes container log tail on failure. Continue with OpenCode-web readiness parity after the reopened Step 15 exit-125 cascade UX slice, or fold any remaining diagnostics/inspect-data gap into the same readiness pass."
 
     - id: podman-control-plane-overhaul
       order: 15.5
@@ -1436,7 +1436,7 @@ plan_index:
       status: in_progress
       deliverable: plan/issues/multi-host-coordination-2026-05-24.md
       depends_on: [recent-work-spec-doc-methodology-audit]
-      progress_note: "linux-next, windows-next, and osx-next are all active as of 2026-05-26T11:47Z. The integration loop ledger at plan/issues/multi-host-integration-loop-2026-05-24.md records sibling heads; per-host queues record item-level leases/events. Current reconciliation: linux-next is at 1d8217d3 after Step 15 router-before-project slices, the tray-network-bootstrap litmus, and integration-loop merge/test of macOS m5 fetch_recipe_artifact; windows-next is at a675e814 with no unmerged Windows delta and trails linux-next by 11 commits; osx-next is at bdb7f9cb with no unmerged macOS delta and trails linux-next by 1 ledger commit. Remaining gates are l9 recipe-publish workflow registration/first green artifacts/manifest SHA pins, Windows w7 branch-sync diagnostics, macOS m5 startVm/provision wiring and live PTY proof after m5, m8 residual user-attended smoke, and Step 16 observatorium readiness diagnostics."
+      progress_note: "linux-next, windows-next, and osx-next are all active as of 2026-05-26T15:29Z. The integration loop ledger at plan/issues/multi-host-integration-loop-2026-05-24.md records sibling heads; per-host queues record item-level leases/events. Current reconciliation: linux-next is at aa8fc2b9 after Step 16 slice 1 observatorium readiness/log capture, the pty_handler AsyncFd rewrite, and explicit pump-cancel work; windows-next is at 7e95c7e2 with no unmerged Windows delta and trails linux-next by 6 commits; osx-next is at bdb7f9cb with no unmerged macOS delta and trails linux-next by 10 commits. Remaining gates are l9 recipe-publish workflow registration/first green artifacts/manifest SHA pins, Windows w7 branch-sync diagnostics to aa8fc2b9, macOS m5 startVm/provision wiring and live PTY proof after m5, m8 residual user-attended smoke, reopened Step 15 exit-125 cascade UX, and Step 16 OpenCode-web readiness parity."
       specs:
         - methodology-accountability
         - host-shell-architecture

@@ -116,8 +116,10 @@ impl UnixPtyMaster {
 
         let slave_path = ptsname_of(master_owned.as_raw_fd())?;
 
-        let async_fd = AsyncFd::new(FdHolder { owned: master_owned })
-            .map_err(UnixPtyError::OpenPty)?;
+        let async_fd = AsyncFd::new(FdHolder {
+            owned: master_owned,
+        })
+        .map_err(UnixPtyError::OpenPty)?;
         Ok(Self {
             master: Arc::new(async_fd),
             _slave: slave_owned,
@@ -290,13 +292,7 @@ fn set_nonblocking(fd: RawFd) -> Result<(), UnixPtyError> {
 
 fn ptsname_of(master_fd: RawFd) -> Result<String, UnixPtyError> {
     let mut buf = [0u8; 128];
-    let rc = unsafe {
-        ptsname_r(
-            master_fd,
-            buf.as_mut_ptr() as *mut c_char,
-            buf.len(),
-        )
-    };
+    let rc = unsafe { ptsname_r(master_fd, buf.as_mut_ptr() as *mut c_char, buf.len()) };
     if rc != 0 {
         return Err(UnixPtyError::Ptsname(io::Error::last_os_error()));
     }
@@ -307,13 +303,7 @@ fn ptsname_of(master_fd: RawFd) -> Result<String, UnixPtyError> {
 }
 
 unsafe fn read_fd(fd: RawFd, buf: &mut [std::mem::MaybeUninit<u8>]) -> io::Result<usize> {
-    let n = unsafe {
-        read(
-            fd,
-            buf.as_mut_ptr() as *mut std::ffi::c_void,
-            buf.len(),
-        )
-    };
+    let n = unsafe { read(fd, buf.as_mut_ptr() as *mut std::ffi::c_void, buf.len()) };
     if n < 0 {
         Err(io::Error::last_os_error())
     } else {
@@ -322,13 +312,7 @@ unsafe fn read_fd(fd: RawFd, buf: &mut [std::mem::MaybeUninit<u8>]) -> io::Resul
 }
 
 unsafe fn write_fd(fd: RawFd, buf: &[u8]) -> io::Result<usize> {
-    let n = unsafe {
-        write(
-            fd,
-            buf.as_ptr() as *const std::ffi::c_void,
-            buf.len(),
-        )
-    };
+    let n = unsafe { write(fd, buf.as_ptr() as *const std::ffi::c_void, buf.len()) };
     if n < 0 {
         Err(io::Error::last_os_error())
     } else {
@@ -354,10 +338,7 @@ mod tests {
     async fn open_real_pty_yields_slave_path() {
         let pty = UnixPtyMaster::open(24, 80).expect("openpty");
         let path = pty.slave_path();
-        assert!(
-            path.starts_with("/dev/"),
-            "unexpected slave path: {path:?}"
-        );
+        assert!(path.starts_with("/dev/"), "unexpected slave path: {path:?}");
     }
 
     /// Compile-time: `UnixPtyReader: AsyncRead` and `UnixPtyWriter:

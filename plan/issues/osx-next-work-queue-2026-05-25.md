@@ -2,14 +2,15 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
-Status: **OPEN** as of 2026-05-26T11:47Z. macOS m1, m1b, m2, m3, m6,
+Status: **OPEN** as of 2026-05-26T15:29Z. macOS m1, m1b, m2, m3, m6,
 m7, m4 sub-task B, and the m5 fetch primitive are done/integrated. The latest
 folded macOS code is `ec76e63a` / plan packet `f8a3ec07`, merged and tested
 into `linux-next` during the 11:43Z integration cycle. `osx-next` is at
-`bdb7f9cb` with no unmerged macOS delta and trails `linux-next` only by the
-latest integration ledger commit. Remaining macOS live-terminal proof is gated
-on recipe-publish workflow registration, first green artifacts, manifest SHA
-pins, and the macOS runtime provisioning flip away from the current deferred
+`bdb7f9cb` with no unmerged macOS delta and trails `linux-next` `aa8fc2b9` by
+10 commits: Step 16 slice 1, pty_handler AsyncFd and pump-cancel work, plus
+coordination checkpoints. Remaining macOS live-terminal proof is gated on
+recipe-publish workflow registration, first green artifacts, manifest SHA pins,
+and the macOS runtime provisioning flip away from the current deferred
 extraction/conversion stubs.
 
 ## How to use this file
@@ -1634,3 +1635,25 @@ Optional next-iter productive macOS work that's NOT blocked:
 After 1-3 are done, the macOS loop will trend toward noop and the
 adaptive cadence will stretch 30m → 1h → 2h → 4h → 6h cap until l9
 step 5 lands.
+### event: linux coordinator status reconciliation — 2026-05-26T13:39Z
+
+- Observed remote heads after fast-forward: `linux-next` `72aa7917`,
+  `windows-next` `7e95c7e2`, `osx-next` `bdb7f9cb`, `main` `ddf52dff`.
+- No unmerged macOS code delta exists. `osx-next` trails current `linux-next`
+  by Step 16 slice 1, pty_handler AsyncFd, and coordination ledger commits.
+- Current macOS next action is unchanged: pull latest `linux-next`, wire
+  `VzRuntime::fetch_recipe_artifact` into `startVm:`, and preserve the
+  recoverable `"pending-ci"` gate until l9 publishes real artifacts and SHA
+  pins. Live PTY proof still waits for a provisioned VM.
+
+### event: linux coordinator status reconciliation — 2026-05-26T15:29Z
+
+- Observed remote heads after fast-forward: `linux-next` `aa8fc2b9`,
+  `windows-next` `7e95c7e2`, `osx-next` `bdb7f9cb`, `main` `ddf52dff`.
+- No unmerged macOS code delta exists. `osx-next` trails current `linux-next`
+  by 10 commits: Step 16 slice 1, pty_handler AsyncFd and pump-cancel work,
+  and coordination ledger commits.
+- Current macOS next action is unchanged: pull latest `linux-next`, wire
+  `VzRuntime::fetch_recipe_artifact` into `startVm:`, and preserve the
+  recoverable `"pending-ci"` gate until l9 publishes real artifacts and SHA
+  pins. Live PTY proof still waits for a provisioned VM.

@@ -371,3 +371,72 @@ Current cross-host gates:
   that primitive into `startVm:` without claiming live E2E until SHA pins.
 - Step 16 is the next Linux dynamic-loop packet: observatorium readiness should
   prove the real page and surface logs/inspect data on failure.
+
+## Coordination Audit - 2026-05-26T13:39Z
+
+host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+
+Observed remote heads after fetch/pull:
+
+- `main`: ddf52dff
+- `linux-next`: 72aa7917
+- `windows-next`: 7e95c7e2
+- `osx-next`: bdb7f9cb
+
+Ledger corrections made in this audit:
+
+- Folded Step 16 slice 1 into the plan graph: observatorium readiness now polls
+  the real HTTPS page and attaches container log tail on failure
+  (`3d75eeef`), so Step 16 is in progress rather than merely ready.
+- Folded the pty_handler AsyncFd rewrite (`65980b02`): the echo-pump test is
+  no longer ignored; the remaining pty_handler follow-up is the SIGTERM-HUP
+  cancellation corner.
+- Refreshed Windows and macOS queue branch-sync targets to current
+  `linux-next` `72aa7917`. No unmerged sibling code delta exists.
+
+Current cross-host gates:
+
+- l9 remains blocked first on workflow registration/release-path diagnosis,
+  then on first green recipe-publish artifacts and manifest SHA pins.
+- Windows w7 remains ready: branch-sync `windows-next` to `72aa7917` and run
+  diagnostics against the workflow/SHA-pin gate.
+- macOS m5 should wire the integrated fetch primitive into `startVm:` while
+  preserving the recoverable `"pending-ci"` state; live E2E waits on real
+  artifacts.
+- Linux can continue Step 16 OpenCode-web readiness parity or close the final
+  pty_handler ignored test.
+
+## Coordination Audit - 2026-05-26T15:29Z
+
+host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+
+Observed remote heads after fetch/pull:
+
+- `main`: ddf52dff
+- `linux-next`: aa8fc2b9
+- `windows-next`: 7e95c7e2
+- `osx-next`: bdb7f9cb
+
+Ledger corrections made in this audit:
+
+- Folded the pty_handler pump-cancel slice (`617a04b3` / plan checkpoint
+  `aa8fc2b9`): host-initiated close now wakes the pump task through an explicit
+  oneshot instead of relying on a kernel HUP readiness edge.
+- Reconciled Step 15 against the latest dynamic-loop intent. Router ordering
+  remains complete and covered by `litmus-tray-network-bootstrap`, but Step 15
+  has one reopened UX residual: collapse exit-125 project-container cascades
+  into a single actionable diagnostic.
+- Refreshed Windows and macOS queue branch-sync targets to current
+  `linux-next` `aa8fc2b9`. No unmerged sibling code delta exists.
+
+Current cross-host gates:
+
+- l9 remains blocked first on workflow registration/release-path diagnosis,
+  then on first green recipe-publish artifacts and manifest SHA pins.
+- Windows w7 remains ready: branch-sync `windows-next` to `aa8fc2b9` and run
+  diagnostics against the workflow/SHA-pin gate.
+- macOS m5 should wire the integrated fetch primitive into `startVm:` while
+  preserving the recoverable `"pending-ci"` state; live E2E waits on real
+  artifacts.
+- Linux should close the Step 15 exit-125 cascade UX residual, then continue
+  Step 16 OpenCode-web readiness parity.

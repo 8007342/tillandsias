@@ -934,15 +934,26 @@ impl PodmanClient {
         let mut full_args = vec!["run".to_string()];
         full_args.extend_from_slice(args);
 
-        let mut parts = vec![
-            format!("stage '{stage}' failed for container {container_name}"),
+        let mut parts = vec![format!(
+            "stage '{stage}' failed for container {container_name}"
+        )];
+        // Step 15 slice 4: when the failure is a known exit-125 pattern (network
+        // missing / port already bound / image not found), prepend a single
+        // actionable typed line BEFORE the verbose cause+hint+argv chain so the
+        // operator sees what to do without parsing the podman stderr cascade.
+        if let PodmanError::CommandFailure(failure) = err
+            && let Some(typed) = classify_typed_launch_failure(failure)
+        {
+            parts.push(typed);
+        }
+        parts.extend([
             format!("cause: {err}"),
             observed_failure_hint(stage, container_name, args),
             format!(
                 "redacted argv: podman {}",
                 redact_argv(&full_args).join(" ")
             ),
-        ];
+        ]);
         let rendered = diagnostics.render_human();
         if !rendered.trim().is_empty() {
             parts.push(rendered);
@@ -1587,6 +1598,74 @@ fn summary_line(value: &str) -> &str {
     value.lines().next().unwrap_or(value)
 }
 
+/// Step 15 slice 4: collapse the exit-125 cascade into a single actionable
+/// typed error line.
+///
+/// `podman run` returns exit 125 for *many* distinct conditions (network
+/// missing, image not found, port-bind conflict, rootless setup errors, …).
+/// Operators historically saw the same generic "stage X failed" wrapper for
+/// each, so the actual root cause was buried in the stderr that the
+/// `cause:` line carried forward verbatim. This classifier inspects the
+/// CommandFailure and, for known patterns, returns a SINGLE line the
+/// operator can act on without parsing podman stderr.
+///
+/// Returns `None` when the failure does not match a known typed pattern —
+/// the caller then falls back to the generic stage-keyed hint.
+///
+/// @trace plan/steps/15-tray-network-bootstrap.md, spec:tray-network-bootstrap
+pub(crate) fn classify_typed_launch_failure(
+    failure: &crate::backend::CommandFailure,
+) -> Option<String> {
+    if failure.output.status != Some(125) {
+        return None;
+    }
+    let stderr_lc = failure.output.stderr.to_ascii_lowercase();
+
+    // Enclave network missing — `ensure_enclave_network` did not run, or
+    // ran and failed silently before this spawn. This is a Step 15
+    // ordering regression by definition. Match podman 4.x + 5.x stderr.
+    if stderr_lc.contains("network")
+        && (stderr_lc.contains("not found")
+            || stderr_lc.contains("does not exist")
+            || stderr_lc.contains("no such network"))
+    {
+        return Some(
+            "typed-error: enclave network missing — ensure_enclave_network must run before this \
+             spawn; this is a Step 15 ordering regression (see plan/steps/15-tray-network-bootstrap.md)"
+                .to_string(),
+        );
+    }
+
+    // Host port conflict — the router or a sibling service is holding
+    // the port we tried to publish. Actionable: kill the orphan or pick
+    // a new port.
+    if stderr_lc.contains("address already in use")
+        || stderr_lc.contains("port is already allocated")
+        || stderr_lc.contains("bind: permission denied")
+    {
+        return Some(
+            "typed-error: host port already bound — kill the prior tillandsias process holding \
+             the port (try `podman ps -a` + `pkill tillandsias`) or pick a different port"
+                .to_string(),
+        );
+    }
+
+    // Image missing — the recipe pull/build step didn't deposit this
+    // tag locally. Actionable: re-run the materializer / pull pass.
+    if (stderr_lc.contains("no such image") || stderr_lc.contains("image not known"))
+        || stderr_lc.contains("manifest unknown")
+    {
+        return Some(
+            "typed-error: container image is not present locally — run the materializer \
+             (`cargo run -p tillandsias-vm-layer --features materialize --bin materialize-cli`) \
+             or `podman pull` the missing tag before this spawn"
+                .to_string(),
+        );
+    }
+
+    None
+}
+
 fn observed_failure_hint(stage: &str, _container_name: &str, args: &[String]) -> String {
     let joined = args.join(" ");
     if joined.contains("TILLANDSIAS_PROJECT_HOST_MOUNT=1") {
@@ -1684,6 +1763,96 @@ impl PodmanClient {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::backend::{CommandFailure, CommandOutput, OperationKind, RetryClass};
+    use std::time::Duration;
+
+    fn fake_failure(status: Option<i32>, stderr: &str) -> CommandFailure {
+        CommandFailure {
+            output: Box::new(CommandOutput {
+                operation: OperationKind::Container,
+                argv: vec!["run".into()],
+                redacted_argv: vec!["run".into()],
+                status,
+                stdout: String::new(),
+                stderr: stderr.into(),
+                duration: Duration::ZERO,
+            }),
+            retry: RetryClass::Unknown,
+        }
+    }
+
+    /// Step 15 slice 4: the canonical "network does not exist" cascade
+    /// produces a single actionable typed-error line.
+    /// @trace plan/steps/15-tray-network-bootstrap.md
+    #[test]
+    fn classify_typed_125_network_missing() {
+        let f = fake_failure(Some(125), r#"Error: network not found"#);
+        let typed = classify_typed_launch_failure(&f).expect("should classify");
+        assert!(
+            typed.starts_with("typed-error: enclave network missing"),
+            "got: {typed}"
+        );
+        assert!(typed.contains("Step 15"));
+    }
+
+    #[test]
+    fn classify_typed_125_network_missing_alt_phrasing() {
+        // podman 4.x sometimes reports "does not exist"; 5.x sometimes
+        // reports "no such network".
+        for stderr in [
+            "Error: network tillandsias-enclave does not exist",
+            "Error: no such network: tillandsias-enclave",
+        ] {
+            let f = fake_failure(Some(125), stderr);
+            let typed = classify_typed_launch_failure(&f)
+                .unwrap_or_else(|| panic!("should classify: {stderr}"));
+            assert!(typed.starts_with("typed-error: enclave network missing"));
+        }
+    }
+
+    #[test]
+    fn classify_typed_125_port_bound() {
+        let f = fake_failure(
+            Some(125),
+            "Error: rootlessport listen tcp 0.0.0.0:8443: bind: address already in use",
+        );
+        let typed = classify_typed_launch_failure(&f).expect("should classify");
+        assert!(
+            typed.starts_with("typed-error: host port already bound"),
+            "got: {typed}"
+        );
+    }
+
+    #[test]
+    fn classify_typed_125_image_missing() {
+        let f = fake_failure(
+            Some(125),
+            "Error: short-name resolution failed: no such image \"tillandsias-router:v0\"",
+        );
+        let typed = classify_typed_launch_failure(&f).expect("should classify");
+        assert!(
+            typed.starts_with("typed-error: container image is not present locally"),
+            "got: {typed}"
+        );
+    }
+
+    /// Non-125 exit codes are not classified — we don't want false
+    /// positives swallowing legitimate runtime errors.
+    #[test]
+    fn classify_typed_only_fires_on_125() {
+        let f = fake_failure(Some(1), "Error: network not found");
+        assert!(classify_typed_launch_failure(&f).is_none());
+        let f = fake_failure(None, "Error: network not found");
+        assert!(classify_typed_launch_failure(&f).is_none());
+    }
+
+    /// Generic exit-125 with unrecognized stderr falls through to None so
+    /// the operator gets the stage-keyed hint instead.
+    #[test]
+    fn classify_typed_unknown_125_falls_through() {
+        let f = fake_failure(Some(125), "Error: some unrecognized failure");
+        assert!(classify_typed_launch_failure(&f).is_none());
+    }
 
     /// @trace spec:enclave-network
     #[test]

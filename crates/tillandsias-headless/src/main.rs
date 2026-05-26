@@ -3941,6 +3941,14 @@ fn run_observatorium_mode(
         Ok::<(), String>(())
     })?;
 
+    // Step 16: probe the actual HTTPS page before launching the browser,
+    // so a router/web mismatch surfaces ONE actionable error here instead
+    // of the user seeing a broken page after the browser opens. Failure
+    // includes the observatorium container's recent logs.
+    //
+    // @trace plan/steps/16-observatorium-readiness-and-ux.md
+    wait_for_observatorium_http_ready(&project_name, router_host_port, debug)?;
+
     if std::env::var("OBSERVATORIUM_BROWSER").ok().as_deref() == Some("none") {
         return Ok(());
     }
@@ -4120,6 +4128,123 @@ fn observatorium_app_url(project_name: &str, host_port: u16) -> String {
         "{}observatorium/",
         observatorium_origin_url(project_name, host_port)
     )
+}
+
+/// Step 16: real HTTP readiness probe for the observatorium URL. Polls
+/// up to 20 × 500ms (10s) for any non-5xx response on the app URL —
+/// matching the established wait-for-opencode-web-route cadence.
+/// `2xx` / `3xx` / `4xx` all count as "router + container alive enough
+/// to talk back"; a 5xx, a connection refused, or a 10s timeout returns
+/// an `Err` carrying the last status / error AND a tail of the
+/// observatorium container's podman logs so the user sees one
+/// actionable failure instead of a "browser opened to broken page".
+///
+/// Cert validation is permissive (`danger_accept_invalid_certs`) because
+/// the Caddy router serves a Tillandsias-signed cert that the host
+/// trust store doesn't (and shouldn't) carry. The probe targets
+/// `localhost:<router-port>` exclusively; the rfc-2119 risk surface
+/// is bounded.
+///
+/// @trace plan/steps/16-observatorium-readiness-and-ux.md
+fn wait_for_observatorium_http_ready(
+    project_name: &str,
+    host_port: u16,
+    debug: bool,
+) -> Result<(), String> {
+    let url = observatorium_app_url(project_name, host_port);
+    let mut last_outcome = String::from("no HTTP probe attempted");
+    for attempt in 1..=20 {
+        match observatorium_probe_status(&url) {
+            Ok(code) if (200..500).contains(&code) => {
+                if debug {
+                    eprintln!(
+                        "[tillandsias] [observatorium] readiness OK on attempt {attempt}/20 (status {code})"
+                    );
+                }
+                return Ok(());
+            }
+            Ok(code) => {
+                last_outcome = format!("status {code}");
+                if debug {
+                    eprintln!(
+                        "[tillandsias] [observatorium] waiting: attempt {attempt}/20 ({last_outcome})"
+                    );
+                }
+            }
+            Err(err) => {
+                last_outcome = err;
+                if debug {
+                    eprintln!(
+                        "[tillandsias] [observatorium] waiting: attempt {attempt}/20 ({last_outcome})"
+                    );
+                }
+            }
+        }
+        std::thread::sleep(Duration::from_millis(500));
+    }
+
+    let logs_tail = observatorium_logs_tail(project_name, 50);
+    Err(format!(
+        "Observatorium readiness probe did not succeed in 10s.\n\
+         URL: {url}\n\
+         Last outcome: {last_outcome}\n\
+         Container logs (last ≤50 lines):\n{logs_tail}\n\
+         Next: inspect `podman logs {observatorium_container}` for the\n\
+         full transcript, then verify the enclave network + router are\n\
+         healthy via `tillandsias --status`.",
+        observatorium_container = observatorium_container_name(project_name),
+    ))
+}
+
+fn observatorium_probe_status(url: &str) -> Result<u16, String> {
+    let url = url.to_string();
+    let rt = tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+        .map_err(|e| format!("probe runtime: {e}"))?;
+    rt.block_on(async move {
+        let client = reqwest::Client::builder()
+            .timeout(Duration::from_secs(2))
+            .redirect(reqwest::redirect::Policy::limited(3))
+            .danger_accept_invalid_certs(true)
+            .build()
+            .map_err(|e| format!("probe client: {e}"))?;
+        client
+            .get(&url)
+            .send()
+            .await
+            .map(|response| response.status().as_u16())
+            .map_err(|e| format!("probe send: {e}"))
+    })
+}
+
+/// Best-effort tail of the observatorium container's podman logs. Used
+/// in the readiness-probe failure message so the user has something
+/// actionable to look at without having to know the container name.
+/// Routes through `tillandsias-podman::PodmanClient::log_tail` to honour
+/// the idiomatic-podman layer contract (`tests::idiomatic_podman_launch_
+/// paths_do_not_bypass_shared_layer`).
+fn observatorium_logs_tail(project_name: &str, lines: usize) -> String {
+    let container = observatorium_container_name(project_name);
+    let rt = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(rt) => rt,
+        Err(e) => return format!("    (could not build log-tail runtime: {e})"),
+    };
+    let client = PodmanClient::new();
+    let tail = rt.block_on(async move { client.log_tail(&container, lines).await });
+    match tail {
+        Ok(t) if t.lines.is_empty() => "    (container logs are empty)".into(),
+        Ok(t) => t
+            .lines
+            .iter()
+            .map(|l| format!("    {l}"))
+            .collect::<Vec<_>>()
+            .join("\n"),
+        Err(e) => format!("    (podman log_tail failed: {e})"),
+    }
 }
 
 #[cfg(test)]

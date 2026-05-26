@@ -20,32 +20,39 @@ and surface logs or inspect data when it is not.
 
 ## Current evidence
 
-- The observatorium launcher still needs better diagnostics on readiness failure.
-- The user-facing error path should be one actionable failure, not repeated churn.
+- Step 16 slice 1 shipped at `3d75eeef`: `wait_for_observatorium_http_ready`
+  polls the real HTTPS page and accepts 2xx/3xx/4xx readiness responses.
+- On readiness failure, the launcher reports one actionable error with
+  observatorium container log tail through the shared Podman client.
+- Remaining UX work should align OpenCode-web with the same readiness pattern
+  and add any still-missing inspect data to failure output.
 
 ## Next action
 
-- Make readiness check the real page, not just container startup.
-- Attach container logs and inspect data to failures.
+- After the Step 15 exit-125 cascade UX residual is closed, extend the
+  readiness/log-capture pattern to OpenCode-web.
+- Add inspect data if log tail alone is not enough to distinguish route versus
+  container startup failures.
 - Keep the browser and tray UX aligned with the same canonical hostname.
 
 ## Checkpoint and push expectation
 
 - Branch: `linux-next`
-- Checkpoint: pending
-- Push: after readiness failures are diagnosable from a single run.
+- Checkpoint: slice 1 pushed at `3d75eeef`; current coordination head
+  `aa8fc2b9`.
+- Push: after OpenCode-web readiness parity or the next diagnostics slice.
 
 ## Handoff note
 
-The next agent should preserve the canonical hostname while making failure
-diagnostics useful enough to debug route versus container startup issues.
+The next agent should preserve the canonical hostname, reuse the Podman client
+for diagnostics, and avoid direct `podman` shellouts in readiness paths.
 
 ## Repeat-mode progress report shape
 
 - Current phase: readiness and UX tightening
-- Focus task: observatorium readiness probes and error reporting
+- Focus task: OpenCode-web readiness parity and remaining diagnostics
 - Blockers: none recorded
-- Next action: validation gate updates
+- Next action: extend the real-page readiness pattern beyond observatorium
 
 ## Execution mode
 

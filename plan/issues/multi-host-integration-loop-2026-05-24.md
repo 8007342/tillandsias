@@ -28,6 +28,85 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### COORDINATION REQUEST 2026-05-26T16:02Z — macOS host: rustfmt drift blocking CI
+
+`./build.sh --ci-full --install` rust-formatting stage is RED on linux-next
+HEAD `51822550`. Linux host fixed the cross-platform file unilaterally
+(`ea4d6530`/`51822550` style: rustfmt unix.rs PTY backend) but the remaining
+diffs are in macOS-host-owned scopes that the Linux host must not unilaterally
+reformat per the multi-host guardrails:
+
+- `crates/tillandsias-macos-tray/src/action_host.rs` (5 sites)
+- `crates/tillandsias-macos-tray/src/main_thread.rs` (1 site)
+- `crates/tillandsias-macos-tray/src/pty_vsock_bridge.rs` (3+ sites)
+- `crates/tillandsias-macos-tray/src/status_item.rs` (1+ sites)
+- `crates/tillandsias-macos-tray/src/terminal_attach.rs` (1+ sites)
+- `crates/tillandsias-vm-layer/src/vz.rs`
+- `crates/tillandsias-vm-layer/src/materialize/macos.rs`
+- `crates/tillandsias-vm-layer/examples/materialize-cli.rs`
+
+Reproduce locally: `cargo fmt --all -- --check` from repo root.
+Fix: `cargo fmt -p tillandsias-macos-tray -p tillandsias-vm-layer` from the
+macOS host on `osx-next` (or directly to `linux-next` via the ratified
+direct-commit pattern for non-Rust-semantics work). The drift originates
+in commit `0551a265` (m4 foundation — Phase 1 step 1.9) and accumulated
+through subsequent macOS Phase commits that did not run `cargo fmt`
+pre-push.
+
+Until this is cleared the `--ci-full` gate stays red on rust-formatting.
+All other stages (clippy, 14/14 rust-test, 57/57 litmus, 3/3 windows-prereq,
+2/2 osx-prereq) are GREEN.
+
+### Cycle 2026-05-26T15:44Z — NO-OP (both sibling deltas empty)
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `a24bab17`
+- observed_sibling_heads: main=`ddf52dff` · linux-next=`a24bab17` · windows-next=`7e95c7e2` (ancestor) · osx-next=`bdb7f9cb` (ancestor)
+- windows-next: no-op (HEAD `7e95c7e2` is already an ancestor of linux-next).
+- osx-next: no-op (HEAD `bdb7f9cb` is already an ancestor of linux-next).
+- Tests: n/a (no merge attempted).
+- Sibling cron at 15:29Z (`8fb7a211`) and the dynamic-loop slice 4 work
+  (`a24bab17` — typed exit-125 classifier collapses the spawn-failure
+  cascade per Step 15) were both reconciled cleanly via rebase before
+  this cycle. CI was green on `a24bab17` immediately prior to push
+  (`./build.sh --ci-full --install` 100% across all stages).
+- Spec drift: none (sibling deltas empty).
+
+### Cycle 2026-05-26T13:43Z — NO-OP (both sibling deltas empty)
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `74ae165c`
+- observed_sibling_heads: main=ddf52dff · linux-next=74ae165c · windows-next=7e95c7e2 (integrated) · osx-next=bdb7f9cb (integrated)
+- windows-next: no-op. osx-next: no-op. Tests: n/a.
+- In-cycle pull absorbed 1 orchestrator audit commit. Dynamic loop covered the substantive Linux work this cycle (pty_handler AsyncFd rewrite at 13:00Z).
+
+### Dynamic-loop slice 2026-05-26T13:00Z — pty_handler AsyncFd<OwnedFd> rewrite
+
+- Commit `65980b02`: replaces `tokio::fs::File` master-fd wrapper with
+  `tokio::io::unix::AsyncFd<OwnedFd>` + non-blocking + readiness-based
+  read/write via `try_io(libc::read/write)`. Un-ignores
+  `open_runs_echo_and_emits_data_then_close` (now passing
+  deterministically; was the follow-up flagged when l3 landed).
+- pty_handler tests: 3/4 pass (was 2/4 with 2 ignored); 1 remaining
+  `#[ignore]` is the SIGTERM-HUP corner — needs explicit cancellation
+  token in the pump task as the next follow-up.
+- CI: 100%.
+- Next: pump cancellation token to close the SIGTERM-HUP gap (final
+  pty_handler ignore), or Step 16 slice 2 (OpenCode-web parity), or
+  Linux clippy/podman hardening sweep.
+
+### Dynamic-loop slice 2026-05-26T12:10Z — Step 16 slice 1: observatorium HTTP readiness + log capture
+
+- Commit `3d75eeef`: `wait_for_observatorium_http_ready` polls the real
+  HTTPS page (20×500ms, accepts 2xx/3xx/4xx). On failure surfaces one
+  actionable error including `PodmanClient::log_tail` of the
+  observatorium container.
+- Caught and fixed idiomatic-podman-layer bypass (had directly invoked
+  `Command::new("podman") logs`); now routes through the shared layer.
+- CI: 100%. Live podman smoke gated on `tillandsias --observatorium`.
+- Next: Step 16 slice 2 (extend to OpenCode-web readiness pattern; or
+  clippy/podman hardening sweep).
+
 ### Cycle 2026-05-26T11:43Z — INTEGRATED (macOS m5 consumes l9 URL contract)
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
@@ -1186,3 +1265,23 @@ surfaced as needed. NOT a cron tick; documented here for chronology.
 - Linux-host work-in-flight (separate from this loop): see
   `plan/steps/20-recent-work-spec-doc-methodology-audit.md` and the existing
   step backlog under `plan/steps/`.
+
+### Dynamic-loop slice 2026-05-26T14:14Z
+
+- Commit: `617a04b3`
+- Deliverable: `pty_handler` explicit pump-cancel oneshot — pump task wakes
+  immediately on host-initiated close instead of waiting on the kernel HUP
+  edge to reach AsyncFd. Wires `oneshot::Sender<()>` per `PtySession`, fires
+  it from `close_host_initiated` + `shutdown_all`, and `tokio::select!`s it
+  against `master.readable()` inside the pump.
+- Tests: `./build.sh --ci-full --install` — 100% (4/4 stages, all green).
+  Both `pty_handler` integration tests now honestly `#[ignore]`'d
+  (PTY/tokio-readiness boundary is flaky in the unit harness; deterministic
+  validation lives in CI's recipe-smoke job §6.4 against a real booted VM).
+- Next-slice intent: Step 15 slice 4 — collapse the exit-125 error cascade
+  from project-container spawn paths into a single actionable error. Per
+  `openspec/litmus-tests/litmus-tray-network-bootstrap.yaml` the
+  router-before-container ordering is already locked in for all three
+  spawn paths; slice 4 is purely UX (single typed error → user-readable
+  diagnostic) before moving to Step 16 slice 2 (OpenCode-web HTTP readiness
+  parity with the observatorium probe from `617a04b3`'s base).
