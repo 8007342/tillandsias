@@ -225,3 +225,31 @@ distilled summary. Then claim or split
 This file was committed and pushed to `origin/linux-next` at the end of the
 forge-diagnostics-automation session. The diagnostics prompt and litmus test
 are in place; the methodology gap requires orchestrator input.
+
+## agent_status_packet — forge-diagnostics/e2e-piggyback-orchestration — 2026-05-27T19:40Z
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- packet: `forge-diagnostics/e2e-piggyback-orchestration` — CLAIMED + slice 1
+  shipped (`a87afce1`). Dependency `methodology-update` confirmed landed
+  (methodology/forge-diagnostics.yaml + methodology/litmus.yaml present).
+- current plan / diagnostics log: **no raw diagnostics log captured yet** — a
+  real capture requires an installed `tillandsias` + a live forge during a slow
+  E2E/runtime-litmus run; this slice built the non-blocking annex + dedup
+  plumbing and wired the standalone litmus through it. The dedup path was
+  self-tested without a forge (reset → seed → skip-with-note → status → reset).
+- files touched: `scripts/forge-diagnostics-annex.sh` (new, non-blocking annex
+  with checksum dedup, --reset/--status), `openspec/litmus-tests/litmus-forge-diagnostics-e2e.yaml`
+  (two double-launch steps → one `--reset` + one annex call).
+- evidence: dedup self-test output (skip note → cycle-skips.log); annex `bash -n`
+  clean; litmus runner parses the amended spec.
+- privacy/isolation assessment: this slice proposes NO forge enhancement; it is
+  pure orchestration (capture + dedup + distill). No new mounts, creds, sockets,
+  or network changes. Envelope intact.
+- blockers/errors: NONE. (The earlier shared-CI rustfmt drift in macOS-owned
+  files is already RESOLVED — macOS fix `4935404a` is in linux-next;
+  `cargo fmt --all -- --check` clean as of `a87afce1`.)
+- next checkpoint: amend the other forge-launching E2E litmus files to call the
+  annex WITHOUT --reset (so the first captures, rest skip in-cycle); produce the
+  first real distilled summary on the next runtime-litmus that has a live forge;
+  then claim/split `forge-enhancements/curated-toolchain-backlog`.
+- lease: CONTINUE (more slices in this packet).
