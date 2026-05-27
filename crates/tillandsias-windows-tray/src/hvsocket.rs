@@ -80,9 +80,127 @@ pub fn wsl_utility_vm_id() -> Result<String, String> {
     })
 }
 
+/// Parse a `8-4-4-4-12` GUID string into a Win32 [`windows::core::GUID`]
+/// (mixed-endian: `data1`/`data2`/`data3` are integers, `data4` is the trailing
+/// 8 bytes as written). Returns `None` on a malformed GUID.
+pub fn parse_guid(s: &str) -> Option<windows::core::GUID> {
+    let s = s.trim().trim_start_matches('{').trim_end_matches('}');
+    let p: Vec<&str> = s.split('-').collect();
+    if p.len() != 5
+        || p[0].len() != 8
+        || p[1].len() != 4
+        || p[2].len() != 4
+        || p[3].len() != 4
+        || p[4].len() != 12
+    {
+        return None;
+    }
+    let data1 = u32::from_str_radix(p[0], 16).ok()?;
+    let data2 = u16::from_str_radix(p[1], 16).ok()?;
+    let data3 = u16::from_str_radix(p[2], 16).ok()?;
+    let tail = format!("{}{}", p[3], p[4]); // 16 hex = 8 bytes, big-endian
+    let mut data4 = [0u8; 8];
+    for (i, b) in data4.iter_mut().enumerate() {
+        *b = u8::from_str_radix(&tail[i * 2..i * 2 + 2], 16).ok()?;
+    }
+    Some(windows::core::GUID {
+        data1,
+        data2,
+        data3,
+        data4,
+    })
+}
+
+/// Connect to the in-VM control wire over a **Hyper-V socket** (`AF_HYPERV`) —
+/// the Windows-host realization of "connect to the guest's AF_VSOCK listener"
+/// for WSL2. Resolves the WSL utility-VM GUID + the vsock-port service GUID,
+/// opens an `AF_HYPERV` / `HV_PROTOCOL_RAW` stream socket, and `connect`s to
+/// `(VmId, ServiceId)`. Returns the connected socket as a [`std::net::TcpStream`]
+/// (a thin wrapper over the OS `SOCKET`; stream read/write work regardless of
+/// address family) so the control-wire framing can run over it.
+///
+/// @trace plan/issues/tray-convergence-coordination.md (F2)
+#[cfg(target_os = "windows")]
+pub fn connect_control_wire(port: u32) -> std::io::Result<std::net::TcpStream> {
+    use std::io::{Error, ErrorKind};
+    use std::os::windows::io::FromRawSocket;
+    use windows::Win32::Networking::WinSock::{
+        SOCK_STREAM, SOCKADDR, WSACleanup, WSADATA, WSAGetLastError, WSAStartup, closesocket,
+        connect, socket,
+    };
+
+    const AF_HYPERV: u16 = 34;
+    const HV_PROTOCOL_RAW: i32 = 1;
+
+    /// `SOCKADDR_HV` (hvsocket.h): family + reserved + 16-byte VmId + 16-byte
+    /// ServiceId GUIDs = 36 bytes.
+    #[repr(C)]
+    struct SockaddrHv {
+        family: u16,
+        reserved: u16,
+        vm_id: windows::core::GUID,
+        service_id: windows::core::GUID,
+    }
+
+    let vm = wsl_utility_vm_id().map_err(|e| Error::new(ErrorKind::NotFound, e))?;
+    let vm_guid =
+        parse_guid(&vm).ok_or_else(|| Error::new(ErrorKind::InvalidData, "bad WSL VM GUID"))?;
+    let svc_guid = parse_guid(&vsock_service_guid(port))
+        .ok_or_else(|| Error::new(ErrorKind::InvalidData, "bad service GUID"))?;
+
+    unsafe {
+        let mut wsadata = WSADATA::default();
+        if WSAStartup(0x0202, &mut wsadata) != 0 {
+            return Err(Error::other("WSAStartup failed"));
+        }
+        let sock = match socket(AF_HYPERV as i32, SOCK_STREAM, HV_PROTOCOL_RAW) {
+            Ok(s) => s,
+            Err(e) => {
+                WSACleanup();
+                return Err(Error::other(format!("AF_HYPERV socket() failed: {e}")));
+            }
+        };
+        let addr = SockaddrHv {
+            family: AF_HYPERV,
+            reserved: 0,
+            vm_id: vm_guid,
+            service_id: svc_guid,
+        };
+        let rc = connect(
+            sock,
+            &addr as *const SockaddrHv as *const SOCKADDR,
+            std::mem::size_of::<SockaddrHv>() as i32,
+        );
+        if rc != 0 {
+            let e = WSAGetLastError();
+            let _ = closesocket(sock);
+            return Err(Error::other(format!(
+                "AF_HYPERV connect to WSL VM (vsock {port}) failed: {e:?}"
+            )));
+        }
+        // Ownership of the connected SOCKET transfers to the TcpStream.
+        Ok(std::net::TcpStream::from_raw_socket(sock.0 as _))
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parses_guid_mixed_endian() {
+        let g = parse_guid("A5A7CF6F-FFF6-4EA9-B4A3-9557B0D5B0CA").expect("valid guid");
+        assert_eq!(g.data1, 0xA5A7_CF6F);
+        assert_eq!(g.data2, 0xFFF6);
+        assert_eq!(g.data3, 0x4EA9);
+        assert_eq!(g.data4, [0xB4, 0xA3, 0x95, 0x57, 0xB0, 0xD5, 0xB0, 0xCA]);
+    }
+
+    #[test]
+    fn rejects_malformed_guid() {
+        assert!(parse_guid("not-a-guid").is_none());
+        assert!(parse_guid("A5A7CF6F-FFF6-4EA9-B4A3").is_none());
+    }
 
     #[test]
     fn control_wire_port_maps_to_expected_service_guid() {
@@ -129,5 +247,22 @@ mod tests {
     #[test]
     fn none_when_no_vm_running() {
         assert_eq!(parse_wsl_vm_id(""), None);
+    }
+
+    /// Live round-trip proof (F2): with a running WSL distro whose
+    /// `tillandsias-headless.service` is `active` on vsock 42420, the host
+    /// resolves the VM GUID + service GUID and establishes an `AF_HYPERV`
+    /// connection to the in-VM listener. Run explicitly:
+    /// `cargo test -p tillandsias-windows-tray -- --ignored hvsocket`.
+    #[cfg(target_os = "windows")]
+    #[test]
+    #[ignore = "needs a running WSL distro with the headless listening on vsock 42420"]
+    fn e2e_hvsocket_connects_to_headless() {
+        let stream = connect_control_wire(42420)
+            .expect("AF_HYPERV connect to the in-VM headless vsock listener");
+        // Connection established = the full F2 path works (VM-GUID + service-GUID
+        // + AF_HYPERV connect → guest AF_VSOCK listener). Full Hello/HelloAck
+        // framing over this stream is the next increment.
+        println!("HvSocket connected to in-VM headless: {stream:?}");
     }
 }
