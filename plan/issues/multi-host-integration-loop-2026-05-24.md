@@ -45,7 +45,9 @@ rooted at `origin/linux-next`, then runs the full installed mechanism:
 `HEAD:linux-next` only after the full mechanism passes. Push rejection becomes
 `status=stale-push`; never force-push. Durable conclusions still land in this
 ledger and `plan/loop_status.md`; ignored local logs are only next-cycle
-handoff state.
+handoff state. If sibling plan-doc conflicts block the merge, the run records
+the conflict, resets the worktree to `origin/linux-next`, and still runs the
+full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
@@ -59,8 +61,9 @@ handoff state.
   ahead of `linux-next` with Windows w9 transport/menu code and smoke evidence.
 - A first check/test-oriented run failed fast on plan-doc conflicts
   (`tray-convergence-coordination.md`, `windows-next-thin-tray.md`). That is
-  evidence for the next merge reconciliation, but the required long run is now
-  the full `--ci-full --install` plus installed `tillandsias` litmus.
+  evidence for the next merge reconciliation; future runtime-litmus runs still
+  continue on latest integrated `linux-next` so build/runtime output is not
+  starved by documentation conflicts.
 - The next recurrent cycle should either publish a runtime-litmus run id/log
   path, fold a completed run result, or record the exact start blocker.
 

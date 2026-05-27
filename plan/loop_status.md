@@ -16,6 +16,9 @@ LastExecutionTime: 2026-05-27T19:05Z
 - A first check/test-oriented integration run was started before this
   correction and failed fast on plan-doc conflicts; its ignored local log is
   available under `plan/localwork/integration-runs/`.
+- If sibling plan-doc conflicts recur, the runtime-litmus runner should record
+  them, reset to `origin/linux-next`, and still run the full installed runtime
+  litmus so the next cycle has build/runtime output to inspect.
 - Added a required three-host assignment board for every loop so hosts get
   primary and fallback work rather than idling behind stale dependencies.
 - Fetched origin, confirmed `linux-next` was clean and up to date at

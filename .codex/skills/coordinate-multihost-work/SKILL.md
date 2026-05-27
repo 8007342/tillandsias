@@ -120,8 +120,10 @@ The background run MUST:
 1. Create a fresh worktree from `origin/linux-next`.
 2. Merge `origin/windows-next` if it is ahead; then merge `origin/osx-next` if
    it is ahead.
-3. On conflicts, stop immediately with `status=failed` and leave `git status`,
-   conflicted paths, and merge output in `run.log`.
+3. On sibling-merge conflicts, record the conflict in `run.log`, mark
+   `merge_status=failed`, assign or preserve a conflict-resolution packet, then
+   reset the runtime worktree back to `origin/linux-next` and still run the
+   runtime litmus on the latest integrated code.
 4. Preserve newer `linux-next` coordination files and known manifest repins
    when resolving only if the resolution is mechanical and already documented in
    the active ledger. Otherwise fail and assign a conflict-resolution packet.
@@ -134,9 +136,12 @@ The background run MUST:
    `Run a Tillandsias runtime litmus for this checkout. Exercise OpenCode
    startup, diagnostics, container readiness, and report exact failures with
    commands and log paths.`
-7. On success, commit the merge with a checkpoint-style message and push
-   `HEAD:linux-next`.
-8. On push rejection, mark `status=stale-push`; the next loop must fetch and
+7. If sibling merges were clean and the full runtime litmus passes, commit the
+   merge with a checkpoint-style message and push `HEAD:linux-next`.
+8. If merge conflicts happened but the runtime litmus passed on unmerged
+   `linux-next`, mark `status=succeeded-with-merge-blocker` and record both the
+   litmus result and the merge-conflict paths.
+9. On push rejection, mark `status=stale-push`; the next loop must fetch and
    start a fresh run rather than force-pushing.
 
 The parent coordinator loop records the run id, pid, heads, worktree, log path,
