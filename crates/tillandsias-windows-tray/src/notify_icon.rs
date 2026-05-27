@@ -205,47 +205,7 @@ pub fn run() -> ! {
         // recipe path lands. Progress is reported via the TrayProgress sink
         // which updates the tooltip and menu.
         if provisioning_enabled() {
-            let progress = std::sync::Arc::new(TrayProgress::new(hwnd));
-            let lifecycle = WslLifecycle::new();
-            tokio::task::spawn_local(async move {
-                // Recipe path (w5): fetch the CI-published rootfs from the
-                // embedded manifest → wsl --import → systemd → HvSocket control-wire
-                // handshake. Proven E2E on real hardware (2026-05-26). Supersedes
-                // the legacy `bootstrap` OCI-base + separate-binary download — the
-                // recipe rootfs self-installs the headless on first boot.
-                match lifecycle.provision_via_recipe(progress).await {
-                    Ok(()) => {
-                        // Control wire is up → flip the condensed status to Ready.
-                        // (The popup already builds the full parity menu from
-                        // MENU_STATE; readiness is reflected in the status line.)
-                        tracing::info!("VM ready — control wire established");
-                        update_status_text("\u{1F7E2} Ready", hwnd);
-                        // WSL2 idles the utility VM down when no host-side session
-                        // holds it open, which silently drops the headless + the
-                        // HvSocket control wire. Hold a keepalive session for the
-                        // tray's lifetime: parking this task keeps `_keepalive`
-                        // alive; on Quit the LocalSet drops the task → kill_on_drop
-                        // releases the VM to idle normally again.
-                        match lifecycle.spawn_keepalive() {
-                            Ok(_keepalive) => {
-                                tracing::info!("VM keepalive holding the control wire warm");
-                                std::future::pending::<()>().await;
-                            }
-                            Err(err) => {
-                                eprintln!("VM keepalive spawn failed: {err}");
-                                update_status_text(
-                                    "\u{1F7E1} Ready (VM may idle out)",
-                                    hwnd,
-                                );
-                            }
-                        }
-                    }
-                    Err(err) => {
-                        eprintln!("WSL recipe provisioning failed: {err}");
-                        update_status_text("\u{1F534} Provisioning failed (see log)", hwnd);
-                    }
-                }
-            });
+            spawn_provisioning(hwnd);
         } else {
             tracing::info!(
                 "provisioning skipped (--no-provision / TILLANDSIAS_NO_PROVISION); \
@@ -264,6 +224,12 @@ pub fn run() -> ! {
             unsafe {
                 let _ = TranslateMessage(&msg);
                 DispatchMessageW(&msg);
+            }
+            // A `Retry` click (handled synchronously in the wndproc above) only
+            // sets a flag; spawn the new provisioning task here, in the LocalSet
+            // context, right after dispatching the click that requested it.
+            if RETRY_REQUESTED.swap(false, std::sync::atomic::Ordering::SeqCst) {
+                spawn_provisioning(hwnd);
             }
             // Cooperative tokio drain.
             tokio::task::yield_now().await;
@@ -343,6 +309,63 @@ fn open_log_file() {
     let _ = std::process::Command::new("explorer.exe")
         .arg(format!("/select,{}", path.display()))
         .spawn();
+}
+
+/// Set by the `Retry` menu click (in the wndproc) and drained by the message
+/// loop, which spawns a fresh provisioning task in the LocalSet context.
+static RETRY_REQUESTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// True while a provisioning task is running or has succeeded (and is parked
+/// holding the VM keepalive). Guards `spawn_provisioning` so a `Retry` while
+/// provisioning is already in flight — or already Ready — is a no-op; it's
+/// cleared only when a provisioning attempt fails, re-enabling `Retry`.
+static PROVISIONING_ACTIVE: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// Spawn the WSL recipe-provisioning task on the current LocalSet: fetch the
+/// CI-published rootfs from the embedded manifest → `wsl --import` → systemd →
+/// HvSocket control-wire handshake (proven E2E on real hardware 2026-05-26).
+/// On success it flips the status to Ready and parks holding a VM keepalive
+/// (WSL2 idles the utility VM down otherwise, dropping the control wire). On
+/// failure it clears `PROVISIONING_ACTIVE` so `Retry` can try again.
+///
+/// Idempotent: a (re)trigger while a task is already active/parked is ignored.
+fn spawn_provisioning(hwnd: HWND) {
+    use std::sync::atomic::Ordering::SeqCst;
+    if PROVISIONING_ACTIVE.swap(true, SeqCst) {
+        tracing::info!("provisioning already active; ignoring (re)trigger");
+        return;
+    }
+    let progress = std::sync::Arc::new(TrayProgress::new(hwnd));
+    let lifecycle = WslLifecycle::new();
+    tokio::task::spawn_local(async move {
+        match lifecycle.provision_via_recipe(progress).await {
+            Ok(()) => {
+                tracing::info!("VM ready — control wire established");
+                update_status_text("\u{1F7E2} Ready", hwnd);
+                // Parking this task holds `_keepalive` for the tray's lifetime;
+                // on Quit the LocalSet drops the task → kill_on_drop releases the
+                // VM to idle normally again. PROVISIONING_ACTIVE stays set (Ready),
+                // so Retry is a no-op while the VM is up.
+                match lifecycle.spawn_keepalive() {
+                    Ok(_keepalive) => {
+                        tracing::info!("VM keepalive holding the control wire warm");
+                        std::future::pending::<()>().await;
+                    }
+                    Err(err) => {
+                        eprintln!("VM keepalive spawn failed: {err}");
+                        update_status_text("\u{1F7E1} Ready (VM may idle out)", hwnd);
+                    }
+                }
+            }
+            Err(err) => {
+                eprintln!("WSL recipe provisioning failed: {err}");
+                update_status_text("\u{1F534} Provisioning failed (Retry to try again)", hwnd);
+                // Re-enable Retry.
+                PROVISIONING_ACTIVE.store(false, SeqCst);
+            }
+        }
+    });
 }
 
 /// Whether the tray should drive WSL provisioning on launch. Dev mode disables
@@ -652,9 +675,15 @@ fn dispatch_action(hwnd: HWND, action: MenuAction) {
             );
         }
         MenuAction::Retry => {
-            tracing::info!(
-                "retry requested: provisioning-retry hook wires with the lifecycle iteration"
-            );
+            // The message loop owns the LocalSet; it spawns the new provisioning
+            // task on the next drain (right after this click is dispatched).
+            if PROVISIONING_ACTIVE.load(std::sync::atomic::Ordering::SeqCst) {
+                tracing::info!("retry ignored: provisioning already active / VM Ready");
+            } else {
+                tracing::info!("retry requested: re-triggering provisioning");
+                RETRY_REQUESTED.store(true, std::sync::atomic::Ordering::SeqCst);
+                update_status_text("\u{1F504} Retrying provisioning\u{2026}", hwnd);
+            }
         }
         MenuAction::OpenLog => {
             tracing::info!(log = %log_file_path().display(), "opening tray log in Explorer");
