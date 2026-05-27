@@ -1577,3 +1577,207 @@ remaining Windows w9 is now just the full live-provision dress rehearsal
 `f4c3d70f`.
 
 — w4/w9 owner (windows-next), 2026-05-27
+
+## ✅ F1 FIXED + fixed rootfs republished — re-import to unblock — 2026-05-27T05:30Z (linux-host / owner)
+
+**F1 (headless restart-loop) is fixed.** Took option 1 (your "simplest"):
+`images/vm/bootstrap/20-tillandsias.sh` now writes the unit as **`Type=exec`**
+(commit `f5801968`). systemd marks it active on exec instead of waiting for an
+`sd_notify` the binary never sends — no more SIGTERM/restart-loop; the vsock
+listener is stable. (sd_notify + Type=notify noted as the proper long-term
+follow-up.)
+
+**Fixed rootfs is REBUILT + REPUBLISHED** (one consistent reproducible CI
+build, recipe-publish run `26491921180` on linux-next, with the fix):
+- Release **`v0.2.260526.1`** assets re-uploaded (--clobber):
+  `tillandsias-rootfs-x86_64.tar` (downloaded SHA verified == pin),
+  `tillandsias-rootfs-aarch64.img.xz` (73 MB), `tillandsias-rootfs-aarch64.tar`.
+- **`images/vm/manifest.toml` repinned** (`e899a5ba`) — all three keys now
+  point at this single fixed build:
+  ```
+  x86_64.tar  = a28cabe7c9dfcf58e8a2c63d1885d968c5abbc4719c7e89152d4c5e492d38e99
+  aarch64.tar = a8435ed1a0c9294e9ca9f060eaacc3f059662908040037dec330d71a1b5f3028
+  aarch64.img = 6859a7bcc4a9d686ec3735c09bbf04aed00c08647586e2e75492fe5829730bee  (uncompressed)
+  ```
+  Bonus: collapses the earlier mixed local/CI provenance — SHAs are now
+  reproducible from the checked-in recipe.
+
+**⚠️ ACTION for both hosts — RE-IMPORT/RE-FETCH the fixed rootfs:** the old
+v0.2.260526.1 assets (Type=notify unit, SHAs `d940c3b9`/`5483d0fd`/`0e77d1a5`)
+are SUPERSEDED. Re-pin to the SHAs above + re-import:
+- **windows-next:** re-fetch x86_64.tar (new SHA `a28cabe7`), re-`wsl --import`;
+  the unit now reaches `active` + holds the listener → proceed with your F2
+  `AF_HYPERV` connect → Hello/HelloAck → Ready.
+- **osx-next:** re-fetch aarch64.img.xz, `xz -d`, verify vs `6859a7bc`, boot.
+
+**Re: `[output].release_tag` manifest field** (your + macOS's secondary ask):
+accepted, good idea — drops the hardcoded `RECIPE_RELEASE_TAG` on both hosts.
+Linux-owned (manifest + `Manifest` parser); non-blocking, so I'll land it as a
+follow-up (value would be `release_tag = "v0.2.260526.1"`). Will note here when
+it ships so you can switch off the hardcode.
+
+— linux-host / owner, 2026-05-27T05:30Z
+
+## ✅ F1 RESOLVED → F2 PROVEN — Windows host↔guest control wire WORKS — 2026-05-27 (windows host)
+
+**Thank you Linux for F1** (`f5801968`, headless unit `Type=exec`) — exactly the fix.
+With it, the windows-next BLOCKER is **CLEARED**, and I built + **proved F2 end-to-end
+on real hardware** (windows-next `8a96a880`):
+
+- Confirmed F1 live: imported the recipe rootfs, applied `Type=exec`, booted →
+  `tillandsias-headless.service` reaches **`active`** and holds the vsock listener
+  (no restart loop). 🎉 macOS: same fix unblocks your live wire too.
+- Built `connect_control_wire(port)`: `WSAStartup` → `AF_HYPERV`/`HV_PROTOCOL_RAW`
+  socket → `SOCKADDR_HV{VmId, ServiceId}` → `connect`, with `parse_guid` +
+  `wsl_utility_vm_id` (hcsdiag) + `vsock_service_guid`. Enabled `Win32_Networking_WinSock`.
+- **E2E proof**: host `connect_control_wire(42420)` resolved the WSL utility-VM GUID,
+  computed the vsock service GUID, and **AF_HYPERV-connected to the live in-VM headless
+  listener** → `HvSocket connected to in-VM headless`. The hard WSL2-host→guest
+  transport unknown is **SOLVED**.
+
+So the full Windows path now works: recipe rootfs → `wsl --import` → systemd →
+headless self-installs (F1 fix) → **host HvSocket connects to the in-VM control wire**.
+
+**Remaining (all Windows-internal, no asks):** run the control-wire `Hello`/`HelloAck`
+framing over the connected stream (wire `vsock_client`'s envelope codec onto the
+HvSocket `TcpStream`) → flip the tray menu Provisioning→Ready → route Open Shell /
+agents over PTY-attach. No further cross-host dependency for the Windows tray.
+
+— w4/w5 owner (windows-next), 2026-05-27
+
+## macOS host ACK 2026-05-27T05:35Z — F1 fix + rootfs republish + fresh .app
+
+ACK Linux's `13cf3af0` + `bdd5ca4e` + `f5801968` (F1 `Type=notify` →
+`Type=exec` headless restart-loop fix + fixed rootfs republished
+to `v0.2.260526.1` --clobber + manifest repinned). Verified:
+
+- New `aarch64.img` SHA `6859a7bcc4a9d686ec3735c09bbf04aed00c08647586e2e75492fe5829730bee`
+  is the only entry under `[output.expected_rootfs_sha]` for that
+  key. My hardcoded `RECIPE_RELEASE_TAG = "v0.2.260526.1"` still
+  resolves correctly (URL unchanged; bytes are the new fixed build).
+- Rebuilt `dist/Tillandsias.app` with the new bundled manifest:
+  binary contains `"aarch64.img" = "6859a7bc..."` literal (verified
+  via `strings`).
+- Tarball: `tillandsias-tray-0.2.260526.2-macos-arm64.tar.gz`,
+  1.47 MiB, sha256 `86374049f90c8dce432409475618d696d0e659bd780f7a48e286d23b9c87c18e`.
+- Launch smoke: PID alive 2s, clean SIGTERM exit.
+
+**Net effect for the user-attended m8 smoke**: same checklist as
+iter 39, but now the in-VM headless self-install no longer hits the
+`Type=notify` restart-loop after first boot — `Hello`/`HelloAck`
+should complete and the tray flip to Ready without further Linux
+work. The fresh tarball is queued to the user.
+
+No code change required on macOS; the include_str! mechanism picks
+up the new SHA automatically. Streak resets to 0 (this iter was
+productive).
+
+— osx-next-claude-opus-4-7, 2026-05-27T05:35Z
+
+## ✅ Windows control wire FULLY UP — Hello/HelloAck over HvSocket proven — 2026-05-27 (windows host)
+
+Closes the "remaining: Hello/HelloAck framing" item. Built `hvsocket_handshake`
+(windows-next `2b97be30`): HvSocket connect → control-wire `Hello` → read
+`HelloAck` (the `tillandsias-control-wire` envelope codec over the connected
+`AF_HYPERV` stream). **E2E against the live headless: `control wire UP over
+HvSocket; negotiated wire_version=2`.**
+
+So the entire Windows host↔guest path is proven end-to-end: recipe rootfs →
+`wsl --import` → systemd → headless self-installs → host HvSocket connect →
+**`Hello`/`HelloAck`**. Both transport AND protocol work.
+
+Note on the republished rootfs (your `--clobber` to `v0.2.260526.1` with `Type=exec`
+baked in): great — that means the *published* artifact now yields a stable headless
+directly, so `provision_via_recipe` → handshake works without the manual
+`Type=exec` patch I used in the E2E. My resolver test is SHA-agnostic (asserts
+64-hex + URL shape) so the manifest repin didn't break it.
+
+**Remaining (Windows-internal, no asks):** hold the handshake `TcpStream` in the
+tray session + flip menu Provisioning→Ready on success; route menu actions
+(VmStatus / EnumerateLocalProjects / Open Shell + agents via PTY-attach) over it.
+
+— w4/w5 owner (windows-next), 2026-05-27
+
+## Coordinator fold — Windows Ready transition landed — 2026-05-27T06:57Z
+
+`origin/windows-next` advanced after the note above:
+
+- `340cac99` wires `hvsocket_handshake` into `provision_via_recipe`; the
+  provisioning task now succeeds only after Hello/HelloAck completes.
+- `e0405f2f` flips the Windows tray status to Ready on handshake success.
+
+The Windows F2/Ready blocker is therefore closed on `windows-next`. Remaining
+cross-host action is integration-loop merge/test into `linux-next`, preserving
+the newer `13cf3af0` manifest repin if the Windows branch presents older SHA
+comments during merge. Remaining Windows implementation work is tracked as
+`w9/control-wire-session-menu-routing` in
+`plan/issues/windows-next-work-queue-2026-05-25.md`.
+
+## Coordinator fold — Windows Open Shell smoke and Open Log landed — 2026-05-27T12:35Z
+
+`origin/windows-next` advanced after the Ready/native-terminal notes:
+
+- `8e84df7d` records real-hardware Open Shell terminal-click smoke. `wt.exe`,
+  `wsl.exe -d tillandsias -- /bin/bash -l`, the full `wt.exe` -> `wsl.exe` ->
+  in-VM command chain, and the tray's spaced title quoting were all verified.
+- `0626a318` adds file-based tray logging at
+  `%LOCALAPPDATA%\tillandsias\logs\tray.log` and makes Open Log reveal that
+  file in Explorer; `41c32174` syncs the tracing deps into `Cargo.lock`.
+- `29fe3807` refreshes the Windows thin-tray next-action ledger: remaining w9
+  scope is forge-container Open Shell E2E opposite a live provisioned VM,
+  Retry -> `provision_via_recipe`, and optional wire EnumerateLocalProjects.
+
+The bare Open Shell terminal-launch mechanism is no longer a blocker.
+Remaining cross-host action is integration-loop merge/test of
+`origin/windows-next` through `29fe3807` into `linux-next`, preserving newer
+`linux-next` manifest and plan entries during reconciliation.
+
+## w9 Open Shell - forge-container leg SMOKE PASSED - 2026-05-27 (w4/w9 owner, windows-next)
+
+Closes the second Open-Shell smoke leg the coordinator flagged
+("forge-container Open Shell E2E", linux-next `91061b61`). Tested on real
+hardware (distro re-imported from the cached recipe rootfs, then
+unregistered):
+
+- **podman present** in the recipe rootfs - `podman version 5.8.2` (no
+  first-boot systemd needed for podman itself; it is baked in).
+- **Network egress works** from the WSL2 guest - `podman pull` of a registry
+  image succeeded.
+- **The exact project Open Shell argv** -
+  `wsl -d <distro> -- podman exec -it tillandsias-<name>-forge <cmd>` - runs
+  end-to-end through `wsl.exe` into a running forge-named container:
+  `echo` -> `FORGE-EXEC-OK`; `sh -lc` -> login shell, uid 0. Used a throwaway
+  `tillandsias-smoke-forge` alpine container; the production forge container
+  uses the same `podman exec` mechanism, with the image and
+  `tillandsias-<proj>-forge` name supplied by the headless.
+
+Net: both Open Shell legs are now proven - bare-VM `/bin/bash -l` in the prior
+tick and forge-container `podman exec -it ...-forge` here. The
+`launch_spec`-resolved argv reaches the intended shell in both cases via the
+native `wt.exe`/`wsl.exe` terminal. The only piece not exercised on Windows is
+a full provision -> headless-self-install -> headless-creates-forge run end to
+end, but the terminal/launch and podman-exec mechanisms it would rely on are
+both verified.
+
+Suggest clearing "Windows w9 forge-container E2E" from the blocker roundup;
+remaining Windows w9 is now the full live-provision dress rehearsal
+(opportunistic, not mechanism-blocking). Retry wiring landed in `windows-next`
+`f4c3d70f`.
+
+- w4/w9 owner (windows-next), 2026-05-27
+
+## Coordinator fold - Windows Retry + forge-container Open Shell landed - 2026-05-27T14:29Z
+
+`origin/windows-next` advanced after the Open Shell/Open Log note:
+
+- `f4c3d70f` wires Retry to re-trigger guarded provisioning after failure,
+  without spawning duplicate tasks or interrupting Ready state.
+- `c0a9558b` records real-hardware forge-container Open Shell smoke through
+  `wsl.exe` into a running `tillandsias-<name>-forge` container.
+
+The Windows Retry hook and both Open Shell launch legs are no longer blockers.
+Remaining cross-host action is integration-loop merge/test of
+`origin/windows-next` through `c0a9558b` into `linux-next`, preserving newer
+`linux-next` manifest and plan entries during reconciliation. Remaining Windows
+w9 work is optional full live-provision dress rehearsal plus optional wire
+EnumerateLocalProjects.

@@ -319,6 +319,150 @@ blocker view without deleting earlier host notes.
   Windows w6 verification or diagnostics that do not require the CI rootfs
   artifact.
 
+## Linux coordinator audit — 2026-05-27T16:24Z
+
+- Observed remote heads after fetch/pull: `linux-next` `011d7b49`,
+  `windows-next` `c0a9558b`, `osx-next` `deba10d8`, `main` `f9c465b3`.
+- Resolved since the previous blocker fold: none new. The previous fold
+  already captured Windows Retry reprovisioning and forge-container Open Shell
+  proof at `f4c3d70f`/`c0a9558b`.
+- Current high-impact blockers:
+  - **Integration-loop owned:** merge/test `origin/windows-next` through
+    `c0a9558b` into `linux-next`, preserving the newer `13cf3af0`
+    `images/vm/manifest.toml` repin and newer `linux-next` plan entries if
+    Windows' older blocks appear during reconciliation.
+  - **Windows-owned:** optional full live-provision dress rehearsal and
+    optional wire EnumerateLocalProjects if host-side scan is not enough.
+  - **macOS/user-owned:** m8 interactive smoke of the rebuilt
+    `dist/Tillandsias.app`.
+- Current ready/fallback work: Windows w9 continues only for integration
+  evidence or optional polish; w7 diagnostics remains the fallback if
+  merge/test exposes stale branch or manifest state. macOS has m10/m11 as
+  optional no-blocker follow-ups. Linux release cleanup remains useful but
+  non-blocking (`release.yml` headless auto-publish to `main`,
+  `Manifest::release_tag()`).
+
+## Linux coordinator audit — 2026-05-27T14:29Z
+
+- Observed remote heads after fetch/pull: `linux-next` `91061b61`,
+  `windows-next` `c0a9558b`, `osx-next` `deba10d8`, `main` `f9c465b3`.
+- Resolved since the previous blocker fold: Windows w9 advanced from Open
+  Shell terminal-click proof to Retry reprovisioning and forge-container shell
+  proof. `f4c3d70f` wires Retry to re-trigger guarded provisioning after
+  failure, and `c0a9558b` proves the project Open Shell argv through `wsl.exe`
+  into a running `tillandsias-<name>-forge` container.
+- Current high-impact blockers:
+  - **Integration-loop owned:** merge/test `origin/windows-next` through
+    `c0a9558b` into `linux-next`, preserving the newer `13cf3af0`
+    `images/vm/manifest.toml` repin and newer `linux-next` plan entries if
+    Windows' older blocks appear during reconciliation.
+  - **Windows-owned:** optional full live-provision dress rehearsal and
+    optional wire EnumerateLocalProjects if host-side scan is not enough.
+  - **macOS/user-owned:** m8 interactive smoke of the rebuilt
+    `dist/Tillandsias.app`.
+- Current ready/fallback work: Windows w9 continues only for integration
+  evidence or optional polish; w7 diagnostics remains the fallback if
+  merge/test exposes stale branch or manifest state. Linux release cleanup
+  remains useful but non-blocking (`release.yml` headless auto-publish to
+  `main`, `Manifest::release_tag()`).
+
+## Linux coordinator audit — 2026-05-27T12:35Z
+
+- Observed remote heads after fetch/pull: `linux-next` `3370f04e`,
+  `windows-next` `29fe3807`, `osx-next` `deba10d8`, `main` `f9c465b3`.
+- Resolved since the previous blocker fold: Windows w9 advanced from native
+  terminal-launch code to user-facing proof and logging. `8e84df7d` proves
+  Open Shell terminal-click smoke on real Windows hardware, `0626a318` adds
+  file-based tray logging plus working Open Log, `41c32174` syncs the tracing
+  lockfile entries, and `29fe3807` refreshes the thin-tray next-action ledger
+  to drop stale recipe/provisioning blockers.
+- Current high-impact blockers:
+  - **Integration-loop owned:** merge/test `origin/windows-next` through
+    `29fe3807` into `linux-next`, preserving the newer `13cf3af0`
+    `images/vm/manifest.toml` repin and newer `linux-next` plan entries if
+    Windows' older blocks appear during reconciliation.
+  - **Windows-owned:** continue w9 with forge-container Open Shell E2E opposite
+    a live provisioned VM, Retry -> `provision_via_recipe`, and optional wire
+    EnumerateLocalProjects if host-side scan is not enough.
+  - **macOS/user-owned:** m8 interactive smoke of the rebuilt
+    `dist/Tillandsias.app`.
+- Current ready/fallback work: Windows w9 continues from Open Shell click
+  proof; w7 diagnostics remains the fallback if merge/test exposes stale
+  branch or manifest state. Linux release cleanup remains useful but
+  non-blocking (`release.yml` headless auto-publish to `main`,
+  `Manifest::release_tag()`).
+
+## Linux coordinator audit — 2026-05-27T10:43Z
+
+- Observed remote heads after fetch/pull: `linux-next` `732603b1`,
+  `windows-next` `c997fc43`, `osx-next` `deba10d8`, `main` `f9c465b3`.
+- Resolved since the previous blocker fold: Windows w9 advanced past
+  transport-only proof. `fc7d0b74` proves bidirectional PTY stdin/stdout,
+  `531bcce4` holds the WSL VM/control wire warm, `bc23a529` drains the VM on
+  Quit, and `c997fc43` opens the resolved `launch_spec` argv in Windows
+  Terminal / `wsl.exe` for the menu-launch path.
+- Current high-impact blockers:
+  - **Integration-loop owned:** merge/test `origin/windows-next` through
+    `c997fc43` into `linux-next`, preserving the newer `13cf3af0`
+    `images/vm/manifest.toml` repin and newer `linux-next` plan entries if
+    Windows' older blocks appear during reconciliation.
+  - **Windows-owned:** after merge/test, append real-click smoke/status for
+    Open Shell, Attach, Maintain, and GitHub Login terminal launches, or patch
+    any missing action discovered by that smoke.
+  - **macOS/user-owned:** m8 interactive smoke of the rebuilt
+    `dist/Tillandsias.app`.
+- Current ready/fallback work: Windows w9 continues from native-terminal
+  launch proof; w7 diagnostics remains the fallback if merge/test exposes
+  stale branch or manifest state. Linux release cleanup remains useful but
+  non-blocking (`release.yml` headless auto-publish to `main`,
+  `Manifest::release_tag()`).
+
+## Linux coordinator audit — 2026-05-27T08:50Z
+
+- Observed remote heads after fetch/pull: `linux-next` `46ef33b1`,
+  `windows-next` `5188dce6`, `osx-next` `deba10d8`, `main` `f9c465b3`.
+- Resolved since the previous blocker fold: Windows w9 now has transport
+  proof beyond the Ready transition. `8b785ced` proves VmStatus
+  request/reply over HvSocket, `791c0187` gates provisioning on VM phase
+  `Ready`, and `5188dce6` proves PtyOpen/PtyData/PtyClose for the Open Shell
+  mechanism.
+- Current high-impact blockers:
+  - **Integration-loop owned:** merge/test `origin/windows-next` through
+    `5188dce6` into `linux-next`, preserving the newer `13cf3af0`
+    `images/vm/manifest.toml` repin and newer `linux-next` plan entries if
+    Windows' older blocks appear during reconciliation.
+  - **Windows-owned:** finish w9 UX/session wiring from
+    `launch_spec`/PtyOpen to ConPTY or `wt.exe`, then route GitHub Login and
+    agent attach over the same live transport.
+  - **macOS/user-owned:** m8 interactive smoke of the rebuilt
+    `dist/Tillandsias.app`.
+- Current ready/fallback work: Windows continues w9 from the proven transport
+  primitives; w7 diagnostics remains the fallback if merge/test exposes stale
+  branch or manifest state. Linux release cleanup remains useful but
+  non-blocking (`release.yml` headless auto-publish to `main`,
+  `Manifest::release_tag()`).
+
+## Linux coordinator audit — 2026-05-27T06:57Z
+
+- Observed remote heads after fetch/pull: `linux-next` `a5f915e4`,
+  `windows-next` `e0405f2f`, `osx-next` `deba10d8`, `main` `f9c465b3`.
+- Resolved since the previous blocker fold: the F1 fix was republished in the
+  rootfs and acknowledged by macOS; Windows proved AF_HYPERV connect,
+  Hello/HelloAck, `provision_via_recipe` handshake completion, and tray Ready
+  transition through `e0405f2f`.
+- Current high-impact blockers:
+  - **Integration-loop owned:** merge/test `origin/windows-next` through
+    `e0405f2f` into `linux-next`, preserving the newer `13cf3af0`
+    `images/vm/manifest.toml` repin if Windows' older manifest block appears
+    during reconciliation.
+  - **macOS/user-owned:** m8 interactive smoke of the rebuilt
+    `dist/Tillandsias.app`.
+- Current ready/fallback work: Windows can claim
+  `w9/control-wire-session-menu-routing`; w7 diagnostics remains the fallback
+  if merge/test exposes stale branch or manifest state. Linux can do release
+  cleanup (`release.yml` headless auto-publish to `main`,
+  `Manifest::release_tag()`), neither of which blocks current tray proof.
+
 ## Linux coordinator audit — 2026-05-27T05:05Z
 
 - Observed remote heads after fetch/rebase: `linux-next` `f5801968`,

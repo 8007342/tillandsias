@@ -28,6 +28,176 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Coordinator audit 2026-05-27T16:24Z — no new sibling advance; w9 merge/test still pending
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- observed_sibling_heads: main=`f9c465b3` · linux-next=`011d7b49` ·
+  windows-next=`c0a9558b` (ahead with unmerged Windows w9 transport/menu code,
+  Open Shell smoke, file logging/Open Log, Retry reprovisioning, and
+  forge-container Open Shell smoke) · osx-next=`deba10d8` (ancestor of
+  linux-next)
+- Coordination fold only; no sibling merge attempted in this pass.
+- Remote progress remains healthy. Since the 14:29Z fold, `linux-next`
+  advanced by one coordination commit (`011d7b49`) and no sibling branch
+  advanced.
+- Active integration watch is unchanged: `origin/windows-next` carries
+  unmerged code/docs through `c0a9558b`. The next integration loop should
+  merge/test those commits into `linux-next` or record exact conflicts.
+- Merge caution: preserve the newer `linux-next` `13cf3af0`
+  `images/vm/manifest.toml` repin and newer plan entries if the Windows branch
+  presents older blocks during reconciliation.
+- Current dependency chain: Windows w9 is proven through Retry and both Open
+  Shell launch legs but still needs merge/test into `linux-next`. The full
+  live-provision dress rehearsal and wire EnumerateLocalProjects are optional
+  Windows follow-ups. macOS still waits on user-attended m8 smoke.
+  Linux/release cleanup remains `release.yml` headless auto-publish to `main`
+  and the manifest-owned `release_tag` accessor.
+
+### Coordinator audit 2026-05-27T14:29Z — Windows w9 Retry + forge-container smoke; merge/test gate advances
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- observed_sibling_heads: main=`f9c465b3` · linux-next=`91061b61` ·
+  windows-next=`c0a9558b` (ahead with unmerged Windows w9 transport/menu code,
+  Open Shell smoke, file logging/Open Log, Retry reprovisioning, and
+  forge-container Open Shell smoke) · osx-next=`deba10d8` (ancestor of
+  linux-next)
+- Coordination fold only; no sibling merge attempted in this pass.
+- Remote progress is healthy. Since the 12:35Z fold, `linux-next` advanced by
+  one coordination commit and `windows-next` advanced from file logging/Open
+  Log to Retry reprovisioning plus forge-container Open Shell smoke. `osx-next`
+  and `main` did not advance.
+- Resolved gates: Windows Retry now re-runs guarded provisioning after a failed
+  attempt (`f4c3d70f`), and the project Open Shell argv reaches a running
+  forge-named container through `wsl.exe` (`c0a9558b`).
+- Active integration watch: `origin/windows-next` carries unmerged code/docs
+  through `c0a9558b`. The next integration loop should merge/test those commits
+  into `linux-next` or record exact conflicts.
+- Merge caution: preserve the newer `linux-next` `13cf3af0`
+  `images/vm/manifest.toml` repin and newer plan entries if the Windows branch
+  presents older blocks during reconciliation.
+- Current dependency chain: Windows w9 is proven through Retry and both Open
+  Shell launch legs but still needs merge/test into `linux-next`. The full
+  live-provision dress rehearsal and wire EnumerateLocalProjects are optional
+  Windows follow-ups. macOS still waits on user-attended m8 smoke.
+  Linux/release cleanup remains `release.yml` headless auto-publish to `main`
+  and the manifest-owned `release_tag` accessor.
+
+### Coordinator audit 2026-05-27T12:35Z — Windows w9 Open Shell smoke + logging; merge/test gate advances
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- observed_sibling_heads: main=`f9c465b3` · linux-next=`3370f04e` ·
+  windows-next=`29fe3807` (ahead with unmerged Windows w9 transport/menu code,
+  Open Shell smoke, file logging/Open Log, lockfile sync, and thin-tray docs) ·
+  osx-next=`deba10d8` (ancestor of linux-next)
+- Coordination fold only; no sibling merge attempted in this pass.
+- Remote progress is healthy. Since the 10:43Z fold, `linux-next` advanced by
+  one coordination commit and `windows-next` advanced from native terminal
+  launch code to Open Shell terminal-click smoke, file logging/Open Log,
+  lockfile sync, and a refreshed Windows thin-tray next action. `osx-next` and
+  `main` did not advance.
+- Resolved gates: Windows now proves Open Shell terminal-click smoke for
+  `wt.exe`, `wsl.exe`, bare-VM `/bin/bash -l`, and spaced-title quoting
+  (`8e84df7d`). The tray now writes a fixed log file and Open Log reveals it
+  in Explorer (`0626a318`/`41c32174`).
+- Active integration watch: `origin/windows-next` carries unmerged code/docs
+  through `29fe3807`. The next integration loop should merge/test those commits
+  into `linux-next` or record exact conflicts.
+- Merge caution: preserve the newer `linux-next` `13cf3af0`
+  `images/vm/manifest.toml` repin and newer plan entries if the Windows branch
+  presents older blocks during reconciliation.
+- Current dependency chain: Windows w9 is proven through the bare Open Shell
+  terminal launch but still needs merge/test into `linux-next`,
+  forge-container Open Shell E2E opposite a live provisioned VM, and Retry
+  wiring. macOS still waits on user-attended m8 smoke. Linux/release cleanup
+  remains `release.yml` headless auto-publish to `main` and the manifest-owned
+  `release_tag` accessor.
+
+### Coordinator audit 2026-05-27T10:43Z — Windows w9 native-terminal path; merge/test gate advances
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- observed_sibling_heads: main=`f9c465b3` · linux-next=`732603b1` ·
+  windows-next=`c997fc43` (ahead with unmerged Windows w9 transport,
+  keepalive, Quit drain, and native-terminal menu launch code) ·
+  osx-next=`deba10d8` (ancestor of linux-next)
+- Coordination fold only; no sibling merge attempted in this pass.
+- Remote progress is healthy. Since the 08:50Z fold, `linux-next` advanced by
+  one coordination commit and `windows-next` advanced from PTY transport proof
+  to bidirectional PTY stdin/stdout, VM keepalive, Quit drain, and native
+  terminal launch for the resolved forge argv. `osx-next` and `main` did not
+  advance.
+- Resolved gates: Windows now proves the host-to-guest PTY data direction
+  (`fc7d0b74`), keeps the WSL VM/control wire warm (`531bcce4`), tears it down
+  on Quit (`bc23a529`), and opens menu actions through Windows Terminal /
+  `wsl.exe` (`c997fc43`).
+- Active integration watch: `origin/windows-next` carries unmerged code through
+  `c997fc43`. The next integration loop should merge/test those commits into
+  `linux-next` or record exact conflicts.
+- Merge caution: preserve the newer `linux-next` `13cf3af0`
+  `images/vm/manifest.toml` repin and newer plan entries if the Windows branch
+  presents older blocks during reconciliation.
+- Current dependency chain: Windows w9 is code-proven on `windows-next` but
+  still needs merge/test into `linux-next` and a terminal-click status packet
+  for Open Shell, Attach, Maintain, and GitHub Login. macOS still waits on
+  user-attended m8 smoke. Linux/release cleanup remains `release.yml`
+  headless auto-publish to `main` and the manifest-owned `release_tag`
+  accessor.
+
+### Coordinator audit 2026-05-27T08:50Z — Windows w9 transport proof; merge/test gate advances
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- observed_sibling_heads: main=`f9c465b3` · linux-next=`46ef33b1` ·
+  windows-next=`5188dce6` (ahead with unmerged Windows Ready + w9 transport
+  proof) · osx-next=`deba10d8` (ancestor of linux-next)
+- Coordination fold only; no sibling merge attempted in this pass.
+- Remote progress is healthy. Since the 06:57Z fold, `linux-next` advanced by
+  one coordination commit and `windows-next` advanced from the Ready transition
+  to w9 request/reply and PTY transport proof. `osx-next` and `main` did not
+  advance.
+- Resolved gates: Windows now proves VmStatus request/reply over HvSocket
+  (`8b785ced`), provisioning waits for VM phase `Ready` (`791c0187`), and
+  PtyOpen/PtyData/PtyClose works over HvSocket for the Open Shell mechanism
+  (`5188dce6`).
+- Active integration watch: `origin/windows-next` carries unmerged code through
+  `5188dce6` (HvSocket transport, Ready-gated provisioning, request/reply, and
+  PTY attach primitives). The next integration loop should merge/test those
+  commits into `linux-next` or record exact conflicts.
+- Merge caution: preserve the newer `linux-next` `13cf3af0`
+  `images/vm/manifest.toml` repin and newer plan entries if the Windows branch
+  presents older blocks during reconciliation.
+- Current dependency chain: Windows transport primitives are proven but w9 is
+  not complete until the menu UX bridges `launch_spec`/PtyOpen to ConPTY or
+  `wt.exe` and routes GitHub Login / agent attach over the live transport.
+  macOS still waits on user-attended m8 smoke. Linux/release cleanup remains
+  `release.yml` headless auto-publish to `main` and the manifest-owned
+  `release_tag` accessor.
+
+### Coordinator audit 2026-05-27T06:57Z — Windows Ready proven; integration merge/test is the gate
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- observed_sibling_heads: main=`f9c465b3` · linux-next=`a5f915e4` ·
+  windows-next=`e0405f2f` (ahead with unmerged Windows Ready code) ·
+  osx-next=`deba10d8` (ancestor of linux-next)
+- Coordination fold only; no sibling merge attempted in this pass.
+- Remote progress is healthy. Since the 05:05Z fold, `linux-next` advanced
+  through the fixed-rootfs repin and Windows control-wire proof notes; macOS
+  acknowledged the F1 fix and rebuilt the app; Windows advanced from F2
+  foundation to tray Ready proof.
+- Resolved gates: F1 is fixed by the `Type=exec` rootfs, Windows F2 HvSocket
+  connect is proven, Hello/HelloAck over the control-wire codec is proven, and
+  `e0405f2f` flips the Windows tray to Ready on handshake success.
+- Active integration watch: `origin/windows-next` carries unmerged code through
+  `e0405f2f` (HvSocket transport, provision_via_recipe handshake, and Ready
+  status flip). The next integration loop should merge/test those commits into
+  `linux-next` or record exact conflicts.
+- Merge caution: `origin/windows-next` still presents an older
+  `images/vm/manifest.toml` SHA/comment block in its diff. Preserve the newer
+  `linux-next` repin from `13cf3af0` during merge reconciliation.
+- Current dependency chain: Windows needs integration-loop evidence before the
+  code is considered folded into `linux-next`; the next Windows work packet is
+  retaining/routing the live control-wire session. macOS waits on user-attended
+  m8 smoke. Linux/release cleanup remains `release.yml` headless auto-publish
+  to `main` and the manifest-owned `release_tag` accessor.
+
 ### Coordinator audit 2026-05-27T05:05Z — l9 closed; F1 fixed; Windows F2 is current gate
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next

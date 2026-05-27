@@ -2,18 +2,23 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/windows-next-thin-tray.md, plan/issues/tray-convergence-coordination.md, plan/issues/control-socket-protocol-convergence-2026-05-25.md, openspec/changes/control-wire-pty-attach/
 
-Status: **OPEN** as of 2026-05-27T05:05Z. Windows w1, w2, w3, w4, w6
+Status: **OPEN** as of 2026-05-27T16:24Z. Windows w1, w2, w3, w4, w6
 diagnostics, the w5 converter, the shared forge-container `launch_spec` /
-`intent_for_action` amendment, the l9 URL resolver, and the w5
-`provision_via_recipe` runtime flip are done on the Windows lane. Windows real
-hardware proved rootfs fetch/SHA/import, systemd boot, headless fetch HTTP 200,
-and a bound in-VM listener. `origin/windows-next` is now ahead of
-`linux-next` with active unmerged Windows deltas through `d15e0fb3`: materialize
-Windows portability, w5 recipe provisioning refinements, and F2 HvSocket
-transport work. The old PR #3 / first green recipe-publish / SHA-pin gates are
-closed. The F1 headless service fix landed on `linux-next` at `f5801968`
-(`Type=exec`). Remaining Windows "Ready" work is syncing that fix and
-finishing F2 HvSocket Hello/HelloAck.
+`intent_for_action` amendment, the l9 URL resolver, the w5
+`provision_via_recipe` runtime flip, and w8 HvSocket Ready proof are done on
+the Windows lane. Windows real hardware proved rootfs fetch/SHA/import,
+systemd boot, headless fetch HTTP 200, the F1 `Type=exec` unit fix, HvSocket
+connect, Hello/HelloAck over the control-wire codec, tray status flipping to
+Ready, VmStatus request/reply over HvSocket, Ready-phase provisioning gating,
+PtyOpen/PtyData/PtyClose proof, bidirectional PTY stdin/stdout, WSL VM
+keepalive, deterministic Quit drain, native-terminal menu launch for the Open
+Shell / Attach / Maintain / GitHub Login argv path, Open Shell terminal-click
+smoke, file-based tray logging plus working Open Log, Retry reprovisioning, and
+forge-container Open Shell smoke.
+`origin/windows-next` is ahead of `linux-next` through `c0a9558b`; the
+integration loop must merge/test that code while preserving the newer
+`linux-next` manifest repin from `13cf3af0` and later plan entries. The old
+PR #3 / recipe-publish / SHA-pin / F1 / F2 gates are closed.
 
 ## How to use this file
 
@@ -37,30 +42,43 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
 
 ## Currently unblocked / active
 
-- `w8/hvsocket-control-wire-ready` is the active Windows packet. Commits
-  `b762feef` and `e3524bd4` landed the HvSocket service-GUID / WSL utility-VM
-  GUID foundation; `d15e0fb3` wires tray run() to the proven recipe path. The
-  next useful packet is a Windows host Hello/HelloAck over HvSocket, then an
-  agent_status_packet that states whether `f5801968` clears the former F1 unit
-  restart loop.
+- `w8/hvsocket-control-wire-ready` is done on `windows-next`: `8a96a880`
+  proved AF_HYPERV connect, `2b97be30` proved Hello/HelloAck, `340cac99`
+  wired the handshake into `provision_via_recipe`, and `e0405f2f` flips the
+  tray to Ready on handshake success. Linux integration-loop merge/test is the
+  remaining cross-host action.
+- `w9/control-wire-session-menu-routing` is in progress on `windows-next`:
+  `8b785ced` proves VmStatus request/reply over HvSocket, `791c0187` makes
+  provisioning wait for VM phase `Ready`, and `5188dce6` proves the
+  PtyOpen/PtyData/PtyClose mechanism behind Open Shell. Newer commits
+  `fc7d0b74`, `531bcce4`, `bc23a529`, and `c997fc43` add bidirectional PTY
+  proof, WSL keepalive, Quit drain, and native-terminal launch for the resolved
+  `launch_spec` argv. Commits `8e84df7d`, `0626a318`, `41c32174`, and
+  `29fe3807` add Open Shell terminal-click smoke, file-based tray logging /
+  working Open Log, Cargo.lock sync, and an updated thin-tray next action. The
+  newer commits `f4c3d70f` and `c0a9558b` wire Retry to re-trigger guarded
+  provisioning and prove the forge-container Open Shell argv. The remaining
+  packet is integration-loop merge/test plus the optional full live-provision
+  dress rehearsal and optional wire EnumerateLocalProjects, not another
+  transport primitive, terminal-launch proof, or Retry hook.
 - `w7/recipe-diagnostics-and-branch-sync` is no longer the primary packet; use
-  it only as a no-code fallback if the HvSocket path is blocked or the latest
-  `linux-next` integration exposes stale diagnostics.
+  it only as a no-code fallback if the `c0a9558b` merge/test exposes stale
+  diagnostics or a manifest/branch-sync conflict.
 - `w6/vm-status-and-enumerate-real-handlers` is done as a no-VM diagnostics
   fallback through `948af711` / integration cycle `b3ae21a`. Live VM status
-  verification now waits on F2 plus smoke of the `f5801968` unit fix, not
-  recipe artifact publication.
+  verification now belongs to w9 session/menu routing over the proven Ready
+  transport, not to the old artifact or F2 gates.
 - `w4/pty-attach-conpty` is done and integrated through `95e4714`. Do not
   create a competing claim; use the completed lease `8a3307907d94` as history.
 - `w5/wsl-import-via-ci-rootfs` has converter, URL resolver, runtime
   provisioning flip, systemd/root fixes, and real E2E proof. Treat remaining
-  Ready blockers as F2 and post-`f5801968` smoke follow-ups, not as w5
-  artifact gates.
+  interaction work as w9 session/menu routing, not as w5 artifact gates.
 
-Do not re-claim w1, w2, w3, w4, w5, or w6; their terminal events are recorded
-below. The next Windows implementation item is F2/HvSocket Ready proof after
-syncing `f5801968`. The independent fallback is w7 diagnostics only if F2 is
-blocked.
+Do not re-claim w1, w2, w3, w4, w5, w6, or w8; their terminal events are
+recorded below. Continue w9 from the Retry and Open Shell proof with
+integration-loop evidence, optional full live-provision dress rehearsal, and
+optional wire EnumerateLocalProjects, with w7 diagnostics as the independent
+fallback if the integration loop surfaces stale branch or manifest state.
 
 ### Item: w8/hvsocket-control-wire-ready
 
@@ -68,7 +86,11 @@ blocked.
 - type: feature
 - owner_host: windows
 - capability_tags: [win32, hvsocket, wsl, control-wire]
-- status: in_progress
+- status: done
+- completed_at: 2026-05-27T06:51Z
+- integration_status: pending linux-next merge/test of `origin/windows-next`
+  through `c0a9558b` (includes later w9 transport, menu-launch, Open Shell
+  smoke, file logging, Open Log, Retry, and forge-container smoke commits)
 - gated_on: []
 - cleared_gates:
   - Linux/recipe F1 headless service restart loop fixed at `f5801968`
@@ -85,11 +107,10 @@ blocked.
     service GUID to connect to the existing in-VM listener without changing the
     wire protocol.
 - next_action: >
-    Pull or merge latest `origin/linux-next` into `windows-next`, finish the
-    host-side HvSocket connect path, run a real Hello/HelloAck against the
-    recipe-provisioned distro, and append an agent_status_packet with exact
-    remaining blocker evidence. If the unit still restarts after `f5801968`,
-    file fresh Linux/recipe evidence.
+    Integration loop should merge/test `origin/windows-next` through
+    `c0a9558b` into `linux-next` and preserve the newer `13cf3af0` manifest
+    repin if the branch merge presents older SHA/comment blocks from
+    `windows-next`.
 - acceptance_evidence:
   - Windows tray reaches Ready via HvSocket after `fetch-headless.service`
     installs the listener binary.
@@ -98,6 +119,84 @@ blocked.
 - fallback_when_blocked: >
     Keep the recipe-provisioned distro and w5 proof as evidence; update w7
     diagnostics so the next agent sees the current F2/post-F1-fix split.
+- agent_status_packet_expected:
+  - current plan
+  - dependencies and blockers
+  - files touched
+  - evidence produced
+  - next checkpoint
+  - lease intent
+
+### Item: w9/control-wire-session-menu-routing
+
+- id: `w9/control-wire-session-menu-routing`
+- type: feature
+- owner_host: windows
+- capability_tags: [win32, hvsocket, control-wire, pty, menu]
+- status: in_progress
+- latest_progress_at: 2026-05-27T13:21Z
+- latest_progress_refs:
+  - `8b785ced` — VmStatus request/reply over HvSocket proven
+  - `791c0187` — provisioning waits for VM phase `Ready`
+  - `5188dce6` — PtyOpen/PtyData/PtyClose over HvSocket proven
+  - `fc7d0b74` — host-to-guest PtyData stdin plus echoed stdout proven
+  - `531bcce4` — WSL keepalive holds the control wire warm
+  - `bc23a529` — Quit drains the VM / keepalive via `wsl --terminate`
+  - `c997fc43` — menu actions launch the resolved argv in `wt.exe` / `wsl.exe`
+  - `8e84df7d` — Open Shell terminal-click smoke passed on real Windows hardware
+  - `0626a318` — file-based tray logging and Open Log reveal landed
+  - `41c32174` — Cargo.lock synced for Windows tracing dependencies
+  - `29fe3807` — thin-tray next action refreshed to current remaining scope
+  - `f4c3d70f` — Retry re-triggers guarded provisioning after failure
+  - `c0a9558b` — forge-container Open Shell smoke passed on real Windows hardware
+- depends_on: [w8/hvsocket-control-wire-ready]
+- gated_on: []
+- owned_files:
+  - `crates/tillandsias-windows-tray/src/hvsocket.rs`
+  - `crates/tillandsias-windows-tray/src/wsl_lifecycle.rs`
+  - `crates/tillandsias-windows-tray/src/notify_icon.rs`
+- summary: >
+    Continue from the proven Ready flow by retaining the live HvSocket
+    control-wire stream in the tray session and routing menu actions over it.
+    Ready should become the start of real interaction, not just the end of
+    provisioning.
+- next_action: >
+    First let the integration loop merge/test `origin/windows-next` through
+    `c0a9558b` into `linux-next` or record exact conflicts. Windows
+    continuation can then run the full live-provision dress rehearsal and
+    optionally add wire EnumerateLocalProjects if host-side project scan is not
+    sufficient.
+- acceptance_evidence:
+  - `8b785ced`: Windows tray can request VmStatus after the Ready flip without
+    reopening provisioning.
+  - `791c0187`: tray reports Ready only after the VM replies with phase
+    `Ready` and `podman_ready: true`.
+  - `5188dce6`: PtyOpen over HvSocket receives PTY output and PtyClose for the
+    Open Shell mechanism.
+  - `fc7d0b74`: PtyData from host to guest is echoed back over the HvSocket PTY
+    path.
+  - `531bcce4`: a held `wsl --exec sleep infinity` keepalive prevents utility
+    VM idle shutdown while the tray is running.
+  - `bc23a529`: Quit tears down the VM/keepalive with bounded `wsl --terminate`.
+  - `c997fc43`: Open Shell / Attach / Maintain / GitHub Login launch the
+    resolved forge argv in Windows Terminal with `wsl.exe` fallback.
+  - `8e84df7d`: terminal-click smoke passed for `wt.exe`, `wsl.exe`, bare-VM
+    `/bin/bash -l`, and spaced-title quoting.
+  - `0626a318` / `41c32174`: file-based tracing writes
+    `%LOCALAPPDATA%\tillandsias\logs\tray.log`; Open Log reveals it in
+    Explorer; lockfile includes the tracing deps.
+  - `f4c3d70f`: Retry sets the tray to "Retrying provisioning..." and
+    re-triggers `provision_via_recipe` only after failure while avoiding
+    duplicate in-flight tasks.
+  - `c0a9558b`: forge-container Open Shell smoke passed through `wsl.exe` into
+    a running `tillandsias-<name>-forge` container.
+  - Remaining: integration-loop merge/test into `linux-next`, optional full
+    live-provision dress rehearsal, and optional wire EnumerateLocalProjects.
+  - `cargo test -p tillandsias-windows-tray --target x86_64-pc-windows-msvc`
+    or equivalent Windows-host evidence stays green.
+- fallback_when_blocked: >
+    Append a no-code agent_status_packet here and run w7 diagnostics with the
+    current `linux-next` and `windows-next` heads.
 - agent_status_packet_expected:
   - current plan
   - dependencies and blockers
@@ -208,6 +307,8 @@ blocked.
 - evidence_on_done:
   - SelectAgent state update and dispatch table slice landed at windows-next `832871d9`.
   - Retry/OpenLog/OpenObservatorium/OpenCodeWeb were explicitly re-pinned to their true runtime gates instead of faking effects.
+  - Open Log later became real at `0626a318`: the tray writes
+    `%LOCALAPPDATA%\tillandsias\logs\tray.log` and reveals it in Explorer.
   - Unit tests in `notify_icon` exercise the dispatch table.
 
 ### Item: w3/scoped-windows-clippy-cleanup
@@ -355,8 +456,8 @@ blocked.
 - progress:
   - No-VM diagnostics fallback landed at `948af711` and was merged/tested into
     `linux-next` at `b3ae21a`.
-  - Live VM surface verification still waits for the recipe artifact path; do
-    not re-open w6 for that smoke unless a specific display regression appears.
+  - Live VM surface verification should be recorded under w9 now that the
+    recipe artifact, F1 unit, F2 transport, and Ready gates are closed.
 
 ## Linux deliverables Windows is waiting on (status mirrors)
 
@@ -365,12 +466,12 @@ blocked.
 | `l1/control-wire-pty-attach-tasks-1` | **done** (shipped `b345ae68`; 23/23 control-wire tests pass on Linux; 22/22 on Windows per `47d91d11`) | w4 done |
 | `l2/recipe-shared-modules` | **done** (windows authored §2 parser `26afb76a` integrated `a7af0ed`; 16/16 recipe tests green on Linux) | w5 done |
 | `l3/in-vm-headless-pty-handler` | **done** (`f770e013`/`8dc0d129`; tasks 4.1-4.7, two pump tests ignored pending AsyncFd rewrite) | w4 done |
-| `l4/replace-vsock-stub-handlers` | **done** (`6956c825`; real VmStatus/EnumerateLocalProjects/CloudRefresh backing data) | w6 diagnostics done; live smoke waits on F2 and post-`f5801968` unit smoke |
+| `l4/replace-vsock-stub-handlers` | **done** (`6956c825`; real VmStatus/EnumerateLocalProjects/CloudRefresh backing data) | w6 diagnostics done; live interaction continues in w9 |
 | `l5/recipe-smoke-ci-publish` | **done for Windows path**; artifacts and SHA pins are published/proven | w5 done |
 | `l6/linux-rasterize-svg-to-ico` | **done** (`ea13ba20`) | w1 done |
 | `l7/§3-materializer-driver` | **done** (`9dca2c47`; materializer feature and cache/export API shipped) | w5 done |
 | `l8/buildah-exec-recipe-publish-smoke` | **done** (`6aeae3a7`; real BuildahExec + `materialize-cli`; 43/43 vm-layer materialize tests, full CI/install pass in ledger) | w5 done |
-| `l9/recipe-artifact-url-and-publish-smoke` | **done for Windows w5**; artifact URL contract, recipe artifacts, manifest SHA pins, and headless release asset fetch are all proven. F1 headless service stability has code fix `f5801968`; remaining follow-up is manifest `release_tag`, not l9 artifact publication. | w5 done; w8 remains |
+| `l9/recipe-artifact-url-and-publish-smoke` | **done for Windows w5**; artifact URL contract, recipe artifacts, manifest SHA pins, fixed F1 rootfs, and headless release asset fetch are all proven. Remaining follow-up is manifest `release_tag`, not l9 artifact publication. | w5 and w8 done |
 
 ## Events
 
@@ -858,3 +959,97 @@ Next greedy pickups (no VM needed): **w4b** (windows-ownable, pure) and **w4d**
 - Current Windows dependency chain: w5 is done; F1 headless service stability
   has code fix `f5801968` and needs smoke; F2 HvSocket is Windows-owned and in
   progress; w7 is a fallback diagnostics packet only.
+
+### Event: 2026-05-27T06:57Z — linux coordinator status reconciliation
+
+- Observed remote heads after fetch/pull: `linux-next` `a5f915e4`,
+  `windows-next` `e0405f2f`, `osx-next` `deba10d8`, `main` `f9c465b3`.
+- Folded terminal events from `origin/windows-next`: `8a96a880` proved
+  AF_HYPERV connect, `2b97be30` proved Hello/HelloAck, `340cac99` wired that
+  handshake into `provision_via_recipe`, and `e0405f2f` flips tray status to
+  Ready on success.
+- Header reconciliation: w8 is now done on Windows. The integration loop still
+  needs to merge/test the Windows code into `linux-next`; preserve the newer
+  `13cf3af0` manifest repin if the branch merge exposes Windows' older
+  manifest block.
+- New ready packet: w9 `control-wire-session-menu-routing` should retain or
+  reacquire the live stream and route menu actions over the proven transport.
+
+### Event: 2026-05-27T08:50Z — linux coordinator status reconciliation
+
+- Observed remote heads after fetch/pull: `linux-next` `46ef33b1`,
+  `windows-next` `5188dce6`, `osx-next` `deba10d8`, `main` `f9c465b3`.
+- Folded new `origin/windows-next` terminal evidence: `8b785ced` proves
+  VmStatus request/reply over HvSocket, `791c0187` makes provisioning wait for
+  VM phase `Ready`, and `5188dce6` proves PtyOpen/PtyData/PtyClose over the
+  HvSocket transport for the Open Shell mechanism.
+- Header reconciliation: w9 is now `in_progress`, not done. The transport
+  primitives are proven, but the menu UX still needs to hold/reacquire the
+  session, bridge `launch_spec`/PtyOpen to ConPTY or `wt.exe`, and route
+  GitHub Login plus agent attach over the same path.
+- Integration-loop gate moved forward from `e0405f2f` to `5188dce6`. During
+  merge/test, preserve the newer `13cf3af0` manifest repin and newer
+  `linux-next` plan entries if the Windows branch presents older blocks.
+
+### Event: 2026-05-27T10:43Z — linux coordinator status reconciliation
+
+- Observed remote heads after fetch/pull: `linux-next` `732603b1`,
+  `windows-next` `c997fc43`, `osx-next` `deba10d8`, `main` `f9c465b3`.
+- Folded new `origin/windows-next` w9 evidence after `5188dce6`:
+  `fc7d0b74` proves bidirectional PTY stdin/stdout, `531bcce4` holds the WSL
+  utility VM warm while the tray runs, `bc23a529` drains that keepalive on
+  Quit, and `c997fc43` launches the resolved `launch_spec` argv in Windows
+  Terminal / `wsl.exe`.
+- Header reconciliation: w9 remains `in_progress`, but the stale "bridge
+  `launch_spec`/PtyOpen to ConPTY or `wt.exe`" wording is superseded by the
+  native-terminal path. Remaining evidence is integration-loop merge/test plus
+  focused terminal-click smoke/status for Open Shell, Attach, Maintain, and
+  GitHub Login.
+- Integration-loop gate moved forward from `5188dce6` to `c997fc43`. During
+  merge/test, preserve the newer `13cf3af0` manifest repin and newer
+  `linux-next` plan entries if the Windows branch presents older blocks.
+
+### Event: 2026-05-27T12:35Z — linux coordinator status reconciliation
+
+- Observed remote heads after fetch/pull: `linux-next` `3370f04e`,
+  `windows-next` `29fe3807`, `osx-next` `deba10d8`, `main` `f9c465b3`.
+- Folded new `origin/windows-next` w9 evidence after `c997fc43`:
+  `8e84df7d` proves Open Shell terminal-click smoke on real Windows hardware,
+  `0626a318` adds file-based tray logging plus working Open Log, `41c32174`
+  syncs the tracing lockfile entries, and `29fe3807` refreshes the thin-tray
+  next-action cache.
+- Header reconciliation: w9 remains `in_progress`, but bare Open Shell
+  terminal-click smoke is resolved. Remaining evidence is integration-loop
+  merge/test, forge-container Open Shell E2E against a live provisioned VM,
+  Retry wiring, and optional wire EnumerateLocalProjects.
+- Integration-loop gate moved forward from `c997fc43` to `29fe3807`. During
+  merge/test, preserve the newer `13cf3af0` manifest repin and newer
+  `linux-next` plan entries if the Windows branch presents older blocks.
+
+### Event: 2026-05-27T14:29Z — linux coordinator status reconciliation
+
+- Observed remote heads after fetch/pull: `linux-next` `91061b61`,
+  `windows-next` `c0a9558b`, `osx-next` `deba10d8`, `main` `f9c465b3`.
+- Folded new `origin/windows-next` w9 evidence after `29fe3807`:
+  `f4c3d70f` wires Retry to re-trigger guarded provisioning after a failed
+  attempt, and `c0a9558b` proves the forge-container Open Shell argv through
+  `wsl.exe` into a running `tillandsias-<name>-forge` container.
+- Header reconciliation: w9 remains `in_progress`, but Retry and both Open
+  Shell legs are no longer blockers. Remaining evidence is integration-loop
+  merge/test, optional full live-provision dress rehearsal, and optional wire
+  EnumerateLocalProjects.
+- Integration-loop gate moved forward from `29fe3807` to `c0a9558b`. During
+  merge/test, preserve the newer `13cf3af0` manifest repin and newer
+  `linux-next` plan entries if the Windows branch presents older blocks.
+
+### Event: 2026-05-27T16:24Z — linux coordinator status reconciliation
+
+- Observed remote heads after fetch/pull: `linux-next` `011d7b49`,
+  `windows-next` `c0a9558b`, `osx-next` `deba10d8`, `main` `f9c465b3`.
+- No new Windows commits landed after `c0a9558b`; the branch delta against
+  `linux-next` remains the w9 transport/menu/Open Shell/Retry code plus
+  related documentation and lockfile updates.
+- Header reconciliation unchanged: w9 remains `in_progress` until the
+  integration loop merge/tests `origin/windows-next` through `c0a9558b`.
+  w7 remains the no-code fallback if that merge/test exposes stale branch,
+  diagnostics, or manifest state.
