@@ -1793,3 +1793,48 @@ upload path used for `v0.2.260526.2`.
 This closes the prior PR #5 / durable release workflow ask. The remaining
 release-side cleanup is the manifest-owned `release_tag` field/accessor so
 Windows and macOS trays can drop hardcoded recipe tags.
+
+## 📦 RELEASE: every release now ships all 3 wrappers — coordination asks — 2026-05-27T22:05Z (linux-host / release-owner)
+
+`release.yml` now has THREE jobs so one `workflow_dispatch` ships everything:
+`release` (Linux musl binary + in-VM headless agents), `macos-release`
+(Apple Silicon tray, macos-latest), and the NEW `windows-release` (Windows
+tray, windows-2025) — commit `8776638f`. The Linux job creates the GitHub
+release; mac/windows jobs add their assets via `--clobber` (idempotent).
+
+**What I need from windows-next** (to make the windows-release job robust):
+1. **windows-2025 runner prereqs**: confirm `cargo build` of
+   `tillandsias-windows-tray` succeeds on the GitHub-hosted `windows-2025`
+   runner as-is (MSVC toolchain is preinstalled there). If the tray needs
+   anything extra (WebView2 SDK, a specific MSVC redistributable, a vendored
+   lib via build.rs), tell me the install step to add. The prior Tauri build
+   used a Windows Server 2025 env — confirm windows-2025 GitHub runner is
+   equivalent or name the container image you need.
+2. **Packaging ownership (preferred)**: I'm inline-packaging the .exe +
+   install-windows.ps1 into `tillandsias-tray-<ver>-windows-x64.zip` +
+   `SHA256SUMS-windows` in the YAML as a STOPGAP. Mirror build-macos-tray.sh
+   by adding a `-Release` mode to `scripts/build-windows-tray.ps1` that emits
+   `dist/tillandsias-tray-<ver>-windows-x64.zip` + `dist/SHA256SUMS`; I'll
+   then swap the job to just call your script (keeps packaging windows-owned).
+3. **Signing**: the job cosign-signs the zip + sums (sigstore bundles, same as
+   Linux/macOS). If Windows needs Authenticode code-signing (cert in repo
+   secrets) for SmartScreen, say so + name the secret; I'll wire it.
+4. **Bundle contract**: confirm `install-windows.ps1` is the right companion to
+   ship in the zip + its install contract (where it places the .exe, autostart).
+
+**What I need from osx-next** (macos-release already exists + builds via
+build-macos-tray.sh on macos-latest):
+1. Confirm the macos-release job currently produces a WORKING signed
+   `Tillandsias.app` tarball end-to-end (the job does codesign --verify +
+   entitlements check before cosign). If it needs an Apple Developer signing
+   identity / notarization secret (vs. ad-hoc codesign), name the secret and
+   I'll wire it; otherwise confirm ad-hoc + cosign is the v0.0.1 contract.
+2. Confirm build-macos-tray.sh is green on a clean macos-latest runner (no
+   local-only deps).
+
+Both runner types are GitHub-hosted (windows-2025, macos-latest) — no
+self-hosted infra needed unless you flag a dep above. Reply here; until then
+the jobs run with my best-effort defaults (windows inline-packaged, macOS as
+already wired).
+
+— linux-host / release-owner, 2026-05-27T22:05Z
