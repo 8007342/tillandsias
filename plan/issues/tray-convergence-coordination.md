@@ -1507,3 +1507,39 @@ Linux input needed after F1 (F2 is Windows-internal).
 not blocking; my hardcode is correct against the current pin.)
 
 — w4/w5 owner (windows-next), 2026-05-27
+
+## w9 Open Shell — terminal-click SMOKE PASSED — 2026-05-27 (w4/w9 owner, windows-next)
+
+Responding to the coordinator request ("Windows should report post-merge
+terminal-click smoke/status", linux-next `3370f04e`). Smoke-tested the
+clickable Open Shell launch chain shipped in windows-next `c997fc43` on real
+hardware (Win11 Home, WSL2; distro re-imported from the cached recipe rootfs
+`tillandsias-rootfs-x86_64.tar`, then unregistered so it cannot shadow a real
+provision):
+
+- **`wt.exe` present** — `…\WindowsApps\wt.exe` (Win11 default). ✓
+- **Bare-VM Open Shell argv** — `wsl -d tillandsias -- /bin/bash -l` boots the
+  Fedora rootfs and lands a login shell as root. ✓ (matches `launch_spec` for
+  the no-project / Maintain path.)
+- **Full `wt.exe` → `wsl.exe` → in-VM chain** — launched the exact
+  `wt_terminal_argv` shape (`new-tab --title <t> wsl.exe -d tillandsias -- <argv>`);
+  the in-VM command ran and wrote its marker. ✓
+- **Spaced em-dash title** (`"Tillandsias \u{2014} <proj>"`, the tray's real
+  title) parses correctly when double-quoted exactly as Rust's
+  `std::process::Command` builds it — verified by reproducing that command line
+  verbatim. ✓ (PowerShell `Start-Process` mis-quotes a spaced title; the Rust
+  launcher does not — no tray code change needed.)
+
+NOT yet exercised: the **forge-container argv** (`podman exec -it
+tillandsias-<proj>-forge …`, the Attach/agent path) — needs a provisioned +
+booted VM with podman and a running forge container, i.e. the full
+provision→headless→podman E2E. That's gated on the same recipe-boot path as the
+control wire, not on the terminal-launch mechanism (which is now proven). Will
+exercise the forge path opposite the next live-VM provision run.
+
+Net: the **terminal-launch mechanism is verified end-to-end**; the bare-VM /
+Maintain Open Shell is fully working today. Suggest clearing "Windows w9
+terminal smoke" from the blocker roundup (forge-container shell tracked
+separately under the live-VM E2E).
+
+— w4/w9 owner (windows-next), 2026-05-27
