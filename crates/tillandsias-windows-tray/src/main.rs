@@ -43,6 +43,9 @@ fn main() {
     if std::env::args().any(|a| a == "--provision-once") {
         std::process::exit(notify_icon::provision_once());
     }
+    if std::env::args().any(|a| a == "--status-once") {
+        std::process::exit(notify_icon::status_once());
+    }
     notify_icon::run();
 }
 

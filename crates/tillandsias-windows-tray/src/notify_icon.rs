@@ -362,6 +362,78 @@ pub fn provision_once() -> i32 {
     })
 }
 
+/// Headless diagnostic entry point (`tillandsias-tray --status-once`): connect to
+/// an already-provisioned VM's HvSocket control wire, request `VmStatus`, and
+/// print the phase / podman_ready / last_event. Exit code: 0 = Ready, 2 =
+/// reachable but not Ready, 1 = control wire unreachable. Pairs with
+/// `--provision-once` for scriptable installed-tray health checks (the GUI tray
+/// has no console). Reuses the same handshake + `VmStatusRequest` path the
+/// provisioning Connecting loop uses.
+pub fn status_once() -> i32 {
+    use tillandsias_control_wire::{ControlMessage, VmPhase};
+
+    init_tracing();
+    let port = tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
+    let runtime = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(rt) => rt,
+        Err(err) => {
+            eprintln!("[status] failed to build tokio runtime: {err}");
+            return 1;
+        }
+    };
+    runtime.block_on(async {
+        let (mut stream, wire_version) = match crate::hvsocket::hvsocket_handshake(port).await {
+            Ok(ok) => ok,
+            Err(err) => {
+                eprintln!("[status] control wire unreachable on vsock {port}: {err}");
+                eprintln!("[status] (is the VM provisioned + running? try --provision-once)");
+                return 1;
+            }
+        };
+        println!("[status] control wire up (wire_version {wire_version})");
+        let reply = match crate::hvsocket::hvsocket_request(
+            &mut stream,
+            2,
+            ControlMessage::VmStatusRequest { seq: 2 },
+        )
+        .await
+        {
+            Ok(reply) => reply,
+            Err(err) => {
+                eprintln!("[status] VmStatusRequest failed: {err}");
+                return 1;
+            }
+        };
+        match reply.body {
+            ControlMessage::VmStatusReply {
+                phase,
+                podman_ready,
+                last_event,
+                ..
+            } => {
+                println!("[status] phase:        {phase:?}");
+                println!("[status] podman_ready: {podman_ready}");
+                println!(
+                    "[status] last_event:   {}",
+                    last_event.as_deref().unwrap_or("(none)")
+                );
+                if matches!(phase, VmPhase::Ready) {
+                    0
+                } else {
+                    2
+                }
+            }
+            other => {
+                eprintln!("[status] unexpected reply to VmStatusRequest: {other:?}");
+                1
+            }
+        }
+    })
+}
+
 /// Set by the `Retry` menu click (in the wndproc) and drained by the message
 /// loop, which spawns a fresh provisioning task in the LocalSet context.
 static RETRY_REQUESTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
