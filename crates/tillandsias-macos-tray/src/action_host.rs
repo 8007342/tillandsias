@@ -332,12 +332,16 @@ async fn run_start(
         );
         let manifest = tillandsias_vm_layer::recipe::Manifest::from_toml(BUNDLED_MANIFEST_TOML)
             .map_err(|e| format!("bundled manifest parse: {e}"))?;
-        // Tag = workspace VERSION (e.g. "v0.2.260526.2"), NOT the
-        // macos-tray crate's Cargo.toml `version` (which is still
-        // "0.1.0" — package-local, not user-facing). The workspace
-        // VERSION is bumped by `scripts/bump-version.sh` and is
-        // what `release.yml` tags artifacts under.
-        let tag = format!("v{}", BUNDLED_VERSION.trim());
+        // Per 2026-05-27 cross-host convergence vote (windows-host +
+        // macOS concur): the manifest is the trust root and should
+        // own the release tag alongside its pinned SHAs — pending
+        // Linux/recipe addition of `[output].release_tag` +
+        // `Manifest::release_tag()` accessor. Until that lands we
+        // hardcode `v0.2.260526.1` to match the tag the current
+        // pinned `aarch64.img` SHA corresponds to (Windows mirrors
+        // this pattern via its `RECIPE_RELEASE_TAG` const). Switch
+        // to `manifest.release_tag()` the moment it's available.
+        let tag = RECIPE_RELEASE_TAG.to_string();
         vz.fetch_recipe_artifact(&manifest, &tag)
             .await
             .map_err(|e| {
@@ -363,12 +367,19 @@ async fn run_start(
 /// rebuild of the macOS tray.
 const BUNDLED_MANIFEST_TOML: &str = include_str!("../../../images/vm/manifest.toml");
 
-/// Workspace VERSION (e.g. `"0.2.260526.2"`) embedded at build time.
-/// Used as the release-tag input to `fetch_recipe_artifact` so first-
-/// launch fetches resolve against the right release. Bumped by
-/// `scripts/bump-version.sh`; consumed by `release.yml` for tagging.
-/// Trim trailing newline at use site.
-const BUNDLED_VERSION: &str = include_str!("../../../VERSION");
+/// Release tag the manifest's currently-pinned rootfs SHAs correspond
+/// to. Hardcoded for v0.0.1 pending Linux addition of
+/// `[output].release_tag` to `manifest.toml` + a
+/// `Manifest::release_tag()` accessor — at which point both trays
+/// switch to `manifest.release_tag()` (single trust root for both
+/// the URL template + SHA pin + release tag).
+///
+/// Windows mirrors this with its own `RECIPE_RELEASE_TAG` const; the
+/// two values MUST stay in sync until the manifest field lands.
+///
+/// @trace plan/issues/tray-convergence-coordination.md
+///        "Tag-source decision — windows vote" 2026-05-27
+const RECIPE_RELEASE_TAG: &str = "v0.2.260526.1";
 
 impl TrayActionHost {
     /// Construct on the AppKit main thread. `mtm` proves we're on the
@@ -408,22 +419,29 @@ mod tests {
         assert_eq!(cls.name(), "TillandsiasTrayActionHost");
     }
 
-    /// run_start surfaces a wrapped, user-actionable error when
-    /// `fetch_recipe_artifact` fails — regardless of whether the
-    /// failure is a SHA gate, an HTTP error, an xz error, etc. The
-    /// wrapping in `run_start` always appends the
-    /// "If the SHA pin is still 'pending-ci'" hint so users get a
-    /// pointer back to the most common cause.
+    /// FULL E2E exercise of the run_start path against the LIVE
+    /// release asset — `#[ignore]` because:
+    ///   - it actually fetches 74 MB from a real release,
+    ///   - decompresses to an 8 GB sparse `.img` (~30s),
+    ///   - SHA-256-streams the decompressed bytes against the pin
+    ///     (~10s more),
+    ///   - and finally `vz.start()` requires the
+    ///     `com.apple.security.virtualization` entitlement (only
+    ///     present on the codesigned `.app` bundle, NOT on
+    ///     `cargo test` binaries), so the start step always errors
+    ///     in the test harness even when the fetch chain succeeds.
     ///
-    /// This test exercises the full path via the bundled manifest +
-    /// VERSION (real release tag, real pinned SHA), which means it
-    /// hits the network and gets back a 404 if the release isn't
-    /// found, OR succeeds at fetch but fails at xz/start. The
-    /// assertions just confirm the wrapping is in place + the slot
-    /// stays empty on failure; the precise inner error varies with
-    /// network state and is not the test's concern.
+    /// Run manually with: `cargo test -p tillandsias-macos-tray
+    /// --bin tillandsias-tray run_start_full_e2e -- --ignored
+    /// --nocapture`. On 2026-05-27 this test ran to the
+    /// `Start VM: rootfs.img fetched successfully` line, proving the
+    /// .img.xz fetch + decompress + verify chain works end-to-end
+    /// against a live release asset (Apple Silicon, Tlatoanis-MacBook-
+    /// Air). The subsequent entitlement error is expected in cargo
+    /// test; the codesigned .app bundle clears that gate.
     #[tokio::test]
-    async fn run_start_wraps_fetch_errors_with_hint() {
+    #[ignore = "slow (~5min), network, needs com.apple.security.virtualization entitlement (.app only)"]
+    async fn run_start_full_e2e() {
         let tmp = tempfile::tempdir().unwrap();
         let vm_slot = Arc::new(Mutex::new(None));
         let result = run_start(tmp.path().to_path_buf(), vm_slot.clone()).await;

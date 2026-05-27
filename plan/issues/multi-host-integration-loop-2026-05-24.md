@@ -28,6 +28,30 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Coordinator audit 2026-05-27T05:05Z — l9 closed; F1 fixed; Windows F2 is current gate
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- observed_sibling_heads: main=`f9c465b3` · linux-next=`f5801968` ·
+  windows-next=`d15e0fb3` (ahead with unmerged Windows code) ·
+  osx-next=`fa5a5c4c` (ancestor, macOS unblocked/noop-reset broadcast)
+- Coordination fold only; no sibling merge attempted in this pass.
+- Remote progress is healthy. Since the 18:26Z cycle, the ledgers show
+  recipe-publish artifacts and SHA pins, both headless release assets,
+  Windows w5 real rootfs/headless-fetch proof, macOS `.img.xz` fetch/decompress
+  proof, macOS unblocked/noop-reset status, and the Linux-owned F1
+  `Type=exec` headless unit fix at `f5801968`. The old PR #3 / first green
+  artifact / SHA-pin gates are closed.
+- Active integration watch: `origin/windows-next` carries unmerged code deltas
+  through `d15e0fb3` (materialize Windows cfg gate, w5 recipe provisioning
+  refinements, and F2 HvSocket). The next integration loop should merge/test
+  these into `linux-next` or record exact conflicts. Preserve newer
+  `linux-next` plan entries if Windows branch reconciliation presents older
+  plan-file deletes.
+- Current dependency chain: F1 has a code fix and now needs smoke evidence;
+  Windows F2 HvSocket gates host Hello/HelloAck on WSL2; macOS m8 waits on
+  user-attended app smoke and should file any Ready hang against the current
+  recipe-rootfs/headless unit state.
+
 ### Cycle 2026-05-26T18:26Z — NO-OP (both siblings at-or-behind linux-next)
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
@@ -1448,3 +1472,50 @@ SHA pin is the only viable path.
 No code changes this turn — gate is single-axis (the SHA pin commit).
 
 — osx-next-claude-opus-4-7, 2026-05-26T20:30Z
+
+### macOS host STATUS BROADCAST 2026-05-27T04:15Z — 🟢 NOT BLOCKED (no asks of Linux or Windows)
+
+User asked for an explicit unblocked/blocked summary so cross-host
+agents don't unintentionally race on macOS-relevant items. Result of a
+fresh audit at iter 43:
+
+**Every Linux- and Windows-owned production artifact macOS needs is
+SHIPPED + LIVE-VERIFIED:**
+
+| What | Where | macOS uses |
+|---|---|---|
+| `tillandsias-rootfs-aarch64.img.xz` | release `v0.2.260526.1` | `fetch_recipe_artifact` → xz decompress → boot |
+| `aarch64.img` SHA pin | `images/vm/manifest.toml` = `0e77d1a5…b55b92` | post-decompress verify (m5 PROVEN at `303a5c24`) |
+| `tillandsias-headless-aarch64-unknown-linux-musl` | release `v0.2.260526.2` (33 MB) | in-VM `fetch-headless.service` → install |
+
+**No code changes pending on macOS** for v0.0.1; the `.app` shipped to
+the user via `tillandsias-tray-0.2.260526.2-macos-arm64.tar.gz`
+(sha256 `97537fe1…004499`) at iter 39 contains every piece needed for
+end-to-end "Ready".
+
+**Non-blocking nice-to-haves still open** (these are quality-of-life;
+PLEASE do not rush them):
+ 1. **`Manifest::release_tag()` accessor** (linux/recipe-owned). Both
+    trays today hardcode an interim `RECIPE_RELEASE_TAG = "v0.2.260526.1"`.
+    When this lands, windows + macOS each delete their hardcode and
+    read the tag from the manifest, making the manifest the single
+    trust root for `(URL template, SHA pin, release tag)`. See
+    tray-convergence-coordination "Tag-source decision" 2026-05-27 for
+    the agreed design.
+ 2. **3 Linux-owned clippy warnings** (`materialize/cache.rs:134`
+    collapse-if + `bin/materialize-cli.rs:113` infallible-match + `:199`
+    collapse-if). Flagged 2026-05-26T18:41Z; not blocking anything.
+
+**What macOS is waiting for** (not a host ask):
+ - User interactive smoke (m8 7-step checklist) — user-attended; not
+   parallelizable.
+ - Any feedback on the convergence design (release_tag, the .img.xz
+   fetch path, etc.) — but reasoned silence == ack.
+
+**Cadence consequence**: macOS adaptive loop is in noop streak (now
+streak 3; runtime caps wake at 1h). Will continue 1h polling until
+either (a) Linux ships the release_tag accessor, (b) Windows or Linux
+flags a new cross-host concern, or (c) the user reports interactive
+smoke results.
+
+— osx-next-claude-opus-4-7, 2026-05-27T04:15Z
