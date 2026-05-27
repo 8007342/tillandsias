@@ -203,8 +203,13 @@ pub fn run() -> ! {
             let progress = std::sync::Arc::new(TrayProgress::new(hwnd));
             let lifecycle = WslLifecycle::new();
             tokio::task::spawn_local(async move {
-                if let Err(err) = lifecycle.bootstrap(progress).await {
-                    eprintln!("WSL lifecycle bootstrap failed: {err}");
+                // Recipe path (w5): fetch the CI-published rootfs from the
+                // embedded manifest → wsl --import → systemd. Proven E2E on real
+                // hardware (2026-05-26). Supersedes the legacy `bootstrap` OCI-base
+                // + separate-binary download — the recipe rootfs self-installs the
+                // headless on first boot.
+                if let Err(err) = lifecycle.provision_via_recipe(progress).await {
+                    eprintln!("WSL recipe provisioning failed: {err}");
                 }
             });
         } else {
