@@ -332,7 +332,12 @@ async fn run_start(
         );
         let manifest = tillandsias_vm_layer::recipe::Manifest::from_toml(BUNDLED_MANIFEST_TOML)
             .map_err(|e| format!("bundled manifest parse: {e}"))?;
-        let tag = format!("v{}", env!("CARGO_PKG_VERSION"));
+        // Tag = workspace VERSION (e.g. "v0.2.260526.2"), NOT the
+        // macos-tray crate's Cargo.toml `version` (which is still
+        // "0.1.0" — package-local, not user-facing). The workspace
+        // VERSION is bumped by `scripts/bump-version.sh` and is
+        // what `release.yml` tags artifacts under.
+        let tag = format!("v{}", BUNDLED_VERSION.trim());
         vz.fetch_recipe_artifact(&manifest, &tag)
             .await
             .map_err(|e| {
@@ -357,6 +362,13 @@ async fn run_start(
 /// Updating the manifest (e.g. SHA pin after CI run) requires a
 /// rebuild of the macOS tray.
 const BUNDLED_MANIFEST_TOML: &str = include_str!("../../../images/vm/manifest.toml");
+
+/// Workspace VERSION (e.g. `"0.2.260526.2"`) embedded at build time.
+/// Used as the release-tag input to `fetch_recipe_artifact` so first-
+/// launch fetches resolve against the right release. Bumped by
+/// `scripts/bump-version.sh`; consumed by `release.yml` for tagging.
+/// Trim trailing newline at use site.
+const BUNDLED_VERSION: &str = include_str!("../../../VERSION");
 
 impl TrayActionHost {
     /// Construct on the AppKit main thread. `mtm` proves we're on the
@@ -396,31 +408,45 @@ mod tests {
         assert_eq!(cls.name(), "TillandsiasTrayActionHost");
     }
 
-    /// run_start short-circuits with a clear error when the image
-    /// root is empty AND the bundled manifest's SHA is still the
-    /// placeholder "pending-ci". This is the expected v0.0.1
-    /// first-launch path until l9 step 5 (CI SHA pin commit) lands.
-    /// After SHA pins are populated, this test would need a network
-    /// to exercise — the failure mode shifts from "no pinned SHA" to
-    /// the actual HTTP fetch.
+    /// run_start surfaces a wrapped, user-actionable error when
+    /// `fetch_recipe_artifact` fails — regardless of whether the
+    /// failure is a SHA gate, an HTTP error, an xz error, etc. The
+    /// wrapping in `run_start` always appends the
+    /// "If the SHA pin is still 'pending-ci'" hint so users get a
+    /// pointer back to the most common cause.
+    ///
+    /// This test exercises the full path via the bundled manifest +
+    /// VERSION (real release tag, real pinned SHA), which means it
+    /// hits the network and gets back a 404 if the release isn't
+    /// found, OR succeeds at fetch but fails at xz/start. The
+    /// assertions just confirm the wrapping is in place + the slot
+    /// stays empty on failure; the precise inner error varies with
+    /// network state and is not the test's concern.
     #[tokio::test]
-    async fn run_start_reports_pending_sha_until_l9_step5() {
+    async fn run_start_wraps_fetch_errors_with_hint() {
         let tmp = tempfile::tempdir().unwrap();
         let vm_slot = Arc::new(Mutex::new(None));
-        let err = run_start(tmp.path().to_path_buf(), vm_slot.clone())
-            .await
-            .expect_err("expected pending-SHA fetch refusal");
-        // The fetch path engages first (image missing), then
-        // download_verified refuses the "pending-ci" placeholder.
-        // Error mentions both the fetch attempt and the SHA gate.
-        assert!(
-            err.contains("recipe-artifact fetch failed"),
-            "expected fetch-failed error, got: {err}"
-        );
-        assert!(
-            err.contains("no pinned SHA-256") || err.contains("pending-ci"),
-            "expected SHA-gate explanation, got: {err}"
-        );
-        assert!(vm_slot.lock().unwrap().is_none(), "slot should stay empty");
+        let result = run_start(tmp.path().to_path_buf(), vm_slot.clone()).await;
+        match result {
+            Err(err) => {
+                assert!(
+                    err.contains("recipe-artifact fetch failed"),
+                    "expected fetch-failed wrapping, got: {err}"
+                );
+                assert!(
+                    err.contains("pending-ci") || err.contains("l9 step 5"),
+                    "expected user-actionable hint, got: {err}"
+                );
+                assert!(vm_slot.lock().unwrap().is_none(), "slot should stay empty on err");
+            }
+            Ok(()) => {
+                // If the network + xz + start actually succeeded, the
+                // VM is now running. Stop it so the test doesn't leak
+                // a live VZVirtualMachine.
+                if let Some(vz) = vm_slot.lock().unwrap().take() {
+                    let _ = vz.stop(std::time::Duration::from_secs(60)).await;
+                }
+            }
+        }
     }
 }
