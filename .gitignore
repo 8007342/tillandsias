@@ -69,3 +69,6 @@ cheatsheet-sources/
 .claude/scheduled_tasks.lock
 .claude/scheduled_tasks.json
 /dist
+# Local materializer cache (rebuilt by recipe-publish CI; never committed)
+/out-cache
+/target/forge-diagnostics
