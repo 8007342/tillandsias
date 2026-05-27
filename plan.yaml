@@ -9,6 +9,7 @@ plan:
     current_directory: true
     prompt_template: './codex "Look at ./plan.yaml and continue implementation using ./methodology.yaml"'
     repeat_template: './codex --repeat 30m "Look at ./plan.yaml and continue implementation using ./methodology.yaml"'
+    big_pickle_template: './opencode-repeat --wait 45m --command diagnose-forge'
 
   methodology:
     root: methodology.yaml
@@ -19,8 +20,8 @@ plan:
 
   current_state:
     last_completed_step: recent-work-spec-doc-methodology-audit (step 20)
-    next_step: forge-diagnostics-automation (step 21.5)
-    next_graph_node: forge-diagnostics-automation (in_progress)
+    next_step: forge-diagnostics-improvement-loop (step 21.6)
+    next_graph_node: forge-diagnostics-improvement-loop (in_progress)
     plan_index: plan/index.yaml
     step_directory: plan/steps
     checkpoint_branch: linux-next

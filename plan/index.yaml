@@ -1498,6 +1498,67 @@ plan_index:
           checkpoint_required: true
           handoff_note: "BLOCKED pending orchestrator response. Requested: new agent_diagnostic litmus signal type, composability rules, non-blocking annex semantics, and cross-test dedup."
 
+    - id: forge-diagnostics-improvement-loop
+      order: 21.6
+      title: Forge Diagnostics Improvement Loop — /diagnose-forge + opencode-repeat
+      status: in_progress
+      deliverable: plan/forge-improvements/
+      depends_on: [forge-diagnostics-automation]
+      specs:
+        - default-image
+        - forge-as-only-runtime
+        - forge-environment-discoverability
+        - forge-hot-cold-split
+        - forge-offline
+        - forge-opencode-onboarding
+        - forge-shell-tools
+        - forge-staleness
+        - forge-standalone
+      exit_criteria:
+        - "Repeat loop runs successfully: ./opencode-repeat --wait 45m --command diagnose-forge"
+        - "/diagnose-forge command extracts actionable gaps from diagnostics output"
+        - "Proposals are filed in plan/forge-improvements/proposals/ with structured frontmatter"
+        - "Approved proposals are implemented against the forge Containerfile and entrypoint"
+        - "Forge completeness rises from 50/50 baseline toward fully-loaded dev environment"
+      tasks:
+        - id: forge-improvement/repeat-wrapper
+          status: completed
+          depends_on: []
+          owned_files:
+            - opencode-repeat
+          checkpoint_required: true
+          handoff_note: "opencode-repeat wrapper created. Supports --wait, --times, --command. Calls opencode run --dangerously-skip-permissions in a loop."
+        - id: forge-improvement/diagnose-command
+          status: completed
+          depends_on: [forge-improvement/repeat-wrapper]
+          owned_files:
+            - .opencode/commands/diagnose-forge.md
+            - .opencode/skills/diagnose-forge/SKILL.md
+          checkpoint_required: true
+          handoff_note: "/diagnose-forge command and diagnose-forge skill created. Command reads diagnostics, extracts gaps, files proposals. Skill provides detailed workflow instructions."
+        - id: forge-improvement/proposal-infra
+          status: completed
+          depends_on: [forge-improvement/diagnose-command]
+          owned_files:
+            - plan/forge-improvements/.gitignore
+            - plan/forge-improvements/.diagnose-state
+          checkpoint_required: true
+          handoff_note: "Proposal directory structure created. State file tracks last-processed diagnostics. .gitignore excludes runtime state."
+        - id: forge-improvement/first-run
+          status: pending
+          depends_on: [forge-improvement/proposal-infra, forge-diagnostics/prompt]
+          owned_files: []
+          checkpoint_required: false
+          handoff_note: "First unattended diagnostics run. Requires a successful E2E build with forge first to produce diagnostics_log. Manual or CI-triggered."
+        - id: forge-improvement/iterate
+          status: pending
+          depends_on: [forge-improvement/first-run]
+          owned_files:
+            - plan/forge-improvements/proposals/
+            - plan/forge-improvements/.diagnose-state
+          checkpoint_required: false
+          handoff_note: "Continuous: each iteration processes new diagnostics, files proposals, implements approved changes. No fixed endpoint — forge iteratively becomes more capable."
+
     - id: multi-host-plan-ledger-adoption
       order: 21
       title: Multi-Host Plan Ledger Adoption
