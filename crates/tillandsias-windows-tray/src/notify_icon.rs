@@ -215,6 +215,25 @@ pub fn run() -> ! {
                         // MENU_STATE; readiness is reflected in the status line.)
                         tracing::info!("VM ready — control wire established");
                         update_status_text("\u{1F7E2} Ready", hwnd);
+                        // WSL2 idles the utility VM down when no host-side session
+                        // holds it open, which silently drops the headless + the
+                        // HvSocket control wire. Hold a keepalive session for the
+                        // tray's lifetime: parking this task keeps `_keepalive`
+                        // alive; on Quit the LocalSet drops the task → kill_on_drop
+                        // releases the VM to idle normally again.
+                        match lifecycle.spawn_keepalive() {
+                            Ok(_keepalive) => {
+                                tracing::info!("VM keepalive holding the control wire warm");
+                                std::future::pending::<()>().await;
+                            }
+                            Err(err) => {
+                                eprintln!("VM keepalive spawn failed: {err}");
+                                update_status_text(
+                                    "\u{1F7E1} Ready (VM may idle out)",
+                                    hwnd,
+                                );
+                            }
+                        }
                     }
                     Err(err) => {
                         eprintln!("WSL recipe provisioning failed: {err}");

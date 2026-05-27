@@ -94,6 +94,14 @@ impl WslLifecycle {
         self.runtime.start().await
     }
 
+    /// Spawn a keepalive `wsl --exec` session that holds the WSL2 utility VM
+    /// open (it idles down otherwise, dropping the HvSocket control wire). The
+    /// caller holds the returned `Child` for the tray's lifetime; it's
+    /// `kill_on_drop`, so releasing it lets the VM idle normally again.
+    pub fn spawn_keepalive(&self) -> Result<tokio::process::Child, String> {
+        self.runtime.spawn_keepalive()
+    }
+
     /// Graceful shutdown — issued by the tray on Quit. The host-shell's
     /// `VmLifecycle::stop` is the production entry point; this wrapper
     /// exists for callers that don't want the full `VmLifecycle` machinery.

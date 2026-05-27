@@ -148,6 +148,34 @@ impl WslRuntime {
             .await;
         Ok(())
     }
+
+    /// Spawn a long-lived `wsl --exec` session that **keeps the WSL2 utility VM
+    /// alive** for the tray's lifetime. WSL2 idles the utility VM down when no
+    /// host-side session is active, which silently drops the in-VM headless +
+    /// the HvSocket control wire (`connect` then times out, WSAETIMEDOUT). An
+    /// active `wsl --exec sleep infinity` holds it open (verified E2E
+    /// 2026-05-27: with a held session the control wire stays reachable; without
+    /// one the VM idles out within ~60s).
+    ///
+    /// The caller holds the returned [`tokio::process::Child`] for as long as the
+    /// VM should stay warm; it's `kill_on_drop`, so dropping it releases the VM
+    /// to idle normally (and `stop`/Quit terminates the VM regardless).
+    ///
+    /// @trace spec:vm-idiomatic-layer, plan/issues/tray-convergence-coordination.md (w9)
+    pub fn spawn_keepalive(&self) -> Result<tokio::process::Child, VmError> {
+        tokio::process::Command::new("wsl")
+            .arg("--distribution")
+            .arg(&self.distro_name)
+            .arg("--exec")
+            .arg("sleep")
+            .arg("infinity")
+            .stdin(std::process::Stdio::null())
+            .stdout(std::process::Stdio::null())
+            .stderr(std::process::Stdio::null())
+            .kill_on_drop(true)
+            .spawn()
+            .map_err(|e| format!("spawn WSL keepalive failed: {e}"))
+    }
 }
 
 #[cfg(target_os = "windows")]
