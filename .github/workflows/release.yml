@@ -27,23 +27,15 @@ jobs:
         with:
           fetch-depth: 0
 
-      - name: Install Rust stable with musl target
-        uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # stable
-        with:
-          toolchain: stable
-          targets: x86_64-unknown-linux-musl, aarch64-unknown-linux-musl
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
 
-      - name: Rust cache
-        uses: swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2
-        with:
-          workspaces: |
-            . -> target
-            . -> target-musl
-
-      - name: Install release tools
-        run: |
-          sudo apt-get update
-          sudo apt-get install -y file jq musl-tools
+      - name: Magic Nix Cache
+        # Caches the nix store across runs via the GitHub Actions cache backend.
+        # Critical for cost: the aarch64 cross-GCC is built from source by
+        # pkgsCross (not in cache.nixos.org), so without this every release run
+        # rebuilds GCC. With it, that's a one-time cost.
+        uses: DeterminateSystems/magic-nix-cache-action@565684385bcd71bad329742eefe8d12f2e765b39 # v13
 
       - name: Resolve and validate version
         env:
@@ -67,71 +59,40 @@ jobs:
       - name: Verify version monotonicity
         run: bash scripts/verify-version-monotonic.sh
 
-      - name: Build router sidecar
-        run: scripts/build-sidecar.sh
-
-      - name: Build portable Linux binary
+      - name: Build musl-static binaries via Nix (host + in-VM agents, both arches)
         run: |
-          cargo build \
-            --workspace \
-            --release \
-            --target x86_64-unknown-linux-musl \
-            --features tray \
-            --manifest-path Cargo.toml
+          # Hermetic crane + pkgsCross builds (flake.nix). Replaces the prior
+          # cargo+musl-tools (x86_64) and cross/musl.cc (aarch64) paths — both
+          # failed in CI (musl.cc network timeout; cross 0.2.5's ancient-glibc
+          # container choked on build.rs). The router sidecar + runtime assets
+          # are git-tracked, so nix embeds them from the checked-out tree.
+          nix build -L .#tillandsias-x86_64-musl           --out-link result-host
+          nix build -L .#tillandsias-headless-x86_64-musl  --out-link result-hx
+          nix build -L .#tillandsias-headless-aarch64-musl --out-link result-ha
 
-      - name: Validate portable binary
+      - name: Collect + validate release artifacts
         run: |
-          BIN="target/x86_64-unknown-linux-musl/release/tillandsias"
-          test -x "$BIN"
-          file "$BIN" | tee /tmp/tillandsias-file.txt
-          grep -F "statically linked" /tmp/tillandsias-file.txt
-          "$BIN" --version
+          mkdir -p release-artifacts
+          install -m 0755 result-host/bin/tillandsias release-artifacts/tillandsias-linux-x86_64
+          install -m 0755 result-hx/bin/tillandsias   release-artifacts/tillandsias-headless-x86_64-unknown-linux-musl
+          install -m 0755 result-ha/bin/tillandsias   release-artifacts/tillandsias-headless-aarch64-unknown-linux-musl
+          install -m 0755 scripts/install.sh   release-artifacts/install.sh
+          install -m 0755 scripts/uninstall.sh release-artifacts/uninstall.sh
+          install -m 0755 scripts/verify.sh    release-artifacts/verify.sh
 
-          HEADLESS_OUTPUT="$(timeout 5 "$BIN" --headless /tmp/tillandsias-release-validation 2>&1 || true)"
+          # musl-static portability sanity (spec:linux-native-portable-executable).
+          file release-artifacts/tillandsias-linux-x86_64 | tee /tmp/f.txt
+          grep -F "statically linked" /tmp/f.txt
+          grep -F "x86-64" /tmp/f.txt
+          file release-artifacts/tillandsias-headless-x86_64-unknown-linux-musl | grep -F "x86-64"
+          file release-artifacts/tillandsias-headless-aarch64-unknown-linux-musl | grep -F "aarch64"
+
+          # Smoke the host binary's headless mode (runs on this x86_64 runner).
+          release-artifacts/tillandsias-linux-x86_64 --version
+          HEADLESS_OUTPUT="$(timeout 5 release-artifacts/tillandsias-linux-x86_64 --headless /tmp/tillandsias-release-validation 2>&1 || true)"
           printf '%s\n' "$HEADLESS_OUTPUT"
           grep -F '"event":"app.started"' <<<"$HEADLESS_OUTPUT"
           grep -F '"event":"app.stopped"' <<<"$HEADLESS_OUTPUT"
-
-      - name: Collect release artifacts (host binary + in-VM headless agents)
-        run: |
-          mkdir -p release-artifacts
-          # Host product binary (--features tray). Saved FIRST, before the
-          # headless builds below reuse the x86_64 target dir for the same
-          # `tillandsias` bin name with a different feature set.
-          install -m 0755 target/x86_64-unknown-linux-musl/release/tillandsias release-artifacts/tillandsias-linux-x86_64
-          install -m 0755 scripts/install.sh release-artifacts/install.sh
-          install -m 0755 scripts/uninstall.sh release-artifacts/uninstall.sh
-          install -m 0755 scripts/verify.sh release-artifacts/verify.sh
-
-          # In-VM headless agents (--features listen-vsock) for BOTH arches.
-          # The recipe rootfs's first-boot tillandsias-headless-fetch.service
-          # downloads tillandsias-headless-<arch>-unknown-linux-musl from
-          # releases/latest (see images/vm/bootstrap/20-tillandsias.sh); without
-          # them the in-VM agent never installs → no vsock Hello/HelloAck → tray
-          # never Ready.
-          #
-          # x86_64: native musl-gcc (musl-tools, installed above).
-          cargo build --release -p tillandsias-headless \
-            --target x86_64-unknown-linux-musl --features listen-vsock
-          install -m 0755 target/x86_64-unknown-linux-musl/release/tillandsias \
-            release-artifacts/tillandsias-headless-x86_64-unknown-linux-musl
-
-          # aarch64: `cross` (containerized toolchain pulled from GHCR). This
-          # REPLACES a musl.cc curl download that timed out from GitHub runners
-          # (curl 28, connect to musl.cc:443 timed out) — cross is the GH-Actions
-          # -friendly way to get an aarch64-musl C cross-compiler. cross mounts
-          # the host rustup/cargo so it uses THIS job's stable toolchain (edition
-          # 2024 OK) with the container's musl cross-gcc + sysroot.
-          cargo install cross --locked --version 0.2.5
-          cross build --release -p tillandsias-headless \
-            --target aarch64-unknown-linux-musl --features listen-vsock
-          install -m 0755 target/aarch64-unknown-linux-musl/release/tillandsias \
-            release-artifacts/tillandsias-headless-aarch64-unknown-linux-musl
-
-          # Arch sanity — fail the release if a cross-build silently produced
-          # the wrong arch.
-          file release-artifacts/tillandsias-headless-x86_64-unknown-linux-musl | grep -F "x86-64"
-          file release-artifacts/tillandsias-headless-aarch64-unknown-linux-musl | grep -F "aarch64"
 
           cd release-artifacts
           sha256sum -- * > SHA256SUMS
