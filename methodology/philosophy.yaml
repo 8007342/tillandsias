@@ -25,6 +25,13 @@ philosophy:
     - spec_is_source_of_truth_not_code
     - convergence_claims_must_cite_evidence_bundle
 
+  math_foundations:
+    - claim: "Finite ordered convergence under declared validators."
+    - lattice_model: "Stable obligations form a finite lattice; evidence-improving transitions are checked for monotonicity."
+    - ranking_function: "CentiColons are a bounded ranking function over that model. They measure residual obligation closure, not probabilistic certainty."
+    - fixed_points: "A fully closed spec is a fixed point of the local refinement operator."
+    - unknown_events: "Unknown-event intake is the escape hatch that prevents the model from confusing current completeness with absolute truth."
+
 layers:
   - name: spec
     description: >

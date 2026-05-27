@@ -158,18 +158,15 @@ evidence_bundle:
     purpose: >
       Drive autonomous work by repeatedly selecting the highest residual
       obligation, verifying the source of intent, and applying the smallest
-      change that monotonically reduces uncertainty. Each pass must preserve an
-      observable log chain so the next pass can continue from the last meaningful
-      failure boundary.
+      change that monotonically reduces uncertainty.
     steps:
       - step: gather_evidence
         description: >
-          Run the current top-level CI boundary (for example `--ci-full --install`)
-          plus the highest-signal litmus for the domain under review. Prefer the
-          shortest failing chain that still explains the offender and record the
-          exact chain reference (`small_test`, sibling set, scoped `--filter` /
-          `--strict`, `--ci-full --install`, `--init --debug`) so the next pass
-          can resume without rediscovery.
+          Run the smallest localized litmus test applicable to the domain using
+          `cargo test` or `./build.sh --ci --strict --filter <spec-id>`.
+          Use lazy evaluation: avoid running the expensive `--ci-full --install`
+          unless you are validating a final release or missing local context.
+          Record the exact chain reference so the next pass can resume.
       - step: verify_intent
         description: >
           Read the active spec, its bound cheatsheets, tombstones, and referenced

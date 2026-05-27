@@ -104,9 +104,6 @@ bootstrap_router:
   intent_options:
     code_implementation:
       choose_when: "User asks to implement or change behavior."
-      roles:
-        - code_author
-        - spec_reader
       read:
         - methodology/spec-system.yaml
         - methodology/ci.yaml
@@ -118,10 +115,6 @@ bootstrap_router:
 
     bug_fix:
       choose_when: "User asks to diagnose and fix incorrect behavior."
-      roles:
-        - code_author
-        - test_author
-        - unknown_triager
       read:
         - methodology/spec-system.yaml
         - methodology/ci.yaml
@@ -134,9 +127,6 @@ bootstrap_router:
 
     test_or_automation:
       choose_when: "User asks to run, add, or repair tests, CI, scripts, or automation."
-      roles:
-        - test_author
-        - ci_operator
       read:
         - methodology/ci.yaml
         - methodology/litmus.yaml
@@ -146,9 +136,6 @@ bootstrap_router:
 
     spec_authoring:
       choose_when: "User asks to create, revise, split, archive, or validate specs."
-      roles:
-        - spec_author
-        - evidence_curator
       read:
         - methodology/spec-system.yaml
         - methodology/litmus.yaml
@@ -161,9 +148,6 @@ bootstrap_router:
 
     litmus_authoring:
       choose_when: "User asks to create or refine executable decision boundaries."
-      roles:
-        - litmus_author
-        - test_author
       read:
         - methodology/litmus.yaml
         - methodology/spec-system.yaml
@@ -175,9 +159,6 @@ bootstrap_router:
 
     cheatsheet_authoring:
       choose_when: "User asks to create, refresh, compact, or validate cheatsheets."
-      roles:
-        - cheatsheet_curator
-        - evidence_curator
       read:
         - methodology/cheatsheets.yaml
         - methodology/provenance.yaml
@@ -188,9 +169,6 @@ bootstrap_router:
 
     release_or_deployment:
       choose_when: "User asks to release, version, deploy, publish, or push to prod."
-      roles:
-        - release_operator
-        - ci_operator
       read:
         - methodology/versioning.yaml
         - methodology/verification.yaml
@@ -203,9 +181,6 @@ bootstrap_router:
 
     multi_agent_orchestration:
       choose_when: "User asks to coordinate background agents or batch work."
-      roles:
-        - orchestrator
-        - event_recorder
       read:
         - methodology/between-commits-work-discipline.yaml
         - methodology/multi-host-development.yaml
@@ -220,9 +195,6 @@ bootstrap_router:
 
     documentation:
       choose_when: "User asks to update docs without changing behavior or specs."
-      roles:
-        - doc_author
-        - evidence_curator
       read:
         - methodology/spec-system.yaml
         - methodology/cheatsheets.yaml
@@ -233,10 +205,6 @@ bootstrap_router:
 
     methodology_refinement:
       choose_when: "User asks to change the methodology itself."
-      roles:
-        - methodology_author
-        - evidence_curator
-        - math_reviewer
       read:
         - methodology/catalog.yaml
         - methodology/multi-host-development.yaml
@@ -252,9 +220,6 @@ bootstrap_router:
 
     unknown_capture:
       choose_when: "Task intent is unclear, surprising, or contradicts known methodology."
-      roles:
-        - unknown_triager
-        - evidence_curator
       read:
         - methodology/event/index.yaml
         - methodology/provenance.yaml
@@ -265,9 +230,6 @@ bootstrap_router:
 
     investigation_only:
       choose_when: "User asks for analysis, audit, review, or explanation without edits."
-      roles:
-        - investigator
-        - evidence_curator
       read:
         - methodology/catalog.yaml
         - methodology/verification.yaml
@@ -281,13 +243,5 @@ bootstrap_router:
         The request is empty, impossible in the current environment, unsafe to
         execute, explicitly asks for no action, or cannot be classified after
         reading this router.
-      roles:
-        - unknown_triager
       read:
         - methodology/event/index.yaml
-      done_when:
-        - no_op_or_blocker_is_reported
-        - unknown_event_created_if_the_gap_teaches_methodology_something
-        - no_source_edit_performed_without_reclassification
-
-  role_file_matrix_ref: methodology/bootstrap/roles.yaml
