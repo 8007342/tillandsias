@@ -48,6 +48,10 @@ windows = { version = "0.58", features = [
     "Win32_Networking_WinSock",
 ] }
 uuid = { workspace = true }
+# File-based tracing: a GUI-subsystem tray has no console, so logs must go to a
+# file (%LOCALAPPDATA%\tillandsias\logs\tray.log) that "Open Log" can surface.
+tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
+tracing-appender = { workspace = true }
 
 [target.'cfg(not(target_os = "windows"))'.dependencies]
 uuid = { workspace = true }

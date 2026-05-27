@@ -150,6 +150,10 @@ fn write_utf16_into<const N: usize>(buf: &mut [u16; N], text: &str) {
 /// Entry point invoked from `main`. Blocks until the user picks "Quit" on
 /// the tray; returns `!` because the OS message loop owns the thread.
 pub fn run() -> ! {
+    // Route tracing to a file before anything logs — a GUI tray has no console.
+    init_tracing();
+    tracing::info!(log = %log_file_path().display(), "tillandsias tray starting");
+
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -293,6 +297,52 @@ pub fn run() -> ! {
         msg.wParam.0 as i32
     });
     std::process::exit(exit_code);
+}
+
+/// Directory the tray writes its log file to (`%LOCALAPPDATA%\tillandsias\logs`,
+/// falling back to the temp dir if `LOCALAPPDATA` is somehow unset).
+fn log_dir() -> std::path::PathBuf {
+    std::env::var_os("LOCALAPPDATA")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir)
+        .join("tillandsias")
+        .join("logs")
+}
+
+/// The tray's log file — a fixed path so "Open Log" always knows where to look.
+fn log_file_path() -> std::path::PathBuf {
+    log_dir().join("tray.log")
+}
+
+/// Initialize file-based tracing. A release tray is a GUI-subsystem binary with
+/// no console, so `tracing::{info,warn,error}!` events are lost unless routed to
+/// a file. Writes (synchronously — tray log volume is tiny, and this avoids a
+/// `WorkerGuard` that `process::exit` would skip flushing) to
+/// `%LOCALAPPDATA%\tillandsias\logs\tray.log`, honoring `RUST_LOG` (default
+/// `info`). Idempotent: a second call is a no-op (`try_init`).
+fn init_tracing() {
+    let dir = log_dir();
+    let _ = std::fs::create_dir_all(&dir);
+    let appender = tracing_appender::rolling::never(&dir, "tray.log");
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
+    let _ = tracing_subscriber::fmt()
+        .with_writer(appender)
+        .with_ansi(false)
+        .with_target(false)
+        .with_env_filter(filter)
+        .try_init();
+}
+
+/// Reveal the tray log file in Explorer (`/select,` highlights it in its
+/// folder), so the user doesn't depend on a `.log` default-app association.
+fn open_log_file() {
+    let path = log_file_path();
+    // Explorer needs the path as a single argument; `/select,<path>` opens the
+    // containing folder with the file highlighted.
+    let _ = std::process::Command::new("explorer.exe")
+        .arg(format!("/select,{}", path.display()))
+        .spawn();
 }
 
 /// Whether the tray should drive WSL provisioning on launch. Dev mode disables
@@ -607,7 +657,8 @@ fn dispatch_action(hwnd: HWND, action: MenuAction) {
             );
         }
         MenuAction::OpenLog => {
-            tracing::info!("open log requested: host-side log-file path not wired yet");
+            tracing::info!(log = %log_file_path().display(), "opening tray log in Explorer");
+            open_log_file();
         }
         // Attach / Maintain / GitHub-login all open an in-VM PTY. `intent_for_action`
         // picks the `PtyIntent`; `launch_spec` produces the exact forge-wrapped in-VM
@@ -732,6 +783,17 @@ mod tests {
     fn wm_trayicon_is_in_app_range() {
         // Both are consts, so enforce the invariant at compile time.
         const { assert!(WM_TRAYICON >= WM_APP) };
+    }
+
+    /// The log file lives under `…\tillandsias\logs\tray.log` so "Open Log" and
+    /// `init_tracing` agree on a single fixed path.
+    #[test]
+    fn log_file_path_is_under_tillandsias_logs() {
+        let p = log_file_path();
+        assert_eq!(p.file_name().unwrap(), "tray.log");
+        let parent = p.parent().unwrap();
+        assert_eq!(parent.file_name().unwrap(), "logs");
+        assert_eq!(parent.parent().unwrap().file_name().unwrap(), "tillandsias");
     }
 
     /// The Open-Shell terminal argv runs the resolved in-VM argv verbatim under
