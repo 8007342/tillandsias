@@ -72,3 +72,5 @@ cheatsheet-sources/
 # Local materializer cache (rebuilt by recipe-publish CI; never committed)
 /out-cache
 /target/forge-diagnostics
+/result
+/result-*

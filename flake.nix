@@ -5,9 +5,15 @@
     nixpkgs.url = "github:NixOS/nixpkgs/nixos-24.11";
     flake-utils.url = "github:numtide/flake-utils";
     rust-overlay.url = "github:oxalica/rust-overlay";
+    # crane: build the Rust release binaries via the flake with the
+    # edition-2024-capable rust-overlay toolchain. nixpkgs-24.11's own rust is
+    # too old for edition 2024, so buildRustPackage can't be used directly.
+    # Pinned to v0.20.3 — the latest crane that targets nixpkgs-24.11; v0.21+
+    # require nixpkgs-25.11 (crane-utils fails to build otherwise).
+    crane.url = "github:ipetkov/crane/v0.20.3";
   };
 
-  outputs = { self, nixpkgs, flake-utils, rust-overlay }:
+  outputs = { self, nixpkgs, flake-utils, rust-overlay, crane }:
     flake-utils.lib.eachDefaultSystem (system:
       let
         overlays = [ rust-overlay.overlays.default ];
@@ -16,8 +22,66 @@
         };
         rustToolchain = pkgs.rust-bin.stable.latest.default.override {
           extensions = [ "rust-src" "clippy" "rustfmt" "rust-analyzer" ];
-          targets = [ "x86_64-unknown-linux-musl" ];
+          targets = [ "x86_64-unknown-linux-musl" "aarch64-unknown-linux-musl" ];
         };
+
+        # ---- Hermetic musl-static release binaries (crane + pkgsCross) -------
+        # Replaces the musl.cc download / `cross` container (both failed in CI:
+        # musl.cc network timeout; cross 0.2.5's ancient-glibc container choked
+        # on tillandsias-headless's build.rs). nix compiles build scripts for
+        # the BUILD host (native glibc) and the binary for the TARGET, and the
+        # aarch64-musl C cross-compiler comes from nixpkgs pkgsCross — no
+        # external download, modern toolchain. TLS is rustls/ring (no OpenSSL),
+        # so cross only needs the C compiler for ring.
+        # @trace spec:linux-native-portable-executable (musl-static requirement)
+        craneLib = (crane.mkLib pkgs).overrideToolchain rustToolchain;
+        # NOT cleanCargoSource: tillandsias-headless's build.rs embeds runtime
+        # assets from images/, observatorium/, and scripts/ (per
+        # spec:linux-native-portable-executable "carries runtime image
+        # contexts"). Keep the full tree but drop build outputs (target/,
+        # out-cache/, dist/, result) for purity + size; cleanSource drops .git.
+        craneSrc = pkgs.lib.cleanSourceWith {
+          src = pkgs.lib.cleanSource ./.;
+          filter = path: _type:
+            !(builtins.elem (baseNameOf path) [ "target" "out-cache" "dist" "result" ]);
+        };
+        crossPkgs = pkgs.pkgsCross.aarch64-multiplatform-musl;
+        aarch64Cc = "${crossPkgs.stdenv.cc}/bin/${crossPkgs.stdenv.cc.targetPrefix}cc";
+        aarch64Ar = "${crossPkgs.stdenv.cc.bintools.bintools}/bin/${crossPkgs.stdenv.cc.targetPrefix}ar";
+
+        commonCraneArgs = {
+          src = craneSrc;
+          strictDeps = true;
+          doCheck = false; # release builds don't run tests (./build.sh does)
+        };
+
+        tillandsias-x86_64-musl = craneLib.buildPackage (commonCraneArgs // {
+          pname = "tillandsias";
+          version = "0.0.0";
+          CARGO_BUILD_TARGET = "x86_64-unknown-linux-musl";
+          cargoExtraArgs = "--bin tillandsias --features tray";
+        });
+
+        tillandsias-headless-x86_64-musl = craneLib.buildPackage (commonCraneArgs // {
+          pname = "tillandsias-headless-x86_64";
+          version = "0.0.0";
+          CARGO_BUILD_TARGET = "x86_64-unknown-linux-musl";
+          cargoExtraArgs = "-p tillandsias-headless --bin tillandsias --features listen-vsock";
+        });
+
+        tillandsias-headless-aarch64-musl = craneLib.buildPackage (commonCraneArgs // {
+          pname = "tillandsias-headless-aarch64";
+          version = "0.0.0";
+          CARGO_BUILD_TARGET = "aarch64-unknown-linux-musl";
+          cargoExtraArgs = "-p tillandsias-headless --bin tillandsias --features listen-vsock";
+          # aarch64-musl cross toolchain (ring's build.rs + linker).
+          depsBuildBuild = [ crossPkgs.stdenv.cc ];
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER = aarch64Cc;
+          CC_aarch64_unknown_linux_musl = aarch64Cc;
+          AR_aarch64_unknown_linux_musl = aarch64Ar;
+          TARGET_CC = aarch64Cc;
+          HOST_CC = "${pkgs.stdenv.cc}/bin/cc";
+        });
 
         # Local files — changing these triggers rebuild
         forgeEntrypoint = ./images/default/entrypoint.sh;
@@ -106,6 +170,11 @@
 
       in {
         packages = {
+          # Hermetic musl-static release binaries (see let-bindings above).
+          inherit tillandsias-x86_64-musl
+                  tillandsias-headless-x86_64-musl
+                  tillandsias-headless-aarch64-musl;
+
           forge-image = pkgs.dockerTools.buildLayeredImage {
             name = "tillandsias-forge";
             tag = "latest";
