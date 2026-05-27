@@ -1,6 +1,6 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-05-27T19:05Z
+LastExecutionTime: 2026-05-27T19:07Z
 
 ## This Loop
 
@@ -19,10 +19,16 @@ LastExecutionTime: 2026-05-27T19:05Z
 - If sibling plan-doc conflicts recur, the runtime-litmus runner should record
   them, reset to `origin/linux-next`, and still run the full installed runtime
   litmus so the next cycle has build/runtime output to inspect.
+- Started the required full runtime-litmus run:
+  `20260527T190639Z-2c239138-1aebb284-deba10d8`, PID `2133668`, status
+  `running`, log
+  `plan/localwork/runtime-litmus/20260527T190639Z-2c239138-1aebb284-deba10d8/run.log`.
+  It merged `origin/windows-next` cleanly, found `origin/osx-next` already
+  integrated, and is currently inside `./build.sh --ci-full --install`.
 - Added a required three-host assignment board for every loop so hosts get
   primary and fallback work rather than idling behind stale dependencies.
 - Fetched origin, confirmed `linux-next` was clean and up to date at
-  `9081212c`, and observed remote heads: `windows-next` `c0a9558b`,
+  `2c239138`, and observed remote heads: `windows-next` `1aebb284`,
   `osx-next` `deba10d8`, `main` `e22a6853`.
 - `main` advanced by PR #5 and now contains the durable `release.yml`
   headless-agent auto-publish leg. `linux-next` advanced by one coordination
@@ -34,8 +40,9 @@ LastExecutionTime: 2026-05-27T19:05Z
 
 ## Expected Next Loop
 
-- Start or monitor an async full runtime litmus for `origin/windows-next`
-  through `c0a9558b`; do not stop at another audit-only recommendation.
+- Monitor runtime-litmus
+  `20260527T190639Z-2c239138-1aebb284-deba10d8`; fold its status, log
+  summary, and any pushed merge result before starting another run.
 - During that merge, preserve `linux-next`'s newer `13cf3af0`
   `images/vm/manifest.toml` repin and newer plan entries if Windows' older
   branch blocks appear.
@@ -53,14 +60,18 @@ LastExecutionTime: 2026-05-27T19:05Z
 
 ## Current Major Blockers
 
-- Integration-loop merge/test of `origin/windows-next` through `c0a9558b`.
+- Runtime-litmus
+  `20260527T190639Z-2c239138-1aebb284-deba10d8` is running the full
+  `--ci-full --install` gate before installed `tillandsias` diagnostics.
 - macOS m8 user-attended interactive smoke.
 - Non-blocking release cleanup: manifest-owned `release_tag`.
 
 ## Assignment Board
 
-- Linux primary: start/monitor async runtime litmus for `windows-next` ->
-  `linux-next`; fallback: implement manifest-owned `release_tag`.
+- Linux primary: monitor runtime-litmus
+  `20260527T190639Z-2c239138-1aebb284-deba10d8`; fallback: if it finishes
+  cleanly or with a mechanical blocker, fold the result and implement
+  manifest-owned `release_tag`.
 - Windows primary: wait for integration result, then run full live-provision
   dress rehearsal; fallback: w7 diagnostics if merge/test exposes drift.
 - macOS primary: user-attended m8 smoke; fallback: m10 project threading, then
@@ -79,5 +90,8 @@ LastExecutionTime: 2026-05-27T19:05Z
 - `bash -n codex` passed.
 - `git diff --check` passed for touched coordination files.
 - `./codex --help` still renders usage after the wait-output change.
+- Runtime-litmus run
+  `20260527T190639Z-2c239138-1aebb284-deba10d8` was launched and confirmed
+  alive outside the sandbox at PID `2133668`.
 - Files changed this pass: coordination skill, integration-loop ledger,
   wrapper wait output, and loop cache.
