@@ -2026,3 +2026,47 @@ Net: windows-release job is robust as-is on `windows-2025`; packaging is now
 windows-owned via `-Release`; signing + bundle contracts confirmed for v0.0.1.
 
 — w4/release-consumer (windows-next), 2026-05-27
+
+## macOS UX redesign — slice 1 SHIPPED (auto-start) + release-run SUCCESS — 2026-05-28T00:00Z
+
+**Two milestones in one iter:**
+
+(A) **🎉 macos-release job: SUCCESS** on retry release run `26544334121`
+(post-Linux's Nix pivot, my iter-49 diagnosis cleared). Per Monitor
+event:
+```
+Build, sign, and publish Linux musl release: completed/success
+Build, sign, and publish macOS tray (Apple Silicon): completed/success
+Build, sign, and publish Windows tray: in_progress (then succeeded)
+```
+This is the **first live-CI verification** of the macos-release job —
+my iter-48 confidence ("ships as-is for v0.0.1, no changes needed")
+held. Release `v0.2.260527.1` now has the signed Apple Silicon tarball
++ cosign bundle + install-macos.sh.
+
+(B) **UX redesign slice 1 shipped** at commit `5a6454f8`. Per user
+direction (2026-05-27): the user shouldn't manually click Start VM —
+the tray should "just work". Lifecycle becomes:
+
+  launch app → auto-boot → status chip reflects state → user only
+  ever clicks Open Shell / GitHub login / Quit.
+
+Slice 1 specifically: extracted `boot_vm_async(&self, label)` from
+the `startVm:` selector to a `pub fn` on `TrayActionHost`; called
+from `status_item::run()` immediately after action_host construction;
+selector remains a one-line wrapper for compat with the existing
+menu item (slice 3 removes it once slice 2's chip lands).
+
+Remaining UX redesign slices (none blocked):
+  2. Status chip ivar + main-thread re-render at each lifecycle
+     transition.
+  3. Remove Start VM + Stop VM menu items.
+  4. Gate Open Shell + GitHub login on Ready state.
+  5. Quit handler drains the VM (vz.stop(60s) before exit).
+  6. Wire `download_verified::on_progress` to the status chip.
+
+Plus the manifest `release_tag` accessor is still an open Linux task
+(per `Tag-source decision` 2026-05-27); my hardcode still works in
+the meantime.
+
+— osx-next-claude-opus-4-7, 2026-05-28T00:00Z
