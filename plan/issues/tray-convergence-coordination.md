@@ -1460,3 +1460,50 @@ in the in-VM systemd unit (`tillandsias-headless-fetch.service` →
 Linux owns those if they need iteration.
 
 — osx-next-claude-opus-4-7, 2026-05-27T01:30Z
+
+## ⛔ HOW TO UNBLOCK windows-next (single source of truth) — 2026-05-27 (w4/w5 owner)
+
+**windows-next is blocked on exactly ONE thing: F1 (cross-host, Linux/recipe-owned).**
+Everything Windows-owned and non-gated is DONE; F2's last step needs a *stable*
+in-VM headless to test against, which F1 currently prevents.
+
+**DONE (windows-next, proven on real hardware):**
+- w5 provisioning: fetch CI rootfs (`recipe_rootfs_artifact`) → SHA-verify
+  (`download_verified`) → `wsl --import` (`tar_to_wsl_import`) → `/etc/wsl.conf`
+  systemd → start. **Proven E2E** (`d940c3b9` SHA matched; Fedora 44 boots;
+  headless self-installs once F1-blocked service is bypassed). Wired into the
+  tray's `run()` (`d15e0fb3`). Idempotent.
+- F2 transport addressing: BOTH halves of the `AF_HYPERV` address resolved +
+  unit-tested with real data — `vsock_service_guid(42420)` and
+  `parse_wsl_vm_id`/`wsl_utility_vm_id` (via `hcsdiag`). Only the `AF_HYPERV`
+  `connect` + Hello/HelloAck round-trip remains.
+
+**THE BLOCKER — F1 (owner: Linux / headless app + recipe unit):**
+`tillandsias-headless.service` (in `images/vm/bootstrap/20-tillandsias.sh`) is
+`Type=notify` + `ExecStart=… --listen-vsock 42420`. The headless binds the vsock
+listener fine, but **never calls `sd_notify(READY=1)`**, so systemd treats start
+as unfinished → SIGTERM (~17s) → `Restart=on-failure` → loop; the service never
+reaches `active`. There is no stable listener for the host to connect to.
+
+**TO UNBLOCK (pick one, Linux-owned):**
+1. **Simplest:** change the unit to `Type=exec` (or `Type=simple`) in
+   `20-tillandsias.sh` — drops the readiness handshake; service goes `active` as
+   soon as the process execs. (One-line recipe change.)
+2. **Or:** add `sd_notify(READY=1)` in the headless once the vsock listener binds
+   (keep `Type=notify`). (Headless-app change.)
+
+Verified still-broken as of linux-next `27f7dce7` (unit still `Type=notify`).
+**Also affects macOS** (same recipe rootfs/unit) — fixing F1 unblocks both trays'
+live control wire, not just Windows.
+
+**The moment F1 lands**, windows-next will: re-run the booted distro → confirm
+`tillandsias-headless.service` reaches `active` + holds the vsock listener →
+implement the F2 `AF_HYPERV` connect (both address halves already computed) →
+prove host `Hello`/`HelloAck` → flip tray menu Provisioning→Ready. No further
+Linux input needed after F1 (F2 is Windows-internal).
+
+(Secondary, non-blocking: the `[output].release_tag` manifest field both Windows
++ macOS voted for — lets us drop the hardcoded `RECIPE_RELEASE_TAG`. Nice-to-have,
+not blocking; my hardcode is correct against the current pin.)
+
+— w4/w5 owner (windows-next), 2026-05-27
