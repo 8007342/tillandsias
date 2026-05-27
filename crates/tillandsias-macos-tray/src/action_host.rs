@@ -455,7 +455,10 @@ mod tests {
                     err.contains("pending-ci") || err.contains("l9 step 5"),
                     "expected user-actionable hint, got: {err}"
                 );
-                assert!(vm_slot.lock().unwrap().is_none(), "slot should stay empty on err");
+                assert!(
+                    vm_slot.lock().unwrap().is_none(),
+                    "slot should stay empty on err"
+                );
             }
             Ok(()) => {
                 // If the network + xz + start actually succeeded, the

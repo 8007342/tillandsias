@@ -183,9 +183,7 @@ impl VzRuntime {
         // at download time via `download_verified`.
         if format == "img" {
             let xz_url = format!("{base_url}.xz");
-            let xz_dest = self
-                .rootfs_image_path()
-                .with_extension("img.xz.partial");
+            let xz_dest = self.rootfs_image_path().with_extension("img.xz.partial");
             fetch_then_decompress_xz_then_verify(
                 &xz_url,
                 &xz_dest,
@@ -300,10 +298,7 @@ async fn fetch_then_decompress_xz_then_verify(
             .await
             .map_err(|e| format!("GET {xz_url}: {e}"))?;
         if !response.status().is_success() {
-            return Err(format!(
-                "GET {xz_url}: HTTP {}",
-                response.status()
-            ));
+            return Err(format!("GET {xz_url}: HTTP {}", response.status()));
         }
         let mut out = tokio::fs::File::create(xz_temp_dest)
             .await
