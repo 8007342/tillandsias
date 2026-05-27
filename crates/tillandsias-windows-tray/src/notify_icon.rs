@@ -311,6 +311,57 @@ fn open_log_file() {
         .spawn();
 }
 
+/// Headless diagnostic entry point (`tillandsias-tray --provision-once`): run the
+/// recipe provisioning flow to completion, printing each phase to stdout, and
+/// return a process exit code (0 = VM reached Ready over the control wire, 1 =
+/// failed). A release tray is a GUI-subsystem binary with no console, so this
+/// gives an observable, scriptable end-to-end provision run for CI smoke and the
+/// live-provision dress rehearsal. Does NOT hold a keepalive — it provisions to
+/// Ready, reports, and exits (the VM idles down normally afterward).
+pub fn provision_once() -> i32 {
+    struct ConsoleProgress;
+    impl ProvisionProgress for ConsoleProgress {
+        fn report_phase(&self, phase: ProvisionPhase) {
+            println!("[provision] phase: {}", phase.status_text());
+            tracing::info!(?phase, "provision phase");
+        }
+        fn report_message(&self, message: &str) {
+            println!("[provision] {message}");
+        }
+    }
+
+    init_tracing();
+    let runtime = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(rt) => rt,
+        Err(err) => {
+            eprintln!("[provision] failed to build tokio runtime: {err}");
+            return 1;
+        }
+    };
+    println!("[provision] starting recipe provisioning (live dress rehearsal)\u{2026}");
+    runtime.block_on(async {
+        let lifecycle = WslLifecycle::new();
+        match lifecycle
+            .provision_via_recipe(std::sync::Arc::new(ConsoleProgress))
+            .await
+        {
+            Ok(()) => {
+                println!("[provision] RESULT: VM Ready \u{2014} control wire up \u{2713}");
+                tracing::info!("provision-once: VM Ready");
+                0
+            }
+            Err(err) => {
+                eprintln!("[provision] RESULT: FAILED \u{2014} {err}");
+                tracing::error!(%err, "provision-once failed");
+                1
+            }
+        }
+    })
+}
+
 /// Set by the `Retry` menu click (in the wndproc) and drained by the message
 /// loop, which spawns a fresh provisioning task in the LocalSet context.
 static RETRY_REQUESTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);

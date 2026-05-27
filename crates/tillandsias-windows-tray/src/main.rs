@@ -37,6 +37,12 @@ mod wsl_lifecycle;
 
 #[cfg(target_os = "windows")]
 fn main() {
+    // Headless diagnostic: provision the VM to Ready, print progress, exit with
+    // status. For CI smoke + the live-provision dress rehearsal (the GUI tray
+    // has no console). Otherwise launch the interactive tray.
+    if std::env::args().any(|a| a == "--provision-once") {
+        std::process::exit(notify_icon::provision_once());
+    }
     notify_icon::run();
 }
 
