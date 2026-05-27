@@ -249,6 +249,50 @@ pub async fn hvsocket_handshake(port: u32) -> std::io::Result<(tokio::net::TcpSt
     }
 }
 
+/// Send one control-wire request envelope over a connected stream and read the
+/// next reply envelope (same 4-byte-length + postcard framing as the handshake).
+/// The building block for w9 menu-action routing (VmStatus / EnumerateLocalProjects
+/// / PTY-attach) over the live HvSocket control wire.
+///
+/// @trace plan/issues/tray-convergence-coordination.md (w9), spec:vsock-transport
+#[cfg(target_os = "windows")]
+pub async fn hvsocket_request(
+    stream: &mut tokio::net::TcpStream,
+    seq: u64,
+    body: tillandsias_control_wire::ControlMessage,
+) -> std::io::Result<tillandsias_control_wire::ControlEnvelope> {
+    use std::io::{Error, ErrorKind};
+    use tillandsias_control_wire::{
+        ControlEnvelope, MAX_MESSAGE_BYTES, WIRE_VERSION, decode, encode,
+    };
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let env = ControlEnvelope {
+        wire_version: WIRE_VERSION,
+        seq,
+        body,
+    };
+    let bytes = encode(&env).map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
+    stream
+        .write_all(&(bytes.len() as u32).to_be_bytes())
+        .await?;
+    stream.write_all(&bytes).await?;
+    stream.flush().await?;
+
+    let mut len_buf = [0u8; 4];
+    stream.read_exact(&mut len_buf).await?;
+    let len = u32::from_be_bytes(len_buf) as usize;
+    if len > MAX_MESSAGE_BYTES {
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            "inbound frame too large",
+        ));
+    }
+    let mut body = vec![0u8; len];
+    stream.read_exact(&mut body).await?;
+    decode(&body).map_err(|e| Error::new(ErrorKind::InvalidData, e))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -343,5 +387,21 @@ mod tests {
             .expect("control-wire Hello/HelloAck over HvSocket");
         println!("control wire UP over HvSocket; negotiated wire_version={wire_version}");
         assert_eq!(wire_version, tillandsias_control_wire::WIRE_VERSION);
+    }
+
+    /// w9 probe: after the handshake, send `VmStatusRequest` over the live wire
+    /// and read the reply — proves the request/response routing path the menu
+    /// will use, and confirms which requests the in-VM headless answers. Run:
+    /// `cargo test -p tillandsias-windows-tray -- --ignored vm_status_over_hvsocket`.
+    #[cfg(target_os = "windows")]
+    #[tokio::test]
+    #[ignore = "needs a running WSL distro with the headless listening on vsock 42420"]
+    async fn e2e_vm_status_over_hvsocket() {
+        use tillandsias_control_wire::ControlMessage;
+        let (mut stream, _) = hvsocket_handshake(42420).await.expect("handshake");
+        let reply = hvsocket_request(&mut stream, 2, ControlMessage::VmStatusRequest { seq: 2 })
+            .await
+            .expect("VmStatusRequest round-trip");
+        println!("VmStatusRequest reply over HvSocket: {:?}", reply.body);
     }
 }
