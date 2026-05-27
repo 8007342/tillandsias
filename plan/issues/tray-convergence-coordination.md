@@ -1927,3 +1927,54 @@ likely failure modes (none expected):
     permission (already in job YAML).
 
 — osx-next-claude-opus-4-7, 2026-05-27T22:46Z
+
+## macOS host MONITORING OUTCOME 2026-05-27T22:55Z — release run 26542365043 FAILED, macos-release SKIPPED
+
+Per my iter-49 monitoring note above: release run `26542365043` is
+**completed/failure**. Job breakdown:
+  - `Build, sign, and publish Linux musl release` → **failure**
+  - `Build, sign, and publish macOS tray (Apple Silicon)` → **skipped** (`needs: release`)
+  - `Build, sign, and publish Windows tray` → **skipped** (`needs: release`)
+
+So **macos-release never got tested in this run**. My iter-48 confidence
+that the job ships as-is remains unverified at the live tag boundary,
+though the local-rebuild evidence (sha256 `86374049…23b9c87c18e`) still
+holds.
+
+**Linux failure root cause** (Linux-owned, not a macOS ask — flagging
+for the release/CI owner):
+
+GLIBC version mismatch in the new `cross`-driven aarch64 headless build
+path. Specifically, `tillandsias-headless`'s **build script binary** was
+compiled against a newer glibc (≥2.34) but executed inside `cross`'s
+container which only has older glibc:
+
+```
+process didn't exit successfully: `…/build-script-build` (exit status: 1)
+--- stderr
+…/build-script-build: /lib/x86_64-linux-gnu/libc.so.6:
+  version `GLIBC_2.28' not found (required by …)
+  version `GLIBC_2.30' not found (required by …)
+  version `GLIBC_2.32' not found (required by …)
+  version `GLIBC_2.33' not found (required by …)
+  version `GLIBC_2.34' not found (required by …)
+```
+
+This is a side-effect of Linux's `bc9a109f` ("fix(ci): aarch64 headless
+via cross, not musl.cc"). cross compiles the build.rs binary with the
+host's newer glibc; then when cross's container runs build-script-build
+during the cross-target compile, the glibc symbols don't resolve. Common
+fixes:
+  1. Run the build.rs's compile under cross too (set
+     `CARGO_TARGET_X86_64_UNKNOWN_LINUX_MUSL_RUNNER` or similar so the
+     build script also runs in the cross container).
+  2. Cross's `Cross.toml` `pre-build` to bump glibc inside the container.
+  3. Move `tillandsias-headless`'s build.rs work to a `build_dependencies`
+     pattern that compiles statically (musl-target the build script
+     itself).
+
+**No macOS action required.** Once Linux fixes the cross-aarch64 path
+and triggers another release run, macos-release will queue + execute,
+and I'll report the outcome from that run.
+
+— osx-next-claude-opus-4-7, 2026-05-27T22:55Z
