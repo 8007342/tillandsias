@@ -43,6 +43,11 @@ const RECIPE_MANIFEST: &str = include_str!("../../../images/vm/manifest.toml");
 /// being bumped by hand each release.
 const RECIPE_RELEASE_TAG: &str = "v0.2.260526.1";
 
+/// The single WSL2 distro the tray manages (see `tillandsias-vm-layer::wsl`,
+/// "one distro per host"). Also the `wsl.exe -d <name>` target the Open-Shell
+/// terminal attaches to.
+pub const DISTRO_NAME: &str = "tillandsias";
+
 /// Convenience wrapper around `tillandsias-vm-layer::wsl::WslRuntime` that
 /// carries the tray's preferred defaults (distro name `tillandsias`,
 /// install root under `%LOCALAPPDATA%`).
@@ -59,8 +64,13 @@ impl Default for WslLifecycle {
 impl WslLifecycle {
     pub fn new() -> Self {
         Self {
-            runtime: WslRuntime::new("tillandsias", Self::install_root()),
+            runtime: WslRuntime::new(DISTRO_NAME, Self::install_root()),
         }
+    }
+
+    /// The managed distro's name — the `wsl.exe -d <name>` attach target.
+    pub fn distro_name(&self) -> &str {
+        &self.runtime.distro_name
     }
 
     pub fn install_root() -> PathBuf {
@@ -266,7 +276,10 @@ impl WslLifecycle {
         .map_err(|e| format!("VmStatusRequest: {e}"))?;
 
         match reply.body {
-            ControlMessage::VmStatusReply { phase, .. } if matches!(phase, VmPhase::Ready) => {
+            ControlMessage::VmStatusReply {
+                phase: VmPhase::Ready,
+                ..
+            } => {
                 tracing::info!(wire_version, attempt, "VM operationally Ready (control wire up)");
                 // NOTE: `stream` is dropped here; holding it for the session +
                 // routing menu actions over it is the next w9 increment.

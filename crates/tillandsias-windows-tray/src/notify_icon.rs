@@ -29,6 +29,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ffi::OsString;
 use std::os::windows::ffi::OsStrExt;
+use std::os::windows::process::CommandExt;
 use std::sync::Mutex;
 
 use tillandsias_host_shell::menu_action::{self, MenuAction};
@@ -608,12 +609,11 @@ fn dispatch_action(hwnd: HWND, action: MenuAction) {
         MenuAction::OpenLog => {
             tracing::info!("open log requested: host-side log-file path not wired yet");
         }
-        // Attach / Maintain / GitHub-login all open an in-VM PTY. The click is
-        // resolved end-to-end on the host side here — `intent_for_action` picks
-        // the `PtyIntent`, `launch_spec` produces the exact in-VM argv — leaving
-        // only the vsock `PtyOpen` send for the VM-E2E iteration.
+        // Attach / Maintain / GitHub-login all open an in-VM PTY. `intent_for_action`
+        // picks the `PtyIntent`; `launch_spec` produces the exact forge-wrapped in-VM
+        // argv; then we open it in a native Windows terminal via `wsl.exe`.
         MenuAction::Attach { .. } | MenuAction::Maintain { .. } | MenuAction::GithubLogin => {
-            resolve_and_log_pty_launch(&action);
+            launch_open_shell_terminal(&action);
         }
         MenuAction::CloudOverflow | MenuAction::Inert => {}
     }
@@ -629,24 +629,82 @@ fn selected_agent() -> SelectedAgent {
         .unwrap_or_else(|| MenuState::initial().selected_agent)
 }
 
-/// Resolve a PTY-opening menu action to its in-VM launch spec and log it. The
-/// resolution (`MenuAction` → [`intent_for_action`] → [`launch_spec`]) is the
-/// full host-side path; the remaining step — sending the `PtyOpen` frame over
-/// vsock and pumping the ConPTY — lands with the VM-E2E iteration (w4f).
-fn resolve_and_log_pty_launch(action: &MenuAction) {
+/// Open a PTY-opening menu action (Attach / Maintain / GitHub-login) in a native
+/// Windows terminal. `intent_for_action` → `launch_spec` resolve the exact
+/// forge-wrapped in-VM argv (a project click → `podman exec -it
+/// tillandsias-<proj>-forge …`; no project → the bare VM shell), and we hand
+/// that argv to `wsl.exe -d <distro> --` inside a terminal window.
+///
+/// Per the cross-host agreement (tray-convergence-coordination.md: "Transport/UX
+/// is per-OS — each tray uses its native terminal affordance; no need to
+/// converge"), Windows uses `wsl.exe`'s built-in console↔in-VM-PTY bridge rather
+/// than pumping a ConPTY over HvSocket. The *shell argv* is what converges with
+/// the macOS Terminal.app path — both land in the same forge-container shell.
+///
+/// @trace plan/issues/tray-convergence-coordination.md (Open Shell — per-OS terminal, shared argv)
+fn launch_open_shell_terminal(action: &MenuAction) {
     let Some((intent, project)) = intent_for_action(action, selected_agent()) else {
         tracing::warn!(?action, "no PTY intent for action (unexpected in this arm)");
         return;
     };
     // Default geometry until the tray owns a real terminal surface to size from.
-    // A project click forge-wraps the argv (podman exec); None runs in the VM.
     let spec = launch_spec(&intent, project.as_deref(), 24, 80);
-    tracing::info!(
-        ?intent,
-        project = ?project,
-        argv = ?spec.argv,
-        "resolved tray click to in-VM PTY launch; vsock attach pending VM-E2E (w4f)"
-    );
+    let distro = crate::wsl_lifecycle::DISTRO_NAME;
+    let title = match project.as_deref() {
+        Some(p) => format!("Tillandsias \u{2014} {p}"),
+        None => "Tillandsias shell".to_string(),
+    };
+    match spawn_wsl_terminal(distro, &title, &spec.argv) {
+        Ok(()) => tracing::info!(?intent, project = ?project, argv = ?spec.argv,
+            "opened in-VM PTY in a native terminal (wsl.exe)"),
+        Err(err) => tracing::warn!(%err, ?intent, project = ?project,
+            "failed to open terminal for in-VM PTY"),
+    }
+}
+
+/// Build the Windows Terminal (`wt.exe`) argv that opens `in_vm_argv` in the VM
+/// via `wsl.exe -d <distro> --`, in a titled new tab. Pure + testable; the spawn
+/// wrapper feeds this to `wt.exe` (with a bare-console fallback if wt is absent).
+fn wt_terminal_argv(distro: &str, title: &str, in_vm_argv: &[String]) -> Vec<String> {
+    let mut v = vec![
+        "new-tab".to_string(),
+        "--title".to_string(),
+        title.to_string(),
+        "wsl.exe".to_string(),
+        "-d".to_string(),
+        distro.to_string(),
+        "--".to_string(),
+    ];
+    v.extend(in_vm_argv.iter().cloned());
+    v
+}
+
+/// Open `in_vm_argv` in a native Windows terminal attached to the WSL2 distro.
+/// Prefers Windows Terminal (`wt.exe`, ships with Win11); if it can't be spawned
+/// (older host / not installed), falls back to `wsl.exe` in its own new console.
+fn spawn_wsl_terminal(distro: &str, title: &str, in_vm_argv: &[String]) -> std::io::Result<()> {
+    use std::process::Command;
+    // CREATE_NEW_CONSOLE — the fallback `wsl.exe` gets its own console window
+    // instead of inheriting the (hidden) tray process console.
+    const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
+
+    match Command::new("wt.exe")
+        .args(wt_terminal_argv(distro, title, in_vm_argv))
+        .spawn()
+    {
+        Ok(_) => Ok(()),
+        Err(_) => {
+            // Fallback: bare `wsl.exe` in a fresh console.
+            Command::new("wsl.exe")
+                .arg("-d")
+                .arg(distro)
+                .arg("--")
+                .args(in_vm_argv)
+                .creation_flags(CREATE_NEW_CONSOLE)
+                .spawn()
+                .map(|_| ())
+        }
+    }
 }
 
 /// Apply the state-mutating effect of a menu action to the menu state.
@@ -674,6 +732,44 @@ mod tests {
     fn wm_trayicon_is_in_app_range() {
         // Both are consts, so enforce the invariant at compile time.
         const { assert!(WM_TRAYICON >= WM_APP) };
+    }
+
+    /// The Open-Shell terminal argv runs the resolved in-VM argv verbatim under
+    /// `wsl.exe -d <distro> --` in a titled tab — the forge-wrapped command (the
+    /// part that converges with the macOS Terminal.app path) is preserved intact.
+    #[test]
+    fn wt_terminal_argv_wraps_in_vm_argv_under_wsl() {
+        let in_vm = vec![
+            "podman".to_string(),
+            "exec".to_string(),
+            "-it".to_string(),
+            "tillandsias-foo-forge".to_string(),
+            "bash".to_string(),
+            "-l".to_string(),
+        ];
+        let argv = wt_terminal_argv("tillandsias", "Tillandsias \u{2014} foo", &in_vm);
+        assert_eq!(
+            argv,
+            vec![
+                "new-tab",
+                "--title",
+                "Tillandsias \u{2014} foo",
+                "wsl.exe",
+                "-d",
+                "tillandsias",
+                "--",
+                "podman",
+                "exec",
+                "-it",
+                "tillandsias-foo-forge",
+                "bash",
+                "-l",
+            ]
+        );
+        // The `--` separator must precede the in-VM argv so wsl.exe runs it in
+        // the guest rather than parsing it as wsl options.
+        let sep = argv.iter().position(|a| a == "--").unwrap();
+        assert_eq!(&argv[sep + 1..sep + 2], &["podman"]);
     }
 
     use std::path::PathBuf;
