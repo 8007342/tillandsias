@@ -17,3 +17,13 @@ past streak 1, but the counter still tracks loop liveness).
     are Linux-internal scope. Windows shipped `cca9da4a` — Windows scope.
     macOS state remains: code complete, tests green (25 + 63), fmt clean.
   - next wake: 1h (3600s).
+- **streak 2** — 2026-05-27T20:10Z (iter 47)
+  - reason: 8 new linux-next commits (`ff01513d` build flag fix +
+    `1c25f346` security audit doc + `82b276fc`/`e1a190d4`
+    CloudRefreshRequest real impl + `f9897aed` observatorium UI +
+    `f783a0b8` methodology audit + `64c62adf`/`b9a36388` container-
+    start-health litmus). All Linux-internal scope. Security audit
+    references macOS only as a label-disable contract item (Linux
+    container-launch territory) + Secure Enclave as a v0.0.2+ idea.
+    No macOS-tagged ask in any new coordinator-cycle entry.
+  - next wake: 2h target (runtime clamps to 1h).
