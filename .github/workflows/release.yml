@@ -106,24 +106,24 @@ jobs:
           # In-VM headless agents (--features listen-vsock) for BOTH arches.
           # The recipe rootfs's first-boot tillandsias-headless-fetch.service
           # downloads tillandsias-headless-<arch>-unknown-linux-musl from
-          # releases/latest (see images/vm/bootstrap/20-tillandsias.sh). This
-          # codifies the manual publish done 2026-05-27; without it the in-VM
-          # agent never installs → no vsock Hello/HelloAck → tray never Ready.
-          # aarch64 cross-builds with the static musl.cc toolchain (the same
-          # method proven locally); x86_64 uses musl-tools' musl-gcc.
-          curl -fsSL --retry 3 -o /tmp/aarch64-musl-cross.tgz https://musl.cc/aarch64-linux-musl-cross.tgz
-          tar -xzf /tmp/aarch64-musl-cross.tgz -C /tmp
-          export PATH="/tmp/aarch64-linux-musl-cross/bin:${PATH}"
-
+          # releases/latest (see images/vm/bootstrap/20-tillandsias.sh); without
+          # them the in-VM agent never installs → no vsock Hello/HelloAck → tray
+          # never Ready.
+          #
+          # x86_64: native musl-gcc (musl-tools, installed above).
           cargo build --release -p tillandsias-headless \
             --target x86_64-unknown-linux-musl --features listen-vsock
           install -m 0755 target/x86_64-unknown-linux-musl/release/tillandsias \
             release-artifacts/tillandsias-headless-x86_64-unknown-linux-musl
 
-          CC_aarch64_unknown_linux_musl=aarch64-linux-musl-gcc \
-          AR_aarch64_unknown_linux_musl=aarch64-linux-musl-ar \
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-musl-gcc \
-          cargo build --release -p tillandsias-headless \
+          # aarch64: `cross` (containerized toolchain pulled from GHCR). This
+          # REPLACES a musl.cc curl download that timed out from GitHub runners
+          # (curl 28, connect to musl.cc:443 timed out) — cross is the GH-Actions
+          # -friendly way to get an aarch64-musl C cross-compiler. cross mounts
+          # the host rustup/cargo so it uses THIS job's stable toolchain (edition
+          # 2024 OK) with the container's musl cross-gcc + sysroot.
+          cargo install cross --locked --version 0.2.5
+          cross build --release -p tillandsias-headless \
             --target aarch64-unknown-linux-musl --features listen-vsock
           install -m 0755 target/aarch64-unknown-linux-musl/release/tillandsias \
             release-artifacts/tillandsias-headless-aarch64-unknown-linux-musl
