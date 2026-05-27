@@ -204,12 +204,22 @@ pub fn run() -> ! {
             let lifecycle = WslLifecycle::new();
             tokio::task::spawn_local(async move {
                 // Recipe path (w5): fetch the CI-published rootfs from the
-                // embedded manifest → wsl --import → systemd. Proven E2E on real
-                // hardware (2026-05-26). Supersedes the legacy `bootstrap` OCI-base
-                // + separate-binary download — the recipe rootfs self-installs the
-                // headless on first boot.
-                if let Err(err) = lifecycle.provision_via_recipe(progress).await {
-                    eprintln!("WSL recipe provisioning failed: {err}");
+                // embedded manifest → wsl --import → systemd → HvSocket control-wire
+                // handshake. Proven E2E on real hardware (2026-05-26). Supersedes
+                // the legacy `bootstrap` OCI-base + separate-binary download — the
+                // recipe rootfs self-installs the headless on first boot.
+                match lifecycle.provision_via_recipe(progress).await {
+                    Ok(()) => {
+                        // Control wire is up → flip the condensed status to Ready.
+                        // (The popup already builds the full parity menu from
+                        // MENU_STATE; readiness is reflected in the status line.)
+                        tracing::info!("VM ready — control wire established");
+                        update_status_text("\u{1F7E2} Ready", hwnd);
+                    }
+                    Err(err) => {
+                        eprintln!("WSL recipe provisioning failed: {err}");
+                        update_status_text("\u{1F534} Provisioning failed (see log)", hwnd);
+                    }
                 }
             });
         } else {
