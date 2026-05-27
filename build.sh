@@ -109,6 +109,17 @@ while [[ $# -gt 0 ]]; do
         --ci-full)        FLAG_CI_FULL=true ;;
         --graphs)         FLAG_GRAPHS=true ;;
         --strict-all)     FLAG_STRICT_ALL=true ;;
+        --observatorium)
+            FLAG_OBSERVATORIUM=true
+            if [[ -n "${2:-}" && "${2:0:1}" != "-" ]]; then
+                OBSERVATORIUM_PROJECT="${2}"
+                shift 2
+            else
+                OBSERVATORIUM_PROJECT="."
+                shift
+            fi
+            continue
+            ;;
         --spec)
             FLAG_SPEC=true
             if [[ -n "${2:-}" && "${2:0:1}" != "-" ]]; then
@@ -357,6 +368,15 @@ if [[ "$FLAG_INIT" == true ]]; then
     # Also prune old images
     _step "Pruning old images..."
     "$PODMAN_CTL" image prune -f 2>/dev/null || true
+    exit 0
+fi
+
+if [[ "${FLAG_OBSERVATORIUM:-false}" == true ]]; then
+    _step "Building workspace (debug)..."
+    _require_host_build_tools
+    (cd "$SCRIPT_DIR" && cargo build --workspace)
+    _step "Running tillandsias --observatorium ${OBSERVATORIUM_PROJECT}..."
+    "$SCRIPT_DIR/target/debug/tillandsias" --observatorium "$OBSERVATORIUM_PROJECT"
     exit 0
 fi
 
