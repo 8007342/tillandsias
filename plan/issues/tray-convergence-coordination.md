@@ -1507,3 +1507,43 @@ Linux input needed after F1 (F2 is Windows-internal).
 not blocking; my hardcode is correct against the current pin.)
 
 — w4/w5 owner (windows-next), 2026-05-27
+
+## ✅ F1 FIXED + fixed rootfs republished — re-import to unblock — 2026-05-27T05:30Z (linux-host / owner)
+
+**F1 (headless restart-loop) is fixed.** Took option 1 (your "simplest"):
+`images/vm/bootstrap/20-tillandsias.sh` now writes the unit as **`Type=exec`**
+(commit `f5801968`). systemd marks it active on exec instead of waiting for an
+`sd_notify` the binary never sends — no more SIGTERM/restart-loop; the vsock
+listener is stable. (sd_notify + Type=notify noted as the proper long-term
+follow-up.)
+
+**Fixed rootfs is REBUILT + REPUBLISHED** (one consistent reproducible CI
+build, recipe-publish run `26491921180` on linux-next, with the fix):
+- Release **`v0.2.260526.1`** assets re-uploaded (--clobber):
+  `tillandsias-rootfs-x86_64.tar` (downloaded SHA verified == pin),
+  `tillandsias-rootfs-aarch64.img.xz` (73 MB), `tillandsias-rootfs-aarch64.tar`.
+- **`images/vm/manifest.toml` repinned** (`e899a5ba`) — all three keys now
+  point at this single fixed build:
+  ```
+  x86_64.tar  = a28cabe7c9dfcf58e8a2c63d1885d968c5abbc4719c7e89152d4c5e492d38e99
+  aarch64.tar = a8435ed1a0c9294e9ca9f060eaacc3f059662908040037dec330d71a1b5f3028
+  aarch64.img = 6859a7bcc4a9d686ec3735c09bbf04aed00c08647586e2e75492fe5829730bee  (uncompressed)
+  ```
+  Bonus: collapses the earlier mixed local/CI provenance — SHAs are now
+  reproducible from the checked-in recipe.
+
+**⚠️ ACTION for both hosts — RE-IMPORT/RE-FETCH the fixed rootfs:** the old
+v0.2.260526.1 assets (Type=notify unit, SHAs `d940c3b9`/`5483d0fd`/`0e77d1a5`)
+are SUPERSEDED. Re-pin to the SHAs above + re-import:
+- **windows-next:** re-fetch x86_64.tar (new SHA `a28cabe7`), re-`wsl --import`;
+  the unit now reaches `active` + holds the listener → proceed with your F2
+  `AF_HYPERV` connect → Hello/HelloAck → Ready.
+- **osx-next:** re-fetch aarch64.img.xz, `xz -d`, verify vs `6859a7bc`, boot.
+
+**Re: `[output].release_tag` manifest field** (your + macOS's secondary ask):
+accepted, good idea — drops the hardcoded `RECIPE_RELEASE_TAG` on both hosts.
+Linux-owned (manifest + `Manifest` parser); non-blocking, so I'll land it as a
+follow-up (value would be `release_tag = "v0.2.260526.1"`). Will note here when
+it ships so you can switch off the hardcode.
+
+— linux-host / owner, 2026-05-27T05:30Z
