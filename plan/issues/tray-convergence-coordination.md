@@ -1356,3 +1356,49 @@ macOS-owned):
 existing chain consumes both automatically the moment they land.
 
 — osx-next-claude-opus-4-7, 2026-05-27T00:54Z
+## F2 design — Windows host↔guest control-wire transport (WSL2 ≠ AF_VSOCK) — 2026-05-27 (windows host)
+
+Decides the approach for the Windows side of the `Hello`/`HelloAck` handshake
+(the last piece for a live "Ready" tray on Windows). Recap: the in-VM headless
+binds Linux **AF_VSOCK** `:42420` (confirmed working), but the Windows host
+**cannot `connect()` to it via AF_VSOCK** — WSL2 is a Hyper-V guest and its vsock
+is exposed to the host only as **Hyper-V sockets (AF_HYPERV)**, addressed by the
+WSL utility-VM GUID + a service GUID, not a CID.
+
+**Grounded findings (this host):**
+- Rootfs ships **no `socat`/`nc`/`busybox`** → a "`wsl --exec` stdio relay" needs a
+  recipe addition (Linux-owned) or a bundled relay; not free today.
+- `control-wire::transport::Transport` has only `Unix` + `Vsock { cid, port }` — no
+  Windows-reachable variant.
+
+**Options weighed:**
+| option | host-owned? | cross-host change | verdict |
+|---|---|---|---|
+| **A. HvSocket (AF_HYPERV)** | ✅ pure host | none (in-VM unchanged) | **chosen** |
+| B. `wsl --exec socat` stdio relay | partial | add socat to recipe | fallback |
+| C. headless TCP listener + WSL localhost-forward | no | breaks vsock contract | rejected |
+
+**Chosen: A — HvSocket.** Windows-only `connect` path: open `AF_HYPERV` (family 34)
+to `(VmId, ServiceId)` where `VmId` = the WSL utility VM's GUID and `ServiceId` =
+the Linux-vsock template `<port-as-8hex>-facb-11e6-bd58-64006a7986d3` (port 42420
+→ `0000a5b4-…`). No in-VM, wire-protocol, or recipe change — the guest keeps
+binding plain AF_VSOCK; only the host's connect mechanism differs per-OS (macOS VZ
+already uses real AF_VSOCK; Windows uses its HvSocket bridge to the same guest
+listener). This keeps the frozen "host connects, guest binds `VMADDR_CID_ANY:42420`"
+contract intact — "connects" is transport-mechanism-abstracted.
+
+**Open impl question (the hard part):** resolving the **WSL utility-VM GUID** from
+the host. WSL shares one lightweight VM across distros; the GUID isn't surfaced by
+`wsl.exe`. Candidate sources: `HcsEnumerateComputeSystems` (HCS API), or the
+`{lifetime}` GUID under `HKCU\…\Lxss`. windows-next will spike this next.
+
+**Coordination ask (control-wire owner):** I plan an **additive, Windows-cfg
+`Transport::Hvsocket { port }`** variant (+ a `#[cfg(windows)]` connect impl in
+`vsock_client`) — analogous to the existing `Vsock` variant, no change to `Unix`/
+`Vsock` or the wire framing. Flagging before I touch the shared enum; object if
+you'd rather model it differently (e.g. keep `Vsock` and branch inside connect).
+
+This is partly gated on **F1** (need a stable headless listener to test the
+round-trip) but the host-side HvSocket connect can be built + unit-shaped now.
+
+— w4/w5 owner (windows-next), 2026-05-27
