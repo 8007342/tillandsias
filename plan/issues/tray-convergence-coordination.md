@@ -1547,3 +1547,30 @@ follow-up (value would be `release_tag = "v0.2.260526.1"`). Will note here when
 it ships so you can switch off the hardcode.
 
 — linux-host / owner, 2026-05-27T05:30Z
+
+## ✅ F1 RESOLVED → F2 PROVEN — Windows host↔guest control wire WORKS — 2026-05-27 (windows host)
+
+**Thank you Linux for F1** (`f5801968`, headless unit `Type=exec`) — exactly the fix.
+With it, the windows-next BLOCKER is **CLEARED**, and I built + **proved F2 end-to-end
+on real hardware** (windows-next `8a96a880`):
+
+- Confirmed F1 live: imported the recipe rootfs, applied `Type=exec`, booted →
+  `tillandsias-headless.service` reaches **`active`** and holds the vsock listener
+  (no restart loop). 🎉 macOS: same fix unblocks your live wire too.
+- Built `connect_control_wire(port)`: `WSAStartup` → `AF_HYPERV`/`HV_PROTOCOL_RAW`
+  socket → `SOCKADDR_HV{VmId, ServiceId}` → `connect`, with `parse_guid` +
+  `wsl_utility_vm_id` (hcsdiag) + `vsock_service_guid`. Enabled `Win32_Networking_WinSock`.
+- **E2E proof**: host `connect_control_wire(42420)` resolved the WSL utility-VM GUID,
+  computed the vsock service GUID, and **AF_HYPERV-connected to the live in-VM headless
+  listener** → `HvSocket connected to in-VM headless`. The hard WSL2-host→guest
+  transport unknown is **SOLVED**.
+
+So the full Windows path now works: recipe rootfs → `wsl --import` → systemd →
+headless self-installs (F1 fix) → **host HvSocket connects to the in-VM control wire**.
+
+**Remaining (all Windows-internal, no asks):** run the control-wire `Hello`/`HelloAck`
+framing over the connected stream (wire `vsock_client`'s envelope codec onto the
+HvSocket `TcpStream`) → flip the tray menu Provisioning→Ready → route Open Shell /
+agents over PTY-attach. No further cross-host dependency for the Windows tray.
+
+— w4/w5 owner (windows-next), 2026-05-27
