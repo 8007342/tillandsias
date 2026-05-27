@@ -2,7 +2,7 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
-## macOS UNBLOCKED for v0.0.1 — as of 2026-05-27T19:19Z
+## macOS UNBLOCKED for v0.0.1 — as of 2026-05-27T23:25Z
 
 **macOS has zero blocking asks for other hosts.** Every Linux- and
 Windows-owned artifact the macOS production path needs is shipped +
@@ -36,18 +36,25 @@ live-verified:
 
 **Autonomous macOS cleanup gate cleared:** the runtime-litmus rustfmt blocker
 from `20260527T190639Z-2c239138-1aebb284-deba10d8` is resolved on
-`linux-next` by `4935404a` / `feb51d66`. `osx-next` is now identical to
-`linux-next` at `b463cb53`. macOS may use m10/m11 as autonomous cleanup, but
-the only macOS acceptance blocker remains user-attended m8 smoke.
+`linux-next` by `4935404a` / `feb51d66`. `osx-next` is at `f8778350` and
+remains an ancestor of `origin/linux-next` `891bb757`. Runtime-litmus
+`20260527T231258Z-b06a5997-1e20d6d0-b06a5997` failed at `Disk quota exceeded`
+before installed runtime diagnostics; replacement full installed runtime-litmus
+`20260527T231940Z-b06a5997-1e20d6d0-b06a5997` passed build/install and init,
+then failed in OpenCode diagnostics with the `vault_bootstrap.rs:205`
+nested-runtime panic. This is not a macOS blocker. macOS may use m10/m11 as
+autonomous cleanup, but the only macOS acceptance blocker remains
+user-attended m8 smoke. Release run `26544334121` is the current monitored run
+after the Linux Nix musl release pivot.
 
-The status line below is the coordinator refresh after the 19:19Z fetch.
+The status line below is the coordinator refresh after the 23:25Z rebase.
 
 ---
 
-Status: **OPEN** as of 2026-05-27T21:15Z. macOS m1, m1b, m2, m3, m6,
+Status: **OPEN** as of 2026-05-27T23:25Z. macOS m1, m1b, m2, m3, m6,
 m7, m4 sub-task B, m5 fetch primitive, m5 Start VM auto-fetch wiring, `.img.xz`
 download/decompress, and bytes-level SHA proof are done/integrated. `osx-next`
-is at `b463cb53`, identical to `linux-next`.
+is at `f8778350`, an ancestor of `origin/linux-next`.
 The old l9 recipe-publish/SHA-pin gates and the F1 headless service restart
 loop are closed. Remaining macOS acceptance is user-attended m8 smoke of the
 rebuilt `dist/Tillandsias.app`; if Ready still hangs after Start VM, file
@@ -1927,3 +1934,23 @@ step 5 lands.
   acceptance gate. Autonomous fallback is m10 project threading or semantic
   m11 cleanup; neither blocks the Windows rustfmt retry and runtime-litmus
   rerun.
+
+### event: linux coordinator status reconciliation — 2026-05-27T23:25Z
+
+- Observed remote heads after fetch/rebase: `origin/linux-next` `891bb757`
+  before this coordination commit, `windows-next` `1e20d6d0`, `osx-next`
+  `f8778350`, `main` `fa746f03`.
+- `osx-next` remains an ancestor of `linux-next`; there is no macOS code delta
+  for the integration loop to merge.
+- Runtime-litmus `20260527T231258Z-b06a5997-1e20d6d0-b06a5997` found both
+  siblings already integrated but failed at `Disk quota exceeded` during
+  `./build.sh --ci-full --install`. Replacement runtime-litmus
+  `20260527T231940Z-b06a5997-1e20d6d0-b06a5997` passed build/install and init,
+  then failed in OpenCode diagnostics with the `vault_bootstrap.rs:205`
+  nested-runtime panic. This is a Linux coordination/runtime gate, not a macOS
+  implementation blocker.
+- Release run `26544334121` is the current monitored run after the Linux Nix
+  musl release pivot.
+- Current macOS dependency chain: m8 user-attended smoke remains the manual
+  acceptance gate. Autonomous fallback is m10 project threading or semantic
+  m11 cleanup.

@@ -19,9 +19,9 @@ linux-next, windows-next, and osx-next.
 | Branch | Commit |
 |---|---|
 | `main` | fa746f03 |
-| `linux-next` | b463cb53 |
-| `windows-next` | cca9da4a |
-| `osx-next` | b463cb53 |
+| `linux-next` | 891bb757 before this coordination commit |
+| `windows-next` | 1e20d6d0 |
+| `osx-next` | f8778350 |
 
 ## Context
 
@@ -282,6 +282,32 @@ are in place; the methodology gap requires orchestrator input.
 - No raw `target/forge-diagnostics/` output should be expected from this run.
   Keep the next action from the 20:30Z packet: wire another forge-launching E2E
   litmus through the annex without weakening its parent verdict.
+
+## coordinator observation — 2026-05-27T23:28Z
+
+- Runtime-litmus `20260527T231258Z-b06a5997-1e20d6d0-b06a5997` reached
+  `./build.sh --ci-full --install` but failed at `Disk quota exceeded` before
+  installed `tillandsias --debug --init` or the diagnostics prompt could run.
+  No raw `target/forge-diagnostics/` output should be expected from that run.
+- Replacement full installed runtime-litmus
+  `20260527T231940Z-b06a5997-1e20d6d0-b06a5997` ran on the pre-rebase
+  `b06a5997` tree after scratch worktree cleanup. Build/install and
+  `tillandsias --debug --init` passed, then
+  `tillandsias . --opencode --diagnostics --prompt ...` failed with a
+  nested-runtime panic at
+  `crates/tillandsias-headless/src/vault_bootstrap.rs:205`.
+- The diagnostics annex created two zero-byte raw logs. The latest empty log
+  was distilled to
+  `plan/diagnostics/diagnostics_20260527T232335Z-summary.md`.
+- Push-time rebase absorbed `origin/linux-next` `891bb757`, so any diagnostics
+  output from this run is useful but does not validate the latest diagnostics
+  timestamp change.
+- Next action: fix or assign the nested-runtime panic, then start a fresh
+  runtime for current `origin/linux-next` and distill the first non-empty raw
+  diagnostics log.
+- No forge enhancement is approved by this observation. The lease-overlap note
+  below still applies; coordinate before taking the next forge-diagnostics
+  owned-file slice.
 
 ## agent_status_packet — work-loop slice 2026-05-27T21:35Z — clever-prompt actionable analysis
 

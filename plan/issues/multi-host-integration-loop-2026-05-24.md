@@ -51,6 +51,52 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Coordinator fold 2026-05-27T23:28Z — runtime-litmus fails in diagnostics panic
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- observed_sibling_heads after push-time rebase: main=`fa746f03` ·
+  origin/linux-next=`891bb757` before this coordination commit ·
+  windows-next=`1e20d6d0` · osx-next=`f8778350`
+- `origin/windows-next` and `origin/osx-next` are both ancestors of
+  `origin/linux-next`; no sibling merge was needed this pass. The previous
+  Windows rustfmt blocker is resolved by `9315e9de`, and integration cycle
+  `edfb72c6` merged/tested the Windows delta.
+- Runtime-litmus `20260527T231258Z-b06a5997-1e20d6d0-b06a5997` found both
+  siblings already integrated (`merged_siblings=none`), reached
+  `./build.sh --ci-full --install`, passed tests through 60 suites and trace
+  validation, then failed at the build phase with `Disk quota exceeded` while
+  compiling `tillandsias-litmus-rust` / `tokio` (exit code 101). Log:
+  `plan/localwork/runtime-litmus/20260527T231258Z-b06a5997-1e20d6d0-b06a5997/run.log`.
+- Removed finished scratch worktrees under `/tmp/tillandsias-*`, freeing `/tmp`
+  from 81% used to 1% used; durable logs remain in `plan/localwork/`.
+- Started replacement full installed runtime-litmus
+  `20260527T231940Z-b06a5997-1e20d6d0-b06a5997` with systemd unit
+  `tillandsias-runtime-litmus-20260527T231940Z-b06a5997-1e20d6d0-b06a5997.service`.
+  Worktree:
+  `/tmp/tillandsias-runtime-litmus-20260527T231940Z-b06a5997-1e20d6d0-b06a5997`.
+  Log:
+  `plan/localwork/runtime-litmus/20260527T231940Z-b06a5997-1e20d6d0-b06a5997/run.log`.
+- Parent status at publish time for the replacement run: `merge_status=clean`,
+  `merged_siblings=none`, `litmus_status=running`.
+- Replacement result: build/install and `tillandsias --debug --init` passed.
+  The run then failed in `tillandsias . --opencode --diagnostics --prompt ...`
+  with a nested-runtime panic at
+  `crates/tillandsias-headless/src/vault_bootstrap.rs:205`
+  (`Cannot start a runtime from within a runtime`, exit code 101).
+- The diagnostics annex created two zero-byte raw logs; the latest was
+  distilled to
+  `plan/diagnostics/diagnostics_20260527T232335Z-summary.md`.
+- Removed `plan/localwork/runtime-litmus/current` after folding the finished
+  result. No runtime-litmus is active at handoff.
+- Push-time rebase note: `origin/linux-next` advanced after this run started
+  (`3f1cc8e8` diagnostics timestamp and `891bb757` plan note), and
+  `origin/osx-next` advanced to `f8778350` with the Nix musl release pivot.
+  Treat the replacement run as pre-rebase evidence for `b06a5997`.
+- Next reader action: fix or assign the `vault_bootstrap.rs:205` diagnostics
+  panic before starting another full runtime-litmus; the latest remote code
+  moved diagnostics timestamp/Nix release plumbing, not the nested-runtime
+  panic path.
+
 ### Cycle 2026-05-27T21:44Z — MERGED windows-next (35 commits, w9 + control-wire) ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next

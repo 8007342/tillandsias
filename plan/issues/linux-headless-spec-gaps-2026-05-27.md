@@ -8,6 +8,14 @@ bounded slices from. Each item is sized for one loop iteration. NOT for siblings
 
 ## Diagnostics / observability (USER PRIORITY — `--diagnostics` + logging layer)
 
+0. **[CRITICAL] `--opencode --diagnostics` nested-runtime panic.**
+   Runtime-litmus `20260527T231940Z-b06a5997-1e20d6d0-b06a5997` passed
+   build/install and `tillandsias --debug --init`, then failed at
+   `tillandsias . --opencode --diagnostics --prompt ...` with
+   `crates/tillandsias-headless/src/vault_bootstrap.rs:205`: "Cannot start a
+   runtime from within a runtime." Fix the diagnostics/OpenCode launch path so
+   vault bootstrap does not call a blocking runtime from inside Tokio, then run
+   a fresh full runtime-litmus from current `origin/linux-next`.
 1. **[HIGH] ISO 8601 timestamp prefix on launch events.** `format_launch_event`
    (crates/tillandsias-podman/src/client.rs:~1596) emits no timestamp; spec
    runtime-diagnostics-stream requires `[<UTC>] ` prefix. Add `chrono::Utc::now()`

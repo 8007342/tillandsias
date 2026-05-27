@@ -1,81 +1,80 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-05-27T21:16Z
+LastExecutionTime: 2026-05-27T23:28Z
 
 ## This Loop
 
-- Fetched origin and fast-forwarded local `linux-next` from `fa1e4b8e` to
-  `b463cb53`.
-- Observed heads: `main` `fa746f03`, `linux-next` `b463cb53`,
-  `windows-next` `cca9da4a`, `osx-next` `b463cb53`; push-time rebase later
-  absorbed `origin/linux-next` `be467b13` with observatorium-only files.
-- `origin/osx-next` is identical to `origin/linux-next`. `origin/windows-next`
-  still has unique code, including `9c7b30ce` `--provision-once` headless mode
-  and `cca9da4a` full live-provision dress rehearsal status.
-- Runtime-litmus `20260527T211507Z-b463cb53-cca9da4a-b463cb53` clean-merged
-  `origin/windows-next`, found `origin/osx-next` already integrated, passed
-  pre-build litmus 57/57, wrote centicolon evidence, then failed
-  `./build.sh --ci-full --install` at `rust-formatting`.
-- Removed the finished `plan/localwork/runtime-litmus/current` marker after
-  folding the result into the durable ledgers.
-- Exact blocker: Windows-owned
-  `crates/tillandsias-windows-tray/src/wsl_lifecycle.rs` still needs the
-  `tracing::info!(wire_version, attempt, ...)` call reflowed by rustfmt.
-- The first local launcher attempt
-  `20260527T211334Z-b463cb53-cca9da4a-b463cb53` died before validation and is
-  marked `launcher-died` locally; it is superseded by the folded run above.
+- Fetched origin and fast-forwarded local `linux-next` from `346704fe` to
+  `b06a5997`.
+- Push-time fetch/rebase absorbed new `origin/linux-next` `891bb757`
+  (`3f1cc8e8` ISO-8601 diagnostics timestamp plus plan note) and
+  `origin/osx-next` `f8778350` (Nix musl release pivot plus release rerun
+  monitor); this coordination commit is now on top.
+- Observed heads: `main` `fa746f03`, `linux-next` `891bb757`,
+  `windows-next` `1e20d6d0`, `osx-next` `f8778350`.
+- `origin/windows-next` and `origin/osx-next` are both ancestors of
+  `origin/linux-next`; `9315e9de` cleared the old Windows rustfmt blocker, and
+  `edfb72c6` merged/tested the Windows w9/control-wire delta.
+- Runtime-litmus `20260527T231258Z-b06a5997-1e20d6d0-b06a5997`
+  hit `Disk quota exceeded` during `./build.sh --ci-full --install`; removed
+  stale `/tmp/tillandsias-*` worktrees and freed `/tmp` from 81% to 1% used.
+- Replacement runtime-litmus
+  `20260527T231940Z-b06a5997-1e20d6d0-b06a5997` passed build/install and
+  `tillandsias --debug --init`, then failed in
+  `tillandsias . --opencode --diagnostics --prompt ...` with
+  `vault_bootstrap.rs:205` nested-runtime panic, exit 101.
+- The diagnostics annex created two zero-byte raw logs; distilled the latest
+  as `plan/diagnostics/diagnostics_20260527T232335Z-summary.md`.
+- No runtime-litmus is active at handoff; systemd-run is the durable launcher
+  path for future async runs.
 
 ## Expected Next Loop
 
-- First check whether Windows pushed the `wsl_lifecycle.rs` rustfmt cleanup to
-  `origin/windows-next`. If yes, start a fresh runtime-litmus from current
-  `origin/linux-next`, merge `origin/windows-next`, and continue through
-  installed diagnostics before pushing.
-- If formatting is still red, do not rerun the same integration; keep
-  `plan/localwork/runtime-litmus/20260527T211507Z-b463cb53-cca9da4a-b463cb53/run.log`
-  as evidence and ping the Windows w9 queue item.
-- Continue forge diagnostics only as a non-blocking annex after the build gate
-  reaches a live forge; this run stopped before raw diagnostics could be
-  produced.
+- Do not start another full runtime-litmus until the
+  `vault_bootstrap.rs:205` nested-runtime panic is fixed or explicitly waived;
+  the latest remote code did not touch this panic path.
+- After the panic fix lands, start a fresh runtime-litmus from current
+  `origin/linux-next` because the folded runtime evidence predates
+  `891bb757`.
+- Track release run `26544334121`, the rerun after the Linux Nix musl release
+  pivot; older run `26542365043` failed before `macos-release`.
 
 ## Resolved Since Previous Loop
 
-- macOS/vm-layer rustfmt blocker is cleared and `origin/osx-next` has caught up
-  to `origin/linux-next`.
-- Windows w9 full live-provision dress rehearsal is now reported done on
-  `origin/windows-next`.
+- Windows-owned `wsl_lifecycle.rs` rustfmt blocker is cleared.
+- `origin/windows-next` through `1e20d6d0` is merged into `origin/linux-next`
+  and passed `./build.sh --check` plus `./build.sh --test`.
+- `origin/osx-next` `f8778350` is an ancestor of `origin/linux-next`
+  `891bb757`.
 
 ## Current Major Blockers
 
-- Windows-owned rustfmt diff in
-  `crates/tillandsias-windows-tray/src/wsl_lifecycle.rs` blocks the Windows w9
-  integration merge from reaching installed runtime diagnostics.
+- Full installed runtime-litmus fails in the OpenCode diagnostics phase:
+  `vault_bootstrap.rs:205` nested-runtime panic, exit 101.
 - macOS m8 user-attended interactive smoke remains the manual acceptance gate.
-- Non-blocking release cleanup: manifest-owned `release_tag` accessor.
-- Forge improvement loop still needs its first real piggy-backed diagnostics
+- Latest integrated code after `891bb757` still needs a fresh full runtime
+  after the diagnostics panic is fixed.
+- Release workflow run `26544334121` is pending/being monitored.
+- Forge improvement loop still needs its first real non-empty diagnostics
   summary before approving concrete image/toolchain changes.
 
 ## Assignment Board
 
-- Linux primary: hold the integration gate and rerun runtime-litmus only after
-  the Windows formatting fix lands; fallback: manifest-owned `release_tag`
-  accessor.
-- Linux forge lane: no raw forge diagnostics from this failed build-gate run;
-  fallback: wire one more forge-launching E2E to
-  `scripts/forge-diagnostics-annex.sh`.
-- Windows primary: clear the w9 `wsl_lifecycle.rs` rustfmt diff, then let the
-  integration loop retest `origin/windows-next` `cca9da4a`; fallback: w7
-  diagnostics if validation later exposes branch or manifest drift.
+- Linux primary: fix or assign the `vault_bootstrap.rs:205` nested-runtime
+  diagnostics panic, then start a fresh current-head runtime; fallback:
+  monitor/fix release run `26544334121`.
+- Windows primary: no immediate blocker; optional wire EnumerateLocalProjects
+  remains fallback unless fresh runtime evidence exposes project-scan drift.
 - macOS primary: user-attended m8 smoke. Autonomous fallback: m10 project
-  threading or semantic m11 MenuStructure cleanup; the macOS rustfmt gate is
-  already cleared.
+  threading or m11 MenuStructure cleanup; release packaging waits on run
+  `26544334121`.
 
 ## Stale Or Pending Pings
 
-- No expired active leases were found in the queue headers read this pass;
-  Windows and macOS should pull this commit before new status packets.
+- No expired leases found; Windows and macOS should pull this coordination
+  commit before new status packets.
 
 ## Validation
 
-- YAML parser check passed for methodology and plan entry files.
+- YAML parser check passed for `plan.yaml` and `plan/index.yaml`.
 - `git diff --check` passed for touched coordination files.

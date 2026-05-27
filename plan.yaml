@@ -36,7 +36,24 @@ plan:
     p3_backlog_status: "24/27 gaps implemented across Waves 17-24; 3 undocumented gaps remain (non-blocking)"
     doc_debt_payoff_status: "Completed 2026-05-16; plan/index stale status corrected 2026-05-24"
     recent_work_audit_status: "Completed and verified 2026-05-24: git-mirror safe refspec spec/litmus, Vault Phase 6 default spec, multi-host methodology, and Markdown distillation refreshed"
-    multi_host_coordination_status: "Active 2026-05-27T21:16Z: linux-next and osx-next are both at b463cb53; main is at fa746f03; windows-next is at cca9da4a with the Windows w9 transport/menu code plus --provision-once and full live-provision dress rehearsal status. Runtime-litmus 20260527T211507Z-b463cb53-cca9da4a-b463cb53 clean-merged windows-next, found osx-next already integrated, passed pre-build litmus 57/57, wrote centicolon evidence, then failed ./build.sh --ci-full --install at rust-formatting. Current gate is Windows-owned wsl_lifecycle.rs rustfmt reflow before a fresh runtime-litmus can reach installed diagnostics; other gates are macOS m8 user-attended smoke, first real forge diagnostics summary, optional Windows wire EnumerateLocalProjects, and manifest release_tag accessor cleanup."
+    multi_host_coordination_status: >
+      Active 2026-05-27T23:25Z: origin/linux-next is at 891bb757 before this
+      coordination commit, origin/osx-next is at f8778350 and remains an
+      ancestor, main is at fa746f03, and windows-next is at 1e20d6d0 and is
+      already integrated. Windows w9/control-wire rustfmt blocker is resolved
+      by 9315e9de, and integration cycle edfb72c6 / merge b9cee2fd merged and
+      check/tested the Windows delta. Runtime-litmus
+      20260527T231258Z-b06a5997-1e20d6d0-b06a5997 reached build/test work but
+      failed at `Disk quota exceeded`; old scratch worktrees were removed.
+      Replacement full installed runtime-litmus
+      20260527T231940Z-b06a5997-1e20d6d0-b06a5997 passed build/install and
+      init, then failed in OpenCode diagnostics with a nested-runtime panic at
+      crates/tillandsias-headless/src/vault_bootstrap.rs:205. Current gates are
+      fixing/assigning that diagnostics panic, then starting a fresh runtime
+      for 891bb757/this coordination commit, macOS m8 user-attended smoke,
+      release run 26544334121 after the Linux Nix musl pivot, first real
+      non-empty forge diagnostics summary, and optional Windows wire
+      EnumerateLocalProjects.
     markdown_distillation_status: "Active 2026-05-24: ad hoc Markdown is intake only; retained top-level/tool-local reports must be tombstone pointers to specs, cheatsheets, methodology, or plan"
     methodology_reconciliation_status: "Completed 2026-05-19: OpenCode Web launch specs, cheatsheets, CA generation, overlay/theme proxy, project selection, and auth-gated readiness reconciled"
     git_identity_propagation_status: "Completed 2026-05-19: GitHub Login identity now propagates to forge env and repo-local git config for Codex/OpenCode/OpenCode Web/Claude/maintenance"
