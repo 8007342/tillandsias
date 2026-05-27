@@ -51,6 +51,39 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Coordinator fold 2026-05-27T19:19Z — runtime-litmus failed at rust-formatting
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- observed_sibling_heads: main=`e22a6853` · linux-next=`f3838069` ·
+  windows-next=`1aebb284` (ahead with unmerged Windows w9 transport/menu
+  code plus a merge-sync from `linux-next`) · osx-next=`deba10d8` (ancestor
+  of linux-next)
+- Folded runtime-litmus
+  `20260527T190639Z-2c239138-1aebb284-deba10d8`. Metadata recorded
+  `merge_status=clean`, `litmus_status=failed`, `exit_code=1`; the local
+  `current` marker was removed after folding the completed run.
+- Runtime evidence: `origin/windows-next` merged cleanly into the fresh
+  runtime worktree and `origin/osx-next` was already integrated. The run
+  reached `./build.sh --ci-full --install`, passed pre-build litmus 57/57,
+  wrote centicolon signature/evidence, then failed the `rust-formatting`
+  check. Installed `tillandsias --debug --init` and `tillandsias . --opencode
+  --diagnostics` did not run because the build gate failed first.
+- Formatting blocker paths:
+  `crates/tillandsias-macos-tray/src/action_host.rs`,
+  `crates/tillandsias-macos-tray/src/terminal_attach.rs`,
+  `crates/tillandsias-vm-layer/src/vz.rs`, and
+  `crates/tillandsias-windows-tray/src/wsl_lifecycle.rs`.
+- No duplicate runtime-litmus was started in this same loop because the same
+  heads with no formatting fix would reproduce the same failure. The blocker
+  is now assigned to macOS m11 for the macOS/vm-layer formatting diffs and
+  Windows w9 for `wsl_lifecycle.rs`; the next loop should start a fresh
+  runtime-litmus immediately after those format fixes land.
+- Current dependency chain: Windows w9 is code-proven and clean-mergeable but
+  not integrated until rustfmt passes and the full installed runtime litmus
+  completes. macOS m8 still waits on user-attended smoke, with m11 now
+  autonomous before any noop. Linux release cleanup remains the
+  manifest-owned `release_tag` accessor.
+
 ### Coordinator contract update 2026-05-27T19:05Z — active full runtime litmus required
 
 - The coordination skill now requires active integration execution. When

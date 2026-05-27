@@ -2,7 +2,7 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/windows-next-thin-tray.md, plan/issues/tray-convergence-coordination.md, plan/issues/control-socket-protocol-convergence-2026-05-25.md, openspec/changes/control-wire-pty-attach/
 
-Status: **OPEN** as of 2026-05-27T18:15Z. Windows w1, w2, w3, w4, w6
+Status: **OPEN** as of 2026-05-27T19:19Z. Windows w1, w2, w3, w4, w6
 diagnostics, the w5 converter, the shared forge-container `launch_spec` /
 `intent_for_action` amendment, the l9 URL resolver, the w5
 `provision_via_recipe` runtime flip, and w8 HvSocket Ready proof are done on
@@ -15,10 +15,14 @@ keepalive, deterministic Quit drain, native-terminal menu launch for the Open
 Shell / Attach / Maintain / GitHub Login argv path, Open Shell terminal-click
 smoke, file-based tray logging plus working Open Log, Retry reprovisioning, and
 forge-container Open Shell smoke.
-`origin/windows-next` is ahead of `linux-next` through `c0a9558b`; the
-integration loop must merge/test that code while preserving the newer
-`linux-next` manifest repin from `13cf3af0` and later plan entries. The old
-PR #3 / recipe-publish / SHA-pin / F1 / F2 gates are closed.
+`origin/windows-next` is ahead of `linux-next` through `1aebb284` (the latest
+commit is a sync merge from `linux-next`). Runtime-litmus
+`20260527T190639Z-2c239138-1aebb284-deba10d8` clean-merged the branch but
+failed before integration at the `rust-formatting` gate. The Windows-owned
+format diff is
+`crates/tillandsias-windows-tray/src/wsl_lifecycle.rs`; fix that before the
+next full runtime-litmus attempt. The old PR #3 / recipe-publish / SHA-pin /
+F1 / F2 gates are closed.
 
 ## How to use this file
 
@@ -60,7 +64,10 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
   provisioning and prove the forge-container Open Shell argv. The remaining
   packet is integration-loop merge/test plus the optional full live-provision
   dress rehearsal and optional wire EnumerateLocalProjects, not another
-  transport primitive, terminal-launch proof, or Retry hook.
+  transport primitive, terminal-launch proof, or Retry hook. The current
+  integration blocker is a rustfmt diff in
+  `crates/tillandsias-windows-tray/src/wsl_lifecycle.rs` surfaced by
+  runtime-litmus `20260527T190639Z-2c239138-1aebb284-deba10d8`.
 - `w7/recipe-diagnostics-and-branch-sync` is no longer the primary packet; use
   it only as a no-code fallback if the `c0a9558b` merge/test exposes stale
   diagnostics or a manifest/branch-sync conflict.
@@ -161,11 +168,12 @@ fallback if the integration loop surfaces stale branch or manifest state.
     Ready should become the start of real interaction, not just the end of
     provisioning.
 - next_action: >
-    First let the integration loop merge/test `origin/windows-next` through
-    `c0a9558b` into `linux-next` or record exact conflicts. Windows
-    continuation can then run the full live-provision dress rehearsal and
-    optionally add wire EnumerateLocalProjects if host-side project scan is not
-    sufficient.
+    First clear the rustfmt diff in
+    `crates/tillandsias-windows-tray/src/wsl_lifecycle.rs`, then let the
+    integration loop rerun `origin/windows-next` through `1aebb284` into
+    `linux-next` or record exact conflicts. Windows continuation can then run
+    the full live-provision dress rehearsal and optionally add wire
+    EnumerateLocalProjects if host-side project scan is not sufficient.
 - acceptance_evidence:
   - `8b785ced`: Windows tray can request VmStatus after the Ready flip without
     reopening provisioning.
@@ -190,8 +198,9 @@ fallback if the integration loop surfaces stale branch or manifest state.
     duplicate in-flight tasks.
   - `c0a9558b`: forge-container Open Shell smoke passed through `wsl.exe` into
     a running `tillandsias-<name>-forge` container.
-  - Remaining: integration-loop merge/test into `linux-next`, optional full
-    live-provision dress rehearsal, and optional wire EnumerateLocalProjects.
+  - Remaining: Windows-owned rustfmt cleanup for `wsl_lifecycle.rs`,
+    integration-loop merge/test into `linux-next`, optional full live-provision
+    dress rehearsal, and optional wire EnumerateLocalProjects.
   - `cargo test -p tillandsias-windows-tray --target x86_64-pc-windows-msvc`
     or equivalent Windows-host evidence stays green.
 - fallback_when_blocked: >
@@ -1068,3 +1077,19 @@ Next greedy pickups (no VM needed): **w4b** (windows-ownable, pure) and **w4d**
 - Release-side note: PR #5 merged to `main`, so the durable release workflow
   now auto-publishes the in-VM headless agents. This closes the prior
   release.yml cleanup ask but does not change the Windows w9 merge/test gate.
+
+### Event: 2026-05-27T19:19Z — runtime-litmus clean merge, rustfmt blocker
+
+- Observed remote heads after fetch/pull: `linux-next` `f3838069`,
+  `windows-next` `1aebb284`, `osx-next` `deba10d8`, `main` `e22a6853`.
+- Runtime-litmus `20260527T190639Z-2c239138-1aebb284-deba10d8` clean-merged
+  `origin/windows-next` and found `origin/osx-next` already integrated, then
+  failed `./build.sh --ci-full --install` at the `rust-formatting` check.
+- Windows-owned blocker: rustfmt wants to reflow the
+  `tracing::info!(wire_version, attempt, "VM operationally Ready...")` call in
+  `crates/tillandsias-windows-tray/src/wsl_lifecycle.rs`.
+- Next Windows packet: run `cargo fmt --all` or a scoped rustfmt that covers
+  `wsl_lifecycle.rs`, push the formatting checkpoint to `windows-next`, and
+  append an agent_status_packet here. Do not reopen transport, Retry, or Open
+  Shell behavior; this is a formatting-only gate before the integration loop
+  can rerun the full installed runtime litmus.

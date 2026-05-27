@@ -2,7 +2,7 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
-## macOS UNBLOCKED for v0.0.1 — as of 2026-05-27T18:15Z
+## macOS UNBLOCKED for v0.0.1 — as of 2026-05-27T19:19Z
 
 **macOS has zero blocking asks for other hosts.** Every Linux- and
 Windows-owned artifact the macOS production path needs is shipped +
@@ -34,19 +34,29 @@ live-verified:
 **What macOS is waiting for** (not a cross-host ask):
   - User interactive smoke results — user-attended; not parallelizable.
 
-The status line below is the coordinator refresh after the 18:15Z fetch.
+**Autonomous macOS cleanup now blocking the integration gate:** runtime-litmus
+`20260527T190639Z-2c239138-1aebb284-deba10d8` failed at rust-formatting after
+a clean Windows merge. Mac-owned diffs are
+`crates/tillandsias-macos-tray/src/action_host.rs`,
+`crates/tillandsias-macos-tray/src/terminal_attach.rs`, and
+`crates/tillandsias-vm-layer/src/vz.rs`; claim m11 before nooping behind user
+smoke.
+
+The status line below is the coordinator refresh after the 19:19Z fetch.
 
 ---
 
-Status: **OPEN** as of 2026-05-27T18:15Z. macOS m1, m1b, m2, m3, m6,
+Status: **OPEN** as of 2026-05-27T19:19Z. macOS m1, m1b, m2, m3, m6,
 m7, m4 sub-task B, m5 fetch primitive, m5 Start VM auto-fetch wiring, `.img.xz`
 download/decompress, and bytes-level SHA proof are done/integrated. `osx-next`
-is at `deba10d8`, which is already an ancestor of `linux-next` `9081212c`.
+is at `deba10d8`, which is already an ancestor of `linux-next` `f3838069`.
 The old l9 recipe-publish/SHA-pin gates and the F1 headless service restart
 loop are closed. Remaining macOS acceptance is user-attended m8 smoke of the
 rebuilt `dist/Tillandsias.app`; if Ready still hangs after Start VM, file
 fresh evidence against the current recipe-rootfs/headless unit state rather
-than reopening m5 fetch/provision code.
+than reopening m5 fetch/provision code. Autonomous fallback is no longer a
+noop: m11 should clear the rustfmt diffs listed above before the next
+runtime-litmus run.
 
 ## How to use this file
 
@@ -145,12 +155,16 @@ accessor.
     m4/m5 code. This keeps the macOS tray aligned while l9 artifacts are
     pending, without touching release-lane workflow state.
 - next_action: >
-    Run focused macOS tray tests/lints, identify the smallest MenuStructure
-    adapter change that removes duplicate manual menu wiring, and checkpoint
-    only if the diff is semantic or needed to keep CI green.
+    First clear the runtime-litmus rustfmt diffs in `action_host.rs`,
+    `terminal_attach.rs`, and `vz.rs`. Then run focused macOS tray
+    tests/lints, identify the smallest MenuStructure adapter change that
+    removes duplicate manual menu wiring, and checkpoint only if the diff is
+    semantic or needed to keep CI green.
 - acceptance_evidence:
-  - `cargo fmt --all -- --check` or a scoped rustfmt pass for macOS-owned
-    crates.
+  - `cargo fmt --all -- --check` or a scoped rustfmt pass for
+    `crates/tillandsias-macos-tray/src/action_host.rs`,
+    `crates/tillandsias-macos-tray/src/terminal_attach.rs`, and
+    `crates/tillandsias-vm-layer/src/vz.rs`.
   - `cargo clippy -p tillandsias-macos-tray -- -D warnings` if available on
     macOS, or a documented platform/toolchain blocker.
   - `cargo test -p tillandsias-macos-tray --bin tillandsias-tray`.
@@ -1870,3 +1884,18 @@ step 5 lands.
   cross-host ask for macOS this loop. The prior release.yml auto-publish ask is
   closed by PR #5; only the manifest `release_tag` accessor remains as
   non-blocking cleanup.
+
+### event: linux coordinator status reconciliation — 2026-05-27T19:19Z
+
+- Observed remote heads after fetch/pull: `linux-next` `f3838069`,
+  `windows-next` `1aebb284`, `osx-next` `deba10d8`, `main` `e22a6853`.
+- Runtime-litmus `20260527T190639Z-2c239138-1aebb284-deba10d8` found
+  `osx-next` already integrated but failed the merged runtime worktree at the
+  `rust-formatting` check.
+- Mac-owned blocker paths:
+  `crates/tillandsias-macos-tray/src/action_host.rs`,
+  `crates/tillandsias-macos-tray/src/terminal_attach.rs`, and
+  `crates/tillandsias-vm-layer/src/vz.rs`.
+- Current macOS dependency chain: m8 user-attended smoke remains the
+  acceptance gate, but m11 is now the autonomous primary packet before macOS
+  should noop; m10 remains the fallback after formatting is clean.

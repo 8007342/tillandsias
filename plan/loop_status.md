@@ -1,97 +1,79 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-05-27T19:07Z
+LastExecutionTime: 2026-05-27T19:19Z
 
 ## This Loop
 
-- Updated `/coordinate-multihost-work` from audit-only coordination to active
-  orchestration: when sibling branches are ahead it must start or monitor an
-  async full runtime litmus instead of only recommending future merge/test.
-- Defined the async run protocol using ignored local metadata under
-  `plan/localwork/runtime-litmus/<run_id>/` and a fresh worktree under
-  `/tmp/tillandsias-runtime-litmus-<run_id>`.
-- The long command is now explicitly:
-  `./build.sh --ci-full --install && tillandsias --debug --init &&
-  tillandsias . --opencode --diagnostics --prompt "$LITMUS_PROMPT"`.
-- A first check/test-oriented integration run was started before this
-  correction and failed fast on plan-doc conflicts; its ignored local log is
-  available under `plan/localwork/integration-runs/`.
-- If sibling plan-doc conflicts recur, the runtime-litmus runner should record
-  them, reset to `origin/linux-next`, and still run the full installed runtime
-  litmus so the next cycle has build/runtime output to inspect.
-- Started the required full runtime-litmus run:
-  `20260527T190639Z-2c239138-1aebb284-deba10d8`, PID `2133668`, status
-  `running`, log
-  `plan/localwork/runtime-litmus/20260527T190639Z-2c239138-1aebb284-deba10d8/run.log`.
-  It merged `origin/windows-next` cleanly, found `origin/osx-next` already
-  integrated, and is currently inside `./build.sh --ci-full --install`.
-- Added a required three-host assignment board for every loop so hosts get
-  primary and fallback work rather than idling behind stale dependencies.
 - Fetched origin, confirmed `linux-next` was clean and up to date at
-  `2c239138`, and observed remote heads: `windows-next` `1aebb284`,
-  `osx-next` `deba10d8`, `main` `e22a6853`.
-- `main` advanced by PR #5 and now contains the durable `release.yml`
-  headless-agent auto-publish leg. `linux-next` advanced by one coordination
-  commit; neither sibling platform branch advanced since the 16:24Z fold.
-- Reconciled active queues without changing item states: Windows w9 remains
-  `in_progress` pending integration-loop merge/test; w7 remains the fallback.
-  macOS m8 remains user-attended, with m10/m11 ready as optional no-blocker
-  follow-ups.
+  `f3838069`, and observed heads: `main` `e22a6853`, `windows-next`
+  `1aebb284`, `osx-next` `deba10d8`.
+- Folded runtime-litmus `20260527T190639Z-2c239138-1aebb284-deba10d8`:
+  `origin/windows-next` merged cleanly in the runtime worktree and
+  `origin/osx-next` was already integrated, but `./build.sh --ci-full
+  --install` failed before installed runtime diagnostics at the
+  `rust-formatting` check.
+- Evidence from the failed run: pre-build litmus passed 57/57 and centicolon
+  signature writing completed; overall gate was 13/14 with only formatting
+  red. No `tillandsias --debug --init` or `tillandsias . --opencode
+  --diagnostics` command ran because the build gate stopped first.
+- Current rustfmt blocker spans macOS-owned
+  `action_host.rs`, `terminal_attach.rs`, and `vz.rs`, plus Windows-owned
+  `wsl_lifecycle.rs`. The active queues now point macOS m11 and Windows w9 at
+  that cleanup before another runtime-litmus attempt.
+- Removed the stale local `plan/localwork/runtime-litmus/current` marker after
+  folding the finished run. No duplicate runtime run was started because the
+  same heads with no formatting fix would reproduce the same failed gate.
 
 ## Expected Next Loop
 
-- Monitor runtime-litmus
-  `20260527T190639Z-2c239138-1aebb284-deba10d8`; fold its status, log
-  summary, and any pushed merge result before starting another run.
-- During that merge, preserve `linux-next`'s newer `13cf3af0`
-  `images/vm/manifest.toml` repin and newer plan entries if Windows' older
-  branch blocks appear.
-- Windows can focus on the optional full live-provision dress rehearsal and
-  optional wire EnumerateLocalProjects, using w7 diagnostics only if
-  merge/test exposes stale branch or manifest state.
-- macOS remains on user-attended m8 smoke; release cleanup is now narrowed to
-  the manifest-owned `release_tag` accessor.
+- First check whether rustfmt cleanup landed for the four paths listed above.
+  If yes, start a fresh runtime-litmus from current `origin/linux-next`, merge
+  `origin/windows-next`, and continue through installed `tillandsias`
+  diagnostics before pushing.
+- If formatting is still red, do not rerun the same integration; keep the
+  failed log as evidence and ping the owning queue item.
+- Preserve `linux-next`'s newer manifest repin and newer plan entries if a
+  later Windows merge presents older branch blocks.
 
 ## Resolved Since Previous Loop
 
-- PR #5 merged `linux-next` to `main` at `e22a6853`; the release workflow now
-  carries the headless x86_64/aarch64 publish leg instead of relying on a
-  manual upload.
+- The runtime-litmus run is no longer ambiguous/running: it completed, proved
+  a clean Windows merge, and isolated the blocker to rust formatting rather
+  than merge conflicts, stale push, or missing sibling evidence.
 
 ## Current Major Blockers
 
-- Runtime-litmus
-  `20260527T190639Z-2c239138-1aebb284-deba10d8` is running the full
-  `--ci-full --install` gate before installed `tillandsias` diagnostics.
+- Rust formatting blocks the Windows w9 integration merge. Owners:
+  Windows w9 for `crates/tillandsias-windows-tray/src/wsl_lifecycle.rs`;
+  macOS m11 for `crates/tillandsias-macos-tray/src/action_host.rs`,
+  `crates/tillandsias-macos-tray/src/terminal_attach.rs`, and
+  `crates/tillandsias-vm-layer/src/vz.rs`.
+- Windows w9 remains unmerged into `linux-next` until the full runtime litmus
+  can run past formatting and through installed diagnostics.
 - macOS m8 user-attended interactive smoke.
 - Non-blocking release cleanup: manifest-owned `release_tag`.
 
 ## Assignment Board
 
-- Linux primary: monitor runtime-litmus
-  `20260527T190639Z-2c239138-1aebb284-deba10d8`; fallback: if it finishes
-  cleanly or with a mechanical blocker, fold the result and implement
-  manifest-owned `release_tag`.
-- Windows primary: wait for integration result, then run full live-provision
-  dress rehearsal; fallback: w7 diagnostics if merge/test exposes drift.
-- macOS primary: user-attended m8 smoke; fallback: m10 project threading, then
-  m11 MenuStructure/clippy cleanup.
+- Linux primary: hold the integration gate, start the next runtime-litmus only
+  after rustfmt cleanup lands; fallback: manifest-owned `release_tag` accessor.
+- Windows primary: clear the w9 `wsl_lifecycle.rs` rustfmt diff, then continue
+  full live-provision dress rehearsal; fallback: w7 diagnostics if merge/test
+  exposes branch or manifest drift.
+- macOS primary: m11 formatting/MenuStructure cleanup for the listed macOS
+  files; fallback: m10 project threading. User-attended m8 smoke remains a
+  separate manual gate.
 
 ## Stale Or Pending Pings
 
 - No expired leases found in active queues.
-- Windows has unmerged code/docs delta; integration-loop merge/test is the
-  pending cross-host action.
-- macOS has no cross-host asks and may noop until user smoke feedback or
-  release-tag/accessor work lands.
+- Windows has unmerged code/docs delta plus one Windows-owned rustfmt diff.
+- macOS now has autonomous rustfmt cleanup before it should noop behind user
+  smoke feedback.
 
 ## Validation
 
-- `bash -n codex` passed.
+- `python3 -c` YAML parser check passed for plan/methodology entry files.
 - `git diff --check` passed for touched coordination files.
-- `./codex --help` still renders usage after the wait-output change.
-- Runtime-litmus run
-  `20260527T190639Z-2c239138-1aebb284-deba10d8` was launched and confirmed
-  alive outside the sandbox at PID `2133668`.
-- Files changed this pass: coordination skill, integration-loop ledger,
-  wrapper wait output, and loop cache.
+- Files changed this pass: `plan.yaml`, integration-loop ledger, Windows and
+  macOS work queues, and loop cache.
