@@ -432,6 +432,15 @@ fn launch_vault_container(debug: bool) -> Result<(), String> {
         .stderr(Stdio::null())
         .status();
 
+    // Vault must join the enclave bridge network so (a) `--network-alias vault`
+    // is valid — rootless podman's DEFAULT network is pasta/slirp4netns, not
+    // bridge, and aliases/static-ip are bridge-only ("networks and static
+    // ip/mac address can only be used with Bridge mode networking"); and
+    // (b) enclave containers can reach Vault by its alias. Idempotent — short-
+    // circuits when the network already exists (it normally does, created
+    // during `run_init`, but ensure here so the bootstrap is self-sufficient).
+    crate::ensure_enclave_network(debug)?;
+
     if debug {
         eprintln!(
             "[tillandsias-vault] launching container {VAULT_CONTAINER_NAME} (publish 127.0.0.1:{VAULT_HOST_PORT}:8200)"
@@ -452,6 +461,10 @@ fn launch_vault_container(debug: bool) -> Result<(), String> {
             VAULT_CONTAINER_NAME,
             "--hostname",
             VAULT_NETWORK_ALIAS,
+            // Bridge network for the alias + enclave reachability (see
+            // launch_vault_container preamble). Must precede --network-alias.
+            "--network",
+            crate::ENCLAVE_NET,
             "--network-alias",
             VAULT_NETWORK_ALIAS,
             "--secret",
