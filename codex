@@ -175,6 +175,20 @@ timestamp_utc() {
   date -u '+%Y-%m-%dT%H:%M:%SZ'
 }
 
+timestamp_pacific_from_epoch() {
+  local epoch="$1"
+  if command -v python >/dev/null 2>&1; then
+    python - "$epoch" <<'PY'
+from datetime import datetime
+from zoneinfo import ZoneInfo
+import sys
+print(datetime.fromtimestamp(int(sys.argv[1]), ZoneInfo("America/Los_Angeles")).strftime("%Y-%m-%d %H:%M:%S %Z"))
+PY
+  else
+    TZ=America/Los_Angeles date -d "@$epoch" '+%Y-%m-%d %H:%M:%S %Z'
+  fi
+}
+
 run_tui_once() {
   "$CODEX_BIN" \
     "${common_args[@]}" \
@@ -213,7 +227,9 @@ if [[ -n "$WAIT_INTERVAL" ]]; then
     if [[ -n "$TIMES" && "$cycle" -ge "$TIMES" ]]; then
       exit 0
     fi
-    printf '[codex-wait] %s sleeping %s before next cycle\n' "$(timestamp_utc)" "$WAIT_INTERVAL" >&2
+    next_epoch=$(( $(date +%s) + wait_seconds ))
+    next_pacific="$(timestamp_pacific_from_epoch "$next_epoch")"
+    printf '[codex-wait] %s sleeping %s before next cycle at %s (America/Los_Angeles)\n' "$(timestamp_utc)" "$WAIT_INTERVAL" "$next_pacific" >&2
     sleep "$wait_seconds"
   done
 fi

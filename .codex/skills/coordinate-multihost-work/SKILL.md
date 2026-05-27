@@ -15,6 +15,11 @@ Do coordination, spec, plan, methodology, and cheatsheet work. Do not change
 implementation code unless the blocker is clearly a small coordination-side fix
 required to unblock agents. Respect dirty worktree changes you did not make.
 
+This skill is also the active runtime orchestrator. If a sibling branch has
+eligible code ahead of `linux-next`, do not only recommend that a future loop
+merge/test it. Pull/merge what can be merged, then start or monitor the full
+runtime litmus run so the next loop has concrete output to read.
+
 ## Start Of Loop
 
 1. Fetch origin.
@@ -70,6 +75,91 @@ required to unblock agents. Respect dirty worktree changes you did not make.
   checkpoint, and whether the lease should continue, release, or be reclaimed.
 - Prefer pinging or reassigning stale work over duplicating work. Respect active
   leases unless expired or explicitly released.
+
+## Integration And Runtime Executor
+
+Run this before ending the loop whenever `origin/windows-next` or
+`origin/osx-next` is not an ancestor of `origin/linux-next`, or whenever the
+latest integrated code has not yet been exercised by the full runtime litmus.
+
+1. Check for an active async runtime run under
+   `plan/localwork/runtime-litmus/current`.
+   - If present, read `metadata.env`, `status`, and `run.log`.
+   - If the pid is still alive, record a short "validation still running"
+     update in `plan/loop_status.md` and do not start a second run.
+   - If it finished, fold the result into
+     `plan/issues/multi-host-integration-loop-*.md`, then remove or replace
+     the `current` symlink/file.
+2. If no run is active, compute sibling deltas with:
+   - `git merge-base --is-ancestor origin/windows-next origin/linux-next`
+   - `git merge-base --is-ancestor origin/osx-next origin/linux-next`
+   - `git rev-list --left-right --count origin/linux-next...origin/<sibling>`
+3. If a sibling has unique commits, attempt a real merge in a fresh worktree.
+   Prefer Windows first when both have deltas because Windows currently carries
+   the larger runtime surface; otherwise merge every eligible sibling in one
+   run, one branch at a time.
+4. Never write "next loop should merge/test" unless this loop either started a
+   run, observed an already-running run, or recorded a concrete reason the run
+   could not start.
+
+### Async Runtime Litmus Run
+
+Use ignored local state only:
+
+- run directory: `plan/localwork/runtime-litmus/<run_id>/`
+- current marker: `plan/localwork/runtime-litmus/current`
+- worktree: `/tmp/tillandsias-runtime-litmus-<run_id>`
+- log: `plan/localwork/runtime-litmus/<run_id>/run.log`
+- metadata: `plan/localwork/runtime-litmus/<run_id>/metadata.env`
+- status file: `plan/localwork/runtime-litmus/<run_id>/status`
+
+Run id format: `YYYYMMDDTHHMMSSZ-<linux>-<windows>-<osx>`.
+
+The background run MUST:
+
+1. Create a fresh worktree from `origin/linux-next`.
+2. Merge `origin/windows-next` if it is ahead; then merge `origin/osx-next` if
+   it is ahead.
+3. On conflicts, stop immediately with `status=failed` and leave `git status`,
+   conflicted paths, and merge output in `run.log`.
+4. Preserve newer `linux-next` coordination files and known manifest repins
+   when resolving only if the resolution is mechanical and already documented in
+   the active ledger. Otherwise fail and assign a conflict-resolution packet.
+5. Run the full installed runtime mechanism, saving all stdout/stderr to
+   `run.log`:
+   - `./build.sh --ci-full --install`
+   - `tillandsias --debug --init`
+   - `tillandsias . --opencode --diagnostics --prompt "$LITMUS_PROMPT"`
+6. Use `TILLANDSIAS_LITMUS_PROMPT` when set. Otherwise use this default prompt:
+   `Run a Tillandsias runtime litmus for this checkout. Exercise OpenCode
+   startup, diagnostics, container readiness, and report exact failures with
+   commands and log paths.`
+7. On success, commit the merge with a checkpoint-style message and push
+   `HEAD:linux-next`.
+8. On push rejection, mark `status=stale-push`; the next loop must fetch and
+   start a fresh run rather than force-pushing.
+
+The parent coordinator loop records the run id, pid, heads, worktree, log path,
+and next reader action in `plan/loop_status.md` before ending.
+
+## Assignment Board
+
+Every loop must publish or refresh a three-host assignment board in
+`plan/loop_status.md`:
+
+- Linux primary and fallback.
+- Windows primary and fallback.
+- macOS primary and fallback.
+
+Rules:
+
+- If a host has an in-progress item, name the next checkpoint expected in the
+  next one or two cycles.
+- If a host is blocked, name the blocker owner and the fallback packet.
+- If a host has no useful autonomous work, say why; user-attended smoke is the
+  only acceptable idle reason.
+- Prefer creating a ready packet over letting a host idle behind another host's
+  dependency.
 
 ## Loop Status Cache
 

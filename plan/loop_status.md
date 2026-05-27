@@ -1,9 +1,23 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-05-27T18:15Z
+LastExecutionTime: 2026-05-27T19:05Z
 
 ## This Loop
 
+- Updated `/coordinate-multihost-work` from audit-only coordination to active
+  orchestration: when sibling branches are ahead it must start or monitor an
+  async full runtime litmus instead of only recommending future merge/test.
+- Defined the async run protocol using ignored local metadata under
+  `plan/localwork/runtime-litmus/<run_id>/` and a fresh worktree under
+  `/tmp/tillandsias-runtime-litmus-<run_id>`.
+- The long command is now explicitly:
+  `./build.sh --ci-full --install && tillandsias --debug --init &&
+  tillandsias . --opencode --diagnostics --prompt "$LITMUS_PROMPT"`.
+- A first check/test-oriented integration run was started before this
+  correction and failed fast on plan-doc conflicts; its ignored local log is
+  available under `plan/localwork/integration-runs/`.
+- Added a required three-host assignment board for every loop so hosts get
+  primary and fallback work rather than idling behind stale dependencies.
 - Fetched origin, confirmed `linux-next` was clean and up to date at
   `9081212c`, and observed remote heads: `windows-next` `c0a9558b`,
   `osx-next` `deba10d8`, `main` `e22a6853`.
@@ -17,8 +31,8 @@ LastExecutionTime: 2026-05-27T18:15Z
 
 ## Expected Next Loop
 
-- Integration loop should merge/test `origin/windows-next` through
-  `c0a9558b` into `linux-next`, or record exact conflicts.
+- Start or monitor an async full runtime litmus for `origin/windows-next`
+  through `c0a9558b`; do not stop at another audit-only recommendation.
 - During that merge, preserve `linux-next`'s newer `13cf3af0`
   `images/vm/manifest.toml` repin and newer plan entries if Windows' older
   branch blocks appear.
@@ -40,6 +54,15 @@ LastExecutionTime: 2026-05-27T18:15Z
 - macOS m8 user-attended interactive smoke.
 - Non-blocking release cleanup: manifest-owned `release_tag`.
 
+## Assignment Board
+
+- Linux primary: start/monitor async runtime litmus for `windows-next` ->
+  `linux-next`; fallback: implement manifest-owned `release_tag`.
+- Windows primary: wait for integration result, then run full live-provision
+  dress rehearsal; fallback: w7 diagnostics if merge/test exposes drift.
+- macOS primary: user-attended m8 smoke; fallback: m10 project threading, then
+  m11 MenuStructure/clippy cleanup.
+
 ## Stale Or Pending Pings
 
 - No expired leases found in active queues.
@@ -50,9 +73,8 @@ LastExecutionTime: 2026-05-27T18:15Z
 
 ## Validation
 
-- PyYAML parsed `plan.yaml`, `plan/index.yaml`, and the methodology entry YAML
-  files.
+- `bash -n codex` passed.
 - `git diff --check` passed for touched coordination files.
-- Files changed this pass: loop cache, plan status/index, Windows and macOS
-  work queues, blocker roundup, coordination audit, integration-loop ledger,
-  and tray convergence note.
+- `./codex --help` still renders usage after the wait-output change.
+- Files changed this pass: coordination skill, integration-loop ledger,
+  wrapper wait output, and loop cache.

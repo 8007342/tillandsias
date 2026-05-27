@@ -26,7 +26,43 @@ Guardrails: never force-push, never push to `main`/`osx-next`/`windows-next`,
 never delete another host's plan notes (tombstone/supersede only). Escalate at
 three consecutive same-cause failures.
 
+## Active Orchestrator Contract
+
+As of 2026-05-27T18:57Z, `/coordinate-multihost-work` is not allowed to stop at
+"next loop should merge/test" when a sibling branch is ahead. Each run must do
+one of:
+
+- start an async runtime litmus run under
+  `plan/localwork/runtime-litmus/<run_id>/` with its worktree in
+  `/tmp/tillandsias-runtime-litmus-<run_id>`;
+- observe and summarize an already-running async runtime litmus run; or
+- record the concrete blocker that prevented starting validation.
+
+Async runtime litmus merges eligible sibling branches into a fresh worktree
+rooted at `origin/linux-next`, then runs the full installed mechanism:
+`./build.sh --ci-full --install`, `tillandsias --debug --init`, and
+`tillandsias . --opencode --diagnostics --prompt "$LITMUS_PROMPT"`. It pushes
+`HEAD:linux-next` only after the full mechanism passes. Push rejection becomes
+`status=stale-push`; never force-push. Durable conclusions still land in this
+ledger and `plan/loop_status.md`; ignored local logs are only next-cycle
+handoff state.
+
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
+
+### Coordinator contract update 2026-05-27T19:05Z — active full runtime litmus required
+
+- The coordination skill now requires active integration execution. When
+  `windows-next` or `osx-next` is ahead of `linux-next`, the orchestrator must
+  start or monitor an async full runtime litmus run rather than only
+  recommending future merge/test work.
+- Current immediate target remains `origin/windows-next` `c0a9558b`, which is
+  ahead of `linux-next` with Windows w9 transport/menu code and smoke evidence.
+- A first check/test-oriented run failed fast on plan-doc conflicts
+  (`tray-convergence-coordination.md`, `windows-next-thin-tray.md`). That is
+  evidence for the next merge reconciliation, but the required long run is now
+  the full `--ci-full --install` plus installed `tillandsias` litmus.
+- The next recurrent cycle should either publish a runtime-litmus run id/log
+  path, fold a completed run result, or record the exact start blocker.
 
 ### Coordinator audit 2026-05-27T18:15Z — main advanced by PR #5; w9 merge/test still pending
 
