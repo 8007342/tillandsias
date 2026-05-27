@@ -280,7 +280,11 @@ impl WslLifecycle {
                 phase: VmPhase::Ready,
                 ..
             } => {
-                tracing::info!(wire_version, attempt, "VM operationally Ready (control wire up)");
+                tracing::info!(
+                    wire_version,
+                    attempt,
+                    "VM operationally Ready (control wire up)"
+                );
                 // NOTE: `stream` is dropped here; holding it for the session +
                 // routing menu actions over it is the next w9 increment.
                 Ok(())
