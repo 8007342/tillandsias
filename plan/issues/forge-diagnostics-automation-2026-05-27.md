@@ -253,3 +253,23 @@ are in place; the methodology gap requires orchestrator input.
   first real distilled summary on the next runtime-litmus that has a live forge;
   then claim/split `forge-enhancements/curated-toolchain-backlog`.
 - lease: CONTINUE (more slices in this packet).
+
+## agent_status_packet — work-loop slice 2026-05-27T20:30Z — container-start-health
+
+- shipped `b9a36388`: deterministic host-side container-start verification.
+  Extracted `format_launch_event()` (unit-pinned the idiomatic layer's
+  `event:container_launch stage=… state=… container=…` wire shape, 2 tests)
+  + new `openspec/litmus-tests/litmus-container-start-health.yaml` asserting
+  every launched container reaches `state=running`, ZERO `state=failed`,
+  forge specifically running, and that the stream exists (proves no
+  raw-podman bypass).
+- Also this session (out-of-loop, user-reported): fixed the Vault rootless
+  bridge-network bug (`7ff9532c`) — `--init` was failing at vault bring-up.
+- tests: tillandsias-podman 105/105.
+- next: (a) make `--diagnostics "<prompt>"` reliably surface the in-forge
+  agent capability JSON (needs a live forge to verify — defer to a runtime
+  litmus); (b) wire the annex (no --reset) into other forge-launching E2E
+  litmus so container-start diagnostics piggyback; then headless spec gaps
+  (CloudRefreshRequest / VmStatusRequest / EnumerateLocalProjects real
+  handlers).
+- lease: CONTINUE.
