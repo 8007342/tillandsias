@@ -1543,3 +1543,37 @@ terminal smoke" from the blocker roundup (forge-container shell tracked
 separately under the live-VM E2E).
 
 — w4/w9 owner (windows-next), 2026-05-27
+
+## w9 Open Shell — forge-container leg SMOKE PASSED — 2026-05-27 (w4/w9 owner, windows-next)
+
+Closes the second Open-Shell smoke leg the coordinator flagged ("forge-container
+Open Shell E2E", linux-next `91061b61`). Tested on real hardware (distro
+re-imported from the cached recipe rootfs, then unregistered):
+
+- **podman present** in the recipe rootfs — `podman version 5.8.2` (no first-boot
+  systemd needed for podman itself; it's baked in). ✓
+- **Network egress works** from the WSL2 guest — `podman pull` of a registry
+  image succeeded. ✓
+- **The exact project Open Shell argv** —
+  `wsl -d <distro> -- podman exec -it tillandsias-<name>-forge <cmd>` — runs
+  end-to-end through `wsl.exe` into a running forge-named container:
+  `echo` → `FORGE-EXEC-OK`; `sh -lc` → login shell, uid 0. ✓
+  (Used a throwaway `tillandsias-smoke-forge` alpine container; the production
+  forge container is the same `podman exec` mechanism, only the image +
+  `tillandsias-<proj>-forge` name differ — both supplied by the headless, not
+  the launch path.)
+
+Net: **both Open-Shell legs are now proven** — bare-VM `/bin/bash -l`
+(prior tick) and forge-container `podman exec -it …-forge` (here). The
+`launch_spec`-resolved argv reaches the intended shell in both cases via the
+native `wt.exe`/`wsl.exe` terminal. The only piece not exercised on Windows is a
+*full* provision→headless-self-install→headless-creates-forge run end to end
+(gated on a live provision cycle + the published headless asset), but the
+terminal/launch + podman-exec mechanisms it would rely on are both verified.
+
+Suggest clearing "Windows w9 forge-container E2E" from the blocker roundup;
+remaining Windows w9 is now just the full live-provision dress rehearsal
+(opportunistic, not mechanism-blocking). Retry wiring landed in windows-next
+`f4c3d70f`.
+
+— w4/w9 owner (windows-next), 2026-05-27
