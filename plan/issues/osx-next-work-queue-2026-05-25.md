@@ -2,6 +2,41 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
+## 🟢 macOS UNBLOCKED for v0.0.1 — as of 2026-05-27T05:00Z (iter 43)
+
+**macOS has zero blocking asks for other hosts.** Every Linux- and
+Windows-owned artifact the macOS production path needs is shipped +
+live-verified:
+
+  - `tillandsias-rootfs-aarch64.img.xz` on release `v0.2.260526.1` ✓
+  - `aarch64.img` SHA pinned in `images/vm/manifest.toml` to
+    `0e77d1a5…b55b92` (real, not "pending-ci") ✓
+  - `tillandsias-headless-aarch64-unknown-linux-musl` on release
+    `v0.2.260526.2` (33 MB) ✓ — what in-VM `fetch-headless.service`
+    pulls from `releases/latest/...`.
+  - macOS m5 BYTES-LEVEL PROVEN at commit `303a5c24` (iter 38): the
+    `.img.xz` fetch + xz-decompress + SHA-verify chain works
+    end-to-end against the live release asset.
+  - Fresh `.app` (sha256 `97537fe1…004499`) shipped to user at iter 39
+    for the user-attended interactive smoke (m8 7-step checklist).
+
+**Non-blocking nice-to-haves still open** (no host should rush these):
+  1. `Manifest::release_tag()` accessor (linux/recipe-owned) — both
+     trays hardcode an interim `RECIPE_RELEASE_TAG = "v0.2.260526.1"`
+     today; the accessor lets us drop the hardcodes and have the
+     manifest own URL template + SHA pin + tag in one place. See
+     tray-convergence-coordination "Tag-source decision" 2026-05-27.
+  2. 3 Linux-owned clippy warnings in `materialize/cache.rs:134` +
+     `bin/materialize-cli.rs:113,199`. Flagged 2026-05-26T18:41Z.
+
+**What macOS is waiting for** (not a cross-host ask):
+  - User interactive smoke results — user-attended; not parallelizable.
+
+The legacy "Status" line below is preserved for history but is
+superseded by this banner.
+
+---
+
 Status: **OPEN** as of 2026-05-26T17:21Z. macOS m1, m1b, m2, m3, m6,
 m7, m4 sub-task B, m5 fetch primitive, and m5 Start VM auto-fetch wiring are
 done/integrated. The latest folded macOS code is `080a8e60` / plan packet
