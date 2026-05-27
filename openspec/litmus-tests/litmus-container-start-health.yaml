@@ -1,0 +1,105 @@
+# @trace spec:podman-idiomatic-patterns, spec:runtime-diagnostics-stream, spec:forge-as-only-runtime
+# Container-Start Health via the Idiomatic Podman Layer.
+#
+# Verifies that when a container-launching flow runs with --diagnostics, the
+# IDIOMATIC layer (PodmanClient::run_container_observed → emit_launch_event)
+# reports each container reaching `state=running` and NONE reaching
+# `state=failed`. This is how litmus tests confirm containers started
+# correctly — by asserting on tillandsias's own structured launch-event
+# stream, NOT by scraping raw `podman ps`. The stream shape
+# (`event:container_launch stage=… state=… container=…`) is pinned by the
+# `launch_event_line_shape_is_stable` unit test in tillandsias-podman; keep
+# the greps below in lockstep with it.
+name: litmus:container-start-health
+spec: podman-idiomatic-patterns
+phase: post-build
+description: >
+  Run a forge-launching flow with --diagnostics, capture the idiomatic
+  layer's container_launch event stream from stderr, and assert every
+  launched container reached state=running with zero state=failed. Proves
+  the idiomatic-podman + runtime-diagnostics layers verify container start.
+severity: high
+size: e2e
+
+preconditions:
+  - tillandsias binary is installed and on PATH
+  - forge + enclave images are built locally (scripts/build-image.sh)
+  - a project dir exists at PWD (the litmus runs from the repo root)
+
+critical_path:
+  - step: "ensure diagnostics artifact dir"
+    command: "mkdir -p target/forge-diagnostics"
+    timeout_ms: 2000
+
+  - step: "launch forge with --diagnostics, capturing the idiomatic launch-event stream (stderr)"
+    # --diagnostics implies --debug, which enables emit_launch_event. stdout
+    # (agent output) is discarded; stderr carries the structured
+    # event:container_launch stream we assert on. Non-fatal exit: we judge by
+    # the captured stream, not the agent's exit code.
+    command: >
+      tillandsias . --opencode --diagnostics
+      --prompt "report ready and exit"
+      >/dev/null
+      2> "target/forge-diagnostics/container-start_$(date -u +%Y%m%dT%H%M%SZ).stderr.log"
+      || true
+    timeout_ms: 600000
+
+  - step: "at least one container reached state=running via the idiomatic layer"
+    command: >
+      LOG=$(ls -t target/forge-diagnostics/container-start_*.stderr.log 2>/dev/null | head -1)
+      && [ -n "$LOG" ]
+      && grep -Eq 'event:container_launch stage=[^ ]+ state=running container=' "$LOG"
+      && echo "ok: idiomatic layer reported >=1 container running"
+    timeout_ms: 10000
+    expected_behavior: "ok: idiomatic layer reported >=1 container running"
+
+  - step: "NO container reported state=failed"
+    # A single failed launch fails this gate, surfacing the failing stage +
+    # container name straight from the stream.
+    command: >
+      LOG=$(ls -t target/forge-diagnostics/container-start_*.stderr.log 2>/dev/null | head -1)
+      && if grep -E 'event:container_launch .* state=failed' "$LOG"; then
+           echo "FAIL: a container launch failed (see lines above)"; exit 1;
+         else
+           echo "ok: no container_launch state=failed";
+         fi
+    timeout_ms: 10000
+    expected_behavior: "ok: no container_launch state=failed"
+
+  - step: "the forge stage specifically reached running"
+    command: >
+      LOG=$(ls -t target/forge-diagnostics/container-start_*.stderr.log 2>/dev/null | head -1)
+      && grep -Eq 'event:container_launch stage=forge state=running container=' "$LOG"
+      && echo "ok: forge container running"
+    timeout_ms: 10000
+    expected_behavior: "ok: forge container running"
+
+  - step: "events came from the idiomatic layer (no raw-podman bypass signature)"
+    # The event:container_launch stream is emitted ONLY by the shared
+    # PodmanClient path; its presence is the proof launches were not done via
+    # a bare Command::new(\"podman\") bypass.
+    command: >
+      LOG=$(ls -t target/forge-diagnostics/container-start_*.stderr.log 2>/dev/null | head -1)
+      && grep -cE 'event:container_launch ' "$LOG"
+      | awk '{ if ($1+0 >= 1) print "ok: " $1 " idiomatic launch events"; else { print "FAIL: no idiomatic launch events"; exit 1 } }'
+    timeout_ms: 10000
+    expected_behavior: "ok: <N> idiomatic launch events"
+
+observability:
+  traces:
+    - "@trace spec:podman-idiomatic-patterns"
+    - "@trace spec:runtime-diagnostics-stream"
+  expected_log: "Container start health verified via idiomatic launch-event stream"
+  log_fields:
+    spec: "podman-idiomatic-patterns"
+    test: "container-start-health"
+    artifact: "target/forge-diagnostics/container-start_*.stderr.log"
+
+rollback:
+  on_failure: >
+    Inspect the captured stderr log for the failing stage/container, then
+    `podman logs <container>` for that stage. Common causes mirror the
+    typed exit-125 classifier: enclave network missing (ensure_enclave_network),
+    host port already bound, or image not present locally. If tillandsias is
+    not installed, run ./build.sh --release --install first.
+  command: "ls -la target/forge-diagnostics/ && tail -40 target/forge-diagnostics/container-start_*.stderr.log 2>/dev/null"

@@ -1580,7 +1580,25 @@ fn emit_launch_event(
     if !enabled {
         return;
     }
+    eprintln!(
+        "{}",
+        format_launch_event(stage, container_name, state, detail)
+    );
+}
 
+/// Build the idiomatic-layer container-launch diagnostics line. Extracted so
+/// the exact wire shape is unit-pinnable — litmus tests grep this stream
+/// (`event:container_launch ... state=running|failed`) to verify containers
+/// start correctly via the shared layer rather than raw podman. Keep the
+/// `key=value` field order stable: assertions depend on it.
+///
+/// @trace spec:runtime-diagnostics-stream, spec:podman-idiomatic-patterns
+fn format_launch_event(
+    stage: &str,
+    container_name: &str,
+    state: &str,
+    detail: Option<&str>,
+) -> String {
     let mut line = format!(
         "event:container_launch stage={} state={} container={}",
         shell_escape_field(stage),
@@ -1591,7 +1609,7 @@ fn emit_launch_event(
         line.push_str(" detail=");
         line.push_str(&shell_escape_field(detail));
     }
-    eprintln!("{line}");
+    line
 }
 
 fn summary_line(value: &str) -> &str {
@@ -1852,6 +1870,40 @@ mod tests {
     fn classify_typed_unknown_125_falls_through() {
         let f = fake_failure(Some(125), "Error: some unrecognized failure");
         assert!(classify_typed_launch_failure(&f).is_none());
+    }
+
+    /// Pins the idiomatic-layer container-launch diagnostics wire shape that
+    /// the container-start-health litmus greps. If this changes, update
+    /// openspec/litmus-tests/litmus-container-start-health.yaml in lockstep.
+    /// @trace spec:runtime-diagnostics-stream, spec:podman-idiomatic-patterns
+    #[test]
+    fn launch_event_line_shape_is_stable() {
+        let running = format_launch_event("forge", "tillandsias-acme-forge", "running", None);
+        assert_eq!(
+            running,
+            "event:container_launch stage=forge state=running container=tillandsias-acme-forge"
+        );
+        // Field order is stage, state, container — litmus assertions depend on it.
+        assert!(running.starts_with("event:container_launch stage="));
+        assert!(running.contains(" state=running "));
+
+        let failed =
+            format_launch_event("router", "tillandsias-router", "failed", Some("exit 125"));
+        assert_eq!(
+            failed,
+            "event:container_launch stage=router state=failed container=tillandsias-router detail=\"exit 125\""
+        );
+    }
+
+    /// A whitespace/special-char detail is quoted (shell_escape_field) so a
+    /// grep-based litmus parse stays single-line and unambiguous.
+    #[test]
+    fn launch_event_detail_is_escaped() {
+        let line = format_launch_event("git", "c", "starting", Some("multi word detail"));
+        assert!(
+            line.ends_with("detail=\"multi word detail\""),
+            "got: {line}"
+        );
     }
 
     /// @trace spec:enclave-network
