@@ -16,6 +16,8 @@
 )]
 
 #[cfg(target_os = "windows")]
+mod hvsocket;
+#[cfg(target_os = "windows")]
 mod installation_uuid;
 #[cfg(target_os = "windows")]
 mod notify_icon;
@@ -35,6 +37,15 @@ mod wsl_lifecycle;
 
 #[cfg(target_os = "windows")]
 fn main() {
+    // Headless diagnostic: provision the VM to Ready, print progress, exit with
+    // status. For CI smoke + the live-provision dress rehearsal (the GUI tray
+    // has no console). Otherwise launch the interactive tray.
+    if std::env::args().any(|a| a == "--provision-once") {
+        std::process::exit(notify_icon::provision_once());
+    }
+    if std::env::args().any(|a| a == "--status-once") {
+        std::process::exit(notify_icon::status_once());
+    }
     notify_icon::run();
 }
 

@@ -183,12 +183,21 @@ longer blocked:
 - DONE: **forge-container Open Shell smoke** (`c0a9558b`) — the exact
   `wsl -d <distro> -- podman exec -it tillandsias-<name>-forge <cmd>` shape
   runs into a forge-named container and returns `FORGE-EXEC-OK`.
+- DONE: **full live-provision dress rehearsal** (`9c7b30ce`) — added
+  `tillandsias-tray --provision-once` (headless console-progress provision; exit
+  0=Ready/1=fail, for CI/diagnostics) and ran it on real hardware: SettingUp ->
+  DownloadingRootfs (downloaded + SHA-verified against the REPINNED `13cf3af0`
+  manifest -> confirms the embedded manifest matches the live published rootfs)
+  -> `tar_to_wsl_import` -> systemd -> first-boot headless self-install ->
+  HvSocket handshake -> **VM Ready, exit 0**. The entire production provisioning
+  flow is now proven end-to-end against live published assets. (Benign: WSL warns
+  "Failed to start systemd user session for root" — per-user session, not the
+  system service running the headless; control wire came up regardless.)
 
-NEXT (remaining w9, model-independent):
-- Full live-provision dress rehearsal — run provision -> headless
-  self-install -> headless creates forge -> Open Shell in the production
-  container. This is opportunistic confirmation; the terminal, Retry, and
-  podman-exec mechanisms are already proven.
+NEXT (remaining w9 — all optional, nothing mechanism-blocking):
+- Optional: in-container production Open Shell via a real headless-created forge
+  (the `podman exec` mechanism + bare-VM shell are already proven; this is the
+  forge image/name supplied by a live headless rather than a throwaway alpine).
 - Optional: `EnumerateLocalProjects` over the wire (in-VM projects) — today the
   menu is populated by the host-side `~/src` scan, which already works.
 

@@ -20,6 +20,7 @@ use tillandsias_host_shell::provisioning::{ProvisionPhase, ProvisionProgress};
 use tillandsias_vm_layer::fetch::{
     ProvisioningPins, RemoteArtifact, download_verified, is_sha256_hex,
 };
+use tillandsias_vm_layer::materialize::{MaterializedRootfs, tar_to_wsl_import};
 use tillandsias_vm_layer::recipe::Manifest;
 use tillandsias_vm_layer::{ProvisionManifest, VmRuntime, wsl::WslRuntime};
 
@@ -28,6 +29,24 @@ use tillandsias_vm_layer::{ProvisionManifest, VmRuntime, wsl::WslRuntime};
 ///
 /// @trace spec:vm-provisioning-lifecycle
 const PROVISIONING_MANIFEST: &str = include_str!("../assets/provisioning-manifest.json");
+
+/// The recipe materialization manifest (l9 `[output]` artifact-URL + SHA
+/// contract), embedded so the installed, checkout-free tray can resolve the
+/// CI-published rootfs without a repo. Manifest-delivery decision (w5 consumer
+/// question): embed at build time — one trusted artifact, no runtime fetch of
+/// the trust root.
+const RECIPE_MANIFEST: &str = include_str!("../../../images/vm/manifest.toml");
+
+/// Release tag the rootfs artifacts are published under. Tag-source decision
+/// (w5 consumer question): a build-time constant for v0.0.1. TODO: wire to the
+/// workspace CalVer version so it tracks releases automatically rather than
+/// being bumped by hand each release.
+const RECIPE_RELEASE_TAG: &str = "v0.2.260526.1";
+
+/// The single WSL2 distro the tray manages (see `tillandsias-vm-layer::wsl`,
+/// "one distro per host"). Also the `wsl.exe -d <name>` target the Open-Shell
+/// terminal attaches to.
+pub const DISTRO_NAME: &str = "tillandsias";
 
 /// Convenience wrapper around `tillandsias-vm-layer::wsl::WslRuntime` that
 /// carries the tray's preferred defaults (distro name `tillandsias`,
@@ -45,8 +64,13 @@ impl Default for WslLifecycle {
 impl WslLifecycle {
     pub fn new() -> Self {
         Self {
-            runtime: WslRuntime::new("tillandsias", Self::install_root()),
+            runtime: WslRuntime::new(DISTRO_NAME, Self::install_root()),
         }
+    }
+
+    /// The managed distro's name — the `wsl.exe -d <name>` attach target.
+    pub fn distro_name(&self) -> &str {
+        &self.runtime.distro_name
     }
 
     pub fn install_root() -> PathBuf {
@@ -78,6 +102,14 @@ impl WslLifecycle {
     /// runtime. Idempotent.
     pub async fn ensure_started(&self) -> Result<(), String> {
         self.runtime.start().await
+    }
+
+    /// Spawn a keepalive `wsl --exec` session that holds the WSL2 utility VM
+    /// open (it idles down otherwise, dropping the HvSocket control wire). The
+    /// caller holds the returned `Child` for the tray's lifetime; it's
+    /// `kill_on_drop`, so releasing it lets the VM idle normally again.
+    pub fn spawn_keepalive(&self) -> Result<tokio::process::Child, String> {
+        self.runtime.spawn_keepalive()
     }
 
     /// Graceful shutdown — issued by the tray on Quit. The host-shell's
@@ -135,6 +167,133 @@ impl WslLifecycle {
 
         progress.report_phase(ProvisionPhase::Connecting);
         Ok(())
+    }
+
+    /// Recipe-path first-run provisioning — the **w5 flip**. Supersedes the
+    /// legacy [`bootstrap`](Self::bootstrap) OCI-base + separate-binary path:
+    ///
+    /// 1. `SettingUp` — ensure cache/install dirs.
+    /// 2. `DownloadingRootfs` — resolve the CI-published rootfs from the
+    ///    embedded recipe manifest (l9 `[output]` URL + SHA) and
+    ///    `download_verified` it (SHA-gated; resumable).
+    /// 3. `InstallingTillandsias` — `materialize::wsl::tar_to_wsl_import` →
+    ///    `wsl --import`. No separate binary drop / unit install: the recipe
+    ///    rootfs self-installs the headless on first boot
+    ///    (`bootstrap/20-tillandsias.sh`) and already carries the systemd unit.
+    /// 4. `StartingVm` — `WslRuntime::start`.
+    ///
+    /// Idempotency note: `WslRuntime::provision`'s skip-if-registered guard is
+    /// not yet shared here; callers should probe (`ensure_vm_provisioned`)
+    /// before invoking on an already-imported distro (follow-up).
+    ///
+    /// @trace plan/issues/tray-convergence-coordination.md (w5 flip),
+    /// spec:vm-provisioning-lifecycle.provision.first-run-downloads@v1
+    pub async fn provision_via_recipe(
+        &self,
+        progress: Arc<dyn ProvisionProgress>,
+    ) -> Result<(), String> {
+        progress.report_phase(ProvisionPhase::SettingUp);
+        tokio::fs::create_dir_all(Self::cache_root())
+            .await
+            .map_err(|e| format!("create cache_root failed: {e}"))?;
+        tokio::fs::create_dir_all(Self::install_root())
+            .await
+            .map_err(|e| format!("create install_root failed: {e}"))?;
+
+        // Idempotent: if a prior run already imported the distro, skip the
+        // download + `wsl --import` and just (re)start it.
+        if self.runtime.is_registered().await {
+            progress.report_phase(ProvisionPhase::StartingVm);
+            self.runtime.start().await?;
+            progress.report_phase(ProvisionPhase::Connecting);
+            return Ok(());
+        }
+
+        let manifest = Manifest::from_toml(RECIPE_MANIFEST)
+            .map_err(|e| format!("parse embedded recipe manifest: {e}"))?;
+        let artifact = recipe_rootfs_artifact(&manifest, RECIPE_RELEASE_TAG)?;
+
+        progress.report_phase(ProvisionPhase::DownloadingRootfs);
+        let dest = Self::cache_root().join("rootfs").join(format!(
+            "tillandsias-rootfs-x86_64-{}.tar",
+            &artifact.sha256[..12]
+        ));
+        download_verified(&artifact, &dest, &|_, _| {}).await?;
+
+        progress.report_phase(ProvisionPhase::InstallingTillandsias);
+        tar_to_wsl_import(
+            "tillandsias",
+            &Self::install_root(),
+            &MaterializedRootfs::Tar(dest),
+        )
+        .await?;
+        // Enable systemd via /etc/wsl.conf + terminate, so the next start boots
+        // under systemd and the recipe rootfs's first-boot headless self-install
+        // (fetch-headless.sh) + systemd unit run. No binary drop / unit install.
+        self.runtime.configure_recipe_distro().await?;
+
+        progress.report_phase(ProvisionPhase::StartingVm);
+        self.runtime.start().await?;
+
+        // Connecting: establish the control wire over HvSocket and complete the
+        // `Hello`/`HelloAck` handshake. The in-VM headless self-installs on first
+        // boot (fetch-headless) then systemd starts it, so retry while it comes
+        // up. (Transport + handshake proven E2E — see `crate::hvsocket`.)
+        progress.report_phase(ProvisionPhase::Connecting);
+        const CW_PORT: u32 = tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
+        let mut last_err = String::from("(no attempt)");
+        for attempt in 1..=12u32 {
+            match self.try_connect_until_ready(CW_PORT, attempt).await {
+                Ok(()) => return Ok(()),
+                Err(e) => {
+                    last_err = e;
+                    tokio::time::sleep(Duration::from_secs(5)).await;
+                }
+            }
+        }
+        Err(format!(
+            "control-wire handshake did not succeed within budget: {last_err}"
+        ))
+    }
+
+    /// One connect attempt that succeeds only when the VM is **operationally
+    /// Ready**: HvSocket handshake → `VmStatusRequest` → require `phase: Ready`.
+    /// During first boot the headless reports `Provisioning`/`Starting` while it
+    /// self-installs; the caller retries until this returns `Ok`. (Request path
+    /// proven E2E: `VmStatusReply { phase: Ready, podman_ready: true }`.)
+    async fn try_connect_until_ready(&self, port: u32, attempt: u32) -> Result<(), String> {
+        use tillandsias_control_wire::{ControlMessage, VmPhase};
+
+        let (mut stream, wire_version) = crate::hvsocket::hvsocket_handshake(port)
+            .await
+            .map_err(|e| format!("handshake: {e}"))?;
+        let reply = crate::hvsocket::hvsocket_request(
+            &mut stream,
+            2,
+            ControlMessage::VmStatusRequest { seq: 2 },
+        )
+        .await
+        .map_err(|e| format!("VmStatusRequest: {e}"))?;
+
+        match reply.body {
+            ControlMessage::VmStatusReply {
+                phase: VmPhase::Ready,
+                ..
+            } => {
+                tracing::info!(
+                    wire_version,
+                    attempt,
+                    "VM operationally Ready (control wire up)"
+                );
+                // NOTE: `stream` is dropped here; holding it for the session +
+                // routing menu actions over it is the next w9 increment.
+                Ok(())
+            }
+            ControlMessage::VmStatusReply { phase, .. } => {
+                Err(format!("VM not yet Ready (phase {phase:?})"))
+            }
+            other => Err(format!("unexpected reply to VmStatusRequest: {other:?}")),
+        }
     }
 }
 
@@ -232,31 +391,65 @@ mod tests {
         assert!(root.ends_with("tillandsias\\wsl") || root.ends_with("tillandsias/wsl"));
     }
 
-    // The committed recipe manifest — tested against directly so the resolver
-    // tracks the real l9 `[output]` contract, not a mock.
+    // The committed recipe manifest — used for a live-contract integration check.
     const REAL_MANIFEST: &str = include_str!("../../../images/vm/manifest.toml");
+
+    // A minimal synthetic manifest with a caller-chosen x86_64.tar SHA, so the
+    // resolver tests are robust to the committed manifest's SHA rolling per
+    // release (l9 step 3 backfilled real SHAs at a6163af2). Literal `{tag}` /
+    // `{arch}` / `{format}` braces are left for `artifact_url` to substitute.
+    fn manifest_with_x86_tar_sha(sha: &str) -> Manifest {
+        const TMPL: &str = r#"recipe_version = 1
+[output]
+artifact_url_template = "https://github.com/8007342/tillandsias/releases/download/{tag}/tillandsias-rootfs-{arch}.{format}"
+[output.expected_rootfs_sha]
+"x86_64.tar" = "__SHA__"
+"#;
+        Manifest::from_toml(&TMPL.replace("__SHA__", sha)).expect("parse inline manifest")
+    }
 
     #[test]
     fn recipe_rootfs_artifact_gates_on_pending_ci_sha() {
-        let m = Manifest::from_toml(REAL_MANIFEST).expect("parse committed manifest");
-        // The committed manifest still carries `pending-ci`, so resolution must
-        // refuse rather than hand back an unverifiable pin.
+        let m = manifest_with_x86_tar_sha("pending-ci");
+        // A non-64-hex placeholder must refuse rather than hand back an
+        // unverifiable pin.
         let err = recipe_rootfs_artifact(&m, "v0.2.260526.1").expect_err("pending-ci must gate");
         assert!(err.contains("not yet published"), "unexpected error: {err}");
     }
 
     #[test]
-    fn recipe_rootfs_artifact_resolves_url_and_sha_once_published() {
-        // Simulate the recipe-publish CI having backfilled a real SHA.
-        let fake_sha = "a".repeat(64);
-        let published = REAL_MANIFEST.replace("pending-ci", &fake_sha);
-        let m = Manifest::from_toml(&published).expect("parse manifest");
-        let art = recipe_rootfs_artifact(&m, "v0.2.260526.1").expect("resolves once SHA is real");
-        assert_eq!(art.sha256, fake_sha);
+    fn recipe_rootfs_artifact_resolves_url_and_sha() {
+        let sha = "a".repeat(64);
+        let m = manifest_with_x86_tar_sha(&sha);
+        let art = recipe_rootfs_artifact(&m, "v0.2.260526.1").expect("resolves with a real SHA");
+        assert_eq!(art.sha256, sha);
         assert_eq!(
             art.url,
             "https://github.com/8007342/tillandsias/releases/download/\
              v0.2.260526.1/tillandsias-rootfs-x86_64.tar"
+        );
+    }
+
+    /// Live-contract check: since l9 step 3 backfilled real SHAs, the COMMITTED
+    /// manifest now resolves to a verifiable artifact. Asserts shape (64-hex +
+    /// URL), not the exact SHA (which rolls per release) — and guards against a
+    /// regression back to `pending-ci`.
+    #[test]
+    fn recipe_rootfs_artifact_resolves_against_committed_manifest() {
+        let m = Manifest::from_toml(REAL_MANIFEST).expect("parse committed manifest");
+        let art = recipe_rootfs_artifact(&m, "v0.2.260526.1")
+            .expect("committed manifest carries a real x86_64.tar SHA (l9 step 3)");
+        assert_eq!(
+            art.sha256.len(),
+            64,
+            "expected a 64-hex SHA, got {:?}",
+            art.sha256
+        );
+        assert!(
+            art.url
+                .ends_with("/v0.2.260526.1/tillandsias-rootfs-x86_64.tar"),
+            "unexpected url: {}",
+            art.url
         );
     }
 }

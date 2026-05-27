@@ -29,6 +29,7 @@ use std::cell::RefCell;
 use std::collections::HashMap;
 use std::ffi::OsString;
 use std::os::windows::ffi::OsStrExt;
+use std::os::windows::process::CommandExt;
 use std::sync::Mutex;
 
 use tillandsias_host_shell::menu_action::{self, MenuAction};
@@ -149,6 +150,10 @@ fn write_utf16_into<const N: usize>(buf: &mut [u16; N], text: &str) {
 /// Entry point invoked from `main`. Blocks until the user picks "Quit" on
 /// the tray; returns `!` because the OS message loop owns the thread.
 pub fn run() -> ! {
+    // Route tracing to a file before anything logs — a GUI tray has no console.
+    init_tracing();
+    tracing::info!(log = %log_file_path().display(), "tillandsias tray starting");
+
     let runtime = tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -200,13 +205,7 @@ pub fn run() -> ! {
         // recipe path lands. Progress is reported via the TrayProgress sink
         // which updates the tooltip and menu.
         if provisioning_enabled() {
-            let progress = std::sync::Arc::new(TrayProgress::new(hwnd));
-            let lifecycle = WslLifecycle::new();
-            tokio::task::spawn_local(async move {
-                if let Err(err) = lifecycle.bootstrap(progress).await {
-                    eprintln!("WSL lifecycle bootstrap failed: {err}");
-                }
-            });
+            spawn_provisioning(hwnd);
         } else {
             tracing::info!(
                 "provisioning skipped (--no-provision / TILLANDSIAS_NO_PROVISION); \
@@ -226,11 +225,17 @@ pub fn run() -> ! {
                 let _ = TranslateMessage(&msg);
                 DispatchMessageW(&msg);
             }
+            // A `Retry` click (handled synchronously in the wndproc above) only
+            // sets a flag; spawn the new provisioning task here, in the LocalSet
+            // context, right after dispatching the click that requested it.
+            if RETRY_REQUESTED.swap(false, std::sync::atomic::Ordering::SeqCst) {
+                spawn_provisioning(hwnd);
+            }
             // Cooperative tokio drain.
             tokio::task::yield_now().await;
         }
 
-        // Clean up.
+        // Clean up the tray icon first so Quit gives instant visual feedback.
         unsafe {
             let mut nid: NOTIFYICONDATAW = std::mem::zeroed();
             nid.cbSize = std::mem::size_of::<NOTIFYICONDATAW>() as u32;
@@ -238,9 +243,252 @@ pub fn run() -> ! {
             nid.uID = TRAY_ICON_ID;
             let _ = Shell_NotifyIconW(NIM_DELETE, &nid);
         }
+
+        // Quit → graceful drain. The provision task (now being torn down with the
+        // LocalSet) held the keepalive `wsl` session; on Windows a parent exit
+        // does NOT reap that child, so without an explicit `wsl --terminate` the
+        // utility VM (and the orphaned keepalive) would linger until WSL's own
+        // idle timeout. Issue a bounded stop so the VM is torn down deterministically
+        // — matches the macOS/Linux trays' Quit → drain contract.
+        // @trace plan/steps/windows-next-thin-tray.md (Quit → graceful drain)
+        if provisioning_enabled() {
+            let lifecycle = WslLifecycle::new();
+            let drain = lifecycle.graceful_shutdown();
+            match tokio::time::timeout(std::time::Duration::from_secs(15), drain).await {
+                Ok(Ok(())) => tracing::info!("VM drained on Quit (wsl --terminate)"),
+                Ok(Err(err)) => tracing::warn!(%err, "VM drain on Quit failed"),
+                Err(_) => tracing::warn!("VM drain on Quit timed out after 15s"),
+            }
+        }
         msg.wParam.0 as i32
     });
     std::process::exit(exit_code);
+}
+
+/// Directory the tray writes its log file to (`%LOCALAPPDATA%\tillandsias\logs`,
+/// falling back to the temp dir if `LOCALAPPDATA` is somehow unset).
+fn log_dir() -> std::path::PathBuf {
+    std::env::var_os("LOCALAPPDATA")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(std::env::temp_dir)
+        .join("tillandsias")
+        .join("logs")
+}
+
+/// The tray's log file — a fixed path so "Open Log" always knows where to look.
+fn log_file_path() -> std::path::PathBuf {
+    log_dir().join("tray.log")
+}
+
+/// Initialize file-based tracing. A release tray is a GUI-subsystem binary with
+/// no console, so `tracing::{info,warn,error}!` events are lost unless routed to
+/// a file. Writes (synchronously — tray log volume is tiny, and this avoids a
+/// `WorkerGuard` that `process::exit` would skip flushing) to
+/// `%LOCALAPPDATA%\tillandsias\logs\tray.log`, honoring `RUST_LOG` (default
+/// `info`). Idempotent: a second call is a no-op (`try_init`).
+fn init_tracing() {
+    let dir = log_dir();
+    let _ = std::fs::create_dir_all(&dir);
+    let appender = tracing_appender::rolling::never(&dir, "tray.log");
+    let filter = tracing_subscriber::EnvFilter::try_from_default_env()
+        .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
+    let _ = tracing_subscriber::fmt()
+        .with_writer(appender)
+        .with_ansi(false)
+        .with_target(false)
+        .with_env_filter(filter)
+        .try_init();
+}
+
+/// Reveal the tray log file in Explorer (`/select,` highlights it in its
+/// folder), so the user doesn't depend on a `.log` default-app association.
+fn open_log_file() {
+    let path = log_file_path();
+    // Explorer needs the path as a single argument; `/select,<path>` opens the
+    // containing folder with the file highlighted.
+    let _ = std::process::Command::new("explorer.exe")
+        .arg(format!("/select,{}", path.display()))
+        .spawn();
+}
+
+/// Headless diagnostic entry point (`tillandsias-tray --provision-once`): run the
+/// recipe provisioning flow to completion, printing each phase to stdout, and
+/// return a process exit code (0 = VM reached Ready over the control wire, 1 =
+/// failed). A release tray is a GUI-subsystem binary with no console, so this
+/// gives an observable, scriptable end-to-end provision run for CI smoke and the
+/// live-provision dress rehearsal. Does NOT hold a keepalive — it provisions to
+/// Ready, reports, and exits (the VM idles down normally afterward).
+pub fn provision_once() -> i32 {
+    struct ConsoleProgress;
+    impl ProvisionProgress for ConsoleProgress {
+        fn report_phase(&self, phase: ProvisionPhase) {
+            println!("[provision] phase: {}", phase.status_text());
+            tracing::info!(?phase, "provision phase");
+        }
+        fn report_message(&self, message: &str) {
+            println!("[provision] {message}");
+        }
+    }
+
+    init_tracing();
+    let runtime = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(rt) => rt,
+        Err(err) => {
+            eprintln!("[provision] failed to build tokio runtime: {err}");
+            return 1;
+        }
+    };
+    println!("[provision] starting recipe provisioning (live dress rehearsal)\u{2026}");
+    runtime.block_on(async {
+        let lifecycle = WslLifecycle::new();
+        match lifecycle
+            .provision_via_recipe(std::sync::Arc::new(ConsoleProgress))
+            .await
+        {
+            Ok(()) => {
+                println!("[provision] RESULT: VM Ready \u{2014} control wire up \u{2713}");
+                tracing::info!("provision-once: VM Ready");
+                0
+            }
+            Err(err) => {
+                eprintln!("[provision] RESULT: FAILED \u{2014} {err}");
+                tracing::error!(%err, "provision-once failed");
+                1
+            }
+        }
+    })
+}
+
+/// Headless diagnostic entry point (`tillandsias-tray --status-once`): connect to
+/// an already-provisioned VM's HvSocket control wire, request `VmStatus`, and
+/// print the phase / podman_ready / last_event. Exit code: 0 = Ready, 2 =
+/// reachable but not Ready, 1 = control wire unreachable. Pairs with
+/// `--provision-once` for scriptable installed-tray health checks (the GUI tray
+/// has no console). Reuses the same handshake + `VmStatusRequest` path the
+/// provisioning Connecting loop uses.
+pub fn status_once() -> i32 {
+    use tillandsias_control_wire::{ControlMessage, VmPhase};
+
+    init_tracing();
+    let port = tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
+    let runtime = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(rt) => rt,
+        Err(err) => {
+            eprintln!("[status] failed to build tokio runtime: {err}");
+            return 1;
+        }
+    };
+    runtime.block_on(async {
+        let (mut stream, wire_version) = match crate::hvsocket::hvsocket_handshake(port).await {
+            Ok(ok) => ok,
+            Err(err) => {
+                eprintln!("[status] control wire unreachable on vsock {port}: {err}");
+                eprintln!("[status] (is the VM provisioned + running? try --provision-once)");
+                return 1;
+            }
+        };
+        println!("[status] control wire up (wire_version {wire_version})");
+        let reply = match crate::hvsocket::hvsocket_request(
+            &mut stream,
+            2,
+            ControlMessage::VmStatusRequest { seq: 2 },
+        )
+        .await
+        {
+            Ok(reply) => reply,
+            Err(err) => {
+                eprintln!("[status] VmStatusRequest failed: {err}");
+                return 1;
+            }
+        };
+        match reply.body {
+            ControlMessage::VmStatusReply {
+                phase,
+                podman_ready,
+                last_event,
+                ..
+            } => {
+                println!("[status] phase:        {phase:?}");
+                println!("[status] podman_ready: {podman_ready}");
+                println!(
+                    "[status] last_event:   {}",
+                    last_event.as_deref().unwrap_or("(none)")
+                );
+                if matches!(phase, VmPhase::Ready) {
+                    0
+                } else {
+                    2
+                }
+            }
+            other => {
+                eprintln!("[status] unexpected reply to VmStatusRequest: {other:?}");
+                1
+            }
+        }
+    })
+}
+
+/// Set by the `Retry` menu click (in the wndproc) and drained by the message
+/// loop, which spawns a fresh provisioning task in the LocalSet context.
+static RETRY_REQUESTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// True while a provisioning task is running or has succeeded (and is parked
+/// holding the VM keepalive). Guards `spawn_provisioning` so a `Retry` while
+/// provisioning is already in flight — or already Ready — is a no-op; it's
+/// cleared only when a provisioning attempt fails, re-enabling `Retry`.
+static PROVISIONING_ACTIVE: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
+/// Spawn the WSL recipe-provisioning task on the current LocalSet: fetch the
+/// CI-published rootfs from the embedded manifest → `wsl --import` → systemd →
+/// HvSocket control-wire handshake (proven E2E on real hardware 2026-05-26).
+/// On success it flips the status to Ready and parks holding a VM keepalive
+/// (WSL2 idles the utility VM down otherwise, dropping the control wire). On
+/// failure it clears `PROVISIONING_ACTIVE` so `Retry` can try again.
+///
+/// Idempotent: a (re)trigger while a task is already active/parked is ignored.
+fn spawn_provisioning(hwnd: HWND) {
+    use std::sync::atomic::Ordering::SeqCst;
+    if PROVISIONING_ACTIVE.swap(true, SeqCst) {
+        tracing::info!("provisioning already active; ignoring (re)trigger");
+        return;
+    }
+    let progress = std::sync::Arc::new(TrayProgress::new(hwnd));
+    let lifecycle = WslLifecycle::new();
+    tokio::task::spawn_local(async move {
+        match lifecycle.provision_via_recipe(progress).await {
+            Ok(()) => {
+                tracing::info!("VM ready — control wire established");
+                update_status_text("\u{1F7E2} Ready", hwnd);
+                // Parking this task holds `_keepalive` for the tray's lifetime;
+                // on Quit the LocalSet drops the task → kill_on_drop releases the
+                // VM to idle normally again. PROVISIONING_ACTIVE stays set (Ready),
+                // so Retry is a no-op while the VM is up.
+                match lifecycle.spawn_keepalive() {
+                    Ok(_keepalive) => {
+                        tracing::info!("VM keepalive holding the control wire warm");
+                        std::future::pending::<()>().await;
+                    }
+                    Err(err) => {
+                        eprintln!("VM keepalive spawn failed: {err}");
+                        update_status_text("\u{1F7E1} Ready (VM may idle out)", hwnd);
+                    }
+                }
+            }
+            Err(err) => {
+                eprintln!("WSL recipe provisioning failed: {err}");
+                update_status_text("\u{1F534} Provisioning failed (Retry to try again)", hwnd);
+                // Re-enable Retry.
+                PROVISIONING_ACTIVE.store(false, SeqCst);
+            }
+        }
+    });
 }
 
 /// Whether the tray should drive WSL provisioning on launch. Dev mode disables
@@ -550,19 +798,25 @@ fn dispatch_action(hwnd: HWND, action: MenuAction) {
             );
         }
         MenuAction::Retry => {
-            tracing::info!(
-                "retry requested: provisioning-retry hook wires with the lifecycle iteration"
-            );
+            // The message loop owns the LocalSet; it spawns the new provisioning
+            // task on the next drain (right after this click is dispatched).
+            if PROVISIONING_ACTIVE.load(std::sync::atomic::Ordering::SeqCst) {
+                tracing::info!("retry ignored: provisioning already active / VM Ready");
+            } else {
+                tracing::info!("retry requested: re-triggering provisioning");
+                RETRY_REQUESTED.store(true, std::sync::atomic::Ordering::SeqCst);
+                update_status_text("\u{1F504} Retrying provisioning\u{2026}", hwnd);
+            }
         }
         MenuAction::OpenLog => {
-            tracing::info!("open log requested: host-side log-file path not wired yet");
+            tracing::info!(log = %log_file_path().display(), "opening tray log in Explorer");
+            open_log_file();
         }
-        // Attach / Maintain / GitHub-login all open an in-VM PTY. The click is
-        // resolved end-to-end on the host side here — `intent_for_action` picks
-        // the `PtyIntent`, `launch_spec` produces the exact in-VM argv — leaving
-        // only the vsock `PtyOpen` send for the VM-E2E iteration.
+        // Attach / Maintain / GitHub-login all open an in-VM PTY. `intent_for_action`
+        // picks the `PtyIntent`; `launch_spec` produces the exact forge-wrapped in-VM
+        // argv; then we open it in a native Windows terminal via `wsl.exe`.
         MenuAction::Attach { .. } | MenuAction::Maintain { .. } | MenuAction::GithubLogin => {
-            resolve_and_log_pty_launch(&action);
+            launch_open_shell_terminal(&action);
         }
         MenuAction::CloudOverflow | MenuAction::Inert => {}
     }
@@ -578,24 +832,82 @@ fn selected_agent() -> SelectedAgent {
         .unwrap_or_else(|| MenuState::initial().selected_agent)
 }
 
-/// Resolve a PTY-opening menu action to its in-VM launch spec and log it. The
-/// resolution (`MenuAction` → [`intent_for_action`] → [`launch_spec`]) is the
-/// full host-side path; the remaining step — sending the `PtyOpen` frame over
-/// vsock and pumping the ConPTY — lands with the VM-E2E iteration (w4f).
-fn resolve_and_log_pty_launch(action: &MenuAction) {
+/// Open a PTY-opening menu action (Attach / Maintain / GitHub-login) in a native
+/// Windows terminal. `intent_for_action` → `launch_spec` resolve the exact
+/// forge-wrapped in-VM argv (a project click → `podman exec -it
+/// tillandsias-<proj>-forge …`; no project → the bare VM shell), and we hand
+/// that argv to `wsl.exe -d <distro> --` inside a terminal window.
+///
+/// Per the cross-host agreement (tray-convergence-coordination.md: "Transport/UX
+/// is per-OS — each tray uses its native terminal affordance; no need to
+/// converge"), Windows uses `wsl.exe`'s built-in console↔in-VM-PTY bridge rather
+/// than pumping a ConPTY over HvSocket. The *shell argv* is what converges with
+/// the macOS Terminal.app path — both land in the same forge-container shell.
+///
+/// @trace plan/issues/tray-convergence-coordination.md (Open Shell — per-OS terminal, shared argv)
+fn launch_open_shell_terminal(action: &MenuAction) {
     let Some((intent, project)) = intent_for_action(action, selected_agent()) else {
         tracing::warn!(?action, "no PTY intent for action (unexpected in this arm)");
         return;
     };
     // Default geometry until the tray owns a real terminal surface to size from.
-    // A project click forge-wraps the argv (podman exec); None runs in the VM.
     let spec = launch_spec(&intent, project.as_deref(), 24, 80);
-    tracing::info!(
-        ?intent,
-        project = ?project,
-        argv = ?spec.argv,
-        "resolved tray click to in-VM PTY launch; vsock attach pending VM-E2E (w4f)"
-    );
+    let distro = crate::wsl_lifecycle::DISTRO_NAME;
+    let title = match project.as_deref() {
+        Some(p) => format!("Tillandsias \u{2014} {p}"),
+        None => "Tillandsias shell".to_string(),
+    };
+    match spawn_wsl_terminal(distro, &title, &spec.argv) {
+        Ok(()) => tracing::info!(?intent, project = ?project, argv = ?spec.argv,
+            "opened in-VM PTY in a native terminal (wsl.exe)"),
+        Err(err) => tracing::warn!(%err, ?intent, project = ?project,
+            "failed to open terminal for in-VM PTY"),
+    }
+}
+
+/// Build the Windows Terminal (`wt.exe`) argv that opens `in_vm_argv` in the VM
+/// via `wsl.exe -d <distro> --`, in a titled new tab. Pure + testable; the spawn
+/// wrapper feeds this to `wt.exe` (with a bare-console fallback if wt is absent).
+fn wt_terminal_argv(distro: &str, title: &str, in_vm_argv: &[String]) -> Vec<String> {
+    let mut v = vec![
+        "new-tab".to_string(),
+        "--title".to_string(),
+        title.to_string(),
+        "wsl.exe".to_string(),
+        "-d".to_string(),
+        distro.to_string(),
+        "--".to_string(),
+    ];
+    v.extend(in_vm_argv.iter().cloned());
+    v
+}
+
+/// Open `in_vm_argv` in a native Windows terminal attached to the WSL2 distro.
+/// Prefers Windows Terminal (`wt.exe`, ships with Win11); if it can't be spawned
+/// (older host / not installed), falls back to `wsl.exe` in its own new console.
+fn spawn_wsl_terminal(distro: &str, title: &str, in_vm_argv: &[String]) -> std::io::Result<()> {
+    use std::process::Command;
+    // CREATE_NEW_CONSOLE — the fallback `wsl.exe` gets its own console window
+    // instead of inheriting the (hidden) tray process console.
+    const CREATE_NEW_CONSOLE: u32 = 0x0000_0010;
+
+    match Command::new("wt.exe")
+        .args(wt_terminal_argv(distro, title, in_vm_argv))
+        .spawn()
+    {
+        Ok(_) => Ok(()),
+        Err(_) => {
+            // Fallback: bare `wsl.exe` in a fresh console.
+            Command::new("wsl.exe")
+                .arg("-d")
+                .arg(distro)
+                .arg("--")
+                .args(in_vm_argv)
+                .creation_flags(CREATE_NEW_CONSOLE)
+                .spawn()
+                .map(|_| ())
+        }
+    }
 }
 
 /// Apply the state-mutating effect of a menu action to the menu state.
@@ -623,6 +935,55 @@ mod tests {
     fn wm_trayicon_is_in_app_range() {
         // Both are consts, so enforce the invariant at compile time.
         const { assert!(WM_TRAYICON >= WM_APP) };
+    }
+
+    /// The log file lives under `…\tillandsias\logs\tray.log` so "Open Log" and
+    /// `init_tracing` agree on a single fixed path.
+    #[test]
+    fn log_file_path_is_under_tillandsias_logs() {
+        let p = log_file_path();
+        assert_eq!(p.file_name().unwrap(), "tray.log");
+        let parent = p.parent().unwrap();
+        assert_eq!(parent.file_name().unwrap(), "logs");
+        assert_eq!(parent.parent().unwrap().file_name().unwrap(), "tillandsias");
+    }
+
+    /// The Open-Shell terminal argv runs the resolved in-VM argv verbatim under
+    /// `wsl.exe -d <distro> --` in a titled tab — the forge-wrapped command (the
+    /// part that converges with the macOS Terminal.app path) is preserved intact.
+    #[test]
+    fn wt_terminal_argv_wraps_in_vm_argv_under_wsl() {
+        let in_vm = vec![
+            "podman".to_string(),
+            "exec".to_string(),
+            "-it".to_string(),
+            "tillandsias-foo-forge".to_string(),
+            "bash".to_string(),
+            "-l".to_string(),
+        ];
+        let argv = wt_terminal_argv("tillandsias", "Tillandsias \u{2014} foo", &in_vm);
+        assert_eq!(
+            argv,
+            vec![
+                "new-tab",
+                "--title",
+                "Tillandsias \u{2014} foo",
+                "wsl.exe",
+                "-d",
+                "tillandsias",
+                "--",
+                "podman",
+                "exec",
+                "-it",
+                "tillandsias-foo-forge",
+                "bash",
+                "-l",
+            ]
+        );
+        // The `--` separator must precede the in-VM argv so wsl.exe runs it in
+        // the guest rather than parsing it as wsl options.
+        let sep = argv.iter().position(|a| a == "--").unwrap();
+        assert_eq!(&argv[sep + 1..sep + 2], &["podman"]);
     }
 
     use std::path::PathBuf;
