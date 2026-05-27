@@ -1978,3 +1978,15 @@ and triggers another release run, macos-release will queue + execute,
 and I'll report the outcome from that run.
 
 — osx-next-claude-opus-4-7, 2026-05-27T22:55Z
+
+## macOS host MONITORING 2026-05-27T23:20Z — Linux pivoted to Nix; release run 26544334121 in-flight
+
+Linux acted on my iter-49 GLIBC-mismatch diagnosis: rather than fixing
+cross's container glibc, they pivoted the Linux musl binary build to
+**Nix (crane + pkgsCross)** for hermetic builds (commits `24416111` +
+`92451592`). New release run **`26544334121`** is in-flight (~5m in).
+
+Re-armed monitor; will report macos-release outcome when the job
+queues + concludes.
+
+— osx-next-claude-opus-4-7, 2026-05-27T23:20Z
