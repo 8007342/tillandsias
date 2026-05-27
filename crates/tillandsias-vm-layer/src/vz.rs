@@ -145,8 +145,6 @@ impl VzRuntime {
         manifest: &crate::recipe::Manifest,
         tag: &str,
     ) -> Result<(), String> {
-        use crate::fetch::{RemoteArtifact, download_verified};
-
         let arch = if cfg!(target_arch = "aarch64") {
             "aarch64"
         } else {
@@ -155,7 +153,7 @@ impl VzRuntime {
         let format = "img";
         let key = format!("{arch}.{format}");
 
-        let url = manifest.artifact_url(arch, format, tag).ok_or_else(|| {
+        let base_url = manifest.artifact_url(arch, format, tag).ok_or_else(|| {
             format!("manifest has no [output].artifact_url_template; cannot resolve {key} URL")
         })?;
 
@@ -169,20 +167,41 @@ impl VzRuntime {
             })?
             .to_string();
 
-        let artifact = RemoteArtifact {
-            url,
-            sha256,
-            bytes: None,
-        };
-
-        // Ensure image_root exists; download_verified writes the
-        // dest path directly and won't create parent dirs.
+        // Ensure image_root exists; the helpers below write the dest
+        // path directly and won't create parent dirs.
         if let Some(parent) = self.rootfs_image_path().parent() {
             std::fs::create_dir_all(parent)
                 .map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
         }
 
-        download_verified(&artifact, &self.rootfs_image_path(), &|_, _| {}).await
+        // Format-specific dispatch. The raw .img is ~8 GB sparse,
+        // exceeding GitHub's 2 GiB release-asset limit, so CI publishes
+        // it xz-compressed (.img.xz, ~74 MB). The manifest's pinned SHA
+        // is the DECOMPRESSED bytes — the bytes VFR actually boots —
+        // so we fetch the .xz unverified, decompress, then sha-verify.
+        // .tar artifacts (Windows path) are published raw and verified
+        // at download time via `download_verified`.
+        if format == "img" {
+            let xz_url = format!("{base_url}.xz");
+            let xz_dest = self
+                .rootfs_image_path()
+                .with_extension("img.xz.partial");
+            fetch_then_decompress_xz_then_verify(
+                &xz_url,
+                &xz_dest,
+                &self.rootfs_image_path(),
+                &sha256,
+            )
+            .await
+        } else {
+            use crate::fetch::{RemoteArtifact, download_verified};
+            let artifact = RemoteArtifact {
+                url: base_url,
+                sha256,
+                bytes: None,
+            };
+            download_verified(&artifact, &self.rootfs_image_path(), &|_, _| {}).await
+        }
     }
 
     /// Open a host-side vsock stream to the running VM on `port`. Returns
@@ -234,6 +253,127 @@ impl VzRuntime {
 
         crate::transport_macos::VsockStream::from_vsock_fd(fd).map_err(OpenVsockError::Stream)
     }
+}
+
+/// Fetch the xz-compressed asset at `xz_url` to `xz_temp_dest`,
+/// decompress to `final_dest` via `xz -d`, then SHA-256-verify the
+/// decompressed bytes against `expected_sha`. On any failure, both
+/// the temp file AND the final dest are removed so a retry starts
+/// clean.
+///
+/// Used by [`VzRuntime::fetch_recipe_artifact`] for the `.img.xz`
+/// path. Stays a free function (vs method) so future Windows/Linux
+/// xz-asset paths can reuse it without touching `VzRuntime`.
+///
+/// macOS today; would also apply to any other host fetching a large
+/// recipe-published `.img.xz`. `xz` must be on `$PATH` — the macOS
+/// `.app` install path assumes it (system `/usr/bin/xz` on macOS 14+
+/// or homebrew `/opt/homebrew/bin/xz`).
+///
+/// @trace plan/issues/tray-convergence-coordination.md
+///        (linux 2026-05-27T00:20Z .img.xz note)
+#[cfg(all(feature = "recipe", feature = "download"))]
+async fn fetch_then_decompress_xz_then_verify(
+    xz_url: &str,
+    xz_temp_dest: &std::path::Path,
+    final_dest: &std::path::Path,
+    expected_sha: &str,
+) -> Result<(), String> {
+    use crate::fetch::is_sha256_hex;
+    use sha2::{Digest, Sha256};
+    use tokio::io::AsyncReadExt;
+
+    if !is_sha256_hex(expected_sha) {
+        return Err(format!(
+            "{} has no pinned SHA-256 (got {expected_sha:?}); \
+             refusing to fetch unverified",
+            xz_url
+        ));
+    }
+
+    // Step 1: stream-download the .xz to xz_temp_dest. We can't use
+    // `download_verified` here because it would expect the SHA to
+    // match the .xz bytes, but the manifest SHA is for the
+    // decompressed bytes.
+    {
+        let mut response = reqwest::get(xz_url)
+            .await
+            .map_err(|e| format!("GET {xz_url}: {e}"))?;
+        if !response.status().is_success() {
+            return Err(format!(
+                "GET {xz_url}: HTTP {}",
+                response.status()
+            ));
+        }
+        let mut out = tokio::fs::File::create(xz_temp_dest)
+            .await
+            .map_err(|e| format!("create {}: {e}", xz_temp_dest.display()))?;
+        use tokio::io::AsyncWriteExt;
+        while let Some(chunk) = response
+            .chunk()
+            .await
+            .map_err(|e| format!("read {xz_url}: {e}"))?
+        {
+            out.write_all(&chunk)
+                .await
+                .map_err(|e| format!("write {}: {e}", xz_temp_dest.display()))?;
+        }
+        out.flush()
+            .await
+            .map_err(|e| format!("flush {}: {e}", xz_temp_dest.display()))?;
+    }
+
+    // Step 2: decompress via `xz -d -c <temp>` → final_dest.
+    let final_out = std::fs::File::create(final_dest)
+        .map_err(|e| format!("create {}: {e}", final_dest.display()))?;
+    let xz_status = std::process::Command::new("xz")
+        .arg("-d")
+        .arg("-c")
+        .arg(xz_temp_dest)
+        .stdout(std::process::Stdio::from(final_out))
+        .stderr(std::process::Stdio::piped())
+        .status()
+        .map_err(|e| format!("spawn xz: {e} (is `xz` on $PATH?)"))?;
+    if !xz_status.success() {
+        let _ = std::fs::remove_file(final_dest);
+        let _ = std::fs::remove_file(xz_temp_dest);
+        return Err(format!("xz -d failed: exit {xz_status}"));
+    }
+    let _ = std::fs::remove_file(xz_temp_dest);
+
+    // Step 3: SHA-256-verify the decompressed bytes against the pin.
+    let mut f = tokio::fs::File::open(final_dest)
+        .await
+        .map_err(|e| format!("open {}: {e}", final_dest.display()))?;
+    let mut hasher = Sha256::new();
+    let mut buf = vec![0u8; 1 << 20];
+    loop {
+        let n = f
+            .read(&mut buf)
+            .await
+            .map_err(|e| format!("read {}: {e}", final_dest.display()))?;
+        if n == 0 {
+            break;
+        }
+        hasher.update(&buf[..n]);
+    }
+    let actual = hasher
+        .finalize()
+        .iter()
+        .fold(String::with_capacity(64), |mut s, b| {
+            use std::fmt::Write;
+            let _ = write!(s, "{b:02x}");
+            s
+        });
+    let expected_lower = expected_sha.to_ascii_lowercase();
+    if actual != expected_lower {
+        let _ = std::fs::remove_file(final_dest);
+        return Err(format!(
+            "SHA-256 mismatch on decompressed {}: expected {expected_lower}, got {actual}",
+            final_dest.display()
+        ));
+    }
+    Ok(())
 }
 
 /// Errors returned by [`VzRuntime::open_vsock_stream`].

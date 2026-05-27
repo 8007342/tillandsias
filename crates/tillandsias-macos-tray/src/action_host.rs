@@ -332,7 +332,16 @@ async fn run_start(
         );
         let manifest = tillandsias_vm_layer::recipe::Manifest::from_toml(BUNDLED_MANIFEST_TOML)
             .map_err(|e| format!("bundled manifest parse: {e}"))?;
-        let tag = format!("v{}", env!("CARGO_PKG_VERSION"));
+        // Per 2026-05-27 cross-host convergence vote (windows-host +
+        // macOS concur): the manifest is the trust root and should
+        // own the release tag alongside its pinned SHAs — pending
+        // Linux/recipe addition of `[output].release_tag` +
+        // `Manifest::release_tag()` accessor. Until that lands we
+        // hardcode `v0.2.260526.1` to match the tag the current
+        // pinned `aarch64.img` SHA corresponds to (Windows mirrors
+        // this pattern via its `RECIPE_RELEASE_TAG` const). Switch
+        // to `manifest.release_tag()` the moment it's available.
+        let tag = RECIPE_RELEASE_TAG.to_string();
         vz.fetch_recipe_artifact(&manifest, &tag)
             .await
             .map_err(|e| {
@@ -357,6 +366,20 @@ async fn run_start(
 /// Updating the manifest (e.g. SHA pin after CI run) requires a
 /// rebuild of the macOS tray.
 const BUNDLED_MANIFEST_TOML: &str = include_str!("../../../images/vm/manifest.toml");
+
+/// Release tag the manifest's currently-pinned rootfs SHAs correspond
+/// to. Hardcoded for v0.0.1 pending Linux addition of
+/// `[output].release_tag` to `manifest.toml` + a
+/// `Manifest::release_tag()` accessor — at which point both trays
+/// switch to `manifest.release_tag()` (single trust root for both
+/// the URL template + SHA pin + release tag).
+///
+/// Windows mirrors this with its own `RECIPE_RELEASE_TAG` const; the
+/// two values MUST stay in sync until the manifest field lands.
+///
+/// @trace plan/issues/tray-convergence-coordination.md
+///        "Tag-source decision — windows vote" 2026-05-27
+const RECIPE_RELEASE_TAG: &str = "v0.2.260526.1";
 
 impl TrayActionHost {
     /// Construct on the AppKit main thread. `mtm` proves we're on the
@@ -396,31 +419,52 @@ mod tests {
         assert_eq!(cls.name(), "TillandsiasTrayActionHost");
     }
 
-    /// run_start short-circuits with a clear error when the image
-    /// root is empty AND the bundled manifest's SHA is still the
-    /// placeholder "pending-ci". This is the expected v0.0.1
-    /// first-launch path until l9 step 5 (CI SHA pin commit) lands.
-    /// After SHA pins are populated, this test would need a network
-    /// to exercise — the failure mode shifts from "no pinned SHA" to
-    /// the actual HTTP fetch.
+    /// FULL E2E exercise of the run_start path against the LIVE
+    /// release asset — `#[ignore]` because:
+    ///   - it actually fetches 74 MB from a real release,
+    ///   - decompresses to an 8 GB sparse `.img` (~30s),
+    ///   - SHA-256-streams the decompressed bytes against the pin
+    ///     (~10s more),
+    ///   - and finally `vz.start()` requires the
+    ///     `com.apple.security.virtualization` entitlement (only
+    ///     present on the codesigned `.app` bundle, NOT on
+    ///     `cargo test` binaries), so the start step always errors
+    ///     in the test harness even when the fetch chain succeeds.
+    ///
+    /// Run manually with: `cargo test -p tillandsias-macos-tray
+    /// --bin tillandsias-tray run_start_full_e2e -- --ignored
+    /// --nocapture`. On 2026-05-27 this test ran to the
+    /// `Start VM: rootfs.img fetched successfully` line, proving the
+    /// .img.xz fetch + decompress + verify chain works end-to-end
+    /// against a live release asset (Apple Silicon, Tlatoanis-MacBook-
+    /// Air). The subsequent entitlement error is expected in cargo
+    /// test; the codesigned .app bundle clears that gate.
     #[tokio::test]
-    async fn run_start_reports_pending_sha_until_l9_step5() {
+    #[ignore = "slow (~5min), network, needs com.apple.security.virtualization entitlement (.app only)"]
+    async fn run_start_full_e2e() {
         let tmp = tempfile::tempdir().unwrap();
         let vm_slot = Arc::new(Mutex::new(None));
-        let err = run_start(tmp.path().to_path_buf(), vm_slot.clone())
-            .await
-            .expect_err("expected pending-SHA fetch refusal");
-        // The fetch path engages first (image missing), then
-        // download_verified refuses the "pending-ci" placeholder.
-        // Error mentions both the fetch attempt and the SHA gate.
-        assert!(
-            err.contains("recipe-artifact fetch failed"),
-            "expected fetch-failed error, got: {err}"
-        );
-        assert!(
-            err.contains("no pinned SHA-256") || err.contains("pending-ci"),
-            "expected SHA-gate explanation, got: {err}"
-        );
-        assert!(vm_slot.lock().unwrap().is_none(), "slot should stay empty");
+        let result = run_start(tmp.path().to_path_buf(), vm_slot.clone()).await;
+        match result {
+            Err(err) => {
+                assert!(
+                    err.contains("recipe-artifact fetch failed"),
+                    "expected fetch-failed wrapping, got: {err}"
+                );
+                assert!(
+                    err.contains("pending-ci") || err.contains("l9 step 5"),
+                    "expected user-actionable hint, got: {err}"
+                );
+                assert!(vm_slot.lock().unwrap().is_none(), "slot should stay empty on err");
+            }
+            Ok(()) => {
+                // If the network + xz + start actually succeeded, the
+                // VM is now running. Stop it so the test doesn't leak
+                // a live VZVirtualMachine.
+                if let Some(vz) = vm_slot.lock().unwrap().take() {
+                    let _ = vz.stop(std::time::Duration::from_secs(60)).await;
+                }
+            }
+        }
     }
 }

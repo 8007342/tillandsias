@@ -1,62 +1,58 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-05-26T17:21Z
+LastExecutionTime: 2026-05-27T16:24Z
 
 ## This Loop
 
-- Fetched origin and fast-forwarded local `linux-next` from `8fb7a211` to
-  `a18bcbf3`.
-- Observed remote heads: `linux-next` `a18bcbf3`, `windows-next` `7e95c7e2`,
-  `osx-next` `a3152fc5`, `main` `03c3c50c`.
-- Remote progress is healthy: `main` registered `recipe-publish`, `osx-next`
-  shipped m5 Start VM auto-fetch wiring, and `linux-next` carries the rootless
-  Buildah workflow fix. `windows-next` intentionally has no new delta.
-- Reconciled Step 15 as completed after `a24bab17` collapsed the exit-125
-  cascade into one typed diagnostic.
-- Reconciled macOS m5 as done; macOS now has optional ready work packets
-  (`m10`, `m11`) while live VM proof waits on l9 SHA pins.
+- Fetched origin, confirmed `linux-next` was clean and up to date at
+  `011d7b49`, and observed remote heads: `windows-next` `c0a9558b`,
+  `osx-next` `deba10d8`, `main` `f9c465b3`.
+- No sibling branch advanced since the 14:29Z fold. `linux-next` advanced by
+  one coordination commit (`011d7b49`) that already folded Windows w9 Retry and
+  forge-container Open Shell smoke.
+- Reconciled active queues without changing item states: Windows w9 remains
+  `in_progress` pending integration-loop merge/test; w7 remains the fallback.
+  macOS m8 remains user-attended, with m10/m11 ready as optional no-blocker
+  follow-ups.
 
 ## Expected Next Loop
 
-- Linux/release owner should land or otherwise resolve PR #3
-  (`ci-recipe-publish-rootless-fix-2026-05-26`) on `main`, then rerun
-  `recipe-publish` and backfill real `images/vm/manifest.toml` SHAs if green.
-- Windows should branch-sync from `7e95c7e2` to `a18bcbf3`, run w7 diagnostics,
-  and report that the remaining artifact gate is PR #3 plus a green
-  recipe-publish run.
-- macOS should either claim m10 project-threading or m11 MenuStructure/clippy
-  work; live PTY proof remains blocked until l9 publishes real artifacts.
-- Step 16 should continue with OpenCode-web readiness parity now that Step 15
-  is closed.
+- Integration loop should merge/test `origin/windows-next` through
+  `c0a9558b` into `linux-next`, or record exact conflicts.
+- During that merge, preserve `linux-next`'s newer `13cf3af0`
+  `images/vm/manifest.toml` repin and newer plan entries if Windows' older
+  branch blocks appear.
+- Windows can focus on the optional full live-provision dress rehearsal and
+  optional wire EnumerateLocalProjects, using w7 diagnostics only if
+  merge/test exposes stale branch or manifest state.
+- macOS remains on user-attended m8 smoke; release cleanup can add
+  `Manifest::release_tag()` and durable headless auto-publish to `main`.
 
 ## Resolved Since Previous Loop
 
-- PR #2 merged `recipe-publish.yml` onto `main`; GitHub Actions now registers
-  the workflow.
-- MacOS m5 Start VM auto-fetch wiring is complete on `osx-next` and folded into
-  `linux-next`.
-- Step 15 exit-125 cascade UX residual is closed by `a24bab17`.
+- None new this loop. The previous fold resolved Windows Retry and
+  forge-container Open Shell proof (`f4c3d70f`/`c0a9558b`).
 
 ## Current Major Blockers
 
-- l9 `recipe-artifact-url-and-publish-smoke`: the first real main-branch runs
-  failed with rootless Buildah overlay mount exit 125. The fix exists on
-  `linux-next` and PR #3, but is not on `main` yet.
-- Windows w5 and macOS live VM/PTY proof need a green recipe-publish run and
-  manifest SHA pins.
-- m8 acceptance remains blocked on a user-attended macOS interactive menu smoke.
+- Integration-loop merge/test of `origin/windows-next` through `c0a9558b`.
+- macOS m8 user-attended interactive smoke.
+- Non-blocking release cleanup: PR #5/release.yml headless auto-publish to
+  `main` and manifest-owned `release_tag`.
 
 ## Stale Or Pending Pings
 
 - No expired leases found in active queues.
-- Windows w7 remains ready as the branch-sync diagnostic fallback.
-- MacOS m10/m11 are ready optional packets; m8 still needs a human-attended
-  smoke.
-- PR #3 is the current release-lane ping for l9.
+- Windows has unmerged code/docs delta; integration-loop merge/test is the
+  pending cross-host action.
+- macOS has no cross-host asks and may noop until user smoke feedback or
+  release-tag/accessor work lands.
 
 ## Validation
 
-- PyYAML parsed `plan.yaml` and `plan/index.yaml`.
+- PyYAML parsed `plan.yaml`, `plan/index.yaml`, and the methodology entry YAML
+  files.
 - `git diff --check` passed for touched coordination files.
-- Files changed this pass: loop cache, plan status/index, Step 15/16 notes,
-  per-host queues, blocker/convergence ledgers, and integration-loop ledger.
+- Files changed this pass: loop cache, plan status/index, Windows and macOS
+  work queues, blocker roundup, coordination audit, and integration-loop
+  ledger.
