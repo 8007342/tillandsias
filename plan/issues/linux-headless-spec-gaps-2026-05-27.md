@@ -45,6 +45,8 @@ bounded slices from. Each item is sized for one loop iteration. NOT for siblings
 - CloudRefreshRequest: real (gh repo list) — `e1a190d4`.
 - container-start-health litmus + format_launch_event extraction — `b9a36388`.
 - clever-prompt actionable analysis (missing_tools/proposed_enhancements) — `1f89f4bd`.
+- **GAP 1 DONE**: ISO-8601 UTC timestamp prefix on launch-event stream — `3f1cc8e8`.
+  (Next diagnostics gap: GAP 2 `--debug` → DiagnosticsHandle stream activation.)
 
 ## Lease note
 The forge-diagnostics PACKET (annex/prompt/distill) is leased by `pickie`; items
