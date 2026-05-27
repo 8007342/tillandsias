@@ -18,10 +18,10 @@ linux-next, windows-next, and osx-next.
 
 | Branch | Commit |
 |---|---|
-| `main` | e22a6853 |
-| `linux-next` | 1a25c745 |
-| `windows-next` | 1aebb284 |
-| `osx-next` | deba10d8 |
+| `main` | fa746f03 |
+| `linux-next` | b463cb53 |
+| `windows-next` | cca9da4a |
+| `osx-next` | b463cb53 |
 
 ## Context
 
@@ -273,3 +273,12 @@ are in place; the methodology gap requires orchestrator input.
   (CloudRefreshRequest / VmStatusRequest / EnumerateLocalProjects real
   handlers).
 - lease: CONTINUE.
+
+## coordinator observation — 2026-05-27T21:16Z
+
+- Runtime-litmus `20260527T211507Z-b463cb53-cca9da4a-b463cb53` stopped at the
+  `rust-formatting` build gate before installed `tillandsias --debug --init`
+  or forge diagnostics could run.
+- No raw `target/forge-diagnostics/` output should be expected from this run.
+  Keep the next action from the 20:30Z packet: wire another forge-launching E2E
+  litmus through the annex without weakening its parent verdict.

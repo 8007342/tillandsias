@@ -51,6 +51,43 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Coordinator fold 2026-05-27T21:16Z — Windows dress-rehearsal delta still blocked by rustfmt
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- observed_sibling_heads: main=`fa746f03` · linux-next=`b463cb53` ·
+  windows-next=`cca9da4a` (ahead with the Windows w9 transport/menu work plus
+  `--provision-once` and full live-provision dress rehearsal status) ·
+  osx-next=`b463cb53` (identical to linux-next)
+- Remote progress is healthy. Since the 19:23Z fold, `linux-next` advanced
+  through forge diagnostics, Vault network, observatorium, headless
+  `CloudRefreshRequest`, build flag, and macOS noop-status commits; `main`
+  advanced to `fa746f03`; `windows-next` advanced from `1aebb284` to
+  `cca9da4a`; `osx-next` caught up to `linux-next`.
+- Resolved gate: the macOS/vm-layer portion of the prior rustfmt blocker is
+  cleared by `4935404a` / `feb51d66`; `origin/osx-next` is now identical to
+  `origin/linux-next`.
+- Runtime-litmus
+  `20260527T211507Z-b463cb53-cca9da4a-b463cb53` clean-merged
+  `origin/windows-next`, found `origin/osx-next` already integrated, passed
+  pre-build litmus 57/57, and wrote centicolon evidence. It failed
+  `./build.sh --ci-full --install` at `rust-formatting` before installed
+  `tillandsias --debug --init` or `tillandsias . --opencode --diagnostics`
+  could run.
+- Removed the finished `plan/localwork/runtime-litmus/current` marker after
+  folding the result; the run directory/log remain under `plan/localwork/`.
+- Exact remaining formatting blocker:
+  `crates/tillandsias-windows-tray/src/wsl_lifecycle.rs` line near the
+  `tracing::info!(wire_version, attempt, "VM operationally Ready...")` call.
+  `/tmp/fmt-check.log` shows only that Windows-owned reflow.
+- The first local launcher attempt
+  `20260527T211334Z-b463cb53-cca9da4a-b463cb53` died before validation and was
+  marked `launcher-died`; ignore it in favor of the completed run above.
+- Current dependency chain: Windows w9 is behavior-proven through the full
+  dress rehearsal but remains unintegrated until the Windows-owned rustfmt diff
+  lands and a fresh runtime-litmus reaches installed diagnostics. macOS remains
+  gated on user-attended m8 smoke; Linux forge lane still waits for a real
+  diagnostics summary.
+
 ### Coordinator fold 2026-05-27T19:23Z — forge diagnostics lane approved
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
