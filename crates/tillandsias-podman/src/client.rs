@@ -1581,9 +1581,18 @@ fn emit_launch_event(
         return;
     }
     eprintln!(
-        "{}",
+        "[{}] {}",
+        iso8601_millis(chrono::Utc::now()),
         format_launch_event(stage, container_name, state, detail)
     );
+}
+
+/// Format a UTC instant as the runtime-diagnostics-stream timestamp:
+/// `2026-05-03T14:23:45.123Z` (ISO 8601 UTC, millisecond precision). Pure +
+/// testable; `emit_launch_event` prepends `[<this>] ` to every event line so
+/// the stream is ordered + parseable per spec:runtime-diagnostics-stream.
+fn iso8601_millis(dt: chrono::DateTime<chrono::Utc>) -> String {
+    dt.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()
 }
 
 /// Build the idiomatic-layer container-launch diagnostics line. Extracted so
@@ -1893,6 +1902,22 @@ mod tests {
             failed,
             "event:container_launch stage=router state=failed container=tillandsias-router detail=\"exit 125\""
         );
+    }
+
+    /// The diagnostics timestamp is ISO 8601 UTC with millisecond precision
+    /// and a trailing Z (spec:runtime-diagnostics-stream). Pinned against a
+    /// fixed instant so it's deterministic.
+    #[test]
+    fn iso8601_millis_shape() {
+        use chrono::TimeZone;
+        let dt = chrono::Utc
+            .with_ymd_and_hms(2026, 5, 3, 14, 23, 45)
+            .unwrap()
+            + chrono::Duration::milliseconds(123);
+        assert_eq!(iso8601_millis(dt), "2026-05-03T14:23:45.123Z");
+        // Always 3 fractional digits + trailing Z, even on a whole second.
+        let whole = chrono::Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
+        assert_eq!(iso8601_millis(whole), "2026-01-01T00:00:00.000Z");
     }
 
     /// A whitespace/special-char detail is quoted (shell_escape_field) so a
