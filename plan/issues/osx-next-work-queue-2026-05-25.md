@@ -2,7 +2,7 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
-## 🟢 macOS UNBLOCKED for v0.0.1 — as of 2026-05-27T05:00Z (iter 43)
+## macOS UNBLOCKED for v0.0.1 — as of 2026-05-27T06:57Z
 
 **macOS has zero blocking asks for other hosts.** Every Linux- and
 Windows-owned artifact the macOS production path needs is shipped +
@@ -10,15 +10,17 @@ live-verified:
 
   - `tillandsias-rootfs-aarch64.img.xz` on release `v0.2.260526.1` ✓
   - `aarch64.img` SHA pinned in `images/vm/manifest.toml` to
-    `0e77d1a5…b55b92` (real, not "pending-ci") ✓
+    `6859a7bc...9730bee` after the F1 `Type=exec` rootfs republish ✓
   - `tillandsias-headless-aarch64-unknown-linux-musl` on release
     `v0.2.260526.2` (33 MB) ✓ — what in-VM `fetch-headless.service`
     pulls from `releases/latest/...`.
   - macOS m5 BYTES-LEVEL PROVEN at commit `303a5c24` (iter 38): the
     `.img.xz` fetch + xz-decompress + SHA-verify chain works
     end-to-end against the live release asset.
-  - Fresh `.app` (sha256 `97537fe1…004499`) shipped to user at iter 39
-    for the user-attended interactive smoke (m8 7-step checklist).
+  - Fresh post-F1 `.app` tarball
+    `tillandsias-tray-0.2.260526.2-macos-arm64.tar.gz` (sha256
+    `86374049...c87c18e`) was rebuilt with the new bundled manifest for
+    the user-attended interactive smoke (m8 7-step checklist).
 
 **Non-blocking nice-to-haves still open** (no host should rush these):
   1. `Manifest::release_tag()` accessor (linux/recipe-owned) — both
@@ -32,20 +34,19 @@ live-verified:
 **What macOS is waiting for** (not a cross-host ask):
   - User interactive smoke results — user-attended; not parallelizable.
 
-The status line below is the coordinator refresh after the 05:05Z rebase.
+The status line below is the coordinator refresh after the 06:57Z fetch.
 
 ---
 
-Status: **OPEN** as of 2026-05-27T05:05Z. macOS m1, m1b, m2, m3, m6,
+Status: **OPEN** as of 2026-05-27T06:57Z. macOS m1, m1b, m2, m3, m6,
 m7, m4 sub-task B, m5 fetch primitive, m5 Start VM auto-fetch wiring, `.img.xz`
 download/decompress, and bytes-level SHA proof are done/integrated. `osx-next`
-is at `fa5a5c4c`; `linux-next` is at `f5801968` after the Linux-owned
-headless unit fix (`Type=exec`) landed. The macOS noop streak was reset by
-iter 43's unblocked broadcast. The old l9 recipe-publish/SHA-pin gates are
-closed. Remaining macOS acceptance is user-attended m8 smoke of the rebuilt
-`dist/Tillandsias.app`; if Ready still hangs after Start VM, file fresh
-evidence against the current recipe-rootfs/headless unit state rather than
-reopening m5 fetch/provision code.
+is at `deba10d8`, which is already an ancestor of `linux-next` `a5f915e4`.
+The old l9 recipe-publish/SHA-pin gates and the F1 headless service restart
+loop are closed. Remaining macOS acceptance is user-attended m8 smoke of the
+rebuilt `dist/Tillandsias.app`; if Ready still hangs after Start VM, file
+fresh evidence against the current recipe-rootfs/headless unit state rather
+than reopening m5 fetch/provision code.
 
 ## How to use this file
 
@@ -1811,3 +1812,16 @@ step 5 lands.
   primary acceptance gate. If Start VM reaches the in-VM unit but Ready hangs
   after `f5801968`, file fresh evidence against the current recipe-rootfs /
   headless unit state rather than reopening m5 fetch/provision code.
+
+### event: linux coordinator status reconciliation — 2026-05-27T06:57Z
+
+- Observed remote heads after fetch/pull: `linux-next` `a5f915e4`,
+  `windows-next` `e0405f2f`, `osx-next` `deba10d8`, `main` `f9c465b3`.
+- Folded macOS ACK `deba10d8`: the rebuilt app tarball includes the fixed
+  `6859a7bc...9730bee` manifest pin and launch smoke still exits cleanly.
+  `osx-next` is already an ancestor of `linux-next`.
+- Windows F2/Ready is now proven on `windows-next`, so a macOS Ready hang
+  should be filed as fresh macOS smoke evidence against the current app/rootfs
+  state rather than as a shared F1/F2 blocker.
+- Current macOS dependency chain is unchanged: m8 user-attended smoke is the
+  acceptance gate; m10/m11 are optional no-blocker follow-ups.

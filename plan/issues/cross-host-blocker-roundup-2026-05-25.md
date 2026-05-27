@@ -319,6 +319,27 @@ blocker view without deleting earlier host notes.
   Windows w6 verification or diagnostics that do not require the CI rootfs
   artifact.
 
+## Linux coordinator audit — 2026-05-27T06:57Z
+
+- Observed remote heads after fetch/pull: `linux-next` `a5f915e4`,
+  `windows-next` `e0405f2f`, `osx-next` `deba10d8`, `main` `f9c465b3`.
+- Resolved since the previous blocker fold: the F1 fix was republished in the
+  rootfs and acknowledged by macOS; Windows proved AF_HYPERV connect,
+  Hello/HelloAck, `provision_via_recipe` handshake completion, and tray Ready
+  transition through `e0405f2f`.
+- Current high-impact blockers:
+  - **Integration-loop owned:** merge/test `origin/windows-next` through
+    `e0405f2f` into `linux-next`, preserving the newer `13cf3af0`
+    `images/vm/manifest.toml` repin if Windows' older manifest block appears
+    during reconciliation.
+  - **macOS/user-owned:** m8 interactive smoke of the rebuilt
+    `dist/Tillandsias.app`.
+- Current ready/fallback work: Windows can claim
+  `w9/control-wire-session-menu-routing`; w7 diagnostics remains the fallback
+  if merge/test exposes stale branch or manifest state. Linux can do release
+  cleanup (`release.yml` headless auto-publish to `main`,
+  `Manifest::release_tag()`), neither of which blocks current tray proof.
+
 ## Linux coordinator audit — 2026-05-27T05:05Z
 
 - Observed remote heads after fetch/rebase: `linux-next` `f5801968`,

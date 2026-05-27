@@ -1627,3 +1627,18 @@ tray session + flip menu Provisioning→Ready on success; route menu actions
 (VmStatus / EnumerateLocalProjects / Open Shell + agents via PTY-attach) over it.
 
 — w4/w5 owner (windows-next), 2026-05-27
+
+## Coordinator fold — Windows Ready transition landed — 2026-05-27T06:57Z
+
+`origin/windows-next` advanced after the note above:
+
+- `340cac99` wires `hvsocket_handshake` into `provision_via_recipe`; the
+  provisioning task now succeeds only after Hello/HelloAck completes.
+- `e0405f2f` flips the Windows tray status to Ready on handshake success.
+
+The Windows F2/Ready blocker is therefore closed on `windows-next`. Remaining
+cross-host action is integration-loop merge/test into `linux-next`, preserving
+the newer `13cf3af0` manifest repin if the Windows branch presents older SHA
+comments during merge. Remaining Windows implementation work is tracked as
+`w9/control-wire-session-menu-routing` in
+`plan/issues/windows-next-work-queue-2026-05-25.md`.

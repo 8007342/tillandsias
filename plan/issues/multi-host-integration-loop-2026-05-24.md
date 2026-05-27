@@ -28,6 +28,33 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Coordinator audit 2026-05-27T06:57Z — Windows Ready proven; integration merge/test is the gate
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- observed_sibling_heads: main=`f9c465b3` · linux-next=`a5f915e4` ·
+  windows-next=`e0405f2f` (ahead with unmerged Windows Ready code) ·
+  osx-next=`deba10d8` (ancestor of linux-next)
+- Coordination fold only; no sibling merge attempted in this pass.
+- Remote progress is healthy. Since the 05:05Z fold, `linux-next` advanced
+  through the fixed-rootfs repin and Windows control-wire proof notes; macOS
+  acknowledged the F1 fix and rebuilt the app; Windows advanced from F2
+  foundation to tray Ready proof.
+- Resolved gates: F1 is fixed by the `Type=exec` rootfs, Windows F2 HvSocket
+  connect is proven, Hello/HelloAck over the control-wire codec is proven, and
+  `e0405f2f` flips the Windows tray to Ready on handshake success.
+- Active integration watch: `origin/windows-next` carries unmerged code through
+  `e0405f2f` (HvSocket transport, provision_via_recipe handshake, and Ready
+  status flip). The next integration loop should merge/test those commits into
+  `linux-next` or record exact conflicts.
+- Merge caution: `origin/windows-next` still presents an older
+  `images/vm/manifest.toml` SHA/comment block in its diff. Preserve the newer
+  `linux-next` repin from `13cf3af0` during merge reconciliation.
+- Current dependency chain: Windows needs integration-loop evidence before the
+  code is considered folded into `linux-next`; the next Windows work packet is
+  retaining/routing the live control-wire session. macOS waits on user-attended
+  m8 smoke. Linux/release cleanup remains `release.yml` headless auto-publish
+  to `main` and the manifest-owned `release_tag` accessor.
+
 ### Coordinator audit 2026-05-27T05:05Z — l9 closed; F1 fixed; Windows F2 is current gate
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next

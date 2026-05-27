@@ -440,3 +440,36 @@ Current cross-host gates:
   artifacts.
 - Linux should close the Step 15 exit-125 cascade UX residual, then continue
   Step 16 OpenCode-web readiness parity.
+
+## Coordination Audit - 2026-05-27T06:57Z
+
+host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+
+Observed remote heads after fetch/pull:
+
+- `main`: f9c465b3
+- `linux-next`: a5f915e4
+- `windows-next`: e0405f2f
+- `osx-next`: deba10d8
+
+Ledger corrections made in this audit:
+
+- Folded terminal events from `plan/issues/tray-convergence-coordination.md`
+  and `origin/windows-next`: F1 is fixed and republished in the rootfs,
+  Windows F2 is no longer blocked, Hello/HelloAck is proven over HvSocket, and
+  `e0405f2f` flips the Windows tray to Ready on handshake success.
+- Marked `w8/hvsocket-control-wire-ready` done in the Windows queue and added
+  `w9/control-wire-session-menu-routing` as the next Windows packet.
+- Refreshed macOS queue status to the post-F1 manifest SHA
+  `6859a7bc...9730bee` and the fresh app tarball
+  `86374049...c87c18e`; macOS remains blocked only on user-attended m8 smoke.
+
+Current cross-host gates:
+
+- Integration loop should merge/test `origin/windows-next` through `e0405f2f`
+  into `linux-next`, preserving the newer `13cf3af0` manifest repin if the
+  Windows branch presents its older manifest block.
+- macOS m8 is user-attended and not parallelizable.
+- Release cleanup remains useful but non-blocking: land durable
+  `release.yml` headless auto-publish on `main` and add
+  `Manifest::release_tag()` so both trays can drop hardcoded recipe tags.

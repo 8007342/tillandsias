@@ -1,66 +1,58 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-05-27T05:05Z
+LastExecutionTime: 2026-05-27T06:57Z
 
 ## This Loop
 
-- Fetched origin and rebased the coordination commit after `origin/linux-next`
-  advanced from `27f7dce7` to `f5801968`.
-- Observed remote heads: `linux-next` `f5801968`, `osx-next` `fa5a5c4c`,
-  `windows-next` `d15e0fb3`, `main` `f9c465b3`.
-- Remote progress is healthy: recipe-publish, manifest SHA pins, headless
-  release assets, macOS `.img.xz` fetch/decompress, and Windows w5 rootfs
-  import/headless-fetch proof all landed in the ledgers.
-- Reconciled stale PR #3/SHA-pin blocker references in the quick-start status
-  and host queues. The active dependency tail is now Windows HvSocket,
-  macOS user-attended smoke, and manifest `release_tag` cleanup. The headless
-  service restart-loop fix landed at `f5801968`.
+- Fetched origin, fast-forwarded `linux-next` from `b31b4720` to `a5f915e4`,
+  and reconciled newer sibling state.
+- Observed remote heads: `linux-next` `a5f915e4`, `windows-next`
+  `e0405f2f`, `osx-next` `deba10d8`, `main` `f9c465b3`.
+- Folded Windows terminal events: F1 is fixed in the republished rootfs,
+  HvSocket connect is proven, Hello/HelloAck is proven, and the Windows tray
+  now flips to Ready on handshake success.
+- Marked Windows w8 done and added w9 session/menu routing as the next Windows
+  packet. Refreshed macOS to the post-F1 manifest SHA and fresh app tarball.
 
 ## Expected Next Loop
 
-- Integration loop should merge/test `origin/windows-next` deltas into
-  `linux-next` or record exact conflicts, preserving newer `linux-next` plan
-  entries during reconciliation.
-- Windows should continue F2/HvSocket to a real Hello/HelloAck, then replace
-  interim recipe-tag constants once `Manifest::release_tag()` lands.
-- Linux/recipe owner should watch the `f5801968` `Type=exec` unit fix through
-  the next Windows/macOS smoke and add the manifest `release_tag` accessor if
-  owning that contract.
-- macOS should run the user-attended `dist/Tillandsias.app` smoke; if Ready
-  hangs after Start VM, record evidence against the shared headless service
-  unit rather than reopening m5 fetch/provision code.
+- Integration loop should merge/test `origin/windows-next` through `e0405f2f`
+  into `linux-next`, or record exact conflicts.
+- During that merge, preserve `linux-next`'s newer `13cf3af0`
+  `images/vm/manifest.toml` repin if Windows' older manifest block appears.
+- Windows can claim w9 to retain the live control-wire session and route menu
+  actions over it; w7 remains the no-code diagnostics fallback.
+- macOS remains on user-attended m8 smoke; release cleanup can add
+  `Manifest::release_tag()` and durable headless auto-publish to `main`.
 
 ## Resolved Since Previous Loop
 
-- PR #3/rootless Buildah follow-up is no longer the active gate; recipe
-  materialization and SHA publication progressed through real artifacts.
-- Windows w5 has real rootfs import proof and headless fetch now returns 200.
-- macOS m5 has bytes-level proof for `.img.xz` download, decompression, and
-  SHA verification; a fresh `.app` was rebuilt for manual smoke.
-- F1 headless service stability has an upstream fix: `f5801968` changes the
-  in-VM unit to `Type=exec`.
+- Windows F2/HvSocket is no longer a blocker: `8a96a880` proved connect and
+  `2b97be30` proved Hello/HelloAck.
+- `340cac99` wired the handshake into `provision_via_recipe`; `e0405f2f`
+  flips the tray to Ready on success.
+- macOS acknowledged the fixed rootfs and rebuilt the app tarball with the
+  new `6859a7bc...9730bee` manifest pin.
 
 ## Current Major Blockers
 
-- F2 Windows transport: WSL2 requires a Windows host HvSocket bridge to the
-  guest AF_VSOCK listener; `origin/windows-next` has in-progress commits
-  through `d15e0fb3` awaiting integration-loop merge/test.
-- macOS m8 acceptance still needs a user-attended interactive smoke.
-- Durable release cleanup remains: PR #5/release.yml headless auto-publish is
-  ahead of `main`, and both trays want manifest-owned `release_tag`.
+- Integration-loop merge/test of `origin/windows-next` through `e0405f2f`.
+- macOS m8 user-attended interactive smoke.
+- Non-blocking release cleanup: PR #5/release.yml headless auto-publish to
+  `main` and manifest-owned `release_tag`.
 
 ## Stale Or Pending Pings
 
 - No expired leases found in active queues.
-- `osx-next` reset its noop streak with the iter 43 unblocked broadcast; it is
-  waiting on user smoke or Linux-owned release-tag/accessor work.
-- Windows has active unmerged code delta; integration-loop merge/test is the
-  pending cross-host action.
+- Windows has unmerged code delta; integration-loop merge/test is the pending
+  cross-host action.
+- macOS has no cross-host asks and may noop until user smoke feedback or
+  release-tag/accessor work lands.
 
 ## Validation
 
-- PyYAML parsed `plan.yaml`, `plan/index.yaml`, and the methodology entry
-  YAML files.
+- PyYAML parsed `plan.yaml`, `plan/index.yaml`, and the methodology entry YAML
+  files.
 - `git diff --check` passed for touched coordination files.
-- Files changed this pass: loop cache, plan status/index, Step 20 summary,
-  per-host queues, blocker roundup, and integration-loop ledger.
+- Files changed this pass: loop cache, plan status/index, per-host queues,
+  blocker roundup, coordination audit, and integration-loop ledger.
