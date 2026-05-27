@@ -610,7 +610,7 @@ function renderCode() {
       <ul class="code-list">
         ${hits.map(src => {
           const [path, line] = src.href.split('#L');
-          return \`<li><a href="\${escapeAttr(sourceHref(src.href))}" target="_blank">\${escapeHtml(src.label)}</a><div class="block">\${escapeHtml(path)} \${line ? \`line \${escapeHtml(line)}\` : ''}</div></li>\`;
+          return `<li><a href="${escapeAttr(sourceHref(src.href))}" target="_blank">${escapeHtml(src.label)}</a><div class="block">${escapeHtml(path)} ${line ? `line ${escapeHtml(line)}` : ''}</div></li>`;
         }).join('')}
       </ul>
     </div>`;
@@ -668,7 +668,7 @@ function renderDashboard() {
   const history = state.dashboard.history;
   if (history.length === 0) return;
 
-  const labels = history.map(h => h.release_version !== 'unknown' ? h.release_version : h.source_commit.substring(0,7));
+  const labels = history.map(h => h.release || h.commit.substring(0,7));
   const percentClosed = history.map(h => h.percent_closed);
   const residualCc = history.map(h => h.residual_cc);
 
@@ -753,12 +753,12 @@ function renderDashboard() {
     <div class="metric-box">
       <h3>Current Closure</h3>
       <div class="val">${latest.percent_closed ? latest.percent_closed.toFixed(1) : 0}%</div>
-      <div class="sub">of ${latest.expected_total_cc || 0} cc budget</div>
+      <div class="sub">of ${latest.total_cc || 0} cc budget</div>
     </div>
     <div class="metric-box">
       <h3>Residual Obligations</h3>
       <div class="val" style="color: var(--chart-color-2);">${latest.residual_cc || 0} cc</div>
-      <div class="sub">Worst: ${escapeHtml(latest.max_residual_spec || 'none')}</div>
+      <div class="sub">Worst: ${escapeHtml(latest.worst_spec || 'none')}</div>
     </div>
     <div class="metric-box">
       <h3>Host CPU Usage</h3>
