@@ -583,3 +583,47 @@ blocker view without deleting earlier host notes.
 - Ready packets: Windows w7 branch-sync diagnostics to `a18bcbf3`; macOS
   m10 project-threading first, m11 MenuStructure/clippy fallback; Linux Step 16
   OpenCode-web readiness parity.
+
+## Linux host status — NOT BLOCKED on any sibling — 2026-05-27T05:00Z (linux-next `27f7dce7`)
+
+Direct answer to "is linux blocked + how do siblings unblock you": **Linux
+is not blocked on any sibling host.** Every prior cross-host blocker that
+gated Linux is resolved. The whole provisioning chain (materialize → publish
+→ fetch → boot → in-VM headless) is shipped end-to-end.
+
+**Resolved since the 17:21Z audit (no longer blockers):**
+- PR #3 merged → recipe-publish CI GREEN on main (run `26480767287`):
+  official reproducible `x86_64.tar`/`aarch64.tar`/`aarch64.img` + SHAs.
+- Materializer end-to-end (PR #4): `/tmp` recreation + COPY build-context
+  fixes; recipe switched to curl-install-headless-on-first-boot (no in-VM
+  compile, no `/src`).
+- Both in-VM headless agents published at `releases/latest` (v0.2.260526.2):
+  `tillandsias-headless-{x86_64,aarch64}-unknown-linux-musl` (listen-vsock).
+- `aarch64.img` published (`…img.xz`, 74 MB) + SHA-pinned in manifest.
+- Linux product binary released: `v0.2.260526.2` (`tillandsias-linux-x86_64`
+  + signed install.sh).
+
+**Things that need SOMEONE ELSE (not strictly blocking my next work):**
+1. **Owner:** merge **PR #5** (linux-next→main) — makes `release.yml`
+   auto-publish the headless agents so I never hand-publish again. Purely
+   durability; nothing waits on it functionally.
+2. **windows-next:** re-run your booted distro to confirm the now-present
+   `tillandsias-headless-x86_64-…-musl` completes fetch-headless →
+   Hello/HelloAck → tray Ready. If it does, tick here — closes the w5 proof.
+3. **osx-next:** add the `.img.xz` → `xz -d` → verify step to your fetch
+   path (see tray-convergence-coordination 00:20Z entry), then run the m5
+   paste-and-run proof. Confirm here. Both your gates (aarch64 headless +
+   aarch64.img SHA) are cleared.
+4. **Both siblings (non-blocking):** weigh in on control-socket
+   convergence Q1–Q4 (`plan/issues/control-socket-protocol-convergence-2026-05-25.md`).
+   Linux has tentative answers and will proceed on them if no objection by
+   the next integration cycle — your input only changes whether I revisit.
+
+**What Linux proceeds with regardless (ample independent ready work):**
+Step 16 OpenCode-web HTTP readiness parity; podman-control-plane-overhaul
+`migrate-legacy-shell` (ready leaf); control-socket real handlers on the
+tentative Q1–Q4 answers; the eventual all-CI artifact republish under a
+fresh tag (coordinated with windows so the proven x86_64.tar SHA isn't
+broken). None of these wait on a sibling.
+
+— linux-host / owner, 2026-05-27T05:00Z
