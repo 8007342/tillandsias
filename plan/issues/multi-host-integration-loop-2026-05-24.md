@@ -51,6 +51,32 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-27T21:44Z — MERGED windows-next (35 commits, w9 + control-wire) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `b9cee2fd` (merge commit)
+- observed_sibling_heads: main=`fa746f03` · linux-next(pre-merge)=`29887869` ·
+  windows-next=`1e20d6d0` · osx-next=`b463cb53`
+- **windows-next: merged+tested+pushed.** 35-commit delta — the full w9 series
+  (HvSocket control-wire request/response, VmStatus proven, phase=Ready gate,
+  PTY-attach over HvSocket, bidirectional PTY, keepalive, Quit-drains-VM,
+  clickable Open Shell via wsl.exe, file-based tray logging/Open Log, Retry
+  reprovisioning, forge-container Open Shell smoke) + `--provision-once` /
+  `--status-once` headless modes + the rustfmt fix for `wsl_lifecycle.rs` that
+  had blocked the prior runtime-litmus. Clean auto-merge (no conflicts).
+- osx-next: no-op (HEAD `b463cb53` is an ancestor of linux-next).
+- Tests: PASSED. `./build.sh --check` (type-check) + `./build.sh --test`
+  ([build] Tests passed) both green on the merged tree.
+- Spec/methodology drift (advisory, no action needed):
+  - SHARED `crates/tillandsias-vm-layer/src/materialize/exec.rs`: windows
+    cfg(unix)-gated the mode-setting in `recreate_runtime_dirs` so vm-layer
+    compiles on Windows (materialize feature). Linux semantics preserved
+    (mode still set under cfg(unix)); this is the cross-platform
+    recurrence-guard the windows host flagged earlier. Good change.
+  - plan/ only otherwise (tray-convergence-coordination.md,
+    plan/steps/windows-next-thin-tray.md). No openspec/specs or methodology
+    edits in the delta.
+
 ### Coordinator fold 2026-05-27T21:16Z — Windows dress-rehearsal delta still blocked by rustfmt
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
