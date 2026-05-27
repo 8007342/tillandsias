@@ -113,6 +113,91 @@ The Orchestrator should produce a methodology PR or plan issue with the
 proposed spec changes, then assign it back to this agent or any other agent
 that picks up forge work.
 
+## Orchestrator Response — 2026-05-27T19:35Z
+
+Decision: approved with privacy/isolation constraints.
+
+The forge diagnostics loop is now formalized as a non-blocking
+`agent_diagnostic` annex signal in `methodology/litmus.yaml` and
+`methodology/forge-diagnostics.yaml`. Slow E2E tests that already launch a
+forge may piggy-back exactly one diagnostics prompt per CI/orchestrator cycle,
+write raw output under `target/forge-diagnostics/`, and feed the distillation
+pipeline. The diagnostics result is a forge-completeness signal, not a parent
+E2E pass/fail signal.
+
+Enhancement approval gate:
+
+- Allowed: pre-installed and pre-configured toolchains for TypeScript,
+  JavaScript, Rust, Python, Dart, Wasm, and web app builds; language servers;
+  formatters; linters; parsers; package managers; debuggers; shell helpers;
+  cache-aware builder configuration; and discoverability docs.
+- Rejected by default: additional host mounts, host credential exposure, GitHub
+  token exposure inside forge, privileged containers, raw host socket access,
+  proxy/router/enclave bypasses, or any network broadening not already covered
+  by an approved spec.
+- Required for every proposed enhancement: privacy/isolation assessment,
+  owned files, expected evidence, and whether the prompt should shrink because
+  a real spec/litmus now covers the capability.
+
+### Work Packet: forge-diagnostics/e2e-piggyback-orchestration
+
+- id: `forge-diagnostics/e2e-piggyback-orchestration`
+- owner_host: linux
+- capability_tags: [forge, e2e, litmus, diagnostics, methodology]
+- status: ready
+- depends_on: [`forge-diagnostics/methodology-update`]
+- owned_files:
+  - `openspec/litmus-tests/litmus-forge-diagnostics-e2e.yaml`
+  - `scripts/distill-forge-diagnostics.sh`
+  - `plan/diagnostics/`
+  - any E2E litmus file amended to call the annex
+- expected_evidence:
+  - A slow E2E or runtime-litmus run writes one raw diagnostics log under
+    `target/forge-diagnostics/`.
+  - The distillation script writes one durable summary under `plan/diagnostics/`.
+  - Duplicate E2E forge launches in the same cycle append a checksum skip note
+    instead of rerunning the expensive prompt.
+- next_action: >
+    Wire the diagnostics prompt into the slow E2E/runtime-litmus path as a
+    piggy-back annex. Do not weaken the parent E2E verdict; diagnostics failures
+    become summary findings and follow-up work packets.
+- agent_status_packet_required:
+  - current plan and whether a diagnostics log was created
+  - blockers/errors and exact log paths
+  - privacy/isolation assessment for any proposed forge enhancement
+  - files touched and evidence produced
+  - next checkpoint and whether the lease should continue, release, or be reclaimed
+
+### Work Packet: forge-enhancements/curated-toolchain-backlog
+
+- id: `forge-enhancements/curated-toolchain-backlog`
+- owner_host: any
+- capability_tags: [forge, images, toolchains, privacy, specs]
+- status: ready
+- depends_on: [`forge-diagnostics/e2e-piggyback-orchestration`]
+- owned_files:
+  - `plan/diagnostics/`
+  - `images/default/`
+  - `openspec/specs/default-image/spec.md`
+  - relevant forge specs/litmus bindings
+- expected_evidence:
+  - Backlog groups requested tools by ecosystem: web/TypeScript/JavaScript,
+    Rust/Wasm, Python, Dart/Flutter, parsers/language servers, debuggers, and
+    builders.
+  - Each candidate records approved/blocked/deferred with privacy/isolation
+    rationale.
+  - Approved candidates are split into platform-sized implementation packets,
+    not one giant image change.
+- next_action: >
+    After the first piggy-backed diagnostics summary lands, distill proposed
+    forge enhancements into a prioritized backlog. Approve only changes that
+    keep the existing privacy/isolation envelope intact.
+- agent_status_packet_required:
+  - candidate list with approval status
+  - privacy/isolation rationale
+  - expected image/spec/litmus files
+  - evidence required before prompt items can be removed
+
 ## Handoff Note
 
 Cold-start agents should read this issue, then:
@@ -130,8 +215,10 @@ Key files:
 - `openspec/litmus-tests/litmus-forge-diagnostics-e2e.yaml` — the diagnostics litmus test
 - `target/forge-diagnostics/` — raw diagnostic logs (ephemeral, not committed)
 
-Next action: await orchestrator methodology update, then wire the diagnostics
-litmus test into the E2E rotation.
+Next action: claim `forge-diagnostics/e2e-piggyback-orchestration`, wire the
+diagnostics annex into the slow E2E/runtime-litmus path, and publish a
+distilled summary. Then claim or split
+`forge-enhancements/curated-toolchain-backlog`.
 
 ## Checkpoint
 

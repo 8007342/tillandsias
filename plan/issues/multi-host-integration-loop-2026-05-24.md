@@ -51,6 +51,29 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Coordinator fold 2026-05-27T19:23Z — forge diagnostics lane approved
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- Responded to Big Pickle's forge diagnostics methodology request. Added
+  `methodology/forge-diagnostics.yaml`, formalized `agent_diagnostic` as a
+  non-blocking annex in `methodology/litmus.yaml`, and updated
+  `/coordinate-multihost-work` so cross-host assignments include explicit
+  pull-awareness bookkeeping.
+- Forge enhancement approval policy: accepted work improves the ready-to-use
+  forge image inside the existing privacy/isolation envelope. Toolchains,
+  language servers, formatters, linters, parsers, debuggers, builders, package
+  managers, shell helpers, and docs are eligible. Extra mounts, host tokens,
+  privileged containers, host sockets, and proxy/router/enclave bypasses are
+  rejected by default.
+- New ready packets:
+  `forge-diagnostics/e2e-piggyback-orchestration` (wire one diagnostics prompt
+  into slow E2E/runtime-litmus and distill a summary) and
+  `forge-enhancements/curated-toolchain-backlog` (split approved toolchain
+  improvements after the first summary lands).
+- Windows/macOS queues received pull-awareness events. Their current rustfmt
+  primary work remains unchanged; forge diagnostics are informational unless
+  they produce evidence during a slow smoke.
+
 ### Coordinator fold 2026-05-27T19:19Z — runtime-litmus failed at rust-formatting
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next

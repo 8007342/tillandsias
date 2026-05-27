@@ -36,6 +36,8 @@ increases and is validated by dedicated spec/litmus pairs.
 
 ## Methodology Gap
 
-See `plan/issues/forge-diagnostics-automation-2026-05-27.md` for the
-request to the Orchestrator to update `methodology/litmus.yaml` with a
-new `agent_diagnostic` signal type that formalizes this loop.
+Resolved by `methodology/litmus.yaml` and `methodology/forge-diagnostics.yaml`.
+`agent_diagnostic` is a non-blocking annex signal: parent E2E tests may pass
+while diagnostics record missing forge capabilities. Proposed forge
+enhancements still require orchestrator approval for privacy/isolation before
+they become implementation work.

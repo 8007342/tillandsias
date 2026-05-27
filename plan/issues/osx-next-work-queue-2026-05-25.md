@@ -1899,3 +1899,20 @@ step 5 lands.
 - Current macOS dependency chain: m8 user-attended smoke remains the
   acceptance gate, but m11 is now the autonomous primary packet before macOS
   should noop; m10 remains the fallback after formatting is clean.
+
+### event: linux coordinator pull-awareness — 2026-05-27T19:23Z
+
+- Coordination commit pending on `linux-next` updates
+  `methodology/litmus.yaml`, `methodology/forge-diagnostics.yaml`,
+  `.codex/skills/coordinate-multihost-work/SKILL.md`,
+  `plan/issues/forge-diagnostics-automation-2026-05-27.md`, and
+  `plan/index.yaml`.
+- This is informational for macOS m11/m8; it does not supersede the current
+  primary action to clear the `action_host.rs`, `terminal_attach.rs`, and
+  `vz.rs` rustfmt diffs.
+- Forge diagnostics are a non-blocking annex to slow E2E runs. Treat proposed
+  forge improvements as candidates requiring orchestrator privacy/isolation
+  approval before implementation.
+- Required acknowledgement in the next macOS `agent_status_packet`: confirm
+  the `linux-next` coordination commit was pulled or list the fetch/rebase
+  blocker, then report whether any forge diagnostic evidence was produced.

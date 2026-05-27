@@ -43,6 +43,14 @@ litmus_test:
         failure: "what failure looks like"
         spec_linkage: "which spec(s) govern this signal"
         timeout: "max time allowed before forced failure (if applicable)"
+    annex_signals:
+      agent_diagnostic: >
+        Optional non-blocking signal where an E2E test prompts the in-forge
+        agent and captures structured capability output for offline
+        distillation. Agent diagnostic content may reveal forge completeness
+        gaps, but it MUST NOT change the parent litmus verdict except when the
+        diagnostics launch/output structure itself is the bound behavior under
+        test.
 
   properties:
     - must_short_circuit_on_failure: "failing signal halts progression with root cause"
@@ -50,6 +58,7 @@ litmus_test:
     - must_be_self_contained: "can run offline, no external dependencies unless explicitly gated"
     - must_converge: "repeated runs on the same code and state converge to the same result"
     - must_be_independent: "success/failure of one litmus test does not depend on others"
+    - annex_signals_are_non_blocking: "agent_diagnostic findings become plan/spec work, not parent-test failures"
 
   drift_detection:
     mechanism: >
@@ -145,6 +154,11 @@ litmus_test:
         agent_guidance: >
           Run only with --ci-full --install. Never split binary-invocation steps into
           separate litmus files — compose them in one critical_path instead.
+        annex_guidance: >
+          If the E2E already launches a forge, it may piggy-back one
+          `agent_diagnostic` prompt and write raw output under
+          target/forge-diagnostics/. Reuse a same-run checksum marker rather
+          than invoking the expensive prompt repeatedly.
     caveat_glossary:
       compile_cold: "First cargo compile in an empty toolbox adds 30-120s."
       tray_feature_compile: "GTK4 headers force near-full recompile even with warm cache."

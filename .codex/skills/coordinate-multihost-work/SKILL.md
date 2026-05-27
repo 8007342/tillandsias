@@ -73,6 +73,10 @@ runtime litmus run so the next loop has concrete output to read.
 - When assigning work, include an `agent_status_packet` expectation: current
   plan, dependencies, blockers/errors, files touched, evidence produced, next
   checkpoint, and whether the lease should continue, release, or be reclaimed.
+- When a coordination change affects another host, add explicit pull-awareness
+  bookkeeping in that host's queue: the branch/commit to pull, the files whose
+  instructions changed, whether the change blocks or only informs their work,
+  and the expected acknowledgement or next checkpoint.
 - Prefer pinging or reassigning stale work over duplicating work. Respect active
   leases unless expired or explicitly released.
 
@@ -165,6 +169,28 @@ Rules:
   only acceptable idle reason.
 - Prefer creating a ready packet over letting a host idle behind another host's
   dependency.
+
+## Forge Improvement Lane
+
+Each loop must also check `plan/issues/forge-diagnostics-automation-*.md` and
+`plan/diagnostics/` when slow E2E or runtime-litmus work touched the forge.
+
+Rules:
+
+- Treat forge diagnostics as a non-blocking annex to expensive E2E runs. It may
+  collect evidence while the forge is already alive, but diagnostics findings
+  do not fail the parent E2E unless launch/output structure was the test.
+- Enforce the privacy/isolation gate before approving enhancements. Allowed
+  work improves the ready-to-use forge image and configuration inside the
+  existing sandbox: language toolchains, compilers, builders, parsers,
+  debuggers, package managers, language servers, formatters, and docs. Reject
+  requests for broader mounts, host credentials, privileged containers, raw
+  host sockets, or network isolation bypasses.
+- Approved enhancements become normal work packets with owner host, owned
+  files, evidence, prompt updates, and `agent_status_packet` bookkeeping.
+- If no forge diagnostic summary exists after a slow E2E run that launched a
+  forge, assign a follow-up to run or wire the piggy-back diagnostics rather
+  than leaving the improvement loop implicit.
 
 ## Loop Status Cache
 

@@ -137,6 +137,25 @@ timestamp_utc() {
   date -u '+%Y-%m-%dT%H:%M:%SZ'
 }
 
+timestamp_pacific_from_epoch() {
+  local epoch="$1"
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - "$epoch" <<'PY' 2>/dev/null && return 0
+import datetime
+import sys
+from zoneinfo import ZoneInfo
+
+epoch = int(sys.argv[1])
+dt = datetime.datetime.fromtimestamp(epoch, ZoneInfo("America/Los_Angeles"))
+print(dt.strftime("%Y-%m-%d %H:%M:%S %Z"))
+PY
+  fi
+
+  TZ=America/Los_Angeles date -d "@$epoch" '+%Y-%m-%d %H:%M:%S %Z' 2>/dev/null \
+    || date -r "$epoch" '+%Y-%m-%d %H:%M:%S %Z' 2>/dev/null \
+    || printf 'epoch:%s\n' "$epoch"
+}
+
 build_opencode_args() {
   local args=()
 
@@ -177,7 +196,8 @@ if [[ -n "$WAIT_INTERVAL" ]]; then
     if [[ -n "$TIMES" && "$cycle" -ge "$TIMES" ]]; then
       exit 0
     fi
-    printf '[opencode-repeat] %s sleeping %s before next cycle\n' "$(timestamp_utc)" "$WAIT_INTERVAL" >&2
+    next_epoch="$(($(date +%s) + wait_seconds))"
+    printf '[opencode-repeat] %s sleeping %s before next cycle at %s (America/Los_Angeles)\n' "$(timestamp_utc)" "$WAIT_INTERVAL" "$(timestamp_pacific_from_epoch "$next_epoch")" >&2
     sleep "$wait_seconds"
   done
 else

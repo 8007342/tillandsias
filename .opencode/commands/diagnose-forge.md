@@ -73,10 +73,11 @@ For each gap you can confidently identify:
        description: <what to change>
      - file: images/default/entrypoint-forge-opencode.sh
        description: <what to change>
-   approved_by: orchestrator
+   approval_required: orchestrator
+   approved_by:
    ---
    ```
-3. In the body, describe the gap in detail, cite the diagnostics evidence, and explain why the change is safe (privacy, zero-trust).
+3. In the body, describe the gap in detail, cite the diagnostics evidence, and explain why the change is safe under the forge privacy/isolation envelope. Do not request broader host mounts, host credentials, privileged containers, raw host sockets, or proxy/router/enclave bypasses.
 
 Run the distillation script to formalize the analysis:
 
@@ -108,6 +109,8 @@ Summarize what happened:
 - Do NOT remove existing forge capabilities — only add
 - Every proposal must cite specific diagnostics evidence
 - Keep changes small and focused — one gap per proposal
+- Do not self-approve proposals; unattended runs file `status: proposed` items
+  for orchestrator review
 - If you cannot confidently identify a gap, say so rather than guessing
 - Do NOT commit or push unless you made meaningful changes
 - If interactive (`question` tool is available), ask the ORCHESTRATOR for approval before implementing non-trivial changes. In unattended mode, file proposals for later review.

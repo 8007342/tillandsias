@@ -18,6 +18,11 @@ The forge should be a **fully-loaded development environment** — a new user wi
 
 Target toolset includes: Flutter, React/Angular toolchains, Dart, TypeScript, Rust, Go, Python, Node.js, Java/Kotlin, compilers (gcc, clang), builders (make, cmake, cargo, npm, maven), monitoring tools, and everything needed to build any web app from scratch.
 
+All enhancements remain inside the existing forge privacy and isolation
+envelope. Proposals may add pre-installed tools and configuration, but must not
+request broader host mounts, host credentials, privileged containers, raw host
+sockets, or proxy/router/enclave bypasses.
+
 ## File Layout
 
 - `plan/forge-improvements/proposals/` — one `.md` file per proposed gap
@@ -39,7 +44,8 @@ proposed → reviewed → approved → implemented
 
 - **proposed**: Filed by Big Pickle based on diagnostics analysis
 - **reviewed**: ORCHESTRATOR has read it but not yet decided
-- **approved**: ORCHESTRATOR has approved — ready for implementation
+- **approved**: ORCHESTRATOR has approved with privacy/isolation rationale —
+  ready for implementation
 - **implemented**: Changes applied and committed
 - **rejected**: ORCHESTRATOR declined (with reason)
 - **stale**: Diagnostics no longer show this gap (capability was added by other means)
@@ -71,4 +77,6 @@ When implementing an approved proposal:
 - **One gap per proposal** — keeps review tractable
 - **Privacy-first**: No telemetry, no cloud callbacks, no data exfiltration
 - **Zero-trust**: Changes must not open new network egress or reduce container isolation
+- Do not self-approve proposals. In unattended mode, file proposals with
+  `status: proposed` and wait for the orchestrator to mark `status: approved`.
 - If unsure about a change's safety, mark the proposal as `needs_review` and explain the risk

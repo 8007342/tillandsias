@@ -1093,3 +1093,20 @@ Next greedy pickups (no VM needed): **w4b** (windows-ownable, pure) and **w4d**
   append an agent_status_packet here. Do not reopen transport, Retry, or Open
   Shell behavior; this is a formatting-only gate before the integration loop
   can rerun the full installed runtime litmus.
+
+### Event: 2026-05-27T19:23Z — pull-awareness for forge diagnostics lane
+
+- Coordination commit pending on `linux-next` updates
+  `methodology/litmus.yaml`, `methodology/forge-diagnostics.yaml`,
+  `.codex/skills/coordinate-multihost-work/SKILL.md`,
+  `plan/issues/forge-diagnostics-automation-2026-05-27.md`, and
+  `plan/index.yaml`.
+- This is informational for Windows w9; it does not supersede the current
+  primary action to clear the `wsl_lifecycle.rs` rustfmt diff.
+- If Windows observes forge diagnostics output during live-provision dress
+  rehearsal, record it as non-blocking evidence. Do not accept requests for
+  broader host mounts, host credentials, privileged containers, raw host
+  sockets, or proxy/router/enclave bypasses.
+- Required acknowledgement in the next Windows `agent_status_packet`: confirm
+  the `linux-next` coordination commit was pulled or list the fetch/rebase
+  blocker, then report whether any forge diagnostic evidence was produced.

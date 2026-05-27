@@ -1491,12 +1491,33 @@ plan_index:
           checkpoint_required: true
           handoff_note: "Distillation script reads raw diagnostics logs, extracts capability status, compares vs previous run for regressions, and writes dated summaries to plan/diagnostics/."
         - id: forge-diagnostics/methodology-update
-          status: blocked
+          status: completed
           depends_on: [forge-diagnostics/coordination]
           owned_files:
             - methodology/litmus.yaml
+            - methodology/forge-diagnostics.yaml
+            - methodology.yaml
+            - .codex/skills/coordinate-multihost-work/SKILL.md
           checkpoint_required: true
-          handoff_note: "BLOCKED pending orchestrator response. Requested: new agent_diagnostic litmus signal type, composability rules, non-blocking annex semantics, and cross-test dedup."
+          handoff_note: "Orchestrator approved agent_diagnostic as a non-blocking annex, added forge privacy/isolation approval rules, and updated coordination bookkeeping requirements."
+        - id: forge-diagnostics/e2e-piggyback-orchestration
+          status: ready
+          depends_on: [forge-diagnostics/methodology-update]
+          owned_files:
+            - openspec/litmus-tests/litmus-forge-diagnostics-e2e.yaml
+            - scripts/distill-forge-diagnostics.sh
+            - plan/diagnostics/
+          checkpoint_required: true
+          handoff_note: "Wire one diagnostics prompt into slow E2E/runtime-litmus forge launches, write raw logs to target/forge-diagnostics, distill summaries to plan/diagnostics, and dedupe repeated prompts by checksum."
+        - id: forge-enhancements/curated-toolchain-backlog
+          status: ready
+          depends_on: [forge-diagnostics/e2e-piggyback-orchestration]
+          owned_files:
+            - plan/diagnostics/
+            - images/default/
+            - openspec/specs/default-image/spec.md
+          checkpoint_required: true
+          handoff_note: "After the first piggy-backed diagnostics summary lands, split approved ready-to-use forge toolchain improvements into privacy/isolation-safe implementation packets."
 
     - id: forge-diagnostics-improvement-loop
       order: 21.6
@@ -1519,6 +1540,7 @@ plan_index:
         - "/diagnose-forge command extracts actionable gaps from diagnostics output"
         - "Proposals are filed in plan/forge-improvements/proposals/ with structured frontmatter"
         - "Approved proposals are implemented against the forge Containerfile and entrypoint"
+        - "Orchestrator approval records privacy/isolation rationale before any proposal becomes implementable"
         - "Forge completeness rises from 50/50 baseline toward fully-loaded dev environment"
       tasks:
         - id: forge-improvement/repeat-wrapper
@@ -1546,10 +1568,10 @@ plan_index:
           handoff_note: "Proposal directory structure created. State file tracks last-processed diagnostics. .gitignore excludes runtime state."
         - id: forge-improvement/first-run
           status: pending
-          depends_on: [forge-improvement/proposal-infra, forge-diagnostics/prompt]
+          depends_on: [forge-improvement/proposal-infra, forge-diagnostics/e2e-piggyback-orchestration]
           owned_files: []
           checkpoint_required: false
-          handoff_note: "First unattended diagnostics run. Requires a successful E2E build with forge first to produce diagnostics_log. Manual or CI-triggered."
+          handoff_note: "First unattended diagnostics run. Requires a slow E2E/runtime-litmus forge launch to produce a diagnostics log. Proposals remain status: proposed until orchestrator approval."
         - id: forge-improvement/iterate
           status: pending
           depends_on: [forge-improvement/first-run]
