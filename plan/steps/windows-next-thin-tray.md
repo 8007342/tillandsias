@@ -21,8 +21,8 @@ headless over vsock. Podman never on the Windows host. Older 6-distro
 
 - `crates/tillandsias-windows-tray/notify_icon.rs` — Win32 tray UI implemented
   (message-only window, icon, WM_TASKBARCREATED re-add, right-click popup from
-  host-shell menu model). SelectAgent, Quit, Open Log, and native-terminal
-  launch for PTY-backed actions are wired; Retry remains a stub.
+  host-shell menu model). SelectAgent, Quit, Open Log, native-terminal launch
+  for PTY-backed actions, and Retry reprovisioning are wired.
 - `crates/tillandsias-vm-layer/src/wsl.rs` — WslRuntime provision/start/stop/
   exec/wait_ready implemented as real wsl.exe shell-outs (Windows-gated).
   GAP: no snapshot/clone method on the VmRuntime trait.
@@ -82,9 +82,11 @@ headless over vsock. Podman never on the Windows host. Older 6-distro
     builds + launches clean with the live scanner. 2 new tray tests.
   - DONE (2026-05-26/27): recipe provisioning, HvSocket Hello/HelloAck,
     Ready-state gating, VmStatus over HvSocket, PTY open/data/close,
-    bidirectional PTY data, VM keepalive, Quit drain, and native-terminal Open
-    Shell launch are proven. Remaining w9 scope is forge-container Open Shell
-    E2E, Retry wiring, and optional wire EnumerateLocalProjects.
+    bidirectional PTY data, VM keepalive, Quit drain, native-terminal Open
+    Shell launch, Retry reprovisioning, and forge-container Open Shell smoke
+    are proven. Remaining w9 scope is integration-loop merge/test, optional
+    full live-provision dress rehearsal, and optional wire
+    EnumerateLocalProjects.
   - WIRE-DISPATCH CONTRACT (advisory from `plan/issues/control-socket-protocol-
     convergence-2026-05-25.md`): when the Win32 tray finally calls into the
     control wire, target the SAME `ControlMessage` variants over both transports
@@ -116,7 +118,7 @@ headless over vsock. Podman never on the Windows host. Older 6-distro
 ## NEXT ACTION (resume here)
 
 Phase 0/1/2 DONE; Phase 4 portable slice DONE; w5 recipe-provisioning + w9
-control-wire/PTY/Open-Shell PROVEN E2E (2026-05-26/27). Cargo at
+control-wire/PTY/Open-Shell/Retry PROVEN E2E (2026-05-26/27). Cargo at
 `%USERPROFILE%\.cargo\bin` — prepend each PowerShell session:
 `$env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"`.
 
@@ -175,15 +177,18 @@ longer blocked:
   (per the per-OS-terminal agreement; only the shell argv converges with
   macOS). Smoke PASSED (`8e84df7d`): `wt.exe` + `wsl.exe` bridge + bare-VM
   `/bin/bash -l` + spaced-title quoting all verified.
+- DONE: **Retry** (`f4c3d70f`) — Retry sets "Retrying provisioning..." and
+  re-runs guarded `provision_via_recipe` after failure without duplicating an
+  active task or interrupting Ready state.
+- DONE: **forge-container Open Shell smoke** (`c0a9558b`) — the exact
+  `wsl -d <distro> -- podman exec -it tillandsias-<name>-forge <cmd>` shape
+  runs into a forge-named container and returns `FORGE-EXEC-OK`.
 
 NEXT (remaining w9, model-independent):
-- Forge-container Open Shell E2E — exercise the `podman exec -it
-  tillandsias-<proj>-forge` argv opposite a live provisioned VM with a running
-  forge container (the only Open-Shell leg not yet smoke-tested; gated on a live
-  provision run, not on the launch mechanism).
-- `Retry` menu action — currently a stub; wire it to re-trigger
-  `provision_via_recipe` (needs the provision spawn refactored to be
-  re-invokable from the WM_COMMAND handler).
+- Full live-provision dress rehearsal — run provision -> headless
+  self-install -> headless creates forge -> Open Shell in the production
+  container. This is opportunistic confirmation; the terminal, Retry, and
+  podman-exec mechanisms are already proven.
 - Optional: `EnumerateLocalProjects` over the wire (in-VM projects) — today the
   menu is populated by the host-side `~/src` scan, which already works.
 

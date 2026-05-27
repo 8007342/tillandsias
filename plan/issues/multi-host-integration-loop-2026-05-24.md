@@ -28,6 +28,35 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Coordinator audit 2026-05-27T14:29Z — Windows w9 Retry + forge-container smoke; merge/test gate advances
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- observed_sibling_heads: main=`f9c465b3` · linux-next=`91061b61` ·
+  windows-next=`c0a9558b` (ahead with unmerged Windows w9 transport/menu code,
+  Open Shell smoke, file logging/Open Log, Retry reprovisioning, and
+  forge-container Open Shell smoke) · osx-next=`deba10d8` (ancestor of
+  linux-next)
+- Coordination fold only; no sibling merge attempted in this pass.
+- Remote progress is healthy. Since the 12:35Z fold, `linux-next` advanced by
+  one coordination commit and `windows-next` advanced from file logging/Open
+  Log to Retry reprovisioning plus forge-container Open Shell smoke. `osx-next`
+  and `main` did not advance.
+- Resolved gates: Windows Retry now re-runs guarded provisioning after a failed
+  attempt (`f4c3d70f`), and the project Open Shell argv reaches a running
+  forge-named container through `wsl.exe` (`c0a9558b`).
+- Active integration watch: `origin/windows-next` carries unmerged code/docs
+  through `c0a9558b`. The next integration loop should merge/test those commits
+  into `linux-next` or record exact conflicts.
+- Merge caution: preserve the newer `linux-next` `13cf3af0`
+  `images/vm/manifest.toml` repin and newer plan entries if the Windows branch
+  presents older blocks during reconciliation.
+- Current dependency chain: Windows w9 is proven through Retry and both Open
+  Shell launch legs but still needs merge/test into `linux-next`. The full
+  live-provision dress rehearsal and wire EnumerateLocalProjects are optional
+  Windows follow-ups. macOS still waits on user-attended m8 smoke.
+  Linux/release cleanup remains `release.yml` headless auto-publish to `main`
+  and the manifest-owned `release_tag` accessor.
+
 ### Coordinator audit 2026-05-27T12:35Z — Windows w9 Open Shell smoke + logging; merge/test gate advances
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next

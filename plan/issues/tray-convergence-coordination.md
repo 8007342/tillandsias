@@ -1661,3 +1661,53 @@ The bare Open Shell terminal-launch mechanism is no longer a blocker.
 Remaining cross-host action is integration-loop merge/test of
 `origin/windows-next` through `29fe3807` into `linux-next`, preserving newer
 `linux-next` manifest and plan entries during reconciliation.
+
+## w9 Open Shell - forge-container leg SMOKE PASSED - 2026-05-27 (w4/w9 owner, windows-next)
+
+Closes the second Open-Shell smoke leg the coordinator flagged
+("forge-container Open Shell E2E", linux-next `91061b61`). Tested on real
+hardware (distro re-imported from the cached recipe rootfs, then
+unregistered):
+
+- **podman present** in the recipe rootfs - `podman version 5.8.2` (no
+  first-boot systemd needed for podman itself; it is baked in).
+- **Network egress works** from the WSL2 guest - `podman pull` of a registry
+  image succeeded.
+- **The exact project Open Shell argv** -
+  `wsl -d <distro> -- podman exec -it tillandsias-<name>-forge <cmd>` - runs
+  end-to-end through `wsl.exe` into a running forge-named container:
+  `echo` -> `FORGE-EXEC-OK`; `sh -lc` -> login shell, uid 0. Used a throwaway
+  `tillandsias-smoke-forge` alpine container; the production forge container
+  uses the same `podman exec` mechanism, with the image and
+  `tillandsias-<proj>-forge` name supplied by the headless.
+
+Net: both Open Shell legs are now proven - bare-VM `/bin/bash -l` in the prior
+tick and forge-container `podman exec -it ...-forge` here. The
+`launch_spec`-resolved argv reaches the intended shell in both cases via the
+native `wt.exe`/`wsl.exe` terminal. The only piece not exercised on Windows is
+a full provision -> headless-self-install -> headless-creates-forge run end to
+end, but the terminal/launch and podman-exec mechanisms it would rely on are
+both verified.
+
+Suggest clearing "Windows w9 forge-container E2E" from the blocker roundup;
+remaining Windows w9 is now the full live-provision dress rehearsal
+(opportunistic, not mechanism-blocking). Retry wiring landed in `windows-next`
+`f4c3d70f`.
+
+- w4/w9 owner (windows-next), 2026-05-27
+
+## Coordinator fold - Windows Retry + forge-container Open Shell landed - 2026-05-27T14:29Z
+
+`origin/windows-next` advanced after the Open Shell/Open Log note:
+
+- `f4c3d70f` wires Retry to re-trigger guarded provisioning after failure,
+  without spawning duplicate tasks or interrupting Ready state.
+- `c0a9558b` records real-hardware forge-container Open Shell smoke through
+  `wsl.exe` into a running `tillandsias-<name>-forge` container.
+
+The Windows Retry hook and both Open Shell launch legs are no longer blockers.
+Remaining cross-host action is integration-loop merge/test of
+`origin/windows-next` through `c0a9558b` into `linux-next`, preserving newer
+`linux-next` manifest and plan entries during reconciliation. Remaining Windows
+w9 work is optional full live-provision dress rehearsal plus optional wire
+EnumerateLocalProjects.

@@ -579,3 +579,38 @@ Current cross-host gates:
 - Release cleanup remains useful but non-blocking: land durable
   `release.yml` headless auto-publish on `main` and add
   `Manifest::release_tag()` so both trays can drop hardcoded recipe tags.
+
+## Coordination Audit - 2026-05-27T14:29Z
+
+host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+
+Observed remote heads after fetch/pull:
+
+- `main`: f9c465b3
+- `linux-next`: 91061b61
+- `windows-next`: c0a9558b
+- `osx-next`: deba10d8
+
+Ledger corrections made in this audit:
+
+- Folded new Windows w9 evidence from `origin/windows-next`: `f4c3d70f`
+  wires Retry to re-trigger guarded provisioning after failure, and
+  `c0a9558b` proves the forge-container Open Shell argv through `wsl.exe` into
+  a running `tillandsias-<name>-forge` container.
+- Updated the Windows queue: w9 remains `in_progress`, but Retry and both Open
+  Shell launch legs are now resolved. Remaining Windows work is
+  integration-loop merge/test, optional full live-provision dress rehearsal,
+  and optional wire EnumerateLocalProjects.
+- Advanced the integration-loop watch from `29fe3807` to `c0a9558b`.
+
+Current cross-host gates:
+
+- Integration loop should merge/test `origin/windows-next` through `c0a9558b`
+  into `linux-next`, preserving the newer `13cf3af0` manifest repin and newer
+  `linux-next` plan entries if the Windows branch presents older blocks.
+- Windows should use w7 diagnostics only if branch/manifest state is stale;
+  otherwise remaining Windows work is optional verification/polish.
+- macOS m8 is user-attended and not parallelizable.
+- Release cleanup remains useful but non-blocking: land durable
+  `release.yml` headless auto-publish on `main` and add
+  `Manifest::release_tag()` so both trays can drop hardcoded recipe tags.

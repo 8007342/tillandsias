@@ -2,7 +2,7 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/windows-next-thin-tray.md, plan/issues/tray-convergence-coordination.md, plan/issues/control-socket-protocol-convergence-2026-05-25.md, openspec/changes/control-wire-pty-attach/
 
-Status: **OPEN** as of 2026-05-27T12:35Z. Windows w1, w2, w3, w4, w6
+Status: **OPEN** as of 2026-05-27T14:29Z. Windows w1, w2, w3, w4, w6
 diagnostics, the w5 converter, the shared forge-container `launch_spec` /
 `intent_for_action` amendment, the l9 URL resolver, the w5
 `provision_via_recipe` runtime flip, and w8 HvSocket Ready proof are done on
@@ -11,11 +11,11 @@ systemd boot, headless fetch HTTP 200, the F1 `Type=exec` unit fix, HvSocket
 connect, Hello/HelloAck over the control-wire codec, tray status flipping to
 Ready, VmStatus request/reply over HvSocket, Ready-phase provisioning gating,
 PtyOpen/PtyData/PtyClose proof, bidirectional PTY stdin/stdout, WSL VM
-keepalive, deterministic Quit drain, and native-terminal menu launch for the
-Open Shell / Attach / Maintain / GitHub Login argv path. Windows has now also
-proved Open Shell terminal-click smoke and added file-based tray logging plus
-working Open Log.
-`origin/windows-next` is ahead of `linux-next` through `29fe3807`; the
+keepalive, deterministic Quit drain, native-terminal menu launch for the Open
+Shell / Attach / Maintain / GitHub Login argv path, Open Shell terminal-click
+smoke, file-based tray logging plus working Open Log, Retry reprovisioning, and
+forge-container Open Shell smoke.
+`origin/windows-next` is ahead of `linux-next` through `c0a9558b`; the
 integration loop must merge/test that code while preserving the newer
 `linux-next` manifest repin from `13cf3af0` and later plan entries. The old
 PR #3 / recipe-publish / SHA-pin / F1 / F2 gates are closed.
@@ -56,11 +56,13 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
   `launch_spec` argv. Commits `8e84df7d`, `0626a318`, `41c32174`, and
   `29fe3807` add Open Shell terminal-click smoke, file-based tray logging /
   working Open Log, Cargo.lock sync, and an updated thin-tray next action. The
-  remaining packet is integration-loop merge/test plus forge-container Open
-  Shell E2E, Retry wiring, and optional wire EnumerateLocalProjects, not
-  another transport primitive or bare terminal-launch proof.
+  newer commits `f4c3d70f` and `c0a9558b` wire Retry to re-trigger guarded
+  provisioning and prove the forge-container Open Shell argv. The remaining
+  packet is integration-loop merge/test plus the optional full live-provision
+  dress rehearsal and optional wire EnumerateLocalProjects, not another
+  transport primitive, terminal-launch proof, or Retry hook.
 - `w7/recipe-diagnostics-and-branch-sync` is no longer the primary packet; use
-  it only as a no-code fallback if the `29fe3807` merge/test exposes stale
+  it only as a no-code fallback if the `c0a9558b` merge/test exposes stale
   diagnostics or a manifest/branch-sync conflict.
 - `w6/vm-status-and-enumerate-real-handlers` is done as a no-VM diagnostics
   fallback through `948af711` / integration cycle `b3ae21a`. Live VM status
@@ -73,10 +75,10 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
   interaction work as w9 session/menu routing, not as w5 artifact gates.
 
 Do not re-claim w1, w2, w3, w4, w5, w6, or w8; their terminal events are
-recorded below. Continue w9 from Open Shell terminal-click proof with
-integration-loop evidence, forge-container E2E, Retry wiring, and optional
-wire EnumerateLocalProjects, with w7 diagnostics as the independent fallback if
-the integration loop surfaces stale branch or manifest state.
+recorded below. Continue w9 from the Retry and Open Shell proof with
+integration-loop evidence, optional full live-provision dress rehearsal, and
+optional wire EnumerateLocalProjects, with w7 diagnostics as the independent
+fallback if the integration loop surfaces stale branch or manifest state.
 
 ### Item: w8/hvsocket-control-wire-ready
 
@@ -87,8 +89,8 @@ the integration loop surfaces stale branch or manifest state.
 - status: done
 - completed_at: 2026-05-27T06:51Z
 - integration_status: pending linux-next merge/test of `origin/windows-next`
-  through `29fe3807` (includes later w9 transport, menu-launch, Open Shell
-  smoke, file logging, and Open Log commits)
+  through `c0a9558b` (includes later w9 transport, menu-launch, Open Shell
+  smoke, file logging, Open Log, Retry, and forge-container smoke commits)
 - gated_on: []
 - cleared_gates:
   - Linux/recipe F1 headless service restart loop fixed at `f5801968`
@@ -106,7 +108,7 @@ the integration loop surfaces stale branch or manifest state.
     wire protocol.
 - next_action: >
     Integration loop should merge/test `origin/windows-next` through
-    `29fe3807` into `linux-next` and preserve the newer `13cf3af0` manifest
+    `c0a9558b` into `linux-next` and preserve the newer `13cf3af0` manifest
     repin if the branch merge presents older SHA/comment blocks from
     `windows-next`.
 - acceptance_evidence:
@@ -132,7 +134,7 @@ the integration loop surfaces stale branch or manifest state.
 - owner_host: windows
 - capability_tags: [win32, hvsocket, control-wire, pty, menu]
 - status: in_progress
-- latest_progress_at: 2026-05-27T12:20Z
+- latest_progress_at: 2026-05-27T13:21Z
 - latest_progress_refs:
   - `8b785ced` — VmStatus request/reply over HvSocket proven
   - `791c0187` — provisioning waits for VM phase `Ready`
@@ -145,6 +147,8 @@ the integration loop surfaces stale branch or manifest state.
   - `0626a318` — file-based tray logging and Open Log reveal landed
   - `41c32174` — Cargo.lock synced for Windows tracing dependencies
   - `29fe3807` — thin-tray next action refreshed to current remaining scope
+  - `f4c3d70f` — Retry re-triggers guarded provisioning after failure
+  - `c0a9558b` — forge-container Open Shell smoke passed on real Windows hardware
 - depends_on: [w8/hvsocket-control-wire-ready]
 - gated_on: []
 - owned_files:
@@ -158,9 +162,8 @@ the integration loop surfaces stale branch or manifest state.
     provisioning.
 - next_action: >
     First let the integration loop merge/test `origin/windows-next` through
-    `29fe3807` into `linux-next` or record exact conflicts. Windows
-    continuation should then exercise forge-container Open Shell E2E opposite a
-    live provisioned VM, wire Retry to re-trigger `provision_via_recipe`, and
+    `c0a9558b` into `linux-next` or record exact conflicts. Windows
+    continuation can then run the full live-provision dress rehearsal and
     optionally add wire EnumerateLocalProjects if host-side project scan is not
     sufficient.
 - acceptance_evidence:
@@ -182,8 +185,13 @@ the integration loop surfaces stale branch or manifest state.
   - `0626a318` / `41c32174`: file-based tracing writes
     `%LOCALAPPDATA%\tillandsias\logs\tray.log`; Open Log reveals it in
     Explorer; lockfile includes the tracing deps.
-  - Remaining: integration-loop merge/test into `linux-next`, forge-container
-    Open Shell E2E, Retry wiring, and optional wire EnumerateLocalProjects.
+  - `f4c3d70f`: Retry sets the tray to "Retrying provisioning..." and
+    re-triggers `provision_via_recipe` only after failure while avoiding
+    duplicate in-flight tasks.
+  - `c0a9558b`: forge-container Open Shell smoke passed through `wsl.exe` into
+    a running `tillandsias-<name>-forge` container.
+  - Remaining: integration-loop merge/test into `linux-next`, optional full
+    live-provision dress rehearsal, and optional wire EnumerateLocalProjects.
   - `cargo test -p tillandsias-windows-tray --target x86_64-pc-windows-msvc`
     or equivalent Windows-host evidence stays green.
 - fallback_when_blocked: >
@@ -1015,5 +1023,21 @@ Next greedy pickups (no VM needed): **w4b** (windows-ownable, pure) and **w4d**
   merge/test, forge-container Open Shell E2E against a live provisioned VM,
   Retry wiring, and optional wire EnumerateLocalProjects.
 - Integration-loop gate moved forward from `c997fc43` to `29fe3807`. During
+  merge/test, preserve the newer `13cf3af0` manifest repin and newer
+  `linux-next` plan entries if the Windows branch presents older blocks.
+
+### Event: 2026-05-27T14:29Z — linux coordinator status reconciliation
+
+- Observed remote heads after fetch/pull: `linux-next` `91061b61`,
+  `windows-next` `c0a9558b`, `osx-next` `deba10d8`, `main` `f9c465b3`.
+- Folded new `origin/windows-next` w9 evidence after `29fe3807`:
+  `f4c3d70f` wires Retry to re-trigger guarded provisioning after a failed
+  attempt, and `c0a9558b` proves the forge-container Open Shell argv through
+  `wsl.exe` into a running `tillandsias-<name>-forge` container.
+- Header reconciliation: w9 remains `in_progress`, but Retry and both Open
+  Shell legs are no longer blockers. Remaining evidence is integration-loop
+  merge/test, optional full live-provision dress rehearsal, and optional wire
+  EnumerateLocalProjects.
+- Integration-loop gate moved forward from `29fe3807` to `c0a9558b`. During
   merge/test, preserve the newer `13cf3af0` manifest repin and newer
   `linux-next` plan entries if the Windows branch presents older blocks.

@@ -319,6 +319,30 @@ blocker view without deleting earlier host notes.
   Windows w6 verification or diagnostics that do not require the CI rootfs
   artifact.
 
+## Linux coordinator audit — 2026-05-27T14:29Z
+
+- Observed remote heads after fetch/pull: `linux-next` `91061b61`,
+  `windows-next` `c0a9558b`, `osx-next` `deba10d8`, `main` `f9c465b3`.
+- Resolved since the previous blocker fold: Windows w9 advanced from Open
+  Shell terminal-click proof to Retry reprovisioning and forge-container shell
+  proof. `f4c3d70f` wires Retry to re-trigger guarded provisioning after
+  failure, and `c0a9558b` proves the project Open Shell argv through `wsl.exe`
+  into a running `tillandsias-<name>-forge` container.
+- Current high-impact blockers:
+  - **Integration-loop owned:** merge/test `origin/windows-next` through
+    `c0a9558b` into `linux-next`, preserving the newer `13cf3af0`
+    `images/vm/manifest.toml` repin and newer `linux-next` plan entries if
+    Windows' older blocks appear during reconciliation.
+  - **Windows-owned:** optional full live-provision dress rehearsal and
+    optional wire EnumerateLocalProjects if host-side scan is not enough.
+  - **macOS/user-owned:** m8 interactive smoke of the rebuilt
+    `dist/Tillandsias.app`.
+- Current ready/fallback work: Windows w9 continues only for integration
+  evidence or optional polish; w7 diagnostics remains the fallback if
+  merge/test exposes stale branch or manifest state. Linux release cleanup
+  remains useful but non-blocking (`release.yml` headless auto-publish to
+  `main`, `Manifest::release_tag()`).
+
 ## Linux coordinator audit — 2026-05-27T12:35Z
 
 - Observed remote heads after fetch/pull: `linux-next` `3370f04e`,
