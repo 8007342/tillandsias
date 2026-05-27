@@ -191,3 +191,20 @@ The four key gains:
 - `crates/tillandsias-headless/src/vsock_server.rs:150` — current vsock dispatcher.
 - `crates/tillandsias-headless/tests/vsock_listener_e2e.rs` — vsock test fixture (good model for unix-side equivalent).
 - PR #2 — https://github.com/8007342/tillandsias/pull/2 — where the Linux implementation will land.
+
+## Update 2026-05-27T21:00Z (linux-host) — CloudRefreshRequest now real (Q4 progress)
+
+The vsock `CloudRefreshRequest` handler is no longer a stub (`e1a190d4`): the
+in-VM headless runs `gh repo list --json nameWithOwner,defaultBranchRef` with
+the mounted token (`/run/secrets/tillandsias-github-token`) and parses into
+`CloudProjectEntry`, degrading to an empty list when gh/token are absent.
+
+Q4 status: both transports now serve REAL backing data —
+- unix tray (Linux host): `tillandsias_core::remote_projects` (containerized gh).
+- vsock (in-VM): `gh` directly with the mounted token (this commit).
+Same reply shape, host-appropriate execution context — the "unified backing
+data, host-local execution" resolution. EnumerateLocalProjects was already
+real (each host's local scanner). Remaining stub: none of the read handlers;
+VmStatusRequest already reflects the real phase.
+
+Siblings: no action needed; wire shape unchanged (WIRE_VERSION 2).
