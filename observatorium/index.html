@@ -3,210 +3,466 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Observatorium</title>
+  <title>Tillandsias Observatorium</title>
+  <script src="lib/chart.umd.js"></script>
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    
     :root {
       color-scheme: dark;
       --bg: #0b0f14;
-      --bg2: #10161d;
-      --panel: #121a23;
-      --panel2: #16202a;
-      --line: #243243;
-      --line-soft: #1b2633;
+      --bg-gradient: radial-gradient(circle at top right, #1a2636 0%, var(--bg) 60%);
+      --panel: rgba(18, 26, 35, 0.6);
+      --panel-hover: rgba(255, 255, 255, 0.05);
+      --line: rgba(255, 255, 255, 0.1);
+      --line-soft: rgba(255, 255, 255, 0.05);
       --text: #d8e2ee;
-      --muted: #8da2b8;
+      --text-muted: #8da2b8;
       --accent: #8bb7ff;
+      --accent-glow: rgba(139, 183, 255, 0.3);
       --accent2: #75d0c4;
       --chip: rgba(139, 183, 255, 0.12);
+      --chart-color-1: #8bb7ff;
+      --chart-color-2: #ff8b8b;
     }
+
     * { box-sizing: border-box; }
-    html, body { margin: 0; min-height: 100%; background: radial-gradient(circle at top, #16202d 0%, var(--bg) 45%); color: var(--text); font: 14px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-    a { color: var(--accent); text-decoration: none; }
-    a:hover { text-decoration: underline; }
-    .shell { display: grid; grid-template-rows: auto auto 1fr; min-height: 100vh; }
-    header { padding: 18px 20px 10px; border-bottom: 1px solid var(--line-soft); background: linear-gradient(180deg, rgba(255,255,255,0.03), transparent); }
-    h1 { margin: 0; font-size: 20px; font-weight: 650; letter-spacing: 0.01em; }
-    .subtitle { margin-top: 6px; color: var(--muted); font-size: 13px; }
-    .toolbar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-top: 14px; }
-    .search, .badge, button {
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg-gradient);
+      background-attachment: fixed;
+      color: var(--text);
+      font-family: 'Inter', -apple-system, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    a { color: var(--accent); text-decoration: none; transition: color 0.2s; }
+    a:hover { color: #fff; }
+
+    /* Layout Shell */
+    .shell {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Header */
+    header.top-nav {
+      padding: 20px 24px 0;
+      border-bottom: 1px solid var(--line-soft);
+      background: rgba(11, 15, 20, 0.7);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      z-index: 10;
+      flex-shrink: 0;
+    }
+    
+    .header-content {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      padding-bottom: 20px;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      background: linear-gradient(90deg, #fff, var(--accent));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .brand .subtitle {
+      margin-top: 4px;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    /* Inputs & Buttons */
+    input, button, .badge {
+      font-family: inherit;
       border: 1px solid var(--line);
       border-radius: 999px;
       background: rgba(255,255,255,0.03);
       color: var(--text);
-      padding: 8px 12px;
+      padding: 8px 16px;
+      font-size: 13px;
+      transition: all 0.2s ease;
     }
-    .search { min-width: 260px; outline: none; }
-    .badge { color: var(--muted); background: var(--chip); }
-    button { cursor: pointer; }
-    main { padding: 16px; display: grid; grid-template-columns: 1.1fr 1.2fr 1fr; gap: 14px; min-height: 0; }
-    .panel {
-      min-height: 0;
-      border: 1px solid var(--line);
-      border-radius: 20px;
-      background: linear-gradient(180deg, rgba(255,255,255,0.03), transparent), var(--panel);
+    input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--accent-glow);
+    }
+    button { cursor: pointer; font-weight: 500; }
+    button:hover {
+      background: rgba(255,255,255,0.08);
+      border-color: var(--accent);
+    }
+    .badge { color: var(--text-muted); background: var(--chip); border: none; }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 24px;
+      margin-top: 10px;
+    }
+    .tab {
+      padding: 10px 4px;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+    .tab:hover { color: #fff; }
+    .tab.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+
+    /* Main Content Area */
+    main {
+      flex: 1;
+      position: relative;
       overflow: hidden;
-      display: grid;
+    }
+
+    .view {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      display: none;
+      padding: 20px;
+      overflow: hidden;
+      animation: fadeIn 0.3s ease;
+    }
+    .view.active { display: grid; }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(5px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Trace Viewer Layout */
+    #trace-view {
+      grid-template-columns: 1.1fr 1.2fr 1fr;
+      gap: 20px;
+    }
+
+    /* Dashboard Layout */
+    #dashboard-view {
+      display: none;
+      grid-template-columns: 1fr 300px;
       grid-template-rows: auto 1fr;
-      box-shadow: 0 20px 50px rgba(0,0,0,0.22);
+      gap: 20px;
+      overflow-y: auto;
     }
+    #dashboard-view.active { display: grid; }
+
+    /* Panels (Glassmorphism) */
+    .panel {
+      display: flex;
+      flex-direction: column;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--panel);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+      overflow: hidden;
+    }
+    
     .panel header {
-      padding: 14px 16px;
+      padding: 16px 20px;
       border-bottom: 1px solid var(--line-soft);
-      background: transparent;
+      background: rgba(255,255,255,0.01);
     }
-    .panel h2 { margin: 0; font-size: 15px; }
-    .panel .meta { margin-top: 4px; color: var(--muted); font-size: 12px; }
-    .list { overflow: auto; padding: 10px; min-height: 0; }
+    .panel h2 { margin: 0; font-size: 15px; font-weight: 600; }
+    .panel .meta { margin-top: 4px; color: var(--text-muted); font-size: 12px; }
+    
+    .list { overflow-y: auto; padding: 12px; flex: 1; }
+    
+    /* Cards */
     .card {
       border: 1px solid var(--line-soft);
-      border-radius: 16px;
-      background: rgba(255,255,255,0.025);
-      margin-bottom: 10px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.02);
+      margin-bottom: 12px;
+      transition: all 0.2s ease;
       overflow: hidden;
     }
-    .card.selected { border-color: rgba(139,183,255,0.6); box-shadow: 0 0 0 1px rgba(139,183,255,0.2) inset; }
+    .card:hover {
+      background: var(--panel-hover);
+      border-color: rgba(255,255,255,0.15);
+    }
+    .card.selected {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent-glow) inset;
+      background: rgba(139, 183, 255, 0.05);
+    }
+    
     .card button.row {
       width: 100%;
       text-align: left;
       border: 0;
       background: transparent;
-      padding: 12px 13px;
+      padding: 14px 16px;
       border-radius: 0;
     }
+    
     .title-line { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
-    .title-line strong { font-weight: 650; }
-    .title-line small { color: var(--muted); }
-    .summary { margin-top: 6px; color: var(--muted); font-size: 12px; }
-    .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+    .title-line strong { font-weight: 600; font-size: 14px; color: #fff; }
+    .title-line small { color: var(--text-muted); }
+    .summary { margin-top: 6px; color: var(--text-muted); font-size: 12px; line-height: 1.4; }
+    
+    .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
     .chip {
-      padding: 3px 8px;
+      padding: 4px 10px;
       border-radius: 999px;
       background: var(--chip);
       color: var(--accent2);
       font-size: 11px;
+      font-weight: 500;
     }
+    
     .details {
       border-top: 1px solid var(--line-soft);
-      padding: 11px 13px 13px;
-      background: rgba(255,255,255,0.02);
-      color: var(--text);
+      padding: 12px 16px;
+      background: rgba(0,0,0,0.2);
     }
     .details.hidden { display: none; }
-    .details .block { margin-top: 8px; color: var(--muted); font-size: 12px; }
-    .kv { display: grid; grid-template-columns: 92px 1fr; gap: 4px 10px; font-size: 12px; }
-    .kv div:nth-child(odd) { color: var(--muted); }
+    
+    .kv { display: grid; grid-template-columns: 80px 1fr; gap: 6px 12px; font-size: 12px; }
+    .kv div:nth-child(odd) { color: var(--text-muted); font-weight: 500; }
+    
     .code-list { list-style: none; padding: 0; margin: 0; }
-    .code-list li {
-      border-bottom: 1px solid var(--line-soft);
-      padding: 10px 0;
-    }
+    .code-list li { border-bottom: 1px solid var(--line-soft); padding: 12px 0; }
     .code-list li:last-child { border-bottom: 0; }
-    .empty { padding: 16px; color: var(--muted); }
-    .footer-note {
-      padding: 10px 16px 14px;
-      border-top: 1px solid var(--line-soft);
-      color: var(--muted);
-      font-size: 12px;
+    .code-list .block { margin-top: 4px; color: var(--text-muted); font-size: 12px; font-family: ui-monospace, monospace; }
+    
+    .empty { padding: 20px; color: var(--text-muted); text-align: center; }
+
+    /* Dashboard Specifics */
+    .chart-container {
+      position: relative;
+      width: 100%;
+      height: 400px;
+      padding: 20px;
     }
-    code, pre { font-family: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+    
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      padding: 20px;
+    }
+    
+    .metric-box {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--line-soft);
+      border-radius: 12px;
+      padding: 16px;
+      text-align: center;
+    }
+    .metric-box h3 { margin: 0 0 8px; font-size: 12px; color: var(--text-muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
+    .metric-box .val { font-size: 28px; font-weight: 700; color: #fff; }
+    .metric-box .sub { font-size: 12px; color: var(--accent); margin-top: 4px; }
+    
+    .dash-full-width { grid-column: 1 / -1; }
+
+    /* Footer */
+    .footer-note {
+      padding: 12px 24px;
+      border-top: 1px solid var(--line-soft);
+      background: rgba(11, 15, 20, 0.9);
+      color: var(--text-muted);
+      font-size: 12px;
+      display: flex;
+      justify-content: space-between;
+    }
+
     @media (max-width: 1200px) {
-      main { grid-template-columns: 1fr; }
+      #trace-view { grid-template-columns: 1fr; overflow-y: auto; }
+      .panel { min-height: 400px; }
+      #dashboard-view { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
 <div class="shell">
-  <header>
-    <h1>Observatorium</h1>
-    <div class="subtitle">Live local trace graph for specs, code, and cheatsheets. Minimal UI, no cache, project source mounted read-only.</div>
-    <div class="toolbar">
-      <input id="search" class="search" placeholder="Filter specs, code hits, or cheatsheets">
-      <button id="refresh">Refresh</button>
-      <span id="status" class="badge">Loading source snapshot…</span>
+  <header class="top-nav">
+    <div class="header-content">
+      <div class="brand">
+        <h1>Observatorium</h1>
+        <div class="subtitle">Live source traces & convergence metrics.</div>
+      </div>
+      <div class="toolbar">
+        <input id="search" placeholder="Filter specs, code, cheatsheets" style="width: 280px;">
+        <button id="refresh">Sync Data</button>
+        <span id="status" class="badge">Loading...</span>
+      </div>
+    </div>
+    <div class="tabs">
+      <div class="tab active" data-target="trace-view">Trace Viewer</div>
+      <div class="tab" data-target="dashboard-view">Convergence Dashboard</div>
     </div>
   </header>
 
   <main>
-    <section class="panel">
-      <header>
-        <h2>Specs</h2>
-        <div class="meta">Selected spec and nearby trace provenance</div>
-      </header>
-      <div id="specs" class="list"></div>
+    <!-- Trace View -->
+    <section id="trace-view" class="view active">
+      <div class="panel">
+        <header>
+          <h2>Specs</h2>
+          <div class="meta">Select a spec to view provenance</div>
+        </header>
+        <div id="specs" class="list"></div>
+      </div>
+
+      <div class="panel">
+        <header>
+          <h2>Code Hits</h2>
+          <div class="meta">Source locations for active selection</div>
+        </header>
+        <div id="code" class="list"></div>
+      </div>
+
+      <div class="panel">
+        <header>
+          <h2>Cheatsheets</h2>
+          <div class="meta">Relevant guides and bound specs</div>
+        </header>
+        <div id="sheets" class="list"></div>
+      </div>
     </section>
 
-    <section class="panel">
-      <header>
-        <h2>Code</h2>
-        <div class="meta">Source hits from TRACES.md for the active selection</div>
-      </header>
-      <div id="code" class="list"></div>
-    </section>
-
-    <section class="panel">
-      <header>
-        <h2>Cheatsheets</h2>
-        <div class="meta">Relevant cheatsheet hits and traced specs</div>
-      </header>
-      <div id="sheets" class="list"></div>
+    <!-- Dashboard View -->
+    <section id="dashboard-view" class="view">
+      <div class="panel dash-full-width">
+        <header>
+          <h2>Convergence Progression</h2>
+          <div class="meta">CentiColon closure vs. Residual Obligations over recent releases</div>
+        </header>
+        <div class="chart-container">
+          <canvas id="convergenceChart"></canvas>
+        </div>
+      </div>
+      
+      <div class="panel dash-full-width" style="height: auto;">
+        <div class="metrics-grid" id="metrics-summary">
+          <!-- Filled via JS -->
+        </div>
+      </div>
     </section>
   </main>
 
-  <div class="footer-note" id="footer">Ready.</div>
+  <div class="footer-note">
+    <span id="footer-left">Ready.</span>
+    <span id="footer-right">Zero-dependency native projection.</span>
+  </div>
 </div>
 
 <script>
+// ==========================================
+// App State & Globals
+// ==========================================
 const SOURCE_ROOT = (window.OBSERVATORIUM_SOURCE_ROOT || '/source').replace(/\/+$/, '') || '';
 const state = {
   traces: [],
   sheets: [],
+  dashboard: null,
   selectedSpec: null,
   selectedSheet: null,
   search: '',
   sheetCache: new Map(),
+  chartInstance: null
 };
 
 const els = {
   status: document.getElementById('status'),
-  footer: document.getElementById('footer'),
+  footerLeft: document.getElementById('footer-left'),
   search: document.getElementById('search'),
   refresh: document.getElementById('refresh'),
   specs: document.getElementById('specs'),
   code: document.getElementById('code'),
   sheets: document.getElementById('sheets'),
+  tabs: document.querySelectorAll('.tab'),
+  views: document.querySelectorAll('.view'),
+  metricsGrid: document.getElementById('metrics-summary')
 };
 
 function setStatus(text) { els.status.textContent = text; }
-function setFooter(text) { els.footer.textContent = text; }
+function setFooter(text) { els.footerLeft.textContent = text; }
 
+// ==========================================
+// Tab Navigation
+// ==========================================
+els.tabs.forEach(tab => {
+  tab.addEventListener('click', () => {
+    els.tabs.forEach(t => t.classList.remove('active'));
+    els.views.forEach(v => v.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(tab.dataset.target).classList.add('active');
+    
+    // Resize chart if switching to dashboard
+    if (tab.dataset.target === 'dashboard-view' && state.chartInstance) {
+      state.chartInstance.resize();
+    }
+  });
+});
+
+// ==========================================
+// Data Fetching
+// ==========================================
 async function fetchText(path) {
   const res = await fetch(path, { cache: 'no-store' });
   if (!res.ok) throw new Error(`${path}: ${res.status}`);
   return res.text();
 }
 
-async function fetchFirst(paths) {
+async function fetchJSON(path) {
+  const res = await fetch(path, { cache: 'no-store' });
+  if (!res.ok) throw new Error(`${path}: ${res.status}`);
+  return res.json();
+}
+
+async function fetchFirst(paths, type = 'text') {
   let lastError = null;
   for (const path of paths) {
     try {
-      return { path, text: await fetchText(path) };
+      return { path, data: type === 'json' ? await fetchJSON(path) : await fetchText(path) };
     } catch (err) {
       lastError = err;
     }
   }
-  return { path: null, text: '', error: lastError };
+  return { path: null, data: type === 'json' ? null : '', error: lastError };
 }
 
 function sourcePath(path) {
   const clean = String(path).replace(/^\/+/, '');
   return SOURCE_ROOT ? `${SOURCE_ROOT}/${clean}` : `/${clean}`;
 }
-
 function sourceHref(href) {
   if (/^(https?:|data:|#)/i.test(href)) return href;
   return sourcePath(href);
 }
 
+// ==========================================
+// Parsers
+// ==========================================
 function parseTraces(markdown) {
   const rows = [];
   for (const line of markdown.split(/\r?\n/)) {
@@ -231,10 +487,7 @@ function parseCheatsheetIndex(markdown) {
   for (const rawLine of markdown.split(/\r?\n/)) {
     const line = rawLine.trimEnd();
     const heading = line.match(/^##\s+(.+)$/);
-    if (heading) {
-      category = heading[1].trim();
-      continue;
-    }
+    if (heading) { category = heading[1].trim(); continue; }
     const item = line.match(/^-\s+(.+?)\s+—\s+(.+)$/);
     if (!item || !category) continue;
     const file = item[1].replace(/\s+\[.*$/, '').trim();
@@ -248,13 +501,8 @@ function parseCheatsheetIndex(markdown) {
   return items;
 }
 
-function specNameFromTrace(trace) {
-  return trace.replace(/^spec:/, '');
-}
-
-function tokenize(value) {
-  return value.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
-}
+function specNameFromTrace(trace) { return trace.replace(/^spec:/, ''); }
+function tokenize(value) { return value.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean); }
 
 function scoreSheet(sheet, specId) {
   const tokens = tokenize(specId);
@@ -265,12 +513,12 @@ function scoreSheet(sheet, specId) {
 async function loadSheetAnnotations(sheet) {
   if (state.sheetCache.has(sheet.path)) return state.sheetCache.get(sheet.path);
   try {
-    const { text } = await fetchFirst([
+    const { data } = await fetchFirst([
       sourcePath(`cheatsheets/${sheet.path}`),
-      `/cheatsheets/${sheet.path}`,
+      `/cheatsheets/${sheet.path}`
     ]);
-    const traces = [...text.matchAll(/@trace\s+spec:([a-z0-9-]+)/gi)].map(m => m[1]);
-    const parsed = { text, traces };
+    const traces = [...data.matchAll(/@trace\s+spec:([a-z0-9-]+)/gi)].map(m => m[1]);
+    const parsed = { text: data, traces };
     state.sheetCache.set(sheet.path, parsed);
     return parsed;
   } catch (err) {
@@ -280,6 +528,9 @@ async function loadSheetAnnotations(sheet) {
   }
 }
 
+// ==========================================
+// Trace Viewer Rendering
+// ==========================================
 function selectedTraceRow() {
   if (!state.selectedSpec) return null;
   return state.traces.find(row => specNameFromTrace(row.trace) === state.selectedSpec) || null;
@@ -302,30 +553,22 @@ function filteredSheets() {
 }
 
 function escapeHtml(value) {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+  return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
-
-function escapeAttr(value) {
-  return escapeHtml(value).replace(/`/g, '&#96;');
-}
+function escapeAttr(value) { return escapeHtml(value).replace(/`/g, '&#96;'); }
 
 function renderSpecs() {
   const rows = filteredSpecs();
   if (!rows.length) {
-    els.specs.innerHTML = '<div class="empty">No specs match the current filter.</div>';
+    els.specs.innerHTML = '<div class="empty">No specs match filter.</div>';
     return;
   }
   els.specs.innerHTML = rows.map(row => {
     const specId = specNameFromTrace(row.trace);
     const selected = specId === state.selectedSpec;
-    const chips = row.sources.slice(0, 4).map(src => `<span class="chip">${escapeHtml(src.label)}</span>`).join('');
+    const chips = row.sources.slice(0, 3).map(src => `<span class="chip">${escapeHtml(src.label)}</span>`).join('');
     return `
-      <article class="card ${selected ? 'selected' : ''}">
+      <div class="card ${selected ? 'selected' : ''}">
         <button class="row" data-spec="${escapeAttr(specId)}">
           <div class="title-line">
             <strong>${escapeHtml(specId)}</strong>
@@ -334,21 +577,13 @@ function renderSpecs() {
           <div class="summary">${row.sources.length} code hit(s)</div>
           <div class="chips">${chips}</div>
         </button>
-        <div class="details ${selected ? '' : 'hidden'}">
-          <div class="kv">
-            <div>Trace</div><div>${escapeHtml(row.trace)}</div>
-            <div>Spec file</div><div>${escapeHtml(row.specPath)}</div>
-            <div>Hits</div><div>${row.sources.length}</div>
-          </div>
-        </div>
-      </article>`;
+      </div>`;
   }).join('');
-  els.specs.querySelectorAll('[data-spec]').forEach(button => {
-    button.addEventListener('click', () => {
-      state.selectedSpec = button.dataset.spec;
+  els.specs.querySelectorAll('[data-spec]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.selectedSpec = btn.dataset.spec;
       state.selectedSheet = null;
-      location.hash = `spec=${encodeURIComponent(state.selectedSpec)}`;
-      renderAll();
+      renderTraceView();
     });
   });
 }
@@ -358,144 +593,227 @@ function renderCode() {
   const q = state.search.toLowerCase();
   const hits = row ? row.sources.filter(src => !q || src.label.toLowerCase().includes(q) || src.href.toLowerCase().includes(q)) : [];
   if (!row) {
-    els.code.innerHTML = '<div class="empty">Select a spec or cheatsheet to reveal the corresponding source hits.</div>';
+    els.code.innerHTML = '<div class="empty">Select a spec or cheatsheet.</div>';
     return;
   }
   els.code.innerHTML = `
-    <article class="card selected">
-      <button class="row" data-code-spec="${escapeAttr(state.selectedSpec)}">
+    <div class="card selected" style="margin-bottom: 0; border-radius: 12px 12px 0 0; border-bottom: 0;">
+      <div class="row" style="padding: 16px;">
         <div class="title-line">
           <strong>${escapeHtml(state.selectedSpec)}</strong>
           <small>${hits.length} visible hit(s)</small>
         </div>
         <div class="summary">${escapeHtml(row.specPath)}</div>
-      </button>
-      <div class="details">
-        <ul class="code-list">
-          ${hits.map(src => {
-            const [path, line] = src.href.split('#L');
-            return `<li><a href="${escapeAttr(sourceHref(src.href))}">${escapeHtml(src.label)}</a><div class="block">${escapeHtml(path)} ${line ? `line ${escapeHtml(line)}` : ''}</div></li>`;
-          }).join('')}
-        </ul>
       </div>
-    </article>`;
-  els.code.querySelectorAll('[data-code-spec]').forEach(button => {
-    button.addEventListener('click', () => {
-      state.selectedSheet = null;
-      location.hash = `spec=${encodeURIComponent(button.dataset.codeSpec)}`;
-    });
-  });
+    </div>
+    <div class="details" style="border-radius: 0 0 12px 12px; border: 1px solid var(--accent); background: rgba(139, 183, 255, 0.02);">
+      <ul class="code-list">
+        ${hits.map(src => {
+          const [path, line] = src.href.split('#L');
+          return \`<li><a href="\${escapeAttr(sourceHref(src.href))}" target="_blank">\${escapeHtml(src.label)}</a><div class="block">\${escapeHtml(path)} \${line ? \`line \${escapeHtml(line)}\` : ''}</div></li>\`;
+        }).join('')}
+      </ul>
+    </div>`;
 }
 
 async function renderSheets() {
   const rows = filteredSheets();
   if (!rows.length) {
-    els.sheets.innerHTML = '<div class="empty">No cheatsheets match the current filter.</div>';
+    els.sheets.innerHTML = '<div class="empty">No cheatsheets match filter.</div>';
     return;
   }
-
-  const html = [];
-  for (const sheet of rows.slice(0, 20)) {
+  let html = '';
+  for (const sheet of rows.slice(0, 15)) {
     const isSelected = sheet.path === state.selectedSheet;
     const annotations = isSelected ? (await loadSheetAnnotations(sheet)).traces : [];
     const tracedSpecs = annotations.length ? annotations : (state.selectedSpec ? [state.selectedSpec] : []);
-    html.push(`
-      <article class="card ${isSelected ? 'selected' : ''}">
+    html += `
+      <div class="card ${isSelected ? 'selected' : ''}">
         <button class="row" data-sheet="${escapeAttr(sheet.path)}">
           <div class="title-line">
             <strong>${escapeHtml(sheet.path)}</strong>
             <small>${escapeHtml(sheet.category)}</small>
           </div>
           <div class="summary">${escapeHtml(sheet.description)}</div>
-          <div class="chips">${tracedSpecs.slice(0, 3).map(spec => `<span class="chip">${escapeHtml(spec)}</span>`).join('')}</div>
+          <div class="chips">${tracedSpecs.slice(0, 3).map(s => `<span class="chip">${escapeHtml(s)}</span>`).join('')}</div>
         </button>
-        <div class="details ${isSelected ? '' : 'hidden'}">
-          <div class="kv">
-            <div>Path</div><div>${escapeHtml(sheet.path)}</div>
-            <div>Category</div><div>${escapeHtml(sheet.category)}</div>
-            <div>Spec hits</div><div>${escapeHtml((annotations.length ? annotations : tracedSpecs).join(', ') || 'none')}</div>
-          </div>
-        </div>
-      </article>`);
+      </div>`;
   }
-  els.sheets.innerHTML = html.join('');
-  els.sheets.querySelectorAll('[data-sheet]').forEach(button => {
-    button.addEventListener('click', async () => {
-      state.selectedSheet = button.dataset.sheet;
+  els.sheets.innerHTML = html;
+  els.sheets.querySelectorAll('[data-sheet]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      state.selectedSheet = btn.dataset.sheet;
       const sheet = state.sheets.find(s => s.path === state.selectedSheet);
       if (sheet) {
         const annotations = await loadSheetAnnotations(sheet);
         if (annotations.traces.length) state.selectedSpec = annotations.traces[0];
       }
-      location.hash = `sheet=${encodeURIComponent(state.selectedSheet)}`;
-      renderAll();
+      renderTraceView();
     });
   });
 }
 
-async function loadAll() {
-  setStatus('Loading TRACES.md');
-  const [tracesResult, sheetsResult] = await Promise.all([
-    fetchFirst([sourcePath('TRACES.md'), '/TRACES.md']),
-    fetchFirst([sourcePath('cheatsheets/INDEX.md'), '/cheatsheets/INDEX.md']),
-  ]);
-  state.traces = tracesResult.text ? parseTraces(tracesResult.text) : [];
-  state.sheets = sheetsResult.text ? parseCheatsheetIndex(sheetsResult.text) : [];
-  setStatus(`${state.traces.length} trace bucket(s), ${state.sheets.length} cheatsheet entries`);
-  const loadedFrom = tracesResult.path || sheetsResult.path || SOURCE_ROOT || '/source';
-  setFooter(`Source snapshot loaded from ${loadedFrom}.`);
-}
-
-function selectFromHash() {
-  const params = new URLSearchParams(location.hash.replace(/^#/, ''));
-  if (params.has('sheet')) state.selectedSheet = params.get('sheet');
-  if (params.has('spec')) state.selectedSpec = params.get('spec');
-}
-
-async function renderAll() {
+function renderTraceView() {
   renderSpecs();
   renderCode();
-  await renderSheets();
+  renderSheets();
 }
 
-els.search.addEventListener('input', () => {
-  state.search = els.search.value.trim();
-  renderAll();
-});
+// ==========================================
+// Dashboard Rendering
+// ==========================================
+function renderDashboard() {
+  if (!state.dashboard || !state.dashboard.history) return;
+  
+  const history = state.dashboard.history;
+  if (history.length === 0) return;
 
-els.refresh.addEventListener('click', async () => {
-  state.sheetCache.clear();
-  await init();
-});
+  const labels = history.map(h => h.release_version !== 'unknown' ? h.release_version : h.source_commit.substring(0,7));
+  const percentClosed = history.map(h => h.percent_closed);
+  const residualCc = history.map(h => h.residual_cc);
+
+  const ctx = document.getElementById('convergenceChart').getContext('2d');
+  
+  if (state.chartInstance) {
+    state.chartInstance.destroy();
+  }
+
+  Chart.defaults.color = '#8da2b8';
+  Chart.defaults.font.family = "'Inter', sans-serif";
+
+  state.chartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets: [
+        {
+          label: 'Percent Closed (%)',
+          data: percentClosed,
+          borderColor: '#8bb7ff',
+          backgroundColor: 'rgba(139, 183, 255, 0.1)',
+          yAxisID: 'y',
+          fill: true,
+          tension: 0.3,
+          borderWidth: 2,
+          pointRadius: 2,
+          pointBackgroundColor: '#8bb7ff'
+        },
+        {
+          label: 'Residual Obligations (cc)',
+          data: residualCc,
+          borderColor: '#ff8b8b',
+          backgroundColor: 'transparent',
+          yAxisID: 'y1',
+          tension: 0.3,
+          borderWidth: 2,
+          borderDash: [5, 5],
+          pointRadius: 2,
+          pointBackgroundColor: '#ff8b8b'
+        }
+      ]
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'top', labels: { usePointStyle: true, boxWidth: 8 } },
+        tooltip: {
+          backgroundColor: 'rgba(11, 15, 20, 0.9)',
+          titleColor: '#fff',
+          bodyColor: '#d8e2ee',
+          borderColor: 'rgba(255,255,255,0.1)',
+          borderWidth: 1,
+          padding: 12
+        }
+      },
+      scales: {
+        x: { grid: { color: 'rgba(255,255,255,0.05)' } },
+        y: {
+          type: 'linear', display: true, position: 'left',
+          title: { display: true, text: 'Completion (%)' },
+          grid: { color: 'rgba(255,255,255,0.05)' },
+          min: 0, max: 100
+        },
+        y1: {
+          type: 'linear', display: true, position: 'right',
+          title: { display: true, text: 'CentiColons (cc)' },
+          grid: { drawOnChartArea: false },
+          min: 0
+        }
+      }
+    }
+  });
+
+  // Render Metric Boxes
+  const latest = state.dashboard.latest || {};
+  const metrics = state.dashboard.metrics || {};
+  
+  els.metricsGrid.innerHTML = `
+    <div class="metric-box">
+      <h3>Current Closure</h3>
+      <div class="val">${latest.percent_closed ? latest.percent_closed.toFixed(1) : 0}%</div>
+      <div class="sub">of ${latest.expected_total_cc || 0} cc budget</div>
+    </div>
+    <div class="metric-box">
+      <h3>Residual Obligations</h3>
+      <div class="val" style="color: var(--chart-color-2);">${latest.residual_cc || 0} cc</div>
+      <div class="sub">Worst: ${escapeHtml(latest.max_residual_spec || 'none')}</div>
+    </div>
+    <div class="metric-box">
+      <h3>Host CPU Usage</h3>
+      <div class="val">${metrics.cpu_percent ? metrics.cpu_percent.toFixed(1) : 0}%</div>
+      <div class="sub">At last CI build</div>
+    </div>
+    <div class="metric-box">
+      <h3>Host Mem Usage</h3>
+      <div class="val">${metrics.memory_percent ? metrics.memory_percent.toFixed(1) : 0}%</div>
+      <div class="sub">At last CI build</div>
+    </div>
+  `;
+}
+
+// ==========================================
+// Initialization
+// ==========================================
+async function loadAll() {
+  setStatus('Loading Source & Metrics...');
+  const [tracesRes, sheetsRes, dashRes] = await Promise.all([
+    fetchFirst([sourcePath('TRACES.md'), '/TRACES.md']),
+    fetchFirst([sourcePath('cheatsheets/INDEX.md'), '/cheatsheets/INDEX.md']),
+    fetchFirst([sourcePath('docs/convergence/centicolon-dashboard.json'), '/docs/convergence/centicolon-dashboard.json'], 'json')
+  ]);
+  
+  state.traces = tracesRes.data ? parseTraces(tracesRes.data) : [];
+  state.sheets = sheetsRes.data ? parseCheatsheetIndex(sheetsRes.data) : [];
+  state.dashboard = dashRes.data || null;
+
+  setStatus(`Loaded: ${state.traces.length} specs, ${state.sheets.length} sheets`);
+  setFooter(`Source: ${tracesRes.path || 'fallback'}`);
+}
 
 async function init() {
-  selectFromHash();
   await loadAll();
   if (!state.selectedSpec && state.traces.length) {
     state.selectedSpec = specNameFromTrace(state.traces[0].trace);
   }
-  if (state.selectedSheet && !state.selectedSpec) {
-    const sheet = state.sheets.find(s => s.path === state.selectedSheet);
-    if (sheet) {
-      const annotations = await loadSheetAnnotations(sheet);
-      if (annotations.traces.length) state.selectedSpec = annotations.traces[0];
-    }
+  renderTraceView();
+  
+  // Dashboard Chart requires lib loaded, it should be loaded since it's a synchronous script tag
+  if (typeof Chart !== 'undefined') {
+    renderDashboard();
+  } else {
+    console.error("Chart.js not loaded.");
   }
-  await renderAll();
 }
 
-window.addEventListener('hashchange', () => {
-  selectFromHash();
-  renderAll();
-});
+els.search.addEventListener('input', () => { state.search = els.search.value.trim(); renderTraceView(); });
+els.refresh.addEventListener('click', async () => { state.sheetCache.clear(); await init(); });
 
 init().catch(err => {
   console.error(err);
-  setStatus('Failed to load source snapshot');
+  setStatus('Failed to load snapshot');
   setFooter(String(err));
-  els.specs.innerHTML = `<div class="empty">${escapeHtml(String(err))}</div>`;
-  els.code.innerHTML = '<div class="empty">Unable to load code hits.</div>';
-  els.sheets.innerHTML = '<div class="empty">Unable to load cheatsheet hits.</div>';
 });
 </script>
 </body>
