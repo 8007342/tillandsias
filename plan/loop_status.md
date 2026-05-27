@@ -1,15 +1,15 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-05-27T16:24Z
+LastExecutionTime: 2026-05-27T18:15Z
 
 ## This Loop
 
 - Fetched origin, confirmed `linux-next` was clean and up to date at
-  `011d7b49`, and observed remote heads: `windows-next` `c0a9558b`,
-  `osx-next` `deba10d8`, `main` `f9c465b3`.
-- No sibling branch advanced since the 14:29Z fold. `linux-next` advanced by
-  one coordination commit (`011d7b49`) that already folded Windows w9 Retry and
-  forge-container Open Shell smoke.
+  `9081212c`, and observed remote heads: `windows-next` `c0a9558b`,
+  `osx-next` `deba10d8`, `main` `e22a6853`.
+- `main` advanced by PR #5 and now contains the durable `release.yml`
+  headless-agent auto-publish leg. `linux-next` advanced by one coordination
+  commit; neither sibling platform branch advanced since the 16:24Z fold.
 - Reconciled active queues without changing item states: Windows w9 remains
   `in_progress` pending integration-loop merge/test; w7 remains the fallback.
   macOS m8 remains user-attended, with m10/m11 ready as optional no-blocker
@@ -25,20 +25,20 @@ LastExecutionTime: 2026-05-27T16:24Z
 - Windows can focus on the optional full live-provision dress rehearsal and
   optional wire EnumerateLocalProjects, using w7 diagnostics only if
   merge/test exposes stale branch or manifest state.
-- macOS remains on user-attended m8 smoke; release cleanup can add
-  `Manifest::release_tag()` and durable headless auto-publish to `main`.
+- macOS remains on user-attended m8 smoke; release cleanup is now narrowed to
+  the manifest-owned `release_tag` accessor.
 
 ## Resolved Since Previous Loop
 
-- None new this loop. The previous fold resolved Windows Retry and
-  forge-container Open Shell proof (`f4c3d70f`/`c0a9558b`).
+- PR #5 merged `linux-next` to `main` at `e22a6853`; the release workflow now
+  carries the headless x86_64/aarch64 publish leg instead of relying on a
+  manual upload.
 
 ## Current Major Blockers
 
 - Integration-loop merge/test of `origin/windows-next` through `c0a9558b`.
 - macOS m8 user-attended interactive smoke.
-- Non-blocking release cleanup: PR #5/release.yml headless auto-publish to
-  `main` and manifest-owned `release_tag`.
+- Non-blocking release cleanup: manifest-owned `release_tag`.
 
 ## Stale Or Pending Pings
 
@@ -54,5 +54,5 @@ LastExecutionTime: 2026-05-27T16:24Z
   files.
 - `git diff --check` passed for touched coordination files.
 - Files changed this pass: loop cache, plan status/index, Windows and macOS
-  work queues, blocker roundup, coordination audit, and integration-loop
-  ledger.
+  work queues, blocker roundup, coordination audit, integration-loop ledger,
+  and tray convergence note.

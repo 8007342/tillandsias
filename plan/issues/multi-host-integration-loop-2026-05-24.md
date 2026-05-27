@@ -28,6 +28,34 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Coordinator audit 2026-05-27T18:15Z — main advanced by PR #5; w9 merge/test still pending
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- observed_sibling_heads: main=`e22a6853` (PR #5 merged `linux-next` to
+  `main`) · linux-next=`9081212c` · windows-next=`c0a9558b` (ahead with
+  unmerged Windows w9 transport/menu code, Open Shell smoke, file logging/Open
+  Log, Retry reprovisioning, and forge-container Open Shell smoke) ·
+  osx-next=`deba10d8` (ancestor of linux-next)
+- Coordination fold only; no sibling merge attempted in this pass.
+- Remote progress remains healthy. Since the 16:24Z fold, `linux-next`
+  advanced by one coordination commit (`9081212c`) and `main` advanced by PR
+  #5; neither sibling platform branch advanced.
+- Resolved since previous loop: `release.yml` headless auto-publish is now on
+  `main` via PR #5, so future release runs should publish both in-VM headless
+  agents without a manual upload.
+- Active integration watch is unchanged: `origin/windows-next` carries
+  unmerged code/docs through `c0a9558b`. The next integration loop should
+  merge/test those commits into `linux-next` or record exact conflicts.
+- Merge caution: preserve the newer `linux-next` `13cf3af0`
+  `images/vm/manifest.toml` repin and newer plan entries if the Windows branch
+  presents older blocks during reconciliation.
+- Current dependency chain: Windows w9 is proven through Retry and both Open
+  Shell launch legs but still needs merge/test into `linux-next`. The full
+  live-provision dress rehearsal and wire EnumerateLocalProjects are optional
+  Windows follow-ups. macOS still waits on user-attended m8 smoke.
+  Linux/release cleanup is now narrowed to the manifest-owned `release_tag`
+  accessor.
+
 ### Coordinator audit 2026-05-27T16:24Z — no new sibling advance; w9 merge/test still pending
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next

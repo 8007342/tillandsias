@@ -646,3 +646,37 @@ Current cross-host gates:
 - Release cleanup remains useful but non-blocking: land durable
   `release.yml` headless auto-publish on `main` and add
   `Manifest::release_tag()` so both trays can drop hardcoded recipe tags.
+
+## Coordination Audit - 2026-05-27T18:15Z
+
+host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+
+Observed remote heads after fetch/pull:
+
+- `main`: e22a6853
+- `linux-next`: 9081212c
+- `windows-next`: c0a9558b
+- `osx-next`: deba10d8
+
+Ledger corrections made in this audit:
+
+- Refreshed the loop cache and plan/index status from `011d7b49` to the
+  current shared head `9081212c`.
+- Recorded that PR #5 merged to `main` at `e22a6853`, carrying the durable
+  `release.yml` headless-agent auto-publish leg. This closes the prior
+  release workflow cleanup ask.
+- Appended no-new-sibling-progress events to the Windows and macOS queues.
+  No work-item header state changed: the latest terminal events still match
+  the headers.
+
+Current cross-host gates:
+
+- Integration loop should merge/test `origin/windows-next` through `c0a9558b`
+  into `linux-next`, preserving the newer `13cf3af0` manifest repin and newer
+  `linux-next` plan entries if the Windows branch presents older blocks.
+- Windows should use w7 diagnostics only if branch/manifest state is stale;
+  otherwise remaining Windows work is optional verification/polish.
+- macOS m8 is user-attended and not parallelizable. macOS m10/m11 remain ready
+  optional no-blocker follow-ups.
+- Release cleanup is now narrowed to `Manifest::release_tag()` so both trays
+  can drop hardcoded recipe tags.

@@ -1711,3 +1711,15 @@ Remaining cross-host action is integration-loop merge/test of
 `linux-next` manifest and plan entries during reconciliation. Remaining Windows
 w9 work is optional full live-provision dress rehearsal plus optional wire
 EnumerateLocalProjects.
+
+## Coordinator fold - PR #5 release auto-publish landed on main - 2026-05-27T18:15Z
+
+`origin/main` advanced to `e22a6853` by merging PR #5 from `linux-next`. The
+durable `release.yml` headless-agent publish leg is now on `main`, so future
+release runs should produce both `tillandsias-headless-x86_64-unknown-linux-musl`
+and `tillandsias-headless-aarch64-unknown-linux-musl` without the manual
+upload path used for `v0.2.260526.2`.
+
+This closes the prior PR #5 / durable release workflow ask. The remaining
+release-side cleanup is the manifest-owned `release_tag` field/accessor so
+Windows and macOS trays can drop hardcoded recipe tags.

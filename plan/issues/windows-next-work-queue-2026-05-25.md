@@ -2,7 +2,7 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/windows-next-thin-tray.md, plan/issues/tray-convergence-coordination.md, plan/issues/control-socket-protocol-convergence-2026-05-25.md, openspec/changes/control-wire-pty-attach/
 
-Status: **OPEN** as of 2026-05-27T16:24Z. Windows w1, w2, w3, w4, w6
+Status: **OPEN** as of 2026-05-27T18:15Z. Windows w1, w2, w3, w4, w6
 diagnostics, the w5 converter, the shared forge-container `launch_spec` /
 `intent_for_action` amendment, the l9 URL resolver, the w5
 `provision_via_recipe` runtime flip, and w8 HvSocket Ready proof are done on
@@ -1053,3 +1053,18 @@ Next greedy pickups (no VM needed): **w4b** (windows-ownable, pure) and **w4d**
   integration loop merge/tests `origin/windows-next` through `c0a9558b`.
   w7 remains the no-code fallback if that merge/test exposes stale branch,
   diagnostics, or manifest state.
+
+### Event: 2026-05-27T18:15Z — linux coordinator status reconciliation
+
+- Observed remote heads after fetch/pull: `linux-next` `9081212c`,
+  `windows-next` `c0a9558b`, `osx-next` `deba10d8`, `main` `e22a6853`.
+- No new Windows commits landed after `c0a9558b`; the branch delta against
+  `linux-next` remains the w9 transport/menu/Open Shell/Retry code plus
+  related documentation and lockfile updates.
+- Header reconciliation unchanged: w9 remains `in_progress` until the
+  integration loop merge/tests `origin/windows-next` through `c0a9558b`.
+  w7 remains the no-code fallback if that merge/test exposes stale branch,
+  diagnostics, or manifest state.
+- Release-side note: PR #5 merged to `main`, so the durable release workflow
+  now auto-publishes the in-VM headless agents. This closes the prior
+  release.yml cleanup ask but does not change the Windows w9 merge/test gate.
