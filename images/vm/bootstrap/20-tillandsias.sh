@@ -90,7 +90,16 @@ Requires=tillandsias-headless-fetch.service
 Wants=network-online.target
 
 [Service]
-Type=notify
+# Type=exec, not notify: tillandsias-headless binds the vsock listener at
+# startup but does NOT call sd_notify(READY=1). Under Type=notify systemd
+# SIGTERMs the "unfinished" start after the timeout (~17s) and restart-loops
+# it, so the listener never reaches `active` and the host has nothing stable
+# to connect to (cross-host blocker reported by windows-next 2026-05-27).
+# Type=exec marks the unit active once the binary has exec'd successfully,
+# which is correct here: the listener binds within milliseconds of exec and
+# the host-side connect already retries. (Proper long-term: add sd_notify to
+# the binary + restore Type=notify — tracked as a follow-up.)
+Type=exec
 ExecStart=/usr/local/bin/tillandsias-headless --listen-vsock 42420
 Restart=on-failure
 RestartSec=2s
