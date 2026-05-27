@@ -183,6 +183,72 @@ pub fn connect_control_wire(port: u32) -> std::io::Result<std::net::TcpStream> {
     }
 }
 
+/// Connect over HvSocket and run the control-wire `Hello`/`HelloAck` handshake,
+/// returning the negotiated wire version. Proves the FULL Windows host→guest
+/// control wire end-to-end: transport (`AF_HYPERV`) + protocol (the
+/// `tillandsias-control-wire` envelope codec). The connected stream is returned
+/// for the caller to keep for the session.
+///
+/// @trace plan/issues/tray-convergence-coordination.md (F2), spec:vsock-transport
+#[cfg(target_os = "windows")]
+pub async fn hvsocket_handshake(port: u32) -> std::io::Result<(tokio::net::TcpStream, u16)> {
+    use std::io::{Error, ErrorKind};
+    use tillandsias_control_wire::{
+        ControlEnvelope, ControlMessage, MAX_MESSAGE_BYTES, WIRE_VERSION, decode, encode,
+    };
+    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+
+    let std_stream = connect_control_wire(port)?;
+    std_stream.set_nonblocking(true)?;
+    let mut stream = tokio::net::TcpStream::from_std(std_stream)?;
+
+    let hello = ControlEnvelope {
+        wire_version: WIRE_VERSION,
+        seq: 1,
+        body: ControlMessage::Hello {
+            from: "tillandsias-windows-tray".to_string(),
+            capabilities: vec![
+                "VmStatusRequest".to_string(),
+                "EnumerateLocalProjects".to_string(),
+            ],
+        },
+    };
+    let bytes = encode(&hello).map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
+    stream
+        .write_all(&(bytes.len() as u32).to_be_bytes())
+        .await?;
+    stream.write_all(&bytes).await?;
+    stream.flush().await?;
+
+    let mut len_buf = [0u8; 4];
+    stream.read_exact(&mut len_buf).await?;
+    let len = u32::from_be_bytes(len_buf) as usize;
+    if len > MAX_MESSAGE_BYTES {
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            "inbound frame too large",
+        ));
+    }
+    let mut body = vec![0u8; len];
+    stream.read_exact(&mut body).await?;
+    let ack = decode(&body).map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
+    match ack.body {
+        ControlMessage::HelloAck { wire_version, .. } => {
+            if wire_version != WIRE_VERSION {
+                return Err(Error::new(
+                    ErrorKind::InvalidData,
+                    format!("wire version mismatch: local={WIRE_VERSION} server={wire_version}"),
+                ));
+            }
+            Ok((stream, wire_version))
+        }
+        other => Err(Error::new(
+            ErrorKind::InvalidData,
+            format!("expected HelloAck, got {other:?}"),
+        )),
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -261,8 +327,21 @@ mod tests {
         let stream = connect_control_wire(42420)
             .expect("AF_HYPERV connect to the in-VM headless vsock listener");
         // Connection established = the full F2 path works (VM-GUID + service-GUID
-        // + AF_HYPERV connect → guest AF_VSOCK listener). Full Hello/HelloAck
-        // framing over this stream is the next increment.
+        // + AF_HYPERV connect → guest AF_VSOCK listener).
         println!("HvSocket connected to in-VM headless: {stream:?}");
+    }
+
+    /// Full host→guest control-wire proof: HvSocket connect + `Hello`/`HelloAck`
+    /// against the live in-VM headless. Run explicitly with a distro up:
+    /// `cargo test -p tillandsias-windows-tray -- --ignored hvsocket_handshake`.
+    #[cfg(target_os = "windows")]
+    #[tokio::test]
+    #[ignore = "needs a running WSL distro with the headless listening on vsock 42420"]
+    async fn e2e_hvsocket_handshake() {
+        let (_stream, wire_version) = hvsocket_handshake(42420)
+            .await
+            .expect("control-wire Hello/HelloAck over HvSocket");
+        println!("control wire UP over HvSocket; negotiated wire_version={wire_version}");
+        assert_eq!(wire_version, tillandsias_control_wire::WIRE_VERSION);
     }
 }
