@@ -225,19 +225,10 @@ impl WslLifecycle {
         const CW_PORT: u32 = tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
         let mut last_err = String::from("(no attempt)");
         for attempt in 1..=12u32 {
-            match crate::hvsocket::hvsocket_handshake(CW_PORT).await {
-                Ok((_stream, wire_version)) => {
-                    tracing::info!(
-                        wire_version,
-                        attempt,
-                        "control wire up (HvSocket handshake)"
-                    );
-                    // NOTE: `_stream` is dropped here; holding it for the session
-                    // + flipping the tray menu to Ready is the next increment.
-                    return Ok(());
-                }
+            match self.try_connect_until_ready(CW_PORT, attempt).await {
+                Ok(()) => return Ok(()),
                 Err(e) => {
-                    last_err = e.to_string();
+                    last_err = e;
                     tokio::time::sleep(Duration::from_secs(5)).await;
                 }
             }
@@ -245,6 +236,39 @@ impl WslLifecycle {
         Err(format!(
             "control-wire handshake did not succeed within budget: {last_err}"
         ))
+    }
+
+    /// One connect attempt that succeeds only when the VM is **operationally
+    /// Ready**: HvSocket handshake → `VmStatusRequest` → require `phase: Ready`.
+    /// During first boot the headless reports `Provisioning`/`Starting` while it
+    /// self-installs; the caller retries until this returns `Ok`. (Request path
+    /// proven E2E: `VmStatusReply { phase: Ready, podman_ready: true }`.)
+    async fn try_connect_until_ready(&self, port: u32, attempt: u32) -> Result<(), String> {
+        use tillandsias_control_wire::{ControlMessage, VmPhase};
+
+        let (mut stream, wire_version) = crate::hvsocket::hvsocket_handshake(port)
+            .await
+            .map_err(|e| format!("handshake: {e}"))?;
+        let reply = crate::hvsocket::hvsocket_request(
+            &mut stream,
+            2,
+            ControlMessage::VmStatusRequest { seq: 2 },
+        )
+        .await
+        .map_err(|e| format!("VmStatusRequest: {e}"))?;
+
+        match reply.body {
+            ControlMessage::VmStatusReply { phase, .. } if matches!(phase, VmPhase::Ready) => {
+                tracing::info!(wire_version, attempt, "VM operationally Ready (control wire up)");
+                // NOTE: `stream` is dropped here; holding it for the session +
+                // routing menu actions over it is the next w9 increment.
+                Ok(())
+            }
+            ControlMessage::VmStatusReply { phase, .. } => {
+                Err(format!("VM not yet Ready (phase {phase:?})"))
+            }
+            other => Err(format!("unexpected reply to VmStatusRequest: {other:?}")),
+        }
     }
 }
 
