@@ -51,6 +51,25 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-27T23:44Z — MERGED windows-next (-Release packaging + coord response) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `5a281371` (merge commit)
+- observed_sibling_heads: main=`fa746f03` · linux-next(pre-merge)=`60e046d8` ·
+  windows-next=`3340523c` · osx-next=`f8778350`
+- **windows-next: merged+tested+pushed.** 2-commit delta: `16445fad`
+  (`build-windows-tray.ps1 -Release` — builds + packages the tray zip +
+  SHA256SUMS, closing my inline-packaging CI stopgap) + `3340523c` (response
+  to all 4 windows-release coordination asks). The windows-release job now
+  calls `build-windows-tray.ps1 -Release -Version` instead of inline pwsh.
+  Clean auto-merge (no conflicts) with my nix-based Linux release job.
+- osx-next: no-op (HEAD `f8778350` is an ancestor).
+- Tests: PASSED. `./build.sh --check` + `./build.sh --test` green. (No Rust
+  delta in this merge — release.yml + the windows ps1 + plan + gitignore.)
+- Spec/methodology drift: none. Advisory: windows owns
+  `scripts/build-windows-tray.ps1` + the windows-release job wiring now; both
+  sibling-owned + coordinated. No openspec/specs or methodology edits.
+
 ### Coordinator fold 2026-05-27T23:28Z — runtime-litmus fails in diagnostics panic
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
