@@ -16,3 +16,9 @@ Cadence: streak 1 → 1h | 2 → 2h | 3 → 4h | 4+ → 6h (cap).
     Awaiting either user smoke feedback or Linux ship of
     `Manifest::release_tag()` accessor (per windows-host's tag-source vote).
   - next wake: 1h (3600s).
+- **streak 2** — 2026-05-27T03:02Z (iter 41)
+  - reason: still no new linux-next commits since `c93c8014`. Windows
+    shipped `b762feef` (F2 HvSocket service-GUID derivation) but that's
+    Windows-internal; no macOS impact. State unchanged from streak 1
+    rationale.
+  - next wake: 2h (7200s).
