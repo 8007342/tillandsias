@@ -102,46 +102,14 @@ declare_class!(
     unsafe impl TrayActionHost {
         #[method(startVm:)]
         fn start_vm(&self, _sender: Option<&AnyObject>) {
-            let ivars = self.ivars();
-
-            // Re-entry gate: ignore the click if a start/stop is
-            // already in flight. We run on the main thread; the
-            // worker clears the flag via dispatch_to_main_thread.
-            {
-                let mut busy = ivars.vm_busy.lock().unwrap();
-                if *busy {
-                    eprintln!("[tillandsias-tray] Start VM: already in progress, ignoring");
-                    return;
-                }
-                *busy = true;
-            }
-            // Idempotency: if we already hold a live VM handle, just
-            // log and bail (without touching the busy flag race).
-            if ivars.vm.lock().unwrap().is_some() {
-                *ivars.vm_busy.lock().unwrap() = false;
-                eprintln!("[tillandsias-tray] Start VM: VM already running, ignoring");
-                return;
-            }
-
-            let runtime = ivars.runtime.clone();
-            let vm_slot = ivars.vm.clone();
-            let vm_busy = ivars.vm_busy.clone();
-            let image_root = ivars.image_root.clone();
-
-            eprintln!(
-                "[tillandsias-tray] Start VM: spawning worker (image_root={})",
-                image_root.display()
-            );
-            runtime.spawn(async move {
-                let result = run_start(image_root, vm_slot).await;
-                dispatch_to_main_thread(move || {
-                    *vm_busy.lock().unwrap() = false;
-                    match result {
-                        Ok(()) => eprintln!("[tillandsias-tray] Start VM: VM is running"),
-                        Err(e) => eprintln!("[tillandsias-tray] Start VM failed: {e}"),
-                    }
-                });
-            });
+            // Thin selector wrapper around the shared boot path. The
+            // menu item that triggers this selector is on its way out
+            // (slice 3 of the auto-start UX redesign — the user
+            // doesn't manually drive VM lifecycle), but keeping the
+            // selector alive lets the existing Start VM menu item +
+            // any external `[host startVm:]` callers still work
+            // during the transition.
+            self.boot_vm_async("Start VM");
         }
 
         #[method(stopVm:)]
@@ -403,6 +371,62 @@ impl TrayActionHost {
         // class ivars before init runs.
         let this = mtm.alloc::<Self>().set_ivars(ivars);
         unsafe { msg_send_id![super(this), init] }
+    }
+
+    /// Shared boot-the-VM path. Called by the `startVm:` selector AND
+    /// directly from `status_item::run()` on app launch so the user
+    /// never has to manually click Start VM (the lifecycle is
+    /// automatic; the menu chip — slice 2 — reflects current state).
+    ///
+    /// `label` is the user-facing action name used in stderr logs so
+    /// the auto-launch path and any legacy menu-click path stay
+    /// distinguishable while we still have both.
+    ///
+    /// Safe to call multiple times: the busy gate + handle-already-
+    /// installed check make repeat calls no-ops.
+    pub fn boot_vm_async(&self, label: &str) {
+        let ivars = self.ivars();
+
+        // Re-entry gate: ignore the call if a start/stop is already
+        // in flight. We run on the main thread; the worker clears
+        // the flag via dispatch_to_main_thread.
+        {
+            let mut busy = ivars.vm_busy.lock().unwrap();
+            if *busy {
+                eprintln!("[tillandsias-tray] {label}: already in progress, ignoring");
+                return;
+            }
+            *busy = true;
+        }
+        // Idempotency: if we already hold a live VM handle, just log
+        // and bail (without touching the busy flag race).
+        if ivars.vm.lock().unwrap().is_some() {
+            *ivars.vm_busy.lock().unwrap() = false;
+            eprintln!("[tillandsias-tray] {label}: VM already running, ignoring");
+            return;
+        }
+
+        let runtime = ivars.runtime.clone();
+        let vm_slot = ivars.vm.clone();
+        let vm_busy = ivars.vm_busy.clone();
+        let image_root = ivars.image_root.clone();
+        let label_owned = label.to_string();
+        let label_done = label_owned.clone();
+
+        eprintln!(
+            "[tillandsias-tray] {label_owned}: spawning worker (image_root={})",
+            image_root.display()
+        );
+        runtime.spawn(async move {
+            let result = run_start(image_root, vm_slot).await;
+            dispatch_to_main_thread(move || {
+                *vm_busy.lock().unwrap() = false;
+                match result {
+                    Ok(()) => eprintln!("[tillandsias-tray] {label_done}: VM is running"),
+                    Err(e) => eprintln!("[tillandsias-tray] {label_done} failed: {e}"),
+                }
+            });
+        });
     }
 }
 

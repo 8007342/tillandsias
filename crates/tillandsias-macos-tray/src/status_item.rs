@@ -77,6 +77,14 @@ pub fn run() -> ! {
     let image_root = default_image_root();
     let action_host = TrayActionHost::new(mtm, tokio_runtime.clone(), image_root);
 
+    // Auto-start the VM as soon as the tray comes up. The user never
+    // manually drives VM lifecycle — that's an implementation detail
+    // surfaced via the menu's status chip (slice 2). The boot path is
+    // identical to the legacy Start VM click (which still works as a
+    // no-op retry), but fires immediately on launch so the user sees
+    // Provisioning → Booting → Ready without intervention.
+    action_host.boot_vm_async("Auto-boot");
+
     // Build the initial provisioning menu so the user sees the condensed
     // status line right away, even before the VM thread reports anything.
     let initial = MenuStructure::initial_provisioning();
