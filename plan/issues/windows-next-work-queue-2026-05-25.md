@@ -2,7 +2,7 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/windows-next-thin-tray.md, plan/issues/tray-convergence-coordination.md, plan/issues/control-socket-protocol-convergence-2026-05-25.md, openspec/changes/control-wire-pty-attach/
 
-Status: **OPEN** as of 2026-05-27T08:50Z. Windows w1, w2, w3, w4, w6
+Status: **OPEN** as of 2026-05-27T10:43Z. Windows w1, w2, w3, w4, w6
 diagnostics, the w5 converter, the shared forge-container `launch_spec` /
 `intent_for_action` amendment, the l9 URL resolver, the w5
 `provision_via_recipe` runtime flip, and w8 HvSocket Ready proof are done on
@@ -10,8 +10,10 @@ the Windows lane. Windows real hardware proved rootfs fetch/SHA/import,
 systemd boot, headless fetch HTTP 200, the F1 `Type=exec` unit fix, HvSocket
 connect, Hello/HelloAck over the control-wire codec, tray status flipping to
 Ready, VmStatus request/reply over HvSocket, Ready-phase provisioning gating,
-and PtyOpen/PtyData/PtyClose proof for the Open Shell mechanism.
-`origin/windows-next` is ahead of `linux-next` through `5188dce6`; the
+PtyOpen/PtyData/PtyClose proof, bidirectional PTY stdin/stdout, WSL VM
+keepalive, deterministic Quit drain, and native-terminal menu launch for the
+Open Shell / Attach / Maintain / GitHub Login argv path.
+`origin/windows-next` is ahead of `linux-next` through `c997fc43`; the
 integration loop must merge/test that code while preserving the newer
 `linux-next` manifest repin from `13cf3af0` and later plan entries. The old
 PR #3 / recipe-publish / SHA-pin / F1 / F2 gates are closed.
@@ -46,12 +48,13 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
 - `w9/control-wire-session-menu-routing` is in progress on `windows-next`:
   `8b785ced` proves VmStatus request/reply over HvSocket, `791c0187` makes
   provisioning wait for VM phase `Ready`, and `5188dce6` proves the
-  PtyOpen/PtyData/PtyClose mechanism behind Open Shell. The remaining Windows
-  implementation packet is UX/session plumbing: retain or reacquire the live
-  stream and bridge `launch_spec`/PtyOpen to ConPTY or `wt.exe` for Open
-  Shell, GitHub Login, and agent attach actions.
+  PtyOpen/PtyData/PtyClose mechanism behind Open Shell. Newer commits
+  `fc7d0b74`, `531bcce4`, `bc23a529`, and `c997fc43` add bidirectional PTY
+  proof, WSL keepalive, Quit drain, and native-terminal launch for the resolved
+  `launch_spec` argv. The remaining packet is integration-loop merge/test plus
+  any post-merge terminal-click smoke/status, not another transport primitive.
 - `w7/recipe-diagnostics-and-branch-sync` is no longer the primary packet; use
-  it only as a no-code fallback if the `5188dce6` merge/test exposes stale
+  it only as a no-code fallback if the `c997fc43` merge/test exposes stale
   diagnostics or a manifest/branch-sync conflict.
 - `w6/vm-status-and-enumerate-real-handlers` is done as a no-VM diagnostics
   fallback through `948af711` / integration cycle `b3ae21a`. Live VM status
@@ -64,9 +67,10 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
   interaction work as w9 session/menu routing, not as w5 artifact gates.
 
 Do not re-claim w1, w2, w3, w4, w5, w6, or w8; their terminal events are
-recorded below. Continue w9 session/menu routing from the proven HvSocket
-request/reply and PTY primitives, with w7 diagnostics as the independent
-fallback if the integration loop surfaces stale branch or manifest state.
+recorded below. Continue w9 from the native-terminal launch proof with
+integration-loop evidence and focused terminal-click smoke/status, with w7
+diagnostics as the independent fallback if the integration loop surfaces stale
+branch or manifest state.
 
 ### Item: w8/hvsocket-control-wire-ready
 
@@ -77,7 +81,7 @@ fallback if the integration loop surfaces stale branch or manifest state.
 - status: done
 - completed_at: 2026-05-27T06:51Z
 - integration_status: pending linux-next merge/test of `origin/windows-next`
-  through `5188dce6` (includes later w9 transport-proof commits)
+  through `c997fc43` (includes later w9 transport and menu-launch commits)
 - gated_on: []
 - cleared_gates:
   - Linux/recipe F1 headless service restart loop fixed at `f5801968`
@@ -95,7 +99,7 @@ fallback if the integration loop surfaces stale branch or manifest state.
     wire protocol.
 - next_action: >
     Integration loop should merge/test `origin/windows-next` through
-    `5188dce6` into `linux-next` and preserve the newer `13cf3af0` manifest
+    `c997fc43` into `linux-next` and preserve the newer `13cf3af0` manifest
     repin if the branch merge presents older SHA/comment blocks from
     `windows-next`.
 - acceptance_evidence:
@@ -121,11 +125,15 @@ fallback if the integration loop surfaces stale branch or manifest state.
 - owner_host: windows
 - capability_tags: [win32, hvsocket, control-wire, pty, menu]
 - status: in_progress
-- latest_progress_at: 2026-05-27T08:22Z
+- latest_progress_at: 2026-05-27T10:24Z
 - latest_progress_refs:
   - `8b785ced` — VmStatus request/reply over HvSocket proven
   - `791c0187` — provisioning waits for VM phase `Ready`
   - `5188dce6` — PtyOpen/PtyData/PtyClose over HvSocket proven
+  - `fc7d0b74` — host-to-guest PtyData stdin plus echoed stdout proven
+  - `531bcce4` — WSL keepalive holds the control wire warm
+  - `bc23a529` — Quit drains the VM / keepalive via `wsl --terminate`
+  - `c997fc43` — menu actions launch the resolved argv in `wt.exe` / `wsl.exe`
 - depends_on: [w8/hvsocket-control-wire-ready]
 - gated_on: []
 - owned_files:
@@ -139,11 +147,10 @@ fallback if the integration loop surfaces stale branch or manifest state.
     provisioning.
 - next_action: >
     First let the integration loop merge/test `origin/windows-next` through
-    `5188dce6` into `linux-next` or record exact conflicts. Windows
-    continuation should keep the established stream or a reconnectable session
-    handle after `provision_via_recipe`, thread `launch_spec` argv into
-    PtyOpen, bridge PtyData to ConPTY or `wt.exe` for Open Shell, and route
-    GitHub Login / agent attach through the same control-wire/PTY path.
+    `c997fc43` into `linux-next` or record exact conflicts. Windows
+    continuation should then append a status packet with real-click evidence
+    for Open Shell, Attach, Maintain, and GitHub Login terminal launches, or
+    patch any missing menu action discovered by that smoke.
 - acceptance_evidence:
   - `8b785ced`: Windows tray can request VmStatus after the Ready flip without
     reopening provisioning.
@@ -151,9 +158,15 @@ fallback if the integration loop surfaces stale branch or manifest state.
     `Ready` and `podman_ready: true`.
   - `5188dce6`: PtyOpen over HvSocket receives PTY output and PtyClose for the
     Open Shell mechanism.
-  - Remaining: Open Shell and GitHub Login menu actions use the live transport
-    and ConPTY / `wt.exe`, or report a precise missing-session error rather
-    than silently dropping the action.
+  - `fc7d0b74`: PtyData from host to guest is echoed back over the HvSocket PTY
+    path.
+  - `531bcce4`: a held `wsl --exec sleep infinity` keepalive prevents utility
+    VM idle shutdown while the tray is running.
+  - `bc23a529`: Quit tears down the VM/keepalive with bounded `wsl --terminate`.
+  - `c997fc43`: Open Shell / Attach / Maintain / GitHub Login launch the
+    resolved forge argv in Windows Terminal with `wsl.exe` fallback.
+  - Remaining: integration-loop merge/test into `linux-next` plus real-click
+    smoke/status for the user-facing terminal rows.
   - `cargo test -p tillandsias-windows-tray --target x86_64-pc-windows-msvc`
     or equivalent Windows-host evidence stays green.
 - fallback_when_blocked: >
@@ -948,5 +961,23 @@ Next greedy pickups (no VM needed): **w4b** (windows-ownable, pure) and **w4d**
   session, bridge `launch_spec`/PtyOpen to ConPTY or `wt.exe`, and route
   GitHub Login plus agent attach over the same path.
 - Integration-loop gate moved forward from `e0405f2f` to `5188dce6`. During
+  merge/test, preserve the newer `13cf3af0` manifest repin and newer
+  `linux-next` plan entries if the Windows branch presents older blocks.
+
+### Event: 2026-05-27T10:43Z — linux coordinator status reconciliation
+
+- Observed remote heads after fetch/pull: `linux-next` `732603b1`,
+  `windows-next` `c997fc43`, `osx-next` `deba10d8`, `main` `f9c465b3`.
+- Folded new `origin/windows-next` w9 evidence after `5188dce6`:
+  `fc7d0b74` proves bidirectional PTY stdin/stdout, `531bcce4` holds the WSL
+  utility VM warm while the tray runs, `bc23a529` drains that keepalive on
+  Quit, and `c997fc43` launches the resolved `launch_spec` argv in Windows
+  Terminal / `wsl.exe`.
+- Header reconciliation: w9 remains `in_progress`, but the stale "bridge
+  `launch_spec`/PtyOpen to ConPTY or `wt.exe`" wording is superseded by the
+  native-terminal path. Remaining evidence is integration-loop merge/test plus
+  focused terminal-click smoke/status for Open Shell, Attach, Maintain, and
+  GitHub Login.
+- Integration-loop gate moved forward from `5188dce6` to `c997fc43`. During
   merge/test, preserve the newer `13cf3af0` manifest repin and newer
   `linux-next` plan entries if the Windows branch presents older blocks.

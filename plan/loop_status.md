@@ -1,44 +1,44 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-05-27T08:50Z
+LastExecutionTime: 2026-05-27T10:43Z
 
 ## This Loop
 
-- Fetched origin and confirmed `linux-next` is current at `46ef33b1`.
-- Observed remote heads: `linux-next` `46ef33b1`, `windows-next`
-  `5188dce6`, `osx-next` `deba10d8`, `main` `f9c465b3`.
-- Folded new Windows w9 evidence: `8b785ced` proves VmStatus
-  request/reply over HvSocket, `791c0187` makes provisioning wait for VM
-  phase `Ready`, and `5188dce6` proves PtyOpen/PtyData/PtyClose over
-  HvSocket for the Open Shell mechanism.
-- Reconciled headers so w9 is `in_progress`, not done: transport primitives
-  are proven; menu/session UX wiring remains.
+- Fetched origin, fast-forwarded to `linux-next` `732603b1`, and observed
+  remote heads: `windows-next` `c997fc43`, `osx-next` `deba10d8`, `main`
+  `f9c465b3`.
+- Folded new Windows w9 evidence after `5188dce6`: `fc7d0b74` proves
+  bidirectional PTY stdin/stdout, `531bcce4` holds the WSL VM warm,
+  `bc23a529` drains it on Quit, and `c997fc43` launches the resolved
+  `launch_spec` argv in Windows Terminal / `wsl.exe`.
+- Reconciled headers so w9 remains `in_progress`: Windows menu UX is now
+  code-proven on `windows-next`, but integration-loop merge/test and any
+  real-click smoke/status packet still need to land.
 
 ## Expected Next Loop
 
 - Integration loop should merge/test `origin/windows-next` through
-  `5188dce6` into `linux-next`, or record exact conflicts.
+  `c997fc43` into `linux-next`, or record exact conflicts.
 - During that merge, preserve `linux-next`'s newer `13cf3af0`
   `images/vm/manifest.toml` repin and newer plan entries if Windows' older
   branch blocks appear.
-- Windows should continue w9 by bridging `launch_spec`/PtyOpen to ConPTY or
-  `wt.exe`, then route GitHub Login and agent attach over the live transport.
+- Windows should report post-merge smoke/status for Open Shell, Attach,
+  Maintain, and GitHub Login terminal launches, or patch any missing action.
 - macOS remains on user-attended m8 smoke; release cleanup can add
   `Manifest::release_tag()` and durable headless auto-publish to `main`.
 
 ## Resolved Since Previous Loop
 
-- Windows advanced beyond Ready: VmStatus request/reply is proven over
-  HvSocket.
-- Provisioning now waits for operational VM phase `Ready`, not merely socket
-  connection.
-- PTY attach primitives are proven over HvSocket for the Open Shell mechanism.
+- Windows proved the remaining PTY data direction with host-to-guest stdin.
+- Windows added a WSL keepalive so the HvSocket control wire does not idle out.
+- Quit now terminates the VM instead of leaving the keepalive orphaned.
+- Menu actions now open a native terminal using the resolved forge argv.
 
 ## Current Major Blockers
 
-- Integration-loop merge/test of `origin/windows-next` through `5188dce6`.
-- Windows w9 UX/session wiring from the proven transport primitives to real
-  menu actions.
+- Integration-loop merge/test of `origin/windows-next` through `c997fc43`.
+- Windows w9 remains open for integration plus terminal-click smoke/status,
+  not for the old transport primitives.
 - macOS m8 user-attended interactive smoke.
 - Non-blocking release cleanup: PR #5/release.yml headless auto-publish to
   `main` and manifest-owned `release_tag`.

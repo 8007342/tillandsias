@@ -507,3 +507,38 @@ Current cross-host gates:
 - Release cleanup remains useful but non-blocking: land durable
   `release.yml` headless auto-publish on `main` and add
   `Manifest::release_tag()` so both trays can drop hardcoded recipe tags.
+
+## Coordination Audit - 2026-05-27T10:43Z
+
+host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+
+Observed remote heads after fetch/pull:
+
+- `main`: f9c465b3
+- `linux-next`: 732603b1
+- `windows-next`: c997fc43
+- `osx-next`: deba10d8
+
+Ledger corrections made in this audit:
+
+- Folded new Windows w9 evidence from `origin/windows-next`: `fc7d0b74`
+  proves bidirectional PTY stdin/stdout, `531bcce4` holds the WSL VM/control
+  wire warm, `bc23a529` drains the VM on Quit, and `c997fc43` launches the
+  resolved forge argv in Windows Terminal / `wsl.exe`.
+- Updated the Windows queue: w9 remains `in_progress`, but the remaining work
+  is now integration-loop merge/test plus terminal-click smoke/status, not the
+  old transport primitive or ConPTY bridge wording.
+- Advanced the integration-loop watch from `5188dce6` to `c997fc43`.
+
+Current cross-host gates:
+
+- Integration loop should merge/test `origin/windows-next` through `c997fc43`
+  into `linux-next`, preserving the newer `13cf3af0` manifest repin and newer
+  `linux-next` plan entries if the Windows branch presents older blocks.
+- Windows should append post-merge smoke/status for Open Shell, Attach,
+  Maintain, and GitHub Login native-terminal launches, or patch any missing
+  action found by that smoke.
+- macOS m8 is user-attended and not parallelizable.
+- Release cleanup remains useful but non-blocking: land durable
+  `release.yml` headless auto-publish on `main` and add
+  `Manifest::release_tag()` so both trays can drop hardcoded recipe tags.

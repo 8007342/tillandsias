@@ -28,6 +28,36 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Coordinator audit 2026-05-27T10:43Z — Windows w9 native-terminal path; merge/test gate advances
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- observed_sibling_heads: main=`f9c465b3` · linux-next=`732603b1` ·
+  windows-next=`c997fc43` (ahead with unmerged Windows w9 transport,
+  keepalive, Quit drain, and native-terminal menu launch code) ·
+  osx-next=`deba10d8` (ancestor of linux-next)
+- Coordination fold only; no sibling merge attempted in this pass.
+- Remote progress is healthy. Since the 08:50Z fold, `linux-next` advanced by
+  one coordination commit and `windows-next` advanced from PTY transport proof
+  to bidirectional PTY stdin/stdout, VM keepalive, Quit drain, and native
+  terminal launch for the resolved forge argv. `osx-next` and `main` did not
+  advance.
+- Resolved gates: Windows now proves the host-to-guest PTY data direction
+  (`fc7d0b74`), keeps the WSL VM/control wire warm (`531bcce4`), tears it down
+  on Quit (`bc23a529`), and opens menu actions through Windows Terminal /
+  `wsl.exe` (`c997fc43`).
+- Active integration watch: `origin/windows-next` carries unmerged code through
+  `c997fc43`. The next integration loop should merge/test those commits into
+  `linux-next` or record exact conflicts.
+- Merge caution: preserve the newer `linux-next` `13cf3af0`
+  `images/vm/manifest.toml` repin and newer plan entries if the Windows branch
+  presents older blocks during reconciliation.
+- Current dependency chain: Windows w9 is code-proven on `windows-next` but
+  still needs merge/test into `linux-next` and a terminal-click status packet
+  for Open Shell, Attach, Maintain, and GitHub Login. macOS still waits on
+  user-attended m8 smoke. Linux/release cleanup remains `release.yml`
+  headless auto-publish to `main` and the manifest-owned `release_tag`
+  accessor.
+
 ### Coordinator audit 2026-05-27T08:50Z — Windows w9 transport proof; merge/test gate advances
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next

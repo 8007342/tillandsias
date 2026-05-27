@@ -319,6 +319,31 @@ blocker view without deleting earlier host notes.
   Windows w6 verification or diagnostics that do not require the CI rootfs
   artifact.
 
+## Linux coordinator audit — 2026-05-27T10:43Z
+
+- Observed remote heads after fetch/pull: `linux-next` `732603b1`,
+  `windows-next` `c997fc43`, `osx-next` `deba10d8`, `main` `f9c465b3`.
+- Resolved since the previous blocker fold: Windows w9 advanced past
+  transport-only proof. `fc7d0b74` proves bidirectional PTY stdin/stdout,
+  `531bcce4` holds the WSL VM/control wire warm, `bc23a529` drains the VM on
+  Quit, and `c997fc43` opens the resolved `launch_spec` argv in Windows
+  Terminal / `wsl.exe` for the menu-launch path.
+- Current high-impact blockers:
+  - **Integration-loop owned:** merge/test `origin/windows-next` through
+    `c997fc43` into `linux-next`, preserving the newer `13cf3af0`
+    `images/vm/manifest.toml` repin and newer `linux-next` plan entries if
+    Windows' older blocks appear during reconciliation.
+  - **Windows-owned:** after merge/test, append real-click smoke/status for
+    Open Shell, Attach, Maintain, and GitHub Login terminal launches, or patch
+    any missing action discovered by that smoke.
+  - **macOS/user-owned:** m8 interactive smoke of the rebuilt
+    `dist/Tillandsias.app`.
+- Current ready/fallback work: Windows w9 continues from native-terminal
+  launch proof; w7 diagnostics remains the fallback if merge/test exposes
+  stale branch or manifest state. Linux release cleanup remains useful but
+  non-blocking (`release.yml` headless auto-publish to `main`,
+  `Manifest::release_tag()`).
+
 ## Linux coordinator audit — 2026-05-27T08:50Z
 
 - Observed remote heads after fetch/pull: `linux-next` `46ef33b1`,
