@@ -473,3 +473,37 @@ Current cross-host gates:
 - Release cleanup remains useful but non-blocking: land durable
   `release.yml` headless auto-publish on `main` and add
   `Manifest::release_tag()` so both trays can drop hardcoded recipe tags.
+
+## Coordination Audit - 2026-05-27T08:50Z
+
+host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+
+Observed remote heads after fetch/pull:
+
+- `main`: f9c465b3
+- `linux-next`: 46ef33b1
+- `windows-next`: 5188dce6
+- `osx-next`: deba10d8
+
+Ledger corrections made in this audit:
+
+- Folded new Windows w9 transport evidence from `origin/windows-next`:
+  `8b785ced` proves VmStatus request/reply over HvSocket, `791c0187` gates
+  provisioning on VM phase `Ready`, and `5188dce6` proves
+  PtyOpen/PtyData/PtyClose over HvSocket for the Open Shell mechanism.
+- Updated the Windows queue: w9 is `in_progress` with transport primitives
+  proven, not done. Remaining Windows work is menu/session UX wiring from
+  `launch_spec`/PtyOpen to ConPTY or `wt.exe`, plus GitHub Login and agent
+  attach over the live transport.
+- Advanced the integration-loop watch from `e0405f2f` to `5188dce6`.
+
+Current cross-host gates:
+
+- Integration loop should merge/test `origin/windows-next` through `5188dce6`
+  into `linux-next`, preserving the newer `13cf3af0` manifest repin and newer
+  `linux-next` plan entries if the Windows branch presents older blocks.
+- Windows w9 UX/session wiring remains the next Windows-owned packet.
+- macOS m8 is user-attended and not parallelizable.
+- Release cleanup remains useful but non-blocking: land durable
+  `release.yml` headless auto-publish on `main` and add
+  `Manifest::release_tag()` so both trays can drop hardcoded recipe tags.

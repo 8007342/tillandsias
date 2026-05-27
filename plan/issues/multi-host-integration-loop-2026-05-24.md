@@ -28,6 +28,35 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Coordinator audit 2026-05-27T08:50Z — Windows w9 transport proof; merge/test gate advances
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- observed_sibling_heads: main=`f9c465b3` · linux-next=`46ef33b1` ·
+  windows-next=`5188dce6` (ahead with unmerged Windows Ready + w9 transport
+  proof) · osx-next=`deba10d8` (ancestor of linux-next)
+- Coordination fold only; no sibling merge attempted in this pass.
+- Remote progress is healthy. Since the 06:57Z fold, `linux-next` advanced by
+  one coordination commit and `windows-next` advanced from the Ready transition
+  to w9 request/reply and PTY transport proof. `osx-next` and `main` did not
+  advance.
+- Resolved gates: Windows now proves VmStatus request/reply over HvSocket
+  (`8b785ced`), provisioning waits for VM phase `Ready` (`791c0187`), and
+  PtyOpen/PtyData/PtyClose works over HvSocket for the Open Shell mechanism
+  (`5188dce6`).
+- Active integration watch: `origin/windows-next` carries unmerged code through
+  `5188dce6` (HvSocket transport, Ready-gated provisioning, request/reply, and
+  PTY attach primitives). The next integration loop should merge/test those
+  commits into `linux-next` or record exact conflicts.
+- Merge caution: preserve the newer `linux-next` `13cf3af0`
+  `images/vm/manifest.toml` repin and newer plan entries if the Windows branch
+  presents older blocks during reconciliation.
+- Current dependency chain: Windows transport primitives are proven but w9 is
+  not complete until the menu UX bridges `launch_spec`/PtyOpen to ConPTY or
+  `wt.exe` and routes GitHub Login / agent attach over the live transport.
+  macOS still waits on user-attended m8 smoke. Linux/release cleanup remains
+  `release.yml` headless auto-publish to `main` and the manifest-owned
+  `release_tag` accessor.
+
 ### Coordinator audit 2026-05-27T06:57Z — Windows Ready proven; integration merge/test is the gate
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next

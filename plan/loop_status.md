@@ -1,42 +1,44 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-05-27T06:57Z
+LastExecutionTime: 2026-05-27T08:50Z
 
 ## This Loop
 
-- Fetched origin, fast-forwarded `linux-next` from `b31b4720` to `a5f915e4`,
-  and reconciled newer sibling state.
-- Observed remote heads: `linux-next` `a5f915e4`, `windows-next`
-  `e0405f2f`, `osx-next` `deba10d8`, `main` `f9c465b3`.
-- Folded Windows terminal events: F1 is fixed in the republished rootfs,
-  HvSocket connect is proven, Hello/HelloAck is proven, and the Windows tray
-  now flips to Ready on handshake success.
-- Marked Windows w8 done and added w9 session/menu routing as the next Windows
-  packet. Refreshed macOS to the post-F1 manifest SHA and fresh app tarball.
+- Fetched origin and confirmed `linux-next` is current at `46ef33b1`.
+- Observed remote heads: `linux-next` `46ef33b1`, `windows-next`
+  `5188dce6`, `osx-next` `deba10d8`, `main` `f9c465b3`.
+- Folded new Windows w9 evidence: `8b785ced` proves VmStatus
+  request/reply over HvSocket, `791c0187` makes provisioning wait for VM
+  phase `Ready`, and `5188dce6` proves PtyOpen/PtyData/PtyClose over
+  HvSocket for the Open Shell mechanism.
+- Reconciled headers so w9 is `in_progress`, not done: transport primitives
+  are proven; menu/session UX wiring remains.
 
 ## Expected Next Loop
 
-- Integration loop should merge/test `origin/windows-next` through `e0405f2f`
-  into `linux-next`, or record exact conflicts.
+- Integration loop should merge/test `origin/windows-next` through
+  `5188dce6` into `linux-next`, or record exact conflicts.
 - During that merge, preserve `linux-next`'s newer `13cf3af0`
-  `images/vm/manifest.toml` repin if Windows' older manifest block appears.
-- Windows can claim w9 to retain the live control-wire session and route menu
-  actions over it; w7 remains the no-code diagnostics fallback.
+  `images/vm/manifest.toml` repin and newer plan entries if Windows' older
+  branch blocks appear.
+- Windows should continue w9 by bridging `launch_spec`/PtyOpen to ConPTY or
+  `wt.exe`, then route GitHub Login and agent attach over the live transport.
 - macOS remains on user-attended m8 smoke; release cleanup can add
   `Manifest::release_tag()` and durable headless auto-publish to `main`.
 
 ## Resolved Since Previous Loop
 
-- Windows F2/HvSocket is no longer a blocker: `8a96a880` proved connect and
-  `2b97be30` proved Hello/HelloAck.
-- `340cac99` wired the handshake into `provision_via_recipe`; `e0405f2f`
-  flips the tray to Ready on success.
-- macOS acknowledged the fixed rootfs and rebuilt the app tarball with the
-  new `6859a7bc...9730bee` manifest pin.
+- Windows advanced beyond Ready: VmStatus request/reply is proven over
+  HvSocket.
+- Provisioning now waits for operational VM phase `Ready`, not merely socket
+  connection.
+- PTY attach primitives are proven over HvSocket for the Open Shell mechanism.
 
 ## Current Major Blockers
 
-- Integration-loop merge/test of `origin/windows-next` through `e0405f2f`.
+- Integration-loop merge/test of `origin/windows-next` through `5188dce6`.
+- Windows w9 UX/session wiring from the proven transport primitives to real
+  menu actions.
 - macOS m8 user-attended interactive smoke.
 - Non-blocking release cleanup: PR #5/release.yml headless auto-publish to
   `main` and manifest-owned `release_tag`.
@@ -54,5 +56,5 @@ LastExecutionTime: 2026-05-27T06:57Z
 - PyYAML parsed `plan.yaml`, `plan/index.yaml`, and the methodology entry YAML
   files.
 - `git diff --check` passed for touched coordination files.
-- Files changed this pass: loop cache, plan status/index, per-host queues,
+- Files changed this pass: loop cache, plan status/index, Windows work queue,
   blocker roundup, coordination audit, and integration-loop ledger.

@@ -319,6 +319,31 @@ blocker view without deleting earlier host notes.
   Windows w6 verification or diagnostics that do not require the CI rootfs
   artifact.
 
+## Linux coordinator audit — 2026-05-27T08:50Z
+
+- Observed remote heads after fetch/pull: `linux-next` `46ef33b1`,
+  `windows-next` `5188dce6`, `osx-next` `deba10d8`, `main` `f9c465b3`.
+- Resolved since the previous blocker fold: Windows w9 now has transport
+  proof beyond the Ready transition. `8b785ced` proves VmStatus
+  request/reply over HvSocket, `791c0187` gates provisioning on VM phase
+  `Ready`, and `5188dce6` proves PtyOpen/PtyData/PtyClose for the Open Shell
+  mechanism.
+- Current high-impact blockers:
+  - **Integration-loop owned:** merge/test `origin/windows-next` through
+    `5188dce6` into `linux-next`, preserving the newer `13cf3af0`
+    `images/vm/manifest.toml` repin and newer `linux-next` plan entries if
+    Windows' older blocks appear during reconciliation.
+  - **Windows-owned:** finish w9 UX/session wiring from
+    `launch_spec`/PtyOpen to ConPTY or `wt.exe`, then route GitHub Login and
+    agent attach over the same live transport.
+  - **macOS/user-owned:** m8 interactive smoke of the rebuilt
+    `dist/Tillandsias.app`.
+- Current ready/fallback work: Windows continues w9 from the proven transport
+  primitives; w7 diagnostics remains the fallback if merge/test exposes stale
+  branch or manifest state. Linux release cleanup remains useful but
+  non-blocking (`release.yml` headless auto-publish to `main`,
+  `Manifest::release_tag()`).
+
 ## Linux coordinator audit — 2026-05-27T06:57Z
 
 - Observed remote heads after fetch/pull: `linux-next` `a5f915e4`,

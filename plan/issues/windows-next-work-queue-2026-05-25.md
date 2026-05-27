@@ -2,15 +2,17 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/windows-next-thin-tray.md, plan/issues/tray-convergence-coordination.md, plan/issues/control-socket-protocol-convergence-2026-05-25.md, openspec/changes/control-wire-pty-attach/
 
-Status: **OPEN** as of 2026-05-27T06:57Z. Windows w1, w2, w3, w4, w6
+Status: **OPEN** as of 2026-05-27T08:50Z. Windows w1, w2, w3, w4, w6
 diagnostics, the w5 converter, the shared forge-container `launch_spec` /
 `intent_for_action` amendment, the l9 URL resolver, the w5
 `provision_via_recipe` runtime flip, and w8 HvSocket Ready proof are done on
 the Windows lane. Windows real hardware proved rootfs fetch/SHA/import,
 systemd boot, headless fetch HTTP 200, the F1 `Type=exec` unit fix, HvSocket
-connect, Hello/HelloAck over the control-wire codec, and tray status flipping
-to Ready. `origin/windows-next` is ahead of `linux-next` through `e0405f2f`;
-the integration loop must merge/test that code while preserving the newer
+connect, Hello/HelloAck over the control-wire codec, tray status flipping to
+Ready, VmStatus request/reply over HvSocket, Ready-phase provisioning gating,
+and PtyOpen/PtyData/PtyClose proof for the Open Shell mechanism.
+`origin/windows-next` is ahead of `linux-next` through `5188dce6`; the
+integration loop must merge/test that code while preserving the newer
 `linux-next` manifest repin from `13cf3af0` and later plan entries. The old
 PR #3 / recipe-publish / SHA-pin / F1 / F2 gates are closed.
 
@@ -41,12 +43,15 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
   wired the handshake into `provision_via_recipe`, and `e0405f2f` flips the
   tray to Ready on handshake success. Linux integration-loop merge/test is the
   remaining cross-host action.
-- `w9/control-wire-session-menu-routing` is the next Windows implementation
-  packet: retain the established control-wire session and route VmStatus,
-  EnumerateLocalProjects, Open Shell, GitHub Login, and agent attach actions
-  over the live transport instead of treating Ready as a terminal state.
+- `w9/control-wire-session-menu-routing` is in progress on `windows-next`:
+  `8b785ced` proves VmStatus request/reply over HvSocket, `791c0187` makes
+  provisioning wait for VM phase `Ready`, and `5188dce6` proves the
+  PtyOpen/PtyData/PtyClose mechanism behind Open Shell. The remaining Windows
+  implementation packet is UX/session plumbing: retain or reacquire the live
+  stream and bridge `launch_spec`/PtyOpen to ConPTY or `wt.exe` for Open
+  Shell, GitHub Login, and agent attach actions.
 - `w7/recipe-diagnostics-and-branch-sync` is no longer the primary packet; use
-  it only as a no-code fallback if the `e0405f2f` merge/test exposes stale
+  it only as a no-code fallback if the `5188dce6` merge/test exposes stale
   diagnostics or a manifest/branch-sync conflict.
 - `w6/vm-status-and-enumerate-real-handlers` is done as a no-VM diagnostics
   fallback through `948af711` / integration cycle `b3ae21a`. Live VM status
@@ -59,9 +64,9 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
   interaction work as w9 session/menu routing, not as w5 artifact gates.
 
 Do not re-claim w1, w2, w3, w4, w5, w6, or w8; their terminal events are
-recorded below. The next Windows implementation item is w9 session/menu routing
-after the Ready proof, with w7 diagnostics as the independent fallback if the
-integration loop surfaces stale branch or manifest state.
+recorded below. Continue w9 session/menu routing from the proven HvSocket
+request/reply and PTY primitives, with w7 diagnostics as the independent
+fallback if the integration loop surfaces stale branch or manifest state.
 
 ### Item: w8/hvsocket-control-wire-ready
 
@@ -72,7 +77,7 @@ integration loop surfaces stale branch or manifest state.
 - status: done
 - completed_at: 2026-05-27T06:51Z
 - integration_status: pending linux-next merge/test of `origin/windows-next`
-  through `e0405f2f`
+  through `5188dce6` (includes later w9 transport-proof commits)
 - gated_on: []
 - cleared_gates:
   - Linux/recipe F1 headless service restart loop fixed at `f5801968`
@@ -90,7 +95,7 @@ integration loop surfaces stale branch or manifest state.
     wire protocol.
 - next_action: >
     Integration loop should merge/test `origin/windows-next` through
-    `e0405f2f` into `linux-next` and preserve the newer `13cf3af0` manifest
+    `5188dce6` into `linux-next` and preserve the newer `13cf3af0` manifest
     repin if the branch merge presents older SHA/comment blocks from
     `windows-next`.
 - acceptance_evidence:
@@ -115,7 +120,12 @@ integration loop surfaces stale branch or manifest state.
 - type: feature
 - owner_host: windows
 - capability_tags: [win32, hvsocket, control-wire, pty, menu]
-- status: ready
+- status: in_progress
+- latest_progress_at: 2026-05-27T08:22Z
+- latest_progress_refs:
+  - `8b785ced` — VmStatus request/reply over HvSocket proven
+  - `791c0187` — provisioning waits for VM phase `Ready`
+  - `5188dce6` — PtyOpen/PtyData/PtyClose over HvSocket proven
 - depends_on: [w8/hvsocket-control-wire-ready]
 - gated_on: []
 - owned_files:
@@ -128,15 +138,22 @@ integration loop surfaces stale branch or manifest state.
     Ready should become the start of real interaction, not just the end of
     provisioning.
 - next_action: >
-    Pull or merge latest `origin/linux-next`, keep the established stream or a
-    reconnectable session handle after `provision_via_recipe`, then route
-    VmStatus, EnumerateLocalProjects, Open Shell, GitHub Login, and agent
-    attach actions through the control-wire/PTY path with focused tests.
+    First let the integration loop merge/test `origin/windows-next` through
+    `5188dce6` into `linux-next` or record exact conflicts. Windows
+    continuation should keep the established stream or a reconnectable session
+    handle after `provision_via_recipe`, thread `launch_spec` argv into
+    PtyOpen, bridge PtyData to ConPTY or `wt.exe` for Open Shell, and route
+    GitHub Login / agent attach through the same control-wire/PTY path.
 - acceptance_evidence:
-  - Windows tray can request VmStatus or EnumerateLocalProjects after the Ready
-    flip without reopening provisioning.
-  - Open Shell and GitHub Login use the live transport or report a precise
-    missing-session error rather than silently dropping the action.
+  - `8b785ced`: Windows tray can request VmStatus after the Ready flip without
+    reopening provisioning.
+  - `791c0187`: tray reports Ready only after the VM replies with phase
+    `Ready` and `podman_ready: true`.
+  - `5188dce6`: PtyOpen over HvSocket receives PTY output and PtyClose for the
+    Open Shell mechanism.
+  - Remaining: Open Shell and GitHub Login menu actions use the live transport
+    and ConPTY / `wt.exe`, or report a precise missing-session error rather
+    than silently dropping the action.
   - `cargo test -p tillandsias-windows-tray --target x86_64-pc-windows-msvc`
     or equivalent Windows-host evidence stays green.
 - fallback_when_blocked: >
@@ -917,3 +934,19 @@ Next greedy pickups (no VM needed): **w4b** (windows-ownable, pure) and **w4d**
   manifest block.
 - New ready packet: w9 `control-wire-session-menu-routing` should retain or
   reacquire the live stream and route menu actions over the proven transport.
+
+### Event: 2026-05-27T08:50Z — linux coordinator status reconciliation
+
+- Observed remote heads after fetch/pull: `linux-next` `46ef33b1`,
+  `windows-next` `5188dce6`, `osx-next` `deba10d8`, `main` `f9c465b3`.
+- Folded new `origin/windows-next` terminal evidence: `8b785ced` proves
+  VmStatus request/reply over HvSocket, `791c0187` makes provisioning wait for
+  VM phase `Ready`, and `5188dce6` proves PtyOpen/PtyData/PtyClose over the
+  HvSocket transport for the Open Shell mechanism.
+- Header reconciliation: w9 is now `in_progress`, not done. The transport
+  primitives are proven, but the menu UX still needs to hold/reacquire the
+  session, bridge `launch_spec`/PtyOpen to ConPTY or `wt.exe`, and route
+  GitHub Login plus agent attach over the same path.
+- Integration-loop gate moved forward from `e0405f2f` to `5188dce6`. During
+  merge/test, preserve the newer `13cf3af0` manifest repin and newer
+  `linux-next` plan entries if the Windows branch presents older blocks.
