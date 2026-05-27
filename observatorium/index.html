@@ -388,6 +388,7 @@ const state = {
   selectedSheet: null,
   search: '',
   sheetCache: new Map(),
+  fileCache: new Map(),
   chartInstance: null
 };
 
@@ -588,16 +589,60 @@ function renderSpecs() {
   });
 }
 
+async function fetchFileLines(path, lineNum) {
+  let content = '';
+  if (state.fileCache.has(path)) {
+    content = state.fileCache.get(path);
+  } else {
+    try {
+      content = await fetchText(sourcePath(path));
+      state.fileCache.set(path, content);
+    } catch (err) {
+      return `<div style="color: var(--chart-color-2); padding: 8px;">Error loading file: ${escapeHtml(err.message)}</div>`;
+    }
+  }
+  const lines = content.split(/\r?\n/);
+  const start = Math.max(0, lineNum - 6);
+  const end = Math.min(lines.length, lineNum + 10);
+  
+  let html = '<div class="code-fragment" style="font-family: ui-monospace, monospace; font-size: 12px; background: #06090d; border-radius: 8px; overflow-x: auto; padding: 8px 0; display: flex; flex-direction: column;">';
+  for (let i = start; i < end; i++) {
+    const isTarget = (i + 1) === lineNum;
+    html += `
+      <div class="code-line" style="display: flex; padding: 2px 16px; line-height: 1.4; ${isTarget ? 'background: rgba(139, 183, 255, 0.15); border-left: 3px solid var(--accent); padding-left: 13px;' : ''}">
+        <span class="line-num" style="width: 40px; color: var(--text-muted); text-align: right; margin-right: 16px; user-select: none;">${i + 1}</span>
+        <span class="line-text" style="white-space: pre; color: ${isTarget ? '#fff' : 'var(--text)'};">${escapeHtml(lines[i])}</span>
+      </div>`;
+  }
+  html += '</div>';
+  return html;
+}
+
 function renderCode() {
   const row = selectedTraceRow();
   const q = state.search.toLowerCase();
   const hits = row ? row.sources.filter(src => !q || src.label.toLowerCase().includes(q) || src.href.toLowerCase().includes(q)) : [];
+  
   if (!row) {
     els.code.innerHTML = '<div class="empty">Select a spec or cheatsheet.</div>';
     return;
   }
-  els.code.innerHTML = `
-    <div class="card selected" style="margin-bottom: 0; border-radius: 12px 12px 0 0; border-bottom: 0;">
+
+  // Parse and group by file path
+  const parsedHits = hits.map(src => {
+    const [path, lineStr] = src.href.split('#L');
+    const line = lineStr ? parseInt(lineStr, 10) : 1;
+    return { label: src.label, path, line, href: src.href };
+  });
+
+  const groups = {};
+  for (const hit of parsedHits) {
+    if (!groups[hit.path]) groups[hit.path] = [];
+    groups[hit.path].push(hit);
+  }
+
+  let html = `
+    <div class="card selected" style="margin-bottom: 16px; border-radius: 12px;">
       <div class="row" style="padding: 16px;">
         <div class="title-line">
           <strong>${escapeHtml(state.selectedSpec)}</strong>
@@ -605,15 +650,52 @@ function renderCode() {
         </div>
         <div class="summary">${escapeHtml(row.specPath)}</div>
       </div>
-    </div>
-    <div class="details" style="border-radius: 0 0 12px 12px; border: 1px solid var(--accent); background: rgba(139, 183, 255, 0.02);">
-      <ul class="code-list">
-        ${hits.map(src => {
-          const [path, line] = src.href.split('#L');
-          return `<li><a href="${escapeAttr(sourceHref(src.href))}" target="_blank">${escapeHtml(src.label)}</a><div class="block">${escapeHtml(path)} ${line ? `line ${escapeHtml(line)}` : ''}</div></li>`;
-        }).join('')}
-      </ul>
     </div>`;
+
+  const filePaths = Object.keys(groups).sort();
+  if (filePaths.length === 0) {
+    html += '<div class="empty">No matching code hits.</div>';
+    els.code.innerHTML = html;
+    return;
+  }
+
+  html += filePaths.map(path => {
+    const fileHits = groups[path];
+    return `
+      <details class="file-group" open style="border: 1px solid var(--line-soft); border-radius: 12px; background: rgba(255,255,255,0.01); margin-bottom: 12px; overflow: hidden;">
+        <summary style="padding: 12px 16px; font-weight: 600; cursor: pointer; display: flex; justify-content: space-between; align-items: center; user-select: none; background: rgba(255,255,255,0.02); list-style: none;">
+          <span class="file-path" style="font-weight: 600; color: #fff;">${escapeHtml(path)}</span>
+          <span class="badge" style="font-size: 11px; padding: 2px 8px; border-radius: 12px; background: rgba(255,255,255,0.08);">${fileHits.length} hit(s)</span>
+        </summary>
+        <div class="file-hits" style="padding: 12px 16px; background: rgba(0,0,0,0.15); border-top: 1px solid var(--line-soft);">
+          ${fileHits.map(hit => `
+            <details class="hit-details" data-path="${escapeAttr(hit.path)}" data-line="${hit.line}" style="margin-bottom: 8px; border: 1px solid var(--line-soft); border-radius: 8px; background: rgba(0,0,0,0.1);">
+              <summary style="padding: 8px 12px; font-size: 13px; cursor: pointer; font-weight: 500; display: flex; justify-content: space-between; align-items: center; list-style: none;">
+                <span style="color: var(--text-muted);">Line ${hit.line}</span>
+                <code style="font-family: ui-monospace, monospace; color: var(--accent); background: rgba(139, 183, 255, 0.08); padding: 2px 6px; border-radius: 4px; font-size: 11px;">${escapeHtml(hit.label)}</code>
+              </summary>
+              <div class="hit-code-content" style="border-top: 1px solid var(--line-soft); padding: 8px; background: #06090d; overflow-x: auto;">Loading...</div>
+            </details>
+          `).join('')}
+        </div>
+      </details>`;
+  }).join('');
+
+  els.code.innerHTML = html;
+
+  // Add event listeners for toggling code hit details
+  els.code.querySelectorAll('details.hit-details').forEach(det => {
+    det.addEventListener('toggle', async () => {
+      if (det.open) {
+        const path = det.dataset.path;
+        const line = parseInt(det.dataset.line, 10);
+        const contentDiv = det.querySelector('.hit-code-content');
+        if (contentDiv.textContent === 'Loading...') {
+          contentDiv.innerHTML = await fetchFileLines(path, line);
+        }
+      }
+    });
+  });
 }
 
 async function renderSheets() {
