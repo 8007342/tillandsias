@@ -391,6 +391,7 @@ const state = {
   search: '',
   sheetCache: new Map(),
   fileCache: new Map(),
+  hitBounds: new Map(),
   detectedSourceRoot: '/source',
   chartInstance: null
 };
@@ -651,9 +652,13 @@ async function fetchFileLines(path, lineNum) {
       return `<div style="color: var(--chart-color-2); padding: 8px;">Error loading file: ${escapeHtml(err.message)}</div>`;
     }
   }
+  
+  const hitKey = `${path}#L${lineNum}`;
+  const bounds = state.hitBounds.get(hitKey) || { before: 2, after: 2 };
+  
   const lines = content.split(/\r?\n/);
-  const start = Math.max(0, lineNum - 6);
-  const end = Math.min(lines.length, lineNum + 10);
+  const start = Math.max(0, lineNum - 1 - bounds.before);
+  const end = Math.min(lines.length, lineNum + bounds.after);
   
   // Highlight the entire block
   const blockCode = lines.slice(start, end).join('\n');
@@ -667,8 +672,27 @@ async function fetchFileLines(path, lineNum) {
   }
   
   const highlightedLines = splitHighlightedHtml(highlightedHtml);
+  const canExpandTop = start > 0;
+  const canExpandBottom = end < lines.length;
   
-  let html = '<div class="code-fragment hljs" style="font-family: ui-monospace, monospace; font-size: 12px; background: #0b0f14; border-radius: 8px; overflow-x: auto; padding: 8px 0; display: flex; flex-direction: column; border: 1px solid var(--line-soft);">';
+  let html = '<div style="display: flex; flex-direction: column; gap: 6px;">';
+  
+  // Render Top Expand Buttons
+  if (canExpandTop) {
+    html += `
+      <div style="display: flex; gap: 8px; justify-content: center; align-items: center; padding: 2px 0;">
+        <span style="color: var(--text-muted); font-size: 11px;">Expand top:</span>
+        <button onclick="expandSnippet('${escapeAttr(path)}', ${lineNum}, 'top', 3)" style="padding: 2px 8px; font-size: 10px; border-radius: 4px; border: 1px solid var(--line-soft); background: rgba(255,255,255,0.03); color: var(--text-muted); cursor: pointer;">+3</button>
+        <button onclick="expandSnippet('${escapeAttr(path)}', ${lineNum}, 'top', 5)" style="padding: 2px 8px; font-size: 10px; border-radius: 4px; border: 1px solid var(--line-soft); background: rgba(255,255,255,0.03); color: var(--text-muted); cursor: pointer;">+5</button>
+        <button onclick="expandSnippet('${escapeAttr(path)}', ${lineNum}, 'top', 10)" style="padding: 2px 8px; font-size: 10px; border-radius: 4px; border: 1px solid var(--line-soft); background: rgba(255,255,255,0.03); color: var(--text-muted); cursor: pointer;">+10</button>
+        <button onclick="expandSnippet('${escapeAttr(path)}', ${lineNum}, 'top', 20)" style="padding: 2px 8px; font-size: 10px; border-radius: 4px; border: 1px solid var(--line-soft); background: rgba(255,255,255,0.03); color: var(--text-muted); cursor: pointer;">+20</button>
+      </div>`;
+  } else {
+    html += `<div style="text-align: center; color: var(--text-muted); font-size: 10px; padding: 2px 0;">Start of file reached</div>`;
+  }
+  
+  // Render Code Lines
+  html += '<div class="code-fragment hljs" style="font-family: ui-monospace, monospace; font-size: 12px; background: #0b0f14; border-radius: 8px; overflow-x: auto; padding: 8px 0; display: flex; flex-direction: column; border: 1px solid var(--line-soft);">';
   for (let i = start; i < end; i++) {
     const isTarget = (i + 1) === lineNum;
     const highlightedLineText = highlightedLines[i - start] !== undefined ? highlightedLines[i - start] : escapeHtml(lines[i]);
@@ -679,8 +703,40 @@ async function fetchFileLines(path, lineNum) {
       </div>`;
   }
   html += '</div>';
+  
+  // Render Bottom Expand Buttons
+  if (canExpandBottom) {
+    html += `
+      <div style="display: flex; gap: 8px; justify-content: center; align-items: center; padding: 2px 0;">
+        <span style="color: var(--text-muted); font-size: 11px;">Expand bottom:</span>
+        <button onclick="expandSnippet('${escapeAttr(path)}', ${lineNum}, 'bottom', 3)" style="padding: 2px 8px; font-size: 10px; border-radius: 4px; border: 1px solid var(--line-soft); background: rgba(255,255,255,0.03); color: var(--text-muted); cursor: pointer;">+3</button>
+        <button onclick="expandSnippet('${escapeAttr(path)}', ${lineNum}, 'bottom', 5)" style="padding: 2px 8px; font-size: 10px; border-radius: 4px; border: 1px solid var(--line-soft); background: rgba(255,255,255,0.03); color: var(--text-muted); cursor: pointer;">+5</button>
+        <button onclick="expandSnippet('${escapeAttr(path)}', ${lineNum}, 'bottom', 10)" style="padding: 2px 8px; font-size: 10px; border-radius: 4px; border: 1px solid var(--line-soft); background: rgba(255,255,255,0.03); color: var(--text-muted); cursor: pointer;">+10</button>
+        <button onclick="expandSnippet('${escapeAttr(path)}', ${lineNum}, 'bottom', 20)" style="padding: 2px 8px; font-size: 10px; border-radius: 4px; border: 1px solid var(--line-soft); background: rgba(255,255,255,0.03); color: var(--text-muted); cursor: pointer;">+20</button>
+      </div>`;
+  } else {
+    html += `<div style="text-align: center; color: var(--text-muted); font-size: 10px; padding: 2px 0;">End of file reached</div>`;
+  }
+  
+  html += '</div>';
   return html;
 }
+
+window.expandSnippet = async function(path, lineNum, direction, amount) {
+  const hitKey = `${path}#L${lineNum}`;
+  const bounds = state.hitBounds.get(hitKey) || { before: 2, after: 2 };
+  if (direction === 'top') {
+    bounds.before += amount;
+  } else {
+    bounds.after += amount;
+  }
+  state.hitBounds.set(hitKey, bounds);
+  
+  const contentDiv = document.querySelector(`details.hit-details[data-path="${escapeAttr(path)}"][data-line="${lineNum}"] .hit-code-content`);
+  if (contentDiv) {
+    contentDiv.innerHTML = await fetchFileLines(path, lineNum);
+  }
+};
 
 function renderCode() {
   const row = selectedTraceRow();
@@ -696,6 +752,13 @@ function renderCode() {
   const parsedHits = hits.map(src => {
     const [path, lineStr] = src.href.split('#L');
     const line = lineStr ? parseInt(lineStr, 10) : 1;
+    
+    // Initialize hit bounds if not exists
+    const hitKey = `${path}#L${line}`;
+    if (!state.hitBounds.has(hitKey)) {
+      state.hitBounds.set(hitKey, { before: 2, after: 2 });
+    }
+    
     return { label: src.label, path, line, href: src.href };
   });
 
