@@ -26,23 +26,22 @@ preconditions:
   - plan/diagnostics/forge-diagnostics-prompt.txt exists and is non-empty
 
 critical_path:
-  - step: "ensure diagnostics artifact directory exists"
-    command: "mkdir -p target/forge-diagnostics"
-    timeout_ms: 2000
+  - step: "reset the cycle dedupe marker so this standalone run captures"
+    # Other slow E2E forge tests call the annex WITHOUT --reset, so the first
+    # eligible run captures and the rest dedup-skip (piggyback_protocol). This
+    # standalone diagnostics test owns its own cycle, so it resets first to
+    # guarantee a fresh capture.
+    command: "scripts/forge-diagnostics-annex.sh --reset"
+    timeout_ms: 5000
 
-  - step: "run forge diagnostics prompt capture"
-    command: >
-      tillandsias . --opencode --diagnostics
-      --prompt "$(cat plan/diagnostics/forge-diagnostics-prompt.txt)"
-      2>/dev/null
-    timeout_ms: 600000
-
-  - step: "capture stdout to timestamped diagnostics log"
-    command: >
-      tillandsias . --opencode --diagnostics
-      --prompt "$(cat plan/diagnostics/forge-diagnostics-prompt.txt)"
-      2>/dev/null
-      | tee "target/forge-diagnostics/diagnostics_$(date -u +%Y%m%dT%H%M%SZ).log"
+  - step: "run the non-blocking diagnostics annex (one forge launch + dedup + distill)"
+    # Replaces the two prior inline `tillandsias --opencode --diagnostics`
+    # invocations (which launched the forge TWICE). The annex launches once,
+    # writes target/forge-diagnostics/diagnostics_<UTC>.log, records the dedupe
+    # marker, and distills into plan/diagnostics/. Non-blocking by contract
+    # (exits 0); the JSON-validity gate below is what decides this test's
+    # verdict per the agent_diagnostic annex signal rule.
+    command: "scripts/forge-diagnostics-annex.sh"
     timeout_ms: 600000
 
   - step: "validate output is parseable JSON with diagnostics_timestamp field"
