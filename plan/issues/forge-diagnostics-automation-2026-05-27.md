@@ -282,3 +282,25 @@ are in place; the methodology gap requires orchestrator input.
 - No raw `target/forge-diagnostics/` output should be expected from this run.
   Keep the next action from the 20:30Z packet: wire another forge-launching E2E
   litmus through the annex without weakening its parent verdict.
+
+## agent_status_packet — work-loop slice 2026-05-27T21:35Z — clever-prompt actionable analysis
+
+- host_id: linux-tlatoani-fedora · agent: claude-opus (linux WORK loop, cron e3a4f695)
+- shipped `1f89f4bd`: aligned prompt ↔ distiller ↔ litmus to the methodology
+  response_shape's actionable arrays (missing_tools / proposed_enhancements /
+  isolation_or_privacy_risks). The "clever prompt" now instructs in-envelope
+  analysis (hard privacy/isolation rule); the distiller surfaces an "Enhancement
+  Candidates (→ curated-toolchain-backlog)" + "Isolation/Privacy Risks" section;
+  the litmus structurally asserts the three arrays. Fixed a set -e grep-abort in
+  distill. Verified via fixture (sections render; empty-risks doesn't abort) +
+  litmus assertion compiles.
+- evidence: fixture distill run (transient, not committed); no live forge needed.
+- ⚠️ LEASE OVERLAP: this issue's header shows lease_id forge-diagnostics-automation
+  -2026-05-27 / agent_id `pickie` (OpenCode big-pickle). I (claude-opus linux WORK
+  loop) have been shipping diagnostics slices per the USER's direct linux-host
+  directive; pushes have stayed conflict-free, but to avoid colliding with pickie
+  I'm DONE touching forge-diagnostics owned_files for now. Coordinate before
+  either of us takes the next forge-diagnostics slice.
+- next (this loop, NON-overlapping): headless spec gaps — VmStatusRequest real
+  lifecycle transitions, runtime-diagnostics-stream / observability-metrics spec
+  audits. These are outside the forge-diagnostics packet scope.
