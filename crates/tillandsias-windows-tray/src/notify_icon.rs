@@ -264,13 +264,30 @@ pub fn run() -> ! {
             tokio::task::yield_now().await;
         }
 
-        // Clean up.
+        // Clean up the tray icon first so Quit gives instant visual feedback.
         unsafe {
             let mut nid: NOTIFYICONDATAW = std::mem::zeroed();
             nid.cbSize = std::mem::size_of::<NOTIFYICONDATAW>() as u32;
             nid.hWnd = hwnd;
             nid.uID = TRAY_ICON_ID;
             let _ = Shell_NotifyIconW(NIM_DELETE, &nid);
+        }
+
+        // Quit → graceful drain. The provision task (now being torn down with the
+        // LocalSet) held the keepalive `wsl` session; on Windows a parent exit
+        // does NOT reap that child, so without an explicit `wsl --terminate` the
+        // utility VM (and the orphaned keepalive) would linger until WSL's own
+        // idle timeout. Issue a bounded stop so the VM is torn down deterministically
+        // — matches the macOS/Linux trays' Quit → drain contract.
+        // @trace plan/steps/windows-next-thin-tray.md (Quit → graceful drain)
+        if provisioning_enabled() {
+            let lifecycle = WslLifecycle::new();
+            let drain = lifecycle.graceful_shutdown();
+            match tokio::time::timeout(std::time::Duration::from_secs(15), drain).await {
+                Ok(Ok(())) => tracing::info!("VM drained on Quit (wsl --terminate)"),
+                Ok(Err(err)) => tracing::warn!(%err, "VM drain on Quit failed"),
+                Err(_) => tracing::warn!("VM drain on Quit timed out after 15s"),
+            }
         }
         msg.wParam.0 as i32
     });
