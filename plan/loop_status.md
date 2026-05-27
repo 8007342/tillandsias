@@ -1,62 +1,66 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-05-26T17:21Z
+LastExecutionTime: 2026-05-27T05:05Z
 
 ## This Loop
 
-- Fetched origin and fast-forwarded local `linux-next` from `8fb7a211` to
-  `a18bcbf3`.
-- Observed remote heads: `linux-next` `a18bcbf3`, `windows-next` `7e95c7e2`,
-  `osx-next` `a3152fc5`, `main` `03c3c50c`.
-- Remote progress is healthy: `main` registered `recipe-publish`, `osx-next`
-  shipped m5 Start VM auto-fetch wiring, and `linux-next` carries the rootless
-  Buildah workflow fix. `windows-next` intentionally has no new delta.
-- Reconciled Step 15 as completed after `a24bab17` collapsed the exit-125
-  cascade into one typed diagnostic.
-- Reconciled macOS m5 as done; macOS now has optional ready work packets
-  (`m10`, `m11`) while live VM proof waits on l9 SHA pins.
+- Fetched origin and rebased the coordination commit after `origin/linux-next`
+  advanced from `27f7dce7` to `f5801968`.
+- Observed remote heads: `linux-next` `f5801968`, `osx-next` `fa5a5c4c`,
+  `windows-next` `d15e0fb3`, `main` `f9c465b3`.
+- Remote progress is healthy: recipe-publish, manifest SHA pins, headless
+  release assets, macOS `.img.xz` fetch/decompress, and Windows w5 rootfs
+  import/headless-fetch proof all landed in the ledgers.
+- Reconciled stale PR #3/SHA-pin blocker references in the quick-start status
+  and host queues. The active dependency tail is now Windows HvSocket,
+  macOS user-attended smoke, and manifest `release_tag` cleanup. The headless
+  service restart-loop fix landed at `f5801968`.
 
 ## Expected Next Loop
 
-- Linux/release owner should land or otherwise resolve PR #3
-  (`ci-recipe-publish-rootless-fix-2026-05-26`) on `main`, then rerun
-  `recipe-publish` and backfill real `images/vm/manifest.toml` SHAs if green.
-- Windows should branch-sync from `7e95c7e2` to `a18bcbf3`, run w7 diagnostics,
-  and report that the remaining artifact gate is PR #3 plus a green
-  recipe-publish run.
-- macOS should either claim m10 project-threading or m11 MenuStructure/clippy
-  work; live PTY proof remains blocked until l9 publishes real artifacts.
-- Step 16 should continue with OpenCode-web readiness parity now that Step 15
-  is closed.
+- Integration loop should merge/test `origin/windows-next` deltas into
+  `linux-next` or record exact conflicts, preserving newer `linux-next` plan
+  entries during reconciliation.
+- Windows should continue F2/HvSocket to a real Hello/HelloAck, then replace
+  interim recipe-tag constants once `Manifest::release_tag()` lands.
+- Linux/recipe owner should watch the `f5801968` `Type=exec` unit fix through
+  the next Windows/macOS smoke and add the manifest `release_tag` accessor if
+  owning that contract.
+- macOS should run the user-attended `dist/Tillandsias.app` smoke; if Ready
+  hangs after Start VM, record evidence against the shared headless service
+  unit rather than reopening m5 fetch/provision code.
 
 ## Resolved Since Previous Loop
 
-- PR #2 merged `recipe-publish.yml` onto `main`; GitHub Actions now registers
-  the workflow.
-- MacOS m5 Start VM auto-fetch wiring is complete on `osx-next` and folded into
-  `linux-next`.
-- Step 15 exit-125 cascade UX residual is closed by `a24bab17`.
+- PR #3/rootless Buildah follow-up is no longer the active gate; recipe
+  materialization and SHA publication progressed through real artifacts.
+- Windows w5 has real rootfs import proof and headless fetch now returns 200.
+- macOS m5 has bytes-level proof for `.img.xz` download, decompression, and
+  SHA verification; a fresh `.app` was rebuilt for manual smoke.
+- F1 headless service stability has an upstream fix: `f5801968` changes the
+  in-VM unit to `Type=exec`.
 
 ## Current Major Blockers
 
-- l9 `recipe-artifact-url-and-publish-smoke`: the first real main-branch runs
-  failed with rootless Buildah overlay mount exit 125. The fix exists on
-  `linux-next` and PR #3, but is not on `main` yet.
-- Windows w5 and macOS live VM/PTY proof need a green recipe-publish run and
-  manifest SHA pins.
-- m8 acceptance remains blocked on a user-attended macOS interactive menu smoke.
+- F2 Windows transport: WSL2 requires a Windows host HvSocket bridge to the
+  guest AF_VSOCK listener; `origin/windows-next` has in-progress commits
+  through `d15e0fb3` awaiting integration-loop merge/test.
+- macOS m8 acceptance still needs a user-attended interactive smoke.
+- Durable release cleanup remains: PR #5/release.yml headless auto-publish is
+  ahead of `main`, and both trays want manifest-owned `release_tag`.
 
 ## Stale Or Pending Pings
 
 - No expired leases found in active queues.
-- Windows w7 remains ready as the branch-sync diagnostic fallback.
-- MacOS m10/m11 are ready optional packets; m8 still needs a human-attended
-  smoke.
-- PR #3 is the current release-lane ping for l9.
+- `osx-next` reset its noop streak with the iter 43 unblocked broadcast; it is
+  waiting on user smoke or Linux-owned release-tag/accessor work.
+- Windows has active unmerged code delta; integration-loop merge/test is the
+  pending cross-host action.
 
 ## Validation
 
-- PyYAML parsed `plan.yaml` and `plan/index.yaml`.
+- PyYAML parsed `plan.yaml`, `plan/index.yaml`, and the methodology entry
+  YAML files.
 - `git diff --check` passed for touched coordination files.
-- Files changed this pass: loop cache, plan status/index, Step 15/16 notes,
-  per-host queues, blocker/convergence ledgers, and integration-loop ledger.
+- Files changed this pass: loop cache, plan status/index, Step 20 summary,
+  per-host queues, blocker roundup, and integration-loop ledger.

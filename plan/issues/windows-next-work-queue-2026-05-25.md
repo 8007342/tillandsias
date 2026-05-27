@@ -2,18 +2,18 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/windows-next-thin-tray.md, plan/issues/tray-convergence-coordination.md, plan/issues/control-socket-protocol-convergence-2026-05-25.md, openspec/changes/control-wire-pty-attach/
 
-Status: **OPEN** as of 2026-05-26T17:21Z. Windows w1, w2, w3, w4, w6
-diagnostics, the w5 `materialize::wsl::tar_to_wsl_import` converter, the shared
-forge-container `launch_spec` / `intent_for_action` amendment, and the w5
-`RemoteArtifact` resolver for the l9 URL contract are done/integrated through
-`linux-next`. The integration-loop merge/test of `origin/windows-next`
-`83e2cd51` completed at `150d8a14`. `origin/windows-next` currently has no
-unmerged Windows delta and is 17 commits behind `linux-next` `a18bcbf3`
-(Step 16, pty_handler, Step 15, macOS m5 fold, recipe-publish registration
-notes, and the rootless Buildah workflow fix). Remaining WSL rootfs
-provisioning work is gated on PR #3/main recipe-publish fix, first green
-artifacts, manifest SHA pins, and the Windows tray runtime flip away from the
-older provisioning manifest.
+Status: **OPEN** as of 2026-05-27T05:05Z. Windows w1, w2, w3, w4, w6
+diagnostics, the w5 converter, the shared forge-container `launch_spec` /
+`intent_for_action` amendment, the l9 URL resolver, and the w5
+`provision_via_recipe` runtime flip are done on the Windows lane. Windows real
+hardware proved rootfs fetch/SHA/import, systemd boot, headless fetch HTTP 200,
+and a bound in-VM listener. `origin/windows-next` is now ahead of
+`linux-next` with active unmerged Windows deltas through `d15e0fb3`: materialize
+Windows portability, w5 recipe provisioning refinements, and F2 HvSocket
+transport work. The old PR #3 / first green recipe-publish / SHA-pin gates are
+closed. The F1 headless service fix landed on `linux-next` at `f5801968`
+(`Type=exec`). Remaining Windows "Ready" work is syncing that fix and
+finishing F2 HvSocket Hello/HelloAck.
 
 ## How to use this file
 
@@ -37,24 +37,74 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
 
 ## Currently unblocked / active
 
-- `w7/recipe-diagnostics-and-branch-sync` remains ready as a no-VM fallback:
-  `origin/windows-next` has no unmerged delta, but it is behind current
-  `linux-next` `a18bcbf3`. The next useful packet is a Windows branch-sync
-  pull/merge of latest `linux-next`, then diagnostic output against the remaining
-  PR #3/main recipe-publish fix and SHA-pin artifact gate.
+- `w8/hvsocket-control-wire-ready` is the active Windows packet. Commits
+  `b762feef` and `e3524bd4` landed the HvSocket service-GUID / WSL utility-VM
+  GUID foundation; `d15e0fb3` wires tray run() to the proven recipe path. The
+  next useful packet is a Windows host Hello/HelloAck over HvSocket, then an
+  agent_status_packet that states whether `f5801968` clears the former F1 unit
+  restart loop.
+- `w7/recipe-diagnostics-and-branch-sync` is no longer the primary packet; use
+  it only as a no-code fallback if the HvSocket path is blocked or the latest
+  `linux-next` integration exposes stale diagnostics.
 - `w6/vm-status-and-enumerate-real-handlers` is done as a no-VM diagnostics
   fallback through `948af711` / integration cycle `b3ae21a`. Live VM status
-  verification waits for the recipe artifact path.
+  verification now waits on F2 plus smoke of the `f5801968` unit fix, not
+  recipe artifact publication.
 - `w4/pty-attach-conpty` is done and integrated through `95e4714`. Do not
   create a competing claim; use the completed lease `8a3307907d94` as history.
-- `w5/wsl-import-via-ci-rootfs` has its converter slice and URL resolver done,
-  but the runtime provisioning flip remains blocked on real SHA pins and first
-  green recipe-publish artifacts.
+- `w5/wsl-import-via-ci-rootfs` has converter, URL resolver, runtime
+  provisioning flip, systemd/root fixes, and real E2E proof. Treat remaining
+  Ready blockers as F2 and post-`f5801968` smoke follow-ups, not as w5
+  artifact gates.
 
-Do not re-claim w1, w2, w3, or w4; their terminal events are recorded below.
-The next Windows implementation item is the w5 runtime provisioning flip after
-real recipe artifacts and SHA pins exist; the independent ready fallback is w7
-diagnostics and branch sync.
+Do not re-claim w1, w2, w3, w4, w5, or w6; their terminal events are recorded
+below. The next Windows implementation item is F2/HvSocket Ready proof after
+syncing `f5801968`. The independent fallback is w7 diagnostics only if F2 is
+blocked.
+
+### Item: w8/hvsocket-control-wire-ready
+
+- id: `w8/hvsocket-control-wire-ready`
+- type: feature
+- owner_host: windows
+- capability_tags: [win32, hvsocket, wsl, control-wire]
+- status: in_progress
+- gated_on: []
+- cleared_gates:
+  - Linux/recipe F1 headless service restart loop fixed at `f5801968`
+    (`Type=exec`)
+- depends_on: [w5/wsl-import-via-ci-rootfs]
+- owned_files:
+  - `crates/tillandsias-windows-tray/src/hvsocket.rs`
+  - `crates/tillandsias-windows-tray/src/wsl_lifecycle.rs`
+  - `crates/tillandsias-windows-tray/src/notify_icon.rs`
+- summary: >
+    Complete the Windows host-to-guest control-wire transport. WSL2 exposes
+    the guest AF_VSOCK listener through Hyper-V sockets rather than a standard
+    host AF_VSOCK CID. Use the WSL utility-VM GUID plus the port-derived
+    service GUID to connect to the existing in-VM listener without changing the
+    wire protocol.
+- next_action: >
+    Pull or merge latest `origin/linux-next` into `windows-next`, finish the
+    host-side HvSocket connect path, run a real Hello/HelloAck against the
+    recipe-provisioned distro, and append an agent_status_packet with exact
+    remaining blocker evidence. If the unit still restarts after `f5801968`,
+    file fresh Linux/recipe evidence.
+- acceptance_evidence:
+  - Windows tray reaches Ready via HvSocket after `fetch-headless.service`
+    installs the listener binary.
+  - `scripts/diagnose-windows.ps1` or equivalent notes distinguish F2
+    transport failures from any post-`f5801968` recipe-rootfs/unit regression.
+- fallback_when_blocked: >
+    Keep the recipe-provisioned distro and w5 proof as evidence; update w7
+    diagnostics so the next agent sees the current F2/post-F1-fix split.
+- agent_status_packet_expected:
+  - current plan
+  - dependencies and blockers
+  - files touched
+  - evidence produced
+  - next checkpoint
+  - lease intent
 
 ### Item: w7/recipe-diagnostics-and-branch-sync
 
@@ -67,29 +117,24 @@ diagnostics and branch sync.
 - owned_files:
   - `scripts/diagnose-windows.ps1`
 - summary: >
-    Keep the Windows no-VM diagnostic current while the recipe artifact path
-    finishes. `origin/windows-next` `7e95c7e2` has already absorbed Step 16
-    slice 1 and has no unmerged Windows delta, but the branch now needs to
-    absorb `linux-next` `a18bcbf3`. Report whether the script still accurately
-    distinguishes the completed BuildahExec/materialize-cli implementation and
-    URL resolver from the still-missing main-branch PR #3 workflow fix and SHA
-    pins. The forge-target `launch_spec` amendment is complete, so w7 should
-    focus on branch-sync diagnostics unless the latest `linux-next` exposes a
-    Windows-specific regression.
+    Keep the Windows no-VM diagnostic current only as a fallback. The recipe
+    artifact path is proven, so diagnostics should now distinguish completed
+    w5 provisioning from F2 HvSocket transport work and any post-`f5801968`
+    recipe-rootfs/unit regression. `origin/windows-next` has active unmerged code delta; do
+    not report PR #3, first green recipe-publish, or manifest SHA pins as live
+    blockers.
 - next_action: >
-    Pull or merge latest `origin/linux-next` into `windows-next`, run
-    `scripts/diagnose-windows.ps1` on Windows, and append an
-    agent_status_packet here with branch-sync result plus remaining
-    PR #3 recipe-publish fix/SHA-pin artifact-gate diagnostics.
+    If F2/HvSocket is blocked, pull or merge latest `origin/linux-next` into
+    `windows-next`, run `scripts/diagnose-windows.ps1` on Windows, and append
+    an agent_status_packet here with branch-sync result plus the current F2
+    state.
 - acceptance_evidence:
   - `scripts/diagnose-windows.ps1` output on Windows, including WSL presence,
     recipe input detection, and the current workflow/artifact gate.
   - Pushed `windows-next` status/diagnostic commit if the script needs changes,
     or a no-code agent_status_packet if `83e2cd51` is sufficient.
 - fallback_when_blocked: >
-    Prepare w5 runtime-provisioning code against the l9 artifact contract, but
-    treat `"pending-ci"` SHA pins as a recoverable not-yet-published state and
-    mark E2E verification blocked until recipe-publish emits real SHAs.
+    Hand off to `w8/hvsocket-control-wire-ready` if diagnostics are current.
 - agent_status_packet_expected:
   - current plan
   - dependencies and blockers
@@ -235,11 +280,10 @@ diagnostics and branch sync.
 - type: feature
 - owner_host: windows
 - capability_tags: [wsl, vm-layer, fetch, provisioning]
-- status: blocked
-- gated_on:
-  - linux deliverable `l9/recipe-artifact-url-and-publish-smoke` (first green
-    recipe-publish rootfs `.tar` artifacts and SHA pins after PR #3/main fix)
-  - `images/vm/manifest.toml` SHA pins from first green recipe-publish run
+- status: done
+- completed_at: 2026-05-27
+- acceptance_status: rootfs_import_and_headless_fetch_proven_ready_waits_on_f1_f2
+- gated_on: []
 - cleared_gates:
   - linux deliverable `l2/recipe-shared-modules` integrated at `a7af0ed`
   - linux deliverable `l7/§3-materializer-driver` shipped at `9dca2c47`
@@ -250,6 +294,10 @@ diagnostics and branch sync.
     `963baeb1`
   - Windows-owned `RemoteArtifact` resolver for the l9 URL contract landed at
     `83e2cd51` and was integrated/tested at `150d8a14`
+  - recipe artifacts and manifest SHA pins landed; Windows proved the
+    `x86_64.tar` fetch/SHA/import path against a real WSL2 distro
+  - headless release asset publish fixed the first-boot fetch 404; Windows
+    confirmed HTTP 200 and listener binding
 - depends_on: []
 - owned_files:
   - `crates/tillandsias-vm-layer/src/wsl.rs`
@@ -265,8 +313,10 @@ diagnostics and branch sync.
     URL resolver are done; the remaining Windows work is the runtime
     fetch/provisioning flip from the legacy OCI provisioning manifest to the
     recipe-published tar with SHA verification and a recoverable
-    `"pending-ci"` state before the first artifact run.
-- estimated_effort: 1 day after l9 SHA pins land.
+    `"pending-ci"` state before the first artifact run. This is now
+    implemented and proven; Ready state depends on F2 HvSocket transport and
+    smoke of the `f5801968` unit fix, not on additional w5 artifact work.
+- estimated_effort: done.
 - progress:
   - Windows-owned converter slice `materialize::wsl::tar_to_wsl_import`
     landed on `origin/windows-next` at `cb39cb7c` and was integrated/tested
@@ -275,8 +325,12 @@ diagnostics and branch sync.
   - Windows-owned `RemoteArtifact` resolver for the l9 URL contract landed on
     `origin/windows-next` at `83e2cd51` and was integrated/tested into
     `linux-next` at `150d8a14`.
-  - Full WSL provisioning flip remains gated on PR #3/main recipe-publish fix,
-    l9 real recipe-publish artifacts, and manifest SHA pins.
+  - Runtime provisioning flip landed on `origin/windows-next` at `56760531`,
+    with follow-up `wsl.conf` systemd/default-root fixes and idempotent
+    skip-if-registered behavior.
+  - Deep E2E proved rootfs fetch/SHA/import, systemd boot, headless fetch HTTP
+    200, and listener bind. Remaining Ready work is tracked as F2 plus smoke
+    of the `f5801968` unit fix.
 
 ### Item: w6/vm-status-and-enumerate-real-handlers
 
@@ -309,14 +363,14 @@ diagnostics and branch sync.
 | Linux item | Status | Blocks Windows item |
 |---|---|---|
 | `l1/control-wire-pty-attach-tasks-1` | **done** (shipped `b345ae68`; 23/23 control-wire tests pass on Linux; 22/22 on Windows per `47d91d11`) | w4 done |
-| `l2/recipe-shared-modules` | **done** (windows authored §2 parser `26afb76a` integrated `a7af0ed`; 16/16 recipe tests green on Linux) | w5 converter slice done; provision gated on l9 SHA pins |
+| `l2/recipe-shared-modules` | **done** (windows authored §2 parser `26afb76a` integrated `a7af0ed`; 16/16 recipe tests green on Linux) | w5 done |
 | `l3/in-vm-headless-pty-handler` | **done** (`f770e013`/`8dc0d129`; tasks 4.1-4.7, two pump tests ignored pending AsyncFd rewrite) | w4 done |
-| `l4/replace-vsock-stub-handlers` | **done** (`6956c825`; real VmStatus/EnumerateLocalProjects/CloudRefresh backing data) | w6 diagnostics done; live smoke waits on artifacts |
-| `l5/recipe-smoke-ci-publish` | **workflow scaffold landed** (`55ff55c6`/`fad97244`), but first release artifacts and SHA pins not yet proven | w5 |
+| `l4/replace-vsock-stub-handlers` | **done** (`6956c825`; real VmStatus/EnumerateLocalProjects/CloudRefresh backing data) | w6 diagnostics done; live smoke waits on F2 and post-`f5801968` unit smoke |
+| `l5/recipe-smoke-ci-publish` | **done for Windows path**; artifacts and SHA pins are published/proven | w5 done |
 | `l6/linux-rasterize-svg-to-ico` | **done** (`ea13ba20`) | w1 done |
-| `l7/§3-materializer-driver` | **done** (`9dca2c47`; materializer feature and cache/export API shipped) | w5 converter done; l9 SHA pins remain |
-| `l8/buildah-exec-recipe-publish-smoke` | **done** (`6aeae3a7`; real BuildahExec + `materialize-cli`; 43/43 vm-layer materialize tests, full CI/install pass in ledger) | w5 runtime provisioning flip now waits on l9 SHA pins |
-| `l9/recipe-artifact-url-and-publish-smoke` | **blocked on PR #3/main CI fix + green run + SHA pins**; artifact URL contract done (`963baeb1`, `9db73978`, `74b1d78d`), Windows URL resolver done (`83e2cd51`/`150d8a14`), PR #2 registered `recipe-publish` on `main` (`03c3c50c`), first real runs failed on rootless Buildah overlay mount exit 125, and the fix is on `linux-next`/PR #3 but not main yet | w5 runtime provisioning flip |
+| `l7/§3-materializer-driver` | **done** (`9dca2c47`; materializer feature and cache/export API shipped) | w5 done |
+| `l8/buildah-exec-recipe-publish-smoke` | **done** (`6aeae3a7`; real BuildahExec + `materialize-cli`; 43/43 vm-layer materialize tests, full CI/install pass in ledger) | w5 done |
+| `l9/recipe-artifact-url-and-publish-smoke` | **done for Windows w5**; artifact URL contract, recipe artifacts, manifest SHA pins, and headless release asset fetch are all proven. F1 headless service stability has code fix `f5801968`; remaining follow-up is manifest `release_tag`, not l9 artifact publication. | w5 done; w8 remains |
 
 ## Events
 
@@ -788,3 +842,19 @@ Next greedy pickups (no VM needed): **w4b** (windows-ownable, pure) and **w4d**
 - Keep w7 ready: branch-sync to `a18bcbf3`, run
   `scripts/diagnose-windows.ps1`, and report that the current artifact gate is
   PR #3 plus a green recipe-publish run and manifest SHA pins.
+
+### Event: 2026-05-27T05:05Z — linux coordinator status reconciliation
+
+- Observed remote heads after fetch/rebase: `linux-next` `f5801968`,
+  `windows-next` `d15e0fb3`, `osx-next` `fa5a5c4c`, `main` `f9c465b3`.
+- Folded terminal events from `plan/issues/tray-convergence-coordination.md`:
+  PR #3, recipe-publish artifacts, manifest SHA pins, headless release assets,
+  and Windows w5 rootfs/headless-fetch proof are resolved.
+- `origin/windows-next` has active unmerged code delta into `linux-next`:
+  materialize Windows portability, recipe provisioning runtime refinements, and
+  F2 HvSocket work through `d15e0fb3`. The integration loop should merge/test
+  these or record exact conflicts; do not treat normal linux-next remote
+  progress as a blocker.
+- Current Windows dependency chain: w5 is done; F1 headless service stability
+  has code fix `f5801968` and needs smoke; F2 HvSocket is Windows-owned and in
+  progress; w7 is a fallback diagnostics packet only.

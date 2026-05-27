@@ -28,6 +28,30 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Coordinator audit 2026-05-27T05:05Z — l9 closed; F1 fixed; Windows F2 is current gate
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- observed_sibling_heads: main=`f9c465b3` · linux-next=`f5801968` ·
+  windows-next=`d15e0fb3` (ahead with unmerged Windows code) ·
+  osx-next=`fa5a5c4c` (ancestor, macOS unblocked/noop-reset broadcast)
+- Coordination fold only; no sibling merge attempted in this pass.
+- Remote progress is healthy. Since the 18:26Z cycle, the ledgers show
+  recipe-publish artifacts and SHA pins, both headless release assets,
+  Windows w5 real rootfs/headless-fetch proof, macOS `.img.xz` fetch/decompress
+  proof, macOS unblocked/noop-reset status, and the Linux-owned F1
+  `Type=exec` headless unit fix at `f5801968`. The old PR #3 / first green
+  artifact / SHA-pin gates are closed.
+- Active integration watch: `origin/windows-next` carries unmerged code deltas
+  through `d15e0fb3` (materialize Windows cfg gate, w5 recipe provisioning
+  refinements, and F2 HvSocket). The next integration loop should merge/test
+  these into `linux-next` or record exact conflicts. Preserve newer
+  `linux-next` plan entries if Windows branch reconciliation presents older
+  plan-file deletes.
+- Current dependency chain: F1 has a code fix and now needs smoke evidence;
+  Windows F2 HvSocket gates host Hello/HelloAck on WSL2; macOS m8 waits on
+  user-attended app smoke and should file any Ready hang against the current
+  recipe-rootfs/headless unit state.
+
 ### Cycle 2026-05-26T18:26Z — NO-OP (both siblings at-or-behind linux-next)
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next

@@ -32,19 +32,20 @@ live-verified:
 **What macOS is waiting for** (not a cross-host ask):
   - User interactive smoke results — user-attended; not parallelizable.
 
-The legacy "Status" line below is preserved for history but is
-superseded by this banner.
+The status line below is the coordinator refresh after the 05:05Z rebase.
 
 ---
 
-Status: **OPEN** as of 2026-05-26T17:21Z. macOS m1, m1b, m2, m3, m6,
-m7, m4 sub-task B, m5 fetch primitive, and m5 Start VM auto-fetch wiring are
-done/integrated. The latest folded macOS code is `080a8e60` / plan packet
-`64eba8f7`, folded into `linux-next` through merge `a3152fc5`. `osx-next` is
-at `a3152fc5` with no unmerged macOS delta and trails `linux-next`
-`a18bcbf3` by 2 commits: PR #2 registration notes and the rootless Buildah
-recipe-publish fix. Remaining macOS live-terminal proof is gated on l9:
-PR #3/main recipe-publish fix, first green artifacts, and manifest SHA pins.
+Status: **OPEN** as of 2026-05-27T05:05Z. macOS m1, m1b, m2, m3, m6,
+m7, m4 sub-task B, m5 fetch primitive, m5 Start VM auto-fetch wiring, `.img.xz`
+download/decompress, and bytes-level SHA proof are done/integrated. `osx-next`
+is at `fa5a5c4c`; `linux-next` is at `f5801968` after the Linux-owned
+headless unit fix (`Type=exec`) landed. The macOS noop streak was reset by
+iter 43's unblocked broadcast. The old l9 recipe-publish/SHA-pin gates are
+closed. Remaining macOS acceptance is user-attended m8 smoke of the rebuilt
+`dist/Tillandsias.app`; if Ready still hangs after Start VM, file fresh
+evidence against the current recipe-rootfs/headless unit state rather than
+reopening m5 fetch/provision code.
 
 ## How to use this file
 
@@ -72,13 +73,13 @@ Per branch canon §4, plan/-class writes directly are CORRECT; code commits
 SHOULD route through `osx-next` so the integration loop can run isolation
 checks. Advisory only; both flows still work.
 
-Work-shaping note: m5 runtime provisioning is now wired against the artifact
-contract, but E2E should wait for first green recipe-publish SHAs. m8 produced
-its autonomous no-VM build/process evidence and now waits on user-attended menu
-click smoke. The former m9 no-VM PTY adapter packet is superseded by m4 slices
-4c.1, 4c.2, and 5b; do not re-claim it. Current macOS implementation targets
-are optional follow-ups that do not require live artifacts: m10 project
-threading for PTY launch and m11 MenuStructure/clippy integration.
+Work-shaping note: m5 runtime provisioning is wired and bytes-level proven
+against live release assets. m8 produced autonomous build/process evidence and
+now waits on user-attended menu-click smoke. The former m9 no-VM PTY adapter
+packet is superseded by m4 slices 4c.1, 4c.2, and 5b; do not re-claim it.
+m10/m11 remain optional follow-ups, but the current macOS loop is allowed to
+noop while waiting on user smoke feedback or the shared manifest `release_tag`
+accessor.
 
 ## Currently unblocked / active
 
@@ -100,8 +101,8 @@ threading for PTY launch and m11 MenuStructure/clippy integration.
     Thread the active project selected by the macOS menu into `attach_pty` so
     `launch_spec(intent, project, rows, cols)` targets the same forge container
     semantics as the Windows launch-spec amendment instead of bare-VM bash.
-    This is useful before l9 SHA pins because it is structurally testable
-    without a booted VM.
+    This is useful before or after user smoke because it is structurally
+    testable without a booted VM.
 - next_action: >
     Inspect the current `MenuStructure`/status-item project state, pass an
     `Option<ProjectRef>` or equivalent through `open_shell` / `github_login`
@@ -154,7 +155,8 @@ threading for PTY launch and m11 MenuStructure/clippy integration.
   - `cargo test -p tillandsias-macos-tray --bin tillandsias-tray`.
 - fallback_when_blocked: >
     Leave a no-code agent_status_packet explaining which MenuStructure field is
-    missing, then wait on l9 SHA pins or user-attended m8 smoke.
+    missing, then wait on user-attended m8 smoke or the manifest
+    `release_tag` accessor.
 - agent_status_packet_expected:
   - current plan
   - dependencies and blockers
@@ -412,10 +414,9 @@ threading for PTY launch and m11 MenuStructure/clippy integration.
 - capability_tags: [vfr, vm-layer, fetch, provisioning]
 - status: done
 - completed_at: 2026-05-26T16:21Z
-- acceptance_status: blocked_on_l9_sha_pins_for_live_boot
+- acceptance_status: bytes_level_proven; live_app_smoke_waits_on_user_attended_m8
 - gated_on:
-  - live boot smoke after linux deliverable `l9/recipe-artifact-url-and-publish-smoke`
-    publishes first green artifacts and `images/vm/manifest.toml` SHA pins
+  - user-attended m8 smoke of the rebuilt production `.app`
 - cleared_gates:
   - linux deliverable `l2/recipe-shared-modules` integrated at `a7af0ed`
   - linux deliverable `l7/§3-materializer-driver` shipped at `9dca2c47`
@@ -429,6 +430,10 @@ threading for PTY launch and m11 MenuStructure/clippy integration.
     merged/tested into `linux-next` during the 11:43Z integration cycle
   - m5 Start VM auto-fetch wiring landed on `origin/osx-next` at `080a8e60`
     and was folded into `linux-next` through `a3152fc5`
+  - l9 recipe-publish artifacts, manifest SHA pins, and both headless release
+    assets landed
+  - `.img.xz` fetch/decompress landed at `916a240e`; bytes-level proof landed
+    at `303a5c24`; full unblocked app-smoke state landed at `3cc9e563`
 - depends_on: [m1/vmruntime-stop-and-wait-ready]
 - owned_files:
   - `crates/tillandsias-vm-layer/src/vz.rs` (provisioning slice)
@@ -441,10 +446,12 @@ threading for PTY launch and m11 MenuStructure/clippy integration.
     intermediate). Contribute `materialize::macos::tar_to_vfr_img`
     (Linux-runnable per D6 task 2b.2). The converter and workflow scaffold
     are done, and the macOS fetch primitive is wired into `startVm:`. Fresh
-    installs now auto-fetch the `.img` before boot, treat `"pending-ci"` SHA
-    pins as a recoverable not-yet-published state, and preserve the live boot
-    path for the first green recipe-publish artifacts.
-- estimated_effort: done; live verification after l9 SHA pins land.
+    installs now fetch the published `.img.xz`, decompress to the VFR image,
+    and verify the decompressed bytes against the manifest's `aarch64.img` SHA.
+    The current temporary tag source is an in-code constant matching the
+    manifest pins; replace it with `Manifest::release_tag()` when that shared
+    accessor lands.
+- estimated_effort: done; live verification is the user-attended m8 smoke.
 
 ### Item: m6/macos-installer-pkg-and-codesign
 
@@ -505,13 +512,13 @@ threading for PTY launch and m11 MenuStructure/clippy integration.
 | Linux item | Status | Blocks macOS item |
 |---|---|---|
 | `l1/control-wire-pty-attach-tasks-1` | done (`b345ae68`; §1 enum/capability tasks complete) | m4 ready with l3 also done |
-| `l2/recipe-shared-modules` | done (`a7af0ed`; parser tests green on Linux) | m5 converter/API work unblocked; full provision gated on l9 SHA pins |
+| `l2/recipe-shared-modules` | done (`a7af0ed`; parser tests green on Linux) | m5 done |
 | `l3/in-vm-headless-pty-handler` | done (`f770e013`/`8dc0d129`; tasks 4.1-4.7, two pump tests ignored pending AsyncFd rewrite) | m4 ready for host-side wiring |
 | `l4/replace-vsock-stub-handlers` | done (`6956c825`; informational only for macOS) | (informational only for macOS) |
-| `l5/recipe-smoke-ci-publish` | workflow scaffold landed (`55ff55c6`/`fad97244`), but first release artifacts and SHA pins not yet proven | m5 |
+| `l5/recipe-smoke-ci-publish` | done for macOS path; `.img.xz` asset and manifest SHA are published/proven | m5 done |
 | `l7/§3-materializer-driver` | done (`9dca2c47`; materializer feature and cache/export API shipped) | m5 converter/API work unblocked |
-| `l8/buildah-exec-recipe-publish-smoke` | done (`6aeae3a7`; real BuildahExec + `materialize-cli`; 43/43 vm-layer materialize tests, full CI/install pass in ledger) | m5 runtime provision now waits on l9 SHA pins |
-| `l9/recipe-artifact-url-and-publish-smoke` | blocked on workflow registration + CI/SHA pins; artifact URL contract done (`963baeb1`, `9db73978`, `74b1d78d`), recipe-publish workflow is not registered from default branch `main`, and first green artifacts/manifest SHA pins are still needed | m5 runtime provisioning flip |
+| `l8/buildah-exec-recipe-publish-smoke` | done (`6aeae3a7`; real BuildahExec + `materialize-cli`; 43/43 vm-layer materialize tests, full CI/install pass in ledger) | m5 done |
+| `l9/recipe-artifact-url-and-publish-smoke` | done for macOS m5; artifact URL contract, `.img.xz` release asset, manifest SHA pin, and bytes-level fetch/decompress verification are complete | m5 done; m8 smoke remains |
 
 ## Events
 
@@ -1788,3 +1795,19 @@ step 5 lands.
   (`ci-recipe-publish-rootless-fix-2026-05-26`) targeting `main`.
 - Ready macOS work while waiting: claim `m10/menu-project-threading-for-pty-launch`
   first; use `m11/menu-structure-action-integration-and-clippy` as fallback.
+
+### event: linux coordinator status reconciliation — 2026-05-27T05:05Z
+
+- Observed remote heads after fetch/rebase: `linux-next` `f5801968`,
+  `windows-next` `d15e0fb3`, `osx-next` `fa5a5c4c`, `main` `f9c465b3`.
+- Folded later terminal events from `plan/issues/tray-convergence-coordination.md`:
+  recipe-publish artifacts and SHA pins are no longer the blocker, both
+  headless release assets are live, `.img.xz` fetch/decompress/SHA verification
+  is bytes-level proven, and the fresh `.app` is rebuilt for interactive smoke.
+- `plan/issues/osx-next-noop-streak.md` has been reset by iter 43's unblocked
+  broadcast. MacOS has no cron-sized blocking code packet until user smoke
+  feedback or Linux-owned manifest `release_tag` accessor work lands.
+- Current macOS dependency chain: m5 is done; m8 user-attended smoke is the
+  primary acceptance gate. If Start VM reaches the in-VM unit but Ready hangs
+  after `f5801968`, file fresh evidence against the current recipe-rootfs /
+  headless unit state rather than reopening m5 fetch/provision code.

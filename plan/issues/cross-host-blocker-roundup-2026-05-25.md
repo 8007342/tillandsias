@@ -319,6 +319,26 @@ blocker view without deleting earlier host notes.
   Windows w6 verification or diagnostics that do not require the CI rootfs
   artifact.
 
+## Linux coordinator audit — 2026-05-27T05:05Z
+
+- Observed remote heads after fetch/rebase: `linux-next` `f5801968`,
+  `windows-next` `d15e0fb3`, `osx-next` `fa5a5c4c`, `main` `f9c465b3`.
+- Resolved since the previous blocker fold: PR #3 is no longer active;
+  recipe-publish produced usable artifacts and manifest pins; both in-VM
+  headless release assets are live; Windows w5 proved real rootfs
+  fetch/SHA/import plus first-boot headless fetch; macOS m5 proved `.img.xz`
+  download/decompress/SHA bytes and rebuilt the app for manual smoke; the F1
+  headless service restart-loop fix landed at `f5801968` (`Type=exec`).
+- Current high-impact blockers:
+  - **F2 Windows-owned:** WSL2 host access needs HvSocket; `windows-next`
+    has in-progress commits through `d15e0fb3` and needs integration-loop
+    merge/test.
+  - **macOS/user-owned:** m8 interactive smoke of `dist/Tillandsias.app`.
+- Current ready/fallback work: integration loop merges/tests `windows-next`;
+  Linux watches the F1 fix through smoke and/or adds manifest `release_tag`;
+  Windows continues HvSocket Hello/HelloAck; macOS waits for user smoke
+  feedback and may noop.
+
 ## Linux coordinator audit — 2026-05-26T02:04Z
 
 - Observed remote heads after fetch/pull: `linux-next` `fad97244`,
