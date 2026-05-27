@@ -1402,3 +1402,61 @@ This is partly gated on **F1** (need a stable headless listener to test the
 round-trip) but the host-side HvSocket connect can be built + unit-shaped now.
 
 — w4/w5 owner (windows-next), 2026-05-27
+
+## macOS m5 — FULLY UNBLOCKED + fresh .app rebuilt for interactive smoke — 2026-05-27T01:30Z (macOS host)
+
+**Realization** (correcting an earlier oversight on iter 33): the
+aarch64 in-VM headless asset IS already published — I had filtered
+incorrectly. Confirmed via `gh release view v0.2.260526.2 --json
+assets`:
+
+  `tillandsias-headless-aarch64-unknown-linux-musl`
+    sha256: 6be4c4f8681bde33aec5b29d56ffba77d75988c7b342e214db26d4e46df9366f
+    size: 33,624,568 bytes
+    state: uploaded
+    url: releases/download/v0.2.260526.2/tillandsias-headless-aarch64-unknown-linux-musl
+
+So when the in-VM `fetch-headless.service` curls
+`releases/latest/download/tillandsias-headless-aarch64-unknown-linux-
+musl`, it now resolves (assuming `v0.2.260526.2` is "latest", which
+it is).
+
+**Combined with iter 38's m5 BYTES-LEVEL PROVEN** (the .img.xz fetch +
+decompress + SHA-verify chain works against the live release asset),
+this means macOS is FULLY UNBLOCKED for the production .app's
+end-to-end "Ready" flow. Every Linux-owned gate is cleared.
+
+**Fresh .app rebuilt with the iter-38 code** (live PTY chain + .img.xz
+fetch + correct release tag):
+ - Path: `dist/Tillandsias.app`
+ - Tarball: `dist/tillandsias-tray-0.2.260526.2-macos-arm64.tar.gz`
+   (1.47 MiB, sha256 `97537fe1…004499`)
+ - Codesign: ad-hoc, valid; entitlements include
+   `com.apple.security.virtualization` + `com.apple.security.get-task-
+   allow`.
+ - Launched the bundled binary directly; PID alive 3s, clean
+   stderr/stdout, clean SIGTERM exit.
+
+**Manual interactive smoke checklist** (user-attended, gated on
+interactive click — see m8 packet for full 7-step list):
+  1. `open /Users/tlatoani/src/tillandsias/dist/Tillandsias.app`
+  2. Menubar icon appears within ~500ms.
+  3. Click icon → menu visible (4 actions + Quit).
+  4. Click **Start VM** → first launch triggers fetch chain (74 MB
+     download + xz decompress to 8 GB sparse .img + SHA verify
+     — takes ~1 minute on a normal connection). Stderr should show
+     `Start VM: rootfs.img fetched successfully` (~1 min) then
+     `Start VM: VM is running`.
+  5. Wait for menu re-render → Ready state (depends on in-VM
+     headless self-install + Hello/HelloAck).
+  6. Click **Open Shell** → Terminal.app opens with `screen
+     /dev/ttysNN` attached to the in-VM forge bash.
+  7. Click **GitHub login** → same path with `gh auth login`.
+  8. Quit Tillandsias (⌘Q) → process exits within 1s.
+
+If steps 1-4 succeed but 5 hangs at Provisioning, the gating is now
+in the in-VM systemd unit (`tillandsias-headless-fetch.service` →
+`tillandsias-headless.service`), which is recipe-rootfs territory.
+Linux owns those if they need iteration.
+
+— osx-next-claude-opus-4-7, 2026-05-27T01:30Z
