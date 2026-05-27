@@ -25,8 +25,8 @@ use tillandsias_control_wire::transport::{
     AsyncReadWrite, CONTROL_WIRE_VSOCK_PORT, Listener, Transport, bind,
 };
 use tillandsias_control_wire::{
-    CAP_PTY_ATTACH_V1, ControlEnvelope, ControlMessage, ErrorCode, LocalProjectEntry,
-    MAX_MESSAGE_BYTES, VmPhase, WIRE_VERSION, decode, encode,
+    CAP_PTY_ATTACH_V1, CloudProjectEntry, ControlEnvelope, ControlMessage, ErrorCode,
+    LocalProjectEntry, MAX_MESSAGE_BYTES, VmPhase, WIRE_VERSION, decode, encode,
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::mpsc;
@@ -300,23 +300,22 @@ async fn handle_connection(
                 }
             }
             ControlMessage::CloudRefreshRequest { seq } => {
-                // l4 (deferred): real implementation invokes `gh repo list
-                // --json owner,name,defaultBranchRef` as a subprocess.
-                // The in-VM `gh` reads the GitHub token from
-                // `/run/secrets/vault-token` (mounted by the host shell on
-                // container launch) and the result is parsed into
-                // CloudProjectEntry. Until that subprocess + token wiring is
-                // in place we return an empty list with the existing schema
-                // so the host tray can still issue the request and render an
-                // empty cloud-projects section.
+                // Real in-VM implementation: invoke `gh repo list --json
+                // nameWithOwner,defaultBranchRef` with the mounted GitHub
+                // token, parse into CloudProjectEntry. Degrades to an empty
+                // list (preserving the prior stub behaviour) when gh or the
+                // token are absent or the call fails, so the host tray still
+                // gets a well-formed reply offline / pre-login.
                 //
-                // @trace spec:host-shell-architecture, spec:tillandsias-vault, plan/issues/multi-host-integration-loop-2026-05-24.md l4
+                // @trace spec:host-shell-architecture, spec:tillandsias-vault,
+                //        plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q4)
+                let projects = fetch_cloud_projects();
                 let reply = ControlEnvelope {
                     wire_version: WIRE_VERSION,
                     seq: env.seq,
                     body: ControlMessage::CloudRefreshReply {
                         seq_in_reply_to: seq,
-                        projects: Vec::new(),
+                        projects,
                     },
                 };
                 if write_envelope(&mut stream, &reply).await.is_err() {
@@ -520,9 +519,142 @@ fn enumerate_local_projects() -> Vec<LocalProjectEntry> {
     out
 }
 
+/// In-VM GitHub token mounted by the host shell on container launch. Stable
+/// name (podman secret / bind mount); see vault_bootstrap's token plumbing.
+const IN_VM_GITHUB_TOKEN_PATH: &str = "/run/secrets/tillandsias-github-token";
+
+/// Fetch the user's cloud (GitHub) projects from inside the VM by shelling
+/// out to `gh`. Returns an empty list — never an error — when the token or
+/// `gh` is missing or the call fails, so `CloudRefreshReply` is always
+/// well-formed (matches the previous stub's offline/pre-login behaviour).
+///
+/// @trace spec:host-shell-architecture, spec:tillandsias-vault
+fn fetch_cloud_projects() -> Vec<CloudProjectEntry> {
+    let token = match std::fs::read_to_string(IN_VM_GITHUB_TOKEN_PATH) {
+        Ok(t) if !t.trim().is_empty() => t.trim().to_string(),
+        _ => {
+            debug!(
+                spec = "host-shell-architecture",
+                path = IN_VM_GITHUB_TOKEN_PATH,
+                "CloudRefreshRequest: no GitHub token mounted; returning empty cloud list"
+            );
+            return Vec::new();
+        }
+    };
+
+    let output = std::process::Command::new("gh")
+        .args([
+            "repo",
+            "list",
+            "--json",
+            "nameWithOwner,defaultBranchRef",
+            "--limit",
+            "100",
+        ])
+        .env("GH_TOKEN", &token)
+        .output();
+
+    let stdout = match output {
+        Ok(out) if out.status.success() => out.stdout,
+        Ok(out) => {
+            warn!(
+                spec = "host-shell-architecture",
+                status = ?out.status.code(),
+                stderr = %String::from_utf8_lossy(&out.stderr).trim(),
+                "CloudRefreshRequest: gh repo list failed; returning empty cloud list"
+            );
+            return Vec::new();
+        }
+        Err(e) => {
+            warn!(
+                spec = "host-shell-architecture",
+                error = %e,
+                "CloudRefreshRequest: gh not available; returning empty cloud list"
+            );
+            return Vec::new();
+        }
+    };
+
+    parse_gh_repo_list(&String::from_utf8_lossy(&stdout))
+}
+
+/// Pure parser for `gh repo list --json nameWithOwner,defaultBranchRef`
+/// output. Tolerant: skips entries missing nameWithOwner; a repo with no
+/// defaultBranchRef (e.g. an empty repo) gets an empty default_branch rather
+/// than being dropped. Malformed JSON yields an empty list.
+fn parse_gh_repo_list(json: &str) -> Vec<CloudProjectEntry> {
+    let Ok(value) = serde_json::from_str::<serde_json::Value>(json) else {
+        return Vec::new();
+    };
+    let Some(array) = value.as_array() else {
+        return Vec::new();
+    };
+    let mut out = Vec::new();
+    for item in array {
+        let Some(name_with_owner) = item.get("nameWithOwner").and_then(|v| v.as_str()) else {
+            continue;
+        };
+        let (owner, repo) = match name_with_owner.split_once('/') {
+            Some((o, r)) if !o.is_empty() && !r.is_empty() => (o.to_string(), r.to_string()),
+            _ => continue,
+        };
+        let default_branch = item
+            .get("defaultBranchRef")
+            .and_then(|v| v.get("name"))
+            .and_then(|v| v.as_str())
+            .unwrap_or("")
+            .to_string();
+        out.push(CloudProjectEntry {
+            label: name_with_owner.to_string(),
+            owner,
+            repo,
+            default_branch,
+        });
+    }
+    out
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn parse_gh_repo_list_maps_name_owner_and_branch() {
+        let json = r#"[
+            {"nameWithOwner":"8007342/tillandsias","defaultBranchRef":{"name":"main"}},
+            {"nameWithOwner":"acme/widgets","defaultBranchRef":{"name":"trunk"}}
+        ]"#;
+        let out = parse_gh_repo_list(json);
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0].label, "8007342/tillandsias");
+        assert_eq!(out[0].owner, "8007342");
+        assert_eq!(out[0].repo, "tillandsias");
+        assert_eq!(out[0].default_branch, "main");
+        assert_eq!(out[1].default_branch, "trunk");
+    }
+
+    #[test]
+    fn parse_gh_repo_list_tolerates_missing_branch_and_bad_entries() {
+        // Empty repo (no defaultBranchRef) is kept with empty branch; an
+        // entry missing nameWithOwner is skipped, not fatal.
+        let json = r#"[
+            {"nameWithOwner":"u/empty-repo","defaultBranchRef":null},
+            {"description":"no name field"},
+            {"nameWithOwner":"u/ok","defaultBranchRef":{"name":"main"}}
+        ]"#;
+        let out = parse_gh_repo_list(json);
+        assert_eq!(out.len(), 2);
+        assert_eq!(out[0].label, "u/empty-repo");
+        assert_eq!(out[0].default_branch, "");
+        assert_eq!(out[1].repo, "ok");
+    }
+
+    #[test]
+    fn parse_gh_repo_list_empty_on_malformed_or_non_array() {
+        assert!(parse_gh_repo_list("not json").is_empty());
+        assert!(parse_gh_repo_list("{}").is_empty());
+        assert!(parse_gh_repo_list("[]").is_empty());
+    }
 
     #[test]
     fn vm_state_handle_defaults_to_ready() {
