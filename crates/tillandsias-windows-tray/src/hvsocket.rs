@@ -293,6 +293,33 @@ pub async fn hvsocket_request(
     decode(&body).map_err(|e| Error::new(ErrorKind::InvalidData, e))
 }
 
+/// Read one control-wire envelope from a connected stream (4-byte length +
+/// postcard). The streaming-read counterpart to [`hvsocket_request`], used to
+/// pump multi-frame exchanges like a PTY session (`PtyData` … `PtyClose`).
+///
+/// @trace plan/issues/tray-convergence-coordination.md (w9), spec:vsock-transport
+#[cfg(target_os = "windows")]
+pub async fn hvsocket_read_envelope(
+    stream: &mut tokio::net::TcpStream,
+) -> std::io::Result<tillandsias_control_wire::ControlEnvelope> {
+    use std::io::{Error, ErrorKind};
+    use tillandsias_control_wire::{MAX_MESSAGE_BYTES, decode};
+    use tokio::io::AsyncReadExt;
+
+    let mut len_buf = [0u8; 4];
+    stream.read_exact(&mut len_buf).await?;
+    let len = u32::from_be_bytes(len_buf) as usize;
+    if len > MAX_MESSAGE_BYTES {
+        return Err(Error::new(
+            ErrorKind::InvalidData,
+            "inbound frame too large",
+        ));
+    }
+    let mut body = vec![0u8; len];
+    stream.read_exact(&mut body).await?;
+    decode(&body).map_err(|e| Error::new(ErrorKind::InvalidData, e))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -403,5 +430,62 @@ mod tests {
             .await
             .expect("VmStatusRequest round-trip");
         println!("VmStatusRequest reply over HvSocket: {:?}", reply.body);
+    }
+
+    /// w9 PTY-attach probe: open a PTY in the VM running a short command and
+    /// pump the output frames back to `PtyClose`. Proves the in-VM headless's
+    /// PTY-attach (the mechanism behind Open Shell / agents). Run:
+    /// `cargo test -p tillandsias-windows-tray -- --ignored pty_attach_over_hvsocket`.
+    #[cfg(target_os = "windows")]
+    #[tokio::test]
+    #[ignore = "needs a running WSL distro with the headless listening on vsock 42420"]
+    async fn e2e_pty_attach_over_hvsocket() {
+        use tillandsias_control_wire::{ControlMessage, PtyDirection};
+
+        let (mut stream, _) = hvsocket_handshake(42420).await.expect("handshake");
+        // Open a PTY running a command that prints a marker and exits.
+        let first = hvsocket_request(
+            &mut stream,
+            2,
+            ControlMessage::PtyOpen {
+                session_id: 1,
+                rows: 24,
+                cols: 80,
+                argv: vec!["/bin/echo".into(), "tillandsias-pty-ok".into()],
+                env: vec![("TERM".into(), "xterm-256color".into())],
+                cwd: None,
+            },
+        )
+        .await
+        .expect("PtyOpen round-trip");
+
+        let mut output = Vec::new();
+        let mut env = first;
+        loop {
+            match env.body {
+                ControlMessage::PtyData {
+                    direction: PtyDirection::ToHost,
+                    bytes,
+                    ..
+                } => output.extend_from_slice(&bytes),
+                ControlMessage::PtyClose { exit, .. } => {
+                    println!(
+                        "PTY closed: exit={:?}; output={:?}",
+                        exit,
+                        String::from_utf8_lossy(&output)
+                    );
+                    break;
+                }
+                other => println!("PTY frame: {other:?}"),
+            }
+            env = hvsocket_read_envelope(&mut stream)
+                .await
+                .expect("read PTY frame");
+        }
+        assert!(
+            String::from_utf8_lossy(&output).contains("tillandsias-pty-ok"),
+            "expected PTY output to contain the marker; got {:?}",
+            String::from_utf8_lossy(&output)
+        );
     }
 }
