@@ -1,30 +1,54 @@
 <#
 .SYNOPSIS
-    Build the Tillandsias Windows tray binary (tillandsias-tray.exe).
+    Build (and optionally package) the Tillandsias Windows tray
+    (tillandsias-tray.exe).
 
 .DESCRIPTION
     The windows-owned parallel to scripts/build-macos-tray.sh. Compiles the
     `tillandsias-windows-tray` crate for the host MSVC target and reports the
     resulting executable path. Release by default (GUI subsystem, no console
-    window); pass -Debug for a console-attached build that surfaces tracing
+    window); pass -DebugBuild for a console-attached build that surfaces tracing
     output for interactive debugging.
 
-    @trace spec:windows-native-tray
+    With -Release it ALSO packages the publishable release artifacts (mirroring
+    build-macos-tray.sh): a `tillandsias-tray-<version>-windows-x64.zip` (the exe
+    + install-windows.ps1) plus a distinct `SHA256SUMS-windows` (so it does not
+    collide with the Linux/macOS sums in the shared release), written under
+    `release-artifacts/`. This absorbs the inline packaging stopgap previously in
+    the release.yml `windows-release` job (tray-convergence-coordination.md ask).
+
+    @trace spec:windows-native-tray, spec:linux-native-portable-executable
 
 .PARAMETER DebugBuild
     Build the debug profile (keeps a console window + assertions) instead of
-    release.
+    release. Mutually exclusive with -Release.
+
+.PARAMETER Release
+    After a release build, stage + zip the publishable artifacts + emit
+    SHA256SUMS-windows under release-artifacts/. Implies a release profile.
+
+.PARAMETER Version
+    Release version string (no leading 'v') used in the artifact name. Defaults
+    to the contents of the repo-root VERSION file. Only used with -Release.
 
 .EXAMPLE
     scripts\build-windows-tray.ps1
     scripts\build-windows-tray.ps1 -DebugBuild
+    scripts\build-windows-tray.ps1 -Release
+    scripts\build-windows-tray.ps1 -Release -Version 0.2.260527.1
 #>
 [CmdletBinding()]
 param(
-    [switch]$DebugBuild
+    [switch]$DebugBuild,
+    [switch]$Release,
+    [string]$Version
 )
 
 $ErrorActionPreference = 'Stop'
+
+if ($DebugBuild -and $Release) {
+    throw "-DebugBuild and -Release are mutually exclusive (packaging needs a release build)."
+}
 
 # Repo root = parent of this script's directory.
 $RepoRoot = Split-Path -Parent $PSScriptRoot
@@ -48,5 +72,51 @@ $exe = Join-Path $RepoRoot "target\$profileName\tillandsias-tray.exe"
 if (-not (Test-Path $exe)) { throw "expected binary not found: $exe" }
 
 Write-Host "Built: $exe" -ForegroundColor Green
-# Emit the path as the script's object output so callers can capture it.
-Write-Output $exe
+
+if (-not $Release) {
+    # Emit the path as the script's object output so callers can capture it.
+    Write-Output $exe
+    return
+}
+
+# --- Release packaging (mirrors build-macos-tray.sh) ---------------------------
+if ([string]::IsNullOrWhiteSpace($Version)) {
+    $versionFile = Join-Path $RepoRoot 'VERSION'
+    if (-not (Test-Path $versionFile)) {
+        throw "-Release needs a version: pass -Version or provide a repo-root VERSION file."
+    }
+    $Version = (Get-Content $versionFile -Raw).Trim()
+}
+# Tolerate a leading 'v' if a caller passes a tag.
+$Version = $Version.TrimStart('v')
+
+$artifactsDir = Join-Path $RepoRoot 'release-artifacts'
+New-Item -ItemType Directory -Force $artifactsDir | Out-Null
+
+$base = "tillandsias-tray-$Version-windows-x64"
+$stage = Join-Path $artifactsDir $base
+if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
+New-Item -ItemType Directory -Force $stage | Out-Null
+
+Copy-Item $exe (Join-Path $stage 'tillandsias-tray.exe')
+$installer = Join-Path $RepoRoot 'scripts\install-windows.ps1'
+if (Test-Path $installer) {
+    Copy-Item $installer (Join-Path $stage 'install-windows.ps1')
+}
+
+$zip = Join-Path $artifactsDir "$base.zip"
+if (Test-Path $zip) { Remove-Item -Force $zip }
+Compress-Archive -Path (Join-Path $stage '*') -DestinationPath $zip -Force
+Remove-Item -Recurse -Force $stage
+
+# Distinct sums file so it does not collide with the Linux/macOS SHA256SUMS in
+# the shared release. sha256sum format: "<hash>  <filename>".
+$hash = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
+$sums = Join-Path $artifactsDir 'SHA256SUMS-windows'
+"$hash  $(Split-Path $zip -Leaf)" | Out-File -Encoding ascii -NoNewline $sums
+
+Write-Host "Packaged: $zip" -ForegroundColor Green
+Write-Host "Checksums: $sums" -ForegroundColor Green
+Get-ChildItem $artifactsDir | Select-Object Name, Length | Format-Table -AutoSize | Out-Host
+# Emit the zip path as the script's object output.
+Write-Output $zip

@@ -74,3 +74,5 @@ cheatsheet-sources/
 /target/forge-diagnostics
 /result
 /result-*
+# Release packaging staging (build-windows-tray.ps1 -Release / release CI jobs)
+/release-artifacts
