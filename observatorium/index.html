@@ -4,7 +4,9 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>Tillandsias Observatorium</title>
+  <link rel="stylesheet" href="lib/highlight.min.css">
   <script src="lib/chart.umd.js"></script>
+  <script src="lib/highlight.min.js"></script>
   <style>
     @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
     
@@ -591,6 +593,52 @@ function renderSpecs() {
   });
 }
 
+function detectLanguage(path) {
+  const ext = path.split('.').pop().toLowerCase();
+  switch (ext) {
+    case 'rs': return 'rust';
+    case 'sh': return 'bash';
+    case 'md': return 'markdown';
+    case 'yaml':
+    case 'yml': return 'yaml';
+    case 'toml': return 'toml';
+    case 'json': return 'json';
+    case 'js': return 'javascript';
+    case 'ts': return 'typescript';
+    case 'html': return 'html';
+    case 'css': return 'css';
+    default: return 'plaintext';
+  }
+}
+
+function splitHighlightedHtml(html) {
+  const lines = html.split(/\r?\n/);
+  const result = [];
+  const openTags = [];
+  
+  for (const line of lines) {
+    // Build prefix from open tags
+    const prefix = openTags.map(tag => tag.outer).join('');
+    
+    // Analyze current line for tags to update the stack
+    const tagRegex = /<\/?span[^>]*>/g;
+    let match;
+    while ((match = tagRegex.exec(line)) !== null) {
+      const tag = match[0];
+      if (tag.startsWith('</')) {
+        openTags.pop();
+      } else {
+        openTags.push({ outer: tag });
+      }
+    }
+    
+    // Close currently open tags
+    const suffix = '</span>'.repeat(openTags.length);
+    result.push(prefix + line + suffix);
+  }
+  return result;
+}
+
 async function fetchFileLines(path, lineNum) {
   let content = '';
   if (state.fileCache.has(path)) {
@@ -607,13 +655,27 @@ async function fetchFileLines(path, lineNum) {
   const start = Math.max(0, lineNum - 6);
   const end = Math.min(lines.length, lineNum + 10);
   
-  let html = '<div class="code-fragment" style="font-family: ui-monospace, monospace; font-size: 12px; background: #06090d; border-radius: 8px; overflow-x: auto; padding: 8px 0; display: flex; flex-direction: column;">';
+  // Highlight the entire block
+  const blockCode = lines.slice(start, end).join('\n');
+  let highlightedHtml = blockCode;
+  if (typeof hljs !== 'undefined') {
+    try {
+      highlightedHtml = hljs.highlight(blockCode, { language: detectLanguage(path) }).value;
+    } catch (e) {
+      console.error('Highlight failed:', e);
+    }
+  }
+  
+  const highlightedLines = splitHighlightedHtml(highlightedHtml);
+  
+  let html = '<div class="code-fragment hljs" style="font-family: ui-monospace, monospace; font-size: 12px; background: #0b0f14; border-radius: 8px; overflow-x: auto; padding: 8px 0; display: flex; flex-direction: column; border: 1px solid var(--line-soft);">';
   for (let i = start; i < end; i++) {
     const isTarget = (i + 1) === lineNum;
+    const highlightedLineText = highlightedLines[i - start] !== undefined ? highlightedLines[i - start] : escapeHtml(lines[i]);
     html += `
       <div class="code-line" style="display: flex; padding: 2px 16px; line-height: 1.4; ${isTarget ? 'background: rgba(139, 183, 255, 0.15); border-left: 3px solid var(--accent); padding-left: 13px;' : ''}">
         <span class="line-num" style="width: 40px; color: var(--text-muted); text-align: right; margin-right: 16px; user-select: none;">${i + 1}</span>
-        <span class="line-text" style="white-space: pre; color: ${isTarget ? '#fff' : 'var(--text)'};">${escapeHtml(lines[i])}</span>
+        <span class="line-text" style="white-space: pre; color: ${isTarget ? '#fff' : ''};">${highlightedLineText}</span>
       </div>`;
   }
   html += '</div>';
