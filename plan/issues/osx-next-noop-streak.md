@@ -21,4 +21,9 @@ Cadence: streak 1 → 1h | 2 → 2h | 3 → 4h | 4+ → 6h (cap).
     shipped `b762feef` (F2 HvSocket service-GUID derivation) but that's
     Windows-internal; no macOS impact. State unchanged from streak 1
     rationale.
-  - next wake: 2h (7200s).
+  - next wake: 2h (7200s) — runtime clamped to 1h actual (3600s cap).
+- **streak 3** — 2026-05-27T04:04Z (iter 42)
+  - reason: no new linux-next commits since `65ef0e13`. Windows shipped
+    `e3524bd4` (F2 — resolve WSL utility-VM GUID via hcsdiag) — still
+    Windows-internal scope. macOS state unchanged.
+  - next wake: 4h (14400s) requested, will clamp to 1h.
