@@ -261,11 +261,25 @@ pub async fn hvsocket_request(
     seq: u64,
     body: tillandsias_control_wire::ControlMessage,
 ) -> std::io::Result<tillandsias_control_wire::ControlEnvelope> {
+    hvsocket_send(stream, seq, body).await?;
+    hvsocket_read_envelope(stream).await
+}
+
+/// Send one control-wire request envelope over a connected stream (no reply
+/// read). Used for fire-and-forward frames like `PtyOpen` / `PtyData{ToGuest}`
+/// (stdin) / `PtyClose`, where replies arrive asynchronously and are pumped
+/// separately via [`hvsocket_read_envelope`].
+///
+/// @trace plan/issues/tray-convergence-coordination.md (w9), spec:vsock-transport
+#[cfg(target_os = "windows")]
+pub async fn hvsocket_send(
+    stream: &mut tokio::net::TcpStream,
+    seq: u64,
+    body: tillandsias_control_wire::ControlMessage,
+) -> std::io::Result<()> {
     use std::io::{Error, ErrorKind};
-    use tillandsias_control_wire::{
-        ControlEnvelope, MAX_MESSAGE_BYTES, WIRE_VERSION, decode, encode,
-    };
-    use tokio::io::{AsyncReadExt, AsyncWriteExt};
+    use tillandsias_control_wire::{ControlEnvelope, WIRE_VERSION, encode};
+    use tokio::io::AsyncWriteExt;
 
     let env = ControlEnvelope {
         wire_version: WIRE_VERSION,
@@ -277,20 +291,7 @@ pub async fn hvsocket_request(
         .write_all(&(bytes.len() as u32).to_be_bytes())
         .await?;
     stream.write_all(&bytes).await?;
-    stream.flush().await?;
-
-    let mut len_buf = [0u8; 4];
-    stream.read_exact(&mut len_buf).await?;
-    let len = u32::from_be_bytes(len_buf) as usize;
-    if len > MAX_MESSAGE_BYTES {
-        return Err(Error::new(
-            ErrorKind::InvalidData,
-            "inbound frame too large",
-        ));
-    }
-    let mut body = vec![0u8; len];
-    stream.read_exact(&mut body).await?;
-    decode(&body).map_err(|e| Error::new(ErrorKind::InvalidData, e))
+    stream.flush().await
 }
 
 /// Read one control-wire envelope from a connected stream (4-byte length +
@@ -487,5 +488,81 @@ mod tests {
             "expected PTY output to contain the marker; got {:?}",
             String::from_utf8_lossy(&output)
         );
+    }
+
+    /// w9 bidirectional probe: open `cat` in a PTY, write to its **stdin**
+    /// (host→guest `PtyData{ToGuest}`), and read the echo back
+    /// (guest→host `PtyData{ToHost}`). Proves the last unproven data direction —
+    /// host→guest stdin — i.e. the full interactive Open Shell data path. Run:
+    /// `cargo test -p tillandsias-windows-tray -- --ignored pty_bidirectional`.
+    #[cfg(target_os = "windows")]
+    #[tokio::test]
+    #[ignore = "needs a running WSL distro with the headless listening on vsock 42420"]
+    async fn e2e_pty_bidirectional_over_hvsocket() {
+        use tillandsias_control_wire::{ControlMessage, PtyDirection, PtyExit};
+
+        let (mut stream, _) = hvsocket_handshake(42420).await.expect("handshake");
+        // `cat` echoes stdin → stdout.
+        hvsocket_send(
+            &mut stream,
+            2,
+            ControlMessage::PtyOpen {
+                session_id: 1,
+                rows: 24,
+                cols: 80,
+                argv: vec!["/bin/cat".into()],
+                env: vec![("TERM".into(), "xterm-256color".into())],
+                cwd: None,
+            },
+        )
+        .await
+        .expect("PtyOpen cat");
+
+        // Host → guest stdin.
+        let marker = "tillandsias-stdin-ok\n";
+        hvsocket_send(
+            &mut stream,
+            3,
+            ControlMessage::PtyData {
+                session_id: 1,
+                direction: PtyDirection::ToGuest,
+                bytes: marker.as_bytes().to_vec(),
+            },
+        )
+        .await
+        .expect("PtyData ToGuest (stdin)");
+
+        // Read echoed stdout until the marker round-trips.
+        let mut out = Vec::new();
+        while !String::from_utf8_lossy(&out).contains("tillandsias-stdin-ok") {
+            let env = hvsocket_read_envelope(&mut stream)
+                .await
+                .expect("read frame");
+            if let ControlMessage::PtyData {
+                direction: PtyDirection::ToHost,
+                bytes,
+                ..
+            } = env.body
+            {
+                out.extend_from_slice(&bytes);
+            }
+        }
+        println!(
+            "bidirectional PTY over HvSocket — stdin echoed back: {:?}",
+            String::from_utf8_lossy(&out)
+        );
+        // Terminate the session (host-initiated close).
+        let _ = hvsocket_send(
+            &mut stream,
+            4,
+            ControlMessage::PtyClose {
+                session_id: 1,
+                exit: PtyExit {
+                    code: 0,
+                    signal: None,
+                },
+            },
+        )
+        .await;
     }
 }
