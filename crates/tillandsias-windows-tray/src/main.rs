@@ -16,6 +16,8 @@
 )]
 
 #[cfg(target_os = "windows")]
+mod hvsocket;
+#[cfg(target_os = "windows")]
 mod installation_uuid;
 #[cfg(target_os = "windows")]
 mod notify_icon;
