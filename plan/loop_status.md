@@ -1,18 +1,19 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-05-27T14:29Z
+LastExecutionTime: 2026-05-27T16:24Z
 
 ## This Loop
 
 - Fetched origin, confirmed `linux-next` was clean and up to date at
-  `91061b61`, and observed remote heads: `windows-next` `c0a9558b`,
+  `011d7b49`, and observed remote heads: `windows-next` `c0a9558b`,
   `osx-next` `deba10d8`, `main` `f9c465b3`.
-- Folded new Windows evidence after `29fe3807`: `f4c3d70f` wires Retry to
-  re-trigger guarded provisioning, and `c0a9558b` reports forge-container Open
-  Shell smoke passed on real Windows hardware.
-- Reconciled w9 so it remains `in_progress`: Retry and both Open Shell legs
-  are now proven, but `origin/windows-next` still needs integration-loop
-  merge/test into `linux-next`.
+- No sibling branch advanced since the 14:29Z fold. `linux-next` advanced by
+  one coordination commit (`011d7b49`) that already folded Windows w9 Retry and
+  forge-container Open Shell smoke.
+- Reconciled active queues without changing item states: Windows w9 remains
+  `in_progress` pending integration-loop merge/test; w7 remains the fallback.
+  macOS m8 remains user-attended, with m10/m11 ready as optional no-blocker
+  follow-ups.
 
 ## Expected Next Loop
 
@@ -29,10 +30,8 @@ LastExecutionTime: 2026-05-27T14:29Z
 
 ## Resolved Since Previous Loop
 
-- Windows wired Retry to re-run `provision_via_recipe` after a failed
-  provisioning attempt (`f4c3d70f`).
-- Windows proved the forge-container Open Shell argv through `wsl.exe` into a
-  running `tillandsias-<name>-forge` container (`c0a9558b`).
+- None new this loop. The previous fold resolved Windows Retry and
+  forge-container Open Shell proof (`f4c3d70f`/`c0a9558b`).
 
 ## Current Major Blockers
 
@@ -55,5 +54,5 @@ LastExecutionTime: 2026-05-27T14:29Z
   files.
 - `git diff --check` passed for touched coordination files.
 - Files changed this pass: loop cache, plan status/index, Windows and macOS
-  work queues, blocker roundup, tray convergence note, coordination audit,
-  integration-loop ledger, and Windows thin-tray step cache.
+  work queues, blocker roundup, coordination audit, and integration-loop
+  ledger.

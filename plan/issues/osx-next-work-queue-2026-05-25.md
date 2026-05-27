@@ -2,7 +2,7 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
-## macOS UNBLOCKED for v0.0.1 — as of 2026-05-27T14:29Z
+## macOS UNBLOCKED for v0.0.1 — as of 2026-05-27T16:24Z
 
 **macOS has zero blocking asks for other hosts.** Every Linux- and
 Windows-owned artifact the macOS production path needs is shipped +
@@ -34,14 +34,14 @@ live-verified:
 **What macOS is waiting for** (not a cross-host ask):
   - User interactive smoke results — user-attended; not parallelizable.
 
-The status line below is the coordinator refresh after the 14:29Z fetch.
+The status line below is the coordinator refresh after the 16:24Z fetch.
 
 ---
 
-Status: **OPEN** as of 2026-05-27T14:29Z. macOS m1, m1b, m2, m3, m6,
+Status: **OPEN** as of 2026-05-27T16:24Z. macOS m1, m1b, m2, m3, m6,
 m7, m4 sub-task B, m5 fetch primitive, m5 Start VM auto-fetch wiring, `.img.xz`
 download/decompress, and bytes-level SHA proof are done/integrated. `osx-next`
-is at `deba10d8`, which is already an ancestor of `linux-next` `91061b61`.
+is at `deba10d8`, which is already an ancestor of `linux-next` `011d7b49`.
 The old l9 recipe-publish/SHA-pin gates and the F1 headless service restart
 loop are closed. Remaining macOS acceptance is user-attended m8 smoke of the
 rebuilt `dist/Tillandsias.app`; if Ready still hangs after Start VM, file
@@ -1846,4 +1846,14 @@ step 5 lands.
   work-queue updates.
 - Current macOS dependency chain is unchanged: m8 user-attended smoke is the
   acceptance gate; m10/m11 are optional no-blocker follow-ups; there is no
+  cross-host ask for macOS this loop.
+
+### event: linux coordinator status reconciliation — 2026-05-27T16:24Z
+
+- Observed remote heads after fetch/pull: `linux-next` `011d7b49`,
+  `windows-next` `c0a9558b`, `osx-next` `deba10d8`, `main` `f9c465b3`.
+- No unmerged macOS code delta exists. `osx-next` remains an ancestor of
+  `linux-next`; the newer Linux commit is a coordination fold for Windows w9.
+- Current macOS dependency chain is unchanged: m8 user-attended smoke remains
+  the acceptance gate; m10/m11 are optional no-blocker follow-ups; there is no
   cross-host ask for macOS this loop.

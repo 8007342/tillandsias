@@ -319,6 +319,29 @@ blocker view without deleting earlier host notes.
   Windows w6 verification or diagnostics that do not require the CI rootfs
   artifact.
 
+## Linux coordinator audit — 2026-05-27T16:24Z
+
+- Observed remote heads after fetch/pull: `linux-next` `011d7b49`,
+  `windows-next` `c0a9558b`, `osx-next` `deba10d8`, `main` `f9c465b3`.
+- Resolved since the previous blocker fold: none new. The previous fold
+  already captured Windows Retry reprovisioning and forge-container Open Shell
+  proof at `f4c3d70f`/`c0a9558b`.
+- Current high-impact blockers:
+  - **Integration-loop owned:** merge/test `origin/windows-next` through
+    `c0a9558b` into `linux-next`, preserving the newer `13cf3af0`
+    `images/vm/manifest.toml` repin and newer `linux-next` plan entries if
+    Windows' older blocks appear during reconciliation.
+  - **Windows-owned:** optional full live-provision dress rehearsal and
+    optional wire EnumerateLocalProjects if host-side scan is not enough.
+  - **macOS/user-owned:** m8 interactive smoke of the rebuilt
+    `dist/Tillandsias.app`.
+- Current ready/fallback work: Windows w9 continues only for integration
+  evidence or optional polish; w7 diagnostics remains the fallback if
+  merge/test exposes stale branch or manifest state. macOS has m10/m11 as
+  optional no-blocker follow-ups. Linux release cleanup remains useful but
+  non-blocking (`release.yml` headless auto-publish to `main`,
+  `Manifest::release_tag()`).
+
 ## Linux coordinator audit — 2026-05-27T14:29Z
 
 - Observed remote heads after fetch/pull: `linux-next` `91061b61`,
