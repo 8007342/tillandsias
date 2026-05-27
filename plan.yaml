@@ -19,8 +19,8 @@ plan:
 
   current_state:
     last_completed_step: recent-work-spec-doc-methodology-audit (step 20)
-    next_step: multi-host-plan-ledger-adoption (step 21)
-    next_graph_node: multi-host-plan-ledger-adoption (in_progress)
+    next_step: forge-diagnostics-automation (step 21.5)
+    next_graph_node: forge-diagnostics-automation (in_progress)
     plan_index: plan/index.yaml
     step_directory: plan/steps
     checkpoint_branch: linux-next

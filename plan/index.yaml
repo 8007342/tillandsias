@@ -1430,6 +1430,74 @@ plan_index:
           checkpoint_required: true
           handoff_note: "Ad hoc Markdown is intake only; retained files are compatibility tombstones that point at canonical artifacts."
 
+    - id: forge-diagnostics-automation
+      order: 21.5
+      title: Forge Diagnostics Automation — Non-blocking completeness probe loop
+      status: in_progress
+      deliverable: plan/issues/forge-diagnostics-automation-2026-05-27.md
+      depends_on: [recent-work-spec-doc-methodology-audit]
+      specs:
+        - default-image
+        - forge-as-only-runtime
+        - forge-cache-dual
+        - forge-environment-discoverability
+        - forge-hot-cold-split
+        - forge-offline
+        - forge-opencode-onboarding
+        - forge-shell-tools
+        - forge-staleness
+        - forge-standalone
+        - forge-welcome
+      exit_criteria:
+        - "forge diagnostics E2E litmus test exists and runs successfully (phase: post-build, size: e2e)"
+        - "Distillation pipeline (scripts/distill-forge-diagnostics.sh) produces actionable summaries in plan/diagnostics/"
+        - "Prompt evolution cycle works: capabilities confirmed → removed from prompt; gaps found → added to prompt"
+        - "Methodology updated per orchestrator feedback (litmus signal type: agent_diagnostic)"
+        - "Orchestrator acknowledges and responds to the methodology gap request"
+      tasks:
+        - id: forge-diagnostics/coordination
+          status: completed
+          depends_on: []
+          owned_files:
+            - plan/issues/forge-diagnostics-automation-2026-05-27.md
+          checkpoint_required: true
+          handoff_note: "Coordination issue created with host identity, sibling heads, and methodology gap request to orchestrator."
+        - id: forge-diagnostics/baseline
+          status: completed
+          depends_on: [forge-diagnostics/coordination]
+          owned_files:
+            - plan/diagnostics/forge-completeness-baseline-2026-05-27.md
+          checkpoint_required: true
+          handoff_note: "50 forge requirements audited: 6% full LITMUS, 24% STATIC, 34% PROMPT-eligible, 36% NONE."
+        - id: forge-diagnostics/prompt
+          status: completed
+          depends_on: [forge-diagnostics/baseline]
+          owned_files:
+            - plan/diagnostics/forge-diagnostics-prompt.txt
+          checkpoint_required: true
+          handoff_note: "Initial hybrid prompt placed in plan/diagnostics/. Covers agent availability, network isolation, hot/cold paths, cache env, shell tools, openspec, and welcome."
+        - id: forge-diagnostics/litmus-test
+          status: completed
+          depends_on: [forge-diagnostics/prompt]
+          owned_files:
+            - openspec/litmus-tests/litmus-forge-diagnostics-e2e.yaml
+          checkpoint_required: true
+          handoff_note: "E2E litmus test created. Gating points verify JSON parseability; capability assertions are non-gating (annex semantics)."
+        - id: forge-diagnostics/distillation-script
+          status: completed
+          depends_on: [forge-diagnostics/litmus-test]
+          owned_files:
+            - scripts/distill-forge-diagnostics.sh
+          checkpoint_required: true
+          handoff_note: "Distillation script reads raw diagnostics logs, extracts capability status, compares vs previous run for regressions, and writes dated summaries to plan/diagnostics/."
+        - id: forge-diagnostics/methodology-update
+          status: blocked
+          depends_on: [forge-diagnostics/coordination]
+          owned_files:
+            - methodology/litmus.yaml
+          checkpoint_required: true
+          handoff_note: "BLOCKED pending orchestrator response. Requested: new agent_diagnostic litmus signal type, composability rules, non-blocking annex semantics, and cross-test dedup."
+
     - id: multi-host-plan-ledger-adoption
       order: 21
       title: Multi-Host Plan Ledger Adoption

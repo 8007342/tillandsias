@@ -165,7 +165,8 @@ specs:
   status: active
   litmus_tests:
   - litmus:forge-standalone-traceability
-  coverage_ratio: 33
+  - litmus:forge-diagnostics-e2e
+  coverage_ratio: 50
   last_verified: '2026-05-12'
 - spec_id: dev-build
   status: active

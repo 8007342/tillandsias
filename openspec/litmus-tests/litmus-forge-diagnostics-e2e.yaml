@@ -1,0 +1,90 @@
+# @trace spec:default-image, spec:forge-as-only-runtime, spec:forge-offline, spec:forge-hot-cold-split, spec:forge-environment-discoverability, spec:forge-cache-dual, spec:forge-shell-tools, spec:forge-welcome, spec:forge-opencode-onboarding
+# Forge Diagnostics E2E — Non-blocking completeness probe.
+#
+# NOTE: This test runs the forge agent with a diagnostic prompt and captures
+# structured output. The gating points ONLY verify that the forge launched,
+# the agent responded, and the output is parseable JSON. Individual
+# capability checks are non-gating — they are recorded in the diagnostics
+# log for offline analysis.
+#
+# See plan/issues/forge-diagnostics-automation-2026-05-27.md for the
+# methodology context and the request to the orchestrator to formalize
+# this as an official litmus signal type.
+name: litmus:forge-diagnostics-e2e
+spec: default-image
+phase: post-build
+description: >
+  Launch forge with diagnostic prompt, capture structured agent-output log,
+  and verify the forge is alive and responding. Capability assertions are
+  NON-GATING — failures become forge-completeness signals, not CI blocks.
+severity: low
+size: e2e
+
+preconditions:
+  - tillandsias binary is installed and on PATH
+  - forge image is built and available locally
+  - plan/diagnostics/forge-diagnostics-prompt.txt exists and is non-empty
+
+critical_path:
+  - step: "ensure diagnostics artifact directory exists"
+    command: "mkdir -p target/forge-diagnostics"
+    timeout_ms: 2000
+
+  - step: "run forge diagnostics prompt capture"
+    command: >
+      tillandsias . --opencode --diagnostics
+      --prompt "$(cat plan/diagnostics/forge-diagnostics-prompt.txt)"
+      2>/dev/null
+    timeout_ms: 600000
+
+  - step: "capture stdout to timestamped diagnostics log"
+    command: >
+      tillandsias . --opencode --diagnostics
+      --prompt "$(cat plan/diagnostics/forge-diagnostics-prompt.txt)"
+      2>/dev/null
+      | tee "target/forge-diagnostics/diagnostics_$(date -u +%Y%m%dT%H%M%SZ).log"
+    timeout_ms: 600000
+
+  - step: "validate output is parseable JSON with diagnostics_timestamp field"
+    command: >
+      LOG=$(ls -t target/forge-diagnostics/diagnostics_*.log 2>/dev/null | head -1)
+      && [ -n "$LOG" ]
+      && cat "$LOG" | python3 -c "
+import json, sys
+data = json.load(sys.stdin)
+assert 'diagnostics_timestamp' in data, 'missing diagnostics_timestamp'
+assert 'capabilities' in data, 'missing capabilities'
+caps = data['capabilities']
+assert 'agent_available' in caps, 'missing agent_available'
+print('PASS: forge diagnostics JSON valid')
+print(f'  timestamp: {data[\"diagnostics_timestamp\"]}')
+# Non-gating: report capability status without failing
+for section, values in caps.items():
+    if isinstance(values, dict):
+        for key, val in values.items():
+            status = 'OK' if val not in ('unset', 'N/A', 'BLOCKED', 'NOT_FOUND', 'NONE') else 'MISSING'
+            print(f'  [{status}] {section}.{key} = {val}')
+    else:
+        print(f'  [INFO] {section} = {values}')
+"
+    timeout_ms: 15000
+
+observability:
+  traces:
+    - "@trace spec:default-image"
+    - "@trace spec:forge-as-only-runtime"
+    - "@trace spec:forge-offline"
+    - "@trace spec:forge-hot-cold-split"
+  expected_log: "Forge diagnostics E2E captured structured capability report"
+  log_fields:
+    spec: "forge-diagnostics"
+    test: "forge-diagnostics-e2e"
+    artifact: "target/forge-diagnostics/diagnostics_*.log"
+
+rollback:
+  on_failure: >
+    Ensure tillandsias binary is on PATH and forge image is built
+    (scripts/build-image.sh forge). If the binary is stale, rebuild
+    with ./build.sh --release --install. If the prompt file changed
+    without updating the JSON schema in step 3, update the validation.
+  command: "ls -la target/forge-diagnostics/ && cat target/forge-diagnostics/diagnostics_*.log 2>/dev/null | head -100"
