@@ -217,8 +217,34 @@ impl WslLifecycle {
         progress.report_phase(ProvisionPhase::StartingVm);
         self.runtime.start().await?;
 
+        // Connecting: establish the control wire over HvSocket and complete the
+        // `Hello`/`HelloAck` handshake. The in-VM headless self-installs on first
+        // boot (fetch-headless) then systemd starts it, so retry while it comes
+        // up. (Transport + handshake proven E2E — see `crate::hvsocket`.)
         progress.report_phase(ProvisionPhase::Connecting);
-        Ok(())
+        const CW_PORT: u32 = tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
+        let mut last_err = String::from("(no attempt)");
+        for attempt in 1..=12u32 {
+            match crate::hvsocket::hvsocket_handshake(CW_PORT).await {
+                Ok((_stream, wire_version)) => {
+                    tracing::info!(
+                        wire_version,
+                        attempt,
+                        "control wire up (HvSocket handshake)"
+                    );
+                    // NOTE: `_stream` is dropped here; holding it for the session
+                    // + flipping the tray menu to Ready is the next increment.
+                    return Ok(());
+                }
+                Err(e) => {
+                    last_err = e.to_string();
+                    tokio::time::sleep(Duration::from_secs(5)).await;
+                }
+            }
+        }
+        Err(format!(
+            "control-wire handshake did not succeed within budget: {last_err}"
+        ))
     }
 }
 
