@@ -319,6 +319,32 @@ blocker view without deleting earlier host notes.
   Windows w6 verification or diagnostics that do not require the CI rootfs
   artifact.
 
+## Linux coordinator audit — 2026-05-27T12:35Z
+
+- Observed remote heads after fetch/pull: `linux-next` `3370f04e`,
+  `windows-next` `29fe3807`, `osx-next` `deba10d8`, `main` `f9c465b3`.
+- Resolved since the previous blocker fold: Windows w9 advanced from native
+  terminal-launch code to user-facing proof and logging. `8e84df7d` proves
+  Open Shell terminal-click smoke on real Windows hardware, `0626a318` adds
+  file-based tray logging plus working Open Log, `41c32174` syncs the tracing
+  lockfile entries, and `29fe3807` refreshes the thin-tray next-action ledger
+  to drop stale recipe/provisioning blockers.
+- Current high-impact blockers:
+  - **Integration-loop owned:** merge/test `origin/windows-next` through
+    `29fe3807` into `linux-next`, preserving the newer `13cf3af0`
+    `images/vm/manifest.toml` repin and newer `linux-next` plan entries if
+    Windows' older blocks appear during reconciliation.
+  - **Windows-owned:** continue w9 with forge-container Open Shell E2E opposite
+    a live provisioned VM, Retry -> `provision_via_recipe`, and optional wire
+    EnumerateLocalProjects if host-side scan is not enough.
+  - **macOS/user-owned:** m8 interactive smoke of the rebuilt
+    `dist/Tillandsias.app`.
+- Current ready/fallback work: Windows w9 continues from Open Shell click
+  proof; w7 diagnostics remains the fallback if merge/test exposes stale
+  branch or manifest state. Linux release cleanup remains useful but
+  non-blocking (`release.yml` headless auto-publish to `main`,
+  `Manifest::release_tag()`).
+
 ## Linux coordinator audit — 2026-05-27T10:43Z
 
 - Observed remote heads after fetch/pull: `linux-next` `732603b1`,

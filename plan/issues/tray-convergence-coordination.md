@@ -1642,3 +1642,22 @@ the newer `13cf3af0` manifest repin if the Windows branch presents older SHA
 comments during merge. Remaining Windows implementation work is tracked as
 `w9/control-wire-session-menu-routing` in
 `plan/issues/windows-next-work-queue-2026-05-25.md`.
+
+## Coordinator fold — Windows Open Shell smoke and Open Log landed — 2026-05-27T12:35Z
+
+`origin/windows-next` advanced after the Ready/native-terminal notes:
+
+- `8e84df7d` records real-hardware Open Shell terminal-click smoke. `wt.exe`,
+  `wsl.exe -d tillandsias -- /bin/bash -l`, the full `wt.exe` -> `wsl.exe` ->
+  in-VM command chain, and the tray's spaced title quoting were all verified.
+- `0626a318` adds file-based tray logging at
+  `%LOCALAPPDATA%\tillandsias\logs\tray.log` and makes Open Log reveal that
+  file in Explorer; `41c32174` syncs the tracing deps into `Cargo.lock`.
+- `29fe3807` refreshes the Windows thin-tray next-action ledger: remaining w9
+  scope is forge-container Open Shell E2E opposite a live provisioned VM,
+  Retry -> `provision_via_recipe`, and optional wire EnumerateLocalProjects.
+
+The bare Open Shell terminal-launch mechanism is no longer a blocker.
+Remaining cross-host action is integration-loop merge/test of
+`origin/windows-next` through `29fe3807` into `linux-next`, preserving newer
+`linux-next` manifest and plan entries during reconciliation.

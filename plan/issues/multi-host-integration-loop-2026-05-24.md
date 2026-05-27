@@ -28,6 +28,36 @@ three consecutive same-cause failures.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Coordinator audit 2026-05-27T12:35Z — Windows w9 Open Shell smoke + logging; merge/test gate advances
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- observed_sibling_heads: main=`f9c465b3` · linux-next=`3370f04e` ·
+  windows-next=`29fe3807` (ahead with unmerged Windows w9 transport/menu code,
+  Open Shell smoke, file logging/Open Log, lockfile sync, and thin-tray docs) ·
+  osx-next=`deba10d8` (ancestor of linux-next)
+- Coordination fold only; no sibling merge attempted in this pass.
+- Remote progress is healthy. Since the 10:43Z fold, `linux-next` advanced by
+  one coordination commit and `windows-next` advanced from native terminal
+  launch code to Open Shell terminal-click smoke, file logging/Open Log,
+  lockfile sync, and a refreshed Windows thin-tray next action. `osx-next` and
+  `main` did not advance.
+- Resolved gates: Windows now proves Open Shell terminal-click smoke for
+  `wt.exe`, `wsl.exe`, bare-VM `/bin/bash -l`, and spaced-title quoting
+  (`8e84df7d`). The tray now writes a fixed log file and Open Log reveals it
+  in Explorer (`0626a318`/`41c32174`).
+- Active integration watch: `origin/windows-next` carries unmerged code/docs
+  through `29fe3807`. The next integration loop should merge/test those commits
+  into `linux-next` or record exact conflicts.
+- Merge caution: preserve the newer `linux-next` `13cf3af0`
+  `images/vm/manifest.toml` repin and newer plan entries if the Windows branch
+  presents older blocks during reconciliation.
+- Current dependency chain: Windows w9 is proven through the bare Open Shell
+  terminal launch but still needs merge/test into `linux-next`,
+  forge-container Open Shell E2E opposite a live provisioned VM, and Retry
+  wiring. macOS still waits on user-attended m8 smoke. Linux/release cleanup
+  remains `release.yml` headless auto-publish to `main` and the manifest-owned
+  `release_tag` accessor.
+
 ### Coordinator audit 2026-05-27T10:43Z — Windows w9 native-terminal path; merge/test gate advances
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next

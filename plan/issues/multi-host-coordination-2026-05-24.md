@@ -542,3 +542,40 @@ Current cross-host gates:
 - Release cleanup remains useful but non-blocking: land durable
   `release.yml` headless auto-publish on `main` and add
   `Manifest::release_tag()` so both trays can drop hardcoded recipe tags.
+
+## Coordination Audit - 2026-05-27T12:35Z
+
+host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+
+Observed remote heads after fetch/pull:
+
+- `main`: f9c465b3
+- `linux-next`: 3370f04e
+- `windows-next`: 29fe3807
+- `osx-next`: deba10d8
+
+Ledger corrections made in this audit:
+
+- Folded new Windows w9 evidence from `origin/windows-next`: `8e84df7d`
+  proves Open Shell terminal-click smoke on real hardware, `0626a318` adds
+  file-based tray logging and working Open Log, `41c32174` syncs the tracing
+  lockfile entries, and `29fe3807` refreshes the Windows thin-tray next-action
+  cache to the current scope.
+- Updated the Windows queue: w9 remains `in_progress`, but Open Shell
+  terminal-click smoke is now resolved. Remaining Windows work is
+  integration-loop merge/test, forge-container Open Shell E2E against a live
+  provisioned VM, Retry wiring, and optional wire EnumerateLocalProjects.
+- Advanced the integration-loop watch from `c997fc43` to `29fe3807`.
+
+Current cross-host gates:
+
+- Integration loop should merge/test `origin/windows-next` through `29fe3807`
+  into `linux-next`, preserving the newer `13cf3af0` manifest repin and newer
+  `linux-next` plan entries if the Windows branch presents older blocks.
+- Windows should continue w9 with forge-container Open Shell E2E and Retry
+  wiring after merge/test, using w7 diagnostics only if branch/manifest state is
+  stale.
+- macOS m8 is user-attended and not parallelizable.
+- Release cleanup remains useful but non-blocking: land durable
+  `release.yml` headless auto-publish on `main` and add
+  `Manifest::release_tag()` so both trays can drop hardcoded recipe tags.

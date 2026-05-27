@@ -21,12 +21,14 @@ headless over vsock. Podman never on the Windows host. Older 6-distro
 
 - `crates/tillandsias-windows-tray/notify_icon.rs` — Win32 tray UI implemented
   (message-only window, icon, WM_TASKBARCREATED re-add, right-click popup from
-  host-shell menu model). GAP: menu actions only log; nothing wired.
+  host-shell menu model). SelectAgent, Quit, Open Log, and native-terminal
+  launch for PTY-backed actions are wired; Retry remains a stub.
 - `crates/tillandsias-vm-layer/src/wsl.rs` — WslRuntime provision/start/stop/
   exec/wait_ready implemented as real wsl.exe shell-outs (Windows-gated).
   GAP: no snapshot/clone method on the VmRuntime trait.
 - `crates/tillandsias-windows-tray/wsl_lifecycle.rs` — bootstrap sequence
-  sketched. GAP: rootfs + binary downloads are PLACEHOLDERS (no HTTP, no SHA).
+  drives recipe rootfs download, SHA verification, WSL import, systemd
+  configuration, HvSocket handshake, keepalive, and graceful shutdown.
 - `tillandsias-host-shell`, `tillandsias-control-wire` + vsock transport: present.
 
 ## Phased plan
@@ -52,11 +54,9 @@ headless over vsock. Podman never on the Windows host. Older 6-distro
   bootstrap now fetches+verifies both. Tests: 10 unit pass (sha-hex validation,
   cache-hit-skips-network, unpinned-sha-refused, pins-parse) + 1 live test that
   downloads the REAL release binary and verifies its SHA (passed, 2s).
-- Phase 2b — OCI flatten + real import (NEXT): the pinned rootfs is a Fedora
-  OCI *image archive*, not a flat rootfs. `WslRuntime::provision` must flatten
-  the layer(s) (parse index.json -> manifest -> layer blob -> extract) into a
-  rootfs tar before `wsl --import`. Until then, bootstrap downloads+verifies
-  both artifacts but the import step will reject the OCI archive.
+- Phase 2b — OCI flatten + real import (DROPPED): superseded by the owner's
+  vm-recipe-provisioning model, which exports a flat rootfs tar from CI. Do NOT
+  build an OCI-flatten path.
 - Phase 3 — Snapshot / fast-boot: extend VmRuntime (seal_base +
   clone_from_base/reset_to_base); implement on WslRuntime via VHDX clone +
   `wsl --import-in-place`; update vm-idiomatic-layer + vm-provisioning-lifecycle
@@ -80,11 +80,11 @@ headless over vsock. Podman never on the Windows host. Older 6-distro
     local projects from first paint, no VM needed. `apply_project_event_to`
     (dedup by basename, name-sorted, removal) factored + unit-tested; tray
     builds + launches clean with the live scanner. 2 new tray tests.
-  - REMAINING (needs a booted VM): connect vsock client to a live in-VM
-    headless, flip menu Provisioning→Ready from a real handshake +
-    EnumerateLocalProjects (merge with scanned local list), Quit→graceful VM
-    drain (VmShutdownRequest then stop), route Attach/GitHubLogin/agents over
-    the wire (control-wire-pty-attach for Open Shell + login).
+  - DONE (2026-05-26/27): recipe provisioning, HvSocket Hello/HelloAck,
+    Ready-state gating, VmStatus over HvSocket, PTY open/data/close,
+    bidirectional PTY data, VM keepalive, Quit drain, and native-terminal Open
+    Shell launch are proven. Remaining w9 scope is forge-container Open Shell
+    E2E, Retry wiring, and optional wire EnumerateLocalProjects.
   - WIRE-DISPATCH CONTRACT (advisory from `plan/issues/control-socket-protocol-
     convergence-2026-05-25.md`): when the Win32 tray finally calls into the
     control wire, target the SAME `ControlMessage` variants over both transports
@@ -115,22 +115,23 @@ headless over vsock. Podman never on the Windows host. Older 6-distro
 
 ## NEXT ACTION (resume here)
 
-Phase 0/1/2 DONE; Phase 4 portable slice DONE. Cargo at `%USERPROFILE%\.cargo\bin`
-— prepend each PowerShell session:
+Phase 0/1/2 DONE; Phase 4 portable slice DONE; w5 recipe-provisioning + w9
+control-wire/PTY/Open-Shell PROVEN E2E (2026-05-26/27). Cargo at
+`%USERPROFILE%\.cargo\bin` — prepend each PowerShell session:
 `$env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"`.
 
 FIRST, re-sync shared ./plan: `git fetch --all`, then read
-`plan/issues/tray-convergence-coordination.md` and check origin/linux-next +
-origin/osx-next for responses to the windows-next recipe-convergence
-preferences (CI-materialized rootfs as the Windows default). The provisioning
-path depends on that cross-host decision.
+`plan/issues/tray-convergence-coordination.md` and the integration-loop ledger
+for new cross-host signal (merge conflicts, build/test failures, shared-contract
+changes). The recipe-convergence decision (CI-materialized rootfs as the Windows
+default) has LANDED and is implemented; the provisioning path is no longer
+blocked on it.
 
 NOTE: Phase 2b OCI-flatten is DROPPED — the owner's vm-recipe-provisioning
 model exports a flat rootfs tar from the recipe (no shipped binary, no OCI
 flatten). Do NOT build OCI-flatten.
 
-Provisioning thread is BLOCKED on the cross-host recipe decision. While
-blocked, model-independent work available WITHOUT a booted VM:
+Model-independent menu/install work (WITHOUT a booted VM):
 - DONE (2026-05-25): Host-side `~/src` scan via host-shell `scanner` populates
   menu local_projects from first paint (wired in `notify_icon::run`).
 - DONE (2026-05-25): real tray icon shipped (`assets/tillandsias.ico`, 7 sizes
@@ -142,16 +143,48 @@ blocked, model-independent work available WITHOUT a booted VM:
   parallel to `scripts/install-macos.sh`, but builds from source (no published
   Windows release artifact yet). A `--no-provision` / `TILLANDSIAS_NO_PROVISION`
   dev-mode gate in `run()` skips WSL bootstrap so the menu comes up clean for
-  local testing; installer defaults to dev mode while provisioning is gated.
-  Verified end-to-end: built, installed, launched — tray icon + right-click
-  menu live (status line, ~/src projects, agent radio, GitHub login, Quit).
+  local testing.
+- DONE (2026-05-27): **file-based tray logging** — `run()` installs a
+  `tracing-subscriber` file writer at startup
+  (`%LOCALAPPDATA%\tillandsias\logs\tray.log`, honors `RUST_LOG`); a
+  GUI-subsystem tray has no console otherwise. `Open Log` reveals it in
+  Explorer. (`0626a318`)
 - OBSERVED (2026-05-25): windows-host rustfmt produces drift on
-  `crates/tillandsias-host-shell/src/pty/unix.rs` (macOS-owned). Not touched
-  unilaterally — likely rustfmt-version skew or an unformatted landing; flag for
-  a linux/macOS fmt pass or a pinned-rustfmt reconciliation.
+  macOS-owned siblings (`pty/unix.rs`, etc.) — rustfmt-version skew. Reverted,
+  never staged; flag for a pinned-rustfmt reconciliation.
 
-Once a VM can boot (recipe lands, or interim path agreed): connect vsock client
--> handshake -> flip menu Provisioning->Ready + EnumerateLocalProjects, Quit->
-graceful drain, route Attach/GitHubLogin over the wire (control-wire-pty-attach).
-Contribute `materialize::wsl::tar_to_wsl_import` to the shared recipe module.
+PROVISIONING + CONTROL WIRE — PROVEN E2E on real hardware (2026-05-26/27), no
+longer blocked:
+- DONE: `provision_via_recipe` (w5) — recipe rootfs from embedded
+  `manifest.toml` -> `download_verified` ->
+  `materialize::wsl::tar_to_wsl_import` -> `configure_recipe_distro`
+  (systemd) -> headless self-installs on first boot.
+- DONE (F2): HvSocket transport (`hvsocket.rs`) — WSL2 is a Hyper-V guest, so
+  the host reaches the guest's AF_VSOCK listener via `AF_HYPERV`
+  `(VmId, ServiceId)`. Proven: `Hello`/`HelloAck`,
+  `VmStatusRequest`->`Ready`, PTY-attach both directions (one-shot +
+  bidirectional stdin). Flips menu Provisioning->Ready.
+- DONE: **VM keepalive** (`531bcce4`) — WSL2 idles the utility VM down without
+  a host-side session; `spawn_keepalive` (`wsl --exec sleep infinity`,
+  kill_on_drop) is held for the tray's lifetime so the control wire stays warm.
+- DONE: **Quit -> graceful drain** (`bc23a529`) — bounded `wsl --terminate` on
+  Quit tears down VM + keepalive (no orphaned child).
+- DONE: **clickable Open Shell** (`c997fc43`) — Attach/Maintain/GitHubLogin
+  resolve `intent_for_action` -> `launch_spec` to the forge-wrapped in-VM argv,
+  opened in a native terminal via `wt.exe`/`wsl.exe -d tillandsias -- <argv>`
+  (per the per-OS-terminal agreement; only the shell argv converges with
+  macOS). Smoke PASSED (`8e84df7d`): `wt.exe` + `wsl.exe` bridge + bare-VM
+  `/bin/bash -l` + spaced-title quoting all verified.
+
+NEXT (remaining w9, model-independent):
+- Forge-container Open Shell E2E — exercise the `podman exec -it
+  tillandsias-<proj>-forge` argv opposite a live provisioned VM with a running
+  forge container (the only Open-Shell leg not yet smoke-tested; gated on a live
+  provision run, not on the launch mechanism).
+- `Retry` menu action — currently a stub; wire it to re-trigger
+  `provision_via_recipe` (needs the provision spawn refactored to be
+  re-invokable from the WM_COMMAND handler).
+- Optional: `EnumerateLocalProjects` over the wire (in-VM projects) — today the
+  menu is populated by the host-side `~/src` scan, which already works.
+
 Checkpoint to origin/windows-next after each meaningful batch.
