@@ -104,6 +104,17 @@ try:
     diag = data.get('diagnostics', [])
     for d in diag:
         print(f'DIAGNOSTIC: {d}')
+    # Actionable analysis (methodology response_shape) — these feed the
+    # forge-enhancements/curated-toolchain-backlog packet.
+    for t in data.get('missing_tools', []):
+        print(f'MISSING_TOOL: {t}')
+    for e in data.get('proposed_enhancements', []):
+        if isinstance(e, dict):
+            print(f'PROPOSED_ENHANCEMENT: {e.get(\"ecosystem\",\"other\")}: {e.get(\"tool\",\"?\")} — {e.get(\"why\",\"\")}')
+        else:
+            print(f'PROPOSED_ENHANCEMENT: {e}')
+    for r in data.get('isolation_or_privacy_risks', []):
+        print(f'ISOLATION_RISK: {r}')
     # Timestamp
     print(f'TIMESTAMP={data.get(\"diagnostics_timestamp\", \"unknown\")}')
     print(f'FORGE_VERSION={data.get(\"forge_version\", \"unknown\")}')
@@ -237,6 +248,38 @@ SUMMARY
 
     if [[ $missing_count -eq 0 ]]; then
         echo "- All forge capabilities nominal. Consider removing checked items from the diagnostics prompt." >> "$summary_file"
+    fi
+
+    # Actionable analysis from the agent (methodology response_shape) — the
+    # input the orchestrator triages into forge-enhancements/curated-toolchain-backlog.
+    # `|| true`: grep exits non-zero on no-match, which would abort under
+    # `set -e` when the array is empty (the common, healthy case).
+    local risks
+    risks=$(echo "$diagnostics_json" | grep '^ISOLATION_RISK: ' | sed 's/^ISOLATION_RISK: /- /' || true)
+    if [[ -n "$risks" ]]; then
+        echo "" >> "$summary_file"
+        echo "## ⚠️ Isolation / Privacy Risks (investigate before any enhancement)" >> "$summary_file"
+        echo "" >> "$summary_file"
+        echo "$risks" >> "$summary_file"
+    fi
+
+    local missing_tools enhancements
+    missing_tools=$(echo "$diagnostics_json" | grep '^MISSING_TOOL: ' | sed 's/^MISSING_TOOL: /- /' || true)
+    enhancements=$(echo "$diagnostics_json" | grep '^PROPOSED_ENHANCEMENT: ' | sed 's/^PROPOSED_ENHANCEMENT: /- /' || true)
+    if [[ -n "$missing_tools" || -n "$enhancements" ]]; then
+        echo "" >> "$summary_file"
+        echo "## Forge Enhancement Candidates (→ curated-toolchain-backlog)" >> "$summary_file"
+        echo "" >> "$summary_file"
+        echo "Candidates only — orchestrator approves against the privacy/isolation gate." >> "$summary_file"
+        echo "" >> "$summary_file"
+        if [[ -n "$missing_tools" ]]; then
+            echo "### Missing tools" >> "$summary_file"
+            echo "$missing_tools" >> "$summary_file"
+        fi
+        if [[ -n "$enhancements" ]]; then
+            echo "### Proposed enhancements" >> "$summary_file"
+            echo "$enhancements" >> "$summary_file"
+        fi
     fi
 
     _info "Summary written: $summary_file"

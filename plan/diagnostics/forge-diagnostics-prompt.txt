@@ -56,6 +56,29 @@ welcome_paths=$(ls /usr/local/share/tillandsias/ 2>/dev/null | tr '\n' ':')
 # Diagnostics about diagnostics
 opencode_init_prompt=${OPENCODE_INIT_PROMPT_FILE:-unset}
 
+--- ANALYSIS (fills missing_tools / proposed_enhancements / isolation_or_privacy_risks) ---
+
+After running the checks, ANALYZE the results and fill the three actionable
+arrays in the JSON below. This is the meaningful output the project acts on:
+
+- missing_tools: tools/toolchains/language-servers/debuggers/formatters a
+  developer would expect in a ready-to-use forge but that are absent here.
+  Be concrete (e.g. "rust-analyzer", "pyright", "delve"). [] if none.
+- proposed_enhancements: specific, in-envelope improvements to the forge
+  IMAGE or CONFIG (preinstalled toolchains, language servers, preconfigured
+  env, discoverability docs). Each item:
+  {"tool":"...","ecosystem":"rust|web|python|dart|wasm|other","why":"..."}.
+- isolation_or_privacy_risks: anything observed that WEAKENS isolation (a
+  reachable external host, an unexpected mount, exposed creds, a proxy
+  bypass). [] if the envelope looks intact.
+
+HARD RULE — privacy/isolation envelope: you MUST NOT propose broader host
+mounts, host credential/token exposure, privileged containers, raw host
+sockets, or any network-isolation bypass. Proposals are limited to a more
+complete ready-to-use forge image within the EXISTING sandbox. Anything that
+WEAKENS the envelope goes in isolation_or_privacy_risks, never in
+proposed_enhancements.
+
 --- OUTPUT FORMAT ---
 
 Output ONLY the following JSON structure with real values filled in.
@@ -111,5 +134,8 @@ Do NOT wrap in markdown code fences. Output raw JSON only.
       "init_prompt_file": "<opencode_init_prompt>"
     }
   },
-  "diagnostics": []
+  "diagnostics": [],
+  "missing_tools": [],
+  "proposed_enhancements": [],
+  "isolation_or_privacy_risks": []
 }

@@ -55,6 +55,12 @@ assert 'diagnostics_timestamp' in data, 'missing diagnostics_timestamp'
 assert 'capabilities' in data, 'missing capabilities'
 caps = data['capabilities']
 assert 'agent_available' in caps, 'missing agent_available'
+# Structural (methodology forge-diagnostics response_shape): the three
+# actionable arrays must be present + lists. Their CONTENTS are non-gating
+# (agent_diagnostic annex), but absence is an invalid-structure failure.
+for field in ('missing_tools', 'proposed_enhancements', 'isolation_or_privacy_risks'):
+    assert field in data, f'missing {field}'
+    assert isinstance(data[field], list), f'{field} must be a list'
 print('PASS: forge diagnostics JSON valid')
 print(f'  timestamp: {data[\"diagnostics_timestamp\"]}')
 # Non-gating: report capability status without failing
@@ -65,6 +71,10 @@ for section, values in caps.items():
             print(f'  [{status}] {section}.{key} = {val}')
     else:
         print(f'  [INFO] {section} = {values}')
+# Surface the actionable analysis (non-gating) so a CI run shows gaps.
+print(f'  missing_tools: {len(data[\"missing_tools\"])}; '
+      f'proposed_enhancements: {len(data[\"proposed_enhancements\"])}; '
+      f'isolation_risks: {len(data[\"isolation_or_privacy_risks\"])}')
 "
     timeout_ms: 15000
 
