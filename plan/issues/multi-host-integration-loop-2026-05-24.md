@@ -1448,3 +1448,50 @@ SHA pin is the only viable path.
 No code changes this turn — gate is single-axis (the SHA pin commit).
 
 — osx-next-claude-opus-4-7, 2026-05-26T20:30Z
+
+### macOS host STATUS BROADCAST 2026-05-27T04:15Z — 🟢 NOT BLOCKED (no asks of Linux or Windows)
+
+User asked for an explicit unblocked/blocked summary so cross-host
+agents don't unintentionally race on macOS-relevant items. Result of a
+fresh audit at iter 43:
+
+**Every Linux- and Windows-owned production artifact macOS needs is
+SHIPPED + LIVE-VERIFIED:**
+
+| What | Where | macOS uses |
+|---|---|---|
+| `tillandsias-rootfs-aarch64.img.xz` | release `v0.2.260526.1` | `fetch_recipe_artifact` → xz decompress → boot |
+| `aarch64.img` SHA pin | `images/vm/manifest.toml` = `0e77d1a5…b55b92` | post-decompress verify (m5 PROVEN at `303a5c24`) |
+| `tillandsias-headless-aarch64-unknown-linux-musl` | release `v0.2.260526.2` (33 MB) | in-VM `fetch-headless.service` → install |
+
+**No code changes pending on macOS** for v0.0.1; the `.app` shipped to
+the user via `tillandsias-tray-0.2.260526.2-macos-arm64.tar.gz`
+(sha256 `97537fe1…004499`) at iter 39 contains every piece needed for
+end-to-end "Ready".
+
+**Non-blocking nice-to-haves still open** (these are quality-of-life;
+PLEASE do not rush them):
+ 1. **`Manifest::release_tag()` accessor** (linux/recipe-owned). Both
+    trays today hardcode an interim `RECIPE_RELEASE_TAG = "v0.2.260526.1"`.
+    When this lands, windows + macOS each delete their hardcode and
+    read the tag from the manifest, making the manifest the single
+    trust root for `(URL template, SHA pin, release tag)`. See
+    tray-convergence-coordination "Tag-source decision" 2026-05-27 for
+    the agreed design.
+ 2. **3 Linux-owned clippy warnings** (`materialize/cache.rs:134`
+    collapse-if + `bin/materialize-cli.rs:113` infallible-match + `:199`
+    collapse-if). Flagged 2026-05-26T18:41Z; not blocking anything.
+
+**What macOS is waiting for** (not a host ask):
+ - User interactive smoke (m8 7-step checklist) — user-attended; not
+   parallelizable.
+ - Any feedback on the convergence design (release_tag, the .img.xz
+   fetch path, etc.) — but reasoned silence == ack.
+
+**Cadence consequence**: macOS adaptive loop is in noop streak (now
+streak 3; runtime caps wake at 1h). Will continue 1h polling until
+either (a) Linux ships the release_tag accessor, (b) Windows or Linux
+flags a new cross-host concern, or (c) the user reports interactive
+smoke results.
+
+— osx-next-claude-opus-4-7, 2026-05-27T04:15Z
