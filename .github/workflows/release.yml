@@ -331,35 +331,16 @@ jobs:
           echo "version=${VERSION}" >> "$GITHUB_OUTPUT"
           echo "Resolved Windows release version: v${VERSION}"
 
-      - name: Build tillandsias-tray.exe (windows-owned build script)
+      - name: Build + package the Windows tray (windows-owned build script)
         shell: pwsh
-        run: scripts/build-windows-tray.ps1
-
-      - name: Stage + package release artifacts
-        shell: pwsh
-        env:
-          VERSION: ${{ steps.version.outputs.version }}
         run: |
-          # Inline packaging stopgap: build-windows-tray.ps1 currently emits
-          # only the .exe. We zip it with install-windows.ps1 + emit a distinct
-          # SHA256SUMS-windows (so it doesn't collide with the Linux/macOS sums
-          # in the shared release). Coordination ask filed for windows-next to
-          # move this into build-windows-tray.ps1 -Release, mirroring
-          # build-macos-tray.sh (see tray-convergence-coordination.md).
-          $exe = "target/release/tillandsias-tray.exe"
-          if (-not (Test-Path $exe)) { throw "missing $exe (build-windows-tray.ps1 output)" }
-          New-Item -ItemType Directory -Force release-artifacts | Out-Null
-          $stage = "release-artifacts/tillandsias-tray-$($env:VERSION)-windows-x64"
-          New-Item -ItemType Directory -Force $stage | Out-Null
-          Copy-Item $exe (Join-Path $stage "tillandsias-tray.exe")
-          if (Test-Path scripts/install-windows.ps1) {
-            Copy-Item scripts/install-windows.ps1 (Join-Path $stage "install-windows.ps1")
-          }
-          $zip = "release-artifacts/tillandsias-tray-$($env:VERSION)-windows-x64.zip"
-          Compress-Archive -Path (Join-Path $stage "*") -DestinationPath $zip -Force
-          Remove-Item -Recurse -Force $stage
-          $h = (Get-FileHash $zip -Algorithm SHA256).Hash.ToLower()
-          "$h  $(Split-Path $zip -Leaf)" | Out-File -Encoding ascii -NoNewline "release-artifacts/SHA256SUMS-windows"
+          # The windows-owned build script now builds AND packages under -Release
+          # (tray-convergence-coordination.md ask, done windows-next): produces
+          # release-artifacts/tillandsias-tray-<ver>-windows-x64.zip (exe +
+          # install-windows.ps1) + a distinct SHA256SUMS-windows. This replaces
+          # the prior inline packaging stopgap; the signing step below consumes
+          # those exact paths.
+          scripts/build-windows-tray.ps1 -Release -Version "${{ steps.version.outputs.version }}"
           Get-ChildItem release-artifacts
 
       - name: Install Cosign
