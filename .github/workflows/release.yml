@@ -31,7 +31,7 @@ jobs:
         uses: dtolnay/rust-toolchain@3c5f7ea28cd621ae0bf5283f0e981fb97b8a7af9 # stable
         with:
           toolchain: stable
-          targets: x86_64-unknown-linux-musl
+          targets: x86_64-unknown-linux-musl, aarch64-unknown-linux-musl
 
       - name: Rust cache
         uses: swatinem/rust-cache@c19371144df3bb44fab255c43d04cbc2ab54d1c4 # v2
@@ -92,13 +92,46 @@ jobs:
           grep -F '"event":"app.started"' <<<"$HEADLESS_OUTPUT"
           grep -F '"event":"app.stopped"' <<<"$HEADLESS_OUTPUT"
 
-      - name: Collect release artifacts
+      - name: Collect release artifacts (host binary + in-VM headless agents)
         run: |
           mkdir -p release-artifacts
+          # Host product binary (--features tray). Saved FIRST, before the
+          # headless builds below reuse the x86_64 target dir for the same
+          # `tillandsias` bin name with a different feature set.
           install -m 0755 target/x86_64-unknown-linux-musl/release/tillandsias release-artifacts/tillandsias-linux-x86_64
           install -m 0755 scripts/install.sh release-artifacts/install.sh
           install -m 0755 scripts/uninstall.sh release-artifacts/uninstall.sh
           install -m 0755 scripts/verify.sh release-artifacts/verify.sh
+
+          # In-VM headless agents (--features listen-vsock) for BOTH arches.
+          # The recipe rootfs's first-boot tillandsias-headless-fetch.service
+          # downloads tillandsias-headless-<arch>-unknown-linux-musl from
+          # releases/latest (see images/vm/bootstrap/20-tillandsias.sh). This
+          # codifies the manual publish done 2026-05-27; without it the in-VM
+          # agent never installs → no vsock Hello/HelloAck → tray never Ready.
+          # aarch64 cross-builds with the static musl.cc toolchain (the same
+          # method proven locally); x86_64 uses musl-tools' musl-gcc.
+          curl -fsSL --retry 3 -o /tmp/aarch64-musl-cross.tgz https://musl.cc/aarch64-linux-musl-cross.tgz
+          tar -xzf /tmp/aarch64-musl-cross.tgz -C /tmp
+          export PATH="/tmp/aarch64-linux-musl-cross/bin:${PATH}"
+
+          cargo build --release -p tillandsias-headless \
+            --target x86_64-unknown-linux-musl --features listen-vsock
+          install -m 0755 target/x86_64-unknown-linux-musl/release/tillandsias \
+            release-artifacts/tillandsias-headless-x86_64-unknown-linux-musl
+
+          CC_aarch64_unknown_linux_musl=aarch64-linux-musl-gcc \
+          AR_aarch64_unknown_linux_musl=aarch64-linux-musl-ar \
+          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER=aarch64-linux-musl-gcc \
+          cargo build --release -p tillandsias-headless \
+            --target aarch64-unknown-linux-musl --features listen-vsock
+          install -m 0755 target/aarch64-unknown-linux-musl/release/tillandsias \
+            release-artifacts/tillandsias-headless-aarch64-unknown-linux-musl
+
+          # Arch sanity — fail the release if a cross-build silently produced
+          # the wrong arch.
+          file release-artifacts/tillandsias-headless-x86_64-unknown-linux-musl | grep -F "x86-64"
+          file release-artifacts/tillandsias-headless-aarch64-unknown-linux-musl | grep -F "aarch64"
 
           cd release-artifacts
           sha256sum -- * > SHA256SUMS
