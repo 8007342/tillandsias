@@ -389,6 +389,7 @@ const state = {
   search: '',
   sheetCache: new Map(),
   fileCache: new Map(),
+  detectedSourceRoot: '/source',
   chartInstance: null
 };
 
@@ -454,7 +455,8 @@ async function fetchFirst(paths, type = 'text') {
 
 function sourcePath(path) {
   const clean = String(path).replace(/^\/+/, '');
-  return SOURCE_ROOT ? `${SOURCE_ROOT}/${clean}` : `/${clean}`;
+  const root = (typeof state !== 'undefined' && state.detectedSourceRoot !== undefined) ? state.detectedSourceRoot : (window.OBSERVATORIUM_SOURCE_ROOT || '/source');
+  return root ? `${root.replace(/\/+$/, '')}/${clean}` : `/${clean}`;
 }
 function sourceHref(href) {
   if (/^(https?:|data:|#)/i.test(href)) return href;
@@ -866,6 +868,12 @@ async function loadAll() {
     fetchFirst([sourcePath('docs/convergence/centicolon-dashboard.json'), '/docs/convergence/centicolon-dashboard.json'], 'json')
   ]);
   
+  if (tracesRes.path && !tracesRes.path.startsWith('/source/')) {
+    state.detectedSourceRoot = '';
+  } else {
+    state.detectedSourceRoot = '/source';
+  }
+
   state.traces = tracesRes.data ? parseTraces(tracesRes.data) : [];
   state.sheets = sheetsRes.data ? parseCheatsheetIndex(sheetsRes.data) : [];
   state.dashboard = dashRes.data || null;
