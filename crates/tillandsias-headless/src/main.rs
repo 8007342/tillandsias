@@ -4063,6 +4063,25 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
     let rt = podman_runtime()?;
     let client = PodmanClient::new();
     rt.block_on(async {
+        // gap-3 phase-2c: spawn the live diagnostic-event emitter so
+        // `event:container_exit container=… exit_code=…` lines land on
+        // stderr when --debug / --diagnostics is on. Captured by the
+        // forge-diagnostics annex stderr companion + the distill
+        // "Container-Start Stream" section. Filter prefix matches the
+        // tillandsias-* container names launched below.
+        //
+        // The handle is aborted at the bottom of this block so the
+        // emitter doesn't outlive the forge session (stderr would keep
+        // emitting after the user's session ended).
+        //
+        // @trace spec:runtime-diagnostics-stream
+        // @trace plan/issues/linux-headless-spec-gaps-2026-05-27.md (gap 3 phase-2c)
+        let diag_emitter =
+            tillandsias_podman::diagnostic_event_emitter::spawn_diagnostic_event_emitter(
+                debug,
+                "tillandsias-",
+            );
+
         cleanup_stack_containers(&client, project_name).await;
 
         // Step 15: bring the router up BEFORE any project containers so the
@@ -4142,6 +4161,16 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
             )
             .await;
         cleanup_shared_stack_if_no_running_forge(&client, project_name, debug).await;
+
+        // Stop the diagnostic-event emitter before propagating the
+        // forge result so the stderr stream cleanly closes with the
+        // session. abort + await is safe to call when handle is None
+        // (--debug off) because we only entered this branch via Some.
+        if let Some(handle) = diag_emitter {
+            handle.abort();
+            let _ = handle.await;
+        }
+
         result.map_err(|e| format!("[OpenCode] forge session exited: {e}"))?;
 
         Ok::<(), String>(())

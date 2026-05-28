@@ -200,6 +200,16 @@ bounded slices from. Each item is sized for one loop iteration. NOT for siblings
   not the events stream). Three unit tests cover disabled-path,
   Died-with-and-without-exit-code routing, and exhaustive lifecycle-
   action coverage so future variants must be considered.
+- **GAP 3 PHASE-2C** (live wiring): `run_opencode_mode` now spawns
+  `spawn_diagnostic_event_emitter(debug, "tillandsias-")` at the top
+  of its podman-runtime block and aborts the handle after the
+  foreground forge exits. The next `--diagnostics` capture should
+  carry real `event:container_exit container=tillandsias-…
+  exit_code=…` lines in the `.stderr.log` companion — surfaced in
+  the distill "Container-Start Stream" section that the orchestrator
+  reads from `plan/diagnostics/`. `run_observatorium_mode` wiring is
+  a follow-on slice; the lifecycle there is more complex (host-side
+  browser open) and not the user's stated forge-diagnostics priority.
   (Next diagnostics gap: GAP 2 / GAP 3 PHASE-2 — wire the live podman
   events parser to emit_diagnostic_event when `debug` is on.)
 
