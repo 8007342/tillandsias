@@ -755,30 +755,107 @@ impl TrayActionHost {
             image_root.display()
         );
         runtime.spawn(async move {
-            let result = run_start(image_root, vm_slot).await;
+            let result = run_start(image_root, vm_slot.clone()).await;
+
+            // On success, snapshot the Arc<VzRuntime> for the poller
+            // BEFORE handing ownership to the dispatch closure. On
+            // failure, the slot stays empty and the poller is skipped.
+            let vz_for_poller: Option<Arc<VzRuntime>> = match &result {
+                Ok(()) => vm_slot.lock().unwrap().as_ref().cloned(),
+                Err(_) => None,
+            };
+
+            // Initial post-boot chip text. Mirrors Windows' framing:
+            // Starting until the in-VM headless replies via VmStatus.
+            let initial_text = match &result {
+                Ok(()) => {
+                    eprintln!("[tillandsias-tray] {label_done}: VM is running");
+                    vm_phase_status_text(tillandsias_control_wire::VmPhase::Starting, false)
+                }
+                Err(e) => {
+                    eprintln!("[tillandsias-tray] {label_done} failed: {e}");
+                    format!("\u{1F534} {e}")
+                }
+            };
+
+            // Stage Arcs for the initial dispatch (these clones get
+            // consumed; the originals stay for the poller spawn).
+            let initial_status_text_slot = status_text_slot.clone();
+            let initial_status_item_slot = status_item_slot.clone();
+            let initial_status_menu_item_slot = status_menu_item_slot.clone();
+            let initial_text_for_dispatch = initial_text.clone();
             dispatch_to_main_thread(move || {
                 *vm_busy.lock().unwrap() = false;
-                let text = match &result {
-                    Ok(()) => {
-                        eprintln!("[tillandsias-tray] {label_done}: VM is running");
-                        // VM hardware is up but the in-VM headless +
-                        // podman aren't yet verified. Match Windows'
-                        // post-boot framing — `Starting…` until
-                        // VmStatus polling (next slice) flips it to
-                        // `Ready`/`Ready (podman starting…)` based on
-                        // the in-VM reply.
-                        vm_phase_status_text(tillandsias_control_wire::VmPhase::Starting, false)
-                    }
-                    Err(e) => {
-                        eprintln!("[tillandsias-tray] {label_done} failed: {e}");
-                        format!("\u{1F534} {e}")
-                    }
-                };
-                *status_text_slot.lock().unwrap() = text.clone();
-                apply_status_text_main_thread(&text, &status_item_slot, &status_menu_item_slot);
+                *initial_status_text_slot.lock().unwrap() = initial_text_for_dispatch.clone();
+                apply_status_text_main_thread(
+                    &initial_text_for_dispatch,
+                    &initial_status_item_slot,
+                    &initial_status_menu_item_slot,
+                );
             });
+
+            // Live status: kick off the 30s VmStatus poller. Holds
+            // the Arc<VzRuntime> for its lifetime; the task lives for
+            // the app lifetime (no cancellation in v0.0.1 — the Tokio
+            // runtime drop on process exit takes it down).
+            if let Some(vz) = vz_for_poller {
+                spawn_vm_status_poller(
+                    vz,
+                    status_text_slot,
+                    status_item_slot,
+                    status_menu_item_slot,
+                );
+            }
         });
     }
+}
+
+/// Spawn the 30s VmStatus poller. Mirrors windows-tray's
+/// `spawn_provisioning` Ready branch (commit c45f23ae): every 30s,
+/// call `poll_vm_status_once`, render the result through
+/// `vm_phase_status_text`, and patch the chip via a main-thread
+/// dispatch. A transient wire error leaves the last-known chip text
+/// untouched (matching the windows policy).
+///
+/// Lives outside the impl so the spawned task only captures Arcs +
+/// the VzRuntime handle (no Retained<Self> bookkeeping). The task
+/// runs for the lifetime of the Tokio runtime — process exit takes
+/// it down via runtime drop.
+///
+/// @trace spec:vsock-transport,
+///        plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 5)
+fn spawn_vm_status_poller(
+    vz: Arc<VzRuntime>,
+    status_text: Arc<Mutex<String>>,
+    status_item: Arc<Mutex<Option<appkit_handle::StatusItemHandle>>>,
+    status_menu_item: Arc<Mutex<Option<appkit_handle::StatusMenuItemHandle>>>,
+) {
+    tokio::spawn(async move {
+        loop {
+            tokio::time::sleep(Duration::from_secs(30)).await;
+            match poll_vm_status_once(&vz).await {
+                Ok((phase, podman_ready)) => {
+                    let text = vm_phase_status_text(phase, podman_ready);
+                    let text_for_dispatch = text.clone();
+                    let status_text = status_text.clone();
+                    let status_item = status_item.clone();
+                    let status_menu_item = status_menu_item.clone();
+                    dispatch_to_main_thread(move || {
+                        *status_text.lock().unwrap() = text_for_dispatch.clone();
+                        apply_status_text_main_thread(
+                            &text_for_dispatch,
+                            &status_item,
+                            &status_menu_item,
+                        );
+                    });
+                }
+                Err(e) => {
+                    // Best-effort: log + leave last-known chip text.
+                    eprintln!("[tillandsias-tray] vm-status poll: {e}");
+                }
+            }
+        }
+    });
 }
 
 #[cfg(test)]
