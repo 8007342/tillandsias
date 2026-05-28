@@ -322,6 +322,14 @@ pub struct TrayActionHostIvars {
     /// truth is `status_menu_item.title`; we keep this string in
     /// sync so off-thread reads stay safe.
     status_text: Arc<Mutex<String>>,
+    /// Held menu-state snapshot. Updated by the poller tasks when
+    /// they learn the in-VM truth (cloud_projects from
+    /// `poll_cloud_projects_once`; eventually podman_ready + login).
+    /// Slice 8b stages this for slice 8c's menu re-render path —
+    /// at this slice's commit nothing reads the field yet beyond
+    /// `eprintln` logging of changes, so the visible menu is still
+    /// driven by `MenuStructure::initial_provisioning()`.
+    menu_state: Arc<Mutex<tillandsias_host_shell::menu_state::MenuState>>,
 }
 
 declare_class!(
@@ -687,6 +695,11 @@ impl TrayActionHost {
             image_root,
             status_item: Arc::new(Mutex::new(None)),
             status_menu_item: Arc::new(Mutex::new(None)),
+            menu_state: Arc::new(Mutex::new({
+                let mut s = tillandsias_host_shell::menu_state::MenuState::initial();
+                s.target = tillandsias_host_shell::menu_state::TargetSurface::MacosTray;
+                s
+            })),
             status_text: Arc::new(Mutex::new(
                 "\u{1F535} Setting up Fedora Linux\u{2026}".to_string(),
             )),
@@ -883,6 +896,7 @@ impl TrayActionHost {
         let status_text_slot = ivars.status_text.clone();
         let status_item_slot = ivars.status_item.clone();
         let status_menu_item_slot = ivars.status_menu_item.clone();
+        let menu_state_slot = ivars.menu_state.clone();
 
         eprintln!(
             "[tillandsias-tray] {label_owned}: spawning worker (image_root={})",
@@ -959,6 +973,7 @@ impl TrayActionHost {
                     status_text_slot,
                     status_item_slot,
                     status_menu_item_slot,
+                    menu_state_slot,
                 );
             }
         });
@@ -984,12 +999,60 @@ fn spawn_vm_status_poller(
     status_text: Arc<Mutex<String>>,
     status_item: Arc<Mutex<Option<appkit_handle::StatusItemHandle>>>,
     status_menu_item: Arc<Mutex<Option<appkit_handle::StatusMenuItemHandle>>>,
+    menu_state: Arc<Mutex<tillandsias_host_shell::menu_state::MenuState>>,
 ) {
     tokio::spawn(async move {
+        // Tick counter for the cloud-projects cadence. Matches windows-
+        // tray's "first tick + every 10 ticks" pattern (commit
+        // b0cdcdee) — first poll happens before the initial 30 s sleep,
+        // subsequent polls every ~5 min (10 * 30 s = 300 s). gh repo
+        // list is a slower-changing input than VmStatus so we don't
+        // need every-tick granularity.
+        let mut tick: u32 = 0;
         loop {
+            // Cloud projects: first tick + every 10 ticks.
+            if tick.is_multiple_of(10) {
+                match poll_cloud_projects_once(&vz).await {
+                    Ok(projects) => {
+                        // Update the held MenuState. Slice 8b stages
+                        // this — slice 8c will rebuild the NSMenu on
+                        // change. For now, log changes so the operator
+                        // smoke logs show whether the wire is delivering
+                        // the expected projects.
+                        let new_count = projects.len();
+                        let mut guard = menu_state.lock().unwrap();
+                        let changed = guard.cloud_projects != projects;
+                        if changed {
+                            guard.cloud_projects = projects;
+                            eprintln!(
+                                "[tillandsias-tray] cloud-projects: \
+                                 menu_state updated ({} entries)",
+                                new_count
+                            );
+                        }
+                        drop(guard);
+                    }
+                    Err(e) => {
+                        eprintln!("[tillandsias-tray] cloud-projects poll: {e}");
+                    }
+                }
+            }
+
             tokio::time::sleep(Duration::from_secs(30)).await;
+            tick = tick.wrapping_add(1);
+
             match poll_vm_status_once(&vz).await {
                 Ok((phase, podman_ready)) => {
+                    // Reflect podman_ready into the held MenuState so
+                    // slice 8c's menu re-render can flip the per-project
+                    // action gating (`Attach Here` etc.) without a
+                    // separate poll. Same pattern windows-tray uses.
+                    {
+                        let mut guard = menu_state.lock().unwrap();
+                        if guard.podman_ready != podman_ready {
+                            guard.podman_ready = podman_ready;
+                        }
+                    }
                     let text = vm_phase_status_text(phase, podman_ready);
                     let text_for_dispatch = text.clone();
                     let status_text = status_text.clone();
