@@ -2328,3 +2328,27 @@ step 5 lands.
   is structurally + functionally 1:1 with windows-tray (modulo
   m8 user smoke + the linux-owned release_tag accessor). Loop
   will likely shift to noop cadence soon.
+
+### event: macOS .app rebuild + ship (slices 8a-10) — 2026-05-28T09:00Z
+
+- Rebuilt `Tillandsias.app v0.2.260527.5` from `d5868727` (carries
+  slices 8a-10 on top of the 2026-05-28T04:30Z ship):
+    * Tarball: `tillandsias-tray-0.2.260527.5-macos-arm64.tar.gz`
+    * Size: 1.50 MiB
+    * SHA-256: `62104b6dd6a3b2af7ddaa0051dce608efb941c165079496850b350a881c9fed9`
+    * (previous ship sha: `2694745a...`)
+- Delta vs prior ship:
+    * slice 8a — `poll_cloud_projects_once` + `cloud_entry_to_menu`
+    * slice 8b — held `MenuState` + cloud-projects polling cadence
+    * slice 8c — full NSMenu rebuild on state change
+    * slice 9  — byte-level "Downloading rootfs N/M MB (P%)" chip
+    * slice 10 — symmetric initial menu via `menu_state::build`
+- Tarball delivered to user proactively via SendUserFile for the
+  m8 smoke checklist re-run. Same 7-step checklist as before;
+  additional surfaces to inspect:
+    * Frame 0 menu shape: should show full 9-item Ready (not 2-item)
+    * After ~5 min with VM healthy: cloud-projects submenu populated
+    * Cold launch (delete `~/Library/Application Support/tillandsias/
+      rootfs.img` first): chip shows live byte-level progress
+- Streak: 0 (productive iter). Next macOS iter eligible at ~09:30Z;
+  loop likely shifts to noop cadence pending smoke feedback.
