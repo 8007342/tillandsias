@@ -1172,3 +1172,11 @@ Next greedy pickups (no VM needed): **w4b** (windows-ownable, pure) and **w4d**
 - Required next Windows status packet: pull this coordination commit, keep wire
   `EnumerateLocalProjects` optional, and do not reopen Windows w9 unless a
   fresh current-head runtime produces Windows-specific evidence.
+
+### Event: 2026-05-28T02:54:00Z — linux coordinator status reconciliation
+
+- Observed remote heads after fetch/pull: `origin/linux-next` `089c1b34` (before this coordination commit), `origin/windows-next` `c45f23ae`, `origin/osx-next` `80d9196e`.
+- Sibling branches ancestry: both `origin/windows-next` and `origin/osx-next` are fully merged and integrated as ancestors of the current local HEAD.
+- Discovered that the previous background runtime litmus run `20260528T010600Z-c9e83852-3340523c-82d735ef` failed during OpenCode execution due to a Linux container networking/crun sethostname limitation: hostnames generated for enclave services (e.g. `git-tillandsias-runtime-litmus-...`) exceeded the 63-character Linux hostname limit.
+- Resolved this blocker by implementing a robust `sanitize_hostname` function in `crates/tillandsias-headless` to safely truncate and hash hostnames exceeding 63 characters. Verified all tests pass green.
+- Next action: A fresh background runtime litmus run will be scheduled to validate the integrated HEAD with the new hostname sanitization safely in place.

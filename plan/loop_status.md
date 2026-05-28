@@ -1,36 +1,23 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-05-28T01:06Z
+LastExecutionTime: 2026-05-28T02:54:00Z
 
 ## This Loop
 
 - Fetched origin, audited remote sibling heads, and computed branch ancestry.
-- Confirmed `windows-next` (`3340523c`) is an ancestor of `linux-next`.
-- Discovered `osx-next` (`82d735ef`) contains a new unique commit: `feat(macos-tray): MenuAction click dispatcher — mirrors windows-tray pattern`.
-- Resolved the `cp: cannot create regular file '/home/tlatoani/.local/bin/tillandsias': Text file busy` installer collision by modifying `build.sh` to forcefully unlink the target binary before copying the new one. Committed and pushed to `linux-next` (`c9e83852`).
-- Launched a fresh asynchronous background runtime litmus run (`20260528T010600Z-c9e83852-3340523c-82d735ef`) to:
-  - Create a fresh worktree at `/tmp/tillandsias-runtime-litmus-20260528T010600Z-c9e83852-3340523c-82d735ef`.
-  - Cleanly merge `origin/osx-next`.
-  - Execute Phased Local CI (`./build.sh --ci-full --install`, `tillandsias --init`, and E2E litmus diagnostics).
-  - Automatically commit and push the integrated HEAD to `origin/linux-next` upon successful validation.
-- Background Process details:
-  - PID: 3186773
-  - Status Log: `plan/localwork/runtime-litmus/20260528T010600Z-c9e83852-3340523c-82d735ef/run.log`
-  - Status Indicator: `plan/localwork/runtime-litmus/current`
+- Confirmed `windows-next` (`c45f23ae`) and `osx-next` (`80d9196e`) are fully merged/integrated into `linux-next`.
+- Discovered that the previous background runtime litmus run (`20260528T010600Z-c9e83852-3340523c-82d735ef`) failed due to an OCI runtime/sethostname limit (`crun: sethostname: Invalid argument`) because dynamically generated hostnames for enclave containers (like `git-tillandsias-runtime-litmus-...`) exceeded the 63-character Linux hostname limit.
+- Resolved this blocker by implementing a robust `sanitize_hostname` helper in `crates/tillandsias-headless` to safely truncate and hash hostnames exceeding 63 characters.
+- Successfully verified the fix locally: `./build.sh --check` and `./build.sh --test` compile and pass all tests!
 
 ## Expected Next Loop
 
-- Monitor the status of background litmus run `20260528T010600Z-c9e83852-3340523c-82d735ef`.
-- Fold the validation output and merge status into the integration loop ledger and clean up temporary worktree files.
+- Trigger and monitor a fresh asynchronous background runtime litmus run with the now-safe hostnames.
 - Track downstream sibling branch pulls and subsequent remote movements.
-
 
 ## Resolved Since Previous Loop
 
-- Resolved the `Text file busy` installer collision by forcing target unlinking inside `build.sh`.
-- Resolved the `vault_bootstrap.rs:205` nested-runtime panic.
-- Resolved the TUI escape sequences inside captured diagnostics raw logs, unblocking clean JSON validation.
-- Restored 100% pass rate in the post-build litmus test suite.
+- Resolved the `crun: sethostname: Invalid argument` OCI runtime failure on long project names.
 
 ## Current Major Blockers
 
@@ -39,13 +26,13 @@ LastExecutionTime: 2026-05-28T01:06Z
 
 ## Assignment Board
 
-- Linux primary: monitor/fix release run `26544334121`; triage forge capabilities from the newly validated diagnostics log into the curated-toolchain-backlog.
+- Linux primary: launch a fresh background runtime litmus run to validate integrated HEAD; monitor/fix release run `26544334121`.
 - Windows primary: no immediate blocker; optional wire EnumerateLocalProjects remains fallback.
 - macOS primary: user-attended m8 smoke. Autonomous fallback: m10 project threading or m11 MenuStructure cleanup.
 
 ## Stale Or Pending Pings
 
-- No expired leases found; Windows and macOS should pull this coordination commit before new status packets.
+- No expired leases; Windows and macOS should pull this coordination commit.
 
 ## Validation
 

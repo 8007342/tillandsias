@@ -1057,7 +1057,7 @@ fn build_launch_spec(project: &ProjectEntry, kind: LaunchKind, image: &str) -> C
             project_name,
             action_slug(kind)
         ))
-        .hostname(format!("forge-{project_name}"))
+        .hostname(super::sanitize_hostname(&format!("forge-{project_name}")))
         .network("tillandsias-enclave")
         .pids_limit(512)
         .volume(

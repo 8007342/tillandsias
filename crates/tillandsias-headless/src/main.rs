@@ -1408,7 +1408,7 @@ fn build_git_run_args(
         "--name".into(),
         format!("tillandsias-git-{project_name}"),
         "--hostname".into(),
-        format!("git-{project_name}"),
+        sanitize_hostname(&format!("git-{project_name}")),
         "--network-alias".into(),
         "git-service".into(),
         "--network".into(),
@@ -1987,12 +1987,39 @@ fn select_router_host_port(port_override: Option<u16>, debug: bool) -> Result<u1
     })
 }
 
+pub(crate) fn sanitize_hostname(raw: &str) -> String {
+    use sha2::Digest;
+
+    // A valid hostname can only contain alphanumeric and hyphens, and cannot exceed 63 characters.
+    let mut cleaned: String = raw
+        .chars()
+        .map(|c| if c.is_ascii_alphanumeric() || c == '-' { c } else { '-' })
+        .collect();
+
+    // Trim leading/trailing hyphens as they are generally discouraged/invalid
+    cleaned = cleaned.trim_matches('-').to_string();
+
+    if cleaned.len() <= 63 {
+        cleaned
+    } else {
+        // Take a hash of the original raw hostname to keep it unique
+        let mut hasher = sha2::Sha256::new();
+        hasher.update(raw.as_bytes());
+        let result = hasher.finalize();
+        let hash_str: String = result[..8].iter().map(|b| format!("{:02x}", b)).collect();
+
+        // Take first 46 chars, a hyphen, and the 16 hex chars = 63 chars total!
+        let prefix = &cleaned[..46];
+        format!("{prefix}-{hash_str}")
+    }
+}
+
 fn forge_container_name(project_name: &str) -> String {
     format!("tillandsias-{project_name}-forge")
 }
 
 fn forge_hostname(project_name: &str) -> String {
-    format!("forge-{project_name}")
+    sanitize_hostname(&format!("forge-{project_name}"))
 }
 
 fn build_forge_common_args(
@@ -3755,7 +3782,7 @@ fn build_observatorium_web_args(
     ContainerSpec::new(image)
         .pull_never()
         .name(observatorium_container_name(project_name))
-        .hostname(format!("observatorium-{project_name}"))
+        .hostname(sanitize_hostname(&format!("observatorium-{project_name}")))
         .detached()
         .read_only()
         .pids_limit(64)
