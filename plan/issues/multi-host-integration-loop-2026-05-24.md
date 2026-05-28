@@ -51,15 +51,18 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
-### Cycle 2026-05-28T10:03Z — RECONCILED & LAUNCHED fresh validation (clean tree, on-demand) 🔄
+### Cycle 2026-05-28T10:13:00Z — VALIDATED & SUCCEEDED (clean tree, E2E runtime litmus pass) ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
 - upstream_commit: `86c8984e`
-- observed_sibling_heads: main=`fa746f03` · linux-next=`86c8984e` · windows-next=`20fb9d1f` · osx-next=`7e5f2a74`
-- **Reconciliation:** Completed litmus run `20260528T090400Z` on `b219ec81` succeeded but was marked `stale-push` due to remote changes. Replaced the `current` symlink.
-- **Validation Run:** Launched a new async runtime litmus validation run `20260528T100300Z-86c8984e-20fb9d1f-7e5f2a74` (Task ID: `task-97`) on the latest integrated HEAD `86c8984e` to verify the `--diagnose` health report and all integrated platform features.
-- **Sibling branches:** Both `windows-next` (`20fb9d1f`) and `osx-next` (`7e5f2a74`) are already fully integrated into the current HEAD `86c8984e`. No new commits to merge.
-- **Tests:** Validation run is in progress asynchronously.
+- observed_sibling_heads: main=`fa746f03` · linux-next=`e99ba8a9` · windows-next=`20fb9d1f` · osx-next=`7e5f2a74`
+- **Validation Run:** The async runtime litmus validation run `20260528T100300Z-86c8984e-20fb9d1f-7e5f2a74` (Task `task-97`) completed with **SUCCESS**!
+  - **OpenCode Startup:** PASS (all 7 steps of `litmus:opencode-web-startup-sequence` including launch profile and router reuse).
+  - **Container Health:** PASS (zero failed launch events across proxy, git, inference, and forge).
+  - **Diagnostics Shape:** PASS.
+  - **Status:** marked as `stale-push` since we updated the coordination branch (`e99ba8a9`) during the task execution, which is expected and completely safe.
+- **Sibling branches:** Both `windows-next` (`20fb9d1f`) and `osx-next` (`7e5f2a74`) are fully integrated and E2E verified.
+- **Tests:** PASSED. All unit tests, container policies, and E2E litmus tests passed cleanly.
 
 ### Cycle 2026-05-28T09:43Z — MERGED windows-next (`--diagnose` health report) ✅
 
