@@ -37,23 +37,12 @@ plan:
     doc_debt_payoff_status: "Completed 2026-05-16; plan/index stale status corrected 2026-05-24"
     recent_work_audit_status: "Completed and verified 2026-05-24: git-mirror safe refspec spec/litmus, Vault Phase 6 default spec, multi-host methodology, and Markdown distillation refreshed"
     multi_host_coordination_status: >
-      Active 2026-05-27T23:25Z: origin/linux-next is at 891bb757 before this
-      coordination commit, origin/osx-next is at f8778350 and remains an
-      ancestor, main is at fa746f03, and windows-next is at 1e20d6d0 and is
-      already integrated. Windows w9/control-wire rustfmt blocker is resolved
-      by 9315e9de, and integration cycle edfb72c6 / merge b9cee2fd merged and
-      check/tested the Windows delta. Runtime-litmus
-      20260527T231258Z-b06a5997-1e20d6d0-b06a5997 reached build/test work but
-      failed at `Disk quota exceeded`; old scratch worktrees were removed.
-      Replacement full installed runtime-litmus
-      20260527T231940Z-b06a5997-1e20d6d0-b06a5997 passed build/install and
-      init, then failed in OpenCode diagnostics with a nested-runtime panic at
-      crates/tillandsias-headless/src/vault_bootstrap.rs:205. Current gates are
-      fixing/assigning that diagnostics panic, then starting a fresh runtime
-      for 891bb757/this coordination commit, macOS m8 user-attended smoke,
-      release run 26544334121 after the Linux Nix musl pivot, first real
-      non-empty forge diagnostics summary, and optional Windows wire
-      EnumerateLocalProjects.
+      Active 2026-05-28T14:03Z: origin/linux-next is at 2b26f0d2, which is
+      fully integrated with origin/windows-next (8992652a) and origin/osx-next (982560ba).
+      The last async runtime litmus validation run (stale-push from 13:04:08Z) completed with SUCCESS.
+      A new async validation run 20260528T140323Z-2b26f0d2-8992652a-982560ba was successfully
+      launched in the background to exercise the newly integrated tree.
+      Current blockers include macOS m8 user-attended smoke, and the pending release workflow run 26544334121.
     markdown_distillation_status: "Active 2026-05-24: ad hoc Markdown is intake only; retained top-level/tool-local reports must be tombstone pointers to specs, cheatsheets, methodology, or plan"
     methodology_reconciliation_status: "Completed 2026-05-19: OpenCode Web launch specs, cheatsheets, CA generation, overlay/theme proxy, project selection, and auth-gated readiness reconciled"
     git_identity_propagation_status: "Completed 2026-05-19: GitHub Login identity now propagates to forge env and repo-local git config for Codex/OpenCode/OpenCode Web/Claude/maintenance"
