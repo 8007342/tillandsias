@@ -51,6 +51,15 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-28T13:00Z — ACTIVE litmus validation launched & sibling ancestors verified 🚀
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `d07d9192`
+- observed_sibling_heads: main=`fa746f03` · linux-next=`d07d9192` · windows-next=`4fff31af` (integrated) · osx-next=`52711fb1` (integrated)
+- **Active Validation Run:** Launched a fresh async runtime litmus validation run `20260528T130320Z-d07d9192-4fff31af-52711fb1` (Task `task-120`) to exercise the latest commit `d07d9192` (`feat(podman-diagnostics): live event router — Died → event:container_exit`).
+- **Previous Litmus Run:** The validation run `20260528T120300Z-d2fbe0ab-4fff31af-d2fbe0ab` was completed successfully, but the push to `origin/linux-next` returned `stale-push` because the remote branch advanced to `d07d9192` while it was running.
+- **Sibling branches:** Both `windows-next` (`4fff31af`) and `osx-next` (`52711fb1`) are confirmed ancestors of `linux-next`, meaning all remote changes are fully integrated.
+
 ### Cycle 2026-05-28T12:00Z — INTEGRATED macOS slice 11b & SUCCEEDED E2E runtime litmus ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
