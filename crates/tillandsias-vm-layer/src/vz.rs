@@ -144,6 +144,7 @@ impl VzRuntime {
         &self,
         manifest: &crate::recipe::Manifest,
         tag: &str,
+        on_phase: &(dyn Fn(&str) + Send + Sync),
     ) -> Result<(), String> {
         let arch = if cfg!(target_arch = "aarch64") {
             "aarch64"
@@ -189,6 +190,7 @@ impl VzRuntime {
                 &xz_dest,
                 &self.rootfs_image_path(),
                 &sha256,
+                on_phase,
             )
             .await
         } else {
@@ -198,7 +200,10 @@ impl VzRuntime {
                 sha256,
                 bytes: None,
             };
-            download_verified(&artifact, &self.rootfs_image_path(), &|_, _| {}).await
+            on_phase("Downloading rootfs");
+            let result = download_verified(&artifact, &self.rootfs_image_path(), &|_, _| {}).await;
+            on_phase("Verifying rootfs SHA-256");
+            result
         }
     }
 
@@ -276,6 +281,7 @@ async fn fetch_then_decompress_xz_then_verify(
     xz_temp_dest: &std::path::Path,
     final_dest: &std::path::Path,
     expected_sha: &str,
+    on_phase: &(dyn Fn(&str) + Send + Sync),
 ) -> Result<(), String> {
     use crate::fetch::is_sha256_hex;
     use sha2::{Digest, Sha256};
@@ -293,6 +299,7 @@ async fn fetch_then_decompress_xz_then_verify(
     // `download_verified` here because it would expect the SHA to
     // match the .xz bytes, but the manifest SHA is for the
     // decompressed bytes.
+    on_phase("Downloading rootfs");
     {
         let mut response = reqwest::get(xz_url)
             .await
@@ -319,6 +326,7 @@ async fn fetch_then_decompress_xz_then_verify(
     }
 
     // Step 2: decompress via `xz -d -c <temp>` → final_dest.
+    on_phase("Decompressing rootfs");
     let final_out = std::fs::File::create(final_dest)
         .map_err(|e| format!("create {}: {e}", final_dest.display()))?;
     let xz_status = std::process::Command::new("xz")
@@ -337,6 +345,7 @@ async fn fetch_then_decompress_xz_then_verify(
     let _ = std::fs::remove_file(xz_temp_dest);
 
     // Step 3: SHA-256-verify the decompressed bytes against the pin.
+    on_phase("Verifying rootfs SHA-256");
     let mut f = tokio::fs::File::open(final_dest)
         .await
         .map_err(|e| format!("open {}: {e}", final_dest.display()))?;
@@ -1247,7 +1256,7 @@ artifact_url_template = "https://example.invalid/{tag}/{arch}.{format}"
         let tmp = tempfile::tempdir().unwrap();
         let rt = VzRuntime::new(3, tmp.path().to_path_buf());
         let err = rt
-            .fetch_recipe_artifact(&manifest, "v0.0.0-test")
+            .fetch_recipe_artifact(&manifest, "v0.0.0-test", &|_| {})
             .await
             .expect_err("placeholder SHA must be refused");
         assert!(
@@ -1272,7 +1281,7 @@ recipe_version = 1
         let tmp = tempfile::tempdir().unwrap();
         let rt = VzRuntime::new(3, tmp.path().to_path_buf());
         let err = rt
-            .fetch_recipe_artifact(&manifest, "vX")
+            .fetch_recipe_artifact(&manifest, "vX", &|_| {})
             .await
             .expect_err("missing template must error");
         assert!(

@@ -515,6 +515,7 @@ async fn run_pty_attach(
 async fn run_start(
     image_root: PathBuf,
     vm_slot: Arc<Mutex<Option<Arc<VzRuntime>>>>,
+    on_phase: &(dyn Fn(&str) + Send + Sync),
 ) -> Result<(), String> {
     let vz = Arc::new(VzRuntime::new(TILLANDSIAS_GUEST_CID, image_root));
 
@@ -545,7 +546,7 @@ async fn run_start(
         // this pattern via its `RECIPE_RELEASE_TAG` const). Switch
         // to `manifest.release_tag()` the moment it's available.
         let tag = RECIPE_RELEASE_TAG.to_string();
-        vz.fetch_recipe_artifact(&manifest, &tag)
+        vz.fetch_recipe_artifact(&manifest, &tag, on_phase)
             .await
             .map_err(|e| {
                 format!(
@@ -803,8 +804,29 @@ impl TrayActionHost {
             "[tillandsias-tray] {label_owned}: spawning worker (image_root={})",
             image_root.display()
         );
+        // Phase callback: each call to on_phase("Downloading rootfs")
+        // etc. dispatches an `apply_status_text_main_thread` so the
+        // user sees the chip update during a cold first launch
+        // (74 MB download → xz decompress → SHA-256 verify). Subsequent
+        // launches hit the rootfs.img cache and the phase callback
+        // never fires.
+        let phase_status_text = status_text_slot.clone();
+        let phase_status_item = status_item_slot.clone();
+        let phase_status_menu_item = status_menu_item_slot.clone();
+        let on_phase: Box<dyn Fn(&str) + Send + Sync> = Box::new(move |phase: &str| {
+            let text = format!("\u{1F535} {phase}\u{2026}");
+            let text_for_dispatch = text.clone();
+            let status_text = phase_status_text.clone();
+            let status_item = phase_status_item.clone();
+            let status_menu_item = phase_status_menu_item.clone();
+            dispatch_to_main_thread(move || {
+                *status_text.lock().unwrap() = text_for_dispatch.clone();
+                apply_status_text_main_thread(&text_for_dispatch, &status_item, &status_menu_item);
+            });
+        });
+
         runtime.spawn(async move {
-            let result = run_start(image_root, vm_slot.clone()).await;
+            let result = run_start(image_root, vm_slot.clone(), on_phase.as_ref()).await;
 
             // On success, snapshot the Arc<VzRuntime> for the poller
             // BEFORE handing ownership to the dispatch closure. On
@@ -973,7 +995,7 @@ mod tests {
     async fn run_start_full_e2e() {
         let tmp = tempfile::tempdir().unwrap();
         let vm_slot = Arc::new(Mutex::new(None));
-        let result = run_start(tmp.path().to_path_buf(), vm_slot.clone()).await;
+        let result = run_start(tmp.path().to_path_buf(), vm_slot.clone(), &|_| {}).await;
         match result {
             Err(err) => {
                 assert!(
