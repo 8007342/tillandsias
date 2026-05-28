@@ -2046,3 +2046,38 @@ step 5 lands.
 - Discovered that the previous background runtime litmus run `20260528T010600Z-c9e83852-3340523c-82d735ef` failed during OpenCode execution due to a Linux container networking/crun sethostname limitation: hostnames generated for enclave services (e.g. `git-tillandsias-runtime-litmus-...`) exceeded the 63-character Linux hostname limit.
 - Resolved this blocker by implementing a robust `sanitize_hostname` function in `crates/tillandsias-headless` to safely truncate and hash hostnames exceeding 63 characters. Verified all tests pass green.
 - Next action: A fresh background runtime litmus run will be scheduled to validate the integrated HEAD with the new hostname sanitization safely in place.
+
+### event: macOS slice 5 — VmStatus 30s poller wired (UX-correction complete) — 2026-05-28T03:00Z
+
+- Commit `ad49984b` lands the final UX-correction slice: after
+  `run_start` returns Ok, `boot_vm_async` snapshots the
+  `Arc<VzRuntime>` from `vm_slot` and hands it to
+  `spawn_vm_status_poller`, which spawns a Tokio task that calls
+  `poll_vm_status_once` (slice 4) every 30 s and patches the
+  `ids::STATUS` chip + tooltip via `apply_status_text_main_thread`
+  with the result of `vm_phase_status_text` (slice 3).
+- The chip now fully mirrors the windows-tray progression:
+  "🔵 Setting up Fedora Linux…" (macOS pre-boot) → "🔵 Starting…"
+  (post-boot, awaiting first VmStatus reply) → "🟡 Ready (podman
+  starting…)" / "🟢 Ready" (driven by the live in-VM VmStatusReply
+  podman_ready flag).
+- Transient wire errors are best-effort: logged + the last-known
+  chip text is left untouched, matching windows-tray's
+  `refresh_vm_status` policy (c45f23ae).
+- Task lifecycle: the poller runs for the lifetime of the Tokio
+  runtime (no cancellation handle). Quit drops the runtime, which
+  ends the task. A graceful drain via `VmShutdownRequest`
+  acknowledgement is the next slice (Quit drain, slice 6).
+- Tests + lint clean: macos-tray 26/26; vm-layer 63/63;
+  `cargo clippy -p tillandsias-macos-tray --no-deps -- -D warnings`
+  clean; fmt clean.
+- UX-parity invariant intact: zero macOS-extra menu items per
+  owner's 2026-05-27 hard requirement. The macOS-specific VM-spinup
+  layer is now fully encoded in the chip text, with the post-Ready
+  segment 1:1 with windows-tray.
+- Streak: 0 (productive iter). With UX-correction slices 1-5 done,
+  the remaining macOS-owned items are:
+    * slice 6 — Quit drain (vz.stop(60s) before exit(0))
+    * slice 7 — fetch progress (wire download_verified::on_progress
+      to the chip during materialization)
+  Next macOS iter eligible at ~03:30Z to pick up slice 6.
