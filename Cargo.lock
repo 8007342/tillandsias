@@ -2891,6 +2891,8 @@ name = "tillandsias-windows-tray"
 version = "0.1.0"
 dependencies = [
  "embed-resource",
+ "serde",
+ "serde_json",
  "tempfile",
  "tillandsias-control-wire",
  "tillandsias-host-shell",

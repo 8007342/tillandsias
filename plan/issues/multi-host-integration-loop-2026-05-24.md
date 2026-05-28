@@ -51,6 +51,25 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-28T15:43Z — MERGED windows-next (`--diagnose --json` machine-readable) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `c57879a4` (merge commit)
+- observed_sibling_heads: main=`fa746f03` · linux-next(pre-merge)=`7a6ca3bd` ·
+  windows-next=`c4908438` · osx-next=`fcefb57b`
+- **windows-next: merged+tested+pushed.** 1-commit delta `c4908438`
+  (feat: `--diagnose --json` machine-readable output for support
+  tooling). Four files: notify_icon.rs + main.rs + Cargo.toml +
+  Cargo.lock (windows-tray added a JSON-serialization dep) — all
+  sibling-owned scope. Clean auto-merge.
+- osx-next: no-op (HEAD `fcefb57b` is BEHIND linux-next at `7a6ca3bd`;
+  `linux-next..origin/osx-next` is empty — orchestrator hasn't
+  fast-forwarded osx-next yet, but the steward has nothing to pull).
+- Tests: PASSED. `./build.sh --check` + `--test` green.
+- Spec/methodology/plan drift: none. Diff confined to
+  `crates/tillandsias-windows-tray/` + workspace Cargo.lock/.toml
+  (normal cargo dep addition).
+
 ### Coordinator fold 2026-05-28T15:14Z — Async Runtime Litmus E2E validation SUCCEEDED (stale-push)! ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
