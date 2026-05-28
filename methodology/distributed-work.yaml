@@ -470,6 +470,31 @@ distributed_work:
         (plan/issues/multi-host-integration-loop-2026-05-24.md) records
         every conflict resolution it performs."
 
+  active_multi_host_mediation_and_conflict_handling:
+    purpose: >
+      Active coordination rules to spot and resolve multi-host cooperation
+      blockers including deadlocks, thrashing, and wrong-direction progress.
+    protocols:
+      deadlock_mediation:
+        trigger: "Sibling A and Sibling B are mutually waiting on each other's deliverables."
+        action: >
+          Break the deadlock by extracting a minimal, mock-based interface contract or
+          naming one host as the primary driver to unblock the interface first. Repin
+          the blocker to the mock contract task.
+      wrong_direction_progress_mediation:
+        trigger: "A sibling implements plans or code deviating from active specs or violating core design invariants."
+        action: >
+          Freeze the sibling's lease. Document the divergence in loop_status.md and their
+          work queue. Force-assign a corrective 'Spec Alignment & Litmus Verification'
+          packet as their next primary task.
+      thrashing_mediation:
+        trigger: "Two hosts repeatedly overwrite each other's plan notes or code changes (undo-loops)."
+        action: >
+          Freeze both active leases. Audit the git history of the thrashed resource. Enforce
+          the stable-ID CRDT semantic merge policy for plans, and assign a single synchronous
+          conflict-resolution wave to one host while directing the other to a separate,
+          independent fallback task.
+
   cheatsheet_index:
     - cheatsheets/concurrent-git/branches.md
     - cheatsheets/concurrent-git/agent-handoff.md

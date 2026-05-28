@@ -321,3 +321,26 @@ bidirectional_knowledge_flow_constraint:
     - no_dead_ends_in_feedback_loops
     - every_layer_can_signal_upstream
     - ci_validator_enforces_bidirectional_consistency
+
+finite_time_convergence_and_velocity_control:
+  description: >
+    Enforce a strictly positive lower bound on convergence velocity to guarantee
+    spec convergence in finite time, even with concurrent multi-host executions.
+  metrics:
+    residual_correctness_debt:
+      symbol: R_t
+      definition: "sum of named residual CentiColon obligations + count of unimplemented spec requirements"
+    convergence_velocity:
+      symbol: V_c
+      formula: "(R_t_minus_3 - R_t) / delta_t"
+      minimum_acceptable: "V_min > 0"
+  rules:
+    - finite_time_guarantee: >
+        Convergence is guaranteed in finite time by enforcing V_c >= V_min when R_t > 0.
+        If V_c falls below V_min, the orchestrator triggers a High-Velocity Alignment Event.
+    - high_velocity_alignment_event:
+        triggers: "V_c < V_min"
+        actions:
+          - reduce_lease_ttl: "Reduce lease TTL from 4 hours to 1 hour to increase iteration frequency."
+          - exploratory_work_freeze: "Prohibit all exploratory or optional P3 optimizations; focus strictly on root blockers."
+          - defuse_blockers: "Force all hosts to focus on root blockers, mock-based interface contracts, or focused litmus tests."

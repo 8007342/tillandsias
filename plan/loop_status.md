@@ -1,22 +1,24 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-05-28T18:15:50Z
+LastExecutionTime: 2026-05-28T19:14:00Z
 
 ## This Loop
 
-- Sibling branches `windows-next` (`5d310bf4`) and `osx-next` (`433797ec`) are fully integrated as ancestors of `linux-next`.
-- Successfully validated E2E runtime litmus on run `20260528T180200Z-433797ec-5d310bf4-433797ec`! The build, Cargo tests (including browser-mcp, control-wire, and core), and the E2E open-code container startup and exit were 100% green.
-- Sibling heads are confirmed fully synchronized, integrated, and E2E verified.
+- **Skill Restructuring**: Successfully relocated multihost coordination skills to the unified project-level directory `./skills/` to make them accessible to all agents across providers.
+- **Provider stubs**: Updated `.gemini/` and `.codex/` skill suites to delegator stubs.
+- **Methodology Upgrades**: Integrated formal **Convergence Velocity** ($\mathcal{V}_c$) tracking and the **Finite-Time Convergence Guarantee** into `methodology/convergence.yaml`.
+- **Active Mediation**: Added multi-host conflict detection and mediation rules (deadlocks, wrong-direction progress, thrashing) to `methodology/distributed-work.yaml`.
+- **Velocity Metrics**: Current residual debt $\mathcal{R}$ remains low; Convergence Velocity is healthy. **High-Velocity Alignment Event** is **Inactive**.
+- **Sibling Branches**: `windows-next` and `osx-next` remain fully synchronized, integrated, and E2E verified on `linux-next`.
 
 ## Expected Next Loop
 
-- Sibling hosts to pull latest `origin/linux-next` updates and align local validation caches.
-- Implement approved forge enhancements in the forge image (`images/default/Containerfile`) and entrypoint script (`images/default/entrypoint-forge-opencode.sh`).
+- Sibling hosts to pull latest `origin/linux-next` updates to consume the unified `./skills` directory and updated methodology rules.
+- Proceed with approved forge enhancements in the Containerfile and entrypoint script.
 
 ## Resolved Since Previous Loop
 
-- macOS slice 15 (--diagnose --json schema pins + tray-diagnose.sh bash consumer) successfully integrated, validated, and verified E2E.
-- Reset macOS no-op streak with a successful runtime verification.
+- Unified multi-host orchestration skills and integrated finite-time velocity constraints to bound convergence time.
 
 ## Current Major Blockers
 
@@ -37,9 +39,8 @@ LastExecutionTime: 2026-05-28T18:15:50Z
 
 ## Stale Or Pending Pings
 
-- Sibling hosts should pull this coordination commit to align with latest convergence state.
+- Sibling hosts MUST pull the latest `origin/linux-next` coordination updates to adopt the root `./skills/` structure and active mediation protocols.
 
 ## Validation
 
-- Full E2E runtime litmus validation passed 100% cleanly on the latest integrated HEAD `433797ec` (via run `20260528T180200Z-433797ec-5d310bf4-433797ec` with status `stale-push` due to concurrent coordination push).
-- YAML check: `plan.yaml` and `plan/index.yaml` are clean.
+- YAML check: `plan.yaml`, `plan/index.yaml`, `methodology/convergence.yaml`, and `methodology/distributed-work.yaml` are clean and 100% syntactically valid (verified via python3-yaml).
