@@ -51,6 +51,23 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-28T05:43Z — MERGED windows-next (CloudRefreshRequest → MenuState wiring) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `8864a43b` (merge commit)
+- observed_sibling_heads: main=`fa746f03` · linux-next(pre-merge)=`fba9b816` ·
+  windows-next=`b0cdcdee` · osx-next=`1e5f1c36`
+- **windows-next: merged+tested+pushed.** 1-commit delta `b0cdcdee`
+  (feat: wire CloudRefreshRequest → MenuState.cloud_projects). Single
+  windows-tray file (notify_icon.rs) — sibling-owned scope. Clean
+  auto-merge; consumes the headless-side CloudRefreshRequest handler
+  (`e1a190d4`) that linux landed earlier this session.
+- osx-next: no-op (HEAD `1e5f1c36` is an ancestor of linux-next; sibling
+  has already absorbed every linux commit through `fba9b816`).
+- Tests: PASSED. `./build.sh --check` + `--test` green.
+- Spec/methodology/plan drift: none. Diff is confined to
+  `crates/tillandsias-windows-tray/src/notify_icon.rs`.
+
 ### Coordinator fold 2026-05-28T04:12Z — Async Runtime Litmus E2E validation SUCCEEDED! ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
