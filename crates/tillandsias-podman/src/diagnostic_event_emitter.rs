@@ -109,23 +109,15 @@ async fn run_emitter(prefix: String) {
 /// the lifecycle-tracker path (consumed by UI state); the spec-mandated
 /// typed events don't have backing data for them yet (see module doc).
 fn route_record(record: &ContainerLifecycleRecord) {
-    match record.action {
-        ContainerLifecycleAction::Died => {
-            let body = format_container_exit_event(
-                &record.container_name,
-                record.exit_code.unwrap_or(-1),
-                // duration_seconds: needs start→exit pairing state;
-                // tracked as a follow-on slice.
-                None,
-            );
-            emit_diagnostic_event(true, "event:container_exit", &record.container_name, &body);
-        }
-        // The other actions (Started/StopRequested/Killed/Removed/
-        // CleanedUp/Observed/Disappeared) don't map to a spec-mandated
-        // typed event today. `event:container_launch state=…` lines are
-        // emitted from the launch path itself (emit_launch_event in
-        // client.rs), NOT from the post-launch events stream.
-        _ => {}
+    if record.action == ContainerLifecycleAction::Died {
+        let body = format_container_exit_event(
+            &record.container_name,
+            record.exit_code.unwrap_or(-1),
+            // duration_seconds: needs start→exit pairing state;
+            // tracked as a follow-on slice.
+            None,
+        );
+        emit_diagnostic_event(true, "event:container_exit", &record.container_name, &body);
     }
 }
 
