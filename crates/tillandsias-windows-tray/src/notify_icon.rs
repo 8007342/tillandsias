@@ -107,10 +107,13 @@ impl ProvisionProgress for TrayProgress {
     fn report_phase(&self, phase: ProvisionPhase) {
         update_status_text(phase.status_text(), self.hwnd.0);
     }
-    fn report_message(&self, _message: &str) {
-        // Sub-messages are not surfaced in the menu per the condensed-
-        // status contract; we drop them silently. The provisioning log
-        // captures the full detail.
+    fn report_message(&self, message: &str) {
+        // Sub-messages refine the current phase chip in-place — e.g. the
+        // recipe path streams "Downloading rootfs N / M MB (P%)" through here
+        // during materialization, mirroring the macOS fetch-progress chip
+        // (slice 7, `f5443276`). Each subsequent `report_phase` call replaces
+        // the chip with the next phase, so transitions are clean.
+        update_status_text(message, self.hwnd.0);
     }
 }
 

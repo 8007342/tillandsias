@@ -218,7 +218,28 @@ impl WslLifecycle {
             "tillandsias-rootfs-x86_64-{}.tar",
             &artifact.sha256[..12]
         ));
-        download_verified(&artifact, &dest, &|_, _| {}).await?;
+        // Live download-progress chip — converges with macOS slice 7's
+        // fetch-progress chip (`f5443276`). The closure dedups by integer
+        // percent so the chip updates at most ~100× per download (~3 MB
+        // increments for a 280 MB rootfs); unknown totals (no
+        // Content-Length) leave the previous phase chip in place.
+        let progress_for_cb = progress.clone();
+        let last_pct = std::sync::atomic::AtomicU8::new(101);
+        let on_progress = move |downloaded: u64, total: Option<u64>| {
+            let Some(total) = total.filter(|t| *t > 0) else {
+                return;
+            };
+            let pct = (downloaded.saturating_mul(100) / total).min(100) as u8;
+            if last_pct.swap(pct, std::sync::atomic::Ordering::Relaxed) == pct {
+                return;
+            }
+            let mb = downloaded / (1024 * 1024);
+            let total_mb = total / (1024 * 1024);
+            progress_for_cb.report_message(&format!(
+                "\u{1F535} Downloading rootfs {mb} / {total_mb} MB ({pct}%)"
+            ));
+        };
+        download_verified(&artifact, &dest, &on_progress).await?;
 
         progress.report_phase(ProvisionPhase::InstallingTillandsias);
         tar_to_wsl_import(
