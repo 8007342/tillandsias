@@ -181,6 +181,20 @@ fn applescript_escape_single_quoted(reason: &str) -> String {
     out
 }
 
+/// Format a dispatcher `Error{code, message}` into a poller-side log
+/// string. Mirrors `tillandsias-windows-tray::notify_icon::
+/// describe_wire_error` (commit eddb5c00) so both trays surface
+/// identical operator-visible text when Linux's `decide_route`
+/// returns an Unsupported frame instead of dropping into the
+/// generic "unexpected reply" path.
+fn describe_wire_error(code: tillandsias_control_wire::ErrorCode, message: &str) -> String {
+    if message.is_empty() {
+        format!("dispatcher error {code:?}")
+    } else {
+        format!("dispatcher error {code:?}: {message}")
+    }
+}
+
 /// Condensed status-line text for a live VM phase + podman readiness.
 /// Drives the shared `ids::STATUS` chip (and the menubar tooltip) so
 /// the menu reflects real VM health — converges with the windows-tray
@@ -285,6 +299,14 @@ async fn poll_vm_status_once(
             last_event,
             ..
         } => Ok((phase, podman_ready, last_event)),
+        // Linux's convergence-packet item 3 (commit 4eb0baff) wires
+        // decide_route into the vsock dispatcher so requests with no
+        // inner handler return Error{code, message} frames carrying
+        // the dispatcher's own naming ("Unsupported: variant X not
+        // wired on vsock"). Surface that explicitly instead of
+        // dropping into the generic "unexpected reply" path —
+        // mirrors windows-tray's eddb5c00 (item 4).
+        ControlMessage::Error { code, message, .. } => Err(describe_wire_error(code, &message)),
         other => Err(format!("unexpected reply to VmStatusRequest: {other:?}")),
     }
 }
@@ -367,6 +389,11 @@ async fn poll_cloud_projects_once(
         ControlMessage::CloudRefreshReply { projects, .. } => {
             Ok(projects.iter().map(cloud_entry_to_menu).collect())
         }
+        // See poll_vm_status_once for context on the dispatcher Error
+        // frame (Linux convergence-packet items 2 + 3, commits
+        // aeb5499a / 4eb0baff). Surface code + message via the shared
+        // describe_wire_error helper.
+        ControlMessage::Error { code, message, .. } => Err(describe_wire_error(code, &message)),
         other => Err(format!(
             "unexpected reply to CloudRefreshRequest: {other:?}"
         )),
@@ -1294,6 +1321,35 @@ mod tests {
             ),
             "recipe-artifact fetch failed: \\\"rootfs.img\\\" missing"
         );
+    }
+
+    /// `describe_wire_error` pins the operator-visible format of a
+    /// dispatcher Error frame so both trays surface identical text.
+    /// Mirrors the windows-tray test
+    /// `describe_wire_error_includes_code_and_message` (commit
+    /// eddb5c00) — divergence would fail either suite.
+    #[test]
+    fn describe_wire_error_includes_code_and_message() {
+        use tillandsias_control_wire::ErrorCode;
+        let s = describe_wire_error(ErrorCode::Unsupported, "variant X not wired on vsock");
+        assert!(s.contains("Unsupported"), "code missing: {s}");
+        assert!(
+            s.contains("variant X not wired on vsock"),
+            "message missing: {s}"
+        );
+    }
+
+    /// An empty message must not leave a dangling colon (e.g.
+    /// `"dispatcher error Internal: "`). Pins the empty-message
+    /// branch so a future refactor doesn't accidentally append the
+    /// colon unconditionally.
+    #[test]
+    fn describe_wire_error_no_trailing_colon_on_empty_message() {
+        use tillandsias_control_wire::ErrorCode;
+        let s = describe_wire_error(ErrorCode::Internal, "");
+        assert!(s.contains("Internal"), "code missing: {s}");
+        assert!(!s.ends_with(':'), "trailing colon: {s}");
+        assert!(!s.contains(": "), "spurious colon-space: {s}");
     }
 
     /// `compose_chip_text` appends a non-empty `last_event` after a
