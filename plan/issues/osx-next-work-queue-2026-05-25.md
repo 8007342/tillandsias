@@ -2440,3 +2440,29 @@ step 5 lands.
   fmt clean.
 - Streak: 0 (productive iter). Next macOS iter eligible at
   ~12:30Z.
+
+### event: macOS slice 12 — compose_chip_text last_event append — 2026-05-28T13:30Z
+
+- Commit `5c5e0e20` mirrors item 2 of windows-tray's `8992652a`.
+  Adds `compose_chip_text(base, last_event_opt) -> String` that
+  appends a non-empty `VmStatusReply.last_event` after a Unicode
+  MIDDLE DOT (U+00B7), so the live chip surfaces in-VM activity:
+    * before: "🟢 Ready"
+    * after:  "🟢 Ready · forge-foo created"
+  None/whitespace last_event leaves the base untouched.
+- `poll_vm_status_once` signature changed to return
+  `Option<String> last_event` from `VmStatusReply`;
+  `spawn_vm_status_poller` composes it into the chip via
+  `compose_chip_text(vm_phase_status_text(...), last_event)`.
+- Byte-identical chip format with windows-tray. New unit test
+  `compose_chip_text_appends_last_event` mirrors the windows-tray
+  test of the same name — divergence between the two trays' chip
+  composition would fail either suite.
+- Deferred to a follow-up: a macOS UNUserNotificationCenter
+  equivalent of windows' `show_balloon` (item 1 from 8992652a).
+  That requires `objc2-user-notifications` + permission-request
+  plumbing; meaningful UX gain but bigger than this slice.
+- Tests + lint clean: macos-tray 31/31 (+1); clippy -D warnings
+  clean; fmt clean. Streak reset to 0.
+- Streak: 0 (productive iter). Next macOS iter eligible at
+  ~14:00Z.
