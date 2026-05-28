@@ -1954,3 +1954,27 @@ step 5 lands.
 - Current macOS dependency chain: m8 user-attended smoke remains the manual
   acceptance gate. Autonomous fallback is m10 project threading or semantic
   m11 cleanup.
+
+### event: macOS slice 2 — ids::STATUS chip wired to VM lifecycle — 2026-05-28T01:19Z
+
+- Commit `5e8bac82` lands the second slice of the post-UX-correction plan:
+  `TrayActionHost` now holds `Arc<Mutex<Option<…>>>` handles for the
+  `NSStatusItem` and the first-row `NSMenuItem` (`ids::STATUS`).
+  `status_item::run` populates those handles once on startup via
+  `attach_status_handles`; subsequent lifecycle events call
+  `set_status_text` which dispatches a `setTitle:`/`setToolTip:` pair to the
+  AppKit main thread.
+- Phases wired today: "🔵 Setting up Fedora Linux…" on boot,
+  "🟢 VM running" on success, "🔴 <error>" on failure. Provisioning
+  granularity (Booting / Downloading / Verifying) lands in slice 6 when
+  `download_verified::on_progress` is wired through.
+- Tests + clippy + fmt clean: `cargo test -p tillandsias-macos-tray --bin
+  tillandsias-tray` 25 passed; `cargo test -p tillandsias-vm-layer --features
+  recipe,download,materialize --lib` 63 passed; `cargo clippy -p
+  tillandsias-macos-tray --no-deps -- -D warnings` clean.
+- UX-parity invariant preserved: menu shape stays identical to Linux +
+  Windows. The macOS-specific VM-spinup layer is encoded only in the chip
+  text, never as an extra menu item (per owner 2026-05-27 hard requirement).
+- Streak: 0 (productive iter). Next macOS iter eligible at ~01:49Z to start
+  slice 3 (held MenuState + menu re-render for SelectAgent + project list
+  updates).
