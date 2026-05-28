@@ -5772,6 +5772,13 @@ async fn run_headless_async(
 
     let metrics_handle = spawn_metrics_sampler();
 
+    // @trace spec:observability-metrics gap:OBS-009 — spawn the Prometheus
+    // HTTP exporter alongside the sampler. The endpoint is read-only and
+    // bound to localhost only; if the bind fails (port already in use,
+    // socket permission), we log a warning and continue — headless MUST
+    // NOT refuse to start because the diagnostic surface is unavailable.
+    let metrics_http_handle = spawn_metrics_http_server();
+
     // @trace spec:vsock-transport — when `--listen-vsock <PORT>` was supplied,
     // bind the control wire on virtio-vsock instead of the Linux Unix
     // socket. The vsock listener is the in-VM service the host-side
@@ -5787,6 +5794,12 @@ async fn run_headless_async(
     if let Some(handle) = metrics_handle {
         handle.abort();
         // Drain the join future; aborted tasks yield JoinError(cancelled).
+        let _ = handle.await;
+    }
+
+    // Stop the metrics HTTP exporter alongside the sampler.
+    if let Some(handle) = metrics_http_handle {
+        handle.abort();
         let _ = handle.await;
     }
 
@@ -6387,6 +6400,43 @@ fn spawn_metrics_sampler() -> Option<tokio::task::JoinHandle<()>> {
     let handle = tokio::spawn(async move {
         let mut sampler = MetricsSampler::new();
         sampler.collect_continuous(interval).await;
+    });
+    Some(handle)
+}
+
+/// Spawn the Prometheus HTTP exporter on localhost. Default bind is
+/// `127.0.0.1:9090` (Prometheus' canonical port); override via the
+/// `TILLANDSIAS_METRICS_ADDR` env var (e.g. `127.0.0.1:0` in tests, or a
+/// different port when 9090 is taken by an external scraper).
+///
+/// Returning `None` means the bind failed up front (port already taken,
+/// permission denied, ...). Per spec:observability-metrics the headless
+/// service MUST continue to run when the diagnostic surface is unavailable
+/// — sampling and the control wire are not gated on metrics scrape
+/// reachability. The warning surfaces the cause in the headless event log.
+///
+/// @trace spec:observability-metrics gap:OBS-009
+fn spawn_metrics_http_server() -> Option<tokio::task::JoinHandle<()>> {
+    use crate::metrics_server::{MetricsServerState, start_metrics_server};
+    use std::net::SocketAddr;
+
+    let addr_str =
+        std::env::var("TILLANDSIAS_METRICS_ADDR").unwrap_or_else(|_| "127.0.0.1:9090".to_string());
+    let addr: SocketAddr = match addr_str.parse() {
+        Ok(a) => a,
+        Err(e) => {
+            eprintln!(
+                "[tillandsias] metrics: invalid TILLANDSIAS_METRICS_ADDR={addr_str}: {e} — exporter disabled"
+            );
+            return None;
+        }
+    };
+
+    let state = MetricsServerState::new();
+    let handle = tokio::spawn(async move {
+        if let Err(e) = start_metrics_server(addr, state).await {
+            eprintln!("[tillandsias] metrics: HTTP exporter on {addr} stopped: {e}");
+        }
     });
     Some(handle)
 }

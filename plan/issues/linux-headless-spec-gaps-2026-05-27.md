@@ -48,10 +48,19 @@ bounded slices from. Each item is sized for one loop iteration. NOT for siblings
 3. **[CRITICAL] Event-type diversity.** Only `event:container_launch` exists; spec
    wants container_exit / container_signal / resource_exhaustion / container_stderr.
    Hook podman events (podman/src/events.rs:~105) → typed events. Larger; split.
-4. **[CRITICAL] Metrics HTTP endpoint is stubbed.** metrics_server.rs:~89 has
-   `TODO: Implement HTTP connection handling`; `start_metrics_server` never called
-   from `run_headless_async`. Complete GET /metrics → format_prometheus_metrics;
-   spawn from headless. Pair with metrics-collection-failure honesty (no fake zeros).
+4. **[DONE] Metrics HTTP endpoint.** Implemented hand-rolled HTTP/1.1
+   handler in `crates/tillandsias-headless/src/metrics_server.rs`:
+   `GET /metrics` → `format_prometheus_metrics` body with
+   `Content-Type: text/plain; version=0.0.4`; `POST /metrics` → 405; wrong
+   path → 404; bad request → 400; collection failure → 500 with error body
+   (NOT a fabricated 200 — explicit per spec:observability-metrics).
+   Connection-per-scrape (no keep-alive), 5s read timeout + 8KB request
+   cap to bound slow-loris. Wired into `run_headless_async` via
+   `spawn_metrics_http_server` paired with the sampler abort. Default bind
+   `127.0.0.1:9090`; override with `TILLANDSIAS_METRICS_ADDR`. Bind failure
+   logs + continues (headless MUST NOT refuse to start because the
+   diagnostic surface is unavailable). Two end-to-end tests over real
+   TCP loopback + a routing matrix unit test pin behaviour.
 5. **[MED] Diagnostics event filtering + bounded ring buffer.** No
    `--debug-filter`/`--debug-container`/`TILLANDSIAS_DEBUG_LEVEL`;
    diagnostics_stream.rs:170 uses an unbounded channel (spec wants ≤10K ring +
@@ -83,6 +92,10 @@ bounded slices from. Each item is sized for one loop iteration. NOT for siblings
   PodmanEventStream → emitter wiring is the live-runtime PHASE-2 slice
   (paired with the gap-2 DiagnosticsHandle::start activation). Pinning the
   shape now means PHASE-2 can't drift on field order or escaping.
+- **GAP 4 DONE**: metrics HTTP endpoint completed + wired into
+  `run_headless_async`. See gap-4 description above for the full
+  shape; spawn helper is `spawn_metrics_http_server` in
+  `crates/tillandsias-headless/src/main.rs`.
   (Next diagnostics gap: GAP 2 / GAP 3 PHASE-2 — wire the live podman
   events parser to emit_diagnostic_event when `debug` is on.)
 
