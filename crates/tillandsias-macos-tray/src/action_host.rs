@@ -57,12 +57,62 @@ use std::time::Duration;
 use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, NSObject};
 use objc2::{ClassType, DeclaredClass, declare_class, msg_send_id, mutability};
+use objc2_app_kit::{NSMenuItem, NSStatusItem};
 use objc2_foundation::MainThreadMarker;
 
 use tillandsias_vm_layer::VmRuntime;
 use tillandsias_vm_layer::vz::VzRuntime;
 
 use crate::main_thread::dispatch_to_main_thread;
+
+/// Send/Sync wrappers around AppKit `Retained<…>` handles so they can
+/// sit in the action-host's ivars (the host is `MainThreadOnly`, but
+/// ivars get cloned across threads when worker callbacks move Arcs
+/// into background tasks before dispatching back to main).
+///
+/// SAFETY: every method on `NSStatusItem` / `NSMenuItem` MUST be
+/// called from the AppKit main thread. All touches in this crate go
+/// through `dispatch_to_main_thread`, so the contract holds. The
+/// wrappers exist purely to satisfy `Send + Sync`.
+mod appkit_handle {
+    use objc2::rc::Retained;
+    use objc2_app_kit::{NSMenuItem, NSStatusItem};
+    pub(crate) struct StatusItemHandle(pub Retained<NSStatusItem>);
+    // SAFETY: see module docstring.
+    unsafe impl Send for StatusItemHandle {}
+    unsafe impl Sync for StatusItemHandle {}
+    pub(crate) struct StatusMenuItemHandle(pub Retained<NSMenuItem>);
+    // SAFETY: see module docstring.
+    unsafe impl Send for StatusMenuItemHandle {}
+    unsafe impl Sync for StatusMenuItemHandle {}
+}
+
+/// Apply a status-chip text update on the AppKit main thread.
+/// Updates the first-row menu item's title AND the menubar icon's
+/// tooltip so hover-over also reveals the live phase.
+///
+/// MUST be invoked from the main thread (the libdispatch contract
+/// in `dispatch_to_main_thread` enforces that for closure callers).
+/// Reading the Arc<Mutex<>> handles is cheap and non-blocking
+/// because nothing else holds them across long sections.
+fn apply_status_text_main_thread(
+    text: &str,
+    status_item: &Arc<Mutex<Option<appkit_handle::StatusItemHandle>>>,
+    status_menu_item: &Arc<Mutex<Option<appkit_handle::StatusMenuItemHandle>>>,
+) {
+    use objc2_foundation::NSString;
+    // We're on main per the libdispatch contract.
+    let mtm = unsafe { MainThreadMarker::new_unchecked() };
+    let label = NSString::from_str(text);
+    if let Some(handle) = status_menu_item.lock().unwrap().as_ref() {
+        unsafe { handle.0.setTitle(&label) };
+    }
+    if let Some(handle) = status_item.lock().unwrap().as_ref()
+        && let Some(button) = unsafe { handle.0.button(mtm) }
+    {
+        unsafe { button.setToolTip(Some(&label)) };
+    }
+}
 
 /// Default vsock CID for the Tillandsias guest. Matches what the
 /// in-VM headless binds; the host always connects to this CID.
@@ -82,6 +132,21 @@ pub struct TrayActionHostIvars {
     vm: Arc<Mutex<Option<Arc<VzRuntime>>>>,
     vm_busy: Arc<Mutex<bool>>,
     image_root: PathBuf,
+    /// The NSStatusItem the action host's tooltip updates apply to.
+    /// Set once at startup via `attach_status_handles`; stays `None`
+    /// only briefly between TrayActionHost::new and the subsequent
+    /// attach call from `status_item::run`.
+    status_item: Arc<Mutex<Option<appkit_handle::StatusItemHandle>>>,
+    /// The first-row "status chip" NSMenuItem whose `title` reflects
+    /// the current lifecycle phase. Held directly so `set_status_text`
+    /// just calls `setTitle:` on it (cheaper + simpler than rebuilding
+    /// the whole menu). Set alongside `status_item`.
+    status_menu_item: Arc<Mutex<Option<appkit_handle::StatusMenuItemHandle>>>,
+    /// Current first-row status text. Stored for any future
+    /// non-AppKit consumer (logs, tests). The actual UI source of
+    /// truth is `status_menu_item.title`; we keep this string in
+    /// sync so off-thread reads stay safe.
+    status_text: Arc<Mutex<String>>,
 }
 
 declare_class!(
@@ -395,6 +460,11 @@ impl TrayActionHost {
             vm: Arc::new(Mutex::new(None)),
             vm_busy: Arc::new(Mutex::new(false)),
             image_root,
+            status_item: Arc::new(Mutex::new(None)),
+            status_menu_item: Arc::new(Mutex::new(None)),
+            status_text: Arc::new(Mutex::new(
+                "\u{1F535} Setting up Fedora Linux\u{2026}".to_string(),
+            )),
         };
         // SAFETY: `mtm` proves main-thread; allocation + init is the
         // standard ObjC two-step. `set_ivars` populates the declared
@@ -496,6 +566,43 @@ impl TrayActionHost {
         }
     }
 
+    /// Stash AppKit handles so subsequent `set_status_text` calls
+    /// can update the first-row chip + the tooltip in-place. Called
+    /// once from `status_item::run` right after both handles exist.
+    /// Must be invoked from the main thread (`MainThreadOnly`
+    /// contract on `TrayActionHost`).
+    pub fn attach_status_handles(
+        &self,
+        status_item: Retained<NSStatusItem>,
+        status_menu_item: Retained<NSMenuItem>,
+    ) {
+        let ivars = self.ivars();
+        *ivars.status_item.lock().unwrap() = Some(appkit_handle::StatusItemHandle(status_item));
+        *ivars.status_menu_item.lock().unwrap() =
+            Some(appkit_handle::StatusMenuItemHandle(status_menu_item));
+    }
+
+    /// Update the first-row status chip + the menubar tooltip to
+    /// `text`. Records the string in `ivars.status_text` and
+    /// dispatches an AppKit `setTitle:` / `setToolTip:` call on the
+    /// main thread. Fire from any thread; the AppKit work happens
+    /// on main.
+    ///
+    /// Slice 2 scope: macOS-local lifecycle phases the host owns —
+    /// Provisioning, Booting, Ready, Error. Once the in-VM headless
+    /// reports its own status over vsock (ControlMessage::VmStatus
+    /// subscription), those will feed into the same path.
+    pub fn set_status_text(&self, text: impl Into<String>) {
+        let ivars = self.ivars();
+        let text = text.into();
+        *ivars.status_text.lock().unwrap() = text.clone();
+        let status_item = ivars.status_item.clone();
+        let status_menu_item = ivars.status_menu_item.clone();
+        dispatch_to_main_thread(move || {
+            apply_status_text_main_thread(&text, &status_item, &status_menu_item);
+        });
+    }
+
     /// Shared boot-the-VM path. Called by the `startVm:` selector AND
     /// directly from `status_item::run()` on app launch so the user
     /// never has to manually click Start VM (the lifecycle is
@@ -536,6 +643,22 @@ impl TrayActionHost {
         let label_owned = label.to_string();
         let label_done = label_owned.clone();
 
+        // Status chip: show that we've started. The Provisioning phase
+        // bundles fetch + decompress + verify + boot until the
+        // in-VM headless's vsock handshake completes (slice gates on
+        // that signal). Granularity will increase when we wire
+        // `download_verified::on_progress` (next slice).
+        self.set_status_text("\u{1F535} Setting up Fedora Linux\u{2026}");
+
+        // Clone the Arc-based status handles so the completion callback
+        // can update the chip from the main-thread dispatch without
+        // needing a Retained<Self> (which isn't Send). The closure
+        // re-runs `apply_status_text_main_thread` on the main thread
+        // exactly like `set_status_text` would.
+        let status_text_slot = ivars.status_text.clone();
+        let status_item_slot = ivars.status_item.clone();
+        let status_menu_item_slot = ivars.status_menu_item.clone();
+
         eprintln!(
             "[tillandsias-tray] {label_owned}: spawning worker (image_root={})",
             image_root.display()
@@ -544,10 +667,18 @@ impl TrayActionHost {
             let result = run_start(image_root, vm_slot).await;
             dispatch_to_main_thread(move || {
                 *vm_busy.lock().unwrap() = false;
-                match result {
-                    Ok(()) => eprintln!("[tillandsias-tray] {label_done}: VM is running"),
-                    Err(e) => eprintln!("[tillandsias-tray] {label_done} failed: {e}"),
-                }
+                let text = match &result {
+                    Ok(()) => {
+                        eprintln!("[tillandsias-tray] {label_done}: VM is running");
+                        "\u{1F7E2} VM running".to_string()
+                    }
+                    Err(e) => {
+                        eprintln!("[tillandsias-tray] {label_done} failed: {e}");
+                        format!("\u{1F534} {e}")
+                    }
+                };
+                *status_text_slot.lock().unwrap() = text.clone();
+                apply_status_text_main_thread(&text, &status_item_slot, &status_menu_item_slot);
             });
         });
     }

@@ -135,9 +135,41 @@ pub fn install_status_item(
         unsafe { button.setToolTip(Some(&tooltip)) };
     }
 
-    let menu = build_menu(mtm, structure, action_host);
+    let (menu, status_row) = build_menu_with_status_row(mtm, structure, action_host);
     unsafe { status_item.setMenu(Some(&menu)) };
+
+    // Hand the action-host the live handles so its lifecycle
+    // updates (`set_status_text`) can patch the title + tooltip
+    // in-place instead of rebuilding the menu. We hold our own
+    // +1 retain via the returned Retained — give the action-host
+    // its own retain by cloning the smart pointer.
+    if let Some(row) = status_row {
+        action_host.attach_status_handles(status_item.clone(), row);
+    }
     status_item
+}
+
+/// Build the menu and return the first-row `NSMenuItem` (the one
+/// keyed `ids::STATUS`) so the action-host can patch its title as
+/// the VM lifecycle advances. The status row is `None` only if the
+/// shared `MenuStructure` produced an empty top-level list — which
+/// `initial_provisioning()` never does, but we don't want to panic
+/// here.
+fn build_menu_with_status_row(
+    mtm: MainThreadMarker,
+    structure: &MenuStructure,
+    action_host: &TrayActionHost,
+) -> (Retained<NSMenu>, Option<Retained<NSMenuItem>>) {
+    let menu = NSMenu::new(mtm);
+    let mut status_row: Option<Retained<NSMenuItem>> = None;
+    for spec in render(structure) {
+        let item = build_menu_item(mtm, &spec, action_host);
+        if spec.id == ids::STATUS && status_row.is_none() {
+            status_row = Some(item.clone());
+        }
+        menu.addItem(&item);
+    }
+    (menu, status_row)
 }
 
 /// Build an `NSMenu` from a host-shell `MenuStructure`. Walks the tree
