@@ -61,10 +61,19 @@ bounded slices from. Each item is sized for one loop iteration. NOT for siblings
    logs + continues (headless MUST NOT refuse to start because the
    diagnostic surface is unavailable). Two end-to-end tests over real
    TCP loopback + a routing matrix unit test pin behaviour.
-5. **[MED] Diagnostics event filtering + bounded ring buffer.** No
-   `--debug-filter`/`--debug-container`/`TILLANDSIAS_DEBUG_LEVEL`;
-   diagnostics_stream.rs:170 uses an unbounded channel (spec wants ≤10K ring +
-   backpressure logging at depth>100). 
+5. **[MED] Diagnostics event filtering + bounded ring buffer.**
+   PHASE-1 DONE: filtering side. `crates/tillandsias-podman/src/
+   diagnostics_filter.rs` implements `DiagnosticsFilter` reading
+   `TILLANDSIAS_DEBUG_FILTER` (comma-list of event types),
+   `TILLANDSIAS_DEBUG_CONTAINER` (glob with `*` wildcards), and
+   `TILLANDSIAS_DEBUG_LEVEL` (`normal`/`verbose`; verbose unlocks
+   `event:internal_*`). Consulted by `emit_launch_event` and the (staged)
+   `emit_diagnostic_event`; cached in a process-wide `OnceLock`. Eight
+   unit tests pin behaviour for every spec scenario. PHASE-2 PENDING:
+   bounded ring buffer in diagnostics_stream.rs (≤10K events,
+   backpressure log at depth>100, drop-oldest). Needs the runtime wiring
+   (gap-2/3 phase-2) to land first because the channel today is in the
+   not-yet-active DiagnosticsHandle path.
 
 ## Control-wire / VM lifecycle
 
@@ -96,6 +105,11 @@ bounded slices from. Each item is sized for one loop iteration. NOT for siblings
   `run_headless_async`. See gap-4 description above for the full
   shape; spawn helper is `spawn_metrics_http_server` in
   `crates/tillandsias-headless/src/main.rs`.
+- **GAP 5 PHASE-1 DONE**: `DiagnosticsFilter` (event-type allowlist +
+  container glob + debug level). `crates/tillandsias-podman/src/
+  diagnostics_filter.rs` + integration in `emit_launch_event` /
+  `emit_diagnostic_event`. See gap-5 description above for env-var
+  surface. Ring-buffer half is PHASE-2.
   (Next diagnostics gap: GAP 2 / GAP 3 PHASE-2 — wire the live podman
   events parser to emit_diagnostic_event when `debug` is on.)
 
