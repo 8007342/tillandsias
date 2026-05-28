@@ -51,6 +51,20 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-28T01:44Z — MERGED windows-next (VM-status polling) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `7778caab` (merge commit)
+- observed_sibling_heads: main=`fa746f03` · linux-next(pre-merge)=`c3d585ba` ·
+  windows-next=`c45f23ae` · osx-next=`5e8bac82`
+- **windows-next: merged+tested+pushed.** 1-commit delta `c45f23ae` (live
+  VM-status polling → MenuState: podman_ready + phase). Single file,
+  `crates/tillandsias-windows-tray/src/notify_icon.rs` (windows-owned). Clean
+  auto-merge.
+- osx-next: no-op (HEAD `5e8bac82` is an ancestor).
+- Tests: PASSED. `./build.sh --check` + `./build.sh --test` green.
+- Spec/methodology drift: none (one windows-tray .rs file; no specs/methodology/plan).
+
 ### Cycle 2026-05-27T23:44Z — MERGED windows-next (-Release packaging + coord response) ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next

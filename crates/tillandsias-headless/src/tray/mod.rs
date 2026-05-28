@@ -2841,6 +2841,82 @@ async fn register_with_watcher(connection: &Connection, service_name: &str) {
     }
 }
 
+/// Run native tray mode using a pure D-Bus StatusNotifierItem path.
+///
+/// @trace spec:tray-app, spec:tray-ux, spec:tray-progress-and-icon-states, spec:tray-icon-lifecycle
+#[allow(dead_code)] // kept as the no-debug shim for external callers/tests
+pub fn run_tray_mode(config_path: Option<String>) -> Result<(), String> {
+    run_tray_mode_with_debug(config_path, false)
+}
+
+/// Same as [`run_tray_mode`] but with the `--debug` flag plumbed through so
+/// the containerized-gh / cloud-refresh paths can emit `[tillandsias] gh: …`
+/// stderr breadcrumbs. @trace spec:remote-projects
+pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Result<(), String> {
+    let version = super::VERSION.trim().to_string();
+    let root = super::resolve_runtime_asset_root(&version, debug)?;
+    let state =
+        TrayUiState::new_with_debug(root.clone(), version.clone(), discover_projects(), debug);
+    let service = Arc::new(TrayService::new(state));
+    start_control_socket_server()?;
+
+    // @trace spec:tray-ux, spec:remote-projects
+    // Kick off the initial cloud-projects fetch on the async executor so the
+    // ☁️ Cloud submenu populates without blocking tray startup. If the user
+    // isn't authenticated this is effectively a no-op inside cloud.rs.
+    if service.snapshot().is_authenticated {
+        let service_for_init = service.clone();
+        let state_handle = service.state_handle();
+        let debug = service.snapshot().debug;
+        if service
+            .task_executor
+            .spawn_task(move || {
+                match cloud::refresh_cloud_projects_if_stale(state_handle, false, debug) {
+                    Ok(outcome) if outcome.menu_changed() => {
+                        let _ = futures::executor::block_on(
+                            service_for_init.rebuild_after_state_change(),
+                        );
+                    }
+                    Ok(_) => {}
+                    Err(_) => {}
+                }
+            })
+            .is_err()
+        {
+            warn!("task queue full: skipping initial cloud refresh");
+        }
+    }
+
+    if let Some(path) = config_path {
+        info!("Tray started with config path: {path}");
+    }
+
+    let runtime =
+        tokio::runtime::Runtime::new().map_err(|e| format!("failed to create runtime: {e}"))?;
+    let _connection = runtime.block_on(async {
+        let conn = build_connection(service.clone()).await?;
+        service.attach_connection(conn.clone());
+        register_with_watcher(&conn, &service.service_name).await;
+        Ok::<Connection, String>(conn)
+    })?;
+    runtime.block_on(async move {
+        let item_ctxt = SignalContext::new(service.connection(), service.item_path.as_str())
+            .map_err(|e| e.to_string())?;
+        let menu_ctxt = SignalContext::new(service.connection(), service.menu_path.as_str())
+            .map_err(|e| e.to_string())?;
+        let _ = StatusNotifierItemIface::new_icon(&item_ctxt).await;
+        let _ = StatusNotifierItemIface::new_status(&item_ctxt).await;
+        let _ = StatusNotifierItemIface::new_tool_tip(&item_ctxt).await;
+        let _ = DbusMenuIface::layout_updated(&menu_ctxt, service.snapshot().revision, 0).await;
+
+        futures::future::pending::<()>().await;
+        #[allow(unreachable_code)]
+        Ok::<(), String>(())
+    })?;
+
+    Ok(())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4135,80 +4211,4 @@ mod tests {
         let result = service.task_executor.spawn_task(|| {});
         assert!(result.is_ok(), "TrayService executor should be ready");
     }
-}
-
-/// Run native tray mode using a pure D-Bus StatusNotifierItem path.
-///
-/// @trace spec:tray-app, spec:tray-ux, spec:tray-progress-and-icon-states, spec:tray-icon-lifecycle
-#[allow(dead_code)] // kept as the no-debug shim for external callers/tests
-pub fn run_tray_mode(config_path: Option<String>) -> Result<(), String> {
-    run_tray_mode_with_debug(config_path, false)
-}
-
-/// Same as [`run_tray_mode`] but with the `--debug` flag plumbed through so
-/// the containerized-gh / cloud-refresh paths can emit `[tillandsias] gh: …`
-/// stderr breadcrumbs. @trace spec:remote-projects
-pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Result<(), String> {
-    let version = super::VERSION.trim().to_string();
-    let root = super::resolve_runtime_asset_root(&version, debug)?;
-    let state =
-        TrayUiState::new_with_debug(root.clone(), version.clone(), discover_projects(), debug);
-    let service = Arc::new(TrayService::new(state));
-    start_control_socket_server()?;
-
-    // @trace spec:tray-ux, spec:remote-projects
-    // Kick off the initial cloud-projects fetch on the async executor so the
-    // ☁️ Cloud submenu populates without blocking tray startup. If the user
-    // isn't authenticated this is effectively a no-op inside cloud.rs.
-    if service.snapshot().is_authenticated {
-        let service_for_init = service.clone();
-        let state_handle = service.state_handle();
-        let debug = service.snapshot().debug;
-        if service
-            .task_executor
-            .spawn_task(move || {
-                match cloud::refresh_cloud_projects_if_stale(state_handle, false, debug) {
-                    Ok(outcome) if outcome.menu_changed() => {
-                        let _ = futures::executor::block_on(
-                            service_for_init.rebuild_after_state_change(),
-                        );
-                    }
-                    Ok(_) => {}
-                    Err(_) => {}
-                }
-            })
-            .is_err()
-        {
-            warn!("task queue full: skipping initial cloud refresh");
-        }
-    }
-
-    if let Some(path) = config_path {
-        info!("Tray started with config path: {path}");
-    }
-
-    let runtime =
-        tokio::runtime::Runtime::new().map_err(|e| format!("failed to create runtime: {e}"))?;
-    let _connection = runtime.block_on(async {
-        let conn = build_connection(service.clone()).await?;
-        service.attach_connection(conn.clone());
-        register_with_watcher(&conn, &service.service_name).await;
-        Ok::<Connection, String>(conn)
-    })?;
-    runtime.block_on(async move {
-        let item_ctxt = SignalContext::new(service.connection(), service.item_path.as_str())
-            .map_err(|e| e.to_string())?;
-        let menu_ctxt = SignalContext::new(service.connection(), service.menu_path.as_str())
-            .map_err(|e| e.to_string())?;
-        let _ = StatusNotifierItemIface::new_icon(&item_ctxt).await;
-        let _ = StatusNotifierItemIface::new_status(&item_ctxt).await;
-        let _ = StatusNotifierItemIface::new_tool_tip(&item_ctxt).await;
-        let _ = DbusMenuIface::layout_updated(&menu_ctxt, service.snapshot().revision, 0).await;
-
-        futures::future::pending::<()>().await;
-        #[allow(unreachable_code)]
-        Ok::<(), String>(())
-    })?;
-
-    Ok(())
 }
