@@ -223,8 +223,13 @@ fn build_menu_item(
         unsafe { item.setState(objc2_app_kit::NSControlStateValueOn) };
     }
     // ID-keyed action wiring.
-    // - Quit uses AppKit's standard responder-chain `terminate:` with
-    //   nil target + ⌘Q shortcut (the canonical AppKit pattern).
+    // - Quit uses our custom `quitWithDrain:` selector on the
+    //   TrayActionHost so we can drain the in-VM headless (60s
+    //   timeout) before exiting. AppKit's `terminate:` would skip
+    //   the drain and leave the VM in a half-stopped state. We
+    //   keep ⌘Q as the key equivalent — the user-visible binding
+    //   is identical, only the implementation gains a graceful
+    //   shutdown step.
     // - Every other enabled, leaf-ish item gets the generic
     //   `trayAction:` selector targeting the shared TrayActionHost.
     //   The id string is stashed on the NSMenuItem via
@@ -232,11 +237,11 @@ fn build_menu_item(
     //   resolves to `MenuAction` via the shared `menu_action::resolve`
     //   table (same dispatch surface windows-tray uses).
     if spec.id == ids::QUIT {
+        let host_any: &AnyObject = <TrayActionHost as ClassType>::as_super(action_host).as_ref();
         unsafe {
             item.setKeyEquivalent(&NSString::from_str("q"));
-            item.setAction(Some(sel!(terminate:)));
-            // Nil target → responder chain → NSApplication terminates.
-            item.setTarget(None);
+            item.setAction(Some(sel!(quitWithDrain:)));
+            item.setTarget(Some(host_any));
         }
     } else if spec.enabled {
         let id_str = NSString::from_str(&spec.id);

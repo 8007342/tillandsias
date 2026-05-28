@@ -308,6 +308,55 @@ declare_class!(
             });
         }
 
+        #[method(quitWithDrain:)]
+        fn quit_with_drain(&self, _sender: Option<&AnyObject>) {
+            let ivars = self.ivars();
+
+            // User-visible feedback: chip immediately flips to Stopping.
+            // The tooltip mirrors so even with the menu closed the
+            // menubar icon hover surface reflects the drain.
+            self.set_status_text("\u{1F534} Stopping\u{2026}");
+
+            // Take the live VM out of the slot so a stray retry click
+            // can't double-stop. If there's no VM (e.g. user quits
+            // before boot completes), we still proceed to exit(0) —
+            // Quit must always terminate the app.
+            let vm_taken = ivars.vm.lock().unwrap().take();
+
+            // Mark busy so concurrent click paths skip out fast — the
+            // drain task never clears this; exit(0) ends the process.
+            *ivars.vm_busy.lock().unwrap() = true;
+
+            let runtime = ivars.runtime.clone();
+
+            eprintln!(
+                "[tillandsias-tray] Quit: draining (timeout={}s)",
+                VM_STOP_DRAIN.as_secs()
+            );
+            runtime.spawn(async move {
+                if let Some(vm) = vm_taken {
+                    match vm.stop(VM_STOP_DRAIN).await {
+                        Ok(()) => {
+                            eprintln!("[tillandsias-tray] Quit: VM drained cleanly")
+                        }
+                        Err(e) => {
+                            eprintln!("[tillandsias-tray] Quit: drain failed: {e}")
+                        }
+                    }
+                } else {
+                    eprintln!("[tillandsias-tray] Quit: no live VM, skipping drain");
+                }
+                // Bypass AppKit cleanup — the only critical shutdown
+                // step for v0.0.1 is the VM drain above. NSApplication
+                // doesn't own state we need to flush; the Tokio
+                // runtime is fine to abandon (we're about to call
+                // exit(0) anyway). Future revisions can route this
+                // through NSApplicationDelegate::applicationShouldTerminate
+                // + NSTerminateLater for a cleaner AppKit handshake.
+                std::process::exit(0);
+            });
+        }
+
         #[method(openShell:)]
         fn open_shell(&self, _sender: Option<&AnyObject>) {
             self.attach_pty(
