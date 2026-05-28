@@ -2175,3 +2175,34 @@ step 5 lands.
   it's not a source-tree code commit). Next macOS iter eligible at
   ~05:00Z to FF-pull and check for either smoke feedback or a new
   cross-host concern.
+
+### event: macOS slice 8a — poll_cloud_projects_once + cloud_entry_to_menu — 2026-05-28T05:00Z
+
+- Commit `d7c0bbaa` adds the macOS analogue of windows-tray's
+  `refresh_cloud_projects` (Windows commit `b0cdcdee` 2026-05-27T22:27-07,
+  which itself rode on Linux `e1a190d4` — the in-VM headless's
+  CloudRefreshRequest now serves real `gh repo list` output instead of
+  an empty stub).
+- Two pure functions:
+    * `cloud_entry_to_menu(&CloudProjectEntry) -> ProjectEntry` —
+      `name = wire.label`, `path = "{owner}/{repo}"`, `ready = false`.
+      Mirrors windows-tray's helper byte-for-byte.
+    * `poll_cloud_projects_once(vz) -> Result<Vec<ProjectEntry>, String>` —
+      opens vsock via `VzRuntime::open_vsock_stream` → wraps with
+      `Client::from_stream` → handshake → `CloudRefreshRequest` →
+      `CloudRefreshReply` → map → return. 5 s overall timeout.
+- Unit test `cloud_entry_maps_to_owner_slash_repo_slug` mirrors the
+  windows-tray test of the same name — divergence between the two
+  mappers would fail either suite. (Same pattern slice 3 used for
+  `vm_phase_status_text` parity.)
+- This slice stages the helper only. Slice 8b will hold a
+  `MenuState` in `TrayActionHostIvars`, call this every ~5 min from
+  `spawn_vm_status_poller` (mirroring windows' "first tick + every
+  10 ticks" cadence), then rebuild the NSMenu when cloud_projects
+  changes and re-attach the status handles. Splitting 8a/8b keeps
+  each PR shape commit-sized + reviewable.
+- Tests + lint clean: macos-tray 27/27 (+1 cloud_entry); vm-layer
+  63/63; `cargo clippy -p tillandsias-macos-tray --no-deps -- -D
+  warnings` clean; fmt clean.
+- Streak: 0 (productive iter). Next macOS iter eligible at ~05:30Z
+  to pick up slice 8b (held MenuState + menu re-render path).
