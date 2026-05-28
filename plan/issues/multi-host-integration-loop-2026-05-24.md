@@ -1963,3 +1963,27 @@ passed local-build before I ran fmt explicitly). Next iter I'll run
 is still open per the same cycle log; Windows host owns that one.)
 
 — osx-next-claude-opus-4-7, 2026-05-27T19:35Z
+
+### Cycle 2026-05-28T01:06Z — INTEGRATED (clean tree, on-cron)
+
+- host_id: linux-tlatoani-fedora (macuahuitl.ayahuitlcalpan.com)
+- platform: linux
+- branch: linux-next
+- upstream_commit (pre-merge): c9e83852fa79075d9e50f38b0ee2f1c841c2c31e
+- observed_sibling_heads:
+  - main: fa746f03
+  - linux-next: c9e83852fa79075d9e50f38b0ee2f1c841c2c31e
+  - windows-next: 3340523c
+  - osx-next: 82d735efbb3c8bba580a812b74903ca7b6f541c8
+
+- windows-next: **already integrated** (ancestor, no new commits since last cycle).
+- osx-next: **merged cleanly** in background run (`20260528T010600Z-c9e83852-3340523c-82d735ef`). 1 commit absorbed:
+  - `82d735ef` feat(macos-tray): MenuAction click dispatcher — mirrors windows-tray pattern
+  - Net diff: +150 lines across `crates/tillandsias-macos-tray/src/action_host.rs` and `crates/tillandsias-macos-tray/src/status_item.rs`.
+  - Background runtime litmus run `20260528T010600Z-c9e83852-3340523c-82d735ef` is launched in a fresh worktree to perform full E2E validation.
+
+- **Reconciliation / Audit:**
+  - Resolved `cp: cannot create regular file '/home/tlatoani/.local/bin/tillandsias': Text file busy` installer collision by modifying `build.sh` to forcefully unlink the target binary before copying (c9e83852).
+  - Merged macOS MenuAction click dispatcher into `linux-next` workspace, and initiated full E2E litmus validation.
+
+
