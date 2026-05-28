@@ -2352,3 +2352,31 @@ step 5 lands.
       rootfs.img` first): chip shows live byte-level progress
 - Streak: 0 (productive iter). Next macOS iter eligible at ~09:30Z;
   loop likely shifts to noop cadence pending smoke feedback.
+
+### event: macOS slice 11 — --diagnose health report — 2026-05-28T10:30Z
+
+- Commit `db1619ae` mirrors `tillandsias-windows-tray::notify_icon::
+  diagnose` (commit `20fb9d1f`) in spirit. Adds
+  `tillandsias-tray --diagnose` that prints version / bundle / image-
+  root artifacts / manifest SHA pin / control-wire disclaimer and
+  exits without launching AppKit.
+- **macOS-specific limitation called out in the report**: Apple's
+  `Virtualization.framework` vsock is per-VM-handle (no `AF_VSOCK`),
+  so a standalone `--diagnose` process literally cannot reach a
+  separately-running tray's control wire. The report explicitly
+  points the user at the menubar chip (already driven by the 30 s
+  poller from slice 5) for live phase + podman_ready.
+- Exit codes mirror windows: 0 provisioned, 2 degraded, 1 hard fail.
+  Verified live: pre-first-launch dev box → "MISSING vmlinuz /
+  initramfs.img" + "aarch64.img SHA-256 pin: 6859a7bcc4a9…" +
+  exit 2.
+- Useful for the m8 smoke checklist re-runs: the user can now
+  diagnose "is the .app installed properly / has it provisioned"
+  from a terminal without launching the GUI.
+- This iter is also the noop-streak reset — `plan/issues/osx-next-
+  noop-streak.md` deleted; streak back to 0.
+- Tests + lint clean: macos-tray 27/27; clippy -D warnings clean;
+  fmt clean.
+- Next macOS iter eligible at ~11:00Z. With slice 11 the macOS
+  --diagnose convergence with windows-tray is shipped; remaining
+  items unchanged (manifest.release_tag Linux-owned + user smoke).
