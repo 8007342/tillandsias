@@ -494,60 +494,102 @@ fn handle_control_connection(mut stream: UnixStream, subscribers: ControlSubscri
         return;
     };
 
-    match first.body {
-        ControlMessage::Hello { .. } => {
-            let ack = ControlEnvelope {
-                wire_version: WIRE_VERSION,
-                seq: first.seq,
-                body: ControlMessage::HelloAck {
-                    wire_version: WIRE_VERSION,
-                    server_caps: vec!["IssueWebSession".to_string(), "EvictProject".to_string()],
-                },
-            };
-            if write_control_envelope(&mut stream, &ack).is_err() {
-                return;
-            }
-            subscribers
-                .lock()
-                .expect("control subscribers lock")
-                .push(Arc::new(Mutex::new(stream)));
-        }
-        ControlMessage::IssueWebSession { .. } | ControlMessage::EvictProject { .. } => {
-            // Broadcast to every registered subscriber first. This is a
-            // synchronous call: when it returns, the framed bytes have been
-            // written to each subscriber socket's send buffer, so any
-            // sidecar reading its end is guaranteed to pick the envelope up
-            // on its next poll.
-            broadcast_control_envelope(&subscribers, &first);
+    // Convergence packet item 2: consult `control_dispatch::decide_route`
+    // for the routing decision. The matrix lives in the canonical module
+    // so unix + vsock can never silently disagree on whether a variant
+    // is supported — only one place to update when a new variant lands.
+    //
+    // @trace plan/issues/control-socket-protocol-convergence-2026-05-25.md
+    //   (item 2 of 3)
+    use crate::control_dispatch::{DispatchOutcome, TransportKind, decide_route};
 
-            // Then ack the originator on the connection we still hold. The
-            // CLI uses this ack as the proof that the broadcast happened
-            // before it launches the browser, eliminating the OTP race that
-            // let the browser POST `/_auth/login` before the sidecar's
-            // `OtpStore` saw the cookie. The originating socket was never
-            // added to `subscribers`, so `broadcast_control_envelope` does
-            // not write to it — we have to ack it here.
-            //
-            // Ack failures are intentionally swallowed: if the originator
-            // closed early we simply have nothing to confirm to, and the
-            // broadcast has already succeeded for the real subscribers.
-            //
-            // @trace spec:opencode-web-session-otp, spec:tray-host-control-socket
-            let ack = ControlEnvelope {
-                wire_version: WIRE_VERSION,
-                seq: first.seq,
-                body: ControlMessage::IssueAck {
-                    seq_acked: first.seq,
-                },
-            };
-            let _ = write_control_envelope(&mut stream, &ack);
+    let routing = decide_route(&first.body, TransportKind::UnixSocket);
+
+    match routing {
+        DispatchOutcome::Handle => {
+            // The matrix says this transport handles the variant. Now
+            // dispatch to the actual handler. The variant set the unix
+            // path has handlers for is currently {Hello, IssueWebSession,
+            // EvictProject}; the other matrix-Handle variants (VmStatus
+            // family, EnumerateLocalProjects, CloudRefreshRequest,
+            // McpFrame) need real handlers wired in a follow-on slice.
+            // Until those land, the inner `_` arm writes an explicit
+            // Error{Unsupported} with a hint about the gap — the
+            // matrix-and-handler asymmetry surfaces visibly instead of
+            // silently dropping.
+            match first.body {
+                ControlMessage::Hello { .. } => {
+                    let ack = ControlEnvelope {
+                        wire_version: WIRE_VERSION,
+                        seq: first.seq,
+                        body: ControlMessage::HelloAck {
+                            wire_version: WIRE_VERSION,
+                            server_caps: vec![
+                                "IssueWebSession".to_string(),
+                                "EvictProject".to_string(),
+                            ],
+                        },
+                    };
+                    if write_control_envelope(&mut stream, &ack).is_err() {
+                        return;
+                    }
+                    subscribers
+                        .lock()
+                        .expect("control subscribers lock")
+                        .push(Arc::new(Mutex::new(stream)));
+                }
+                ControlMessage::IssueWebSession { .. } | ControlMessage::EvictProject { .. } => {
+                    // Broadcast to every registered subscriber first. This is a
+                    // synchronous call: when it returns, the framed bytes have been
+                    // written to each subscriber socket's send buffer, so any
+                    // sidecar reading its end is guaranteed to pick the envelope up
+                    // on its next poll.
+                    broadcast_control_envelope(&subscribers, &first);
+
+                    // Then ack the originator on the connection we still hold. The
+                    // CLI uses this ack as the proof that the broadcast happened
+                    // before it launches the browser, eliminating the OTP race that
+                    // let the browser POST `/_auth/login` before the sidecar's
+                    // `OtpStore` saw the cookie. The originating socket was never
+                    // added to `subscribers`, so `broadcast_control_envelope` does
+                    // not write to it — we have to ack it here.
+                    //
+                    // Ack failures are intentionally swallowed: if the originator
+                    // closed early we simply have nothing to confirm to, and the
+                    // broadcast has already succeeded for the real subscribers.
+                    //
+                    // @trace spec:opencode-web-session-otp, spec:tray-host-control-socket
+                    let ack = ControlEnvelope {
+                        wire_version: WIRE_VERSION,
+                        seq: first.seq,
+                        body: ControlMessage::IssueAck {
+                            seq_acked: first.seq,
+                        },
+                    };
+                    let _ = write_control_envelope(&mut stream, &ack);
+                }
+                other => {
+                    // Matrix says Handle but no inner arm yet. Write a
+                    // descriptive Error so the client knows the gap is
+                    // a missing handler, not a wire-format issue.
+                    let err = ControlEnvelope {
+                        wire_version: WIRE_VERSION,
+                        seq: first.seq,
+                        body: ControlMessage::Error {
+                            seq_in_reply_to: Some(first.seq),
+                            code: ErrorCode::Unsupported,
+                            message: format!(
+                                "variant {} is on the unix-socket matrix but the handler is not implemented yet \
+                                 (see plan/issues/control-socket-protocol-convergence-2026-05-25.md item 2)",
+                                other.kind()
+                            ),
+                        },
+                    };
+                    let _ = write_control_envelope(&mut stream, &err);
+                }
+            }
         }
-        // Per plan/issues/control-socket-protocol-convergence-2026-05-25.md:
-        // any other variant that the unix-socket dispatcher does not handle
-        // (e.g. VmStatusRequest, EnumerateLocalProjects) must reply with an
-        // explicit Error frame rather than silently dropping. Silent drops
-        // hang clients waiting for a reply they will never receive.
-        other => {
+        DispatchOutcome::Unsupported => {
             let err = ControlEnvelope {
                 wire_version: WIRE_VERSION,
                 seq: first.seq,
@@ -555,8 +597,27 @@ fn handle_control_connection(mut stream: UnixStream, subscribers: ControlSubscri
                     seq_in_reply_to: Some(first.seq),
                     code: ErrorCode::Unsupported,
                     message: format!(
-                        "variant {} not handled by the unix-socket dispatcher",
-                        other.kind()
+                        "variant {} not supported on the unix-socket transport",
+                        first.body.kind()
+                    ),
+                },
+            };
+            let _ = write_control_envelope(&mut stream, &err);
+        }
+        DispatchOutcome::ResponseOnly => {
+            // Protocol violation: a *Reply / Ack / Error / HelloAck
+            // showed up as the first frame, which only the server
+            // emits. Reject with a precise diagnostic so the client
+            // sees the misuse.
+            let err = ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq: first.seq,
+                body: ControlMessage::Error {
+                    seq_in_reply_to: Some(first.seq),
+                    code: ErrorCode::Unsupported,
+                    message: format!(
+                        "variant {} is a response-shape frame and cannot open a connection",
+                        first.body.kind()
                     ),
                 },
             };

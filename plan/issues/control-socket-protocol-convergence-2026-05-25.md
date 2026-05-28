@@ -265,3 +265,31 @@ dispatcher is sync `std::os::unix::net::UnixStream` while vsock's is
 async tokio, and the convergence packet's preferred path is keeping
 `decide_route` sync (it already is — pure function) and having each
 transport adapt around it.
+
+## Update 2026-05-28T22:54Z — unix-socket dispatcher wired (item 2 of 3)
+
+`tray::handle_control_connection` now consults
+`control_dispatch::decide_route(&body, TransportKind::UnixSocket)`
+as the routing decision and matches on `DispatchOutcome`:
+
+  * `Handle` → inner variant-match runs the existing handler
+    (Hello, IssueWebSession, EvictProject). A new inner-arm
+    `_` writes an explicit Error{Unsupported} for matrix-Handle
+    variants that don't have a handler yet (e.g. VmStatusRequest
+    per Q2 — needs a real handler) — surfaces the gap visibly
+    instead of silent drop.
+  * `Unsupported` → Error{Unsupported} with "not supported on the
+    unix-socket transport" message.
+  * `ResponseOnly` → Error{Unsupported} with "is a response-shape
+    frame and cannot open a connection" — precise diagnostic for
+    a peer that sends e.g. HelloAck as the first frame.
+
+Behaviour change for callers: variants the matrix says Handle but
+which don't have a handler yet now reply with a DESCRIPTIVE Error
+that references this packet for follow-up, instead of the generic
+"variant X not handled" they got before.
+
+Item 3 (wire decide_route into vsock_server::serve_connection)
+remains the next slice — same pattern, but the dispatcher there is
+async tokio and threads through pty_store + VmStateHandle, so it
+gets its own commit.
