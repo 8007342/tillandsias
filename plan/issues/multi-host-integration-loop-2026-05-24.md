@@ -51,6 +51,35 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-28T23:43Z — MERGED windows-next (tray-side `Error{Unsupported}` handling — convergence packet item 4) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `18ac0066` (merge commit)
+- observed_sibling_heads: main=`fa746f03` · linux-next(pre-merge)=`9813cdbd` ·
+  windows-next=`eddb5c00` · osx-next=`0c1cde85`
+- **windows-next: merged+tested+pushed.** 1-commit delta `eddb5c00`
+  (feat: tray-side `Error{Unsupported}` handling — convergence packet
+  item 4). Windows-tray is now CONSUMING the transport-specific Error
+  messages the linux-host convergence packet (items 1-3, completed
+  in this same session at 23:23Z, commit `4eb0baff`) ships from
+  `decide_route`. Single windows-tray file (notify_icon.rs, +90/-23
+  lines). Clean auto-merge — no overlap with the linux-side
+  control_dispatch.rs / tray/mod.rs / vsock_server.rs changes.
+- osx-next: no-op (HEAD `0c1cde85` is BEHIND linux-next at `9813cdbd`;
+  `linux-next..origin/osx-next` is empty — orchestrator hasn't yet
+  fast-forwarded osx-next to absorb the convergence packet).
+- Tests: PASSED. `./build.sh --check` + `--test` green.
+- Spec/methodology/plan drift: none. Diff confined to
+  `crates/tillandsias-windows-tray/src/notify_icon.rs`. Cross-host
+  signal: Windows extended the convergence packet with a NEW item 4
+  ("tray-side handling") that consumes the matrix's transport-
+  specific Error messages. The linux-next packet description
+  (plan/issues/control-socket-protocol-convergence-2026-05-25.md)
+  says the packet was COMPLETE at items 1-3; Windows's item 4 is a
+  legitimate downstream extension (consumer side). Worth a future
+  packet-doc update to record items 4+ as the consumer-side mirrors,
+  but no immediate spec drift.
+
 ### Cycle 2026-05-28T21:43Z — MERGED windows-next (install --diagnose sanity check + GUI-subsystem stdio fixes) ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
