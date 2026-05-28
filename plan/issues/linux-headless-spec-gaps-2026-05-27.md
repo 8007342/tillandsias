@@ -74,7 +74,17 @@ bounded slices from. Each item is sized for one loop iteration. NOT for siblings
 - container-start-health litmus + format_launch_event extraction — `b9a36388`.
 - clever-prompt actionable analysis (missing_tools/proposed_enhancements) — `1f89f4bd`.
 - **GAP 1 DONE**: ISO-8601 UTC timestamp prefix on launch-event stream — `3f1cc8e8`.
-  (Next diagnostics gap: GAP 2 `--debug` → DiagnosticsHandle stream activation.)
+- **GAP 3 PHASE-1 DONE (data shape)**: typed event formatters
+  `format_container_exit_event` / `format_container_signal_event` /
+  `format_resource_exhaustion_event` / `format_container_stderr_event` +
+  `emit_diagnostic_event` wrapper (all in `crates/tillandsias-podman/src/
+  client.rs`), with unit tests pinning every wire shape verbatim from
+  spec:runtime-diagnostics-stream. STAGED via `#[allow(dead_code)]` — the
+  PodmanEventStream → emitter wiring is the live-runtime PHASE-2 slice
+  (paired with the gap-2 DiagnosticsHandle::start activation). Pinning the
+  shape now means PHASE-2 can't drift on field order or escaping.
+  (Next diagnostics gap: GAP 2 / GAP 3 PHASE-2 — wire the live podman
+  events parser to emit_diagnostic_event when `debug` is on.)
 
 ## Lease note
 The forge-diagnostics PACKET (annex/prompt/distill) is leased by `pickie`; items
