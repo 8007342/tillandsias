@@ -51,6 +51,26 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-28T19:43Z — MERGED windows-next (tray-diagnostics cheatsheet + exit-code test) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `cc91e441` (merge commit)
+- observed_sibling_heads: main=`fa746f03` · linux-next(pre-merge)=`0bd58df6` ·
+  windows-next=`5908fc64` · osx-next=`0bd58df6`
+- **windows-next: merged+tested+pushed.** 1-commit delta `5908fc64`
+  (docs: tray-diagnostics cheatsheet + exit-code contract test).
+  Three files: `cheatsheets/runtime/windows-tray-diagnostics.md`
+  (new, 116 lines, Windows-host doc), `cheatsheets/INDEX.md`
+  (registers the new cheatsheet, shared-scope addition),
+  `crates/tillandsias-windows-tray/src/notify_icon.rs`
+  (sibling-owned).
+- osx-next: no-op (HEAD `0bd58df6` matches linux-next pre-merge —
+  orchestrator already fast-forwarded osx-next).
+- Tests: PASSED. `./build.sh --check` + `--test` green.
+- Spec/methodology/plan drift: none. `cheatsheets/INDEX.md` was
+  modified but the change is a legitimate registration of the new
+  Windows-host cheatsheet, not cross-platform spec drift.
+
 ### Cycle 2026-05-28T18:02Z — INTEGRATED macOS slice 15 & SUCCEEDED E2E runtime litmus ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
