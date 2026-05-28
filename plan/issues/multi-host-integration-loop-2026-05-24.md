@@ -2001,4 +2001,21 @@ is still open per the same cycle log; Windows host owns that one.)
   - Merged macOS MenuAction click dispatcher into `linux-next` workspace, and initiated full E2E litmus validation.
   - **Background Run Failure & Fix:** Litmus run `20260528T010600Z-c9e83852-3340523c-82d735ef` failed during OpenCode startup with `crun: sethostname: Invalid argument` due to the git container hostname exceeding the 63-character Linux hostname limit. This was resolved in commit `1db7477f` by implementing a robust `sanitize_hostname` helper in `crates/tillandsias-headless` to truncate and hash long hostnames.
 
+### Cycle 2026-05-28T03:03Z — RECONCILED & RE-LAUNCHED (clean tree, on-demand)
 
+- host_id: linux-tlatoani-fedora (macuahuitl.ayahuitlcalpan.com)
+- platform: linux
+- branch: linux-next
+- upstream_commit (pre-merge): 1db7477f7a9973c6c76d0ced28e30003f0b3d616
+- observed_sibling_heads:
+  - main: fa746f03
+  - linux-next: 5e8022c788099c973a972373d2bb087d7c852365
+  - windows-next: c45f23ae431a78d84e6489efad7794204f8d26d4
+  - osx-next: 80d9196e521d544734d1a85d485ee12fcd0d2baa
+
+- windows-next: **already integrated** (ancestor).
+- osx-next: **already integrated** (ancestor).
+- **Background Run Re-launch:**
+  - Resolved a style/formatting issue in `crates/tillandsias-headless/src/main.rs` that blocked the initial build gate, and committed/pushed it as `5e8022c7`.
+  - Re-launched the asynchronous background runtime litmus run under ID `20260528T030100Z-1db7477f-c45f23ae-80d9196e` to fully validate the integrated sibling HEADs and the hostname sanitization fix.
+  - Active run logs are written to `plan/localwork/runtime-litmus/20260528T030100Z-1db7477f-c45f23ae-80d9196e/run.log`.
