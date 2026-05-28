@@ -51,6 +51,22 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-28T07:43Z — MERGED windows-next (fetch-progress chip during materialization) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `a4be74af` (merge commit)
+- observed_sibling_heads: main=`fa746f03` · linux-next(pre-merge)=`3f37d745` ·
+  windows-next=`6645d04b` · osx-next=`99d0abdb`
+- **windows-next: merged+tested+pushed.** 1-commit delta `6645d04b`
+  (feat: live fetch-progress chip during recipe materialization).
+  Two windows-tray files (notify_icon.rs, wsl_lifecycle.rs) — all
+  sibling-owned scope. Clean auto-merge.
+- osx-next: no-op (HEAD `99d0abdb` already matches linux-next; orchestrator
+  fast-forwarded osx-next through earlier in this session).
+- Tests: PASSED. `./build.sh --check` + `--test` green.
+- Spec/methodology/plan drift: none. Diff confined to
+  `crates/tillandsias-windows-tray/`.
+
 ### Cycle 2026-05-28T05:43Z — MERGED windows-next (CloudRefreshRequest → MenuState wiring) ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
