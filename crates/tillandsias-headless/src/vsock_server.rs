@@ -54,10 +54,14 @@ const IN_VM_PODMAN_SOCKET_DEFAULT: &str = "/run/podman/podman.sock";
 /// through provisioning → ready → drain. The vsock listener reads from this
 /// on every `VmStatusRequest` so the host tray sees real state, not a stub.
 ///
-/// Default is `Ready` (the listener is bound and serving = the VM is up).
-/// Other phases are set by lifecycle hooks elsewhere in the binary.
+/// Default is `Starting` — the headless binary has bound the listener but
+/// podman is not yet reachable, so attaching project containers would fail.
+/// `advance_to_ready_when_podman_up` polls the podman socket and flips to
+/// `Ready` once the socket is reachable (or to `Failed` if it never is).
+/// `Stopping` is set by the shutdown watcher when SIGTERM/SIGINT arrives;
+/// `Draining` is set by the per-connection drain path.
 ///
-/// @trace spec:vsock-transport, spec:vm-provisioning-lifecycle, plan/issues/multi-host-integration-loop-2026-05-24.md (l4)
+/// @trace spec:vsock-transport, spec:vm-provisioning-lifecycle, plan/issues/linux-headless-spec-gaps-2026-05-27.md (gap 6)
 #[derive(Debug, Clone)]
 pub struct VmStateHandle {
     phase: Arc<RwLock<VmPhase>>,
@@ -65,12 +69,12 @@ pub struct VmStateHandle {
 }
 
 impl VmStateHandle {
-    /// Construct with default `Ready` phase and the conventional podman
+    /// Construct with default `Starting` phase and the conventional podman
     /// socket path. Tests and lifecycle hooks may use [`set_phase`] /
     /// [`set_podman_socket`] to drive transitions.
     pub fn new() -> Self {
         Self {
-            phase: Arc::new(RwLock::new(VmPhase::Ready)),
+            phase: Arc::new(RwLock::new(VmPhase::Starting)),
             podman_socket: PathBuf::from(IN_VM_PODMAN_SOCKET_DEFAULT),
         }
     }
@@ -101,6 +105,63 @@ impl VmStateHandle {
     /// menu items until podman is actually up.
     pub fn podman_ready(&self) -> bool {
         self.podman_socket.exists()
+    }
+
+    /// Poll [`podman_ready`] on a fixed interval until either the socket
+    /// appears (transition `Starting → Ready`) or `timeout` elapses
+    /// (transition `Starting → Failed`). Intended to be `tokio::spawn`'d
+    /// alongside [`run_vsock_listener`] when the in-VM headless first
+    /// comes up.
+    ///
+    /// The check is purely filesystem-based; we do not connect to the
+    /// socket here — `podman_ready` is the public contract and a probe
+    /// connect would add a real-podman dependency to a unit-testable code
+    /// path. Callers that need a stronger guarantee can flip Ready
+    /// downstream after the first successful container operation.
+    ///
+    /// Already-`Ready` (or any non-`Starting` state set by a different
+    /// path) is left alone — this method only advances `Starting`.
+    ///
+    /// @trace spec:vsock-transport, spec:vm-provisioning-lifecycle
+    pub async fn advance_to_ready_when_podman_up(
+        &self,
+        timeout: std::time::Duration,
+        poll_interval: std::time::Duration,
+    ) {
+        let start = std::time::Instant::now();
+        loop {
+            // Bail out if a different transition (e.g. Stopping from the
+            // shutdown watcher) raced us — we never demote a phase here.
+            if self.current_phase() != VmPhase::Starting {
+                return;
+            }
+            if self.podman_ready() {
+                self.set_phase(VmPhase::Ready);
+                return;
+            }
+            if start.elapsed() >= timeout {
+                self.set_phase(VmPhase::Failed);
+                return;
+            }
+            tokio::time::sleep(poll_interval).await;
+        }
+    }
+
+    /// Watch `shutdown` for a flip to true and, when it does, transition
+    /// the phase to `Stopping`. Idempotent and safe to spawn alongside
+    /// the listener task: poll cadence is intentionally coarse (250 ms)
+    /// since this only governs the lifecycle-reporting wire, not any
+    /// hot-path behaviour.
+    ///
+    /// @trace spec:vsock-transport, spec:vm-provisioning-lifecycle
+    pub async fn watch_shutdown_and_mark_stopping(&self, shutdown: Arc<AtomicBool>) {
+        while !shutdown.load(Ordering::SeqCst) {
+            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+        }
+        // Don't clobber a terminal `Failed` if the advancer beat us to it.
+        if self.current_phase() != VmPhase::Failed {
+            self.set_phase(VmPhase::Stopping);
+        }
     }
 }
 
@@ -656,10 +717,15 @@ mod tests {
         assert!(parse_gh_repo_list("[]").is_empty());
     }
 
+    /// Default is `Starting` (gap-6 contract). The vsock listener can
+    /// answer VmStatusRequest the moment it binds, but the in-VM
+    /// headless must NOT advertise `Ready` until podman is reachable —
+    /// otherwise the host tray would offer project-attach menu items
+    /// against a podman socket that doesn't exist yet.
     #[test]
-    fn vm_state_handle_defaults_to_ready() {
+    fn vm_state_handle_defaults_to_starting() {
         let state = VmStateHandle::new();
-        assert_eq!(state.current_phase(), VmPhase::Ready);
+        assert_eq!(state.current_phase(), VmPhase::Starting);
     }
 
     #[test]
@@ -684,6 +750,117 @@ mod tests {
         let mut state = VmStateHandle::new();
         state.set_podman_socket(PathBuf::from("/this/path/does/not/exist"));
         assert!(!state.podman_ready());
+    }
+
+    /// gap-6 contract: `advance_to_ready_when_podman_up` flips
+    /// `Starting → Ready` the moment `podman_ready` returns true. We
+    /// stand up a real tempfile, point the state at it, and confirm the
+    /// transition fires within the poll interval. Sub-second cadence so
+    /// the test stays fast.
+    #[tokio::test]
+    async fn advance_to_ready_flips_phase_when_socket_appears() {
+        use std::time::Duration;
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let sock = tmp.path().join("podman.sock");
+        let mut state = VmStateHandle::new();
+        state.set_podman_socket(sock.clone());
+        assert_eq!(state.current_phase(), VmPhase::Starting);
+
+        // Spawn the advancer first, then create the file from this task
+        // a few polls in. Cloned handle shares the same phase lock.
+        let advancer_state = state.clone();
+        let advancer = tokio::spawn(async move {
+            advancer_state
+                .advance_to_ready_when_podman_up(Duration::from_secs(2), Duration::from_millis(25))
+                .await;
+        });
+
+        tokio::time::sleep(Duration::from_millis(75)).await;
+        std::fs::File::create(&sock).expect("create podman.sock");
+
+        advancer.await.expect("advancer join");
+        assert_eq!(state.current_phase(), VmPhase::Ready);
+    }
+
+    /// gap-6 contract: when the socket never appears within `timeout`,
+    /// the advancer flips `Starting → Failed`. The host tray uses this
+    /// to surface a clear "VM is up but podman never came online" state
+    /// instead of leaving the phase as a permanent `Starting`.
+    #[tokio::test]
+    async fn advance_to_ready_marks_failed_on_timeout() {
+        use std::time::Duration;
+        let mut state = VmStateHandle::new();
+        // A path that will never exist — relies on the advancer's poll
+        // interval being far shorter than the timeout to keep the test
+        // bounded.
+        state.set_podman_socket(PathBuf::from("/nonexistent/podman.sock"));
+        state
+            .advance_to_ready_when_podman_up(Duration::from_millis(60), Duration::from_millis(15))
+            .await;
+        assert_eq!(state.current_phase(), VmPhase::Failed);
+    }
+
+    /// gap-6 contract: a `Stopping` (or `Draining`, or `Ready`) set by
+    /// another path while the advancer is polling MUST NOT be demoted.
+    /// The advancer is single-purpose — it advances `Starting`, nothing
+    /// else.
+    #[tokio::test]
+    async fn advance_to_ready_respects_concurrent_transitions() {
+        use std::time::Duration;
+        let state = VmStateHandle::new();
+        state.set_phase(VmPhase::Stopping);
+
+        // Even with a long timeout + non-existent socket, the advancer
+        // exits immediately because the phase is no longer Starting.
+        let start = std::time::Instant::now();
+        state
+            .advance_to_ready_when_podman_up(Duration::from_secs(60), Duration::from_millis(50))
+            .await;
+        assert!(start.elapsed() < Duration::from_millis(200));
+        assert_eq!(state.current_phase(), VmPhase::Stopping);
+    }
+
+    /// gap-6 contract: `watch_shutdown_and_mark_stopping` flips the
+    /// phase to `Stopping` when the shared shutdown atomic goes true.
+    /// This is how `graceful_shutdown_async` entry shows up over the
+    /// vsock control wire without having to thread the state through
+    /// every shutdown call site.
+    #[tokio::test]
+    async fn watch_shutdown_marks_stopping_when_atomic_flips() {
+        use std::time::Duration;
+        let state = VmStateHandle::new();
+        // Pretend the advancer already brought us to Ready.
+        state.set_phase(VmPhase::Ready);
+        let shutdown = Arc::new(AtomicBool::new(false));
+
+        let watcher_state = state.clone();
+        let watcher_shutdown = Arc::clone(&shutdown);
+        let watcher = tokio::spawn(async move {
+            watcher_state
+                .watch_shutdown_and_mark_stopping(watcher_shutdown)
+                .await;
+        });
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        shutdown.store(true, Ordering::SeqCst);
+        watcher.await.expect("watcher join");
+        assert_eq!(state.current_phase(), VmPhase::Stopping);
+    }
+
+    /// gap-6 contract: the shutdown watcher MUST NOT clobber a terminal
+    /// `Failed`. If the advancer timed out before SIGTERM arrived, we
+    /// want the host tray to keep seeing the diagnostic, not see it
+    /// rewritten into the more innocuous-looking `Stopping`.
+    #[tokio::test]
+    async fn watch_shutdown_preserves_failed_state() {
+        let state = VmStateHandle::new();
+        state.set_phase(VmPhase::Failed);
+        let shutdown = Arc::new(AtomicBool::new(true)); // already requested
+
+        state
+            .watch_shutdown_and_mark_stopping(Arc::clone(&shutdown))
+            .await;
+        assert_eq!(state.current_phase(), VmPhase::Failed);
     }
 
     #[test]

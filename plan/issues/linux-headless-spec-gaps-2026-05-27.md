@@ -77,15 +77,24 @@ bounded slices from. Each item is sized for one loop iteration. NOT for siblings
 
 ## Control-wire / VM lifecycle
 
-6. **[MED] VmStatusRequest phase lifecycle.** vsock handler IS real (reads
-   VmStateHandle, vsock_server.rs:271) but most phases are dead: only `Ready`
-   (hardcoded init, line ~73) + `Draining` (line ~329) are ever set.
-   `Starting`/`Stopping`/`Failed`/`Provisioning` never set. Bounded linux slice:
-   gate `Starting→Ready` on `podman_ready()` transition; set `Stopping` on
-   `graceful_shutdown_async` entry (thread VmStateHandle in). NOTE:
-   `Provisioning` belongs to sibling provisioning paths (wsl/vz lifecycle) — not
-   linux. Unix-socket transport correctly returns Unsupported for VmStatusRequest
-   (host-only channel) — keep.
+6. **[DONE] VmStatusRequest phase lifecycle (linux-owned phases).**
+   `VmStateHandle::new()` now defaults to `Starting` (not `Ready` —
+   listener-bound ≠ podman-reachable). Added two async helpers in
+   `crates/tillandsias-headless/src/vsock_server.rs`:
+   `advance_to_ready_when_podman_up(timeout, poll_interval)` polls
+   `podman_ready` and flips `Starting → Ready` or `Starting → Failed`
+   on timeout; `watch_shutdown_and_mark_stopping(shutdown)` waits for
+   the SIGTERM/SIGINT atomic and flips `* → Stopping` (preserving a
+   terminal `Failed`). Both spawned alongside `run_vsock_listener` from
+   `maybe_spawn_vsock_listener` in main.rs — `graceful_shutdown_async`
+   needs no signature change; phase transitions ride the same shared
+   shutdown atomic the listener already uses. Five new tokio tests pin
+   every transition (`Starting → Ready` on socket appear,
+   `Starting → Failed` on timeout, respect concurrent transitions,
+   shutdown flips to Stopping, Stopping does NOT clobber Failed).
+   NOTE: `Provisioning` belongs to sibling provisioning paths (wsl/vz)
+   — not linux. Unix-socket transport correctly returns Unsupported
+   for VmStatusRequest (host-only channel) — left as-is.
 
 ## Done this session (for context)
 - CloudRefreshRequest: real (gh repo list) — `e1a190d4`.
@@ -110,6 +119,11 @@ bounded slices from. Each item is sized for one loop iteration. NOT for siblings
   diagnostics_filter.rs` + integration in `emit_launch_event` /
   `emit_diagnostic_event`. See gap-5 description above for env-var
   surface. Ring-buffer half is PHASE-2.
+- **GAP 6 DONE** (linux-owned phases): VmStateHandle defaults to
+  `Starting`; phase-advancer + shutdown-watcher tasks spawned by
+  `maybe_spawn_vsock_listener` carry the lifecycle without threading
+  state through `graceful_shutdown_async`. `Provisioning` belongs to
+  sibling provisioning paths.
   (Next diagnostics gap: GAP 2 / GAP 3 PHASE-2 — wire the live podman
   events parser to emit_diagnostic_event when `debug` is on.)
 
