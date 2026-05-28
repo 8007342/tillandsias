@@ -272,4 +272,111 @@ mod tests {
         let manifest = r#""aarch64.img" = "pending-ci""#;
         assert_eq!(parse_aarch64_img_sha(manifest), None);
     }
+
+    // ────────────────────────────────────────────────────────────────
+    //  JSON schema-pin tests (mirrors windows-tray e96d1fc8)
+    //
+    //  The --diagnose --json schema is a public surface that
+    //  scripts/tray-diagnose.sh (and any future support tooling
+    //  uploading the JSON) parse field-by-field. Renames or removes
+    //  here must break the build, not silently break the consumer.
+    // ────────────────────────────────────────────────────────────────
+
+    use super::{DiagnoseReport, exit_code_from};
+
+    fn baseline_diagnose_report() -> DiagnoseReport {
+        DiagnoseReport {
+            version: "0.1.0",
+            in_app: true,
+            exe_path: Some(
+                "/Applications/Tillandsias.app/Contents/MacOS/tillandsias-tray".to_string(),
+            ),
+            image_root: "/Users/test/Library/Application Support/tillandsias".to_string(),
+            rootfs_present: true,
+            rootfs_bytes: Some(8_589_934_592),
+            kernel_present: true,
+            kernel_bytes: Some(11_534_336),
+            initrd_present: true,
+            initrd_bytes: Some(67_108_864),
+            release_tag: "v0.2.260526.1",
+            manifest_pin_aarch64_img: Some("6859a7bcc4a9".to_string()),
+            provisioned: true,
+        }
+    }
+
+    /// Top-level JSON keys are the support-tooling contract.
+    /// `tray-diagnose.sh` reads `.version`, `.in_app`, `.release_tag`,
+    /// `.manifest_pin_aarch64_img`, `.provisioned`, and the per-
+    /// artifact `_present` flags by name. A silent rename of any of
+    /// these would degrade the consumer to "FAIL : null".
+    #[test]
+    fn diagnose_report_json_keys_locked() {
+        let report = baseline_diagnose_report();
+        let value: serde_json::Value = serde_json::to_value(&report).unwrap();
+        let obj = value
+            .as_object()
+            .expect("DiagnoseReport must serialise as a JSON object");
+        for required_key in [
+            "version",
+            "in_app",
+            "exe_path",
+            "image_root",
+            "rootfs_present",
+            "rootfs_bytes",
+            "kernel_present",
+            "kernel_bytes",
+            "initrd_present",
+            "initrd_bytes",
+            "release_tag",
+            "manifest_pin_aarch64_img",
+            "provisioned",
+        ] {
+            assert!(
+                obj.contains_key(required_key),
+                "DiagnoseReport JSON missing required key {required_key:?}; check serde rename"
+            );
+        }
+    }
+
+    /// `manifest_pin_aarch64_img: None` must serialise as JSON null,
+    /// not the literal string "null" or the absent key. Consumer
+    /// path: `tray-diagnose.sh` reads `.manifest_pin_aarch64_img //
+    /// "(none)"` — `//` only triggers on null/missing, so a string
+    /// "null" would silently render as PASS with bogus pin.
+    #[test]
+    fn diagnose_report_none_pin_serialises_as_null() {
+        let mut report = baseline_diagnose_report();
+        report.manifest_pin_aarch64_img = None;
+        let value: serde_json::Value = serde_json::to_value(&report).unwrap();
+        assert_eq!(value["manifest_pin_aarch64_img"], serde_json::Value::Null);
+    }
+
+    /// `bytes` fields are `Option<u64>`; missing artifacts MUST
+    /// serialise as JSON null. `tray-diagnose.sh` doesn't currently
+    /// read the bytes, but a future dashboard expects null for
+    /// "absent" so it can render "—" instead of "0".
+    #[test]
+    fn diagnose_report_none_bytes_serialise_as_null() {
+        let mut report = baseline_diagnose_report();
+        report.kernel_present = false;
+        report.kernel_bytes = None;
+        report.initrd_present = false;
+        report.initrd_bytes = None;
+        let value: serde_json::Value = serde_json::to_value(&report).unwrap();
+        assert_eq!(value["kernel_bytes"], serde_json::Value::Null);
+        assert_eq!(value["initrd_bytes"], serde_json::Value::Null);
+    }
+
+    /// `exit_code_from` is the public contract `tray-diagnose.sh`
+    /// (and `--diagnose --json`'s own `main`) rely on for the
+    /// 0/2/1 exit contract. Pin the mapping so accidental flips
+    /// (e.g. returning the wrong code for provisioned=true) break
+    /// the build.
+    #[test]
+    fn exit_code_provisioned_zero_degraded_two() {
+        let mut report = baseline_diagnose_report();
+        assert_eq!(exit_code_from(&report), 0);
+        report.provisioned = false;
+        assert_eq!(exit_code_from(&report), 2);
+    }
 }
