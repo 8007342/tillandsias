@@ -128,8 +128,16 @@ except Exception as e:
     print(f'PARSE_ERROR={e}')
 " 2>&1) || diagnostics_json="PARSE_ERROR=Failed to parse JSON"
 
-        timestamp=$(echo "$diagnostics_json" | grep '^TIMESTAMP=' | cut -d= -f2-)
-        forge_version=$(echo "$diagnostics_json" | grep '^FORGE_VERSION=' | cut -d= -f2-)
+        # Brace-group + `|| true` to survive set -euo pipefail when the
+        # python extractor emits only `PARSE_ERROR=…` (e.g. the raw log
+        # is empty or malformed). Without this guard, an empty raw log
+        # aborts distill_one before any summary is written — masking
+        # the bug as "no summary appeared" instead of surfacing the
+        # underlying empty-log finding.
+        timestamp=$({ echo "$diagnostics_json" | grep '^TIMESTAMP=' || true; } | cut -d= -f2-)
+        forge_version=$({ echo "$diagnostics_json" | grep '^FORGE_VERSION=' || true; } | cut -d= -f2-)
+        timestamp=${timestamp:-unknown}
+        forge_version=${forge_version:-unknown}
     else
         _warn "python3 not available; grep-based extraction"
         timestamp=$(grep -o '"diagnostics_timestamp":"[^"]*"' "$log_file" | head -1 | cut -d'"' -f4 || echo "unknown")
@@ -341,6 +349,81 @@ SUMMARY
             echo '```' >> "$summary_file"
             grep -E 'event:container_launch .* state=failed' "$stderr_log" >> "$summary_file" 2>/dev/null || true
             echo '```' >> "$summary_file"
+        fi
+
+        # Typed-event arms beyond container_launch — added when the
+        # gap-3 phase-2c+ wiring in tillandsias-headless lands real
+        # spec-shape emissions. Surface counts always; sample lines
+        # only when present (keeps the summary compact on a happy
+        # session that produced no exits/signals/oom).
+        #
+        # @trace spec:runtime-diagnostics-stream (Container exit / signal /
+        #   resource_exhaustion / stderr scenarios)
+        # @trace plan/issues/linux-headless-spec-gaps-2026-05-27.md
+        #   (gap 3 phases 2c..2g)
+        local exit_count signal_count resource_count stderr_count
+        exit_count=$({ grep -E 'event:container_exit ' "$stderr_log" 2>/dev/null || true; } | wc -l)
+        signal_count=$({ grep -E 'event:container_signal ' "$stderr_log" 2>/dev/null || true; } | wc -l)
+        resource_count=$({ grep -E 'event:resource_exhaustion ' "$stderr_log" 2>/dev/null || true; } | wc -l)
+        stderr_count=$({ grep -E 'event:container_stderr ' "$stderr_log" 2>/dev/null || true; } | wc -l)
+        exit_count=${exit_count// /}
+        signal_count=${signal_count// /}
+        resource_count=${resource_count// /}
+        stderr_count=${stderr_count// /}
+
+        if [[ "$exit_count" -gt 0 || "$signal_count" -gt 0 || "$resource_count" -gt 0 || "$stderr_count" -gt 0 ]]; then
+            echo "" >> "$summary_file"
+            echo "### Typed-event arms" >> "$summary_file"
+            echo "" >> "$summary_file"
+            echo "| event type | count |" >> "$summary_file"
+            echo "|---|---:|" >> "$summary_file"
+            [[ "$exit_count" -gt 0 ]]     && echo "| event:container_exit       | ${exit_count}     |" >> "$summary_file"
+            [[ "$signal_count" -gt 0 ]]   && echo "| event:container_signal     | ${signal_count}   |" >> "$summary_file"
+            [[ "$resource_count" -gt 0 ]] && echo "| event:resource_exhaustion  | ${resource_count} |" >> "$summary_file"
+            [[ "$stderr_count" -gt 0 ]]   && echo "| event:container_stderr     | ${stderr_count}   |" >> "$summary_file"
+
+            # Sample exit/signal/resource lines verbatim — these are
+            # operationally meaningful (one or two lines each tells
+            # the orchestrator exactly what died and why). Cap at 10
+            # to keep the summary terse.
+            if [[ "$exit_count" -gt 0 ]]; then
+                echo "" >> "$summary_file"
+                echo "#### container_exit lines (head 10)" >> "$summary_file"
+                echo '```' >> "$summary_file"
+                grep -E 'event:container_exit ' "$stderr_log" 2>/dev/null | head -10 >> "$summary_file" || true
+                echo '```' >> "$summary_file"
+            fi
+            if [[ "$signal_count" -gt 0 ]]; then
+                echo "" >> "$summary_file"
+                echo "#### container_signal lines (head 10)" >> "$summary_file"
+                echo '```' >> "$summary_file"
+                grep -E 'event:container_signal ' "$stderr_log" 2>/dev/null | head -10 >> "$summary_file" || true
+                echo '```' >> "$summary_file"
+            fi
+            if [[ "$resource_count" -gt 0 ]]; then
+                echo "" >> "$summary_file"
+                echo "#### resource_exhaustion lines (head 10)" >> "$summary_file"
+                echo '```' >> "$summary_file"
+                grep -E 'event:resource_exhaustion ' "$stderr_log" 2>/dev/null | head -10 >> "$summary_file" || true
+                echo '```' >> "$summary_file"
+            fi
+
+            # Stderr is high-volume by design (every line from every
+            # tailed support container). Just surface the top-N
+            # noisiest containers + a short head-of-stream so the
+            # orchestrator can spot which container is chattiest
+            # without reading every line.
+            if [[ "$stderr_count" -gt 0 ]]; then
+                local stderr_by_container
+                stderr_by_container=$({ grep -oE 'event:container_stderr container=[^ ]+' "$stderr_log" 2>/dev/null || true; } | sort | uniq -c | sort -rn | head -5)
+                if [[ -n "$stderr_by_container" ]]; then
+                    echo "" >> "$summary_file"
+                    echo "#### container_stderr — top 5 containers by line count" >> "$summary_file"
+                    echo '```' >> "$summary_file"
+                    echo "$stderr_by_container" >> "$summary_file"
+                    echo '```' >> "$summary_file"
+                fi
+            fi
         fi
     fi
 
