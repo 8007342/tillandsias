@@ -183,6 +183,23 @@ bounded slices from. Each item is sized for one loop iteration. NOT for siblings
   surface the gap-3 phase-2 diagnostics-stream emitter slice will
   consume (records → `format_container_exit_event`/etc. →
   `emit_diagnostic_event`).
+- **GAP 3 PHASE-2B** (routing helper): new module
+  `crates/tillandsias-podman/src/diagnostic_event_emitter.rs` glues
+  the records-sink (phase-2a) to the staged formatters (phase-1) and
+  the global filter (gap-5 phase-1). Public:
+  `spawn_diagnostic_event_emitter(enabled: bool, prefix: &str)` —
+  returns `Some(JoinHandle)` when `enabled` so the caller (next
+  slice: `run_opencode_mode`) can abort on shutdown; `None` and zero
+  cost when disabled. Today routes `ContainerLifecycleAction::Died →
+  format_container_exit_event` (with `exit_code` from the podman
+  events payload; `duration_seconds=None` until start→exit pairing
+  state lands). Signal/resource/stderr arms documented as deferred
+  (signal: podman's `Status=kill` records the request, not the
+  delivered signal; resource: needs `Status=oom` parse extension;
+  stderr: belongs on the per-container `podman logs -f` tail path,
+  not the events stream). Three unit tests cover disabled-path,
+  Died-with-and-without-exit-code routing, and exhaustive lifecycle-
+  action coverage so future variants must be considered.
   (Next diagnostics gap: GAP 2 / GAP 3 PHASE-2 — wire the live podman
   events parser to emit_diagnostic_event when `debug` is on.)
 
