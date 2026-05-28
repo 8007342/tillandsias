@@ -44,7 +44,12 @@ fn main() {
     // session without putting a stray menu-bar icon up.
     let args: Vec<String> = std::env::args().collect();
     if args.iter().any(|a| a == "--diagnose") {
-        std::process::exit(diagnose::main());
+        let format = if args.iter().any(|a| a == "--json") {
+            diagnose::DiagnoseFormat::Json
+        } else {
+            diagnose::DiagnoseFormat::Human
+        };
+        std::process::exit(diagnose::main(format));
     }
     status_item::run();
 }

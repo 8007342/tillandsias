@@ -2747,6 +2747,8 @@ dependencies = [
  "objc2-app-kit",
  "objc2-foundation",
  "objc2-virtualization",
+ "serde",
+ "serde_json",
  "tempfile",
  "tillandsias-control-wire",
  "tillandsias-host-shell",

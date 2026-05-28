@@ -54,102 +54,158 @@ fn image_root() -> PathBuf {
     home.join("Library/Application Support/tillandsias")
 }
 
+/// Output format selected via `--diagnose` (default) or
+/// `--diagnose --json`. Mirrors windows-tray's `DiagnoseFormat`
+/// (commit c4908438).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum DiagnoseFormat {
+    Human,
+    Json,
+}
+
+/// Bundled diagnostic-report payload. Both human and JSON formatters
+/// emit exactly these fields, so support tooling that parses the JSON
+/// gets the same data the user sees in the terminal. Mirrors windows-
+/// tray's `DiagnoseReport` (commit c4908438) — field names match
+/// byte-for-byte where the concept exists on both hosts; macOS-only
+/// fields and windows-only fields differ.
+#[derive(serde::Serialize)]
+pub struct DiagnoseReport {
+    pub version: &'static str,
+    pub in_app: bool,
+    pub exe_path: Option<String>,
+    pub image_root: String,
+    pub rootfs_present: bool,
+    pub rootfs_bytes: Option<u64>,
+    pub kernel_present: bool,
+    pub kernel_bytes: Option<u64>,
+    pub initrd_present: bool,
+    pub initrd_bytes: Option<u64>,
+    pub release_tag: &'static str,
+    pub manifest_pin_aarch64_img: Option<String>,
+    pub provisioned: bool,
+}
+
 /// Entry point invoked from `main` when `--diagnose` is on argv.
 /// Returns the exit code to bubble up via `std::process::exit`.
-pub fn main() -> i32 {
-    println!("Tillandsias.app diagnostic report");
-    println!("================================");
-    println!();
+pub fn main(format: DiagnoseFormat) -> i32 {
+    let report = collect_report();
+    match format {
+        DiagnoseFormat::Human => print_human(&report),
+        DiagnoseFormat::Json => print_json(&report),
+    }
+    exit_code_from(&report)
+}
 
-    // 1. Version
-    println!("Version:    {}", env!("CARGO_PKG_VERSION"));
-
-    // 2. Bundle identity — exe path containment is the cheapest
-    //    signal we're running from a packaged .app vs. cargo build.
+fn collect_report() -> DiagnoseReport {
     let exe = std::env::current_exe().ok();
     let in_app = exe
         .as_ref()
         .and_then(|p| p.to_str())
         .map(|s| s.contains("/Tillandsias.app/"))
         .unwrap_or(false);
+    let exe_path = exe.as_ref().map(|p| p.display().to_string());
+
+    let root = image_root();
+    let image_root_str = root.display().to_string();
+    let (rootfs_present, rootfs_bytes) = stat_file(&root.join("rootfs.img"));
+    let (kernel_present, kernel_bytes) = stat_file(&root.join("vmlinuz"));
+    let (initrd_present, initrd_bytes) = stat_file(&root.join("initramfs.img"));
+    let provisioned = rootfs_present && kernel_present && initrd_present;
+
+    const BUNDLED_MANIFEST_TOML: &str = include_str!("../../../images/vm/manifest.toml");
+    let manifest_pin_aarch64_img = parse_aarch64_img_sha(BUNDLED_MANIFEST_TOML);
+
+    DiagnoseReport {
+        version: env!("CARGO_PKG_VERSION"),
+        in_app,
+        exe_path,
+        image_root: image_root_str,
+        rootfs_present,
+        rootfs_bytes,
+        kernel_present,
+        kernel_bytes,
+        initrd_present,
+        initrd_bytes,
+        release_tag: crate::action_host::RECIPE_RELEASE_TAG,
+        manifest_pin_aarch64_img,
+        provisioned,
+    }
+}
+
+fn stat_file(path: &std::path::Path) -> (bool, Option<u64>) {
+    match std::fs::metadata(path) {
+        Ok(md) => (true, Some(md.len())),
+        Err(_) => (false, None),
+    }
+}
+
+fn print_human(r: &DiagnoseReport) {
+    println!("Tillandsias.app diagnostic report");
+    println!("================================");
+    println!();
+    println!("Version:    {}", r.version);
     println!(
         "Bundle:     {}",
-        if in_app {
+        if r.in_app {
             "inside Tillandsias.app (codesigned ad-hoc at build)"
         } else {
             "running outside .app (development binary)"
         }
     );
-    if let Some(exe_path) = exe {
-        println!("Exe:        {}", exe_path.display());
+    if let Some(ref exe_path) = r.exe_path {
+        println!("Exe:        {exe_path}");
     }
-
-    // 3. Image-root artifacts. A user who reports "the tray doesn't
-    //    seem to do anything" most often hasn't run a successful
-    //    first-launch yet — the materializer hasn't populated these.
-    let root = image_root();
-    println!("Image-root: {}", root.display());
-    let rootfs = root.join("rootfs.img");
-    let kernel = root.join("vmlinuz");
-    let initrd = root.join("initramfs.img");
-    let mut provisioned = true;
-    for (label, path) in [
-        ("  rootfs.img", &rootfs),
-        ("  vmlinuz", &kernel),
-        ("  initramfs.img", &initrd),
-    ] {
-        match std::fs::metadata(path) {
-            Ok(md) => println!("{label:<16}  present, {} bytes", md.len()),
-            Err(_) => {
-                println!("{label:<16}  MISSING");
-                provisioned = false;
-            }
-        }
+    println!("Image-root: {}", r.image_root);
+    print_artifact("  rootfs.img", r.rootfs_present, r.rootfs_bytes);
+    print_artifact("  vmlinuz", r.kernel_present, r.kernel_bytes);
+    print_artifact("  initramfs.img", r.initrd_present, r.initrd_bytes);
+    println!("Release:    {}", r.release_tag);
+    println!("Manifest:   bundled at build (compile-time include_str!)");
+    match &r.manifest_pin_aarch64_img {
+        Some(sha) => println!("  aarch64.img SHA-256 pin: {sha}\u{2026}"),
+        None => println!("  aarch64.img SHA-256 pin: (not found / parse skipped)"),
     }
-
-    // 4. Release tag (compile-time bundled) — the GitHub release
-    //    the .app will fetch the rootfs.img.xz from on first launch.
-    //    Surfaced separately from the manifest pin so the operator
-    //    can spot tag/SHA mismatches at a glance. Matches windows-
-    //    tray's --diagnose layout (commit 4fff31af).
-    println!("Release:    {}", crate::action_host::RECIPE_RELEASE_TAG);
-
-    // 5. Manifest pin (compile-time bundled) — confirms the .app
-    //    knows which SHA it expects post-decompress. Useful when
-    //    the user sees "SHA mismatch" errors or wonders which build
-    //    of the recipe the .app pins to.
-    print_manifest_pin();
-
-    // 6. Live wire — explicitly disclaim macOS's limitation so the
-    //    user knows where to look instead.
     println!();
     println!("Control wire status:");
     println!("  (live VM phase + podman_ready are only reachable from");
     println!("   the running tray process itself — macOS vsock is per-");
     println!("   VM-handle, no AF_VSOCK. Click the menubar icon for");
     println!("   the live chip; the 30 s poller refreshes it in place.)");
-
     println!();
-    if provisioned {
+    if r.provisioned {
         println!("Status: PROVISIONED — first-launch materialization complete.");
-        0
     } else {
         println!(
             "Status: NOT PROVISIONED — launch the tray once (or `open \
              /Applications/Tillandsias.app`) to fetch rootfs.img on \
              first launch."
         );
-        2
     }
 }
 
-fn print_manifest_pin() {
-    const BUNDLED_MANIFEST_TOML: &str = include_str!("../../../images/vm/manifest.toml");
-    println!("Manifest:   bundled at build (compile-time include_str!)");
-    match parse_aarch64_img_sha(BUNDLED_MANIFEST_TOML) {
-        Some(sha) => println!("  aarch64.img SHA-256 pin: {sha}…"),
-        None => println!("  aarch64.img SHA-256 pin: (not found / parse skipped)"),
+fn print_artifact(label: &str, present: bool, bytes: Option<u64>) {
+    if present {
+        println!("{label:<16}  present, {} bytes", bytes.unwrap_or(0));
+    } else {
+        println!("{label:<16}  MISSING");
     }
+}
+
+fn print_json(r: &DiagnoseReport) {
+    match serde_json::to_string_pretty(r) {
+        Ok(s) => println!("{s}"),
+        Err(e) => {
+            // Best-effort: emit a single-line fallback object so the
+            // tool consuming the output isn't stuck parsing empty stdout.
+            eprintln!("[tillandsias-tray] --diagnose --json serialize failed: {e}");
+            println!("{{\"error\":\"serialize failed: {e}\"}}");
+        }
+    }
+}
+
+fn exit_code_from(r: &DiagnoseReport) -> i32 {
+    if r.provisioned { 0 } else { 2 }
 }
 
 /// Extract the first 12-char SHA-256 prefix for `aarch64.img` from a
