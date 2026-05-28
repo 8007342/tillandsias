@@ -385,22 +385,34 @@ pub fn status_once() -> i32 {
         }
     };
     runtime.block_on(async {
-        let (mut stream, wire_version) = match crate::hvsocket::hvsocket_handshake(port).await {
-            Ok(ok) => ok,
+        use tillandsias_control_wire::transport::Transport;
+        use tillandsias_control_wire::{ControlEnvelope, WIRE_VERSION};
+        use tillandsias_host_shell::vsock_client::Client;
+
+        let stream = match crate::hvsocket::open_hvsocket_stream(port).await {
+            Ok(stream) => stream,
             Err(err) => {
                 eprintln!("[status] control wire unreachable on vsock {port}: {err}");
                 eprintln!("[status] (is the VM provisioned + running? try --provision-once)");
                 return 1;
             }
         };
+        let mut client = Client::from_stream(Box::new(stream), Transport::Vsock { cid: 0, port });
+        let wire_version = match client.handshake().await {
+            Ok(v) => v,
+            Err(err) => {
+                eprintln!("[status] handshake failed: {err}");
+                return 1;
+            }
+        };
         println!("[status] control wire up (wire_version {wire_version})");
-        let reply = match crate::hvsocket::hvsocket_request(
-            &mut stream,
-            2,
-            ControlMessage::VmStatusRequest { seq: 2 },
-        )
-        .await
-        {
+        let seq = client.allocate_seq();
+        let envelope = ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq,
+            body: ControlMessage::VmStatusRequest { seq },
+        };
+        let reply = match client.request(&envelope).await {
             Ok(reply) => reply,
             Err(err) => {
                 eprintln!("[status] VmStatusRequest failed: {err}");
@@ -457,23 +469,39 @@ fn vm_phase_status_text(phase: tillandsias_control_wire::VmPhase, podman_ready: 
 /// known state untouched (logged at debug). Reuses the proven handshake +
 /// `VmStatusRequest` path.
 async fn refresh_vm_status(hwnd: HWND) {
-    use tillandsias_control_wire::ControlMessage;
+    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
+    use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
+    use tillandsias_host_shell::vsock_client::Client;
 
-    let port = tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
-    let (mut stream, _wire) = match crate::hvsocket::hvsocket_handshake(port).await {
-        Ok(ok) => ok,
+    // Open HvSocket (Windows realization of vsock-connect) + drive the standard
+    // host-shell Client — same shared Client + Hello/HelloAck + request path as
+    // the macOS poll_vm_status_once (slice 4, `80d9196e`), only the transport
+    // open differs per OS.
+    let stream = match crate::hvsocket::open_hvsocket_stream(CONTROL_WIRE_VSOCK_PORT).await {
+        Ok(stream) => stream,
         Err(err) => {
             tracing::debug!(%err, "vm status poll: control wire unreachable");
             return;
         }
     };
-    let reply = match crate::hvsocket::hvsocket_request(
-        &mut stream,
-        3,
-        ControlMessage::VmStatusRequest { seq: 3 },
-    )
-    .await
-    {
+    let mut client = Client::from_stream(
+        Box::new(stream),
+        Transport::Vsock {
+            cid: 0,
+            port: CONTROL_WIRE_VSOCK_PORT,
+        },
+    );
+    if let Err(err) = client.handshake().await {
+        tracing::debug!(%err, "vm status poll: handshake failed");
+        return;
+    }
+    let seq = client.allocate_seq();
+    let envelope = ControlEnvelope {
+        wire_version: WIRE_VERSION,
+        seq,
+        body: ControlMessage::VmStatusRequest { seq },
+    };
+    let reply = match client.request(&envelope).await {
         Ok(reply) => reply,
         Err(err) => {
             tracing::debug!(%err, "vm status poll: VmStatusRequest failed");

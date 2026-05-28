@@ -262,18 +262,31 @@ impl WslLifecycle {
     /// self-installs; the caller retries until this returns `Ok`. (Request path
     /// proven E2E: `VmStatusReply { phase: Ready, podman_ready: true }`.)
     async fn try_connect_until_ready(&self, port: u32, attempt: u32) -> Result<(), String> {
-        use tillandsias_control_wire::{ControlMessage, VmPhase};
+        use tillandsias_control_wire::transport::Transport;
+        use tillandsias_control_wire::{ControlEnvelope, ControlMessage, VmPhase, WIRE_VERSION};
+        use tillandsias_host_shell::vsock_client::Client;
 
-        let (mut stream, wire_version) = crate::hvsocket::hvsocket_handshake(port)
+        // Open the HvSocket transport, then drive the standard host-shell Client
+        // (same Hello/HelloAck + request path the macOS tray uses over its
+        // VZVirtioSocketConnection stream — slice 4 `80d9196e`).
+        let stream = crate::hvsocket::open_hvsocket_stream(port)
+            .await
+            .map_err(|e| format!("hvsocket open: {e}"))?;
+        let mut client = Client::from_stream(Box::new(stream), Transport::Vsock { cid: 0, port });
+        let wire_version = client
+            .handshake()
             .await
             .map_err(|e| format!("handshake: {e}"))?;
-        let reply = crate::hvsocket::hvsocket_request(
-            &mut stream,
-            2,
-            ControlMessage::VmStatusRequest { seq: 2 },
-        )
-        .await
-        .map_err(|e| format!("VmStatusRequest: {e}"))?;
+        let seq = client.allocate_seq();
+        let envelope = ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq,
+            body: ControlMessage::VmStatusRequest { seq },
+        };
+        let reply = client
+            .request(&envelope)
+            .await
+            .map_err(|e| format!("VmStatusRequest: {e}"))?;
 
         match reply.body {
             ControlMessage::VmStatusReply {
