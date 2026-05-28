@@ -91,9 +91,25 @@ pub fn run() -> ! {
     // Provisioning → Booting → Ready without intervention.
     action_host.boot_vm_async("Auto-boot");
 
-    // Build the initial provisioning menu so the user sees the condensed
-    // status line right away, even before the VM thread reports anything.
-    let initial = MenuStructure::initial_provisioning();
+    // Build the initial menu via the shared `menu_state::build` path —
+    // the same one the poller's rebuild uses (slice 8c). This makes
+    // the first frame and every subsequent rebuild produce the
+    // structurally-identical 9-item Ready menu (status / local /
+    // cloud / agents / observatorium / opencode web / github login /
+    // version footer / quit), so the user sees the full menu shape
+    // from frame 0 instead of waiting for the first poll tick to
+    // expand from the 2-item Provisioning shape.
+    //
+    // The status chip text is the boot-phase default the action-host
+    // also writes via `set_status_text` in `boot_vm_async`, so the
+    // first-frame chip matches subsequent updates byte-for-byte.
+    let initial_state = {
+        let mut s = tillandsias_host_shell::menu_state::MenuState::initial();
+        s.target = tillandsias_host_shell::menu_state::TargetSurface::MacosTray;
+        s.status_text = "\u{1F535} Setting up Fedora Linux\u{2026}".to_string();
+        s
+    };
+    let initial = tillandsias_host_shell::menu_state::build(&initial_state);
     let status_item = install_status_item(mtm, &initial, &action_host);
 
     // Spawn the VM lifecycle on a background thread — see vz_lifecycle.
