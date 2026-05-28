@@ -2599,3 +2599,21 @@ step 5 lands.
 - Tests + lint clean: macos-tray 35/35 (+4); clippy -D warnings
   clean; fmt clean.
 - Streak: 0 (productive iter). Next macOS iter eligible at ~18:00Z.
+
+### event: macOS slice 16 — install-macos.sh post-install --diagnose sanity check — 2026-05-28T19:30Z
+
+- Commit `5dcd54a0` wires `--diagnose --json` into the curl-installer
+  as a post-extract, pre-launch sanity step. Surfaces broken installs
+  (corrupted tarball, codesign on the wrong file) immediately rather
+  than the user staring at a never-appearing menubar icon.
+- Exit-code handling:
+    * exit 0 (re-install over provisioned) or 2 (expected first
+      install) → proceed to `open -a`; (if jq present) print
+      `installed: version=X.Y.Z pin=abc…` breadcrumb.
+    * exit 1 (binary missing or codesign broken) → `die` with
+      "install bits broken" + a clear error path.
+    * `$TRAY_BIN` missing entirely → `die` before --diagnose runs.
+- jq breadcrumb is best-effort — most macOS users have jq via brew,
+  but the install verification itself doesn't depend on it.
+- Resets the noop streak — file deleted.
+- Streak: 0 (productive iter). Next macOS iter eligible at ~20:00Z.
