@@ -96,13 +96,75 @@ impl PodmanEventStream {
         }
     }
 
+    /// Lossless sibling of [`Self::stream`]: emits full
+    /// [`ContainerLifecycleRecord`]s (carrying `exit_code`, `action`,
+    /// `source`, ...) instead of the simplified `PodmanEvent`. The
+    /// retry/backoff/fall-back-to-inspect machinery is identical to
+    /// `stream`; only the channel item type differs.
+    ///
+    /// Intended consumer: the gap-2/3 phase-2 diagnostics-stream emitter
+    /// that converts each record into a typed `event:container_exit`
+    /// (with `exit_code` and `duration_seconds`) or `event:container_signal`
+    /// line via `format_container_*_event` + `emit_diagnostic_event`. Today
+    /// (slice 2026-05-28T12:23Z) only the channel surface is provided; the
+    /// wiring lives in a follow-on slice.
+    ///
+    /// @trace spec:runtime-diagnostics-stream, spec:podman-orchestration
+    /// @trace plan/issues/linux-headless-spec-gaps-2026-05-27.md (gap 3 phase-2)
+    pub async fn stream_records(self, tx: mpsc::Sender<ContainerLifecycleRecord>) {
+        let mut attempt: u32 = 0;
+
+        loop {
+            attempt += 1;
+
+            if attempt <= 3 || attempt.is_multiple_of(5) {
+                info!(attempt, "Starting podman events listener (records sink)");
+            }
+
+            #[cfg(target_os = "windows")]
+            let stream_result = self.stream_events_wsl(&tx).await;
+            #[cfg(not(target_os = "windows"))]
+            let stream_result = self.stream_events(&tx).await;
+
+            match stream_result {
+                Ok(()) => return,
+                Err(e) => {
+                    if attempt <= 3 || attempt.is_multiple_of(5) {
+                        warn!(
+                            ?e,
+                            attempt,
+                            "Podman/WSL events stream (records sink) failed, falling back to backoff inspection"
+                        );
+                    }
+                }
+            }
+
+            match self.backoff_inspect(&tx).await {
+                Ok(()) => {
+                    attempt = 0;
+                }
+                Err(()) => return,
+            }
+        }
+    }
+
     /// Primary (Linux): stream `podman events --format json`.
     ///
     /// No container name filter on the command -- podman's `--filter container=`
     /// takes exact names, not globs. We filter by prefix in `parse_podman_event()`.
+    ///
+    /// Generic on the sink item type `T: From<ContainerLifecycleRecord>` so the
+    /// same parse loop can drive two public methods: `stream` (lossy
+    /// `PodmanEvent`, keeps UI-state callers happy) and `stream_records`
+    /// (lossless `ContainerLifecycleRecord` carrying `exit_code` etc., used by
+    /// the diagnostics-stream emitter when gap-2/3 phase-2 wiring lands).
+    /// Reflexive `T: From<T>` makes the records case a free no-op conversion.
     // @trace spec:podman-orchestration
     #[cfg(not(target_os = "windows"))]
-    async fn stream_events(&self, tx: &mpsc::Sender<PodmanEvent>) -> Result<(), PodmanEventError> {
+    async fn stream_events<T>(&self, tx: &mpsc::Sender<T>) -> Result<(), PodmanEventError>
+    where
+        T: From<ContainerLifecycleRecord> + Send + 'static,
+    {
         debug!(prefix = %self.prefix, "Starting podman events stream (no name filter, prefix matched in-process)");
 
         let mut child = spawn_podman_stream(
@@ -169,10 +231,10 @@ impl PodmanEventStream {
     // @trace spec:cross-platform, spec:wsl-daemon-orchestration
     // @cheatsheet runtime/wsl-daemon-patterns.md, runtime/systemd-socket-activation.md
     #[cfg(target_os = "windows")]
-    async fn stream_events_wsl(
-        &self,
-        tx: &mpsc::Sender<PodmanEvent>,
-    ) -> Result<(), PodmanEventError> {
+    async fn stream_events_wsl<T>(&self, tx: &mpsc::Sender<T>) -> Result<(), PodmanEventError>
+    where
+        T: From<ContainerLifecycleRecord> + Send + 'static,
+    {
         use tokio::fs::OpenOptions;
 
         debug!(prefix = %self.prefix, "Starting WSL systemd socket stream");
@@ -239,7 +301,10 @@ impl PodmanEventStream {
     ///
     /// Tracks previously-seen running containers so that disappearances
     /// (from `--rm` containers dying) are detected and reported as Stopped.
-    async fn backoff_inspect(&self, tx: &mpsc::Sender<PodmanEvent>) -> Result<(), ()> {
+    async fn backoff_inspect<T>(&self, tx: &mpsc::Sender<T>) -> Result<(), ()>
+    where
+        T: From<ContainerLifecycleRecord> + Send + 'static,
+    {
         let mut interval = Duration::from_secs(1);
         let max_interval = Duration::from_secs(30);
         let mut known_running: HashSet<String> = HashSet::new();
@@ -765,5 +830,25 @@ mod tests {
         // WSL uses uppercase state strings; lowercase should not parse
         let json = wsl_event_json("tillandsias-foo-bar", "running");
         assert!(parse_wsl_event(&json, "tillandsias-").is_none());
+    }
+
+    /// Compile-pinning for `PodmanEventStream::stream_records`. The
+    /// records-sink path takes `mpsc::Sender<ContainerLifecycleRecord>`
+    /// (lossless — carries exit_code, action, source) rather than the
+    /// `PodmanEvent` sink that `stream` uses. We can't exercise the live
+    /// `podman events` subprocess in unit tests, but we CAN prove the
+    /// public surface stays compatible with the typed channel by
+    /// constructing it and dropping it without calling `.await`.
+    ///
+    /// If a future refactor narrows `stream_records` to a non-record
+    /// sink type, this test fails at compile time — which is exactly
+    /// the drift signal the gap-2/3 phase-2 wiring slice needs.
+    #[test]
+    fn stream_records_accepts_lifecycle_record_channel() {
+        let (tx, _rx) = mpsc::channel::<ContainerLifecycleRecord>(1);
+        let stream = PodmanEventStream::new("tillandsias-");
+        // Coerce to the typed sender to verify signature; never await.
+        let _fut: std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>> =
+            Box::pin(stream.stream_records(tx));
     }
 }

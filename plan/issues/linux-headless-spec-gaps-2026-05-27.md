@@ -170,6 +170,19 @@ bounded slices from. Each item is sized for one loop iteration. NOT for siblings
   cache. Catches env-var renames that would silently break user-
   visible filter behaviour without breaking any constructor-based
   unit test. Seven grep-based steps, all green on linux-next HEAD.
+- **GAP 3 PHASE-2A** (records-sink surface): `PodmanEventStream`
+  gained a `stream_records(tx: mpsc::Sender<ContainerLifecycleRecord>)`
+  public method — lossless sibling of the existing
+  `stream(tx: mpsc::Sender<PodmanEvent>)`. Internal `stream_events` /
+  `stream_events_wsl` / `backoff_inspect` generalised on
+  `T: From<ContainerLifecycleRecord> + Send + 'static` so both public
+  entry points share the same retry/backoff/fall-back machinery.
+  Reflexive `T: From<T>` makes the records case a free no-op conversion;
+  PodmanEvent path is unchanged. A compile-pinning unit test asserts
+  the records-sink signature stays compatible. This is the channel
+  surface the gap-3 phase-2 diagnostics-stream emitter slice will
+  consume (records → `format_container_exit_event`/etc. →
+  `emit_diagnostic_event`).
   (Next diagnostics gap: GAP 2 / GAP 3 PHASE-2 — wire the live podman
   events parser to emit_diagnostic_event when `debug` is on.)
 
