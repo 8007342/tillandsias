@@ -22,7 +22,10 @@
 #                                        (phase-2g)
 #
 #   crates/tillandsias-headless/src/main.rs
-#     run_opencode_mode  →  spawns both emitter + handle when --debug
+#     run_opencode_mode       →  spawns both emitter + handle when --debug
+#     run_observatorium_mode  →  same wiring, scope-limited to the rt.block_on
+#                                 (chromium containers launched by the
+#                                 host-side browser path are out of scope)
 #
 # A formatter rename without a matching grep update here would silently
 # break the runtime chain even with the formatter shape litmus green;
@@ -107,6 +110,22 @@ critical_path:
       && grep -F 'start_typed_event_stream' crates/tillandsias-headless/src/main.rs
     timeout_ms: 3000
     expected_behavior: "start_typed_event_stream"
+
+  - step: "BOTH run_opencode_mode AND run_observatorium_mode have ≥2 wiring calls each"
+    # The phase-2c+2g wiring should land in both forge-launching code
+    # paths. A regression that removes ONE while leaving the other
+    # passes the previous step but breaks symmetry: count grep matches
+    # to catch that.
+    command: >
+      OPENCODE_LINE=$(grep -n 'fn run_opencode_mode' crates/tillandsias-headless/src/main.rs | head -1 | cut -d: -f1)
+      && OBSERV_LINE=$(grep -n 'fn run_observatorium_mode' crates/tillandsias-headless/src/main.rs | head -1 | cut -d: -f1)
+      && [ -n "$OPENCODE_LINE" ] && [ -n "$OBSERV_LINE" ]
+      && EMITTER_COUNT=$(grep -c 'spawn_diagnostic_event_emitter' crates/tillandsias-headless/src/main.rs)
+      && HANDLE_COUNT=$(grep -c 'start_typed_event_stream' crates/tillandsias-headless/src/main.rs)
+      && [ "$EMITTER_COUNT" -ge 2 ] && [ "$HANDLE_COUNT" -ge 2 ]
+      && echo "ok: both forge-launching modes wire both helpers (emitter=$EMITTER_COUNT, handle=$HANDLE_COUNT)"
+    timeout_ms: 3000
+    expected_behavior: "ok: both forge-launching modes wire both helpers"
 
   - step: "emitter-layer unit tests are attached"
     # If any of these is renamed without updating both this litmus

@@ -207,9 +207,19 @@ bounded slices from. Each item is sized for one loop iteration. NOT for siblings
   carry real `event:container_exit container=tillandsias-…
   exit_code=…` lines in the `.stderr.log` companion — surfaced in
   the distill "Container-Start Stream" section that the orchestrator
-  reads from `plan/diagnostics/`. `run_observatorium_mode` wiring is
-  a follow-on slice; the lifecycle there is more complex (host-side
-  browser open) and not the user's stated forge-diagnostics priority.
+  reads from `plan/diagnostics/`.
+  ALSO (later slice): `run_observatorium_mode` got the same phase-2c
+  + phase-2g wiring inside its `rt.block_on` — spawning
+  `spawn_diagnostic_event_emitter` and a typed-stderr
+  `DiagnosticsHandle` on `[tillandsias-router, observatorium_name]`.
+  Caveat: the block_on closes BEFORE the synchronous
+  `wait_for_observatorium_http_ready` and `launch_observatorium_
+  browser` calls, so chromium-core / chromium-framework container
+  events are NOT captured by this slice. A follow-on slice could
+  raise the emitter to a higher scope. Litmus
+  `litmus-runtime-diagnostics-emitter-shape` extended with a step
+  that asserts both forge-launching modes wire both helpers (counts
+  must be ≥ 2 each).
 - **GAP 3 PHASE-2D** (OOM event): added
   `ContainerLifecycleAction::Oom` to the parser action table and the
   `Display` impl; `parse_podman_lifecycle_record` now maps

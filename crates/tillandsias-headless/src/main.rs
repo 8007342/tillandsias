@@ -3946,6 +3946,29 @@ fn run_observatorium_mode(
     let web_image = versioned_image_tag("web", version);
     let router_image = versioned_image_tag("router", version);
     rt.block_on(async {
+        // gap-3 phase-2c symmetry with run_opencode_mode: spawn the live
+        // diagnostic-event emitter so `event:container_exit container=…
+        // exit_code=…` lines land on stderr when --debug is on. Captured
+        // by the forge-diagnostics annex stderr companion + the distill
+        // "Container-Start Stream" + "Typed-event arms" sections.
+        //
+        // NOTE: this rt.block_on closes BEFORE the synchronous
+        // `wait_for_observatorium_http_ready` / `launch_observatorium_
+        // browser` steps, so events from the chromium-core / chromium-
+        // framework containers (launched by the host-side browser path)
+        // are NOT captured here. The events that ARE captured: router,
+        // observatorium-web, and any background podman activity during
+        // route setup. A follow-on slice could raise the emitter to a
+        // higher scope to also cover the browser containers.
+        //
+        // @trace spec:runtime-diagnostics-stream
+        // @trace plan/issues/linux-headless-spec-gaps-2026-05-27.md (gap 3 phase-2c symmetry)
+        let diag_emitter =
+            tillandsias_podman::diagnostic_event_emitter::spawn_diagnostic_event_emitter(
+                debug,
+                "tillandsias-",
+            );
+
         client.remove_container(&observatorium_name).await.ok();
 
         // Step 15 slice 2: bring the router up BEFORE the observatorium-web
@@ -3973,6 +3996,26 @@ fn run_observatorium_mode(
             .await
             .map_err(|e| format!("[Observatorium] failed to start web container: {e}"))?;
 
+        // gap-3 phase-2g symmetry: start the typed-event stderr tail on
+        // the two containers the observatorium launch path owns at this
+        // point — `tillandsias-router` (just ensured up) and the web
+        // container we just launched. Chromium containers come later
+        // (host-side browser path) and are out of scope here.
+        //
+        // @trace spec:runtime-diagnostics-stream (Stderr line pass-through)
+        // @trace plan/issues/linux-headless-spec-gaps-2026-05-27.md (gap 3 phase-2g symmetry)
+        let _diag_logs_handle = if debug {
+            Some(
+                tillandsias_podman::DiagnosticsHandle::start_typed_event_stream(vec![
+                    "tillandsias-router".to_string(),
+                    observatorium_name.clone(),
+                ])
+                .await,
+            )
+        } else {
+            None
+        };
+
         let route = RouterRoute::new(
             format!("observatorium.{project_name}"),
             observatorium_name.clone(),
@@ -3981,6 +4024,14 @@ fn run_observatorium_mode(
         .with_root_redirect("/observatorium/");
         upsert_router_route(route, debug)?;
         caddy_reload_routes(debug).await?;
+
+        // Stop the diagnostic-event emitter before this block closes;
+        // dropping `_diag_logs_handle` aborts its podman-logs-f tails
+        // implicitly via DiagnosticsHandle::Drop.
+        if let Some(handle) = diag_emitter {
+            handle.abort();
+            let _ = handle.await;
+        }
 
         Ok::<(), String>(())
     })?;
