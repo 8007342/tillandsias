@@ -490,6 +490,19 @@ pub fn status_once() -> i32 {
     })
 }
 
+/// Compose a one-line description of an `Error` reply the in-VM headless's
+/// dispatcher returns when a request is unsupported / mis-routed / failed.
+/// Used by `refresh_vm_status` / `refresh_cloud_projects` / `diagnose` so
+/// operators see the dispatcher's "descriptive surface" (per the convergence
+/// packet's Q1/Q2/Q4 matrix routing) instead of a silent fall-through.
+fn describe_wire_error(code: tillandsias_control_wire::ErrorCode, message: &str) -> String {
+    if message.is_empty() {
+        format!("dispatcher error {code:?}")
+    } else {
+        format!("dispatcher error {code:?}: {message}")
+    }
+}
+
 /// Condensed status-line text for a live VM phase + podman readiness. Drives the
 /// shared `ids::STATUS` chip (and the tray tooltip) so the menu reflects real VM
 /// health — converges with the macOS tray's status-chip-to-VM-phase wiring.
@@ -552,22 +565,33 @@ async fn refresh_vm_status(hwnd: HWND) {
             return;
         }
     };
-    if let ControlMessage::VmStatusReply {
-        phase,
-        podman_ready,
-        last_event,
-        ..
-    } = reply.body
-    {
-        if let Ok(mut guard) = MENU_STATE.lock() {
-            guard.get_or_insert_with(MenuState::initial).podman_ready = podman_ready;
+    match reply.body {
+        ControlMessage::VmStatusReply {
+            phase,
+            podman_ready,
+            last_event,
+            ..
+        } => {
+            if let Ok(mut guard) = MENU_STATE.lock() {
+                guard.get_or_insert_with(MenuState::initial).podman_ready = podman_ready;
+            }
+            // status_text + tooltip (own MENU_STATE lock inside). Appends the
+            // headless's `last_event` when present so the chip reflects in-VM
+            // activity (e.g. "Ready · forge-foo created"), not just the phase.
+            let base = vm_phase_status_text(phase, podman_ready);
+            update_status_text(&compose_chip_text(&base, last_event.as_deref()), hwnd);
+            tracing::debug!(?phase, podman_ready, "vm status polled");
         }
-        // status_text + tooltip (own MENU_STATE lock inside). Appends the
-        // headless's `last_event` when present so the chip reflects in-VM
-        // activity (e.g. "Ready · forge-foo created"), not just the phase.
-        let base = vm_phase_status_text(phase, podman_ready);
-        update_status_text(&compose_chip_text(&base, last_event.as_deref()), hwnd);
-        tracing::debug!(?phase, podman_ready, "vm status polled");
+        // Per the control-dispatch convergence packet (5c67ddb9, aeb5499a) the
+        // headless's vsock dispatcher returns an `Error{Unsupported, …}` frame
+        // when a request has no inner handler yet. Surface it at WARN so an
+        // operator sees why a poll didn't refresh the chip.
+        ControlMessage::Error { code, message, .. } => {
+            tracing::warn!("vm status poll: {}", describe_wire_error(code, &message));
+        }
+        other => {
+            tracing::debug!("vm status poll: unexpected reply variant {}", other.kind());
+        }
     }
 }
 
@@ -624,15 +648,24 @@ async fn refresh_cloud_projects(_hwnd: HWND) {
             return;
         }
     };
-    if let ControlMessage::CloudRefreshReply { projects, .. } = reply.body {
-        let mapped: Vec<ProjectEntry> = projects.iter().map(cloud_entry_to_menu).collect();
-        let n = mapped.len();
-        if let Ok(mut guard) = MENU_STATE.lock() {
-            guard.get_or_insert_with(MenuState::initial).cloud_projects = mapped;
+    match reply.body {
+        ControlMessage::CloudRefreshReply { projects, .. } => {
+            let mapped: Vec<ProjectEntry> = projects.iter().map(cloud_entry_to_menu).collect();
+            let n = mapped.len();
+            if let Ok(mut guard) = MENU_STATE.lock() {
+                guard.get_or_insert_with(MenuState::initial).cloud_projects = mapped;
+            }
+            tracing::debug!(count = n, "cloud projects refreshed");
         }
-        tracing::debug!(count = n, "cloud projects refreshed");
-    } else {
-        tracing::debug!(?reply.body, "cloud refresh: unexpected reply");
+        // Convergence packet (5c67ddb9): dispatcher returns Error{Unsupported}
+        // for variants not yet wired on this transport. Surface it so an
+        // operator can see why the cloud-projects submenu didn't refresh.
+        ControlMessage::Error { code, message, .. } => {
+            tracing::warn!("cloud refresh: {}", describe_wire_error(code, &message));
+        }
+        other => {
+            tracing::debug!("cloud refresh: unexpected reply variant {}", other.kind());
+        }
     }
 }
 
@@ -798,6 +831,15 @@ fn collect_report() -> DiagnoseReport {
                         podman_ready: Some(podman_ready),
                         last_event,
                         error: None,
+                    },
+                    // Dispatcher returned Error (convergence packet item 2).
+                    // Surface its code + message rather than just "unexpected reply".
+                    ControlMessage::Error { code, message, .. } => WireReport {
+                        reachable: true,
+                        phase: None,
+                        podman_ready: None,
+                        last_event: None,
+                        error: Some(describe_wire_error(code, &message)),
                     },
                     other => WireReport {
                         reachable: true,
@@ -1459,6 +1501,31 @@ mod tests {
     fn wm_trayicon_is_in_app_range() {
         // Both are consts, so enforce the invariant at compile time.
         const { assert!(WM_TRAYICON >= WM_APP) };
+    }
+
+    /// `describe_wire_error` is the tray-side surface for the convergence
+    /// packet's Error{Unsupported,…} replies (5c67ddb9, aeb5499a). Operators
+    /// must see the dispatcher's code + message, not a silent fall-through.
+    #[test]
+    fn describe_wire_error_includes_code_and_message() {
+        use tillandsias_control_wire::ErrorCode;
+        let s = describe_wire_error(ErrorCode::Unsupported, "variant X not wired on vsock");
+        assert!(s.contains("Unsupported"), "code missing: {s}");
+        assert!(
+            s.contains("variant X not wired on vsock"),
+            "message missing: {s}"
+        );
+    }
+
+    #[test]
+    fn describe_wire_error_handles_empty_message() {
+        use tillandsias_control_wire::ErrorCode;
+        let s = describe_wire_error(ErrorCode::Internal, "");
+        assert!(s.contains("Internal"));
+        assert!(
+            !s.contains(": "),
+            "empty message must not leave a dangling colon: {s}"
+        );
     }
 
     /// Pin the `--diagnose --json` schema so support tooling consuming the
