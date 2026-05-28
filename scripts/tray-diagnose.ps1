@@ -6,7 +6,7 @@
 .DESCRIPTION
     Runs the installed (or local-build) tray with `--diagnose --json`, parses
     the machine-readable report, and prints a colorized PASS / FAIL line per
-    check. A real consumer that demonstrates the JSON schema's utility — the
+    check. A real consumer that demonstrates the JSON schema's utility -- the
     same JSON can be uploaded to a support endpoint or fed into a richer
     dashboard.
 
