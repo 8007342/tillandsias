@@ -51,6 +51,28 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-28T17:43Z — MERGED windows-next (`--diagnose --json` schema pin + tray-diagnose.ps1) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `68b1002a` (merge commit)
+- observed_sibling_heads: main=`fa746f03` · linux-next(pre-merge)=`ce257f39` ·
+  windows-next=`5d310bf4` · osx-next=`3a286687`
+- **windows-next: merged+tested+pushed.** 2-commit delta
+  (`e96d1fc8` feat: diagnose --json schema pin + tray-diagnose.ps1
+  consumer; `5d310bf4` fix: ASCII-only tray-diagnose.ps1 — drop
+  em-dash in comment). Two files: notify_icon.rs (sibling-owned)
+  + new `scripts/tray-diagnose.ps1` (132 lines, Windows-host
+  PowerShell helper for tray-diagnose `--json` consumer). The
+  PowerShell script is Windows-host tooling; it's outside the
+  steward's edit scope but cleanly merges.
+- osx-next: no-op (HEAD `3a286687` is BEHIND linux-next at `ce257f39`;
+  `linux-next..origin/osx-next` is empty — orchestrator hasn't
+  fast-forwarded osx-next yet, steward has nothing to pull).
+- Tests: PASSED. `./build.sh --check` + `--test` green.
+- Spec/methodology/plan drift: none. Diff confined to
+  `crates/tillandsias-windows-tray/` and a new Windows-host
+  PowerShell helper.
+
 ### Cycle 2026-05-28T17:05:00Z — NO-OP (siblings integrated) & APPROVED 8 forge proposals ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
