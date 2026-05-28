@@ -18,6 +18,8 @@
 #[cfg(target_os = "macos")]
 mod action_host;
 #[cfg(target_os = "macos")]
+mod diagnose;
+#[cfg(target_os = "macos")]
 mod installation_uuid;
 #[cfg(target_os = "macos")]
 mod main_thread;
@@ -35,6 +37,15 @@ mod terminal_attach;
 
 #[cfg(target_os = "macos")]
 fn main() {
+    // Argv-driven sub-modes (mirrors windows-tray's `--diagnose`
+    // pattern from commit 20fb9d1f). `--diagnose` runs the static
+    // health report and exits before AppKit gets a chance to
+    // initialize, so the binary can be invoked from a terminal
+    // session without putting a stray menu-bar icon up.
+    let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "--diagnose") {
+        std::process::exit(diagnose::main());
+    }
     status_item::run();
 }
 
