@@ -51,6 +51,27 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-28T21:43Z — MERGED windows-next (install --diagnose sanity check + GUI-subsystem stdio fixes) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `4b7aac37` (merge commit)
+- observed_sibling_heads: main=`fa746f03` · linux-next(pre-merge)=`472c4465` ·
+  windows-next=`d7bfcdd9` · osx-next=`472c4465`
+- **windows-next: merged+tested+pushed.** 1-commit delta `d7bfcdd9`
+  (feat: install --diagnose sanity check + GUI-subsystem stdio
+  fixes). Five files — three windows-tray (notify_icon.rs, main.rs,
+  windows-tray-diagnostics.md) + two Windows scripts (install-
+  windows.ps1, tray-diagnose.ps1). All sibling-owned scope. Clean
+  auto-merge.
+- osx-next: no-op (HEAD `472c4465` matches linux-next pre-merge;
+  orchestrator already fast-forwarded osx-next).
+- Tests: PASSED. `./build.sh --check` + `--test` green.
+- Spec/methodology/plan drift: none. Diff confined to
+  `crates/tillandsias-windows-tray/`, `scripts/install-windows.ps1`,
+  `scripts/tray-diagnose.ps1`, and the
+  `cheatsheets/runtime/windows-tray-diagnostics.md` file Windows
+  owns.
+
 ### Cycle 2026-05-28T19:43Z — MERGED windows-next (tray-diagnostics cheatsheet + exit-code test) ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
