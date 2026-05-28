@@ -81,7 +81,7 @@ impl DiagnosticsFilter {
         let event_types = event_types.map(|items| {
             items
                 .iter()
-                .map(|raw| normalize_event_name(raw))
+                .map(normalize_event_name)
                 .filter(|s| !s.is_empty())
                 .collect::<HashSet<_>>()
         });

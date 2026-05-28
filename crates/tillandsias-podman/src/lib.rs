@@ -706,7 +706,10 @@ pub fn podman_cmd() -> tokio::process::Command {
     unsafe {
         cmd.pre_exec(|| {
             for fd in 3..1024 {
-                libc::close(fd);
+                let fd_flags = libc::fcntl(fd, libc::F_GETFD);
+                if fd_flags != -1 && (fd_flags & libc::FD_CLOEXEC) == 0 {
+                    libc::close(fd);
+                }
             }
             Ok(())
         });
@@ -756,7 +759,10 @@ pub fn podman_cmd_sync() -> std::process::Command {
         unsafe {
             cmd.pre_exec(|| {
                 for fd in 3..1024 {
-                    libc::close(fd);
+                    let fd_flags = libc::fcntl(fd, libc::F_GETFD);
+                    if fd_flags != -1 && (fd_flags & libc::FD_CLOEXEC) == 0 {
+                        libc::close(fd);
+                    }
                 }
                 Ok(())
             });
