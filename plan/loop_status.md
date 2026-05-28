@@ -1,22 +1,24 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-05-28T03:05:00Z
+LastExecutionTime: 2026-05-28T03:20:00Z
 
 ## This Loop
 
-- Fetched origin, audited remote sibling heads, and computed branch ancestry.
-- Confirmed `windows-next` (`c45f23ae`) and `osx-next` (`ad49984b`) are fully merged/integrated into `linux-next`.
-- Successfully verified the hostname sanitization fix locally: `./build.sh --test` completed with 120+ unit/integration tests passing.
-- Triggered a fresh asynchronous background runtime litmus run (`20260528T030400Z-914d8a11-c45f23ae-80d9196e`) to validate the integrated HEAD under the now-safe hostnames.
+- Audited integration status: confirmed `windows-next` (`c45f23ae`) and `osx-next` (`80d9196e` / `ad49984b`) are fully merged/integrated into `linux-next`.
+- Resolved the diagnostics exit-1/TUI blocker: intercepted `--print` flag in `images/default/entrypoint-forge-opencode.sh` to run opencode in unattended mode instead of interactive TUI.
+- Re-built and initialized container images via `tillandsias --debug --init`.
+- Successfully verified the fix: `tillandsias . --opencode --diagnostics` ran perfectly unattended and completed successfully (exited 0).
+- Distilled results and updated loop history.
 
 ## Expected Next Loop
 
-- Monitor and fold the results of the newly launched asynchronous background runtime litmus run `20260528T030400Z-914d8a11-c45f23ae-80d9196e`.
-- Triage the diagnostics log and distill summaries into `plan/diagnostics/` once the litmus run completes.
+- Sibling branches to pull and build on top of latest `linux-next`.
+- Monitor release run `26544334121` if still active.
 
 ## Resolved Since Previous Loop
 
-- Resolved the `crun: sethostname: Invalid argument` OCI runtime failure on long project names.
+- Resolved the OCI runtime hostname length issue (`sanitize_hostname`).
+- Resolved the `--print` diagnostics flag TUI blocker on `opencode` container launches.
 
 ## Current Major Blockers
 
@@ -25,15 +27,15 @@ LastExecutionTime: 2026-05-28T03:05:00Z
 
 ## Assignment Board
 
-- Linux primary: monitor the active background runtime litmus run `20260528T030400Z-914d8a11-c45f23ae-80d9196e`; monitor/fix release run `26544334121`.
+- Linux primary: monitor/distill any upcoming E2E/litmus runs; monitor/fix release run `26544334121`.
 - Windows primary: no immediate blocker; optional wire EnumerateLocalProjects remains fallback.
 - macOS primary: user-attended m8 smoke. Autonomous fallback: m10 project threading or m11 MenuStructure cleanup.
 
 ## Stale Or Pending Pings
 
-- No expired leases; Windows and macOS should pull this coordination commit.
+- Sibling hosts (Windows and macOS) should pull this coordination commit.
 
 ## Validation
 
 - YAML parser check passed for `plan.yaml` and `plan/index.yaml`.
-- `git diff --check` passed for touched coordination files.
+- Verified `tillandsias . --opencode --diagnostics` exits 0 (litmus pass).

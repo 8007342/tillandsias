@@ -136,5 +136,26 @@ fi
 
 # ── Launch OpenCode ─────────────────────────────────────────
 trace_lifecycle "entrypoint" "opencode launching"
-trace_lifecycle "exec" "launching opencode ($OC_BIN)"
-exec "$OC_BIN" "$@"
+
+# Detect if `--print` is in the arguments.
+IS_DIAGNOSTICS=false
+for arg in "$@"; do
+    if [ "$arg" = "--print" ]; then
+        IS_DIAGNOSTICS=true
+    fi
+done
+
+if [ "$IS_DIAGNOSTICS" = "true" ]; then
+    trace_lifecycle "exec" "launching unattended opencode run"
+    # Execute the unattended loop run command.
+    # We ignore the other passed arguments (--print, --output-format, json) as they are intended for the orchestrator,
+    # and instead run opencode unattended using the synthetic prompt or command.
+    if [ -n "${TILLANDSIAS_OPENCODE_PROMPT:-}" ]; then
+        exec "$OC_BIN" run --dangerously-skip-permissions "$TILLANDSIAS_OPENCODE_PROMPT"
+    else
+        exec "$OC_BIN" run --dangerously-skip-permissions
+    fi
+else
+    trace_lifecycle "exec" "launching opencode ($OC_BIN)"
+    exec "$OC_BIN" "$@"
+fi

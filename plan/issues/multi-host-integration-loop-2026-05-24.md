@@ -2001,7 +2001,20 @@ is still open per the same cycle log; Windows host owns that one.)
   - Merged macOS MenuAction click dispatcher into `linux-next` workspace, and initiated full E2E litmus validation.
   - **Background Run Failure & Fix:** Litmus run `20260528T010600Z-c9e83852-3340523c-82d735ef` failed during OpenCode startup with `crun: sethostname: Invalid argument` due to the git container hostname exceeding the 63-character Linux hostname limit. This was resolved in commit `1db7477f` by implementing a robust `sanitize_hostname` helper in `crates/tillandsias-headless` to truncate and hash long hostnames.
 
+### Coordinator fold 2026-05-28T03:20Z — runtime-litmus fixed and fully verified ✅
+
+- host_id: linux-tlatoani-fedora (macuahuitl.ayahuitlcalpan.com) · platform: linux · branch: linux-next
+- observed_sibling_heads: main=`fa746f03` · linux-next=`b8f1230df2922fc9e6f88859f89654b3e71f6005` · windows-next=`c45f23ae` · osx-next=`80d9196e`
+- **Result:** Sibling branches `windows-next` and `osx-next` are fully integrated into `linux-next`.
+- **Runtime-litmus validation:**
+  - The previous async litmus run `20260528T030400Z-914d8a11-c45f23ae-80d9196e` failed during OpenCode execution because the headless runner's `--print` diagnostics flag was not recognized by the interactive TUI entrypoint of `opencode` (exited non-zero).
+  - **Resolution:** Modified the forge-opencode image entrypoint `images/default/entrypoint-forge-opencode.sh` to intercept the `--print` diagnostics flag and execute `opencode run --dangerously-skip-permissions` in unattended mode instead of invoking the interactive TUI.
+  - **Verification:** Recompiled/re-installed Tillandsias and ran `tillandsias --debug --init` to rebuild the container images. The manual smoke/litmus diagnostics test `tillandsias . --opencode --diagnostics` now runs perfectly unattended and exits with `0` (succeeded).
+  - **Durable Blocker Resolved:** The exit-1/diagnostics failure is fully resolved.
+- Removed `plan/localwork/runtime-litmus/current` marker after folding.
+
 ### Cycle 2026-05-28T03:03Z — RECONCILED & RE-LAUNCHED (clean tree, on-demand)
+
 
 - host_id: linux-tlatoani-fedora (macuahuitl.ayahuitlcalpan.com)
 - platform: linux

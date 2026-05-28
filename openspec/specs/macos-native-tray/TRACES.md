@@ -24,7 +24,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-macos-tray/src/status_item.rs#L16](../../../crates/tillandsias-macos-tray/src/status_item.rs#L16)
 - [crates/tillandsias-macos-tray/src/status_item.rs#L47](../../../crates/tillandsias-macos-tray/src/status_item.rs#L47)
 - [crates/tillandsias-macos-tray/src/status_item.rs#L113](../../../crates/tillandsias-macos-tray/src/status_item.rs#L113)
-- [crates/tillandsias-macos-tray/src/status_item.rs#L157](../../../crates/tillandsias-macos-tray/src/status_item.rs#L157)
+- [crates/tillandsias-macos-tray/src/status_item.rs#L191](../../../crates/tillandsias-macos-tray/src/status_item.rs#L191)
 - [crates/tillandsias-macos-tray/src/terminal_attach.rs#L21](../../../crates/tillandsias-macos-tray/src/terminal_attach.rs#L21)
 - [crates/tillandsias-macos-tray/src/terminal_attach.rs#L81](../../../crates/tillandsias-macos-tray/src/terminal_attach.rs#L81)
 - [crates/tillandsias-macos-tray/src/terminal_attach.rs#L95](../../../crates/tillandsias-macos-tray/src/terminal_attach.rs#L95)
