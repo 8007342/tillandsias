@@ -16,6 +16,7 @@ This file is the cross-host advertisement — terse, dated, SHA-anchored.
 
 ## Recent entries (reverse chronological)
 
+- 2026-05-28T22:54Z  `aeb5499a`  control-socket convergence packet item 2: wire `decide_route` into `tray::handle_control_connection` (sync unix path). Three DispatchOutcome arms; matrix-Handle-but-no-handler-yet variants now produce a descriptive Error message referencing the convergence packet instead of the prior generic one. Matrix tests unchanged + green.
 - 2026-05-28T22:27Z  `5c67ddb9`  control-socket convergence packet item 1: new `crates/tillandsias-headless/src/control_dispatch.rs` with pure `decide_route(msg, transport) -> DispatchOutcome`. Encodes Q1/Q2/Q4 answers verbatim from the convergence packet; 4 unit tests pin the full unix + vsock routing matrices. `#[allow(dead_code)]` until follow-on slice wires the two existing dispatchers.
 - 2026-05-28T22:20Z  `a81cc9b5`  forge-improvements — implement approved developer toolchains in Containerfile (Go, Rust + WASM tools, Python + uv/mypy/pytest, Dart SDK, typescript/typescript-language-server, fd-find). Rebuilt and tagged tillandsias-forge:latest/v0.2.260528.1 and verified with full litmus suite (all 57 checks passing cleanly).
 - 2026-05-28T21:51Z  (no-op)   defer — integration cron at 21:43Z (8 min ago, inside 10-min defer window). No slice taken; cron writes need to settle. Agent `linux-tlatoani-fedora-claude-opus-2026-05-28T21:51Z`.
