@@ -1456,6 +1456,105 @@ mod tests {
         const { assert!(WM_TRAYICON >= WM_APP) };
     }
 
+    /// Pin the `--diagnose --json` schema so support tooling consuming the
+    /// machine-readable output never breaks silently. The five tests below
+    /// catch (a) renamed / removed top-level keys, (b) renamed / removed
+    /// nested `wire.*` keys, (c) the `manifest_pin_x86_64_tar` Option being
+    /// (de)serialized in an unexpected way, (d) `recent_log_tail` ceasing to
+    /// be an array. A schema change here is a schema change for tooling —
+    /// adjust both deliberately together.
+    fn baseline_diagnose_report() -> DiagnoseReport {
+        DiagnoseReport {
+            version: "0.0.0-test",
+            log_path: "C:\\path\\to\\tray.log".to_string(),
+            log_exists: false,
+            wt_present: true,
+            distro: "tillandsias",
+            distro_registered: false,
+            release_tag: "v0.0.0",
+            manifest_pin_x86_64_tar: Some("abcdef123456".to_string()),
+            wire: WireReport {
+                reachable: false,
+                phase: None,
+                podman_ready: None,
+                last_event: None,
+                error: Some("not provisioned".to_string()),
+            },
+            recent_log_tail: vec![],
+        }
+    }
+
+    #[test]
+    fn diagnose_json_top_level_keys_pinned() {
+        let v: serde_json::Value =
+            serde_json::to_value(baseline_diagnose_report()).expect("serialize");
+        let obj = v.as_object().expect("top-level JSON object");
+        for key in [
+            "version",
+            "log_path",
+            "log_exists",
+            "wt_present",
+            "distro",
+            "distro_registered",
+            "release_tag",
+            "manifest_pin_x86_64_tar",
+            "wire",
+            "recent_log_tail",
+        ] {
+            assert!(
+                obj.contains_key(key),
+                "diagnose --json missing top-level key: {key}"
+            );
+        }
+    }
+
+    #[test]
+    fn diagnose_json_wire_object_keys_pinned() {
+        let v: serde_json::Value =
+            serde_json::to_value(baseline_diagnose_report()).expect("serialize");
+        let wire = v
+            .get("wire")
+            .and_then(|w| w.as_object())
+            .expect("wire object");
+        for key in ["reachable", "phase", "podman_ready", "last_event", "error"] {
+            assert!(
+                wire.contains_key(key),
+                "diagnose --json wire object missing key: {key}"
+            );
+        }
+    }
+
+    #[test]
+    fn diagnose_json_manifest_pin_some_serializes_as_string() {
+        let mut r = baseline_diagnose_report();
+        r.manifest_pin_x86_64_tar = Some("a28cabe7c9df".to_string());
+        let v: serde_json::Value = serde_json::to_value(r).expect("serialize");
+        assert_eq!(
+            v["manifest_pin_x86_64_tar"],
+            serde_json::Value::String("a28cabe7c9df".to_string())
+        );
+    }
+
+    #[test]
+    fn diagnose_json_manifest_pin_none_serializes_as_null() {
+        let mut r = baseline_diagnose_report();
+        r.manifest_pin_x86_64_tar = None;
+        let v: serde_json::Value = serde_json::to_value(r).expect("serialize");
+        assert_eq!(v["manifest_pin_x86_64_tar"], serde_json::Value::Null);
+    }
+
+    #[test]
+    fn diagnose_json_recent_log_tail_is_array() {
+        let mut r = baseline_diagnose_report();
+        r.recent_log_tail = vec!["line one".to_string(), "line two".to_string()];
+        let v: serde_json::Value = serde_json::to_value(r).expect("serialize");
+        let tail = v["recent_log_tail"]
+            .as_array()
+            .expect("recent_log_tail array");
+        assert_eq!(tail.len(), 2);
+        assert_eq!(tail[0], serde_json::Value::String("line one".to_string()));
+    }
+
     /// The chip composer appends a non-empty `last_event` after a Unicode
     /// MIDDLE DOT so the user sees in-VM activity in the tray. `None` or
     /// whitespace-only events leave the base phase line untouched.
