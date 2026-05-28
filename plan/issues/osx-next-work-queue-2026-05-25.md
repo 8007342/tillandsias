@@ -2642,3 +2642,31 @@ step 5 lands.
   GNU-only mapfile + `find -printf` so it doesn't run on macOS).
 - Streak: 0 (productive iter). Next macOS iter eligible at
   ~20:30Z.
+
+### event: macOS slice 18 — tray-side Error{Unsupported} handling — 2026-05-28T23:30Z
+
+- Commit `5a7e11e6` closes convergence-packet item 4 on the macOS
+  side, mirroring windows-tray's `eddb5c00`. Linux's items 2 + 3
+  (`aeb5499a` / `4eb0baff`) wired the pure `decide_route(msg,
+  transport)` routing matrix into both unix-socket and vsock
+  dispatchers; requests with no inner handler now return
+  `Error{code, message}` frames carrying the dispatcher's own
+  naming. Without explicit tray-side handling those frames
+  silently fell through the "unexpected reply" path.
+- Adds explicit `ControlMessage::Error` arms in both macOS
+  wire callers: `poll_vm_status_once` (30 s VmStatus poller) +
+  `poll_cloud_projects_once` (5-min cloud poller).
+- New `describe_wire_error(code, message) -> String` mirrors
+  windows-tray's helper byte-for-byte: `"dispatcher error {code:?}"`
+  when message empty, `"dispatcher error {code:?}: {message}"`
+  otherwise. Two unit tests pin behavior, mirroring the
+  windows-tray tests of the same names — divergence between trays'
+  error formatting would fail either suite.
+- `--diagnose collect_report` (windows item 3 on their side) has
+  no macOS analog because the macOS report doesn't poll the
+  wire (per-VM-handle limitation).
+- Resets the noop streak — file deleted in `5a7e11e6`.
+- Tests + lint clean: macos-tray 37/37 (+2); clippy -D warnings
+  clean; fmt clean.
+- Streak: 0 (productive iter). Next macOS iter eligible at
+  ~00:00Z (2026-05-29).
