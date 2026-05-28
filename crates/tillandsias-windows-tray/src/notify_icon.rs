@@ -434,6 +434,67 @@ pub fn status_once() -> i32 {
     })
 }
 
+/// Condensed status-line text for a live VM phase + podman readiness. Drives the
+/// shared `ids::STATUS` chip (and the tray tooltip) so the menu reflects real VM
+/// health — converges with the macOS tray's status-chip-to-VM-phase wiring.
+fn vm_phase_status_text(phase: tillandsias_control_wire::VmPhase, podman_ready: bool) -> String {
+    use tillandsias_control_wire::VmPhase;
+    match phase {
+        VmPhase::Ready if podman_ready => "\u{1F7E2} Ready".to_string(),
+        VmPhase::Ready => "\u{1F7E1} Ready (podman starting\u{2026})".to_string(),
+        VmPhase::Provisioning => "\u{1F535} Provisioning\u{2026}".to_string(),
+        VmPhase::Starting => "\u{1F535} Starting\u{2026}".to_string(),
+        VmPhase::Draining => "\u{1F7E0} Draining\u{2026}".to_string(),
+        VmPhase::Stopping => "\u{1F534} Stopping\u{2026}".to_string(),
+        VmPhase::Failed => "\u{1F534} VM failed".to_string(),
+    }
+}
+
+/// Poll the in-VM `VmStatus` once over the control wire and reflect it in the
+/// shared `MenuState`: sets `podman_ready` (which gates per-project actions like
+/// "Attach Here" in `menu_state::build`) and refreshes the status line + tooltip
+/// from the live phase. Best-effort — a transient wire error leaves the last
+/// known state untouched (logged at debug). Reuses the proven handshake +
+/// `VmStatusRequest` path.
+async fn refresh_vm_status(hwnd: HWND) {
+    use tillandsias_control_wire::ControlMessage;
+
+    let port = tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
+    let (mut stream, _wire) = match crate::hvsocket::hvsocket_handshake(port).await {
+        Ok(ok) => ok,
+        Err(err) => {
+            tracing::debug!(%err, "vm status poll: control wire unreachable");
+            return;
+        }
+    };
+    let reply = match crate::hvsocket::hvsocket_request(
+        &mut stream,
+        3,
+        ControlMessage::VmStatusRequest { seq: 3 },
+    )
+    .await
+    {
+        Ok(reply) => reply,
+        Err(err) => {
+            tracing::debug!(%err, "vm status poll: VmStatusRequest failed");
+            return;
+        }
+    };
+    if let ControlMessage::VmStatusReply {
+        phase,
+        podman_ready,
+        ..
+    } = reply.body
+    {
+        if let Ok(mut guard) = MENU_STATE.lock() {
+            guard.get_or_insert_with(MenuState::initial).podman_ready = podman_ready;
+        }
+        // status_text + tooltip (own MENU_STATE lock inside).
+        update_status_text(&vm_phase_status_text(phase, podman_ready), hwnd);
+        tracing::debug!(?phase, podman_ready, "vm status polled");
+    }
+}
+
 /// Set by the `Retry` menu click (in the wndproc) and drained by the message
 /// loop, which spawns a fresh provisioning task in the LocalSet context.
 static RETRY_REQUESTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -473,11 +534,21 @@ fn spawn_provisioning(hwnd: HWND) {
                 match lifecycle.spawn_keepalive() {
                     Ok(_keepalive) => {
                         tracing::info!("VM keepalive holding the control wire warm");
-                        std::future::pending::<()>().await;
+                        // Live status: poll VmStatus so the menu reflects real VM
+                        // health — podman_ready gates per-project actions, and the
+                        // status line tracks phase (Ready/Draining/Stopping).
+                        // This loop holds `_keepalive` for the tray's lifetime; on
+                        // Quit the LocalSet drops the task → kill_on_drop.
+                        loop {
+                            refresh_vm_status(hwnd).await;
+                            tokio::time::sleep(std::time::Duration::from_secs(30)).await;
+                        }
                     }
                     Err(err) => {
                         eprintln!("VM keepalive spawn failed: {err}");
                         update_status_text("\u{1F7E1} Ready (VM may idle out)", hwnd);
+                        // No keepalive to hold; still surface one live status read.
+                        refresh_vm_status(hwnd).await;
                     }
                 }
             }
@@ -935,6 +1006,30 @@ mod tests {
     fn wm_trayicon_is_in_app_range() {
         // Both are consts, so enforce the invariant at compile time.
         const { assert!(WM_TRAYICON >= WM_APP) };
+    }
+
+    /// The live status line distinguishes VM phases + podman readiness, so the
+    /// shared `ids::STATUS` chip reflects real VM health (Ready vs podman-starting
+    /// vs draining/failed) rather than a single static "Ready".
+    #[test]
+    fn vm_phase_status_text_reflects_phase_and_podman() {
+        use tillandsias_control_wire::VmPhase;
+        assert!(vm_phase_status_text(VmPhase::Ready, true).contains("Ready"));
+        // Ready-with-podman is visibly distinct from Ready-without-podman.
+        assert_ne!(
+            vm_phase_status_text(VmPhase::Ready, true),
+            vm_phase_status_text(VmPhase::Ready, false)
+        );
+        assert!(
+            vm_phase_status_text(VmPhase::Draining, true)
+                .to_lowercase()
+                .contains("drain")
+        );
+        assert!(
+            vm_phase_status_text(VmPhase::Failed, false)
+                .to_lowercase()
+                .contains("fail")
+        );
     }
 
     /// The log file lives under `…\tillandsias\logs\tray.log` so "Open Log" and
