@@ -5668,16 +5668,61 @@ fn maybe_spawn_vsock_listener(
 ) -> Option<tokio::task::JoinHandle<()>> {
     let port = listen_vsock_port?;
     Some(tokio::spawn(async move {
-        // Default VmStateHandle: phase=Ready, podman socket at the
-        // conventional path. Real lifecycle hooks update this when
-        // provisioning + drain wiring lands.
+        // One VmStateHandle drives three concurrent tasks below — the
+        // accept loop (reads it on every VmStatusRequest), the phase
+        // advancer (`Starting → Ready` when podman appears, `→ Failed`
+        // on timeout), and the shutdown watcher (`→ Stopping` when the
+        // shared SIGTERM atomic flips). The handle is cheaply cloneable
+        // (Arc<RwLock<VmPhase>> internally), so all three see the same
+        // phase transitions in real time.
+        //
+        // gap-6 phase-lifecycle wiring lives entirely here so
+        // `graceful_shutdown_async` doesn't need a signature change.
+        // @trace spec:vsock-transport, spec:vm-provisioning-lifecycle
         let state = vsock_server::VmStateHandle::new();
+
+        // Advancer: flip Starting → Ready once /run/podman/podman.sock
+        // appears, or Starting → Failed after 60s. Cheap filesystem
+        // polls every 500 ms; the host tray sees the transition over
+        // the vsock control wire without a probe-connect.
+        let advancer_state = state.clone();
+        let advancer = tokio::spawn(async move {
+            advancer_state
+                .advance_to_ready_when_podman_up(
+                    std::time::Duration::from_secs(60),
+                    std::time::Duration::from_millis(500),
+                )
+                .await;
+        });
+
+        // Shutdown watcher: when SIGTERM/SIGINT flips the shared
+        // shutdown atomic, flip phase=Stopping so the host tray sees
+        // graceful-shutdown-in-progress over the wire before the
+        // listener exits.
+        let watcher_state = state.clone();
+        let watcher_shutdown = Arc::clone(&shutdown);
+        let watcher = tokio::spawn(async move {
+            watcher_state
+                .watch_shutdown_and_mark_stopping(watcher_shutdown)
+                .await;
+        });
+
         match vsock_server::run_vsock_listener(port, shutdown, state).await {
             Ok(()) => {}
             Err(err) => {
                 eprintln!("[tillandsias] vsock listener on port {port} failed: {err}");
             }
         }
+
+        // The listener has exited (clean shutdown or bind error). Stop
+        // the lifecycle helpers — neither is meaningful without the
+        // listener serving status replies. Aborts are idempotent if
+        // they already returned on their own (watcher does, when the
+        // shutdown atomic flipped).
+        advancer.abort();
+        let _ = advancer.await;
+        watcher.abort();
+        let _ = watcher.await;
     }))
 }
 
