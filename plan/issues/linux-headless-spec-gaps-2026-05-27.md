@@ -270,6 +270,20 @@ bounded slices from. Each item is sized for one loop iteration. NOT for siblings
        phase-2d)
     5. container_stderr (DiagnosticsHandle typed tail, phase-2g)
     6. internal_* (verbose level via DiagnosticsFilter, gap-5 phase-1)
+- **GAP 3 PHASE-2 PINNING**: new instant-phase litmus
+  `litmus-runtime-diagnostics-emitter-shape` greps the
+  emitter-layer surfaces (`spawn_diagnostic_event_emitter`,
+  `EmitterState { start_times: HashMap<String, i64> }`,
+  `signal_name_from_exit_code` + the canonical signal names,
+  the five routing arms by `ContainerLifecycleAction::*` literal,
+  `start_typed_event_stream` + its `format_container_stderr_event`
+  bridge + the `event:container_stderr` literal, and the
+  `run_opencode_mode` wiring calls). Seven grep steps catch a
+  formatter rename, a routing-arm deletion, or a missing wiring
+  call that the formatter-shape litmus would miss. Companion to
+  the existing `litmus-runtime-diagnostics-typed-events-shape`
+  (formatter layer) and `litmus-diagnostics-filter-env-shape`
+  (env-var layer).
   (Next diagnostics gap: GAP 2 / GAP 3 PHASE-2 — wire the live podman
   events parser to emit_diagnostic_event when `debug` is on.)
 

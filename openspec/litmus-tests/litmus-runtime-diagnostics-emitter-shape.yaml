@@ -1,0 +1,139 @@
+# @trace spec:runtime-diagnostics-stream
+# Runtime emitter-layer pinning — the gap-3 phase-2 surfaces that
+# CONSUME the formatters pinned by
+# litmus-runtime-diagnostics-typed-events-shape.yaml.
+#
+# Three modules together produce the live typed-event stream the spec
+# scenarios mandate:
+#
+#   crates/tillandsias-podman/src/diagnostic_event_emitter.rs
+#     spawn_diagnostic_event_emitter  →  podman events route loop
+#     EmitterState                    →  start→exit pairing for
+#                                        duration_seconds (phase-2e)
+#     signal_name_from_exit_code      →  signal-induced exit decoder
+#                                        (phase-2f)
+#     route_record                    →  Died/Oom/Removed dispatch
+#                                        with state mutation
+#
+#   crates/tillandsias-podman/src/diagnostics_stream.rs
+#     DiagnosticsHandle::start_typed_event_stream  →  per-container
+#                                        podman logs -f tail emitting
+#                                        event:container_stderr lines
+#                                        (phase-2g)
+#
+#   crates/tillandsias-headless/src/main.rs
+#     run_opencode_mode  →  spawns both emitter + handle when --debug
+#
+# A formatter rename without a matching grep update here would silently
+# break the runtime chain even with the formatter shape litmus green;
+# this is the integration-layer drift signal.
+
+name: litmus:runtime-diagnostics-emitter-shape
+spec: runtime-diagnostics-stream
+phase: pre-build
+description: >
+  Verify the runtime diagnostics emitter layer (gap-3 phase-2a–2g)
+  remains wired end-to-end: the spawn helper, the start→exit pairing
+  state, the signal helper, the routing dispatch, the typed stderr
+  tail, and the run_opencode_mode wiring that activates all of them.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-podman/src/diagnostic_event_emitter.rs
+  - workspace contains crates/tillandsias-podman/src/diagnostics_stream.rs
+  - workspace contains crates/tillandsias-headless/src/main.rs
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "spawn_diagnostic_event_emitter public surface present (phase-2b)"
+    command: "grep -F 'pub fn spawn_diagnostic_event_emitter' crates/tillandsias-podman/src/diagnostic_event_emitter.rs"
+    timeout_ms: 3000
+    expected_behavior: "pub fn spawn_diagnostic_event_emitter"
+
+  - step: "EmitterState carries the start-time map (phase-2e)"
+    # The HashMap<String, i64> name → observed_at_unix is the data
+    # structure that lets Died records fill duration_seconds. Pinning
+    # both the type and the field name catches a rename that would
+    # silently lose duration_seconds from emitted exit lines.
+    command: >
+      grep -F 'struct EmitterState' crates/tillandsias-podman/src/diagnostic_event_emitter.rs
+      && grep -F 'start_times: HashMap<String, i64>' crates/tillandsias-podman/src/diagnostic_event_emitter.rs
+    timeout_ms: 3000
+    expected_behavior: "start_times: HashMap<String, i64>"
+
+  - step: "signal_name_from_exit_code helper present (phase-2f)"
+    # The POSIX 128+N decoder for signal-induced exits. Without it,
+    # signal-killed containers would still emit container_exit but
+    # never the preceding container_signal line.
+    command: >
+      grep -F 'fn signal_name_from_exit_code' crates/tillandsias-podman/src/diagnostic_event_emitter.rs
+      && grep -F 'SIGKILL' crates/tillandsias-podman/src/diagnostic_event_emitter.rs
+      && grep -F 'SIGSEGV' crates/tillandsias-podman/src/diagnostic_event_emitter.rs
+      && grep -F 'SIGTERM' crates/tillandsias-podman/src/diagnostic_event_emitter.rs
+    timeout_ms: 3000
+    expected_behavior: "SIGTERM"
+
+  - step: "route_record dispatches all five routing arms (Died/Oom/Started/Removed/CleanedUp)"
+    # Routing-table integrity: a refactor that drops a match arm would
+    # silently stop emitting some events. The action variant names
+    # below match the diagnostics.rs enum verbatim.
+    command: >
+      grep -F 'ContainerLifecycleAction::Died' crates/tillandsias-podman/src/diagnostic_event_emitter.rs
+      && grep -F 'ContainerLifecycleAction::Oom' crates/tillandsias-podman/src/diagnostic_event_emitter.rs
+      && grep -F 'ContainerLifecycleAction::Started' crates/tillandsias-podman/src/diagnostic_event_emitter.rs
+      && grep -F 'ContainerLifecycleAction::Removed' crates/tillandsias-podman/src/diagnostic_event_emitter.rs
+      && grep -F 'ContainerLifecycleAction::CleanedUp' crates/tillandsias-podman/src/diagnostic_event_emitter.rs
+    timeout_ms: 3000
+    expected_behavior: "ContainerLifecycleAction::CleanedUp"
+
+  - step: "DiagnosticsHandle::start_typed_event_stream surface present (phase-2g)"
+    # The typed stderr tail. A regression to legacy `start()` (which
+    # writes a different format to stdout) would not be caught by the
+    # formatter-shape litmus.
+    command: >
+      grep -F 'pub async fn start_typed_event_stream' crates/tillandsias-podman/src/diagnostics_stream.rs
+      && grep -F 'format_container_stderr_event' crates/tillandsias-podman/src/diagnostics_stream.rs
+      && grep -F 'event:container_stderr' crates/tillandsias-podman/src/diagnostics_stream.rs
+    timeout_ms: 3000
+    expected_behavior: "event:container_stderr"
+
+  - step: "run_opencode_mode wires both spawn helpers when --debug (phase-2c+2g)"
+    # End-to-end wiring at the launch path. Without either call, a
+    # --diagnostics run would not emit container_exit / container_stderr
+    # despite all the lower layers being in place.
+    command: >
+      grep -F 'spawn_diagnostic_event_emitter' crates/tillandsias-headless/src/main.rs
+      && grep -F 'start_typed_event_stream' crates/tillandsias-headless/src/main.rs
+    timeout_ms: 3000
+    expected_behavior: "start_typed_event_stream"
+
+  - step: "emitter-layer unit tests are attached"
+    # If any of these is renamed without updating both this litmus
+    # and the corresponding behaviour pin, a regression could ship
+    # behind a green CI run.
+    command: >
+      grep -F 'fn started_then_died_records_duration_and_evicts_entry' crates/tillandsias-podman/src/diagnostic_event_emitter.rs
+      && grep -F 'fn died_without_prior_started_has_no_duration' crates/tillandsias-podman/src/diagnostic_event_emitter.rs
+      && grep -F 'fn signal_name_from_exit_code_maps_common_signals' crates/tillandsias-podman/src/diagnostic_event_emitter.rs
+      && grep -F 'fn start_typed_event_stream_signature_pin' crates/tillandsias-podman/src/diagnostics_stream.rs
+    timeout_ms: 3000
+    expected_behavior: "start_typed_event_stream_signature_pin"
+
+observability:
+  traces:
+    - "@trace spec:runtime-diagnostics-stream"
+  expected_log: "Emitter layer (spawn helper, state, signal decoder, routing, typed stderr tail, wiring) intact"
+  log_fields:
+    spec: "runtime-diagnostics-stream"
+    test: "runtime-diagnostics-emitter-shape"
+
+rollback:
+  on_failure: >
+    A function, struct, or wiring call moved or was renamed. Cross-check
+    against plan/issues/linux-headless-spec-gaps-2026-05-27.md (gap 3
+    phases 2a–2g) and the spec scenarios under
+    openspec/specs/runtime-diagnostics-stream/spec.md. If the rename was
+    deliberate, update both the unit-test name AND this litmus' grep
+    in lockstep — never one without the other.
+  command: "grep -nE 'fn (spawn_diagnostic_event_emitter|signal_name_from_exit_code|route_record|start_typed_event_stream)|struct EmitterState' crates/tillandsias-podman/src/diagnostic_event_emitter.rs crates/tillandsias-podman/src/diagnostics_stream.rs"
