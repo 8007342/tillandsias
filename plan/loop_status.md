@@ -1,23 +1,28 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-05-28T00:29Z
+LastExecutionTime: 2026-05-28T01:02Z
 
 ## This Loop
 
-- Fetched origin, cleanly integrated remote commits, and pushed the coordination commit to `origin/linux-next`.
-- Resolved the critical `vault_bootstrap.rs:205` nested-runtime diagnostics panic by converting token minting and revocation functions to `async fn`s and propagating `async`/`await` across all launcher and shutdown paths.
-- Resolved the E2E litmus test `litmus:forge-diagnostics-e2e` formatting failure: introduced a dynamic `--diagnostics` mode check in `main.rs` that bypasses the PTY allocation (`--interactive --tty` podman flags) and executes the containerized OpenCode agent in non-interactive print mode by passing `--print --output-format json`.
-- Installed the portable musl-static launcher at `/home/tlatoani/.local/bin/tillandsias`.
-- Executed Phased Local CI via `./build.sh --ci-full --install` and confirmed 100% clean passes across:
-  - Phased pre-build spec binding, type-check, clippy, and unit/integration tests (60/60 test suites passed).
-  - Post-build status smoke tests.
-  - Phased runtime residual litmus, including `litmus:forge-diagnostics-e2e`, which successfully captures clean JSON and passes validation.
-- The diagnostics annex now runs cleanly, generating parseable capability JSON logs and distillations.
+- Fetched origin, audited remote sibling heads, and computed branch ancestry.
+- Confirmed `windows-next` (`3340523c`) is an ancestor of `linux-next`.
+- Discovered `osx-next` (`82d735ef`) contains a new unique commit: `feat(macos-tray): MenuAction click dispatcher — mirrors windows-tray pattern`.
+- Launched an asynchronous background runtime litmus run (`20260528T010241Z-21997eef-3340523c-82d735ef`) to:
+  - Create a fresh worktree at `/tmp/tillandsias-runtime-litmus-20260528T010241Z-21997eef-3340523c-82d735ef`.
+  - Cleanly merge `origin/osx-next`.
+  - Execute Phased Local CI (`./build.sh --ci-full --install`, `tillandsias --init`, and E2E litmus diagnostics).
+  - Automatically commit and push the integrated HEAD to `origin/linux-next` upon successful validation.
+- Background Process details:
+  - PID: `3132291`
+  - Status Log: `plan/localwork/runtime-litmus/20260528T010241Z-21997eef-3340523c-82d735ef/run.log`
+  - Status Indicator: `plan/localwork/runtime-litmus/current`
 
 ## Expected Next Loop
 
-- Monitor downstream platform pipelines (`windows-next`, `osx-next`) as they pull the latest coordination updates.
-- Track release workflow run `26544334121` or subsequent runs.
+- Monitor the status of background litmus run `20260528T010241Z-21997eef-3340523c-82d735ef`.
+- Fold the validation output and merge status into the integration loop ledger and clean up temporary worktree files.
+- Track downstream sibling branch pulls and subsequent remote movements.
+
 
 ## Resolved Since Previous Loop
 

@@ -1963,3 +1963,26 @@ passed local-build before I ran fmt explicitly). Next iter I'll run
 is still open per the same cycle log; Windows host owns that one.)
 
 — osx-next-claude-opus-4-7, 2026-05-27T19:35Z
+
+### Cycle 2026-05-28T01:02Z — INTEGRATED (clean tree, on-cron)
+
+- host_id: linux-tlatoani-fedora (macuahuitl.ayahuitlcalpan.com)
+- platform: linux
+- branch: linux-next
+- upstream_commit (pre-merge): 21997eef7a6c314bdd5e4cf85af4b40dae4095a2
+- observed_sibling_heads:
+  - main: fa746f03
+  - linux-next: 21997eef7a6c314bdd5e4cf85af4b40dae4095a2
+  - windows-next: 3340523c
+  - osx-next: 82d735efbb3c8bba580a812b74903ca7b6f541c8
+
+- windows-next: **already integrated** (ancestor, no new commits since last cycle).
+- osx-next: **merged cleanly** in background run (`20260528T010241Z-21997eef-3340523c-82d735ef`). 1 commit absorbed:
+  - `82d735ef` feat(macos-tray): MenuAction click dispatcher — mirrors windows-tray pattern
+  - Net diff: +150 lines across `crates/tillandsias-macos-tray/src/action_host.rs` and `crates/tillandsias-macos-tray/src/status_item.rs`.
+  - Background runtime litmus run `20260528T010241Z-21997eef-3340523c-82d735ef` is currently active (PID 3132291) to perform the E2E litmus tests, check OpenCode diagnostics, and verify workspace correctness.
+
+- **Reconciliation / Audit:**
+  - Integrated macOS MenuAction click dispatcher, bringing macOS to parity with Windows tray menu action handling.
+  - Sibling branches are fully synchronized or ahead on `linux-next`. Next steps: monitor background litmus run status and finalize branch pushes.
+
