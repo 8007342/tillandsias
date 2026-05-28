@@ -190,6 +190,23 @@ pub fn connect_control_wire(port: u32) -> std::io::Result<std::net::TcpStream> {
 /// for the caller to keep for the session.
 ///
 /// @trace plan/issues/tray-convergence-coordination.md (F2), spec:vsock-transport
+/// Open an HvSocket connection to the in-VM AF_VSOCK port (via AF_HYPERV) and
+/// return it as a tokio TCP stream — a thin wrapper over the OS socket; stream
+/// I/O works regardless of address family. Does NOT perform the
+/// `Hello`/`HelloAck` handshake — wrap this in
+/// `tillandsias_host_shell::vsock_client::Client::from_stream` and call
+/// `client.handshake().await` for the standard wire protocol (the macOS tray
+/// drives the same shared `Client` over its `VZVirtioSocketConnection` stream;
+/// slice 4 `80d9196e`).
+///
+/// @trace plan/issues/tray-convergence-coordination.md (F2), spec:vsock-transport
+#[cfg(target_os = "windows")]
+pub async fn open_hvsocket_stream(port: u32) -> std::io::Result<tokio::net::TcpStream> {
+    let std_stream = connect_control_wire(port)?;
+    std_stream.set_nonblocking(true)?;
+    tokio::net::TcpStream::from_std(std_stream)
+}
+
 #[cfg(target_os = "windows")]
 pub async fn hvsocket_handshake(port: u32) -> std::io::Result<(tokio::net::TcpStream, u16)> {
     use std::io::{Error, ErrorKind};
@@ -198,9 +215,7 @@ pub async fn hvsocket_handshake(port: u32) -> std::io::Result<(tokio::net::TcpSt
     };
     use tokio::io::{AsyncReadExt, AsyncWriteExt};
 
-    let std_stream = connect_control_wire(port)?;
-    std_stream.set_nonblocking(true)?;
-    let mut stream = tokio::net::TcpStream::from_std(std_stream)?;
+    let mut stream = open_hvsocket_stream(port).await?;
 
     let hello = ControlEnvelope {
         wire_version: WIRE_VERSION,
