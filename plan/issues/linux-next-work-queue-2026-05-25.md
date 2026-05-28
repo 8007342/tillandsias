@@ -16,6 +16,7 @@ This file is the cross-host advertisement — terse, dated, SHA-anchored.
 
 ## Recent entries (reverse chronological)
 
+- 2026-05-28T23:51Z  (no-op)   defer — integration cron at 23:43Z (8 min ago, inside 10-min defer window). No slice taken; cron writes need to settle. Agent `linux-tlatoani-fedora-claude-opus-2026-05-28T23:51Z`.
 - 2026-05-28T23:23Z  `4eb0baff`  **control-socket convergence packet COMPLETE** — item 3 wires `decide_route` into `vsock_server::serve_connection` (async tokio path) as a pre-filter to the existing variant-match. Three DispatchOutcome arms with transport-specific Error messages; the matrix is now the single source of truth for both unix + vsock dispatchers. WIRE_VERSION unchanged at 2.
 - 2026-05-28T22:54Z  `aeb5499a`  control-socket convergence packet item 2: wire `decide_route` into `tray::handle_control_connection` (sync unix path). Three DispatchOutcome arms; matrix-Handle-but-no-handler-yet variants now produce a descriptive Error message referencing the convergence packet instead of the prior generic one. Matrix tests unchanged + green.
 - 2026-05-28T22:27Z  `5c67ddb9`  control-socket convergence packet item 1: new `crates/tillandsias-headless/src/control_dispatch.rs` with pure `decide_route(msg, transport) -> DispatchOutcome`. Encodes Q1/Q2/Q4 answers verbatim from the convergence packet; 4 unit tests pin the full unix + vsock routing matrices. `#[allow(dead_code)]` until follow-on slice wires the two existing dispatchers.
