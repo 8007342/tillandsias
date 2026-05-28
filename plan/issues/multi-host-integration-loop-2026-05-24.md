@@ -51,6 +51,25 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-28T11:43Z — MERGED windows-next (`--diagnose` release-tag + manifest-pin surface) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `bf25618f` (merge commit)
+- observed_sibling_heads: main=`fa746f03` · linux-next(pre-merge)=`5a7d7076` ·
+  windows-next=`4fff31af` · osx-next=`97bb472a`
+- **windows-next: merged+tested+pushed.** 1-commit delta `4fff31af`
+  (feat: `--diagnose` surfaces release tag + manifest pin — extends the
+  windows-tray support-diagnostic landed last cycle to include the
+  installed release tag + recipe manifest SHAs in its health report).
+  Two windows-tray files (notify_icon.rs, wsl_lifecycle.rs) — all
+  sibling-owned scope. Clean auto-merge.
+- osx-next: no-op (HEAD `97bb472a` is BEHIND linux-next at `5a7d7076`;
+  `linux-next..origin/osx-next` is empty so the integration steward has
+  nothing to pull).
+- Tests: PASSED. `./build.sh --check` + `--test` green.
+- Spec/methodology/plan drift: none. Diff confined to
+  `crates/tillandsias-windows-tray/`.
+
 ### Cycle 2026-05-28T11:03:00Z — VALIDATED & SUCCEEDED (clean tree, E2E runtime litmus pass, first diagnostics capture) ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
