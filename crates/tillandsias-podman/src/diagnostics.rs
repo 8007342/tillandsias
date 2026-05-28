@@ -31,6 +31,15 @@ pub enum ContainerLifecycleAction {
     StopRequested,
     Killed,
     Died,
+    /// Killed by the kernel OOM killer. Podman events emits this as
+    /// `Status=oom` separately from `died` (a Died record typically
+    /// follows). Routed to `event:resource_exhaustion` by the
+    /// diagnostic-event emitter so the orchestrator can distinguish
+    /// "container exited with non-zero" from "kernel killed it for
+    /// breaching its memory cgroup limit".
+    ///
+    /// @trace spec:runtime-diagnostics-stream (Resource event)
+    Oom,
     Removed,
     CleanedUp,
     Observed,
@@ -45,6 +54,7 @@ impl fmt::Display for ContainerLifecycleAction {
             Self::StopRequested => "stop-requested",
             Self::Killed => "killed",
             Self::Died => "died",
+            Self::Oom => "oom",
             Self::Removed => "removed",
             Self::CleanedUp => "cleaned-up",
             Self::Observed => "observed",

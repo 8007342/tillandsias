@@ -21,16 +21,20 @@
 //!   it would require start→exit pairing state that the lifecycle stream
 //!   doesn't carry; the formatter already accepts `None` for this field.
 //!
+//! - [`ContainerLifecycleAction::Oom`] → `event:resource_exhaustion`
+//!   with `resource=memory_oom`. Podman emits `Status=oom` as a
+//!   separate event from `died` (both fire when the kernel reaps a
+//!   container for breaching its memory cgroup limit). `limit_bytes`
+//!   is left `None` because podman events don't carry the cgroup
+//!   limit; an inspect-lookup pass could fill it but adds latency on
+//!   what should be a fast event-stream path.
+//!
 //! What this module DOESN'T emit yet:
 //!
 //! - `event:container_signal`: podman events `Status=kill` records the
 //!   kill REQUEST, not the signal the kernel delivered, so we can't
 //!   accurately fill `signal=…`. Routing for this lands when there's a
 //!   separate source for the signal name.
-//! - `event:resource_exhaustion`: podman events emits `Status=oom` which
-//!   we don't yet parse — a follow-on slice will extend
-//!   `parse_podman_lifecycle_record` to handle OOM and pipe it through
-//!   here.
 //! - `event:container_stderr`: needs a separate `podman logs -f` tail
 //!   per container (the `DiagnosticsHandle` path), not the events
 //!   stream this module wraps.
@@ -38,7 +42,9 @@
 use tokio::sync::mpsc;
 use tracing::debug;
 
-use crate::client::{emit_diagnostic_event, format_container_exit_event};
+use crate::client::{
+    emit_diagnostic_event, format_container_exit_event, format_resource_exhaustion_event,
+};
 use crate::diagnostics::{ContainerLifecycleAction, ContainerLifecycleRecord};
 use crate::events::PodmanEventStream;
 
@@ -109,15 +115,35 @@ async fn run_emitter(prefix: String) {
 /// the lifecycle-tracker path (consumed by UI state); the spec-mandated
 /// typed events don't have backing data for them yet (see module doc).
 fn route_record(record: &ContainerLifecycleRecord) {
-    if record.action == ContainerLifecycleAction::Died {
-        let body = format_container_exit_event(
-            &record.container_name,
-            record.exit_code.unwrap_or(-1),
-            // duration_seconds: needs start→exit pairing state;
-            // tracked as a follow-on slice.
-            None,
-        );
-        emit_diagnostic_event(true, "event:container_exit", &record.container_name, &body);
+    match record.action {
+        ContainerLifecycleAction::Died => {
+            let body = format_container_exit_event(
+                &record.container_name,
+                record.exit_code.unwrap_or(-1),
+                // duration_seconds: needs start→exit pairing state;
+                // tracked as a follow-on slice.
+                None,
+            );
+            emit_diagnostic_event(true, "event:container_exit", &record.container_name, &body);
+        }
+        ContainerLifecycleAction::Oom => {
+            // resource=memory_oom matches the spec scenario literal.
+            // limit_bytes is None because podman events don't carry it;
+            // a follow-on inspect-lookup pass could fill it.
+            let body = format_resource_exhaustion_event(&record.container_name, "memory_oom", None);
+            emit_diagnostic_event(
+                true,
+                "event:resource_exhaustion",
+                &record.container_name,
+                &body,
+            );
+        }
+        // The other actions (Started/StopRequested/Killed/Removed/
+        // CleanedUp/Observed/Disappeared) don't map to a spec-mandated
+        // typed event today. `event:container_launch state=…` lines are
+        // emitted from the launch path itself (emit_launch_event in
+        // client.rs), NOT from the post-launch events stream.
+        _ => {}
     }
 }
 
@@ -163,13 +189,26 @@ mod tests {
         route_record(&died_record("tillandsias-x-forge", None));
     }
 
-    /// Non-Died records must NOT trigger the exit-event arm. We can't
-    /// hook the eprintln directly here; instead we verify dispatch is
-    /// exhaustive on `ContainerLifecycleAction` so any future addition
-    /// has to be considered. A bare `_ => {}` would let new variants
-    /// silently miss routing.
+    /// An Oom record MUST route to the resource-exhaustion arm. Pinned
+    /// separately from Died so a future routing-table edit can't drop
+    /// Oom silently.
     #[test]
-    fn route_record_other_actions_no_panic() {
+    fn route_record_handles_oom_without_panic() {
+        let mut r = died_record("tillandsias-x-forge", None);
+        r.action = ContainerLifecycleAction::Oom;
+        r.raw_status = Some("oom".into());
+        route_record(&r);
+    }
+
+    /// Non-routing records (everything except Died and Oom) must NOT
+    /// trigger any emit arm. We can't hook the eprintln directly here;
+    /// instead we verify dispatch is exhaustive on
+    /// `ContainerLifecycleAction` by enumerating every non-routing
+    /// variant. A bare `_ => {}` would let new variants silently miss
+    /// routing — adding a new variant in diagnostics.rs forces a
+    /// decision here.
+    #[test]
+    fn route_record_non_routing_actions_no_panic() {
         let base = died_record("tillandsias-x", None);
         for action in [
             ContainerLifecycleAction::Created,

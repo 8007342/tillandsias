@@ -210,6 +210,16 @@ bounded slices from. Each item is sized for one loop iteration. NOT for siblings
   reads from `plan/diagnostics/`. `run_observatorium_mode` wiring is
   a follow-on slice; the lifecycle there is more complex (host-side
   browser open) and not the user's stated forge-diagnostics priority.
+- **GAP 3 PHASE-2D** (OOM event): added
+  `ContainerLifecycleAction::Oom` to the parser action table and the
+  `Display` impl; `parse_podman_lifecycle_record` now maps
+  `Status=oom` → `(Oom, ContainerState::Stopped)`. The diagnostic
+  event emitter routes Oom → `format_resource_exhaustion_event` with
+  `resource=memory_oom`, `limit_bytes=None` (podman events don't
+  carry the cgroup limit; a follow-on inspect-lookup could fill it).
+  Two new unit tests: parser maps `Status=oom` correctly, and the
+  emitter routes Oom without panicking. The non-routing exhaustive
+  test was updated to reflect that Died+Oom both now route.
   (Next diagnostics gap: GAP 2 / GAP 3 PHASE-2 — wire the live podman
   events parser to emit_diagnostic_event when `debug` is on.)
 

@@ -453,6 +453,13 @@ fn parse_podman_lifecycle_record(
         ),
         "kill" => (ContainerLifecycleAction::Killed, ContainerState::Stopping),
         "died" => (ContainerLifecycleAction::Died, ContainerState::Stopped),
+        // Podman emits `Status=oom` as a SEPARATE event from `died`
+        // when the kernel OOM killer reaps a container — both fire,
+        // typically in close succession. We surface it as a distinct
+        // typed event downstream (event:resource_exhaustion with
+        // resource=memory_oom) so operators can distinguish a clean
+        // non-zero exit from a memory-limit kill.
+        "oom" => (ContainerLifecycleAction::Oom, ContainerState::Stopped),
         "remove" => (ContainerLifecycleAction::Removed, ContainerState::Stopped),
         "cleanup" => (ContainerLifecycleAction::CleanedUp, ContainerState::Stopped),
         _ => return None,
@@ -693,6 +700,23 @@ mod tests {
         let json = r#"{"Name":"tillandsias-x","Status":"died","Type":"container","Time":1}"#;
         let record = parse_podman_lifecycle_record(json, "tillandsias-").unwrap();
         assert_eq!(record.action, ContainerLifecycleAction::Died);
+        assert_eq!(record.exit_code, None);
+    }
+
+    /// `Status=oom` is its own podman event (fires alongside `died`
+    /// when the kernel reaps a container for breaching its memory
+    /// cgroup limit). It maps to the dedicated `Oom` action so the
+    /// downstream emitter can produce `event:resource_exhaustion`
+    /// rather than a generic `event:container_exit`.
+    #[test]
+    fn parse_oom_event() {
+        let json = r#"{"Name":"tillandsias-myproject-forge","Status":"oom","Type":"container","Time":1711400005,"ContainerExitCode":137}"#;
+        let record = parse_podman_lifecycle_record(json, "tillandsias-").unwrap();
+        assert_eq!(record.action, ContainerLifecycleAction::Oom);
+        assert_eq!(record.new_state, ContainerState::Stopped);
+        assert_eq!(record.raw_status.as_deref(), Some("oom"));
+        // We only extract exit_code on Died records — oom is a separate
+        // observation; the Died event that follows will carry the code.
         assert_eq!(record.exit_code, None);
     }
 
