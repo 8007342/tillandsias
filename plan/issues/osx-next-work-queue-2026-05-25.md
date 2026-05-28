@@ -2571,3 +2571,31 @@ step 5 lands.
   human report; serde_json formats the DiagnoseReport struct.
 - Delivered proactively via SendUserFile.
 - Streak: 0 (productive iter). Next macOS iter eligible at ~17:00Z.
+
+### event: macOS slice 15 — --diagnose --json schema pins + tray-diagnose.sh — 2026-05-28T17:30Z
+
+- Commit `af14f21c` mirrors windows-tray's `e96d1fc8`. Two
+  coordinated pieces locking in the --diagnose --json schema:
+    1. Four unit tests pin the JSON shape so renames/removes break
+       the build (`diagnose_report_json_keys_locked`,
+       `diagnose_report_none_pin_serialises_as_null`,
+       `diagnose_report_none_bytes_serialise_as_null`,
+       `exit_code_provisioned_zero_degraded_two`).
+    2. `scripts/tray-diagnose.sh` — a one-shot bash consumer
+       that runs the tray's `--diagnose --json`, parses with jq,
+       prints colorized PASS/FAIL per check, exits 0/2/1.
+       Mirrors `scripts/tray-diagnose.ps1` byte-for-byte where the
+       shell concepts overlap (auto-discovery search order, exit
+       codes, PASS/FAIL line shape, color rendering).
+- Subtle correctness fix vs. the ps1: bash needs `set +e` around
+  the `--diagnose --json` invocation because `set -e` would treat
+  the legitimate degraded-exit-2 as a script crash. PowerShell's
+  `&` operator doesn't trip on non-zero exit; bash does.
+- Verified live: `tray-diagnose.sh` on the dev build shows 4 PASS
+  checks (Version, Release tag, Manifest pin, rootfs.img present) +
+  4 FAIL checks (Bundle outside .app, vmlinuz/initramfs missing,
+  Provisioned), DEGRADED rendering with exit 2.
+- Resets the noop streak — file deleted.
+- Tests + lint clean: macos-tray 35/35 (+4); clippy -D warnings
+  clean; fmt clean.
+- Streak: 0 (productive iter). Next macOS iter eligible at ~18:00Z.
