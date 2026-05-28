@@ -328,6 +328,76 @@ async fn handle_connection(
                         return;
                     }
                 };
+
+                // Convergence packet item 3: consult `control_dispatch::
+                // decide_route` for the routing decision. The matrix lives
+                // in the canonical module so unix + vsock can never
+                // silently disagree. Unsupported / ResponseOnly arms write
+                // a precise Error and continue the loop; the existing
+                // variant-match below handles the Handle case.
+                //
+                // @trace plan/issues/control-socket-protocol-convergence-2026-05-25.md
+                //   (item 3 of 3)
+                let routing = crate::control_dispatch::decide_route(
+                    &env.body,
+                    crate::control_dispatch::TransportKind::Vsock,
+                );
+                match routing {
+                    crate::control_dispatch::DispatchOutcome::Unsupported => {
+                        debug!(
+                            spec = "vsock-transport",
+                            kind = env.body.kind(),
+                            "rejecting vsock frame: matrix says Unsupported"
+                        );
+                        let err = ControlEnvelope {
+                            wire_version: WIRE_VERSION,
+                            seq: env.seq,
+                            body: ControlMessage::Error {
+                                seq_in_reply_to: Some(env.seq),
+                                code: ErrorCode::Unsupported,
+                                message: format!(
+                                    "variant {} not supported on the in-VM vsock transport",
+                                    env.body.kind()
+                                ),
+                            },
+                        };
+                        if write_envelope(&mut stream, &err).await.is_err() {
+                            #[cfg(unix)]
+                            pty_store.shutdown_all().await;
+                            return;
+                        }
+                        continue;
+                    }
+                    crate::control_dispatch::DispatchOutcome::ResponseOnly => {
+                        debug!(
+                            spec = "vsock-transport",
+                            kind = env.body.kind(),
+                            "rejecting vsock frame: matrix says ResponseOnly (server-only)"
+                        );
+                        let err = ControlEnvelope {
+                            wire_version: WIRE_VERSION,
+                            seq: env.seq,
+                            body: ControlMessage::Error {
+                                seq_in_reply_to: Some(env.seq),
+                                code: ErrorCode::Unsupported,
+                                message: format!(
+                                    "variant {} is a response-shape frame and cannot open a connection",
+                                    env.body.kind()
+                                ),
+                            },
+                        };
+                        if write_envelope(&mut stream, &err).await.is_err() {
+                            #[cfg(unix)]
+                            pty_store.shutdown_all().await;
+                            return;
+                        }
+                        continue;
+                    }
+                    crate::control_dispatch::DispatchOutcome::Handle => {
+                        // Fall through to the variant-match below.
+                    }
+                }
+
                 match env.body {
             ControlMessage::VmStatusRequest { seq } => {
                 // l4: read real lifecycle phase + check podman socket.
@@ -465,12 +535,17 @@ async fn handle_connection(
                 // emitted by the pump task on child exit.
                 pty_store.close_host_initiated(session_id).await;
             }
-            // Per plan/issues/control-socket-protocol-convergence-2026-05-25.md:
-            // unhandled variants must reply with an explicit Error frame
-            // (Unsupported) instead of silently logging and continuing.
-            // Clients otherwise hang waiting for a reply they will never get.
+            // Convergence-packet pre-filter caught Unsupported and
+            // ResponseOnly above; reaching this arm means the matrix
+            // says Handle but no handler exists yet. Surface the gap
+            // with a descriptive Error so the missing-handler case is
+            // visibly distinct from a wire-format rejection.
             other => {
-                debug!(spec = "vsock-transport", kind = other.kind(), "rejecting unsupported vsock frame");
+                debug!(
+                    spec = "vsock-transport",
+                    kind = other.kind(),
+                    "matrix says Handle but no handler implemented yet"
+                );
                 let err = ControlEnvelope {
                     wire_version: WIRE_VERSION,
                     seq: env.seq,
@@ -478,7 +553,8 @@ async fn handle_connection(
                         seq_in_reply_to: Some(env.seq),
                         code: ErrorCode::Unsupported,
                         message: format!(
-                            "variant {} not handled by the in-VM vsock dispatcher",
+                            "variant {} is on the vsock matrix but the handler is not implemented yet \
+                             (see plan/issues/control-socket-protocol-convergence-2026-05-25.md item 3)",
                             other.kind()
                         ),
                     },

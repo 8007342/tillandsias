@@ -293,3 +293,54 @@ Item 3 (wire decide_route into vsock_server::serve_connection)
 remains the next slice — same pattern, but the dispatcher there is
 async tokio and threads through pty_store + VmStateHandle, so it
 gets its own commit.
+
+## Update 2026-05-28T23:25Z — vsock dispatcher wired (item 3 of 3) — packet COMPLETE
+
+`vsock_server::serve_connection` now consults
+`control_dispatch::decide_route(&env.body, TransportKind::Vsock)` as
+a pre-filter before the existing variant-match. Three outcome arms:
+
+  * `Unsupported` → write Error{Unsupported} with "not supported on
+    the in-VM vsock transport" and `continue` the read loop. Pty
+    shutdown happens on write failure as before.
+  * `ResponseOnly` → write Error{Unsupported} with "is a response-
+    shape frame and cannot open a connection" — precise diagnostic
+    for a peer that sends e.g. HelloAck inbound.
+  * `Handle` → fall through to the existing variant-match (with all
+    its real handlers: VmStatusRequest, EnumerateLocalProjects,
+    CloudRefreshRequest, VmShutdownRequest, PtyOpen/Data/Resize/
+    Close).
+
+The inner `other =>` arm's role is now "matrix says Handle but no
+handler exists yet" — surface that gap with a descriptive Error
+referencing this packet rather than the prior generic "not handled
+by the in-VM vsock dispatcher" message.
+
+**Convergence packet status: COMPLETE.** Items 1-3 all shipped:
+
+  1. `5c67ddb9` — pure routing matrix module (decide_route + 4
+     matrix tests)
+  2. `aeb5499a` — unix-socket dispatcher wires the matrix
+  3. `<this commit>` — vsock dispatcher wires the matrix
+
+Sibling hosts: the wire format is unchanged (WIRE_VERSION still 2).
+The behaviour change is operator-visible: variants that produce
+Error{Unsupported} now have transport-specific messages identifying
+WHICH transport rejected the variant and (where applicable) the
+follow-on slice expected to ship the handler. Symmetric variants
+per the Q1/Q2/Q4 matrix are guaranteed to be handled equivalently
+across both transports — the matrix is now the single source of
+truth, and adding a new ControlMessage variant updates one place
+(decide_route + the 4 unit-test arms).
+
+Open follow-ons (deferred since this packet's slices stayed
+bounded):
+
+  * Q3 dispatcher sync ↔ async unification (Linux preference: keep
+    decide_route sync — which it is — and tokio-port the unix
+    listener as a separate change).
+  * Handler bodies for matrix-Handle variants that currently fall
+    through to the "matrix says Handle but no handler yet" arm
+    (mostly the unix path's VmStatusRequest / EnumerateLocalProjects
+    / CloudRefreshRequest / McpFrame — Q2/Q4 say unix should handle
+    these too).
