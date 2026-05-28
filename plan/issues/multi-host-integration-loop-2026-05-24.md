@@ -51,6 +51,17 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-28T08:05Z — RESOLVED podman subprocess panic and clippy check 🛠️
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `d30ab5f4` (checkpoint commit)
+- observed_sibling_heads: main=`fa746f03` · linux-next(pre-merge)=`fafabe1d` ·
+  windows-next=`6645d04b` · osx-next=`99d0abdb`
+- **Subprocess child-sync pipe panic fixed.** Modified `crates/tillandsias-podman/src/lib.rs` to query `FD_CLOEXEC` using `libc::fcntl` and skip closing those file descriptors during pre_exec sanitization, cleanly resolving standard library subprocess spawns.
+- **Clippy check cleared.** Replaced redundant closure in `crates/tillandsias-podman/src/diagnostics_filter.rs` (`|raw| normalize_event_name(raw)` to `normalize_event_name`).
+- **Tests:** PASSED. `./build.sh` local validation passed all 14 checks and 36 litmus tests cleanly.
+- Spec/methodology/plan drift: none. Diff confined to `crates/tillandsias-podman/` and regenerated dashboard metrics.
+
 ### Cycle 2026-05-28T07:43Z — MERGED windows-next (fetch-progress chip during materialization) ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next

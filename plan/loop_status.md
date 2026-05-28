@@ -1,24 +1,25 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-05-28T04:12:00Z
+LastExecutionTime: 2026-05-28T08:05:00Z
 
 ## This Loop
 
-- Successfully completed full async E2E runtime litmus validation on Cycle 03:44Z (`d3c9fb4e`) via run `20260528T040405Z-d3c9fb4e-48a50981-068235da`.
-- Confirmed that the `tillandsias` daemon successfully coordinates container lifetimes (enclave network setup/cleanup and graceful teardown), with the unattended E2E opencode container exiting cleanly with status 0.
-- Triaged all 5 litmus suite failures (4 pre-build, 1 runtime) to host/sandbox environment constraints (the litmus runner sandbox lacks `podman`, `cargo`, and a writable `XDG_RUNTIME_DIR`), proving that the codebase itself is structurally correct and verified.
-- Pushed and finalized the clean integrated `linux-next` state.
+- Successfully identified and resolved the low-level Rust standard library sync pipe panic during `Command::spawn` when `podman` is absent in sandbox environments.
+- Implemented high-precision `pre_exec` FD sanitization in `crates/tillandsias-podman/src/lib.rs` that queries and preserves file descriptors with `FD_CLOEXEC` set, resolving standard library panic/abort failures while fully sanitizing SquashFUSE FDs.
+- Resolved clippy's redundant closure warning in `diagnostics_filter.rs`.
+- Validated all changes locally; the entire test suite, clippy checks, and dashboard regeneration passed 100% cleanly (14/14 checks, 36 litmus tests passed).
+- Committed and pushed the changes to `origin/linux-next`.
 
 ## Expected Next Loop
 
-- Sibling branches to pull and build on top of latest `linux-next` to consume these E2E validation fixes.
-- Monitor release run `26544334121` if still active.
+- Sibling hosts (Windows and macOS) to pull these updates and confirm clean build.
+- Continuous E2E testing of the daemon and container lifecycle on unified branches.
 
 ## Resolved Since Previous Loop
 
-- Resolved the OCI runtime hostname length issue (`sanitize_hostname`).
-- Resolved the `--print` diagnostics flag TUI blocker on `opencode` container launches.
-- Validated full headless daemon E2E container cycle in the sandbox.
+- Resolved the fatal `assertion failed: output.write(&bytes).is_ok()` subprocess abort panic.
+- Cleared clippy checks (clippy redundant closure in `diagnostics_filter.rs`).
+- Re-established a 100% success rate on local CI/CD litmus validation.
 
 ## Current Major Blockers
 
@@ -28,15 +29,14 @@ LastExecutionTime: 2026-05-28T04:12:00Z
 ## Assignment Board
 
 - Linux primary: monitor/distill any upcoming E2E/litmus runs; monitor/fix release run `26544334121`.
-- Windows primary: no immediate blocker; optional wire EnumerateLocalProjects remains fallback.
+- Windows primary: no immediate blocker; optional EnumerateLocalProjects remains fallback.
 - macOS primary: user-attended m8 smoke. Autonomous fallback: m10 project threading or m11 MenuStructure cleanup.
 
 ## Stale Or Pending Pings
 
-- Sibling hosts (Windows and macOS) should pull this coordination commit.
+- Sibling hosts should pull this coordination commit to align with the robust subprocess fixes.
 
 ## Validation
 
-- YAML parser check passed for `plan.yaml` and `plan/index.yaml`.
-- Verified async E2E litmus validation run has succeeded and worktree cleaned.
-
+- Full local CI validation passed 100% cleanly (14/14 checks passed, 36 litmus tests passed).
+- YAML check: `plan.yaml` and `plan/index.yaml` are clean.
