@@ -284,6 +284,20 @@ bounded slices from. Each item is sized for one loop iteration. NOT for siblings
   the existing `litmus-runtime-diagnostics-typed-events-shape`
   (formatter layer) and `litmus-diagnostics-filter-env-shape`
   (env-var layer).
+- **GAP 5 PHASE-2** (ring buffer + backpressure log): the records
+  channel in `run_emitter` is now sized at 10 000 per
+  spec:runtime-diagnostics-stream "Terminal blocked" max. A new
+  `BackpressureMeter { threshold, above: bool }` watches the in-
+  flight depth (`capacity - sender.capacity()`) on every recv;
+  when the depth crosses 100 (rising edge only, per spec "Event
+  rate limit") it emits a single `warn` line with
+  `event_buffer_depth = N`. State machine pinned by three unit
+  tests: rising-crossing logs once, sustained-high stays quiet,
+  drop-then-rise logs again; `depth = threshold` is NOT "above"
+  (strict `> 100`); depth=0 is silent (guards integer
+  underflow). spec permits dropping oldest on overflow but does
+  not require it — tokio mpsc's await-on-full is the simpler
+  honest backpressure signal.
   (Next diagnostics gap: GAP 2 / GAP 3 PHASE-2 — wire the live podman
   events parser to emit_diagnostic_event when `debug` is on.)
 

@@ -59,7 +59,7 @@
 use std::collections::HashMap;
 
 use tokio::sync::mpsc;
-use tracing::debug;
+use tracing::{debug, warn};
 
 use crate::client::{
     emit_diagnostic_event, format_container_exit_event, format_container_signal_event,
@@ -68,13 +68,22 @@ use crate::client::{
 use crate::diagnostics::{ContainerLifecycleAction, ContainerLifecycleRecord};
 use crate::events::PodmanEventStream;
 
-/// Channel buffer for the records sink. The diagnostic emitter is a
-/// best-effort observability path — if the consumer falls behind, we
-/// prefer to drop on backpressure rather than stall the upstream parse
-/// loop. 256 is plenty for an interactive `--diagnostics` session;
-/// gap-5 phase-2 (bounded ring buffer at 10K with backpressure logging)
-/// is a separate spec-mandated layer that wraps this channel.
-const RECORDS_CHANNEL_CAPACITY: usize = 256;
+/// Channel buffer for the records sink. spec:runtime-diagnostics-stream
+/// "Terminal blocked" scenario pins the maximum at 10K events; a
+/// tokio mpsc with this bound IS the ring buffer for our purposes
+/// (FIFO, awaits on the sender side when full — the spec permits
+/// dropping oldest but does not require it; awaiting is the simpler
+/// honest backpressure signal).
+///
+/// Gap-5 phase-2 (this slice).
+const RECORDS_CHANNEL_CAPACITY: usize = 10_000;
+
+/// Threshold per spec:runtime-diagnostics-stream "Event rate limit":
+/// log `event_buffer_depth = N` when the in-flight depth crosses this
+/// value. We surface ONE rising-edge log per crossing (not one per
+/// arrival above the threshold) so a sustained-high session doesn't
+/// drown stderr in backpressure messages.
+const BACKPRESSURE_LOG_THRESHOLD: usize = 100;
 
 /// Spawn the live diagnostic-event emitter. Returns `None` when
 /// `enabled` is false (caller passes the `debug` flag verbatim, so a
@@ -104,6 +113,7 @@ pub fn spawn_diagnostic_event_emitter(
 
 async fn run_emitter(prefix: String) {
     let (tx, mut rx) = mpsc::channel::<ContainerLifecycleRecord>(RECORDS_CHANNEL_CAPACITY);
+    let sender_for_depth = tx.clone();
     let stream = PodmanEventStream::new(&prefix);
     // The stream task owns the sender; when this routing loop drops its
     // half (or this task is aborted), the stream task observes the
@@ -117,7 +127,21 @@ async fn run_emitter(prefix: String) {
     );
 
     let mut state = EmitterState::default();
+    let mut meter = BackpressureMeter::new(BACKPRESSURE_LOG_THRESHOLD);
     while let Some(record) = rx.recv().await {
+        // Approximate the in-flight depth as
+        // `total_capacity - available_capacity_on_sender_side`. This
+        // counts items the producer has sent but the consumer (this
+        // loop) hasn't pulled off the channel yet. Cheap atomic load.
+        let in_flight = RECORDS_CHANNEL_CAPACITY.saturating_sub(sender_for_depth.capacity());
+        if let Some(log_depth) = meter.observe(in_flight) {
+            warn!(
+                spec = "runtime-diagnostics-stream",
+                event_buffer_depth = log_depth,
+                threshold = BACKPRESSURE_LOG_THRESHOLD,
+                "diagnostic event buffer backpressure (depth > threshold)"
+            );
+        }
         route_record(&mut state, &record);
     }
 
@@ -157,6 +181,50 @@ fn signal_name_from_exit_code(code: i32) -> Option<String> {
         n => return Some(format!("SIG{n}")),
     };
     Some(name.to_string())
+}
+
+/// Rising-edge backpressure detector. Per
+/// spec:runtime-diagnostics-stream "Event rate limit", we SHOULD log
+/// `event_buffer_depth = N` when the buffer exceeds the threshold —
+/// once per rising crossing, not once per arrival above threshold,
+/// so a sustained-high session doesn't drown stderr in warnings.
+///
+/// State machine:
+///   below threshold + observe(below)  → no log
+///   below threshold + observe(above)  → log + transition above
+///   above threshold + observe(above)  → no log (still above)
+///   above threshold + observe(below)  → no log + transition below
+///
+/// Pure value type. `observe(depth)` returns `Some(depth)` when a
+/// rising crossing happens, `None` otherwise.
+///
+/// @trace spec:runtime-diagnostics-stream (Event rate limit)
+#[derive(Debug)]
+struct BackpressureMeter {
+    threshold: usize,
+    above: bool,
+}
+
+impl BackpressureMeter {
+    fn new(threshold: usize) -> Self {
+        Self {
+            threshold,
+            above: false,
+        }
+    }
+
+    fn observe(&mut self, depth: usize) -> Option<usize> {
+        if depth > self.threshold {
+            if !self.above {
+                self.above = true;
+                return Some(depth);
+            }
+            None
+        } else {
+            self.above = false;
+            None
+        }
+    }
 }
 
 /// Per-session state the router carries across record arrivals — today
@@ -460,6 +528,49 @@ mod tests {
         let mut state = EmitterState::default();
         let died = died_record("tillandsias-x-forge", Some(137));
         route_record(&mut state, &died);
+    }
+
+    /// gap-5 phase-2: `BackpressureMeter` logs ONCE on rising
+    /// crossing of the threshold, not once per arrival above. State
+    /// machine pinned: below→below = silent, below→above = log,
+    /// above→above = silent, above→below = silent (just transitions
+    /// down).
+    #[test]
+    fn backpressure_meter_logs_only_on_rising_crossing() {
+        let mut m = BackpressureMeter::new(100);
+        // below → below: silent
+        assert_eq!(m.observe(50), None);
+        assert_eq!(m.observe(99), None);
+        // below → above: log
+        assert_eq!(m.observe(101), Some(101));
+        // above → above (still above): silent
+        assert_eq!(m.observe(200), None);
+        assert_eq!(m.observe(150), None);
+        // above → below: silent (no "all clear" log; the threshold
+        // is one-directional in the spec).
+        assert_eq!(m.observe(80), None);
+        // below → above again: log again
+        assert_eq!(m.observe(120), Some(120));
+    }
+
+    /// gap-5 phase-2: depth EXACTLY at threshold is NOT "above" —
+    /// the spec says `> 100`, not `>= 100`. Avoid spamming on a
+    /// steady-state stream sitting at the boundary.
+    #[test]
+    fn backpressure_meter_threshold_is_strictly_greater() {
+        let mut m = BackpressureMeter::new(100);
+        assert_eq!(m.observe(100), None);
+        assert_eq!(m.observe(100), None);
+        assert_eq!(m.observe(101), Some(101));
+    }
+
+    /// gap-5 phase-2: depth=0 below a non-zero threshold is silent —
+    /// guards against an integer underflow path in callers computing
+    /// depth from capacity subtraction.
+    #[test]
+    fn backpressure_meter_zero_depth_is_silent() {
+        let mut m = BackpressureMeter::new(100);
+        assert_eq!(m.observe(0), None);
     }
 
     /// gap-3 phase-2e: multiple containers tracked independently —
