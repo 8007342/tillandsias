@@ -37,11 +37,9 @@ plan:
     doc_debt_payoff_status: "Completed 2026-05-16; plan/index stale status corrected 2026-05-24"
     recent_work_audit_status: "Completed and verified 2026-05-24: git-mirror safe refspec spec/litmus, Vault Phase 6 default spec, multi-host methodology, and Markdown distillation refreshed"
     multi_host_coordination_status: >
-      Active 2026-05-28T14:03Z: origin/linux-next is at 2b26f0d2, which is
+      Active 2026-05-28T14:14Z: origin/linux-next is at 2b26f0d2, which is
       fully integrated with origin/windows-next (8992652a) and origin/osx-next (982560ba).
-      The last async runtime litmus validation run (stale-push from 13:04:08Z) completed with SUCCESS.
-      A new async validation run 20260528T140323Z-2b26f0d2-8992652a-982560ba was successfully
-      launched in the background to exercise the newly integrated tree.
+      The last async runtime litmus validation run 20260528T140323Z-2b26f0d2-8992652a-982560ba completed with SUCCESS.
       Current blockers include macOS m8 user-attended smoke, and the pending release workflow run 26544334121.
     markdown_distillation_status: "Active 2026-05-24: ad hoc Markdown is intake only; retained top-level/tool-local reports must be tombstone pointers to specs, cheatsheets, methodology, or plan"
     methodology_reconciliation_status: "Completed 2026-05-19: OpenCode Web launch specs, cheatsheets, CA generation, overlay/theme proxy, project selection, and auth-gated readiness reconciled"

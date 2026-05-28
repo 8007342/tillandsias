@@ -51,12 +51,11 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
-### Cycle 2026-05-28T13:43Z — MERGED windows-next (tray balloon + last_event in live chip) ✅
+### Cycle 2026-05-28T13:43Z — MERGED windows-next & SUCCEEDED E2E runtime litmus ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
-- upstream_commit: `23914b41` (merge commit)
-- observed_sibling_heads: main=`fa746f03` · linux-next(pre-merge)=`982560ba` ·
-  windows-next=`8992652a` · osx-next=`982560ba`
+- upstream_commit: `2b26f0d2`
+- observed_sibling_heads: main=`fa746f03` · linux-next=`2b26f0d2` · windows-next=`8992652a` (integrated) · osx-next=`982560ba` (integrated)
 - **windows-next: merged+tested+pushed.** 1-commit delta `8992652a`
   (feat: tray balloon on provisioning failure + `last_event` field
   surfaced in the live chip — windows-tray's read-side of the
@@ -64,6 +63,9 @@ full runtime litmus against the latest integrated code.
   populate as gap-3 phase-2c starts producing typed events). Single
   windows-tray file (notify_icon.rs) — sibling-owned scope. Clean
   auto-merge.
+- **Validation Run:** The async runtime litmus validation run `20260528T140323Z-2b26f0d2-8992652a-982560ba` (Task `task-134`) completed with **SUCCESS**!
+  - **OpenCode Startup:** PASS.
+  - **Status:** marked as `stale-push` since we committed and pushed coordination updates (`156018ab`) during its execution.
 - osx-next: no-op (HEAD `982560ba` matches linux-next pre-merge;
   orchestrator already fast-forwarded osx-next).
 - Tests: PASSED. `./build.sh --check` + `--test` green.
