@@ -137,6 +137,74 @@ fn vm_phase_status_text(phase: tillandsias_control_wire::VmPhase, podman_ready: 
     }
 }
 
+/// One-shot VmStatus poll over the in-VM control wire. Mirrors
+/// `tillandsias-windows-tray::notify_icon::refresh_vm_status` but
+/// drives the macOS-specific vsock path:
+///
+///   1. `VzRuntime::open_vsock_stream` (which uses
+///      `VZVirtioSocketDevice.connectToPort:` under the hood) to get
+///      an `AsyncRead + AsyncWrite` stream into the guest's port 42420.
+///   2. Wrap the stream in `Client::from_stream` so the standard
+///      Hello/HelloAck + request/recv code paths drive it.
+///   3. Send a `VmStatusRequest` and expect a `VmStatusReply`.
+///
+/// Returns the `(phase, podman_ready)` pair so the caller can render
+/// it via `vm_phase_status_text` + `apply_status_text_main_thread`.
+/// Best-effort: a transient wire error is returned as `Err(String)` so
+/// the caller can log + leave the last-known chip text untouched
+/// (matching the windows-tray policy of "transient error → no chip
+/// update"). The 5 s timeout covers connect + handshake + reply.
+///
+/// @trace spec:vsock-transport,
+///        plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 4)
+async fn poll_vm_status_once(
+    vz: &VzRuntime,
+) -> Result<(tillandsias_control_wire::VmPhase, bool), String> {
+    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
+    use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
+    use tillandsias_host_shell::vsock_client::Client;
+
+    let connect_timeout = Duration::from_secs(5);
+    let stream = vz
+        .open_vsock_stream(CONTROL_WIRE_VSOCK_PORT, connect_timeout)
+        .await
+        .map_err(|e| format!("vsock connect: {e}"))?;
+
+    let mut client = Client::from_stream(
+        Box::new(stream),
+        Transport::Vsock {
+            cid: TILLANDSIAS_GUEST_CID,
+            port: CONTROL_WIRE_VSOCK_PORT,
+        },
+    );
+
+    client
+        .handshake()
+        .await
+        .map_err(|e| format!("control-wire handshake: {e}"))?;
+
+    let envelope = ControlEnvelope {
+        wire_version: WIRE_VERSION,
+        seq: client.allocate_seq(),
+        body: ControlMessage::VmStatusRequest {
+            seq: client.allocate_seq(),
+        },
+    };
+    let reply = client
+        .request(&envelope)
+        .await
+        .map_err(|e| format!("VmStatusRequest: {e}"))?;
+
+    match reply.body {
+        ControlMessage::VmStatusReply {
+            phase,
+            podman_ready,
+            ..
+        } => Ok((phase, podman_ready)),
+        other => Err(format!("unexpected reply to VmStatusRequest: {other:?}")),
+    }
+}
+
 /// Default vsock CID for the Tillandsias guest. Matches what the
 /// in-VM headless binds; the host always connects to this CID.
 const TILLANDSIAS_GUEST_CID: u32 = 3;
