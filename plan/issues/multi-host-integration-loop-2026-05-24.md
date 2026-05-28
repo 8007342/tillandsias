@@ -51,15 +51,15 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
-### Cycle 2026-05-28T12:00Z — INTEGRATED macOS slice 11b & RUNNING E2E runtime litmus ⏳
+### Cycle 2026-05-28T12:00Z — INTEGRATED macOS slice 11b & SUCCEEDED E2E runtime litmus ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
 - upstream_commit: `d2fbe0ab`
 - observed_sibling_heads: main=`fa746f03` · linux-next=`d2fbe0ab` · windows-next=`4fff31af` (integrated) · osx-next=`d2fbe0ab` (integrated)
 - **macOS slice 11b integrated.** Commit `37ff2d5f` mirrors windows-tray's `4fff31af`. The macOS diagnose report now prints the release tag directly above the manifest pin so the operator can spot mismatches at a glance. Verified all standard tests are 100% clean locally.
-- **Validation Run:** The async runtime litmus validation run `20260528T120300Z-d2fbe0ab-4fff31af-d2fbe0ab` (Task `task-113`) has been launched and is currently running to perform the full enclave integration litmus verification!
-- **Sibling branches:** Both `windows-next` (`4fff31af`) and `osx-next` (`d2fbe0ab`) are fully integrated and verified via standard cargo tests.
-- **Tests:** PASSED. All 70 unit and integration tests passed cleanly in the local environment.
+- **Validation Run:** The async runtime litmus validation run `20260528T120300Z-d2fbe0ab-4fff31af-d2fbe0ab` (Task `task-113`) finished with **SUCCESS** (`stale-push` status as expected). All **70 unit and integration tests passed**.
+- **Diagnostics Summary:** OpenCode diagnostics generated [diagnostics_20260528T120919Z-summary.md](file:///home/tlatoani/4src/tillandsias/plan/diagnostics/diagnostics_20260528T120919Z-summary.md) with **84% completeness** (21/25 checks passed), showing an improvement over the previous cycle!
+- **Sibling branches:** Both `windows-next` (`4fff31af`) and `osx-next` (`d2fbe0ab`) are fully integrated and validated in the fresh enclave environment.
 
 ### Cycle 2026-05-28T11:43Z — MERGED windows-next (`--diagnose` release-tag + manifest-pin surface) ✅
 
