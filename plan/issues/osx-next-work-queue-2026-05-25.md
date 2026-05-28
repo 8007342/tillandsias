@@ -1978,3 +1978,36 @@ step 5 lands.
 - Streak: 0 (productive iter). Next macOS iter eligible at ~01:49Z to start
   slice 3 (held MenuState + menu re-render for SelectAgent + project list
   updates).
+
+### event: macOS slice 3 — vm_phase_status_text converges with windows-tray — 2026-05-28T01:55Z
+
+- Commit `637246b3` mirrors `tillandsias-windows-tray::notify_icon::
+  vm_phase_status_text` (Windows commit `c45f23ae` 2026-05-27T18:28-07,
+  which itself called out convergence with macOS commit `5e8bac82`).
+  Both trays now produce byte-identical chip strings for each
+  (`VmPhase`, `podman_ready`) combination — Ready / Ready (podman
+  starting…) / Provisioning… / Starting… / Draining… / Stopping… /
+  VM failed.
+- The post-boot success branch of `boot_vm_async` now uses
+  `vm_phase_status_text(Starting, false)` instead of the macOS-only
+  placeholder "🟢 VM running". Once slice 4 wires `VmStatusRequest`
+  polling, the chip will flip to "Ready" / "Ready (podman starting…)"
+  based on the in-VM reply — identical to Windows.
+- Macos-specific pre-boot phase "🔵 Setting up Fedora Linux…" stays
+  outside the shared table because the VM-spinup phase has no
+  Linux/Windows analogue (Linux + Windows tray either don't spin
+  anything up, or already started by the time the tray launches).
+- Tests + lint clean: macos-tray 26/26 (1 new
+  `vm_phase_status_text_reflects_phase_and_podman` mirroring the
+  windows-tray test of the same name); `cargo clippy -p
+  tillandsias-macos-tray --no-deps -- -D warnings` clean; fmt clean.
+- Convergence pattern: when linux-tray gets a status chip the same
+  helper drops in as a 1:1 paste. The deduplication candidate (hoist
+  to `tillandsias-host-shell`) is intentionally deferred — Windows
+  + macOS each keeping their own inline copy mirrors the spec
+  invariant that the table is per-tray (cross-platform-stable but
+  not crate-shared yet).
+- Streak: 0 (productive iter). Next macOS iter eligible at ~02:25Z to
+  pick up slice 4 (the VmStatus poller itself — opening the
+  VZVirtioSocketConnection + sending VmStatusRequest every 30s,
+  mirroring `refresh_vm_status` in windows-tray).
