@@ -35,13 +35,13 @@ const PROVISIONING_MANIFEST: &str = include_str!("../assets/provisioning-manifes
 /// CI-published rootfs without a repo. Manifest-delivery decision (w5 consumer
 /// question): embed at build time — one trusted artifact, no runtime fetch of
 /// the trust root.
-const RECIPE_MANIFEST: &str = include_str!("../../../images/vm/manifest.toml");
+pub const RECIPE_MANIFEST: &str = include_str!("../../../images/vm/manifest.toml");
 
 /// Release tag the rootfs artifacts are published under. Tag-source decision
 /// (w5 consumer question): a build-time constant for v0.0.1. TODO: wire to the
 /// workspace CalVer version so it tracks releases automatically rather than
 /// being bumped by hand each release.
-const RECIPE_RELEASE_TAG: &str = "v0.2.260526.1";
+pub const RECIPE_RELEASE_TAG: &str = "v0.2.260526.1";
 
 /// The single WSL2 distro the tray manages (see `tillandsias-vm-layer::wsl`,
 /// "one distro per host"). Also the `wsl.exe -d <name>` target the Open-Shell
