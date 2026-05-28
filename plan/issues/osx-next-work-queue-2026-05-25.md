@@ -2206,3 +2206,31 @@ step 5 lands.
   warnings` clean; fmt clean.
 - Streak: 0 (productive iter). Next macOS iter eligible at ~05:30Z
   to pick up slice 8b (held MenuState + menu re-render path).
+
+### event: macOS slice 8b — held MenuState + cloud-projects polling — 2026-05-28T05:30Z
+
+- Commit `08f41521` adds `menu_state: Arc<Mutex<MenuState>>` to
+  `TrayActionHostIvars`, initialised to `MenuState::initial()` with
+  `target=MacosTray`. Wires `spawn_vm_status_poller` to also tick on
+  a cloud-projects cadence:
+    * tick 0, 10, 20, … → `poll_cloud_projects_once(vz)` →
+      `menu_state.cloud_projects = new_list`
+    * every 30 s → `poll_vm_status_once(vz)` →
+      `menu_state.podman_ready = reply.podman_ready`,
+      chip = `vm_phase_status_text(phase, ready)`
+- Cadence mirrors windows-tray's "first tick + every 10 ticks"
+  pattern (commit b0cdcdee). `gh repo list` is a slower-changing
+  input than VmStatus so it doesn't need per-tick granularity.
+- The held MenuState is staged at this slice — nothing rebuilds
+  the NSMenu yet. Cloud-project changes are logged at info
+  ("cloud-projects: menu_state updated (N entries)") so the
+  operator smoke logs show the wire is delivering the expected
+  projects. Slice 8c will rebuild the NSMenu when state changes,
+  using `tillandsias_host_shell::menu_state::build(&state)` to
+  produce the full MenuStructure (today the menu is still built
+  from `MenuStructure::initial_provisioning()`).
+- Tests + lint clean: macos-tray 27/27; clippy -D warnings clean;
+  fmt clean.
+- Streak: 0 (productive iter). Next macOS iter eligible at ~06:00Z
+  to scope slice 8c (full menu re-render — NSStatusItem.setMenu:
+  + re-attach status_handles after each rebuild).
