@@ -2081,3 +2081,37 @@ step 5 lands.
     * slice 7 — fetch progress (wire download_verified::on_progress
       to the chip during materialization)
   Next macOS iter eligible at ~03:30Z to pick up slice 6.
+
+### event: macOS slice 6 — Quit drain via quitWithDrain selector — 2026-05-28T03:30Z
+
+- Commit `b4e07b2a` replaces the Quit item's responder-chain
+  `terminate:` binding with a custom `quitWithDrain:` selector on
+  TrayActionHost. The handler flips the chip to "🔴 Stopping…",
+  takes the live VzRuntime out of `ivars.vm`, marks `vm_busy=true`,
+  spawns a Tokio task that calls `vm.stop(VM_STOP_DRAIN=60s)`, then
+  unconditionally `std::process::exit(0)`.
+- ⌘Q stays bound — user-visible binding is identical. The drain
+  reuses the existing `VzRuntime::stop` path (sends
+  `VmShutdownRequest` over vsock, waits, escalates to hard stop on
+  timeout), so we inherit windows-tray's tested drain semantics.
+- Bypassing AppKit cleanup is acceptable for v0.0.1: the VM is the
+  only state that needs flushing, and `exit(0)` after the await
+  guarantees drain-then-die ordering. A future revision can route
+  through `NSApplicationDelegate::applicationShouldTerminate` +
+  `NSTerminateLater` for a cleaner AppKit handshake (no v0.0.1
+  user-visible difference).
+- Tests + lint clean: macos-tray 26/26; clippy -D warnings clean;
+  fmt clean.
+- Symmetric architecture confirmation from windows: commit
+  `48a50981` refactored windows-tray to use my slice-4
+  `Client::from_stream` constructor across `refresh_vm_status` +
+  `try_connect_until_ready` + `--status-once`. Both trays now share
+  one Hello/HelloAck + request/recv path; only the transport open
+  differs per OS. Windows verified live: `--status-once` reads
+  `wire_version=2, Ready, podman_ready: true, exit 0` from a
+  provisioned VM.
+- Streak: 0 (productive iter). Remaining macOS-owned item:
+    * slice 7 — fetch progress (wire `download_verified::on_progress`
+      into the chip so the user sees ~MB-fetched / decompression /
+      verify phases during a cold first launch).
+  Next macOS iter eligible at ~04:00Z.
