@@ -2276,3 +2276,31 @@ step 5 lands.
   manifest.release_tag accessor (Linux-owned) + user-attended m8
   smoke. Next macOS iter eligible at ~06:30Z; likely shifts to
   noop cadence pending those.
+
+### event: macOS slice 9 — byte-level fetch-progress chip — 2026-05-28T06:30Z
+
+- Commit `551680f0` converges with windows-tray's `6645d04b` (live
+  fetch-progress chip during recipe materialization).
+  `fetch_then_decompress_xz_then_verify`'s reqwest streaming loop
+  now tracks downloaded bytes + Content-Length and emits refined
+  "Downloading rootfs N/M MB (P%)" lines via the existing
+  `on_phase` callback whenever integer percent changes.
+- Throttling by percent caps dispatches at ~100 per download
+  (~750 KB increments for a 74 MB .img.xz), well within any
+  AppKit main-thread budget. Unknown Content-Length (rare on
+  GitHub release assets) leaves the prior chip untouched — same
+  fallback windows-tray uses.
+- Chip-string format ("Downloading rootfs N/M MB (P%)") is
+  byte-identical to windows-tray's. macOS first-launch chip now
+  mirrors windows: "🔵 Downloading rootfs 12/74 MB (16%)…" →
+  "🔵 Decompressing rootfs…" → "🔵 Verifying rootfs SHA-256…" →
+  "🔵 Starting…" → live VmStatus.
+- No signature change — `on_phase: &(dyn Fn(&str))` is reused.
+  Tests + lint clean: vm-layer 63/63, macos-tray 27/27, clippy +
+  fmt clean across both crates.
+- Streak: 0 (productive iter). Next macOS iter eligible at
+  ~07:00Z. With slices 1-9 done the macOS↔windows convergence
+  on the m4 sub-task B surface is functionally complete (chip
+  text, menu re-render, fetch progress, Quit drain). Remaining
+  items: nice-to-have manifest.release_tag (Linux-owned) +
+  user-attended m8 smoke.
