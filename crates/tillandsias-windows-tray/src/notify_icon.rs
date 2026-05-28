@@ -44,8 +44,8 @@ use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM
 use windows::Win32::Graphics::Gdi::HBRUSH;
 use windows::Win32::System::LibraryLoader::GetModuleHandleW;
 use windows::Win32::UI::Shell::{
-    NIF_ICON, NIF_MESSAGE, NIF_TIP, NIM_ADD, NIM_DELETE, NIM_MODIFY, NOTIFYICONDATAW,
-    Shell_NotifyIconW,
+    NIF_ICON, NIF_INFO, NIF_MESSAGE, NIF_TIP, NIIF_ERROR, NIIF_INFO, NIIF_WARNING, NIM_ADD,
+    NIM_DELETE, NIM_MODIFY, NOTIFYICONDATAW, Shell_NotifyIconW,
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu, DispatchMessageW,
@@ -137,6 +137,47 @@ fn update_status_text(text: &str, hwnd: HWND) {
     write_utf16_into(&mut nid.szTip, text);
     unsafe {
         let _ = Shell_NotifyIconW(NIM_MODIFY, &nid);
+    }
+}
+
+/// Severity of a tray balloon notification — maps to the Win11 toast icon.
+#[derive(Clone, Copy, PartialEq, Eq)]
+enum BalloonSeverity {
+    Info,
+    Warning,
+    Error,
+}
+
+/// Pop a tray balloon notification (modern Win11 surfaces this as a toast in
+/// the Action Center). Uses `NIM_MODIFY` with `NIF_INFO`, reusing the icon's
+/// existing identity. Best-effort — silently no-op on `Shell_NotifyIconW`
+/// failure (the chip + log still carry the same info).
+fn show_balloon(hwnd: HWND, title: &str, message: &str, severity: BalloonSeverity) {
+    let mut nid: NOTIFYICONDATAW = unsafe { std::mem::zeroed() };
+    nid.cbSize = std::mem::size_of::<NOTIFYICONDATAW>() as u32;
+    nid.hWnd = hwnd;
+    nid.uID = TRAY_ICON_ID;
+    nid.uFlags = NIF_INFO;
+    write_utf16_into(&mut nid.szInfo, message);
+    write_utf16_into(&mut nid.szInfoTitle, title);
+    nid.dwInfoFlags = match severity {
+        BalloonSeverity::Info => NIIF_INFO,
+        BalloonSeverity::Warning => NIIF_WARNING,
+        BalloonSeverity::Error => NIIF_ERROR,
+    };
+    unsafe {
+        let _ = Shell_NotifyIconW(NIM_MODIFY, &nid);
+    }
+}
+
+/// Compose the live chip text from a base phase line + an optional headless
+/// `last_event`. When the event is `Some` and non-empty, appends `" \u{00B7} <evt>"`
+/// (Unicode MIDDLE DOT) so the user can see what the in-VM headless is doing
+/// (e.g. `"\u{1F7E2} Ready \u{00B7} forge-foo created"`). Pure + testable.
+fn compose_chip_text(base: &str, last_event: Option<&str>) -> String {
+    match last_event.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(evt) => format!("{base} \u{00B7} {evt}"),
+        None => base.to_string(),
     }
 }
 
@@ -514,14 +555,18 @@ async fn refresh_vm_status(hwnd: HWND) {
     if let ControlMessage::VmStatusReply {
         phase,
         podman_ready,
+        last_event,
         ..
     } = reply.body
     {
         if let Ok(mut guard) = MENU_STATE.lock() {
             guard.get_or_insert_with(MenuState::initial).podman_ready = podman_ready;
         }
-        // status_text + tooltip (own MENU_STATE lock inside).
-        update_status_text(&vm_phase_status_text(phase, podman_ready), hwnd);
+        // status_text + tooltip (own MENU_STATE lock inside). Appends the
+        // headless's `last_event` when present so the chip reflects in-VM
+        // activity (e.g. "Ready · forge-foo created"), not just the phase.
+        let base = vm_phase_status_text(phase, podman_ready);
+        update_status_text(&compose_chip_text(&base, last_event.as_deref()), hwnd);
         tracing::debug!(?phase, podman_ready, "vm status polled");
     }
 }
@@ -853,6 +898,16 @@ fn spawn_provisioning(hwnd: HWND) {
             Err(err) => {
                 eprintln!("WSL recipe provisioning failed: {err}");
                 update_status_text("\u{1F534} Provisioning failed (Retry to try again)", hwnd);
+                // Win11 surfaces this as a toast in the Action Center, so the
+                // failure doesn't just sit invisibly in the tray icon waiting
+                // for the user to mouseover. Clicking the toast brings the
+                // tray to the foreground; the user picks Retry from the menu.
+                show_balloon(
+                    hwnd,
+                    "Tillandsias \u{2014} provisioning failed",
+                    &format!("{err}\n\nRight-click the tray icon \u{2192} Retry to try again."),
+                    BalloonSeverity::Error,
+                );
                 // Re-enable Retry.
                 PROVISIONING_ACTIVE.store(false, SeqCst);
             }
@@ -1304,6 +1359,32 @@ mod tests {
     fn wm_trayicon_is_in_app_range() {
         // Both are consts, so enforce the invariant at compile time.
         const { assert!(WM_TRAYICON >= WM_APP) };
+    }
+
+    /// The chip composer appends a non-empty `last_event` after a Unicode
+    /// MIDDLE DOT so the user sees in-VM activity in the tray. `None` or
+    /// whitespace-only events leave the base phase line untouched.
+    #[test]
+    fn compose_chip_text_appends_last_event() {
+        // None → bare base.
+        assert_eq!(
+            compose_chip_text("\u{1F7E2} Ready", None),
+            "\u{1F7E2} Ready"
+        );
+        // Empty / whitespace → bare base (don't print a dangling separator).
+        assert_eq!(
+            compose_chip_text("\u{1F7E2} Ready", Some("")),
+            "\u{1F7E2} Ready"
+        );
+        assert_eq!(
+            compose_chip_text("\u{1F7E2} Ready", Some("   ")),
+            "\u{1F7E2} Ready"
+        );
+        // Some(non-empty) → "<base> · <evt>".
+        let out = compose_chip_text("\u{1F7E2} Ready", Some("forge-foo created"));
+        assert!(out.starts_with("\u{1F7E2} Ready"));
+        assert!(out.contains('\u{00B7}'));
+        assert!(out.ends_with("forge-foo created"));
     }
 
     /// The manifest-pin parser reads `"x86_64.tar" = "<sha>"` out of the
