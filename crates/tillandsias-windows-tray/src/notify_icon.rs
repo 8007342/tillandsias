@@ -1543,6 +1543,43 @@ mod tests {
         assert_eq!(v["manifest_pin_x86_64_tar"], serde_json::Value::Null);
     }
 
+    /// The `--diagnose` / `--diagnose --json` exit code is a public contract
+    /// (0 = fully healthy, 2 = degraded). Pins it so a future refactor cannot
+    /// silently flip "degraded" to "ok" or vice-versa for support scripts that
+    /// trigger on the exit code (e.g. `scripts/tray-diagnose.ps1`).
+    #[test]
+    fn exit_code_provisioned_zero_degraded_two() {
+        // Fully healthy: distro registered AND wire reachable AND phase Ready.
+        let mut healthy = baseline_diagnose_report();
+        healthy.distro_registered = true;
+        healthy.wire = WireReport {
+            reachable: true,
+            phase: Some("Ready".to_string()),
+            podman_ready: Some(true),
+            last_event: None,
+            error: None,
+        };
+        assert_eq!(exit_code_from(&healthy), 0, "fully healthy -> 0");
+
+        // Baseline (no distro, no wire) -> 2.
+        assert_eq!(exit_code_from(&baseline_diagnose_report()), 2);
+
+        // Distro only (wire still unreachable) -> 2.
+        let mut deg = baseline_diagnose_report();
+        deg.distro_registered = true;
+        assert_eq!(exit_code_from(&deg), 2, "distro only -> 2");
+
+        // Wire reachable but phase != Ready -> 2.
+        deg.wire = WireReport {
+            reachable: true,
+            phase: Some("Starting".to_string()),
+            podman_ready: Some(false),
+            last_event: None,
+            error: None,
+        };
+        assert_eq!(exit_code_from(&deg), 2, "phase != Ready -> 2");
+    }
+
     #[test]
     fn diagnose_json_recent_log_tail_is_array() {
         let mut r = baseline_diagnose_report();
