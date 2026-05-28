@@ -45,11 +45,19 @@ methodology:
     registered:
       advance-work-from-plan:
         path: skills/advance-work-from-plan/SKILL.md
+        tier: worker   # see methodology/distributed-work.yaml agent_execution_roles
+        complement_of: skills/multihost-orchestration  # the orchestrator tier
+        authoritative_spec: methodology/distributed-work.yaml worker_agent_protocol
         purpose: >
-          Single-iteration work cycle for any agent on any host. Pick one
-          bounded slice of READY work from plan/, ship it, exit. Replaces
-          the per-cycle long-form work prompt.
-        cadence: "~30 min in active sessions"
+          Discover, claim, implement, checkpoint, and complete units of
+          work from the shared plan ledger based on host capabilities and
+          lease rules. The Worker tier of the two-tier execution model
+          documented in methodology/distributed-work.yaml — sustains
+          development velocity and enforces finite-time convergence by
+          letting any agent on any host autonomously cycle one shaped
+          packet from plan/ to completion or yield. Replaces the per-cycle
+          long-form work prompt.
+        cadence: "~30 min in active sessions; on-demand otherwise"
         host_awareness: detects linux/macOS/Windows → active branch + write scope
         steerable: true   # orchestrator may edit between iterations
 
