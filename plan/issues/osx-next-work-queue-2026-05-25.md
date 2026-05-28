@@ -2115,3 +2115,41 @@ step 5 lands.
       into the chip so the user sees ~MB-fetched / decompression /
       verify phases during a cold first launch).
   Next macOS iter eligible at ~04:00Z.
+
+### event: macOS slice 7 — fetch-progress chip during cold-launch — 2026-05-28T04:00Z
+
+- Commit `f5443276` lands the last UX slice on the m4 sub-task B
+  list. Threads an `on_phase: &(dyn Fn(&str) + Send + Sync)`
+  callback through `VzRuntime::fetch_recipe_artifact` →
+  `fetch_then_decompress_xz_then_verify` (vm-layer), and from
+  `boot_vm_async` → `run_start` (macos-tray). The callback fires
+  three times per cold launch:
+    1. "🔵 Downloading rootfs…" (before HTTP GET stream)
+    2. "🔵 Decompressing rootfs…" (before xz subprocess)
+    3. "🔵 Verifying rootfs SHA-256…" (before sha-stream)
+  Subsequent launches hit the rootfs.img cache so the callback
+  never fires and the user sees the chip jump straight to
+  "🔵 Starting…".
+- The callback closure captures Arc-cloned status handles + the
+  status_text slot, then on each call dispatches an
+  `apply_status_text_main_thread` via `dispatch_to_main_thread`
+  (libdispatch). All updates happen on the AppKit main thread.
+- vm-layer additive change: two existing tests + macos-tray's
+  `run_start_full_e2e` updated to pass `&|_| {}` no-op closures.
+  No behavioral change to tests; pure signature widening.
+- Tests + lint clean: macos-tray 26/26; vm-layer 63/63;
+  `cargo clippy -p tillandsias-macos-tray --no-deps -- -D warnings`
+  clean; fmt clean across both crates.
+  (vm-layer's pre-existing `materialize/cache.rs:134` collapse-if
+  warning is Linux-owned and unchanged by this slice.)
+- With slices 1-7 complete, m4 sub-task B "action-host wiring" is
+  DONE for v0.0.1. The only outstanding macOS-owned items are the
+  nice-to-haves (Manifest::release_tag accessor — gated on linux-
+  recipe addition) and user-attended m8 smoke (which is the manual
+  acceptance gate, not parallelizable).
+- Streak: 0 (productive iter). Next macOS iter eligible at ~04:30Z
+  — at that point the loop will likely shift to noop cadence
+  (escalating wake) until either (a) Linux ships the release_tag
+  accessor unlocking the manifest-trust-root refactor, (b) Linux
+  or Windows flags a new cross-host concern, or (c) the user
+  reports interactive smoke results from a fresh .app install.
