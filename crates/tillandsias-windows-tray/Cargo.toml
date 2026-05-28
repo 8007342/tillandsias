@@ -22,6 +22,9 @@ tillandsias-vm-layer = { path = "../tillandsias-vm-layer" }
 tillandsias-control-wire = { path = "../tillandsias-control-wire" }
 tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
+# Machine-readable `--diagnose --json` output for installed-tray support tooling.
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 # The real provisioning fetch path only compiles on Windows, so the download
