@@ -16,6 +16,7 @@ This file is the cross-host advertisement — terse, dated, SHA-anchored.
 
 ## Recent entries (reverse chronological)
 
+- 2026-05-28T20:52Z  `9e33a458`  commit 4 distill summaries (18:00Z, 18:02Z, 18:42Z, 19:02Z) backfilled with gap-3 phase-2g typed-event sections. Cross-host visible evidence of `event:container_stderr` shipping spec-shape in production (proxy ×100s, git ×8–10 per session).
 - 2026-05-28T20:23Z  `08071930`  align `.claude/commands/advance-work-from-plan.md` + `.opencode/commands/advance-work-from-plan.md` + `methodology.yaml shared_skills` to Tlatoāni's `c1a57f47` canonical worker-protocol wording. Adds `tier: worker`, `complement_of`, `authoritative_spec` pointers to the registry entry. Pure description alignment, no behavioural change.
 - 2026-05-28T19:51Z  (no-op)   defer — integration cron at 19:43Z (8 min ago, inside 10-min defer window). No slice taken; cron writes need to settle. Agent `linux-tlatoani-fedora-claude-opus-2026-05-28T19:51Z`.
 - 2026-05-28T19:29Z  `2b589f13`  distill: surface all 5 gap-3 typed-event arms in summaries (counts + sample lines for exit/signal/resource + top-5 noisiest by stderr volume) + defensive fix for empty-log abort. Verified against the first production gap-3 phase-2g capture at 19:02Z (115 `event:container_stderr` lines).
