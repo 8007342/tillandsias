@@ -523,6 +523,71 @@ async fn refresh_vm_status(hwnd: HWND) {
     }
 }
 
+/// Map a wire `CloudProjectEntry` ({label, owner, repo, default_branch}) onto the
+/// shared menu `ProjectEntry` (the cloud-projects submenu the host renders).
+/// `ProjectEntry::path` is the `owner/repo` slug (per its doc); `ready` is always
+/// false for cloud projects (they have no in-VM forge container).
+fn cloud_entry_to_menu(entry: &tillandsias_control_wire::CloudProjectEntry) -> ProjectEntry {
+    ProjectEntry {
+        name: entry.label.clone(),
+        path: format!("{}/{}", entry.owner, entry.repo),
+        ready: false,
+    }
+}
+
+/// Poll the in-VM headless's `CloudRefreshRequest` (real `gh repo list` once
+/// `e1a190d4` landed) and reflect the result in the shared
+/// `MenuState.cloud_projects` so the menu's cloud-projects submenu shows the
+/// logged-in user's repos. Best-effort: a transient wire error / unauthenticated
+/// gh leaves the last-known list untouched (logged at debug).
+async fn refresh_cloud_projects(_hwnd: HWND) {
+    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
+    use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
+    use tillandsias_host_shell::vsock_client::Client;
+
+    let stream = match crate::hvsocket::open_hvsocket_stream(CONTROL_WIRE_VSOCK_PORT).await {
+        Ok(stream) => stream,
+        Err(err) => {
+            tracing::debug!(%err, "cloud refresh: control wire unreachable");
+            return;
+        }
+    };
+    let mut client = Client::from_stream(
+        Box::new(stream),
+        Transport::Vsock {
+            cid: 0,
+            port: CONTROL_WIRE_VSOCK_PORT,
+        },
+    );
+    if let Err(err) = client.handshake().await {
+        tracing::debug!(%err, "cloud refresh: handshake failed");
+        return;
+    }
+    let seq = client.allocate_seq();
+    let envelope = ControlEnvelope {
+        wire_version: WIRE_VERSION,
+        seq,
+        body: ControlMessage::CloudRefreshRequest { seq },
+    };
+    let reply = match client.request(&envelope).await {
+        Ok(reply) => reply,
+        Err(err) => {
+            tracing::debug!(%err, "cloud refresh: request failed");
+            return;
+        }
+    };
+    if let ControlMessage::CloudRefreshReply { projects, .. } = reply.body {
+        let mapped: Vec<ProjectEntry> = projects.iter().map(cloud_entry_to_menu).collect();
+        let n = mapped.len();
+        if let Ok(mut guard) = MENU_STATE.lock() {
+            guard.get_or_insert_with(MenuState::initial).cloud_projects = mapped;
+        }
+        tracing::debug!(count = n, "cloud projects refreshed");
+    } else {
+        tracing::debug!(?reply.body, "cloud refresh: unexpected reply");
+    }
+}
+
 /// Set by the `Retry` menu click (in the wndproc) and drained by the message
 /// loop, which spawns a fresh provisioning task in the LocalSet context.
 static RETRY_REQUESTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
@@ -562,13 +627,21 @@ fn spawn_provisioning(hwnd: HWND) {
                 match lifecycle.spawn_keepalive() {
                     Ok(_keepalive) => {
                         tracing::info!("VM keepalive holding the control wire warm");
-                        // Live status: poll VmStatus so the menu reflects real VM
-                        // health — podman_ready gates per-project actions, and the
-                        // status line tracks phase (Ready/Draining/Stopping).
-                        // This loop holds `_keepalive` for the tray's lifetime; on
+                        // Live status: poll VmStatus every tick (30 s) so the
+                        // menu reflects real VM health — podman_ready gates
+                        // per-project actions, and the status line tracks phase
+                        // (Ready/Draining/Stopping). Refresh cloud projects on
+                        // the first tick + every 10 ticks (~5 min) since
+                        // `gh repo list` is a slower-changing input than VM
+                        // status. Holds `_keepalive` for the tray's lifetime; on
                         // Quit the LocalSet drops the task → kill_on_drop.
+                        let mut tick: u32 = 0;
                         loop {
                             refresh_vm_status(hwnd).await;
+                            if tick.is_multiple_of(10) {
+                                refresh_cloud_projects(hwnd).await;
+                            }
+                            tick = tick.wrapping_add(1);
                             tokio::time::sleep(std::time::Duration::from_secs(30)).await;
                         }
                     }
@@ -1034,6 +1107,22 @@ mod tests {
     fn wm_trayicon_is_in_app_range() {
         // Both are consts, so enforce the invariant at compile time.
         const { assert!(WM_TRAYICON >= WM_APP) };
+    }
+
+    /// Cloud `ProjectEntry.path` is the `owner/repo` slug (per its doc) so the
+    /// menu's cloud-projects submenu shows a stable, gh-style identifier.
+    #[test]
+    fn cloud_entry_maps_to_owner_repo_slug() {
+        let entry = tillandsias_control_wire::CloudProjectEntry {
+            label: "my project".to_string(),
+            owner: "8007342".to_string(),
+            repo: "tillandsias".to_string(),
+            default_branch: "main".to_string(),
+        };
+        let mapped = cloud_entry_to_menu(&entry);
+        assert_eq!(mapped.name, "my project");
+        assert_eq!(mapped.path, "8007342/tillandsias");
+        assert!(!mapped.ready, "cloud projects have no in-VM forge yet");
     }
 
     /// The live status line distinguishes VM phases + podman readiness, so the
