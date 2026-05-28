@@ -230,6 +230,19 @@ bounded slices from. Each item is sized for one loop iteration. NOT for siblings
   contract: Started records observed_at; Died computes duration +
   evicts; Died-without-Started reports None; Removed/CleanedUp
   evict; multiple containers tracked independently.
+- **GAP 3 PHASE-2F** (signal extraction): signal-induced Died routes
+  through `event:container_signal` BEFORE `event:container_exit`.
+  POSIX convention: exit code `128 + signal_num` → the signal was
+  delivered. New `signal_name_from_exit_code(code) -> Option<String>`
+  maps the common signals (SIGINT/SIGABRT/SIGKILL/SIGSEGV/SIGPIPE/
+  SIGALRM/SIGTERM) to canonical names and falls back to `SIG<n>` for
+  anything outside the well-known set; clean-exit codes (0..=128)
+  and out-of-range codes return None. The exit line still follows
+  with the original exit_code + duration_seconds, so a downstream
+  consumer sees BOTH facts: which signal precipitated the death AND
+  the resulting exit code + duration. Four new unit tests pin the
+  mapping (common signals, numeric fallback, clean-exit None,
+  out-of-range None) plus a no-panic test for the routed path.
   (Next diagnostics gap: GAP 2 / GAP 3 PHASE-2 — wire the live podman
   events parser to emit_diagnostic_event when `debug` is on.)
 

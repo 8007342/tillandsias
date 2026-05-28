@@ -41,12 +41,17 @@
 //!   limit; an inspect-lookup pass could fill it but adds latency on
 //!   what should be a fast event-stream path.
 //!
+//! - **Signal-induced Died** → `event:container_signal` (preceding the
+//!   exit line). When a container's POSIX exit code is in the
+//!   `129..=255` range, by convention the implied signal is
+//!   `(code - 128)`. We map the common ones to canonical names
+//!   (SIGINT/SIGABRT/SIGKILL/SIGSEGV/SIGTERM) and fall back to
+//!   `signal=SIG<n>` for anything else. The exit line follows so a
+//!   downstream consumer sees BOTH facts: which signal precipitated
+//!   the death AND the resulting exit code + duration.
+//!
 //! What this module DOESN'T emit yet:
 //!
-//! - `event:container_signal`: podman events `Status=kill` records the
-//!   kill REQUEST, not the signal the kernel delivered, so we can't
-//!   accurately fill `signal=…`. Routing for this lands when there's a
-//!   separate source for the signal name.
 //! - `event:container_stderr`: needs a separate `podman logs -f` tail
 //!   per container (the `DiagnosticsHandle` path), not the events
 //!   stream this module wraps.
@@ -57,7 +62,8 @@ use tokio::sync::mpsc;
 use tracing::debug;
 
 use crate::client::{
-    emit_diagnostic_event, format_container_exit_event, format_resource_exhaustion_event,
+    emit_diagnostic_event, format_container_exit_event, format_container_signal_event,
+    format_resource_exhaustion_event,
 };
 use crate::diagnostics::{ContainerLifecycleAction, ContainerLifecycleRecord};
 use crate::events::PodmanEventStream;
@@ -121,6 +127,38 @@ async fn run_emitter(prefix: String) {
     let _ = stream_task.await;
 }
 
+/// Decode a POSIX exit code into the implied signal name (if any).
+///
+/// Convention: when a process is killed by signal N, the shell-visible
+/// exit code is `128 + N`. So an exit code in `129..=255` implies the
+/// container was signal-killed and the signal number is `code - 128`.
+/// Maps the common signals to their canonical names and falls back to
+/// `SIG<n>` for anything outside the well-known set, so the wire shape
+/// always carries something grep-able.
+///
+/// Returns `None` for any code outside the 129..=255 range, including
+/// the typical "clean exit" range 0..=128.
+///
+/// @trace spec:runtime-diagnostics-stream (Container signal event)
+fn signal_name_from_exit_code(code: i32) -> Option<String> {
+    if !(129..=255).contains(&code) {
+        return None;
+    }
+    let sig = code - 128;
+    let name = match sig {
+        2 => "SIGINT",
+        6 => "SIGABRT",
+        9 => "SIGKILL",
+        11 => "SIGSEGV",
+        13 => "SIGPIPE",
+        14 => "SIGALRM",
+        15 => "SIGTERM",
+        // Anything else: render as SIG<n> so the line still parses.
+        n => return Some(format!("SIG{n}")),
+    };
+    Some(name.to_string())
+}
+
 /// Per-session state the router carries across record arrivals — today
 /// just the start-time map so `Died` records can fill `duration_seconds`.
 ///
@@ -169,6 +207,21 @@ fn route_record(state: &mut EmitterState, record: &ContainerLifecycleRecord) {
             }
         }
         ContainerLifecycleAction::Died => {
+            // POSIX convention: a process killed by a signal exits
+            // with `128 + signal_num`. When that pattern shows up on
+            // a Died record, emit the signal line FIRST — the
+            // kernel-delivered signal is the precipitating fact, the
+            // exit code is the consequence. The exit line follows so
+            // a downstream consumer sees BOTH.
+            if let Some(name) = record.exit_code.and_then(signal_name_from_exit_code) {
+                let body = format_container_signal_event(&record.container_name, &name);
+                emit_diagnostic_event(
+                    true,
+                    "event:container_signal",
+                    &record.container_name,
+                    &body,
+                );
+            }
             let started_at = state.start_times.remove(&record.container_name);
             let duration = match (started_at, record.observed_at_unix) {
                 (Some(start), Some(end)) if end >= start => Some((end - start).max(0) as u64),
@@ -358,6 +411,55 @@ mod tests {
         route_record(&mut state, &r2);
 
         assert!(state.start_times.is_empty());
+    }
+
+    /// gap-3 phase-2f: a signal-induced exit (POSIX exit code
+    /// `128 + signal_num`) maps to the canonical signal name. The
+    /// helper is the testable surface; the eprintln side effect of
+    /// the route arm is verified separately as a no-panic.
+    #[test]
+    fn signal_name_from_exit_code_maps_common_signals() {
+        assert_eq!(signal_name_from_exit_code(130).as_deref(), Some("SIGINT"));
+        assert_eq!(signal_name_from_exit_code(134).as_deref(), Some("SIGABRT"));
+        assert_eq!(signal_name_from_exit_code(137).as_deref(), Some("SIGKILL"));
+        assert_eq!(signal_name_from_exit_code(139).as_deref(), Some("SIGSEGV"));
+        assert_eq!(signal_name_from_exit_code(143).as_deref(), Some("SIGTERM"));
+    }
+
+    /// gap-3 phase-2f: exit codes outside the well-known set fall
+    /// through to `SIG<n>` so the wire shape still parses and the
+    /// signal number is visible.
+    #[test]
+    fn signal_name_from_exit_code_falls_back_to_numeric() {
+        // 128 + 17 = 145 (SIGCHLD on most Unixes); we don't map it.
+        assert_eq!(signal_name_from_exit_code(145).as_deref(), Some("SIG17"));
+        // 128 + 31 = 159 (SIGSYS); also not mapped — falls back.
+        assert_eq!(signal_name_from_exit_code(159).as_deref(), Some("SIG31"));
+    }
+
+    /// gap-3 phase-2f: clean-exit codes (0..=128) and out-of-range
+    /// codes (>255 or negative) MUST return None — we never invent
+    /// a signal for a non-signal exit.
+    #[test]
+    fn signal_name_from_exit_code_returns_none_on_clean_or_out_of_range() {
+        assert_eq!(signal_name_from_exit_code(0), None);
+        assert_eq!(signal_name_from_exit_code(1), None);
+        assert_eq!(signal_name_from_exit_code(127), None);
+        assert_eq!(signal_name_from_exit_code(128), None);
+        assert_eq!(signal_name_from_exit_code(256), None);
+        assert_eq!(signal_name_from_exit_code(-1), None);
+    }
+
+    /// gap-3 phase-2f: a Died with a signal-range exit_code routes
+    /// through both arms — container_signal (precipitating) and
+    /// container_exit (consequence) — without panic. The actual
+    /// emission ordering is asserted via stderr inspection in the
+    /// runtime litmus; the helper test above is the pure-data pin.
+    #[test]
+    fn route_record_handles_signal_induced_died_without_panic() {
+        let mut state = EmitterState::default();
+        let died = died_record("tillandsias-x-forge", Some(137));
+        route_record(&mut state, &died);
     }
 
     /// gap-3 phase-2e: multiple containers tracked independently —
