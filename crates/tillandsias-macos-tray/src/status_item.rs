@@ -38,7 +38,7 @@ use objc2_foundation::{MainThreadMarker, NSString};
 
 use crate::action_host::TrayActionHost;
 use crate::menu_disabled_v2::{MacMenuItemSpec, render};
-use tillandsias_host_shell::menu_state::MenuStructure;
+use tillandsias_host_shell::menu_state::{MenuStructure, ids};
 
 /// Entry point invoked from `main`. Blocks until the user picks "Quit" on
 /// the menu; returns never (`!`) because the AppKit run loop owns the
@@ -140,127 +140,40 @@ pub fn install_status_item(
     status_item
 }
 
-/// Build an `NSMenu` from a host-shell `MenuStructure`. Walks the tree once
-/// and produces `NSMenuItem` instances per the `MacMenuItemSpec` adapter,
-/// then appends the standard footer (separator + version disabled header +
-/// separator + Quit).
+/// Build an `NSMenu` from a host-shell `MenuStructure`. Walks the tree
+/// 1:1 — the macOS tray renders the SAME menu shape as Linux + Windows,
+/// with no macOS-specific extras. Per-item action wiring happens inside
+/// `build_menu_item` keyed on `MacMenuItemSpec::id`:
+///   - `ids::QUIT` → AppKit `terminate:` with nil target (responder chain).
+///   - other ids → not yet wired (follow-up slice).
 ///
-/// The Quit item uses the standard AppKit `terminate:` action with a nil
-/// target — AppKit walks the responder chain and `NSApplication` handles
-/// it. Cmd-Q keyboard shortcut is wired so power users don't even need to
-/// open the menu. Without this item the binary is unkillable from the UI
-/// (the v0.0.1 / iter-12 "stuck" issue the user hit on first launch).
+/// The "VM spin-up" that's unique to macOS (and Windows) is NOT a
+/// menu item — it's surfaced via the `ids::STATUS` first row whose
+/// label/tooltip reflect the lifecycle phase. The actual spin-up
+/// happens automatically on app launch (`status_item::run` calls
+/// `action_host.boot_vm_async("Auto-boot")` before NSApplication.run).
 ///
-/// Per spec invariant `menu-renders-in-50ms`, the construction is purely
-/// allocation + per-item method calls; no I/O or sleeps.
+/// Per spec invariant `menu-renders-in-50ms`, construction is purely
+/// allocation + per-item method calls; no I/O.
 ///
 /// @trace spec:macos-native-tray.ui.menu-parity@v1
 pub fn build_menu(
     mtm: MainThreadMarker,
     structure: &MenuStructure,
-    action_host: &TrayActionHost,
+    _action_host: &TrayActionHost,
 ) -> Retained<NSMenu> {
     let menu = NSMenu::new(mtm);
     for spec in render(structure) {
         let item = build_menu_item(mtm, &spec);
         menu.addItem(&item);
     }
-    append_actions(mtm, &menu, action_host);
-    append_footer(mtm, &menu);
     menu
 }
 
-/// Append the four interactive items that drive the VM lifecycle and
-/// shell-attach UX. Sandwiched between the rendered portable menu items
-/// and the footer (separator + version header + Quit).
-///
-/// Each item's `target` is the shared `TrayActionHost` and its `action`
-/// is the matching ObjC selector declared in `action_host.rs`. AppKit
-/// dispatches on click; the Rust method runs on the main thread.
-///
-/// Slice 1 wires the selectors as eprintln stubs; subsequent slices
-/// (m4 sub-task B 2/3/4/5) replace each stub with real Tokio-task
-/// dispatch + main-thread UI feedback.
-///
-/// @trace plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 1)
-fn append_actions(mtm: MainThreadMarker, menu: &NSMenu, action_host: &TrayActionHost) {
-    // Separator above the action block so it's visually grouped distinct
-    // from the portable menu items above.
-    menu.addItem(&NSMenuItem::separatorItem(mtm));
-
-    // Coerce `&TrayActionHost` to `&AnyObject` for `setTarget:`. The
-    // declared class is `MainThreadOnly: NSObject` so the chain is
-    // TrayActionHost → NSObject → AnyObject; we walk it via `as_super`.
-    let host_any: &AnyObject = <TrayActionHost as ClassType>::as_super(action_host).as_ref();
-
-    add_action_item(mtm, menu, "Start VM", sel!(startVm:), host_any);
-    add_action_item(mtm, menu, "Stop VM", sel!(stopVm:), host_any);
-    add_action_item(mtm, menu, "Open Shell", sel!(openShell:), host_any);
-    add_action_item(mtm, menu, "GitHub login", sel!(githubLogin:), host_any);
-}
-
-/// Helper: construct an NSMenuItem with title + action + target wired
-/// up. Pulled out so `append_actions` reads as a table.
-fn add_action_item(
-    mtm: MainThreadMarker,
-    menu: &NSMenu,
-    title: &str,
-    action: Sel,
-    target: &AnyObject,
-) {
-    let item = NSMenuItem::new(mtm);
-    unsafe {
-        item.setTitle(&NSString::from_str(title));
-        item.setAction(Some(action));
-        item.setTarget(Some(target));
-    }
-    menu.addItem(&item);
-}
-
-/// Append the standard tray footer to the bottom of any menu:
-///
-///   ───────────────
-///   Tillandsias v<…>  (disabled header for identity)
-///   ───────────────
-///   Quit Tillandsias  ⌘Q
-///
-/// Idempotent: appended ONCE per menu construction (callers rebuild the
-/// menu from scratch when state changes). The Quit item is what stops the
-/// `NSApplication::run` loop in `super::run()`.
-fn append_footer(mtm: MainThreadMarker, menu: &NSMenu) {
-    let sep1 = NSMenuItem::separatorItem(mtm);
-    menu.addItem(&sep1);
-
-    // Identity header — disabled so it can't be selected; carries the
-    // package version so the user knows what they're running. Reads VERSION
-    // baked in at build time via CARGO_PKG_VERSION (= the 3-component crate
-    // version derived from the 4-component VERSION file via bump-version.sh).
-    let version_label = format!("Tillandsias v{} (alpha)", env!("CARGO_PKG_VERSION"));
-    let header = NSMenuItem::new(mtm);
-    unsafe {
-        header.setTitle(&NSString::from_str(&version_label));
-        header.setEnabled(false);
-    }
-    menu.addItem(&header);
-
-    let sep2 = NSMenuItem::separatorItem(mtm);
-    menu.addItem(&sep2);
-
-    // Quit — AppKit's standard responder-chain pattern. Target = nil so
-    // [NSApp terminate:] gets dispatched via the chain. Cmd-Q for the
-    // keyboard shortcut.
-    let quit = NSMenuItem::new(mtm);
-    unsafe {
-        quit.setTitle(&NSString::from_str("Quit Tillandsias"));
-        quit.setKeyEquivalent(&NSString::from_str("q"));
-        quit.setAction(Some(sel!(terminate:)));
-        // Explicit nil target → responder chain → NSApplication handles it.
-        quit.setTarget(None);
-    }
-    menu.addItem(&quit);
-}
-
 fn build_menu_item(mtm: MainThreadMarker, spec: &MacMenuItemSpec) -> Retained<NSMenuItem> {
+    // Separator items have no title; the shared menu_disabled_v2 spec
+    // doesn't currently produce separators, but if it does in future
+    // the empty label is the convention.
     let title = NSString::from_str(&spec.label);
     let item = NSMenuItem::new(mtm);
     unsafe { item.setTitle(&title) };
@@ -272,6 +185,18 @@ fn build_menu_item(mtm: MainThreadMarker, spec: &MacMenuItemSpec) -> Retained<NS
     if spec.checked {
         // NSControlStateValueOn = 1
         unsafe { item.setState(objc2_app_kit::NSControlStateValueOn) };
+    }
+    // ID-keyed action wiring. Currently only Quit is hooked; other
+    // menu actions (per-project Attach, GitHub login, agent selection,
+    // etc.) need a click → MenuAction → dispatch path that mirrors the
+    // Linux tray's handling — slice planned, not yet shipped.
+    if spec.id == ids::QUIT {
+        unsafe {
+            item.setKeyEquivalent(&NSString::from_str("q"));
+            item.setAction(Some(sel!(terminate:)));
+            // Nil target → responder chain → NSApplication terminates.
+            item.setTarget(None);
+        }
     }
     if !spec.children.is_empty() {
         let submenu = NSMenu::new(mtm);

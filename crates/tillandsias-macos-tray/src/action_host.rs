@@ -486,9 +486,11 @@ mod tests {
             }
             Ok(()) => {
                 // If the network + xz + start actually succeeded, the
-                // VM is now running. Stop it so the test doesn't leak
-                // a live VZVirtualMachine.
-                if let Some(vz) = vm_slot.lock().unwrap().take() {
+                // VM is now running. Take the Arc out of the slot
+                // BEFORE awaiting so we don't hold the std::sync Mutex
+                // across an `.await` (clippy::await_holding_lock).
+                let vz_taken = vm_slot.lock().unwrap().take();
+                if let Some(vz) = vz_taken {
                     let _ = vz.stop(std::time::Duration::from_secs(60)).await;
                 }
             }
