@@ -1,121 +1,99 @@
 ---
 name: advance-work-from-plan
-description: Pick the next bounded slice of READY work from the project plan and ship it. Agent-agnostic + host-aware. Replaces the per-cycle long-form work prompt; the orchestrator can edit this file between iterations to steer remote agent work.
-license: MIT
-metadata:
-  author: tillandsias
-  version: "1.0"
-  invokedBy: /advance-work-from-plan
-  cadence: ~30 min in active sessions; coordinate-multihost-work handles the 2h integration cron
+description: Discover, claim, implement, checkpoint, and complete units of work from the shared plan ledger based on host capabilities and lease rules, complementary to multihost-orchestration.
 ---
 
 # Advance Work From Plan
 
-A single-iteration work cycle for **any agent** on **any host**. Pick one bounded
-slice of READY linux/macOS/Windows-next work, ship it, exit. Designed for
-unattended loops (cron, scheduler) and interactive use (`/advance-work-from-plan`
-in TUI).
+This skill is the recurring scheduled execution loop for worker agents. It allows any agent on any host to autonomously select, claim, implement, checkpoint, and complete shaped work from the shared `plan/` ledger — sustaining development velocity and enforcing finite-time convergence.
 
-**Key property**: this file is committed to the repo. The orchestrator may edit
-it between iterations to add a new priority focus, tighten guardrails, change
-the defer window, or steer work toward a specific packet. Agents always load
-the latest committed version at invocation time.
+---
 
-## 1 — Identify host + active branch
+## 1 — Orient & Discover Environment
 
-Detect which host you're on:
+1.  **Git Check**: Run:
+    ```bash
+    git fetch origin
+    git checkout linux-next
+    git pull --ff-only
+    ```
+2.  **Host and Identity**: Identify your platform (`linux`, `windows`, `macos`), your agent name, and your intended capabilities (`rust`, `podman`, `docs`, `testing`, etc.).
+3.  **Host Detection Table**:
+    | uname/$OS | Platform Name | Canonical Branch |
+    |-----------|---------------|------------------|
+    | Linux     | `linux`       | `linux-next`     |
+    | macOS     | `macos`       | `osx-next`       |
+    | Windows   | `windows`     | `windows-next`   |
+4.  **Create Agent ID**: Compose a unique ID: `<platform>-<workstation>-<backend>-<utc-timestamp>`.
+5.  **Read Authoritative Ledgers**: Read:
+    -   `methodology.yaml`
+    -   `methodology/distributed-work.yaml`
+    -   `plan.yaml`
+    -   `plan/index.yaml`
+    -   `plan/loop_status.md`
 
-| Probe                              | Host    | Active branch |
-|------------------------------------|---------|---------------|
-| `uname -s` → `Linux`               | linux   | `linux-next`  |
-| `uname -s` → `Darwin`              | macOS   | `osx-next`    |
-| `uname -s` → `MINGW*`/`MSYS*`/`CYGWIN*` or `$OS == Windows_NT` | Windows | `windows-next` |
+---
 
-Verify with `git branch --show-current`. If the working branch is not the
-host's active branch:
+## 2 — Discover Work & Select Shaped Packet
 
-- Log the mismatch, do NOT switch.
-- Skip to step 7 with a SKIPPED ledger entry.
+1.  **Walk the Graph**: Read, in order:
+    -   `plan/index.yaml` — packet index + selection policy.
+    -   `plan/issues/<host>-next-*work-queue*.md` — your host's queue (e.g. `linux-next-work-queue-*`, `osx-next-work-queue-*`, `windows-next-work-queue-*`).
+    -   `plan/issues/forge-diagnostics-automation-2026-05-27.md` and `plan/issues/cross-host-blocker-roundup-*.md` — high-impact packets.
+    -   (Linux only) `plan/issues/linux-headless-spec-gaps-2026-05-27.md` — diagnostics + headless backlog.
+    -   Any other `plan/issues/*.md` referencing your host or "any host".
+2.  **Filter Eligible Packets**: Find tasks where:
+    -   `owner_host` matches your platform or is `any`.
+    -   `status` is `ready`, `pending` (if dependencies are unblocked), or `failed-retryable`.
+    -   `capability_tags` intersect with your capabilities.
+    -   There is no active unexpired lease.
+3.  **Selection Priority (Top Wins)**:
+    -   **Diagnostics-driven container-start verification** (USER PRIORITY, linux runtime-host today): work that strengthens the `--diagnostics` → annex → distill → litmus chain. See `scripts/forge-diagnostics-annex.sh`, `scripts/distill-forge-diagnostics.sh`, `openspec/litmus-tests/litmus-forge-diagnostics-e2e.yaml`, `methodology/forge-diagnostics.yaml` piggyback_protocol.
+    -   **Spec gap fills**: `openspec/specs/<spec>/spec.md` requirements without implementation coverage. Focus on `headless-mode`, `podman-idiomatic-patterns`, `runtime-diagnostics-stream`, `logging-accountability`, `observability-metrics`.
+    -   **Drift-protection litmus**: instant-phase tests pinning surfaces that recent work added (formatter literals, env-var contracts, public API names, unit-test names).
+    -   **Clippy / idiomatic-podman hardening**.
+4.  **Constraint**: ONE logical commit per cycle. If a slice estimates >2h, split it and ship the first half.
+5.  **Delegate Parallelizable Research**: Use sub-agents for file inventories, grep searches, etc., but keep ownership of specs, verification, and commits.
 
-The 2h integration cron (`coordinate-multihost-work`) handles cross-host
-fast-forwards and merges; do not duplicate that work here.
+---
 
-## 2 — Refresh
+## 3 — Claim the Lease
 
-```bash
-git fetch origin --prune
-git pull --ff-only origin <active-branch>
-git status --short    # must be clean
-```
+1.  **Mint Lease ID**: Mint a content-stable lease ID.
+2.  **Emit Claim Event**: Update the task's YAML block to append a `claim` event under `events:`:
+    ```yaml
+    - type: claim
+      ts: "<ISO-8601-UTC>"
+      agent_id: "<your-agent-id>"
+      host: "<linux|windows|macos>"
+      lease_id: "<your-lease-id>"
+      expires_at: "<acquired-at + 4 hours>"
+    ```
+    Change the task's top-level status to `claimed`.
+3.  **Commit & Push**: Commit ONLY the plan file edits to `origin/linux-next`:
+    ```bash
+    git add plan/
+    git commit -m "chore(plan): claim lease for <task-id>"
+    git push origin linux-next
+    ```
+4.  **Collision Recovery**: If the push is rejected because another agent claimed the lease concurrently, fetch, pull, yield your claim, and select a different packet.
 
-If dirty with sibling/auto-artifact churn, `git stash` it (do NOT commit).
-If truly blocked, write a SKIPPED ledger entry (step 7) and exit.
+---
 
-## 3 — Discover work
+## 4 — Host Write Scope & Unblock-with-NOOP
 
-Read, in order:
+Each host has a primary write scope. You can READ everything; you should normally only WRITE within your scope:
 
-1. `plan/index.yaml` — packet index + selection policy.
-2. `plan/issues/<host>-next-*work-queue*.md` — your host's queue (e.g.
-   `linux-next-work-queue-*`, `osx-next-work-queue-*`,
-   `windows-next-work-queue-*`).
-3. `plan/issues/forge-diagnostics-automation-2026-05-27.md`,
-   `plan/issues/cross-host-blocker-roundup-*.md` — high-impact packets.
-4. (linux) `plan/issues/linux-headless-spec-gaps-2026-05-27.md` —
-   diagnostics + headless backlog.
-5. Any other `plan/issues/*.md` referencing your host or "any host".
+| Host    | Primary write scope |
+|---------|---------------------|
+| Linux   | `crates/tillandsias-{headless,podman,control-wire,core,metrics,logging,vault-client}/`, `scripts/forge-diagnostics-*`, `scripts/distill-*`, `images/`, `openspec/litmus-tests/`, most `plan/issues/` |
+| macOS   | `crates/tillandsias-macos-tray/`, `crates/tillandsias-vm-layer/src/{vz,transport_macos,materialize/macos}.rs`, `scripts/install-macos*`, `scripts/build-macos*` |
+| Windows | `crates/tillandsias-windows-tray/`, `crates/tillandsias-vm-layer/src/{wsl,materialize/windows}.rs`, `scripts/install-windows*`, `scripts/tray-diagnose.ps1`, host-shell pty windows files |
 
-## 4 — Pick ONE bounded slice (30 min – 2 h)
+Cross-host shared scope (any host may write, but COORDINATE via the ledger first): `crates/tillandsias-control-wire/` (wire format — WIRE_VERSION must not break), `crates/tillandsias-host-shell/`, `methodology/`, `openspec/specs/`, top-level docs.
 
-Selection priority (top wins):
-
-1. **Diagnostics-driven container-start verification** (USER PRIORITY,
-   linux runtime-host today): work that strengthens the
-   `--diagnostics` → annex → distill → litmus chain. See
-   `scripts/forge-diagnostics-annex.sh`,
-   `scripts/distill-forge-diagnostics.sh`,
-   `openspec/litmus-tests/litmus-forge-diagnostics-e2e.yaml`,
-   `methodology/forge-diagnostics.yaml` piggyback_protocol.
-2. **Spec gap fills**: `openspec/specs/<spec>/spec.md` requirements
-   without implementation coverage. Focus on
-   `headless-mode`, `podman-idiomatic-patterns`,
-   `runtime-diagnostics-stream`, `logging-accountability`,
-   `observability-metrics`.
-3. **Drift-protection litmus**: instant-phase tests pinning surfaces
-   that recent work added (formatter literals, env-var contracts,
-   public API names, unit-test names).
-4. **Clippy / idiomatic-podman hardening**.
-
-**Constraint**: ONE logical commit per cycle. If a slice estimates >2h,
-split it and ship the first half.
-
-**Delegate parallelizable research** (file inventory, stale-reference
-audits, multi-file grep): use the host's available sub-agent tool
-(Claude `Agent`, OpenCode/Codex equivalents). Keep ownership of specs,
-verification, commits.
-
-## 5 — Host scope (SOFT guidance + unblock-with-NOOP)
-
-Each host has a primary write scope. You can READ everything; you should
-normally only WRITE within your scope:
-
-| Host    | Primary write scope                                                                                                                                                                                  |
-|---------|------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------|
-| linux   | `crates/tillandsias-{headless,podman,control-wire,core,metrics,logging,vault-client}/`, `scripts/forge-diagnostics-*`, `scripts/distill-*`, `images/`, `openspec/litmus-tests/`, most `plan/issues/` |
-| macOS   | `crates/tillandsias-macos-tray/`, `crates/tillandsias-vm-layer/src/{vz,transport_macos,materialize/macos}.rs`, `scripts/install-macos*`, `scripts/build-macos*`                                       |
-| Windows | `crates/tillandsias-windows-tray/`, `crates/tillandsias-vm-layer/src/{wsl,materialize/windows}.rs`, `scripts/install-windows*`, `scripts/tray-diagnose.ps1`, host-shell pty windows files            |
-
-Cross-host shared scope (any host may write, but COORDINATE via the
-ledger first): `crates/tillandsias-control-wire/` (wire format —
-WIRE_VERSION must not break), `crates/tillandsias-host-shell/`,
-`methodology/`, `openspec/specs/`, top-level docs.
-
-### Unblock-with-NOOP rule
-
-If your work needs a function/type/file that lives in a sibling-owned
-scope and doesn't exist yet, you MAY add a **minimal stub** there to
-unblock yourself. Mark it explicitly:
-
+### Unblock-with-NOOP Rule
+If your work needs a function/type/file that lives in a sibling-owned scope and doesn't exist yet, you MAY add a **minimal stub** there to unblock yourself. Mark it explicitly:
 ```rust
 // PLEASE REVIEW: <sibling-host> — minimal stub to unblock <your-work>.
 // Owner: replace with the real implementation and add a brief
@@ -126,17 +104,11 @@ pub fn placeholder() -> Result<(), String> {
     Err("not yet implemented".to_string())
 }
 ```
+Cite the unblock in your commit body (`unblock-noop: <path>:<line>`) so the sibling host can find it on their next cycle. Keep the stub tiny — one function, one error, no business logic.
 
-Cite the unblock in your commit body (`unblock-noop: <path>:<line>`) so
-the sibling host can find it on their next cycle. Keep the stub tiny —
-one function, one error, no business logic.
+---
 
-Sibling-owned cosmetic drift (e.g. rustfmt drift in their files
-breaking your shared CI): flag in the ledger, do NOT reformat. Cite
-`feedback_sibling_fmt_drift_flag_not_fix` if the project memory
-records this preference.
-
-## 6 — Execute + verify
+## 5 — Execute + Verify
 
 ```bash
 cargo fmt --all
@@ -146,93 +118,71 @@ cargo test -p <crate-you-touched>      # targeted, fast
 ```
 
 Hard rules:
-
-- **Never bypass the idiomatic-podman layer.** The test
-  `idiomatic_podman_launch_paths_do_not_bypass_shared_layer` enforces
-  routing through `PodmanClient` — no direct `Command::new("podman")`
-  in production launch paths.
-- **Container security flags are non-negotiable**: `--cap-drop=ALL`,
-  `--security-opt=no-new-privileges`, `--userns=keep-id`, `--rm`.
+- **Never bypass the idiomatic-podman layer.** The test `idiomatic_podman_launch_paths_do_not_bypass_shared_layer` enforces routing through `PodmanClient` — no direct `Command::new("podman")` in production launch paths.
+- **Container security flags are non-negotiable**: `--cap-drop=ALL`, `--security-opt=no-new-privileges`, `--userns=keep-id`, `--rm`.
 - **Pre-commit hooks and release signing** are not optional.
 
-## 7 — Commit + push + ledger (unconditional)
+---
 
-```bash
-git add <specific-files>      # NEVER `git add -A` (cross-host churn)
-git commit -m "<slice-message>"   # cite trace + plan packet + any unblock-noop
-git push origin <active-branch>
-# on non-ff: git fetch && git rebase origin/<active-branch> && push, ≤3x
-```
+## 6 — Commit, Push & Checkpoint
 
-The ledger entry is the cross-host advertisement of your shipped work.
-Write a one-line outcome to your host's work-queue ledger
-(`plan/issues/<host>-next-work-queue-*.md`):
+1.  **Durable Checkpointing**: At meaningful milestones (every 30–45 minutes), write an `agent_status_packet` as a `progress` or `checkpoint` event to the plan file, and commit/push it to `linux-next`.
+    -   *Schema requirement*: Include current plan, touched files, partial evidence, and next checkpoint.
+2.  **targeted git add**: ONLY stage the intended files:
+    ```bash
+    git add <specific-files>      # NEVER `git add -A` (cross-host churn)
+    git commit -m "<slice-message>"   # cite trace + plan packet + any unblock-noop
+    git push origin <active-branch>
+    # on non-ff: git fetch && git rebase origin/<active-branch> && push, ≤3x
+    ```
+3.  **Durable Ledger Update**: Write a one-line outcome to your host's work-queue ledger (`plan/issues/<host>-next-work-queue-*.md`):
+    ```
+    - 2026-MM-DDTHH:MMZ  <commit-sha>  <one-line summary>
+    ```
 
-```
-- 2026-MM-DDTHH:MMZ  <commit-sha>  <one-line summary>
-```
+### Defer Rule
+If the 2h integration cron fired in the last 10 min (check the latest `### Cycle` timestamp in `plan/issues/multi-host-integration-loop-2026-05-24.md`), write a no-op ledger entry and exit. The cron's writes need to settle before another work commit lands.
 
-### Defer rule
+---
 
-If the 2h integration cron fired in the last 10 min (check the latest
-`### Cycle` timestamp in
-`plan/issues/multi-host-integration-loop-2026-05-24.md`), write a
-no-op ledger entry and exit. The cron's writes need to settle before
-another work commit lands.
+## 7 — Submit Completion or Yield
 
-### Output line
+### Submit Completion
+1.  **Full Verification**: Run the full validation litmus on your platform to confirm zero-drift compliance.
+2.  **Emit Completed Event**: Update the task's YAML block:
+    -   Append a `completed` event to `events:` listing all commit SHAs and validation log paths.
+    -   Flip the task status to `done` in the item header.
+    -   Update any local dependency mirror tables in the same pass.
+3.  **Commit & Push Ledger**: Commit and push the final plan edits to `origin/linux-next`.
 
-A single line back to the invoker:
+### Yield & Triage (Failure/Blockage)
+1.  **Emit Blocked or Failed Event**: If you encounter an unresolvable error, blocker, or spec gap:
+    -   Append a `blocked` or `failed` event to `events:` detailing the exact reason, the named blocker, and the smallest next diagnostic command.
+    -   Flip status to `blocked` or `failed` (with `retryable: true|false`).
+    -   Commit and push to `origin/linux-next` so the Orchestrator can audit and reschedule it.
+2.  **Fallback Selection**: Release your local lease, select your named fallback task, and begin the loop fresh.
 
-```
-Work slice <UTC> — shipped: <one-line>. Tests: <pass|n/a>. Delegated: <agents|none>. Next: <one-line>.
-```
+---
 
-## Hard guardrails
+## Hard Guardrails
 
 - NEVER `git push --force`.
-- NEVER push directly to `main` — use PRs. Check
-  `plan/issues/cross-host-blocker-roundup-*.md` for the active
-  `<host>-next → main` PR number before opening a duplicate.
-- NEVER push to a sibling host's branch (linux MUST NOT push to
-  `osx-next` or `windows-next`).
+- NEVER push directly to `main` — use PRs. Check `plan/issues/cross-host-blocker-roundup-*.md` for the active `<host>-next → main` PR number before opening a duplicate.
+- NEVER push to a sibling host's branch (linux MUST NOT push to `osx-next` or `windows-next`).
 - NEVER skip hooks or signing.
-- `release.yml` / `recipe-publish.yml` workflows are
-  `workflow_dispatch` only — never auto-trigger.
-- NEVER resolve cross-host plan conflicts by deletion — tombstone or
-  supersede only.
-- When the worktree is dirty, only stage `plan/` files explicitly by
-  path. Implementation code from a previous (uncommitted) iteration is
-  NOT yours to touch.
+- `release.yml` / `recipe-publish.yml` workflows are `workflow_dispatch` only — never auto-trigger.
+- NEVER resolve cross-host plan conflicts by deletion — tombstone or supersede only.
+- When the worktree is dirty, only stage `plan/` files explicitly by path. Implementation code from a previous (uncommitted) iteration is NOT yours to touch.
 
-## How orchestrators steer this skill
+---
+
+## How Orchestrators Steer this Skill
 
 The canonical file lives at `skills/advance-work-from-plan/SKILL.md`.
-Each agent runtime (`.claude/`, `.opencode/`, `.codex/`, `.gemini/`,
-`.github/`) accesses it via a symlink under its `skills/` directory, so
-there is exactly one source of truth.
+Each agent runtime (`.claude/`, `.opencode/`, `.codex/`, `.gemini/`, `.github/`) accesses it via a symlink under its `skills/` directory, so there is exactly one source of truth.
 
 To steer remote agent work between iterations, an orchestrator can:
-
-- Edit the priority list in §4 to elevate a packet for the next cycle.
-- Tighten or loosen the defer rule in §7.
+- Edit the priority list in §2 to elevate a packet for the next cycle.
+- Tighten or loosen the defer rule in §6.
 - Add a new host row to §1 (e.g. when a freebsd-host comes online).
-- Drop or extend the unblock-with-NOOP rule in §5.
-
-Commit + push the edit. Every subsequent invocation of this skill
-reads the new version from disk — no agent code change required.
-
-## Change Log
-
-- **2026-05-28** (linux-tlatoani-fedora): Initial creation. Extracted
-  from the per-cycle work-loop prompt that had been pasted into every
-  Linux work loop / integration cron invocation. Adds:
-  - host-detection table in §1
-  - work-discovery order in §3
-  - soft scope guidance + unblock-with-NOOP escape hatch in §5
-  - explicit defer rule in §7
-  Symlinked into `.claude/skills/`, `.opencode/skills/`,
-  `.codex/skills/`, `.gemini/skills/`, `.github/skills/`. Future work:
-  the existing `openspec-*` skills are still per-runtime duplicates
-  (they differ in content between runtimes today, so a unification
-  pass requires reconciliation before symlinking).
+- Drop or extend the unblock-with-NOOP rule in §4.
