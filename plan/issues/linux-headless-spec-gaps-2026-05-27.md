@@ -17,8 +17,14 @@ bounded slices from. Each item is sized for one loop iteration. NOT for siblings
    `pub async fn` and `.await`s `issue_approle_token` directly (no runtime
    nesting). Verified: builds + vault tests green. (A parallel block_in_place
    helper fix was drafted on this host but dropped in favor of the cleaner
-   async approach already on origin.) Follow-up: a fresh runtime-litmus from
-   current origin/linux-next to confirm the full --opencode --diagnostics path.
+   async approach already on origin.) **END-TO-END VERIFIED** at 2026-05-28T~03:20Z
+   (sibling commit `6e79297d`): manual litmus `tillandsias . --opencode
+   --diagnostics` ran cleanly and exited 0. Two secondary blockers also cleared
+   en route — OCI hostname length (`sanitize_hostname`) and `--print` TUI flag
+   in `images/default/entrypoint-forge-opencode.sh`. The raw diagnostics log
+   from that manual run wasn't committed to `plan/diagnostics/`, so the
+   `curated-toolchain-backlog` triage waits for the NEXT litmus run that
+   produces a committed non-empty distilled summary.
 1. **[HIGH] ISO 8601 timestamp prefix on launch events.** `format_launch_event`
    (crates/tillandsias-podman/src/client.rs:~1596) emits no timestamp; spec
    runtime-diagnostics-stream requires `[<UTC>] ` prefix. Add `chrono::Utc::now()`
