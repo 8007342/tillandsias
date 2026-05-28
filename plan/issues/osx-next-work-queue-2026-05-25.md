@@ -2234,3 +2234,45 @@ step 5 lands.
 - Streak: 0 (productive iter). Next macOS iter eligible at ~06:00Z
   to scope slice 8c (full menu re-render — NSStatusItem.setMenu:
   + re-attach status_handles after each rebuild).
+
+### event: macOS slice 8c — NSMenu rebuild on MenuState change — 2026-05-28T06:00Z
+
+- Commit `8d3a8774` closes the menu-rebuild loop that slice 8b
+  staged. The poller now triggers `rebuild_menu_main_thread` via
+  `dispatch_to_main_thread` whenever cloud_projects or
+  podman_ready changes:
+    1. Clone the held MenuState
+    2. `tillandsias_host_shell::menu_state::build(&state)` → fresh
+       MenuStructure (same path Linux native + Windows tray use)
+    3. `build_menu_with_status_row` (now `pub(crate)`) walks it +
+       wires `trayAction:` targets on every clickable item using
+       the live action-host
+    4. `NSStatusItem.setMenu:` swaps the new menu in
+    5. Re-attach the `status_menu_item` Arc to the new first-row
+       NSMenuItem so future `set_status_text` calls target the
+       fresh instance (the old one is released with the old menu)
+- Infrastructure: new `TrayActionHostHandle` Send/Sync wrapper +
+  `self_handle: Arc<Mutex<Option<…>>>` field populated once via
+  `set_self_handle` from `status_item::run`. The wrapper exists
+  because `Retained<TrayActionHost>` isn't Send (UnsafeCell layout)
+  and the rebuild dispatch needs to reach `&TrayActionHost` on the
+  main thread to pass to `build_menu_with_status_row`.
+- Chip-update and rebuild dispatches are independent main-thread
+  tasks. Chip text always lands; rebuild only when state actually
+  changed. Both run on the AppKit serial queue so they can't
+  interleave with user click handlers.
+- Note: today the initial menu still uses
+  `MenuStructure::initial_provisioning()` in `install_status_item`;
+  the first poll tick rebuilds to the full menu via
+  `menu_state::build`. A follow-up slice can switch the initial
+  build for symmetric initial+update paths (and to show the menu
+  shape sooner even before the first poll tick).
+- Tests + lint clean: macos-tray 27/27; clippy -D warnings clean;
+  fmt clean.
+- Streak: 0 (productive iter). With slice 8c done, the macOS cloud-
+  projects convergence is functionally complete — the menu now
+  reflects in-VM `gh repo list` output 1:1 with windows-tray.
+  Remaining macOS items unchanged from prior entry: nice-to-have
+  manifest.release_tag accessor (Linux-owned) + user-attended m8
+  smoke. Next macOS iter eligible at ~06:30Z; likely shifts to
+  noop cadence pending those.
