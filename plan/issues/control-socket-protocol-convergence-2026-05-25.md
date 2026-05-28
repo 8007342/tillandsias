@@ -192,6 +192,28 @@ The four key gains:
 - `crates/tillandsias-headless/tests/vsock_listener_e2e.rs` — vsock test fixture (good model for unix-side equivalent).
 - PR #2 — https://github.com/8007342/tillandsias/pull/2 — where the Linux implementation will land.
 
+## Update 2026-05-28T08:55Z (linux-host) — `ControlMessage::kind()` lifted to control-wire
+
+Both dispatchers (`tray/mod.rs::handle_control_connection` and
+`vsock_server::serve_connection`) previously constructed their Error-frame
+`message:` strings via a duplicated `control_message_kind` helper in
+tray/mod.rs (unix path) or by `format!("{:?}", std::mem::discriminant(&other))`
+producing an opaque `Discriminant(13)` (vsock path).
+
+Lifted `pub fn kind(&self) -> &'static str` to `impl ControlMessage` in
+the canonical `tillandsias-control-wire` crate. Within the defining crate,
+`#[non_exhaustive]` does NOT relax exhaustiveness, so adding a new
+variant is a compile error here until it gets a stable name — the shipped
+wire surface cannot drift from the diagnostic surface unnoticed. Removed
+the duplicate helper from tray/mod.rs and the opaque discriminant
+formatting from vsock_server.rs; both now call `other.kind()`. New unit
+test pins the name table for every declared variant.
+
+Net result: operator-visible Error frames now read
+`variant CloudRefreshRequest not handled by the in-VM vsock dispatcher`
+instead of `variant Discriminant(13) not handled …`. No wire change;
+WIRE_VERSION stays at 2.
+
 ## Update 2026-05-27T21:00Z (linux-host) — CloudRefreshRequest now real (Q4 progress)
 
 The vsock `CloudRefreshRequest` handler is no longer a stub (`e1a190d4`): the

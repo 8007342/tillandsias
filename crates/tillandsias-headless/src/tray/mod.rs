@@ -556,38 +556,12 @@ fn handle_control_connection(mut stream: UnixStream, subscribers: ControlSubscri
                     code: ErrorCode::Unsupported,
                     message: format!(
                         "variant {} not handled by the unix-socket dispatcher",
-                        control_message_kind(&other)
+                        other.kind()
                     ),
                 },
             };
             let _ = write_control_envelope(&mut stream, &err);
         }
-    }
-}
-
-/// Short stable name for a `ControlMessage` variant, used in `Error` frame
-/// messages so clients can log which request they sent that was rejected.
-fn control_message_kind(msg: &ControlMessage) -> &'static str {
-    match msg {
-        ControlMessage::Hello { .. } => "Hello",
-        ControlMessage::HelloAck { .. } => "HelloAck",
-        ControlMessage::IssueWebSession { .. } => "IssueWebSession",
-        ControlMessage::IssueAck { .. } => "IssueAck",
-        ControlMessage::Error { .. } => "Error",
-        ControlMessage::EvictProject { .. } => "EvictProject",
-        ControlMessage::McpFrame { .. } => "McpFrame",
-        ControlMessage::VmStatusRequest { .. } => "VmStatusRequest",
-        ControlMessage::VmStatusReply { .. } => "VmStatusReply",
-        ControlMessage::VmShutdownRequest { .. } => "VmShutdownRequest",
-        ControlMessage::EnumerateLocalProjects { .. } => "EnumerateLocalProjects",
-        ControlMessage::LocalProjectsReply { .. } => "LocalProjectsReply",
-        ControlMessage::CloudRefreshRequest { .. } => "CloudRefreshRequest",
-        ControlMessage::CloudRefreshReply { .. } => "CloudRefreshReply",
-        ControlMessage::PtyOpen { .. } => "PtyOpen",
-        ControlMessage::PtyData { .. } => "PtyData",
-        ControlMessage::PtyResize { .. } => "PtyResize",
-        ControlMessage::PtyClose { .. } => "PtyClose",
-        _ => "Unknown",
     }
 }
 

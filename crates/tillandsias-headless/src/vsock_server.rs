@@ -470,7 +470,7 @@ async fn handle_connection(
             // (Unsupported) instead of silently logging and continuing.
             // Clients otherwise hang waiting for a reply they will never get.
             other => {
-                debug!(spec = "vsock-transport", msg = ?other, "rejecting unsupported vsock frame");
+                debug!(spec = "vsock-transport", kind = other.kind(), "rejecting unsupported vsock frame");
                 let err = ControlEnvelope {
                     wire_version: WIRE_VERSION,
                     seq: env.seq,
@@ -478,8 +478,8 @@ async fn handle_connection(
                         seq_in_reply_to: Some(env.seq),
                         code: ErrorCode::Unsupported,
                         message: format!(
-                            "variant {:?} not handled by the in-VM vsock dispatcher",
-                            std::mem::discriminant(&other),
+                            "variant {} not handled by the in-VM vsock dispatcher",
+                            other.kind()
                         ),
                     },
                 };
