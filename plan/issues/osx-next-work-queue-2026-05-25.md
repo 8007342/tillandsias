@@ -2521,3 +2521,39 @@ step 5 lands.
   a "look here" nudge.
 - Delivered proactively via SendUserFile.
 - Streak: 0 (productive iter). Next macOS iter eligible at ~15:30Z.
+
+### event: macOS slice 14 — --diagnose --json machine-readable output — 2026-05-28T15:30Z
+
+- Commit `72cbf8a7` mirrors windows-tray's `c4908438` (`--diagnose
+  --json` for support tooling). Refactors `diagnose()` into
+  collect-then-format so both human and JSON output emit the EXACT
+  same fields:
+    * `DiagnoseFormat` enum (Human / Json)
+    * `DiagnoseReport` struct with `#[derive(serde::Serialize)]`
+    * `collect_report()` does all the data collection
+    * `print_human` / `print_json` / `exit_code_from` each take
+      `&DiagnoseReport` — same data, two formatters, one decision
+- Live JSON output (verified):
+    ```json
+    {
+      "version": "0.1.0",
+      "in_app": false,
+      "exe_path": "...",
+      "image_root": "/Users/.../Library/Application Support/tillandsias",
+      "rootfs_present": true, "rootfs_bytes": 0,
+      "kernel_present": false, "kernel_bytes": null,
+      "initrd_present": false, "initrd_bytes": null,
+      "release_tag": "v0.2.260526.1",
+      "manifest_pin_aarch64_img": "6859a7bcc4a9",
+      "provisioned": false
+    }
+    ```
+- macOS-only fields differ from windows where the concept doesn't
+  exist: no `log_path` (no file-based tracing on macOS yet), no
+  `wire` object (macOS vsock is per-VM-handle so `--diagnose`
+  can't reach the live tray's wire), and the chip-text disclaimer
+  is human-only since the JSON consumer wants raw data.
+- Adds `serde` + `serde_json` to macos-tray deps (workspace = true).
+- Tests + lint clean: macos-tray 32/32; clippy -D warnings clean;
+  fmt clean.
+- Streak: 0 (productive iter). Next macOS iter eligible at ~16:00Z.
