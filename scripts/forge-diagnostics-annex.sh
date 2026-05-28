@@ -93,22 +93,37 @@ if [[ -f "$MARKER" ]]; then
 fi
 
 # --- capture (non-blocking) -------------------------------------------------
-RAW_LOG="${DIAG_DIR}/diagnostics_$(date -u +%Y%m%dT%H%M%SZ).log"
+TS="$(date -u +%Y%m%dT%H%M%SZ)"
+RAW_LOG="${DIAG_DIR}/diagnostics_${TS}.log"
+# Companion file: the idiomatic-podman layer writes
+# `event:container_launch stage=… state=… container=…` lines to stderr
+# whenever --diagnostics is active. Without capturing stderr here, those
+# launch events vanish, and downstream litmus loses the structured proof
+# that containers actually reached state=running via the shared layer.
+# Keep BOTH files: the stdout JSON is the agent's structured capability
+# report; the stderr log is the runtime-diagnostics-stream evidence.
+STDERR_LOG="${DIAG_DIR}/diagnostics_${TS}.stderr.log"
 
 if ! command -v tillandsias >/dev/null 2>&1; then
   log "FINDING: tillandsias not on PATH — cannot run forge diagnostics prompt; annex non-blocking, continuing"
   exit 0
 fi
 
-log "capturing forge diagnostics -> $RAW_LOG"
+log "capturing forge diagnostics -> $RAW_LOG (+ $STDERR_LOG)"
 # The forge is assumed already alive (piggy-back). Capture is best-effort: a
 # launch/timeout/parse failure is a finding, never a caller failure.
 if tillandsias . --opencode --diagnostics \
-      --prompt "$(cat "$PROMPT_FILE")" < /dev/null 2>/dev/null \
+      --prompt "$(cat "$PROMPT_FILE")" < /dev/null 2>"$STDERR_LOG" \
       | tee "$RAW_LOG" >/dev/null; then
   if [[ -s "$RAW_LOG" ]]; then
+    # Marker carries the stdout log path (the long-standing contract);
+    # the stderr companion sits next to it on disk and is discoverable
+    # via the `.stderr.log` suffix or by `ls -t … | head -1`.
     printf '%s %s\n' "$PROMPT_SHA" "$RAW_LOG" > "$MARKER"
     log "captured + marked ($MARKER)"
+    if [[ ! -s "$STDERR_LOG" ]]; then
+      log "FINDING: stderr capture is empty — no container_launch event stream observed; recorded, non-blocking"
+    fi
     # Distill into a durable plan/diagnostics summary (also non-blocking).
     if [[ -x "$DISTILL" ]]; then
       "$DISTILL" --latest "$RAW_LOG" || log "FINDING: distillation reported an issue (non-blocking)"

@@ -131,6 +131,17 @@ bounded slices from. Each item is sized for one loop iteration. NOT for siblings
   `Actor.Attributes.containerExitCode` shape, stringified or integer).
   Non-Died statuses get `None`. Five new unit tests pin both shapes
   + the "Died without exit code reports None" honesty case.
+- **USER PRIORITY (b) DONE**: forge-diagnostics annex now captures
+  stderr to a `.stderr.log` companion next to the stdout JSON. The
+  idiomatic-layer `event:container_launch` stream — previously
+  discarded by `2>/dev/null` — is now available to litmus assertions
+  via `target/forge-diagnostics/diagnostics_<UTC>.stderr.log`. Empty
+  stderr is recorded as a FINDING (non-blocking). The forge-diagnostics-
+  e2e litmus gained two structural assertions: ≥1 `state=running`
+  line + zero `state=failed` lines from the same capture cycle. This
+  fulfills "leverage `tillandsias ... --diagnostics` to extract
+  meaningful structured results" — both the JSON capability report
+  AND the launch-event stream now ride one forge launch per cycle.
   (Next diagnostics gap: GAP 2 / GAP 3 PHASE-2 — wire the live podman
   events parser to emit_diagnostic_event when `debug` is on.)
 

@@ -78,17 +78,52 @@ print(f'  missing_tools: {len(data[\"missing_tools\"])}; '
 "
     timeout_ms: 15000
 
+  - step: "container-start health: the idiomatic layer emitted at least one running event"
+    # The annex now captures stderr to a `.stderr.log` companion next to
+    # the stdout JSON. The launch-event stream (emit_launch_event,
+    # spec:runtime-diagnostics-stream, ISO-8601 prefixed) lives there. A
+    # single `state=running container=…` line is structural proof that
+    # the shared PodmanClient layer ran — a raw `Command::new("podman")`
+    # bypass would NOT produce these. Field order is pinned by the unit
+    # test `launch_event_line_shape_is_stable`; keep this grep in lockstep.
+    # @trace spec:runtime-diagnostics-stream, spec:podman-idiomatic-patterns
+    command: >
+      STDERR=$(ls -t target/forge-diagnostics/diagnostics_*.stderr.log 2>/dev/null | head -1)
+      && [ -n "$STDERR" ]
+      && [ -s "$STDERR" ]
+      && grep -Eq 'event:container_launch stage=[^ ]+ state=running container=' "$STDERR"
+      && echo "ok: idiomatic layer reported >=1 container running via diagnostics annex"
+    timeout_ms: 10000
+    expected_behavior: "ok: idiomatic layer reported >=1 container running via diagnostics annex"
+
+  - step: "container-start health: NO container reached state=failed during the annex capture"
+    # A failed launch surfaces the failing stage + container straight
+    # from the stream. Gating: a single failed line in the diagnostics
+    # cycle invalidates the structured report (containers didn't reach
+    # the state the JSON claims).
+    command: >
+      STDERR=$(ls -t target/forge-diagnostics/diagnostics_*.stderr.log 2>/dev/null | head -1)
+      && [ -n "$STDERR" ]
+      && if grep -E 'event:container_launch .* state=failed' "$STDERR"; then
+           echo "FAIL: a container launch failed during the annex capture (see lines above)"; exit 1;
+         else
+           echo "ok: no container_launch state=failed in annex stderr";
+         fi
+    timeout_ms: 10000
+    expected_behavior: "ok: no container_launch state=failed in annex stderr"
+
 observability:
   traces:
     - "@trace spec:default-image"
     - "@trace spec:forge-as-only-runtime"
     - "@trace spec:forge-offline"
     - "@trace spec:forge-hot-cold-split"
-  expected_log: "Forge diagnostics E2E captured structured capability report"
+  expected_log: "Forge diagnostics E2E captured structured capability report + idiomatic-layer launch-event stream"
   log_fields:
     spec: "forge-diagnostics"
     test: "forge-diagnostics-e2e"
     artifact: "target/forge-diagnostics/diagnostics_*.log"
+    stderr_artifact: "target/forge-diagnostics/diagnostics_*.stderr.log"
 
 rollback:
   on_failure: >
