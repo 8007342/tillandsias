@@ -5,6 +5,7 @@ pub mod cache_semantics;
 mod client;
 pub mod container_spec;
 pub mod diagnostics;
+pub mod diagnostics_filter;
 pub mod diagnostics_stream;
 pub mod events;
 mod gpu;

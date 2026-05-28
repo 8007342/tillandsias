@@ -1580,6 +1580,17 @@ fn emit_launch_event(
     if !enabled {
         return;
     }
+    // Consult the process-wide diagnostics filter (env-driven; see
+    // crate::diagnostics_filter). The filter is built once per process
+    // and pass-through unless the user set TILLANDSIAS_DEBUG_FILTER /
+    // TILLANDSIAS_DEBUG_CONTAINER / TILLANDSIAS_DEBUG_LEVEL.
+    //
+    // @trace spec:runtime-diagnostics-stream (Requirement: Event filtering and control)
+    if !crate::diagnostics_filter::DiagnosticsFilter::global()
+        .allows("event:container_launch", container_name)
+    {
+        return;
+    }
     eprintln!(
         "[{}] {}",
         iso8601_millis(chrono::Utc::now()),
@@ -1702,16 +1713,29 @@ pub(crate) fn format_container_stderr_event(container_name: &str, line: &str) ->
 
 /// Emit a typed diagnostic-stream event to stderr with the ISO-8601 prefix
 /// the spec mandates. Mirrors `emit_launch_event` — gated on `enabled` so
-/// callers can pass the runtime `debug` flag without branching themselves.
+/// callers can pass the runtime `debug` flag without branching themselves,
+/// and consults the global `DiagnosticsFilter` so
+/// `TILLANDSIAS_DEBUG_FILTER`/`TILLANDSIAS_DEBUG_CONTAINER` env vars take
+/// effect uniformly across all typed events.
 ///
-/// `event` MUST be the body produced by one of `format_container_exit_event`,
-/// `format_container_signal_event`, `format_resource_exhaustion_event`, or
-/// `format_container_stderr_event`. The wrapper is intentionally untyped on
-/// the body so we don't need an enum for one-shot dispatch; the formatter
-/// functions are the typed surface.
+/// `event_type` MUST be the wire-shape event kind (`event:container_exit`,
+/// `event:container_signal`, ...) so the filter can match it. `container`
+/// MUST be the literal container name as emitted in the event body, so a
+/// `TILLANDSIAS_DEBUG_CONTAINER=tillandsias-myproject-*` glob can target
+/// it. `event_body` MUST be the body produced by one of
+/// `format_container_exit_event`, `format_container_signal_event`,
+/// `format_resource_exhaustion_event`, or `format_container_stderr_event`.
 #[allow(dead_code)] // staged for diagnostics-stream wiring slice (gap-2/gap-3)
-pub(crate) fn emit_diagnostic_event(enabled: bool, event_body: &str) {
+pub(crate) fn emit_diagnostic_event(
+    enabled: bool,
+    event_type: &str,
+    container: &str,
+    event_body: &str,
+) {
     if !enabled {
+        return;
+    }
+    if !crate::diagnostics_filter::DiagnosticsFilter::global().allows(event_type, container) {
         return;
     }
     eprintln!("[{}] {}", iso8601_millis(chrono::Utc::now()), event_body);
