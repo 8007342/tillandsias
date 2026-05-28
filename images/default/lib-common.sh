@@ -547,9 +547,13 @@ export UV_CACHE_DIR="$PROJECT_CACHE/uv"
 # pip (per-project; pipx tools live in /opt/pipx, image-state)
 export PIP_CACHE_DIR="$PROJECT_CACHE/pip"
 
-# PATH augmentation for per-project binaries (cargo install, go install,
-# npm -g into PROJECT_CACHE/npm/global)
-export PATH="$NPM_CONFIG_PREFIX/bin:$CARGO_HOME/bin:$GOPATH/bin:$PNPM_HOME:$PATH"
+# PATH augmentation for per-project binaries, user home binaries, and system-wide toolchains
+export RUSTUP_HOME="/usr/local/rustup"
+export DART_ROOT="/opt/dart-sdk"
+export FLUTTER_ROOT="/opt/flutter"
+export TILLANDSIAS_CHEATSHEETS="/opt/cheatsheets"
+export PATH="$NPM_CONFIG_PREFIX/bin:$CARGO_HOME/bin:$GOPATH/bin:$PNPM_HOME:$HOME/.cargo/bin:$HOME/go/bin:/usr/local/cargo/bin:/opt/dart-sdk/bin:$PATH"
+
 
 # ── Update-check rate-limiting ──────────────────────────────
 # Returns 0 (true) if the last check was more than 24 hours ago or never ran.

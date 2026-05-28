@@ -21,6 +21,11 @@ RUN microdnf install -y \
         git gh curl wget jq ripgrep \
         nodejs npm \
         java-25-openjdk-headless maven \
+        golang \
+        python3-pip \
+        just \
+        gdb lldb strace valgrind \
+        gcc gcc-c++ make cmake openssl-devel pkgconfig unzip \
     && microdnf clean all
 
 # ── Agent binaries ─────────────────────────────────────────────
@@ -28,6 +33,34 @@ RUN microdnf install -y \
 # Install the coding agents at image build time so the forge launches
 # with no runtime installer and no dependency on host cache state.
 RUN npm install -g --prefix /usr/local opencode-ai@latest @fission-ai/openspec @anthropic-ai/claude-code @openai/codex
+
+# ── Python packages and developer tools ─────────────────────────
+RUN pip3 install --no-cache-dir pyright ruff poetry pipx \
+    && npm install -g yarn pnpm
+
+# ── Go tools ───────────────────────────────────────────────────
+RUN GOBIN=/usr/local/bin go install golang.org/x/tools/gopls@latest \
+    && GOBIN=/usr/local/bin go install github.com/go-delve/delve/cmd/dlv@latest
+
+# ── Rust toolchain ─────────────────────────────────────────────
+ENV RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:$PATH
+
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
+        --default-toolchain stable \
+        --profile minimal \
+        --component rust-analyzer --component clippy --component rustfmt \
+    && curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C /usr/local/bin \
+    && cargo install cargo-chef cargo-watch cargo-audit wasm-pack trunk typos-cli watchexec-cli
+
+# ── Dart SDK ───────────────────────────────────────────────────
+RUN LATEST_DART=$(curl -sSf https://storage.googleapis.com/dart-archive/channels/stable/release/latest/VERSION | jq -r .version) \
+    && curl -LsSf https://storage.googleapis.com/dart-archive/channels/stable/release/${LATEST_DART}/sdk/dartsdk-linux-x64-release.zip -o /tmp/dart.zip \
+    && mkdir -p /opt \
+    && unzip -q /tmp/dart.zip -d /opt \
+    && rm -f /tmp/dart.zip
+ENV PATH=/opt/dart-sdk/bin:$PATH
 
 # ── Create forge user ──────────────────────────────────────────
 # DISTRO: useradd (Fedora shadow-utils), NOT adduser -D (Alpine)
@@ -37,7 +70,12 @@ RUN useradd -u 1000 -m -s /bin/bash forge
 RUN mkdir -p /home/forge/src \
     && mkdir -p /home/forge/.cache/tillandsias \
     && mkdir -p /home/forge/.config/opencode \
+    && mkdir -p /opt/cheatsheets /opt/cheatsheets-image /opt/cheatsheet-sources \
     && mkdir -p /tmp && chmod 1777 /tmp
+
+# ── Cheatsheets ────────────────────────────────────────────────
+COPY cheatsheets/ /opt/cheatsheets-image/
+COPY cheatsheet-sources/ /opt/cheatsheet-sources/
 
 # ── Shared library ─────────────────────────────────────────────
 RUN mkdir -p /usr/local/lib/tillandsias
@@ -76,6 +114,7 @@ COPY opencode.json /home/forge/.config/opencode/config.json
 # tui.json into ~/.config/opencode/ (project workspace bind takes precedence
 # at the user-config layer when applications resolve XDG paths).
 COPY config-overlay/opencode/tui.json /home/forge/.config/opencode/tui.json
+COPY config-overlay/opencode/instructions/ /home/forge/.config/opencode/instructions/
 
 # ── Shell configs ──────────────────────────────────────────────
 RUN mkdir -p /etc/skel/.config/fish
@@ -94,6 +133,7 @@ RUN chmod +x /usr/local/share/tillandsias/forge-welcome.sh || true
 # @trace spec:help-system-localization
 COPY help.sh /usr/local/share/tillandsias/help.sh
 RUN chmod +x /usr/local/share/tillandsias/help*.sh || true
+RUN ln -sf /usr/local/share/tillandsias/help.sh /usr/local/bin/tillandsias-help
 
 # ── Shell helper functions ─────────────────────────────────────
 # @trace spec:forge-shell-tools, spec:forge-environment-discoverability
@@ -108,7 +148,7 @@ RUN mkdir -p /etc/tillandsias/locales
 COPY locales/ /etc/tillandsias/locales/
 
 # ── Fix ownership ──────────────────────────────────────────────
-RUN chown -R 1000:1000 /home/forge
+RUN chown -R 1000:1000 /home/forge /opt
 
 USER 1000:1000
 WORKDIR /home/forge/src
