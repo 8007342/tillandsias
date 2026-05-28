@@ -308,6 +308,10 @@ impl PodmanEventStream {
                                 source: LifecycleSource::BackoffInspection,
                                 raw_status: Some(state.to_string()),
                                 observed_at_unix: None,
+                                // `podman ps` doesn't include the exit
+                                // code in its JSON output — exit codes
+                                // come from `podman events` Died lines.
+                                exit_code: None,
                             };
 
                             if tx.send(record.into()).await.is_err() {
@@ -332,6 +336,9 @@ impl PodmanEventStream {
                         source: LifecycleSource::BackoffInspection,
                         raw_status: None,
                         observed_at_unix: None,
+                        // `--rm` removed the container before we could
+                        // observe its exit; the code is gone.
+                        exit_code: None,
                     };
                     if tx.send(record.into()).await.is_err() {
                         return Err(()); // Channel closed
@@ -386,6 +393,16 @@ fn parse_podman_lifecycle_record(
         _ => return None,
     };
 
+    // Podman emits the container's exit status on `Status=died` payloads
+    // as `ContainerExitCode` (top-level integer). Some older builds put it
+    // under `Actor.Attributes.containerExitCode` instead — accept both.
+    // For non-Died statuses there's no exit code to capture.
+    let exit_code = if matches!(action, ContainerLifecycleAction::Died) {
+        extract_podman_exit_code(&value)
+    } else {
+        None
+    };
+
     Some(ContainerLifecycleRecord {
         container_name: name.to_string(),
         action,
@@ -393,7 +410,34 @@ fn parse_podman_lifecycle_record(
         source: LifecycleSource::PodmanEvents,
         raw_status: value["Status"].as_str().map(str::to_string),
         observed_at_unix: value["Time"].as_i64(),
+        exit_code,
     })
+}
+
+/// Extract a container exit code from a podman events JSON payload.
+///
+/// Podman has shipped two shapes over the years; we read both:
+///   * top-level `ContainerExitCode` (current; observed on podman 4.x+)
+///   * `Actor.Attributes.containerExitCode` (older builds, stringified)
+///
+/// Returns `None` if neither field is present or convertible to `i32`.
+/// Exit codes outside `i32` are clamped to `None` rather than silently
+/// truncated.
+fn extract_podman_exit_code(value: &serde_json::Value) -> Option<i32> {
+    if let Some(n) = value.get("ContainerExitCode").and_then(|v| v.as_i64()) {
+        return i32::try_from(n).ok();
+    }
+    let attr = value
+        .get("Actor")
+        .and_then(|a| a.get("Attributes"))
+        .and_then(|a| a.get("containerExitCode"))?;
+    if let Some(n) = attr.as_i64() {
+        return i32::try_from(n).ok();
+    }
+    if let Some(s) = attr.as_str() {
+        return s.parse::<i32>().ok();
+    }
+    None
 }
 
 /// Parse a JSON event line from the WSL router systemd socket.
@@ -441,6 +485,9 @@ fn parse_wsl_lifecycle_record(json_line: &str, prefix: &str) -> Option<Container
         source: LifecycleSource::WslRouter,
         raw_status: Some(state_str.to_string()),
         observed_at_unix: None,
+        // The WSL router systemd-socket event channel doesn't expose
+        // exit codes today; can be plumbed through later if needed.
+        exit_code: None,
     })
 }
 
@@ -516,6 +563,72 @@ mod tests {
         let json = podman_event_json("tillandsias-tetris-aeranthos", "died");
         let event = parse_podman_event(&json, "tillandsias-").unwrap();
         assert_eq!(event.new_state, ContainerState::Stopped);
+    }
+
+    /// Modern podman 4.x+ shape: `ContainerExitCode` at the top level of
+    /// the event JSON. Verifies the typed record captures it for the
+    /// `event:container_exit ... exit_code=…` typed-event downstream.
+    #[test]
+    fn died_event_extracts_top_level_exit_code() {
+        let json = r#"{"Name":"tillandsias-x-forge","Status":"died","Type":"container","Time":1711400005,"ContainerExitCode":137}"#;
+        let record = parse_podman_lifecycle_record(json, "tillandsias-").unwrap();
+        assert_eq!(record.action, ContainerLifecycleAction::Died);
+        assert_eq!(record.exit_code, Some(137));
+    }
+
+    /// Older podman builds put the exit code on the Actor.Attributes
+    /// blob, sometimes stringified. The extractor accepts both shapes.
+    #[test]
+    fn died_event_extracts_legacy_actor_attributes_exit_code() {
+        let json = r#"{
+            "Name":"tillandsias-x-forge",
+            "Status":"died",
+            "Type":"container",
+            "Time":1711400005,
+            "Actor":{"Attributes":{"containerExitCode":"137"}}
+        }"#;
+        let record = parse_podman_lifecycle_record(json, "tillandsias-").unwrap();
+        assert_eq!(record.exit_code, Some(137));
+
+        // Integer (non-stringified) Actor.Attributes form also works.
+        let json_int = r#"{
+            "Name":"tillandsias-x-forge",
+            "Status":"died",
+            "Type":"container",
+            "Time":1711400005,
+            "Actor":{"Attributes":{"containerExitCode":42}}
+        }"#;
+        let record = parse_podman_lifecycle_record(json_int, "tillandsias-").unwrap();
+        assert_eq!(record.exit_code, Some(42));
+    }
+
+    /// Non-Died statuses MUST NOT carry an exit_code, even if a payload
+    /// happens to ship a `ContainerExitCode`. Exit codes are only
+    /// semantically meaningful at termination — anything else would be a
+    /// stale value from a previous run leaking into a Start record.
+    #[test]
+    fn non_died_events_have_no_exit_code() {
+        for status in ["start", "create", "stop", "kill", "remove", "cleanup"] {
+            let json = format!(
+                r#"{{"Name":"tillandsias-x","Status":"{status}","Type":"container","Time":1,"ContainerExitCode":99}}"#
+            );
+            let record = parse_podman_lifecycle_record(&json, "tillandsias-").unwrap();
+            assert_eq!(
+                record.exit_code, None,
+                "status={status} should not carry exit_code"
+            );
+        }
+    }
+
+    /// A Died event without any exit-code field gracefully reports None
+    /// — we never fabricate a value (matching the same honesty principle
+    /// as the metrics endpoint).
+    #[test]
+    fn died_event_without_exit_code_reports_none() {
+        let json = r#"{"Name":"tillandsias-x","Status":"died","Type":"container","Time":1}"#;
+        let record = parse_podman_lifecycle_record(json, "tillandsias-").unwrap();
+        assert_eq!(record.action, ContainerLifecycleAction::Died);
+        assert_eq!(record.exit_code, None);
     }
 
     #[test]

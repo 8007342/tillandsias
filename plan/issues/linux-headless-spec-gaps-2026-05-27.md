@@ -124,6 +124,13 @@ bounded slices from. Each item is sized for one loop iteration. NOT for siblings
   `maybe_spawn_vsock_listener` carry the lifecycle without threading
   state through `graceful_shutdown_async`. `Provisioning` belongs to
   sibling provisioning paths.
+- **GAP 3 PHASE-1B DONE** (parser → typed-record exit_code):
+  `ContainerLifecycleRecord` gained an `exit_code: Option<i32>` field;
+  `parse_podman_lifecycle_record` now extracts `ContainerExitCode`
+  from podman events Died payloads (modern top-level + legacy
+  `Actor.Attributes.containerExitCode` shape, stringified or integer).
+  Non-Died statuses get `None`. Five new unit tests pin both shapes
+  + the "Died without exit code reports None" honesty case.
   (Next diagnostics gap: GAP 2 / GAP 3 PHASE-2 — wire the live podman
   events parser to emit_diagnostic_event when `debug` is on.)
 
