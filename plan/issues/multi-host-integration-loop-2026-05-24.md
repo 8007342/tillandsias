@@ -51,6 +51,29 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-28T13:43Z — MERGED windows-next (tray balloon + last_event in live chip) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `23914b41` (merge commit)
+- observed_sibling_heads: main=`fa746f03` · linux-next(pre-merge)=`982560ba` ·
+  windows-next=`8992652a` · osx-next=`982560ba`
+- **windows-next: merged+tested+pushed.** 1-commit delta `8992652a`
+  (feat: tray balloon on provisioning failure + `last_event` field
+  surfaced in the live chip — windows-tray's read-side of the
+  `VmStatusReply.last_event` field that the in-VM headless will
+  populate as gap-3 phase-2c starts producing typed events). Single
+  windows-tray file (notify_icon.rs) — sibling-owned scope. Clean
+  auto-merge.
+- osx-next: no-op (HEAD `982560ba` matches linux-next pre-merge;
+  orchestrator already fast-forwarded osx-next).
+- Tests: PASSED. `./build.sh --check` + `--test` green.
+- Spec/methodology/plan drift: none. Diff confined to
+  `crates/tillandsias-windows-tray/src/notify_icon.rs`. Cross-host
+  observation: windows-next is consuming the `last_event` field on
+  `VmStatusReply` — same control-wire surface my recent
+  diagnostic-event emitter populates indirectly via the events stream.
+  Good convergence; nothing to action.
+
 ### Cycle 2026-05-28T13:00Z — SUCCEEDED E2E runtime litmus & sibling ancestors verified ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
