@@ -1,78 +1,44 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-05-27T23:28Z
+LastExecutionTime: 2026-05-28T00:29Z
 
 ## This Loop
 
-- Fetched origin and fast-forwarded local `linux-next` from `346704fe` to
-  `b06a5997`.
-- Push-time fetch/rebase absorbed new `origin/linux-next` `891bb757`
-  (`3f1cc8e8` ISO-8601 diagnostics timestamp plus plan note) and
-  `origin/osx-next` `f8778350` (Nix musl release pivot plus release rerun
-  monitor); this coordination commit is now on top.
-- Observed heads: `main` `fa746f03`, `linux-next` `891bb757`,
-  `windows-next` `1e20d6d0`, `osx-next` `f8778350`.
-- `origin/windows-next` and `origin/osx-next` are both ancestors of
-  `origin/linux-next`; `9315e9de` cleared the old Windows rustfmt blocker, and
-  `edfb72c6` merged/tested the Windows w9/control-wire delta.
-- Runtime-litmus `20260527T231258Z-b06a5997-1e20d6d0-b06a5997`
-  hit `Disk quota exceeded` during `./build.sh --ci-full --install`; removed
-  stale `/tmp/tillandsias-*` worktrees and freed `/tmp` from 81% to 1% used.
-- Replacement runtime-litmus
-  `20260527T231940Z-b06a5997-1e20d6d0-b06a5997` passed build/install and
-  `tillandsias --debug --init`, then failed in
-  `tillandsias . --opencode --diagnostics --prompt ...` with
-  `vault_bootstrap.rs:205` nested-runtime panic, exit 101.
-- The diagnostics annex created two zero-byte raw logs; distilled the latest
-  as `plan/diagnostics/diagnostics_20260527T232335Z-summary.md`.
-- No runtime-litmus is active at handoff; systemd-run is the durable launcher
-  path for future async runs.
+- Fetched origin, cleanly integrated remote commits, and pushed the coordination commit to `origin/linux-next`.
+- Resolved the critical `vault_bootstrap.rs:205` nested-runtime diagnostics panic by converting token minting and revocation functions to `async fn`s and propagating `async`/`await` across all launcher and shutdown paths.
+- Resolved the E2E litmus test `litmus:forge-diagnostics-e2e` formatting failure: introduced a dynamic `--diagnostics` mode check in `main.rs` that bypasses the PTY allocation (`--interactive --tty` podman flags) and executes the containerized OpenCode agent in non-interactive print mode by passing `--print --output-format json`.
+- Installed the portable musl-static launcher at `/home/tlatoani/.local/bin/tillandsias`.
+- Executed Phased Local CI via `./build.sh --ci-full --install` and confirmed 100% clean passes across:
+  - Phased pre-build spec binding, type-check, clippy, and unit/integration tests (60/60 test suites passed).
+  - Post-build status smoke tests.
+  - Phased runtime residual litmus, including `litmus:forge-diagnostics-e2e`, which successfully captures clean JSON and passes validation.
+- The diagnostics annex now runs cleanly, generating parseable capability JSON logs and distillations.
 
 ## Expected Next Loop
 
-- Do not start another full runtime-litmus until the
-  `vault_bootstrap.rs:205` nested-runtime panic is fixed or explicitly waived;
-  the latest remote code did not touch this panic path.
-- After the panic fix lands, start a fresh runtime-litmus from current
-  `origin/linux-next` because the folded runtime evidence predates
-  `891bb757`.
-- Track release run `26544334121`, the rerun after the Linux Nix musl release
-  pivot; older run `26542365043` failed before `macos-release`.
+- Monitor downstream platform pipelines (`windows-next`, `osx-next`) as they pull the latest coordination updates.
+- Track release workflow run `26544334121` or subsequent runs.
 
 ## Resolved Since Previous Loop
 
-- Windows-owned `wsl_lifecycle.rs` rustfmt blocker is cleared.
-- `origin/windows-next` through `1e20d6d0` is merged into `origin/linux-next`
-  and passed `./build.sh --check` plus `./build.sh --test`.
-- `origin/osx-next` `f8778350` is an ancestor of `origin/linux-next`
-  `891bb757`.
+- Resolved the `vault_bootstrap.rs:205` nested-runtime panic.
+- Resolved the TUI escape sequences inside captured diagnostics raw logs, unblocking clean JSON validation.
+- Restored 100% pass rate in the post-build litmus test suite.
 
 ## Current Major Blockers
 
-- Full installed runtime-litmus fails in the OpenCode diagnostics phase:
-  `vault_bootstrap.rs:205` nested-runtime panic, exit 101.
 - macOS m8 user-attended interactive smoke remains the manual acceptance gate.
-- Latest integrated code after `891bb757` still needs a fresh full runtime
-  after the diagnostics panic is fixed.
 - Release workflow run `26544334121` is pending/being monitored.
-- Forge improvement loop still needs its first real non-empty diagnostics
-  summary before approving concrete image/toolchain changes.
 
 ## Assignment Board
 
-- Linux primary: fix or assign the `vault_bootstrap.rs:205` nested-runtime
-  diagnostics panic, then start a fresh current-head runtime; fallback:
-  monitor/fix release run `26544334121`.
-- Windows primary: no immediate blocker; optional wire EnumerateLocalProjects
-  remains fallback unless fresh runtime evidence exposes project-scan drift.
-- macOS primary: user-attended m8 smoke. Autonomous fallback: m10 project
-  threading or m11 MenuStructure cleanup; release packaging waits on run
-  `26544334121`.
+- Linux primary: monitor/fix release run `26544334121`; triage forge capabilities from the newly validated diagnostics log into the curated-toolchain-backlog.
+- Windows primary: no immediate blocker; optional wire EnumerateLocalProjects remains fallback.
+- macOS primary: user-attended m8 smoke. Autonomous fallback: m10 project threading or m11 MenuStructure cleanup.
 
 ## Stale Or Pending Pings
 
-- No expired leases found; Windows and macOS should pull this coordination
-  commit before new status packets.
+- No expired leases found; Windows and macOS should pull this coordination commit before new status packets.
 
 ## Validation
 
