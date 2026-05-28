@@ -114,6 +114,29 @@ fn apply_status_text_main_thread(
     }
 }
 
+/// Condensed status-line text for a live VM phase + podman readiness.
+/// Drives the shared `ids::STATUS` chip (and the menubar tooltip) so
+/// the menu reflects real VM health — converges with the windows-tray
+/// helper of the same name (see `tillandsias-windows-tray::notify_icon::
+/// vm_phase_status_text`, commit c45f23ae). Keeping the two trays'
+/// phase strings byte-for-byte identical satisfies the 2026-05-27 UX
+/// hard requirement that all three platforms render the same chip text
+/// once the in-VM headless reports its phase. The macOS-specific
+/// pre-boot phase ("Setting up Fedora Linux…") sits outside this
+/// table because it has no Linux/Windows analogue.
+fn vm_phase_status_text(phase: tillandsias_control_wire::VmPhase, podman_ready: bool) -> String {
+    use tillandsias_control_wire::VmPhase;
+    match phase {
+        VmPhase::Ready if podman_ready => "\u{1F7E2} Ready".to_string(),
+        VmPhase::Ready => "\u{1F7E1} Ready (podman starting\u{2026})".to_string(),
+        VmPhase::Provisioning => "\u{1F535} Provisioning\u{2026}".to_string(),
+        VmPhase::Starting => "\u{1F535} Starting\u{2026}".to_string(),
+        VmPhase::Draining => "\u{1F7E0} Draining\u{2026}".to_string(),
+        VmPhase::Stopping => "\u{1F534} Stopping\u{2026}".to_string(),
+        VmPhase::Failed => "\u{1F534} VM failed".to_string(),
+    }
+}
+
 /// Default vsock CID for the Tillandsias guest. Matches what the
 /// in-VM headless binds; the host always connects to this CID.
 const TILLANDSIAS_GUEST_CID: u32 = 3;
@@ -670,7 +693,13 @@ impl TrayActionHost {
                 let text = match &result {
                     Ok(()) => {
                         eprintln!("[tillandsias-tray] {label_done}: VM is running");
-                        "\u{1F7E2} VM running".to_string()
+                        // VM hardware is up but the in-VM headless +
+                        // podman aren't yet verified. Match Windows'
+                        // post-boot framing — `Starting…` until
+                        // VmStatus polling (next slice) flips it to
+                        // `Ready`/`Ready (podman starting…)` based on
+                        // the in-VM reply.
+                        vm_phase_status_text(tillandsias_control_wire::VmPhase::Starting, false)
                     }
                     Err(e) => {
                         eprintln!("[tillandsias-tray] {label_done} failed: {e}");
@@ -695,6 +724,34 @@ mod tests {
     fn tray_action_host_class_registers() {
         let cls = TrayActionHost::class();
         assert_eq!(cls.name(), "TillandsiasTrayActionHost");
+    }
+
+    /// The live status line distinguishes VM phases + podman readiness,
+    /// so the shared `ids::STATUS` chip reflects real VM health
+    /// (Ready vs podman-starting vs draining/failed) rather than a
+    /// single static "Ready". Mirrors the windows-tray test in
+    /// `notify_icon::tests::vm_phase_status_text_reflects_phase_and_podman`
+    /// — keeping the two assertions identical guards the cross-platform
+    /// UX-parity invariant.
+    #[test]
+    fn vm_phase_status_text_reflects_phase_and_podman() {
+        use tillandsias_control_wire::VmPhase;
+        assert!(vm_phase_status_text(VmPhase::Ready, true).contains("Ready"));
+        // Ready-with-podman is visibly distinct from Ready-without-podman.
+        assert_ne!(
+            vm_phase_status_text(VmPhase::Ready, true),
+            vm_phase_status_text(VmPhase::Ready, false)
+        );
+        assert!(
+            vm_phase_status_text(VmPhase::Draining, true)
+                .to_lowercase()
+                .contains("drain")
+        );
+        assert!(
+            vm_phase_status_text(VmPhase::Failed, false)
+                .to_lowercase()
+                .contains("fail")
+        );
     }
 
     /// FULL E2E exercise of the run_start path against the LIVE
