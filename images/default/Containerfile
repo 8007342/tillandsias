@@ -18,7 +18,7 @@ RUN microdnf install -y \
         bash coreutils findutils grep sed gawk tar gzip xz \
         procps-ng shadow-utils ca-certificates \
         fish zsh \
-        git gh curl wget jq ripgrep \
+        git gh curl wget jq ripgrep fd-find \
         nodejs npm \
         java-25-openjdk-headless maven \
         golang \
@@ -35,8 +35,8 @@ RUN microdnf install -y \
 RUN npm install -g --prefix /usr/local opencode-ai@latest @fission-ai/openspec @anthropic-ai/claude-code @openai/codex
 
 # ── Python packages and developer tools ─────────────────────────
-RUN pip3 install --no-cache-dir pyright ruff poetry pipx \
-    && npm install -g yarn pnpm
+RUN pip3 install --no-cache-dir pyright ruff poetry pipx uv mypy pytest \
+    && npm install -g yarn pnpm typescript typescript-language-server
 
 # ── Go tools ───────────────────────────────────────────────────
 RUN GOBIN=/usr/local/bin go install golang.org/x/tools/gopls@latest \

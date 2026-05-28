@@ -1585,7 +1585,7 @@ plan_index:
           checkpoint_required: false
           handoff_note: "First unattended diagnostics run. Requires a slow E2E/runtime-litmus forge launch to produce a diagnostics log. Proposals remain status: proposed until orchestrator approval."
         - id: forge-improvement/iterate
-          status: ready
+          status: in_progress
           depends_on: [forge-improvement/first-run]
           owned_files:
             - plan/forge-improvements/proposals/

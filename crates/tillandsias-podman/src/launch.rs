@@ -82,6 +82,11 @@ impl ContainerLauncher {
                 },
             );
         }
+        spec = spec
+            .tmpfs("/tmp:size=256m,mode=1777")
+            .tmpfs("/run/user/1000:size=64m,mode=0700")
+            .tmpfs("/opt/cheatsheets:size=8m,mode=0755")
+            .env("TILLANDSIAS_CHEATSHEETS", "/opt/cheatsheets");
 
         spec
     }

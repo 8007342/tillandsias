@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-05-28T21:12:32Z",
+  "generated_at": "2026-05-28T22:19:39Z",
   "title": "Progression Trends",
   "series_namespace": "local_development",
   "series_label": "Local Development",
   "source_file": "target/convergence/centicolon-signature.jsonl",
-  "record_count": 16,
-  "sparkline_closed": "██▁█████████████",
-  "sparkline_residual": "▁▁█▁▁▁▁▁▁▁▁▁▁▁▁▁",
+  "record_count": 17,
+  "sparkline_closed": "██▁██████████████",
+  "sparkline_residual": "▁▁█▁▁▁▁▁▁▁▁▁▁▁▁▁▁",
   "alert_level": "green",
   "alert_thresholds": {
     "red_below_percent_closed": 90,
@@ -63,17 +63,17 @@
     "start_commit": "5a593bc4f9f4",
     "end_release": "0.2.260528.1",
     "end_commit": "d08d1e879c75",
-    "count": 16,
-    "closed": "██▁█████████████",
-    "residual": "▁▁█▁▁▁▁▁▁▁▁▁▁▁▁▁"
+    "count": 17,
+    "closed": "██▁██████████████",
+    "residual": "▁▁█▁▁▁▁▁▁▁▁▁▁▁▁▁▁"
   }
 ],
   "latest": {
   "release": "0.2.260528.1",
-  "date": "2026-05-28T21:05:09Z",
+  "date": "2026-05-28T21:12:32Z",
   "commit": "d08d1e879c75",
-  "total_cc": 120,
-  "earned_cc": 120,
+  "total_cc": 140,
+  "earned_cc": 140,
   "residual_cc": 0,
   "percent_closed": 100,
   "worst_spec": "n/a",
@@ -81,7 +81,7 @@
   "evidence": "target/convergence/evidence-bundle.json",
   "projection": "docs/convergence/centicolon-dashboard.md",
   "ci_result": "PASS",
-  "ci_run_id": "local-ci-20260528T210509Z",
+  "ci_run_id": "local-ci-20260528T211232Z",
   "trend_glyph": ""
 },
   "history": [
@@ -339,6 +339,22 @@
     "projection": "docs/convergence/centicolon-dashboard.md",
     "ci_result": "PASS",
     "ci_run_id": "local-ci-20260528T210509Z",
+    "trend_glyph": ""
+  },
+  {
+    "release": "0.2.260528.1",
+    "date": "2026-05-28T21:12:32Z",
+    "commit": "d08d1e879c75",
+    "total_cc": 140,
+    "earned_cc": 140,
+    "residual_cc": 0,
+    "percent_closed": 100,
+    "worst_spec": "n/a",
+    "worst_reason": "n/a",
+    "evidence": "target/convergence/evidence-bundle.json",
+    "projection": "docs/convergence/centicolon-dashboard.md",
+    "ci_result": "PASS",
+    "ci_run_id": "local-ci-20260528T211232Z",
     "trend_glyph": ""
   }
 ]

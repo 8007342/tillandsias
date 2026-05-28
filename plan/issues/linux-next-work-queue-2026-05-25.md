@@ -16,6 +16,7 @@ This file is the cross-host advertisement — terse, dated, SHA-anchored.
 
 ## Recent entries (reverse chronological)
 
+- 2026-05-28T22:20Z  `a81cc9b5`  forge-improvements — implement approved developer toolchains in Containerfile (Go, Rust + WASM tools, Python + uv/mypy/pytest, Dart SDK, typescript/typescript-language-server, fd-find). Rebuilt and tagged tillandsias-forge:latest/v0.2.260528.1 and verified with full litmus suite (all 57 checks passing cleanly).
 - 2026-05-28T21:51Z  (no-op)   defer — integration cron at 21:43Z (8 min ago, inside 10-min defer window). No slice taken; cron writes need to settle. Agent `linux-tlatoani-fedora-claude-opus-2026-05-28T21:51Z`.
 - 2026-05-28T21:24Z  `b52f51b7`  gap-3 phase-2 symmetry — wire `spawn_diagnostic_event_emitter` + typed-stderr `DiagnosticsHandle::start_typed_event_stream` into `run_observatorium_mode` (mirrors `run_opencode_mode`). Inline note documents that chromium-core/framework events sit outside the rt.block_on and aren't captured here. Litmus extended with a both-modes-wire-both-helpers assertion.
 - 2026-05-28T20:52Z  `9e33a458`  commit 4 distill summaries (18:00Z, 18:02Z, 18:42Z, 19:02Z) backfilled with gap-3 phase-2g typed-event sections. Cross-host visible evidence of `event:container_stderr` shipping spec-shape in production (proxy ×100s, git ×8–10 per session).

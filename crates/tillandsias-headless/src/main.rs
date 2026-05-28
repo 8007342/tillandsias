@@ -2245,6 +2245,14 @@ fn build_opencode_forge_args(
         format!("TILLANDSIAS_PROJECT={project_name}"),
         "--env".into(),
         "TILLANDSIAS_PROJECT_HOST_MOUNT=1".into(),
+        "--env".into(),
+        "TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets".into(),
+        "--tmpfs".into(),
+        "/tmp:size=256m,mode=1777".into(),
+        "--tmpfs".into(),
+        "/run/user/1000:size=64m,mode=0700".into(),
+        "--tmpfs".into(),
+        "/opt/cheatsheets:size=8m,mode=0755".into(),
         // Mount under `/home/forge/src/<project>/` (not directly at
         // `/home/forge/src`) so the in-container tree matches what the forge
         // entrypoint's clone path would produce
@@ -5561,6 +5569,10 @@ pub(crate) fn build_forge_agent_run_args(
         .env("PROJECT", project_name)
         .env("TILLANDSIAS_PROJECT", project_name)
         .env("TILLANDSIAS_PROJECT_HOST_MOUNT", "1")
+        .tmpfs("/tmp:size=256m,mode=1777")
+        .tmpfs("/run/user/1000:size=64m,mode=0700")
+        .tmpfs("/opt/cheatsheets:size=8m,mode=0755")
+        .env("TILLANDSIAS_CHEATSHEETS", "/opt/cheatsheets")
         .entrypoint(mode.entrypoint());
     if debug {
         spec = spec.env("TILLANDSIAS_DEBUG", "1");

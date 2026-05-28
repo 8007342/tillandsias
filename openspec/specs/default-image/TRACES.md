@@ -7,9 +7,9 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 - [build-forge.sh#L2](../../../build-forge.sh#L2)
 - [build.sh#L287](../../../build.sh#L287)
-- [crates/tillandsias-core/src/container_profile.rs#L285](../../../crates/tillandsias-core/src/container_profile.rs#L285)
-- [crates/tillandsias-headless/src/main.rs#L2302](../../../crates/tillandsias-headless/src/main.rs#L2302)
-- [crates/tillandsias-headless/src/main.rs#L2931](../../../crates/tillandsias-headless/src/main.rs#L2931)
+- [crates/tillandsias-core/src/container_profile.rs#L293](../../../crates/tillandsias-core/src/container_profile.rs#L293)
+- [crates/tillandsias-headless/src/main.rs#L2310](../../../crates/tillandsias-headless/src/main.rs#L2310)
+- [crates/tillandsias-headless/src/main.rs#L2939](../../../crates/tillandsias-headless/src/main.rs#L2939)
 - [images/default/config-overlay/mcp/host-browser.sh#L8](../../../images/default/config-overlay/mcp/host-browser.sh#L8)
 - [images/default/Containerfile#L4](../../../images/default/Containerfile#L4)
 - [images/default/Containerfile#L11](../../../images/default/Containerfile#L11)

@@ -6,8 +6,10 @@ Run `./scripts/generate-traces.sh` to regenerate.
 ## Annotated locations
 
 - [crates/tillandsias-headless/src/main.rs#L134](../../../crates/tillandsias-headless/src/main.rs#L134)
-- [crates/tillandsias-headless/src/main.rs#L4077](../../../crates/tillandsias-headless/src/main.rs#L4077)
-- [crates/tillandsias-headless/src/main.rs#L4156](../../../crates/tillandsias-headless/src/main.rs#L4156)
+- [crates/tillandsias-headless/src/main.rs#L3972](../../../crates/tillandsias-headless/src/main.rs#L3972)
+- [crates/tillandsias-headless/src/main.rs#L4013](../../../crates/tillandsias-headless/src/main.rs#L4013)
+- [crates/tillandsias-headless/src/main.rs#L4136](../../../crates/tillandsias-headless/src/main.rs#L4136)
+- [crates/tillandsias-headless/src/main.rs#L4215](../../../crates/tillandsias-headless/src/main.rs#L4215)
 - [crates/tillandsias-podman/src/client.rs#L807](../../../crates/tillandsias-podman/src/client.rs#L807)
 - [crates/tillandsias-podman/src/client.rs#L841](../../../crates/tillandsias-podman/src/client.rs#L841)
 - [crates/tillandsias-podman/src/client.rs#L1588](../../../crates/tillandsias-podman/src/client.rs#L1588)

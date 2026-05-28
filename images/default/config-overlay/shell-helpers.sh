@@ -298,5 +298,7 @@ For more info, see:
 EOF
 }
 
-# Alias for consistency
-alias tillandsias-help=tillandsias-shell-help
+# Sourced as function for compatibility with non-interactive shells
+tillandsias-help() {
+    tillandsias-shell-help "$@"
+}
