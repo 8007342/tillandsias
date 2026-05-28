@@ -51,6 +51,23 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-28T03:44Z — MERGED windows-next (host-shell Client::from_stream convergence) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `f31dc4df` (merge commit)
+- observed_sibling_heads: main=`fa746f03` · linux-next(pre-merge)=`068235da` ·
+  windows-next=`48a50981` · osx-next=`068235da`
+- **windows-next: merged+tested+pushed.** 1-commit delta `48a50981` (refactor:
+  use shared host-shell `Client::from_stream`, converging with macOS slice 4).
+  Three windows-tray files (hvsocket.rs, notify_icon.rs, wsl_lifecycle.rs) —
+  all sibling-owned. Clean auto-merge.
+- osx-next: no-op (HEAD `068235da` == linux-next; orchestrator already
+  fast-forwarded osx-next).
+- Tests: PASSED. `./build.sh --check` + `--test` green.
+- Spec/methodology drift: none (only windows-tray .rs files; the host-shell
+  `Client::from_stream` is a shared seam — windows + macOS now consume it via
+  the same path, healthy convergence).
+
 ### Cycle 2026-05-28T01:44Z — MERGED windows-next (VM-status polling) ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
