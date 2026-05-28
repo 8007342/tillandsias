@@ -107,13 +107,20 @@ pub fn main() -> i32 {
         }
     }
 
-    // 4. Manifest pin (compile-time bundled) — confirms the .app
-    //    knows which release tag + SHA it expects to fetch on first
-    //    launch. Useful diagnostic when the user sees "SHA mismatch"
-    //    errors or wonders which release the .app pins to.
+    // 4. Release tag (compile-time bundled) — the GitHub release
+    //    the .app will fetch the rootfs.img.xz from on first launch.
+    //    Surfaced separately from the manifest pin so the operator
+    //    can spot tag/SHA mismatches at a glance. Matches windows-
+    //    tray's --diagnose layout (commit 4fff31af).
+    println!("Release:    {}", crate::action_host::RECIPE_RELEASE_TAG);
+
+    // 5. Manifest pin (compile-time bundled) — confirms the .app
+    //    knows which SHA it expects post-decompress. Useful when
+    //    the user sees "SHA mismatch" errors or wonders which build
+    //    of the recipe the .app pins to.
     print_manifest_pin();
 
-    // 5. Live wire — explicitly disclaim macOS's limitation so the
+    // 6. Live wire — explicitly disclaim macOS's limitation so the
     //    user knows where to look instead.
     println!();
     println!("Control wire status:");

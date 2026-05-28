@@ -691,7 +691,7 @@ const BUNDLED_MANIFEST_TOML: &str = include_str!("../../../images/vm/manifest.to
 ///
 /// @trace plan/issues/tray-convergence-coordination.md
 ///        "Tag-source decision — windows vote" 2026-05-27
-const RECIPE_RELEASE_TAG: &str = "v0.2.260526.1";
+pub(crate) const RECIPE_RELEASE_TAG: &str = "v0.2.260526.1";
 
 impl TrayActionHost {
     /// Construct on the AppKit main thread. `mtm` proves we're on the
