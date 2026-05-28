@@ -147,6 +147,22 @@ fn vm_phase_status_text(phase: tillandsias_control_wire::VmPhase, podman_ready: 
     }
 }
 
+/// Append a non-empty `VmStatusReply.last_event` to the base chip
+/// string after a Unicode MIDDLE DOT so the live chip reflects in-VM
+/// activity (e.g. `🟢 Ready · forge-foo created`) rather than just
+/// the phase. `None` or whitespace-only `last_event` leaves the base
+/// untouched.
+///
+/// Mirrors `tillandsias-windows-tray::notify_icon::compose_chip_text`
+/// (commit 8992652a) byte-for-byte so both trays produce identical
+/// chip strings for identical `VmStatusReply` payloads.
+fn compose_chip_text(base: &str, last_event: Option<&str>) -> String {
+    match last_event.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(evt) => format!("{base} \u{00B7} {evt}"),
+        None => base.to_string(),
+    }
+}
+
 /// One-shot VmStatus poll over the in-VM control wire. Mirrors
 /// `tillandsias-windows-tray::notify_icon::refresh_vm_status` but
 /// drives the macOS-specific vsock path:
@@ -169,7 +185,7 @@ fn vm_phase_status_text(phase: tillandsias_control_wire::VmPhase, podman_ready: 
 ///        plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 4)
 async fn poll_vm_status_once(
     vz: &VzRuntime,
-) -> Result<(tillandsias_control_wire::VmPhase, bool), String> {
+) -> Result<(tillandsias_control_wire::VmPhase, bool, Option<String>), String> {
     use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
     use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
     use tillandsias_host_shell::vsock_client::Client;
@@ -209,8 +225,9 @@ async fn poll_vm_status_once(
         ControlMessage::VmStatusReply {
             phase,
             podman_ready,
+            last_event,
             ..
-        } => Ok((phase, podman_ready)),
+        } => Ok((phase, podman_ready, last_event)),
         other => Err(format!("unexpected reply to VmStatusRequest: {other:?}")),
     }
 }
@@ -1114,7 +1131,7 @@ fn spawn_vm_status_poller(
             tick = tick.wrapping_add(1);
 
             match poll_vm_status_once(&vz).await {
-                Ok((phase, podman_ready)) => {
+                Ok((phase, podman_ready, last_event)) => {
                     // Reflect podman_ready into the held MenuState so
                     // the menu rebuild flips per-project action gating
                     // (`Attach Here` etc.). Same pattern windows-tray
@@ -1127,7 +1144,8 @@ fn spawn_vm_status_poller(
                             rebuild_needed = true;
                         }
                     }
-                    let text = vm_phase_status_text(phase, podman_ready);
+                    let base = vm_phase_status_text(phase, podman_ready);
+                    let text = compose_chip_text(&base, last_event.as_deref());
                     let text_for_dispatch = text.clone();
                     let chip_status_text = status_text.clone();
                     let chip_status_item = status_item.clone();
@@ -1182,6 +1200,31 @@ mod tests {
     fn tray_action_host_class_registers() {
         let cls = TrayActionHost::class();
         assert_eq!(cls.name(), "TillandsiasTrayActionHost");
+    }
+
+    /// `compose_chip_text` appends a non-empty `last_event` after a
+    /// MIDDLE DOT so the live chip surfaces in-VM activity. Mirrors
+    /// the windows-tray test `compose_chip_text_appends_last_event`
+    /// (commit 8992652a) — divergence between the two trays' chip
+    /// composition would fail either suite.
+    #[test]
+    fn compose_chip_text_appends_last_event() {
+        let base = "\u{1F7E2} Ready";
+        // None: base unchanged.
+        assert_eq!(compose_chip_text(base, None), base);
+        // Empty: base unchanged (whitespace trim ⇒ empty ⇒ None).
+        assert_eq!(compose_chip_text(base, Some("")), base);
+        assert_eq!(compose_chip_text(base, Some("   ")), base);
+        // Non-empty: MIDDLE DOT + event appended.
+        assert_eq!(
+            compose_chip_text(base, Some("forge-foo created")),
+            "\u{1F7E2} Ready \u{00B7} forge-foo created"
+        );
+        // Surrounding whitespace on event is trimmed.
+        assert_eq!(
+            compose_chip_text(base, Some("  forge-bar started  ")),
+            "\u{1F7E2} Ready \u{00B7} forge-bar started"
+        );
     }
 
     /// `cloud_entry_to_menu` produces the byte-identical `ProjectEntry`
