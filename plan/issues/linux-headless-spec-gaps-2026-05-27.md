@@ -161,6 +161,15 @@ bounded slices from. Each item is sized for one loop iteration. NOT for siblings
   phase-2 wiring slice; this litmus surfaces any rename or accidental
   deletion before the wiring lands. Six grep-based steps, all green
   on linux-next HEAD.
+- **GAP 5 PHASE-1 PINNING**: companion litmus
+  `litmus-diagnostics-filter-env-shape` greps the
+  `DiagnosticsFilter` env-var contract (`TILLANDSIAS_DEBUG_FILTER`/
+  `_CONTAINER`/`_LEVEL`), the `"verbose"` keyword + `event:internal_*`
+  prefix, the public API (`pass_through`/`new`/`from_env`/`global`/
+  `allows`), the eight spec-scenario unit tests, and the `OnceLock`
+  cache. Catches env-var renames that would silently break user-
+  visible filter behaviour without breaking any constructor-based
+  unit test. Seven grep-based steps, all green on linux-next HEAD.
   (Next diagnostics gap: GAP 2 / GAP 3 PHASE-2 — wire the live podman
   events parser to emit_diagnostic_event when `debug` is on.)
 
