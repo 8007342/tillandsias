@@ -4141,6 +4141,34 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
             .await
             .map_err(|e| format!("[OpenCode] failed to start inference: {e}"))?;
 
+        // gap-3 phase-2g: start the typed-event stderr tail on the
+        // SUPPORT containers (router/proxy/git/inference). The
+        // foreground forge is intentionally NOT in this list — it's
+        // served attached to the user's terminal by
+        // `run_container_attached_observed` below and tailing it here
+        // would double-print every line.
+        //
+        // DiagnosticsHandle::Drop aborts every spawned `podman logs -f`
+        // task, so dropping `_diag_logs_handle` at the end of the
+        // block_on closure cleanly tears the tail tasks down — no
+        // explicit abort needed.
+        //
+        // @trace spec:runtime-diagnostics-stream (Stderr line pass-through)
+        // @trace plan/issues/linux-headless-spec-gaps-2026-05-27.md (gap 3 phase-2g)
+        let _diag_logs_handle = if debug {
+            Some(
+                tillandsias_podman::DiagnosticsHandle::start_typed_event_stream(vec![
+                    "tillandsias-router".to_string(),
+                    "tillandsias-proxy".to_string(),
+                    git_container_name.clone(),
+                    "tillandsias-inference".to_string(),
+                ])
+                .await,
+            )
+        } else {
+            None
+        };
+
         let diagnostics = std::env::args().any(|a| a == "--diagnostics");
         let opencode_args = build_opencode_forge_args(
             &project_path_resolved,

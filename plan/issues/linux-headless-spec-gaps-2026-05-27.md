@@ -243,6 +243,33 @@ bounded slices from. Each item is sized for one loop iteration. NOT for siblings
   the resulting exit code + duration. Four new unit tests pin the
   mapping (common signals, numeric fallback, clean-exit None,
   out-of-range None) plus a no-panic test for the routed path.
+- **GAP 3 PHASE-2G** (container_stderr): new
+  `DiagnosticsHandle::start_typed_event_stream(container_names) ->
+  Self` in `diagnostics_stream.rs` — sibling of the existing
+  human-format `start()`. Each accepted container gets a
+  `podman logs -f` follow task forwarding lines through
+  `format_container_stderr_event` + `emit_diagnostic_event`, so
+  every observed log line lands on stderr as
+  `[<ISO-8601>] event:container_stderr container=<name>
+  line="<escaped>"` and rides the DiagnosticsFilter env-var gates
+  (gap-5 phase-1). Wired into `run_opencode_mode` immediately after
+  the inference container launches, on the SUPPORT containers
+  (router/proxy/git/inference). The foreground forge is excluded
+  because it's served attached to the user's terminal by
+  `run_container_attached_observed` and tailing it here would
+  double-print. `DiagnosticsHandle::Drop` aborts every spawned tail
+  on closure exit (no explicit abort needed). Compile-pinning unit
+  test asserts the signature stays compatible.
+
+  WITH this, the 6-arm gap-3 typed-event chain is COMPLETE:
+    1. container_launch (emit_launch_event, gap-3 phase-1)
+    2. container_exit (Died → format_container_exit_event, phases
+       1b + 2c + 2e)
+    3. container_signal (signal-range exit_code, phase-2f)
+    4. resource_exhaustion (Oom → format_resource_exhaustion_event,
+       phase-2d)
+    5. container_stderr (DiagnosticsHandle typed tail, phase-2g)
+    6. internal_* (verbose level via DiagnosticsFilter, gap-5 phase-1)
   (Next diagnostics gap: GAP 2 / GAP 3 PHASE-2 — wire the live podman
   events parser to emit_diagnostic_event when `debug` is on.)
 
