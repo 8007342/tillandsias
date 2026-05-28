@@ -24,10 +24,21 @@ bounded slices from. Each item is sized for one loop iteration. NOT for siblings
    runtime-diagnostics-stream requires `[<UTC>] ` prefix. Add `chrono::Utc::now()`
    prefix; update the `launch_event_line_shape_is_stable` unit test +
    litmus-container-start-health grep. Bounded, unit-verifiable.
-2. **[HIGH] `--debug` → diagnostics stream activation.** `--debug`/`--diagnostics`
-   parsed (main.rs:101) but `DiagnosticsHandle` (podman/src/diagnostics_stream.rs)
-   is never instantiated in `run_headless_async`; `emit_launch_event`'s
-   `debug_enabled` is not threaded from the headless runner. Wire it.
+2. **[HIGH, re-scoped 2026-05-28] `--debug` → diagnostics stream activation.**
+   AUDIT CORRECTION: the `debug` → `emit_launch_event` half is ALREADY correct —
+   every `run_container_observed(...)` call in the container-launch paths
+   (run_opencode_mode L4053-4088, run_observatorium_mode, ensure_enclave_for_project,
+   main.rs ~1741/2932/...) passes the real `debug` flag, so `event:container_launch`
+   lines (now ISO-8601-prefixed, gap 1) DO emit under `--debug`/`--diagnostics`.
+   REMAINING (the real, meatier slice): `DiagnosticsHandle`
+   (podman/src/diagnostics_stream.rs) is exported but NEVER instantiated — it's
+   the live `podman logs` tail stream the spec wants. Wiring point: in
+   run_opencode_mode / run_observatorium_mode, AFTER the enclave containers
+   launch + when `debug`, `DiagnosticsHandle::start(<container names>)` and let
+   it forward records to stderr for the session lifetime; abort on teardown.
+   Needs a live-container run (or the runtime-litmus) to verify — not a
+   unit-only slice. Best sequenced after the runtime-litmus is green
+   (gap-0 just fixed) so it's validated end-to-end.
 3. **[CRITICAL] Event-type diversity.** Only `event:container_launch` exists; spec
    wants container_exit / container_signal / resource_exhaustion / container_stderr.
    Hook podman events (podman/src/events.rs:~105) → typed events. Larger; split.
