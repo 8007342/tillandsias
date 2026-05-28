@@ -2557,3 +2557,17 @@ step 5 lands.
 - Tests + lint clean: macos-tray 32/32; clippy -D warnings clean;
   fmt clean.
 - Streak: 0 (productive iter). Next macOS iter eligible at ~16:00Z.
+
+### event: macOS .app rebuild + ship (slice 14 --diagnose --json) — 2026-05-28T16:30Z
+
+- Rebuilt `Tillandsias.app v0.2.260527.5` from `26265587` (carries
+  slice 14 on top of the prior fc031636 ship):
+    * Tarball: `tillandsias-tray-0.2.260527.5-macos-arm64.tar.gz`
+    * Size: 1.51 MiB
+    * SHA-256: `e07ce58a8f7531b2fc124a1152f62729d8bf684e75ddf7e364d08cf62b492a40`
+    * (previous ship sha: `fc031636…`)
+- Delta vs prior ship: `--diagnose --json` emits machine-readable
+  output for support tooling / jq pipelines. Same data as the
+  human report; serde_json formats the DiagnoseReport struct.
+- Delivered proactively via SendUserFile.
+- Streak: 0 (productive iter). Next macOS iter eligible at ~17:00Z.
