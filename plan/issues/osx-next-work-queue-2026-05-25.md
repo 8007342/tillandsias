@@ -2401,3 +2401,25 @@ step 5 lands.
   the AppKit tray.
 - Streak: 0 (productive iter — ship counts as a deliverable for
   closing v0.0.1). Next macOS iter eligible at ~11:30Z.
+
+### event: macOS slice 11a — diagnose manifest-pin parser tests — 2026-05-28T11:30Z
+
+- Commit `a97b219a` extracts the inline aarch64.img SHA parser
+  from `print_manifest_pin` into a pure
+  `parse_aarch64_img_sha(manifest_toml: &str) -> Option<String>`
+  helper, and adds three regression tests:
+    * `parses_quoted_key_sha_form` — the actual
+      `"aarch64.img" = "<sha>"` shape the recipe-publish CI emits
+    * `parses_bare_key_sha_form` — bare-key tolerance for future
+      manifest authors who drop the quotes
+    * `refuses_placeholder_pending_ci` — "pending-ci" must NOT
+      parse as a pin
+- Drift-detection: if the manifest format changes upstream the
+  parse-quoted test fails loudly in CI, instead of the report
+  silently falling back to "(not found)" only when someone runs
+  --diagnose interactively.
+- Pure refactor — no behavior change to the running binary.
+- Tests + lint clean: macos-tray 30/30 (+3 diagnose); clippy -D
+  warnings clean; fmt clean.
+- Streak: 0 (productive iter). Next macOS iter eligible at
+  ~12:00Z.
