@@ -1,0 +1,132 @@
+<#
+.SYNOPSIS
+    One-shot Tillandsias tray health check consuming `tillandsias-tray
+    --diagnose --json`.
+
+.DESCRIPTION
+    Runs the installed (or local-build) tray with `--diagnose --json`, parses
+    the machine-readable report, and prints a colorized PASS / FAIL line per
+    check. A real consumer that demonstrates the JSON schema's utility — the
+    same JSON can be uploaded to a support endpoint or fed into a richer
+    dashboard.
+
+    Distinct from `diagnose-windows.ps1` (a no-VM-required pre-tray host-facts
+    diagnostic). This one assumes the tray binary exists and queries its own
+    `--diagnose` instead of re-implementing the checks.
+
+    Search order for `tillandsias-tray.exe` (first match wins):
+      1. -ExePath argument (if provided).
+      2. %LOCALAPPDATA%\Programs\Tillandsias\tillandsias-tray.exe
+         (the path scripts\install-windows.ps1 installs to).
+      3. `Get-Command tillandsias-tray.exe` (PATH).
+      4. <repo>\target\release\tillandsias-tray.exe (dev build).
+      5. <repo>\target\debug\tillandsias-tray.exe   (dev build).
+
+    Exit codes mirror the tray's `--diagnose` contract:
+      0 - distro registered AND control wire reachable AND phase Ready.
+      2 - degraded (the tool ran end-to-end but at least one check failed).
+      1 - could not locate or invoke tillandsias-tray.exe.
+
+    @trace spec:windows-native-tray
+
+.PARAMETER ExePath
+    Explicit path to tillandsias-tray.exe. Overrides the default search order.
+
+.EXAMPLE
+    scripts\tray-diagnose.ps1
+    scripts\tray-diagnose.ps1 -ExePath C:\path\to\tillandsias-tray.exe
+#>
+[CmdletBinding()]
+param(
+    [string]$ExePath
+)
+
+$ErrorActionPreference = 'Stop'
+
+function Resolve-TrayExe {
+    param([string]$Explicit)
+    if ($Explicit) {
+        if (Test-Path $Explicit) { return (Resolve-Path $Explicit).Path }
+        throw "specified -ExePath not found: $Explicit"
+    }
+    $installed = Join-Path $env:LOCALAPPDATA 'Programs\Tillandsias\tillandsias-tray.exe'
+    if (Test-Path $installed) { return $installed }
+    $onPath = Get-Command 'tillandsias-tray.exe' -ErrorAction SilentlyContinue
+    if ($onPath) { return $onPath.Source }
+    $repoRoot = Split-Path -Parent $PSScriptRoot
+    foreach ($prof in @('release','debug')) {
+        $candidate = Join-Path $repoRoot "target\$prof\tillandsias-tray.exe"
+        if (Test-Path $candidate) { return $candidate }
+    }
+    throw "tillandsias-tray.exe not found. Install via scripts\install-windows.ps1, build via scripts\build-windows-tray.ps1, or pass -ExePath."
+}
+
+function Write-Check {
+    param([string]$Label, [bool]$Ok, [string]$Detail)
+    if ($Ok) {
+        Write-Host '  PASS ' -NoNewline -ForegroundColor Green
+    } else {
+        Write-Host '  FAIL ' -NoNewline -ForegroundColor Red
+    }
+    if ($Detail) { Write-Host "$Label : $Detail" } else { Write-Host $Label }
+}
+
+# --- run + parse ---------------------------------------------------------------
+$exe = Resolve-TrayExe -Explicit $ExePath
+Write-Host 'tillandsias-tray health check'
+Write-Host '============================='
+Write-Host "Using exe: $exe"
+Write-Host
+
+$raw = & $exe --diagnose --json 2>$null
+if (-not $raw) {
+    Write-Host "FAIL : --diagnose --json produced no output (exit $LASTEXITCODE)" -ForegroundColor Red
+    exit 1
+}
+try {
+    $report = $raw | ConvertFrom-Json -ErrorAction Stop
+} catch {
+    Write-Host "FAIL : --diagnose --json output is not valid JSON ($_)" -ForegroundColor Red
+    exit 1
+}
+
+# --- checks --------------------------------------------------------------------
+$failures = 0
+Write-Host 'Identity:'
+Write-Check 'version           ' $true $report.version
+Write-Check 'log file exists   ' $report.log_exists $report.log_path
+if (-not $report.log_exists) { $failures++ }
+
+Write-Host "`nWindows host:"
+Write-Check 'wt.exe present    ' $report.wt_present
+if (-not $report.wt_present) { $failures++ }
+Write-Check 'distro registered ' $report.distro_registered $report.distro
+if (-not $report.distro_registered) { $failures++ }
+
+Write-Host "`nRecipe / artifact:"
+Write-Check 'release tag       ' $true $report.release_tag
+$pin = $report.manifest_pin_x86_64_tar
+$pinDetail = if ($pin) { "x86_64.tar $pin..." } else { '(not found)' }
+Write-Check 'manifest pin      ' ([bool]$pin) $pinDetail
+if (-not $pin) { $failures++ }
+
+Write-Host "`nControl wire:"
+$wireOk = $report.wire.reachable -and ($report.wire.phase -eq 'Ready') -and $report.wire.podman_ready
+Write-Check 'reachable         ' $report.wire.reachable
+Write-Check 'phase Ready       ' ($report.wire.phase -eq 'Ready') $report.wire.phase
+Write-Check 'podman ready      ' ([bool]$report.wire.podman_ready)
+if (-not $wireOk) {
+    $failures++
+    if ($report.wire.error) {
+        Write-Host "  -> error: $($report.wire.error)" -ForegroundColor Yellow
+    }
+}
+
+Write-Host
+if ($failures -eq 0) {
+    Write-Host 'HEALTHY (0 failures)' -ForegroundColor Green
+    exit 0
+} else {
+    Write-Host "DEGRADED ($failures failure(s)) - run 'tillandsias-tray --provision-once' to provision" -ForegroundColor Yellow
+    exit 2
+}
