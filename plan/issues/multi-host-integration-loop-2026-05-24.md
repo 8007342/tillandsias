@@ -1999,5 +1999,6 @@ is still open per the same cycle log; Windows host owns that one.)
 - **Reconciliation / Audit:**
   - Resolved `cp: cannot create regular file '/home/tlatoani/.local/bin/tillandsias': Text file busy` installer collision by modifying `build.sh` to forcefully unlink the target binary before copying (c9e83852).
   - Merged macOS MenuAction click dispatcher into `linux-next` workspace, and initiated full E2E litmus validation.
+  - **Background Run Failure & Fix:** Litmus run `20260528T010600Z-c9e83852-3340523c-82d735ef` failed during OpenCode startup with `crun: sethostname: Invalid argument` due to the git container hostname exceeding the 63-character Linux hostname limit. This was resolved in commit `1db7477f` by implementing a robust `sanitize_hostname` helper in `crates/tillandsias-headless` to truncate and hash long hostnames.
 
 
