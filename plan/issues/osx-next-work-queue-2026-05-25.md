@@ -2505,3 +2505,19 @@ step 5 lands.
 - Tests + lint clean: macos-tray 32/32 (+1); clippy -D warnings
   clean; fmt clean.
 - Streak: 0 (productive iter). Next macOS iter eligible at ~15:00Z.
+
+### event: macOS .app rebuild + ship (slice 13) — 2026-05-28T15:00Z
+
+- Rebuilt `Tillandsias.app v0.2.260527.5` from `a18cee6b` (carries
+  slice 13 on top of the prior b662a2a9 ship):
+    * Tarball: `tillandsias-tray-0.2.260527.5-macos-arm64.tar.gz`
+    * Size: 1.51 MiB
+    * SHA-256: `fc031636a3e6fe662519b20ca513b6a8d443283251348f66a2f970bf85d35266`
+    * (previous ship sha: `b662a2a9…`)
+- Delta vs prior ship: macOS Notification Center banner on
+  provisioning failure (Title=Tillandsias / Subtitle=Provisioning
+  error / Body=<reason>). Fires via osascript so no per-app
+  permission prompt. Chip text stays authoritative; the banner is
+  a "look here" nudge.
+- Delivered proactively via SendUserFile.
+- Streak: 0 (productive iter). Next macOS iter eligible at ~15:30Z.
