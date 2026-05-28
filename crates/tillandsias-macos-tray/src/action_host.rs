@@ -124,6 +124,63 @@ fn apply_status_text_main_thread(
     }
 }
 
+/// Fire a macOS Notification Center banner ("Tillandsias —
+/// Provisioning error / <reason>") so the user notices a failed VM
+/// boot even without hovering the menubar icon. Mirrors windows-
+/// tray's `show_balloon` (commit 8992652a item 1) but implemented
+/// via an `osascript -e 'display notification ...'` shell-out
+/// instead of `UNUserNotificationCenter` to avoid pulling
+/// `objc2-user-notifications` (which currently pins a different
+/// objc2 major than the workspace) and the permission-request
+/// plumbing.
+///
+/// Best-effort: spawn osascript detached, log any error, never
+/// block. The chip text remains the authoritative failure surface;
+/// the notification is purely a "look here" nudge.
+fn notify_provisioning_failed(reason: &str) {
+    // AppleScript single-quote-escape so a `'` in the reason doesn't
+    // terminate the literal. Then wrap the whole call in another
+    // outer escape layer because we pass it as -e arg.
+    let escaped = applescript_escape_single_quoted(reason);
+    let body = format!(
+        "display notification \"{escaped}\" with title \"Tillandsias\" \
+         subtitle \"Provisioning error\""
+    );
+    match std::process::Command::new("osascript")
+        .arg("-e")
+        .arg(&body)
+        .spawn()
+    {
+        Ok(_child) => {
+            // Detached — let it complete in the background. macOS
+            // notifications fire near-instantly so we don't need to
+            // await the child.
+        }
+        Err(err) => {
+            eprintln!("[tillandsias-tray] notification: osascript spawn failed: {err}");
+        }
+    }
+}
+
+/// AppleScript double-quoted-string escaping: backslash + double-quote
+/// are the only metachars we need to handle inside `"..."`. Used by
+/// `notify_provisioning_failed` to embed a user-visible reason inside
+/// an AppleScript literal.
+fn applescript_escape_single_quoted(reason: &str) -> String {
+    let mut out = String::with_capacity(reason.len());
+    for c in reason.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            // Collapse newlines to spaces — AppleScript display
+            // notification renders newlines as control chars.
+            '\n' | '\r' => out.push(' '),
+            other => out.push(other),
+        }
+    }
+    out
+}
+
 /// Condensed status-line text for a live VM phase + podman readiness.
 /// Drives the shared `ids::STATUS` chip (and the menubar tooltip) so
 /// the menu reflects real VM health — converges with the windows-tray
@@ -987,6 +1044,15 @@ impl TrayActionHost {
                 }
                 Err(e) => {
                     eprintln!("[tillandsias-tray] {label_done} failed: {e}");
+                    // Surface the failure via a Notification Center
+                    // banner so the user notices even without hovering
+                    // the menubar icon (Action Center carries the most-
+                    // recent banner across screen-locks too). Mirrors
+                    // windows-tray's show_balloon (commit 8992652a
+                    // item 1). Best-effort: a failed osascript shell-
+                    // out is logged + ignored, the chip is the
+                    // authoritative surface.
+                    notify_provisioning_failed(e);
                     format!("\u{1F534} {e}")
                 }
             };
@@ -1200,6 +1266,34 @@ mod tests {
     fn tray_action_host_class_registers() {
         let cls = TrayActionHost::class();
         assert_eq!(cls.name(), "TillandsiasTrayActionHost");
+    }
+
+    /// `applescript_escape_single_quoted` defangs the AppleScript
+    /// double-quoted-string metacharacters (`\` and `"`) and
+    /// collapses newlines to spaces. Guards against
+    /// `notify_provisioning_failed` accidentally crafting a script
+    /// that breaks out of the literal.
+    #[test]
+    fn applescript_escape_handles_metas_and_newlines() {
+        assert_eq!(applescript_escape_single_quoted("plain"), "plain");
+        assert_eq!(
+            applescript_escape_single_quoted("has \"quotes\""),
+            "has \\\"quotes\\\""
+        );
+        assert_eq!(applescript_escape_single_quoted("has\\back"), "has\\\\back");
+        // Newlines collapse to spaces.
+        assert_eq!(applescript_escape_single_quoted("two\nlines"), "two lines");
+        assert_eq!(
+            applescript_escape_single_quoted("carriage\rreturn"),
+            "carriage return"
+        );
+        // Combined: a realistic error string.
+        assert_eq!(
+            applescript_escape_single_quoted(
+                "recipe-artifact fetch failed: \"rootfs.img\" missing"
+            ),
+            "recipe-artifact fetch failed: \\\"rootfs.img\\\" missing"
+        );
     }
 
     /// `compose_chip_text` appends a non-empty `last_event` after a
