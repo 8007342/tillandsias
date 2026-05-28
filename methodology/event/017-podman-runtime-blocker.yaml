@@ -1,4 +1,4 @@
-status: triaged
+status: distilled
 kind: blocker
 title: Podman runtime availability blocks residual litmus convergence
 date: 2026-05-07
@@ -31,3 +31,8 @@ notes:
   - >
     The browser-ephemeral test also needs semantic correction: the current
     container command does not make the asserted temp directory observable.
+
+distilled_into:
+  - scripts/local-ci.sh:podman_runtime_health_probe
+  - scripts/run-litmus-test.sh
+
