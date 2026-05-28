@@ -14,7 +14,7 @@ LastExecutionTime: 2026-05-28T01:06Z
   - Execute Phased Local CI (`./build.sh --ci-full --install`, `tillandsias --init`, and E2E litmus diagnostics).
   - Automatically commit and push the integrated HEAD to `origin/linux-next` upon successful validation.
 - Background Process details:
-  - PID: (To be started)
+  - PID: 3186773
   - Status Log: `plan/localwork/runtime-litmus/20260528T010600Z-c9e83852-3340523c-82d735ef/run.log`
   - Status Indicator: `plan/localwork/runtime-litmus/current`
 
