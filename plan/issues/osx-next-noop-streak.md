@@ -20,3 +20,17 @@ Reset (delete this file) on the next productive iter.
   backfill) + work-queue entries. All in-VM headless / Linux-
   side, no macOS-actionable code. macos-tray still builds clean.
   Surface unchanged from streak-1. Next wake 2h per streak-2.
+
+- 2026-05-28T22:40Z — streak=3. FF-pulled `5c67ddb9`
+  (control-dispatch pure routing matrix for unix+vsock,
+  convergence packet item 1) + `5caa7bc4` (forge-improvements
+  toolchain install) + `d7bfcdd9` (windows install --diagnose
+  parity with my macOS slice 16, with two Windows-specific
+  stdio fixes). All in-VM headless / Linux container / Windows-
+  host changes; nothing macOS-actionable. macos-tray builds
+  clean. The decide_route() routing matrix lives in
+  tillandsias-headless (runs INSIDE the VM); macOS-host code
+  only sends messages, never dispatches them, so no host-side
+  adapter needed. Windows mirroring my slice 16 is informational
+  — convergence flowing both directions. Next wake 4h per
+  streak-3 (runtime caps at 1h though).
