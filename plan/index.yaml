@@ -1595,27 +1595,16 @@ plan_index:
       depends_on: [recent-work-spec-doc-methodology-audit]
       progress_note: >
         linux-next, windows-next, and osx-next are all active as of
-        2026-05-27T23:25Z. The integration loop ledger at
+        2026-05-28T15:03Z. The integration loop ledger at
         plan/issues/multi-host-integration-loop-2026-05-24.md records sibling
         heads; per-host queues record item-level leases/events. Current
-        reconciliation: origin/linux-next is at 891bb757 before this
-        coordination commit, origin/osx-next is at f8778350 and remains an
-        ancestor, main is at fa746f03, and windows-next is at 1e20d6d0.
-        Resolved gates include the Windows
-        wsl_lifecycle.rs rustfmt fix (9315e9de) and Windows w9/control-wire
-        merge/test into linux-next (edfb72c6 / b9cee2fd, build.sh --check and
-        --test passed). Runtime-litmus
-        20260527T231258Z-b06a5997-1e20d6d0-b06a5997 failed at `Disk quota
-        exceeded`; old scratch worktrees were removed. Replacement full
-        installed runtime-litmus
-        20260527T231940Z-b06a5997-1e20d6d0-b06a5997 passed build/install and
-        init, then failed in OpenCode diagnostics with a nested-runtime panic at
-        crates/tillandsias-headless/src/vault_bootstrap.rs:205. Remaining gates
-        are fixing/assigning that diagnostics panic, starting a fresh runtime
-        for 891bb757/this coordination commit, macOS m8 user-attended smoke,
-        release run 26544334121 after the Linux Nix musl pivot, first real
-        non-empty forge diagnostics summary, and optional Windows wire
-        EnumerateLocalProjects. Step 15 is closed.
+        reconciliation: origin/linux-next is at c12383f0, origin/osx-next is at
+        a18cee6b and remains an ancestor, main is at fa746f03, and windows-next
+        is at 8992652a. A fresh async runtime litmus validation run
+        20260528T150335Z-c12383f0-8992652a-a18cee6b has been triggered.
+        Remaining gates are macOS m8 user-attended smoke, release run
+        26544334121, first real non-empty forge diagnostics summary, and optional
+        Windows wire EnumerateLocalProjects. Step 15 is closed.
       specs:
         - methodology-accountability
         - host-shell-architecture

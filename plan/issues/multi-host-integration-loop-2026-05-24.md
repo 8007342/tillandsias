@@ -51,6 +51,19 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-28T15:03Z — NO-OP (siblings integrated) & TRIGGERED E2E runtime litmus 🔄
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `c12383f0`
+- observed_sibling_heads: main=`fa746f03` · linux-next=`c12383f0` · windows-next=`8992652a` (integrated) · osx-next=`a18cee6b` (integrated)
+- **Validation Run:** A fresh async runtime litmus validation run `20260528T150335Z-c12383f0-8992652a-a18cee6b` was triggered to exercise the latest integrated HEAD `c12383f0` which includes:
+  - `feat(podman-diagnostics): Started → Died pairing for duration_seconds (gap-3 phase-2e)` (`c12383f0`)
+  - `coord(osx-next): record macOS slice 13 (notification on provisioning failure)` (`a18cee6b`)
+  - `m4(macos-tray): macOS notification on provisioning failure (slice 13)` (`60a5cb33`)
+  - `docs(diagnose-forge): cross-host fallback — distill summary when raw log absent` (`8aa86bb2`)
+  - `feat(podman-diagnostics): route Status=oom → event:resource_exhaustion (gap-3 phase-2d)` (`26266705`)
+- **Sibling branches:** Both `windows-next` and `osx-next` are confirmed ancestors of `linux-next`, meaning all remote changes are fully integrated.
+
 ### Cycle 2026-05-28T13:43Z — MERGED windows-next & SUCCEEDED E2E runtime litmus ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
