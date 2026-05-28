@@ -112,19 +112,32 @@ print(f'  missing_tools: {len(data[\"missing_tools\"])}; '
     timeout_ms: 10000
     expected_behavior: "ok: no container_launch state=failed in annex stderr"
 
-  - step: "container-start health: the forge stage specifically reached running"
-    # The annex prompt activates --opencode → must launch the forge
-    # container. A capture without `stage=forge state=running` means
-    # the agent JSON came from somewhere unexpected (cached run, mocked
-    # call, ...) and the structured report can't be trusted to reflect
-    # the current forge image. Gating.
+  - step: "container-start health: the forge-agent stage launched (running OR exited)"
+    # The annex prompt activates --opencode → must launch the agent
+    # container. spec:runtime-diagnostics-stream "Launch stage event"
+    # allows TWO terminal states for the agent stage: `state=running` for
+    # detached containers, OR `state=exited` for a completed attached
+    # foreground forge (which is what `--diagnostics --prompt …` produces:
+    # the agent runs to completion, then exits cleanly).
+    #
+    # Stage label is per-agent (`opencode`, `claude`, `codex`, or the
+    # generic `forge`) — accept any of them so this litmus stays correct
+    # across agent choices.
+    #
+    # Verified shape from the first production distill
+    # (plan/diagnostics/diagnostics_20260528T111351Z-summary.md):
+    #   `event:container_launch stage=opencode state=exited container=…`
+    #
+    # A capture without an agent-stage line means the agent JSON came
+    # from somewhere unexpected (cached run, mocked call, ...) and the
+    # structured report can't be trusted. Gating.
     command: >
       STDERR=$(ls -t target/forge-diagnostics/diagnostics_*.stderr.log 2>/dev/null | head -1)
       && [ -n "$STDERR" ]
-      && grep -Eq 'event:container_launch stage=forge state=running container=' "$STDERR"
-      && echo "ok: forge container reached state=running via idiomatic layer"
+      && grep -Eq 'event:container_launch stage=(opencode|claude|codex|forge) state=(running|exited) container=' "$STDERR"
+      && echo "ok: forge-agent stage launched via idiomatic layer"
     timeout_ms: 10000
-    expected_behavior: "ok: forge container reached state=running via idiomatic layer"
+    expected_behavior: "ok: forge-agent stage launched via idiomatic layer"
 
 observability:
   traces:

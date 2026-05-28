@@ -66,13 +66,20 @@ critical_path:
     timeout_ms: 10000
     expected_behavior: "ok: no container_launch state=failed"
 
-  - step: "the forge stage specifically reached running"
+  - step: "the forge-agent stage launched (running OR exited)"
+    # spec:runtime-diagnostics-stream "Launch stage event" allows TWO
+    # terminal states: `state=running` for detached containers, or
+    # `state=exited` for an attached foreground forge that completed
+    # (which is what `--diagnostics --prompt …` produces).
+    # Stage label is per-agent — accept the current set.
+    # First production distill confirms the real shape:
+    #   `event:container_launch stage=opencode state=exited container=…`
     command: >
       LOG=$(ls -t target/forge-diagnostics/container-start_*.stderr.log 2>/dev/null | head -1)
-      && grep -Eq 'event:container_launch stage=forge state=running container=' "$LOG"
-      && echo "ok: forge container running"
+      && grep -Eq 'event:container_launch stage=(opencode|claude|codex|forge) state=(running|exited) container=' "$LOG"
+      && echo "ok: forge-agent stage launched"
     timeout_ms: 10000
-    expected_behavior: "ok: forge container running"
+    expected_behavior: "ok: forge-agent stage launched"
 
   - step: "events came from the idiomatic layer (no raw-podman bypass signature)"
     # The event:container_launch stream is emitted ONLY by the shared
