@@ -2380,3 +2380,24 @@ step 5 lands.
 - Next macOS iter eligible at ~11:00Z. With slice 11 the macOS
   --diagnose convergence with windows-tray is shipped; remaining
   items unchanged (manifest.release_tag Linux-owned + user smoke).
+
+### event: macOS .app rebuild + ship (slice 11 / --diagnose) — 2026-05-28T11:00Z
+
+- Rebuilt `Tillandsias.app v0.2.260527.5` from `782d2fce` (carries
+  slice 11 on top of the prior 62104b6d ship):
+    * Tarball: `tillandsias-tray-0.2.260527.5-macos-arm64.tar.gz`
+    * Size: 1.51 MiB
+    * SHA-256: `70feac0b5a2fe79df90b46b617f62600201be6c7dd126a7e619f7f7aa3fb912f`
+    * (previous ship sha: `62104b6d…`)
+- Delivered proactively via SendUserFile. After install the user
+  can now run from terminal:
+    /Applications/Tillandsias.app/Contents/MacOS/tillandsias-tray --diagnose
+  to print version / bundle identity / image-root artifacts (with
+  byte sizes) / aarch64.img SHA-256 pin / control-wire disclaimer.
+  Exit code 0 (provisioned) / 2 (degraded) / 1 (hard fail) mirrors
+  windows-tray.
+- This complements the GUI m8 smoke checklist — operator can
+  confirm install + provisioning from terminal without launching
+  the AppKit tray.
+- Streak: 0 (productive iter — ship counts as a deliverable for
+  closing v0.0.1). Next macOS iter eligible at ~11:30Z.
