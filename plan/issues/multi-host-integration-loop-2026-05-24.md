@@ -51,6 +51,24 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-28T09:43Z — MERGED windows-next (`--diagnose` health report) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `5c39554f` (merge commit)
+- observed_sibling_heads: main=`fa746f03` · linux-next(pre-merge)=`82a47bf6` ·
+  windows-next=`20fb9d1f` · osx-next=`7e5f2a74`
+- **windows-next: merged+tested+pushed.** 1-commit delta `20fb9d1f`
+  (feat: `--diagnose` health report — installed-tray support diagnostic).
+  Two windows-tray files (main.rs, notify_icon.rs) — all sibling-owned
+  scope. Clean auto-merge.
+- osx-next: no-op (HEAD `7e5f2a74` is BEHIND linux-next at `82a47bf6`;
+  `linux-next..origin/osx-next` is empty so the integration steward
+  has nothing to pull — the orchestrator may still want to
+  fast-forward osx-next from this side as a separate sibling concern).
+- Tests: PASSED. `./build.sh --check` + `--test` green.
+- Spec/methodology/plan drift: none. Diff confined to
+  `crates/tillandsias-windows-tray/`.
+
 ### Coordinator fold 2026-05-28T09:11Z — Async Runtime Litmus E2E validation SUCCEEDED! ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
