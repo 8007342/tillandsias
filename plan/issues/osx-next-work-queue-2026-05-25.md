@@ -2011,3 +2011,30 @@ step 5 lands.
   pick up slice 4 (the VmStatus poller itself — opening the
   VZVirtioSocketConnection + sending VmStatusRequest every 30s,
   mirroring `refresh_vm_status` in windows-tray).
+
+### event: macOS slice 4 — poll_vm_status_once + Client::from_stream — 2026-05-28T02:25Z
+
+- Commit `80d9196e` adds the macOS analogue of windows-tray's
+  `refresh_vm_status`: `poll_vm_status_once(vz) -> Result<(VmPhase,
+  bool), String>`. Opens vsock via `VzRuntime::open_vsock_stream`,
+  wraps the resulting stream in the standard `host-shell::Client`
+  via the new `Client::from_stream(stream, transport)` constructor,
+  runs Hello + VmStatusRequest, returns `(phase, podman_ready)`.
+- `Client::from_stream` is an additive constructor on the shared
+  `tillandsias-host-shell` crate. Existing `Client::connect` /
+  `connect_vsock` paths are untouched. macOS needs the
+  pre-opened-stream path because `VZVirtioSocketConnection` produces
+  the stream itself — macOS has no `AF_VSOCK`, so the standard
+  `Transport::Vsock` connect path cannot reproduce it.
+- New unit test `from_stream_handshake_drives_pre_opened_stream` in
+  `vsock_client::tests` covers the new constructor against the
+  existing fake_unix_server fixture. host-shell vsock_client 3/3
+  green; macos-tray 26/26 green; vm-layer 63/63 green;
+  clippy -D warnings + fmt clean.
+- Visible UX impact this slice: none (the function is staged but
+  not yet wired into a 30s ticker). Slice 5 spawns the ticker after
+  `run_start` succeeds and feeds the result into
+  `vm_phase_status_text` + `apply_status_text_main_thread`, mirroring
+  the windows-tray loop in `spawn_provisioning`.
+- Streak: 0 (productive iter). Next macOS iter eligible at ~02:55Z
+  to wire the ticker (slice 5).
