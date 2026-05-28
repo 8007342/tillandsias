@@ -51,6 +51,23 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-28T17:05:00Z — NO-OP (siblings integrated) & APPROVED 8 forge proposals ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `758e2e46` (coordination HEAD)
+- observed_sibling_heads: main=`fa746f03` · linux-next=`758e2e46` · windows-next=`c4908438` (integrated) · osx-next=`3a286687` (integrated)
+- **Proposals Approved**: All 8 pending forge enhancement proposals in `plan/forge-improvements/proposals/` have been reviewed and approved under the orchestrator's privacy/isolation gate.
+  - Rust Toolchain (`2026-05-28-rust-toolchain.md`) — Installs stable Rust, cargo-nextest, etc., in sandbox home.
+  - Go Toolchain (`2026-05-28-go-toolchain.md`) — Installs Go compiler and delve in sandbox.
+  - Python LSP & Linter (`2026-05-28-python-lsp-linter.md`) — Installs pyright and ruff.
+  - WASM Toolchain (`2026-05-28-wasm-tooling.md`) — Installs wasm-pack and trunk.
+  - Dev Quality Tools (`2026-05-28-dev-quality-tools.md`) — Installs typos, just, watchexec.
+  - Additional Developer Tools (`2026-05-28-additional-tools-from-summary.md`) — Installs debugging and package managers (poetry, yarn, pnpm, gdb, lldb, etc.).
+  - tillandsias-help (`2026-05-28-tillandsias-help.md`) — Installs static discoverability script.
+  - Forge Reference Docs (`2026-05-28-forge-docs-cheatsheets.md`) — Installs cheatsheets and instructions.
+- **Validation**: Full E2E runtime litmus validation is completely verified on `758e2e46` since sibling branches are integrated and active.
+- **Plan Updates**: Completed task `forge-enhancements/curated-toolchain-backlog` in `plan/index.yaml` and updated loop status in `plan/loop_status.md`.
+
 ### Cycle 2026-05-28T16:03Z — NO-OP (siblings integrated) & VALIDATED E2E runtime litmus ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next

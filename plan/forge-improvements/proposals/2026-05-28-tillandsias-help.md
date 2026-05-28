@@ -2,8 +2,9 @@
 title: Install tillandsias-help shell script
 gap: "shell.tillandsias_help: command not found in PATH; welcome scripts register it but it's absent"
 category: shell-tool
-status: proposed
+status: approved
 proposed_at: 2026-05-28T12:15:00Z
+approved_at: 2026-05-28T17:05:00Z
 changes:
   - file: images/default/Containerfile
     description: |
@@ -13,7 +14,7 @@ changes:
   - file: images/default/entrypoint-forge-opencode.sh
     description: No changes needed (already in PATH via /usr/local/bin).
 approval_required: orchestrator
-approved_by:
+approved_by: Antigravity (Orchestrator)
 ---
 
 ## Gap

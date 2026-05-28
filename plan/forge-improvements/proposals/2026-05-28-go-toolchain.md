@@ -2,8 +2,9 @@
 title: Install Go toolchain (go, delve)
 gap: "missing_tools: go, delve; GOPATH pre-configured but compiler absent"
 category: sdk
-status: proposed
+status: approved
 proposed_at: 2026-05-28T12:15:00Z
+approved_at: 2026-05-28T17:05:00Z
 changes:
   - file: images/default/Containerfile
     description: |
@@ -12,7 +13,7 @@ changes:
   - file: images/default/entrypoint-forge-opencode.sh
     description: Ensure `~/go/bin` is in PATH for delve and other go-installed tools.
 approval_required: orchestrator
-approved_by:
+approved_by: Antigravity (Orchestrator)
 ---
 
 ## Gap

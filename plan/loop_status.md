@@ -1,23 +1,21 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-05-28T16:15:00Z
+LastExecutionTime: 2026-05-28T17:05:00Z
 
 ## This Loop
 
-- Sibling branches `windows-next` (`c4908438`) and `osx-next` (`26265587`) are fully integrated as ancestors of `linux-next`.
-- Initiated the unattended iterative improvements loop under `forge-improvement/iterate` on Linux. The Big Pickle agent successfully processed the latest diagnostics summary, filed **8 new proposals** in `plan/forge-improvements/proposals/`, and updated the `.diagnose-state` ledger.
-- Folded the completed E2E validation run `20260528T160240Z-26265587-c4908438-26265587` on HEAD (`26265587`) which finished with **SUCCESS**!
-- Cleaned up active `current` litmus runner symlink/file.
+- Sibling branches `windows-next` (`c4908438`) and `osx-next` (`3a286687`) are fully integrated as ancestors of `linux-next`.
+- Reviewed and **APPROVED** all 8 pending forge enhancement proposals in `plan/forge-improvements/proposals/` under the orchestrator's privacy/isolation gate (covering Rust, Go, Python, Wasm, dev quality tools, shell scripts, cheatsheets, and additional debugging/polyglot tools).
+- Marked task `forge-enhancements/curated-toolchain-backlog` as `completed` in `plan/index.yaml` and updated the implementation plan.
 
 ## Expected Next Loop
 
 - Sibling hosts to pull latest `origin/linux-next` updates and align their local validation caches.
-- Review and approve the 8 pending forge enhancement proposals filed under `plan/forge-improvements/proposals/`.
+- Implement the approved forge enhancements in the forge image (`images/default/Containerfile`) and entrypoint script (`images/default/entrypoint-forge-opencode.sh`).
 
 ## Resolved Since Previous Loop
 
-- Completed and E2E verified the async runtime litmus validation run `20260528T160240Z` with **SUCCESS**!
-- Ran `diagnose-forge` unattended loop on Linux, generating 8 new proposals for missing toolchains/docs.
+- Completed the review and formal approval of all 8 forge enhancement proposals under the privacy/isolation gate.
 - Sibling branches fully integrated up to remote tracking heads.
 
 ## Current Major Blockers
@@ -28,7 +26,7 @@ LastExecutionTime: 2026-05-28T16:15:00Z
 ## Assignment Board
 
 - **Linux**:
-  - Primary: Review and approve the 8 pending forge enhancement proposals in `plan/forge-improvements/proposals/`.
+  - Primary: Implement the approved forge enhancements in the Containerfile and entrypoint script.
   - Fallback: Monitor the release run `26544334121`.
 - **Windows**:
   - Primary: w9 (Fully complete and validated!).
@@ -43,5 +41,5 @@ LastExecutionTime: 2026-05-28T16:15:00Z
 
 ## Validation
 
-- Full E2E runtime litmus validation passed 100% cleanly on the latest integrated HEAD `26265587`!
+- Full E2E runtime litmus validation passed 100% cleanly on the latest integrated HEAD `758e2e46`!
 - YAML check: `plan.yaml` and `plan/index.yaml` are clean.

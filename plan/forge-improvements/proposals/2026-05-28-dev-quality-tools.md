@@ -2,8 +2,9 @@
 title: Install dev quality tools (typos, just, watchexec)
 gap: "missing_tools: typos, just, watchexec; CI and dev-loop automation tools absent"
 category: runtime-tool
-status: proposed
+status: approved
 proposed_at: 2026-05-28T12:15:00Z
+approved_at: 2026-05-28T17:05:00Z
 changes:
   - file: images/default/Containerfile
     description: |
@@ -13,7 +14,7 @@ changes:
   - file: images/default/entrypoint-forge-opencode.sh
     description: No changes needed (all install into ~/.cargo/bin).
 approval_required: orchestrator
-approved_by:
+approved_by: Antigravity (Orchestrator)
 ---
 
 ## Gap

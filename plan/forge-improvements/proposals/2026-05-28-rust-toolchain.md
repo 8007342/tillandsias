@@ -2,8 +2,9 @@
 title: Install Rust toolchain (rustc, cargo, rust-analyzer, clippy, rustfmt, cargo-*)
 gap: "missing_tools: rustc, cargo, rust-analyzer, clippy, rustfmt, cargo-nextest, cargo-chef, cargo-audit, cargo-watch"
 category: sdk
-status: proposed
+status: approved
 proposed_at: 2026-05-28T12:15:00Z
+approved_at: 2026-05-28T17:05:00Z
 changes:
   - file: images/default/Containerfile
     description: |
@@ -14,7 +15,7 @@ changes:
   - file: images/default/entrypoint-forge-opencode.sh
     description: Export RUSTUP_HOME and ensure ~/.cargo/bin is in PATH.
 approval_required: orchestrator
-approved_by:
+approved_by: Antigravity (Orchestrator)
 ---
 
 ## Gap

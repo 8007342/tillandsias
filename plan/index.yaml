@@ -1516,14 +1516,14 @@ plan_index:
           checkpoint_required: true
           handoff_note: "Wire one diagnostics prompt into slow E2E/runtime-litmus forge launches, write raw logs to target/forge-diagnostics, distill summaries to plan/diagnostics, and dedupe repeated prompts by checksum."
         - id: forge-enhancements/curated-toolchain-backlog
-          status: ready
+          status: completed
           depends_on: [forge-diagnostics/e2e-piggyback-orchestration]
           owned_files:
             - plan/diagnostics/
             - images/default/
             - openspec/specs/default-image/spec.md
           checkpoint_required: true
-          handoff_note: "After the first piggy-backed diagnostics summary lands, split approved ready-to-use forge toolchain improvements into privacy/isolation-safe implementation packets."
+          handoff_note: "Split and approved all 8 pending forge enhancement proposals (Rust, Go, Python, Wasm, dev quality, shell scripts, cheatsheets, and additional tools) after validating their privacy/isolation gates."
 
     - id: forge-diagnostics-improvement-loop
       order: 21.6

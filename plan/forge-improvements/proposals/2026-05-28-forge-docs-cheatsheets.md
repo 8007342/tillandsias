@@ -2,8 +2,9 @@
 title: Create forge reference docs (cheatsheets, agent instructions, cache-discipline)
 gap: "hot_paths.cheatsheets missing; TILLANDSIAS_CHEATSHEETS unset; agent_instructions empty"
 category: env-var
-status: proposed
+status: approved
 proposed_at: 2026-05-28T12:15:00Z
+approved_at: 2026-05-28T17:05:00Z
 changes:
   - file: images/default/Containerfile
     description: |
@@ -13,7 +14,7 @@ changes:
   - file: images/default/entrypoint-forge-opencode.sh
     description: Export TILLANDSIAS_CHEATSHEETS pointing to /opt/cheatsheets if not already set.
 approval_required: orchestrator
-approved_by:
+approved_by: Antigravity (Orchestrator)
 ---
 
 ## Gap

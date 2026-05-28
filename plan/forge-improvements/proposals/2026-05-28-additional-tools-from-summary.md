@@ -2,8 +2,9 @@
 title: Install additional developer tools (pip3, poetry, gopls, gdb, lldb, strace, valgrind, yarn, pnpm, dart, flutter)
 gap: "distilled summary diagnostics_20260528T120919Z reports extended missing tool list"
 category: runtime-tool
-status: proposed
+status: approved
 proposed_at: 2026-05-28T12:15:00Z
+approved_at: 2026-05-28T17:05:00Z
 changes:
   - file: images/default/Containerfile
     description: |
@@ -17,7 +18,7 @@ changes:
   - file: images/default/entrypoint-forge-opencode.sh
     description: Export DART_ROOT, FLUTTER_ROOT and add to PATH if flutter/dart installed.
 approval_required: orchestrator
-approved_by:
+approved_by: Antigravity (Orchestrator)
 ---
 
 ## Gap

@@ -2,8 +2,9 @@
 title: Install WASM toolchain (wasm-pack, trunk)
 gap: "missing_tools: wasm-pack, trunk; project genus uses WASM/Rust"
 category: runtime-tool
-status: proposed
+status: approved
 proposed_at: 2026-05-28T12:15:00Z
+approved_at: 2026-05-28T17:05:00Z
 changes:
   - file: images/default/Containerfile
     description: |
@@ -13,7 +14,7 @@ changes:
   - file: images/default/entrypoint-forge-opencode.sh
     description: No changes needed (cargo-installed binaries land in ~/.cargo/bin).
 approval_required: orchestrator
-approved_by:
+approved_by: Antigravity (Orchestrator)
 ---
 
 ## Gap
