@@ -32,21 +32,28 @@ Look in `plan/forge-improvements/proposals/` for `.md` files with frontmatter `s
 
 ```bash
 !`ls -1t target/forge-diagnostics/diagnostics_*.log 2>/dev/null | head -1`
+!`ls -1t plan/diagnostics/diagnostics_*-summary.md 2>/dev/null | head -1`
 ```
 
 Read the state file at `plan/forge-improvements/.diagnose-state` (YAML with fields: `last_processed_at`, `last_diagnostics_file`).
 
-If no diagnostics file exists, print "No diagnostics data yet — waiting for first E2E diagnostics run" and skip to step 5.
+**Two input sources, in priority order:**
 
-If the latest diagnostics file is the same as `last_diagnostics_file` in state, print "No new diagnostics since last run" and skip to step 5.
+1. **Raw log** (`target/forge-diagnostics/diagnostics_<UTC>.log`) — present only on the host that actually ran the forge-diagnostics annex this cycle. `target/` is gitignored so this never reaches sibling hosts.
+2. **Distilled summary** (`plan/diagnostics/diagnostics_<UTC>-summary.md`) — committed, durable, propagates across hosts. `scripts/distill-forge-diagnostics.sh` produces it from a raw log on whichever host ran the annex. Contains the same actionable arrays the raw log carries (`missing_tools`, `proposed_enhancements`, `isolation_or_privacy_risks`) plus a `Container-Start Stream` section.
+
+If BOTH are absent (or contain only zero-byte logs from failed runs), print "No diagnostics data yet — waiting for first E2E diagnostics run" and skip to step 5.
+
+Pick the chosen input: prefer the raw log if non-empty (richer signal), otherwise fall back to the latest distilled summary (the cross-host path). If the chosen input's path matches `last_diagnostics_file` in state, print "No new diagnostics since last run" and skip to step 5.
 
 ### 4. Extract gaps and file proposals
 
-Read the latest diagnostics file. Also read the latest distilled summary from `plan/diagnostics/`:
+Read the chosen input from step 3 (raw log or distilled summary). Both shapes carry the structured arrays you need:
 
-```bash
-!`ls -1t plan/diagnostics/diagnostics-summary-*.md 2>/dev/null | head -1`
-```
+- `missing_tools` — raw: JSON array; summary: `- ` bullet list under `### Missing tools`
+- `proposed_enhancements` — raw: JSON array of `{ecosystem, tool, why}`; summary: `### Proposed enhancements` bullets
+- `isolation_or_privacy_risks` — raw: JSON array; summary: `## ⚠️ Isolation / Privacy Risks` bullets
+- `capabilities` — raw: nested JSON object; summary: `## Missing Capabilities` list (only the missing ones, prefixed `- `)
 
 Analyze the diagnostics output for actionable gaps:
 

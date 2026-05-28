@@ -330,3 +330,38 @@ are in place; the methodology gap requires orchestrator input.
 - next (this loop, NON-overlapping): headless spec gaps — VmStatusRequest real
   lifecycle transitions, runtime-diagnostics-stream / observability-metrics spec
   audits. These are outside the forge-diagnostics packet scope.
+
+## Update 2026-05-28T14:30Z — diagnose-forge agent unblocked (cross-host input)
+
+The Big Pickle forge-diagnostics agent reported it was blocked: "No
+diagnostics data yet — `target/forge-diagnostics/` doesn't exist and no
+E2E diagnostics run has produced a log." On THIS host that's
+structurally true — `target/` is gitignored, so raw logs produced on
+the host that runs the E2E annex (currently osx-tlatoani or whichever
+orchestrator fires the runtime-litmus) never propagate. The committed
+distill summaries in `plan/diagnostics/` DO propagate and carry the
+same actionable arrays (`missing_tools`, `proposed_enhancements`,
+`isolation_or_privacy_risks` plus the Container-Start Stream forensics
+my recent gap-3 phase-2 wiring produces).
+
+Patched `.opencode/commands/diagnose-forge.md` step 3 so the agent
+prefers the raw log when present (richer signal, fast path on the
+host that ran the annex) and falls back to the latest
+`plan/diagnostics/diagnostics_<UTC>-summary.md` when it isn't (the
+cross-host path). Step 4 documents both shapes (JSON arrays vs.
+bullet lists) for each structured field. Also fixed the SKILL.md
+file-layout note's glob (`diagnostics-summary-*.md` →
+`diagnostics_*-summary.md`, which is the actual filename pattern
+the distill script writes).
+
+No new state file is committed — `.diagnose-state` is gitignored
+and each host's agent processes from a fresh local view; the
+fallback path lets a host with no raw log pick up the latest
+distill summary on its next `/diagnose-forge` run.
+
+Lease note: this is a minimal unblocker for the agent's input
+contract. Pickie's actual proposal-filing work remains pickie's;
+this edit just expands the input surface so the agent isn't
+permanently stuck on hosts that aren't the annex producer.
+
+@trace plan/issues/forge-diagnostics-automation-2026-05-27.md

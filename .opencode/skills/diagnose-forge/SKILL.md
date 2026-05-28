@@ -27,8 +27,8 @@ sockets, or proxy/router/enclave bypasses.
 
 - `plan/forge-improvements/proposals/` — one `.md` file per proposed gap
 - `plan/forge-improvements/.diagnose-state` — tracks last processed diagnostics file
-- `target/forge-diagnostics/diagnostics_*.log` — raw diagnostics from E2E runs (ephemeral)
-- `plan/diagnostics/diagnostics-summary-*.md` — distilled summaries (durable)
+- `target/forge-diagnostics/diagnostics_*.log` — raw diagnostics from E2E runs (host-local, gitignored). Present only on the host that ran the annex.
+- `plan/diagnostics/diagnostics_*-summary.md` — distilled summaries (durable, committed). Cross-host fallback input — see step 3 of the `/diagnose-forge` command.
 - `images/default/Containerfile` — forge image definition (main target for changes)
 - `images/default/entrypoint-forge-opencode.sh` — runtime env setup (main target for changes)
 
