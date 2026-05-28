@@ -2466,3 +2466,18 @@ step 5 lands.
   clean; fmt clean. Streak reset to 0.
 - Streak: 0 (productive iter). Next macOS iter eligible at
   ~14:00Z.
+
+### event: macOS .app rebuild + ship (slices 11a/11b/12) — 2026-05-28T14:00Z
+
+- Rebuilt `Tillandsias.app v0.2.260527.5` from `982560ba` (carries
+  slices 11a + 11b + 12 on top of the prior 70feac0b ship):
+    * Tarball: `tillandsias-tray-0.2.260527.5-macos-arm64.tar.gz`
+    * Size: 1.51 MiB
+    * SHA-256: `b662a2a9362d93bdd71b1ff34cfb5a386746d2c013e67b97785254f06fd8d2cc`
+    * (previous ship sha: `70feac0b…`)
+- Delta vs prior ship:
+    * slice 11a — diagnose parser tests (drift detection in CI)
+    * slice 11b — `--diagnose` surfaces `Release: v0.2.260526.1`
+    * slice 12  — chip surfaces `last_event` via compose_chip_text
+- Delivered proactively via SendUserFile.
+- Streak: 0 (productive iter). Next macOS iter eligible at ~14:30Z.
