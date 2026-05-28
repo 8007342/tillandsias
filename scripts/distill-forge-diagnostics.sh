@@ -85,10 +85,16 @@ distill_one() {
 
     if command -v python3 &>/dev/null; then
         diagnostics_json=$(python3 -c "
-import json, sys
+import json, sys, re
 try:
     with open('$log_file') as f:
-        data = json.load(f)
+        content = f.read()
+    # Extract JSON object (robust to markdown fences or command headers)
+    match = re.search(r'\{.*\}', content, re.DOTALL)
+    if match:
+        data = json.loads(match.group(0))
+    else:
+        data = json.loads(content)
     # Flatten capabilities into section.key: status pairs
     caps = data.get('capabilities', {})
     for section, values in caps.items():

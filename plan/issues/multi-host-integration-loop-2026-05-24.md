@@ -51,6 +51,21 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-28T11:03:00Z — VALIDATED & SUCCEEDED (clean tree, E2E runtime litmus pass, first diagnostics capture) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `20cc355a`
+- observed_sibling_heads: main=`fa746f03` · linux-next=`e99ba8a9` · windows-next=`20fb9d1f` · osx-next=`36688b0c`
+- **Validation Run:** The async runtime litmus validation run `20260528T110300Z-20cc355a-20fb9d1f-36688b0c` (Task `task-117`) completed with **SUCCESS**!
+  - **OpenCode Startup:** PASS (all 7 steps of `litmus:opencode-web-startup-sequence` including launch profile and router reuse).
+  - **Container Health:** PASS (zero failed launch events across proxy, git, inference, and forge).
+  - **Diagnostics Shape:** PASS.
+  - **Status:** marked as `succeeded` cleanly, pushing HEAD to `origin/linux-next`.
+- **First Diagnostics Capture:** Successfully executed `scripts/forge-diagnostics-annex.sh` on the host to capture a live capability report from the in-forge agent. Distilled to `plan/diagnostics/diagnostics_20260528T111351Z-summary.md` showing **80% Completeness** (20/25 checks passed).
+- **Plan Updates:** Marked `forge-diagnostics/e2e-piggyback-orchestration` and `forge-improvement/first-run` completed in `plan/index.yaml`, promoting `forge-improvement/iterate` to `ready`.
+- **Sibling branches:** Both `windows-next` (`20fb9d1f`) and `osx-next` (`36688b0c`) are fully integrated and E2E verified in the latest integrated runtime environment.
+- **Tests:** PASSED. All unit tests, container policies, and E2E litmus tests passed cleanly.
+
 ### Cycle 2026-05-28T10:13:00Z — VALIDATED & SUCCEEDED (clean tree, E2E runtime litmus pass) ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next

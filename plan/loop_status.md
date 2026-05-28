@@ -1,21 +1,26 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-05-28T10:13:00Z
+LastExecutionTime: 2026-05-28T11:15:00Z
 
 ## This Loop
 
-- Completed and verified the fresh async runtime litmus validation run `20260528T100300Z-86c8984e-20fb9d1f-7e5f2a74` (Task `task-97`) on HEAD (`86c8984e`), which succeeded beautifully (OpenCode startup PASS, diagnostics shape PASS, container-start health PASS with zero failed launch events).
+- Completed and E2E verified the fresh async runtime litmus validation run `20260528T110300Z-20cc355a-20fb9d1f-36688b0c` (Task `task-117`) on HEAD (`20cc355a`).
 - Cleaned up the temporary worktree under `/tmp/tillandsias-runtime-litmus-*`.
-- Sibling branches `windows-next` (`20fb9d1f`) and `osx-next` (`7e5f2a74`) are fully integrated and E2E verified in the latest integrated runtime environment.
+- Sibling branches `windows-next` (`20fb9d1f`) and `osx-next` (`36688b0c`) are fully integrated and E2E verified in the latest integrated runtime environment.
+- Captured first real non-empty capability diagnostics log directly on the host (`diagnostics_20260528T111351Z.log`) and distilled it to `plan/diagnostics/diagnostics_20260528T111351Z-summary.md` with **80% Completeness** (20/25 checks passed)!
+- Marked `forge-diagnostics/e2e-piggyback-orchestration` and `forge-improvement/first-run` as completed, and promoted `forge-improvement/iterate` to `ready` in `plan/index.yaml`.
+- Pushed successful sibling branch integrations successfully to `origin/linux-next`.
 
 ## Expected Next Loop
 
 - Sibling hosts to pull latest `origin/linux-next` updates and align their local validation caches.
 - Await/monitor release workflow run `26544334121` or any new incoming code pushes.
+- Initiate the first unattended iterative improvements loop under `forge-improvement/iterate`.
 
 ## Resolved Since Previous Loop
 
-- Succeeded E2E async runtime litmus validation run `20260528T100300Z` on HEAD (`86c8984e`), confirming the integrated Windows `--diagnose` health report is fully sound.
+- Succeeded E2E async runtime litmus validation run `20260528T110300Z` on HEAD (`20cc355a`), integrating latest Windows and macOS heads cleanly.
+- Succeeded E2E async runtime litmus validation run `20260528T100300Z` on HEAD (`86c8984e`).
 - Succeeded E2E async runtime litmus validation run `20260528T090400Z` on HEAD (b219ec81).
 - Subprocess child-sync pipe panic fixed (Cycle 2026-05-28T08:05Z).
 

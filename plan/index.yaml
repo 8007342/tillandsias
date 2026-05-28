@@ -1507,7 +1507,7 @@ plan_index:
           checkpoint_required: true
           handoff_note: "Orchestrator approved agent_diagnostic as a non-blocking annex, added forge privacy/isolation approval rules, and updated coordination bookkeeping requirements."
         - id: forge-diagnostics/e2e-piggyback-orchestration
-          status: ready
+          status: completed
           depends_on: [forge-diagnostics/methodology-update]
           owned_files:
             - openspec/litmus-tests/litmus-forge-diagnostics-e2e.yaml
@@ -1573,13 +1573,13 @@ plan_index:
           checkpoint_required: true
           handoff_note: "Proposal directory structure created. State file tracks last-processed diagnostics. .gitignore excludes runtime state."
         - id: forge-improvement/first-run
-          status: pending
+          status: completed
           depends_on: [forge-improvement/proposal-infra, forge-diagnostics/e2e-piggyback-orchestration]
           owned_files: []
           checkpoint_required: false
           handoff_note: "First unattended diagnostics run. Requires a slow E2E/runtime-litmus forge launch to produce a diagnostics log. Proposals remain status: proposed until orchestrator approval."
         - id: forge-improvement/iterate
-          status: pending
+          status: ready
           depends_on: [forge-improvement/first-run]
           owned_files:
             - plan/forge-improvements/proposals/
