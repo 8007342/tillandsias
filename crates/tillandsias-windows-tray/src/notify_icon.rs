@@ -591,6 +591,29 @@ async fn refresh_cloud_projects(_hwnd: HWND) {
     }
 }
 
+/// Parse the SHA-256 pin for `key` (e.g. `"x86_64.tar"`) out of the embedded
+/// recipe `manifest.toml` `[output.expected_rootfs_sha]` table, returning its
+/// first 12 hex chars. Tolerates both the quoted-key form the recipe-publish CI
+/// emits (`"x86_64.tar" = "<sha>"`) and the bare-key form a future author might
+/// drop the quotes on. Any non-hex placeholder (e.g. `"pending-ci"`) fails the
+/// `>= 12 hex chars` gate and returns `None` so the caller can fall back to a
+/// "(not found / parse skipped)" message. Mirrors the macOS diagnose
+/// manifest-pin parser (slice 11a, `a97b219a`).
+fn parse_rootfs_sha_pin(manifest_toml: &str, key: &str) -> Option<String> {
+    for line in manifest_toml.lines() {
+        let trimmed = line.trim().trim_start_matches('"');
+        if let Some(rest) = trimmed.strip_prefix(key) {
+            let rest = rest.trim_start_matches(['"', ' ', '=']);
+            let rest = rest.trim_start_matches('"');
+            let sha: String = rest.chars().take_while(|c| c.is_ascii_hexdigit()).collect();
+            if sha.len() >= 12 {
+                return Some(sha[..12].to_string());
+            }
+        }
+    }
+    None
+}
+
 /// Headless diagnostic entry point (`tillandsias-tray --diagnose`): print a
 /// bundled health report — tray version, log file, `wt.exe` availability,
 /// `tillandsias` distro registration, live control-wire status (phase +
@@ -643,6 +666,18 @@ pub fn diagnose() -> i32 {
         } else {
             "NOT registered (run --provision-once to provision)"
         }
+    );
+
+    // Manifest pin — first 12 hex of the embedded x86_64.tar SHA-256, so
+    // support can confirm which recipe-published artifact the installed tray
+    // would provision against. Mirrors the macOS diagnose manifest-pin
+    // display (slice 11, db1619ae).
+    println!("Release tag:  {}", crate::wsl_lifecycle::RECIPE_RELEASE_TAG);
+    println!(
+        "Manifest pin: x86_64.tar {}",
+        parse_rootfs_sha_pin(crate::wsl_lifecycle::RECIPE_MANIFEST, "x86_64.tar")
+            .map(|sha| format!("{sha}\u{2026}"))
+            .unwrap_or_else(|| "(not found / parse skipped)".to_string())
     );
 
     // Live control wire — handshake + VmStatusRequest.
@@ -1269,6 +1304,47 @@ mod tests {
     fn wm_trayicon_is_in_app_range() {
         // Both are consts, so enforce the invariant at compile time.
         const { assert!(WM_TRAYICON >= WM_APP) };
+    }
+
+    /// The manifest-pin parser reads `"x86_64.tar" = "<sha>"` out of the
+    /// `[output.expected_rootfs_sha]` table — the actual shape recipe-publish
+    /// emits — and returns the first 12 hex chars.
+    #[test]
+    fn parses_quoted_key_sha_form() {
+        let manifest = r#"
+[output.expected_rootfs_sha]
+"x86_64.tar"  = "a28cabe7c9dfcf58e8a2c63d1885d968c5abbc4719c7e89152d4c5e492d38e99"
+"aarch64.tar" = "a8435ed1a0c9294e9ca9f060eaacc3f059662908040037dec330d71a1b5f3028"
+"#;
+        assert_eq!(
+            parse_rootfs_sha_pin(manifest, "x86_64.tar"),
+            Some("a28cabe7c9df".to_string())
+        );
+    }
+
+    /// Tolerate the bare-key form too (TOML accepts unquoted keys with only
+    /// `[A-Za-z0-9_-]` plus dots; future manifest authors might drop the
+    /// quotes on the simple arch keys).
+    #[test]
+    fn parses_bare_key_sha_form() {
+        let manifest =
+            "x86_64.tar  = \"a28cabe7c9dfcf58e8a2c63d1885d968c5abbc4719c7e89152d4c5e492d38e99\"\n";
+        assert_eq!(
+            parse_rootfs_sha_pin(manifest, "x86_64.tar"),
+            Some("a28cabe7c9df".to_string())
+        );
+    }
+
+    /// `"pending-ci"` (or any non-hex placeholder) MUST NOT parse as a pin —
+    /// the report should show "(not found / parse skipped)" instead of printing
+    /// garbage. The `>= 12 hex chars` gate makes this safe by construction.
+    #[test]
+    fn refuses_placeholder_pending_ci() {
+        let manifest = r#"
+[output.expected_rootfs_sha]
+"x86_64.tar" = "pending-ci"
+"#;
+        assert!(parse_rootfs_sha_pin(manifest, "x86_64.tar").is_none());
     }
 
     /// Cloud `ProjectEntry.path` is the `owner/repo` slug (per its doc) so the
