@@ -726,7 +726,12 @@ fn collect_report() -> DiagnoseReport {
         .map(|o| o.status.success())
         .unwrap_or(false);
 
+    // `wsl.exe -l -q` emits UTF-16LE with a BOM by default; `WSL_UTF8=1` forces
+    // plain UTF-8 so `String::from_utf8_lossy` actually sees readable lines.
+    // Without this, `lines().any(eq DISTRO_NAME)` returned false even on a
+    // registered distro — the bytes parsed as mojibake.
     let distro_registered = std::process::Command::new("wsl.exe")
+        .env("WSL_UTF8", "1")
         .args(["-l", "-q"])
         .output()
         .map(|o| {
