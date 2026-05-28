@@ -85,6 +85,16 @@ mod appkit_handle {
     // SAFETY: see module docstring.
     unsafe impl Send for StatusMenuItemHandle {}
     unsafe impl Sync for StatusMenuItemHandle {}
+    /// A retained pointer to the TrayActionHost instance itself.
+    /// Used by the cloud-projects poller's menu-rebuild dispatch
+    /// to call back into TrayActionHost on the main thread so it
+    /// can wire `target = action_host` on each rebuilt NSMenuItem.
+    /// Set once at startup via `set_self_handle`; only the .0 is
+    /// dereffed inside a main-thread dispatch closure.
+    pub(crate) struct TrayActionHostHandle(pub Retained<super::TrayActionHost>);
+    // SAFETY: see module docstring.
+    unsafe impl Send for TrayActionHostHandle {}
+    unsafe impl Sync for TrayActionHostHandle {}
 }
 
 /// Apply a status-chip text update on the AppKit main thread.
@@ -325,11 +335,17 @@ pub struct TrayActionHostIvars {
     /// Held menu-state snapshot. Updated by the poller tasks when
     /// they learn the in-VM truth (cloud_projects from
     /// `poll_cloud_projects_once`; eventually podman_ready + login).
-    /// Slice 8b stages this for slice 8c's menu re-render path —
-    /// at this slice's commit nothing reads the field yet beyond
-    /// `eprintln` logging of changes, so the visible menu is still
-    /// driven by `MenuStructure::initial_provisioning()`.
+    /// Slice 8b stages this for slice 8c's menu re-render path.
     menu_state: Arc<Mutex<tillandsias_host_shell::menu_state::MenuState>>,
+    /// `Retained<TrayActionHost>` to self, populated once via
+    /// `set_self_handle` right after construction. Held so the
+    /// cloud-projects poller's rebuild dispatch can re-bind every
+    /// new NSMenuItem's `target` back to the live action host
+    /// without needing a Retained<Self> threaded through Send-able
+    /// closures (which doesn't work — Retained<TrayActionHost>
+    /// isn't Send because of the UnsafeCell layout). Wrapping in
+    /// `TrayActionHostHandle` is the safe seam.
+    self_handle: Arc<Mutex<Option<appkit_handle::TrayActionHostHandle>>>,
 }
 
 declare_class!(
@@ -700,6 +716,7 @@ impl TrayActionHost {
                 s.target = tillandsias_host_shell::menu_state::TargetSurface::MacosTray;
                 s
             })),
+            self_handle: Arc::new(Mutex::new(None)),
             status_text: Arc::new(Mutex::new(
                 "\u{1F535} Setting up Fedora Linux\u{2026}".to_string(),
             )),
@@ -820,6 +837,15 @@ impl TrayActionHost {
             Some(appkit_handle::StatusMenuItemHandle(status_menu_item));
     }
 
+    /// Stash a Retained handle to `self` so off-thread workers (the
+    /// cloud-projects poller's rebuild dispatch) can re-borrow it on
+    /// the main thread to call methods like `build_menu_item` that
+    /// need `&TrayActionHost` for `setTarget:`. Call once from
+    /// `status_item::run` right after `TrayActionHost::new`.
+    pub fn set_self_handle(&self, this: Retained<Self>) {
+        *self.ivars().self_handle.lock().unwrap() = Some(appkit_handle::TrayActionHostHandle(this));
+    }
+
     /// Update the first-row status chip + the menubar tooltip to
     /// `text`. Records the string in `ivars.status_text` and
     /// dispatches an AppKit `setTitle:` / `setToolTip:` call on the
@@ -897,6 +923,7 @@ impl TrayActionHost {
         let status_item_slot = ivars.status_item.clone();
         let status_menu_item_slot = ivars.status_menu_item.clone();
         let menu_state_slot = ivars.menu_state.clone();
+        let self_handle_slot = ivars.self_handle.clone();
 
         eprintln!(
             "[tillandsias-tray] {label_owned}: spawning worker (image_root={})",
@@ -974,6 +1001,7 @@ impl TrayActionHost {
                     status_item_slot,
                     status_menu_item_slot,
                     menu_state_slot,
+                    self_handle_slot,
                 );
             }
         });
@@ -994,12 +1022,60 @@ impl TrayActionHost {
 ///
 /// @trace spec:vsock-transport,
 ///        plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 5)
+/// Rebuild the NSMenu on the AppKit main thread from the held
+/// MenuState and swap it in via `NSStatusItem.setMenu:`. Re-attaches
+/// `status_menu_item` to the new first-row item (the chip), since
+/// the old NSMenuItem instance is replaced by a fresh one inside
+/// the new menu and any future `setTitle:` calls must target the
+/// new instance.
+///
+/// MUST be invoked on the main thread (the libdispatch contract in
+/// `dispatch_to_main_thread` enforces that for callers).
+///
+/// If `self_handle` hasn't been populated (i.e. someone forgot to
+/// call `set_self_handle` from `status_item::run`), the rebuild is
+/// skipped with a log line — better than panicking the AppKit
+/// thread mid-loop.
+///
+/// @trace spec:macos-native-tray.ui.menu-parity@v1,
+///        plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 8c)
+fn rebuild_menu_main_thread(
+    menu_state: &Arc<Mutex<tillandsias_host_shell::menu_state::MenuState>>,
+    status_item: &Arc<Mutex<Option<appkit_handle::StatusItemHandle>>>,
+    status_menu_item: &Arc<Mutex<Option<appkit_handle::StatusMenuItemHandle>>>,
+    self_handle: &Arc<Mutex<Option<appkit_handle::TrayActionHostHandle>>>,
+) {
+    use tillandsias_host_shell::menu_state as menu_state_mod;
+    let mtm = unsafe { MainThreadMarker::new_unchecked() };
+
+    let state_snapshot: menu_state_mod::MenuState = menu_state.lock().unwrap().clone();
+    let structure = menu_state_mod::build(&state_snapshot);
+
+    let host_guard = self_handle.lock().unwrap();
+    let Some(host_handle) = host_guard.as_ref() else {
+        eprintln!("[tillandsias-tray] menu-rebuild: self_handle not set, skipping");
+        return;
+    };
+    let host: &TrayActionHost = &host_handle.0;
+
+    let (menu, new_status_row) =
+        crate::status_item::build_menu_with_status_row(mtm, &structure, host);
+
+    if let Some(item_handle) = status_item.lock().unwrap().as_ref() {
+        unsafe { item_handle.0.setMenu(Some(&menu)) };
+    }
+    if let Some(row) = new_status_row {
+        *status_menu_item.lock().unwrap() = Some(appkit_handle::StatusMenuItemHandle(row));
+    }
+}
+
 fn spawn_vm_status_poller(
     vz: Arc<VzRuntime>,
     status_text: Arc<Mutex<String>>,
     status_item: Arc<Mutex<Option<appkit_handle::StatusItemHandle>>>,
     status_menu_item: Arc<Mutex<Option<appkit_handle::StatusMenuItemHandle>>>,
     menu_state: Arc<Mutex<tillandsias_host_shell::menu_state::MenuState>>,
+    self_handle: Arc<Mutex<Option<appkit_handle::TrayActionHostHandle>>>,
 ) {
     tokio::spawn(async move {
         // Tick counter for the cloud-projects cadence. Matches windows-
@@ -1011,19 +1087,15 @@ fn spawn_vm_status_poller(
         let mut tick: u32 = 0;
         loop {
             // Cloud projects: first tick + every 10 ticks.
+            let mut rebuild_needed = false;
             if tick.is_multiple_of(10) {
                 match poll_cloud_projects_once(&vz).await {
                     Ok(projects) => {
-                        // Update the held MenuState. Slice 8b stages
-                        // this — slice 8c will rebuild the NSMenu on
-                        // change. For now, log changes so the operator
-                        // smoke logs show whether the wire is delivering
-                        // the expected projects.
                         let new_count = projects.len();
                         let mut guard = menu_state.lock().unwrap();
-                        let changed = guard.cloud_projects != projects;
-                        if changed {
+                        if guard.cloud_projects != projects {
                             guard.cloud_projects = projects;
+                            rebuild_needed = true;
                             eprintln!(
                                 "[tillandsias-tray] cloud-projects: \
                                  menu_state updated ({} entries)",
@@ -1044,26 +1116,28 @@ fn spawn_vm_status_poller(
             match poll_vm_status_once(&vz).await {
                 Ok((phase, podman_ready)) => {
                     // Reflect podman_ready into the held MenuState so
-                    // slice 8c's menu re-render can flip the per-project
-                    // action gating (`Attach Here` etc.) without a
-                    // separate poll. Same pattern windows-tray uses.
+                    // the menu rebuild flips per-project action gating
+                    // (`Attach Here` etc.). Same pattern windows-tray
+                    // uses. A change here triggers the same rebuild
+                    // dispatch the cloud-projects branch uses.
                     {
                         let mut guard = menu_state.lock().unwrap();
                         if guard.podman_ready != podman_ready {
                             guard.podman_ready = podman_ready;
+                            rebuild_needed = true;
                         }
                     }
                     let text = vm_phase_status_text(phase, podman_ready);
                     let text_for_dispatch = text.clone();
-                    let status_text = status_text.clone();
-                    let status_item = status_item.clone();
-                    let status_menu_item = status_menu_item.clone();
+                    let chip_status_text = status_text.clone();
+                    let chip_status_item = status_item.clone();
+                    let chip_status_menu_item = status_menu_item.clone();
                     dispatch_to_main_thread(move || {
-                        *status_text.lock().unwrap() = text_for_dispatch.clone();
+                        *chip_status_text.lock().unwrap() = text_for_dispatch.clone();
                         apply_status_text_main_thread(
                             &text_for_dispatch,
-                            &status_item,
-                            &status_menu_item,
+                            &chip_status_item,
+                            &chip_status_menu_item,
                         );
                     });
                 }
@@ -1071,6 +1145,27 @@ fn spawn_vm_status_poller(
                     // Best-effort: log + leave last-known chip text.
                     eprintln!("[tillandsias-tray] vm-status poll: {e}");
                 }
+            }
+
+            // If either cloud_projects or podman_ready changed this
+            // iteration, rebuild the NSMenu on the main thread so
+            // the menu reflects the new state. Note: the rebuild
+            // happens AFTER the chip dispatch — they're independent
+            // main-thread tasks and the chip update doesn't depend
+            // on the new menu being installed.
+            if rebuild_needed {
+                let rebuild_menu_state = menu_state.clone();
+                let rebuild_status_item = status_item.clone();
+                let rebuild_status_menu_item = status_menu_item.clone();
+                let rebuild_self_handle = self_handle.clone();
+                dispatch_to_main_thread(move || {
+                    rebuild_menu_main_thread(
+                        &rebuild_menu_state,
+                        &rebuild_status_item,
+                        &rebuild_status_menu_item,
+                        &rebuild_self_handle,
+                    );
+                });
             }
         }
     });

@@ -77,6 +77,12 @@ pub fn run() -> ! {
     let image_root = default_image_root();
     let action_host = TrayActionHost::new(mtm, tokio_runtime.clone(), image_root);
 
+    // Stash a Retained handle back to the action-host so the cloud-
+    // projects + VmStatus pollers can dispatch menu rebuilds that
+    // re-wire `trayAction:` targets via the live action-host instance.
+    // Safe to call here — we're on the AppKit main thread.
+    action_host.set_self_handle(action_host.clone());
+
     // Auto-start the VM as soon as the tray comes up. The user never
     // manually drives VM lifecycle — that's an implementation detail
     // surfaced via the menu's status chip (slice 2). The boot path is
@@ -155,7 +161,7 @@ pub fn install_status_item(
 /// shared `MenuStructure` produced an empty top-level list — which
 /// `initial_provisioning()` never does, but we don't want to panic
 /// here.
-fn build_menu_with_status_row(
+pub(crate) fn build_menu_with_status_row(
     mtm: MainThreadMarker,
     structure: &MenuStructure,
     action_host: &TrayActionHost,
