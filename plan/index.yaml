@@ -1595,13 +1595,13 @@ plan_index:
       depends_on: [recent-work-spec-doc-methodology-audit]
       progress_note: >
         linux-next, windows-next, and osx-next are all active as of
-        2026-05-28T15:03Z. The integration loop ledger at
+        2026-05-28T15:15Z. The integration loop ledger at
         plan/issues/multi-host-integration-loop-2026-05-24.md records sibling
         heads; per-host queues record item-level leases/events. Current
         reconciliation: origin/linux-next is at c12383f0, origin/osx-next is at
         a18cee6b and remains an ancestor, main is at fa746f03, and windows-next
-        is at 8992652a. A fresh async runtime litmus validation run
-        20260528T150335Z-c12383f0-8992652a-a18cee6b has been triggered.
+        is at 8992652a. The last async runtime litmus validation run
+        20260528T150335Z-c12383f0-8992652a-a18cee6b completed with SUCCESS.
         Remaining gates are macOS m8 user-attended smoke, release run
         26544334121, first real non-empty forge diagnostics summary, and optional
         Windows wire EnumerateLocalProjects. Step 15 is closed.
