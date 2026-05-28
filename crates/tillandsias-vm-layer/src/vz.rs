@@ -299,6 +299,13 @@ async fn fetch_then_decompress_xz_then_verify(
     // `download_verified` here because it would expect the SHA to
     // match the .xz bytes, but the manifest SHA is for the
     // decompressed bytes.
+    //
+    // Byte-level progress: emit a refined "Downloading rootfs N/M MB
+    // (P%)" line through on_phase, throttled by integer percent so we
+    // don't spam main-thread dispatches. Matches the windows-tray
+    // format introduced in commit 6645d04b — keeps the cold-launch UX
+    // identical across both trays for the macOS-/Windows-specific
+    // VM-spinup layer.
     on_phase("Downloading rootfs");
     {
         let mut response = reqwest::get(xz_url)
@@ -307,6 +314,9 @@ async fn fetch_then_decompress_xz_then_verify(
         if !response.status().is_success() {
             return Err(format!("GET {xz_url}: HTTP {}", response.status()));
         }
+        let total: Option<u64> = response.content_length();
+        let mut downloaded: u64 = 0;
+        let mut last_percent: i32 = -1;
         let mut out = tokio::fs::File::create(xz_temp_dest)
             .await
             .map_err(|e| format!("create {}: {e}", xz_temp_dest.display()))?;
@@ -319,6 +329,19 @@ async fn fetch_then_decompress_xz_then_verify(
             out.write_all(&chunk)
                 .await
                 .map_err(|e| format!("write {}: {e}", xz_temp_dest.display()))?;
+            downloaded += chunk.len() as u64;
+            if let Some(total_bytes) = total {
+                let percent = ((downloaded * 100) / total_bytes.max(1)) as i32;
+                if percent != last_percent {
+                    last_percent = percent;
+                    on_phase(&format!(
+                        "Downloading rootfs {}/{} MB ({}%)",
+                        downloaded / 1_000_000,
+                        total_bytes / 1_000_000,
+                        percent
+                    ));
+                }
+            }
         }
         out.flush()
             .await
