@@ -112,6 +112,20 @@ print(f'  missing_tools: {len(data[\"missing_tools\"])}; '
     timeout_ms: 10000
     expected_behavior: "ok: no container_launch state=failed in annex stderr"
 
+  - step: "container-start health: the forge stage specifically reached running"
+    # The annex prompt activates --opencode → must launch the forge
+    # container. A capture without `stage=forge state=running` means
+    # the agent JSON came from somewhere unexpected (cached run, mocked
+    # call, ...) and the structured report can't be trusted to reflect
+    # the current forge image. Gating.
+    command: >
+      STDERR=$(ls -t target/forge-diagnostics/diagnostics_*.stderr.log 2>/dev/null | head -1)
+      && [ -n "$STDERR" ]
+      && grep -Eq 'event:container_launch stage=forge state=running container=' "$STDERR"
+      && echo "ok: forge container reached state=running via idiomatic layer"
+    timeout_ms: 10000
+    expected_behavior: "ok: forge container reached state=running via idiomatic layer"
+
 observability:
   traces:
     - "@trace spec:default-image"

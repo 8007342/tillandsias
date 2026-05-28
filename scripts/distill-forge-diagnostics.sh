@@ -282,6 +282,62 @@ SUMMARY
         fi
     fi
 
+    # Launch-event stream forensics. The annex writes
+    # `diagnostics_<UTC>.stderr.log` next to the stdout JSON; that file
+    # carries the idiomatic-podman layer's `event:container_launch`
+    # stream (ISO-8601 prefixed). Surfacing stages + states in the
+    # distill summary gives the orchestrator the structural proof of
+    # container-start health alongside the capability report — without
+    # having to chase the raw log.
+    #
+    # @trace spec:runtime-diagnostics-stream, spec:podman-idiomatic-patterns
+    local stderr_log="${log_file%.log}.stderr.log"
+    if [[ -f "$stderr_log" && -s "$stderr_log" ]]; then
+        local total_events running_events failed_events
+        # `set -euo pipefail` is on at the top of this script — a grep
+        # with no matches exits 1 and (via pipefail) would propagate up
+        # through `local x=$(pipeline)` and abort the function. Wrap
+        # each grep in a brace-group with `|| true` so a clean
+        # no-match yields exactly "0" out of `wc -l`.
+        total_events=$({ grep -E 'event:container_launch ' "$stderr_log" 2>/dev/null || true; } | wc -l)
+        running_events=$({ grep -E 'event:container_launch .* state=running ' "$stderr_log" 2>/dev/null || true; } | wc -l)
+        failed_events=$({ grep -E 'event:container_launch .* state=failed' "$stderr_log" 2>/dev/null || true; } | wc -l)
+        # Trim possible leading whitespace from `wc` on some platforms.
+        total_events=${total_events// /}
+        running_events=${running_events// /}
+        failed_events=${failed_events// /}
+
+        # Distinct (stage, state) tuples — one line per unique pairing,
+        # sorted for stable output. Surfaces "what reached running" at
+        # a glance.
+        local stage_state_table
+        stage_state_table=$({ grep -oE 'event:container_launch stage=[^ ]+ state=[^ ]+' "$stderr_log" 2>/dev/null || true; } | sort -u)
+
+        echo "" >> "$summary_file"
+        echo "## Container-Start Stream (from .stderr.log companion)" >> "$summary_file"
+        echo "" >> "$summary_file"
+        echo "- **Source**: \`${stderr_log}\`" >> "$summary_file"
+        echo "- **Total launch events**: ${total_events}" >> "$summary_file"
+        echo "- **state=running**: ${running_events}" >> "$summary_file"
+        echo "- **state=failed**: ${failed_events}" >> "$summary_file"
+        if [[ -n "$stage_state_table" ]]; then
+            echo "" >> "$summary_file"
+            echo "### Distinct stage → state pairings" >> "$summary_file"
+            echo "" >> "$summary_file"
+            echo '```' >> "$summary_file"
+            echo "$stage_state_table" >> "$summary_file"
+            echo '```' >> "$summary_file"
+        fi
+        if [[ "$failed_events" -gt 0 ]]; then
+            echo "" >> "$summary_file"
+            echo "### ❌ Failed launches" >> "$summary_file"
+            echo "" >> "$summary_file"
+            echo '```' >> "$summary_file"
+            grep -E 'event:container_launch .* state=failed' "$stderr_log" >> "$summary_file" 2>/dev/null || true
+            echo '```' >> "$summary_file"
+        fi
+    fi
+
     _info "Summary written: $summary_file"
     _info "Completeness: ${completeness_pct}% (${ok_count}/${total_checks})"
 }

@@ -137,11 +137,22 @@ bounded slices from. Each item is sized for one loop iteration. NOT for siblings
   discarded by `2>/dev/null` — is now available to litmus assertions
   via `target/forge-diagnostics/diagnostics_<UTC>.stderr.log`. Empty
   stderr is recorded as a FINDING (non-blocking). The forge-diagnostics-
-  e2e litmus gained two structural assertions: ≥1 `state=running`
-  line + zero `state=failed` lines from the same capture cycle. This
-  fulfills "leverage `tillandsias ... --diagnostics` to extract
-  meaningful structured results" — both the JSON capability report
-  AND the launch-event stream now ride one forge launch per cycle.
+  e2e litmus gained three structural assertions: ≥1 `state=running`
+  line, zero `state=failed` lines, AND `stage=forge state=running`
+  specifically (the agent JSON would otherwise be untrustworthy if no
+  forge container was actually launched). This fulfills "leverage
+  `tillandsias ... --diagnostics` to extract meaningful structured
+  results" — both the JSON capability report AND the launch-event
+  stream now ride one forge launch per cycle.
+- **USER PRIORITY (a) AMPLIFIED**: `scripts/distill-forge-diagnostics.sh`
+  now reads the stderr companion and adds a "Container-Start Stream"
+  section to each `plan/diagnostics/<basename>-summary.md` with total
+  launch events, count by state (running/failed), distinct stage→state
+  pairings, and any failed-launch lines verbatim. Three integration
+  tests run against fixtures (healthy / failed / empty stderr) all
+  produce the expected sections. The orchestrator now sees
+  container-start health forensics in the same durable record as the
+  capability report.
   (Next diagnostics gap: GAP 2 / GAP 3 PHASE-2 — wire the live podman
   events parser to emit_diagnostic_event when `debug` is on.)
 
