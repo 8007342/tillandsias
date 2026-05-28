@@ -665,35 +665,67 @@ fn parse_rootfs_sha_pin(manifest_toml: &str, key: &str) -> Option<String> {
 /// `podman_ready` + `last_event`), and the recent log tail — for installed-tray
 /// support. Exit 0 if everything reachable + Ready; 2 if degraded; 1 on a hard
 /// failure (no runtime, etc.). Pairs with `--provision-once` / `--status-once`.
-pub fn diagnose() -> i32 {
+/// Output format for `--diagnose`.
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub enum DiagnoseFormat {
+    /// Human-readable text report (default).
+    Human,
+    /// Machine-readable JSON object for support tooling.
+    Json,
+}
+
+/// Structured diagnostic report. The `--diagnose` mode builds one of these and
+/// formats it as either human-readable text or JSON, so support tooling parsing
+/// the JSON sees the exact same fields the human report shows.
+#[derive(serde::Serialize)]
+struct DiagnoseReport {
+    version: &'static str,
+    log_path: String,
+    log_exists: bool,
+    wt_present: bool,
+    distro: &'static str,
+    distro_registered: bool,
+    release_tag: &'static str,
+    manifest_pin_x86_64_tar: Option<String>,
+    wire: WireReport,
+    recent_log_tail: Vec<String>,
+}
+
+#[derive(serde::Serialize)]
+struct WireReport {
+    reachable: bool,
+    /// Debug-formatted VmPhase variant (e.g. `"Ready"`, `"Draining"`).
+    phase: Option<String>,
+    podman_ready: Option<bool>,
+    last_event: Option<String>,
+    /// On `reachable=false`: the reason (handshake failure, open error, etc.).
+    error: Option<String>,
+}
+
+pub fn diagnose(format: DiagnoseFormat) -> i32 {
+    init_tracing();
+    let report = collect_report();
+    match format {
+        DiagnoseFormat::Human => print_human(&report),
+        DiagnoseFormat::Json => print_json(&report),
+    }
+    exit_code_from(&report)
+}
+
+fn collect_report() -> DiagnoseReport {
     use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
     use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
     use tillandsias_host_shell::vsock_client::Client;
 
-    init_tracing();
-    println!("tillandsias-tray --diagnose");
-    println!("===========================");
-    println!("Version:      {}", env!("CARGO_PKG_VERSION"));
     let log = log_file_path();
-    println!("Log file:     {}", log.display());
-    println!("Log exists:   {}", if log.exists() { "yes" } else { "no" });
+    let log_exists = log.exists();
 
-    // wt.exe presence — Windows Terminal (preferred Open-Shell launcher).
     let wt_present = std::process::Command::new("where.exe")
         .arg("wt.exe")
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false);
-    println!(
-        "wt.exe:       {}",
-        if wt_present {
-            "present \u{2713}"
-        } else {
-            "not found (bare console fallback will be used)"
-        }
-    );
 
-    // Distro registered?
     let distro_registered = std::process::Command::new("wsl.exe")
         .args(["-l", "-q"])
         .output()
@@ -703,131 +735,194 @@ pub fn diagnose() -> i32 {
                 .any(|l| l.trim() == crate::wsl_lifecycle::DISTRO_NAME)
         })
         .unwrap_or(false);
+
+    let manifest_pin = parse_rootfs_sha_pin(crate::wsl_lifecycle::RECIPE_MANIFEST, "x86_64.tar");
+
+    // Live control wire. Tokio runtime build is essentially infallible — on the
+    // rare failure we still emit a (degraded) report rather than aborting.
+    let wire = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(runtime) => runtime.block_on(async {
+            let stream = match crate::hvsocket::open_hvsocket_stream(CONTROL_WIRE_VSOCK_PORT).await
+            {
+                Ok(s) => s,
+                Err(err) => {
+                    return WireReport {
+                        reachable: false,
+                        phase: None,
+                        podman_ready: None,
+                        last_event: None,
+                        error: Some(format!("hvsocket open: {err}")),
+                    };
+                }
+            };
+            let mut client = Client::from_stream(
+                Box::new(stream),
+                Transport::Vsock {
+                    cid: 0,
+                    port: CONTROL_WIRE_VSOCK_PORT,
+                },
+            );
+            if let Err(err) = client.handshake().await {
+                return WireReport {
+                    reachable: false,
+                    phase: None,
+                    podman_ready: None,
+                    last_event: None,
+                    error: Some(format!("handshake: {err}")),
+                };
+            }
+            let seq = client.allocate_seq();
+            let envelope = ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq,
+                body: ControlMessage::VmStatusRequest { seq },
+            };
+            match client.request(&envelope).await {
+                Ok(reply) => match reply.body {
+                    ControlMessage::VmStatusReply {
+                        phase,
+                        podman_ready,
+                        last_event,
+                        ..
+                    } => WireReport {
+                        reachable: true,
+                        phase: Some(format!("{phase:?}")),
+                        podman_ready: Some(podman_ready),
+                        last_event,
+                        error: None,
+                    },
+                    other => WireReport {
+                        reachable: true,
+                        phase: None,
+                        podman_ready: None,
+                        last_event: None,
+                        error: Some(format!("unexpected reply: {}", other.kind())),
+                    },
+                },
+                Err(err) => WireReport {
+                    reachable: false,
+                    phase: None,
+                    podman_ready: None,
+                    last_event: None,
+                    error: Some(format!("VmStatusRequest: {err}")),
+                },
+            }
+        }),
+        Err(err) => WireReport {
+            reachable: false,
+            phase: None,
+            podman_ready: None,
+            last_event: None,
+            error: Some(format!("tokio runtime build failed: {err}")),
+        },
+    };
+
+    let recent_log_tail = std::fs::read_to_string(&log)
+        .ok()
+        .map(|content| {
+            let lines: Vec<&str> = content.lines().collect();
+            let start = lines.len().saturating_sub(20);
+            lines[start..].iter().map(|s| s.to_string()).collect()
+        })
+        .unwrap_or_default();
+
+    DiagnoseReport {
+        version: env!("CARGO_PKG_VERSION"),
+        log_path: log.display().to_string(),
+        log_exists,
+        wt_present,
+        distro: crate::wsl_lifecycle::DISTRO_NAME,
+        distro_registered,
+        release_tag: crate::wsl_lifecycle::RECIPE_RELEASE_TAG,
+        manifest_pin_x86_64_tar: manifest_pin,
+        wire,
+        recent_log_tail,
+    }
+}
+
+fn print_human(r: &DiagnoseReport) {
+    println!("tillandsias-tray --diagnose");
+    println!("===========================");
+    println!("Version:      {}", r.version);
+    println!("Log file:     {}", r.log_path);
+    println!("Log exists:   {}", if r.log_exists { "yes" } else { "no" });
+    println!(
+        "wt.exe:       {}",
+        if r.wt_present {
+            "present \u{2713}"
+        } else {
+            "not found (bare console fallback will be used)"
+        }
+    );
     println!(
         "Distro `{}`:  {}",
-        crate::wsl_lifecycle::DISTRO_NAME,
-        if distro_registered {
+        r.distro,
+        if r.distro_registered {
             "registered \u{2713}"
         } else {
             "NOT registered (run --provision-once to provision)"
         }
     );
-
-    // Manifest pin — first 12 hex of the embedded x86_64.tar SHA-256, so
-    // support can confirm which recipe-published artifact the installed tray
-    // would provision against. Mirrors the macOS diagnose manifest-pin
-    // display (slice 11, db1619ae).
-    println!("Release tag:  {}", crate::wsl_lifecycle::RECIPE_RELEASE_TAG);
+    println!("Release tag:  {}", r.release_tag);
     println!(
         "Manifest pin: x86_64.tar {}",
-        parse_rootfs_sha_pin(crate::wsl_lifecycle::RECIPE_MANIFEST, "x86_64.tar")
+        r.manifest_pin_x86_64_tar
+            .as_deref()
             .map(|sha| format!("{sha}\u{2026}"))
             .unwrap_or_else(|| "(not found / parse skipped)".to_string())
     );
-
-    // Live control wire — handshake + VmStatusRequest.
-    let runtime = match tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-    {
-        Ok(rt) => rt,
-        Err(err) => {
-            eprintln!("[diagnose] tokio runtime build failed: {err}");
-            return 1;
-        }
-    };
-    enum WireStatus {
-        Ready {
-            podman_ready: bool,
-            last: Option<String>,
-        },
-        NotReady {
-            phase: String,
-            podman_ready: bool,
-        },
-        Unreachable(String),
-    }
-    let wire = runtime.block_on(async {
-        let stream = match crate::hvsocket::open_hvsocket_stream(CONTROL_WIRE_VSOCK_PORT).await {
-            Ok(s) => s,
-            Err(err) => return WireStatus::Unreachable(format!("{err}")),
-        };
-        let mut client = Client::from_stream(
-            Box::new(stream),
-            Transport::Vsock {
-                cid: 0,
-                port: CONTROL_WIRE_VSOCK_PORT,
-            },
-        );
-        if let Err(err) = client.handshake().await {
-            return WireStatus::Unreachable(format!("handshake: {err}"));
-        }
-        let seq = client.allocate_seq();
-        let envelope = ControlEnvelope {
-            wire_version: WIRE_VERSION,
-            seq,
-            body: ControlMessage::VmStatusRequest { seq },
-        };
-        match client.request(&envelope).await {
-            Ok(reply) => match reply.body {
-                ControlMessage::VmStatusReply {
-                    phase: tillandsias_control_wire::VmPhase::Ready,
-                    podman_ready,
-                    last_event,
-                    ..
-                } => WireStatus::Ready {
-                    podman_ready,
-                    last: last_event,
-                },
-                ControlMessage::VmStatusReply {
-                    phase,
-                    podman_ready,
-                    ..
-                } => WireStatus::NotReady {
-                    phase: format!("{phase:?}"),
-                    podman_ready,
-                },
-                other => WireStatus::Unreachable(format!("unexpected reply: {}", other.kind())),
-            },
-            Err(err) => WireStatus::Unreachable(format!("VmStatusRequest: {err}")),
-        }
-    });
-    match &wire {
-        WireStatus::Ready { podman_ready, last } => {
-            println!("Control wire: REACHABLE, phase=Ready, podman_ready={podman_ready}");
-            println!("Last event:   {}", last.as_deref().unwrap_or("(none)"));
-        }
-        WireStatus::NotReady {
-            phase,
-            podman_ready,
-        } => {
+    match (
+        &r.wire.reachable,
+        r.wire.phase.as_deref(),
+        r.wire.podman_ready,
+    ) {
+        (true, Some("Ready"), Some(podman)) => {
+            println!("Control wire: REACHABLE, phase=Ready, podman_ready={podman}");
             println!(
-                "Control wire: reachable but not Ready (phase={phase}, podman_ready={podman_ready})"
+                "Last event:   {}",
+                r.wire.last_event.as_deref().unwrap_or("(none)")
             );
         }
-        WireStatus::Unreachable(why) => {
+        (true, Some(phase), Some(podman)) => {
+            println!(
+                "Control wire: reachable but not Ready (phase={phase}, podman_ready={podman})"
+            );
+        }
+        _ => {
+            let why = r.wire.error.as_deref().unwrap_or("(unknown)");
             println!("Control wire: unreachable ({why})");
             println!(
                 "              (is the VM provisioned + running? wsl -d tillandsias --exec true)"
             );
         }
     }
-
-    // Recent log tail — last ~20 lines so support has immediate context.
-    if let Ok(content) = std::fs::read_to_string(&log) {
+    if !r.recent_log_tail.is_empty() {
         println!();
-        println!("--- recent log tail (20 lines) ---");
-        let lines: Vec<&str> = content.lines().collect();
-        let start = lines.len().saturating_sub(20);
-        for line in &lines[start..] {
+        println!(
+            "--- recent log tail ({} lines) ---",
+            r.recent_log_tail.len()
+        );
+        for line in &r.recent_log_tail {
             println!("{line}");
         }
     }
+}
 
-    match (distro_registered, &wire) {
-        (true, WireStatus::Ready { .. }) => 0,
-        _ => 2,
-    }
+fn print_json(r: &DiagnoseReport) {
+    // `to_string_pretty` cannot fail for a serde-derived struct.
+    println!(
+        "{}",
+        serde_json::to_string_pretty(r).expect("serialize DiagnoseReport")
+    );
+}
+
+fn exit_code_from(r: &DiagnoseReport) -> i32 {
+    let fully_healthy =
+        r.distro_registered && r.wire.reachable && r.wire.phase.as_deref() == Some("Ready");
+    if fully_healthy { 0 } else { 2 }
 }
 
 /// Set by the `Retry` menu click (in the wndproc) and drained by the message
