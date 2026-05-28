@@ -1355,11 +1355,13 @@ fn read_host_project_origin_url(project_path: &Path) -> Option<String> {
 ///
 /// @trace spec:tillandsias-vault, spec:secrets-management
 #[allow(unused_variables)]
-fn mint_git_mirror_vault_token(project_name: &str, debug: bool) -> Option<String> {
+async fn mint_git_mirror_vault_token(project_name: &str, debug: bool) -> Option<String> {
     #[cfg(feature = "vault")]
     {
         let instance = format!("{project_name}-{}", std::process::id());
-        match vault_bootstrap::mint_approle_token_for_container("git-mirror", &instance, debug) {
+        match vault_bootstrap::mint_approle_token_for_container("git-mirror", &instance, debug)
+            .await
+        {
             Ok((_token, secret_name)) => Some(secret_name),
             Err(e) => {
                 if debug {
@@ -2143,6 +2145,7 @@ enum ForgeMode {
     Web,
 }
 
+#[allow(clippy::too_many_arguments)]
 fn build_opencode_forge_args(
     project_path: &Path,
     project_name: &str,
@@ -2150,6 +2153,7 @@ fn build_opencode_forge_args(
     certs_dir: &Path,
     version: &str,
     mode: ForgeMode,
+    diagnostics: bool,
     debug: bool,
 ) -> Vec<String> {
     // CLI mode attaches stdio (--interactive --tty) for a real shell; Web
@@ -2174,8 +2178,10 @@ fn build_opencode_forge_args(
     ];
     match mode {
         ForgeMode::Cli => {
-            args.push("--interactive".into());
-            args.push("--tty".into());
+            if !diagnostics {
+                args.push("--interactive".into());
+                args.push("--tty".into());
+            }
         }
         ForgeMode::Web => {
             args.push("--detach".into());
@@ -2247,6 +2253,11 @@ fn build_opencode_forge_args(
     args.push(forge_image_tag(version));
     if !cmd.is_empty() {
         args.push(cmd.into());
+    }
+    if diagnostics {
+        args.push("--print".into());
+        args.push("--output-format".into());
+        args.push("json".into());
     }
     args
 }
@@ -2928,7 +2939,7 @@ fn run_status_check(debug: bool) -> Result<(), String> {
             .map_err(|e| e.to_string())?;
 
         let git_container_name = format!("tillandsias-git-{project_name}");
-        let git_vault_secret = mint_git_mirror_vault_token(project_name, debug);
+        let git_vault_secret = mint_git_mirror_vault_token(project_name, debug).await;
         client
             .run_container_observed(
                 "status-git",
@@ -4048,7 +4059,7 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
             .await
             .map_err(|e| format!("[OpenCode] failed to start proxy: {e}"))?;
         let git_container_name = format!("tillandsias-git-{project_name}");
-        let git_vault_secret = mint_git_mirror_vault_token(project_name, debug);
+        let git_vault_secret = mint_git_mirror_vault_token(project_name, debug).await;
         client
             .run_container_observed(
                 "opencode-git",
@@ -4078,6 +4089,7 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
             .await
             .map_err(|e| format!("[OpenCode] failed to start inference: {e}"))?;
 
+        let diagnostics = std::env::args().any(|a| a == "--diagnostics");
         let opencode_args = build_opencode_forge_args(
             &project_path_resolved,
             project_name,
@@ -4085,6 +4097,7 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
             &certs_dir,
             version,
             ForgeMode::Cli,
+            diagnostics,
             debug,
         );
         let result = client
@@ -4959,7 +4972,7 @@ pub(crate) fn run_opencode_web_mode(
             Some(&versioned_image_tag("proxy", version)),
         )?;
         let git_container_name = format!("tillandsias-git-{project_name}");
-        let git_vault_secret = mint_git_mirror_vault_token(project_name, debug);
+        let git_vault_secret = mint_git_mirror_vault_token(project_name, debug).await;
         client
             .run_container_observed(
                 "opencode-web-git",
@@ -5012,6 +5025,7 @@ pub(crate) fn run_opencode_web_mode(
             &certs_dir,
             version,
             ForgeMode::Web,
+            false,
             debug,
         );
         client
@@ -5323,7 +5337,7 @@ pub(crate) fn ensure_enclave_for_project(
             .await
             .map_err(|e| format!("[forge-launch] failed to start proxy: {e}"))?;
         let git_container_name = format!("tillandsias-git-{project_name}");
-        let git_vault_secret = mint_git_mirror_vault_token(project_name, debug);
+        let git_vault_secret = mint_git_mirror_vault_token(project_name, debug).await;
         client
             .run_container_observed(
                 "forge-launch-git",
@@ -5759,7 +5773,7 @@ async fn run_headless_async(
     // `tillandsias-vault-data` named volume).
     #[cfg(feature = "vault")]
     {
-        vault_bootstrap::revoke_pending_container_tokens(false);
+        vault_bootstrap::revoke_pending_container_tokens(false).await;
     }
 
     // Emit stopped event
@@ -6822,6 +6836,7 @@ mod tests {
             &PathBuf::from("/tmp/ca"),
             "1.2.3",
             ForgeMode::Cli,
+            false,
             true,
         );
 
@@ -6846,6 +6861,35 @@ mod tests {
             args.iter()
                 .any(|arg| arg == "/tmp/project:/home/forge/src/alpha:rw")
         );
+    }
+
+    #[test]
+    fn opencode_args_diagnostics_mode() {
+        let args = build_opencode_forge_args(
+            &PathBuf::from("/tmp/project"),
+            "alpha",
+            Some("hello"),
+            &PathBuf::from("/tmp/ca"),
+            "1.2.3",
+            ForgeMode::Cli,
+            true,
+            true,
+        );
+
+        assert!(!has_arg(&args, "--interactive"));
+        assert!(!has_arg(&args, "--tty"));
+        assert!(has_arg(&args, "--print"));
+        assert!(has_arg(&args, "--output-format"));
+        assert!(has_arg(&args, "json"));
+        assert!(has_arg(&args, "--entrypoint"));
+        assert!(has_arg(
+            &args,
+            "/usr/local/bin/entrypoint-forge-opencode.sh"
+        ));
+        assert!(has_arg(&args, "TILLANDSIAS_OPENCODE_PROMPT=hello"));
+        assert!(has_arg(&args, "TILLANDSIAS_PROJECT=alpha"));
+        assert!(has_arg(&args, "TILLANDSIAS_PROJECT_HOST_MOUNT=1"));
+        assert!(has_arg(&args, "TILLANDSIAS_DEBUG=1"));
     }
 
     #[test]

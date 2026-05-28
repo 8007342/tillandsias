@@ -31,6 +31,12 @@ plan_index:
       claimed or overlaps a claim, skip to the next ready packet rather than
       waiting. Dependency tails should be preferred when they unlock downstream
       work on another host.
+    metrics_policy:
+      tracking_requirements:
+        - "Track total counts: pending, ready, in_progress, blocked, completed."
+        - "Calculate block duration: time elapsed since the `blocked` event was recorded."
+        - "Construct blocking tree: identify upstream root blockers with the longest downstream chains."
+        - "Prioritize unblocking: root blockers in the tree MUST be resolved first, even if the node seems minor, to unlock subsequent work waves."
     claim_rule: >
       Claims are leases on file scope and graph node scope. Claims are
       idempotent by graph_node_id plus lease_id. Repeated claims must converge.

@@ -189,7 +189,7 @@ pub fn write_github_token_to_vault(token: &str, debug: bool) -> Result<(), Strin
 /// secret name embeds the container instance so concurrent containers
 /// don't collide; the token bytes themselves are written into the named
 /// podman secret as the value.
-pub fn mint_approle_token_for_container(
+pub async fn mint_approle_token_for_container(
     role: &str,
     container_instance: &str,
     debug: bool,
@@ -197,12 +197,12 @@ pub fn mint_approle_token_for_container(
     if !container_running(VAULT_CONTAINER_NAME) {
         return Err("Vault container is not running".into());
     }
-    let rt = tokio_runtime()?;
     let base_url = host_base_url();
     let root_token = read_root_token()?;
     let client = VaultClient::new(&base_url, &root_token);
-    let token = rt
-        .block_on(client.issue_approle_token(role))
+    let token = client
+        .issue_approle_token(role)
+        .await
         .map_err(|e| format!("vault issue_approle_token failed: {e}"))?;
 
     let secret_name = format!("tillandsias-vault-token-{role}-{container_instance}");
@@ -221,7 +221,7 @@ pub fn mint_approle_token_for_container(
 /// doesn't deadlock the shutdown path. The Vault container itself is
 /// preserved on disk (matches the `tillandsias-vault-data` volume
 /// contract).
-pub fn revoke_pending_container_tokens(debug: bool) {
+pub async fn revoke_pending_container_tokens(debug: bool) {
     let entries: Vec<(String, String)> = match revocation_registry().lock() {
         Ok(mut reg) => reg.drain().collect(),
         Err(_) => return,
@@ -229,17 +229,6 @@ pub fn revoke_pending_container_tokens(debug: bool) {
     if entries.is_empty() {
         return;
     }
-    let rt = match tokio_runtime() {
-        Ok(rt) => rt,
-        Err(e) => {
-            if debug {
-                eprintln!(
-                    "[tillandsias-vault] revoke: could not build tokio runtime: {e}; skipping"
-                );
-            }
-            return;
-        }
-    };
     let base_url = host_base_url();
     let root_token = match read_root_token() {
         Ok(t) => t,
@@ -252,7 +241,7 @@ pub fn revoke_pending_container_tokens(debug: bool) {
     };
     let client = VaultClient::new(&base_url, &root_token);
     for (secret_name, token) in entries {
-        if let Err(e) = rt.block_on(client.revoke_token(&token))
+        if let Err(e) = client.revoke_token(&token).await
             && debug
         {
             eprintln!("[tillandsias-vault] revoke {} failed: {e}", secret_name);

@@ -245,3 +245,15 @@ multi_host_development:
           cross-platform session artifact, file a plan/ note so the
           integration loop's ledger surfaces the methodology-level
           implication.
+
+  waves_of_local_agents:
+    rule: >
+      To minimize coordination overhead and sustain development velocity,
+      agents claiming work SHOULD utilize local "waves" (parallel or sequential
+      local sub-tasks or sub-agents) to implement larger chunks of work rather than executing
+      micro-steps and immediately yielding for verification.
+    remote_deliverables: >
+      Remote hosts must have clear, actionable deliverable definitions in
+      `plan/` and use the defined communication protocols (agent_status_packet)
+      to report the completion of entire waves, avoiding unnecessary stalls
+      while waiting for central unblocking.

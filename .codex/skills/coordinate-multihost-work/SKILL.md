@@ -1,13 +1,14 @@
 ---
 name: coordinate-multihost-work
-description: Coordinate Tillandsias Linux, Windows, and macOS implementation agents by auditing shared plan/methodology ledgers, reconciling stale work queues, surfacing blockers, assigning unclaimed work, maintaining plan/loop_status.md, and pushing coordination-only fixes to origin/linux-next. Use when invoked as /coordinate-multihost-work or when asked to run the Tillandsias multi-host coordination loop.
+description: Coordinate Tillandsias Linux, Windows, and macOS implementation agents by auditing shared plan/methodology ledgers, reconciling stale work queues, surfacing blockers, assigning unclaimed work, maintaining plan/loop_status.md, and pushing coordination-only fixes to origin/linux-next. Designed to be run via Antigravity scheduling (e.g., hourly/daily) to ensure continuous CI/CD-friendly unblocking requests. Use when invoked as /coordinate-multihost-work or when asked to run the Tillandsias multi-host coordination loop.
 ---
 
 # Coordinate Multi-Host Work
 
 Run a short, durable coordination pass for the Tillandsias Linux, Windows, and
 macOS implementation agents. The goal is to keep agents unblocked and converging
-on the specs without relying on chat history.
+on the specs without relying on chat history. This skill is meant to run automatically
+via an orchestrator like Antigravity to quickly unblock dependencies in a CI/CD-friendly way.
 
 ## Core Rule
 
@@ -49,6 +50,12 @@ runtime litmus run so the next loop has concrete output to read.
 
 - Compare work-item headers against terminal events. If the latest terminal
   event says done, stalled, blocked, failed, or released, reconcile the header.
+- Compute work metrics: total items pending, ready, in_progress, blocked, and done.
+- Track block durations and construct the blocking tree:
+  - For each blocked item, record how long it has been blocked (time elapsed since the `blocked` event).
+  - Identify chain dependencies (e.g., A blocks B, which blocks C).
+  - Identify the "root blockers" with the longest downstream chains or longest block durations.
+  - Prioritize unblocking actions for these root blockers, even if the root item seems unimportant, because unblocking it unlocks a wave of dependent work.
 - Track remote progress as a health signal: document the latest observed heads
   and the delta since the previous loop. If `origin/linux-next` or active
   sibling branches do not advance for multiple expected cycles, record that
@@ -61,6 +68,9 @@ runtime litmus run so the next loop has concrete output to read.
   an agent for one or two cron iterations and produce useful evidence. Avoid
   publishing tiny one-file chores as standalone work unless they unblock another
   host or are the last step before completion.
+- Encourage Local Waves: When assigning work, configure the expected checkpoints
+  so that local agents deploy internal waves (sub-agents) to complete larger
+  chunks before idling, ensuring continuous monotonic reduction of uncertainty.
 - Keep ready work eager: every active host should have at least one claimed or
   ready unblocked packet, plus one named fallback packet when its primary work
   is blocked. If a queue has only gated work, create or surface a verification,

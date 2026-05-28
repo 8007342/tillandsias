@@ -148,6 +148,9 @@ distributed_work:
             idempotent: false
           blocked:
             fields: [ts, agent_id, host, lease_id, reason, blocker_refs]
+            metrics_tracking:
+              - "Coordinators MUST calculate the elapsed duration since the initial blocked event."
+              - "Coordinators MUST analyze blocker_refs to build a blocking tree, prioritizing root blockers."
             idempotent: false
           checkpoint:
             fields: [ts, agent_id, host, lease_id, commit_sha, summary]

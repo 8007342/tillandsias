@@ -11,14 +11,12 @@ methodology:
   bootstrap:
     command: "/skills bootstrap"
     first_step: "Read plan.yaml, plan/index.yaml, and methodology/bootstrap/router.yaml."
-    selection_rule: "Choose exactly one intent from bootstrap_router.intent_options."
-    role_rule: "Use methodology/bootstrap/roles.yaml for m:n role and file affordances."
+    selection_rule: "Choose exactly one intent from bootstrap_router.intent_options. The intent defines your required reading set."
     receipt_required_before_source_edits: true
     autonomous_loop: "After bootstrap, iterate via methodology/bootstrap/router.yaml and methodology/convergence.yaml until the selected residual obligation stops decreasing or the spec itself needs refinement."
 
   entrypoints:
     task_router: methodology/bootstrap/router.yaml
-    role_file_matrix: methodology/bootstrap/roles.yaml
     component_catalog: methodology/catalog.yaml
     agent_observability: methodology/agent-observability.yaml
     forge_diagnostics: methodology/forge-diagnostics.yaml

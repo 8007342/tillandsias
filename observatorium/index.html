@@ -354,9 +354,18 @@
     <!-- Dashboard View -->
     <section id="dashboard-view" class="view">
       <div class="panel dash-full-width">
-        <header>
-          <h2>Convergence Progression</h2>
-          <div class="meta">CentiColon closure vs. Residual Obligations over recent releases</div>
+        <header style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+          <div>
+            <h2>Convergence Progression</h2>
+            <div class="meta">CentiColon closure vs. Residual Obligations over recent releases</div>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <label for="spec-filter" style="font-size: 13px; color: var(--text-muted); font-weight: 500;">Filter Spec:</label>
+            <input list="specs-datalist" id="spec-filter" placeholder="All Specs (Overall)" style="width: 240px; padding: 6px 12px; font-size: 13px; border-radius: 8px;">
+            <datalist id="specs-datalist">
+              <option value="All Specs (Overall)">
+            </datalist>
+          </div>
         </header>
         <div class="chart-container">
           <canvas id="convergenceChart"></canvas>
@@ -365,6 +374,16 @@
       
       <div class="panel dash-full-width" style="height: auto;">
         <div class="metrics-grid" id="metrics-summary">
+          <!-- Filled via JS -->
+        </div>
+      </div>
+
+      <div class="panel dash-full-width" style="height: auto; max-height: 400px; margin-bottom: 20px;">
+        <header>
+          <h2>Timeline of Milestones & Refactors</h2>
+          <div class="meta">Key events parsed dynamically from the convergence history</div>
+        </header>
+        <div id="milestones-timeline" class="list" style="padding: 20px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto;">
           <!-- Filled via JS -->
         </div>
       </div>
@@ -537,6 +556,109 @@ async function loadSheetAnnotations(sheet) {
 // ==========================================
 // Trace Viewer Rendering
 // ==========================================
+function extractSpecSummary(markdown) {
+  const lines = markdown.split(/\r?\n/);
+  let purposeIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].trim().startsWith('## Purpose')) {
+      purposeIdx = i;
+      break;
+    }
+  }
+  
+  if (purposeIdx !== -1) {
+    const summaryLines = [];
+    for (let i = purposeIdx + 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (line.startsWith('#')) break;
+      if (line) {
+        summaryLines.push(line);
+      }
+    }
+    if (summaryLines.length > 0) {
+      return summaryLines.join(' ');
+    }
+  }
+
+  let titleIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].trim().startsWith('# ')) {
+      titleIdx = i;
+      break;
+    }
+  }
+  if (titleIdx !== -1) {
+    const summaryLines = [];
+    for (let i = titleIdx + 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (line.startsWith('#')) break;
+      if (line) {
+        summaryLines.push(line);
+      }
+    }
+    if (summaryLines.length > 0) {
+      return summaryLines.join(' ');
+    }
+  }
+
+  return "";
+}
+
+function cleanSummary(text) {
+  return text
+    .replace(/\[(.*?)\]\(.*?\)/g, '$1')
+    .replace(/`/g, '')
+    .trim()
+    .substring(0, 180);
+}
+
+function parseCheatsheetBlocks(markdown) {
+  const lines = markdown.split(/\r?\n/);
+  const blocks = [];
+  let currentBlock = null;
+
+  for (const line of lines) {
+    const headingMatch = line.match(/^##\s+(.+)$/);
+    if (headingMatch) {
+      if (currentBlock) {
+        blocks.push(currentBlock);
+      }
+      const title = headingMatch[1].trim();
+      currentBlock = {
+        title,
+        lines: [],
+        description: ''
+      };
+    } else if (currentBlock) {
+      currentBlock.lines.push(line);
+    }
+  }
+  if (currentBlock) {
+    blocks.push(currentBlock);
+  }
+
+  blocks.forEach(block => {
+    const textLines = block.lines
+      .map(l => l.trim())
+      .filter(l => l && !l.startsWith('`') && !l.startsWith('|') && !l.startsWith('-') && !l.startsWith('*') && !l.startsWith('<') && !l.startsWith('!') && !l.startsWith('>'));
+    
+    let desc = '';
+    if (textLines.length > 0) {
+      desc = textLines[0].replace(/[#*`_\[\]()]/g, '');
+    } else {
+      const hasTable = block.lines.some(l => l.includes('|'));
+      const hasCode = block.lines.some(l => l.startsWith('```'));
+      if (hasTable) desc = "Reference table / command summary";
+      else if (hasCode) desc = "Command line examples & code patterns";
+      else desc = "Reference notes";
+    }
+    block.description = desc.substring(0, 100);
+    block.content = block.lines.join('\n').trim();
+  });
+
+  return blocks;
+}
+
 function selectedTraceRow() {
   if (!state.selectedSpec) return null;
   return state.traces.find(row => specNameFromTrace(row.trace) === state.selectedSpec) || null;
@@ -546,7 +668,12 @@ function filteredSpecs() {
   const q = state.search.toLowerCase();
   return state.traces.filter(row => {
     const specId = specNameFromTrace(row.trace);
-    return !q || specId.includes(q) || row.specPath.toLowerCase().includes(q) || row.sources.some(s => s.href.toLowerCase().includes(q) || s.label.toLowerCase().includes(q));
+    const summaryText = (row.summary || '').toLowerCase();
+    return !q || 
+           specId.includes(q) || 
+           row.specPath.toLowerCase().includes(q) || 
+           summaryText.includes(q) ||
+           row.sources.some(s => s.href.toLowerCase().includes(q) || s.label.toLowerCase().includes(q));
   });
 }
 
@@ -573,15 +700,22 @@ function renderSpecs() {
     const specId = specNameFromTrace(row.trace);
     const selected = specId === state.selectedSpec;
     const chips = row.sources.slice(0, 3).map(src => `<span class="chip">${escapeHtml(src.label)}</span>`).join('');
+    
+    const summaryHtml = row.summary 
+      ? `<div class="summary" style="margin-top: 6px; font-size: 12px; color: var(--text-muted); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">${escapeHtml(row.summary)}</div>`
+      : '';
+    const hitsHtml = `<div class="summary" style="margin-top: 6px; color: var(--accent); font-size: 11px; font-weight: 500;">${row.sources.length} code hit(s)</div>`;
+
     return `
       <div class="card ${selected ? 'selected' : ''}">
-        <button class="row" data-spec="${escapeAttr(specId)}">
+        <button class="row" data-spec="${escapeAttr(specId)}" style="display: block; width: 100%;">
           <div class="title-line">
             <strong>${escapeHtml(specId)}</strong>
             <small>${escapeHtml(row.specPath.replace(/^openspec\/specs\//, ''))}</small>
           </div>
-          <div class="summary">${row.sources.length} code hit(s)</div>
-          <div class="chips">${chips}</div>
+          ${summaryHtml}
+          ${hitsHtml}
+          <div class="chips" style="margin-top: 8px;">${chips}</div>
         </button>
       </div>`;
   }).join('');
@@ -740,8 +874,7 @@ window.expandSnippet = async function(path, lineNum, direction, amount) {
 
 function renderCode() {
   const row = selectedTraceRow();
-  const q = state.search.toLowerCase();
-  const hits = row ? row.sources.filter(src => !q || src.label.toLowerCase().includes(q) || src.href.toLowerCase().includes(q)) : [];
+  const hits = row ? row.sources : [];
   
   if (!row) {
     els.code.innerHTML = '<div class="empty">Select a spec or cheatsheet.</div>';
@@ -836,16 +969,46 @@ async function renderSheets() {
     const isSelected = sheet.path === state.selectedSheet;
     const annotations = isSelected ? (await loadSheetAnnotations(sheet)).traces : [];
     const tracedSpecs = annotations.length ? annotations : (state.selectedSpec ? [state.selectedSpec] : []);
+    
+    let expandedHtml = '';
+    if (isSelected) {
+      const sheetData = await loadSheetAnnotations(sheet);
+      const blocks = parseCheatsheetBlocks(sheetData.text || '');
+      
+      expandedHtml = `
+        <div class="details" style="border-top: 1px solid var(--line-soft); padding: 12px 16px; background: rgba(0,0,0,0.25); display: flex; flex-direction: column; gap: 10px;">
+          <div style="font-weight: 600; font-size: 12px; color: var(--accent); display: flex; justify-content: space-between; align-items: center;">
+            <span>Cheatsheet Blocks</span>
+            <span style="font-size: 11px; color: var(--text-muted); font-weight: normal;">Click headers to expand/collapse</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            ${blocks.length > 0 ? blocks.map((block, bIdx) => `
+              <details ${bIdx === 0 ? 'open' : ''} style="border: 1px solid var(--line-soft); border-radius: 8px; background: rgba(0,0,0,0.15); overflow: hidden;">
+                <summary style="padding: 8px 12px; font-size: 12px; font-weight: 600; cursor: pointer; color: #fff; background: rgba(255,255,255,0.02); user-select: none; border-bottom: 1px solid var(--line-soft); display: flex; flex-direction: column; gap: 2px;">
+                  <span>${escapeHtml(block.title)}</span>
+                  <span style="font-size: 10px; color: var(--text-muted); font-weight: normal; margin-top: 2px;">${escapeHtml(block.description)}</span>
+                </summary>
+                <div style="padding: 10px; font-family: ui-monospace, monospace; font-size: 11px; max-height: 250px; overflow-y: auto; white-space: pre-wrap; background: #06090d; line-height: 1.4; color: var(--text);">\n${escapeHtml(block.content)}\n</div>
+              </details>
+            `).join('') : `
+              <div style="color: var(--text-muted); font-size: 11px; font-style: italic;">No subsections found. Full content below:</div>
+              <pre style="padding: 10px; font-family: ui-monospace, monospace; font-size: 11px; max-height: 250px; overflow-y: auto; white-space: pre-wrap; background: #06090d; line-height: 1.4; color: var(--text); border-radius: 8px; border: 1px solid var(--line-soft); margin: 0;">${escapeHtml(sheetData.text || '')}</pre>
+            `}
+          </div>
+        </div>`;
+    }
+
     html += `
       <div class="card ${isSelected ? 'selected' : ''}">
-        <button class="row" data-sheet="${escapeAttr(sheet.path)}">
+        <button class="row" data-sheet="${escapeAttr(sheet.path)}" style="display: block; width: 100%;">
           <div class="title-line">
             <strong>${escapeHtml(sheet.path)}</strong>
             <small>${escapeHtml(sheet.category)}</small>
           </div>
-          <div class="summary">${escapeHtml(sheet.description)}</div>
-          <div class="chips">${tracedSpecs.slice(0, 3).map(s => `<span class="chip">${escapeHtml(s)}</span>`).join('')}</div>
+          <div class="summary" style="margin-top: 6px; color: var(--text-muted); font-size: 12px; line-height: 1.4;">${escapeHtml(sheet.description)}</div>
+          <div class="chips" style="margin-top: 8px;">${tracedSpecs.slice(0, 3).map(s => `<span class="chip">${escapeHtml(s)}</span>`).join('')}</div>
         </button>
+        ${expandedHtml}
       </div>`;
   }
   els.sheets.innerHTML = html;
@@ -871,11 +1034,212 @@ function renderTraceView() {
 // ==========================================
 // Dashboard Rendering
 // ==========================================
+// ==========================================
+// Dashboard Rendering & Milestone Helpers
+// ==========================================
+function detectMilestones(history) {
+  const milestones = [];
+  if (!history || history.length === 0) return milestones;
+
+  let lastTotalCc = null;
+  let lastWorstSpec = null;
+  let lastPercentClosed = null;
+
+  history.forEach((h, idx) => {
+    const currentTotalCc = h.total_cc;
+    const currentWorstSpec = h.worst_spec;
+    const currentPercentClosed = h.percent_closed;
+    const label = h.release || h.commit.substring(0, 7);
+
+    if (idx === 0) {
+      milestones.push({
+        index: idx,
+        label: label,
+        title: "Initial Baseline",
+        description: `Baseline established with ${currentTotalCc} cc budget. Worst spec: ${currentWorstSpec}.`,
+        type: 'baseline'
+      });
+    } else {
+      // 1. Budget changes
+      if (currentTotalCc !== lastTotalCc && lastTotalCc !== null) {
+        if (currentTotalCc > lastTotalCc) {
+          milestones.push({
+            index: idx,
+            label: label,
+            title: "New Specs & Requirements",
+            description: `Total budget increased from ${lastTotalCc} cc to ${currentTotalCc} cc (new specs/requirements added).`,
+            type: 'budget-increase'
+          });
+        } else {
+          milestones.push({
+            index: idx,
+            label: label,
+            title: "Methodology Refactoring",
+            description: `Total budget adjusted/refactored from ${lastTotalCc} cc to ${currentTotalCc} cc.`,
+            type: 'budget-decrease'
+          });
+        }
+      }
+
+      // 2. Worst spec shifts (bottleneck change)
+      if (currentWorstSpec !== lastWorstSpec && lastWorstSpec !== null) {
+        if (currentWorstSpec !== 'n/a' && lastWorstSpec !== 'n/a') {
+          milestones.push({
+            index: idx,
+            label: label,
+            title: "Bottleneck Shifted",
+            description: `Worst offending spec transitioned from ${lastWorstSpec} to ${currentWorstSpec}.`,
+            type: 'bottleneck-shift'
+          });
+        } else if (currentWorstSpec !== 'n/a' && lastWorstSpec === 'n/a') {
+          milestones.push({
+            index: idx,
+            label: label,
+            title: "New Failures / Regressions",
+            description: `New obligations emerged under failing spec: ${currentWorstSpec}.`,
+            type: 'regression'
+          });
+        } else if (currentWorstSpec === 'n/a' && lastWorstSpec !== 'n/a') {
+          milestones.push({
+            index: idx,
+            label: label,
+            title: "All Specs Converged",
+            description: `100% completion reached! Active obligations under ${lastWorstSpec} successfully resolved.`,
+            type: 'success'
+          });
+        }
+      }
+
+      // 3. Major drops in accuracy (dropped by >= 10%)
+      if (lastPercentClosed !== null && (lastPercentClosed - currentPercentClosed) >= 10) {
+        milestones.push({
+          index: idx,
+          label: label,
+          title: "Major Regression",
+          description: `Percent closed dropped significantly by ${(lastPercentClosed - currentPercentClosed).toFixed(0)}% (from ${lastPercentClosed}% to ${currentPercentClosed}%).`,
+          type: 'accuracy-drop'
+        });
+      }
+    }
+
+    lastTotalCc = currentTotalCc;
+    lastWorstSpec = currentWorstSpec;
+    lastPercentClosed = currentPercentClosed;
+  });
+
+  return milestones;
+}
+
+function populateSpecDatalist() {
+  const datalist = document.getElementById('specs-datalist');
+  if (!datalist) return;
+  
+  // Extract all unique specs from traces
+  const specs = state.traces.map(row => specNameFromTrace(row.trace));
+  
+  // Also collect any worst_spec from history to ensure full coverage
+  if (state.dashboard && state.dashboard.history) {
+    state.dashboard.history.forEach(h => {
+      if (h.worst_spec && h.worst_spec !== 'n/a') {
+        const specName = h.worst_spec.replace(/^spec:/, '');
+        if (!specs.includes(specName)) {
+          specs.push(specName);
+        }
+      }
+    });
+  }
+  
+  // Sort alphabetically
+  specs.sort();
+  
+  let html = '<option value="All Specs (Overall)">';
+  specs.forEach(spec => {
+    html += `<option value="${escapeAttr(spec)}">`;
+  });
+  datalist.innerHTML = html;
+}
+
+function renderMilestonesTimeline(milestones, history) {
+  const container = document.getElementById('milestones-timeline');
+  if (!container) return;
+
+  if (milestones.length === 0) {
+    container.innerHTML = '<div class="empty">No milestones identified in this timeline.</div>';
+    return;
+  }
+
+  // Display in reverse chronological order (latest milestones first)
+  const sortedMilestones = [...milestones].reverse();
+
+  container.innerHTML = sortedMilestones.map(m => {
+    const h = history[m.index];
+    let badgeColor = '';
+    let badgeText = '';
+
+    switch (m.type) {
+      case 'baseline':
+        badgeColor = 'background: rgba(139, 183, 255, 0.12); color: var(--accent); border: 1px solid rgba(139, 183, 255, 0.3);';
+        badgeText = 'BASELINE';
+        break;
+      case 'budget-increase':
+        badgeColor = 'background: rgba(255, 202, 139, 0.12); color: #ffca8b; border: 1px solid rgba(255, 202, 139, 0.3);';
+        badgeText = 'NEW REQUIREMENTS';
+        break;
+      case 'budget-decrease':
+        badgeColor = 'background: rgba(197, 139, 255, 0.12); color: #c58bff; border: 1px solid rgba(197, 139, 255, 0.3);';
+        badgeText = 'METHODOLOGY REFACTOR';
+        break;
+      case 'bottleneck-shift':
+        badgeColor = 'background: rgba(139, 255, 196, 0.12); color: #8bffc4; border: 1px solid rgba(139, 255, 196, 0.3);';
+        badgeText = 'BOTTLENECK SHIFT';
+        break;
+      case 'regression':
+      case 'accuracy-drop':
+        badgeColor = 'background: rgba(255, 139, 139, 0.12); color: #ff8b8b; border: 1px solid rgba(255, 139, 139, 0.3);';
+        badgeText = 'REGRESSION';
+        break;
+      case 'success':
+        badgeColor = 'background: rgba(117, 208, 196, 0.12); color: var(--accent2); border: 1px solid rgba(117, 208, 196, 0.3);';
+        badgeText = 'CONVERGED';
+        break;
+      default:
+        badgeColor = 'background: rgba(255, 255, 255, 0.08); color: var(--text-muted); border: 1px solid var(--line-soft);';
+        badgeText = 'EVENT';
+    }
+
+    const formattedDate = new Date(h.date).toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
+    return `
+      <div class="card" style="display: flex; flex-direction: column; padding: 14px 16px; margin-bottom: 8px; border-radius: 12px; background: rgba(255,255,255,0.015); border: 1px solid var(--line-soft);">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 6px;">
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <span style="font-size: 11px; padding: 3px 8px; border-radius: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; ${badgeColor}">${badgeText}</span>
+            <strong style="color: #fff; font-size: 14px;">${escapeHtml(m.title)}</strong>
+          </div>
+          <span style="color: var(--text-muted); font-size: 12px; font-family: ui-monospace, monospace;">Release ${escapeHtml(m.label)} · ${formattedDate}</span>
+        </div>
+        <div style="color: var(--text); font-size: 13px; line-height: 1.4;">${escapeHtml(m.description)}</div>
+      </div>`;
+  }).join('');
+}
+
 function renderDashboard() {
   if (!state.dashboard || !state.dashboard.history) return;
   
   const history = state.dashboard.history;
   if (history.length === 0) return;
+
+  const milestones = detectMilestones(history);
+  renderMilestonesTimeline(milestones, history);
+
+  const filterInput = document.getElementById('spec-filter');
+  const selectedSpecName = filterInput ? filterInput.value.trim() : '';
+  const isFiltered = selectedSpecName && selectedSpecName !== 'All Specs (Overall)' && selectedSpecName !== '';
 
   const labels = history.map(h => h.release || h.commit.substring(0,7));
   const percentClosed = history.map(h => h.percent_closed);
@@ -890,36 +1254,121 @@ function renderDashboard() {
   Chart.defaults.color = '#8da2b8';
   Chart.defaults.font.family = "'Inter', sans-serif";
 
+  let datasets = [];
+  if (isFiltered) {
+    // Generate spec-specific data
+    const specPercentClosed = history.map(h => {
+      const isWorst = h.worst_spec && h.worst_spec.replace(/^spec:/, '') === selectedSpecName;
+      if (isWorst) {
+        return h.percent_closed; // Use the actual closed percent at that failing snapshot
+      }
+      return 100; // Assume 100% closed when not failing or not the worst offender
+    });
+    
+    const specResidualCc = history.map(h => {
+      const isWorst = h.worst_spec && h.worst_spec.replace(/^spec:/, '') === selectedSpecName;
+      return isWorst ? h.residual_cc : 0;
+    });
+
+    datasets = [
+      {
+        label: 'Overall closure baseline (dotted)',
+        data: percentClosed,
+        borderColor: 'rgba(139, 183, 255, 0.35)',
+        backgroundColor: 'transparent',
+        yAxisID: 'y',
+        borderWidth: 1.5,
+        borderDash: [4, 4],
+        pointRadius: 0
+      },
+      {
+        label: `${selectedSpecName} Closure (%)`,
+        data: specPercentClosed,
+        borderColor: '#75d0c4',
+        backgroundColor: 'rgba(117, 208, 196, 0.08)',
+        yAxisID: 'y',
+        fill: true,
+        tension: 0.3,
+        borderWidth: 3,
+        pointRadius: history.map((h, idx) => {
+          const hasMilestone = milestones.some(m => m.index === idx);
+          const isWorst = h.worst_spec && h.worst_spec.replace(/^spec:/, '') === selectedSpecName;
+          return hasMilestone || isWorst ? 6 : 2;
+        }),
+        pointStyle: history.map((h, idx) => {
+          const isWorst = h.worst_spec && h.worst_spec.replace(/^spec:/, '') === selectedSpecName;
+          return isWorst ? 'rectRot' : 'circle';
+        }),
+        pointBackgroundColor: history.map((h, idx) => {
+          const isWorst = h.worst_spec && h.worst_spec.replace(/^spec:/, '') === selectedSpecName;
+          if (isWorst) return '#ff8b8b'; // highlight failure points in red
+          const ms = milestones.find(m => m.index === idx);
+          return ms ? '#75d0c4' : '#75d0c4';
+        })
+      },
+      {
+        label: `${selectedSpecName} Residual (cc)`,
+        data: specResidualCc,
+        borderColor: '#ff8b8b',
+        backgroundColor: 'transparent',
+        yAxisID: 'y1',
+        tension: 0.3,
+        borderWidth: 2,
+        pointRadius: 2,
+        pointBackgroundColor: '#ff8b8b'
+      }
+    ];
+  } else {
+    // Show overall lines
+    datasets = [
+      {
+        label: 'Percent Closed (%)',
+        data: percentClosed,
+        borderColor: '#8bb7ff',
+        backgroundColor: 'rgba(139, 183, 255, 0.1)',
+        yAxisID: 'y',
+        fill: true,
+        tension: 0.3,
+        borderWidth: 2,
+        pointRadius: history.map((h, idx) => milestones.some(m => m.index === idx) ? 6 : 2),
+        pointStyle: history.map((h, idx) => milestones.some(m => m.index === idx) ? 'triangle' : 'circle'),
+        pointBackgroundColor: history.map((h, idx) => {
+          const ms = milestones.find(m => m.index === idx);
+          if (ms) {
+            switch (ms.type) {
+              case 'baseline': return '#8bb7ff';
+              case 'budget-increase': return '#ffca8b';
+              case 'budget-decrease': return '#c58bff';
+              case 'bottleneck-shift': return '#8bffc4';
+              case 'regression': return '#ff8b8b';
+              case 'accuracy-drop': return '#ff8b8b';
+              case 'success': return '#75d0c4';
+              default: return '#fff';
+            }
+          }
+          return '#8bb7ff';
+        })
+      },
+      {
+        label: 'Residual Obligations (cc)',
+        data: residualCc,
+        borderColor: '#ff8b8b',
+        backgroundColor: 'transparent',
+        yAxisID: 'y1',
+        tension: 0.3,
+        borderWidth: 2,
+        borderDash: [5, 5],
+        pointRadius: 2,
+        pointBackgroundColor: '#ff8b8b'
+      }
+    ];
+  }
+
   state.chartInstance = new Chart(ctx, {
     type: 'line',
     data: {
       labels,
-      datasets: [
-        {
-          label: 'Percent Closed (%)',
-          data: percentClosed,
-          borderColor: '#8bb7ff',
-          backgroundColor: 'rgba(139, 183, 255, 0.1)',
-          yAxisID: 'y',
-          fill: true,
-          tension: 0.3,
-          borderWidth: 2,
-          pointRadius: 2,
-          pointBackgroundColor: '#8bb7ff'
-        },
-        {
-          label: 'Residual Obligations (cc)',
-          data: residualCc,
-          borderColor: '#ff8b8b',
-          backgroundColor: 'transparent',
-          yAxisID: 'y1',
-          tension: 0.3,
-          borderWidth: 2,
-          borderDash: [5, 5],
-          pointRadius: 2,
-          pointBackgroundColor: '#ff8b8b'
-        }
-      ]
+      datasets
     },
     options: {
       responsive: true,
@@ -933,7 +1382,17 @@ function renderDashboard() {
           bodyColor: '#d8e2ee',
           borderColor: 'rgba(255,255,255,0.1)',
           borderWidth: 1,
-          padding: 12
+          padding: 12,
+          callbacks: {
+            afterBody: (context) => {
+              const idx = context[0].dataIndex;
+              const msList = milestones.filter(m => m.index === idx);
+              if (msList.length > 0) {
+                return '\n★ MILESTONES:\n' + msList.map(m => `• [${m.title}] ${m.description}`).join('\n');
+              }
+              return '';
+            }
+          }
         }
       },
       scales: {
@@ -1003,6 +1462,19 @@ async function loadAll() {
   state.sheets = sheetsRes.data ? parseCheatsheetIndex(sheetsRes.data) : [];
   state.dashboard = dashRes.data || null;
 
+  // Proactively fetch spec summaries in parallel
+  setStatus('Loading spec summaries...');
+  const summaryPromises = state.traces.map(async row => {
+    if (!row.specPath) return;
+    try {
+      const content = await fetchText(sourcePath(row.specPath));
+      row.summary = cleanSummary(extractSpecSummary(content));
+    } catch (err) {
+      row.summary = "";
+    }
+  });
+  await Promise.all(summaryPromises);
+
   setStatus(`Loaded: ${state.traces.length} specs, ${state.sheets.length} sheets`);
   setFooter(`Source: ${tracesRes.path || 'fallback'}`);
 }
@@ -1016,6 +1488,7 @@ async function init() {
   
   // Dashboard Chart requires lib loaded, it should be loaded since it's a synchronous script tag
   if (typeof Chart !== 'undefined') {
+    populateSpecDatalist();
     renderDashboard();
   } else {
     console.error("Chart.js not loaded.");
@@ -1023,6 +1496,14 @@ async function init() {
 }
 
 els.search.addEventListener('input', () => { state.search = els.search.value.trim(); renderTraceView(); });
+
+const filterInput = document.getElementById('spec-filter');
+if (filterInput) {
+  filterInput.addEventListener('input', () => {
+    renderDashboard();
+  });
+}
+
 els.refresh.addEventListener('click', async () => { state.sheetCache.clear(); await init(); });
 
 init().catch(err => {

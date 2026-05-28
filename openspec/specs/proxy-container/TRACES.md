@@ -6,7 +6,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 ## Annotated locations
 
 - [build-proxy.sh#L2](../../../build-proxy.sh#L2)
-- [build.sh#L276](../../../build.sh#L276)
+- [build.sh#L287](../../../build.sh#L287)
 - [crates/tillandsias-core/src/container_profile.rs#L205](../../../crates/tillandsias-core/src/container_profile.rs#L205)
 - [crates/tillandsias-core/src/container_profile.rs#L360](../../../crates/tillandsias-core/src/container_profile.rs#L360)
 - [crates/tillandsias-core/src/container_profile.rs#L428](../../../crates/tillandsias-core/src/container_profile.rs#L428)
@@ -18,8 +18,8 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-core/src/container_profile.rs#L905](../../../crates/tillandsias-core/src/container_profile.rs#L905)
 - [crates/tillandsias-core/src/container_profile.rs#L1069](../../../crates/tillandsias-core/src/container_profile.rs#L1069)
 - [crates/tillandsias-core/src/state.rs#L171](../../../crates/tillandsias-core/src/state.rs#L171)
-- [crates/tillandsias-headless/src/main.rs#L2258](../../../crates/tillandsias-headless/src/main.rs#L2258)
-- [crates/tillandsias-headless/src/main.rs#L2887](../../../crates/tillandsias-headless/src/main.rs#L2887)
+- [crates/tillandsias-headless/src/main.rs#L2269](../../../crates/tillandsias-headless/src/main.rs#L2269)
+- [crates/tillandsias-headless/src/main.rs#L2898](../../../crates/tillandsias-headless/src/main.rs#L2898)
 - [images/default/entrypoint-forge-claude.sh#L24](../../../images/default/entrypoint-forge-claude.sh#L24)
 - [images/default/entrypoint-forge-codex.sh#L23](../../../images/default/entrypoint-forge-codex.sh#L23)
 - [images/default/entrypoint-forge-opencode.sh#L24](../../../images/default/entrypoint-forge-opencode.sh#L24)

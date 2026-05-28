@@ -104,7 +104,7 @@ log "capturing forge diagnostics -> $RAW_LOG"
 # The forge is assumed already alive (piggy-back). Capture is best-effort: a
 # launch/timeout/parse failure is a finding, never a caller failure.
 if tillandsias . --opencode --diagnostics \
-      --prompt "$(cat "$PROMPT_FILE")" 2>/dev/null \
+      --prompt "$(cat "$PROMPT_FILE")" < /dev/null 2>/dev/null \
       | tee "$RAW_LOG" >/dev/null; then
   if [[ -s "$RAW_LOG" ]]; then
     printf '%s %s\n' "$PROMPT_SHA" "$RAW_LOG" > "$MARKER"
