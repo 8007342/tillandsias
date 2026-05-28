@@ -2354,3 +2354,26 @@ is still open per the same cycle log; Windows host owns that one.)
   - Resolved a style/formatting issue in `crates/tillandsias-headless/src/main.rs` that blocked the initial build gate, and committed/pushed it as `5e8022c7`.
   - Re-launched the asynchronous background runtime litmus run under ID `20260528T030100Z-1db7477f-c45f23ae-80d9196e` to fully validate the integrated sibling HEADs and the hostname sanitization fix.
   - Active run logs are written to `plan/localwork/runtime-litmus/20260528T030100Z-1db7477f-c45f23ae-80d9196e/run.log`.
+
+### Cycle 2026-05-28T19:20Z — FORGE ENHANCEMENTS SHIPPED & VERIFIED (clean tree, on-cron)
+
+- host_id: linux-tlatoani-fedora (macuahuitl.ayahuitlcalpan.com)
+- platform: linux
+- branch: linux-next
+- upstream_commit (pre-merge): 150cc556a678129a8d54d123efd7b8e05e16d627
+- observed_sibling_heads:
+  - main: fa746f03
+  - linux-next: 2b750fd1edb5fa53f5ff240c06152a5c9a41bd9f
+  - windows-next: c45f23ae431a78d84e6489efad7794204f8d26d4
+  - osx-next: 11317c79bcbe188aff17b2fefda5a51e37c87930
+
+- windows-next: **already integrated** (ancestor).
+- osx-next: **already integrated** (ancestor).
+- **Work Completed & Verified:**
+  - Implemented all 8 approved forge enhancement proposals in `images/default/Containerfile`.
+  - Added `unzip` package to Fedora Minimal `microdnf` dependencies.
+  - Implemented a dynamic Dart SDK downloader that query-resolves the official latest stable channel release `VERSION` from Google Cloud Storage and retrieves the `.zip` archive dynamically, resolving 404/staleness issues.
+  - Corrected `rustup-init` component installation syntax to supply separate `--component` options individually instead of parsing space-separated lists.
+  - Successfully built and asserted the forge container locally using `./build-forge.sh --assert` (`tillandsias-forge:3f008ca4ecef4dab55d3bcf59fb1a40a6bf0339989871fa0b2e73ccc28254fc6`).
+  - Ran workspace checks and tests using `./build.sh --check && ./build.sh --test`. All unit tests, integration tests, and doc-tests passed 100% cleanly across all crates (`tillandsias-headless`, `tillandsias-podman`, `tillandsias-scanner`, `tillandsias-vault-client`, `tillandsias-vm-layer`, `tillandsias-logging`, `tillandsias-metrics`, etc.).
+  - Staged and committed improvements, pushing them to `origin/linux-next` as `2b750fd1`.
