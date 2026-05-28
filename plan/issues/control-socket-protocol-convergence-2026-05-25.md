@@ -230,3 +230,38 @@ real (each host's local scanner). Remaining stub: none of the read handlers;
 VmStatusRequest already reflects the real phase.
 
 Siblings: no action needed; wire shape unchanged (WIRE_VERSION 2).
+
+## Update 2026-05-28T22:24Z — pure routing matrix landed (item 1 of 3)
+
+The first step of the convergence packet is now in:
+`crates/tillandsias-headless/src/control_dispatch.rs`. Pure module
+encoding the dispatch-table Q1/Q2/Q4 answers from this issue:
+
+  * `TransportKind { UnixSocket, Vsock }`
+  * `DispatchOutcome { Handle, Unsupported, ResponseOnly }`
+  * `pub fn decide_route(msg, transport) -> DispatchOutcome` — no I/O,
+    no allocation, no global state.
+
+Routing matrix verbatim from this packet's answers:
+
+  | Variant                                             | Unix       | Vsock      |
+  |-----------------------------------------------------|------------|------------|
+  | Hello                                               | Handle     | Handle     |
+  | IssueWebSession / EvictProject                      | Handle     | **Unsup**  |  Q1
+  | McpFrame                                            | Handle     | **Unsup**  |
+  | VmStatusRequest / VmShutdownRequest                 | **Handle** | Handle     |  Q2
+  | EnumerateLocalProjects / CloudRefreshRequest        | **Handle** | Handle     |  Q4
+  | PtyOpen / PtyData / PtyResize / PtyClose            | **Unsup**  | Handle     |
+  | HelloAck / IssueAck / Error / *Reply                | ResponseOnly | ResponseOnly |
+
+Four unit tests pin every entry in the table verbatim — adding a new
+ControlMessage variant produces an `unreachable!` panic in the test
+fixture, which is the drift signal the convergence packet needs.
+
+The module is `#[allow(dead_code)]` until the follow-on slice wires it
+into `tray::handle_control_connection` and `vsock_server::serve_connection`
+(items 2 and 3 of this packet). That refactor needs care: tray's
+dispatcher is sync `std::os::unix::net::UnixStream` while vsock's is
+async tokio, and the convergence packet's preferred path is keeping
+`decide_route` sync (it already is — pure function) and having each
+transport adapt around it.
