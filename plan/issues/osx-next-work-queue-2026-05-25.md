@@ -2423,3 +2423,20 @@ step 5 lands.
   warnings clean; fmt clean.
 - Streak: 0 (productive iter). Next macOS iter eligible at
   ~12:00Z.
+
+### event: macOS slice 11b — --diagnose surfaces release tag — 2026-05-28T12:00Z
+
+- Commit `37ff2d5f` mirrors windows-tray's `4fff31af`. The macOS
+  diagnose report now prints "Release: v0.2.260526.1" right above
+  the manifest pin so the operator can spot tag/SHA mismatches
+  at a glance.
+- `RECIPE_RELEASE_TAG` in `action_host.rs` is now `pub(crate)` so
+  the diagnose module can read it without duplicating the const.
+  Both trays share the same hardcode pattern until
+  `manifest.release_tag()` lands (Linux-owned nice-to-have).
+- No new tests — the existing aarch64.img parser tests cover the
+  shared-format invariant; the release tag is a pure const surface.
+- Tests + lint clean: macos-tray 30/30; clippy -D warnings clean;
+  fmt clean.
+- Streak: 0 (productive iter). Next macOS iter eligible at
+  ~12:30Z.
