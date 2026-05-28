@@ -15,11 +15,23 @@
 //!
 //! What this module routes today:
 //!
-//! - [`ContainerLifecycleAction::Died`] → `event:container_exit` with the
-//!   `exit_code` parsed out of the podman events Died payload (gap-3
-//!   phase-1b). `duration_seconds` is left off for now because computing
-//!   it would require start→exit pairing state that the lifecycle stream
-//!   doesn't carry; the formatter already accepts `None` for this field.
+//! - [`ContainerLifecycleAction::Started`] → no event (the
+//!   `event:container_launch state=running` line is the launch path's
+//!   own emission, not ours). The Started observed_at is recorded so
+//!   the matching Died can fill `duration_seconds`.
+//!
+//! - [`ContainerLifecycleAction::Died`] → `event:container_exit` with
+//!   the `exit_code` parsed out of the podman events Died payload
+//!   (gap-3 phase-1b) AND `duration_seconds` computed from the
+//!   Started→Died pair (gap-3 phase-2e). Containers Died without a
+//!   prior Started — emitter started late, restart loop, or
+//!   `--rm` cycle that fell through the BackoffInspection path —
+//!   emit with `duration_seconds=None` (never fabricated).
+//!
+//! - [`ContainerLifecycleAction::Removed`] /
+//!   [`ContainerLifecycleAction::CleanedUp`] → no event; just evict
+//!   any stale start-time entry so `--rm` containers (which may not
+//!   produce a Died) don't leak start-time map entries.
 //!
 //! - [`ContainerLifecycleAction::Oom`] → `event:resource_exhaustion`
 //!   with `resource=memory_oom`. Podman emits `Status=oom` as a
@@ -38,6 +50,8 @@
 //! - `event:container_stderr`: needs a separate `podman logs -f` tail
 //!   per container (the `DiagnosticsHandle` path), not the events
 //!   stream this module wraps.
+
+use std::collections::HashMap;
 
 use tokio::sync::mpsc;
 use tracing::debug;
@@ -96,8 +110,9 @@ async fn run_emitter(prefix: String) {
         "diagnostic-event emitter running"
     );
 
+    let mut state = EmitterState::default();
     while let Some(record) = rx.recv().await {
-        route_record(&record);
+        route_record(&mut state, &record);
     }
 
     // Channel closed (stream task exited or aborted). Cancel the stream
@@ -106,23 +121,63 @@ async fn run_emitter(prefix: String) {
     let _ = stream_task.await;
 }
 
-/// Decide which typed-event line (if any) to emit for one parsed
-/// lifecycle record. Pure dispatch — pulled out of `run_emitter` so it
-/// stays unit-testable without spinning a tokio task.
+/// Per-session state the router carries across record arrivals — today
+/// just the start-time map so `Died` records can fill `duration_seconds`.
 ///
-/// Today only `Died` records route to a typed event
-/// (`event:container_exit`). Other actions are observability-only on
-/// the lifecycle-tracker path (consumed by UI state); the spec-mandated
-/// typed events don't have backing data for them yet (see module doc).
-fn route_record(record: &ContainerLifecycleRecord) {
+/// Bounded by the live container set: entries are inserted on Started
+/// and removed on Died/Removed/CleanedUp, so the map stays roughly
+/// proportional to the running enclave. A pathological churn (thousands
+/// of containers per second over hours) could grow the map; the gap-5
+/// phase-2 ring buffer is the upstream backpressure layer that bounds
+/// this case before it reaches the router.
+///
+/// @trace spec:runtime-diagnostics-stream (Container exit event)
+#[derive(Debug, Default)]
+struct EmitterState {
+    /// container_name → unix-seconds observed_at of the Started record.
+    /// We use `observed_at_unix` from the parser (podman event `Time`
+    /// field), not local wall-clock, so the duration reflects the
+    /// kernel-observed lifecycle on the podman host — correct even if
+    /// the emitter clock is skewed.
+    start_times: HashMap<String, i64>,
+}
+
+/// Decide which typed-event line (if any) to emit for one parsed
+/// lifecycle record. Carries `&mut EmitterState` so it can track the
+/// start→exit pairing needed for `duration_seconds`. Pulled out of
+/// `run_emitter` so it stays unit-testable without spinning a tokio
+/// task.
+///
+/// Routing arms today:
+///
+///   Started   → record observed_at in state; no event emitted (the
+///               `event:container_launch state=running` line is the
+///               launch-path's own emission, not ours).
+///   Died      → look up start time, compute duration if available,
+///               emit `event:container_exit` with exit_code +
+///               duration_seconds, then evict the entry.
+///   Oom       → emit `event:resource_exhaustion`.
+///   Removed/CleanedUp → evict the start-time entry. (Containers that
+///               are `--rm` removed without a Died event fall into the
+///               BackoffInspection's Disappeared branch which we don't
+///               track here; the entry will time out as a leak.)
+fn route_record(state: &mut EmitterState, record: &ContainerLifecycleRecord) {
     match record.action {
+        ContainerLifecycleAction::Started => {
+            if let Some(at) = record.observed_at_unix {
+                state.start_times.insert(record.container_name.clone(), at);
+            }
+        }
         ContainerLifecycleAction::Died => {
+            let started_at = state.start_times.remove(&record.container_name);
+            let duration = match (started_at, record.observed_at_unix) {
+                (Some(start), Some(end)) if end >= start => Some((end - start).max(0) as u64),
+                _ => None,
+            };
             let body = format_container_exit_event(
                 &record.container_name,
                 record.exit_code.unwrap_or(-1),
-                // duration_seconds: needs start→exit pairing state;
-                // tracked as a follow-on slice.
-                None,
+                duration,
             );
             emit_diagnostic_event(true, "event:container_exit", &record.container_name, &body);
         }
@@ -138,11 +193,16 @@ fn route_record(record: &ContainerLifecycleRecord) {
                 &body,
             );
         }
-        // The other actions (Started/StopRequested/Killed/Removed/
-        // CleanedUp/Observed/Disappeared) don't map to a spec-mandated
-        // typed event today. `event:container_launch state=…` lines are
-        // emitted from the launch path itself (emit_launch_event in
-        // client.rs), NOT from the post-launch events stream.
+        ContainerLifecycleAction::Removed | ContainerLifecycleAction::CleanedUp => {
+            // Evict stale start-time entries so a `--rm` container
+            // removed without a matching Died doesn't leak forever.
+            state.start_times.remove(&record.container_name);
+        }
+        // The other actions (StopRequested/Killed/Observed/Disappeared)
+        // don't map to a spec-mandated typed event today.
+        // `event:container_launch state=…` lines are emitted from the
+        // launch path itself (emit_launch_event in client.rs), NOT from
+        // the post-launch events stream.
         _ => {}
     }
 }
@@ -174,6 +234,18 @@ mod tests {
         assert!(handle.is_none());
     }
 
+    fn started_record(name: &str, observed_at: i64) -> ContainerLifecycleRecord {
+        ContainerLifecycleRecord {
+            container_name: name.into(),
+            action: ContainerLifecycleAction::Started,
+            new_state: ContainerState::Running,
+            source: LifecycleSource::PodmanEvents,
+            raw_status: Some("start".into()),
+            observed_at_unix: Some(observed_at),
+            exit_code: None,
+        }
+    }
+
     /// Pure-dispatch test: a Died record with an exit code MUST be
     /// matched by the route arm. We can't assert on the eprintln side
     /// effect without capturing stderr, but we CAN assert the match
@@ -182,11 +254,9 @@ mod tests {
     /// shape of the matched action.
     #[test]
     fn route_record_handles_died_without_panic() {
-        // Died with exit_code → routed to the exit-event arm.
-        route_record(&died_record("tillandsias-x-forge", Some(137)));
-        // Died WITHOUT exit_code → still routed (formatter handles
-        // `unwrap_or(-1)` for the "we know it died, code unknown" case).
-        route_record(&died_record("tillandsias-x-forge", None));
+        let mut state = EmitterState::default();
+        route_record(&mut state, &died_record("tillandsias-x-forge", Some(137)));
+        route_record(&mut state, &died_record("tillandsias-x-forge", None));
     }
 
     /// An Oom record MUST route to the resource-exhaustion arm. Pinned
@@ -194,35 +264,117 @@ mod tests {
     /// Oom silently.
     #[test]
     fn route_record_handles_oom_without_panic() {
+        let mut state = EmitterState::default();
         let mut r = died_record("tillandsias-x-forge", None);
         r.action = ContainerLifecycleAction::Oom;
         r.raw_status = Some("oom".into());
-        route_record(&r);
+        route_record(&mut state, &r);
     }
 
-    /// Non-routing records (everything except Died and Oom) must NOT
-    /// trigger any emit arm. We can't hook the eprintln directly here;
-    /// instead we verify dispatch is exhaustive on
-    /// `ContainerLifecycleAction` by enumerating every non-routing
-    /// variant. A bare `_ => {}` would let new variants silently miss
-    /// routing — adding a new variant in diagnostics.rs forces a
-    /// decision here.
+    /// Non-routing records (everything except Died/Oom/Started/
+    /// Removed/CleanedUp) must NOT trigger any emit or state mutation.
+    /// Exhaustive over `ContainerLifecycleAction` so adding a new
+    /// variant in diagnostics.rs forces a decision here.
     #[test]
     fn route_record_non_routing_actions_no_panic() {
+        let mut state = EmitterState::default();
         let base = died_record("tillandsias-x", None);
         for action in [
             ContainerLifecycleAction::Created,
-            ContainerLifecycleAction::Started,
             ContainerLifecycleAction::StopRequested,
             ContainerLifecycleAction::Killed,
-            ContainerLifecycleAction::Removed,
-            ContainerLifecycleAction::CleanedUp,
             ContainerLifecycleAction::Observed,
             ContainerLifecycleAction::Disappeared,
         ] {
             let mut r = base.clone();
             r.action = action;
-            route_record(&r); // must not panic, must not double-emit
+            route_record(&mut state, &r);
         }
+        assert!(
+            state.start_times.is_empty(),
+            "non-routing actions must not mutate state"
+        );
+    }
+
+    /// gap-3 phase-2e contract: a Started → Died pair, with
+    /// `observed_at_unix` timestamps, produces an exit-event line
+    /// carrying `duration_seconds=<end-start>`. The start-time entry
+    /// is evicted on Died so the same container can restart fresh.
+    #[test]
+    fn started_then_died_records_duration_and_evicts_entry() {
+        let mut state = EmitterState::default();
+        route_record(
+            &mut state,
+            &started_record("tillandsias-myproj-forge", 1_711_400_000),
+        );
+        assert_eq!(
+            state.start_times.get("tillandsias-myproj-forge"),
+            Some(&1_711_400_000),
+            "Started must record observed_at into state"
+        );
+
+        let mut died = died_record("tillandsias-myproj-forge", Some(0));
+        died.observed_at_unix = Some(1_711_400_025);
+        route_record(&mut state, &died);
+
+        // The exit-event side effect went to stderr (not asserted
+        // here); the visible state change is the eviction.
+        assert!(
+            !state.start_times.contains_key("tillandsias-myproj-forge"),
+            "Died must evict the start-time entry"
+        );
+    }
+
+    /// gap-3 phase-2e: a Died WITHOUT a preceding Started (e.g.
+    /// emitter started after container launch) routes cleanly with
+    /// duration_seconds=None — never fabricates a bogus value.
+    #[test]
+    fn died_without_prior_started_has_no_duration() {
+        let mut state = EmitterState::default();
+        let mut died = died_record("tillandsias-orphan", Some(1));
+        died.observed_at_unix = Some(1_711_400_005);
+        route_record(&mut state, &died);
+        // No-op on the state map; assertion is the absence of panic +
+        // the empty state going in/out.
+        assert!(state.start_times.is_empty());
+    }
+
+    /// gap-3 phase-2e: Removed and CleanedUp evict any stale
+    /// start-time entry so `--rm` containers (which may not produce a
+    /// Died) don't leak forever.
+    #[test]
+    fn removed_and_cleanedup_evict_start_time() {
+        let mut state = EmitterState::default();
+        route_record(&mut state, &started_record("tillandsias-rm-1", 1_000));
+        route_record(&mut state, &started_record("tillandsias-rm-2", 2_000));
+        assert_eq!(state.start_times.len(), 2);
+
+        let mut r1 = died_record("tillandsias-rm-1", None);
+        r1.action = ContainerLifecycleAction::Removed;
+        route_record(&mut state, &r1);
+
+        let mut r2 = died_record("tillandsias-rm-2", None);
+        r2.action = ContainerLifecycleAction::CleanedUp;
+        route_record(&mut state, &r2);
+
+        assert!(state.start_times.is_empty());
+    }
+
+    /// gap-3 phase-2e: multiple containers tracked independently —
+    /// one Started → Died pair doesn't disturb another's start time.
+    #[test]
+    fn multiple_containers_tracked_independently() {
+        let mut state = EmitterState::default();
+        route_record(&mut state, &started_record("tillandsias-a", 100));
+        route_record(&mut state, &started_record("tillandsias-b", 200));
+        assert_eq!(state.start_times.len(), 2);
+
+        let mut died_a = died_record("tillandsias-a", Some(0));
+        died_a.observed_at_unix = Some(150);
+        route_record(&mut state, &died_a);
+
+        // a evicted, b retained with original start time.
+        assert!(!state.start_times.contains_key("tillandsias-a"));
+        assert_eq!(state.start_times.get("tillandsias-b"), Some(&200));
     }
 }

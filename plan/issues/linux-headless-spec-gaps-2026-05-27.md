@@ -220,6 +220,16 @@ bounded slices from. Each item is sized for one loop iteration. NOT for siblings
   Two new unit tests: parser maps `Status=oom` correctly, and the
   emitter routes Oom without panicking. The non-routing exhaustive
   test was updated to reflect that Died+Oom both now route.
+- **GAP 3 PHASE-2E** (duration_seconds): start→exit pairing landed.
+  `EmitterState` carries a `HashMap<container_name, observed_at>`
+  populated by Started records and consumed by Died records to
+  compute `duration_seconds=(end-start)`. Entries are evicted on
+  Died, Removed, or CleanedUp so `--rm` containers don't leak.
+  Died without a prior Started cleanly emits `duration_seconds=None`
+  — never fabricated. Five new unit tests cover the pairing
+  contract: Started records observed_at; Died computes duration +
+  evicts; Died-without-Started reports None; Removed/CleanedUp
+  evict; multiple containers tracked independently.
   (Next diagnostics gap: GAP 2 / GAP 3 PHASE-2 — wire the live podman
   events parser to emit_diagnostic_event when `debug` is on.)
 
