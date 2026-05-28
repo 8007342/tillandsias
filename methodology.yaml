@@ -27,6 +27,31 @@ methodology:
     plan_step_notes: plan/steps/README.md
     plan_issues_root: plan/issues
     unknown_event_register: methodology/event/index.yaml
+    shared_skills_root: skills/
+
+  shared_skills:
+    # Top-level ./skills/ is the canonical, agent-agnostic source of truth.
+    # Each per-runtime `.<agent>/skills/<name>` is a symlink to the canonical
+    # so there is exactly one file to read + edit. Orchestrators can edit
+    # the canonical between iterations to steer remote agent work; every
+    # subsequent invocation reads the latest committed version.
+    canonical_root: skills/
+    symlinked_into:
+      - .claude/skills/
+      - .opencode/skills/
+      - .codex/skills/
+      - .gemini/skills/
+      - .github/skills/
+    registered:
+      advance-work-from-plan:
+        path: skills/advance-work-from-plan/SKILL.md
+        purpose: >
+          Single-iteration work cycle for any agent on any host. Pick one
+          bounded slice of READY work from plan/, ship it, exit. Replaces
+          the per-cycle long-form work prompt.
+        cadence: "~30 min in active sessions"
+        host_awareness: detects linux/macOS/Windows → active branch + write scope
+        steerable: true   # orchestrator may edit between iterations
 
   invariant_summary:
     - specs_define_intent

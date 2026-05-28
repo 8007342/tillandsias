@@ -22,6 +22,12 @@ plan_index:
       When a step completes, update its status, write the evidence summary to
       its deliverable, checkpoint the current state to origin/linux-next, and
       then promote the next eligible pending step to ready.
+    canonical_work_loop_skill: skills/advance-work-from-plan/SKILL.md
+    # Every agent on every host SHOULD invoke `/advance-work-from-plan` (or the
+    # equivalent skill load) for each work cycle instead of pasting a long-form
+    # prompt. The skill is a single committed file; orchestrators can edit it
+    # between iterations to steer remote agent work. See methodology.yaml
+    # `shared_skills.advance-work-from-plan` for the registry entry.
 
   graph_policy:
     model: dag
