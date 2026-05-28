@@ -545,6 +545,7 @@ if [[ "$FLAG_INSTALL" == true ]]; then
 
     # Copy binary to install location
     mkdir -p "$INSTALL_DIR"
+    rm -f "$INSTALL_BIN"
     cp "$RELEASE_BIN" "$INSTALL_BIN"
     chmod +x "$INSTALL_BIN"
     _info "Portable launcher installed: $INSTALL_BIN ($(du -h "$INSTALL_BIN" | cut -f1))"
