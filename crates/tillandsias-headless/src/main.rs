@@ -1993,7 +1993,13 @@ pub(crate) fn sanitize_hostname(raw: &str) -> String {
     // A valid hostname can only contain alphanumeric and hyphens, and cannot exceed 63 characters.
     let mut cleaned: String = raw
         .chars()
-        .map(|c| if c.is_ascii_alphanumeric() || c == '-' { c } else { '-' })
+        .map(|c| {
+            if c.is_ascii_alphanumeric() || c == '-' {
+                c
+            } else {
+                '-'
+            }
+        })
         .collect();
 
     // Trim leading/trailing hyphens as they are generally discouraged/invalid
