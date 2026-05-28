@@ -205,6 +205,90 @@ async fn poll_vm_status_once(
     }
 }
 
+/// Map a wire `CloudProjectEntry` ({label, owner, repo,
+/// default_branch}) onto the shared menu `ProjectEntry` the cloud-
+/// projects submenu renders. `ProjectEntry::path` is the `owner/repo`
+/// slug per its doc; `ready` is always false for cloud projects
+/// (they have no in-VM forge container). Mirrors windows-tray's
+/// `cloud_entry_to_menu` (commit b0cdcdee) byte-for-byte so both
+/// trays produce identical ProjectEntry rows from the same wire
+/// reply.
+fn cloud_entry_to_menu(
+    entry: &tillandsias_control_wire::CloudProjectEntry,
+) -> tillandsias_host_shell::menu_state::ProjectEntry {
+    tillandsias_host_shell::menu_state::ProjectEntry {
+        name: entry.label.clone(),
+        path: format!("{}/{}", entry.owner, entry.repo),
+        ready: false,
+    }
+}
+
+/// One-shot CloudRefreshRequest over the in-VM control wire. Mirrors
+/// `tillandsias-windows-tray::notify_icon::refresh_cloud_projects`
+/// (commit b0cdcdee) but drives the macOS-specific vsock path via
+/// `VzRuntime::open_vsock_stream`. Reuses the standard
+/// `Client::from_stream` + handshake + request path slice 4
+/// introduced.
+///
+/// Returns the mapped `Vec<ProjectEntry>` so the caller can write it
+/// into the held `MenuState.cloud_projects` and re-render the menu.
+/// Best-effort: a transient wire error / unauthenticated `gh` in the
+/// VM returns `Err(String)` so the caller can log + leave the last-
+/// known cloud list untouched (matches windows-tray's policy).
+///
+/// 5 s overall timeout (connect + handshake + reply) — `gh repo list`
+/// inside the VM is the slowest input but Linux's e1a190d4 caches
+/// the underlying calls; if it still races the timeout the user just
+/// sees the prior list.
+///
+/// @trace spec:host-shell-architecture,
+///        plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 8a)
+async fn poll_cloud_projects_once(
+    vz: &VzRuntime,
+) -> Result<Vec<tillandsias_host_shell::menu_state::ProjectEntry>, String> {
+    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
+    use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
+    use tillandsias_host_shell::vsock_client::Client;
+
+    let connect_timeout = Duration::from_secs(5);
+    let stream = vz
+        .open_vsock_stream(CONTROL_WIRE_VSOCK_PORT, connect_timeout)
+        .await
+        .map_err(|e| format!("vsock connect: {e}"))?;
+
+    let mut client = Client::from_stream(
+        Box::new(stream),
+        Transport::Vsock {
+            cid: TILLANDSIAS_GUEST_CID,
+            port: CONTROL_WIRE_VSOCK_PORT,
+        },
+    );
+    client
+        .handshake()
+        .await
+        .map_err(|e| format!("control-wire handshake: {e}"))?;
+
+    let seq = client.allocate_seq();
+    let envelope = ControlEnvelope {
+        wire_version: WIRE_VERSION,
+        seq,
+        body: ControlMessage::CloudRefreshRequest { seq },
+    };
+    let reply = client
+        .request(&envelope)
+        .await
+        .map_err(|e| format!("CloudRefreshRequest: {e}"))?;
+
+    match reply.body {
+        ControlMessage::CloudRefreshReply { projects, .. } => {
+            Ok(projects.iter().map(cloud_entry_to_menu).collect())
+        }
+        other => Err(format!(
+            "unexpected reply to CloudRefreshRequest: {other:?}"
+        )),
+    }
+}
+
 /// Default vsock CID for the Tillandsias guest. Matches what the
 /// in-VM headless binds; the host always connects to this CID.
 const TILLANDSIAS_GUEST_CID: u32 = 3;
@@ -940,6 +1024,24 @@ mod tests {
     fn tray_action_host_class_registers() {
         let cls = TrayActionHost::class();
         assert_eq!(cls.name(), "TillandsiasTrayActionHost");
+    }
+
+    /// `cloud_entry_to_menu` produces the byte-identical `ProjectEntry`
+    /// shape windows-tray produces from the same wire input (commit
+    /// b0cdcdee), so the cross-platform menu submenu rows agree on
+    /// (name, path, ready) without either tray drifting.
+    #[test]
+    fn cloud_entry_maps_to_owner_slash_repo_slug() {
+        let wire = tillandsias_control_wire::CloudProjectEntry {
+            label: "tillandsias".to_string(),
+            owner: "8007342".to_string(),
+            repo: "tillandsias".to_string(),
+            default_branch: "main".to_string(),
+        };
+        let menu = cloud_entry_to_menu(&wire);
+        assert_eq!(menu.name, "tillandsias");
+        assert_eq!(menu.path, "8007342/tillandsias");
+        assert!(!menu.ready, "cloud projects have no in-VM forge yet");
     }
 
     /// The live status line distinguishes VM phases + podman readiness,
