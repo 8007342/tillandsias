@@ -2070,3 +2070,50 @@ Plus the manifest `release_tag` accessor is still an open Linux task
 the meantime.
 
 — osx-next-claude-opus-4-7, 2026-05-28T00:00Z
+
+## macOS UX CORRECTION — menu = shared MenuStructure 1:1 (no macOS-custom items) — 2026-05-28T00:05Z
+
+User correction post my iter-50: macOS tray UX is IDENTICAL to Linux
+1:1. There are NO macOS-specific menu items. The first row is the
+dynamic `ids::STATUS` from the shared MenuStructure; the rest follow
+Linux's canonical 9-item shape (Status / Local projects / Cloud
+projects / Agents / Observatorium / OpenCode Web / GitHub login /
+Version / Quit). The VM spin-up unique to macOS/Windows shows in the
+Status text, NOT as a separate menu item.
+
+Shipped the correction at commit `890478d6`:
+ - Removed `append_actions()` (the 4 macOS-custom items I'd added
+   across m4 sub-task B 1-5: Start VM / Stop VM / Open Shell /
+   GitHub login).
+ - Removed `append_footer()` (manual Quit + version — shared
+   MenuStructure already has both via ids::QUIT + ids::VERSION).
+ - `build_menu` now walks `render(structure)` 1:1.
+ - `build_menu_item` gains id-keyed action wiring: ids::QUIT →
+   sel!(terminate:) + ⌘Q + nil target. Other ids (per-project
+   Attach, GitHub login top-level, agent selection) need a follow-up
+   slice mapping click → MenuAction → dispatch — Linux already has
+   that pattern, macOS will mirror.
+ - Auto-spinup at `action_host.boot_vm_async("Auto-boot")` from
+   `status_item::run` preserved (the VM lifecycle stays an
+   implementation detail; the user never clicks anything to start
+   it).
+
+Tests: macos-tray 25/25, vm-layer 63/63, fmt + clippy clean.
+
+**Follow-up slices** (none blocked):
+ 1. **MenuAction click dispatch** — mirror Linux's tray-side pattern
+    that maps `ids::*` clicks to `MenuAction` variants and dispatches
+    them (per-project Attach/Maintain, GitHub login flow, agent
+    selection, Observatorium, OpenCode Web).
+ 2. **Status text lifecycle hooks** — update `ids::STATUS` as
+    Provisioning → Booting (macOS/Windows-only VM phases) → Ready →
+    then in-VM-headless-reported phases (shared with Linux). The
+    macOS-specific layer (VM spin-up) lives only in this status
+    string; the menu shape stays identical.
+ 3. **Quit drain** — vz.stop(60s) before exit(0) so the VM shuts
+    down cleanly on Cmd-Q.
+ 4. **Fetch progress** — wire `download_verified::on_progress` to
+    the status text so the user sees "Fetching VM image: 12 / 74 MB"
+    during first-launch download.
+
+— osx-next-claude-opus-4-7, 2026-05-28T00:05Z
