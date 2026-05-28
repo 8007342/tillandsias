@@ -1,0 +1,106 @@
+# @trace spec:runtime-diagnostics-stream
+# Typed-event formatter wire-shape pinning.
+#
+# spec:runtime-diagnostics-stream mandates four typed event lines beyond
+# `event:container_launch`: container_exit, container_signal,
+# resource_exhaustion, container_stderr. The corresponding pure formatters
+# live in `crates/tillandsias-podman/src/client.rs` (added in gap-3 phase-1
+# of plan/issues/linux-headless-spec-gaps-2026-05-27.md) and are STAGED
+# behind `#[allow(dead_code)]` until the gap-2/gap-3 phase-2 live-runtime
+# wiring lands.
+#
+# Without this litmus the staged formatters could quietly drift before any
+# caller exercises them. Their unit tests pin the exact wire shape, but a
+# rename or accidental deletion wouldn't surface anywhere a CI orchestrator
+# routinely looks. This instant-phase litmus greps the canonical surfaces
+# so a future shipped-but-untested rename fails fast.
+#
+# Keep these greps in lockstep with the unit tests:
+#   container_exit_event_shape
+#   container_signal_event_shape
+#   resource_exhaustion_event_shape
+#   container_stderr_event_shape
+
+name: litmus:runtime-diagnostics-typed-events-shape
+spec: runtime-diagnostics-stream
+phase: pre-build
+description: >
+  Verify the four spec-mandated typed-event formatters
+  (container_exit / container_signal / resource_exhaustion /
+  container_stderr) remain present in the podman crate with their
+  pinned wire shapes, even while staged behind #[allow(dead_code)]
+  ahead of the live-runtime wiring slice.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-podman/src/client.rs
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "container_exit formatter + wire-shape literal present"
+    command: >
+      grep -F 'fn format_container_exit_event' crates/tillandsias-podman/src/client.rs
+      && grep -F 'event:container_exit container=' crates/tillandsias-podman/src/client.rs
+    timeout_ms: 3000
+    expected_behavior: "event:container_exit container="
+
+  - step: "container_signal formatter + wire-shape literal present"
+    command: >
+      grep -F 'fn format_container_signal_event' crates/tillandsias-podman/src/client.rs
+      && grep -F 'event:container_signal container=' crates/tillandsias-podman/src/client.rs
+    timeout_ms: 3000
+    expected_behavior: "event:container_signal container="
+
+  - step: "resource_exhaustion formatter + wire-shape literal present"
+    command: >
+      grep -F 'fn format_resource_exhaustion_event' crates/tillandsias-podman/src/client.rs
+      && grep -F 'event:resource_exhaustion container=' crates/tillandsias-podman/src/client.rs
+    timeout_ms: 3000
+    expected_behavior: "event:resource_exhaustion container="
+
+  - step: "container_stderr formatter + wire-shape literal present"
+    command: >
+      grep -F 'fn format_container_stderr_event' crates/tillandsias-podman/src/client.rs
+      && grep -F 'event:container_stderr container=' crates/tillandsias-podman/src/client.rs
+    timeout_ms: 3000
+    expected_behavior: "event:container_stderr container="
+
+  - step: "emit_diagnostic_event wrapper still gated on the global filter"
+    # The wrapper consults DiagnosticsFilter::global() before emitting, so
+    # TILLANDSIAS_DEBUG_FILTER / _CONTAINER / _LEVEL env vars take effect
+    # across all typed events (gap-5 phase-1). A regression that bypasses
+    # the filter would break event filtering silently.
+    command: >
+      grep -F 'fn emit_diagnostic_event' crates/tillandsias-podman/src/client.rs
+      && grep -F 'DiagnosticsFilter::global()' crates/tillandsias-podman/src/client.rs
+    timeout_ms: 3000
+    expected_behavior: "DiagnosticsFilter::global()"
+
+  - step: "unit tests pinning each shape are attached"
+    # If a future refactor renames the test or drops the assertion, this
+    # step surfaces the regression immediately even before cargo test runs.
+    command: >
+      grep -F 'fn container_exit_event_shape' crates/tillandsias-podman/src/client.rs
+      && grep -F 'fn container_signal_event_shape' crates/tillandsias-podman/src/client.rs
+      && grep -F 'fn resource_exhaustion_event_shape' crates/tillandsias-podman/src/client.rs
+      && grep -F 'fn container_stderr_event_shape' crates/tillandsias-podman/src/client.rs
+    timeout_ms: 3000
+    expected_behavior: "container_stderr_event_shape"
+
+observability:
+  traces:
+    - "@trace spec:runtime-diagnostics-stream"
+  expected_log: "Typed-event formatters (exit/signal/resource/stderr) present with pinned wire shapes"
+  log_fields:
+    spec: "runtime-diagnostics-stream"
+    test: "runtime-diagnostics-typed-events-shape"
+
+rollback:
+  on_failure: >
+    A formatter was renamed, moved, or deleted. Check the unit tests in
+    crates/tillandsias-podman/src/client.rs (the `*_event_shape` tests)
+    and plan/issues/linux-headless-spec-gaps-2026-05-27.md (gap-3
+    phase-1). Restore the canonical name or update both the spec scenario
+    literal and this litmus' greps in lockstep.
+  command: "grep -nE 'fn format_container|fn emit_diagnostic_event|event:container_(launch|exit|signal|stderr)|event:resource_exhaustion' crates/tillandsias-podman/src/client.rs | head -20"

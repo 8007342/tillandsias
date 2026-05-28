@@ -153,6 +153,14 @@ bounded slices from. Each item is sized for one loop iteration. NOT for siblings
   produce the expected sections. The orchestrator now sees
   container-start health forensics in the same durable record as the
   capability report.
+- **GAP 3 PHASE-1 PINNING**: new instant-phase litmus
+  `litmus-runtime-diagnostics-typed-events-shape` greps for the four
+  staged formatter functions + their wire-shape literals + the
+  `DiagnosticsFilter::global()` gate + the four unit-test names. The
+  formatters are still `#[allow(dead_code)]` ahead of the gap-2/3
+  phase-2 wiring slice; this litmus surfaces any rename or accidental
+  deletion before the wiring lands. Six grep-based steps, all green
+  on linux-next HEAD.
   (Next diagnostics gap: GAP 2 / GAP 3 PHASE-2 — wire the live podman
   events parser to emit_diagnostic_event when `debug` is on.)
 
