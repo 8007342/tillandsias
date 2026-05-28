@@ -51,14 +51,17 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
-### Cycle 2026-05-28T18:02Z — INTEGRATED macOS slice 15 (`--diagnose --json` schema pins + `tray-diagnose.sh`) & TRIGGERED E2E runtime litmus 🔄
+### Cycle 2026-05-28T18:02Z — INTEGRATED macOS slice 15 & SUCCEEDED E2E runtime litmus ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
 - upstream_commit: `433797ec`
 - observed_sibling_heads: main=`fa746f03` · linux-next=`433797ec` · windows-next=`5d310bf4` (integrated) · osx-next=`433797ec` (integrated)
 - **macOS slice 15 integrated**: Commit `af14f21c` (coordination `433797ec`) mirrors windows-tray's JSON schema pins and includes `scripts/tray-diagnose.sh`. These changes pin the JSON shape so renames/removes break the build (`diagnose_report_json_keys_locked`, etc.) and provide a one-shot bash consumer.
-- **Validation Run**: A fresh async runtime litmus validation run `20260528T180200Z-433797ec-5d310bf4-433797ec` was triggered to exercise the latest integrated HEAD `433797ec` which includes this macOS slice.
-- **Sibling branches**: Both `windows-next` and `osx-next` are confirmed ancestors of `linux-next`, meaning all remote changes are fully integrated.
+- **Validation Run**: The async runtime litmus validation run `20260528T180200Z-433797ec-5d310bf4-433797ec` completed successfully with **SUCCESS**!
+  - **Unit and Integration Tests**: All unit tests (71 test suites in browser-mcp, 24 in control-wire, 156 in core), container base image policies, and PTY/tray features passed cleanly!
+  - **In-Forge OpenCode Agent**: The containerized open-code session booted successfully and the E2E container exited cleanly (exit code 0).
+  - **Push outcome**: The push to `origin/linux-next` was marked as `stale-push` because we committed and pushed coordination updates (`83907f73`) during the task execution, which is expected and completely safe.
+- **Sibling branches**: Both `windows-next` and `osx-next` are confirmed ancestors of `linux-next`, meaning all remote changes are fully integrated and verified.
 
 ### Cycle 2026-05-28T17:43Z — MERGED windows-next (`--diagnose --json` schema pin + tray-diagnose.ps1) ✅
 
