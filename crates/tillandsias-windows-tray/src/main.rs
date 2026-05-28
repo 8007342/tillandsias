@@ -40,6 +40,17 @@ fn main() {
     // Headless diagnostic: provision the VM to Ready, print progress, exit with
     // status. For CI smoke + the live-provision dress rehearsal (the GUI tray
     // has no console). Otherwise launch the interactive tray.
+    //
+    // NOTE on stdio: the release tray is a GUI-subsystem binary, so when
+    // invoked from PowerShell `println!` to a captured pipe may or may not be
+    // delivered (Rust treats a detached stdout as BrokenPipe and discards).
+    // The reliable path for support scripts is to REDIRECT to a file
+    // (`exe --diagnose --json > out.json`) — file handles work regardless of
+    // console attachment — and to branch on the *exit code* rather than the
+    // captured output. `scripts/install-windows.ps1` and `scripts/tray-diagnose.ps1`
+    // do this. Tried AttachConsole(ATTACH_PARENT_PROCESS) — it attaches the
+    // binary to the *visible* parent console, bypassing PowerShell's pipe, so
+    // captured-output scripts see nothing. Reverted.
     if std::env::args().any(|a| a == "--provision-once") {
         std::process::exit(notify_icon::provision_once());
     }

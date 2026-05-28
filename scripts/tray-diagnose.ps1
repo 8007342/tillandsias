@@ -78,9 +78,17 @@ Write-Host '============================='
 Write-Host "Using exe: $exe"
 Write-Host
 
-$raw = & $exe --diagnose --json 2>$null
+# NOTE: the release tray is a GUI-subsystem binary; PowerShell's `&` capture of
+# its stdout is unreliable (large writes from `println!` can be silently
+# dropped). cmd.exe handles native stdio directly, so we route through it via
+# a temp file. See cheatsheets/runtime/windows-tray-diagnostics.md.
+$tmp = Join-Path $env:TEMP "tray-diagnose-$([guid]::NewGuid().ToString('N')).json"
+& cmd.exe /c "`"$exe`" --diagnose --json > `"$tmp`" 2>nul"
+$trayExit = $LASTEXITCODE
+$raw = Get-Content $tmp -Raw -ErrorAction SilentlyContinue
+Remove-Item $tmp -ErrorAction SilentlyContinue
 if (-not $raw) {
-    Write-Host "FAIL : --diagnose --json produced no output (exit $LASTEXITCODE)" -ForegroundColor Red
+    Write-Host "FAIL : --diagnose --json produced no output (exit $trayExit)" -ForegroundColor Red
     exit 1
 }
 try {
