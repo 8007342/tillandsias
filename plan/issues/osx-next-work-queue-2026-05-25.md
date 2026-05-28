@@ -2153,3 +2153,25 @@ step 5 lands.
   accessor unlocking the manifest-trust-root refactor, (b) Linux
   or Windows flags a new cross-host concern, or (c) the user
   reports interactive smoke results from a fresh .app install.
+
+### event: macOS .app rebuild + ship for m8 user-attended smoke — 2026-05-28T04:30Z
+
+- Ran `./scripts/build-macos-tray.sh` against commit `eee670ab`
+  (which carries all 7 UX-correction slices). Output:
+    Bundle: `dist/Tillandsias.app` (version 0.2.260527.5)
+    Tarball: `dist/tillandsias-tray-0.2.260527.5-macos-arm64.tar.gz`
+    Size: 1.49 MiB
+    SHA-256: `2694745a8435804be84049570a00c939b103a9e6e33bf0eaec03f001eea3879e`
+    Codesign: ad-hoc with com.apple.security.virtualization
+    Verify: "satisfies its Designated Requirement"
+- Tarball delivered to the user proactively via SendUserFile so they
+  can run the m8 smoke checklist (Start VM auto-boots → chip cycles
+  through fetch phases on cold launch → Open Shell + GitHub login
+  route via PTY-over-vsock → Quit drains the VM 60 s before exit).
+- This is the only remaining true blocker for v0.0.1; everything
+  else is nice-to-have.
+- Streak: 0 (productive iter — shipped a build artifact to the
+  user, which is meaningful work toward closing v0.0.1 even though
+  it's not a source-tree code commit). Next macOS iter eligible at
+  ~05:00Z to FF-pull and check for either smoke feedback or a new
+  cross-host concern.
