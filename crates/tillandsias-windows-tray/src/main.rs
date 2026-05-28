@@ -46,6 +46,9 @@ fn main() {
     if std::env::args().any(|a| a == "--status-once") {
         std::process::exit(notify_icon::status_once());
     }
+    if std::env::args().any(|a| a == "--diagnose") {
+        std::process::exit(notify_icon::diagnose());
+    }
     notify_icon::run();
 }
 
