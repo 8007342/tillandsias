@@ -13,3 +13,10 @@ Reset (delete this file) on the next productive iter.
   the macOS surface is comprehensive. Loop awaiting m8 user
   smoke feedback or a new cross-host concern naming macOS
   crates. Next wake 1h per streak-1 schedule.
+
+- 2026-05-28T21:30Z — streak=2. FF-pulled `b52f51b7` (headless
+  observatorium-mode emitter + typed stderr handle, gap-3
+  phase-2 symmetry) + `9e33a458` (diagnostics distill summaries
+  backfill) + work-queue entries. All in-VM headless / Linux-
+  side, no macOS-actionable code. macos-tray still builds clean.
+  Surface unchanged from streak-1. Next wake 2h per streak-2.
