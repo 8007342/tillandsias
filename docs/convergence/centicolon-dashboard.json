@@ -1,13 +1,13 @@
 {
-  "generated_at": "2026-05-28T08:04:59Z",
+  "generated_at": "2026-05-28T09:03:28Z",
   "title": "Progression Trends",
   "series_namespace": "local_development",
   "series_label": "Local Development",
   "source_file": "target/convergence/centicolon-signature.jsonl",
-  "record_count": 12,
-  "sparkline_closed": "██▁█████████",
-  "sparkline_residual": "▁▁█▁▁▁▁▁▁▁▁▁",
-  "alert_level": "yellow",
+  "record_count": 13,
+  "sparkline_closed": "██▁██████████",
+  "sparkline_residual": "▁▁█▁▁▁▁▁▁▁▁▁▁",
+  "alert_level": "green",
   "alert_thresholds": {
     "red_below_percent_closed": 90,
     "yellow_below_percent_closed": 95
@@ -63,25 +63,25 @@
     "start_commit": "5a593bc4f9f4",
     "end_release": "0.2.260527.5",
     "end_commit": "fafabe1da403",
-    "count": 12,
-    "closed": "██▁█████████",
-    "residual": "▁▁█▁▁▁▁▁▁▁▁▁"
+    "count": 13,
+    "closed": "██▁██████████",
+    "residual": "▁▁█▁▁▁▁▁▁▁▁▁▁"
   }
 ],
   "latest": {
   "release": "0.2.260527.5",
-  "date": "2026-05-28T08:03:56Z",
+  "date": "2026-05-28T08:04:36Z",
   "commit": "fafabe1da403",
   "total_cc": 650,
-  "earned_cc": 590,
-  "residual_cc": 60,
-  "percent_closed": 90.76923076923077,
-  "worst_spec": "spec:dev-build",
-  "worst_reason": "Clippy warnings found: run 'cargo clippy --workspace' to see details (see /tmp/clippy-check.log)",
+  "earned_cc": 650,
+  "residual_cc": 0,
+  "percent_closed": 100,
+  "worst_spec": "n/a",
+  "worst_reason": "n/a",
   "evidence": "target/convergence/evidence-bundle.json",
   "projection": "docs/convergence/centicolon-dashboard.md",
-  "ci_result": "FAIL",
-  "ci_run_id": "local-ci-20260528T080356Z",
+  "ci_result": "PASS",
+  "ci_run_id": "local-ci-20260528T080436Z",
   "trend_glyph": ""
 },
   "history": [
@@ -275,6 +275,22 @@
     "projection": "docs/convergence/centicolon-dashboard.md",
     "ci_result": "FAIL",
     "ci_run_id": "local-ci-20260528T080356Z",
+    "trend_glyph": ""
+  },
+  {
+    "release": "0.2.260527.5",
+    "date": "2026-05-28T08:04:36Z",
+    "commit": "fafabe1da403",
+    "total_cc": 650,
+    "earned_cc": 650,
+    "residual_cc": 0,
+    "percent_closed": 100,
+    "worst_spec": "n/a",
+    "worst_reason": "n/a",
+    "evidence": "target/convergence/evidence-bundle.json",
+    "projection": "docs/convergence/centicolon-dashboard.md",
+    "ci_result": "PASS",
+    "ci_run_id": "local-ci-20260528T080436Z",
     "trend_glyph": ""
   }
 ]
