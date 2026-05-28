@@ -298,6 +298,26 @@ bounded slices from. Each item is sized for one loop iteration. NOT for siblings
   underflow). spec permits dropping oldest on overflow but does
   not require it — tokio mpsc's await-on-full is the simpler
   honest backpressure signal.
+- **PRODUCTION VALIDATION 2026-05-28T19:02Z**: the local annex
+  capture at `target/forge-diagnostics/diagnostics_20260528T190248Z.
+  stderr.log` confirms gap-3 phase-2g `event:container_stderr` is
+  shipping real spec-shape lines under `--diagnostics`:
+  `[<ISO-8601>] event:container_stderr container=tillandsias-proxy
+  line="…"`. 115 stderr lines across two support containers
+  (`tillandsias-proxy` × 107, `tillandsias-git-…` × 8). No exits/
+  signals/oom because the support set is long-running. The earlier
+  18:42Z capture has zero typed-event-2g lines (pre-deployment),
+  so the binary cutover happened between those two runs.
+  Companion slice: `scripts/distill-forge-diagnostics.sh` now
+  surfaces ALL 5 typed-event arms in a "Typed-event arms" table
+  with sample lines for exit/signal/resource and a top-5
+  noisiest-by-container table for stderr — so the orchestrator
+  reads these from the durable `plan/diagnostics/` summaries
+  instead of having to chase the raw `target/forge-diagnostics/`
+  logs that don't propagate across hosts. Also fixed a
+  pre-existing `set -euo pipefail` abort in distill when the raw
+  log is empty (grep no-match on `^TIMESTAMP=` would crash before
+  any summary was written).
   (Next diagnostics gap: GAP 2 / GAP 3 PHASE-2 — wire the live podman
   events parser to emit_diagnostic_event when `debug` is on.)
 
