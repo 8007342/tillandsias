@@ -2481,3 +2481,27 @@ step 5 lands.
     * slice 12  — chip surfaces `last_event` via compose_chip_text
 - Delivered proactively via SendUserFile.
 - Streak: 0 (productive iter). Next macOS iter eligible at ~14:30Z.
+
+### event: macOS slice 13 — Notification Center banner on provisioning failure — 2026-05-28T14:30Z
+
+- Commit `60a5cb33` mirrors item 1 of windows-tray's `8992652a`
+  (show_balloon). On the Err branch of `run_start`, fires a macOS
+  Notification Center banner so the user notices a failed VM boot
+  even without hovering the menubar icon. Title=Tillandsias /
+  subtitle=Provisioning error / body=<reason>.
+- Implementation: `osascript -e 'display notification "..."'`
+  shell-out rather than `objc2-user-notifications` (which pins a
+  different objc2 major than the workspace's 0.5) plus the
+  `UNUserNotificationCenter` permission-request plumbing.
+  osascript notifications fire without a per-app permission prompt
+  on macOS 11+ since the script editor's bundle ID is preauthorized.
+- Best-effort: spawn detached, log on error, never block. The
+  chip text remains the authoritative failure surface; the
+  notification is a "look here" nudge.
+- New `applescript_escape_single_quoted` helper defangs `\`, `"`,
+  and newlines so a quote-containing error string can't break out
+  of the AppleScript literal. Covered by
+  `applescript_escape_handles_metas_and_newlines` unit test.
+- Tests + lint clean: macos-tray 32/32 (+1); clippy -D warnings
+  clean; fmt clean.
+- Streak: 0 (productive iter). Next macOS iter eligible at ~15:00Z.
