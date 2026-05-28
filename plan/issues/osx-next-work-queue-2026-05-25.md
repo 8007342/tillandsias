@@ -2304,3 +2304,27 @@ step 5 lands.
   text, menu re-render, fetch progress, Quit drain). Remaining
   items: nice-to-have manifest.release_tag (Linux-owned) +
   user-attended m8 smoke.
+
+### event: macOS slice 10 — symmetric initial menu via menu_state::build — 2026-05-28T08:30Z
+
+- Commit `c9541768` closes the slice-8c-noted asymmetry: the
+  initial menu in `status_item::run` now uses
+  `tillandsias_host_shell::menu_state::build(&initial_state)` —
+  the same path the poller's rebuild uses — instead of
+  `MenuStructure::initial_provisioning()`.
+- `initial_state = MenuState::initial()` with `target=MacosTray`
+  and `status_text="🔵 Setting up Fedora Linux…"` (matches the
+  boot-phase default boot_vm_async writes via set_status_text).
+- User-visible: frame 0 already shows the structurally-identical
+  9-item Ready menu (status / local-projects / cloud-projects /
+  agents / observatorium / opencode-web / github-login / version
+  footer / quit) — same shape Linux native + Windows render. No
+  more morph from 2-item provisioning to 9-item ready on first
+  poll tick.
+- Tests + lint clean: macos-tray 27/27; clippy -D warnings clean;
+  fmt clean.
+- Streak: 0 (productive iter). Next macOS iter eligible at
+  ~09:00Z. With slices 1-10 done the macOS m4 sub-task B surface
+  is structurally + functionally 1:1 with windows-tray (modulo
+  m8 user smoke + the linux-owned release_tag accessor). Loop
+  will likely shift to noop cadence soon.
