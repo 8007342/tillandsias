@@ -160,17 +160,21 @@ pub fn install_status_item(
 pub fn build_menu(
     mtm: MainThreadMarker,
     structure: &MenuStructure,
-    _action_host: &TrayActionHost,
+    action_host: &TrayActionHost,
 ) -> Retained<NSMenu> {
     let menu = NSMenu::new(mtm);
     for spec in render(structure) {
-        let item = build_menu_item(mtm, &spec);
+        let item = build_menu_item(mtm, &spec, action_host);
         menu.addItem(&item);
     }
     menu
 }
 
-fn build_menu_item(mtm: MainThreadMarker, spec: &MacMenuItemSpec) -> Retained<NSMenuItem> {
+fn build_menu_item(
+    mtm: MainThreadMarker,
+    spec: &MacMenuItemSpec,
+    action_host: &TrayActionHost,
+) -> Retained<NSMenuItem> {
     // Separator items have no title; the shared menu_disabled_v2 spec
     // doesn't currently produce separators, but if it does in future
     // the empty label is the convention.
@@ -186,10 +190,15 @@ fn build_menu_item(mtm: MainThreadMarker, spec: &MacMenuItemSpec) -> Retained<NS
         // NSControlStateValueOn = 1
         unsafe { item.setState(objc2_app_kit::NSControlStateValueOn) };
     }
-    // ID-keyed action wiring. Currently only Quit is hooked; other
-    // menu actions (per-project Attach, GitHub login, agent selection,
-    // etc.) need a click → MenuAction → dispatch path that mirrors the
-    // Linux tray's handling — slice planned, not yet shipped.
+    // ID-keyed action wiring.
+    // - Quit uses AppKit's standard responder-chain `terminate:` with
+    //   nil target + ⌘Q shortcut (the canonical AppKit pattern).
+    // - Every other enabled, leaf-ish item gets the generic
+    //   `trayAction:` selector targeting the shared TrayActionHost.
+    //   The id string is stashed on the NSMenuItem via
+    //   `setRepresentedObject:`; the action_host reads it back +
+    //   resolves to `MenuAction` via the shared `menu_action::resolve`
+    //   table (same dispatch surface windows-tray uses).
     if spec.id == ids::QUIT {
         unsafe {
             item.setKeyEquivalent(&NSString::from_str("q"));
@@ -197,11 +206,21 @@ fn build_menu_item(mtm: MainThreadMarker, spec: &MacMenuItemSpec) -> Retained<NS
             // Nil target → responder chain → NSApplication terminates.
             item.setTarget(None);
         }
+    } else if spec.enabled {
+        let id_str = NSString::from_str(&spec.id);
+        // Coerce `&TrayActionHost` to `&AnyObject` for `setTarget:` via
+        // the declared class's super chain (NSObject → AnyObject).
+        let host_any: &AnyObject = <TrayActionHost as ClassType>::as_super(action_host).as_ref();
+        unsafe {
+            item.setAction(Some(sel!(trayAction:)));
+            item.setTarget(Some(host_any));
+            item.setRepresentedObject(Some(&id_str));
+        }
     }
     if !spec.children.is_empty() {
         let submenu = NSMenu::new(mtm);
         for child in &spec.children {
-            let child_item = build_menu_item(mtm, child);
+            let child_item = build_menu_item(mtm, child, action_host);
             submenu.addItem(&child_item);
         }
         item.setSubmenu(Some(&submenu));

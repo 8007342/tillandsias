@@ -167,6 +167,36 @@ declare_class!(
                 tillandsias_host_shell::pty::PtyIntent::GithubLogin,
             );
         }
+
+        /// Generic shared-MenuStructure click dispatcher. Every menu
+        /// item built from the shared `MenuStructure` (except Quit,
+        /// which uses the responder-chain `terminate:`) has its
+        /// `action = sel!(trayAction:)` + `target = action_host` +
+        /// `representedObject = NSString::from_str(spec.id)`. On
+        /// click, AppKit delivers `sender = NSMenuItem`; we read the
+        /// id string, resolve to `MenuAction` via the shared
+        /// `menu_action::resolve` table, and dispatch — mirroring
+        /// `tillandsias-windows-tray::notify_icon::dispatch_action`.
+        #[method(trayAction:)]
+        fn tray_action(&self, sender: Option<&AnyObject>) {
+            use objc2::msg_send_id;
+            use objc2_app_kit::NSMenuItem;
+            use objc2_foundation::NSString;
+
+            let Some(sender) = sender else { return };
+            let item: &NSMenuItem = unsafe { &*(sender as *const AnyObject).cast() };
+            // SAFETY: representedObject returns Option<Retained<NSObject>>.
+            // We set it to an NSString at menu-build time, so the downcast
+            // is safe for our menu items. msg_send_id! handles the +0/+1
+            // retain conventions correctly for `representedObject`.
+            let rep: Option<Retained<NSString>> =
+                unsafe { msg_send_id![item, representedObject] };
+            let id_owned = match rep {
+                Some(s) => s.to_string(),
+                None => return,
+            };
+            self.dispatch_menu_action(&id_owned);
+        }
     }
 );
 
@@ -371,6 +401,99 @@ impl TrayActionHost {
         // class ivars before init runs.
         let this = mtm.alloc::<Self>().set_ivars(ivars);
         unsafe { msg_send_id![super(this), init] }
+    }
+
+    /// Resolve a menu-item id to its `MenuAction` and dispatch.
+    /// Mirrors `tillandsias-windows-tray::notify_icon::dispatch_action`
+    /// so the per-host implementations of the shared menu agree on
+    /// what each item does.
+    ///
+    /// Slice scope (this iter): handle the items Windows actually
+    /// has a side-effect for today (Retry, Open URLs, Open Log), log
+    /// the others honestly (don't pretend Attach/GithubLogin work
+    /// without the in-VM headless + status state). Subsequent
+    /// slices add SelectAgent + menu re-render, Quit drain, and the
+    /// real Attach/Maintain/GithubLogin PTY path once the macOS tray
+    /// holds enough state to identify the active project.
+    pub fn dispatch_menu_action(&self, id: &str) {
+        use tillandsias_host_shell::menu_action::{self, MenuAction};
+
+        let action = menu_action::resolve(id);
+        eprintln!("[tillandsias-tray] click: id={id} action={action:?}");
+        match action {
+            MenuAction::Quit => {
+                // The menu's Quit item already wires `terminate:`
+                // directly (responder chain → NSApplication), so this
+                // arm typically isn't reached. Defensive log only.
+                eprintln!("[tillandsias-tray] Quit dispatched via trayAction (unexpected)");
+            }
+            MenuAction::Retry => {
+                // Mirror Windows: re-trigger provisioning. boot_vm_async
+                // is idempotent + busy-gated, so a click while already
+                // booting is a no-op.
+                self.boot_vm_async("Retry");
+            }
+            MenuAction::OpenLog => {
+                // Open ~/Library/Logs/Tillandsias/tray.log (or its
+                // parent if the file isn't yet written). Best-effort:
+                // shell out to `open` so the user's default text editor
+                // takes over. Mirrors Windows's `open_log_file`.
+                if let Some(home) = std::env::var_os("HOME") {
+                    let log_dir = std::path::PathBuf::from(home).join("Library/Logs/Tillandsias");
+                    let _ = std::fs::create_dir_all(&log_dir);
+                    let _ = std::process::Command::new("open").arg(&log_dir).spawn();
+                }
+            }
+            MenuAction::OpenObservatorium | MenuAction::OpenOpenCodeWeb => {
+                // Same gating as Windows today: no URL exists until the
+                // VM + router are up (gui-passthrough is v2 per the
+                // macos-tray spec). Log + skip; the menu items also
+                // come in with `enabled=false` from
+                // `menu_disabled_v2::render`, so this arm shouldn't be
+                // reachable in practice — defensive only.
+                eprintln!("[tillandsias-tray] {action:?}: no URL yet (gui-passthrough is v2)");
+            }
+            MenuAction::SelectAgent(agent) => {
+                // TODO(slice): mutate held MenuState + re-render the
+                // menu so the checkmark moves. Mirrors Windows's
+                // `apply_menu_action_state`. Stubbed for now — clicking
+                // updates stderr but the menu doesn't visually change.
+                eprintln!(
+                    "[tillandsias-tray] SelectAgent({agent:?}): TODO wire MenuState + rerender"
+                );
+            }
+            MenuAction::Attach {
+                ref scope,
+                ref name,
+            }
+            | MenuAction::Maintain {
+                ref scope,
+                ref name,
+            } => {
+                // TODO(slice): build a PtyIntent + project from the
+                // click, run attach_pty against the in-VM forge for
+                // that project. Needs MenuState ownership + a way to
+                // resolve "active project" from a click. Stubbed.
+                eprintln!(
+                    "[tillandsias-tray] {action:?} (scope={scope:?}, name={name:?}): \
+                     TODO wire to attach_pty"
+                );
+            }
+            MenuAction::GithubLogin => {
+                // Top-level GitHub login. Same gate as Attach —
+                // needs the in-VM headless to be Ready. Defer to the
+                // existing `attach_pty(GithubLogin)` path, which
+                // already logs "no VM running" cleanly when the VM
+                // isn't up yet.
+                self.attach_pty(
+                    "GitHub login",
+                    tillandsias_host_shell::pty::PtyIntent::GithubLogin,
+                );
+            }
+            MenuAction::CloudOverflow | MenuAction::Inert => {
+                // Informational / overflow placeholders. No action.
+            }
+        }
     }
 
     /// Shared boot-the-VM path. Called by the `startVm:` selector AND
