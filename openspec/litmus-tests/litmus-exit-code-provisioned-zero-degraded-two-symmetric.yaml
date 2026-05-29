@@ -1,0 +1,67 @@
+# @trace spec:windows-native-tray, spec:macos-native-tray
+# Cross-tray drift protection for the `--diagnose` exit-code contract.
+#
+# Both spec.md files declare the SAME invariant: --diagnose exits 0 (healthy),
+# 2 (degraded), or 1 (hard failure). Support tooling on both platforms
+# (scripts/tray-diagnose.{ps1,sh}, scripts/install-{windows.ps1,macos.sh}'s
+# post-install sanity check) branches on the exit code as a tri-state and
+# MUST see byte-identical semantics across OSes.
+#
+# Spec invariant declarations:
+#   - windows-native-tray.invariant.diagnose-exit-codes (spec.md, commit
+#     145ff3d2)
+#   - macos-native-tray.invariant.diagnose-exit-codes (spec.md, commit
+#     2bd4faaf slice 22)
+#
+# Both invariants are MEASURABLE via the identically-named unit test
+# `exit_code_provisioned_zero_degraded_two` on each side:
+#   - windows: crates/tillandsias-windows-tray/src/notify_icon.rs (commit
+#     5908fc64)
+#   - macos:   crates/tillandsias-macos-tray/src/diagnose.rs (slice 15a,
+#     part of the slice 11/14/15 series)
+#
+# This litmus enforces the SYMMETRY between them at the source level — a
+# refactor that drops or renames the exit-code test on one side without
+# the other would silently desymmetrize the tri-state contract, breaking
+# support tooling on the desymmetrized OS.
+#
+# Pattern matches macOS slices 27 + 28: each step's expected_behavior is a
+# literal substring of the SECOND grep in the && chain (the pin-test fn
+# name) so the runner's matcher (run-litmus-test.sh:466 case-insensitive
+# fixed-string substring search) only PASSes when BOTH greps in the chain
+# produce expected content.
+
+name: litmus:exit-code-provisioned-zero-degraded-two-symmetric
+spec: windows-native-tray
+phase: pre-build
+description: "Pin the cross-tray --diagnose exit-code contract (0/2/1) via the identically-named exit_code_provisioned_zero_degraded_two unit test on both sides."
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-windows-tray/src/notify_icon.rs
+  - workspace contains crates/tillandsias-macos-tray/src/diagnose.rs
+  - workspace contains openspec/specs/windows-native-tray/spec.md
+  - workspace contains openspec/specs/macos-native-tray/spec.md
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "windows-tray exit-code pin test exists"
+    command: "grep -F 'fn exit_code_provisioned_zero_degraded_two' crates/tillandsias-windows-tray/src/notify_icon.rs"
+    expected_behavior: "exit_code_provisioned_zero_degraded_two"
+    timeout_ms: 3000
+
+  - step: "macos-tray exit-code pin test exists"
+    command: "grep -F 'fn exit_code_provisioned_zero_degraded_two' crates/tillandsias-macos-tray/src/diagnose.rs"
+    expected_behavior: "exit_code_provisioned_zero_degraded_two"
+    timeout_ms: 3000
+
+  - step: "windows spec declares the diagnose-exit-codes invariant"
+    command: "grep -F 'diagnose-exit-codes' openspec/specs/windows-native-tray/spec.md"
+    expected_behavior: "diagnose-exit-codes"
+    timeout_ms: 3000
+
+  - step: "macos spec declares the diagnose-exit-codes invariant"
+    command: "grep -F 'diagnose-exit-codes' openspec/specs/macos-native-tray/spec.md"
+    expected_behavior: "diagnose-exit-codes"
+    timeout_ms: 3000
