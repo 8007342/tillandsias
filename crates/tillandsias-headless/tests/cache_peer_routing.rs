@@ -398,3 +398,49 @@ fn test_cache_peer_documentation() {
         "comment should mention enclave network"
     );
 }
+
+// ============================================================================
+// Test 10: Proxy Egress Isolation and TCP Reset Rules
+// ============================================================================
+
+#[test]
+fn test_proxy_egress_isolation_tcp_reset() {
+    // @trace plan/forge-improvements/proposals/2026-05-28-proxy-egress-isolation.md
+    // Verify Squid TCP Reset (RST) configuration on strictly denied runtime traffic.
+    // This provides egress defense-in-depth, preventing HTTP 403 leaks.
+
+    let squid_conf = fs::read_to_string("images/proxy/squid.conf")
+        .or_else(|_| fs::read_to_string("../images/proxy/squid.conf"))
+        .or_else(|_| fs::read_to_string("../../images/proxy/squid.conf"))
+        .expect("Failed to read squid.conf");
+
+    // Verify strict_deny_acl exists and maps to strict_port
+    assert!(
+        squid_conf.contains("acl strict_deny_acl strict_port"),
+        "strict_deny_acl must be defined as strict_port"
+    );
+
+    // Verify deny_info TCP_RESET is configured for strict_deny_acl
+    assert!(
+        squid_conf.contains("deny_info TCP_RESET strict_deny_acl"),
+        "deny_info TCP_RESET strict_deny_acl must be configured to reset connections on deny"
+    );
+
+    // Verify http_access deny strict_deny_acl is applied
+    assert!(
+        squid_conf.contains("http_access deny strict_deny_acl"),
+        "http_access deny strict_deny_acl must be applied to trigger the TCP Reset"
+    );
+
+    // Ensure deny_info TCP_RESET is defined before http_access deny strict_deny_acl
+    let deny_info_idx = squid_conf
+        .find("deny_info TCP_RESET strict_deny_acl")
+        .expect("deny_info not found");
+    let deny_rule_idx = squid_conf
+        .find("http_access deny strict_deny_acl")
+        .expect("deny rule not found");
+    assert!(
+        deny_info_idx < deny_rule_idx,
+        "deny_info TCP_RESET directive must appear before the http_access deny rule"
+    );
+}
