@@ -59,6 +59,8 @@ use tracing::{debug, error, info, warn};
 
 use serde::{Deserialize, Serialize};
 
+#[cfg(any(feature = "tray", feature = "listen-vsock"))]
+mod cloud_projects;
 mod control_dispatch;
 #[cfg(any(feature = "tray", feature = "listen-vsock"))]
 mod local_projects;

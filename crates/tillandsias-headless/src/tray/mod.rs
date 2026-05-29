@@ -616,6 +616,29 @@ fn handle_control_connection(mut stream: UnixStream, subscribers: ControlSubscri
                     };
                     let _ = write_control_envelope(&mut stream, &reply);
                 }
+                ControlMessage::CloudRefreshRequest { seq } => {
+                    // Linux-native CloudRefreshRequest handler (Q4
+                    // answer of the convergence packet). Unlike the
+                    // vsock side (which reads a token from
+                    // /run/secrets/tillandsias-github-token), the
+                    // unix-side host invocation passes `token: None`
+                    // and lets `gh` use the user's local auth config
+                    // search path. Same wire reply shape, host-
+                    // appropriate execution context.
+                    //
+                    // @trace spec:host-shell-architecture
+                    // @trace plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q4)
+                    let projects = crate::cloud_projects::fetch_cloud_projects(None);
+                    let reply = ControlEnvelope {
+                        wire_version: WIRE_VERSION,
+                        seq: first.seq,
+                        body: ControlMessage::CloudRefreshReply {
+                            seq_in_reply_to: seq,
+                            projects,
+                        },
+                    };
+                    let _ = write_control_envelope(&mut stream, &reply);
+                }
                 other => {
                     // Matrix says Handle but no inner arm yet. Write a
                     // descriptive Error so the client knows the gap is
