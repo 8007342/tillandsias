@@ -51,6 +51,44 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-29T23:43Z — MERGED osx-next (2 macOS build-findings entries) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `b504850f` (merge commit; linux-next was at
+  `0638f348` pre-merge).
+- observed_sibling_heads: main=`ea28d773` · linux-next=`0638f348`
+  (pre-merge) · windows-next=`24d7bec7` (already integrated, no new
+  commits since 19:43Z) · osx-next=`7f9c8cc0`.
+- windows-next: **no-op** — empty range `linux-next..origin/windows-next`.
+  Windows-next head `24d7bec7` was already integrated at the 19:43Z
+  cycle; no new work since.
+- osx-next: **merged + tested + pushed** — 2 commits added two more
+  hourly `/build-macos-tray` results to `plan/issues/macos-build-findings-
+  2026-05-29.md` (entries 222435Z + 232433Z, both `ok`). Confirms the
+  macOS-host's `build-macos-tray` daily-loop skill is still firing
+  hourly and writing the durable artifact cleanly. Single-file plan/-only
+  delta (+72 lines).
+- merge stats: 1 file changed, 72 insertions(+), 0 deletions(-).
+  Plan-only — no openspec/, methodology/, or crate changes.
+- verification: `./build.sh --check` passed; `./build.sh --test` passed.
+- spec-drift: **none** — diff is entirely under `plan/issues/`. No
+  cross-platform protocol or shared-spec surfaces touched.
+- linux work this 2h window: 4 spec-gap-fill commits (`browser-isolation-
+  framework` 33→67 at 21:21Z, `fix-windows-image-routing` 33→67 at
+  22:29Z via helper extraction, `tray-host-control-socket` 30→75 at
+  22:55Z with new unix-shape litmus, `runtime-diagnostics` 30→75 at
+  23:25Z with new spec-mapping-shape litmus + @trace spec:runtime-
+  diagnostics alignment on diagnostic_event_emitter.rs). Full instant
+  suite now 66/66 PASS at 100% across 89 specs (up from 62/62 at the
+  start of this window — net +4 spec-gap litmus tests landed without
+  any regressions).
+- recommended next: continue 30-33% spec-gap audit. Strong candidates:
+  `forge-offline`, `mcp-on-demand`, `secrets-management` (all 33%,
+  last_verified 2026-05-03 with substantial post-implementation work
+  since). The macOS-host's hourly build-findings cron continues to
+  produce useful artifacts; no cross-platform action item from osx-next
+  this cycle.
+
 ### Cycle 2026-05-29T21:43Z — MERGED osx-next (macOS build findings + UX-gaps doc) ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
