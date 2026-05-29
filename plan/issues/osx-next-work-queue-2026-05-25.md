@@ -2761,3 +2761,22 @@ step 5 lands.
   `2bd4faaf`.
 - Streak: 0 (productive iter). Next macOS iter eligible at
   ~07:00Z.
+
+### event: macOS slice 23 — drift-protection pin for WIRE_UNREACHABLE_CHIP_TEXT — 2026-05-29T07:00Z
+
+- Commit `cbeedb4a` extracts the slice-21 inline literal
+  `"🔴 Wire unreachable"` (byte-identical with windows-tray's
+  `mark_wire_unreachable` in d2cf10f0) into a `const` and adds
+  `wire_unreachable_chip_text_pinned` unit test asserting:
+    * exact bytes equal "\u{1F534} Wire unreachable"
+    * length is 21 bytes
+    * first char is U+1F534 LARGE RED CIRCLE specifically
+- Selected via /advance-work-from-plan §2 priority #3
+  "Drift-protection litmus" — guards the cross-tray UX-parity
+  invariant against future refactors on the macOS side. Windows-
+  tray follow-on is for that host to extract their const + add a
+  matching pin test (their literal is still inline today).
+- Tests + lint clean: macos-tray 40/40 (+1); clippy -D warnings
+  clean; fmt clean.
+- Streak: 0 (productive iter). Next macOS iter eligible at
+  ~07:30Z.
