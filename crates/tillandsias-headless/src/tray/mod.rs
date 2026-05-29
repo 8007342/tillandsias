@@ -538,13 +538,14 @@ fn handle_control_connection(mut stream: UnixStream, subscribers: ControlSubscri
             // The matrix says this transport handles the variant. Now
             // dispatch to the actual handler. The variant set the unix
             // path has handlers for is currently {Hello, IssueWebSession,
-            // EvictProject}; the other matrix-Handle variants (VmStatus
-            // family, EnumerateLocalProjects, CloudRefreshRequest,
-            // McpFrame) need real handlers wired in a follow-on slice.
-            // Until those land, the inner `_` arm writes an explicit
-            // Error{Unsupported} with a hint about the gap — the
-            // matrix-and-handler asymmetry surfaces visibly instead of
-            // silently dropping.
+            // EvictProject, EnumerateLocalProjects, CloudRefreshRequest,
+            // VmStatusRequest}; the remaining matrix-Handle variants
+            // (VmShutdownRequest, McpFrame, plus host-only stdin/pty
+            // tunnel frames) need real handlers wired in follow-on
+            // slices. Until those land, the inner `_` arm writes an
+            // explicit Error{Unsupported} with a hint about the gap —
+            // the matrix-and-handler asymmetry surfaces visibly instead
+            // of silently dropping.
             match first.body {
                 ControlMessage::Hello { .. } => {
                     let ack = ControlEnvelope {
@@ -635,6 +636,42 @@ fn handle_control_connection(mut stream: UnixStream, subscribers: ControlSubscri
                         body: ControlMessage::CloudRefreshReply {
                             seq_in_reply_to: seq,
                             projects,
+                        },
+                    };
+                    let _ = write_control_envelope(&mut stream, &reply);
+                }
+                ControlMessage::VmStatusRequest { seq } => {
+                    // Linux-native VmStatusRequest handler (Q2 answer
+                    // of the convergence packet). We're answering on
+                    // a working unix socket — by definition the tray
+                    // process is up and serving, so we report
+                    // `phase=Ready`. `podman_ready` is the live check
+                    // `tillandsias_podman::podman_available_sync()`
+                    // already runs elsewhere on this host.
+                    //
+                    // Lifecycle distinctions like Starting/Stopping/
+                    // Draining/Failed would need a `TrayPhaseHandle`
+                    // shared with the tray's main shutdown path —
+                    // mirror of the in-VM `VmStateHandle` but rooted
+                    // in the tray process's own lifecycle. That's a
+                    // follow-on slice. Minimal-but-useful shape
+                    // first: clients downstream now see real
+                    // (phase, podman_ready) data instead of the
+                    // descriptive Error message they got pre-this-
+                    // slice.
+                    //
+                    // @trace spec:tray-host-control-socket
+                    // @trace spec:vm-provisioning-lifecycle
+                    // @trace plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q2)
+                    let podman_ready = tillandsias_podman::podman_available_sync();
+                    let reply = ControlEnvelope {
+                        wire_version: WIRE_VERSION,
+                        seq: first.seq,
+                        body: ControlMessage::VmStatusReply {
+                            seq_in_reply_to: seq,
+                            phase: tillandsias_control_wire::VmPhase::Ready,
+                            podman_ready,
+                            last_event: Some("linux-native-tray".to_string()),
                         },
                     };
                     let _ = write_control_envelope(&mut stream, &reply);
@@ -3027,10 +3064,16 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
 mod tests {
     use super::*;
 
-    /// Regression: a `ControlMessage` variant that the unix-socket dispatcher
-    /// does not handle (e.g. `VmStatusRequest`, which today is vsock-only)
-    /// must reply with an explicit `Error { Unsupported }` frame, not be
-    /// silently dropped. Silent drops hang clients indefinitely.
+    /// Regression: a `ControlMessage` variant that is on the unix-socket
+    /// matrix as `Handle` but does not yet have a real handler implementation
+    /// (currently `McpFrame` — host-browser-mcp tunnel between forge and
+    /// tray) must reply with an explicit `Error { Unsupported }` frame, not
+    /// be silently dropped. Silent drops hang clients indefinitely.
+    ///
+    /// This test used to use `VmStatusRequest` as its example; that variant
+    /// now has a real handler (Linux-native phase=Ready + live
+    /// `podman_available_sync` check), so the example moved to `McpFrame`
+    /// which remains matrix-Handle-but-no-handler-yet.
     ///
     /// @trace plan/issues/control-socket-protocol-convergence-2026-05-25.md,
     ///        spec:tray-host-control-socket
@@ -3048,7 +3091,10 @@ mod tests {
         let req = ControlEnvelope {
             wire_version: WIRE_VERSION,
             seq: 42,
-            body: ControlMessage::VmStatusRequest { seq: 42 },
+            body: ControlMessage::McpFrame {
+                session_id: 7,
+                payload: vec![0x01, 0x02, 0x03],
+            },
         };
         let payload = encode(&req).expect("encode");
         client_side
@@ -3083,11 +3129,93 @@ mod tests {
                 assert_eq!(seq_in_reply_to, Some(42));
                 assert_eq!(code, ErrorCode::Unsupported);
                 assert!(
-                    message.contains("VmStatusRequest"),
+                    message.contains("McpFrame"),
                     "error message should name the rejected variant; got {message:?}"
                 );
             }
             other => panic!("expected Error variant, got {other:?}"),
+        }
+    }
+
+    /// `VmStatusRequest` is the third matrix-Handle-but-no-handler variant
+    /// migrated to a real implementation (after `EnumerateLocalProjects` and
+    /// `CloudRefreshRequest`). The unix dispatcher reports `phase=Ready` —
+    /// we're answering on a working socket, by definition the tray is
+    /// serving — plus a live `podman_available_sync` check for the
+    /// `podman_ready` field. `last_event` is a transport-tag string so a
+    /// downstream client can tell unix-from-vsock replies apart.
+    ///
+    /// This is intentionally a minimal slice. A follow-on can add a real
+    /// `TrayPhaseHandle` with Starting/Stopping/Draining transitions —
+    /// mirror of the in-VM `VmStateHandle` — rooted in the tray's own
+    /// shutdown path. Until then, "we're up" is the truth and `Ready` is
+    /// the correct value.
+    ///
+    /// @trace plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q2),
+    ///        spec:tray-host-control-socket,
+    ///        spec:vm-provisioning-lifecycle
+    #[test]
+    fn vm_status_request_on_unix_socket_replies_with_ready_phase() {
+        use std::io::{Read, Write};
+        use std::os::unix::net::UnixStream;
+        use std::sync::Mutex;
+        use std::thread;
+
+        let (server_side, mut client_side) =
+            UnixStream::pair().expect("UnixStream::pair available on linux");
+        let subscribers: ControlSubscribers = Arc::new(Mutex::new(Vec::new()));
+
+        let req = ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 99,
+            body: ControlMessage::VmStatusRequest { seq: 99 },
+        };
+        let payload = encode(&req).expect("encode");
+        client_side
+            .write_all(&(payload.len() as u32).to_be_bytes())
+            .expect("write len");
+        client_side.write_all(&payload).expect("write body");
+        client_side.flush().expect("flush");
+
+        let server_thread = thread::spawn(move || {
+            handle_control_connection(server_side, subscribers);
+        });
+
+        let mut len_buf = [0_u8; 4];
+        client_side.read_exact(&mut len_buf).expect("read len");
+        let len = u32::from_be_bytes(len_buf) as usize;
+        let mut reply_bytes = vec![0_u8; len];
+        client_side
+            .read_exact(&mut reply_bytes)
+            .expect("read reply body");
+        let reply: ControlEnvelope = decode(&reply_bytes).expect("decode reply");
+
+        server_thread.join().expect("server thread joined");
+
+        assert_eq!(reply.wire_version, WIRE_VERSION);
+        assert_eq!(reply.seq, 99);
+        match reply.body {
+            ControlMessage::VmStatusReply {
+                seq_in_reply_to,
+                phase,
+                podman_ready: _,
+                last_event,
+            } => {
+                assert_eq!(seq_in_reply_to, 99);
+                assert!(
+                    matches!(phase, tillandsias_control_wire::VmPhase::Ready),
+                    "expected phase=Ready on a tray that is answering; got {phase:?}"
+                );
+                // `podman_ready` is environment-dependent — don't pin
+                // a value, only that we returned a real bool. The
+                // hard contract is the variant shape.
+                assert_eq!(
+                    last_event.as_deref(),
+                    Some("linux-native-tray"),
+                    "expected linux-native-tray transport tag in last_event"
+                );
+            }
+            other => panic!("expected VmStatusReply variant, got {other:?}"),
         }
     }
 
