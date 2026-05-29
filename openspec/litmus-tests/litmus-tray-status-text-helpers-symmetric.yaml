@@ -66,32 +66,46 @@ preconditions:
   - shell utilities (grep) are available in PATH
 
 critical_path:
+  # NOTE on expected_behavior: the runner's matcher
+  # (scripts/run-litmus-test.sh:466) does a case-insensitive FIXED-STRING
+  # substring search of expected_behavior IN the step's combined stdout
+  # +stderr, after special-case sentinels (line 405-468; `*"succeeds"*`
+  # only requires non-empty output). For && grep chains where stdout
+  # would be EMPTY when the second grep misses, a description string
+  # would either fall through to the substring check and fail, or
+  # mis-match via the "succeeds" sentinel even on empty-output. Pin
+  # expected_behavior to a literal substring of the SECOND grep's
+  # match (the pin-test fn name) so the step only passes when BOTH
+  # greps in the chain produce expected content — same lesson captured
+  # in litmus-recipe-release-tag-symmetric.yaml after the linux-host
+  # repair at commit e8659b38.
+
   - step: "windows-tray declares vm_phase_status_text + its pin test"
     command: "grep -F 'fn vm_phase_status_text' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn vm_phase_status_text_reflects_phase_and_podman' crates/tillandsias-windows-tray/src/notify_icon.rs"
-    expected_behavior: "both fn vm_phase_status_text + pin test present"
+    expected_behavior: "vm_phase_status_text_reflects_phase_and_podman"
     timeout_ms: 3000
 
   - step: "macos-tray declares vm_phase_status_text + its pin test"
     command: "grep -F 'fn vm_phase_status_text' crates/tillandsias-macos-tray/src/action_host.rs && grep -F 'fn vm_phase_status_text_reflects_phase_and_podman' crates/tillandsias-macos-tray/src/action_host.rs"
-    expected_behavior: "both fn vm_phase_status_text + pin test present"
+    expected_behavior: "vm_phase_status_text_reflects_phase_and_podman"
     timeout_ms: 3000
 
   - step: "windows-tray declares describe_wire_error + its pin test"
     command: "grep -F 'fn describe_wire_error' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn describe_wire_error_includes_code_and_message' crates/tillandsias-windows-tray/src/notify_icon.rs"
-    expected_behavior: "both fn describe_wire_error + pin test present"
+    expected_behavior: "describe_wire_error_includes_code_and_message"
     timeout_ms: 3000
 
   - step: "macos-tray declares describe_wire_error + its pin test"
     command: "grep -F 'fn describe_wire_error' crates/tillandsias-macos-tray/src/action_host.rs && grep -F 'fn describe_wire_error_includes_code_and_message' crates/tillandsias-macos-tray/src/action_host.rs"
-    expected_behavior: "both fn describe_wire_error + pin test present"
+    expected_behavior: "describe_wire_error_includes_code_and_message"
     timeout_ms: 3000
 
   - step: "windows-tray declares compose_chip_text + its pin test"
     command: "grep -F 'fn compose_chip_text' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn compose_chip_text_appends_last_event' crates/tillandsias-windows-tray/src/notify_icon.rs"
-    expected_behavior: "both fn compose_chip_text + pin test present"
+    expected_behavior: "compose_chip_text_appends_last_event"
     timeout_ms: 3000
 
   - step: "macos-tray declares compose_chip_text + its pin test"
     command: "grep -F 'fn compose_chip_text' crates/tillandsias-macos-tray/src/action_host.rs && grep -F 'fn compose_chip_text_appends_last_event' crates/tillandsias-macos-tray/src/action_host.rs"
-    expected_behavior: "both fn compose_chip_text + pin test present"
+    expected_behavior: "compose_chip_text_appends_last_event"
     timeout_ms: 3000
