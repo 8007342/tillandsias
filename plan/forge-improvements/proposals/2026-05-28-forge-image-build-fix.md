@@ -2,8 +2,12 @@
 title: Fix forge image build failure — stage cheatsheets into build context
 gap: "Forge tray build fails at COPY cheatsheets/ — directory missing from runtime bundle context"
 category: sdk
-status: proposed
+status: implemented
 proposed_at: 2026-05-28T21:15:00Z
+approved_at: 2026-05-29T02:10:00Z
+implemented_at: 2026-05-29T02:10:00Z
+approved_by: Antigravity Orchestrator
+evidence: "Staged permanent cheatsheets/ and cheatsheet-sources/ into images/default/ and updated build-image.sh to refresh rather than cleanup in commit c373f12a"
 changes:
   - file: images/default/Containerfile
     description: |
@@ -28,8 +32,6 @@ changes:
       Created as a permanent copy of the project-root cheatsheet-sources/ for
       the same reason — the Containerfile's COPY instruction needs these
       directories in the build context at all times.
-approval_required: orchestrator
-approved_by:
 ---
 
 ## Gap
