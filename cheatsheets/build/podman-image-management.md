@@ -175,7 +175,7 @@ ENTRYPOINT ["/app/bin/app"]
 ```bash
 # Tag a built image for release
 podman tag tillandsias-forge:tmp tillandsias-forge:v0.1.37.25  # Version
-podman tag tillandsias-forge:tmp tillandsias-forge:latest      # Latest alias
+podman tag tillandsias-forge:tmp tillandsias-forge:vX.Y.Z       # Release alias
 
 # Push all tags
 podman push docker.io/tillandsias/forge:v0.1.37.25

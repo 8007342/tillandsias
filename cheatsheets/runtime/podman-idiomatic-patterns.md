@@ -796,7 +796,7 @@ buildah build-using-dockerfile --layers Dockerfile
 # Multi-stage build
 FROM rust:latest AS builder
 RUN cargo build --release
-FROM alpine:latest
+FROM alpine:3.20
 COPY --from=builder /app/target/release/myapp /app/myapp
 CMD ["/app/myapp"]
 ```

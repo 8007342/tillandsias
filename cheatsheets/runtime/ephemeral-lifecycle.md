@@ -151,7 +151,7 @@ Tillandsias uses a two-layer package caching strategy:
 ### Layer 1: Container Build Cache (Podman Internal)
 ```
 podman build layer caching:
-  FROM alpine:latest          → cached, reuse between builds
+  FROM alpine:3.20            → cached, reuse between builds
   RUN dnf install nginx       → layer cached if dependencies unchanged
   COPY entrypoint.sh /        → cached if source file unchanged
 ```

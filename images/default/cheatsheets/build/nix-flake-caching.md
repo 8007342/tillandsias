@@ -247,7 +247,7 @@ nix build ./images#forge-image
 HASH=$(nix eval --raw ./images#forge-image.imageTag)
 
 podman load < result
-podman tag tillandsias-forge:$HASH tillandsias-forge:latest
+podman tag tillandsias-forge:$HASH tillandsias-forge:vX.Y.Z
 ```
 
 **Cache hierarchy:**

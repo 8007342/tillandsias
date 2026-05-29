@@ -1,13 +1,13 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-05-29T04:06:00Z
+LastExecutionTime: 2026-05-29T05:05:00Z
 
 ## This Loop
 
 - **Skill Enhancement**: Upgraded `/multihost-orchestration` and sibling skills in `./skills` to conduct active multi-host coordination, including automated branch drift detection and thrashing mitigation.
 - **Convergence Velocity Controls**: Integrated maximum velocity caps ($C_{max}$) and divergence distance thresholds ($D_{max}$) into the convergence engine to strictly guarantee finite-time convergence.
 - **Branch Integration & Sync**: Verified that remote sibling branches (`origin/windows-next` and `origin/osx-next`) and the release branch (`origin/main`) are fully integrated and verified as ancestors of the current `linux-next` tip.
-- **Full Workspace Greenness**: Ran automated test suite (`./build.sh --test`) and verified 100% test passes across all 661+ unit and integration tests.
+- **Full Workspace Greenness**: Re-ran the local validation suite (`./scripts/local-ci.sh`) after addressing all container base policy violations and code formatting. All 661+ unit and integration tests and 16 litmus checks pass with 100% success.
 - **Forge Improvements**: Successfully executed unattended `/diagnose-forge` run. Verified and marked 8 approved proposals (Rust, Go, Python, WASM, dev-quality, additional-dev-tools, tillandsias-help, forge-docs-cheatsheets) as fully implemented.
 - **Build Fix & Security Approval**: Approved and implemented build-context fix to stage permanent cheatsheets directories to `images/default/`. Approved the security defense-in-depth proposal for proxy TCP-level dropping rules.
 - **Convergence Velocity**: Verified strictly positive convergence velocity ($\mathcal{V}_c = 0$ as $\mathcal{R}_t = 0$ is fully achieved), passing all proximity thresholds with zero open high/medium uncertainty events.
@@ -20,6 +20,9 @@ LastExecutionTime: 2026-05-29T04:06:00Z
 
 ## Resolved Since Previous Loop
 
+- Resolved `container-base-policy` violations by removing and pinning mutable `:latest` references in original and staged cheatsheets (`nix-flake-caching.md`, `podman-image-management.md`, `ephemeral-lifecycle.md`, and `podman-idiomatic-patterns.md`), achieving 100% policy compliance.
+- Formally ran `cargo fmt --all` to resolve formatting in `crates/tillandsias-headless/src/tray/mod.rs` and validated 100% clean passes of `./scripts/local-ci.sh`.
+- Completed plan index and step file ledger bookkeeping for task `podman-control-plane-overhaul/migrate-legacy-shell`, flipping parent step 15.5 status to completed.
 - Enhanced `/multihost-orchestration`, `/coordinate-multihost-work`, and `/advance-work-from-plan` in `./skills` to support active multi-host coordination, branch divergence monitoring, and thrashing prevention.
 - Added velocity limits, commit caps ($C_{max} = 2$ commits/hour), and branch drift distance limits ($D_{max} = 5$ commits) to `methodology/convergence.yaml`.
 - Completed the unattended `/diagnose-forge` capability baseline discovery and marked 8 approved proposals as implemented.

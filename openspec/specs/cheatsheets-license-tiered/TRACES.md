@@ -8,6 +8,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [cheatsheets/license-allowlist.toml#L37](../../../cheatsheets/license-allowlist.toml#L37)
 - [crates/tillandsias-core/src/config.rs#L103](../../../crates/tillandsias-core/src/config.rs#L103)
 - [crates/tillandsias-core/src/config.rs#L131](../../../crates/tillandsias-core/src/config.rs#L131)
+- [images/default/cheatsheets/license-allowlist.toml#L37](../../../images/default/cheatsheets/license-allowlist.toml#L37)
 - [images/default/lib-common.sh#L96](../../../images/default/lib-common.sh#L96)
 - [images/default/lib-common.sh#L662](../../../images/default/lib-common.sh#L662)
 - [images/default/lib-common.sh#L687](../../../images/default/lib-common.sh#L687)
