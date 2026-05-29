@@ -725,6 +725,7 @@ specs:
   - litmus:tray-status-text-helpers-symmetric
   - litmus:exit-code-provisioned-zero-degraded-two-symmetric
   - litmus:windows-tray-architectural-invariants
+  - litmus:pty-attach-project-threading-symmetric
   coverage_ratio: 100
   last_verified: '2026-05-29'
 - spec_id: wsl-daemon-orchestration

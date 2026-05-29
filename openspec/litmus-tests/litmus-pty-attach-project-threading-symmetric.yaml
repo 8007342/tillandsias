@@ -1,0 +1,62 @@
+# @trace spec:windows-native-tray, spec:macos-native-tray
+# Cross-tray drift protection for the per-project PTY-attach plumbing both
+# trays now ship — Attach Here / Maintain / agent menu rows MUST thread the
+# clicked project's name through `intent_for_action` -> `launch_spec` so the
+# in-VM exec lands inside `tillandsias-<project>-forge` rather than dumping
+# the user into a bare-VM shell.
+#
+# Windows landed this in commit c997fc43 (notify_icon.rs's
+# launch_open_shell_terminal). macOS landed the same in commit 61e4233f (m10),
+# whose own commit body explicitly mirrors "Same behaviour windows-tray ships
+# at notify_icon.rs:1604" — both trays now call:
+#
+#   launch_spec(&intent, project.as_deref(), 24, 80)
+#
+# with the project from `intent_for_action(action, selected_agent())`. A
+# refactor on either side that regresses the second positional argument to
+# `None` (the slice-4c.2 macOS shape before m10) would silently send the
+# user back to a bare-VM shell on that OS — invisible until runtime smoke.
+# This litmus pins the exact call shape on both sides at the source level.
+
+name: litmus:pty-attach-project-threading-symmetric
+spec: windows-native-tray
+phase: pre-build
+description: "Pin the cross-tray PTY-attach project-threading call shape (launch_spec(&intent, project.as_deref(), 24, 80)) on both windows-tray and macos-tray."
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-windows-tray/src/notify_icon.rs
+  - workspace contains crates/tillandsias-macos-tray/src/action_host.rs
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "windows-tray imports intent_for_action + launch_spec from host-shell"
+    command: "grep -F 'use tillandsias_host_shell::pty::{intent_for_action, launch_spec}' crates/tillandsias-windows-tray/src/notify_icon.rs"
+    expected_behavior: "intent_for_action, launch_spec"
+    timeout_ms: 3000
+
+  - step: "macos-tray imports intent_for_action + launch_spec from host-shell"
+    command: "grep -F 'intent_for_action' crates/tillandsias-macos-tray/src/action_host.rs && grep -F 'launch_spec' crates/tillandsias-macos-tray/src/action_host.rs"
+    expected_behavior: "launch_spec"
+    timeout_ms: 3000
+
+  - step: "windows-tray calls launch_spec with project.as_deref()"
+    # Pinning the exact 4-arg call shape catches a regression to None on
+    # the second positional argument (slice-4c.2 macOS shape pre-m10).
+    command: "grep -F 'launch_spec(&intent, project.as_deref(), 24, 80)' crates/tillandsias-windows-tray/src/notify_icon.rs"
+    expected_behavior: "launch_spec(&intent, project.as_deref(), 24, 80)"
+    timeout_ms: 3000
+
+  - step: "macos-tray calls launch_spec with project.as_deref()"
+    command: "grep -F 'launch_spec(&intent, project.as_deref(), 24, 80)' crates/tillandsias-macos-tray/src/action_host.rs"
+    expected_behavior: "launch_spec(&intent, project.as_deref(), 24, 80)"
+    timeout_ms: 3000
+
+  - step: "neither tray has a stray launch_spec call with None as the project"
+    # Catches a partial regression where the project gets dropped on one
+    # arm even if another arm keeps the threading. There MUST be zero
+    # `launch_spec(&intent, None, ` occurrences in either tray's source.
+    command: "! grep -rqF 'launch_spec(&intent, None,' crates/tillandsias-windows-tray/src/ crates/tillandsias-macos-tray/src/ && echo 'no-bare-vm-shell-leakage'"
+    expected_behavior: "no-bare-vm-shell-leakage"
+    timeout_ms: 3000
