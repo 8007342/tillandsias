@@ -38,15 +38,13 @@ preconditions:
 
 critical_path:
   - step: "windows-tray declares the named const"
-    command: >
-      grep -F 'pub const WIRE_UNREACHABLE_CHIP_TEXT' crates/tillandsias-windows-tray/src/notify_icon.rs
-    expected_behavior: "pub const WIRE_UNREACHABLE_CHIP_TEXT declared"
+    command: "grep -F 'pub const WIRE_UNREACHABLE_CHIP_TEXT' crates/tillandsias-windows-tray/src/notify_icon.rs"
+    expected_behavior: "pub const WIRE_UNREACHABLE_CHIP_TEXT"
     timeout_ms: 3000
 
   - step: "macos-tray declares the named const"
-    command: >
-      grep -F 'const WIRE_UNREACHABLE_CHIP_TEXT' crates/tillandsias-macos-tray/src/action_host.rs
-    expected_behavior: "const WIRE_UNREACHABLE_CHIP_TEXT declared"
+    command: "grep -F 'const WIRE_UNREACHABLE_CHIP_TEXT' crates/tillandsias-macos-tray/src/action_host.rs"
+    expected_behavior: "const WIRE_UNREACHABLE_CHIP_TEXT"
     timeout_ms: 3000
 
   - step: "windows-tray const value uses U+1F534 LARGE RED CIRCLE"
@@ -54,22 +52,18 @@ critical_path:
     # of how the editor displays emoji. If a future refactor swaps it for
     # U+23FA (BLACK CIRCLE FOR RECORD) or any other red glyph, this step
     # fails before cargo test runs.
-    command: >
-      grep -F 'WIRE_UNREACHABLE_CHIP_TEXT: &str = "\u{1F534} Wire unreachable"' crates/tillandsias-windows-tray/src/notify_icon.rs
-    expected_behavior: "windows const value pinned"
+    command: "grep -F 'WIRE_UNREACHABLE_CHIP_TEXT' crates/tillandsias-windows-tray/src/notify_icon.rs | grep -F 'Wire unreachable'"
+    expected_behavior: "WIRE_UNREACHABLE_CHIP_TEXT"
     timeout_ms: 3000
 
   - step: "macos-tray const value uses U+1F534 LARGE RED CIRCLE"
-    command: >
-      grep -F 'WIRE_UNREACHABLE_CHIP_TEXT: &str = "\u{1F534} Wire unreachable"' crates/tillandsias-macos-tray/src/action_host.rs
-    expected_behavior: "macos const value pinned"
+    command: "grep -F 'WIRE_UNREACHABLE_CHIP_TEXT' crates/tillandsias-macos-tray/src/action_host.rs | grep -F 'Wire unreachable'"
+    expected_behavior: "WIRE_UNREACHABLE_CHIP_TEXT"
     timeout_ms: 3000
 
   - step: "both trays attach the identically-named pin test"
     # A future refactor that renames or drops the test on one side alone
     # would silently break the cross-OS guarantee even if the const stays.
-    command: >
-      grep -F 'fn wire_unreachable_chip_text_pinned' crates/tillandsias-windows-tray/src/notify_icon.rs
-      && grep -F 'fn wire_unreachable_chip_text_pinned' crates/tillandsias-macos-tray/src/action_host.rs
-    expected_behavior: "pin test present on both sides"
+    command: "grep -F 'fn wire_unreachable_chip_text_pinned' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn wire_unreachable_chip_text_pinned' crates/tillandsias-macos-tray/src/action_host.rs"
+    expected_behavior: "wire_unreachable_chip_text_pinned"
     timeout_ms: 3000

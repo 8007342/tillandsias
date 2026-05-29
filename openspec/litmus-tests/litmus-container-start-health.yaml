@@ -69,7 +69,7 @@ critical_path:
     # a bare Command::new(\"podman\") bypass.
     command: "LOG=$(ls -t target/forge-diagnostics/container-start_*.stderr.log 2>/dev/null | head -1) && grep -cE 'event:container_launch ' \"$LOG\" | awk '{ if ($1+0 >= 1) print \"ok: \" $1 \" idiomatic launch events\"; else { print \"FAIL: no idiomatic launch events\"; exit 1 } }'"
     timeout_ms: 10000
-    expected_behavior: "ok: <N> idiomatic launch events"
+    expected_behavior: "at least one idiomatic launch events"
 
   # Piggyback: run the forge-diagnostics annex WITHOUT --reset. The annex's
   # dedupe-by-prompt-sha mechanism ensures that across all
@@ -90,7 +90,7 @@ critical_path:
   - step: "non-blocking annex piggyback: capture diagnostics summary if first in cycle, else dedup-skip"
     command: "scripts/forge-diagnostics-annex.sh || true"
     timeout_ms: 600000
-    expected_behavior: "annex exit 0 (always); summary or skip note recorded under target/forge-diagnostics/"
+    expected_behavior: "[forge-annex]"
 
   # Non-gating observation: confirm the annex produced *something* —
   # either a raw log + distill summary (first in cycle) or a skip note
@@ -99,7 +99,7 @@ critical_path:
   - step: "annex produced a raw log, skip note, OR distill summary (any cycle outcome is fine)"
     command: "if ls -t target/forge-diagnostics/diagnostics_*.log >/dev/null 2>&1 || [ -s target/forge-diagnostics/cycle-skips.log ] || ls -t plan/diagnostics/diagnostics_*-summary.md >/dev/null 2>&1; then echo \"ok: annex left evidence (raw log, skip note, or distill summary)\"; else echo \"ok: annex ran but left no evidence on this host (annex contract honoured)\"; fi"
     timeout_ms: 5000
-    expected_behavior: "ok: annex left evidence ..."
+    expected_behavior: "ok: annex left evidence"
 
 observability:
   traces:
