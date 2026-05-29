@@ -2780,3 +2780,17 @@ step 5 lands.
   clean; fmt clean.
 - Streak: 0 (productive iter). Next macOS iter eligible at
   ~07:30Z.
+
+### event: macOS slice 24 — symmetric wire-unreachable invariant on macOS spec — 2026-05-29T08:30Z
+
+- Commit `4a0abba6`. Windows landed `145ff3d2` mirroring my slices
+  22+23 byte-for-byte, including a new Invariant
+  `wire-unreachable-chip-text` codifying the cross-OS contract from
+  BOTH sides. macOS spec was missing the symmetric pin.
+- Adds the same Invariant to macos-native-tray.spec.md with
+  Measurable=`wire_unreachable_chip_text_pinned` and a body that
+  references the windows sibling (`145ff3d2`) — bidirectional
+  cross-reference means a future refactor on either side cannot
+  ship without updating both specs in lockstep.
+- Streak: 0 (productive iter). Next macOS iter eligible at
+  ~09:00Z.
