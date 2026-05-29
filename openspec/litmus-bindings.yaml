@@ -124,8 +124,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:cheatsheet-tier-discipline
-  coverage_ratio: 33
-  last_verified: '2026-05-12'
+  - litmus:cheatsheets-license-allowlist-shape
+  coverage_ratio: 67
+  last_verified: '2026-05-29'
 - spec_id: ci-release
   status: active
   litmus_tests:
