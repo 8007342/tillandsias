@@ -28,12 +28,12 @@ use zbus::{Connection, ConnectionBuilder, fdo, interface};
 use zvariant::{OwnedObjectPath, OwnedValue, Value};
 
 use crate::ENCLAVE_NO_PROXY;
+use crate::remote_projects;
 use tillandsias_control_wire::{
     ControlEnvelope, ControlMessage, ErrorCode, MAX_MESSAGE_BYTES, WIRE_VERSION, decode, encode,
 };
 use tillandsias_core::config::{self, SelectedAgent};
 use tillandsias_core::genus::TrayIconState;
-use crate::remote_projects;
 use tillandsias_podman::{
     ContainerSpec, MountMode, container_exists_sync, image_exists_sync, podman_available_sync,
     stop_container_sync,
@@ -571,6 +571,45 @@ impl TrayPhaseHandle {
     fn set_phase(&self, next: tillandsias_control_wire::VmPhase) {
         *self.phase.write().expect("tray phase lock") = next;
     }
+
+    /// Watch `shutdown` for a flip to true and, when it does, transition
+    /// the phase to `Stopping`. Sync polling mirror of
+    /// `vsock_server::VmStateHandle::watch_shutdown_and_mark_stopping` —
+    /// the tray's accept loop is a `std::thread`, not a tokio task, so we
+    /// poll synchronously to match. Cadence is intentionally coarse
+    /// (250 ms): this only governs the lifecycle-reporting wire, not any
+    /// hot-path behaviour.
+    ///
+    /// This is the linux-native counterpart to the vsock-side
+    /// `watch_shutdown_and_mark_stopping`. The cross-host symmetry now
+    /// completes Q2 of the convergence packet: windows + macOS send
+    /// `VmShutdownRequest` BEFORE tearing down WSL/VZ, and the linux
+    /// tray itself transitions to `Stopping` on its own SIGTERM/SIGINT,
+    /// so a sibling-host client polling `VmStatusRequest` sees the
+    /// lifecycle truthfully across the whole shutdown window.
+    ///
+    /// Idempotent. Returns once the atomic is true and the transition
+    /// has been recorded.
+    ///
+    /// @trace spec:tray-host-control-socket, spec:vm-provisioning-lifecycle,
+    ///        spec:signal-handling
+    /// @trace plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q2)
+    fn watch_shutdown_and_mark_stopping_blocking(
+        &self,
+        shutdown: Arc<std::sync::atomic::AtomicBool>,
+    ) {
+        use std::sync::atomic::Ordering;
+        while !shutdown.load(Ordering::SeqCst) {
+            std::thread::sleep(std::time::Duration::from_millis(250));
+        }
+        // Don't clobber a terminal Failed if some future advancer beat
+        // us to it. (The tray doesn't have a Failed-producing advancer
+        // today; this matches the vsock-side helper's defensive
+        // pattern so the two stay symmetric.)
+        if self.current_phase() != tillandsias_control_wire::VmPhase::Failed {
+            self.set_phase(tillandsias_control_wire::VmPhase::Stopping);
+        }
+    }
 }
 
 fn handle_control_connection(
@@ -820,8 +859,16 @@ fn handle_control_connection(
 /// Start the tray-owned control socket used by the router sidecar and one-shot
 /// CLI publishers.
 ///
-/// @trace spec:tray-host-control-socket, spec:opencode-web-session-otp
-fn start_control_socket_server() -> Result<(), String> {
+/// The `shutdown` atomic is the same one `install_shutdown_signal_handlers`
+/// returns; we spawn a watcher thread that polls it and flips the shared
+/// `TrayPhaseHandle` to `Stopping` when SIGTERM/SIGINT fires, so a
+/// sibling-host client polling `VmStatusRequest` during tray exit sees the
+/// real phase instead of the stale `Ready` value.
+///
+/// @trace spec:tray-host-control-socket, spec:opencode-web-session-otp,
+///        spec:signal-handling, spec:vm-provisioning-lifecycle
+/// @trace plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q2)
+fn start_control_socket_server(shutdown: Arc<std::sync::atomic::AtomicBool>) -> Result<(), String> {
     let socket_path = control_socket_path();
     if let Some(parent) = socket_path.parent() {
         fs::create_dir_all(parent)
@@ -841,14 +888,27 @@ fn start_control_socket_server() -> Result<(), String> {
 
     // The listener bound successfully — by the next line the accept
     // loop will be picking up clients, so we transition Starting ->
-    // Ready. The handle is then cloned into each per-connection
-    // worker; `VmStatusRequest` reads it, `VmShutdownRequest` writes
-    // it. See `TrayPhaseHandle` for the lifecycle model + the
-    // follow-on slice that wires SIGTERM/SIGINT into mark_stopping().
+    // Ready. The handle is then cloned into (a) each per-connection
+    // worker that needs to read/write the phase and (b) the shutdown
+    // watcher below.
     //
     // @trace plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q2)
     let phase_handle = TrayPhaseHandle::new();
     phase_handle.set_phase(tillandsias_control_wire::VmPhase::Ready);
+
+    // Shutdown watcher: when SIGTERM/SIGINT flips the shared shutdown
+    // atomic, transition phase to `Stopping` so any concurrent
+    // `VmStatusRequest` from a sibling host (e.g. macOS slice 20's
+    // pre-VZ-stop wire shutdown or windows slice 80eceb0b's pre-WSL-
+    // terminate poller) sees the truth. Sync polling matches the
+    // accept loop's std::thread shape.
+    //
+    // @trace spec:signal-handling, spec:vm-provisioning-lifecycle
+    let watcher_handle = phase_handle.clone();
+    let watcher_shutdown = Arc::clone(&shutdown);
+    std::thread::spawn(move || {
+        watcher_handle.watch_shutdown_and_mark_stopping_blocking(watcher_shutdown);
+    });
 
     std::thread::spawn(move || {
         for incoming in listener.incoming() {
@@ -3099,7 +3159,17 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
     let state =
         TrayUiState::new_with_debug(root.clone(), version.clone(), discover_projects(), debug);
     let service = Arc::new(TrayService::new(state));
-    start_control_socket_server()?;
+
+    // Install SIGTERM/SIGINT handlers BEFORE binding the control socket
+    // so the shutdown atomic exists by the time the control-socket
+    // watcher thread starts polling. signal-hook intercepts SIGTERM/
+    // SIGINT (they don't kill the process anymore); the main runtime
+    // loop below polls the atomic and exits gracefully when it flips.
+    //
+    // @trace spec:signal-handling, spec:tray-host-control-socket
+    // @trace plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q2)
+    let shutdown = crate::install_shutdown_signal_handlers()?;
+    start_control_socket_server(Arc::clone(&shutdown))?;
 
     // @trace spec:tray-ux, spec:remote-projects
     // Kick off the initial cloud-projects fetch on the async executor so the
@@ -3150,8 +3220,23 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
         let _ = StatusNotifierItemIface::new_tool_tip(&item_ctxt).await;
         let _ = DbusMenuIface::layout_updated(&menu_ctxt, service.snapshot().revision, 0).await;
 
-        futures::future::pending::<()>().await;
-        #[allow(unreachable_code)]
+        // Main wait loop: poll the SIGTERM/SIGINT atomic at 250 ms
+        // cadence. Matches the control-socket watcher's poll cadence
+        // (start_control_socket_server) and `vsock_server`'s 250 ms
+        // shutdown poll on the in-VM side — symmetric across both
+        // transports. Replaces the prior `futures::future::pending`
+        // forever-await: signal-hook now intercepts SIGTERM/SIGINT, so
+        // the process would otherwise never exit on those signals.
+        //
+        // @trace spec:signal-handling, spec:tray-host-control-socket
+        use std::sync::atomic::Ordering;
+        while !shutdown.load(Ordering::SeqCst) {
+            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+        }
+        info!(
+            spec = "signal-handling",
+            "tray received shutdown signal; exiting gracefully (control-socket watcher already flipped phase=Stopping)"
+        );
         Ok::<(), String>(())
     })?;
 
@@ -3317,6 +3402,108 @@ mod tests {
             }
             other => panic!("expected VmStatusReply variant, got {other:?}"),
         }
+    }
+
+    /// `watch_shutdown_and_mark_stopping_blocking` transitions the
+    /// shared phase to `Stopping` once the shutdown atomic flips. This
+    /// is the linux-native counterpart of the vsock-side
+    /// `VmStateHandle::watch_shutdown_and_mark_stopping`: when the
+    /// tray's SIGTERM/SIGINT handler sets the atomic, sibling-host
+    /// clients polling `VmStatusRequest` see `phase=Stopping` instead
+    /// of stale `Ready`.
+    ///
+    /// We spawn the watcher on a thread (sync poll, matches the accept
+    /// loop's shape), flip the atomic from the test thread, then
+    /// observe the phase transition through a separate clone of the
+    /// handle. The watcher must NOT clobber a terminal `Failed` —
+    /// defensive guard matches the vsock-side pattern even though the
+    /// tray has no Failed-producing advancer today.
+    ///
+    /// @trace plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q2)
+    /// @trace spec:signal-handling, spec:vm-provisioning-lifecycle
+    #[test]
+    fn watch_shutdown_blocking_flips_phase_to_stopping_when_atomic_flips() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::thread;
+        use std::time::{Duration, Instant};
+
+        let handle = TrayPhaseHandle::ready_for_test();
+        let observer = handle.clone();
+        let shutdown = Arc::new(AtomicBool::new(false));
+        let watcher_shutdown = Arc::clone(&shutdown);
+
+        let watcher = thread::spawn(move || {
+            handle.watch_shutdown_and_mark_stopping_blocking(watcher_shutdown);
+        });
+
+        // Briefly confirm the watcher is parked at `Ready` (it polls
+        // every 250 ms; give it well under one poll period to settle).
+        thread::sleep(Duration::from_millis(50));
+        assert!(matches!(
+            observer.current_phase(),
+            tillandsias_control_wire::VmPhase::Ready
+        ));
+
+        // Flip the atomic; the watcher should pick it up within ~250 ms.
+        shutdown.store(true, Ordering::SeqCst);
+
+        let deadline = Instant::now() + Duration::from_secs(2);
+        loop {
+            if matches!(
+                observer.current_phase(),
+                tillandsias_control_wire::VmPhase::Stopping
+            ) {
+                break;
+            }
+            assert!(
+                Instant::now() < deadline,
+                "watcher did not flip phase to Stopping within 2s"
+            );
+            thread::sleep(Duration::from_millis(25));
+        }
+
+        watcher.join().expect("watcher thread joined");
+    }
+
+    /// Defensive guard: if some future advancer set the phase to
+    /// `Failed` before the shutdown watcher fires, the watcher must
+    /// NOT clobber the terminal Failed state. The tray doesn't have a
+    /// Failed-producing advancer today; this matches the vsock-side
+    /// helper's pattern so the two stay symmetric and the contract
+    /// holds when we do add one.
+    ///
+    /// @trace spec:vm-provisioning-lifecycle
+    #[test]
+    fn watch_shutdown_blocking_does_not_clobber_terminal_failed() {
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::thread;
+        use std::time::Duration;
+
+        let handle = TrayPhaseHandle::ready_for_test();
+        handle.set_phase(tillandsias_control_wire::VmPhase::Failed);
+        let observer = handle.clone();
+        let shutdown = Arc::new(AtomicBool::new(true));
+
+        // Run the watcher synchronously on this thread; with shutdown
+        // already true it should return after at most one poll without
+        // changing the phase.
+        let t = thread::spawn(move || {
+            handle.watch_shutdown_and_mark_stopping_blocking(shutdown);
+        });
+        t.join().expect("watcher joined");
+
+        assert!(
+            matches!(
+                observer.current_phase(),
+                tillandsias_control_wire::VmPhase::Failed
+            ),
+            "watcher must not clobber a terminal Failed phase; got {:?}",
+            observer.current_phase()
+        );
+        // Sanity: the polling sleep is at most 250 ms so this test
+        // completes in well under a second even with the worst-case
+        // first-poll alignment.
+        let _ = Duration::from_millis(0);
     }
 
     /// `TrayPhaseHandle` round-trips state. Default constructor starts

@@ -6620,7 +6620,13 @@ fn spawn_metrics_http_server() -> Option<tokio::task::JoinHandle<()>> {
 /// signal handler, and the async sleep yields the runtime while backing off so
 /// we do not spin aggressively while waiting for termination.
 /// @trace spec:linux-native-portable-executable, spec:signal-handling, spec:runtime-logging
-fn install_shutdown_signal_handlers() -> Result<Arc<AtomicBool>, String> {
+///
+/// `pub(crate)` so the tray's `run_tray_mode_with_debug` path can install
+/// the same SIGTERM/SIGINT atomic and share it with `start_control_socket_server`
+/// for the `TrayPhaseHandle` shutdown watcher. Without it, the tray runs
+/// without signal handlers and SIGTERM kills the process immediately —
+/// sibling-host clients polling `VmStatusRequest` never see `phase=Stopping`.
+pub(crate) fn install_shutdown_signal_handlers() -> Result<Arc<AtomicBool>, String> {
     let terminated = Arc::new(AtomicBool::new(false));
     flag::register(libc::SIGTERM, Arc::clone(&terminated))
         .map_err(|e| format!("Failed to register SIGTERM: {e}"))?;
