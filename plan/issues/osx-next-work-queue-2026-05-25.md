@@ -2832,3 +2832,25 @@ step 5 lands.
   litmus coverage).
 - Streak: 0 (productive iter). Next macOS iter eligible at
   ~12:00Z.
+
+### event: macOS slice 27 — RECIPE_RELEASE_TAG cross-tray drift pin — 2026-05-29T12:25Z
+
+- New `openspec/litmus-tests/litmus-recipe-release-tag-symmetric.yaml`
+  (4 grep steps, all PASS locally) pinning the byte-identical
+  `RECIPE_RELEASE_TAG = "v0.2.260526.1"` const both trays declare
+  (windows `wsl_lifecycle.rs:44`, macos `action_host.rs:983`).
+- Surface had ZERO litmus coverage. A one-sided bump would silently
+  ship trays fetching different rootfs builds — same class of cross-
+  host drift the wire-unreachable + diagnose-CLI litmuses already
+  guard against. With this pin, any future tag bump must update
+  windows source + macos source + this litmus together as a forcing
+  function for cross-host coordination.
+- Selected via /advance-work-from-plan §2 priority #3 "drift-
+  protection litmus". Bound on macos-native-tray (3 litmuses,
+  coverage stays 100%); windows-native-tray binding row left for
+  that host to add (precedent: slice 25 wire-unreachable binding).
+- YAML parses cleanly (ruby yaml load on both the litmus + the
+  bindings file). No Rust changes. macos-tray 40/40, vm-layer
+  build clean.
+- Streak: 0 (productive iter). Next macOS iter eligible at
+  ~12:55Z.
