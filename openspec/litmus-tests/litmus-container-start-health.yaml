@@ -36,33 +36,18 @@ critical_path:
     # (agent output) is discarded; stderr carries the structured
     # event:container_launch stream we assert on. Non-fatal exit: we judge by
     # the captured stream, not the agent's exit code.
-    command: >
-      tillandsias . --opencode --diagnostics
-      --prompt "report ready and exit"
-      >/dev/null
-      2> "target/forge-diagnostics/container-start_$(date -u +%Y%m%dT%H%M%SZ).stderr.log"
-      || true
+    command: "tillandsias . --opencode --diagnostics --prompt \"report ready and exit\" >/dev/null 2> \"target/forge-diagnostics/container-start_$(date -u +%Y%m%dT%H%M%SZ).stderr.log\" || true"
     timeout_ms: 600000
 
   - step: "at least one container reached state=running via the idiomatic layer"
-    command: >
-      LOG=$(ls -t target/forge-diagnostics/container-start_*.stderr.log 2>/dev/null | head -1)
-      && [ -n "$LOG" ]
-      && grep -Eq 'event:container_launch stage=[^ ]+ state=running container=' "$LOG"
-      && echo "ok: idiomatic layer reported >=1 container running"
+    command: "LOG=$(ls -t target/forge-diagnostics/container-start_*.stderr.log 2>/dev/null | head -1) && [ -n \"$LOG\" ] && grep -Eq 'event:container_launch stage=[^ ]+ state=running container=' \"$LOG\" && echo \"ok: idiomatic layer reported >=1 container running\""
     timeout_ms: 10000
     expected_behavior: "ok: idiomatic layer reported >=1 container running"
 
   - step: "NO container reported state=failed"
     # A single failed launch fails this gate, surfacing the failing stage +
     # container name straight from the stream.
-    command: >
-      LOG=$(ls -t target/forge-diagnostics/container-start_*.stderr.log 2>/dev/null | head -1)
-      && if grep -E 'event:container_launch .* state=failed' "$LOG"; then
-           echo "FAIL: a container launch failed (see lines above)"; exit 1;
-         else
-           echo "ok: no container_launch state=failed";
-         fi
+    command: "LOG=$(ls -t target/forge-diagnostics/container-start_*.stderr.log 2>/dev/null | head -1) && if grep -E 'event:container_launch .* state=failed' \"$LOG\"; then echo \"FAIL: a container launch failed (see lines above)\"; exit 1; else echo \"ok: no container_launch state=failed\"; fi"
     timeout_ms: 10000
     expected_behavior: "ok: no container_launch state=failed"
 
@@ -74,10 +59,7 @@ critical_path:
     # Stage label is per-agent — accept the current set.
     # First production distill confirms the real shape:
     #   `event:container_launch stage=opencode state=exited container=…`
-    command: >
-      LOG=$(ls -t target/forge-diagnostics/container-start_*.stderr.log 2>/dev/null | head -1)
-      && grep -Eq 'event:container_launch stage=(opencode|claude|codex|forge) state=(running|exited) container=' "$LOG"
-      && echo "ok: forge-agent stage launched"
+    command: "LOG=$(ls -t target/forge-diagnostics/container-start_*.stderr.log 2>/dev/null | head -1) && grep -Eq 'event:container_launch stage=(opencode|claude|codex|forge) state=(running|exited) container=' \"$LOG\" && echo \"ok: forge-agent stage launched\""
     timeout_ms: 10000
     expected_behavior: "ok: forge-agent stage launched"
 
@@ -85,10 +67,7 @@ critical_path:
     # The event:container_launch stream is emitted ONLY by the shared
     # PodmanClient path; its presence is the proof launches were not done via
     # a bare Command::new(\"podman\") bypass.
-    command: >
-      LOG=$(ls -t target/forge-diagnostics/container-start_*.stderr.log 2>/dev/null | head -1)
-      && grep -cE 'event:container_launch ' "$LOG"
-      | awk '{ if ($1+0 >= 1) print "ok: " $1 " idiomatic launch events"; else { print "FAIL: no idiomatic launch events"; exit 1 } }'
+    command: "LOG=$(ls -t target/forge-diagnostics/container-start_*.stderr.log 2>/dev/null | head -1) && grep -cE 'event:container_launch ' \"$LOG\" | awk '{ if ($1+0 >= 1) print \"ok: \" $1 \" idiomatic launch events\"; else { print \"FAIL: no idiomatic launch events\"; exit 1 } }'"
     timeout_ms: 10000
     expected_behavior: "ok: <N> idiomatic launch events"
 
@@ -118,14 +97,7 @@ critical_path:
   # (later in cycle). This is the durable evidence that the piggyback
   # wired up.
   - step: "annex produced a raw log, skip note, OR distill summary (any cycle outcome is fine)"
-    command: >
-      if ls -t target/forge-diagnostics/diagnostics_*.log >/dev/null 2>&1
-         || [ -s target/forge-diagnostics/cycle-skips.log ]
-         || ls -t plan/diagnostics/diagnostics_*-summary.md >/dev/null 2>&1; then
-        echo "ok: annex left evidence (raw log, skip note, or distill summary)";
-      else
-        echo "ok: annex ran but left no evidence on this host (annex contract honoured)";
-      fi
+    command: "if ls -t target/forge-diagnostics/diagnostics_*.log >/dev/null 2>&1 || [ -s target/forge-diagnostics/cycle-skips.log ] || ls -t plan/diagnostics/diagnostics_*-summary.md >/dev/null 2>&1; then echo \"ok: annex left evidence (raw log, skip note, or distill summary)\"; else echo \"ok: annex ran but left no evidence on this host (annex contract honoured)\"; fi"
     timeout_ms: 5000
     expected_behavior: "ok: annex left evidence ..."
 

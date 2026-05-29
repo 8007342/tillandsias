@@ -46,44 +46,26 @@ preconditions:
 
 critical_path:
   - step: "decide_route + TransportKind + DispatchOutcome are present in the canonical module (item 1)"
-    command: >
-      grep -F 'pub fn decide_route' crates/tillandsias-headless/src/control_dispatch.rs
-      && grep -F 'pub enum TransportKind' crates/tillandsias-headless/src/control_dispatch.rs
-      && grep -F 'pub enum DispatchOutcome' crates/tillandsias-headless/src/control_dispatch.rs
+    command: "grep -F 'pub fn decide_route' crates/tillandsias-headless/src/control_dispatch.rs && grep -F 'pub enum TransportKind' crates/tillandsias-headless/src/control_dispatch.rs && grep -F 'pub enum DispatchOutcome' crates/tillandsias-headless/src/control_dispatch.rs"
     timeout_ms: 3000
     expected_behavior: "pub enum DispatchOutcome"
 
   - step: "all three TransportKind / DispatchOutcome variant arms exist"
-    command: >
-      grep -F 'UnixSocket' crates/tillandsias-headless/src/control_dispatch.rs
-      && grep -F 'Vsock' crates/tillandsias-headless/src/control_dispatch.rs
-      && grep -F 'Handle' crates/tillandsias-headless/src/control_dispatch.rs
-      && grep -F 'Unsupported' crates/tillandsias-headless/src/control_dispatch.rs
-      && grep -F 'ResponseOnly' crates/tillandsias-headless/src/control_dispatch.rs
+    command: "grep -F 'UnixSocket' crates/tillandsias-headless/src/control_dispatch.rs && grep -F 'Vsock' crates/tillandsias-headless/src/control_dispatch.rs && grep -F 'Handle' crates/tillandsias-headless/src/control_dispatch.rs && grep -F 'Unsupported' crates/tillandsias-headless/src/control_dispatch.rs && grep -F 'ResponseOnly' crates/tillandsias-headless/src/control_dispatch.rs"
     timeout_ms: 3000
     expected_behavior: "ResponseOnly"
 
   - step: "tray/mod.rs (unix dispatcher) consults decide_route (item 2)"
     # Without this consultation, the unix dispatcher reverts to its
     # own variant table — convergence broken silently.
-    command: >
-      grep -F 'decide_route' crates/tillandsias-headless/src/tray/mod.rs
-      && grep -F 'TransportKind::UnixSocket' crates/tillandsias-headless/src/tray/mod.rs
-      && grep -F 'DispatchOutcome::Handle' crates/tillandsias-headless/src/tray/mod.rs
-      && grep -F 'DispatchOutcome::Unsupported' crates/tillandsias-headless/src/tray/mod.rs
-      && grep -F 'DispatchOutcome::ResponseOnly' crates/tillandsias-headless/src/tray/mod.rs
+    command: "grep -F 'decide_route' crates/tillandsias-headless/src/tray/mod.rs && grep -F 'TransportKind::UnixSocket' crates/tillandsias-headless/src/tray/mod.rs && grep -F 'DispatchOutcome::Handle' crates/tillandsias-headless/src/tray/mod.rs && grep -F 'DispatchOutcome::Unsupported' crates/tillandsias-headless/src/tray/mod.rs && grep -F 'DispatchOutcome::ResponseOnly' crates/tillandsias-headless/src/tray/mod.rs"
     timeout_ms: 3000
     expected_behavior: "DispatchOutcome::ResponseOnly"
 
   - step: "vsock_server.rs (vsock dispatcher) consults decide_route (item 3)"
     # Same regression check on the vsock side. The pre-filter sits
     # right before the existing variant-match.
-    command: >
-      grep -F 'decide_route' crates/tillandsias-headless/src/vsock_server.rs
-      && grep -F 'TransportKind::Vsock' crates/tillandsias-headless/src/vsock_server.rs
-      && grep -F 'DispatchOutcome::Handle' crates/tillandsias-headless/src/vsock_server.rs
-      && grep -F 'DispatchOutcome::Unsupported' crates/tillandsias-headless/src/vsock_server.rs
-      && grep -F 'DispatchOutcome::ResponseOnly' crates/tillandsias-headless/src/vsock_server.rs
+    command: "grep -F 'decide_route' crates/tillandsias-headless/src/vsock_server.rs && grep -F 'TransportKind::Vsock' crates/tillandsias-headless/src/vsock_server.rs && grep -F 'DispatchOutcome::Handle' crates/tillandsias-headless/src/vsock_server.rs && grep -F 'DispatchOutcome::Unsupported' crates/tillandsias-headless/src/vsock_server.rs && grep -F 'DispatchOutcome::ResponseOnly' crates/tillandsias-headless/src/vsock_server.rs"
     timeout_ms: 3000
     expected_behavior: "DispatchOutcome::ResponseOnly"
 
@@ -93,9 +75,7 @@ critical_path:
     # referencing the packet so future contributors find the
     # follow-up slice. A rewording is fine but the packet-path
     # reference must stay.
-    command: >
-      grep -F 'control-socket-protocol-convergence-2026-05-25.md' crates/tillandsias-headless/src/tray/mod.rs
-      && grep -F 'control-socket-protocol-convergence-2026-05-25.md' crates/tillandsias-headless/src/vsock_server.rs
+    command: "grep -F 'control-socket-protocol-convergence-2026-05-25.md' crates/tillandsias-headless/src/tray/mod.rs && grep -F 'control-socket-protocol-convergence-2026-05-25.md' crates/tillandsias-headless/src/vsock_server.rs"
     timeout_ms: 3000
     expected_behavior: "control-socket-protocol-convergence-2026-05-25.md"
 
@@ -104,11 +84,7 @@ critical_path:
     # variant addition that lands in decide_route but not in the
     # fixture panics via `unreachable!` — the drift signal the
     # convergence packet needs.
-    command: >
-      grep -F 'fn unix_socket_routing_matrix' crates/tillandsias-headless/src/control_dispatch.rs
-      && grep -F 'fn vsock_routing_matrix' crates/tillandsias-headless/src/control_dispatch.rs
-      && grep -F 'fn symmetric_variants_match_on_both_transports' crates/tillandsias-headless/src/control_dispatch.rs
-      && grep -F 'fn response_shaped_variants_are_response_only_on_both_transports' crates/tillandsias-headless/src/control_dispatch.rs
+    command: "grep -F 'fn unix_socket_routing_matrix' crates/tillandsias-headless/src/control_dispatch.rs && grep -F 'fn vsock_routing_matrix' crates/tillandsias-headless/src/control_dispatch.rs && grep -F 'fn symmetric_variants_match_on_both_transports' crates/tillandsias-headless/src/control_dispatch.rs && grep -F 'fn response_shaped_variants_are_response_only_on_both_transports' crates/tillandsias-headless/src/control_dispatch.rs"
     timeout_ms: 3000
     expected_behavior: "response_shaped_variants_are_response_only_on_both_transports"
 

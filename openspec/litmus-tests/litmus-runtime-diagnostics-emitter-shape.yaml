@@ -59,9 +59,7 @@ critical_path:
     # structure that lets Died records fill duration_seconds. Pinning
     # both the type and the field name catches a rename that would
     # silently lose duration_seconds from emitted exit lines.
-    command: >
-      grep -F 'struct EmitterState' crates/tillandsias-podman/src/diagnostic_event_emitter.rs
-      && grep -F 'start_times: HashMap<String, i64>' crates/tillandsias-podman/src/diagnostic_event_emitter.rs
+    command: "grep -F 'struct EmitterState' crates/tillandsias-podman/src/diagnostic_event_emitter.rs && grep -F 'start_times: HashMap<String, i64>' crates/tillandsias-podman/src/diagnostic_event_emitter.rs"
     timeout_ms: 3000
     expected_behavior: "start_times: HashMap<String, i64>"
 
@@ -69,11 +67,7 @@ critical_path:
     # The POSIX 128+N decoder for signal-induced exits. Without it,
     # signal-killed containers would still emit container_exit but
     # never the preceding container_signal line.
-    command: >
-      grep -F 'fn signal_name_from_exit_code' crates/tillandsias-podman/src/diagnostic_event_emitter.rs
-      && grep -F 'SIGKILL' crates/tillandsias-podman/src/diagnostic_event_emitter.rs
-      && grep -F 'SIGSEGV' crates/tillandsias-podman/src/diagnostic_event_emitter.rs
-      && grep -F 'SIGTERM' crates/tillandsias-podman/src/diagnostic_event_emitter.rs
+    command: "grep -F 'fn signal_name_from_exit_code' crates/tillandsias-podman/src/diagnostic_event_emitter.rs && grep -F 'SIGKILL' crates/tillandsias-podman/src/diagnostic_event_emitter.rs && grep -F 'SIGSEGV' crates/tillandsias-podman/src/diagnostic_event_emitter.rs && grep -F 'SIGTERM' crates/tillandsias-podman/src/diagnostic_event_emitter.rs"
     timeout_ms: 3000
     expected_behavior: "SIGTERM"
 
@@ -81,12 +75,7 @@ critical_path:
     # Routing-table integrity: a refactor that drops a match arm would
     # silently stop emitting some events. The action variant names
     # below match the diagnostics.rs enum verbatim.
-    command: >
-      grep -F 'ContainerLifecycleAction::Died' crates/tillandsias-podman/src/diagnostic_event_emitter.rs
-      && grep -F 'ContainerLifecycleAction::Oom' crates/tillandsias-podman/src/diagnostic_event_emitter.rs
-      && grep -F 'ContainerLifecycleAction::Started' crates/tillandsias-podman/src/diagnostic_event_emitter.rs
-      && grep -F 'ContainerLifecycleAction::Removed' crates/tillandsias-podman/src/diagnostic_event_emitter.rs
-      && grep -F 'ContainerLifecycleAction::CleanedUp' crates/tillandsias-podman/src/diagnostic_event_emitter.rs
+    command: "grep -F 'ContainerLifecycleAction::Died' crates/tillandsias-podman/src/diagnostic_event_emitter.rs && grep -F 'ContainerLifecycleAction::Oom' crates/tillandsias-podman/src/diagnostic_event_emitter.rs && grep -F 'ContainerLifecycleAction::Started' crates/tillandsias-podman/src/diagnostic_event_emitter.rs && grep -F 'ContainerLifecycleAction::Removed' crates/tillandsias-podman/src/diagnostic_event_emitter.rs && grep -F 'ContainerLifecycleAction::CleanedUp' crates/tillandsias-podman/src/diagnostic_event_emitter.rs"
     timeout_ms: 3000
     expected_behavior: "ContainerLifecycleAction::CleanedUp"
 
@@ -94,10 +83,7 @@ critical_path:
     # The typed stderr tail. A regression to legacy `start()` (which
     # writes a different format to stdout) would not be caught by the
     # formatter-shape litmus.
-    command: >
-      grep -F 'pub async fn start_typed_event_stream' crates/tillandsias-podman/src/diagnostics_stream.rs
-      && grep -F 'format_container_stderr_event' crates/tillandsias-podman/src/diagnostics_stream.rs
-      && grep -F 'event:container_stderr' crates/tillandsias-podman/src/diagnostics_stream.rs
+    command: "grep -F 'pub async fn start_typed_event_stream' crates/tillandsias-podman/src/diagnostics_stream.rs && grep -F 'format_container_stderr_event' crates/tillandsias-podman/src/diagnostics_stream.rs && grep -F 'event:container_stderr' crates/tillandsias-podman/src/diagnostics_stream.rs"
     timeout_ms: 3000
     expected_behavior: "event:container_stderr"
 
@@ -105,9 +91,7 @@ critical_path:
     # End-to-end wiring at the launch path. Without either call, a
     # --diagnostics run would not emit container_exit / container_stderr
     # despite all the lower layers being in place.
-    command: >
-      grep -F 'spawn_diagnostic_event_emitter' crates/tillandsias-headless/src/main.rs
-      && grep -F 'start_typed_event_stream' crates/tillandsias-headless/src/main.rs
+    command: "grep -F 'spawn_diagnostic_event_emitter' crates/tillandsias-headless/src/main.rs && grep -F 'start_typed_event_stream' crates/tillandsias-headless/src/main.rs"
     timeout_ms: 3000
     expected_behavior: "start_typed_event_stream"
 
@@ -116,14 +100,7 @@ critical_path:
     # paths. A regression that removes ONE while leaving the other
     # passes the previous step but breaks symmetry: count grep matches
     # to catch that.
-    command: >
-      OPENCODE_LINE=$(grep -n 'fn run_opencode_mode' crates/tillandsias-headless/src/main.rs | head -1 | cut -d: -f1)
-      && OBSERV_LINE=$(grep -n 'fn run_observatorium_mode' crates/tillandsias-headless/src/main.rs | head -1 | cut -d: -f1)
-      && [ -n "$OPENCODE_LINE" ] && [ -n "$OBSERV_LINE" ]
-      && EMITTER_COUNT=$(grep -c 'spawn_diagnostic_event_emitter' crates/tillandsias-headless/src/main.rs)
-      && HANDLE_COUNT=$(grep -c 'start_typed_event_stream' crates/tillandsias-headless/src/main.rs)
-      && [ "$EMITTER_COUNT" -ge 2 ] && [ "$HANDLE_COUNT" -ge 2 ]
-      && echo "ok: both forge-launching modes wire both helpers (emitter=$EMITTER_COUNT, handle=$HANDLE_COUNT)"
+    command: "OPENCODE_LINE=$(grep -n 'fn run_opencode_mode' crates/tillandsias-headless/src/main.rs | head -1 | cut -d: -f1) && OBSERV_LINE=$(grep -n 'fn run_observatorium_mode' crates/tillandsias-headless/src/main.rs | head -1 | cut -d: -f1) && [ -n \"$OPENCODE_LINE\" ] && [ -n \"$OBSERV_LINE\" ] && EMITTER_COUNT=$(grep -c 'spawn_diagnostic_event_emitter' crates/tillandsias-headless/src/main.rs) && HANDLE_COUNT=$(grep -c 'start_typed_event_stream' crates/tillandsias-headless/src/main.rs) && [ \"$EMITTER_COUNT\" -ge 2 ] && [ \"$HANDLE_COUNT\" -ge 2 ] && echo \"ok: both forge-launching modes wire both helpers (emitter=$EMITTER_COUNT, handle=$HANDLE_COUNT)\""
     timeout_ms: 3000
     expected_behavior: "ok: both forge-launching modes wire both helpers"
 
@@ -131,11 +108,7 @@ critical_path:
     # If any of these is renamed without updating both this litmus
     # and the corresponding behaviour pin, a regression could ship
     # behind a green CI run.
-    command: >
-      grep -F 'fn started_then_died_records_duration_and_evicts_entry' crates/tillandsias-podman/src/diagnostic_event_emitter.rs
-      && grep -F 'fn died_without_prior_started_has_no_duration' crates/tillandsias-podman/src/diagnostic_event_emitter.rs
-      && grep -F 'fn signal_name_from_exit_code_maps_common_signals' crates/tillandsias-podman/src/diagnostic_event_emitter.rs
-      && grep -F 'fn start_typed_event_stream_signature_pin' crates/tillandsias-podman/src/diagnostics_stream.rs
+    command: "grep -F 'fn started_then_died_records_duration_and_evicts_entry' crates/tillandsias-podman/src/diagnostic_event_emitter.rs && grep -F 'fn died_without_prior_started_has_no_duration' crates/tillandsias-podman/src/diagnostic_event_emitter.rs && grep -F 'fn signal_name_from_exit_code_maps_common_signals' crates/tillandsias-podman/src/diagnostic_event_emitter.rs && grep -F 'fn start_typed_event_stream_signature_pin' crates/tillandsias-podman/src/diagnostics_stream.rs"
     timeout_ms: 3000
     expected_behavior: "start_typed_event_stream_signature_pin"
 
