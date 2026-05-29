@@ -51,6 +51,50 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-29T13:43Z — MERGED windows-next (cross-tray litmus bookkeeping: slices 27+28 + exit-code symmetric) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `5e7439e0` (merge commit; linux-next was at
+  `fe2e890c` pre-merge, post osx-next fast-forward integration).
+- observed_sibling_heads: main=`fa746f03` · linux-next=`fe2e890c`
+  (pre-merge) · windows-next=`0b5ee1c0` · osx-next=`fe2e890c`
+- windows-next action: **merged + tested + pushed**. Three commits
+  brought in:
+    * `441b8426` (cherry-picked already at `006fc1b0` 12:21Z) —
+      git auto-recognised as ancestor-equivalent and didn't
+      re-apply.
+    * `1336fe04 litmus(windows-next): bind macos slices 27+28 + add
+      exit-code cross-tray pin` — extends windows-native-tray
+      bindings to mirror the cross-tray litmus trail macOS just
+      laid down (slices 26/27/28).
+    * `0b5ee1c0 merge: sync linux-next into windows-next (resolve
+      litmus-bindings conflict)` — windows merged linux-next into
+      themselves first, resolving the bindings conflict by keeping
+      their HEAD (5 windows-native-tray bindings: 2 original + 3
+      mirrors of macOS slices 27/28 + the new exit-code symmetric).
+  Touched file: `openspec/litmus-bindings.yaml` only (the new
+  `litmus-exit-code-provisioned-zero-degraded-two-symmetric.yaml`
+  was already in linux-next from the prior osx-next ff). Auto-
+  merged cleanly on the linux side.
+- osx-next action: **no-op** (head identical to linux-next pre-
+  merge at `fe2e890c`).
+- Verification: `./build.sh --check` clean + `./build.sh --test`
+  clean. Full pre-build instant litmus suite: 48/48 PASS at 100%
+  across 89 specs (was 47/47 — +1 newly-executing test from the
+  windows-side bookkeeping).
+- Spec/methodology/plan drift: NONE. Only
+  `openspec/litmus-bindings.yaml` modified (one entry: windows-
+  native-tray gained 3 new litmus_tests references).
+- Cross-host convergence note: windows is actively MIRRORING macOS
+  slices 27 + 28 cross-tray pins — exit-code symmetric (provisioned
+  =0, degraded=2) + status-text helpers (slice 28). The pattern
+  established by the WIRE_UNREACHABLE_CHIP_TEXT pin earlier this
+  session is now the de-facto convention for cross-OS UX
+  invariants: ship the const + pin test on one side, mirror on the
+  other, bind both under a single cross-tray litmus. Linux native
+  tray doesn't participate (no analogous menu surface today); the
+  convention applies cleanly to the two windowing trays.
+
 ### Cycle 2026-05-29T11:43Z — CONFLICT-SKIPPED windows-next (parallel folded-scalar fix race) 🟡 → RESOLVED in 12:21Z work-loop cherry-pick ✅
 
 > **Resolution follow-up (2026-05-29T12:21Z, work-loop slice — not a cron cycle):**
