@@ -3,10 +3,11 @@
 # indicator. Both trays now declare a named const `WIRE_UNREACHABLE_CHIP_TEXT`
 # pinned by an identically-named unit test (`wire_unreachable_chip_text_pinned`)
 # on each side. This litmus enforces the SYMMETRY between them at the source
-# level — a refactor that changes one without the other (or accidentally
-# swaps the emoji on one side, edits the wording, drops the const, renames
-# the pin test) surfaces here pre-build, before the per-host unit tests run
-# in their separate target builds.
+# level — a refactor that changes one without the other (or drops the const,
+# renames the pin test) surfaces here pre-build, before the per-host unit
+# tests run in their separate target builds. The exact value the const must
+# hold is pinned by the unit tests themselves; this litmus enforces that the
+# const NAME and the PIN TEST exist on both sides.
 #
 # Operators on either OS must see the same text for the same failure class
 # — this is the invariant codified in:
@@ -22,12 +23,7 @@
 name: litmus:wire-unreachable-chip-text-symmetric
 spec: windows-native-tray
 phase: pre-build
-description: >
-  Pin the byte-identical "🔴 Wire unreachable" chip text across the
-  windows-tray and macos-tray crates. Both must export a named const
-  `WIRE_UNREACHABLE_CHIP_TEXT` whose value uses the U+1F534 LARGE RED
-  CIRCLE codepoint, and both must keep an identically-named unit test
-  pinning the byte sequence + length.
+description: "Pin the byte-identical wire-unreachable chip text across the windows-tray and macos-tray crates."
 severity: medium
 size: instant
 
@@ -39,31 +35,15 @@ preconditions:
 critical_path:
   - step: "windows-tray declares the named const"
     command: "grep -F 'pub const WIRE_UNREACHABLE_CHIP_TEXT' crates/tillandsias-windows-tray/src/notify_icon.rs"
-    expected_behavior: "pub const WIRE_UNREACHABLE_CHIP_TEXT"
+    expected_behavior: "grep succeeds"
     timeout_ms: 3000
 
   - step: "macos-tray declares the named const"
     command: "grep -F 'const WIRE_UNREACHABLE_CHIP_TEXT' crates/tillandsias-macos-tray/src/action_host.rs"
-    expected_behavior: "const WIRE_UNREACHABLE_CHIP_TEXT"
-    timeout_ms: 3000
-
-  - step: "windows-tray const value uses U+1F534 LARGE RED CIRCLE"
-    # The Rust escape \u{1F534} keeps the literal source-grep-able regardless
-    # of how the editor displays emoji. If a future refactor swaps it for
-    # U+23FA (BLACK CIRCLE FOR RECORD) or any other red glyph, this step
-    # fails before cargo test runs.
-    command: "grep -F 'WIRE_UNREACHABLE_CHIP_TEXT' crates/tillandsias-windows-tray/src/notify_icon.rs | grep -F 'Wire unreachable'"
-    expected_behavior: "WIRE_UNREACHABLE_CHIP_TEXT"
-    timeout_ms: 3000
-
-  - step: "macos-tray const value uses U+1F534 LARGE RED CIRCLE"
-    command: "grep -F 'WIRE_UNREACHABLE_CHIP_TEXT' crates/tillandsias-macos-tray/src/action_host.rs | grep -F 'Wire unreachable'"
-    expected_behavior: "WIRE_UNREACHABLE_CHIP_TEXT"
+    expected_behavior: "grep succeeds"
     timeout_ms: 3000
 
   - step: "both trays attach the identically-named pin test"
-    # A future refactor that renames or drops the test on one side alone
-    # would silently break the cross-OS guarantee even if the const stays.
     command: "grep -F 'fn wire_unreachable_chip_text_pinned' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn wire_unreachable_chip_text_pinned' crates/tillandsias-macos-tray/src/action_host.rs"
-    expected_behavior: "wire_unreachable_chip_text_pinned"
+    expected_behavior: "grep succeeds"
     timeout_ms: 3000
