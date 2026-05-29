@@ -595,6 +595,90 @@ async fn refresh_vm_status(hwnd: HWND) {
     }
 }
 
+/// Map a wire `LocalProjectEntry` ({label, guest_path, last_seen_unix}) onto the
+/// shared menu `ProjectEntry`. `path` is the in-VM mount path the headless
+/// reported — used by "Attach Here" forge-container launches as the cwd. `ready`
+/// is `false` because per-project forge status isn't on the wire yet (slice 19
+/// note). Mirrors macOS `local_entry_to_menu` (slice 19, `06088c41`).
+fn local_entry_to_menu(entry: &tillandsias_control_wire::LocalProjectEntry) -> ProjectEntry {
+    ProjectEntry {
+        name: entry.label.clone(),
+        path: entry.guest_path.clone(),
+        ready: false,
+    }
+}
+
+/// Poll the in-VM headless's `EnumerateLocalProjects` handler (convergence
+/// packet Q4; landed in `05cc3a7d`) and merge the result into the shared
+/// `MenuState.local_projects`. Complementary to the host-side `~/src` scanner
+/// (which delivers immediate file-change updates without a running VM); the
+/// wire poll picks up VM-side reconciliation on a slower cadence and matches
+/// the macOS tray's polling shape (slice 19, `06088c41`).
+///
+/// Best-effort: a transient wire error / Error{Unsupported} leaves the
+/// last-known list untouched (logged at debug / warn respectively).
+async fn refresh_local_projects(_hwnd: HWND) {
+    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
+    use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
+    use tillandsias_host_shell::vsock_client::Client;
+
+    let stream = match crate::hvsocket::open_hvsocket_stream(CONTROL_WIRE_VSOCK_PORT).await {
+        Ok(stream) => stream,
+        Err(err) => {
+            tracing::debug!(%err, "local projects refresh: control wire unreachable");
+            return;
+        }
+    };
+    let mut client = Client::from_stream(
+        Box::new(stream),
+        Transport::Vsock {
+            cid: 0,
+            port: CONTROL_WIRE_VSOCK_PORT,
+        },
+    );
+    if let Err(err) = client.handshake().await {
+        tracing::debug!(%err, "local projects refresh: handshake failed");
+        return;
+    }
+    let seq = client.allocate_seq();
+    let envelope = ControlEnvelope {
+        wire_version: WIRE_VERSION,
+        seq,
+        body: ControlMessage::EnumerateLocalProjects { seq },
+    };
+    let reply = match client.request(&envelope).await {
+        Ok(reply) => reply,
+        Err(err) => {
+            tracing::debug!(%err, "local projects refresh: request failed");
+            return;
+        }
+    };
+    match reply.body {
+        ControlMessage::LocalProjectsReply { entries, .. } => {
+            let mapped: Vec<ProjectEntry> = entries.iter().map(local_entry_to_menu).collect();
+            let n = mapped.len();
+            if let Ok(mut guard) = MENU_STATE.lock() {
+                guard.get_or_insert_with(MenuState::initial).local_projects = mapped;
+            }
+            tracing::debug!(count = n, "local projects refreshed (VM-side)");
+        }
+        // Per convergence packet item 4 (eddb5c00): surface the dispatcher's
+        // Error so an operator sees why the local-projects didn't refresh.
+        ControlMessage::Error { code, message, .. } => {
+            tracing::warn!(
+                "local projects refresh: {}",
+                describe_wire_error(code, &message)
+            );
+        }
+        other => {
+            tracing::debug!(
+                "local projects refresh: unexpected reply variant {}",
+                other.kind()
+            );
+        }
+    }
+}
+
 /// Map a wire `CloudProjectEntry` ({label, owner, repo, default_branch}) onto the
 /// shared menu `ProjectEntry` (the cloud-projects submenu the host renders).
 /// `ProjectEntry::path` is the `owner/repo` slug (per its doc); `ready` is always
@@ -1022,7 +1106,12 @@ fn spawn_provisioning(hwnd: HWND) {
                         let mut tick: u32 = 0;
                         loop {
                             refresh_vm_status(hwnd).await;
+                            // Slower polls every 10 ticks (~5 min). Local fs
+                            // walks are virtually free vs `gh repo list`, so
+                            // run local first to keep the menu fresh fast.
+                            // Order mirrors macOS slice 19 (`06088c41`).
                             if tick.is_multiple_of(10) {
+                                refresh_local_projects(hwnd).await;
                                 refresh_cloud_projects(hwnd).await;
                             }
                             tick = tick.wrapping_add(1);
@@ -1729,6 +1818,25 @@ mod tests {
 "x86_64.tar" = "pending-ci"
 "#;
         assert!(parse_rootfs_sha_pin(manifest, "x86_64.tar").is_none());
+    }
+
+    /// Local `ProjectEntry.path` is the in-VM `guest_path` (per its doc) so an
+    /// `Attach Here` exec lands the forge container with the right cwd. Mirrors
+    /// the macOS slice 19 mapping.
+    #[test]
+    fn local_entry_maps_to_guest_path() {
+        let entry = tillandsias_control_wire::LocalProjectEntry {
+            label: "tillandsias".to_string(),
+            guest_path: "/mnt/c/Users/bullo/src/tillandsias".to_string(),
+            last_seen_unix: 1700000000,
+        };
+        let mapped = local_entry_to_menu(&entry);
+        assert_eq!(mapped.name, "tillandsias");
+        assert_eq!(mapped.path, "/mnt/c/Users/bullo/src/tillandsias");
+        assert!(
+            !mapped.ready,
+            "per-project ready flag isn't on the wire yet"
+        );
     }
 
     /// Cloud `ProjectEntry.path` is the `owner/repo` slug (per its doc) so the
