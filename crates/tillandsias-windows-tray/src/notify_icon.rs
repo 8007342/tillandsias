@@ -505,6 +505,13 @@ pub fn status_once() -> i32 {
     })
 }
 
+/// Pinned chip text for control-wire degradation. Naming + byte sequence MUST
+/// match macOS's identical const (slice 23, `cbeedb4a`) so a future refactor
+/// on either side can't silently break the cross-tray UX-parity invariant —
+/// operators see the same text for the same failure class. Pinned by
+/// `wire_unreachable_chip_text_pinned`.
+pub const WIRE_UNREACHABLE_CHIP_TEXT: &str = "\u{1F534} Wire unreachable";
+
 /// Mark the live status chip as wire-unreachable. Called from the poll loop
 /// when `refresh_vm_status` can't reach the in-VM headless — without this, a
 /// mid-session wire failure (headless crash, VM terminated externally, etc.)
@@ -516,7 +523,7 @@ fn mark_wire_unreachable(hwnd: HWND) {
     if let Ok(mut guard) = MENU_STATE.lock() {
         guard.get_or_insert_with(MenuState::initial).podman_ready = false;
     }
-    update_status_text("\u{1F534} Wire unreachable", hwnd);
+    update_status_text(WIRE_UNREACHABLE_CHIP_TEXT, hwnd);
 }
 
 /// Compose a one-line description of an `Error` reply the in-VM headless's
@@ -1912,6 +1919,26 @@ mod tests {
 "x86_64.tar" = "pending-ci"
 "#;
         assert!(parse_rootfs_sha_pin(manifest, "x86_64.tar").is_none());
+    }
+
+    /// Pin the wire-unreachable chip text so a future refactor (emoji swap,
+    /// wording edit, localization) can't silently break the cross-tray UX
+    /// parity invariant. Identical-named to macOS slice 23 (`cbeedb4a`); same
+    /// three assertions — byte sequence, total length, leading codepoint.
+    #[test]
+    fn wire_unreachable_chip_text_pinned() {
+        assert_eq!(WIRE_UNREACHABLE_CHIP_TEXT, "\u{1F534} Wire unreachable");
+        assert_eq!(
+            WIRE_UNREACHABLE_CHIP_TEXT.len(),
+            21,
+            "byte length drift: {} bytes",
+            WIRE_UNREACHABLE_CHIP_TEXT.len()
+        );
+        assert_eq!(
+            WIRE_UNREACHABLE_CHIP_TEXT.chars().next(),
+            Some('\u{1F534}'),
+            "first char must be U+1F534 LARGE RED CIRCLE (not U+23FA or other red glyph)"
+        );
     }
 
     /// Local `ProjectEntry.path` is the in-VM `guest_path` (per its doc) so an

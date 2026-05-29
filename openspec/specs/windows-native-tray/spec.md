@@ -171,7 +171,96 @@ otherwise. The implementation SHALL NOT use SSH.
 - **WHEN** `crates/tillandsias-windows-tray/src/**.rs` and `crates/tillandsias-vm-layer/src/wsl.rs` are searched for `Command::new("ssh")`
 - **THEN** zero matches SHALL be found
 
+### Requirement: `--diagnose` CLI mode emits a stable bundled health report
+- **ID**: windows-native-tray.diagnose.cli-health-report@v1
+- **Modality**: MUST
+- **Measurable**: true
+- **Invariants**: [windows-native-tray.invariant.diagnose-exit-codes]
+
+@trace spec:windows-native-tray
+
+The `tillandsias-tray.exe` binary MUST support a `--diagnose` flag (and a
+`--diagnose --json` variant) that prints a bundled health report and exits
+without launching the Win32 message loop. The output MUST be stable across
+the v0.0.1 series so support tooling (`scripts/tray-diagnose.ps1`,
+`scripts/install-windows.ps1` post-install verify) can rely on the shape.
+
+#### Scenario: Human-readable report is emitted on `--diagnose`
+- **GIVEN** the tray binary is invoked from a console with `--diagnose` (and
+  no `--json`)
+- **WHEN** the binary runs
+- **THEN** stdout SHALL contain a section-per-field health report
+  (Version, Log file, Log exists, `wt.exe`, Distro registration, Release
+  tag, Manifest pin, Control wire status, Last event, recent log tail)
+- **AND** the binary SHALL exit before invoking `create_message_window`
+- **AND** the binary SHALL exit 0 if `distro_registered` AND
+  `wire.reachable` AND `wire.phase == "Ready"`; 2 if degraded (any check
+  failed but the tool ran end-to-end); or 1 on a hard failure (tokio
+  runtime build refused, etc.)
+
+#### Scenario: JSON output emits a schema-pinned object
+- **GIVEN** `--diagnose --json`
+- **WHEN** the binary runs
+- **THEN** stdout SHALL be a parseable JSON object with the documented top
+  level keys (`version`, `log_path`, `log_exists`, `wt_present`, `distro`,
+  `distro_registered`, `release_tag`, `manifest_pin_x86_64_tar`, `wire`,
+  `recent_log_tail`)
+- **AND** the `wire` nested object SHALL contain (`reachable`, `phase`,
+  `podman_ready`, `last_event`, `error`)
+- **AND** `manifest_pin_x86_64_tar` SHALL serialise as a JSON string when
+  the embedded manifest has an `x86_64.tar` pin and as JSON `null` when it
+  does not (a non-hex placeholder like `"pending-ci"` MUST serialise as
+  `null`, not a garbage substring)
+- **AND** `recent_log_tail` SHALL serialise as a JSON array (empty array
+  when the log file does not yet exist, not `null` or absent)
+- **AND** the JSON schema SHALL be pinned by unit tests in
+  `tillandsias-windows-tray::notify_icon::tests`
+  (`diagnose_json_top_level_keys_pinned`,
+  `diagnose_json_wire_object_keys_pinned`,
+  `diagnose_json_manifest_pin_some_serializes_as_string`,
+  `diagnose_json_manifest_pin_none_serializes_as_null`,
+  `diagnose_json_recent_log_tail_is_array`)
+
+#### Scenario: Capturing `--diagnose --json` from PowerShell uses `cmd.exe` redirect
+- **GIVEN** the installed (release / GUI-subsystem) tray binary is invoked
+  from a PowerShell session and the caller needs to capture the JSON
+- **WHEN** the caller uses `cmd /c "<exe> --diagnose --json > out.json 2>nul"`
+- **THEN** `out.json` SHALL receive the complete machine-readable report
+- **AND** PowerShell's direct stdout capture (`$x = & exe`, `& exe > file`)
+  MAY silently drop large `println!` writes from GUI-subsystem binaries and
+  thus is NOT a supported capture path (the cheatsheet documents this)
+
 ## Invariants
+
+### Invariant: `--diagnose` exit codes are limited to {0, 2, 1}
+- **ID**: windows-native-tray.invariant.diagnose-exit-codes
+- **Modality**: MUST
+- **Measurable**: true via the unit test
+  `exit_code_provisioned_zero_degraded_two` in
+  `crates/tillandsias-windows-tray/src/notify_icon.rs`.
+
+The `--diagnose` and `--diagnose --json` modes SHALL exit with one of three
+codes: **0** (fully healthy: distro registered AND wire reachable AND phase
+Ready), **2** (degraded: the binary ran end-to-end but at least one check
+failed), or **1** (hard failure: the tray could not run `--diagnose`
+itself). Tooling MUST be able to use the exit code as a tri-state without
+parsing stdout.
+
+### Invariant: `WIRE_UNREACHABLE_CHIP_TEXT` is pinned across trays
+- **ID**: windows-native-tray.invariant.wire-unreachable-chip-text
+- **Modality**: MUST
+- **Measurable**: true via the unit test
+  `wire_unreachable_chip_text_pinned` in
+  `crates/tillandsias-windows-tray/src/notify_icon.rs`.
+
+The live-status chip rendered when `refresh_vm_status` cannot reach the
+in-VM headless SHALL be byte-identical to the macOS tray's
+`WIRE_UNREACHABLE_CHIP_TEXT` (slice 23, commit `cbeedb4a`):
+`"\u{1F534} Wire unreachable"` (21 bytes UTF-8, leading codepoint
+U+1F534 LARGE RED CIRCLE). Operators on either OS SHALL see the same
+text for the same failure class.
+
+
 
 ### Invariant: No Tauri or WebView surface
 - **ID**: windows-native-tray.invariant.no-tauri-or-webview
