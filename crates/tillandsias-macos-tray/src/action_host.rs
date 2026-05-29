@@ -311,6 +311,77 @@ async fn poll_vm_status_once(
     }
 }
 
+/// Send a wire-level `VmShutdownRequest` to the in-VM headless so it
+/// can drain podman containers + sessions BEFORE VZ tears down the
+/// VM. Mirrors `tillandsias-windows-tray::wsl_lifecycle::
+/// request_vm_shutdown` (commit `80eceb0b`) but uses macOS's
+/// `VZVirtioSocketConnection` path via `VzRuntime::open_vsock_stream`.
+///
+/// Bounded by `RTT_BUDGET` (3 s) — a wedged in-VM headless cannot
+/// delay Quit indefinitely; the caller follows up with VZ-level
+/// `requestStop` which carries its own deadline. Returns `Err` on
+/// connect/handshake/reply failures + on the dispatcher's own
+/// `Error{Unsupported}` reply (which is the expected state until
+/// Linux ships the vsock-side inner handler — at which point this
+/// auto-upgrades with no tray change).
+///
+/// `drain_timeout` is encoded as the request's `drain_timeout_ms`
+/// hint for the in-VM headless so it knows the host's overall
+/// shutdown budget.
+///
+/// @trace spec:vsock-transport,
+///        plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q2),
+///        plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 20)
+async fn request_vm_shutdown(vz: &VzRuntime, drain_timeout: Duration) -> Result<(), String> {
+    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
+    use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
+    use tillandsias_host_shell::vsock_client::Client;
+
+    const RTT_BUDGET: Duration = Duration::from_secs(3);
+
+    let stream = vz
+        .open_vsock_stream(CONTROL_WIRE_VSOCK_PORT, RTT_BUDGET)
+        .await
+        .map_err(|e| format!("vsock connect: {e}"))?;
+
+    let mut client = Client::from_stream(
+        Box::new(stream),
+        Transport::Vsock {
+            cid: TILLANDSIAS_GUEST_CID,
+            port: CONTROL_WIRE_VSOCK_PORT,
+        },
+    );
+    client
+        .handshake()
+        .await
+        .map_err(|e| format!("control-wire handshake: {e}"))?;
+
+    let seq = client.allocate_seq();
+    let envelope = ControlEnvelope {
+        wire_version: WIRE_VERSION,
+        seq,
+        body: ControlMessage::VmShutdownRequest {
+            seq,
+            drain_timeout_ms: drain_timeout.as_millis().min(u32::MAX as u128) as u32,
+        },
+    };
+    let reply = client
+        .request(&envelope)
+        .await
+        .map_err(|e| format!("VmShutdownRequest: {e}"))?;
+
+    match reply.body {
+        // Per the wire convention (other handlers' shape): an Ok
+        // shutdown ack is signalled either by a tailored reply
+        // variant when Linux adds one, OR — for v0.0.1 where the
+        // vsock inner arm isn't shipped yet — by a clean
+        // Error{Unsupported}/etc. We treat ANY non-Error reply as
+        // OK so this auto-upgrades when the inner arm lands.
+        ControlMessage::Error { code, message, .. } => Err(describe_wire_error(code, &message)),
+        _other => Ok(()),
+    }
+}
+
 /// Map a wire `LocalProjectEntry` ({label, guest_path,
 /// last_seen_unix}) onto the shared menu `ProjectEntry` the local-
 /// projects submenu renders. `ProjectEntry::path` is the in-VM
@@ -621,6 +692,33 @@ declare_class!(
             );
             runtime.spawn(async move {
                 if let Some(vm) = vm_taken {
+                    // Two-step graceful shutdown (mirrors windows-tray
+                    // 80eceb0b Q2). Step 1: wire-level
+                    // VmShutdownRequest so the in-VM headless gets a
+                    // chance to drain podman containers + their
+                    // sessions BEFORE VZ tears down the VM. Bounded
+                    // 3s wire RTT so a wedged headless can't delay
+                    // Quit indefinitely; we then fall through to
+                    // VZ.requestStop which carries its own
+                    // VM_STOP_DRAIN deadline. On vsock today the
+                    // in-VM dispatcher routes per the matrix but no
+                    // inner VmShutdownRequest handler exists yet, so
+                    // the reply is Error{Unsupported} which we log at
+                    // info as expected. When linux adds the vsock
+                    // inner arm this auto-upgrades with NO tray code
+                    // change.
+                    match request_vm_shutdown(&vm, VM_STOP_DRAIN).await {
+                        Ok(()) => eprintln!(
+                            "[tillandsias-tray] Quit: in-VM headless acked shutdown request"
+                        ),
+                        Err(e) => eprintln!(
+                            "[tillandsias-tray] Quit: in-VM shutdown request: {e} \
+                             (proceeding to VZ.requestStop)"
+                        ),
+                    }
+                    // Step 2: VZ-level stop (existing path). Drains
+                    // VM_STOP_DRAIN waiting for state=Stopped then
+                    // escalates to force-stop.
                     match vm.stop(VM_STOP_DRAIN).await {
                         Ok(()) => {
                             eprintln!("[tillandsias-tray] Quit: VM drained cleanly")
