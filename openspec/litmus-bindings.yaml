@@ -253,8 +253,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:fix-windows-image-routing-shape
-  coverage_ratio: 33
-  last_verified: '2026-05-12'
+  - litmus:fix-windows-image-routing-helper-shape
+  coverage_ratio: 67
+  last_verified: '2026-05-29'
 - spec_id: forge-as-only-runtime
   status: active
   litmus_tests:
