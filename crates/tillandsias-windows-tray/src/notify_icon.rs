@@ -296,6 +296,21 @@ pub fn run() -> ! {
         // — matches the macOS/Linux trays' Quit → drain contract.
         // @trace plan/steps/windows-next-thin-tray.md (Quit → graceful drain)
         if provisioning_enabled() {
+            // Step 1: optimistic wire-level graceful drain (convergence packet
+            // Q2 — `a10dc0f6`). Headless gets a chance to stop podman
+            // containers cleanly before we yank the VM. Bounded so a hung
+            // wire doesn't delay Quit; we fall through to the hard terminate
+            // regardless of the outcome.
+            let _ = tokio::time::timeout(
+                std::time::Duration::from_secs(3),
+                request_vm_shutdown(10_000),
+            )
+            .await;
+
+            // Step 2: hard backstop — `wsl --terminate`. On Windows a parent
+            // exit does NOT reap the keepalive `wsl --exec` child, so without
+            // this the utility VM (and the orphaned keepalive) would linger
+            // until WSL's own idle timeout.
             let lifecycle = WslLifecycle::new();
             let drain = lifecycle.graceful_shutdown();
             match tokio::time::timeout(std::time::Duration::from_secs(15), drain).await {
@@ -675,6 +690,68 @@ async fn refresh_local_projects(_hwnd: HWND) {
                 "local projects refresh: unexpected reply variant {}",
                 other.kind()
             );
+        }
+    }
+}
+
+/// Send a `VmShutdownRequest` over the control wire as the optimistic
+/// graceful-drain path before the hard `wsl --terminate` backstop.
+///
+/// Best-effort + bounded. When the in-VM headless's vsock-side inner handler
+/// ships (currently unix-only, `a10dc0f6`) it gets `drain_timeout_ms` to stop
+/// podman containers cleanly before we yank the VM. Today on vsock the
+/// dispatcher routes per the matrix; no inner handler exists yet, so the
+/// reply is `Error{Unsupported}`, which we log at info (it's the expected
+/// current state). When linux adds the vsock arm this auto-upgrades with no
+/// tray change. Convergence packet Q2.
+async fn request_vm_shutdown(drain_timeout_ms: u32) {
+    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
+    use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
+    use tillandsias_host_shell::vsock_client::Client;
+
+    let stream = match crate::hvsocket::open_hvsocket_stream(CONTROL_WIRE_VSOCK_PORT).await {
+        Ok(stream) => stream,
+        Err(err) => {
+            tracing::debug!(%err, "vm shutdown request: control wire unreachable");
+            return;
+        }
+    };
+    let mut client = Client::from_stream(
+        Box::new(stream),
+        Transport::Vsock {
+            cid: 0,
+            port: CONTROL_WIRE_VSOCK_PORT,
+        },
+    );
+    if let Err(err) = client.handshake().await {
+        tracing::debug!(%err, "vm shutdown request: handshake failed");
+        return;
+    }
+    let seq = client.allocate_seq();
+    let envelope = ControlEnvelope {
+        wire_version: WIRE_VERSION,
+        seq,
+        body: ControlMessage::VmShutdownRequest {
+            seq,
+            drain_timeout_ms,
+        },
+    };
+    let reply = match client.request(&envelope).await {
+        Ok(reply) => reply,
+        Err(err) => {
+            tracing::debug!(%err, "vm shutdown request: send failed");
+            return;
+        }
+    };
+    match reply.body {
+        ControlMessage::Error { code, message, .. } => {
+            tracing::info!(
+                "vm shutdown request: {} (wire-level drain not yet wired on vsock; falling back to wsl --terminate)",
+                describe_wire_error(code, &message)
+            );
+        }
+        other => {
+            tracing::info!("vm shutdown request acknowledged: {}", other.kind());
         }
     }
 }
