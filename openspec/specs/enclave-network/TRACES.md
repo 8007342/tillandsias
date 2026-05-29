@@ -28,7 +28,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-podman/src/client.rs#L2135](../../../crates/tillandsias-podman/src/client.rs#L2135)
 - [crates/tillandsias-podman/src/client.rs#L2148](../../../crates/tillandsias-podman/src/client.rs#L2148)
 - [crates/tillandsias-podman/src/lib.rs#L92](../../../crates/tillandsias-podman/src/lib.rs#L92)
-- [images/default/Containerfile#L166](../../../images/default/Containerfile#L166)
+- [images/default/Containerfile#L199](../../../images/default/Containerfile#L199)
 - [images/default/forge-welcome.sh#L132](../../../images/default/forge-welcome.sh#L132)
 - [images/default/lib-common.sh#L202](../../../images/default/lib-common.sh#L202)
 - [images/default/lib-common.sh#L312](../../../images/default/lib-common.sh#L312)

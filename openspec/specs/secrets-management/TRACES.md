@@ -38,7 +38,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-router-sidecar/tests/router_e2e_test.rs#L497](../../../crates/tillandsias-router-sidecar/tests/router_e2e_test.rs#L497)
 - [crates/tillandsias-router-sidecar/tests/router_e2e_test.rs#L532](../../../crates/tillandsias-router-sidecar/tests/router_e2e_test.rs#L532)
 - [crates/tillandsias-router-sidecar/tests/router_e2e_test.rs#L564](../../../crates/tillandsias-router-sidecar/tests/router_e2e_test.rs#L564)
-- [images/default/Containerfile#L112](../../../images/default/Containerfile#L112)
+- [images/default/Containerfile#L145](../../../images/default/Containerfile#L145)
 - [images/default/entrypoint-forge-opencode-web.sh#L12](../../../images/default/entrypoint-forge-opencode-web.sh#L12)
 - [images/default/lib-common.sh#L60](../../../images/default/lib-common.sh#L60)
 - [images/default/lib-common.sh#L180](../../../images/default/lib-common.sh#L180)

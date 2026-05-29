@@ -27,7 +27,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/config-overlay/shell-helpers.sh#L46](../../../images/default/config-overlay/shell-helpers.sh#L46)
 - [images/default/config-overlay/shell-helpers.sh#L66](../../../images/default/config-overlay/shell-helpers.sh#L66)
 - [images/default/config-overlay/shell-helpers.sh#L140](../../../images/default/config-overlay/shell-helpers.sh#L140)
-- [images/default/Containerfile#L144](../../../images/default/Containerfile#L144)
+- [images/default/Containerfile#L177](../../../images/default/Containerfile#L177)
 - [images/default/entrypoint-forge-claude.sh#L89](../../../images/default/entrypoint-forge-claude.sh#L89)
 - [images/default/entrypoint-forge-opencode.sh#L96](../../../images/default/entrypoint-forge-opencode.sh#L96)
 - [images/default/entrypoint-forge-opencode-web.sh#L87](../../../images/default/entrypoint-forge-opencode-web.sh#L87)

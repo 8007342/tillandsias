@@ -15,5 +15,5 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-core/src/container_profile.rs#L958](../../../crates/tillandsias-core/src/container_profile.rs#L958)
 - [images/default/config-overlay/mcp/git-tools.sh#L3](../../../images/default/config-overlay/mcp/git-tools.sh#L3)
 - [images/default/config-overlay/mcp/project-info.sh#L3](../../../images/default/config-overlay/mcp/project-info.sh#L3)
-- [images/default/Containerfile#L32](../../../images/default/Containerfile#L32)
+- [images/default/Containerfile#L35](../../../images/default/Containerfile#L35)
 - [images/default/lib-common.sh#L640](../../../images/default/lib-common.sh#L640)
