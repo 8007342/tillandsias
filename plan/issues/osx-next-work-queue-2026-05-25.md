@@ -2988,3 +2988,17 @@ step 5 lands.
   (`menu-structure-action-integration-and-clippy`) remains as
   optional follow-up — mostly absorbed by the UX-correction series.
 - Streak: 0 (productive iter). Next macOS iter eligible at ~15:55Z.
+
+### event: macOS noop — defer for 15:43Z cron — 2026-05-29T15:51Z
+
+- Integration cron at 15:43Z is 8 min ago (inside 10-min defer
+  window per skill §6 Defer Rule). No slice taken; cron writes
+  need to settle.
+- That cron merged windows-next's `cc21502e` (6 windows-tray
+  architectural invariants pinned, mirroring macOS slice 30
+  `afde4b9b` byte-for-shape). Both trays now have grep-based
+  source-level pins for their canonical invariants. Pre-build
+  instant litmus suite at 53/53 PASS @ 100% across 89 specs.
+- No new macOS-naming asks in the merged ledger.
+- Streak: 1 (defer-noop). Next macOS iter eligible in ~1h
+  (3600s wake per adaptive cadence rules).
