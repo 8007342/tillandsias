@@ -324,8 +324,9 @@ bidirectional_knowledge_flow_constraint:
 
 finite_time_convergence_and_velocity_control:
   description: >
-    Enforce a strictly positive lower bound on convergence velocity to guarantee
-    spec convergence in finite time, even with concurrent multi-host executions.
+    Enforce a strictly positive lower bound on convergence velocity and upper bounds
+    on commit rate to guarantee spec convergence in finite time, prevent multi-host thrashing,
+    and detect divergent development paths across branches.
   metrics:
     residual_correctness_debt:
       symbol: R_t
@@ -334,6 +335,14 @@ finite_time_convergence_and_velocity_control:
       symbol: V_c
       formula: "(R_t_minus_3 - R_t) / delta_t"
       minimum_acceptable: "V_min > 0"
+    maximum_commit_velocity_cap:
+      symbol: C_max
+      value: "2 commits/hour"
+      description: "Maximum allowable remote pushes per host to prevent plan/code write-write thrashing."
+    divergence_distance_threshold:
+      symbol: D_max
+      value: "5 commits"
+      description: "Maximum commits a sibling branch may drift ahead of the common merge-base without integration."
   rules:
     - finite_time_guarantee: >
         Convergence is guaranteed in finite time by enforcing V_c >= V_min when R_t > 0.
@@ -344,3 +353,15 @@ finite_time_convergence_and_velocity_control:
           - reduce_lease_ttl: "Reduce lease TTL from 4 hours to 1 hour to increase iteration frequency."
           - exploratory_work_freeze: "Prohibit all exploratory or optional P3 optimizations; focus strictly on root blockers."
           - defuse_blockers: "Force all hosts to focus on root blockers, mock-based interface contracts, or focused litmus tests."
+    - velocity_limit_and_thrashing_prevention:
+        triggers: "commit_rate > C_max AND V_c <= 0"
+        actions:
+          - velocity_cooldown: "Enforce a mandatory 1-hour push cooldown on the thrashed host to allow other hosts to merge."
+          - claim_freeze: "Prohibit claiming new tasks until the host has successfully pulled and integrated linux-next."
+    - divergence_control:
+        triggers: "drift_distance > D_max"
+        actions:
+          - remote_push_lock: "Temporarily lock remote pushes on the diverging sibling branch."
+          - forced_rebase_task: "Force-assign a 'Forced Branch Rebase & Integration' task as the sibling host's next primary action."
+          - synchronous_integration_wave: "Trigger an immediate orchestrator-led merge loop to fold sibling commits into linux-next."
+

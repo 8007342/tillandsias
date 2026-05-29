@@ -37,7 +37,7 @@ This skill is also the active runtime orchestrator. If a sibling branch has elig
 
 ## Active Coordination & Mediation Audit
 
-In every hourly pass, the orchestrator MUST actively analyze concurrent work and evidence to detect and mediate three critical multi-host alignment problems:
+In every hourly pass, the orchestrator MUST actively analyze concurrent work and evidence to detect and mediate four critical multi-host alignment problems:
 
 ### 1. Deadlocks (Mutual Waiting)
 *   **Detection**: Sibling A is blocked on Sibling B's interface/API, while Sibling B is blocked on Sibling A's implementation, configuration, or environment.
@@ -46,7 +46,7 @@ In every hourly pass, the orchestrator MUST actively analyze concurrent work and
     -   Repin the blocker to a simplified mock task and update both queues to proceed independently.
 
 ### 2. Wrong-Direction Progress (Spec/Methodology Divergence)
-*   **Detection**: A sibling is implementing code or plans that deviate from active specs, bypass Caddy/reverse-proxy constraints, or violate the nonblocking/yield-returning policy.
+*   **Detection**: A sibling is implementing code or plans that deviate from active specs, bypass reverse-proxy constraints, or violate the nonblocking/yield-returning policy.
 *   **Mediation**:
     -   Freeze the sibling's current lease.
     -   Document the spec gap or divergence in `plan/loop_status.md` and the host's queue file.
@@ -59,25 +59,38 @@ In every hourly pass, the orchestrator MUST actively analyze concurrent work and
     -   Perform a git history analysis (`git log -p -n 5 <shared-file>`) to pinpoint the root conflict.
     -   Enforce the CRDT semantic-merge policy: plan updates are semantic upserts keyed by stable IDs. If code is thrashed, assign a single synchronous conflict-resolution wave to one host and keep the other host on a separate, independent fallback path.
 
+### 4. Divergent Branch Paths (Branch Drift)
+*   **Detection**: Sibling branch (`windows-next` or `osx-next`) is accumulating independent commits that are not integrated into `linux-next`.
+    -   Measure branch drift count: `git rev-list --count origin/linux-next..origin/<sibling-branch>`.
+    -   Trigger Alert if commit count > **$D_{max} = 5$ commits**.
+*   **Mediation**:
+    -   Freeze the diverging sibling branch's write leases.
+    -   Force-assign a primary "Forced Branch Rebase & Sibling Integration" task to that host.
+    -   Trigger synchronous orchestrator merge and run the litmus suite.
+
 ---
 
 ## Velocity & Finite-Time Convergence Guarantee
 
-To guarantee convergence in finite time, the orchestrator MUST track and enforce the strictly positive lower bound of convergence velocity ($\mathcal{V}_c \ge \mathcal{V}_{min} > 0$):
+To guarantee convergence in finite time, the orchestrator MUST track and enforce the strictly positive lower bound of convergence velocity and upper bounds on commit rates:
 
 1.  **Compute Residual CORRECTNESS Debt ($\mathcal{R}$)**:
-    -   $\mathcal{R}$ is measured by the total count of residual named CentiColon obligations plus the number of unimplemented MUST requirements across active specs.
+    -   $\mathcal{R}$ is measured by the total count of residual named CentiColon obligations plus the number of unimplemented MUST requirements across active specs:
+        $$\mathcal{R} = N_{CentiColons} + N_{UnimplementedSpecs} + N_{OpenIssues}$$
 2.  **Calculate Convergence Velocity ($\mathcal{V}_c$)**:
     -   Compare the current $\mathcal{R}$ with the $\mathcal{R}$ from the previous 3 coordination cycles:
         $$\mathcal{V}_c = \frac{\mathcal{R}_{t-3} - \mathcal{R}_t}{\Delta t}$$
 3.  **Enforce Minimum Velocity ($\mathcal{V}_{min}$)**:
-    -   If $\mathcal{R} > 0$ and $\mathcal{V}_c$ falls below $\mathcal{V}_{min}$ (meaning progress is stalled, slow, or thrashed), trigger a **High-Velocity Alignment Event**:
+    -   If $\mathcal{R} > 0$ and $\mathcal{V}_c$ falls below $\mathcal{V}_{min} = 1$ correctness unit / hour, trigger a **High-Velocity Alignment Event**:
         -   **Reduce TTL**: Automatically shrink the lease TTL from 4 hours to **1 hour** to force faster heartbeats and rapid handoffs.
         -   **Freeze Feature Work**: Prohibit all new exploratory feature work or optional P3 optimizations.
         -   **Force Blocker Defusal**: Force all active hosts to focus strictly on:
             1. Resolving the root blocker in the blocking tree.
             2. Writing focused litmus tests to prove the boundary of the failing contract.
             3. Completing outstanding verification tasks.
+4.  **Enforce Maximum Velocity Cap ($C_{max}$ / Thrashing Prevention)**:
+    -   **Detection**: If a host's commit rate exceeds **$C_{max} = 2$ commits/hour** while convergence velocity remains zero or negative ($\mathcal{V}_c \le 0$), a Thrashing Violation is declared.
+    -   **Actions**: Enforce a mandatory **1-hour commit cooldown** (blocking remote pushes) and a **Claim Freeze** forcing the host to integrate `linux-next` and verify first.
 
 ---
 

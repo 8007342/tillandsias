@@ -169,6 +169,8 @@ If the 2h integration cron fired in the last 10 min (check the latest `### Cycle
 - NEVER `git push --force`.
 - NEVER push directly to `main` — use PRs. Check `plan/issues/cross-host-blocker-roundup-*.md` for the active `<host>-next → main` PR number before opening a duplicate.
 - NEVER push to a sibling host's branch (linux MUST NOT push to `osx-next` or `windows-next`).
+- **Velocity Limit Compliance ($C_{max}$)**: Do not push more than **2 commits per hour** if convergence velocity remains zero or negative ($\mathcal{V}_c \le 0$). High-frequency pushing without progress causes thrashing and triggers a 1-hour cooldown.
+- **Branch Drift Compliance ($D_{max}$)**: Do not allow your platform branch (`windows-next`, `osx-next`) to drift more than **$D_{max} = 5$ commits** ahead of the common `merge-base` with `linux-next`. If drift exceeds 5 commits, you MUST immediately halt feature work and run a pull-integration and rebase pass.
 - NEVER skip hooks or signing.
 - `release.yml` / `recipe-publish.yml` workflows are `workflow_dispatch` only — never auto-trigger.
 - NEVER resolve cross-host plan conflicts by deletion — tombstone or supersede only.
