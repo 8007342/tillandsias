@@ -2812,3 +2812,23 @@ step 5 lands.
 - Resets noop streak — file deleted in `fdd01b6d`.
 - Streak: 0 (productive iter). Next macOS iter eligible at
   ~10:30Z.
+
+### event: macOS slice 26 — pin --diagnose CLI surface litmus — 2026-05-29T11:30Z
+
+- Commit `41b57a15`. Mirrors windows-tray's `441b8426`
+  (`litmus:windows-tray-diagnose-cli-surface`) for the macOS
+  surface. New `litmus:macos-tray-diagnose-cli-surface` with 7
+  grep steps pinning the entire `--diagnose` CLI diagnostic
+  surface (binary modes, JSON schema-pin tests, exit-code
+  contract test, install-macos.sh sanity check, tray-diagnose.sh
+  consumer, cheatsheet provenance).
+- All 7 steps PASS locally on the integrated tree.
+- macOS-specific deltas vs. windows: 2 CLI modes not 4 (no
+  --provision-once/--status-once), 4 schema-pin tests not 5
+  (no wire-object keys test), bash `set +e` instead of cmd.exe
+  redirect (the bash exit-code-as-tri-state pattern).
+- Bumps macos-native-tray binding coverage_ratio 50 → 100
+  (both spec invariants + the diagnose Requirement now have
+  litmus coverage).
+- Streak: 0 (productive iter). Next macOS iter eligible at
+  ~12:00Z.
