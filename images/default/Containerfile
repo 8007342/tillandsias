@@ -52,7 +52,16 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
         --profile minimal \
         --component rust-analyzer --component clippy --component rustfmt \
     && curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C /usr/local/bin \
-    && cargo install cargo-chef cargo-watch cargo-audit wasm-pack trunk typos-cli watchexec-cli
+    && cargo install cargo-chef cargo-watch cargo-audit wasm-pack trunk typos-cli watchexec-cli \
+    && ln -sf "$(rustup which rust-analyzer)" /usr/local/bin/rust-analyzer
+# Symlink resolves the rustup-component installation path
+# ($RUSTUP_HOME/toolchains/<triple>/bin/rust-analyzer) into /usr/local/bin
+# so LSP clients that launch the binary by name (rather than via the cargo
+# dispatch shim that `clippy` + `rustfmt` get for free) can find it. Closes
+# the rust-analyzer PATH-symlink gap surfaced by the 08:08Z forge diagnostic
+# run and approved by the orchestrator at 045a6720.
+# @trace plan/diagnostics/forge-enhancements-curated-toolchain-backlog-2026-05-29.md
+#   (rust-analyzer PATH symlink — approved)
 
 # ── Dart SDK ───────────────────────────────────────────────────
 RUN LATEST_DART=$(curl -sSf https://storage.googleapis.com/dart-archive/channels/stable/release/latest/VERSION | jq -r .version) \
