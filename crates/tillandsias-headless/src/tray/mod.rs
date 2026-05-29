@@ -18,7 +18,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
-use std::sync::{Arc, Mutex, OnceLock};
+use std::sync::{Arc, Mutex, OnceLock, RwLock};
 use std::time::{Duration, Instant};
 
 use image::GenericImageView;
@@ -517,7 +517,67 @@ fn broadcast_control_envelope(subscribers: &ControlSubscribers, envelope: &Contr
     });
 }
 
-fn handle_control_connection(mut stream: UnixStream, subscribers: ControlSubscribers) {
+/// Tray-side mirror of the in-VM `VmStateHandle`. Tracks the tray
+/// process's own lifecycle phase so `VmStatusRequest` over the unix
+/// control socket reports the truth instead of a hardcoded value, and
+/// `VmShutdownRequest` has a place to record the Draining transition.
+///
+/// Phase model (subset of `VmPhase` semantics applicable to the tray):
+///
+///   * `Starting`  — listener binding, not yet accepting.
+///   * `Ready`     — accept loop running; tray serving control-socket
+///                   clients.
+///   * `Draining`  — `VmShutdownRequest` received; tray is winding
+///                   down but the process is still alive.
+///   * `Stopping`  — SIGTERM/SIGINT observed; tray about to exit
+///                   (wiring is a follow-on slice).
+///   * `Failed`    — unrecoverable error during startup (reserved).
+///
+/// Held by the control-socket accept thread, cloned per connection
+/// into `handle_control_connection`. Cheap-to-clone `Arc<RwLock>`
+/// shape; reads are the hot path (every `VmStatusRequest`), writes
+/// are rare (state transitions).
+///
+/// @trace spec:tray-host-control-socket, spec:vm-provisioning-lifecycle
+/// @trace plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q2)
+#[derive(Clone)]
+struct TrayPhaseHandle {
+    phase: Arc<RwLock<tillandsias_control_wire::VmPhase>>,
+}
+
+impl TrayPhaseHandle {
+    /// Fresh handle starting at `Starting`. Use in production
+    /// construction — the tray hasn't bound its socket yet.
+    fn new() -> Self {
+        Self {
+            phase: Arc::new(RwLock::new(tillandsias_control_wire::VmPhase::Starting)),
+        }
+    }
+
+    /// Test-only constructor that skips straight to `Ready`. Used by
+    /// the regression tests that exercise `handle_control_connection`
+    /// directly without going through `start_control_socket_server`.
+    #[cfg(test)]
+    fn ready_for_test() -> Self {
+        Self {
+            phase: Arc::new(RwLock::new(tillandsias_control_wire::VmPhase::Ready)),
+        }
+    }
+
+    fn current_phase(&self) -> tillandsias_control_wire::VmPhase {
+        *self.phase.read().expect("tray phase lock")
+    }
+
+    fn set_phase(&self, next: tillandsias_control_wire::VmPhase) {
+        *self.phase.write().expect("tray phase lock") = next;
+    }
+}
+
+fn handle_control_connection(
+    mut stream: UnixStream,
+    subscribers: ControlSubscribers,
+    phase_handle: TrayPhaseHandle,
+) {
     let Ok(first) = read_control_envelope(&mut stream) else {
         return;
     };
@@ -539,8 +599,8 @@ fn handle_control_connection(mut stream: UnixStream, subscribers: ControlSubscri
             // dispatch to the actual handler. The variant set the unix
             // path has handlers for is currently {Hello, IssueWebSession,
             // EvictProject, EnumerateLocalProjects, CloudRefreshRequest,
-            // VmStatusRequest}; the remaining matrix-Handle variants
-            // (VmShutdownRequest, McpFrame, plus host-only stdin/pty
+            // VmStatusRequest, VmShutdownRequest}; the remaining
+            // matrix-Handle variants (McpFrame plus host-only stdin/pty
             // tunnel frames) need real handlers wired in follow-on
             // slices. Until those land, the inner `_` arm writes an
             // explicit Error{Unsupported} with a hint about the gap —
@@ -642,23 +702,12 @@ fn handle_control_connection(mut stream: UnixStream, subscribers: ControlSubscri
                 }
                 ControlMessage::VmStatusRequest { seq } => {
                     // Linux-native VmStatusRequest handler (Q2 answer
-                    // of the convergence packet). We're answering on
-                    // a working unix socket — by definition the tray
-                    // process is up and serving, so we report
-                    // `phase=Ready`. `podman_ready` is the live check
-                    // `tillandsias_podman::podman_available_sync()`
-                    // already runs elsewhere on this host.
-                    //
-                    // Lifecycle distinctions like Starting/Stopping/
-                    // Draining/Failed would need a `TrayPhaseHandle`
-                    // shared with the tray's main shutdown path —
-                    // mirror of the in-VM `VmStateHandle` but rooted
-                    // in the tray process's own lifecycle. That's a
-                    // follow-on slice. Minimal-but-useful shape
-                    // first: clients downstream now see real
-                    // (phase, podman_ready) data instead of the
-                    // descriptive Error message they got pre-this-
-                    // slice.
+                    // of the convergence packet). `phase` is read
+                    // from the shared `TrayPhaseHandle` which the
+                    // accept thread set to `Ready` after the listener
+                    // bound, and which `VmShutdownRequest` flips to
+                    // `Draining`. `podman_ready` is the live check
+                    // `tillandsias_podman::podman_available_sync()`.
                     //
                     // @trace spec:tray-host-control-socket
                     // @trace spec:vm-provisioning-lifecycle
@@ -669,12 +718,46 @@ fn handle_control_connection(mut stream: UnixStream, subscribers: ControlSubscri
                         seq: first.seq,
                         body: ControlMessage::VmStatusReply {
                             seq_in_reply_to: seq,
-                            phase: tillandsias_control_wire::VmPhase::Ready,
+                            phase: phase_handle.current_phase(),
                             podman_ready,
                             last_event: Some("linux-native-tray".to_string()),
                         },
                     };
                     let _ = write_control_envelope(&mut stream, &reply);
+                }
+                ControlMessage::VmShutdownRequest {
+                    seq,
+                    drain_timeout_ms,
+                } => {
+                    // Linux-native VmShutdownRequest handler (Q2 of
+                    // the convergence packet). Mirrors the in-VM
+                    // vsock-side behaviour: flip phase to Draining so
+                    // any concurrent VmStatusRequest observer (e.g.
+                    // a separate forge or sidecar connection) sees
+                    // the right state. The wire defines no
+                    // VmShutdownReply variant, so we don't ack —
+                    // closing the connection is the signal, same as
+                    // the vsock side.
+                    //
+                    // Drain semantics: `drain_timeout_ms` is recorded
+                    // in the structured log for operator visibility
+                    // but not yet honoured by an actual drain step
+                    // — the tray's real shutdown path (SIGTERM/
+                    // SIGINT into the existing async-executor drain)
+                    // continues to run on the signal side. Wiring
+                    // `mark_stopping()` into that signal path is a
+                    // follow-on slice.
+                    //
+                    // @trace spec:tray-host-control-socket
+                    // @trace spec:vm-provisioning-lifecycle
+                    // @trace plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q2)
+                    phase_handle.set_phase(tillandsias_control_wire::VmPhase::Draining);
+                    info!(
+                        spec = "tray-host-control-socket",
+                        seq,
+                        drain_timeout_ms,
+                        "VmShutdownRequest on unix socket; phase=Draining (drain wiring is follow-on)"
+                    );
                 }
                 other => {
                     // Matrix says Handle but no inner arm yet. Write a
@@ -755,12 +838,27 @@ fn start_control_socket_server() -> Result<(), String> {
         .map_err(|err| format!("failed to chmod control socket: {err}"))?;
 
     let subscribers: ControlSubscribers = Arc::new(Mutex::new(Vec::new()));
+
+    // The listener bound successfully — by the next line the accept
+    // loop will be picking up clients, so we transition Starting ->
+    // Ready. The handle is then cloned into each per-connection
+    // worker; `VmStatusRequest` reads it, `VmShutdownRequest` writes
+    // it. See `TrayPhaseHandle` for the lifecycle model + the
+    // follow-on slice that wires SIGTERM/SIGINT into mark_stopping().
+    //
+    // @trace plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q2)
+    let phase_handle = TrayPhaseHandle::new();
+    phase_handle.set_phase(tillandsias_control_wire::VmPhase::Ready);
+
     std::thread::spawn(move || {
         for incoming in listener.incoming() {
             match incoming {
                 Ok(stream) => {
                     let subscribers = subscribers.clone();
-                    std::thread::spawn(move || handle_control_connection(stream, subscribers));
+                    let phase_handle = phase_handle.clone();
+                    std::thread::spawn(move || {
+                        handle_control_connection(stream, subscribers, phase_handle)
+                    });
                 }
                 Err(err) => warn!(error = %err, "control socket accept failed"),
             }
@@ -3103,8 +3201,9 @@ mod tests {
         client_side.write_all(&payload).expect("write body");
         client_side.flush().expect("flush");
 
+        let phase_handle = TrayPhaseHandle::ready_for_test();
         let server_thread = thread::spawn(move || {
-            handle_control_connection(server_side, subscribers);
+            handle_control_connection(server_side, subscribers, phase_handle);
         });
 
         let mut len_buf = [0_u8; 4];
@@ -3177,8 +3276,9 @@ mod tests {
         client_side.write_all(&payload).expect("write body");
         client_side.flush().expect("flush");
 
+        let phase_handle = TrayPhaseHandle::ready_for_test();
         let server_thread = thread::spawn(move || {
-            handle_control_connection(server_side, subscribers);
+            handle_control_connection(server_side, subscribers, phase_handle);
         });
 
         let mut len_buf = [0_u8; 4];
@@ -3217,6 +3317,102 @@ mod tests {
             }
             other => panic!("expected VmStatusReply variant, got {other:?}"),
         }
+    }
+
+    /// `TrayPhaseHandle` round-trips state. Default constructor starts
+    /// at `Starting`; `set_phase` mutates; `current_phase` reads;
+    /// clones share state via `Arc`. This pins the cheap-to-clone
+    /// contract that lets the accept loop hand a clone to every
+    /// per-connection worker.
+    ///
+    /// @trace plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q2)
+    #[test]
+    fn tray_phase_handle_round_trips_state_across_clones() {
+        let h = TrayPhaseHandle::new();
+        assert!(matches!(
+            h.current_phase(),
+            tillandsias_control_wire::VmPhase::Starting
+        ));
+
+        let h2 = h.clone();
+        h.set_phase(tillandsias_control_wire::VmPhase::Ready);
+        assert!(matches!(
+            h2.current_phase(),
+            tillandsias_control_wire::VmPhase::Ready
+        ));
+
+        h2.set_phase(tillandsias_control_wire::VmPhase::Draining);
+        assert!(matches!(
+            h.current_phase(),
+            tillandsias_control_wire::VmPhase::Draining
+        ));
+    }
+
+    /// `VmShutdownRequest` over the unix socket flips the shared
+    /// phase handle to `Draining`. The wire defines no
+    /// `VmShutdownReply` variant, so the handler closes the
+    /// connection rather than acking — matching the in-VM vsock
+    /// side's behaviour. We assert (a) no reply frame arrives
+    /// (clean EOF on client side) and (b) the phase observed by a
+    /// concurrent clone of the handle is `Draining`.
+    ///
+    /// @trace plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q2),
+    ///        spec:tray-host-control-socket,
+    ///        spec:vm-provisioning-lifecycle
+    #[test]
+    fn vm_shutdown_request_on_unix_socket_flips_phase_to_draining() {
+        use std::io::{Read, Write};
+        use std::os::unix::net::UnixStream;
+        use std::sync::Mutex;
+        use std::thread;
+
+        let (server_side, mut client_side) =
+            UnixStream::pair().expect("UnixStream::pair available on linux");
+        let subscribers: ControlSubscribers = Arc::new(Mutex::new(Vec::new()));
+
+        let req = ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 123,
+            body: ControlMessage::VmShutdownRequest {
+                seq: 123,
+                drain_timeout_ms: 5_000,
+            },
+        };
+        let payload = encode(&req).expect("encode");
+        client_side
+            .write_all(&(payload.len() as u32).to_be_bytes())
+            .expect("write len");
+        client_side.write_all(&payload).expect("write body");
+        client_side.flush().expect("flush");
+
+        // Observe the post-handler phase through a separate clone of
+        // the handle — same Arc, same state.
+        let phase_handle = TrayPhaseHandle::ready_for_test();
+        let phase_observer = phase_handle.clone();
+        let server_thread = thread::spawn(move || {
+            handle_control_connection(server_side, subscribers, phase_handle);
+        });
+
+        // Expect EOF, not a reply frame. read_exact on a 4-byte len
+        // header should return UnexpectedEof since the handler closes
+        // without writing anything.
+        let mut len_buf = [0_u8; 4];
+        let read_result = client_side.read_exact(&mut len_buf);
+        assert!(
+            read_result.is_err(),
+            "expected EOF (no reply for VmShutdownRequest); got {len_buf:?}"
+        );
+
+        server_thread.join().expect("server thread joined");
+
+        assert!(
+            matches!(
+                phase_observer.current_phase(),
+                tillandsias_control_wire::VmPhase::Draining
+            ),
+            "expected phase=Draining after VmShutdownRequest; got {:?}",
+            phase_observer.current_phase()
+        );
     }
 
     fn test_state(selected_agent: SelectedAgent, forge_available: bool) -> TrayUiState {
