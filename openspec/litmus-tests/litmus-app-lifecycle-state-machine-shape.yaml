@@ -1,0 +1,117 @@
+# @trace spec:app-lifecycle
+#
+# Structural drift protection for the `TrayAppLifecycleState` enum
+# + `validate_transition` state machine in tillandsias-core.
+#
+# Today `app-lifecycle` (spec coverage_ratio: 33) is bound only to
+# `litmus:environment-isolation` which actually targets
+# `environment-runtime` — a real binding mismatch. The
+# implementation of the app-lifecycle Tray state machine lives in
+# `crates/tillandsias-core/src/state.rs:62` (the 5-variant enum
+# Idle/Initializing/Running/Stopping/Error) and at line 88 (the
+# `validate_transition` method that enforces the spec's transition
+# rules). Neither is currently grep-pinned.
+#
+# This instant + grep-only litmus pins the canonical surfaces so
+# a refactor that drops a variant, adds an unauthorized transition,
+# or strips the `@trace spec:app-lifecycle` markers fires pre-build.
+#
+# Many of the 14 spec requirements reference functions
+# (`shutdown_all`, `MenuCommand::Quit`, `ExitRequested`,
+# `kill_container`) that don't exist in the workspace yet — those
+# are forward-looking and pinned by future litmus iterations as
+# they ship. This litmus focuses on what IS implemented today.
+#
+# Raises app-lifecycle coverage_ratio 33 → 67.
+name: litmus:app-lifecycle-state-machine-shape
+spec: app-lifecycle
+phase: pre-build
+description: >
+  Pin the `TrayAppLifecycleState` enum + `validate_transition`
+  state machine: 5 canonical variants
+  (Idle/Initializing/Running/Stopping/Error), per-variant
+  `@trace spec:app-lifecycle` markers, and the documented
+  state-transition rules.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-core/src/state.rs
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "state.rs carries the spec:app-lifecycle trace at file head"
+    command: "grep -F '@trace spec:tray-app, spec:app-lifecycle, spec:tray-progress-and-icon-states' crates/tillandsias-core/src/state.rs"
+    timeout_ms: 3000
+    expected_behavior: "spec:app-lifecycle"
+
+  - step: "TrayAppLifecycleState enum is declared"
+    command: "grep -F 'pub enum TrayAppLifecycleState' crates/tillandsias-core/src/state.rs"
+    timeout_ms: 3000
+    expected_behavior: "pub enum TrayAppLifecycleState"
+
+  - step: "all 5 spec-mandated variants present"
+    # Idle, Initializing, Running, Stopping, Error — the 5
+    # variants the spec's "User-facing app semantics" requirement
+    # mandates. Dropping any one breaks the spec→code mapping.
+    command: "grep -F 'Idle,' crates/tillandsias-core/src/state.rs && grep -F 'Initializing,' crates/tillandsias-core/src/state.rs && grep -F 'Running,' crates/tillandsias-core/src/state.rs && grep -F 'Stopping,' crates/tillandsias-core/src/state.rs && grep -F 'Error,' crates/tillandsias-core/src/state.rs"
+    timeout_ms: 3000
+    expected_behavior: "Error,"
+
+  - step: "validate_transition method exists"
+    # Spec requirement: state transitions are constrained. The
+    # `validate_transition(&self, next) -> Result<(), String>`
+    # method is the single source of truth for which transitions
+    # are permitted. A refactor that turns this into a no-op
+    # (`pub fn validate_transition() -> Result<(), String> {
+    # Ok(()) }`) would silently legalize all transitions.
+    command: "grep -F 'pub fn validate_transition(&self, next: TrayAppLifecycleState) -> Result<(), String>' crates/tillandsias-core/src/state.rs"
+    timeout_ms: 3000
+    expected_behavior: "validate_transition"
+
+  - step: "canonical transition rule: Running → Stopping (graceful shutdown gate)"
+    # Spec: "From Running: only transition to Stopping (never
+    # directly to another state)". This match arm is the
+    # graceful-shutdown invariant — losing it allows Running →
+    # Idle without going through Stopping (skipping shutdown
+    # cleanup).
+    command: "grep -F '(Self::Running, Self::Stopping) => Ok(())' crates/tillandsias-core/src/state.rs"
+    timeout_ms: 3000
+    expected_behavior: "Self::Running, Self::Stopping"
+
+  - step: "canonical transition rule: Initializing → Running (success path)"
+    command: "grep -F '(Self::Initializing, Self::Running) => Ok(())' crates/tillandsias-core/src/state.rs"
+    timeout_ms: 3000
+    expected_behavior: "Self::Initializing, Self::Running"
+
+  - step: "canonical transition rule: Initializing → Error (failure path)"
+    command: "grep -F '(Self::Initializing, Self::Error) => Ok(())' crates/tillandsias-core/src/state.rs"
+    timeout_ms: 3000
+    expected_behavior: "Self::Initializing, Self::Error"
+
+  - step: "canonical transition rule: Idle → Initializing (kickoff path)"
+    command: "grep -F '(Self::Idle, Self::Initializing) => Ok(())' crates/tillandsias-core/src/state.rs"
+    timeout_ms: 3000
+    expected_behavior: "Self::Idle, Self::Initializing"
+
+observability:
+  traces:
+    - "@trace spec:app-lifecycle"
+    - "@trace spec:tray-app"
+  expected_log: "TrayAppLifecycleState enum + transition rules pinned per app-lifecycle spec"
+  log_fields:
+    spec: "app-lifecycle"
+    test: "app-lifecycle-state-machine-shape"
+    artifact: "crates/tillandsias-core/src/state.rs"
+
+rollback:
+  on_failure: >
+    A TrayAppLifecycleState surface drifted from app-lifecycle
+    spec. Restore: the file-head @trace line; the
+    `pub enum TrayAppLifecycleState` with all 5 variants (Idle,
+    Initializing, Running, Stopping, Error); the
+    `validate_transition(&self, next) -> Result<(), String>`
+    method; the four canonical transition rules (Idle →
+    Initializing, Initializing → Running, Initializing → Error,
+    Running → Stopping).
+  command: "sed -n '60,120p' crates/tillandsias-core/src/state.rs"
