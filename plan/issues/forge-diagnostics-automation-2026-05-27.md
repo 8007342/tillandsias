@@ -575,3 +575,42 @@ permanently stuck on hosts that aren't the annex producer.
 
 @trace plan/issues/forge-diagnostics-automation-2026-05-27.md
 @trace plan/diagnostics/forge-enhancements-curated-toolchain-backlog-2026-05-29.md
+
+## agent_status_packet — work-loop slice 2026-05-29T08:21Z — curated backlog delta from 08:08Z + 08:11Z runs
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- packet: `forge-enhancements/curated-toolchain-backlog` — continuation
+  of the 06:21Z claim (`0df57c10`). The packet's "Update protocol"
+  (established in the original commit) directs future runs to append
+  delta sections rather than rewrite history; this slice exercises
+  that protocol for the first time.
+- shipped: appended `## Update 2026-05-29T08:21Z` section to
+  `plan/diagnostics/forge-enhancements-curated-toolchain-backlog-
+  2026-05-29.md` (file grew 158 → 273 lines). Three sub-sections:
+    * Provenance addendum citing 08:08Z + 08:11Z source summaries
+    * 15 new candidate tools (with one architectural-class candidate
+      `tmpfs-work-partition` tagged for orchestrator routing to
+      `spec:forge-cache-dual` rather than treating as toolchain)
+    * Amplified privacy/isolation observations (5 new framings)
+    * Cross-run convergence updates (run-count strengthens existing
+      candidates from 2-of-3 to 3-of-5 or 4-of-5)
+    * Sizing-notes addendum proposing 3 new platform-sized packets
+      (dev quality-of-life batch, C/C++ build tooling batch verify-
+      first, rust-analyzer PATH symlink trivial)
+- privacy/isolation: no envelope change. The 5 new observations
+  AMPLIFY the existing gate at the file head — they don't introduce
+  new candidates that require gate-bypass.
+- files touched: `plan/diagnostics/forge-enhancements-curated-
+  toolchain-backlog-2026-05-29.md` (appended only).
+- evidence: file structure follows the Update protocol; new
+  candidates trace to specific source-summary lines.
+- blockers/errors: NONE.
+- next checkpoint: orchestrator review of the now-expanded backlog;
+  individual candidate state advances from proposed → approved/
+  blocked/deferred. The `rust-analyzer` PATH symlink is the
+  highest-leverage-lowest-effort candidate (one Containerfile line);
+  the dev quality-of-life batch is the highest-velocity batch.
+- lease: CONTINUE.
+
+@trace plan/issues/forge-diagnostics-automation-2026-05-27.md
+@trace plan/diagnostics/forge-enhancements-curated-toolchain-backlog-2026-05-29.md (Update 2026-05-29T08:21Z)

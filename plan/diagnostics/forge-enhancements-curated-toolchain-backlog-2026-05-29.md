@@ -165,3 +165,109 @@ delta — do NOT rewrite history. The forge enhancements that ALREADY
 shipped this session (e.g. the 8 approved tools per the
 2026-05-28T20:23Z baseline implemented in `c373f12a` + `a81cc9b5`)
 established the pattern.
+
+## Update 2026-05-29T08:21Z — delta from 08:08Z + 08:11Z runs
+
+Two new live diagnostic runs surfaced candidates and privacy/isolation
+observations not present in the original 04:05Z/05:03Z/06:03Z seed.
+Per the file's "Update protocol" at the top: appended below, do NOT
+rewrite history.
+
+### Provenance — new runs
+
+- `plan/diagnostics/diagnostics_20260529T080843Z-summary.md` (08:08Z,
+  100% completeness, 18 missing tools, ~14 enhancement candidates,
+  2 isolation risks)
+- `plan/diagnostics/diagnostics_20260529T081135Z-summary.md` (08:11Z,
+  100% completeness, 9 missing tools, 10 enhancement candidates,
+  5 isolation risks)
+
+### New candidate tools (proposed)
+
+| Candidate | Status | Source runs | Ecosystem | Rationale | Privacy/isolation notes |
+|---|---|---|---|---|---|
+| `rust-analyzer` (PATH symlink) | proposed | 08:08Z | Rust | **Installation gap, not missing binary**: the rustup component is installed at `/usr/local/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rust-analyzer` but isn't symlinked into `/usr/local/bin/`. LSP clients can't find it. | Pure symlink — no new envelope impact. Likely a one-line Containerfile fix. |
+| `cargo-audit` | proposed | 08:08Z | Rust | Security advisory scanner for Rust dependencies — complementary to the already-proposed `cargo-deny`. | Single binary; cargo install. Needs network at FIRST RUN to fetch advisory-db (same as `cargo-deny`). |
+| `just` | proposed | 08:08Z | Other (task runners) | Modern alternative to make/Justfile-driven workflows. | Single static binary; install from upstream release. No new egress. |
+| `gcc` | proposed | 08:08Z | Other (build) | C compiler. **Verify** — may already be available via rustc's bundled cc OR via build-essential; check with `command -v gcc` against actual image. | n/a if already installed; otherwise apt/dnf install — adds significant image size. |
+| `g++` | proposed | 08:08Z | Other (build) | C++ compiler. Same verify-first treatment as `gcc`. | Same as `gcc`. |
+| `make` | proposed | 08:08Z | Other (build) | Build automation. Often coupled with gcc/g++ as build-essential. | Tiny binary; apt/dnf install. |
+| `cmake` | proposed | 08:08Z | Other (build) | Cross-platform build generator. Heavier than `make`. | Larger install; gate at image-size budget. |
+| `jq` | proposed | 08:08Z | Other (data) | **Verify-installed**: agent flagged as missing but earlier 06:03Z summary noted `jq` available. Run discrepancy — investigate before approving. | n/a — likely already present. |
+| `ripgrep` | proposed | 08:08Z | Other (dev quality-of-life) | Fast grep alternative. Standard in modern dev images. | Single static binary; cargo or apt/dnf install. |
+| `fd` | proposed | 08:08Z | Other (dev quality-of-life) | Modern `find` alternative. | Single static binary; cargo or apt/dnf install. |
+| `bat` | proposed | 08:08Z | Other (dev quality-of-life) | Syntax-highlighted `cat`. | Single static binary. |
+| `delta` | proposed | 08:08Z | Other (dev quality-of-life) | Better `git diff` viewer. | Single static binary. |
+| `httpie` | proposed | 08:08Z | Other (HTTP client) | User-friendly `curl` alternative. Useful for diagnostic HTTP testing. | pip install — same envelope as existing python. |
+| `yq` | proposed | 08:08Z, 08:11Z (×2) | Other (data) | YAML processor analogous to `jq`. OpenSpec/methodology/plan files are YAML-heavy — frequently useful. | Single binary; go install or upstream release. |
+| `git-lfs` | proposed | 08:11Z | Other (git extension) | Git Large File Storage support for binary/asset repos. | Git extension; apt/dnf install. Network at LFS-fetch time (proxy ACL already governs git fetches). |
+
+### New non-binary candidates (architectural)
+
+| Candidate | Status | Source runs | Rationale | Notes |
+|---|---|---|---|---|
+| `tmpfs-work-partition` | proposed | 08:11Z | All work paths (src, tmp, cheatsheets) share a single ~951 MB root filesystem. Mount a dedicated tmpfs (e.g. 4 GB) at `/home/forge/.cache/tillandsias-work` for ephemeral build artifacts per `spec:forge-cache-dual`. | NOT a toolchain candidate — this is a Containerfile / orchestrate-enclave.sh change. Routes through different approval pipeline. Tag for the orchestrator to split into a `spec:forge-cache-dual` follow-on packet rather than treating as a toolchain item. |
+
+### New / amplified privacy/isolation observations (delta vs. file head's gate)
+
+The 08:08 and 08:11 runs amplified the original "external_curl HTTP
+403" observation with finer-grained framings. These don't BLOCK any
+specific candidate but inform the gate when the orchestrator reviews
+the full backlog:
+
+- **Proxy-as-plain-HTTP (no TLS) to `http://proxy:3128`** — credentials
+  or tokens sent through proxy are visible WITHIN the container
+  network (08:11Z). The proxy is already inside the enclave network,
+  so the threat surface is in-enclave; still, terminating the proxy
+  with TLS would harden against in-enclave lateral observation.
+- **GIT_AUTHOR_EMAIL + GIT_AUTHOR_NAME present** — personal-info leak
+  if container outputs are captured or shared (08:08Z + 08:11Z). The
+  values are real (`bulloncito@gmail.com` / `Tlatoāni`). Possible
+  mitigation: scrub these on entry per spec:tillandsias-vault?
+  Investigate.
+- **/run/secrets mounted from host AND world-readable** — currently
+  empty in the container, but any future mounted secret would be
+  visible to all processes (08:11Z). Permissions tightening to
+  `0o600` + owner-only is a quick win.
+- **Single root filesystem (no isolation hot/cold)** — same
+  observation that motivates the `tmpfs-work-partition` candidate
+  above (08:11Z). `spec:forge-cache-dual` already addresses this in
+  spec, but the implementation gap remains.
+- **HTTPS CONNECT-tunnelling via the proxy** — the proxy ACL governs
+  HTTP GET targets, but HTTPS CONNECT to non-standard ports may
+  bypass policy (08:11Z). Verify against the Squid TCP-reset ACL
+  shipped at `96531d2a` — that work specifically targeted denied
+  strict-port-3128 connections; CONNECT-tunnel behaviour for
+  ALLOWED hosts is a different matter.
+
+### Cross-run convergence updates
+
+Some candidates from the original 04:05/05:03/06:03 seed strengthened:
+
+- `nix` — now confirmed by 4 of 5 runs (was 2 of 3).
+- `flutter` — now confirmed by 3 of 5 runs (was 2 of 3).
+- `prettier` — now confirmed by 4 of 5 runs (was 3 of 3).
+- `eslint` — now confirmed by 3 of 5 runs (was 2 of 3).
+- `black` — now confirmed by 3 of 5 runs (was 2 of 3).
+- `delve` — now confirmed by 3 of 5 runs (was 2 of 3).
+
+The strengthening reduces "captured-once" noise. The orchestrator can
+weight by run-count when deciding approval order.
+
+### Sizing-notes addendum
+
+Two of the new candidates need their own sizing flag:
+
+- **Dev quality-of-life batch** (small): `ripgrep`, `fd`, `bat`,
+  `delta`, `httpie`, `yq`, `git-lfs`. Six binaries, single image layer.
+  Likely high-approval-velocity batch.
+- **C/C++ build tooling batch** (medium, verify-first): `gcc`, `g++`,
+  `make`, `cmake`. CONFIRM these aren't already present via
+  build-essential before sizing; if genuinely missing, batch as one
+  packet — none make sense in isolation.
+- **rust-analyzer PATH symlink** (trivial): one-line Containerfile
+  fix. Could merge into the "Rust cargo-* batch" or be a follow-on
+  hotfix.
+
+The original "Sizing notes" 10-packet decomposition still holds; the
+above are additive.
