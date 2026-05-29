@@ -18,7 +18,7 @@ RUN microdnf install -y \
         bash coreutils findutils grep sed gawk tar gzip xz \
         procps-ng shadow-utils ca-certificates \
         fish zsh \
-        git gh curl wget jq ripgrep fd-find \
+        git gh curl wget jq ripgrep fd-find bat git-delta git-lfs httpie yq \
         nodejs npm \
         java-25-openjdk-headless maven \
         golang \
@@ -26,7 +26,9 @@ RUN microdnf install -y \
         just \
         gdb lldb strace valgrind \
         gcc gcc-c++ make cmake openssl-devel pkgconfig unzip \
+    && git lfs install --system \
     && microdnf clean all
+
 
 # ── Agent binaries ─────────────────────────────────────────────
 # @trace spec:default-image, spec:layered-tools-overlay

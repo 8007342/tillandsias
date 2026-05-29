@@ -187,20 +187,20 @@ rewrite history.
 | Candidate | Status | Source runs | Ecosystem | Rationale | Privacy/isolation notes |
 |---|---|---|---|---|---|
 | `rust-analyzer` (PATH symlink) | **implemented** | 08:08Z | Rust | **Installation gap, not missing binary**: the rustup component is installed at `/usr/local/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rust-analyzer` but isn't symlinked into `/usr/local/bin/`. LSP clients can't find it. | Pure symlink — no new envelope impact. Shipped: `ln -sf "$(rustup which rust-analyzer)" /usr/local/bin/rust-analyzer` appended to the rustup-install RUN step in `images/default/Containerfile`. Verification: next live forge-diagnostic run will surface rust-analyzer as present. |
-| `cargo-audit` | approved | 08:08Z | Rust | Security advisory scanner for Rust dependencies — complementary to the already-proposed `cargo-deny`. | Single binary; cargo install. Needs network at FIRST RUN to fetch advisory-db (same as `cargo-deny`). |
-| `just` | approved | 08:08Z | Other (task runners) | Modern alternative to make/Justfile-driven workflows. | Single static binary; install from upstream release. No new egress. |
-| `gcc` | approved | 08:08Z | Other (build) | C compiler. **Verify** — may already be available via rustc's bundled cc OR via build-essential; check with `command -v gcc` against actual image. | n/a if already installed; otherwise apt/dnf install — adds significant image size. |
-| `g++` | approved | 08:08Z | Other (build) | C++ compiler. Same verify-first treatment as `gcc`. | Same as `gcc`. |
-| `make` | approved | 08:08Z | Other (build) | Build automation. Often coupled with gcc/g++ as build-essential. | Tiny binary; apt/dnf install. |
-| `cmake` | approved | 08:08Z | Other (build) | Cross-platform build generator. Heavier than `make`. | Larger install; gate at image-size budget. |
+| `cargo-audit` | **implemented** | 08:08Z | Rust | Security advisory scanner for Rust dependencies — complementary to the already-proposed `cargo-deny`. | Shipped via `cargo install cargo-audit` at image build time. |
+| `just` | **implemented** | 08:08Z | Other (task runners) | Modern alternative to make/Justfile-driven workflows. | Shipped via `microdnf install just` at image build time. |
+| `gcc` | **implemented** | 08:08Z | Other (build) | C compiler. **Verify** — may already be available via rustc's bundled cc OR via build-essential; check with `command -v gcc` against actual image. | Shipped via `microdnf install gcc` at image build time. |
+| `g++` | **implemented** | 08:08Z | Other (build) | C++ compiler. Same verify-first treatment as `gcc`. | Shipped via `microdnf install gcc-c++` at image build time. |
+| `make` | **implemented** | 08:08Z | Other (build) | Build automation. Often coupled with gcc/g++ as build-essential. | Shipped via `microdnf install make` at image build time. |
+| `cmake` | **implemented** | 08:08Z | Other (build) | Cross-platform build generator. Heavier than `make`. | Shipped via `microdnf install cmake` at image build time. |
 | `jq` | blocked | 08:08Z | Other (data) | **Verify-installed**: agent flagged as missing but earlier 06:03Z summary noted `jq` available. Already present in image. | n/a — redundant. |
-| `ripgrep` | approved | 08:08Z | Other (dev quality-of-life) | Fast grep alternative. Standard in modern dev images. | Single static binary; cargo or apt/dnf install. |
-| `fd` | approved | 08:08Z | Other (dev quality-of-life) | Modern `find` alternative. | Single static binary; cargo or apt/dnf install. |
-| `bat` | approved | 08:08Z | Other (dev quality-of-life) | Syntax-highlighted `cat`. | Single static binary. |
-| `delta` | approved | 08:08Z | Other (dev quality-of-life) | Better `git diff` viewer. | Single static binary. |
-| `httpie` | approved | 08:08Z | Other (HTTP client) | User-friendly `curl` alternative. Useful for diagnostic HTTP testing. | pip install — same envelope as existing python. |
-| `yq` | approved | 08:08Z, 08:11Z (×2) | Other (data) | YAML processor analogous to `jq`. OpenSpec/methodology/plan files are YAML-heavy — frequently useful. | Single binary; go install or upstream release. |
-| `git-lfs` | approved | 08:11Z | Other (git extension) | Git Large File Storage support for binary/asset repos. | Git extension; apt/dnf install. Network at LFS-fetch time (proxy ACL already governs git fetches). |
+| `ripgrep` | **implemented** | 08:08Z | Other (dev quality-of-life) | Fast grep alternative. Standard in modern dev images. | Shipped via `microdnf install ripgrep` at image build time. |
+| `fd` | **implemented** | 08:08Z | Other (dev quality-of-life) | Modern `find` alternative. | Shipped via `microdnf install fd-find` at image build time (installs directly as `/usr/bin/fd` on Fedora 44). |
+| `bat` | **implemented** | 08:08Z | Other (dev quality-of-life) | Syntax-highlighted `cat`. | Shipped via `microdnf install bat` at image build time. |
+| `delta` | **implemented** | 08:08Z | Other (dev quality-of-life) | Better `git diff` viewer. | Shipped via `microdnf install git-delta` at image build time. |
+| `httpie` | **implemented** | 08:08Z | Other (HTTP client) | User-friendly `curl` alternative. Useful for diagnostic HTTP testing. | Shipped via `microdnf install httpie` at image build time. |
+| `yq` | **implemented** | 08:08Z, 08:11Z (×2) | Other (data) | YAML processor analogous to `jq`. OpenSpec/methodology/plan files are YAML-heavy — frequently useful. | Shipped via `microdnf install yq` at image build time. |
+| `git-lfs` | **implemented** | 08:11Z | Other (git extension) | Git Large File Storage support for binary/asset repos. | Shipped via `microdnf install git-lfs` and globally registered via `git lfs install --system` at image build time. |
 
 ### New non-binary candidates (architectural)
 

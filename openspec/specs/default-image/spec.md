@@ -27,6 +27,11 @@ The default container image SHALL be based on Fedora Minimal and MUST include Op
 - **WHEN** the container starts
 - **THEN** `git` and `gh` SHALL be available in PATH
 
+#### Scenario: Image contains developer quality-of-life tools (bat, delta, git-lfs, httpie, yq)
+- **WHEN** the container starts
+- **THEN** `bat`, `delta`, `git-lfs`, `httpie`, and `yq` SHALL be available in PATH
+- **AND** Git LFS filters SHALL be registered globally
+
 ### Requirement: Non-root user with UID 1000
 The container SHALL run as user `forge` (UID 1000) to match host user UID via `--userns=keep-id`.
 
