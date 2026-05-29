@@ -51,6 +51,18 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-29T02:10Z — NO-OP (siblings integrated) & VALIDATED 100% green tests & Approved/Implemented Forge Improvements ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `2bbaa4a3` (includes forge-improvements staging & approvals)
+- observed_sibling_heads: main=`fa746f03` · linux-next=`2bbaa4a3` · windows-next=`55a1c188` (integrated) · osx-next=`29c422cc` (integrated)
+- **Validation Pass**: Ran full workspace compilation check (`./build.sh --check`) and automated test suite (`./build.sh --test`). All 661+ unit and integration tests passed cleanly.
+- **Unattended Diagnostics Loop**: Successfully completed the unattended `diagnose-forge` run under task-65. Fully marked the 8 approved forge enhancement proposals (Rust, Go, Python, WASM, dev-quality, additional-dev-tools, tillandsias-help, forge-docs-cheatsheets) as implemented.
+- **Build Fix & Egress Proposals**: 
+  - Staged permanent copies of `cheatsheets/` and `cheatsheet-sources/` to `images/default/` and updated `build-image.sh` to resolve a critical `podman build` context failure. Approved and implemented in commit `c373f12a`.
+  - Investigated proxy egress HTTP 403 versus TCP-level drops and filed a new security defense-in-depth proposal (`2026-05-28-proxy-egress-isolation.md`), approved by the orchestrator.
+- **Spec/methodology/plan drift**: none.
+
 ### Cycle 2026-05-29T01:43Z — MERGED windows-next (poll EnumerateLocalProjects → MenuState) ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
