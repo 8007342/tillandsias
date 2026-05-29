@@ -37,7 +37,7 @@ plan:
     doc_debt_payoff_status: "Completed 2026-05-16; plan/index stale status corrected 2026-05-24"
     recent_work_audit_status: "Completed and verified 2026-05-24: git-mirror safe refspec spec/litmus, Vault Phase 6 default spec, multi-host methodology, and Markdown distillation refreshed"
     multi_host_coordination_status: >
-      Active 2026-05-29T20:00:00Z: Re-audited remote sibling branches (zero drift, 100% convergence). Re-verified that all 661+ unit and integration tests and 59/59 litmus checks pass with 100% success. Verified the new `build-windows-tray` and `probe-macos-tray-on-windows` daily-loop skills are integrated and operating correctly.
+      Active 2026-05-29T21:00:00Z: Re-audited remote sibling branches (zero drift, 100% convergence). Re-verified that all 138 workspace tests and 17/17 pre-build instant litmus checks pass cleanly with 100% success. Verified the new `build-windows-tray` and `probe-macos-tray-on-windows` daily-loop skills are integrated and operating correctly.
     markdown_distillation_status: "Active 2026-05-24: ad hoc Markdown is intake only; retained top-level/tool-local reports must be tombstone pointers to specs, cheatsheets, methodology, or plan"
     methodology_reconciliation_status: "Completed 2026-05-19: OpenCode Web launch specs, cheatsheets, CA generation, overlay/theme proxy, project selection, and auth-gated readiness reconciled"
     git_identity_propagation_status: "Completed 2026-05-19: GitHub Login identity now propagates to forge env and repo-local git config for Codex/OpenCode/OpenCode Web/Claude/maintenance"
