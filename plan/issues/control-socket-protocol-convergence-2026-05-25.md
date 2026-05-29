@@ -402,3 +402,92 @@ Matrix-Handle status on the unix dispatcher (Q2 + Q4):
 | `McpFrame`               | matrix-Handle, no handler — follow-on   |
 
 WIRE_VERSION unchanged at 2.
+
+## Update 2026-05-29T02:51Z — TrayPhaseHandle real lifecycle + VmShutdownRequest handler shipped (Q2 continued)
+
+Fourth matrix-Handle-but-no-handler variant migrated to a real
+implementation on the unix dispatcher. Commit `a10dc0f6`.
+
+The minimal-slice VmStatusRequest from `9eff05c8` reported a
+hardcoded `phase=Ready`; this slice replaces that with a real shared
+phase value. New `TrayPhaseHandle` type — cheap-to-clone
+`Arc<RwLock<VmPhase>>` wrapper — mirrors the in-VM `VmStateHandle`
+shape:
+
+```rust
+#[derive(Clone)]
+struct TrayPhaseHandle {
+    phase: Arc<RwLock<tillandsias_control_wire::VmPhase>>,
+}
+```
+
+Constructor `new()` starts at `Starting`. The control-socket accept
+thread in `start_control_socket_server` transitions
+`Starting -> Ready` immediately after `UnixListener::bind()` succeeds
+(by the next line the accept loop is picking up clients, so Ready is
+the truth). The handle is then cloned into each per-connection
+worker:
+
+```rust
+let phase_handle = TrayPhaseHandle::new();
+phase_handle.set_phase(tillandsias_control_wire::VmPhase::Ready);
+std::thread::spawn(move || {
+    for incoming in listener.incoming() {
+        if let Ok(stream) = incoming {
+            let subscribers = subscribers.clone();
+            let phase_handle = phase_handle.clone();
+            std::thread::spawn(move || {
+                handle_control_connection(stream, subscribers, phase_handle)
+            });
+        }
+    }
+});
+```
+
+VmStatusRequest now reads `phase_handle.current_phase()` instead of
+hardcoding Ready.
+
+VmShutdownRequest handler arm:
+
+```rust
+ControlMessage::VmShutdownRequest { seq, drain_timeout_ms } => {
+    phase_handle.set_phase(tillandsias_control_wire::VmPhase::Draining);
+    info!(
+        spec = "tray-host-control-socket",
+        seq, drain_timeout_ms,
+        "VmShutdownRequest on unix socket; phase=Draining (drain wiring is follow-on)"
+    );
+}
+```
+
+No reply frame — closing the connection is the signal, same as the
+vsock side. `drain_timeout_ms` is logged for operator visibility but
+not honoured yet by an actual drain step; the tray's existing
+SIGTERM/SIGINT shutdown path still drives the real teardown.
+
+Updated matrix-Handle status on the unix dispatcher:
+
+| Variant                  | Status                                |
+|--------------------------|---------------------------------------|
+| `Hello`                  | ✓ handled (HelloAck)                  |
+| `IssueWebSession`        | ✓ handled (broadcast + ack)           |
+| `EvictProject`           | ✓ handled (broadcast + ack)           |
+| `EnumerateLocalProjects` | ✓ handled (`05cc3a7d`)                |
+| `CloudRefreshRequest`    | ✓ handled (`71db9f68`)                |
+| `VmStatusRequest`        | ✓ handled (`9eff05c8`, `a10dc0f6`)    |
+| `VmShutdownRequest`      | ✓ handled (`a10dc0f6`)                |
+| `McpFrame`               | matrix-Handle, no handler — follow-on |
+
+Open follow-ons:
+
+  * Wire `mark_stopping()` into the tray's existing SIGTERM/SIGINT
+    signal path so VmStatusRequest observers see `Stopping` during
+    tray exit too (the phase model now exists; signal-side wiring
+    is the remaining piece).
+  * Honour `drain_timeout_ms` from VmShutdownRequest by parking the
+    accept loop and waiting for in-flight requests to complete
+    before letting the signal path proceed.
+  * `McpFrame` handler — host-browser-mcp tunnel between forge and
+    tray (needs forge↔tray plumbing on the unix path).
+
+129 headless tests passing. WIRE_VERSION unchanged at 2.
