@@ -505,6 +505,20 @@ pub fn status_once() -> i32 {
     })
 }
 
+/// Mark the live status chip as wire-unreachable. Called from the poll loop
+/// when `refresh_vm_status` can't reach the in-VM headless — without this, a
+/// mid-session wire failure (headless crash, VM terminated externally, etc.)
+/// would leave the chip showing the last-known "Ready" state forever. Also
+/// clears `MenuState.podman_ready` so per-project actions are correctly
+/// re-gated. The next successful poll restores the phase + podman chip
+/// naturally.
+fn mark_wire_unreachable(hwnd: HWND) {
+    if let Ok(mut guard) = MENU_STATE.lock() {
+        guard.get_or_insert_with(MenuState::initial).podman_ready = false;
+    }
+    update_status_text("\u{1F534} Wire unreachable", hwnd);
+}
+
 /// Compose a one-line description of an `Error` reply the in-VM headless's
 /// dispatcher returns when a request is unsupported / mis-routed / failed.
 /// Used by `refresh_vm_status` / `refresh_cloud_projects` / `diagnose` so
@@ -553,6 +567,7 @@ async fn refresh_vm_status(hwnd: HWND) {
         Ok(stream) => stream,
         Err(err) => {
             tracing::debug!(%err, "vm status poll: control wire unreachable");
+            mark_wire_unreachable(hwnd);
             return;
         }
     };
@@ -565,6 +580,7 @@ async fn refresh_vm_status(hwnd: HWND) {
     );
     if let Err(err) = client.handshake().await {
         tracing::debug!(%err, "vm status poll: handshake failed");
+        mark_wire_unreachable(hwnd);
         return;
     }
     let seq = client.allocate_seq();
@@ -577,6 +593,7 @@ async fn refresh_vm_status(hwnd: HWND) {
         Ok(reply) => reply,
         Err(err) => {
             tracing::debug!(%err, "vm status poll: VmStatusRequest failed");
+            mark_wire_unreachable(hwnd);
             return;
         }
     };
