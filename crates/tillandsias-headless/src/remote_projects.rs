@@ -9,7 +9,6 @@
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::path::Path;
-use std::process::Command;
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::{debug, warn};

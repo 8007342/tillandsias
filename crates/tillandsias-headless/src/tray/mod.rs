@@ -526,11 +526,11 @@ fn broadcast_control_envelope(subscribers: &ControlSubscribers, envelope: &Contr
 ///
 ///   * `Starting`  — listener binding, not yet accepting.
 ///   * `Ready`     — accept loop running; tray serving control-socket
-///                   clients.
+///     clients.
 ///   * `Draining`  — `VmShutdownRequest` received; tray is winding
-///                   down but the process is still alive.
+///     down but the process is still alive.
 ///   * `Stopping`  — SIGTERM/SIGINT observed; tray about to exit
-///                   (wiring is a follow-on slice).
+///     (wiring is a follow-on slice).
 ///   * `Failed`    — unrecoverable error during startup (reserved).
 ///
 /// Held by the control-socket accept thread, cloned per connection

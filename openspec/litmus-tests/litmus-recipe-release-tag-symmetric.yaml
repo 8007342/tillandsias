@@ -64,11 +64,18 @@ critical_path:
     # The current shared tag. When the recipe-publish workflow ships a
     # new version, this step + the macos step below + the two source
     # consts must all bump together.
+    #
+    # expected_behavior is a SUBSTRING of the grep output (case-
+    # insensitive). The runner's matcher (run-litmus-test.sh:466)
+    # does `grep -Fqi "$expected" <<<"$output"` — descriptive strings
+    # like "windows tag pinned at …" don't appear in the actual grep
+    # output, so we pin a literal substring of the matched line
+    # instead.
     command: "grep -F 'RECIPE_RELEASE_TAG: &str = \"v0.2.260526.1\"' crates/tillandsias-windows-tray/src/wsl_lifecycle.rs"
-    expected_behavior: "windows tag pinned at v0.2.260526.1"
+    expected_behavior: "v0.2.260526.1"
     timeout_ms: 3000
 
   - step: "macos-tray const value is v0.2.260526.1"
     command: "grep -F 'RECIPE_RELEASE_TAG: &str = \"v0.2.260526.1\"' crates/tillandsias-macos-tray/src/action_host.rs"
-    expected_behavior: "macos tag pinned at v0.2.260526.1"
+    expected_behavior: "v0.2.260526.1"
     timeout_ms: 3000

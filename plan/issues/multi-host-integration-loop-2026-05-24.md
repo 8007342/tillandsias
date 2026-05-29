@@ -51,7 +51,16 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
-### Cycle 2026-05-29T11:43Z — CONFLICT-SKIPPED windows-next (parallel folded-scalar fix race) 🟡
+### Cycle 2026-05-29T11:43Z — CONFLICT-SKIPPED windows-next (parallel folded-scalar fix race) 🟡 → RESOLVED in 12:21Z work-loop cherry-pick ✅
+
+> **Resolution follow-up (2026-05-29T12:21Z, work-loop slice — not a cron cycle):**
+> Cherry-picked windows-next `441b8426` onto linux-next (commit `006fc1b0`), preferring
+> windows-next's version of the symmetric pin file (`git checkout --theirs`) per the
+> recommendation below. Suite check: pre-build instant 44/44 PASS at 100% (was 42 —
+> +2 from the now-executing windows-tray-diagnose-cli-surface and the repaired
+> wire-unreachable-chip-text-symmetric). windows-next is now fully integrated as of
+> `006fc1b0`. The next integration cron should observe `linux-next..origin/windows-
+> next` as empty for this commit range and not re-encounter the conflict.
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
 - upstream_commit: `79578c2f` (pre-merge head, unchanged — merge
