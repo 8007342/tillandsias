@@ -51,6 +51,56 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-29T07:43Z — MERGED windows-next (slices 22+23 parity: WIRE_UNREACHABLE_CHIP_TEXT pin + --diagnose spec doc) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `b36b924b` (merge commit; linux-next was at
+  `e2dd85be` pre-merge, having just fast-forwarded an osx-next coord
+  cycle).
+- observed_sibling_heads: main=`fa746f03` · linux-next=`e2dd85be`
+  (pre-merge) · windows-next=`145ff3d2` · osx-next=`e2dd85be`
+- windows-next action: **merged + tested + pushed**. Single commit
+  `145ff3d2 spec(windows-next): pin WIRE_UNREACHABLE_CHIP_TEXT +
+  spec doc --diagnose (slices 22+23 parity)` — coordinated mirrors
+  of macOS slices 22 (`2bd4faaf`) and 23 (`cbeedb4a`):
+    1. Extracts the wire-unreachable chip literal into
+       `pub const WIRE_UNREACHABLE_CHIP_TEXT` with the SAME name as
+       the macOS side, so a refactor on either platform is caught by
+       a same-named unit test on both. Asserts exact byte sequence,
+       length 21 UTF-8 bytes, leading codepoint U+1F534.
+    2. Adds `--diagnose` CLI Requirement + two Invariants to
+       `openspec/specs/windows-native-tray/spec.md`: codifies what
+       prior shipped commits (20fb9d1f / c4908438 / e96d1fc8 /
+       d7bfcdd9) already do. Two Invariants:
+       `diagnose-exit-codes` (0/2/1 — provisioned/degraded/failed)
+       measurable by `exit_code_provisioned_zero_degraded_two`;
+       `wire-unreachable-chip-text` cross-OS byte-identical measurable
+       by `wire_unreachable_chip_text_pinned`.
+  Touched files: `crates/tillandsias-windows-tray/src/notify_icon.rs`
+  (windows-owned) + `openspec/specs/windows-native-tray/spec.md`
+  (windows-specific spec file). windows-tray suite 33/33, fmt +
+  clippy clean.
+- osx-next action: **no-op** (head identical to linux-next post-
+  earlier osx coord cycle).
+- Verification: `./build.sh --check` clean + `./build.sh --test`
+  clean (full workspace test suite passed).
+- Spec/methodology/plan drift: ADVISORY only —
+  `openspec/specs/windows-native-tray/spec.md` gained a Requirement
+  + 2 Invariants. This is documentation-codification of already-
+  shipped behavior (the implementation existed at 20fb9d1f /
+  c4908438 / e96d1fc8 / d7bfcdd9; this commit just brings the spec
+  text in line). No behavior change, no cross-platform contract
+  impact, no methodology/ or plan/ files affected.
+- Cross-host convergence note: with both windows (`145ff3d2`) and
+  macOS (`cbeedb4a`) now pinning `WIRE_UNREACHABLE_CHIP_TEXT` with
+  the SAME name and SAME byte sequence on both platforms, a future
+  rename on either side is caught by their same-named unit tests.
+  This is the cross-OS-byte-identical drift-protection invariant
+  declared in windows-native-tray.spec.md and matches the parallel
+  litmus-protection wave that's been the dominant pattern across
+  recent sibling slices (linux observability-metrics 5438da9a + osx
+  slice 23 cbeedb4a + windows 145ff3d2).
+
 ### Cycle 2026-05-29T07:05Z — NO-OP (siblings integrated) & VALIDATED 100% green tests & Step 16 + Step 21.5 Completed ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
