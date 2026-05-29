@@ -188,6 +188,55 @@ ship with `observatorium` and `opencode_web` menu items disabled and tagged
 - **AND** the cheatsheet `cheatsheets/runtime/macos-vz-gui-research-v2.md`
   SHALL document the M5 research findings
 
+### Requirement: `--diagnose` CLI mode emits a stable bundled health report
+- **ID**: macos-native-tray.diagnose.cli-health-report@v1
+- **Modality**: MUST
+- **Measurable**: true
+- **Invariants**: [macos-native-tray.invariant.diagnose-exit-codes]
+
+@trace spec:macos-native-tray
+
+The `tillandsias-tray` binary MUST support a `--diagnose` flag (and a
+`--diagnose --json` variant) that prints a bundled health report and exits
+without launching AppKit. The output MUST be stable across the v0.0.1
+series so support tooling (`scripts/tray-diagnose.sh`,
+`scripts/install-macos.sh` post-install verify) can rely on the shape.
+
+#### Scenario: Human-readable report is emitted on `--diagnose`
+- **GIVEN** the tray binary is invoked from a terminal with `--diagnose` (and
+  no `--json`)
+- **WHEN** the binary runs
+- **THEN** stdout SHALL contain a section-per-field health report
+  (Version, Bundle, Image-root, Release, Manifest pin, Control wire
+  disclaimer, Status)
+- **AND** the binary SHALL exit before invoking `NSApplication::run`
+- **AND** the binary SHALL exit 0 if the image-root is fully provisioned, 2
+  if degraded (any required artifact missing), or 1 on hard failure
+
+#### Scenario: JSON output emits a schema-pinned object
+- **GIVEN** `--diagnose --json`
+- **WHEN** the binary runs
+- **THEN** stdout SHALL be a parseable JSON object with the documented keys
+  (`version`, `in_app`, `exe_path`, `image_root`, `rootfs_present`,
+  `rootfs_bytes`, `kernel_present`, `kernel_bytes`, `initrd_present`,
+  `initrd_bytes`, `release_tag`, `manifest_pin_aarch64_img`, `provisioned`)
+- **AND** missing-artifact `*_bytes` fields SHALL serialise as JSON `null`
+  (not absent and not `0`)
+- **AND** the `provisioned` boolean SHALL be `true` iff rootfs +
+  vmlinuz + initramfs.img all exist on disk
+- **AND** the JSON schema SHALL be pinned by unit tests in
+  `tillandsias-macos-tray::diagnose::tests`
+
+#### Scenario: macOS-specific wire limitation is surfaced
+- **GIVEN** `--diagnose` is invoked from a terminal (i.e. a separate process
+  from any running tray)
+- **WHEN** the report's control-wire section renders
+- **THEN** the human format SHALL explicitly disclaim that live
+  VM-phase + podman_ready are reachable only from the running tray
+  process itself (per-VM-handle vsock; no `AF_VSOCK` on macOS)
+- **AND** the JSON format SHALL omit a `wire` object entirely (no
+  field that would lie about a probe the macOS path cannot perform)
+
 ## Invariants
 
 ### Invariant: No Tauri or WebView surface
@@ -234,6 +283,17 @@ ship with `observatorium` and `opencode_web` menu items disabled and tagged
 - **ID**: macos-native-tray.invariant.terminal-uses-iterm2-when-default
 - **Expression**: `iterm2_is_default => spawn_terminal_uses(iTerm2)`
 - **Measurable**: true
+
+### Invariant: `--diagnose` exit codes are limited to {0, 2, 1}
+- **ID**: macos-native-tray.invariant.diagnose-exit-codes
+- **Expression**: `crates/tillandsias-macos-tray/src/diagnose.rs::exit_code_from
+  RETURNS one of {0, 2, 1}`
+- **Measurable**: true via the unit test
+  `exit_code_provisioned_zero_degraded_two`
+
+  Tooling consumers (`scripts/tray-diagnose.sh`, `scripts/install-macos.sh`
+  post-install verify, future support dashboards) branch on these exit codes.
+  Adding new values would silently break consumers.
 
 ### Invariant: No display passthrough in v1
 - **ID**: macos-native-tray.invariant.no-display-passthrough-in-v1
