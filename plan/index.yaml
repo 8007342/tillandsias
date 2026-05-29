@@ -1597,7 +1597,7 @@ plan_index:
           checkpoint_required: false
           handoff_note: "First unattended diagnostics run. Requires a slow E2E/runtime-litmus forge launch to produce a diagnostics log. Proposals remain status: proposed until orchestrator approval."
         - id: forge-improvement/iterate
-          status: claimed
+          status: completed
           depends_on: [forge-improvement/first-run]
           owned_files:
             - plan/forge-improvements/proposals/
@@ -1638,6 +1638,11 @@ plan_index:
               host: "linux"
               lease_id: "lease-linux-forge-linter-tools-20260529T1606"
               expires_at: "2026-05-29T20:06:00Z"
+            - type: completed
+              ts: "2026-05-29T16:16:00Z"
+              agent_id: "linux-tlatoani-fedora-antigravity-20260529T1606"
+              commits: ["7844b76711708d175daa99cad43a92aaeffc80f8"]
+              validation_log: "fa7a2cb0-2de1-4271-abbb-57bb85ceef50/task-216"
 
     - id: multi-host-plan-ledger-adoption
       order: 21
