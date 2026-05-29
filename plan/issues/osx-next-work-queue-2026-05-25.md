@@ -3057,3 +3057,22 @@ step 5 lands.
   surfaces at pre-build litmus run instead.
 - Streak: 0 (productive iter). Next macOS iter eligible at
   ~18:00Z.
+
+### event: macOS — restore merge-lost windows-native-tray binding entry — 2026-05-29T18:05Z
+
+- The 17:43Z integration cron's merge of windows-next dropped the
+  `- litmus:pty-attach-project-threading-symmetric` entry that
+  windows-host added to the windows-native-tray binding row in
+  commit `f66e9fcc`. Parallel-write hazard with my slice 32
+  `143fb28b` (which added the same litmus to the macos-native-tray
+  row eight lines earlier).
+- The litmus file itself made it through cleanly; only the windows-
+  side binding bookkeeping was lost. Re-added the entry so both
+  trays' binding rows reflect the symmetric cross-tray pin both
+  sides intended.
+- Per skill §4 ("any host may write, but COORDINATE via the ledger
+  first"), restoring a sibling-authored entry lost to a merge
+  artifact is corrective bookkeeping. Each tray's binding list
+  now has 7 litmuses; coverage_ratio stays 100% on both.
+- YAML parses cleanly. No code changes.
+- Streak: 0 (productive iter). Next macOS iter eligible at ~18:35Z.
