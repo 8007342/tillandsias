@@ -759,6 +759,7 @@ declare_class!(
             self.attach_pty(
                 "Open Shell",
                 tillandsias_host_shell::pty::PtyIntent::Shell,
+                None,
             );
         }
 
@@ -767,6 +768,7 @@ declare_class!(
             self.attach_pty(
                 "GitHub login",
                 tillandsias_host_shell::pty::PtyIntent::GithubLogin,
+                None,
             );
         }
 
@@ -812,8 +814,21 @@ impl TrayActionHost {
     ///
     /// `label` is the user-facing action name used in stderr logs
     /// and the stub fallback message. `intent` is the canonical
-    /// `PtyIntent` consumed by `launch_spec`.
-    fn attach_pty(&self, label: &'static str, intent: tillandsias_host_shell::pty::PtyIntent) {
+    /// `PtyIntent` consumed by `launch_spec`. `project` (m10): when
+    /// `Some(p)`, `launch_spec` wraps the in-VM command with `podman
+    /// exec -it tillandsias-<p>-forge …` so the PTY lands inside the
+    /// project's forge container (cross-host agreement: the user's
+    /// files + dev tooling live in the forge, not on the bare VM).
+    /// When `None`, the bare-VM command runs — the deliberate
+    /// VM-debug escape hatch for `Shell` + the user-level path for
+    /// `GithubLogin`. See `tillandsias_host_shell::pty::intent_for_action`
+    /// for the canonical `MenuAction` → `(intent, project)` mapping.
+    fn attach_pty(
+        &self,
+        label: &'static str,
+        intent: tillandsias_host_shell::pty::PtyIntent,
+        project: Option<String>,
+    ) {
         let ivars = self.ivars();
         let vz = match ivars.vm.lock().unwrap().clone() {
             Some(vz) => vz,
@@ -823,9 +838,9 @@ impl TrayActionHost {
             }
         };
         let runtime = ivars.runtime.clone();
-        eprintln!("[tillandsias-tray] {label}: spawning attach worker");
+        eprintln!("[tillandsias-tray] {label}: spawning attach worker (project={project:?})");
         runtime.spawn(async move {
-            let result = run_pty_attach(vz, intent).await;
+            let result = run_pty_attach(vz, intent, project).await;
             dispatch_to_main_thread(move || match result {
                 Ok(slave_path) => {
                     eprintln!("[tillandsias-tray] {label}: PTY attached at {slave_path}");
@@ -855,10 +870,11 @@ impl TrayActionHost {
 /// can spawn Terminal.app pointed at it via `screen`.
 ///
 /// `intent` selects the in-VM command — `Shell` for /bin/bash -l,
-/// `GithubLogin` for `gh auth login`, etc. With project=None the
-/// command targets the bare VM per the convergence-coordination
-/// fallback (slice 5b' will surface project selection from
-/// MenuStructure once it carries that state).
+/// `GithubLogin` for `gh auth login`, etc. `project` (m10): when
+/// `Some(p)`, `launch_spec` wraps the command in `podman exec -it
+/// tillandsias-<p>-forge …` so it lands inside that project's forge
+/// container; when `None`, the bare-VM command runs (Shell = VM-debug
+/// escape; GithubLogin = user-level pre-attach).
 ///
 /// Each spawned tokio task (the bridge writer/reader, pump_io's two
 /// halves) runs detached for v0.0.1; they unwind naturally when the
@@ -867,6 +883,7 @@ impl TrayActionHost {
 async fn run_pty_attach(
     vz: std::sync::Arc<VzRuntime>,
     intent: tillandsias_host_shell::pty::PtyIntent,
+    project: Option<String>,
 ) -> Result<String, String> {
     use std::sync::Arc;
     use std::time::Duration;
@@ -896,7 +913,7 @@ async fn run_pty_attach(
     let master = UnixPtyMaster::open(24, 80).map_err(|e| format!("openpty: {e}"))?;
     let slave_path = master.slave_path().to_string();
 
-    let opts = launch_spec(&intent, None, 24, 80);
+    let opts = launch_spec(&intent, project.as_deref(), 24, 80);
     let session = PtySession::open(Arc::new(transport), &alloc, &router, &opts)
         .map_err(|e| format!("PtyOpen: {e}"))?;
 
@@ -1076,32 +1093,50 @@ impl TrayActionHost {
                     "[tillandsias-tray] SelectAgent({agent:?}): TODO wire MenuState + rerender"
                 );
             }
-            MenuAction::Attach {
-                ref scope,
-                ref name,
-            }
-            | MenuAction::Maintain {
-                ref scope,
-                ref name,
-            } => {
-                // TODO(slice): build a PtyIntent + project from the
-                // click, run attach_pty against the in-VM forge for
-                // that project. Needs MenuState ownership + a way to
-                // resolve "active project" from a click. Stubbed.
-                eprintln!(
-                    "[tillandsias-tray] {action:?} (scope={scope:?}, name={name:?}): \
-                     TODO wire to attach_pty"
-                );
+            MenuAction::Attach { .. } | MenuAction::Maintain { .. } => {
+                // m10: resolve (intent, project) via the shared
+                // `intent_for_action` table — same canonical mapping
+                // windows-tray uses (notify_icon.rs:1604
+                // `launch_open_shell_terminal`). Attach maps to
+                // `Agent(<selected_agent>)`; Maintain maps to `Shell`;
+                // both carry the project name as `Some(p)` so
+                // `launch_spec` wraps the command in `podman exec -it
+                // tillandsias-<p>-forge …` against the in-VM forge.
+                // `selected_agent` is read from the held
+                // `MenuState.selected_agent` (the same slot the
+                // SelectAgent arm will eventually mutate).
+                let agent = self
+                    .ivars()
+                    .menu_state
+                    .lock()
+                    .map(|s| s.selected_agent)
+                    .unwrap_or_else(|_| {
+                        tillandsias_host_shell::menu_state::MenuState::initial().selected_agent
+                    });
+                if let Some((intent, project)) =
+                    tillandsias_host_shell::pty::intent_for_action(&action, agent)
+                {
+                    let label: &'static str = match action {
+                        MenuAction::Attach { .. } => "Attach",
+                        MenuAction::Maintain { .. } => "Maintain",
+                        _ => unreachable!(),
+                    };
+                    self.attach_pty(label, intent, project);
+                } else {
+                    eprintln!("[tillandsias-tray] {action:?}: no PTY intent (unexpected)");
+                }
             }
             MenuAction::GithubLogin => {
                 // Top-level GitHub login. Same gate as Attach —
                 // needs the in-VM headless to be Ready. Defer to the
                 // existing `attach_pty(GithubLogin)` path, which
                 // already logs "no VM running" cleanly when the VM
-                // isn't up yet.
+                // isn't up yet. project=None: `gh auth login` is
+                // user-level so it runs in the bare VM pre-attach.
                 self.attach_pty(
                     "GitHub login",
                     tillandsias_host_shell::pty::PtyIntent::GithubLogin,
+                    None,
                 );
             }
             MenuAction::CloudOverflow | MenuAction::Inert => {
@@ -1697,6 +1732,67 @@ mod tests {
     /// `notify_icon::tests::vm_phase_status_text_reflects_phase_and_podman`
     /// — keeping the two assertions identical guards the cross-platform
     /// UX-parity invariant.
+    /// m10: pin the dispatcher's `Attach`/`Maintain` arm contract — every
+    /// click on a per-project menu row resolves via the shared
+    /// `intent_for_action` table to a `(PtyIntent, Some(project))` tuple
+    /// that `attach_pty` threads into `launch_spec`, producing a forge-
+    /// container-wrapped argv (`podman exec -it tillandsias-<p>-forge …`)
+    /// rather than a bare-VM shell. A future refactor of either
+    /// `intent_for_action` or the dispatcher's resolve path that lost
+    /// the project would silently dump users into the wrong shell.
+    ///
+    /// The host-shell crate already byte-pins `launch_spec`'s wrapping
+    /// behaviour for `project=Some` (`launch_spec_wraps_in_forge_podman_
+    /// exec_when_project_given` at pty/mod.rs:632). This macOS-side test
+    /// pins the LINK: the macOS dispatcher invokes `intent_for_action`
+    /// with the right arguments to produce a non-None project.
+    #[test]
+    fn attach_action_resolves_to_project_via_intent_for_action() {
+        use tillandsias_host_shell::menu_action::{MenuAction, ProjectScope};
+        use tillandsias_host_shell::menu_state::SelectedAgent;
+        use tillandsias_host_shell::pty::{PtyIntent, intent_for_action};
+
+        let action = MenuAction::Attach {
+            scope: ProjectScope::Local,
+            name: "myproj".to_string(),
+        };
+        let (intent, project) = intent_for_action(&action, SelectedAgent::OpenCode)
+            .expect("Attach must yield Some((intent, project))");
+        assert!(
+            matches!(intent, PtyIntent::Agent(SelectedAgent::OpenCode)),
+            "Attach must map to Agent(<selected_agent>), got: {intent:?}"
+        );
+        assert_eq!(
+            project.as_deref(),
+            Some("myproj"),
+            "Attach must thread the project name into launch_spec"
+        );
+
+        let maintain = MenuAction::Maintain {
+            scope: ProjectScope::Local,
+            name: "myproj".to_string(),
+        };
+        let (m_intent, m_project) = intent_for_action(&maintain, SelectedAgent::OpenCode)
+            .expect("Maintain must yield Some((intent, project))");
+        assert!(
+            matches!(m_intent, PtyIntent::Shell),
+            "Maintain must map to Shell (forge-shell, not agent)"
+        );
+        assert_eq!(
+            m_project.as_deref(),
+            Some("myproj"),
+            "Maintain must thread the project name into launch_spec"
+        );
+
+        // GithubLogin remains project-less (gh auth login is user-level
+        // pre-attach — runs in the bare VM, not the forge container).
+        let github = MenuAction::GithubLogin;
+        let (g_intent, g_project) =
+            intent_for_action(&github, SelectedAgent::OpenCode).expect("GithubLogin yields Some");
+        assert!(matches!(g_intent, PtyIntent::GithubLogin));
+        assert_eq!(g_project, None, "GithubLogin must NOT thread a project");
+    }
+
     #[test]
     fn vm_phase_status_text_reflects_phase_and_podman() {
         use tillandsias_control_wire::VmPhase;

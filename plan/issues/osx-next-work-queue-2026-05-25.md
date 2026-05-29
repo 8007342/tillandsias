@@ -2958,3 +2958,33 @@ step 5 lands.
 - Coverage on macos-native-tray binding stays at 6 litmuses / 100%.
   No Rust changes. YAML validates clean.
 - Streak: 0 (productive iter). Next macOS iter eligible at ~15:15Z.
+
+### event: macOS m10 — menu-project-threading-for-pty-launch COMPLETE — 2026-05-29T15:25Z
+
+- Wires the per-project Attach/Maintain menu clicks through to the
+  forge-container PTY-attach. `attach_pty(&self, label, intent,
+  project: Option<String>)` gained the project param; `run_pty_attach`
+  now passes `project.as_deref()` into `launch_spec` instead of
+  hardcoded `None` — so per-project clicks land in
+  `tillandsias-<p>-forge` via `podman exec -it` (the same forge-
+  container semantics windows-tray's `launch_open_shell_terminal`
+  produces at `notify_icon.rs:1604`).
+- `dispatch_menu_action::MenuAction::Attach/Maintain` arm replaced
+  its TODO stub: reads `selected_agent` from held `MenuState`, calls
+  the shared `intent_for_action(&action, agent)` (canonical helper
+  windows uses), then `self.attach_pty(label, intent, project)`.
+- `open_shell` / `github_login` selectors + the dispatcher's
+  GithubLogin arm pass `None` (bare-VM by design: Shell is the
+  debug escape; gh auth login is user-level pre-attach).
+- New unit test `attach_action_resolves_to_project_via_intent_for_
+  action` pins the dispatcher ↔ `intent_for_action` link: asserts
+  Attach -> (Agent(<agent>), Some("myproj")), Maintain ->
+  (Shell, Some("myproj")), GithubLogin -> (GithubLogin, None).
+- Tests: macos-tray 41/41 (+1, was 40). clippy `--tests -D warnings`
+  clean. fmt clean.
+- Picked up after slice 31 cleared the architectural-invariants
+  litmus track. m10 was the loop_status assignment-board fallback
+  ("m10 project threading") with no remaining dependencies; m11
+  (`menu-structure-action-integration-and-clippy`) remains as
+  optional follow-up — mostly absorbed by the UX-correction series.
+- Streak: 0 (productive iter). Next macOS iter eligible at ~15:55Z.
