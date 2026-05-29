@@ -80,3 +80,62 @@ trace: .claude/skills/build-macos-tray/SKILL.md (the skill that wrote this)
 **Cross-host visibility note**: N/A (SECTION_KIND=ok).
 
 **Next iteration ask**: N/A. The tarball-reproducibility note above is worth threading into the skill if it becomes a real cross-host coordination cost (e.g. windows-host wants to verify their build matches macOS's bytewise). Not blocking anything today.
+
+---
+
+### 20260529T203000Z — autonomous-smoke-false-positive correction
+
+- agent_id: macos-Tlatoani-MacBook-Air-claude-opus-20260529T203000Z
+- head_sha: 5e331872 (same bundle as the 20260529T193710Z install)
+
+**Why this section exists**: both prior sections today reported `SECTION_KIND=ok` based on autonomous-smoke signals (codesign + entitlement + `--diagnose --json` schema + 3s alive-after-launch + clean SIGTERM). User-attended launch of the installed `~/Applications/Tillandsias.app` from the 20260529T193710Z run surfaces three UX regressions that the autonomous smoke does not catch. The earlier `SECTION_KIND=ok` is technically true for what it asserted, but the bundle is **not user-smoke-ready**.
+
+**User-observed regressions** (full evidence + spec cross-references in `plan/issues/macos-tray-ux-gaps-2026-05-29.md`):
+
+- gap-1 — status item shows the bare letter `T`, not a tray icon — violates `macos-native-tray.ui.nsstatusitem-only@v1` scenario "Status item appears in menu bar" (spec line 49-52)
+- gap-2 — menu structure does not match the parity contract — violates `macos-native-tray.ui.menu-parity@v1` (spec line 64-88); exact divergence not yet captured (need screenshot or NSMenu item dump from the user's host)
+- gap-3 — "failed to fetch recipe" surfaces during normal launch — contradicts the 20260529T190656Z claim that "auto-boot worker engages on launch and immediately enters the recipe-artifact-fetch path — this is m5 working as designed"; the autonomous SIGTERM at 3s cannot distinguish "fetch in progress" from "fetch will fail"
+
+**Implication for the hourly `/build-macos-tray` cron** (job `0c175e88`, every hour at :23 starting today): until the autonomous smoke gains menu/icon/stderr assertions, `SECTION_KIND=ok` from this skill means "the build produced something that satisfies its diagnose schema", not "the bundle is user-smoke-ready". The hourly iteration should pick up `macos-tray-ux-gaps-2026-05-29.md` and chip away one gap at a time.
+
+**Cross-host visibility note**: macOS host has open UX-regression work that is NOT visible from the bare `/build-macos-tray` SECTION_KIND. Linux/Windows hosts auditing macOS readiness should read `macos-tray-ux-gaps-2026-05-29.md`, not just this findings file.
+
+**Next iteration ask**: scaffold `/test-e2e-macos-tray` skill, OR add menu-dump + stderr-tail + icon-asset assertions to `/build-macos-tray` so SECTION_KIND=ok carries the right semantics. User decision pending.
+
+---
+
+### 20260529T212446Z — ok
+
+- agent_id: macos-Tlatoani-MacBook-Air-claude-opus-20260529T212446Z
+- head_sha: 9a945410
+- version: 0.2.260528.1
+- build_run_id: 20260529T212446Z
+
+**Build**:
+- duration: 0.48 s wall-clock (cargo cache hit — cargo build itself finished in 0.26s; the rest is sign/tar/sha overhead)
+- tarball: tillandsias-tray-0.2.260528.1-macos-arm64.tar.gz (1.52 MiB, sha256 47703902ac77ab134c03339fa464fee220afb4175354da2d4daf2a4891d51b3a)
+- codesign verify: pass (`valid on disk` + `satisfies its Designated Requirement`)
+- entitlement com.apple.security.virtualization: present (script greps post-sign; success line implies it)
+
+**Autonomous smoke**:
+- `--diagnose --json` exit: 2 (degraded — `provisioned: false`, same as prior runs today since no Start VM cycle in between)
+- `--diagnose --json` keys present: [exe_path, image_root, in_app, initrd_bytes, initrd_present, kernel_bytes, kernel_present, manifest_pin_aarch64_img, provisioned, release_tag, rootfs_bytes, rootfs_present, version] — same 13-key schema per `litmus:macos-tray-diagnose-cli-surface`
+- diagnose values: release_tag=v0.2.260526.1, manifest_pin=6859a7bcc4a9 (unchanged from prior runs)
+- detached launch: alive-after-3s
+- SIGTERM round-trip: clean-SIGTERM-exit
+- **new stderr capture** (worth recording for the e2e suite to build on): the 3s-window stderr includes `[tillandsias-tray] Auto-boot: spawning worker (image_root=/Users/tlatoani/Library/Application Support/tillandsias)` followed by `[tillandsias-tray] Start VM: rootfs.img missing at .../rootfs.img; attempting recipe-artifact fetch` — confirms the auto-boot path enters the fetch branch within 3s; the 3s SIGTERM still cannot tell if the fetch ultimately succeeds (gap-3 territory).
+
+**Install**:
+- target: ~/Applications/Tillandsias.app
+- backup made: yes — prior bundle (the 20260529T193710Z install that the user observed gap-1/gap-2/gap-3 against) rotated to `Tillandsias.app.bak`
+- post-install diagnose schema match: yes (13-key shape preserved)
+
+**Findings** (free-form):
+- First build against `9a945410` (this is the post-merge head after `git fetch` pulled `origin/linux-next` to `fc298496`). Prior two daily runs were against `4bc7f0e8` (cold-cache 14s build) and `5e331872` (warm 1s build). Today's third run is also a warm 1s build at `9a945410` — the linux-next merge did not touch any macos-tray source.
+- Tarball SHA32 changed again (`47703902...` vs `668b0a5c...` vs `bfb3a0df...` across the three runs) despite byte-stable binary. Confirms the reproducibility note from run 2 — `tar -czf` mtime embedding is per-invocation. Not a regression.
+- `scripts/run-litmus-test.sh litmus:macos-tray-diagnose-cli-surface` still errors on macOS with `declare: -A: invalid option` (bash 3 limitation). Known; Linux integration loop runs these tests cleanly.
+- The freshly-installed bundle (head `9a945410`) **has NOT yet been re-tested against gap-1 / gap-2 / gap-3** from `plan/issues/macos-tray-ux-gaps-2026-05-29.md`. The user's observation was against the bundle from `5e331872`; the merge head doesn't touch tray code so the gaps are very likely still present, but proof requires a user-attended launch OR the scheduled `/test-e2e-macos-tray` run (job `5ea2407a`, 4:43 AM daily).
+
+**Cross-host visibility note**: N/A (SECTION_KIND=ok at the autonomous layer). Sibling hosts auditing macOS readiness should still consult `plan/issues/macos-tray-ux-gaps-2026-05-29.md` for the UX-regression overlay.
+
+**Next iteration ask**: N/A from this run. The hourly cron `0c175e88` will fire again at the next `:23`; the daily e2e cron `5ea2407a` at 04:43 will be the first run that exercises the gap assertions against this freshly-installed `9a945410` bundle.
