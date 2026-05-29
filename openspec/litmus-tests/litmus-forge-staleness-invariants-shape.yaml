@@ -1,0 +1,111 @@
+# @trace spec:forge-staleness
+#
+# Companion drift-protection for forge-staleness invariants the
+# existing `litmus:forge-staleness-shape` doesn't pin.
+#
+# The existing litmus covers the build-script side: hash file
+# naming + "is up to date" message + prune messages + @trace lines.
+# This companion pins the RUST-side invariants the spec mandates:
+#
+#   * "Absent cache version file means fresh start, not a staleness
+#     signal" — the `unwrap_or(false); // No cached version on
+#     fresh start is OK, not a mismatch` literal at main.rs:899.
+#     This is non-negotiable for supporting ephemeral deployments
+#     (per the spec text + cache-recovery-mechanism cross-ref).
+#   * "Source-hash staleness file" — `fn containerfile_is_stale`
+#     in main.rs is the entry point.
+#   * Multiple @trace markers on the cache-version + staleness
+#     functions in main.rs — the spec→code mapping document.
+#   * image_builder.rs "Check staleness (skip if already exists)"
+#     pattern — the runtime-side staleness decision.
+#
+# Companion litmus raises forge-staleness coverage 30 → 67.
+name: litmus:forge-staleness-invariants-shape
+spec: forge-staleness
+phase: pre-build
+description: >
+  Pin the Rust-side forge-staleness invariants: containerfile_is_
+  stale entry point; unwrap_or(false) "absent = fresh start"
+  guarantee; @trace spec:forge-staleness on cache-version
+  functions in main.rs + the "Check staleness" pattern in
+  image_builder.rs.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-headless/src/main.rs
+  - workspace contains crates/tillandsias-core/src/image_builder.rs
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "containerfile_is_stale entry point exists with the spec-pinned signature"
+    # Spec requirement: "Source-hash staleness file". The function
+    # at main.rs:1049 reads/computes the source hash and decides
+    # whether a rebuild is needed. A refactor that drops or
+    # renames this function silently breaks the staleness check.
+    command: "grep -F 'fn containerfile_is_stale(root: &Path, image_name: &str, debug: bool) -> Result<bool, String>' crates/tillandsias-headless/src/main.rs"
+    timeout_ms: 3000
+    expected_behavior: "fn containerfile_is_stale"
+
+  - step: "absent cache version file means fresh start (non-negotiable invariant)"
+    # Spec requirement: "Absent cache version file means fresh
+    # start, not a staleness signal". The unwrap_or(false) at
+    # main.rs:899 (with the inline comment) is the entire
+    # mechanism for this guarantee. A refactor swapping it for
+    # `unwrap_or(true)` or removing the unwrap_or would silently
+    # convert ephemeral deployments into staleness errors.
+    command: "grep -F 'unwrap_or(false); // No cached version on fresh start is OK, not a mismatch' crates/tillandsias-headless/src/main.rs"
+    timeout_ms: 3000
+    expected_behavior: "No cached version on fresh start is OK"
+
+  - step: "cache-version + staleness functions trace forge-staleness + forge-cache-dual"
+    # Both specs co-trace these functions. The spec→code mapping
+    # document depends on the trace presence. A refactor that
+    # drops one spec from the trace breaks that spec's
+    # observability list at this code location.
+    command: "grep -cF '@trace spec:forge-staleness, spec:forge-cache-dual' crates/tillandsias-headless/src/main.rs | awk '{ if ($1+0 >= 4) print \"ok: \" $1 \" traces present\"; else { print \"FAIL: expected >=4 traces, got \" $1; exit 1 } }'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "image_builder.rs documents Check staleness step + skip-if-exists pattern"
+    # The runtime-side image-builder explicitly comments "Check
+    # staleness (skip if already exists)" — that comment is the
+    # spec→code mapping for "Tray always invokes build script
+    # for staleness check" requirement. Without it, the
+    # staleness step gets lost in a future refactor.
+    command: "grep -F 'Step 1: Check staleness (skip if already exists)' crates/tillandsias-core/src/image_builder.rs"
+    timeout_ms: 3000
+    expected_behavior: "Check staleness"
+
+  - step: "image_builder.rs exposes a skipped-due-to-staleness signal"
+    # The result of the staleness check is surfaced through a
+    # documented boolean field. A refactor that hides it (e.g.
+    # by making the field private without a getter) would prevent
+    # callers from logging skip-vs-rebuild outcomes.
+    command: "grep -F 'Whether the build was skipped due to staleness (true = already existed).' crates/tillandsias-core/src/image_builder.rs"
+    timeout_ms: 3000
+    expected_behavior: "skipped due to staleness"
+
+observability:
+  traces:
+    - "@trace spec:forge-staleness"
+    - "@trace spec:forge-cache-dual"
+  expected_log: "Rust-side forge-staleness invariants pinned (containerfile_is_stale + absent-cache-version-OK + 4 traces)"
+  log_fields:
+    spec: "forge-staleness"
+    test: "forge-staleness-invariants-shape"
+    main_artifact: "crates/tillandsias-headless/src/main.rs"
+    builder_artifact: "crates/tillandsias-core/src/image_builder.rs"
+
+rollback:
+  on_failure: >
+    A forge-staleness invariant drifted. Restore:
+    `fn containerfile_is_stale(root: &Path, image_name: &str,
+    debug: bool) -> Result<bool, String>`; the
+    `unwrap_or(false); // No cached version on fresh start is OK,
+    not a mismatch` literal in main.rs; at least 4 `@trace
+    spec:forge-staleness, spec:forge-cache-dual` markers in
+    main.rs; the "Step 1: Check staleness (skip if already
+    exists)" comment + "Whether the build was skipped due to
+    staleness" docstring in image_builder.rs.
+  command: "grep -nE 'fn containerfile_is_stale|No cached version on fresh start|Check staleness|skipped due to staleness' crates/tillandsias-headless/src/main.rs crates/tillandsias-core/src/image_builder.rs | head -10"
