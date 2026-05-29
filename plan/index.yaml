@@ -1636,7 +1636,7 @@ plan_index:
     - id: multi-host-plan-ledger-adoption
       order: 21
       title: Multi-Host Plan Ledger Adoption
-      status: in_progress
+      status: completed
       deliverable: plan/issues/multi-host-coordination-2026-05-24.md
       depends_on: [recent-work-spec-doc-methodology-audit]
       progress_note: >
@@ -1660,7 +1660,7 @@ plan_index:
         - "A failed ancestry check creates a plan issue instead of a blind fast-forward."
       tasks:
         - id: multi-host-ledger/adopt-fields
-          status: in_progress
+          status: completed
           depends_on: []
           owned_files:
             - plan/issues/multi-host-coordination-2026-05-24.md
