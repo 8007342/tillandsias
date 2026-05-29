@@ -37,7 +37,7 @@ plan:
     doc_debt_payoff_status: "Completed 2026-05-16; plan/index stale status corrected 2026-05-24"
     recent_work_audit_status: "Completed and verified 2026-05-24: git-mirror safe refspec spec/litmus, Vault Phase 6 default spec, multi-host methodology, and Markdown distillation refreshed"
     multi_host_coordination_status: >
-      Active 2026-05-28T22:20:00Z: Completed implementation of approved forge toolchain improvements (Rust, Go, Python, Wasm, Dart, and global packages/linters/formatters). Rebuilt and tagged tillandsias-forge:latest / tillandsias-forge:v0.2.260528.1. Verified through full litmus suite (all 57 checks passing cleanly).
+      Active 2026-05-29T06:08:00Z: Configured Squid TCP Reset for strict port denials (proposal 2026-05-28-proxy-egress-isolation.md) to enforce zero-trust isolation boundaries. Added comprehensive unit tests and verified all 144 headless tests passing.
     markdown_distillation_status: "Active 2026-05-24: ad hoc Markdown is intake only; retained top-level/tool-local reports must be tombstone pointers to specs, cheatsheets, methodology, or plan"
     methodology_reconciliation_status: "Completed 2026-05-19: OpenCode Web launch specs, cheatsheets, CA generation, overlay/theme proxy, project selection, and auth-gated readiness reconciled"
     git_identity_propagation_status: "Completed 2026-05-19: GitHub Login identity now propagates to forge env and repo-local git config for Codex/OpenCode/OpenCode Web/Claude/maintenance"
