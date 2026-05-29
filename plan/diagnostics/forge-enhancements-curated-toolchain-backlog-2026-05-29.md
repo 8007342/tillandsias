@@ -65,17 +65,17 @@ unchanged before approval:
 
 | Candidate | Status | Source runs | Rationale | Privacy/isolation notes |
 |---|---|---|---|---|
-| `black` | approved | 04:05Z, 06:03Z | Formatter; ruff is installed but black is the standard formatter. | pip install — same envelope as existing python. |
-| `pylint` | approved | 06:03Z | Linter complement to ruff/mypy. | pip install — same envelope. |
+| `black` | **implemented** | 04:05Z, 06:03Z | Formatter; ruff is installed but black is the standard formatter. | pip install — same envelope as existing python. Shipped on the existing `pip3 install` RUN layer (no new image layer). |
+| `pylint` | **implemented** | 06:03Z | Linter complement to ruff/mypy. | pip install — same envelope. Shipped alongside `black` in the same pip3 install batch. |
 | `flake8` | deferred | 06:03Z | Linter (overlaps with pylint — pick one). | pip install — same envelope. |
-| `bandit` | approved | 06:03Z | Security-oriented Python linter. | pip install — same envelope. |
+| `bandit` | **implemented** | 06:03Z | Security-oriented Python linter. | pip install — same envelope. Shipped alongside `black` + `pylint` in the same pip3 install batch. |
 
 ### Web (JS/TS)
 
 | Candidate | Status | Source runs | Rationale | Privacy/isolation notes |
 |---|---|---|---|---|
-| `prettier` | approved | 04:05Z, 05:03Z, 06:03Z (×3) | Universal formatter covering JS/TS/CSS/JSON/Markdown. No formatter pre-installed. | npm install — same envelope as existing node/npm. |
-| `eslint` | approved | 05:03Z, 06:03Z (×2) | Standard JS/TS linter. `typescript-language-server` is installed but no linter. | npm install — same envelope. |
+| `prettier` | **implemented** | 04:05Z, 05:03Z, 06:03Z (×3) | Universal formatter covering JS/TS/CSS/JSON/Markdown. No formatter pre-installed. | npm install — same envelope as existing node/npm. Shipped on the existing `npm install -g` RUN layer (no new image layer). |
+| `eslint` | **implemented** | 05:03Z, 06:03Z (×2) | Standard JS/TS linter. `typescript-language-server` is installed but no linter. | npm install — same envelope. Shipped alongside `prettier` in the same npm install batch. |
 
 ### Dart / Flutter
 

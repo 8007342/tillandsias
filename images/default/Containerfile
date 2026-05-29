@@ -37,8 +37,19 @@ RUN microdnf install -y \
 RUN npm install -g --prefix /usr/local opencode-ai@latest @fission-ai/openspec @anthropic-ai/claude-code @openai/codex
 
 # ── Python packages and developer tools ─────────────────────────
+# Python additions: black + pylint + bandit. Web additions: prettier +
+# eslint. All 5 are orchestrator-approved curated-backlog candidates
+# (045a6720); they fit on the existing pip3 + npm install RUN layer
+# without adding a new image layer. Same envelope as the existing
+# python/node infrastructure — no new egress, no new creds, no new
+# mounts.
+#
+# @trace plan/diagnostics/forge-enhancements-curated-toolchain-backlog-2026-05-29.md
+#   (black, pylint, bandit, prettier, eslint — approved)
 RUN pip3 install --no-cache-dir pyright ruff poetry pipx uv mypy pytest \
-    && npm install -g yarn pnpm typescript typescript-language-server
+        black pylint bandit \
+    && npm install -g yarn pnpm typescript typescript-language-server \
+        prettier eslint
 
 # ── Go tools ───────────────────────────────────────────────────
 RUN GOBIN=/usr/local/bin go install golang.org/x/tools/gopls@latest \
