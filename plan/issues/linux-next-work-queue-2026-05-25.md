@@ -16,6 +16,7 @@ This file is the cross-host advertisement — terse, dated, SHA-anchored.
 
 ## Recent entries (reverse chronological)
 
+- 2026-05-29T01:06Z  (no-op)   defer — integration cron at 01:05Z (1 min ago, inside 10-min defer window). No slice taken; cron writes need to settle. Agent `linux-tlatoani-fedora-gemini-20260529T0105`.
 - 2026-05-29T00:55Z  `05cc3a7d`  EnumerateLocalProjects handler on unix dispatcher (convergence packet Q4) — new shared `local_projects` module with pure `scan_project_root(&Path) -> Vec<LocalProjectEntry>`; vsock side refactored to use it; unix side gains `TILLANDSIAS_HOST_PROJECT_ROOT` env var + `$HOME/src` default + the inner-Handle arm. 3 new + 2 existing scanner tests all green. First matrix-Handle-but-no-handler variant migrated to a real implementation.
 - 2026-05-29T00:23Z  `614d65f4`  litmus: pin control-socket convergence packet wiring — new `litmus-control-dispatch-shape` instant-phase test greps `control_dispatch.rs` + `tray/mod.rs` + `vsock_server.rs` + `main.rs` mod registration. Seven steps catch a regression that re-inlines the routing matrix in either dispatcher while keeping the matrix unit tests green. Drift protection for items 1-3 shipped earlier this session.
 - 2026-05-29T00:06Z  (no-op)   defer — integration cron at 00:05Z (1 min ago, inside 10-min defer window). No slice taken; cron writes need to settle. Agent `linux-macuahuitl-gemini-20260529T0005`.
