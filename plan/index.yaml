@@ -895,7 +895,7 @@ plan_index:
         - "The next agent can cold-start from the step file without chat history"
       tasks:
         - id: plan-ledger-refresh/bootstrap
-          status: in_progress
+          status: completed
           depends_on: []
           owned_files:
             - methodology.yaml
