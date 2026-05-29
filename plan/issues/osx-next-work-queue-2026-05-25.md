@@ -2739,3 +2739,25 @@ step 5 lands.
   fmt clean.
 - Streak: 0 (productive iter). Next macOS iter eligible at
   ~06:00Z.
+
+### event: macOS slice 22 — spec gap fill: `--diagnose` Requirement + Invariant — 2026-05-29T06:20Z
+
+- Commit `2bd4faaf` codifies the `--diagnose` CLI surface in
+  `openspec/specs/macos-native-tray/spec.md`. Slices 11/11a/11b/14/
+  15/16 shipped the surface + tests + cheatsheet + installer
+  integration but the spec itself never enumerated it.
+- New Requirement "`--diagnose` CLI mode emits a stable bundled
+  health report" with 3 Scenarios (Human / JSON / wire-limitation
+  disclaimer) + new Invariant "`--diagnose` exit codes are limited
+  to {0, 2, 1}" measurable via existing
+  `exit_code_provisioned_zero_degraded_two` test.
+- Shape follows the structured form used by windows-native-tray
+  (`ID + Modality + Measurable + Invariants + @trace`, then
+  scenarios) — `openspec validate` is still red because of the
+  same pre-existing systemic SHALL/MUST disagreement that affects
+  the 5 pre-existing requirements; not introduced by this slice.
+- Selected via the `/advance-work-from-plan` skill's §2 priority
+  rule "spec gap fills". Resets noop streak — file deleted in
+  `2bd4faaf`.
+- Streak: 0 (productive iter). Next macOS iter eligible at
+  ~07:00Z.
