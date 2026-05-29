@@ -175,3 +175,39 @@ trace: .claude/skills/build-macos-tray/SKILL.md (the skill that wrote this)
 **Cross-host visibility note**: N/A (SECTION_KIND=ok at the autonomous layer).
 
 **Next iteration ask**: N/A. Same as prior section.
+
+---
+
+### 20260529T232433Z — ok
+
+- agent_id: macos-Tlatoani-MacBook-Air-claude-opus-20260529T232433Z
+- head_sha: 97cd09ea
+- version: 0.2.260528.1
+- build_run_id: 20260529T232433Z
+
+**Build**:
+- duration: 0.38 s wall-clock (cache hit)
+- tarball: tillandsias-tray-0.2.260528.1-macos-arm64.tar.gz (1.52 MiB, sha256 636873cba5bcf045aaa846fa54f83a1aa4e5b2c0aecae51e667f323818cd4c35)
+- codesign verify: pass
+- entitlement com.apple.security.virtualization: present
+
+**Autonomous smoke**:
+- `--diagnose --json` exit: 2 (degraded)
+- `--diagnose --json` keys present: 13 (full schema)
+- detached launch: alive-after-3s
+- SIGTERM round-trip: clean-SIGTERM-exit
+- stderr `diff` vs prior run (20260529T222435Z): **identical byte-for-byte** — the auto-boot trace is deterministic at the 3s mark.
+
+**Install**:
+- target: ~/Applications/Tillandsias.app
+- backup made: yes
+- post-install diagnose schema match: yes (13 keys)
+
+**Findings** (free-form):
+- 5th `ok` run today. Same autonomous-layer signal. Body deliberately minimal.
+- **Stable-fingerprint observation**: smoke stderr is identical across runs in the same head/install-state. That makes "stderr diff vs prior run" a cheap regression-detector the skill could add: if the diff is non-empty, flag for human attention. Candidate for §8 skill iteration.
+- Linux-next divergence at push time: `origin/linux-next` is now ~21 commits ahead of HEAD. `osx-next:linux-next` push still skipped per the same reasoning as the prior two sections; pushing `osx-next:osx-next` only.
+
+**Cross-host visibility note**: N/A.
+
+**Next iteration ask**: N/A.
