@@ -1,0 +1,97 @@
+# @trace spec:macos-native-tray, spec:windows-native-tray
+# Cross-tray drift protection for the three UX-text helpers that drive
+# the status-row + menubar-tooltip + chip rendering in both trays.
+# Each helper has an identically-named function on both sides plus an
+# identically-named unit test that pins its behaviour. The macOS side
+# was added as byte-for-byte mirrors of the windows-tray originals in
+# the m4-UX-correction series (slices 1-7, 2026-05-28) to satisfy the
+# owner's "1:1 UX with windows-tray + Linux" hard requirement
+# (2026-05-27).
+#
+# The three helpers:
+#   - `vm_phase_status_text(phase, podman_ready) -> String`
+#     formats the post-Ready chip segment ("Starting…", "Running",
+#     "Podman starting", etc.) — windows reference is the canonical
+#     surface, macOS slice 3 (637246b3) mirrored it byte-for-byte.
+#     Pin test on both sides: `vm_phase_status_text_reflects_phase_and_podman`.
+#   - `describe_wire_error(code, message) -> String`
+#     formats wire `Error{code,message}` envelopes into the chip's
+#     red-circle suffix text.
+#     Pin test on both sides: `describe_wire_error_includes_code_and_message`.
+#   - `compose_chip_text(base, last_event) -> String`
+#     appends the last-event suffix ("Status: <event>") to the base
+#     chip text. Drives the live-event update behaviour.
+#     Pin test on both sides: `compose_chip_text_appends_last_event`.
+#
+# This litmus enforces that BOTH trays keep ALL THREE helper functions
+# AND their identically-named pin tests at the source level. A refactor
+# on one side that renames a helper, drops a pin test, or pulls one
+# helper into a shared crate without lifting the symmetric pin on the
+# other side surfaces here pre-build — before the per-host unit tests
+# run in their separate target builds and silently diverge on the
+# unchanged side.
+#
+# The byte-level value contract of each helper is pinned by its own
+# per-host unit test (e.g. `vm_phase_status_text_reflects_phase_and_podman`
+# asserts the exact emitted strings). This litmus enforces only that
+# the symmetric source surface continues to exist on both sides.
+#
+# Provenance:
+#   windows references (canonical): crates/tillandsias-windows-tray/src/notify_icon.rs
+#     vm_phase_status_text   line 545; pin test line 1983
+#     describe_wire_error    line 534; pin test line 1700
+#     compose_chip_text      line 177; pin test line 1861
+#   macos mirrors (m4 UX-correction series 2026-05-28):
+#     vm_phase_status_text   line 208; pin test line 1701; slice 3 commit 637246b3
+#     describe_wire_error    line 190; pin test line 1607
+#     compose_chip_text      line 230; pin test line 1636
+#   this litmus: macOS slice 28 (cross-tray drift-protection pin)
+#
+# Sibling-binding ask: this litmus is bound under macos-native-tray on
+# the same change that creates it; windows-native-tray host owner is
+# invited to add it to their litmus_tests list (currently has 2, will
+# go to 3). The binding sequence mirrors slice 25 + slice 27 — each
+# side owns its own binding row.
+
+name: litmus:tray-status-text-helpers-symmetric
+spec: macos-native-tray
+phase: pre-build
+description: "Pin the three tray status-text helpers (vm_phase_status_text + describe_wire_error + compose_chip_text) and their identically-named pin tests across the windows-tray and macos-tray crates so a one-sided refactor cannot silently desymmetrize the chip UX."
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-windows-tray/src/notify_icon.rs
+  - workspace contains crates/tillandsias-macos-tray/src/action_host.rs
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "windows-tray declares vm_phase_status_text + its pin test"
+    command: "grep -F 'fn vm_phase_status_text' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn vm_phase_status_text_reflects_phase_and_podman' crates/tillandsias-windows-tray/src/notify_icon.rs"
+    expected_behavior: "both fn vm_phase_status_text + pin test present"
+    timeout_ms: 3000
+
+  - step: "macos-tray declares vm_phase_status_text + its pin test"
+    command: "grep -F 'fn vm_phase_status_text' crates/tillandsias-macos-tray/src/action_host.rs && grep -F 'fn vm_phase_status_text_reflects_phase_and_podman' crates/tillandsias-macos-tray/src/action_host.rs"
+    expected_behavior: "both fn vm_phase_status_text + pin test present"
+    timeout_ms: 3000
+
+  - step: "windows-tray declares describe_wire_error + its pin test"
+    command: "grep -F 'fn describe_wire_error' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn describe_wire_error_includes_code_and_message' crates/tillandsias-windows-tray/src/notify_icon.rs"
+    expected_behavior: "both fn describe_wire_error + pin test present"
+    timeout_ms: 3000
+
+  - step: "macos-tray declares describe_wire_error + its pin test"
+    command: "grep -F 'fn describe_wire_error' crates/tillandsias-macos-tray/src/action_host.rs && grep -F 'fn describe_wire_error_includes_code_and_message' crates/tillandsias-macos-tray/src/action_host.rs"
+    expected_behavior: "both fn describe_wire_error + pin test present"
+    timeout_ms: 3000
+
+  - step: "windows-tray declares compose_chip_text + its pin test"
+    command: "grep -F 'fn compose_chip_text' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn compose_chip_text_appends_last_event' crates/tillandsias-windows-tray/src/notify_icon.rs"
+    expected_behavior: "both fn compose_chip_text + pin test present"
+    timeout_ms: 3000
+
+  - step: "macos-tray declares compose_chip_text + its pin test"
+    command: "grep -F 'fn compose_chip_text' crates/tillandsias-macos-tray/src/action_host.rs && grep -F 'fn compose_chip_text_appends_last_event' crates/tillandsias-macos-tray/src/action_host.rs"
+    expected_behavior: "both fn compose_chip_text + pin test present"
+    timeout_ms: 3000

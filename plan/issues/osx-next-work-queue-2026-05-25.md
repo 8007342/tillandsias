@@ -2854,3 +2854,26 @@ step 5 lands.
   build clean.
 - Streak: 0 (productive iter). Next macOS iter eligible at
   ~12:55Z.
+
+### event: macOS slice 28 — tray status-text helpers cross-tray pin — 2026-05-29T12:55Z
+
+- New `openspec/litmus-tests/litmus-tray-status-text-helpers-
+  symmetric.yaml` (6 grep steps, all PASS locally) pinning the three
+  status-text helpers + their identically-named pin tests on both
+  sides: `vm_phase_status_text` / `describe_wire_error` /
+  `compose_chip_text` plus the `*_reflects_phase_and_podman`,
+  `*_includes_code_and_message`, `*_appends_last_event` unit tests.
+- These three helpers were the m4-UX-correction series' core
+  deliverable for the owner's 2026-05-27 "1:1 UX with windows + Linux"
+  hard requirement. The byte-level value contract is pinned by each
+  per-host unit test; this litmus enforces only the symmetric SOURCE
+  surface — a one-sided refactor that renames a helper or drops a
+  pin test would silently desymmetrize the chip UX.
+- Selected via /advance-work-from-plan §2 priority #3 "drift-
+  protection litmus". Same pattern + provenance as slices 25 (wire-
+  unreachable symmetric) + 27 (recipe-release-tag symmetric).
+- Bound on macos-native-tray (4 litmuses, coverage stays 100%);
+  windows-native-tray binding row left for that host per slice-25/27
+  precedent. YAML parses cleanly. No Rust changes.
+- Streak: 0 (productive iter). Next macOS iter eligible at
+  ~13:25Z.
