@@ -139,3 +139,39 @@ trace: .claude/skills/build-macos-tray/SKILL.md (the skill that wrote this)
 **Cross-host visibility note**: N/A (SECTION_KIND=ok at the autonomous layer). Sibling hosts auditing macOS readiness should still consult `plan/issues/macos-tray-ux-gaps-2026-05-29.md` for the UX-regression overlay.
 
 **Next iteration ask**: N/A from this run. The hourly cron `0c175e88` will fire again at the next `:23`; the daily e2e cron `5ea2407a` at 04:43 will be the first run that exercises the gap assertions against this freshly-installed `9a945410` bundle.
+
+---
+
+### 20260529T222435Z — ok
+
+- agent_id: macos-Tlatoani-MacBook-Air-claude-opus-20260529T222435Z
+- head_sha: 632786c3
+- version: 0.2.260528.1
+- build_run_id: 20260529T222435Z
+
+**Build**:
+- duration: 0.42 s wall-clock (cargo cache hit; only `chore(macos-build-findings)` and the new UX-gaps doc landed since the prior run — no source touched)
+- tarball: tillandsias-tray-0.2.260528.1-macos-arm64.tar.gz (1.52 MiB, sha256 7231964ea73b4b83550e53fee0c36b3204d8ef1d844c9ed62ce4b5d78e973b3d)
+- codesign verify: pass
+- entitlement com.apple.security.virtualization: present
+
+**Autonomous smoke**:
+- `--diagnose --json` exit: 2 (degraded; provisioned=false, release_tag=v0.2.260526.1 — unchanged)
+- `--diagnose --json` keys present: 13 (full schema; same shape as prior runs)
+- detached launch: alive-after-3s
+- SIGTERM round-trip: clean-SIGTERM-exit
+- stderr: same two-line auto-boot trace as 20260529T212446Z (`Auto-boot: spawning worker` → `Start VM: rootfs.img missing; attempting recipe-artifact fetch`). The 3s window still cuts off before the fetch resolves; gap-3 outcome still unobserved in autonomous smoke.
+
+**Install**:
+- target: ~/Applications/Tillandsias.app
+- backup made: yes
+- post-install diagnose schema match: yes (13 keys)
+
+**Findings** (free-form):
+- 4th `ok` run today. Body kept tight on purpose — nothing new vs the 20260529T212446Z run other than the per-invocation tarball SHA delta (`7231964e...` vs `47703902...`).
+- The recurring pattern of "build green / autonomous-smoke green / UX gaps still unverified" is exactly what `/test-e2e-macos-tray` is designed to close. First e2e run lands at 04:43 local.
+- Skill self-refinement candidate (still pending user decision): pre-check `git rev-list --count HEAD..origin/linux-next` before the §7 linux-next push and skip the push when non-zero; today the count has been 15 → 21+ during this session.
+
+**Cross-host visibility note**: N/A (SECTION_KIND=ok at the autonomous layer).
+
+**Next iteration ask**: N/A. Same as prior section.
