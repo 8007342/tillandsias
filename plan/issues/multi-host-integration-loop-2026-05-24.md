@@ -51,6 +51,52 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-29T17:43Z — MERGED windows-next (cross-tray PTY-attach project-threading pin) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `00052d1c` (merge commit; linux-next was at
+  `55d0f0e1` pre-merge).
+- observed_sibling_heads: main=`fa746f03` · linux-next=`55d0f0e1`
+  (pre-merge) · windows-next=`f66e9fcc` · osx-next=`55d0f0e1`
+- windows-next action: **merged + tested + pushed**. Single commit
+  `f66e9fcc litmus(windows-next): cross-tray PTY-attach project-
+  threading pin` adds a binding entry for the already-merged-via-
+  osx-ff `litmus-pty-attach-project-threading-symmetric.yaml`.
+  macOS m10 (`61e4233f`) made the macos-tray's `launch_spec` call
+  byte-identical to the windows-tray pattern at
+  `notify_icon.rs:1604` — both trays now call
+  `launch_spec(&intent, project.as_deref(), 24, 80)` from
+  `intent_for_action(action, selected_agent())`. Pre-m10 macOS
+  used `None` as the second positional arg (slice 4c.2 bare-VM
+  shell shape).
+  The new litmus pins this call shape on both sides at the source
+  level. A regression that drops `project.as_deref()` in favor of
+  `None` on either OS would silently send the user back to a
+  bare-VM shell on that platform — invisible until runtime smoke.
+  Five steps: each tray imports `intent_for_action` + `launch_spec`;
+  each calls `launch_spec` with `project.as_deref()`; zero stray
+  `launch_spec(&intent, None,` callsites in either tray.
+  Touched file: `openspec/litmus-bindings.yaml` only (the litmus
+  YAML was already in linux-next from the prior osx fast-forward).
+  Auto-merged cleanly.
+- osx-next action: **no-op** (head identical to linux-next pre-
+  merge at `55d0f0e1`).
+- Verification: `./build.sh --check` clean + `./build.sh --test`
+  clean. Full pre-build instant litmus suite: 57/57 PASS at 100%
+  across 89 specs (was 56/56 — +1 newly executing
+  windows-side binding of the cross-tray pin).
+- Spec/methodology/plan drift: NONE. Litmus-only commit
+  (openspec/litmus-bindings.yaml + the new litmus YAML which
+  arrived via earlier osx ff).
+- Cross-host convergence note: this completes the m10 cross-tray
+  PTY-attach convergence: macOS shipped m10 to match the windows
+  call shape, windows binds the symmetric litmus that catches
+  drift on either side. Cross-tray pattern (ship + bind +
+  mirror) is now 6 deep across this session (WIRE_UNREACHABLE_
+  CHIP_TEXT, RECIPE_RELEASE_TAG, status-text-helpers,
+  exit-code-symmetric, --diagnose CLI surface, architectural-
+  invariants, PTY-attach project-threading).
+
 ### Cycle 2026-05-29T15:43Z — MERGED windows-next (6 windows-tray architectural invariants, mirrors macOS slice 30) ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next

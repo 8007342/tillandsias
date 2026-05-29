@@ -134,8 +134,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:ci-release-musl-binary-policy
-  coverage_ratio: 33
-  last_verified: '2026-05-19'
+  - litmus:ci-release-toolchain-shape
+  coverage_ratio: 67
+  last_verified: '2026-05-29'
 - spec_id: cli-bash-mode
   status: obsolete
   litmus_tests: []
@@ -215,8 +216,11 @@ specs:
   status: active
   litmus_tests:
   - litmus:environment-isolation
-  coverage_ratio: 33
-  last_verified: '2026-05-03'
+  - litmus:enclave-isolation
+  - litmus:ephemeral-guarantee
+  - litmus:podman-idiomatic-launch-routing
+  coverage_ratio: 100
+  last_verified: '2026-05-29'
 - spec_id: external-logs-layer
   status: active
   litmus_tests:
@@ -426,6 +430,7 @@ specs:
   - litmus:tray-status-text-helpers-symmetric
   - litmus:exit-code-provisioned-zero-degraded-two-symmetric
   - litmus:macos-tray-architectural-invariants
+  - litmus:pty-attach-project-threading-symmetric
   coverage_ratio: 100
   last_verified: '2026-05-29'
 - spec_id: methodology-accountability
