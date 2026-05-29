@@ -2719,3 +2719,23 @@ step 5 lands.
   fmt clean.
 - Streak: 0 (productive iter). Next macOS iter eligible at
   ~04:30Z.
+
+### event: macOS slice 21 — wire degradation surfaced in live chip — 2026-05-29T05:30Z
+
+- Commit `36879a5e` mirrors windows-tray's `d2cf10f0`. The Err
+  branch of `spawn_vm_status_poller` now:
+    1. Clears `menu_state.podman_ready` so per-project actions
+       correctly re-gate off after the rebuild.
+    2. Flips the chip to "🔴 Wire unreachable" — byte-identical
+       to the windows string so both trays produce the same
+       operator-visible text on the same failure class.
+    3. Triggers a rebuild so the menu re-renders the gated state.
+- Recovery is automatic: next successful poll restores phase +
+  podman via the existing Ok branch. Bounded chip flicker — only
+  on actual error ticks, no flapping when the wire is steady-
+  state ok or steady-state broken.
+- Resets the noop streak — file deleted in `36879a5e`.
+- Tests + lint clean: macos-tray 39/39; clippy -D warnings clean;
+  fmt clean.
+- Streak: 0 (productive iter). Next macOS iter eligible at
+  ~06:00Z.
