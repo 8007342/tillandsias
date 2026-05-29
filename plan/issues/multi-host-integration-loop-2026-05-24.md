@@ -51,6 +51,52 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-29T15:43Z — MERGED windows-next (6 windows-tray architectural invariants, mirrors macOS slice 30) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `fdaa52e0` (merge commit; linux-next was at
+  `a6bfd8e7` pre-merge).
+- observed_sibling_heads: main=`fa746f03` · linux-next=`a6bfd8e7`
+  (pre-merge) · windows-next=`cc21502e` · osx-next=`65bd61ea`
+- windows-next action: **merged + tested + pushed**. Single commit
+  `cc21502e litmus(windows-next): pin 6 windows-tray architectural
+  invariants` mirrors macOS slice 30 (`afde4b9b`) in shape (inverted-
+  grep + sentinel for no-X invariants; identifier-presence for has-X).
+  Pins six pre-existing windows-native-tray spec.md invariants that
+  had zero litmus coverage:
+    1. `no-tauri-or-webview` — windows-tray Cargo.toml carries no
+       tauri/wry/webview deps (thin Win32 NotifyIcon shape).
+    2. `no-ssh` — zero `Command::new ssh` callsites in
+       windows-tray + vm-layer/wsl.rs.
+    3. `notifyicon-reregisters` — WM_TASKBARCREATED handler present
+       in notify_icon.rs (tray icon survives explorer.exe restart).
+    4. `menu-sourced-from-host-shell` — notify_icon.rs invokes
+       `menu_state::build` (single source of truth for cross-tray
+       parity).
+    5. `distro-name-pinned` — `DISTRO_NAME = "tillandsias"`.
+    6. `terminal-uses-wt` — `launch_open_shell_terminal` builds
+       `wt_terminal_argv` + spawns `wt.exe`.
+  Touched files: `openspec/litmus-tests/litmus-windows-tray-
+  architectural-invariants.yaml` (new) + `openspec/litmus-bindings
+  .yaml` (windows-native-tray binding entry gains the new litmus
+  reference). Auto-merged cleanly.
+- osx-next action: **no-op** (no commits ahead of linux-next; osx
+  is behind at `65bd61ea` waiting for its own merge cycle).
+- Verification: `./build.sh --check` clean + `./build.sh --test`
+  clean. Full pre-build instant litmus suite: 53/53 PASS at 100%
+  across 89 specs (was 52/52 — +1 newly executing).
+- Spec/methodology/plan drift: NONE. Litmus-only commit
+  (openspec/litmus-tests/ + openspec/litmus-bindings.yaml). No
+  openspec/specs/, methodology/, or plan/ files affected.
+- Cross-host convergence note: windows mirroring macOS slice 30
+  completes the architectural-invariants cross-tray parity. Both
+  trays now have grep-based source-level pins for their canonical
+  invariants (no-X via inverted-grep + sentinel; has-X via
+  identifier-presence). The litmus-as-cross-host-drift-protection
+  pattern this session established is now applied across all
+  three platform-specific spec areas (macos-native-tray,
+  windows-native-tray, podman-idiomatic-patterns).
+
 ### Cycle 2026-05-29T13:43Z — MERGED windows-next (cross-tray litmus bookkeeping: slices 27+28 + exit-code symmetric) ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
