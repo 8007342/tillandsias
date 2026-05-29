@@ -1,0 +1,83 @@
+# @trace spec:windows-native-tray
+# Drift-protection litmus for pre-existing windows-native-tray spec
+# invariants that until now had zero litmus coverage. Mirrors macos slice 30
+# (afde4b9b) in shape — the inverted-grep + sentinel pattern catches "no X"
+# invariants at the source level so a refactor that introduces a forbidden
+# dependency / use-path / API call surfaces here pre-build.
+#
+# The 6 invariants pinned here are declared in
+# openspec/specs/windows-native-tray/spec.md:
+#   - "No Tauri or WebView surface"            (line 265)
+#   - "NotifyIcon re-registers on Explorer restart" (line 270)
+#   - "Menu sourced from host shell state"     (line 275)
+#   - "Distro name is pinned to 'tillandsias'" (line 290)
+#   - "Terminal attach never uses SSH"         (line 305)
+#   - "Terminal uses wt.exe when available"    (line 310)
+#
+# Spec invariants left without source-level litmus pinning (runtime-only,
+# broader cross-cutting): "Menu renders within 50ms", "WSL operations route
+# through vm layer", "WSLg detection is event-driven", "OpenCode Web is
+# disabled without WSLg". These remain enforced by unit tests + scenario
+# wording in spec.md.
+
+name: litmus:windows-tray-architectural-invariants
+spec: windows-native-tray
+phase: pre-build
+description: "Pin six spec-declared architectural invariants of tillandsias-windows-tray (no-tauri-or-webview / WM_TASKBARCREATED / menu_state::build / DISTRO_NAME / no-ssh / wt.exe)."
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-windows-tray/Cargo.toml
+  - workspace contains crates/tillandsias-windows-tray/src/notify_icon.rs
+  - workspace contains crates/tillandsias-windows-tray/src/wsl_lifecycle.rs
+  - workspace contains crates/tillandsias-vm-layer/src/wsl.rs
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "no-tauri-or-webview: windows-tray Cargo.toml carries no [tauri, wry, webview] deps"
+    # Codifies the "thin Win32 NotifyIcon wrapper" v1 shape — no embedded
+    # browser engine, no Tauri webview, no wry. Inverted grep produces the
+    # success token on absence.
+    command: "! grep -qE 'tauri|wry|webview' crates/tillandsias-windows-tray/Cargo.toml && echo 'no-tauri-or-webview'"
+    expected_behavior: "no-tauri-or-webview"
+    timeout_ms: 3000
+
+  - step: "no-ssh: windows-tray + vm-layer wsl.rs carry zero Command::new(ssh) callsites"
+    # spec.md (line 170) scenario "SSH is never invoked" mandates this; SSH
+    # would route around the WSL2 control wire + wt.exe terminal-attach contract.
+    command: "! grep -rqE 'Command::new\\(\"ssh\"\\)' crates/tillandsias-windows-tray/src/ crates/tillandsias-vm-layer/src/wsl.rs && echo 'no-ssh-callsites'"
+    expected_behavior: "no-ssh-callsites"
+    timeout_ms: 3000
+
+  - step: "notifyicon-reregisters: WM_TASKBARCREATED handler exists in notify_icon.rs"
+    # The window message Explorer broadcasts when it restarts — the tray
+    # MUST re-register the icon (NIM_ADD) on receipt or it disappears
+    # silently from the tray after explorer.exe crashes.
+    command: "grep -F 'WM_TASKBARCREATED' crates/tillandsias-windows-tray/src/notify_icon.rs"
+    expected_behavior: "WM_TASKBARCREATED"
+    timeout_ms: 3000
+
+  - step: "menu-sourced-from-host-shell: notify_icon.rs invokes menu_state::build"
+    # The shared MenuStructure builder (host-shell crate) is the single
+    # source of truth — both trays render from it for parity.
+    command: "grep -F 'menu_state::build' crates/tillandsias-windows-tray/src/notify_icon.rs"
+    expected_behavior: "menu_state::build"
+    timeout_ms: 3000
+
+  - step: "distro-name-pinned: DISTRO_NAME const is exactly 'tillandsias'"
+    # Pinning both the const name AND value catches a rename or a typo'd
+    # bump. Provisioning + Open-Shell + the keepalive all depend on this
+    # being a single source of truth.
+    command: "grep -F 'pub const DISTRO_NAME: &str = \"tillandsias\"' crates/tillandsias-windows-tray/src/wsl_lifecycle.rs"
+    expected_behavior: "tillandsias"
+    timeout_ms: 3000
+
+  - step: "terminal-uses-wt: launch_open_shell_terminal calls wt.exe (with bare-console fallback)"
+    # The wt_terminal_argv builder + wt.exe Command spawn together
+    # implement the spec.md scenario "Open shell click launches wt.exe with
+    # forge container exec". Catches a refactor that drops wt.exe in favor
+    # of the bare-console-only path.
+    command: "grep -F 'fn wt_terminal_argv' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F '\"wt.exe\"' crates/tillandsias-windows-tray/src/notify_icon.rs"
+    expected_behavior: "wt.exe"
+    timeout_ms: 3000
