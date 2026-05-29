@@ -344,3 +344,61 @@ bounded):
     (mostly the unix path's VmStatusRequest / EnumerateLocalProjects
     / CloudRefreshRequest / McpFrame — Q2/Q4 say unix should handle
     these too).
+
+## Update 2026-05-29T02:25Z — VmStatusRequest handler shipped on unix dispatcher (Q2)
+
+Third matrix-Handle-but-no-handler variant migrated to a real
+implementation on the linux-native unix dispatcher. Commit
+`9eff05c8`.
+
+Minimal slice — we're answering on a working unix socket, so the
+tray is by definition serving and we reply with
+`phase=VmPhase::Ready`. `podman_ready` is the live
+`tillandsias_podman::podman_available_sync()` check that already
+runs elsewhere on this host. `last_event` carries a
+`"linux-native-tray"` transport tag so downstream clients can tell
+unix-from-vsock replies apart.
+
+```rust
+ControlMessage::VmStatusRequest { seq } => {
+    let podman_ready = tillandsias_podman::podman_available_sync();
+    let reply = ControlEnvelope {
+        wire_version: WIRE_VERSION,
+        seq: first.seq,
+        body: ControlMessage::VmStatusReply {
+            seq_in_reply_to: seq,
+            phase: tillandsias_control_wire::VmPhase::Ready,
+            podman_ready,
+            last_event: Some("linux-native-tray".to_string()),
+        },
+    };
+    let _ = write_control_envelope(&mut stream, &reply);
+}
+```
+
+A real `TrayPhaseHandle` mirroring the in-VM `VmStateHandle`
+(Starting / Stopping / Draining / Failed transitions, rooted in the
+tray's own SIGTERM/SIGINT atomic and the
+`graceful_shutdown_async` path) is the natural follow-on. Until
+then, "we're up" is the truth and `Ready` is the correct value.
+
+The regression test `unsupported_variant_on_unix_socket_replies_
+with_error` now uses `McpFrame` as its example
+matrix-Handle-but-no-handler variant; the new
+`vm_status_request_on_unix_socket_replies_with_ready_phase` test
+pins the new behaviour. Headless suite: 127 passed.
+
+Matrix-Handle status on the unix dispatcher (Q2 + Q4):
+
+| Variant                  | Status                                  |
+|--------------------------|-----------------------------------------|
+| `Hello`                  | ✓ handled (HelloAck)                    |
+| `IssueWebSession`        | ✓ handled (broadcast + ack)             |
+| `EvictProject`           | ✓ handled (broadcast + ack)             |
+| `EnumerateLocalProjects` | ✓ handled (`05cc3a7d`)                  |
+| `CloudRefreshRequest`    | ✓ handled (`71db9f68`)                  |
+| `VmStatusRequest`        | ✓ handled (`9eff05c8`)                  |
+| `VmShutdownRequest`      | matrix-Handle, no handler — follow-on   |
+| `McpFrame`               | matrix-Handle, no handler — follow-on   |
+
+WIRE_VERSION unchanged at 2.
