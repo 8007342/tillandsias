@@ -1,0 +1,114 @@
+# @trace spec:gh-auth-script
+#
+# Structural drift protection for the `--github-login` path and
+# its supporting scripts.
+#
+# The existing `litmus:gh-auth-script-smoke` (size: quick) runs the
+# fake-podman test harness end-to-end — covers behavioural
+# correctness. This companion is instant + grep-only; pins the
+# canonical surfaces the spec mandates so a refactor that drops
+# `run_github_login`, renames the harness, or strips the multi-
+# spec trace fires pre-build.
+#
+# Combined with the existing smoke litmus, raises gh-auth-script
+# coverage_ratio 30 → 67.
+name: litmus:gh-auth-script-shape
+spec: gh-auth-script
+phase: pre-build
+description: >
+  Pin the `run_github_login` entry point + its multi-spec trace +
+  the `--github-login` CLI flag + the fake-podman test harness +
+  the legacy `create-secrets.sh` script + the
+  `--legacy-keyring-secrets` deprecation flag, per the spec's
+  "Single implementation behind tray and CLI entry points"
+  requirement.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-headless/src/main.rs
+  - workspace contains scripts/test-support/github-login-fake.sh
+  - workspace contains scripts/create-secrets.sh
+  - shell utilities (grep, test) are available in PATH
+
+critical_path:
+  - step: "run_github_login() entry point exists with the multi-spec trace"
+    # Spec requirement: "Single implementation behind tray and
+    # CLI entry points". The `run_github_login(debug:
+    # bool, legacy_keyring_secrets: bool)` signature is that
+    # single implementation. Its docblock traces FIVE related
+    # specs — losing any one of those traces breaks the
+    # spec→code mapping for the corresponding spec.
+    command: "grep -F 'fn run_github_login(debug: bool, legacy_keyring_secrets: bool)' crates/tillandsias-headless/src/main.rs"
+    timeout_ms: 3000
+    expected_behavior: "fn run_github_login"
+
+  - step: "run_github_login docblock traces all 5 specs the entry point implements"
+    command: "grep -F '@trace spec:gh-auth-script, spec:secrets-management, spec:podman-secrets-integration, spec:secret-rotation, spec:tillandsias-vault' crates/tillandsias-headless/src/main.rs"
+    timeout_ms: 3000
+    expected_behavior: "spec:gh-auth-script, spec:secrets-management"
+
+  - step: "--github-login CLI flag is parsed"
+    command: "grep -F 'let github_login = user_args.iter().any(|a| a == \"--github-login\")' crates/tillandsias-headless/src/main.rs"
+    timeout_ms: 3000
+    expected_behavior: "github_login"
+
+  - step: "--legacy-keyring-secrets deprecation flag is parsed alongside"
+    # Spec mandates the keyring path stays available behind the
+    # `--legacy-keyring-secrets` flag for backward compat. Drop
+    # the flag and operators on old keyring setups get the
+    # vault-only error with no escape hatch.
+    command: "grep -F 'let legacy_keyring_secrets = user_args.iter().any(|a| a == \"--legacy-keyring-secrets\")' crates/tillandsias-headless/src/main.rs"
+    timeout_ms: 3000
+    expected_behavior: "legacy_keyring_secrets"
+
+  - step: "fake-podman test harness exists at the canonical path"
+    # The existing `litmus:gh-auth-script-smoke` invokes this
+    # harness via `bash scripts/test-support/github-login-fake.sh`.
+    # If a refactor moves the harness, the smoke litmus's
+    # precondition fails and the runtime drift is invisible.
+    command: "test -x scripts/test-support/github-login-fake.sh && echo 'ok: fake harness executable'"
+    timeout_ms: 3000
+    expected_behavior: "ok: fake harness executable"
+
+  - step: "scripts/create-secrets.sh exists (legacy keyring path)"
+    # Per the vault_bootstrap.rs docstring: the legacy keyring
+    # path uses `scripts/create-secrets.sh` and is reached via
+    # `tillandsias --legacy-keyring-secrets`. Drop this and the
+    # entire backward-compat keyring flow breaks silently.
+    command: "test -x scripts/create-secrets.sh && echo 'ok: create-secrets executable'"
+    timeout_ms: 3000
+    expected_behavior: "ok: create-secrets executable"
+
+  - step: "accountability log line is emitted on gh_auth_start"
+    # Spec requirement: "Host extracts the token". The
+    # accountability log line at gh_auth_start is the auditable
+    # entry point — drop it and the operation isn't observable
+    # in the runtime log.
+    command: "grep -F 'operation = \"gh_auth_start\"' crates/tillandsias-headless/src/main.rs"
+    timeout_ms: 3000
+    expected_behavior: "gh_auth_start"
+
+observability:
+  traces:
+    - "@trace spec:gh-auth-script"
+    - "@trace spec:secrets-management"
+    - "@trace spec:tillandsias-vault"
+  expected_log: "run_github_login entry + multi-spec trace + CLI flags + harness scripts pinned"
+  log_fields:
+    spec: "gh-auth-script"
+    test: "gh-auth-script-shape"
+    runtime_artifact: "crates/tillandsias-headless/src/main.rs"
+    harness_artifact: "scripts/test-support/github-login-fake.sh"
+    legacy_artifact: "scripts/create-secrets.sh"
+
+rollback:
+  on_failure: >
+    A gh-auth-script surface drifted from the spec. Restore:
+    `fn run_github_login(debug: bool, legacy_keyring_secrets:
+    bool)` entry point with its 5-spec @trace docblock; both
+    `--github-login` and `--legacy-keyring-secrets` CLI flags;
+    `gh_auth_start` accountability log; executable bits on
+    scripts/test-support/github-login-fake.sh and
+    scripts/create-secrets.sh.
+  command: "grep -nE 'run_github_login|github-login|legacy-keyring-secrets|gh_auth_start' crates/tillandsias-headless/src/main.rs | head -10 && ls -la scripts/test-support/github-login-fake.sh scripts/create-secrets.sh"

@@ -333,8 +333,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:gh-auth-script-smoke
-  coverage_ratio: 30
-  last_verified: '2026-05-12'
+  - litmus:gh-auth-script-shape
+  coverage_ratio: 67
+  last_verified: '2026-05-29'
 - spec_id: git-mirror-service
   status: active
   litmus_tests:
