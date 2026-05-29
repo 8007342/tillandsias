@@ -74,6 +74,9 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
         --component rust-analyzer --component clippy --component rustfmt \
     && curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C /usr/local/bin \
     && cargo install cargo-chef cargo-watch cargo-audit wasm-pack trunk typos-cli watchexec-cli \
+    && curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash \
+    && cargo binstall --no-confirm cargo-edit cargo-llvm-cov cargo-deny cargo-semver-checks cargo-expand cargo-criterion cargo-wasi \
+    && curl -LsSf https://github.com/bytecodealliance/wasmtime/releases/download/v45.0.0/wasmtime-v45.0.0-x86_64-linux.tar.xz | tar -xJf - --strip-components=1 -C /usr/local/bin wasmtime-v45.0.0-x86_64-linux/wasmtime \
     && ln -sf "$(rustup which rust-analyzer)" /usr/local/bin/rust-analyzer
 # Symlink resolves the rustup-component installation path
 # ($RUSTUP_HOME/toolchains/<triple>/bin/rust-analyzer) into /usr/local/bin

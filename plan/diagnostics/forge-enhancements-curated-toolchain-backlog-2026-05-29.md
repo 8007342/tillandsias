@@ -49,17 +49,17 @@ unchanged before approval:
 
 | Candidate | Status | Source runs | Rationale | Privacy/isolation notes |
 |---|---|---|---|---|
-| `clippy` (rustup component) | approved | 06:03Z | Standard Rust linter; absent despite rustc/cargo installed. | Rustup component install — same envelope as rustc. No new egress. |
-| `cargo-edit` | approved | 06:03Z | Enables `cargo add/rm/upgrade` for ergonomic dep management. | Single binary; cargo install. No new egress. |
-| `cargo-llvm-cov` | approved | 06:03Z | Code-coverage tooling expected in CI/test workflows. | Drops llvm tools too — image-size impact; gate at size budget. |
+| `clippy` (rustup component) | **implemented** | 06:03Z | Standard Rust linter; absent despite rustc/cargo installed. | Rustup component install — same envelope as rustc. No new egress. |
+| `cargo-edit` | **implemented** | 06:03Z | Enables `cargo add/rm/upgrade` for ergonomic dep management. | Single binary; cargo install. No new egress. |
+| `cargo-llvm-cov` | **implemented** | 06:03Z | Code-coverage tooling expected in CI/test workflows. | Drops llvm tools too — image-size impact; gate at size budget. |
 | `cargo-tarpaulin` | deferred | 06:03Z | Alternative coverage tool — pick one between this and `cargo-llvm-cov`. | Single binary; cargo install. |
-| `cargo-deny` | approved | 06:03Z | License + advisory checking, standard in production pipelines. | Needs network at FIRST RUN to fetch advisory-db; review proxy ACL. |
-| `cargo-semver-checks` | approved | 06:03Z | Automated semver verification for library releases. | Single binary; cargo install. |
-| `cargo-expand` | approved | 06:03Z | Macro-expansion debugging essential for Rust development. | Single binary; cargo install. |
+| `cargo-deny` | **implemented** | 06:03Z | License + advisory checking, standard in production pipelines. | Needs network at FIRST RUN to fetch advisory-db; review proxy ACL. |
+| `cargo-semver-checks` | **implemented** | 06:03Z | Automated semver verification for library releases. | Single binary; cargo install. |
+| `cargo-expand` | **implemented** | 06:03Z | Macro-expansion debugging essential for Rust development. | Single binary; cargo install. |
 | `cargo-outdated` | approved | 06:03Z | Dependency-freshness checks. | Network needed for upstream version query; gate at proxy ACL. |
 | `cargo-tree` | blocked | 06:03Z | Dependency-graph visualization (now in cargo core — VERIFY this is still needed). | n/a — likely already covered by `cargo tree`. Redundant. |
-| `cargo-criterion` | approved | 06:03Z | Benchmarking harness front-end for criterion. | Single binary; cargo install. |
-| `cargo-wasi` | approved | 06:03Z | WASI target convenience wrapper. | Single binary; depends on `wasmtime` being available. |
+| `cargo-criterion` | **implemented** | 06:03Z | Benchmarking harness front-end for criterion. | Single binary; cargo install. |
+| `cargo-wasi` | **implemented** | 06:03Z | WASI target convenience wrapper. | Single binary; depends on `wasmtime` being available. |
 
 ### Python
 
@@ -87,13 +87,13 @@ unchanged before approval:
 
 | Candidate | Status | Source runs | Rationale | Privacy/isolation notes |
 |---|---|---|---|---|
-| `delve` | approved | 04:05Z, 06:03Z | Go debugger; toolchain + gopls present but no debugger. | go install — same envelope as existing go. |
+| `delve` | **implemented** | 04:05Z, 06:03Z | Go debugger; toolchain + gopls present but no debugger. | go install — same envelope as existing go. |
 
 ### WebAssembly
 
 | Candidate | Status | Source runs | Rationale | Privacy/isolation notes |
 |---|---|---|---|---|
-| `wasmtime` | approved | 04:05Z, 05:03Z, 06:03Z (×3) | WASM runtime; `wasm-pack` is present but no runtime to execute the output. | Single static binary; install from upstream release. No new egress. |
+| `wasmtime` | **implemented** | 04:05Z, 05:03Z, 06:03Z (×3) | WASM runtime; `wasm-pack` is present but no runtime to execute the output. | Single static binary; install from upstream release. No new egress. |
 | `wasmer` | deferred | 06:03Z | Alternative WASM runtime — pick one between this and `wasmtime`. | Single static binary; install from upstream release. |
 
 ### Shell
