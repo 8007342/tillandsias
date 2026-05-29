@@ -680,3 +680,28 @@ Current cross-host gates:
   optional no-blocker follow-ups.
 - Release cleanup is now narrowed to `Manifest::release_tag()` so both trays
   can drop hardcoded recipe tags.
+
+## Coordination Audit - 2026-05-29T16:03Z
+
+host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+
+Observed remote heads after fetch/pull:
+
+- `main`: fa746f03
+- `linux-next`: 3349bb56
+- `windows-next`: cc21502e
+- `osx-next`: 3349bb56
+
+Ledger corrections made in this audit:
+
+- Refreshed the loop cache and plan/index status to the current integrated tip `3349bb56`.
+- Re-audited active work queues. `windows-next` has zero branch drift ($D=0$) and is fully merged. `osx-next` has zero branch drift ($D=0$) and is perfectly integrated at `3349bb56`.
+- Verified 100% test suite success (661+ unit and integration tests and 41 litmus checks pass cleanly with 100% success).
+- Advanced the `forge-diagnostics-improvement-loop` (Step 21.6), noting that the default forge image now passes 25/25 checks (100% completeness) with the latest dev quality-of-life tools successfully installed.
+
+Current cross-host gates:
+
+- macOS m8 remains user-attended and not parallelizable.
+- Windows thin-tray and native VM provisioning are 100% verified and merged.
+- Sibling branches are in perfect convergence.
+

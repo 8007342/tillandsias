@@ -1,0 +1,108 @@
+# @trace spec:async-inference-launch
+#
+# Structural drift protection for the async-inference-launch contract
+# as implemented in the forge entrypoint scripts. The existing
+# `litmus:inference-readiness-probe-shape` covers the orchestrator
+# script + tray launcher + standalone diagnostic surfaces — what's
+# left is the FORGE-SIDE entrypoint's non-blocking probe contract
+# that the spec mandates ("Inference is a soft requirement —
+# failure logs DEGRADED but does not block coding session start").
+#
+# This companion is instant + grep-only. Pins:
+#   1. Forge entrypoints (opencode + opencode-web) carry the
+#      `@trace spec:async-inference-launch` mapping.
+#   2. They use `curl -m 1` (1-second timeout) — explicitly bounded
+#      so the probe never blocks forge startup.
+#   3. The non-blocking-by-design comment is preserved in the
+#      entrypoint header.
+#   4. The probe calls `trace_lifecycle "inference"` with both
+#      ready-success and not-ready-graceful branches, so a
+#      regression that drops the not-ready branch (turning the
+#      probe into a hard gate) fires here.
+#
+# Combined with the existing readiness-probe-shape, raises
+# async-inference-launch coverage_ratio 30 → 67.
+name: litmus:async-inference-launch-entrypoint-shape
+spec: async-inference-launch
+phase: pre-build
+description: >
+  Pin the forge-entrypoint async-inference-launch contract:
+  spec→trace mapping in both opencode + opencode-web entrypoints,
+  bounded curl timeout (-m 1), non-blocking design comment,
+  trace_lifecycle calls for both ready + not-ready paths so a
+  regression turning the probe into a hard gate fires pre-build.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains images/default/entrypoint-forge-opencode.sh
+  - workspace contains images/default/entrypoint-forge-opencode-web.sh
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "opencode entrypoint carries the spec→trace mapping"
+    command: "grep -F '@trace spec:async-inference-launch' images/default/entrypoint-forge-opencode.sh"
+    timeout_ms: 3000
+    expected_behavior: "spec:async-inference-launch"
+
+  - step: "opencode-web entrypoint carries the spec→trace mapping"
+    command: "grep -F '@trace spec:async-inference-launch' images/default/entrypoint-forge-opencode-web.sh"
+    timeout_ms: 3000
+    expected_behavior: "spec:async-inference-launch"
+
+  - step: "opencode entrypoint bounds the probe with curl -m 1 (non-blocking)"
+    # Spec mandates the probe never block forge startup. A regression
+    # bumping the timeout to 30+ seconds would turn this from a
+    # diagnostic into a launch-time hang.
+    command: "grep -F 'curl -m 1 -sf \"http://inference:11434/api/version\"' images/default/entrypoint-forge-opencode.sh"
+    timeout_ms: 3000
+    expected_behavior: "curl -m 1"
+
+  - step: "opencode entrypoint documents the do-NOT-block contract"
+    command: "grep -F 'do NOT block' images/default/entrypoint-forge-opencode.sh"
+    timeout_ms: 3000
+    expected_behavior: "do NOT block"
+
+  - step: "opencode entrypoint emits trace_lifecycle for the ready path"
+    command: "grep -F 'trace_lifecycle \"inference\" \"ready (probe passed)\"' images/default/entrypoint-forge-opencode.sh"
+    timeout_ms: 3000
+    expected_behavior: "ready (probe passed)"
+
+  - step: "opencode entrypoint emits trace_lifecycle for the not-ready graceful path"
+    # The "not-ready" branch is what preserves the spec invariant:
+    # failure logs but does NOT block forge launch. A regression
+    # that swaps this for `exit 1` or `return 1` would silently
+    # convert the soft requirement into a hard gate.
+    command: "grep -F 'trace_lifecycle \"inference\" \"not-ready' images/default/entrypoint-forge-opencode.sh"
+    timeout_ms: 3000
+    expected_behavior: "not-ready"
+
+  - step: "opencode-web entrypoint mirrors the same probe contract"
+    # The web variant must behave identically — same timeout, same
+    # non-blocking design — so cross-mode inference behaviour stays
+    # consistent.
+    command: "grep -F 'http://inference:11434/api/version' images/default/entrypoint-forge-opencode-web.sh"
+    timeout_ms: 3000
+    expected_behavior: "http://inference:11434/api/version"
+
+observability:
+  traces:
+    - "@trace spec:async-inference-launch"
+    - "@trace spec:inference-container"
+  expected_log: "Forge-entrypoint inference probe contract pinned per async-inference-launch spec"
+  log_fields:
+    spec: "async-inference-launch"
+    test: "async-inference-launch-entrypoint-shape"
+    opencode_artifact: "images/default/entrypoint-forge-opencode.sh"
+    opencode_web_artifact: "images/default/entrypoint-forge-opencode-web.sh"
+
+rollback:
+  on_failure: >
+    A forge-entrypoint async-inference-launch surface drifted from
+    the spec. Inspect both entrypoint scripts: the `@trace
+    spec:async-inference-launch` mapping must stay; the `curl -m 1`
+    bounded probe MUST keep its 1-second timeout; the
+    "do NOT block" design comment MUST remain; both
+    `trace_lifecycle "inference"` branches (ready/not-ready) MUST
+    exist so the probe stays a soft requirement.
+  command: "sed -n '60,90p' images/default/entrypoint-forge-opencode.sh && sed -n '60,90p' images/default/entrypoint-forge-opencode-web.sh"

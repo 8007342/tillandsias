@@ -1,0 +1,112 @@
+# @trace spec:filesystem-scanner
+#
+# Structural drift protection for filesystem-scanner's
+# OS-native event-driven contract. The existing
+# `litmus:filesystem-scanner-shape` (size: quick) runs three
+# cargo-test unit tests — covers behavioural correctness. This
+# companion is instant + grep-only; pins the source-level
+# surfaces the spec mandates so a refactor that swaps the
+# OS-native backend for poll-based or changes the debounce
+# constant without updating the spec fires pre-build.
+#
+# Combined with the existing test-running litmus, raises
+# filesystem-scanner coverage_ratio 33 → 67.
+name: litmus:filesystem-scanner-event-driven-shape
+spec: filesystem-scanner
+phase: pre-build
+description: >
+  Pin the scanner's OS-native event-driven surfaces: `notify::
+  RecommendedWatcher` use (the cross-platform inotify/kqueue/
+  ReadDirectoryChangesW abstraction), the 2-second default
+  debounce constant the spec mandates, `RecursiveMode` enrolment,
+  and the spec→trace mapping in both lib.rs and watcher.rs.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-scanner/src/lib.rs
+  - workspace contains crates/tillandsias-scanner/src/watcher.rs
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "scanner library carries the spec→trace mapping at file head"
+    command: "grep -F '@trace spec:filesystem-scanner' crates/tillandsias-scanner/src/lib.rs"
+    timeout_ms: 3000
+    expected_behavior: "spec:filesystem-scanner"
+
+  - step: "watcher uses the OS-native notify::RecommendedWatcher"
+    # `RecommendedWatcher` is the notify crate's cross-platform
+    # facade that picks inotify on Linux, FSEvents on macOS, and
+    # ReadDirectoryChangesW on Windows. A refactor that swaps this
+    # for `PollWatcher` would silently violate the spec's
+    # "OS-native event-driven watching" requirement (and lose the
+    # zero-CPU idle property).
+    command: "grep -F 'notify::{Event, RecommendedWatcher, RecursiveMode, Watcher}' crates/tillandsias-scanner/src/watcher.rs"
+    timeout_ms: 3000
+    expected_behavior: "RecommendedWatcher"
+
+  - step: "default debounce constant is 2000 ms"
+    # The 2-second debounce absorbs editor multi-write atomic-save
+    # patterns + kqueue's coarser (~1s) latency per the watcher
+    # docstring at lines 51-61. Bumping this past the kqueue
+    # latency baseline would let single edits get reported twice.
+    command: "grep -F 'debounce: Duration::from_millis(2000)' crates/tillandsias-scanner/src/watcher.rs"
+    timeout_ms: 3000
+    expected_behavior: "Duration::from_millis(2000)"
+
+  - step: "watcher exposes a configurable debounce override"
+    # The `config.debounce_ms` override lets operators tune for
+    # their workload (longer for slow networked filesystems,
+    # shorter for SSD-only setups). Drop this and the runtime
+    # becomes tied to the 2s default forever.
+    command: "grep -F 'Duration::from_millis(config.debounce_ms)' crates/tillandsias-scanner/src/watcher.rs"
+    timeout_ms: 3000
+    expected_behavior: "config.debounce_ms"
+
+  - step: "watcher docstring documents the OS-native backend choice"
+    # The docstring explicitly lists inotify (Linux) + kqueue
+    # (macOS) + ReadDirectoryChangesW (Windows) so future
+    # contributors understand the cross-platform contract. If
+    # this gets deleted, the spec→implementation mapping document
+    # disappears too.
+    command: "grep -F 'OS-native file watchers (inotify/kqueue/ReadDirectoryChangesW)' crates/tillandsias-scanner/src/watcher.rs"
+    timeout_ms: 3000
+    expected_behavior: "inotify/kqueue/ReadDirectoryChangesW"
+
+  - step: "watcher documents the Linux inotify per-user watch limit"
+    # Spec Test "Watch limit exhaustion graceful degradation"
+    # depends on this being documented as a known production
+    # gotcha. The docstring names the sysctl operators raise.
+    command: "grep -F 'fs.inotify.max_user_watches' crates/tillandsias-scanner/src/watcher.rs"
+    timeout_ms: 3000
+    expected_behavior: "fs.inotify.max_user_watches"
+
+  - step: "watch() returns a notify::Result (no swallowed-error refactor)"
+    # The spec depends on watcher startup errors being propagated
+    # to callers (so they can surface the inotify-limit-exhausted
+    # case to the user). A refactor that catches and discards
+    # would break the graceful-degradation Test.
+    command: "grep -F 'pub async fn watch(mut self, tx: mpsc::Sender<ProjectChange>) -> notify::Result<()>' crates/tillandsias-scanner/src/watcher.rs"
+    timeout_ms: 3000
+    expected_behavior: "notify::Result"
+
+observability:
+  traces:
+    - "@trace spec:filesystem-scanner"
+  expected_log: "Scanner OS-native event-driven surfaces + 2s debounce + watch-limit docs pinned"
+  log_fields:
+    spec: "filesystem-scanner"
+    test: "filesystem-scanner-event-driven-shape"
+    artifact: "crates/tillandsias-scanner/src/watcher.rs"
+
+rollback:
+  on_failure: >
+    A filesystem-scanner source-level surface drifted from the
+    spec. Inspect crates/tillandsias-scanner/src/watcher.rs:
+    the `notify::RecommendedWatcher` (OS-native) abstraction MUST
+    stay; the 2000 ms default debounce MUST stay; the
+    `config.debounce_ms` override MUST stay; the docstring's
+    inotify/kqueue/ReadDirectoryChangesW reference MUST stay;
+    `watch()` MUST return `notify::Result<()>` so the
+    inotify-limit case can propagate.
+  command: "sed -n '1,80p' crates/tillandsias-scanner/src/watcher.rs"

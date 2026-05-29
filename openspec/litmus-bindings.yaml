@@ -29,8 +29,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:inference-readiness-probe-shape
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  - litmus:async-inference-launch-entrypoint-shape
+  coverage_ratio: 67
+  last_verified: '2026-05-29'
 - spec_id: binary-signing
   status: active
   litmus_tests:
@@ -226,8 +227,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:filesystem-scanner-shape
-  coverage_ratio: 33
-  last_verified: '2026-05-12'
+  - litmus:filesystem-scanner-event-driven-shape
+  coverage_ratio: 67
+  last_verified: '2026-05-29'
 - spec_id: fix-podman-machine-host-aliases
   status: obsolete
   litmus_tests: []
