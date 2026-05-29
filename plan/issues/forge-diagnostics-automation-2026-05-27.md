@@ -403,3 +403,51 @@ permanently stuck on hosts that aren't the annex producer.
 
 @trace methodology/forge-diagnostics.yaml (piggyback_protocol)
 @trace openspec/litmus-tests/litmus-container-start-health.yaml
+
+## agent_status_packet — work-loop slice 2026-05-29T04:51Z — runtime envelope emitter for sub-deliverable (a)
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- packet: `forge-diagnostics/e2e-piggyback-orchestration` — closes the
+  user-priority sub-deliverable (a) on the **runtime side**: "ensure
+  --diagnostics emits the structured capability JSON the forge-
+  diagnostics litmus expects". Distill-script consumer wiring deferred
+  to a 15-min follow-on so the runtime change can ship and be tested
+  independently.
+- shipped: `4c2993ac feat(diagnostics): emit
+  event:diagnostics_envelope stderr line on --diagnostics`.
+- direct evidence of the gap this slice closes: the most recent NON-
+  stderr distill summary at 19:02Z shows
+    Source log: target/forge-diagnostics/diagnostics_20260528T190248Z.log
+    Parse Errors: Expecting value: line 1 column 1 (char 0)
+    Completeness: 0 / 0 checks passed (0%)
+  — RAW_LOG was 0 bytes. The agent emitted NOTHING to stdout, so the
+  distill chain had no framing fields to recover (TIMESTAMP/FORGE_
+  VERSION both `unknown`). With this slice, the .stderr.log companion
+  always carries a machine-readable `event:diagnostics_envelope` line
+  with the run's UTC timestamp, tillandsias version, host platform,
+  and agent kind — independent of whether the LLM complied.
+- format pinned by `format_diagnostics_envelope_line` + 3 unit tests:
+    event:diagnostics_envelope timestamp=<ISO-8601-UTC-Z>
+    tillandsias_version=<v> host_platform=<linux|macos|windows|other>
+    agent=<opencode|claude|codex|bash|observatorium|none>
+  Same family as the `event:container_launch …` lines that
+  `litmus-container-start-health` already greps.
+- files touched: `crates/tillandsias-headless/src/main.rs` (the
+  `if diagnostics { … eprintln envelope }` hook at the existing flag-
+  resolution point, plus two pure helpers + tests).
+- privacy/isolation: no envelope change at the architecture level —
+  the line emits only the timestamp + version + host + agent kind,
+  no PII, no project paths, no credentials. The string family
+  `event:diagnostics_*` is already in stderr today via the
+  container_launch stream; this just adds a sibling line.
+- evidence: 3 new tests; 144 headless tests passing (up from 141);
+  `./build.sh --check` clean.
+- blockers/errors: NONE.
+- next checkpoint: follow-on distill-script slice consumes
+  `event:diagnostics_envelope` from the `.stderr.log` companion to
+  populate TIMESTAMP/FORGE_VERSION/HOST_PLATFORM/AGENT fields in the
+  summary when the JSON payload's own fields are unknown. ~15 min
+  scope; no LLM dependency.
+- lease: CONTINUE.
+
+@trace plan/issues/forge-diagnostics-automation-2026-05-27.md
