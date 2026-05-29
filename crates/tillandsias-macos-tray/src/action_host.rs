@@ -311,6 +311,83 @@ async fn poll_vm_status_once(
     }
 }
 
+/// Map a wire `LocalProjectEntry` ({label, guest_path,
+/// last_seen_unix}) onto the shared menu `ProjectEntry` the local-
+/// projects submenu renders. `ProjectEntry::path` is the in-VM
+/// guest path (the VM mounts the host's `~/src/` via virtio-fs so
+/// the guest path is what "Attach Here" actually targets). `ready`
+/// defaults to false — per-project forge readiness isn't carried
+/// by `LocalProjectsReply` yet; a future PerProjectStatusReply
+/// would be the right place to populate it.
+fn local_entry_to_menu(
+    entry: &tillandsias_control_wire::LocalProjectEntry,
+) -> tillandsias_host_shell::menu_state::ProjectEntry {
+    tillandsias_host_shell::menu_state::ProjectEntry {
+        name: entry.label.clone(),
+        path: entry.guest_path.clone(),
+        ready: false,
+    }
+}
+
+/// One-shot `EnumerateLocalProjects` over the in-VM control wire.
+/// Mirrors `poll_cloud_projects_once` but consumes Linux's
+/// `EnumerateLocalProjects` handler (commit `05cc3a7d`) — each host
+/// (including macOS) walks its in-VM mount of the host's `~/src/`
+/// via virtio-fs, returning one entry per visible directory.
+///
+/// Returns `Vec<ProjectEntry>` mapped from `LocalProjectEntry`.
+/// Best-effort: a transient wire error returns `Err(String)` so the
+/// caller can log + leave the last-known list untouched.
+///
+/// @trace spec:host-shell-architecture,
+///        plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 19)
+async fn poll_local_projects_once(
+    vz: &VzRuntime,
+) -> Result<Vec<tillandsias_host_shell::menu_state::ProjectEntry>, String> {
+    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
+    use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
+    use tillandsias_host_shell::vsock_client::Client;
+
+    let connect_timeout = Duration::from_secs(5);
+    let stream = vz
+        .open_vsock_stream(CONTROL_WIRE_VSOCK_PORT, connect_timeout)
+        .await
+        .map_err(|e| format!("vsock connect: {e}"))?;
+
+    let mut client = Client::from_stream(
+        Box::new(stream),
+        Transport::Vsock {
+            cid: TILLANDSIAS_GUEST_CID,
+            port: CONTROL_WIRE_VSOCK_PORT,
+        },
+    );
+    client
+        .handshake()
+        .await
+        .map_err(|e| format!("control-wire handshake: {e}"))?;
+
+    let seq = client.allocate_seq();
+    let envelope = ControlEnvelope {
+        wire_version: WIRE_VERSION,
+        seq,
+        body: ControlMessage::EnumerateLocalProjects { seq },
+    };
+    let reply = client
+        .request(&envelope)
+        .await
+        .map_err(|e| format!("EnumerateLocalProjects: {e}"))?;
+
+    match reply.body {
+        ControlMessage::LocalProjectsReply { entries, .. } => {
+            Ok(entries.iter().map(local_entry_to_menu).collect())
+        }
+        ControlMessage::Error { code, message, .. } => Err(describe_wire_error(code, &message)),
+        other => Err(format!(
+            "unexpected reply to EnumerateLocalProjects: {other:?}"
+        )),
+    }
+}
+
 /// Map a wire `CloudProjectEntry` ({label, owner, repo,
 /// default_branch}) onto the shared menu `ProjectEntry` the cloud-
 /// projects submenu renders. `ProjectEntry::path` is the `owner/repo`
@@ -1196,9 +1273,32 @@ fn spawn_vm_status_poller(
         // need every-tick granularity.
         let mut tick: u32 = 0;
         loop {
-            // Cloud projects: first tick + every 10 ticks.
+            // Cloud + local projects: first tick + every 10 ticks.
+            // The cadence rationale (slower than VmStatus) is in the
+            // cloud-poll docstring — gh repo list / local fs scan are
+            // both slow-changing relative to phase. Local goes first
+            // because `~/src/` walks are virtually free vs `gh`.
             let mut rebuild_needed = false;
             if tick.is_multiple_of(10) {
+                match poll_local_projects_once(&vz).await {
+                    Ok(projects) => {
+                        let new_count = projects.len();
+                        let mut guard = menu_state.lock().unwrap();
+                        if guard.local_projects != projects {
+                            guard.local_projects = projects;
+                            rebuild_needed = true;
+                            eprintln!(
+                                "[tillandsias-tray] local-projects: \
+                                 menu_state updated ({} entries)",
+                                new_count
+                            );
+                        }
+                        drop(guard);
+                    }
+                    Err(e) => {
+                        eprintln!("[tillandsias-tray] local-projects poll: {e}");
+                    }
+                }
                 match poll_cloud_projects_once(&vz).await {
                     Ok(projects) => {
                         let new_count = projects.len();
@@ -1375,6 +1475,26 @@ mod tests {
             compose_chip_text(base, Some("  forge-bar started  ")),
             "\u{1F7E2} Ready \u{00B7} forge-bar started"
         );
+    }
+
+    /// `local_entry_to_menu` translates a Linux-side
+    /// `LocalProjectEntry` (commit `05cc3a7d` — label + guest_path +
+    /// last_seen_unix) into the shared menu `ProjectEntry`
+    /// (name + path + ready). Path is the in-VM guest_path because
+    /// that's what "Attach Here" passes to the in-VM exec call.
+    /// Ready defaults to false until a per-project status reply
+    /// lands.
+    #[test]
+    fn local_entry_maps_label_to_name_and_guest_path() {
+        let wire = tillandsias_control_wire::LocalProjectEntry {
+            label: "tillandsias".to_string(),
+            guest_path: "/host-mnt/src/tillandsias".to_string(),
+            last_seen_unix: 1_700_000_000,
+        };
+        let menu = local_entry_to_menu(&wire);
+        assert_eq!(menu.name, "tillandsias");
+        assert_eq!(menu.path, "/host-mnt/src/tillandsias");
+        assert!(!menu.ready, "local entry ready defaults to false");
     }
 
     /// `cloud_entry_to_menu` produces the byte-identical `ProjectEntry`
