@@ -112,8 +112,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:cheatsheet-source-layer-validation
-  coverage_ratio: 33
-  last_verified: '2026-05-12'
+  - litmus:cheatsheet-source-layer-shape
+  coverage_ratio: 67
+  last_verified: '2026-05-29'
 - spec_id: cheatsheet-tooling
   status: active
   litmus_tests:
@@ -720,6 +721,7 @@ specs:
   - litmus:recipe-release-tag-symmetric
   - litmus:tray-status-text-helpers-symmetric
   - litmus:exit-code-provisioned-zero-degraded-two-symmetric
+  - litmus:windows-tray-architectural-invariants
   coverage_ratio: 100
   last_verified: '2026-05-29'
 - spec_id: wsl-daemon-orchestration
