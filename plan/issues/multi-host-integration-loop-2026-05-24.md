@@ -51,6 +51,29 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-29T01:43Z — MERGED windows-next (poll EnumerateLocalProjects → MenuState) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `a9051a58` (merge commit)
+- observed_sibling_heads: main=`fa746f03` · linux-next(pre-merge)=`4b758087` ·
+  windows-next=`55a1c188` · osx-next=`b59969f7`
+- **windows-next: merged+tested+pushed.** 1-commit delta `55a1c188`
+  (feat: poll EnumerateLocalProjects → MenuState, mirroring macOS
+  slice 19). Single windows-tray file (notify_icon.rs, +108 lines).
+  Sibling-owned scope. Clean auto-merge.
+- osx-next: no-op (HEAD `b59969f7` is BEHIND linux-next at `4b758087`;
+  `linux-next..origin/osx-next` is empty — orchestrator hasn't
+  fast-forwarded osx-next past my recent `2a99f1c9` rebase yet).
+- Tests: PASSED. `./build.sh --check` + `--test` green.
+- Spec/methodology/plan drift: none. Diff confined to
+  `crates/tillandsias-windows-tray/src/notify_icon.rs`. Cross-host
+  convergence signal: Windows is now CONSUMING the
+  `EnumerateLocalProjects` handler I shipped at 00:55Z on the
+  unix-socket dispatcher (`05cc3a7d`); they're polling it to
+  populate the tray's MenuState. macOS shipped the same consumer
+  via "slice 19" earlier. The convergence-packet matrix is paying
+  off in real cross-host wiring.
+
 ### Cycle 2026-05-29T01:05Z — NO-OP (siblings integrated) & VALIDATED 100% green tests ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
