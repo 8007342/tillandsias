@@ -1042,7 +1042,7 @@ plan_index:
     - id: podman-control-plane-overhaul
       order: 15.5
       title: Podman Control-Plane Overhaul
-      status: in_progress
+      status: completed
       deliverable: plan/steps/15-podman-control-plane-overhaul.md
       depends_on: [podman-idiomatic-foundation]
       specs:
@@ -1071,7 +1071,7 @@ plan_index:
           checkpoint_required: true
           handoff_note: "Dedicated CLI facade and thin shell delegate landed on 2026-05-18."
         - id: podman-control-plane-overhaul/migrate-legacy-shell
-          status: claimed
+          status: completed
           depends_on: [podman-control-plane-overhaul/facade]
           owned_files:
             - build.sh
@@ -1086,6 +1086,11 @@ plan_index:
               host: "linux"
               lease_id: "lease-linux-migrate-legacy-shell-20260529T0306"
               expires_at: "2026-05-29T07:07:00Z"
+            - type: completed
+              ts: "2026-05-29T04:06:00Z"
+              agent_id: "linux-tlatoani-fedora-claude-opus-2026-05-29T04:05:00Z"
+              commits: ["45244a41324009efc02fad56b19f9234f632300c"]
+              validation_log: "ba2b1d5f-6b47-4de5-a8cd-7bd99313049e/task-93"
 
     - id: methodology-reconciliation
       order: 16.5
