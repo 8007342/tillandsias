@@ -2,9 +2,11 @@
 title: Install Rust toolchain (rustc, cargo, rust-analyzer, clippy, rustfmt, cargo-*)
 gap: "missing_tools: rustc, cargo, rust-analyzer, clippy, rustfmt, cargo-nextest, cargo-chef, cargo-audit, cargo-watch"
 category: sdk
-status: approved
+status: implemented
 proposed_at: 2026-05-28T12:15:00Z
 approved_at: 2026-05-28T17:05:00Z
+implemented_at: 2026-05-28T21:15:00Z
+evidence: "Containerfile lines 46-55: rustup, cargo, rust-analyzer, clippy, rustfmt, cargo-chef, cargo-watch, cargo-audit, nextest, wasm-pack, trunk, typos-cli, watchexec-cli installed"
 changes:
   - file: images/default/Containerfile
     description: |

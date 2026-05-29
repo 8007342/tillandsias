@@ -405,14 +405,12 @@ _podman_rootless_diagnostic() {
 
 BUILD_LOG="$(mktemp "${TMPDIR:-/tmp}/tillandsias-build-image.XXXXXX.log")"
 if [[ "$IMAGE_NAME" == "forge" ]]; then
-    _step "Staging cheatsheets into build context..."
+    _step "Refreshing cheatsheets in build context..."
     rm -rf "$IMAGE_DIR/cheatsheets" "$IMAGE_DIR/cheatsheet-sources"
     cp -rp "$ROOT/cheatsheets" "$IMAGE_DIR/cheatsheets"
     cp -rp "$ROOT/cheatsheet-sources" "$IMAGE_DIR/cheatsheet-sources"
-    trap 'rm -rf "$IMAGE_DIR/cheatsheets" "$IMAGE_DIR/cheatsheet-sources"; rm -f "$BUILD_LOG"' EXIT
-else
-    trap 'rm -f "$BUILD_LOG"' EXIT
 fi
+trap 'rm -f "$BUILD_LOG"' EXIT
 
 if _verbose_enabled; then
     "$PODMAN" build \

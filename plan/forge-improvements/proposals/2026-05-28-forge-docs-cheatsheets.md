@@ -2,9 +2,11 @@
 title: Create forge reference docs (cheatsheets, agent instructions, cache-discipline)
 gap: "hot_paths.cheatsheets missing; TILLANDSIAS_CHEATSHEETS unset; agent_instructions empty"
 category: env-var
-status: approved
+status: implemented
 proposed_at: 2026-05-28T12:15:00Z
 approved_at: 2026-05-28T17:05:00Z
+implemented_at: 2026-05-28T21:15:00Z
+evidence: "Containerfile line 73: /opt/cheatsheets, /opt/cheatsheets-image, /opt/cheatsheet-sources dirs; lines 77-78: COPY cheatsheets/ and cheatsheet-sources/; line 117: COPY instructions/ overlay; lib-common.sh line 554: TILLANDSIAS_CHEATSHEETS export"
 changes:
   - file: images/default/Containerfile
     description: |

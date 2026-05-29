@@ -62,6 +62,11 @@ RUN LATEST_DART=$(curl -sSf https://storage.googleapis.com/dart-archive/channels
     && rm -f /tmp/dart.zip
 ENV PATH=/opt/dart-sdk/bin:$PATH
 
+# ── Environment exports for diagnostics and agent discovery ─────
+ENV TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets \
+    DART_ROOT=/opt/dart-sdk \
+    FLUTTER_ROOT=/opt/flutter
+
 # ── Create forge user ──────────────────────────────────────────
 # DISTRO: useradd (Fedora shadow-utils), NOT adduser -D (Alpine)
 RUN useradd -u 1000 -m -s /bin/bash forge

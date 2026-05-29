@@ -2,9 +2,11 @@
 title: Install Python LSP (pyright) and linter/formatter (ruff)
 gap: "missing_tools: pyright, ruff; Python3 present but no developer tooling"
 category: runtime-tool
-status: approved
+status: implemented
 proposed_at: 2026-05-28T12:15:00Z
 approved_at: 2026-05-28T17:05:00Z
+implemented_at: 2026-05-28T21:15:00Z
+evidence: "Containerfile line 38: pyright, ruff, poetry, pipx, uv, mypy, pytest via pip3"
 changes:
   - file: images/default/Containerfile
     description: |

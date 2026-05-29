@@ -2,9 +2,11 @@
 title: Install dev quality tools (typos, just, watchexec)
 gap: "missing_tools: typos, just, watchexec; CI and dev-loop automation tools absent"
 category: runtime-tool
-status: approved
+status: implemented
 proposed_at: 2026-05-28T12:15:00Z
 approved_at: 2026-05-28T17:05:00Z
+implemented_at: 2026-05-28T21:15:00Z
+evidence: "Containerfile line 26: just via microdnf; line 55: typos-cli, watchexec-cli via cargo install"
 changes:
   - file: images/default/Containerfile
     description: |

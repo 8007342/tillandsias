@@ -2,9 +2,11 @@
 title: Install additional developer tools (pip3, poetry, gopls, gdb, lldb, strace, valgrind, yarn, pnpm, dart, flutter)
 gap: "distilled summary diagnostics_20260528T120919Z reports extended missing tool list"
 category: runtime-tool
-status: approved
+status: implemented
 proposed_at: 2026-05-28T12:15:00Z
 approved_at: 2026-05-28T17:05:00Z
+implemented_at: 2026-05-28T21:15:00Z
+evidence: "Containerfile lines 25,27-28: pip3, gdb, lldb, strace, valgrind, gcc, g++, make, cmake via microdnf; line 38: poetry via pip3; line 39: yarn, pnpm via npm; lines 58-63: Dart SDK"
 changes:
   - file: images/default/Containerfile
     description: |

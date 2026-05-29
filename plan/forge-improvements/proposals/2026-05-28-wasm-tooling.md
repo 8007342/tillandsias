@@ -2,9 +2,11 @@
 title: Install WASM toolchain (wasm-pack, trunk)
 gap: "missing_tools: wasm-pack, trunk; project genus uses WASM/Rust"
 category: runtime-tool
-status: approved
+status: implemented
 proposed_at: 2026-05-28T12:15:00Z
 approved_at: 2026-05-28T17:05:00Z
+implemented_at: 2026-05-28T21:15:00Z
+evidence: "Containerfile line 55: wasm-pack, trunk installed via cargo install"
 changes:
   - file: images/default/Containerfile
     description: |

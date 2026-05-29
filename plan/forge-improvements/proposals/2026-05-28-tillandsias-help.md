@@ -2,9 +2,11 @@
 title: Install tillandsias-help shell script
 gap: "shell.tillandsias_help: command not found in PATH; welcome scripts register it but it's absent"
 category: shell-tool
-status: approved
+status: implemented
 proposed_at: 2026-05-28T12:15:00Z
 approved_at: 2026-05-28T17:05:00Z
+implemented_at: 2026-05-28T21:15:00Z
+evidence: "Containerfile line 136: symlink /usr/local/bin/tillandsias-help -> /usr/local/share/tillandsias/help.sh"
 changes:
   - file: images/default/Containerfile
     description: |

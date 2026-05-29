@@ -2,9 +2,11 @@
 title: Install Go toolchain (go, delve)
 gap: "missing_tools: go, delve; GOPATH pre-configured but compiler absent"
 category: sdk
-status: approved
+status: implemented
 proposed_at: 2026-05-28T12:15:00Z
 approved_at: 2026-05-28T17:05:00Z
+implemented_at: 2026-05-28T21:15:00Z
+evidence: "Containerfile line 24: golang microdnf package; lines 42-43: gopls, delve go-installed"
 changes:
   - file: images/default/Containerfile
     description: |
