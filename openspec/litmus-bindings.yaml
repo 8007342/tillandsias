@@ -657,8 +657,10 @@ specs:
   status: active
   litmus_tests:
   - litmus:binary-e2e-smoke
-  coverage_ratio: 30
-  last_verified: '2026-05-15'
+  - litmus:control-dispatch-shape
+  - litmus:tray-host-control-socket-unix-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-29'
 - spec_id: tray-icon-lifecycle
   status: active
   litmus_tests:
