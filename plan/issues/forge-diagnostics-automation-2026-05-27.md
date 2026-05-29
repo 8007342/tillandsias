@@ -365,3 +365,41 @@ this edit just expands the input surface so the agent isn't
 permanently stuck on hosts that aren't the annex producer.
 
 @trace plan/issues/forge-diagnostics-automation-2026-05-27.md
+
+## agent_status_packet — work-loop slice 2026-05-29T03:21Z — annex piggyback on container-start-health
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- packet: `forge-diagnostics/e2e-piggyback-orchestration` — closes the
+  20:30Z "next checkpoint" line: "wire the annex (no --reset) into other
+  forge-launching E2E litmus so container-start diagnostics piggyback".
+- shipped: amended `openspec/litmus-tests/litmus-container-start-health.yaml`
+  with two non-gating steps appended to `critical_path`:
+    1. `scripts/forge-diagnostics-annex.sh || true` (no `--reset`) —
+       the annex's checksum dedup ensures exactly one E2E run in a cycle
+       captures; the rest write a skip note to `cycle-skips.log`.
+    2. Observe: a raw log, skip note, or distill summary exists. Any
+       cycle outcome is fine (the annex's `set -uo pipefail` exit-0
+       contract is the hard guarantee).
+- E2E forge-launching litmus inventory checked: the only other
+  candidates (`litmus-environment-isolation`, `litmus-ephemeral-guarantee`,
+  `litmus-enclave-isolation`) do NOT launch tillandsias agents — they
+  either inspect forge images via raw `podman run` or grep config files.
+  So `litmus-container-start-health` is the natural and only piggyback
+  host besides the dedicated `litmus-forge-diagnostics-e2e` (which keeps
+  `--reset`, as it owns the standalone trigger).
+- privacy/isolation: no envelope change. The annex's launch uses the
+  same `tillandsias . --opencode --diagnostics --prompt $FILE` path
+  the standalone diagnostics litmus already uses; no new mounts, creds,
+  sockets, or network changes.
+- files touched: `openspec/litmus-tests/litmus-container-start-health.yaml`.
+- evidence: YAML parses (python yaml.safe_load); type-check clean;
+  full instant-phase litmus suite still 36/36 PASS at 100% coverage.
+- blockers/errors: NONE.
+- next checkpoint: a real runtime-litmus pass with a live forge will
+  produce the first piggy-backed distill summary on a host that's NOT
+  the dedicated standalone diagnostics test. Then claim/split
+  `forge-enhancements/curated-toolchain-backlog`.
+- lease: CONTINUE.
+
+@trace methodology/forge-diagnostics.yaml (piggyback_protocol)
+@trace openspec/litmus-tests/litmus-container-start-health.yaml

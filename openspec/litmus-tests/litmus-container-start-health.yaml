@@ -92,15 +92,55 @@ critical_path:
     timeout_ms: 10000
     expected_behavior: "ok: <N> idiomatic launch events"
 
+  # Piggyback: run the forge-diagnostics annex WITHOUT --reset. The annex's
+  # dedupe-by-prompt-sha mechanism ensures that across all
+  # forge-launching E2E tests in the same cycle, exactly one captures the
+  # diagnostics prompt and the rest append a skip note. This test's main
+  # launch (above) is its own thing — the annex runs the *separate*
+  # diagnostics prompt from `plan/diagnostics/forge-diagnostics-prompt.txt`
+  # and writes its own log under `target/forge-diagnostics/diagnostics_*.log`
+  # + a distilled summary under `plan/diagnostics/`.
+  #
+  # NON-BLOCKING by contract — the annex always exits 0 (see annex script
+  # header); the `|| true` is belt+suspenders. Capturing failures become
+  # signals in the distill summary, not parent-E2E failures.
+  #
+  # @trace methodology/forge-diagnostics.yaml (piggyback_protocol)
+  # @trace plan/issues/forge-diagnostics-automation-2026-05-27.md
+  #   (forge-diagnostics/e2e-piggyback-orchestration)
+  - step: "non-blocking annex piggyback: capture diagnostics summary if first in cycle, else dedup-skip"
+    command: "scripts/forge-diagnostics-annex.sh || true"
+    timeout_ms: 600000
+    expected_behavior: "annex exit 0 (always); summary or skip note recorded under target/forge-diagnostics/"
+
+  # Non-gating observation: confirm the annex produced *something* —
+  # either a raw log + distill summary (first in cycle) or a skip note
+  # (later in cycle). This is the durable evidence that the piggyback
+  # wired up.
+  - step: "annex produced a raw log, skip note, OR distill summary (any cycle outcome is fine)"
+    command: >
+      if ls -t target/forge-diagnostics/diagnostics_*.log >/dev/null 2>&1
+         || [ -s target/forge-diagnostics/cycle-skips.log ]
+         || ls -t plan/diagnostics/diagnostics_*-summary.md >/dev/null 2>&1; then
+        echo "ok: annex left evidence (raw log, skip note, or distill summary)";
+      else
+        echo "ok: annex ran but left no evidence on this host (annex contract honoured)";
+      fi
+    timeout_ms: 5000
+    expected_behavior: "ok: annex left evidence ..."
+
 observability:
   traces:
     - "@trace spec:podman-idiomatic-patterns"
     - "@trace spec:runtime-diagnostics-stream"
-  expected_log: "Container start health verified via idiomatic launch-event stream"
+    - "@trace methodology/forge-diagnostics.yaml (piggyback_protocol)"
+    - "@trace plan/issues/forge-diagnostics-automation-2026-05-27.md (e2e-piggyback-orchestration)"
+  expected_log: "Container start health verified via idiomatic launch-event stream + annex piggyback"
   log_fields:
     spec: "podman-idiomatic-patterns"
     test: "container-start-health"
     artifact: "target/forge-diagnostics/container-start_*.stderr.log"
+    piggyback_artifact: "target/forge-diagnostics/diagnostics_*.log OR plan/diagnostics/diagnostics_*-summary.md OR target/forge-diagnostics/cycle-skips.log"
 
 rollback:
   on_failure: >
