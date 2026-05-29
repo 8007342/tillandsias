@@ -51,6 +51,57 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-29T19:43Z — MERGED windows-next (build-windows-tray + probe-macos-tray-on-windows daily-loop skills) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `04ea1fd0` (merge commit; linux-next was at
+  `9a945410` pre-merge).
+- observed_sibling_heads: main=`ea28d773` · linux-next=`9a945410`
+  (pre-merge) · windows-next=`24d7bec7` · osx-next=`9a945410`
+- windows-next action: **merged + tested + pushed**. Three commits
+  brought in:
+    * `b13f95c4 skills(windows-next): /build-windows-tray +
+      /build-macos-tray daily-loop skills + initial findings` —
+      new skills following the pattern macOS established with
+      `/build-macos-tray` (commit `69c730f6` on the macos side).
+      The windows host gets its own per-platform build cron + a
+      cross-build probe.
+    * `da70e27f Merge remote-tracking branch 'origin/linux-next'
+      into windows-next` — windows pulled in linux-next (the
+      release-flow + my recent litmus work).
+    * `24d7bec7 skills(windows-next): rename build-macos-tray ->
+      probe-macos-tray-on-windows (avoid collision with macos-
+      host's authoritative skill)` — windows had independently
+      named their cross-build skill `build-macos-tray`, which
+      collided with the macOS-host's authoritative skill of the
+      same name (already in linux-next via osx-next merge).
+      Renamed to `probe-macos-tray-on-windows` and refactored
+      findings-file format to mirror macOS's pattern
+      (`plan/issues/<skill>-findings-YYYY-MM-DD.md`, append per
+      run with structured SECTION_KIND sections).
+  Touched files: 6 new (2 skill canonical dirs + 2 .claude/skills
+  pointer files + 2 plan/diagnostics finding files). All windows-
+  owned skill scope, no linux/macOS code overlap. Auto-merged
+  cleanly.
+- osx-next action: **no-op** (head identical to linux-next pre-
+  merge at `9a945410`).
+- Verification: `./build.sh --check` clean + `./build.sh --test`
+  clean. Full pre-build instant litmus suite: 59/59 PASS at 100%
+  across 89 specs (no new bound litmus; skills are docs-only).
+- Spec/methodology/plan drift: NONE. Skills + finding files only.
+- Cross-host convergence note: with this merge, ALL THREE platform
+  hosts now have per-platform build cron skills following the
+  `/build-<platform>-tray` pattern + the `/merge-to-main-and-
+  release` daily release skill on linux. The orchestration mesh is
+  now self-driving daily releases + per-platform smoke testing
+  with cross-host findings ledgers, all from canonical skill files
+  in `skills/<name>/` symlinked or pointer-referenced from
+  `.<runtime>/skills/`. Pattern reuse depth: 3 build-platform-X
+  skills (osx, windows, "probe windows builds macOS") +
+  merge-to-main-and-release + 2 work-loop skills
+  (advance-work-from-plan + coordinate-multihost-work +
+  multihost-orchestration).
+
 ### Cycle 2026-05-29T17:43Z — MERGED windows-next (cross-tray PTY-attach project-threading pin) ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
