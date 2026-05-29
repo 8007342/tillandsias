@@ -100,16 +100,16 @@ unchanged before approval:
 
 | Candidate | Status | Source runs | Rationale | Privacy/isolation notes |
 |---|---|---|---|---|
-| `shellcheck` | approved | 04:05Z | Project uses extensive shell scripting; no static analysis for shell scripts. | Single static binary; apt/dnf install. No new egress. |
-| `shfmt` | approved | 04:05Z | Shell formatter; absent alongside shellcheck. | Single static binary; go install or upstream release. |
+| `shellcheck` | **implemented** | 04:05Z | Project uses extensive shell scripting; no static analysis for shell scripts. | microdnf install — added to the existing dnf RUN layer; no new image layer. |
+| `shfmt` | **implemented** | 04:05Z | Shell formatter; absent alongside shellcheck. | `go install mvdan.cc/sh/v3/cmd/shfmt@latest` — added to the existing Go-tools RUN layer alongside gopls + dlv; no new image layer. |
 
 ### Profiling / Dynamic Analysis
 
 | Candidate | Status | Source runs | Rationale | Privacy/isolation notes |
 |---|---|---|---|---|
 | `perf` (linux-tools) | blocked | 06:03Z | Linux performance counters. gdb/lldb/strace/valgrind are present. | Needs CAP_PERFMON or root; **violates security envelope (requires privileges)**. |
-| `ltrace` | approved | 06:03Z | Library-call tracer; complements existing strace. | Single binary; same ptrace privs as strace. Same envelope. |
-| `heaptrack` | approved | 06:03Z | Heap-allocation profiler. | Single binary; same envelope as existing valgrind. |
+| `ltrace` | **implemented** | 06:03Z | Library-call tracer; complements existing strace. | microdnf install — added alongside `strace`/`valgrind` on the existing dnf RUN layer. Same ptrace privs as strace, same envelope. |
+| `heaptrack` | **implemented** | 06:03Z | Heap-allocation profiler. | microdnf install — added alongside `valgrind` on the existing dnf RUN layer. Same envelope as existing valgrind. |
 
 ### Reproducible builds / Package managers
 

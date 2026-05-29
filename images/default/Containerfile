@@ -24,7 +24,8 @@ RUN microdnf install -y \
         golang \
         python3-pip \
         just \
-        gdb lldb strace valgrind \
+        gdb lldb strace ltrace valgrind heaptrack \
+        shellcheck \
         gcc gcc-c++ make cmake openssl-devel pkgconfig unzip \
     && git lfs install --system \
     && microdnf clean all
@@ -52,8 +53,15 @@ RUN pip3 install --no-cache-dir pyright ruff poetry pipx uv mypy pytest \
         prettier eslint
 
 # ── Go tools ───────────────────────────────────────────────────
+# `shfmt` added alongside gopls + dlv: the shell formatter is upstream
+# at mvdan.cc/sh and the Go toolchain is already present. Same RUN
+# layer, same envelope. Approved curated-backlog candidate (045a6720).
+#
+# @trace plan/diagnostics/forge-enhancements-curated-toolchain-backlog-2026-05-29.md
+#   (shfmt — approved)
 RUN GOBIN=/usr/local/bin go install golang.org/x/tools/gopls@latest \
-    && GOBIN=/usr/local/bin go install github.com/go-delve/delve/cmd/dlv@latest
+    && GOBIN=/usr/local/bin go install github.com/go-delve/delve/cmd/dlv@latest \
+    && GOBIN=/usr/local/bin go install mvdan.cc/sh/v3/cmd/shfmt@latest
 
 # ── Rust toolchain ─────────────────────────────────────────────
 ENV RUSTUP_HOME=/usr/local/rustup \
