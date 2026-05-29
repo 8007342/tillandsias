@@ -215,8 +215,11 @@ specs:
   status: active
   litmus_tests:
   - litmus:environment-isolation
-  coverage_ratio: 33
-  last_verified: '2026-05-03'
+  - litmus:enclave-isolation
+  - litmus:ephemeral-guarantee
+  - litmus:podman-idiomatic-launch-routing
+  coverage_ratio: 100
+  last_verified: '2026-05-29'
 - spec_id: external-logs-layer
   status: active
   litmus_tests:
