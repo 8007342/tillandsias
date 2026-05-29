@@ -1604,6 +1604,18 @@ plan_index:
             - plan/forge-improvements/.diagnose-state
           checkpoint_required: false
           handoff_note: "Continuous: each iteration processes new diagnostics, files proposals, implements approved changes. No fixed endpoint — forge iteratively becomes more capable."
+          events:
+            - type: claim
+              ts: "2026-05-29T06:06:00Z"
+              agent_id: "linux-tlatoani-fedora-antigravity-20260529T0606"
+              host: "linux"
+              lease_id: "lease-linux-squid-tcp-reset-20260529T0606"
+              expires_at: "2026-05-29T10:06:00Z"
+            - type: completed
+              ts: "2026-05-29T06:08:00Z"
+              agent_id: "linux-tlatoani-fedora-antigravity-20260529T0606"
+              commits: ["96531d2a83497ca6bdcabbb6cf05a0b88ac271f5"]
+              validation_log: "48cafbb5-119f-4230-92ca-5254423cee6b/task-203"
 
     - id: multi-host-plan-ledger-adoption
       order: 21

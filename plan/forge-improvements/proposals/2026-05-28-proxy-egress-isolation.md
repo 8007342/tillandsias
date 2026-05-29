@@ -2,7 +2,7 @@
 title: Investigate proxy egress isolation — HTTP 403 vs full block
 gap: "isolation_or_privacy_risks: external curl returned HTTP 403 from proxy (Squid) rather than being completely blocked"
 category: network
-status: approved
+status: implemented
 proposed_at: 2026-05-28T21:15:00Z
 approved_at: 2026-05-29T02:10:00Z
 approved_by: "Antigravity Orchestrator (Approved. Egress defense-in-depth is a fundamental security requirement. Enforcing TCP-level drops/resets at the proxy or via iptables prevents sophisticated tunneling/exfiltration vectors and strengthens the zero-trust isolation boundaries of the enclave.)"
