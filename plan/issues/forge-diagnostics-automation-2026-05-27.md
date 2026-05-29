@@ -451,3 +451,64 @@ permanently stuck on hosts that aren't the annex producer.
 - lease: CONTINUE.
 
 @trace plan/issues/forge-diagnostics-automation-2026-05-27.md
+
+## agent_status_packet — work-loop slice 2026-05-29T05:21Z — distill consumer for envelope (sub-deliverable (a) complete)
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- packet: `forge-diagnostics/e2e-piggyback-orchestration` — closes the
+  CONSUMER side of USER PRIORITY sub-deliverable (a). The runtime
+  emitter shipped at 04:51Z (`4c2993ac`); this slice (`8f070293`)
+  wires the bash distill script to consume it from the `.stderr.log`
+  companion.
+- shipped: `8f070293 feat(diagnostics): distill consumes
+  event:diagnostics_envelope from stderr companion`.
+- synthetic round-trip evidence (test fixture: empty stdout +
+  envelope-only stderr):
+
+    # Forge Diagnostics Summary — 2026-05-29T05:21:00Z
+    - **Forge version**: 0.2.260528 (from-envelope; in-forge JSON missing)
+    - **Host platform**: linux
+    - **Agent**: opencode
+    - **Completeness**: 0 / 0 checks passed (0%)
+    ## Parse Errors
+    - Expecting value: line 1 column 1 (char 0)
+
+  Compare with the 19:02Z pre-envelope baseline:
+    - **Forge version**: unknown
+    - (no Host platform field)
+    - (no Agent field)
+
+  Every run now has real framing regardless of LLM compliance. The
+  JSON parse error still surfaces — the envelope is fallback context,
+  not a mask.
+- drift-protection litmus shipped:
+  `openspec/litmus-tests/litmus-diagnostics-envelope-shape.yaml`
+  (instant pre-build, 6 steps) greps BOTH sides of the Rust-emitter
+  ↔ bash-consumer symmetry — if the field set diverges, the litmus
+  fires. `cli-diagnostics` spec flipped from `status: deferred` to
+  `status: active` in `openspec/litmus-bindings.yaml`. Coverage rose
+  from 85 specs at 100% pass-rate to 86 specs at 100% pass-rate
+  (instant pre-build suite 37/37, was 36/36).
+- privacy/isolation: no envelope-related change at the architecture
+  level — the stderr line carries timestamp + version + host + agent
+  kind only. No PII, no project paths, no credentials.
+- files touched:
+    * `scripts/distill-forge-diagnostics.sh` (consumer block + new
+      metadata lines)
+    * `openspec/litmus-tests/litmus-diagnostics-envelope-shape.yaml`
+      (new drift-protection litmus)
+    * `openspec/litmus-bindings.yaml` (cli-diagnostics: deferred →
+      active, +1 litmus binding)
+- evidence: synthetic round-trip; full instant pre-build suite
+  37/37 PASS; 144 headless tests still green; `./build.sh --check`
+  clean.
+- blockers/errors: NONE.
+- next checkpoint: a real runtime-litmus pass with a live forge will
+  produce the first real-world envelope-recovered summary on a host
+  where the LLM happened to fail. Then claim/split
+  `forge-enhancements/curated-toolchain-backlog` for the now-visible
+  forge enhancements queue (the 5:03Z summary's 5-tool missing-list
+  and 5 proposed-enhancements list are a natural seed).
+- lease: CONTINUE.
+
+@trace plan/issues/forge-diagnostics-automation-2026-05-27.md
