@@ -1019,7 +1019,7 @@ plan_index:
     - id: observatorium-readiness-and-ux
       order: 16
       title: Observatorium Readiness and UX — Fail Loudly With Logs
-      status: in_progress
+      status: completed
       deliverable: plan/steps/16-observatorium-readiness-and-ux.md
       depends_on: [router-observatorium-routing, user-runtime-port-selection, tray-network-bootstrap]
       specs: []
@@ -1029,7 +1029,7 @@ plan_index:
         - "Tray and observatorium errors resolve to one actionable path"
       tasks:
         - id: observatorium-readiness-and-ux/readiness-check
-          status: in_progress
+          status: completed
           depends_on: [tray-network-bootstrap/enclave-network]
           owned_files:
             - crates/tillandsias-headless/src/main.rs
@@ -1457,7 +1457,7 @@ plan_index:
     - id: forge-diagnostics-automation
       order: 21.5
       title: Forge Diagnostics Automation — Non-blocking completeness probe loop
-      status: in_progress
+      status: completed
       deliverable: plan/issues/forge-diagnostics-automation-2026-05-27.md
       depends_on: [recent-work-spec-doc-methodology-audit]
       specs:

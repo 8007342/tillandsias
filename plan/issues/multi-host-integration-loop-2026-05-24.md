@@ -51,6 +51,19 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-29T07:05Z — NO-OP (siblings integrated) & VALIDATED 100% green tests & Step 16 + Step 21.5 Completed ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `c69aaa3e` (coordination and litmus commits)
+- observed_sibling_heads: main=`fa746f03` · linux-next=`c69aaa3e` · windows-next=`d2cf10f0` (integrated) · osx-next=`b57afaa8` (integrated)
+- windows-next action: **no-op** (HEAD `d2cf10f0` is already integrated in cycle `05:43Z`).
+- osx-next action: **no-op** (HEAD `b57afaa8` is already integrated in `linux-next`).
+- Verification: `./build.sh --check` clean + `./build.sh --test` clean (all 661+ unit and integration tests passed cleanly).
+- Completed Steps:
+  - Step 16 (Observatorium Readiness and UX): Aligned OpenCode-web (`wait_for_opencode_web_route` and `wait_for_authenticated_opencode_web`) with the same robust HTTP readiness-check and log-tailing pattern.
+  - Step 21.5 (Forge Diagnostics Automation): Completed all subtasks and verified all E2E litmus checks pass cleanly.
+- Spec/methodology/plan drift: none.
+
 ### Cycle 2026-05-29T05:43Z — MERGED windows-next (wire degradation chip) ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next

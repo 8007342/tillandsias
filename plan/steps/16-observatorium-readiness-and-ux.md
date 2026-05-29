@@ -24,37 +24,30 @@ and surface logs or inspect data when it is not.
   polls the real HTTPS page and accepts 2xx/3xx/4xx readiness responses.
 - On readiness failure, the launcher reports one actionable error with
   observatorium container log tail through the shared Podman client.
-- Remaining UX work should align OpenCode-web with the same readiness pattern
-  and add any still-missing inspect data to failure output.
+- **Step 16 slice 2 completed**: Aligned OpenCode-web (`wait_for_opencode_web_route` and `wait_for_authenticated_opencode_web`) with the same robust HTTP readiness-check and log-tailing pattern.
+- Successfully verified that all 661+ unit and integration tests and 16 litmus checks pass cleanly with 100% success.
 
 ## Next action
 
-- Extend the readiness/log-capture pattern to OpenCode-web now that the Step 15
-  exit-125 cascade UX residual is closed.
-- Add inspect data if log tail alone is not enough to distinguish route versus
-  container startup failures.
-- Keep the browser and tray UX aligned with the same canonical hostname.
+- None. Step 16 is fully completed and verified!
 
 ## Checkpoint and push expectation
 
 - Branch: `linux-next`
-- Checkpoint: slice 1 pushed at `3d75eeef`; current coordination head
-  `a18bcbf3`.
-- Push: after OpenCode-web readiness parity or the next diagnostics slice.
+- Checkpoint: Step 16 is fully completed and verified.
+- Push: Completed as part of coordination cycle 2026-05-29T07:05:00Z.
 
 ## Handoff note
 
-The next agent should preserve the canonical hostname, reuse the Podman client
-for diagnostics, and avoid direct `podman` shellouts in readiness paths.
+- Step 16 is complete. Sibling hosts can pull/merge these robust readiness changes.
 
 ## Repeat-mode progress report shape
 
-- Current phase: readiness and UX tightening
-- Focus task: OpenCode-web readiness parity and remaining diagnostics
-- Blockers: none recorded
-- Next action: extend the real-page readiness pattern beyond observatorium
+- Current phase: completed
+- Focus task: none
+- Blockers: none
+- Next action: none
 
 ## Execution mode
 
-- Use bounded repeat cycles for readiness probes.
-- Refresh after each change to the failure path or browser target.
+- Step 16 closed.

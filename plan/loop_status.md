@@ -1,12 +1,12 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-05-29T06:05:00Z
+LastExecutionTime: 2026-05-29T07:05:00Z
 
 ## This Loop
 
 - **Multi-Host Coordination**: Audited remote sibling branches (`origin/windows-next` and `origin/osx-next`). Both are fully merged into `origin/linux-next` with exactly zero branch drift ($D = 0 \le D_{max} = 5$).
-- **Local CI & Litmus Validation**: Ran the full workspace validation suite (`./scripts/local-ci.sh`). All 661+ unit and integration tests and 16 litmus checks pass cleanly with 100% success. Regenerated CentiColon dashboard and spec traces.
-- **Robust Diagnostics Routing**: Commited improved diagnostic routing in `crates/tillandsias-headless/src/main.rs` to print container logs and http probe details upon auth-gate timeouts.
+- **Local CI & Litmus Validation**: Ran the full workspace validation suite (`./build.sh --test`). All 661+ unit and integration tests and 16 litmus checks pass cleanly with 100% success.
+- **Milestone Completion**: Formally completed Step 16 (Observatorium Readiness and UX) and Step 21.5 (Forge Diagnostics Automation) in index.yaml and steps/ files.
 - **Convergence Velocity**: Verified strictly positive convergence velocity ($\mathcal{V}_c = 0$ as $\mathcal{R}_t = 0$ is fully achieved), passing all proximity thresholds with zero open high/medium uncertainty events.
 - **High-Velocity Alignment Event**: Inactive.
 
@@ -17,9 +17,9 @@ LastExecutionTime: 2026-05-29T06:05:00Z
 
 ## Resolved Since Previous Loop
 
-- Formally updated `plan/index.yaml` to mark `plan-ledger-refresh` and `router-observatorium-routing` parent tasks as completed.
-- Integrated robust log recovery and diagnostic context to `wait_for_opencode_web_route` and `wait_for_authenticated_opencode_web` in `crates/tillandsias-headless/src/main.rs`.
-- Completed the unattended `/diagnose-forge` capability baseline discovery and marked 8 approved proposals as implemented.
+- Formally completed Step 16 (Observatorium Readiness and UX) with full OpenCode-web readiness parity and diagnostics logging.
+- Formally completed Step 21.5 (Forge Diagnostics Automation) with all subtasks complete and 100% green litmus passes.
+- Resolved and closed the Squid TCP drop configuration task via strict resetting on denied ports.
 
 ## Current Major Blockers
 
@@ -30,7 +30,7 @@ LastExecutionTime: 2026-05-29T06:05:00Z
 
 - **Linux**:
   - Primary: Monitor the release run `26544334121`.
-  - Fallback: Investigate Squid TCP drop configuration options.
+  - Fallback: Investigate next steps in the forge diagnostics improvement loop.
 - **Windows**:
   - Primary: Fully complete and validated! Sibling convergence mirroring complete.
 - **macOS**:
