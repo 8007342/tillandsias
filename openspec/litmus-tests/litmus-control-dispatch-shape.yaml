@@ -1,0 +1,142 @@
+# @trace spec:tray-host-control-socket, spec:vsock-transport
+# Control-socket dispatch convergence — instant-phase shape litmus.
+#
+# Pins the now-complete state of the convergence packet
+# (plan/issues/control-socket-protocol-convergence-2026-05-25.md,
+# items 1-3 shipped 2026-05-28 at 22:27Z / 22:54Z / 23:23Z).
+#
+# Three files participate:
+#
+#   crates/tillandsias-headless/src/control_dispatch.rs
+#     pure routing matrix module (item 1) — pub fn decide_route +
+#     TransportKind + DispatchOutcome + 4 unit tests
+#
+#   crates/tillandsias-headless/src/tray/mod.rs
+#     unix-socket dispatcher (item 2) consults
+#     decide_route(&body, TransportKind::UnixSocket) and matches on
+#     DispatchOutcome before the variant-match
+#
+#   crates/tillandsias-headless/src/vsock_server.rs
+#     vsock dispatcher (item 3) consults
+#     decide_route(&env.body, TransportKind::Vsock) as a pre-filter
+#     to the variant-match
+#
+# A regression that removes the matrix consultation from either
+# dispatcher would silently restore the prior "each transport
+# carries its own variant table" world — passing the existing
+# routing-matrix unit tests (the module would still exist) but
+# bypassing the convergence the packet was filed to enforce.
+
+name: litmus:control-dispatch-shape
+spec: tray-host-control-socket
+phase: pre-build
+description: >
+  Verify that the control-socket convergence packet's three pieces
+  remain wired end-to-end — the pure routing matrix module exists,
+  AND both transport dispatchers consult it before their
+  variant-match.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-headless/src/control_dispatch.rs
+  - workspace contains crates/tillandsias-headless/src/tray/mod.rs
+  - workspace contains crates/tillandsias-headless/src/vsock_server.rs
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "decide_route + TransportKind + DispatchOutcome are present in the canonical module (item 1)"
+    command: >
+      grep -F 'pub fn decide_route' crates/tillandsias-headless/src/control_dispatch.rs
+      && grep -F 'pub enum TransportKind' crates/tillandsias-headless/src/control_dispatch.rs
+      && grep -F 'pub enum DispatchOutcome' crates/tillandsias-headless/src/control_dispatch.rs
+    timeout_ms: 3000
+    expected_behavior: "pub enum DispatchOutcome"
+
+  - step: "all three TransportKind / DispatchOutcome variant arms exist"
+    command: >
+      grep -F 'UnixSocket' crates/tillandsias-headless/src/control_dispatch.rs
+      && grep -F 'Vsock' crates/tillandsias-headless/src/control_dispatch.rs
+      && grep -F 'Handle' crates/tillandsias-headless/src/control_dispatch.rs
+      && grep -F 'Unsupported' crates/tillandsias-headless/src/control_dispatch.rs
+      && grep -F 'ResponseOnly' crates/tillandsias-headless/src/control_dispatch.rs
+    timeout_ms: 3000
+    expected_behavior: "ResponseOnly"
+
+  - step: "tray/mod.rs (unix dispatcher) consults decide_route (item 2)"
+    # Without this consultation, the unix dispatcher reverts to its
+    # own variant table — convergence broken silently.
+    command: >
+      grep -F 'decide_route' crates/tillandsias-headless/src/tray/mod.rs
+      && grep -F 'TransportKind::UnixSocket' crates/tillandsias-headless/src/tray/mod.rs
+      && grep -F 'DispatchOutcome::Handle' crates/tillandsias-headless/src/tray/mod.rs
+      && grep -F 'DispatchOutcome::Unsupported' crates/tillandsias-headless/src/tray/mod.rs
+      && grep -F 'DispatchOutcome::ResponseOnly' crates/tillandsias-headless/src/tray/mod.rs
+    timeout_ms: 3000
+    expected_behavior: "DispatchOutcome::ResponseOnly"
+
+  - step: "vsock_server.rs (vsock dispatcher) consults decide_route (item 3)"
+    # Same regression check on the vsock side. The pre-filter sits
+    # right before the existing variant-match.
+    command: >
+      grep -F 'decide_route' crates/tillandsias-headless/src/vsock_server.rs
+      && grep -F 'TransportKind::Vsock' crates/tillandsias-headless/src/vsock_server.rs
+      && grep -F 'DispatchOutcome::Handle' crates/tillandsias-headless/src/vsock_server.rs
+      && grep -F 'DispatchOutcome::Unsupported' crates/tillandsias-headless/src/vsock_server.rs
+      && grep -F 'DispatchOutcome::ResponseOnly' crates/tillandsias-headless/src/vsock_server.rs
+    timeout_ms: 3000
+    expected_behavior: "DispatchOutcome::ResponseOnly"
+
+  - step: "matrix-Handle-but-no-handler-yet arm references the convergence packet"
+    # The inner `other =>` arms now only catch matrix-Handle variants
+    # that don't have a handler — surfaced as a descriptive Error
+    # referencing the packet so future contributors find the
+    # follow-up slice. A rewording is fine but the packet-path
+    # reference must stay.
+    command: >
+      grep -F 'control-socket-protocol-convergence-2026-05-25.md' crates/tillandsias-headless/src/tray/mod.rs
+      && grep -F 'control-socket-protocol-convergence-2026-05-25.md' crates/tillandsias-headless/src/vsock_server.rs
+    timeout_ms: 3000
+    expected_behavior: "control-socket-protocol-convergence-2026-05-25.md"
+
+  - step: "four routing-matrix unit tests still attached"
+    # These are the behaviour pin for the matrix itself. A future
+    # variant addition that lands in decide_route but not in the
+    # fixture panics via `unreachable!` — the drift signal the
+    # convergence packet needs.
+    command: >
+      grep -F 'fn unix_socket_routing_matrix' crates/tillandsias-headless/src/control_dispatch.rs
+      && grep -F 'fn vsock_routing_matrix' crates/tillandsias-headless/src/control_dispatch.rs
+      && grep -F 'fn symmetric_variants_match_on_both_transports' crates/tillandsias-headless/src/control_dispatch.rs
+      && grep -F 'fn response_shaped_variants_are_response_only_on_both_transports' crates/tillandsias-headless/src/control_dispatch.rs
+    timeout_ms: 3000
+    expected_behavior: "response_shaped_variants_are_response_only_on_both_transports"
+
+  - step: "control_dispatch module registered in main.rs"
+    # If the `mod control_dispatch;` line is removed, the dispatchers'
+    # `crate::control_dispatch::*` references fail to compile and the
+    # binary won't build — but that's a noisy regression. Pinning the
+    # mod line here surfaces the cause faster than chasing a build
+    # error.
+    command: "grep -F 'mod control_dispatch;' crates/tillandsias-headless/src/main.rs"
+    timeout_ms: 3000
+    expected_behavior: "mod control_dispatch;"
+
+observability:
+  traces:
+    - "@trace spec:tray-host-control-socket"
+    - "@trace spec:vsock-transport"
+  expected_log: "Convergence packet items 1-3 wiring + matrix tests intact"
+  log_fields:
+    spec: "tray-host-control-socket"
+    test: "control-dispatch-shape"
+
+rollback:
+  on_failure: >
+    A surface from the control-socket convergence packet has drifted.
+    Cross-check against plan/issues/control-socket-protocol-convergence
+    -2026-05-25.md (items 1-3 completion notes 2026-05-28T22:27Z /
+    22:54Z / 23:23Z) and the three files this litmus greps. If the
+    rename was deliberate, update both the convergence packet doc
+    AND this litmus' greps in lockstep — never one without the other.
+  command: "grep -nE 'decide_route|TransportKind|DispatchOutcome|mod control_dispatch' crates/tillandsias-headless/src/control_dispatch.rs crates/tillandsias-headless/src/tray/mod.rs crates/tillandsias-headless/src/vsock_server.rs crates/tillandsias-headless/src/main.rs | head -40"
