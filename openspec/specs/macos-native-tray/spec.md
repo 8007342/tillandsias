@@ -284,6 +284,21 @@ series so support tooling (`scripts/tray-diagnose.sh`,
 - **Expression**: `iterm2_is_default => spawn_terminal_uses(iTerm2)`
 - **Measurable**: true
 
+### Invariant: `WIRE_UNREACHABLE_CHIP_TEXT` is pinned across trays
+- **ID**: macos-native-tray.invariant.wire-unreachable-chip-text
+- **Modality**: MUST
+- **Measurable**: true via the unit test
+  `wire_unreachable_chip_text_pinned` in
+  `crates/tillandsias-macos-tray/src/action_host.rs`.
+
+The live-status chip rendered when `spawn_vm_status_poller`'s Err branch
+fires (mid-session wire failure — headless crash, VM externally terminated,
+keepalive lost) SHALL be byte-identical to the windows tray's
+`WIRE_UNREACHABLE_CHIP_TEXT` (windows commit `145ff3d2`):
+`"\u{1F534} Wire unreachable"` (21 bytes UTF-8, leading codepoint
+U+1F534 LARGE RED CIRCLE). Operators on either OS SHALL see the same
+text for the same failure class.
+
 ### Invariant: `--diagnose` exit codes are limited to {0, 2, 1}
 - **ID**: macos-native-tray.invariant.diagnose-exit-codes
 - **Expression**: `crates/tillandsias-macos-tray/src/diagnose.rs::exit_code_from
