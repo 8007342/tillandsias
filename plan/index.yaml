@@ -1621,6 +1621,12 @@ plan_index:
               agent_id: "linux-tlatoani-fedora-antigravity-2026-05-29T08:13Z"
               commits: ["dd5e07ffbd590d9841804eb586ab714249a4f664"]
               validation_log: "479ba771-9568-4347-8f8b-b40406ce3b25/task-261"
+            - type: claim
+              ts: "2026-05-29T11:06:00Z"
+              agent_id: "linux-tlatoani-fedora-antigravity-20260529T1106"
+              host: "linux"
+              lease_id: "lease-linux-forge-rust-wasm-tools-20260529T1106"
+              expires_at: "2026-05-29T15:06:00Z"
 
     - id: multi-host-plan-ledger-adoption
       order: 21
