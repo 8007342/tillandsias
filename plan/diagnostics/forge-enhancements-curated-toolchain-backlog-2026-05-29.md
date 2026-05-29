@@ -49,73 +49,73 @@ unchanged before approval:
 
 | Candidate | Status | Source runs | Rationale | Privacy/isolation notes |
 |---|---|---|---|---|
-| `clippy` (rustup component) | proposed | 06:03Z | Standard Rust linter; absent despite rustc/cargo installed. | Rustup component install — same envelope as rustc. No new egress. |
-| `cargo-edit` | proposed | 06:03Z | Enables `cargo add/rm/upgrade` for ergonomic dep management. | Single binary; cargo install. No new egress. |
-| `cargo-llvm-cov` | proposed | 06:03Z | Code-coverage tooling expected in CI/test workflows. | Drops llvm tools too — image-size impact; gate at size budget. |
-| `cargo-tarpaulin` | proposed | 06:03Z | Alternative coverage tool — pick one between this and `cargo-llvm-cov`. | Single binary; cargo install. |
-| `cargo-deny` | proposed | 06:03Z | License + advisory checking, standard in production pipelines. | Needs network at FIRST RUN to fetch advisory-db; review proxy ACL. |
-| `cargo-semver-checks` | proposed | 06:03Z | Automated semver verification for library releases. | Single binary; cargo install. |
-| `cargo-expand` | proposed | 06:03Z | Macro-expansion debugging essential for Rust development. | Single binary; cargo install. |
-| `cargo-outdated` | proposed | 06:03Z | Dependency-freshness checks. | Network needed for upstream version query; gate at proxy ACL. |
-| `cargo-tree` | proposed | 06:03Z | Dependency-graph visualization (now in cargo core — VERIFY this is still needed). | n/a — likely already covered by `cargo tree`. Likely BLOCKED. |
-| `cargo-criterion` | proposed | 06:03Z | Benchmarking harness front-end for criterion. | Single binary; cargo install. |
-| `cargo-wasi` | proposed | 06:03Z | WASI target convenience wrapper. | Single binary; depends on `wasmtime` being available. |
+| `clippy` (rustup component) | approved | 06:03Z | Standard Rust linter; absent despite rustc/cargo installed. | Rustup component install — same envelope as rustc. No new egress. |
+| `cargo-edit` | approved | 06:03Z | Enables `cargo add/rm/upgrade` for ergonomic dep management. | Single binary; cargo install. No new egress. |
+| `cargo-llvm-cov` | approved | 06:03Z | Code-coverage tooling expected in CI/test workflows. | Drops llvm tools too — image-size impact; gate at size budget. |
+| `cargo-tarpaulin` | deferred | 06:03Z | Alternative coverage tool — pick one between this and `cargo-llvm-cov`. | Single binary; cargo install. |
+| `cargo-deny` | approved | 06:03Z | License + advisory checking, standard in production pipelines. | Needs network at FIRST RUN to fetch advisory-db; review proxy ACL. |
+| `cargo-semver-checks` | approved | 06:03Z | Automated semver verification for library releases. | Single binary; cargo install. |
+| `cargo-expand` | approved | 06:03Z | Macro-expansion debugging essential for Rust development. | Single binary; cargo install. |
+| `cargo-outdated` | approved | 06:03Z | Dependency-freshness checks. | Network needed for upstream version query; gate at proxy ACL. |
+| `cargo-tree` | blocked | 06:03Z | Dependency-graph visualization (now in cargo core — VERIFY this is still needed). | n/a — likely already covered by `cargo tree`. Redundant. |
+| `cargo-criterion` | approved | 06:03Z | Benchmarking harness front-end for criterion. | Single binary; cargo install. |
+| `cargo-wasi` | approved | 06:03Z | WASI target convenience wrapper. | Single binary; depends on `wasmtime` being available. |
 
 ### Python
 
 | Candidate | Status | Source runs | Rationale | Privacy/isolation notes |
 |---|---|---|---|---|
-| `black` | proposed | 04:05Z, 06:03Z | Formatter; ruff is installed but black is the standard formatter. | pip install — same envelope as existing python. |
-| `pylint` | proposed | 06:03Z | Linter complement to ruff/mypy. | pip install — same envelope. |
-| `flake8` | proposed | 06:03Z | Linter (overlaps with pylint — pick one). | pip install — same envelope. |
-| `bandit` | proposed | 06:03Z | Security-oriented Python linter. | pip install — same envelope. |
+| `black` | approved | 04:05Z, 06:03Z | Formatter; ruff is installed but black is the standard formatter. | pip install — same envelope as existing python. |
+| `pylint` | approved | 06:03Z | Linter complement to ruff/mypy. | pip install — same envelope. |
+| `flake8` | deferred | 06:03Z | Linter (overlaps with pylint — pick one). | pip install — same envelope. |
+| `bandit` | approved | 06:03Z | Security-oriented Python linter. | pip install — same envelope. |
 
 ### Web (JS/TS)
 
 | Candidate | Status | Source runs | Rationale | Privacy/isolation notes |
 |---|---|---|---|---|
-| `prettier` | proposed | 04:05Z, 05:03Z, 06:03Z (×3) | Universal formatter covering JS/TS/CSS/JSON/Markdown. No formatter pre-installed. | npm install — same envelope as existing node/npm. |
-| `eslint` | proposed | 05:03Z, 06:03Z (×2) | Standard JS/TS linter. `typescript-language-server` is installed but no linter. | npm install — same envelope. |
+| `prettier` | approved | 04:05Z, 05:03Z, 06:03Z (×3) | Universal formatter covering JS/TS/CSS/JSON/Markdown. No formatter pre-installed. | npm install — same envelope as existing node/npm. |
+| `eslint` | approved | 05:03Z, 06:03Z (×2) | Standard JS/TS linter. `typescript-language-server` is installed but no linter. | npm install — same envelope. |
 
 ### Dart / Flutter
 
 | Candidate | Status | Source runs | Rationale | Privacy/isolation notes |
 |---|---|---|---|---|
-| `flutter` | proposed | 04:05Z, 05:03Z | Dart SDK 3.12.1 installed + `flutter.md` instruction exists, but flutter binary absent. | Flutter SDK install — large image-size impact (~1 GB); gate at size budget. Flutter doctor needs network at first run. |
+| `flutter` | deferred | 04:05Z, 05:03Z | Dart SDK 3.12.1 installed + `flutter.md` instruction exists, but flutter binary absent. | Flutter SDK install — large image-size impact (~1 GB); gate at size budget. Flutter doctor needs network at first run. |
 
 ### Go
 
 | Candidate | Status | Source runs | Rationale | Privacy/isolation notes |
 |---|---|---|---|---|
-| `delve` | proposed | 04:05Z, 06:03Z | Go debugger; toolchain + gopls present but no debugger. | go install — same envelope as existing go. |
+| `delve` | approved | 04:05Z, 06:03Z | Go debugger; toolchain + gopls present but no debugger. | go install — same envelope as existing go. |
 
 ### WebAssembly
 
 | Candidate | Status | Source runs | Rationale | Privacy/isolation notes |
 |---|---|---|---|---|
-| `wasmtime` | proposed | 04:05Z, 05:03Z, 06:03Z (×3) | WASM runtime; `wasm-pack` is present but no runtime to execute the output. | Single static binary; install from upstream release. No new egress. |
-| `wasmer` | proposed | 06:03Z | Alternative WASM runtime — pick one between this and `wasmtime`. | Single static binary; install from upstream release. |
+| `wasmtime` | approved | 04:05Z, 05:03Z, 06:03Z (×3) | WASM runtime; `wasm-pack` is present but no runtime to execute the output. | Single static binary; install from upstream release. No new egress. |
+| `wasmer` | deferred | 06:03Z | Alternative WASM runtime — pick one between this and `wasmtime`. | Single static binary; install from upstream release. |
 
 ### Shell
 
 | Candidate | Status | Source runs | Rationale | Privacy/isolation notes |
 |---|---|---|---|---|
-| `shellcheck` | proposed | 04:05Z | Project uses extensive shell scripting; no static analysis for shell scripts. | Single static binary; apt/dnf install. No new egress. |
-| `shfmt` | proposed | 04:05Z | Shell formatter; absent alongside shellcheck. | Single static binary; go install or upstream release. |
+| `shellcheck` | approved | 04:05Z | Project uses extensive shell scripting; no static analysis for shell scripts. | Single static binary; apt/dnf install. No new egress. |
+| `shfmt` | approved | 04:05Z | Shell formatter; absent alongside shellcheck. | Single static binary; go install or upstream release. |
 
 ### Profiling / Dynamic Analysis
 
 | Candidate | Status | Source runs | Rationale | Privacy/isolation notes |
 |---|---|---|---|---|
-| `perf` (linux-tools) | proposed | 06:03Z | Linux performance counters. gdb/lldb/strace/valgrind are present. | Needs CAP_PERFMON or root; **may BLOCK at the security envelope**. Investigate before approving. |
-| `ltrace` | proposed | 06:03Z | Library-call tracer; complements existing strace. | Single binary; same ptrace privs as strace. Same envelope. |
-| `heaptrack` | proposed | 06:03Z | Heap-allocation profiler. | Single binary; same envelope as existing valgrind. |
+| `perf` (linux-tools) | blocked | 06:03Z | Linux performance counters. gdb/lldb/strace/valgrind are present. | Needs CAP_PERFMON or root; **violates security envelope (requires privileges)**. |
+| `ltrace` | approved | 06:03Z | Library-call tracer; complements existing strace. | Single binary; same ptrace privs as strace. Same envelope. |
+| `heaptrack` | approved | 06:03Z | Heap-allocation profiler. | Single binary; same envelope as existing valgrind. |
 
 ### Reproducible builds / Package managers
 
 | Candidate | Status | Source runs | Rationale | Privacy/isolation notes |
 |---|---|---|---|---|
-| `nix` | proposed | 04:05Z, 05:03Z | `nix-first.md` instruction exists but binary is absent — instruction-installer gap. | Nix daemon needs root by default; rootless mode (`nix --no-daemon`) exists but limits cache sharing. **Investigate envelope before approving.** |
+| `nix` | deferred | 04:05Z, 05:03Z | `nix-first.md` instruction exists but binary is absent — instruction-installer gap. | Nix daemon needs root by default; rootless mode limits cache sharing. **Deferred pending rootless/enclave investigation.** |
 
 ## Sizing notes (for orchestrator split)
 
@@ -182,31 +182,31 @@ rewrite history.
   100% completeness, 9 missing tools, 10 enhancement candidates,
   5 isolation risks)
 
-### New candidate tools (proposed)
+### New candidate tools (proposed & reviewed)
 
 | Candidate | Status | Source runs | Ecosystem | Rationale | Privacy/isolation notes |
 |---|---|---|---|---|---|
-| `rust-analyzer` (PATH symlink) | proposed | 08:08Z | Rust | **Installation gap, not missing binary**: the rustup component is installed at `/usr/local/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rust-analyzer` but isn't symlinked into `/usr/local/bin/`. LSP clients can't find it. | Pure symlink — no new envelope impact. Likely a one-line Containerfile fix. |
-| `cargo-audit` | proposed | 08:08Z | Rust | Security advisory scanner for Rust dependencies — complementary to the already-proposed `cargo-deny`. | Single binary; cargo install. Needs network at FIRST RUN to fetch advisory-db (same as `cargo-deny`). |
-| `just` | proposed | 08:08Z | Other (task runners) | Modern alternative to make/Justfile-driven workflows. | Single static binary; install from upstream release. No new egress. |
-| `gcc` | proposed | 08:08Z | Other (build) | C compiler. **Verify** — may already be available via rustc's bundled cc OR via build-essential; check with `command -v gcc` against actual image. | n/a if already installed; otherwise apt/dnf install — adds significant image size. |
-| `g++` | proposed | 08:08Z | Other (build) | C++ compiler. Same verify-first treatment as `gcc`. | Same as `gcc`. |
-| `make` | proposed | 08:08Z | Other (build) | Build automation. Often coupled with gcc/g++ as build-essential. | Tiny binary; apt/dnf install. |
-| `cmake` | proposed | 08:08Z | Other (build) | Cross-platform build generator. Heavier than `make`. | Larger install; gate at image-size budget. |
-| `jq` | proposed | 08:08Z | Other (data) | **Verify-installed**: agent flagged as missing but earlier 06:03Z summary noted `jq` available. Run discrepancy — investigate before approving. | n/a — likely already present. |
-| `ripgrep` | proposed | 08:08Z | Other (dev quality-of-life) | Fast grep alternative. Standard in modern dev images. | Single static binary; cargo or apt/dnf install. |
-| `fd` | proposed | 08:08Z | Other (dev quality-of-life) | Modern `find` alternative. | Single static binary; cargo or apt/dnf install. |
-| `bat` | proposed | 08:08Z | Other (dev quality-of-life) | Syntax-highlighted `cat`. | Single static binary. |
-| `delta` | proposed | 08:08Z | Other (dev quality-of-life) | Better `git diff` viewer. | Single static binary. |
-| `httpie` | proposed | 08:08Z | Other (HTTP client) | User-friendly `curl` alternative. Useful for diagnostic HTTP testing. | pip install — same envelope as existing python. |
-| `yq` | proposed | 08:08Z, 08:11Z (×2) | Other (data) | YAML processor analogous to `jq`. OpenSpec/methodology/plan files are YAML-heavy — frequently useful. | Single binary; go install or upstream release. |
-| `git-lfs` | proposed | 08:11Z | Other (git extension) | Git Large File Storage support for binary/asset repos. | Git extension; apt/dnf install. Network at LFS-fetch time (proxy ACL already governs git fetches). |
+| `rust-analyzer` (PATH symlink) | approved | 08:08Z | Rust | **Installation gap, not missing binary**: the rustup component is installed at `/usr/local/rustup/toolchains/stable-x86_64-unknown-linux-gnu/bin/rust-analyzer` but isn't symlinked into `/usr/local/bin/`. LSP clients can't find it. | Pure symlink — no new envelope impact. Likely a one-line Containerfile fix. |
+| `cargo-audit` | approved | 08:08Z | Rust | Security advisory scanner for Rust dependencies — complementary to the already-proposed `cargo-deny`. | Single binary; cargo install. Needs network at FIRST RUN to fetch advisory-db (same as `cargo-deny`). |
+| `just` | approved | 08:08Z | Other (task runners) | Modern alternative to make/Justfile-driven workflows. | Single static binary; install from upstream release. No new egress. |
+| `gcc` | approved | 08:08Z | Other (build) | C compiler. **Verify** — may already be available via rustc's bundled cc OR via build-essential; check with `command -v gcc` against actual image. | n/a if already installed; otherwise apt/dnf install — adds significant image size. |
+| `g++` | approved | 08:08Z | Other (build) | C++ compiler. Same verify-first treatment as `gcc`. | Same as `gcc`. |
+| `make` | approved | 08:08Z | Other (build) | Build automation. Often coupled with gcc/g++ as build-essential. | Tiny binary; apt/dnf install. |
+| `cmake` | approved | 08:08Z | Other (build) | Cross-platform build generator. Heavier than `make`. | Larger install; gate at image-size budget. |
+| `jq` | blocked | 08:08Z | Other (data) | **Verify-installed**: agent flagged as missing but earlier 06:03Z summary noted `jq` available. Already present in image. | n/a — redundant. |
+| `ripgrep` | approved | 08:08Z | Other (dev quality-of-life) | Fast grep alternative. Standard in modern dev images. | Single static binary; cargo or apt/dnf install. |
+| `fd` | approved | 08:08Z | Other (dev quality-of-life) | Modern `find` alternative. | Single static binary; cargo or apt/dnf install. |
+| `bat` | approved | 08:08Z | Other (dev quality-of-life) | Syntax-highlighted `cat`. | Single static binary. |
+| `delta` | approved | 08:08Z | Other (dev quality-of-life) | Better `git diff` viewer. | Single static binary. |
+| `httpie` | approved | 08:08Z | Other (HTTP client) | User-friendly `curl` alternative. Useful for diagnostic HTTP testing. | pip install — same envelope as existing python. |
+| `yq` | approved | 08:08Z, 08:11Z (×2) | Other (data) | YAML processor analogous to `jq`. OpenSpec/methodology/plan files are YAML-heavy — frequently useful. | Single binary; go install or upstream release. |
+| `git-lfs` | approved | 08:11Z | Other (git extension) | Git Large File Storage support for binary/asset repos. | Git extension; apt/dnf install. Network at LFS-fetch time (proxy ACL already governs git fetches). |
 
 ### New non-binary candidates (architectural)
 
 | Candidate | Status | Source runs | Rationale | Notes |
 |---|---|---|---|---|
-| `tmpfs-work-partition` | proposed | 08:11Z | All work paths (src, tmp, cheatsheets) share a single ~951 MB root filesystem. Mount a dedicated tmpfs (e.g. 4 GB) at `/home/forge/.cache/tillandsias-work` for ephemeral build artifacts per `spec:forge-cache-dual`. | NOT a toolchain candidate — this is a Containerfile / orchestrate-enclave.sh change. Routes through different approval pipeline. Tag for the orchestrator to split into a `spec:forge-cache-dual` follow-on packet rather than treating as a toolchain item. |
+| `tmpfs-work-partition` | deferred | 08:11Z | All work paths share a single ~951 MB root filesystem. Mount dedicated tmpfs at `/home/forge/.cache/tillandsias-work` per `spec:forge-cache-dual`. | NOT a toolchain candidate — this is a Containerfile / orchestrate-enclave.sh change. Routes through different approval pipeline. Tagged for `spec:forge-cache-dual` follow-on. |
 
 ### New / amplified privacy/isolation observations (delta vs. file head's gate)
 
