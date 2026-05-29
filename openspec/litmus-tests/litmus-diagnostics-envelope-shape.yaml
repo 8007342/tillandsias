@@ -1,0 +1,89 @@
+# @trace spec:cli-diagnostics, spec:runtime-diagnostics-stream
+# @trace plan/issues/forge-diagnostics-automation-2026-05-27.md
+#   (USER PRIORITY sub-deliverable (a))
+#
+# Diagnostics-Envelope Shape: Rust-emitter ↔ bash-consumer symmetry.
+#
+# The runtime emits `event:diagnostics_envelope timestamp=… tillandsias_
+# version=… host_platform=… agent=…` to stderr on every `--diagnostics`
+# invocation (commit 4c2993ac). The bash distill script consumes that
+# exact format from the .stderr.log companion to recover framing fields
+# when the LLM's stdout JSON failed to parse.
+#
+# This litmus pins BOTH sides so a format change on either gets caught
+# at type-check time, not in a production run with a confused operator
+# scratching their head at TIMESTAMP=unknown.
+name: litmus:diagnostics-envelope-shape
+spec: cli-diagnostics
+phase: pre-build
+description: >
+  Drift protection for the diagnostics-envelope stderr line: pin both
+  the Rust-side emitter format and the bash-side distill consumer
+  parser so a unilateral format change on either side is caught at
+  litmus time. The unit tests
+  `format_diagnostics_envelope_line_emits_pinned_shape` and
+  `select_diagnostics_agent_kind_respects_precedence_and_none_fallback`
+  cover the emitter; this litmus covers the symmetry.
+severity: high
+size: instant
+
+preconditions:
+  - crates/tillandsias-headless/src/main.rs exists
+  - scripts/distill-forge-diagnostics.sh exists
+
+critical_path:
+  # The runner parses single-line `command: "..."` only — folded `>`
+  # multi-line scalars aren't recognised. Keep each command on one
+  # line; expected_behavior is a substring of the grep output.
+  - step: "rust emitter: format string contains the four pinned fields"
+    command: "grep -F 'event:diagnostics_envelope timestamp={timestamp} tillandsias_version={tillandsias_version} host_platform={host_platform} agent={agent_kind}' crates/tillandsias-headless/src/main.rs"
+    timeout_ms: 5000
+    expected_behavior: "event:diagnostics_envelope timestamp="
+
+  - step: "rust emitter: select_diagnostics_agent_kind is the agent-token source"
+    command: "grep -F 'fn select_diagnostics_agent_kind(' crates/tillandsias-headless/src/main.rs"
+    timeout_ms: 5000
+    expected_behavior: "fn select_diagnostics_agent_kind"
+
+  - step: "bash distill consumer: greps the event tag line"
+    command: "grep -F \"grep -E '^event:diagnostics_envelope '\" scripts/distill-forge-diagnostics.sh"
+    timeout_ms: 5000
+    expected_behavior: "^event:diagnostics_envelope"
+
+  - step: "bash distill consumer: extracts all four envelope fields"
+    command: "grep -F \"grep -oE 'timestamp=[^ ]+'\" scripts/distill-forge-diagnostics.sh && grep -F \"grep -oE 'tillandsias_version=[^ ]+'\" scripts/distill-forge-diagnostics.sh && grep -F \"grep -oE 'host_platform=[^ ]+'\" scripts/distill-forge-diagnostics.sh && grep -F \"grep -oE 'agent=[^ ]+'\" scripts/distill-forge-diagnostics.sh"
+    timeout_ms: 5000
+    expected_behavior: "tillandsias_version="
+
+  - step: "summary template gains Host platform + Agent fields"
+    command: "grep -F 'Host platform**: ${envelope_host_platform}' scripts/distill-forge-diagnostics.sh && grep -F 'Agent**: ${envelope_agent}' scripts/distill-forge-diagnostics.sh"
+    timeout_ms: 5000
+    expected_behavior: "envelope_host_platform"
+
+  - step: "rust unit test pinning the emitter format still exists"
+    command: "grep -F 'fn format_diagnostics_envelope_line_emits_pinned_shape' crates/tillandsias-headless/src/main.rs"
+    timeout_ms: 5000
+    expected_behavior: "format_diagnostics_envelope_line_emits_pinned_shape"
+
+observability:
+  traces:
+    - "@trace spec:cli-diagnostics"
+    - "@trace spec:runtime-diagnostics-stream"
+    - "@trace plan/issues/forge-diagnostics-automation-2026-05-27.md (sub-deliverable (a))"
+  expected_log: "Rust emitter + bash consumer pin the same envelope format"
+  log_fields:
+    spec: "cli-diagnostics"
+    test: "diagnostics-envelope-shape"
+    rust_artifact: "crates/tillandsias-headless/src/main.rs"
+    bash_artifact: "scripts/distill-forge-diagnostics.sh"
+
+rollback:
+  on_failure: >
+    The Rust emitter and bash consumer disagree on the envelope format.
+    Reconcile by aligning the format-string literal in main.rs with the
+    `grep -oE 'KEY=[^ ]+'` extractors in distill-forge-diagnostics.sh.
+    Both sides MUST move together. The Rust unit tests
+    (format_diagnostics_envelope_line_*) document the contract; sync
+    them with the bash side before re-running this litmus.
+  command: >
+    grep -nE 'diagnostics_envelope' crates/tillandsias-headless/src/main.rs scripts/distill-forge-diagnostics.sh

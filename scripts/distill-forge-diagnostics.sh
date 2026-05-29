@@ -180,6 +180,53 @@ except Exception as e:
         fi
     fi
 
+    # Envelope-line fallback: when the LLM stdout JSON failed to parse
+    # (timestamp/forge_version stay `unknown`) or didn't run at all,
+    # recover framing fields from the `event:diagnostics_envelope` line
+    # the runtime emits to stderr at every `--diagnostics` invocation
+    # (commit 4c2993ac). The companion stderr log path is computed
+    # below at line ~308; we recompute it here so the metadata header
+    # has access to envelope values BEFORE the Container-Start Stream
+    # section appends. Format pinned by the Rust-side unit test
+    # `format_diagnostics_envelope_line_emits_pinned_shape`:
+    #
+    #   event:diagnostics_envelope timestamp=<ISO-Z>
+    #     tillandsias_version=<v> host_platform=<…> agent=<…>
+    #
+    # @trace spec:cli-diagnostics, spec:runtime-diagnostics-stream
+    # @trace plan/issues/forge-diagnostics-automation-2026-05-27.md
+    #   (USER PRIORITY sub-deliverable (a) — distill consumer side)
+    local envelope_stderr_log="${log_file%.log}.stderr.log"
+    local envelope_timestamp="" envelope_tversion=""
+    local envelope_host_platform="unknown" envelope_agent="unknown"
+    if [[ -f "$envelope_stderr_log" && -s "$envelope_stderr_log" ]]; then
+        local envelope_line
+        envelope_line=$({ grep -E '^event:diagnostics_envelope ' "$envelope_stderr_log" 2>/dev/null || true; } | tail -1)
+        if [[ -n "$envelope_line" ]]; then
+            # Field extraction: each k=v pair is space-separated. Use
+            # grep -oE on the precise key= prefix so a future field
+            # added to the envelope line doesn't accidentally match.
+            envelope_timestamp=$({ echo "$envelope_line" | grep -oE 'timestamp=[^ ]+' || true; } | cut -d= -f2-)
+            envelope_tversion=$({ echo "$envelope_line" | grep -oE 'tillandsias_version=[^ ]+' || true; } | cut -d= -f2-)
+            local hp_match ag_match
+            hp_match=$({ echo "$envelope_line" | grep -oE 'host_platform=[^ ]+' || true; } | cut -d= -f2-)
+            ag_match=$({ echo "$envelope_line" | grep -oE 'agent=[^ ]+' || true; } | cut -d= -f2-)
+            envelope_host_platform=${hp_match:-unknown}
+            envelope_agent=${ag_match:-unknown}
+        fi
+    fi
+    # Use envelope as fallback for unknown JSON-extracted values.
+    if [[ "$timestamp" == "unknown" && -n "$envelope_timestamp" ]]; then
+        timestamp="$envelope_timestamp"
+    fi
+    if [[ "$forge_version" == "unknown" && -n "$envelope_tversion" ]]; then
+        # The envelope carries `tillandsias_version`, which is the host-
+        # side binary version, NOT the in-forge `forge_version`. These
+        # are usually the same string in practice but we annotate the
+        # source so the orchestrator can tell them apart.
+        forge_version="${envelope_tversion} (from-envelope; in-forge JSON missing)"
+    fi
+
     # Write summary
     cat > "$summary_file" <<SUMMARY
 # Forge Diagnostics Summary — ${timestamp}
@@ -188,6 +235,8 @@ except Exception as e:
 
 - **Source log**: \`${log_file}\`
 - **Forge version**: ${forge_version}
+- **Host platform**: ${envelope_host_platform}
+- **Agent**: ${envelope_agent}
 - **Completeness**: ${ok_count} / ${total_checks} checks passed (${completeness_pct}%)
 SUMMARY
 

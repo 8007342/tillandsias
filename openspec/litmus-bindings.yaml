@@ -138,10 +138,11 @@ specs:
   coverage_ratio: 0
   last_verified: '2026-05-06'
 - spec_id: cli-diagnostics
-  status: deferred
-  litmus_tests: []
-  coverage_ratio: 0
-  last_verified: '2026-05-06'
+  status: active
+  litmus_tests:
+  - litmus:diagnostics-envelope-shape
+  coverage_ratio: 25
+  last_verified: '2026-05-29'
 - spec_id: cli-mode
   status: active
   litmus_tests:
