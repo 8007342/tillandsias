@@ -480,10 +480,9 @@ Updated matrix-Handle status on the unix dispatcher:
 
 Open follow-ons:
 
-  * Wire `mark_stopping()` into the tray's existing SIGTERM/SIGINT
-    signal path so VmStatusRequest observers see `Stopping` during
-    tray exit too (the phase model now exists; signal-side wiring
-    is the remaining piece).
+  * ~~Wire `mark_stopping()` into the tray's existing SIGTERM/SIGINT
+    signal path~~ — DONE in `08b9e96e`. See the 04:21Z addendum
+    below.
   * Honour `drain_timeout_ms` from VmShutdownRequest by parking the
     accept loop and waiting for in-flight requests to complete
     before letting the signal path proceed.
@@ -491,3 +490,81 @@ Open follow-ons:
     tray (needs forge↔tray plumbing on the unix path).
 
 129 headless tests passing. WIRE_VERSION unchanged at 2.
+
+## Update 2026-05-29T04:21Z — SIGTERM/SIGINT → phase=Stopping wiring (Q2 functionally complete)
+
+Closes the natural follow-on from `a10dc0f6`. Commit `08b9e96e`.
+
+Q2 is now functionally complete across all three transports — the
+phase a sibling-host client observes via `VmStatusRequest` tracks the
+truth across the entire tray lifecycle window:
+
+  * Linux tray (this commit): `Starting → Ready` on `UnixListener::
+    bind()` success → `Draining` on `VmShutdownRequest` →
+    `Stopping` on SIGTERM/SIGINT.
+  * Vsock (already in place): same shape via
+    `VmStateHandle::advance_to_ready_when_podman_up` +
+    `watch_shutdown_and_mark_stopping` since the gap-6 phase-
+    lifecycle wiring.
+
+Cross-host context: windows-next `80eceb0b` and macOS slice 20
+(`8b9baf8f`) BOTH now send `VmShutdownRequest` BEFORE tearing down
+WSL/VZ. They expect the in-VM headless to drain podman; this slice
+completes the symmetry by making the linux **host tray** itself
+transition phases on its own signal path. A sibling-host client
+polling `VmStatusRequest` during the entire shutdown sequence
+(tray-send-VmShutdownRequest → tray-receives-SIGTERM → tray-exit)
+sees the lifecycle truthfully.
+
+New `TrayPhaseHandle::watch_shutdown_and_mark_stopping_blocking`
+mirrors the vsock-side async helper:
+
+```rust
+fn watch_shutdown_and_mark_stopping_blocking(
+    &self, shutdown: Arc<AtomicBool>,
+) {
+    while !shutdown.load(Ordering::SeqCst) {
+        std::thread::sleep(Duration::from_millis(250));
+    }
+    if self.current_phase() != VmPhase::Failed {
+        self.set_phase(VmPhase::Stopping);
+    }
+}
+```
+
+Sync polling shape matches the accept-loop's `std::thread`.
+
+Wiring:
+
+  * `start_control_socket_server(shutdown: Arc<AtomicBool>)` —
+    accepts the shared SIGTERM atomic, spawns a watcher thread
+    holding a clone of the `TrayPhaseHandle` + a clone of the
+    atomic.
+  * `install_shutdown_signal_handlers` lifted from `fn` to
+    `pub(crate) fn` so the tray's `run_tray_mode_with_debug` can
+    install the same SIGTERM/SIGINT atomic the headless mode uses.
+  * Main runtime loop in `run_tray_mode_with_debug` swapped from
+    `futures::future::pending` (forever-await) to a tokio sleep
+    loop polling the atomic at 250 ms cadence. With signal-hook
+    intercepting SIGTERM/SIGINT, the process would otherwise never
+    exit on those signals.
+
+Tests: 2 new (watcher flips phase / defensive-guard against
+clobbering Failed). 141 headless tests passing (up from 129 + 10
+picked up from gemini's `45244a41` refactor).
+
+Updated matrix-Handle status on the unix dispatcher:
+
+| Variant                  | Status                                |
+|--------------------------|---------------------------------------|
+| `Hello`                  | ✓ handled                             |
+| `IssueWebSession`        | ✓ handled                             |
+| `EvictProject`           | ✓ handled                             |
+| `EnumerateLocalProjects` | ✓ handled (`05cc3a7d`)                |
+| `CloudRefreshRequest`    | ✓ handled (`71db9f68`)                |
+| `VmStatusRequest`        | ✓ handled — full lifecycle (`08b9e96e`)|
+| `VmShutdownRequest`      | ✓ handled (`a10dc0f6`)                |
+| `McpFrame`               | matrix-Handle, no handler — follow-on |
+
+McpFrame is now the **only** remaining matrix-Handle-but-no-handler
+variant on the unix dispatcher. WIRE_VERSION unchanged at 2.
