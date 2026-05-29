@@ -1,0 +1,85 @@
+# @trace spec:macos-native-tray
+# Drift protection for four pre-existing macos-native-tray spec invariants
+# that until now had no pre-build litmus coverage. Unlike slices 25 / 27 /
+# 28 / 29 (cross-tray symmetric pins), these are macOS-only architectural
+# invariants — UX-correction-series and Phase 0 establishment artifacts —
+# but they are equally drift-prone because they pin *absences* and
+# build-config shape that a refactor can violate without anything else
+# catching it.
+#
+# The four invariants pinned here (all from openspec/specs/macos-native-tray/spec.md):
+#
+#   1. `vz-via-vm-layer` (macos-native-tray.invariant.vz-via-vm-layer):
+#      `crates/tillandsias-macos-tray/src/**.rs CONTAINS no
+#      objc2_virtualization::` — VZ access SHALL route through
+#      tillandsias-vm-layer's abstraction (VzRuntime). A direct
+#      objc2_virtualization import in the tray would bypass the
+#      vm-layer trait surface and break the shared trait contract.
+#
+#   2. `no-tauri-or-webview` (macos-native-tray.invariant.no-tauri-or-
+#      webview): `crates/tillandsias-macos-tray/Cargo.toml CONTAINS no
+#      [tauri, wry, webview]` — architectural anti-dep, codifies the
+#      "thin AppKit wrapper" v1 shape (no embedded browser engine).
+#
+#   3. `lsuielement-true` (macos-native-tray.invariant.lsuielement-true):
+#      `Info.plist CONTAINS <key>LSUIElement</key><true/>` — without
+#      this, the tray binary would appear in the Dock + Cmd-Tab
+#      switcher, breaking the "menubar-only daemon" UX contract.
+#
+#   4. `terminal-attach-no-ssh` (macos-native-tray.invariant.terminal-
+#      attach-no-ssh): the live PTY-attach codepath SHALL never invoke
+#      ssh on the host (all VM I/O routes through virtio-vsock; no
+#      sshd in the in-VM forge container). Pin test
+#      `screen_attach_never_invokes_ssh` in terminal_attach.rs asserts
+#      this; this litmus enforces the test continues to exist.
+#
+# Pattern: each step's expected_behavior is a literal substring of the
+# step's stdout (per the matcher's substring rule documented at
+# scripts/run-litmus-test.sh:466 — same convention slices 27 + 28 + 29
+# established after the linux-host repair at e8659b38). For "must NOT
+# contain" invariants (1) + (2) we use the `! grep ... && echo <token>`
+# idiom: stdout is the success token on absence, empty on presence. The
+# matcher catches presence as a substring miss.
+
+name: litmus:macos-tray-architectural-invariants
+spec: macos-native-tray
+phase: pre-build
+description: "Pin four pre-existing macos-native-tray spec invariants without litmus coverage: vz-via-vm-layer, no-tauri-or-webview, lsuielement-true, terminal-attach-no-ssh."
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-macos-tray/src
+  - workspace contains crates/tillandsias-macos-tray/Cargo.toml
+  - workspace contains crates/tillandsias-macos-tray/assets/Info.plist.template
+  - workspace contains crates/tillandsias-macos-tray/src/terminal_attach.rs
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "vz-via-vm-layer: no direct objc2_virtualization:: imports in tray sources"
+    # The `:: ` after the crate name ensures we catch the use-path
+    # form (e.g. `objc2_virtualization::VZVirtualMachine`) without
+    # false-positiving on the @trace comments or docstrings that may
+    # mention the crate name as text. Inverted grep pattern produces
+    # the success token on absence, empty stdout on presence.
+    command: "! grep -rq 'objc2_virtualization::' crates/tillandsias-macos-tray/src/ && echo 'no-direct-vz-import'"
+    expected_behavior: "no-direct-vz-import"
+    timeout_ms: 3000
+
+  - step: "no-tauri-or-webview: macos-tray Cargo.toml carries no [tauri, wry, webview] deps"
+    command: "! grep -qE 'tauri|wry|webview' crates/tillandsias-macos-tray/Cargo.toml && echo 'no-tauri-or-webview'"
+    expected_behavior: "no-tauri-or-webview"
+    timeout_ms: 3000
+
+  - step: "lsuielement-true: Info.plist template binds LSUIElement -> <true/>"
+    # grep -A1 extracts the LSUIElement key line + the next line (the
+    # value); pipe through grep '<true/>' to confirm the value is true.
+    # Robust against other `<true/>` values elsewhere in the plist.
+    command: "grep -A1 -F '<key>LSUIElement</key>' crates/tillandsias-macos-tray/assets/Info.plist.template | grep -F '<true/>' && echo 'lsuielement-is-true'"
+    expected_behavior: "lsuielement-is-true"
+    timeout_ms: 3000
+
+  - step: "terminal-attach-no-ssh: pin test screen_attach_never_invokes_ssh exists"
+    command: "grep -F 'fn screen_attach_never_invokes_ssh' crates/tillandsias-macos-tray/src/terminal_attach.rs"
+    expected_behavior: "screen_attach_never_invokes_ssh"
+    timeout_ms: 3000

@@ -2899,3 +2899,31 @@ step 5 lands.
 - YAML parses cleanly. No Rust changes.
 - Streak: 0 (productive iter). Next macOS iter eligible at
   ~14:05Z.
+
+### event: macOS slice 30 — macOS-only architectural-invariants litmus — 2026-05-29T14:10Z
+
+- New `openspec/litmus-tests/litmus-macos-tray-architectural-
+  invariants.yaml` (4 grep steps, all PASS locally + verified
+  through the matcher) pinning FOUR pre-existing macos-spec
+  invariants that had ZERO litmus coverage:
+    1. `vz-via-vm-layer` (no `objc2_virtualization::` use-paths in
+       macos-tray sources)
+    2. `no-tauri-or-webview` (no [tauri, wry, webview] deps in
+       Cargo.toml)
+    3. `lsuielement-true` (Info.plist binds LSUIElement -> <true/>)
+    4. `terminal-attach-no-ssh` (the `screen_attach_never_invokes_ssh`
+       pin test in `terminal_attach.rs` exists)
+- Unlike slices 25-29 (cross-tray symmetric pins), these are
+  macOS-only architectural invariants pinning *absences* and
+  build-config shape; equally drift-prone because nothing else
+  catches a refactor that breaks them.
+- Uses `! grep ... && echo <token>` idiom for "must NOT contain"
+  steps (1+2), so the matcher's substring rule is satisfied via
+  the success-token output. Same `expected_behavior = literal
+  substring of stdout` convention slices 27+28+29 established.
+- Selected via /advance-work-from-plan §2 priority #2 "spec gap
+  fills" — invariants 1-4 had no implementation coverage.
+- Bound on macos-native-tray (6 litmuses now, coverage stays 100%).
+  macOS spec invariants pinned by litmus jumped 2/12 -> 6/12.
+- YAML parses cleanly. No Rust changes.
+- Streak: 0 (productive iter). Next macOS iter eligible at ~14:40Z.
