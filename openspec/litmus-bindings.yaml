@@ -341,8 +341,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:host-browser-mcp-shape
-  coverage_ratio: 33
-  last_verified: '2026-05-12'
+  - litmus:host-browser-mcp-frame-shape
+  coverage_ratio: 67
+  last_verified: '2026-05-29'
 - spec_id: host-chromium
   status: obsolete
   litmus_tests: null
