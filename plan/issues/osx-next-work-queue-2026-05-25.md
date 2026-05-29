@@ -2794,3 +2794,21 @@ step 5 lands.
   ship without updating both specs in lockstep.
 - Streak: 0 (productive iter). Next macOS iter eligible at
   ~09:00Z.
+
+### event: macOS slice 25 — bind cross-tray wire-unreachable symmetric litmus — 2026-05-29T10:00Z
+
+- Commit `fdd01b6d`. Windows landed `43737173` — a cross-tray
+  litmus grep-asserting both trays' WIRE_UNREACHABLE_CHIP_TEXT
+  const + identically-named pin test stay in lockstep at the
+  source level. They explicitly invited the macOS-side binding.
+- Two issues addressed:
+    1. The litmus was bound to windows-native-tray (50% coverage).
+    2. macos-native-tray had **no entry at all** in
+       `openspec/litmus-bindings.yaml` — pre-existing spec-tracking
+       gap.
+- Added the missing macos-native-tray binding with the windows-
+  symmetric litmus pinned (50% coverage, mirrors the windows
+  binding). YAML parses cleanly post-edit.
+- Resets noop streak — file deleted in `fdd01b6d`.
+- Streak: 0 (productive iter). Next macOS iter eligible at
+  ~10:30Z.
