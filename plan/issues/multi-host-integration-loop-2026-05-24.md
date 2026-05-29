@@ -51,6 +51,46 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-29T05:43Z — MERGED windows-next (wire degradation chip) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `a258e20a` (merge commit; linux-next was at
+  `f8f68bea` pre-merge, having just fast-forwarded an osx-next coord
+  cycle that put linux + osx heads in lock-step).
+- observed_sibling_heads: main=`fa746f03` · linux-next=`f8f68bea`
+  (pre-merge) · windows-next=`d2cf10f0` · osx-next=`f8f68bea`
+- windows-next action: **merged + tested + pushed**. Single commit
+  `d2cf10f0 feat(windows-next): surface wire degradation in the live
+  chip` — adds `mark_wire_unreachable(hwnd)` called from all three
+  refresh_vm_status error paths (transport open, handshake, request).
+  Updates `MENU_STATE.status_text` to a red "Wire unreachable"
+  indicator and clears `MENU_STATE.podman_ready` so per-project
+  actions re-gate via `menu_state::build`. Next successful poll
+  restores the phase + podman chip naturally — bounded flicker only
+  on actual error. Touched files: `crates/tillandsias-windows-tray/
+  src/notify_icon.rs` + `cheatsheets/runtime/windows-tray-
+  diagnostics.md` (both windows-owned). windows-tray suite 32/32,
+  fmt + clippy clean.
+- osx-next action: **no-op** (head identical to linux-next post-
+  recent coord cycle — osx already fast-forwarded into linux work).
+- Verification: `./build.sh --check` clean + `./build.sh --test`
+  clean (full workspace test suite passed).
+- Spec/methodology/plan drift: NONE — windows commit touches only
+  the windows-tray crate + its own runtime cheatsheet. No openspec/,
+  methodology/, or plan/ files affected.
+- Cross-host convergence note: looking back at sibling commits
+  already in linux-next from the earlier osx coord cycle, macOS
+  ALSO just shipped `36879a5e m4(macos-tray): surface wire
+  degradation in live chip (slice 21)` — exact same UX pattern in
+  parallel on both platforms. Wire-degradation surfacing is the
+  natural follow-on to Q2's lifecycle-phase visibility work
+  (linux a10dc0f6 + 08b9e96e earlier this session): once both
+  tray platforms can SEE phase transitions, both want to render
+  wire-unreachable as a distinct UX state when polling itself
+  fails. Linux native unix-socket tray doesn't have an analogous
+  surface today; not a blocker — the linux tray's failure mode is
+  the process dying, not a remote wire breaking.
+
 ### Cycle 2026-05-29T03:43Z — MERGED windows-next (VmShutdownRequest on Quit, Q2 consumption) ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
