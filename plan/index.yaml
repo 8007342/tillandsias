@@ -1071,7 +1071,7 @@ plan_index:
           checkpoint_required: true
           handoff_note: "Dedicated CLI facade and thin shell delegate landed on 2026-05-18."
         - id: podman-control-plane-overhaul/migrate-legacy-shell
-          status: ready
+          status: claimed
           depends_on: [podman-control-plane-overhaul/facade]
           owned_files:
             - build.sh
@@ -1079,6 +1079,13 @@ plan_index:
             - scripts/run-litmus-test.sh
           checkpoint_required: true
           handoff_note: "Next wave: retire residual shell orchestration, then enable strict no-direct-Podman audit."
+          events:
+            - type: claim
+              ts: "2026-05-29T03:07:00Z"
+              agent_id: "linux-macuahuitl-gemini-2026-05-29T030553Z"
+              host: "linux"
+              lease_id: "lease-linux-migrate-legacy-shell-20260529T0306"
+              expires_at: "2026-05-29T07:07:00Z"
 
     - id: methodology-reconciliation
       order: 16.5
