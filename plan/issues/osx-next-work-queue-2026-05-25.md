@@ -2927,3 +2927,34 @@ step 5 lands.
   macOS spec invariants pinned by litmus jumped 2/12 -> 6/12.
 - YAML parses cleanly. No Rust changes.
 - Streak: 0 (productive iter). Next macOS iter eligible at ~14:40Z.
+
+### event: macOS slice 31 — extend architectural-invariants litmus +4 invariants — 2026-05-29T14:45Z
+
+- Extended slice 30's `litmus-macos-tray-architectural-invariants.yaml`
+  with 5 more grep patterns pinning 4 additional macOS spec
+  invariants:
+    (5) menu-from-host-shell-state: status_item.rs uses
+        `menu_state::build`
+    (6) gui-items-deferred-to-v2: pin test
+        `macos_target_disables_observatorium_and_opencode_web_for_v2`
+        exists in shared menu_state.rs
+    (7) terminal-uses-iterm2-when-default: pin test
+        `terminal_detection_returns_iterm2_preferred_when_present`
+        exists in terminal_attach.rs
+    (8) vz-cid-allocated-at-config: `VzRuntime::new(guest_cid: u32,
+        ...)` constructor signature proves config-time allocation
+    (9) no-display-passthrough-in-v1: `! grep VZGraphics... && echo`
+        catches absence in vz.rs
+- All 5 new steps verified locally + simulated through the matcher
+  (all MATCH). Same `! grep ... && echo <token>` idiom for step 9
+  (absence-pin) as slices 30 + 28 + 27 used for similar patterns.
+- macOS spec invariants pinned by litmus jumped 6/12 → 10/12. Only
+  `menu-renders-in-50ms` remains (runtime perf, not statically
+  pinnable).
+- Selected via /advance-work-from-plan §2 priority #2 "spec gap
+  fills". Extended existing slice-30 file (single architectural-
+  invariants litmus is the natural home for these) rather than
+  fragmenting into a new YAML.
+- Coverage on macos-native-tray binding stays at 6 litmuses / 100%.
+  No Rust changes. YAML validates clean.
+- Streak: 0 (productive iter). Next macOS iter eligible at ~15:15Z.

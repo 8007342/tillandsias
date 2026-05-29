@@ -1,5 +1,5 @@
 # @trace spec:macos-native-tray
-# Drift protection for four pre-existing macos-native-tray spec invariants
+# Drift protection for nine pre-existing macos-native-tray spec invariants
 # that until now had no pre-build litmus coverage. Unlike slices 25 / 27 /
 # 28 / 29 (cross-tray symmetric pins), these are macOS-only architectural
 # invariants — UX-correction-series and Phase 0 establishment artifacts —
@@ -7,7 +7,16 @@
 # build-config shape that a refactor can violate without anything else
 # catching it.
 #
-# The four invariants pinned here (all from openspec/specs/macos-native-tray/spec.md):
+# Slice 30 (2026-05-29T14:10Z) introduced the first four steps (vz-via-vm-
+# layer, no-tauri-or-webview, lsuielement-true, terminal-attach-no-ssh).
+# Slice 31 (2026-05-29T14:45Z) extends with five more grep patterns
+# pinning four additional invariants: menu-from-host-shell-state,
+# gui-items-deferred-to-v2, terminal-uses-iterm2-when-default, vz-cid-
+# allocated-at-config, no-display-passthrough-in-v1. macOS-spec
+# invariants pinned by litmus is now 10/12 (only menu-renders-in-50ms
+# remains: runtime perf, not statically pinnable).
+#
+# The nine invariants pinned here (all from openspec/specs/macos-native-tray/spec.md):
 #
 #   1. `vz-via-vm-layer` (macos-native-tray.invariant.vz-via-vm-layer):
 #      `crates/tillandsias-macos-tray/src/**.rs CONTAINS no
@@ -44,7 +53,7 @@
 name: litmus:macos-tray-architectural-invariants
 spec: macos-native-tray
 phase: pre-build
-description: "Pin four pre-existing macos-native-tray spec invariants without litmus coverage: vz-via-vm-layer, no-tauri-or-webview, lsuielement-true, terminal-attach-no-ssh."
+description: "Pin nine pre-existing macos-native-tray spec invariants without litmus coverage: vz-via-vm-layer, no-tauri-or-webview, lsuielement-true, terminal-attach-no-ssh, menu-from-host-shell-state, gui-items-deferred-to-v2, terminal-uses-iterm2-when-default, vz-cid-allocated-at-config, no-display-passthrough-in-v1."
 severity: medium
 size: instant
 
@@ -53,6 +62,9 @@ preconditions:
   - workspace contains crates/tillandsias-macos-tray/Cargo.toml
   - workspace contains crates/tillandsias-macos-tray/assets/Info.plist.template
   - workspace contains crates/tillandsias-macos-tray/src/terminal_attach.rs
+  - workspace contains crates/tillandsias-macos-tray/src/status_item.rs
+  - workspace contains crates/tillandsias-host-shell/src/menu_state.rs
+  - workspace contains crates/tillandsias-vm-layer/src/vz.rs
   - shell utilities (grep) are available in PATH
 
 critical_path:
@@ -82,4 +94,45 @@ critical_path:
   - step: "terminal-attach-no-ssh: pin test screen_attach_never_invokes_ssh exists"
     command: "grep -F 'fn screen_attach_never_invokes_ssh' crates/tillandsias-macos-tray/src/terminal_attach.rs"
     expected_behavior: "screen_attach_never_invokes_ssh"
+    timeout_ms: 3000
+
+  # Slice 31 additions (4 more invariants, 5 grep patterns):
+
+  - step: "menu-from-host-shell-state: status_item builds via host_shell::menu_state::build"
+    command: "grep -F 'menu_state::build' crates/tillandsias-macos-tray/src/status_item.rs"
+    expected_behavior: "menu_state::build"
+    timeout_ms: 3000
+
+  - step: "gui-items-deferred-to-v2: shared menu_state pin test disables observatorium + opencode_web for MacosTray"
+    # The macos-target rendering of MenuStructure must mark
+    # observatorium + opencode_web disabled on v1. The pin test on the
+    # shared menu_state.rs codifies this behaviour for the MacosTray
+    # surface; this litmus enforces the test continues to exist.
+    command: "grep -F 'fn macos_target_disables_observatorium_and_opencode_web_for_v2' crates/tillandsias-host-shell/src/menu_state.rs"
+    expected_behavior: "macos_target_disables_observatorium_and_opencode_web_for_v2"
+    timeout_ms: 3000
+
+  - step: "terminal-uses-iterm2-when-default: pin test terminal_detection_returns_iterm2_preferred_when_present exists"
+    command: "grep -F 'fn terminal_detection_returns_iterm2_preferred_when_present' crates/tillandsias-macos-tray/src/terminal_attach.rs"
+    expected_behavior: "terminal_detection_returns_iterm2_preferred_when_present"
+    timeout_ms: 3000
+
+  - step: "vz-cid-allocated-at-config: VzRuntime::new takes guest_cid: u32 at construction"
+    # The constructor signature `pub fn new(guest_cid: u32, image_root:
+    # PathBuf) -> Self` proves the CID is allocated when the runtime is
+    # built (config-time), not later at run time. A future refactor that
+    # made CID a runtime parameter (e.g. allocated during start() call)
+    # would change this signature.
+    command: "grep -F 'pub fn new(guest_cid: u32' crates/tillandsias-vm-layer/src/vz.rs"
+    expected_behavior: "pub fn new(guest_cid: u32"
+    timeout_ms: 3000
+
+  - step: "no-display-passthrough-in-v1: vz.rs configures no graphics device"
+    # The v1 spec invariant prohibits display passthrough. Adding a
+    # VZGraphicsDeviceConfiguration (the VFR type that exposes a virtual
+    # GPU + framebuffer to the guest) would silently violate this. The
+    # `! grep ... && echo <token>` idiom catches the absence; presence
+    # leaves stdout empty and the matcher fails the step.
+    command: "! grep -qE 'VZGraphicsDeviceConfiguration|graphics_device' crates/tillandsias-vm-layer/src/vz.rs && echo 'no-display-passthrough'"
+    expected_behavior: "no-display-passthrough"
     timeout_ms: 3000
