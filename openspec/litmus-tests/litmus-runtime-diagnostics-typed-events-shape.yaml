@@ -38,31 +38,31 @@ preconditions:
   - shell utilities (grep) are available in PATH
 
 critical_path:
+  # The runner parses single-line `command: "..."` only — folded `>`
+  # multi-line scalars aren't recognised (the runner counts zero steps
+  # and returns a generic "Check implementation" failure). This litmus
+  # shipped previously with folded scalars and was silently NEVER
+  # executing in the runner — discovered while binding it to
+  # `spec:runtime-diagnostics-stream` on 2026-05-29. Converted in
+  # lockstep with the binding so the green-on-paper failure-in-
+  # practice doesn't survive activation.
   - step: "container_exit formatter + wire-shape literal present"
-    command: >
-      grep -F 'fn format_container_exit_event' crates/tillandsias-podman/src/client.rs
-      && grep -F 'event:container_exit container=' crates/tillandsias-podman/src/client.rs
+    command: "grep -F 'fn format_container_exit_event' crates/tillandsias-podman/src/client.rs && grep -F 'event:container_exit container=' crates/tillandsias-podman/src/client.rs"
     timeout_ms: 3000
     expected_behavior: "event:container_exit container="
 
   - step: "container_signal formatter + wire-shape literal present"
-    command: >
-      grep -F 'fn format_container_signal_event' crates/tillandsias-podman/src/client.rs
-      && grep -F 'event:container_signal container=' crates/tillandsias-podman/src/client.rs
+    command: "grep -F 'fn format_container_signal_event' crates/tillandsias-podman/src/client.rs && grep -F 'event:container_signal container=' crates/tillandsias-podman/src/client.rs"
     timeout_ms: 3000
     expected_behavior: "event:container_signal container="
 
   - step: "resource_exhaustion formatter + wire-shape literal present"
-    command: >
-      grep -F 'fn format_resource_exhaustion_event' crates/tillandsias-podman/src/client.rs
-      && grep -F 'event:resource_exhaustion container=' crates/tillandsias-podman/src/client.rs
+    command: "grep -F 'fn format_resource_exhaustion_event' crates/tillandsias-podman/src/client.rs && grep -F 'event:resource_exhaustion container=' crates/tillandsias-podman/src/client.rs"
     timeout_ms: 3000
     expected_behavior: "event:resource_exhaustion container="
 
   - step: "container_stderr formatter + wire-shape literal present"
-    command: >
-      grep -F 'fn format_container_stderr_event' crates/tillandsias-podman/src/client.rs
-      && grep -F 'event:container_stderr container=' crates/tillandsias-podman/src/client.rs
+    command: "grep -F 'fn format_container_stderr_event' crates/tillandsias-podman/src/client.rs && grep -F 'event:container_stderr container=' crates/tillandsias-podman/src/client.rs"
     timeout_ms: 3000
     expected_behavior: "event:container_stderr container="
 
@@ -71,20 +71,12 @@ critical_path:
     # TILLANDSIAS_DEBUG_FILTER / _CONTAINER / _LEVEL env vars take effect
     # across all typed events (gap-5 phase-1). A regression that bypasses
     # the filter would break event filtering silently.
-    command: >
-      grep -F 'fn emit_diagnostic_event' crates/tillandsias-podman/src/client.rs
-      && grep -F 'DiagnosticsFilter::global()' crates/tillandsias-podman/src/client.rs
+    command: "grep -F 'fn emit_diagnostic_event' crates/tillandsias-podman/src/client.rs && grep -F 'DiagnosticsFilter::global()' crates/tillandsias-podman/src/client.rs"
     timeout_ms: 3000
     expected_behavior: "DiagnosticsFilter::global()"
 
   - step: "unit tests pinning each shape are attached"
-    # If a future refactor renames the test or drops the assertion, this
-    # step surfaces the regression immediately even before cargo test runs.
-    command: >
-      grep -F 'fn container_exit_event_shape' crates/tillandsias-podman/src/client.rs
-      && grep -F 'fn container_signal_event_shape' crates/tillandsias-podman/src/client.rs
-      && grep -F 'fn resource_exhaustion_event_shape' crates/tillandsias-podman/src/client.rs
-      && grep -F 'fn container_stderr_event_shape' crates/tillandsias-podman/src/client.rs
+    command: "grep -F 'fn container_exit_event_shape' crates/tillandsias-podman/src/client.rs && grep -F 'fn container_signal_event_shape' crates/tillandsias-podman/src/client.rs && grep -F 'fn resource_exhaustion_event_shape' crates/tillandsias-podman/src/client.rs && grep -F 'fn container_stderr_event_shape' crates/tillandsias-podman/src/client.rs"
     timeout_ms: 3000
     expected_behavior: "container_stderr_event_shape"
 
