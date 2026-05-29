@@ -170,6 +170,164 @@ bounded slices from. Each item is sized for one loop iteration. NOT for siblings
   cache. Catches env-var renames that would silently break user-
   visible filter behaviour without breaking any constructor-based
   unit test. Seven grep-based steps, all green on linux-next HEAD.
+- **GAP 3 PHASE-2A** (records-sink surface): `PodmanEventStream`
+  gained a `stream_records(tx: mpsc::Sender<ContainerLifecycleRecord>)`
+  public method — lossless sibling of the existing
+  `stream(tx: mpsc::Sender<PodmanEvent>)`. Internal `stream_events` /
+  `stream_events_wsl` / `backoff_inspect` generalised on
+  `T: From<ContainerLifecycleRecord> + Send + 'static` so both public
+  entry points share the same retry/backoff/fall-back machinery.
+  Reflexive `T: From<T>` makes the records case a free no-op conversion;
+  PodmanEvent path is unchanged. A compile-pinning unit test asserts
+  the records-sink signature stays compatible. This is the channel
+  surface the gap-3 phase-2 diagnostics-stream emitter slice will
+  consume (records → `format_container_exit_event`/etc. →
+  `emit_diagnostic_event`).
+- **GAP 3 PHASE-2B** (routing helper): new module
+  `crates/tillandsias-podman/src/diagnostic_event_emitter.rs` glues
+  the records-sink (phase-2a) to the staged formatters (phase-1) and
+  the global filter (gap-5 phase-1). Public:
+  `spawn_diagnostic_event_emitter(enabled: bool, prefix: &str)` —
+  returns `Some(JoinHandle)` when `enabled` so the caller (next
+  slice: `run_opencode_mode`) can abort on shutdown; `None` and zero
+  cost when disabled. Today routes `ContainerLifecycleAction::Died →
+  format_container_exit_event` (with `exit_code` from the podman
+  events payload; `duration_seconds=None` until start→exit pairing
+  state lands). Signal/resource/stderr arms documented as deferred
+  (signal: podman's `Status=kill` records the request, not the
+  delivered signal; resource: needs `Status=oom` parse extension;
+  stderr: belongs on the per-container `podman logs -f` tail path,
+  not the events stream). Three unit tests cover disabled-path,
+  Died-with-and-without-exit-code routing, and exhaustive lifecycle-
+  action coverage so future variants must be considered.
+- **GAP 3 PHASE-2C** (live wiring): `run_opencode_mode` now spawns
+  `spawn_diagnostic_event_emitter(debug, "tillandsias-")` at the top
+  of its podman-runtime block and aborts the handle after the
+  foreground forge exits. The next `--diagnostics` capture should
+  carry real `event:container_exit container=tillandsias-…
+  exit_code=…` lines in the `.stderr.log` companion — surfaced in
+  the distill "Container-Start Stream" section that the orchestrator
+  reads from `plan/diagnostics/`.
+  ALSO (later slice): `run_observatorium_mode` got the same phase-2c
+  + phase-2g wiring inside its `rt.block_on` — spawning
+  `spawn_diagnostic_event_emitter` and a typed-stderr
+  `DiagnosticsHandle` on `[tillandsias-router, observatorium_name]`.
+  Caveat: the block_on closes BEFORE the synchronous
+  `wait_for_observatorium_http_ready` and `launch_observatorium_
+  browser` calls, so chromium-core / chromium-framework container
+  events are NOT captured by this slice. A follow-on slice could
+  raise the emitter to a higher scope. Litmus
+  `litmus-runtime-diagnostics-emitter-shape` extended with a step
+  that asserts both forge-launching modes wire both helpers (counts
+  must be ≥ 2 each).
+- **GAP 3 PHASE-2D** (OOM event): added
+  `ContainerLifecycleAction::Oom` to the parser action table and the
+  `Display` impl; `parse_podman_lifecycle_record` now maps
+  `Status=oom` → `(Oom, ContainerState::Stopped)`. The diagnostic
+  event emitter routes Oom → `format_resource_exhaustion_event` with
+  `resource=memory_oom`, `limit_bytes=None` (podman events don't
+  carry the cgroup limit; a follow-on inspect-lookup could fill it).
+  Two new unit tests: parser maps `Status=oom` correctly, and the
+  emitter routes Oom without panicking. The non-routing exhaustive
+  test was updated to reflect that Died+Oom both now route.
+- **GAP 3 PHASE-2E** (duration_seconds): start→exit pairing landed.
+  `EmitterState` carries a `HashMap<container_name, observed_at>`
+  populated by Started records and consumed by Died records to
+  compute `duration_seconds=(end-start)`. Entries are evicted on
+  Died, Removed, or CleanedUp so `--rm` containers don't leak.
+  Died without a prior Started cleanly emits `duration_seconds=None`
+  — never fabricated. Five new unit tests cover the pairing
+  contract: Started records observed_at; Died computes duration +
+  evicts; Died-without-Started reports None; Removed/CleanedUp
+  evict; multiple containers tracked independently.
+- **GAP 3 PHASE-2F** (signal extraction): signal-induced Died routes
+  through `event:container_signal` BEFORE `event:container_exit`.
+  POSIX convention: exit code `128 + signal_num` → the signal was
+  delivered. New `signal_name_from_exit_code(code) -> Option<String>`
+  maps the common signals (SIGINT/SIGABRT/SIGKILL/SIGSEGV/SIGPIPE/
+  SIGALRM/SIGTERM) to canonical names and falls back to `SIG<n>` for
+  anything outside the well-known set; clean-exit codes (0..=128)
+  and out-of-range codes return None. The exit line still follows
+  with the original exit_code + duration_seconds, so a downstream
+  consumer sees BOTH facts: which signal precipitated the death AND
+  the resulting exit code + duration. Four new unit tests pin the
+  mapping (common signals, numeric fallback, clean-exit None,
+  out-of-range None) plus a no-panic test for the routed path.
+- **GAP 3 PHASE-2G** (container_stderr): new
+  `DiagnosticsHandle::start_typed_event_stream(container_names) ->
+  Self` in `diagnostics_stream.rs` — sibling of the existing
+  human-format `start()`. Each accepted container gets a
+  `podman logs -f` follow task forwarding lines through
+  `format_container_stderr_event` + `emit_diagnostic_event`, so
+  every observed log line lands on stderr as
+  `[<ISO-8601>] event:container_stderr container=<name>
+  line="<escaped>"` and rides the DiagnosticsFilter env-var gates
+  (gap-5 phase-1). Wired into `run_opencode_mode` immediately after
+  the inference container launches, on the SUPPORT containers
+  (router/proxy/git/inference). The foreground forge is excluded
+  because it's served attached to the user's terminal by
+  `run_container_attached_observed` and tailing it here would
+  double-print. `DiagnosticsHandle::Drop` aborts every spawned tail
+  on closure exit (no explicit abort needed). Compile-pinning unit
+  test asserts the signature stays compatible.
+
+  WITH this, the 6-arm gap-3 typed-event chain is COMPLETE:
+    1. container_launch (emit_launch_event, gap-3 phase-1)
+    2. container_exit (Died → format_container_exit_event, phases
+       1b + 2c + 2e)
+    3. container_signal (signal-range exit_code, phase-2f)
+    4. resource_exhaustion (Oom → format_resource_exhaustion_event,
+       phase-2d)
+    5. container_stderr (DiagnosticsHandle typed tail, phase-2g)
+    6. internal_* (verbose level via DiagnosticsFilter, gap-5 phase-1)
+- **GAP 3 PHASE-2 PINNING**: new instant-phase litmus
+  `litmus-runtime-diagnostics-emitter-shape` greps the
+  emitter-layer surfaces (`spawn_diagnostic_event_emitter`,
+  `EmitterState { start_times: HashMap<String, i64> }`,
+  `signal_name_from_exit_code` + the canonical signal names,
+  the five routing arms by `ContainerLifecycleAction::*` literal,
+  `start_typed_event_stream` + its `format_container_stderr_event`
+  bridge + the `event:container_stderr` literal, and the
+  `run_opencode_mode` wiring calls). Seven grep steps catch a
+  formatter rename, a routing-arm deletion, or a missing wiring
+  call that the formatter-shape litmus would miss. Companion to
+  the existing `litmus-runtime-diagnostics-typed-events-shape`
+  (formatter layer) and `litmus-diagnostics-filter-env-shape`
+  (env-var layer).
+- **GAP 5 PHASE-2** (ring buffer + backpressure log): the records
+  channel in `run_emitter` is now sized at 10 000 per
+  spec:runtime-diagnostics-stream "Terminal blocked" max. A new
+  `BackpressureMeter { threshold, above: bool }` watches the in-
+  flight depth (`capacity - sender.capacity()`) on every recv;
+  when the depth crosses 100 (rising edge only, per spec "Event
+  rate limit") it emits a single `warn` line with
+  `event_buffer_depth = N`. State machine pinned by three unit
+  tests: rising-crossing logs once, sustained-high stays quiet,
+  drop-then-rise logs again; `depth = threshold` is NOT "above"
+  (strict `> 100`); depth=0 is silent (guards integer
+  underflow). spec permits dropping oldest on overflow but does
+  not require it — tokio mpsc's await-on-full is the simpler
+  honest backpressure signal.
+- **PRODUCTION VALIDATION 2026-05-28T19:02Z**: the local annex
+  capture at `target/forge-diagnostics/diagnostics_20260528T190248Z.
+  stderr.log` confirms gap-3 phase-2g `event:container_stderr` is
+  shipping real spec-shape lines under `--diagnostics`:
+  `[<ISO-8601>] event:container_stderr container=tillandsias-proxy
+  line="…"`. 115 stderr lines across two support containers
+  (`tillandsias-proxy` × 107, `tillandsias-git-…` × 8). No exits/
+  signals/oom because the support set is long-running. The earlier
+  18:42Z capture has zero typed-event-2g lines (pre-deployment),
+  so the binary cutover happened between those two runs.
+  Companion slice: `scripts/distill-forge-diagnostics.sh` now
+  surfaces ALL 5 typed-event arms in a "Typed-event arms" table
+  with sample lines for exit/signal/resource and a top-5
+  noisiest-by-container table for stderr — so the orchestrator
+  reads these from the durable `plan/diagnostics/` summaries
+  instead of having to chase the raw `target/forge-diagnostics/`
+  logs that don't propagate across hosts. Also fixed a
+  pre-existing `set -euo pipefail` abort in distill when the raw
+  log is empty (grep no-match on `^TIMESTAMP=` would crash before
+  any summary was written).
   (Next diagnostics gap: GAP 2 / GAP 3 PHASE-2 — wire the live podman
   events parser to emit_diagnostic_event when `debug` is on.)
 

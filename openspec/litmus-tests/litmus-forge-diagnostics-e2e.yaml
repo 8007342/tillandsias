@@ -45,37 +45,7 @@ critical_path:
     timeout_ms: 600000
 
   - step: "validate output is parseable JSON with diagnostics_timestamp field"
-    command: >
-      LOG=$(ls -t target/forge-diagnostics/diagnostics_*.log 2>/dev/null | head -1)
-      && [ -n "$LOG" ]
-      && cat "$LOG" | python3 -c "
-import json, sys
-data = json.load(sys.stdin)
-assert 'diagnostics_timestamp' in data, 'missing diagnostics_timestamp'
-assert 'capabilities' in data, 'missing capabilities'
-caps = data['capabilities']
-assert 'agent_available' in caps, 'missing agent_available'
-# Structural (methodology forge-diagnostics response_shape): the three
-# actionable arrays must be present + lists. Their CONTENTS are non-gating
-# (agent_diagnostic annex), but absence is an invalid-structure failure.
-for field in ('missing_tools', 'proposed_enhancements', 'isolation_or_privacy_risks'):
-    assert field in data, f'missing {field}'
-    assert isinstance(data[field], list), f'{field} must be a list'
-print('PASS: forge diagnostics JSON valid')
-print(f'  timestamp: {data[\"diagnostics_timestamp\"]}')
-# Non-gating: report capability status without failing
-for section, values in caps.items():
-    if isinstance(values, dict):
-        for key, val in values.items():
-            status = 'OK' if val not in ('unset', 'N/A', 'BLOCKED', 'NOT_FOUND', 'NONE') else 'MISSING'
-            print(f'  [{status}] {section}.{key} = {val}')
-    else:
-        print(f'  [INFO] {section} = {values}')
-# Surface the actionable analysis (non-gating) so a CI run shows gaps.
-print(f'  missing_tools: {len(data[\"missing_tools\"])}; '
-      f'proposed_enhancements: {len(data[\"proposed_enhancements\"])}; '
-      f'isolation_risks: {len(data[\"isolation_or_privacy_risks\"])}')
-"
+    command: "LOG=$(ls -t target/forge-diagnostics/diagnostics_*.log 2>/dev/null | head -1) && [ -n \"$LOG\" ] && python3 -c \"import json, sys; data = json.load(sys.stdin); assert 'diagnostics_timestamp' in data, 'missing diagnostics_timestamp'; assert 'capabilities' in data, 'missing capabilities'; caps = data['capabilities']; assert 'agent_available' in caps, 'missing agent_available'; [ [sys.stderr.write(f'error: {f} not in data\n'), sys.exit(1)] for f in ('missing_tools', 'proposed_enhancements', 'isolation_or_privacy_risks') if f not in data or not isinstance(data[f], list) ]; print('PASS: forge diagnostics JSON valid'); print(f'  timestamp: {data[\\\"diagnostics_timestamp\\\"]}'); [ [print(f'  [{\\\"OK\\\" if val not in (\\\"unset\\\", \\\"N/A\\\", \\\"BLOCKED\\\", \\\"NOT_FOUND\\\", \\\"NONE\\\") else \\\"MISSING\\\"}] {sec}.{key} = {val}') for key, val in vals.items()] if isinstance(vals, dict) else print(f'  [INFO] {sec} = {vals}') for sec, vals in caps.items() ]; print(f'  missing_tools: {len(data[\\\"missing_tools\\\"])}; proposed_enhancements: {len(data[\\\"proposed_enhancements\\\"])}; isolation_risks: {len(data[\\\"isolation_or_privacy_risks\\\"])}')\" < \"$LOG\""
     timeout_ms: 15000
 
   - step: "container-start health: the idiomatic layer emitted at least one running event"
@@ -87,12 +57,7 @@ print(f'  missing_tools: {len(data[\"missing_tools\"])}; '
     # bypass would NOT produce these. Field order is pinned by the unit
     # test `launch_event_line_shape_is_stable`; keep this grep in lockstep.
     # @trace spec:runtime-diagnostics-stream, spec:podman-idiomatic-patterns
-    command: >
-      STDERR=$(ls -t target/forge-diagnostics/diagnostics_*.stderr.log 2>/dev/null | head -1)
-      && [ -n "$STDERR" ]
-      && [ -s "$STDERR" ]
-      && grep -Eq 'event:container_launch stage=[^ ]+ state=running container=' "$STDERR"
-      && echo "ok: idiomatic layer reported >=1 container running via diagnostics annex"
+    command: "STDERR=$(ls -t target/forge-diagnostics/diagnostics_*.stderr.log 2>/dev/null | head -1) && [ -n \"$STDERR\" ] && [ -s \"$STDERR\" ] && grep -Eq 'event:container_launch stage=[^ ]+ state=running container=' \"$STDERR\" && echo \"ok: idiomatic layer reported >=1 container running via diagnostics annex\""
     timeout_ms: 10000
     expected_behavior: "ok: idiomatic layer reported >=1 container running via diagnostics annex"
 
@@ -101,14 +66,7 @@ print(f'  missing_tools: {len(data[\"missing_tools\"])}; '
     # from the stream. Gating: a single failed line in the diagnostics
     # cycle invalidates the structured report (containers didn't reach
     # the state the JSON claims).
-    command: >
-      STDERR=$(ls -t target/forge-diagnostics/diagnostics_*.stderr.log 2>/dev/null | head -1)
-      && [ -n "$STDERR" ]
-      && if grep -E 'event:container_launch .* state=failed' "$STDERR"; then
-           echo "FAIL: a container launch failed during the annex capture (see lines above)"; exit 1;
-         else
-           echo "ok: no container_launch state=failed in annex stderr";
-         fi
+    command: "STDERR=$(ls -t target/forge-diagnostics/diagnostics_*.stderr.log 2>/dev/null | head -1) && [ -n \"$STDERR\" ] && if grep -E 'event:container_launch .* state=failed' \"$STDERR\"; then echo \"FAIL: a container launch failed during the annex capture (see lines above)\"; exit 1; else echo \"ok: no container_launch state=failed in annex stderr\"; fi"
     timeout_ms: 10000
     expected_behavior: "ok: no container_launch state=failed in annex stderr"
 
@@ -131,11 +89,7 @@ print(f'  missing_tools: {len(data[\"missing_tools\"])}; '
     # A capture without an agent-stage line means the agent JSON came
     # from somewhere unexpected (cached run, mocked call, ...) and the
     # structured report can't be trusted. Gating.
-    command: >
-      STDERR=$(ls -t target/forge-diagnostics/diagnostics_*.stderr.log 2>/dev/null | head -1)
-      && [ -n "$STDERR" ]
-      && grep -Eq 'event:container_launch stage=(opencode|claude|codex|forge) state=(running|exited) container=' "$STDERR"
-      && echo "ok: forge-agent stage launched via idiomatic layer"
+    command: "STDERR=$(ls -t target/forge-diagnostics/diagnostics_*.stderr.log 2>/dev/null | head -1) && [ -n \"$STDERR\" ] && grep -Eq 'event:container_launch stage=(opencode|claude|codex|forge) state=(running|exited) container=' \"$STDERR\" && echo \"ok: forge-agent stage launched via idiomatic layer\""
     timeout_ms: 10000
     expected_behavior: "ok: forge-agent stage launched via idiomatic layer"
 

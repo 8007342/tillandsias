@@ -1,7 +1,7 @@
 trace: spec:methodology-accountability
 
 event_id: methodology.event.012-litmus-podman-runtime-blocker@v1
-status: triaged
+status: distilled
 observed_at: "2026-05-06T00:00:00Z"
 reporter: "codex"
 summary: >
@@ -84,3 +84,8 @@ closure_criteria:
   - podman_runtime_provisioned_for_litmus
   - runner_reports_infra_blockers_separately_from_contract_failures
   - container_backed_litmus_commands_can_execute_to_completion
+
+distilled_into:
+  - scripts/local-ci.sh:podman_runtime_health_probe
+  - scripts/run-litmus-test.sh
+

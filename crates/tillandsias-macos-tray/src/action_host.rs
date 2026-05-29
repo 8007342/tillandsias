@@ -124,6 +124,77 @@ fn apply_status_text_main_thread(
     }
 }
 
+/// Fire a macOS Notification Center banner ("Tillandsias —
+/// Provisioning error / <reason>") so the user notices a failed VM
+/// boot even without hovering the menubar icon. Mirrors windows-
+/// tray's `show_balloon` (commit 8992652a item 1) but implemented
+/// via an `osascript -e 'display notification ...'` shell-out
+/// instead of `UNUserNotificationCenter` to avoid pulling
+/// `objc2-user-notifications` (which currently pins a different
+/// objc2 major than the workspace) and the permission-request
+/// plumbing.
+///
+/// Best-effort: spawn osascript detached, log any error, never
+/// block. The chip text remains the authoritative failure surface;
+/// the notification is purely a "look here" nudge.
+fn notify_provisioning_failed(reason: &str) {
+    // AppleScript single-quote-escape so a `'` in the reason doesn't
+    // terminate the literal. Then wrap the whole call in another
+    // outer escape layer because we pass it as -e arg.
+    let escaped = applescript_escape_single_quoted(reason);
+    let body = format!(
+        "display notification \"{escaped}\" with title \"Tillandsias\" \
+         subtitle \"Provisioning error\""
+    );
+    match std::process::Command::new("osascript")
+        .arg("-e")
+        .arg(&body)
+        .spawn()
+    {
+        Ok(_child) => {
+            // Detached — let it complete in the background. macOS
+            // notifications fire near-instantly so we don't need to
+            // await the child.
+        }
+        Err(err) => {
+            eprintln!("[tillandsias-tray] notification: osascript spawn failed: {err}");
+        }
+    }
+}
+
+/// AppleScript double-quoted-string escaping: backslash + double-quote
+/// are the only metachars we need to handle inside `"..."`. Used by
+/// `notify_provisioning_failed` to embed a user-visible reason inside
+/// an AppleScript literal.
+fn applescript_escape_single_quoted(reason: &str) -> String {
+    let mut out = String::with_capacity(reason.len());
+    for c in reason.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '"' => out.push_str("\\\""),
+            // Collapse newlines to spaces — AppleScript display
+            // notification renders newlines as control chars.
+            '\n' | '\r' => out.push(' '),
+            other => out.push(other),
+        }
+    }
+    out
+}
+
+/// Format a dispatcher `Error{code, message}` into a poller-side log
+/// string. Mirrors `tillandsias-windows-tray::notify_icon::
+/// describe_wire_error` (commit eddb5c00) so both trays surface
+/// identical operator-visible text when Linux's `decide_route`
+/// returns an Unsupported frame instead of dropping into the
+/// generic "unexpected reply" path.
+fn describe_wire_error(code: tillandsias_control_wire::ErrorCode, message: &str) -> String {
+    if message.is_empty() {
+        format!("dispatcher error {code:?}")
+    } else {
+        format!("dispatcher error {code:?}: {message}")
+    }
+}
+
 /// Condensed status-line text for a live VM phase + podman readiness.
 /// Drives the shared `ids::STATUS` chip (and the menubar tooltip) so
 /// the menu reflects real VM health — converges with the windows-tray
@@ -144,6 +215,22 @@ fn vm_phase_status_text(phase: tillandsias_control_wire::VmPhase, podman_ready: 
         VmPhase::Draining => "\u{1F7E0} Draining\u{2026}".to_string(),
         VmPhase::Stopping => "\u{1F534} Stopping\u{2026}".to_string(),
         VmPhase::Failed => "\u{1F534} VM failed".to_string(),
+    }
+}
+
+/// Append a non-empty `VmStatusReply.last_event` to the base chip
+/// string after a Unicode MIDDLE DOT so the live chip reflects in-VM
+/// activity (e.g. `🟢 Ready · forge-foo created`) rather than just
+/// the phase. `None` or whitespace-only `last_event` leaves the base
+/// untouched.
+///
+/// Mirrors `tillandsias-windows-tray::notify_icon::compose_chip_text`
+/// (commit 8992652a) byte-for-byte so both trays produce identical
+/// chip strings for identical `VmStatusReply` payloads.
+fn compose_chip_text(base: &str, last_event: Option<&str>) -> String {
+    match last_event.map(str::trim).filter(|s| !s.is_empty()) {
+        Some(evt) => format!("{base} \u{00B7} {evt}"),
+        None => base.to_string(),
     }
 }
 
@@ -169,7 +256,7 @@ fn vm_phase_status_text(phase: tillandsias_control_wire::VmPhase, podman_ready: 
 ///        plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 4)
 async fn poll_vm_status_once(
     vz: &VzRuntime,
-) -> Result<(tillandsias_control_wire::VmPhase, bool), String> {
+) -> Result<(tillandsias_control_wire::VmPhase, bool, Option<String>), String> {
     use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
     use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
     use tillandsias_host_shell::vsock_client::Client;
@@ -209,9 +296,166 @@ async fn poll_vm_status_once(
         ControlMessage::VmStatusReply {
             phase,
             podman_ready,
+            last_event,
             ..
-        } => Ok((phase, podman_ready)),
+        } => Ok((phase, podman_ready, last_event)),
+        // Linux's convergence-packet item 3 (commit 4eb0baff) wires
+        // decide_route into the vsock dispatcher so requests with no
+        // inner handler return Error{code, message} frames carrying
+        // the dispatcher's own naming ("Unsupported: variant X not
+        // wired on vsock"). Surface that explicitly instead of
+        // dropping into the generic "unexpected reply" path —
+        // mirrors windows-tray's eddb5c00 (item 4).
+        ControlMessage::Error { code, message, .. } => Err(describe_wire_error(code, &message)),
         other => Err(format!("unexpected reply to VmStatusRequest: {other:?}")),
+    }
+}
+
+/// Send a wire-level `VmShutdownRequest` to the in-VM headless so it
+/// can drain podman containers + sessions BEFORE VZ tears down the
+/// VM. Mirrors `tillandsias-windows-tray::wsl_lifecycle::
+/// request_vm_shutdown` (commit `80eceb0b`) but uses macOS's
+/// `VZVirtioSocketConnection` path via `VzRuntime::open_vsock_stream`.
+///
+/// Bounded by `RTT_BUDGET` (3 s) — a wedged in-VM headless cannot
+/// delay Quit indefinitely; the caller follows up with VZ-level
+/// `requestStop` which carries its own deadline. Returns `Err` on
+/// connect/handshake/reply failures + on the dispatcher's own
+/// `Error{Unsupported}` reply (which is the expected state until
+/// Linux ships the vsock-side inner handler — at which point this
+/// auto-upgrades with no tray change).
+///
+/// `drain_timeout` is encoded as the request's `drain_timeout_ms`
+/// hint for the in-VM headless so it knows the host's overall
+/// shutdown budget.
+///
+/// @trace spec:vsock-transport,
+///        plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q2),
+///        plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 20)
+async fn request_vm_shutdown(vz: &VzRuntime, drain_timeout: Duration) -> Result<(), String> {
+    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
+    use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
+    use tillandsias_host_shell::vsock_client::Client;
+
+    const RTT_BUDGET: Duration = Duration::from_secs(3);
+
+    let stream = vz
+        .open_vsock_stream(CONTROL_WIRE_VSOCK_PORT, RTT_BUDGET)
+        .await
+        .map_err(|e| format!("vsock connect: {e}"))?;
+
+    let mut client = Client::from_stream(
+        Box::new(stream),
+        Transport::Vsock {
+            cid: TILLANDSIAS_GUEST_CID,
+            port: CONTROL_WIRE_VSOCK_PORT,
+        },
+    );
+    client
+        .handshake()
+        .await
+        .map_err(|e| format!("control-wire handshake: {e}"))?;
+
+    let seq = client.allocate_seq();
+    let envelope = ControlEnvelope {
+        wire_version: WIRE_VERSION,
+        seq,
+        body: ControlMessage::VmShutdownRequest {
+            seq,
+            drain_timeout_ms: drain_timeout.as_millis().min(u32::MAX as u128) as u32,
+        },
+    };
+    let reply = client
+        .request(&envelope)
+        .await
+        .map_err(|e| format!("VmShutdownRequest: {e}"))?;
+
+    match reply.body {
+        // Per the wire convention (other handlers' shape): an Ok
+        // shutdown ack is signalled either by a tailored reply
+        // variant when Linux adds one, OR — for v0.0.1 where the
+        // vsock inner arm isn't shipped yet — by a clean
+        // Error{Unsupported}/etc. We treat ANY non-Error reply as
+        // OK so this auto-upgrades when the inner arm lands.
+        ControlMessage::Error { code, message, .. } => Err(describe_wire_error(code, &message)),
+        _other => Ok(()),
+    }
+}
+
+/// Map a wire `LocalProjectEntry` ({label, guest_path,
+/// last_seen_unix}) onto the shared menu `ProjectEntry` the local-
+/// projects submenu renders. `ProjectEntry::path` is the in-VM
+/// guest path (the VM mounts the host's `~/src/` via virtio-fs so
+/// the guest path is what "Attach Here" actually targets). `ready`
+/// defaults to false — per-project forge readiness isn't carried
+/// by `LocalProjectsReply` yet; a future PerProjectStatusReply
+/// would be the right place to populate it.
+fn local_entry_to_menu(
+    entry: &tillandsias_control_wire::LocalProjectEntry,
+) -> tillandsias_host_shell::menu_state::ProjectEntry {
+    tillandsias_host_shell::menu_state::ProjectEntry {
+        name: entry.label.clone(),
+        path: entry.guest_path.clone(),
+        ready: false,
+    }
+}
+
+/// One-shot `EnumerateLocalProjects` over the in-VM control wire.
+/// Mirrors `poll_cloud_projects_once` but consumes Linux's
+/// `EnumerateLocalProjects` handler (commit `05cc3a7d`) — each host
+/// (including macOS) walks its in-VM mount of the host's `~/src/`
+/// via virtio-fs, returning one entry per visible directory.
+///
+/// Returns `Vec<ProjectEntry>` mapped from `LocalProjectEntry`.
+/// Best-effort: a transient wire error returns `Err(String)` so the
+/// caller can log + leave the last-known list untouched.
+///
+/// @trace spec:host-shell-architecture,
+///        plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 19)
+async fn poll_local_projects_once(
+    vz: &VzRuntime,
+) -> Result<Vec<tillandsias_host_shell::menu_state::ProjectEntry>, String> {
+    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
+    use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
+    use tillandsias_host_shell::vsock_client::Client;
+
+    let connect_timeout = Duration::from_secs(5);
+    let stream = vz
+        .open_vsock_stream(CONTROL_WIRE_VSOCK_PORT, connect_timeout)
+        .await
+        .map_err(|e| format!("vsock connect: {e}"))?;
+
+    let mut client = Client::from_stream(
+        Box::new(stream),
+        Transport::Vsock {
+            cid: TILLANDSIAS_GUEST_CID,
+            port: CONTROL_WIRE_VSOCK_PORT,
+        },
+    );
+    client
+        .handshake()
+        .await
+        .map_err(|e| format!("control-wire handshake: {e}"))?;
+
+    let seq = client.allocate_seq();
+    let envelope = ControlEnvelope {
+        wire_version: WIRE_VERSION,
+        seq,
+        body: ControlMessage::EnumerateLocalProjects { seq },
+    };
+    let reply = client
+        .request(&envelope)
+        .await
+        .map_err(|e| format!("EnumerateLocalProjects: {e}"))?;
+
+    match reply.body {
+        ControlMessage::LocalProjectsReply { entries, .. } => {
+            Ok(entries.iter().map(local_entry_to_menu).collect())
+        }
+        ControlMessage::Error { code, message, .. } => Err(describe_wire_error(code, &message)),
+        other => Err(format!(
+            "unexpected reply to EnumerateLocalProjects: {other:?}"
+        )),
     }
 }
 
@@ -293,6 +537,11 @@ async fn poll_cloud_projects_once(
         ControlMessage::CloudRefreshReply { projects, .. } => {
             Ok(projects.iter().map(cloud_entry_to_menu).collect())
         }
+        // See poll_vm_status_once for context on the dispatcher Error
+        // frame (Linux convergence-packet items 2 + 3, commits
+        // aeb5499a / 4eb0baff). Surface code + message via the shared
+        // describe_wire_error helper.
+        ControlMessage::Error { code, message, .. } => Err(describe_wire_error(code, &message)),
         other => Err(format!(
             "unexpected reply to CloudRefreshRequest: {other:?}"
         )),
@@ -302,6 +551,19 @@ async fn poll_cloud_projects_once(
 /// Default vsock CID for the Tillandsias guest. Matches what the
 /// in-VM headless binds; the host always connects to this CID.
 const TILLANDSIAS_GUEST_CID: u32 = 3;
+
+/// Status-chip text the wire-degradation branch of
+/// `spawn_vm_status_poller` writes when `poll_vm_status_once` fails
+/// (handshake / connect / request error). Pinned as a `const` —
+/// not an inline literal — because `tillandsias-windows-tray::
+/// notify_icon::mark_wire_unreachable` writes the SAME string. If
+/// either tray drifts (e.g. someone localises one side or changes
+/// the emoji), the cross-tray UX-parity invariant silently
+/// breaks. The unit test
+/// `wire_unreachable_chip_text_pinned` asserts the exact byte
+/// sequence (`🔴 + space + Wire unreachable`, U+1F534 + " Wire
+/// unreachable" = 22 bytes).
+const WIRE_UNREACHABLE_CHIP_TEXT: &str = "\u{1F534} Wire unreachable";
 
 /// How long `VzRuntime::stop` waits for an orderly drain before
 /// escalating to a force-stop. Documented in
@@ -443,6 +705,33 @@ declare_class!(
             );
             runtime.spawn(async move {
                 if let Some(vm) = vm_taken {
+                    // Two-step graceful shutdown (mirrors windows-tray
+                    // 80eceb0b Q2). Step 1: wire-level
+                    // VmShutdownRequest so the in-VM headless gets a
+                    // chance to drain podman containers + their
+                    // sessions BEFORE VZ tears down the VM. Bounded
+                    // 3s wire RTT so a wedged headless can't delay
+                    // Quit indefinitely; we then fall through to
+                    // VZ.requestStop which carries its own
+                    // VM_STOP_DRAIN deadline. On vsock today the
+                    // in-VM dispatcher routes per the matrix but no
+                    // inner VmShutdownRequest handler exists yet, so
+                    // the reply is Error{Unsupported} which we log at
+                    // info as expected. When linux adds the vsock
+                    // inner arm this auto-upgrades with NO tray code
+                    // change.
+                    match request_vm_shutdown(&vm, VM_STOP_DRAIN).await {
+                        Ok(()) => eprintln!(
+                            "[tillandsias-tray] Quit: in-VM headless acked shutdown request"
+                        ),
+                        Err(e) => eprintln!(
+                            "[tillandsias-tray] Quit: in-VM shutdown request: {e} \
+                             (proceeding to VZ.requestStop)"
+                        ),
+                    }
+                    // Step 2: VZ-level stop (existing path). Drains
+                    // VM_STOP_DRAIN waiting for state=Stopped then
+                    // escalates to force-stop.
                     match vm.stop(VM_STOP_DRAIN).await {
                         Ok(()) => {
                             eprintln!("[tillandsias-tray] Quit: VM drained cleanly")
@@ -691,7 +980,7 @@ const BUNDLED_MANIFEST_TOML: &str = include_str!("../../../images/vm/manifest.to
 ///
 /// @trace plan/issues/tray-convergence-coordination.md
 ///        "Tag-source decision — windows vote" 2026-05-27
-const RECIPE_RELEASE_TAG: &str = "v0.2.260526.1";
+pub(crate) const RECIPE_RELEASE_TAG: &str = "v0.2.260526.1";
 
 impl TrayActionHost {
     /// Construct on the AppKit main thread. `mtm` proves we're on the
@@ -970,6 +1259,15 @@ impl TrayActionHost {
                 }
                 Err(e) => {
                     eprintln!("[tillandsias-tray] {label_done} failed: {e}");
+                    // Surface the failure via a Notification Center
+                    // banner so the user notices even without hovering
+                    // the menubar icon (Action Center carries the most-
+                    // recent banner across screen-locks too). Mirrors
+                    // windows-tray's show_balloon (commit 8992652a
+                    // item 1). Best-effort: a failed osascript shell-
+                    // out is logged + ignored, the chip is the
+                    // authoritative surface.
+                    notify_provisioning_failed(e);
                     format!("\u{1F534} {e}")
                 }
             };
@@ -1086,9 +1384,32 @@ fn spawn_vm_status_poller(
         // need every-tick granularity.
         let mut tick: u32 = 0;
         loop {
-            // Cloud projects: first tick + every 10 ticks.
+            // Cloud + local projects: first tick + every 10 ticks.
+            // The cadence rationale (slower than VmStatus) is in the
+            // cloud-poll docstring — gh repo list / local fs scan are
+            // both slow-changing relative to phase. Local goes first
+            // because `~/src/` walks are virtually free vs `gh`.
             let mut rebuild_needed = false;
             if tick.is_multiple_of(10) {
+                match poll_local_projects_once(&vz).await {
+                    Ok(projects) => {
+                        let new_count = projects.len();
+                        let mut guard = menu_state.lock().unwrap();
+                        if guard.local_projects != projects {
+                            guard.local_projects = projects;
+                            rebuild_needed = true;
+                            eprintln!(
+                                "[tillandsias-tray] local-projects: \
+                                 menu_state updated ({} entries)",
+                                new_count
+                            );
+                        }
+                        drop(guard);
+                    }
+                    Err(e) => {
+                        eprintln!("[tillandsias-tray] local-projects poll: {e}");
+                    }
+                }
                 match poll_cloud_projects_once(&vz).await {
                     Ok(projects) => {
                         let new_count = projects.len();
@@ -1114,7 +1435,7 @@ fn spawn_vm_status_poller(
             tick = tick.wrapping_add(1);
 
             match poll_vm_status_once(&vz).await {
-                Ok((phase, podman_ready)) => {
+                Ok((phase, podman_ready, last_event)) => {
                     // Reflect podman_ready into the held MenuState so
                     // the menu rebuild flips per-project action gating
                     // (`Attach Here` etc.). Same pattern windows-tray
@@ -1127,7 +1448,8 @@ fn spawn_vm_status_poller(
                             rebuild_needed = true;
                         }
                     }
-                    let text = vm_phase_status_text(phase, podman_ready);
+                    let base = vm_phase_status_text(phase, podman_ready);
+                    let text = compose_chip_text(&base, last_event.as_deref());
                     let text_for_dispatch = text.clone();
                     let chip_status_text = status_text.clone();
                     let chip_status_item = status_item.clone();
@@ -1142,8 +1464,42 @@ fn spawn_vm_status_poller(
                     });
                 }
                 Err(e) => {
-                    // Best-effort: log + leave last-known chip text.
+                    // Mid-session wire failure (headless crash, VM
+                    // terminated externally, lost handshake). Without
+                    // an explicit chip update the user would see the
+                    // last-known Ready forever. Mirrors windows-tray
+                    // `mark_wire_unreachable` (commit d2cf10f0):
+                    //   1. clear podman_ready so per-project actions
+                    //      correctly re-gate off after the rebuild
+                    //   2. flip the chip to "🔴 Wire unreachable"
+                    //      (byte-identical to windows)
+                    //   3. trigger a rebuild so the menu re-renders
+                    //      the now-gated state
+                    // The next successful poll restores phase +
+                    // podman naturally — bounded chip flicker only on
+                    // actual error ticks, no flapping when the wire
+                    // is steady-state ok or steady-state broken.
                     eprintln!("[tillandsias-tray] vm-status poll: {e}");
+                    {
+                        let mut guard = menu_state.lock().unwrap();
+                        if guard.podman_ready {
+                            guard.podman_ready = false;
+                            rebuild_needed = true;
+                        }
+                    }
+                    let text = WIRE_UNREACHABLE_CHIP_TEXT.to_string();
+                    let text_for_dispatch = text.clone();
+                    let chip_status_text = status_text.clone();
+                    let chip_status_item = status_item.clone();
+                    let chip_status_menu_item = status_menu_item.clone();
+                    dispatch_to_main_thread(move || {
+                        *chip_status_text.lock().unwrap() = text_for_dispatch.clone();
+                        apply_status_text_main_thread(
+                            &text_for_dispatch,
+                            &chip_status_item,
+                            &chip_status_menu_item,
+                        );
+                    });
                 }
             }
 
@@ -1182,6 +1538,138 @@ mod tests {
     fn tray_action_host_class_registers() {
         let cls = TrayActionHost::class();
         assert_eq!(cls.name(), "TillandsiasTrayActionHost");
+    }
+
+    /// `applescript_escape_single_quoted` defangs the AppleScript
+    /// double-quoted-string metacharacters (`\` and `"`) and
+    /// collapses newlines to spaces. Guards against
+    /// `notify_provisioning_failed` accidentally crafting a script
+    /// that breaks out of the literal.
+    #[test]
+    fn applescript_escape_handles_metas_and_newlines() {
+        assert_eq!(applescript_escape_single_quoted("plain"), "plain");
+        assert_eq!(
+            applescript_escape_single_quoted("has \"quotes\""),
+            "has \\\"quotes\\\""
+        );
+        assert_eq!(applescript_escape_single_quoted("has\\back"), "has\\\\back");
+        // Newlines collapse to spaces.
+        assert_eq!(applescript_escape_single_quoted("two\nlines"), "two lines");
+        assert_eq!(
+            applescript_escape_single_quoted("carriage\rreturn"),
+            "carriage return"
+        );
+        // Combined: a realistic error string.
+        assert_eq!(
+            applescript_escape_single_quoted(
+                "recipe-artifact fetch failed: \"rootfs.img\" missing"
+            ),
+            "recipe-artifact fetch failed: \\\"rootfs.img\\\" missing"
+        );
+    }
+
+    /// `WIRE_UNREACHABLE_CHIP_TEXT` is the byte-identical chip
+    /// string both macOS and windows trays emit on wire failure
+    /// (slice 21 / windows commit d2cf10f0). Drift-protection
+    /// litmus: if a future refactor changes the emoji or wording
+    /// on either side, the cross-tray UX-parity invariant silently
+    /// breaks — operators get different text on the same failure
+    /// class. This test asserts the exact byte sequence so any
+    /// such drift fails the build here AND in the windows-tray
+    /// suite (which would need a corresponding test added when
+    /// they adopt this pattern).
+    #[test]
+    fn wire_unreachable_chip_text_pinned() {
+        // Exact bytes: U+1F534 (LARGE RED CIRCLE = 4 bytes UTF-8)
+        // + ' ' (U+0020 = 1 byte) + "Wire unreachable" (16 bytes).
+        // Total = 21 bytes. Pin both the byte length and the
+        // expanded string literal so a partial typo (e.g. dropping
+        // the space, or swapping the emoji codepoint) is caught.
+        assert_eq!(
+            WIRE_UNREACHABLE_CHIP_TEXT.as_bytes(),
+            "\u{1F534} Wire unreachable".as_bytes()
+        );
+        assert_eq!(WIRE_UNREACHABLE_CHIP_TEXT.len(), 21);
+        // Emoji codepoint is the LARGE RED CIRCLE specifically (not
+        // BLACK CIRCLE FOR RECORD U+23FA or any other red glyph).
+        // Windows tray's mark_wire_unreachable uses the exact same
+        // codepoint — keep these in lockstep.
+        let first_char = WIRE_UNREACHABLE_CHIP_TEXT.chars().next().unwrap();
+        assert_eq!(first_char, '\u{1F534}');
+    }
+
+    /// `describe_wire_error` pins the operator-visible format of a
+    /// dispatcher Error frame so both trays surface identical text.
+    /// Mirrors the windows-tray test
+    /// `describe_wire_error_includes_code_and_message` (commit
+    /// eddb5c00) — divergence would fail either suite.
+    #[test]
+    fn describe_wire_error_includes_code_and_message() {
+        use tillandsias_control_wire::ErrorCode;
+        let s = describe_wire_error(ErrorCode::Unsupported, "variant X not wired on vsock");
+        assert!(s.contains("Unsupported"), "code missing: {s}");
+        assert!(
+            s.contains("variant X not wired on vsock"),
+            "message missing: {s}"
+        );
+    }
+
+    /// An empty message must not leave a dangling colon (e.g.
+    /// `"dispatcher error Internal: "`). Pins the empty-message
+    /// branch so a future refactor doesn't accidentally append the
+    /// colon unconditionally.
+    #[test]
+    fn describe_wire_error_no_trailing_colon_on_empty_message() {
+        use tillandsias_control_wire::ErrorCode;
+        let s = describe_wire_error(ErrorCode::Internal, "");
+        assert!(s.contains("Internal"), "code missing: {s}");
+        assert!(!s.ends_with(':'), "trailing colon: {s}");
+        assert!(!s.contains(": "), "spurious colon-space: {s}");
+    }
+
+    /// `compose_chip_text` appends a non-empty `last_event` after a
+    /// MIDDLE DOT so the live chip surfaces in-VM activity. Mirrors
+    /// the windows-tray test `compose_chip_text_appends_last_event`
+    /// (commit 8992652a) — divergence between the two trays' chip
+    /// composition would fail either suite.
+    #[test]
+    fn compose_chip_text_appends_last_event() {
+        let base = "\u{1F7E2} Ready";
+        // None: base unchanged.
+        assert_eq!(compose_chip_text(base, None), base);
+        // Empty: base unchanged (whitespace trim ⇒ empty ⇒ None).
+        assert_eq!(compose_chip_text(base, Some("")), base);
+        assert_eq!(compose_chip_text(base, Some("   ")), base);
+        // Non-empty: MIDDLE DOT + event appended.
+        assert_eq!(
+            compose_chip_text(base, Some("forge-foo created")),
+            "\u{1F7E2} Ready \u{00B7} forge-foo created"
+        );
+        // Surrounding whitespace on event is trimmed.
+        assert_eq!(
+            compose_chip_text(base, Some("  forge-bar started  ")),
+            "\u{1F7E2} Ready \u{00B7} forge-bar started"
+        );
+    }
+
+    /// `local_entry_to_menu` translates a Linux-side
+    /// `LocalProjectEntry` (commit `05cc3a7d` — label + guest_path +
+    /// last_seen_unix) into the shared menu `ProjectEntry`
+    /// (name + path + ready). Path is the in-VM guest_path because
+    /// that's what "Attach Here" passes to the in-VM exec call.
+    /// Ready defaults to false until a per-project status reply
+    /// lands.
+    #[test]
+    fn local_entry_maps_label_to_name_and_guest_path() {
+        let wire = tillandsias_control_wire::LocalProjectEntry {
+            label: "tillandsias".to_string(),
+            guest_path: "/host-mnt/src/tillandsias".to_string(),
+            last_seen_unix: 1_700_000_000,
+        };
+        let menu = local_entry_to_menu(&wire);
+        assert_eq!(menu.name, "tillandsias");
+        assert_eq!(menu.path, "/host-mnt/src/tillandsias");
+        assert!(!menu.ready, "local entry ready defaults to false");
     }
 
     /// `cloud_entry_to_menu` produces the byte-identical `ProjectEntry`

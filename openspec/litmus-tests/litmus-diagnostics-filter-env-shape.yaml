@@ -53,19 +53,12 @@ critical_path:
     # `event:internal_*` is the canonical prefix for verbose-only events.
     # If either string drifts, the level gate stops working without any
     # unit test failing (the tests use DebugLevel::Verbose directly).
-    command: >
-      grep -F '"verbose"' crates/tillandsias-podman/src/diagnostics_filter.rs
-      && grep -F 'event:internal_' crates/tillandsias-podman/src/diagnostics_filter.rs
+    command: "grep -F '\"verbose\"' crates/tillandsias-podman/src/diagnostics_filter.rs && grep -F 'event:internal_' crates/tillandsias-podman/src/diagnostics_filter.rs"
     timeout_ms: 3000
     expected_behavior: "event:internal_"
 
   - step: "public API: pass_through / new / from_env / global / allows"
-    command: >
-      grep -E 'pub fn pass_through' crates/tillandsias-podman/src/diagnostics_filter.rs
-      && grep -E 'pub fn new\(' crates/tillandsias-podman/src/diagnostics_filter.rs
-      && grep -E 'pub fn from_env' crates/tillandsias-podman/src/diagnostics_filter.rs
-      && grep -E 'pub fn global' crates/tillandsias-podman/src/diagnostics_filter.rs
-      && grep -E 'pub fn allows\(' crates/tillandsias-podman/src/diagnostics_filter.rs
+    command: "grep -E 'pub fn pass_through' crates/tillandsias-podman/src/diagnostics_filter.rs && grep -E 'pub fn new\\(' crates/tillandsias-podman/src/diagnostics_filter.rs && grep -E 'pub fn from_env' crates/tillandsias-podman/src/diagnostics_filter.rs && grep -E 'pub fn global' crates/tillandsias-podman/src/diagnostics_filter.rs && grep -E 'pub fn allows\\(' crates/tillandsias-podman/src/diagnostics_filter.rs"
     timeout_ms: 3000
     expected_behavior: "pub fn allows("
 
@@ -73,15 +66,7 @@ critical_path:
     # If any of these is renamed without updating both this litmus and
     # the spec-mapped scenario list, a regression in the env-var surface
     # could ship behind a green CI run.
-    command: >
-      grep -F 'fn pass_through_allows_everything' crates/tillandsias-podman/src/diagnostics_filter.rs
-      && grep -F 'fn event_type_allowlist_gates_emission' crates/tillandsias-podman/src/diagnostics_filter.rs
-      && grep -F 'fn event_type_blank_items_skipped' crates/tillandsias-podman/src/diagnostics_filter.rs
-      && grep -F 'fn container_glob_matches' crates/tillandsias-podman/src/diagnostics_filter.rs
-      && grep -F 'fn internal_events_require_verbose' crates/tillandsias-podman/src/diagnostics_filter.rs
-      && grep -F 'fn filters_compose_with_and_semantics' crates/tillandsias-podman/src/diagnostics_filter.rs
-      && grep -F 'fn debug_level_parse_is_lenient' crates/tillandsias-podman/src/diagnostics_filter.rs
-      && grep -F 'fn glob_matches_primitives' crates/tillandsias-podman/src/diagnostics_filter.rs
+    command: "grep -F 'fn pass_through_allows_everything' crates/tillandsias-podman/src/diagnostics_filter.rs && grep -F 'fn event_type_allowlist_gates_emission' crates/tillandsias-podman/src/diagnostics_filter.rs && grep -F 'fn event_type_blank_items_skipped' crates/tillandsias-podman/src/diagnostics_filter.rs && grep -F 'fn container_glob_matches' crates/tillandsias-podman/src/diagnostics_filter.rs && grep -F 'fn internal_events_require_verbose' crates/tillandsias-podman/src/diagnostics_filter.rs && grep -F 'fn filters_compose_with_and_semantics' crates/tillandsias-podman/src/diagnostics_filter.rs && grep -F 'fn debug_level_parse_is_lenient' crates/tillandsias-podman/src/diagnostics_filter.rs && grep -F 'fn glob_matches_primitives' crates/tillandsias-podman/src/diagnostics_filter.rs"
     timeout_ms: 3000
     expected_behavior: "glob_matches_primitives"
 

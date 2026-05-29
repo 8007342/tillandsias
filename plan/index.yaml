@@ -22,6 +22,12 @@ plan_index:
       When a step completes, update its status, write the evidence summary to
       its deliverable, checkpoint the current state to origin/linux-next, and
       then promote the next eligible pending step to ready.
+    canonical_work_loop_skill: skills/advance-work-from-plan/SKILL.md
+    # Every agent on every host SHOULD invoke `/advance-work-from-plan` (or the
+    # equivalent skill load) for each work cycle instead of pasting a long-form
+    # prompt. The skill is a single committed file; orchestrators can edit it
+    # between iterations to steer remote agent work. See methodology.yaml
+    # `shared_skills.advance-work-from-plan` for the registry entry.
 
   graph_policy:
     model: dag
@@ -878,8 +884,8 @@ plan_index:
 
     - id: plan-ledger-refresh
       order: 12
-      title: Plan Ledger Refresh — Tray and Observatorium Routing Wave
-      status: in_progress
+      title: Plan Ledger Refresh — Durable Ledger & Step Splitting
+      status: completed
       deliverable: plan/steps/12-plan-ledger-refresh.md
       depends_on: []
       specs: []
@@ -889,7 +895,7 @@ plan_index:
         - "The next agent can cold-start from the step file without chat history"
       tasks:
         - id: plan-ledger-refresh/bootstrap
-          status: in_progress
+          status: completed
           depends_on: []
           owned_files:
             - methodology.yaml
@@ -900,7 +906,7 @@ plan_index:
           checkpoint_required: true
           handoff_note: "Current wave: refresh the durable plan ledger first, then split routing/bootstrap/port/readiness into resumable step files. Keep plan/issues as the blocker queue and preserve cold-start readability."
         - id: plan-ledger-refresh/tray-routing-split
-          status: ready
+          status: completed
           depends_on:
             - plan-ledger-refresh/bootstrap
           owned_files:
@@ -914,7 +920,7 @@ plan_index:
     - id: router-observatorium-routing
       order: 13
       title: Router and Observatorium Routing — Canonical Hostname Wave
-      status: in_progress
+      status: completed
       deliverable: plan/steps/13-router-observatorium-routing.md
       depends_on: [plan-ledger-refresh]
       specs: []
@@ -924,7 +930,7 @@ plan_index:
         - "Safe browser launch paths accept the HTTPS observatorium URL"
       tasks:
         - id: router-observatorium-routing/allowlist-and-canonical-url
-          status: in_progress
+          status: completed
           depends_on: [plan-ledger-refresh/bootstrap]
           owned_files:
             - crates/tillandsias-browser-mcp/src/allowlist.rs
@@ -1013,7 +1019,7 @@ plan_index:
     - id: observatorium-readiness-and-ux
       order: 16
       title: Observatorium Readiness and UX — Fail Loudly With Logs
-      status: in_progress
+      status: completed
       deliverable: plan/steps/16-observatorium-readiness-and-ux.md
       depends_on: [router-observatorium-routing, user-runtime-port-selection, tray-network-bootstrap]
       specs: []
@@ -1023,7 +1029,7 @@ plan_index:
         - "Tray and observatorium errors resolve to one actionable path"
       tasks:
         - id: observatorium-readiness-and-ux/readiness-check
-          status: in_progress
+          status: completed
           depends_on: [tray-network-bootstrap/enclave-network]
           owned_files:
             - crates/tillandsias-headless/src/main.rs
@@ -1036,7 +1042,7 @@ plan_index:
     - id: podman-control-plane-overhaul
       order: 15.5
       title: Podman Control-Plane Overhaul
-      status: in_progress
+      status: completed
       deliverable: plan/steps/15-podman-control-plane-overhaul.md
       depends_on: [podman-idiomatic-foundation]
       specs:
@@ -1065,7 +1071,7 @@ plan_index:
           checkpoint_required: true
           handoff_note: "Dedicated CLI facade and thin shell delegate landed on 2026-05-18."
         - id: podman-control-plane-overhaul/migrate-legacy-shell
-          status: ready
+          status: completed
           depends_on: [podman-control-plane-overhaul/facade]
           owned_files:
             - build.sh
@@ -1073,6 +1079,18 @@ plan_index:
             - scripts/run-litmus-test.sh
           checkpoint_required: true
           handoff_note: "Next wave: retire residual shell orchestration, then enable strict no-direct-Podman audit."
+          events:
+            - type: claim
+              ts: "2026-05-29T03:07:00Z"
+              agent_id: "linux-macuahuitl-gemini-2026-05-29T030553Z"
+              host: "linux"
+              lease_id: "lease-linux-migrate-legacy-shell-20260529T0306"
+              expires_at: "2026-05-29T07:07:00Z"
+            - type: completed
+              ts: "2026-05-29T04:06:00Z"
+              agent_id: "linux-tlatoani-fedora-claude-opus-2026-05-29T04:05:00Z"
+              commits: ["45244a41324009efc02fad56b19f9234f632300c"]
+              validation_log: "ba2b1d5f-6b47-4de5-a8cd-7bd99313049e/task-93"
 
     - id: methodology-reconciliation
       order: 16.5
@@ -1439,7 +1457,7 @@ plan_index:
     - id: forge-diagnostics-automation
       order: 21.5
       title: Forge Diagnostics Automation — Non-blocking completeness probe loop
-      status: in_progress
+      status: completed
       deliverable: plan/issues/forge-diagnostics-automation-2026-05-27.md
       depends_on: [recent-work-spec-doc-methodology-audit]
       specs:
@@ -1516,14 +1534,14 @@ plan_index:
           checkpoint_required: true
           handoff_note: "Wire one diagnostics prompt into slow E2E/runtime-litmus forge launches, write raw logs to target/forge-diagnostics, distill summaries to plan/diagnostics, and dedupe repeated prompts by checksum."
         - id: forge-enhancements/curated-toolchain-backlog
-          status: ready
+          status: completed
           depends_on: [forge-diagnostics/e2e-piggyback-orchestration]
           owned_files:
             - plan/diagnostics/
             - images/default/
             - openspec/specs/default-image/spec.md
           checkpoint_required: true
-          handoff_note: "After the first piggy-backed diagnostics summary lands, split approved ready-to-use forge toolchain improvements into privacy/isolation-safe implementation packets."
+          handoff_note: "Split and approved all 8 pending forge enhancement proposals (Rust, Go, Python, Wasm, dev quality, shell scripts, cheatsheets, and additional tools) after validating their privacy/isolation gates."
 
     - id: forge-diagnostics-improvement-loop
       order: 21.6
@@ -1579,13 +1597,41 @@ plan_index:
           checkpoint_required: false
           handoff_note: "First unattended diagnostics run. Requires a slow E2E/runtime-litmus forge launch to produce a diagnostics log. Proposals remain status: proposed until orchestrator approval."
         - id: forge-improvement/iterate
-          status: ready
+          status: in_progress
           depends_on: [forge-improvement/first-run]
           owned_files:
             - plan/forge-improvements/proposals/
             - plan/forge-improvements/.diagnose-state
           checkpoint_required: false
           handoff_note: "Continuous: each iteration processes new diagnostics, files proposals, implements approved changes. No fixed endpoint — forge iteratively becomes more capable."
+          events:
+            - type: claim
+              ts: "2026-05-29T06:06:00Z"
+              agent_id: "linux-tlatoani-fedora-antigravity-20260529T0606"
+              host: "linux"
+              lease_id: "lease-linux-squid-tcp-reset-20260529T0606"
+              expires_at: "2026-05-29T10:06:00Z"
+            - type: completed
+              ts: "2026-05-29T06:08:00Z"
+              agent_id: "linux-tlatoani-fedora-antigravity-20260529T0606"
+              commits: ["96531d2a83497ca6bdcabbb6cf05a0b88ac271f5"]
+              validation_log: "48cafbb5-119f-4230-92ca-5254423cee6b/task-203"
+            - type: completed
+              ts: "2026-05-29T08:13:00Z"
+              agent_id: "linux-tlatoani-fedora-antigravity-2026-05-29T08:13Z"
+              commits: ["dd5e07ffbd590d9841804eb586ab714249a4f664"]
+              validation_log: "479ba771-9568-4347-8f8b-b40406ce3b25/task-261"
+            - type: claim
+              ts: "2026-05-29T11:06:00Z"
+              agent_id: "linux-tlatoani-fedora-antigravity-20260529T1106"
+              host: "linux"
+              lease_id: "lease-linux-forge-rust-wasm-tools-20260529T1106"
+              expires_at: "2026-05-29T15:06:00Z"
+            - type: completed
+              ts: "2026-05-29T11:25:00Z"
+              agent_id: "linux-tlatoani-fedora-antigravity-20260529T1106"
+              commits: ["06afb9585ad5886f2c434a09f020288a0ce43214"]
+              validation_log: "2cb1729b-7ee0-4f54-bc91-933c9f4cab74/task-148"
 
     - id: multi-host-plan-ledger-adoption
       order: 21
@@ -1595,27 +1641,16 @@ plan_index:
       depends_on: [recent-work-spec-doc-methodology-audit]
       progress_note: >
         linux-next, windows-next, and osx-next are all active as of
-        2026-05-27T23:25Z. The integration loop ledger at
+        2026-05-28T15:15Z. The integration loop ledger at
         plan/issues/multi-host-integration-loop-2026-05-24.md records sibling
         heads; per-host queues record item-level leases/events. Current
-        reconciliation: origin/linux-next is at 891bb757 before this
-        coordination commit, origin/osx-next is at f8778350 and remains an
-        ancestor, main is at fa746f03, and windows-next is at 1e20d6d0.
-        Resolved gates include the Windows
-        wsl_lifecycle.rs rustfmt fix (9315e9de) and Windows w9/control-wire
-        merge/test into linux-next (edfb72c6 / b9cee2fd, build.sh --check and
-        --test passed). Runtime-litmus
-        20260527T231258Z-b06a5997-1e20d6d0-b06a5997 failed at `Disk quota
-        exceeded`; old scratch worktrees were removed. Replacement full
-        installed runtime-litmus
-        20260527T231940Z-b06a5997-1e20d6d0-b06a5997 passed build/install and
-        init, then failed in OpenCode diagnostics with a nested-runtime panic at
-        crates/tillandsias-headless/src/vault_bootstrap.rs:205. Remaining gates
-        are fixing/assigning that diagnostics panic, starting a fresh runtime
-        for 891bb757/this coordination commit, macOS m8 user-attended smoke,
-        release run 26544334121 after the Linux Nix musl pivot, first real
-        non-empty forge diagnostics summary, and optional Windows wire
-        EnumerateLocalProjects. Step 15 is closed.
+        reconciliation: origin/linux-next is at c12383f0, origin/osx-next is at
+        a18cee6b and remains an ancestor, main is at fa746f03, and windows-next
+        is at 8992652a. The last async runtime litmus validation run
+        20260528T150335Z-c12383f0-8992652a-a18cee6b completed with SUCCESS.
+        Remaining gates are macOS m8 user-attended smoke, release run
+        26544334121, first real non-empty forge diagnostics summary, and optional
+        Windows wire EnumerateLocalProjects. Step 15 is closed.
       specs:
         - methodology-accountability
         - host-shell-architecture

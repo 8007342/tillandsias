@@ -27,30 +27,25 @@ and `plan/issues/` first so future agents can resume without chat history.
 
 ## Next action
 
-- Keep the plan ledger aligned with the new wave naming.
-- Preserve idempotent step updates.
-- Make sure the next agent can discover the routing work from the plan graph alone.
+- Proceed to `plan-ledger-refresh/tray-routing-split` to verify and integrate the discrete tray/routing step files.
 
 ## Checkpoint and push expectation
 
 - Branch: `linux-next`
-- Checkpoint: pending
-- Push: checkpoint and push after the ledger refresh batch is coherent.
+- Checkpoint: completed
+- Push: completed
 
 ## Handoff note
 
-The next agent should treat the plan files as source material, not commentary.
-The immediate goal is to keep routing and tray work discoverable from the graph
-without needing a stale conversation context.
+The plan ledger bootstrap is completed. The methodology points to the durable ledger, and all tray/router steps are split into discrete, cold-start readable step files.
 
 ## Repeat-mode progress report shape
 
-- Current phase: ledger refresh
-- Focus task: plan/index and methodology alignment
+- Current phase: completed
+- Focus task: none
 - Blockers: none recorded
-- Next action: route split step file updates
+- Next action: tray-routing-split
 
 ## Execution mode
 
-- Use bounded repeat cycles if the ledger still drifts after the next patch.
-- Refresh the same task note after each meaningful substep.
+- Complete. No repeat cycles needed for Step 12.

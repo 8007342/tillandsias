@@ -2,7 +2,7 @@
 
 ## Status
 
-in_progress
+completed
 
 ## Intent
 

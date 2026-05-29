@@ -4,6 +4,7 @@ pub mod backend;
 pub mod cache_semantics;
 mod client;
 pub mod container_spec;
+pub mod diagnostic_event_emitter;
 pub mod diagnostics;
 pub mod diagnostics_filter;
 pub mod diagnostics_stream;

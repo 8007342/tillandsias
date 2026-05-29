@@ -18,16 +18,87 @@ RUN microdnf install -y \
         bash coreutils findutils grep sed gawk tar gzip xz \
         procps-ng shadow-utils ca-certificates \
         fish zsh \
-        git gh curl wget jq ripgrep \
+        git gh curl wget jq ripgrep fd-find bat git-delta git-lfs httpie yq \
         nodejs npm \
         java-25-openjdk-headless maven \
+        golang \
+        python3-pip \
+        just \
+        gdb lldb strace ltrace valgrind heaptrack \
+        shellcheck \
+        gcc gcc-c++ make cmake openssl-devel pkgconfig unzip \
+    && git lfs install --system \
     && microdnf clean all
+
 
 # ── Agent binaries ─────────────────────────────────────────────
 # @trace spec:default-image, spec:layered-tools-overlay
 # Install the coding agents at image build time so the forge launches
 # with no runtime installer and no dependency on host cache state.
 RUN npm install -g --prefix /usr/local opencode-ai@latest @fission-ai/openspec @anthropic-ai/claude-code @openai/codex
+
+# ── Python packages and developer tools ─────────────────────────
+# Python additions: black + pylint + bandit. Web additions: prettier +
+# eslint. All 5 are orchestrator-approved curated-backlog candidates
+# (045a6720); they fit on the existing pip3 + npm install RUN layer
+# without adding a new image layer. Same envelope as the existing
+# python/node infrastructure — no new egress, no new creds, no new
+# mounts.
+#
+# @trace plan/diagnostics/forge-enhancements-curated-toolchain-backlog-2026-05-29.md
+#   (black, pylint, bandit, prettier, eslint — approved)
+RUN pip3 install --no-cache-dir pyright ruff poetry pipx uv mypy pytest \
+        black pylint bandit \
+    && npm install -g yarn pnpm typescript typescript-language-server \
+        prettier eslint
+
+# ── Go tools ───────────────────────────────────────────────────
+# `shfmt` added alongside gopls + dlv: the shell formatter is upstream
+# at mvdan.cc/sh and the Go toolchain is already present. Same RUN
+# layer, same envelope. Approved curated-backlog candidate (045a6720).
+#
+# @trace plan/diagnostics/forge-enhancements-curated-toolchain-backlog-2026-05-29.md
+#   (shfmt — approved)
+RUN GOBIN=/usr/local/bin go install golang.org/x/tools/gopls@latest \
+    && GOBIN=/usr/local/bin go install github.com/go-delve/delve/cmd/dlv@latest \
+    && GOBIN=/usr/local/bin go install mvdan.cc/sh/v3/cmd/shfmt@latest
+
+# ── Rust toolchain ─────────────────────────────────────────────
+ENV RUSTUP_HOME=/usr/local/rustup \
+    CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:$PATH
+
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
+        --default-toolchain stable \
+        --profile minimal \
+        --component rust-analyzer --component clippy --component rustfmt \
+    && curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C /usr/local/bin \
+    && cargo install cargo-chef cargo-watch cargo-audit wasm-pack trunk typos-cli watchexec-cli \
+    && curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash \
+    && cargo binstall --no-confirm cargo-edit cargo-llvm-cov cargo-deny cargo-semver-checks cargo-expand cargo-criterion cargo-wasi \
+    && curl -LsSf https://github.com/bytecodealliance/wasmtime/releases/download/v45.0.0/wasmtime-v45.0.0-x86_64-linux.tar.xz | tar -xJf - --strip-components=1 -C /usr/local/bin wasmtime-v45.0.0-x86_64-linux/wasmtime \
+    && ln -sf "$(rustup which rust-analyzer)" /usr/local/bin/rust-analyzer
+# Symlink resolves the rustup-component installation path
+# ($RUSTUP_HOME/toolchains/<triple>/bin/rust-analyzer) into /usr/local/bin
+# so LSP clients that launch the binary by name (rather than via the cargo
+# dispatch shim that `clippy` + `rustfmt` get for free) can find it. Closes
+# the rust-analyzer PATH-symlink gap surfaced by the 08:08Z forge diagnostic
+# run and approved by the orchestrator at 045a6720.
+# @trace plan/diagnostics/forge-enhancements-curated-toolchain-backlog-2026-05-29.md
+#   (rust-analyzer PATH symlink — approved)
+
+# ── Dart SDK ───────────────────────────────────────────────────
+RUN LATEST_DART=$(curl -sSf https://storage.googleapis.com/dart-archive/channels/stable/release/latest/VERSION | jq -r .version) \
+    && curl -LsSf https://storage.googleapis.com/dart-archive/channels/stable/release/${LATEST_DART}/sdk/dartsdk-linux-x64-release.zip -o /tmp/dart.zip \
+    && mkdir -p /opt \
+    && unzip -q /tmp/dart.zip -d /opt \
+    && rm -f /tmp/dart.zip
+ENV PATH=/opt/dart-sdk/bin:$PATH
+
+# ── Environment exports for diagnostics and agent discovery ─────
+ENV TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets \
+    DART_ROOT=/opt/dart-sdk \
+    FLUTTER_ROOT=/opt/flutter
 
 # ── Create forge user ──────────────────────────────────────────
 # DISTRO: useradd (Fedora shadow-utils), NOT adduser -D (Alpine)
@@ -37,7 +108,12 @@ RUN useradd -u 1000 -m -s /bin/bash forge
 RUN mkdir -p /home/forge/src \
     && mkdir -p /home/forge/.cache/tillandsias \
     && mkdir -p /home/forge/.config/opencode \
+    && mkdir -p /opt/cheatsheets /opt/cheatsheets-image /opt/cheatsheet-sources \
     && mkdir -p /tmp && chmod 1777 /tmp
+
+# ── Cheatsheets ────────────────────────────────────────────────
+COPY cheatsheets/ /opt/cheatsheets-image/
+COPY cheatsheet-sources/ /opt/cheatsheet-sources/
 
 # ── Shared library ─────────────────────────────────────────────
 RUN mkdir -p /usr/local/lib/tillandsias
@@ -76,6 +152,7 @@ COPY opencode.json /home/forge/.config/opencode/config.json
 # tui.json into ~/.config/opencode/ (project workspace bind takes precedence
 # at the user-config layer when applications resolve XDG paths).
 COPY config-overlay/opencode/tui.json /home/forge/.config/opencode/tui.json
+COPY config-overlay/opencode/instructions/ /home/forge/.config/opencode/instructions/
 
 # ── Shell configs ──────────────────────────────────────────────
 RUN mkdir -p /etc/skel/.config/fish
@@ -94,6 +171,7 @@ RUN chmod +x /usr/local/share/tillandsias/forge-welcome.sh || true
 # @trace spec:help-system-localization
 COPY help.sh /usr/local/share/tillandsias/help.sh
 RUN chmod +x /usr/local/share/tillandsias/help*.sh || true
+RUN ln -sf /usr/local/share/tillandsias/help.sh /usr/local/bin/tillandsias-help
 
 # ── Shell helper functions ─────────────────────────────────────
 # @trace spec:forge-shell-tools, spec:forge-environment-discoverability
@@ -108,7 +186,7 @@ RUN mkdir -p /etc/tillandsias/locales
 COPY locales/ /etc/tillandsias/locales/
 
 # ── Fix ownership ──────────────────────────────────────────────
-RUN chown -R 1000:1000 /home/forge
+RUN chown -R 1000:1000 /home/forge /opt
 
 USER 1000:1000
 WORKDIR /home/forge/src

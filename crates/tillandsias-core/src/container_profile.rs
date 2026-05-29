@@ -262,7 +262,11 @@ pub fn forge_opencode_profile() -> ContainerProfile {
         image_override: None,
         pids_limit: 512,  // Compilers, language servers, AI tools
         read_only: false, // Forge needs mutable workspace
-        tmpfs_mounts: vec![],
+        tmpfs_mounts: vec![
+            "/tmp:size=256m,mode=1777",
+            "/run/user/1000:size=64m,mode=0700",
+            "/opt/cheatsheets:size=8m,mode=0755",
+        ],
     }
 }
 
@@ -278,7 +282,11 @@ pub fn forge_claude_profile() -> ContainerProfile {
         image_override: None,
         pids_limit: 512,  // Compilers, language servers, AI tools
         read_only: false, // Forge needs mutable workspace
-        tmpfs_mounts: vec![],
+        tmpfs_mounts: vec![
+            "/tmp:size=256m,mode=1777",
+            "/run/user/1000:size=64m,mode=0700",
+            "/opt/cheatsheets:size=8m,mode=0755",
+        ],
     }
 }
 
@@ -297,7 +305,11 @@ pub fn forge_opencode_web_profile() -> ContainerProfile {
         image_override: None,
         pids_limit: 512,
         read_only: false,
-        tmpfs_mounts: vec![],
+        tmpfs_mounts: vec![
+            "/tmp:size=256m,mode=1777",
+            "/run/user/1000:size=64m,mode=0700",
+            "/opt/cheatsheets:size=8m,mode=0755",
+        ],
     }
 }
 
@@ -311,7 +323,11 @@ pub fn terminal_profile() -> ContainerProfile {
         mounts: common_forge_mounts(),
         pids_limit: 512,  // Same as forge (maintenance shell)
         read_only: false, // Terminal needs mutable workspace
-        tmpfs_mounts: vec![],
+        tmpfs_mounts: vec![
+            "/tmp:size=256m,mode=1777",
+            "/run/user/1000:size=64m,mode=0700",
+            "/opt/cheatsheets:size=8m,mode=0755",
+        ],
         env_vars: vec![
             ProfileEnvVar {
                 name: "TILLANDSIAS_PROJECT",
@@ -381,6 +397,10 @@ pub fn terminal_profile() -> ContainerProfile {
             ProfileEnvVar {
                 name: "no_proxy",
                 value: EnvValue::Literal("localhost,127.0.0.1,git-service"),
+            },
+            ProfileEnvVar {
+                name: "TILLANDSIAS_CHEATSHEETS",
+                value: EnvValue::Literal("/opt/cheatsheets"),
             },
         ],
         secrets: vec![],
@@ -663,6 +683,10 @@ fn common_forge_env() -> Vec<ProfileEnvVar> {
             name: "no_proxy",
             value: EnvValue::Literal("localhost,127.0.0.1,git-service"),
         },
+        ProfileEnvVar {
+            name: "TILLANDSIAS_CHEATSHEETS",
+            value: EnvValue::Literal("/opt/cheatsheets"),
+        },
     ]
 }
 
@@ -802,27 +826,28 @@ mod tests {
     }
 
     #[test]
-    fn forge_profiles_have_seventeen_env_vars() {
+    fn forge_profiles_have_eighteen_env_vars() {
         let opencode = forge_opencode_profile();
         let claude = forge_claude_profile();
         // PROJECT, HOST_OS, AGENT, LANG, LANGUAGE,
         // GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL, GIT_COMMITTER_NAME, GIT_COMMITTER_EMAIL,
         // GIT_SERVICE, OLLAMA_HOST,
-        // HTTP_PROXY, HTTPS_PROXY, NO_PROXY, http_proxy, https_proxy, no_proxy
+        // HTTP_PROXY, HTTPS_PROXY, NO_PROXY, http_proxy, https_proxy, no_proxy, TILLANDSIAS_CHEATSHEETS
         // @trace spec:proxy-container, spec:enclave-network, spec:git-mirror-service, spec:inference-container
-        assert_eq!(opencode.env_vars.len(), 17);
-        assert_eq!(claude.env_vars.len(), 17);
+        assert_eq!(opencode.env_vars.len(), 18);
+        assert_eq!(claude.env_vars.len(), 18);
     }
 
     #[test]
-    fn terminal_has_sixteen_env_vars() {
+    fn terminal_has_seventeen_env_vars() {
         let profile = terminal_profile();
         // PROJECT, HOST_OS, LANG, LANGUAGE (no AGENT)
         // + GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL, GIT_COMMITTER_NAME, GIT_COMMITTER_EMAIL
         // + TILLANDSIAS_GIT_SERVICE, OLLAMA_HOST
         // + HTTP_PROXY, HTTPS_PROXY, NO_PROXY, http_proxy, https_proxy, no_proxy
+        // + TILLANDSIAS_CHEATSHEETS
         // @trace spec:proxy-container, spec:enclave-network, spec:inference-container, spec:git-mirror-service
-        assert_eq!(profile.env_vars.len(), 16);
+        assert_eq!(profile.env_vars.len(), 17);
     }
 
     // @trace spec:git-mirror-service, spec:secrets-management, spec:podman-orchestration

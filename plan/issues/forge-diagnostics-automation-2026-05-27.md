@@ -330,3 +330,287 @@ are in place; the methodology gap requires orchestrator input.
 - next (this loop, NON-overlapping): headless spec gaps — VmStatusRequest real
   lifecycle transitions, runtime-diagnostics-stream / observability-metrics spec
   audits. These are outside the forge-diagnostics packet scope.
+
+## Update 2026-05-28T14:30Z — diagnose-forge agent unblocked (cross-host input)
+
+The Big Pickle forge-diagnostics agent reported it was blocked: "No
+diagnostics data yet — `target/forge-diagnostics/` doesn't exist and no
+E2E diagnostics run has produced a log." On THIS host that's
+structurally true — `target/` is gitignored, so raw logs produced on
+the host that runs the E2E annex (currently osx-tlatoani or whichever
+orchestrator fires the runtime-litmus) never propagate. The committed
+distill summaries in `plan/diagnostics/` DO propagate and carry the
+same actionable arrays (`missing_tools`, `proposed_enhancements`,
+`isolation_or_privacy_risks` plus the Container-Start Stream forensics
+my recent gap-3 phase-2 wiring produces).
+
+Patched `.opencode/commands/diagnose-forge.md` step 3 so the agent
+prefers the raw log when present (richer signal, fast path on the
+host that ran the annex) and falls back to the latest
+`plan/diagnostics/diagnostics_<UTC>-summary.md` when it isn't (the
+cross-host path). Step 4 documents both shapes (JSON arrays vs.
+bullet lists) for each structured field. Also fixed the SKILL.md
+file-layout note's glob (`diagnostics-summary-*.md` →
+`diagnostics_*-summary.md`, which is the actual filename pattern
+the distill script writes).
+
+No new state file is committed — `.diagnose-state` is gitignored
+and each host's agent processes from a fresh local view; the
+fallback path lets a host with no raw log pick up the latest
+distill summary on its next `/diagnose-forge` run.
+
+Lease note: this is a minimal unblocker for the agent's input
+contract. Pickie's actual proposal-filing work remains pickie's;
+this edit just expands the input surface so the agent isn't
+permanently stuck on hosts that aren't the annex producer.
+
+@trace plan/issues/forge-diagnostics-automation-2026-05-27.md
+
+## agent_status_packet — work-loop slice 2026-05-29T03:21Z — annex piggyback on container-start-health
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- packet: `forge-diagnostics/e2e-piggyback-orchestration` — closes the
+  20:30Z "next checkpoint" line: "wire the annex (no --reset) into other
+  forge-launching E2E litmus so container-start diagnostics piggyback".
+- shipped: amended `openspec/litmus-tests/litmus-container-start-health.yaml`
+  with two non-gating steps appended to `critical_path`:
+    1. `scripts/forge-diagnostics-annex.sh || true` (no `--reset`) —
+       the annex's checksum dedup ensures exactly one E2E run in a cycle
+       captures; the rest write a skip note to `cycle-skips.log`.
+    2. Observe: a raw log, skip note, or distill summary exists. Any
+       cycle outcome is fine (the annex's `set -uo pipefail` exit-0
+       contract is the hard guarantee).
+- E2E forge-launching litmus inventory checked: the only other
+  candidates (`litmus-environment-isolation`, `litmus-ephemeral-guarantee`,
+  `litmus-enclave-isolation`) do NOT launch tillandsias agents — they
+  either inspect forge images via raw `podman run` or grep config files.
+  So `litmus-container-start-health` is the natural and only piggyback
+  host besides the dedicated `litmus-forge-diagnostics-e2e` (which keeps
+  `--reset`, as it owns the standalone trigger).
+- privacy/isolation: no envelope change. The annex's launch uses the
+  same `tillandsias . --opencode --diagnostics --prompt $FILE` path
+  the standalone diagnostics litmus already uses; no new mounts, creds,
+  sockets, or network changes.
+- files touched: `openspec/litmus-tests/litmus-container-start-health.yaml`.
+- evidence: YAML parses (python yaml.safe_load); type-check clean;
+  full instant-phase litmus suite still 36/36 PASS at 100% coverage.
+- blockers/errors: NONE.
+- next checkpoint: a real runtime-litmus pass with a live forge will
+  produce the first piggy-backed distill summary on a host that's NOT
+  the dedicated standalone diagnostics test. Then claim/split
+  `forge-enhancements/curated-toolchain-backlog`.
+- lease: CONTINUE.
+
+@trace methodology/forge-diagnostics.yaml (piggyback_protocol)
+@trace openspec/litmus-tests/litmus-container-start-health.yaml
+
+## agent_status_packet — work-loop slice 2026-05-29T04:51Z — runtime envelope emitter for sub-deliverable (a)
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- packet: `forge-diagnostics/e2e-piggyback-orchestration` — closes the
+  user-priority sub-deliverable (a) on the **runtime side**: "ensure
+  --diagnostics emits the structured capability JSON the forge-
+  diagnostics litmus expects". Distill-script consumer wiring deferred
+  to a 15-min follow-on so the runtime change can ship and be tested
+  independently.
+- shipped: `4c2993ac feat(diagnostics): emit
+  event:diagnostics_envelope stderr line on --diagnostics`.
+- direct evidence of the gap this slice closes: the most recent NON-
+  stderr distill summary at 19:02Z shows
+    Source log: target/forge-diagnostics/diagnostics_20260528T190248Z.log
+    Parse Errors: Expecting value: line 1 column 1 (char 0)
+    Completeness: 0 / 0 checks passed (0%)
+  — RAW_LOG was 0 bytes. The agent emitted NOTHING to stdout, so the
+  distill chain had no framing fields to recover (TIMESTAMP/FORGE_
+  VERSION both `unknown`). With this slice, the .stderr.log companion
+  always carries a machine-readable `event:diagnostics_envelope` line
+  with the run's UTC timestamp, tillandsias version, host platform,
+  and agent kind — independent of whether the LLM complied.
+- format pinned by `format_diagnostics_envelope_line` + 3 unit tests:
+    event:diagnostics_envelope timestamp=<ISO-8601-UTC-Z>
+    tillandsias_version=<v> host_platform=<linux|macos|windows|other>
+    agent=<opencode|claude|codex|bash|observatorium|none>
+  Same family as the `event:container_launch …` lines that
+  `litmus-container-start-health` already greps.
+- files touched: `crates/tillandsias-headless/src/main.rs` (the
+  `if diagnostics { … eprintln envelope }` hook at the existing flag-
+  resolution point, plus two pure helpers + tests).
+- privacy/isolation: no envelope change at the architecture level —
+  the line emits only the timestamp + version + host + agent kind,
+  no PII, no project paths, no credentials. The string family
+  `event:diagnostics_*` is already in stderr today via the
+  container_launch stream; this just adds a sibling line.
+- evidence: 3 new tests; 144 headless tests passing (up from 141);
+  `./build.sh --check` clean.
+- blockers/errors: NONE.
+- next checkpoint: follow-on distill-script slice consumes
+  `event:diagnostics_envelope` from the `.stderr.log` companion to
+  populate TIMESTAMP/FORGE_VERSION/HOST_PLATFORM/AGENT fields in the
+  summary when the JSON payload's own fields are unknown. ~15 min
+  scope; no LLM dependency.
+- lease: CONTINUE.
+
+@trace plan/issues/forge-diagnostics-automation-2026-05-27.md
+
+## agent_status_packet — work-loop slice 2026-05-29T05:21Z — distill consumer for envelope (sub-deliverable (a) complete)
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- packet: `forge-diagnostics/e2e-piggyback-orchestration` — closes the
+  CONSUMER side of USER PRIORITY sub-deliverable (a). The runtime
+  emitter shipped at 04:51Z (`4c2993ac`); this slice (`8f070293`)
+  wires the bash distill script to consume it from the `.stderr.log`
+  companion.
+- shipped: `8f070293 feat(diagnostics): distill consumes
+  event:diagnostics_envelope from stderr companion`.
+- synthetic round-trip evidence (test fixture: empty stdout +
+  envelope-only stderr):
+
+    # Forge Diagnostics Summary — 2026-05-29T05:21:00Z
+    - **Forge version**: 0.2.260528 (from-envelope; in-forge JSON missing)
+    - **Host platform**: linux
+    - **Agent**: opencode
+    - **Completeness**: 0 / 0 checks passed (0%)
+    ## Parse Errors
+    - Expecting value: line 1 column 1 (char 0)
+
+  Compare with the 19:02Z pre-envelope baseline:
+    - **Forge version**: unknown
+    - (no Host platform field)
+    - (no Agent field)
+
+  Every run now has real framing regardless of LLM compliance. The
+  JSON parse error still surfaces — the envelope is fallback context,
+  not a mask.
+- drift-protection litmus shipped:
+  `openspec/litmus-tests/litmus-diagnostics-envelope-shape.yaml`
+  (instant pre-build, 6 steps) greps BOTH sides of the Rust-emitter
+  ↔ bash-consumer symmetry — if the field set diverges, the litmus
+  fires. `cli-diagnostics` spec flipped from `status: deferred` to
+  `status: active` in `openspec/litmus-bindings.yaml`. Coverage rose
+  from 85 specs at 100% pass-rate to 86 specs at 100% pass-rate
+  (instant pre-build suite 37/37, was 36/36).
+- privacy/isolation: no envelope-related change at the architecture
+  level — the stderr line carries timestamp + version + host + agent
+  kind only. No PII, no project paths, no credentials.
+- files touched:
+    * `scripts/distill-forge-diagnostics.sh` (consumer block + new
+      metadata lines)
+    * `openspec/litmus-tests/litmus-diagnostics-envelope-shape.yaml`
+      (new drift-protection litmus)
+    * `openspec/litmus-bindings.yaml` (cli-diagnostics: deferred →
+      active, +1 litmus binding)
+- evidence: synthetic round-trip; full instant pre-build suite
+  37/37 PASS; 144 headless tests still green; `./build.sh --check`
+  clean.
+- blockers/errors: NONE.
+- next checkpoint: a real runtime-litmus pass with a live forge will
+  produce the first real-world envelope-recovered summary on a host
+  where the LLM happened to fail. Then claim/split
+  `forge-enhancements/curated-toolchain-backlog` for the now-visible
+  forge enhancements queue (the 5:03Z summary's 5-tool missing-list
+  and 5 proposed-enhancements list are a natural seed).
+- lease: CONTINUE.
+
+@trace plan/issues/forge-diagnostics-automation-2026-05-27.md
+
+## agent_status_packet — work-loop slice 2026-05-29T06:21Z — curated-toolchain-backlog seeded
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- packet: `forge-enhancements/curated-toolchain-backlog` — CLAIMED
+  and slice 1 shipped. The packet's dependency
+  `forge-diagnostics/e2e-piggyback-orchestration` is now functionally
+  complete (4c2993ac runtime emitter + 8f070293 distill consumer +
+  e4aad43b piggyback wiring on container-start-health), so this
+  packet is unblocked. Three live diagnostic runs this session
+  (04:05Z, 05:03Z, 06:03Z) produced converging candidate lists with
+  100% completeness on the structural side, giving a rich seed.
+- shipped: new file
+  `plan/diagnostics/forge-enhancements-curated-toolchain-backlog-
+  2026-05-29.md` — organizes 24 unique candidates across 8
+  ecosystems (Rust, Python, Web, Dart/Flutter, Go, WASM, Shell,
+  Profiling, Reproducible-builds) per the packet's
+  expected_evidence rule ("Backlog groups requested tools by
+  ecosystem"). Each candidate carries a status (proposed only —
+  the file does NOT approve unilaterally), source-run citations,
+  rationale, and a privacy/isolation note pointing at any envelope
+  concerns. A "Sizing notes" section pre-decomposes the future
+  approval queue into 10 platform-sized implementation packets per
+  the packet's "not one giant image change" rule.
+- candidates surfaced by ecosystem (proposed status):
+    - Rust: 11 (clippy, cargo-edit, cargo-llvm-cov / cargo-tarpaulin
+      pick-one, cargo-deny, cargo-semver-checks, cargo-expand,
+      cargo-outdated, cargo-tree (likely blocked — likely
+      duplicate of `cargo tree` builtin), cargo-criterion,
+      cargo-wasi)
+    - Python: 4 (black, pylint, flake8, bandit)
+    - Web (JS/TS): 2 (prettier, eslint — both confirmed by ≥2 runs)
+    - Dart/Flutter: 1 (flutter — confirmed by 2 runs; large image
+      impact)
+    - Go: 1 (delve — confirmed by 2 runs)
+    - WASM: 2 (wasmtime confirmed by 3 runs, wasmer alternative;
+      pick-one)
+    - Shell: 2 (shellcheck, shfmt)
+    - Profiling: 3 (perf — envelope-review flag, ltrace, heaptrack)
+    - Reproducible: 1 (nix — envelope-review flag)
+- privacy/isolation gating section preserved at file head — orchestrator
+  reviews each candidate against the unchanged envelope (no new egress,
+  no new creds, no new mounts, no security-flag drops) before
+  approving.
+- files touched: `plan/diagnostics/forge-enhancements-curated-
+  toolchain-backlog-2026-05-29.md` (new).
+- evidence: file structure follows the packet's expected_evidence
+  rules; cited candidates trace back to exact source-summary lines;
+  no code changes so build/test gates not exercised.
+- blockers/errors: NONE.
+- next checkpoint: orchestrator reviews + flips status fields on
+  individual candidates (proposed → approved/blocked/deferred).
+  Approved candidates spawn sized implementation packets per the
+  pre-decomposed groupings in the "Sizing notes" section. The 8
+  already-shipped enhancements from earlier this session (Go, Rust,
+  Python, WASM, dev-quality batch in c373f12a + a81cc9b5)
+  established the pattern for future approval-implementation
+  cycles.
+- lease: CONTINUE on the forge-diagnostics packet umbrella; this
+  packet is now in the "awaiting orchestrator review" phase.
+
+@trace plan/issues/forge-diagnostics-automation-2026-05-27.md
+@trace plan/diagnostics/forge-enhancements-curated-toolchain-backlog-2026-05-29.md
+
+## agent_status_packet — work-loop slice 2026-05-29T08:21Z — curated backlog delta from 08:08Z + 08:11Z runs
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- packet: `forge-enhancements/curated-toolchain-backlog` — continuation
+  of the 06:21Z claim (`0df57c10`). The packet's "Update protocol"
+  (established in the original commit) directs future runs to append
+  delta sections rather than rewrite history; this slice exercises
+  that protocol for the first time.
+- shipped: appended `## Update 2026-05-29T08:21Z` section to
+  `plan/diagnostics/forge-enhancements-curated-toolchain-backlog-
+  2026-05-29.md` (file grew 158 → 273 lines). Three sub-sections:
+    * Provenance addendum citing 08:08Z + 08:11Z source summaries
+    * 15 new candidate tools (with one architectural-class candidate
+      `tmpfs-work-partition` tagged for orchestrator routing to
+      `spec:forge-cache-dual` rather than treating as toolchain)
+    * Amplified privacy/isolation observations (5 new framings)
+    * Cross-run convergence updates (run-count strengthens existing
+      candidates from 2-of-3 to 3-of-5 or 4-of-5)
+    * Sizing-notes addendum proposing 3 new platform-sized packets
+      (dev quality-of-life batch, C/C++ build tooling batch verify-
+      first, rust-analyzer PATH symlink trivial)
+- privacy/isolation: no envelope change. The 5 new observations
+  AMPLIFY the existing gate at the file head — they don't introduce
+  new candidates that require gate-bypass.
+- files touched: `plan/diagnostics/forge-enhancements-curated-
+  toolchain-backlog-2026-05-29.md` (appended only).
+- evidence: file structure follows the Update protocol; new
+  candidates trace to specific source-summary lines.
+- blockers/errors: NONE.
+- next checkpoint: orchestrator review of the now-expanded backlog;
+  individual candidate state advances from proposed → approved/
+  blocked/deferred. The `rust-analyzer` PATH symlink is the
+  highest-leverage-lowest-effort candidate (one Containerfile line);
+  the dev quality-of-life batch is the highest-velocity batch.
+- lease: CONTINUE.
+
+@trace plan/issues/forge-diagnostics-automation-2026-05-27.md
+@trace plan/diagnostics/forge-enhancements-curated-toolchain-backlog-2026-05-29.md (Update 2026-05-29T08:21Z)

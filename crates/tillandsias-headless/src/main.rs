@@ -59,6 +59,13 @@ use tracing::{debug, error, info, warn};
 
 use serde::{Deserialize, Serialize};
 
+#[cfg(any(feature = "tray", feature = "listen-vsock"))]
+mod cloud_projects;
+mod control_dispatch;
+#[cfg(any(feature = "tray", feature = "listen-vsock"))]
+mod local_projects;
+#[cfg(any(feature = "tray", feature = "listen-vsock"))]
+pub mod remote_projects;
 mod runtime_assets;
 #[cfg(feature = "vault")]
 // @trace spec:tillandsias-vault — Phase 6 default bootstrap (was Phase 3 opt-in).
@@ -136,6 +143,48 @@ fn main() {
     let debug = debug || diagnostics;
     if debug {
         eprintln!("[tillandsias] version: {version}");
+    }
+
+    // USER PRIORITY (a) of the diagnostics-driven container-start
+    // verification work: emit a structured envelope line to stderr at
+    // the start of every `--diagnostics` run. This is the framing the
+    // distill script can rely on regardless of whether the agent
+    // followed its prompt and emitted parseable JSON to stdout. The
+    // most recent baseline (19:02Z) showed `TIMESTAMP=unknown` +
+    // `FORGE_VERSION=unknown` + `0/0 checks passed` because the RAW_LOG
+    // was empty — the LLM didn't comply. With this envelope on stderr,
+    // the distill script's stderr companion path (already exists, see
+    // `Container-Start Stream (from .stderr.log companion)` section in
+    // every recent summary) gains a stable, machine-readable line
+    // independent of LLM behaviour.
+    //
+    // Format pinned by `format_diagnostics_envelope_line` + its unit
+    // tests. Distill-script consumer wiring lives in a follow-on slice
+    // so this commit can land independently.
+    //
+    // @trace spec:cli-diagnostics, spec:runtime-diagnostics-stream
+    // @trace plan/issues/forge-diagnostics-automation-2026-05-27.md
+    //   (USER PRIORITY sub-deliverable (a))
+    if diagnostics {
+        let agent_kind = select_diagnostics_agent_kind(
+            opencode || opencode_web,
+            claude,
+            codex,
+            bash,
+            observatorium,
+        );
+        let host_platform = if cfg!(target_os = "linux") {
+            "linux"
+        } else if cfg!(target_os = "macos") {
+            "macos"
+        } else if cfg!(target_os = "windows") {
+            "windows"
+        } else {
+            "other"
+        };
+        let timestamp = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        let line = format_diagnostics_envelope_line(&timestamp, version, host_platform, agent_kind);
+        eprintln!("{line}");
     }
 
     if let Some(port) = port_override {
@@ -417,6 +466,67 @@ fn main() {
         eprintln!("Error: {}", e);
         std::process::exit(1);
     }
+}
+
+/// Map the agent-selection boolean flags to a stable string token for
+/// the `event:diagnostics_envelope` stderr line. Mutual exclusion is
+/// enforced upstream by the CLI usage; if multiple flags happen to be
+/// set we resolve in the documented precedence order:
+/// opencode > claude > codex > bash > observatorium. `none` is the
+/// fallback when --diagnostics was passed without an agent flag (the
+/// envelope still emits — operator gets a real timestamp).
+///
+/// @trace spec:cli-diagnostics, spec:runtime-diagnostics-stream
+fn select_diagnostics_agent_kind(
+    opencode_any: bool,
+    claude: bool,
+    codex: bool,
+    bash: bool,
+    observatorium: bool,
+) -> &'static str {
+    if opencode_any {
+        "opencode"
+    } else if claude {
+        "claude"
+    } else if codex {
+        "codex"
+    } else if bash {
+        "bash"
+    } else if observatorium {
+        "observatorium"
+    } else {
+        "none"
+    }
+}
+
+/// Format the structured envelope line emitted by `tillandsias
+/// --diagnostics` to stderr at the start of every run. The distill
+/// script's stderr-companion path consumes this in a follow-on slice
+/// to recover framing fields (timestamp, version, host, agent) when
+/// the LLM's stdout JSON is empty or malformed.
+///
+/// Format is space-separated key=value pairs, prefixed with the event
+/// tag `event:diagnostics_envelope`. Pinned shape:
+///
+/// ```text
+/// event:diagnostics_envelope timestamp=<ISO-8601-UTC> tillandsias_version=<v> host_platform=<linux|macos|windows|other> agent=<opencode|claude|codex|bash|observatorium|none>
+/// ```
+///
+/// Same family as the existing `event:container_launch …` lines that
+/// `litmus-container-start-health` already greps. Both come from the
+/// debug/diagnostics stream; `container_launch` is per-container,
+/// `diagnostics_envelope` is per-run.
+///
+/// @trace spec:cli-diagnostics, spec:runtime-diagnostics-stream
+fn format_diagnostics_envelope_line(
+    timestamp: &str,
+    tillandsias_version: &str,
+    host_platform: &str,
+    agent_kind: &str,
+) -> String {
+    format!(
+        "event:diagnostics_envelope timestamp={timestamp} tillandsias_version={tillandsias_version} host_platform={host_platform} agent={agent_kind}"
+    )
 }
 
 fn print_usage(version: &str) {
@@ -2245,6 +2355,14 @@ fn build_opencode_forge_args(
         format!("TILLANDSIAS_PROJECT={project_name}"),
         "--env".into(),
         "TILLANDSIAS_PROJECT_HOST_MOUNT=1".into(),
+        "--env".into(),
+        "TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets".into(),
+        "--tmpfs".into(),
+        "/tmp:size=256m,mode=1777".into(),
+        "--tmpfs".into(),
+        "/run/user/1000:size=64m,mode=0700".into(),
+        "--tmpfs".into(),
+        "/opt/cheatsheets:size=8m,mode=0755".into(),
         // Mount under `/home/forge/src/<project>/` (not directly at
         // `/home/forge/src`) so the in-container tree matches what the forge
         // entrypoint's clone path would produce
@@ -3814,7 +3932,7 @@ fn launch_observatorium_browser(
     debug: bool,
 ) -> Result<(), String> {
     let app_url = observatorium_app_url(project_name, router_host_port);
-    if let Err(err) = wait_for_opencode_web_route(&app_url, debug) {
+    if let Err(err) = wait_for_opencode_web_route(project_name, &app_url, debug) {
         return Err(format!(
             "Observatorium auth gate did not become ready: {err}"
         ));
@@ -3857,7 +3975,7 @@ fn launch_observatorium_browser(
 
     send_issue_web_session(&project_label, &otp)
         .map_err(|e| format!("Failed to register Observatorium session with router: {e}"))?;
-    if let Err(err) = wait_for_authenticated_opencode_web(&app_url, &otp, debug) {
+    if let Err(err) = wait_for_authenticated_opencode_web(project_name, &app_url, &otp, debug) {
         return Err(format!(
             "Observatorium app did not become reachable with a registered session: {err}"
         ));
@@ -3946,6 +4064,29 @@ fn run_observatorium_mode(
     let web_image = versioned_image_tag("web", version);
     let router_image = versioned_image_tag("router", version);
     rt.block_on(async {
+        // gap-3 phase-2c symmetry with run_opencode_mode: spawn the live
+        // diagnostic-event emitter so `event:container_exit container=…
+        // exit_code=…` lines land on stderr when --debug is on. Captured
+        // by the forge-diagnostics annex stderr companion + the distill
+        // "Container-Start Stream" + "Typed-event arms" sections.
+        //
+        // NOTE: this rt.block_on closes BEFORE the synchronous
+        // `wait_for_observatorium_http_ready` / `launch_observatorium_
+        // browser` steps, so events from the chromium-core / chromium-
+        // framework containers (launched by the host-side browser path)
+        // are NOT captured here. The events that ARE captured: router,
+        // observatorium-web, and any background podman activity during
+        // route setup. A follow-on slice could raise the emitter to a
+        // higher scope to also cover the browser containers.
+        //
+        // @trace spec:runtime-diagnostics-stream
+        // @trace plan/issues/linux-headless-spec-gaps-2026-05-27.md (gap 3 phase-2c symmetry)
+        let diag_emitter =
+            tillandsias_podman::diagnostic_event_emitter::spawn_diagnostic_event_emitter(
+                debug,
+                "tillandsias-",
+            );
+
         client.remove_container(&observatorium_name).await.ok();
 
         // Step 15 slice 2: bring the router up BEFORE the observatorium-web
@@ -3973,6 +4114,26 @@ fn run_observatorium_mode(
             .await
             .map_err(|e| format!("[Observatorium] failed to start web container: {e}"))?;
 
+        // gap-3 phase-2g symmetry: start the typed-event stderr tail on
+        // the two containers the observatorium launch path owns at this
+        // point — `tillandsias-router` (just ensured up) and the web
+        // container we just launched. Chromium containers come later
+        // (host-side browser path) and are out of scope here.
+        //
+        // @trace spec:runtime-diagnostics-stream (Stderr line pass-through)
+        // @trace plan/issues/linux-headless-spec-gaps-2026-05-27.md (gap 3 phase-2g symmetry)
+        let _diag_logs_handle = if debug {
+            Some(
+                tillandsias_podman::DiagnosticsHandle::start_typed_event_stream(vec![
+                    "tillandsias-router".to_string(),
+                    observatorium_name.clone(),
+                ])
+                .await,
+            )
+        } else {
+            None
+        };
+
         let route = RouterRoute::new(
             format!("observatorium.{project_name}"),
             observatorium_name.clone(),
@@ -3981,6 +4142,14 @@ fn run_observatorium_mode(
         .with_root_redirect("/observatorium/");
         upsert_router_route(route, debug)?;
         caddy_reload_routes(debug).await?;
+
+        // Stop the diagnostic-event emitter before this block closes;
+        // dropping `_diag_logs_handle` aborts its podman-logs-f tails
+        // implicitly via DiagnosticsHandle::Drop.
+        if let Some(handle) = diag_emitter {
+            handle.abort();
+            let _ = handle.await;
+        }
 
         Ok::<(), String>(())
     })?;
@@ -4063,6 +4232,25 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
     let rt = podman_runtime()?;
     let client = PodmanClient::new();
     rt.block_on(async {
+        // gap-3 phase-2c: spawn the live diagnostic-event emitter so
+        // `event:container_exit container=… exit_code=…` lines land on
+        // stderr when --debug / --diagnostics is on. Captured by the
+        // forge-diagnostics annex stderr companion + the distill
+        // "Container-Start Stream" section. Filter prefix matches the
+        // tillandsias-* container names launched below.
+        //
+        // The handle is aborted at the bottom of this block so the
+        // emitter doesn't outlive the forge session (stderr would keep
+        // emitting after the user's session ended).
+        //
+        // @trace spec:runtime-diagnostics-stream
+        // @trace plan/issues/linux-headless-spec-gaps-2026-05-27.md (gap 3 phase-2c)
+        let diag_emitter =
+            tillandsias_podman::diagnostic_event_emitter::spawn_diagnostic_event_emitter(
+                debug,
+                "tillandsias-",
+            );
+
         cleanup_stack_containers(&client, project_name).await;
 
         // Step 15: bring the router up BEFORE any project containers so the
@@ -4122,6 +4310,34 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
             .await
             .map_err(|e| format!("[OpenCode] failed to start inference: {e}"))?;
 
+        // gap-3 phase-2g: start the typed-event stderr tail on the
+        // SUPPORT containers (router/proxy/git/inference). The
+        // foreground forge is intentionally NOT in this list — it's
+        // served attached to the user's terminal by
+        // `run_container_attached_observed` below and tailing it here
+        // would double-print every line.
+        //
+        // DiagnosticsHandle::Drop aborts every spawned `podman logs -f`
+        // task, so dropping `_diag_logs_handle` at the end of the
+        // block_on closure cleanly tears the tail tasks down — no
+        // explicit abort needed.
+        //
+        // @trace spec:runtime-diagnostics-stream (Stderr line pass-through)
+        // @trace plan/issues/linux-headless-spec-gaps-2026-05-27.md (gap 3 phase-2g)
+        let _diag_logs_handle = if debug {
+            Some(
+                tillandsias_podman::DiagnosticsHandle::start_typed_event_stream(vec![
+                    "tillandsias-router".to_string(),
+                    "tillandsias-proxy".to_string(),
+                    git_container_name.clone(),
+                    "tillandsias-inference".to_string(),
+                ])
+                .await,
+            )
+        } else {
+            None
+        };
+
         let diagnostics = std::env::args().any(|a| a == "--diagnostics");
         let opencode_args = build_opencode_forge_args(
             &project_path_resolved,
@@ -4142,6 +4358,16 @@ fn run_opencode_mode(project_path: &str, prompt: Option<&str>, debug: bool) -> R
             )
             .await;
         cleanup_shared_stack_if_no_running_forge(&client, project_name, debug).await;
+
+        // Stop the diagnostic-event emitter before propagating the
+        // forge result so the stderr stream cleanly closes with the
+        // session. abort + await is safe to call when handle is None
+        // (--debug off) because we only entered this branch via Some.
+        if let Some(handle) = diag_emitter {
+            handle.abort();
+            let _ = handle.await;
+        }
+
         result.map_err(|e| format!("[OpenCode] forge session exited: {e}"))?;
 
         Ok::<(), String>(())
@@ -4264,14 +4490,12 @@ fn observatorium_probe_status(url: &str) -> Result<u16, String> {
     })
 }
 
-/// Best-effort tail of the observatorium container's podman logs. Used
-/// in the readiness-probe failure message so the user has something
-/// actionable to look at without having to know the container name.
+/// Best-effort tail of a container's podman logs. Used in readiness-probe
+/// failure messages so the user has something actionable to look at.
 /// Routes through `tillandsias-podman::PodmanClient::log_tail` to honour
 /// the idiomatic-podman layer contract (`tests::idiomatic_podman_launch_
 /// paths_do_not_bypass_shared_layer`).
-fn observatorium_logs_tail(project_name: &str, lines: usize) -> String {
-    let container = observatorium_container_name(project_name);
+fn container_logs_tail(container: &str, lines: usize) -> String {
     let rt = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -4280,7 +4504,7 @@ fn observatorium_logs_tail(project_name: &str, lines: usize) -> String {
         Err(e) => return format!("    (could not build log-tail runtime: {e})"),
     };
     let client = PodmanClient::new();
-    let tail = rt.block_on(async move { client.log_tail(&container, lines).await });
+    let tail = rt.block_on(async move { client.log_tail(container, lines).await });
     match tail {
         Ok(t) if t.lines.is_empty() => "    (container logs are empty)".into(),
         Ok(t) => t
@@ -4291,6 +4515,14 @@ fn observatorium_logs_tail(project_name: &str, lines: usize) -> String {
             .join("\n"),
         Err(e) => format!("    (podman log_tail failed: {e})"),
     }
+}
+
+/// Best-effort tail of the observatorium container's podman logs. Used
+/// in the readiness-probe failure message so the user has something
+/// actionable to look at without having to know the container name.
+fn observatorium_logs_tail(project_name: &str, lines: usize) -> String {
+    let container = observatorium_container_name(project_name);
+    container_logs_tail(&container, lines)
 }
 
 #[cfg(test)]
@@ -4388,31 +4620,46 @@ fn opencode_web_http_status(url: &str, cookie_header: Option<String>) -> Result<
     })
 }
 
-fn wait_for_opencode_web_route(url: &str, debug: bool) -> Result<(), String> {
+fn wait_for_opencode_web_route(project_name: &str, url: &str, debug: bool) -> Result<(), String> {
+    let mut last_outcome = String::from("no HTTP probe attempted");
     for attempt in 1..=20 {
         match opencode_web_http_status(url, None) {
             Ok(401) => return Ok(()),
-            Ok(code) if debug => {
-                eprintln!(
-                    "[tillandsias] waiting for OpenCode Web auth gate: attempt {attempt}/20 (status {code})"
-                );
+            Ok(code) => {
+                last_outcome = format!("status {code}");
+                if debug {
+                    eprintln!(
+                        "[tillandsias] waiting for OpenCode Web auth gate: attempt {attempt}/20 ({last_outcome})"
+                    );
+                }
             }
-            Err(err) if debug => {
-                eprintln!(
-                    "[tillandsias] waiting for OpenCode Web auth gate: attempt {attempt}/20 ({err})"
-                );
+            Err(err) => {
+                last_outcome = err;
+                if debug {
+                    eprintln!(
+                        "[tillandsias] waiting for OpenCode Web auth gate: attempt {attempt}/20 ({last_outcome})"
+                    );
+                }
             }
-            _ => {}
         }
         std::thread::sleep(Duration::from_millis(500));
     }
 
+    let forge_container = forge_container_name(project_name);
+    let logs_tail = container_logs_tail(&forge_container, 50);
     Err(format!(
-        "OpenCode Web auth gate did not become ready: {url}"
+        "OpenCode Web auth gate did not become ready in 10s.\n\
+         URL: {url}\n\
+         Last outcome: {last_outcome}\n\
+         Forge container logs (last ≤50 lines):\n{logs_tail}\n\
+         Next: inspect `podman logs {forge_container}` for the\n\
+         full transcript, then verify the enclave network + router are\n\
+         healthy via `tillandsias --status`."
     ))
 }
 
 fn wait_for_authenticated_opencode_web(
+    project_name: &str,
     url: &str,
     cookie_value: &[u8; tillandsias_otp::COOKIE_LEN],
     debug: bool,
@@ -4423,26 +4670,40 @@ fn wait_for_authenticated_opencode_web(
         tillandsias_otp::format_cookie_value(cookie_value)
     );
 
+    let mut last_outcome = String::from("no HTTP probe attempted");
     for attempt in 1..=20 {
         match opencode_web_http_status(url, Some(cookie_header.clone())) {
             Ok(code) if (200..400).contains(&code) => return Ok(()),
-            Ok(code) if debug => {
-                eprintln!(
-                    "[tillandsias] waiting for authenticated OpenCode Web app: attempt {attempt}/20 (status {code})"
-                );
+            Ok(code) => {
+                last_outcome = format!("status {code}");
+                if debug {
+                    eprintln!(
+                        "[tillandsias] waiting for authenticated OpenCode Web app: attempt {attempt}/20 ({last_outcome})"
+                    );
+                }
             }
-            Err(err) if debug => {
-                eprintln!(
-                    "[tillandsias] waiting for authenticated OpenCode Web app: attempt {attempt}/20 ({err})"
-                );
+            Err(err) => {
+                last_outcome = err;
+                if debug {
+                    eprintln!(
+                        "[tillandsias] waiting for authenticated OpenCode Web app: attempt {attempt}/20 ({last_outcome})"
+                    );
+                }
             }
-            _ => {}
         }
         std::thread::sleep(Duration::from_millis(500));
     }
 
+    let forge_container = forge_container_name(project_name);
+    let logs_tail = container_logs_tail(&forge_container, 50);
     Err(format!(
-        "OpenCode Web app did not become reachable with a registered session: {url}"
+        "OpenCode Web app did not become reachable with a registered session in 10s.\n\
+         URL: {url}\n\
+         Last outcome: {last_outcome}\n\
+         Forge container logs (last ≤50 lines):\n{logs_tail}\n\
+         Next: inspect `podman logs {forge_container}` for the\n\
+         full transcript, then verify the enclave network + router are\n\
+         healthy via `tillandsias --status`."
     ))
 }
 
@@ -4726,7 +4987,7 @@ fn launch_opencode_web_browser(
 ) -> Result<(), String> {
     let url = opencode_web_url(project_name, router_host_port);
     emit_opencode_web_event(project_name, "browser", "wait_for_route", Some(&url))?;
-    if let Err(err) = wait_for_opencode_web_route(&url, debug) {
+    if let Err(err) = wait_for_opencode_web_route(project_name, &url, debug) {
         emit_opencode_web_event(project_name, "browser", "route_unhealthy", Some(&err))?;
         return Err(err);
     }
@@ -4788,7 +5049,7 @@ fn launch_opencode_web_browser(
             emit_opencode_web_event(project_name, "browser", "session_register_failed", Some(&e));
         format!("Failed to register web session with router: {e}")
     })?;
-    if let Err(err) = wait_for_authenticated_opencode_web(&url, &otp, debug) {
+    if let Err(err) = wait_for_authenticated_opencode_web(project_name, &url, &otp, debug) {
         emit_opencode_web_event(project_name, "browser", "session_probe_failed", Some(&err))?;
         return Err(err);
     }
@@ -5453,6 +5714,10 @@ pub(crate) fn build_forge_agent_run_args(
         .env("PROJECT", project_name)
         .env("TILLANDSIAS_PROJECT", project_name)
         .env("TILLANDSIAS_PROJECT_HOST_MOUNT", "1")
+        .tmpfs("/tmp:size=256m,mode=1777")
+        .tmpfs("/run/user/1000:size=64m,mode=0700")
+        .tmpfs("/opt/cheatsheets:size=8m,mode=0755")
+        .env("TILLANDSIAS_CHEATSHEETS", "/opt/cheatsheets")
         .entrypoint(mode.entrypoint());
     if debug {
         spec = spec.env("TILLANDSIAS_DEBUG", "1");
@@ -6493,7 +6758,13 @@ fn spawn_metrics_http_server() -> Option<tokio::task::JoinHandle<()>> {
 /// signal handler, and the async sleep yields the runtime while backing off so
 /// we do not spin aggressively while waiting for termination.
 /// @trace spec:linux-native-portable-executable, spec:signal-handling, spec:runtime-logging
-fn install_shutdown_signal_handlers() -> Result<Arc<AtomicBool>, String> {
+///
+/// `pub(crate)` so the tray's `run_tray_mode_with_debug` path can install
+/// the same SIGTERM/SIGINT atomic and share it with `start_control_socket_server`
+/// for the `TrayPhaseHandle` shutdown watcher. Without it, the tray runs
+/// without signal handlers and SIGTERM kills the process immediately —
+/// sibling-host clients polling `VmStatusRequest` never see `phase=Stopping`.
+pub(crate) fn install_shutdown_signal_handlers() -> Result<Arc<AtomicBool>, String> {
     let terminated = Arc::new(AtomicBool::new(false));
     flag::register(libc::SIGTERM, Arc::clone(&terminated))
         .map_err(|e| format!("Failed to register SIGTERM: {e}"))?;
@@ -7957,6 +8228,99 @@ mod tests {
         assert!(
             control_socket_is_listening(&socket_path),
             "bound listener must be reported as listening"
+        );
+    }
+
+    /// `format_diagnostics_envelope_line` produces the pinned shape
+    /// the distill script's stderr-companion path will consume. The
+    /// line is space-separated `key=value` pairs prefixed with the
+    /// `event:diagnostics_envelope` tag, same family as the existing
+    /// `event:container_launch …` lines. The shape is the API the
+    /// follow-on distill update reads — any regression here would
+    /// silently break the framing recovery.
+    ///
+    /// @trace spec:cli-diagnostics, spec:runtime-diagnostics-stream
+    /// @trace plan/issues/forge-diagnostics-automation-2026-05-27.md
+    #[test]
+    fn format_diagnostics_envelope_line_emits_pinned_shape() {
+        let line = format_diagnostics_envelope_line(
+            "2026-05-29T04:51:00Z",
+            "0.2.260528",
+            "linux",
+            "opencode",
+        );
+        assert_eq!(
+            line,
+            "event:diagnostics_envelope timestamp=2026-05-29T04:51:00Z \
+             tillandsias_version=0.2.260528 host_platform=linux agent=opencode"
+        );
+    }
+
+    /// All five agent kinds (+ `none`) round-trip through
+    /// `select_diagnostics_agent_kind` per the documented precedence
+    /// (opencode > claude > codex > bash > observatorium). `none` is
+    /// the fallback when --diagnostics was passed without an agent
+    /// flag; the envelope still emits so operators get a real
+    /// timestamp.
+    ///
+    /// @trace spec:cli-diagnostics
+    #[test]
+    fn select_diagnostics_agent_kind_respects_precedence_and_none_fallback() {
+        // Precedence: opencode wins even if multiple flags are set.
+        assert_eq!(
+            select_diagnostics_agent_kind(true, true, true, true, true),
+            "opencode"
+        );
+        // Each kind in isolation maps to its token.
+        assert_eq!(
+            select_diagnostics_agent_kind(true, false, false, false, false),
+            "opencode"
+        );
+        assert_eq!(
+            select_diagnostics_agent_kind(false, true, false, false, false),
+            "claude"
+        );
+        assert_eq!(
+            select_diagnostics_agent_kind(false, false, true, false, false),
+            "codex"
+        );
+        assert_eq!(
+            select_diagnostics_agent_kind(false, false, false, true, false),
+            "bash"
+        );
+        assert_eq!(
+            select_diagnostics_agent_kind(false, false, false, false, true),
+            "observatorium"
+        );
+        // No agent flag → `none` fallback.
+        assert_eq!(
+            select_diagnostics_agent_kind(false, false, false, false, false),
+            "none"
+        );
+    }
+
+    /// Envelope line accepts the actual ISO-8601 format the runtime
+    /// emits (`chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Secs,
+    /// true)` → `…Z` suffix, second-precision). Tests against a
+    /// realistic chrono-produced string so a future format-flag flip
+    /// (e.g. millisecond precision, non-Z timezone) breaks the
+    /// regression instead of silently passing through.
+    ///
+    /// @trace spec:cli-diagnostics, spec:runtime-diagnostics-stream
+    #[test]
+    fn format_diagnostics_envelope_line_accepts_real_chrono_timestamp() {
+        use chrono::SecondsFormat;
+        let ts = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
+        let line = format_diagnostics_envelope_line(&ts, "0.2.260528", "linux", "opencode");
+        assert!(line.starts_with("event:diagnostics_envelope timestamp="));
+        // Z suffix (the `true` arg above forces it).
+        let ts_field = line
+            .split_whitespace()
+            .find(|tok| tok.starts_with("timestamp="))
+            .expect("envelope must have a timestamp= field");
+        assert!(
+            ts_field.ends_with('Z'),
+            "timestamp= must end with Z; got {ts_field}"
         );
     }
 }

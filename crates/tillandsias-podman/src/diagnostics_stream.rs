@@ -215,6 +215,80 @@ impl DiagnosticsHandle {
         Self { join_handles }
     }
 
+    /// Like [`Self::start`] but emits each log line through the typed
+    /// diagnostics-event surface — `event:container_stderr container=…
+    /// line=…` to STDERR with the ISO-8601 prefix and the global
+    /// [`DiagnosticsFilter`](crate::diagnostics_filter::DiagnosticsFilter)
+    /// gating from gap-5 phase-1.
+    ///
+    /// This is the gap-3 phase-2g entry point — wired from the
+    /// container-launch paths in `tillandsias-headless` when `--debug`
+    /// or `--diagnostics` is on. Use [`Self::start`] for the legacy
+    /// human-format `[container] line` stdout stream (kept for the
+    /// in-process consumer that hasn't migrated to typed events).
+    ///
+    /// The forge agent's own stderr should NOT be tailed via this path —
+    /// it's served attached to the user's terminal by
+    /// `run_container_attached_observed` and would be double-printed.
+    /// Pass only the SUPPORT containers (router, proxy, git, inference).
+    ///
+    /// @trace spec:runtime-diagnostics-stream (Stderr line pass-through)
+    /// @trace plan/issues/linux-headless-spec-gaps-2026-05-27.md (gap 3 phase-2g)
+    pub async fn start_typed_event_stream(container_names: Vec<String>) -> Self {
+        let (tx, mut rx) = mpsc::unbounded_channel::<ContainerLogRecord>();
+
+        let mut join_handles = Vec::new();
+        for container_name in container_names {
+            let tx = tx.clone();
+            let task = tokio::spawn(async move {
+                match ContainerLogStream::spawn(&container_name).await {
+                    Ok(mut stream) => {
+                        debug!(container = %container_name, "Typed log stream started");
+                        if let Err(e) = stream.forward_records(tx).await {
+                            warn!(
+                                container = %container_name,
+                                %e,
+                                "Typed log stream failed"
+                            );
+                        }
+                    }
+                    Err(e) => {
+                        warn!(
+                            container = %container_name,
+                            %e,
+                            "Failed to start typed log stream"
+                        );
+                    }
+                }
+            });
+            join_handles.push(task);
+        }
+        drop(tx);
+
+        // The emit_diagnostic_event wrapper is the typed-event sink — it
+        // handles the ISO-8601 prefix, stderr destination, and
+        // DiagnosticsFilter check. `true` is passed verbatim because
+        // start_typed_event_stream is only called when --debug/
+        // --diagnostics is on (the caller checks).
+        let emit_task = tokio::spawn(async move {
+            while let Some(record) = rx.recv().await {
+                let body = crate::client::format_container_stderr_event(
+                    &record.container_name,
+                    &record.line,
+                );
+                crate::client::emit_diagnostic_event(
+                    true,
+                    "event:container_stderr",
+                    &record.container_name,
+                    &body,
+                );
+            }
+        });
+        join_handles.push(emit_task);
+
+        Self { join_handles }
+    }
+
     /// Wait for all log streams to complete.
     pub async fn wait_all(&mut self) {
         for handle in &mut self.join_handles {
@@ -283,5 +357,19 @@ mod tests {
     fn typed_log_records_render_like_legacy_lines() {
         let record = ContainerLogRecord::combined("tillandsias-test-forge", "ready");
         assert_eq!(record.render_human(), "[tillandsias-test-forge] ready");
+    }
+
+    /// gap-3 phase-2g compile-pin: `DiagnosticsHandle::start_typed_event_stream`
+    /// keeps the public signature `async fn(Vec<String>) -> Self`. If a
+    /// future refactor narrows the types or makes it non-async, this
+    /// test fails at compile time — the drift signal the wiring slice
+    /// in `tillandsias-headless` depends on.
+    #[test]
+    fn start_typed_event_stream_signature_pin() {
+        // Reference the function as a function pointer to its erased
+        // shape — proves it exists and is callable with the documented
+        // input type. We don't await it because that would actually
+        // spawn `podman logs -f` subprocesses.
+        let _f: fn(Vec<String>) -> _ = DiagnosticsHandle::start_typed_event_stream;
     }
 }

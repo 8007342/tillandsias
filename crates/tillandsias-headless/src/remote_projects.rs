@@ -1,4 +1,5 @@
 // @trace spec:remote-projects, spec:gh-auth-script
+// @cheatsheet runtime/hashicorp-vault-tillandsias.md
 //! GitHub project discovery and caching for tray's "Clone Project" feature.
 //!
 //! Queries GitHub API via `gh` inside the git image, filters projects based on
@@ -8,7 +9,6 @@
 use serde::{Deserialize, Serialize};
 use std::env;
 use std::path::Path;
-use std::process::Command;
 use std::sync::{Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 use tracing::{debug, warn};
@@ -155,7 +155,7 @@ fn run_git_image_shell(script: &str, extra_args: &[&str], debug: bool) -> Result
     if debug {
         debug_log_podman_invocation("run_git_image_shell", &image, true, script, extra_args);
     }
-    let mut command = Command::new("podman");
+    let mut command = tillandsias_podman::podman_cmd_sync();
     command.args([
         "run",
         "--rm",
@@ -373,7 +373,7 @@ exec gh repo clone "$1" "$2"
         );
     }
 
-    let output = Command::new("podman")
+    let output = tillandsias_podman::podman_cmd_sync()
         .args([
             "run",
             "--rm",
@@ -505,6 +505,7 @@ mod tests {
         let _guard = TEST_LOCK.lock().expect("test lock");
         let podman_dir = install_podman_mock();
         let original_path = std::env::var_os("PATH");
+        let original_bin = std::env::var_os("TILLANDSIAS_PODMAN_BIN");
         let mock_path = format!(
             "{}:{}",
             podman_dir.path().display(),
@@ -515,6 +516,7 @@ mod tests {
         );
         unsafe { std::env::set_var("PATH", mock_path) };
         unsafe { std::env::set_var("TILLANDSIAS_GIT_IMAGE", "mock-image") };
+        unsafe { std::env::remove_var("TILLANDSIAS_PODMAN_BIN") };
         invalidate_github_projects_cache();
 
         let projects = discover_github_projects_result().expect("containerized gh fetch");
@@ -526,6 +528,11 @@ mod tests {
         if let Some(path) = original_path {
             unsafe { std::env::set_var("PATH", path) };
         }
+        if let Some(bin) = original_bin {
+            unsafe { std::env::set_var("TILLANDSIAS_PODMAN_BIN", bin) };
+        } else {
+            unsafe { std::env::remove_var("TILLANDSIAS_PODMAN_BIN") };
+        }
         unsafe { std::env::remove_var("TILLANDSIAS_GIT_IMAGE") };
         invalidate_github_projects_cache();
     }
@@ -535,6 +542,7 @@ mod tests {
         let _guard = TEST_LOCK.lock().expect("test lock");
         let podman_dir = install_podman_mock();
         let original_path = std::env::var_os("PATH");
+        let original_bin = std::env::var_os("TILLANDSIAS_PODMAN_BIN");
         let mock_path = format!(
             "{}:{}",
             podman_dir.path().display(),
@@ -545,6 +553,7 @@ mod tests {
         );
         unsafe { std::env::set_var("PATH", mock_path) };
         unsafe { std::env::set_var("TILLANDSIAS_GIT_IMAGE", "mock-image") };
+        unsafe { std::env::remove_var("TILLANDSIAS_PODMAN_BIN") };
 
         let clone_root = tempdir().expect("clone tempdir");
         let target = clone_root.path().join("forge");
@@ -559,6 +568,11 @@ mod tests {
 
         if let Some(path) = original_path {
             unsafe { std::env::set_var("PATH", path) };
+        }
+        if let Some(bin) = original_bin {
+            unsafe { std::env::set_var("TILLANDSIAS_PODMAN_BIN", bin) };
+        } else {
+            unsafe { std::env::remove_var("TILLANDSIAS_PODMAN_BIN") };
         }
         unsafe { std::env::remove_var("TILLANDSIAS_GIT_IMAGE") };
     }
@@ -616,6 +630,7 @@ mod tests {
         let state_dir = tempdir().expect("state tempdir");
         let original_path = std::env::var_os("PATH");
         let original_state = std::env::var_os("LITMUS_PODMAN_STATE_DIR");
+        let original_bin = std::env::var_os("TILLANDSIAS_PODMAN_BIN");
         let mock_path = format!(
             "{}:{}",
             podman_dir.path().display(),
@@ -627,6 +642,7 @@ mod tests {
         unsafe { std::env::set_var("PATH", mock_path) };
         unsafe { std::env::set_var("TILLANDSIAS_GIT_IMAGE", "mock-image") };
         unsafe { std::env::set_var("LITMUS_PODMAN_STATE_DIR", state_dir.path()) };
+        unsafe { std::env::remove_var("TILLANDSIAS_PODMAN_BIN") };
 
         let clone_root = tempdir().expect("clone tempdir");
         let target = clone_root.path().join("lakanoa");
@@ -649,6 +665,11 @@ mod tests {
         } else {
             unsafe { std::env::remove_var("LITMUS_PODMAN_STATE_DIR") };
         }
+        if let Some(bin) = original_bin {
+            unsafe { std::env::set_var("TILLANDSIAS_PODMAN_BIN", bin) };
+        } else {
+            unsafe { std::env::remove_var("TILLANDSIAS_PODMAN_BIN") };
+        }
         unsafe { std::env::remove_var("TILLANDSIAS_GIT_IMAGE") };
     }
 
@@ -668,6 +689,7 @@ mod tests {
         let state_dir = tempdir().expect("state tempdir");
         let original_path = std::env::var_os("PATH");
         let original_state = std::env::var_os("LITMUS_PODMAN_STATE_DIR");
+        let original_bin = std::env::var_os("TILLANDSIAS_PODMAN_BIN");
         let mock_path = format!(
             "{}:{}",
             podman_dir.path().display(),
@@ -679,6 +701,7 @@ mod tests {
         unsafe { std::env::set_var("PATH", mock_path) };
         unsafe { std::env::set_var("TILLANDSIAS_GIT_IMAGE", "mock-image") };
         unsafe { std::env::set_var("LITMUS_PODMAN_STATE_DIR", state_dir.path()) };
+        unsafe { std::env::remove_var("TILLANDSIAS_PODMAN_BIN") };
 
         let clone_root = tempdir().expect("clone tempdir");
         let target = clone_root.path().join("lakanoa");
@@ -725,6 +748,11 @@ mod tests {
             unsafe { std::env::set_var("LITMUS_PODMAN_STATE_DIR", state) };
         } else {
             unsafe { std::env::remove_var("LITMUS_PODMAN_STATE_DIR") };
+        }
+        if let Some(bin) = original_bin {
+            unsafe { std::env::set_var("TILLANDSIAS_PODMAN_BIN", bin) };
+        } else {
+            unsafe { std::env::remove_var("TILLANDSIAS_PODMAN_BIN") };
         }
         unsafe { std::env::remove_var("TILLANDSIAS_GIT_IMAGE") };
     }

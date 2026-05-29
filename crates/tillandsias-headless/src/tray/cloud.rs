@@ -16,7 +16,7 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
-use tillandsias_core::remote_projects;
+use crate::remote_projects;
 use tracing::warn;
 
 use super::{ProjectEntry, TrayUiState, resolved_max_cloud_projects_in_menu};
