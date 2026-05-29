@@ -1,0 +1,99 @@
+# @trace spec:runtime-diagnostics-stream
+# DiagnosticsFilter env-var contract pinning.
+#
+# spec:runtime-diagnostics-stream "Event filtering and control" mandates
+# three env vars: TILLANDSIAS_DEBUG_FILTER (event-type allowlist),
+# TILLANDSIAS_DEBUG_CONTAINER (container-name glob), TILLANDSIAS_DEBUG_LEVEL
+# (normal | verbose, unlocking event:internal_* events). The implementation
+# lives in crates/tillandsias-podman/src/diagnostics_filter.rs and is
+# consumed via DiagnosticsFilter::global() by emit_launch_event and
+# emit_diagnostic_event in client.rs (gap-5 phase-1 of
+# plan/issues/linux-headless-spec-gaps-2026-05-27.md).
+#
+# This litmus is the env-var-surface companion to
+# litmus-runtime-diagnostics-typed-events-shape.yaml. Renaming an env var
+# silently would break user-visible filter behaviour without breaking any
+# unit test (the tests construct DiagnosticsFilter via Self::new, not via
+# from_env). Grepping for the literal env-var strings + the public API +
+# the unit-test names catches that drift before it ships.
+
+name: litmus:diagnostics-filter-env-shape
+spec: runtime-diagnostics-stream
+phase: pre-build
+description: >
+  Verify the DiagnosticsFilter env-var contract
+  (TILLANDSIAS_DEBUG_FILTER / _CONTAINER / _LEVEL) and the public API
+  (pass_through, new, from_env, global, allows) remain present in
+  diagnostics_filter.rs, along with the eight unit tests pinning the
+  spec scenarios.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-podman/src/diagnostics_filter.rs
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "TILLANDSIAS_DEBUG_FILTER env-var literal present"
+    command: "grep -F 'TILLANDSIAS_DEBUG_FILTER' crates/tillandsias-podman/src/diagnostics_filter.rs"
+    timeout_ms: 3000
+    expected_behavior: "TILLANDSIAS_DEBUG_FILTER"
+
+  - step: "TILLANDSIAS_DEBUG_CONTAINER env-var literal present"
+    command: "grep -F 'TILLANDSIAS_DEBUG_CONTAINER' crates/tillandsias-podman/src/diagnostics_filter.rs"
+    timeout_ms: 3000
+    expected_behavior: "TILLANDSIAS_DEBUG_CONTAINER"
+
+  - step: "TILLANDSIAS_DEBUG_LEVEL env-var literal present"
+    command: "grep -F 'TILLANDSIAS_DEBUG_LEVEL' crates/tillandsias-podman/src/diagnostics_filter.rs"
+    timeout_ms: 3000
+    expected_behavior: "TILLANDSIAS_DEBUG_LEVEL"
+
+  - step: "verbose level keyword still gates internal events"
+    # `event:internal_*` is the canonical prefix for verbose-only events.
+    # If either string drifts, the level gate stops working without any
+    # unit test failing (the tests use DebugLevel::Verbose directly).
+    command: "grep -F '\"verbose\"' crates/tillandsias-podman/src/diagnostics_filter.rs && grep -F 'event:internal_' crates/tillandsias-podman/src/diagnostics_filter.rs"
+    timeout_ms: 3000
+    expected_behavior: "event:internal_"
+
+  - step: "public API: pass_through / new / from_env / global / allows"
+    command: "grep -E 'pub fn pass_through' crates/tillandsias-podman/src/diagnostics_filter.rs && grep -E 'pub fn new\\(' crates/tillandsias-podman/src/diagnostics_filter.rs && grep -E 'pub fn from_env' crates/tillandsias-podman/src/diagnostics_filter.rs && grep -E 'pub fn global' crates/tillandsias-podman/src/diagnostics_filter.rs && grep -E 'pub fn allows\\(' crates/tillandsias-podman/src/diagnostics_filter.rs"
+    timeout_ms: 3000
+    expected_behavior: "pub fn allows("
+
+  - step: "eight unit tests pinning the spec scenarios still attached"
+    # If any of these is renamed without updating both this litmus and
+    # the spec-mapped scenario list, a regression in the env-var surface
+    # could ship behind a green CI run.
+    command: "grep -F 'fn pass_through_allows_everything' crates/tillandsias-podman/src/diagnostics_filter.rs && grep -F 'fn event_type_allowlist_gates_emission' crates/tillandsias-podman/src/diagnostics_filter.rs && grep -F 'fn event_type_blank_items_skipped' crates/tillandsias-podman/src/diagnostics_filter.rs && grep -F 'fn container_glob_matches' crates/tillandsias-podman/src/diagnostics_filter.rs && grep -F 'fn internal_events_require_verbose' crates/tillandsias-podman/src/diagnostics_filter.rs && grep -F 'fn filters_compose_with_and_semantics' crates/tillandsias-podman/src/diagnostics_filter.rs && grep -F 'fn debug_level_parse_is_lenient' crates/tillandsias-podman/src/diagnostics_filter.rs && grep -F 'fn glob_matches_primitives' crates/tillandsias-podman/src/diagnostics_filter.rs"
+    timeout_ms: 3000
+    expected_behavior: "glob_matches_primitives"
+
+  - step: "DiagnosticsFilter::global() OnceLock cache still in place"
+    # The global() cache is the only path that reads from env. If it gets
+    # accidentally bypassed (e.g. a refactor inlines from_env at each
+    # call site), env vars would be re-read on every emission — wasteful
+    # and inconsistent during a long-running session.
+    command: "grep -F 'OnceLock' crates/tillandsias-podman/src/diagnostics_filter.rs"
+    timeout_ms: 3000
+    expected_behavior: "OnceLock"
+
+observability:
+  traces:
+    - "@trace spec:runtime-diagnostics-stream"
+  expected_log: "DiagnosticsFilter env-var contract + public API + spec-scenario tests intact"
+  log_fields:
+    spec: "runtime-diagnostics-stream"
+    test: "diagnostics-filter-env-shape"
+
+rollback:
+  on_failure: >
+    An env var, public API name, or unit-test name has drifted. Cross-check
+    against plan/issues/linux-headless-spec-gaps-2026-05-27.md (gap 5
+    phase-1) and the spec scenarios under
+    openspec/specs/runtime-diagnostics-stream/spec.md
+    (Requirement: Event filtering and control). If the rename was
+    deliberate, update both the spec scenario literal and this litmus'
+    greps in lockstep — never one without the other.
+  command: "grep -nE 'TILLANDSIAS_DEBUG_|pub fn (pass_through|new|from_env|global|allows)\\(|OnceLock' crates/tillandsias-podman/src/diagnostics_filter.rs"

@@ -3,210 +3,491 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Observatorium</title>
+  <title>Tillandsias Observatorium</title>
+  <link rel="stylesheet" href="lib/highlight.min.css">
+  <script src="lib/chart.umd.js"></script>
+  <script src="lib/highlight.min.js"></script>
   <style>
+    @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+    
     :root {
       color-scheme: dark;
       --bg: #0b0f14;
-      --bg2: #10161d;
-      --panel: #121a23;
-      --panel2: #16202a;
-      --line: #243243;
-      --line-soft: #1b2633;
+      --bg-gradient: radial-gradient(circle at top right, #1a2636 0%, var(--bg) 60%);
+      --panel: rgba(18, 26, 35, 0.6);
+      --panel-hover: rgba(255, 255, 255, 0.05);
+      --line: rgba(255, 255, 255, 0.1);
+      --line-soft: rgba(255, 255, 255, 0.05);
       --text: #d8e2ee;
-      --muted: #8da2b8;
+      --text-muted: #8da2b8;
       --accent: #8bb7ff;
+      --accent-glow: rgba(139, 183, 255, 0.3);
       --accent2: #75d0c4;
       --chip: rgba(139, 183, 255, 0.12);
+      --chart-color-1: #8bb7ff;
+      --chart-color-2: #ff8b8b;
     }
+
     * { box-sizing: border-box; }
-    html, body { margin: 0; min-height: 100%; background: radial-gradient(circle at top, #16202d 0%, var(--bg) 45%); color: var(--text); font: 14px/1.5 system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
-    a { color: var(--accent); text-decoration: none; }
-    a:hover { text-decoration: underline; }
-    .shell { display: grid; grid-template-rows: auto auto 1fr; min-height: 100vh; }
-    header { padding: 18px 20px 10px; border-bottom: 1px solid var(--line-soft); background: linear-gradient(180deg, rgba(255,255,255,0.03), transparent); }
-    h1 { margin: 0; font-size: 20px; font-weight: 650; letter-spacing: 0.01em; }
-    .subtitle { margin-top: 6px; color: var(--muted); font-size: 13px; }
-    .toolbar { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-top: 14px; }
-    .search, .badge, button {
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: var(--bg-gradient);
+      background-attachment: fixed;
+      color: var(--text);
+      font-family: 'Inter', -apple-system, sans-serif;
+      font-size: 14px;
+      line-height: 1.5;
+      display: flex;
+      flex-direction: column;
+    }
+    
+    a { color: var(--accent); text-decoration: none; transition: color 0.2s; }
+    a:hover { color: #fff; }
+
+    /* Layout Shell */
+    .shell {
+      display: flex;
+      flex-direction: column;
+      flex: 1;
+      height: 100vh;
+      overflow: hidden;
+    }
+
+    /* Header */
+    header.top-nav {
+      padding: 20px 24px 0;
+      border-bottom: 1px solid var(--line-soft);
+      background: rgba(11, 15, 20, 0.7);
+      backdrop-filter: blur(12px);
+      -webkit-backdrop-filter: blur(12px);
+      z-index: 10;
+      flex-shrink: 0;
+    }
+    
+    .header-content {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-end;
+      padding-bottom: 20px;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 24px;
+      font-weight: 700;
+      letter-spacing: -0.02em;
+      background: linear-gradient(90deg, #fff, var(--accent));
+      -webkit-background-clip: text;
+      -webkit-text-fill-color: transparent;
+    }
+    .brand .subtitle {
+      margin-top: 4px;
+      color: var(--text-muted);
+      font-size: 13px;
+    }
+
+    .toolbar {
+      display: flex;
+      gap: 12px;
+      align-items: center;
+    }
+
+    /* Inputs & Buttons */
+    input, button, .badge {
+      font-family: inherit;
       border: 1px solid var(--line);
       border-radius: 999px;
       background: rgba(255,255,255,0.03);
       color: var(--text);
-      padding: 8px 12px;
+      padding: 8px 16px;
+      font-size: 13px;
+      transition: all 0.2s ease;
     }
-    .search { min-width: 260px; outline: none; }
-    .badge { color: var(--muted); background: var(--chip); }
-    button { cursor: pointer; }
-    main { padding: 16px; display: grid; grid-template-columns: 1.1fr 1.2fr 1fr; gap: 14px; min-height: 0; }
-    .panel {
-      min-height: 0;
-      border: 1px solid var(--line);
-      border-radius: 20px;
-      background: linear-gradient(180deg, rgba(255,255,255,0.03), transparent), var(--panel);
+    input:focus {
+      outline: none;
+      border-color: var(--accent);
+      box-shadow: 0 0 0 2px var(--accent-glow);
+    }
+    button { cursor: pointer; font-weight: 500; }
+    button:hover {
+      background: rgba(255,255,255,0.08);
+      border-color: var(--accent);
+    }
+    .badge { color: var(--text-muted); background: var(--chip); border: none; }
+
+    /* Tabs */
+    .tabs {
+      display: flex;
+      gap: 24px;
+      margin-top: 10px;
+    }
+    .tab {
+      padding: 10px 4px;
+      color: var(--text-muted);
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+      font-weight: 500;
+      transition: all 0.2s;
+    }
+    .tab:hover { color: #fff; }
+    .tab.active {
+      color: var(--accent);
+      border-bottom-color: var(--accent);
+    }
+
+    /* Main Content Area */
+    main {
+      flex: 1;
+      position: relative;
       overflow: hidden;
-      display: grid;
+    }
+
+    .view {
+      position: absolute;
+      top: 0; left: 0; right: 0; bottom: 0;
+      display: none;
+      padding: 20px;
+      overflow: hidden;
+      animation: fadeIn 0.3s ease;
+    }
+    .view.active { display: grid; }
+    
+    @keyframes fadeIn {
+      from { opacity: 0; transform: translateY(5px); }
+      to { opacity: 1; transform: translateY(0); }
+    }
+
+    /* Trace Viewer Layout */
+    #trace-view {
+      grid-template-columns: 1.1fr 1.2fr 1fr;
+      gap: 20px;
+    }
+
+    /* Dashboard Layout */
+    #dashboard-view {
+      display: none;
+      grid-template-columns: 1fr 300px;
       grid-template-rows: auto 1fr;
-      box-shadow: 0 20px 50px rgba(0,0,0,0.22);
+      gap: 20px;
+      overflow-y: auto;
     }
+    #dashboard-view.active { display: grid; }
+
+    /* Panels (Glassmorphism) */
+    .panel {
+      display: flex;
+      flex-direction: column;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: var(--panel);
+      backdrop-filter: blur(16px);
+      -webkit-backdrop-filter: blur(16px);
+      box-shadow: 0 20px 40px rgba(0,0,0,0.3);
+      overflow: hidden;
+    }
+    
     .panel header {
-      padding: 14px 16px;
+      padding: 16px 20px;
       border-bottom: 1px solid var(--line-soft);
-      background: transparent;
+      background: rgba(255,255,255,0.01);
     }
-    .panel h2 { margin: 0; font-size: 15px; }
-    .panel .meta { margin-top: 4px; color: var(--muted); font-size: 12px; }
-    .list { overflow: auto; padding: 10px; min-height: 0; }
+    .panel h2 { margin: 0; font-size: 15px; font-weight: 600; }
+    .panel .meta { margin-top: 4px; color: var(--text-muted); font-size: 12px; }
+    
+    .list { overflow-y: auto; padding: 12px; flex: 1; }
+    
+    /* Cards */
     .card {
       border: 1px solid var(--line-soft);
-      border-radius: 16px;
-      background: rgba(255,255,255,0.025);
-      margin-bottom: 10px;
+      border-radius: 12px;
+      background: rgba(255,255,255,0.02);
+      margin-bottom: 12px;
+      transition: all 0.2s ease;
       overflow: hidden;
     }
-    .card.selected { border-color: rgba(139,183,255,0.6); box-shadow: 0 0 0 1px rgba(139,183,255,0.2) inset; }
+    .card:hover {
+      background: var(--panel-hover);
+      border-color: rgba(255,255,255,0.15);
+    }
+    .card.selected {
+      border-color: var(--accent);
+      box-shadow: 0 0 0 1px var(--accent-glow) inset;
+      background: rgba(139, 183, 255, 0.05);
+    }
+    
     .card button.row {
       width: 100%;
       text-align: left;
       border: 0;
       background: transparent;
-      padding: 12px 13px;
+      padding: 14px 16px;
       border-radius: 0;
     }
+    
     .title-line { display: flex; gap: 8px; align-items: baseline; flex-wrap: wrap; }
-    .title-line strong { font-weight: 650; }
-    .title-line small { color: var(--muted); }
-    .summary { margin-top: 6px; color: var(--muted); font-size: 12px; }
-    .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 8px; }
+    .title-line strong { font-weight: 600; font-size: 14px; color: #fff; }
+    .title-line small { color: var(--text-muted); }
+    .summary { margin-top: 6px; color: var(--text-muted); font-size: 12px; line-height: 1.4; }
+    
+    .chips { display: flex; gap: 6px; flex-wrap: wrap; margin-top: 10px; }
     .chip {
-      padding: 3px 8px;
+      padding: 4px 10px;
       border-radius: 999px;
       background: var(--chip);
       color: var(--accent2);
       font-size: 11px;
+      font-weight: 500;
     }
+    
     .details {
       border-top: 1px solid var(--line-soft);
-      padding: 11px 13px 13px;
-      background: rgba(255,255,255,0.02);
-      color: var(--text);
+      padding: 12px 16px;
+      background: rgba(0,0,0,0.2);
     }
     .details.hidden { display: none; }
-    .details .block { margin-top: 8px; color: var(--muted); font-size: 12px; }
-    .kv { display: grid; grid-template-columns: 92px 1fr; gap: 4px 10px; font-size: 12px; }
-    .kv div:nth-child(odd) { color: var(--muted); }
+    
+    .kv { display: grid; grid-template-columns: 80px 1fr; gap: 6px 12px; font-size: 12px; }
+    .kv div:nth-child(odd) { color: var(--text-muted); font-weight: 500; }
+    
     .code-list { list-style: none; padding: 0; margin: 0; }
-    .code-list li {
-      border-bottom: 1px solid var(--line-soft);
-      padding: 10px 0;
-    }
+    .code-list li { border-bottom: 1px solid var(--line-soft); padding: 12px 0; }
     .code-list li:last-child { border-bottom: 0; }
-    .empty { padding: 16px; color: var(--muted); }
-    .footer-note {
-      padding: 10px 16px 14px;
-      border-top: 1px solid var(--line-soft);
-      color: var(--muted);
-      font-size: 12px;
+    .code-list .block { margin-top: 4px; color: var(--text-muted); font-size: 12px; font-family: ui-monospace, monospace; }
+    
+    .empty { padding: 20px; color: var(--text-muted); text-align: center; }
+
+    /* Dashboard Specifics */
+    .chart-container {
+      position: relative;
+      width: 100%;
+      height: 400px;
+      padding: 20px;
     }
-    code, pre { font-family: ui-monospace, "SFMono-Regular", Consolas, "Liberation Mono", monospace; }
+    
+    .metrics-grid {
+      display: grid;
+      grid-template-columns: repeat(2, 1fr);
+      gap: 16px;
+      padding: 20px;
+    }
+    
+    .metric-box {
+      background: rgba(255,255,255,0.03);
+      border: 1px solid var(--line-soft);
+      border-radius: 12px;
+      padding: 16px;
+      text-align: center;
+    }
+    .metric-box h3 { margin: 0 0 8px; font-size: 12px; color: var(--text-muted); font-weight: 500; text-transform: uppercase; letter-spacing: 0.05em; }
+    .metric-box .val { font-size: 28px; font-weight: 700; color: #fff; }
+    .metric-box .sub { font-size: 12px; color: var(--accent); margin-top: 4px; }
+    
+    .dash-full-width { grid-column: 1 / -1; }
+
+    /* Footer */
+    .footer-note {
+      padding: 12px 24px;
+      border-top: 1px solid var(--line-soft);
+      background: rgba(11, 15, 20, 0.9);
+      color: var(--text-muted);
+      font-size: 12px;
+      display: flex;
+      justify-content: space-between;
+    }
+
     @media (max-width: 1200px) {
-      main { grid-template-columns: 1fr; }
+      #trace-view { grid-template-columns: 1fr; overflow-y: auto; }
+      .panel { min-height: 400px; }
+      #dashboard-view { grid-template-columns: 1fr; }
     }
   </style>
 </head>
 <body>
 <div class="shell">
-  <header>
-    <h1>Observatorium</h1>
-    <div class="subtitle">Live local trace graph for specs, code, and cheatsheets. Minimal UI, no cache, project source mounted read-only.</div>
-    <div class="toolbar">
-      <input id="search" class="search" placeholder="Filter specs, code hits, or cheatsheets">
-      <button id="refresh">Refresh</button>
-      <span id="status" class="badge">Loading source snapshot…</span>
+  <header class="top-nav">
+    <div class="header-content">
+      <div class="brand">
+        <h1>Observatorium</h1>
+        <div class="subtitle">Live source traces & convergence metrics.</div>
+      </div>
+      <div class="toolbar">
+        <input id="search" placeholder="Filter specs, code, cheatsheets" style="width: 280px;">
+        <button id="refresh">Sync Data</button>
+        <span id="status" class="badge">Loading...</span>
+      </div>
+    </div>
+    <div class="tabs">
+      <div class="tab active" data-target="trace-view">Trace Viewer</div>
+      <div class="tab" data-target="dashboard-view">Convergence Dashboard</div>
     </div>
   </header>
 
   <main>
-    <section class="panel">
-      <header>
-        <h2>Specs</h2>
-        <div class="meta">Selected spec and nearby trace provenance</div>
-      </header>
-      <div id="specs" class="list"></div>
+    <!-- Trace View -->
+    <section id="trace-view" class="view active">
+      <div class="panel">
+        <header>
+          <h2>Specs</h2>
+          <div class="meta">Select a spec to view provenance</div>
+        </header>
+        <div id="specs" class="list"></div>
+      </div>
+
+      <div class="panel">
+        <header>
+          <h2>Code Hits</h2>
+          <div class="meta">Source locations for active selection</div>
+        </header>
+        <div id="code" class="list"></div>
+      </div>
+
+      <div class="panel">
+        <header>
+          <h2>Cheatsheets</h2>
+          <div class="meta">Relevant guides and bound specs</div>
+        </header>
+        <div id="sheets" class="list"></div>
+      </div>
     </section>
 
-    <section class="panel">
-      <header>
-        <h2>Code</h2>
-        <div class="meta">Source hits from TRACES.md for the active selection</div>
-      </header>
-      <div id="code" class="list"></div>
-    </section>
+    <!-- Dashboard View -->
+    <section id="dashboard-view" class="view">
+      <div class="panel dash-full-width">
+        <header style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 16px;">
+          <div>
+            <h2>Convergence Progression</h2>
+            <div class="meta">CentiColon closure vs. Residual Obligations over recent releases</div>
+          </div>
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <label for="spec-filter" style="font-size: 13px; color: var(--text-muted); font-weight: 500;">Filter Spec:</label>
+            <input list="specs-datalist" id="spec-filter" placeholder="All Specs (Overall)" style="width: 240px; padding: 6px 12px; font-size: 13px; border-radius: 8px;">
+            <datalist id="specs-datalist">
+              <option value="All Specs (Overall)">
+            </datalist>
+          </div>
+        </header>
+        <div class="chart-container">
+          <canvas id="convergenceChart"></canvas>
+        </div>
+      </div>
+      
+      <div class="panel dash-full-width" style="height: auto;">
+        <div class="metrics-grid" id="metrics-summary">
+          <!-- Filled via JS -->
+        </div>
+      </div>
 
-    <section class="panel">
-      <header>
-        <h2>Cheatsheets</h2>
-        <div class="meta">Relevant cheatsheet hits and traced specs</div>
-      </header>
-      <div id="sheets" class="list"></div>
+      <div class="panel dash-full-width" style="height: auto; max-height: 400px; margin-bottom: 20px;">
+        <header>
+          <h2>Timeline of Milestones & Refactors</h2>
+          <div class="meta">Key events parsed dynamically from the convergence history</div>
+        </header>
+        <div id="milestones-timeline" class="list" style="padding: 20px; display: flex; flex-direction: column; gap: 12px; overflow-y: auto;">
+          <!-- Filled via JS -->
+        </div>
+      </div>
     </section>
   </main>
 
-  <div class="footer-note" id="footer">Ready.</div>
+  <div class="footer-note">
+    <span id="footer-left">Ready.</span>
+    <span id="footer-right">Zero-dependency native projection.</span>
+  </div>
 </div>
 
 <script>
+// ==========================================
+// App State & Globals
+// ==========================================
 const SOURCE_ROOT = (window.OBSERVATORIUM_SOURCE_ROOT || '/source').replace(/\/+$/, '') || '';
 const state = {
   traces: [],
   sheets: [],
+  dashboard: null,
   selectedSpec: null,
   selectedSheet: null,
   search: '',
   sheetCache: new Map(),
+  fileCache: new Map(),
+  hitBounds: new Map(),
+  detectedSourceRoot: '/source',
+  chartInstance: null
 };
 
 const els = {
   status: document.getElementById('status'),
-  footer: document.getElementById('footer'),
+  footerLeft: document.getElementById('footer-left'),
   search: document.getElementById('search'),
   refresh: document.getElementById('refresh'),
   specs: document.getElementById('specs'),
   code: document.getElementById('code'),
   sheets: document.getElementById('sheets'),
+  tabs: document.querySelectorAll('.tab'),
+  views: document.querySelectorAll('.view'),
+  metricsGrid: document.getElementById('metrics-summary')
 };
 
 function setStatus(text) { els.status.textContent = text; }
-function setFooter(text) { els.footer.textContent = text; }
+function setFooter(text) { els.footerLeft.textContent = text; }
 
+// ==========================================
+// Tab Navigation
+// ==========================================
+els.tabs.forEach(tab => {
+  tab.addEventListener('click', () => {
+    els.tabs.forEach(t => t.classList.remove('active'));
+    els.views.forEach(v => v.classList.remove('active'));
+    tab.classList.add('active');
+    document.getElementById(tab.dataset.target).classList.add('active');
+    
+    // Resize chart if switching to dashboard
+    if (tab.dataset.target === 'dashboard-view' && state.chartInstance) {
+      state.chartInstance.resize();
+    }
+  });
+});
+
+// ==========================================
+// Data Fetching
+// ==========================================
 async function fetchText(path) {
   const res = await fetch(path, { cache: 'no-store' });
   if (!res.ok) throw new Error(`${path}: ${res.status}`);
   return res.text();
 }
 
-async function fetchFirst(paths) {
+async function fetchJSON(path) {
+  const res = await fetch(path, { cache: 'no-store' });
+  if (!res.ok) throw new Error(`${path}: ${res.status}`);
+  return res.json();
+}
+
+async function fetchFirst(paths, type = 'text') {
   let lastError = null;
   for (const path of paths) {
     try {
-      return { path, text: await fetchText(path) };
+      return { path, data: type === 'json' ? await fetchJSON(path) : await fetchText(path) };
     } catch (err) {
       lastError = err;
     }
   }
-  return { path: null, text: '', error: lastError };
+  return { path: null, data: type === 'json' ? null : '', error: lastError };
 }
 
 function sourcePath(path) {
   const clean = String(path).replace(/^\/+/, '');
-  return SOURCE_ROOT ? `${SOURCE_ROOT}/${clean}` : `/${clean}`;
+  const root = (typeof state !== 'undefined' && state.detectedSourceRoot !== undefined) ? state.detectedSourceRoot : (window.OBSERVATORIUM_SOURCE_ROOT || '/source');
+  return root ? `${root.replace(/\/+$/, '')}/${clean}` : `/${clean}`;
 }
-
 function sourceHref(href) {
   if (/^(https?:|data:|#)/i.test(href)) return href;
   return sourcePath(href);
 }
 
+// ==========================================
+// Parsers
+// ==========================================
 function parseTraces(markdown) {
   const rows = [];
   for (const line of markdown.split(/\r?\n/)) {
@@ -231,10 +512,7 @@ function parseCheatsheetIndex(markdown) {
   for (const rawLine of markdown.split(/\r?\n/)) {
     const line = rawLine.trimEnd();
     const heading = line.match(/^##\s+(.+)$/);
-    if (heading) {
-      category = heading[1].trim();
-      continue;
-    }
+    if (heading) { category = heading[1].trim(); continue; }
     const item = line.match(/^-\s+(.+?)\s+—\s+(.+)$/);
     if (!item || !category) continue;
     const file = item[1].replace(/\s+\[.*$/, '').trim();
@@ -248,13 +526,8 @@ function parseCheatsheetIndex(markdown) {
   return items;
 }
 
-function specNameFromTrace(trace) {
-  return trace.replace(/^spec:/, '');
-}
-
-function tokenize(value) {
-  return value.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean);
-}
+function specNameFromTrace(trace) { return trace.replace(/^spec:/, ''); }
+function tokenize(value) { return value.toLowerCase().split(/[^a-z0-9]+/).filter(Boolean); }
 
 function scoreSheet(sheet, specId) {
   const tokens = tokenize(specId);
@@ -265,12 +538,12 @@ function scoreSheet(sheet, specId) {
 async function loadSheetAnnotations(sheet) {
   if (state.sheetCache.has(sheet.path)) return state.sheetCache.get(sheet.path);
   try {
-    const { text } = await fetchFirst([
+    const { data } = await fetchFirst([
       sourcePath(`cheatsheets/${sheet.path}`),
-      `/cheatsheets/${sheet.path}`,
+      `/cheatsheets/${sheet.path}`
     ]);
-    const traces = [...text.matchAll(/@trace\s+spec:([a-z0-9-]+)/gi)].map(m => m[1]);
-    const parsed = { text, traces };
+    const traces = [...data.matchAll(/@trace\s+spec:([a-z0-9-]+)/gi)].map(m => m[1]);
+    const parsed = { text: data, traces };
     state.sheetCache.set(sheet.path, parsed);
     return parsed;
   } catch (err) {
@@ -278,6 +551,112 @@ async function loadSheetAnnotations(sheet) {
     state.sheetCache.set(sheet.path, parsed);
     return parsed;
   }
+}
+
+// ==========================================
+// Trace Viewer Rendering
+// ==========================================
+function extractSpecSummary(markdown) {
+  const lines = markdown.split(/\r?\n/);
+  let purposeIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].trim().startsWith('## Purpose')) {
+      purposeIdx = i;
+      break;
+    }
+  }
+  
+  if (purposeIdx !== -1) {
+    const summaryLines = [];
+    for (let i = purposeIdx + 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (line.startsWith('#')) break;
+      if (line) {
+        summaryLines.push(line);
+      }
+    }
+    if (summaryLines.length > 0) {
+      return summaryLines.join(' ');
+    }
+  }
+
+  let titleIdx = -1;
+  for (let i = 0; i < lines.length; i++) {
+    if (lines[i].trim().startsWith('# ')) {
+      titleIdx = i;
+      break;
+    }
+  }
+  if (titleIdx !== -1) {
+    const summaryLines = [];
+    for (let i = titleIdx + 1; i < lines.length; i++) {
+      const line = lines[i].trim();
+      if (line.startsWith('#')) break;
+      if (line) {
+        summaryLines.push(line);
+      }
+    }
+    if (summaryLines.length > 0) {
+      return summaryLines.join(' ');
+    }
+  }
+
+  return "";
+}
+
+function cleanSummary(text) {
+  return text
+    .replace(/\[(.*?)\]\(.*?\)/g, '$1')
+    .replace(/`/g, '')
+    .trim()
+    .substring(0, 180);
+}
+
+function parseCheatsheetBlocks(markdown) {
+  const lines = markdown.split(/\r?\n/);
+  const blocks = [];
+  let currentBlock = null;
+
+  for (const line of lines) {
+    const headingMatch = line.match(/^##\s+(.+)$/);
+    if (headingMatch) {
+      if (currentBlock) {
+        blocks.push(currentBlock);
+      }
+      const title = headingMatch[1].trim();
+      currentBlock = {
+        title,
+        lines: [],
+        description: ''
+      };
+    } else if (currentBlock) {
+      currentBlock.lines.push(line);
+    }
+  }
+  if (currentBlock) {
+    blocks.push(currentBlock);
+  }
+
+  blocks.forEach(block => {
+    const textLines = block.lines
+      .map(l => l.trim())
+      .filter(l => l && !l.startsWith('`') && !l.startsWith('|') && !l.startsWith('-') && !l.startsWith('*') && !l.startsWith('<') && !l.startsWith('!') && !l.startsWith('>'));
+    
+    let desc = '';
+    if (textLines.length > 0) {
+      desc = textLines[0].replace(/[#*`_\[\]()]/g, '');
+    } else {
+      const hasTable = block.lines.some(l => l.includes('|'));
+      const hasCode = block.lines.some(l => l.startsWith('```'));
+      if (hasTable) desc = "Reference table / command summary";
+      else if (hasCode) desc = "Command line examples & code patterns";
+      else desc = "Reference notes";
+    }
+    block.description = desc.substring(0, 100);
+    block.content = block.lines.join('\n').trim();
+  });
+
+  return blocks;
 }
 
 function selectedTraceRow() {
@@ -289,7 +668,12 @@ function filteredSpecs() {
   const q = state.search.toLowerCase();
   return state.traces.filter(row => {
     const specId = specNameFromTrace(row.trace);
-    return !q || specId.includes(q) || row.specPath.toLowerCase().includes(q) || row.sources.some(s => s.href.toLowerCase().includes(q) || s.label.toLowerCase().includes(q));
+    const summaryText = (row.summary || '').toLowerCase();
+    return !q || 
+           specId.includes(q) || 
+           row.specPath.toLowerCase().includes(q) || 
+           summaryText.includes(q) ||
+           row.sources.some(s => s.href.toLowerCase().includes(q) || s.label.toLowerCase().includes(q));
   });
 }
 
@@ -302,87 +686,274 @@ function filteredSheets() {
 }
 
 function escapeHtml(value) {
-  return String(value)
-    .replace(/&/g, '&amp;')
-    .replace(/</g, '&lt;')
-    .replace(/>/g, '&gt;')
-    .replace(/"/g, '&quot;')
-    .replace(/'/g, '&#39;');
+  return String(value).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;').replace(/"/g, '&quot;').replace(/'/g, '&#39;');
 }
-
-function escapeAttr(value) {
-  return escapeHtml(value).replace(/`/g, '&#96;');
-}
+function escapeAttr(value) { return escapeHtml(value).replace(/`/g, '&#96;'); }
 
 function renderSpecs() {
   const rows = filteredSpecs();
   if (!rows.length) {
-    els.specs.innerHTML = '<div class="empty">No specs match the current filter.</div>';
+    els.specs.innerHTML = '<div class="empty">No specs match filter.</div>';
     return;
   }
   els.specs.innerHTML = rows.map(row => {
     const specId = specNameFromTrace(row.trace);
     const selected = specId === state.selectedSpec;
-    const chips = row.sources.slice(0, 4).map(src => `<span class="chip">${escapeHtml(src.label)}</span>`).join('');
+    const chips = row.sources.slice(0, 3).map(src => `<span class="chip">${escapeHtml(src.label)}</span>`).join('');
+    
+    const summaryHtml = row.summary 
+      ? `<div class="summary" style="margin-top: 6px; font-size: 12px; color: var(--text-muted); line-height: 1.4; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; overflow: hidden;">${escapeHtml(row.summary)}</div>`
+      : '';
+    const hitsHtml = `<div class="summary" style="margin-top: 6px; color: var(--accent); font-size: 11px; font-weight: 500;">${row.sources.length} code hit(s)</div>`;
+
     return `
-      <article class="card ${selected ? 'selected' : ''}">
-        <button class="row" data-spec="${escapeAttr(specId)}">
+      <div class="card ${selected ? 'selected' : ''}">
+        <button class="row" data-spec="${escapeAttr(specId)}" style="display: block; width: 100%;">
           <div class="title-line">
             <strong>${escapeHtml(specId)}</strong>
             <small>${escapeHtml(row.specPath.replace(/^openspec\/specs\//, ''))}</small>
           </div>
-          <div class="summary">${row.sources.length} code hit(s)</div>
-          <div class="chips">${chips}</div>
+          ${summaryHtml}
+          ${hitsHtml}
+          <div class="chips" style="margin-top: 8px;">${chips}</div>
         </button>
-        <div class="details ${selected ? '' : 'hidden'}">
-          <div class="kv">
-            <div>Trace</div><div>${escapeHtml(row.trace)}</div>
-            <div>Spec file</div><div>${escapeHtml(row.specPath)}</div>
-            <div>Hits</div><div>${row.sources.length}</div>
-          </div>
-        </div>
-      </article>`;
+      </div>`;
   }).join('');
-  els.specs.querySelectorAll('[data-spec]').forEach(button => {
-    button.addEventListener('click', () => {
-      state.selectedSpec = button.dataset.spec;
+  els.specs.querySelectorAll('[data-spec]').forEach(btn => {
+    btn.addEventListener('click', () => {
+      state.selectedSpec = btn.dataset.spec;
       state.selectedSheet = null;
-      location.hash = `spec=${encodeURIComponent(state.selectedSpec)}`;
-      renderAll();
+      renderTraceView();
     });
   });
 }
 
+function detectLanguage(path) {
+  const ext = path.split('.').pop().toLowerCase();
+  switch (ext) {
+    case 'rs': return 'rust';
+    case 'sh': return 'bash';
+    case 'md': return 'markdown';
+    case 'yaml':
+    case 'yml': return 'yaml';
+    case 'toml': return 'toml';
+    case 'json': return 'json';
+    case 'js': return 'javascript';
+    case 'ts': return 'typescript';
+    case 'html': return 'html';
+    case 'css': return 'css';
+    default: return 'plaintext';
+  }
+}
+
+function splitHighlightedHtml(html) {
+  const lines = html.split(/\r?\n/);
+  const result = [];
+  const openTags = [];
+  
+  for (const line of lines) {
+    // Build prefix from open tags
+    const prefix = openTags.map(tag => tag.outer).join('');
+    
+    // Analyze current line for tags to update the stack
+    const tagRegex = /<\/?span[^>]*>/g;
+    let match;
+    while ((match = tagRegex.exec(line)) !== null) {
+      const tag = match[0];
+      if (tag.startsWith('</')) {
+        openTags.pop();
+      } else {
+        openTags.push({ outer: tag });
+      }
+    }
+    
+    // Close currently open tags
+    const suffix = '</span>'.repeat(openTags.length);
+    result.push(prefix + line + suffix);
+  }
+  return result;
+}
+
+async function fetchFileLines(path, lineNum) {
+  let content = '';
+  if (state.fileCache.has(path)) {
+    content = state.fileCache.get(path);
+  } else {
+    try {
+      content = await fetchText(sourcePath(path));
+      state.fileCache.set(path, content);
+    } catch (err) {
+      return `<div style="color: var(--chart-color-2); padding: 8px;">Error loading file: ${escapeHtml(err.message)}</div>`;
+    }
+  }
+  
+  const hitKey = `${path}#L${lineNum}`;
+  const bounds = state.hitBounds.get(hitKey) || { before: 2, after: 2 };
+  
+  const lines = content.split(/\r?\n/);
+  const start = Math.max(0, lineNum - 1 - bounds.before);
+  const end = Math.min(lines.length, lineNum + bounds.after);
+  
+  // Highlight the entire block
+  const blockCode = lines.slice(start, end).join('\n');
+  let highlightedHtml = blockCode;
+  if (typeof hljs !== 'undefined') {
+    try {
+      highlightedHtml = hljs.highlight(blockCode, { language: detectLanguage(path) }).value;
+    } catch (e) {
+      console.error('Highlight failed:', e);
+    }
+  }
+  
+  const highlightedLines = splitHighlightedHtml(highlightedHtml);
+  const canExpandTop = start > 0;
+  const canExpandBottom = end < lines.length;
+  
+  let html = '<div style="display: flex; flex-direction: column; gap: 6px;">';
+  
+  // Render Top Expand Buttons
+  if (canExpandTop) {
+    html += `
+      <div style="display: flex; gap: 8px; justify-content: center; align-items: center; padding: 2px 0;">
+        <span style="color: var(--text-muted); font-size: 11px;">Expand top:</span>
+        <button onclick="expandSnippet('${escapeAttr(path)}', ${lineNum}, 'top', 3)" style="padding: 2px 8px; font-size: 10px; border-radius: 4px; border: 1px solid var(--line-soft); background: rgba(255,255,255,0.03); color: var(--text-muted); cursor: pointer;">+3</button>
+        <button onclick="expandSnippet('${escapeAttr(path)}', ${lineNum}, 'top', 5)" style="padding: 2px 8px; font-size: 10px; border-radius: 4px; border: 1px solid var(--line-soft); background: rgba(255,255,255,0.03); color: var(--text-muted); cursor: pointer;">+5</button>
+        <button onclick="expandSnippet('${escapeAttr(path)}', ${lineNum}, 'top', 10)" style="padding: 2px 8px; font-size: 10px; border-radius: 4px; border: 1px solid var(--line-soft); background: rgba(255,255,255,0.03); color: var(--text-muted); cursor: pointer;">+10</button>
+        <button onclick="expandSnippet('${escapeAttr(path)}', ${lineNum}, 'top', 20)" style="padding: 2px 8px; font-size: 10px; border-radius: 4px; border: 1px solid var(--line-soft); background: rgba(255,255,255,0.03); color: var(--text-muted); cursor: pointer;">+20</button>
+      </div>`;
+  } else {
+    html += `<div style="text-align: center; color: var(--text-muted); font-size: 10px; padding: 2px 0;">Start of file reached</div>`;
+  }
+  
+  // Render Code Lines
+  html += '<div class="code-fragment hljs" style="font-family: ui-monospace, monospace; font-size: 12px; background: #0b0f14; border-radius: 8px; overflow-x: auto; padding: 8px 0; display: flex; flex-direction: column; border: 1px solid var(--line-soft);">';
+  for (let i = start; i < end; i++) {
+    const isTarget = (i + 1) === lineNum;
+    const highlightedLineText = highlightedLines[i - start] !== undefined ? highlightedLines[i - start] : escapeHtml(lines[i]);
+    html += `
+      <div class="code-line" style="display: flex; padding: 2px 16px; line-height: 1.4; ${isTarget ? 'background: rgba(139, 183, 255, 0.15); border-left: 3px solid var(--accent); padding-left: 13px;' : ''}">
+        <span class="line-num" style="width: 40px; color: var(--text-muted); text-align: right; margin-right: 16px; user-select: none;">${i + 1}</span>
+        <span class="line-text" style="white-space: pre; color: ${isTarget ? '#fff' : ''};">${highlightedLineText}</span>
+      </div>`;
+  }
+  html += '</div>';
+  
+  // Render Bottom Expand Buttons
+  if (canExpandBottom) {
+    html += `
+      <div style="display: flex; gap: 8px; justify-content: center; align-items: center; padding: 2px 0;">
+        <span style="color: var(--text-muted); font-size: 11px;">Expand bottom:</span>
+        <button onclick="expandSnippet('${escapeAttr(path)}', ${lineNum}, 'bottom', 3)" style="padding: 2px 8px; font-size: 10px; border-radius: 4px; border: 1px solid var(--line-soft); background: rgba(255,255,255,0.03); color: var(--text-muted); cursor: pointer;">+3</button>
+        <button onclick="expandSnippet('${escapeAttr(path)}', ${lineNum}, 'bottom', 5)" style="padding: 2px 8px; font-size: 10px; border-radius: 4px; border: 1px solid var(--line-soft); background: rgba(255,255,255,0.03); color: var(--text-muted); cursor: pointer;">+5</button>
+        <button onclick="expandSnippet('${escapeAttr(path)}', ${lineNum}, 'bottom', 10)" style="padding: 2px 8px; font-size: 10px; border-radius: 4px; border: 1px solid var(--line-soft); background: rgba(255,255,255,0.03); color: var(--text-muted); cursor: pointer;">+10</button>
+        <button onclick="expandSnippet('${escapeAttr(path)}', ${lineNum}, 'bottom', 20)" style="padding: 2px 8px; font-size: 10px; border-radius: 4px; border: 1px solid var(--line-soft); background: rgba(255,255,255,0.03); color: var(--text-muted); cursor: pointer;">+20</button>
+      </div>`;
+  } else {
+    html += `<div style="text-align: center; color: var(--text-muted); font-size: 10px; padding: 2px 0;">End of file reached</div>`;
+  }
+  
+  html += '</div>';
+  return html;
+}
+
+window.expandSnippet = async function(path, lineNum, direction, amount) {
+  const hitKey = `${path}#L${lineNum}`;
+  const bounds = state.hitBounds.get(hitKey) || { before: 2, after: 2 };
+  if (direction === 'top') {
+    bounds.before += amount;
+  } else {
+    bounds.after += amount;
+  }
+  state.hitBounds.set(hitKey, bounds);
+  
+  const contentDiv = document.querySelector(`details.hit-details[data-path="${escapeAttr(path)}"][data-line="${lineNum}"] .hit-code-content`);
+  if (contentDiv) {
+    contentDiv.innerHTML = await fetchFileLines(path, lineNum);
+  }
+};
+
 function renderCode() {
   const row = selectedTraceRow();
-  const q = state.search.toLowerCase();
-  const hits = row ? row.sources.filter(src => !q || src.label.toLowerCase().includes(q) || src.href.toLowerCase().includes(q)) : [];
+  const hits = row ? row.sources : [];
+  
   if (!row) {
-    els.code.innerHTML = '<div class="empty">Select a spec or cheatsheet to reveal the corresponding source hits.</div>';
+    els.code.innerHTML = '<div class="empty">Select a spec or cheatsheet.</div>';
     return;
   }
-  els.code.innerHTML = `
-    <article class="card selected">
-      <button class="row" data-code-spec="${escapeAttr(state.selectedSpec)}">
+
+  // Parse and group by file path
+  const parsedHits = hits.map(src => {
+    const [path, lineStr] = src.href.split('#L');
+    const line = lineStr ? parseInt(lineStr, 10) : 1;
+    
+    // Initialize hit bounds if not exists
+    const hitKey = `${path}#L${line}`;
+    if (!state.hitBounds.has(hitKey)) {
+      state.hitBounds.set(hitKey, { before: 2, after: 2 });
+    }
+    
+    return { label: src.label, path, line, href: src.href };
+  });
+
+  const groups = {};
+  for (const hit of parsedHits) {
+    if (!groups[hit.path]) groups[hit.path] = [];
+    groups[hit.path].push(hit);
+  }
+
+  let html = `
+    <div class="card selected" style="margin-bottom: 16px; border-radius: 12px;">
+      <div class="row" style="padding: 16px;">
         <div class="title-line">
           <strong>${escapeHtml(state.selectedSpec)}</strong>
           <small>${hits.length} visible hit(s)</small>
         </div>
         <div class="summary">${escapeHtml(row.specPath)}</div>
-      </button>
-      <div class="details">
-        <ul class="code-list">
-          ${hits.map(src => {
-            const [path, line] = src.href.split('#L');
-            return `<li><a href="${escapeAttr(sourceHref(src.href))}">${escapeHtml(src.label)}</a><div class="block">${escapeHtml(path)} ${line ? `line ${escapeHtml(line)}` : ''}</div></li>`;
-          }).join('')}
-        </ul>
       </div>
-    </article>`;
-  els.code.querySelectorAll('[data-code-spec]').forEach(button => {
-    button.addEventListener('click', () => {
-      state.selectedSheet = null;
-      location.hash = `spec=${encodeURIComponent(button.dataset.codeSpec)}`;
+    </div>`;
+
+  const filePaths = Object.keys(groups).sort();
+  if (filePaths.length === 0) {
+    html += '<div class="empty">No matching code hits.</div>';
+    els.code.innerHTML = html;
+    return;
+  }
+
+  html += filePaths.map(path => {
+    const fileHits = groups[path];
+    return `
+      <details class="file-group" open style="border: 1px solid var(--line-soft); border-radius: 12px; background: rgba(255,255,255,0.01); margin-bottom: 12px; overflow: hidden;">
+        <summary style="padding: 12px 16px; font-weight: 600; cursor: pointer; display: flex; justify-content: space-between; align-items: center; user-select: none; background: rgba(255,255,255,0.02); list-style: none;">
+          <span class="file-path" style="font-weight: 600; color: #fff;">${escapeHtml(path)}</span>
+          <span class="badge" style="font-size: 11px; padding: 2px 8px; border-radius: 12px; background: rgba(255,255,255,0.08);">${fileHits.length} hit(s)</span>
+        </summary>
+        <div class="file-hits" style="padding: 12px 16px; background: rgba(0,0,0,0.15); border-top: 1px solid var(--line-soft);">
+          ${fileHits.map(hit => `
+            <details class="hit-details" data-path="${escapeAttr(hit.path)}" data-line="${hit.line}" style="margin-bottom: 8px; border: 1px solid var(--line-soft); border-radius: 8px; background: rgba(0,0,0,0.1);">
+              <summary style="padding: 8px 12px; font-size: 13px; cursor: pointer; font-weight: 500; display: flex; justify-content: space-between; align-items: center; list-style: none;">
+                <span style="color: var(--text-muted);">Line ${hit.line}</span>
+                <code style="font-family: ui-monospace, monospace; color: var(--accent); background: rgba(139, 183, 255, 0.08); padding: 2px 6px; border-radius: 4px; font-size: 11px;">${escapeHtml(hit.label)}</code>
+              </summary>
+              <div class="hit-code-content" style="border-top: 1px solid var(--line-soft); padding: 8px; background: #06090d; overflow-x: auto;">Loading...</div>
+            </details>
+          `).join('')}
+        </div>
+      </details>`;
+  }).join('');
+
+  els.code.innerHTML = html;
+
+  // Add event listeners for toggling code hit details
+  els.code.querySelectorAll('details.hit-details').forEach(det => {
+    det.addEventListener('toggle', async () => {
+      if (det.open) {
+        const path = det.dataset.path;
+        const line = parseInt(det.dataset.line, 10);
+        const contentDiv = det.querySelector('.hit-code-content');
+        if (contentDiv.textContent === 'Loading...') {
+          contentDiv.innerHTML = await fetchFileLines(path, line);
+        }
+      }
     });
   });
 }
@@ -390,112 +961,555 @@ function renderCode() {
 async function renderSheets() {
   const rows = filteredSheets();
   if (!rows.length) {
-    els.sheets.innerHTML = '<div class="empty">No cheatsheets match the current filter.</div>';
+    els.sheets.innerHTML = '<div class="empty">No cheatsheets match filter.</div>';
     return;
   }
-
-  const html = [];
-  for (const sheet of rows.slice(0, 20)) {
+  let html = '';
+  for (const sheet of rows.slice(0, 15)) {
     const isSelected = sheet.path === state.selectedSheet;
     const annotations = isSelected ? (await loadSheetAnnotations(sheet)).traces : [];
     const tracedSpecs = annotations.length ? annotations : (state.selectedSpec ? [state.selectedSpec] : []);
-    html.push(`
-      <article class="card ${isSelected ? 'selected' : ''}">
-        <button class="row" data-sheet="${escapeAttr(sheet.path)}">
+    
+    let expandedHtml = '';
+    if (isSelected) {
+      const sheetData = await loadSheetAnnotations(sheet);
+      const blocks = parseCheatsheetBlocks(sheetData.text || '');
+      
+      expandedHtml = `
+        <div class="details" style="border-top: 1px solid var(--line-soft); padding: 12px 16px; background: rgba(0,0,0,0.25); display: flex; flex-direction: column; gap: 10px;">
+          <div style="font-weight: 600; font-size: 12px; color: var(--accent); display: flex; justify-content: space-between; align-items: center;">
+            <span>Cheatsheet Blocks</span>
+            <span style="font-size: 11px; color: var(--text-muted); font-weight: normal;">Click headers to expand/collapse</span>
+          </div>
+          <div style="display: flex; flex-direction: column; gap: 8px;">
+            ${blocks.length > 0 ? blocks.map((block, bIdx) => `
+              <details ${bIdx === 0 ? 'open' : ''} style="border: 1px solid var(--line-soft); border-radius: 8px; background: rgba(0,0,0,0.15); overflow: hidden;">
+                <summary style="padding: 8px 12px; font-size: 12px; font-weight: 600; cursor: pointer; color: #fff; background: rgba(255,255,255,0.02); user-select: none; border-bottom: 1px solid var(--line-soft); display: flex; flex-direction: column; gap: 2px;">
+                  <span>${escapeHtml(block.title)}</span>
+                  <span style="font-size: 10px; color: var(--text-muted); font-weight: normal; margin-top: 2px;">${escapeHtml(block.description)}</span>
+                </summary>
+                <div style="padding: 10px; font-family: ui-monospace, monospace; font-size: 11px; max-height: 250px; overflow-y: auto; white-space: pre-wrap; background: #06090d; line-height: 1.4; color: var(--text);">\n${escapeHtml(block.content)}\n</div>
+              </details>
+            `).join('') : `
+              <div style="color: var(--text-muted); font-size: 11px; font-style: italic;">No subsections found. Full content below:</div>
+              <pre style="padding: 10px; font-family: ui-monospace, monospace; font-size: 11px; max-height: 250px; overflow-y: auto; white-space: pre-wrap; background: #06090d; line-height: 1.4; color: var(--text); border-radius: 8px; border: 1px solid var(--line-soft); margin: 0;">${escapeHtml(sheetData.text || '')}</pre>
+            `}
+          </div>
+        </div>`;
+    }
+
+    html += `
+      <div class="card ${isSelected ? 'selected' : ''}">
+        <button class="row" data-sheet="${escapeAttr(sheet.path)}" style="display: block; width: 100%;">
           <div class="title-line">
             <strong>${escapeHtml(sheet.path)}</strong>
             <small>${escapeHtml(sheet.category)}</small>
           </div>
-          <div class="summary">${escapeHtml(sheet.description)}</div>
-          <div class="chips">${tracedSpecs.slice(0, 3).map(spec => `<span class="chip">${escapeHtml(spec)}</span>`).join('')}</div>
+          <div class="summary" style="margin-top: 6px; color: var(--text-muted); font-size: 12px; line-height: 1.4;">${escapeHtml(sheet.description)}</div>
+          <div class="chips" style="margin-top: 8px;">${tracedSpecs.slice(0, 3).map(s => `<span class="chip">${escapeHtml(s)}</span>`).join('')}</div>
         </button>
-        <div class="details ${isSelected ? '' : 'hidden'}">
-          <div class="kv">
-            <div>Path</div><div>${escapeHtml(sheet.path)}</div>
-            <div>Category</div><div>${escapeHtml(sheet.category)}</div>
-            <div>Spec hits</div><div>${escapeHtml((annotations.length ? annotations : tracedSpecs).join(', ') || 'none')}</div>
-          </div>
-        </div>
-      </article>`);
+        ${expandedHtml}
+      </div>`;
   }
-  els.sheets.innerHTML = html.join('');
-  els.sheets.querySelectorAll('[data-sheet]').forEach(button => {
-    button.addEventListener('click', async () => {
-      state.selectedSheet = button.dataset.sheet;
+  els.sheets.innerHTML = html;
+  els.sheets.querySelectorAll('[data-sheet]').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      state.selectedSheet = btn.dataset.sheet;
       const sheet = state.sheets.find(s => s.path === state.selectedSheet);
       if (sheet) {
         const annotations = await loadSheetAnnotations(sheet);
         if (annotations.traces.length) state.selectedSpec = annotations.traces[0];
       }
-      location.hash = `sheet=${encodeURIComponent(state.selectedSheet)}`;
-      renderAll();
+      renderTraceView();
     });
   });
 }
 
-async function loadAll() {
-  setStatus('Loading TRACES.md');
-  const [tracesResult, sheetsResult] = await Promise.all([
-    fetchFirst([sourcePath('TRACES.md'), '/TRACES.md']),
-    fetchFirst([sourcePath('cheatsheets/INDEX.md'), '/cheatsheets/INDEX.md']),
-  ]);
-  state.traces = tracesResult.text ? parseTraces(tracesResult.text) : [];
-  state.sheets = sheetsResult.text ? parseCheatsheetIndex(sheetsResult.text) : [];
-  setStatus(`${state.traces.length} trace bucket(s), ${state.sheets.length} cheatsheet entries`);
-  const loadedFrom = tracesResult.path || sheetsResult.path || SOURCE_ROOT || '/source';
-  setFooter(`Source snapshot loaded from ${loadedFrom}.`);
-}
-
-function selectFromHash() {
-  const params = new URLSearchParams(location.hash.replace(/^#/, ''));
-  if (params.has('sheet')) state.selectedSheet = params.get('sheet');
-  if (params.has('spec')) state.selectedSpec = params.get('spec');
-}
-
-async function renderAll() {
+function renderTraceView() {
   renderSpecs();
   renderCode();
-  await renderSheets();
+  renderSheets();
 }
 
-els.search.addEventListener('input', () => {
-  state.search = els.search.value.trim();
-  renderAll();
-});
+// ==========================================
+// Dashboard Rendering
+// ==========================================
+// ==========================================
+// Dashboard Rendering & Milestone Helpers
+// ==========================================
+function detectMilestones(history) {
+  const milestones = [];
+  if (!history || history.length === 0) return milestones;
 
-els.refresh.addEventListener('click', async () => {
-  state.sheetCache.clear();
-  await init();
-});
+  let lastTotalCc = null;
+  let lastWorstSpec = null;
+  let lastPercentClosed = null;
+
+  history.forEach((h, idx) => {
+    const currentTotalCc = h.total_cc;
+    const currentWorstSpec = h.worst_spec;
+    const currentPercentClosed = h.percent_closed;
+    const label = h.release || h.commit.substring(0, 7);
+
+    if (idx === 0) {
+      milestones.push({
+        index: idx,
+        label: label,
+        title: "Initial Baseline",
+        description: `Baseline established with ${currentTotalCc} cc budget. Worst spec: ${currentWorstSpec}.`,
+        type: 'baseline'
+      });
+    } else {
+      // 1. Budget changes
+      if (currentTotalCc !== lastTotalCc && lastTotalCc !== null) {
+        if (currentTotalCc > lastTotalCc) {
+          milestones.push({
+            index: idx,
+            label: label,
+            title: "New Specs & Requirements",
+            description: `Total budget increased from ${lastTotalCc} cc to ${currentTotalCc} cc (new specs/requirements added).`,
+            type: 'budget-increase'
+          });
+        } else {
+          milestones.push({
+            index: idx,
+            label: label,
+            title: "Methodology Refactoring",
+            description: `Total budget adjusted/refactored from ${lastTotalCc} cc to ${currentTotalCc} cc.`,
+            type: 'budget-decrease'
+          });
+        }
+      }
+
+      // 2. Worst spec shifts (bottleneck change)
+      if (currentWorstSpec !== lastWorstSpec && lastWorstSpec !== null) {
+        if (currentWorstSpec !== 'n/a' && lastWorstSpec !== 'n/a') {
+          milestones.push({
+            index: idx,
+            label: label,
+            title: "Bottleneck Shifted",
+            description: `Worst offending spec transitioned from ${lastWorstSpec} to ${currentWorstSpec}.`,
+            type: 'bottleneck-shift'
+          });
+        } else if (currentWorstSpec !== 'n/a' && lastWorstSpec === 'n/a') {
+          milestones.push({
+            index: idx,
+            label: label,
+            title: "New Failures / Regressions",
+            description: `New obligations emerged under failing spec: ${currentWorstSpec}.`,
+            type: 'regression'
+          });
+        } else if (currentWorstSpec === 'n/a' && lastWorstSpec !== 'n/a') {
+          milestones.push({
+            index: idx,
+            label: label,
+            title: "All Specs Converged",
+            description: `100% completion reached! Active obligations under ${lastWorstSpec} successfully resolved.`,
+            type: 'success'
+          });
+        }
+      }
+
+      // 3. Major drops in accuracy (dropped by >= 10%)
+      if (lastPercentClosed !== null && (lastPercentClosed - currentPercentClosed) >= 10) {
+        milestones.push({
+          index: idx,
+          label: label,
+          title: "Major Regression",
+          description: `Percent closed dropped significantly by ${(lastPercentClosed - currentPercentClosed).toFixed(0)}% (from ${lastPercentClosed}% to ${currentPercentClosed}%).`,
+          type: 'accuracy-drop'
+        });
+      }
+    }
+
+    lastTotalCc = currentTotalCc;
+    lastWorstSpec = currentWorstSpec;
+    lastPercentClosed = currentPercentClosed;
+  });
+
+  return milestones;
+}
+
+function populateSpecDatalist() {
+  const datalist = document.getElementById('specs-datalist');
+  if (!datalist) return;
+  
+  // Extract all unique specs from traces
+  const specs = state.traces.map(row => specNameFromTrace(row.trace));
+  
+  // Also collect any worst_spec from history to ensure full coverage
+  if (state.dashboard && state.dashboard.history) {
+    state.dashboard.history.forEach(h => {
+      if (h.worst_spec && h.worst_spec !== 'n/a') {
+        const specName = h.worst_spec.replace(/^spec:/, '');
+        if (!specs.includes(specName)) {
+          specs.push(specName);
+        }
+      }
+    });
+  }
+  
+  // Sort alphabetically
+  specs.sort();
+  
+  let html = '<option value="All Specs (Overall)">';
+  specs.forEach(spec => {
+    html += `<option value="${escapeAttr(spec)}">`;
+  });
+  datalist.innerHTML = html;
+}
+
+function renderMilestonesTimeline(milestones, history) {
+  const container = document.getElementById('milestones-timeline');
+  if (!container) return;
+
+  if (milestones.length === 0) {
+    container.innerHTML = '<div class="empty">No milestones identified in this timeline.</div>';
+    return;
+  }
+
+  // Display in reverse chronological order (latest milestones first)
+  const sortedMilestones = [...milestones].reverse();
+
+  container.innerHTML = sortedMilestones.map(m => {
+    const h = history[m.index];
+    let badgeColor = '';
+    let badgeText = '';
+
+    switch (m.type) {
+      case 'baseline':
+        badgeColor = 'background: rgba(139, 183, 255, 0.12); color: var(--accent); border: 1px solid rgba(139, 183, 255, 0.3);';
+        badgeText = 'BASELINE';
+        break;
+      case 'budget-increase':
+        badgeColor = 'background: rgba(255, 202, 139, 0.12); color: #ffca8b; border: 1px solid rgba(255, 202, 139, 0.3);';
+        badgeText = 'NEW REQUIREMENTS';
+        break;
+      case 'budget-decrease':
+        badgeColor = 'background: rgba(197, 139, 255, 0.12); color: #c58bff; border: 1px solid rgba(197, 139, 255, 0.3);';
+        badgeText = 'METHODOLOGY REFACTOR';
+        break;
+      case 'bottleneck-shift':
+        badgeColor = 'background: rgba(139, 255, 196, 0.12); color: #8bffc4; border: 1px solid rgba(139, 255, 196, 0.3);';
+        badgeText = 'BOTTLENECK SHIFT';
+        break;
+      case 'regression':
+      case 'accuracy-drop':
+        badgeColor = 'background: rgba(255, 139, 139, 0.12); color: #ff8b8b; border: 1px solid rgba(255, 139, 139, 0.3);';
+        badgeText = 'REGRESSION';
+        break;
+      case 'success':
+        badgeColor = 'background: rgba(117, 208, 196, 0.12); color: var(--accent2); border: 1px solid rgba(117, 208, 196, 0.3);';
+        badgeText = 'CONVERGED';
+        break;
+      default:
+        badgeColor = 'background: rgba(255, 255, 255, 0.08); color: var(--text-muted); border: 1px solid var(--line-soft);';
+        badgeText = 'EVENT';
+    }
+
+    const formattedDate = new Date(h.date).toLocaleDateString(undefined, {
+      month: 'short',
+      day: 'numeric',
+      hour: '2-digit',
+      minute: '2-digit'
+    });
+
+    return `
+      <div class="card" style="display: flex; flex-direction: column; padding: 14px 16px; margin-bottom: 8px; border-radius: 12px; background: rgba(255,255,255,0.015); border: 1px solid var(--line-soft);">
+        <div style="display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; gap: 8px; margin-bottom: 6px;">
+          <div style="display: flex; gap: 8px; align-items: center;">
+            <span style="font-size: 11px; padding: 3px 8px; border-radius: 4px; font-weight: 600; text-transform: uppercase; letter-spacing: 0.05em; ${badgeColor}">${badgeText}</span>
+            <strong style="color: #fff; font-size: 14px;">${escapeHtml(m.title)}</strong>
+          </div>
+          <span style="color: var(--text-muted); font-size: 12px; font-family: ui-monospace, monospace;">Release ${escapeHtml(m.label)} · ${formattedDate}</span>
+        </div>
+        <div style="color: var(--text); font-size: 13px; line-height: 1.4;">${escapeHtml(m.description)}</div>
+      </div>`;
+  }).join('');
+}
+
+function renderDashboard() {
+  if (!state.dashboard || !state.dashboard.history) return;
+  
+  const history = state.dashboard.history;
+  if (history.length === 0) return;
+
+  const milestones = detectMilestones(history);
+  renderMilestonesTimeline(milestones, history);
+
+  const filterInput = document.getElementById('spec-filter');
+  const selectedSpecName = filterInput ? filterInput.value.trim() : '';
+  const isFiltered = selectedSpecName && selectedSpecName !== 'All Specs (Overall)' && selectedSpecName !== '';
+
+  const labels = history.map(h => h.release || h.commit.substring(0,7));
+  const percentClosed = history.map(h => h.percent_closed);
+  const residualCc = history.map(h => h.residual_cc);
+
+  const ctx = document.getElementById('convergenceChart').getContext('2d');
+  
+  if (state.chartInstance) {
+    state.chartInstance.destroy();
+  }
+
+  Chart.defaults.color = '#8da2b8';
+  Chart.defaults.font.family = "'Inter', sans-serif";
+
+  let datasets = [];
+  if (isFiltered) {
+    // Generate spec-specific data
+    const specPercentClosed = history.map(h => {
+      const isWorst = h.worst_spec && h.worst_spec.replace(/^spec:/, '') === selectedSpecName;
+      if (isWorst) {
+        return h.percent_closed; // Use the actual closed percent at that failing snapshot
+      }
+      return 100; // Assume 100% closed when not failing or not the worst offender
+    });
+    
+    const specResidualCc = history.map(h => {
+      const isWorst = h.worst_spec && h.worst_spec.replace(/^spec:/, '') === selectedSpecName;
+      return isWorst ? h.residual_cc : 0;
+    });
+
+    datasets = [
+      {
+        label: 'Overall closure baseline (dotted)',
+        data: percentClosed,
+        borderColor: 'rgba(139, 183, 255, 0.35)',
+        backgroundColor: 'transparent',
+        yAxisID: 'y',
+        borderWidth: 1.5,
+        borderDash: [4, 4],
+        pointRadius: 0
+      },
+      {
+        label: `${selectedSpecName} Closure (%)`,
+        data: specPercentClosed,
+        borderColor: '#75d0c4',
+        backgroundColor: 'rgba(117, 208, 196, 0.08)',
+        yAxisID: 'y',
+        fill: true,
+        tension: 0.3,
+        borderWidth: 3,
+        pointRadius: history.map((h, idx) => {
+          const hasMilestone = milestones.some(m => m.index === idx);
+          const isWorst = h.worst_spec && h.worst_spec.replace(/^spec:/, '') === selectedSpecName;
+          return hasMilestone || isWorst ? 6 : 2;
+        }),
+        pointStyle: history.map((h, idx) => {
+          const isWorst = h.worst_spec && h.worst_spec.replace(/^spec:/, '') === selectedSpecName;
+          return isWorst ? 'rectRot' : 'circle';
+        }),
+        pointBackgroundColor: history.map((h, idx) => {
+          const isWorst = h.worst_spec && h.worst_spec.replace(/^spec:/, '') === selectedSpecName;
+          if (isWorst) return '#ff8b8b'; // highlight failure points in red
+          const ms = milestones.find(m => m.index === idx);
+          return ms ? '#75d0c4' : '#75d0c4';
+        })
+      },
+      {
+        label: `${selectedSpecName} Residual (cc)`,
+        data: specResidualCc,
+        borderColor: '#ff8b8b',
+        backgroundColor: 'transparent',
+        yAxisID: 'y1',
+        tension: 0.3,
+        borderWidth: 2,
+        pointRadius: 2,
+        pointBackgroundColor: '#ff8b8b'
+      }
+    ];
+  } else {
+    // Show overall lines
+    datasets = [
+      {
+        label: 'Percent Closed (%)',
+        data: percentClosed,
+        borderColor: '#8bb7ff',
+        backgroundColor: 'rgba(139, 183, 255, 0.1)',
+        yAxisID: 'y',
+        fill: true,
+        tension: 0.3,
+        borderWidth: 2,
+        pointRadius: history.map((h, idx) => milestones.some(m => m.index === idx) ? 6 : 2),
+        pointStyle: history.map((h, idx) => milestones.some(m => m.index === idx) ? 'triangle' : 'circle'),
+        pointBackgroundColor: history.map((h, idx) => {
+          const ms = milestones.find(m => m.index === idx);
+          if (ms) {
+            switch (ms.type) {
+              case 'baseline': return '#8bb7ff';
+              case 'budget-increase': return '#ffca8b';
+              case 'budget-decrease': return '#c58bff';
+              case 'bottleneck-shift': return '#8bffc4';
+              case 'regression': return '#ff8b8b';
+              case 'accuracy-drop': return '#ff8b8b';
+              case 'success': return '#75d0c4';
+              default: return '#fff';
+            }
+          }
+          return '#8bb7ff';
+        })
+      },
+      {
+        label: 'Residual Obligations (cc)',
+        data: residualCc,
+        borderColor: '#ff8b8b',
+        backgroundColor: 'transparent',
+        yAxisID: 'y1',
+        tension: 0.3,
+        borderWidth: 2,
+        borderDash: [5, 5],
+        pointRadius: 2,
+        pointBackgroundColor: '#ff8b8b'
+      }
+    ];
+  }
+
+  state.chartInstance = new Chart(ctx, {
+    type: 'line',
+    data: {
+      labels,
+      datasets
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      interaction: { mode: 'index', intersect: false },
+      plugins: {
+        legend: { position: 'top', labels: { usePointStyle: true, boxWidth: 8 } },
+        tooltip: {
+          backgroundColor: 'rgba(11, 15, 20, 0.9)',
+          titleColor: '#fff',
+          bodyColor: '#d8e2ee',
+          borderColor: 'rgba(255,255,255,0.1)',
+          borderWidth: 1,
+          padding: 12,
+          callbacks: {
+            afterBody: (context) => {
+              const idx = context[0].dataIndex;
+              const msList = milestones.filter(m => m.index === idx);
+              if (msList.length > 0) {
+                return '\n★ MILESTONES:\n' + msList.map(m => `• [${m.title}] ${m.description}`).join('\n');
+              }
+              return '';
+            }
+          }
+        }
+      },
+      scales: {
+        x: { grid: { color: 'rgba(255,255,255,0.05)' } },
+        y: {
+          type: 'linear', display: true, position: 'left',
+          title: { display: true, text: 'Completion (%)' },
+          grid: { color: 'rgba(255,255,255,0.05)' },
+          min: 0, max: 100
+        },
+        y1: {
+          type: 'linear', display: true, position: 'right',
+          title: { display: true, text: 'CentiColons (cc)' },
+          grid: { drawOnChartArea: false },
+          min: 0
+        }
+      }
+    }
+  });
+
+  // Render Metric Boxes
+  const latest = state.dashboard.latest || {};
+  const metrics = state.dashboard.metrics || {};
+  
+  els.metricsGrid.innerHTML = `
+    <div class="metric-box">
+      <h3>Current Closure</h3>
+      <div class="val">${latest.percent_closed ? latest.percent_closed.toFixed(1) : 0}%</div>
+      <div class="sub">of ${latest.total_cc || 0} cc budget</div>
+    </div>
+    <div class="metric-box">
+      <h3>Residual Obligations</h3>
+      <div class="val" style="color: var(--chart-color-2);">${latest.residual_cc || 0} cc</div>
+      <div class="sub">Worst: ${escapeHtml(latest.worst_spec || 'none')}</div>
+    </div>
+    <div class="metric-box">
+      <h3>Host CPU Usage</h3>
+      <div class="val">${metrics.cpu_percent ? metrics.cpu_percent.toFixed(1) : 0}%</div>
+      <div class="sub">At last CI build</div>
+    </div>
+    <div class="metric-box">
+      <h3>Host Mem Usage</h3>
+      <div class="val">${metrics.memory_percent ? metrics.memory_percent.toFixed(1) : 0}%</div>
+      <div class="sub">At last CI build</div>
+    </div>
+  `;
+}
+
+// ==========================================
+// Initialization
+// ==========================================
+async function loadAll() {
+  setStatus('Loading Source & Metrics...');
+  const [tracesRes, sheetsRes, dashRes] = await Promise.all([
+    fetchFirst([sourcePath('TRACES.md'), '/TRACES.md']),
+    fetchFirst([sourcePath('cheatsheets/INDEX.md'), '/cheatsheets/INDEX.md']),
+    fetchFirst([sourcePath('docs/convergence/centicolon-dashboard.json'), '/docs/convergence/centicolon-dashboard.json'], 'json')
+  ]);
+  
+  if (tracesRes.path && !tracesRes.path.startsWith('/source/')) {
+    state.detectedSourceRoot = '';
+  } else {
+    state.detectedSourceRoot = '/source';
+  }
+
+  state.traces = tracesRes.data ? parseTraces(tracesRes.data) : [];
+  state.sheets = sheetsRes.data ? parseCheatsheetIndex(sheetsRes.data) : [];
+  state.dashboard = dashRes.data || null;
+
+  // Proactively fetch spec summaries in parallel
+  setStatus('Loading spec summaries...');
+  const summaryPromises = state.traces.map(async row => {
+    if (!row.specPath) return;
+    try {
+      const content = await fetchText(sourcePath(row.specPath));
+      row.summary = cleanSummary(extractSpecSummary(content));
+    } catch (err) {
+      row.summary = "";
+    }
+  });
+  await Promise.all(summaryPromises);
+
+  setStatus(`Loaded: ${state.traces.length} specs, ${state.sheets.length} sheets`);
+  setFooter(`Source: ${tracesRes.path || 'fallback'}`);
+}
 
 async function init() {
-  selectFromHash();
   await loadAll();
   if (!state.selectedSpec && state.traces.length) {
     state.selectedSpec = specNameFromTrace(state.traces[0].trace);
   }
-  if (state.selectedSheet && !state.selectedSpec) {
-    const sheet = state.sheets.find(s => s.path === state.selectedSheet);
-    if (sheet) {
-      const annotations = await loadSheetAnnotations(sheet);
-      if (annotations.traces.length) state.selectedSpec = annotations.traces[0];
-    }
+  renderTraceView();
+  
+  // Dashboard Chart requires lib loaded, it should be loaded since it's a synchronous script tag
+  if (typeof Chart !== 'undefined') {
+    populateSpecDatalist();
+    renderDashboard();
+  } else {
+    console.error("Chart.js not loaded.");
   }
-  await renderAll();
 }
 
-window.addEventListener('hashchange', () => {
-  selectFromHash();
-  renderAll();
-});
+els.search.addEventListener('input', () => { state.search = els.search.value.trim(); renderTraceView(); });
+
+const filterInput = document.getElementById('spec-filter');
+if (filterInput) {
+  filterInput.addEventListener('input', () => {
+    renderDashboard();
+  });
+}
+
+els.refresh.addEventListener('click', async () => { state.sheetCache.clear(); await init(); });
 
 init().catch(err => {
   console.error(err);
-  setStatus('Failed to load source snapshot');
+  setStatus('Failed to load snapshot');
   setFooter(String(err));
-  els.specs.innerHTML = `<div class="empty">${escapeHtml(String(err))}</div>`;
-  els.code.innerHTML = '<div class="empty">Unable to load code hits.</div>';
-  els.sheets.innerHTML = '<div class="empty">Unable to load cheatsheet hits.</div>';
 });
 </script>
 </body>

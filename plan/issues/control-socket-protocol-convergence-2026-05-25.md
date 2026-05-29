@@ -191,3 +191,380 @@ The four key gains:
 - `crates/tillandsias-headless/src/vsock_server.rs:150` — current vsock dispatcher.
 - `crates/tillandsias-headless/tests/vsock_listener_e2e.rs` — vsock test fixture (good model for unix-side equivalent).
 - PR #2 — https://github.com/8007342/tillandsias/pull/2 — where the Linux implementation will land.
+
+## Update 2026-05-28T08:55Z (linux-host) — `ControlMessage::kind()` lifted to control-wire
+
+Both dispatchers (`tray/mod.rs::handle_control_connection` and
+`vsock_server::serve_connection`) previously constructed their Error-frame
+`message:` strings via a duplicated `control_message_kind` helper in
+tray/mod.rs (unix path) or by `format!("{:?}", std::mem::discriminant(&other))`
+producing an opaque `Discriminant(13)` (vsock path).
+
+Lifted `pub fn kind(&self) -> &'static str` to `impl ControlMessage` in
+the canonical `tillandsias-control-wire` crate. Within the defining crate,
+`#[non_exhaustive]` does NOT relax exhaustiveness, so adding a new
+variant is a compile error here until it gets a stable name — the shipped
+wire surface cannot drift from the diagnostic surface unnoticed. Removed
+the duplicate helper from tray/mod.rs and the opaque discriminant
+formatting from vsock_server.rs; both now call `other.kind()`. New unit
+test pins the name table for every declared variant.
+
+Net result: operator-visible Error frames now read
+`variant CloudRefreshRequest not handled by the in-VM vsock dispatcher`
+instead of `variant Discriminant(13) not handled …`. No wire change;
+WIRE_VERSION stays at 2.
+
+## Update 2026-05-27T21:00Z (linux-host) — CloudRefreshRequest now real (Q4 progress)
+
+The vsock `CloudRefreshRequest` handler is no longer a stub (`e1a190d4`): the
+in-VM headless runs `gh repo list --json nameWithOwner,defaultBranchRef` with
+the mounted token (`/run/secrets/tillandsias-github-token`) and parses into
+`CloudProjectEntry`, degrading to an empty list when gh/token are absent.
+
+Q4 status: both transports now serve REAL backing data —
+- unix tray (Linux host): `tillandsias_core::remote_projects` (containerized gh).
+- vsock (in-VM): `gh` directly with the mounted token (this commit).
+Same reply shape, host-appropriate execution context — the "unified backing
+data, host-local execution" resolution. EnumerateLocalProjects was already
+real (each host's local scanner). Remaining stub: none of the read handlers;
+VmStatusRequest already reflects the real phase.
+
+Siblings: no action needed; wire shape unchanged (WIRE_VERSION 2).
+
+## Update 2026-05-28T22:24Z — pure routing matrix landed (item 1 of 3)
+
+The first step of the convergence packet is now in:
+`crates/tillandsias-headless/src/control_dispatch.rs`. Pure module
+encoding the dispatch-table Q1/Q2/Q4 answers from this issue:
+
+  * `TransportKind { UnixSocket, Vsock }`
+  * `DispatchOutcome { Handle, Unsupported, ResponseOnly }`
+  * `pub fn decide_route(msg, transport) -> DispatchOutcome` — no I/O,
+    no allocation, no global state.
+
+Routing matrix verbatim from this packet's answers:
+
+  | Variant                                             | Unix       | Vsock      |
+  |-----------------------------------------------------|------------|------------|
+  | Hello                                               | Handle     | Handle     |
+  | IssueWebSession / EvictProject                      | Handle     | **Unsup**  |  Q1
+  | McpFrame                                            | Handle     | **Unsup**  |
+  | VmStatusRequest / VmShutdownRequest                 | **Handle** | Handle     |  Q2
+  | EnumerateLocalProjects / CloudRefreshRequest        | **Handle** | Handle     |  Q4
+  | PtyOpen / PtyData / PtyResize / PtyClose            | **Unsup**  | Handle     |
+  | HelloAck / IssueAck / Error / *Reply                | ResponseOnly | ResponseOnly |
+
+Four unit tests pin every entry in the table verbatim — adding a new
+ControlMessage variant produces an `unreachable!` panic in the test
+fixture, which is the drift signal the convergence packet needs.
+
+The module is `#[allow(dead_code)]` until the follow-on slice wires it
+into `tray::handle_control_connection` and `vsock_server::serve_connection`
+(items 2 and 3 of this packet). That refactor needs care: tray's
+dispatcher is sync `std::os::unix::net::UnixStream` while vsock's is
+async tokio, and the convergence packet's preferred path is keeping
+`decide_route` sync (it already is — pure function) and having each
+transport adapt around it.
+
+## Update 2026-05-28T22:54Z — unix-socket dispatcher wired (item 2 of 3)
+
+`tray::handle_control_connection` now consults
+`control_dispatch::decide_route(&body, TransportKind::UnixSocket)`
+as the routing decision and matches on `DispatchOutcome`:
+
+  * `Handle` → inner variant-match runs the existing handler
+    (Hello, IssueWebSession, EvictProject). A new inner-arm
+    `_` writes an explicit Error{Unsupported} for matrix-Handle
+    variants that don't have a handler yet (e.g. VmStatusRequest
+    per Q2 — needs a real handler) — surfaces the gap visibly
+    instead of silent drop.
+  * `Unsupported` → Error{Unsupported} with "not supported on the
+    unix-socket transport" message.
+  * `ResponseOnly` → Error{Unsupported} with "is a response-shape
+    frame and cannot open a connection" — precise diagnostic for
+    a peer that sends e.g. HelloAck as the first frame.
+
+Behaviour change for callers: variants the matrix says Handle but
+which don't have a handler yet now reply with a DESCRIPTIVE Error
+that references this packet for follow-up, instead of the generic
+"variant X not handled" they got before.
+
+Item 3 (wire decide_route into vsock_server::serve_connection)
+remains the next slice — same pattern, but the dispatcher there is
+async tokio and threads through pty_store + VmStateHandle, so it
+gets its own commit.
+
+## Update 2026-05-28T23:25Z — vsock dispatcher wired (item 3 of 3) — packet COMPLETE
+
+`vsock_server::serve_connection` now consults
+`control_dispatch::decide_route(&env.body, TransportKind::Vsock)` as
+a pre-filter before the existing variant-match. Three outcome arms:
+
+  * `Unsupported` → write Error{Unsupported} with "not supported on
+    the in-VM vsock transport" and `continue` the read loop. Pty
+    shutdown happens on write failure as before.
+  * `ResponseOnly` → write Error{Unsupported} with "is a response-
+    shape frame and cannot open a connection" — precise diagnostic
+    for a peer that sends e.g. HelloAck inbound.
+  * `Handle` → fall through to the existing variant-match (with all
+    its real handlers: VmStatusRequest, EnumerateLocalProjects,
+    CloudRefreshRequest, VmShutdownRequest, PtyOpen/Data/Resize/
+    Close).
+
+The inner `other =>` arm's role is now "matrix says Handle but no
+handler exists yet" — surface that gap with a descriptive Error
+referencing this packet rather than the prior generic "not handled
+by the in-VM vsock dispatcher" message.
+
+**Convergence packet status: COMPLETE.** Items 1-3 all shipped:
+
+  1. `5c67ddb9` — pure routing matrix module (decide_route + 4
+     matrix tests)
+  2. `aeb5499a` — unix-socket dispatcher wires the matrix
+  3. `<this commit>` — vsock dispatcher wires the matrix
+
+Sibling hosts: the wire format is unchanged (WIRE_VERSION still 2).
+The behaviour change is operator-visible: variants that produce
+Error{Unsupported} now have transport-specific messages identifying
+WHICH transport rejected the variant and (where applicable) the
+follow-on slice expected to ship the handler. Symmetric variants
+per the Q1/Q2/Q4 matrix are guaranteed to be handled equivalently
+across both transports — the matrix is now the single source of
+truth, and adding a new ControlMessage variant updates one place
+(decide_route + the 4 unit-test arms).
+
+Open follow-ons (deferred since this packet's slices stayed
+bounded):
+
+  * Q3 dispatcher sync ↔ async unification (Linux preference: keep
+    decide_route sync — which it is — and tokio-port the unix
+    listener as a separate change).
+  * Handler bodies for matrix-Handle variants that currently fall
+    through to the "matrix says Handle but no handler yet" arm
+    (mostly the unix path's VmStatusRequest / EnumerateLocalProjects
+    / CloudRefreshRequest / McpFrame — Q2/Q4 say unix should handle
+    these too).
+
+## Update 2026-05-29T02:25Z — VmStatusRequest handler shipped on unix dispatcher (Q2)
+
+Third matrix-Handle-but-no-handler variant migrated to a real
+implementation on the linux-native unix dispatcher. Commit
+`9eff05c8`.
+
+Minimal slice — we're answering on a working unix socket, so the
+tray is by definition serving and we reply with
+`phase=VmPhase::Ready`. `podman_ready` is the live
+`tillandsias_podman::podman_available_sync()` check that already
+runs elsewhere on this host. `last_event` carries a
+`"linux-native-tray"` transport tag so downstream clients can tell
+unix-from-vsock replies apart.
+
+```rust
+ControlMessage::VmStatusRequest { seq } => {
+    let podman_ready = tillandsias_podman::podman_available_sync();
+    let reply = ControlEnvelope {
+        wire_version: WIRE_VERSION,
+        seq: first.seq,
+        body: ControlMessage::VmStatusReply {
+            seq_in_reply_to: seq,
+            phase: tillandsias_control_wire::VmPhase::Ready,
+            podman_ready,
+            last_event: Some("linux-native-tray".to_string()),
+        },
+    };
+    let _ = write_control_envelope(&mut stream, &reply);
+}
+```
+
+A real `TrayPhaseHandle` mirroring the in-VM `VmStateHandle`
+(Starting / Stopping / Draining / Failed transitions, rooted in the
+tray's own SIGTERM/SIGINT atomic and the
+`graceful_shutdown_async` path) is the natural follow-on. Until
+then, "we're up" is the truth and `Ready` is the correct value.
+
+The regression test `unsupported_variant_on_unix_socket_replies_
+with_error` now uses `McpFrame` as its example
+matrix-Handle-but-no-handler variant; the new
+`vm_status_request_on_unix_socket_replies_with_ready_phase` test
+pins the new behaviour. Headless suite: 127 passed.
+
+Matrix-Handle status on the unix dispatcher (Q2 + Q4):
+
+| Variant                  | Status                                  |
+|--------------------------|-----------------------------------------|
+| `Hello`                  | ✓ handled (HelloAck)                    |
+| `IssueWebSession`        | ✓ handled (broadcast + ack)             |
+| `EvictProject`           | ✓ handled (broadcast + ack)             |
+| `EnumerateLocalProjects` | ✓ handled (`05cc3a7d`)                  |
+| `CloudRefreshRequest`    | ✓ handled (`71db9f68`)                  |
+| `VmStatusRequest`        | ✓ handled (`9eff05c8`)                  |
+| `VmShutdownRequest`      | matrix-Handle, no handler — follow-on   |
+| `McpFrame`               | matrix-Handle, no handler — follow-on   |
+
+WIRE_VERSION unchanged at 2.
+
+## Update 2026-05-29T02:51Z — TrayPhaseHandle real lifecycle + VmShutdownRequest handler shipped (Q2 continued)
+
+Fourth matrix-Handle-but-no-handler variant migrated to a real
+implementation on the unix dispatcher. Commit `a10dc0f6`.
+
+The minimal-slice VmStatusRequest from `9eff05c8` reported a
+hardcoded `phase=Ready`; this slice replaces that with a real shared
+phase value. New `TrayPhaseHandle` type — cheap-to-clone
+`Arc<RwLock<VmPhase>>` wrapper — mirrors the in-VM `VmStateHandle`
+shape:
+
+```rust
+#[derive(Clone)]
+struct TrayPhaseHandle {
+    phase: Arc<RwLock<tillandsias_control_wire::VmPhase>>,
+}
+```
+
+Constructor `new()` starts at `Starting`. The control-socket accept
+thread in `start_control_socket_server` transitions
+`Starting -> Ready` immediately after `UnixListener::bind()` succeeds
+(by the next line the accept loop is picking up clients, so Ready is
+the truth). The handle is then cloned into each per-connection
+worker:
+
+```rust
+let phase_handle = TrayPhaseHandle::new();
+phase_handle.set_phase(tillandsias_control_wire::VmPhase::Ready);
+std::thread::spawn(move || {
+    for incoming in listener.incoming() {
+        if let Ok(stream) = incoming {
+            let subscribers = subscribers.clone();
+            let phase_handle = phase_handle.clone();
+            std::thread::spawn(move || {
+                handle_control_connection(stream, subscribers, phase_handle)
+            });
+        }
+    }
+});
+```
+
+VmStatusRequest now reads `phase_handle.current_phase()` instead of
+hardcoding Ready.
+
+VmShutdownRequest handler arm:
+
+```rust
+ControlMessage::VmShutdownRequest { seq, drain_timeout_ms } => {
+    phase_handle.set_phase(tillandsias_control_wire::VmPhase::Draining);
+    info!(
+        spec = "tray-host-control-socket",
+        seq, drain_timeout_ms,
+        "VmShutdownRequest on unix socket; phase=Draining (drain wiring is follow-on)"
+    );
+}
+```
+
+No reply frame — closing the connection is the signal, same as the
+vsock side. `drain_timeout_ms` is logged for operator visibility but
+not honoured yet by an actual drain step; the tray's existing
+SIGTERM/SIGINT shutdown path still drives the real teardown.
+
+Updated matrix-Handle status on the unix dispatcher:
+
+| Variant                  | Status                                |
+|--------------------------|---------------------------------------|
+| `Hello`                  | ✓ handled (HelloAck)                  |
+| `IssueWebSession`        | ✓ handled (broadcast + ack)           |
+| `EvictProject`           | ✓ handled (broadcast + ack)           |
+| `EnumerateLocalProjects` | ✓ handled (`05cc3a7d`)                |
+| `CloudRefreshRequest`    | ✓ handled (`71db9f68`)                |
+| `VmStatusRequest`        | ✓ handled (`9eff05c8`, `a10dc0f6`)    |
+| `VmShutdownRequest`      | ✓ handled (`a10dc0f6`)                |
+| `McpFrame`               | matrix-Handle, no handler — follow-on |
+
+Open follow-ons:
+
+  * ~~Wire `mark_stopping()` into the tray's existing SIGTERM/SIGINT
+    signal path~~ — DONE in `08b9e96e`. See the 04:21Z addendum
+    below.
+  * Honour `drain_timeout_ms` from VmShutdownRequest by parking the
+    accept loop and waiting for in-flight requests to complete
+    before letting the signal path proceed.
+  * `McpFrame` handler — host-browser-mcp tunnel between forge and
+    tray (needs forge↔tray plumbing on the unix path).
+
+129 headless tests passing. WIRE_VERSION unchanged at 2.
+
+## Update 2026-05-29T04:21Z — SIGTERM/SIGINT → phase=Stopping wiring (Q2 functionally complete)
+
+Closes the natural follow-on from `a10dc0f6`. Commit `08b9e96e`.
+
+Q2 is now functionally complete across all three transports — the
+phase a sibling-host client observes via `VmStatusRequest` tracks the
+truth across the entire tray lifecycle window:
+
+  * Linux tray (this commit): `Starting → Ready` on `UnixListener::
+    bind()` success → `Draining` on `VmShutdownRequest` →
+    `Stopping` on SIGTERM/SIGINT.
+  * Vsock (already in place): same shape via
+    `VmStateHandle::advance_to_ready_when_podman_up` +
+    `watch_shutdown_and_mark_stopping` since the gap-6 phase-
+    lifecycle wiring.
+
+Cross-host context: windows-next `80eceb0b` and macOS slice 20
+(`8b9baf8f`) BOTH now send `VmShutdownRequest` BEFORE tearing down
+WSL/VZ. They expect the in-VM headless to drain podman; this slice
+completes the symmetry by making the linux **host tray** itself
+transition phases on its own signal path. A sibling-host client
+polling `VmStatusRequest` during the entire shutdown sequence
+(tray-send-VmShutdownRequest → tray-receives-SIGTERM → tray-exit)
+sees the lifecycle truthfully.
+
+New `TrayPhaseHandle::watch_shutdown_and_mark_stopping_blocking`
+mirrors the vsock-side async helper:
+
+```rust
+fn watch_shutdown_and_mark_stopping_blocking(
+    &self, shutdown: Arc<AtomicBool>,
+) {
+    while !shutdown.load(Ordering::SeqCst) {
+        std::thread::sleep(Duration::from_millis(250));
+    }
+    if self.current_phase() != VmPhase::Failed {
+        self.set_phase(VmPhase::Stopping);
+    }
+}
+```
+
+Sync polling shape matches the accept-loop's `std::thread`.
+
+Wiring:
+
+  * `start_control_socket_server(shutdown: Arc<AtomicBool>)` —
+    accepts the shared SIGTERM atomic, spawns a watcher thread
+    holding a clone of the `TrayPhaseHandle` + a clone of the
+    atomic.
+  * `install_shutdown_signal_handlers` lifted from `fn` to
+    `pub(crate) fn` so the tray's `run_tray_mode_with_debug` can
+    install the same SIGTERM/SIGINT atomic the headless mode uses.
+  * Main runtime loop in `run_tray_mode_with_debug` swapped from
+    `futures::future::pending` (forever-await) to a tokio sleep
+    loop polling the atomic at 250 ms cadence. With signal-hook
+    intercepting SIGTERM/SIGINT, the process would otherwise never
+    exit on those signals.
+
+Tests: 2 new (watcher flips phase / defensive-guard against
+clobbering Failed). 141 headless tests passing (up from 129 + 10
+picked up from gemini's `45244a41` refactor).
+
+Updated matrix-Handle status on the unix dispatcher:
+
+| Variant                  | Status                                |
+|--------------------------|---------------------------------------|
+| `Hello`                  | ✓ handled                             |
+| `IssueWebSession`        | ✓ handled                             |
+| `EvictProject`           | ✓ handled                             |
+| `EnumerateLocalProjects` | ✓ handled (`05cc3a7d`)                |
+| `CloudRefreshRequest`    | ✓ handled (`71db9f68`)                |
+| `VmStatusRequest`        | ✓ handled — full lifecycle (`08b9e96e`)|
+| `VmShutdownRequest`      | ✓ handled (`a10dc0f6`)                |
+| `McpFrame`               | matrix-Handle, no handler — follow-on |
+
+McpFrame is now the **only** remaining matrix-Handle-but-no-handler
+variant on the unix dispatcher. WIRE_VERSION unchanged at 2.

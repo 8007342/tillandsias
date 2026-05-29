@@ -1,0 +1,5 @@
+# Re-include cheatsheet-sources/ under this directory (root .gitignore
+# ignores it globally with bare pattern "cheatsheet-sources/").
+# The Containerfile's COPY cheatsheet-sources/ /opt/cheatsheet-sources/
+# needs this directory present in the build context at all times.
+!cheatsheet-sources/

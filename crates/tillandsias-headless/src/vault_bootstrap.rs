@@ -25,6 +25,7 @@ use std::process::{Command, Stdio};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
+use tillandsias_podman::podman_cmd_sync;
 use tillandsias_vault_client::{Policy, VaultClient, auto_unseal};
 use zeroize::Zeroize;
 
@@ -189,7 +190,7 @@ pub fn write_github_token_to_vault(token: &str, debug: bool) -> Result<(), Strin
 /// secret name embeds the container instance so concurrent containers
 /// don't collide; the token bytes themselves are written into the named
 /// podman secret as the value.
-pub fn mint_approle_token_for_container(
+pub async fn mint_approle_token_for_container(
     role: &str,
     container_instance: &str,
     debug: bool,
@@ -197,12 +198,12 @@ pub fn mint_approle_token_for_container(
     if !container_running(VAULT_CONTAINER_NAME) {
         return Err("Vault container is not running".into());
     }
-    let rt = tokio_runtime()?;
     let base_url = host_base_url();
     let root_token = read_root_token()?;
     let client = VaultClient::new(&base_url, &root_token);
-    let token = rt
-        .block_on(client.issue_approle_token(role))
+    let token = client
+        .issue_approle_token(role)
+        .await
         .map_err(|e| format!("vault issue_approle_token failed: {e}"))?;
 
     let secret_name = format!("tillandsias-vault-token-{role}-{container_instance}");
@@ -221,7 +222,7 @@ pub fn mint_approle_token_for_container(
 /// doesn't deadlock the shutdown path. The Vault container itself is
 /// preserved on disk (matches the `tillandsias-vault-data` volume
 /// contract).
-pub fn revoke_pending_container_tokens(debug: bool) {
+pub async fn revoke_pending_container_tokens(debug: bool) {
     let entries: Vec<(String, String)> = match revocation_registry().lock() {
         Ok(mut reg) => reg.drain().collect(),
         Err(_) => return,
@@ -229,17 +230,6 @@ pub fn revoke_pending_container_tokens(debug: bool) {
     if entries.is_empty() {
         return;
     }
-    let rt = match tokio_runtime() {
-        Ok(rt) => rt,
-        Err(e) => {
-            if debug {
-                eprintln!(
-                    "[tillandsias-vault] revoke: could not build tokio runtime: {e}; skipping"
-                );
-            }
-            return;
-        }
-    };
     let base_url = host_base_url();
     let root_token = match read_root_token() {
         Ok(t) => t,
@@ -252,12 +242,12 @@ pub fn revoke_pending_container_tokens(debug: bool) {
     };
     let client = VaultClient::new(&base_url, &root_token);
     for (secret_name, token) in entries {
-        if let Err(e) = rt.block_on(client.revoke_token(&token))
+        if let Err(e) = client.revoke_token(&token).await
             && debug
         {
             eprintln!("[tillandsias-vault] revoke {} failed: {e}", secret_name);
         }
-        let _ = Command::new("podman")
+        let _ = podman_cmd_sync()
             .args(["secret", "rm", &secret_name])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -342,7 +332,7 @@ fn read_machine_id() -> Result<String, String> {
 
 fn create_unseal_secret(key: &[u8; 32], debug: bool) -> Result<(), String> {
     // Best-effort remove any prior secret.
-    let _ = Command::new("podman")
+    let _ = podman_cmd_sync()
         .args(["secret", "rm", VAULT_UNSEAL_SECRET])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -352,7 +342,7 @@ fn create_unseal_secret(key: &[u8; 32], debug: bool) -> Result<(), String> {
             "[tillandsias-vault] creating podman secret {VAULT_UNSEAL_SECRET} (32 bytes from HKDF)"
         );
     }
-    let mut child = Command::new("podman")
+    let mut child = podman_cmd_sync()
         .args([
             "secret",
             "create",
@@ -387,7 +377,7 @@ fn create_unseal_secret(key: &[u8; 32], debug: bool) -> Result<(), String> {
 /// Create (or replace) a podman secret holding the supplied token bytes.
 /// Mode `0400`, file driver. Used for per-container AppRole tokens.
 fn create_token_podman_secret(name: &str, token: &str, debug: bool) -> Result<(), String> {
-    let _ = Command::new("podman")
+    let _ = podman_cmd_sync()
         .args(["secret", "rm", name])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -398,7 +388,7 @@ fn create_token_podman_secret(name: &str, token: &str, debug: bool) -> Result<()
             token.len()
         );
     }
-    let mut child = Command::new("podman")
+    let mut child = podman_cmd_sync()
         .args(["secret", "create", "--driver=file", name, "-"])
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
@@ -426,11 +416,20 @@ fn create_token_podman_secret(name: &str, token: &str, debug: bool) -> Result<()
 
 fn launch_vault_container(debug: bool) -> Result<(), String> {
     // Tear down any previous container with the same name (idempotent).
-    let _ = Command::new("podman")
+    let _ = podman_cmd_sync()
         .args(["rm", "-f", VAULT_CONTAINER_NAME])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status();
+
+    // Vault must join the enclave bridge network so (a) `--network-alias vault`
+    // is valid — rootless podman's DEFAULT network is pasta/slirp4netns, not
+    // bridge, and aliases/static-ip are bridge-only ("networks and static
+    // ip/mac address can only be used with Bridge mode networking"); and
+    // (b) enclave containers can reach Vault by its alias. Idempotent — short-
+    // circuits when the network already exists (it normally does, created
+    // during `run_init`, but ensure here so the bootstrap is self-sufficient).
+    crate::ensure_enclave_network(debug)?;
 
     if debug {
         eprintln!(
@@ -444,7 +443,7 @@ fn launch_vault_container(debug: bool) -> Result<(), String> {
     );
     let volume_arg = format!("{}:/vault/data", VAULT_VOLUME);
     let port_arg = format!("127.0.0.1:{}:8200", VAULT_HOST_PORT);
-    let status = Command::new("podman")
+    let status = podman_cmd_sync()
         .args([
             "run",
             "-d",
@@ -452,6 +451,10 @@ fn launch_vault_container(debug: bool) -> Result<(), String> {
             VAULT_CONTAINER_NAME,
             "--hostname",
             VAULT_NETWORK_ALIAS,
+            // Bridge network for the alias + enclave reachability (see
+            // launch_vault_container preamble). Must precede --network-alias.
+            "--network",
+            crate::ENCLAVE_NET,
             "--network-alias",
             VAULT_NETWORK_ALIAS,
             "--secret",
@@ -508,7 +511,7 @@ fn wait_for_vault_ready(
 }
 
 fn read_root_token() -> Result<String, String> {
-    let out = Command::new("podman")
+    let out = podman_cmd_sync()
         .args([
             "exec",
             VAULT_CONTAINER_NAME,
@@ -527,7 +530,7 @@ fn read_root_token() -> Result<String, String> {
 }
 
 fn container_running(name: &str) -> bool {
-    let out = Command::new("podman")
+    let out = podman_cmd_sync()
         .args(["inspect", "--format", "{{.State.Running}}", name])
         .output();
     match out {
@@ -608,7 +611,7 @@ pub fn policy_role_name(policy: &Policy) -> &'static str {
 /// of the regular bootstrap.
 #[allow(dead_code)]
 async fn migrate_legacy_github_token(client: &VaultClient, debug: bool) -> Result<(), String> {
-    let out = Command::new("podman")
+    let out = podman_cmd_sync()
         .args([
             "run",
             "--rm",
@@ -643,7 +646,7 @@ async fn migrate_legacy_github_token(client: &VaultClient, debug: bool) -> Resul
     if read_back["token"].as_str() != Some(token.as_str()) {
         return Err("vault read-back did not match written token".to_string());
     }
-    let _ = Command::new("podman")
+    let _ = podman_cmd_sync()
         .args(["secret", "rm", "tillandsias-github-token"])
         .stdout(Stdio::null())
         .stderr(Stdio::null())

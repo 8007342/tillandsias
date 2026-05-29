@@ -2,7 +2,7 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
-## macOS UNBLOCKED for v0.0.1 — as of 2026-05-27T16:24Z
+## macOS UNBLOCKED for v0.0.1 — as of 2026-05-27T23:25Z
 
 **macOS has zero blocking asks for other hosts.** Every Linux- and
 Windows-owned artifact the macOS production path needs is shipped +
@@ -34,19 +34,34 @@ live-verified:
 **What macOS is waiting for** (not a cross-host ask):
   - User interactive smoke results — user-attended; not parallelizable.
 
-The status line below is the coordinator refresh after the 16:24Z fetch.
+**Autonomous macOS cleanup gate cleared:** the runtime-litmus rustfmt blocker
+from `20260527T190639Z-2c239138-1aebb284-deba10d8` is resolved on
+`linux-next` by `4935404a` / `feb51d66`. `osx-next` is at `f8778350` and
+remains an ancestor of `origin/linux-next` `891bb757`. Runtime-litmus
+`20260527T231258Z-b06a5997-1e20d6d0-b06a5997` failed at `Disk quota exceeded`
+before installed runtime diagnostics; replacement full installed runtime-litmus
+`20260527T231940Z-b06a5997-1e20d6d0-b06a5997` passed build/install and init,
+then failed in OpenCode diagnostics with the `vault_bootstrap.rs:205`
+nested-runtime panic. This is not a macOS blocker. macOS may use m10/m11 as
+autonomous cleanup, but the only macOS acceptance blocker remains
+user-attended m8 smoke. Release run `26544334121` is the current monitored run
+after the Linux Nix musl release pivot.
+
+The status line below is the coordinator refresh after the 23:25Z rebase.
 
 ---
 
-Status: **OPEN** as of 2026-05-27T16:24Z. macOS m1, m1b, m2, m3, m6,
+Status: **OPEN** as of 2026-05-27T23:25Z. macOS m1, m1b, m2, m3, m6,
 m7, m4 sub-task B, m5 fetch primitive, m5 Start VM auto-fetch wiring, `.img.xz`
 download/decompress, and bytes-level SHA proof are done/integrated. `osx-next`
-is at `deba10d8`, which is already an ancestor of `linux-next` `011d7b49`.
+is at `f8778350`, an ancestor of `origin/linux-next`.
 The old l9 recipe-publish/SHA-pin gates and the F1 headless service restart
 loop are closed. Remaining macOS acceptance is user-attended m8 smoke of the
 rebuilt `dist/Tillandsias.app`; if Ready still hangs after Start VM, file
 fresh evidence against the current recipe-rootfs/headless unit state rather
-than reopening m5 fetch/provision code.
+than reopening m5 fetch/provision code. Autonomous fallback is no longer a
+noop: m10 project threading and the remaining semantic m11 MenuStructure
+cleanup are available after the rustfmt-only gate was cleared.
 
 ## How to use this file
 
@@ -145,12 +160,15 @@ accessor.
     m4/m5 code. This keeps the macOS tray aligned while l9 artifacts are
     pending, without touching release-lane workflow state.
 - next_action: >
-    Run focused macOS tray tests/lints, identify the smallest MenuStructure
-    adapter change that removes duplicate manual menu wiring, and checkpoint
-    only if the diff is semantic or needed to keep CI green.
+    Rustfmt-only cleanup is already clear on `linux-next`. Run focused macOS
+    tray tests/lints, identify the smallest MenuStructure adapter change that
+    removes duplicate manual menu wiring, and checkpoint only if the diff is
+    semantic or needed to keep CI green.
 - acceptance_evidence:
-  - `cargo fmt --all -- --check` or a scoped rustfmt pass for macOS-owned
-    crates.
+  - `cargo fmt --all -- --check` or a scoped rustfmt pass for
+    `crates/tillandsias-macos-tray/src/action_host.rs`,
+    `crates/tillandsias-macos-tray/src/terminal_attach.rs`, and
+    `crates/tillandsias-vm-layer/src/vz.rs`.
   - `cargo clippy -p tillandsias-macos-tray -- -D warnings` if available on
     macOS, or a documented platform/toolchain blocker.
   - `cargo test -p tillandsias-macos-tray --bin tillandsias-tray`.
@@ -1857,3 +1875,1204 @@ step 5 lands.
 - Current macOS dependency chain is unchanged: m8 user-attended smoke remains
   the acceptance gate; m10/m11 are optional no-blocker follow-ups; there is no
   cross-host ask for macOS this loop.
+
+### event: linux coordinator status reconciliation — 2026-05-27T18:15Z
+
+- Observed remote heads after fetch/pull: `linux-next` `9081212c`,
+  `windows-next` `c0a9558b`, `osx-next` `deba10d8`, `main` `e22a6853`.
+- No unmerged macOS code delta exists. `osx-next` remains an ancestor of
+  `linux-next`; the newer Linux commits are coordination folds and PR #5 is
+  now merged to `main`.
+- Current macOS dependency chain is unchanged: m8 user-attended smoke remains
+  the acceptance gate; m10/m11 are optional no-blocker follow-ups; there is no
+  cross-host ask for macOS this loop. The prior release.yml auto-publish ask is
+  closed by PR #5; only the manifest `release_tag` accessor remains as
+  non-blocking cleanup.
+
+### event: linux coordinator status reconciliation — 2026-05-27T19:19Z
+
+- Observed remote heads after fetch/pull: `linux-next` `f3838069`,
+  `windows-next` `1aebb284`, `osx-next` `deba10d8`, `main` `e22a6853`.
+- Runtime-litmus `20260527T190639Z-2c239138-1aebb284-deba10d8` found
+  `osx-next` already integrated but failed the merged runtime worktree at the
+  `rust-formatting` check.
+- Mac-owned blocker paths:
+  `crates/tillandsias-macos-tray/src/action_host.rs`,
+  `crates/tillandsias-macos-tray/src/terminal_attach.rs`, and
+  `crates/tillandsias-vm-layer/src/vz.rs`.
+- Current macOS dependency chain: m8 user-attended smoke remains the
+  acceptance gate, but m11 is now the autonomous primary packet before macOS
+  should noop; m10 remains the fallback after formatting is clean.
+
+### event: linux coordinator pull-awareness — 2026-05-27T19:23Z
+
+- Coordination commit pending on `linux-next` updates
+  `methodology/litmus.yaml`, `methodology/forge-diagnostics.yaml`,
+  `.codex/skills/coordinate-multihost-work/SKILL.md`,
+  `plan/issues/forge-diagnostics-automation-2026-05-27.md`, and
+  `plan/index.yaml`.
+- This is informational for macOS m11/m8; it does not supersede the current
+  primary action to clear the `action_host.rs`, `terminal_attach.rs`, and
+  `vz.rs` rustfmt diffs.
+- Forge diagnostics are a non-blocking annex to slow E2E runs. Treat proposed
+  forge improvements as candidates requiring orchestrator privacy/isolation
+  approval before implementation.
+- Required acknowledgement in the next macOS `agent_status_packet`: confirm
+  the `linux-next` coordination commit was pulled or list the fetch/rebase
+  blocker, then report whether any forge diagnostic evidence was produced.
+
+### event: linux coordinator status reconciliation — 2026-05-27T21:15Z
+
+- Observed remote heads after fetch/pull: `linux-next` `b463cb53`,
+  `windows-next` `cca9da4a`, `osx-next` `b463cb53`, `main` `fa746f03`.
+- `osx-next` is identical to `linux-next`; there is no macOS code delta for the
+  integration loop to merge.
+- The prior rustfmt blocker is resolved by `4935404a` / `feb51d66`, so m11 is
+  no longer a formatting-only gate. Remaining m11 work is semantic
+  MenuStructure cleanup.
+- Current macOS dependency chain: m8 user-attended smoke remains the manual
+  acceptance gate. Autonomous fallback is m10 project threading or semantic
+  m11 cleanup; neither blocks the Windows rustfmt retry and runtime-litmus
+  rerun.
+
+### event: linux coordinator status reconciliation — 2026-05-27T23:25Z
+
+- Observed remote heads after fetch/rebase: `origin/linux-next` `891bb757`
+  before this coordination commit, `windows-next` `1e20d6d0`, `osx-next`
+  `f8778350`, `main` `fa746f03`.
+- `osx-next` remains an ancestor of `linux-next`; there is no macOS code delta
+  for the integration loop to merge.
+- Runtime-litmus `20260527T231258Z-b06a5997-1e20d6d0-b06a5997` found both
+  siblings already integrated but failed at `Disk quota exceeded` during
+  `./build.sh --ci-full --install`. Replacement runtime-litmus
+  `20260527T231940Z-b06a5997-1e20d6d0-b06a5997` passed build/install and init,
+  then failed in OpenCode diagnostics with the `vault_bootstrap.rs:205`
+  nested-runtime panic. This is a Linux coordination/runtime gate, not a macOS
+  implementation blocker.
+- Release run `26544334121` is the current monitored run after the Linux Nix
+  musl release pivot.
+- Current macOS dependency chain: m8 user-attended smoke remains the manual
+  acceptance gate. Autonomous fallback is m10 project threading or semantic
+  m11 cleanup.
+
+### event: macOS slice 2 — ids::STATUS chip wired to VM lifecycle — 2026-05-28T01:19Z
+
+- Commit `5e8bac82` lands the second slice of the post-UX-correction plan:
+  `TrayActionHost` now holds `Arc<Mutex<Option<…>>>` handles for the
+  `NSStatusItem` and the first-row `NSMenuItem` (`ids::STATUS`).
+  `status_item::run` populates those handles once on startup via
+  `attach_status_handles`; subsequent lifecycle events call
+  `set_status_text` which dispatches a `setTitle:`/`setToolTip:` pair to the
+  AppKit main thread.
+- Phases wired today: "🔵 Setting up Fedora Linux…" on boot,
+  "🟢 VM running" on success, "🔴 <error>" on failure. Provisioning
+  granularity (Booting / Downloading / Verifying) lands in slice 6 when
+  `download_verified::on_progress` is wired through.
+- Tests + clippy + fmt clean: `cargo test -p tillandsias-macos-tray --bin
+  tillandsias-tray` 25 passed; `cargo test -p tillandsias-vm-layer --features
+  recipe,download,materialize --lib` 63 passed; `cargo clippy -p
+  tillandsias-macos-tray --no-deps -- -D warnings` clean.
+- UX-parity invariant preserved: menu shape stays identical to Linux +
+  Windows. The macOS-specific VM-spinup layer is encoded only in the chip
+  text, never as an extra menu item (per owner 2026-05-27 hard requirement).
+- Streak: 0 (productive iter). Next macOS iter eligible at ~01:49Z to start
+  slice 3 (held MenuState + menu re-render for SelectAgent + project list
+  updates).
+
+### event: macOS slice 3 — vm_phase_status_text converges with windows-tray — 2026-05-28T01:55Z
+
+- Commit `637246b3` mirrors `tillandsias-windows-tray::notify_icon::
+  vm_phase_status_text` (Windows commit `c45f23ae` 2026-05-27T18:28-07,
+  which itself called out convergence with macOS commit `5e8bac82`).
+  Both trays now produce byte-identical chip strings for each
+  (`VmPhase`, `podman_ready`) combination — Ready / Ready (podman
+  starting…) / Provisioning… / Starting… / Draining… / Stopping… /
+  VM failed.
+- The post-boot success branch of `boot_vm_async` now uses
+  `vm_phase_status_text(Starting, false)` instead of the macOS-only
+  placeholder "🟢 VM running". Once slice 4 wires `VmStatusRequest`
+  polling, the chip will flip to "Ready" / "Ready (podman starting…)"
+  based on the in-VM reply — identical to Windows.
+- Macos-specific pre-boot phase "🔵 Setting up Fedora Linux…" stays
+  outside the shared table because the VM-spinup phase has no
+  Linux/Windows analogue (Linux + Windows tray either don't spin
+  anything up, or already started by the time the tray launches).
+- Tests + lint clean: macos-tray 26/26 (1 new
+  `vm_phase_status_text_reflects_phase_and_podman` mirroring the
+  windows-tray test of the same name); `cargo clippy -p
+  tillandsias-macos-tray --no-deps -- -D warnings` clean; fmt clean.
+- Convergence pattern: when linux-tray gets a status chip the same
+  helper drops in as a 1:1 paste. The deduplication candidate (hoist
+  to `tillandsias-host-shell`) is intentionally deferred — Windows
+  + macOS each keeping their own inline copy mirrors the spec
+  invariant that the table is per-tray (cross-platform-stable but
+  not crate-shared yet).
+- Streak: 0 (productive iter). Next macOS iter eligible at ~02:25Z to
+  pick up slice 4 (the VmStatus poller itself — opening the
+  VZVirtioSocketConnection + sending VmStatusRequest every 30s,
+  mirroring `refresh_vm_status` in windows-tray).
+
+### event: macOS slice 4 — poll_vm_status_once + Client::from_stream — 2026-05-28T02:25Z
+
+- Commit `80d9196e` adds the macOS analogue of windows-tray's
+  `refresh_vm_status`: `poll_vm_status_once(vz) -> Result<(VmPhase,
+  bool), String>`. Opens vsock via `VzRuntime::open_vsock_stream`,
+  wraps the resulting stream in the standard `host-shell::Client`
+  via the new `Client::from_stream(stream, transport)` constructor,
+  runs Hello + VmStatusRequest, returns `(phase, podman_ready)`.
+- `Client::from_stream` is an additive constructor on the shared
+  `tillandsias-host-shell` crate. Existing `Client::connect` /
+  `connect_vsock` paths are untouched. macOS needs the
+  pre-opened-stream path because `VZVirtioSocketConnection` produces
+  the stream itself — macOS has no `AF_VSOCK`, so the standard
+  `Transport::Vsock` connect path cannot reproduce it.
+- New unit test `from_stream_handshake_drives_pre_opened_stream` in
+  `vsock_client::tests` covers the new constructor against the
+  existing fake_unix_server fixture. host-shell vsock_client 3/3
+  green; macos-tray 26/26 green; vm-layer 63/63 green;
+  clippy -D warnings + fmt clean.
+- Visible UX impact this slice: none (the function is staged but
+  not yet wired into a 30s ticker). Slice 5 spawns the ticker after
+  `run_start` succeeds and feeds the result into
+  `vm_phase_status_text` + `apply_status_text_main_thread`, mirroring
+  the windows-tray loop in `spawn_provisioning`.
+- Streak: 0 (productive iter). Next macOS iter eligible at ~02:55Z
+  to wire the ticker (slice 5).
+
+### Event: 2026-05-28T02:54:00Z — linux coordinator status reconciliation
+
+- Observed remote heads after fetch/pull: `origin/linux-next` `089c1b34` (before this coordination commit), `origin/windows-next` `c45f23ae`, `origin/osx-next` `80d9196e`.
+- Sibling branches ancestry: both `origin/windows-next` and `origin/osx-next` are fully merged and integrated as ancestors of the current local HEAD.
+- Discovered that the previous background runtime litmus run `20260528T010600Z-c9e83852-3340523c-82d735ef` failed during OpenCode execution due to a Linux container networking/crun sethostname limitation: hostnames generated for enclave services (e.g. `git-tillandsias-runtime-litmus-...`) exceeded the 63-character Linux hostname limit.
+- Resolved this blocker by implementing a robust `sanitize_hostname` function in `crates/tillandsias-headless` to safely truncate and hash hostnames exceeding 63 characters. Verified all tests pass green.
+- Next action: A fresh background runtime litmus run will be scheduled to validate the integrated HEAD with the new hostname sanitization safely in place.
+
+### event: macOS slice 5 — VmStatus 30s poller wired (UX-correction complete) — 2026-05-28T03:00Z
+
+- Commit `ad49984b` lands the final UX-correction slice: after
+  `run_start` returns Ok, `boot_vm_async` snapshots the
+  `Arc<VzRuntime>` from `vm_slot` and hands it to
+  `spawn_vm_status_poller`, which spawns a Tokio task that calls
+  `poll_vm_status_once` (slice 4) every 30 s and patches the
+  `ids::STATUS` chip + tooltip via `apply_status_text_main_thread`
+  with the result of `vm_phase_status_text` (slice 3).
+- The chip now fully mirrors the windows-tray progression:
+  "🔵 Setting up Fedora Linux…" (macOS pre-boot) → "🔵 Starting…"
+  (post-boot, awaiting first VmStatus reply) → "🟡 Ready (podman
+  starting…)" / "🟢 Ready" (driven by the live in-VM VmStatusReply
+  podman_ready flag).
+- Transient wire errors are best-effort: logged + the last-known
+  chip text is left untouched, matching windows-tray's
+  `refresh_vm_status` policy (c45f23ae).
+- Task lifecycle: the poller runs for the lifetime of the Tokio
+  runtime (no cancellation handle). Quit drops the runtime, which
+  ends the task. A graceful drain via `VmShutdownRequest`
+  acknowledgement is the next slice (Quit drain, slice 6).
+- Tests + lint clean: macos-tray 26/26; vm-layer 63/63;
+  `cargo clippy -p tillandsias-macos-tray --no-deps -- -D warnings`
+  clean; fmt clean.
+- UX-parity invariant intact: zero macOS-extra menu items per
+  owner's 2026-05-27 hard requirement. The macOS-specific VM-spinup
+  layer is now fully encoded in the chip text, with the post-Ready
+  segment 1:1 with windows-tray.
+- Streak: 0 (productive iter). With UX-correction slices 1-5 done,
+  the remaining macOS-owned items are:
+    * slice 6 — Quit drain (vz.stop(60s) before exit(0))
+    * slice 7 — fetch progress (wire download_verified::on_progress
+      to the chip during materialization)
+  Next macOS iter eligible at ~03:30Z to pick up slice 6.
+
+### event: macOS slice 6 — Quit drain via quitWithDrain selector — 2026-05-28T03:30Z
+
+- Commit `b4e07b2a` replaces the Quit item's responder-chain
+  `terminate:` binding with a custom `quitWithDrain:` selector on
+  TrayActionHost. The handler flips the chip to "🔴 Stopping…",
+  takes the live VzRuntime out of `ivars.vm`, marks `vm_busy=true`,
+  spawns a Tokio task that calls `vm.stop(VM_STOP_DRAIN=60s)`, then
+  unconditionally `std::process::exit(0)`.
+- ⌘Q stays bound — user-visible binding is identical. The drain
+  reuses the existing `VzRuntime::stop` path (sends
+  `VmShutdownRequest` over vsock, waits, escalates to hard stop on
+  timeout), so we inherit windows-tray's tested drain semantics.
+- Bypassing AppKit cleanup is acceptable for v0.0.1: the VM is the
+  only state that needs flushing, and `exit(0)` after the await
+  guarantees drain-then-die ordering. A future revision can route
+  through `NSApplicationDelegate::applicationShouldTerminate` +
+  `NSTerminateLater` for a cleaner AppKit handshake (no v0.0.1
+  user-visible difference).
+- Tests + lint clean: macos-tray 26/26; clippy -D warnings clean;
+  fmt clean.
+- Symmetric architecture confirmation from windows: commit
+  `48a50981` refactored windows-tray to use my slice-4
+  `Client::from_stream` constructor across `refresh_vm_status` +
+  `try_connect_until_ready` + `--status-once`. Both trays now share
+  one Hello/HelloAck + request/recv path; only the transport open
+  differs per OS. Windows verified live: `--status-once` reads
+  `wire_version=2, Ready, podman_ready: true, exit 0` from a
+  provisioned VM.
+- Streak: 0 (productive iter). Remaining macOS-owned item:
+    * slice 7 — fetch progress (wire `download_verified::on_progress`
+      into the chip so the user sees ~MB-fetched / decompression /
+      verify phases during a cold first launch).
+  Next macOS iter eligible at ~04:00Z.
+
+### event: macOS slice 7 — fetch-progress chip during cold-launch — 2026-05-28T04:00Z
+
+- Commit `f5443276` lands the last UX slice on the m4 sub-task B
+  list. Threads an `on_phase: &(dyn Fn(&str) + Send + Sync)`
+  callback through `VzRuntime::fetch_recipe_artifact` →
+  `fetch_then_decompress_xz_then_verify` (vm-layer), and from
+  `boot_vm_async` → `run_start` (macos-tray). The callback fires
+  three times per cold launch:
+    1. "🔵 Downloading rootfs…" (before HTTP GET stream)
+    2. "🔵 Decompressing rootfs…" (before xz subprocess)
+    3. "🔵 Verifying rootfs SHA-256…" (before sha-stream)
+  Subsequent launches hit the rootfs.img cache so the callback
+  never fires and the user sees the chip jump straight to
+  "🔵 Starting…".
+- The callback closure captures Arc-cloned status handles + the
+  status_text slot, then on each call dispatches an
+  `apply_status_text_main_thread` via `dispatch_to_main_thread`
+  (libdispatch). All updates happen on the AppKit main thread.
+- vm-layer additive change: two existing tests + macos-tray's
+  `run_start_full_e2e` updated to pass `&|_| {}` no-op closures.
+  No behavioral change to tests; pure signature widening.
+- Tests + lint clean: macos-tray 26/26; vm-layer 63/63;
+  `cargo clippy -p tillandsias-macos-tray --no-deps -- -D warnings`
+  clean; fmt clean across both crates.
+  (vm-layer's pre-existing `materialize/cache.rs:134` collapse-if
+  warning is Linux-owned and unchanged by this slice.)
+- With slices 1-7 complete, m4 sub-task B "action-host wiring" is
+  DONE for v0.0.1. The only outstanding macOS-owned items are the
+  nice-to-haves (Manifest::release_tag accessor — gated on linux-
+  recipe addition) and user-attended m8 smoke (which is the manual
+  acceptance gate, not parallelizable).
+- Streak: 0 (productive iter). Next macOS iter eligible at ~04:30Z
+  — at that point the loop will likely shift to noop cadence
+  (escalating wake) until either (a) Linux ships the release_tag
+  accessor unlocking the manifest-trust-root refactor, (b) Linux
+  or Windows flags a new cross-host concern, or (c) the user
+  reports interactive smoke results from a fresh .app install.
+
+### event: macOS .app rebuild + ship for m8 user-attended smoke — 2026-05-28T04:30Z
+
+- Ran `./scripts/build-macos-tray.sh` against commit `eee670ab`
+  (which carries all 7 UX-correction slices). Output:
+    Bundle: `dist/Tillandsias.app` (version 0.2.260527.5)
+    Tarball: `dist/tillandsias-tray-0.2.260527.5-macos-arm64.tar.gz`
+    Size: 1.49 MiB
+    SHA-256: `2694745a8435804be84049570a00c939b103a9e6e33bf0eaec03f001eea3879e`
+    Codesign: ad-hoc with com.apple.security.virtualization
+    Verify: "satisfies its Designated Requirement"
+- Tarball delivered to the user proactively via SendUserFile so they
+  can run the m8 smoke checklist (Start VM auto-boots → chip cycles
+  through fetch phases on cold launch → Open Shell + GitHub login
+  route via PTY-over-vsock → Quit drains the VM 60 s before exit).
+- This is the only remaining true blocker for v0.0.1; everything
+  else is nice-to-have.
+- Streak: 0 (productive iter — shipped a build artifact to the
+  user, which is meaningful work toward closing v0.0.1 even though
+  it's not a source-tree code commit). Next macOS iter eligible at
+  ~05:00Z to FF-pull and check for either smoke feedback or a new
+  cross-host concern.
+
+### event: macOS slice 8a — poll_cloud_projects_once + cloud_entry_to_menu — 2026-05-28T05:00Z
+
+- Commit `d7c0bbaa` adds the macOS analogue of windows-tray's
+  `refresh_cloud_projects` (Windows commit `b0cdcdee` 2026-05-27T22:27-07,
+  which itself rode on Linux `e1a190d4` — the in-VM headless's
+  CloudRefreshRequest now serves real `gh repo list` output instead of
+  an empty stub).
+- Two pure functions:
+    * `cloud_entry_to_menu(&CloudProjectEntry) -> ProjectEntry` —
+      `name = wire.label`, `path = "{owner}/{repo}"`, `ready = false`.
+      Mirrors windows-tray's helper byte-for-byte.
+    * `poll_cloud_projects_once(vz) -> Result<Vec<ProjectEntry>, String>` —
+      opens vsock via `VzRuntime::open_vsock_stream` → wraps with
+      `Client::from_stream` → handshake → `CloudRefreshRequest` →
+      `CloudRefreshReply` → map → return. 5 s overall timeout.
+- Unit test `cloud_entry_maps_to_owner_slash_repo_slug` mirrors the
+  windows-tray test of the same name — divergence between the two
+  mappers would fail either suite. (Same pattern slice 3 used for
+  `vm_phase_status_text` parity.)
+- This slice stages the helper only. Slice 8b will hold a
+  `MenuState` in `TrayActionHostIvars`, call this every ~5 min from
+  `spawn_vm_status_poller` (mirroring windows' "first tick + every
+  10 ticks" cadence), then rebuild the NSMenu when cloud_projects
+  changes and re-attach the status handles. Splitting 8a/8b keeps
+  each PR shape commit-sized + reviewable.
+- Tests + lint clean: macos-tray 27/27 (+1 cloud_entry); vm-layer
+  63/63; `cargo clippy -p tillandsias-macos-tray --no-deps -- -D
+  warnings` clean; fmt clean.
+- Streak: 0 (productive iter). Next macOS iter eligible at ~05:30Z
+  to pick up slice 8b (held MenuState + menu re-render path).
+
+### event: macOS slice 8b — held MenuState + cloud-projects polling — 2026-05-28T05:30Z
+
+- Commit `08f41521` adds `menu_state: Arc<Mutex<MenuState>>` to
+  `TrayActionHostIvars`, initialised to `MenuState::initial()` with
+  `target=MacosTray`. Wires `spawn_vm_status_poller` to also tick on
+  a cloud-projects cadence:
+    * tick 0, 10, 20, … → `poll_cloud_projects_once(vz)` →
+      `menu_state.cloud_projects = new_list`
+    * every 30 s → `poll_vm_status_once(vz)` →
+      `menu_state.podman_ready = reply.podman_ready`,
+      chip = `vm_phase_status_text(phase, ready)`
+- Cadence mirrors windows-tray's "first tick + every 10 ticks"
+  pattern (commit b0cdcdee). `gh repo list` is a slower-changing
+  input than VmStatus so it doesn't need per-tick granularity.
+- The held MenuState is staged at this slice — nothing rebuilds
+  the NSMenu yet. Cloud-project changes are logged at info
+  ("cloud-projects: menu_state updated (N entries)") so the
+  operator smoke logs show the wire is delivering the expected
+  projects. Slice 8c will rebuild the NSMenu when state changes,
+  using `tillandsias_host_shell::menu_state::build(&state)` to
+  produce the full MenuStructure (today the menu is still built
+  from `MenuStructure::initial_provisioning()`).
+- Tests + lint clean: macos-tray 27/27; clippy -D warnings clean;
+  fmt clean.
+- Streak: 0 (productive iter). Next macOS iter eligible at ~06:00Z
+  to scope slice 8c (full menu re-render — NSStatusItem.setMenu:
+  + re-attach status_handles after each rebuild).
+
+### event: macOS slice 8c — NSMenu rebuild on MenuState change — 2026-05-28T06:00Z
+
+- Commit `8d3a8774` closes the menu-rebuild loop that slice 8b
+  staged. The poller now triggers `rebuild_menu_main_thread` via
+  `dispatch_to_main_thread` whenever cloud_projects or
+  podman_ready changes:
+    1. Clone the held MenuState
+    2. `tillandsias_host_shell::menu_state::build(&state)` → fresh
+       MenuStructure (same path Linux native + Windows tray use)
+    3. `build_menu_with_status_row` (now `pub(crate)`) walks it +
+       wires `trayAction:` targets on every clickable item using
+       the live action-host
+    4. `NSStatusItem.setMenu:` swaps the new menu in
+    5. Re-attach the `status_menu_item` Arc to the new first-row
+       NSMenuItem so future `set_status_text` calls target the
+       fresh instance (the old one is released with the old menu)
+- Infrastructure: new `TrayActionHostHandle` Send/Sync wrapper +
+  `self_handle: Arc<Mutex<Option<…>>>` field populated once via
+  `set_self_handle` from `status_item::run`. The wrapper exists
+  because `Retained<TrayActionHost>` isn't Send (UnsafeCell layout)
+  and the rebuild dispatch needs to reach `&TrayActionHost` on the
+  main thread to pass to `build_menu_with_status_row`.
+- Chip-update and rebuild dispatches are independent main-thread
+  tasks. Chip text always lands; rebuild only when state actually
+  changed. Both run on the AppKit serial queue so they can't
+  interleave with user click handlers.
+- Note: today the initial menu still uses
+  `MenuStructure::initial_provisioning()` in `install_status_item`;
+  the first poll tick rebuilds to the full menu via
+  `menu_state::build`. A follow-up slice can switch the initial
+  build for symmetric initial+update paths (and to show the menu
+  shape sooner even before the first poll tick).
+- Tests + lint clean: macos-tray 27/27; clippy -D warnings clean;
+  fmt clean.
+- Streak: 0 (productive iter). With slice 8c done, the macOS cloud-
+  projects convergence is functionally complete — the menu now
+  reflects in-VM `gh repo list` output 1:1 with windows-tray.
+  Remaining macOS items unchanged from prior entry: nice-to-have
+  manifest.release_tag accessor (Linux-owned) + user-attended m8
+  smoke. Next macOS iter eligible at ~06:30Z; likely shifts to
+  noop cadence pending those.
+
+### event: macOS slice 9 — byte-level fetch-progress chip — 2026-05-28T06:30Z
+
+- Commit `551680f0` converges with windows-tray's `6645d04b` (live
+  fetch-progress chip during recipe materialization).
+  `fetch_then_decompress_xz_then_verify`'s reqwest streaming loop
+  now tracks downloaded bytes + Content-Length and emits refined
+  "Downloading rootfs N/M MB (P%)" lines via the existing
+  `on_phase` callback whenever integer percent changes.
+- Throttling by percent caps dispatches at ~100 per download
+  (~750 KB increments for a 74 MB .img.xz), well within any
+  AppKit main-thread budget. Unknown Content-Length (rare on
+  GitHub release assets) leaves the prior chip untouched — same
+  fallback windows-tray uses.
+- Chip-string format ("Downloading rootfs N/M MB (P%)") is
+  byte-identical to windows-tray's. macOS first-launch chip now
+  mirrors windows: "🔵 Downloading rootfs 12/74 MB (16%)…" →
+  "🔵 Decompressing rootfs…" → "🔵 Verifying rootfs SHA-256…" →
+  "🔵 Starting…" → live VmStatus.
+- No signature change — `on_phase: &(dyn Fn(&str))` is reused.
+  Tests + lint clean: vm-layer 63/63, macos-tray 27/27, clippy +
+  fmt clean across both crates.
+- Streak: 0 (productive iter). Next macOS iter eligible at
+  ~07:00Z. With slices 1-9 done the macOS↔windows convergence
+  on the m4 sub-task B surface is functionally complete (chip
+  text, menu re-render, fetch progress, Quit drain). Remaining
+  items: nice-to-have manifest.release_tag (Linux-owned) +
+  user-attended m8 smoke.
+
+### event: macOS slice 10 — symmetric initial menu via menu_state::build — 2026-05-28T08:30Z
+
+- Commit `c9541768` closes the slice-8c-noted asymmetry: the
+  initial menu in `status_item::run` now uses
+  `tillandsias_host_shell::menu_state::build(&initial_state)` —
+  the same path the poller's rebuild uses — instead of
+  `MenuStructure::initial_provisioning()`.
+- `initial_state = MenuState::initial()` with `target=MacosTray`
+  and `status_text="🔵 Setting up Fedora Linux…"` (matches the
+  boot-phase default boot_vm_async writes via set_status_text).
+- User-visible: frame 0 already shows the structurally-identical
+  9-item Ready menu (status / local-projects / cloud-projects /
+  agents / observatorium / opencode-web / github-login / version
+  footer / quit) — same shape Linux native + Windows render. No
+  more morph from 2-item provisioning to 9-item ready on first
+  poll tick.
+- Tests + lint clean: macos-tray 27/27; clippy -D warnings clean;
+  fmt clean.
+- Streak: 0 (productive iter). Next macOS iter eligible at
+  ~09:00Z. With slices 1-10 done the macOS m4 sub-task B surface
+  is structurally + functionally 1:1 with windows-tray (modulo
+  m8 user smoke + the linux-owned release_tag accessor). Loop
+  will likely shift to noop cadence soon.
+
+### event: macOS .app rebuild + ship (slices 8a-10) — 2026-05-28T09:00Z
+
+- Rebuilt `Tillandsias.app v0.2.260527.5` from `d5868727` (carries
+  slices 8a-10 on top of the 2026-05-28T04:30Z ship):
+    * Tarball: `tillandsias-tray-0.2.260527.5-macos-arm64.tar.gz`
+    * Size: 1.50 MiB
+    * SHA-256: `62104b6dd6a3b2af7ddaa0051dce608efb941c165079496850b350a881c9fed9`
+    * (previous ship sha: `2694745a...`)
+- Delta vs prior ship:
+    * slice 8a — `poll_cloud_projects_once` + `cloud_entry_to_menu`
+    * slice 8b — held `MenuState` + cloud-projects polling cadence
+    * slice 8c — full NSMenu rebuild on state change
+    * slice 9  — byte-level "Downloading rootfs N/M MB (P%)" chip
+    * slice 10 — symmetric initial menu via `menu_state::build`
+- Tarball delivered to user proactively via SendUserFile for the
+  m8 smoke checklist re-run. Same 7-step checklist as before;
+  additional surfaces to inspect:
+    * Frame 0 menu shape: should show full 9-item Ready (not 2-item)
+    * After ~5 min with VM healthy: cloud-projects submenu populated
+    * Cold launch (delete `~/Library/Application Support/tillandsias/
+      rootfs.img` first): chip shows live byte-level progress
+- Streak: 0 (productive iter). Next macOS iter eligible at ~09:30Z;
+  loop likely shifts to noop cadence pending smoke feedback.
+
+### event: macOS slice 11 — --diagnose health report — 2026-05-28T10:30Z
+
+- Commit `db1619ae` mirrors `tillandsias-windows-tray::notify_icon::
+  diagnose` (commit `20fb9d1f`) in spirit. Adds
+  `tillandsias-tray --diagnose` that prints version / bundle / image-
+  root artifacts / manifest SHA pin / control-wire disclaimer and
+  exits without launching AppKit.
+- **macOS-specific limitation called out in the report**: Apple's
+  `Virtualization.framework` vsock is per-VM-handle (no `AF_VSOCK`),
+  so a standalone `--diagnose` process literally cannot reach a
+  separately-running tray's control wire. The report explicitly
+  points the user at the menubar chip (already driven by the 30 s
+  poller from slice 5) for live phase + podman_ready.
+- Exit codes mirror windows: 0 provisioned, 2 degraded, 1 hard fail.
+  Verified live: pre-first-launch dev box → "MISSING vmlinuz /
+  initramfs.img" + "aarch64.img SHA-256 pin: 6859a7bcc4a9…" +
+  exit 2.
+- Useful for the m8 smoke checklist re-runs: the user can now
+  diagnose "is the .app installed properly / has it provisioned"
+  from a terminal without launching the GUI.
+- This iter is also the noop-streak reset — `plan/issues/osx-next-
+  noop-streak.md` deleted; streak back to 0.
+- Tests + lint clean: macos-tray 27/27; clippy -D warnings clean;
+  fmt clean.
+- Next macOS iter eligible at ~11:00Z. With slice 11 the macOS
+  --diagnose convergence with windows-tray is shipped; remaining
+  items unchanged (manifest.release_tag Linux-owned + user smoke).
+
+### event: macOS .app rebuild + ship (slice 11 / --diagnose) — 2026-05-28T11:00Z
+
+- Rebuilt `Tillandsias.app v0.2.260527.5` from `782d2fce` (carries
+  slice 11 on top of the prior 62104b6d ship):
+    * Tarball: `tillandsias-tray-0.2.260527.5-macos-arm64.tar.gz`
+    * Size: 1.51 MiB
+    * SHA-256: `70feac0b5a2fe79df90b46b617f62600201be6c7dd126a7e619f7f7aa3fb912f`
+    * (previous ship sha: `62104b6d…`)
+- Delivered proactively via SendUserFile. After install the user
+  can now run from terminal:
+    /Applications/Tillandsias.app/Contents/MacOS/tillandsias-tray --diagnose
+  to print version / bundle identity / image-root artifacts (with
+  byte sizes) / aarch64.img SHA-256 pin / control-wire disclaimer.
+  Exit code 0 (provisioned) / 2 (degraded) / 1 (hard fail) mirrors
+  windows-tray.
+- This complements the GUI m8 smoke checklist — operator can
+  confirm install + provisioning from terminal without launching
+  the AppKit tray.
+- Streak: 0 (productive iter — ship counts as a deliverable for
+  closing v0.0.1). Next macOS iter eligible at ~11:30Z.
+
+### event: macOS slice 11a — diagnose manifest-pin parser tests — 2026-05-28T11:30Z
+
+- Commit `a97b219a` extracts the inline aarch64.img SHA parser
+  from `print_manifest_pin` into a pure
+  `parse_aarch64_img_sha(manifest_toml: &str) -> Option<String>`
+  helper, and adds three regression tests:
+    * `parses_quoted_key_sha_form` — the actual
+      `"aarch64.img" = "<sha>"` shape the recipe-publish CI emits
+    * `parses_bare_key_sha_form` — bare-key tolerance for future
+      manifest authors who drop the quotes
+    * `refuses_placeholder_pending_ci` — "pending-ci" must NOT
+      parse as a pin
+- Drift-detection: if the manifest format changes upstream the
+  parse-quoted test fails loudly in CI, instead of the report
+  silently falling back to "(not found)" only when someone runs
+  --diagnose interactively.
+- Pure refactor — no behavior change to the running binary.
+- Tests + lint clean: macos-tray 30/30 (+3 diagnose); clippy -D
+  warnings clean; fmt clean.
+- Streak: 0 (productive iter). Next macOS iter eligible at
+  ~12:00Z.
+
+### event: macOS slice 11b — --diagnose surfaces release tag — 2026-05-28T12:00Z
+
+- Commit `37ff2d5f` mirrors windows-tray's `4fff31af`. The macOS
+  diagnose report now prints "Release: v0.2.260526.1" right above
+  the manifest pin so the operator can spot tag/SHA mismatches
+  at a glance.
+- `RECIPE_RELEASE_TAG` in `action_host.rs` is now `pub(crate)` so
+  the diagnose module can read it without duplicating the const.
+  Both trays share the same hardcode pattern until
+  `manifest.release_tag()` lands (Linux-owned nice-to-have).
+- No new tests — the existing aarch64.img parser tests cover the
+  shared-format invariant; the release tag is a pure const surface.
+- Tests + lint clean: macos-tray 30/30; clippy -D warnings clean;
+  fmt clean.
+- Streak: 0 (productive iter). Next macOS iter eligible at
+  ~12:30Z.
+
+### event: macOS slice 12 — compose_chip_text last_event append — 2026-05-28T13:30Z
+
+- Commit `5c5e0e20` mirrors item 2 of windows-tray's `8992652a`.
+  Adds `compose_chip_text(base, last_event_opt) -> String` that
+  appends a non-empty `VmStatusReply.last_event` after a Unicode
+  MIDDLE DOT (U+00B7), so the live chip surfaces in-VM activity:
+    * before: "🟢 Ready"
+    * after:  "🟢 Ready · forge-foo created"
+  None/whitespace last_event leaves the base untouched.
+- `poll_vm_status_once` signature changed to return
+  `Option<String> last_event` from `VmStatusReply`;
+  `spawn_vm_status_poller` composes it into the chip via
+  `compose_chip_text(vm_phase_status_text(...), last_event)`.
+- Byte-identical chip format with windows-tray. New unit test
+  `compose_chip_text_appends_last_event` mirrors the windows-tray
+  test of the same name — divergence between the two trays' chip
+  composition would fail either suite.
+- Deferred to a follow-up: a macOS UNUserNotificationCenter
+  equivalent of windows' `show_balloon` (item 1 from 8992652a).
+  That requires `objc2-user-notifications` + permission-request
+  plumbing; meaningful UX gain but bigger than this slice.
+- Tests + lint clean: macos-tray 31/31 (+1); clippy -D warnings
+  clean; fmt clean. Streak reset to 0.
+- Streak: 0 (productive iter). Next macOS iter eligible at
+  ~14:00Z.
+
+### event: macOS .app rebuild + ship (slices 11a/11b/12) — 2026-05-28T14:00Z
+
+- Rebuilt `Tillandsias.app v0.2.260527.5` from `982560ba` (carries
+  slices 11a + 11b + 12 on top of the prior 70feac0b ship):
+    * Tarball: `tillandsias-tray-0.2.260527.5-macos-arm64.tar.gz`
+    * Size: 1.51 MiB
+    * SHA-256: `b662a2a9362d93bdd71b1ff34cfb5a386746d2c013e67b97785254f06fd8d2cc`
+    * (previous ship sha: `70feac0b…`)
+- Delta vs prior ship:
+    * slice 11a — diagnose parser tests (drift detection in CI)
+    * slice 11b — `--diagnose` surfaces `Release: v0.2.260526.1`
+    * slice 12  — chip surfaces `last_event` via compose_chip_text
+- Delivered proactively via SendUserFile.
+- Streak: 0 (productive iter). Next macOS iter eligible at ~14:30Z.
+
+### event: macOS slice 13 — Notification Center banner on provisioning failure — 2026-05-28T14:30Z
+
+- Commit `60a5cb33` mirrors item 1 of windows-tray's `8992652a`
+  (show_balloon). On the Err branch of `run_start`, fires a macOS
+  Notification Center banner so the user notices a failed VM boot
+  even without hovering the menubar icon. Title=Tillandsias /
+  subtitle=Provisioning error / body=<reason>.
+- Implementation: `osascript -e 'display notification "..."'`
+  shell-out rather than `objc2-user-notifications` (which pins a
+  different objc2 major than the workspace's 0.5) plus the
+  `UNUserNotificationCenter` permission-request plumbing.
+  osascript notifications fire without a per-app permission prompt
+  on macOS 11+ since the script editor's bundle ID is preauthorized.
+- Best-effort: spawn detached, log on error, never block. The
+  chip text remains the authoritative failure surface; the
+  notification is a "look here" nudge.
+- New `applescript_escape_single_quoted` helper defangs `\`, `"`,
+  and newlines so a quote-containing error string can't break out
+  of the AppleScript literal. Covered by
+  `applescript_escape_handles_metas_and_newlines` unit test.
+- Tests + lint clean: macos-tray 32/32 (+1); clippy -D warnings
+  clean; fmt clean.
+- Streak: 0 (productive iter). Next macOS iter eligible at ~15:00Z.
+
+### event: macOS .app rebuild + ship (slice 13) — 2026-05-28T15:00Z
+
+- Rebuilt `Tillandsias.app v0.2.260527.5` from `a18cee6b` (carries
+  slice 13 on top of the prior b662a2a9 ship):
+    * Tarball: `tillandsias-tray-0.2.260527.5-macos-arm64.tar.gz`
+    * Size: 1.51 MiB
+    * SHA-256: `fc031636a3e6fe662519b20ca513b6a8d443283251348f66a2f970bf85d35266`
+    * (previous ship sha: `b662a2a9…`)
+- Delta vs prior ship: macOS Notification Center banner on
+  provisioning failure (Title=Tillandsias / Subtitle=Provisioning
+  error / Body=<reason>). Fires via osascript so no per-app
+  permission prompt. Chip text stays authoritative; the banner is
+  a "look here" nudge.
+- Delivered proactively via SendUserFile.
+- Streak: 0 (productive iter). Next macOS iter eligible at ~15:30Z.
+
+### event: macOS slice 14 — --diagnose --json machine-readable output — 2026-05-28T15:30Z
+
+- Commit `72cbf8a7` mirrors windows-tray's `c4908438` (`--diagnose
+  --json` for support tooling). Refactors `diagnose()` into
+  collect-then-format so both human and JSON output emit the EXACT
+  same fields:
+    * `DiagnoseFormat` enum (Human / Json)
+    * `DiagnoseReport` struct with `#[derive(serde::Serialize)]`
+    * `collect_report()` does all the data collection
+    * `print_human` / `print_json` / `exit_code_from` each take
+      `&DiagnoseReport` — same data, two formatters, one decision
+- Live JSON output (verified):
+    ```json
+    {
+      "version": "0.1.0",
+      "in_app": false,
+      "exe_path": "...",
+      "image_root": "/Users/.../Library/Application Support/tillandsias",
+      "rootfs_present": true, "rootfs_bytes": 0,
+      "kernel_present": false, "kernel_bytes": null,
+      "initrd_present": false, "initrd_bytes": null,
+      "release_tag": "v0.2.260526.1",
+      "manifest_pin_aarch64_img": "6859a7bcc4a9",
+      "provisioned": false
+    }
+    ```
+- macOS-only fields differ from windows where the concept doesn't
+  exist: no `log_path` (no file-based tracing on macOS yet), no
+  `wire` object (macOS vsock is per-VM-handle so `--diagnose`
+  can't reach the live tray's wire), and the chip-text disclaimer
+  is human-only since the JSON consumer wants raw data.
+- Adds `serde` + `serde_json` to macos-tray deps (workspace = true).
+- Tests + lint clean: macos-tray 32/32; clippy -D warnings clean;
+  fmt clean.
+- Streak: 0 (productive iter). Next macOS iter eligible at ~16:00Z.
+
+### event: macOS .app rebuild + ship (slice 14 --diagnose --json) — 2026-05-28T16:30Z
+
+- Rebuilt `Tillandsias.app v0.2.260527.5` from `26265587` (carries
+  slice 14 on top of the prior fc031636 ship):
+    * Tarball: `tillandsias-tray-0.2.260527.5-macos-arm64.tar.gz`
+    * Size: 1.51 MiB
+    * SHA-256: `e07ce58a8f7531b2fc124a1152f62729d8bf684e75ddf7e364d08cf62b492a40`
+    * (previous ship sha: `fc031636…`)
+- Delta vs prior ship: `--diagnose --json` emits machine-readable
+  output for support tooling / jq pipelines. Same data as the
+  human report; serde_json formats the DiagnoseReport struct.
+- Delivered proactively via SendUserFile.
+- Streak: 0 (productive iter). Next macOS iter eligible at ~17:00Z.
+
+### event: macOS slice 15 — --diagnose --json schema pins + tray-diagnose.sh — 2026-05-28T17:30Z
+
+- Commit `af14f21c` mirrors windows-tray's `e96d1fc8`. Two
+  coordinated pieces locking in the --diagnose --json schema:
+    1. Four unit tests pin the JSON shape so renames/removes break
+       the build (`diagnose_report_json_keys_locked`,
+       `diagnose_report_none_pin_serialises_as_null`,
+       `diagnose_report_none_bytes_serialise_as_null`,
+       `exit_code_provisioned_zero_degraded_two`).
+    2. `scripts/tray-diagnose.sh` — a one-shot bash consumer
+       that runs the tray's `--diagnose --json`, parses with jq,
+       prints colorized PASS/FAIL per check, exits 0/2/1.
+       Mirrors `scripts/tray-diagnose.ps1` byte-for-byte where the
+       shell concepts overlap (auto-discovery search order, exit
+       codes, PASS/FAIL line shape, color rendering).
+- Subtle correctness fix vs. the ps1: bash needs `set +e` around
+  the `--diagnose --json` invocation because `set -e` would treat
+  the legitimate degraded-exit-2 as a script crash. PowerShell's
+  `&` operator doesn't trip on non-zero exit; bash does.
+- Verified live: `tray-diagnose.sh` on the dev build shows 4 PASS
+  checks (Version, Release tag, Manifest pin, rootfs.img present) +
+  4 FAIL checks (Bundle outside .app, vmlinuz/initramfs missing,
+  Provisioned), DEGRADED rendering with exit 2.
+- Resets the noop streak — file deleted.
+- Tests + lint clean: macos-tray 35/35 (+4); clippy -D warnings
+  clean; fmt clean.
+- Streak: 0 (productive iter). Next macOS iter eligible at ~18:00Z.
+
+### event: macOS slice 16 — install-macos.sh post-install --diagnose sanity check — 2026-05-28T19:30Z
+
+- Commit `5dcd54a0` wires `--diagnose --json` into the curl-installer
+  as a post-extract, pre-launch sanity step. Surfaces broken installs
+  (corrupted tarball, codesign on the wrong file) immediately rather
+  than the user staring at a never-appearing menubar icon.
+- Exit-code handling:
+    * exit 0 (re-install over provisioned) or 2 (expected first
+      install) → proceed to `open -a`; (if jq present) print
+      `installed: version=X.Y.Z pin=abc…` breadcrumb.
+    * exit 1 (binary missing or codesign broken) → `die` with
+      "install bits broken" + a clear error path.
+    * `$TRAY_BIN` missing entirely → `die` before --diagnose runs.
+- jq breadcrumb is best-effort — most macOS users have jq via brew,
+  but the install verification itself doesn't depend on it.
+- Resets the noop streak — file deleted.
+- Streak: 0 (productive iter). Next macOS iter eligible at ~20:00Z.
+
+### event: macOS slice 17 — macos-tray-diagnostics cheatsheet — 2026-05-28T20:00Z
+
+- Commit `5c2b4c28` mirrors windows-tray's `5908fc64`
+  (cheatsheets/runtime/windows-tray-diagnostics.md) for the macOS
+  surface. New file: `cheatsheets/runtime/macos-tray-diagnostics.md`.
+- Adapted for platform-specific differences:
+    * Two diagnostic modes (`--diagnose` / `--diagnose --json`)
+      instead of windows' four (no `--provision-once` /
+      `--status-once` because of the per-VM-handle vsock).
+    * macOS-specific limitation called out up front so support
+      engineers understand why the report covers only static +
+      filesystem health.
+    * JSON schema documented field-by-field, byte-aligned with
+      the pinned tests in `diagnose::tests`.
+    * Five common pitfalls drawn from this loop's experience
+      (per-VM-handle vsock, stale installed binary, bash tri-state
+      exit code, missing jq on stock macOS, ad-hoc-signed
+      Gatekeeper).
+- YAML frontmatter follows the windows cheatsheet shape so the
+  autogenerated INDEX.md picks it up on the next Linux-side
+  `regenerate-cheatsheet-index.sh` run (the regen script uses
+  GNU-only mapfile + `find -printf` so it doesn't run on macOS).
+- Streak: 0 (productive iter). Next macOS iter eligible at
+  ~20:30Z.
+
+### event: macOS slice 18 — tray-side Error{Unsupported} handling — 2026-05-28T23:30Z
+
+- Commit `5a7e11e6` closes convergence-packet item 4 on the macOS
+  side, mirroring windows-tray's `eddb5c00`. Linux's items 2 + 3
+  (`aeb5499a` / `4eb0baff`) wired the pure `decide_route(msg,
+  transport)` routing matrix into both unix-socket and vsock
+  dispatchers; requests with no inner handler now return
+  `Error{code, message}` frames carrying the dispatcher's own
+  naming. Without explicit tray-side handling those frames
+  silently fell through the "unexpected reply" path.
+- Adds explicit `ControlMessage::Error` arms in both macOS
+  wire callers: `poll_vm_status_once` (30 s VmStatus poller) +
+  `poll_cloud_projects_once` (5-min cloud poller).
+- New `describe_wire_error(code, message) -> String` mirrors
+  windows-tray's helper byte-for-byte: `"dispatcher error {code:?}"`
+  when message empty, `"dispatcher error {code:?}: {message}"`
+  otherwise. Two unit tests pin behavior, mirroring the
+  windows-tray tests of the same names — divergence between trays'
+  error formatting would fail either suite.
+- `--diagnose collect_report` (windows item 3 on their side) has
+  no macOS analog because the macOS report doesn't poll the
+  wire (per-VM-handle limitation).
+- Resets the noop streak — file deleted in `5a7e11e6`.
+- Tests + lint clean: macos-tray 37/37 (+2); clippy -D warnings
+  clean; fmt clean.
+- Streak: 0 (productive iter). Next macOS iter eligible at
+  ~00:00Z (2026-05-29).
+
+### event: macOS slice 19 — poll EnumerateLocalProjects + populate menu — 2026-05-29T01:30Z
+
+- Commit `06088c41` consumes Linux's just-landed
+  `EnumerateLocalProjects` handler (`05cc3a7d`, convergence packet
+  Q4). macOS-first convergence — windows-tray hasn't wired this
+  yet, so this slice sets the shape they can mirror.
+- Adds `poll_local_projects_once(vz)` + `local_entry_to_menu`
+  mirror-of-`poll_cloud_projects_once` shape. Wires into the
+  poller's first-tick+every-10-ticks branch, before the cloud
+  poll (local fs walks are virtually free vs `gh repo list`).
+- `local_entry_to_menu`: name=label, path=guest_path (in-VM
+  mount path, what "Attach Here" exec calls target),
+  ready=false (per-project status isn't on the wire yet; a
+  future PerProjectStatusReply will populate it).
+- Reuses slice-18's `describe_wire_error` Error{Unsupported}
+  handling.
+- Resets the noop streak — file deleted in `06088c41`.
+- Tests + lint clean: macos-tray 39/39 (+2); clippy -D warnings
+  clean; fmt clean.
+- Streak: 0 (productive iter). Next macOS iter eligible at
+  ~02:00Z.
+
+### event: macOS slice 20 — wire-level VmShutdownRequest before VZ stop — 2026-05-29T04:00Z
+
+- Commit `8b9baf8f` mirrors windows-tray's `80eceb0b` (Q2 of
+  convergence packet). Adds a wire-level VmShutdownRequest step
+  BEFORE `VZ.requestStop` so the in-VM headless can drain podman
+  containers + sessions instead of being yanked underneath.
+- New `request_vm_shutdown(vz, drain_timeout)` mirrors the
+  existing poller helpers (open vsock → from_stream client →
+  handshake → request → classify reply). Bounded by RTT_BUDGET=3s.
+  Reuses slice-18's `describe_wire_error` Error{Unsupported}
+  helper.
+- On vsock today the inner VmShutdownRequest handler isn't
+  shipped yet — Linux landed it on the unix dispatcher only
+  (`a10dc0f6`). The reply is Error{Unsupported} which the
+  helper surfaces and the caller logs at info. When linux adds
+  the vsock inner arm, the non-Error branch lights up
+  automatically with NO tray code change.
+- Two-step shutdown (wire request + VZ.requestStop) is now
+  structurally identical to windows-tray's request_vm_shutdown +
+  graceful_shutdown pattern; only the inner OS call differs
+  (`VZ.requestStop` vs `wsl --terminate`).
+- Resets the noop streak — file deleted.
+- Tests + lint clean: macos-tray 39/39; clippy -D warnings clean;
+  fmt clean.
+- Streak: 0 (productive iter). Next macOS iter eligible at
+  ~04:30Z.
+
+### event: macOS slice 21 — wire degradation surfaced in live chip — 2026-05-29T05:30Z
+
+- Commit `36879a5e` mirrors windows-tray's `d2cf10f0`. The Err
+  branch of `spawn_vm_status_poller` now:
+    1. Clears `menu_state.podman_ready` so per-project actions
+       correctly re-gate off after the rebuild.
+    2. Flips the chip to "🔴 Wire unreachable" — byte-identical
+       to the windows string so both trays produce the same
+       operator-visible text on the same failure class.
+    3. Triggers a rebuild so the menu re-renders the gated state.
+- Recovery is automatic: next successful poll restores phase +
+  podman via the existing Ok branch. Bounded chip flicker — only
+  on actual error ticks, no flapping when the wire is steady-
+  state ok or steady-state broken.
+- Resets the noop streak — file deleted in `36879a5e`.
+- Tests + lint clean: macos-tray 39/39; clippy -D warnings clean;
+  fmt clean.
+- Streak: 0 (productive iter). Next macOS iter eligible at
+  ~06:00Z.
+
+### event: macOS slice 22 — spec gap fill: `--diagnose` Requirement + Invariant — 2026-05-29T06:20Z
+
+- Commit `2bd4faaf` codifies the `--diagnose` CLI surface in
+  `openspec/specs/macos-native-tray/spec.md`. Slices 11/11a/11b/14/
+  15/16 shipped the surface + tests + cheatsheet + installer
+  integration but the spec itself never enumerated it.
+- New Requirement "`--diagnose` CLI mode emits a stable bundled
+  health report" with 3 Scenarios (Human / JSON / wire-limitation
+  disclaimer) + new Invariant "`--diagnose` exit codes are limited
+  to {0, 2, 1}" measurable via existing
+  `exit_code_provisioned_zero_degraded_two` test.
+- Shape follows the structured form used by windows-native-tray
+  (`ID + Modality + Measurable + Invariants + @trace`, then
+  scenarios) — `openspec validate` is still red because of the
+  same pre-existing systemic SHALL/MUST disagreement that affects
+  the 5 pre-existing requirements; not introduced by this slice.
+- Selected via the `/advance-work-from-plan` skill's §2 priority
+  rule "spec gap fills". Resets noop streak — file deleted in
+  `2bd4faaf`.
+- Streak: 0 (productive iter). Next macOS iter eligible at
+  ~07:00Z.
+
+### event: macOS slice 23 — drift-protection pin for WIRE_UNREACHABLE_CHIP_TEXT — 2026-05-29T07:00Z
+
+- Commit `cbeedb4a` extracts the slice-21 inline literal
+  `"🔴 Wire unreachable"` (byte-identical with windows-tray's
+  `mark_wire_unreachable` in d2cf10f0) into a `const` and adds
+  `wire_unreachable_chip_text_pinned` unit test asserting:
+    * exact bytes equal "\u{1F534} Wire unreachable"
+    * length is 21 bytes
+    * first char is U+1F534 LARGE RED CIRCLE specifically
+- Selected via /advance-work-from-plan §2 priority #3
+  "Drift-protection litmus" — guards the cross-tray UX-parity
+  invariant against future refactors on the macOS side. Windows-
+  tray follow-on is for that host to extract their const + add a
+  matching pin test (their literal is still inline today).
+- Tests + lint clean: macos-tray 40/40 (+1); clippy -D warnings
+  clean; fmt clean.
+- Streak: 0 (productive iter). Next macOS iter eligible at
+  ~07:30Z.
+
+### event: macOS slice 24 — symmetric wire-unreachable invariant on macOS spec — 2026-05-29T08:30Z
+
+- Commit `4a0abba6`. Windows landed `145ff3d2` mirroring my slices
+  22+23 byte-for-byte, including a new Invariant
+  `wire-unreachable-chip-text` codifying the cross-OS contract from
+  BOTH sides. macOS spec was missing the symmetric pin.
+- Adds the same Invariant to macos-native-tray.spec.md with
+  Measurable=`wire_unreachable_chip_text_pinned` and a body that
+  references the windows sibling (`145ff3d2`) — bidirectional
+  cross-reference means a future refactor on either side cannot
+  ship without updating both specs in lockstep.
+- Streak: 0 (productive iter). Next macOS iter eligible at
+  ~09:00Z.
+
+### event: macOS slice 25 — bind cross-tray wire-unreachable symmetric litmus — 2026-05-29T10:00Z
+
+- Commit `fdd01b6d`. Windows landed `43737173` — a cross-tray
+  litmus grep-asserting both trays' WIRE_UNREACHABLE_CHIP_TEXT
+  const + identically-named pin test stay in lockstep at the
+  source level. They explicitly invited the macOS-side binding.
+- Two issues addressed:
+    1. The litmus was bound to windows-native-tray (50% coverage).
+    2. macos-native-tray had **no entry at all** in
+       `openspec/litmus-bindings.yaml` — pre-existing spec-tracking
+       gap.
+- Added the missing macos-native-tray binding with the windows-
+  symmetric litmus pinned (50% coverage, mirrors the windows
+  binding). YAML parses cleanly post-edit.
+- Resets noop streak — file deleted in `fdd01b6d`.
+- Streak: 0 (productive iter). Next macOS iter eligible at
+  ~10:30Z.
+
+### event: macOS slice 26 — pin --diagnose CLI surface litmus — 2026-05-29T11:30Z
+
+- Commit `41b57a15`. Mirrors windows-tray's `441b8426`
+  (`litmus:windows-tray-diagnose-cli-surface`) for the macOS
+  surface. New `litmus:macos-tray-diagnose-cli-surface` with 7
+  grep steps pinning the entire `--diagnose` CLI diagnostic
+  surface (binary modes, JSON schema-pin tests, exit-code
+  contract test, install-macos.sh sanity check, tray-diagnose.sh
+  consumer, cheatsheet provenance).
+- All 7 steps PASS locally on the integrated tree.
+- macOS-specific deltas vs. windows: 2 CLI modes not 4 (no
+  --provision-once/--status-once), 4 schema-pin tests not 5
+  (no wire-object keys test), bash `set +e` instead of cmd.exe
+  redirect (the bash exit-code-as-tri-state pattern).
+- Bumps macos-native-tray binding coverage_ratio 50 → 100
+  (both spec invariants + the diagnose Requirement now have
+  litmus coverage).
+- Streak: 0 (productive iter). Next macOS iter eligible at
+  ~12:00Z.
+
+### event: macOS slice 27 — RECIPE_RELEASE_TAG cross-tray drift pin — 2026-05-29T12:25Z
+
+- New `openspec/litmus-tests/litmus-recipe-release-tag-symmetric.yaml`
+  (4 grep steps, all PASS locally) pinning the byte-identical
+  `RECIPE_RELEASE_TAG = "v0.2.260526.1"` const both trays declare
+  (windows `wsl_lifecycle.rs:44`, macos `action_host.rs:983`).
+- Surface had ZERO litmus coverage. A one-sided bump would silently
+  ship trays fetching different rootfs builds — same class of cross-
+  host drift the wire-unreachable + diagnose-CLI litmuses already
+  guard against. With this pin, any future tag bump must update
+  windows source + macos source + this litmus together as a forcing
+  function for cross-host coordination.
+- Selected via /advance-work-from-plan §2 priority #3 "drift-
+  protection litmus". Bound on macos-native-tray (3 litmuses,
+  coverage stays 100%); windows-native-tray binding row left for
+  that host to add (precedent: slice 25 wire-unreachable binding).
+- YAML parses cleanly (ruby yaml load on both the litmus + the
+  bindings file). No Rust changes. macos-tray 40/40, vm-layer
+  build clean.
+- Streak: 0 (productive iter). Next macOS iter eligible at
+  ~12:55Z.
+
+### event: macOS slice 28 — tray status-text helpers cross-tray pin — 2026-05-29T12:55Z
+
+- New `openspec/litmus-tests/litmus-tray-status-text-helpers-
+  symmetric.yaml` (6 grep steps, all PASS locally) pinning the three
+  status-text helpers + their identically-named pin tests on both
+  sides: `vm_phase_status_text` / `describe_wire_error` /
+  `compose_chip_text` plus the `*_reflects_phase_and_podman`,
+  `*_includes_code_and_message`, `*_appends_last_event` unit tests.
+- These three helpers were the m4-UX-correction series' core
+  deliverable for the owner's 2026-05-27 "1:1 UX with windows + Linux"
+  hard requirement. The byte-level value contract is pinned by each
+  per-host unit test; this litmus enforces only the symmetric SOURCE
+  surface — a one-sided refactor that renames a helper or drops a
+  pin test would silently desymmetrize the chip UX.
+- Selected via /advance-work-from-plan §2 priority #3 "drift-
+  protection litmus". Same pattern + provenance as slices 25 (wire-
+  unreachable symmetric) + 27 (recipe-release-tag symmetric).
+- Bound on macos-native-tray (4 litmuses, coverage stays 100%);
+  windows-native-tray binding row left for that host per slice-25/27
+  precedent. YAML parses cleanly. No Rust changes.
+- Streak: 0 (productive iter). Next macOS iter eligible at
+  ~13:25Z.
+
+### event: macOS slice 29 — bring forward windows exit-code symmetric litmus + bind — 2026-05-29T13:35Z
+
+- Windows commit `1336fe04` bound my slices 27+28 onto windows-
+  native-tray AND authored a new cross-tray litmus
+  `litmus:exit-code-provisioned-zero-degraded-two-symmetric` (4
+  grep steps) pinning the --diagnose exit-code tri-state contract
+  via the identically-named `exit_code_provisioned_zero_degraded_two`
+  unit test on both sides + the `diagnose-exit-codes` invariant in
+  both spec.md files.
+- Brought the litmus file forward into linux-next byte-identically
+  (`git show origin/windows-next:...`) so it's runnable on my tree
+  before the 2h integration cron merges windows-next. Git will
+  dedupe at merge time.
+- Bound on macos-native-tray (5 litmuses now, coverage stays 100%).
+  Closes the cross-tray binding loop windows opened. Same precedent
+  as slices 25/27/28: each side owns its own binding row.
+- All 4 grep steps verified PASS locally on my tree (windows fn,
+  macos fn, windows spec invariant, macos spec invariant).
+- YAML parses cleanly. No Rust changes.
+- Streak: 0 (productive iter). Next macOS iter eligible at
+  ~14:05Z.
+
+### event: macOS slice 30 — macOS-only architectural-invariants litmus — 2026-05-29T14:10Z
+
+- New `openspec/litmus-tests/litmus-macos-tray-architectural-
+  invariants.yaml` (4 grep steps, all PASS locally + verified
+  through the matcher) pinning FOUR pre-existing macos-spec
+  invariants that had ZERO litmus coverage:
+    1. `vz-via-vm-layer` (no `objc2_virtualization::` use-paths in
+       macos-tray sources)
+    2. `no-tauri-or-webview` (no [tauri, wry, webview] deps in
+       Cargo.toml)
+    3. `lsuielement-true` (Info.plist binds LSUIElement -> <true/>)
+    4. `terminal-attach-no-ssh` (the `screen_attach_never_invokes_ssh`
+       pin test in `terminal_attach.rs` exists)
+- Unlike slices 25-29 (cross-tray symmetric pins), these are
+  macOS-only architectural invariants pinning *absences* and
+  build-config shape; equally drift-prone because nothing else
+  catches a refactor that breaks them.
+- Uses `! grep ... && echo <token>` idiom for "must NOT contain"
+  steps (1+2), so the matcher's substring rule is satisfied via
+  the success-token output. Same `expected_behavior = literal
+  substring of stdout` convention slices 27+28+29 established.
+- Selected via /advance-work-from-plan §2 priority #2 "spec gap
+  fills" — invariants 1-4 had no implementation coverage.
+- Bound on macos-native-tray (6 litmuses now, coverage stays 100%).
+  macOS spec invariants pinned by litmus jumped 2/12 -> 6/12.
+- YAML parses cleanly. No Rust changes.
+- Streak: 0 (productive iter). Next macOS iter eligible at ~14:40Z.
+
+### event: macOS slice 31 — extend architectural-invariants litmus +4 invariants — 2026-05-29T14:45Z
+
+- Extended slice 30's `litmus-macos-tray-architectural-invariants.yaml`
+  with 5 more grep patterns pinning 4 additional macOS spec
+  invariants:
+    (5) menu-from-host-shell-state: status_item.rs uses
+        `menu_state::build`
+    (6) gui-items-deferred-to-v2: pin test
+        `macos_target_disables_observatorium_and_opencode_web_for_v2`
+        exists in shared menu_state.rs
+    (7) terminal-uses-iterm2-when-default: pin test
+        `terminal_detection_returns_iterm2_preferred_when_present`
+        exists in terminal_attach.rs
+    (8) vz-cid-allocated-at-config: `VzRuntime::new(guest_cid: u32,
+        ...)` constructor signature proves config-time allocation
+    (9) no-display-passthrough-in-v1: `! grep VZGraphics... && echo`
+        catches absence in vz.rs
+- All 5 new steps verified locally + simulated through the matcher
+  (all MATCH). Same `! grep ... && echo <token>` idiom for step 9
+  (absence-pin) as slices 30 + 28 + 27 used for similar patterns.
+- macOS spec invariants pinned by litmus jumped 6/12 → 10/12. Only
+  `menu-renders-in-50ms` remains (runtime perf, not statically
+  pinnable).
+- Selected via /advance-work-from-plan §2 priority #2 "spec gap
+  fills". Extended existing slice-30 file (single architectural-
+  invariants litmus is the natural home for these) rather than
+  fragmenting into a new YAML.
+- Coverage on macos-native-tray binding stays at 6 litmuses / 100%.
+  No Rust changes. YAML validates clean.
+- Streak: 0 (productive iter). Next macOS iter eligible at ~15:15Z.
+
+### event: macOS m10 — menu-project-threading-for-pty-launch COMPLETE — 2026-05-29T15:25Z
+
+- Wires the per-project Attach/Maintain menu clicks through to the
+  forge-container PTY-attach. `attach_pty(&self, label, intent,
+  project: Option<String>)` gained the project param; `run_pty_attach`
+  now passes `project.as_deref()` into `launch_spec` instead of
+  hardcoded `None` — so per-project clicks land in
+  `tillandsias-<p>-forge` via `podman exec -it` (the same forge-
+  container semantics windows-tray's `launch_open_shell_terminal`
+  produces at `notify_icon.rs:1604`).
+- `dispatch_menu_action::MenuAction::Attach/Maintain` arm replaced
+  its TODO stub: reads `selected_agent` from held `MenuState`, calls
+  the shared `intent_for_action(&action, agent)` (canonical helper
+  windows uses), then `self.attach_pty(label, intent, project)`.
+- `open_shell` / `github_login` selectors + the dispatcher's
+  GithubLogin arm pass `None` (bare-VM by design: Shell is the
+  debug escape; gh auth login is user-level pre-attach).
+- New unit test `attach_action_resolves_to_project_via_intent_for_
+  action` pins the dispatcher ↔ `intent_for_action` link: asserts
+  Attach -> (Agent(<agent>), Some("myproj")), Maintain ->
+  (Shell, Some("myproj")), GithubLogin -> (GithubLogin, None).
+- Tests: macos-tray 41/41 (+1, was 40). clippy `--tests -D warnings`
+  clean. fmt clean.
+- Picked up after slice 31 cleared the architectural-invariants
+  litmus track. m10 was the loop_status assignment-board fallback
+  ("m10 project threading") with no remaining dependencies; m11
+  (`menu-structure-action-integration-and-clippy`) remains as
+  optional follow-up — mostly absorbed by the UX-correction series.
+- Streak: 0 (productive iter). Next macOS iter eligible at ~15:55Z.
+
+### event: macOS noop — defer for 15:43Z cron — 2026-05-29T15:51Z
+
+- Integration cron at 15:43Z is 8 min ago (inside 10-min defer
+  window per skill §6 Defer Rule). No slice taken; cron writes
+  need to settle.
+- That cron merged windows-next's `cc21502e` (6 windows-tray
+  architectural invariants pinned, mirroring macOS slice 30
+  `afde4b9b` byte-for-shape). Both trays now have grep-based
+  source-level pins for their canonical invariants. Pre-build
+  instant litmus suite at 53/53 PASS @ 100% across 89 specs.
+- No new macOS-naming asks in the merged ledger.
+- Streak: 1 (defer-noop). Next macOS iter eligible in ~1h
+  (3600s wake per adaptive cadence rules).
+
+### event: macOS m11 — SelectAgent state mutation + immediate rebuild — 2026-05-29T16:55Z
+
+- Closes the SelectAgent TODO that was the last unwired arm in
+  `dispatch_menu_action`. New free fn `apply_menu_action_state(state,
+  action) -> bool` mirrors windows-tray's `apply_menu_action_state`
+  at `notify_icon.rs:1674` byte-for-shape. SelectAgent arm: lock
+  held MenuState, mutate via helper, if changed dispatch
+  `rebuild_menu_main_thread` on the AppKit main thread so the
+  checkmark moves on the same click.
+- macOS difference from windows: NSMenu is built-once, requires
+  explicit `setMenu:` swap — so the rebuild is mandatory for
+  visible checkmark UX. Windows's HMENU repaints on hover.
+- Closes the m10 follow-up: m10's `Attach/Maintain` arm reads
+  `selected_agent` from held MenuState; now that read returns a
+  meaningful value when the user has selected a different agent.
+- New unit test `apply_menu_action_state_mutates_only_on_agent_
+  change` (3 assertions: idempotent re-select returns false; agent
+  switch returns true + mutates; non-SelectAgent variants are
+  no-op). Mirrors windows-tray's `apply_menu_action_state_*` tests
+  at notify_icon.rs:2080+.
+- Bonus cleanup: converted a pre-existing orphan doc-block (lifted
+  spawn_vm_status_poller doc) from `///` to `//` to satisfy
+  clippy's `empty_line_after_doc_comments` — was always there
+  but the lint only fires once a new function is inserted after
+  the dangling doc.
+- Tests: macos-tray 42/42 (+1, was 41). clippy `--tests -D
+  warnings` clean. fmt clean.
+- Streak reset to 0 (productive iter; noop streak file deleted).
+  Next macOS iter eligible at ~17:25Z.
+
+### event: macOS — bring forward windows-authored project-threading symmetric litmus — 2026-05-29T17:30Z
+
+- Windows commit `f66e9fcc` authored
+  `litmus:pty-attach-project-threading-symmetric` (5 grep steps)
+  pinning the m10 call-shape `launch_spec(&intent,
+  project.as_deref(), 24, 80)` on BOTH trays + the
+  `intent_for_action` + `launch_spec` imports on each side +
+  a cross-cutting absence pin "no stray `launch_spec(&intent,
+  None,` callsites in either tray's source".
+- Brought the file forward into linux-next byte-identically
+  (`git show origin/windows-next:...`) before the 2h integration
+  cron pulls windows-next; git dedupes at merge time. Bound on
+  macos-native-tray (7 litmuses now, coverage stays 100%). Same
+  precedent as slice 29 (windows-authored exit-code symmetric
+  litmus brought forward).
+- All 5 grep steps verified PASS locally on my tree: windows
+  import / macos import / windows call-shape / macos call-shape /
+  no-bare-vm-leakage cross-cutting absence.
+- This litmus pins the m10 contract: a regression dropping
+  `project.as_deref()` back to `None` (the slice-4c.2 macOS pre-m10
+  shape) would silently send users into bare-VM shells. Now
+  surfaces at pre-build litmus run instead.
+- Streak: 0 (productive iter). Next macOS iter eligible at
+  ~18:00Z.
+
+### event: macOS — restore merge-lost windows-native-tray binding entry — 2026-05-29T18:05Z
+
+- The 17:43Z integration cron's merge of windows-next dropped the
+  `- litmus:pty-attach-project-threading-symmetric` entry that
+  windows-host added to the windows-native-tray binding row in
+  commit `f66e9fcc`. Parallel-write hazard with my slice 32
+  `143fb28b` (which added the same litmus to the macos-native-tray
+  row eight lines earlier).
+- The litmus file itself made it through cleanly; only the windows-
+  side binding bookkeeping was lost. Re-added the entry so both
+  trays' binding rows reflect the symmetric cross-tray pin both
+  sides intended.
+- Per skill §4 ("any host may write, but COORDINATE via the ledger
+  first"), restoring a sibling-authored entry lost to a merge
+  artifact is corrective bookkeeping. Each tray's binding list
+  now has 7 litmuses; coverage_ratio stays 100% on both.
+- YAML parses cleanly. No code changes.
+- Streak: 0 (productive iter). Next macOS iter eligible at ~18:35Z.

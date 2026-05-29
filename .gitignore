@@ -69,3 +69,10 @@ cheatsheet-sources/
 .claude/scheduled_tasks.lock
 .claude/scheduled_tasks.json
 /dist
+# Local materializer cache (rebuilt by recipe-publish CI; never committed)
+/out-cache
+/target/forge-diagnostics
+/result
+/result-*
+# Release packaging staging (build-windows-tray.ps1 -Release / release CI jobs)
+/release-artifacts

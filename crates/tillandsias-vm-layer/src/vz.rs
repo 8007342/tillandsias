@@ -144,6 +144,7 @@ impl VzRuntime {
         &self,
         manifest: &crate::recipe::Manifest,
         tag: &str,
+        on_phase: &(dyn Fn(&str) + Send + Sync),
     ) -> Result<(), String> {
         let arch = if cfg!(target_arch = "aarch64") {
             "aarch64"
@@ -183,14 +184,13 @@ impl VzRuntime {
         // at download time via `download_verified`.
         if format == "img" {
             let xz_url = format!("{base_url}.xz");
-            let xz_dest = self
-                .rootfs_image_path()
-                .with_extension("img.xz.partial");
+            let xz_dest = self.rootfs_image_path().with_extension("img.xz.partial");
             fetch_then_decompress_xz_then_verify(
                 &xz_url,
                 &xz_dest,
                 &self.rootfs_image_path(),
                 &sha256,
+                on_phase,
             )
             .await
         } else {
@@ -200,7 +200,10 @@ impl VzRuntime {
                 sha256,
                 bytes: None,
             };
-            download_verified(&artifact, &self.rootfs_image_path(), &|_, _| {}).await
+            on_phase("Downloading rootfs");
+            let result = download_verified(&artifact, &self.rootfs_image_path(), &|_, _| {}).await;
+            on_phase("Verifying rootfs SHA-256");
+            result
         }
     }
 
@@ -278,6 +281,7 @@ async fn fetch_then_decompress_xz_then_verify(
     xz_temp_dest: &std::path::Path,
     final_dest: &std::path::Path,
     expected_sha: &str,
+    on_phase: &(dyn Fn(&str) + Send + Sync),
 ) -> Result<(), String> {
     use crate::fetch::is_sha256_hex;
     use sha2::{Digest, Sha256};
@@ -295,16 +299,24 @@ async fn fetch_then_decompress_xz_then_verify(
     // `download_verified` here because it would expect the SHA to
     // match the .xz bytes, but the manifest SHA is for the
     // decompressed bytes.
+    //
+    // Byte-level progress: emit a refined "Downloading rootfs N/M MB
+    // (P%)" line through on_phase, throttled by integer percent so we
+    // don't spam main-thread dispatches. Matches the windows-tray
+    // format introduced in commit 6645d04b — keeps the cold-launch UX
+    // identical across both trays for the macOS-/Windows-specific
+    // VM-spinup layer.
+    on_phase("Downloading rootfs");
     {
         let mut response = reqwest::get(xz_url)
             .await
             .map_err(|e| format!("GET {xz_url}: {e}"))?;
         if !response.status().is_success() {
-            return Err(format!(
-                "GET {xz_url}: HTTP {}",
-                response.status()
-            ));
+            return Err(format!("GET {xz_url}: HTTP {}", response.status()));
         }
+        let total: Option<u64> = response.content_length();
+        let mut downloaded: u64 = 0;
+        let mut last_percent: i32 = -1;
         let mut out = tokio::fs::File::create(xz_temp_dest)
             .await
             .map_err(|e| format!("create {}: {e}", xz_temp_dest.display()))?;
@@ -317,6 +329,19 @@ async fn fetch_then_decompress_xz_then_verify(
             out.write_all(&chunk)
                 .await
                 .map_err(|e| format!("write {}: {e}", xz_temp_dest.display()))?;
+            downloaded += chunk.len() as u64;
+            if let Some(total_bytes) = total {
+                let percent = ((downloaded * 100) / total_bytes.max(1)) as i32;
+                if percent != last_percent {
+                    last_percent = percent;
+                    on_phase(&format!(
+                        "Downloading rootfs {}/{} MB ({}%)",
+                        downloaded / 1_000_000,
+                        total_bytes / 1_000_000,
+                        percent
+                    ));
+                }
+            }
         }
         out.flush()
             .await
@@ -324,6 +349,7 @@ async fn fetch_then_decompress_xz_then_verify(
     }
 
     // Step 2: decompress via `xz -d -c <temp>` → final_dest.
+    on_phase("Decompressing rootfs");
     let final_out = std::fs::File::create(final_dest)
         .map_err(|e| format!("create {}: {e}", final_dest.display()))?;
     let xz_status = std::process::Command::new("xz")
@@ -342,6 +368,7 @@ async fn fetch_then_decompress_xz_then_verify(
     let _ = std::fs::remove_file(xz_temp_dest);
 
     // Step 3: SHA-256-verify the decompressed bytes against the pin.
+    on_phase("Verifying rootfs SHA-256");
     let mut f = tokio::fs::File::open(final_dest)
         .await
         .map_err(|e| format!("open {}: {e}", final_dest.display()))?;
@@ -1252,7 +1279,7 @@ artifact_url_template = "https://example.invalid/{tag}/{arch}.{format}"
         let tmp = tempfile::tempdir().unwrap();
         let rt = VzRuntime::new(3, tmp.path().to_path_buf());
         let err = rt
-            .fetch_recipe_artifact(&manifest, "v0.0.0-test")
+            .fetch_recipe_artifact(&manifest, "v0.0.0-test", &|_| {})
             .await
             .expect_err("placeholder SHA must be refused");
         assert!(
@@ -1277,7 +1304,7 @@ recipe_version = 1
         let tmp = tempfile::tempdir().unwrap();
         let rt = VzRuntime::new(3, tmp.path().to_path_buf());
         let err = rt
-            .fetch_recipe_artifact(&manifest, "vX")
+            .fetch_recipe_artifact(&manifest, "vX", &|_| {})
             .await
             .expect_err("missing template must error");
         assert!(

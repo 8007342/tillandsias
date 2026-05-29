@@ -1,0 +1,102 @@
+# @trace spec:host-browser-mcp, spec:tray-host-control-socket
+# @trace plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q1)
+#
+# Drift protection for `ControlMessage::McpFrame` spec contracts:
+#
+#   * Wire shape: `{ session_id: u64, payload: Vec<u8> }` per the
+#     "MCP transport rides the existing host control socket"
+#     requirement in `openspec/specs/host-browser-mcp/spec.md`.
+#   * Per-variant size cap: `MAX_MCP_FRAME_BYTES = 4 MiB` to support
+#     PNG screenshots and large tool responses per the same spec.
+#   * Convergence-packet matrix: `McpFrame` is `Handle` on UnixSocket,
+#     `Unsupported` on Vsock (Q1 of `plan/issues/control-socket-
+#     protocol-convergence-2026-05-25.md` — McpFrame is the
+#     host-browser-mcp tunnel; vsock-side in-VM headless has no
+#     analogous role).
+#
+# Companion to the existing `litmus:host-browser-mcp-shape` (size:
+# quick) which runs cargo test + greps the bridge wiring. This new
+# litmus is `size: instant` and grep-only, so the spec-pinned
+# constants get protected at the fastest pre-build phase. Combined,
+# the two raise `host-browser-mcp` coverage_ratio from 33 to ~67.
+name: litmus:host-browser-mcp-frame-shape
+spec: host-browser-mcp
+phase: pre-build
+description: >
+  Instant-phase drift protection for the McpFrame variant shape, the
+  4 MiB payload cap, and the convergence-packet matrix decision
+  (UnixSocket=Handle, Vsock=Unsupported). Catches spec-contract
+  divergence before cargo test runs.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-control-wire/src/lib.rs
+  - workspace contains crates/tillandsias-headless/src/control_dispatch.rs
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  # The runner parses single-line `command: "..."` only — folded `>`
+  # multi-line scalars aren't recognised.
+  - step: "McpFrame variant declaration uses the spec-pinned shape"
+    command: "grep -F 'McpFrame { session_id: u64, payload: Vec<u8> }' crates/tillandsias-control-wire/src/lib.rs"
+    timeout_ms: 5000
+    expected_behavior: "McpFrame { session_id: u64, payload: Vec<u8> }"
+
+  - step: "MAX_MCP_FRAME_BYTES = 4 MiB per spec contract"
+    command: "grep -F 'pub const MAX_MCP_FRAME_BYTES: usize = 4 * 1024 * 1024' crates/tillandsias-control-wire/src/lib.rs"
+    timeout_ms: 5000
+    expected_behavior: "MAX_MCP_FRAME_BYTES: usize = 4 * 1024 * 1024"
+
+  - step: "MCP frame cap traces the spec it serves"
+    # `@trace spec:host-browser-mcp` sits in the docblock IMMEDIATELY
+    # ABOVE `MAX_MCP_FRAME_BYTES`. A simpler grep against the
+    # surrounding context: verify the trace line exists in the
+    # control-wire crate at all. If a refactor splits the file or
+    # moves the constant without carrying the trace, this fires.
+    command: "grep -B 2 'pub const MAX_MCP_FRAME_BYTES' crates/tillandsias-control-wire/src/lib.rs | grep -F '@trace spec:host-browser-mcp'"
+    timeout_ms: 5000
+    expected_behavior: "@trace spec:host-browser-mcp"
+
+  - step: "convergence-packet matrix: McpFrame is Handle on UnixSocket"
+    command: "grep -F '(McpFrame { .. }, UnixSocket) => Handle' crates/tillandsias-headless/src/control_dispatch.rs"
+    timeout_ms: 5000
+    expected_behavior: "UnixSocket) => Handle"
+
+  - step: "convergence-packet matrix: McpFrame is Unsupported on Vsock"
+    command: "grep -F '(McpFrame { .. }, Vsock) => Unsupported' crates/tillandsias-headless/src/control_dispatch.rs"
+    timeout_ms: 5000
+    expected_behavior: "Vsock) => Unsupported"
+
+  - step: "control-wire docstring acknowledges McpFrame's 4 MiB exception"
+    # The header docstring at the MAX_MESSAGE_BYTES declaration says
+    # McpFrame payloads MAY reach 4 MiB and that the per-variant cap
+    # is enforced by the framing layer. If a future refactor removes
+    # that comment without updating the spec contract too, this
+    # litmus catches the drift.
+    command: "grep -F 'McpFrame` payloads may reach 4 MiB' crates/tillandsias-control-wire/src/lib.rs"
+    timeout_ms: 5000
+    expected_behavior: "McpFrame` payloads may reach 4 MiB"
+
+observability:
+  traces:
+    - "@trace spec:host-browser-mcp"
+    - "@trace spec:tray-host-control-socket"
+    - "@trace plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q1)"
+  expected_log: "McpFrame variant shape + 4 MiB cap + matrix routing pinned"
+  log_fields:
+    spec: "host-browser-mcp"
+    test: "host-browser-mcp-frame-shape"
+    wire_artifact: "crates/tillandsias-control-wire/src/lib.rs"
+    dispatch_artifact: "crates/tillandsias-headless/src/control_dispatch.rs"
+
+rollback:
+  on_failure: >
+    A McpFrame spec contract drifted. Restore canonical surfaces:
+    the variant shape must stay `{ session_id: u64, payload: Vec<u8> }`
+    per the host-browser-mcp spec's "MCP transport rides the existing
+    host control socket" requirement; the per-variant cap MUST stay
+    `4 * 1024 * 1024` to support PNG screenshots + large tool
+    responses; the convergence-packet matrix MUST keep McpFrame as
+    Handle on UnixSocket and Unsupported on Vsock (host-only tunnel).
+  command: "grep -nE 'McpFrame|MAX_MCP_FRAME' crates/tillandsias-control-wire/src/lib.rs crates/tillandsias-headless/src/control_dispatch.rs | head -20"

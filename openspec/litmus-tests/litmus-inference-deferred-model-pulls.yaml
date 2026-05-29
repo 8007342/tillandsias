@@ -25,18 +25,7 @@ critical_path:
     failure_pattern: "Permission denied"
 
   - step: "launch inference container (first run — models NOT in cache)"
-    command: >
-      CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias/models";
-      mkdir -p "$CACHE_DIR";
-      timeout 180 podman run --rm \
-        --name test-inference-first-run \
-        -v "$CACHE_DIR:/home/ollama/.ollama/models" \
-        -e TILLANDSIAS_INFERENCE_SKIP_RUNTIME_PULLS=0 \
-        tillandsias-inference:latest &
-      CONTAINER_PID=$!;
-      sleep 3;
-      (podman logs test-inference-first-run 2>&1 | head -50) > /tmp/inference_first_run.log;
-      cat /tmp/inference_first_run.log
+    command: "CACHE_DIR=\"${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias/models\"; mkdir -p \"$CACHE_DIR\"; timeout 180 podman run --rm --name test-inference-first-run -v \"$CACHE_DIR:/home/ollama/.ollama/models\" -e TILLANDSIAS_INFERENCE_SKIP_RUNTIME_PULLS=0 tillandsias-inference:latest & CONTAINER_PID=$!; sleep 3; (podman logs test-inference-first-run 2>&1 | head -50) > /tmp/inference_first_run.log; cat /tmp/inference_first_run.log"
     timeout_ms: 185000
     success_pattern: "Pulling T0|T1 ready"
     failure_pattern: "FAILED|panic|Error|error:"
@@ -48,31 +37,13 @@ critical_path:
     failure_pattern: "FIRST_RUN_CACHED"
 
   - step: "wait for first run to complete and verify models are cached"
-    command: >
-      sleep 5;
-      CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias/models";
-      if [ -f "$CACHE_DIR/manifests/registry.ollama.ai/library/qwen2.5/0.5b" ] || \
-         [ -f "$CACHE_DIR/manifests/registry.ollama.ai/library/llama3.2/3b" ]; then
-        echo MODELS_CACHED
-      else
-        echo MODELS_NOT_CACHED
-      fi
+    command: "sleep 5; CACHE_DIR=\"${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias/models\"; if [ -f \"$CACHE_DIR/manifests/registry.ollama.ai/library/qwen2.5/0.5b\" ] || [ -f \"$CACHE_DIR/manifests/registry.ollama.ai/library/llama3.2/3b\" ]; then echo MODELS_CACHED; else echo MODELS_NOT_CACHED; fi"
     timeout_ms: 10000
     success_pattern: "MODELS_CACHED"
     failure_pattern: "MODELS_NOT_CACHED"
 
   - step: "launch inference container (second run — models IN cache)"
-    command: >
-      CACHE_DIR="${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias/models";
-      timeout 30 podman run --rm \
-        --name test-inference-cached-run \
-        -v "$CACHE_DIR:/home/ollama/.ollama/models" \
-        -e TILMANDSIAS_INFERENCE_SKIP_RUNTIME_PULLS=1 \
-        tillandsias-inference:latest &
-      sleep 3;
-      (podman logs test-inference-cached-run 2>&1 | head -30) > /tmp/inference_cached_run.log;
-      cat /tmp/inference_cached_run.log;
-      pkill -f test-inference-cached-run || true
+    command: "CACHE_DIR=\"${XDG_CACHE_HOME:-$HOME/.cache}/tillandsias/models\"; timeout 30 podman run --rm --name test-inference-cached-run -v \"$CACHE_DIR:/home/ollama/.ollama/models\" -e TILMANDSIAS_INFERENCE_SKIP_RUNTIME_PULLS=1 tillandsias-inference:latest & sleep 3; (podman logs test-inference-cached-run 2>&1 | head -30) > /tmp/inference_cached_run.log; cat /tmp/inference_cached_run.log; pkill -f test-inference-cached-run || true"
     timeout_ms: 35000
     success_pattern: "ready \\(cached\\)"
     failure_pattern: "Pulling T|FAILED|panic"

@@ -72,6 +72,24 @@ impl Client {
         .await
     }
 
+    /// Wrap a pre-opened stream as a `Client`. Used by hosts that open
+    /// the underlying transport via a non-`tillandsias_control_wire`
+    /// path (e.g. macOS opens vsock via `VZVirtioSocketConnection`,
+    /// then hands the resulting AsyncRead+AsyncWrite stream here so
+    /// the standard Hello/HelloAck + request/recv code paths can drive
+    /// it). The caller carries responsibility for the `Transport`
+    /// label used in diagnostics.
+    pub fn from_stream(
+        stream: Box<dyn AsyncReadWrite + Unpin + Send>,
+        transport: Transport,
+    ) -> Self {
+        Self {
+            stream,
+            next_seq: AtomicU64::new(1),
+            transport,
+        }
+    }
+
     fn next_seq(&self) -> u64 {
         self.next_seq.fetch_add(1, Ordering::Relaxed)
     }
@@ -234,6 +252,31 @@ mod tests {
         let client = connect_with_handshake(Transport::Unix(path), DEFAULT_HANDSHAKE_TIMEOUT)
             .await
             .expect("handshake succeeds");
+        // After handshake the next seq is 2 (we consumed 1 for Hello).
+        assert_eq!(client.next_seq.load(Ordering::Relaxed), 2);
+    }
+
+    /// `Client::from_stream` accepts a pre-opened stream (the macOS
+    /// vsock path produces one via VZVirtioSocketConnection rather
+    /// than the standard `Transport::Vsock` connect path). Verifies
+    /// the wrapped client drives the same Hello/HelloAck handshake
+    /// the standard `connect_with_handshake` does.
+    ///
+    /// @trace spec:host-shell-architecture.transport.vsock-client-lifecycle@v1,
+    ///        plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 4)
+    #[tokio::test]
+    async fn from_stream_handshake_drives_pre_opened_stream() {
+        let dir = tempfile::tempdir().unwrap();
+        let path = dir.path().join("from-stream.sock");
+        let _server = spawn_hello_responder(path.clone()).await;
+        tokio::time::sleep(Duration::from_millis(50)).await;
+
+        let stream = tokio::net::UnixStream::connect(&path)
+            .await
+            .expect("connect");
+        let mut client = Client::from_stream(Box::new(stream), Transport::Unix(path));
+        let wire = client.handshake().await.expect("handshake succeeds");
+        assert_eq!(wire, WIRE_VERSION);
         // After handshake the next seq is 2 (we consumed 1 for Hello).
         assert_eq!(client.next_seq.load(Ordering::Relaxed), 2);
     }

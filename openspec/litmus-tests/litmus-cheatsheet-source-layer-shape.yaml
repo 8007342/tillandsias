@@ -1,0 +1,107 @@
+# @trace spec:cheatsheet-source-layer
+#
+# Structural drift protection for the cheatsheet-source-layer spec.
+#
+# The existing `litmus:cheatsheet-source-layer-validation` runs the
+# validator script (`scripts/check-cheatsheet-sources.sh --no-sha`)
+# end-to-end against the live workspace — covers requirements 4
+# (Validator invariants) + 3 (Provenance binding) at the RUNTIME
+# behaviour level.
+#
+# This companion is also instant + grep-only; pins the structural
+# pieces the validator depends on so a refactor that moves the
+# sources directory, deletes INDEX.json, or drops a documented check
+# fires pre-build before the validator runtime test executes.
+#
+# Combined with the existing validation litmus, raises
+# cheatsheet-source-layer coverage_ratio 33 → 67.
+name: litmus:cheatsheet-source-layer-shape
+spec: cheatsheet-source-layer
+phase: pre-build
+description: >
+  Structural drift protection: pins the validator script's canonical
+  surfaces, the sources directory + INDEX.json manifest at their
+  canonical paths, the four documented validator checks, and the
+  spec→file trace mapping. Companion to the existing validation
+  runtime litmus.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains scripts/check-cheatsheet-sources.sh
+  - workspace contains cheatsheet-sources/
+  - shell utilities (grep, test) are available in PATH
+
+critical_path:
+  - step: "validator script is executable at the canonical path"
+    command: "test -x scripts/check-cheatsheet-sources.sh && echo 'ok: validator executable'"
+    timeout_ms: 3000
+    expected_behavior: "ok: validator executable"
+
+  - step: "validator script carries the spec trace"
+    command: "grep -F '@trace spec:cheatsheet-source-layer' scripts/check-cheatsheet-sources.sh"
+    timeout_ms: 3000
+    expected_behavior: "spec:cheatsheet-source-layer"
+
+  - step: "sources directory exists at the canonical location"
+    command: "test -d cheatsheet-sources && echo 'ok: cheatsheet-sources dir present'"
+    timeout_ms: 3000
+    expected_behavior: "ok: cheatsheet-sources dir present"
+
+  - step: "validator points at the canonical INDEX.json path"
+    command: "grep -F 'INDEX_FILE=\"${SOURCES_DIR}/INDEX.json\"' scripts/check-cheatsheet-sources.sh"
+    timeout_ms: 3000
+    expected_behavior: "INDEX.json"
+
+  - step: "validator script documents all four spec-mandated checks"
+    # The script header explicitly enumerates 4 checks per spec
+    # requirement 4 (Validator invariants). Drift here = a refactor
+    # that quietly drops one of the spec's promised checks.
+    command: "grep -F '1. For every cheatsheet' scripts/check-cheatsheet-sources.sh && grep -F '2. For every local' scripts/check-cheatsheet-sources.sh && grep -F '3. Orphan detection' scripts/check-cheatsheet-sources.sh && grep -F '4. SHA-check' scripts/check-cheatsheet-sources.sh"
+    timeout_ms: 3000
+    expected_behavior: "4. SHA-check"
+
+  - step: "at least one cheatsheet carries a ## Provenance section"
+    # The "Provenance binding" requirement mandates EVERY bundled
+    # cheatsheet has this section. We don't enumerate all of them
+    # here (validator handles that at runtime) — just confirm the
+    # convention is alive in at least the TEMPLATE.md file the spec
+    # uses as canonical reference.
+    command: "grep -F '## Provenance' cheatsheets/TEMPLATE.md"
+    timeout_ms: 3000
+    expected_behavior: "## Provenance"
+
+  - step: "validator handles fresh-state (missing INDEX.json) gracefully"
+    # Per the validator script's sanity-check block, absence of
+    # INDEX.json is a valid first-run/post-reset state — the
+    # validator emits a warning and exits 0, NOT a hard error.
+    # This is explicit at lines 47-55 of the script. A refactor
+    # that swaps the warning for `exit 1` would silently break
+    # ephemeral-deployment use cases.
+    #
+    # Grep avoids the em-dash punctuation in the warning text
+    # (UTF-8 round-trip via YAML→shell can fuzz); pins the
+    # `no sources fetched yet` literal which is unambiguous ASCII.
+    command: "grep -F 'no sources fetched yet' scripts/check-cheatsheet-sources.sh"
+    timeout_ms: 3000
+    expected_behavior: "no sources fetched yet"
+
+observability:
+  traces:
+    - "@trace spec:cheatsheet-source-layer"
+  expected_log: "Validator script + sources dir + INDEX.json + provenance convention pinned"
+  log_fields:
+    spec: "cheatsheet-source-layer"
+    test: "cheatsheet-source-layer-shape"
+    validator_artifact: "scripts/check-cheatsheet-sources.sh"
+    sources_artifact: "cheatsheet-sources/INDEX.json"
+
+rollback:
+  on_failure: >
+    A cheatsheet-source-layer structural surface drifted. Restore
+    the validator's spec trace, the sources directory at
+    `cheatsheet-sources/`, the manifest at
+    `cheatsheet-sources/INDEX.json`, the four documented checks in
+    the validator script header, and the `## Provenance` section
+    in `cheatsheets/TEMPLATE.md`.
+  command: "ls -la scripts/check-cheatsheet-sources.sh cheatsheet-sources/INDEX.json && head -30 scripts/check-cheatsheet-sources.sh"

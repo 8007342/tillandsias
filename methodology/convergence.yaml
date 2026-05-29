@@ -158,18 +158,15 @@ evidence_bundle:
     purpose: >
       Drive autonomous work by repeatedly selecting the highest residual
       obligation, verifying the source of intent, and applying the smallest
-      change that monotonically reduces uncertainty. Each pass must preserve an
-      observable log chain so the next pass can continue from the last meaningful
-      failure boundary.
+      change that monotonically reduces uncertainty.
     steps:
       - step: gather_evidence
         description: >
-          Run the current top-level CI boundary (for example `--ci-full --install`)
-          plus the highest-signal litmus for the domain under review. Prefer the
-          shortest failing chain that still explains the offender and record the
-          exact chain reference (`small_test`, sibling set, scoped `--filter` /
-          `--strict`, `--ci-full --install`, `--init --debug`) so the next pass
-          can resume without rediscovery.
+          Run the smallest localized litmus test applicable to the domain using
+          `cargo test` or `./build.sh --ci --strict --filter <spec-id>`.
+          Use lazy evaluation: avoid running the expensive `--ci-full --install`
+          unless you are validating a final release or missing local context.
+          Record the exact chain reference so the next pass can resume.
       - step: verify_intent
         description: >
           Read the active spec, its bound cheatsheets, tombstones, and referenced
@@ -324,3 +321,47 @@ bidirectional_knowledge_flow_constraint:
     - no_dead_ends_in_feedback_loops
     - every_layer_can_signal_upstream
     - ci_validator_enforces_bidirectional_consistency
+
+finite_time_convergence_and_velocity_control:
+  description: >
+    Enforce a strictly positive lower bound on convergence velocity and upper bounds
+    on commit rate to guarantee spec convergence in finite time, prevent multi-host thrashing,
+    and detect divergent development paths across branches.
+  metrics:
+    residual_correctness_debt:
+      symbol: R_t
+      definition: "sum of named residual CentiColon obligations + count of unimplemented spec requirements"
+    convergence_velocity:
+      symbol: V_c
+      formula: "(R_t_minus_3 - R_t) / delta_t"
+      minimum_acceptable: "V_min > 0"
+    maximum_commit_velocity_cap:
+      symbol: C_max
+      value: "2 commits/hour"
+      description: "Maximum allowable remote pushes per host to prevent plan/code write-write thrashing."
+    divergence_distance_threshold:
+      symbol: D_max
+      value: "5 commits"
+      description: "Maximum commits a sibling branch may drift ahead of the common merge-base without integration."
+  rules:
+    - finite_time_guarantee: >
+        Convergence is guaranteed in finite time by enforcing V_c >= V_min when R_t > 0.
+        If V_c falls below V_min, the orchestrator triggers a High-Velocity Alignment Event.
+    - high_velocity_alignment_event:
+        triggers: "V_c < V_min"
+        actions:
+          - reduce_lease_ttl: "Reduce lease TTL from 4 hours to 1 hour to increase iteration frequency."
+          - exploratory_work_freeze: "Prohibit all exploratory or optional P3 optimizations; focus strictly on root blockers."
+          - defuse_blockers: "Force all hosts to focus on root blockers, mock-based interface contracts, or focused litmus tests."
+    - velocity_limit_and_thrashing_prevention:
+        triggers: "commit_rate > C_max AND V_c <= 0"
+        actions:
+          - velocity_cooldown: "Enforce a mandatory 1-hour push cooldown on the thrashed host to allow other hosts to merge."
+          - claim_freeze: "Prohibit claiming new tasks until the host has successfully pulled and integrated linux-next."
+    - divergence_control:
+        triggers: "drift_distance > D_max"
+        actions:
+          - remote_push_lock: "Temporarily lock remote pushes on the diverging sibling branch."
+          - forced_rebase_task: "Force-assign a 'Forced Branch Rebase & Integration' task as the sibling host's next primary action."
+          - synchronous_integration_wave: "Trigger an immediate orchestrator-led merge loop to fold sibling commits into linux-next."
+

@@ -109,6 +109,17 @@ while [[ $# -gt 0 ]]; do
         --ci-full)        FLAG_CI_FULL=true ;;
         --graphs)         FLAG_GRAPHS=true ;;
         --strict-all)     FLAG_STRICT_ALL=true ;;
+        --observatorium)
+            FLAG_OBSERVATORIUM=true
+            if [[ -n "${2:-}" && "${2:0:1}" != "-" ]]; then
+                OBSERVATORIUM_PROJECT="${2}"
+                shift 2
+            else
+                OBSERVATORIUM_PROJECT="."
+                shift
+            fi
+            continue
+            ;;
         --spec)
             FLAG_SPEC=true
             if [[ -n "${2:-}" && "${2:0:1}" != "-" ]]; then
@@ -360,6 +371,15 @@ if [[ "$FLAG_INIT" == true ]]; then
     exit 0
 fi
 
+if [[ "${FLAG_OBSERVATORIUM:-false}" == true ]]; then
+    _step "Building workspace (debug)..."
+    _require_host_build_tools
+    (cd "$SCRIPT_DIR" && cargo build --workspace)
+    _step "Running tillandsias --observatorium ${OBSERVATORIUM_PROJECT}..."
+    "$SCRIPT_DIR/target/debug/tillandsias" --observatorium "$OBSERVATORIUM_PROJECT"
+    exit 0
+fi
+
 if [[ "$FLAG_REMOVE" == true ]]; then
     # Remove binary symlink
     rm -f "$INSTALL_BIN"
@@ -525,6 +545,7 @@ if [[ "$FLAG_INSTALL" == true ]]; then
 
     # Copy binary to install location
     mkdir -p "$INSTALL_DIR"
+    rm -f "$INSTALL_BIN"
     cp "$RELEASE_BIN" "$INSTALL_BIN"
     chmod +x "$INSTALL_BIN"
     _info "Portable launcher installed: $INSTALL_BIN ($(du -h "$INSTALL_BIN" | cut -f1))"

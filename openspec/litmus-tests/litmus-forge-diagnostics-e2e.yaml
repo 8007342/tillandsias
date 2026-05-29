@@ -1,0 +1,115 @@
+# @trace spec:default-image, spec:forge-as-only-runtime, spec:forge-offline, spec:forge-hot-cold-split, spec:forge-environment-discoverability, spec:forge-cache-dual, spec:forge-shell-tools, spec:forge-welcome, spec:forge-opencode-onboarding
+# Forge Diagnostics E2E — Non-blocking completeness probe.
+#
+# NOTE: This test runs the forge agent with a diagnostic prompt and captures
+# structured output. The gating points ONLY verify that the forge launched,
+# the agent responded, and the output is parseable JSON. Individual
+# capability checks are non-gating — they are recorded in the diagnostics
+# log for offline analysis.
+#
+# See plan/issues/forge-diagnostics-automation-2026-05-27.md for the
+# methodology context and the request to the orchestrator to formalize
+# this as an official litmus signal type.
+name: litmus:forge-diagnostics-e2e
+spec: default-image
+phase: post-build
+description: >
+  Launch forge with diagnostic prompt, capture structured agent-output log,
+  and verify the forge is alive and responding. Capability assertions are
+  NON-GATING — failures become forge-completeness signals, not CI blocks.
+severity: low
+size: e2e
+
+preconditions:
+  - tillandsias binary is installed and on PATH
+  - forge image is built and available locally
+  - plan/diagnostics/forge-diagnostics-prompt.txt exists and is non-empty
+
+critical_path:
+  - step: "reset the cycle dedupe marker so this standalone run captures"
+    # Other slow E2E forge tests call the annex WITHOUT --reset, so the first
+    # eligible run captures and the rest dedup-skip (piggyback_protocol). This
+    # standalone diagnostics test owns its own cycle, so it resets first to
+    # guarantee a fresh capture.
+    command: "scripts/forge-diagnostics-annex.sh --reset"
+    timeout_ms: 5000
+
+  - step: "run the non-blocking diagnostics annex (one forge launch + dedup + distill)"
+    # Replaces the two prior inline `tillandsias --opencode --diagnostics`
+    # invocations (which launched the forge TWICE). The annex launches once,
+    # writes target/forge-diagnostics/diagnostics_<UTC>.log, records the dedupe
+    # marker, and distills into plan/diagnostics/. Non-blocking by contract
+    # (exits 0); the JSON-validity gate below is what decides this test's
+    # verdict per the agent_diagnostic annex signal rule.
+    command: "scripts/forge-diagnostics-annex.sh"
+    timeout_ms: 600000
+
+  - step: "validate output is parseable JSON with diagnostics_timestamp field"
+    command: "LOG=$(ls -t target/forge-diagnostics/diagnostics_*.log 2>/dev/null | head -1) && [ -n \"$LOG\" ] && python3 -c \"import json, sys; data = json.load(sys.stdin); assert 'diagnostics_timestamp' in data, 'missing diagnostics_timestamp'; assert 'capabilities' in data, 'missing capabilities'; caps = data['capabilities']; assert 'agent_available' in caps, 'missing agent_available'; [ [sys.stderr.write(f'error: {f} not in data\n'), sys.exit(1)] for f in ('missing_tools', 'proposed_enhancements', 'isolation_or_privacy_risks') if f not in data or not isinstance(data[f], list) ]; print('PASS: forge diagnostics JSON valid'); print(f'  timestamp: {data[\\\"diagnostics_timestamp\\\"]}'); [ [print(f'  [{\\\"OK\\\" if val not in (\\\"unset\\\", \\\"N/A\\\", \\\"BLOCKED\\\", \\\"NOT_FOUND\\\", \\\"NONE\\\") else \\\"MISSING\\\"}] {sec}.{key} = {val}') for key, val in vals.items()] if isinstance(vals, dict) else print(f'  [INFO] {sec} = {vals}') for sec, vals in caps.items() ]; print(f'  missing_tools: {len(data[\\\"missing_tools\\\"])}; proposed_enhancements: {len(data[\\\"proposed_enhancements\\\"])}; isolation_risks: {len(data[\\\"isolation_or_privacy_risks\\\"])}')\" < \"$LOG\""
+    timeout_ms: 15000
+
+  - step: "container-start health: the idiomatic layer emitted at least one running event"
+    # The annex now captures stderr to a `.stderr.log` companion next to
+    # the stdout JSON. The launch-event stream (emit_launch_event,
+    # spec:runtime-diagnostics-stream, ISO-8601 prefixed) lives there. A
+    # single `state=running container=…` line is structural proof that
+    # the shared PodmanClient layer ran — a raw `Command::new("podman")`
+    # bypass would NOT produce these. Field order is pinned by the unit
+    # test `launch_event_line_shape_is_stable`; keep this grep in lockstep.
+    # @trace spec:runtime-diagnostics-stream, spec:podman-idiomatic-patterns
+    command: "STDERR=$(ls -t target/forge-diagnostics/diagnostics_*.stderr.log 2>/dev/null | head -1) && [ -n \"$STDERR\" ] && [ -s \"$STDERR\" ] && grep -Eq 'event:container_launch stage=[^ ]+ state=running container=' \"$STDERR\" && echo \"ok: idiomatic layer reported >=1 container running via diagnostics annex\""
+    timeout_ms: 10000
+    expected_behavior: "ok: idiomatic layer reported >=1 container running via diagnostics annex"
+
+  - step: "container-start health: NO container reached state=failed during the annex capture"
+    # A failed launch surfaces the failing stage + container straight
+    # from the stream. Gating: a single failed line in the diagnostics
+    # cycle invalidates the structured report (containers didn't reach
+    # the state the JSON claims).
+    command: "STDERR=$(ls -t target/forge-diagnostics/diagnostics_*.stderr.log 2>/dev/null | head -1) && [ -n \"$STDERR\" ] && if grep -E 'event:container_launch .* state=failed' \"$STDERR\"; then echo \"FAIL: a container launch failed during the annex capture (see lines above)\"; exit 1; else echo \"ok: no container_launch state=failed in annex stderr\"; fi"
+    timeout_ms: 10000
+    expected_behavior: "ok: no container_launch state=failed in annex stderr"
+
+  - step: "container-start health: the forge-agent stage launched (running OR exited)"
+    # The annex prompt activates --opencode → must launch the agent
+    # container. spec:runtime-diagnostics-stream "Launch stage event"
+    # allows TWO terminal states for the agent stage: `state=running` for
+    # detached containers, OR `state=exited` for a completed attached
+    # foreground forge (which is what `--diagnostics --prompt …` produces:
+    # the agent runs to completion, then exits cleanly).
+    #
+    # Stage label is per-agent (`opencode`, `claude`, `codex`, or the
+    # generic `forge`) — accept any of them so this litmus stays correct
+    # across agent choices.
+    #
+    # Verified shape from the first production distill
+    # (plan/diagnostics/diagnostics_20260528T111351Z-summary.md):
+    #   `event:container_launch stage=opencode state=exited container=…`
+    #
+    # A capture without an agent-stage line means the agent JSON came
+    # from somewhere unexpected (cached run, mocked call, ...) and the
+    # structured report can't be trusted. Gating.
+    command: "STDERR=$(ls -t target/forge-diagnostics/diagnostics_*.stderr.log 2>/dev/null | head -1) && [ -n \"$STDERR\" ] && grep -Eq 'event:container_launch stage=(opencode|claude|codex|forge) state=(running|exited) container=' \"$STDERR\" && echo \"ok: forge-agent stage launched via idiomatic layer\""
+    timeout_ms: 10000
+    expected_behavior: "ok: forge-agent stage launched via idiomatic layer"
+
+observability:
+  traces:
+    - "@trace spec:default-image"
+    - "@trace spec:forge-as-only-runtime"
+    - "@trace spec:forge-offline"
+    - "@trace spec:forge-hot-cold-split"
+  expected_log: "Forge diagnostics E2E captured structured capability report + idiomatic-layer launch-event stream"
+  log_fields:
+    spec: "forge-diagnostics"
+    test: "forge-diagnostics-e2e"
+    artifact: "target/forge-diagnostics/diagnostics_*.log"
+    stderr_artifact: "target/forge-diagnostics/diagnostics_*.stderr.log"
+
+rollback:
+  on_failure: >
+    Ensure tillandsias binary is on PATH and forge image is built
+    (scripts/build-image.sh forge). If the binary is stale, rebuild
+    with ./build.sh --release --install. If the prompt file changed
+    without updating the JSON schema in step 3, update the validation.
+  command: "ls -la target/forge-diagnostics/ && cat target/forge-diagnostics/diagnostics_*.log 2>/dev/null | head -100"

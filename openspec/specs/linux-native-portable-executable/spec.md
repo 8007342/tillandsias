@@ -34,11 +34,31 @@ The release artifact for the Linux client runtime MUST be named
 `tillandsias-linux-x86_64` and MUST be the same musl-static binary installed by
 `scripts/install.sh`.
 
+The binary MUST be built for a `*-unknown-linux-musl` target and statically
+linked (no dynamic libc dependency). This is a deliberate **portability
+requirement**, not an incidental build choice: a glibc-dynamic binary couples
+to the host's glibc version and would fail or misbehave across the range of
+distros and glibc vintages users run. musl-static linkage makes the single
+published artifact run unmodified on any modern x86_64 Linux (and aarch64 for
+the in-VM agent), which is the whole point of a checkout-free, toolchain-free
+portable executable. The same requirement applies to the in-VM headless agent
+assets (`tillandsias-headless-<arch>-unknown-linux-musl`), which are
+curl-installed into the (potentially different-libc) VM rootfs at first boot.
+The nix build surfaces this as a hard constraint: a non-musl-static Linux
+release target is a portability regression and MUST be rejected.
+
 #### Scenario: Curl installer uses release binary
 
 - **WHEN** a user runs the curl installer
 - **THEN** it downloads `tillandsias-linux-x86_64` from the latest GitHub Release
 - **AND** installs it as `tillandsias` in a safe current-user bin directory, usually `~/.local/bin/tillandsias`
+
+#### Scenario: Release build target is musl-static
+
+- **WHEN** the Linux release artifact (or an in-VM headless agent asset) is built
+- **THEN** the cargo target MUST be `*-unknown-linux-musl`
+- **AND** the resulting binary MUST be statically linked (`file(1)` reports "statically linked")
+- **AND** a glibc-dynamic or otherwise host-coupled Linux release binary MUST NOT be published
 
 ### Requirement: Native tray builds may use host UI libraries
 

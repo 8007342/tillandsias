@@ -1,0 +1,72 @@
+trace: methodology.yaml, methodology/litmus.yaml, plan/issues/forge-diagnostics-automation-2026-05-27.md
+
+forge_diagnostics:
+  version: v0.1
+  purpose: >
+    Define the slow, non-blocking forge improvement loop that piggy-backs on
+    expensive E2E forge launches. The loop asks an agent inside the forge to
+    report capabilities, distills the result, and turns gaps into ordinary
+    plan/spec/litmus work.
+
+  privacy_and_isolation_policy:
+    rule: >
+      Forge enhancement proposals MUST NOT request extra host permissions,
+      broader mounts, host token access, socket escapes, or weakened network
+      isolation. The approved improvement direction is a more complete
+      ready-to-use forge image: compilers, builders, parsers, debuggers,
+      language servers, package managers, and documented configuration that
+      operate within the existing forge privacy and isolation envelope.
+    allowed_examples:
+      - TypeScript, JavaScript, Rust, Python, Dart, Wasm, and web app toolchains
+      - language servers, formatters, linters, test runners, and debuggers
+      - build systems and parsers that use project-local files and approved caches
+      - discoverability docs, shell helpers, and preconfigured environment variables
+    disallowed_examples:
+      - mounting additional host directories by default
+      - exposing host credentials or GitHub tokens to the forge
+      - bypassing the proxy/router/enclave network path
+      - adding privileged containers or host socket access
+
+  agent_diagnostic_signal:
+    rule: >
+      `agent_diagnostic` is an annex litmus signal: an E2E run may prompt the
+      in-forge agent for structured capability output, but the capability
+      answers do not decide the parent E2E test's pass/fail verdict. The parent
+      test may fail only on launch, timeout, missing output, or invalid
+      structure.
+    required_artifacts:
+      raw_log: "target/forge-diagnostics/diagnostics_<UTC>.log"
+      summary: "plan/diagnostics/diagnostics_<UTC>-summary.md"
+      issue_or_task: "plan issue/task for any approved enhancement gap"
+    response_shape:
+      - diagnostics_timestamp
+      - forge_version
+      - capabilities
+      - missing_tools
+      - proposed_enhancements
+      - isolation_or_privacy_risks
+
+  piggyback_protocol:
+    rule: >
+      Any slow E2E run that already launches a forge MAY run one forge
+      diagnostics prompt during the same forge lifetime. In a single CI or
+      orchestrator cycle, only the first eligible E2E run executes the full
+      prompt; later eligible tests append a checksum-based skip note pointing
+      to the first raw log.
+    prompt_source: plan/diagnostics/forge-diagnostics-prompt.txt
+    dedupe_marker: target/forge-diagnostics/current-prompt.sha256
+    distillation_command: scripts/distill-forge-diagnostics.sh
+    non_blocking_annex: true
+
+  orchestrator_approval_gate:
+    rule: >
+      Forge enhancements proposed by diagnostics are candidates, not approval.
+      The coordinator/orchestrator approves only changes that preserve privacy
+      and isolation, then assigns them as normal work items with owned files,
+      expected evidence, and an agent_status_packet requirement.
+    approval_record:
+      - "accepted/rejected/deferred"
+      - "privacy/isolation assessment"
+      - "owned files and host assignment"
+      - "expected litmus or static evidence"
+      - "prompt update or removal when coverage becomes a real litmus"

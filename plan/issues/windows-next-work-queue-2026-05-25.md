@@ -2,7 +2,7 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/windows-next-thin-tray.md, plan/issues/tray-convergence-coordination.md, plan/issues/control-socket-protocol-convergence-2026-05-25.md, openspec/changes/control-wire-pty-attach/
 
-Status: **OPEN** as of 2026-05-27T16:24Z. Windows w1, w2, w3, w4, w6
+Status: **OPEN** as of 2026-05-27T23:25Z. Windows w1, w2, w3, w4, w6
 diagnostics, the w5 converter, the shared forge-container `launch_spec` /
 `intent_for_action` amendment, the l9 URL resolver, the w5
 `provision_via_recipe` runtime flip, and w8 HvSocket Ready proof are done on
@@ -14,11 +14,22 @@ PtyOpen/PtyData/PtyClose proof, bidirectional PTY stdin/stdout, WSL VM
 keepalive, deterministic Quit drain, native-terminal menu launch for the Open
 Shell / Attach / Maintain / GitHub Login argv path, Open Shell terminal-click
 smoke, file-based tray logging plus working Open Log, Retry reprovisioning, and
-forge-container Open Shell smoke.
-`origin/windows-next` is ahead of `linux-next` through `c0a9558b`; the
-integration loop must merge/test that code while preserving the newer
-`linux-next` manifest repin from `13cf3af0` and later plan entries. The old
-PR #3 / recipe-publish / SHA-pin / F1 / F2 gates are closed.
+forge-container Open Shell smoke. Newer Windows commits `9c7b30ce` and
+`cca9da4a` add `--provision-once` headless mode and report the full
+live-provision dress rehearsal as done.
+The Windows-owned rustfmt blocker is cleared by `9315e9de`, and
+`origin/windows-next` through `1e20d6d0` is now merged into
+`origin/linux-next` by integration cycle `edfb72c6` / merge `b9cee2fd`;
+`./build.sh --check` and `./build.sh --test` passed on the merged tree.
+Runtime-litmus `20260527T231258Z-b06a5997-1e20d6d0-b06a5997` failed at `Disk
+quota exceeded`; replacement full installed runtime-litmus
+`20260527T231940Z-b06a5997-1e20d6d0-b06a5997` passed build/install and init,
+then failed in the OpenCode diagnostics phase with a nested-runtime panic at
+`crates/tillandsias-headless/src/vault_bootstrap.rs:205`. Push-time rebase
+later absorbed `origin/linux-next` `891bb757`; after the panic is fixed, Linux
+should start a fresh runtime for current `origin/linux-next`. Optional wire
+`EnumerateLocalProjects` remains a fallback, not a blocker. The old PR #3 /
+recipe-publish / SHA-pin / F1 / F2 gates are closed.
 
 ## How to use this file
 
@@ -45,8 +56,10 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
 - `w8/hvsocket-control-wire-ready` is done on `windows-next`: `8a96a880`
   proved AF_HYPERV connect, `2b97be30` proved Hello/HelloAck, `340cac99`
   wired the handshake into `provision_via_recipe`, and `e0405f2f` flips the
-  tray to Ready on handshake success. Linux integration-loop merge/test is the
-  remaining cross-host action.
+  tray to Ready on handshake success. Linux integration-loop merge/test is
+  complete in `b9cee2fd`; replacement full installed runtime validation is now
+  blocked by diagnostics panic
+  `20260527T231940Z-b06a5997-1e20d6d0-b06a5997`.
 - `w9/control-wire-session-menu-routing` is in progress on `windows-next`:
   `8b785ced` proves VmStatus request/reply over HvSocket, `791c0187` makes
   provisioning wait for VM phase `Ready`, and `5188dce6` proves the
@@ -57,10 +70,13 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
   `29fe3807` add Open Shell terminal-click smoke, file-based tray logging /
   working Open Log, Cargo.lock sync, and an updated thin-tray next action. The
   newer commits `f4c3d70f` and `c0a9558b` wire Retry to re-trigger guarded
-  provisioning and prove the forge-container Open Shell argv. The remaining
-  packet is integration-loop merge/test plus the optional full live-provision
-  dress rehearsal and optional wire EnumerateLocalProjects, not another
-  transport primitive, terminal-launch proof, or Retry hook.
+  provisioning and prove the forge-container Open Shell argv. `9c7b30ce` /
+  `cca9da4a` add and prove the live provision dress rehearsal. `9315e9de`
+  clears the `wsl_lifecycle.rs` rustfmt blocker, and integration cycle
+  `edfb72c6` merged Windows through `1e20d6d0` into `linux-next`. The
+  remaining packet is the full installed runtime-litmus result plus optional
+  wire EnumerateLocalProjects, not another transport primitive,
+  terminal-launch proof, Retry hook, or formatting cleanup.
 - `w7/recipe-diagnostics-and-branch-sync` is no longer the primary packet; use
   it only as a no-code fallback if the `c0a9558b` merge/test exposes stale
   diagnostics or a manifest/branch-sync conflict.
@@ -75,10 +91,10 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
   interaction work as w9 session/menu routing, not as w5 artifact gates.
 
 Do not re-claim w1, w2, w3, w4, w5, w6, or w8; their terminal events are
-recorded below. Continue w9 from the Retry and Open Shell proof with
-integration-loop evidence, optional full live-provision dress rehearsal, and
-optional wire EnumerateLocalProjects, with w7 diagnostics as the independent
-fallback if the integration loop surfaces stale branch or manifest state.
+recorded below. Continue w9 by waiting for the integrated full runtime-litmus
+result, with optional wire EnumerateLocalProjects after validation and w7
+diagnostics as the independent fallback if the runtime exposes stale branch or
+manifest state.
 
 ### Item: w8/hvsocket-control-wire-ready
 
@@ -88,9 +104,12 @@ fallback if the integration loop surfaces stale branch or manifest state.
 - capability_tags: [win32, hvsocket, wsl, control-wire]
 - status: done
 - completed_at: 2026-05-27T06:51Z
-- integration_status: pending linux-next merge/test of `origin/windows-next`
-  through `c0a9558b` (includes later w9 transport, menu-launch, Open Shell
-  smoke, file logging, Open Log, Retry, and forge-container smoke commits)
+- integration_status: merged into `linux-next` at `b9cee2fd`; `./build.sh
+  --check` and `./build.sh --test` passed in integration cycle `edfb72c6`.
+  Runtime-litmus `20260527T231258Z-b06a5997-1e20d6d0-b06a5997` failed at disk
+  quota; replacement runtime-litmus
+  `20260527T231940Z-b06a5997-1e20d6d0-b06a5997` failed in diagnostics with
+  the `vault_bootstrap.rs:205` nested-runtime panic.
 - gated_on: []
 - cleared_gates:
   - Linux/recipe F1 headless service restart loop fixed at `f5801968`
@@ -107,10 +126,10 @@ fallback if the integration loop surfaces stale branch or manifest state.
     service GUID to connect to the existing in-VM listener without changing the
     wire protocol.
 - next_action: >
-    Integration loop should merge/test `origin/windows-next` through
-    `c0a9558b` into `linux-next` and preserve the newer `13cf3af0` manifest
-    repin if the branch merge presents older SHA/comment blocks from
-    `windows-next`.
+    Wait for Linux to fix or assign the `vault_bootstrap.rs:205`
+    nested-runtime diagnostics panic, then let the integration loop run a fresh
+    current-head runtime. Do not reopen w8 transport work unless the runtime
+    produces fresh evidence against this item.
 - acceptance_evidence:
   - Windows tray reaches Ready via HvSocket after `fetch-headless.service`
     installs the listener binary.
@@ -134,7 +153,7 @@ fallback if the integration loop surfaces stale branch or manifest state.
 - owner_host: windows
 - capability_tags: [win32, hvsocket, control-wire, pty, menu]
 - status: in_progress
-- latest_progress_at: 2026-05-27T13:21Z
+- latest_progress_at: 2026-05-27T23:25Z
 - latest_progress_refs:
   - `8b785ced` — VmStatus request/reply over HvSocket proven
   - `791c0187` — provisioning waits for VM phase `Ready`
@@ -149,6 +168,10 @@ fallback if the integration loop surfaces stale branch or manifest state.
   - `29fe3807` — thin-tray next action refreshed to current remaining scope
   - `f4c3d70f` — Retry re-triggers guarded provisioning after failure
   - `c0a9558b` — forge-container Open Shell smoke passed on real Windows hardware
+  - `9c7b30ce` — `--provision-once` headless mode live dress rehearsal passed
+  - `cca9da4a` — full live-provision dress rehearsal marked done
+  - `9315e9de` — `wsl_lifecycle.rs` rustfmt blocker cleared
+  - `edfb72c6` / `b9cee2fd` — Windows w9 delta merged/tested into `linux-next`
 - depends_on: [w8/hvsocket-control-wire-ready]
 - gated_on: []
 - owned_files:
@@ -161,11 +184,11 @@ fallback if the integration loop surfaces stale branch or manifest state.
     Ready should become the start of real interaction, not just the end of
     provisioning.
 - next_action: >
-    First let the integration loop merge/test `origin/windows-next` through
-    `c0a9558b` into `linux-next` or record exact conflicts. Windows
-    continuation can then run the full live-provision dress rehearsal and
-    optionally add wire EnumerateLocalProjects if host-side project scan is not
-    sufficient.
+    Wait for Linux to fix or assign the `vault_bootstrap.rs:205`
+    nested-runtime diagnostics panic, then start a fresh runtime for current
+    `origin/linux-next`. If the fresh current-head run passes, treat w9 as
+    integration-complete and continue only optional wire EnumerateLocalProjects
+    if host-side project scan is not sufficient.
 - acceptance_evidence:
   - `8b785ced`: Windows tray can request VmStatus after the Ready flip without
     reopening provisioning.
@@ -190,8 +213,12 @@ fallback if the integration loop surfaces stale branch or manifest state.
     duplicate in-flight tasks.
   - `c0a9558b`: forge-container Open Shell smoke passed through `wsl.exe` into
     a running `tillandsias-<name>-forge` container.
-  - Remaining: integration-loop merge/test into `linux-next`, optional full
-    live-provision dress rehearsal, and optional wire EnumerateLocalProjects.
+  - `9c7b30ce` / `cca9da4a`: full live-provision dress rehearsal is reported
+    done.
+  - `9315e9de` / `edfb72c6`: Windows-owned rustfmt cleanup and
+    integration-loop merge/test into `linux-next` are complete.
+  - Remaining: full installed runtime-litmus result and optional wire
+    EnumerateLocalProjects.
   - `cargo test -p tillandsias-windows-tray --target x86_64-pc-windows-msvc`
     or equivalent Windows-host evidence stays green.
 - fallback_when_blocked: >
@@ -1053,3 +1080,103 @@ Next greedy pickups (no VM needed): **w4b** (windows-ownable, pure) and **w4d**
   integration loop merge/tests `origin/windows-next` through `c0a9558b`.
   w7 remains the no-code fallback if that merge/test exposes stale branch,
   diagnostics, or manifest state.
+
+### Event: 2026-05-27T18:15Z — linux coordinator status reconciliation
+
+- Observed remote heads after fetch/pull: `linux-next` `9081212c`,
+  `windows-next` `c0a9558b`, `osx-next` `deba10d8`, `main` `e22a6853`.
+- No new Windows commits landed after `c0a9558b`; the branch delta against
+  `linux-next` remains the w9 transport/menu/Open Shell/Retry code plus
+  related documentation and lockfile updates.
+- Header reconciliation unchanged: w9 remains `in_progress` until the
+  integration loop merge/tests `origin/windows-next` through `c0a9558b`.
+  w7 remains the no-code fallback if that merge/test exposes stale branch,
+  diagnostics, or manifest state.
+- Release-side note: PR #5 merged to `main`, so the durable release workflow
+  now auto-publishes the in-VM headless agents. This closes the prior
+  release.yml cleanup ask but does not change the Windows w9 merge/test gate.
+
+### Event: 2026-05-27T19:19Z — runtime-litmus clean merge, rustfmt blocker
+
+- Observed remote heads after fetch/pull: `linux-next` `f3838069`,
+  `windows-next` `1aebb284`, `osx-next` `deba10d8`, `main` `e22a6853`.
+- Runtime-litmus `20260527T190639Z-2c239138-1aebb284-deba10d8` clean-merged
+  `origin/windows-next` and found `origin/osx-next` already integrated, then
+  failed `./build.sh --ci-full --install` at the `rust-formatting` check.
+- Windows-owned blocker: rustfmt wants to reflow the
+  `tracing::info!(wire_version, attempt, "VM operationally Ready...")` call in
+  `crates/tillandsias-windows-tray/src/wsl_lifecycle.rs`.
+- Next Windows packet: run `cargo fmt --all` or a scoped rustfmt that covers
+  `wsl_lifecycle.rs`, push the formatting checkpoint to `windows-next`, and
+  append an agent_status_packet here. Do not reopen transport, Retry, or Open
+  Shell behavior; this is a formatting-only gate before the integration loop
+  can rerun the full installed runtime litmus.
+
+### Event: 2026-05-27T19:23Z — pull-awareness for forge diagnostics lane
+
+- Coordination commit pending on `linux-next` updates
+  `methodology/litmus.yaml`, `methodology/forge-diagnostics.yaml`,
+  `.codex/skills/coordinate-multihost-work/SKILL.md`,
+  `plan/issues/forge-diagnostics-automation-2026-05-27.md`, and
+  `plan/index.yaml`.
+- This is informational for Windows w9; it does not supersede the current
+  primary action to clear the `wsl_lifecycle.rs` rustfmt diff.
+- If Windows observes forge diagnostics output during live-provision dress
+  rehearsal, record it as non-blocking evidence. Do not accept requests for
+  broader host mounts, host credentials, privileged containers, raw host
+  sockets, or proxy/router/enclave bypasses.
+- Required acknowledgement in the next Windows `agent_status_packet`: confirm
+  the `linux-next` coordination commit was pulled or list the fetch/rebase
+  blocker, then report whether any forge diagnostic evidence was produced.
+
+### Event: 2026-05-27T21:16Z — runtime-litmus for `cca9da4a` failed at Windows rustfmt
+
+- Observed remote heads after fetch/pull: `linux-next` `b463cb53`,
+  `windows-next` `cca9da4a`, `osx-next` `b463cb53`, `main` `fa746f03`.
+- Windows advanced after the prior rustfmt gate: `9c7b30ce` adds
+  `--provision-once` headless mode and live dress rehearsal evidence;
+  `cca9da4a` marks the full live-provision dress rehearsal done.
+- macOS/vm-layer rustfmt is no longer the blocker. `linux-next` includes the
+  formatting cleanup (`4935404a`) and the follow-up ACK (`feb51d66`).
+- Runtime-litmus `20260527T211507Z-b463cb53-cca9da4a-b463cb53` clean-merged
+  `origin/windows-next`, found `origin/osx-next` already integrated, passed
+  pre-build litmus 57/57, and wrote centicolon evidence, then failed
+  `./build.sh --ci-full --install` at rustfmt.
+- Exact Windows-owned blocker from `/tmp/fmt-check.log`:
+  `crates/tillandsias-windows-tray/src/wsl_lifecycle.rs` needs the
+  `tracing::info!(wire_version, attempt, "VM operationally Ready...")` call
+  reflowed by `cargo fmt`.
+- Required next Windows status packet: pull this coordination update, wait for
+  the runtime result before reopening behavior work, clear only the formatting
+  diff first, and only continue optional wire EnumerateLocalProjects after the
+  integration gate is green.
+
+### Event: 2026-05-27T23:25Z — rustfmt resolved, Windows integrated, runtime retry running
+
+- Observed remote heads after fetch/rebase: `origin/linux-next` `891bb757`
+  before this coordination commit, `windows-next` `1e20d6d0`, `osx-next`
+  `f8778350`, `main` `fa746f03`.
+- Windows fixed the rustfmt blocker at `9315e9de`; `1e20d6d0` added
+  `--status-once` control-wire health diagnostics.
+- Integration cycle `edfb72c6` clean-merged `origin/windows-next` into
+  `linux-next` at merge commit `b9cee2fd`; `./build.sh --check` and
+  `./build.sh --test` both passed on the merged tree.
+- Runtime-litmus `20260527T231258Z-b06a5997-1e20d6d0-b06a5997` found
+  `merged_siblings=none` because both sibling branches are already ancestors
+  of `linux-next`, then failed at `Disk quota exceeded` during
+  `./build.sh --ci-full --install`. Old scratch worktrees were removed.
+- Replacement full installed runtime-litmus
+  `20260527T231940Z-b06a5997-1e20d6d0-b06a5997` passed build/install and init,
+  then failed in OpenCode diagnostics with the `vault_bootstrap.rs:205`
+  nested-runtime panic.
+- Required next Windows status packet: pull this coordination commit, keep wire
+  `EnumerateLocalProjects` optional, and do not reopen Windows w9 unless a
+  fresh current-head runtime produces Windows-specific evidence.
+
+### Event: 2026-05-28T02:54:00Z — linux coordinator status reconciliation
+
+- Observed remote heads after fetch/pull: `origin/linux-next` `089c1b34` (before this coordination commit), `origin/windows-next` `c45f23ae`, `origin/osx-next` `80d9196e`.
+- Sibling branches ancestry: both `origin/windows-next` and `origin/osx-next` are fully merged and integrated as ancestors of the current local HEAD.
+- Discovered that the previous background runtime litmus run `20260528T010600Z-c9e83852-3340523c-82d735ef` failed during OpenCode execution due to a Linux container networking/crun sethostname limitation: hostnames generated for enclave services (e.g. `git-tillandsias-runtime-litmus-...`) exceeded the 63-character Linux hostname limit.
+- Resolved this blocker by implementing a robust `sanitize_hostname` function in `crates/tillandsias-headless` to safely truncate and hash hostnames exceeding 63 characters. Verified all tests pass green.
+- Next action: A fresh background runtime litmus run will be scheduled to validate the integrated HEAD with the new hostname sanitization safely in place.

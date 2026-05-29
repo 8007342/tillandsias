@@ -1,0 +1,2 @@
+# Runtime state — tracks last-processed diagnostics file
+.diagnose-state

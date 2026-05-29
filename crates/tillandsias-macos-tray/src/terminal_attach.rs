@@ -262,13 +262,10 @@ mod live {
             .spawn()?;
         Ok(())
     }
-
 }
 
 #[cfg(target_os = "macos")]
-pub use live::{
-    LiveInstalledTerminals, spawn_terminal_pty_attach, spawn_terminal_stub_window,
-};
+pub use live::{LiveInstalledTerminals, spawn_terminal_pty_attach, spawn_terminal_stub_window};
 
 #[cfg(test)]
 mod tests {

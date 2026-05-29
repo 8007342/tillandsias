@@ -1,0 +1,103 @@
+# @trace spec:forge-cache-dual
+#
+# Drift protection for two forge-cache-dual spec requirements that the
+# existing `litmus:forge-cache-dual-shape` (size: instant) doesn't pin:
+#
+#   1. "Forge containers see exactly four path categories" — specifically
+#      the kernel-enforced tmpfs size caps on `/tmp` (256 MB, mode 1777)
+#      and `/run/user/1000` (64 MB, mode 0700). The spec calls these
+#      out as non-negotiable: writes beyond MUST fail with ENOSPC, not
+#      silently spill to disk.
+#   2. "cache_version file lifecycle" — `init_cache_dir()`,
+#      `save_version()`, and `check_cache_integrity()` are the named
+#      functions in the spec's Implementation detail section. If a
+#      future refactor renames or drops one, the lifecycle invariant
+#      breaks silently.
+#
+# Companion to the existing `litmus:forge-cache-dual-shape`. Together
+# they raise forge-cache-dual coverage_ratio from 33 to ~67.
+name: litmus:forge-cache-dual-tmpfs-caps
+spec: forge-cache-dual
+phase: pre-build
+description: >
+  Drift protection for the tmpfs size caps (`/tmp:256m`,
+  `/run/user/1000:64m`) and the cache_version lifecycle functions
+  (`init_cache_dir`, `save_version`, `check_cache_integrity`) that
+  spec:forge-cache-dual mandates as non-negotiable.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-podman/src/launch.rs
+  - workspace contains crates/tillandsias-podman/src/cache_semantics.rs
+  - workspace contains crates/tillandsias-core/src/container_profile.rs
+  - workspace contains crates/tillandsias-headless/src/main.rs
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "tmpfs cap on /tmp at 256 MB with mode 1777"
+    # Spec mandates `--tmpfs=/tmp:size=256m,mode=1777`. Spread across
+    # at least three sites: container_profile.rs (the policy), launch.rs
+    # (the call), and cache_semantics.rs (the format-string generator).
+    command: "grep -F '/tmp:size=256m,mode=1777' crates/tillandsias-core/src/container_profile.rs && grep -F '/tmp:size=256m,mode=1777' crates/tillandsias-podman/src/launch.rs"
+    timeout_ms: 5000
+    expected_behavior: "/tmp:size=256m,mode=1777"
+
+  - step: "tmpfs cap on /run/user/1000 at 64 MB with mode 0700"
+    command: "grep -F '/run/user/1000:size=64m,mode=0700' crates/tillandsias-core/src/container_profile.rs && grep -F '/run/user/1000:size=64m,mode=0700' crates/tillandsias-podman/src/launch.rs"
+    timeout_ms: 5000
+    expected_behavior: "/run/user/1000:size=64m,mode=0700"
+
+  - step: "cache_semantics generator emits the size= format-string"
+    # The generator is the single source-of-truth for the tmpfs args
+    # the launcher passes to podman. A refactor that bypasses it (e.g.
+    # inlining the literal in launch.rs only) would leave one site
+    # silently undercapped. Pin the generator's format-strings.
+    command: "grep -F '/tmp:size={}m,mode=1777' crates/tillandsias-podman/src/cache_semantics.rs && grep -F '/run/user/1000:size={}m,mode=0700' crates/tillandsias-podman/src/cache_semantics.rs"
+    timeout_ms: 5000
+    expected_behavior: "/run/user/1000:size={}m,mode=0700"
+
+  - step: "cache_version lifecycle functions present in main.rs"
+    # Spec Implementation detail names these three functions. A rename
+    # silently breaks the spec-to-code mapping.
+    command: "grep -F 'fn init_cache_dir' crates/tillandsias-headless/src/main.rs && grep -F 'fn save_version' crates/tillandsias-headless/src/main.rs && grep -F 'fn check_cache_integrity' crates/tillandsias-headless/src/main.rs"
+    timeout_ms: 5000
+    expected_behavior: "fn check_cache_integrity"
+
+  - step: "cache_version filename literal pinned in main.rs"
+    # Spec mandates the file name is `cache_version` (no extension,
+    # no synonym). Pin the literal so a rename like `version.txt`
+    # surfaces here.
+    command: "grep -F 'cache_dir.join(\"cache_version\")' crates/tillandsias-headless/src/main.rs"
+    timeout_ms: 5000
+    expected_behavior: "cache_dir.join"
+
+  - step: "spec→code trace on container_profile.rs"
+    # The container_profile policy file carries the spec trace at its
+    # head. If a refactor moves the tmpfs literals out of that file
+    # without updating the trace, both ends drift.
+    command: "grep -F 'spec:forge-cache-dual' crates/tillandsias-core/src/container_profile.rs"
+    timeout_ms: 5000
+    expected_behavior: "spec:forge-cache-dual"
+
+observability:
+  traces:
+    - "@trace spec:forge-cache-dual"
+  expected_log: "tmpfs caps + cache_version lifecycle functions pinned per spec"
+  log_fields:
+    spec: "forge-cache-dual"
+    test: "forge-cache-dual-tmpfs-caps"
+    cap_artifact: "crates/tillandsias-core/src/container_profile.rs"
+    lifecycle_artifact: "crates/tillandsias-headless/src/main.rs"
+
+rollback:
+  on_failure: >
+    A tmpfs cap or cache_version lifecycle surface drifted from
+    spec:forge-cache-dual. The caps `/tmp:size=256m,mode=1777` and
+    `/run/user/1000:size=64m,mode=0700` MUST stay byte-identical
+    across container_profile.rs + launch.rs + cache_semantics.rs's
+    format strings. The lifecycle functions (`init_cache_dir`,
+    `save_version`, `check_cache_integrity`) MUST keep their names
+    in main.rs. Restore canonical surfaces or update the spec text
+    and this litmus together.
+  command: "grep -nE 'tmpfs|cache_version|init_cache_dir|save_version|check_cache_integrity' crates/tillandsias-core/src/container_profile.rs crates/tillandsias-podman/src/launch.rs crates/tillandsias-podman/src/cache_semantics.rs crates/tillandsias-headless/src/main.rs | head -20"

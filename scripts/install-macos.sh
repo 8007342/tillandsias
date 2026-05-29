@@ -156,5 +156,40 @@ cat <<EOF
   After the first bypass, double-clicking works normally.
 
 EOF
+# ── post-install sanity check ───────────────────────────────────────────
+# Invoke the bundled `--diagnose --json` to confirm the install bits
+# are sound (version baked, manifest pin present, the binary can run)
+# BEFORE asking AppKit to launch the GUI. Failure here means the
+# tarball was corrupted in transit or the codesign step ran on the
+# wrong file — the installer should surface that immediately rather
+# than the user staring at a never-appearing menubar icon.
+#
+# Exit codes:
+#   0 — image-root provisioned (only on re-install over an already-
+#       provisioned tray; first install is "2 / not provisioned" + ok).
+#   2 — degraded but bits intact (the expected first-install state).
+#   1 — hard failure (binary missing, codesign broken).
+say "verifying installed binary via --diagnose --json"
+TRAY_BIN="$DEST/Contents/MacOS/tillandsias-tray"
+if [[ -x "$TRAY_BIN" ]]; then
+    set +e
+    DIAG_JSON="$("$TRAY_BIN" --diagnose --json 2>/dev/null)"
+    DIAG_EXIT=$?
+    set -e
+    if [[ $DIAG_EXIT -eq 1 ]]; then
+        die "tillandsias-tray --diagnose --json hard-failed (exit 1); install bits broken"
+    fi
+    # Best-effort breadcrumb: surface version + manifest pin so the
+    # user has a one-liner for support if the GUI doesn't appear.
+    # Skip silently if jq isn't installed.
+    if command -v jq >/dev/null 2>&1; then
+        DIAG_VERSION="$(echo "$DIAG_JSON" | jq -r '.version' 2>/dev/null || echo '?')"
+        DIAG_PIN="$(echo "$DIAG_JSON" | jq -r '.manifest_pin_aarch64_img // "?"' 2>/dev/null)"
+        say "installed: version=$DIAG_VERSION pin=$DIAG_PIN…"
+    fi
+else
+    die "$TRAY_BIN missing or not executable; tarball extracted but binary is broken"
+fi
+
 say "launching $DEST"
 open -a "$DEST" || say "warning: open returned non-zero — try the right-click Open above"

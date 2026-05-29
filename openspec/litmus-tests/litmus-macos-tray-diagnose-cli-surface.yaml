@@ -1,0 +1,80 @@
+# @trace spec:macos-native-tray
+# Mirror of litmus-windows-tray-diagnose-cli-surface (windows commit
+# 441b8426) adapted for the macOS surface. Pin the entire `--diagnose`
+# CLI diagnostic surface — the binary modes, the JSON-schema unit
+# tests, the consumer script, the install-script sanity check, and the
+# cheatsheet provenance — so a refactor that drops a mode, renames a
+# schema test, deletes a script, or unlinks the cheatsheet surfaces
+# here pre-build instead of breaking support tooling at the install
+# step.
+#
+# Pairs with macos-native-tray.spec.md's `--diagnose CLI mode emits a
+# stable bundled health report` Requirement (slice 22, commit 2bd4faaf)
+# and its two invariants:
+#   - diagnose-exit-codes {0, 2, 1}
+#   - wire-unreachable-chip-text symmetric
+# (the latter pinned cross-tray by litmus:wire-unreachable-chip-text-
+# symmetric, slice 25 binding fdd01b6d).
+#
+# macOS-specific differences vs. windows:
+#   - Two CLI modes (--diagnose, --diagnose --json) instead of four;
+#     macOS has no --provision-once / --status-once (per-VM-handle
+#     vsock means a standalone process can't reach the live tray's
+#     wire — disclaimed in the macos-native-tray spec).
+#   - Four JSON schema-pin tests (diagnose_report_json_keys_locked,
+#     diagnose_report_none_pin_serialises_as_null,
+#     diagnose_report_none_bytes_serialise_as_null,
+#     exit_code_provisioned_zero_degraded_two).
+#   - install-macos.sh uses bash `set +e` instead of cmd.exe redirect
+#     (Windows pwsh-pipe stdio-drop issue is windows-specific).
+
+name: litmus:macos-tray-diagnose-cli-surface
+spec: macos-native-tray
+phase: pre-build
+description: "Pin the diagnostic CLI surface of tillandsias-tray (macOS) across the binary modes, JSON-schema unit tests, consumer script, install-script sanity check, and cheatsheet."
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-macos-tray/src/main.rs
+  - workspace contains crates/tillandsias-macos-tray/src/diagnose.rs
+  - workspace contains scripts/install-macos.sh
+  - workspace contains scripts/tray-diagnose.sh
+  - workspace contains cheatsheets/runtime/macos-tray-diagnostics.md
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "both CLI modes wired in main.rs"
+    command: "grep -Fe '--diagnose' crates/tillandsias-macos-tray/src/main.rs && grep -Fe '--json' crates/tillandsias-macos-tray/src/main.rs"
+    expected_behavior: "grep succeeds"
+    timeout_ms: 3000
+
+  - step: "DiagnoseFormat enum + Human/Json variants pinned"
+    command: "grep -F 'pub enum DiagnoseFormat' crates/tillandsias-macos-tray/src/diagnose.rs && grep -F 'Human' crates/tillandsias-macos-tray/src/diagnose.rs && grep -F 'Json' crates/tillandsias-macos-tray/src/diagnose.rs"
+    expected_behavior: "grep succeeds"
+    timeout_ms: 3000
+
+  - step: "JSON schema-pin unit tests attached"
+    command: "grep -F 'fn diagnose_report_json_keys_locked' crates/tillandsias-macos-tray/src/diagnose.rs && grep -F 'fn diagnose_report_none_pin_serialises_as_null' crates/tillandsias-macos-tray/src/diagnose.rs && grep -F 'fn diagnose_report_none_bytes_serialise_as_null' crates/tillandsias-macos-tray/src/diagnose.rs"
+    expected_behavior: "grep succeeds"
+    timeout_ms: 3000
+
+  - step: "exit-code contract test attached"
+    command: "grep -F 'fn exit_code_provisioned_zero_degraded_two' crates/tillandsias-macos-tray/src/diagnose.rs"
+    expected_behavior: "grep succeeds"
+    timeout_ms: 3000
+
+  - step: "install-macos.sh contains the post-install --diagnose sanity check"
+    command: "grep -Fe '--diagnose --json' scripts/install-macos.sh && grep -F 'install bits broken' scripts/install-macos.sh"
+    expected_behavior: "grep succeeds"
+    timeout_ms: 3000
+
+  - step: "tray-diagnose.sh consumer script uses bash set +e around the tray invocation"
+    command: "grep -F 'set +e' scripts/tray-diagnose.sh && grep -Fe '--diagnose --json' scripts/tray-diagnose.sh"
+    expected_behavior: "grep succeeds"
+    timeout_ms: 3000
+
+  - step: "cheatsheet exists with the documented schema"
+    command: "grep -F 'macOS tray diagnostics' cheatsheets/runtime/macos-tray-diagnostics.md && grep -F 'manifest_pin_aarch64_img' cheatsheets/runtime/macos-tray-diagnostics.md"
+    expected_behavior: "grep succeeds"
+    timeout_ms: 3000

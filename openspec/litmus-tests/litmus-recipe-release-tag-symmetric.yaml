@@ -1,0 +1,81 @@
+# @trace spec:macos-native-tray, spec:windows-native-tray
+# Cross-tray drift protection for the rootfs recipe release tag both trays
+# fetch + cache + diagnose against. Both trays declare a named const
+# `RECIPE_RELEASE_TAG` whose value selects which GitHub release of the
+# `tillandsias-vm-recipe` artifacts (the .img.xz rootfs, the SHA-256
+# manifest, the kernel/initrd pair) the tray downloads on first
+# provision. The cached artifact path keys on this tag, so a one-sided
+# bump silently ships trays that fetch + cache DIFFERENT rootfs builds —
+# the windows tray would boot one Fedora 44 image and the macOS tray a
+# different one, breaking the "same in-VM tillandsias-headless across
+# trays" invariant that the multi-host work depends on.
+#
+# Today both sides carry the byte-identical value `v0.2.260526.1`:
+#   - crates/tillandsias-windows-tray/src/wsl_lifecycle.rs:44
+#   - crates/tillandsias-macos-tray/src/action_host.rs:983
+#
+# This litmus enforces three properties at the source level:
+#   1. windows-tray declares `pub const RECIPE_RELEASE_TAG`
+#   2. macos-tray declares `pub(crate) const RECIPE_RELEASE_TAG`
+#   3. both consts hold the same current value
+#
+# Property (3) makes this litmus a forcing function for cross-host
+# coordination: when the recipe-publish workflow ships a new tag, the
+# bumper must update windows-tray, macos-tray, AND this litmus in the
+# same change — otherwise CI flags the divergence pre-build before
+# either tray ships an installable artifact that fetches the wrong
+# rootfs.
+#
+# Provenance:
+#   windows const introduced by the wsl-lifecycle materialization slice
+#   macos const introduced by macOS slice 11b (mirrors the windows pattern)
+#   this litmus: macOS slice 27 (drift-protection pin)
+#
+# Sibling-binding ask: this litmus is bound under macos-native-tray on
+# the same change that creates it; windows-native-tray host owner is
+# invited to add it to their litmus_tests list (currently has 1, will
+# go to 2). The binding sequence mirrors slice 25 for the wire-
+# unreachable litmus — each side owns its own binding row.
+
+name: litmus:recipe-release-tag-symmetric
+spec: macos-native-tray
+phase: pre-build
+description: "Pin the byte-identical RECIPE_RELEASE_TAG const across the windows-tray and macos-tray crates so a one-sided bump cannot silently divert the two trays to different rootfs releases."
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-windows-tray/src/wsl_lifecycle.rs
+  - workspace contains crates/tillandsias-macos-tray/src/action_host.rs
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "windows-tray declares the named const"
+    command: "grep -F 'pub const RECIPE_RELEASE_TAG' crates/tillandsias-windows-tray/src/wsl_lifecycle.rs"
+    expected_behavior: "pub const RECIPE_RELEASE_TAG"
+    timeout_ms: 3000
+
+  - step: "macos-tray declares the named const"
+    command: "grep -F 'pub(crate) const RECIPE_RELEASE_TAG' crates/tillandsias-macos-tray/src/action_host.rs"
+    expected_behavior: "pub(crate) const RECIPE_RELEASE_TAG"
+    timeout_ms: 3000
+
+  - step: "windows-tray const value is v0.2.260526.1"
+    # The current shared tag. When the recipe-publish workflow ships a
+    # new version, this step + the macos step below + the two source
+    # consts must all bump together.
+    #
+    # expected_behavior is a SUBSTRING of the grep output (case-
+    # insensitive). The runner's matcher (run-litmus-test.sh:466)
+    # does `grep -Fqi "$expected" <<<"$output"` — descriptive strings
+    # like "windows tag pinned at …" don't appear in the actual grep
+    # output, so we pin a literal substring of the matched line
+    # instead.
+    command: "grep -F 'RECIPE_RELEASE_TAG: &str = \"v0.2.260526.1\"' crates/tillandsias-windows-tray/src/wsl_lifecycle.rs"
+    expected_behavior: "v0.2.260526.1"
+    timeout_ms: 3000
+
+  - step: "macos-tray const value is v0.2.260526.1"
+    command: "grep -F 'RECIPE_RELEASE_TAG: &str = \"v0.2.260526.1\"' crates/tillandsias-macos-tray/src/action_host.rs"
+    expected_behavior: "v0.2.260526.1"
+    timeout_ms: 3000

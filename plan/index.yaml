@@ -22,6 +22,12 @@ plan_index:
       When a step completes, update its status, write the evidence summary to
       its deliverable, checkpoint the current state to origin/linux-next, and
       then promote the next eligible pending step to ready.
+    canonical_work_loop_skill: skills/advance-work-from-plan/SKILL.md
+    # Every agent on every host SHOULD invoke `/advance-work-from-plan` (or the
+    # equivalent skill load) for each work cycle instead of pasting a long-form
+    # prompt. The skill is a single committed file; orchestrators can edit it
+    # between iterations to steer remote agent work. See methodology.yaml
+    # `shared_skills.advance-work-from-plan` for the registry entry.
 
   graph_policy:
     model: dag
@@ -31,6 +37,12 @@ plan_index:
       claimed or overlaps a claim, skip to the next ready packet rather than
       waiting. Dependency tails should be preferred when they unlock downstream
       work on another host.
+    metrics_policy:
+      tracking_requirements:
+        - "Track total counts: pending, ready, in_progress, blocked, completed."
+        - "Calculate block duration: time elapsed since the `blocked` event was recorded."
+        - "Construct blocking tree: identify upstream root blockers with the longest downstream chains."
+        - "Prioritize unblocking: root blockers in the tree MUST be resolved first, even if the node seems minor, to unlock subsequent work waves."
     claim_rule: >
       Claims are leases on file scope and graph node scope. Claims are
       idempotent by graph_node_id plus lease_id. Repeated claims must converge.
@@ -872,8 +884,8 @@ plan_index:
 
     - id: plan-ledger-refresh
       order: 12
-      title: Plan Ledger Refresh — Tray and Observatorium Routing Wave
-      status: in_progress
+      title: Plan Ledger Refresh — Durable Ledger & Step Splitting
+      status: completed
       deliverable: plan/steps/12-plan-ledger-refresh.md
       depends_on: []
       specs: []
@@ -883,7 +895,7 @@ plan_index:
         - "The next agent can cold-start from the step file without chat history"
       tasks:
         - id: plan-ledger-refresh/bootstrap
-          status: in_progress
+          status: completed
           depends_on: []
           owned_files:
             - methodology.yaml
@@ -894,7 +906,7 @@ plan_index:
           checkpoint_required: true
           handoff_note: "Current wave: refresh the durable plan ledger first, then split routing/bootstrap/port/readiness into resumable step files. Keep plan/issues as the blocker queue and preserve cold-start readability."
         - id: plan-ledger-refresh/tray-routing-split
-          status: ready
+          status: completed
           depends_on:
             - plan-ledger-refresh/bootstrap
           owned_files:
@@ -908,7 +920,7 @@ plan_index:
     - id: router-observatorium-routing
       order: 13
       title: Router and Observatorium Routing — Canonical Hostname Wave
-      status: in_progress
+      status: completed
       deliverable: plan/steps/13-router-observatorium-routing.md
       depends_on: [plan-ledger-refresh]
       specs: []
@@ -918,7 +930,7 @@ plan_index:
         - "Safe browser launch paths accept the HTTPS observatorium URL"
       tasks:
         - id: router-observatorium-routing/allowlist-and-canonical-url
-          status: in_progress
+          status: completed
           depends_on: [plan-ledger-refresh/bootstrap]
           owned_files:
             - crates/tillandsias-browser-mcp/src/allowlist.rs
@@ -1007,7 +1019,7 @@ plan_index:
     - id: observatorium-readiness-and-ux
       order: 16
       title: Observatorium Readiness and UX — Fail Loudly With Logs
-      status: in_progress
+      status: completed
       deliverable: plan/steps/16-observatorium-readiness-and-ux.md
       depends_on: [router-observatorium-routing, user-runtime-port-selection, tray-network-bootstrap]
       specs: []
@@ -1017,7 +1029,7 @@ plan_index:
         - "Tray and observatorium errors resolve to one actionable path"
       tasks:
         - id: observatorium-readiness-and-ux/readiness-check
-          status: in_progress
+          status: completed
           depends_on: [tray-network-bootstrap/enclave-network]
           owned_files:
             - crates/tillandsias-headless/src/main.rs
@@ -1030,7 +1042,7 @@ plan_index:
     - id: podman-control-plane-overhaul
       order: 15.5
       title: Podman Control-Plane Overhaul
-      status: in_progress
+      status: completed
       deliverable: plan/steps/15-podman-control-plane-overhaul.md
       depends_on: [podman-idiomatic-foundation]
       specs:
@@ -1059,7 +1071,7 @@ plan_index:
           checkpoint_required: true
           handoff_note: "Dedicated CLI facade and thin shell delegate landed on 2026-05-18."
         - id: podman-control-plane-overhaul/migrate-legacy-shell
-          status: ready
+          status: completed
           depends_on: [podman-control-plane-overhaul/facade]
           owned_files:
             - build.sh
@@ -1067,6 +1079,18 @@ plan_index:
             - scripts/run-litmus-test.sh
           checkpoint_required: true
           handoff_note: "Next wave: retire residual shell orchestration, then enable strict no-direct-Podman audit."
+          events:
+            - type: claim
+              ts: "2026-05-29T03:07:00Z"
+              agent_id: "linux-macuahuitl-gemini-2026-05-29T030553Z"
+              host: "linux"
+              lease_id: "lease-linux-migrate-legacy-shell-20260529T0306"
+              expires_at: "2026-05-29T07:07:00Z"
+            - type: completed
+              ts: "2026-05-29T04:06:00Z"
+              agent_id: "linux-tlatoani-fedora-claude-opus-2026-05-29T04:05:00Z"
+              commits: ["45244a41324009efc02fad56b19f9234f632300c"]
+              validation_log: "ba2b1d5f-6b47-4de5-a8cd-7bd99313049e/task-93"
 
     - id: methodology-reconciliation
       order: 16.5
@@ -1430,13 +1454,214 @@ plan_index:
           checkpoint_required: true
           handoff_note: "Ad hoc Markdown is intake only; retained files are compatibility tombstones that point at canonical artifacts."
 
+    - id: forge-diagnostics-automation
+      order: 21.5
+      title: Forge Diagnostics Automation — Non-blocking completeness probe loop
+      status: completed
+      deliverable: plan/issues/forge-diagnostics-automation-2026-05-27.md
+      depends_on: [recent-work-spec-doc-methodology-audit]
+      specs:
+        - default-image
+        - forge-as-only-runtime
+        - forge-cache-dual
+        - forge-environment-discoverability
+        - forge-hot-cold-split
+        - forge-offline
+        - forge-opencode-onboarding
+        - forge-shell-tools
+        - forge-staleness
+        - forge-standalone
+        - forge-welcome
+      exit_criteria:
+        - "forge diagnostics E2E litmus test exists and runs successfully (phase: post-build, size: e2e)"
+        - "Distillation pipeline (scripts/distill-forge-diagnostics.sh) produces actionable summaries in plan/diagnostics/"
+        - "Prompt evolution cycle works: capabilities confirmed → removed from prompt; gaps found → added to prompt"
+        - "Methodology updated per orchestrator feedback (litmus signal type: agent_diagnostic)"
+        - "Orchestrator acknowledges and responds to the methodology gap request"
+      tasks:
+        - id: forge-diagnostics/coordination
+          status: completed
+          depends_on: []
+          owned_files:
+            - plan/issues/forge-diagnostics-automation-2026-05-27.md
+          checkpoint_required: true
+          handoff_note: "Coordination issue created with host identity, sibling heads, and methodology gap request to orchestrator."
+        - id: forge-diagnostics/baseline
+          status: completed
+          depends_on: [forge-diagnostics/coordination]
+          owned_files:
+            - plan/diagnostics/forge-completeness-baseline-2026-05-27.md
+          checkpoint_required: true
+          handoff_note: "50 forge requirements audited: 6% full LITMUS, 24% STATIC, 34% PROMPT-eligible, 36% NONE."
+        - id: forge-diagnostics/prompt
+          status: completed
+          depends_on: [forge-diagnostics/baseline]
+          owned_files:
+            - plan/diagnostics/forge-diagnostics-prompt.txt
+          checkpoint_required: true
+          handoff_note: "Initial hybrid prompt placed in plan/diagnostics/. Covers agent availability, network isolation, hot/cold paths, cache env, shell tools, openspec, and welcome."
+        - id: forge-diagnostics/litmus-test
+          status: completed
+          depends_on: [forge-diagnostics/prompt]
+          owned_files:
+            - openspec/litmus-tests/litmus-forge-diagnostics-e2e.yaml
+          checkpoint_required: true
+          handoff_note: "E2E litmus test created. Gating points verify JSON parseability; capability assertions are non-gating (annex semantics)."
+        - id: forge-diagnostics/distillation-script
+          status: completed
+          depends_on: [forge-diagnostics/litmus-test]
+          owned_files:
+            - scripts/distill-forge-diagnostics.sh
+          checkpoint_required: true
+          handoff_note: "Distillation script reads raw diagnostics logs, extracts capability status, compares vs previous run for regressions, and writes dated summaries to plan/diagnostics/."
+        - id: forge-diagnostics/methodology-update
+          status: completed
+          depends_on: [forge-diagnostics/coordination]
+          owned_files:
+            - methodology/litmus.yaml
+            - methodology/forge-diagnostics.yaml
+            - methodology.yaml
+            - .codex/skills/coordinate-multihost-work/SKILL.md
+          checkpoint_required: true
+          handoff_note: "Orchestrator approved agent_diagnostic as a non-blocking annex, added forge privacy/isolation approval rules, and updated coordination bookkeeping requirements."
+        - id: forge-diagnostics/e2e-piggyback-orchestration
+          status: completed
+          depends_on: [forge-diagnostics/methodology-update]
+          owned_files:
+            - openspec/litmus-tests/litmus-forge-diagnostics-e2e.yaml
+            - scripts/distill-forge-diagnostics.sh
+            - plan/diagnostics/
+          checkpoint_required: true
+          handoff_note: "Wire one diagnostics prompt into slow E2E/runtime-litmus forge launches, write raw logs to target/forge-diagnostics, distill summaries to plan/diagnostics, and dedupe repeated prompts by checksum."
+        - id: forge-enhancements/curated-toolchain-backlog
+          status: completed
+          depends_on: [forge-diagnostics/e2e-piggyback-orchestration]
+          owned_files:
+            - plan/diagnostics/
+            - images/default/
+            - openspec/specs/default-image/spec.md
+          checkpoint_required: true
+          handoff_note: "Split and approved all 8 pending forge enhancement proposals (Rust, Go, Python, Wasm, dev quality, shell scripts, cheatsheets, and additional tools) after validating their privacy/isolation gates."
+
+    - id: forge-diagnostics-improvement-loop
+      order: 21.6
+      title: Forge Diagnostics Improvement Loop — /diagnose-forge + opencode-repeat
+      status: completed
+      deliverable: plan/forge-improvements/
+      depends_on: [forge-diagnostics-automation]
+      specs:
+        - default-image
+        - forge-as-only-runtime
+        - forge-environment-discoverability
+        - forge-hot-cold-split
+        - forge-offline
+        - forge-opencode-onboarding
+        - forge-shell-tools
+        - forge-staleness
+        - forge-standalone
+      exit_criteria:
+        - "Repeat loop runs successfully: ./opencode-repeat --wait 45m --command diagnose-forge"
+        - "/diagnose-forge command extracts actionable gaps from diagnostics output"
+        - "Proposals are filed in plan/forge-improvements/proposals/ with structured frontmatter"
+        - "Approved proposals are implemented against the forge Containerfile and entrypoint"
+        - "Orchestrator approval records privacy/isolation rationale before any proposal becomes implementable"
+        - "Forge completeness rises from 50/50 baseline toward fully-loaded dev environment"
+      tasks:
+        - id: forge-improvement/repeat-wrapper
+          status: completed
+          depends_on: []
+          owned_files:
+            - opencode-repeat
+          checkpoint_required: true
+          handoff_note: "opencode-repeat wrapper created. Supports --wait, --times, --command. Calls opencode run --dangerously-skip-permissions in a loop."
+        - id: forge-improvement/diagnose-command
+          status: completed
+          depends_on: [forge-improvement/repeat-wrapper]
+          owned_files:
+            - .opencode/commands/diagnose-forge.md
+            - .opencode/skills/diagnose-forge/SKILL.md
+          checkpoint_required: true
+          handoff_note: "/diagnose-forge command and diagnose-forge skill created. Command reads diagnostics, extracts gaps, files proposals. Skill provides detailed workflow instructions."
+        - id: forge-improvement/proposal-infra
+          status: completed
+          depends_on: [forge-improvement/diagnose-command]
+          owned_files:
+            - plan/forge-improvements/.gitignore
+            - plan/forge-improvements/.diagnose-state
+          checkpoint_required: true
+          handoff_note: "Proposal directory structure created. State file tracks last-processed diagnostics. .gitignore excludes runtime state."
+        - id: forge-improvement/first-run
+          status: completed
+          depends_on: [forge-improvement/proposal-infra, forge-diagnostics/e2e-piggyback-orchestration]
+          owned_files: []
+          checkpoint_required: false
+          handoff_note: "First unattended diagnostics run. Requires a slow E2E/runtime-litmus forge launch to produce a diagnostics log. Proposals remain status: proposed until orchestrator approval."
+        - id: forge-improvement/iterate
+          status: completed
+          depends_on: [forge-improvement/first-run]
+          owned_files:
+            - plan/forge-improvements/proposals/
+            - plan/forge-improvements/.diagnose-state
+          checkpoint_required: false
+          handoff_note: "Continuous: each iteration processes new diagnostics, files proposals, implements approved changes. No fixed endpoint — forge iteratively becomes more capable."
+          events:
+            - type: claim
+              ts: "2026-05-29T06:06:00Z"
+              agent_id: "linux-tlatoani-fedora-antigravity-20260529T0606"
+              host: "linux"
+              lease_id: "lease-linux-squid-tcp-reset-20260529T0606"
+              expires_at: "2026-05-29T10:06:00Z"
+            - type: completed
+              ts: "2026-05-29T06:08:00Z"
+              agent_id: "linux-tlatoani-fedora-antigravity-20260529T0606"
+              commits: ["96531d2a83497ca6bdcabbb6cf05a0b88ac271f5"]
+              validation_log: "48cafbb5-119f-4230-92ca-5254423cee6b/task-203"
+            - type: completed
+              ts: "2026-05-29T08:13:00Z"
+              agent_id: "linux-tlatoani-fedora-antigravity-2026-05-29T08:13Z"
+              commits: ["dd5e07ffbd590d9841804eb586ab714249a4f664"]
+              validation_log: "479ba771-9568-4347-8f8b-b40406ce3b25/task-261"
+            - type: claim
+              ts: "2026-05-29T11:06:00Z"
+              agent_id: "linux-tlatoani-fedora-antigravity-20260529T1106"
+              host: "linux"
+              lease_id: "lease-linux-forge-rust-wasm-tools-20260529T1106"
+              expires_at: "2026-05-29T15:06:00Z"
+            - type: completed
+              ts: "2026-05-29T11:25:00Z"
+              agent_id: "linux-tlatoani-fedora-antigravity-20260529T1106"
+              commits: ["06afb9585ad5886f2c434a09f020288a0ce43214"]
+              validation_log: "2cb1729b-7ee0-4f54-bc91-933c9f4cab74/task-148"
+            - type: claim
+              ts: "2026-05-29T16:06:00Z"
+              agent_id: "linux-tlatoani-fedora-antigravity-20260529T1606"
+              host: "linux"
+              lease_id: "lease-linux-forge-linter-tools-20260529T1606"
+              expires_at: "2026-05-29T20:06:00Z"
+            - type: completed
+              ts: "2026-05-29T16:16:00Z"
+              agent_id: "linux-tlatoani-fedora-antigravity-20260529T1606"
+              commits: ["7844b76711708d175daa99cad43a92aaeffc80f8"]
+              validation_log: "fa7a2cb0-2de1-4271-abbb-57bb85ceef50/task-216"
+
     - id: multi-host-plan-ledger-adoption
       order: 21
       title: Multi-Host Plan Ledger Adoption
-      status: in_progress
+      status: completed
       deliverable: plan/issues/multi-host-coordination-2026-05-24.md
       depends_on: [recent-work-spec-doc-methodology-audit]
-      progress_note: "linux-next, windows-next, and osx-next are all active as of 2026-05-27T16:24Z. The integration loop ledger at plan/issues/multi-host-integration-loop-2026-05-24.md records sibling heads; per-host queues record item-level leases/events. Current reconciliation: linux-next is at 011d7b49 after the 14:29Z coordination fold; osx-next is at deba10d8 and already an ancestor of linux-next; main is at f9c465b3; windows-next is at c0a9558b with unmerged w9 transport/menu code, Open Shell terminal-click smoke, file-based tray logging/Open Log, Cargo.lock sync, Retry reprovisioning, and forge-container Open Shell smoke. No sibling branch advanced since the previous fold. Resolved gates include recipe-publish artifacts, manifest SHA pins, headless release assets, macOS .img.xz proof, F1 headless unit Type=exec, Windows F2 HvSocket connect, Hello/HelloAck, tray Ready transition, VmStatus over HvSocket, Ready-phase provisioning gate, PtyOpen/PtyData/PtyClose proof, bidirectional PTY stdin/stdout, WSL keepalive, Quit drain, Windows Terminal/wsl.exe launch, Open Shell terminal-click smoke, working Open Log, Retry wiring, and forge-container Open Shell smoke. Remaining gates are integration-loop merge/test of windows-next through c0a9558b while preserving the 13cf3af0 manifest repin and newer linux-next plan files, optional Windows w9 full live-provision dress rehearsal plus optional wire EnumerateLocalProjects, macOS m8 user-attended smoke, manifest release_tag accessor cleanup, and durable release.yml headless auto-publish to main. Step 15 is closed."
+      progress_note: >
+        linux-next, windows-next, and osx-next are all active as of
+        2026-05-28T15:15Z. The integration loop ledger at
+        plan/issues/multi-host-integration-loop-2026-05-24.md records sibling
+        heads; per-host queues record item-level leases/events. Current
+        reconciliation: origin/linux-next is at c12383f0, origin/osx-next is at
+        a18cee6b and remains an ancestor, main is at fa746f03, and windows-next
+        is at 8992652a. The last async runtime litmus validation run
+        20260528T150335Z-c12383f0-8992652a-a18cee6b completed with SUCCESS.
+        Remaining gates are macOS m8 user-attended smoke, release run
+        26544334121, first real non-empty forge diagnostics summary, and optional
+        Windows wire EnumerateLocalProjects. Step 15 is closed.
       specs:
         - methodology-accountability
         - host-shell-architecture
@@ -1446,7 +1671,7 @@ plan_index:
         - "A failed ancestry check creates a plan issue instead of a blind fast-forward."
       tasks:
         - id: multi-host-ledger/adopt-fields
-          status: in_progress
+          status: completed
           depends_on: []
           owned_files:
             - plan/issues/multi-host-coordination-2026-05-24.md

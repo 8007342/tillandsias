@@ -311,6 +311,46 @@ pub enum ErrorCode {
     Unsupported,
 }
 
+impl ControlMessage {
+    /// Short, stable, human-readable name for this variant.
+    ///
+    /// Used by both transport dispatchers (unix-socket in tray/mod.rs and
+    /// vsock in vsock_server.rs) when constructing `Error` frames for
+    /// unsupported variants — operators see "variant CloudRefreshRequest
+    /// not handled by …" instead of the opaque
+    /// `Discriminant(13)` from `std::mem::discriminant`.
+    ///
+    /// The match is intentionally explicit (not derived) — within the
+    /// defining crate `#[non_exhaustive]` does NOT relax exhaustiveness,
+    /// so adding a new variant becomes a compile error here until it gets
+    /// a stable name. That's the point: the shipped wire surface cannot
+    /// drift from the diagnostic surface unnoticed.
+    ///
+    /// @trace plan/issues/control-socket-protocol-convergence-2026-05-25.md
+    pub fn kind(&self) -> &'static str {
+        match self {
+            ControlMessage::Hello { .. } => "Hello",
+            ControlMessage::HelloAck { .. } => "HelloAck",
+            ControlMessage::IssueWebSession { .. } => "IssueWebSession",
+            ControlMessage::IssueAck { .. } => "IssueAck",
+            ControlMessage::Error { .. } => "Error",
+            ControlMessage::EvictProject { .. } => "EvictProject",
+            ControlMessage::McpFrame { .. } => "McpFrame",
+            ControlMessage::VmStatusRequest { .. } => "VmStatusRequest",
+            ControlMessage::VmStatusReply { .. } => "VmStatusReply",
+            ControlMessage::VmShutdownRequest { .. } => "VmShutdownRequest",
+            ControlMessage::EnumerateLocalProjects { .. } => "EnumerateLocalProjects",
+            ControlMessage::LocalProjectsReply { .. } => "LocalProjectsReply",
+            ControlMessage::CloudRefreshRequest { .. } => "CloudRefreshRequest",
+            ControlMessage::CloudRefreshReply { .. } => "CloudRefreshReply",
+            ControlMessage::PtyOpen { .. } => "PtyOpen",
+            ControlMessage::PtyData { .. } => "PtyData",
+            ControlMessage::PtyResize { .. } => "PtyResize",
+            ControlMessage::PtyClose { .. } => "PtyClose",
+        }
+    }
+}
+
 /// Encode an envelope to its postcard byte representation.
 ///
 /// The framing layer prepends the 4-byte length prefix; this function only
@@ -599,6 +639,111 @@ mod tests {
                 payload: large_payload,
             },
         });
+    }
+
+    /// `ControlMessage::kind()` returns a stable, human-readable name for
+    /// every declared variant. Pinned by an explicit table so that adding
+    /// a new variant without naming it shows up as a test diff, not as a
+    /// silent "Unknown" in operator-facing Error frames.
+    #[test]
+    fn control_message_kind_names_every_declared_variant() {
+        // One sample envelope per variant — the wire-shape doesn't matter
+        // for the name lookup, just that the discriminant is correct.
+        let cases: &[(ControlMessage, &str)] = &[
+            (
+                ControlMessage::Hello {
+                    from: "x".into(),
+                    capabilities: vec![],
+                },
+                "Hello",
+            ),
+            (
+                ControlMessage::HelloAck {
+                    wire_version: WIRE_VERSION,
+                    server_caps: vec![],
+                },
+                "HelloAck",
+            ),
+            (
+                ControlMessage::IssueWebSession {
+                    project_label: "p".into(),
+                    cookie_value: [0u8; 32],
+                },
+                "IssueWebSession",
+            ),
+            (ControlMessage::IssueAck { seq_acked: 1 }, "IssueAck"),
+            (
+                ControlMessage::Error {
+                    seq_in_reply_to: None,
+                    code: ErrorCode::Unsupported,
+                    message: "x".into(),
+                },
+                "Error",
+            ),
+            (
+                ControlMessage::EvictProject {
+                    project_label: "p".into(),
+                },
+                "EvictProject",
+            ),
+            (
+                ControlMessage::McpFrame {
+                    session_id: 1,
+                    payload: vec![],
+                },
+                "McpFrame",
+            ),
+            (
+                ControlMessage::VmStatusRequest { seq: 1 },
+                "VmStatusRequest",
+            ),
+            (
+                ControlMessage::VmStatusReply {
+                    seq_in_reply_to: 1,
+                    phase: VmPhase::Ready,
+                    podman_ready: true,
+                    last_event: None,
+                },
+                "VmStatusReply",
+            ),
+            (
+                ControlMessage::VmShutdownRequest {
+                    seq: 1,
+                    drain_timeout_ms: 0,
+                },
+                "VmShutdownRequest",
+            ),
+            (
+                ControlMessage::EnumerateLocalProjects { seq: 1 },
+                "EnumerateLocalProjects",
+            ),
+            (
+                ControlMessage::LocalProjectsReply {
+                    seq_in_reply_to: 1,
+                    entries: vec![],
+                },
+                "LocalProjectsReply",
+            ),
+            (
+                ControlMessage::CloudRefreshRequest { seq: 1 },
+                "CloudRefreshRequest",
+            ),
+            (
+                ControlMessage::CloudRefreshReply {
+                    seq_in_reply_to: 1,
+                    projects: vec![],
+                },
+                "CloudRefreshReply",
+            ),
+        ];
+        for (msg, expected) in cases {
+            assert_eq!(
+                msg.kind(),
+                *expected,
+                "kind() mismatch for {expected}: got {}",
+                msg.kind()
+            );
+        }
     }
 
     #[test]

@@ -1,0 +1,91 @@
+# @trace spec:cheatsheets-license-tiered
+#
+# Drift protection for the `cheatsheets/license-allowlist.toml` CRDT
+# classifier that the cheatsheets-license-tiered spec mandates as the
+# tier-inference source of truth.
+#
+# The existing `litmus:cheatsheet-tier-discipline` (size: instant) runs
+# the tier validator in strict mode — covers the validator behaviour
+# end-to-end at runtime. This companion is also instant and grep-only;
+# pins the FILE structure of the TOML itself so a refactor that moves
+# the file or drops a required field fires pre-build before any
+# validator invocation.
+#
+# Combined with the existing tier-discipline litmus, raises
+# cheatsheets-license-tiered coverage_ratio 33 → 67.
+name: litmus:cheatsheets-license-allowlist-shape
+spec: cheatsheets-license-tiered
+phase: pre-build
+description: >
+  Pin the license-allowlist.toml file structure: spec trace at head,
+  the three canonical tier strings (bundled / distro-packaged /
+  pull-on-demand), the redistribution+default_tier+last_evaluated
+  schema fields, and presence of at least one domain entry. Companion
+  to the existing tier-discipline runtime litmus.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains cheatsheets/license-allowlist.toml
+  - workspace contains cheatsheets/INDEX.md
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "license-allowlist.toml is in its canonical location"
+    command: "test -f cheatsheets/license-allowlist.toml && echo 'ok: file present'"
+    timeout_ms: 3000
+    expected_behavior: "ok: file present"
+
+  - step: "allowlist header documents the three canonical tier strings"
+    command: "grep -F 'bundled | distro-packaged | pull-on-demand' cheatsheets/license-allowlist.toml"
+    timeout_ms: 3000
+    expected_behavior: "bundled | distro-packaged | pull-on-demand"
+
+  - step: "allowlist documents the required per-domain schema fields"
+    command: "grep -F 'publisher' cheatsheets/license-allowlist.toml && grep -F 'license' cheatsheets/license-allowlist.toml && grep -F 'redistribution' cheatsheets/license-allowlist.toml && grep -F 'default_tier' cheatsheets/license-allowlist.toml && grep -F 'last_evaluated' cheatsheets/license-allowlist.toml"
+    timeout_ms: 3000
+    expected_behavior: "last_evaluated"
+
+  - step: "allowlist documents the default-tier inference rules"
+    # The spec mandates: redistribution=bundled → default_tier=bundled,
+    # redistribution=attribute-only → default_tier=bundled,
+    # redistribution=do-not-bundle → default_tier=pull-on-demand.
+    # The header comment block documents these mappings.
+    command: "grep -F 'redistribution=do-not-bundle' cheatsheets/license-allowlist.toml"
+    timeout_ms: 3000
+    expected_behavior: "redistribution=do-not-bundle"
+
+  - step: "allowlist contains at least one [domains.*] entry"
+    # `grep -F` for the literal prefix avoids the YAML-via-shell
+    # double-escape of `\[` for ERE char-class brackets that fails
+    # with "Unmatched [".
+    command: "grep -cF '[domains.' cheatsheets/license-allowlist.toml | awk '{ if ($1+0 >= 1) print \"ok: \" $1 \" domain entries\"; else { print \"FAIL: no domain entries\"; exit 1 } }'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "INDEX.md exists in cheatsheets/ (target of the resolved-tier render)"
+    command: "test -f cheatsheets/INDEX.md && echo 'ok: INDEX.md present'"
+    timeout_ms: 3000
+    expected_behavior: "ok: INDEX.md present"
+
+observability:
+  traces:
+    - "@trace spec:cheatsheets-license-tiered"
+  expected_log: "License-allowlist TOML structure + canonical tier strings + schema fields pinned"
+  log_fields:
+    spec: "cheatsheets-license-tiered"
+    test: "cheatsheets-license-allowlist-shape"
+    artifact: "cheatsheets/license-allowlist.toml"
+
+rollback:
+  on_failure: >
+    The license-allowlist.toml drifted from the cheatsheets-license-
+    tiered spec contract. Inspect cheatsheets/license-allowlist.toml:
+    the header comment block must document the three canonical tier
+    strings (bundled / distro-packaged / pull-on-demand), the
+    required per-domain schema fields (publisher, license,
+    redistribution, default_tier, last_evaluated), the default-tier
+    inference rules (redistribution=do-not-bundle →
+    default_tier=pull-on-demand), and the file must contain at least
+    one [domains.*] entry.
+  command: "sed -n '1,40p' cheatsheets/license-allowlist.toml && grep -cE '^\\[domains\\.' cheatsheets/license-allowlist.toml"

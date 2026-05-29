@@ -8,6 +8,27 @@ can be expedited. This is a CRDT-style status board — every host: append your
 current blockers + ETAs under your section; tick others' asks when resolved.
 Do not delete another host's lines (supersede/strike-through only).
 
+## Coordinator refresh — 2026-05-27T23:25Z
+
+- The original "Linux integration loop dormant" blocker is resolved. The loop
+  has repeatedly folded sibling state, and `origin/windows-next` through
+  `1e20d6d0` is now merged/tested into `origin/linux-next` by `edfb72c6` /
+  `b9cee2fd`.
+- Runtime-litmus `20260527T231258Z-b06a5997-1e20d6d0-b06a5997` failed at
+  `Disk quota exceeded`; old scratch worktrees were removed. Current shared
+  runtime gate is the replacement full installed runtime-litmus
+  `20260527T231940Z-b06a5997-1e20d6d0-b06a5997`, which passed build/install and
+  init but failed in OpenCode diagnostics with the `vault_bootstrap.rs:205`
+  nested-runtime panic.
+- Push-time rebase absorbed `origin/linux-next` `891bb757` and
+  `origin/osx-next` `f8778350`, so the next loop should start a fresh runtime
+  for current `origin/linux-next` after folding the active run.
+- Current host-specific blockers: macOS m8 user-attended smoke, release
+  workflow run `26544334121` still being monitored after the Linux Nix musl
+  pivot, Linux diagnostics panic fix, and first real non-empty forge
+  diagnostics summary. Optional Windows wire `EnumerateLocalProjects` is not a
+  blocker.
+
 ## Windows host (windows-next) — status + the one blocker
 
 - DONE, pushed, GREEN on Windows: `vm-recipe-provisioning §2` recipe parser +
@@ -318,6 +339,28 @@ blocker view without deleting earlier host notes.
 - Ready work: macOS m4 action-host wiring; macOS m5 converter/CI-fetch work;
   Windows w6 verification or diagnostics that do not require the CI rootfs
   artifact.
+
+## Linux coordinator audit — 2026-05-27T18:15Z
+
+- Observed remote heads after fetch/pull: `linux-next` `9081212c`,
+  `windows-next` `c0a9558b`, `osx-next` `deba10d8`, `main` `e22a6853`.
+- Resolved since the previous blocker fold: PR #5 merged `linux-next` to
+  `main`, carrying the durable `release.yml` headless-agent auto-publish leg.
+  The prior "merge PR #5 / release.yml auto-publish to main" ask is closed.
+- Current high-impact blockers:
+  - **Integration-loop owned:** merge/test `origin/windows-next` through
+    `c0a9558b` into `linux-next`, preserving the newer `13cf3af0`
+    `images/vm/manifest.toml` repin and newer `linux-next` plan entries if
+    Windows' older blocks appear during reconciliation.
+  - **Windows-owned:** optional full live-provision dress rehearsal and
+    optional wire EnumerateLocalProjects if host-side scan is not enough.
+  - **macOS/user-owned:** m8 interactive smoke of the rebuilt
+    `dist/Tillandsias.app`.
+- Current ready/fallback work: Windows w9 continues only for integration
+  evidence or optional polish; w7 diagnostics remains the fallback if
+  merge/test exposes stale branch or manifest state. macOS has m10/m11 as
+  optional no-blocker follow-ups. Linux release cleanup is now narrowed to
+  `Manifest::release_tag()`.
 
 ## Linux coordinator audit — 2026-05-27T16:24Z
 

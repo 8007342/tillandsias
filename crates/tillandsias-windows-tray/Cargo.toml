@@ -22,16 +22,21 @@ tillandsias-vm-layer = { path = "../tillandsias-vm-layer" }
 tillandsias-control-wire = { path = "../tillandsias-control-wire" }
 tokio = { workspace = true, features = ["full"] }
 tracing = { workspace = true }
+# Machine-readable `--diagnose --json` output for installed-tray support tooling.
+serde = { workspace = true, features = ["derive"] }
+serde_json = { workspace = true }
 
 [target.'cfg(target_os = "windows")'.dependencies]
 # The real provisioning fetch path only compiles on Windows, so the download
 # feature (reqwest+rustls+sha2) is pulled only here. Cargo unions this with the
 # base [dependencies] entry above.
-# `recipe` adds the Manifest parser so the recipe-artifact resolver can read
-# the l9 `[output]` URL template + expected SHA. `download` is the fetch path.
+# `recipe` adds the Manifest parser (l9 `[output]` URL template + expected SHA);
+# `materialize` provides the `wsl::tar_to_wsl_import` converter; `download` is the
+# verified-fetch path. Together they back the w5 recipe-provisioning flip.
 tillandsias-vm-layer = { path = "../tillandsias-vm-layer", features = [
     "download",
     "recipe",
+    "materialize",
 ] }
 windows = { version = "0.58", features = [
     "Win32_UI_Shell",
@@ -43,8 +48,13 @@ windows = { version = "0.58", features = [
     "Win32_System_LibraryLoader",
     "Win32_Graphics_Gdi",
     "Win32_UI_HiDpi",
+    "Win32_Networking_WinSock",
 ] }
 uuid = { workspace = true }
+# File-based tracing: a GUI-subsystem tray has no console, so logs must go to a
+# file (%LOCALAPPDATA%\tillandsias\logs\tray.log) that "Open Log" can surface.
+tracing-subscriber = { workspace = true, features = ["env-filter", "fmt"] }
+tracing-appender = { workspace = true }
 
 [target.'cfg(not(target_os = "windows"))'.dependencies]
 uuid = { workspace = true }

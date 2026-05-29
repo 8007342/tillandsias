@@ -1,0 +1,205 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Big Pickle repeat loop for Tillandsias.
+#
+# One-shot unattended:
+#   ./opencode-repeat "diagnose the forge"
+#
+# Unattended loop, sleeping after each completed round:
+#   ./opencode-repeat --wait 45m "diagnose the forge"
+#
+# Bounded unattended loop:
+#   ./opencode-repeat --wait 45m --times 10 "diagnose the forge"
+#
+# Run a custom command each iteration:
+#   ./opencode-repeat --wait 2h --command diagnose-forge
+
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(git -C "$script_dir" rev-parse --show-toplevel 2>/dev/null || printf '%s\n' "$script_dir")"
+cd "$repo_root"
+
+OPENCODE_BIN="${OPENCODE_BIN:-}"
+if [[ -z "$OPENCODE_BIN" ]]; then
+  OPENCODE_BIN="$(command -v opencode 2>/dev/null || true)"
+fi
+if [[ -z "$OPENCODE_BIN" || ! -x "$OPENCODE_BIN" ]]; then
+  printf 'opencode-repeat: unable to find opencode binary. Set OPENCODE_BIN=/path/to/opencode.\n' >&2
+  exit 127
+fi
+
+QUIET=0
+WAIT_INTERVAL=""
+TIMES=""
+COMMAND_NAME=""
+codex_args=()
+
+usage() {
+  cat >&2 <<'EOF'
+Usage:
+  ./opencode-repeat [--quiet] "prompt"
+  ./opencode-repeat --wait <duration> [--times <n>] [--command <name>] "prompt"
+
+Options:
+  --quiet, -q          Suppress opencode output (pass --print-logs).
+  --wait <duration>   Run opencode, then sleep duration, repeat forever.
+  --repeat <duration> Compatibility alias for --wait.
+  --times <n>         Limit --wait/--repeat to n rounds.
+  --command <name>    Run a registered command (e.g. diagnose-forge).
+  --help, -h          Show this help.
+
+Duration examples: 30m, 2h, 2h30m, 45s.
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --quiet|-q)
+      QUIET=1
+      shift
+      ;;
+    --wait|--repeat)
+      if [[ $# -lt 2 ]]; then
+        printf 'opencode-repeat: %s requires a duration such as 30m, 2h, or 2h30m\n' "$1" >&2
+        exit 2
+      fi
+      WAIT_INTERVAL="$2"
+      shift 2
+      ;;
+    --times)
+      if [[ $# -lt 2 || ! "$2" =~ ^[0-9]+$ || "$2" -lt 1 ]]; then
+        printf 'opencode-repeat: --times requires a positive integer\n' >&2
+        exit 2
+      fi
+      TIMES="$2"
+      shift 2
+      ;;
+    --command)
+      if [[ $# -lt 2 ]]; then
+        printf 'opencode-repeat: --command requires a command name\n' >&2
+        exit 2
+      fi
+      COMMAND_NAME="$2"
+      shift 2
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      codex_args+=("$@")
+      break
+      ;;
+    *)
+      codex_args+=("$1")
+      shift
+      ;;
+  esac
+done
+
+duration_to_seconds() {
+  local input="$1"
+  local rest="$input"
+  local total=0
+  local number unit
+
+  if [[ "$rest" =~ ^[0-9]+$ ]]; then
+    printf '%s\n' "$rest"
+    return 0
+  fi
+
+  while [[ -n "$rest" ]]; do
+    if [[ "$rest" =~ ^([0-9]+)([smhd])(.*)$ ]]; then
+      number="${BASH_REMATCH[1]}"
+      unit="${BASH_REMATCH[2]}"
+      rest="${BASH_REMATCH[3]}"
+      case "$unit" in
+        s) total=$((total + number)) ;;
+        m) total=$((total + number * 60)) ;;
+        h) total=$((total + number * 3600)) ;;
+        d) total=$((total + number * 86400)) ;;
+      esac
+    else
+      printf 'opencode-repeat: invalid duration %q. Use forms like 30m, 2h, 2h30m, or 45s.\n' "$input" >&2
+      return 2
+    fi
+  done
+
+  if [[ "$total" -lt 1 ]]; then
+    printf 'opencode-repeat: duration must be greater than zero\n' >&2
+    exit 2
+  fi
+  printf '%s\n' "$total"
+}
+
+timestamp_utc() {
+  date -u '+%Y-%m-%dT%H:%M:%SZ'
+}
+
+timestamp_pacific_from_epoch() {
+  local epoch="$1"
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - "$epoch" <<'PY' 2>/dev/null && return 0
+import datetime
+import sys
+from zoneinfo import ZoneInfo
+
+epoch = int(sys.argv[1])
+dt = datetime.datetime.fromtimestamp(epoch, ZoneInfo("America/Los_Angeles"))
+print(dt.strftime("%Y-%m-%d %H:%M:%S %Z"))
+PY
+  fi
+
+  TZ=America/Los_Angeles date -d "@$epoch" '+%Y-%m-%d %H:%M:%S %Z' 2>/dev/null \
+    || date -r "$epoch" '+%Y-%m-%d %H:%M:%S %Z' 2>/dev/null \
+    || printf 'epoch:%s\n' "$epoch"
+}
+
+build_opencode_args() {
+  local args=()
+
+  if [[ "$QUIET" -eq 1 ]]; then
+    args+=(--print-logs)
+  fi
+
+  args+=(run --dangerously-skip-permissions)
+
+  if [[ -n "$COMMAND_NAME" ]]; then
+    args+=(--command "$COMMAND_NAME")
+  fi
+
+  if [[ ${#codex_args[@]} -gt 0 ]]; then
+    args+=("${codex_args[@]}")
+  fi
+
+  printf '%s\n' "${args[@]}"
+}
+
+run_once() {
+  mapfile -t opencode_args < <(build_opencode_args)
+  "$OPENCODE_BIN" "${opencode_args[@]}"
+}
+
+if [[ -n "$WAIT_INTERVAL" ]]; then
+  wait_seconds="$(duration_to_seconds "$WAIT_INTERVAL")"
+  cycle=0
+  while :; do
+    cycle=$((cycle + 1))
+    printf '[opencode-repeat] %s cycle %d start repo=%s wait=%s\n' "$(timestamp_utc)" "$cycle" "$repo_root" "$WAIT_INTERVAL" >&2
+    run_once
+    status=$?
+    printf '[opencode-repeat] %s cycle %d complete exit=%d\n' "$(timestamp_utc)" "$cycle" "$status" >&2
+    if [[ "$status" -ne 0 ]]; then
+      exit "$status"
+    fi
+    if [[ -n "$TIMES" && "$cycle" -ge "$TIMES" ]]; then
+      exit 0
+    fi
+    next_epoch="$(($(date +%s) + wait_seconds))"
+    printf '[opencode-repeat] %s sleeping %s before next cycle at %s (America/Los_Angeles)\n' "$(timestamp_utc)" "$WAIT_INTERVAL" "$(timestamp_pacific_from_epoch "$next_epoch")" >&2
+    sleep "$wait_seconds"
+  done
+else
+  run_once
+fi

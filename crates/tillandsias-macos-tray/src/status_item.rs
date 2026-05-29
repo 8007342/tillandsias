@@ -38,7 +38,7 @@ use objc2_foundation::{MainThreadMarker, NSString};
 
 use crate::action_host::TrayActionHost;
 use crate::menu_disabled_v2::{MacMenuItemSpec, render};
-use tillandsias_host_shell::menu_state::MenuStructure;
+use tillandsias_host_shell::menu_state::{MenuStructure, ids};
 
 /// Entry point invoked from `main`. Blocks until the user picks "Quit" on
 /// the menu; returns never (`!`) because the AppKit run loop owns the
@@ -77,9 +77,39 @@ pub fn run() -> ! {
     let image_root = default_image_root();
     let action_host = TrayActionHost::new(mtm, tokio_runtime.clone(), image_root);
 
-    // Build the initial provisioning menu so the user sees the condensed
-    // status line right away, even before the VM thread reports anything.
-    let initial = MenuStructure::initial_provisioning();
+    // Stash a Retained handle back to the action-host so the cloud-
+    // projects + VmStatus pollers can dispatch menu rebuilds that
+    // re-wire `trayAction:` targets via the live action-host instance.
+    // Safe to call here — we're on the AppKit main thread.
+    action_host.set_self_handle(action_host.clone());
+
+    // Auto-start the VM as soon as the tray comes up. The user never
+    // manually drives VM lifecycle — that's an implementation detail
+    // surfaced via the menu's status chip (slice 2). The boot path is
+    // identical to the legacy Start VM click (which still works as a
+    // no-op retry), but fires immediately on launch so the user sees
+    // Provisioning → Booting → Ready without intervention.
+    action_host.boot_vm_async("Auto-boot");
+
+    // Build the initial menu via the shared `menu_state::build` path —
+    // the same one the poller's rebuild uses (slice 8c). This makes
+    // the first frame and every subsequent rebuild produce the
+    // structurally-identical 9-item Ready menu (status / local /
+    // cloud / agents / observatorium / opencode web / github login /
+    // version footer / quit), so the user sees the full menu shape
+    // from frame 0 instead of waiting for the first poll tick to
+    // expand from the 2-item Provisioning shape.
+    //
+    // The status chip text is the boot-phase default the action-host
+    // also writes via `set_status_text` in `boot_vm_async`, so the
+    // first-frame chip matches subsequent updates byte-for-byte.
+    let initial_state = {
+        let mut s = tillandsias_host_shell::menu_state::MenuState::initial();
+        s.target = tillandsias_host_shell::menu_state::TargetSurface::MacosTray;
+        s.status_text = "\u{1F535} Setting up Fedora Linux\u{2026}".to_string();
+        s
+    };
+    let initial = tillandsias_host_shell::menu_state::build(&initial_state);
     let status_item = install_status_item(mtm, &initial, &action_host);
 
     // Spawn the VM lifecycle on a background thread — see vz_lifecycle.
@@ -127,24 +157,58 @@ pub fn install_status_item(
         unsafe { button.setToolTip(Some(&tooltip)) };
     }
 
-    let menu = build_menu(mtm, structure, action_host);
+    let (menu, status_row) = build_menu_with_status_row(mtm, structure, action_host);
     unsafe { status_item.setMenu(Some(&menu)) };
+
+    // Hand the action-host the live handles so its lifecycle
+    // updates (`set_status_text`) can patch the title + tooltip
+    // in-place instead of rebuilding the menu. We hold our own
+    // +1 retain via the returned Retained — give the action-host
+    // its own retain by cloning the smart pointer.
+    if let Some(row) = status_row {
+        action_host.attach_status_handles(status_item.clone(), row);
+    }
     status_item
 }
 
-/// Build an `NSMenu` from a host-shell `MenuStructure`. Walks the tree once
-/// and produces `NSMenuItem` instances per the `MacMenuItemSpec` adapter,
-/// then appends the standard footer (separator + version disabled header +
-/// separator + Quit).
+/// Build the menu and return the first-row `NSMenuItem` (the one
+/// keyed `ids::STATUS`) so the action-host can patch its title as
+/// the VM lifecycle advances. The status row is `None` only if the
+/// shared `MenuStructure` produced an empty top-level list — which
+/// `initial_provisioning()` never does, but we don't want to panic
+/// here.
+pub(crate) fn build_menu_with_status_row(
+    mtm: MainThreadMarker,
+    structure: &MenuStructure,
+    action_host: &TrayActionHost,
+) -> (Retained<NSMenu>, Option<Retained<NSMenuItem>>) {
+    let menu = NSMenu::new(mtm);
+    let mut status_row: Option<Retained<NSMenuItem>> = None;
+    for spec in render(structure) {
+        let item = build_menu_item(mtm, &spec, action_host);
+        if spec.id == ids::STATUS && status_row.is_none() {
+            status_row = Some(item.clone());
+        }
+        menu.addItem(&item);
+    }
+    (menu, status_row)
+}
+
+/// Build an `NSMenu` from a host-shell `MenuStructure`. Walks the tree
+/// 1:1 — the macOS tray renders the SAME menu shape as Linux + Windows,
+/// with no macOS-specific extras. Per-item action wiring happens inside
+/// `build_menu_item` keyed on `MacMenuItemSpec::id`:
+///   - `ids::QUIT` → AppKit `terminate:` with nil target (responder chain).
+///   - other ids → not yet wired (follow-up slice).
 ///
-/// The Quit item uses the standard AppKit `terminate:` action with a nil
-/// target — AppKit walks the responder chain and `NSApplication` handles
-/// it. Cmd-Q keyboard shortcut is wired so power users don't even need to
-/// open the menu. Without this item the binary is unkillable from the UI
-/// (the v0.0.1 / iter-12 "stuck" issue the user hit on first launch).
+/// The "VM spin-up" that's unique to macOS (and Windows) is NOT a
+/// menu item — it's surfaced via the `ids::STATUS` first row whose
+/// label/tooltip reflect the lifecycle phase. The actual spin-up
+/// happens automatically on app launch (`status_item::run` calls
+/// `action_host.boot_vm_async("Auto-boot")` before NSApplication.run).
 ///
-/// Per spec invariant `menu-renders-in-50ms`, the construction is purely
-/// allocation + per-item method calls; no I/O or sleeps.
+/// Per spec invariant `menu-renders-in-50ms`, construction is purely
+/// allocation + per-item method calls; no I/O.
 ///
 /// @trace spec:macos-native-tray.ui.menu-parity@v1
 pub fn build_menu(
@@ -154,105 +218,20 @@ pub fn build_menu(
 ) -> Retained<NSMenu> {
     let menu = NSMenu::new(mtm);
     for spec in render(structure) {
-        let item = build_menu_item(mtm, &spec);
+        let item = build_menu_item(mtm, &spec, action_host);
         menu.addItem(&item);
     }
-    append_actions(mtm, &menu, action_host);
-    append_footer(mtm, &menu);
     menu
 }
 
-/// Append the four interactive items that drive the VM lifecycle and
-/// shell-attach UX. Sandwiched between the rendered portable menu items
-/// and the footer (separator + version header + Quit).
-///
-/// Each item's `target` is the shared `TrayActionHost` and its `action`
-/// is the matching ObjC selector declared in `action_host.rs`. AppKit
-/// dispatches on click; the Rust method runs on the main thread.
-///
-/// Slice 1 wires the selectors as eprintln stubs; subsequent slices
-/// (m4 sub-task B 2/3/4/5) replace each stub with real Tokio-task
-/// dispatch + main-thread UI feedback.
-///
-/// @trace plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 1)
-fn append_actions(mtm: MainThreadMarker, menu: &NSMenu, action_host: &TrayActionHost) {
-    // Separator above the action block so it's visually grouped distinct
-    // from the portable menu items above.
-    menu.addItem(&NSMenuItem::separatorItem(mtm));
-
-    // Coerce `&TrayActionHost` to `&AnyObject` for `setTarget:`. The
-    // declared class is `MainThreadOnly: NSObject` so the chain is
-    // TrayActionHost → NSObject → AnyObject; we walk it via `as_super`.
-    let host_any: &AnyObject = <TrayActionHost as ClassType>::as_super(action_host).as_ref();
-
-    add_action_item(mtm, menu, "Start VM", sel!(startVm:), host_any);
-    add_action_item(mtm, menu, "Stop VM", sel!(stopVm:), host_any);
-    add_action_item(mtm, menu, "Open Shell", sel!(openShell:), host_any);
-    add_action_item(mtm, menu, "GitHub login", sel!(githubLogin:), host_any);
-}
-
-/// Helper: construct an NSMenuItem with title + action + target wired
-/// up. Pulled out so `append_actions` reads as a table.
-fn add_action_item(
+fn build_menu_item(
     mtm: MainThreadMarker,
-    menu: &NSMenu,
-    title: &str,
-    action: Sel,
-    target: &AnyObject,
-) {
-    let item = NSMenuItem::new(mtm);
-    unsafe {
-        item.setTitle(&NSString::from_str(title));
-        item.setAction(Some(action));
-        item.setTarget(Some(target));
-    }
-    menu.addItem(&item);
-}
-
-/// Append the standard tray footer to the bottom of any menu:
-///
-///   ───────────────
-///   Tillandsias v<…>  (disabled header for identity)
-///   ───────────────
-///   Quit Tillandsias  ⌘Q
-///
-/// Idempotent: appended ONCE per menu construction (callers rebuild the
-/// menu from scratch when state changes). The Quit item is what stops the
-/// `NSApplication::run` loop in `super::run()`.
-fn append_footer(mtm: MainThreadMarker, menu: &NSMenu) {
-    let sep1 = NSMenuItem::separatorItem(mtm);
-    menu.addItem(&sep1);
-
-    // Identity header — disabled so it can't be selected; carries the
-    // package version so the user knows what they're running. Reads VERSION
-    // baked in at build time via CARGO_PKG_VERSION (= the 3-component crate
-    // version derived from the 4-component VERSION file via bump-version.sh).
-    let version_label = format!("Tillandsias v{} (alpha)", env!("CARGO_PKG_VERSION"));
-    let header = NSMenuItem::new(mtm);
-    unsafe {
-        header.setTitle(&NSString::from_str(&version_label));
-        header.setEnabled(false);
-    }
-    menu.addItem(&header);
-
-    let sep2 = NSMenuItem::separatorItem(mtm);
-    menu.addItem(&sep2);
-
-    // Quit — AppKit's standard responder-chain pattern. Target = nil so
-    // [NSApp terminate:] gets dispatched via the chain. Cmd-Q for the
-    // keyboard shortcut.
-    let quit = NSMenuItem::new(mtm);
-    unsafe {
-        quit.setTitle(&NSString::from_str("Quit Tillandsias"));
-        quit.setKeyEquivalent(&NSString::from_str("q"));
-        quit.setAction(Some(sel!(terminate:)));
-        // Explicit nil target → responder chain → NSApplication handles it.
-        quit.setTarget(None);
-    }
-    menu.addItem(&quit);
-}
-
-fn build_menu_item(mtm: MainThreadMarker, spec: &MacMenuItemSpec) -> Retained<NSMenuItem> {
+    spec: &MacMenuItemSpec,
+    action_host: &TrayActionHost,
+) -> Retained<NSMenuItem> {
+    // Separator items have no title; the shared menu_disabled_v2 spec
+    // doesn't currently produce separators, but if it does in future
+    // the empty label is the convention.
     let title = NSString::from_str(&spec.label);
     let item = NSMenuItem::new(mtm);
     unsafe { item.setTitle(&title) };
@@ -265,10 +244,42 @@ fn build_menu_item(mtm: MainThreadMarker, spec: &MacMenuItemSpec) -> Retained<NS
         // NSControlStateValueOn = 1
         unsafe { item.setState(objc2_app_kit::NSControlStateValueOn) };
     }
+    // ID-keyed action wiring.
+    // - Quit uses our custom `quitWithDrain:` selector on the
+    //   TrayActionHost so we can drain the in-VM headless (60s
+    //   timeout) before exiting. AppKit's `terminate:` would skip
+    //   the drain and leave the VM in a half-stopped state. We
+    //   keep ⌘Q as the key equivalent — the user-visible binding
+    //   is identical, only the implementation gains a graceful
+    //   shutdown step.
+    // - Every other enabled, leaf-ish item gets the generic
+    //   `trayAction:` selector targeting the shared TrayActionHost.
+    //   The id string is stashed on the NSMenuItem via
+    //   `setRepresentedObject:`; the action_host reads it back +
+    //   resolves to `MenuAction` via the shared `menu_action::resolve`
+    //   table (same dispatch surface windows-tray uses).
+    if spec.id == ids::QUIT {
+        let host_any: &AnyObject = <TrayActionHost as ClassType>::as_super(action_host).as_ref();
+        unsafe {
+            item.setKeyEquivalent(&NSString::from_str("q"));
+            item.setAction(Some(sel!(quitWithDrain:)));
+            item.setTarget(Some(host_any));
+        }
+    } else if spec.enabled {
+        let id_str = NSString::from_str(&spec.id);
+        // Coerce `&TrayActionHost` to `&AnyObject` for `setTarget:` via
+        // the declared class's super chain (NSObject → AnyObject).
+        let host_any: &AnyObject = <TrayActionHost as ClassType>::as_super(action_host).as_ref();
+        unsafe {
+            item.setAction(Some(sel!(trayAction:)));
+            item.setTarget(Some(host_any));
+            item.setRepresentedObject(Some(&id_str));
+        }
+    }
     if !spec.children.is_empty() {
         let submenu = NSMenu::new(mtm);
         for child in &spec.children {
-            let child_item = build_menu_item(mtm, child);
+            let child_item = build_menu_item(mtm, child, action_host);
             submenu.addItem(&child_item);
         }
         item.setSubmenu(Some(&submenu));

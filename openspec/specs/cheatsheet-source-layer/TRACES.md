@@ -6,6 +6,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 ## Annotated locations
 
 - [cheatsheets/license-allowlist.toml#L37](../../../cheatsheets/license-allowlist.toml#L37)
+- [images/default/cheatsheets/license-allowlist.toml#L37](../../../images/default/cheatsheets/license-allowlist.toml#L37)
 - [scripts/audit-cheatsheet-sources.sh#L16](../../../scripts/audit-cheatsheet-sources.sh#L16)
 - [scripts/bind-provenance-local-paths.sh#L4](../../../scripts/bind-provenance-local-paths.sh#L4)
 - [scripts/bind-provenance-local-paths.sh#L34](../../../scripts/bind-provenance-local-paths.sh#L34)

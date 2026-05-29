@@ -117,6 +117,41 @@ if ($Startup) {
 $mode = if ($Provision) { 'provisioning ENABLED' } else { 'dev mode (--no-provision)' }
 Write-Host "Installed $AppName ($mode)." -ForegroundColor Green
 
+# --- Post-install sanity check ----------------------------------------------
+# Invoke the bundled `--diagnose --json` to confirm the install bits are sound
+# (binary runs, version baked, manifest pin parses) BEFORE asking the user to
+# launch the GUI. Surfaces a broken install immediately rather than the user
+# staring at a tray that never appears. Mirrors macOS slice 16 (5dcd54a0).
+#
+# Exit codes:
+#   0 = re-install over an already-provisioned tray (Ready state).
+#   2 = first install: binary works but distro not provisioned yet (expected, ok).
+#   1 = hard failure: binary missing or won't run -> installer fails.
+#
+# Capture via cmd.exe redirect: the release tray is GUI-subsystem; PowerShell's
+# direct stdout capture is unreliable for large writes. cmd handles native
+# stdio directly. See cheatsheets/runtime/windows-tray-diagnostics.md.
+Write-Host "Verifying installed binary via --diagnose --json..." -ForegroundColor Cyan
+$diagTmp = Join-Path $env:TEMP "tillandsias-install-diag-$([guid]::NewGuid().ToString('N')).json"
+& cmd.exe /c "`"$InstalledExe`" --diagnose --json > `"$diagTmp`" 2>nul"
+$diagExit = $LASTEXITCODE
+$diagJson = Get-Content $diagTmp -Raw -ErrorAction SilentlyContinue
+Remove-Item $diagTmp -ErrorAction SilentlyContinue
+if ($diagExit -eq 1) {
+    throw "tillandsias-tray --diagnose --json hard-failed (exit 1); install bits broken"
+}
+if ($diagJson) {
+    try {
+        $report = $diagJson | ConvertFrom-Json -ErrorAction Stop
+        $pin = if ($report.manifest_pin_x86_64_tar) { "$($report.manifest_pin_x86_64_tar)..." } else { '(none)' }
+        Write-Host "  installed: version=$($report.version) pin=$pin (--diagnose exit $diagExit)" -ForegroundColor Green
+    } catch {
+        Write-Host "  --diagnose ran (exit $diagExit) but JSON parse failed; binary may still be sound" -ForegroundColor Yellow
+    }
+} else {
+    Write-Host "  --diagnose ran (exit $diagExit); no JSON captured (still acceptable for v0.0.1)" -ForegroundColor Yellow
+}
+
 # --- Launch -----------------------------------------------------------------
 if ($Launch) {
     Write-Host "Launching..." -ForegroundColor Cyan

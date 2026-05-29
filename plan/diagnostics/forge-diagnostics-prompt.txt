@@ -1,0 +1,141 @@
+You are running inside a Tillandsias forge container. You exist to help the
+project improve the forge itself. Run the diagnostic checks below and return
+your results as the JSON structure shown at the end of this prompt.
+
+Do NOT explain your reasoning. Do NOT add commentary. Only output the JSON
+structure. If a check fails, include the error in the "diagnostics" array.
+
+--- DIAGNOSTIC CHECKS ---
+
+# Agent availability
+opencode=$(command -v opencode 2>&1 || true)
+claude=$(command -v claude 2>&1 || true)
+codex=$(command -v codex 2>&1 || true)
+
+# Entrypoint paths
+bash_entrypoint=$(cat /usr/local/bin/tillandsias-entrypoint.sh | head -3 2>&1 || true)
+opencode_entrypoint=$(cat /usr/local/bin/entrypoint-forge-opencode.sh | head -1 2>&1 || true)
+
+# Network isolation
+external_curl=$( (curl -m 2 -s -o /dev/null -w "%{http_code}" https://example.com 2>&1 || echo "BLOCKED") )
+proxy_url=$(echo "${HTTP_PROXY:-${http_proxy:-unset}}")
+inference_reachable=$( (curl -m 2 -sf http://inference:11434/api/version >/dev/null 2>&1 && echo "yes") || echo "no" )
+
+# Hot/cold storage split
+tmpfs_mounts=$(findmnt -t tmpfs -o TARGET,SIZE -n 2>&1 || true)
+cheatsheets_df=$(df --output=size,target /opt/cheatsheets 2>/dev/null | tail -1 || echo "N/A")
+src_df=$(df --output=size,target /home/forge/src 2>/dev/null | tail -1 || echo "N/A")
+tmp_df=$(df --output=size,target /tmp 2>/dev/null | tail -1 || echo "N/A")
+
+# Environment discovery
+project_path=${TILLANDSIAS_PROJECT_PATH:-unset}
+project_genus=${TILLANDSIAS_PROJECT_GENUS:-unset}
+cheatsheets_env=${TILLANDSIAS_CHEATSHEETS:-unset}
+
+# Cache semantics
+cargo_home=${CARGO_HOME:-unset}
+npm_cache=${npm_config_cache:-unset}
+go_path=${GOPATH:-unset}
+gradle_home=${GRADLE_USER_HOME:-unset}
+
+# Agent instructions
+cache_discipline_paths=$(find ~/.config/opencode/instructions/ -name '*.md' 2>/dev/null | tr '\n' ':' || echo "NONE")
+cache_discipline_content=$(cat ~/.config/opencode/instructions/cache-discipline.md 2>/dev/null | head -5 || echo "NONE")
+
+# Shell tools
+shell_helpers=$(type tillandsias-help 2>&1 || echo "NOT_FOUND")
+user_id=$(id 2>&1 || true)
+cwd=$(pwd 2>&1 || true)
+
+# OpenSpec
+os_bin=$(command -v opsx 2>&1 || command -v openspec 2>&1 || echo "NOT_FOUND")
+
+# Welcome banner
+welcome_paths=$(ls /usr/local/share/tillandsias/ 2>/dev/null | tr '\n' ':')
+
+# Diagnostics about diagnostics
+opencode_init_prompt=${OPENCODE_INIT_PROMPT_FILE:-unset}
+
+--- ANALYSIS (fills missing_tools / proposed_enhancements / isolation_or_privacy_risks) ---
+
+After running the checks, ANALYZE the results and fill the three actionable
+arrays in the JSON below. This is the meaningful output the project acts on:
+
+- missing_tools: tools/toolchains/language-servers/debuggers/formatters a
+  developer would expect in a ready-to-use forge but that are absent here.
+  Be concrete (e.g. "rust-analyzer", "pyright", "delve"). [] if none.
+- proposed_enhancements: specific, in-envelope improvements to the forge
+  IMAGE or CONFIG (preinstalled toolchains, language servers, preconfigured
+  env, discoverability docs). Each item:
+  {"tool":"...","ecosystem":"rust|web|python|dart|wasm|other","why":"..."}.
+- isolation_or_privacy_risks: anything observed that WEAKENS isolation (a
+  reachable external host, an unexpected mount, exposed creds, a proxy
+  bypass). [] if the envelope looks intact.
+
+HARD RULE — privacy/isolation envelope: you MUST NOT propose broader host
+mounts, host credential/token exposure, privileged containers, raw host
+sockets, or any network-isolation bypass. Proposals are limited to a more
+complete ready-to-use forge image within the EXISTING sandbox. Anything that
+WEAKENS the envelope goes in isolation_or_privacy_risks, never in
+proposed_enhancements.
+
+--- OUTPUT FORMAT ---
+
+Output ONLY the following JSON structure with real values filled in.
+Do NOT wrap in markdown code fences. Output raw JSON only.
+
+{
+  "diagnostics_timestamp": "$(date -u +%Y-%m-%dT%H:%M:%SZ)",
+  "forge_version": "$(cat /VERSION 2>/dev/null || cat VERSION 2>/dev/null || echo 'unknown')",
+  "capabilities": {
+    "agent_available": {
+      "opencode": "<opencode>",
+      "claude": "<claude>",
+      "codex": "<codex>"
+    },
+    "network_isolation": {
+      "external_curl": "<external_curl>",
+      "proxy_url": "<proxy_url>",
+      "inference_reachable": "<inference_reachable>"
+    },
+    "hot_paths": {
+      "tmpfs_mounts": "<tmpfs_mounts>",
+      "cheatsheets": "<cheatsheets_df>",
+      "src": "<src_df>",
+      "tmp": "<tmp_df>"
+    },
+    "environment": {
+      "TILLANDSIAS_PROJECT_PATH": "<project_path>",
+      "TILLANDSIAS_PROJECT_GENUS": "<project_genus>",
+      "TILLANDSIAS_CHEATSHEETS": "<cheatsheets_env>"
+    },
+    "cache_routing": {
+      "CARGO_HOME": "<cargo_home>",
+      "npm_config_cache": "<npm_cache>",
+      "GOPATH": "<go_path>",
+      "GRADLE_USER_HOME": "<gradle_home>"
+    },
+    "agent_instructions": {
+      "paths": "<cache_discipline_paths>",
+      "discipline_content_first_lines": "<cache_discipline_content>"
+    },
+    "shell": {
+      "tillandsias_help": "<shell_helpers>",
+      "user": "<user_id>",
+      "cwd": "<cwd>"
+    },
+    "openspec": {
+      "opsx_bin": "<os_bin>"
+    },
+    "welcome": {
+      "welcome_paths": "<welcome_paths>"
+    },
+    "startup": {
+      "init_prompt_file": "<opencode_init_prompt>"
+    }
+  },
+  "diagnostics": [],
+  "missing_tools": [],
+  "proposed_enhancements": [],
+  "isolation_or_privacy_risks": []
+}

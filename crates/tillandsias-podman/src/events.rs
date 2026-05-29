@@ -96,13 +96,75 @@ impl PodmanEventStream {
         }
     }
 
+    /// Lossless sibling of [`Self::stream`]: emits full
+    /// [`ContainerLifecycleRecord`]s (carrying `exit_code`, `action`,
+    /// `source`, ...) instead of the simplified `PodmanEvent`. The
+    /// retry/backoff/fall-back-to-inspect machinery is identical to
+    /// `stream`; only the channel item type differs.
+    ///
+    /// Intended consumer: the gap-2/3 phase-2 diagnostics-stream emitter
+    /// that converts each record into a typed `event:container_exit`
+    /// (with `exit_code` and `duration_seconds`) or `event:container_signal`
+    /// line via `format_container_*_event` + `emit_diagnostic_event`. Today
+    /// (slice 2026-05-28T12:23Z) only the channel surface is provided; the
+    /// wiring lives in a follow-on slice.
+    ///
+    /// @trace spec:runtime-diagnostics-stream, spec:podman-orchestration
+    /// @trace plan/issues/linux-headless-spec-gaps-2026-05-27.md (gap 3 phase-2)
+    pub async fn stream_records(self, tx: mpsc::Sender<ContainerLifecycleRecord>) {
+        let mut attempt: u32 = 0;
+
+        loop {
+            attempt += 1;
+
+            if attempt <= 3 || attempt.is_multiple_of(5) {
+                info!(attempt, "Starting podman events listener (records sink)");
+            }
+
+            #[cfg(target_os = "windows")]
+            let stream_result = self.stream_events_wsl(&tx).await;
+            #[cfg(not(target_os = "windows"))]
+            let stream_result = self.stream_events(&tx).await;
+
+            match stream_result {
+                Ok(()) => return,
+                Err(e) => {
+                    if attempt <= 3 || attempt.is_multiple_of(5) {
+                        warn!(
+                            ?e,
+                            attempt,
+                            "Podman/WSL events stream (records sink) failed, falling back to backoff inspection"
+                        );
+                    }
+                }
+            }
+
+            match self.backoff_inspect(&tx).await {
+                Ok(()) => {
+                    attempt = 0;
+                }
+                Err(()) => return,
+            }
+        }
+    }
+
     /// Primary (Linux): stream `podman events --format json`.
     ///
     /// No container name filter on the command -- podman's `--filter container=`
     /// takes exact names, not globs. We filter by prefix in `parse_podman_event()`.
+    ///
+    /// Generic on the sink item type `T: From<ContainerLifecycleRecord>` so the
+    /// same parse loop can drive two public methods: `stream` (lossy
+    /// `PodmanEvent`, keeps UI-state callers happy) and `stream_records`
+    /// (lossless `ContainerLifecycleRecord` carrying `exit_code` etc., used by
+    /// the diagnostics-stream emitter when gap-2/3 phase-2 wiring lands).
+    /// Reflexive `T: From<T>` makes the records case a free no-op conversion.
     // @trace spec:podman-orchestration
     #[cfg(not(target_os = "windows"))]
-    async fn stream_events(&self, tx: &mpsc::Sender<PodmanEvent>) -> Result<(), PodmanEventError> {
+    async fn stream_events<T>(&self, tx: &mpsc::Sender<T>) -> Result<(), PodmanEventError>
+    where
+        T: From<ContainerLifecycleRecord> + Send + 'static,
+    {
         debug!(prefix = %self.prefix, "Starting podman events stream (no name filter, prefix matched in-process)");
 
         let mut child = spawn_podman_stream(
@@ -169,10 +231,10 @@ impl PodmanEventStream {
     // @trace spec:cross-platform, spec:wsl-daemon-orchestration
     // @cheatsheet runtime/wsl-daemon-patterns.md, runtime/systemd-socket-activation.md
     #[cfg(target_os = "windows")]
-    async fn stream_events_wsl(
-        &self,
-        tx: &mpsc::Sender<PodmanEvent>,
-    ) -> Result<(), PodmanEventError> {
+    async fn stream_events_wsl<T>(&self, tx: &mpsc::Sender<T>) -> Result<(), PodmanEventError>
+    where
+        T: From<ContainerLifecycleRecord> + Send + 'static,
+    {
         use tokio::fs::OpenOptions;
 
         debug!(prefix = %self.prefix, "Starting WSL systemd socket stream");
@@ -239,7 +301,10 @@ impl PodmanEventStream {
     ///
     /// Tracks previously-seen running containers so that disappearances
     /// (from `--rm` containers dying) are detected and reported as Stopped.
-    async fn backoff_inspect(&self, tx: &mpsc::Sender<PodmanEvent>) -> Result<(), ()> {
+    async fn backoff_inspect<T>(&self, tx: &mpsc::Sender<T>) -> Result<(), ()>
+    where
+        T: From<ContainerLifecycleRecord> + Send + 'static,
+    {
         let mut interval = Duration::from_secs(1);
         let max_interval = Duration::from_secs(30);
         let mut known_running: HashSet<String> = HashSet::new();
@@ -308,6 +373,10 @@ impl PodmanEventStream {
                                 source: LifecycleSource::BackoffInspection,
                                 raw_status: Some(state.to_string()),
                                 observed_at_unix: None,
+                                // `podman ps` doesn't include the exit
+                                // code in its JSON output — exit codes
+                                // come from `podman events` Died lines.
+                                exit_code: None,
                             };
 
                             if tx.send(record.into()).await.is_err() {
@@ -332,6 +401,9 @@ impl PodmanEventStream {
                         source: LifecycleSource::BackoffInspection,
                         raw_status: None,
                         observed_at_unix: None,
+                        // `--rm` removed the container before we could
+                        // observe its exit; the code is gone.
+                        exit_code: None,
                     };
                     if tx.send(record.into()).await.is_err() {
                         return Err(()); // Channel closed
@@ -381,9 +453,26 @@ fn parse_podman_lifecycle_record(
         ),
         "kill" => (ContainerLifecycleAction::Killed, ContainerState::Stopping),
         "died" => (ContainerLifecycleAction::Died, ContainerState::Stopped),
+        // Podman emits `Status=oom` as a SEPARATE event from `died`
+        // when the kernel OOM killer reaps a container — both fire,
+        // typically in close succession. We surface it as a distinct
+        // typed event downstream (event:resource_exhaustion with
+        // resource=memory_oom) so operators can distinguish a clean
+        // non-zero exit from a memory-limit kill.
+        "oom" => (ContainerLifecycleAction::Oom, ContainerState::Stopped),
         "remove" => (ContainerLifecycleAction::Removed, ContainerState::Stopped),
         "cleanup" => (ContainerLifecycleAction::CleanedUp, ContainerState::Stopped),
         _ => return None,
+    };
+
+    // Podman emits the container's exit status on `Status=died` payloads
+    // as `ContainerExitCode` (top-level integer). Some older builds put it
+    // under `Actor.Attributes.containerExitCode` instead — accept both.
+    // For non-Died statuses there's no exit code to capture.
+    let exit_code = if matches!(action, ContainerLifecycleAction::Died) {
+        extract_podman_exit_code(&value)
+    } else {
+        None
     };
 
     Some(ContainerLifecycleRecord {
@@ -393,7 +482,34 @@ fn parse_podman_lifecycle_record(
         source: LifecycleSource::PodmanEvents,
         raw_status: value["Status"].as_str().map(str::to_string),
         observed_at_unix: value["Time"].as_i64(),
+        exit_code,
     })
+}
+
+/// Extract a container exit code from a podman events JSON payload.
+///
+/// Podman has shipped two shapes over the years; we read both:
+///   * top-level `ContainerExitCode` (current; observed on podman 4.x+)
+///   * `Actor.Attributes.containerExitCode` (older builds, stringified)
+///
+/// Returns `None` if neither field is present or convertible to `i32`.
+/// Exit codes outside `i32` are clamped to `None` rather than silently
+/// truncated.
+fn extract_podman_exit_code(value: &serde_json::Value) -> Option<i32> {
+    if let Some(n) = value.get("ContainerExitCode").and_then(|v| v.as_i64()) {
+        return i32::try_from(n).ok();
+    }
+    let attr = value
+        .get("Actor")
+        .and_then(|a| a.get("Attributes"))
+        .and_then(|a| a.get("containerExitCode"))?;
+    if let Some(n) = attr.as_i64() {
+        return i32::try_from(n).ok();
+    }
+    if let Some(s) = attr.as_str() {
+        return s.parse::<i32>().ok();
+    }
+    None
 }
 
 /// Parse a JSON event line from the WSL router systemd socket.
@@ -441,6 +557,9 @@ fn parse_wsl_lifecycle_record(json_line: &str, prefix: &str) -> Option<Container
         source: LifecycleSource::WslRouter,
         raw_status: Some(state_str.to_string()),
         observed_at_unix: None,
+        // The WSL router systemd-socket event channel doesn't expose
+        // exit codes today; can be plumbed through later if needed.
+        exit_code: None,
     })
 }
 
@@ -516,6 +635,89 @@ mod tests {
         let json = podman_event_json("tillandsias-tetris-aeranthos", "died");
         let event = parse_podman_event(&json, "tillandsias-").unwrap();
         assert_eq!(event.new_state, ContainerState::Stopped);
+    }
+
+    /// Modern podman 4.x+ shape: `ContainerExitCode` at the top level of
+    /// the event JSON. Verifies the typed record captures it for the
+    /// `event:container_exit ... exit_code=…` typed-event downstream.
+    #[test]
+    fn died_event_extracts_top_level_exit_code() {
+        let json = r#"{"Name":"tillandsias-x-forge","Status":"died","Type":"container","Time":1711400005,"ContainerExitCode":137}"#;
+        let record = parse_podman_lifecycle_record(json, "tillandsias-").unwrap();
+        assert_eq!(record.action, ContainerLifecycleAction::Died);
+        assert_eq!(record.exit_code, Some(137));
+    }
+
+    /// Older podman builds put the exit code on the Actor.Attributes
+    /// blob, sometimes stringified. The extractor accepts both shapes.
+    #[test]
+    fn died_event_extracts_legacy_actor_attributes_exit_code() {
+        let json = r#"{
+            "Name":"tillandsias-x-forge",
+            "Status":"died",
+            "Type":"container",
+            "Time":1711400005,
+            "Actor":{"Attributes":{"containerExitCode":"137"}}
+        }"#;
+        let record = parse_podman_lifecycle_record(json, "tillandsias-").unwrap();
+        assert_eq!(record.exit_code, Some(137));
+
+        // Integer (non-stringified) Actor.Attributes form also works.
+        let json_int = r#"{
+            "Name":"tillandsias-x-forge",
+            "Status":"died",
+            "Type":"container",
+            "Time":1711400005,
+            "Actor":{"Attributes":{"containerExitCode":42}}
+        }"#;
+        let record = parse_podman_lifecycle_record(json_int, "tillandsias-").unwrap();
+        assert_eq!(record.exit_code, Some(42));
+    }
+
+    /// Non-Died statuses MUST NOT carry an exit_code, even if a payload
+    /// happens to ship a `ContainerExitCode`. Exit codes are only
+    /// semantically meaningful at termination — anything else would be a
+    /// stale value from a previous run leaking into a Start record.
+    #[test]
+    fn non_died_events_have_no_exit_code() {
+        for status in ["start", "create", "stop", "kill", "remove", "cleanup"] {
+            let json = format!(
+                r#"{{"Name":"tillandsias-x","Status":"{status}","Type":"container","Time":1,"ContainerExitCode":99}}"#
+            );
+            let record = parse_podman_lifecycle_record(&json, "tillandsias-").unwrap();
+            assert_eq!(
+                record.exit_code, None,
+                "status={status} should not carry exit_code"
+            );
+        }
+    }
+
+    /// A Died event without any exit-code field gracefully reports None
+    /// — we never fabricate a value (matching the same honesty principle
+    /// as the metrics endpoint).
+    #[test]
+    fn died_event_without_exit_code_reports_none() {
+        let json = r#"{"Name":"tillandsias-x","Status":"died","Type":"container","Time":1}"#;
+        let record = parse_podman_lifecycle_record(json, "tillandsias-").unwrap();
+        assert_eq!(record.action, ContainerLifecycleAction::Died);
+        assert_eq!(record.exit_code, None);
+    }
+
+    /// `Status=oom` is its own podman event (fires alongside `died`
+    /// when the kernel reaps a container for breaching its memory
+    /// cgroup limit). It maps to the dedicated `Oom` action so the
+    /// downstream emitter can produce `event:resource_exhaustion`
+    /// rather than a generic `event:container_exit`.
+    #[test]
+    fn parse_oom_event() {
+        let json = r#"{"Name":"tillandsias-myproject-forge","Status":"oom","Type":"container","Time":1711400005,"ContainerExitCode":137}"#;
+        let record = parse_podman_lifecycle_record(json, "tillandsias-").unwrap();
+        assert_eq!(record.action, ContainerLifecycleAction::Oom);
+        assert_eq!(record.new_state, ContainerState::Stopped);
+        assert_eq!(record.raw_status.as_deref(), Some("oom"));
+        // We only extract exit_code on Died records — oom is a separate
+        // observation; the Died event that follows will carry the code.
+        assert_eq!(record.exit_code, None);
     }
 
     #[test]
@@ -652,5 +854,25 @@ mod tests {
         // WSL uses uppercase state strings; lowercase should not parse
         let json = wsl_event_json("tillandsias-foo-bar", "running");
         assert!(parse_wsl_event(&json, "tillandsias-").is_none());
+    }
+
+    /// Compile-pinning for `PodmanEventStream::stream_records`. The
+    /// records-sink path takes `mpsc::Sender<ContainerLifecycleRecord>`
+    /// (lossless — carries exit_code, action, source) rather than the
+    /// `PodmanEvent` sink that `stream` uses. We can't exercise the live
+    /// `podman events` subprocess in unit tests, but we CAN prove the
+    /// public surface stays compatible with the typed channel by
+    /// constructing it and dropping it without calling `.await`.
+    ///
+    /// If a future refactor narrows `stream_records` to a non-record
+    /// sink type, this test fails at compile time — which is exactly
+    /// the drift signal the gap-2/3 phase-2 wiring slice needs.
+    #[test]
+    fn stream_records_accepts_lifecycle_record_channel() {
+        let (tx, _rx) = mpsc::channel::<ContainerLifecycleRecord>(1);
+        let stream = PodmanEventStream::new("tillandsias-");
+        // Coerce to the typed sender to verify signature; never await.
+        let _fut: std::pin::Pin<Box<dyn std::future::Future<Output = ()> + Send>> =
+            Box::pin(stream.stream_records(tx));
     }
 }

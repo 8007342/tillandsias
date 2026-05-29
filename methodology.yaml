@@ -11,16 +11,15 @@ methodology:
   bootstrap:
     command: "/skills bootstrap"
     first_step: "Read plan.yaml, plan/index.yaml, and methodology/bootstrap/router.yaml."
-    selection_rule: "Choose exactly one intent from bootstrap_router.intent_options."
-    role_rule: "Use methodology/bootstrap/roles.yaml for m:n role and file affordances."
+    selection_rule: "Choose exactly one intent from bootstrap_router.intent_options. The intent defines your required reading set."
     receipt_required_before_source_edits: true
     autonomous_loop: "After bootstrap, iterate via methodology/bootstrap/router.yaml and methodology/convergence.yaml until the selected residual obligation stops decreasing or the spec itself needs refinement."
 
   entrypoints:
     task_router: methodology/bootstrap/router.yaml
-    role_file_matrix: methodology/bootstrap/roles.yaml
     component_catalog: methodology/catalog.yaml
     agent_observability: methodology/agent-observability.yaml
+    forge_diagnostics: methodology/forge-diagnostics.yaml
     multi_host_development: methodology/multi-host-development.yaml
     distributed_work: methodology/distributed-work.yaml
     plan_root: plan.yaml
@@ -28,6 +27,39 @@ methodology:
     plan_step_notes: plan/steps/README.md
     plan_issues_root: plan/issues
     unknown_event_register: methodology/event/index.yaml
+    shared_skills_root: skills/
+
+  shared_skills:
+    # Top-level ./skills/ is the canonical, agent-agnostic source of truth.
+    # Each per-runtime `.<agent>/skills/<name>` is a symlink to the canonical
+    # so there is exactly one file to read + edit. Orchestrators can edit
+    # the canonical between iterations to steer remote agent work; every
+    # subsequent invocation reads the latest committed version.
+    canonical_root: skills/
+    symlinked_into:
+      - .claude/skills/
+      - .opencode/skills/
+      - .codex/skills/
+      - .gemini/skills/
+      - .github/skills/
+    registered:
+      advance-work-from-plan:
+        path: skills/advance-work-from-plan/SKILL.md
+        tier: worker   # see methodology/distributed-work.yaml agent_execution_roles
+        complement_of: skills/multihost-orchestration  # the orchestrator tier
+        authoritative_spec: methodology/distributed-work.yaml worker_agent_protocol
+        purpose: >
+          Discover, claim, implement, checkpoint, and complete units of
+          work from the shared plan ledger based on host capabilities and
+          lease rules. The Worker tier of the two-tier execution model
+          documented in methodology/distributed-work.yaml — sustains
+          development velocity and enforces finite-time convergence by
+          letting any agent on any host autonomously cycle one shaped
+          packet from plan/ to completion or yield. Replaces the per-cycle
+          long-form work prompt.
+        cadence: "~30 min in active sessions; on-demand otherwise"
+        host_awareness: detects linux/macOS/Windows → active branch + write scope
+        steerable: true   # orchestrator may edit between iterations
 
   invariant_summary:
     - specs_define_intent
@@ -43,6 +75,7 @@ methodology:
     - agents_assume_next_step_may_be_claimed_by_a_different_agent
     - remote_checkpoints_are_durable_and_local_state_is_ephemeral
     - platform_branches_pull_and_merge_from_durable_remote_before_checkpoints
+    - forge_improvements_preserve_privacy_and_isolation_boundaries
     - ad_hoc_markdown_is_intake_not_authority
 
   semantic_distillation:

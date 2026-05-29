@@ -25,8 +25,8 @@ use tillandsias_control_wire::transport::{
     AsyncReadWrite, CONTROL_WIRE_VSOCK_PORT, Listener, Transport, bind,
 };
 use tillandsias_control_wire::{
-    CAP_PTY_ATTACH_V1, ControlEnvelope, ControlMessage, ErrorCode, LocalProjectEntry,
-    MAX_MESSAGE_BYTES, VmPhase, WIRE_VERSION, decode, encode,
+    CAP_PTY_ATTACH_V1, CloudProjectEntry, ControlEnvelope, ControlMessage, ErrorCode,
+    LocalProjectEntry, MAX_MESSAGE_BYTES, VmPhase, WIRE_VERSION, decode, encode,
 };
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::sync::mpsc;
@@ -54,10 +54,14 @@ const IN_VM_PODMAN_SOCKET_DEFAULT: &str = "/run/podman/podman.sock";
 /// through provisioning → ready → drain. The vsock listener reads from this
 /// on every `VmStatusRequest` so the host tray sees real state, not a stub.
 ///
-/// Default is `Ready` (the listener is bound and serving = the VM is up).
-/// Other phases are set by lifecycle hooks elsewhere in the binary.
+/// Default is `Starting` — the headless binary has bound the listener but
+/// podman is not yet reachable, so attaching project containers would fail.
+/// `advance_to_ready_when_podman_up` polls the podman socket and flips to
+/// `Ready` once the socket is reachable (or to `Failed` if it never is).
+/// `Stopping` is set by the shutdown watcher when SIGTERM/SIGINT arrives;
+/// `Draining` is set by the per-connection drain path.
 ///
-/// @trace spec:vsock-transport, spec:vm-provisioning-lifecycle, plan/issues/multi-host-integration-loop-2026-05-24.md (l4)
+/// @trace spec:vsock-transport, spec:vm-provisioning-lifecycle, plan/issues/linux-headless-spec-gaps-2026-05-27.md (gap 6)
 #[derive(Debug, Clone)]
 pub struct VmStateHandle {
     phase: Arc<RwLock<VmPhase>>,
@@ -65,12 +69,12 @@ pub struct VmStateHandle {
 }
 
 impl VmStateHandle {
-    /// Construct with default `Ready` phase and the conventional podman
+    /// Construct with default `Starting` phase and the conventional podman
     /// socket path. Tests and lifecycle hooks may use [`set_phase`] /
     /// [`set_podman_socket`] to drive transitions.
     pub fn new() -> Self {
         Self {
-            phase: Arc::new(RwLock::new(VmPhase::Ready)),
+            phase: Arc::new(RwLock::new(VmPhase::Starting)),
             podman_socket: PathBuf::from(IN_VM_PODMAN_SOCKET_DEFAULT),
         }
     }
@@ -101,6 +105,63 @@ impl VmStateHandle {
     /// menu items until podman is actually up.
     pub fn podman_ready(&self) -> bool {
         self.podman_socket.exists()
+    }
+
+    /// Poll [`podman_ready`] on a fixed interval until either the socket
+    /// appears (transition `Starting → Ready`) or `timeout` elapses
+    /// (transition `Starting → Failed`). Intended to be `tokio::spawn`'d
+    /// alongside [`run_vsock_listener`] when the in-VM headless first
+    /// comes up.
+    ///
+    /// The check is purely filesystem-based; we do not connect to the
+    /// socket here — `podman_ready` is the public contract and a probe
+    /// connect would add a real-podman dependency to a unit-testable code
+    /// path. Callers that need a stronger guarantee can flip Ready
+    /// downstream after the first successful container operation.
+    ///
+    /// Already-`Ready` (or any non-`Starting` state set by a different
+    /// path) is left alone — this method only advances `Starting`.
+    ///
+    /// @trace spec:vsock-transport, spec:vm-provisioning-lifecycle
+    pub async fn advance_to_ready_when_podman_up(
+        &self,
+        timeout: std::time::Duration,
+        poll_interval: std::time::Duration,
+    ) {
+        let start = std::time::Instant::now();
+        loop {
+            // Bail out if a different transition (e.g. Stopping from the
+            // shutdown watcher) raced us — we never demote a phase here.
+            if self.current_phase() != VmPhase::Starting {
+                return;
+            }
+            if self.podman_ready() {
+                self.set_phase(VmPhase::Ready);
+                return;
+            }
+            if start.elapsed() >= timeout {
+                self.set_phase(VmPhase::Failed);
+                return;
+            }
+            tokio::time::sleep(poll_interval).await;
+        }
+    }
+
+    /// Watch `shutdown` for a flip to true and, when it does, transition
+    /// the phase to `Stopping`. Idempotent and safe to spawn alongside
+    /// the listener task: poll cadence is intentionally coarse (250 ms)
+    /// since this only governs the lifecycle-reporting wire, not any
+    /// hot-path behaviour.
+    ///
+    /// @trace spec:vsock-transport, spec:vm-provisioning-lifecycle
+    pub async fn watch_shutdown_and_mark_stopping(&self, shutdown: Arc<AtomicBool>) {
+        while !shutdown.load(Ordering::SeqCst) {
+            tokio::time::sleep(std::time::Duration::from_millis(250)).await;
+        }
+        // Don't clobber a terminal `Failed` if the advancer beat us to it.
+        if self.current_phase() != VmPhase::Failed {
+            self.set_phase(VmPhase::Stopping);
+        }
     }
 }
 
@@ -267,6 +328,76 @@ async fn handle_connection(
                         return;
                     }
                 };
+
+                // Convergence packet item 3: consult `control_dispatch::
+                // decide_route` for the routing decision. The matrix lives
+                // in the canonical module so unix + vsock can never
+                // silently disagree. Unsupported / ResponseOnly arms write
+                // a precise Error and continue the loop; the existing
+                // variant-match below handles the Handle case.
+                //
+                // @trace plan/issues/control-socket-protocol-convergence-2026-05-25.md
+                //   (item 3 of 3)
+                let routing = crate::control_dispatch::decide_route(
+                    &env.body,
+                    crate::control_dispatch::TransportKind::Vsock,
+                );
+                match routing {
+                    crate::control_dispatch::DispatchOutcome::Unsupported => {
+                        debug!(
+                            spec = "vsock-transport",
+                            kind = env.body.kind(),
+                            "rejecting vsock frame: matrix says Unsupported"
+                        );
+                        let err = ControlEnvelope {
+                            wire_version: WIRE_VERSION,
+                            seq: env.seq,
+                            body: ControlMessage::Error {
+                                seq_in_reply_to: Some(env.seq),
+                                code: ErrorCode::Unsupported,
+                                message: format!(
+                                    "variant {} not supported on the in-VM vsock transport",
+                                    env.body.kind()
+                                ),
+                            },
+                        };
+                        if write_envelope(&mut stream, &err).await.is_err() {
+                            #[cfg(unix)]
+                            pty_store.shutdown_all().await;
+                            return;
+                        }
+                        continue;
+                    }
+                    crate::control_dispatch::DispatchOutcome::ResponseOnly => {
+                        debug!(
+                            spec = "vsock-transport",
+                            kind = env.body.kind(),
+                            "rejecting vsock frame: matrix says ResponseOnly (server-only)"
+                        );
+                        let err = ControlEnvelope {
+                            wire_version: WIRE_VERSION,
+                            seq: env.seq,
+                            body: ControlMessage::Error {
+                                seq_in_reply_to: Some(env.seq),
+                                code: ErrorCode::Unsupported,
+                                message: format!(
+                                    "variant {} is a response-shape frame and cannot open a connection",
+                                    env.body.kind()
+                                ),
+                            },
+                        };
+                        if write_envelope(&mut stream, &err).await.is_err() {
+                            #[cfg(unix)]
+                            pty_store.shutdown_all().await;
+                            return;
+                        }
+                        continue;
+                    }
+                    crate::control_dispatch::DispatchOutcome::Handle => {
+                        // Fall through to the variant-match below.
+                    }
+                }
+
                 match env.body {
             ControlMessage::VmStatusRequest { seq } => {
                 // l4: read real lifecycle phase + check podman socket.
@@ -300,23 +431,22 @@ async fn handle_connection(
                 }
             }
             ControlMessage::CloudRefreshRequest { seq } => {
-                // l4 (deferred): real implementation invokes `gh repo list
-                // --json owner,name,defaultBranchRef` as a subprocess.
-                // The in-VM `gh` reads the GitHub token from
-                // `/run/secrets/vault-token` (mounted by the host shell on
-                // container launch) and the result is parsed into
-                // CloudProjectEntry. Until that subprocess + token wiring is
-                // in place we return an empty list with the existing schema
-                // so the host tray can still issue the request and render an
-                // empty cloud-projects section.
+                // Real in-VM implementation: invoke `gh repo list --json
+                // nameWithOwner,defaultBranchRef` with the mounted GitHub
+                // token, parse into CloudProjectEntry. Degrades to an empty
+                // list (preserving the prior stub behaviour) when gh or the
+                // token are absent or the call fails, so the host tray still
+                // gets a well-formed reply offline / pre-login.
                 //
-                // @trace spec:host-shell-architecture, spec:tillandsias-vault, plan/issues/multi-host-integration-loop-2026-05-24.md l4
+                // @trace spec:host-shell-architecture, spec:tillandsias-vault,
+                //        plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q4)
+                let projects = fetch_cloud_projects();
                 let reply = ControlEnvelope {
                     wire_version: WIRE_VERSION,
                     seq: env.seq,
                     body: ControlMessage::CloudRefreshReply {
                         seq_in_reply_to: seq,
-                        projects: Vec::new(),
+                        projects,
                     },
                 };
                 if write_envelope(&mut stream, &reply).await.is_err() {
@@ -405,12 +535,17 @@ async fn handle_connection(
                 // emitted by the pump task on child exit.
                 pty_store.close_host_initiated(session_id).await;
             }
-            // Per plan/issues/control-socket-protocol-convergence-2026-05-25.md:
-            // unhandled variants must reply with an explicit Error frame
-            // (Unsupported) instead of silently logging and continuing.
-            // Clients otherwise hang waiting for a reply they will never get.
+            // Convergence-packet pre-filter caught Unsupported and
+            // ResponseOnly above; reaching this arm means the matrix
+            // says Handle but no handler exists yet. Surface the gap
+            // with a descriptive Error so the missing-handler case is
+            // visibly distinct from a wire-format rejection.
             other => {
-                debug!(spec = "vsock-transport", msg = ?other, "rejecting unsupported vsock frame");
+                debug!(
+                    spec = "vsock-transport",
+                    kind = other.kind(),
+                    "matrix says Handle but no handler implemented yet"
+                );
                 let err = ControlEnvelope {
                     wire_version: WIRE_VERSION,
                     seq: env.seq,
@@ -418,8 +553,9 @@ async fn handle_connection(
                         seq_in_reply_to: Some(env.seq),
                         code: ErrorCode::Unsupported,
                         message: format!(
-                            "variant {:?} not handled by the in-VM vsock dispatcher",
-                            std::mem::discriminant(&other),
+                            "variant {} is on the vsock matrix but the handler is not implemented yet \
+                             (see plan/issues/control-socket-protocol-convergence-2026-05-25.md item 3)",
+                            other.kind()
                         ),
                     },
                 };
@@ -473,61 +609,66 @@ fn in_vm_project_root() -> PathBuf {
     )
 }
 
-/// Enumerate the in-VM project bind-mount root and return one entry per
-/// visible directory. Hidden entries (leading dot) and non-directories
-/// are skipped. `last_seen_unix` is the directory's mtime.
-///
-/// Cheap by design: a single `read_dir` + per-entry `metadata`. The host
-/// tray re-issues this on user-visible events, not on a tight loop.
+/// Enumerate the in-VM project bind-mount root. Thin wrapper around
+/// the shared `crate::local_projects::scan_project_root` so both the
+/// vsock (in-VM) and unix (Linux native) dispatchers run the same
+/// directory-walk + sort + mtime logic on different roots.
 ///
 /// @trace spec:host-shell-architecture, plan/issues/multi-host-integration-loop-2026-05-24.md l4
 fn enumerate_local_projects() -> Vec<LocalProjectEntry> {
     let root = in_vm_project_root();
-    let Ok(entries) = std::fs::read_dir(&root) else {
+    let out = crate::local_projects::scan_project_root(&root);
+    if out.is_empty() {
         debug!(
             spec = "host-shell-architecture",
             root = %root.display(),
-            "EnumerateLocalProjects: project root not readable; returning empty"
+            "EnumerateLocalProjects (in-VM): project root unreadable or empty; returning empty list"
         );
-        return Vec::new();
-    };
-    let mut out = Vec::new();
-    for entry in entries.flatten() {
-        let path = entry.path();
-        let Ok(meta) = entry.metadata() else { continue };
-        if !meta.is_dir() {
-            continue;
-        }
-        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
-            continue;
-        };
-        if name.starts_with('.') {
-            continue;
-        }
-        let last_seen_unix = meta
-            .modified()
-            .ok()
-            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
-        out.push(LocalProjectEntry {
-            label: name.to_string(),
-            guest_path: path.to_string_lossy().into_owned(),
-            last_seen_unix,
-        });
     }
-    out.sort_by(|a, b| a.label.cmp(&b.label));
     out
+}
+
+/// In-VM GitHub token mounted by the host shell on container launch. Stable
+/// name (podman secret / bind mount); see vault_bootstrap's token plumbing.
+const IN_VM_GITHUB_TOKEN_PATH: &str = "/run/secrets/tillandsias-github-token";
+
+/// Fetch the user's cloud (GitHub) projects from inside the VM. Reads
+/// the mounted token, then delegates the `gh` invocation + JSON parse
+/// to the shared `crate::cloud_projects::fetch_cloud_projects` helper.
+///
+/// @trace spec:host-shell-architecture, spec:tillandsias-vault
+fn fetch_cloud_projects() -> Vec<CloudProjectEntry> {
+    let token = match std::fs::read_to_string(IN_VM_GITHUB_TOKEN_PATH) {
+        Ok(t) if !t.trim().is_empty() => t.trim().to_string(),
+        _ => {
+            debug!(
+                spec = "host-shell-architecture",
+                path = IN_VM_GITHUB_TOKEN_PATH,
+                "CloudRefreshRequest (in-VM): no GitHub token mounted; returning empty cloud list"
+            );
+            return Vec::new();
+        }
+    };
+    crate::cloud_projects::fetch_cloud_projects(Some(&token))
 }
 
 #[cfg(test)]
 mod tests {
     use super::*;
 
+    // (parse_gh_repo_list tests moved to crate::cloud_projects with the
+    // function itself. The vsock-side fetch_cloud_projects wrapper is
+    // now a thin token-read shim, not worth a separate test target.)
+
+    /// Default is `Starting` (gap-6 contract). The vsock listener can
+    /// answer VmStatusRequest the moment it binds, but the in-VM
+    /// headless must NOT advertise `Ready` until podman is reachable —
+    /// otherwise the host tray would offer project-attach menu items
+    /// against a podman socket that doesn't exist yet.
     #[test]
-    fn vm_state_handle_defaults_to_ready() {
+    fn vm_state_handle_defaults_to_starting() {
         let state = VmStateHandle::new();
-        assert_eq!(state.current_phase(), VmPhase::Ready);
+        assert_eq!(state.current_phase(), VmPhase::Starting);
     }
 
     #[test]
@@ -552,6 +693,117 @@ mod tests {
         let mut state = VmStateHandle::new();
         state.set_podman_socket(PathBuf::from("/this/path/does/not/exist"));
         assert!(!state.podman_ready());
+    }
+
+    /// gap-6 contract: `advance_to_ready_when_podman_up` flips
+    /// `Starting → Ready` the moment `podman_ready` returns true. We
+    /// stand up a real tempfile, point the state at it, and confirm the
+    /// transition fires within the poll interval. Sub-second cadence so
+    /// the test stays fast.
+    #[tokio::test]
+    async fn advance_to_ready_flips_phase_when_socket_appears() {
+        use std::time::Duration;
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let sock = tmp.path().join("podman.sock");
+        let mut state = VmStateHandle::new();
+        state.set_podman_socket(sock.clone());
+        assert_eq!(state.current_phase(), VmPhase::Starting);
+
+        // Spawn the advancer first, then create the file from this task
+        // a few polls in. Cloned handle shares the same phase lock.
+        let advancer_state = state.clone();
+        let advancer = tokio::spawn(async move {
+            advancer_state
+                .advance_to_ready_when_podman_up(Duration::from_secs(2), Duration::from_millis(25))
+                .await;
+        });
+
+        tokio::time::sleep(Duration::from_millis(75)).await;
+        std::fs::File::create(&sock).expect("create podman.sock");
+
+        advancer.await.expect("advancer join");
+        assert_eq!(state.current_phase(), VmPhase::Ready);
+    }
+
+    /// gap-6 contract: when the socket never appears within `timeout`,
+    /// the advancer flips `Starting → Failed`. The host tray uses this
+    /// to surface a clear "VM is up but podman never came online" state
+    /// instead of leaving the phase as a permanent `Starting`.
+    #[tokio::test]
+    async fn advance_to_ready_marks_failed_on_timeout() {
+        use std::time::Duration;
+        let mut state = VmStateHandle::new();
+        // A path that will never exist — relies on the advancer's poll
+        // interval being far shorter than the timeout to keep the test
+        // bounded.
+        state.set_podman_socket(PathBuf::from("/nonexistent/podman.sock"));
+        state
+            .advance_to_ready_when_podman_up(Duration::from_millis(60), Duration::from_millis(15))
+            .await;
+        assert_eq!(state.current_phase(), VmPhase::Failed);
+    }
+
+    /// gap-6 contract: a `Stopping` (or `Draining`, or `Ready`) set by
+    /// another path while the advancer is polling MUST NOT be demoted.
+    /// The advancer is single-purpose — it advances `Starting`, nothing
+    /// else.
+    #[tokio::test]
+    async fn advance_to_ready_respects_concurrent_transitions() {
+        use std::time::Duration;
+        let state = VmStateHandle::new();
+        state.set_phase(VmPhase::Stopping);
+
+        // Even with a long timeout + non-existent socket, the advancer
+        // exits immediately because the phase is no longer Starting.
+        let start = std::time::Instant::now();
+        state
+            .advance_to_ready_when_podman_up(Duration::from_secs(60), Duration::from_millis(50))
+            .await;
+        assert!(start.elapsed() < Duration::from_millis(200));
+        assert_eq!(state.current_phase(), VmPhase::Stopping);
+    }
+
+    /// gap-6 contract: `watch_shutdown_and_mark_stopping` flips the
+    /// phase to `Stopping` when the shared shutdown atomic goes true.
+    /// This is how `graceful_shutdown_async` entry shows up over the
+    /// vsock control wire without having to thread the state through
+    /// every shutdown call site.
+    #[tokio::test]
+    async fn watch_shutdown_marks_stopping_when_atomic_flips() {
+        use std::time::Duration;
+        let state = VmStateHandle::new();
+        // Pretend the advancer already brought us to Ready.
+        state.set_phase(VmPhase::Ready);
+        let shutdown = Arc::new(AtomicBool::new(false));
+
+        let watcher_state = state.clone();
+        let watcher_shutdown = Arc::clone(&shutdown);
+        let watcher = tokio::spawn(async move {
+            watcher_state
+                .watch_shutdown_and_mark_stopping(watcher_shutdown)
+                .await;
+        });
+
+        tokio::time::sleep(Duration::from_millis(50)).await;
+        shutdown.store(true, Ordering::SeqCst);
+        watcher.await.expect("watcher join");
+        assert_eq!(state.current_phase(), VmPhase::Stopping);
+    }
+
+    /// gap-6 contract: the shutdown watcher MUST NOT clobber a terminal
+    /// `Failed`. If the advancer timed out before SIGTERM arrived, we
+    /// want the host tray to keep seeing the diagnostic, not see it
+    /// rewritten into the more innocuous-looking `Stopping`.
+    #[tokio::test]
+    async fn watch_shutdown_preserves_failed_state() {
+        let state = VmStateHandle::new();
+        state.set_phase(VmPhase::Failed);
+        let shutdown = Arc::new(AtomicBool::new(true)); // already requested
+
+        state
+            .watch_shutdown_and_mark_stopping(Arc::clone(&shutdown))
+            .await;
+        assert_eq!(state.current_phase(), VmPhase::Failed);
     }
 
     #[test]

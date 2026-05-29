@@ -12,8 +12,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:environment-isolation
-  coverage_ratio: 33
-  last_verified: '2026-05-03'
+  - litmus:app-lifecycle-state-machine-shape
+  coverage_ratio: 67
+  last_verified: '2026-05-29'
 - spec_id: appimage-build-pipeline
   status: obsolete
   litmus_tests: []
@@ -29,8 +30,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:inference-readiness-probe-shape
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  - litmus:async-inference-launch-entrypoint-shape
+  coverage_ratio: 67
+  last_verified: '2026-05-29'
 - spec_id: binary-signing
   status: active
   litmus_tests:
@@ -112,8 +114,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:cheatsheet-source-layer-validation
-  coverage_ratio: 33
-  last_verified: '2026-05-12'
+  - litmus:cheatsheet-source-layer-shape
+  coverage_ratio: 67
+  last_verified: '2026-05-29'
 - spec_id: cheatsheet-tooling
   status: active
   litmus_tests:
@@ -124,8 +127,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:cheatsheet-tier-discipline
-  coverage_ratio: 33
-  last_verified: '2026-05-12'
+  - litmus:cheatsheets-license-allowlist-shape
+  coverage_ratio: 67
+  last_verified: '2026-05-29'
 - spec_id: ci-release
   status: active
   litmus_tests:
@@ -138,10 +142,11 @@ specs:
   coverage_ratio: 0
   last_verified: '2026-05-06'
 - spec_id: cli-diagnostics
-  status: deferred
-  litmus_tests: []
-  coverage_ratio: 0
-  last_verified: '2026-05-06'
+  status: active
+  litmus_tests:
+  - litmus:diagnostics-envelope-shape
+  coverage_ratio: 25
+  last_verified: '2026-05-29'
 - spec_id: cli-mode
   status: active
   litmus_tests:
@@ -165,7 +170,8 @@ specs:
   status: active
   litmus_tests:
   - litmus:forge-standalone-traceability
-  coverage_ratio: 33
+  - litmus:forge-diagnostics-e2e
+  coverage_ratio: 50
   last_verified: '2026-05-12'
 - spec_id: dev-build
   status: active
@@ -215,14 +221,16 @@ specs:
   status: active
   litmus_tests:
   - litmus:external-logs-layer-shape
-  coverage_ratio: 33
-  last_verified: '2026-05-12'
+  - litmus:external-logs-manifest-shape
+  coverage_ratio: 67
+  last_verified: '2026-05-29'
 - spec_id: filesystem-scanner
   status: active
   litmus_tests:
   - litmus:filesystem-scanner-shape
-  coverage_ratio: 33
-  last_verified: '2026-05-12'
+  - litmus:filesystem-scanner-event-driven-shape
+  coverage_ratio: 67
+  last_verified: '2026-05-29'
 - spec_id: fix-podman-machine-host-aliases
   status: obsolete
   litmus_tests: []
@@ -245,8 +253,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:forge-as-only-runtime
+  - litmus:container-start-health
   coverage_ratio: 100
-  last_verified: '2026-05-19'
+  last_verified: '2026-05-29'
 - spec_id: forge-cache-architecture
   status: obsolete
   litmus_tests: []
@@ -257,8 +266,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:forge-cache-dual-shape
-  coverage_ratio: 33
-  last_verified: '2026-05-12'
+  - litmus:forge-cache-dual-tmpfs-caps
+  coverage_ratio: 67
+  last_verified: '2026-05-29'
 - spec_id: forge-environment-discoverability
   status: active
   litmus_tests:
@@ -338,8 +348,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:host-browser-mcp-shape
-  coverage_ratio: 33
-  last_verified: '2026-05-12'
+  - litmus:host-browser-mcp-frame-shape
+  coverage_ratio: 67
+  last_verified: '2026-05-29'
 - spec_id: host-chromium
   status: obsolete
   litmus_tests: null
@@ -406,6 +417,18 @@ specs:
   - litmus:user-runtime-checkout-free-install
   coverage_ratio: 100
   last_verified: '2026-05-20'
+- spec_id: macos-native-tray
+  status: active
+  litmus_tests:
+  - litmus:wire-unreachable-chip-text-symmetric
+  - litmus:macos-tray-diagnose-cli-surface
+  - litmus:recipe-release-tag-symmetric
+  - litmus:tray-status-text-helpers-symmetric
+  - litmus:exit-code-provisioned-zero-degraded-two-symmetric
+  - litmus:macos-tray-architectural-invariants
+  - litmus:pty-attach-project-threading-symmetric
+  coverage_ratio: 100
+  last_verified: '2026-05-29'
 - spec_id: methodology-accountability
   status: active
   litmus_tests:
@@ -506,8 +529,9 @@ specs:
   - litmus:podman-idiomatic-error-discrimination
   - litmus:podman-idiomatic-launch-routing
   - litmus:headless-init-status-check-source-built
+  - litmus:container-start-health
   coverage_ratio: 100
-  last_verified: '2026-05-16'
+  last_verified: '2026-05-29'
 - spec_id: project-bootstrap-readme
   status: active
   litmus_tests:
@@ -543,8 +567,11 @@ specs:
   status: active
   litmus_tests:
   - litmus:runtime-diagnostics-stream-shape
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  - litmus:runtime-diagnostics-emitter-shape
+  - litmus:runtime-diagnostics-typed-events-shape
+  - litmus:container-start-health
+  coverage_ratio: 100
+  last_verified: '2026-05-29'
 - spec_id: runtime-logging
   status: active
   litmus_tests:
@@ -690,6 +717,18 @@ specs:
   litmus_tests: []
   coverage_ratio: 0
   last_verified: '2026-05-03'
+- spec_id: windows-native-tray
+  status: active
+  litmus_tests:
+  - litmus:wire-unreachable-chip-text-symmetric
+  - litmus:windows-tray-diagnose-cli-surface
+  - litmus:recipe-release-tag-symmetric
+  - litmus:tray-status-text-helpers-symmetric
+  - litmus:exit-code-provisioned-zero-degraded-two-symmetric
+  - litmus:windows-tray-architectural-invariants
+  - litmus:pty-attach-project-threading-symmetric
+  coverage_ratio: 100
+  last_verified: '2026-05-29'
 - spec_id: wsl-daemon-orchestration
   status: active
   litmus_tests:
@@ -732,6 +771,12 @@ specs:
   - litmus:observability-convergence-shape
   coverage_ratio: 60
   last_verified: '2026-05-14'
+- spec_id: observability-metrics
+  status: active
+  litmus_tests:
+  - litmus:observability-metrics-shape
+  coverage_ratio: 100
+  last_verified: '2026-05-29'
 - spec_id: podman-secrets-integration
   status: active
   litmus_tests:

@@ -1,0 +1,424 @@
+# cheatsheets/license-allowlist.toml
+#
+# Tier classifier for the cheatsheet system. Relocated from
+# cheatsheet-sources/ to cheatsheets/ in change cheatsheets-license-tiered
+# to sit next to the cheatsheets it classifies (the verbatim cheatsheet-sources/
+# tree is being retired).
+#
+# Each domain entry declares:
+#   publisher       — human-readable name
+#   license         — short license identifier (SPDX or short ID)
+#   license_url     — canonical URL for the license text
+#   redistribution  — bundled | attribute-only | do-not-bundle  (legal authority)
+#   default_tier    — bundled | distro-packaged | pull-on-demand  (cheatsheet tier when frontmatter omits 'tier')
+#   last_evaluated  — ISO date the license was last re-checked (manually OR by an in-forge agent post-pull)
+#   evaluated_by    — hand-curated | agent-runtime-pull | host-refresh-script
+#
+# Default-tier inference:
+#   redistribution=bundled      → default_tier=bundled         (forge image bake)
+#   redistribution=attribute-only→ default_tier=bundled         (cheatsheet must attribute per license)
+#   redistribution=do-not-bundle→ default_tier=pull-on-demand  (forge image carries stub only; agent pulls at runtime)
+#
+# This file is a CRDT.  Every pull-on-demand fetch by an in-forge agent
+# re-evaluates the upstream's license declaration and bumps last_evaluated;
+# license drift between the stored value and the upstream emits a
+# `license_drift` event in the cheatsheet-telemetry EXTERNAL log channel.
+# Auto-merge of agent-proposed allowlist edits is OUT of scope until v3;
+# today host maintainers triage the drift events and edit the TOML by hand.
+#
+# Cheatsheets cite their per-document license in their `## Provenance` section;
+# the per-domain license here is the *default* assumption when a cheatsheet's
+# frontmatter omits `tier`. Per-cheatsheet `tier:` overrides win for edge cases
+# (e.g., a single CC-BY-SA cheatsheet on a domain whose default is unspecified).
+#
+# Domains not in this file are treated as `default_tier = pull-on-demand` by
+# the validator (safe default: never accidentally bundle an unaudited domain).
+#
+# @trace spec:cheatsheets-license-tiered, spec:cheatsheet-source-layer
+
+# ---------------------------------------------------------------------------
+# Standards bodies — freely redistributable
+# ---------------------------------------------------------------------------
+
+[domains."rfc-editor.org"]
+publisher = "IETF / RFC Editor"
+license = "ietf-trust-legal-provisions"
+license_url = "https://trustee.ietf.org/license-info/"
+redistribution = "bundled"
+default_tier = "bundled"
+last_evaluated = "2026-04-27"
+evaluated_by = "hand-curated"
+
+[domains."www.rfc-editor.org"]
+publisher = "IETF / RFC Editor"
+license = "ietf-trust-legal-provisions"
+license_url = "https://trustee.ietf.org/license-info/"
+redistribution = "bundled"
+default_tier = "bundled"
+last_evaluated = "2026-04-27"
+evaluated_by = "hand-curated"
+
+[domains."datatracker.ietf.org"]
+publisher = "IETF"
+license = "ietf-trust-legal-provisions"
+license_url = "https://trustee.ietf.org/license-info/"
+redistribution = "bundled"
+default_tier = "bundled"
+last_evaluated = "2026-04-27"
+evaluated_by = "hand-curated"
+
+[domains."www.w3.org"]
+publisher = "W3C"
+license = "w3c-document-license-2015"
+license_url = "https://www.w3.org/Consortium/Legal/2015/doc-license"
+redistribution = "bundled"
+default_tier = "bundled"
+last_evaluated = "2026-04-27"
+evaluated_by = "hand-curated"
+
+[domains."html.spec.whatwg.org"]
+publisher = "WHATWG"
+license = "cc-by-4.0"
+license_url = "https://creativecommons.org/licenses/by/4.0/"
+redistribution = "bundled"
+default_tier = "bundled"
+last_evaluated = "2026-04-27"
+evaluated_by = "hand-curated"
+
+[domains."fetch.spec.whatwg.org"]
+publisher = "WHATWG"
+license = "cc-by-4.0"
+license_url = "https://creativecommons.org/licenses/by/4.0/"
+redistribution = "bundled"
+default_tier = "bundled"
+last_evaluated = "2026-04-27"
+evaluated_by = "hand-curated"
+
+[domains."streams.spec.whatwg.org"]
+publisher = "WHATWG"
+license = "cc-by-4.0"
+license_url = "https://creativecommons.org/licenses/by/4.0/"
+redistribution = "bundled"
+default_tier = "bundled"
+last_evaluated = "2026-04-27"
+evaluated_by = "hand-curated"
+
+[domains."url.spec.whatwg.org"]
+publisher = "WHATWG"
+license = "cc-by-4.0"
+license_url = "https://creativecommons.org/licenses/by/4.0/"
+redistribution = "bundled"
+default_tier = "bundled"
+last_evaluated = "2026-04-27"
+evaluated_by = "hand-curated"
+
+[domains."encoding.spec.whatwg.org"]
+publisher = "WHATWG"
+license = "cc-by-4.0"
+license_url = "https://creativecommons.org/licenses/by/4.0/"
+redistribution = "bundled"
+default_tier = "bundled"
+last_evaluated = "2026-04-27"
+evaluated_by = "hand-curated"
+
+[domains."infra.spec.whatwg.org"]
+publisher = "WHATWG"
+license = "cc-by-4.0"
+license_url = "https://creativecommons.org/licenses/by/4.0/"
+redistribution = "bundled"
+default_tier = "bundled"
+last_evaluated = "2026-04-27"
+evaluated_by = "hand-curated"
+
+# ---------------------------------------------------------------------------
+# MDN Web Docs — CC-BY-SA 2.5 for pre-2020 content; newer under CC-BY-SA 2.5
+# ---------------------------------------------------------------------------
+
+[domains."developer.mozilla.org"]
+publisher = "MDN contributors"
+license = "cc-by-sa-2.5"
+license_url = "https://creativecommons.org/licenses/by-sa/2.5/"
+redistribution = "bundled"
+default_tier = "bundled"
+last_evaluated = "2026-04-27"
+evaluated_by = "hand-curated"
+
+# ---------------------------------------------------------------------------
+# OWASP — CC-BY-SA 4.0
+# ---------------------------------------------------------------------------
+
+[domains."owasp.org"]
+publisher = "OWASP"
+license = "cc-by-sa-4.0"
+license_url = "https://creativecommons.org/licenses/by-sa/4.0/"
+redistribution = "bundled"
+default_tier = "bundled"
+last_evaluated = "2026-04-27"
+evaluated_by = "hand-curated"
+
+[domains."cheatsheetseries.owasp.org"]
+publisher = "OWASP"
+license = "cc-by-sa-4.0"
+license_url = "https://creativecommons.org/licenses/by-sa/4.0/"
+redistribution = "bundled"
+default_tier = "bundled"
+last_evaluated = "2026-04-27"
+evaluated_by = "hand-curated"
+
+# ---------------------------------------------------------------------------
+# Linux kernel docs — GPL-2.0+
+# ---------------------------------------------------------------------------
+
+[domains."www.kernel.org"]
+publisher = "kernel.org"
+license = "gpl-2.0+"
+license_url = "https://www.kernel.org/doc/html/latest/process/license-rules.html"
+redistribution = "bundled"
+default_tier = "bundled"
+last_evaluated = "2026-04-27"
+evaluated_by = "hand-curated"
+
+[domains."kernel.org"]
+publisher = "kernel.org"
+license = "gpl-2.0+"
+license_url = "https://www.kernel.org/doc/html/latest/process/license-rules.html"
+redistribution = "bundled"
+default_tier = "bundled"
+last_evaluated = "2026-04-27"
+evaluated_by = "hand-curated"
+
+# ---------------------------------------------------------------------------
+# Python Software Foundation — PSF License
+# ---------------------------------------------------------------------------
+
+[domains."docs.python.org"]
+publisher = "Python Software Foundation"
+license = "psf"
+license_url = "https://docs.python.org/3/license.html"
+redistribution = "bundled"
+default_tier = "bundled"
+last_evaluated = "2026-04-27"
+evaluated_by = "hand-curated"
+
+# ---------------------------------------------------------------------------
+# Rust — MIT or Apache-2.0
+# ---------------------------------------------------------------------------
+
+[domains."doc.rust-lang.org"]
+publisher = "The Rust Project Developers"
+license = "mit-or-apache-2.0"
+license_url = "https://www.rust-lang.org/policies/licenses"
+redistribution = "bundled"
+default_tier = "bundled"
+last_evaluated = "2026-04-27"
+evaluated_by = "hand-curated"
+
+[domains."docs.rs"]
+publisher = "The Rust Project / crate authors"
+license = "mit-or-apache-2.0"
+license_url = "https://docs.rs"
+redistribution = "bundled"
+default_tier = "bundled"
+last_evaluated = "2026-04-27"
+evaluated_by = "hand-curated"
+
+# ---------------------------------------------------------------------------
+# GitHub raw — MIT (Ollama project).
+# NOTE: Only the Ollama subdomain-path is "bundled". Other raw.githubusercontent.com
+# paths default to "attribute-only" since licenses vary per repo.
+# ---------------------------------------------------------------------------
+
+[domains."raw.githubusercontent.com/ollama/ollama"]
+publisher = "Ollama project"
+license = "mit"
+license_url = "https://github.com/ollama/ollama/blob/main/LICENSE"
+redistribution = "bundled"
+default_tier = "bundled"
+last_evaluated = "2026-04-27"
+evaluated_by = "hand-curated"
+
+[domains."raw.githubusercontent.com"]
+publisher = "Various (GitHub raw content)"
+license = "repo-specific"
+license_url = ""
+redistribution = "attribute-only"
+default_tier = "bundled"
+last_evaluated = "2026-04-27"
+evaluated_by = "hand-curated"
+
+# ---------------------------------------------------------------------------
+# PostgreSQL — PostgreSQL License (BSD-like)
+# ---------------------------------------------------------------------------
+
+[domains."www.postgresql.org"]
+publisher = "PostgreSQL Global Development Group"
+license = "postgresql"
+license_url = "https://www.postgresql.org/about/licence/"
+redistribution = "bundled"
+default_tier = "bundled"
+last_evaluated = "2026-04-27"
+evaluated_by = "hand-curated"
+
+[domains."postgresql.org"]
+publisher = "PostgreSQL Global Development Group"
+license = "postgresql"
+license_url = "https://www.postgresql.org/about/licence/"
+redistribution = "bundled"
+default_tier = "bundled"
+last_evaluated = "2026-04-27"
+evaluated_by = "hand-curated"
+
+# ---------------------------------------------------------------------------
+# SQLite — Public Domain
+# ---------------------------------------------------------------------------
+
+[domains."www.sqlite.org"]
+publisher = "SQLite consortium"
+license = "public-domain"
+license_url = "https://www.sqlite.org/copyright.html"
+redistribution = "bundled"
+default_tier = "bundled"
+last_evaluated = "2026-04-27"
+evaluated_by = "hand-curated"
+
+[domains."sqlite.org"]
+publisher = "SQLite consortium"
+license = "public-domain"
+license_url = "https://www.sqlite.org/copyright.html"
+redistribution = "bundled"
+default_tier = "bundled"
+last_evaluated = "2026-04-27"
+evaluated_by = "hand-curated"
+
+# ---------------------------------------------------------------------------
+# Nginx — BSD-like (open source docs)
+# ---------------------------------------------------------------------------
+
+[domains."nginx.org"]
+publisher = "NGINX, Inc."
+license = "bsd-2-clause"
+license_url = "https://nginx.org/LICENSE"
+redistribution = "bundled"
+default_tier = "bundled"
+last_evaluated = "2026-04-27"
+evaluated_by = "hand-curated"
+
+# ---------------------------------------------------------------------------
+# Go language docs — BSD 3-Clause
+# ---------------------------------------------------------------------------
+
+[domains."go.dev"]
+publisher = "The Go Authors"
+license = "bsd-3-clause"
+license_url = "https://go.dev/LICENSE"
+redistribution = "bundled"
+default_tier = "bundled"
+last_evaluated = "2026-04-27"
+evaluated_by = "hand-curated"
+
+[domains."pkg.go.dev"]
+publisher = "The Go Authors"
+license = "bsd-3-clause"
+license_url = "https://go.dev/LICENSE"
+redistribution = "bundled"
+default_tier = "bundled"
+last_evaluated = "2026-04-27"
+evaluated_by = "hand-curated"
+
+# ---------------------------------------------------------------------------
+# Node.js / npm docs — MIT
+# ---------------------------------------------------------------------------
+
+[domains."nodejs.org"]
+publisher = "Node.js contributors"
+license = "mit"
+license_url = "https://github.com/nodejs/node/blob/main/LICENSE"
+redistribution = "bundled"
+default_tier = "bundled"
+last_evaluated = "2026-04-27"
+evaluated_by = "hand-curated"
+
+[domains."docs.npmjs.com"]
+publisher = "npm, Inc."
+license = "mit"
+license_url = "https://docs.npmjs.com/"
+redistribution = "bundled"
+default_tier = "bundled"
+last_evaluated = "2026-04-27"
+evaluated_by = "hand-curated"
+
+# ---------------------------------------------------------------------------
+# Vendor docs — do-not-bundle (link only; fetched copy .gitignore-d)
+# ---------------------------------------------------------------------------
+
+[domains."docs.aws.amazon.com"]
+publisher = "Amazon Web Services"
+license = "aws-customer-agreement"
+license_url = "https://aws.amazon.com/agreement/"
+redistribution = "do-not-bundle"
+default_tier = "pull-on-demand"
+last_evaluated = "2026-04-27"
+evaluated_by = "hand-curated"
+
+[domains."docs.oracle.com"]
+publisher = "Oracle Corporation"
+license = "oracle-ftc"
+license_url = "https://www.oracle.com/downloads/licenses/oracle-free-license.html"
+redistribution = "do-not-bundle"
+default_tier = "pull-on-demand"
+last_evaluated = "2026-04-27"
+evaluated_by = "hand-curated"
+
+[domains."docs.microsoft.com"]
+publisher = "Microsoft"
+license = "microsoft-content-use"
+license_url = "https://learn.microsoft.com/en-us/legal/termsofuse"
+redistribution = "do-not-bundle"
+default_tier = "pull-on-demand"
+last_evaluated = "2026-04-27"
+evaluated_by = "hand-curated"
+
+[domains."learn.microsoft.com"]
+publisher = "Microsoft"
+license = "microsoft-content-use"
+license_url = "https://learn.microsoft.com/en-us/legal/termsofuse"
+redistribution = "do-not-bundle"
+default_tier = "pull-on-demand"
+last_evaluated = "2026-04-27"
+evaluated_by = "hand-curated"
+
+[domains."cloud.google.com"]
+publisher = "Google LLC"
+license = "google-tos"
+license_url = "https://cloud.google.com/terms"
+redistribution = "do-not-bundle"
+default_tier = "pull-on-demand"
+last_evaluated = "2026-04-27"
+evaluated_by = "hand-curated"
+
+[domains."developers.google.com"]
+publisher = "Google LLC"
+license = "cc-by-4.0"
+license_url = "https://creativecommons.org/licenses/by/4.0/"
+redistribution = "attribute-only"
+default_tier = "bundled"
+last_evaluated = "2026-04-27"
+evaluated_by = "hand-curated"
+
+[domains."azure.microsoft.com"]
+publisher = "Microsoft"
+license = "microsoft-content-use"
+license_url = "https://learn.microsoft.com/en-us/legal/termsofuse"
+redistribution = "do-not-bundle"
+default_tier = "pull-on-demand"
+last_evaluated = "2026-04-27"
+evaluated_by = "hand-curated"
+
+[domains."docs.docker.com"]
+publisher = "Docker, Inc."
+license = "apache-2.0"
+license_url = "https://docs.docker.com/"
+redistribution = "attribute-only"
+default_tier = "bundled"
+last_evaluated = "2026-04-27"
+evaluated_by = "hand-curated"

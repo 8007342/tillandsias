@@ -5,7 +5,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [build.sh#L227](../../../build.sh#L227)
+- [build.sh#L238](../../../build.sh#L238)
 - [images/default/lib-common.sh#L12](../../../images/default/lib-common.sh#L12)
 - [images/inference/entrypoint.sh#L10](../../../images/inference/entrypoint.sh#L10)
 - [scripts/orchestrate-enclave.sh#L59](../../../scripts/orchestrate-enclave.sh#L59)

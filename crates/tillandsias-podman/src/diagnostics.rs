@@ -31,6 +31,15 @@ pub enum ContainerLifecycleAction {
     StopRequested,
     Killed,
     Died,
+    /// Killed by the kernel OOM killer. Podman events emits this as
+    /// `Status=oom` separately from `died` (a Died record typically
+    /// follows). Routed to `event:resource_exhaustion` by the
+    /// diagnostic-event emitter so the orchestrator can distinguish
+    /// "container exited with non-zero" from "kernel killed it for
+    /// breaching its memory cgroup limit".
+    ///
+    /// @trace spec:runtime-diagnostics-stream (Resource event)
+    Oom,
     Removed,
     CleanedUp,
     Observed,
@@ -45,6 +54,7 @@ impl fmt::Display for ContainerLifecycleAction {
             Self::StopRequested => "stop-requested",
             Self::Killed => "killed",
             Self::Died => "died",
+            Self::Oom => "oom",
             Self::Removed => "removed",
             Self::CleanedUp => "cleaned-up",
             Self::Observed => "observed",
@@ -63,6 +73,15 @@ pub struct ContainerLifecycleRecord {
     pub source: LifecycleSource,
     pub raw_status: Option<String>,
     pub observed_at_unix: Option<i64>,
+    /// Container exit code when the source can carry it (podman events
+    /// emits `ContainerExitCode` on `Status=died` payloads). `None` for
+    /// non-terminal actions and for sources that don't expose it (today
+    /// the WSL router event channel doesn't). Feeds the (future)
+    /// `event:container_exit container=… exit_code=…` typed-event line
+    /// pinned in `format_container_exit_event`.
+    ///
+    /// @trace spec:runtime-diagnostics-stream (Container exit event)
+    pub exit_code: Option<i32>,
 }
 
 impl ContainerLifecycleRecord {
@@ -76,6 +95,9 @@ impl ContainerLifecycleRecord {
         }
         if let Some(observed_at_unix) = self.observed_at_unix {
             rendered.push_str(&format!(" observed_at_unix={observed_at_unix}"));
+        }
+        if let Some(exit_code) = self.exit_code {
+            rendered.push_str(&format!(" exit_code={exit_code}"));
         }
         rendered
     }
@@ -261,11 +283,34 @@ mod tests {
             source: LifecycleSource::PodmanEvents,
             raw_status: Some("start".into()),
             observed_at_unix: Some(1_711_400_000),
+            exit_code: None,
         };
 
         assert_eq!(
             record.render_human(),
             "event:container_lifecycle container=tillandsias-demo-aeranthos action=started state=Running source=podman-events raw_status=start observed_at_unix=1711400000"
+        );
+    }
+
+    /// A Died record with a captured `exit_code` renders the additional
+    /// `exit_code=<N>` field — pinned by unit test so the (future)
+    /// `event:container_exit ... exit_code=…` typed-event line and any
+    /// downstream grep stay deterministic across renderers.
+    #[test]
+    fn lifecycle_records_render_exit_code_when_present() {
+        let record = ContainerLifecycleRecord {
+            container_name: "tillandsias-demo-aeranthos".into(),
+            action: ContainerLifecycleAction::Died,
+            new_state: ContainerState::Stopped,
+            source: LifecycleSource::PodmanEvents,
+            raw_status: Some("died".into()),
+            observed_at_unix: Some(1_711_400_005),
+            exit_code: Some(137),
+        };
+
+        assert_eq!(
+            record.render_human(),
+            "event:container_lifecycle container=tillandsias-demo-aeranthos action=died state=Stopped source=podman-events raw_status=died observed_at_unix=1711400005 exit_code=137"
         );
     }
 

@@ -1580,7 +1580,45 @@ fn emit_launch_event(
     if !enabled {
         return;
     }
+    // Consult the process-wide diagnostics filter (env-driven; see
+    // crate::diagnostics_filter). The filter is built once per process
+    // and pass-through unless the user set TILLANDSIAS_DEBUG_FILTER /
+    // TILLANDSIAS_DEBUG_CONTAINER / TILLANDSIAS_DEBUG_LEVEL.
+    //
+    // @trace spec:runtime-diagnostics-stream (Requirement: Event filtering and control)
+    if !crate::diagnostics_filter::DiagnosticsFilter::global()
+        .allows("event:container_launch", container_name)
+    {
+        return;
+    }
+    eprintln!(
+        "[{}] {}",
+        iso8601_millis(chrono::Utc::now()),
+        format_launch_event(stage, container_name, state, detail)
+    );
+}
 
+/// Format a UTC instant as the runtime-diagnostics-stream timestamp:
+/// `2026-05-03T14:23:45.123Z` (ISO 8601 UTC, millisecond precision). Pure +
+/// testable; `emit_launch_event` prepends `[<this>] ` to every event line so
+/// the stream is ordered + parseable per spec:runtime-diagnostics-stream.
+fn iso8601_millis(dt: chrono::DateTime<chrono::Utc>) -> String {
+    dt.format("%Y-%m-%dT%H:%M:%S%.3fZ").to_string()
+}
+
+/// Build the idiomatic-layer container-launch diagnostics line. Extracted so
+/// the exact wire shape is unit-pinnable — litmus tests grep this stream
+/// (`event:container_launch ... state=running|failed`) to verify containers
+/// start correctly via the shared layer rather than raw podman. Keep the
+/// `key=value` field order stable: assertions depend on it.
+///
+/// @trace spec:runtime-diagnostics-stream, spec:podman-idiomatic-patterns
+fn format_launch_event(
+    stage: &str,
+    container_name: &str,
+    state: &str,
+    detail: Option<&str>,
+) -> String {
     let mut line = format!(
         "event:container_launch stage={} state={} container={}",
         shell_escape_field(stage),
@@ -1591,7 +1629,116 @@ fn emit_launch_event(
         line.push_str(" detail=");
         line.push_str(&shell_escape_field(detail));
     }
-    eprintln!("{line}");
+    line
+}
+
+/// Build the diagnostics-stream container-exit line. Field order is
+/// `container`, `exit_code`, optional `duration_seconds` — pinned by unit
+/// test so litmus assertions can grep on it.
+///
+/// The four typed-event formatters below are intentionally STAGED ahead of
+/// the PodmanEventStream → diagnostics emitter wiring (tracked as gap-2/
+/// gap-3 in plan/issues/linux-headless-spec-gaps-2026-05-27.md). Pinning
+/// the wire shape now via unit tests means the live-runtime wiring slice
+/// doesn't have to relitigate field order or escaping.
+///
+/// @trace spec:runtime-diagnostics-stream (scenario "Container exit event")
+#[allow(dead_code)] // staged for diagnostics-stream wiring slice (gap-2/gap-3)
+pub(crate) fn format_container_exit_event(
+    container_name: &str,
+    exit_code: i32,
+    duration_seconds: Option<u64>,
+) -> String {
+    let mut line = format!(
+        "event:container_exit container={} exit_code={}",
+        shell_escape_field(container_name),
+        exit_code
+    );
+    if let Some(secs) = duration_seconds {
+        line.push_str(&format!(" duration_seconds={secs}"));
+    }
+    line
+}
+
+/// Build the diagnostics-stream container-signal line. Signals carry the
+/// short name (`SIGTERM`, `SIGSEGV`, `SIGKILL`, ...) so operators don't have
+/// to translate numeric codes from podman's raw event payload.
+///
+/// @trace spec:runtime-diagnostics-stream (scenario "Container signal event")
+#[allow(dead_code)] // staged for diagnostics-stream wiring slice (gap-2/gap-3)
+pub(crate) fn format_container_signal_event(container_name: &str, signal: &str) -> String {
+    format!(
+        "event:container_signal container={} signal={}",
+        shell_escape_field(container_name),
+        shell_escape_field(signal)
+    )
+}
+
+/// Build the diagnostics-stream resource-exhaustion line. `resource` is a
+/// short identifier such as `memory_oom` or `disk_full`; `limit_bytes` is
+/// optional because not every resource is byte-quantified (e.g. file
+/// descriptors). Keep field order stable.
+///
+/// @trace spec:runtime-diagnostics-stream (scenario "Resource event (OOM, disk)")
+#[allow(dead_code)] // staged for diagnostics-stream wiring slice (gap-2/gap-3)
+pub(crate) fn format_resource_exhaustion_event(
+    container_name: &str,
+    resource: &str,
+    limit_bytes: Option<u64>,
+) -> String {
+    let mut line = format!(
+        "event:resource_exhaustion container={} resource={}",
+        shell_escape_field(container_name),
+        shell_escape_field(resource)
+    );
+    if let Some(bytes) = limit_bytes {
+        line.push_str(&format!(" limit_bytes={bytes}"));
+    }
+    line
+}
+
+/// Build the diagnostics-stream container-stderr pass-through line. The raw
+/// stderr line is shell-escaped so embedded whitespace/quotes survive as a
+/// single grep-able value — spec mandates one event per terminal line.
+///
+/// @trace spec:runtime-diagnostics-stream (scenario "Stderr line pass-through")
+#[allow(dead_code)] // staged for diagnostics-stream wiring slice (gap-2/gap-3)
+pub(crate) fn format_container_stderr_event(container_name: &str, line: &str) -> String {
+    format!(
+        "event:container_stderr container={} line={}",
+        shell_escape_field(container_name),
+        shell_escape_field(line)
+    )
+}
+
+/// Emit a typed diagnostic-stream event to stderr with the ISO-8601 prefix
+/// the spec mandates. Mirrors `emit_launch_event` — gated on `enabled` so
+/// callers can pass the runtime `debug` flag without branching themselves,
+/// and consults the global `DiagnosticsFilter` so
+/// `TILLANDSIAS_DEBUG_FILTER`/`TILLANDSIAS_DEBUG_CONTAINER` env vars take
+/// effect uniformly across all typed events.
+///
+/// `event_type` MUST be the wire-shape event kind (`event:container_exit`,
+/// `event:container_signal`, ...) so the filter can match it. `container`
+/// MUST be the literal container name as emitted in the event body, so a
+/// `TILLANDSIAS_DEBUG_CONTAINER=tillandsias-myproject-*` glob can target
+/// it. `event_body` MUST be the body produced by one of
+/// `format_container_exit_event`, `format_container_signal_event`,
+/// `format_resource_exhaustion_event`, or `format_container_stderr_event`.
+#[allow(dead_code)] // staged for diagnostics-stream wiring slice (gap-2/gap-3)
+pub(crate) fn emit_diagnostic_event(
+    enabled: bool,
+    event_type: &str,
+    container: &str,
+    event_body: &str,
+) {
+    if !enabled {
+        return;
+    }
+    if !crate::diagnostics_filter::DiagnosticsFilter::global().allows(event_type, container) {
+        return;
+    }
+    eprintln!("[{}] {}", iso8601_millis(chrono::Utc::now()), event_body);
 }
 
 fn summary_line(value: &str) -> &str {
@@ -1852,6 +1999,129 @@ mod tests {
     fn classify_typed_unknown_125_falls_through() {
         let f = fake_failure(Some(125), "Error: some unrecognized failure");
         assert!(classify_typed_launch_failure(&f).is_none());
+    }
+
+    /// Pins the idiomatic-layer container-launch diagnostics wire shape that
+    /// the container-start-health litmus greps. If this changes, update
+    /// openspec/litmus-tests/litmus-container-start-health.yaml in lockstep.
+    /// @trace spec:runtime-diagnostics-stream, spec:podman-idiomatic-patterns
+    #[test]
+    fn launch_event_line_shape_is_stable() {
+        let running = format_launch_event("forge", "tillandsias-acme-forge", "running", None);
+        assert_eq!(
+            running,
+            "event:container_launch stage=forge state=running container=tillandsias-acme-forge"
+        );
+        // Field order is stage, state, container — litmus assertions depend on it.
+        assert!(running.starts_with("event:container_launch stage="));
+        assert!(running.contains(" state=running "));
+
+        let failed =
+            format_launch_event("router", "tillandsias-router", "failed", Some("exit 125"));
+        assert_eq!(
+            failed,
+            "event:container_launch stage=router state=failed container=tillandsias-router detail=\"exit 125\""
+        );
+    }
+
+    /// The diagnostics timestamp is ISO 8601 UTC with millisecond precision
+    /// and a trailing Z (spec:runtime-diagnostics-stream). Pinned against a
+    /// fixed instant so it's deterministic.
+    #[test]
+    fn iso8601_millis_shape() {
+        use chrono::TimeZone;
+        let dt = chrono::Utc
+            .with_ymd_and_hms(2026, 5, 3, 14, 23, 45)
+            .unwrap()
+            + chrono::Duration::milliseconds(123);
+        assert_eq!(iso8601_millis(dt), "2026-05-03T14:23:45.123Z");
+        // Always 3 fractional digits + trailing Z, even on a whole second.
+        let whole = chrono::Utc.with_ymd_and_hms(2026, 1, 1, 0, 0, 0).unwrap();
+        assert_eq!(iso8601_millis(whole), "2026-01-01T00:00:00.000Z");
+    }
+
+    /// A whitespace/special-char detail is quoted (shell_escape_field) so a
+    /// grep-based litmus parse stays single-line and unambiguous.
+    #[test]
+    fn launch_event_detail_is_escaped() {
+        let line = format_launch_event("git", "c", "starting", Some("multi word detail"));
+        assert!(
+            line.ends_with("detail=\"multi word detail\""),
+            "got: {line}"
+        );
+    }
+
+    /// Pins the `event:container_exit` wire shape from
+    /// spec:runtime-diagnostics-stream verbatim. Field order is
+    /// `container`, `exit_code`, optional `duration_seconds` — litmus
+    /// assertions and the (future) PodmanEvents → diagnostics emitter both
+    /// depend on this ordering.
+    #[test]
+    fn container_exit_event_shape() {
+        let zero = format_container_exit_event("tillandsias-myproject-foo", 0, Some(25));
+        assert_eq!(
+            zero,
+            "event:container_exit container=tillandsias-myproject-foo exit_code=0 duration_seconds=25"
+        );
+        // No duration when we can't pair start→exit (start lost across
+        // restarts, observed-only via inspect, ...).
+        let no_dur = format_container_exit_event("tillandsias-x", 137, None);
+        assert_eq!(
+            no_dur,
+            "event:container_exit container=tillandsias-x exit_code=137"
+        );
+        // Negative exit codes (signal-killed reported as -N by some
+        // runtimes) survive without mangling.
+        let neg = format_container_exit_event("c", -11, None);
+        assert!(neg.contains(" exit_code=-11"), "got: {neg}");
+    }
+
+    /// Pins the `event:container_signal` wire shape from
+    /// spec:runtime-diagnostics-stream. Signals are emitted by short name
+    /// (SIGTERM, SIGSEGV, ...) — operators should not need to translate
+    /// numeric codes from podman's raw payload.
+    #[test]
+    fn container_signal_event_shape() {
+        let line = format_container_signal_event("tillandsias-myproject-foo", "SIGSEGV");
+        assert_eq!(
+            line,
+            "event:container_signal container=tillandsias-myproject-foo signal=SIGSEGV"
+        );
+    }
+
+    /// Pins the `event:resource_exhaustion` wire shape from
+    /// spec:runtime-diagnostics-stream. `limit_bytes` is optional because
+    /// not every resource is byte-quantified.
+    #[test]
+    fn resource_exhaustion_event_shape() {
+        let oom = format_resource_exhaustion_event(
+            "tillandsias-myproject-foo",
+            "memory_oom",
+            Some(2_147_483_648),
+        );
+        assert_eq!(
+            oom,
+            "event:resource_exhaustion container=tillandsias-myproject-foo resource=memory_oom limit_bytes=2147483648"
+        );
+        // Resource without a numeric limit (FDs, processes, ...).
+        let fds = format_resource_exhaustion_event("c", "file_descriptors", None);
+        assert_eq!(
+            fds,
+            "event:resource_exhaustion container=c resource=file_descriptors"
+        );
+    }
+
+    /// Pins the `event:container_stderr` pass-through shape and verifies
+    /// that an embedded-whitespace stderr line is shell-escaped to stay on
+    /// one terminal line per spec:runtime-diagnostics-stream.
+    #[test]
+    fn container_stderr_event_shape() {
+        let line =
+            format_container_stderr_event("tillandsias-myproject-foo", "error: compilation failed");
+        assert_eq!(
+            line,
+            "event:container_stderr container=tillandsias-myproject-foo line=\"error: compilation failed\""
+        );
     }
 
     /// @trace spec:enclave-network

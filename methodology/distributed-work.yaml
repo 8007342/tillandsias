@@ -148,6 +148,9 @@ distributed_work:
             idempotent: false
           blocked:
             fields: [ts, agent_id, host, lease_id, reason, blocker_refs]
+            metrics_tracking:
+              - "Coordinators MUST calculate the elapsed duration since the initial blocked event."
+              - "Coordinators MUST analyze blocker_refs to build a blocking tree, prioritizing root blockers."
             idempotent: false
           checkpoint:
             fields: [ts, agent_id, host, lease_id, commit_sha, summary]
@@ -466,6 +469,81 @@ distributed_work:
       - "The integration loop ledger
         (plan/issues/multi-host-integration-loop-2026-05-24.md) records
         every conflict resolution it performs."
+
+  active_multi_host_mediation_and_conflict_handling:
+    purpose: >
+      Active coordination rules to spot and resolve multi-host cooperation
+      blockers including deadlocks, thrashing, and wrong-direction progress.
+    protocols:
+      deadlock_mediation:
+        trigger: "Sibling A and Sibling B are mutually waiting on each other's deliverables."
+        action: >
+          Break the deadlock by extracting a minimal, mock-based interface contract or
+          naming one host as the primary driver to unblock the interface first. Repin
+          the blocker to the mock contract task.
+      wrong_direction_progress_mediation:
+        trigger: "A sibling implements plans or code deviating from active specs or violating core design invariants."
+        action: >
+          Freeze the sibling's lease. Document the divergence in loop_status.md and their
+          work queue. Force-assign a corrective 'Spec Alignment & Litmus Verification'
+          packet as their next primary task.
+      thrashing_mediation:
+        trigger: "Two hosts repeatedly overwrite each other's plan notes or code changes (undo-loops)."
+        action: >
+          Freeze both active leases. Audit the git history of the thrashed resource. Enforce
+          the stable-ID CRDT semantic merge policy for plans, and assign a single synchronous
+          conflict-resolution wave to one host while directing the other to a separate,
+          independent fallback task.
+
+  agent_execution_roles:
+    purpose: >
+      Define the two-tier execution model to sustain high velocity and guarantee finite-time
+      convergence: the Orchestration tier and the Worker execution tier.
+    roles:
+      orchestrator:
+        skill: "/multihost-orchestration (delegates to /coordinate-multihost-work)"
+        cadence: "hourly or daily integration cycles"
+        focus: >
+          Global health, blocker tree construction, active conflict mediation (deadlocks,
+          divergence, thrashing), convergence velocity calculations, and board shaping.
+          Publishes unblocked, actionable tasks for workers.
+      worker:
+        skill: "/advance-work-from-plan"
+        cadence: "highly recurring (every hour or on-demand)"
+        focus: >
+          Self-assignment orientation, claiming leases, implementing code/specs/cheatsheets,
+          emitting progress checkpoints, executing litmus tests, and publishing completed evidence.
+
+  worker_agent_protocol:
+    purpose: >
+      Detailed execution loop for worker agents to claim, execute, and complete shaped work
+      from the plan ledger without conflicting or idling.
+    steps:
+      - step: orient_and_identify
+        description: "Run start-of-session checks to fetch canonical remote state and determine host/capabilities."
+      - step: select_shaped_work
+        description: >
+          Scan the plan ledger. Filter for ready/pending/failed-retryable tasks where owner_host
+          matches or is 'any', and matching capability tags exist.
+      - step: claim_lease
+        description: >
+          Write a 'claim' event under the chosen task (upsert), minting a unique lease_id. Commit
+          and push to origin/linux-next. If pushed rebase reveals a competing claim, yield and re-select.
+      - step: implement_and_checkpoint
+        description: >
+          Switch to platform branch if target scope requires code work. Perform incremental changes.
+          Every 30-45 minutes or at coherent checkpoints, emit an 'agent_status_packet' progress event
+          (using the progress/checkpoint event block) and commit/push to linux-next.
+      - step: validate_local_litmus
+        description: "Run focused local litmus tests to verify current incremental correctness."
+      - step: submit_completion
+        description: >
+          Upon satisfying exit criteria, run the full validation litmus. Write a 'completed' event
+          to the events list, update status to 'done', and commit/push to origin/linux-next.
+      - step: yield_with_triage
+        description: >
+          If blocked or failed, write a 'blocked' or 'failed' event with a clear error/reason
+          under the item's events list, update status, release the lease, and switch to a ready fallback task.
 
   cheatsheet_index:
     - cheatsheets/concurrent-git/branches.md
