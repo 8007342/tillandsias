@@ -2,13 +2,13 @@
 
 ## Metadata
 
-- **Source log**: `target/forge-diagnostics/diagnostics_20260528T211316Z.stderr.log`
+- **Source log**: `target/forge-diagnostics/diagnostics_20260528T002635Z.log`
 - **Forge version**: unknown
 - **Completeness**: 0 / 0 checks passed (0%)
 
 ## Parse Errors
 
-- Expecting property name enclosed in double quotes: line 1 column 2 (char 1)
+- Expecting value: line 1 column 1 (char 0)
 
 ## Recommended Actions
 

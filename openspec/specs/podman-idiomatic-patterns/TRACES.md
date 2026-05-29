@@ -26,4 +26,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-podman/src/lib.rs#L1025](../../../crates/tillandsias-podman/src/lib.rs#L1025)
 - [crates/tillandsias-podman/src/lib.rs#L1052](../../../crates/tillandsias-podman/src/lib.rs#L1052)
 - [crates/tillandsias-podman/src/lib.rs#L1083](../../../crates/tillandsias-podman/src/lib.rs#L1083)
-- [scripts/distill-forge-diagnostics.sh#L307](../../../scripts/distill-forge-diagnostics.sh#L307)
+- [scripts/distill-forge-diagnostics.sh#L356](../../../scripts/distill-forge-diagnostics.sh#L356)

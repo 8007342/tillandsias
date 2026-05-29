@@ -3932,7 +3932,7 @@ fn launch_observatorium_browser(
     debug: bool,
 ) -> Result<(), String> {
     let app_url = observatorium_app_url(project_name, router_host_port);
-    if let Err(err) = wait_for_opencode_web_route(&app_url, debug) {
+    if let Err(err) = wait_for_opencode_web_route(project_name, &app_url, debug) {
         return Err(format!(
             "Observatorium auth gate did not become ready: {err}"
         ));
@@ -3975,7 +3975,7 @@ fn launch_observatorium_browser(
 
     send_issue_web_session(&project_label, &otp)
         .map_err(|e| format!("Failed to register Observatorium session with router: {e}"))?;
-    if let Err(err) = wait_for_authenticated_opencode_web(&app_url, &otp, debug) {
+    if let Err(err) = wait_for_authenticated_opencode_web(project_name, &app_url, &otp, debug) {
         return Err(format!(
             "Observatorium app did not become reachable with a registered session: {err}"
         ));
@@ -4490,14 +4490,12 @@ fn observatorium_probe_status(url: &str) -> Result<u16, String> {
     })
 }
 
-/// Best-effort tail of the observatorium container's podman logs. Used
-/// in the readiness-probe failure message so the user has something
-/// actionable to look at without having to know the container name.
+/// Best-effort tail of a container's podman logs. Used in readiness-probe
+/// failure messages so the user has something actionable to look at.
 /// Routes through `tillandsias-podman::PodmanClient::log_tail` to honour
 /// the idiomatic-podman layer contract (`tests::idiomatic_podman_launch_
 /// paths_do_not_bypass_shared_layer`).
-fn observatorium_logs_tail(project_name: &str, lines: usize) -> String {
-    let container = observatorium_container_name(project_name);
+fn container_logs_tail(container: &str, lines: usize) -> String {
     let rt = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
         .build()
@@ -4506,7 +4504,7 @@ fn observatorium_logs_tail(project_name: &str, lines: usize) -> String {
         Err(e) => return format!("    (could not build log-tail runtime: {e})"),
     };
     let client = PodmanClient::new();
-    let tail = rt.block_on(async move { client.log_tail(&container, lines).await });
+    let tail = rt.block_on(async move { client.log_tail(container, lines).await });
     match tail {
         Ok(t) if t.lines.is_empty() => "    (container logs are empty)".into(),
         Ok(t) => t
@@ -4517,6 +4515,14 @@ fn observatorium_logs_tail(project_name: &str, lines: usize) -> String {
             .join("\n"),
         Err(e) => format!("    (podman log_tail failed: {e})"),
     }
+}
+
+/// Best-effort tail of the observatorium container's podman logs. Used
+/// in the readiness-probe failure message so the user has something
+/// actionable to look at without having to know the container name.
+fn observatorium_logs_tail(project_name: &str, lines: usize) -> String {
+    let container = observatorium_container_name(project_name);
+    container_logs_tail(&container, lines)
 }
 
 #[cfg(test)]
@@ -4614,31 +4620,46 @@ fn opencode_web_http_status(url: &str, cookie_header: Option<String>) -> Result<
     })
 }
 
-fn wait_for_opencode_web_route(url: &str, debug: bool) -> Result<(), String> {
+fn wait_for_opencode_web_route(project_name: &str, url: &str, debug: bool) -> Result<(), String> {
+    let mut last_outcome = String::from("no HTTP probe attempted");
     for attempt in 1..=20 {
         match opencode_web_http_status(url, None) {
             Ok(401) => return Ok(()),
-            Ok(code) if debug => {
-                eprintln!(
-                    "[tillandsias] waiting for OpenCode Web auth gate: attempt {attempt}/20 (status {code})"
-                );
+            Ok(code) => {
+                last_outcome = format!("status {code}");
+                if debug {
+                    eprintln!(
+                        "[tillandsias] waiting for OpenCode Web auth gate: attempt {attempt}/20 ({last_outcome})"
+                    );
+                }
             }
-            Err(err) if debug => {
-                eprintln!(
-                    "[tillandsias] waiting for OpenCode Web auth gate: attempt {attempt}/20 ({err})"
-                );
+            Err(err) => {
+                last_outcome = err;
+                if debug {
+                    eprintln!(
+                        "[tillandsias] waiting for OpenCode Web auth gate: attempt {attempt}/20 ({last_outcome})"
+                    );
+                }
             }
-            _ => {}
         }
         std::thread::sleep(Duration::from_millis(500));
     }
 
+    let forge_container = forge_container_name(project_name);
+    let logs_tail = container_logs_tail(&forge_container, 50);
     Err(format!(
-        "OpenCode Web auth gate did not become ready: {url}"
+        "OpenCode Web auth gate did not become ready in 10s.\n\
+         URL: {url}\n\
+         Last outcome: {last_outcome}\n\
+         Forge container logs (last ≤50 lines):\n{logs_tail}\n\
+         Next: inspect `podman logs {forge_container}` for the\n\
+         full transcript, then verify the enclave network + router are\n\
+         healthy via `tillandsias --status`."
     ))
 }
 
 fn wait_for_authenticated_opencode_web(
+    project_name: &str,
     url: &str,
     cookie_value: &[u8; tillandsias_otp::COOKIE_LEN],
     debug: bool,
@@ -4649,26 +4670,40 @@ fn wait_for_authenticated_opencode_web(
         tillandsias_otp::format_cookie_value(cookie_value)
     );
 
+    let mut last_outcome = String::from("no HTTP probe attempted");
     for attempt in 1..=20 {
         match opencode_web_http_status(url, Some(cookie_header.clone())) {
             Ok(code) if (200..400).contains(&code) => return Ok(()),
-            Ok(code) if debug => {
-                eprintln!(
-                    "[tillandsias] waiting for authenticated OpenCode Web app: attempt {attempt}/20 (status {code})"
-                );
+            Ok(code) => {
+                last_outcome = format!("status {code}");
+                if debug {
+                    eprintln!(
+                        "[tillandsias] waiting for authenticated OpenCode Web app: attempt {attempt}/20 ({last_outcome})"
+                    );
+                }
             }
-            Err(err) if debug => {
-                eprintln!(
-                    "[tillandsias] waiting for authenticated OpenCode Web app: attempt {attempt}/20 ({err})"
-                );
+            Err(err) => {
+                last_outcome = err;
+                if debug {
+                    eprintln!(
+                        "[tillandsias] waiting for authenticated OpenCode Web app: attempt {attempt}/20 ({last_outcome})"
+                    );
+                }
             }
-            _ => {}
         }
         std::thread::sleep(Duration::from_millis(500));
     }
 
+    let forge_container = forge_container_name(project_name);
+    let logs_tail = container_logs_tail(&forge_container, 50);
     Err(format!(
-        "OpenCode Web app did not become reachable with a registered session: {url}"
+        "OpenCode Web app did not become reachable with a registered session in 10s.\n\
+         URL: {url}\n\
+         Last outcome: {last_outcome}\n\
+         Forge container logs (last ≤50 lines):\n{logs_tail}\n\
+         Next: inspect `podman logs {forge_container}` for the\n\
+         full transcript, then verify the enclave network + router are\n\
+         healthy via `tillandsias --status`."
     ))
 }
 
@@ -4952,7 +4987,7 @@ fn launch_opencode_web_browser(
 ) -> Result<(), String> {
     let url = opencode_web_url(project_name, router_host_port);
     emit_opencode_web_event(project_name, "browser", "wait_for_route", Some(&url))?;
-    if let Err(err) = wait_for_opencode_web_route(&url, debug) {
+    if let Err(err) = wait_for_opencode_web_route(project_name, &url, debug) {
         emit_opencode_web_event(project_name, "browser", "route_unhealthy", Some(&err))?;
         return Err(err);
     }
@@ -5014,7 +5049,7 @@ fn launch_opencode_web_browser(
             emit_opencode_web_event(project_name, "browser", "session_register_failed", Some(&e));
         format!("Failed to register web session with router: {e}")
     })?;
-    if let Err(err) = wait_for_authenticated_opencode_web(&url, &otp, debug) {
+    if let Err(err) = wait_for_authenticated_opencode_web(project_name, &url, &otp, debug) {
         emit_opencode_web_event(project_name, "browser", "session_probe_failed", Some(&err))?;
         return Err(err);
     }

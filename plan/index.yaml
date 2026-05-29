@@ -884,8 +884,8 @@ plan_index:
 
     - id: plan-ledger-refresh
       order: 12
-      title: Plan Ledger Refresh — Tray and Observatorium Routing Wave
-      status: in_progress
+      title: Plan Ledger Refresh — Durable Ledger & Step Splitting
+      status: completed
       deliverable: plan/steps/12-plan-ledger-refresh.md
       depends_on: []
       specs: []
@@ -906,7 +906,7 @@ plan_index:
           checkpoint_required: true
           handoff_note: "Current wave: refresh the durable plan ledger first, then split routing/bootstrap/port/readiness into resumable step files. Keep plan/issues as the blocker queue and preserve cold-start readability."
         - id: plan-ledger-refresh/tray-routing-split
-          status: ready
+          status: completed
           depends_on:
             - plan-ledger-refresh/bootstrap
           owned_files:
@@ -920,7 +920,7 @@ plan_index:
     - id: router-observatorium-routing
       order: 13
       title: Router and Observatorium Routing — Canonical Hostname Wave
-      status: in_progress
+      status: completed
       deliverable: plan/steps/13-router-observatorium-routing.md
       depends_on: [plan-ledger-refresh]
       specs: []
@@ -930,7 +930,7 @@ plan_index:
         - "Safe browser launch paths accept the HTTPS observatorium URL"
       tasks:
         - id: router-observatorium-routing/allowlist-and-canonical-url
-          status: in_progress
+          status: completed
           depends_on: [plan-ledger-refresh/bootstrap]
           owned_files:
             - crates/tillandsias-browser-mcp/src/allowlist.rs
