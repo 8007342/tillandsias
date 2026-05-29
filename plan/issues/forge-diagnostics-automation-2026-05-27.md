@@ -512,3 +512,66 @@ permanently stuck on hosts that aren't the annex producer.
 - lease: CONTINUE.
 
 @trace plan/issues/forge-diagnostics-automation-2026-05-27.md
+
+## agent_status_packet — work-loop slice 2026-05-29T06:21Z — curated-toolchain-backlog seeded
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- packet: `forge-enhancements/curated-toolchain-backlog` — CLAIMED
+  and slice 1 shipped. The packet's dependency
+  `forge-diagnostics/e2e-piggyback-orchestration` is now functionally
+  complete (4c2993ac runtime emitter + 8f070293 distill consumer +
+  e4aad43b piggyback wiring on container-start-health), so this
+  packet is unblocked. Three live diagnostic runs this session
+  (04:05Z, 05:03Z, 06:03Z) produced converging candidate lists with
+  100% completeness on the structural side, giving a rich seed.
+- shipped: new file
+  `plan/diagnostics/forge-enhancements-curated-toolchain-backlog-
+  2026-05-29.md` — organizes 24 unique candidates across 8
+  ecosystems (Rust, Python, Web, Dart/Flutter, Go, WASM, Shell,
+  Profiling, Reproducible-builds) per the packet's
+  expected_evidence rule ("Backlog groups requested tools by
+  ecosystem"). Each candidate carries a status (proposed only —
+  the file does NOT approve unilaterally), source-run citations,
+  rationale, and a privacy/isolation note pointing at any envelope
+  concerns. A "Sizing notes" section pre-decomposes the future
+  approval queue into 10 platform-sized implementation packets per
+  the packet's "not one giant image change" rule.
+- candidates surfaced by ecosystem (proposed status):
+    - Rust: 11 (clippy, cargo-edit, cargo-llvm-cov / cargo-tarpaulin
+      pick-one, cargo-deny, cargo-semver-checks, cargo-expand,
+      cargo-outdated, cargo-tree (likely blocked — likely
+      duplicate of `cargo tree` builtin), cargo-criterion,
+      cargo-wasi)
+    - Python: 4 (black, pylint, flake8, bandit)
+    - Web (JS/TS): 2 (prettier, eslint — both confirmed by ≥2 runs)
+    - Dart/Flutter: 1 (flutter — confirmed by 2 runs; large image
+      impact)
+    - Go: 1 (delve — confirmed by 2 runs)
+    - WASM: 2 (wasmtime confirmed by 3 runs, wasmer alternative;
+      pick-one)
+    - Shell: 2 (shellcheck, shfmt)
+    - Profiling: 3 (perf — envelope-review flag, ltrace, heaptrack)
+    - Reproducible: 1 (nix — envelope-review flag)
+- privacy/isolation gating section preserved at file head — orchestrator
+  reviews each candidate against the unchanged envelope (no new egress,
+  no new creds, no new mounts, no security-flag drops) before
+  approving.
+- files touched: `plan/diagnostics/forge-enhancements-curated-
+  toolchain-backlog-2026-05-29.md` (new).
+- evidence: file structure follows the packet's expected_evidence
+  rules; cited candidates trace back to exact source-summary lines;
+  no code changes so build/test gates not exercised.
+- blockers/errors: NONE.
+- next checkpoint: orchestrator reviews + flips status fields on
+  individual candidates (proposed → approved/blocked/deferred).
+  Approved candidates spawn sized implementation packets per the
+  pre-decomposed groupings in the "Sizing notes" section. The 8
+  already-shipped enhancements from earlier this session (Go, Rust,
+  Python, WASM, dev-quality batch in c373f12a + a81cc9b5)
+  established the pattern for future approval-implementation
+  cycles.
+- lease: CONTINUE on the forge-diagnostics packet umbrella; this
+  packet is now in the "awaiting orchestrator review" phase.
+
+@trace plan/issues/forge-diagnostics-automation-2026-05-27.md
+@trace plan/diagnostics/forge-enhancements-curated-toolchain-backlog-2026-05-29.md
