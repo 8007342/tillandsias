@@ -44,3 +44,39 @@ trace: .claude/skills/build-macos-tray/SKILL.md (the skill that wrote this)
 **Cross-host visibility note**: N/A (SECTION_KIND=ok).
 
 **Next iteration ask**: N/A (SECTION_KIND=ok). Next run is tomorrow 12:07 PM local per CronCreate `2358d904`.
+
+---
+
+### 20260529T193710Z — ok
+
+- agent_id: macos-Tlatoani-MacBook-Air-claude-opus-20260529T193710Z
+- head_sha: 5e331872
+- version: 0.2.260528.1
+- build_run_id: 20260529T193710Z
+
+**Build**:
+- duration: 1 s wall-clock (cargo cache hit; nothing changed between this run and 20260529T190656Z 30 min earlier — proves incremental cache works for back-to-back invocations)
+- tarball: tillandsias-tray-0.2.260528.1-macos-arm64.tar.gz (1.52 MiB, sha256 668b0a5c3b202794dd62e04beabe191cf673ba17d7166c1e45a4721bc6cea2d3)
+- codesign verify: pass (`valid on disk` + `satisfies its Designated Requirement`)
+- entitlement com.apple.security.virtualization: present
+
+**Autonomous smoke**:
+- `--diagnose --json` exit: 2 (degraded; same `provisioned: false` state as the first run — no Start VM cycle in between)
+- `--diagnose --json` keys present: [exe_path, image_root, in_app, initrd_bytes, initrd_present, kernel_bytes, kernel_present, manifest_pin_aarch64_img, provisioned, release_tag, rootfs_bytes, rootfs_present, version] — same 13 keys as prior run
+- diagnose values: provisioned=false, release_tag=v0.2.260526.1, manifest_pin=6859a7bcc4a9 (matches RECIPE_RELEASE_TAG const pinned by slice 27's litmus + manifest.toml pin from F1 republish)
+- detached launch: alive-after-3s
+- SIGTERM round-trip: clean-SIGTERM-exit
+
+**Install**:
+- target: ~/Applications/Tillandsias.app
+- backup made: yes — first run's bundle rotated to `Tillandsias.app.bak`
+- post-install diagnose schema match: yes
+
+**Findings** (free-form; what regressed, what surprised, what to investigate):
+- **Tarball SHA changed despite identical binary bytes**: prior run tarball was `bfb3a0dffc144dadd495ec548142e5ed98e626c97748e0ccc3b8a5e8fd84ff18`; this run is `668b0a5c3b202794dd62e04beabe191cf673ba17d7166c1e45a4721bc6cea2d3`. The bundled binary is `3191968` bytes in both runs (byte-stable from cargo cache hit), but `tar -czf` embeds file mtimes + a gzip timestamp, so back-to-back tars of identical content produce different sha256. **Reproducibility implication**: `scripts/build-macos-tray.sh`'s SHA256SUMS line is currently per-build, not per-source-state — sibling hosts can't use the line for "is this the same bundle as macOS shipped last week?" verification. **Recommendation for a future skill iteration or `build-macos-tray.sh` patch**: pass `--mtime` (BSD tar) or set `GZIP=-n` + sort the directory walk to produce a reproducible tarball. Low priority — not a regression, just a "documented limitation" datapoint the daily cron will surface every run until fixed.
+- **Pre-install pkill found no running tray** even though my smoke `pkill`'d in §2b. The two halves of the skill are sequential, so any tray spawned in §2b is already dead before §3 reaches its pkill — the pkill is a no-op in the happy path but cheap insurance for the rare race where §2b's SIGTERM didn't fully exit. Behaves as designed; flag for completeness.
+- **Cargo cache is the dominant variable** for build duration: 14s (run 1, cold cargo state on a fresh terminal) vs 1s (run 2, cached). Daily runs at 12:07 PM will typically be the cold-cache path the first day after a `cargo clean` and warm cache otherwise. Both are fast.
+
+**Cross-host visibility note**: N/A (SECTION_KIND=ok).
+
+**Next iteration ask**: N/A. The tarball-reproducibility note above is worth threading into the skill if it becomes a real cross-host coordination cost (e.g. windows-host wants to verify their build matches macOS's bytewise). Not blocking anything today.
