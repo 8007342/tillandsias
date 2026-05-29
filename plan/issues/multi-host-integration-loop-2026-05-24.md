@@ -51,6 +51,63 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-29T11:43Z — CONFLICT-SKIPPED windows-next (parallel folded-scalar fix race) 🟡
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `79578c2f` (pre-merge head, unchanged — merge
+  aborted).
+- observed_sibling_heads: main=`fa746f03` · linux-next=`79578c2f` ·
+  windows-next=`441b8426` · osx-next=`79578c2f`
+- windows-next action: **conflict-skipped**. Single commit
+  `441b8426 litmus(windows-next): pin --diagnose CLI surface + repair
+  wire-unreachable litmus for runner` does two things: (1) adds a new
+  `litmus:windows-tray-diagnose-cli-surface` (clean, would not have
+  conflicted), and (2) repairs the folded-scalar bug in
+  `litmus-wire-unreachable-chip-text-symmetric.yaml` that I flagged
+  as a drift advisory in the 09:43Z cron ledger entry.
+- The CONFLICT: linux-side antigravity (`3d24ac20` at 10:04Z) and
+  windows-side (`441b8426` at 11:32Z) BOTH independently fixed the
+  same folded-scalar bug in the same file. Both converted
+  `command: >` to single-line `command: "..."` form, but with
+  different per-step text + windows additionally dropped two
+  redundant value-content steps (the per-host unit tests already
+  pin the byte sequence). `git merge --no-ff --no-commit
+  origin/windows-next` reported `CONFLICT (content)` on
+  `openspec/litmus-tests/litmus-wire-unreachable-chip-text-
+  symmetric.yaml` with 6 conflict markers. Aborted per protocol.
+  windows-next remains unintegrated this cycle.
+- osx-next action: **no-op** (head identical to linux-next post-
+  earlier osx coord cycle at `79578c2f`).
+- Verification: skipped (no merge to verify).
+- Spec/methodology/plan drift: ADVISORY only. The conflict is
+  BENIGN IN INTENT — both sides fixed the same bug — but needs
+  human or single-host resolution to pick one set of step texts.
+  Recommended resolution path (does NOT need to land this cycle):
+    1. Compare the linux-side `3d24ac20` repair vs the windows-side
+       `441b8426` repair step-by-step.
+    2. windows-next's repair is more aggressive (drops two redundant
+       value-content steps because the per-host unit tests already
+       pin the byte sequence). That's a sensible reduction.
+    3. Either: (a) cherry-pick windows-next's version onto
+       linux-next, accepting their refinement; OR (b) leave the
+       linux-side version in place and have windows-next rebase
+       their commit onto linux-next, picking up the linux version
+       as the merge base.
+  Option (a) preserves windows-next's authorship of the refinement
+  and is the cleanest forward move. Flag for the next integration
+  cycle steward to act on.
+- Cross-host convergence note: this is the FIRST conflict-skipped
+  cycle in the recent integration arc. The collision is on the
+  shared-scope `openspec/litmus-tests/` directory, specifically a
+  file both linux + windows had legitimate reason to repair
+  simultaneously. Lesson learned: a drift advisory in one cron's
+  ledger entry doesn't guarantee that the sibling host's parallel
+  fix won't race a same-host fix in the meantime. The advisory
+  workflow is correct; the race window is narrow but real. Future
+  drift advisories could include a "claim resolution lease" hint
+  (e.g. "linux will fix in next work cycle") to reduce same-bug
+  parallel-repair races.
+
 ### Cycle 2026-05-29T10:04Z — NO-OP (siblings integrated) & VALIDATED 100% green tests & Release 26544334121 Successful ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
