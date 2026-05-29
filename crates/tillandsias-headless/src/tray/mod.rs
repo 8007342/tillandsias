@@ -33,7 +33,7 @@ use tillandsias_control_wire::{
 };
 use tillandsias_core::config::{self, SelectedAgent};
 use tillandsias_core::genus::TrayIconState;
-use tillandsias_core::remote_projects;
+use crate::remote_projects;
 use tillandsias_podman::{
     ContainerSpec, MountMode, container_exists_sync, image_exists_sync, podman_available_sync,
     stop_container_sync,

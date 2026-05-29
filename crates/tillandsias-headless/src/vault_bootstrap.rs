@@ -25,6 +25,7 @@ use std::process::{Command, Stdio};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
+use tillandsias_podman::podman_cmd_sync;
 use tillandsias_vault_client::{Policy, VaultClient, auto_unseal};
 use zeroize::Zeroize;
 
@@ -246,7 +247,7 @@ pub async fn revoke_pending_container_tokens(debug: bool) {
         {
             eprintln!("[tillandsias-vault] revoke {} failed: {e}", secret_name);
         }
-        let _ = Command::new("podman")
+        let _ = podman_cmd_sync()
             .args(["secret", "rm", &secret_name])
             .stdout(Stdio::null())
             .stderr(Stdio::null())
@@ -331,7 +332,7 @@ fn read_machine_id() -> Result<String, String> {
 
 fn create_unseal_secret(key: &[u8; 32], debug: bool) -> Result<(), String> {
     // Best-effort remove any prior secret.
-    let _ = Command::new("podman")
+    let _ = podman_cmd_sync()
         .args(["secret", "rm", VAULT_UNSEAL_SECRET])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -341,7 +342,7 @@ fn create_unseal_secret(key: &[u8; 32], debug: bool) -> Result<(), String> {
             "[tillandsias-vault] creating podman secret {VAULT_UNSEAL_SECRET} (32 bytes from HKDF)"
         );
     }
-    let mut child = Command::new("podman")
+    let mut child = podman_cmd_sync()
         .args([
             "secret",
             "create",
@@ -376,7 +377,7 @@ fn create_unseal_secret(key: &[u8; 32], debug: bool) -> Result<(), String> {
 /// Create (or replace) a podman secret holding the supplied token bytes.
 /// Mode `0400`, file driver. Used for per-container AppRole tokens.
 fn create_token_podman_secret(name: &str, token: &str, debug: bool) -> Result<(), String> {
-    let _ = Command::new("podman")
+    let _ = podman_cmd_sync()
         .args(["secret", "rm", name])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -387,7 +388,7 @@ fn create_token_podman_secret(name: &str, token: &str, debug: bool) -> Result<()
             token.len()
         );
     }
-    let mut child = Command::new("podman")
+    let mut child = podman_cmd_sync()
         .args(["secret", "create", "--driver=file", name, "-"])
         .stdin(Stdio::piped())
         .stdout(Stdio::null())
@@ -415,7 +416,7 @@ fn create_token_podman_secret(name: &str, token: &str, debug: bool) -> Result<()
 
 fn launch_vault_container(debug: bool) -> Result<(), String> {
     // Tear down any previous container with the same name (idempotent).
-    let _ = Command::new("podman")
+    let _ = podman_cmd_sync()
         .args(["rm", "-f", VAULT_CONTAINER_NAME])
         .stdout(Stdio::null())
         .stderr(Stdio::null())
@@ -442,7 +443,7 @@ fn launch_vault_container(debug: bool) -> Result<(), String> {
     );
     let volume_arg = format!("{}:/vault/data", VAULT_VOLUME);
     let port_arg = format!("127.0.0.1:{}:8200", VAULT_HOST_PORT);
-    let status = Command::new("podman")
+    let status = podman_cmd_sync()
         .args([
             "run",
             "-d",
@@ -510,7 +511,7 @@ fn wait_for_vault_ready(
 }
 
 fn read_root_token() -> Result<String, String> {
-    let out = Command::new("podman")
+    let out = podman_cmd_sync()
         .args([
             "exec",
             VAULT_CONTAINER_NAME,
@@ -529,7 +530,7 @@ fn read_root_token() -> Result<String, String> {
 }
 
 fn container_running(name: &str) -> bool {
-    let out = Command::new("podman")
+    let out = podman_cmd_sync()
         .args(["inspect", "--format", "{{.State.Running}}", name])
         .output();
     match out {
@@ -610,7 +611,7 @@ pub fn policy_role_name(policy: &Policy) -> &'static str {
 /// of the regular bootstrap.
 #[allow(dead_code)]
 async fn migrate_legacy_github_token(client: &VaultClient, debug: bool) -> Result<(), String> {
-    let out = Command::new("podman")
+    let out = podman_cmd_sync()
         .args([
             "run",
             "--rm",
@@ -645,7 +646,7 @@ async fn migrate_legacy_github_token(client: &VaultClient, debug: bool) -> Resul
     if read_back["token"].as_str() != Some(token.as_str()) {
         return Err("vault read-back did not match written token".to_string());
     }
-    let _ = Command::new("podman")
+    let _ = podman_cmd_sync()
         .args(["secret", "rm", "tillandsias-github-token"])
         .stdout(Stdio::null())
         .stderr(Stdio::null())

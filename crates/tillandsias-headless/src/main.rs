@@ -64,6 +64,8 @@ mod cloud_projects;
 mod control_dispatch;
 #[cfg(any(feature = "tray", feature = "listen-vsock"))]
 mod local_projects;
+#[cfg(any(feature = "tray", feature = "listen-vsock"))]
+pub mod remote_projects;
 mod runtime_assets;
 #[cfg(feature = "vault")]
 // @trace spec:tillandsias-vault — Phase 6 default bootstrap (was Phase 3 opt-in).

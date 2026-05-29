@@ -1,4 +1,5 @@
 // @trace spec:remote-projects, spec:gh-auth-script
+// @cheatsheet runtime/hashicorp-vault-tillandsias.md
 //! GitHub project discovery and caching for tray's "Clone Project" feature.
 //!
 //! Queries GitHub API via `gh` inside the git image, filters projects based on
@@ -155,7 +156,7 @@ fn run_git_image_shell(script: &str, extra_args: &[&str], debug: bool) -> Result
     if debug {
         debug_log_podman_invocation("run_git_image_shell", &image, true, script, extra_args);
     }
-    let mut command = Command::new("podman");
+    let mut command = tillandsias_podman::podman_cmd_sync();
     command.args([
         "run",
         "--rm",
@@ -373,7 +374,7 @@ exec gh repo clone "$1" "$2"
         );
     }
 
-    let output = Command::new("podman")
+    let output = tillandsias_podman::podman_cmd_sync()
         .args([
             "run",
             "--rm",

@@ -8,7 +8,6 @@ pub mod genus;
 pub mod icons;
 pub mod image_builder;
 pub mod project;
-pub mod remote_projects;
 pub mod secrets;
 pub mod state;
 pub mod tools;
