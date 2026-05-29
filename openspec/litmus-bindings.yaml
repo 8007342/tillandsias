@@ -570,8 +570,10 @@ specs:
   status: active
   litmus_tests:
   - litmus:runtime-diagnostics-shape
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  - litmus:runtime-diagnostics-emitter-shape
+  - litmus:runtime-diagnostics-spec-mapping-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-29'
 - spec_id: runtime-diagnostics-stream
   status: active
   litmus_tests:
