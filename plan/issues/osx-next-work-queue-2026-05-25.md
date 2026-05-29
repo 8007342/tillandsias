@@ -3002,3 +3002,33 @@ step 5 lands.
 - No new macOS-naming asks in the merged ledger.
 - Streak: 1 (defer-noop). Next macOS iter eligible in ~1h
   (3600s wake per adaptive cadence rules).
+
+### event: macOS m11 — SelectAgent state mutation + immediate rebuild — 2026-05-29T16:55Z
+
+- Closes the SelectAgent TODO that was the last unwired arm in
+  `dispatch_menu_action`. New free fn `apply_menu_action_state(state,
+  action) -> bool` mirrors windows-tray's `apply_menu_action_state`
+  at `notify_icon.rs:1674` byte-for-shape. SelectAgent arm: lock
+  held MenuState, mutate via helper, if changed dispatch
+  `rebuild_menu_main_thread` on the AppKit main thread so the
+  checkmark moves on the same click.
+- macOS difference from windows: NSMenu is built-once, requires
+  explicit `setMenu:` swap — so the rebuild is mandatory for
+  visible checkmark UX. Windows's HMENU repaints on hover.
+- Closes the m10 follow-up: m10's `Attach/Maintain` arm reads
+  `selected_agent` from held MenuState; now that read returns a
+  meaningful value when the user has selected a different agent.
+- New unit test `apply_menu_action_state_mutates_only_on_agent_
+  change` (3 assertions: idempotent re-select returns false; agent
+  switch returns true + mutates; non-SelectAgent variants are
+  no-op). Mirrors windows-tray's `apply_menu_action_state_*` tests
+  at notify_icon.rs:2080+.
+- Bonus cleanup: converted a pre-existing orphan doc-block (lifted
+  spawn_vm_status_poller doc) from `///` to `//` to satisfy
+  clippy's `empty_line_after_doc_comments` — was always there
+  but the lint only fires once a new function is inserted after
+  the dangling doc.
+- Tests: macos-tray 42/42 (+1, was 41). clippy `--tests -D
+  warnings` clean. fmt clean.
+- Streak reset to 0 (productive iter; noop streak file deleted).
+  Next macOS iter eligible at ~17:25Z.

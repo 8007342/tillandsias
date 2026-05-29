@@ -1085,13 +1085,46 @@ impl TrayActionHost {
                 eprintln!("[tillandsias-tray] {action:?}: no URL yet (gui-passthrough is v2)");
             }
             MenuAction::SelectAgent(agent) => {
-                // TODO(slice): mutate held MenuState + re-render the
-                // menu so the checkmark moves. Mirrors Windows's
-                // `apply_menu_action_state`. Stubbed for now — clicking
-                // updates stderr but the menu doesn't visually change.
-                eprintln!(
-                    "[tillandsias-tray] SelectAgent({agent:?}): TODO wire MenuState + rerender"
-                );
+                // m11: mutate held MenuState via `apply_menu_action_state`
+                // (mirror of windows-tray's `apply_menu_action_state` at
+                // notify_icon.rs:1674), then trigger an immediate NSMenu
+                // rebuild on the main thread so the checkmark moves on
+                // the current click. Unlike windows's HMENU which the
+                // system re-paints on next hover, an NSMenu is built
+                // once and stays static until `setMenu:` swaps it —
+                // so explicit rebuild here is required for visible UX.
+                //
+                // `apply_menu_action_state` is a no-op (returns false)
+                // when the agent is unchanged, so spamming the same
+                // agent doesn't churn the menu.
+                let changed = {
+                    let mut state = match self.ivars().menu_state.lock() {
+                        Ok(g) => g,
+                        Err(_) => {
+                            eprintln!("[tillandsias-tray] SelectAgent: menu_state poisoned");
+                            return;
+                        }
+                    };
+                    apply_menu_action_state(&mut state, &action)
+                };
+                if changed {
+                    eprintln!("[tillandsias-tray] SelectAgent({agent:?}): updated + rebuilding");
+                    let ivars = self.ivars();
+                    let menu_state = ivars.menu_state.clone();
+                    let status_item = ivars.status_item.clone();
+                    let status_menu_item = ivars.status_menu_item.clone();
+                    let self_handle = ivars.self_handle.clone();
+                    dispatch_to_main_thread(move || {
+                        rebuild_menu_main_thread(
+                            &menu_state,
+                            &status_item,
+                            &status_menu_item,
+                            &self_handle,
+                        );
+                    });
+                } else {
+                    eprintln!("[tillandsias-tray] SelectAgent({agent:?}): already selected");
+                }
             }
             MenuAction::Attach { .. } | MenuAction::Maintain { .. } => {
                 // m10: resolve (intent, project) via the shared
@@ -1341,20 +1374,48 @@ impl TrayActionHost {
     }
 }
 
-/// Spawn the 30s VmStatus poller. Mirrors windows-tray's
-/// `spawn_provisioning` Ready branch (commit c45f23ae): every 30s,
-/// call `poll_vm_status_once`, render the result through
-/// `vm_phase_status_text`, and patch the chip via a main-thread
-/// dispatch. A transient wire error leaves the last-known chip text
-/// untouched (matching the windows policy).
+// (orphaned doc-block from an earlier refactor; the canonical
+// docstring for `spawn_vm_status_poller` lives at the function
+// itself further down. Converted from `///` to `//` so clippy's
+// `empty_line_after_doc_comments` lint stays happy in the gap
+// between the next two functions.)
+//
+// Spawn the 30s VmStatus poller. Mirrors windows-tray's
+// `spawn_provisioning` Ready branch (commit c45f23ae): every 30s,
+// call `poll_vm_status_once`, render the result through
+// `vm_phase_status_text`, and patch the chip via a main-thread
+// dispatch. A transient wire error leaves the last-known chip text
+// untouched (matching the windows policy).
+//
+// @trace spec:vsock-transport,
+//        plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 5)
+
+/// Apply the state-mutating effect of a menu action to the held
+/// `MenuState`. Currently only `SelectAgent` mutates state (sets
+/// `selected_agent`); returns `true` if `state` was actually changed
+/// — `false` for an idempotent re-select of the same agent or for
+/// any other action variant.
 ///
-/// Lives outside the impl so the spawned task only captures Arcs +
-/// the VzRuntime handle (no Retained<Self> bookkeeping). The task
-/// runs for the lifetime of the Tokio runtime — process exit takes
-/// it down via runtime drop.
+/// Mirrors windows-tray's `apply_menu_action_state` at
+/// `notify_icon.rs:1674` byte-for-shape so the cross-tray state-
+/// mutation contract is symmetric. Factored out of the dispatcher
+/// so the rule is unit-testable without driving AppKit.
 ///
-/// @trace spec:vsock-transport,
-///        plan/steps/20-macos-tray-v0_0_1.md (m4 sub-task B slice 5)
+/// @trace spec:macos-native-tray.ui.menu-parity@v1
+fn apply_menu_action_state(
+    state: &mut tillandsias_host_shell::menu_state::MenuState,
+    action: &tillandsias_host_shell::menu_action::MenuAction,
+) -> bool {
+    use tillandsias_host_shell::menu_action::MenuAction;
+    match action {
+        MenuAction::SelectAgent(agent) if state.selected_agent != *agent => {
+            state.selected_agent = *agent;
+            true
+        }
+        _ => false,
+    }
+}
+
 /// Rebuild the NSMenu on the AppKit main thread from the held
 /// MenuState and swap it in via `NSStatusItem.setMenu:`. Re-attaches
 /// `status_menu_item` to the new first-row item (the chip), since
@@ -1732,6 +1793,50 @@ mod tests {
     /// `notify_icon::tests::vm_phase_status_text_reflects_phase_and_podman`
     /// — keeping the two assertions identical guards the cross-platform
     /// UX-parity invariant.
+    /// m11: `apply_menu_action_state` mutates `MenuState.selected_agent`
+    /// when a `SelectAgent` click carries a different agent than the
+    /// currently-held one; returns `false` (no-op) when the agent is
+    /// unchanged or the action is not `SelectAgent`. Mirrors windows-
+    /// tray's `apply_menu_action_state` behaviour at notify_icon.rs:1674.
+    #[test]
+    fn apply_menu_action_state_mutates_only_on_agent_change() {
+        use tillandsias_host_shell::menu_action::MenuAction;
+        use tillandsias_host_shell::menu_state::{MenuState, SelectedAgent};
+
+        let mut state = MenuState::initial();
+        let initial_agent = state.selected_agent;
+
+        // Idempotent: re-selecting the current agent is a no-op.
+        assert!(
+            !apply_menu_action_state(&mut state, &MenuAction::SelectAgent(initial_agent)),
+            "re-selecting current agent must not mutate state"
+        );
+        assert_eq!(state.selected_agent, initial_agent);
+
+        // Different agent flips state + returns true.
+        let other_agent = if initial_agent == SelectedAgent::OpenCode {
+            SelectedAgent::Claude
+        } else {
+            SelectedAgent::OpenCode
+        };
+        assert!(
+            apply_menu_action_state(&mut state, &MenuAction::SelectAgent(other_agent)),
+            "switching agent must return true"
+        );
+        assert_eq!(state.selected_agent, other_agent);
+
+        // Other actions don't touch agent state.
+        assert!(
+            !apply_menu_action_state(&mut state, &MenuAction::Quit),
+            "Quit must not mutate menu state"
+        );
+        assert!(
+            !apply_menu_action_state(&mut state, &MenuAction::GithubLogin),
+            "GithubLogin must not mutate menu state"
+        );
+        assert_eq!(state.selected_agent, other_agent, "state unchanged");
+    }
+
     /// m10: pin the dispatcher's `Attach`/`Maintain` arm contract — every
     /// click on a per-project menu row resolves via the shared
     /// `intent_for_action` table to a `(PtyIntent, Some(project))` tuple
