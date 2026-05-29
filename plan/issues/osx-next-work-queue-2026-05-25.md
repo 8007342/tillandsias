@@ -2692,3 +2692,30 @@ step 5 lands.
   clean; fmt clean.
 - Streak: 0 (productive iter). Next macOS iter eligible at
   ~02:00Z.
+
+### event: macOS slice 20 — wire-level VmShutdownRequest before VZ stop — 2026-05-29T04:00Z
+
+- Commit `8b9baf8f` mirrors windows-tray's `80eceb0b` (Q2 of
+  convergence packet). Adds a wire-level VmShutdownRequest step
+  BEFORE `VZ.requestStop` so the in-VM headless can drain podman
+  containers + sessions instead of being yanked underneath.
+- New `request_vm_shutdown(vz, drain_timeout)` mirrors the
+  existing poller helpers (open vsock → from_stream client →
+  handshake → request → classify reply). Bounded by RTT_BUDGET=3s.
+  Reuses slice-18's `describe_wire_error` Error{Unsupported}
+  helper.
+- On vsock today the inner VmShutdownRequest handler isn't
+  shipped yet — Linux landed it on the unix dispatcher only
+  (`a10dc0f6`). The reply is Error{Unsupported} which the
+  helper surfaces and the caller logs at info. When linux adds
+  the vsock inner arm, the non-Error branch lights up
+  automatically with NO tray code change.
+- Two-step shutdown (wire request + VZ.requestStop) is now
+  structurally identical to windows-tray's request_vm_shutdown +
+  graceful_shutdown pattern; only the inner OS call differs
+  (`VZ.requestStop` vs `wsl --terminate`).
+- Resets the noop streak — file deleted.
+- Tests + lint clean: macos-tray 39/39; clippy -D warnings clean;
+  fmt clean.
+- Streak: 0 (productive iter). Next macOS iter eligible at
+  ~04:30Z.
