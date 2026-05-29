@@ -51,6 +51,49 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-29T21:43Z — MERGED osx-next (macOS build findings + UX-gaps doc) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `150aea76` (merge commit; linux-next was at
+  `fc298496` pre-merge).
+- observed_sibling_heads: main=`ea28d773` · linux-next=`fc298496`
+  (pre-merge) · windows-next=`24d7bec7` (already integrated at
+  19:43Z) · osx-next=`632786c3`
+- windows-next action: **no-op** (no commits ahead of linux-next;
+  windows last merge was at the 19:43Z cycle).
+- osx-next action: **merged + tested + pushed**. Single commit
+  `632786c3 chore(macos-build-findings): 20260529T212446Z ok +
+  UX-gaps documented`:
+    * Hourly `/build-macos-tray` run against `9a945410` (post the
+      19:43Z linux-next merge) — build green, smoke green, install
+      replaced the `5e331872` bundle the user observed gap-1/
+      gap-2/gap-3 against. Fresh bundle not yet re-tested against
+      the UX gap list — that will land when
+      `/test-e2e-macos-tray` fires at 04:43Z (per the macOS
+      autonomous-smoke schedule).
+    * Publishes `plan/issues/macos-tray-ux-gaps-2026-05-29.md` —
+      durable UX-regression list referenced by the autonomous-
+      smoke-false-positive correction section appended earlier
+      today. This is the macOS host's persistent log of UX
+      regressions the autonomous smoke can't yet detect; future
+      work will close those autonomously-detectable.
+  Touched files: 2 plan/issues/ files (1 updated + 1 new). All
+  macOS-host-owned plan-scope content; no code overlap. Auto-
+  merged cleanly.
+- Verification: `./build.sh --check` clean + `./build.sh --test`
+  clean. Full pre-build instant litmus suite: 62/62 PASS at 100%
+  across 89 specs (no new bound litmus; plan docs only).
+- Spec/methodology/plan drift: NONE outside `plan/issues/`. The
+  new `plan/issues/macos-tray-ux-gaps-2026-05-29.md` is macOS-
+  host-owned content — no spec, methodology, or cross-platform
+  contract changes.
+- Cross-host convergence note: the per-platform build cron skills
+  (macOS / windows / `merge-to-main-and-release`) are now producing
+  ledger artifacts visible cross-host. macOS has a UX-gap follow-on
+  loop where autonomous smoke can't detect what the user observed
+  on `5e331872`; the new bundle from `/build-macos-tray` 21:24Z
+  is up to bat for the next `/test-e2e-macos-tray` cycle.
+
 ### Cycle 2026-05-29T20:00Z — CONVERGED (zero branch drift, local CI validated) ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
