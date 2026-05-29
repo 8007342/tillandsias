@@ -19,9 +19,9 @@ plan:
     verification: methodology/verification.yaml
 
   current_state:
-    last_completed_step: multi-host-plan-ledger-adoption (step 21)
-    next_step: forge-diagnostics-improvement-loop (step 21.6)
-    next_graph_node: forge-diagnostics-improvement-loop (in_progress)
+    last_completed_step: forge-diagnostics-improvement-loop (step 21.6)
+    next_step: none
+    next_graph_node: none
     plan_index: plan/index.yaml
     step_directory: plan/steps
     checkpoint_branch: linux-next

@@ -1546,7 +1546,7 @@ plan_index:
     - id: forge-diagnostics-improvement-loop
       order: 21.6
       title: Forge Diagnostics Improvement Loop — /diagnose-forge + opencode-repeat
-      status: in_progress
+      status: completed
       deliverable: plan/forge-improvements/
       depends_on: [forge-diagnostics-automation]
       specs:
