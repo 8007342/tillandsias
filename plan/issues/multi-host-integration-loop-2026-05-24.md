@@ -51,6 +51,41 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-29T03:43Z — MERGED windows-next (VmShutdownRequest on Quit, Q2 consumption) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `e8f1b690` (merge commit; linux-next was at `6c140db6` pre-merge)
+- observed_sibling_heads: main=`fa746f03` · linux-next=`6c140db6` (pre-merge) · windows-next=`80eceb0b` · osx-next=`d8129ce2`
+- windows-next action: **merged + tested + pushed**. Single commit
+  `80eceb0b feat(windows-next): VmShutdownRequest on Quit (wire-level
+  graceful drain, Q2)` — windows consuming the linux unix-dispatcher
+  Q2 work from this morning's a10dc0f6 + a2d series. Windows Quit
+  now does an optimistic wire-level VmShutdownRequest (drain_timeout_ms=10s,
+  bounded 3s RTT) BEFORE `wsl --terminate`, so the in-VM headless
+  has a chance to drain podman containers gracefully. Errors are
+  logged as info via `describe_wire_error` and the hard terminate
+  fallback still runs — behaviour is strictly backward-compatible.
+  Touched file: `crates/tillandsias-windows-tray/src/notify_icon.rs`
+  (windows-owned scope, no overlap with linux files). The merge auto-
+  upgrades when linux adds the **vsock-side** VmShutdownRequest inner
+  handler (currently the matrix routes it but the variant-match falls
+  through to "matrix says Handle but no handler yet"). No tray code
+  change needed for that upgrade — pure data-driven evolution.
+- osx-next action: **no-op** (head unchanged at `d8129ce2` since the
+  previous cycle's noop-streak-2 acknowledgement of my Q2 work).
+- Verification: `./build.sh --check` clean + `./build.sh --test` clean
+  (full workspace test suite passed).
+- Spec/methodology/plan drift: NONE — windows commit touches only
+  the windows-tray crate; no openspec/, methodology/, or plan/ files
+  affected.
+- Cross-host convergence note: Q2 of the control-socket convergence
+  packet has now produced THREE rounds of cross-host follow-through
+  in under two hours — linux ships unix-side handler (a10dc0f6 02:51Z)
+  → osx acknowledges via noop-streak-2 (d8129ce2 ~03:00Z) → windows
+  consumes via Quit drain (80eceb0b 03:26Z). The matrix-as-source-of-
+  truth design is paying back exactly as the convergence packet
+  predicted.
+
 ### Cycle 2026-05-29T02:10Z — NO-OP (siblings integrated) & VALIDATED 100% green tests & Approved/Implemented Forge Improvements ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
