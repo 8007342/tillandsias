@@ -247,8 +247,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:forge-as-only-runtime
+  - litmus:container-start-health
   coverage_ratio: 100
-  last_verified: '2026-05-19'
+  last_verified: '2026-05-29'
 - spec_id: forge-cache-architecture
   status: obsolete
   litmus_tests: []
@@ -508,8 +509,9 @@ specs:
   - litmus:podman-idiomatic-error-discrimination
   - litmus:podman-idiomatic-launch-routing
   - litmus:headless-init-status-check-source-built
+  - litmus:container-start-health
   coverage_ratio: 100
-  last_verified: '2026-05-16'
+  last_verified: '2026-05-29'
 - spec_id: project-bootstrap-readme
   status: active
   litmus_tests:
@@ -547,7 +549,8 @@ specs:
   - litmus:runtime-diagnostics-stream-shape
   - litmus:runtime-diagnostics-emitter-shape
   - litmus:runtime-diagnostics-typed-events-shape
-  coverage_ratio: 90
+  - litmus:container-start-health
+  coverage_ratio: 100
   last_verified: '2026-05-29'
 - spec_id: runtime-logging
   status: active
