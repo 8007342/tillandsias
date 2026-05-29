@@ -2670,3 +2670,25 @@ step 5 lands.
   clean; fmt clean.
 - Streak: 0 (productive iter). Next macOS iter eligible at
   ~00:00Z (2026-05-29).
+
+### event: macOS slice 19 — poll EnumerateLocalProjects + populate menu — 2026-05-29T01:30Z
+
+- Commit `06088c41` consumes Linux's just-landed
+  `EnumerateLocalProjects` handler (`05cc3a7d`, convergence packet
+  Q4). macOS-first convergence — windows-tray hasn't wired this
+  yet, so this slice sets the shape they can mirror.
+- Adds `poll_local_projects_once(vz)` + `local_entry_to_menu`
+  mirror-of-`poll_cloud_projects_once` shape. Wires into the
+  poller's first-tick+every-10-ticks branch, before the cloud
+  poll (local fs walks are virtually free vs `gh repo list`).
+- `local_entry_to_menu`: name=label, path=guest_path (in-VM
+  mount path, what "Attach Here" exec calls target),
+  ready=false (per-project status isn't on the wire yet; a
+  future PerProjectStatusReply will populate it).
+- Reuses slice-18's `describe_wire_error` Error{Unsupported}
+  handling.
+- Resets the noop streak — file deleted in `06088c41`.
+- Tests + lint clean: macos-tray 39/39 (+2); clippy -D warnings
+  clean; fmt clean.
+- Streak: 0 (productive iter). Next macOS iter eligible at
+  ~02:00Z.
