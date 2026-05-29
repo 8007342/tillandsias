@@ -710,7 +710,8 @@ specs:
   status: active
   litmus_tests:
   - litmus:wire-unreachable-chip-text-symmetric
-  coverage_ratio: 50
+  - litmus:windows-tray-diagnose-cli-surface
+  coverage_ratio: 100
   last_verified: '2026-05-29'
 - spec_id: wsl-daemon-orchestration
   status: active

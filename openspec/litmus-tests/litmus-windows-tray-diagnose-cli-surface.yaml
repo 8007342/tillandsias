@@ -1,0 +1,63 @@
+# @trace spec:windows-native-tray
+# Pin the entire `--diagnose` CLI diagnostic surface — the binary modes, the
+# JSON-schema unit tests, the consumer scripts, and the cheatsheet provenance
+# — so a refactor that drops a mode, renames a schema test, deletes a script,
+# or unlinks the cheatsheet surfaces here pre-build instead of breaking
+# support tooling at the install step.
+#
+# Pairs with windows-native-tray.spec.md's `--diagnose CLI mode emits a stable
+# bundled health report` Requirement (commit 145ff3d2) and its two invariants:
+#   - diagnose-exit-codes {0, 2, 1}
+#   - wire-unreachable-chip-text symmetric
+# (the latter pinned cross-tray by litmus-wire-unreachable-chip-text-symmetric).
+
+name: litmus:windows-tray-diagnose-cli-surface
+spec: windows-native-tray
+phase: pre-build
+description: "Pin the diagnostic CLI surface of tillandsias-tray.exe across the binary modes, JSON-schema unit tests, consumer scripts, and cheatsheet."
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-windows-tray/src/main.rs
+  - workspace contains crates/tillandsias-windows-tray/src/notify_icon.rs
+  - workspace contains scripts/install-windows.ps1
+  - workspace contains scripts/tray-diagnose.ps1
+  - workspace contains cheatsheets/runtime/windows-tray-diagnostics.md
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "all four CLI modes wired in main.rs"
+    command: "grep -Fe '--provision-once' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--status-once' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--diagnose' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--json' crates/tillandsias-windows-tray/src/main.rs"
+    expected_behavior: "grep succeeds"
+    timeout_ms: 3000
+
+  - step: "DiagnoseFormat enum + Human/Json variants pinned"
+    command: "grep -F 'pub enum DiagnoseFormat' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'DiagnoseFormat::Human' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'DiagnoseFormat::Json' crates/tillandsias-windows-tray/src/notify_icon.rs"
+    expected_behavior: "grep succeeds"
+    timeout_ms: 3000
+
+  - step: "JSON schema-pin unit tests attached"
+    command: "grep -F 'fn diagnose_json_top_level_keys_pinned' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn diagnose_json_wire_object_keys_pinned' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn diagnose_json_manifest_pin_some_serializes_as_string' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn diagnose_json_manifest_pin_none_serializes_as_null' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn diagnose_json_recent_log_tail_is_array' crates/tillandsias-windows-tray/src/notify_icon.rs"
+    expected_behavior: "grep succeeds"
+    timeout_ms: 3000
+
+  - step: "exit-code contract test attached"
+    command: "grep -F 'fn exit_code_provisioned_zero_degraded_two' crates/tillandsias-windows-tray/src/notify_icon.rs"
+    expected_behavior: "grep succeeds"
+    timeout_ms: 3000
+
+  - step: "install-windows.ps1 contains the post-install --diagnose sanity check"
+    command: "grep -F 'cmd.exe' scripts/install-windows.ps1 && grep -Fe '--diagnose --json' scripts/install-windows.ps1 && grep -F 'install bits broken' scripts/install-windows.ps1"
+    expected_behavior: "grep succeeds"
+    timeout_ms: 3000
+
+  - step: "tray-diagnose.ps1 consumer script uses cmd-redirect"
+    command: "grep -F 'cmd.exe /c' scripts/tray-diagnose.ps1 && grep -Fe '--diagnose --json' scripts/tray-diagnose.ps1"
+    expected_behavior: "grep succeeds"
+    timeout_ms: 3000
+
+  - step: "cheatsheet exists with the documented schema"
+    command: "grep -F 'Windows tray diagnostics' cheatsheets/runtime/windows-tray-diagnostics.md && grep -F 'manifest_pin_x86_64_tar' cheatsheets/runtime/windows-tray-diagnostics.md"
+    expected_behavior: "grep succeeds"
+    timeout_ms: 3000
