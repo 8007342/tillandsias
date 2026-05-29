@@ -417,6 +417,7 @@ specs:
   - litmus:macos-tray-diagnose-cli-surface
   - litmus:recipe-release-tag-symmetric
   - litmus:tray-status-text-helpers-symmetric
+  - litmus:exit-code-provisioned-zero-degraded-two-symmetric
   coverage_ratio: 100
   last_verified: '2026-05-29'
 - spec_id: methodology-accountability

@@ -2877,3 +2877,25 @@ step 5 lands.
   precedent. YAML parses cleanly. No Rust changes.
 - Streak: 0 (productive iter). Next macOS iter eligible at
   ~13:25Z.
+
+### event: macOS slice 29 — bring forward windows exit-code symmetric litmus + bind — 2026-05-29T13:35Z
+
+- Windows commit `1336fe04` bound my slices 27+28 onto windows-
+  native-tray AND authored a new cross-tray litmus
+  `litmus:exit-code-provisioned-zero-degraded-two-symmetric` (4
+  grep steps) pinning the --diagnose exit-code tri-state contract
+  via the identically-named `exit_code_provisioned_zero_degraded_two`
+  unit test on both sides + the `diagnose-exit-codes` invariant in
+  both spec.md files.
+- Brought the litmus file forward into linux-next byte-identically
+  (`git show origin/windows-next:...`) so it's runnable on my tree
+  before the 2h integration cron merges windows-next. Git will
+  dedupe at merge time.
+- Bound on macos-native-tray (5 litmuses now, coverage stays 100%).
+  Closes the cross-tray binding loop windows opened. Same precedent
+  as slices 25/27/28: each side owns its own binding row.
+- All 4 grep steps verified PASS locally on my tree (windows fn,
+  macos fn, windows spec invariant, macos spec invariant).
+- YAML parses cleanly. No Rust changes.
+- Streak: 0 (productive iter). Next macOS iter eligible at
+  ~14:05Z.
