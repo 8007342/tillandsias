@@ -453,6 +453,34 @@ fn control_socket_path() -> PathBuf {
     runtime_dir.join("tillandsias/control.sock")
 }
 
+/// Env var that overrides the default Linux-native host project root.
+/// Linux native (the tray running on the user's desktop, not in-VM)
+/// resolves projects from the host filesystem — convention is
+/// `$HOME/src` unless the user pins something else. See the in-VM
+/// sibling `vsock_server::IN_VM_PROJECT_ROOT_ENV` for the other half
+/// of the Q4 answer.
+///
+/// @trace plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q4)
+const HOST_PROJECT_ROOT_ENV: &str = "TILLANDSIAS_HOST_PROJECT_ROOT";
+
+/// Resolve the Linux-native host project root.
+///
+/// Priority: `TILLANDSIAS_HOST_PROJECT_ROOT` env var → `$HOME/src`
+/// (matches the user's typical workspace layout) → an unreadable
+/// fallback so `scan_project_root` returns an empty list without
+/// panicking.
+fn host_project_root() -> PathBuf {
+    if let Ok(v) = env::var(HOST_PROJECT_ROOT_ENV) {
+        return PathBuf::from(v);
+    }
+    if let Some(home) = env::var_os("HOME") {
+        return PathBuf::from(home).join("src");
+    }
+    // No HOME and no override → a path that will fail read_dir and
+    // produce an empty list. Better than panicking.
+    PathBuf::from("/nonexistent")
+}
+
 fn read_control_envelope(stream: &mut UnixStream) -> std::io::Result<ControlEnvelope> {
     let mut len = [0_u8; 4];
     stream.read_exact(&mut len)?;
@@ -567,6 +595,26 @@ fn handle_control_connection(mut stream: UnixStream, subscribers: ControlSubscri
                         },
                     };
                     let _ = write_control_envelope(&mut stream, &ack);
+                }
+                ControlMessage::EnumerateLocalProjects { seq } => {
+                    // Linux-native EnumerateLocalProjects handler (Q4
+                    // answer of the convergence packet). Mirrors the
+                    // vsock-side `enumerate_local_projects` but points
+                    // at the host filesystem (default `$HOME/src`)
+                    // instead of the in-VM bind-mount root.
+                    //
+                    // @trace spec:host-shell-architecture
+                    // @trace plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q4)
+                    let entries = crate::local_projects::scan_project_root(&host_project_root());
+                    let reply = ControlEnvelope {
+                        wire_version: WIRE_VERSION,
+                        seq: first.seq,
+                        body: ControlMessage::LocalProjectsReply {
+                            seq_in_reply_to: seq,
+                            entries,
+                        },
+                    };
+                    let _ = write_control_envelope(&mut stream, &reply);
                 }
                 other => {
                     // Matrix says Handle but no inner arm yet. Write a

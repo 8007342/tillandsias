@@ -609,50 +609,22 @@ fn in_vm_project_root() -> PathBuf {
     )
 }
 
-/// Enumerate the in-VM project bind-mount root and return one entry per
-/// visible directory. Hidden entries (leading dot) and non-directories
-/// are skipped. `last_seen_unix` is the directory's mtime.
-///
-/// Cheap by design: a single `read_dir` + per-entry `metadata`. The host
-/// tray re-issues this on user-visible events, not on a tight loop.
+/// Enumerate the in-VM project bind-mount root. Thin wrapper around
+/// the shared `crate::local_projects::scan_project_root` so both the
+/// vsock (in-VM) and unix (Linux native) dispatchers run the same
+/// directory-walk + sort + mtime logic on different roots.
 ///
 /// @trace spec:host-shell-architecture, plan/issues/multi-host-integration-loop-2026-05-24.md l4
 fn enumerate_local_projects() -> Vec<LocalProjectEntry> {
     let root = in_vm_project_root();
-    let Ok(entries) = std::fs::read_dir(&root) else {
+    let out = crate::local_projects::scan_project_root(&root);
+    if out.is_empty() {
         debug!(
             spec = "host-shell-architecture",
             root = %root.display(),
-            "EnumerateLocalProjects: project root not readable; returning empty"
+            "EnumerateLocalProjects (in-VM): project root unreadable or empty; returning empty list"
         );
-        return Vec::new();
-    };
-    let mut out = Vec::new();
-    for entry in entries.flatten() {
-        let path = entry.path();
-        let Ok(meta) = entry.metadata() else { continue };
-        if !meta.is_dir() {
-            continue;
-        }
-        let Some(name) = path.file_name().and_then(|n| n.to_str()) else {
-            continue;
-        };
-        if name.starts_with('.') {
-            continue;
-        }
-        let last_seen_unix = meta
-            .modified()
-            .ok()
-            .and_then(|t| t.duration_since(std::time::UNIX_EPOCH).ok())
-            .map(|d| d.as_secs())
-            .unwrap_or(0);
-        out.push(LocalProjectEntry {
-            label: name.to_string(),
-            guest_path: path.to_string_lossy().into_owned(),
-            last_seen_unix,
-        });
     }
-    out.sort_by(|a, b| a.label.cmp(&b.label));
     out
 }
 

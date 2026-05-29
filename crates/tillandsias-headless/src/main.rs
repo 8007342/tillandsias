@@ -60,6 +60,8 @@ use tracing::{debug, error, info, warn};
 use serde::{Deserialize, Serialize};
 
 mod control_dispatch;
+#[cfg(any(feature = "tray", feature = "listen-vsock"))]
+mod local_projects;
 mod runtime_assets;
 #[cfg(feature = "vault")]
 // @trace spec:tillandsias-vault — Phase 6 default bootstrap (was Phase 3 opt-in).
