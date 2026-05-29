@@ -1,0 +1,102 @@
+# @trace spec:external-logs-layer
+#
+# Drift protection for the external-logs producer-manifest contract.
+#
+# The existing `litmus:external-logs-layer-shape` (size: quick) runs
+# `cargo test -p tillandsias-core` on the path-construction helpers
+# (`external_logs_dir` + `external_logs_role_dir`) — covers
+# requirement 2 (Producer mount + manifest contract) at the path
+# level but doesn't pin the actual manifest in the default image
+# that the spec requires producers to declare.
+#
+# This companion litmus is size: instant and grep-only; pins the
+# manifest schema at the spec-contract level:
+#   1. `images/default/external-logs.yaml` exists with the
+#      `@trace spec:external-logs-layer` line (the spec→file
+#      mapping document).
+#   2. `role:` field present at top level (per "Producer writes
+#      only to declared files" scenario).
+#   3. `files:` array with required entries: `name`, `purpose`,
+#      `format`, `rotate_at_mb`, `written_by` (per "Manifest
+#      format" scenario's schema).
+#   4. `format:` values are in {text, jsonl} — the spec
+#      explicitly forbids binary formats.
+#
+# Combined with the existing quick litmus, raises external-logs-
+# layer coverage_ratio from 33 to ~67.
+name: litmus:external-logs-manifest-shape
+spec: external-logs-layer
+phase: pre-build
+description: >
+  Drift protection for the producer-manifest contract — pins the
+  default image's `external-logs.yaml` against the schema the
+  external-logs-layer spec mandates (role + files[] with
+  name/purpose/format/rotate_at_mb/written_by, format restricted
+  to text|jsonl).
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains images/default/external-logs.yaml
+  - workspace contains crates/tillandsias-core/src/config.rs
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "default-image manifest carries the spec→file trace"
+    # The @trace line may list multiple specs comma-separated (the
+    # manifest also traces cheatsheets-license-tiered). Match the
+    # spec name within the @trace line, not as a prefix.
+    command: "grep -E '@trace.*spec:external-logs-layer' images/default/external-logs.yaml"
+    timeout_ms: 3000
+    expected_behavior: "spec:external-logs-layer"
+
+  - step: "manifest declares a top-level role field"
+    command: "grep -E '^role:' images/default/external-logs.yaml"
+    timeout_ms: 3000
+    expected_behavior: "role:"
+
+  - step: "manifest declares a top-level files array"
+    command: "grep -E '^files:' images/default/external-logs.yaml"
+    timeout_ms: 3000
+    expected_behavior: "files:"
+
+  - step: "each file entry includes the required schema fields"
+    command: "grep -F 'name:' images/default/external-logs.yaml && grep -F 'purpose:' images/default/external-logs.yaml && grep -F 'format:' images/default/external-logs.yaml && grep -F 'rotate_at_mb:' images/default/external-logs.yaml && grep -F 'written_by:' images/default/external-logs.yaml"
+    timeout_ms: 3000
+    expected_behavior: "rotate_at_mb:"
+
+  - step: "format values restricted to text or jsonl (no binary)"
+    # The spec scenario "Manifest format" explicitly forbids binary
+    # formats. Any `format:` line in the manifest MUST evaluate to
+    # text or jsonl. A future regression that introduces e.g.
+    # `format: binary` would fire here pre-build.
+    command: "if grep -Ev 'format:[[:space:]]*(text|jsonl)' images/default/external-logs.yaml | grep -E 'format:'; then echo 'FAIL: non-text/jsonl format value detected'; exit 1; else echo 'ok: all format values are text or jsonl'; fi"
+    timeout_ms: 3000
+    expected_behavior: "ok: all format values are text or jsonl"
+
+  - step: "tillandsias-core exposes the path-construction helpers"
+    command: "grep -F 'pub fn external_logs_dir' crates/tillandsias-core/src/config.rs && grep -F 'pub fn external_logs_role_dir(role: &str)' crates/tillandsias-core/src/config.rs"
+    timeout_ms: 3000
+    expected_behavior: "external_logs_role_dir"
+
+observability:
+  traces:
+    - "@trace spec:external-logs-layer"
+  expected_log: "Producer manifest schema + path helpers pinned per external-logs-layer spec"
+  log_fields:
+    spec: "external-logs-layer"
+    test: "external-logs-manifest-shape"
+    manifest_artifact: "images/default/external-logs.yaml"
+    helper_artifact: "crates/tillandsias-core/src/config.rs"
+
+rollback:
+  on_failure: >
+    The producer manifest or the path-construction helpers drifted
+    from the external-logs-layer spec. Inspect
+    `images/default/external-logs.yaml` (must keep the @trace line,
+    the `role:` top-level field, the `files:` array with each entry
+    declaring name/purpose/format/rotate_at_mb/written_by, and
+    `format:` values restricted to text|jsonl); and
+    `crates/tillandsias-core/src/config.rs` (must export
+    `external_logs_dir()` and `external_logs_role_dir(role: &str)`).
+  command: "sed -n '1,40p' images/default/external-logs.yaml && grep -nE 'external_logs_' crates/tillandsias-core/src/config.rs | head"
