@@ -51,6 +51,78 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-29T09:43Z — MERGED windows-next (cross-tray wire-unreachable symmetric pin litmus) ⚠️ litmus uses folded-`>` scalar (silently parsed as 0 steps)
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `f90e999a` (merge commit; linux-next was at
+  `675f6125` pre-merge).
+- observed_sibling_heads: main=`fa746f03` · linux-next=`675f6125`
+  (pre-merge) · windows-next=`43737173` · osx-next=`4211a013`
+- windows-next action: **merged + tested + pushed** (with drift
+  advisory below). Single commit `43737173 litmus(windows-next):
+  cross-tray wire-unreachable chip-text symmetric pin` — adds a
+  new litmus `litmus-wire-unreachable-chip-text-symmetric.yaml`
+  that asserts both windows-tray AND macos-tray:
+    1. Declare `(pub) const WIRE_UNREACHABLE_CHIP_TEXT`
+    2. Both use the U+1F534 LARGE RED CIRCLE codepoint via
+       `"\u{1F534} Wire unreachable"`
+    3. Both attach an identically-named `wire_unreachable_chip_text
+       _pinned` unit test
+  Five grep steps. Touched files: `openspec/litmus-bindings.yaml`
+  (windows-native-tray gains the new binding, coverage_ratio 50 —
+  pins one of the two invariants the spec declares) +
+  `openspec/litmus-tests/litmus-wire-unreachable-chip-text-symmetric
+  .yaml` (new file). windows-tray suite reported 32/32, fmt+clippy
+  clean.
+- osx-next action: **no-op** (no commits ahead of linux-next).
+- Verification: `./build.sh --check` clean + `./build.sh --test`
+  clean (workspace test suite passed). Merge clean — bindings file
+  auto-merged the parallel additions (mine for container-start-
+  health 3-spec binding at `8c0c8387` + windows for the new
+  symmetric pin) without conflict.
+
+#### Drift advisory: silently-broken litmus from this merge
+
+⚠️ The new `litmus-wire-unreachable-chip-text-symmetric.yaml`
+uses YAML folded-`>` multi-line scalars for its `command:` fields.
+The `scripts/run-litmus-test.sh` runner's regex parser only matches
+single-line `command: "..."` form (line 619), so when invoked the
+runner counts ZERO steps and returns a generic "Check
+implementation" failure. The test is shipped as drift-protection
+but silently NEVER executes.
+
+  Status: `litmus:wire-unreachable-chip-text-symmetric` FAILS via
+  the runner; the underlying source-level symmetry is intact
+  (manual grep of both files confirms the const + value + pin test
+  on each side). The runner gives a false-negative on test
+  execution, not a real-negative on the drift it's trying to catch.
+
+This is the same parser quirk I discovered + flagged at 07:21Z
+(when binding `runtime-diagnostics-typed-events-shape`) and the
+sibling antigravity agent swept across 5 other litmus tests at
+08:13Z (`dd5e07ff`). The windows litmus shipped concurrently with
+that sweep and missed it.
+
+Recommended follow-on (does NOT need to land this cycle): convert
+each `command: >` block in `litmus-wire-unreachable-chip-text-
+symmetric.yaml` to single-line `command: "..."` form. Same fix
+pattern as `5438da9a` and `dd5e07ff`. This is a `openspec/` scope
+change — shared, but technically anyone can do it; flagging here
+so it doesn't surprise the next integration cron.
+
+- Spec/methodology/plan drift: openspec/litmus-bindings.yaml gained
+  a windows-native-tray binding entry (1 line). openspec/litmus-
+  tests/ gained one new file. No openspec/specs, methodology/, or
+  plan/ files affected.
+- Cross-host convergence note: the symmetric pin is the natural
+  follow-on to windows + macOS extracting the const with the same
+  name (windows `145ff3d2` + macos `cbeedb4a`). Once the
+  folded-scalar parser issue is fixed, the litmus becomes the
+  cross-OS drift-protection guarantee both spec invariants
+  reference (`wire-unreachable-chip-text-symmetric` in
+  macos-native-tray.spec.md slice 24 `4a0abba6`; corresponding
+  windows-native-tray invariant).
+
 ### Cycle 2026-05-29T07:43Z — MERGED windows-next (slices 22+23 parity: WIRE_UNREACHABLE_CHIP_TEXT pin + --diagnose spec doc) ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
