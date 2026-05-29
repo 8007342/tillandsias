@@ -3032,3 +3032,28 @@ step 5 lands.
   warnings` clean. fmt clean.
 - Streak reset to 0 (productive iter; noop streak file deleted).
   Next macOS iter eligible at ~17:25Z.
+
+### event: macOS — bring forward windows-authored project-threading symmetric litmus — 2026-05-29T17:30Z
+
+- Windows commit `f66e9fcc` authored
+  `litmus:pty-attach-project-threading-symmetric` (5 grep steps)
+  pinning the m10 call-shape `launch_spec(&intent,
+  project.as_deref(), 24, 80)` on BOTH trays + the
+  `intent_for_action` + `launch_spec` imports on each side +
+  a cross-cutting absence pin "no stray `launch_spec(&intent,
+  None,` callsites in either tray's source".
+- Brought the file forward into linux-next byte-identically
+  (`git show origin/windows-next:...`) before the 2h integration
+  cron pulls windows-next; git dedupes at merge time. Bound on
+  macos-native-tray (7 litmuses now, coverage stays 100%). Same
+  precedent as slice 29 (windows-authored exit-code symmetric
+  litmus brought forward).
+- All 5 grep steps verified PASS locally on my tree: windows
+  import / macos import / windows call-shape / macos call-shape /
+  no-bare-vm-leakage cross-cutting absence.
+- This litmus pins the m10 contract: a regression dropping
+  `project.as_deref()` back to `None` (the slice-4c.2 macOS pre-m10
+  shape) would silently send users into bare-VM shells. Now
+  surfaces at pre-build litmus run instead.
+- Streak: 0 (productive iter). Next macOS iter eligible at
+  ~18:00Z.
