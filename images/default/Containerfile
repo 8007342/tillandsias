@@ -48,9 +48,9 @@ RUN npm install -g --prefix /usr/local opencode-ai@latest @fission-ai/openspec @
 # @trace plan/diagnostics/forge-enhancements-curated-toolchain-backlog-2026-05-29.md
 #   (black, pylint, bandit, prettier, eslint — approved)
 RUN pip3 install --no-cache-dir pyright ruff poetry pipx uv mypy pytest \
-        black pylint bandit \
+        black pylint bandit python-lsp-server yamllint \
     && npm install -g yarn pnpm typescript typescript-language-server \
-        prettier eslint
+        prettier eslint markdownlint-cli
 
 # ── Go tools ───────────────────────────────────────────────────
 # `shfmt` added alongside gopls + dlv: the shell formatter is upstream
@@ -77,7 +77,9 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
     && curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash \
     && cargo binstall --no-confirm cargo-edit cargo-llvm-cov cargo-deny cargo-semver-checks cargo-expand cargo-criterion cargo-wasi \
     && curl -LsSf https://github.com/bytecodealliance/wasmtime/releases/download/v45.0.0/wasmtime-v45.0.0-x86_64-linux.tar.xz | tar -xJf - --strip-components=1 -C /usr/local/bin wasmtime-v45.0.0-x86_64-linux/wasmtime \
-    && ln -sf "$(rustup which rust-analyzer)" /usr/local/bin/rust-analyzer
+    && ln -sf "$(rustup which rust-analyzer)" /usr/local/bin/rust-analyzer \
+    && curl -LsSf https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz | tar -xzf - -C /usr/local/bin actionlint \
+    && curl -LsSf https://github.com/errata-ai/vale/releases/download/v3.14.2/vale_3.14.2_Linux_64-bit.tar.gz | tar -xzf - -C /usr/local/bin vale
 # Symlink resolves the rustup-component installation path
 # ($RUSTUP_HOME/toolchains/<triple>/bin/rust-analyzer) into /usr/local/bin
 # so LSP clients that launch the binary by name (rather than via the cargo

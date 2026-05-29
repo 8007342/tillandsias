@@ -271,3 +271,21 @@ Two of the new candidates need their own sizing flag:
 
 The original "Sizing notes" 10-packet decomposition still holds; the
 above are additive.
+
+## Update 2026-05-29T16:10Z — delta from 15:13Z run
+
+A new live diagnostic run (`diagnostics_20260529T151307Z-summary.md`) surfaced additional candidates and verified further convergence. Per the file's "Update protocol", these updates are appended below.
+
+### Provenance — new runs
+
+- `plan/diagnostics/diagnostics_20260529T151307Z-summary.md` (15:13Z, 100% completeness, 5 missing tools, 5 enhancement candidates)
+
+### New candidate tools (proposed & approved)
+
+| Candidate | Status | Source runs | Ecosystem | Rationale | Privacy/isolation notes |
+|---|---|---|---|---|---|
+| `pylsp` | **implemented** | 15:13Z | Python | Python language server (python-lsp-server) to enable rich code intelligence. | Installed via pip3. Standard sandboxed execution. No new egress. |
+| `yamllint` | **implemented** | 15:13Z | Other (linter) | Linter for YAML configuration files (OpenSpec/methodology/plan). | Installed via pip3. Static local execution. |
+| `markdownlint` | **implemented** | 15:13Z | Other (linter) | Markdown style and syntax linter for documentation and specs. | Installed via npm (`markdownlint-cli`). Local static analysis. |
+| `actionlint` | **implemented** | 15:13Z | Other (linter) | Linter for GitHub Actions workflow files. | Pinned static Go binary downloaded from upstream releases. Local static analysis. |
+| `vale` | **implemented** | 15:13Z | Other (linter) | Syntax-aware prose linter for documentation and specifications. | Pinned static Go binary downloaded from upstream releases. Local static analysis. |
