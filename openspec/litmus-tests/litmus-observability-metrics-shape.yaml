@@ -1,0 +1,91 @@
+# @trace spec:observability-metrics
+#
+# Observability Metrics Shape: pins the Prometheus exporter contract.
+#
+# `openspec/specs/observability-metrics/spec.md` mandates:
+#   * Metrics endpoint or sampler MUST return structured measurements
+#     with stable names and units.
+#   * Collection failure MUST be represented as an error or absent
+#     sample, NOT a fabricated healthy value.
+#
+# This litmus is drift-protection — if a refactor removes the
+# `format_prometheus_metrics` Result-typed signature, drops the
+# `# TYPE`/`# HELP` headers, or replaces the 500-on-error path with
+# a fabricated 200, the litmus fires.
+#
+# Existing unit tests inside `crates/tillandsias-headless/src/
+# metrics_server.rs` cover the runtime behaviour (e.g.
+# `test_format_prometheus_metrics_contains_valid_format`); this
+# litmus pins the structural surfaces.
+name: litmus:observability-metrics-shape
+spec: observability-metrics
+phase: pre-build
+description: >
+  Drift protection for the Prometheus metrics exporter and HTTP
+  server surfaces in `crates/tillandsias-headless/src/metrics_server
+  .rs`: stable Prometheus text format (TYPE + HELP headers),
+  Result-typed format function, and 500-on-collection-failure path
+  per spec:observability-metrics.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-headless/src/metrics_server.rs
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "metrics_server.rs carries the observability-metrics trace"
+    command: "grep -F '@trace spec:observability-metrics' crates/tillandsias-headless/src/metrics_server.rs"
+    timeout_ms: 5000
+    expected_behavior: "@trace spec:observability-metrics"
+
+  - step: "format_prometheus_metrics returns Result<String, String> (no fabricated values on failure)"
+    command: "grep -F 'pub fn format_prometheus_metrics(state: &MetricsServerState) -> Result<String, String>' crates/tillandsias-headless/src/metrics_server.rs"
+    timeout_ms: 5000
+    expected_behavior: "Result<String, String>"
+
+  - step: "collection-failure spec contract is documented at the module head"
+    command: "grep -F 'collection failure MUST surface as an' crates/tillandsias-headless/src/metrics_server.rs"
+    timeout_ms: 5000
+    expected_behavior: "collection failure MUST surface"
+
+  - step: "500 Internal Server Error path exists on collection failure"
+    command: "grep -F '500,' crates/tillandsias-headless/src/metrics_server.rs && grep -F '\"Internal Server Error\"' crates/tillandsias-headless/src/metrics_server.rs"
+    timeout_ms: 5000
+    expected_behavior: "Internal Server Error"
+
+  - step: "MetricsServerState wraps a sampler + an exporter (stable surface for HTTP server)"
+    command: "grep -F 'sampler: Arc<Mutex<MetricsSampler>>' crates/tillandsias-headless/src/metrics_server.rs && grep -F 'exporter: PrometheusExporter' crates/tillandsias-headless/src/metrics_server.rs"
+    timeout_ms: 5000
+    expected_behavior: "PrometheusExporter"
+
+  - step: "Prometheus TYPE+HELP headers are pinned by an existing unit test (stable names/units contract)"
+    command: "grep -F 'test_format_prometheus_metrics_contains_valid_format' crates/tillandsias-headless/src/metrics_server.rs && grep -F 'starts_with(\"# TYPE\")' crates/tillandsias-headless/src/metrics_server.rs && grep -F 'starts_with(\"# HELP\")' crates/tillandsias-headless/src/metrics_server.rs"
+    timeout_ms: 5000
+    expected_behavior: "# HELP"
+
+  - step: "metrics HTTP endpoint is `200 OK` on success with the Prometheus text content type"
+    command: "grep -F '200, \"OK\", \"text/plain; version=0.0.4\"' crates/tillandsias-headless/src/metrics_server.rs"
+    timeout_ms: 5000
+    expected_behavior: "text/plain; version=0.0.4"
+
+observability:
+  traces:
+    - "@trace spec:observability-metrics"
+  expected_log: "Prometheus exporter contract pinned end-to-end"
+  log_fields:
+    spec: "observability-metrics"
+    test: "observability-metrics-shape"
+    artifact: "crates/tillandsias-headless/src/metrics_server.rs"
+
+rollback:
+  on_failure: >
+    The metrics endpoint or sampler surface drifted from the
+    `spec:observability-metrics` contract. Inspect
+    `crates/tillandsias-headless/src/metrics_server.rs`: the
+    Result-typed `format_prometheus_metrics` MUST stay (no
+    Option<String>-and-return-empty-on-failure refactor), the
+    `# TYPE`/`# HELP` test MUST stay (stable names/units), and
+    the 500-on-collection-failure path MUST stay (no fabricated
+    200 on error).
+  command: "sed -n '1,80p' crates/tillandsias-headless/src/metrics_server.rs"
