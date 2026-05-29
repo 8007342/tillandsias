@@ -145,6 +145,48 @@ fn main() {
         eprintln!("[tillandsias] version: {version}");
     }
 
+    // USER PRIORITY (a) of the diagnostics-driven container-start
+    // verification work: emit a structured envelope line to stderr at
+    // the start of every `--diagnostics` run. This is the framing the
+    // distill script can rely on regardless of whether the agent
+    // followed its prompt and emitted parseable JSON to stdout. The
+    // most recent baseline (19:02Z) showed `TIMESTAMP=unknown` +
+    // `FORGE_VERSION=unknown` + `0/0 checks passed` because the RAW_LOG
+    // was empty — the LLM didn't comply. With this envelope on stderr,
+    // the distill script's stderr companion path (already exists, see
+    // `Container-Start Stream (from .stderr.log companion)` section in
+    // every recent summary) gains a stable, machine-readable line
+    // independent of LLM behaviour.
+    //
+    // Format pinned by `format_diagnostics_envelope_line` + its unit
+    // tests. Distill-script consumer wiring lives in a follow-on slice
+    // so this commit can land independently.
+    //
+    // @trace spec:cli-diagnostics, spec:runtime-diagnostics-stream
+    // @trace plan/issues/forge-diagnostics-automation-2026-05-27.md
+    //   (USER PRIORITY sub-deliverable (a))
+    if diagnostics {
+        let agent_kind = select_diagnostics_agent_kind(
+            opencode || opencode_web,
+            claude,
+            codex,
+            bash,
+            observatorium,
+        );
+        let host_platform = if cfg!(target_os = "linux") {
+            "linux"
+        } else if cfg!(target_os = "macos") {
+            "macos"
+        } else if cfg!(target_os = "windows") {
+            "windows"
+        } else {
+            "other"
+        };
+        let timestamp = chrono::Utc::now().to_rfc3339_opts(chrono::SecondsFormat::Secs, true);
+        let line = format_diagnostics_envelope_line(&timestamp, version, host_platform, agent_kind);
+        eprintln!("{line}");
+    }
+
     if let Some(port) = port_override {
         // SAFETY: these writes happen during process startup before any worker
         // threads are spawned, so there is no concurrent environment mutation.
@@ -424,6 +466,67 @@ fn main() {
         eprintln!("Error: {}", e);
         std::process::exit(1);
     }
+}
+
+/// Map the agent-selection boolean flags to a stable string token for
+/// the `event:diagnostics_envelope` stderr line. Mutual exclusion is
+/// enforced upstream by the CLI usage; if multiple flags happen to be
+/// set we resolve in the documented precedence order:
+/// opencode > claude > codex > bash > observatorium. `none` is the
+/// fallback when --diagnostics was passed without an agent flag (the
+/// envelope still emits — operator gets a real timestamp).
+///
+/// @trace spec:cli-diagnostics, spec:runtime-diagnostics-stream
+fn select_diagnostics_agent_kind(
+    opencode_any: bool,
+    claude: bool,
+    codex: bool,
+    bash: bool,
+    observatorium: bool,
+) -> &'static str {
+    if opencode_any {
+        "opencode"
+    } else if claude {
+        "claude"
+    } else if codex {
+        "codex"
+    } else if bash {
+        "bash"
+    } else if observatorium {
+        "observatorium"
+    } else {
+        "none"
+    }
+}
+
+/// Format the structured envelope line emitted by `tillandsias
+/// --diagnostics` to stderr at the start of every run. The distill
+/// script's stderr-companion path consumes this in a follow-on slice
+/// to recover framing fields (timestamp, version, host, agent) when
+/// the LLM's stdout JSON is empty or malformed.
+///
+/// Format is space-separated key=value pairs, prefixed with the event
+/// tag `event:diagnostics_envelope`. Pinned shape:
+///
+/// ```text
+/// event:diagnostics_envelope timestamp=<ISO-8601-UTC> tillandsias_version=<v> host_platform=<linux|macos|windows|other> agent=<opencode|claude|codex|bash|observatorium|none>
+/// ```
+///
+/// Same family as the existing `event:container_launch …` lines that
+/// `litmus-container-start-health` already greps. Both come from the
+/// debug/diagnostics stream; `container_launch` is per-container,
+/// `diagnostics_envelope` is per-run.
+///
+/// @trace spec:cli-diagnostics, spec:runtime-diagnostics-stream
+fn format_diagnostics_envelope_line(
+    timestamp: &str,
+    tillandsias_version: &str,
+    host_platform: &str,
+    agent_kind: &str,
+) -> String {
+    format!(
+        "event:diagnostics_envelope timestamp={timestamp} tillandsias_version={tillandsias_version} host_platform={host_platform} agent={agent_kind}"
+    )
 }
 
 fn print_usage(version: &str) {
@@ -8090,6 +8193,99 @@ mod tests {
         assert!(
             control_socket_is_listening(&socket_path),
             "bound listener must be reported as listening"
+        );
+    }
+
+    /// `format_diagnostics_envelope_line` produces the pinned shape
+    /// the distill script's stderr-companion path will consume. The
+    /// line is space-separated `key=value` pairs prefixed with the
+    /// `event:diagnostics_envelope` tag, same family as the existing
+    /// `event:container_launch …` lines. The shape is the API the
+    /// follow-on distill update reads — any regression here would
+    /// silently break the framing recovery.
+    ///
+    /// @trace spec:cli-diagnostics, spec:runtime-diagnostics-stream
+    /// @trace plan/issues/forge-diagnostics-automation-2026-05-27.md
+    #[test]
+    fn format_diagnostics_envelope_line_emits_pinned_shape() {
+        let line = format_diagnostics_envelope_line(
+            "2026-05-29T04:51:00Z",
+            "0.2.260528",
+            "linux",
+            "opencode",
+        );
+        assert_eq!(
+            line,
+            "event:diagnostics_envelope timestamp=2026-05-29T04:51:00Z \
+             tillandsias_version=0.2.260528 host_platform=linux agent=opencode"
+        );
+    }
+
+    /// All five agent kinds (+ `none`) round-trip through
+    /// `select_diagnostics_agent_kind` per the documented precedence
+    /// (opencode > claude > codex > bash > observatorium). `none` is
+    /// the fallback when --diagnostics was passed without an agent
+    /// flag; the envelope still emits so operators get a real
+    /// timestamp.
+    ///
+    /// @trace spec:cli-diagnostics
+    #[test]
+    fn select_diagnostics_agent_kind_respects_precedence_and_none_fallback() {
+        // Precedence: opencode wins even if multiple flags are set.
+        assert_eq!(
+            select_diagnostics_agent_kind(true, true, true, true, true),
+            "opencode"
+        );
+        // Each kind in isolation maps to its token.
+        assert_eq!(
+            select_diagnostics_agent_kind(true, false, false, false, false),
+            "opencode"
+        );
+        assert_eq!(
+            select_diagnostics_agent_kind(false, true, false, false, false),
+            "claude"
+        );
+        assert_eq!(
+            select_diagnostics_agent_kind(false, false, true, false, false),
+            "codex"
+        );
+        assert_eq!(
+            select_diagnostics_agent_kind(false, false, false, true, false),
+            "bash"
+        );
+        assert_eq!(
+            select_diagnostics_agent_kind(false, false, false, false, true),
+            "observatorium"
+        );
+        // No agent flag → `none` fallback.
+        assert_eq!(
+            select_diagnostics_agent_kind(false, false, false, false, false),
+            "none"
+        );
+    }
+
+    /// Envelope line accepts the actual ISO-8601 format the runtime
+    /// emits (`chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Secs,
+    /// true)` → `…Z` suffix, second-precision). Tests against a
+    /// realistic chrono-produced string so a future format-flag flip
+    /// (e.g. millisecond precision, non-Z timezone) breaks the
+    /// regression instead of silently passing through.
+    ///
+    /// @trace spec:cli-diagnostics, spec:runtime-diagnostics-stream
+    #[test]
+    fn format_diagnostics_envelope_line_accepts_real_chrono_timestamp() {
+        use chrono::SecondsFormat;
+        let ts = chrono::Utc::now().to_rfc3339_opts(SecondsFormat::Secs, true);
+        let line = format_diagnostics_envelope_line(&ts, "0.2.260528", "linux", "opencode");
+        assert!(line.starts_with("event:diagnostics_envelope timestamp="));
+        // Z suffix (the `true` arg above forces it).
+        let ts_field = line
+            .split_whitespace()
+            .find(|tok| tok.starts_with("timestamp="))
+            .expect("envelope must have a timestamp= field");
+        assert!(
+            ts_field.ends_with('Z'),
+            "timestamp= must end with Z; got {ts_field}"
         );
     }
 }
