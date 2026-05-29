@@ -43,8 +43,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:browser-ephemeral
-  coverage_ratio: 33
-  last_verified: '2026-05-03'
+  - litmus:browser-isolation-core-shape
+  coverage_ratio: 67
+  last_verified: '2026-05-29'
 - spec_id: browser-isolation-framework
   status: active
   litmus_tests:

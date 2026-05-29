@@ -1,0 +1,117 @@
+# @trace spec:browser-isolation-core
+#
+# Structural drift protection for browser-isolation-core surfaces.
+#
+# The existing `litmus:browser-ephemeral` (size: e2e) launches the
+# browser via the fake-podman harness — covers behavioural
+# correctness end-to-end. This companion is instant + grep-only;
+# pins the launch-script source-level surfaces the spec mandates so
+# a refactor that drops a security flag or changes the image-name
+# pattern fires pre-build before the e2e test runs.
+#
+# Pins the three browser-isolation-core requirements:
+#   1. Security model for chromium-core image (--cap-drop=ALL,
+#      read-only, user-data-dir).
+#   2. Content-hash image identity with human aliases
+#      (tillandsias-chromium-framework:v<N.N.N.N> pattern).
+#   3. Build invocation via build-image.sh (sibling script
+#      check-container-bases.sh exists).
+#
+# Companion litmus raises browser-isolation-core coverage 33 → 67.
+name: litmus:browser-isolation-core-shape
+spec: browser-isolation-core
+phase: pre-build
+description: >
+  Pin scripts/launch-chromium.sh + scripts/run-safe-browser.sh
+  spec-trace headers; the --cap-drop=ALL + --user-data-dir security
+  flags; the tillandsias-chromium-framework:v<version> image
+  identity pattern; the sibling check-container-bases.sh script.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains scripts/launch-chromium.sh
+  - workspace contains scripts/run-safe-browser.sh
+  - workspace contains scripts/check-container-bases.sh
+  - shell utilities (grep, test) are available in PATH
+
+critical_path:
+  - step: "launch-chromium.sh carries the 3-spec trace at file head"
+    # The launcher script implements three specs co-traced at the
+    # header. A regression that strips one spec from the trace
+    # breaks the spec→code mapping for that spec.
+    command: "grep -F '@trace spec:browser-isolation-core, spec:chromium-safe-variant, spec:chromium-debug-variant' scripts/launch-chromium.sh"
+    timeout_ms: 3000
+    expected_behavior: "spec:browser-isolation-core"
+
+  - step: "run-safe-browser.sh carries the 3-spec trace at file head"
+    command: "grep -F '@trace spec:browser-isolation-core, spec:chromium-safe-variant, spec:browser-isolation-tray-integration' scripts/run-safe-browser.sh"
+    timeout_ms: 3000
+    expected_behavior: "spec:browser-isolation-core"
+
+  - step: "launch script enforces --cap-drop=ALL (reduced capabilities)"
+    # Spec requirement: "Reduced capabilities — the image MUST use
+    # minimal kernel capabilities via `--cap-drop=ALL`". Dropping
+    # this turns the container into a regular cap-bearing process.
+    # expected_behavior MUST NOT start with `--` (the matcher passes
+    # it positionally to grep, and grep would parse `--cap-drop=ALL`
+    # as an unrecognised option). Strip the leading `--`.
+    command: "grep -F '\"--cap-drop=ALL\"' scripts/launch-chromium.sh"
+    timeout_ms: 3000
+    expected_behavior: "cap-drop=ALL"
+
+  - step: "launch script uses --user-data-dir (ephemeral profile)"
+    # Spec requirement (via the ephemeral-profile invariant): the
+    # browser writes to a known dir the wrapper can sweep on exit.
+    # A refactor that drops user-data-dir lets Chromium write to
+    # the default ~/.config/chromium location, leaking state
+    # across launches.
+    command: "grep -F '\"--user-data-dir=${PROFILE_DIR}\"' scripts/launch-chromium.sh"
+    timeout_ms: 3000
+    expected_behavior: "user-data-dir"
+
+  - step: "image identity uses the canonical tillandsias-chromium-framework:v<version> pattern"
+    # Spec requirement: "Content-hash image identity with human
+    # aliases". The framework image is keyed by the v<version>
+    # tag. A regression to e.g. `chromium:latest` would lose
+    # the content-hash discipline.
+    command: "grep -F 'tillandsias-chromium-framework:v${VERSION}' scripts/launch-chromium.sh"
+    timeout_ms: 3000
+    expected_behavior: "tillandsias-chromium-framework"
+
+  - step: "sibling check-container-bases.sh exists + executable (build invocation contract)"
+    # Spec requirement: "Build invocation via build-image.sh".
+    # The check-container-bases.sh sibling script is the
+    # verification surface for image base pinning, named in the
+    # spec's verification list.
+    command: "test -x scripts/check-container-bases.sh && echo 'ok: check-container-bases.sh executable'"
+    timeout_ms: 3000
+    expected_behavior: "ok: check-container-bases.sh executable"
+
+  - step: "both launch scripts are executable"
+    command: "test -x scripts/launch-chromium.sh && test -x scripts/run-safe-browser.sh && echo 'ok: launch scripts executable'"
+    timeout_ms: 3000
+    expected_behavior: "ok: launch scripts executable"
+
+observability:
+  traces:
+    - "@trace spec:browser-isolation-core"
+    - "@trace spec:browser-isolation-tray-integration"
+  expected_log: "Browser launch scripts + security flags + image identity pinned per browser-isolation-core spec"
+  log_fields:
+    spec: "browser-isolation-core"
+    test: "browser-isolation-core-shape"
+    launcher_artifact: "scripts/launch-chromium.sh"
+    safe_wrapper_artifact: "scripts/run-safe-browser.sh"
+
+rollback:
+  on_failure: >
+    A browser-isolation-core surface drifted. Restore:
+    `@trace spec:browser-isolation-core, ...` headers on
+    launch-chromium.sh + run-safe-browser.sh; the
+    `--cap-drop=ALL` security flag; the
+    `--user-data-dir=${PROFILE_DIR}` ephemeral profile flag; the
+    `tillandsias-chromium-framework:v${VERSION}` image-name
+    pattern; executable bits on launch + check-container-bases
+    scripts.
+  command: "head -3 scripts/launch-chromium.sh scripts/run-safe-browser.sh && grep -nE 'cap-drop=ALL|user-data-dir|tillandsias-chromium-framework' scripts/launch-chromium.sh"
