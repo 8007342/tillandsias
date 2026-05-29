@@ -16,6 +16,7 @@ This file is the cross-host advertisement — terse, dated, SHA-anchored.
 
 ## Recent entries (reverse chronological)
 
+- 2026-05-29T00:23Z  `614d65f4`  litmus: pin control-socket convergence packet wiring — new `litmus-control-dispatch-shape` instant-phase test greps `control_dispatch.rs` + `tray/mod.rs` + `vsock_server.rs` + `main.rs` mod registration. Seven steps catch a regression that re-inlines the routing matrix in either dispatcher while keeping the matrix unit tests green. Drift protection for items 1-3 shipped earlier this session.
 - 2026-05-29T00:06Z  (no-op)   defer — integration cron at 00:05Z (1 min ago, inside 10-min defer window). No slice taken; cron writes need to settle. Agent `linux-macuahuitl-gemini-20260529T0005`.
 - 2026-05-28T23:51Z  (no-op)   defer — integration cron at 23:43Z (8 min ago, inside 10-min defer window). No slice taken; cron writes need to settle. Agent `linux-tlatoani-fedora-claude-opus-2026-05-28T23:51Z`.
 - 2026-05-28T23:23Z  `4eb0baff`  **control-socket convergence packet COMPLETE** — item 3 wires `decide_route` into `vsock_server::serve_connection` (async tokio path) as a pre-filter to the existing variant-match. Three DispatchOutcome arms with transport-specific Error messages; the matrix is now the single source of truth for both unix + vsock dispatchers. WIRE_VERSION unchanged at 2.
