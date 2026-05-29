@@ -552,6 +552,19 @@ async fn poll_cloud_projects_once(
 /// in-VM headless binds; the host always connects to this CID.
 const TILLANDSIAS_GUEST_CID: u32 = 3;
 
+/// Status-chip text the wire-degradation branch of
+/// `spawn_vm_status_poller` writes when `poll_vm_status_once` fails
+/// (handshake / connect / request error). Pinned as a `const` —
+/// not an inline literal — because `tillandsias-windows-tray::
+/// notify_icon::mark_wire_unreachable` writes the SAME string. If
+/// either tray drifts (e.g. someone localises one side or changes
+/// the emoji), the cross-tray UX-parity invariant silently
+/// breaks. The unit test
+/// `wire_unreachable_chip_text_pinned` asserts the exact byte
+/// sequence (`🔴 + space + Wire unreachable`, U+1F534 + " Wire
+/// unreachable" = 22 bytes).
+const WIRE_UNREACHABLE_CHIP_TEXT: &str = "\u{1F534} Wire unreachable";
+
 /// How long `VzRuntime::stop` waits for an orderly drain before
 /// escalating to a force-stop. Documented in
 /// `cheatsheets/runtime/tray-state-machine.md` as 60s for the
@@ -1474,7 +1487,7 @@ fn spawn_vm_status_poller(
                             rebuild_needed = true;
                         }
                     }
-                    let text = "\u{1F534} Wire unreachable".to_string();
+                    let text = WIRE_UNREACHABLE_CHIP_TEXT.to_string();
                     let text_for_dispatch = text.clone();
                     let chip_status_text = status_text.clone();
                     let chip_status_item = status_item.clone();
@@ -1553,6 +1566,36 @@ mod tests {
             ),
             "recipe-artifact fetch failed: \\\"rootfs.img\\\" missing"
         );
+    }
+
+    /// `WIRE_UNREACHABLE_CHIP_TEXT` is the byte-identical chip
+    /// string both macOS and windows trays emit on wire failure
+    /// (slice 21 / windows commit d2cf10f0). Drift-protection
+    /// litmus: if a future refactor changes the emoji or wording
+    /// on either side, the cross-tray UX-parity invariant silently
+    /// breaks — operators get different text on the same failure
+    /// class. This test asserts the exact byte sequence so any
+    /// such drift fails the build here AND in the windows-tray
+    /// suite (which would need a corresponding test added when
+    /// they adopt this pattern).
+    #[test]
+    fn wire_unreachable_chip_text_pinned() {
+        // Exact bytes: U+1F534 (LARGE RED CIRCLE = 4 bytes UTF-8)
+        // + ' ' (U+0020 = 1 byte) + "Wire unreachable" (16 bytes).
+        // Total = 21 bytes. Pin both the byte length and the
+        // expanded string literal so a partial typo (e.g. dropping
+        // the space, or swapping the emoji codepoint) is caught.
+        assert_eq!(
+            WIRE_UNREACHABLE_CHIP_TEXT.as_bytes(),
+            "\u{1F534} Wire unreachable".as_bytes()
+        );
+        assert_eq!(WIRE_UNREACHABLE_CHIP_TEXT.len(), 21);
+        // Emoji codepoint is the LARGE RED CIRCLE specifically (not
+        // BLACK CIRCLE FOR RECORD U+23FA or any other red glyph).
+        // Windows tray's mark_wire_unreachable uses the exact same
+        // codepoint — keep these in lockstep.
+        let first_char = WIRE_UNREACHABLE_CHIP_TEXT.chars().next().unwrap();
+        assert_eq!(first_char, '\u{1F534}');
     }
 
     /// `describe_wire_error` pins the operator-visible format of a
