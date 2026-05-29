@@ -1451,8 +1451,42 @@ fn spawn_vm_status_poller(
                     });
                 }
                 Err(e) => {
-                    // Best-effort: log + leave last-known chip text.
+                    // Mid-session wire failure (headless crash, VM
+                    // terminated externally, lost handshake). Without
+                    // an explicit chip update the user would see the
+                    // last-known Ready forever. Mirrors windows-tray
+                    // `mark_wire_unreachable` (commit d2cf10f0):
+                    //   1. clear podman_ready so per-project actions
+                    //      correctly re-gate off after the rebuild
+                    //   2. flip the chip to "🔴 Wire unreachable"
+                    //      (byte-identical to windows)
+                    //   3. trigger a rebuild so the menu re-renders
+                    //      the now-gated state
+                    // The next successful poll restores phase +
+                    // podman naturally — bounded chip flicker only on
+                    // actual error ticks, no flapping when the wire
+                    // is steady-state ok or steady-state broken.
                     eprintln!("[tillandsias-tray] vm-status poll: {e}");
+                    {
+                        let mut guard = menu_state.lock().unwrap();
+                        if guard.podman_ready {
+                            guard.podman_ready = false;
+                            rebuild_needed = true;
+                        }
+                    }
+                    let text = "\u{1F534} Wire unreachable".to_string();
+                    let text_for_dispatch = text.clone();
+                    let chip_status_text = status_text.clone();
+                    let chip_status_item = status_item.clone();
+                    let chip_status_menu_item = status_menu_item.clone();
+                    dispatch_to_main_thread(move || {
+                        *chip_status_text.lock().unwrap() = text_for_dispatch.clone();
+                        apply_status_text_main_thread(
+                            &text_for_dispatch,
+                            &chip_status_item,
+                            &chip_status_menu_item,
+                        );
+                    });
                 }
             }
 
