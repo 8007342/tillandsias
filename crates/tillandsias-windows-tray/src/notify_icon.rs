@@ -421,6 +421,45 @@ pub fn provision_once() -> i32 {
     })
 }
 
+/// Structured `--status-once` report. Mirrors the JSON shape of the `wire`
+/// sub-object inside `--diagnose --json` (same field names + types), plus an
+/// `exit_code` so a JSON consumer doesn't have to mirror the wire-state →
+/// exit-code derivation. Pinned by `status_once_json_keys_pinned`.
+#[derive(serde::Serialize)]
+struct StatusReport {
+    /// `true` once handshake succeeds. Mirrors `WireReport.reachable`.
+    reachable: bool,
+    /// Negotiated wire_version (`u16`) if handshake succeeded. Matches the
+    /// `WIRE_VERSION` const type in `tillandsias-control-wire`.
+    wire_version: Option<u16>,
+    /// Debug-formatted `VmPhase` if `VmStatusReply` arrived.
+    phase: Option<String>,
+    /// In-VM headless reports `true` once podman responds to a no-op exec.
+    podman_ready: Option<bool>,
+    /// Free-form headless event string (None if not surfaced).
+    last_event: Option<String>,
+    /// Set on any failure path (open / handshake / request / unexpected reply).
+    error: Option<String>,
+    /// Final exit code so JSON consumers don't need to re-derive
+    /// 0/2/1 from phase/reachable. See `--status-once` exit-code contract
+    /// (`status-once-exit-codes` pin).
+    exit_code: i32,
+}
+
+/// Compute the `--status-once` exit code from a freshly-collected status report.
+/// 0 = Ready, 2 = reachable but not Ready, 1 = control wire unreachable / hard
+/// error. Pure so a unit test can pin the matrix.
+fn status_exit_code(report: &StatusReport) -> i32 {
+    if !report.reachable {
+        return 1;
+    }
+    match report.phase.as_deref() {
+        Some("Ready") => 0,
+        Some(_) => 2,
+        None => 1,
+    }
+}
+
 /// Headless diagnostic entry point (`tillandsias-tray --status-once`): connect to
 /// an already-provisioned VM's HvSocket control wire, request `VmStatus`, and
 /// print the phase / podman_ready / last_event. Exit code: 0 = Ready, 2 =
@@ -428,10 +467,25 @@ pub fn provision_once() -> i32 {
 /// `--provision-once` for scriptable installed-tray health checks (the GUI tray
 /// has no console). Reuses the same handshake + `VmStatusRequest` path the
 /// provisioning Connecting loop uses.
-pub fn status_once() -> i32 {
-    use tillandsias_control_wire::{ControlMessage, VmPhase};
-
+///
+/// `format` mirrors the `--diagnose` format selector: `Human` prints the
+/// pre-existing `[status] …` lines for human eyeballs, `Json` emits a single
+/// `StatusReport` JSON object on stdout for support-tooling consumers.
+pub fn status_once(format: DiagnoseFormat) -> i32 {
     init_tracing();
+    let report = collect_status_report();
+    match format {
+        DiagnoseFormat::Human => print_status_human(&report),
+        DiagnoseFormat::Json => print_status_json(&report),
+    }
+    report.exit_code
+}
+
+/// Build a `StatusReport` by opening the control wire, performing the
+/// handshake, and issuing a `VmStatusRequest`. Captures every failure mode
+/// as an `error` string so the structured output is the same shape on the
+/// success and failure paths.
+fn collect_status_report() -> StatusReport {
     let port = tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
     let runtime = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -439,32 +493,54 @@ pub fn status_once() -> i32 {
     {
         Ok(rt) => rt,
         Err(err) => {
-            eprintln!("[status] failed to build tokio runtime: {err}");
-            return 1;
+            return StatusReport {
+                reachable: false,
+                wire_version: None,
+                phase: None,
+                podman_ready: None,
+                last_event: None,
+                error: Some(format!("tokio runtime build failed: {err}")),
+                exit_code: 1,
+            };
         }
     };
-    runtime.block_on(async {
+    let mut report = runtime.block_on(async {
         use tillandsias_control_wire::transport::Transport;
-        use tillandsias_control_wire::{ControlEnvelope, WIRE_VERSION};
+        use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
         use tillandsias_host_shell::vsock_client::Client;
 
         let stream = match crate::hvsocket::open_hvsocket_stream(port).await {
             Ok(stream) => stream,
             Err(err) => {
-                eprintln!("[status] control wire unreachable on vsock {port}: {err}");
-                eprintln!("[status] (is the VM provisioned + running? try --provision-once)");
-                return 1;
+                return StatusReport {
+                    reachable: false,
+                    wire_version: None,
+                    phase: None,
+                    podman_ready: None,
+                    last_event: None,
+                    error: Some(format!(
+                        "control wire unreachable on vsock {port}: {err} (is the VM \
+                         provisioned + running? try --provision-once)"
+                    )),
+                    exit_code: 0,
+                };
             }
         };
         let mut client = Client::from_stream(Box::new(stream), Transport::Vsock { cid: 0, port });
         let wire_version = match client.handshake().await {
             Ok(v) => v,
             Err(err) => {
-                eprintln!("[status] handshake failed: {err}");
-                return 1;
+                return StatusReport {
+                    reachable: false,
+                    wire_version: None,
+                    phase: None,
+                    podman_ready: None,
+                    last_event: None,
+                    error: Some(format!("handshake failed: {err}")),
+                    exit_code: 0,
+                };
             }
         };
-        println!("[status] control wire up (wire_version {wire_version})");
         let seq = client.allocate_seq();
         let envelope = ControlEnvelope {
             wire_version: WIRE_VERSION,
@@ -474,8 +550,15 @@ pub fn status_once() -> i32 {
         let reply = match client.request(&envelope).await {
             Ok(reply) => reply,
             Err(err) => {
-                eprintln!("[status] VmStatusRequest failed: {err}");
-                return 1;
+                return StatusReport {
+                    reachable: true,
+                    wire_version: Some(wire_version),
+                    phase: None,
+                    podman_ready: None,
+                    last_event: None,
+                    error: Some(format!("VmStatusRequest failed: {err}")),
+                    exit_code: 0,
+                };
             }
         };
         match reply.body {
@@ -484,25 +567,55 @@ pub fn status_once() -> i32 {
                 podman_ready,
                 last_event,
                 ..
-            } => {
-                println!("[status] phase:        {phase:?}");
-                println!("[status] podman_ready: {podman_ready}");
-                println!(
-                    "[status] last_event:   {}",
-                    last_event.as_deref().unwrap_or("(none)")
-                );
-                if matches!(phase, VmPhase::Ready) {
-                    0
-                } else {
-                    2
-                }
-            }
-            other => {
-                eprintln!("[status] unexpected reply to VmStatusRequest: {other:?}");
-                1
-            }
+            } => StatusReport {
+                reachable: true,
+                wire_version: Some(wire_version),
+                phase: Some(format!("{phase:?}")),
+                podman_ready: Some(podman_ready),
+                last_event,
+                error: None,
+                exit_code: 0,
+            },
+            other => StatusReport {
+                reachable: true,
+                wire_version: Some(wire_version),
+                phase: None,
+                podman_ready: None,
+                last_event: None,
+                error: Some(format!("unexpected reply to VmStatusRequest: {other:?}")),
+                exit_code: 0,
+            },
         }
-    })
+    });
+    report.exit_code = status_exit_code(&report);
+    report
+}
+
+fn print_status_human(r: &StatusReport) {
+    if let Some(v) = r.wire_version {
+        println!("[status] control wire up (wire_version {v})");
+    }
+    if let Some(err) = &r.error {
+        eprintln!("[status] {err}");
+        return;
+    }
+    if let Some(phase) = &r.phase {
+        println!("[status] phase:        {phase}");
+    }
+    if let Some(pr) = r.podman_ready {
+        println!("[status] podman_ready: {pr}");
+    }
+    println!(
+        "[status] last_event:   {}",
+        r.last_event.as_deref().unwrap_or("(none)")
+    );
+}
+
+fn print_status_json(r: &StatusReport) {
+    match serde_json::to_string_pretty(r) {
+        Ok(json) => println!("{json}"),
+        Err(err) => eprintln!("[status] failed to serialize JSON: {err}"),
+    }
 }
 
 /// Pinned chip text for control-wire degradation. Naming + byte sequence MUST
@@ -1867,6 +1980,68 @@ mod tests {
             .expect("recent_log_tail array");
         assert_eq!(tail.len(), 2);
         assert_eq!(tail[0], serde_json::Value::String("line one".to_string()));
+    }
+
+    fn baseline_status_report() -> StatusReport {
+        StatusReport {
+            reachable: false,
+            wire_version: None,
+            phase: None,
+            podman_ready: None,
+            last_event: None,
+            error: Some("not provisioned".to_string()),
+            exit_code: 1,
+        }
+    }
+
+    /// Pin the `--status-once --json` top-level key set so a future refactor
+    /// that drops or renames a field surfaces here, not at the support-tooling
+    /// step. Mirrors `diagnose_json_top_level_keys_pinned` for the StatusReport
+    /// shape. Bound by `litmus:windows-tray-diagnose-cli-surface`.
+    #[test]
+    fn status_once_json_keys_pinned() {
+        let v: serde_json::Value =
+            serde_json::to_value(baseline_status_report()).expect("serialize");
+        let obj = v.as_object().expect("top-level JSON object");
+        for key in [
+            "reachable",
+            "wire_version",
+            "phase",
+            "podman_ready",
+            "last_event",
+            "error",
+            "exit_code",
+        ] {
+            assert!(
+                obj.contains_key(key),
+                "status-once --json missing top-level key: {key}"
+            );
+        }
+    }
+
+    /// `--status-once` exit-code contract (independent of the `--diagnose`
+    /// matrix; same semantics as the human-mode bash-script consumer expects):
+    /// 0 = Ready, 2 = reachable-but-not-Ready, 1 = unreachable. Pins the
+    /// matrix so a refactor can't silently flip the codes for the support
+    /// scripts that branch on them.
+    #[test]
+    fn status_once_exit_codes() {
+        // Unreachable → 1.
+        let mut r = baseline_status_report();
+        assert_eq!(status_exit_code(&r), 1, "unreachable -> 1");
+
+        // Reachable, phase Ready → 0.
+        r.reachable = true;
+        r.phase = Some("Ready".to_string());
+        assert_eq!(status_exit_code(&r), 0, "Ready -> 0");
+
+        // Reachable, phase non-Ready → 2.
+        r.phase = Some("Starting".to_string());
+        assert_eq!(status_exit_code(&r), 2, "non-Ready phase -> 2");
+
+        // Reachable, phase absent (e.g. unexpected reply variant) → 1.
+        r.phase = None;
+        assert_eq!(status_exit_code(&r), 1, "reachable but no phase -> 1");
     }
 
     /// The chip composer appends a non-empty `last_event` after a Unicode
