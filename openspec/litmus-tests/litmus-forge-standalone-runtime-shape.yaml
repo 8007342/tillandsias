@@ -1,0 +1,139 @@
+# @trace spec:forge-standalone
+#
+# Drift-protection for the runtime invocation of
+# `run-forge-standalone.sh`. The spec has 5 requirements covering the
+# standalone troubleshooting path (forge-image-only, project-scoped
+# mount, interactive bash, full network, fail-fast). The existing
+# `litmus:forge-standalone-traceability` covers @trace markers, the
+# `--help` string, the `No local forge image found` fail-fast branch,
+# and the `build-forge.sh` → `scripts/build-image.sh forge` delegation
+# — but does NOT pin the actual `podman run` invocation that
+# implements Reqs 1-4.
+#
+# This litmus pins the invocation surfaces. The standalone runner is
+# the canonical operator escape hatch (forge image only, no enclave,
+# no orchestration, full network); any drift here breaks the
+# troubleshooting workflow documented in
+# `cheatsheets/runtime/forge-standalone.md`.
+#
+# Combined with the existing traceability litmus, raises
+# forge-standalone coverage_ratio 33 → 75.
+name: litmus:forge-standalone-runtime-shape
+spec: forge-standalone
+phase: pre-build
+description: >
+  Pin the podman-run invocation in run-forge-standalone.sh: forge
+  image only (Req 1), /home/forge/src/<project> mount (Req 2),
+  --entrypoint /bin/bash + --interactive --tty (Req 3), --network=host
+  (Req 4), non-negotiable security flags, and --src fail-fast (Req 5).
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains run-forge-standalone.sh
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "Req 1: single-container `exec podman run` invocation (no orchestration)"
+    # Spec § "Standalone forge runner uses the forge image only" — the
+    # runner MUST NOT start proxy/git/inference/tray. The literal
+    # `exec podman run` invocation (replacing the shell process) is
+    # the smoking-gun proof: a single container, no orchestrator
+    # script call, no sidecar launch. A refactor that wraps the call
+    # in a helper that ALSO spawns sidecars would break the spec
+    # silently — pinning the bare `exec podman run` literal catches
+    # that.
+    command: "grep -F 'exec podman run' run-forge-standalone.sh"
+    timeout_ms: 3000
+    expected_behavior: "exec podman run"
+
+  - step: "Req 2: source mount targets /home/forge/src/<project> path"
+    # Spec § "Source mount is project-scoped" Scenario "Project
+    # directory mount" mandates the container sees
+    # `/home/forge/src/<basename-of-src>`. The `CONTAINER_SRC`
+    # assignment is the canonical resolution site; pin the format
+    # string so a regression to `/workspace/$PROJECT_NAME` or
+    # `/src/$PROJECT_NAME` fails fast.
+    command: "grep -F 'CONTAINER_SRC=\"/home/forge/src/$PROJECT_NAME\"' run-forge-standalone.sh"
+    timeout_ms: 3000
+    expected_behavior: "CONTAINER_SRC"
+
+  - step: "Req 3: --entrypoint /bin/bash + --interactive + --tty (operator shell)"
+    # Spec § "Interactive bash session" Scenario "Operator gets a
+    # shell" mandates bash + interactive. A refactor swapping
+    # /bin/bash for /bin/sh or dropping --interactive/--tty would
+    # silently break the shell experience.
+    command: "grep -F -- '--entrypoint /bin/bash' run-forge-standalone.sh && grep -F -- '--interactive' run-forge-standalone.sh && grep -F -- '--tty' run-forge-standalone.sh"
+    timeout_ms: 3000
+    expected_behavior: "/bin/bash"
+
+  - step: "Req 4: --network=host (full network access, no enclave wiring)"
+    # Spec § "Full network access without enclave wiring" mandates
+    # the container reaches external services freely — the
+    # OPPOSITE of forge-offline. A regression to `--network=
+    # tillandsias-enclave` would silently break the troubleshooting
+    # workflow (operator can't `pip install` from PyPI etc.).
+    command: "grep -F -- '--network=host' run-forge-standalone.sh"
+    timeout_ms: 3000
+    expected_behavior: "network=host"
+
+  - step: "Req 1 + 5: image lookup is tillandsias-forge:v<VERSION>, no :latest fallback"
+    # Spec § Req 1 mandates the exact `tillandsias-forge:v<VERSION>`
+    # image tag; Req 5 mandates fail-fast on missing image rather
+    # than falling back to `:latest`. Pin both the literal version
+    # tag pattern AND the absence of any standalone `latest` token.
+    command: "grep -F 'tillandsias-forge:v${VERSION}' run-forge-standalone.sh && grep -F 'localhost/tillandsias-forge:v${VERSION}' run-forge-standalone.sh && ! grep -Fq ':latest' run-forge-standalone.sh && echo \"ok: forge-version tag pinned, no :latest fallback\""
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req 5: --src required + exits 2 on missing/invalid path"
+    # Spec § "Runner is fail-fast and explicit" Scenarios mandate
+    # usage error on missing --src and on invalid path. Pin the
+    # 3 error-message literals + the exit 2 convention so a regression
+    # that swallows the error or exits 0 fails fast.
+    command: "grep -F -- '--src is required' run-forge-standalone.sh && grep -F 'Source path does not exist' run-forge-standalone.sh && grep -F 'Source path must be a directory' run-forge-standalone.sh && grep -Fc 'exit 2' run-forge-standalone.sh | awk '{ if ($1+0 >= 3) print \"ok:\", $1, \"exit 2 sites\"; else { print \"FAIL: only\", $1, \"of >=3\"; exit 1 } }'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "non-negotiable security flags: --cap-drop=ALL + --security-opt=no-new-privileges + --userns=keep-id"
+    # NOT in the forge-standalone spec text, but guardrailed by
+    # methodology — the container security envelope MUST hold even
+    # for the standalone troubleshooting path. A regression here
+    # would silently widen the container's privilege.
+    command: "grep -F -- '--cap-drop=ALL' run-forge-standalone.sh && grep -F -- '--security-opt=no-new-privileges' run-forge-standalone.sh && grep -F -- '--userns=keep-id' run-forge-standalone.sh"
+    timeout_ms: 3000
+    expected_behavior: "userns=keep-id"
+
+  - step: "Req 1 invariant: no enclave-orchestrator script call"
+    # The standalone path MUST NOT invoke any orchestrator wrapper.
+    # Specifically: no `scripts/start-enclave.sh`, no
+    # `cargo run -p tillandsias-headless --bin ...`, no proxy/git
+    # subprocess. Pin by absence: grep for forbidden invocations.
+    command: "if grep -Eq 'start-enclave|run-enclave|tillandsias-headless' run-forge-standalone.sh; then echo \"FAIL: enclave-orchestrator call in standalone runner\"; grep -nE 'start-enclave|run-enclave|tillandsias-headless' run-forge-standalone.sh; exit 1; else echo \"ok: 0 enclave-orchestrator calls in standalone runner\"; fi"
+    timeout_ms: 3000
+    expected_behavior: "ok: 0 enclave-orchestrator calls"
+
+observability:
+  traces:
+    - "@trace spec:forge-standalone"
+    - "@trace spec:default-image"
+  expected_log: "forge-standalone runtime invocation surfaces pinned (Reqs 1-5 + security envelope)"
+  log_fields:
+    spec: "forge-standalone"
+    test: "forge-standalone-runtime-shape"
+    artifact: "run-forge-standalone.sh"
+
+rollback:
+  on_failure: >
+    A `spec:forge-standalone` runtime surface drifted. Restore the
+    `exec podman run` literal (no orchestrator wrapper); the
+    `CONTAINER_SRC="/home/forge/src/$PROJECT_NAME"` mount target;
+    `--entrypoint /bin/bash` + `--interactive` + `--tty`;
+    `--network=host` (NOT enclave network); `tillandsias-forge:v
+    ${VERSION}` image tag with localhost/-prefixed fallback and NO
+    `:latest`; `--src is required` + `Source path does not exist`
+    + `Source path must be a directory` error messages with 3 `exit
+    2` sites; the security trio `--cap-drop=ALL` /
+    `--security-opt=no-new-privileges` / `--userns=keep-id`; and
+    NO enclave-orchestrator subprocess.
+  command: "grep -nE 'exec podman run|CONTAINER_SRC|--entrypoint|--network|tillandsias-forge:v|--src is required|--cap-drop|--userns|start-enclave|tillandsias-headless' run-forge-standalone.sh | head -25"
