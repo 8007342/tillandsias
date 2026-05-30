@@ -623,8 +623,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:tray-minimal-ux-contract-shape
-  coverage_ratio: 33
-  last_verified: '2026-05-15'
+  - litmus:simplified-tray-ux-leaf-action-shape
+  coverage_ratio: 67
+  last_verified: '2026-05-30'
 - spec_id: singleton-guard
   status: obsolete
   litmus_tests: null

@@ -71,6 +71,18 @@ The version line (e.g., `v0.1.168.224`) and the signature `— by Tlatoāni` app
 
 When authenticated, MUST show all local projects found in `~/.tillandsias/watch/` (or configured watch path), alphabetically sorted. Each project MUST display exactly 4 tools:
 
+> **⚠ Implementation reality (as of 2026-05-30):** the deployed
+> `LeafAction` enum in `crates/tillandsias-headless/src/tray/mod.rs`
+> has **6 variants**, not the 4 the spec table below documents:
+> `Claude` (👾) / `Codex` (🏗️) / `OpenCode` (💻) / `OpenCodeWeb` (📐) /
+> `Observatorium` (🔭) / `Maintenance` (🔧). The two extra tools
+> (`Codex` + `Observatorium`) landed after the spec was written;
+> the emojis also differ (impl uses 👾📐, spec uses 👽🌐). Reconcile
+> by either updating this spec table to the 6-variant deployed set
+> OR collapsing the enum back to the 4 originally-specified tools.
+> The drift was discovered by `litmus:simplified-tray-ux-leaf-
+> action-shape` which pins what the code does today.
+
 ```
 [<home> ~/src/ >
 ├── <project-1> ▸
