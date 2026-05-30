@@ -737,8 +737,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:ephemeral-guarantee
-  coverage_ratio: 33
-  last_verified: '2026-05-15'
+  - litmus:web-image-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: windows-cross-build
   status: obsolete
   litmus_tests: []

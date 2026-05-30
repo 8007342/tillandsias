@@ -1,0 +1,105 @@
+# @trace spec:web-image
+#
+# Drift-protection for the web-image Containerfile + entrypoint.
+# spec:web-image mandates an Alpine-based <10MB image serving static
+# files via busybox httpd on port 8080. Single existing binding
+# `litmus:ephemeral-guarantee` (e2e, last_verified 2026-05-15)
+# covered generic ephemeral isolation; the Containerfile + entrypoint
+# source surfaces were untrapped.
+name: litmus:web-image-shape
+spec: web-image
+phase: pre-build
+description: >
+  Pin the web-image Containerfile (Alpine 3.20 + busybox-extras +
+  EXPOSE 8080 + WORKDIR /var/www + ENTRYPOINT script) and the
+  entrypoint.sh (POSIX sh + busybox httpd on :8080 serving /var/www
+  + spec trace).
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains images/web/Containerfile
+  - workspace contains images/web/entrypoint.sh
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "Containerfile + entrypoint.sh both carry @trace spec:web-image"
+    # Both files are spec-identity sites. A regression dropping
+    # either trace would silently demote that file out of the
+    # web-image graph.
+    command: "grep -F '@trace spec:web-image' images/web/Containerfile && grep -F '@trace spec:web-image' images/web/entrypoint.sh"
+    timeout_ms: 3000
+    expected_behavior: "spec:web-image"
+
+  - step: "Req Alpine base: FROM docker.io/library/alpine:3.20 (Req 'Minimal Alpine-based')"
+    # Spec § Req mandates Alpine 3.20 as the base image and <10MB
+    # total size. Pinning the FROM literal catches a regression to
+    # a different base (e.g. Debian) that would silently blow up
+    # the size budget AND switch the POSIX sh shell.
+    command: "grep -F 'FROM docker.io/library/alpine:3.20' images/web/Containerfile"
+    timeout_ms: 3000
+    expected_behavior: "alpine:3.20"
+
+  - step: "Req busybox-extras package install + no other apk add (size budget)"
+    # Spec § Req 'busybox httpd no additional packages' — the
+    # Containerfile should install ONLY busybox-extras (which
+    # carries httpd) and nothing else. A regression adding a
+    # 'apk add curl' or similar would silently break the <10MB
+    # size invariant.
+    command: "grep -F 'apk add --no-cache busybox-extras' images/web/Containerfile && APK_COUNT=$(grep -c 'apk add' images/web/Containerfile); [ \"$APK_COUNT\" = '1' ] && echo \"ok: exactly 1 apk add (busybox-extras)\" || { echo \"FAIL: $APK_COUNT apk add invocations\"; exit 1; }"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req port 8080 exposed + WORKDIR /var/www"
+    # Spec § Req mandates port 8080 + `/var/www` as the serving
+    # root. The `EXPOSE 8080` directive is the container-port
+    # contract; `WORKDIR /var/www` is the entrypoint's default
+    # directory.
+    command: "grep -F 'EXPOSE 8080' images/web/Containerfile && grep -F 'WORKDIR /var/www' images/web/Containerfile"
+    timeout_ms: 3000
+    expected_behavior: "/var/www"
+
+  - step: "entrypoint.sh: POSIX sh shebang (Alpine busybox ash, no bash)"
+    # Spec § Req mandates 'no additional packages'. Alpine doesn't
+    # ship bash by default; using #!/bin/sh ensures the entrypoint
+    # works on the minimal image without an extra apk install.
+    command: "head -1 images/web/entrypoint.sh | grep -F '#!/bin/sh'"
+    timeout_ms: 3000
+    expected_behavior: "#!/bin/sh"
+
+  - step: "entrypoint.sh: exec httpd -f -p 8080 -h /var/www (busybox httpd launch)"
+    # Spec § Req mandates 'busybox httpd serves static files from
+    # /var/www on port 8080'. The exec line is the canonical launch;
+    # `-f` foreground (PID 1 behaviour), `-p 8080` port binding,
+    # `-h /var/www` serving root. Pin the full literal.
+    command: "grep -F 'exec httpd -f -p 8080 -h /var/www' images/web/entrypoint.sh"
+    timeout_ms: 3000
+    expected_behavior: "exec httpd"
+
+  - step: "entrypoint.sh: serving banner + URL printed before httpd exec (UX contract)"
+    # Spec § Req 'Entrypoint displays banner and serving URL'.
+    # The banner is the operator-facing identification; pin the
+    # `tillandsias web` literal + the http://localhost:8080 URL.
+    command: "grep -F 'tillandsias web' images/web/entrypoint.sh && grep -F 'http://localhost:8080' images/web/entrypoint.sh"
+    timeout_ms: 3000
+    expected_behavior: "http://localhost:8080"
+
+observability:
+  traces:
+    - "@trace spec:web-image"
+  expected_log: "web-image Containerfile (Alpine 3.20 + busybox-extras + EXPOSE 8080 + WORKDIR /var/www) + entrypoint.sh (POSIX sh + exec httpd + banner) all pinned"
+  log_fields:
+    spec: "web-image"
+    test: "web-image-shape"
+    artifact: "images/web/{Containerfile,entrypoint.sh}"
+
+rollback:
+  on_failure: >
+    A `spec:web-image` source surface drifted. Restore: `@trace
+    spec:web-image` on both Containerfile + entrypoint.sh; `FROM
+    docker.io/library/alpine:3.20`; exactly 1 `apk add --no-cache
+    busybox-extras` (no other packages); `EXPOSE 8080` +
+    `WORKDIR /var/www`; entrypoint shebang `#!/bin/sh`; `exec httpd
+    -f -p 8080 -h /var/www` launch line; serving banner with
+    `tillandsias web` + `http://localhost:8080` URL.
+  command: "ls -la images/web/ && cat images/web/Containerfile && cat images/web/entrypoint.sh"
