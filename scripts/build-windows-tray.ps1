@@ -65,8 +65,24 @@ $buildArgs = @('build', '-p', 'tillandsias-windows-tray')
 if (-not $DebugBuild) { $buildArgs += '--release' }
 
 Write-Host "Building tillandsias-tray ($profileName)..." -ForegroundColor Cyan
-& cargo @buildArgs
-if ($LASTEXITCODE -ne 0) { throw "cargo build failed (exit $LASTEXITCODE)" }
+# Cargo writes its progress messages ("Compiling...", "Finished...") to stderr.
+# Under `$ErrorActionPreference = 'Stop'` PowerShell wraps each stderr write
+# from a native exe as a NativeCommandError RemoteException, which the Stop
+# trap treats as a terminating error — aborting the build mid-stream the
+# moment cargo first writes "Compiling X". This is the well-known stderr-wrap
+# quirk documented in skills/build-windows-tray + cheatsheets/runtime/
+# windows-tray-diagnostics.md. Locally relax the preference around the cargo
+# invocation, capture $LASTEXITCODE explicitly, then restore — a real cargo
+# compile failure still surfaces via the exit code check below.
+$prevErrorActionPreference = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+try {
+    & cargo @buildArgs
+    $cargoExit = $LASTEXITCODE
+} finally {
+    $ErrorActionPreference = $prevErrorActionPreference
+}
+if ($cargoExit -ne 0) { throw "cargo build failed (exit $cargoExit)" }
 
 $exe = Join-Path $RepoRoot "target\$profileName\tillandsias-tray.exe"
 if (-not (Test-Path $exe)) { throw "expected binary not found: $exe" }

@@ -760,3 +760,96 @@ exists) is structurally separate.
 **Next iteration ask**: N/A (SECTION_KIND=ok). The windows-tray's
 operator-facing surface — CLI modes + install verification + health
 check script — is now end-to-end consistent and self-documenting.
+
+---
+
+### 20260530T220000Z — ok (fix build-subscript stderr-wrap; install-windows.ps1 now end-to-end clean)
+
+- agent_id: windows-bullo-claude-opus-20260530T220000Z
+- head_sha: 20f37703 (post-merge of linux-next +7 commits — web-image +
+  spec-traceability litmus pins (89/89 PASS milestone) + 19:43Z cycle
+  merging my prior 567009f6; no shared-contract churn)
+- version: 0.2.260528.1 (linux-next still pre-VERSION-bump sync from main)
+- build_commit: 567009f6 (pre-this-commit head)
+- build_run_id: 20260530T220000Z
+
+**Sibling context**:
+- linux-next +7 commits: `web-image` 33→75, **`spec-traceability` 33→75
+  at 20:51Z reached MILESTONE 89/89 PASS** (full instant litmus suite is
+  now at 100% across every spec). cycle 19:43Z (`0a7a1a6a`) smoke-tested
+  my prior `567009f6` cleanly.
+- osx-next still b4a45622 (12+ hours, 9 cycles, "DEEPLY overdue" per
+  19:43Z cycle).
+- Release `v0.2.260530.1` published successfully but linux-next hasn't
+  yet pulled main's VERSION bump back in. Normal release-cycle pattern.
+
+**Change made**: fixed a concrete bug I documented in the prior tick —
+`scripts/install-windows.ps1` aborted mid-install when the nested
+`build-windows-tray.ps1` subscript tripped PowerShell's NativeCommandError
+wrap on cargo's stderr writes. The Stop preference inside the subscript
+treated the very first "Compiling X" stderr line as terminating, killing
+the build before "Finished release" — and the install never proceeded.
+End users hitting this would see a broken install with no useful error.
+
+Files touched (Windows-owned):
+- `scripts/build-windows-tray.ps1`: around the `& cargo @buildArgs` call,
+  save the outer `$ErrorActionPreference`, locally set to `Continue`,
+  invoke cargo, capture `$LASTEXITCODE`, restore the preference via a
+  `try {} finally {}` (so an actual cargo compile failure — exit != 0 —
+  still throws via the existing exit-code check on the next line; only
+  the spurious-stderr-wrap-as-error path is fixed). 13-line surgical
+  edit + a 9-line explanatory comment block citing the skill +
+  cheatsheet for the historical context.
+- `skills/build-windows-tray/SKILL.md`:
+  - Section 2 ("Release build"): updated to note the wrapper now safely
+    handles stderr-wrap; both `scripts\build-windows-tray.ps1` and
+    direct `cargo build` work. Cargo-direct retained for ad-hoc cases.
+  - Section 4 ("Install"): updated to **prefer `scripts\install-windows.ps1`**
+    (the previously-anchored "future tuning pass" that the section
+    referenced has now landed). Script now handles shortcut creation +
+    autostart + the 2-layer post-install verification end-to-end.
+    Direct-copy path retained for skip-rebuild cases.
+  - Tuning log: new 2026-05-30 entry documenting the fix.
+
+**Build + tests**: no Rust code touched; binary unchanged.
+
+**Smoke** (end-to-end verification on real hardware):
+- Direct invoke `scripts\build-windows-tray.ps1`: clean — "Building
+  tillandsias-tray (release)..." → "Built: target\release\
+  tillandsias-tray.exe" → "Finished release profile" → emits exe path
+  on output. No Stop trap fired.
+- End-to-end `scripts\install-windows.ps1` (was broken last tick): now
+  completes cleanly — Build → Install → "Start Menu shortcut" →
+  "Installed Tillandsias (dev mode (--no-provision))" → Layer 1
+  `--version` reports `tillandsias-tray 0.2.260528.1 (a963c16d)` →
+  Layer 2 `--diagnose --json` reports `version=... commit=... pin=...`
+  → `wire: hvsocket open: no running WSL utility VM…` (expected). Script
+  exit code 2 = the propagated `--diagnose` degraded exit, NOT a script
+  abort.
+- `windows-native-tray` litmus: 7/7 PASS (no YAML changes this tick;
+  build-windows-tray.ps1 isn't pinned at this surface level).
+
+**Findings** (free-form):
+- The fix preserves the "fail on real cargo error" semantics — only the
+  spurious-stderr-as-NativeCommandError path is silenced. A cargo
+  compile failure (exit 1) still throws via the existing `if ($cargoExit
+  -ne 0) { throw ... }` line that the fix preserves.
+- The try/finally ensures `$ErrorActionPreference` is always restored
+  to the outer value even on cargo error — symmetric with how the rest
+  of the script expects Stop semantics for other commands (e.g.
+  `Compress-Archive`, `Get-FileHash`).
+- The skill update is the more impactful part: the daily
+  `/build-windows-tray` cron now uses `scripts\install-windows.ps1`
+  end-to-end, which means a real install run happens on the host every
+  day — not just a `Copy-Item` to the install path. Catches install-side
+  regressions (shortcut creation, autostart, post-install verification)
+  that the cron previously didn't exercise.
+
+**Cross-host visibility note**: pure Windows-side script + skill changes.
+No cross-host coordination needed. macOS's `scripts/build-macos-tray.sh`
+is shell, not PowerShell, so the stderr-wrap class doesn't apply there.
+
+**Next iteration ask**: N/A (SECTION_KIND=ok). With this fix, the user's
+canonical workflow — `git pull && scripts\install-windows.ps1` — now
+works end-to-end from a fresh checkout. The daily cron will validate
+the install path every day at 11:17 AM PDT going forward.
