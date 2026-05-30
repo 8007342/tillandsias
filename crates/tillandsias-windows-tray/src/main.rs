@@ -82,6 +82,21 @@ fn main() {
         };
         std::process::exit(notify_icon::diagnose(format));
     }
+    if std::env::args().any(|a| a == "--logs") {
+        // Optional `--tail <N>`: print the last N lines instead of the
+        // full file. Malformed values (non-numeric, missing arg) fall
+        // through to the full-file path — friendlier than rejecting the
+        // run for a typo.
+        let mut iter = std::env::args();
+        let tail: Option<usize> = loop {
+            match iter.next() {
+                Some(a) if a == "--tail" => break iter.next().and_then(|v| v.parse().ok()),
+                Some(_) => continue,
+                None => break None,
+            }
+        };
+        std::process::exit(notify_icon::logs(tail));
+    }
     notify_icon::run();
 }
 
