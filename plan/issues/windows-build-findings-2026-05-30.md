@@ -853,3 +853,103 @@ is shell, not PowerShell, so the stderr-wrap class doesn't apply there.
 canonical workflow — `git pull && scripts\install-windows.ps1` — now
 works end-to-end from a fresh checkout. The daily cron will validate
 the install path every day at 11:17 AM PDT going forward.
+
+---
+
+### 20260530T232500Z — ok (diagnose-windows.ps1: identity line + stale-readiness-summary fix)
+
+- agent_id: windows-bullo-claude-opus-20260530T232500Z
+- head_sha: c827ee7f (post-merge of linux-next +9 commits — subdomain-naming-flip
+  + zen-default-with-ollama-analysis-pool litmus pins + secret-rotation
+  tombstone alignment; no shared-contract churn)
+- version: 0.2.260528.1
+- build_commit: fdc3c00e
+- build_run_id: 20260530T232500Z
+
+**Sibling context** (no windows-tray action required):
+- linux-next +9 commits: 4 spec-gap-fill slices (subdomain-naming-flip,
+  zen-default-with-ollama-analysis-pool, secret-rotation tombstone) + cycle
+  21:43Z merging my prior `fdc3c00e` cleanly. Total spec count went 89→88
+  (one tombstoned). No shared-contract churn.
+- osx-next still stalled at b4a45622 (~15.5 hours since 06:27Z; integration
+  loop's 21:43Z cycle reiterates "DEEPLY overdue" escalation flag).
+- Merge-tree linux-next + windows-next: clean.
+
+**Change made**: targeted improvements to
+`scripts/diagnose-windows.ps1` — the pre-tray host-facts diagnostic
+(distinct from `tray-diagnose.ps1` which probes the live runtime).
+Surfaced two material issues:
+
+1. **Stale "Readiness summary"**: said VM provisioning is
+   `"Still GATED on the sec.2b CI-fetch / recipe-smoke job publishing
+   the per-arch rootfs .tar"`. **Wrong** — provisioning was proven E2E
+   on 2026-05-26/27 against live published rootfs assets, and the
+   daily release pipeline (today's `v0.2.260530.1`, prior releases)
+   publishes per-arch rootfs tars. Lower-skill operators reading this
+   would be told the wrong story about whether they can provision.
+2. **"Installed tray" section showed file mtime but not the binary's
+   self-identity**. After today's `--version` mode addition (4 ticks
+   ago), there's a fast way to ask the binary what it is — and that
+   answer matters more than file mtime (which is install time, not
+   build time; matters for release-artifact installs).
+
+Files touched (Windows-owned only):
+- `scripts/diagnose-windows.ps1`:
+  - **Installed tray section**: after the file-mtime line, add a
+    `--version` ping via the same `cmd /c` redirect pattern
+    `tray-diagnose.ps1` + `install-windows.ps1` use. Reports
+    `tillandsias-tray <workspace VERSION> (<build_commit>)` as a new
+    `[ok] identity:` line. Warns if the ping fails (binary incompatible
+    or fundamentally broken). Also added a pointer to
+    `scripts\tray-diagnose.ps1` for live runtime health (separation of
+    concerns: this script = pre-tray host facts; tray-diagnose =
+    live-runtime health).
+  - **Recipe materializer section**: updated stale
+    `"COMPLETE except the buildah-driven sec.2b CI-fetch job"` text →
+    `"COMPLETE end-to-end as of 2026-05-30: CI release pipeline
+    publishes per-arch rootfs tars on every daily release"`. Matches
+    reality.
+  - **Readiness summary**: full rewrite of the VM-provisioning block.
+    Was `"Still GATED on the sec.2b CI-fetch / recipe-smoke job"`
+    (stale). Now: `"UNBLOCKED. Proven E2E 2026-05-26/27 against live
+    published rootfs assets; daily release pipeline publishes per-arch
+    rootfs tars (see releases/latest on the GitHub repo). Run:
+    install-windows.ps1 -Provision -Launch"`. Also reorganized the
+    bottom command list to surface live runtime health + log
+    inspection commands (`scripts\tray-diagnose.ps1` +
+    `tillandsias-tray --logs --tail 50`) — new since the prior
+    edition of this section.
+
+**Build**: N/A (script-only changes; binary unchanged from prior tick).
+
+**Smoke** (real hardware):
+- `scripts\diagnose-windows.ps1` ran end-to-end clean. New identity
+  line in the Installed tray section: `[ok] identity: tillandsias-tray
+  0.2.260528.1 (a963c16d)`. Readiness summary now reads correctly with
+  the `UNBLOCKED` block + the 4-command bottom list (tray launch x2 +
+  health check + log inspection).
+- `windows-native-tray` litmus: 7/7 PASS (no YAML changes this tick;
+  diagnose-windows.ps1 isn't pinned at this surface level).
+
+**Findings** (free-form):
+- The wave of script enrichment this morning + last tick + this tick
+  (install-windows.ps1, tray-diagnose.ps1, diagnose-windows.ps1) has
+  brought all three operator-facing scripts to a consistent surface:
+  every script now reports `version + build_commit + (script-specific
+  data)`, and they each point at the OTHER scripts for the data they
+  don't own (this script → tray-diagnose for live runtime;
+  tray-diagnose → `--logs --tail N` for more log; install-windows →
+  diagnose-windows for pre-tray host facts).
+- The stale-text issues caught here would have lingered indefinitely
+  without a routine eyes-on-script audit — a reminder that
+  documentation-in-scripts decays as the architectural state moves on.
+  Spec-anchored litmus catches code drift; nothing catches script
+  *text* drift today. Worth flagging if/when someone wants a "script
+  staleness audit" litmus.
+
+**Cross-host visibility note**: pure Windows script changes. No
+cross-host coordination needed.
+
+**Next iteration ask**: N/A (SECTION_KIND=ok). The 3 windows
+operator-facing scripts (install-windows.ps1, tray-diagnose.ps1,
+diagnose-windows.ps1) are now mutually consistent + accurate.

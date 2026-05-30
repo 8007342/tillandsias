@@ -113,8 +113,29 @@ Section 'Installed tray'
 if (Test-Path $InstalledExe) {
     $item = Get-Item $InstalledExe
     Ok "binary: $InstalledExe ($(Format-Size $item.Length), built $($item.LastWriteTime.ToString('yyyy-MM-dd HH:mm')))"
+
+    # Quick identity ping via `tillandsias-tray --version` (fast, no WSL
+    # touch; same flag install-windows.ps1's Layer 1 preflight uses). Reports
+    # workspace VERSION + short build_commit baked at compile time, so the
+    # operator sees what the installed binary self-identifies as — distinct
+    # from the file's mtime above (which is install time, not build time
+    # for binaries copied from a release artifact). cmd-redirect to bypass
+    # PowerShell's GUI-subsystem stdout capture quirk; see
+    # cheatsheets/runtime/windows-tray-diagnostics.md.
+    $verTmp = Join-Path $env:TEMP "tillandsias-diag-ver-$([guid]::NewGuid().ToString('N')).txt"
+    & cmd.exe /c "`"$InstalledExe`" --version > `"$verTmp`" 2>nul"
+    $verExit = $LASTEXITCODE
+    $verLine = (Get-Content $verTmp -Raw -ErrorAction SilentlyContinue) -replace '\s+$', ''
+    Remove-Item $verTmp -ErrorAction SilentlyContinue
+    if ($verExit -eq 0 -and $verLine) {
+        Ok "identity: $verLine"
+    } else {
+        Warn "identity: --version failed (exit $verExit); binary may be incompatible"
+    }
+
     $proc = Get-Process -Name 'tillandsias-tray' -ErrorAction SilentlyContinue
     if ($proc) { Ok "running (PID $($proc.Id -join ', '))" } else { Warn 'not currently running (launch from Start Menu or install-windows.ps1 -Launch)' }
+    Info 'For live runtime health: scripts\tray-diagnose.ps1 (consumes --diagnose --json + recent_log_tail)'
 } else {
     Warn "not installed. Build + install with: scripts\install-windows.ps1 -Launch"
 }
@@ -133,24 +154,28 @@ foreach ($r in $recipeInputs) {
     else { Warn ("{0,-14} {1}  (absent)" -f $r.Label, $r.Path); $recipeComplete = $false }
 }
 if ($recipeComplete) {
-    Info 'Recipe authoring (sec.1.x) + both per-OS converters (sec.3.7.1 macOS .img,'
-    Info 'sec.3.7.2 WSL --import) are present. Materializer ecosystem is COMPLETE'
-    Info 'except the buildah-driven sec.2b CI-fetch job that publishes the rootfs tar.'
+    Info 'Recipe authoring + both per-OS converters (macOS .img, WSL --import) are'
+    Info 'present. Materializer ecosystem COMPLETE end-to-end as of 2026-05-30:'
+    Info 'CI release pipeline publishes per-arch rootfs tars on every daily release.'
 }
 
 # --- Readiness summary -------------------------------------------------------
 Section 'Readiness summary'
 Info 'Works now (no VM):    tray UI, right-click menu, ~/src project scan, agent'
 Info '                      selection, click->PtyIntent->launch_spec resolution.'
-Info 'Converter ready:      materialize::wsl::tar_to_wsl_import (w5 slice) integrated'
-Info '                      into linux-next; vm-layer 43/43 green incl. macOS converter.'
+Info 'Converter ready:      materialize::wsl::tar_to_wsl_import (w5 slice) integrated;'
+Info '                      vm-layer green incl. macOS converter.'
 if ($wslReady) {
-    Info 'VM provisioning:      WSL present, recipe authored. Still GATED on the sec.2b'
-    Info '                      CI-fetch / recipe-smoke job publishing the per-arch'
-    Info '                      rootfs .tar that tar_to_wsl_import imports.'
+    Info 'VM provisioning:      UNBLOCKED. Proven E2E 2026-05-26/27 against live published'
+    Info '                      rootfs assets; daily release pipeline publishes per-arch'
+    Info '                      rootfs tars (see releases/latest on the GitHub repo).'
+    Info '                      Run: install-windows.ps1 -Provision -Launch'
 } else {
-    Warn 'VM provisioning:      blocked twice over - install WSL2 AND wait for the'
-    Warn '                      sec.2b CI rootfs-publish job.'
+    Warn 'VM provisioning:      install WSL2 first (wsl --install, elevated, reboot).'
+    Warn '                      Provisioning flow itself is unblocked once WSL is present.'
 }
+Info ''
 Info 'Run the tray menu-only (no provisioning):  install-windows.ps1 -Launch'
-Info 'Attempt real provisioning once unblocked:  install-windows.ps1 -Provision -Launch'
+Info 'Attempt real provisioning:                 install-windows.ps1 -Provision -Launch'
+Info 'Live runtime health check:                 scripts\tray-diagnose.ps1'
+Info 'Inspect tray logs:                         tillandsias-tray --logs --tail 50'
