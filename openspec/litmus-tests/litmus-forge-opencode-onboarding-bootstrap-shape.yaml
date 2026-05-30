@@ -1,0 +1,136 @@
+# @trace spec:forge-opencode-onboarding
+#
+# Drift-protection for the surfaces the existing
+# `litmus:forge-opencode-onboarding-shape` doesn't cover: Req 1
+# (first-turn discovery: tillandsias-inventory + TILLANDSIAS_
+# CHEATSHEETS/INDEX.md), Req 2 ORDER constraint (instructions[0] MUST
+# be methodology.md, not just "present"), and Req 3 web-launcher
+# scenarios (config overlay, SSE theme proxy, project clone path).
+#
+# The existing shape litmus pins the 5 instruction files in config.json
+# and the CLI entrypoint's openspec-init + /startup bootstrap, but
+# doesn't pin:
+#
+#   * Req 1 § Agent discovers available tools — forge-discovery.md
+#     names `tillandsias-inventory` + `$TILLANDSIAS_CHEATSHEETS/
+#     INDEX.md` as the canonical discovery commands
+#   * Req 1 § Agent avoids assuming tool absence — the `which <tool>`
+#     guidance literal
+#   * Req 2 ORDER — methodology.md is `instructions[0]` (first entry)
+#   * Req 3 § Web launcher applies the same project + theme overlay —
+#     entrypoint-forge-opencode-web.sh calls
+#     `apply_opencode_config_overlay` + execs `sse-keepalive-proxy.js`
+#     for the dark-theme bootstrap + drives project materialization
+#     via `clone_project_from_mirror` / `find_project_dir` /
+#     `export_project_env`
+#
+# Combined with the existing shape litmus, raises
+# forge-opencode-onboarding coverage_ratio 30 → 75.
+name: litmus:forge-opencode-onboarding-bootstrap-shape
+spec: forge-opencode-onboarding
+phase: pre-build
+description: >
+  Pin the Req 1 discovery surfaces (tillandsias-inventory +
+  TILLANDSIAS_CHEATSHEETS/INDEX.md + which discipline), the Req 2
+  ORDER constraint (methodology.md as instructions[0]), and the
+  Req 3 web-launcher scenarios (overlay + SSE proxy + project clone).
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains images/default/config-overlay/opencode/config.json
+  - workspace contains images/default/config-overlay/opencode/instructions/forge-discovery.md
+  - workspace contains images/default/entrypoint-forge-opencode-web.sh
+  - workspace contains images/default/sse-keepalive-proxy.js
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "Req 1 discovery: forge-discovery.md names tillandsias-inventory"
+    # Spec § "Agent discovers available tools" mandates the canonical
+    # discovery command. forge-discovery.md is the agent-facing
+    # instruction file; the literal must remain pinned so a rename
+    # of the inventory binary surfaces in both the script and the
+    # docs in lockstep.
+    command: "grep -F 'tillandsias-inventory' images/default/config-overlay/opencode/instructions/forge-discovery.md"
+    timeout_ms: 3000
+    expected_behavior: "tillandsias-inventory"
+
+  - step: "Req 1 discovery: forge-discovery.md names $TILLANDSIAS_CHEATSHEETS/INDEX.md"
+    # Spec § "Agent discovers available tools" Scenario 2 — the agent
+    # MUST read INDEX.md. The cheatsheets root is `/opt/cheatsheets`
+    # (env var TILLANDSIAS_CHEATSHEETS), and INDEX.md is its
+    # discovery surface. Pin the literal `$TILLANDSIAS_CHEATSHEETS/
+    # INDEX.md` path so a regression to a hardcoded `/opt/...`
+    # surfaces both the env-var contract and the discovery path.
+    command: "grep -F 'TILLANDSIAS_CHEATSHEETS/INDEX.md' images/default/config-overlay/opencode/instructions/forge-discovery.md"
+    timeout_ms: 3000
+    expected_behavior: "TILLANDSIAS_CHEATSHEETS/INDEX.md"
+
+  - step: "Req 1 discipline: 'Don't guess if a tool exists' / `which` guidance present"
+    # Spec § "Agent avoids assuming tool absence" — the discipline
+    # text in forge-discovery.md is the agent-facing pin. A
+    # regression dropping the guidance would silently re-enable
+    # the guess-instead-of-check pattern.
+    command: "grep -F 'tillandsias-inventory | grep' images/default/config-overlay/opencode/instructions/forge-discovery.md"
+    timeout_ms: 3000
+    expected_behavior: "tillandsias-inventory | grep"
+
+  - step: "Req 2 ORDER: methodology.md is instructions[0] (first entry in config.json)"
+    # Spec § "Modularized instruction files" Scenario "Agent
+    # receives methodology.md as first-turn context" mandates
+    # `instructions[0] MUST be methodology.md`. Verify by checking
+    # the line IMMEDIATELY after `"instructions": [` references
+    # methodology.md — i.e. the first-array-entry position.
+    command: "awk '/\"instructions\": \\[/{getline; if ($0 ~ /methodology.md/) { print \"ok: methodology.md is instructions[0]\"; exit 0 } else { print \"FAIL: instructions[0] is\", $0; exit 1 } }' images/default/config-overlay/opencode/config.json"
+    timeout_ms: 3000
+    expected_behavior: "ok: methodology.md is instructions[0]"
+
+  - step: "Req 3 web launcher: entrypoint-forge-opencode-web.sh applies config overlay"
+    # Spec § "Web launcher applies the same project and theme overlay"
+    # — the call to `apply_opencode_config_overlay` is the
+    # configuration-side surface. Pinning the call by name catches a
+    # rename that would silently break the per-session overlay.
+    command: "grep -F 'apply_opencode_config_overlay' images/default/entrypoint-forge-opencode-web.sh"
+    timeout_ms: 3000
+    expected_behavior: "apply_opencode_config_overlay"
+
+  - step: "Req 3 web theme bootstrap: web launcher execs sse-keepalive-proxy.js"
+    # Spec § "the browser-facing port MUST be fronted by the bundled
+    # SSE/theme proxy" — the `exec /usr/local/bin/sse-keepalive-
+    # proxy.js` literal is the proof. A regression that swaps to
+    # direct `opencode serve` would silently break the dark-theme
+    # bootstrap.
+    command: "grep -F 'exec /usr/local/bin/sse-keepalive-proxy.js' images/default/entrypoint-forge-opencode-web.sh"
+    timeout_ms: 3000
+    expected_behavior: "sse-keepalive-proxy.js"
+
+  - step: "Req 3 web project materialization: clone + find + export project env"
+    # Spec § "the active project MUST resolve to /home/forge/src/
+    # <project>" + § "repo-local git identity MUST be configured".
+    # The three helper calls drive the project-resolution chain. Pin
+    # all three so a regression dropping any of them fails fast.
+    command: "grep -F 'clone_project_from_mirror' images/default/entrypoint-forge-opencode-web.sh && grep -F 'find_project_dir' images/default/entrypoint-forge-opencode-web.sh && grep -F 'export_project_env' images/default/entrypoint-forge-opencode-web.sh"
+    timeout_ms: 3000
+    expected_behavior: "export_project_env"
+
+observability:
+  traces:
+    - "@trace spec:forge-opencode-onboarding"
+  expected_log: "first-turn discovery + instructions[0] order + web-launcher (overlay + theme proxy + project chain) all pinned"
+  log_fields:
+    spec: "forge-opencode-onboarding"
+    test: "forge-opencode-onboarding-bootstrap-shape"
+    artifact: "images/default/config-overlay/opencode/{config.json,instructions/forge-discovery.md} + entrypoint-forge-opencode-web.sh"
+
+rollback:
+  on_failure: >
+    A `spec:forge-opencode-onboarding` surface drifted. Restore:
+    `tillandsias-inventory` reference in `forge-discovery.md`;
+    `$TILLANDSIAS_CHEATSHEETS/INDEX.md` path literal;
+    `tillandsias-inventory | grep` discipline guidance;
+    `methodology.md` as `instructions[0]` in config.json;
+    `apply_opencode_config_overlay` + `exec /usr/local/bin/
+    sse-keepalive-proxy.js` + `clone_project_from_mirror` +
+    `find_project_dir` + `export_project_env` in
+    `entrypoint-forge-opencode-web.sh`.
+  command: "grep -nE 'tillandsias-inventory|TILLANDSIAS_CHEATSHEETS|methodology|apply_opencode_config_overlay|sse-keepalive-proxy|clone_project_from_mirror|find_project_dir|export_project_env' images/default/config-overlay/opencode/config.json images/default/config-overlay/opencode/instructions/forge-discovery.md images/default/entrypoint-forge-opencode-web.sh | head -25"

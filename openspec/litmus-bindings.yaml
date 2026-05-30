@@ -307,8 +307,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:forge-opencode-onboarding-shape
-  coverage_ratio: 30
-  last_verified: '2026-05-12'
+  - litmus:forge-opencode-onboarding-bootstrap-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: forge-shell-tools
   status: active
   litmus_tests:
