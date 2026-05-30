@@ -1,0 +1,127 @@
+# @trace spec:default-image
+#
+# Drift-protection for the default forge image Containerfile +
+# build pipeline. spec:default-image has 6 requirements covering
+# Fedora Minimal base + dev tools + forge UID 1000 + OpenCode
+# entrypoint + declarative Containerfile build + content-hash
+# image identity.
+#
+# Existing bindings `litmus:forge-standalone-traceability` +
+# `litmus:forge-diagnostics-e2e` covered launch-path + diagnostic
+# E2E behaviour. The Containerfile source surfaces + build-image.sh
+# entry-point dispatch were untrapped.
+name: litmus:default-image-containerfile-shape
+spec: default-image
+phase: pre-build
+description: >
+  Pin default-image Containerfile (Fedora 44 + microdnf core dev
+  tools + opencode/openspec/claude/codex npm install + forge UID
+  1000 + 5 entrypoint scripts + opencode config) and build-image.sh
+  multi-image dispatch (forge/web/proxy/git/inference/router/chromium
+  variants/vault).
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains images/default/Containerfile
+  - workspace contains scripts/build-image.sh
+  - workspace contains images/default/entrypoint-forge-{opencode,opencode-web,claude,codex}.sh
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "Containerfile + build-image.sh both carry @trace spec:default-image"
+    # Substring match handles comma-list trace format; Containerfile
+    # has the marker on line 4; build-image.sh's @trace is
+    # spec:forge-standalone-runner (a related but different spec),
+    # so pin the @trace on Containerfile + a default-image
+    # cross-reference in build-image.sh.
+    command: "grep -F '@trace spec:default-image' images/default/Containerfile && grep -F 'forge' scripts/build-image.sh"
+    timeout_ms: 3000
+    expected_behavior: "spec:default-image"
+
+  - step: "Req Fedora Minimal base: FROM registry.fedoraproject.org/fedora-minimal:44"
+    # Spec § Req mandates Fedora Minimal base. The 44 pin is the
+    # current LTS-equivalent; a regression to a different distro
+    # (Alpine/Debian) would silently break the microdnf + glibc +
+    # bash + useradd contract documented in the file-head note.
+    command: "grep -F 'FROM registry.fedoraproject.org/fedora-minimal:44' images/default/Containerfile"
+    timeout_ms: 3000
+    expected_behavior: "fedora-minimal:44"
+
+  - step: "Req Dev tools: microdnf installs core dev toolchain (git/gh/jq/ripgrep/node/python/etc.)"
+    # Spec § Req mandates a long list of dev tools. Pin the
+    # `microdnf install -y` invocation + a representative subset
+    # of mandated tools. A regression switching to a different
+    # package manager (dnf, apk) or dropping core tools (git/gh/
+    # nodejs/python3) would silently break the agent's discovery
+    # contract.
+    command: "grep -F 'microdnf install -y' images/default/Containerfile && for t in git gh ripgrep nodejs python3-pip; do grep -Fq \"$t\" images/default/Containerfile || { echo \"FAIL: tool '$t' missing\"; exit 1; }; done && echo \"ok: core dev tools present\""
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req Agents: npm install of opencode + openspec + claude + codex"
+    # Spec § Req mandates OpenCode + OpenSpec + Claude Code + Codex
+    # are available in PATH. The npm install line installs all 4 in
+    # one invocation; pin the canonical package names.
+    command: "grep -F 'opencode-ai@latest @fission-ai/openspec @anthropic-ai/claude-code @openai/codex' images/default/Containerfile"
+    timeout_ms: 3000
+    expected_behavior: "opencode-ai"
+
+  - step: "Req Non-root user: useradd -u 1000 forge"
+    # Spec § Req mandates forge UID 1000 to match host user UID
+    # via --userns=keep-id. The useradd literal is the user-
+    # creation site; pin the explicit UID assignment.
+    command: "grep -F 'useradd -u 1000 -m -s /bin/bash forge' images/default/Containerfile"
+    timeout_ms: 3000
+    expected_behavior: "useradd -u 1000"
+
+  - step: "Req Entrypoint: 4 forge entrypoint scripts COPY'd into /usr/local/bin"
+    # Spec § Req mandates entrypoint launches OpenCode. The 4
+    # entrypoint scripts (opencode + opencode-web + claude + codex)
+    # are the implementation — Containerfile must COPY all of them.
+    command: "for s in opencode opencode-web claude codex; do grep -Fq \"entrypoint-forge-$s.sh\" images/default/Containerfile || { echo \"FAIL: entrypoint-forge-$s.sh not COPY'd\"; exit 1; }; done && echo \"ok: 4 forge entrypoints present\""
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req Build pipeline: build-image.sh dispatches forge/web/proxy/git/inference/router/chromium/vault"
+    # Spec § Req mandates `scripts/build-image.sh forge` and `web`
+    # build the respective images. The case-arm in the script
+    # dispatches to >=8 image names; pin the canonical list so a
+    # refactor dropping a target surfaces fast.
+    command: "grep -F 'forge|web|proxy|git|inference|router|chromium-core|chromium-framework|vault' scripts/build-image.sh"
+    timeout_ms: 3000
+    expected_behavior: "forge|web"
+
+  - step: "Req Content-hash identity: build-image.sh tags with content-hash + version alias"
+    # Spec § Req mandates `tillandsias-forge:<CONTENT_HASH>`
+    # canonical tag + `v<version>` + `:latest` aliases. The
+    # script's tagging logic is the implementation; pin the
+    # IMAGE_TAG variable + the podman-build invocation.
+    command: "grep -F 'IMAGE_TAG' scripts/build-image.sh && grep -F 'podman build' scripts/build-image.sh"
+    timeout_ms: 3000
+    expected_behavior: "podman build"
+
+observability:
+  traces:
+    - "@trace spec:default-image"
+    - "@trace spec:forge-standalone-runner"
+  expected_log: "default-image Containerfile (Fedora 44 + microdnf dev tools + npm agents + forge UID 1000 + 4 entrypoints) + build-image.sh multi-image dispatch all pinned"
+  log_fields:
+    spec: "default-image"
+    test: "default-image-containerfile-shape"
+    artifact: "images/default/Containerfile + scripts/build-image.sh"
+
+rollback:
+  on_failure: >
+    A `spec:default-image` source surface drifted. Restore:
+    `@trace spec:default-image` on Containerfile; `FROM registry.
+    fedoraproject.org/fedora-minimal:44`; `microdnf install -y`
+    with git/gh/ripgrep/nodejs/python3-pip + the broader dev
+    toolchain; npm install of `opencode-ai@latest @fission-ai/
+    openspec @anthropic-ai/claude-code @openai/codex`; `useradd
+    -u 1000 -m -s /bin/bash forge`; COPY directives for all 4
+    forge entrypoint scripts (opencode, opencode-web, claude,
+    codex); build-image.sh's `forge|web|proxy|git|inference|
+    router|chromium-core|chromium-framework|vault` dispatch case
+    + IMAGE_TAG + `podman build` invocation.
+  command: "head -40 images/default/Containerfile && grep -n 'forge|web|proxy\\|IMAGE_TAG\\|podman build' scripts/build-image.sh | head -10"

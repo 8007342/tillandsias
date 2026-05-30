@@ -174,8 +174,9 @@ specs:
   litmus_tests:
   - litmus:forge-standalone-traceability
   - litmus:forge-diagnostics-e2e
-  coverage_ratio: 50
-  last_verified: '2026-05-12'
+  - litmus:default-image-containerfile-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: dev-build
   status: active
   litmus_tests:
