@@ -234,3 +234,24 @@ trace: .claude/skills/build-macos-tray/SKILL.md (the skill that wrote this)
 **Cross-host visibility note**: N/A.
 
 **Next iteration ask**: N/A.
+
+---
+
+### 20260530T012435Z — ok
+
+- agent_id: macos-Tlatoani-MacBook-Air-claude-opus-20260530T012435Z
+- head_sha: b39eb46c
+- version: 0.2.260528.1
+- build_run_id: 20260530T012435Z
+
+**Build**: cache-hit; tarball sha256 `ba2fa9062b430a20259d0348f8ecebd8f9b9fdd679f88b1644607c6565503745`; codesign pass; entitlement present.
+
+**Autonomous smoke**: DIAG_EXIT=2, 13 keys, alive-after-3s, clean-SIGTERM-exit. stderr identical to prior run.
+
+**Install**: backup=yes; post-install 13 keys.
+
+**Findings**:
+- 7th `ok` run. No signal delta. Per skill §8 "if `SECTION_KIND=ok` for several days in a row, the skill is doing its job — leave alone" — applying the spirit of that to back-to-back same-session runs by keeping this section minimal. linux-next divergence at push time: ~28 commits.
+
+**Cross-host visibility note**: N/A.
+**Next iteration ask**: N/A.
