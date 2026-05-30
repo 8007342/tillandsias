@@ -34,6 +34,31 @@ fn main() {
     println!("cargo:rerun-if-changed=../../VERSION");
     println!("cargo:rustc-env=WORKSPACE_VERSION={workspace_version}");
 
+    // Bake the short git commit SHA the binary was built from so support
+    // tooling can correlate a running tray to a specific commit (operators
+    // pasting `--diagnose --json` into a bug report make `build_commit`
+    // ground-truth for triage). Best-effort: if git isn't on PATH or this
+    // isn't a working tree (e.g. building from a source tarball), emit
+    // "unknown" rather than failing the build. Re-runs when HEAD moves
+    // (commit, branch switch, checkout) because of the rerun-if-changed on
+    // .git/HEAD. Set BEFORE the windows-target gate for the same
+    // cross-check-from-Linux reason as WORKSPACE_VERSION.
+    println!("cargo:rerun-if-changed=../../.git/HEAD");
+    println!("cargo:rerun-if-env-changed=BUILD_COMMIT_SHA_OVERRIDE");
+    let build_commit = std::env::var("BUILD_COMMIT_SHA_OVERRIDE").unwrap_or_else(|_| {
+        std::process::Command::new("git")
+            .args(["rev-parse", "--short", "HEAD"])
+            .current_dir(&manifest_dir_path)
+            .output()
+            .ok()
+            .filter(|o| o.status.success())
+            .and_then(|o| String::from_utf8(o.stdout).ok())
+            .map(|s| s.trim().to_string())
+            .filter(|s| !s.is_empty())
+            .unwrap_or_else(|| "unknown".to_string())
+    });
+    println!("cargo:rustc-env=BUILD_COMMIT_SHA={build_commit}");
+
     // Only emit the rerun-if directives + the resource compile invocation
     // when the host is producing a Windows artifact. `cargo check` from
     // Linux against `x86_64-pc-windows-gnu` triggers this path.

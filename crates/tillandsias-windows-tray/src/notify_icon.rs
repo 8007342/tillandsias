@@ -898,6 +898,14 @@ pub enum DiagnoseFormat {
 #[derive(serde::Serialize)]
 struct DiagnoseReport {
     version: &'static str,
+    /// Short git SHA of the commit this binary was built from. Baked at
+    /// compile time by build.rs (`BUILD_COMMIT_SHA`); falls back to
+    /// `"unknown"` if git wasn't available or the build was from a source
+    /// tarball with no working tree. Useful for correlating a running tray
+    /// to a specific commit when an operator pastes `--diagnose --json`
+    /// into a bug report (the workspace `version` rolls only on release,
+    /// so two binaries from the same release tag can still differ).
+    build_commit: &'static str,
     log_path: String,
     log_exists: bool,
     wt_present: bool,
@@ -1066,6 +1074,7 @@ fn collect_report() -> DiagnoseReport {
         // so the JSON's `version` field matches the release tag instead of
         // the crate's static `Cargo.toml` `0.1.0`. See build.rs for details.
         version: env!("WORKSPACE_VERSION"),
+        build_commit: env!("BUILD_COMMIT_SHA"),
         log_path: log.display().to_string(),
         log_exists,
         wt_present,
@@ -1082,6 +1091,7 @@ fn print_human(r: &DiagnoseReport) {
     println!("tillandsias-tray --diagnose");
     println!("===========================");
     println!("Version:      {}", r.version);
+    println!("Build commit: {}", r.build_commit);
     println!("Log file:     {}", r.log_path);
     println!("Log exists:   {}", if r.log_exists { "yes" } else { "no" });
     println!(
@@ -1731,6 +1741,7 @@ mod tests {
     fn baseline_diagnose_report() -> DiagnoseReport {
         DiagnoseReport {
             version: "0.0.0-test",
+            build_commit: "deadbeef",
             log_path: "C:\\path\\to\\tray.log".to_string(),
             log_exists: false,
             wt_present: true,
@@ -1756,6 +1767,7 @@ mod tests {
         let obj = v.as_object().expect("top-level JSON object");
         for key in [
             "version",
+            "build_commit",
             "log_path",
             "log_exists",
             "wt_present",
