@@ -41,13 +41,16 @@ continue building from current HEAD.
 
 ### 2. Release build
 
-Invoke cargo directly, NOT the `scripts/build-windows-tray.ps1` wrapper, because
-PowerShell tool invocations wrap cargo's stderr ("Compiling …", "Finished …")
-as `NativeCommandError` when `$ErrorActionPreference = 'Stop'` is set inside
-the wrapper. Direct cargo invocation tolerates the stderr stream correctly:
+As of 2026-05-30, `scripts/build-windows-tray.ps1` locally relaxes
+`$ErrorActionPreference` around the cargo invocation, so its stderr writes
+("Compiling …", "Finished …") no longer trip the Stop trap as
+`NativeCommandError`. Either path works:
 
 ```powershell
 $env:Path = "$env:USERPROFILE\.cargo\bin;$env:Path"
+# Either invoke the wrapper (preferred — same path users hit):
+& scripts\build-windows-tray.ps1
+# OR invoke cargo directly (still works, useful for ad-hoc):
 cargo build -p tillandsias-windows-tray --release
 ```
 
@@ -74,8 +77,21 @@ after the process exits, and `Copy-Item -Force` will fail with `IOException`
 
 ### 4. Install
 
-Direct copy to the install path (`scripts/install-windows.ps1` rebuilds first,
-which re-trips the cargo-stderr wrapping issue):
+As of 2026-05-30, `scripts/install-windows.ps1` runs end-to-end (the
+build-subscript stderr-wrap issue that previously aborted it mid-install was
+fixed in the same 2026-05-30 build-windows-tray.ps1 tuning). Prefer the
+script — it handles shortcut creation, autostart, and the Layer 1 (`--version`)
++ Layer 2 (`--diagnose --json`) post-install verification you'd otherwise
+re-implement here:
+
+```powershell
+& scripts\install-windows.ps1
+```
+
+The script rebuilds via the (now-safe) build subscript, copies to
+`%LOCALAPPDATA%\Programs\Tillandsias\tillandsias-tray.exe`, creates a Start
+Menu shortcut, and runs the two-layer post-install sanity check. Direct
+copy is still fine if you want to skip the rebuild:
 
 ```powershell
 $installDir = Join-Path $env:LOCALAPPDATA 'Programs\Tillandsias'
@@ -83,11 +99,6 @@ New-Item -ItemType Directory -Force $installDir | Out-Null
 Copy-Item target\release\tillandsias-tray.exe `
   (Join-Path $installDir 'tillandsias-tray.exe') -Force
 ```
-
-A future tuning pass MAY make `install-windows.ps1` tolerate the stderr-wrap
-issue (e.g. via a `-SkipBuild` flag that this skill could then use), at which
-point this skill SHOULD switch back to the script as the single source of
-truth for install semantics (shortcut creation, autostart, etc.).
 
 ### 5. Post-install `--diagnose` sanity check
 
@@ -203,3 +214,9 @@ Edit this section over time. Each entry: date + what changed + why.
 - **2026-05-29:** initial. Direct cargo invocation (not the wrapper script).
   Documents the PowerShell-stderr-wrap, copy-after-stop-sleep, and
   cmd-redirect requirements drawn from the real loop's experience.
+- **2026-05-30:** `scripts/build-windows-tray.ps1` now locally relaxes
+  `$ErrorActionPreference` around the cargo call (with try/finally to
+  restore on exit), so cargo's stderr writes no longer trip the Stop trap.
+  The wrapper + `scripts/install-windows.ps1` both run end-to-end without
+  the bypass. Skill body switched to prefer the script for builds + install
+  while still showing the direct-cargo path for ad-hoc use.
