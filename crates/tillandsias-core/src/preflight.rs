@@ -158,6 +158,74 @@ pub fn parse_mem_available_mb(meminfo_output: &str) -> Option<u64> {
     None
 }
 
+/// Working-set baseline (MB) added on top of the tmpfs sum to compute
+/// the `--memory` ceiling for a forge container.
+///
+/// Spec § "--memory ceiling pairs with tmpfs caps" mandates
+/// `--memory = sum(tmpfs caps) + 256 MB` and `--memory-swap` MUST
+/// equal `--memory` exactly (zero net swap). The 256 MB baseline is
+/// the spec's working-set headroom — enough for the agent process,
+/// language servers, and the in-VM helpers without overcommitting.
+///
+/// @trace spec:forge-hot-cold-split
+pub const FORGE_WORKING_SET_BASELINE_MB: u32 = 256;
+
+/// Parse the `size=<N>m` field from a tmpfs spec string.
+///
+/// Forge tmpfs strings have the form `/path:size=Nm,mode=NNNN`. The
+/// size token is `size=<value>m` (lowercase `m` suffix, MiB unit).
+/// Returns the parsed value in MiB or `None` when the field is
+/// missing/malformed.
+///
+/// Tolerant of comma-separated extra tokens (mode, …) and of token
+/// order — `size=` may appear anywhere after the first colon.
+///
+/// @trace spec:forge-hot-cold-split (parser for [`compute_memory_
+///   ceiling_mb`])
+pub fn parse_tmpfs_size_mb(tmpfs_spec: &str) -> Option<u32> {
+    // Everything after the first colon is the option list.
+    let (_path, opts) = tmpfs_spec.split_once(':')?;
+    for token in opts.split(',') {
+        let trimmed = token.trim();
+        if let Some(rest) = trimmed.strip_prefix("size=") {
+            // Strip a trailing unit suffix (`m`/`M`). The forge profiles
+            // exclusively use `m`; we accept both cases defensively.
+            let value_str = rest
+                .strip_suffix('m')
+                .or_else(|| rest.strip_suffix('M'))
+                .unwrap_or(rest);
+            return value_str.parse::<u32>().ok();
+        }
+    }
+    None
+}
+
+/// Compute the `--memory` ceiling (MB) for a forge container, given
+/// its tmpfs mount sizes.
+///
+/// Spec § "--memory ceiling pairs with tmpfs caps":
+///
+/// > The ceiling is: `sum(all tmpfs size_mb) + 256` (256 MB
+/// > working-set baseline).
+///
+/// `--memory-swap` MUST equal `--memory` exactly (zero net swap) —
+/// the caller is responsible for emitting both args from the
+/// returned value.
+///
+/// Saturating add so a malicious profile with billions of MB of
+/// tmpfs can't overflow. The 256 baseline always wins for empty
+/// profiles (returns 256) — useful when the helper is called
+/// preemptively on a profile that hasn't yet been sized.
+///
+/// @trace spec:forge-hot-cold-split (Requirement: --memory ceiling
+///   pairs with tmpfs caps)
+pub fn compute_memory_ceiling_mb(tmpfs_sizes_mb: impl IntoIterator<Item = u32>) -> u32 {
+    let sum: u32 = tmpfs_sizes_mb
+        .into_iter()
+        .fold(0_u32, |acc, n| acc.saturating_add(n));
+    sum.saturating_add(FORGE_WORKING_SET_BASELINE_MB)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -293,5 +361,87 @@ Cached:          4567890 kB
         assert!(msg.contains("200 MiB required"), "missing required: {msg}");
         assert!(msg.contains("250 MiB"), "missing threshold: {msg}");
         assert!(msg.contains("1.25×"), "missing headroom factor: {msg}");
+    }
+
+    // @trace spec:forge-hot-cold-split (Scenario "--memory = sum(tmpfs
+    //   caps) + 256 MB working-set baseline")
+    #[test]
+    fn compute_memory_ceiling_returns_sum_plus_256_baseline() {
+        // Spec example: 4 tmpfs mounts totaling 8 + 800 + 256 + 64 = 1128 MB.
+        // Ceiling = 1128 + 256 baseline = 1384 MB.
+        let sizes = [8, 800, 256, 64];
+        assert_eq!(
+            compute_memory_ceiling_mb(sizes),
+            1384,
+            "spec example: {sizes:?} → 1128 + 256 baseline = 1384"
+        );
+
+        // Single 256 MB mount → 256 + 256 = 512.
+        assert_eq!(compute_memory_ceiling_mb([256]), 512);
+    }
+
+    // @trace spec:forge-hot-cold-split (degenerate: empty tmpfs list
+    //   — spec mandates ceiling ALWAYS includes the 256 MB baseline,
+    //   so even a profile with zero tmpfs mounts gets 256)
+    #[test]
+    fn compute_memory_ceiling_returns_baseline_for_empty_profile() {
+        let empty: [u32; 0] = [];
+        assert_eq!(
+            compute_memory_ceiling_mb(empty),
+            FORGE_WORKING_SET_BASELINE_MB
+        );
+    }
+
+    // @trace spec:forge-hot-cold-split (saturating-add branch — a
+    //   malicious profile listing billions of MB of tmpfs cannot
+    //   overflow u32)
+    #[test]
+    fn compute_memory_ceiling_saturates_on_overflow() {
+        // Two near-u32::MAX entries saturate; baseline can't push it
+        // further.
+        let huge = [u32::MAX - 100, 200];
+        assert_eq!(compute_memory_ceiling_mb(huge), u32::MAX);
+    }
+
+    // @trace spec:forge-hot-cold-split (parser for tmpfs spec strings
+    //   in container_profile.rs — canonical forge format)
+    #[test]
+    fn parse_tmpfs_size_mb_extracts_from_canonical_forge_format() {
+        // Canonical forge tmpfs strings (from container_profile.rs).
+        assert_eq!(parse_tmpfs_size_mb("/tmp:size=256m,mode=1777"), Some(256));
+        assert_eq!(
+            parse_tmpfs_size_mb("/run/user/1000:size=64m,mode=0700"),
+            Some(64)
+        );
+        assert_eq!(
+            parse_tmpfs_size_mb("/opt/cheatsheets:size=8m,mode=0755"),
+            Some(8)
+        );
+
+        // Size without mode (older format).
+        assert_eq!(parse_tmpfs_size_mb("/tmp:size=256m"), Some(256));
+
+        // Token order reversed — `mode=` first, then `size=`.
+        assert_eq!(parse_tmpfs_size_mb("/tmp:mode=1777,size=512m"), Some(512));
+
+        // Defensive: uppercase `M` suffix.
+        assert_eq!(parse_tmpfs_size_mb("/tmp:size=128M"), Some(128));
+    }
+
+    // @trace spec:forge-hot-cold-split (parser fallback — malformed
+    //   or missing size token returns None so the caller can decide
+    //   how to handle the unknown size)
+    #[test]
+    fn parse_tmpfs_size_mb_returns_none_on_missing_or_malformed() {
+        // No colon at all (not a valid tmpfs spec).
+        assert_eq!(parse_tmpfs_size_mb("/tmp"), None);
+        // Colon but no size token.
+        assert_eq!(parse_tmpfs_size_mb("/tmp:mode=1777"), None);
+        // Empty input.
+        assert_eq!(parse_tmpfs_size_mb(""), None);
+        // size= with no value.
+        assert_eq!(parse_tmpfs_size_mb("/tmp:size=m"), None);
+        // Unparseable size value.
+        assert_eq!(parse_tmpfs_size_mb("/tmp:size=hugem"), None);
     }
 }

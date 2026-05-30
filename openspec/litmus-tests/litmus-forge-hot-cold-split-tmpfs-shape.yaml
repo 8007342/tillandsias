@@ -190,6 +190,34 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok:"
 
+  - step: "Req 3 --memory ceiling: compute_memory_ceiling_mb pure helper + 256 baseline"
+    # Spec § "--memory ceiling pairs with tmpfs caps" mandates
+    # `--memory = sum(tmpfs caps) + 256`. The baseline literal and
+    # the helper are both pinned: the constant catches a regression
+    # that silently shrinks the working-set headroom; the helper
+    # signature catches a rename of the canonical entry point.
+    command: "grep -F 'pub const FORGE_WORKING_SET_BASELINE_MB: u32 = 256;' crates/tillandsias-core/src/preflight.rs && grep -F 'pub fn compute_memory_ceiling_mb(tmpfs_sizes_mb: impl IntoIterator<Item = u32>) -> u32' crates/tillandsias-core/src/preflight.rs"
+    timeout_ms: 3000
+    expected_behavior: "compute_memory_ceiling_mb"
+
+  - step: "Req 3 tmpfs size parser: parse_tmpfs_size_mb extracts size=Nm"
+    # Pure parser for the canonical forge tmpfs format
+    # `/path:size=Nm,mode=NNNN`. The launch-time composition is
+    # `compute_memory_ceiling_mb(profile.tmpfs_mounts.iter().filter_map
+    # (parse_tmpfs_size_mb))` — pinning the parser signature catches
+    # a rename that would silently break that composition.
+    command: "grep -F 'pub fn parse_tmpfs_size_mb(tmpfs_spec: &str) -> Option<u32>' crates/tillandsias-core/src/preflight.rs"
+    timeout_ms: 3000
+    expected_behavior: "parse_tmpfs_size_mb"
+
+  - step: "Req 3: >=3 unit tests cover compute_memory_ceiling_mb + tmpfs parser"
+    # Covers: spec-example (4 mounts → sum + 256), empty profile →
+    # baseline, saturating-add, parser canonical (4 cases), parser
+    # fallback (5 cases). Pin >=3 by name presence.
+    command: "grep -cE 'fn (compute_memory_ceiling|parse_tmpfs_size_mb)_' crates/tillandsias-core/src/preflight.rs | awk '{ if ($1+0 >= 3) print \"ok:\", $1, \"memory-ceiling test cases\"; else { print \"FAIL: only\", $1, \"of >=3\"; exit 1 } }'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
 observability:
   traces:
     - "@trace spec:forge-hot-cold-split"
