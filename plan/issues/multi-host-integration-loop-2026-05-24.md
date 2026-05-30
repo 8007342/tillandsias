@@ -51,6 +51,57 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-30T21:43Z — MERGED windows-next (build-windows-tray.ps1 stderr-wrap install bug fix) + osx-next no-op ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `306494a` (merge commit; linux-next was at
+  `07e3d4c1` pre-merge).
+- observed_sibling_heads: main=`677a89af` · linux-next=`07e3d4c1`
+  (pre-merge) · windows-next=`fdc3c00e` · osx-next=`b4a45622`
+  (unchanged 9 consecutive cycles since 06:27Z — ~15.5 hour stall).
+- **windows-next: merged + tested + pushed** — substantive 1-commit
+  delta `fdc3c00e fix(scripts): build-windows-tray.ps1 no longer
+  aborts on cargo stderr-wrap`. Real install-blocking bug fixed:
+  `install-windows.ps1` was aborting mid-install when its nested
+  `build-windows-tray.ps1` subscript tripped PowerShell's
+  NativeCommandError wrap on cargo's stderr writes ("Compiling X").
+  The `$ErrorActionPreference = Stop` inside the subscript treated
+  the very first stderr line as terminating, killing the build
+  before "Finished release" — end users saw a broken install with
+  no useful error. Fix: around the `& cargo @buildArgs` call,
+  save outer `$ErrorActionPreference`, locally set to `Continue`,
+  invoke cargo, capture `$LASTEXITCODE`, restore via `try/finally`.
+  Real cargo failures (exit != 0) still throw via the existing
+  exit-code check — only the spurious-stderr-wrap-as-error path
+  fixed. skills/build-windows-tray/SKILL.md updated to note both
+  wrapper + direct `cargo build` work now. All changes in sibling-
+  owned scope (build-windows-tray.ps1 + windows-host-owned skill).
+- **osx-next: no-op** — empty range, unchanged 9 consecutive cycles
+  since 06:27Z (~15.5 hours, deepest stall of this session).
+  **ESCALATION DEEPLY overdue**: orchestrator-level macOS host ping
+  STRONGLY recommended; 6+ cycles past the 3-cycle guardrail.
+- merge stats: 3 files changed, 139 insertions(+), 13 deletions(-).
+  Windows build script + skill + plan/ build-findings doc.
+- verification: `./build.sh --check` + `./build.sh --test` passed.
+- spec-drift: **none** — no openspec/, methodology/, or shared-crate
+  changes.
+- linux work this 2h window: 4 spec-gap-fill slices — `web-image`
+  33→75 at 20:21Z (Containerfile + entrypoint pin), `spec-
+  traceability` 33→75 at 20:51Z (meta-spec USAGE floors:
+  >=500 Rust + >=100 shell @trace annotations + >=50 structured
+  log fields + >=10 distinct spec IDs traced + >=10 module-level
+  traces) — **89/89 PASS milestone**, `subdomain-naming-flip`
+  33→75 at 21:21Z (security-relevant `extract_project_label`
+  parser + cookie-scoping helper + Caddyfile order). Full instant
+  suite progressed 87/87 → 88/88 → 89/89 → 90/90 PASS at 100%
+  across 89 specs.
+- recommended next: orchestrator ping macOS host (9-cycle silence
+  is the longest stall of this entire arc); continue 33% backlog
+  (zen-default-with-ollama-analysis-pool, secret-rotation
+  tombstone alignment); pursue forge-hot-cold-split Req 1
+  `/home/forge/src` tmpfs mount OR github-credential-health
+  4-state classifier as substantial real-implementation slices.
+
 ### Cycle 2026-05-30T19:43Z — MERGED windows-next (install + tray-diagnose PowerShell consume new CLI surface) + osx-next no-op ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
