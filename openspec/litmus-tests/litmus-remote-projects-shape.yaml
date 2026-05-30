@@ -1,0 +1,122 @@
+# @trace spec:remote-projects
+#
+# Drift-protection for the remote-projects implementation in
+# `crates/tillandsias-headless/src/remote_projects.rs`. spec:remote-
+# projects has 5 requirements covering GitHub repo fetch (containerized
+# `gh` invocation), local-existence filter, 5-minute TTL cache, clone
+# orchestration, and loading state.
+#
+# Single existing binding `litmus:ephemeral-guarantee` (e2e,
+# last_verified 2026-05-15) covered generic ephemeral isolation.
+# The 11-test implementation crate was untrapped at source.
+name: litmus:remote-projects-shape
+spec: remote-projects
+phase: pre-build
+description: >
+  Pin the remote-projects implementation: GitHubProject struct +
+  nwo() canonical owner/name form, CACHE_TTL_SECS=300 (5 minutes),
+  invalidate_github_projects_cache, clone_project_from_github
+  containerized-gh entry, and the 11 cargo unit tests covering
+  cache/clone/normalisation/redaction.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-headless/src/remote_projects.rs
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "file-head trace declares spec:remote-projects + spec:gh-auth-script"
+    # The implementation crate carries both traces (gh-auth-script
+    # because the clone path runs containerized `gh`). Substring
+    # match handles comma-list trace format (quirk #9).
+    command: "grep -F 'spec:remote-projects, spec:gh-auth-script' crates/tillandsias-headless/src/remote_projects.rs"
+    timeout_ms: 3000
+    expected_behavior: "spec:remote-projects"
+
+  - step: "Req Cache: CACHE_TTL_SECS = 300 (5-minute TTL per spec)"
+    # Spec § "Cache remote repository list" mandates exactly 5
+    # minutes. The constant is the spec-mandated literal; a
+    # regression to a longer TTL would silently widen the staleness
+    # window beyond the spec scenario "Cache stale" definition.
+    command: "grep -F 'const CACHE_TTL_SECS: u64 = 300;' crates/tillandsias-headless/src/remote_projects.rs"
+    timeout_ms: 3000
+    expected_behavior: "CACHE_TTL_SECS"
+
+  - step: "Req Identity: GitHubProject struct + nwo() canonical owner/name accessor"
+    # Spec § "Fetch remote repository list" mandates returning a
+    # typed list. The GitHubProject struct + the `nwo()` method
+    # (canonical `owner/name` form for `gh repo clone`) are the
+    # pure-data spine. nwo() is critical because the JSON `url`
+    # field is the API URL — gh repo clone can't consume it.
+    command: "grep -F 'pub struct GitHubProject {' crates/tillandsias-headless/src/remote_projects.rs && grep -F 'pub fn nwo(&self) -> String' crates/tillandsias-headless/src/remote_projects.rs"
+    timeout_ms: 3000
+    expected_behavior: "pub fn nwo"
+
+  - step: "Req Cache invalidation: pub fn invalidate_github_projects_cache()"
+    # Spec § Scenario "Cache refreshed after auth" mandates the
+    # cache MUST be invalidated when the user completes GitHub
+    # Login or Refresh. The public invalidation entry is the
+    # canonical surface; a refactor renaming it would silently
+    # break the auth-refresh flow.
+    command: "grep -F 'pub fn invalidate_github_projects_cache()' crates/tillandsias-headless/src/remote_projects.rs"
+    timeout_ms: 3000
+    expected_behavior: "invalidate_github_projects_cache"
+
+  - step: "Req Clone: pub fn clone_project_from_github + _with_debug variants"
+    # Spec § "Clone remote project" Scenario "Successful clone"
+    # mandates `gh repo clone <owner>/<name> ~/src/<name>` runs
+    # inside the git image. The two public entries are the
+    # production path (no debug) + the debug-instrumented path
+    # (used by the tray during user-initiated clone).
+    command: "grep -F 'pub fn clone_project_from_github(repo_url: &str, target_path: &Path) -> Result<(), String>' crates/tillandsias-headless/src/remote_projects.rs && grep -F 'pub fn clone_project_from_github_with_debug(' crates/tillandsias-headless/src/remote_projects.rs"
+    timeout_ms: 3000
+    expected_behavior: "clone_project_from_github"
+
+  - step: ">=8 cargo unit tests cover Reqs 1-5 (cache/clone/normalise/redact)"
+    # Pinning by test-name presence catches a silent test deletion
+    # that would make the existing `litmus:ephemeral-guarantee`
+    # e2e step vacuously pass for that scenario. The 11 tests
+    # include git_image_tag_defaults / test_is_cache_valid /
+    # test_cache_invalidation / discover_projects_uses_containerized
+    # _gh / clone_project_uses_containerized_gh / normalize_repo_
+    # identifier_handles_known_shapes / github_project_nwo_returns_
+    # owner_slash_name / clone_normalizes_api_url_to_owner_name /
+    # clone_uses_host_parent_bindmount / debug_log_helpers_redact_
+    # token_but_show_shape — pin >=8 of them.
+    command: "grep -cE 'fn (git_image_tag_defaults|test_is_cache_valid|test_cache_invalidation|discover_projects_uses_containerized_gh|clone_project_uses_containerized_gh|normalize_repo_identifier_handles_known_shapes|github_project_nwo_returns_owner_slash_name|clone_normalizes_api_url_to_owner_name|clone_uses_host_parent_bindmount|debug_log_helpers_redact_token_but_show_shape)' crates/tillandsias-headless/src/remote_projects.rs | awk '{ if ($1+0 >= 8) print \"ok:\", $1, \"remote-projects test cases\"; else { print \"FAIL: only\", $1, \"of >=8\"; exit 1 } }'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req Fetch + token redaction: debug_log_helpers_redact_token_but_show_shape test pinned"
+    # Spec mentions debug-mode token-redaction in passing (via the
+    # secrets-management cross-reference). The test name is the
+    # behavioural pin — a regression to a non-redacting log helper
+    # would silently leak the GH token into accountability logs.
+    command: "grep -F 'fn debug_log_helpers_redact_token_but_show_shape' crates/tillandsias-headless/src/remote_projects.rs"
+    timeout_ms: 3000
+    expected_behavior: "redact_token"
+
+observability:
+  traces:
+    - "@trace spec:remote-projects"
+    - "@trace spec:gh-auth-script"
+    - "@trace spec:tray-ux"
+  expected_log: "remote_projects.rs CACHE_TTL + GitHubProject + clone entry + 8+ tests + token-redaction pinned"
+  log_fields:
+    spec: "remote-projects"
+    test: "remote-projects-shape"
+    artifact: "crates/tillandsias-headless/src/remote_projects.rs"
+
+rollback:
+  on_failure: >
+    A `spec:remote-projects` source surface drifted. Restore the
+    file-head trace `@trace spec:remote-projects, spec:gh-auth-
+    script`; `const CACHE_TTL_SECS: u64 = 300` (5-minute TTL);
+    `pub struct GitHubProject` + `pub fn nwo(&self) -> String`
+    (canonical owner/name); `pub fn invalidate_github_projects_
+    cache()`; `pub fn clone_project_from_github(repo_url, target_
+    path) -> Result<(), String>` + `clone_project_from_github_with
+    _debug`; >=8 of the 11 named unit tests covering cache + clone
+    + normalisation + token-redaction.
+  command: "grep -nE 'spec:remote-projects|CACHE_TTL_SECS|pub fn (nwo|invalidate_github|clone_project_from_github)|fn (test_is_cache_valid|clone_project_uses_containerized_gh|debug_log_helpers_redact_token)' crates/tillandsias-headless/src/remote_projects.rs | head -20"
