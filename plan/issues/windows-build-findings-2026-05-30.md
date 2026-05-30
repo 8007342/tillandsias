@@ -224,3 +224,108 @@ is now feature-complete for the windows-tray v0.0.1 milestone (per
 plan/steps/windows-next-thin-tray.md NEXT ACTION's "richer diagnostics"
 eager-mandate target). Tomorrow's cron will rebuild from this commit and
 naturally update `build_commit`.
+
+---
+
+### 20260530T110000Z — ok (tray menu version footer renders workspace VERSION)
+
+- agent_id: windows-bullo-claude-opus-20260530T110000Z
+- head_sha: 8688f465 (post-merge of linux-next +9 commits — all linux-internal
+  litmus pinning + work-queue + a merge of my prior 13539385 going through
+  linux-next; no shared-contract changes)
+- version: 0.2.260528.1 (workspace VERSION)
+- build_commit: 13539385 (current windows-next pre-this-commit head)
+- build_run_id: 20260530T110000Z
+
+**Change made**: fixed a third manifestation of the
+crate-static-CARGO_PKG_VERSION-vs-workspace-VERSION divergence, this time
+in the tray menu's user-visible **version footer**. Before this commit,
+the menu rendered "v0.1.0 — By Tlatoāni" (sourced via
+`tillandsias-host-shell::version()` → `env!("CARGO_PKG_VERSION")` →
+host-shell's static `Cargo.toml` `0.1.0`). After: the menu renders
+"v0.2.260528.1 — By Tlatoāni" — the workspace VERSION the user actually
+installed. Windows-side contained fix (does not touch the shared
+`tillandsias-host-shell` crate); coordination note filed proposing the
+proper shared-crate fix that would fix it for all 3 trays
+simultaneously.
+
+Files touched (Windows-owned only):
+- `crates/tillandsias-windows-tray/src/notify_icon.rs`:
+  - New `fresh_menu_state()` helper just after the `MENU_STATE` static.
+    Calls `MenuState::initial()` then overrides `state.version` with
+    `env!("WORKSPACE_VERSION")` (the env var the windows-tray's existing
+    `build.rs` emits from the prior workspace-VERSION fix). Pure;
+    side-effect-free.
+  - 12 mechanical replacements of `MenuState::initial` →
+    `fresh_menu_state` across all production + test callsites in this
+    file. Includes the `get_or_insert_with(MenuState::initial)`
+    accessor pattern at 6 sites (the closure form
+    `get_or_insert_with(fresh_menu_state)` works because both are
+    `fn() -> MenuState`). The `.unwrap_or_else(|| MenuState::initial()
+    .selected_agent)` callsite also routes through the new helper —
+    `selected_agent` is unchanged by the version override, so this is
+    behavior-equivalent.
+  - New pin test `fresh_menu_state_footer_reports_workspace_version`:
+    asserts `state.version == env!("WORKSPACE_VERSION")` AND
+    `state.version != "0.1.0"` (the explicit "is the override still
+    plumbed?" check). Surfaces a future refactor that drops the
+    override as a test failure pre-build instead of as a UX regression
+    in a user-facing menu.
+
+**Build**: 36.60 s release (windows-tray only).
+
+**Tests**: 36 + 3 = 39 passed / 5 ignored — +1 over yesterday's 35+3
+baseline. The new `fresh_menu_state_footer_reports_workspace_version`
+test PASSes green.
+
+**Smoke** (`--diagnose --json` validates the workspace-VERSION pipeline
+end-to-end; the menu footer itself only renders in the live GUI tray,
+not in `--diagnose`):
+- `--diagnose --json` exit: 2 (expected steady state — wire unreachable)
+- `version` field: `0.2.260528.1` (unchanged — confirms the workspace-
+  VERSION env var still reads correctly)
+- `build_commit` field: `a963c16d` (last commit included in this build's
+  source tree; will self-update when the new commit lands + cron rebuilds)
+- 11 top-level keys present (unchanged from prior section)
+
+**Litmus**:
+- `windows-native-tray`: 7/7 PASS (no changes to litmus YAML this tick;
+  the architectural-invariants step pins menu *shape* not footer *text*,
+  so the change is transparent to the suite)
+- `cargo fmt`: clean
+- `cargo clippy -D warnings`: clean
+
+**Findings** (free-form):
+- Discovered during a routine exploration of `MenuAction::Inert`'s
+  comment which mentions a "version footer" — looked up
+  `menu_state::ids::VERSION` and found the actual footer rendering
+  pulls from `state.version`, which itself was wrong on all three
+  trays. Same root-cause family as the prior 2 ticks' fixes; same
+  WORKSPACE_VERSION env var plumbing reused.
+- The contained Windows-side fix means Windows users see the correct
+  footer today; Linux + macOS continue to render the wrong "v0.1.0"
+  until the shared-crate or macOS-tray-side fix lands (proposed in
+  `plan/issues/tray-convergence-coordination.md` § "ASK shared host-shell
+  + macOS host"). Two non-exclusive paths offered there: (1)
+  `tillandsias-host-shell::version()` itself reads workspace VERSION
+  via a host-shell-owned `build.rs` (proper fix; fixes all 3 trays at
+  once; makes the windows-side `fresh_menu_state` override a no-op);
+  or (2) macOS-tray mirrors the windows-side contained pattern.
+- The 12-site `MenuState::initial` → `fresh_menu_state` replacement is
+  the kind of small mechanical refactor that the cleanest cleanup
+  would later **delete** the override once fix #1 lands shared-crate-
+  wide. Until then it's a stopgap for visible UX correctness on
+  Windows.
+
+**Cross-host visibility note**: ASK filed in
+`plan/issues/tray-convergence-coordination.md` § "ASK shared host-shell
++ macOS host: menu version-footer renders CARGO_PKG_VERSION too" —
+includes both proposed fix shapes (shared host-shell build.rs vs.
+macOS-tray contained mirror). Linux host: the shared-crate fix would
+also benefit you (linux GNOME/KDE trays would also start showing the
+correct footer once host-shell::version() returns workspace VERSION).
+
+**Next iteration ask**: N/A (SECTION_KIND=ok). Three workspace-VERSION-
+related fixes now landed in three ticks: (1) `--diagnose --json`
+`version` field, (2) `build_commit` triage field, (3) tray menu footer.
+The visible UX impact for Windows users is now correct end-to-end.
