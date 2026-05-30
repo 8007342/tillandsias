@@ -51,6 +51,56 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-30T15:43Z — MERGED windows-next (--help / --version CLI modes) + osx-next no-op ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `3742267` (merge commit; linux-next was at
+  `37c2d706` pre-merge).
+- observed_sibling_heads: main=`ea28d773` · linux-next=`37c2d706`
+  (pre-merge) · windows-next=`04278ec0` · osx-next=`b4a45622`
+  (unchanged 6 cycles since 06:27Z — stall ongoing).
+- **windows-next: merged + tested + pushed** — substantive 1-commit
+  delta `04278ec0 feat(windows-tray): --help / --version CLI modes
+  for standard convention parity`. New `version_line() ->
+  "tillandsias-tray {WORKSPACE_VERSION} ({BUILD_COMMIT_SHA})"` reuses
+  the env vars build.rs bakes for --diagnose, so the 3 places a user
+  can ask "what version?" (--version + --diagnose --json version
+  field + tray menu footer) stay self-consistent. New `help_text()`
+  documents all 6 CLI modes + exit-code contracts + GUI-subsystem
+  stdio quirk + cheatsheet pointer. +2 schema-pin unit tests
+  (`version_line_uses_workspace_version_and_commit` asserts both env
+  vars present + 0.1.0 regression guard; `help_text_documents_all
+  _cli_modes` asserts all 8 flag spellings + exit-code markers). The
+  windows-tray litmus extended "four CLI modes" → "six CLI modes"
+  grep + new "--help / --version surface tests attached" step.
+  Crate-side delta all in windows-tray scope (sibling-owned).
+- **osx-next: no-op** — empty range, unchanged 6 consecutive cycles.
+  macOS hourly cron stalled since 06:27Z (b4a45622). Per
+  guardrails, 3-cycle stall already exceeded; flagged at 11:43Z
+  cycle as needing orchestrator ping; now at 6 cycles with no
+  change. **ESCALATION watch**: orchestrator should ping macOS host
+  directly. Not blocking integration but the silence is now
+  conspicuous.
+- merge stats: 5 files changed, 235 insertions(+), 2 deletions(-).
+  Windows-tray crate (4 files) + plan/ build-findings doc.
+- verification: `./build.sh --check` + `./build.sh --test` passed.
+- **spec-drift via litmus update**: windows-host extended
+  `litmus-windows-tray-diagnose-cli-surface.yaml` in lockstep with
+  the implementation changes (existing pattern; windows-owned
+  litmus). No linux action.
+- linux work this 2h window: 3 spec-gap-fill slices — `podman-
+  container-spec` 33→75 at 14:21Z + `podman-container-handle` 33→75
+  at 14:51Z (sibling specs in same container_spec.rs file; the
+  typed-spec layer's source surfaces now both have instant-phase
+  drift-protection); `remote-projects` 33→75 at 15:21Z (11-test
+  implementation crate pinned). Full instant suite progressed
+  80/80 → 81/81 → 82/82 → 83/83 PASS at 100% across 89 specs.
+- recommended next: orchestrator ping macOS host (6-cycle silence
+  is conspicuous); continue 33% backlog (host-chromium-on-demand);
+  pursue forge-hot-cold-split Req 1 `/home/forge/src` tmpfs mount
+  OR github-credential-health 4-state classifier as substantial
+  real-implementation slices.
+
 ### Cycle 2026-05-30T13:43Z — MERGED windows-next (cleanup acknowledging shared fix) + osx-next (build-findings) ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
