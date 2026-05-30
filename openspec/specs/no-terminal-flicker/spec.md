@@ -57,6 +57,8 @@ The tray menu MUST be pre-built once at startup and then updated (not rebuilt) w
 
 Tray menu visibility MUST be driven by a static lookup table mapping `Stage` (Booting, Ready, NoAuth, Authed, NetIssue) to item visibility:
 
+> **⚠ Implementation reality (as of 2026-05-30):** the deployed enum in `crates/tillandsias-headless/src/tray/mod.rs` is named **`TrayStatusStage`** (not bare `Stage`) and uses an **11-variant enclave-launch progression**: `PreLaunch → NetworkUp → ProxyStarting → GitStarting → InferenceStarting → ForgeStarting → RouterStarting → AllReady`, plus the side states `ShuttingDown`, `Failed { stage, descriptor }`, and `PodmanMissing`. The 5-stage auth-focused model in the table below describes the original design intent; the deployed enum is richer (per-service launch visibility) but doesn't map 1:1 to the table. Reconcile by either updating this spec table to the 11-variant progression OR collapsing the enum back to the 5 auth-focused stages. The drift was discovered by `litmus:no-terminal-flicker-shape` (commit 6bc2f3ad + 2026-05-30T10:51Z work-queue ledger).
+
 | Item | Booting | Ready | NoAuth | Authed | NetIssue |
 |------|---------|-------|--------|--------|----------|
 | Status indicator | ✓ enabled | ✓ enabled | ✓ enabled | ✓ enabled | ✓ enabled |

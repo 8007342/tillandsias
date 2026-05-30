@@ -14,6 +14,8 @@ The system SHALL build and run a `tillandsias-proxy` container that provides a c
 
 **Current operating mode**: splice-all. Squid reads SNI for domain filtering but does NOT decrypt TLS traffic. The MITM infrastructure (certs, sslcrtd, dynamic cert generation) is fully deployed but dormant. One configuration change (`ssl_bump bump bump_domains` replacing `ssl_bump splice all`) would enable active interception for selected domains.
 
+> **⚠ Implementation reality (as of 2026-05-30):** `images/proxy/squid.conf:102` currently uses `ssl_bump bump all` (active interception with caching across the entire enclave + dev builds, per `@trace spec:transparent-https-caching` on line 87). The splice-all language above describes the original design intent; the deployed configuration runs active bump mode. Reconcile by either reverting the squid.conf policy to splice-all OR updating this spec text to match. The drift was discovered by `litmus:proxy-container-shape` (commit 9703da88 + 2026-05-30T08:51Z work-queue ledger).
+
 @trace spec:proxy-container
 
 #### Scenario: HTTP request to allowlisted domain
