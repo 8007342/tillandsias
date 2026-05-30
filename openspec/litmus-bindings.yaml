@@ -525,8 +525,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:podman-container-spec-shape
-  coverage_ratio: 33
-  last_verified: '2026-05-12'
+  - litmus:podman-container-spec-source-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: podman-container-handle
   status: active
   litmus_tests:
