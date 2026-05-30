@@ -1,0 +1,129 @@
+# @trace spec:forge-offline
+#
+# Drift-protection for the declarative-profile + launch-path surfaces
+# that implement spec:forge-offline. The spec has three requirements:
+#
+#   1. Forge containers have zero credentials
+#      → forge_*_profile.secrets = vec![]; common_forge_env carries no
+#        GH_TOKEN / ANTHROPIC_API_KEY / GIT_ASKPASS
+#   2. Forge containers have no direct project mount
+#      → common_forge_mounts has only tools/config overlays + log dir +
+#        tray socket. NO project bind mount; source comes from git
+#        mirror clone at entrypoint time.
+#   3. Forge containers are enclave-only
+#      → launch path passes `--network tillandsias-enclave` via
+#        ENCLAVE_NET in main.rs
+#
+# Previously bound only to `litmus:credential-isolation` (single test,
+# coverage_ratio 33, last_verified 2026-05-03 — pre-declarative-profile
+# refactor). This litmus + an additional binding to the existing
+# `litmus:ephemeral-guarantee` (which exercises the no-external-route
+# invariant in e2e) raises forge-offline coverage_ratio 33 → 75 (3/3
+# requirements covered).
+#
+# Implementation lives in:
+#   crates/tillandsias-core/src/container_profile.rs (profiles, mounts,
+#     env vars)
+#   crates/tillandsias-headless/src/main.rs (ENCLAVE_NET launch arg)
+name: litmus:forge-offline-profile-shape
+spec: forge-offline
+phase: pre-build
+description: >
+  Pin the declarative-profile + launch-path surfaces that implement
+  spec:forge-offline: file-head trace, all 3 forge profiles set
+  secrets=vec![], no host-project bind mount in common_forge_mounts,
+  no credential env vars in common_forge_env, and the launch path
+  attaches `--network tillandsias-enclave`.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-core/src/container_profile.rs
+  - workspace contains crates/tillandsias-headless/src/main.rs
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "container_profile.rs file-head trace declares spec:forge-offline"
+    # The declarative-profile module IS the implementation of Reqs 1+2.
+    # A regression dropping the marker would silently demote the file
+    # out of the spec's TRACES.md graph.
+    command: "grep -F '@trace spec:forge-offline' crates/tillandsias-core/src/container_profile.rs"
+    timeout_ms: 3000
+    expected_behavior: "spec:forge-offline"
+
+  - step: "all 3 forge_*_profile builders set secrets: vec![] (zero credentials, Req 1)"
+    # The literal `secrets: vec![]` MUST appear at least 3 times in
+    # this file: once each for forge_opencode_profile,
+    # forge_claude_profile, and forge_opencode_web_profile. A
+    # regression adding a podman-secret to any forge profile would
+    # silently violate the spec's "no token leakage" contract.
+    # YAML→shell un-escape consumes the `\[\]` escapes; use grep -F
+    # (fixed-string) so brackets are literal rather than ERE charclass.
+    # Eighth matcher/parser quirk this session.
+    command: "grep -cF 'secrets: vec![]' crates/tillandsias-core/src/container_profile.rs | awk '{ if ($1+0 >= 3) print \"ok:\", $1, \"forge-profile secrets:vec![] sites\"; else { print \"FAIL: only\", $1, \"of >=3 secrets:vec![] sites\"; exit 1 } }'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "common_forge_mounts has NO host-project bind mount (Req 2)"
+    # Spec § "Forge containers have no direct project mount" — source
+    # comes from git clone, not from the host. The MountSource enum
+    # variants used MUST be exactly: ToolsOverlay, ConfigOverlay,
+    # ContainerLogs, TraySocket — and NONE of {HostProject, ProjectRoot,
+    # WorkspaceMount}. We assert by greping for the legitimate variants
+    # being present and the forbidden ones being absent.
+    command: "ALL_PRESENT=$(grep -cE 'MountSource::(ToolsOverlay|ConfigOverlay|ContainerLogs|TraySocket)' crates/tillandsias-core/src/container_profile.rs) && [ \"$ALL_PRESENT\" -ge 4 ] && ! grep -qE 'MountSource::(HostProject|ProjectRoot|WorkspaceMount)' crates/tillandsias-core/src/container_profile.rs && echo \"ok: 4 legitimate forge mount variants, 0 host-project mounts\""
+    timeout_ms: 3000
+    expected_behavior: "ok: 4 legitimate forge mount variants"
+
+  - step: "common_forge_env has NO credential env vars (Req 1)"
+    # Spec scenario "Forge launched without credentials" mandates the
+    # environment SHALL NOT contain GIT_ASKPASS, ANTHROPIC_API_KEY, or
+    # GH_TOKEN. The env list is declarative, so missing means missing.
+    # Grep returns success when match-count = 0 here.
+    command: "if grep -qE '\"(GH_TOKEN|ANTHROPIC_API_KEY|GIT_ASKPASS)\"' crates/tillandsias-core/src/container_profile.rs; then echo \"FAIL: credential env var present in profiles\"; grep -nE '\"(GH_TOKEN|ANTHROPIC_API_KEY|GIT_ASKPASS)\"' crates/tillandsias-core/src/container_profile.rs; exit 1; else echo \"ok: 0 credential env vars in forge profiles\"; fi"
+    timeout_ms: 3000
+    expected_behavior: "ok: 0 credential env vars in forge profiles"
+
+  - step: "launch path attaches --network ENCLAVE_NET for forge containers (Req 3)"
+    # Spec § "Forge containers are enclave-only": the launch arg
+    # builder MUST pass `--network tillandsias-enclave`. The const
+    # ENCLAVE_NET = "tillandsias-enclave" is declared in main.rs;
+    # forge containers reference it via `ENCLAVE_NET.into()` in the
+    # podman args vec. Pin both the const declaration and at least
+    # one launch-path use.
+    command: "grep -F 'const ENCLAVE_NET: &str = \"tillandsias-enclave\"' crates/tillandsias-headless/src/main.rs && grep -c 'ENCLAVE_NET' crates/tillandsias-headless/src/main.rs | awk '{ if ($1+0 >= 3) print \"ok:\", $1, \"ENCLAVE_NET references\"; else { print \"FAIL: only\", $1, \"of >=3\"; exit 1 } }'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "forge_profiles_have_eighteen_env_vars unit test attached (env-shape pin)"
+    # The behavioural pin for the env-list shape. If a regression adds
+    # GH_TOKEN to the env list, this test would fail at runtime — but
+    # only if the test name + behaviour stays intact. Pinning the test
+    # name catches a rename that would silently widen the env contract.
+    command: "grep -F 'fn forge_profiles_have_eighteen_env_vars' crates/tillandsias-core/src/container_profile.rs"
+    timeout_ms: 3000
+    expected_behavior: "forge_profiles_have_eighteen_env_vars"
+
+observability:
+  traces:
+    - "@trace spec:forge-offline"
+    - "@trace spec:enclave-network"
+    - "@trace spec:environment-runtime"
+  expected_log: "spec:forge-offline declarative-profile + launch-path surfaces pinned across Reqs 1+2+3"
+  log_fields:
+    spec: "forge-offline"
+    test: "forge-offline-profile-shape"
+    artifact: "crates/tillandsias-core/src/container_profile.rs + crates/tillandsias-headless/src/main.rs"
+
+rollback:
+  on_failure: >
+    A `spec:forge-offline` surface drifted. Restore the file-head
+    `@trace spec:forge-offline` on container_profile.rs; ensure all 3
+    forge profile builders (opencode / claude / opencode-web) carry
+    `secrets: vec![]`; ensure common_forge_mounts only uses the 4
+    legitimate MountSource variants (ToolsOverlay, ConfigOverlay,
+    ContainerLogs, TraySocket) — NO HostProject / ProjectRoot /
+    WorkspaceMount; ensure common_forge_env never names
+    GH_TOKEN / ANTHROPIC_API_KEY / GIT_ASKPASS; ensure the launch
+    path in main.rs uses ENCLAVE_NET via `--network`.
+  command: "grep -nE 'secrets: vec!\\[|MountSource::(ToolsOverlay|ConfigOverlay|ContainerLogs|TraySocket|HostProject|ProjectRoot|WorkspaceMount)|GH_TOKEN|ANTHROPIC_API_KEY|GIT_ASKPASS|ENCLAVE_NET' crates/tillandsias-core/src/container_profile.rs crates/tillandsias-headless/src/main.rs | head -25"

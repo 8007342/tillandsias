@@ -9,6 +9,9 @@
 //! arg builder and cannot be overridden.
 //!
 //! @trace spec:environment-runtime, spec:podman-orchestration
+//! @trace spec:forge-offline (zero credentials via secrets: vec![]; no
+//!        host project mount in common_forge_mounts; no credential env
+//!        vars in common_forge_env — Reqs 1 + 2)
 
 use std::path::PathBuf;
 

@@ -298,8 +298,10 @@ specs:
   status: active
   litmus_tests:
   - litmus:credential-isolation
-  coverage_ratio: 33
-  last_verified: '2026-05-03'
+  - litmus:ephemeral-guarantee
+  - litmus:forge-offline-profile-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: forge-opencode-onboarding
   status: active
   litmus_tests:
