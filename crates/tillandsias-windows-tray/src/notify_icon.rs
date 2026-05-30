@@ -1062,7 +1062,10 @@ fn collect_report() -> DiagnoseReport {
         .unwrap_or_default();
 
     DiagnoseReport {
-        version: env!("CARGO_PKG_VERSION"),
+        // WORKSPACE_VERSION baked by build.rs from the repo-root VERSION file
+        // so the JSON's `version` field matches the release tag instead of
+        // the crate's static `Cargo.toml` `0.1.0`. See build.rs for details.
+        version: env!("WORKSPACE_VERSION"),
         log_path: log.display().to_string(),
         log_exists,
         wt_present,

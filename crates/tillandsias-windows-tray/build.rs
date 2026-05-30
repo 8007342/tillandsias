@@ -18,6 +18,22 @@
 //! @trace spec:windows-native-tray
 
 fn main() {
+    // Read the workspace VERSION file and expose it as WORKSPACE_VERSION so
+    // `--diagnose --json` reports the release version (`0.2.260528.1`) rather
+    // than the crate's static `Cargo.toml` `version = "0.1.0"`. The crate
+    // versions don't get bumped per release; the repo-root VERSION file is
+    // the single source of truth (the install/build scripts already quote
+    // it). This is set UNCONDITIONALLY (before the windows-target gate)
+    // so cross-checks from Linux also have the env var available.
+    let manifest_dir_path =
+        std::path::PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap_or_default());
+    let version_file = manifest_dir_path.join("../../VERSION");
+    let workspace_version = std::fs::read_to_string(&version_file)
+        .map(|s| s.trim().to_string())
+        .unwrap_or_else(|_| env!("CARGO_PKG_VERSION").to_string());
+    println!("cargo:rerun-if-changed=../../VERSION");
+    println!("cargo:rustc-env=WORKSPACE_VERSION={workspace_version}");
+
     // Only emit the rerun-if directives + the resource compile invocation
     // when the host is producing a Windows artifact. `cargo check` from
     // Linux against `x86_64-pc-windows-gnu` triggers this path.
