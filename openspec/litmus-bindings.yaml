@@ -692,8 +692,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:tray-minimal-ux-contract-shape
-  coverage_ratio: 33
-  last_verified: '2026-05-12'
+  - litmus:tray-minimal-ux-status-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: tray-progress-and-icon-states
   status: active
   litmus_tests:
