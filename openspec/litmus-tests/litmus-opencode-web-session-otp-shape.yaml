@@ -1,0 +1,132 @@
+# @trace spec:opencode-web-session-otp
+#
+# Drift-protection for the per-attach OTP + cookie implementation in
+# `crates/tillandsias-otp` and the IssueWebSession control-socket
+# routing in `crates/tillandsias-headless`. The spec has 6
+# requirements covering OTP generation, router-side validation +
+# cookie issuance, cookie shape + lifetime, multi-window
+# reattachment, secrets-management integration, and authenticated
+# readiness probe.
+#
+# Existing binding was only `litmus:credential-isolation` (e2e,
+# last_verified 2026-05-03) covering generic credential-non-
+# persistence. The implementation crate (29-annotation-count spec)
+# was untrapped at source level.
+#
+# This litmus pins the cookie/OTP surfaces. Combined with the
+# existing e2e, raises opencode-web-session-otp coverage_ratio 30 → 75.
+name: litmus:opencode-web-session-otp-shape
+spec: opencode-web-session-otp
+phase: pre-build
+description: >
+  Pin the per-attach OTP + cookie implementation: COOKIE_LEN/NAME/PATH
+  constants, the HttpOnly + SameSite=Lax format_set_cookie_header,
+  the OtpStore single-use + eviction API, generate_session_token
+  CSPRNG, build_login_data_url data: URI embedding, and the
+  IssueWebSession matrix-Handle arm on unix transport.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-otp/src/lib.rs
+  - workspace contains crates/tillandsias-headless/src/control_dispatch.rs
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "file-head trace declares spec:opencode-web-session-otp + secrets-management"
+    # The implementation crate is the spec-identity site; pinning
+    # both traces catches a regression that demotes the file out of
+    # either spec graph.
+    command: "grep -F '@trace spec:opencode-web-session-otp, spec:secrets-management' crates/tillandsias-otp/src/lib.rs"
+    timeout_ms: 3000
+    expected_behavior: "spec:opencode-web-session-otp"
+
+  - step: "Req: cookie shape constants — COOKIE_LEN=32, COOKIE_NAME=tillandsias_session, COOKIE_PATH=/"
+    # Spec § "Cookie Shape and Lifetime" mandates exact name and
+    # 32-byte value. Pinning all 3 constants in one step catches
+    # any rename/shrink that would silently break the contract
+    # with the router-sidecar.
+    command: "grep -F 'pub const COOKIE_LEN: usize = 32;' crates/tillandsias-otp/src/lib.rs && grep -F 'pub const COOKIE_NAME: &str = \"tillandsias_session\";' crates/tillandsias-otp/src/lib.rs && grep -F 'pub const COOKIE_PATH: &str = \"/\";' crates/tillandsias-otp/src/lib.rs"
+    timeout_ms: 3000
+    expected_behavior: "tillandsias_session"
+
+  - step: "Req: format_set_cookie_header emits HttpOnly + SameSite=Lax literals"
+    # Spec § Cookie Shape mandates `HttpOnly: true` + `SameSite:
+    # Lax`. The Set-Cookie header format literal is the single
+    # serialization site; a regression to SameSite=Strict (which
+    # the spec calls out by name as wrong) would silently break
+    # the data: URL → 302 redirect flow.
+    command: "grep -F 'pub fn format_set_cookie_header' crates/tillandsias-otp/src/lib.rs && grep -F 'HttpOnly; SameSite=Lax' crates/tillandsias-otp/src/lib.rs"
+    timeout_ms: 3000
+    expected_behavior: "HttpOnly; SameSite=Lax"
+
+  - step: "Req: OtpStore exposes push/validate/evict_expired/evict_project API"
+    # Spec § "Router-Side OTP Validation" mandates single-use
+    # consumption + eviction; spec § "Per-Attach OTP Generation"
+    # mandates in-memory tracking. The 4 method names are the
+    # spec-mapped lifecycle surface; pin >=4 by name.
+    command: "grep -cE 'pub fn (push|validate|evict_expired|evict_project|session_count)' crates/tillandsias-otp/src/lib.rs | awk '{ if ($1+0 >= 4) print \"ok:\", $1, \"OtpStore lifecycle methods\"; else { print \"FAIL: only\", $1, \"of >=4\"; exit 1 } }'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req: generate_session_token CSPRNG + issue_session entry point"
+    # Spec § Per-Attach OTP mandates CSPRNG via getrandom/rand
+    # thread_rng; spec § Multi-Window Reattachment mandates each
+    # attach gets a fresh OTP. The `issue_session(project_label)`
+    # entry point composes them.
+    command: "grep -F 'pub fn generate_session_token() -> [u8; COOKIE_LEN]' crates/tillandsias-otp/src/lib.rs && grep -F 'pub fn issue_session(project_label: &str) -> [u8; COOKIE_LEN]' crates/tillandsias-otp/src/lib.rs"
+    timeout_ms: 3000
+    expected_behavior: "issue_session"
+
+  - step: "Req: build_login_data_url + build_login_form_html (data: URI embedding)"
+    # Spec § Per-Attach OTP Generation step 4: "Launch Chromium
+    # with --app=data:text/html;base64,<encoded-form>". The two
+    # helpers are the data-URL build chain; pin both.
+    command: "grep -F 'pub fn build_login_data_url' crates/tillandsias-otp/src/lib.rs && grep -F 'pub fn build_login_form_html' crates/tillandsias-otp/src/lib.rs"
+    timeout_ms: 3000
+    expected_behavior: "build_login_data_url"
+
+  - step: "Req: PENDING_TTL = 60 seconds (single-use lifetime)"
+    # Spec § Secrets Management Integration: "MUST be evicted from
+    # memory immediately after use (single-use TTL)". The 60-second
+    # pending-TTL is the spec-mandated upper bound before the
+    # eviction tick reclaims unused OTPs. A regression to a longer
+    # TTL would widen the attack window.
+    command: "grep -F 'pub const PENDING_TTL: Duration = Duration::from_secs(60);' crates/tillandsias-otp/src/lib.rs"
+    timeout_ms: 3000
+    expected_behavior: "PENDING_TTL"
+
+  - step: "Req: control-socket routing — IssueWebSession matrix-Handle on UnixSocket, Unsupported on Vsock"
+    # Spec § Per-Attach OTP step 5: "Pass the OTP to the router via
+    # the control-socket channel (tray-host-control-socket spec)".
+    # The matrix routing is the convergence-packet's Q1 answer:
+    # IssueWebSession is unix-only (OTP issuance is host-side; the
+    # in-VM headless dispatcher has no analogous role).
+    command: "grep -F '(IssueWebSession { .. } | EvictProject { .. }, UnixSocket) => Handle' crates/tillandsias-headless/src/control_dispatch.rs && grep -F '(IssueWebSession { .. } | EvictProject { .. }, Vsock) => Unsupported' crates/tillandsias-headless/src/control_dispatch.rs"
+    timeout_ms: 3000
+    expected_behavior: "Unsupported"
+
+observability:
+  traces:
+    - "@trace spec:opencode-web-session-otp"
+    - "@trace spec:secrets-management"
+    - "@trace spec:tray-host-control-socket"
+  expected_log: "OTP + cookie implementation surfaces pinned across Reqs 1-5"
+  log_fields:
+    spec: "opencode-web-session-otp"
+    test: "opencode-web-session-otp-shape"
+    artifact: "crates/tillandsias-otp/src/lib.rs + crates/tillandsias-headless/src/control_dispatch.rs"
+
+rollback:
+  on_failure: >
+    A `spec:opencode-web-session-otp` surface drifted. Restore: file-
+    head `@trace spec:opencode-web-session-otp, spec:secrets-
+    management`; cookie constants `COOKIE_LEN=32`, `COOKIE_NAME=
+    tillandsias_session`, `COOKIE_PATH=/`; `format_set_cookie_header`
+    emitting `HttpOnly; SameSite=Lax` (NOT Strict); the 4-method
+    `OtpStore` lifecycle API; `generate_session_token` +
+    `issue_session` entry points; `build_login_data_url` +
+    `build_login_form_html` data-URL builders; `PENDING_TTL =
+    Duration::from_secs(60)`; and the `IssueWebSession` matrix
+    Handle/Unsupported arms in `control_dispatch.rs`.
+  command: "grep -nE 'COOKIE_LEN|COOKIE_NAME|COOKIE_PATH|format_set_cookie_header|OtpStore|generate_session_token|issue_session|build_login|PENDING_TTL|IssueWebSession' crates/tillandsias-otp/src/lib.rs crates/tillandsias-headless/src/control_dispatch.rs | head -25"

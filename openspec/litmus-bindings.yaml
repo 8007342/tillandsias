@@ -495,8 +495,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:credential-isolation
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  - litmus:opencode-web-session-otp-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: overlay-mount-cache
   status: obsolete
   litmus_tests: []
