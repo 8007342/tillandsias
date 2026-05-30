@@ -372,6 +372,41 @@ fn open_log_file() {
 
 /// Headless diagnostic entry point (`tillandsias-tray --provision-once`): run the
 /// recipe provisioning flow to completion, printing each phase to stdout, and
+/// Pure tail-selection helper for [`logs`]. With `tail = Some(n)`, returns
+/// the last `n` lines; with `None`, returns all lines. `saturating_sub`
+/// handles `n > len` (return all lines) and `n = 0` (return none) without
+/// underflow. Pinned by `select_log_tail_handles_all_cases`.
+fn select_log_tail(content: &str, tail: Option<usize>) -> Vec<&str> {
+    let lines: Vec<&str> = content.lines().collect();
+    let start = match tail {
+        Some(n) => lines.len().saturating_sub(n),
+        None => 0,
+    };
+    lines[start..].to_vec()
+}
+
+/// `--logs` / `--logs --tail <N>`: dump the tray log file to stdout for
+/// operators who want to inspect more than the 20 lines `--diagnose`
+/// surfaces in `recent_log_tail`. Honors the GUI-subsystem stdio quirk:
+/// support scripts should redirect to a file
+/// (`tray.exe --logs > out.txt 2>nul`) rather than rely on PowerShell
+/// pipe capture. Exit: 0 if the log file was read (even if empty), 1 if
+/// it's missing or unreadable. Does NOT touch WSL.
+pub fn logs(tail: Option<usize>) -> i32 {
+    let path = log_file_path();
+    let content = match std::fs::read_to_string(&path) {
+        Ok(c) => c,
+        Err(err) => {
+            eprintln!("[logs] cannot read log file {}: {err}", path.display());
+            return 1;
+        }
+    };
+    for line in select_log_tail(&content, tail) {
+        println!("{line}");
+    }
+    0
+}
+
 /// Single-line `--version` / `-V` output. Format: `tillandsias-tray <version>
 /// (<short-commit>)`. Reuses the same `WORKSPACE_VERSION` + `BUILD_COMMIT_SHA`
 /// env vars `build.rs` bakes for the diagnose surface — so the three places a
@@ -410,6 +445,8 @@ pub fn help_text() -> String {
             Exit: 0 = Ready, 2 = reachable-not-Ready, 1 = unreachable.\n    \
             --diagnose [--json]     Bundled health report (10+ keys). Exit: 0 healthy,\n                            \
             2 degraded, 1 hard fail.\n    \
+            --logs [--tail N]       Dump the tray log file to stdout (last N lines\n                            \
+            with --tail). Exit: 0 = readable, 1 = missing.\n    \
             --help, -h              Print this help and exit 0.\n    \
             --version, -V           Print version + build commit and exit 0.\n\
          \n\
@@ -2064,6 +2101,38 @@ mod tests {
         );
     }
 
+    /// `select_log_tail` is the pure half of `--logs --tail N`. Pin all
+    /// four edge cases (no tail, normal tail, tail > len, tail == 0) so a
+    /// future refactor can't silently flip semantics that the CLI
+    /// promises in its `--help` text.
+    #[test]
+    fn select_log_tail_handles_all_cases() {
+        let content = "a\nb\nc\nd\ne";
+
+        // tail = None: all lines.
+        assert_eq!(
+            select_log_tail(content, None),
+            vec!["a", "b", "c", "d", "e"]
+        );
+
+        // tail = Some(2): last 2 lines.
+        assert_eq!(select_log_tail(content, Some(2)), vec!["d", "e"]);
+
+        // tail > len: all lines (saturating_sub guards against underflow).
+        assert_eq!(
+            select_log_tail(content, Some(100)),
+            vec!["a", "b", "c", "d", "e"]
+        );
+
+        // tail = Some(0): no lines.
+        let empty: Vec<&str> = vec![];
+        assert_eq!(select_log_tail(content, Some(0)), empty);
+
+        // Empty content: no lines regardless of tail.
+        assert_eq!(select_log_tail("", None), empty);
+        assert_eq!(select_log_tail("", Some(5)), empty);
+    }
+
     /// `--help` / `-h` must document every CLI mode by its exact flag name.
     /// A future mode added without a help entry surfaces here pre-build
     /// rather than being discovered field-side as undocumented.
@@ -2075,6 +2144,8 @@ mod tests {
             "--status-once",
             "--diagnose",
             "--json",
+            "--logs",
+            "--tail",
             "--help",
             "-h",
             "--version",

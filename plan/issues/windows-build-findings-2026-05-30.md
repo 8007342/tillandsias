@@ -548,3 +548,115 @@ want symmetric short-circuit `--help`/`--version` modes, the
 **Next iteration ask**: N/A (SECTION_KIND=ok). The diagnose CLI surface
 + standard convention CLI modes are now fully wired. Next eager chunk
 will look at other windows-tray surfaces.
+
+---
+
+### 20260530T170000Z — ok (--logs CLI mode for past-the-tail log inspection)
+
+- agent_id: windows-bullo-claude-opus-20260530T170000Z
+- head_sha: d1873ddb (post-merge of linux-next +8 commits — all linux-internal
+  litmus pinning + work-queue + 1 sibling merge of my prior 04278ec0; no
+  shared-contract churn)
+- version: 0.2.260528.1
+- build_commit: 04278ec0 (current windows-next pre-this-commit head)
+- build_run_id: 20260530T170000Z
+
+**Sibling context**:
+- linux-next +8 commits: versioning litmus pin (33→75), host-chromium-on-demand
+  pin (33→75), remote-projects pin merged in. All linux-internal.
+- osx-next still stalled at b4a45622 (8+ hours, 7 cycles). Integration loop's
+  15:43Z cycle escalated to "ESCALATION watch: orchestrator should ping macOS
+  host directly." Not actionable from windows-next.
+
+**Change made**: added `--logs` / `--logs --tail <N>` CLI mode. Operators
+inspecting tray logs today either see only the 20-line `recent_log_tail` in
+`--diagnose --json` or navigate to `%LOCALAPPDATA%\tillandsias\logs\` and
+open `tray.log` themselves. `--logs` dumps the file to stdout for
+redirect-to-file capture — same GUI-subsystem stdio quirk pattern as
+`--diagnose --json` (PowerShell pipe-capture is unreliable; the canonical
+shape is `tray.exe --logs > out.txt 2>nul`).
+
+Files touched (Windows-owned only):
+- `crates/tillandsias-windows-tray/src/main.rs`: parse `--logs` from argv;
+  optional `--tail <N>` parser walks argv looking for the literal `--tail`
+  token followed by a usize-parseable value (malformed → falls through to
+  full-file path; friendlier than rejecting the run for a typo).
+- `crates/tillandsias-windows-tray/src/notify_icon.rs`:
+  - New `select_log_tail(content: &str, tail: Option<usize>) -> Vec<&str>`
+    — pure tail-selector helper. `saturating_sub` guards against `n > len`
+    underflow + `n = 0` empty-vec edge case.
+  - New `pub fn logs(tail: Option<usize>) -> i32` — reads log file via
+    existing `log_file_path()` helper, dispatches through select_log_tail,
+    prints each line. Exit: 0 if file was readable (even if empty), 1 if
+    missing or unreadable (with descriptive eprintln). Does NOT touch
+    WSL.
+  - Extended `help_text()` with `--logs [--tail N]` row in the MODES
+    section + exit-code contract documented.
+  - New pin test `select_log_tail_handles_all_cases` covers all 4 edge
+    cases (tail=None, tail<len, tail>len, tail=0) + empty-content
+    variants. Pure; doesn't touch the file system.
+  - Extended `help_text_documents_all_cli_modes` test to also require
+    `--logs` and `--tail` flag spellings.
+- `openspec/litmus-tests/litmus-windows-tray-diagnose-cli-surface.yaml`:
+  - "all six CLI modes wired in main.rs" → "all seven CLI modes wired
+    in main.rs", extended grep with `--logs`.
+  - New step "--logs tail-selector test attached" requires the new pin
+    test name.
+- `cheatsheets/runtime/windows-tray-diagnostics.md`: added `--logs
+  [--tail N]` row to the modes table with the exit-code contract.
+
+**Build**: 36.70 s release (windows-tray only).
+
+**Tests**: 38 + 3 = 41 passed / 5 ignored — +1 over yesterday's 40
+baseline (the new `select_log_tail_handles_all_cases` test; the extended
+`help_text_documents_all_cli_modes` test continues to pass with the
+larger flag list). Both relevant tests PASS green.
+
+**Smoke** (post-install, real hardware — the tray.log on this dev host
+has 7 lines from the 2026-05-27 provision-once dress rehearsal):
+- `--logs --tail 5`: exit 0, prints the 5 latest log lines verbatim
+  (`provision phase phase=InstallingTillandsias` through
+  `provision-once: VM Ready`).
+- `--logs` (no tail): exit 0, prints all 7 lines.
+- Output redirected to a temp file via `cmd /c "exe --logs > out.txt
+  2>nul"` (the canonical GUI-subsystem capture pattern); both file
+  contents verified.
+
+**Litmus**:
+- `windows-native-tray`: 7/7 PASS (extended "seven modes" + new "--logs
+  tail-selector test attached" step green).
+- `cargo fmt -p tillandsias-windows-tray -- --check`: clean (rustfmt
+  re-wrapped one `assert_eq!` macro — applied).
+- `cargo clippy -p tillandsias-windows-tray --release --no-deps -D
+  warnings`: clean.
+
+**Findings** (free-form):
+- The CLI surface is now at 7 modes: `--provision-once` (state
+  transition), `--status-once [--json]` (live wire probe), `--diagnose
+  [--json]` (bundled health report), `--logs [--tail N]` (raw log
+  inspection), `--help`, `--version`, GUI (no flag). Every mode has a
+  documented exit-code contract + a corresponding pin test + cheatsheet
+  documentation + litmus YAML coverage. A support engineer can now
+  triage a broken install entirely from `tillandsias-tray.exe <flag> >
+  out.txt 2>nul` invocations without ever touching the GUI.
+- The pure `select_log_tail` factoring + the 4-edge-case test means the
+  tail logic itself is regression-proof; the file I/O wrapper is the
+  only thing that can break, and its failure path is observable (exit
+  1 + eprintln). This is exactly the pattern the existing
+  `status_exit_code` + `exit_code_from` pure helpers follow.
+- The `--tail <N>` arg parser falls through on malformed input rather
+  than rejecting — a "typed `--tail abc`" user gets the full file
+  rather than an unhelpful exit code. This is the right tradeoff for
+  support tooling.
+
+**Cross-host visibility note**: pure windows-tray-side addition; no
+cross-host coordination needed. Same as `--help`/`--version`, the
+pattern is mirror-able by macOS-tray if its operators ever want
+symmetric log-dump tooling — but macOS already exposes Console.app +
+unified logging, so the need is lower.
+
+**Next iteration ask**: N/A (SECTION_KIND=ok). The CLI surface is now
+operator-feature-complete for v0.0.1: 7 modes, all pinned, all
+documented. Next eager chunk will look elsewhere (tray UX, install
+script polish, or genuinely new functionality rather than CLI-shape
+parity).

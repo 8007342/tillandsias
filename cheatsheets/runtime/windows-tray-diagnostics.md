@@ -35,6 +35,7 @@ A single binary, four diagnostic modes. Each is non-GUI, exits with a code suita
 | `--status-once --json`     | Same status as a structured JSON object on stdout (StatusReport, see below).                | (same as `--status-once`) |
 | `--diagnose`               | Bundled human-readable health report (8 sections — see below).                              | `0` healthy / `2` degraded / `1` hard fail |
 | `--diagnose --json`        | Same report as a structured JSON object on stdout.                                          | (same as `--diagnose`)  |
+| `--logs [--tail N]`        | Dump the tray log file (`%LOCALAPPDATA%\tillandsias\logs\tray.log`) to stdout; `--tail N` for last N lines. | `0` readable / `1` missing |
 | `--help` / `-h`            | Print full usage with all CLI modes + exit-code contracts + stdio note.                     | `0`                     |
 | `--version` / `-V`         | Print `tillandsias-tray <workspace VERSION> (<build_commit>)` on one line.                  | `0`                     |
 
