@@ -1,0 +1,117 @@
+# @trace spec:subdomain-naming-flip
+#
+# Drift-protection for the `<service>.<project>.localhost` subdomain
+# ordering. spec:subdomain-naming-flip mandates the canonical URL
+# shape `opencode.myapp.localhost` (service-first), NOT the old
+# `myapp.opencode.localhost` (project-first). The router-sidecar's
+# `extract_project_label` parser + the headless dynamic-Caddyfile
+# generator both encode the order; a regression in either silently
+# breaks the cookie-binding scoping that secures per-project OTPs.
+#
+# Single existing binding `litmus:ephemeral-guarantee` (e2e,
+# last_verified 2026-05-15) covered generic isolation. The parser
+# + Caddyfile route generator were untrapped at source.
+name: litmus:subdomain-naming-flip-shape
+spec: subdomain-naming-flip
+phase: pre-build
+description: >
+  Pin the subdomain-naming-flip surfaces: router-sidecar's
+  `extract_project_label` parser (`<service>.<project>.localhost`
+  → `<project>` middle component) with all 6 named tests; headless
+  dynamic-Caddyfile generation using `format!("opencode.{},
+  project_name)` shape; `validate_subdomain_binding` cookie scoping;
+  browser-mcp test fixtures asserting the new shape.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-router-sidecar/src/http.rs
+  - workspace contains crates/tillandsias-headless/src/main.rs
+  - workspace contains crates/tillandsias-browser-mcp/src/server.rs
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "router-sidecar http.rs file-head trace declares spec:subdomain-naming-flip"
+    # The parser implementation site. Substring match handles
+    # comma-list trace format (paired with subdomain-routing-via-
+    # reverse-proxy).
+    command: "grep -F 'spec:subdomain-naming-flip' crates/tillandsias-router-sidecar/src/http.rs"
+    timeout_ms: 3000
+    expected_behavior: "spec:subdomain-naming-flip"
+
+  - step: "Req Subdomain ordering: pub fn extract_project_label(host: &str) -> Option<String>"
+    # The parser is the canonical service→project resolver. Spec
+    # § Req mandates `<service>.<project>.localhost` order — the
+    # parser MUST return the middle component (not the first).
+    # Pin both the signature AND the docblock examples.
+    command: "grep -F 'pub fn extract_project_label(host: &str) -> Option<String>' crates/tillandsias-router-sidecar/src/http.rs && grep -F 'opencode.myapp.localhost' crates/tillandsias-router-sidecar/src/http.rs"
+    timeout_ms: 3000
+    expected_behavior: "extract_project_label"
+
+  - step: "Req Subdomain ordering: parser strips port (`:8080` etc.) before extraction"
+    # Spec § Scenario implies port-stripped + case-insensitive
+    # normalization. The `split(':').next()` idiom is the
+    # canonical port-strip; pin its presence.
+    command: "grep -F \"split(':')\" crates/tillandsias-router-sidecar/src/http.rs && grep -F 'to_lowercase()' crates/tillandsias-router-sidecar/src/http.rs"
+    timeout_ms: 3000
+    expected_behavior: "to_lowercase"
+
+  - step: "Req Subdomain ordering: >=6 named extract_project_label unit tests"
+    # The parser has 6+ named test functions covering standard /
+    # with-port / hyphens-and-underscores / case-insensitive /
+    # rejects-non-localhost / rejects-plain-localhost. Pinning by
+    # test-name presence catches a silent test deletion.
+    command: "grep -cE 'fn subdomain_extract_project_label_(standard_format|with_port|with_hyphens_and_underscores|case_insensitive|rejects_non_localhost|rejects_plain_localhost)' crates/tillandsias-router-sidecar/src/http.rs | awk '{ if ($1+0 >= 6) print \"ok:\", $1, \"extract_project_label test cases\"; else { print \"FAIL: only\", $1, \"of >=6\"; exit 1 } }'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req Router config: headless dynamic-Caddyfile uses opencode.{project} (NOT {project}.opencode)"
+    # Spec § "Router configuration update" mandates the Caddyfile
+    # route uses the new `opencode.<project>` order. A regression
+    # to `{project}.opencode` would silently break browser-MCP
+    # allowlists AND the cookie scoping invariant.
+    command: "grep -F 'format!(\"opencode.{}\", project_name)' crates/tillandsias-headless/src/main.rs"
+    timeout_ms: 3000
+    expected_behavior: "opencode.{}"
+
+  - step: "Req cookie scoping: validate_subdomain_binding function present"
+    # Spec § implicit cookie-scoping invariant: a cookie issued
+    # for `opencode.myapp.localhost` MUST NOT validate against
+    # `opencode.otherapp.localhost`. The validate_subdomain_binding
+    # helper enforces this via the per-project OtpStore.
+    command: "grep -F 'pub fn validate_subdomain_binding(' crates/tillandsias-router-sidecar/src/http.rs"
+    timeout_ms: 3000
+    expected_behavior: "validate_subdomain_binding"
+
+  - step: "Req new shape: browser-mcp test fixtures + allowlist description use new order"
+    # spec-cross-reference: browser-mcp's allowlist enforcement
+    # tests assert against the new shape. The string `<service>.
+    # <project>.localhost:8080` in the description field is the
+    # spec contract surface; pin it AND the literal URL fixtures.
+    command: "grep -F '<service>.<project>.localhost:8080' crates/tillandsias-browser-mcp/src/server.rs && grep -F 'http://opencode.acme.localhost:8080/' crates/tillandsias-browser-mcp/tests/allowlist_enforcement_integration.rs"
+    timeout_ms: 3000
+    expected_behavior: "opencode.acme.localhost"
+
+observability:
+  traces:
+    - "@trace spec:subdomain-naming-flip"
+    - "@trace spec:subdomain-routing-via-reverse-proxy"
+  expected_log: "router-sidecar extract_project_label parser + 6 tests + headless Caddyfile shape + cookie-scoping helper + browser-mcp test fixtures all pinned"
+  log_fields:
+    spec: "subdomain-naming-flip"
+    test: "subdomain-naming-flip-shape"
+    artifact: "crates/tillandsias-router-sidecar/src/http.rs + tillandsias-headless/src/main.rs + tillandsias-browser-mcp/{src/server.rs,tests/allowlist_enforcement_integration.rs}"
+
+rollback:
+  on_failure: >
+    A `spec:subdomain-naming-flip` source surface drifted. Restore:
+    `extract_project_label` parser in router-sidecar with port-strip
+    + lowercase + middle-component extraction; >=6 named test
+    cases (standard / with_port / hyphens_and_underscores /
+    case_insensitive / rejects_non_localhost / rejects_plain_
+    localhost); `validate_subdomain_binding` cookie-scoping helper;
+    `format!("opencode.{}", project_name)` in headless main.rs
+    dynamic Caddyfile; browser-mcp allowlist description literal
+    `<service>.<project>.localhost:8080` + test-fixture URLs in
+    the new shape.
+  command: "grep -nE 'extract_project_label|validate_subdomain_binding|opencode\\.\\{\\}|opencode\\.acme\\.localhost|<service>\\.<project>' crates/tillandsias-router-sidecar/src/http.rs crates/tillandsias-headless/src/main.rs crates/tillandsias-browser-mcp/src/server.rs | head -20"
