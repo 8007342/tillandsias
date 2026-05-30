@@ -116,6 +116,44 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok:"
 
+  - step: "Req 5: compute_hot_budget pure helper present with canonical signature"
+    # Spec § "Per-launch project source budget" mandates a
+    # `compute_hot_budget(project_name, cache_dir)` recipe. The
+    # implementation lives in config.rs as a PURE function over
+    # (pack_size_kb, &ForgeConfig) — decoupled from git invocation
+    # so it stays unit-testable. The wider integration (git +
+    # mirror dir resolution + plumbing into the tmpfs mount sized
+    # arg) is the follow-on slice.
+    command: "grep -F 'pub fn compute_hot_budget(pack_size_kb: u64, config: &ForgeConfig) -> u32' crates/tillandsias-core/src/config.rs"
+    timeout_ms: 3000
+    expected_behavior: "compute_hot_budget"
+
+  - step: "Req 5: parse_size_pack_kb pure parser present"
+    # Step 1 of the spec recipe: parse `git count-objects -v -H`
+    # output. Pure string-in / u64-out so the parser is reusable
+    # across the git-runner and unit tests.
+    command: "grep -F 'pub fn parse_size_pack_kb(count_objects_output: &str) -> u64' crates/tillandsias-core/src/config.rs"
+    timeout_ms: 3000
+    expected_behavior: "parse_size_pack_kb"
+
+  - step: "Req 5: HOT_PATH_BUDGET_FLOOR_MB constant pins the 256 MB floor"
+    # Spec § Scenario "Empty mirror returns floor (256 MB)". The
+    # constant centralises the value so a refactor renaming it
+    # surfaces in this litmus, AND the unit test
+    # `compute_hot_budget_returns_floor_for_empty_mirror` uses
+    # the same constant — pinning both keeps them in lockstep.
+    command: "grep -F 'pub const HOT_PATH_BUDGET_FLOOR_MB: u32 = 256;' crates/tillandsias-core/src/config.rs"
+    timeout_ms: 3000
+    expected_behavior: "HOT_PATH_BUDGET_FLOOR_MB"
+
+  - step: "Req 5: 4 unit tests cover the compute_hot_budget recipe"
+    # Inflation / floor / ceiling / custom-config branches +
+    # the 2 parser tests = 6 total tests; pin >=4 by name presence
+    # so a regression that silently deletes a branch fails fast.
+    command: "grep -cE 'fn (compute_hot_budget|parse_size_pack_kb)_' crates/tillandsias-core/src/config.rs | awk '{ if ($1+0 >= 4) print \"ok:\", $1, \"compute_hot_budget + parse_size_pack_kb test cases\"; else { print \"FAIL: only\", $1, \"of >=4\"; exit 1 } }'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
 observability:
   traces:
     - "@trace spec:forge-hot-cold-split"
