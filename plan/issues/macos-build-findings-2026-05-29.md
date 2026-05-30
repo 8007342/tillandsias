@@ -283,3 +283,31 @@ trace: .claude/skills/build-macos-tray/SKILL.md (the skill that wrote this)
 **Autonomous smoke**: DIAG_EXIT=2; 13 keys; alive-after-3s; clean-SIGTERM-exit; stderr identical.
 **Install**: backup=yes; post-install 13 keys.
 **Findings**: 9th `ok` run. No delta.
+
+---
+
+### 20260530T042446Z — ok
+
+- agent_id: macos-Tlatoani-MacBook-Air-claude-opus-20260530T042446Z
+- head_sha: 9b339892
+- version: 0.2.260528.1
+- build_run_id: 20260530T042446Z
+
+**Build**: cache-hit; sha256 `b775b1c99ea83399472b29898d7be1fd4e0fc4b0fac69fd04e89867e61dbd1fc`.
+**Smoke**: DIAG_EXIT=2; 13 keys; alive-after-3s; clean-SIGTERM-exit; stderr identical.
+**Install**: backup=yes; post-install 13 keys.
+**Findings**: 10th `ok`. windows-next also active this fetch (24d7bec7→6c58eaba) — three platform branches diverging in parallel; only osx-next push performed.
+
+---
+
+### 20260530T053941Z — ok
+
+- agent_id: macos-Tlatoani-MacBook-Air-claude-opus-20260530T053941Z
+- head_sha: 9c865501
+- version: 0.2.260528.1
+- build_run_id: 20260530T053941Z
+
+**Build**: cache-hit; sha256 `52e4436e632e4be0148c529e6005e12c3f4c24604100da4f087cd1c552500748`.
+**Smoke**: DIAG_EXIT=2; 13 keys; alive-after-3s; clean-SIGTERM-exit; stderr identical.
+**Install**: backup=yes; post-install 13 keys.
+**Findings**: 11th `ok`. linux-next + windows-next both moved this fetch.
