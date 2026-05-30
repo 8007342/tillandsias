@@ -255,3 +255,31 @@ trace: .claude/skills/build-macos-tray/SKILL.md (the skill that wrote this)
 
 **Cross-host visibility note**: N/A.
 **Next iteration ask**: N/A.
+
+---
+
+### 20260530T022451Z — ok
+
+- agent_id: macos-Tlatoani-MacBook-Air-claude-opus-20260530T022451Z
+- head_sha: e309f39a
+- version: 0.2.260528.1
+- build_run_id: 20260530T022451Z
+
+**Build**: cache-hit; sha256 `74d06089fc38f190a3a5043ec64fac8bf8b4f5a86c2dfc9c1a3df5863065169d`; codesign pass.
+**Autonomous smoke**: DIAG_EXIT=2; 13 keys; alive-after-3s; clean-SIGTERM-exit; stderr identical to prior.
+**Install**: backup=yes; post-install 13 keys.
+**Findings**: 8th `ok`. linux-next ~36 commits ahead at push.
+
+---
+
+### 20260530T032440Z — ok
+
+- agent_id: macos-Tlatoani-MacBook-Air-claude-opus-20260530T032440Z
+- head_sha: 12faaf86
+- version: 0.2.260528.1
+- build_run_id: 20260530T032440Z
+
+**Build**: cache-hit; sha256 `5a56a49a8a7851680108d9ca046ea1994156ade7e3384a405bf4748d6dd18dd8`; codesign pass.
+**Autonomous smoke**: DIAG_EXIT=2; 13 keys; alive-after-3s; clean-SIGTERM-exit; stderr identical.
+**Install**: backup=yes; post-install 13 keys.
+**Findings**: 9th `ok` run. No delta.
