@@ -55,7 +55,12 @@ fn main() {
         std::process::exit(notify_icon::provision_once());
     }
     if std::env::args().any(|a| a == "--status-once") {
-        std::process::exit(notify_icon::status_once());
+        let format = if std::env::args().any(|a| a == "--json") {
+            notify_icon::DiagnoseFormat::Json
+        } else {
+            notify_icon::DiagnoseFormat::Human
+        };
+        std::process::exit(notify_icon::status_once(format));
     }
     if std::env::args().any(|a| a == "--diagnose") {
         let format = if std::env::args().any(|a| a == "--json") {

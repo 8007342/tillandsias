@@ -123,3 +123,104 @@ data.
 `/build-windows-tray` cron (`8c5d0a16`) fires Sat 2026-05-30 11:17 AM PDT;
 that cron run will produce the first build whose `build_commit` field
 self-references the commit that landed this change.
+
+---
+
+### 20260530T085500Z — ok (--status-once --json parity for support-tooling)
+
+- agent_id: windows-bullo-claude-opus-20260530T085500Z
+- head_sha: 815fd836 (post-merge of linux-next +23 commits — all linux-internal
+  litmus pinning + work-queue ledger entries; no shared-contract changes)
+- version: 0.2.260528.1 (workspace VERSION)
+- build_commit: 2727d24d (pre-this-commit head; new commit will self-update)
+- build_run_id: 20260530T085500Z
+
+**Change made**: extended `--status-once` to support a `--json` mode, mirroring
+the `--diagnose --json` UX. The pre-existing human mode (`[status] phase: …`)
+is preserved; passing `--status-once --json` now emits a single `StatusReport`
+JSON object on stdout for support-tooling consumers. The structured shape
+includes a pre-computed `exit_code` field so JSON consumers don't need to
+re-derive the 0/2/1 matrix from `phase` + `reachable`.
+
+Files touched (Windows-owned only):
+- `crates/tillandsias-windows-tray/src/main.rs`: when `--status-once` is on
+  argv, also parse `--json` and pass `DiagnoseFormat::{Human,Json}` into
+  `status_once`. Mirrors the existing `--diagnose --json` parser.
+- `crates/tillandsias-windows-tray/src/notify_icon.rs`:
+  - New `StatusReport` struct: 7 fields — `reachable`, `wire_version: Option<u16>`,
+    `phase: Option<String>`, `podman_ready: Option<bool>`, `last_event:
+    Option<String>`, `error: Option<String>`, `exit_code: i32`. Each failure
+    path captures its `error` string so the JSON shape is identical on the
+    success and failure paths (no schema variance for consumers).
+  - `status_once(format: DiagnoseFormat) -> i32` now collects a `StatusReport`
+    via the new `collect_status_report()`, prints it human-or-JSON, and
+    returns the report's `exit_code`. The handshake / open / VmStatusRequest
+    flow is unchanged.
+  - New `status_exit_code(report: &StatusReport) -> i32`: pure exit-code
+    derivation (0 = Ready, 2 = reachable-not-Ready, 1 = unreachable), so a
+    unit test can pin the matrix.
+  - New `baseline_status_report()` test helper + two new tests:
+    `status_once_json_keys_pinned` (asserts all 7 top-level JSON keys
+    present) and `status_once_exit_codes` (pins the 0/2/1 matrix across the
+    Ready / non-Ready / no-phase / unreachable cases).
+- `openspec/litmus-tests/litmus-windows-tray-diagnose-cli-surface.yaml`:
+  extended the "JSON schema-pin unit tests attached" step to also require
+  `status_once_json_keys_pinned`, and the "exit-code contract tests
+  attached" step to also require `status_once_exit_codes`. Both steps are
+  shared-grep predicates so a refactor that drops either test surfaces at
+  pre-build instead of at the support-tooling step.
+- `cheatsheets/runtime/windows-tray-diagnostics.md`: added `--status-once
+  --json` row to the modes table + a dedicated **`--status-once --json`
+  schema** subsection showing the JSON shape (7 keys, type per field,
+  null-on-the-unreachable-path semantics).
+
+**Build**: 36.85 s release (windows-tray + transitive deps only — other
+crates unchanged).
+
+**Tests**: 35 + 3 = 38 passed / 5 ignored — +2 over yesterday's 33+3
+baseline. The new tests (`status_once_json_keys_pinned` + `status_once_exit_codes`)
+both PASS green.
+
+**Smoke** (post-install, real hardware — WSL utility VM not running):
+- `--status-once --json` exit: 1 (unreachable, expected — `wire.reachable`
+  was also false in `--diagnose --json` this morning, matching)
+- JSON keys (alphabetized from PowerShell): `error, exit_code, last_event,
+  phase, podman_ready, reachable, wire_version` — all 7 present
+- `reachable`: false
+- `exit_code` (in JSON): 1 (matches process exit code)
+- `error`: descriptive — `"control wire unreachable on vsock 42420: no
+  running WSL utility VM in 'hcsdiag list' (is a distro started?) (is the
+  VM provisioned + running? try --provision-once)"`
+
+**Litmus**:
+- `windows-native-tray`: 7/7 PASS (extended schema-pin + exit-code-pin
+  steps stay green).
+- `cargo fmt -p tillandsias-windows-tray -- --check`: clean.
+- `cargo clippy -p tillandsias-windows-tray --release --no-deps -D warnings`:
+  clean.
+
+**Findings** (free-form):
+- The diagnose surface is now fully parity'd: `--diagnose --json` for the
+  bundled health report + `--status-once --json` for the live-wire-only
+  probe. Support tooling can now script either flavor.
+- The on-failure-paths-emit-the-same-JSON-shape design is deliberate:
+  consumers always see the same 7 keys, never have to distinguish "this
+  binary just printed an error string to stderr" from "this binary
+  successfully connected and reported X". The `error` field is the single
+  signal.
+- The wire_version type is `u16` (matches `WIRE_VERSION` const in
+  `tillandsias-control-wire`). Caught a u32-vs-u16 mismatch at compile time
+  — a clean reminder that the wire protocol is its own type domain.
+
+**Cross-host visibility note**: same as the build_commit section — no
+cross-host action required. macOS-tray's `--diagnose --json` is structurally
+separate; macOS does not have an analogous `--status-once` mode today. If
+the macOS host ever wants symmetric live-wire JSON probing, the
+`StatusReport` shape + the seven-key contract + the pre-computed
+`exit_code` are the pattern to mirror.
+
+**Next iteration ask**: N/A (SECTION_KIND=ok). The diagnose CLI surface
+is now feature-complete for the windows-tray v0.0.1 milestone (per
+plan/steps/windows-next-thin-tray.md NEXT ACTION's "richer diagnostics"
+eager-mandate target). Tomorrow's cron will rebuild from this commit and
+naturally update `build_commit`.
