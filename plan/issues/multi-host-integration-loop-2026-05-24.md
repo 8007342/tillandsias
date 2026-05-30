@@ -51,6 +51,62 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-30T05:43Z — MERGED windows-next + osx-next (substantive windows VERSION fix, plan-only osx) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `036cc01e` (after merging both siblings; linux-next
+  was at `ffacaa31` pre-merge).
+- observed_sibling_heads: main=`ea28d773` · linux-next=`ffacaa31`
+  (pre-merge) · windows-next=`a963c16d` · osx-next=`d1eb4024`.
+- **windows-next: merged + tested + pushed** — substantive 3-commit
+  delta after 5+ stalled cycles ended at the previous cron. Most
+  notable: `a963c16d feat(windows-tray): inject workspace VERSION via
+  build.rs into diagnose JSON` — fixes the cross-tray
+  `--diagnose --json` `version` field divergence flagged in today's
+  windows-build-findings (the JSON was reporting the static
+  Cargo.toml `0.1.0` instead of the workspace VERSION `0.2.260528.1`).
+  Windows-host added a build.rs that reads `../../VERSION`, emits
+  `WORKSPACE_VERSION` env var with a rerun-if-changed marker, and
+  `notify_icon.rs:1065` swaps `env!("CARGO_PKG_VERSION")` →
+  `env!("WORKSPACE_VERSION")`. Windows-host also smoke-verified on
+  real hardware (`windows-bullo`: cargo build 40.6s OK, clippy clean,
+  --diagnose --json version field now "0.2.260528.1"). Plus an
+  hourly build-findings entry (040534Z) and a 43-line append to
+  `plan/issues/tray-convergence-coordination.md` asking macOS-host to
+  mirror the same fix on its side. Crate-side delta (2 files, +21
+  lines) all in windows-tray (sibling-owned scope — merged through
+  without linux changes).
+- **osx-next: merged + tested + pushed** — 2 hourly macOS
+  build-findings entries (042446Z + 053941Z, both `ok`) +28 lines
+  plan-only.
+- merge stats: 4 files changed, 282 insertions(+), 1 deletion(-).
+  Total delta = windows crate work + cross-host doc + 2 plan
+  build-findings docs. NO openspec/, methodology/, or shared-crate
+  drift outside sibling scope.
+- verification: `./build.sh --check` passed (both merges); `./build.sh
+  --test` passed (both merges).
+- **spec-drift flagged for linux follow-on**: windows-host's ASK in
+  `tray-convergence-coordination.md` requests macOS-host to mirror
+  the same diagnose-version-field fix. Linux-host's tray (the
+  Linux-native StatusNotifierItem path) does NOT have an analogous
+  `--diagnose --json` surface today, so no parallel linux action is
+  needed. BUT: if linux ever adds a diagnose-JSON CLI flag, it should
+  follow the same workspace-VERSION-via-build.rs pattern. Noting
+  here for future reference.
+- linux work this 2h window: 2 real-implementation slices closing
+  forge-hot-cold-split Reqs 3 and 7 (compute_memory_ceiling_mb at
+  04:51Z + tmpfs-overlay tier table at 05:21Z; preflight.rs module
+  now 17/17 tests across compute_hot_budget + check_host_ram +
+  compute_memory_ceiling_mb + resolve_pull_cache_ram_mb pure halves).
+  Forge-hot-cold-split coverage 75→83→92→92 over the window. Full
+  instant suite stable at 71/71 PASS at 100% across 89 specs.
+- recommended next: continue closing forge-hot-cold-split gaps. The
+  last open gap is Req 1 § `/home/forge/src` tmpfs mount declaration
+  (all 3 sized-decision helpers now ready). Or pursue the coordinated
+  launch-arg-builder refactor wiring all 4 pure helpers into the
+  podman argv. macOS host now has a clear ASK to act on (mirror
+  diagnose-version-field fix).
+
 ### Cycle 2026-05-30T03:43Z — MERGED osx-next (2 macOS build-findings entries) ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
