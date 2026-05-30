@@ -780,8 +780,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:inference-readiness-probe-shape
-  coverage_ratio: 33
-  last_verified: '2026-05-15'
+  - litmus:zen-default-with-ollama-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: chromium-debug-variant
   status: active
   litmus_tests:
