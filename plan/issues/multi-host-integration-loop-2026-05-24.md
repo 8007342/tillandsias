@@ -51,6 +51,60 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-30T19:43Z — MERGED windows-next (install + tray-diagnose PowerShell consume new CLI surface) + osx-next no-op ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `a6785df` (merge commit; linux-next was at
+  `5cbb9455` pre-merge).
+- observed_sibling_heads: main=`677a89af` (now reflects today's
+  v0.2.260530.1 release VERSION bump) · linux-next=`5cbb9455`
+  (pre-merge) · windows-next=`567009f6` · osx-next=`b4a45622`
+  (unchanged 8 consecutive cycles since 06:27Z).
+- **windows-next: merged + tested + pushed** — substantive 1-commit
+  delta `567009f6 feat(scripts): install + tray-diagnose consume new
+  CLI surface (--version preflight + build_commit + recent logs)`.
+  Wraps up the cross-host triage UX improvements from this week's
+  windows-tray work: `install-windows.ps1` adds a Layer-1 preflight
+  invoking `tillandsias-tray --version` via cmd-redirect (fast, no
+  WSL touch, fails loudly on a fundamentally broken binary BEFORE
+  the slower --diagnose flow) + Layer-2 `--diagnose --json` now
+  reports `commit=<build_commit>` alongside version+pin + surfaces
+  `wire.error` for self-sufficient install logs. `tray-diagnose.ps1`
+  adds a "build commit" row alongside "version" + new "Recent log
+  activity" section iterating `report.recent_log_tail` in dark-gray
+  + pointer to `tillandsias-tray --logs --tail N`. Litmus extended
+  in lockstep. All changes in PowerShell scripts (sibling-owned
+  scope: install-windows.ps1 + tray-diagnose.ps1) + windows-owned
+  litmus.
+- **osx-next: no-op** — empty range, unchanged 8 consecutive cycles
+  since 06:27Z (~13 hours). **ESCALATION watch DEEPLY overdue**:
+  orchestrator-level macOS host ping STRONGLY recommended.
+- merge stats: 4 files changed, 140 insertions(+), 5 deletions(-).
+  Windows PowerShell scripts + windows-tray litmus + plan/ build-
+  findings doc.
+- verification: `./build.sh --check` + `./build.sh --test` passed.
+- spec-drift via litmus update: standard pattern (windows extended
+  their own windows-tray litmus); no linux action.
+- linux work this 2h window: 2 substantive slices plus the release
+  recovery — `tray-minimal-ux` 33→75 at 17:21Z (EnclaveStatus
+  state-machine + Quit literal + Seedlings order), **release
+  escalation 18:13Z RESOLVED at 18:22Z** via local-fedora tag push
+  + `gh workflow run release.yml`, **release v0.2.260530.1
+  PUBLISHED at 19:02Z** (workflow `26691456259` `success` at
+  39m38s — 22 cosign-signed assets including all 3 platform
+  binaries + linux musl headless variants; release page
+  https://github.com/8007342/tillandsias/releases/tag/v0.2.260530.1),
+  `simplified-tray-ux` 33→67 at 18:51Z (5th spec/impl divergence
+  flagged + inline reconciled with ⚠ Implementation reality block).
+  Full instant suite progressed 86/86 → 87/87 PASS at 100% across
+  89 specs.
+- recommended next: orchestrator ping macOS host (8-cycle silence
+  is the longest stall of this session); continue 33% backlog
+  (subdomain-naming-flip, web-image, spec-traceability, zen-default-
+  with-ollama-analysis-pool); pursue forge-hot-cold-split Req 1
+  `/home/forge/src` tmpfs mount OR github-credential-health
+  4-state classifier as substantial real-implementation slices.
+
 ### Cycle 2026-05-30T17:43Z — MERGED windows-next (--logs / --logs --tail N) + osx-next no-op ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
