@@ -778,8 +778,10 @@ specs:
   status: active
   litmus_tests:
   - litmus:mcp-on-demand-shape
-  coverage_ratio: 33
-  last_verified: '2026-05-13'
+  - litmus:host-browser-mcp-shape
+  - litmus:mcp-on-demand-bridge-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: observability-convergence
   status: active
   litmus_tests:
