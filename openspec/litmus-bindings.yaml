@@ -483,8 +483,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:cross-platform-tray
-  coverage_ratio: 33
-  last_verified: '2026-05-15'
+  - litmus:no-terminal-flicker-shape
+  coverage_ratio: 67
+  last_verified: '2026-05-30'
 - spec_id: opencode-web-session
   status: obsolete
   litmus_tests: []
