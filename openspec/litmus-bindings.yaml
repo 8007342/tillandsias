@@ -606,11 +606,11 @@ specs:
   coverage_ratio: 100
   last_verified: '2026-05-14'
 - spec_id: secret-rotation
-  status: active
-  litmus_tests:
-  - litmus:credential-isolation
-  coverage_ratio: 33
-  last_verified: '2026-05-15'
+  status: obsolete
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-05-30'
+  tombstone: superseded:podman-secrets-integration
 - spec_id: secrets-management
   status: active
   litmus_tests:
