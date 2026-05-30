@@ -102,6 +102,8 @@ try {
 $failures = 0
 Write-Host 'Identity:'
 Write-Check 'version           ' $true $report.version
+$commit = if ($report.build_commit) { $report.build_commit } else { '(unknown)' }
+Write-Check 'build commit      ' $true $commit
 Write-Check 'log file exists   ' $report.log_exists $report.log_path
 if (-not $report.log_exists) { $failures++ }
 
@@ -127,6 +129,17 @@ if (-not $wireOk) {
     $failures++
     if ($report.wire.error) {
         Write-Host "  -> error: $($report.wire.error)" -ForegroundColor Yellow
+    }
+}
+
+# Recent log activity (sourced from the in-report recent_log_tail field —
+# 20 lines max). Useful for triaging "tray was up earlier and went south"
+# scenarios. If the operator wants more, `tillandsias-tray --logs --tail N`
+# dumps the full log to stdout.
+if ($report.recent_log_tail -and $report.recent_log_tail.Count -gt 0) {
+    Write-Host "`nRecent log activity (last $($report.recent_log_tail.Count) line(s) of tray.log):"
+    foreach ($line in $report.recent_log_tail) {
+        Write-Host "  $line" -ForegroundColor DarkGray
     }
 }
 

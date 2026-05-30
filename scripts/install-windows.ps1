@@ -131,6 +131,24 @@ Write-Host "Installed $AppName ($mode)." -ForegroundColor Green
 # Capture via cmd.exe redirect: the release tray is GUI-subsystem; PowerShell's
 # direct stdout capture is unreliable for large writes. cmd handles native
 # stdio directly. See cheatsheets/runtime/windows-tray-diagnostics.md.
+# Layer 1 (fast): --version ping. If this fails, the binary itself is
+# fundamentally broken (missing runtime DLL, bad architecture, etc.) and we
+# fail loudly before touching --diagnose. --version does NOT touch WSL, so
+# this works even when the WSL feature is disabled.
+Write-Host "Verifying installed binary via --version..." -ForegroundColor Cyan
+$versionTmp = Join-Path $env:TEMP "tillandsias-install-ver-$([guid]::NewGuid().ToString('N')).txt"
+& cmd.exe /c "`"$InstalledExe`" --version > `"$versionTmp`" 2>nul"
+$versionExit = $LASTEXITCODE
+$versionLine = (Get-Content $versionTmp -Raw -ErrorAction SilentlyContinue) -replace '\s+$', ''
+Remove-Item $versionTmp -ErrorAction SilentlyContinue
+if ($versionExit -ne 0 -or -not $versionLine) {
+    throw "tillandsias-tray --version failed (exit $versionExit); install bits broken"
+}
+Write-Host "  $versionLine" -ForegroundColor Green
+
+# Layer 2 (full): --diagnose --json. Bundled health report. Exit 2 (degraded)
+# is expected on a first install when the WSL VM isn't provisioned yet; only
+# exit 1 (hard fail) aborts the installer.
 Write-Host "Verifying installed binary via --diagnose --json..." -ForegroundColor Cyan
 $diagTmp = Join-Path $env:TEMP "tillandsias-install-diag-$([guid]::NewGuid().ToString('N')).json"
 & cmd.exe /c "`"$InstalledExe`" --diagnose --json > `"$diagTmp`" 2>nul"
@@ -144,7 +162,11 @@ if ($diagJson) {
     try {
         $report = $diagJson | ConvertFrom-Json -ErrorAction Stop
         $pin = if ($report.manifest_pin_x86_64_tar) { "$($report.manifest_pin_x86_64_tar)..." } else { '(none)' }
-        Write-Host "  installed: version=$($report.version) pin=$pin (--diagnose exit $diagExit)" -ForegroundColor Green
+        $commit = if ($report.build_commit) { $report.build_commit } else { '(unknown)' }
+        Write-Host "  installed: version=$($report.version) commit=$commit pin=$pin (--diagnose exit $diagExit)" -ForegroundColor Green
+        if ($report.wire.error) {
+            Write-Host "  wire: $($report.wire.error)" -ForegroundColor Yellow
+        }
     } catch {
         Write-Host "  --diagnose ran (exit $diagExit) but JSON parse failed; binary may still be sound" -ForegroundColor Yellow
     }
