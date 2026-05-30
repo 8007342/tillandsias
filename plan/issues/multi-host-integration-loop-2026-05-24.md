@@ -51,6 +51,55 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-30T07:43Z — MERGED windows-next (build_commit field) + osx-next (build-findings) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `6e018d2` (after both sibling merges; linux-next
+  was at `d6336c05` pre-merge).
+- observed_sibling_heads: main=`ea28d773` · linux-next=`d6336c05`
+  (pre-merge) · windows-next=`2727d24d` · osx-next=`6b2eb941`.
+- **windows-next: merged + tested + pushed** — substantive 1-commit
+  delta: `2727d24d feat(windows-tray): add build_commit field to
+  --diagnose for triage`. Diagnose JSON now carries `build_commit:
+  &'static str` field with short git SHA baked at compile time
+  (workspace `version` rolls only on release; two dev builds at the
+  same release tag can still differ at commit level — closes the
+  triage gap). build.rs does best-effort `git rev-parse --short HEAD`
+  with fallback to "unknown" (source-tarball builds), honors
+  BUILD_COMMIT_SHA_OVERRIDE for CI, emits env var BEFORE the
+  windows-target gate so cross-checks from non-Windows hosts also
+  see it. `notify_icon.rs` adds the new field; `diagnose_json_top_
+  level_keys_pinned` test extended 10 → 11 keys (additive contract:
+  "these keys present", not exact count). All crate changes in
+  sibling-owned scope. Plus cheatsheet update + new build-findings
+  doc.
+- **osx-next: merged + tested + pushed** — 1 hourly macOS
+  build-findings entry (062733Z, `ok`), +14 lines plan-only.
+- merge stats: windows 4 files / +165 lines (crate + cheatsheet +
+  plan); osx 1 file / +14 lines (plan).
+- verification: `./build.sh --check` + `./build.sh --test` passed on
+  both merges.
+- spec-drift: **none direct** — no openspec/, methodology/, or
+  shared-crate changes. Windows added a new field to the diagnose
+  JSON schema (`build_commit`); this is windows-tray-only today. If
+  linux ever adds a tray `--diagnose --json` surface (not present
+  today), it should follow the same pattern (build.rs reads
+  workspace VERSION + git rev-parse, additive schema).
+- linux work this 2h window: 2 spec-gap-fill slices landed —
+  `chromium-{debug,safe}-variant` BOTH 33→75 via a single dual-bound
+  litmus at 06:51Z (efficient when variants share an implementation),
+  `forge-opencode-onboarding` 30→75 at 07:21Z pinning Req 1
+  discovery + Req 2 ORDER + Req 3 web-launcher. Full instant suite
+  73/73 → 74/74 across the window — net +1 new litmus + 1 binding
+  edit covering 3 specs.
+- recommended next: continue the 30-33% backlog (opencode-web-session-
+  otp 30%, project-summarizers 33%, proxy-container 33%,
+  reverse-proxy-internal 33%, secret-rotation 33%, no-terminal-flicker
+  33%). Or pick up the still-open forge-hot-cold-split Req 1
+  `/home/forge/src` tmpfs mount declaration as a real-implementation
+  slice (all 3 sized-decision helpers already ready since the
+  04:51Z + 05:21Z slices).
+
 ### Cycle 2026-05-30T05:43Z — MERGED windows-next + osx-next (substantive windows VERSION fix, plan-only osx) ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
