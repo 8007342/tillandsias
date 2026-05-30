@@ -564,8 +564,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:enclave-isolation
-  coverage_ratio: 33
-  last_verified: '2026-05-03'
+  - litmus:proxy-container-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: remote-projects
   status: active
   litmus_tests:
