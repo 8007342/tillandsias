@@ -293,7 +293,7 @@ specs:
   litmus_tests:
   - litmus:forge-hot-cold-split-shape
   - litmus:forge-hot-cold-split-tmpfs-shape
-  coverage_ratio: 75
+  coverage_ratio: 92
   last_verified: '2026-05-30'
 - spec_id: forge-offline
   status: active

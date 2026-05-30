@@ -154,6 +154,70 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok:"
 
+  - step: "Req 4 pre-flight RAM gate: check_host_ram + PreflightError surfaces"
+    # Spec § "Pre-flight RAM check refuses launch on insufficient
+    # host RAM" — the pure decision function lives in the preflight
+    # module. Pin both the function and the error variant so a
+    # refactor renaming either silently breaks the launch gate.
+    command: "grep -F 'pub fn check_host_ram(' crates/tillandsias-core/src/preflight.rs && grep -F 'pub enum PreflightError' crates/tillandsias-core/src/preflight.rs && grep -F 'InsufficientRam' crates/tillandsias-core/src/preflight.rs"
+    timeout_ms: 3000
+    expected_behavior: "InsufficientRam"
+
+  - step: "Req 4: 1.25× headroom factor expressed as 125/100 integer constants"
+    # Spec § "1.25× headroom factor between MemAvailable and required"
+    # mandates the exact multiplier. Pinning the literal constants
+    # (HOST_RAM_HEADROOM_NUM = 125, HOST_RAM_HEADROOM_DEN = 100)
+    # catches a regression that widens or narrows the headroom
+    # silently. Integer-only so the threshold computation is
+    # overflow-safe.
+    command: "grep -F 'pub const HOST_RAM_HEADROOM_NUM: u64 = 125;' crates/tillandsias-core/src/preflight.rs && grep -F 'pub const HOST_RAM_HEADROOM_DEN: u64 = 100;' crates/tillandsias-core/src/preflight.rs"
+    timeout_ms: 3000
+    expected_behavior: "HOST_RAM_HEADROOM"
+
+  - step: "Req 4: parse_mem_available_mb pure parser for Linux /proc/meminfo"
+    # Linux-native API per spec. Pure string-in / Option<u64>-out so
+    # the parser is reusable across the /proc/meminfo runner and
+    # unit tests. None on missing/unparseable so callers fail-closed.
+    command: "grep -F 'pub fn parse_mem_available_mb(meminfo_output: &str) -> Option<u64>' crates/tillandsias-core/src/preflight.rs"
+    timeout_ms: 3000
+    expected_behavior: "parse_mem_available_mb"
+
+  - step: "Req 4: >=5 unit tests cover the pre-flight RAM gate behaviour"
+    # Covers: ok-at-threshold, refuse-below-threshold, ceil-rounding,
+    # zero-required, max-required-no-panic, parser-canonical,
+    # parser-fallback-none, Display-impl. Pin >=5 by name presence.
+    command: "grep -cE 'fn (check_host_ram|parse_mem_available_mb|preflight_error)_' crates/tillandsias-core/src/preflight.rs | awk '{ if ($1+0 >= 5) print \"ok:\", $1, \"preflight test cases\"; else { print \"FAIL: only\", $1, \"of >=5\"; exit 1 } }'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req 3 --memory ceiling: compute_memory_ceiling_mb pure helper + 256 baseline"
+    # Spec § "--memory ceiling pairs with tmpfs caps" mandates
+    # `--memory = sum(tmpfs caps) + 256`. The baseline literal and
+    # the helper are both pinned: the constant catches a regression
+    # that silently shrinks the working-set headroom; the helper
+    # signature catches a rename of the canonical entry point.
+    command: "grep -F 'pub const FORGE_WORKING_SET_BASELINE_MB: u32 = 256;' crates/tillandsias-core/src/preflight.rs && grep -F 'pub fn compute_memory_ceiling_mb(tmpfs_sizes_mb: impl IntoIterator<Item = u32>) -> u32' crates/tillandsias-core/src/preflight.rs"
+    timeout_ms: 3000
+    expected_behavior: "compute_memory_ceiling_mb"
+
+  - step: "Req 3 tmpfs size parser: parse_tmpfs_size_mb extracts size=Nm"
+    # Pure parser for the canonical forge tmpfs format
+    # `/path:size=Nm,mode=NNNN`. The launch-time composition is
+    # `compute_memory_ceiling_mb(profile.tmpfs_mounts.iter().filter_map
+    # (parse_tmpfs_size_mb))` — pinning the parser signature catches
+    # a rename that would silently break that composition.
+    command: "grep -F 'pub fn parse_tmpfs_size_mb(tmpfs_spec: &str) -> Option<u32>' crates/tillandsias-core/src/preflight.rs"
+    timeout_ms: 3000
+    expected_behavior: "parse_tmpfs_size_mb"
+
+  - step: "Req 3: >=3 unit tests cover compute_memory_ceiling_mb + tmpfs parser"
+    # Covers: spec-example (4 mounts → sum + 256), empty profile →
+    # baseline, saturating-add, parser canonical (4 cases), parser
+    # fallback (5 cases). Pin >=3 by name presence.
+    command: "grep -cE 'fn (compute_memory_ceiling|parse_tmpfs_size_mb)_' crates/tillandsias-core/src/preflight.rs | awk '{ if ($1+0 >= 3) print \"ok:\", $1, \"memory-ceiling test cases\"; else { print \"FAIL: only\", $1, \"of >=3\"; exit 1 } }'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
 observability:
   traces:
     - "@trace spec:forge-hot-cold-split"
