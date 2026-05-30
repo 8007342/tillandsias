@@ -532,8 +532,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:podman-container-handle-shape
-  coverage_ratio: 33
-  last_verified: '2026-05-12'
+  - litmus:podman-container-handle-source-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: podman-idiomatic-patterns
   status: active
   litmus_tests:
