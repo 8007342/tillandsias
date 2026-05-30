@@ -51,6 +51,18 @@ fn main() {
     // do this. Tried AttachConsole(ATTACH_PARENT_PROCESS) — it attaches the
     // binary to the *visible* parent console, bypassing PowerShell's pipe, so
     // captured-output scripts see nothing. Reverted.
+    // --help / -h and --version / -V short-circuit before any of the
+    // diagnostic modes so they always succeed and never touch the WSL
+    // surface (e.g. a customer with a totally broken WSL install can still
+    // ask the binary what it is and how to use it).
+    if std::env::args().any(|a| a == "--help" || a == "-h") {
+        print!("{}", notify_icon::help_text());
+        std::process::exit(0);
+    }
+    if std::env::args().any(|a| a == "--version" || a == "-V") {
+        println!("{}", notify_icon::version_line());
+        std::process::exit(0);
+    }
     if std::env::args().any(|a| a == "--provision-once") {
         std::process::exit(notify_icon::provision_once());
     }

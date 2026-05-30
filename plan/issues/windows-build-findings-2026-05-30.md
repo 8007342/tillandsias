@@ -458,3 +458,93 @@ state vis-à-vis the workspace VERSION pipeline — no defensive overrides,
 the shared canonical source is host-shell::version() + windows-tray's
 own build.rs for the diagnose JSON pipeline. Next eager chunks will
 focus elsewhere.
+
+---
+
+### 20260530T150000Z — ok (--help / --version CLI surface for standard convention parity)
+
+- agent_id: windows-bullo-claude-opus-20260530T150000Z
+- head_sha: 4990f55f (post-merge of linux-next +12 commits — all linux-internal
+  litmus pinning + work-queue + 2 sibling merges; no shared-contract churn)
+- version: 0.2.260528.1
+- build_commit: a963c16d (still — this commit will self-update at next rebuild)
+- build_run_id: 20260530T150000Z
+
+**Change made**: added `--help` / `-h` and `--version` / `-V` CLI modes —
+standard convention every CLI tool supports. Useful for support staff
+diagnosing a broken install (a customer with broken WSL can still ask the
+binary what it is and how to use it; neither mode touches the WSL surface).
+
+Files touched (Windows-owned only):
+- `crates/tillandsias-windows-tray/src/main.rs`: parse `--help`/`-h` +
+  `--version`/`-V` from argv. Both short-circuit BEFORE any of the
+  diagnostic modes (so they never touch WSL) and exit 0.
+- `crates/tillandsias-windows-tray/src/notify_icon.rs`:
+  - New `version_line()` -> `String`. Format:
+    `"tillandsias-tray {WORKSPACE_VERSION} ({BUILD_COMMIT_SHA})"`. Reuses
+    the same env vars baked by `build.rs` for the diagnose surface, so
+    the three places a user can ask "what version am I running?"
+    (`--version`, `--diagnose --json` `version` field, tray menu footer)
+    are guaranteed self-consistent.
+  - New `help_text()` -> `String`. Multi-line usage with all 6 CLI modes
+    documented + exit-code contracts + the GUI-subsystem stdio quirk
+    note (so support scripts know to redirect to a file instead of
+    piping) + pointer to `cheatsheets/runtime/windows-tray-diagnostics.md`
+    for the full diagnose JSON schema.
+  - +2 pin tests: `version_line_uses_workspace_version_and_commit`
+    (asserts the line carries both env-var values, starts with the
+    binary name, and explicitly guards against the `0.1.0 (` regression
+    class) + `help_text_documents_all_cli_modes` (asserts all 8 flag
+    spellings present + exit-code markers + cheatsheet pointer + trailing
+    newline).
+- `openspec/litmus-tests/litmus-windows-tray-diagnose-cli-surface.yaml`:
+  - "all four CLI modes wired in main.rs" → "all six CLI modes wired in
+    main.rs", extended grep to also require `--help` and `--version`.
+  - New step "--help / --version surface tests attached" requires the
+    two new pin tests.
+- `cheatsheets/runtime/windows-tray-diagnostics.md`: added `--help` and
+  `--version` rows to the modes table.
+
+**Build**: 36.58 s release.
+
+**Tests**: 37 + 3 = 40 passed / 5 ignored — +2 over yesterday's 38
+baseline (the two new pin tests). Both new tests PASS green.
+
+**Smoke** (post-install, real hardware):
+- `tillandsias-tray.exe --version`: exit 0,
+  `tillandsias-tray 0.2.260528.1 (a963c16d)` on one line.
+- `tillandsias-tray.exe --help`: exit 0, full multi-line help text
+  starting with the same version line then USAGE + MODES + OUTPUT NOTE +
+  cheatsheet pointer. First 8 lines verified.
+- Both modes short-circuit cleanly — never touch WSL.
+
+**Litmus**:
+- `windows-native-tray`: 7/7 PASS (extended "six modes" + new "--help /
+  --version surface tests" steps green).
+- `cargo fmt`: clean (rustfmt re-wrapped one array literal — applied).
+- `cargo clippy -D warnings`: clean.
+
+**Findings** (free-form):
+- The CLI surface is now feature-complete by standard convention: 6
+  modes (4 diagnostic + help + version) all with documented exit codes,
+  schema-pinned where applicable, cheatsheet-documented, litmus-pinned.
+- The 4-tick workspace-VERSION arc + this `--version` addition mean
+  there's now a single source of truth for "what version am I running?"
+  across `--version`, `--diagnose`, the tray menu footer, and the
+  build.rs-baked binary metadata. All routed through the same
+  `WORKSPACE_VERSION` env var emitted by either windows-tray's build.rs
+  or host-shell's build.rs (and the values agree because both read the
+  same `../../VERSION` file).
+- The help-text pin test's guard against `0.1.0 (` in the version line
+  is a deliberate paranoid check — costs nothing, catches the regression
+  class if the build.rs env var ever stops resolving correctly.
+
+**Cross-host visibility note**: `--help` + `--version` are Windows-tray-
+side conventional additions; no cross-host coordination needed. macOS-
+tray has its own argparse surface and conventions; if its operators ever
+want symmetric short-circuit `--help`/`--version` modes, the
+`version_line()` + `help_text()` factoring is the pattern to mirror.
+
+**Next iteration ask**: N/A (SECTION_KIND=ok). The diagnose CLI surface
++ standard convention CLI modes are now fully wired. Next eager chunk
+will look at other windows-tray surfaces.
