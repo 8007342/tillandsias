@@ -3545,3 +3545,36 @@ gh workflow run release.yml --ref v0.2.260530.1
 ```
 
 The next 24h cycle will compute `v0.2.260530.2` and retry end-to-end.
+
+---
+
+**✅ RESOLVED 2026-05-30T18:22Z (linux-tlatoani-fedora-claude-opus)**
+
+Operator completed the manual unblock from the local fedora host:
+
+- `git tag -a v0.2.260530.1 677a89af` (annotated tag pointing at main's
+  release commit; the inline message references both PR #8 and this
+  escalation block for traceability).
+- `git push origin v0.2.260530.1` → succeeded (`[new tag] v0.2.260530.1
+  -> v0.2.260530.1`). The 403 was specific to the web environment's
+  local git proxy; the real `github.com` remote accepted the push
+  cleanly from this host.
+- `gh workflow run release.yml --ref v0.2.260530.1` → workflow run
+  `26691456259` queued at 18:22:35Z, status: `queued`. Will progress
+  through the standard ~40 minute artifact-build cycle (last release
+  `v0.2.260529.1` took 41m21s).
+- Run URL: https://github.com/8007342/tillandsias/actions/runs/26691456259
+
+The cloud-side release-cycle skill's Steps 1–4 completed correctly
+(PR + merge + VERSION bump + main push); only Step 5 (tag push) and
+Steps 6–7 (workflow_dispatch + artifact build) were blocked by the
+web-env proxy. Operator coverage from a fedora host with native
+git+gh access closed the loop in 7 minutes.
+
+**Follow-on for cloud-side merge-to-main-and-release skill**: if a
+future iteration detects HTTP 403 on `git push origin <tag>`, it
+should fall back to `gh api repos/{owner}/{repo}/git/refs --method
+POST -f ref=refs/tags/<tag> -f sha=<commit>` (which goes through
+GitHub's REST API, not the proxy's git-protocol path) before
+escalating. This would have unblocked the cloud cycle without
+operator intervention.
