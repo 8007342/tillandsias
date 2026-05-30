@@ -1,0 +1,123 @@
+# @trace spec:versioning
+#
+# Drift-protection for the workspace-versioning surfaces. spec:
+# versioning mandates the `VERSION` file at repo root is the single
+# source of truth, that Cargo/Tauri derive their semver from the
+# first 3 components, that tags are immutable, and that the format is
+# 4-part `Major.Minor.YYMMDD.Build` CalVer.
+#
+# Single existing binding `litmus:ephemeral-guarantee` (e2e,
+# last_verified 2026-05-15) covered generic isolation. The
+# versioning machinery — VERSION file shape, build.rs ingestion,
+# pre-push hook guard, bump-version script — was untrapped at
+# source.
+#
+# Builds on 2026-05-30 host-shell + browser-mcp shared
+# `CARGO_PKG_VERSION` → `WORKSPACE_VERSION` fixes (commits 76f93287,
+# 76bb84a2) which made the spec-mandated single-source-of-truth
+# actually fire in practice.
+name: litmus:versioning-shape
+spec: versioning
+phase: pre-build
+description: >
+  Pin the versioning surfaces: VERSION file presence + 4-part
+  Major.Minor.YYMMDD.Build CalVer shape, 3 build.rs files reading
+  ../../VERSION + emitting WORKSPACE_VERSION, bump-version.sh +
+  pre-push-version-guard.sh @trace markers.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains VERSION at repo root
+  - workspace contains crates/tillandsias-{host-shell,browser-mcp,windows-tray}/build.rs
+  - workspace contains scripts/bump-version.sh
+  - workspace contains scripts/hooks/pre-push-version-guard.sh
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "Req: VERSION file exists at repo root with non-empty content"
+    # Spec § "VERSION file as source of truth" Scenario "VERSION
+    # file exists" mandates this. A regression deleting the file or
+    # leaving it empty would silently break every downstream consumer.
+    command: "[ -s VERSION ] && echo \"ok: VERSION file exists and is non-empty\""
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req: VERSION file content is 4-segment dot-delimited"
+    # Spec § "VERSION file is authoritative" mandates a valid 4-part
+    # version. The format per bump-version.sh docblock: `Major.
+    # Minor.YYMMDD.Build`. ERE quantifiers `{6}` don't survive the
+    # YAML→shell un-escape; use `tr | wc -c` to count dots = 3 (=
+    # 4 segments).
+    command: "DOTS=$(tr -cd '.' < VERSION | wc -c); if [ \"$DOTS\" = '3' ]; then echo \"ok: VERSION has 4 segments (3 dots)\"; else echo \"FAIL: VERSION has $DOTS dots, expected 3\"; exit 1; fi"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req: 3 build.rs files read ../../VERSION + emit WORKSPACE_VERSION"
+    # The shared CARGO_PKG_VERSION → WORKSPACE_VERSION migration
+    # (host-shell 76f93287 + browser-mcp 76bb84a2 + windows-tray's
+    # earlier build.rs) made the VERSION file actually fire at
+    # build time. Pin all 3 build.rs files together so a regression
+    # dropping any silently reintroduces the crate-static fallback.
+    command: "for f in crates/tillandsias-host-shell/build.rs crates/tillandsias-browser-mcp/build.rs crates/tillandsias-windows-tray/build.rs; do grep -Fq '../../VERSION' \"$f\" || { echo \"FAIL: $f missing ../../VERSION read\"; exit 1; }; grep -Fq 'WORKSPACE_VERSION' \"$f\" || { echo \"FAIL: $f missing WORKSPACE_VERSION emit\"; exit 1; }; done && echo \"ok: 3 build.rs files read VERSION + emit WORKSPACE_VERSION\""
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req: 3 build.rs files emit rerun-if-changed=../../VERSION (rebuild on bump)"
+    # The cargo rerun-if-changed directive is the rebuild-on-bump
+    # invariant. A regression dropping it would silently leave the
+    # baked-in WORKSPACE_VERSION stale across version bumps until a
+    # clean build was triggered.
+    command: "for f in crates/tillandsias-host-shell/build.rs crates/tillandsias-browser-mcp/build.rs crates/tillandsias-windows-tray/build.rs; do grep -Fq 'cargo:rerun-if-changed=../../VERSION' \"$f\" || { echo \"FAIL: $f missing rerun-if-changed\"; exit 1; }; done && echo \"ok: 3 build.rs files rebuild on VERSION change\""
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req: bump-version.sh entry point + @trace spec:versioning"
+    # Spec § "Monotonic version increments" implies a bump mechanism.
+    # `bump-version.sh` is the canonical entry. Pin both the @trace
+    # marker AND the docblock CalVer description so a regression to
+    # plain semver surfaces fast.
+    command: "grep -F '@trace spec:versioning' scripts/bump-version.sh && grep -F 'Version format: Major.Minor.YYMMDD.Build' scripts/bump-version.sh"
+    timeout_ms: 3000
+    expected_behavior: "Major.Minor.YYMMDD.Build"
+
+  - step: "Req: pre-push-version-guard.sh hook present with @trace + branch guard"
+    # Spec § "Immutable version tags" + "VERSION file authoritative"
+    # together imply guardrails around VERSION-file modifications.
+    # The pre-push hook is the implementation; pin its @trace +
+    # the canonical only-allow-push-to-main message.
+    command: "grep -F '@trace spec:versioning' scripts/hooks/pre-push-version-guard.sh && grep -F 'only allow push to main' scripts/hooks/pre-push-version-guard.sh"
+    timeout_ms: 3000
+    expected_behavior: "main"
+
+  - step: "Req: Cargo workspace.package block present (semver derivation source)"
+    # Spec § "Cargo/Tauri semver derivation" mandates the
+    # workspace.package block (or equivalent) is where Cargo's
+    # 3-part semver lives. A regression removing it would silently
+    # break the `edition.workspace = true` inheritance pattern
+    # across the crates.
+    command: "grep -F '[workspace.package]' Cargo.toml"
+    timeout_ms: 3000
+    expected_behavior: "workspace.package"
+
+observability:
+  traces:
+    - "@trace spec:versioning"
+  expected_log: "VERSION file + 4-part CalVer + 3 build.rs files + bump script + pre-push guard + Cargo workspace.package pinned"
+  log_fields:
+    spec: "versioning"
+    test: "versioning-shape"
+    artifact: "VERSION + crates/{host-shell,browser-mcp,windows-tray}/build.rs + scripts/{bump-version.sh,hooks/pre-push-version-guard.sh} + Cargo.toml"
+
+rollback:
+  on_failure: >
+    A `spec:versioning` source surface drifted. Restore: non-empty
+    `VERSION` file with `Major.Minor.YYMMDD.Build` CalVer (e.g.
+    `0.2.260528.1`); 3 `build.rs` files (host-shell + browser-mcp
+    + windows-tray) each reading `../../VERSION` + emitting
+    `WORKSPACE_VERSION` env var + `cargo:rerun-if-changed=../../
+    VERSION`; `scripts/bump-version.sh` with `@trace spec:versioning`
+    + `Major.Minor.YYMMDD.Build` docblock; `scripts/hooks/pre-push-
+    version-guard.sh` with `@trace spec:versioning` + branch-guard
+    message; `[workspace.package]` block in `Cargo.toml`.
+  command: "ls -la VERSION && grep -nE 'WORKSPACE_VERSION|spec:versioning|workspace.package|VERSION_FILE' VERSION crates/tillandsias-host-shell/build.rs crates/tillandsias-browser-mcp/build.rs crates/tillandsias-windows-tray/build.rs scripts/bump-version.sh scripts/hooks/pre-push-version-guard.sh Cargo.toml 2>/dev/null | head -25"
