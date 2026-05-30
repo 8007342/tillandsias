@@ -51,6 +51,38 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-30T23:43Z — MERGED windows-next (diagnose-windows.ps1 stale readiness + identity-line fix) + osx-next no-op (10+ cycle stall, ~17h+) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `c0f9237` (merge commit; linux-next was at
+  `8e41091b` pre-merge — the 23:21Z work-loop slice +
+  default-image-containerfile-shape litmus + work-queue ledger).
+- observed_sibling_heads: main=`677a89af` · linux-next=`8e41091b` →
+  `c0f9237` · windows-next=`8490a364` · osx-next=`b4a45622`.
+- windows-next: **MERGED + TESTED + PUSHED** — 1 commit
+  `8490a364 fix(scripts): diagnose-windows.ps1 stale readiness +
+  identity-line addition` advancing windows-next. Two files touched
+  (`scripts/diagnose-windows.ps1` + `plan/issues/windows-build-
+  findings-2026-05-30.md`), both in sibling-owned windows-host
+  scope. `./build.sh --check` PASS; `./build.sh --test` PASS
+  (full workspace incl. doc-tests across all crates). Merge commit
+  produced cleanly via `git merge --no-ff --no-commit
+  origin/windows-next` + finalize.
+- osx-next: no-op — zero commits ahead since 06:27Z. **10
+  consecutive cycle stall (~17h 16min)**, deepest stall of session.
+  ESCALATION DEEPLY overdue; orchestrator macOS host ping
+  STRONGLY required — at this duration, host may be offline /
+  agent loop crashed / coordination breakdown. The unchecked
+  ASKs in `plan/issues/tray-convergence-coordination.md` from
+  earlier in the day cannot be acknowledged or actioned without
+  macOS-host engagement.
+- spec-drift: NONE — the merge only touches
+  `scripts/diagnose-windows.ps1` (windows-host script scope) +
+  `plan/issues/windows-build-findings-2026-05-30.md` (windows-host
+  ledger). No openspec/, methodology/, or shared-protocol
+  surfaces affected.
+- ledger push: pending step 7 below.
+
 ### Cycle 2026-05-30T21:43Z — MERGED windows-next (build-windows-tray.ps1 stderr-wrap install bug fix) + osx-next no-op ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
