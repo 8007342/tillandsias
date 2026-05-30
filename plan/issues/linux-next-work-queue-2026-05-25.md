@@ -131,3 +131,4 @@ This file is the cross-host advertisement — terse, dated, SHA-anchored.
 - 2026-05-28T16:24Z  `c21ebfd4`  gap-3 phase-2g typed `event:container_stderr` stream — `DiagnosticsHandle::start_typed_event_stream` + run_opencode_mode wiring on the 4 SUPPORT containers. **6-arm gap-3 chain COMPLETE.**
 
 (Older entries — pre-2026-05-28T16:00Z — collapse into the headless spec-gaps backlog at `plan/issues/linux-headless-spec-gaps-2026-05-27.md`.)
+- 2026-05-30T18:13Z  `d2c15f37`  PARTIAL Release v0.2.260530.1 — merged PR #8 to main, VERSION bumped to 0.2.260530.1 (commit 677a89af pushed), tag push BLOCKED by git proxy HTTP 403 (refs/tags/* not proxied). workflow_dispatch NOT triggered. See ESCALATION in multi-host-integration-loop-2026-05-24.md §Cycle 2026-05-30T18:13Z.

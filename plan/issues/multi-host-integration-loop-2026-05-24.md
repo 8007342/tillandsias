@@ -3511,3 +3511,37 @@ is still open per the same cycle log; Windows host owns that one.)
   - Successfully built and asserted the forge container locally using `./build-forge.sh --assert` (`tillandsias-forge:3f008ca4ecef4dab55d3bcf59fb1a40a6bf0339989871fa0b2e73ccc28254fc6`).
   - Ran workspace checks and tests using `./build.sh --check && ./build.sh --test`. All unit tests, integration tests, and doc-tests passed 100% cleanly across all crates (`tillandsias-headless`, `tillandsias-podman`, `tillandsias-scanner`, `tillandsias-vault-client`, `tillandsias-vm-layer`, `tillandsias-logging`, `tillandsias-metrics`, etc.).
   - Staged and committed improvements, pushing them to `origin/linux-next` as `2b750fd1`.
+
+### Cycle 2026-05-30T18:13Z — ESCALATION: tag push blocked by git proxy (merge-to-main-and-release)
+
+- host_id: linux-web-claude-sonnet (Claude Code on the web)
+- platform: linux (remote execution environment)
+- branch: linux-next → main via PR #8
+
+**ESCALATION: Step 5 tag push failed — git proxy returns HTTP 403 for `refs/tags/*`**
+
+**What completed successfully:**
+- Step 0: Pre-flight — checked out linux-next, clean worktree, up to date with origin/linux-next (HEAD `89115115`)
+- Step 1: Computed version `v0.2.260530.1` (first release of 2026-05-30, no prior v0.2.260530.* tags)
+- Step 2: Opened PR #8 `linux-next → main` (title: "release: v0.2.260530.1 — daily linux-next promotion")
+- Step 3: Merged PR #8 with `--merge` (merge SHA `d2c15f376a30c43cca45835f912386caab57b3dc`); `mergeable_state: clean`, no required checks
+- Step 4: Bumped `VERSION` from `0.2.260529.1` to `0.2.260530.1` on main, committed (`677a89af`), pushed to origin/main successfully
+
+**Where it blocked:**
+- Step 5: `git push origin v0.2.260530.1` → HTTP 403 on the local git proxy (`http://local_proxy@127.0.0.1:45935/git/8007342/tillandsias`). The proxy's fetch refspec is `+refs/heads/*:refs/remotes/origin/*` — tag refs are not proxied. Three retries (0s, 4s, 8s backoff) all returned 403.
+- No MCP GitHub tool is available to create a git tag ref (`mcp__github__*` set does not include `create_tag` or `create_ref`).
+- No `gh` CLI available in this environment.
+- Steps 6–7 (workflow_dispatch trigger + release artifact) are therefore blocked.
+
+**Local tag state:** `v0.2.260530.1` annotated tag exists locally (pointing to `677a89af` on main) but was not pushed.
+
+**Operator action required:**
+```bash
+# On any host with git push access to the real GitHub remote:
+git fetch origin
+git tag -a v0.2.260530.1 677a89af -m "Release 0.2.260530.1 — daily linux-next → main promotion. See PR #8."
+git push origin v0.2.260530.1
+gh workflow run release.yml --ref v0.2.260530.1
+```
+
+The next 24h cycle will compute `v0.2.260530.2` and retry end-to-end.
