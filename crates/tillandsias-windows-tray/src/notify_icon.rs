@@ -372,6 +372,61 @@ fn open_log_file() {
 
 /// Headless diagnostic entry point (`tillandsias-tray --provision-once`): run the
 /// recipe provisioning flow to completion, printing each phase to stdout, and
+/// Single-line `--version` / `-V` output. Format: `tillandsias-tray <version>
+/// (<short-commit>)`. Reuses the same `WORKSPACE_VERSION` + `BUILD_COMMIT_SHA`
+/// env vars `build.rs` bakes for the diagnose surface — so the three places a
+/// user can ask "what version am I running?" (`--version`, `--diagnose --json
+/// version` field, tray menu footer) all return the same string built from
+/// the same source. Pinned by `version_line_uses_workspace_version_and_commit`.
+pub fn version_line() -> String {
+    format!(
+        "tillandsias-tray {} ({})",
+        env!("WORKSPACE_VERSION"),
+        env!("BUILD_COMMIT_SHA")
+    )
+}
+
+/// Multi-line `--help` / `-h` text. Documents every CLI mode, its exit-code
+/// contract, the GUI-subsystem stdio quirk (so support scripts know to
+/// redirect instead of pipe), and points the reader at the canonical
+/// diagnostic flow. Pinned by `help_text_documents_all_cli_modes` — a
+/// future mode that gets added without its `--help` entry surfaces here
+/// pre-build instead of as a documentation-stale incident in the field.
+///
+/// Trailing newline so `print!(help_text())` matches stdio convention.
+pub fn help_text() -> String {
+    format!(
+        "tillandsias-tray {version} ({commit})\n\
+         A native Win32 NotifyIcon tray for Tillandsias on Windows.\n\
+         \n\
+         USAGE:\n    \
+            tillandsias-tray.exe [MODE]\n\
+         \n\
+         MODES:\n    \
+            (no flags)              Launch the interactive tray (GUI subsystem).\n    \
+            --provision-once        Provision the WSL utility VM to Ready, print\n                            \
+            progress, exit. Exit: 0 = Ready, 1 = failed.\n    \
+            --status-once [--json]  Connect to the live control wire, print VmStatus.\n                            \
+            Exit: 0 = Ready, 2 = reachable-not-Ready, 1 = unreachable.\n    \
+            --diagnose [--json]     Bundled health report (10+ keys). Exit: 0 healthy,\n                            \
+            2 degraded, 1 hard fail.\n    \
+            --help, -h              Print this help and exit 0.\n    \
+            --version, -V           Print version + build commit and exit 0.\n\
+         \n\
+         OUTPUT NOTE:\n    \
+            The tray is a GUI-subsystem binary; PowerShell pipe capture of stdout\n    \
+            is unreliable (Rust treats a detached stdout as BrokenPipe and discards).\n    \
+            Support scripts MUST redirect to a file: `tillandsias-tray.exe \\\n        \
+                --diagnose --json > out.json 2>nul`\n    \
+            and branch on the exit code rather than the captured output.\n\
+         \n\
+         See cheatsheets/runtime/windows-tray-diagnostics.md for the full\n\
+         diagnose JSON schema + the canonical PowerShell consumer pattern.\n",
+        version = env!("WORKSPACE_VERSION"),
+        commit = env!("BUILD_COMMIT_SHA"),
+    )
+}
+
 /// return a process exit code (0 = VM reached Ready over the control wire, 1 =
 /// failed). A release tray is a GUI-subsystem binary with no console, so this
 /// gives an observable, scriptable end-to-end provision run for CI smoke and the
@@ -1980,6 +2035,75 @@ mod tests {
             .expect("recent_log_tail array");
         assert_eq!(tail.len(), 2);
         assert_eq!(tail[0], serde_json::Value::String("line one".to_string()));
+    }
+
+    /// `--version` / `-V` must report the same WORKSPACE_VERSION string
+    /// the diagnose JSON's `version` field uses, plus the build_commit
+    /// so an operator who runs `--version` then `--diagnose --json` sees
+    /// the same identifier in both. Pinned because the three places a
+    /// user can ask "what version am I running?" should be self-consistent.
+    #[test]
+    fn version_line_uses_workspace_version_and_commit() {
+        let line = version_line();
+        assert!(
+            line.contains(env!("WORKSPACE_VERSION")),
+            "version line missing WORKSPACE_VERSION: {line}"
+        );
+        assert!(
+            line.contains(env!("BUILD_COMMIT_SHA")),
+            "version line missing BUILD_COMMIT_SHA: {line}"
+        );
+        assert!(
+            line.starts_with("tillandsias-tray "),
+            "version line should start with binary name: {line}"
+        );
+        // Guard against the static-Cargo.toml regression class.
+        assert!(
+            !line.contains("0.1.0 ("),
+            "version line still reporting CARGO_PKG_VERSION shape: {line}"
+        );
+    }
+
+    /// `--help` / `-h` must document every CLI mode by its exact flag name.
+    /// A future mode added without a help entry surfaces here pre-build
+    /// rather than being discovered field-side as undocumented.
+    #[test]
+    fn help_text_documents_all_cli_modes() {
+        let text = help_text();
+        for flag in [
+            "--provision-once",
+            "--status-once",
+            "--diagnose",
+            "--json",
+            "--help",
+            "-h",
+            "--version",
+            "-V",
+        ] {
+            assert!(
+                text.contains(flag),
+                "help text missing CLI flag {flag}:\n{text}"
+            );
+        }
+        // Exit-code contract is part of the CLI promise — pin it.
+        for exit_code_marker in [
+            "Exit: 0",
+            "1 = failed",
+            "2 = reachable-not-Ready",
+            "2 degraded",
+        ] {
+            assert!(
+                text.contains(exit_code_marker),
+                "help text missing exit-code marker {exit_code_marker}"
+            );
+        }
+        // Pointer to the canonical cheatsheet.
+        assert!(
+            text.contains("cheatsheets/runtime/windows-tray-diagnostics.md"),
+            "help text missing cheatsheet pointer"
+        );
+        // Trailing newline so consumers can `print!(help_text())`.
+        assert!(text.ends_with('\n'), "help text missing trailing newline");
     }
 
     fn baseline_status_report() -> StatusReport {

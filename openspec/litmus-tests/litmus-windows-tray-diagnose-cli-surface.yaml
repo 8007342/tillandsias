@@ -27,8 +27,8 @@ preconditions:
   - shell utilities (grep) are available in PATH
 
 critical_path:
-  - step: "all four CLI modes wired in main.rs"
-    command: "grep -Fe '--provision-once' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--status-once' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--diagnose' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--json' crates/tillandsias-windows-tray/src/main.rs"
+  - step: "all six CLI modes wired in main.rs"
+    command: "grep -Fe '--provision-once' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--status-once' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--diagnose' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--json' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--help' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--version' crates/tillandsias-windows-tray/src/main.rs"
     expected_behavior: "grep succeeds"
     timeout_ms: 3000
 
@@ -44,6 +44,11 @@ critical_path:
 
   - step: "exit-code contract tests attached"
     command: "grep -F 'fn exit_code_provisioned_zero_degraded_two' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn status_once_exit_codes' crates/tillandsias-windows-tray/src/notify_icon.rs"
+    expected_behavior: "grep succeeds"
+    timeout_ms: 3000
+
+  - step: "--help / --version surface tests attached"
+    command: "grep -F 'fn version_line_uses_workspace_version_and_commit' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn help_text_documents_all_cli_modes' crates/tillandsias-windows-tray/src/notify_icon.rs"
     expected_behavior: "grep succeeds"
     timeout_ms: 3000
 
