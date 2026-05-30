@@ -211,3 +211,47 @@ trace: .claude/skills/build-macos-tray/SKILL.md (the skill that wrote this)
 **Cross-host visibility note**: N/A.
 
 **Next iteration ask**: N/A.
+
+---
+
+### 20260530T002433Z — ok
+
+- agent_id: macos-Tlatoani-MacBook-Air-claude-opus-20260530T002433Z
+- head_sha: 7f9c8cc0
+- version: 0.2.260528.1
+- build_run_id: 20260530T002433Z
+
+**Build**: 0.38 s cache-hit; tarball sha256 `1295e7c40ed11951b3da882251a8b5bde9382346165042e6489c4d76496873ed`; codesign pass; entitlement present.
+
+**Autonomous smoke**: DIAG_EXIT=2, 13 keys, release_tag=v0.2.260526.1, alive-after-3s, clean-SIGTERM-exit. stderr `diff` vs 20260529T232433Z: **identical**.
+
+**Install**: backup=yes; post-install 13 keys (schema match).
+
+**Findings**:
+- 6th `ok` run, no signal delta vs prior 4 runs. Logging the cross-day UTC rollover: this run is the first with `BUILD_DATE_UTC=2026-05-30` per the skill's pre-flight, but `BUILD_RUN_ID` started at 00:24 UTC during what is still **2026-05-29 local PDT** for the host. Decision: keep this section in `macos-build-findings-2026-05-29.md` (matches the local-day grouping of every other section today). Skill text says "one file per UTC day" — strict-UTC interpretation would split this section into a new `macos-build-findings-2026-05-30.md`. **Flagging as a skill ambiguity for §8 iteration**: clarify whether the file rollover follows UTC or local date.
+- linux-next divergence at push time: `origin/linux-next` is `e00de628` (3 new commits since last run, total ~25 ahead). `osx-next:linux-next` push still skipped.
+
+**Cross-host visibility note**: N/A.
+
+**Next iteration ask**: N/A.
+
+---
+
+### 20260530T012435Z — ok
+
+- agent_id: macos-Tlatoani-MacBook-Air-claude-opus-20260530T012435Z
+- head_sha: b39eb46c
+- version: 0.2.260528.1
+- build_run_id: 20260530T012435Z
+
+**Build**: cache-hit; tarball sha256 `ba2fa9062b430a20259d0348f8ecebd8f9b9fdd679f88b1644607c6565503745`; codesign pass; entitlement present.
+
+**Autonomous smoke**: DIAG_EXIT=2, 13 keys, alive-after-3s, clean-SIGTERM-exit. stderr identical to prior run.
+
+**Install**: backup=yes; post-install 13 keys.
+
+**Findings**:
+- 7th `ok` run. No signal delta. Per skill §8 "if `SECTION_KIND=ok` for several days in a row, the skill is doing its job — leave alone" — applying the spirit of that to back-to-back same-session runs by keeping this section minimal. linux-next divergence at push time: ~28 commits.
+
+**Cross-host visibility note**: N/A.
+**Next iteration ask**: N/A.
