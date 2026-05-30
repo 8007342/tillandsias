@@ -51,6 +51,66 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-30T11:43Z — MERGED windows-next (tray menu VERSION footer fix) + osx-next no-op ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `da893ba` (merge commit; linux-next was at
+  `4f627563` pre-merge).
+- observed_sibling_heads: main=`ea28d773` · linux-next=`4f627563`
+  (pre-merge) · windows-next=`6eb026e0` · osx-next=`6b2eb941`
+  (unchanged for 4+ cycles — macOS hourly cron appears stalled).
+- **windows-next: merged + tested + pushed** — substantive 1-commit
+  delta `6eb026e0 feat(windows-tray): inject workspace VERSION into
+  tray menu footer`. Tray menu footer was rendering `v0.1.0` (sourced
+  from `host-shell::version() → env!("CARGO_PKG_VERSION")` against
+  `tillandsias-host-shell/Cargo.toml`'s static `0.1.0`) instead of
+  the workspace `0.2.260528.1`. Same root cause as the prior
+  `--diagnose --json` version fix but in user-visible UX. Contained
+  windows-side fix: new `fresh_menu_state()` wraps `MenuState::
+  initial()` and overrides `state.version` with `env!("WORKSPACE_
+  VERSION")` (reuses the env var the windows-tray build.rs already
+  emits). Mechanical replacement at 12 callsites + new pin test
+  `fresh_menu_state_footer_reports_workspace_version`. Smoke
+  verified on windows-bullo (39 tests passed / 5 ignored).
+- **osx-next: no-op** — empty range, unchanged for 4+ cycles since
+  06:27Z. macOS hourly build-findings cron appears stalled. Not
+  yet blocking integration but worth a coord ping if it persists.
+- **spec-drift via cross-host ASK** (NEW): windows-host appended
+  58 lines to `plan/issues/tray-convergence-coordination.md` flagging
+  that the menu-version-footer bug exists on **all three** trays
+  today because `host-shell::version()` is hardcoded to read the
+  crate-static `CARGO_PKG_VERSION` (`0.1.0`) instead of the
+  workspace VERSION. The fix is contained on windows-side; the ASK
+  is for shared-host-shell update (the proper structural fix) +
+  macOS-host to mirror the same tray-side override. Linux note:
+  linux tray (`crates/tillandsias-headless/src/tray/mod.rs`) does
+  NOT call `MenuState::initial` or `host-shell::version()` directly
+  — it uses StatusNotifierItem/DBus rendering. So linux is NOT
+  affected by this specific bug, BUT linux's own version-source
+  path should be audited for the same anti-pattern (`env!("CARGO_
+  PKG_VERSION")` against a crate that isn't the workspace root).
+  Recommended follow-on: a linux-side audit slice to verify the
+  linux tray menu / DBusMenu rendering doesn't have its own
+  `CARGO_PKG_VERSION` divergence.
+- merge stats: 3 files changed, 215 insertions(+), 12 deletions(-).
+  Windows-tray crate (sibling-owned scope) + 2 plan/ docs.
+- verification: `./build.sh --check` + `./build.sh --test` passed.
+- linux work this 2h window: 3 spec-gap-fill slices + 1 docs
+  reconciliation slice — `project-summarizers` 33→75 at 10:21Z (6
+  summarizer scripts), `no-terminal-flicker` 33→67 at 10:51Z + 3rd
+  spec drift flagged (`TrayStatusStage` enum 11-variant vs spec's
+  5-variant), then at 11:21Z **consolidated 3-spec reconciliation
+  slice** clearing the queued drift backlog (proxy-container splice/
+  bump + reverse-proxy-internal HTTPS/HTTP + no-terminal-flicker
+  stage-enum) via focused `⚠ Implementation reality (as of 2026-
+  05-30):` blocks alongside divergent text. no-terminal-flicker
+  binding coverage 67→75. Full instant suite 78/78 → 79/79 across
+  the window — net +2 new litmus tests + 3 spec narrative edits.
+- recommended next: linux-side audit slice for the `CARGO_PKG_
+  VERSION` anti-pattern (see windows-host's ASK above). Or
+  continue 33% backlog. Or pursue `forge-hot-cold-split` Req 1
+  `/home/forge/src` tmpfs mount.
+
 ### Cycle 2026-05-30T09:43Z — MERGED windows-next (--status-once --json parity) + osx-next no-op ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
