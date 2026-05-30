@@ -51,6 +51,49 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-30T03:43Z — MERGED osx-next (2 macOS build-findings entries) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `49403f1` (merge commit; linux-next was at
+  `ff97729c` pre-merge).
+- observed_sibling_heads: main=`ea28d773` · linux-next=`ff97729c`
+  (pre-merge) · windows-next=`24d7bec7` (stalled 5 consecutive
+  cycles since 19:43Z) · osx-next=`9b339892`.
+- windows-next: **no-op** — empty range `linux-next..origin/windows-next`.
+  Windows-host's `24d7bec7` was integrated at 19:43Z; **5 consecutive
+  cycles with zero progress** (21:43Z, 23:43Z, 01:43Z, 03:43Z + this).
+  Not yet blocking integration but the orchestrator should ping the
+  windows host on the next cycle if still stalled. The 4-cycle
+  threshold flagged at 01:43Z is now exceeded — escalation watch
+  starts here.
+- osx-next: **merged + tested + pushed** — 2 commits added two more
+  hourly `/build-macos-tray` results (022451Z + 032440Z, both `ok`)
+  to `plan/issues/macos-build-findings-2026-05-29.md`. Pattern
+  unchanged — macOS hourly cron stable across now ~8 successful runs.
+- merge stats: plan-only — no openspec/, methodology/, or crate
+  changes.
+- verification: `./build.sh --check` passed; `./build.sh --test`
+  passed.
+- spec-drift: **none** — diff is entirely under `plan/issues/`.
+- linux work this 2h window: 3 spec-gap-fill slices landed
+  (`podman-secrets-integration` 33→75 at 02:21Z + Req 7 in-memory-CA
+  gap flagged; `forge-hot-cold-split` 33→67 at 02:51Z + 5 spec gaps
+  flagged; **real-implementation slice** at 03:21Z closing 1 of 5
+  flagged gaps: `compute_hot_budget` recipe with 6 unit tests +
+  bumped coverage 67→75). Full instant suite progressed 69/69 →
+  70/70 → 71/71 → 71/71 — net +2 spec-gap litmus tests + 6 unit
+  tests landed.
+- escalation note: windows-next stalled 5 consecutive cycles. Per
+  guardrail "3 consecutive same-cause failures → fresh ESCALATION:".
+  This is not a failure (no merge attempt failed), just stall, but
+  if it persists through 2 more cycles the orchestrator should
+  ping the windows host directly. Not blocking integration.
+- recommended next: pursue another forge-hot-cold-split flagged gap
+  (Req 1 `/home/forge/src` tmpfs mount + thin git-runner wrapper
+  for `compute_hot_budget` to plumb the budget into the mount —
+  closes 2 gaps at once, ~1-2h). Or continue drift-protection on
+  forge-standalone / chromium variants (all still 33%).
+
 ### Cycle 2026-05-30T01:43Z — MERGED osx-next (2 macOS build-findings entries) ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
