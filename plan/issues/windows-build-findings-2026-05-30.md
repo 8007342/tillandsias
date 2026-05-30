@@ -329,3 +329,132 @@ correct footer once host-shell::version() returns workspace VERSION).
 related fixes now landed in three ticks: (1) `--diagnose --json`
 `version` field, (2) `build_commit` triage field, (3) tray menu footer.
 The visible UX impact for Windows users is now correct end-to-end.
+
+---
+
+### 20260530T130000Z — ok (cleanup: deleted windows-side override after shared host-shell fix landed)
+
+- agent_id: windows-bullo-claude-opus-20260530T130000Z
+- head_sha: 47a31a07 (post-merge of linux-next +10 commits)
+- version: 0.2.260528.1 (workspace VERSION — now sourced from host-shell's
+  build.rs not just windows-tray's; either path produces the same value)
+- build_commit: a963c16d (still — new commit will self-update)
+- build_run_id: 20260530T130000Z
+
+**Context**: linux host acted on the 2026-05-30T11:00Z "ASK shared host-shell
++ macOS host" coordination note landed earlier today, and implemented
+**fix option #1** (the proper shared-crate fix) at commit `76f93287
+fix(host-shell): version() returns workspace VERSION not crate-static 0.1.0`:
+
+- New `crates/tillandsias-host-shell/build.rs` reads `../../VERSION`,
+  trims, emits `cargo:rustc-env=WORKSPACE_VERSION=...` + rerun-if-changed
+  — mirror of the windows-tray's `build.rs` shape exactly.
+- `crates/tillandsias-host-shell/src/lib.rs::version()`: swapped
+  `env!("CARGO_PKG_VERSION")` → `env!("WORKSPACE_VERSION")`.
+- New host-shell pin test
+  `version_reports_workspace_release_not_crate_static_zero_dot_one`
+  asserts `version() != "0.1.0"` AND the returned string has ≥3
+  dot-segments (workspace VERSION shape `0.MAJOR.YYMMDD.SEQ`; a
+  2-segment "X.Y" would be the unmistakable signature of a regression).
+
+linux's commit message acknowledges:
+> "the windows-tray's `fresh_menu_state()` override (commit 6eb026e0)
+> becomes structurally redundant — it can stay as defence-in-depth but
+> no longer required for correct behaviour."
+
+linux **also** caught a parallel divergence in `tillandsias-browser-mcp`
+at commit `76bb84a2 fix(browser-mcp): serverInfo.version reports
+workspace VERSION not 0.1.170` — same root cause, same fix shape (new
+browser-mcp build.rs). That JSON-RPC `serverInfo.version` is what an
+AI agent connecting to the MCP server reads as the protocol's version,
+so worth fixing for cross-version-discoverability. Not a windows-tray
+concern but worth knowing about for cross-host visibility.
+
+**Change made (this section)**: removed the now-redundant windows-side
+`fresh_menu_state` override.
+
+Files touched:
+- `crates/tillandsias-windows-tray/src/notify_icon.rs`:
+  - Deleted the `fresh_menu_state()` helper (15 lines).
+  - 12 mechanical reverts: `fresh_menu_state` →
+    `MenuState::initial` across all production + test callsites.
+    Same `get_or_insert_with` accessor pattern as before
+    (function-pointer signature unchanged).
+  - Deleted the `fresh_menu_state_footer_reports_workspace_version`
+    pin test (24 lines) — superseded by the shared host-shell pin
+    test `version_reports_workspace_release_not_crate_static_zero_dot_one`
+    which catches the same regression at the source.
+
+This is the kind of "small mechanical refactor that the cleanest cleanup
+would later **delete** the override once fix #1 lands" mentioned in
+the prior section's findings — fix #1 landed, override deleted.
+windows-tray's `build.rs` still emits its own `WORKSPACE_VERSION` env
+var for `DiagnoseReport.version` + `--diagnose` print_human + `Build
+commit` baking; that pipeline is independent of host-shell's and stays.
+
+**Build**: 38.57 s release (the merge re-touched host-shell + windows-tray
+deps).
+
+**Tests**: 35 + 3 = 38 passed / 5 ignored — net −1 (the deleted override
+test). The remaining 38 tests cover the surface that's still
+windows-tray-owned (DiagnoseReport schema, exit-code matrices,
+StatusReport schema, hvsocket, etc.).
+
+**Smoke** (post-install, real hardware):
+- `--diagnose --json` exit: 2 (expected steady state)
+- `version`: `0.2.260528.1` (unchanged — windows-tray's own build.rs
+  WORKSPACE_VERSION pipeline still feeds the diagnose surface, separate
+  from host-shell's; either path produces the same value)
+- `build_commit`: `a963c16d` (last commit in this build; new commit
+  will self-update at next cron fire)
+- The tray menu footer (live GUI; not in `--diagnose`) will now render
+  `v0.2.260528.1 — By Tlatoāni` via `host-shell::version()` directly —
+  no more windows-tray override layer.
+
+**Litmus**:
+- `windows-native-tray`: 7/7 PASS (no litmus YAML changes; the deleted
+  pin test was internal-only).
+- Shared `tillandsias-host-shell` test
+  `version_reports_workspace_release_not_crate_static_zero_dot_one`
+  also PASSes when invoked directly (`cargo test -p
+  tillandsias-host-shell --release version_reports_workspace`).
+- `cargo fmt -p tillandsias-windows-tray -- --check`: clean.
+- `cargo clippy -p tillandsias-windows-tray --release --no-deps -D warnings`:
+  clean.
+
+**Findings** (free-form):
+- The 4-tick arc converged cleanly: divergence flagged (2026-05-29
+  finding) → contained windows-tray fix #1 of 3 (diagnose JSON) →
+  contained windows-tray fix #2 (build_commit triage) → contained
+  windows-tray fix #3 (menu footer override) + coordination ASK to
+  host-shell-owner → linux acts on ASK with shared-crate fix → windows
+  removes the now-redundant override. Net result is a cleaner codebase
+  + correct UX on all three trays (the shared fix benefits Linux's
+  provisioning fetch path + macOS-tray menu footer + Windows-tray menu
+  footer simultaneously).
+- The shared host-shell fix also incidentally fixes a runtime bug I
+  hadn't realized: linux's commit message notes the
+  `ensure_vm_provisioned` path was silently asking the GitHub release
+  API for `v0.1.0` of `tillandsias-linux-x86_64` (a tag that doesn't
+  exist). That would have 404'd on a fresh-host first-time provision.
+  This was potentially user-visible on Windows too, though our existing
+  recipe-rootfs path bypasses it via the pinned `RECIPE_RELEASE_TAG`
+  const (`v0.2.260526.1`). Worth knowing.
+
+**Cross-host visibility note**: 4-tick arc complete; no open ASKs from
+windows-host today. The
+`plan/issues/tray-convergence-coordination.md` file's
+`2026-05-30T11:00Z ASK` block has been marked RESOLVED by linux host
+(`bc6d53b9`). The earlier `2026-05-30T05:30Z ASK` (macOS-side
+diagnose-version mirror) is technically still open from macOS's
+perspective — but the host-shell fix means macOS's `MenuState.version`
+also reads workspace VERSION now, so the practical user-visible impact
+is already addressed. macOS-tray's `--diagnose --json` `version` field
+would still report crate-static `0.1.0` until macOS does its own
+diagnose.rs swap, but that's a smaller cosmetic-only delta.
+
+**Next iteration ask**: N/A. The windows-tray crate is now in a clean
+state vis-à-vis the workspace VERSION pipeline — no defensive overrides,
+the shared canonical source is host-shell::version() + windows-tray's
+own build.rs for the diagnose JSON pipeline. Next eager chunks will
+focus elsewhere.

@@ -82,21 +82,6 @@ thread_local! {
 /// Shared state accessible from any thread.
 static MENU_STATE: Mutex<Option<MenuState>> = Mutex::new(None);
 
-/// Wraps `fresh_menu_state()` to inject the workspace VERSION into the
-/// version footer ("vX.Y.Z — By Tlatoāni" — see menu_state::build_footer).
-/// Without this override the tray's footer renders the static
-/// `tillandsias-host-shell` `Cargo.toml` `version = "0.1.0"` instead of the
-/// release tag the user actually installed. Same root cause + same fix
-/// shape as the prior `--diagnose --json` `version`-field workspace-VERSION
-/// fix; uses the same `WORKSPACE_VERSION` env var the windows-tray's
-/// build.rs already emits. Filed coordination note for the macOS host /
-/// host-shell shared crate to make this the default everywhere.
-fn fresh_menu_state() -> MenuState {
-    let mut state = MenuState::initial();
-    state.version = env!("WORKSPACE_VERSION").to_string();
-    state
-}
-
 /// Progress sink the WSL provisioning pipeline writes to. Each report
 /// updates the cached `MenuState.status_text` and pokes the window so the
 /// next paint reflects it.
@@ -137,7 +122,7 @@ fn update_status_text(text: &str, hwnd: HWND) {
         if let Some(state) = guard.as_mut() {
             state.status_text = text.to_string();
         } else {
-            let mut state = fresh_menu_state();
+            let mut state = MenuState::initial();
             state.status_text = text.to_string();
             *guard = Some(state);
         }
@@ -236,7 +221,7 @@ pub fn run() -> ! {
         // Initialise menu state; the WSL lifecycle task will mutate it.
         {
             let mut guard = MENU_STATE.lock().unwrap();
-            *guard = Some(fresh_menu_state());
+            *guard = Some(MenuState::initial());
         }
 
         // Host-side project discovery: scan %USERPROFILE%\src and keep the
@@ -649,7 +634,7 @@ pub const WIRE_UNREACHABLE_CHIP_TEXT: &str = "\u{1F534} Wire unreachable";
 /// naturally.
 fn mark_wire_unreachable(hwnd: HWND) {
     if let Ok(mut guard) = MENU_STATE.lock() {
-        guard.get_or_insert_with(fresh_menu_state).podman_ready = false;
+        guard.get_or_insert_with(MenuState::initial).podman_ready = false;
     }
     update_status_text(WIRE_UNREACHABLE_CHIP_TEXT, hwnd);
 }
@@ -740,7 +725,7 @@ async fn refresh_vm_status(hwnd: HWND) {
             ..
         } => {
             if let Ok(mut guard) = MENU_STATE.lock() {
-                guard.get_or_insert_with(fresh_menu_state).podman_ready = podman_ready;
+                guard.get_or_insert_with(MenuState::initial).podman_ready = podman_ready;
             }
             // status_text + tooltip (own MENU_STATE lock inside). Appends the
             // headless's `last_event` when present so the chip reflects in-VM
@@ -825,7 +810,7 @@ async fn refresh_local_projects(_hwnd: HWND) {
             let mapped: Vec<ProjectEntry> = entries.iter().map(local_entry_to_menu).collect();
             let n = mapped.len();
             if let Ok(mut guard) = MENU_STATE.lock() {
-                guard.get_or_insert_with(fresh_menu_state).local_projects = mapped;
+                guard.get_or_insert_with(MenuState::initial).local_projects = mapped;
             }
             tracing::debug!(count = n, "local projects refreshed (VM-side)");
         }
@@ -966,7 +951,7 @@ async fn refresh_cloud_projects(_hwnd: HWND) {
             let mapped: Vec<ProjectEntry> = projects.iter().map(cloud_entry_to_menu).collect();
             let n = mapped.len();
             if let Ok(mut guard) = MENU_STATE.lock() {
-                guard.get_or_insert_with(fresh_menu_state).cloud_projects = mapped;
+                guard.get_or_insert_with(MenuState::initial).cloud_projects = mapped;
             }
             tracing::debug!(count = n, "cloud projects refreshed");
         }
@@ -1621,7 +1606,7 @@ unsafe fn handle_menu_command(hwnd: HWND, cmd_id: u16) {
 /// Apply a host-side project scan event to the shared menu state.
 fn apply_project_event(ev: ProjectEvent) {
     if let Ok(mut guard) = MENU_STATE.lock() {
-        let state = guard.get_or_insert_with(fresh_menu_state);
+        let state = guard.get_or_insert_with(MenuState::initial);
         apply_project_event_to(state, &ev);
     }
 }
@@ -1677,7 +1662,7 @@ fn dispatch_action(hwnd: HWND, action: MenuAction) {
         // checkmark moves on the next paint.
         MenuAction::SelectAgent(agent) => {
             if let Ok(mut guard) = MENU_STATE.lock() {
-                let state = guard.get_or_insert_with(fresh_menu_state);
+                let state = guard.get_or_insert_with(MenuState::initial);
                 if apply_menu_action_state(state, &action) {
                     tracing::info!(?agent, "selected agent updated");
                 }
@@ -1726,7 +1711,7 @@ fn selected_agent() -> SelectedAgent {
         .lock()
         .ok()
         .and_then(|g| g.as_ref().map(|s| s.selected_agent))
-        .unwrap_or_else(|| fresh_menu_state().selected_agent)
+        .unwrap_or_else(|| MenuState::initial().selected_agent)
 }
 
 /// Open a PTY-opening menu action (Attach / Maintain / GitHub-login) in a native
@@ -1997,31 +1982,6 @@ mod tests {
         assert_eq!(tail[0], serde_json::Value::String("line one".to_string()));
     }
 
-    /// The tray menu's version footer text ("v<VERSION> — By Tlatoāni") is
-    /// fed from `MenuState.version`. `tillandsias-host-shell::MenuState::initial`
-    /// fills that from `env!("CARGO_PKG_VERSION")` (the host-shell crate's
-    /// static `Cargo.toml` "0.1.0"), so without our override the footer
-    /// renders "v0.1.0 — …" instead of the release tag the user actually
-    /// installed. `fresh_menu_state()` overrides the field with the
-    /// workspace VERSION baked at build time (`WORKSPACE_VERSION` from
-    /// `build.rs`). Pin so a future refactor that removes the override
-    /// surfaces here pre-build instead of as a UX regression.
-    #[test]
-    fn fresh_menu_state_footer_reports_workspace_version() {
-        let state = fresh_menu_state();
-        assert_eq!(
-            state.version,
-            env!("WORKSPACE_VERSION"),
-            "fresh_menu_state must inject WORKSPACE_VERSION (was {})",
-            state.version
-        );
-        // Sanity: not the crate-static placeholder.
-        assert_ne!(
-            state.version, "0.1.0",
-            "footer is still rendering CARGO_PKG_VERSION — workspace override regressed"
-        );
-    }
-
     fn baseline_status_report() -> StatusReport {
         StatusReport {
             reachable: false,
@@ -2289,7 +2249,7 @@ mod tests {
 
     #[test]
     fn project_added_inserts_sorted_and_deduped() {
-        let mut state = fresh_menu_state();
+        let mut state = MenuState::initial();
         apply_project_event_to(&mut state, &added("C:\\Users\\u\\src\\zebra"));
         apply_project_event_to(&mut state, &added("C:\\Users\\u\\src\\apple"));
         // Duplicate basename is ignored.
@@ -2307,7 +2267,7 @@ mod tests {
     #[test]
     fn select_agent_updates_state_idempotently() {
         use tillandsias_host_shell::menu_state::SelectedAgent;
-        let mut state = fresh_menu_state();
+        let mut state = MenuState::initial();
         assert_eq!(state.selected_agent, SelectedAgent::Claude); // initial
 
         // Selecting a different agent mutates state.
@@ -2331,7 +2291,7 @@ mod tests {
 
     #[test]
     fn project_removed_drops_entry() {
-        let mut state = fresh_menu_state();
+        let mut state = MenuState::initial();
         apply_project_event_to(&mut state, &added("C:\\Users\\u\\src\\keep"));
         apply_project_event_to(&mut state, &added("C:\\Users\\u\\src\\drop"));
         apply_project_event_to(
