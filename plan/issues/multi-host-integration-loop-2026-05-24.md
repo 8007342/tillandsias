@@ -51,6 +51,58 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-30T09:43Z — MERGED windows-next (--status-once --json parity) + osx-next no-op ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `866c337` (merge commit; linux-next was at
+  `faf2f19b` pre-merge).
+- observed_sibling_heads: main=`ea28d773` · linux-next=`faf2f19b`
+  (pre-merge) · windows-next=`13539385` · osx-next=`6b2eb941`
+  (unchanged since 07:43Z cycle — no new commits in 2 hours).
+- **windows-next: merged + tested + pushed** — substantive 1-commit
+  delta `13539385 feat(windows-tray): --status-once --json parity
+  for support tooling`. Adds JSON variant to `--status-once` mirroring
+  the existing `--diagnose --json` UX with pre-computed `exit_code`
+  field so support consumers don't re-derive 0/2/1 from phase +
+  reachable. New `StatusReport` struct (7 fields: reachable,
+  wire_version: Option<u16>, phase, podman_ready, last_event, error,
+  exit_code). `status_exit_code` pure helper for the 0/2/1 matrix.
+  +2 schema-pin unit tests (`status_once_json_keys_pinned` +
+  `status_once_exit_codes`). 38 windows-tray tests passing.
+- **osx-next: no-op** — empty range `linux-next..origin/osx-next`.
+  macOS hourly build-findings cron appears to have not fired this
+  cycle (last entry at 06:27Z merged at 07:43Z cron; nothing new
+  since). Not yet a stall — wait 2 more cycles before flagging.
+- **spec-drift via litmus update**: windows-host edited
+  `openspec/litmus-tests/litmus-windows-tray-diagnose-cli-surface.
+  yaml` to require the 2 new test names in its pin predicates.
+  This is appropriate — the litmus is windows-tray-specific and
+  owned by the windows host; the edit keeps the litmus in lockstep
+  with the implementation changes. No linux action.
+- merge stats: 5 files changed, 338 insertions(+), 37 deletions(-).
+  Windows-tray crate (sibling-owned scope) + windows-tray litmus +
+  windows cheatsheet + windows build-findings plan doc.
+- verification: `./build.sh --check` + `./build.sh --test` passed.
+- linux work this 2h window: 3 spec-gap-fill slices landed —
+  `opencode-web-session-otp` 30→75 at 08:21Z (29-annotation otp
+  crate pin), `proxy-container` 33→75 at 08:51Z + flagged
+  splice-all-vs-bump-all spec drift, `reverse-proxy-internal` 33→75
+  at 09:21Z + flagged HTTPS-vs-HTTP spec drift. Two openspec-text
+  reconciliations are now queued (both are spec text needing to
+  catch up to deliberate implementation choices). Full instant
+  suite progressed 74/74 → 75/75 → 76/76 → 77/77 — net +3 new
+  litmus tests, zero regressions. Quirk #9 discovered: `grep -F
+  '@trace spec:foo'` fails when `spec:foo` is in a comma-separated
+  list; workaround = match just the `spec:foo` substring.
+- recommended next: a focused spec-text reconciliation slice updating
+  both proxy-container § "SSL bump policy" (splice-all → bump-all)
+  AND reverse-proxy-internal § "SSL termination with ephemeral CA"
+  (HTTPS:443 → plain HTTP:8080 per RFC 6761 + auto_https off) to
+  align with the deliberate code reality. Or continue 33% backlog
+  (secret-rotation, project-summarizers, no-terminal-flicker). Or
+  forge-hot-cold-split Req 1 `/home/forge/src` tmpfs mount as the
+  last real-implementation gap.
+
 ### Cycle 2026-05-30T07:43Z — MERGED windows-next (build_commit field) + osx-next (build-findings) ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
