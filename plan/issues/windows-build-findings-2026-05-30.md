@@ -660,3 +660,103 @@ operator-feature-complete for v0.0.1: 7 modes, all pinned, all
 documented. Next eager chunk will look elsewhere (tray UX, install
 script polish, or genuinely new functionality rather than CLI-shape
 parity).
+
+---
+
+### 20260530T200000Z — ok (install + diagnose support scripts now consume the new CLI surface)
+
+- agent_id: windows-bullo-claude-opus-20260530T200000Z
+- head_sha: 5cbb9455 (post-merge of linux-next +12 commits, including the
+  release-cycle escalation record + resolution; no shared-contract churn)
+- version: 0.2.260528.1 (workspace VERSION on linux-next; main has bumped
+  to 0.2.260530.1 but linux-next hasn't pulled it back in yet — normal
+  release-cycle pattern, next tick or two will sync)
+- build_commit: 205d2abf (current windows-next pre-this-commit head)
+- build_run_id: 20260530T200000Z
+
+**Major sibling context** (no windows-tray action required):
+- **Release `v0.2.260530.1` shipped at 19:02Z** via the merge-to-main-and-
+  release flow. main bumped to 677a89af, tag operator-pushed after a git
+  proxy 403 on refs/tags/* (escalation 18:13Z → resolution 18:22Z).
+  Release CI ran 39m38s and published 22 assets. Notably, this is the
+  **first release** that should carry the workspace-VERSION fix-arc
+  through to user-visible surfaces — once linux-next pulls main back in,
+  the next windows-tray build will report `--version` /
+  `--diagnose --json version` / menu footer all as `0.2.260530.1`. The
+  4-tick fix-arc this morning was strategically well-timed.
+- linux-next +12 commits since last tick: `tray-minimal-ux` pin (33→75),
+  `simplified-tray-ux` pin (33→67) + 5th spec-drift inline-reconciled,
+  release escalation+resolution records, integration cycle 17:43Z merging
+  my prior `--logs` work. No shared-contract changes.
+- osx-next still stalled at b4a45622 (10+ hours, 8+ cycles).
+
+**Change made**: extended `install-windows.ps1` + `tray-diagnose.ps1` to
+consume the new CLI surface (`--version` for fast preflight + `build_commit`
+field for full provenance + `recent_log_tail` field for triage history).
+
+Files touched (Windows-owned):
+- `scripts/install-windows.ps1`:
+  - **New Layer 1 preflight**: `tillandsias-tray --version` via the
+    same `cmd /c` redirect pattern. Fast (no WSL touch), fails loudly
+    on a fundamentally broken binary (missing runtime DLL, bad
+    architecture, etc.) BEFORE attempting the slower `--diagnose` flow.
+    Throws if exit != 0 or no output captured.
+  - Existing `--diagnose --json` Layer 2 verification preserved + extended:
+    now reports `commit=<build_commit>` alongside `version=` + `pin=`,
+    and surfaces `wire.error` (if present) so install logs are
+    self-sufficient for triage.
+- `scripts/tray-diagnose.ps1`:
+  - Identity section: new "build commit" row alongside the existing
+    "version" row (sources `report.build_commit` with `(unknown)`
+    fallback).
+  - New "Recent log activity" section at the end, before the
+    HEALTHY/DEGRADED summary. Iterates `report.recent_log_tail` (the 20-
+    line tail diagnose JSON already includes) and prints each line in
+    dark-gray. Points the reader at `tillandsias-tray --logs --tail N`
+    for more.
+- `openspec/litmus-tests/litmus-windows-tray-diagnose-cli-surface.yaml`:
+  - "install-windows.ps1 contains the post-install --diagnose sanity
+    check" → extended to also require `--version` + `build_commit` greps.
+  - "tray-diagnose.ps1 consumer script uses cmd-redirect" → extended to
+    also require `build_commit` + `recent_log_tail` greps.
+
+**Build**: N/A (script-only changes; binary unchanged from prior tick).
+
+**Smoke** (post-install, exercised manually because the install-windows.ps1
+build-subscript trips the cargo-stderr-wrap PowerShell quirk that's a
+known issue — the verification logic itself is what we're testing):
+- Layer 1 `--version` preflight: exit 0,
+  `tillandsias-tray 0.2.260528.1 (a963c16d)`.
+- Layer 2 `--diagnose --json`: parsed cleanly, surfaces
+  `version=0.2.260528.1 commit=a963c16d pin=a28cabe7c9df` + the wire
+  error string (`hvsocket open: no running WSL utility VM…`).
+- `scripts/tray-diagnose.ps1`: prints the full health check with the
+  new "build commit" row in Identity (`PASS build commit : a963c16d`)
+  and the new "Recent log activity" section dumping the 7 lines from
+  the 2026-05-27 provision dress rehearsal. Existing
+  control-wire-unreachable failure path preserved (exit 2 DEGRADED).
+
+**Litmus**:
+- `windows-native-tray`: 7/7 PASS (extended script-pin steps green).
+
+**Findings** (free-form):
+- The install + diagnose support scripts are now operator-grade: every
+  piece of information the JSON contract surfaces is also surfaced to
+  the human-readable output. A support engineer reading either an
+  install log or a tray-diagnose output sees `version + build_commit +
+  pin + recent log activity` without re-running the binary.
+- The two-layer preflight + diagnose pattern in install-windows.ps1
+  is deliberate: `--version` is fast, no-WSL, and catches "binary
+  fundamentally broken" failures before the slower `--diagnose` flow
+  that hits HvSocket / WSL boundaries.
+- The `--logs --tail N` mode from the prior tick is the natural
+  follow-up to tray-diagnose.ps1's "Recent log activity" — operators
+  who want more than 20 lines have a discoverable path.
+
+**Cross-host visibility note**: pure script-side changes. No cross-host
+coordination needed. macOS-tray's diagnose-output.sh consumer (if it
+exists) is structurally separate.
+
+**Next iteration ask**: N/A (SECTION_KIND=ok). The windows-tray's
+operator-facing surface — CLI modes + install verification + health
+check script — is now end-to-end consistent and self-documenting.
