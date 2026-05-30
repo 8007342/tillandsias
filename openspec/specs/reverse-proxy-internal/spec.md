@@ -47,6 +47,8 @@ The reverse proxy MUST route all enclave-internal traffic (no external routing).
 
 The proxy MUST terminate HTTPS connections using certificates issued by the ephemeral CA.
 
+> **⚠ Implementation reality (as of 2026-05-30):** the deployed router runs **plain HTTP on port 8080** with `auto_https off` (`images/router/base.Caddyfile:21`), NOT HTTPS on 443. This is a deliberate design choice: `*.localhost` is loopback per RFC 6761 and modern browsers treat `localhost` as a secure context without TLS (so origin-bound features like service workers, getUserMedia, cookies with `Secure` flag work over plain HTTP). The Caddyfile inline comment on line 19 explicitly documents this rationale ("TLS would require a CA dance for hostnames that browsers already treat as secure contexts"). Reconcile by either re-enabling auto_https + port 443 OR updating this spec text to match the loopback-no-TLS model. The drift was discovered by `litmus:reverse-proxy-internal-shape` (commit 3415c7b6 + 2026-05-30T09:21Z work-queue ledger).
+
 #### Scenario: Client HTTPS connection
 - **WHEN** a client connects via TLS to the proxy (port 443)
 - **THEN** the proxy MUST present a certificate issued by the ephemeral CA (see spec:certificate-authority)

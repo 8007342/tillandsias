@@ -1,0 +1,129 @@
+# @trace spec:podman-container-spec
+#
+# Instant-phase source-level drift-protection complementing the
+# existing `litmus:podman-container-spec-shape` (size: quick) which
+# runs 3 cargo unit tests. This litmus pins the source surfaces of
+# `crates/tillandsias-podman/src/container_spec.rs` so a regression
+# that renames a field, drops a builder method, or weakens a
+# hardening default fails at instant-phase, before the cargo test
+# layer.
+#
+# Spec § "Security defaults are immutable" mandates 6 specific
+# defaults; § "Launch specs are typed and directly serialized"
+# mandates `build_run_args()` returns a deterministic Vec<String>;
+# § "Spec layer supports launch-shape composition" mandates the
+# detached/interactive/tty/env/mount/option/entrypoint/command
+# builder surface.
+#
+# Combined with the existing quick litmus, raises podman-container-
+# spec coverage_ratio 33 → 75.
+name: litmus:podman-container-spec-source-shape
+spec: podman-container-spec
+phase: pre-build
+description: >
+  Pin the ContainerSpec source surface: 6 hardening default fields
+  initialised to true in `new()`, the 5 fluent-chain builder methods
+  (detached / interactive / tty / name / hostname), the dual argv
+  helpers (`build_run_args` + `build_run_argv` with "run" prefix),
+  and >=6 named unit tests.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-podman/src/container_spec.rs
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "file-head trace declares spec:podman-container-spec"
+    # The implementation site. A regression dropping the marker
+    # would silently demote container_spec.rs out of the spec
+    # graph.
+    command: "grep -F 'spec:podman-container-spec' crates/tillandsias-podman/src/container_spec.rs"
+    timeout_ms: 3000
+    expected_behavior: "spec:podman-container-spec"
+
+  - step: "Req Security defaults: ContainerSpec::new() sets the 6 hardening defaults to true"
+    # Spec § "Security defaults are immutable" mandates `--init`,
+    # `--rm`, `--userns=keep-id`, `--cap-drop=ALL`, `--security-
+    # opt=no-new-privileges`, `--security-opt=label=disable`. Each
+    # is gated by a `default: true` boolean on the struct that
+    # `new()` sets. Pin >=6 default-true assignments inside `new()`.
+    # Use `sed -n '/.../,/.../p'` (literal paren via `.`) — awk's
+    # `\(` doesn't survive YAML→shell round-trip.
+    command: "sed -n '/pub fn new.image:/,/^    }/p' crates/tillandsias-podman/src/container_spec.rs | grep -cE ': true,' | awk '{ if ($1+0 >= 6) print \"ok:\", $1, \"hardening default-true fields\"; else { print \"FAIL: only\", $1, \"of >=6\"; exit 1 } }'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req Composition: 5 fluent-chain builder methods (detached / interactive / tty / name / hostname)"
+    # Spec § "Spec layer supports launch-shape composition" — the
+    # builder pattern is the API surface; pin all 5 method
+    # signatures. The `pub fn detached(mut self) -> Self` form is
+    # the canonical fluent-chain return type.
+    command: "for m in detached interactive tty name hostname; do grep -Fq \"pub fn $m(mut self\" crates/tillandsias-podman/src/container_spec.rs || { echo \"FAIL: builder method '$m' missing\"; exit 1; }; done && echo \"ok: 5 fluent-chain builders\""
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req Serialization: build_run_args returns Vec<String>"
+    # Spec § "Launch specs are typed and directly serialized"
+    # mandates a typed-spec → argv vector path with no shell
+    # interpolation. The method MUST return a deterministic
+    # Vec<String> the unit tests can assert on.
+    command: "grep -F 'pub fn build_run_args(&self) -> Vec<String>' crates/tillandsias-podman/src/container_spec.rs"
+    timeout_ms: 3000
+    expected_behavior: "build_run_args"
+
+  - step: "Req Serialization: build_run_argv prepends \"run\" subcommand"
+    # The argv-with-subcommand path the runtime layer uses. Pin
+    # both the method signature AND the `\"run\".to_string()` push
+    # so a regression that removes the subcommand surfaces fast.
+    command: "grep -F 'pub fn build_run_argv(&self) -> Vec<String>' crates/tillandsias-podman/src/container_spec.rs && grep -F 'vec![\"run\".to_string()]' crates/tillandsias-podman/src/container_spec.rs"
+    timeout_ms: 3000
+    expected_behavior: "build_run_argv"
+
+  - step: ">=6 ContainerSpec unit tests pinned by name (each Req scenario)"
+    # Pinning by test-name presence catches a regression that
+    # silently deletes a test (which would make the existing
+    # `litmus:podman-container-spec-shape` cargo-test step pass
+    # vacuously for that scenario).
+    # Drop the trailing `\(` group — same YAML→shell un-escape quirk
+    # as step 2. The test-name substrings are unique enough on their
+    # own.
+    command: "grep -cE 'fn (default_spec_includes_immutable_hardening_flags|interactive_and_tty_flags_are_serialized|persistent_web_profile_is_detached_and_not_auto_removed|browser_flags_can_be_expressed_in_the_typed_spec|bind_and_volume_mounts_are_serialized_deterministically|build_run_argv_prefixes_run|raw_option_passthrough_is_narrowly_allowlisted)' crates/tillandsias-podman/src/container_spec.rs | awk '{ if ($1+0 >= 6) print \"ok:\", $1, \"ContainerSpec test cases\"; else { print \"FAIL: only\", $1, \"of >=6\"; exit 1 } }'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "ContainerSpec struct field set covers the 8 launch-shape Composition types"
+    # Spec § Composition enumerates env / mounts / tmpfs / devices /
+    # options / publish / entrypoint / command + the hardening
+    # booleans. Pin >=8 of those field names in the struct
+    # declaration block.
+    # `sed -n '/pub struct ContainerSpec/,/^}/p'` replaces the awk
+    # range pattern with `\{`-free form. The `^\s+` ERE class also
+    # gets mangled; match each field name with a leading-space
+    # `    ` literal instead.
+    command: "sed -n '/pub struct ContainerSpec/,/^}/p' crates/tillandsias-podman/src/container_spec.rs | grep -cE '    (env|mounts|tmpfs|devices|options|publish|entrypoint|command|network|hostname|name|detached|remove|init|interactive|tty|userns_keep_id|cap_drop_all|no_new_privileges|label_disable):' | awk '{ if ($1+0 >= 8) print \"ok:\", $1, \"ContainerSpec fields\"; else { print \"FAIL: only\", $1, \"of >=8\"; exit 1 } }'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+observability:
+  traces:
+    - "@trace spec:podman-container-spec"
+    - "@trace spec:podman-idiomatic-patterns"
+  expected_log: "ContainerSpec source surface — hardening defaults + builder methods + argv helpers + tests + fields all pinned"
+  log_fields:
+    spec: "podman-container-spec"
+    test: "podman-container-spec-source-shape"
+    artifact: "crates/tillandsias-podman/src/container_spec.rs"
+
+rollback:
+  on_failure: >
+    A `spec:podman-container-spec` source surface drifted. Restore
+    `pub struct ContainerSpec` with its 8+ shape fields + 6 hardening
+    boolean defaults; `pub fn new(image: impl Into<String>) -> Self`
+    initialising all 6 hardening defaults to `true`; the 5 fluent-
+    chain builder methods (`detached` / `interactive` / `tty` /
+    `name` / `hostname`); `pub fn build_run_args(&self) ->
+    Vec<String>` + `pub fn build_run_argv(&self) -> Vec<String>`
+    with `vec!["run".to_string()]` prefix; >=6 named unit tests
+    covering the spec scenarios.
+  command: "grep -nE 'pub struct ContainerSpec|pub fn new\\(image|pub fn (detached|interactive|tty|name|hostname|build_run_args|build_run_argv)\\(|fn (default_spec_includes_immutable|persistent_web_profile|build_run_argv_prefixes_run|raw_option_passthrough_is_narrowly_allowlisted)' crates/tillandsias-podman/src/container_spec.rs | head -20"

@@ -151,6 +151,93 @@ fn default_hot_path_inflation() -> u32 {
     4
 }
 
+/// Floor for the `/home/forge/src` tmpfs budget (MB).
+///
+/// Spec § "Per-launch project source budget" Scenario "Empty mirror
+/// returns floor (256 MB)" mandates this minimum so a brand-new
+/// project clones cleanly even when its mirror is empty.
+///
+/// @trace spec:forge-hot-cold-split
+pub const HOT_PATH_BUDGET_FLOOR_MB: u32 = 256;
+
+/// Parse the `size-pack` field from `git count-objects -v -H` output.
+///
+/// Canonical git output (human-readable mode, `-H`):
+///
+/// ```text
+/// count: 0
+/// size: 0
+/// in-pack: 1234
+/// packs: 1
+/// size-pack: 12345
+/// prune-packable: 0
+/// garbage: 0
+/// size-garbage: 0
+/// ```
+///
+/// Returns the parsed `size-pack` value in **KiB** (git's reporting
+/// unit when called with `-H`; the suffix is `KiB` for sub-MiB sizes
+/// and `MiB` / `GiB` for larger packs — but in the `-v` (non-`-H`)
+/// flow git omits the suffix entirely and reports raw KiB, which is
+/// what the forge launcher actually parses today).
+///
+/// On missing field or unparseable value, returns `0` — the spec
+/// scenario "Empty mirror returns floor (256 MB)" depends on this
+/// fallback so the launcher doesn't fail-closed on a fresh project.
+///
+/// Note: the spec's "200 MB" example talks about MiB; this parser
+/// returns KiB so the caller can do a single multiplication into the
+/// budget. Compose with [`compute_hot_budget`] to get the final cap.
+///
+/// @trace spec:forge-hot-cold-split (Requirement: Per-launch project
+///   source budget — step 1 + 2 of compute_hot_budget recipe)
+pub fn parse_size_pack_kb(count_objects_output: &str) -> u64 {
+    for line in count_objects_output.lines() {
+        let trimmed = line.trim();
+        if let Some(rest) = trimmed.strip_prefix("size-pack:") {
+            return rest.trim().parse::<u64>().unwrap_or(0);
+        }
+    }
+    0
+}
+
+/// Compute the `/home/forge/src` tmpfs budget (in MB) for a forge
+/// launch, given the project's git mirror pack size in KiB.
+///
+/// Spec § "Per-launch project source budget" recipe:
+///
+/// 1. Pack size (KiB) → MiB: `pack_size_kb / 1024` (integer division
+///    — we round down before inflation, then the clamp absorbs the
+///    1 KiB rounding error).
+/// 2. Multiply by [`ForgeConfig::hot_path_inflation`] (default 4).
+/// 3. Clamp to `[HOT_PATH_BUDGET_FLOOR_MB, ForgeConfig::hot_path_
+///    max_mb]` (default ceiling: 4096 MB).
+///
+/// Spec scenarios:
+/// - Pack 200 MB × 4 = 800 MB → returns 800 (within [256, 4096]).
+/// - Empty mirror (pack 0) → inflated 0 → clamped UP to 256 (floor).
+/// - Pack 2 GiB × 4 = 8192 MB → clamped DOWN to 4096 (ceiling).
+///
+/// `u32` arithmetic is safe: max input `(u64::MAX / 1024)` ≈ 16 EiB
+/// in MB still overflows, but the clamp truncates well before that.
+/// Use `saturating_mul` to make the inflation step explicit.
+///
+/// @trace spec:forge-hot-cold-split (Requirement: Per-launch project
+///   source budget — full recipe)
+pub fn compute_hot_budget(pack_size_kb: u64, config: &ForgeConfig) -> u32 {
+    // Step 1: KiB → MiB (integer division; truncation absorbed by clamp).
+    let pack_size_mb = (pack_size_kb / 1024) as u32;
+    // Step 2: × inflation (saturating; a malicious config with huge
+    // inflation can't panic).
+    let inflated = pack_size_mb.saturating_mul(config.hot_path_inflation);
+    // Step 3: clamp to [floor, ceiling]. `max` first so an empty mirror
+    // (inflated == 0) rises to the floor; `min` second so anything
+    // above ceiling falls to the cap.
+    inflated
+        .max(HOT_PATH_BUDGET_FLOOR_MB)
+        .min(config.hot_path_max_mb)
+}
+
 /// Global configuration loaded from `~/.config/tillandsias/config.toml`.
 #[derive(Debug, Clone, serde::Serialize, serde::Deserialize)]
 pub struct GlobalConfig {
@@ -866,6 +953,120 @@ hot_path_inflation = 6
         let parsed_custom: GlobalConfig = toml::from_str(custom).unwrap();
         assert_eq!(parsed_custom.forge.hot_path_max_mb, 2048);
         assert_eq!(parsed_custom.forge.hot_path_inflation, 6);
+    }
+
+    // @trace spec:forge-hot-cold-split (Requirement: Per-launch project
+    //   source budget — Scenario "Budget = git mirror's size-pack ×
+    //   forge.hot_path_inflation, clamped [256, forge.hot_path_max_mb]")
+    #[test]
+    fn compute_hot_budget_inflates_pack_size_by_default_factor() {
+        // Spec example: pack size 200 MB and hot_path_inflation = 4
+        // → budget = 800 MB, within [256, 4096].
+        let config = ForgeConfig::default();
+        let pack_size_kb = 200 * 1024; // 200 MiB
+        let budget = compute_hot_budget(pack_size_kb, &config);
+        assert_eq!(budget, 800, "expected 200 MiB × 4 = 800 MiB budget");
+    }
+
+    // @trace spec:forge-hot-cold-split (Scenario "Empty mirror returns
+    //   floor (256 MB)")
+    #[test]
+    fn compute_hot_budget_returns_floor_for_empty_mirror() {
+        // Spec: empty mirror or count-objects returns 0 → 256 MB floor.
+        let config = ForgeConfig::default();
+        let budget = compute_hot_budget(0, &config);
+        assert_eq!(
+            budget, HOT_PATH_BUDGET_FLOOR_MB,
+            "empty mirror MUST rise to the {} MB floor",
+            HOT_PATH_BUDGET_FLOOR_MB
+        );
+
+        // A pack smaller than the floor (after inflation) MUST also
+        // rise to the floor — a 10 KiB pack × 4 = 40 KiB ≈ 0 MB → 256.
+        let small_budget = compute_hot_budget(10, &config);
+        assert_eq!(
+            small_budget, HOT_PATH_BUDGET_FLOOR_MB,
+            "sub-floor pack MUST rise to the floor"
+        );
+    }
+
+    // @trace spec:forge-hot-cold-split (Scenario "Budget exceeds
+    //   max_mb → clamped at ceiling")
+    #[test]
+    fn compute_hot_budget_clamps_at_ceiling_hot_path_max_mb() {
+        // Spec example phrasing: when pack × inflation exceeds
+        // hot_path_max_mb, return hot_path_max_mb (default 4096 MB).
+        let config = ForgeConfig::default();
+        // 2 GiB pack × 4 = 8 GiB → must clamp to 4096 MB ceiling.
+        let pack_size_kb = 2 * 1024 * 1024; // 2 GiB
+        let budget = compute_hot_budget(pack_size_kb, &config);
+        assert_eq!(
+            budget, config.hot_path_max_mb,
+            "huge pack MUST clamp to hot_path_max_mb ceiling"
+        );
+    }
+
+    // @trace spec:forge-hot-cold-split (custom-config branch — covers
+    //   the user-tunable ceiling and inflation knobs)
+    #[test]
+    fn compute_hot_budget_honours_custom_inflation_and_max() {
+        // A user might raise inflation to 8 (large working trees) and
+        // lower the ceiling to 2048 (constrained host RAM). Both knobs
+        // must compose with the clamp logic.
+        let mut config = ForgeConfig::default();
+        config.hot_path_inflation = 8;
+        config.hot_path_max_mb = 2048;
+
+        // 100 MiB × 8 = 800 MiB (within [256, 2048]).
+        let mid = compute_hot_budget(100 * 1024, &config);
+        assert_eq!(mid, 800);
+
+        // 500 MiB × 8 = 4000 MiB → clamp to 2048.
+        let high = compute_hot_budget(500 * 1024, &config);
+        assert_eq!(high, 2048);
+
+        // Saturating multiplication: a malicious config can't overflow
+        // u32. 1 PiB × 8 saturates to u32::MAX, then clamps to 2048.
+        let huge = compute_hot_budget(u64::MAX / 1024, &config);
+        assert_eq!(huge, 2048);
+    }
+
+    // @trace spec:forge-hot-cold-split (parser for `git count-objects
+    //   -v -H` step 1 of compute_hot_budget recipe)
+    #[test]
+    fn parse_size_pack_kb_extracts_value_from_canonical_output() {
+        let canonical = "count: 0
+size: 0
+in-pack: 1234
+packs: 1
+size-pack: 12345
+prune-packable: 0
+garbage: 0
+size-garbage: 0
+";
+        assert_eq!(parse_size_pack_kb(canonical), 12345);
+
+        // Order-independence: the field can appear anywhere.
+        let reordered = "size-pack: 67\ncount: 0\n";
+        assert_eq!(parse_size_pack_kb(reordered), 67);
+
+        // Whitespace tolerance around the value.
+        let padded = "size-pack:   42   \n";
+        assert_eq!(parse_size_pack_kb(padded), 42);
+    }
+
+    // @trace spec:forge-hot-cold-split (parser fallback — empty mirror
+    //   path: count-objects on a brand-new repo omits size-pack)
+    #[test]
+    fn parse_size_pack_kb_returns_zero_on_missing_or_unparseable_field() {
+        // Missing field entirely (empty repo / git error).
+        assert_eq!(parse_size_pack_kb("count: 0\nsize: 0\n"), 0);
+        // Empty output.
+        assert_eq!(parse_size_pack_kb(""), 0);
+        // Unparseable value (corrupt git output).
+        assert_eq!(parse_size_pack_kb("size-pack: not-a-number"), 0);
+        // Negative-looking value (u64 parse fails).
+        assert_eq!(parse_size_pack_kb("size-pack: -1"), 0);
     }
 
     #[test]

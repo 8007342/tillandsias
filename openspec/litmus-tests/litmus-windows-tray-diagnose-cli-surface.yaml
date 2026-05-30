@@ -27,8 +27,8 @@ preconditions:
   - shell utilities (grep) are available in PATH
 
 critical_path:
-  - step: "all four CLI modes wired in main.rs"
-    command: "grep -Fe '--provision-once' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--status-once' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--diagnose' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--json' crates/tillandsias-windows-tray/src/main.rs"
+  - step: "all seven CLI modes wired in main.rs"
+    command: "grep -Fe '--provision-once' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--status-once' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--diagnose' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--json' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--logs' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--help' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--version' crates/tillandsias-windows-tray/src/main.rs"
     expected_behavior: "grep succeeds"
     timeout_ms: 3000
 
@@ -38,12 +38,22 @@ critical_path:
     timeout_ms: 3000
 
   - step: "JSON schema-pin unit tests attached"
-    command: "grep -F 'fn diagnose_json_top_level_keys_pinned' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn diagnose_json_wire_object_keys_pinned' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn diagnose_json_manifest_pin_some_serializes_as_string' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn diagnose_json_manifest_pin_none_serializes_as_null' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn diagnose_json_recent_log_tail_is_array' crates/tillandsias-windows-tray/src/notify_icon.rs"
+    command: "grep -F 'fn diagnose_json_top_level_keys_pinned' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn diagnose_json_wire_object_keys_pinned' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn diagnose_json_manifest_pin_some_serializes_as_string' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn diagnose_json_manifest_pin_none_serializes_as_null' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn diagnose_json_recent_log_tail_is_array' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn status_once_json_keys_pinned' crates/tillandsias-windows-tray/src/notify_icon.rs"
     expected_behavior: "grep succeeds"
     timeout_ms: 3000
 
-  - step: "exit-code contract test attached"
-    command: "grep -F 'fn exit_code_provisioned_zero_degraded_two' crates/tillandsias-windows-tray/src/notify_icon.rs"
+  - step: "exit-code contract tests attached"
+    command: "grep -F 'fn exit_code_provisioned_zero_degraded_two' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn status_once_exit_codes' crates/tillandsias-windows-tray/src/notify_icon.rs"
+    expected_behavior: "grep succeeds"
+    timeout_ms: 3000
+
+  - step: "--help / --version surface tests attached"
+    command: "grep -F 'fn version_line_uses_workspace_version_and_commit' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn help_text_documents_all_cli_modes' crates/tillandsias-windows-tray/src/notify_icon.rs"
+    expected_behavior: "grep succeeds"
+    timeout_ms: 3000
+
+  - step: "--logs tail-selector test attached"
+    command: "grep -F 'fn select_log_tail_handles_all_cases' crates/tillandsias-windows-tray/src/notify_icon.rs"
     expected_behavior: "grep succeeds"
     timeout_ms: 3000
 

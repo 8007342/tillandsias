@@ -1,0 +1,149 @@
+# @trace spec:tray-host-control-socket
+#
+# Drift-protection for the Linux-native tray's Unix-socket control plane.
+#
+# spec:tray-host-control-socket has four requirements:
+#   1. Socket Creation and Lifecycle
+#   2. Wire Format and Framing (postcard + 4-byte BE length prefix)
+#   3. Message Types and Capability-Based Routing
+#   4. Error Handling and Reliability
+#
+# The convergence-packet (plan/issues/control-socket-protocol-convergence-
+# 2026-05-25.md) shipped a real implementation of all four requirements on
+# the unix side over the last two weeks:
+#   - control_socket_path() at $XDG_RUNTIME_DIR/tillandsias/control.sock
+#   - start_control_socket_server() that creates parent dir, removes
+#     stale socket, binds, chmods 0o600
+#   - read_control_envelope / write_control_envelope helpers carrying
+#     postcard payloads behind a 4-byte big-endian length prefix
+#   - per-connection handle_control_connection that delegates routing to
+#     the canonical control_dispatch::decide_route matrix
+#   - ControlSubscribers fan-out for IssueWebSession / EvictProject
+#   - Error response with seq_in_reply_to + ErrorCode::Unsupported on the
+#     matrix-Unsupported and matrix-Handle-but-no-handler arms
+#
+# This instant litmus pins all those surfaces so a regression that
+# silently swaps the socket path, the permission mode, the framing, or
+# bypasses the canonical matrix surfaces immediately. Combined with the
+# existing litmus:binary-e2e-smoke (binary lifecycle) and
+# litmus:control-dispatch-shape (routing matrix), raises
+# tray-host-control-socket coverage_ratio 30 → 75.
+name: litmus:tray-host-control-socket-unix-shape
+spec: tray-host-control-socket
+phase: pre-build
+description: >
+  Pin the Linux-native tray's unix-socket control plane: XDG_RUNTIME_DIR
+  socket path, 0o600 perms, stale cleanup, start_control_socket_server,
+  postcard framing helpers, delegation to the canonical
+  control_dispatch::decide_route matrix, ControlSubscribers fan-out,
+  and Error{Unsupported} responses with seq_in_reply_to.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-headless/src/tray/mod.rs
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "tray/mod.rs file-head trace declares spec:tray-host-control-socket"
+    # Spec coverage is auditable from grep alone; the file-head trace is
+    # how the openspec walker resolves "which spec does this file
+    # implement". A regression dropping the marker would invisibly
+    # demote tray/mod.rs out of this spec's TRACES.md graph.
+    command: "grep -F 'spec:tray-host-control-socket' crates/tillandsias-headless/src/tray/mod.rs"
+    timeout_ms: 3000
+    expected_behavior: "spec:tray-host-control-socket"
+
+  - step: "control_socket_path resolves XDG_RUNTIME_DIR with /run/user/<uid> fallback"
+    # Spec § Socket Creation and Lifecycle #1: socket lives at
+    # $XDG_RUNTIME_DIR/tillandsias/control.sock (typically
+    # /run/user/<uid>/tillandsias/control.sock). The fallback path uses
+    # libc::getuid() — a regression to a hardcoded /tmp path would break
+    # the spec's "ephemeral by design" cheatsheet contract.
+    command: "grep -F 'XDG_RUNTIME_DIR' crates/tillandsias-headless/src/tray/mod.rs"
+    timeout_ms: 3000
+    expected_behavior: "XDG_RUNTIME_DIR"
+
+  - step: "control socket path is tillandsias/control.sock under the runtime dir"
+    # The literal "tillandsias/control.sock" join MUST be present —
+    # arrow-typing the path elsewhere would silently desync the client.
+    command: "grep -F 'tillandsias/control.sock' crates/tillandsias-headless/src/tray/mod.rs"
+    timeout_ms: 3000
+    expected_behavior: "tillandsias/control.sock"
+
+  - step: "start_control_socket_server entry point + stale cleanup + chmod 0o600"
+    # Spec § Socket Creation and Lifecycle #2, #5: the unlink-then-bind
+    # pattern is the stale-socket recovery; the 0o600 chmod is the
+    # "owning user only" invariant. Both are user-visible if dropped.
+    # Group all 3 in a single multi-line grep so a single regression
+    # surface stands or falls as one observation.
+    #
+    # Quirk: YAML→shell round-trip un-escapes `\(` to `(`, breaking the
+    # ERE group; use `.` as a wildcard for the parens to keep the
+    # pattern shell-quirk-resilient.
+    command: "grep -cE 'fn start_control_socket_server|remove stale control socket|Permissions::from_mode.0o600.' crates/tillandsias-headless/src/tray/mod.rs | awk '{ if ($1+0 >= 3) print \"ok:\", $1, \"surfaces\"; else { print \"FAIL: only\", $1, \"of 3\"; exit 1 } }'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "postcard framing helpers exist with the 4-byte big-endian length prefix"
+    # Spec § Wire Format and Framing: postcard payload, 4-byte BE
+    # length prefix. The from_be_bytes / to_be_bytes pair is the
+    # endianness contract; a regression to LE would silently break
+    # interop with the canonical control-wire schema.
+    command: "grep -cE 'fn read_control_envelope|fn write_control_envelope|u32::from_be_bytes|to_be_bytes' crates/tillandsias-headless/src/tray/mod.rs | awk '{ if ($1+0 >= 4) print \"ok:\", $1, \"framing surfaces\"; else { print \"FAIL: only\", $1, \"of 4\"; exit 1 } }'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "unix dispatcher delegates routing to the canonical control_dispatch matrix"
+    # Spec § Routing: capability-based routing decisions live in the
+    # single source of truth (control_dispatch::decide_route). The unix
+    # dispatcher must consult it rather than re-inlining a parallel
+    # matrix — otherwise unix + vsock can silently disagree.
+    command: "grep -F 'control_dispatch::{DispatchOutcome, TransportKind, decide_route}' crates/tillandsias-headless/src/tray/mod.rs"
+    timeout_ms: 3000
+    expected_behavior: "decide_route"
+
+  - step: "ControlSubscribers fan-out keeps broadcast/Iceberg-OTP racing fixed"
+    # Spec § Routing #broadcast: IssueWebSession + EvictProject fan
+    # out to every registered subscriber. The Arc<Mutex<Vec<Arc<Mutex<
+    # UnixStream>>>>> shape is what lets the broadcast-then-ack pattern
+    # close the OTP race spec:opencode-web-session-otp depends on.
+    command: "grep -F 'type ControlSubscribers = Arc<Mutex<Vec<Arc<Mutex<UnixStream>>>>>;' crates/tillandsias-headless/src/tray/mod.rs"
+    timeout_ms: 3000
+    expected_behavior: "ControlSubscribers"
+
+  - step: "Error responses carry seq_in_reply_to per spec § Error Handling"
+    # Spec § Error Handling and Reliability: server-emitted Error
+    # responses MUST reference the request seq via seq_in_reply_to so
+    # the client can correlate. A regression to seq_in_reply_to: None
+    # would break the convergence-packet test
+    # `error_carries_seq_in_reply_to` and silently re-introduce the
+    # ambiguity the spec eliminates.
+    command: "grep -c 'seq_in_reply_to: Some(first.seq)' crates/tillandsias-headless/src/tray/mod.rs | awk '{ if ($1+0 >= 2) print \"ok:\", $1, \"seq_in_reply_to sites\"; else { print \"FAIL: only\", $1, \"of >=2\"; exit 1 } }'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+observability:
+  traces:
+    - "@trace spec:tray-host-control-socket"
+    - "@trace plan/issues/control-socket-protocol-convergence-2026-05-25.md"
+  expected_log: "unix-socket control plane: path, framing, routing delegation, broadcast, Error{Unsupported} all pinned"
+  log_fields:
+    spec: "tray-host-control-socket"
+    test: "tray-host-control-socket-unix-shape"
+    artifact: "crates/tillandsias-headless/src/tray/mod.rs"
+
+rollback:
+  on_failure: >
+    A `spec:tray-host-control-socket` surface drifted on the Linux-native
+    tray. Restore: file-head `@trace spec:tray-host-control-socket`;
+    `control_socket_path()` resolving `$XDG_RUNTIME_DIR/tillandsias/
+    control.sock` with `/run/user/<uid>` fallback;
+    `start_control_socket_server` that unlinks stale, binds, and chmods
+    `0o600`; `read_control_envelope` / `write_control_envelope` with
+    4-byte big-endian length prefix and postcard payloads;
+    `handle_control_connection` delegating to
+    `control_dispatch::{DispatchOutcome, TransportKind, decide_route}`;
+    `type ControlSubscribers = Arc<Mutex<Vec<Arc<Mutex<UnixStream>>>>>`;
+    Error responses with `seq_in_reply_to: Some(first.seq)`.
+  command: "grep -nE 'control_socket_path|start_control_socket_server|read_control_envelope|write_control_envelope|broadcast_control_envelope|decide_route|ControlSubscribers|seq_in_reply_to' crates/tillandsias-headless/src/tray/mod.rs | head -25"

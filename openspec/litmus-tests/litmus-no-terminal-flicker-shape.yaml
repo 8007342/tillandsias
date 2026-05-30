@@ -1,0 +1,127 @@
+# @trace spec:no-terminal-flicker
+#
+# Drift-protection for the cross-platform no-terminal-flicker
+# surfaces: the Windows `CREATE_NO_WINDOW` constant + helpers in
+# `tillandsias-podman` (Req 1 "Windows background process
+# suppression") and the `TrayStatusStage` enum + `status_label`
+# resolver in `tillandsias-headless/src/tray/mod.rs` (Req 4 + 5
+# stage-visibility lookup + label-update-without-rebuild).
+#
+# Single existing binding `litmus:cross-platform-tray` (last_verified
+# 2026-05-15) covered the tray surface generically; the no-flicker
+# specifics were untrapped.
+#
+# **Spec / implementation divergence noted (NOT fixed here)**: spec
+# § Req 4 names a `Stage` enum with variants {Booting, Ready, NoAuth,
+# Authed, NetIssue}. The actual implementation uses `TrayStatusStage`
+# with a different model (PreLaunch / NetworkUp / ProxyStarting /
+# GitStarting / InferenceStarting / ForgeStarting / RouterStarting /
+# AllReady / ShuttingDown / Failed / PodmanMissing — 11 variants).
+# This litmus pins the variants that actually exist; the spec text
+# needs an update to reflect the per-stage enclave-launch model.
+name: litmus:no-terminal-flicker-shape
+spec: no-terminal-flicker
+phase: pre-build
+description: >
+  Pin the no-terminal-flicker surfaces: `CREATE_NO_WINDOW = 0x0800_0000`
+  constant + `no_window_async` + `no_window_sync` helper signatures
+  in tillandsias-podman; `TrayStatusStage` enum + `status_label`
+  resolver in tillandsias-headless tray.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-podman/src/lib.rs
+  - workspace contains crates/tillandsias-headless/src/tray/mod.rs
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "Req 1 Windows: CREATE_NO_WINDOW = 0x0800_0000 constant pinned"
+    # Spec § "Windows background process suppression" mandates the
+    # 0x08000000 flag value (per MSDN process-creation-flags table).
+    # The constant centralises the literal; pinning catches a
+    # regression to a different bit pattern that would silently
+    # break suppression.
+    command: "grep -F 'pub const CREATE_NO_WINDOW: u32 = 0x0800_0000;' crates/tillandsias-podman/src/lib.rs"
+    timeout_ms: 3000
+    expected_behavior: "0x0800_0000"
+
+  - step: "Req 1 Windows: no_window_async + no_window_sync helper signatures"
+    # The two cross-platform helpers wrap CREATE_NO_WINDOW behind a
+    # #[cfg(windows)] guard. Each takes a mutable Command reference
+    # and returns the same — fluent chain API. A regression to a
+    # different return type would break callers.
+    command: "grep -F 'pub fn no_window_async(cmd: &mut tokio::process::Command) -> &mut tokio::process::Command' crates/tillandsias-podman/src/lib.rs && grep -F 'pub fn no_window_sync(cmd: &mut std::process::Command) -> &mut std::process::Command' crates/tillandsias-podman/src/lib.rs"
+    timeout_ms: 3000
+    expected_behavior: "no_window_sync"
+
+  - step: "tray/mod.rs declares @trace spec:no-terminal-flicker"
+    # The tray is the implementation site of Reqs 3-7 (menu rebuild,
+    # stage visibility, label updates, project list, no polling).
+    # The trace marker is the spec-identity edge.
+    command: "grep -F '@trace spec:no-terminal-flicker' crates/tillandsias-headless/src/tray/mod.rs"
+    timeout_ms: 3000
+    expected_behavior: "spec:no-terminal-flicker"
+
+  - step: "TrayStatusStage enum declared in tray/mod.rs (Req 4 + 5 keyed-by-stage)"
+    # Spec § Req 4 mandates a stage enum drives visibility/labels.
+    # The actual variants differ from the spec's naming (see
+    # divergence note in litmus header) — pin the type by name so
+    # a rename surfaces fast.
+    command: "grep -F 'enum TrayStatusStage' crates/tillandsias-headless/src/tray/mod.rs"
+    timeout_ms: 3000
+    expected_behavior: "TrayStatusStage"
+
+  - step: "TrayStatusStage carries >=8 stage variants (enclave-launch progression)"
+    # Spec § "Stage visibility lookup table" mandates per-stage
+    # routing; the impl uses an 11-variant progression
+    # (PreLaunch / NetworkUp / ProxyStarting / GitStarting /
+    # InferenceStarting / ForgeStarting / RouterStarting / AllReady /
+    # ShuttingDown / Failed / PodmanMissing). Pin >=8 by enumerated
+    # variant-name presence so a regression dropping a stage fails.
+    command: "grep -cE '(PreLaunch|NetworkUp|ProxyStarting|GitStarting|InferenceStarting|ForgeStarting|RouterStarting|AllReady|ShuttingDown|Failed|PodmanMissing)' crates/tillandsias-headless/src/tray/mod.rs | awk '{ if ($1+0 >= 8) print \"ok:\", $1, \"TrayStatusStage variant mentions\"; else { print \"FAIL: only\", $1, \"of >=8\"; exit 1 } }'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req 5: fn status_label(stage: &TrayStatusStage) -> String resolver"
+    # Spec § "Menu label updates without rebuild" mandates a keyed-
+    # by-stage label lookup. status_label is the canonical resolver;
+    # set_text() callers in the tray use it to update existing menu
+    # items without rebuilding.
+    command: "grep -F 'fn status_label(stage: &TrayStatusStage) -> String' crates/tillandsias-headless/src/tray/mod.rs"
+    timeout_ms: 3000
+    expected_behavior: "status_label"
+
+  - step: "Req 4: enclave_status_to_stage() driver pinned"
+    # Spec § "Stage visibility lookup table" — the driver function
+    # that maps EnclaveStatus enum into TrayStatusStage variants.
+    # A regression to a switch-on-string or conditional ladder
+    # would silently break the O(1) lookup invariant.
+    command: "grep -F 'fn enclave_status_to_stage(status: EnclaveStatus) -> TrayStatusStage' crates/tillandsias-headless/src/tray/mod.rs"
+    timeout_ms: 3000
+    expected_behavior: "enclave_status_to_stage"
+
+observability:
+  traces:
+    - "@trace spec:no-terminal-flicker"
+    - "@trace spec:tray-app"
+  expected_log: "CREATE_NO_WINDOW + no_window helpers + TrayStatusStage + status_label + enclave_status_to_stage pinned"
+  log_fields:
+    spec: "no-terminal-flicker"
+    test: "no-terminal-flicker-shape"
+    artifact: "crates/tillandsias-podman/src/lib.rs + crates/tillandsias-headless/src/tray/mod.rs"
+
+rollback:
+  on_failure: >
+    A `spec:no-terminal-flicker` surface drifted. Restore
+    `pub const CREATE_NO_WINDOW: u32 = 0x0800_0000;` in
+    tillandsias-podman/src/lib.rs; the `no_window_async` +
+    `no_window_sync` helper signatures with their fluent chain
+    return types; `@trace spec:no-terminal-flicker` on tray/mod.rs;
+    the `TrayStatusStage` enum with >=8 of its 11 variants
+    (PreLaunch / NetworkUp / ProxyStarting / GitStarting /
+    InferenceStarting / ForgeStarting / RouterStarting / AllReady /
+    ShuttingDown / Failed / PodmanMissing); `fn status_label(stage:
+    &TrayStatusStage) -> String` resolver; `fn enclave_status_to_
+    stage(status: EnclaveStatus) -> TrayStatusStage` driver.
+  command: "grep -nE 'CREATE_NO_WINDOW|no_window|TrayStatusStage|status_label|enclave_status_to_stage' crates/tillandsias-podman/src/lib.rs crates/tillandsias-headless/src/tray/mod.rs | head -25"

@@ -51,6 +51,594 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-30T17:43Z — MERGED windows-next (--logs / --logs --tail N) + osx-next no-op ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `f073af3` (merge commit; linux-next was at
+  `7fe41a73` pre-merge).
+- observed_sibling_heads: main=`ea28d773` · linux-next=`7fe41a73`
+  (pre-merge) · windows-next=`205d2abf` · osx-next=`b4a45622`
+  (unchanged 7 consecutive cycles since 06:27Z).
+- **windows-next: merged + tested + pushed** — substantive 1-commit
+  delta `205d2abf feat(windows-tray): --logs / --logs --tail N CLI
+  mode for past-the-tail log inspection`. New `--logs` flag dumps the
+  log file to stdout for redirect-to-file capture (same GUI-subsystem
+  stdio pattern as other modes). `--tail N` optional with friendly
+  malformed-value fallthrough to full-file path. New
+  `select_log_tail(content, tail) -> Vec<&str>` pure tail-selector
+  helper with `saturating_sub` guards for n>len underflow + n=0
+  empty-vec edge cases. `pub fn logs(tail: Option<usize>) -> i32`
+  reads via existing `log_file_path()`, exit 0 on readable (even if
+  empty), 1 if missing/unreadable. Does NOT touch WSL. +1 pin test
+  covers all 4 edge cases (None / <len / >len / =0) + empty-content
+  variants. `help_text_documents_all_cli_modes` extended to require
+  the new flags. All crate-side changes in windows-tray scope
+  (sibling-owned).
+- **osx-next: no-op** — empty range, unchanged 7 consecutive cycles
+  since 06:27Z. **ESCALATION watch**: 4+ cycles past the guardrail
+  threshold; orchestrator-level ping recommended.
+- **spec-drift via litmus update**: windows-host extended
+  `litmus-windows-tray-diagnose-cli-surface.yaml` in lockstep with
+  the implementation (standard pattern; windows-owned litmus). No
+  linux action.
+- merge stats: 5 files changed, 206 insertions(+), 2 deletions(-).
+  Windows-tray crate + windows-tray litmus + windows cheatsheet +
+  plan docs.
+- verification: `./build.sh --check` + `./build.sh --test` passed.
+- linux work this 2h window: 3 spec-gap-fill slices —
+  `host-chromium-on-demand` 33→75 at 16:21Z (installer + launcher
+  chain) + `versioning` 33→75 at 16:51Z (completing the CARGO_PKG_
+  VERSION→WORKSPACE_VERSION machinery story from yesterday's shared
+  fixes) + `tray-minimal-ux` 33→75 at 17:21Z (EnclaveStatus 5-state
+  + Quit literal + Seedlings order). Full instant suite progressed
+  84/84 → 85/85 → 86/86 PASS at 100% across 89 specs.
+- recommended next: orchestrator ping macOS host (7-cycle silence is
+  conspicuous); continue 33% backlog (simplified-tray-ux,
+  subdomain-naming-flip, web-image); pursue forge-hot-cold-split
+  Req 1 `/home/forge/src` tmpfs mount OR github-credential-health
+  4-state classifier as substantial real-implementation slices.
+
+### Cycle 2026-05-30T15:43Z — MERGED windows-next (--help / --version CLI modes) + osx-next no-op ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `3742267` (merge commit; linux-next was at
+  `37c2d706` pre-merge).
+- observed_sibling_heads: main=`ea28d773` · linux-next=`37c2d706`
+  (pre-merge) · windows-next=`04278ec0` · osx-next=`b4a45622`
+  (unchanged 6 cycles since 06:27Z — stall ongoing).
+- **windows-next: merged + tested + pushed** — substantive 1-commit
+  delta `04278ec0 feat(windows-tray): --help / --version CLI modes
+  for standard convention parity`. New `version_line() ->
+  "tillandsias-tray {WORKSPACE_VERSION} ({BUILD_COMMIT_SHA})"` reuses
+  the env vars build.rs bakes for --diagnose, so the 3 places a user
+  can ask "what version?" (--version + --diagnose --json version
+  field + tray menu footer) stay self-consistent. New `help_text()`
+  documents all 6 CLI modes + exit-code contracts + GUI-subsystem
+  stdio quirk + cheatsheet pointer. +2 schema-pin unit tests
+  (`version_line_uses_workspace_version_and_commit` asserts both env
+  vars present + 0.1.0 regression guard; `help_text_documents_all
+  _cli_modes` asserts all 8 flag spellings + exit-code markers). The
+  windows-tray litmus extended "four CLI modes" → "six CLI modes"
+  grep + new "--help / --version surface tests attached" step.
+  Crate-side delta all in windows-tray scope (sibling-owned).
+- **osx-next: no-op** — empty range, unchanged 6 consecutive cycles.
+  macOS hourly cron stalled since 06:27Z (b4a45622). Per
+  guardrails, 3-cycle stall already exceeded; flagged at 11:43Z
+  cycle as needing orchestrator ping; now at 6 cycles with no
+  change. **ESCALATION watch**: orchestrator should ping macOS host
+  directly. Not blocking integration but the silence is now
+  conspicuous.
+- merge stats: 5 files changed, 235 insertions(+), 2 deletions(-).
+  Windows-tray crate (4 files) + plan/ build-findings doc.
+- verification: `./build.sh --check` + `./build.sh --test` passed.
+- **spec-drift via litmus update**: windows-host extended
+  `litmus-windows-tray-diagnose-cli-surface.yaml` in lockstep with
+  the implementation changes (existing pattern; windows-owned
+  litmus). No linux action.
+- linux work this 2h window: 3 spec-gap-fill slices — `podman-
+  container-spec` 33→75 at 14:21Z + `podman-container-handle` 33→75
+  at 14:51Z (sibling specs in same container_spec.rs file; the
+  typed-spec layer's source surfaces now both have instant-phase
+  drift-protection); `remote-projects` 33→75 at 15:21Z (11-test
+  implementation crate pinned). Full instant suite progressed
+  80/80 → 81/81 → 82/82 → 83/83 PASS at 100% across 89 specs.
+- recommended next: orchestrator ping macOS host (6-cycle silence
+  is conspicuous); continue 33% backlog (host-chromium-on-demand);
+  pursue forge-hot-cold-split Req 1 `/home/forge/src` tmpfs mount
+  OR github-credential-health 4-state classifier as substantial
+  real-implementation slices.
+
+### Cycle 2026-05-30T13:43Z — MERGED windows-next (cleanup acknowledging shared fix) + osx-next (build-findings) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `f11c76a` (after both sibling merges; linux-next
+  was at `801b55d4` pre-merge).
+- observed_sibling_heads: main=`ea28d773` · linux-next=`801b55d4`
+  (pre-merge) · windows-next=`ddeab1f9` · osx-next=`b4a45622`.
+- **windows-next: merged + tested + pushed** — **cross-host
+  coordination ROUND-TRIP COMPLETE**. Windows-host commit
+  `ddeab1f9 cleanup(windows-tray): remove fresh_menu_state override
+  (shared host-shell fix landed)` acknowledges linux's 12:21Z shared
+  host-shell fix (76f93287) and deletes the now-redundant contained
+  override: 15-line `fresh_menu_state()` helper deleted, 12
+  mechanical reverts (`fresh_menu_state` → `MenuState::initial`)
+  across production + tests, 24-line
+  `fresh_menu_state_footer_reports_workspace_version` pin test
+  deleted (superseded by host-shell's
+  `version_reports_workspace_release_not_crate_static_zero_dot_one`
+  which catches the same regression at the source). The windows-tray's
+  own `build.rs` still emits `WORKSPACE_VERSION` independently for
+  `DiagnoseReport.version` + --diagnose Version: print + build_commit
+  triage; that pipeline is independent and stays. **Full coordination
+  cycle**: windows ASK 11:00Z → linux shared fix 12:21Z → linux
+  RESOLVED marker → windows cleanup 13:43Z. Pattern working as
+  designed.
+- **osx-next: merged + tested + pushed** — 1 new file
+  `plan/issues/macos-build-findings-2026-05-30.md` (40 lines, hourly
+  build-findings entry, plan/-only).
+- merge stats: windows 2 files / -52 +141 (net +89 from the new
+  build-findings doc minus override cleanup); osx 1 file / +40.
+- verification: `./build.sh --check` + `./build.sh --test` passed on
+  both merges.
+- **spec-drift: none** — all changes are sibling-owned scope
+  (windows-tray crate, plan docs).
+- linux work this 2h window: 3 substantive slices — `host-shell` +
+  `browser-mcp` shared `CARGO_PKG_VERSION` fixes (12:21Z + 12:51Z;
+  closing windows-host's ASK and the AI-agent-visible MCP serverInfo
+  follow-on) + `github-credential-health` 33→67 drift-protection
+  with 4th spec drift flagged (4-state classifier missing). Full
+  instant suite stable at **79/79 → 80/80 PASS at 100% across 89
+  specs**.
+- recommended next: continue 33% backlog (`host-chromium-on-demand`,
+  `podman-container-handle`, `podman-container-spec`, `remote-
+  projects`); the github-credential-health 4-state classifier
+  implementation (~2h, substantial real-implementation slice); or
+  pursue forge-hot-cold-split Req 1 `/home/forge/src` tmpfs mount.
+
+### Cycle 2026-05-30T11:43Z — MERGED windows-next (tray menu VERSION footer fix) + osx-next no-op ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `da893ba` (merge commit; linux-next was at
+  `4f627563` pre-merge).
+- observed_sibling_heads: main=`ea28d773` · linux-next=`4f627563`
+  (pre-merge) · windows-next=`6eb026e0` · osx-next=`6b2eb941`
+  (unchanged for 4+ cycles — macOS hourly cron appears stalled).
+- **windows-next: merged + tested + pushed** — substantive 1-commit
+  delta `6eb026e0 feat(windows-tray): inject workspace VERSION into
+  tray menu footer`. Tray menu footer was rendering `v0.1.0` (sourced
+  from `host-shell::version() → env!("CARGO_PKG_VERSION")` against
+  `tillandsias-host-shell/Cargo.toml`'s static `0.1.0`) instead of
+  the workspace `0.2.260528.1`. Same root cause as the prior
+  `--diagnose --json` version fix but in user-visible UX. Contained
+  windows-side fix: new `fresh_menu_state()` wraps `MenuState::
+  initial()` and overrides `state.version` with `env!("WORKSPACE_
+  VERSION")` (reuses the env var the windows-tray build.rs already
+  emits). Mechanical replacement at 12 callsites + new pin test
+  `fresh_menu_state_footer_reports_workspace_version`. Smoke
+  verified on windows-bullo (39 tests passed / 5 ignored).
+- **osx-next: no-op** — empty range, unchanged for 4+ cycles since
+  06:27Z. macOS hourly build-findings cron appears stalled. Not
+  yet blocking integration but worth a coord ping if it persists.
+- **spec-drift via cross-host ASK** (NEW): windows-host appended
+  58 lines to `plan/issues/tray-convergence-coordination.md` flagging
+  that the menu-version-footer bug exists on **all three** trays
+  today because `host-shell::version()` is hardcoded to read the
+  crate-static `CARGO_PKG_VERSION` (`0.1.0`) instead of the
+  workspace VERSION. The fix is contained on windows-side; the ASK
+  is for shared-host-shell update (the proper structural fix) +
+  macOS-host to mirror the same tray-side override. Linux note:
+  linux tray (`crates/tillandsias-headless/src/tray/mod.rs`) does
+  NOT call `MenuState::initial` or `host-shell::version()` directly
+  — it uses StatusNotifierItem/DBus rendering. So linux is NOT
+  affected by this specific bug, BUT linux's own version-source
+  path should be audited for the same anti-pattern (`env!("CARGO_
+  PKG_VERSION")` against a crate that isn't the workspace root).
+  Recommended follow-on: a linux-side audit slice to verify the
+  linux tray menu / DBusMenu rendering doesn't have its own
+  `CARGO_PKG_VERSION` divergence.
+- merge stats: 3 files changed, 215 insertions(+), 12 deletions(-).
+  Windows-tray crate (sibling-owned scope) + 2 plan/ docs.
+- verification: `./build.sh --check` + `./build.sh --test` passed.
+- linux work this 2h window: 3 spec-gap-fill slices + 1 docs
+  reconciliation slice — `project-summarizers` 33→75 at 10:21Z (6
+  summarizer scripts), `no-terminal-flicker` 33→67 at 10:51Z + 3rd
+  spec drift flagged (`TrayStatusStage` enum 11-variant vs spec's
+  5-variant), then at 11:21Z **consolidated 3-spec reconciliation
+  slice** clearing the queued drift backlog (proxy-container splice/
+  bump + reverse-proxy-internal HTTPS/HTTP + no-terminal-flicker
+  stage-enum) via focused `⚠ Implementation reality (as of 2026-
+  05-30):` blocks alongside divergent text. no-terminal-flicker
+  binding coverage 67→75. Full instant suite 78/78 → 79/79 across
+  the window — net +2 new litmus tests + 3 spec narrative edits.
+- recommended next: linux-side audit slice for the `CARGO_PKG_
+  VERSION` anti-pattern (see windows-host's ASK above). Or
+  continue 33% backlog. Or pursue `forge-hot-cold-split` Req 1
+  `/home/forge/src` tmpfs mount.
+
+### Cycle 2026-05-30T09:43Z — MERGED windows-next (--status-once --json parity) + osx-next no-op ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `866c337` (merge commit; linux-next was at
+  `faf2f19b` pre-merge).
+- observed_sibling_heads: main=`ea28d773` · linux-next=`faf2f19b`
+  (pre-merge) · windows-next=`13539385` · osx-next=`6b2eb941`
+  (unchanged since 07:43Z cycle — no new commits in 2 hours).
+- **windows-next: merged + tested + pushed** — substantive 1-commit
+  delta `13539385 feat(windows-tray): --status-once --json parity
+  for support tooling`. Adds JSON variant to `--status-once` mirroring
+  the existing `--diagnose --json` UX with pre-computed `exit_code`
+  field so support consumers don't re-derive 0/2/1 from phase +
+  reachable. New `StatusReport` struct (7 fields: reachable,
+  wire_version: Option<u16>, phase, podman_ready, last_event, error,
+  exit_code). `status_exit_code` pure helper for the 0/2/1 matrix.
+  +2 schema-pin unit tests (`status_once_json_keys_pinned` +
+  `status_once_exit_codes`). 38 windows-tray tests passing.
+- **osx-next: no-op** — empty range `linux-next..origin/osx-next`.
+  macOS hourly build-findings cron appears to have not fired this
+  cycle (last entry at 06:27Z merged at 07:43Z cron; nothing new
+  since). Not yet a stall — wait 2 more cycles before flagging.
+- **spec-drift via litmus update**: windows-host edited
+  `openspec/litmus-tests/litmus-windows-tray-diagnose-cli-surface.
+  yaml` to require the 2 new test names in its pin predicates.
+  This is appropriate — the litmus is windows-tray-specific and
+  owned by the windows host; the edit keeps the litmus in lockstep
+  with the implementation changes. No linux action.
+- merge stats: 5 files changed, 338 insertions(+), 37 deletions(-).
+  Windows-tray crate (sibling-owned scope) + windows-tray litmus +
+  windows cheatsheet + windows build-findings plan doc.
+- verification: `./build.sh --check` + `./build.sh --test` passed.
+- linux work this 2h window: 3 spec-gap-fill slices landed —
+  `opencode-web-session-otp` 30→75 at 08:21Z (29-annotation otp
+  crate pin), `proxy-container` 33→75 at 08:51Z + flagged
+  splice-all-vs-bump-all spec drift, `reverse-proxy-internal` 33→75
+  at 09:21Z + flagged HTTPS-vs-HTTP spec drift. Two openspec-text
+  reconciliations are now queued (both are spec text needing to
+  catch up to deliberate implementation choices). Full instant
+  suite progressed 74/74 → 75/75 → 76/76 → 77/77 — net +3 new
+  litmus tests, zero regressions. Quirk #9 discovered: `grep -F
+  '@trace spec:foo'` fails when `spec:foo` is in a comma-separated
+  list; workaround = match just the `spec:foo` substring.
+- recommended next: a focused spec-text reconciliation slice updating
+  both proxy-container § "SSL bump policy" (splice-all → bump-all)
+  AND reverse-proxy-internal § "SSL termination with ephemeral CA"
+  (HTTPS:443 → plain HTTP:8080 per RFC 6761 + auto_https off) to
+  align with the deliberate code reality. Or continue 33% backlog
+  (secret-rotation, project-summarizers, no-terminal-flicker). Or
+  forge-hot-cold-split Req 1 `/home/forge/src` tmpfs mount as the
+  last real-implementation gap.
+
+### Cycle 2026-05-30T07:43Z — MERGED windows-next (build_commit field) + osx-next (build-findings) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `6e018d2` (after both sibling merges; linux-next
+  was at `d6336c05` pre-merge).
+- observed_sibling_heads: main=`ea28d773` · linux-next=`d6336c05`
+  (pre-merge) · windows-next=`2727d24d` · osx-next=`6b2eb941`.
+- **windows-next: merged + tested + pushed** — substantive 1-commit
+  delta: `2727d24d feat(windows-tray): add build_commit field to
+  --diagnose for triage`. Diagnose JSON now carries `build_commit:
+  &'static str` field with short git SHA baked at compile time
+  (workspace `version` rolls only on release; two dev builds at the
+  same release tag can still differ at commit level — closes the
+  triage gap). build.rs does best-effort `git rev-parse --short HEAD`
+  with fallback to "unknown" (source-tarball builds), honors
+  BUILD_COMMIT_SHA_OVERRIDE for CI, emits env var BEFORE the
+  windows-target gate so cross-checks from non-Windows hosts also
+  see it. `notify_icon.rs` adds the new field; `diagnose_json_top_
+  level_keys_pinned` test extended 10 → 11 keys (additive contract:
+  "these keys present", not exact count). All crate changes in
+  sibling-owned scope. Plus cheatsheet update + new build-findings
+  doc.
+- **osx-next: merged + tested + pushed** — 1 hourly macOS
+  build-findings entry (062733Z, `ok`), +14 lines plan-only.
+- merge stats: windows 4 files / +165 lines (crate + cheatsheet +
+  plan); osx 1 file / +14 lines (plan).
+- verification: `./build.sh --check` + `./build.sh --test` passed on
+  both merges.
+- spec-drift: **none direct** — no openspec/, methodology/, or
+  shared-crate changes. Windows added a new field to the diagnose
+  JSON schema (`build_commit`); this is windows-tray-only today. If
+  linux ever adds a tray `--diagnose --json` surface (not present
+  today), it should follow the same pattern (build.rs reads
+  workspace VERSION + git rev-parse, additive schema).
+- linux work this 2h window: 2 spec-gap-fill slices landed —
+  `chromium-{debug,safe}-variant` BOTH 33→75 via a single dual-bound
+  litmus at 06:51Z (efficient when variants share an implementation),
+  `forge-opencode-onboarding` 30→75 at 07:21Z pinning Req 1
+  discovery + Req 2 ORDER + Req 3 web-launcher. Full instant suite
+  73/73 → 74/74 across the window — net +1 new litmus + 1 binding
+  edit covering 3 specs.
+- recommended next: continue the 30-33% backlog (opencode-web-session-
+  otp 30%, project-summarizers 33%, proxy-container 33%,
+  reverse-proxy-internal 33%, secret-rotation 33%, no-terminal-flicker
+  33%). Or pick up the still-open forge-hot-cold-split Req 1
+  `/home/forge/src` tmpfs mount declaration as a real-implementation
+  slice (all 3 sized-decision helpers already ready since the
+  04:51Z + 05:21Z slices).
+
+### Cycle 2026-05-30T05:43Z — MERGED windows-next + osx-next (substantive windows VERSION fix, plan-only osx) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `036cc01e` (after merging both siblings; linux-next
+  was at `ffacaa31` pre-merge).
+- observed_sibling_heads: main=`ea28d773` · linux-next=`ffacaa31`
+  (pre-merge) · windows-next=`a963c16d` · osx-next=`d1eb4024`.
+- **windows-next: merged + tested + pushed** — substantive 3-commit
+  delta after 5+ stalled cycles ended at the previous cron. Most
+  notable: `a963c16d feat(windows-tray): inject workspace VERSION via
+  build.rs into diagnose JSON` — fixes the cross-tray
+  `--diagnose --json` `version` field divergence flagged in today's
+  windows-build-findings (the JSON was reporting the static
+  Cargo.toml `0.1.0` instead of the workspace VERSION `0.2.260528.1`).
+  Windows-host added a build.rs that reads `../../VERSION`, emits
+  `WORKSPACE_VERSION` env var with a rerun-if-changed marker, and
+  `notify_icon.rs:1065` swaps `env!("CARGO_PKG_VERSION")` →
+  `env!("WORKSPACE_VERSION")`. Windows-host also smoke-verified on
+  real hardware (`windows-bullo`: cargo build 40.6s OK, clippy clean,
+  --diagnose --json version field now "0.2.260528.1"). Plus an
+  hourly build-findings entry (040534Z) and a 43-line append to
+  `plan/issues/tray-convergence-coordination.md` asking macOS-host to
+  mirror the same fix on its side. Crate-side delta (2 files, +21
+  lines) all in windows-tray (sibling-owned scope — merged through
+  without linux changes).
+- **osx-next: merged + tested + pushed** — 2 hourly macOS
+  build-findings entries (042446Z + 053941Z, both `ok`) +28 lines
+  plan-only.
+- merge stats: 4 files changed, 282 insertions(+), 1 deletion(-).
+  Total delta = windows crate work + cross-host doc + 2 plan
+  build-findings docs. NO openspec/, methodology/, or shared-crate
+  drift outside sibling scope.
+- verification: `./build.sh --check` passed (both merges); `./build.sh
+  --test` passed (both merges).
+- **spec-drift flagged for linux follow-on**: windows-host's ASK in
+  `tray-convergence-coordination.md` requests macOS-host to mirror
+  the same diagnose-version-field fix. Linux-host's tray (the
+  Linux-native StatusNotifierItem path) does NOT have an analogous
+  `--diagnose --json` surface today, so no parallel linux action is
+  needed. BUT: if linux ever adds a diagnose-JSON CLI flag, it should
+  follow the same workspace-VERSION-via-build.rs pattern. Noting
+  here for future reference.
+- linux work this 2h window: 2 real-implementation slices closing
+  forge-hot-cold-split Reqs 3 and 7 (compute_memory_ceiling_mb at
+  04:51Z + tmpfs-overlay tier table at 05:21Z; preflight.rs module
+  now 17/17 tests across compute_hot_budget + check_host_ram +
+  compute_memory_ceiling_mb + resolve_pull_cache_ram_mb pure halves).
+  Forge-hot-cold-split coverage 75→83→92→92 over the window. Full
+  instant suite stable at 71/71 PASS at 100% across 89 specs.
+- recommended next: continue closing forge-hot-cold-split gaps. The
+  last open gap is Req 1 § `/home/forge/src` tmpfs mount declaration
+  (all 3 sized-decision helpers now ready). Or pursue the coordinated
+  launch-arg-builder refactor wiring all 4 pure helpers into the
+  podman argv. macOS host now has a clear ASK to act on (mirror
+  diagnose-version-field fix).
+
+### Cycle 2026-05-30T03:43Z — MERGED osx-next (2 macOS build-findings entries) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `49403f1` (merge commit; linux-next was at
+  `ff97729c` pre-merge).
+- observed_sibling_heads: main=`ea28d773` · linux-next=`ff97729c`
+  (pre-merge) · windows-next=`24d7bec7` (stalled 5 consecutive
+  cycles since 19:43Z) · osx-next=`9b339892`.
+- windows-next: **no-op** — empty range `linux-next..origin/windows-next`.
+  Windows-host's `24d7bec7` was integrated at 19:43Z; **5 consecutive
+  cycles with zero progress** (21:43Z, 23:43Z, 01:43Z, 03:43Z + this).
+  Not yet blocking integration but the orchestrator should ping the
+  windows host on the next cycle if still stalled. The 4-cycle
+  threshold flagged at 01:43Z is now exceeded — escalation watch
+  starts here.
+- osx-next: **merged + tested + pushed** — 2 commits added two more
+  hourly `/build-macos-tray` results (022451Z + 032440Z, both `ok`)
+  to `plan/issues/macos-build-findings-2026-05-29.md`. Pattern
+  unchanged — macOS hourly cron stable across now ~8 successful runs.
+- merge stats: plan-only — no openspec/, methodology/, or crate
+  changes.
+- verification: `./build.sh --check` passed; `./build.sh --test`
+  passed.
+- spec-drift: **none** — diff is entirely under `plan/issues/`.
+- linux work this 2h window: 3 spec-gap-fill slices landed
+  (`podman-secrets-integration` 33→75 at 02:21Z + Req 7 in-memory-CA
+  gap flagged; `forge-hot-cold-split` 33→67 at 02:51Z + 5 spec gaps
+  flagged; **real-implementation slice** at 03:21Z closing 1 of 5
+  flagged gaps: `compute_hot_budget` recipe with 6 unit tests +
+  bumped coverage 67→75). Full instant suite progressed 69/69 →
+  70/70 → 71/71 → 71/71 — net +2 spec-gap litmus tests + 6 unit
+  tests landed.
+- escalation note: windows-next stalled 5 consecutive cycles. Per
+  guardrail "3 consecutive same-cause failures → fresh ESCALATION:".
+  This is not a failure (no merge attempt failed), just stall, but
+  if it persists through 2 more cycles the orchestrator should
+  ping the windows host directly. Not blocking integration.
+- recommended next: pursue another forge-hot-cold-split flagged gap
+  (Req 1 `/home/forge/src` tmpfs mount + thin git-runner wrapper
+  for `compute_hot_budget` to plumb the budget into the mount —
+  closes 2 gaps at once, ~1-2h). Or continue drift-protection on
+  forge-standalone / chromium variants (all still 33%).
+
+### Cycle 2026-05-30T01:43Z — MERGED osx-next (2 macOS build-findings entries) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `6814d593` (merge commit; linux-next was at
+  `db9fe6e8` pre-merge).
+- observed_sibling_heads: main=`ea28d773` · linux-next=`db9fe6e8`
+  (pre-merge) · windows-next=`24d7bec7` (no new commits since 19:43Z
+  cycle, 4 cycles ago) · osx-next=`e309f39a`.
+- windows-next: **no-op** — empty range `linux-next..origin/windows-next`.
+  Windows-host's last commit `24d7bec7` (build-windows-tray +
+  probe-macos-tray-on-windows skills) was integrated at 19:43Z; no
+  new work since. Worth flagging: 4 consecutive cycles (21:43Z /
+  23:43Z / 00:51Z (work-loop checkpoint, not cron) / 01:43Z) with
+  zero windows-next progress. Not yet blocking, but if it persists
+  another 4 cycles the orchestrator should ping the windows host.
+- osx-next: **merged + tested + pushed** — 2 commits added two more
+  hourly `/build-macos-tray` results to `plan/issues/macos-build-findings-
+  2026-05-29.md` (entries 002433Z + 012435Z, both `ok`). Pattern
+  identical to the 23:43Z cycle — hourly cron is doing its job
+  cleanly, no UX regressions, no spec drift. Single-file plan/-only
+  delta (+44 lines).
+- merge stats: 1 file changed, 44 insertions(+), 0 deletions(-).
+  Plan-only — no openspec/, methodology/, or crate changes.
+- verification: `./build.sh --check` passed; `./build.sh --test` passed.
+- spec-drift: **none** — diff is entirely under `plan/issues/`.
+- linux work this 2h window: 3 spec-gap-fill commits (`runtime-
+  diagnostics` 30→75 at 23:25Z via @trace alignment + spec-mapping
+  litmus; `forge-offline` 33→75 at 00:21Z via declarative-profile
+  litmus; `mcp-on-demand` 33→75 at 00:51Z via bridge-shape litmus;
+  `secrets-management` 33→75 at 01:21Z via implementation-shape
+  litmus). Full instant suite progressed 65/65 → 66/66 → 67/67 →
+  68/68 → 69/69 across the window — net +4 spec-gap litmus tests
+  landed, zero regressions.
+- recommended next: continue 30-33% spec-gap audit. Strong remaining
+  candidates: `forge-hot-cold-split` (33%, last_verified 2026-05-12),
+  `forge-standalone` (33%), `podman-secrets-integration` (33%,
+  complementary to today's secrets-management), `chromium-debug-
+  variant` / `chromium-safe-variant` (paired browser-isolation work).
+  macOS hourly build-findings cron continues to produce useful
+  artifacts — no cross-platform action item this cycle.
+
+### Cycle 2026-05-29T23:43Z — MERGED osx-next (2 macOS build-findings entries) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `b504850f` (merge commit; linux-next was at
+  `0638f348` pre-merge).
+- observed_sibling_heads: main=`ea28d773` · linux-next=`0638f348`
+  (pre-merge) · windows-next=`24d7bec7` (already integrated, no new
+  commits since 19:43Z) · osx-next=`7f9c8cc0`.
+- windows-next: **no-op** — empty range `linux-next..origin/windows-next`.
+  Windows-next head `24d7bec7` was already integrated at the 19:43Z
+  cycle; no new work since.
+- osx-next: **merged + tested + pushed** — 2 commits added two more
+  hourly `/build-macos-tray` results to `plan/issues/macos-build-findings-
+  2026-05-29.md` (entries 222435Z + 232433Z, both `ok`). Confirms the
+  macOS-host's `build-macos-tray` daily-loop skill is still firing
+  hourly and writing the durable artifact cleanly. Single-file plan/-only
+  delta (+72 lines).
+- merge stats: 1 file changed, 72 insertions(+), 0 deletions(-).
+  Plan-only — no openspec/, methodology/, or crate changes.
+- verification: `./build.sh --check` passed; `./build.sh --test` passed.
+- spec-drift: **none** — diff is entirely under `plan/issues/`. No
+  cross-platform protocol or shared-spec surfaces touched.
+- linux work this 2h window: 4 spec-gap-fill commits (`browser-isolation-
+  framework` 33→67 at 21:21Z, `fix-windows-image-routing` 33→67 at
+  22:29Z via helper extraction, `tray-host-control-socket` 30→75 at
+  22:55Z with new unix-shape litmus, `runtime-diagnostics` 30→75 at
+  23:25Z with new spec-mapping-shape litmus + @trace spec:runtime-
+  diagnostics alignment on diagnostic_event_emitter.rs). Full instant
+  suite now 66/66 PASS at 100% across 89 specs (up from 62/62 at the
+  start of this window — net +4 spec-gap litmus tests landed without
+  any regressions).
+- recommended next: continue 30-33% spec-gap audit. Strong candidates:
+  `forge-offline`, `mcp-on-demand`, `secrets-management` (all 33%,
+  last_verified 2026-05-03 with substantial post-implementation work
+  since). The macOS-host's hourly build-findings cron continues to
+  produce useful artifacts; no cross-platform action item from osx-next
+  this cycle.
+
+### Cycle 2026-05-29T21:43Z — MERGED osx-next (macOS build findings + UX-gaps doc) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `150aea76` (merge commit; linux-next was at
+  `fc298496` pre-merge).
+- observed_sibling_heads: main=`ea28d773` · linux-next=`fc298496`
+  (pre-merge) · windows-next=`24d7bec7` (already integrated at
+  19:43Z) · osx-next=`632786c3`
+- windows-next action: **no-op** (no commits ahead of linux-next;
+  windows last merge was at the 19:43Z cycle).
+- osx-next action: **merged + tested + pushed**. Single commit
+  `632786c3 chore(macos-build-findings): 20260529T212446Z ok +
+  UX-gaps documented`:
+    * Hourly `/build-macos-tray` run against `9a945410` (post the
+      19:43Z linux-next merge) — build green, smoke green, install
+      replaced the `5e331872` bundle the user observed gap-1/
+      gap-2/gap-3 against. Fresh bundle not yet re-tested against
+      the UX gap list — that will land when
+      `/test-e2e-macos-tray` fires at 04:43Z (per the macOS
+      autonomous-smoke schedule).
+    * Publishes `plan/issues/macos-tray-ux-gaps-2026-05-29.md` —
+      durable UX-regression list referenced by the autonomous-
+      smoke-false-positive correction section appended earlier
+      today. This is the macOS host's persistent log of UX
+      regressions the autonomous smoke can't yet detect; future
+      work will close those autonomously-detectable.
+  Touched files: 2 plan/issues/ files (1 updated + 1 new). All
+  macOS-host-owned plan-scope content; no code overlap. Auto-
+  merged cleanly.
+- Verification: `./build.sh --check` clean + `./build.sh --test`
+  clean. Full pre-build instant litmus suite: 62/62 PASS at 100%
+  across 89 specs (no new bound litmus; plan docs only).
+- Spec/methodology/plan drift: NONE outside `plan/issues/`. The
+  new `plan/issues/macos-tray-ux-gaps-2026-05-29.md` is macOS-
+  host-owned content — no spec, methodology, or cross-platform
+  contract changes.
+- Cross-host convergence note: the per-platform build cron skills
+  (macOS / windows / `merge-to-main-and-release`) are now producing
+  ledger artifacts visible cross-host. macOS has a UX-gap follow-on
+  loop where autonomous smoke can't detect what the user observed
+  on `5e331872`; the new bundle from `/build-macos-tray` 21:24Z
+  is up to bat for the next `/test-e2e-macos-tray` cycle.
+
+### Cycle 2026-05-29T20:00Z — CONVERGED (zero branch drift, local CI validated) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `693d67e7` (coordination tip; linux-next was at `693d67e7`).
+- observed_sibling_heads: main=`ea28d773` · linux-next=`693d67e7` · windows-next=`24d7bec7` · osx-next=`9a945410`
+- windows-next action: **no-op** (already integrated; `windows-next` is a clean ancestor of `linux-next`).
+- osx-next action: **no-op** (already integrated; `osx-next` is a clean ancestor of `linux-next`).
+- Verification: `./build.sh --ci` successfully executed. All 661+ unit and integration tests and 59/59 litmus checks passed cleanly with 100% success.
+- Spec/methodology/plan drift: NONE.
+- Cross-host convergence note: Sibling branches are in perfect convergence ($D = 0$). All tasks in the roadmap are completed. The orchestration loop has established the daily release and per-platform build crons across the entire multi-host mesh.
+
+### Cycle 2026-05-29T19:43Z — MERGED windows-next (build-windows-tray + probe-macos-tray-on-windows daily-loop skills) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `04ea1fd0` (merge commit; linux-next was at
+  `9a945410` pre-merge).
+- observed_sibling_heads: main=`ea28d773` · linux-next=`9a945410`
+  (pre-merge) · windows-next=`24d7bec7` · osx-next=`9a945410`
+- windows-next action: **merged + tested + pushed**. Three commits
+  brought in:
+    * `b13f95c4 skills(windows-next): /build-windows-tray +
+      /build-macos-tray daily-loop skills + initial findings` —
+      new skills following the pattern macOS established with
+      `/build-macos-tray` (commit `69c730f6` on the macos side).
+      The windows host gets its own per-platform build cron + a
+      cross-build probe.
+    * `da70e27f Merge remote-tracking branch 'origin/linux-next'
+      into windows-next` — windows pulled in linux-next (the
+      release-flow + my recent litmus work).
+    * `24d7bec7 skills(windows-next): rename build-macos-tray ->
+      probe-macos-tray-on-windows (avoid collision with macos-
+      host's authoritative skill)` — windows had independently
+      named their cross-build skill `build-macos-tray`, which
+      collided with the macOS-host's authoritative skill of the
+      same name (already in linux-next via osx-next merge).
+      Renamed to `probe-macos-tray-on-windows` and refactored
+      findings-file format to mirror macOS's pattern
+      (`plan/issues/<skill>-findings-YYYY-MM-DD.md`, append per
+      run with structured SECTION_KIND sections).
+  Touched files: 6 new (2 skill canonical dirs + 2 .claude/skills
+  pointer files + 2 plan/diagnostics finding files). All windows-
+  owned skill scope, no linux/macOS code overlap. Auto-merged
+  cleanly.
+- osx-next action: **no-op** (head identical to linux-next pre-
+  merge at `9a945410`).
+- Verification: `./build.sh --check` clean + `./build.sh --test`
+  clean. Full pre-build instant litmus suite: 59/59 PASS at 100%
+  across 89 specs (no new bound litmus; skills are docs-only).
+- Spec/methodology/plan drift: NONE. Skills + finding files only.
+- Cross-host convergence note: with this merge, ALL THREE platform
+  hosts now have per-platform build cron skills following the
+  `/build-<platform>-tray` pattern + the `/merge-to-main-and-
+  release` daily release skill on linux. The orchestration mesh is
+  now self-driving daily releases + per-platform smoke testing
+  with cross-host findings ledgers, all from canonical skill files
+  in `skills/<name>/` symlinked or pointer-referenced from
+  `.<runtime>/skills/`. Pattern reuse depth: 3 build-platform-X
+  skills (osx, windows, "probe windows builds macOS") +
+  merge-to-main-and-release + 2 work-loop skills
+  (advance-work-from-plan + coordinate-multihost-work +
+  multihost-orchestration).
+
 ### Cycle 2026-05-29T17:43Z — MERGED windows-next (cross-tray PTY-attach project-threading pin) ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next

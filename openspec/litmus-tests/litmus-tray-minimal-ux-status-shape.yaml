@@ -1,0 +1,106 @@
+# @trace spec:tray-minimal-ux
+#
+# Drift-protection for the IMPLEMENTATION surfaces of tray-minimal-ux
+# complementing the existing `litmus:tray-minimal-ux-contract-shape`
+# (which pins spec traces + Seedlings/Attach Here/Maintenance/Stop
+# menu labels + MUST_NOT tombstones). This litmus pins the 5-state
+# enclave-status text mapping (Req 2 dynamic verification status),
+# the Quit Tillandsias menu element (Req 1), and the EnclaveStatus
+# enum + state-machine transitions (Req 2 progression contract).
+#
+# Combined with the existing contract litmus, raises
+# tray-minimal-ux coverage_ratio 33 → 75.
+name: litmus:tray-minimal-ux-status-shape
+spec: tray-minimal-ux
+phase: pre-build
+description: >
+  Pin the EnclaveStatus enum + 5-state text mapping (Verifying /
+  ProxyReady "Building enclave" / GitReady "Building git mirror" /
+  AllHealthy "Environment OK" / Failed "Unhealthy environment"),
+  the icon-glyph progression (☐ → ☐🌐 → ☐🌐🪞 → ✓ / 🥀), and the
+  Quit Tillandsias menu literal.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-headless/src/tray/mod.rs
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "Req 2: 5-state enclave status text mapping (Verifying / ProxyReady / GitReady / AllHealthy / Failed)"
+    # Spec § Req 2 Scenario table mandates exactly 5 states. The
+    # match arms in tray/mod.rs:125-129 are the implementation;
+    # pin all 5 variant arms together.
+    command: "grep -cE 'EnclaveStatus::(Verifying|ProxyReady|GitReady|AllHealthy|Failed) =>' crates/tillandsias-headless/src/tray/mod.rs | awk '{ if ($1+0 >= 5) print \"ok:\", $1, \"EnclaveStatus match arms\"; else { print \"FAIL: only\", $1, \"of >=5\"; exit 1 } }'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req 2: status text literals — 'Verifying environment' + 'Building enclave' + 'Building git mirror' + 'Environment OK' + 'Unhealthy environment'"
+    # Spec § Req 2 mandates exact text labels per state. Pin all 5
+    # literals together — a regression renaming any silently
+    # breaks the menu-text assertion test (line 4041) AND the
+    # user-facing UX.
+    command: "for s in 'Verifying environment' 'Building enclave' 'Building git mirror' 'Environment OK' 'Unhealthy environment'; do grep -Fq \"$s\" crates/tillandsias-headless/src/tray/mod.rs || { echo \"FAIL: status text '$s' missing\"; exit 1; }; done && echo \"ok: 5 status text literals present\""
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req 2: icon glyph progression (☐ → ☐🌐 → ☐🌐🪞 → ✓ / 🥀)"
+    # Spec § Req 2 Scenario table maps each state to an icon
+    # progression. The Unicode glyphs are the user-visible icon
+    # set; pin a representative subset (the ☐ checklist starts,
+    # 🌐 network adds at proxy ready, 🪞 mirror at git ready, ✓
+    # checkmark on success, 🥀 wilted-rose on failure).
+    command: "for g in '☐' '🌐' '🪞' '✓ Environment OK' '🥀 Unhealthy'; do grep -Fq \"$g\" crates/tillandsias-headless/src/tray/mod.rs || { echo \"FAIL: glyph or label '$g' missing\"; exit 1; }; done && echo \"ok: 5 icon-glyph markers present\""
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req 1: Quit Tillandsias menu literal present (4-element first-launch menu)"
+    # Spec § Req 1 mandates exactly 4 menu elements on first launch,
+    # the 4th being `Quit Tillandsias`. The literal appears at the
+    # menu-construction site (mod.rs:2622) AND in the production
+    # menu-shape unit tests (3827, 4119). Pin both production + test
+    # site presence with >=3.
+    command: "grep -cF 'Quit Tillandsias' crates/tillandsias-headless/src/tray/mod.rs | awk '{ if ($1+0 >= 3) print \"ok:\", $1, \"Quit Tillandsias sites\"; else { print \"FAIL: only\", $1, \"of >=3\"; exit 1 } }'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req 2: state-machine transition docblock pins Verifying → ProxyReady → GitReady → AllHealthy chain"
+    # The docblock at lines 50-72 encodes the spec's transition
+    # graph. A regression to a different chain (e.g. swapping the
+    # order or merging states) would break user-visible status
+    # progression. Pin the 4 forward transitions.
+    command: "for t in 'Verifying ──► ProxyReady' 'ProxyReady ──► GitReady' 'GitReady ──► AllHealthy' 'Any.*Verifying' ; do grep -Eq \"$t\" crates/tillandsias-headless/src/tray/mod.rs || { echo \"FAIL: transition '$t' missing\"; exit 1; }; done && echo \"ok: 4 state-machine transitions documented\""
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req 3: Seedlings submenu order (OpenCode / OpenCodeWeb / Claude as SelectedAgent variants)"
+    # Spec § Req 3 mandates Seedlings shows OpenCode Web + OpenCode
+    # + Claude. The SelectedAgent enum variants are the spec-mapped
+    # choice list; pin all 3.
+    command: "for v in 'OpenCode' 'OpenCodeWeb' 'Claude'; do grep -Fq \"SelectedAgent::$v\" crates/tillandsias-headless/src/tray/mod.rs || { echo \"FAIL: SelectedAgent::$v missing\"; exit 1; }; done && echo \"ok: 3 SelectedAgent variants present\""
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+observability:
+  traces:
+    - "@trace spec:tray-minimal-ux"
+    - "@trace spec:tray-app"
+  expected_log: "tray-minimal-ux EnclaveStatus 5-state mapping + status text labels + icon glyphs + Quit Tillandsias + transitions + Seedlings order all pinned"
+  log_fields:
+    spec: "tray-minimal-ux"
+    test: "tray-minimal-ux-status-shape"
+    artifact: "crates/tillandsias-headless/src/tray/mod.rs"
+
+rollback:
+  on_failure: >
+    A `spec:tray-minimal-ux` implementation surface drifted. Restore
+    the 5 `EnclaveStatus::{Verifying,ProxyReady,GitReady,AllHealthy,
+    Failed} =>` match arms with their canonical status text literals
+    (`Verifying environment`, `Building enclave`, `Building git
+    mirror`, `Environment OK`, `Unhealthy environment`); the icon
+    glyphs (☐ / 🌐 / 🪞 / ✓ / 🥀); the `Quit Tillandsias` menu literal
+    at >=3 sites (menu construction + production tests); the
+    state-machine transition docblock (Verifying → ProxyReady →
+    GitReady → AllHealthy + Any → Verifying fallback); the 3
+    SelectedAgent variants (OpenCode / OpenCodeWeb / Claude).
+  command: "grep -nE 'EnclaveStatus::|Verifying environment|Building (enclave|git mirror)|Environment OK|Unhealthy environment|Quit Tillandsias|SelectedAgent::(OpenCode|OpenCodeWeb|Claude)' crates/tillandsias-headless/src/tray/mod.rs | head -25"

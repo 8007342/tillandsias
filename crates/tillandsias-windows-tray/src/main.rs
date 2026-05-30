@@ -51,11 +51,28 @@ fn main() {
     // do this. Tried AttachConsole(ATTACH_PARENT_PROCESS) — it attaches the
     // binary to the *visible* parent console, bypassing PowerShell's pipe, so
     // captured-output scripts see nothing. Reverted.
+    // --help / -h and --version / -V short-circuit before any of the
+    // diagnostic modes so they always succeed and never touch the WSL
+    // surface (e.g. a customer with a totally broken WSL install can still
+    // ask the binary what it is and how to use it).
+    if std::env::args().any(|a| a == "--help" || a == "-h") {
+        print!("{}", notify_icon::help_text());
+        std::process::exit(0);
+    }
+    if std::env::args().any(|a| a == "--version" || a == "-V") {
+        println!("{}", notify_icon::version_line());
+        std::process::exit(0);
+    }
     if std::env::args().any(|a| a == "--provision-once") {
         std::process::exit(notify_icon::provision_once());
     }
     if std::env::args().any(|a| a == "--status-once") {
-        std::process::exit(notify_icon::status_once());
+        let format = if std::env::args().any(|a| a == "--json") {
+            notify_icon::DiagnoseFormat::Json
+        } else {
+            notify_icon::DiagnoseFormat::Human
+        };
+        std::process::exit(notify_icon::status_once(format));
     }
     if std::env::args().any(|a| a == "--diagnose") {
         let format = if std::env::args().any(|a| a == "--json") {
@@ -64,6 +81,21 @@ fn main() {
             notify_icon::DiagnoseFormat::Human
         };
         std::process::exit(notify_icon::diagnose(format));
+    }
+    if std::env::args().any(|a| a == "--logs") {
+        // Optional `--tail <N>`: print the last N lines instead of the
+        // full file. Malformed values (non-numeric, missing arg) fall
+        // through to the full-file path — friendlier than rejecting the
+        // run for a typo.
+        let mut iter = std::env::args();
+        let tail: Option<usize> = loop {
+            match iter.next() {
+                Some(a) if a == "--tail" => break iter.next().and_then(|v| v.parse().ok()),
+                Some(_) => continue,
+                None => break None,
+            }
+        };
+        std::process::exit(notify_icon::logs(tail));
     }
     notify_icon::run();
 }

@@ -43,14 +43,16 @@ specs:
   status: active
   litmus_tests:
   - litmus:browser-ephemeral
-  coverage_ratio: 33
-  last_verified: '2026-05-03'
+  - litmus:browser-isolation-core-shape
+  coverage_ratio: 67
+  last_verified: '2026-05-29'
 - spec_id: browser-isolation-framework
   status: active
   litmus_tests:
   - litmus:browser-ephemeral
-  coverage_ratio: 33
-  last_verified: '2026-05-03'
+  - litmus:browser-isolation-framework-shape
+  coverage_ratio: 67
+  last_verified: '2026-05-29'
 - spec_id: browser-isolation-launcher
   status: obsolete
   litmus_tests: []
@@ -134,8 +136,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:ci-release-musl-binary-policy
-  coverage_ratio: 33
-  last_verified: '2026-05-19'
+  - litmus:ci-release-toolchain-shape
+  coverage_ratio: 67
+  last_verified: '2026-05-29'
 - spec_id: cli-bash-mode
   status: obsolete
   litmus_tests: []
@@ -215,8 +218,11 @@ specs:
   status: active
   litmus_tests:
   - litmus:environment-isolation
-  coverage_ratio: 33
-  last_verified: '2026-05-03'
+  - litmus:enclave-isolation
+  - litmus:ephemeral-guarantee
+  - litmus:podman-idiomatic-launch-routing
+  coverage_ratio: 100
+  last_verified: '2026-05-29'
 - spec_id: external-logs-layer
   status: active
   litmus_tests:
@@ -247,8 +253,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:fix-windows-image-routing-shape
-  coverage_ratio: 33
-  last_verified: '2026-05-12'
+  - litmus:fix-windows-image-routing-helper-shape
+  coverage_ratio: 67
+  last_verified: '2026-05-29'
 - spec_id: forge-as-only-runtime
   status: active
   litmus_tests:
@@ -285,20 +292,24 @@ specs:
   status: active
   litmus_tests:
   - litmus:forge-hot-cold-split-shape
-  coverage_ratio: 33
-  last_verified: '2026-05-12'
+  - litmus:forge-hot-cold-split-tmpfs-shape
+  coverage_ratio: 92
+  last_verified: '2026-05-30'
 - spec_id: forge-offline
   status: active
   litmus_tests:
   - litmus:credential-isolation
-  coverage_ratio: 33
-  last_verified: '2026-05-03'
+  - litmus:ephemeral-guarantee
+  - litmus:forge-offline-profile-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: forge-opencode-onboarding
   status: active
   litmus_tests:
   - litmus:forge-opencode-onboarding-shape
-  coverage_ratio: 30
-  last_verified: '2026-05-12'
+  - litmus:forge-opencode-onboarding-bootstrap-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: forge-shell-tools
   status: active
   litmus_tests:
@@ -310,14 +321,16 @@ specs:
   status: active
   litmus_tests:
   - litmus:forge-staleness-shape
-  coverage_ratio: 30
-  last_verified: '2026-05-12'
+  - litmus:forge-staleness-invariants-shape
+  coverage_ratio: 67
+  last_verified: '2026-05-29'
 - spec_id: forge-standalone
   status: active
   litmus_tests:
   - litmus:forge-standalone-traceability
-  coverage_ratio: 33
-  last_verified: '2026-05-12'
+  - litmus:forge-standalone-runtime-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: forge-welcome
   status: active
   litmus_tests:
@@ -329,8 +342,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:gh-auth-script-smoke
-  coverage_ratio: 30
-  last_verified: '2026-05-12'
+  - litmus:gh-auth-script-shape
+  coverage_ratio: 67
+  last_verified: '2026-05-29'
 - spec_id: git-mirror-service
   status: active
   litmus_tests:
@@ -342,8 +356,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:credential-isolation
-  coverage_ratio: 33
-  last_verified: '2026-05-03'
+  - litmus:github-credential-health-shape
+  coverage_ratio: 67
+  last_verified: '2026-05-30'
 - spec_id: host-browser-mcp
   status: active
   litmus_tests:
@@ -360,8 +375,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:browser-ephemeral
-  coverage_ratio: 33
-  last_verified: '2026-05-03'
+  - litmus:host-chromium-on-demand-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: inference-container
   status: active
   litmus_tests:
@@ -469,8 +485,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:cross-platform-tray
-  coverage_ratio: 33
-  last_verified: '2026-05-15'
+  - litmus:no-terminal-flicker-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: opencode-web-session
   status: obsolete
   litmus_tests: []
@@ -481,8 +498,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:credential-isolation
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  - litmus:opencode-web-session-otp-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: overlay-mount-cache
   status: obsolete
   litmus_tests: []
@@ -508,14 +526,16 @@ specs:
   status: active
   litmus_tests:
   - litmus:podman-container-spec-shape
-  coverage_ratio: 33
-  last_verified: '2026-05-12'
+  - litmus:podman-container-spec-source-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: podman-container-handle
   status: active
   litmus_tests:
   - litmus:podman-container-handle-shape
-  coverage_ratio: 33
-  last_verified: '2026-05-12'
+  - litmus:podman-container-handle-source-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: podman-idiomatic-patterns
   status: active
   litmus_tests:
@@ -543,26 +563,31 @@ specs:
   status: active
   litmus_tests:
   - litmus:project-bootstrap-readme-shape
-  coverage_ratio: 33
-  last_verified: '2026-05-15'
+  - litmus:project-summarizers-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: proxy-container
   status: active
   litmus_tests:
   - litmus:enclave-isolation
-  coverage_ratio: 33
-  last_verified: '2026-05-03'
+  - litmus:proxy-container-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: remote-projects
   status: active
   litmus_tests:
   - litmus:ephemeral-guarantee
-  coverage_ratio: 33
-  last_verified: '2026-05-15'
+  - litmus:remote-projects-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: runtime-diagnostics
   status: active
   litmus_tests:
   - litmus:runtime-diagnostics-shape
-  coverage_ratio: 30
-  last_verified: '2026-05-03'
+  - litmus:runtime-diagnostics-emitter-shape
+  - litmus:runtime-diagnostics-spec-mapping-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-29'
 - spec_id: runtime-diagnostics-stream
   status: active
   litmus_tests:
@@ -590,8 +615,10 @@ specs:
   status: active
   litmus_tests:
   - litmus:credential-isolation
-  coverage_ratio: 33
-  last_verified: '2026-05-03'
+  - litmus:gh-auth-script-shape
+  - litmus:secrets-management-implementation-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: simplified-tray-ux
   status: active
   litmus_tests:
@@ -648,8 +675,10 @@ specs:
   status: active
   litmus_tests:
   - litmus:binary-e2e-smoke
-  coverage_ratio: 30
-  last_verified: '2026-05-15'
+  - litmus:control-dispatch-shape
+  - litmus:tray-host-control-socket-unix-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-29'
 - spec_id: tray-icon-lifecycle
   status: active
   litmus_tests:
@@ -663,8 +692,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:tray-minimal-ux-contract-shape
-  coverage_ratio: 33
-  last_verified: '2026-05-12'
+  - litmus:tray-minimal-ux-status-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: tray-progress-and-icon-states
   status: active
   litmus_tests:
@@ -699,8 +729,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:ephemeral-guarantee
-  coverage_ratio: 33
-  last_verified: '2026-05-15'
+  - litmus:versioning-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: web-image
   status: active
   litmus_tests:
@@ -751,20 +782,24 @@ specs:
   status: active
   litmus_tests:
   - litmus:browser-ephemeral
-  coverage_ratio: 33
-  last_verified: '2026-05-03'
+  - litmus:chromium-variants-launch-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: chromium-safe-variant
   status: active
   litmus_tests:
   - litmus:browser-ephemeral
-  coverage_ratio: 33
-  last_verified: '2026-05-03'
+  - litmus:chromium-variants-launch-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: mcp-on-demand
   status: active
   litmus_tests:
   - litmus:mcp-on-demand-shape
-  coverage_ratio: 33
-  last_verified: '2026-05-13'
+  - litmus:host-browser-mcp-shape
+  - litmus:mcp-on-demand-bridge-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: observability-convergence
   status: active
   litmus_tests:
@@ -781,8 +816,10 @@ specs:
   status: active
   litmus_tests:
   - litmus:credential-isolation
-  coverage_ratio: 33
-  last_verified: '2026-05-03'
+  - litmus:secrets-management-implementation-shape
+  - litmus:podman-secrets-integration-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: tillandsias-vault
   status: active
   litmus_tests:
@@ -813,5 +850,6 @@ specs:
   status: active
   litmus_tests:
   - litmus:enclave-isolation
-  coverage_ratio: 33
-  last_verified: '2026-05-03'
+  - litmus:reverse-proxy-internal-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'

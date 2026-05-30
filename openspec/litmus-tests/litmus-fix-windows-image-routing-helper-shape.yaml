@@ -1,0 +1,104 @@
+# @trace spec:fix-windows-image-routing
+#
+# Companion drift-protection for the `image_build_paths` helper
+# introduced to satisfy `spec:fix-windows-image-routing` "Image
+# Build Centralized in Helper" requirement.
+#
+# The existing `litmus:fix-windows-image-routing-shape` runs the
+# cargo test `build_routing_uses_type_specific_containerfiles` —
+# verifies prepare_build still routes each image-name to the right
+# Containerfile. This companion is instant + grep-only; pins the
+# spec-mandated helper function exists with the right signature
+# AND that prepare_build calls it (rather than inlining the
+# routing again).
+#
+# Combined with the existing test-running litmus, raises
+# fix-windows-image-routing coverage_ratio 33 → 67.
+name: litmus:fix-windows-image-routing-helper-shape
+spec: fix-windows-image-routing
+phase: pre-build
+description: >
+  Pin `pub(crate) fn image_build_paths(root_dir: &str, image_name:
+  &str) -> Result<(String, String), ImageBuilderError>` helper +
+  its @trace + the two new unit tests
+  (image_build_paths_routes_each_known_type_to_its_containerfile,
+  image_build_paths_rejects_unknown_image_type_with_named_error)
+  + the prepare_build refactor that calls the helper.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-core/src/image_builder.rs
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "image_builder.rs head trace includes spec:fix-windows-image-routing"
+    command: "grep -F '@trace spec:fix-windows-image-routing' crates/tillandsias-core/src/image_builder.rs"
+    timeout_ms: 3000
+    expected_behavior: "spec:fix-windows-image-routing"
+
+  - step: "spec-mandated helper function exists with the canonical signature"
+    # Spec requirement: "The routing logic MUST be encapsulated in a
+    # small `image_build_paths(image_name: &str) -> (Containerfile,
+    # ContextDir)` helper function". A refactor inlining the
+    # routing back into prepare_build would silently lose the
+    # centralization invariant.
+    command: "grep -F 'pub(crate) fn image_build_paths(' crates/tillandsias-core/src/image_builder.rs"
+    timeout_ms: 3000
+    expected_behavior: "image_build_paths"
+
+  - step: "helper returns Result<(String, String), ImageBuilderError>"
+    # `grep -F '-> ...'` parses `->` as a malformed option without
+    # `--` separator. Insert `--` so grep treats the pattern
+    # positionally. Seventh matcher/parser quirk this session.
+    command: "grep -F -- '-> Result<(String, String), ImageBuilderError>' crates/tillandsias-core/src/image_builder.rs"
+    timeout_ms: 3000
+    expected_behavior: "ImageBuilderError"
+
+  - step: "prepare_build delegates to the helper (not inline routing)"
+    # If a regression re-inlines the routing into prepare_build,
+    # this assertion fires. The single `image_build_paths(&self.
+    # root_dir, image_name)?` call is the bridge between the
+    # ImageBuilder trait and the spec-mandated helper.
+    command: "grep -F 'image_build_paths(&self.root_dir, image_name)' crates/tillandsias-core/src/image_builder.rs"
+    timeout_ms: 3000
+    expected_behavior: "image_build_paths"
+
+  - step: "unit test pins the routing for all 5 known image types"
+    # Spec requirement: "Defensive Integration Test or Self-Check".
+    # The new test exercises all 5 known types (forge/proxy/git/
+    # inference/web) + asserts the parent invariant
+    # (containerfile == context_dir + "/Containerfile").
+    command: "grep -F 'fn image_build_paths_routes_each_known_type_to_its_containerfile' crates/tillandsias-core/src/image_builder.rs"
+    timeout_ms: 3000
+    expected_behavior: "image_build_paths_routes_each_known_type"
+
+  - step: "unit test pins the error mode for unknown types"
+    # Spec mandates the error mode is "Unknown image type" with the
+    # bad name in the message. A regression to a generic
+    # ContainerfileNotFound("Unknown") would break observability.
+    command: "grep -F 'fn image_build_paths_rejects_unknown_image_type_with_named_error' crates/tillandsias-core/src/image_builder.rs"
+    timeout_ms: 3000
+    expected_behavior: "image_build_paths_rejects_unknown"
+
+observability:
+  traces:
+    - "@trace spec:fix-windows-image-routing"
+  expected_log: "image_build_paths helper + delegation + unit tests pinned"
+  log_fields:
+    spec: "fix-windows-image-routing"
+    test: "fix-windows-image-routing-helper-shape"
+    artifact: "crates/tillandsias-core/src/image_builder.rs"
+
+rollback:
+  on_failure: >
+    A `spec:fix-windows-image-routing` surface drifted. Restore:
+    `@trace spec:fix-windows-image-routing` on image_builder.rs;
+    `pub(crate) fn image_build_paths(root_dir: &str, image_name:
+    &str) -> Result<(String, String), ImageBuilderError>` helper;
+    `prepare_build` MUST delegate via
+    `image_build_paths(&self.root_dir, image_name)?` (NOT inline
+    the routing); both unit tests
+    (`image_build_paths_routes_each_known_type_to_its_containerfile`
+    + `image_build_paths_rejects_unknown_image_type_with_named_error`).
+  command: "grep -nE 'image_build_paths|fix-windows-image-routing' crates/tillandsias-core/src/image_builder.rs | head -15"

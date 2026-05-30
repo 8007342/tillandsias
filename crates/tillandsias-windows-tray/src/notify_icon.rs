@@ -372,6 +372,98 @@ fn open_log_file() {
 
 /// Headless diagnostic entry point (`tillandsias-tray --provision-once`): run the
 /// recipe provisioning flow to completion, printing each phase to stdout, and
+/// Pure tail-selection helper for [`logs`]. With `tail = Some(n)`, returns
+/// the last `n` lines; with `None`, returns all lines. `saturating_sub`
+/// handles `n > len` (return all lines) and `n = 0` (return none) without
+/// underflow. Pinned by `select_log_tail_handles_all_cases`.
+fn select_log_tail(content: &str, tail: Option<usize>) -> Vec<&str> {
+    let lines: Vec<&str> = content.lines().collect();
+    let start = match tail {
+        Some(n) => lines.len().saturating_sub(n),
+        None => 0,
+    };
+    lines[start..].to_vec()
+}
+
+/// `--logs` / `--logs --tail <N>`: dump the tray log file to stdout for
+/// operators who want to inspect more than the 20 lines `--diagnose`
+/// surfaces in `recent_log_tail`. Honors the GUI-subsystem stdio quirk:
+/// support scripts should redirect to a file
+/// (`tray.exe --logs > out.txt 2>nul`) rather than rely on PowerShell
+/// pipe capture. Exit: 0 if the log file was read (even if empty), 1 if
+/// it's missing or unreadable. Does NOT touch WSL.
+pub fn logs(tail: Option<usize>) -> i32 {
+    let path = log_file_path();
+    let content = match std::fs::read_to_string(&path) {
+        Ok(c) => c,
+        Err(err) => {
+            eprintln!("[logs] cannot read log file {}: {err}", path.display());
+            return 1;
+        }
+    };
+    for line in select_log_tail(&content, tail) {
+        println!("{line}");
+    }
+    0
+}
+
+/// Single-line `--version` / `-V` output. Format: `tillandsias-tray <version>
+/// (<short-commit>)`. Reuses the same `WORKSPACE_VERSION` + `BUILD_COMMIT_SHA`
+/// env vars `build.rs` bakes for the diagnose surface — so the three places a
+/// user can ask "what version am I running?" (`--version`, `--diagnose --json
+/// version` field, tray menu footer) all return the same string built from
+/// the same source. Pinned by `version_line_uses_workspace_version_and_commit`.
+pub fn version_line() -> String {
+    format!(
+        "tillandsias-tray {} ({})",
+        env!("WORKSPACE_VERSION"),
+        env!("BUILD_COMMIT_SHA")
+    )
+}
+
+/// Multi-line `--help` / `-h` text. Documents every CLI mode, its exit-code
+/// contract, the GUI-subsystem stdio quirk (so support scripts know to
+/// redirect instead of pipe), and points the reader at the canonical
+/// diagnostic flow. Pinned by `help_text_documents_all_cli_modes` — a
+/// future mode that gets added without its `--help` entry surfaces here
+/// pre-build instead of as a documentation-stale incident in the field.
+///
+/// Trailing newline so `print!(help_text())` matches stdio convention.
+pub fn help_text() -> String {
+    format!(
+        "tillandsias-tray {version} ({commit})\n\
+         A native Win32 NotifyIcon tray for Tillandsias on Windows.\n\
+         \n\
+         USAGE:\n    \
+            tillandsias-tray.exe [MODE]\n\
+         \n\
+         MODES:\n    \
+            (no flags)              Launch the interactive tray (GUI subsystem).\n    \
+            --provision-once        Provision the WSL utility VM to Ready, print\n                            \
+            progress, exit. Exit: 0 = Ready, 1 = failed.\n    \
+            --status-once [--json]  Connect to the live control wire, print VmStatus.\n                            \
+            Exit: 0 = Ready, 2 = reachable-not-Ready, 1 = unreachable.\n    \
+            --diagnose [--json]     Bundled health report (10+ keys). Exit: 0 healthy,\n                            \
+            2 degraded, 1 hard fail.\n    \
+            --logs [--tail N]       Dump the tray log file to stdout (last N lines\n                            \
+            with --tail). Exit: 0 = readable, 1 = missing.\n    \
+            --help, -h              Print this help and exit 0.\n    \
+            --version, -V           Print version + build commit and exit 0.\n\
+         \n\
+         OUTPUT NOTE:\n    \
+            The tray is a GUI-subsystem binary; PowerShell pipe capture of stdout\n    \
+            is unreliable (Rust treats a detached stdout as BrokenPipe and discards).\n    \
+            Support scripts MUST redirect to a file: `tillandsias-tray.exe \\\n        \
+                --diagnose --json > out.json 2>nul`\n    \
+            and branch on the exit code rather than the captured output.\n\
+         \n\
+         See cheatsheets/runtime/windows-tray-diagnostics.md for the full\n\
+         diagnose JSON schema + the canonical PowerShell consumer pattern.\n",
+        version = env!("WORKSPACE_VERSION"),
+        commit = env!("BUILD_COMMIT_SHA"),
+    )
+}
+
 /// return a process exit code (0 = VM reached Ready over the control wire, 1 =
 /// failed). A release tray is a GUI-subsystem binary with no console, so this
 /// gives an observable, scriptable end-to-end provision run for CI smoke and the
@@ -421,6 +513,45 @@ pub fn provision_once() -> i32 {
     })
 }
 
+/// Structured `--status-once` report. Mirrors the JSON shape of the `wire`
+/// sub-object inside `--diagnose --json` (same field names + types), plus an
+/// `exit_code` so a JSON consumer doesn't have to mirror the wire-state →
+/// exit-code derivation. Pinned by `status_once_json_keys_pinned`.
+#[derive(serde::Serialize)]
+struct StatusReport {
+    /// `true` once handshake succeeds. Mirrors `WireReport.reachable`.
+    reachable: bool,
+    /// Negotiated wire_version (`u16`) if handshake succeeded. Matches the
+    /// `WIRE_VERSION` const type in `tillandsias-control-wire`.
+    wire_version: Option<u16>,
+    /// Debug-formatted `VmPhase` if `VmStatusReply` arrived.
+    phase: Option<String>,
+    /// In-VM headless reports `true` once podman responds to a no-op exec.
+    podman_ready: Option<bool>,
+    /// Free-form headless event string (None if not surfaced).
+    last_event: Option<String>,
+    /// Set on any failure path (open / handshake / request / unexpected reply).
+    error: Option<String>,
+    /// Final exit code so JSON consumers don't need to re-derive
+    /// 0/2/1 from phase/reachable. See `--status-once` exit-code contract
+    /// (`status-once-exit-codes` pin).
+    exit_code: i32,
+}
+
+/// Compute the `--status-once` exit code from a freshly-collected status report.
+/// 0 = Ready, 2 = reachable but not Ready, 1 = control wire unreachable / hard
+/// error. Pure so a unit test can pin the matrix.
+fn status_exit_code(report: &StatusReport) -> i32 {
+    if !report.reachable {
+        return 1;
+    }
+    match report.phase.as_deref() {
+        Some("Ready") => 0,
+        Some(_) => 2,
+        None => 1,
+    }
+}
+
 /// Headless diagnostic entry point (`tillandsias-tray --status-once`): connect to
 /// an already-provisioned VM's HvSocket control wire, request `VmStatus`, and
 /// print the phase / podman_ready / last_event. Exit code: 0 = Ready, 2 =
@@ -428,10 +559,25 @@ pub fn provision_once() -> i32 {
 /// `--provision-once` for scriptable installed-tray health checks (the GUI tray
 /// has no console). Reuses the same handshake + `VmStatusRequest` path the
 /// provisioning Connecting loop uses.
-pub fn status_once() -> i32 {
-    use tillandsias_control_wire::{ControlMessage, VmPhase};
-
+///
+/// `format` mirrors the `--diagnose` format selector: `Human` prints the
+/// pre-existing `[status] …` lines for human eyeballs, `Json` emits a single
+/// `StatusReport` JSON object on stdout for support-tooling consumers.
+pub fn status_once(format: DiagnoseFormat) -> i32 {
     init_tracing();
+    let report = collect_status_report();
+    match format {
+        DiagnoseFormat::Human => print_status_human(&report),
+        DiagnoseFormat::Json => print_status_json(&report),
+    }
+    report.exit_code
+}
+
+/// Build a `StatusReport` by opening the control wire, performing the
+/// handshake, and issuing a `VmStatusRequest`. Captures every failure mode
+/// as an `error` string so the structured output is the same shape on the
+/// success and failure paths.
+fn collect_status_report() -> StatusReport {
     let port = tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
     let runtime = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -439,32 +585,54 @@ pub fn status_once() -> i32 {
     {
         Ok(rt) => rt,
         Err(err) => {
-            eprintln!("[status] failed to build tokio runtime: {err}");
-            return 1;
+            return StatusReport {
+                reachable: false,
+                wire_version: None,
+                phase: None,
+                podman_ready: None,
+                last_event: None,
+                error: Some(format!("tokio runtime build failed: {err}")),
+                exit_code: 1,
+            };
         }
     };
-    runtime.block_on(async {
+    let mut report = runtime.block_on(async {
         use tillandsias_control_wire::transport::Transport;
-        use tillandsias_control_wire::{ControlEnvelope, WIRE_VERSION};
+        use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
         use tillandsias_host_shell::vsock_client::Client;
 
         let stream = match crate::hvsocket::open_hvsocket_stream(port).await {
             Ok(stream) => stream,
             Err(err) => {
-                eprintln!("[status] control wire unreachable on vsock {port}: {err}");
-                eprintln!("[status] (is the VM provisioned + running? try --provision-once)");
-                return 1;
+                return StatusReport {
+                    reachable: false,
+                    wire_version: None,
+                    phase: None,
+                    podman_ready: None,
+                    last_event: None,
+                    error: Some(format!(
+                        "control wire unreachable on vsock {port}: {err} (is the VM \
+                         provisioned + running? try --provision-once)"
+                    )),
+                    exit_code: 0,
+                };
             }
         };
         let mut client = Client::from_stream(Box::new(stream), Transport::Vsock { cid: 0, port });
         let wire_version = match client.handshake().await {
             Ok(v) => v,
             Err(err) => {
-                eprintln!("[status] handshake failed: {err}");
-                return 1;
+                return StatusReport {
+                    reachable: false,
+                    wire_version: None,
+                    phase: None,
+                    podman_ready: None,
+                    last_event: None,
+                    error: Some(format!("handshake failed: {err}")),
+                    exit_code: 0,
+                };
             }
         };
-        println!("[status] control wire up (wire_version {wire_version})");
         let seq = client.allocate_seq();
         let envelope = ControlEnvelope {
             wire_version: WIRE_VERSION,
@@ -474,8 +642,15 @@ pub fn status_once() -> i32 {
         let reply = match client.request(&envelope).await {
             Ok(reply) => reply,
             Err(err) => {
-                eprintln!("[status] VmStatusRequest failed: {err}");
-                return 1;
+                return StatusReport {
+                    reachable: true,
+                    wire_version: Some(wire_version),
+                    phase: None,
+                    podman_ready: None,
+                    last_event: None,
+                    error: Some(format!("VmStatusRequest failed: {err}")),
+                    exit_code: 0,
+                };
             }
         };
         match reply.body {
@@ -484,25 +659,55 @@ pub fn status_once() -> i32 {
                 podman_ready,
                 last_event,
                 ..
-            } => {
-                println!("[status] phase:        {phase:?}");
-                println!("[status] podman_ready: {podman_ready}");
-                println!(
-                    "[status] last_event:   {}",
-                    last_event.as_deref().unwrap_or("(none)")
-                );
-                if matches!(phase, VmPhase::Ready) {
-                    0
-                } else {
-                    2
-                }
-            }
-            other => {
-                eprintln!("[status] unexpected reply to VmStatusRequest: {other:?}");
-                1
-            }
+            } => StatusReport {
+                reachable: true,
+                wire_version: Some(wire_version),
+                phase: Some(format!("{phase:?}")),
+                podman_ready: Some(podman_ready),
+                last_event,
+                error: None,
+                exit_code: 0,
+            },
+            other => StatusReport {
+                reachable: true,
+                wire_version: Some(wire_version),
+                phase: None,
+                podman_ready: None,
+                last_event: None,
+                error: Some(format!("unexpected reply to VmStatusRequest: {other:?}")),
+                exit_code: 0,
+            },
         }
-    })
+    });
+    report.exit_code = status_exit_code(&report);
+    report
+}
+
+fn print_status_human(r: &StatusReport) {
+    if let Some(v) = r.wire_version {
+        println!("[status] control wire up (wire_version {v})");
+    }
+    if let Some(err) = &r.error {
+        eprintln!("[status] {err}");
+        return;
+    }
+    if let Some(phase) = &r.phase {
+        println!("[status] phase:        {phase}");
+    }
+    if let Some(pr) = r.podman_ready {
+        println!("[status] podman_ready: {pr}");
+    }
+    println!(
+        "[status] last_event:   {}",
+        r.last_event.as_deref().unwrap_or("(none)")
+    );
+}
+
+fn print_status_json(r: &StatusReport) {
+    match serde_json::to_string_pretty(r) {
+        Ok(json) => println!("{json}"),
+        Err(err) => eprintln!("[status] failed to serialize JSON: {err}"),
+    }
 }
 
 /// Pinned chip text for control-wire degradation. Naming + byte sequence MUST
@@ -898,6 +1103,14 @@ pub enum DiagnoseFormat {
 #[derive(serde::Serialize)]
 struct DiagnoseReport {
     version: &'static str,
+    /// Short git SHA of the commit this binary was built from. Baked at
+    /// compile time by build.rs (`BUILD_COMMIT_SHA`); falls back to
+    /// `"unknown"` if git wasn't available or the build was from a source
+    /// tarball with no working tree. Useful for correlating a running tray
+    /// to a specific commit when an operator pastes `--diagnose --json`
+    /// into a bug report (the workspace `version` rolls only on release,
+    /// so two binaries from the same release tag can still differ).
+    build_commit: &'static str,
     log_path: String,
     log_exists: bool,
     wt_present: bool,
@@ -1062,7 +1275,11 @@ fn collect_report() -> DiagnoseReport {
         .unwrap_or_default();
 
     DiagnoseReport {
-        version: env!("CARGO_PKG_VERSION"),
+        // WORKSPACE_VERSION baked by build.rs from the repo-root VERSION file
+        // so the JSON's `version` field matches the release tag instead of
+        // the crate's static `Cargo.toml` `0.1.0`. See build.rs for details.
+        version: env!("WORKSPACE_VERSION"),
+        build_commit: env!("BUILD_COMMIT_SHA"),
         log_path: log.display().to_string(),
         log_exists,
         wt_present,
@@ -1079,6 +1296,7 @@ fn print_human(r: &DiagnoseReport) {
     println!("tillandsias-tray --diagnose");
     println!("===========================");
     println!("Version:      {}", r.version);
+    println!("Build commit: {}", r.build_commit);
     println!("Log file:     {}", r.log_path);
     println!("Log exists:   {}", if r.log_exists { "yes" } else { "no" });
     println!(
@@ -1728,6 +1946,7 @@ mod tests {
     fn baseline_diagnose_report() -> DiagnoseReport {
         DiagnoseReport {
             version: "0.0.0-test",
+            build_commit: "deadbeef",
             log_path: "C:\\path\\to\\tray.log".to_string(),
             log_exists: false,
             wt_present: true,
@@ -1753,6 +1972,7 @@ mod tests {
         let obj = v.as_object().expect("top-level JSON object");
         for key in [
             "version",
+            "build_commit",
             "log_path",
             "log_exists",
             "wt_present",
@@ -1852,6 +2072,171 @@ mod tests {
             .expect("recent_log_tail array");
         assert_eq!(tail.len(), 2);
         assert_eq!(tail[0], serde_json::Value::String("line one".to_string()));
+    }
+
+    /// `--version` / `-V` must report the same WORKSPACE_VERSION string
+    /// the diagnose JSON's `version` field uses, plus the build_commit
+    /// so an operator who runs `--version` then `--diagnose --json` sees
+    /// the same identifier in both. Pinned because the three places a
+    /// user can ask "what version am I running?" should be self-consistent.
+    #[test]
+    fn version_line_uses_workspace_version_and_commit() {
+        let line = version_line();
+        assert!(
+            line.contains(env!("WORKSPACE_VERSION")),
+            "version line missing WORKSPACE_VERSION: {line}"
+        );
+        assert!(
+            line.contains(env!("BUILD_COMMIT_SHA")),
+            "version line missing BUILD_COMMIT_SHA: {line}"
+        );
+        assert!(
+            line.starts_with("tillandsias-tray "),
+            "version line should start with binary name: {line}"
+        );
+        // Guard against the static-Cargo.toml regression class.
+        assert!(
+            !line.contains("0.1.0 ("),
+            "version line still reporting CARGO_PKG_VERSION shape: {line}"
+        );
+    }
+
+    /// `select_log_tail` is the pure half of `--logs --tail N`. Pin all
+    /// four edge cases (no tail, normal tail, tail > len, tail == 0) so a
+    /// future refactor can't silently flip semantics that the CLI
+    /// promises in its `--help` text.
+    #[test]
+    fn select_log_tail_handles_all_cases() {
+        let content = "a\nb\nc\nd\ne";
+
+        // tail = None: all lines.
+        assert_eq!(
+            select_log_tail(content, None),
+            vec!["a", "b", "c", "d", "e"]
+        );
+
+        // tail = Some(2): last 2 lines.
+        assert_eq!(select_log_tail(content, Some(2)), vec!["d", "e"]);
+
+        // tail > len: all lines (saturating_sub guards against underflow).
+        assert_eq!(
+            select_log_tail(content, Some(100)),
+            vec!["a", "b", "c", "d", "e"]
+        );
+
+        // tail = Some(0): no lines.
+        let empty: Vec<&str> = vec![];
+        assert_eq!(select_log_tail(content, Some(0)), empty);
+
+        // Empty content: no lines regardless of tail.
+        assert_eq!(select_log_tail("", None), empty);
+        assert_eq!(select_log_tail("", Some(5)), empty);
+    }
+
+    /// `--help` / `-h` must document every CLI mode by its exact flag name.
+    /// A future mode added without a help entry surfaces here pre-build
+    /// rather than being discovered field-side as undocumented.
+    #[test]
+    fn help_text_documents_all_cli_modes() {
+        let text = help_text();
+        for flag in [
+            "--provision-once",
+            "--status-once",
+            "--diagnose",
+            "--json",
+            "--logs",
+            "--tail",
+            "--help",
+            "-h",
+            "--version",
+            "-V",
+        ] {
+            assert!(
+                text.contains(flag),
+                "help text missing CLI flag {flag}:\n{text}"
+            );
+        }
+        // Exit-code contract is part of the CLI promise — pin it.
+        for exit_code_marker in [
+            "Exit: 0",
+            "1 = failed",
+            "2 = reachable-not-Ready",
+            "2 degraded",
+        ] {
+            assert!(
+                text.contains(exit_code_marker),
+                "help text missing exit-code marker {exit_code_marker}"
+            );
+        }
+        // Pointer to the canonical cheatsheet.
+        assert!(
+            text.contains("cheatsheets/runtime/windows-tray-diagnostics.md"),
+            "help text missing cheatsheet pointer"
+        );
+        // Trailing newline so consumers can `print!(help_text())`.
+        assert!(text.ends_with('\n'), "help text missing trailing newline");
+    }
+
+    fn baseline_status_report() -> StatusReport {
+        StatusReport {
+            reachable: false,
+            wire_version: None,
+            phase: None,
+            podman_ready: None,
+            last_event: None,
+            error: Some("not provisioned".to_string()),
+            exit_code: 1,
+        }
+    }
+
+    /// Pin the `--status-once --json` top-level key set so a future refactor
+    /// that drops or renames a field surfaces here, not at the support-tooling
+    /// step. Mirrors `diagnose_json_top_level_keys_pinned` for the StatusReport
+    /// shape. Bound by `litmus:windows-tray-diagnose-cli-surface`.
+    #[test]
+    fn status_once_json_keys_pinned() {
+        let v: serde_json::Value =
+            serde_json::to_value(baseline_status_report()).expect("serialize");
+        let obj = v.as_object().expect("top-level JSON object");
+        for key in [
+            "reachable",
+            "wire_version",
+            "phase",
+            "podman_ready",
+            "last_event",
+            "error",
+            "exit_code",
+        ] {
+            assert!(
+                obj.contains_key(key),
+                "status-once --json missing top-level key: {key}"
+            );
+        }
+    }
+
+    /// `--status-once` exit-code contract (independent of the `--diagnose`
+    /// matrix; same semantics as the human-mode bash-script consumer expects):
+    /// 0 = Ready, 2 = reachable-but-not-Ready, 1 = unreachable. Pins the
+    /// matrix so a refactor can't silently flip the codes for the support
+    /// scripts that branch on them.
+    #[test]
+    fn status_once_exit_codes() {
+        // Unreachable → 1.
+        let mut r = baseline_status_report();
+        assert_eq!(status_exit_code(&r), 1, "unreachable -> 1");
+
+        // Reachable, phase Ready → 0.
+        r.reachable = true;
+        r.phase = Some("Ready".to_string());
+        assert_eq!(status_exit_code(&r), 0, "Ready -> 0");
+
+        // Reachable, phase non-Ready → 2.
+        r.phase = Some("Starting".to_string());
+        assert_eq!(status_exit_code(&r), 2, "non-Ready phase -> 2");
+
+        // Reachable, phase absent (e.g. unexpected reply variant) → 1.
+        r.phase = None;
+        assert_eq!(status_exit_code(&r), 1, "reachable but no phase -> 1");
     }
 
     /// The chip composer appends a non-empty `last_event` after a Unicode

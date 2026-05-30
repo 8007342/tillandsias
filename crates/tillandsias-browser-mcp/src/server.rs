@@ -176,6 +176,17 @@ impl BrowserMcpServer {
             }
         };
 
+        // Server version reports the workspace release VERSION (e.g.
+        // `0.2.260528.1`), NOT the crate-static `Cargo.toml` version
+        // (`0.1.170`). The MCP `serverInfo.version` field is what the
+        // AI agent sees; reporting the workspace release lets an
+        // operator pasting the agent's serverInfo into a bug report
+        // correlate the response to a specific release. `WORKSPACE_
+        // VERSION` is baked at build time by `build.rs` reading the
+        // repo-root `VERSION` file.
+        //
+        // @trace spec:host-browser-mcp (follow-on of host-shell fix
+        //   76f93287 / tray-convergence-coordination.md 2026-05-30T11:00Z)
         let result = json!({
             "protocolVersion": "2025-06-18",
             "capabilities": {
@@ -183,7 +194,7 @@ impl BrowserMcpServer {
             },
             "serverInfo": {
                 "name": "tillandsias-browser-mcp",
-                "version": env!("CARGO_PKG_VERSION")
+                "version": env!("WORKSPACE_VERSION")
             }
         });
 
@@ -735,6 +746,46 @@ mod tests {
             }
             _ => panic!("Expected success response"),
         }
+    }
+
+    // @trace spec:host-browser-mcp (regression guard for the
+    //   CARGO_PKG_VERSION anti-pattern flagged in tray-convergence-
+    //   coordination.md 2026-05-30T11:00Z; follow-on of host-shell
+    //   fix 76f93287)
+    #[tokio::test]
+    async fn initialize_serverinfo_version_is_workspace_release_not_crate_static() {
+        let server = test_server(None);
+        let request = RpcRequest {
+            id: Some(99),
+            method: "initialize".to_string(),
+            params: json!({}),
+        };
+        let response = server.handle_request(request).await;
+        let result = match response {
+            RpcResponse::Success { result, .. } => result,
+            _ => panic!("initialize should succeed"),
+        };
+        let version = result
+            .get("serverInfo")
+            .and_then(|s| s.get("version"))
+            .and_then(|v| v.as_str())
+            .expect("serverInfo.version must be a string");
+
+        assert_ne!(
+            version, "0.1.170",
+            "serverInfo.version returned the crate-static `Cargo.toml` value \
+             — build.rs's WORKSPACE_VERSION injection regressed; AI agents \
+             pasting the MCP serverInfo into a bug report will no longer be \
+             able to correlate the response to a specific release."
+        );
+        // Workspace VERSION shape: `0.MAJOR.YYMMDD.SEQ` (e.g.
+        // `0.2.260528.1`). A 2-segment "X.Y" string is the unmistakable
+        // signature of a crate-static fallback regression.
+        assert!(
+            version.matches('.').count() >= 2,
+            "serverInfo.version = {version:?} doesn't look like a workspace \
+             VERSION (expected at least 3 dot-segments e.g. 0.2.260528.1)"
+        );
     }
 
     #[tokio::test]

@@ -1,0 +1,148 @@
+# @trace spec:chromium-debug-variant, spec:chromium-safe-variant
+#
+# Drift-protection for the SHARED launch path implementing the two
+# chromium variants. Both specs (chromium-debug-variant and chromium-
+# safe-variant) are implemented by `scripts/launch-chromium.sh` +
+# `images/chromium/Containerfile.{core,framework}`. The variants
+# differ only in window-type-specific flags (debug adds
+# `--remote-debugging-port`); everything else (security envelope,
+# ephemeral profile + cache, tmpfs mounts, incognito mode, versioned
+# image tag) is shared.
+#
+# Both specs were bound only to `litmus:browser-ephemeral` (e2e,
+# last_verified 2026-05-03) covering the no-credential-persistence
+# behaviour generically. The launch-path surfaces — which encode the
+# security envelope, ephemeral guarantees, and variant-specific
+# DevTools branch — were untrapped.
+#
+# This litmus is bound to BOTH variant specs; raises each from 33 → 75.
+name: litmus:chromium-variants-launch-shape
+spec: chromium-debug-variant
+phase: pre-build
+description: >
+  Pin the shared launch-path surfaces for chromium-debug-variant and
+  chromium-safe-variant: default safe window type, open_debug_window
+  adds remote-debugging flags, versioned framework image with no
+  :latest fallback, incognito + ephemeral profile + cleanup trap,
+  security envelope (--cap-drop=ALL, --userns=keep-id, --read-only,
+  no-new-privileges), and tmpfs mounts for /tmp/chromium-config +
+  /tmp/chromium-cache.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains scripts/launch-chromium.sh
+  - workspace contains images/chromium/Containerfile.core
+  - workspace contains images/chromium/Containerfile.framework
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "launch-chromium.sh file-head trace declares BOTH variant specs"
+    # The launcher is the SINGLE site implementing both variants;
+    # dropping either trace would silently demote the script out of
+    # the variant's TRACES.md graph.
+    command: "grep -F 'spec:chromium-safe-variant' scripts/launch-chromium.sh && grep -F 'spec:chromium-debug-variant' scripts/launch-chromium.sh"
+    timeout_ms: 3000
+    expected_behavior: "chromium-debug-variant"
+
+  - step: "default WINDOW_TYPE is open_safe_window (safe-by-default)"
+    # Spec chromium-safe-variant § "Safe by default" — operators
+    # invoking the launcher without an explicit window type MUST get
+    # the safe variant. A regression that flips the default to
+    # open_debug_window would silently expose every default launch
+    # to DevTools.
+    command: "grep -F 'WINDOW_TYPE=\"${4:-open_safe_window}\"' scripts/launch-chromium.sh"
+    timeout_ms: 3000
+    expected_behavior: "open_safe_window"
+
+  - step: "open_debug_window branch adds --remote-debugging-port + --remote-debugging-address"
+    # Spec chromium-debug-variant § DevTools "Remote DevTools over
+    # CDP" — the debug variant MUST accept CDP connections via the
+    # `--remote-debugging-port=PORT` flag, bound to 127.0.0.1 (NOT
+    # 0.0.0.0) for safe local-only access. Both surfaces in one pin.
+    command: "grep -F 'open_debug_window' scripts/launch-chromium.sh && grep -F -- '--remote-debugging-port=' scripts/launch-chromium.sh && grep -F -- '--remote-debugging-address=127.0.0.1' scripts/launch-chromium.sh"
+    timeout_ms: 3000
+    expected_behavior: "remote-debugging-address=127.0.0.1"
+
+  - step: "image tag is tillandsias-chromium-framework:v<VERSION>, no :latest fallback"
+    # Both variants MUST use the framework image at the workspace
+    # VERSION. The explicit `VERSION == "latest"` early-exit ensures
+    # a regression to a latest-default fails fast at launch.
+    command: "grep -F 'tillandsias-chromium-framework:v${VERSION}' scripts/launch-chromium.sh && grep -F 'chromium launcher requires a concrete version, not' scripts/launch-chromium.sh"
+    timeout_ms: 3000
+    expected_behavior: "chromium-framework:v"
+
+  - step: "ephemeral profile: PROFILE_DIR is per-launch mktemp -d + cleanup trap"
+    # Spec § "Ephemeral profile and cache" mandates per-session
+    # destruction on shutdown. Pin both the mktemp pattern that
+    # creates a fresh dir per launch AND the trap that removes it
+    # on EXIT/INT/TERM. A regression removing the trap would leak
+    # profiles across sessions.
+    command: "grep -F 'PROFILE_DIR=\"$(mktemp -d' scripts/launch-chromium.sh && grep -F 'rm -rf \"$PROFILE_DIR\"' scripts/launch-chromium.sh && grep -F 'trap cleanup EXIT INT TERM' scripts/launch-chromium.sh"
+    timeout_ms: 3000
+    expected_behavior: "trap cleanup"
+
+  - step: "incognito + user-data-dir + read-only root (ephemeral + isolation)"
+    # Spec § "No credential persistence" — `--incognito` blocks
+    # auto-fill/recovery. Spec § "Safe isolation (still ephemeral)"
+    # for debug variant — `--read-only` root means the only writable
+    # paths are the explicit tmpfs mounts. Pin all 3 flags so a
+    # regression to a non-incognito or read-write root surfaces fast.
+    command: "grep -F -- '--incognito' scripts/launch-chromium.sh && grep -F -- '--user-data-dir=${PROFILE_DIR}' scripts/launch-chromium.sh && grep -F -- '--read-only' scripts/launch-chromium.sh"
+    timeout_ms: 3000
+    expected_behavior: "user-data-dir"
+
+  - step: "tmpfs mounts: /tmp + /tmp/chromium-config + /tmp/chromium-cache"
+    # Spec § "Profile in tmpfs" + § "Cache in tmpfs". The 3 tmpfs
+    # mounts MUST be present; their size caps are configurable but
+    # the presence is non-negotiable.
+    command: "grep -cF -- '--tmpfs=/tmp' scripts/launch-chromium.sh | awk '{ if ($1+0 >= 3) print \"ok:\", $1, \"tmpfs mounts (incl. chromium-config + chromium-cache)\"; else { print \"FAIL: only\", $1, \"of >=3\"; exit 1 } }'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "security envelope: --cap-drop=ALL + --userns=keep-id + --security-opt=no-new-privileges"
+    # Both variants — even the debug variant per § "Safe isolation
+    # (still ephemeral)" — MUST keep the security envelope intact.
+    # A regression here would silently widen container privilege on
+    # both the debug AND safe paths.
+    command: "grep -F -- '--cap-drop=ALL' scripts/launch-chromium.sh && grep -F -- '--userns=keep-id' scripts/launch-chromium.sh && grep -F -- '--security-opt=no-new-privileges' scripts/launch-chromium.sh"
+    timeout_ms: 3000
+    expected_behavior: "userns=keep-id"
+
+  - step: "Containerfile.core + Containerfile.framework both trace chromium-debug-variant"
+    # The image-build halves of the variants. Containerfile.core
+    # supplies the minimal image both variants extend; Containerfile.
+    # framework extends with the SDK toolchain that debugging uses.
+    # Pin the @trace on both so a regression dropping the marker on
+    # either side fails fast.
+    command: "grep -F '@trace' images/chromium/Containerfile.core | grep -F 'chromium-debug-variant' && grep -F '@trace' images/chromium/Containerfile.framework | grep -F 'chromium-debug-variant'"
+    timeout_ms: 3000
+    expected_behavior: "chromium-debug-variant"
+
+observability:
+  traces:
+    - "@trace spec:chromium-debug-variant"
+    - "@trace spec:chromium-safe-variant"
+    - "@trace spec:browser-isolation-core"
+    - "@trace spec:browser-isolation-framework"
+  expected_log: "chromium variants launch path + Containerfile.{core,framework} traces pinned across debug + safe specs"
+  log_fields:
+    spec: "chromium-debug-variant,chromium-safe-variant"
+    test: "chromium-variants-launch-shape"
+    artifact: "scripts/launch-chromium.sh + images/chromium/Containerfile.{core,framework}"
+
+rollback:
+  on_failure: >
+    A chromium-variant launch-path surface drifted. Restore: file-head
+    `@trace spec:chromium-{debug,safe}-variant`; default `WINDOW_TYPE`
+    of `open_safe_window`; the `open_debug_window` branch adding
+    `--remote-debugging-port=` + `--remote-debugging-address=
+    127.0.0.1`; the `tillandsias-chromium-framework:v${VERSION}`
+    image tag with the `latest` early-exit guard;
+    `PROFILE_DIR=$(mktemp -d ...)` + `rm -rf "$PROFILE_DIR"` +
+    `trap cleanup EXIT INT TERM`; the `--incognito` + `--user-data-
+    dir=${PROFILE_DIR}` + `--read-only` flags; >=3 `--tmpfs=/tmp`
+    mounts; the `--cap-drop=ALL` + `--userns=keep-id` +
+    `--security-opt=no-new-privileges` envelope; and the
+    Containerfile.{core,framework} @trace markers.
+  command: "grep -nE 'WINDOW_TYPE|open_(safe|debug)_window|tillandsias-chromium-framework|PROFILE_DIR|trap cleanup|--incognito|--read-only|--tmpfs|--cap-drop|--userns|chromium-debug-variant' scripts/launch-chromium.sh images/chromium/Containerfile.core images/chromium/Containerfile.framework | head -30"

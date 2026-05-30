@@ -1,4 +1,5 @@
 // @trace spec:runtime-diagnostics-stream (Container exit event, Container signal event)
+// @trace spec:runtime-diagnostics (Capture exit code and termination signal, Detect resource exhaustion conditions)
 // @trace plan/issues/linux-headless-spec-gaps-2026-05-27.md (gap 3 phase-2b)
 //! Live diagnostic-stream emitter — the runtime half of gap-3.
 //!
