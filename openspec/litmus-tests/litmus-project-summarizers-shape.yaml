@@ -1,0 +1,122 @@
+# @trace spec:project-summarizers
+#
+# Drift-protection for the 6 language-specific manifest summarizer
+# scripts. spec:project-summarizers mandates language-specific
+# summarizers (Cargo, package.json, go.mod, nix, pubspec, pyproject)
+# that read project manifests and emit deterministic Markdown for
+# the README discipline dispatcher per `cheatsheets/welcome/readme-
+# discipline.md` (concatenated under H2 `## Tech Stack` /
+# `## Build/Runtime Dependencies` containers).
+#
+# Existing binding `litmus:project-bootstrap-readme-shape` covers
+# the README-discipline contract + dispatcher; it does NOT pin the
+# summarizers themselves. The 6 summarizer scripts are shipped + all
+# carry `@trace spec:project-summarizers` (per TRACES.md row), but
+# their shape (set -euo pipefail, exit 2 skip semantics, H3 markdown
+# output) is untrapped.
+#
+# Combined with the existing dispatcher litmus, raises
+# project-summarizers coverage_ratio 33 → 75.
+name: litmus:project-summarizers-shape
+spec: project-summarizers
+phase: pre-build
+description: >
+  Pin the 6 manifest summarizer scripts: all carry `@trace spec:
+  project-summarizers`, all use `set -euo pipefail` for deterministic
+  exit, all use `exit 2` on missing manifest (skip semantics, not
+  error), all emit >=3 H3 markdown markers (dispatcher contract),
+  and all are executable.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains scripts/summarize-cargo.sh
+  - workspace contains scripts/summarize-package-json.sh
+  - workspace contains scripts/summarize-go-mod.sh
+  - workspace contains scripts/summarize-nix.sh
+  - workspace contains scripts/summarize-pubspec.sh
+  - workspace contains scripts/summarize-pyproject.sh
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "all 6 summarize-*.sh scripts exist"
+    # The 6-script set is the spec's enumerated coverage (Cargo,
+    # package.json, go.mod, nix, pubspec, pyproject). A regression
+    # deleting one would silently drop a language from the
+    # dispatcher.
+    command: "ls scripts/summarize-cargo.sh scripts/summarize-package-json.sh scripts/summarize-go-mod.sh scripts/summarize-nix.sh scripts/summarize-pubspec.sh scripts/summarize-pyproject.sh"
+    timeout_ms: 3000
+    expected_behavior: "scripts/summarize-pyproject.sh"
+
+  - step: "all 6 summarizers carry @trace spec:project-summarizers"
+    # The trace marker is the spec-identity edge. A regression
+    # dropping any would silently demote that script out of the
+    # spec graph.
+    command: "for f in scripts/summarize-cargo.sh scripts/summarize-package-json.sh scripts/summarize-go-mod.sh scripts/summarize-nix.sh scripts/summarize-pubspec.sh scripts/summarize-pyproject.sh; do grep -Fq '@trace spec:project-summarizers' \"$f\" || { echo \"FAIL: $f missing trace\"; exit 1; }; done && echo \"ok: 6 summarizers trace spec\""
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "all 6 summarizers use set -euo pipefail (deterministic exit)"
+    # Spec § "Summarizers MUST parse manifest files
+    # deterministically" mandates same-input/same-output. `set -euo
+    # pipefail` is the canonical bash discipline for that — fail
+    # on first error rather than silently masking pipeline failures
+    # in the output.
+    command: "for f in scripts/summarize-cargo.sh scripts/summarize-package-json.sh scripts/summarize-go-mod.sh scripts/summarize-nix.sh scripts/summarize-pubspec.sh scripts/summarize-pyproject.sh; do grep -Fq 'set -euo pipefail' \"$f\" || { echo \"FAIL: $f missing set -euo pipefail\"; exit 1; }; done && echo \"ok: 6 summarizers use set -euo pipefail\""
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "all 6 summarizers use exit 2 on missing manifest (skip semantics, not error)"
+    # Per `cheatsheets/welcome/readme-discipline.md` line 96, the
+    # dispatcher pattern is "Nix summarizer returned exit code 2
+    # (manifest not found); skipping". Exit 0 = ok, exit 2 = skip
+    # (manifest absent), other = error. A regression to exit 1 on
+    # missing manifest would silently turn skip into hard error.
+    command: "for f in scripts/summarize-cargo.sh scripts/summarize-package-json.sh scripts/summarize-go-mod.sh scripts/summarize-nix.sh scripts/summarize-pubspec.sh scripts/summarize-pyproject.sh; do grep -Fq 'exit 2' \"$f\" || { echo \"FAIL: $f missing exit 2\"; exit 1; }; done && echo \"ok: 6 summarizers exit 2 on missing manifest\""
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "all 6 summarizers emit >=3 H3 markdown headers (dispatcher contract)"
+    # Per readme-discipline.md line 129: "Each summarizer owns its
+    # H3s; the dispatcher concatenates them into `## Tech Stack`
+    # and `## Build/Runtime Dependencies` H2 containers". A
+    # regression to plain text output would silently break the
+    # dispatcher's grouping.
+    command: "for f in scripts/summarize-cargo.sh scripts/summarize-package-json.sh scripts/summarize-go-mod.sh scripts/summarize-nix.sh scripts/summarize-pubspec.sh scripts/summarize-pyproject.sh; do count=$(grep -cF '### ' \"$f\"); [ \"$count\" -ge 3 ] || { echo \"FAIL: $f has $count of >=3 H3 markers\"; exit 1; }; done && echo \"ok: 6 summarizers emit >=3 H3 markers each\""
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "all 6 summarizers are executable"
+    # Bash scripts need the executable bit to be invoked by the
+    # dispatcher. A `chmod` regression would silently break the
+    # invocation chain.
+    command: "for f in scripts/summarize-cargo.sh scripts/summarize-package-json.sh scripts/summarize-go-mod.sh scripts/summarize-nix.sh scripts/summarize-pubspec.sh scripts/summarize-pyproject.sh; do [ -x \"$f\" ] || { echo \"FAIL: $f not executable\"; exit 1; }; done && echo \"ok: 6 summarizers executable\""
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "TRACES.md row for project-summarizers references all 6 summarizers"
+    # The spec-to-impl graph reference. A regression here would
+    # silently demote the openspec walker's coverage report.
+    command: "grep -F 'spec:project-summarizers' TRACES.md | grep -cE 'summarize-(cargo|package-json|go-mod|nix|pubspec|pyproject)' | awk '{ if ($1+0 >= 1) print \"ok: TRACES.md row references summarizers\"; else { print \"FAIL: TRACES.md row missing summarizer refs\"; exit 1 } }'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+observability:
+  traces:
+    - "@trace spec:project-summarizers"
+  expected_log: "6 manifest summarizer scripts (cargo + package-json + go-mod + nix + pubspec + pyproject) shape pinned"
+  log_fields:
+    spec: "project-summarizers"
+    test: "project-summarizers-shape"
+    artifact: "scripts/summarize-*.sh"
+
+rollback:
+  on_failure: >
+    A `spec:project-summarizers` script surface drifted. Restore the
+    6 `scripts/summarize-{cargo,package-json,go-mod,nix,pubspec,
+    pyproject}.sh` scripts; each MUST carry `@trace spec:project-
+    summarizers`, use `set -euo pipefail`, exit `2` on missing
+    manifest, emit >=3 H3 markdown headers, and have the executable
+    bit set. The TRACES.md row for project-summarizers MUST
+    reference all 6 summarizers as the implementation surface.
+  command: "ls -la scripts/summarize-*.sh && head -3 scripts/summarize-cargo.sh"
