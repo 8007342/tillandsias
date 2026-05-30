@@ -96,3 +96,95 @@ integration loop are aware before any release-discipline tightening.
 **Next iteration ask**: N/A (SECTION_KIND=ok). Next scheduled
 `/build-windows-tray` fires Sat 2026-05-30 11:17 AM PDT per CronCreate
 `8c5d0a16`.
+
+---
+
+### 20260530T053000Z — ok (cross-tray version-field cleanup landed, Windows side)
+
+- agent_id: windows-bullo-claude-opus-20260530T053000Z
+- head_sha: post-merge (74854a1d Merge linux-next: forge-hot-cold-split RAM
+  gate + `--memory` ceiling helpers, +4 commits / +515 LOC into
+  tillandsias-core, no shared-contract touches)
+- version: 0.2.260528.1 (workspace VERSION)
+- build_run_id: 20260530T053000Z
+- prior section (this file): 20260530T040534Z — observed the divergence;
+  this section acts on it
+
+**Change made**: actually fix the cross-tray `--diagnose --json` `version`
+field divergence noted earlier today (the "future cleanup item"), Windows
+side. Pattern: read workspace VERSION in a `build.rs` and inject as a
+`WORKSPACE_VERSION` env var that the diagnose surface uses, replacing the
+crate-static `env!("CARGO_PKG_VERSION")`. Symmetric coordination ask filed
+for macOS host to mirror (`plan/issues/tray-convergence-coordination.md`,
+appended section ASK macOS host).
+
+Files touched (Windows-owned only — did NOT touch macos-tray):
+- `crates/tillandsias-windows-tray/build.rs` — added WORKSPACE_VERSION
+  emission block at top of `main()`, BEFORE the windows-target gate, so
+  cross-checks from non-Windows targets also have the env var available.
+  Reads `../../VERSION` (workspace root, relative to crate manifest dir),
+  trims, falls back to `CARGO_PKG_VERSION` if read fails (defensive — keeps
+  cargo check green even if the workspace VERSION file is ever moved or
+  the build is run from a stripped-down source tree).
+- `crates/tillandsias-windows-tray/src/notify_icon.rs:1065` —
+  `env!("CARGO_PKG_VERSION")` → `env!("WORKSPACE_VERSION")` in
+  `DiagnoseReport.version`, with a 3-line comment pointing readers at
+  build.rs.
+
+**Build**:
+- duration: 40.6 s wall-clock (cold cache after the FF merge re-touched
+  workspace metadata)
+- exe: target/release/tillandsias-tray.exe (6,326,272 bytes — bit-identical
+  size to this morning's build; the version-string swap doesn't affect
+  total exe size at the byte level because both strings are short
+  `&'static str` literals)
+
+**Smoke** (post-install diagnose on real hardware):
+- `--diagnose --json` exit: 2 (degraded — wire unreachable, expected
+  steady state; matches `litmus:exit-code-provisioned-zero-degraded-two-symmetric`)
+- `--diagnose --json` `version` field: `0.2.260528.1` (was `0.1.0` before
+  this commit) — matches the workspace VERSION file + ledger headers
+- `--diagnose --json` `release_tag` field: `v0.2.260526.1` (unchanged —
+  this is the rootfs RECIPE_RELEASE_TAG const, not the binary version)
+- `--diagnose --json` `manifest_pin_x86_64_tar` field: `a28cabe7c9df`
+  (unchanged)
+- all 10 schema keys still present and at expected types
+  (`litmus:windows-tray-diagnose-cli-surface`)
+
+**Litmus**:
+- `windows-native-tray` suite: 7/7 PASS (all 7 bound litmus tests,
+  including `windows-tray-diagnose-cli-surface` — the schema pin doesn't
+  pin the *content* of the version field, only its presence + `&'static
+  str` type, so the swap is binding-clean)
+- `cargo fmt -p tillandsias-windows-tray -- --check`: clean
+- `cargo clippy -p tillandsias-windows-tray --release --no-deps -D warnings`:
+  clean
+
+**Findings** (free-form):
+- The Windows-side bug observed in section 20260530T040534Z is now resolved
+  on the Windows side. The fix is contained to the windows-tray crate and
+  does not touch any shared crate, so it cannot regress macOS or Linux.
+- macOS-side mirror is the natural next step (asked in
+  `plan/issues/tray-convergence-coordination.md`) — once the macOS host
+  picks it up at its next `/build-macos-tray` fire, both `--diagnose --json`
+  surfaces will report the workspace VERSION instead of the crate-static
+  `0.1.0`, and the cross-tray symmetry on this field will hold for real.
+- Until macOS mirrors: there is a transient asymmetry — Windows reports
+  workspace VERSION, macOS still reports crate-static `0.1.0`. This is a
+  one-way fix (Windows is more correct), not a contract regression. No
+  litmus test pins the content of `version` (only its presence + type),
+  so the symmetric-pin litmus tests remain green on both sides.
+
+**Cross-host visibility note**: see the ASK macOS host section appended
+to `plan/issues/tray-convergence-coordination.md` for the exact mirror
+shape (new `build.rs` in `crates/tillandsias-macos-tray/`, swap in
+`crates/tillandsias-macos-tray/src/diagnose.rs:120`). Linux host: no
+action needed; the workspace VERSION is already what `release.yml`
+quotes for artifact filenames + nothing on Linux reads `CARGO_PKG_VERSION`
+for user-visible surfaces.
+
+**Next iteration ask**: macOS host mirrors the fix at next
+`/build-macos-tray`. Tomorrow's `/build-windows-tray` cron fire
+(`8c5d0a16`, 11:17 AM PDT) will produce a new section in this file
+(or in tomorrow's date file) re-validating the fix is sticky.
+
