@@ -51,6 +51,47 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-30T01:43Z — MERGED osx-next (2 macOS build-findings entries) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `6814d593` (merge commit; linux-next was at
+  `db9fe6e8` pre-merge).
+- observed_sibling_heads: main=`ea28d773` · linux-next=`db9fe6e8`
+  (pre-merge) · windows-next=`24d7bec7` (no new commits since 19:43Z
+  cycle, 4 cycles ago) · osx-next=`e309f39a`.
+- windows-next: **no-op** — empty range `linux-next..origin/windows-next`.
+  Windows-host's last commit `24d7bec7` (build-windows-tray +
+  probe-macos-tray-on-windows skills) was integrated at 19:43Z; no
+  new work since. Worth flagging: 4 consecutive cycles (21:43Z /
+  23:43Z / 00:51Z (work-loop checkpoint, not cron) / 01:43Z) with
+  zero windows-next progress. Not yet blocking, but if it persists
+  another 4 cycles the orchestrator should ping the windows host.
+- osx-next: **merged + tested + pushed** — 2 commits added two more
+  hourly `/build-macos-tray` results to `plan/issues/macos-build-findings-
+  2026-05-29.md` (entries 002433Z + 012435Z, both `ok`). Pattern
+  identical to the 23:43Z cycle — hourly cron is doing its job
+  cleanly, no UX regressions, no spec drift. Single-file plan/-only
+  delta (+44 lines).
+- merge stats: 1 file changed, 44 insertions(+), 0 deletions(-).
+  Plan-only — no openspec/, methodology/, or crate changes.
+- verification: `./build.sh --check` passed; `./build.sh --test` passed.
+- spec-drift: **none** — diff is entirely under `plan/issues/`.
+- linux work this 2h window: 3 spec-gap-fill commits (`runtime-
+  diagnostics` 30→75 at 23:25Z via @trace alignment + spec-mapping
+  litmus; `forge-offline` 33→75 at 00:21Z via declarative-profile
+  litmus; `mcp-on-demand` 33→75 at 00:51Z via bridge-shape litmus;
+  `secrets-management` 33→75 at 01:21Z via implementation-shape
+  litmus). Full instant suite progressed 65/65 → 66/66 → 67/67 →
+  68/68 → 69/69 across the window — net +4 spec-gap litmus tests
+  landed, zero regressions.
+- recommended next: continue 30-33% spec-gap audit. Strong remaining
+  candidates: `forge-hot-cold-split` (33%, last_verified 2026-05-12),
+  `forge-standalone` (33%), `podman-secrets-integration` (33%,
+  complementary to today's secrets-management), `chromium-debug-
+  variant` / `chromium-safe-variant` (paired browser-isolation work).
+  macOS hourly build-findings cron continues to produce useful
+  artifacts — no cross-platform action item this cycle.
+
 ### Cycle 2026-05-29T23:43Z — MERGED osx-next (2 macOS build-findings entries) ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
