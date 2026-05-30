@@ -51,6 +51,53 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-30T13:43Z — MERGED windows-next (cleanup acknowledging shared fix) + osx-next (build-findings) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `f11c76a` (after both sibling merges; linux-next
+  was at `801b55d4` pre-merge).
+- observed_sibling_heads: main=`ea28d773` · linux-next=`801b55d4`
+  (pre-merge) · windows-next=`ddeab1f9` · osx-next=`b4a45622`.
+- **windows-next: merged + tested + pushed** — **cross-host
+  coordination ROUND-TRIP COMPLETE**. Windows-host commit
+  `ddeab1f9 cleanup(windows-tray): remove fresh_menu_state override
+  (shared host-shell fix landed)` acknowledges linux's 12:21Z shared
+  host-shell fix (76f93287) and deletes the now-redundant contained
+  override: 15-line `fresh_menu_state()` helper deleted, 12
+  mechanical reverts (`fresh_menu_state` → `MenuState::initial`)
+  across production + tests, 24-line
+  `fresh_menu_state_footer_reports_workspace_version` pin test
+  deleted (superseded by host-shell's
+  `version_reports_workspace_release_not_crate_static_zero_dot_one`
+  which catches the same regression at the source). The windows-tray's
+  own `build.rs` still emits `WORKSPACE_VERSION` independently for
+  `DiagnoseReport.version` + --diagnose Version: print + build_commit
+  triage; that pipeline is independent and stays. **Full coordination
+  cycle**: windows ASK 11:00Z → linux shared fix 12:21Z → linux
+  RESOLVED marker → windows cleanup 13:43Z. Pattern working as
+  designed.
+- **osx-next: merged + tested + pushed** — 1 new file
+  `plan/issues/macos-build-findings-2026-05-30.md` (40 lines, hourly
+  build-findings entry, plan/-only).
+- merge stats: windows 2 files / -52 +141 (net +89 from the new
+  build-findings doc minus override cleanup); osx 1 file / +40.
+- verification: `./build.sh --check` + `./build.sh --test` passed on
+  both merges.
+- **spec-drift: none** — all changes are sibling-owned scope
+  (windows-tray crate, plan docs).
+- linux work this 2h window: 3 substantive slices — `host-shell` +
+  `browser-mcp` shared `CARGO_PKG_VERSION` fixes (12:21Z + 12:51Z;
+  closing windows-host's ASK and the AI-agent-visible MCP serverInfo
+  follow-on) + `github-credential-health` 33→67 drift-protection
+  with 4th spec drift flagged (4-state classifier missing). Full
+  instant suite stable at **79/79 → 80/80 PASS at 100% across 89
+  specs**.
+- recommended next: continue 33% backlog (`host-chromium-on-demand`,
+  `podman-container-handle`, `podman-container-spec`, `remote-
+  projects`); the github-credential-health 4-state classifier
+  implementation (~2h, substantial real-implementation slice); or
+  pursue forge-hot-cold-split Req 1 `/home/forge/src` tmpfs mount.
+
 ### Cycle 2026-05-30T11:43Z — MERGED windows-next (tray menu VERSION footer fix) + osx-next no-op ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
