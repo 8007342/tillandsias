@@ -800,8 +800,10 @@ specs:
   status: active
   litmus_tests:
   - litmus:credential-isolation
-  coverage_ratio: 33
-  last_verified: '2026-05-03'
+  - litmus:secrets-management-implementation-shape
+  - litmus:podman-secrets-integration-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: tillandsias-vault
   status: active
   litmus_tests:
