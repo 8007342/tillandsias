@@ -51,6 +51,53 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-30T17:43Z — MERGED windows-next (--logs / --logs --tail N) + osx-next no-op ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `f073af3` (merge commit; linux-next was at
+  `7fe41a73` pre-merge).
+- observed_sibling_heads: main=`ea28d773` · linux-next=`7fe41a73`
+  (pre-merge) · windows-next=`205d2abf` · osx-next=`b4a45622`
+  (unchanged 7 consecutive cycles since 06:27Z).
+- **windows-next: merged + tested + pushed** — substantive 1-commit
+  delta `205d2abf feat(windows-tray): --logs / --logs --tail N CLI
+  mode for past-the-tail log inspection`. New `--logs` flag dumps the
+  log file to stdout for redirect-to-file capture (same GUI-subsystem
+  stdio pattern as other modes). `--tail N` optional with friendly
+  malformed-value fallthrough to full-file path. New
+  `select_log_tail(content, tail) -> Vec<&str>` pure tail-selector
+  helper with `saturating_sub` guards for n>len underflow + n=0
+  empty-vec edge cases. `pub fn logs(tail: Option<usize>) -> i32`
+  reads via existing `log_file_path()`, exit 0 on readable (even if
+  empty), 1 if missing/unreadable. Does NOT touch WSL. +1 pin test
+  covers all 4 edge cases (None / <len / >len / =0) + empty-content
+  variants. `help_text_documents_all_cli_modes` extended to require
+  the new flags. All crate-side changes in windows-tray scope
+  (sibling-owned).
+- **osx-next: no-op** — empty range, unchanged 7 consecutive cycles
+  since 06:27Z. **ESCALATION watch**: 4+ cycles past the guardrail
+  threshold; orchestrator-level ping recommended.
+- **spec-drift via litmus update**: windows-host extended
+  `litmus-windows-tray-diagnose-cli-surface.yaml` in lockstep with
+  the implementation (standard pattern; windows-owned litmus). No
+  linux action.
+- merge stats: 5 files changed, 206 insertions(+), 2 deletions(-).
+  Windows-tray crate + windows-tray litmus + windows cheatsheet +
+  plan docs.
+- verification: `./build.sh --check` + `./build.sh --test` passed.
+- linux work this 2h window: 3 spec-gap-fill slices —
+  `host-chromium-on-demand` 33→75 at 16:21Z (installer + launcher
+  chain) + `versioning` 33→75 at 16:51Z (completing the CARGO_PKG_
+  VERSION→WORKSPACE_VERSION machinery story from yesterday's shared
+  fixes) + `tray-minimal-ux` 33→75 at 17:21Z (EnclaveStatus 5-state
+  + Quit literal + Seedlings order). Full instant suite progressed
+  84/84 → 85/85 → 86/86 PASS at 100% across 89 specs.
+- recommended next: orchestrator ping macOS host (7-cycle silence is
+  conspicuous); continue 33% backlog (simplified-tray-ux,
+  subdomain-naming-flip, web-image); pursue forge-hot-cold-split
+  Req 1 `/home/forge/src` tmpfs mount OR github-credential-health
+  4-state classifier as substantial real-implementation slices.
+
 ### Cycle 2026-05-30T15:43Z — MERGED windows-next (--help / --version CLI modes) + osx-next no-op ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
