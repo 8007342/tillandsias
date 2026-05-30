@@ -3578,3 +3578,27 @@ POST -f ref=refs/tags/<tag> -f sha=<commit>` (which goes through
 GitHub's REST API, not the proxy's git-protocol path) before
 escalating. This would have unblocked the cloud cycle without
 operator intervention.
+
+**✅ RELEASE PUBLISHED 2026-05-30T19:02Z** — workflow `26691456259`
+completed successfully at `39m38s` (faster than the prior
+`v0.2.260529.1` precedent of `41m21s`). Release page:
+https://github.com/8007342/tillandsias/releases/tag/v0.2.260530.1
+
+22-asset publication includes all 3 platform binaries + linux musl
+headless variants + macOS-arm64 + windows-x64 tray bundles +
+install/uninstall/verify scripts + SHA256SUMS + per-asset cosign
+bundles:
+- `tillandsias-linux-x86_64` (Linux tray)
+- `tillandsias-headless-x86_64-unknown-linux-musl` +
+  `tillandsias-headless-aarch64-unknown-linux-musl` (in-VM agents)
+- `tillandsias-tray-0.2.260530.1-macos-arm64.tar.gz` (macOS tray)
+- `tillandsias-tray-0.2.260530.1-windows-x64.zip` (Windows tray)
+- `install.sh` / `install-macos.sh` / `uninstall.sh` / `verify.sh`
+- `SHA256SUMS` / `SHA256SUMS-macos` / `SHA256SUMS-windows`
+- All assets cosign-signed (`.cosign.bundle` companions).
+
+Linux Silverblue smoke-test target is live. Total operator turnaround
+from the 18:13Z escalation logging to the release being downloadable:
+`19:02Z - 18:13Z = 49 minutes`, of which `~40 minutes` was the CI
+build itself (the operator intervention took ~7 minutes — the bulk
+was waiting for the workflow).
