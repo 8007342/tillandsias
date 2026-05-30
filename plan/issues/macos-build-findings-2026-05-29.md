@@ -311,3 +311,17 @@ trace: .claude/skills/build-macos-tray/SKILL.md (the skill that wrote this)
 **Smoke**: DIAG_EXIT=2; 13 keys; alive-after-3s; clean-SIGTERM-exit; stderr identical.
 **Install**: backup=yes; post-install 13 keys.
 **Findings**: 11th `ok`. linux-next + windows-next both moved this fetch.
+
+---
+
+### 20260530T062733Z — ok
+
+- agent_id: macos-Tlatoani-MacBook-Air-claude-opus-20260530T062733Z
+- head_sha: d1eb4024
+- version: 0.2.260528.1
+- build_run_id: 20260530T062733Z
+
+**Build**: cache-hit; sha256 `9b8648f379693b146746cfe7010c0adf9e08676bb857bf08fe6e13d5c71f616b`.
+**Smoke**: DIAG_EXIT=2; 13 keys; alive-after-3s; clean-SIGTERM-exit; stderr identical.
+**Install**: backup=yes; post-install 13 keys.
+**Findings**: 12th `ok`.
