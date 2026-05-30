@@ -603,8 +603,10 @@ specs:
   status: active
   litmus_tests:
   - litmus:credential-isolation
-  coverage_ratio: 33
-  last_verified: '2026-05-03'
+  - litmus:gh-auth-script-shape
+  - litmus:secrets-management-implementation-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: simplified-tray-ux
   status: active
   litmus_tests:
