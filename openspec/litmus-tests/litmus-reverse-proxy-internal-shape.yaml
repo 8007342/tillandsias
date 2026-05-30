@@ -1,0 +1,151 @@
+# @trace spec:reverse-proxy-internal
+#
+# Drift-protection for the internal reverse-proxy implementation
+# across `images/router/{Containerfile, base.Caddyfile, entrypoint.sh}`
+# and `crates/tillandsias-router-sidecar`. The spec has 6 requirements
+# covering routing, SSL termination, request logging, caching,
+# ephemeral state, and access control + authentication.
+#
+# Single existing binding `litmus:ephemeral-guarantee` (e2e,
+# last_verified 2026-05-03) covered generic isolation. The actual
+# router (Caddy 2 + router-sidecar binary) was untrapped at source
+# level despite being the production authentication chain for
+# OpenCode Web sessions (cookie validation via forward_auth →
+# sidecar /validate → OtpStore lookup).
+#
+# **Spec / implementation divergence flagged**: spec § "SSL termination
+# with ephemeral CA" mandates HTTPS on port 443 with ephemeral-CA-
+# signed certs. The actual implementation runs PLAIN HTTP on port 8080
+# with `auto_https off` (per base.Caddyfile line 21). This is a
+# deliberate design: `*.localhost` is loopback per RFC 6761 and modern
+# browsers treat localhost as a secure context without TLS. The spec
+# text needs an update.
+name: litmus:reverse-proxy-internal-shape
+spec: reverse-proxy-internal
+phase: pre-build
+description: >
+  Pin the router internal-reverse-proxy surfaces: 4 file traces,
+  Caddy base config (auto_https off, admin loopback, /tmp/caddy-
+  storage), entrypoint merge of base + dynamic Caddyfile +
+  supervised sidecar + 9090-readiness wait, sidecar validate-port
+  default + 204/401 reply semantics + control-socket subscriber
+  env var.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains images/router/Containerfile
+  - workspace contains images/router/base.Caddyfile
+  - workspace contains images/router/entrypoint.sh
+  - workspace contains crates/tillandsias-router-sidecar/src/main.rs
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "all 4 router files carry a router-related @trace spec marker"
+    # The implementation is split across 4 files; each carries at
+    # least one related trace. Containerfile + router-sidecar
+    # mention `spec:reverse-proxy-internal` (embedded in a comma-
+    # separated list); base.Caddyfile + entrypoint.sh use
+    # `spec:subdomain-routing-via-reverse-proxy` (the routing-table
+    # half of the same router). Match the spec id substring rather
+    # than the full `@trace spec:` prefix since the marker is
+    # usually embedded in a comma-separated list.
+    command: "for f in images/router/Containerfile crates/tillandsias-router-sidecar/src/main.rs; do grep -Fq 'spec:reverse-proxy-internal' \"$f\" || { echo \"FAIL: $f missing reverse-proxy-internal\"; exit 1; }; done && for f in images/router/base.Caddyfile images/router/entrypoint.sh; do grep -Fq 'spec:subdomain-routing-via-reverse-proxy' \"$f\" || { echo \"FAIL: $f missing subdomain-routing\"; exit 1; }; done && echo \"ok: 4 router files traced\""
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "base.Caddyfile: auto_https off (plain HTTP on *.localhost per RFC 6761)"
+    # Spec § "SSL termination" mandates HTTPS on 443; impl runs
+    # plain HTTP on :8080 deliberately. Pin the `auto_https off`
+    # directive AND the storage location — a regression flipping
+    # auto_https to on would silently break the *.localhost loopback
+    # contract.
+    command: "grep -F 'auto_https off' images/router/base.Caddyfile"
+    timeout_ms: 3000
+    expected_behavior: "auto_https off"
+
+  - step: "base.Caddyfile: admin localhost:2019 (loopback only — access control)"
+    # Spec § "Access control" — admin API for `caddy reload` MUST
+    # be loopback-only. A regression to a public bind would
+    # silently widen the control plane.
+    command: "grep -F 'admin localhost:2019' images/router/base.Caddyfile"
+    timeout_ms: 3000
+    expected_behavior: "admin localhost:2019"
+
+  - step: "base.Caddyfile: storage file_system /tmp/caddy-storage (Req ephemeral state)"
+    # Spec § "Ephemeral cache and state" mandates tmpfs-backed
+    # state. `/tmp` is tmpfs in the router profile; Caddy's storage
+    # MUST point there so cert/state material doesn't persist.
+    command: "grep -F 'storage file_system /tmp/caddy-storage' images/router/base.Caddyfile"
+    timeout_ms: 3000
+    expected_behavior: "/tmp/caddy-storage"
+
+  - step: "entrypoint.sh: merges base.Caddyfile + dynamic /run/router/dynamic.Caddyfile"
+    # Spec § "Enclave-internal routing" — the tray writes per-
+    # project routes to dynamic.Caddyfile; the entrypoint merges
+    # base + dynamic before exec. Pin the path variables that
+    # encode the merge.
+    command: "grep -F 'BASE=/etc/caddy/base.Caddyfile' images/router/entrypoint.sh && grep -F 'DYNAMIC=/run/router/dynamic.Caddyfile' images/router/entrypoint.sh && grep -F 'MERGED=/tmp/Caddyfile' images/router/entrypoint.sh"
+    timeout_ms: 3000
+    expected_behavior: "dynamic.Caddyfile"
+
+  - step: "entrypoint.sh: supervises tillandsias-router-sidecar + waits for :9090 readiness"
+    # Spec § "Litmus test — Routing to forge container" implicitly
+    # requires the sidecar be up before Caddy serves traffic.
+    # entrypoint.sh runs the sidecar in a supervised background
+    # loop + polls 127.0.0.1:9090 (max 5s) BEFORE exec'ing caddy.
+    command: "grep -F '/usr/local/bin/tillandsias-router-sidecar' images/router/entrypoint.sh && grep -F '9090' images/router/entrypoint.sh"
+    timeout_ms: 3000
+    expected_behavior: "9090"
+
+  - step: "router-sidecar: DEFAULT_VALIDATE_PORT = 9090 + TILLANDSIAS_VALIDATE_PORT override"
+    # Spec § "Access control" — the forward_auth port is the
+    # spec-mandated integration point with Caddy's forward_auth
+    # directive. A regression renaming the env var or shifting
+    # the default would silently break the auth chain.
+    command: "grep -F 'const DEFAULT_VALIDATE_PORT: u16 = 9090;' crates/tillandsias-router-sidecar/src/main.rs && grep -F 'TILLANDSIAS_VALIDATE_PORT' crates/tillandsias-router-sidecar/src/main.rs"
+    timeout_ms: 3000
+    expected_behavior: "DEFAULT_VALIDATE_PORT"
+
+  - step: "router-sidecar: TILLANDSIAS_CONTROL_SOCKET env var for tray subscription"
+    # Spec § "Access control and authentication" — the sidecar
+    # subscribes to the tray's control socket to receive
+    # IssueWebSession envelopes. The env var is the connection
+    # contract; a rename would silently break the per-launch
+    # cookie sync.
+    command: "grep -F 'TILLANDSIAS_CONTROL_SOCKET' crates/tillandsias-router-sidecar/src/main.rs"
+    timeout_ms: 3000
+    expected_behavior: "TILLANDSIAS_CONTROL_SOCKET"
+
+  - step: "router-sidecar: 204 (allow) vs 401 (deny) reply semantics documented + httpkit"
+    # Spec § "Unauthorized access" Scenario mandates 401 reply on
+    # missing/invalid credentials. The 204/401 contract is the
+    # forward_auth semantics — 2xx allows, anything else denies.
+    # Pin both literals so a regression to 200/403 would surface.
+    command: "grep -Fq '204' crates/tillandsias-router-sidecar/src/main.rs && grep -Fq '401' crates/tillandsias-router-sidecar/src/main.rs && echo \"ok: 204+401 reply codes documented\""
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+observability:
+  traces:
+    - "@trace spec:reverse-proxy-internal"
+    - "@trace spec:subdomain-routing-via-reverse-proxy"
+    - "@trace spec:opencode-web-session-otp"
+    - "@trace spec:tray-host-control-socket"
+  expected_log: "router Caddy + sidecar surfaces pinned across 4 files"
+  log_fields:
+    spec: "reverse-proxy-internal"
+    test: "reverse-proxy-internal-shape"
+    artifact: "images/router/{Containerfile,base.Caddyfile,entrypoint.sh} + crates/tillandsias-router-sidecar/src/main.rs"
+
+rollback:
+  on_failure: >
+    A `spec:reverse-proxy-internal` source surface drifted. Restore
+    the 4 file `@trace` markers; `auto_https off` + `admin localhost:
+    2019` + `storage file_system /tmp/caddy-storage` in base.
+    Caddyfile; `BASE`/`DYNAMIC`/`MERGED` paths in entrypoint.sh +
+    the `/usr/local/bin/tillandsias-router-sidecar` invocation +
+    9090 readiness wait; `DEFAULT_VALIDATE_PORT = 9090` +
+    `TILLANDSIAS_VALIDATE_PORT` + `TILLANDSIAS_CONTROL_SOCKET` env
+    vars in router-sidecar; and the 204/401 reply-code literals.
+  command: "grep -nE '@trace|auto_https|admin localhost|caddy-storage|BASE=|DYNAMIC=|MERGED=|tillandsias-router-sidecar|9090|DEFAULT_VALIDATE_PORT|TILLANDSIAS_(VALIDATE|CONTROL)|204|401' images/router/Containerfile images/router/base.Caddyfile images/router/entrypoint.sh crates/tillandsias-router-sidecar/src/main.rs | head -30"
