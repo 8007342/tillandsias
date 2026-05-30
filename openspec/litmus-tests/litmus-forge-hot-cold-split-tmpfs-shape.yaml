@@ -218,6 +218,31 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok:"
 
+  - step: "Req 7 tmpfs-overlay tier table: 3 cap constants (64/128/1024 MB) + 2 boundary constants (8/32 GiB)"
+    # Spec § Tmpfs-overlay lane mandates exact cap values per tier.
+    # Pinning the literals catches a regression that silently shifts
+    # the boundary (e.g. raising MODEST cap to 128 MB or lowering
+    # the PLENTIFUL boundary to 16 GiB).
+    command: "grep -F 'pub const PULL_CACHE_RAM_MB_MODEST: u32 = 64;' crates/tillandsias-core/src/preflight.rs && grep -F 'pub const PULL_CACHE_RAM_MB_NORMAL: u32 = 128;' crates/tillandsias-core/src/preflight.rs && grep -F 'pub const PULL_CACHE_RAM_MB_PLENTIFUL: u32 = 1024;' crates/tillandsias-core/src/preflight.rs"
+    timeout_ms: 3000
+    expected_behavior: "PULL_CACHE_RAM_MB_"
+
+  - step: "Req 7 tmpfs-overlay resolver: resolve_pull_cache_ram_mb + parse_mem_total_mb helpers"
+    # Spec § "Tmpfs-overlay cap auto-detected at tray startup" — the
+    # resolver picks the tier from MemTotal, with the user's config
+    # override (Option<u32>) short-circuiting. The /proc/meminfo
+    # MemTotal parser is the Linux-native measurement step.
+    command: "grep -F 'pub fn resolve_pull_cache_ram_mb(mem_total_mb: u64, override_mb: Option<u32>) -> u32' crates/tillandsias-core/src/preflight.rs && grep -F 'pub fn parse_mem_total_mb(meminfo_output: &str) -> Option<u64>' crates/tillandsias-core/src/preflight.rs"
+    timeout_ms: 3000
+    expected_behavior: "resolve_pull_cache_ram_mb"
+
+  - step: "Req 7: >=3 unit tests cover the tmpfs-overlay tier-table + override + parser"
+    # Covers: tier-from-mem-total (3 tiers + boundary), user-override-
+    # wins, parser canonical, parser fallback. Pin >=3 by name.
+    command: "grep -cE 'fn (resolve_pull_cache_ram_mb|parse_mem_total_mb)_' crates/tillandsias-core/src/preflight.rs | awk '{ if ($1+0 >= 3) print \"ok:\", $1, \"tmpfs-overlay test cases\"; else { print \"FAIL: only\", $1, \"of >=3\"; exit 1 } }'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
 observability:
   traces:
     - "@trace spec:forge-hot-cold-split"

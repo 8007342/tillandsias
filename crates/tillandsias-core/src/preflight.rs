@@ -158,6 +158,91 @@ pub fn parse_mem_available_mb(meminfo_output: &str) -> Option<u64> {
     None
 }
 
+/// Parse `MemTotal: <N> kB` from `/proc/meminfo` content.
+///
+/// Companion to [`parse_mem_available_mb`] for the tmpfs-overlay
+/// auto-detection tier table in [`resolve_pull_cache_ram_mb`]. Same
+/// kB → MiB integer-division semantics (truncates DOWN; conservative
+/// because rounding down a 7.99 GiB host to 8191 MiB lands it in the
+/// MODEST tier — the safer side of the spec's boundaries).
+///
+/// Returns `None` when the field is missing or unparseable so callers
+/// can fail-closed (refuse to set the env var rather than silently
+/// applying the wrong tier).
+///
+/// @trace spec:forge-hot-cold-split (Linux-native API for spec §
+///   Tmpfs-overlay lane auto-detection at tray startup)
+pub fn parse_mem_total_mb(meminfo_output: &str) -> Option<u64> {
+    for line in meminfo_output.lines() {
+        let trimmed = line.trim_start();
+        if let Some(rest) = trimmed.strip_prefix("MemTotal:") {
+            let mut parts = rest.split_whitespace();
+            let value = parts.next()?.parse::<u64>().ok()?;
+            return Some(value / 1024);
+        }
+    }
+    None
+}
+
+/// Tier-table caps (MB) for the tmpfs-overlay lane. Spec § "Tmpfs-
+/// overlay lane for per-project ephemeral cache":
+///
+/// | `MemTotal`                  | Tmpfs cap |
+/// |---|---|
+/// | `< 8 GiB`                   | 64 MB     |
+/// | `8 GiB ≤ MemTotal < 32 GiB` | 128 MB    |
+/// | `≥ 32 GiB`                  | 1024 MB   |
+///
+/// Boundaries pulled out as constants so a regression that silently
+/// shifts the tier thresholds surfaces in a single literal site.
+///
+/// @trace spec:forge-hot-cold-split (Requirement: Tmpfs-overlay lane
+///   for per-project ephemeral cache)
+pub const PULL_CACHE_RAM_MB_MODEST: u32 = 64;
+pub const PULL_CACHE_RAM_MB_NORMAL: u32 = 128;
+pub const PULL_CACHE_RAM_MB_PLENTIFUL: u32 = 1024;
+
+/// 8 GiB = 8 × 1024 MiB. The lower boundary between MODEST and
+/// NORMAL tiers.
+pub const PULL_CACHE_RAM_TIER_NORMAL_MB: u64 = 8 * 1024;
+
+/// 32 GiB = 32 × 1024 MiB. The lower boundary between NORMAL and
+/// PLENTIFUL tiers.
+pub const PULL_CACHE_RAM_TIER_PLENTIFUL_MB: u64 = 32 * 1024;
+
+/// Resolve the `TILLANDSIAS_PULL_CACHE_RAM_MB` env var value for a
+/// host with `mem_total_mb` total RAM, optionally overridden by the
+/// user's `forge.pull_cache_ram_mb` config setting.
+///
+/// Spec § "Tmpfs-overlay cap auto-detected at tray startup" Scenario:
+///
+/// > if the user's config sets `forge.pull_cache_ram_mb = 256`, the
+/// > override MUST win and the env var MUST be `256`
+///
+/// So `Some(override_mb)` short-circuits the tier lookup. The `u32`
+/// override type matches `ForgeConfig::pull_cache_ram_mb: Option<u32>`
+/// in config.rs.
+///
+/// Boundary semantics from the spec's tier table: the `<` versus `≤`
+/// distinction matters at the 8 GiB and 32 GiB marks. A host with
+/// exactly 8192 MiB is `>= 8 GiB`, so it lands in NORMAL, not MODEST.
+/// A host with exactly 32768 MiB lands in PLENTIFUL.
+///
+/// @trace spec:forge-hot-cold-split (Requirement: Tmpfs-overlay lane
+///   — Scenario "Tmpfs-overlay cap auto-detected at tray startup")
+pub fn resolve_pull_cache_ram_mb(mem_total_mb: u64, override_mb: Option<u32>) -> u32 {
+    if let Some(value) = override_mb {
+        return value;
+    }
+    if mem_total_mb >= PULL_CACHE_RAM_TIER_PLENTIFUL_MB {
+        PULL_CACHE_RAM_MB_PLENTIFUL
+    } else if mem_total_mb >= PULL_CACHE_RAM_TIER_NORMAL_MB {
+        PULL_CACHE_RAM_MB_NORMAL
+    } else {
+        PULL_CACHE_RAM_MB_MODEST
+    }
+}
+
 /// Working-set baseline (MB) added on top of the tmpfs sum to compute
 /// the `--memory` ceiling for a forge container.
 ///
@@ -443,5 +528,87 @@ Cached:          4567890 kB
         assert_eq!(parse_tmpfs_size_mb("/tmp:size=m"), None);
         // Unparseable size value.
         assert_eq!(parse_tmpfs_size_mb("/tmp:size=hugem"), None);
+    }
+
+    // @trace spec:forge-hot-cold-split (Scenario "Tmpfs-overlay cap
+    //   auto-detected at tray startup" tier-table boundaries)
+    #[test]
+    fn resolve_pull_cache_ram_mb_picks_tier_from_mem_total() {
+        // MODEST tier: 4 GiB host → 64 MB.
+        assert_eq!(
+            resolve_pull_cache_ram_mb(4 * 1024, None),
+            PULL_CACHE_RAM_MB_MODEST
+        );
+        // Just below the 8 GiB boundary stays MODEST.
+        assert_eq!(
+            resolve_pull_cache_ram_mb(8 * 1024 - 1, None),
+            PULL_CACHE_RAM_MB_MODEST
+        );
+
+        // NORMAL tier: spec example "MemTotal = 16 GiB" → 128 MB.
+        assert_eq!(
+            resolve_pull_cache_ram_mb(16 * 1024, None),
+            PULL_CACHE_RAM_MB_NORMAL
+        );
+        // Exactly 8 GiB lands in NORMAL (>= boundary).
+        assert_eq!(
+            resolve_pull_cache_ram_mb(8 * 1024, None),
+            PULL_CACHE_RAM_MB_NORMAL
+        );
+        // Just below the 32 GiB boundary stays NORMAL.
+        assert_eq!(
+            resolve_pull_cache_ram_mb(32 * 1024 - 1, None),
+            PULL_CACHE_RAM_MB_NORMAL
+        );
+
+        // PLENTIFUL tier: exactly 32 GiB and above → 1024 MB.
+        assert_eq!(
+            resolve_pull_cache_ram_mb(32 * 1024, None),
+            PULL_CACHE_RAM_MB_PLENTIFUL
+        );
+        assert_eq!(
+            resolve_pull_cache_ram_mb(128 * 1024, None),
+            PULL_CACHE_RAM_MB_PLENTIFUL
+        );
+    }
+
+    // @trace spec:forge-hot-cold-split (Scenario "if the user's config
+    //   sets forge.pull_cache_ram_mb = 256, the override MUST win")
+    #[test]
+    fn resolve_pull_cache_ram_mb_user_override_wins_at_any_tier() {
+        // Override wins over MODEST tier auto-detection.
+        assert_eq!(resolve_pull_cache_ram_mb(4 * 1024, Some(256)), 256);
+        // Override wins over NORMAL tier auto-detection (spec example).
+        assert_eq!(resolve_pull_cache_ram_mb(16 * 1024, Some(256)), 256);
+        // Override wins over PLENTIFUL tier auto-detection.
+        assert_eq!(resolve_pull_cache_ram_mb(128 * 1024, Some(256)), 256);
+        // User can override DOWN to a tiny value (e.g. 0) — the spec
+        // doesn't validate, so we don't either.
+        assert_eq!(resolve_pull_cache_ram_mb(16 * 1024, Some(0)), 0);
+    }
+
+    // @trace spec:forge-hot-cold-split (Linux /proc/meminfo parser
+    //   for MemTotal — companion to parse_mem_available_mb)
+    #[test]
+    fn parse_mem_total_mb_extracts_value_from_canonical_meminfo() {
+        let canonical = "MemTotal:       16345920 kB
+MemFree:         5234980 kB
+MemAvailable:   12500000 kB
+";
+        // 16345920 kB / 1024 = 15962 MiB (truncated).
+        assert_eq!(parse_mem_total_mb(canonical), Some(15962));
+    }
+
+    // @trace spec:forge-hot-cold-split (parser fail-closed — corrupt
+    //   meminfo refuses to set the env var rather than silently
+    //   applying the wrong tier)
+    #[test]
+    fn parse_mem_total_mb_returns_none_on_missing_or_unparseable() {
+        // Missing field (e.g. unprivileged /proc clone).
+        assert_eq!(parse_mem_total_mb("MemAvailable: 1000 kB\n"), None);
+        // Empty input.
+        assert_eq!(parse_mem_total_mb(""), None);
+        // Unparseable.
+        assert_eq!(parse_mem_total_mb("MemTotal: garbage kB"), None);
     }
 }
