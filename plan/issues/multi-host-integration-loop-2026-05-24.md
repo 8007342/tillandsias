@@ -51,6 +51,176 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-31T01:43Z — MERGED windows-next (install-windows.ps1 -Purge mode + -Uninstall warning) + osx-next no-op (11 cycle stall, ~19h 16min) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `7ab2927` (merge commit; linux-next was at
+  `3b3ee027` pre-merge — the 01:21Z work-loop discovery-CLI
+  install fix + new high-severity install-shape litmus +
+  work-queue ledger).
+- observed_sibling_heads: main=`677a89af` · linux-next=`3b3ee027` →
+  `7ab2927` · windows-next=`14ccbda2` · osx-next=`b4a45622`.
+- windows-next: **MERGED + TESTED + PUSHED** — 1 commit
+  `14ccbda2 feat(scripts): install-windows.ps1 -Purge mode +
+  -Uninstall leftovers warning` advancing windows-next. Two files
+  touched (`scripts/install-windows.ps1` + `plan/issues/windows-
+  build-findings-2026-05-30.md`), both in sibling-owned windows-
+  host scope. `./build.sh --check` PASS; `./build.sh --test` PASS
+  (full workspace incl. doc-tests across all crates). Merge
+  commit produced cleanly via `git merge --no-ff --no-commit
+  origin/windows-next` + finalize.
+- osx-next: no-op — zero commits ahead since 06:27Z. **11
+  consecutive cycle stall (~19h 16min)**, deepest stall of
+  session continues to extend. ESCALATION DEEPLY overdue;
+  orchestrator macOS host ping STRONGLY required — at this
+  duration host may be offline / agent loop crashed / coordination
+  breakdown. The unchecked ASKs in `plan/issues/tray-convergence-
+  coordination.md` from earlier in the day cannot be acknowledged
+  or actioned without macOS-host engagement.
+- spec-drift: NONE — the merge only touches `scripts/install-
+  windows.ps1` (windows-host script scope) + `plan/issues/
+  windows-build-findings-2026-05-30.md` (windows-host ledger).
+  No openspec/, methodology/, or shared-protocol surfaces
+  affected.
+- ledger push: pending step 7 below.
+
+### Cycle 2026-05-30T23:43Z — MERGED windows-next (diagnose-windows.ps1 stale readiness + identity-line fix) + osx-next no-op (10+ cycle stall, ~17h+) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `c0f9237` (merge commit; linux-next was at
+  `8e41091b` pre-merge — the 23:21Z work-loop slice +
+  default-image-containerfile-shape litmus + work-queue ledger).
+- observed_sibling_heads: main=`677a89af` · linux-next=`8e41091b` →
+  `c0f9237` · windows-next=`8490a364` · osx-next=`b4a45622`.
+- windows-next: **MERGED + TESTED + PUSHED** — 1 commit
+  `8490a364 fix(scripts): diagnose-windows.ps1 stale readiness +
+  identity-line addition` advancing windows-next. Two files touched
+  (`scripts/diagnose-windows.ps1` + `plan/issues/windows-build-
+  findings-2026-05-30.md`), both in sibling-owned windows-host
+  scope. `./build.sh --check` PASS; `./build.sh --test` PASS
+  (full workspace incl. doc-tests across all crates). Merge commit
+  produced cleanly via `git merge --no-ff --no-commit
+  origin/windows-next` + finalize.
+- osx-next: no-op — zero commits ahead since 06:27Z. **10
+  consecutive cycle stall (~17h 16min)**, deepest stall of session.
+  ESCALATION DEEPLY overdue; orchestrator macOS host ping
+  STRONGLY required — at this duration, host may be offline /
+  agent loop crashed / coordination breakdown. The unchecked
+  ASKs in `plan/issues/tray-convergence-coordination.md` from
+  earlier in the day cannot be acknowledged or actioned without
+  macOS-host engagement.
+- spec-drift: NONE — the merge only touches
+  `scripts/diagnose-windows.ps1` (windows-host script scope) +
+  `plan/issues/windows-build-findings-2026-05-30.md` (windows-host
+  ledger). No openspec/, methodology/, or shared-protocol
+  surfaces affected.
+- ledger push: pending step 7 below.
+
+### Cycle 2026-05-30T21:43Z — MERGED windows-next (build-windows-tray.ps1 stderr-wrap install bug fix) + osx-next no-op ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `306494a` (merge commit; linux-next was at
+  `07e3d4c1` pre-merge).
+- observed_sibling_heads: main=`677a89af` · linux-next=`07e3d4c1`
+  (pre-merge) · windows-next=`fdc3c00e` · osx-next=`b4a45622`
+  (unchanged 9 consecutive cycles since 06:27Z — ~15.5 hour stall).
+- **windows-next: merged + tested + pushed** — substantive 1-commit
+  delta `fdc3c00e fix(scripts): build-windows-tray.ps1 no longer
+  aborts on cargo stderr-wrap`. Real install-blocking bug fixed:
+  `install-windows.ps1` was aborting mid-install when its nested
+  `build-windows-tray.ps1` subscript tripped PowerShell's
+  NativeCommandError wrap on cargo's stderr writes ("Compiling X").
+  The `$ErrorActionPreference = Stop` inside the subscript treated
+  the very first stderr line as terminating, killing the build
+  before "Finished release" — end users saw a broken install with
+  no useful error. Fix: around the `& cargo @buildArgs` call,
+  save outer `$ErrorActionPreference`, locally set to `Continue`,
+  invoke cargo, capture `$LASTEXITCODE`, restore via `try/finally`.
+  Real cargo failures (exit != 0) still throw via the existing
+  exit-code check — only the spurious-stderr-wrap-as-error path
+  fixed. skills/build-windows-tray/SKILL.md updated to note both
+  wrapper + direct `cargo build` work now. All changes in sibling-
+  owned scope (build-windows-tray.ps1 + windows-host-owned skill).
+- **osx-next: no-op** — empty range, unchanged 9 consecutive cycles
+  since 06:27Z (~15.5 hours, deepest stall of this session).
+  **ESCALATION DEEPLY overdue**: orchestrator-level macOS host ping
+  STRONGLY recommended; 6+ cycles past the 3-cycle guardrail.
+- merge stats: 3 files changed, 139 insertions(+), 13 deletions(-).
+  Windows build script + skill + plan/ build-findings doc.
+- verification: `./build.sh --check` + `./build.sh --test` passed.
+- spec-drift: **none** — no openspec/, methodology/, or shared-crate
+  changes.
+- linux work this 2h window: 4 spec-gap-fill slices — `web-image`
+  33→75 at 20:21Z (Containerfile + entrypoint pin), `spec-
+  traceability` 33→75 at 20:51Z (meta-spec USAGE floors:
+  >=500 Rust + >=100 shell @trace annotations + >=50 structured
+  log fields + >=10 distinct spec IDs traced + >=10 module-level
+  traces) — **89/89 PASS milestone**, `subdomain-naming-flip`
+  33→75 at 21:21Z (security-relevant `extract_project_label`
+  parser + cookie-scoping helper + Caddyfile order). Full instant
+  suite progressed 87/87 → 88/88 → 89/89 → 90/90 PASS at 100%
+  across 89 specs.
+- recommended next: orchestrator ping macOS host (9-cycle silence
+  is the longest stall of this entire arc); continue 33% backlog
+  (zen-default-with-ollama-analysis-pool, secret-rotation
+  tombstone alignment); pursue forge-hot-cold-split Req 1
+  `/home/forge/src` tmpfs mount OR github-credential-health
+  4-state classifier as substantial real-implementation slices.
+
+### Cycle 2026-05-30T19:43Z — MERGED windows-next (install + tray-diagnose PowerShell consume new CLI surface) + osx-next no-op ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `a6785df` (merge commit; linux-next was at
+  `5cbb9455` pre-merge).
+- observed_sibling_heads: main=`677a89af` (now reflects today's
+  v0.2.260530.1 release VERSION bump) · linux-next=`5cbb9455`
+  (pre-merge) · windows-next=`567009f6` · osx-next=`b4a45622`
+  (unchanged 8 consecutive cycles since 06:27Z).
+- **windows-next: merged + tested + pushed** — substantive 1-commit
+  delta `567009f6 feat(scripts): install + tray-diagnose consume new
+  CLI surface (--version preflight + build_commit + recent logs)`.
+  Wraps up the cross-host triage UX improvements from this week's
+  windows-tray work: `install-windows.ps1` adds a Layer-1 preflight
+  invoking `tillandsias-tray --version` via cmd-redirect (fast, no
+  WSL touch, fails loudly on a fundamentally broken binary BEFORE
+  the slower --diagnose flow) + Layer-2 `--diagnose --json` now
+  reports `commit=<build_commit>` alongside version+pin + surfaces
+  `wire.error` for self-sufficient install logs. `tray-diagnose.ps1`
+  adds a "build commit" row alongside "version" + new "Recent log
+  activity" section iterating `report.recent_log_tail` in dark-gray
+  + pointer to `tillandsias-tray --logs --tail N`. Litmus extended
+  in lockstep. All changes in PowerShell scripts (sibling-owned
+  scope: install-windows.ps1 + tray-diagnose.ps1) + windows-owned
+  litmus.
+- **osx-next: no-op** — empty range, unchanged 8 consecutive cycles
+  since 06:27Z (~13 hours). **ESCALATION watch DEEPLY overdue**:
+  orchestrator-level macOS host ping STRONGLY recommended.
+- merge stats: 4 files changed, 140 insertions(+), 5 deletions(-).
+  Windows PowerShell scripts + windows-tray litmus + plan/ build-
+  findings doc.
+- verification: `./build.sh --check` + `./build.sh --test` passed.
+- spec-drift via litmus update: standard pattern (windows extended
+  their own windows-tray litmus); no linux action.
+- linux work this 2h window: 2 substantive slices plus the release
+  recovery — `tray-minimal-ux` 33→75 at 17:21Z (EnclaveStatus
+  state-machine + Quit literal + Seedlings order), **release
+  escalation 18:13Z RESOLVED at 18:22Z** via local-fedora tag push
+  + `gh workflow run release.yml`, **release v0.2.260530.1
+  PUBLISHED at 19:02Z** (workflow `26691456259` `success` at
+  39m38s — 22 cosign-signed assets including all 3 platform
+  binaries + linux musl headless variants; release page
+  https://github.com/8007342/tillandsias/releases/tag/v0.2.260530.1),
+  `simplified-tray-ux` 33→67 at 18:51Z (5th spec/impl divergence
+  flagged + inline reconciled with ⚠ Implementation reality block).
+  Full instant suite progressed 86/86 → 87/87 PASS at 100% across
+  89 specs.
+- recommended next: orchestrator ping macOS host (8-cycle silence
+  is the longest stall of this session); continue 33% backlog
+  (subdomain-naming-flip, web-image, spec-traceability, zen-default-
+  with-ollama-analysis-pool); pursue forge-hot-cold-split Req 1
+  `/home/forge/src` tmpfs mount OR github-credential-health
+  4-state classifier as substantial real-implementation slices.
+
 ### Cycle 2026-05-30T17:43Z — MERGED windows-next (--logs / --logs --tail N) + osx-next no-op ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
@@ -3511,3 +3681,94 @@ is still open per the same cycle log; Windows host owns that one.)
   - Successfully built and asserted the forge container locally using `./build-forge.sh --assert` (`tillandsias-forge:3f008ca4ecef4dab55d3bcf59fb1a40a6bf0339989871fa0b2e73ccc28254fc6`).
   - Ran workspace checks and tests using `./build.sh --check && ./build.sh --test`. All unit tests, integration tests, and doc-tests passed 100% cleanly across all crates (`tillandsias-headless`, `tillandsias-podman`, `tillandsias-scanner`, `tillandsias-vault-client`, `tillandsias-vm-layer`, `tillandsias-logging`, `tillandsias-metrics`, etc.).
   - Staged and committed improvements, pushing them to `origin/linux-next` as `2b750fd1`.
+
+### Cycle 2026-05-30T18:13Z — ESCALATION: tag push blocked by git proxy (merge-to-main-and-release)
+
+- host_id: linux-web-claude-sonnet (Claude Code on the web)
+- platform: linux (remote execution environment)
+- branch: linux-next → main via PR #8
+
+**ESCALATION: Step 5 tag push failed — git proxy returns HTTP 403 for `refs/tags/*`**
+
+**What completed successfully:**
+- Step 0: Pre-flight — checked out linux-next, clean worktree, up to date with origin/linux-next (HEAD `89115115`)
+- Step 1: Computed version `v0.2.260530.1` (first release of 2026-05-30, no prior v0.2.260530.* tags)
+- Step 2: Opened PR #8 `linux-next → main` (title: "release: v0.2.260530.1 — daily linux-next promotion")
+- Step 3: Merged PR #8 with `--merge` (merge SHA `d2c15f376a30c43cca45835f912386caab57b3dc`); `mergeable_state: clean`, no required checks
+- Step 4: Bumped `VERSION` from `0.2.260529.1` to `0.2.260530.1` on main, committed (`677a89af`), pushed to origin/main successfully
+
+**Where it blocked:**
+- Step 5: `git push origin v0.2.260530.1` → HTTP 403 on the local git proxy (`http://local_proxy@127.0.0.1:45935/git/8007342/tillandsias`). The proxy's fetch refspec is `+refs/heads/*:refs/remotes/origin/*` — tag refs are not proxied. Three retries (0s, 4s, 8s backoff) all returned 403.
+- No MCP GitHub tool is available to create a git tag ref (`mcp__github__*` set does not include `create_tag` or `create_ref`).
+- No `gh` CLI available in this environment.
+- Steps 6–7 (workflow_dispatch trigger + release artifact) are therefore blocked.
+
+**Local tag state:** `v0.2.260530.1` annotated tag exists locally (pointing to `677a89af` on main) but was not pushed.
+
+**Operator action required:**
+```bash
+# On any host with git push access to the real GitHub remote:
+git fetch origin
+git tag -a v0.2.260530.1 677a89af -m "Release 0.2.260530.1 — daily linux-next → main promotion. See PR #8."
+git push origin v0.2.260530.1
+gh workflow run release.yml --ref v0.2.260530.1
+```
+
+The next 24h cycle will compute `v0.2.260530.2` and retry end-to-end.
+
+---
+
+**✅ RESOLVED 2026-05-30T18:22Z (linux-tlatoani-fedora-claude-opus)**
+
+Operator completed the manual unblock from the local fedora host:
+
+- `git tag -a v0.2.260530.1 677a89af` (annotated tag pointing at main's
+  release commit; the inline message references both PR #8 and this
+  escalation block for traceability).
+- `git push origin v0.2.260530.1` → succeeded (`[new tag] v0.2.260530.1
+  -> v0.2.260530.1`). The 403 was specific to the web environment's
+  local git proxy; the real `github.com` remote accepted the push
+  cleanly from this host.
+- `gh workflow run release.yml --ref v0.2.260530.1` → workflow run
+  `26691456259` queued at 18:22:35Z, status: `queued`. Will progress
+  through the standard ~40 minute artifact-build cycle (last release
+  `v0.2.260529.1` took 41m21s).
+- Run URL: https://github.com/8007342/tillandsias/actions/runs/26691456259
+
+The cloud-side release-cycle skill's Steps 1–4 completed correctly
+(PR + merge + VERSION bump + main push); only Step 5 (tag push) and
+Steps 6–7 (workflow_dispatch + artifact build) were blocked by the
+web-env proxy. Operator coverage from a fedora host with native
+git+gh access closed the loop in 7 minutes.
+
+**Follow-on for cloud-side merge-to-main-and-release skill**: if a
+future iteration detects HTTP 403 on `git push origin <tag>`, it
+should fall back to `gh api repos/{owner}/{repo}/git/refs --method
+POST -f ref=refs/tags/<tag> -f sha=<commit>` (which goes through
+GitHub's REST API, not the proxy's git-protocol path) before
+escalating. This would have unblocked the cloud cycle without
+operator intervention.
+
+**✅ RELEASE PUBLISHED 2026-05-30T19:02Z** — workflow `26691456259`
+completed successfully at `39m38s` (faster than the prior
+`v0.2.260529.1` precedent of `41m21s`). Release page:
+https://github.com/8007342/tillandsias/releases/tag/v0.2.260530.1
+
+22-asset publication includes all 3 platform binaries + linux musl
+headless variants + macOS-arm64 + windows-x64 tray bundles +
+install/uninstall/verify scripts + SHA256SUMS + per-asset cosign
+bundles:
+- `tillandsias-linux-x86_64` (Linux tray)
+- `tillandsias-headless-x86_64-unknown-linux-musl` +
+  `tillandsias-headless-aarch64-unknown-linux-musl` (in-VM agents)
+- `tillandsias-tray-0.2.260530.1-macos-arm64.tar.gz` (macOS tray)
+- `tillandsias-tray-0.2.260530.1-windows-x64.zip` (Windows tray)
+- `install.sh` / `install-macos.sh` / `uninstall.sh` / `verify.sh`
+- `SHA256SUMS` / `SHA256SUMS-macos` / `SHA256SUMS-windows`
+- All assets cosign-signed (`.cosign.bundle` companions).
+
+Linux Silverblue smoke-test target is live. Total operator turnaround
+from the 18:13Z escalation logging to the release being downloadable:
+`19:02Z - 18:13Z = 49 minutes`, of which `~40 minutes` was the CI
+build itself (the operator intervention took ~7 minutes — the bulk
+was waiting for the workflow).

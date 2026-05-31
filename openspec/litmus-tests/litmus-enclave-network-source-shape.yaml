@@ -1,0 +1,96 @@
+# @trace spec:enclave-network
+#
+# Drift-protection for the Rust-level enclave network implementation
+# surfaces that implement spec:enclave-network. The spec has three
+# requirements:
+#
+#   1. Internal podman network for container isolation
+#      → ENCLAVE_NET / ENCLAVE_NETWORK constants, ensure_enclave_network()
+#   2. Container attachment to enclave network
+#      → forge singles ENCLAVE_NET, proxy dual-homed bridge+enclave
+#   3. Enclave lifecycle telemetry
+#      → @trace annotations, accountability logging
+#
+# Previously bound only to `litmus:enclave-isolation` (shell script
+# orchestration) and `litmus:socket-cleanup` (cleanup). This litmus
+# pins the Rust source-level surfaces.
+name: litmus:enclave-network-source-shape
+spec: enclave-network
+phase: pre-build
+description: >
+  Pin the Rust implementation surfaces for spec:enclave-network:
+  canonical ENCLAVE_NET constant in main.rs, shared ENCLAVE_NETWORK
+  in podman/src/lib.rs, ensure_enclave_network entry point, forge-only
+  vs proxy-dual-homed network attachment patterns, and the naming unit
+  test.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-headless/src/main.rs
+  - workspace contains crates/tillandsias-podman/src/lib.rs
+  - workspace contains crates/tillandsias-core/src/container_profile.rs
+  - shell utilities (grep, awk) are available in PATH
+
+critical_path:
+  - step: "main.rs const ENCLAVE_NET = tillandsias-enclave (canonical launch constant)"
+    command: "grep -F 'const ENCLAVE_NET: &str = \"tillandsias-enclave\"' crates/tillandsias-headless/src/main.rs && echo ENCLAVE_NET"
+    timeout_ms: 3000
+    expected_behavior: "ENCLAVE_NET"
+
+  - step: "podman/src/lib.rs pub const ENCLAVE_NETWORK = tillandsias-enclave (shared constant)"
+    command: "grep -F 'pub const ENCLAVE_NETWORK: &str = \"tillandsias-enclave\"' crates/tillandsias-podman/src/lib.rs && echo ENCLAVE_NETWORK"
+    timeout_ms: 3000
+    expected_behavior: "ENCLAVE_NETWORK"
+
+  - step: "ensure_enclave_network() entry point with network_exists_sync (Req 1 create/reuse)"
+    command: "grep -F 'fn ensure_enclave_network(debug: bool) -> Result<(), String>' crates/tillandsias-headless/src/main.rs && grep -F 'network_exists_sync(ENCLAVE_NET)' crates/tillandsias-headless/src/main.rs && echo ENSURE_ENCLAVE"
+    timeout_ms: 3000
+    expected_behavior: "ENSURE_ENCLAVE"
+
+  - step: "forge containers use ENCLAVE_NET single-network attachment (Req 2 forge-only)"
+    command: "grep -c \"ENCLAVE_NET\\.into()\" crates/tillandsias-headless/src/main.rs | awk '{ if ($1+0 >= 2) print \"ok:\", $1, \"ENCLAVE_NET.into() sites\"; else { print \"FAIL: only\", $1, \"of >=2 ENCLAVE_NET.into() sites\"; exit 1 } }'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "proxy container is dual-homed bridge+enclave (Req 2)"
+    command: "grep -F 'tillandsias-enclave,bridge' crates/tillandsias-core/src/container_profile.rs && echo PROXY_DUAL_HOMED"
+    timeout_ms: 3000
+    expected_behavior: "PROXY_DUAL_HOMED"
+
+  - step: "enclave_network_name unit test pinned (naming invariant)"
+    command: "grep -F 'fn enclave_network_name_follows_spec_pattern' crates/tillandsias-podman/src/lib.rs && echo NAMING_TEST"
+    timeout_ms: 3000
+    expected_behavior: "NAMING_TEST"
+
+  - step: "enclave lifecycle telemetry annotations (Req 3)"
+    # Use substring match for `spec:enclave-network` because the
+    # annotation format is comma-separated (e.g.
+    # `@trace spec:foo, spec:enclave-network`). Matcher quirk #9
+    # family — grep -F '@trace spec:enclave-network' misses the
+    # leading-list form.
+    command: "grep -cF 'spec:enclave-network' crates/tillandsias-headless/src/main.rs | awk '{ if ($1+0 >= 3) print \"ok:\", $1, \"spec:enclave-network trace sites\"; else { print \"FAIL: only\", $1, \"of >=3\"; exit 1 } }'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+observability:
+  traces:
+    - "@trace spec:enclave-network"
+    - "@trace spec:proxy-container"
+    - "@trace spec:environment-runtime"
+  expected_log: "spec:enclave-network Rust implementation surfaces pinned across Reqs 1+2+3"
+  log_fields:
+    spec: "enclave-network"
+    test: "enclave-network-source-shape"
+    artifact: "crates/tillandsias-headless/src/main.rs + crates/tillandsias-podman/src/lib.rs + crates/tillandsias-core/src/container_profile.rs"
+
+rollback:
+  on_failure: >
+    A `spec:enclave-network` implementation surface drifted. Restore
+    the ENCLAVE_NET constant in main.rs and ENCLAVE_NETWORK in
+    podman/src/lib.rs; ensure ensure_enclave_network calls
+    network_exists_sync; ensure forge containers pass
+    ENCLAVE_NET.into() as single network; ensure proxy container
+    uses "tillandsias-enclave,bridge" for dual-homing; keep the
+    enclave_network_name_follows_spec_pattern test.
+  command: "grep -n 'ENCLAVE_NET\\|ENCLAVE_NETWORK\\|ensure_enclave_network\\|enclave,bridge\\|enclave_network_name' crates/tillandsias-headless/src/main.rs crates/tillandsias-podman/src/lib.rs crates/tillandsias-core/src/container_profile.rs | head -25"

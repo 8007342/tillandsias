@@ -1,0 +1,117 @@
+# @trace spec:zen-default-with-ollama-analysis-pool
+#
+# Drift-protection for the Zen-default + Ollama-analysis-pool model
+# routing. Spec mandates: (1) default `opencode/big-pickle` Zen model
+# for primary reasoning + `opencode/gpt-5-nano` small model; (2)
+# Ollama provider enumerated in config.json with all local-pool
+# models; (3) inference container pre-pulls T0 + T1 tool-capable
+# models at startup.
+#
+# Single existing binding `litmus:inference-readiness-probe-shape`
+# (last_verified 2026-05-15) covered the readiness probe but not
+# the config defaults or the pre-pull tier logic.
+name: litmus:zen-default-with-ollama-shape
+spec: zen-default-with-ollama-analysis-pool
+phase: pre-build
+description: >
+  Pin opencode/big-pickle + opencode/gpt-5-nano default-model
+  literals in config.json, the ollama provider enumeration with
+  >=8 models, and the inference container's T0 + T1 pull logic
+  in entrypoint.sh (qwen2.5:0.5b + llama3.2:3b).
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains images/default/config-overlay/opencode/config.json
+  - workspace contains images/inference/entrypoint.sh
+  - workspace contains images/inference/Containerfile
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "Req Default routing: config.json sets model = opencode/big-pickle (Zen primary)"
+    # Spec § Req mandates the bundled config.json defaults to
+    # `opencode/big-pickle` for primary reasoning. A regression
+    # to a different model name silently breaks the Zen-default
+    # contract — operators who don't override get a different
+    # tool-calling model.
+    command: "grep -F '\"model\": \"opencode/big-pickle\"' images/default/config-overlay/opencode/config.json"
+    timeout_ms: 3000
+    expected_behavior: "opencode/big-pickle"
+
+  - step: "Req Default routing: config.json sets small_model = opencode/gpt-5-nano (fast non-tool tasks)"
+    # Spec § Req mandates `opencode/gpt-5-nano` as the fast non-
+    # reasoning Zen model. A regression to a different small-model
+    # silently changes the title/classification path.
+    command: "grep -F '\"small_model\": \"opencode/gpt-5-nano\"' images/default/config-overlay/opencode/config.json"
+    timeout_ms: 3000
+    expected_behavior: "opencode/gpt-5-nano"
+
+  - step: "Req Default routing: ollama provider enumerated with baseURL pointing at enclave inference container"
+    # Spec § Req mandates `provider.ollama` is enumerated with
+    # `--model ollama/<name>` opt-in. The baseURL
+    # http://inference:11434/v1 is the enclave-DNS path; a
+    # regression to a different URL would break the offline-
+    # analysis opt-in path.
+    command: "grep -F '\"baseURL\": \"http://inference:11434/v1\"' images/default/config-overlay/opencode/config.json"
+    timeout_ms: 3000
+    expected_behavior: "inference:11434"
+
+  - step: "Req Default routing: ollama provider enumerates >=8 local-pool models"
+    # Spec § Req mandates ollama enumerates `all available local
+    # models` for explicit `--model ollama/<name>` use. Today the
+    # list has 10 (qwen2.5:{0.5b,7b,14b,coder:7b,coder:14b,coder:
+    # 32b}, llama3.2:{1b,3b}, llama3.1:8b, gpt-oss:20b). Pin >=8
+    # so a regression dropping models surfaces without false-
+    # positive on small-list pruning.
+    command: "MODEL_COUNT=$(grep -cE '\"(qwen|llama|gpt)[^\"]*\":' images/default/config-overlay/opencode/config.json); if [ \"$MODEL_COUNT\" -ge 8 ]; then echo \"ok: $MODEL_COUNT ollama models enumerated\"; else echo \"FAIL: only $MODEL_COUNT of >=8\"; exit 1; fi"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req Tier-tagged pre-pull: inference entrypoint pulls T0 (qwen2.5:0.5b)"
+    # Spec § Tier table mandates T0 is always pulled (CPU baseline,
+    # 397MB qwen2.5:0.5b). The entrypoint's startup pull is the
+    # tier-0 implementation; pin the canonical literal + the
+    # `ollama pull qwen2.5:0.5b` invocation.
+    command: "grep -F 'ollama pull qwen2.5:0.5b' images/inference/entrypoint.sh"
+    timeout_ms: 3000
+    expected_behavior: "ollama pull qwen2.5:0.5b"
+
+  - step: "Req Tier-tagged pre-pull: inference entrypoint pulls T1 (llama3.2:3b)"
+    # Spec § Tier table mandates T1 is always pulled (CPU, 2.0GB
+    # llama3.2:3b). Tool-capable per the spec table.
+    command: "grep -F 'ollama pull llama3.2:3b' images/inference/entrypoint.sh"
+    timeout_ms: 3000
+    expected_behavior: "ollama pull llama3.2:3b"
+
+  - step: "Req inference container: ollama install via tarball extracting only bin/ (skip GPU lib/)"
+    # The Containerfile docblock explicitly notes the tarball-only-
+    # bin extraction skips the ~1.8GB lib/ollama/ GPU runners
+    # since this container is CPU-only inference. Pin the canonical
+    # `ollama-linux-amd64.tar.zst` URL + the `bin/ollama` extraction
+    # discipline note so a regression to a full-extract bloats the
+    # image silently.
+    command: "grep -F 'ollama-linux-amd64.tar.zst' images/inference/Containerfile && grep -F 'bin/ollama' images/inference/Containerfile"
+    timeout_ms: 3000
+    expected_behavior: "ollama-linux-amd64"
+
+observability:
+  traces:
+    - "@trace spec:zen-default-with-ollama-analysis-pool"
+    - "@trace spec:inference-container"
+  expected_log: "Zen-default model literals + ollama provider enumeration + T0/T1 pre-pull + inference container CPU-only ollama install pinned"
+  log_fields:
+    spec: "zen-default-with-ollama-analysis-pool"
+    test: "zen-default-with-ollama-shape"
+    artifact: "images/default/config-overlay/opencode/config.json + images/inference/{entrypoint.sh,Containerfile}"
+
+rollback:
+  on_failure: >
+    A `spec:zen-default-with-ollama-analysis-pool` source surface
+    drifted. Restore: `"model": "opencode/big-pickle"` + `"small_
+    model": "opencode/gpt-5-nano"` in config.json; ollama provider
+    with `baseURL: http://inference:11434/v1` + >=8 enumerated
+    models; inference entrypoint `ollama pull qwen2.5:0.5b` (T0)
+    + `ollama pull llama3.2:3b` (T1); Containerfile uses the
+    `ollama-linux-amd64.tar.zst` tarball with `bin/ollama`-only
+    extraction discipline (skip ~1.8GB lib/ollama GPU runners).
+  command: "grep -nE 'opencode/big-pickle|opencode/gpt-5-nano|inference:11434|ollama pull (qwen2.5:0.5b|llama3.2:3b)|ollama-linux-amd64' images/default/config-overlay/opencode/config.json images/inference/entrypoint.sh images/inference/Containerfile | head -15"

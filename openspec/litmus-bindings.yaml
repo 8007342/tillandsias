@@ -145,11 +145,11 @@ specs:
   coverage_ratio: 0
   last_verified: '2026-05-06'
 - spec_id: cli-diagnostics
-  status: active
-  litmus_tests:
-  - litmus:diagnostics-envelope-shape
-  coverage_ratio: 25
-  last_verified: '2026-05-29'
+  status: obsolete
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-05-31'
+  tombstone: superseded:runtime-diagnostics+runtime-diagnostics-stream+logging-accountability
 - spec_id: cli-mode
   status: active
   litmus_tests:
@@ -174,8 +174,9 @@ specs:
   litmus_tests:
   - litmus:forge-standalone-traceability
   - litmus:forge-diagnostics-e2e
-  coverage_ratio: 50
-  last_verified: '2026-05-12'
+  - litmus:default-image-containerfile-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: dev-build
   status: active
   litmus_tests:
@@ -206,8 +207,9 @@ specs:
   litmus_tests:
   - litmus:enclave-isolation
   - litmus:binary-e2e-smoke
-  coverage_ratio: 67
-  last_verified: '2026-05-12'
+  - litmus:enclave-network-source-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-31'
 - spec_id: enforce-trace-presence
   status: obsolete
   litmus_tests: []
@@ -281,8 +283,9 @@ specs:
   litmus_tests:
   - litmus:forge-environment-discoverability-shape
   - litmus:onboarding-cold-start-discovery
-  coverage_ratio: 50
-  last_verified: '2026-05-14'
+  - litmus:forge-environment-discoverability-install-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: forge-forward-compat
   status: deprecated
   litmus_tests: []
@@ -315,8 +318,9 @@ specs:
   litmus_tests:
   - litmus:forge-shell-tools-shape
   - litmus:onboarding-cold-start-discovery
-  coverage_ratio: 50
-  last_verified: '2026-05-14'
+  - litmus:forge-shell-tools-implementation-shape
+  coverage_ratio: 67
+  last_verified: '2026-05-30'
 - spec_id: forge-staleness
   status: active
   litmus_tests:
@@ -336,8 +340,9 @@ specs:
   litmus_tests:
   - litmus:forge-welcome-shape
   - litmus:onboarding-cold-start-discovery
-  coverage_ratio: 50
-  last_verified: '2026-05-14'
+  - litmus:forge-welcome-banner-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: gh-auth-script
   status: active
   litmus_tests:
@@ -384,8 +389,9 @@ specs:
   - litmus:enclave-isolation
   - litmus:inference-readiness-probe-shape
   - litmus:inference-deferred-model-pulls
-  coverage_ratio: 50
-  last_verified: '2026-05-16'
+  - litmus:inference-container-implementation-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-31'
 - spec_id: inference-host-side-pull
   status: obsolete
   litmus_tests: null
@@ -595,8 +601,9 @@ specs:
   - litmus:runtime-diagnostics-emitter-shape
   - litmus:runtime-diagnostics-typed-events-shape
   - litmus:container-start-health
+  - litmus:diagnostics-envelope-shape
   coverage_ratio: 100
-  last_verified: '2026-05-29'
+  last_verified: '2026-05-31'
 - spec_id: runtime-logging
   status: active
   litmus_tests:
@@ -606,11 +613,11 @@ specs:
   coverage_ratio: 100
   last_verified: '2026-05-14'
 - spec_id: secret-rotation
-  status: active
-  litmus_tests:
-  - litmus:credential-isolation
-  coverage_ratio: 33
-  last_verified: '2026-05-15'
+  status: obsolete
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-05-30'
+  tombstone: superseded:podman-secrets-integration
 - spec_id: secrets-management
   status: active
   litmus_tests:
@@ -623,8 +630,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:tray-minimal-ux-contract-shape
-  coverage_ratio: 33
-  last_verified: '2026-05-15'
+  - litmus:simplified-tray-ux-leaf-action-shape
+  coverage_ratio: 67
+  last_verified: '2026-05-30'
 - spec_id: singleton-guard
   status: obsolete
   litmus_tests: null
@@ -635,14 +643,16 @@ specs:
   status: active
   litmus_tests:
   - litmus:spec-traceability-shape
-  coverage_ratio: 33
-  last_verified: '2026-05-15'
+  - litmus:spec-traceability-usage-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: subdomain-naming-flip
   status: active
   litmus_tests:
   - litmus:ephemeral-guarantee
-  coverage_ratio: 33
-  last_verified: '2026-05-15'
+  - litmus:subdomain-naming-flip-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: subdomain-routing-via-reverse-proxy
   status: deprecated
   litmus_tests:
@@ -736,8 +746,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:ephemeral-guarantee
-  coverage_ratio: 33
-  last_verified: '2026-05-15'
+  - litmus:web-image-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: windows-cross-build
   status: obsolete
   litmus_tests: []
@@ -776,8 +787,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:inference-readiness-probe-shape
-  coverage_ratio: 33
-  last_verified: '2026-05-15'
+  - litmus:zen-default-with-ollama-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: chromium-debug-variant
   status: active
   litmus_tests:
@@ -804,8 +816,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:observability-convergence-shape
-  coverage_ratio: 60
-  last_verified: '2026-05-14'
+  - litmus:observability-convergence-script-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-31'
 - spec_id: observability-metrics
   status: active
   litmus_tests:

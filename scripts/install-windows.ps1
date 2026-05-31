@@ -36,12 +36,21 @@
 
 .PARAMETER Uninstall
     Remove the installed binary, the install directory, and all shortcuts.
+    Leaves cached state behind (downloaded rootfs, WSL distro, logs) — use
+    -Purge for full cleanup. After -Uninstall the script prints what's left.
+
+.PARAMETER Purge
+    -Uninstall PLUS wipe the WSL distro (wsl --unregister tillandsias) +
+    the cache directory + the log directory. The full "as if Tillandsias
+    was never installed" cleanup. Releases ~1GB+ of disk for a fresh
+    rootfs (cache) + WSL VHDX (install root).
 
 .EXAMPLE
     scripts\install-windows.ps1 -Launch
     scripts\install-windows.ps1 -Startup -Launch
     scripts\install-windows.ps1 -DebugBuild -Launch        # console + logs
-    scripts\install-windows.ps1 -Uninstall
+    scripts\install-windows.ps1 -Uninstall                 # minimal removal
+    scripts\install-windows.ps1 -Purge                     # full cleanup
 #>
 [CmdletBinding()]
 param(
@@ -49,7 +58,8 @@ param(
     [switch]$Startup,
     [switch]$Provision,
     [switch]$DebugBuild,
-    [switch]$Uninstall
+    [switch]$Uninstall,
+    [switch]$Purge
 )
 
 $ErrorActionPreference = 'Stop'
@@ -76,16 +86,87 @@ function New-Shortcut {
     $sc.Save()
 }
 
-# --- Uninstall --------------------------------------------------------------
-if ($Uninstall) {
-    Write-Host "Uninstalling $AppName..." -ForegroundColor Cyan
+# --- Uninstall / Purge ------------------------------------------------------
+# `-Uninstall` removes the install bits (binary, shortcuts, install dir) but
+# leaves cached state behind so a fresh re-install can resume from existing
+# rootfs / WSL distro. `-Purge` (implies -Uninstall) ADDITIONALLY removes:
+#   - the WSL distro itself via `wsl --unregister tillandsias` (deletes the
+#     VHDX from %LOCALAPPDATA%\tillandsias\wsl);
+#   - the downloaded-rootfs cache (%LOCALAPPDATA%\tillandsias\cache);
+#   - the tray log directory (%LOCALAPPDATA%\tillandsias\logs).
+# The cache + WSL distro can be ~500MB+ each; -Purge releases that disk.
+if ($Uninstall -or $Purge) {
+    $DataRoot = Join-Path $env:LOCALAPPDATA 'tillandsias'
+    $CacheDir = Join-Path $DataRoot 'cache'
+    $LogsDir  = Join-Path $DataRoot 'logs'
+    $WslRoot  = Join-Path $DataRoot 'wsl'
+    $action = if ($Purge) { 'Purging' } else { 'Uninstalling' }
+    Write-Host "$action $AppName..." -ForegroundColor Cyan
     # Stop a running instance first so the exe isn't locked.
     Get-Process -Name 'tillandsias-tray' -ErrorAction SilentlyContinue | Stop-Process -Force
     foreach ($p in @($ShortcutPath, $StartupLnk)) {
         if (Test-Path $p) { Remove-Item $p -Force; Write-Host "  removed $p" }
     }
     if (Test-Path $InstallDir) { Remove-Item $InstallDir -Recurse -Force; Write-Host "  removed $InstallDir" }
-    Write-Host "Uninstalled." -ForegroundColor Green
+
+    if ($Purge) {
+        # WSL distro: --unregister removes the registration AND the on-disk
+        # VHDX under $WslRoot. Best-effort — tolerate "no distro" / wsl-not-
+        # installed.
+        $wsl = Get-Command wsl -ErrorAction SilentlyContinue
+        if ($wsl) {
+            $listed = (& wsl --list --quiet 2>$null) | ForEach-Object { ($_ -replace "`0", '').Trim() } | Where-Object { $_ }
+            if ($listed -contains 'tillandsias') {
+                & wsl --unregister tillandsias 2>$null
+                if ($LASTEXITCODE -eq 0) {
+                    Write-Host "  unregistered WSL distro 'tillandsias'"
+                } else {
+                    Write-Host "  WARN: wsl --unregister tillandsias exited $LASTEXITCODE; check manually" -ForegroundColor Yellow
+                }
+            } else {
+                Write-Host "  WSL distro 'tillandsias' not registered (already clean)"
+            }
+        } else {
+            Write-Host "  WARN: wsl.exe not found; skipping --unregister (distro may still be present if WSL was later installed)" -ForegroundColor Yellow
+        }
+        # Cache + logs + any remaining wsl dir.
+        foreach ($d in @($CacheDir, $LogsDir, $WslRoot)) {
+            if (Test-Path $d) {
+                Remove-Item $d -Recurse -Force -ErrorAction SilentlyContinue
+                if (Test-Path $d) {
+                    Write-Host "  WARN: failed to fully remove $d (may have files in use)" -ForegroundColor Yellow
+                } else {
+                    Write-Host "  removed $d"
+                }
+            }
+        }
+        # If the data-root is now empty, remove it too.
+        if ((Test-Path $DataRoot) -and -not (Get-ChildItem $DataRoot -Force -ErrorAction SilentlyContinue)) {
+            Remove-Item $DataRoot -Force -ErrorAction SilentlyContinue
+            Write-Host "  removed $DataRoot (empty)"
+        }
+        Write-Host "Purged." -ForegroundColor Green
+    } else {
+        # -Uninstall (no Purge): tell the operator what's left behind so the
+        # "I want all my Tillandsias data gone" path is discoverable.
+        $leftovers = @()
+        foreach ($d in @($CacheDir, $LogsDir, $WslRoot)) {
+            if (Test-Path $d) { $leftovers += $d }
+        }
+        # Also note WSL registration state.
+        $wsl = Get-Command wsl -ErrorAction SilentlyContinue
+        $distroRegistered = $false
+        if ($wsl) {
+            $listed = (& wsl --list --quiet 2>$null) | ForEach-Object { ($_ -replace "`0", '').Trim() } | Where-Object { $_ }
+            $distroRegistered = ($listed -contains 'tillandsias')
+        }
+        if ($leftovers.Count -gt 0 -or $distroRegistered) {
+            Write-Host "Left behind (use -Purge for full cleanup):" -ForegroundColor Yellow
+            foreach ($d in $leftovers) { Write-Host "  $d" -ForegroundColor Yellow }
+            if ($distroRegistered) { Write-Host "  WSL distro 'tillandsias' (still registered; wsl --unregister tillandsias to remove)" -ForegroundColor Yellow }
+        }
+        Write-Host "Uninstalled." -ForegroundColor Green
+    }
     return
 }
 
@@ -131,6 +212,24 @@ Write-Host "Installed $AppName ($mode)." -ForegroundColor Green
 # Capture via cmd.exe redirect: the release tray is GUI-subsystem; PowerShell's
 # direct stdout capture is unreliable for large writes. cmd handles native
 # stdio directly. See cheatsheets/runtime/windows-tray-diagnostics.md.
+# Layer 1 (fast): --version ping. If this fails, the binary itself is
+# fundamentally broken (missing runtime DLL, bad architecture, etc.) and we
+# fail loudly before touching --diagnose. --version does NOT touch WSL, so
+# this works even when the WSL feature is disabled.
+Write-Host "Verifying installed binary via --version..." -ForegroundColor Cyan
+$versionTmp = Join-Path $env:TEMP "tillandsias-install-ver-$([guid]::NewGuid().ToString('N')).txt"
+& cmd.exe /c "`"$InstalledExe`" --version > `"$versionTmp`" 2>nul"
+$versionExit = $LASTEXITCODE
+$versionLine = (Get-Content $versionTmp -Raw -ErrorAction SilentlyContinue) -replace '\s+$', ''
+Remove-Item $versionTmp -ErrorAction SilentlyContinue
+if ($versionExit -ne 0 -or -not $versionLine) {
+    throw "tillandsias-tray --version failed (exit $versionExit); install bits broken"
+}
+Write-Host "  $versionLine" -ForegroundColor Green
+
+# Layer 2 (full): --diagnose --json. Bundled health report. Exit 2 (degraded)
+# is expected on a first install when the WSL VM isn't provisioned yet; only
+# exit 1 (hard fail) aborts the installer.
 Write-Host "Verifying installed binary via --diagnose --json..." -ForegroundColor Cyan
 $diagTmp = Join-Path $env:TEMP "tillandsias-install-diag-$([guid]::NewGuid().ToString('N')).json"
 & cmd.exe /c "`"$InstalledExe`" --diagnose --json > `"$diagTmp`" 2>nul"
@@ -144,7 +243,11 @@ if ($diagJson) {
     try {
         $report = $diagJson | ConvertFrom-Json -ErrorAction Stop
         $pin = if ($report.manifest_pin_x86_64_tar) { "$($report.manifest_pin_x86_64_tar)..." } else { '(none)' }
-        Write-Host "  installed: version=$($report.version) pin=$pin (--diagnose exit $diagExit)" -ForegroundColor Green
+        $commit = if ($report.build_commit) { $report.build_commit } else { '(unknown)' }
+        Write-Host "  installed: version=$($report.version) commit=$commit pin=$pin (--diagnose exit $diagExit)" -ForegroundColor Green
+        if ($report.wire.error) {
+            Write-Host "  wire: $($report.wire.error)" -ForegroundColor Yellow
+        }
     } catch {
         Write-Host "  --diagnose ran (exit $diagExit) but JSON parse failed; binary may still be sound" -ForegroundColor Yellow
     }

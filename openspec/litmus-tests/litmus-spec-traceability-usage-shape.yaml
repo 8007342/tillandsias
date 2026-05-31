@@ -1,0 +1,105 @@
+# @trace spec:spec-traceability
+#
+# Drift-protection for the actual USAGE of @trace + structured-log
+# + @cheatsheet annotations across the codebase. Complements the
+# existing `litmus:spec-traceability-shape` (which pins the SPEC
+# TEXT requirements + observability anchors + cheatsheet presence).
+#
+# Spec § Req "Code annotations link to specs and knowledge" + Req
+# "Structured spec field in tracing logs" + Req "@cheatsheet path
+# annotation in code is a peer of @trace spec:" all mandate
+# annotation coverage. A regression that mass-deletes annotations
+# would silently break the queryable code↔spec graph; pinning the
+# minimum-count floor surfaces it.
+#
+# Combined with the existing shape litmus, raises spec-traceability
+# coverage_ratio 33 → 75.
+name: litmus:spec-traceability-usage-shape
+spec: spec-traceability
+phase: pre-build
+description: >
+  Pin the spec-traceability USAGE counts: >=500 `@trace spec:` in
+  Rust files, >=100 `@trace spec:` in shell scripts, >=50
+  structured `spec = "..."` logging fields, >=20 `@cheatsheet`
+  path annotations. These floors catch a mass-deletion regression
+  while leaving room for normal evolution.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains crates/ + scripts/ + images/ directories
+  - shell utilities (grep, wc) are available in PATH
+
+critical_path:
+  - step: "Req Code annotations: >=500 `@trace spec:` annotations in Rust files"
+    # Current usage is ~993; pin >=500 as the floor so a refactor
+    # that mass-deletes annotations (which would silently break
+    # the spec-to-code graph) surfaces fast. Today's 993 leaves
+    # ~50% headroom for organic cleanup.
+    command: "COUNT=$(grep -r '@trace spec:' --include='*.rs' crates/ 2>/dev/null | wc -l); if [ \"$COUNT\" -ge 500 ]; then echo \"ok: $COUNT @trace spec: Rust annotations\"; else echo \"FAIL: only $COUNT of >=500\"; exit 1; fi"
+    timeout_ms: 5000
+    expected_behavior: "ok:"
+
+  - step: "Req Bash script trace: >=100 `@trace spec:` annotations in shell scripts"
+    # Current usage is ~335 across scripts/ + images/. Pin >=100
+    # as floor — same regression-guard rationale.
+    command: "COUNT=$(grep -r '@trace spec:' --include='*.sh' scripts/ images/ 2>/dev/null | wc -l); if [ \"$COUNT\" -ge 100 ]; then echo \"ok: $COUNT @trace spec: shell annotations\"; else echo \"FAIL: only $COUNT of >=100\"; exit 1; fi"
+    timeout_ms: 5000
+    expected_behavior: "ok:"
+
+  - step: "Req Structured spec field in tracing logs: >=50 `spec = \"...\"` log fields in Rust"
+    # Current usage is ~94. The structured-log `spec = "..."`
+    # field is the canonical observability anchor — operators
+    # filter by it during triage. Pin >=50 as floor.
+    command: "COUNT=$(grep -rE 'spec = \"[a-z-]+\"' --include='*.rs' crates/ 2>/dev/null | wc -l); if [ \"$COUNT\" -ge 50 ]; then echo \"ok: $COUNT structured log spec= fields\"; else echo \"FAIL: only $COUNT of >=50\"; exit 1; fi"
+    timeout_ms: 5000
+    expected_behavior: "ok:"
+
+  - step: "Req @cheatsheet annotation peer of @trace: >=20 `@cheatsheet` annotations"
+    # Current usage is ~48 across Rust + shell. Pin >=20 as floor.
+    # Spec § Req mandates @cheatsheet is a peer of @trace spec:
+    # for knowledge references.
+    command: "COUNT=$(grep -rE '@cheatsheet [a-z-]+/' --include='*.rs' --include='*.sh' crates/ scripts/ images/ 2>/dev/null | wc -l); if [ \"$COUNT\" -ge 20 ]; then echo \"ok: $COUNT @cheatsheet annotations\"; else echo \"FAIL: only $COUNT of >=20\"; exit 1; fi"
+    timeout_ms: 5000
+    expected_behavior: "ok:"
+
+  - step: "@trace spec: distribution: spans >=10 distinct spec IDs in Rust (graph breadth)"
+    # The spec's value proposition is a queryable code↔spec graph.
+    # A regression that consolidates all traces to a single spec
+    # ID (e.g. after a refactor renames everything) would silently
+    # collapse the graph. Count distinct spec IDs in Rust traces.
+    command: "COUNT=$(grep -rh '@trace spec:' --include='*.rs' crates/ 2>/dev/null | grep -oE 'spec:[a-z-]+' | sort -u | wc -l); if [ \"$COUNT\" -ge 10 ]; then echo \"ok: $COUNT distinct spec IDs traced from Rust\"; else echo \"FAIL: only $COUNT distinct spec IDs of >=10\"; exit 1; fi"
+    timeout_ms: 5000
+    expected_behavior: "ok:"
+
+  - step: "Module-level traces (`//! @trace spec:`) present in >=10 Rust files"
+    # Spec § Scenario "Module-level trace" mandates module doc
+    # comments include `//! @trace spec:<capability>`. Pin >=10
+    # files with module-level traces (rather than only inline
+    # block traces) so the spec-identity-at-module-head pattern
+    # stays alive.
+    command: "COUNT=$(grep -rl '//! @trace spec:' --include='*.rs' crates/ 2>/dev/null | wc -l); if [ \"$COUNT\" -ge 10 ]; then echo \"ok: $COUNT Rust files have module-level //! @trace spec:\"; else echo \"FAIL: only $COUNT of >=10\"; exit 1; fi"
+    timeout_ms: 5000
+    expected_behavior: "ok:"
+
+observability:
+  traces:
+    - "@trace spec:spec-traceability"
+  expected_log: ">=500 Rust + >=100 shell @trace annotations + >=50 structured log fields + >=20 @cheatsheet refs + >=10 distinct spec IDs + >=10 module-level traces"
+  log_fields:
+    spec: "spec-traceability"
+    test: "spec-traceability-usage-shape"
+    artifact: "crates/ + scripts/ + images/"
+
+rollback:
+  on_failure: >
+    A `spec:spec-traceability` USAGE floor regressed. The spec's
+    annotation invariants (~20% of code annotated, plus structured
+    `spec` log fields + `@cheatsheet` peers) mean the codebase
+    should carry hundreds of traces. A mass-drop surfacing here is
+    the canary for a refactor that broke the spec-to-code graph.
+    Restore: >=500 Rust + >=100 shell `@trace spec:` annotations;
+    >=50 `spec = "..."` structured-log fields; >=20 `@cheatsheet`
+    annotations; >=10 distinct spec IDs traced from Rust; >=10
+    Rust files with module-level `//! @trace spec:` headers.
+  command: "echo 'Rust @trace:'; grep -r '@trace spec:' --include='*.rs' crates/ 2>/dev/null | wc -l; echo 'Shell @trace:'; grep -r '@trace spec:' --include='*.sh' scripts/ images/ 2>/dev/null | wc -l; echo 'Structured log:'; grep -rE 'spec = \"[a-z-]+\"' --include='*.rs' crates/ 2>/dev/null | wc -l; echo '@cheatsheet:'; grep -rE '@cheatsheet [a-z-]+/' --include='*.rs' --include='*.sh' crates/ scripts/ images/ 2>/dev/null | wc -l"

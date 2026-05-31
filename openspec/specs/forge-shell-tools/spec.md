@@ -34,6 +34,26 @@ The forge image MUST include a curated set of terminal tools for file management
 - **WHEN** a user types `eza`, `bat`, `fd`, `fzf`, `zoxide`, `htop`, or `tree`
 - **THEN** the respective tool MUST run
 
+> ⚠ Implementation reality (as of 2026-05-30): The lean-forge
+> diet (saving ~90MB) dropped 8 of the 10 mandated terminal tools
+> from the deployed image. The Containerfile docblock literally
+> states: "LEAN forge: essential dev tools only. Terminal UX tools
+> (mc, vim, nano, eza, bat, fd-find, fzf, htop, tree, zoxide)
+> removed to save ~90MB. Users who need them can install via the
+> tools overlay or microdnf." Surviving from the spec list:
+> `bat` + `fd-find` (kept for git-delta + ripgrep ergonomics).
+> Absent: `mc`, `vim`, `nano`, `eza`, `fzf`, `zoxide`, `htop`,
+> `tree`. Note the bash/zsh `alias ll='eza -la'` references the
+> absent `eza` — falls back to bash's builtin error on miss.
+> Reconcile by either (a) re-adding the 8 tools to the microdnf
+> install line + dropping this block + relaxing the litmus, OR
+> (b) downgrading the Modern CLI tools scenario to a "tools
+> overlay opt-in" contract (e.g. `tillandsias-tools` microdnf
+> module) + updating the `ll` alias to fall back to `ls -la`
+> when `eza` is unavailable. `litmus:forge-shell-tools-
+> implementation-shape` pins the lean reality (surviving subset)
+> until the architectural decision lands.
+
 ### Requirement: Shell configurations
 The forge image MUST include sensible default configs for bash, fish, and zsh with colored output, useful aliases, and modern tool integration.
 

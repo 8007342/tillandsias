@@ -1,0 +1,134 @@
+# @trace spec:forge-welcome
+#
+# Drift-protection for the forge welcome banner + once-per-session
+# guard + fish-default contract. spec:forge-welcome has 2 reqs
+# spanning (1) welcome content + mount colors + 20-tip pool + OS
+# names; (2) fish as default interactive shell + --bash CLI
+# mounting via TILLANDSIAS_PROJECT_HOST_MOUNT=1.
+#
+# Existing binding `litmus:forge-welcome-shape` (last_verified
+# 2026-05-14) covered the banner content lines but not the 3-shell
+# guard symmetry, the --bash → host-mount env-var wiring in
+# headless, the 20-element tip pool size, or the fish entrypoint
+# choice. Those source surfaces were untrapped.
+name: litmus:forge-welcome-banner-shape
+spec: forge-welcome
+phase: pre-build
+description: >
+  Pin the forge welcome banner sources (20-tip pool + project name
+  in B_CYAN + fish exec in entrypoint-terminal.sh), the 3-shell
+  once-per-session guard symmetry (bash/zsh/fish all read
+  TILLANDSIAS_WELCOME_SHOWN and sourced /usr/local/share/
+  tillandsias/forge-welcome.sh), and the headless --bash flag
+  wiring (TILLANDSIAS_PROJECT_HOST_MOUNT=1 env-var injection).
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains images/default/forge-welcome.sh
+  - workspace contains images/default/entrypoint-terminal.sh
+  - workspace contains images/default/shell/{bashrc,zshrc,config.fish}
+  - workspace contains crates/tillandsias-headless/src/main.rs
+  - shell utilities (grep, awk) are available in PATH
+
+critical_path:
+  - step: "Req 1 trace: @trace spec:forge-welcome on forge-welcome.sh"
+    # Spec § Sources of Truth lists forge-welcome.sh as the canonical
+    # banner-layout site. Substring match handles the comma-list
+    # trace form (`@trace spec:forge-welcome, spec:forge-opencode-
+    # onboarding` lives on line 7).
+    command: "grep -F 'spec:forge-welcome' images/default/forge-welcome.sh"
+    timeout_ms: 3000
+    expected_behavior: "spec:forge-welcome"
+
+  - step: "Req 1 rotating tip pool: exactly 20 tip slots in tips=() array"
+    # Spec § Scenario `Rotating tips` mandates a pool of ~20
+    # beginner-friendly tips. Current impl has exactly 20
+    # ($_tip1..$_tip20) referenced inside the `tips=(...)` array;
+    # use awk to count entries between the array open and close.
+    # A regression collapsing to fewer (or expanding past ~25)
+    # silently changes the discovery surface.
+    command: "TIPS=$(sed -n '/^tips=/,/^)/p' images/default/forge-welcome.sh | grep -c '^    \"'); if [ \"$TIPS\" -eq 20 ]; then echo \"ok: 20 tip slots\"; else echo \"FAIL: $TIPS tip slots (expected 20)\"; exit 1; fi"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req 1 project name in B_CYAN: printf line uses B_CYAN for project value"
+    # Spec § Scenario `Welcome message content` mandates project
+    # name in bold cyan. The impl line `printf ... ${B_WHITE}%s${RST}
+    # ... ${B_CYAN}%s${RST}` (label white, value cyan) is the
+    # rendering site. Pin the `B_CYAN}%s${RST}\"" "$PROJECT"`
+    # substring to catch a regression switching the project value's
+    # color.
+    command: "grep -F 'B_CYAN}%s${RST}' images/default/forge-welcome.sh | grep -F 'PROJECT'"
+    timeout_ms: 3000
+    expected_behavior: "PROJECT"
+
+  - step: "Req 2 fish default: entrypoint-terminal.sh runs `exec fish`"
+    # Spec § Scenario `Terminal from tray` + `CLI --bash flag` both
+    # mandate fish as entrypoint. The terminal entrypoint's
+    # canonical launch site is `exec fish` (line 135), guarded by
+    # `if command -v fish`. Pin both literals so a regression to
+    # `exec bash` surfaces immediately.
+    command: "grep -F 'exec fish' images/default/entrypoint-terminal.sh && grep -F 'if command -v fish' images/default/entrypoint-terminal.sh"
+    timeout_ms: 3000
+    expected_behavior: "exec fish"
+
+  - step: "Req 1 once-per-session guard: TILLANDSIAS_WELCOME_SHOWN sentinel set+checked in all 3 shells"
+    # Spec § Purpose `once-per-session startup gating` mandates the
+    # banner is shown at most once per session. The impl uses
+    # TILLANDSIAS_WELCOME_SHOWN as the sentinel — set by bashrc/
+    # zshrc/config.fish on first display. All 3 shells MUST both
+    # read AND write the sentinel to maintain the once-per-session
+    # invariant across shell switches.
+    command: "for f in bashrc zshrc config.fish; do C=$(grep -c TILLANDSIAS_WELCOME_SHOWN images/default/shell/$f); if [ \"$C\" -lt 2 ]; then echo \"FAIL: $f has only $C TILLANDSIAS_WELCOME_SHOWN refs (need >=2 for read+write)\"; exit 1; fi; done && echo \"ok: 3 shells guard symmetrically\""
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req 1 banner discoverability: all 3 shells source /usr/local/share/tillandsias/forge-welcome.sh"
+    # Spec § Sources lists bashrc/zshrc/config.fish as the startup
+    # guards. The canonical path /usr/local/share/tillandsias/
+    # forge-welcome.sh is the COPY destination in the Containerfile
+    # (default-image build); all 3 shells must reference the same
+    # path so the banner stays uniform across shell choice.
+    command: "for f in bashrc zshrc config.fish; do grep -Fq '/usr/local/share/tillandsias/forge-welcome.sh' images/default/shell/$f || { echo \"FAIL: $f does not source canonical welcome path\"; exit 1; }; done && echo \"ok: 3 shells anchor canonical welcome path\""
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req 2 --bash flag: headless main.rs detects --bash + injects TILLANDSIAS_PROJECT_HOST_MOUNT=1"
+    # Spec § Scenario `CLI --bash flag` mandates `tillandsias
+    # --bash` MUST set `TILLANDSIAS_PROJECT_HOST_MOUNT=1`. The
+    # headless launcher's `--bash` detection + env-var injection
+    # is the contract site; pin both surfaces. The repeated env-
+    # var literal (>=4 sites across launch paths) reflects the
+    # multi-mode parity (Maintenance / Bash / OpenCode) — drop
+    # to <4 and parity breaks silently.
+    command: "grep -Fq '\"--bash\"' crates/tillandsias-headless/src/main.rs && ENVHIT=$(grep -c 'TILLANDSIAS_PROJECT_HOST_MOUNT' crates/tillandsias-headless/src/main.rs); if [ \"$ENVHIT\" -ge 4 ]; then echo \"ok: --bash flag + $ENVHIT host-mount env-var sites\"; else echo \"FAIL: only $ENVHIT host-mount sites (expected >=4)\"; exit 1; fi"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+observability:
+  traces:
+    - "@trace spec:forge-welcome"
+    - "@trace spec:forge-environment-discoverability"
+    - "@trace spec:default-image"
+  expected_log: "forge-welcome banner sources (20-tip pool + B_CYAN project + fish exec) + 3-shell once-per-session guards + headless --bash → TILLANDSIAS_PROJECT_HOST_MOUNT=1 wiring all pinned"
+  log_fields:
+    spec: "forge-welcome"
+    test: "forge-welcome-banner-shape"
+    artifact: "images/default/{forge-welcome.sh,entrypoint-terminal.sh,shell/*} + crates/tillandsias-headless/src/main.rs"
+
+rollback:
+  on_failure: >
+    A `spec:forge-welcome` source surface drifted. Restore: `@trace
+    spec:forge-welcome` on forge-welcome.sh; exactly 20 entries in
+    the `tips=()` array (one per `$_tipN` slot); project value
+    printed via `${B_CYAN}%s${RST}` (cyan, per spec § Scenario
+    `Welcome message content`); `exec fish` (with `command -v
+    fish` guard) as the terminal entrypoint; `TILLANDSIAS_WELCOME_
+    SHOWN` sentinel both set AND read in all 3 shell startups
+    (bashrc + zshrc + config.fish, each carrying >=2 references);
+    canonical `/usr/local/share/tillandsias/forge-welcome.sh` path
+    sourced from all 3 shells; headless `--bash` detection +
+    `TILLANDSIAS_PROJECT_HOST_MOUNT=1` injection (>=4 sites for
+    Maintenance/Bash/OpenCode parity).
+  command: "grep -nE 'spec:forge-welcome|exec fish|TILLANDSIAS_WELCOME_SHOWN|TILLANDSIAS_PROJECT_HOST_MOUNT' images/default/forge-welcome.sh images/default/entrypoint-terminal.sh images/default/shell/{bashrc,zshrc,config.fish} crates/tillandsias-headless/src/main.rs 2>/dev/null | head -20"

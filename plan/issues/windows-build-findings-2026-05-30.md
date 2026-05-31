@@ -660,3 +660,388 @@ operator-feature-complete for v0.0.1: 7 modes, all pinned, all
 documented. Next eager chunk will look elsewhere (tray UX, install
 script polish, or genuinely new functionality rather than CLI-shape
 parity).
+
+---
+
+### 20260530T200000Z — ok (install + diagnose support scripts now consume the new CLI surface)
+
+- agent_id: windows-bullo-claude-opus-20260530T200000Z
+- head_sha: 5cbb9455 (post-merge of linux-next +12 commits, including the
+  release-cycle escalation record + resolution; no shared-contract churn)
+- version: 0.2.260528.1 (workspace VERSION on linux-next; main has bumped
+  to 0.2.260530.1 but linux-next hasn't pulled it back in yet — normal
+  release-cycle pattern, next tick or two will sync)
+- build_commit: 205d2abf (current windows-next pre-this-commit head)
+- build_run_id: 20260530T200000Z
+
+**Major sibling context** (no windows-tray action required):
+- **Release `v0.2.260530.1` shipped at 19:02Z** via the merge-to-main-and-
+  release flow. main bumped to 677a89af, tag operator-pushed after a git
+  proxy 403 on refs/tags/* (escalation 18:13Z → resolution 18:22Z).
+  Release CI ran 39m38s and published 22 assets. Notably, this is the
+  **first release** that should carry the workspace-VERSION fix-arc
+  through to user-visible surfaces — once linux-next pulls main back in,
+  the next windows-tray build will report `--version` /
+  `--diagnose --json version` / menu footer all as `0.2.260530.1`. The
+  4-tick fix-arc this morning was strategically well-timed.
+- linux-next +12 commits since last tick: `tray-minimal-ux` pin (33→75),
+  `simplified-tray-ux` pin (33→67) + 5th spec-drift inline-reconciled,
+  release escalation+resolution records, integration cycle 17:43Z merging
+  my prior `--logs` work. No shared-contract changes.
+- osx-next still stalled at b4a45622 (10+ hours, 8+ cycles).
+
+**Change made**: extended `install-windows.ps1` + `tray-diagnose.ps1` to
+consume the new CLI surface (`--version` for fast preflight + `build_commit`
+field for full provenance + `recent_log_tail` field for triage history).
+
+Files touched (Windows-owned):
+- `scripts/install-windows.ps1`:
+  - **New Layer 1 preflight**: `tillandsias-tray --version` via the
+    same `cmd /c` redirect pattern. Fast (no WSL touch), fails loudly
+    on a fundamentally broken binary (missing runtime DLL, bad
+    architecture, etc.) BEFORE attempting the slower `--diagnose` flow.
+    Throws if exit != 0 or no output captured.
+  - Existing `--diagnose --json` Layer 2 verification preserved + extended:
+    now reports `commit=<build_commit>` alongside `version=` + `pin=`,
+    and surfaces `wire.error` (if present) so install logs are
+    self-sufficient for triage.
+- `scripts/tray-diagnose.ps1`:
+  - Identity section: new "build commit" row alongside the existing
+    "version" row (sources `report.build_commit` with `(unknown)`
+    fallback).
+  - New "Recent log activity" section at the end, before the
+    HEALTHY/DEGRADED summary. Iterates `report.recent_log_tail` (the 20-
+    line tail diagnose JSON already includes) and prints each line in
+    dark-gray. Points the reader at `tillandsias-tray --logs --tail N`
+    for more.
+- `openspec/litmus-tests/litmus-windows-tray-diagnose-cli-surface.yaml`:
+  - "install-windows.ps1 contains the post-install --diagnose sanity
+    check" → extended to also require `--version` + `build_commit` greps.
+  - "tray-diagnose.ps1 consumer script uses cmd-redirect" → extended to
+    also require `build_commit` + `recent_log_tail` greps.
+
+**Build**: N/A (script-only changes; binary unchanged from prior tick).
+
+**Smoke** (post-install, exercised manually because the install-windows.ps1
+build-subscript trips the cargo-stderr-wrap PowerShell quirk that's a
+known issue — the verification logic itself is what we're testing):
+- Layer 1 `--version` preflight: exit 0,
+  `tillandsias-tray 0.2.260528.1 (a963c16d)`.
+- Layer 2 `--diagnose --json`: parsed cleanly, surfaces
+  `version=0.2.260528.1 commit=a963c16d pin=a28cabe7c9df` + the wire
+  error string (`hvsocket open: no running WSL utility VM…`).
+- `scripts/tray-diagnose.ps1`: prints the full health check with the
+  new "build commit" row in Identity (`PASS build commit : a963c16d`)
+  and the new "Recent log activity" section dumping the 7 lines from
+  the 2026-05-27 provision dress rehearsal. Existing
+  control-wire-unreachable failure path preserved (exit 2 DEGRADED).
+
+**Litmus**:
+- `windows-native-tray`: 7/7 PASS (extended script-pin steps green).
+
+**Findings** (free-form):
+- The install + diagnose support scripts are now operator-grade: every
+  piece of information the JSON contract surfaces is also surfaced to
+  the human-readable output. A support engineer reading either an
+  install log or a tray-diagnose output sees `version + build_commit +
+  pin + recent log activity` without re-running the binary.
+- The two-layer preflight + diagnose pattern in install-windows.ps1
+  is deliberate: `--version` is fast, no-WSL, and catches "binary
+  fundamentally broken" failures before the slower `--diagnose` flow
+  that hits HvSocket / WSL boundaries.
+- The `--logs --tail N` mode from the prior tick is the natural
+  follow-up to tray-diagnose.ps1's "Recent log activity" — operators
+  who want more than 20 lines have a discoverable path.
+
+**Cross-host visibility note**: pure script-side changes. No cross-host
+coordination needed. macOS-tray's diagnose-output.sh consumer (if it
+exists) is structurally separate.
+
+**Next iteration ask**: N/A (SECTION_KIND=ok). The windows-tray's
+operator-facing surface — CLI modes + install verification + health
+check script — is now end-to-end consistent and self-documenting.
+
+---
+
+### 20260530T220000Z — ok (fix build-subscript stderr-wrap; install-windows.ps1 now end-to-end clean)
+
+- agent_id: windows-bullo-claude-opus-20260530T220000Z
+- head_sha: 20f37703 (post-merge of linux-next +7 commits — web-image +
+  spec-traceability litmus pins (89/89 PASS milestone) + 19:43Z cycle
+  merging my prior 567009f6; no shared-contract churn)
+- version: 0.2.260528.1 (linux-next still pre-VERSION-bump sync from main)
+- build_commit: 567009f6 (pre-this-commit head)
+- build_run_id: 20260530T220000Z
+
+**Sibling context**:
+- linux-next +7 commits: `web-image` 33→75, **`spec-traceability` 33→75
+  at 20:51Z reached MILESTONE 89/89 PASS** (full instant litmus suite is
+  now at 100% across every spec). cycle 19:43Z (`0a7a1a6a`) smoke-tested
+  my prior `567009f6` cleanly.
+- osx-next still b4a45622 (12+ hours, 9 cycles, "DEEPLY overdue" per
+  19:43Z cycle).
+- Release `v0.2.260530.1` published successfully but linux-next hasn't
+  yet pulled main's VERSION bump back in. Normal release-cycle pattern.
+
+**Change made**: fixed a concrete bug I documented in the prior tick —
+`scripts/install-windows.ps1` aborted mid-install when the nested
+`build-windows-tray.ps1` subscript tripped PowerShell's NativeCommandError
+wrap on cargo's stderr writes. The Stop preference inside the subscript
+treated the very first "Compiling X" stderr line as terminating, killing
+the build before "Finished release" — and the install never proceeded.
+End users hitting this would see a broken install with no useful error.
+
+Files touched (Windows-owned):
+- `scripts/build-windows-tray.ps1`: around the `& cargo @buildArgs` call,
+  save the outer `$ErrorActionPreference`, locally set to `Continue`,
+  invoke cargo, capture `$LASTEXITCODE`, restore the preference via a
+  `try {} finally {}` (so an actual cargo compile failure — exit != 0 —
+  still throws via the existing exit-code check on the next line; only
+  the spurious-stderr-wrap-as-error path is fixed). 13-line surgical
+  edit + a 9-line explanatory comment block citing the skill +
+  cheatsheet for the historical context.
+- `skills/build-windows-tray/SKILL.md`:
+  - Section 2 ("Release build"): updated to note the wrapper now safely
+    handles stderr-wrap; both `scripts\build-windows-tray.ps1` and
+    direct `cargo build` work. Cargo-direct retained for ad-hoc cases.
+  - Section 4 ("Install"): updated to **prefer `scripts\install-windows.ps1`**
+    (the previously-anchored "future tuning pass" that the section
+    referenced has now landed). Script now handles shortcut creation +
+    autostart + the 2-layer post-install verification end-to-end.
+    Direct-copy path retained for skip-rebuild cases.
+  - Tuning log: new 2026-05-30 entry documenting the fix.
+
+**Build + tests**: no Rust code touched; binary unchanged.
+
+**Smoke** (end-to-end verification on real hardware):
+- Direct invoke `scripts\build-windows-tray.ps1`: clean — "Building
+  tillandsias-tray (release)..." → "Built: target\release\
+  tillandsias-tray.exe" → "Finished release profile" → emits exe path
+  on output. No Stop trap fired.
+- End-to-end `scripts\install-windows.ps1` (was broken last tick): now
+  completes cleanly — Build → Install → "Start Menu shortcut" →
+  "Installed Tillandsias (dev mode (--no-provision))" → Layer 1
+  `--version` reports `tillandsias-tray 0.2.260528.1 (a963c16d)` →
+  Layer 2 `--diagnose --json` reports `version=... commit=... pin=...`
+  → `wire: hvsocket open: no running WSL utility VM…` (expected). Script
+  exit code 2 = the propagated `--diagnose` degraded exit, NOT a script
+  abort.
+- `windows-native-tray` litmus: 7/7 PASS (no YAML changes this tick;
+  build-windows-tray.ps1 isn't pinned at this surface level).
+
+**Findings** (free-form):
+- The fix preserves the "fail on real cargo error" semantics — only the
+  spurious-stderr-as-NativeCommandError path is silenced. A cargo
+  compile failure (exit 1) still throws via the existing `if ($cargoExit
+  -ne 0) { throw ... }` line that the fix preserves.
+- The try/finally ensures `$ErrorActionPreference` is always restored
+  to the outer value even on cargo error — symmetric with how the rest
+  of the script expects Stop semantics for other commands (e.g.
+  `Compress-Archive`, `Get-FileHash`).
+- The skill update is the more impactful part: the daily
+  `/build-windows-tray` cron now uses `scripts\install-windows.ps1`
+  end-to-end, which means a real install run happens on the host every
+  day — not just a `Copy-Item` to the install path. Catches install-side
+  regressions (shortcut creation, autostart, post-install verification)
+  that the cron previously didn't exercise.
+
+**Cross-host visibility note**: pure Windows-side script + skill changes.
+No cross-host coordination needed. macOS's `scripts/build-macos-tray.sh`
+is shell, not PowerShell, so the stderr-wrap class doesn't apply there.
+
+**Next iteration ask**: N/A (SECTION_KIND=ok). With this fix, the user's
+canonical workflow — `git pull && scripts\install-windows.ps1` — now
+works end-to-end from a fresh checkout. The daily cron will validate
+the install path every day at 11:17 AM PDT going forward.
+
+---
+
+### 20260530T232500Z — ok (diagnose-windows.ps1: identity line + stale-readiness-summary fix)
+
+- agent_id: windows-bullo-claude-opus-20260530T232500Z
+- head_sha: c827ee7f (post-merge of linux-next +9 commits — subdomain-naming-flip
+  + zen-default-with-ollama-analysis-pool litmus pins + secret-rotation
+  tombstone alignment; no shared-contract churn)
+- version: 0.2.260528.1
+- build_commit: fdc3c00e
+- build_run_id: 20260530T232500Z
+
+**Sibling context** (no windows-tray action required):
+- linux-next +9 commits: 4 spec-gap-fill slices (subdomain-naming-flip,
+  zen-default-with-ollama-analysis-pool, secret-rotation tombstone) + cycle
+  21:43Z merging my prior `fdc3c00e` cleanly. Total spec count went 89→88
+  (one tombstoned). No shared-contract churn.
+- osx-next still stalled at b4a45622 (~15.5 hours since 06:27Z; integration
+  loop's 21:43Z cycle reiterates "DEEPLY overdue" escalation flag).
+- Merge-tree linux-next + windows-next: clean.
+
+**Change made**: targeted improvements to
+`scripts/diagnose-windows.ps1` — the pre-tray host-facts diagnostic
+(distinct from `tray-diagnose.ps1` which probes the live runtime).
+Surfaced two material issues:
+
+1. **Stale "Readiness summary"**: said VM provisioning is
+   `"Still GATED on the sec.2b CI-fetch / recipe-smoke job publishing
+   the per-arch rootfs .tar"`. **Wrong** — provisioning was proven E2E
+   on 2026-05-26/27 against live published rootfs assets, and the
+   daily release pipeline (today's `v0.2.260530.1`, prior releases)
+   publishes per-arch rootfs tars. Lower-skill operators reading this
+   would be told the wrong story about whether they can provision.
+2. **"Installed tray" section showed file mtime but not the binary's
+   self-identity**. After today's `--version` mode addition (4 ticks
+   ago), there's a fast way to ask the binary what it is — and that
+   answer matters more than file mtime (which is install time, not
+   build time; matters for release-artifact installs).
+
+Files touched (Windows-owned only):
+- `scripts/diagnose-windows.ps1`:
+  - **Installed tray section**: after the file-mtime line, add a
+    `--version` ping via the same `cmd /c` redirect pattern
+    `tray-diagnose.ps1` + `install-windows.ps1` use. Reports
+    `tillandsias-tray <workspace VERSION> (<build_commit>)` as a new
+    `[ok] identity:` line. Warns if the ping fails (binary incompatible
+    or fundamentally broken). Also added a pointer to
+    `scripts\tray-diagnose.ps1` for live runtime health (separation of
+    concerns: this script = pre-tray host facts; tray-diagnose =
+    live-runtime health).
+  - **Recipe materializer section**: updated stale
+    `"COMPLETE except the buildah-driven sec.2b CI-fetch job"` text →
+    `"COMPLETE end-to-end as of 2026-05-30: CI release pipeline
+    publishes per-arch rootfs tars on every daily release"`. Matches
+    reality.
+  - **Readiness summary**: full rewrite of the VM-provisioning block.
+    Was `"Still GATED on the sec.2b CI-fetch / recipe-smoke job"`
+    (stale). Now: `"UNBLOCKED. Proven E2E 2026-05-26/27 against live
+    published rootfs assets; daily release pipeline publishes per-arch
+    rootfs tars (see releases/latest on the GitHub repo). Run:
+    install-windows.ps1 -Provision -Launch"`. Also reorganized the
+    bottom command list to surface live runtime health + log
+    inspection commands (`scripts\tray-diagnose.ps1` +
+    `tillandsias-tray --logs --tail 50`) — new since the prior
+    edition of this section.
+
+**Build**: N/A (script-only changes; binary unchanged from prior tick).
+
+**Smoke** (real hardware):
+- `scripts\diagnose-windows.ps1` ran end-to-end clean. New identity
+  line in the Installed tray section: `[ok] identity: tillandsias-tray
+  0.2.260528.1 (a963c16d)`. Readiness summary now reads correctly with
+  the `UNBLOCKED` block + the 4-command bottom list (tray launch x2 +
+  health check + log inspection).
+- `windows-native-tray` litmus: 7/7 PASS (no YAML changes this tick;
+  diagnose-windows.ps1 isn't pinned at this surface level).
+
+**Findings** (free-form):
+- The wave of script enrichment this morning + last tick + this tick
+  (install-windows.ps1, tray-diagnose.ps1, diagnose-windows.ps1) has
+  brought all three operator-facing scripts to a consistent surface:
+  every script now reports `version + build_commit + (script-specific
+  data)`, and they each point at the OTHER scripts for the data they
+  don't own (this script → tray-diagnose for live runtime;
+  tray-diagnose → `--logs --tail N` for more log; install-windows →
+  diagnose-windows for pre-tray host facts).
+- The stale-text issues caught here would have lingered indefinitely
+  without a routine eyes-on-script audit — a reminder that
+  documentation-in-scripts decays as the architectural state moves on.
+  Spec-anchored litmus catches code drift; nothing catches script
+  *text* drift today. Worth flagging if/when someone wants a "script
+  staleness audit" litmus.
+
+**Cross-host visibility note**: pure Windows script changes. No
+cross-host coordination needed.
+
+**Next iteration ask**: N/A (SECTION_KIND=ok). The 3 windows
+operator-facing scripts (install-windows.ps1, tray-diagnose.ps1,
+diagnose-windows.ps1) are now mutually consistent + accurate.
+
+---
+
+### 20260531T013000Z — ok (install-windows.ps1 -Purge mode + -Uninstall leftovers warning)
+
+- agent_id: windows-bullo-claude-opus-20260531T013000Z
+- head_sha: 6c3329dc (post-merge of linux-next +9 commits — default-image,
+  forge-welcome, forge-shell-tools litmus pins + 1 sibling merge of my
+  prior 8490a364; no shared-contract churn)
+- version: 0.2.260528.1
+- build_commit: 8490a364
+- build_run_id: 20260531T013000Z
+
+**Sibling context** (no windows-tray action required):
+- linux-next +9 commits: all litmus pinning slices (`default-image` 50→75,
+  `forge-welcome` 50→75, `forge-shell-tools` 50→67 + 6th impl divergence
+  flagged) + cycle 23:43Z merging my prior 8490a364 cleanly.
+- osx-next still stalled at b4a45622 (~17 hours; deep escalation flag from
+  loop persists).
+- merge-tree clean.
+
+**Change made**: closed a real install-UX gap I noticed while auditing
+the diagnose-windows.ps1 script — `-Uninstall` removed install bits +
+shortcuts but left ~1GB+ of cached state behind (downloaded rootfs,
+WSL distro VHDX, logs). Operators expecting "clean removal" hit
+residual disk usage. Added a `-Purge` flag for full cleanup, and
+upgraded the existing `-Uninstall` flow to enumerate what's left
+behind + point at `-Purge` for the deeper path.
+
+Files touched:
+- `scripts/install-windows.ps1`:
+  - **New `-Purge` switch param** with full docblock. Mirrors apt-get
+    purge semantics (`-Uninstall` = remove install bits;
+    `-Purge` = -Uninstall + scrub all cached state).
+  - **Combined Uninstall/Purge block**: structured single flow that:
+    1. Always stops the running tray + removes shortcuts + removes
+       install dir (today's behavior).
+    2. If -Purge: `wsl --unregister tillandsias` (best-effort,
+       tolerates "no distro" + wsl-not-installed) + removes
+       `%LOCALAPPDATA%\tillandsias\{cache,logs,wsl}` + removes the
+       now-empty data root.
+    3. If -Uninstall (no Purge): enumerates leftover directories +
+       reports the WSL distro registration state, prints a "Left
+       behind (use -Purge for full cleanup)" yellow warning block
+       so the deeper-cleanup path is discoverable.
+  - DocBlock updated: new `.PARAMETER Purge` block + new EXAMPLE row +
+    expanded `.PARAMETER Uninstall` docs to note the leftover semantics
+    + pointer to `-Purge`.
+
+**Build**: N/A (script-only change; binary unchanged).
+
+**Smoke** (real hardware — exercised both paths):
+- `scripts\install-windows.ps1 -Uninstall`: removed Start Menu shortcut
+  + install dir, then printed yellow `Left behind (use -Purge for full
+  cleanup):` block listing the 4 leftover items (cache dir + logs dir
+  + wsl dir + the WSL distro registration `tillandsias`).
+- Reinstall (`scripts\install-windows.ps1` no args): rebuild via
+  build-windows-tray.ps1 subscript (which my prior tick fixed) →
+  Layer 1 `--version` + Layer 2 `--diagnose --json` verification both
+  clean. Confirms install side is end-to-end green.
+- `windows-native-tray` litmus: 7/7 PASS.
+- `-Purge` itself NOT exercised on this host (the local WSL distro has
+  500MB of state I don't want to destroy mid-loop). The control flow
+  is straightforward (it's `-Uninstall` + 4 well-bounded `Remove-Item`
+  + 1 `wsl --unregister` invocation) and was reviewed in code.
+
+**Findings** (free-form):
+- The leftovers-warning UX matters: it surfaces the data layout to
+  operators who otherwise wouldn't know they have 1GB+ of cached state
+  in `%LOCALAPPDATA%\tillandsias\` after a "clean" uninstall. It also
+  makes the `-Purge` path discoverable without requiring docs reading.
+- The `-Purge` flow uses best-effort error handling throughout
+  (`-ErrorAction SilentlyContinue` on Remove-Item, tolerant of
+  wsl-not-installed) so a partial-state cleanup doesn't fail the
+  script halfway through. Each failure surfaces a yellow `WARN:` line
+  the operator can act on.
+- One install-UX gap remains: there's no `-Update` mode that just
+  rebuilds + replaces the binary without re-creating shortcuts. Today
+  re-running the script no-args does the full install path again (it
+  Compress-Archives an unchanged shortcut, etc.). Low priority — the
+  full reinstall is fast enough — but flagged here for future
+  consideration.
+
+**Cross-host visibility note**: pure Windows-side script change. No
+cross-host coordination needed. macOS-tray's install-macos.sh has its
+own uninstall semantics; symmetric purge could be useful there but is
+macOS-host territory.
+
+**Next iteration ask**: N/A (SECTION_KIND=ok). The install-windows.ps1
+flow is now operator-grade: `-Launch`, `-Startup`, `-Provision`,
+`-DebugBuild`, `-Uninstall`, `-Purge` — full lifecycle coverage with
+clear semantics + leftover discoverability.
