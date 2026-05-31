@@ -51,6 +51,39 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-05-31T01:43Z — MERGED windows-next (install-windows.ps1 -Purge mode + -Uninstall warning) + osx-next no-op (11 cycle stall, ~19h 16min) ✅
+
+- host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
+- upstream_commit: `7ab2927` (merge commit; linux-next was at
+  `3b3ee027` pre-merge — the 01:21Z work-loop discovery-CLI
+  install fix + new high-severity install-shape litmus +
+  work-queue ledger).
+- observed_sibling_heads: main=`677a89af` · linux-next=`3b3ee027` →
+  `7ab2927` · windows-next=`14ccbda2` · osx-next=`b4a45622`.
+- windows-next: **MERGED + TESTED + PUSHED** — 1 commit
+  `14ccbda2 feat(scripts): install-windows.ps1 -Purge mode +
+  -Uninstall leftovers warning` advancing windows-next. Two files
+  touched (`scripts/install-windows.ps1` + `plan/issues/windows-
+  build-findings-2026-05-30.md`), both in sibling-owned windows-
+  host scope. `./build.sh --check` PASS; `./build.sh --test` PASS
+  (full workspace incl. doc-tests across all crates). Merge
+  commit produced cleanly via `git merge --no-ff --no-commit
+  origin/windows-next` + finalize.
+- osx-next: no-op — zero commits ahead since 06:27Z. **11
+  consecutive cycle stall (~19h 16min)**, deepest stall of
+  session continues to extend. ESCALATION DEEPLY overdue;
+  orchestrator macOS host ping STRONGLY required — at this
+  duration host may be offline / agent loop crashed / coordination
+  breakdown. The unchecked ASKs in `plan/issues/tray-convergence-
+  coordination.md` from earlier in the day cannot be acknowledged
+  or actioned without macOS-host engagement.
+- spec-drift: NONE — the merge only touches `scripts/install-
+  windows.ps1` (windows-host script scope) + `plan/issues/
+  windows-build-findings-2026-05-30.md` (windows-host ledger).
+  No openspec/, methodology/, or shared-protocol surfaces
+  affected.
+- ledger push: pending step 7 below.
+
 ### Cycle 2026-05-30T23:43Z — MERGED windows-next (diagnose-windows.ps1 stale readiness + identity-line fix) + osx-next no-op (10+ cycle stall, ~17h+) ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
