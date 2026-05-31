@@ -1643,6 +1643,24 @@ plan_index:
               agent_id: "linux-tlatoani-fedora-antigravity-20260529T1606"
               commits: ["7844b76711708d175daa99cad43a92aaeffc80f8"]
               validation_log: "fa7a2cb0-2de1-4271-abbb-57bb85ceef50/task-216"
+            - type: claim
+              ts: "2026-05-31T02:30:00Z"
+              agent_id: "linux-tlatoani-opencode-big-pickle-2026-05-31T023027Z"
+              host: "linux"
+              lease_id: "lease-linux-inference-proxy-wiring-20260531T0230"
+              expires_at: "2026-05-31T06:30:00Z"
+            - type: completed
+              ts: "2026-05-31T02:50:00Z"
+              agent_id: "linux-tlatoani-opencode-big-pickle-2026-05-31T023027Z"
+              lease_id: "lease-linux-inference-proxy-wiring-20260531T0230"
+              summary: >
+                Wired HTTP_PROXY/HTTPS_PROXY/http_proxy/https_proxy env vars
+                pointing at proxy:3128 + NO_PROXY/no_proxy using ENCLAVE_NO_PROXY
+                into build_inference_run_args. Resolved the 7th spec/impl divergence
+                (inference container proxy env vars). Updated spec.md divergence
+                block to ✅ Resolved. Updated litmus (grep -A 60, new proxy step).
+                Verification: cargo test (all pass), ./build.sh --check (pass),
+                litmus 96/96 PASS at 100%.
 
     - id: multi-host-plan-ledger-adoption
       order: 21

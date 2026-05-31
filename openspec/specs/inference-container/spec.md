@@ -73,33 +73,16 @@ proxy and fail with `TCP_DENIED/403`, causing model load stalls.
 - **AND** both are passed to ollama alongside the existing `HTTP_PROXY` /
   `HTTPS_PROXY` entries
 
-> ⚠ Implementation reality (as of 2026-05-30): The single launch
-> path `build_inference_run_args` in `crates/tillandsias-headless/
-> src/main.rs` sets NEITHER `HTTP_PROXY`, `HTTPS_PROXY`, NOR
-> `NO_PROXY` env vars on the inference container — only
-> `OLLAMA_DEBUG=1` + `OLLAMA_KEEP_ALIVE=24h`. This diverges from
-> two requirements simultaneously: Req 1 ("The inference container
-> SHALL use the proxy for model downloads") and Req 4 (the
-> NO_PROXY enclave peer set). A separate `inference_profile()`
-> function in `crates/tillandsias-core/src/container_profile.rs`
-> DOES declare `HTTP_PROXY=http://proxy:3128` + `HTTPS_PROXY=
-> http://proxy:3128` (lowercase variants too), but its `env_vars`
-> field is never consumed by the launch path — dead-code smell.
-> Operational consequence: ollama in the inference container makes
-> direct outbound connections for model pulls (bypassing Squid,
-> bypassing the SSL-bump trust chain). Reconcile by either (a)
-> wire `inference_profile().env_vars` into `build_inference_run_
-> args` AND add the spec § Req 4 NO_PROXY entry, OR (b) downgrade
-> Req 1's "SHALL use the proxy" to "MAY use the proxy" and drop
-> Req 4 entirely if the architectural decision is that inference
-> needs direct internet for model pulls. The `ENCLAVE_NO_PROXY`
-> constant at main.rs:682 (`localhost,127.0.0.1,0.0.0.0,::1,
-> inference,proxy,git-service,10.0.42.0/24`) already encodes the
-> correct enclave peer list for forge containers — path (a) just
-> needs the same constant passed to inference. `litmus:inference-
-> container-implementation-shape` pins the orphaned `inference_
-> profile()` declaration so a refactor that finally wires it up
-> surfaces this litmus for relaxation.
+> ✅ Resolved 2026-05-31: `build_inference_run_args` now sets
+> `HTTP_PROXY=http://proxy:3128`, `HTTPS_PROXY=http://proxy:3128`
+> (lowercase variants too), `NO_PROXY`, and `no_proxy` using the
+> same `ENCLAVE_NO_PROXY` constant (`localhost,127.0.0.1,0.0.0.0,
+> ::1,inference,proxy,git-service,10.0.42.0/24`) that the forge
+> containers use. Ollama model pulls now route through the Squid
+> proxy with SSL-bump. The `inference_profile()` env_vars in
+> `container_profile.rs` remain declared but unconsumed by the
+> launch path — the args-based encoding in `build_inference_run_args`
+> is the canonical path.
 
 ### Requirement: Tier-tagged tool-capable model pre-pulls
 

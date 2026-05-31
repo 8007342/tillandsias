@@ -389,9 +389,8 @@ specs:
   - litmus:inference-readiness-probe-shape
   - litmus:inference-deferred-model-pulls
   - litmus:inference-container-implementation-shape
-  coverage_ratio: 67
-  last_verified: '2026-05-30'
-  last_verified: '2026-05-16'
+  coverage_ratio: 75
+  last_verified: '2026-05-31'
 - spec_id: inference-host-side-pull
   status: obsolete
   litmus_tests: null
