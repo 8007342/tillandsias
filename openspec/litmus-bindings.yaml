@@ -815,8 +815,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:observability-convergence-shape
-  coverage_ratio: 60
-  last_verified: '2026-05-14'
+  - litmus:observability-convergence-script-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-31'
 - spec_id: observability-metrics
   status: active
   litmus_tests:
