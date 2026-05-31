@@ -1,0 +1,241 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Claude Code repeat loop for Tillandsias.
+#
+# Mirror of opencode-repeat, but for the `claude` CLI. Each iteration
+# starts a FRESH context (no --resume / --continue), so a skill that
+# is meant to advance work over time (e.g. /advance-work-from-plan)
+# gets a clean conversation per cycle.
+#
+# One-shot unattended (free-form prompt):
+#   ./claude-repeat "review the linux-next queue"
+#
+# Unattended loop, sleeping after each completed round:
+#   ./claude-repeat --wait 30m --skill advance-work-from-plan
+#
+# Bounded unattended loop (10 cycles, half-hour cadence):
+#   ./claude-repeat --wait 30m --times 10 --skill advance-work-from-plan
+#
+# Skill plus extra prompt args (concatenated as `/skill arg1 arg2`):
+#   ./claude-repeat --wait 1h --skill loop "check the deploy"
+
+script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
+repo_root="$(git -C "$script_dir" rev-parse --show-toplevel 2>/dev/null || printf '%s\n' "$script_dir")"
+cd "$repo_root"
+
+CLAUDE_BIN="${CLAUDE_BIN:-}"
+if [[ -z "$CLAUDE_BIN" ]]; then
+  CLAUDE_BIN="$(command -v claude 2>/dev/null || true)"
+fi
+if [[ -z "$CLAUDE_BIN" || ! -x "$CLAUDE_BIN" ]]; then
+  printf 'claude-repeat: unable to find claude binary. Set CLAUDE_BIN=/path/to/claude.\n' >&2
+  exit 127
+fi
+
+QUIET=0
+WAIT_INTERVAL=""
+TIMES=""
+SKILL_NAME=""
+MODEL=""
+claude_args=()
+
+usage() {
+  cat >&2 <<'EOF'
+Usage:
+  ./claude-repeat [--quiet] [--model <name>] "prompt"
+  ./claude-repeat --wait <duration> [--times <n>] [--skill <name>] [--model <name>] ["prompt"]
+
+Options:
+  --quiet, -q          Suppress claude streaming output (suppresses stderr noise).
+  --wait <duration>    Run claude, then sleep duration, repeat forever.
+  --repeat <duration>  Compatibility alias for --wait.
+  --times <n>          Limit --wait/--repeat to n rounds.
+  --skill <name>       Invoke a skill (slash command). Translates to "/<name>"
+                       as the prompt; any positional prompt is appended after
+                       a space (so `--skill foo "bar baz"` runs `/foo bar baz`).
+  --model <name>       Pass through to claude --model (e.g. opus, sonnet).
+  --help, -h           Show this help.
+
+Behavior:
+  Each iteration is a FRESH context (no --resume / --continue), so a
+  recurring skill like /advance-work-from-plan starts clean every cycle.
+  Permissions are bypassed via --dangerously-skip-permissions to match
+  the unattended-loop expectation; do not run this in a directory you
+  do not trust.
+
+Duration examples: 30m, 2h, 2h30m, 45s.
+EOF
+}
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --quiet|-q)
+      QUIET=1
+      shift
+      ;;
+    --wait|--repeat)
+      if [[ $# -lt 2 ]]; then
+        printf 'claude-repeat: %s requires a duration such as 30m, 2h, or 2h30m\n' "$1" >&2
+        exit 2
+      fi
+      WAIT_INTERVAL="$2"
+      shift 2
+      ;;
+    --times)
+      if [[ $# -lt 2 || ! "$2" =~ ^[0-9]+$ || "$2" -lt 1 ]]; then
+        printf 'claude-repeat: --times requires a positive integer\n' >&2
+        exit 2
+      fi
+      TIMES="$2"
+      shift 2
+      ;;
+    --skill)
+      if [[ $# -lt 2 ]]; then
+        printf 'claude-repeat: --skill requires a skill name\n' >&2
+        exit 2
+      fi
+      SKILL_NAME="${2#/}"   # strip leading slash if the user wrote /foo
+      shift 2
+      ;;
+    --model)
+      if [[ $# -lt 2 ]]; then
+        printf 'claude-repeat: --model requires a model name\n' >&2
+        exit 2
+      fi
+      MODEL="$2"
+      shift 2
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      claude_args+=("$@")
+      break
+      ;;
+    *)
+      claude_args+=("$1")
+      shift
+      ;;
+  esac
+done
+
+if [[ -z "$SKILL_NAME" && ${#claude_args[@]} -eq 0 ]]; then
+  printf 'claude-repeat: nothing to do — supply --skill <name> or a positional prompt.\n' >&2
+  usage
+  exit 2
+fi
+
+duration_to_seconds() {
+  local input="$1"
+  local rest="$input"
+  local total=0
+  local number unit
+
+  if [[ "$rest" =~ ^[0-9]+$ ]]; then
+    printf '%s\n' "$rest"
+    return 0
+  fi
+
+  while [[ -n "$rest" ]]; do
+    if [[ "$rest" =~ ^([0-9]+)([smhd])(.*)$ ]]; then
+      number="${BASH_REMATCH[1]}"
+      unit="${BASH_REMATCH[2]}"
+      rest="${BASH_REMATCH[3]}"
+      case "$unit" in
+        s) total=$((total + number)) ;;
+        m) total=$((total + number * 60)) ;;
+        h) total=$((total + number * 3600)) ;;
+        d) total=$((total + number * 86400)) ;;
+      esac
+    else
+      printf 'claude-repeat: invalid duration %q. Use forms like 30m, 2h, 2h30m, or 45s.\n' "$input" >&2
+      return 2
+    fi
+  done
+
+  if [[ "$total" -lt 1 ]]; then
+    printf 'claude-repeat: duration must be greater than zero\n' >&2
+    exit 2
+  fi
+  printf '%s\n' "$total"
+}
+
+timestamp_utc() {
+  date -u '+%Y-%m-%dT%H:%M:%SZ'
+}
+
+timestamp_pacific_from_epoch() {
+  local epoch="$1"
+  if command -v python3 >/dev/null 2>&1; then
+    python3 - "$epoch" <<'PY' 2>/dev/null && return 0
+import datetime
+import sys
+from zoneinfo import ZoneInfo
+
+epoch = int(sys.argv[1])
+dt = datetime.datetime.fromtimestamp(epoch, ZoneInfo("America/Los_Angeles"))
+print(dt.strftime("%Y-%m-%d %H:%M:%S %Z"))
+PY
+  fi
+
+  TZ=America/Los_Angeles date -d "@$epoch" '+%Y-%m-%d %H:%M:%S %Z' 2>/dev/null \
+    || date -r "$epoch" '+%Y-%m-%d %H:%M:%S %Z' 2>/dev/null \
+    || printf 'epoch:%s\n' "$epoch"
+}
+
+build_prompt() {
+  # If --skill is set, the prompt becomes "/<skill> [positional...]".
+  # Otherwise the positional args are joined with spaces.
+  if [[ -n "$SKILL_NAME" ]]; then
+    if [[ ${#claude_args[@]} -gt 0 ]]; then
+      printf '/%s %s' "$SKILL_NAME" "${claude_args[*]}"
+    else
+      printf '/%s' "$SKILL_NAME"
+    fi
+  else
+    printf '%s' "${claude_args[*]}"
+  fi
+}
+
+run_once() {
+  local prompt
+  prompt="$(build_prompt)"
+
+  local args=(--print --dangerously-skip-permissions)
+  if [[ -n "$MODEL" ]]; then
+    args+=(--model "$MODEL")
+  fi
+  args+=("$prompt")
+
+  if [[ "$QUIET" -eq 1 ]]; then
+    "$CLAUDE_BIN" "${args[@]}" 2>/dev/null
+  else
+    "$CLAUDE_BIN" "${args[@]}"
+  fi
+}
+
+if [[ -n "$WAIT_INTERVAL" ]]; then
+  wait_seconds="$(duration_to_seconds "$WAIT_INTERVAL")"
+  cycle=0
+  while :; do
+    cycle=$((cycle + 1))
+    printf '[claude-repeat] %s cycle %d start repo=%s wait=%s\n' "$(timestamp_utc)" "$cycle" "$repo_root" "$WAIT_INTERVAL" >&2
+    run_once
+    status=$?
+    printf '[claude-repeat] %s cycle %d complete exit=%d\n' "$(timestamp_utc)" "$cycle" "$status" >&2
+    if [[ "$status" -ne 0 ]]; then
+      exit "$status"
+    fi
+    if [[ -n "$TIMES" && "$cycle" -ge "$TIMES" ]]; then
+      exit 0
+    fi
+    next_epoch="$(($(date +%s) + wait_seconds))"
+    printf '[claude-repeat] %s sleeping %s before next cycle at %s (America/Los_Angeles)\n' "$(timestamp_utc)" "$WAIT_INTERVAL" "$(timestamp_pacific_from_epoch "$next_epoch")" >&2
+    sleep "$wait_seconds"
+  done
+else
+  run_once
+fi
