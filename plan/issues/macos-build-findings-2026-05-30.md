@@ -38,3 +38,17 @@ trace: .claude/skills/build-macos-tray/SKILL.md (the skill that wrote this)
 **Smoke**: DIAG_EXIT=2; 13 keys; alive-after-3s; clean-SIGTERM-exit; stderr identical to prior run.
 **Install**: backup=yes; post-install 13 keys.
 **Findings**: 14th `ok` cumulatively. No delta. linux-next + windows-next both moved this fetch (d6336c05→4f627563, a963c16d→6eb026e0).
+
+---
+
+### 20260530T221604Z — ok
+
+- agent_id: macos-Tlatoani-MacBook-Air-claude-opus-20260530T221604Z
+- head_sha: b4a45622
+- version: 0.2.260528.1
+- build_run_id: 20260530T221604Z
+
+**Build**: cache-hit; sha256 `20d22a8a0f1fba7468da23c30e7ed9dcc035de0b2bcc6fef03aad3a15341e15f`; codesign pass.
+**Smoke**: DIAG_EXIT=2; 13 keys; alive-after-3s; clean-SIGTERM-exit.
+**Install**: backup=yes (rotated the bundle the e2e run had observed); post-install 13 keys.
+**Findings**: 15th `ok`. Triggered by user's "suspend loops + prepare local install for smoke test" directive. Loops `0c175e88` (hourly build) and `5ea2407a` (daily e2e) deleted before this run. Also notable in the fetch this run: `main` advanced (ea28d773→677a89af) and a new release tag `v0.2.260530.1` was published — daily release pipeline ran. Bundle handed to user for smoke testing.
