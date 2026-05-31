@@ -133,9 +133,33 @@ Planned as a thin platform wrapper around the same Rust core, delegating contain
 
 ### Windows
 
-**Coming soon.**
+**Beta** (since `v0.2.260530.1`, 2026-05-30). Native Win32 NotifyIcon tray
+around a WSL2-hosted Fedora utility VM. The VM runs the same headless
+tillandsias + podman enclave as Linux; the tray surfaces project actions
+(Open Shell, GitHub login, agent selection) through Windows Terminal +
+`wsl.exe`.
 
-Planned via WSL2: the Linux musl-static binary runs inside WSL, with a thin Windows-side wrapper handling system tray (Win32 NotifyIcon) and lifecycle. Container runtime via Podman Desktop or Docker Desktop.
+**Install** (from an unzipped
+[`tillandsias-tray-<version>-windows-x64.zip`](https://github.com/8007342/tillandsias/releases/latest)
+on the releases page):
+
+```powershell
+scripts\install-windows.ps1 -Launch                # menu-only dev mode
+scripts\install-windows.ps1 -Provision -Launch     # real WSL provisioning
+scripts\install-windows.ps1 -Uninstall             # minimal removal
+scripts\install-windows.ps1 -Purge                 # full cleanup (wsl --unregister + caches)
+```
+
+**Requirements**: Windows 10/11 with WSL2 (`wsl --install` then reboot).
+
+**Diagnostics**: every tray binary surface mirrors the Linux + macOS
+behavior. `tillandsias-tray.exe --diagnose --json` emits a bundled health
+report (11 keys + wire sub-object); `--help` documents all CLI modes +
+env vars + the GUI-subsystem stdio-capture pattern. Two PowerShell
+consumers ship alongside: `scripts\tray-diagnose.ps1` (live-runtime
+health check) and `scripts\diagnose-windows.ps1` (pre-tray host facts).
+See `cheatsheets/runtime/windows-tray-diagnostics.md` for the full
+diagnose JSON schema + canonical consumer patterns.
 
 ## All Downloads
 
