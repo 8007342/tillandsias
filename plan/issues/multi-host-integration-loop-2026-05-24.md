@@ -3772,3 +3772,31 @@ from the 18:13Z escalation logging to the release being downloadable:
 `19:02Z - 18:13Z = 49 minutes`, of which `~40 minutes` was the CI
 build itself (the operator intervention took ~7 minutes — the bulk
 was waiting for the workflow).
+
+## ESCALATION — 2026-05-31T18:08Z — Tag push blocked by local proxy
+
+**Skill:** merge-to-main-and-release  
+**Step failed:** STEP 5 — push annotated tag v0.2.260531.1  
+**Error:** HTTP 403 from local git proxy at 127.0.0.1:41115 on all tag-push attempts (3 retries with exponential backoff). No MCP tool for creating GitHub tags exists. No GitHub API token available to bypass the proxy.
+
+**State of release at failure:**
+- PR #9 (linux-next → main): MERGED ✓ (merge SHA: 4e22d8f9b3640bd18f1d70bed9e81a76cdedf705)
+- VERSION bumped to 0.2.260531.1 on main: PUSHED ✓ (commit fe2295a6)
+- Local annotated tag v0.2.260531.1 created pointing at fe2295a6: EXISTS LOCALLY ✓
+- Remote tag v0.2.260531.1: NOT PUSHED ✗
+- release.yml workflow: NOT TRIGGERED ✗
+- GitHub Release: NOT CREATED ✗
+
+**Operator action required:** Push the tag manually, then trigger release.yml:
+```bash
+git tag -a "v0.2.260531.1" -m "Release 0.2.260531.1" fe2295a6
+git push origin "v0.2.260531.1"
+gh workflow run release.yml --ref v0.2.260531.1
+```
+Or from a machine with direct GitHub push access:
+```bash
+git fetch origin main
+git tag -a "v0.2.260531.1" -m "Release 0.2.260531.1" fe2295a6
+git push origin "v0.2.260531.1"
+gh workflow run release.yml --ref v0.2.260531.1
+```
