@@ -27,8 +27,8 @@ preconditions:
   - shell utilities (grep) are available in PATH
 
 critical_path:
-  - step: "all seven CLI modes wired in main.rs"
-    command: "grep -Fe '--provision-once' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--status-once' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--diagnose' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--json' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--logs' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--help' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--version' crates/tillandsias-windows-tray/src/main.rs"
+  - step: "all seven CLI modes wired in main.rs (plus --bak for --logs rotation backup)"
+    command: "grep -Fe '--provision-once' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--status-once' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--diagnose' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--json' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--logs' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--bak' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--help' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--version' crates/tillandsias-windows-tray/src/main.rs"
     expected_behavior: "grep succeeds"
     timeout_ms: 3000
 

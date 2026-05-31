@@ -517,3 +517,118 @@ sniffing exists on those sides.
 **Next iteration ask**: N/A (SECTION_KIND=ok). The DiagnoseReport now
 exposes the WSL feature's own version so operators can triage
 "old WSL" failures from the report alone.
+
+---
+
+### 20260531T180000Z — ok (--logs --bak: read the rotation backup that was previously invisible)
+
+- agent_id: windows-bullo-claude-opus-20260531T180000Z
+- head_sha: 2db14333 (linux-next + osx-next still unchanged across 5+
+  consecutive ticks now; windows-next 8 ahead pre-this-commit)
+- version: 0.2.260528.1
+- build_commit: 2db14333
+- build_run_id: 20260531T180000Z
+
+**Sibling context**: linux-next velocity-cooldown 5+ ticks; osx-next idle.
+No remote movement. Merge-tree clean.
+
+**Change made**: `--logs` learned a `--bak` flag for reading the rotation
+backup. Two ticks ago I shipped tray.log size-threshold rotation
+(`maybe_rotate_log` renames the oversized file to `tray.log.bak`); but
+`--logs` only read the live file, so the prior session's history sat
+in `tray.log.bak` invisible to the CLI surface — operators wanting
+post-rotation history had to navigate to the log directory manually.
+This closes that loop.
+
+Files touched (Windows-owned only):
+- `crates/tillandsias-windows-tray/src/main.rs`: parse `--bak` from argv
+  alongside the existing `--tail <N>` parsing when `--logs` is on the
+  command line. Both flags are independent: any combination of
+  `--logs`, `--logs --tail N`, `--logs --bak`, `--logs --bak --tail N`
+  works. Adjusted the existing 6-line comment block to also document
+  `--bak`.
+- `crates/tillandsias-windows-tray/src/notify_icon.rs`:
+  - `pub fn logs(tail: Option<usize>, bak: bool) -> i32` — signature
+    extended with a `bak: bool` parameter. Body now selects the file
+    path conditionally: live `log_file_path()` when `!bak`,
+    `log_dir().join("tray.log.bak")` when `bak`. The error path on a
+    missing file branches on the same flag to emit a tailored
+    eprintln: missing-live: existing terse message; missing-bak:
+    explains "the live log hasn't exceeded TRAY_LOG_MAX_BYTES yet —
+    drop --bak to read the live file." so the operator learns why no
+    backup exists (rotation hasn't fired).
+  - `help_text()`: `--logs` MODES row updated to
+    `--logs [--tail N] [--bak]` with a brief inline description of
+    both flags + pointer at the cheatsheet's "Log file rotation"
+    section.
+  - `help_text_documents_all_cli_modes` test extended to require
+    `--bak` in the flag-presence assertion (joins the existing 12
+    flags now 13 with --bak).
+- `openspec/litmus-tests/litmus-windows-tray-diagnose-cli-surface.yaml`:
+  - "all seven CLI modes wired in main.rs" step extended to also
+    require `grep -Fe '--bak'`. Step name updated to "all seven CLI
+    modes wired in main.rs (plus --bak for --logs rotation backup)".
+- `cheatsheets/runtime/windows-tray-diagnostics.md`:
+  - Modes table row for `--logs` updated to
+    `--logs [--tail N] [--bak]`.
+  - Log file rotation section's last sentence rewritten — was
+    "`--logs` only reads the live file; `tray.log.bak` is for ad-hoc
+    operator inspection" → "The default `--logs` reads the live
+    file; pass `--logs --bak` to read the rotation backup (combine
+    with `--tail N` to limit lines)". Less manual, more discoverable.
+
+**Build**: 36.96 s release. Tests: 41 + 3 = 44 passed / 5 ignored
+(same total — no new test added; the existing
+`help_text_documents_all_cli_modes` pin gained 1 assertion but counts
+as 1 test). All green.
+
+**Smoke** (real hardware — exercised both paths):
+- **Existing backup**: the 6 MiB `tray.log.bak` from the 2-tick-ago
+  rotation smoke test (full of null bytes — content shape doesn't
+  matter to the file-read path) was still on disk. Ran
+  `--logs --bak --tail 3`: exit 0; output captured to a temp file
+  with size 6,291,457 bytes (the whole file came back because the
+  null bytes contain no newlines, so `select_log_tail` sees the
+  whole content as "1 line"). Behavior matches contract: tail-3 of
+  a single-line input is that 1 line.
+- **Missing backup**: after deleting the .bak, ran `--logs --bak`
+  (no tail): exit 1 (correct error path). The eprintln went into the
+  cmd /c redirect's stderr-to-nul, but the exit code confirmed the
+  path.
+- Cleaned up the 6 MiB test artifact + temp captures so future
+  smoke runs start from a clean log directory.
+
+**Litmus**:
+- `windows-native-tray`: 7/7 PASS (extended "seven CLI modes" step
+  green with the new `--bak` grep).
+- `cargo fmt`: clean.
+- `cargo clippy -D warnings`: clean.
+
+**Findings** (free-form):
+- The `--logs --bak` UX closes the loop on the rotation feature: now
+  there's a discoverable CLI path to the rotated history, not a
+  "navigate to %LOCALAPPDATA% by hand" assumption. Operators who
+  triage "tray was running but went south — show me the prior
+  session's logs" get a one-liner instead of a file-explorer dance.
+- The signature change `logs(tail) -> logs(tail, bak)` is a
+  breaking change to the pub fn surface — but nothing OUTSIDE
+  notify_icon.rs calls `logs` (only main.rs does, which I updated
+  in lockstep). Future Rust callers would be a non-windows
+  consumer which doesn't exist.
+- The error-message tailoring on missing-bak (mentioning
+  `TRAY_LOG_MAX_BYTES` + suggesting to drop `--bak`) is a small but
+  real UX win: operators discovering `--bak` for the first time who
+  hit "missing backup" get an explanation rather than a generic
+  "file not found".
+- The signature is now the 7-mode CLI surface: `--provision-once`,
+  `--status-once [--json]`, `--diagnose [--json]`,
+  `--logs [--tail N] [--bak]`, `--help`, `--version`, GUI (no flag).
+  All 7 documented in `--help` + cheatsheet + litmus.
+
+**Cross-host visibility note**: pure Windows-tray-side addition; no
+cross-host coordination needed. macOS-tray + Linux tray have their
+own log lifecycle (Console.app + journalctl); the rotation backup
+concept is specific to the windows-tray's file-write model.
+
+**Next iteration ask**: N/A (SECTION_KIND=ok). The full
+`--logs` lifecycle (live + rotated backup) is now CLI-accessible.

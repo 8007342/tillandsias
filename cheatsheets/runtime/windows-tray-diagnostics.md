@@ -35,7 +35,7 @@ A single binary, four diagnostic modes. Each is non-GUI, exits with a code suita
 | `--status-once --json`     | Same status as a structured JSON object on stdout (StatusReport, see below).                | (same as `--status-once`) |
 | `--diagnose`               | Bundled human-readable health report (8 sections — see below).                              | `0` healthy / `2` degraded / `1` hard fail |
 | `--diagnose --json`        | Same report as a structured JSON object on stdout.                                          | (same as `--diagnose`)  |
-| `--logs [--tail N]`        | Dump the tray log file (`%LOCALAPPDATA%\tillandsias\logs\tray.log`) to stdout; `--tail N` for last N lines. | `0` readable / `1` missing |
+| `--logs [--tail N] [--bak]` | Dump the tray log to stdout; `--tail N` for last N lines, `--bak` for the rotation backup `tray.log.bak`. | `0` readable / `1` missing |
 | `--help` / `-h`            | Print full usage with all CLI modes + exit-code contracts + stdio note + ENVIRONMENT vars.  | `0`                     |
 | `--version` / `-V`         | Print `tillandsias-tray <workspace VERSION> (<build_commit>)` on one line.                  | `0`                     |
 
@@ -54,8 +54,9 @@ GUI mode also accepts `--no-provision` to skip WSL bootstrap (clean local-dev me
 `tray.log` is bounded at **5 MiB**: at tray startup, if the existing file
 exceeds that size, it's renamed to `tray.log.bak` (overwriting any prior
 backup) and a fresh `tray.log` starts. Disk-usage upper bound: ~10 MiB
-per log directory (live + one historical backup). `--logs` only reads
-the live file; `tray.log.bak` is for ad-hoc operator inspection.
+per log directory (live + one historical backup). The default `--logs`
+reads the live file; pass `--logs --bak` to read the rotation backup
+(combine with `--tail N` to limit lines).
 
 GUI mode (no flags) launches the tray itself.
 

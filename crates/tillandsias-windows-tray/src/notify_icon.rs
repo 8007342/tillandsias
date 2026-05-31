@@ -451,19 +451,38 @@ fn select_log_tail(content: &str, tail: Option<usize>) -> Vec<&str> {
     lines[start..].to_vec()
 }
 
-/// `--logs` / `--logs --tail <N>`: dump the tray log file to stdout for
-/// operators who want to inspect more than the 20 lines `--diagnose`
-/// surfaces in `recent_log_tail`. Honors the GUI-subsystem stdio quirk:
-/// support scripts should redirect to a file
+/// `--logs` / `--logs --tail <N>` / `--logs --bak [--tail N]`: dump the
+/// tray log file to stdout for operators who want to inspect more than
+/// the 20 lines `--diagnose` surfaces in `recent_log_tail`. Honors the
+/// GUI-subsystem stdio quirk: support scripts should redirect to a file
 /// (`tray.exe --logs > out.txt 2>nul`) rather than rely on PowerShell
 /// pipe capture. Exit: 0 if the log file was read (even if empty), 1 if
 /// it's missing or unreadable. Does NOT touch WSL.
-pub fn logs(tail: Option<usize>) -> i32 {
-    let path = log_file_path();
+///
+/// `bak = true` reads `tray.log.bak` (the rotation backup) instead of
+/// the live `tray.log`. Pairs with [`maybe_rotate_log`] / [`TRAY_LOG_MAX_BYTES`]:
+/// when the live file rotates, the prior session's history sits in the
+/// .bak file invisibly until an operator asks for it explicitly. Missing
+/// .bak (i.e. no rotation has fired yet) exits 1 with a descriptive
+/// eprintln pointing the operator at the live file.
+pub fn logs(tail: Option<usize>, bak: bool) -> i32 {
+    let path = if bak {
+        log_dir().join("tray.log.bak")
+    } else {
+        log_file_path()
+    };
     let content = match std::fs::read_to_string(&path) {
         Ok(c) => c,
         Err(err) => {
-            eprintln!("[logs] cannot read log file {}: {err}", path.display());
+            if bak {
+                eprintln!(
+                    "[logs] no rotation backup at {} ({err}); the live log hasn't \
+                     exceeded TRAY_LOG_MAX_BYTES yet — drop --bak to read the live file.",
+                    path.display()
+                );
+            } else {
+                eprintln!("[logs] cannot read log file {}: {err}", path.display());
+            }
             return 1;
         }
     };
@@ -511,8 +530,9 @@ pub fn help_text() -> String {
             Exit: 0 = Ready, 2 = reachable-not-Ready, 1 = unreachable.\n    \
             --diagnose [--json]     Bundled health report (10+ keys). Exit: 0 healthy,\n                            \
             2 degraded, 1 hard fail.\n    \
-            --logs [--tail N]       Dump the tray log file to stdout (last N lines\n                            \
-            with --tail). Exit: 0 = readable, 1 = missing.\n    \
+            --logs [--tail N] [--bak]  Dump the tray log file to stdout (last N\n                            \
+            lines with --tail; the rotation backup tray.log.bak with --bak —\n                            \
+            see cheatsheet's Log file rotation). Exit: 0 = readable, 1 = missing.\n    \
             --help, -h              Print this help and exit 0.\n    \
             --version, -V           Print version + build commit and exit 0.\n\
          \n\
@@ -2464,6 +2484,7 @@ mod tests {
             "--json",
             "--logs",
             "--tail",
+            "--bak",
             "--help",
             "-h",
             "--version",

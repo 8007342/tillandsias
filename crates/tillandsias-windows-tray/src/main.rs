@@ -95,7 +95,12 @@ fn main() {
                 None => break None,
             }
         };
-        std::process::exit(notify_icon::logs(tail));
+        // `--bak`: read `tray.log.bak` (the size-rotation backup; see
+        // TRAY_LOG_MAX_BYTES). Useful after a long-lived tray triggered
+        // rotation and the operator wants the prior session's history.
+        // Exit 1 if the backup doesn't exist.
+        let bak = std::env::args().any(|a| a == "--bak");
+        std::process::exit(notify_icon::logs(tail, bak));
     }
     notify_icon::run();
 }
