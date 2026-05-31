@@ -1266,6 +1266,13 @@ struct DiagnoseReport {
     install_path: String,
     log_path: String,
     log_exists: bool,
+    /// Size in bytes of the live `tray.log` if it exists. `None` if the
+    /// log file is missing (fresh install before any tracing line writes).
+    /// Pairs with `log_exists`: when `log_exists = true`, `log_size_bytes
+    /// = Some(N)`. Lets operators see "is my log growing?" and "when will
+    /// rotation fire?" from `--diagnose` alone (rotation threshold is
+    /// TRAY_LOG_MAX_BYTES = 5 MiB; see Log file rotation in the cheatsheet).
+    log_size_bytes: Option<u64>,
     /// First non-empty line of `wsl --version` stdout (e.g. on English hosts
     /// `"WSL version: 2.7.3.0"`; on French `"Version WSL : 2.7.3.0"`).
     /// Captured locale-as-is — emitting just the first line is locale-neutral
@@ -1284,6 +1291,15 @@ struct DiagnoseReport {
     wt_present: bool,
     distro: &'static str,
     distro_registered: bool,
+    /// `true` if `wsl --list --running --quiet` lists the `tillandsias`
+    /// distro (i.e. the WSL utility VM is currently UP, not just registered).
+    /// `distro_registered` says "the distro exists on disk", `distro_running`
+    /// says "the distro is actually executing". Useful for triaging
+    /// "registered but idle" vs "registered + active" states. WSL2 idles
+    /// the utility VM down when no host-side session holds it open, so this
+    /// flag flips frequently — capturing it directly avoids the operator
+    /// having to run `wsl --list --running` separately.
+    distro_running: bool,
     release_tag: &'static str,
     manifest_pin_x86_64_tar: Option<String>,
     wire: WireReport,
@@ -1344,6 +1360,28 @@ fn sniff_wsl_version() -> Option<String> {
     }
     let stdout = String::from_utf8_lossy(&output.stdout);
     first_line(&stdout)
+}
+
+/// `true` if `wsl --list --running --quiet` lists the `tillandsias` distro.
+/// Bypasses the locale-dependent "Aucune distribution en cours d'exécution"
+/// / "No distributions are running" stderr by using `--quiet`, which emits
+/// only distro names on stdout (one per line) and always exit-0 — empty
+/// output means no distros are running. `--quiet` output is UTF-16 on
+/// older WSL builds; `WSL_UTF8=1` forces UTF-8 (we tolerate either by
+/// trimming embedded null bytes from each line).
+fn distro_running() -> bool {
+    let Ok(output) = std::process::Command::new("wsl")
+        .args(["--list", "--running", "--quiet"])
+        .env("WSL_UTF8", "1")
+        .output()
+    else {
+        return false;
+    };
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    stdout
+        .lines()
+        .map(|line| line.trim().trim_matches('\u{0}').trim())
+        .any(|name| name == crate::wsl_lifecycle::DISTRO_NAME)
 }
 
 /// Shell out to `cmd.exe /c ver` and return the first non-empty line of
@@ -1499,6 +1537,8 @@ fn collect_report() -> DiagnoseReport {
         .map(|p| p.display().to_string())
         .unwrap_or_else(|_| "(unknown)".to_string());
 
+    let log_size_bytes = std::fs::metadata(&log).ok().map(|m| m.len());
+
     DiagnoseReport {
         // WORKSPACE_VERSION baked by build.rs from the repo-root VERSION file
         // so the JSON's `version` field matches the release tag instead of
@@ -1508,11 +1548,13 @@ fn collect_report() -> DiagnoseReport {
         install_path,
         log_path: log.display().to_string(),
         log_exists,
+        log_size_bytes,
         wsl_version: sniff_wsl_version(),
         os_version: sniff_windows_version(),
         wt_present,
         distro: crate::wsl_lifecycle::DISTRO_NAME,
         distro_registered,
+        distro_running: distro_running(),
         release_tag: crate::wsl_lifecycle::RECIPE_RELEASE_TAG,
         manifest_pin_x86_64_tar: manifest_pin,
         wire,
@@ -1527,7 +1569,14 @@ fn print_human(r: &DiagnoseReport) {
     println!("Build commit: {}", r.build_commit);
     println!("Install path: {}", r.install_path);
     println!("Log file:     {}", r.log_path);
-    println!("Log exists:   {}", if r.log_exists { "yes" } else { "no" });
+    println!(
+        "Log exists:   {}{}",
+        if r.log_exists { "yes" } else { "no" },
+        match r.log_size_bytes {
+            Some(n) => format!(" ({n} bytes)"),
+            None => String::new(),
+        }
+    );
     println!(
         "WSL:          {}",
         r.wsl_version.as_deref().unwrap_or("(not detected)")
@@ -1545,13 +1594,14 @@ fn print_human(r: &DiagnoseReport) {
         }
     );
     println!(
-        "Distro `{}`:  {}",
+        "Distro `{}`:  {}{}",
         r.distro,
         if r.distro_registered {
             "registered \u{2713}"
         } else {
             "NOT registered (run --provision-once to provision)"
-        }
+        },
+        if r.distro_running { ", running" } else { "" }
     );
     println!("Release tag:  {}", r.release_tag);
     println!(
@@ -2205,12 +2255,14 @@ mod tests {
             build_commit: "deadbeef",
             install_path: "C:\\path\\to\\tillandsias-tray.exe".to_string(),
             log_path: "C:\\path\\to\\tray.log".to_string(),
+            log_size_bytes: None,
             wsl_version: Some("WSL version: 2.7.3.0".to_string()),
             os_version: Some("Microsoft Windows [version 10.0.26200.8524]".to_string()),
             log_exists: false,
             wt_present: true,
             distro: "tillandsias",
             distro_registered: false,
+            distro_running: false,
             release_tag: "v0.0.0",
             manifest_pin_x86_64_tar: Some("abcdef123456".to_string()),
             wire: WireReport {
@@ -2235,11 +2287,13 @@ mod tests {
             "install_path",
             "log_path",
             "log_exists",
+            "log_size_bytes",
             "wsl_version",
             "os_version",
             "wt_present",
             "distro",
             "distro_registered",
+            "distro_running",
             "release_tag",
             "manifest_pin_x86_64_tar",
             "wire",

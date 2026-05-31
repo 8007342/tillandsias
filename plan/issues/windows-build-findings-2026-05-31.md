@@ -752,3 +752,124 @@ ever grow analogous fields.
 
 **Next iteration ask**: N/A (SECTION_KIND=ok). The 14-key
 DiagnoseReport is now comprehensive triage in a single JSON payload.
+
+---
+
+### 20260531T220000Z — ok (distro_running + log_size_bytes fields added to --diagnose)
+
+- agent_id: windows-bullo-claude-opus-20260531T220000Z
+- head_sha: 9d01461f (linux-next + osx-next both unchanged 6+ ticks now;
+  windows-next 10 ahead pre-this-commit, 11 ahead post)
+- version: 0.2.260528.1 (still pre-VERSION-sync; today's main release
+  v0.2.260531.1 hasn't propagated back to linux-next yet)
+- build_commit: 9d01461f
+- build_run_id: 20260531T220000Z
+
+**Sibling context**: no remote movement. linux-next + osx-next still
+unchanged 6+ ticks. windows-next 0/11. Merge-tree clean.
+
+**Change made**: two related triage-data additions to `DiagnoseReport`:
+1. **`distro_running: bool`**: did the WSL utility VM actually run at the
+   diagnose moment? `distro_registered` says "the distro exists on disk";
+   `distro_running` says "the distro is actively executing". WSL2 idles
+   VMs down when no host-side session holds them open, so this flag flips
+   frequently — capturing it directly avoids the operator having to run
+   `wsl --list --running` separately.
+2. **`log_size_bytes: Option<u64>`**: how big is the live tray.log? Pairs
+   with the prior tick's tray.log rotation feature — operators can see
+   "is my log growing?" and "how close to rotation am I?" from the JSON
+   alone (rotation threshold is `TRAY_LOG_MAX_BYTES = 5 MiB`). `None`
+   when log file missing (fresh install).
+
+Files touched (Windows-owned only):
+- `crates/tillandsias-windows-tray/src/notify_icon.rs`:
+  - `DiagnoseReport` struct: two new fields with full docblocks
+    (`distro_running` right after `distro_registered`; `log_size_bytes`
+    right after `log_exists`).
+  - New `fn distro_running() -> bool`: shells out to
+    `wsl --list --running --quiet` with `WSL_UTF8=1` (avoids the
+    locale-dependent stderr "Aucune distribution en cours d'exécution"
+    / "No distributions are running" by using `--quiet`, which always
+    exits 0 with empty stdout when no distros are running). Strips
+    embedded null bytes per-line (tolerates UTF-16 LE on older WSL
+    builds where `WSL_UTF8=1` isn't fully honored). Returns
+    `true` if any output line equals
+    `crate::wsl_lifecycle::DISTRO_NAME`.
+  - `collect_report`: populates both new fields (log_size_bytes via
+    `std::fs::metadata(&log).ok().map(|m| m.len())`; distro_running via
+    the new helper).
+  - `print_human`:
+    - "Log exists:" line now appends `(<N> bytes)` when the size is
+      known.
+    - "Distro" line now appends `", running"` when the distro is up.
+  - `baseline_diagnose_report` test helper: sets both new fields to
+    representative values (`log_size_bytes: None`,
+    `distro_running: false`).
+  - `diagnose_json_top_level_keys_pinned` extended to require both new
+    keys (16 keys total now, was 14).
+- `cheatsheets/runtime/windows-tray-diagnostics.md`:
+  - JSON schema block: 2 new rows (log_size_bytes between log_exists
+    and wsl_version; distro_running right after distro_registered)
+    with types + semantics documented.
+
+**Build**: 37.10 s release.
+
+**Tests**: 41 + 3 = 44 passed / 5 ignored (same total as prior tick;
+the new fields are covered by the extended
+`diagnose_json_top_level_keys_pinned` test which still counts as 1
+test). All green.
+
+**Smoke** (real hardware — French Windows, tillandsias distro
+registered but VM not running):
+- `--diagnose --json` exit 2 (expected; wire unreachable).
+- `distro_registered: true` (existing — distro exists on disk).
+- `distro_running: false` (NEW — correctly captures idle state; matches
+  the wire-unreachable status: VM idled down, no host-side session
+  holding it).
+- `log_size_bytes: 0` (NEW — tray.log freshly created by `init_tracing`
+  before the diagnose ran).
+- key count in JSON: **16** (was 14; +2 for the new fields).
+- All other 14 keys unchanged in shape + position.
+
+**Litmus**:
+- `windows-native-tray`: 7/7 PASS.
+- `cargo fmt`: clean.
+- `cargo clippy -D warnings`: clean.
+
+**Findings** (free-form):
+- The 16-key DiagnoseReport now answers the **5-W triage matrix** in
+  one payload:
+  - **What release** (`version`, `build_commit`, `install_path`)
+  - **What host** (`os_version`, `wsl_version`, `wt_present`)
+  - **What state** (`log_exists`, `log_size_bytes`, `distro_registered`,
+    `distro_running`, `wire{*}`)
+  - **What pinned config** (`distro`, `release_tag`,
+    `manifest_pin_x86_64_tar`)
+  - **What recent activity** (`recent_log_tail`, `log_path`)
+- The `distro_registered` + `distro_running` pair gives a 3-state
+  lifecycle view:
+  - registered=false: not yet provisioned
+  - registered=true, running=false: provisioned but idle (normal
+    steady state when no tray session is keepalive-holding the VM)
+  - registered=true, running=true: provisioned + active
+  This is more informative than the single-bool current state and
+  matches how WSL2 actually works (idle-down is automatic, not a
+  failure).
+- The `--quiet` mode of `wsl --list --running` is the right choice
+  for the sniffer: avoids the locale-dependent stderr stream + always
+  exits 0 with the distro names on stdout. Without it, parsing would
+  need a per-locale message dictionary (same trap I avoided in
+  `sniff_wsl_version` by emitting first-line-as-is).
+- The size-bytes addition pairs naturally with rotation: an operator
+  reading `log_size_bytes: 4500000` (4.3 MiB) knows rotation will fire
+  on the next launch (threshold 5 MiB). Discoverable from `--diagnose`
+  alone.
+
+**Cross-host visibility note**: pure Windows-tray-side addition; no
+cross-host coordination needed. macOS / Linux trays have different
+container-runtime lifecycle models (no analog to WSL2's idle-down) but
+could surface similar size-bytes fields for their own log files.
+
+**Next iteration ask**: N/A (SECTION_KIND=ok). The 16-key DiagnoseReport
+covers the 5-W triage matrix; further fields would be feature creep at
+this point.
