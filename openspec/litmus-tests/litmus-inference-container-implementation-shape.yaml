@@ -1,0 +1,146 @@
+# @trace spec:inference-container
+#
+# Drift-protection for the inference container AS-LAUNCHED via
+# `build_inference_run_args` + entrypoint.sh. spec:inference-
+# container has 6 reqs spanning local LLM inference + model cache
+# + lifecycle + NO_PROXY enclave peers + tier-tagged tool-capable
+# pulls + tier classification log.
+#
+# Existing bindings (`litmus:enclave-isolation` + `litmus:
+# inference-readiness-probe-shape` + `litmus:inference-deferred-
+# model-pulls`) covered enclave isolation + readiness probe + the
+# zen-default routing (via the parallel zen-default litmus binding
+# pinning T0/T1 pulls + ollama provider). What was NOT trapped:
+# the actual `build_inference_run_args` env-var inventory, the
+# entrypoint tier-classification line, T0/T1 cached-skip branch,
+# pull-failure-non-fatal handling, and the orphan inference_profile()
+# vs launch-site env-var divergence.
+#
+# 7th SPEC/IMPL DIVERGENCE flagged this session: spec § Req 1
+# + Req 4 mandate HTTP_PROXY/HTTPS_PROXY/NO_PROXY env vars on the
+# inference container, but build_inference_run_args sets NONE of
+# them. Dead-code smell: inference_profile() in container_profile.
+# rs declares the env vars but its env_vars field is never read by
+# the launch path. Spec.md divergence block + this litmus pin the
+# AS-DEPLOYED reality.
+name: litmus:inference-container-implementation-shape
+spec: inference-container
+phase: pre-build
+description: >
+  Pin the inference container's AS-LAUNCHED args + entrypoint
+  surfaces: detached/rm flags, security flags (cap-drop=ALL,
+  no-new-privileges, userns=keep-id), pids-limit=128, OLLAMA_*
+  env vars, model cache volume, CA cert mount, tier classification
+  log line, T0/T1 pull-or-cached branches, pull-failure-non-fatal
+  log shape, the orphan inference_profile() in container_profile.
+  rs declaring (currently unconsumed) proxy env vars.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-headless/src/main.rs
+  - workspace contains crates/tillandsias-core/src/container_profile.rs
+  - workspace contains images/inference/entrypoint.sh
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "Req trace: @trace spec:inference-container on entrypoint.sh"
+    # Spec § Purpose names entrypoint.sh as the lifecycle owner.
+    command: "grep -F 'spec:inference-container' images/inference/entrypoint.sh"
+    timeout_ms: 3000
+    expected_behavior: "spec:inference-container"
+
+  - step: "Req 1 + Req 3 launch: build_inference_run_args sets canonical container identity"
+    # Spec § Req 1 mandates `inference` hostname on enclave network.
+    # build_inference_run_args is the single launch site (no other
+    # path observed). Pin name=tillandsias-inference, hostname=
+    # inference, network-alias=inference so a refactor breaking
+    # enclave discovery surfaces.
+    command: "grep -A 30 'fn build_inference_run_args' crates/tillandsias-headless/src/main.rs | grep -F 'tillandsias-inference' && grep -A 30 'fn build_inference_run_args' crates/tillandsias-headless/src/main.rs | grep -F '\"inference\".into()' | head -1"
+    timeout_ms: 3000
+    expected_behavior: "inference"
+
+  - step: "Req inference security: --cap-drop=ALL + --security-opt=no-new-privileges + --userns=keep-id + --pids-limit=128"
+    # Container security flags are non-negotiable per the work-loop
+    # guardrails. Pin all 4 on the inference launch path.
+    command: "B=$(grep -A 30 'fn build_inference_run_args' crates/tillandsias-headless/src/main.rs); for p in 'cap-drop=ALL' 'security-opt=no-new-privileges' 'userns=keep-id' 'pids-limit=128'; do echo \"$B\" | grep -Fq \"$p\" || { echo \"FAIL: $p missing\"; exit 1; }; done && echo \"ok: 4 security flags pinned\""
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req 2 cache: model cache volume mount + CA cert bind-mount"
+    # Spec § Req 2 mandates `~/.cache/tillandsias/models` → `/home/
+    # ollama/.ollama/models` rw. The CA cert mount enables HTTPS
+    # trust for proxy bumping.
+    command: "grep -A 40 'fn build_inference_run_args' crates/tillandsias-headless/src/main.rs | grep -F '/home/ollama/.ollama/models:rw' && grep -A 40 'fn build_inference_run_args' crates/tillandsias-headless/src/main.rs | grep -F '/etc/tillandsias/ca.crt' | head -1"
+    timeout_ms: 3000
+    expected_behavior: "/etc/tillandsias/ca.crt"
+
+  - step: "Req 5 tier classification log: entrypoint emits single `tier=` line at boot"
+    # Spec § Req 5 mandates one `tier=` line summarizing the
+    # selected pull tier. Entrypoint line 106 is the impl site.
+    command: "grep -F '[inference] tier=' images/inference/entrypoint.sh"
+    timeout_ms: 3000
+    expected_behavior: "[inference] tier="
+
+  - step: "Req 5 tier table: entrypoint maps RAM/VRAM thresholds to T2/T3/T4/T5"
+    # Spec § Req 5 tier table mandates the GPU/RAM thresholds.
+    # Pin each branch literal so a regression silently lowering a
+    # threshold (e.g. T3 at GPU 4GB instead of 8GB) surfaces.
+    command: "COUNT=$(grep -cE 'TIER=\"T[2-5]\"' images/inference/entrypoint.sh); if [ \"$COUNT\" -ge 4 ]; then echo \"ok: $COUNT TIER=T[2-5] branches\"; else echo \"FAIL: $COUNT branches (expected >=4)\"; exit 1; fi"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req 4 pull-failure-non-fatal: entrypoint logs FAILED then continues (Squid EOF tolerance)"
+    # Spec § Req 4 § Scenario `Squid manifest-pull EOF is non-
+    # fatal` mandates pull failures log + continue, not abort.
+    # Entrypoint uses `if ollama pull X; then ok; else FAILED echo
+    # >&2; fi` pattern — pin the FAILED — inference degraded
+    # message that signals non-fatal continuation.
+    command: "FAILS=$(grep -cE '(T0|T1).*pull FAILED' images/inference/entrypoint.sh); if [ \"$FAILS\" -ge 2 ]; then echo \"ok: $FAILS pull-failure non-fatal sites (T0 + T1)\"; else echo \"FAIL: $FAILS sites (expected >=2)\"; exit 1; fi"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Divergence anchor: inference_profile() declares HTTP_PROXY but is orphaned"
+    # 7th SPEC/IMPL DIVERGENCE: spec § Req 1 + Req 4 mandate
+    # HTTP_PROXY/HTTPS_PROXY/NO_PROXY on inference. inference_
+    # profile() in container_profile.rs declares them but its
+    # env_vars field is NEVER consumed by the launch path (build_
+    # inference_run_args sets only OLLAMA_DEBUG + OLLAMA_KEEP_
+    # ALIVE). Spec.md flags this with `⚠ Implementation reality`
+    # block. Pin the orphan declaration so a refactor that finally
+    # wires it up surfaces this litmus for relaxation.
+    command: "grep -A 50 'pub fn inference_profile' crates/tillandsias-core/src/container_profile.rs | grep -F 'HTTP_PROXY' && grep -A 50 'pub fn inference_profile' crates/tillandsias-core/src/container_profile.rs | grep -F 'HTTPS_PROXY'"
+    timeout_ms: 3000
+    expected_behavior: "HTTPS_PROXY"
+
+observability:
+  traces:
+    - "@trace spec:inference-container"
+    - "@trace spec:podman-orchestration"
+    - "@trace spec:zen-default-with-ollama-analysis-pool"
+  expected_log: "inference container as-launched (build_inference_run_args identity + security flags + model cache + CA mount) + entrypoint tier classification + T0/T1 non-fatal failure handling + orphan inference_profile() proxy declaration all pinned alongside the spec.md divergence block"
+  log_fields:
+    spec: "inference-container"
+    test: "inference-container-implementation-shape"
+    artifact: "crates/tillandsias-headless/src/main.rs + crates/tillandsias-core/src/container_profile.rs + images/inference/entrypoint.sh"
+
+rollback:
+  on_failure: >
+    A `spec:inference-container` source surface drifted. Restore:
+    `@trace spec:inference-container` on entrypoint.sh; build_
+    inference_run_args identity (name=tillandsias-inference,
+    hostname=inference, network-alias=inference) + security flags
+    (--cap-drop=ALL, --security-opt=no-new-privileges, --userns=
+    keep-id, --pids-limit=128); model cache volume mount + CA
+    cert bind-mount; entrypoint `[inference] tier=` log line;
+    4-tier ladder (T2/T3/T4/T5 branches with the spec § Req 5
+    RAM/VRAM thresholds); >=2 pull-FAILED non-fatal sites (T0 +
+    T1); inference_profile() HTTP_PROXY/HTTPS_PROXY declarations
+    in container_profile.rs (currently orphaned per the spec.md
+    divergence block — if a refactor finally wires them into the
+    launch path, drop this step + the divergence block + relax
+    the litmus). NEVER set the proxy env vars at launch without
+    also setting NO_PROXY per spec § Req 4 (ollama loopback
+    probes would otherwise hairpin through Squid and stall model
+    loads).
+  command: "grep -nE 'fn build_inference_run_args|tier=|TIER=|inference_profile|HTTP_PROXY|NO_PROXY' crates/tillandsias-headless/src/main.rs crates/tillandsias-core/src/container_profile.rs images/inference/entrypoint.sh 2>/dev/null | head -20"

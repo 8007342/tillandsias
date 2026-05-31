@@ -388,7 +388,9 @@ specs:
   - litmus:enclave-isolation
   - litmus:inference-readiness-probe-shape
   - litmus:inference-deferred-model-pulls
-  coverage_ratio: 50
+  - litmus:inference-container-implementation-shape
+  coverage_ratio: 67
+  last_verified: '2026-05-30'
   last_verified: '2026-05-16'
 - spec_id: inference-host-side-pull
   status: obsolete
