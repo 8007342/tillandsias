@@ -57,6 +57,11 @@ critical_path:
     expected_behavior: "grep succeeds"
     timeout_ms: 3000
 
+  - step: "tray tooltip composer test attached"
+    command: "grep -F 'fn compose_tooltip_includes_version_and_status' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn compose_tooltip' crates/tillandsias-windows-tray/src/notify_icon.rs"
+    expected_behavior: "grep succeeds"
+    timeout_ms: 3000
+
   - step: "install-windows.ps1 contains the post-install --version + --diagnose sanity checks"
     command: "grep -F 'cmd.exe' scripts/install-windows.ps1 && grep -Fe '--diagnose --json' scripts/install-windows.ps1 && grep -Fe '--version' scripts/install-windows.ps1 && grep -F 'install bits broken' scripts/install-windows.ps1 && grep -F 'build_commit' scripts/install-windows.ps1"
     expected_behavior: "grep succeeds"

@@ -128,13 +128,18 @@ fn update_status_text(text: &str, hwnd: HWND) {
         }
     }
     // Update the tooltip on the live icon so users can mouseover for a
-    // quick read.
+    // quick read. Includes the workspace VERSION via compose_tooltip so a
+    // mouseover answers "what version am I running + what state is it in?"
+    // in one glance.
     let mut nid: NOTIFYICONDATAW = unsafe { std::mem::zeroed() };
     nid.cbSize = std::mem::size_of::<NOTIFYICONDATAW>() as u32;
     nid.hWnd = hwnd;
     nid.uID = TRAY_ICON_ID;
     nid.uFlags = NIF_TIP;
-    write_utf16_into(&mut nid.szTip, text);
+    write_utf16_into(
+        &mut nid.szTip,
+        &compose_tooltip(env!("WORKSPACE_VERSION"), text),
+    );
     unsafe {
         let _ = Shell_NotifyIconW(NIM_MODIFY, &nid);
     }
@@ -167,6 +172,24 @@ fn show_balloon(hwnd: HWND, title: &str, message: &str, severity: BalloonSeverit
     };
     unsafe {
         let _ = Shell_NotifyIconW(NIM_MODIFY, &nid);
+    }
+}
+
+/// Compose the tray-icon tooltip from a workspace version string + the live
+/// status chip. Format: `"Tillandsias <version>\n<status>"`. Operators
+/// hovering the tray icon get version + state in one mouseover — no need
+/// to right-click the menu just to read the version footer or pop a
+/// `--diagnose` to confirm "is this the new build?". `write_utf16_into`
+/// truncates safely at 127 chars (szTip is u16; 128 with null terminator)
+/// if the composed string ever exceeds that.
+///
+/// Pure helper so a unit test can pin the format without touching Win32.
+/// Pinned by `compose_tooltip_includes_version_and_status`.
+fn compose_tooltip(version: &str, status: &str) -> String {
+    if status.is_empty() {
+        format!("Tillandsias {version}")
+    } else {
+        format!("Tillandsias {version}\n{status}")
     }
 }
 
@@ -1534,7 +1557,12 @@ unsafe fn add_tray_icon(hwnd: HWND) -> windows::core::Result<()> {
     nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
     nid.uCallbackMessage = WM_TRAYICON;
     nid.hIcon = icon;
-    write_utf16_into(&mut nid.szTip, "Tillandsias");
+    // Initial tooltip — version-only until the first update_status_text call
+    // appends the live status chip. Uses compose_tooltip's "no status" branch.
+    write_utf16_into(
+        &mut nid.szTip,
+        &compose_tooltip(env!("WORKSPACE_VERSION"), ""),
+    );
     let ok = Shell_NotifyIconW(NIM_ADD, &nid);
     if !ok.as_bool() {
         return Err(windows::core::Error::from_win32());
@@ -2098,6 +2126,45 @@ mod tests {
         assert!(
             !line.contains("0.1.0 ("),
             "version line still reporting CARGO_PKG_VERSION shape: {line}"
+        );
+    }
+
+    /// `compose_tooltip` is the pure formatter for the tray's mouseover
+    /// tooltip. Pin: includes "Tillandsias" prefix + version; when status
+    /// is empty produces a version-only single-line tooltip; when status
+    /// is non-empty joins with a newline. szTip is 128 chars in
+    /// NOTIFYICONDATAW; this format is well within bounds for any realistic
+    /// version + status combo.
+    #[test]
+    fn compose_tooltip_includes_version_and_status() {
+        // Version-only (initial tray setup before any status update).
+        assert_eq!(
+            compose_tooltip("0.2.260528.1", ""),
+            "Tillandsias 0.2.260528.1"
+        );
+        // Version + status (live tray after update_status_text).
+        let with_status = compose_tooltip("0.2.260528.1", "\u{1F534} Wire unreachable");
+        assert!(
+            with_status.starts_with("Tillandsias 0.2.260528.1"),
+            "tooltip should start with name + version: {with_status}"
+        );
+        assert!(
+            with_status.contains('\n'),
+            "tooltip should separate version and status with a newline: {with_status}"
+        );
+        assert!(
+            with_status.ends_with("\u{1F534} Wire unreachable"),
+            "tooltip should end with the status text verbatim: {with_status}"
+        );
+        // Length sanity: realistic worst-case fits within szTip's 128 u16.
+        let realistic_max = compose_tooltip(
+            "0.2.260528.1",
+            "\u{1F7E2} Ready \u{00B7} forge-something-with-a-longish-name created",
+        );
+        assert!(
+            realistic_max.encode_utf16().count() < 128,
+            "tooltip should fit szTip's 128-u16 buffer: {} chars",
+            realistic_max.encode_utf16().count()
         );
     }
 

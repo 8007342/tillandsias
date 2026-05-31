@@ -1045,3 +1045,105 @@ macOS-host territory.
 flow is now operator-grade: `-Launch`, `-Startup`, `-Provision`,
 `-DebugBuild`, `-Uninstall`, `-Purge` — full lifecycle coverage with
 clear semantics + leftover discoverability.
+
+---
+
+### 20260531T032000Z — ok (tray tooltip now includes workspace VERSION)
+
+- agent_id: windows-bullo-claude-opus-20260531T032000Z
+- head_sha: a61f80a5 (post-merge of linux-next +12 commits — cli-diagnostics
+  tombstone align 88→87 + inference-container 50→67 + 7th impl divergence
+  fix + claude-repeat new script + cycle 01:43Z merging my prior 14ccbda2;
+  no shared-contract churn)
+- version: 0.2.260528.1
+- build_commit: 14ccbda2
+- build_run_id: 20260531T032000Z
+
+**Sibling context** (no windows-tray action required):
+- linux-next +12 commits: linux-internal litmus pinning + the
+  cli-diagnostics spec tombstone (87 active specs now) + inference-container
+  fix.
+- osx-next still stalled at b4a45622 (~19h 16min, 11 cycles per integration
+  cycle 01:43Z — "deepest stall of session continues to extend").
+
+**Change made**: tray icon mouseover tooltip now includes the workspace
+VERSION. Before this commit: hovering the tray icon showed just the live
+status text (e.g. "🔴 Wire unreachable"). After: shows "Tillandsias
+<workspace VERSION>" on the first line and the live status on the
+second. Operators triaging via mouseover get version + state in one
+glance — no need to right-click the menu just to read the version
+footer or pop `--diagnose` to confirm the running build's identity.
+
+Files touched (Windows-owned only):
+- `crates/tillandsias-windows-tray/src/notify_icon.rs`:
+  - New pure `compose_tooltip(version: &str, status: &str) -> String`
+    helper. Empty-status branch returns single-line `"Tillandsias
+    <version>"` (initial tray-icon registration before any status
+    update). Non-empty-status branch returns 2-line `"Tillandsias
+    <version>\n<status>"`. Format is well within szTip's 128-u16 buffer
+    for any realistic version + status combo (asserted in pin test).
+  - Updated `update_status_text` (live tooltip update site, called
+    on every status change): now writes `compose_tooltip(WORKSPACE_VERSION,
+    text)` instead of raw `text`. Preserves the existing semantics
+    (`uFlags = NIF_TIP`, `Shell_NotifyIconW(NIM_MODIFY, &nid)`).
+  - Updated `add_tray_icon` (initial registration): now writes
+    `compose_tooltip(WORKSPACE_VERSION, "")` instead of the
+    hardcoded `"Tillandsias"`. The initial tooltip is now version-aware.
+  - +1 pin test `compose_tooltip_includes_version_and_status` covers:
+    empty-status branch produces single-line; non-empty produces 2-line
+    starting with `"Tillandsias <version>"` and ending with the status
+    verbatim; realistic worst-case fits within szTip's 128-u16 buffer.
+- `openspec/litmus-tests/litmus-windows-tray-diagnose-cli-surface.yaml`:
+  - New step "tray tooltip composer test attached" requires both the
+    `fn compose_tooltip_includes_version_and_status` pin test and the
+    `fn compose_tooltip` helper itself.
+
+**Build**: 39.28 s release. Binary 6,342,144 bytes (up 15,872 bytes from
+the prior install — composer + pin test + comment block).
+
+**Tests**: 39 + 3 = 42 passed / 5 ignored (+1 over prior tick's 38+3 =
+41 baseline; the new compose_tooltip test is the addition).
+
+**Smoke**:
+- Binary launches via `--diagnose --json`: exit 2 (expected steady
+  state), `version: 0.2.260528.1` (unchanged — the tooltip composer
+  reuses the same WORKSPACE_VERSION env var the diagnose surface uses,
+  so they're guaranteed self-consistent).
+- The tooltip itself is a Win32 mouseover surface that only manifests
+  when the GUI tray is running. Pure-function pin test + the binary's
+  continued ability to start (verified via `--diagnose` exit code) is
+  the verification chain. Visual mouseover unsmoked — would require
+  launching the GUI tray mid-loop which is undesirable.
+
+**Litmus**:
+- `windows-native-tray`: 7/7 PASS (new "tray tooltip composer test
+  attached" step green; full spec count now 87 due to today's
+  cli-diagnostics tombstone but bound litmus coverage unchanged).
+- `cargo fmt`: clean.
+- `cargo clippy -D warnings`: clean.
+
+**Findings** (free-form):
+- The tooltip is the 4th place a user can ask "what version am I
+  running?" — joining `--version`, `--diagnose --json version`, and the
+  tray menu's version footer. All four route through the same
+  `WORKSPACE_VERSION` env var the windows-tray's `build.rs` bakes from
+  `../../VERSION`, so they cannot disagree (compiler-enforced
+  self-consistency via `env!`).
+- Visual UX: when the user hovers the icon, they see the binary
+  identity AND the live state in one mouseover. The 2-line format
+  separates concerns cleanly (Win32 tooltips handle newlines fine).
+- The pin test's `realistic_max` case (with the longest realistic
+  status text I could construct — phase + middle-dot + forge name with
+  a long suffix) confirms the format stays under 128 u16 chars even
+  for worst-case live states. szTip silently truncates beyond that;
+  the assert means future format changes that would silently truncate
+  surface here pre-build.
+
+**Cross-host visibility note**: pure Windows-tray-side addition; no
+cross-host coordination needed. macOS-tray's NSStatusItem tooltip is
+structurally separate; if macOS wants symmetric tooltip enrichment,
+the `compose_tooltip` pattern is mirror-able.
+
+**Next iteration ask**: N/A (SECTION_KIND=ok). The 4 visible
+version-display surfaces (CLI --version, diagnose JSON, menu footer,
+tray tooltip) are now all wired to the same source of truth.
