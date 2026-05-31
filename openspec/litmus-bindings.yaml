@@ -145,11 +145,11 @@ specs:
   coverage_ratio: 0
   last_verified: '2026-05-06'
 - spec_id: cli-diagnostics
-  status: active
-  litmus_tests:
-  - litmus:diagnostics-envelope-shape
-  coverage_ratio: 25
-  last_verified: '2026-05-29'
+  status: obsolete
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-05-31'
+  tombstone: superseded:runtime-diagnostics+runtime-diagnostics-stream+logging-accountability
 - spec_id: cli-mode
   status: active
   litmus_tests:
@@ -600,8 +600,9 @@ specs:
   - litmus:runtime-diagnostics-emitter-shape
   - litmus:runtime-diagnostics-typed-events-shape
   - litmus:container-start-health
+  - litmus:diagnostics-envelope-shape
   coverage_ratio: 100
-  last_verified: '2026-05-29'
+  last_verified: '2026-05-31'
 - spec_id: runtime-logging
   status: active
   litmus_tests:

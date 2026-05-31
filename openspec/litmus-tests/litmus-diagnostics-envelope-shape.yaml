@@ -1,6 +1,12 @@
-# @trace spec:cli-diagnostics, spec:runtime-diagnostics-stream
+# @trace spec:runtime-diagnostics-stream, spec:cli-diagnostics
 # @trace plan/issues/forge-diagnostics-automation-2026-05-27.md
 #   (USER PRIORITY sub-deliverable (a))
+#
+# Re-homed 2026-05-31: cli-diagnostics is a tombstone
+# (superseded:runtime-diagnostics+runtime-diagnostics-stream+
+# logging-accountability). The diagnostics-envelope contract it pins is
+# LIVE under runtime-diagnostics-stream, so the canonical `spec:` binding
+# moved there; the cli-diagnostics @trace stays as a historical reference.
 #
 # Diagnostics-Envelope Shape: Rust-emitter ↔ bash-consumer symmetry.
 #
@@ -14,7 +20,7 @@
 # at type-check time, not in a production run with a confused operator
 # scratching their head at TIMESTAMP=unknown.
 name: litmus:diagnostics-envelope-shape
-spec: cli-diagnostics
+spec: runtime-diagnostics-stream
 phase: pre-build
 description: >
   Drift protection for the diagnostics-envelope stderr line: pin both
@@ -72,7 +78,7 @@ observability:
     - "@trace plan/issues/forge-diagnostics-automation-2026-05-27.md (sub-deliverable (a))"
   expected_log: "Rust emitter + bash consumer pin the same envelope format"
   log_fields:
-    spec: "cli-diagnostics"
+    spec: "runtime-diagnostics-stream"
     test: "diagnostics-envelope-shape"
     rust_artifact: "crates/tillandsias-headless/src/main.rs"
     bash_artifact: "scripts/distill-forge-diagnostics.sh"
