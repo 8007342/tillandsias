@@ -953,3 +953,95 @@ cross-host coordination needed.
 **Next iteration ask**: N/A (SECTION_KIND=ok). The 3 windows
 operator-facing scripts (install-windows.ps1, tray-diagnose.ps1,
 diagnose-windows.ps1) are now mutually consistent + accurate.
+
+---
+
+### 20260531T013000Z — ok (install-windows.ps1 -Purge mode + -Uninstall leftovers warning)
+
+- agent_id: windows-bullo-claude-opus-20260531T013000Z
+- head_sha: 6c3329dc (post-merge of linux-next +9 commits — default-image,
+  forge-welcome, forge-shell-tools litmus pins + 1 sibling merge of my
+  prior 8490a364; no shared-contract churn)
+- version: 0.2.260528.1
+- build_commit: 8490a364
+- build_run_id: 20260531T013000Z
+
+**Sibling context** (no windows-tray action required):
+- linux-next +9 commits: all litmus pinning slices (`default-image` 50→75,
+  `forge-welcome` 50→75, `forge-shell-tools` 50→67 + 6th impl divergence
+  flagged) + cycle 23:43Z merging my prior 8490a364 cleanly.
+- osx-next still stalled at b4a45622 (~17 hours; deep escalation flag from
+  loop persists).
+- merge-tree clean.
+
+**Change made**: closed a real install-UX gap I noticed while auditing
+the diagnose-windows.ps1 script — `-Uninstall` removed install bits +
+shortcuts but left ~1GB+ of cached state behind (downloaded rootfs,
+WSL distro VHDX, logs). Operators expecting "clean removal" hit
+residual disk usage. Added a `-Purge` flag for full cleanup, and
+upgraded the existing `-Uninstall` flow to enumerate what's left
+behind + point at `-Purge` for the deeper path.
+
+Files touched:
+- `scripts/install-windows.ps1`:
+  - **New `-Purge` switch param** with full docblock. Mirrors apt-get
+    purge semantics (`-Uninstall` = remove install bits;
+    `-Purge` = -Uninstall + scrub all cached state).
+  - **Combined Uninstall/Purge block**: structured single flow that:
+    1. Always stops the running tray + removes shortcuts + removes
+       install dir (today's behavior).
+    2. If -Purge: `wsl --unregister tillandsias` (best-effort,
+       tolerates "no distro" + wsl-not-installed) + removes
+       `%LOCALAPPDATA%\tillandsias\{cache,logs,wsl}` + removes the
+       now-empty data root.
+    3. If -Uninstall (no Purge): enumerates leftover directories +
+       reports the WSL distro registration state, prints a "Left
+       behind (use -Purge for full cleanup)" yellow warning block
+       so the deeper-cleanup path is discoverable.
+  - DocBlock updated: new `.PARAMETER Purge` block + new EXAMPLE row +
+    expanded `.PARAMETER Uninstall` docs to note the leftover semantics
+    + pointer to `-Purge`.
+
+**Build**: N/A (script-only change; binary unchanged).
+
+**Smoke** (real hardware — exercised both paths):
+- `scripts\install-windows.ps1 -Uninstall`: removed Start Menu shortcut
+  + install dir, then printed yellow `Left behind (use -Purge for full
+  cleanup):` block listing the 4 leftover items (cache dir + logs dir
+  + wsl dir + the WSL distro registration `tillandsias`).
+- Reinstall (`scripts\install-windows.ps1` no args): rebuild via
+  build-windows-tray.ps1 subscript (which my prior tick fixed) →
+  Layer 1 `--version` + Layer 2 `--diagnose --json` verification both
+  clean. Confirms install side is end-to-end green.
+- `windows-native-tray` litmus: 7/7 PASS.
+- `-Purge` itself NOT exercised on this host (the local WSL distro has
+  500MB of state I don't want to destroy mid-loop). The control flow
+  is straightforward (it's `-Uninstall` + 4 well-bounded `Remove-Item`
+  + 1 `wsl --unregister` invocation) and was reviewed in code.
+
+**Findings** (free-form):
+- The leftovers-warning UX matters: it surfaces the data layout to
+  operators who otherwise wouldn't know they have 1GB+ of cached state
+  in `%LOCALAPPDATA%\tillandsias\` after a "clean" uninstall. It also
+  makes the `-Purge` path discoverable without requiring docs reading.
+- The `-Purge` flow uses best-effort error handling throughout
+  (`-ErrorAction SilentlyContinue` on Remove-Item, tolerant of
+  wsl-not-installed) so a partial-state cleanup doesn't fail the
+  script halfway through. Each failure surfaces a yellow `WARN:` line
+  the operator can act on.
+- One install-UX gap remains: there's no `-Update` mode that just
+  rebuilds + replaces the binary without re-creating shortcuts. Today
+  re-running the script no-args does the full install path again (it
+  Compress-Archives an unchanged shortcut, etc.). Low priority — the
+  full reinstall is fast enough — but flagged here for future
+  consideration.
+
+**Cross-host visibility note**: pure Windows-side script change. No
+cross-host coordination needed. macOS-tray's install-macos.sh has its
+own uninstall semantics; symmetric purge could be useful there but is
+macOS-host territory.
+
+**Next iteration ask**: N/A (SECTION_KIND=ok). The install-windows.ps1
+flow is now operator-grade: `-Launch`, `-Startup`, `-Provision`,
+`-DebugBuild`, `-Uninstall`, `-Purge` — full lifecycle coverage with
+clear semantics + leftover discoverability.
