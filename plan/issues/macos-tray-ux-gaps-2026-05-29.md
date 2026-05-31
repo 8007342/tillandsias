@@ -49,6 +49,8 @@ check the contract.
 
 ### gap-3 — "Failed to fetch recipe" surfaces to the user during normal launch
 
+gap-3 status update 2026-05-30 via /test-e2e-macos-tray run 20260530T121550Z (head b4a45622): the **fetch path itself succeeds** autonomously — stderr shows `rootfs.img fetched successfully` and an 8 GiB rootfs.img persists at `~/Library/Application Support/tillandsias/rootfs.img` post-run. NOT marking `resolved` because (a) the user's "failed to fetch recipe" string was UI-surfaced, and the e2e run never got to inspect the UI (process died before §3 could AX-dump — see gap-4), and (b) `provisioned: false` still holds because `kernel_present=false, initrd_present=false`. So the worker-level fetch is fine; what may still be broken is either (i) the user-visible surfacing of fetch status in the menu/tooltip, or (ii) a separate kernel/initrd fetch path that isn't covered by the rootfs.img fetch. Needs user-attended re-verification against `~/Applications/Tillandsias.app` (currently the 20260531T065036Z install at HEAD b4a45622).
+
 - SECTION_KIND: runtime-failure
 - observed: 2026-05-29, same bundle as gap-1
 - expected (`openspec/specs/macos-native-tray/spec.md:95-117` + spec:vm-provisioning-lifecycle): first-run path SHALL fetch the rootfs/manifest pinned in `images/vm/manifest.toml` (currently SHA `6859a7bc...9730bee` on release `v0.2.260526.1` per `plan/issues/osx-next-work-queue-2026-05-25.md:9-16`) and proceed toward VZ guest boot. Errors that *do* occur should be diagnosable, not opaque.
@@ -61,6 +63,19 @@ check the contract.
 - verification to add to `/test-e2e-macos-tray`: launch installed bundle with `--no-auto-boot` (does not exist yet — see findings file iteration note), OR launch + wait + dump stderr, assert no "failed to fetch" line, assert `--diagnose --json` shows `provisioned=true` after a successful run
 
 ---
+
+### gap-4 — Tray bundle dies between t=3s and t=30s, after a successful recipe fetch
+
+- SECTION_KIND: runtime-failure
+- discovered: 2026-05-30 via /test-e2e-macos-tray run 20260530T121550Z (head b4a45622)
+- expected (`openspec/specs/macos-native-tray/spec.md` + spec:vm-provisioning-lifecycle): a launched tray binary stays resident for as long as the user wants it — the NSStatusItem is supposed to remain in the menu bar until the user clicks "Quit Tillandsias". Background work (recipe fetch, VZ guest boot) should NOT terminate the main process when it completes or fails.
+- actual: at t=3s the process is alive (confirmed every `/build-macos-tray` autonomous-smoke run today); at t=30s the process is dead (no SIGTERM, no SIGKILL — just gone). The last stderr line before the death is `[tillandsias-tray] Start VM: rootfs.img fetched successfully`, suggesting the death happens in the post-fetch path.
+- likely cause hypotheses (none confirmed):
+  - the auto-boot worker exits cleanly after fetch completes because the rest of the provisioning (kernel/initrd fetch + VZ guest boot) is unwired in current code, and the parent process is coupled to the worker's lifetime (it shouldn't be — per spec the tray owns the NSStatusItem regardless of worker state)
+  - a panic in the post-fetch path that doesn't make it to stderr (SIGABRT or similar)
+  - intentional behavior in dev mode (e.g. "exit after fetch" debugging path that wasn't removed)
+- evidence: full stderr at `/tmp/macos-e2e-20260530T121550Z/stderr.log` (only 3 lines); rootfs.img on disk (8 GiB) post-mortem; partial xz file lingering (76 MB)
+- verification to add to `/test-e2e-macos-tray`: check liveness every 5s from t=0 to t=60s and record the death-time bracket; if the death is reproducible, capture the exit code via wait(2) (which the current `&` + `kill -0` flow throws away)
 
 ## What the next iteration should do
 
