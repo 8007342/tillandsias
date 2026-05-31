@@ -1190,6 +1190,14 @@ struct DiagnoseReport {
     /// into a bug report (the workspace `version` rolls only on release,
     /// so two binaries from the same release tag can still differ).
     build_commit: &'static str,
+    /// Path the running binary was invoked from (`std::env::current_exe()`).
+    /// Lets an operator confirm whether the tray that just produced this
+    /// report is the installed copy under `%LOCALAPPDATA%\Programs\
+    /// Tillandsias\` or a dev build run from `target\release\` — a common
+    /// "why isn't my fix showing up?" triage question. Falls back to
+    /// `"(unknown)"` if `current_exe` errors (rare; should not happen on
+    /// supported Windows hosts).
+    install_path: String,
     log_path: String,
     log_exists: bool,
     wt_present: bool,
@@ -1353,12 +1361,17 @@ fn collect_report() -> DiagnoseReport {
         })
         .unwrap_or_default();
 
+    let install_path = std::env::current_exe()
+        .map(|p| p.display().to_string())
+        .unwrap_or_else(|_| "(unknown)".to_string());
+
     DiagnoseReport {
         // WORKSPACE_VERSION baked by build.rs from the repo-root VERSION file
         // so the JSON's `version` field matches the release tag instead of
         // the crate's static `Cargo.toml` `0.1.0`. See build.rs for details.
         version: env!("WORKSPACE_VERSION"),
         build_commit: env!("BUILD_COMMIT_SHA"),
+        install_path,
         log_path: log.display().to_string(),
         log_exists,
         wt_present,
@@ -1376,6 +1389,7 @@ fn print_human(r: &DiagnoseReport) {
     println!("===========================");
     println!("Version:      {}", r.version);
     println!("Build commit: {}", r.build_commit);
+    println!("Install path: {}", r.install_path);
     println!("Log file:     {}", r.log_path);
     println!("Log exists:   {}", if r.log_exists { "yes" } else { "no" });
     println!(
@@ -2031,6 +2045,7 @@ mod tests {
         DiagnoseReport {
             version: "0.0.0-test",
             build_commit: "deadbeef",
+            install_path: "C:\\path\\to\\tillandsias-tray.exe".to_string(),
             log_path: "C:\\path\\to\\tray.log".to_string(),
             log_exists: false,
             wt_present: true,
@@ -2057,6 +2072,7 @@ mod tests {
         for key in [
             "version",
             "build_commit",
+            "install_path",
             "log_path",
             "log_exists",
             "wt_present",

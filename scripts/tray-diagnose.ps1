@@ -104,6 +104,8 @@ Write-Host 'Identity:'
 Write-Check 'version           ' $true $report.version
 $commit = if ($report.build_commit) { $report.build_commit } else { '(unknown)' }
 Write-Check 'build commit      ' $true $commit
+$installPath = if ($report.install_path) { $report.install_path } else { '(unknown)' }
+Write-Check 'install path      ' $true $installPath
 Write-Check 'log file exists   ' $report.log_exists $report.log_path
 if (-not $report.log_exists) { $failures++ }
 

@@ -211,3 +211,96 @@ mirror needed.
 
 **Next iteration ask**: N/A (SECTION_KIND=ok). The tray.log surface
 is now disk-safe for long-running sessions.
+
+---
+
+### 20260531T120000Z — ok (install_path field added to --diagnose JSON)
+
+- agent_id: windows-bullo-claude-opus-20260531T120000Z
+- head_sha: 2f2fbff6 (linux-next + osx-next both unchanged across 2 ticks
+  now; windows-next 5 ahead pre-this-commit)
+- version: 0.2.260528.1
+- build_commit: 2f2fbff6 (will self-update at next rebuild)
+- build_run_id: 20260531T120000Z
+
+**Sibling context**: linux-next velocity-cooldown persists; osx-next idle.
+No remote movement this tick. Merge-tree clean.
+
+**Change made**: added `install_path: String` field to `DiagnoseReport`.
+Today operators triaging "is this the installed copy or a dev build from
+target/release/?" can't answer it from `--diagnose` alone — `log_path` is
+there but not the binary's own path. Common "why isn't my fix showing
+up?" question, especially on Windows where the install path is
+non-obvious (`%LOCALAPPDATA%\Programs\Tillandsias\tillandsias-tray.exe`).
+
+Files touched (Windows-owned only):
+- `crates/tillandsias-windows-tray/src/notify_icon.rs`:
+  - `DiagnoseReport` struct: new `install_path: String` field with
+    docblock pointing at `std::env::current_exe()` + the `"(unknown)"`
+    fallback semantics.
+  - `collect_report`: computes `install_path` from `std::env::current_exe()
+    .map(...).unwrap_or_else(...)` and threads it into the report.
+  - `print_human`: new `Install path: <path>` row between `Build commit:`
+    and `Log file:` (matches the existing pad-to-13 column layout).
+  - `baseline_diagnose_report` test helper: sets a representative
+    `"C:\\path\\to\\tillandsias-tray.exe"` for the pin tests.
+  - `diagnose_json_top_level_keys_pinned`: extended to require
+    `install_path` as the 4th pinned key (was 11, now 12 — pinned-key
+    set grows by 1).
+- `scripts/tray-diagnose.ps1`: Identity section new `install path` row
+  alongside `version` + `build commit`. Sources `$report.install_path`
+  with `(unknown)` fallback.
+- `cheatsheets/runtime/windows-tray-diagnostics.md`: JSON schema block
+  has a new `"install_path"` row with the type + fallback documented.
+
+**Build**: 50.80 s release (slower than usual — cold cache after the
+prior tick's tray.log rotation commit re-touched the crate). Tests:
+40 + 3 = 43 passed / 5 ignored (unchanged from prior tick's
+post-rotation 43 baseline; the new field is covered by the existing
+`diagnose_json_top_level_keys_pinned` test which expanded but stays 1
+test).
+
+**Smoke** (post-install, real hardware):
+- `--diagnose --json` exit 2 (expected; wire unreachable).
+- `install_path` field: `"C:\\Users\\bullo\\AppData\\Local\\Programs\\
+  Tillandsias\\tillandsias-tray.exe"` — the canonical install location.
+- key count in JSON: 12 (was 11; +1 for install_path).
+- `scripts\tray-diagnose.ps1` Identity section now shows
+  `PASS install path : C:\\...\\tillandsias-tray.exe` row alongside
+  the existing version + build-commit rows. Existing flows downstream
+  (Windows host / Recipe / Control wire / Recent log activity)
+  unchanged.
+
+**Litmus**:
+- `windows-native-tray`: 7/7 PASS (the `diagnose_json_top_level_keys_pinned`
+  pin step verifies the new field is present in the test struct + JSON
+  output).
+- `cargo fmt`: clean.
+- `cargo clippy -D warnings`: clean.
+
+**Findings** (free-form):
+- The 12-key DiagnoseReport now answers the 3 fundamental "what is
+  this binary?" questions in one report: **what release tag** (`version`
+  = workspace VERSION), **what specific commit** (`build_commit` = short
+  SHA), **what install location** (`install_path` = the running exe's
+  path). Operators triaging a support ticket can paste the JSON and
+  the support engineer has the complete provenance picture without
+  follow-up.
+- The `current_exe()` failure path (returns `"(unknown)"`) is rare on
+  Windows — `current_exe` on Win32 ultimately calls `GetModuleFileNameW`
+  which should always succeed for a running process. The defensive
+  fallback exists for the principled "diagnose JSON shape is
+  invariant" reason: every key always present, every value at the
+  promised type.
+- The pin-test extension to the keys list means a future refactor that
+  drops `install_path` surfaces here pre-build instead of as
+  silent triage data loss in the field.
+
+**Cross-host visibility note**: pure Windows-tray-side addition; no
+cross-host coordination needed. macOS-tray's `--diagnose --json` could
+mirror this addition if its operators want symmetric install-location
+triage, but that's macOS-host territory.
+
+**Next iteration ask**: N/A (SECTION_KIND=ok). The DiagnoseReport now
+has complete binary-identity provenance (what release + what commit +
+what location).

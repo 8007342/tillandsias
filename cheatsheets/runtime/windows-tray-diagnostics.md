@@ -101,6 +101,7 @@ The JSON shape is pinned by unit tests in `notify_icon::tests::diagnose_json_*` 
 {
   "version":                "0.2.260528.1", // string — workspace VERSION baked at build (was CARGO_PKG_VERSION pre-2026-05-30; see build.rs)
   "build_commit":           "a963c16d",     // string — short git SHA the binary was built from, or "unknown" if git unavailable
+  "install_path":           "C:\\...\\tillandsias-tray.exe", // string — std::env::current_exe(), or "(unknown)" on rare failure
   "log_path":               "C:\\...\\tray.log", // string  — fixed %LOCALAPPDATA%\tillandsias\logs\tray.log
   "log_exists":             true,          // bool
   "wt_present":             true,          // bool    — Windows Terminal on PATH (Open Shell prefers it)
