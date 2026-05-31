@@ -2,7 +2,7 @@
 tags: [windows, tray, diagnostics, json, support, wsl2]
 languages: [rust, powershell]
 since: 2026-05-28
-last_verified: 2026-05-30
+last_verified: 2026-05-31
 sources:
   - internal
 authority: internal
@@ -14,27 +14,45 @@ tier: bundled
 
 @trace spec:windows-native-tray
 
-**Version baseline**: `tillandsias-tray` v0.1.0+ on the windows-next platform branch.
+**Version baseline**: `tillandsias-tray` 0.2.260530.1+ (workspace VERSION;
+on releases `v0.2.260530.1` and later). Reported by `--version`,
+`--diagnose --json` `version` field, tray menu footer, and Win11 toast
+on Ready transition — all routed through the same `WORKSPACE_VERSION`
+env var `build.rs` bakes from the repo-root `VERSION` file.
 **Use when**: an installed Tillandsias tray on a Windows host is misbehaving and you need to figure out which leg (host, distro, control wire, headless) is degraded — or you need a machine-readable health report to feed a support tool.
 
 ## Provenance
 
-- `crates/tillandsias-windows-tray/src/notify_icon.rs` — the four diagnostic entry points are defined here.
-- `scripts/tray-diagnose.ps1` — the canonical PowerShell consumer of `--diagnose --json`.
-- `scripts/diagnose-windows.ps1` — distinct pre-tray host-facts diagnostic (no `--diagnose` involvement).
-- **Last updated:** 2026-05-28 (commits `20fb9d1f` `c4908438` `e96d1fc8`).
+- `crates/tillandsias-windows-tray/src/notify_icon.rs` — every CLI mode + the
+  Win32 GUI entry points are defined here. `git log notify_icon.rs` shows the
+  per-feature history; the schema-pin unit tests (`diagnose_json_top_level_keys_pinned`,
+  `status_once_json_keys_pinned`, `help_text_documents_all_cli_modes`,
+  `first_line_handles_all_cases`, `should_rotate_log_at_threshold_boundary`,
+  `compose_tooltip_includes_version_and_status`, `select_log_tail_handles_all_cases`)
+  pin the operator-facing contracts.
+- `scripts/tray-diagnose.ps1` — the canonical PowerShell consumer of
+  `--diagnose --json`. Surfaces version + build_commit + install_path +
+  recent log activity.
+- `scripts/diagnose-windows.ps1` — distinct pre-tray host-facts diagnostic
+  (no `--diagnose` involvement). Reports WSL2 / distro / cache layout /
+  installed-tray identity via `--version`.
+- `scripts/install-windows.ps1` — installer with `-Launch`, `-Startup`,
+  `-Provision`, `-DebugBuild`, `-Uninstall`, `-Purge`. Two-layer
+  post-install verification (`--version` preflight + `--diagnose --json`).
 
 ## Quick reference
 
-A single binary, four diagnostic modes. Each is non-GUI, exits with a code suitable for scripting.
+A single binary, **seven CLI modes** (six diagnostic + GUI) + four
+operator-facing env vars. Every mode is non-GUI, exits with a code
+suitable for scripting.
 
 | Mode                       | What it does                                                                                | Exit codes              |
 |----------------------------|---------------------------------------------------------------------------------------------|-------------------------|
 | `--provision-once`         | Run `provision_via_recipe` to completion: fetch + verify + import + boot + handshake.       | `0` Ready / `1` failed  |
 | `--status-once`            | Connect to the live control wire, request `VmStatus`, print phase / `podman_ready` / `last_event`. | `0` Ready / `2` reachable-not-Ready / `1` unreachable |
 | `--status-once --json`     | Same status as a structured JSON object on stdout (StatusReport, see below).                | (same as `--status-once`) |
-| `--diagnose`               | Bundled human-readable health report (8 sections — see below).                              | `0` healthy / `2` degraded / `1` hard fail |
-| `--diagnose --json`        | Same report as a structured JSON object on stdout.                                          | (same as `--diagnose`)  |
+| `--diagnose`               | Bundled human-readable health report (~13 rows — version, build_commit, install_path, log + size, WSL + OS versions, wt.exe, distro + running, release tag, manifest pin, control wire, recent log tail). | `0` healthy / `2` degraded / `1` hard fail |
+| `--diagnose --json`        | Same report as a structured JSON object on stdout (16 top-level keys, see schema below).    | (same as `--diagnose`)  |
 | `--logs [--tail N] [--bak]` | Dump the tray log to stdout; `--tail N` for last N lines, `--bak` for the rotation backup `tray.log.bak`. | `0` readable / `1` missing |
 | `--help` / `-h`            | Print full usage with all CLI modes + exit-code contracts + stdio note + ENVIRONMENT vars.  | `0`                     |
 | `--version` / `-V`         | Print `tillandsias-tray <workspace VERSION> (<build_commit>)` on one line.                  | `0`                     |
@@ -57,6 +75,25 @@ backup) and a fresh `tray.log` starts. Disk-usage upper bound: ~10 MiB
 per log directory (live + one historical backup). The default `--logs`
 reads the live file; pass `--logs --bak` to read the rotation backup
 (combine with `--tail N` to limit lines).
+
+### Tray toast notifications
+
+In GUI mode, the tray fires Win11 Action Center toasts on **four**
+state-transition events. All are edge-triggered (no spam on
+steady-state polls) and all reach the user without requiring tray
+interaction.
+
+| Event                          | Title                                              | Severity |
+|--------------------------------|----------------------------------------------------|----------|
+| Provisioning success           | `Tillandsias <workspace VERSION> — ready`          | Info     |
+| Provisioning failure           | `Tillandsias — provisioning failed`                | Error    |
+| Wire degraded (mid-session)    | `Tillandsias — wire degraded`                      | Warning  |
+| Wire recovered from degradation | `Tillandsias — wire recovered`                    | Info     |
+
+The wire-degraded → wire-recovered pair is edge-triggered via
+`WIRE_DEGRADED_NOTIFIED` atomic flag: at most 1 degraded-toast + 1
+recovered-toast per degradation episode, not 1 toast per 30s poll
+while the wire stays down.
 
 GUI mode (no flags) launches the tray itself.
 

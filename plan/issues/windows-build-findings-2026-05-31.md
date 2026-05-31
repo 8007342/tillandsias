@@ -873,3 +873,91 @@ could surface similar size-bytes fields for their own log files.
 **Next iteration ask**: N/A (SECTION_KIND=ok). The 16-key DiagnoseReport
 covers the 5-W triage matrix; further fields would be feature creep at
 this point.
+
+---
+
+### 20260601T000000Z — ok (cheatsheet refresh: 4 stale claims + Win11 toasts section added)
+
+- agent_id: windows-bullo-claude-opus-20260601T000000Z
+- head_sha: 0d15be4b (linux-next + osx-next still both unchanged 7+ ticks;
+  windows-next 11 ahead pre-this-commit, 12 ahead post)
+- version: 0.2.260528.1
+- build_commit: 0d15be4b
+- build_run_id: 20260601T000000Z
+
+**Sibling context**: no remote movement. linux-next + osx-next still both
+unchanged 7+ consecutive ticks now. windows-next 0/12. Merge-tree clean.
+
+**Change made**: a focused documentation refresh of the windows-tray-
+diagnostics cheatsheet. The cheatsheet had accumulated 4 material
+inaccuracies from this session's flurry of additions, plus the Win11
+toast feature I shipped 2 ticks ago wasn't documented anywhere user-
+facing. Stale claims caught + fixed:
+
+1. **`last_verified: 2026-05-30`** → `2026-05-31`.
+2. **"Version baseline: tillandsias-tray v0.1.0+"** → "0.2.260530.1+
+   (workspace VERSION; on releases v0.2.260530.1 and later)" with a
+   pointer to the 4 surfaces that all route through the same
+   WORKSPACE_VERSION env var.
+3. **"A single binary, four diagnostic modes"** in Quick reference
+   intro → "seven CLI modes (six diagnostic + GUI) + four operator-
+   facing env vars" (the table has had 7 modes for ticks now).
+4. **`--diagnose` row "Bundled human-readable health report (8 sections)"**
+   → "~13 rows — version, build_commit, install_path, log + size, WSL +
+   OS versions, wt.exe, distro + running, release tag, manifest pin,
+   control wire, recent log tail". Was 8 sections at v0.0.1; today's
+   surface is ~13 rows after install_path + log_size_bytes + wsl_version
+   + os_version + distro_running + build_commit additions.
+5. **Provenance section's "Last updated: 2026-05-28 (commits 20fb9d1f
+   c4908438 e96d1fc8)"**: replaced with a longer-lived pointer at
+   `git log notify_icon.rs` for per-feature history + an enumeration
+   of the schema-pin unit tests (7 pin tests now) that any consumer
+   should know to look for when verifying a contract claim. Less
+   brittle than tracking specific commit SHAs that go stale every
+   week. Provenance section also lists scripts/install-windows.ps1
+   with its full flag set + 2-layer verification description.
+6. **`--diagnose --json` row** updated to mention "16 top-level keys".
+7. **New "### Tray toast notifications" subsection** between Log file
+   rotation and the GUI-mode line. Documents all 4 Win11 toasts +
+   their titles + severities + the edge-trigger semantics for the
+   wire degraded/recovered pair. This was the worst gap — operators
+   asking "what notifications does the tray show?" had no
+   user-facing reference today.
+
+Files touched (Windows-owned only):
+- `cheatsheets/runtime/windows-tray-diagnostics.md`: front-matter +
+  Version baseline + Provenance + Quick reference + new Tray toasts
+  subsection. Net +37 lines, -14 lines.
+
+**Build**: N/A (docs-only change; binary unchanged from prior tick).
+
+**Smoke**: `windows-native-tray` litmus: 7/7 PASS — the schema-pin
+litmus step verifies `manifest_pin_x86_64_tar` is in the cheatsheet
+(I preserved it through the edits), so the test still finds it.
+
+**Findings** (free-form):
+- The provenance-by-commit-list pattern doesn't scale — every tick
+  the listed commits go stale and someone has to remember to update
+  them. Replacing with "see git log + here are the pin tests to look
+  for" is durable: pin tests are the contract, and git log is always
+  current.
+- The Win11 toasts documentation gap was real: an operator asking
+  "I got a Tillandsias toast saying X — what does that mean?" had no
+  cheatsheet entry to look up. The 4-row table + edge-trigger
+  explanation closes that gap.
+- The Quick reference intro's "four diagnostic modes" claim was
+  technically wrong since the --status-once --json work landed 5+
+  days ago. The "8 sections" claim was wrong since the install_path
+  + log_size_bytes additions this week. Both were small but each
+  user reading the cheatsheet would notice the mismatch with reality.
+- Documentation accuracy is a maintenance discipline, not a one-shot
+  task. Worth scheduling a periodic cheatsheet audit as part of the
+  /build-windows-tray skill's daily flow (future iteration).
+
+**Cross-host visibility note**: pure Windows-tray-side documentation
+refresh; no cross-host coordination needed.
+
+**Next iteration ask**: N/A (SECTION_KIND=ok). The cheatsheet now
+accurately reflects the v0.2.260531-era windows-tray surface: 7 CLI
+modes, 16-key DiagnoseReport, 4 Win11 toasts, 4 env vars, single
+size-rotated log file, 5-MiB threshold + 1-bak ring.
