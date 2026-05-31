@@ -182,6 +182,25 @@ COPY config-overlay/shell-helpers.sh /etc/tillandsias/shell-helpers.sh
 COPY config-overlay/shell-helpers.fish /etc/tillandsias/shell-helpers.fish
 RUN chmod +x /etc/tillandsias/shell-helpers.sh || true
 
+# ── Discovery CLIs ─────────────────────────────────────────────
+# @trace spec:forge-environment-discoverability
+# Restored from a74a13ec (feat(forge): discoverability CLIs). The
+# COPY+symlink block was silently dropped in a later refactor while
+# the bash scripts under cli/ and the welcome-banner references
+# stayed put — leaving an unwired surface where the welcome banner
+# advertised `tillandsias-inventory` / `tillandsias-services` /
+# `tillandsias-models` but the binaries were absent from PATH.
+# `/opt/agents/tillandsias-cli/bin/` mirrors the other-agent
+# install convention; symlinks expose them on the user PATH.
+RUN mkdir -p /opt/agents/tillandsias-cli/bin
+COPY cli/tillandsias-inventory /opt/agents/tillandsias-cli/bin/tillandsias-inventory
+COPY cli/tillandsias-services /opt/agents/tillandsias-cli/bin/tillandsias-services
+COPY cli/tillandsias-models /opt/agents/tillandsias-cli/bin/tillandsias-models
+RUN chmod +x /opt/agents/tillandsias-cli/bin/* \
+    && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-inventory /usr/local/bin/tillandsias-inventory \
+    && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-services /usr/local/bin/tillandsias-services \
+    && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-models /usr/local/bin/tillandsias-models
+
 # ── Locale files ───────────────────────────────────────────────
 # @trace spec:environment-runtime
 RUN mkdir -p /etc/tillandsias/locales

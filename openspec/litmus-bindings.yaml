@@ -282,8 +282,9 @@ specs:
   litmus_tests:
   - litmus:forge-environment-discoverability-shape
   - litmus:onboarding-cold-start-discovery
-  coverage_ratio: 50
-  last_verified: '2026-05-14'
+  - litmus:forge-environment-discoverability-install-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: forge-forward-compat
   status: deprecated
   litmus_tests: []
