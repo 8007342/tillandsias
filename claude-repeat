@@ -34,6 +34,7 @@ if [[ -z "$CLAUDE_BIN" || ! -x "$CLAUDE_BIN" ]]; then
 fi
 
 QUIET=0
+STREAM=1   # default on — `claude --print` buffers everything until done; we want visible progress.
 WAIT_INTERVAL=""
 TIMES=""
 SKILL_NAME=""
@@ -47,7 +48,11 @@ Usage:
   ./claude-repeat --wait <duration> [--times <n>] [--skill <name>] [--model <name>] ["prompt"]
 
 Options:
-  --quiet, -q          Suppress claude streaming output (suppresses stderr noise).
+  --quiet, -q          Suppress all per-iteration output (only cycle banner).
+  --no-stream          Use plain `claude --print` (buffered — no visible
+                       progress until the cycle completes). Default is to
+                       stream tool-use + text deltas via stream-json + a
+                       minimal python parser so you can see what's happening.
   --wait <duration>    Run claude, then sleep duration, repeat forever.
   --repeat <duration>  Compatibility alias for --wait.
   --times <n>          Limit --wait/--repeat to n rounds.
@@ -62,7 +67,8 @@ Behavior:
   recurring skill like /advance-work-from-plan starts clean every cycle.
   Permissions are bypassed via --dangerously-skip-permissions to match
   the unattended-loop expectation; do not run this in a directory you
-  do not trust.
+  do not trust. Streaming requires python3 on PATH (same dep as the
+  Pacific-time timestamp helper).
 
 Duration examples: 30m, 2h, 2h30m, 45s.
 EOF
@@ -72,6 +78,14 @@ while [[ $# -gt 0 ]]; do
   case "$1" in
     --quiet|-q)
       QUIET=1
+      shift
+      ;;
+    --no-stream)
+      STREAM=0
+      shift
+      ;;
+    --stream)
+      STREAM=1
       shift
       ;;
     --wait|--repeat)
@@ -200,18 +214,89 @@ build_prompt() {
   fi
 }
 
+stream_filter_py() {
+  # Minimal stream-json -> human-readable parser. Reads ndjson on stdin.
+  # Emits one line per tool invocation, plus assistant text deltas as they
+  # arrive, and a final result summary. Uses only stdlib so the only
+  # dependency stays "python3 on PATH" (same as the Pacific-time helper).
+  cat <<'PY'
+import json, sys
+
+def emit(s):
+    sys.stdout.write(s)
+    sys.stdout.flush()
+
+last_was_text = False
+for line in sys.stdin:
+    line = line.strip()
+    if not line:
+        continue
+    try:
+        ev = json.loads(line)
+    except json.JSONDecodeError:
+        continue
+
+    t = ev.get("type")
+    if t == "system" and ev.get("subtype") == "init":
+        emit(f"[session {ev.get('session_id','?')[:8]} model={ev.get('model','?')}]\n")
+    elif t == "assistant":
+        msg = ev.get("message", {})
+        for block in msg.get("content", []):
+            bt = block.get("type")
+            if bt == "text":
+                txt = block.get("text", "")
+                if txt:
+                    if not last_was_text:
+                        emit("\n")
+                    emit(txt + "\n")
+                    last_was_text = True
+            elif bt == "tool_use":
+                name = block.get("name", "?")
+                inp = block.get("input", {})
+                desc = inp.get("description") or inp.get("command") or inp.get("file_path") or inp.get("pattern") or ""
+                if isinstance(desc, str) and len(desc) > 80:
+                    desc = desc[:77] + "..."
+                emit(f"→ {name}: {desc}\n" if desc else f"→ {name}\n")
+                last_was_text = False
+    elif t == "result":
+        ms = ev.get("duration_ms", 0)
+        cost = ev.get("total_cost_usd", 0)
+        emit(f"\n[done {ms/1000:.1f}s ${cost:.4f}]\n")
+        last_was_text = False
+    elif t == "rate_limit_event":
+        info = ev.get("rate_limit_info", {})
+        status = info.get("status")
+        if status and status != "allowed":
+            emit(f"[rate-limit: {status}]\n")
+PY
+}
+
 run_once() {
   local prompt
   prompt="$(build_prompt)"
 
+  if [[ "$STREAM" -eq 1 ]] && command -v python3 >/dev/null 2>&1; then
+    local args=(--print --verbose --output-format=stream-json --dangerously-skip-permissions)
+    if [[ -n "$MODEL" ]]; then
+      args+=(--model "$MODEL")
+    fi
+    args+=("$prompt")
+    if [[ "$QUIET" -eq 1 ]]; then
+      "$CLAUDE_BIN" "${args[@]}" 2>/dev/null | python3 -c "$(stream_filter_py)" >/dev/null
+    else
+      "$CLAUDE_BIN" "${args[@]}" | python3 -c "$(stream_filter_py)"
+    fi
+    return ${PIPESTATUS[0]}
+  fi
+
+  # Fallback: plain --print (buffered).
   local args=(--print --dangerously-skip-permissions)
   if [[ -n "$MODEL" ]]; then
     args+=(--model "$MODEL")
   fi
   args+=("$prompt")
-
   if [[ "$QUIET" -eq 1 ]]; then
-    "$CLAUDE_BIN" "${args[@]}" 2>/dev/null
+    "$CLAUDE_BIN" "${args[@]}" >/dev/null 2>&1
   else
     "$CLAUDE_BIN" "${args[@]}"
   fi
