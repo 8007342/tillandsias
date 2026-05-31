@@ -207,8 +207,9 @@ specs:
   litmus_tests:
   - litmus:enclave-isolation
   - litmus:binary-e2e-smoke
-  coverage_ratio: 67
-  last_verified: '2026-05-12'
+  - litmus:enclave-network-source-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-31'
 - spec_id: enforce-trace-presence
   status: obsolete
   litmus_tests: []
