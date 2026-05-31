@@ -337,8 +337,9 @@ specs:
   litmus_tests:
   - litmus:forge-welcome-shape
   - litmus:onboarding-cold-start-discovery
-  coverage_ratio: 50
-  last_verified: '2026-05-14'
+  - litmus:forge-welcome-banner-shape
+  coverage_ratio: 75
+  last_verified: '2026-05-30'
 - spec_id: gh-auth-script
   status: active
   litmus_tests:
