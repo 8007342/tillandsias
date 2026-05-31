@@ -458,7 +458,7 @@ pub fn help_text() -> String {
          A native Win32 NotifyIcon tray for Tillandsias on Windows.\n\
          \n\
          USAGE:\n    \
-            tillandsias-tray.exe [MODE]\n\
+            tillandsias-tray.exe [MODE] [OPTIONS]\n\
          \n\
          MODES:\n    \
             (no flags)              Launch the interactive tray (GUI subsystem).\n    \
@@ -472,6 +472,19 @@ pub fn help_text() -> String {
             with --tail). Exit: 0 = readable, 1 = missing.\n    \
             --help, -h              Print this help and exit 0.\n    \
             --version, -V           Print version + build commit and exit 0.\n\
+         \n\
+         OPTIONS (modify GUI mode):\n    \
+            --no-provision          Skip the WSL bootstrap so the menu comes up clean\n                            \
+            for local dev / testing. The install-windows.ps1 script passes this by\n                            \
+            default to the Start Menu shortcut (drop -Provision to use it).\n\
+         \n\
+         ENVIRONMENT:\n    \
+            RUST_LOG                Log filter for the tray's file logger. Default 'info'.\n                            \
+            Example: RUST_LOG=debug,tillandsias_windows_tray=trace\n    \
+            TILLANDSIAS_NO_PROVISION  Equivalent to --no-provision when set to any value.\n                            \
+            Useful when launching the tray via a method that can't pass flags.\n    \
+            BUILD_COMMIT_SHA_OVERRIDE  Overrides build.rs's git rev-parse during builds\n                            \
+            (CI / reproducible-source scenarios). Bakes at compile time, not runtime.\n\
          \n\
          OUTPUT NOTE:\n    \
             The tray is a GUI-subsystem binary; PowerShell pipe capture of stdout\n    \
@@ -2217,10 +2230,38 @@ mod tests {
             "-h",
             "--version",
             "-V",
+            // OPTIONS (modify GUI mode):
+            "--no-provision",
         ] {
             assert!(
                 text.contains(flag),
                 "help text missing CLI flag {flag}:\n{text}"
+            );
+        }
+        // ENVIRONMENT section: every operator-relevant env var the tray honors
+        // must be documented here so a future addition without docs surfaces
+        // at this pin instead of as undiscoverable-in-the-field.
+        for env_var in [
+            "RUST_LOG",
+            "TILLANDSIAS_NO_PROVISION",
+            "BUILD_COMMIT_SHA_OVERRIDE",
+        ] {
+            assert!(
+                text.contains(env_var),
+                "help text missing ENVIRONMENT entry {env_var}"
+            );
+        }
+        // Section headers (lock the multi-section structure).
+        for section in [
+            "USAGE:",
+            "MODES:",
+            "OPTIONS",
+            "ENVIRONMENT:",
+            "OUTPUT NOTE:",
+        ] {
+            assert!(
+                text.contains(section),
+                "help text missing section header {section}"
             );
         }
         // Exit-code contract is part of the CLI promise — pin it.

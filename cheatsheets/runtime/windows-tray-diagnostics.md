@@ -36,8 +36,18 @@ A single binary, four diagnostic modes. Each is non-GUI, exits with a code suita
 | `--diagnose`               | Bundled human-readable health report (8 sections — see below).                              | `0` healthy / `2` degraded / `1` hard fail |
 | `--diagnose --json`        | Same report as a structured JSON object on stdout.                                          | (same as `--diagnose`)  |
 | `--logs [--tail N]`        | Dump the tray log file (`%LOCALAPPDATA%\tillandsias\logs\tray.log`) to stdout; `--tail N` for last N lines. | `0` readable / `1` missing |
-| `--help` / `-h`            | Print full usage with all CLI modes + exit-code contracts + stdio note.                     | `0`                     |
+| `--help` / `-h`            | Print full usage with all CLI modes + exit-code contracts + stdio note + ENVIRONMENT vars.  | `0`                     |
 | `--version` / `-V`         | Print `tillandsias-tray <workspace VERSION> (<build_commit>)` on one line.                  | `0`                     |
+
+GUI mode also accepts `--no-provision` to skip WSL bootstrap (clean local-dev menu without provisioning). Equivalent: set `TILLANDSIAS_NO_PROVISION` env var.
+
+### Environment variables
+
+| Variable                       | Purpose                                                                          |
+|--------------------------------|----------------------------------------------------------------------------------|
+| `RUST_LOG`                     | Log filter for the tray's file logger. Default `info`. e.g. `debug,tillandsias_windows_tray=trace`. |
+| `TILLANDSIAS_NO_PROVISION`     | Set to any value to skip WSL bootstrap (alias for `--no-provision`).            |
+| `BUILD_COMMIT_SHA_OVERRIDE`    | Overrides build.rs's `git rev-parse` during builds (CI / reproducible-source). Bakes at compile time, not runtime. |
 
 GUI mode (no flags) launches the tray itself.
 

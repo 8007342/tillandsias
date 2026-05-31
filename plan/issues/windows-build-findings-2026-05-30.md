@@ -1147,3 +1147,90 @@ the `compose_tooltip` pattern is mirror-able.
 **Next iteration ask**: N/A (SECTION_KIND=ok). The 4 visible
 version-display surfaces (CLI --version, diagnose JSON, menu footer,
 tray tooltip) are now all wired to the same source of truth.
+
+---
+
+### 20260531T050000Z — ok (--help adds OPTIONS + ENVIRONMENT sections)
+
+- agent_id: windows-bullo-claude-opus-20260531T050000Z
+- head_sha: 89483d0d (post-merge of linux-next +7 commits — all linux-internal
+  litmus pinning + velocity-cooldown work-queue entries; no shared-contract
+  churn)
+- version: 0.2.260528.1
+- build_commit: 0256d198 (current windows-next pre-this-commit head)
+- build_run_id: 20260531T050000Z
+
+**Sibling context** (no windows-tray action required):
+- linux-next +7 commits: enclave-network source-shape 67→75,
+  observability-convergence 60→75 + velocity cooldown work-queue entries.
+  Integration loop hasn't fired since my prior commit 0256d198 (still 1
+  ahead of linux-next this tick; next 2h cycle will pull it in).
+- osx-next still stalled at b4a45622 (still no movement; integration loop
+  notes session-deepest stall continues).
+- merge-tree clean.
+
+**Change made**: `--help` text restructured to document the runtime
+`--no-provision` flag (was previously undocumented in help even though
+`install-windows.ps1` passes it by default) + the 3 operator-relevant
+env vars the tray honors (was completely missing).
+
+Files touched (Windows-owned):
+- `crates/tillandsias-windows-tray/src/notify_icon.rs`:
+  - `help_text()`: USAGE line updated to `[MODE] [OPTIONS]`. New OPTIONS
+    section documents `--no-provision`. New ENVIRONMENT section documents
+    `RUST_LOG`, `TILLANDSIAS_NO_PROVISION`, `BUILD_COMMIT_SHA_OVERRIDE`.
+    Existing MODES + OUTPUT NOTE + cheatsheet-pointer sections unchanged.
+  - Extended `help_text_documents_all_cli_modes` pin test: now also asserts
+    presence of `--no-provision` flag + all 3 ENVIRONMENT env-var names +
+    all 5 section headers (`USAGE:`, `MODES:`, `OPTIONS`, `ENVIRONMENT:`,
+    `OUTPUT NOTE:`). Locks the multi-section structure so a future refactor
+    that drops a section surfaces at pin-test time.
+- `cheatsheets/runtime/windows-tray-diagnostics.md`:
+  - Modes table row for `--help` updated to mention ENVIRONMENT vars
+    (so cheatsheet reader knows to look for them in --help output).
+  - New trailing paragraph documenting `--no-provision` option +
+    `TILLANDSIAS_NO_PROVISION` env equivalence.
+  - New `### Environment variables` subsection with a 3-row table
+    documenting all 3 env vars + their purposes.
+
+**Build**: 36.66 s release. Tests: 39 + 3 = 42 passed / 5 ignored
+(unchanged from prior tick — no new test added; existing
+`help_text_documents_all_cli_modes` test gained 11 new assertions but
+still counts as 1 test).
+
+**Smoke** (post-install, real hardware):
+- `--help` output: full 5-section render confirmed. OPTIONS section
+  shows `--no-provision` with its dev-mode purpose + install-script
+  reference. ENVIRONMENT section shows all 3 env vars with examples
+  (RUST_LOG: `RUST_LOG=debug,tillandsias_windows_tray=trace`).
+- `--version` unchanged: `tillandsias-tray 0.2.260528.1 (a963c16d)`.
+
+**Litmus**:
+- `windows-native-tray`: 7/7 PASS (extended pin test stays green).
+- `cargo fmt`: clean (rustfmt re-wrapped one array literal in the
+  section-headers pin loop — applied).
+- `cargo clippy -D warnings`: clean.
+
+**Findings** (free-form):
+- The help text now documents EVERY runtime knob the tray exposes,
+  not just the diagnostic modes. An operator running `tillandsias-tray
+  --help` gets a complete reference without having to read source code
+  or the install script to discover that `--no-provision` exists.
+- The section-header pin (5 sections enforced) means the structural
+  organization of `--help` is now a contract — a future refactor that
+  collapses sections without coordinating surfaces at pin-test time
+  rather than as a documentation-clarity regression.
+- `BUILD_COMMIT_SHA_OVERRIDE` documentation is subtle but important:
+  it's a build-time env var, not a runtime one — the help text says
+  so explicitly. CI scenarios (reproducible builds without git) that
+  want to set a specific commit SHA can now discover this option from
+  `--help` alone.
+
+**Cross-host visibility note**: pure Windows-tray-side documentation
+addition; no cross-host coordination needed. macOS-tray's --help (if it
+exists yet) has its own argparse surface.
+
+**Next iteration ask**: N/A (SECTION_KIND=ok). The CLI surface is now
+documented to operator-grade in every place an operator might look:
+`--help`, cheatsheet, modes table. Future tray changes that affect
+the operator surface should mechanically update both.
