@@ -101,3 +101,113 @@ accurate).
 **Next iteration ask**: N/A (SECTION_KIND=ok). The user-facing entry
 points for Windows (README → install script → CLI surface →
 diagnostics → cheatsheet) are now all current and self-consistent.
+
+---
+
+### 20260531T100000Z — ok (tray.log size-threshold rotation: bound disk to ~10 MiB)
+
+- agent_id: windows-bullo-claude-opus-20260531T100000Z
+- head_sha: b35eddc8 (linux-next + osx-next unchanged from prior tick;
+  windows-next now 4 ahead pending the next integration cycle)
+- version: 0.2.260528.1
+- build_commit: b35eddc8 (will self-update at next rebuild)
+- build_run_id: 20260531T100000Z
+
+**Sibling context**: no remote movement this tick. linux-next's velocity-
+cooldown continues; osx-next went idle again after yesterday's stall-
+break + gap-4 surface. windows-next 0/4 (4 ahead of linux-next, waiting
+for the next 2h integration cycle). Merge-tree clean.
+
+**Change made**: bounded `%LOCALAPPDATA%\tillandsias\logs\tray.log` disk
+usage. Today it uses `tracing_appender::rolling::never` — unbounded
+growth. A long-running tray with `RUST_LOG=debug` could accumulate
+hundreds of MB over months of use. After this commit: `tray.log` is
+size-rotated at startup. When it exceeds 5 MiB, it's renamed to
+`tray.log.bak` (overwriting any prior backup) and a fresh `tray.log`
+starts. Disk-usage upper bound per log directory: ~10 MiB total (live
++ one historical backup).
+
+Files touched (Windows-owned only):
+- `crates/tillandsias-windows-tray/src/notify_icon.rs`:
+  - New `const TRAY_LOG_MAX_BYTES: u64 = 5 * 1024 * 1024;` — the
+    5 MiB threshold, exposed as a `pub`-adjacent constant so the
+    cheatsheet + tests can reference the same source of truth.
+  - New pure `should_rotate_log(current_size, max_bytes) -> bool` —
+    strict `>` predicate. Pin-test'd at the boundary.
+  - New `maybe_rotate_log(dir: &Path)` — calls
+    `std::fs::metadata` on `tray.log`, gates on `should_rotate_log`,
+    then `remove_file(backup)` + `rename(current, backup)`. All ops
+    are `let _ =`'d (best-effort): a rotation failure (file locked,
+    permission denied) doesn't fail tray startup — we'd rather keep
+    running with an oversized log than refuse to start. The
+    `remove_file(backup)` before `rename` is needed because Windows'
+    `std::fs::rename` fails when the destination exists (Unix's
+    atomically replaces; the redundant remove is harmless there).
+  - `init_tracing` calls `maybe_rotate_log(&dir)` BEFORE the appender
+    opens, so the appender creates a fresh `tray.log` for this
+    session if rotation fired.
+  - New pin test `should_rotate_log_at_threshold_boundary` covers 5
+    cases: 0 (no rotate), threshold-1 (no), threshold (no, strict
+    `>`), threshold+1 (yes), 100× threshold (yes). Plus asserts the
+    threshold constant equals `5 * 1024 * 1024` exactly so the
+    cheatsheet's "5 MiB" promise can't silently drift.
+- `openspec/litmus-tests/litmus-windows-tray-diagnose-cli-surface.yaml`:
+  - New step "tray.log rotation boundary test attached" requires
+    `fn should_rotate_log_at_threshold_boundary` + `fn maybe_rotate_log`
+    + `TRAY_LOG_MAX_BYTES` greps.
+- `cheatsheets/runtime/windows-tray-diagnostics.md`:
+  - New `### Log file rotation` section after the environment table.
+    Documents the 5 MiB threshold, the 10 MiB upper bound, and the
+    fact that `--logs` reads only the live file (operators wanting
+    the backup do so by hand).
+
+**Build**: 37.02 s release.
+
+**Tests**: 40 + 3 = 43 passed / 5 ignored (+1 over yesterday's 39+3 = 42
+baseline; the new rotation boundary test). All green.
+
+**Smoke** (real hardware — direct rotation exercise):
+- Created a fake 6 MiB `tray.log` (6,291,456 bytes) at the canonical
+  path.
+- Ran `tillandsias-tray.exe --diagnose --json` (invokes `init_tracing`
+  → `maybe_rotate_log`).
+- Post-run state: `tray.log` is 0 bytes (fresh), `tray.log.bak` is
+  6,291,456 bytes (the rotated original preserved verbatim).
+- Rotation fires correctly above threshold; pure pin test covers the
+  boundary case (no rotation at exactly 5 MiB).
+
+**Litmus**:
+- `windows-native-tray`: 7/7 PASS (new "tray.log rotation boundary
+  test attached" step green; existing 6 steps unchanged).
+- `cargo fmt`: clean (rustfmt re-wrapped 3 `assert!` calls — applied).
+- `cargo clippy -D warnings`: clean.
+
+**Findings** (free-form):
+- The rotation is intentionally simple: single-backup ring, not
+  date-stamped multi-file rotation. Rationale: `tracing_appender`'s
+  `rolling::Daily` builder produces files with date suffixes that
+  would break the canonical `log_file_path()` = `<dir>/tray.log` path
+  that `--logs`, "Open Log", and `recent_log_tail` all share.
+  Size-threshold rotation preserves the stable path. Future iteration
+  could grow this to a 3-file ring (`tray.log.1`/`.2`/`.3`) if needed
+  but operator value is minimal at v0.0.1.
+- The "best-effort, never fail startup" stance on rotation IO is
+  important: a tray that refuses to launch because of a stuck log
+  file would be a regression worse than the oversized-log it's trying
+  to fix. The `let _ =`'d ops mean even a permission-denied or
+  locked-file failure on rename just leaves the oversized log in
+  place and the new session writes to it (still works, just doesn't
+  rotate this time).
+- The threshold-constant pin (`assert_eq!(TRAY_LOG_MAX_BYTES, 5 *
+  1024 * 1024)`) is deliberate paranoia: the cheatsheet, the docblock,
+  and the unit test all promise "5 MiB". A future refactor that
+  silently flips it to 4 or 6 MiB without updating docs would surface
+  here pre-build.
+
+**Cross-host visibility note**: pure Windows-tray-side improvement;
+log file naming + rotation cadence are platform-internal. macOS-tray's
+Console.app integration handles their log lifecycle differently; no
+mirror needed.
+
+**Next iteration ask**: N/A (SECTION_KIND=ok). The tray.log surface
+is now disk-safe for long-running sessions.

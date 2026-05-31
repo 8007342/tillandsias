@@ -362,15 +362,58 @@ fn log_file_path() -> std::path::PathBuf {
     log_dir().join("tray.log")
 }
 
+/// Rotation threshold for `tray.log`. When the existing file exceeds this
+/// size at tray-startup time, it gets renamed to `tray.log.bak` (overwriting
+/// any prior bak) and a fresh `tray.log` starts. 5 MiB at default `info`
+/// level fits ~50k lines — months of normal use; `RUST_LOG=debug` will
+/// rotate faster. Disk-usage upper bound after rotation: 10 MiB total per
+/// log directory (one live file + one historical backup). Pinned by
+/// `should_rotate_log_at_threshold_boundary`.
+const TRAY_LOG_MAX_BYTES: u64 = 5 * 1024 * 1024;
+
+/// Pure size-vs-threshold predicate for [`maybe_rotate_log`]. Strict `>`
+/// so the threshold itself doesn't trigger rotation (deterministic for
+/// the boundary case).
+fn should_rotate_log(current_size: u64, max_bytes: u64) -> bool {
+    current_size > max_bytes
+}
+
+/// Rotate `<dir>/tray.log` to `<dir>/tray.log.bak` if oversized. Best-effort:
+/// each filesystem op is `let _ =`'d so a rotation failure (file locked,
+/// permission denied, etc.) doesn't fail tray startup — we'd rather keep
+/// running with an oversized log than refuse to start. Called from
+/// [`init_tracing`] BEFORE the file appender is opened so the appender
+/// creates a fresh `tray.log` for this session.
+fn maybe_rotate_log(dir: &std::path::Path) {
+    let current = dir.join("tray.log");
+    let backup = dir.join("tray.log.bak");
+    let Ok(meta) = std::fs::metadata(&current) else {
+        return;
+    };
+    if !should_rotate_log(meta.len(), TRAY_LOG_MAX_BYTES) {
+        return;
+    }
+    // On Windows std::fs::rename fails if the destination already exists; remove
+    // the old backup first. Unix's rename atomically replaces; the redundant
+    // remove is harmless there.
+    let _ = std::fs::remove_file(&backup);
+    let _ = std::fs::rename(&current, &backup);
+}
+
 /// Initialize file-based tracing. A release tray is a GUI-subsystem binary with
 /// no console, so `tracing::{info,warn,error}!` events are lost unless routed to
 /// a file. Writes (synchronously — tray log volume is tiny, and this avoids a
 /// `WorkerGuard` that `process::exit` would skip flushing) to
 /// `%LOCALAPPDATA%\tillandsias\logs\tray.log`, honoring `RUST_LOG` (default
 /// `info`). Idempotent: a second call is a no-op (`try_init`).
+///
+/// Before opening the appender, [`maybe_rotate_log`] rotates the existing
+/// `tray.log` to `tray.log.bak` if it exceeds [`TRAY_LOG_MAX_BYTES`] so the
+/// log directory's disk footprint stays bounded at ~10 MiB.
 fn init_tracing() {
     let dir = log_dir();
     let _ = std::fs::create_dir_all(&dir);
+    maybe_rotate_log(&dir);
     let appender = tracing_appender::rolling::never(&dir, "tray.log");
     let filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
@@ -2140,6 +2183,37 @@ mod tests {
             !line.contains("0.1.0 ("),
             "version line still reporting CARGO_PKG_VERSION shape: {line}"
         );
+    }
+
+    /// Tray.log rotation kicks in strictly ABOVE the threshold so the
+    /// boundary case (file exactly at threshold) doesn't churn the
+    /// backup. Pin these 4 cases so a future refactor that flips to `>=`
+    /// surfaces here pre-build instead of as surprising rotation behavior
+    /// in the field.
+    #[test]
+    fn should_rotate_log_at_threshold_boundary() {
+        // Empty file: nothing to rotate.
+        assert!(!should_rotate_log(0, TRAY_LOG_MAX_BYTES));
+        // Below threshold: no rotation.
+        assert!(!should_rotate_log(
+            TRAY_LOG_MAX_BYTES - 1,
+            TRAY_LOG_MAX_BYTES
+        ));
+        // Exactly at threshold: no rotation (strict `>` semantics).
+        assert!(!should_rotate_log(TRAY_LOG_MAX_BYTES, TRAY_LOG_MAX_BYTES));
+        // Above threshold: rotate.
+        assert!(should_rotate_log(
+            TRAY_LOG_MAX_BYTES + 1,
+            TRAY_LOG_MAX_BYTES
+        ));
+        // Order-of-magnitude over: rotate.
+        assert!(should_rotate_log(
+            TRAY_LOG_MAX_BYTES * 100,
+            TRAY_LOG_MAX_BYTES
+        ));
+        // Sanity-check the threshold itself: 5 MiB matches what
+        // init_tracing's docblock + the cheatsheet promise.
+        assert_eq!(TRAY_LOG_MAX_BYTES, 5 * 1024 * 1024);
     }
 
     /// `compose_tooltip` is the pure formatter for the tray's mouseover

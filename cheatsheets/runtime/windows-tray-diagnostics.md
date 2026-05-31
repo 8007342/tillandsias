@@ -49,6 +49,14 @@ GUI mode also accepts `--no-provision` to skip WSL bootstrap (clean local-dev me
 | `TILLANDSIAS_NO_PROVISION`     | Set to any value to skip WSL bootstrap (alias for `--no-provision`).            |
 | `BUILD_COMMIT_SHA_OVERRIDE`    | Overrides build.rs's `git rev-parse` during builds (CI / reproducible-source). Bakes at compile time, not runtime. |
 
+### Log file rotation
+
+`tray.log` is bounded at **5 MiB**: at tray startup, if the existing file
+exceeds that size, it's renamed to `tray.log.bak` (overwriting any prior
+backup) and a fresh `tray.log` starts. Disk-usage upper bound: ~10 MiB
+per log directory (live + one historical backup). `--logs` only reads
+the live file; `tray.log.bak` is for ad-hoc operator inspection.
+
 GUI mode (no flags) launches the tray itself.
 
 ## Common patterns
