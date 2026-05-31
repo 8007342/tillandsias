@@ -1246,6 +1246,14 @@ struct DiagnoseReport {
     install_path: String,
     log_path: String,
     log_exists: bool,
+    /// First non-empty line of `wsl --version` stdout (e.g. on English hosts
+    /// `"WSL version: 2.7.3.0"`; on French `"Version WSL : 2.7.3.0"`).
+    /// Captured locale-as-is — emitting just the first line is locale-neutral
+    /// (the version number is always present) and avoids a parser that has
+    /// to know per-locale prefix strings. `None` if `wsl.exe` isn't on PATH
+    /// (WSL feature disabled) or the command fails. Lets operators answer
+    /// "is my WSL build old?" from `--diagnose --json` alone.
+    wsl_version: Option<String>,
     wt_present: bool,
     distro: &'static str,
     distro_registered: bool,
@@ -1274,6 +1282,41 @@ pub fn diagnose(format: DiagnoseFormat) -> i32 {
         DiagnoseFormat::Json => print_json(&report),
     }
     exit_code_from(&report)
+}
+
+/// Return the first non-whitespace-only line of `s`, trimmed. Pure for
+/// testability; the WSL-shell-out version below pipes its captured stdout
+/// through this. Returns `None` if `s` has no non-empty line. Explicitly
+/// strips U+FEFF (BOM) before whitespace-trimming so older WSL builds'
+/// UTF-16 LE BOM-prefixed first line still surfaces clean (str::trim
+/// alone doesn't strip U+FEFF — it's Unicode `Cf` Format, not
+/// White_Space).
+fn first_line(s: &str) -> Option<String> {
+    s.lines()
+        .map(|line| line.trim_start_matches('\u{FEFF}').trim())
+        .find(|line| !line.is_empty())
+        .map(|s| s.to_string())
+}
+
+/// Shell out to `wsl --version` and return the first non-empty line of its
+/// stdout (locale-as-is — e.g. `"WSL version: 2.7.3.0"` on English hosts,
+/// `"Version WSL : 2.7.3.0"` on French). `None` if `wsl.exe` isn't on
+/// PATH (WSL feature disabled), the command non-zero-exits, or its output
+/// has no non-empty line. `WSL_UTF8=1` forces UTF-8 output on recent
+/// builds (older builds emit UTF-16 LE BOM-prefixed; we tolerate the BOM
+/// via [`first_line`]'s `str::trim` — the BOM survives as `\u{FEFF}` which
+/// `trim` removes as whitespace per Unicode).
+fn sniff_wsl_version() -> Option<String> {
+    let output = std::process::Command::new("wsl")
+        .arg("--version")
+        .env("WSL_UTF8", "1")
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    first_line(&stdout)
 }
 
 fn collect_report() -> DiagnoseReport {
@@ -1420,6 +1463,7 @@ fn collect_report() -> DiagnoseReport {
         install_path,
         log_path: log.display().to_string(),
         log_exists,
+        wsl_version: sniff_wsl_version(),
         wt_present,
         distro: crate::wsl_lifecycle::DISTRO_NAME,
         distro_registered,
@@ -1438,6 +1482,10 @@ fn print_human(r: &DiagnoseReport) {
     println!("Install path: {}", r.install_path);
     println!("Log file:     {}", r.log_path);
     println!("Log exists:   {}", if r.log_exists { "yes" } else { "no" });
+    println!(
+        "WSL:          {}",
+        r.wsl_version.as_deref().unwrap_or("(not detected)")
+    );
     println!(
         "wt.exe:       {}",
         if r.wt_present {
@@ -2107,6 +2155,7 @@ mod tests {
             build_commit: "deadbeef",
             install_path: "C:\\path\\to\\tillandsias-tray.exe".to_string(),
             log_path: "C:\\path\\to\\tray.log".to_string(),
+            wsl_version: Some("WSL version: 2.7.3.0".to_string()),
             log_exists: false,
             wt_present: true,
             distro: "tillandsias",
@@ -2135,6 +2184,7 @@ mod tests {
             "install_path",
             "log_path",
             "log_exists",
+            "wsl_version",
             "wt_present",
             "distro",
             "distro_registered",
@@ -2258,6 +2308,44 @@ mod tests {
         assert!(
             !line.contains("0.1.0 ("),
             "version line still reporting CARGO_PKG_VERSION shape: {line}"
+        );
+    }
+
+    /// `first_line` is the pure half of `sniff_wsl_version`. Pin all the
+    /// edge cases (empty / leading-blank / leading-whitespace / multi-line /
+    /// no-newline) so a future refactor can't silently flip semantics that
+    /// the cheatsheet's "first non-empty line, trimmed" promise relies on.
+    #[test]
+    fn first_line_handles_all_cases() {
+        // Empty input.
+        assert_eq!(first_line(""), None);
+        // Only whitespace + newlines.
+        assert_eq!(first_line("   \n\n  \n"), None);
+        // Simple multi-line: returns the first non-empty.
+        assert_eq!(
+            first_line("WSL version: 2.7.3.0\nKernel: 6.6\n"),
+            Some("WSL version: 2.7.3.0".to_string())
+        );
+        // Leading blank lines: skip to first non-empty.
+        assert_eq!(
+            first_line("\n\n  \nVersion WSL : 2.7.3.0\n"),
+            Some("Version WSL : 2.7.3.0".to_string())
+        );
+        // Leading whitespace on the first non-empty line: trimmed.
+        assert_eq!(
+            first_line("   trimmed line\nsecond line"),
+            Some("trimmed line".to_string())
+        );
+        // No newline: whole input is the first line.
+        assert_eq!(first_line("single line"), Some("single line".to_string()));
+        // BOM tolerance: U+FEFF is the byte-order mark. Older WSL builds emit
+        // it in UTF-16 LE before the actual first line; first_line strips it
+        // explicitly (via trim_start_matches('\u{FEFF}')) before whitespace
+        // trim, because str::trim alone does NOT strip U+FEFF (it's Cf
+        // Format, not Unicode White_Space).
+        assert_eq!(
+            first_line("\u{FEFF}WSL version: 2.7.3.0"),
+            Some("WSL version: 2.7.3.0".to_string())
         );
     }
 

@@ -104,6 +104,7 @@ The JSON shape is pinned by unit tests in `notify_icon::tests::diagnose_json_*` 
   "install_path":           "C:\\...\\tillandsias-tray.exe", // string — std::env::current_exe(), or "(unknown)" on rare failure
   "log_path":               "C:\\...\\tray.log", // string  — fixed %LOCALAPPDATA%\tillandsias\logs\tray.log
   "log_exists":             true,          // bool
+  "wsl_version":            "WSL version: 2.7.3.0", // string | null — first non-empty line of `wsl --version` stdout (locale-as-is); null if wsl.exe absent or command fails
   "wt_present":             true,          // bool    — Windows Terminal on PATH (Open Shell prefers it)
   "distro":                 "tillandsias", // string  — wsl.exe -d <distro> target
   "distro_registered":      true,          // bool    — `wsl -l -q` listed `distro`

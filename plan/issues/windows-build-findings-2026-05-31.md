@@ -413,3 +413,107 @@ mirror this for first-launch + wire-state-change confirmations.
 **Next iteration ask**: N/A (SECTION_KIND=ok). The tray's
 state-transition UX is now visible to the user via Win11 toasts
 without requiring tray interaction.
+
+---
+
+### 20260531T160000Z — ok (wsl_version field added to --diagnose JSON)
+
+- agent_id: windows-bullo-claude-opus-20260531T160000Z
+- head_sha: 59828401 (linux-next + osx-next still both unchanged across
+  4+ consecutive ticks now; windows-next 7 ahead pre-this-commit)
+- version: 0.2.260528.1
+- build_commit: 59828401
+- build_run_id: 20260531T160000Z
+
+**Sibling context**: linux-next velocity-cooldown 4+ ticks; osx-next idle.
+No remote movement. Merge-tree clean.
+
+**Change made**: added `wsl_version: Option<String>` field to
+`DiagnoseReport`. Today operators triaging "is my WSL build old?" or
+"which WSL service version do I have?" can't answer from `--diagnose`
+alone — they'd have to run `wsl --version` separately. Capturing the
+output's first line directly in the diagnose JSON closes that
+triage gap.
+
+Files touched (Windows-owned only):
+- `crates/tillandsias-windows-tray/src/notify_icon.rs`:
+  - New `wsl_version: Option<String>` field on `DiagnoseReport` with
+    docblock explaining the locale-as-is capture semantics.
+  - New pure `fn first_line(s: &str) -> Option<String>` — extracts the
+    first non-whitespace-only line, trimmed. Explicitly strips U+FEFF
+    (BOM) before whitespace-trimming because `str::trim` alone does
+    NOT strip U+FEFF (it's Unicode `Cf` Format, not `White_Space`) —
+    found this the hard way via a failing pin test, fixed.
+  - New `fn sniff_wsl_version() -> Option<String>` — IO wrapper.
+    Shells out to `wsl --version` with `WSL_UTF8=1` env (forces UTF-8
+    output on recent builds), captures stdout via
+    `String::from_utf8_lossy`, pipes through `first_line`. Returns
+    `None` on missing wsl.exe / non-zero exit / empty output.
+  - `collect_report` populates the new field via `sniff_wsl_version()`.
+  - `print_human` prints `"WSL:          {wsl_version}"` row between
+    `Log exists:` and `wt.exe:` (uses `"(not detected)"` as
+    placeholder for None).
+  - `baseline_diagnose_report` test helper sets a representative
+    `Some("WSL version: 2.7.3.0")`.
+  - `diagnose_json_top_level_keys_pinned` extended to require
+    `wsl_version` as a pinned key (13 keys now, was 12).
+  - New pin test `first_line_handles_all_cases` covers 7 edge cases:
+    empty / whitespace-only / multi-line / leading-blank / leading-
+    whitespace / no-newline / BOM-prefixed. The BOM case is the
+    explicit guard against the `str::trim` Unicode-category confusion
+    documented in the docblock.
+- `openspec/litmus-tests/litmus-windows-tray-diagnose-cli-surface.yaml`:
+  - New step "wsl --version sniffer first-line helper test attached"
+    requires `fn first_line_handles_all_cases` + `fn sniff_wsl_version`.
+- `cheatsheets/runtime/windows-tray-diagnostics.md`:
+  - JSON schema block: new `"wsl_version"` row between `log_exists`
+    and `wt_present` with type + locale-as-is fallback semantics.
+
+**Build**: 36.79 s release.
+
+**Tests**: 41 + 3 = 44 passed / 5 ignored (+1 over prior tick's 43; the
+new `first_line_handles_all_cases` test). All green.
+
+**Smoke** (real hardware — this dev host has French Windows locale):
+- `--diagnose --json` exit 2 (expected; wire unreachable).
+- `wsl_version` field: `"Version WSL : 2.7.3.0"` — French-locale prefix
+  captured as-is. The version number `2.7.3.0` is the universal payload
+  regardless of locale; operators on an English host would see
+  `"WSL version: 2.7.3.0"` instead.
+- key count in JSON: 13 (was 12; +1 for wsl_version).
+- All other 12 keys unchanged in shape + position.
+
+**Litmus**:
+- `windows-native-tray`: 7/7 PASS (new "wsl --version sniffer first-
+  line helper test attached" step green).
+- `cargo fmt`: clean (rustfmt re-wrapped one assert_eq! macro — applied
+  with the no-newline case simplified inline).
+- `cargo clippy -D warnings`: clean.
+
+**Findings** (free-form):
+- The locale-as-is capture decision is deliberate: trying to parse
+  `"WSL version: X"` vs `"Version WSL : X"` vs `"WSL バージョン: X"`
+  (Japanese) etc. would require a per-locale prefix dictionary that
+  could go stale at any future WSL release. Emitting the raw first
+  line trades parser cleanliness for surface-invariance — operators
+  pasting `--diagnose --json` into a support ticket get the same
+  truthful payload whatever their locale.
+- The BOM stripping is real: WSL prior to about build 19045.2546 emits
+  UTF-16 LE with a BOM, and even with `WSL_UTF8=1` set the BOM
+  sometimes survives as the first character. `first_line`'s
+  `trim_start_matches('\u{FEFF}')` before `trim` handles both old and
+  new builds.
+- The 13-key DiagnoseReport surface now covers: 5 binary identity (
+  version, build_commit, install_path, log_path, log_exists), 1 WSL
+  service info (wsl_version), 4 host facts (wt_present, distro,
+  distro_registered, release_tag), 1 manifest pin, 1 wire sub-object,
+  1 recent log array. Comprehensive triage in one JSON payload.
+
+**Cross-host visibility note**: pure Windows-tray-side addition; no
+cross-host coordination needed. Linux + macOS trays have different
+hypervisor/container-runtime concerns; no analog to `wsl --version`
+sniffing exists on those sides.
+
+**Next iteration ask**: N/A (SECTION_KIND=ok). The DiagnoseReport now
+exposes the WSL feature's own version so operators can triage
+"old WSL" failures from the report alone.
