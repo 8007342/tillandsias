@@ -632,3 +632,123 @@ concept is specific to the windows-tray's file-write model.
 
 **Next iteration ask**: N/A (SECTION_KIND=ok). The full
 `--logs` lifecycle (live + rotated backup) is now CLI-accessible.
+
+---
+
+### 20260531T200000Z — ok (os_version field added to --diagnose for triage)
+
+- agent_id: windows-bullo-claude-opus-20260531T200000Z
+- head_sha: 88cf9287 (linux-next finally moved with +1 escalation record
+  for v0.2.260531.1 git-proxy 403; main is now at fe2295a6 with VERSION
+  bumped to 0.2.260531.1 — same release-cycle pattern as yesterday;
+  windows-next had 9 unmerged commits pre this tick now 10)
+- version: 0.2.260528.1 (linux-next still pre-VERSION-sync from main —
+  normal release-cycle pattern; next linux→main→linux sync will pull
+  0.2.260531.1 back into linux-next and from there to windows-next)
+- build_commit: 1e92c6c5 (pre-this-commit head)
+- build_run_id: 20260531T200000Z
+
+**Sibling context**:
+- **v0.2.260531.1 release shipped today** at ~11:22 PDT via
+  merge-to-main-and-release. Same git-proxy 403 escalation pattern as
+  yesterday — `88cf9287 escalation: tag-push 403 blocker for
+  v0.2.260531.1` recorded the blocker; operator presumably resolved
+  via local-fedora tag push as before.
+- linux-next only added the escalation record this tick; no
+  shared-contract changes. Merged forward clean (28-line plan-doc
+  delta).
+- osx-next still unchanged at 05b47860.
+- Today's `/build-windows-tray` cron (11:17 AM PDT) didn't write any
+  entries to this ledger — suggests the cron's session wasn't live
+  at fire time. Standing skill will catch tomorrow's cron.
+
+**Change made**: added `os_version: Option<String>` field to
+`DiagnoseReport`. Operators triaging "is this Windows 10 or 11? what
+build number?" had to run `winver` or `systeminfo` separately;
+surfacing the OS version directly in the diagnose JSON closes that
+gap. Pairs naturally with the prior tick's `wsl_version` addition —
+both are "what host/feature versions am I running?" triage data.
+
+Files touched (Windows-owned only):
+- `crates/tillandsias-windows-tray/src/notify_icon.rs`:
+  - `DiagnoseReport` struct: new `os_version: Option<String>` field
+    with docblock explaining the `cmd /c ver` capture semantics +
+    locale-neutrality of the bracketed version payload.
+  - New `fn sniff_windows_version() -> Option<String>` — IO wrapper
+    shelling out to `cmd /c ver`, capturing stdout via
+    `String::from_utf8_lossy`, pipes through the existing
+    `first_line` pure helper. Same shape as `sniff_wsl_version`:
+    `None` on missing cmd / non-zero exit / empty output.
+  - `collect_report` populates the new field via
+    `sniff_windows_version()`.
+  - `print_human` prints `"OS:           {os_version}"` row right
+    after the `WSL:` row (uses `"(not detected)"` placeholder for
+    None).
+  - `baseline_diagnose_report` test helper sets a representative
+    `Some("Microsoft Windows [version 10.0.26200.8524]")` matching
+    this dev host's actual response.
+  - `diagnose_json_top_level_keys_pinned`: extended to require
+    `os_version` (14 keys now, was 13).
+- `openspec/litmus-tests/litmus-windows-tray-diagnose-cli-surface.yaml`:
+  - "wsl --version sniffer first-line helper test attached" step
+    renamed to "wsl --version + cmd /c ver sniffers + first-line
+    helper test attached" and extended to also require
+    `fn sniff_windows_version` grep.
+- `cheatsheets/runtime/windows-tray-diagnostics.md`:
+  - JSON schema block: new `os_version` row directly after
+    `wsl_version` with type + locale-neutrality fallback semantics.
+
+**Build**: 37.16 s release.
+
+**Tests**: 41 + 3 = 44 passed / 5 ignored (same total as prior tick;
+the new sniffer doesn't add a unit test — IO is hard to mock without
+a fake process — but the pure `first_line` helper that does the
+parsing is already pinned by `first_line_handles_all_cases`).
+
+**Smoke** (real hardware — Windows 11 24H2 build 26200.8524):
+- `--diagnose --json` exit 2 (expected; wire unreachable).
+- `os_version` field: `"Microsoft Windows [version 10.0.26200.8524]"` —
+  Windows 11 24H2 build number captured verbatim.
+- `wsl_version` field still working: `"Version WSL : 2.7.3.0"`.
+- key count in JSON: **14** (was 13; +1 for os_version).
+- All other 13 keys unchanged in shape + position.
+
+**Litmus**:
+- `windows-native-tray`: 7/7 PASS (the renamed step covers the new
+  sniffer name).
+- `cargo fmt`: clean.
+- `cargo clippy -D warnings`: clean.
+
+**Findings** (free-form):
+- The 14-key DiagnoseReport now covers:
+  - **5 binary identity**: version, build_commit, install_path,
+    log_path, log_exists
+  - **2 host-software versions**: wsl_version, os_version (NEW)
+  - **4 host facts**: wt_present, distro, distro_registered,
+    release_tag
+  - **1 manifest pin**: manifest_pin_x86_64_tar
+  - **1 wire sub-object**: wire{}
+  - **1 log array**: recent_log_tail
+  
+  A complete "what's on this host + what's the running binary" picture
+  in one JSON payload. Support engineers can answer almost any triage
+  question without follow-up.
+- The locale-neutrality of `cmd /c ver` is reliable because the
+  bracketed version payload is hard-coded in the OS executable, not
+  localized. The "Microsoft Windows" prefix CAN be localized in
+  theory but in practice all locales surface the bracketed payload
+  identically; emitting the whole line as-is is robust.
+- Both sniffer functions (`sniff_wsl_version` + `sniff_windows_version`)
+  share the same "shell out + first_line + Option<String>" shape.
+  Two instances of the pattern doesn't warrant abstraction yet, but
+  worth noting if a third sniffer ever lands (could refactor into a
+  generic `sniff_first_line(cmd, args, env) -> Option<String>`).
+
+**Cross-host visibility note**: pure Windows-tray-side addition; no
+cross-host coordination needed. Linux + macOS trays would surface
+their own kernel/release info differently (e.g. `uname -r` or
+`sw_vers`); the pattern is mirrorable if their `--diagnose` surfaces
+ever grow analogous fields.
+
+**Next iteration ask**: N/A (SECTION_KIND=ok). The 14-key
+DiagnoseReport is now comprehensive triage in a single JSON payload.

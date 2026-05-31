@@ -1274,6 +1274,13 @@ struct DiagnoseReport {
     /// (WSL feature disabled) or the command fails. Lets operators answer
     /// "is my WSL build old?" from `--diagnose --json` alone.
     wsl_version: Option<String>,
+    /// First non-empty line of `cmd.exe /c ver` (e.g. `"Microsoft Windows
+    /// [version 10.0.26200.8524]"`). Surfaces the Windows OS major +
+    /// build number for triage — operators don't need `winver` / `systeminfo`
+    /// alongside `--diagnose`. Locale-neutral (the bracketed version
+    /// payload is invariant). `None` if `cmd.exe` isn't on PATH (extremely
+    /// unusual) or the command fails.
+    os_version: Option<String>,
     wt_present: bool,
     distro: &'static str,
     distro_registered: bool,
@@ -1330,6 +1337,24 @@ fn sniff_wsl_version() -> Option<String> {
     let output = std::process::Command::new("wsl")
         .arg("--version")
         .env("WSL_UTF8", "1")
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    first_line(&stdout)
+}
+
+/// Shell out to `cmd.exe /c ver` and return the first non-empty line of
+/// its stdout (e.g. `"Microsoft Windows [version 10.0.26200.8524]"`).
+/// Same shape as [`sniff_wsl_version`]: `None` on missing cmd / non-zero
+/// exit / empty output. Pure formatting via [`first_line`]; the bracketed
+/// version payload (`"10.0.26200.8524"`) is locale-neutral so the whole
+/// line is safe to surface as-is.
+fn sniff_windows_version() -> Option<String> {
+    let output = std::process::Command::new("cmd")
+        .args(["/c", "ver"])
         .output()
         .ok()?;
     if !output.status.success() {
@@ -1484,6 +1509,7 @@ fn collect_report() -> DiagnoseReport {
         log_path: log.display().to_string(),
         log_exists,
         wsl_version: sniff_wsl_version(),
+        os_version: sniff_windows_version(),
         wt_present,
         distro: crate::wsl_lifecycle::DISTRO_NAME,
         distro_registered,
@@ -1505,6 +1531,10 @@ fn print_human(r: &DiagnoseReport) {
     println!(
         "WSL:          {}",
         r.wsl_version.as_deref().unwrap_or("(not detected)")
+    );
+    println!(
+        "OS:           {}",
+        r.os_version.as_deref().unwrap_or("(not detected)")
     );
     println!(
         "wt.exe:       {}",
@@ -2176,6 +2206,7 @@ mod tests {
             install_path: "C:\\path\\to\\tillandsias-tray.exe".to_string(),
             log_path: "C:\\path\\to\\tray.log".to_string(),
             wsl_version: Some("WSL version: 2.7.3.0".to_string()),
+            os_version: Some("Microsoft Windows [version 10.0.26200.8524]".to_string()),
             log_exists: false,
             wt_present: true,
             distro: "tillandsias",
@@ -2205,6 +2236,7 @@ mod tests {
             "log_path",
             "log_exists",
             "wsl_version",
+            "os_version",
             "wt_present",
             "distro",
             "distro_registered",

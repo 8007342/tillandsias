@@ -67,8 +67,8 @@ critical_path:
     expected_behavior: "grep succeeds"
     timeout_ms: 3000
 
-  - step: "wsl --version sniffer first-line helper test attached"
-    command: "grep -F 'fn first_line_handles_all_cases' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn sniff_wsl_version' crates/tillandsias-windows-tray/src/notify_icon.rs"
+  - step: "wsl --version + cmd /c ver sniffers + first-line helper test attached"
+    command: "grep -F 'fn first_line_handles_all_cases' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn sniff_wsl_version' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn sniff_windows_version' crates/tillandsias-windows-tray/src/notify_icon.rs"
     expected_behavior: "grep succeeds"
     timeout_ms: 3000
 
