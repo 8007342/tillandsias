@@ -304,3 +304,112 @@ triage, but that's macOS-host territory.
 **Next iteration ask**: N/A (SECTION_KIND=ok). The DiagnoseReport now
 has complete binary-identity provenance (what release + what commit +
 what location).
+
+---
+
+### 20260531T140000Z — ok (Win11 balloon toasts on provisioning success + wire degraded/recovered)
+
+- agent_id: windows-bullo-claude-opus-20260531T140000Z
+- head_sha: 18d0d5cb (linux-next + osx-next both unchanged across 3+
+  consecutive ticks now; windows-next 6 ahead pre-this-commit)
+- version: 0.2.260528.1
+- build_commit: 18d0d5cb (will self-update at next rebuild)
+- build_run_id: 20260531T140000Z
+
+**Sibling context**: linux-next velocity-cooldown across 3+ ticks; osx-next
+idle. windows-next 0/7 (7 ahead of linux-next, waiting for the next
+integration cycle). Merge-tree clean.
+
+**Change made**: tray UX — Win11 balloon toasts on 3 previously-silent
+state transitions: (1) provisioning success, (2) first transition into
+wire-degraded mid-session, (3) wire recovery. Today only provisioning
+failure surfaces as a toast; success + mid-session degradation + recovery
+are silent (operator has to mouseover the icon or right-click the menu
+to learn). On install, the user got NO visible "yes, it worked"
+confirmation post-provisioning — only the chip text updated to
+"🟢 Ready" which they couldn't see without interacting with the tray.
+
+Files touched (Windows-owned only):
+- `crates/tillandsias-windows-tray/src/notify_icon.rs`:
+  - **New `WIRE_DEGRADED_NOTIFIED: AtomicBool`** static, edge-trigger
+    flag for the wire-degraded → wire-recovered toast pair.
+    Initialized `false`.
+  - **`mark_wire_unreachable` enriched**: still updates the chip text
+    and clears `podman_ready` as before. Now ALSO swaps the flag and
+    fires a single warning balloon on the false → true transition.
+    Subsequent polls while still degraded see the flag already set
+    and stay silent. Result: at most 1 degraded-toast per degradation
+    episode instead of 1 every 30 s.
+  - **New `mark_wire_recovered`**: called from the poll-success path
+    when a `VmStatusReply` arrives. Swaps the flag true → false; if it
+    was previously true (i.e. we had toasted a degradation), fires an
+    info balloon confirming recovery. The flag's initial-`false` state
+    means a fresh-Ready poll right after provisioning doesn't
+    spurious-toast — the ground-truth confirmation lives in
+    `spawn_provisioning`'s Ok-balloon path.
+  - **`refresh_vm_status` Ok-branch enriched**: now calls
+    `mark_wire_recovered(hwnd)` alongside the existing status text
+    update so degraded → recovered transitions surface visibly.
+  - **`spawn_provisioning` Ok-branch enriched**: new `show_balloon`
+    call BEFORE the keepalive park, titled
+    `"Tillandsias <workspace VERSION> — ready"` (so the toast doubles
+    as a version-confirmation). Body: "VM is up and the control wire
+    is established. Right-click the tray icon for projects + actions."
+    Mirrors the existing failure-path balloon directly above it —
+    both routes now toast at the end of provisioning.
+
+**Build**: 37.10 s release. Binary 6,344,704 bytes (+2,560 over prior
+tick's 6,342,144).
+
+**Tests**: 40 + 3 = 43 passed / 5 ignored (no new pin test added; the
+balloon code is pure Win32 IO so a test would need to mock the
+`Shell_NotifyIconW` call — the existing build + clippy chain validates
+the code paths).
+
+**Smoke**:
+- Build / fmt / clippy / litmus all green (43 tests pass).
+- Binary reinstalled to %LOCALAPPDATA%\Programs\Tillandsias\.
+- **Visible toasts NOT directly smoked**: balloon notifications are
+  Win11 Action Center toasts that require launching the GUI tray
+  AND triggering the provisioning flow (or the 30-second status
+  poll). Both require an interactive session that I can't run mid-
+  loop. The code paths are exercised by the build/clippy/test chain;
+  visible verification will happen on tomorrow's `/build-windows-tray`
+  cron when the daily flow runs interactively, OR on the user's next
+  fresh `install-windows.ps1 -Provision -Launch` invocation.
+
+**Litmus**:
+- `windows-native-tray`: 7/7 PASS.
+- `cargo fmt`: clean (rustfmt re-wrapped one `format!` macro — applied).
+- `cargo clippy -D warnings`: clean.
+
+**Findings** (free-form):
+- The 3 new toasts complete a "visible feedback for every state
+  transition" UX promise:
+  - Provisioning success → "Tillandsias <vN.N.NNN.N> — ready" (Info)
+  - Provisioning failure → "Tillandsias — provisioning failed" (Error,
+    existing)
+  - Mid-session wire degradation → "Tillandsias — wire degraded"
+    (Warning, edge-triggered)
+  - Wire recovery from a degradation → "Tillandsias — wire recovered"
+    (Info, edge-triggered)
+- The edge-trigger design (single AtomicBool flag) means a flaky wire
+  with many false → true → false oscillations gets ONE notification
+  per oscillation, not 1 per 30 s poll. Idempotent at the API level
+  (calling `mark_wire_unreachable` 20 times in a row results in at most
+  1 toast). Symmetric on the recovery side.
+- Using `env!("WORKSPACE_VERSION")` in the Ready-toast title means
+  users + support engineers see the running binary's identity at the
+  exact moment the user is most likely to be paying attention (right
+  after launch). The 5 places a user can ask "what version am I
+  running?" are now: `--version`, `--diagnose --json version`, menu
+  footer, tray tooltip, **and now the Ready-launch toast**.
+
+**Cross-host visibility note**: pure Windows-tray-side UX addition.
+macOS-tray uses NSUserNotification (or UNUserNotification on modern
+macOS) for similar app-event toasts; symmetric implementation could
+mirror this for first-launch + wire-state-change confirmations.
+
+**Next iteration ask**: N/A (SECTION_KIND=ok). The tray's
+state-transition UX is now visible to the user via Win11 toasts
+without requiring tray interaction.

@@ -796,18 +796,58 @@ fn print_status_json(r: &StatusReport) {
 /// `wire_unreachable_chip_text_pinned`.
 pub const WIRE_UNREACHABLE_CHIP_TEXT: &str = "\u{1F534} Wire unreachable";
 
+/// Edge-trigger flag for the wire-degraded → wire-recovered toast pair.
+/// `mark_wire_unreachable` sets it on the first transition into a degraded
+/// state and fires one balloon; subsequent polls while still degraded see
+/// the flag already set and stay silent. When a poll finally succeeds and
+/// the wire is back up, the success path clears the flag and fires a
+/// "wire recovered" balloon. Result: at most one degraded-toast + one
+/// recovered-toast per degradation episode, instead of one toast every 30 s
+/// while the wire is down.
+static WIRE_DEGRADED_NOTIFIED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
 /// Mark the live status chip as wire-unreachable. Called from the poll loop
 /// when `refresh_vm_status` can't reach the in-VM headless — without this, a
 /// mid-session wire failure (headless crash, VM terminated externally, etc.)
 /// would leave the chip showing the last-known "Ready" state forever. Also
 /// clears `MenuState.podman_ready` so per-project actions are correctly
 /// re-gated. The next successful poll restores the phase + podman chip
-/// naturally.
+/// naturally + clears [`WIRE_DEGRADED_NOTIFIED`].
+///
+/// Edge-triggered toast: on the first transition into degraded, fires a
+/// single warning balloon so the user notices the change. Subsequent polls
+/// while still degraded stay silent (the chip text already shows the state).
 fn mark_wire_unreachable(hwnd: HWND) {
     if let Ok(mut guard) = MENU_STATE.lock() {
         guard.get_or_insert_with(MenuState::initial).podman_ready = false;
     }
     update_status_text(WIRE_UNREACHABLE_CHIP_TEXT, hwnd);
+    if !WIRE_DEGRADED_NOTIFIED.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        show_balloon(
+            hwnd,
+            "Tillandsias \u{2014} wire degraded",
+            "The control wire to the in-VM headless is unreachable. The tray will keep \
+             retrying every 30 s and notify when the connection is back.",
+            BalloonSeverity::Warning,
+        );
+    }
+}
+
+/// Companion to [`mark_wire_unreachable`]: called from the poll-success path
+/// when a VmStatusReply arrives after a degraded interval. Resets the
+/// edge-trigger flag and fires a "wire recovered" balloon — but only if we
+/// had previously toasted a degradation, so a fresh-Ready transition
+/// (e.g. immediately after provisioning) doesn't spurious-toast.
+fn mark_wire_recovered(hwnd: HWND) {
+    if WIRE_DEGRADED_NOTIFIED.swap(false, std::sync::atomic::Ordering::SeqCst) {
+        show_balloon(
+            hwnd,
+            "Tillandsias \u{2014} wire recovered",
+            "Control wire back up. Per-project actions are available again.",
+            BalloonSeverity::Info,
+        );
+    }
 }
 
 /// Compose a one-line description of an `Error` reply the in-VM headless's
@@ -903,6 +943,12 @@ async fn refresh_vm_status(hwnd: HWND) {
             // activity (e.g. "Ready · forge-foo created"), not just the phase.
             let base = vm_phase_status_text(phase, podman_ready);
             update_status_text(&compose_chip_text(&base, last_event.as_deref()), hwnd);
+            // Clear the wire-degraded edge-trigger and surface a "wire
+            // recovered" balloon if we had previously toasted a degradation.
+            // No-op on the steady-state-Ready case (first poll after
+            // provisioning succeeds — that ground-truth confirmation lives
+            // in the spawn_provisioning Ok path's balloon).
+            mark_wire_recovered(hwnd);
             tracing::debug!(?phase, podman_ready, "vm status polled");
         }
         // Per the control-dispatch convergence packet (5c67ddb9, aeb5499a) the
@@ -1500,6 +1546,20 @@ fn spawn_provisioning(hwnd: HWND) {
             Ok(()) => {
                 tracing::info!("VM ready — control wire established");
                 update_status_text("\u{1F7E2} Ready", hwnd);
+                // Win11 toast confirming the tray is fully operational. Users
+                // installing for the first time get visible "yes, it worked"
+                // feedback without having to right-click the menu; subsequent
+                // launches reaffirm "this tray is what you expect" by including
+                // the workspace VERSION in the title. Mirrors the failure path
+                // below; both routes call show_balloon so the user always sees
+                // a toast at the end of provisioning, success or failure.
+                show_balloon(
+                    hwnd,
+                    &format!("Tillandsias {} \u{2014} ready", env!("WORKSPACE_VERSION")),
+                    "VM is up and the control wire is established. Right-click \
+                     the tray icon for projects + actions.",
+                    BalloonSeverity::Info,
+                );
                 // Parking this task holds `_keepalive` for the tray's lifetime;
                 // on Quit the LocalSet drops the task → kill_on_drop releases the
                 // VM to idle normally again. PROVISIONING_ACTIVE stays set (Ready),
