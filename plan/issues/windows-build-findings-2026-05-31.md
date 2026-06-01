@@ -1085,3 +1085,81 @@ helpers, (2) cli_integration tests assert against the real binary's
 output, (3) portable_smoke tests assert against the shared
 host-shell crate's pure surface. All 3 layers run via
 `cargo test -p tillandsias-windows-tray --release`.
+
+---
+
+### 20260601T040000Z — ok (skills/build-windows-tray refresh: 16-key claim + numbering fix + summary entry)
+
+- agent_id: windows-bullo-claude-opus-20260601T040000Z
+- head_sha: e5db526e (linux-next + osx-next still unchanged 9+ ticks;
+  windows-next 14 ahead pre-this-commit, 15 ahead post)
+- version: 0.2.260528.1
+- build_commit: e5db526e
+- build_run_id: 20260601T040000Z
+
+**Sibling context**: no remote movement. linux-next + osx-next unchanged
+9+ consecutive ticks. windows-next 0/15. Merge-tree clean.
+
+**Change made**: similar in spirit to last tick's cheatsheet refresh —
+the `/build-windows-tray` skill (its SKILL.md) had accumulated 3 stale
+elements that the daily cron user would notice as soon as they
+re-read the runbook. Surgical fixes + a session-summary tuning log
+entry.
+
+Files touched (Windows-owned only):
+- `skills/build-windows-tray/SKILL.md`:
+  1. **Section 6 template "Autonomous smoke" stale claim**: said
+     `"all 10 schema keys per litmus:windows-tray-diagnose-cli-surface"`
+     → bumped to **"16 schema keys"** + a hedge: "count grows over
+     time; check the cheatsheet § `--diagnose --json` schema for the
+     current list" so future schema additions don't cause this skill
+     to silently lie. The template's body rows also enriched with
+     `version` / `build_commit` / `install_path` / `wsl_version` /
+     `os_version` / `distro_running` to match the current JSON
+     payload — operators filling in this template now have direct
+     placeholders for the modern surface, not a v0.0.1-era subset.
+  2. **Duplicate `### 7.` numbering bug**: there were two sections
+     numbered `### 7.` — "Commit + push" + "Report". Renamed the
+     second to `### 8.` so the 8-step runbook reads correctly.
+  3. **Tuning log gap**: the prior `2026-05-30` entry was the last
+     anchor. Added a `2026-05-31` entry summarizing the day's
+     surface enrichment (7 CLI modes, 16-key DiagnoseReport, 4 Win11
+     toasts, 4 env vars, `-Purge` mode, log rotation, integration-test
+     suite). Notes that the daily-flow itself is unchanged — the
+     install-windows.ps1 end-to-end path already exercises all of it.
+
+**Build**: N/A (docs-only change; binary unchanged from prior tick).
+
+**Smoke**: `windows-native-tray` litmus 7/7 PASS (skill doc isn't
+pinned at this surface; the litmus checks Rust + script grep
+predicates only).
+
+**Findings** (free-form):
+- The "10 schema keys" → "16 schema keys" bump pattern is a recurring
+  source of staleness — each time someone adds a field, the skill +
+  cheatsheet + ledger templates need updates. The hedge "check the
+  cheatsheet for the current list" decouples the skill from the
+  exact count, so adding fields in the future doesn't require this
+  skill to be updated again. Trade-off: less precise but more
+  durable.
+- Documentation-accuracy work like this and last tick's cheatsheet
+  refresh keeps coming up because rapid feature additions outpace
+  documentation discipline. A periodic audit (e.g. monthly during a
+  quiet velocity-cooldown stretch like the one I'm in now) could
+  catch + fix this kind of drift in bulk.
+- The skill itself doesn't need behavioral changes — the
+  install-windows.ps1 end-to-end flow it now prefers (per the
+  2026-05-30 update) already covers all the new surfaces
+  transparently. The new modes (`--logs --bak`, `--version`,
+  `--help`) and the new diagnose fields show up automatically because
+  the install script captures `--diagnose --json` post-install. Skill
+  is operator-grade as-is.
+
+**Cross-host visibility note**: pure Windows-tray-side skill update;
+no cross-host coordination needed. macOS's `/build-macos-tray` skill
+has its own ledger pattern (mirrored in `/probe-macos-tray-on-windows`)
+and would benefit from a parallel audit.
+
+**Next iteration ask**: N/A (SECTION_KIND=ok). The skill now matches
+the current windows-tray surface and the runbook is correctly
+numbered.
