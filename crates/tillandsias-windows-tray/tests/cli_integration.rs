@@ -160,6 +160,59 @@ fn diagnose_json_has_all_16_top_level_keys() {
     );
 }
 
+/// `--status-once --json` emits a valid 7-key `StatusReport` JSON object
+/// regardless of wire state. On a host where the WSL VM is idled (the
+/// expected steady state when no tray session is keepaliving it), the
+/// `reachable` field is `false`, `error` carries a descriptive string, and
+/// `exit_code` matches the process exit. Pins both the schema + the
+/// exit-code self-consistency: a regression that flipped them out of sync
+/// would surface here.
+#[test]
+fn status_once_json_has_all_7_keys_and_exit_code_matches() {
+    let output = Command::new(TRAY_EXE)
+        .args(["--status-once", "--json"])
+        .output()
+        .expect("run --status-once --json");
+    let code = output.status.code();
+    // 0 = Ready, 2 = reachable-not-Ready, 1 = unreachable. Any of these is
+    // a valid "report ran to completion" outcome.
+    assert!(
+        code == Some(0) || code == Some(1) || code == Some(2),
+        "--status-once --json exit should be 0/1/2, got {code:?}\nstderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    let json: serde_json::Value =
+        serde_json::from_str(&stdout).expect("--status-once --json stdout should be valid JSON");
+    let obj = json.as_object().expect("top-level should be a JSON object");
+    for key in [
+        "reachable",
+        "wire_version",
+        "phase",
+        "podman_ready",
+        "last_event",
+        "error",
+        "exit_code",
+    ] {
+        assert!(
+            obj.contains_key(key),
+            "--status-once --json should include top-level key {key:?}, got: {}",
+            obj.keys().cloned().collect::<Vec<_>>().join(", ")
+        );
+    }
+    // The pre-computed exit_code in the JSON must match the process exit.
+    let json_exit = obj
+        .get("exit_code")
+        .and_then(|v| v.as_i64())
+        .expect("exit_code should be a number");
+    assert_eq!(
+        Some(json_exit as i32),
+        code,
+        "in-JSON exit_code ({json_exit}) should match process exit ({code:?}) — \
+         the two are guaranteed self-consistent by status_exit_code()"
+    );
+}
+
 /// `--logs --bak` when `tray.log.bak` does not exist exits 1 with a
 /// descriptive stderr. Pin the missing-bak path because it's the user-
 /// facing message most operators hit on first `--bak` invocation (before
