@@ -3800,3 +3800,27 @@ git tag -a "v0.2.260531.1" -m "Release 0.2.260531.1" fe2295a6
 git push origin "v0.2.260531.1"
 gh workflow run release.yml --ref v0.2.260531.1
 ```
+
+## ESCALATION — 2026-06-01T18:09Z — Tag push blocked by local proxy (cycle 3)
+
+**Skill:** merge-to-main-and-release
+**Step failed:** STEP 5 — push annotated tag v0.2.260601.1
+**Error:** HTTP 403 from local git proxy at 127.0.0.1:33107 on tag push. No MCP tool for creating GitHub tags or triggering workflow_dispatch. Identical blocker to 2026-05-30 and 2026-05-31 cycles.
+
+**State of release at failure:**
+- PR #10 (linux-next → main): MERGED ✓ (merge SHA: 4f07f25b1dd8ca60b5597cd0f977f6f6907f14bd)
+- VERSION bumped to 0.2.260601.1 on main: PUSHED ✓ (commit 6e3d2335)
+- Local annotated tag v0.2.260601.1 created pointing at 6e3d2335: EXISTS LOCALLY ✓
+- Remote tag v0.2.260601.1: NOT PUSHED ✗
+- release.yml workflow: NOT TRIGGERED ✗
+- GitHub Release: NOT CREATED ✗
+
+**Operator action required:** Push the tag manually, then trigger release.yml:
+```bash
+git fetch origin main
+git tag -a "v0.2.260601.1" -m "Release 0.2.260601.1 — daily linux-next promotion PR #10" 6e3d2335
+git push origin "v0.2.260601.1"
+gh workflow run release.yml --ref v0.2.260601.1
+```
+
+**Recurring pattern:** This is the 3rd consecutive daily cycle blocked at the same step. The git proxy at 127.0.0.1 proxies regular branch pushes but returns 403 for all `refs/tags/*` pushes. Resolution requires either: (a) operator fixes the proxy to allow tag pushes, (b) a `create_tag` MCP tool is added to the GitHub MCP server, or (c) the release workflow is converted to trigger on `push: tags:` with an alternative tag-creation mechanism.
