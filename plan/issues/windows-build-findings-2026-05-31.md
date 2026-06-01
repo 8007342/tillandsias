@@ -1163,3 +1163,107 @@ and would benefit from a parallel audit.
 **Next iteration ask**: N/A (SECTION_KIND=ok). The skill now matches
 the current windows-tray surface and the runbook is correctly
 numbered.
+
+---
+
+### 20260601T060000Z — ok (tray-diagnose.ps1 surfaces 4 newer JSON fields)
+
+- agent_id: windows-bullo-claude-opus-20260601T060000Z
+- head_sha: b95c27f5 (linux-next + osx-next still unchanged 10+ ticks;
+  windows-next 15 ahead pre-this-commit, 16 ahead post)
+- version: 0.2.260528.1
+- build_commit: b95c27f5
+- build_run_id: 20260601T060000Z
+
+**Sibling context**: no remote movement. linux-next + osx-next unchanged
+10+ consecutive ticks. windows-next 0/16. Merge-tree clean.
+
+**Change made**: closed the producer/consumer drift between
+`crates/tillandsias-windows-tray/src/notify_icon.rs` (the JSON
+producer) and `scripts/tray-diagnose.ps1` (the canonical JSON
+consumer). 4 fields the binary now reports were NOT surfaced by the
+script's human-readable health check:
+- `log_size_bytes` (added 3 ticks ago, paired with rotation feature)
+- `wsl_version` (added 2 ticks ago)
+- `os_version` (added 1 tick ago)
+- `distro_running` (added 1 tick ago)
+
+Operators running `scripts\tray-diagnose.ps1` would see the older
+12-field shape; the JSON-only consumer (the binary itself) saw all 16.
+Asymmetric.
+
+Files touched (Windows-owned only):
+- `scripts/tray-diagnose.ps1`:
+  - **Identity section**: `log file exists` row enriched to append
+    `(N bytes)` when `log_size_bytes` is non-null.
+  - **Windows host section**: new `OS version` + `WSL version` rows
+    BEFORE the existing `wt.exe present` row (host-software identity
+    first, then host-binary presence). `OS version` is always PASS
+    (cmd /c ver should never fail on a supported host). `WSL version`
+    counts as a FAIL contributor if absent (no WSL = no tray
+    functionality). New `distro running` row AFTER `distro registered`
+    surfaces the new bool as informational ("yes (VM up)" /
+    "no (idled -- normal when no tray session keepalives the VM)") —
+    NOT a failure when false because WSL2 idles VMs down routinely.
+- `openspec/litmus-tests/litmus-windows-tray-diagnose-cli-surface.yaml`:
+  - "tray-diagnose.ps1 consumer script" step extended with greps for
+    the 4 new field names (`log_size_bytes`, `os_version`,
+    `wsl_version`, `distro_running`). Renamed to mention 16-key JSON.
+
+**Build**: N/A (script-only change; binary unchanged).
+
+**Smoke** (real hardware — exercised end-to-end):
+- `scripts\tray-diagnose.ps1` runs clean. Output:
+  - Identity section now shows `log file exists` with
+    `... tray.log (0 bytes)` size suffix.
+  - Windows host section now shows `OS version` (Microsoft Windows
+    [version 10.0.26200.8524]) + `WSL version` (Version WSL : 2.7.3.0)
+    + the existing `wt.exe present` + `distro registered` + new
+    `distro running: no (idled -- normal when no tray session
+    keepalives the VM)`.
+  - Recipe / Control wire / Recent log activity sections unchanged.
+  - Bottom DEGRADED summary unchanged (still 1 failure: control wire).
+- Initial smoke caught a pitfall: em-dash in the `distro running`
+  detail string mojibake'd to `â€"` because PowerShell 5.1 reads
+  scripts as ANSI when they contain non-BOM Unicode. Per the
+  cheatsheet's existing pitfall #4 ("Keep `scripts/*.ps1`
+  ASCII-only"). Replaced with `--` (ASCII double-hyphen); rendered
+  cleanly on second exercise.
+
+**Litmus**:
+- `windows-native-tray`: 7/7 PASS (the extended "tray-diagnose.ps1
+  consumer script surfaces the 16-key JSON" step now greps for the
+  4 new substrings — all present).
+
+**Findings** (free-form):
+- The producer/consumer drift is a recurring pattern: every time a
+  field gets added to `DiagnoseReport`, the script that surfaces it
+  in human-readable form needs a corresponding update. The litmus
+  pin step on the script's substring presence catches this at
+  pre-build time once the substring is asserted (which I now do for
+  all 4 new fields). The pattern: when adding a DiagnoseReport
+  field, also (a) extend the cheatsheet schema block, (b) extend
+  tray-diagnose.ps1 to surface it, (c) extend the litmus pin step
+  to require the new substring. Three touchpoints, but the litmus
+  pin catches the drift if any of them is missed (the build fails).
+- The em-dash mojibake is a low-grade trap that I should have
+  remembered: I've added 3 em-dashes earlier in the script and they
+  rendered OK (probably because they came in via `Write-Host` with
+  a different encoding path), but the one I just added in a
+  conditional string was triggered. The fix is "use ASCII or use
+  BOM"; I picked ASCII for consistency with the rest of the script.
+- The "informational vs failure" classification for `distro_running`
+  matters: WSL2 idles VMs down within seconds of no activity, so
+  `distro_running: false` is the NORMAL steady state when the user
+  isn't actively using the tray. Marking it as a failure would
+  cause every routine `tray-diagnose.ps1` run to report DEGRADED.
+  Instead it's informational, and the control-wire reachability
+  remains the authoritative "is it usable now?" signal.
+
+**Cross-host visibility note**: pure Windows-tray-side script update;
+no cross-host coordination needed.
+
+**Next iteration ask**: N/A (SECTION_KIND=ok). The 3 windows
+operator-facing surfaces (binary `--diagnose --json`, cheatsheet,
+`tray-diagnose.ps1`) are now all consistent — 16 fields × 3 surfaces
+× pin-tested via litmus.

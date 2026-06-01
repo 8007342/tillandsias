@@ -82,8 +82,8 @@ critical_path:
     expected_behavior: "grep succeeds"
     timeout_ms: 3000
 
-  - step: "tray-diagnose.ps1 consumer script uses cmd-redirect + reports build commit + recent log"
-    command: "grep -F 'cmd.exe /c' scripts/tray-diagnose.ps1 && grep -Fe '--diagnose --json' scripts/tray-diagnose.ps1 && grep -F 'build_commit' scripts/tray-diagnose.ps1 && grep -F 'recent_log_tail' scripts/tray-diagnose.ps1"
+  - step: "tray-diagnose.ps1 consumer script surfaces the 16-key JSON (build commit, install path, OS + WSL versions, log size, distro running, recent log)"
+    command: "grep -F 'cmd.exe /c' scripts/tray-diagnose.ps1 && grep -Fe '--diagnose --json' scripts/tray-diagnose.ps1 && grep -F 'build_commit' scripts/tray-diagnose.ps1 && grep -F 'recent_log_tail' scripts/tray-diagnose.ps1 && grep -F 'log_size_bytes' scripts/tray-diagnose.ps1 && grep -F 'os_version' scripts/tray-diagnose.ps1 && grep -F 'wsl_version' scripts/tray-diagnose.ps1 && grep -F 'distro_running' scripts/tray-diagnose.ps1"
     expected_behavior: "grep succeeds"
     timeout_ms: 3000
 

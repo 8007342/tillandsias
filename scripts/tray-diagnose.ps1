@@ -106,14 +106,26 @@ $commit = if ($report.build_commit) { $report.build_commit } else { '(unknown)' 
 Write-Check 'build commit      ' $true $commit
 $installPath = if ($report.install_path) { $report.install_path } else { '(unknown)' }
 Write-Check 'install path      ' $true $installPath
-Write-Check 'log file exists   ' $report.log_exists $report.log_path
+$logSizeDetail = if ($null -ne $report.log_size_bytes) { "$($report.log_path) ($($report.log_size_bytes) bytes)" } else { $report.log_path }
+Write-Check 'log file exists   ' $report.log_exists $logSizeDetail
 if (-not $report.log_exists) { $failures++ }
 
 Write-Host "`nWindows host:"
+# Surface OS + WSL versions for triage. Locale-as-is — the bracketed
+# version payload is invariant across locales.
+$osVersion = if ($report.os_version) { $report.os_version } else { '(not detected)' }
+Write-Check 'OS version        ' $true $osVersion
+$wslVersion = if ($report.wsl_version) { $report.wsl_version } else { '(not detected)' }
+Write-Check 'WSL version       ' ([bool]$report.wsl_version) $wslVersion
+if (-not $report.wsl_version) { $failures++ }
 Write-Check 'wt.exe present    ' $report.wt_present
 if (-not $report.wt_present) { $failures++ }
 Write-Check 'distro registered ' $report.distro_registered $report.distro
 if (-not $report.distro_registered) { $failures++ }
+# distro_running flips frequently because WSL2 idles VMs down; it's NOT a
+# failure when false. Surface as informational.
+$runDetail = if ($report.distro_running) { 'yes (VM up)' } else { 'no (idled -- normal when no tray session keepalives the VM)' }
+Write-Check 'distro running    ' $true $runDetail
 
 Write-Host "`nRecipe / artifact:"
 Write-Check 'release tag       ' $true $report.release_tag
