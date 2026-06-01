@@ -213,6 +213,78 @@ fn status_once_json_has_all_7_keys_and_exit_code_matches() {
     );
 }
 
+/// `--logs` (no flags) reads the live `tray.log` and exits 0 when it
+/// exists. The actual content is host-dependent (tracing emits varying
+/// lines per session), so this test asserts only the contract: exit 0
+/// AND stdout is valid UTF-8. Together with the inline
+/// `select_log_tail_handles_all_cases` test (which pins the tail
+/// arithmetic) this covers `--logs` end-to-end. Init_tracing creates the
+/// log file on every startup, so a fresh test host that has never run
+/// the tray before would still have a file to read (this test runs the
+/// binary which calls init_tracing as a side effect of `--logs`).
+#[test]
+fn logs_no_flags_reads_live_log_and_exits_0() {
+    let output = Command::new(TRAY_EXE)
+        .arg("--logs")
+        .output()
+        .expect("run --logs");
+    assert_eq!(
+        output.status.code(),
+        Some(0),
+        "--logs should exit 0 (live log always exists after init_tracing); got {:?}\nstderr: {}",
+        output.status,
+        String::from_utf8_lossy(&output.stderr)
+    );
+    // stdout must be valid UTF-8 (the file is tracing-fmt's text output).
+    // Content is host-dependent so we don't pin substrings; the
+    // existence-and-readable contract is what matters.
+    let _stdout = std::str::from_utf8(&output.stdout).expect("--logs stdout should be valid UTF-8");
+}
+
+/// `--diagnose` (HUMAN mode, no `--json`) emits the bundled report as
+/// labeled rows. Catches: a regression in `print_human` that drops a
+/// section label, panics, or prints to the wrong stream. Different code
+/// path from `print_json`; `diagnose_json_has_all_16_top_level_keys`
+/// doesn't cover this one. Asserts exit ∈ {0, 2} (1 = binary broken)
+/// + the presence of the canonical section labels that the cheatsheet documents.
+#[test]
+fn diagnose_human_includes_pinned_section_labels() {
+    let output = Command::new(TRAY_EXE)
+        .arg("--diagnose")
+        .output()
+        .expect("run --diagnose");
+    let code = output.status.code();
+    assert!(
+        code == Some(0) || code == Some(2),
+        "--diagnose exit should be 0 or 2, got {code:?}\nstderr: {}",
+        String::from_utf8_lossy(&output.stderr)
+    );
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    // Pin the labels the cheatsheet's Quick reference table lists as the
+    // "~13 rows" of the human report. A future refactor that drops or
+    // renames a label surfaces here pre-build instead of as a
+    // documentation-stale incident in the field.
+    for label in [
+        "tillandsias-tray --diagnose",
+        "Version:",
+        "Build commit:",
+        "Install path:",
+        "Log file:",
+        "Log exists:",
+        "WSL:",
+        "OS:",
+        "wt.exe:",
+        "Distro `",
+        "Release tag:",
+        "Manifest pin:",
+    ] {
+        assert!(
+            stdout.contains(label),
+            "--diagnose human output should contain section label {label:?}, got:\n{stdout}"
+        );
+    }
+}
+
 /// `--logs --bak` when `tray.log.bak` does not exist exits 1 with a
 /// descriptive stderr. Pin the missing-bak path because it's the user-
 /// facing message most operators hit on first `--bak` invocation (before

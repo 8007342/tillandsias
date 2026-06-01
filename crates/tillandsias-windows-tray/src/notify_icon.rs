@@ -1,9 +1,12 @@
-//! Win32 NotifyIcon plumbing for the Windows tray.
+//! Win32 NotifyIcon plumbing + CLI diagnostic surface for the Windows tray.
 //!
-//! Owns the message pump, the menu builder, and the bridge between
-//! `tillandsias-host-shell` events and Win32 `Shell_NotifyIcon` updates.
+//! Owns the message pump, the menu builder, the bridge between
+//! `tillandsias-host-shell` events and Win32 `Shell_NotifyIcon` updates,
+//! AND every non-GUI CLI mode the tray binary exposes
+//! (`--diagnose [--json]`, `--status-once [--json]`, `--provision-once`,
+//! `--logs [--tail N] [--bak]`, `--version`, `--help`).
 //!
-//! ## Architecture
+//! ## Architecture (GUI mode)
 //!
 //! 1. We register a hidden message-only window via `RegisterClassExW` +
 //!    `CreateWindowExW`. All tray events route to this window's wndproc.
@@ -19,6 +22,43 @@
 //!    message loop via `LocalSet`. The `WslLifecycle` task lives there,
 //!    and progress callbacks flip the global menu state via a `Mutex`
 //!    behind the window handle.
+//! 5. Win11 toasts fire at 4 edge-triggered events: provisioning success
+//!    (`spawn_provisioning` Ok branch), provisioning failure (Err branch),
+//!    wire degraded (`mark_wire_unreachable`), wire recovered
+//!    (`mark_wire_recovered`). See `WIRE_DEGRADED_NOTIFIED` for the
+//!    flag pattern that prevents repeat toasts during a single
+//!    degradation episode.
+//!
+//! ## File structure (roughly top-to-bottom)
+//!
+//! - **Constants + globals**: `TRAY_ICON_ID`, `WM_TRAYICON`,
+//!   `WIRE_UNREACHABLE_CHIP_TEXT`, `RECIPE_RELEASE_TAG`
+//!   (cross-tray-pinned), `TRAY_LOG_MAX_BYTES`, `MENU_STATE`,
+//!   `PROVISIONING_ACTIVE`, `WIRE_DEGRADED_NOTIFIED`.
+//! - **GUI infrastructure**: `run`, `add_tray_icon`, `wndproc`, menu
+//!   building, tooltip + balloon helpers, status-text update.
+//! - **CLI mode entry points** (each takes its `DiagnoseFormat` if
+//!   applicable and returns the process exit code):
+//!   - `provision_once` — synchronous recipe-provision flow.
+//!   - `status_once(format)` — live control-wire VmStatus probe;
+//!     emits `StatusReport` (7 keys) in JSON mode.
+//!   - `diagnose(format)` — bundled 16-key `DiagnoseReport`.
+//!   - `logs(tail, bak)` — dump live `tray.log` or rotation backup.
+//!   - `version_line` / `help_text` — string-returning helpers
+//!     called by `main.rs` for `--version` / `--help`.
+//! - **Diagnostic sniffers** (each `Option<String>`-returning,
+//!   `None` on missing command / failure): `sniff_wsl_version`,
+//!   `sniff_windows_version`, `distro_running` (`bool`).
+//! - **Pure helpers**: `first_line`, `select_log_tail`,
+//!   `should_rotate_log`, `compose_chip_text`, `compose_tooltip`,
+//!   `status_exit_code`, `exit_code_from`, `vm_phase_status_text`,
+//!   `describe_wire_error`. All Win32-IO-free and pin-tested.
+//! - **Log lifecycle**: `log_dir`, `log_file_path`, `init_tracing`,
+//!   `maybe_rotate_log` (size-threshold rotation at 5 MiB).
+//! - **Inline `tests` module**: 41 pin tests covering schema, exit
+//!   codes, pure helpers, and the diagnostic surface against
+//!   `baseline_diagnose_report()`. End-to-end coverage against the
+//!   real binary lives in `tests/cli_integration.rs`.
 //!
 //! @trace spec:windows-native-tray
 

@@ -282,3 +282,131 @@ contributor entry-point (README → CONTRIBUTING-WINDOWS → cheatsheet
 contributors can find the dev cycle commands, the test pyramid, the
 drift-protection checklist, and the common pitfalls without spelunking
 through the codebase.
+
+---
+
+### 20260601T140000Z — ok (cli_integration → 7/7 stateless CLI modes + notify_icon.rs file-structure docblock)
+
+- agent_id: windows-bullo-claude-opus-20260601T140000Z
+- head_sha: d76914ba (linux-next + osx-next still unchanged 14+ ticks;
+  windows-next 19 ahead pre-this-commit, 20 ahead post)
+- version: 0.2.260528.1
+- build_commit: d76914ba
+- build_run_id: 20260601T140000Z
+
+**Sibling context**: no remote movement. linux-next + osx-next unchanged
+14+ consecutive ticks. windows-next 0/20. Merge-tree clean.
+
+**Change made**: two related polish improvements bundled:
+
+1. **`tests/cli_integration.rs` 5/7 → 7/7 stateless CLI modes covered**.
+   Added 2 new tests:
+   - `logs_no_flags_reads_live_log_and_exits_0`: runs `tray.exe
+     --logs` (no flags), asserts exit 0 (the live log always exists
+     post-init_tracing), asserts stdout is valid UTF-8. Content not
+     pinned (host-dependent). Together with the inline
+     `select_log_tail_handles_all_cases` test (pure tail arithmetic)
+     this covers `--logs` end-to-end.
+   - `diagnose_human_includes_pinned_section_labels`: runs
+     `tray.exe --diagnose` (HUMAN mode, no `--json`), asserts exit
+     ∈ {0, 2} (1 = binary broken), pins **12 section labels** that
+     the cheatsheet's Quick reference documents (`tillandsias-tray
+     --diagnose`, `Version:`, `Build commit:`, `Install path:`,
+     `Log file:`, `Log exists:`, `WSL:`, `OS:`, `wt.exe:`,
+     `` Distro ` ``, `Release tag:`, `Manifest pin:`). Different code
+     path from `print_json` (which `diagnose_json_has_all_16_top_level_keys`
+     covers); a regression in `print_human` that drops a label,
+     panics, or prints to the wrong stream is caught here.
+
+   Now 7/7 stateless CLI modes have end-to-end tests:
+   `--version`, `--help`, `--diagnose` (human + JSON),
+   `--status-once --json`, `--logs` (both no-flags + `--bak` missing).
+   The 8th mode `--provision-once` is intentionally skipped — it
+   requires WSL state and control-wire interaction (environment-
+   dependent and flaky as a test).
+
+2. **`crates/tillandsias-windows-tray/src/notify_icon.rs` top
+   docblock refreshed** to reflect the file's now-rich ~2500-line
+   structure. The prior docblock described only the Win32 GUI
+   plumbing — accurate for the file at v0.0.1 but stale after this
+   session's CLI-surface additions. New docblock:
+   - **Title**: "Win32 NotifyIcon plumbing **+ CLI diagnostic surface**".
+   - **Scope**: enumerates the 6 non-GUI CLI modes the file owns
+     (`--diagnose [--json]`, `--status-once [--json]`,
+     `--provision-once`, `--logs [--tail N] [--bak]`, `--version`,
+     `--help`).
+   - **Architecture (GUI mode)**: existing 4 steps preserved + new
+     step 5 documenting the 4 edge-triggered Win11 toasts +
+     `WIRE_DEGRADED_NOTIFIED` pattern.
+   - **File structure** (NEW section): roughly top-to-bottom
+     organization with 6 subsections: Constants + globals, GUI
+     infrastructure, CLI mode entry points (with the
+     `Option<DiagnoseFormat>` parameter convention noted),
+     Diagnostic sniffers (3 of them, all Option-returning),
+     Pure helpers (10+ names listed, "all Win32-IO-free and
+     pin-tested"), Log lifecycle, and the inline `tests` module
+     (41 tests). Pointers to where end-to-end coverage lives
+     (`tests/cli_integration.rs`).
+
+Files touched (Windows-owned only):
+- `crates/tillandsias-windows-tray/src/notify_icon.rs`: top docblock
+  refresh (lines 1-66 now; was 1-23).
+- `crates/tillandsias-windows-tray/tests/cli_integration.rs`: +2 new
+  test functions (logs_no_flags + diagnose_human) between the
+  existing 3rd and 4th tests.
+- `openspec/litmus-tests/litmus-windows-tray-diagnose-cli-surface.yaml`:
+  step name updated "end-to-end cli_integration tests attached
+  **(7 of 7 stateless CLI modes)**" + extended grep predicate to
+  require all 7 test names.
+
+**Build**: 50.98 s release (docblock change in notify_icon.rs
+triggered a recompile of the whole crate). Tests: 41 inline + **7
+cli_integration (+2 over prior tick's 5)** + 3 portable_smoke =
+**51 passed** / 5 ignored / 0 failed.
+
+**Smoke**: the 7 cli_integration tests AS A SET are the end-to-end
+smoke. Each runs the real binary against real exit codes / captured
+output / parsed JSON. The 2 new tests caught one clippy diagnostic
+during commit (`clippy::doc_lazy_continuation` on a wrapped doc-list
+line in the `diagnose_human` test docstring) — fixed by joining
+the wrap. Real bug class: clippy's `-D warnings` would have surfaced
+this in CI if the test had been added without local clippy first.
+Reminder of the value of `clippy --tests` in the dev cycle.
+
+**Litmus**:
+- `windows-native-tray`: 7/7 PASS (extended pin step "7 of 7
+  stateless CLI modes" green).
+- `cargo fmt`: clean (rustfmt re-wrapped one `let _stdout = ...`
+  line — applied).
+- `cargo clippy --tests -D warnings`: clean (after the
+  doc_lazy_continuation fix above).
+
+**Findings** (free-form):
+- The 2 new tests catch different regression classes than the inline
+  pins: `logs_no_flags` would catch a panic in `logs(None, false)`
+  that the pure `select_log_tail` test can't observe; `diagnose_human`
+  would catch a `print_human` regression that drops/renames a row
+  label, which the JSON-only `diagnose_json_has_all_16_top_level_keys`
+  doesn't cover (different code path).
+- 12 section labels pinned in `diagnose_human` — these mirror the
+  cheatsheet's Quick reference table. A future field-rename
+  (`Install path:` → `Path:`, say) would fail this test pre-build
+  AND require the cheatsheet + tray-diagnose.ps1 + install-windows.ps1
+  + litmus YAML to be updated in lockstep. The 5-touchpoint
+  drift-protection discipline catches the change in CI.
+- The notify_icon.rs docblock refresh is a small but real navigation
+  aid: a future contributor opening the file gets a roadmap to the
+  ~2500 lines instead of having to scroll-and-discover. The
+  "Pure helpers" subsection's "all Win32-IO-free and pin-tested"
+  note is a deliberate signal: helpers that don't fit that bill
+  should refactor, not add.
+
+**Cross-host visibility note**: pure Windows-tray-side polish; no
+cross-host coordination needed.
+
+**Next iteration ask**: N/A (SECTION_KIND=ok). cli_integration
+coverage is now full for stateless CLI modes (7/7); the only
+remaining mode `--provision-once` is intentionally environment-
+dependent. notify_icon.rs has a self-documenting roadmap for
+navigation. The windows-tray surface is at a deeply polished steady
+state.
