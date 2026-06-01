@@ -183,3 +183,102 @@ cross-host coordination needed.
 surfaces are now consistent w.r.t. the 16-field diagnose JSON. Future
 field additions need triple-update (cheatsheet + scripts + litmus) but
 the drift-protection now in place catches any miss at pre-build.
+
+---
+
+### 20260601T120000Z — ok (CONTRIBUTING-WINDOWS.md: dev guide for future contributors)
+
+- agent_id: windows-bullo-claude-opus-20260601T120000Z
+- head_sha: a9163cda (linux-next + osx-next still unchanged 13+ ticks;
+  windows-next 18 ahead pre-this-commit, 19 ahead post)
+- version: 0.2.260528.1
+- build_commit: a9163cda
+- build_run_id: 20260601T120000Z
+
+**Sibling context**: no remote movement. linux-next + osx-next unchanged
+13+ consecutive ticks. windows-next 0/19. Merge-tree clean.
+
+**Change made**: created `docs/CONTRIBUTING-WINDOWS.md` — a focused
+per-platform dev guide. The repo's existing `docs/` has `SECRETS.md`,
+`UPDATING.md`, `VERIFICATION.md`, `cross-platform-builds.md`, etc., but
+no Windows-side contributor guide. Future contributors hit the same
+pitfalls I learned the hard way during this session (PowerShell
+stderr-wrap, ASCII-only scripts, GUI-subsystem stdio quirks,
+producer/consumer drift discipline) and would benefit from those being
+captured in one discoverable place.
+
+Files touched (Windows-owned only):
+- `docs/CONTRIBUTING-WINDOWS.md` (NEW, ~95 lines):
+  - **Intro**: short pointer-list at the canonical authoritative docs
+    (cheatsheet, skill, plan ledger, source) — this doc is a guide,
+    not a duplicator.
+  - **Quick dev cycle**: copy-pasteable commands for build / test /
+    fmt / clippy / litmus.
+  - **Test pyramid table**: 3 layers — inline (41 tests, pure +
+    schema-pin), `cli_integration` (5 tests, end-to-end vs real
+    binary), `portable_smoke` (3 tests, shared host-shell crate).
+    "When adding a feature: prefer Layer 1, add Layer 2 if CLI argv
+    or JSON shape, Layer 3 only for cross-host-shared".
+  - **Operator-facing surface coverage checklist**: 5-step list of
+    what to update when adding a `DiagnoseReport` field (implementation
+    + inline pin + cheatsheet + tray-diagnose.ps1 + install-windows.ps1
+    + litmus YAML). With the explicit note "Miss any of these and the
+    litmus catches it pre-build" — both the cost AND the protection
+    are real.
+  - **Common pitfalls**: 6-item list of the bugs I actually hit
+    (GUI-subsystem stdout capture, em-dash mojibake, cargo stderr-wrap,
+    rename-on-Windows, str::trim/BOM, cross-tray RECIPE_RELEASE_TAG pin).
+  - **Scripts vs binary modes**: explains the 2 surface layers + the
+    "prefer binary over script" guidance.
+  - **CI considerations**: documents that the integration loop runs
+    `./build.sh --check` + `./build.sh --test` (Linux-portable layer
+    only); Windows-only paths verified on windows-bullo + daily cron.
+  - **See also**: links to README, cheatsheet, skill, coordination
+    doc, plan step ledger.
+- `openspec/litmus-tests/litmus-windows-tray-diagnose-cli-surface.yaml`:
+  - New step "CONTRIBUTING-WINDOWS dev guide exists with the test
+    pyramid + drift-protection checklist" — requires 3 substring
+    greps (`'Contributing to'`, `'Test pyramid'`, `'Operator-facing
+    surface coverage'`) so a future refactor that deletes or guts
+    the file surfaces pre-build.
+- `README.md` § Windows: new closing paragraph linking
+  `docs/CONTRIBUTING-WINDOWS.md` with a 1-sentence summary of what's
+  in it. Also: bumped the "11 keys + wire sub-object" claim in the
+  diagnostics paragraph to "16 keys + wire sub-object" matching the
+  current schema (was stale by 5 fields).
+
+**Build**: N/A (docs-only change; binary unchanged from prior tick).
+
+**Smoke**: `windows-native-tray` litmus 7/7 PASS (new
+"CONTRIBUTING-WINDOWS dev guide exists" step green; all 3 substrings
+matched).
+
+**Findings** (free-form):
+- The "litmus catches it pre-build" phrase appears 3 times in the
+  new doc — that's deliberate. The cost of the drift-protection
+  discipline (3-5 file updates per new DiagnoseReport field) is
+  paid AT COMMIT TIME, not at user-frustration time. Future
+  contributors who don't internalize this will hit a failing build
+  and learn it via litmus, which is the right teaching moment.
+- The "prefer binary mode over script" guidance is a real lesson
+  from this session: every binary CLI mode I added (--version,
+  --help, --logs, --logs --bak) has end-to-end tests + a stable
+  contract; every script addition required producer/consumer drift
+  reconciliation across multiple files. The binary surface is
+  intrinsically more testable + more stable.
+- The README bump (11 → 16 keys) was incidental but real:
+  yesterday's tray-diagnose.ps1 + install-windows.ps1 refreshes
+  surfaced all the same fields, but the README's high-level summary
+  still said "11 keys" — a 5-day-old number. Now matches.
+
+**Cross-host visibility note**: pure Windows-tray-side documentation;
+no cross-host coordination needed. macOS-tray + Linux tray would
+benefit from analogous per-platform CONTRIBUTING guides; their host
+owners can decide whether to mirror the pattern.
+
+**Next iteration ask**: N/A (SECTION_KIND=ok). The windows-tray's
+contributor entry-point (README → CONTRIBUTING-WINDOWS → cheatsheet
++ skill + plan ledger) is now a complete onboarding chain. Future
+contributors can find the dev cycle commands, the test pyramid, the
+drift-protection checklist, and the common pitfalls without spelunking
+through the codebase.

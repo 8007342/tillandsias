@@ -154,12 +154,18 @@ scripts\install-windows.ps1 -Purge                 # full cleanup (wsl --unregis
 
 **Diagnostics**: every tray binary surface mirrors the Linux + macOS
 behavior. `tillandsias-tray.exe --diagnose --json` emits a bundled health
-report (11 keys + wire sub-object); `--help` documents all CLI modes +
+report (16 keys + wire sub-object); `--help` documents all CLI modes +
 env vars + the GUI-subsystem stdio-capture pattern. Two PowerShell
 consumers ship alongside: `scripts\tray-diagnose.ps1` (live-runtime
 health check) and `scripts\diagnose-windows.ps1` (pre-tray host facts).
 See `cheatsheets/runtime/windows-tray-diagnostics.md` for the full
 diagnose JSON schema + canonical consumer patterns.
+
+**Contributing**: see [`docs/CONTRIBUTING-WINDOWS.md`](docs/CONTRIBUTING-WINDOWS.md)
+for the dev-cycle commands, the 3-layer test pyramid, the drift-protection
+checklist (what to update when a `DiagnoseReport` field gets added), and
+the common Windows-specific pitfalls (PowerShell stderr-wrap, ASCII-only
+scripts, GUI-subsystem stdio quirks).
 
 ## All Downloads
 

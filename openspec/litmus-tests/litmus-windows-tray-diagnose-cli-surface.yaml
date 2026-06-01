@@ -91,3 +91,8 @@ critical_path:
     command: "grep -F 'Windows tray diagnostics' cheatsheets/runtime/windows-tray-diagnostics.md && grep -F 'manifest_pin_x86_64_tar' cheatsheets/runtime/windows-tray-diagnostics.md"
     expected_behavior: "grep succeeds"
     timeout_ms: 3000
+
+  - step: "CONTRIBUTING-WINDOWS dev guide exists with the test pyramid + drift-protection checklist"
+    command: "grep -F 'Contributing to' docs/CONTRIBUTING-WINDOWS.md && grep -F 'Test pyramid' docs/CONTRIBUTING-WINDOWS.md && grep -F 'Operator-facing surface coverage' docs/CONTRIBUTING-WINDOWS.md"
+    expected_behavior: "grep succeeds"
+    timeout_ms: 3000
