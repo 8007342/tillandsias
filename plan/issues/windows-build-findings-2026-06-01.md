@@ -630,3 +630,93 @@ cross-host coordination needed.
 **Next iteration ask**: N/A (SECTION_KIND=ok). The human `--diagnose`
 output now mirrors the JSON's logical grouping, with the section
 headers pin-tested + cheatsheet-documented for drift-protection.
+
+---
+
+### 20260601T200000Z — ok (release zip ships the full diagnostic toolchain)
+
+- agent_id: windows-bullo-claude-opus-20260601T200000Z
+- head_sha: 11dbaa02 (post-merge of linux-next +1 commit — escalation
+  record for v0.2.260601.1 git-proxy 403; windows-next 22 ahead pre-this-
+  commit, 23 ahead post)
+- version: 0.2.260528.1 (linux-next still pre-VERSION-sync; main has
+  bumped to 0.2.260601.1 today's release)
+- build_commit: 11dbaa02
+- build_run_id: 20260601T200000Z
+
+**Sibling context**:
+- **`v0.2.260601.1` shipped to main today** at ~10 AM PDT via the merge-
+  to-main-and-release flow. 3rd consecutive release with the git-proxy
+  403 tag-push escalation pattern (v0.2.260530.1 + v0.2.260531.1 +
+  v0.2.260601.1 — operator handles each manually). Plan-doc-only delta
+  on linux-next; no shared-contract changes.
+- osx-next still unchanged at 05b47860.
+- Merge-tree linux-next + windows-next: clean.
+
+**Change made**: extended `scripts/build-windows-tray.ps1 -Release`
+packaging to ship the **full diagnostic toolchain** in the release zip.
+Today the zip contains the exe + `install-windows.ps1` only; users who
+download the release don't get `tray-diagnose.ps1` (the canonical live-
+runtime health check) or `diagnose-windows.ps1` (pre-tray host facts).
+They'd need to clone the repo separately to get those — a real gap.
+
+Files touched (Windows-owned only):
+- `scripts/build-windows-tray.ps1`:
+  - The single `install-windows.ps1` `Copy-Item` replaced with a
+    bundled-scripts loop over 3 names (`install-windows.ps1`,
+    `tray-diagnose.ps1`, `diagnose-windows.ps1`). Each Copy is
+    best-effort: a missing source path warns (yellow text) but
+    doesn't abort the release-package build, so the core binary +
+    installer still get packaged even if a script is removed from
+    source.
+  - 9-line explanatory comment block above the loop documenting the
+    intent ("full diagnostic toolchain on extract — no need to clone").
+
+**Build**: N/A (script-only change; binary unchanged from prior tick's
+build).
+
+**Smoke** (real hardware — exercised `-Release` end-to-end):
+- `scripts\build-windows-tray.ps1 -Release` ran clean.
+- Output: `tillandsias-tray-0.2.260528.1-windows-x64.zip` (2,543,491
+  bytes) + `SHA256SUMS-windows` (111 bytes).
+- Zip contents (4 entries):
+  ```
+  diagnose-windows.ps1  8507 bytes
+  install-windows.ps1   13982 bytes
+  tillandsias-tray.exe  6352384 bytes
+  tray-diagnose.ps1     7271 bytes
+  ```
+  All 3 scripts + the exe; correct alphabetical order.
+- Cleaned up `release-artifacts/` post-smoke so the directory doesn't
+  pollute the workspace.
+
+**Litmus**:
+- `windows-native-tray`: 7/7 PASS (no litmus YAML changes this tick;
+  the `-Release` packaging isn't pin-tested at this surface level).
+
+**Findings** (free-form):
+- The release zip is now self-contained for the operator triage
+  workflow: extract → `install-windows.ps1 -Launch` → if anything
+  misbehaves, `tray-diagnose.ps1` (live-wire health) or
+  `diagnose-windows.ps1` (host facts) are right there in the same
+  directory. No "clone the repo for the scripts" diversion.
+- The best-effort Copy + WARN-but-don't-abort pattern matches the
+  existing "if (Test-Path $installer)" check that's already in the
+  script for `install-windows.ps1`. Consistent with the existing
+  defensive packaging discipline.
+- Today's daily release v0.2.260601.1 won't have the new bundled
+  scripts because the release was cut before this commit. Tomorrow's
+  release (and subsequent ones) will. The CI workflow that drives
+  the release runs the same `-Release` invocation, so no CI-side
+  changes needed.
+
+**Cross-host visibility note**: pure Windows-tray-side packaging
+improvement. macOS-tray's `build-macos-tray.sh` may benefit from a
+parallel "ship the operator scripts in the .tar.gz" extension if its
+analog scripts exist; macOS-host territory.
+
+**Next iteration ask**: N/A (SECTION_KIND=ok). Tomorrow's release
+will be the first to ship the full diagnostic toolchain inline. Daily
+`/build-windows-tray` cron at 11:17 AM PDT will exercise this path
+during its build step (though the cron runs without `-Release`, so
+it won't directly test the packaging changes).
