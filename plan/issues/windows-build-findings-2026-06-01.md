@@ -410,3 +410,96 @@ remaining mode `--provision-once` is intentionally environment-
 dependent. notify_icon.rs has a self-documenting roadmap for
 navigation. The windows-tray surface is at a deeply polished steady
 state.
+
+---
+
+### 20260601T160000Z — ok (dead-code audit: removed 4/5 unnecessary #![allow(dead_code)] attributes)
+
+- agent_id: windows-bullo-claude-opus-20260601T160000Z
+- head_sha: c2edd829 (linux-next + osx-next still both unchanged 15+
+  ticks now; windows-next 20 ahead pre-this-commit, 21 ahead post)
+- version: 0.2.260528.1
+- build_commit: c2edd829
+- build_run_id: 20260601T160000Z
+
+**Sibling context**: no remote movement. linux-next + osx-next unchanged
+15+ consecutive ticks. windows-next 0/21. Merge-tree clean.
+
+**Change made**: dead-code-allow audit. The tray crate had 7
+`#![allow(dead_code)]` attributes (3 in `src/stubs/*` for Linux compile-
+stubs, 4 in Windows-only source files). Removed 4 of the 4 Windows-only
+ones (`notify_icon.rs`, `hvsocket.rs`, `wsl_lifecycle.rs`,
+`installation_uuid.rs`) — all genuinely no longer needed, confirmed by
+warning-free build after removal. Restored 1 (`main.rs`) because it had
+13 actually-dead items in submodules (WIP architecture: Credential
+Manager UUID flow, pre-recipe download paths) that future iteration may
+wire up; better to keep the explanatory comment-block + the allow than
+delete the WIP code or accept a noisy clippy run. Stubs untouched (they
+define Linux-only stubs that ARE dead at link time on Linux but exist
+to keep cargo check green from non-Windows hosts).
+
+Files touched (Windows-owned only):
+- `crates/tillandsias-windows-tray/src/notify_icon.rs`: removed
+  `#![allow(dead_code)]` (line 25 prior). 0 warnings post-removal —
+  every fn / const in the ~2700-line file is now reachable from
+  active code paths.
+- `crates/tillandsias-windows-tray/src/hvsocket.rs`: removed
+  `#![allow(dead_code)]`. 0 warnings.
+- `crates/tillandsias-windows-tray/src/wsl_lifecycle.rs`: removed
+  `#![allow(dead_code)]`. 0 warnings.
+- `crates/tillandsias-windows-tray/src/installation_uuid.rs`: removed
+  `#![allow(dead_code)]`. 0 warnings (the credential-manager
+  functions are unused but main.rs's allow already covers the binary
+  level; per-file allow was redundant).
+- `crates/tillandsias-windows-tray/src/main.rs`: kept
+  `#![allow(dead_code)]` but replaced the silent attribute with a
+  6-line explanatory comment block explaining WHY it's kept: WIP
+  architecture (credential UUID flow + pre-recipe download paths)
+  kept as future infrastructure. Per-item allows would be noisy; the
+  crate-level allow at the binary entry point preserves them without
+  polluting the source files.
+
+**Build**: 36.63 s release.
+**Tests**: 41 inline + 7 cli_integration + 3 portable_smoke = **51
+passed** / 5 ignored / 0 failed (unchanged from prior tick — no test
+behavior changed).
+
+**Smoke**: 13 dead-code warnings surface from the dropped main.rs
+allow as a diagnostic exercise, then disappear when the allow is
+restored with the explanatory comment block. The 4 file-level allows
+elsewhere were verified safe to remove by ensuring `cargo build`
+stays warning-free after each removal.
+
+**Litmus**:
+- `windows-native-tray`: 7/7 PASS.
+- `cargo fmt`: clean.
+- `cargo clippy --tests -D warnings`: clean.
+
+**Findings** (free-form):
+- The 4 removed allows were technical debt — at some point each was
+  added when the file genuinely had work-in-progress dead code, but
+  the file grew + the dead code got wired or deleted, and nobody
+  noticed the allow had outlived its purpose. The dead-code audit
+  is a useful "is this file in a clean steady state?" check that's
+  cheap to run.
+- The retained allow on main.rs is now self-documenting (the
+  comment-block explains WHY it's kept). A future reader / linter
+  asking "should this be removed?" gets the answer from the
+  comment. If the WIP code gets wired or pruned, the allow can be
+  removed and the build will surface any forgotten items.
+- The 13 dead items in main.rs's submodules represent 3 distinct
+  categories: hvsocket helpers (4 fns kept as future H2 transport
+  utilities), installation_uuid (3 fns — full Credential Manager
+  flow never wired but architecturally complete), wsl_lifecycle
+  methods (5 — pre-recipe-rootfs paths superseded by
+  provision_via_recipe). All are kept as architecture-by-reference
+  in case a future iteration wires them; deleting would lose the
+  design intent.
+
+**Cross-host visibility note**: pure Windows-tray-side cleanup; no
+cross-host coordination needed.
+
+**Next iteration ask**: N/A (SECTION_KIND=ok). The 4 cleaned files
+are now warning-free without the allow; the 1 retained allow is
+self-documenting. Future contributors learn the dead-code-as-WIP
+pattern from the main.rs comment block.

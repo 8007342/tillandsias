@@ -10,8 +10,6 @@
 //!
 //! @trace spec:windows-native-tray, spec:vm-idiomatic-layer
 
-#![allow(dead_code)]
-
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;

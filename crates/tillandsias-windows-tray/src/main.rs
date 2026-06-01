@@ -7,6 +7,11 @@
 //!
 //! @trace spec:windows-native-tray
 
+// Helpers in hvsocket / installation_uuid / wsl_lifecycle that aren't
+// wired into the active code paths yet (Credential Manager UUID flow,
+// pre-recipe download paths kept as architecture for future iteration).
+// Per-item allows would be noisy; this crate-level allow on the binary
+// preserves them without polluting the source files.
 #![allow(dead_code)]
 // Tell Windows this is a GUI subsystem binary — no console window pops up
 // on tray launch. Non-Windows builds ignore this attribute entirely.

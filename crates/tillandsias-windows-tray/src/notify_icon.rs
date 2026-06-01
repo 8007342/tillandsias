@@ -62,7 +62,6 @@
 //!
 //! @trace spec:windows-native-tray
 
-#![allow(dead_code)]
 #![allow(unsafe_op_in_unsafe_fn)]
 
 use std::cell::RefCell;
