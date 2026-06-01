@@ -72,8 +72,8 @@ critical_path:
     expected_behavior: "grep succeeds"
     timeout_ms: 3000
 
-  - step: "end-to-end cli_integration tests attached (7 of 7 stateless CLI modes)"
-    command: "grep -F 'fn version_line_has_workspace_version_and_commit' crates/tillandsias-windows-tray/tests/cli_integration.rs && grep -F 'fn help_text_includes_all_documented_surfaces' crates/tillandsias-windows-tray/tests/cli_integration.rs && grep -F 'fn diagnose_json_has_all_16_top_level_keys' crates/tillandsias-windows-tray/tests/cli_integration.rs && grep -F 'fn diagnose_human_includes_pinned_section_labels' crates/tillandsias-windows-tray/tests/cli_integration.rs && grep -F 'fn status_once_json_has_all_7_keys_and_exit_code_matches' crates/tillandsias-windows-tray/tests/cli_integration.rs && grep -F 'fn logs_no_flags_reads_live_log_and_exits_0' crates/tillandsias-windows-tray/tests/cli_integration.rs && grep -F 'fn logs_bak_when_missing_exits_1_with_pointer_to_live_file' crates/tillandsias-windows-tray/tests/cli_integration.rs"
+  - step: "end-to-end cli_integration tests attached (7 of 7 stateless CLI modes + cross-surface version consistency)"
+    command: "grep -F 'fn version_line_has_workspace_version_and_commit' crates/tillandsias-windows-tray/tests/cli_integration.rs && grep -F 'fn help_text_includes_all_documented_surfaces' crates/tillandsias-windows-tray/tests/cli_integration.rs && grep -F 'fn diagnose_json_has_all_16_top_level_keys' crates/tillandsias-windows-tray/tests/cli_integration.rs && grep -F 'fn diagnose_human_includes_pinned_section_labels' crates/tillandsias-windows-tray/tests/cli_integration.rs && grep -F 'fn status_once_json_has_all_7_keys_and_exit_code_matches' crates/tillandsias-windows-tray/tests/cli_integration.rs && grep -F 'fn logs_no_flags_reads_live_log_and_exits_0' crates/tillandsias-windows-tray/tests/cli_integration.rs && grep -F 'fn logs_bak_when_missing_exits_1_with_pointer_to_live_file' crates/tillandsias-windows-tray/tests/cli_integration.rs && grep -F 'fn cross_surface_version_consistency' crates/tillandsias-windows-tray/tests/cli_integration.rs"
     expected_behavior: "grep succeeds"
     timeout_ms: 3000
 

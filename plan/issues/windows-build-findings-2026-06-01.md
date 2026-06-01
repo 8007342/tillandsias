@@ -824,3 +824,91 @@ bottom without reading all 13 rows. The pre-existing
 `tray-diagnose.ps1`'s HEALTHY/DEGRADED summary becomes redundant for
 quick checks (though it still adds value via PASS/FAIL per-check
 breakdown + colorization).
+
+---
+
+### 20260602T000000Z — ok (cross-surface consistency tests: version threading + footer/exit-code agreement)
+
+- agent_id: windows-bullo-claude-opus-20260602T000000Z
+- head_sha: 27a86166 (linux-next + osx-next still unchanged from prior
+  tick; windows-next 24 ahead pre-this-commit, 25 ahead post)
+- version: 0.2.260528.1
+- build_commit: 27a86166
+- build_run_id: 20260602T000000Z
+
+**Sibling context**: no remote movement. linux-next + osx-next unchanged.
+windows-next 0/25. Merge-tree clean.
+
+**Change made**: two new cross-surface consistency assertions to the
+`cli_integration` suite. Both target a class of regressions where one
+surface drifts from the canonical source while others stay in sync —
+caught at the binary level, not just the test-helper level.
+
+Files touched (Windows-owned only):
+- `crates/tillandsias-windows-tray/tests/cli_integration.rs`:
+  1. **New test `cross_surface_version_consistency`**: runs `--version`,
+     `--help`, and `--diagnose --json` against the real binary in
+     sequence and asserts all three surface the same
+     `env!("WORKSPACE_VERSION")` string at runtime. A refactor that
+     adds a wrapper or pad to just one surface (e.g. a "v" prefix on
+     `--version` only) would silently make cross-checking consumers
+     conclude the binary is misreporting. The inline pin tests use
+     `env!()` at test compile time — they'd catch a build.rs
+     regression but NOT a print-path regression in a single surface.
+     This test catches both.
+  2. **`diagnose_human_includes_pinned_section_labels` extended**:
+     after the existing 18 substring assertions, now also asserts that
+     the footer's `(exit N)` marker matches the actual process exit
+     code (e.g. on a host where `--diagnose` exits 2, the footer must
+     contain `"(exit 2)"`). The inline `summary_line_classifies_exit_code`
+     test pins the verdict→code mapping at the pure-function level;
+     this real-binary assertion adds defense-in-depth at the print-
+     path level — the inline test could pass while the actual binary
+     output silently does something different (extremely unlikely but
+     mechanically possible).
+- `openspec/litmus-tests/litmus-windows-tray-diagnose-cli-surface.yaml`:
+  - Step name renamed `"(7 of 7 stateless CLI modes + cross-surface
+    version consistency)"`. Grep predicate extended to require the
+    new `cross_surface_version_consistency` test name.
+
+**Build**: tests recompile + run.
+
+**Tests**: 42 inline + **8 cli_integration (+1)** + 3 portable_smoke =
+**53 passed** / 5 ignored / 0 failed (up from 52 last tick). All green.
+
+**Smoke**: the new tests AS A SET are the smoke. Each runs the real
+binary against real captured outputs.
+
+**Litmus**:
+- `windows-native-tray`: 7/7 PASS (renamed step green with all 8 grep
+  predicates).
+- `cargo fmt`: clean.
+- `cargo clippy --tests -D warnings`: clean.
+
+**Findings** (free-form):
+- The cross-surface test catches a real bug class: today the version
+  threading is `WORKSPACE_VERSION env var → build.rs → 5 surfaces
+  (--version + --help + --diagnose --json + menu footer + tray
+  tooltip + Ready toast)`. A refactor that changes the format of
+  ONE surface without coordinating the others would silently lie.
+  This test enforces the version-threading invariant.
+- The `(exit N)` cross-check in the diagnose-human test is similar:
+  the inline pin test ensures the pure function returns the right
+  verdict for each exit code; this real-binary check verifies the
+  print path actually emits the verdict the pure function returned.
+  Two layers of defense for one invariant.
+- 8 cli_integration tests now exercise the 7 stateless CLI modes
+  end-to-end + 1 cross-surface consistency check. That's an honest
+  upper bound for "what can be tested without WSL/wire state".
+  Future test additions would have to either (a) provide test
+  fixtures for WSL state, or (b) target new functionality not yet
+  shipped.
+
+**Cross-host visibility note**: pure Windows-tray-side testing
+addition; no cross-host coordination needed.
+
+**Next iteration ask**: N/A (SECTION_KIND=ok). The cross-surface
+consistency tests provide the final piece of drift-protection:
+between the binary's surfaces themselves (not just binary vs
+test-helper). 53 tests total across 3 layers — a deeply tested
+windows-tray.

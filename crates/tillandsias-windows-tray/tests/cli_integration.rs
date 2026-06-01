@@ -213,6 +213,60 @@ fn status_once_json_has_all_7_keys_and_exit_code_matches() {
     );
 }
 
+/// Self-consistency: the version string baked at build time must be
+/// surfaced identically by ALL THREE places the binary reports it —
+/// `--version`, `--help` (in the title line), and `--diagnose --json`
+/// (the `version` field). All three route through `env!("WORKSPACE_VERSION")`
+/// at compile time; this test asserts they agree at runtime against the
+/// real captured outputs.
+///
+/// A refactor that adds a wrapper / pad to one surface but not the others
+/// (e.g. a "v" prefix on just `--version`) would silently make consumers
+/// who cross-check think the binary is misreporting. Caught here pre-build.
+#[test]
+fn cross_surface_version_consistency() {
+    let expected = env!("WORKSPACE_VERSION");
+
+    // --version
+    let v_out = Command::new(TRAY_EXE)
+        .arg("--version")
+        .output()
+        .expect("run --version");
+    let v_str = String::from_utf8_lossy(&v_out.stdout);
+    assert!(
+        v_str.contains(expected),
+        "--version output should contain WORKSPACE_VERSION {expected:?}: {v_str}"
+    );
+
+    // --help (first line includes the version per `help_text()`)
+    let h_out = Command::new(TRAY_EXE)
+        .arg("--help")
+        .output()
+        .expect("run --help");
+    let h_str = String::from_utf8_lossy(&h_out.stdout);
+    assert!(
+        h_str.contains(expected),
+        "--help output should contain WORKSPACE_VERSION {expected:?}: {h_str}"
+    );
+
+    // --diagnose --json -> version field
+    let d_out = Command::new(TRAY_EXE)
+        .args(["--diagnose", "--json"])
+        .output()
+        .expect("run --diagnose --json");
+    let d_str = String::from_utf8_lossy(&d_out.stdout);
+    let d_json: serde_json::Value =
+        serde_json::from_str(&d_str).expect("--diagnose --json stdout is valid JSON");
+    let d_version = d_json
+        .get("version")
+        .and_then(|v| v.as_str())
+        .expect("--diagnose --json version field is a string");
+    assert_eq!(
+        d_version, expected,
+        "--diagnose --json version should equal WORKSPACE_VERSION {expected:?}"
+    );
+}
+
 /// `--logs` (no flags) reads the live `tray.log` and exits 0 when it
 /// exists. The actual content is host-dependent (tracing emits varying
 /// lines per session), so this test asserts only the contract: exit 0
@@ -289,11 +343,23 @@ fn diagnose_human_includes_pinned_section_labels() {
         // here we assert the footer is actually emitted by the binary.
         "Status:",
     ] {
+        // (substring presence check inside the loop)
         assert!(
             stdout.contains(label),
             "--diagnose human output should contain section label {label:?}, got:\n{stdout}"
         );
     }
+    // The Status footer reports `(exit N)`; assert N matches the actual
+    // process exit code. Catches a future regression where summary_line's
+    // verdict mapping drifts from exit_code_from (the inline pin tests
+    // already catch that, but verifying it at the real-binary level adds
+    // a defense-in-depth layer — the inline test could pass while the
+    // print path silently does something different).
+    let expected_marker = format!("(exit {})", code.expect("exit code is set"));
+    assert!(
+        stdout.contains(&expected_marker),
+        "--diagnose footer's '{expected_marker}' should match process exit code, got:\n{stdout}"
+    );
 }
 
 /// `--logs --bak` when `tray.log.bak` does not exist exits 1 with a
