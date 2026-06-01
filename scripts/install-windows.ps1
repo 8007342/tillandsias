@@ -245,6 +245,12 @@ if ($diagJson) {
         $pin = if ($report.manifest_pin_x86_64_tar) { "$($report.manifest_pin_x86_64_tar)..." } else { '(none)' }
         $commit = if ($report.build_commit) { $report.build_commit } else { '(unknown)' }
         Write-Host "  installed: version=$($report.version) commit=$commit pin=$pin (--diagnose exit $diagExit)" -ForegroundColor Green
+        # Surface the host-software triage line: OS build + WSL version captured
+        # at install time. Pairs with version+commit above as a complete
+        # "what binary + what host" snapshot for install-log triage.
+        $osVer = if ($report.os_version) { $report.os_version } else { '(not detected)' }
+        $wslVer = if ($report.wsl_version) { $report.wsl_version } else { '(not detected -- run wsl --install)' }
+        Write-Host "  host:      OS=$osVer; WSL=$wslVer" -ForegroundColor Green
         if ($report.wire.error) {
             Write-Host "  wire: $($report.wire.error)" -ForegroundColor Yellow
         }

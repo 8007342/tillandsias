@@ -100,3 +100,86 @@ no cross-host coordination needed.
 coverage at 5/7 CLI modes end-to-end (the 2 uncovered are
 environmental: `--provision-once` requires WSL state, and the human
 mode of `--status-once` is redundant with the JSON variant).
+
+---
+
+### 20260601T100000Z — ok (install-windows.ps1 surfaces OS + WSL versions in post-install log)
+
+- agent_id: windows-bullo-claude-opus-20260601T100000Z
+- head_sha: 543b9926 (linux-next + osx-next still unchanged 12+ ticks now;
+  windows-next 17 ahead pre-this-commit, 18 ahead post)
+- version: 0.2.260528.1
+- build_commit: 543b9926
+- build_run_id: 20260601T100000Z
+
+**Sibling context**: no remote movement. linux-next + osx-next unchanged
+12+ consecutive ticks now. windows-next 0/18. Merge-tree clean.
+
+**Change made**: closed the LAST producer/consumer drift gap from
+yesterday's tray-diagnose.ps1 refresh. `install-windows.ps1`'s
+post-install one-liner reported `version=X commit=Y pin=Z` but didn't
+surface `os_version` / `wsl_version` (fields added 2 ticks ago).
+Operators reading install logs missed the host-software triage
+snapshot — "what host did this install onto?" was implicit.
+
+Files touched (Windows-owned only):
+- `scripts/install-windows.ps1`:
+  - Existing `installed: version=X commit=Y pin=Z (...)` line unchanged
+    (binary identity snapshot).
+  - NEW `host: OS=X; WSL=Y` line below it (host-software identity
+    snapshot at install time). Pulls from `$report.os_version` +
+    `$report.wsl_version` with `(not detected)` / `(not detected -- run
+    wsl --install)` fallbacks. Color: Green (informational PASS state).
+- `openspec/litmus-tests/litmus-windows-tray-diagnose-cli-surface.yaml`:
+  - "install-windows.ps1 contains post-install --version + --diagnose"
+    pin step extended with greps for `os_version` and `wsl_version` so
+    a future regression that drops the host line surfaces pre-build.
+
+**Build**: install-windows.ps1 ran end-to-end via `scripts\install-
+windows.ps1` (rebuild via the now-safe build subscript). Binary
+unchanged from prior tick (same `a963c16d` commit baked).
+
+**Smoke** (real hardware):
+- `scripts\install-windows.ps1` output now reads (excerpt):
+  ```
+    installed: version=0.2.260528.1 commit=a963c16d pin=a28cabe7c9df... (--diagnose exit 2)
+    host:      OS=Microsoft Windows [version 10.0.26200.8524]; WSL=Version WSL : 2.7.3.0
+    wire: hvsocket open: no running WSL utility VM in `hcsdiag list` (is a distro started?)
+  ```
+  Complete triage snapshot in 3 lines: binary identity + host identity
+  + wire state. An operator pasting an install log into a support
+  ticket now has the OS build + WSL version captured at install time
+  without needing the operator to also run `winver` / `wsl --version`
+  separately.
+
+**Litmus**:
+- `windows-native-tray`: 7/7 PASS (extended pin step green — both
+  `os_version` and `wsl_version` substrings present in
+  install-windows.ps1).
+
+**Findings** (free-form):
+- This was the LAST producer/consumer drift gap from yesterday's
+  cleanup. All 4 windows-tray operator-facing surfaces now
+  consistently surface the host-software triage data:
+  - **binary** `--diagnose --json`: 16 fields (16/16 in JSON)
+  - **cheatsheet**: 16 fields documented
+  - **`tray-diagnose.ps1`**: 16 fields rendered (added yesterday)
+  - **`install-windows.ps1`**: 5 fields in one-liner (version +
+    commit + pin + OS + WSL), wire state on separate line, log size +
+    distro_running intentionally omitted as not-useful-at-install-time
+- The 4 surfaces now have litmus pins requiring all the relevant
+  substrings (for the script surfaces; the binary's pin is the inline
+  schema-pin tests). A new field added to `DiagnoseReport` requires
+  3 doc/script updates + 3 litmus extensions to keep everything in
+  sync. The cost is real but the drift-protection is real too.
+- The "(not detected -- run wsl --install)" fallback for missing WSL
+  is operator-friendly: tells the user the action to take to fix the
+  state. Subtle but a real UX improvement.
+
+**Cross-host visibility note**: pure Windows-tray-side update; no
+cross-host coordination needed.
+
+**Next iteration ask**: N/A (SECTION_KIND=ok). All 4 operator-facing
+surfaces are now consistent w.r.t. the 16-field diagnose JSON. Future
+field additions need triple-update (cheatsheet + scripts + litmus) but
+the drift-protection now in place catches any miss at pre-build.
