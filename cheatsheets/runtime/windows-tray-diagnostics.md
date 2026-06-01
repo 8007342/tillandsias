@@ -51,7 +51,7 @@ suitable for scripting.
 | `--provision-once`         | Run `provision_via_recipe` to completion: fetch + verify + import + boot + handshake.       | `0` Ready / `1` failed  |
 | `--status-once`            | Connect to the live control wire, request `VmStatus`, print phase / `podman_ready` / `last_event`. | `0` Ready / `2` reachable-not-Ready / `1` unreachable |
 | `--status-once --json`     | Same status as a structured JSON object on stdout (StatusReport, see below).                | (same as `--status-once`) |
-| `--diagnose`               | Bundled human-readable health report (~13 rows — version, build_commit, install_path, log + size, WSL + OS versions, wt.exe, distro + running, release tag, manifest pin, control wire, recent log tail). | `0` healthy / `2` degraded / `1` hard fail |
+| `--diagnose`               | Bundled human-readable health report (~13 rows in 5 grouped sections: binary identity, logs, host software, WSL distro + rootfs, control wire — followed by recent log tail). | `0` healthy / `2` degraded / `1` hard fail |
 | `--diagnose --json`        | Same report as a structured JSON object on stdout (16 top-level keys, see schema below).    | (same as `--diagnose`)  |
 | `--logs [--tail N] [--bak]` | Dump the tray log to stdout; `--tail N` for last N lines, `--bak` for the rotation backup `tray.log.bak`. | `0` readable / `1` missing |
 | `--help` / `-h`            | Print full usage with all CLI modes + exit-code contracts + stdio note + ENVIRONMENT vars.  | `0`                     |

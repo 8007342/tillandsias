@@ -503,3 +503,130 @@ cross-host coordination needed.
 are now warning-free without the allow; the 1 retained allow is
 self-documenting. Future contributors learn the dead-code-as-WIP
 pattern from the main.rs comment block.
+
+---
+
+### 20260601T180000Z — ok (--diagnose human mode: 5 grouped sections for scannability)
+
+- agent_id: windows-bullo-claude-opus-20260601T180000Z
+- head_sha: bb569174 (linux-next + osx-next still both unchanged 16+
+  ticks now; windows-next 21 ahead pre-this-commit, 22 ahead post)
+- version: 0.2.260528.1
+- build_commit: bb569174
+- build_run_id: 20260601T180000Z
+
+**Sibling context**: no remote movement. linux-next + osx-next unchanged
+16+ consecutive ticks. windows-next 0/22. Merge-tree clean.
+
+**Change made**: `print_human` (the `--diagnose` no-`--json` formatter)
+was a flat 13-row list. Reorganized into **5 grouped sections** with
+`--- label ---` dividers (matching the existing `--- recent log tail
+---` separator) for scannability. Operators triaging by eyeball can
+now find specific groups faster.
+
+The 5 sections:
+- **`--- binary identity ---`**: `Version`, `Build commit`,
+  `Install path`
+- **`--- logs ---`**: `Log file`, `Log exists` (with size suffix)
+- **`--- host software ---`**: `WSL`, `OS`, `wt.exe`
+- **`--- WSL distro + rootfs ---`**: `Distro`, `Release tag`,
+  `Manifest pin`
+- **`--- control wire ---`**: existing 3-arm match on wire state
+  unchanged, just now under the header
+- (Recent log tail section already had its own `--- recent log tail
+  ({N} lines) ---` header — preserved.)
+
+Files touched (Windows-owned only):
+- `crates/tillandsias-windows-tray/src/notify_icon.rs`: `print_human`
+  rewritten with `println!("\n--- label ---")` between groups. No
+  field added or removed; the existing 13 rows are unchanged in
+  content + order, just visually grouped.
+- `crates/tillandsias-windows-tray/tests/cli_integration.rs`: the
+  `diagnose_human_includes_pinned_section_labels` test was already
+  asserting 12 row labels; extended to also assert the 5 new section
+  headers. Now pins 17 substrings total (12 rows + 5 sections).
+- `cheatsheets/runtime/windows-tray-diagnostics.md`: `--diagnose` row
+  description updated from `"~13 rows"` to `"~13 rows in 5 grouped
+  sections: binary identity, logs, host software, WSL distro + rootfs,
+  control wire — followed by recent log tail"`.
+
+**Build**: 36.96 s release.
+
+**Tests**: 41 inline + 7 cli_integration + 3 portable_smoke = **51
+passed** / 5 ignored / 0 failed (unchanged total — the
+`diagnose_human` test grew assertions but still counts as 1 test).
+
+**Smoke** (real hardware — `--diagnose` no-flags output):
+```
+tillandsias-tray --diagnose
+===========================
+
+--- binary identity ---
+Version:      0.2.260528.1
+Build commit: a963c16d
+Install path: C:\Users\bullo\AppData\Local\Programs\Tillandsias\tillandsias-tray.exe
+
+--- logs ---
+Log file:     C:\Users\bullo\AppData\Local\tillandsias\logs\tray.log
+Log exists:   yes (0 bytes)
+
+--- host software ---
+WSL:          Version WSL : 2.7.3.0
+OS:           Microsoft Windows [version 10.0.26200.8524]
+wt.exe:       present ✓
+
+--- WSL distro + rootfs ---
+Distro `tillandsias`:  registered ✓
+Release tag:  v0.2.260526.1
+Manifest pin: x86_64.tar a28cabe7c9df…
+
+--- control wire ---
+Control wire: unreachable (hvsocket open: no running WSL utility VM ...)
+              (is the VM provisioned + running? wsl -d tillandsias --exec true)
+```
+
+The PowerShell terminal mojibakes `✓` → `âœ"` and `…` → `â€¦` on this
+French-locale host (the binary's UTF-8 output collides with the
+terminal's ANSI codepage). This is pre-existing under
+human-mode-via-PowerShell-on-French-locale (the JSON mode stores
+these as proper UTF-8 — `cmd /c` redirect captures them correctly).
+Not introduced by this commit.
+
+**Litmus**:
+- `windows-native-tray`: 7/7 PASS (the extended cli_integration test
+  pins all 5 new section headers + the existing 12 row labels).
+- `cargo fmt`: clean.
+- `cargo clippy --tests -D warnings`: clean.
+
+**Findings** (free-form):
+- The grouping decision was driven by the JSON's logical structure:
+  the 16 keys naturally cluster into "what binary?" (binary identity),
+  "logs?" (logs), "host?" (host software), "VM?" (WSL distro), "is
+  it usable?" (control wire). The human output now mirrors this
+  cluster.
+- The `--- label ---` style was chosen to match the existing
+  `--- recent log tail (N lines) ---` divider — visual consistency
+  with the only pre-existing separator. An alternative `[label]` or
+  `### label` would have been more eye-catching but introduced a 2nd
+  visual style.
+- The test grew from 12 substring assertions to 17. The 5 section
+  headers become regression-protected: a future refactor that
+  removes a header surfaces here pre-build. The cheatsheet also
+  documents the grouping so a refactor that changes the section
+  names breaks 3 places (test + cheatsheet + actual output) — high
+  drift-protection.
+- The mojibake of `✓` / `…` under PowerShell on French locale is a
+  known limitation of human mode (PowerShell 5.1's default codepage
+  collides with the binary's UTF-8 output). NOT a new bug from this
+  commit, just visible in the smoke. Operators on English locale
+  see the glyphs correctly. The fix would be to set
+  `[Console]::OutputEncoding = [System.Text.Encoding]::UTF8` in
+  the PowerShell session, but that's a per-session concern not a
+  binary-side one.
+
+**Cross-host visibility note**: pure Windows-tray-side polish; no
+cross-host coordination needed.
+
+**Next iteration ask**: N/A (SECTION_KIND=ok). The human `--diagnose`
+output now mirrors the JSON's logical grouping, with the section
+headers pin-tested + cheatsheet-documented for drift-protection.

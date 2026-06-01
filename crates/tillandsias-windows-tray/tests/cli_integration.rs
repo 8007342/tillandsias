@@ -261,9 +261,12 @@ fn diagnose_human_includes_pinned_section_labels() {
     );
     let stdout = String::from_utf8_lossy(&output.stdout);
     // Pin the labels the cheatsheet's Quick reference table lists as the
-    // "~13 rows" of the human report. A future refactor that drops or
-    // renames a label surfaces here pre-build instead of as a
-    // documentation-stale incident in the field.
+    // "~13 rows" of the human report + the 5 grouped section headers
+    // (--- binary identity ---, --- logs ---, --- host software ---,
+    // --- WSL distro + rootfs ---, --- control wire ---). A future
+    // refactor that drops or renames a label or section header surfaces
+    // here pre-build instead of as a documentation-stale incident in the
+    // field.
     for label in [
         "tillandsias-tray --diagnose",
         "Version:",
@@ -277,6 +280,11 @@ fn diagnose_human_includes_pinned_section_labels() {
         "Distro `",
         "Release tag:",
         "Manifest pin:",
+        "--- binary identity ---",
+        "--- logs ---",
+        "--- host software ---",
+        "--- WSL distro + rootfs ---",
+        "--- control wire ---",
     ] {
         assert!(
             stdout.contains(label),

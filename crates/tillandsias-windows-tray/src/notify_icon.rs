@@ -1604,9 +1604,13 @@ fn collect_report() -> DiagnoseReport {
 fn print_human(r: &DiagnoseReport) {
     println!("tillandsias-tray --diagnose");
     println!("===========================");
+
+    println!("\n--- binary identity ---");
     println!("Version:      {}", r.version);
     println!("Build commit: {}", r.build_commit);
     println!("Install path: {}", r.install_path);
+
+    println!("\n--- logs ---");
     println!("Log file:     {}", r.log_path);
     println!(
         "Log exists:   {}{}",
@@ -1616,6 +1620,8 @@ fn print_human(r: &DiagnoseReport) {
             None => String::new(),
         }
     );
+
+    println!("\n--- host software ---");
     println!(
         "WSL:          {}",
         r.wsl_version.as_deref().unwrap_or("(not detected)")
@@ -1632,6 +1638,8 @@ fn print_human(r: &DiagnoseReport) {
             "not found (bare console fallback will be used)"
         }
     );
+
+    println!("\n--- WSL distro + rootfs ---");
     println!(
         "Distro `{}`:  {}{}",
         r.distro,
@@ -1650,6 +1658,8 @@ fn print_human(r: &DiagnoseReport) {
             .map(|sha| format!("{sha}\u{2026}"))
             .unwrap_or_else(|| "(not found / parse skipped)".to_string())
     );
+
+    println!("\n--- control wire ---");
     match (
         &r.wire.reachable,
         r.wire.phase.as_deref(),
