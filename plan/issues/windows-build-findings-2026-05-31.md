@@ -961,3 +961,127 @@ refresh; no cross-host coordination needed.
 accurately reflects the v0.2.260531-era windows-tray surface: 7 CLI
 modes, 16-key DiagnoseReport, 4 Win11 toasts, 4 env vars, single
 size-rotated log file, 5-MiB threshold + 1-bak ring.
+
+---
+
+### 20260601T020000Z — ok (end-to-end cli_integration tests via real binary)
+
+- agent_id: windows-bullo-claude-opus-20260601T020000Z
+- head_sha: 4f96c906 (linux-next + osx-next still unchanged 8+ ticks;
+  windows-next 13 ahead pre-this-commit, 14 ahead post)
+- version: 0.2.260528.1
+- build_commit: 4f96c906
+- build_run_id: 20260601T020000Z
+
+**Sibling context**: no remote movement. linux-next + osx-next unchanged
+8+ consecutive ticks. windows-next 0/14. Merge-tree clean.
+
+**Change made**: new integration-test file `tests/cli_integration.rs`
+exercising the **real binary** end-to-end. The existing 41 inline pin
+tests in `notify_icon::tests` assert against a **test helper**
+(`baseline_diagnose_report()`) — they can't detect a panic in
+`collect_report`, an `env!` resolution failure (build.rs regression),
+a JSON serialization failure, or a sniffer that fails the whole
+process instead of returning `None`. Tests that invoke the actual
+compiled exe and parse its captured output close that gap.
+
+Files touched (Windows-owned only):
+- `crates/tillandsias-windows-tray/tests/cli_integration.rs` — NEW file,
+  4 `#[cfg(target_os = "windows")]` tests using
+  `env!("CARGO_BIN_EXE_tillandsias-tray")` to find the always-fresh
+  built binary:
+  1. **`version_line_has_workspace_version_and_commit`**: runs
+     `tray.exe --version`, asserts exit 0, output starts with
+     `"tillandsias-tray "`, contains both `WORKSPACE_VERSION` AND
+     `BUILD_COMMIT_SHA` env-var values.
+  2. **`help_text_includes_all_documented_surfaces`**: runs
+     `tray.exe --help`, asserts exit 0, output contains 16 distinct
+     substrings spanning every CLI mode + the `--no-provision` option
+     + all 3 env vars + all 5 section headers + the cheatsheet
+     pointer.
+  3. **`diagnose_json_has_all_16_top_level_keys`**: runs
+     `tray.exe --diagnose --json`, asserts exit is 0 or 2 (both are
+     valid "report ran to completion" outcomes; 1 means the binary
+     itself is broken), parses stdout as JSON, asserts all 16 pinned
+     top-level keys present, plus spot-checks that the `version` field
+     equals `env!("WORKSPACE_VERSION")` — this catches a real bug
+     class where the diagnose serialization could ship without the
+     workspace VERSION (a regression in build.rs would yield a
+     mismatch).
+  4. **`logs_bak_when_missing_exits_1_with_pointer_to_live_file`**:
+     deletes any existing `tray.log.bak`, runs `tray.exe --logs --bak`,
+     asserts exit 1 + stderr mentions `--bak` and either
+     `"drop --bak"` or `"live log"`. Pins the operator-facing error
+     message so a future eprintln change can't silently make the
+     error less helpful.
+
+  The file is `#![cfg(target_os = "windows")]`-gated so `cargo test
+  --workspace` from Linux dev boxes (which probe-macos-tray-on-windows
+  + portable_smoke.rs both target) stays green.
+- `openspec/litmus-tests/litmus-windows-tray-diagnose-cli-surface.yaml`:
+  new step "end-to-end cli_integration tests attached" requires all 4
+  test-name greps.
+
+**Build**: tests compile + link against the released binary directly
+(0.48 s wall-clock for the cli_integration suite once the binary was
+built).
+
+**Tests**: 41 + 4 + 3 = **48 passed** / 5 ignored / 0 failed (was
+41 + 0 + 3 = 44 prior tick; this tick: +4 new in the cli_integration
+suite). All green.
+
+**Smoke**: the 4 new tests AS A SET are the end-to-end smoke. Each
+runs the real binary against real env vars / real captured stdout /
+real exit codes. Confirms:
+- `tray.exe --version` works + reports the right strings.
+- `tray.exe --help` works + documents everything we claim.
+- `tray.exe --diagnose --json` works + JSON shape matches the schema +
+  the workspace VERSION threading is intact.
+- `tray.exe --logs --bak` error path works + the operator gets a useful
+  eprintln.
+
+**Litmus**:
+- `windows-native-tray`: 7/7 PASS (the new pin step "end-to-end
+  cli_integration tests attached" requires all 4 test-name greps; runs
+  green).
+- `cargo fmt`: clean.
+- `cargo clippy -D warnings`: clean.
+
+**Findings** (free-form):
+- The integration test layer catches a real bug class the inline pin
+  tests cannot:
+  - A `collect_report` panic (the test helper bypasses the IO path
+    entirely).
+  - A `build.rs` regression where `WORKSPACE_VERSION` resolves to the
+    wrong value (the inline tests use `env!()` which would also fail
+    but only at test compile time; the end-to-end test verifies that
+    THE BINARY uses the right value).
+  - A sniffer that fails the whole process instead of returning
+    `None` (e.g. `sniff_wsl_version` if `wsl --version` returns
+    non-UTF-8 garbage that `from_utf8_lossy` can't handle — wouldn't
+    catch this, but a panicking sniffer would now be caught).
+  - A help_text refactor that drops a mode in MAIN but keeps the
+    `help_text()` test struct (the inline test would still pass; the
+    end-to-end test would fail because the binary's actual --help
+    output would miss the mode in argv parsing).
+- `env!("CARGO_BIN_EXE_<bin>")` is the canonical Cargo-supported way
+  to find the always-fresh built binary from integration tests. No
+  `find`-the-target-dir hacks needed.
+- The 4-test suite is intentionally focused on the operator-facing
+  surface (version, help, diagnose, logs error path) — not exhaustive
+  coverage of every CLI mode. Adding tests for `--provision-once` and
+  `--status-once` would require WSL/control-wire state which makes
+  the tests environment-dependent and flaky. The 4 modes covered
+  here are stateless and deterministic.
+
+**Cross-host visibility note**: pure Windows-tray-side addition; tests
+are Windows-only (cfg-gated). No cross-host coordination needed.
+macOS-tray + Linux tray could follow the same pattern with their own
+real-binary integration tests.
+
+**Next iteration ask**: N/A (SECTION_KIND=ok). The test pyramid now
+has 3 layers: (1) inline pin tests assert against the test struct
+helpers, (2) cli_integration tests assert against the real binary's
+output, (3) portable_smoke tests assert against the shared
+host-shell crate's pure surface. All 3 layers run via
+`cargo test -p tillandsias-windows-tray --release`.
