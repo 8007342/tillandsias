@@ -1695,6 +1695,27 @@ fn print_human(r: &DiagnoseReport) {
             println!("{line}");
         }
     }
+    // Self-summarizing footer — pre-computes the exit-code verdict so an
+    // operator scanning the output can read the bottom line first instead
+    // of working through the 13 rows. Mirrors `tray-diagnose.ps1`'s
+    // HEALTHY / DEGRADED summary but in the binary itself.
+    println!();
+    println!("{}", summary_line(r));
+}
+
+/// Pure summary line for [`print_human`]. Pinned by
+/// `summary_line_classifies_exit_code` so a future refactor that flips
+/// the verdict-to-code mapping out of sync with [`exit_code_from`] is
+/// caught pre-build. Matches the cheatsheet's documented exit-code
+/// table (`0` healthy / `2` degraded / `1` hard fail; print_human is
+/// never reached on exit 1).
+fn summary_line(r: &DiagnoseReport) -> String {
+    let code = exit_code_from(r);
+    match code {
+        0 => "Status: HEALTHY (exit 0)".to_string(),
+        2 => "Status: DEGRADED (exit 2) -- see rows above for the failing check(s)".to_string(),
+        other => format!("Status: UNKNOWN (exit {other})"),
+    }
 }
 
 fn print_json(r: &DiagnoseReport) {
@@ -2425,6 +2446,49 @@ mod tests {
             error: None,
         };
         assert_eq!(exit_code_from(&deg), 2, "phase != Ready -> 2");
+    }
+
+    /// `summary_line` must agree with [`exit_code_from`] for every
+    /// possible exit-code path. A future refactor that flips the verdict
+    /// out of sync (e.g. prints "HEALTHY" while exit_code_from returns 2)
+    /// would silently lie to operators; this test catches that pre-build.
+    #[test]
+    fn summary_line_classifies_exit_code() {
+        // Healthy: registered + Ready wire.
+        let mut healthy = baseline_diagnose_report();
+        healthy.distro_registered = true;
+        healthy.wire = WireReport {
+            reachable: true,
+            phase: Some("Ready".to_string()),
+            podman_ready: Some(true),
+            last_event: None,
+            error: None,
+        };
+        let s = summary_line(&healthy);
+        assert!(
+            s.contains("HEALTHY") && s.contains("exit 0"),
+            "healthy report -> {s}"
+        );
+
+        // Baseline = degraded (no distro, no wire).
+        let s = summary_line(&baseline_diagnose_report());
+        assert!(
+            s.contains("DEGRADED") && s.contains("exit 2"),
+            "degraded report -> {s}"
+        );
+
+        // Reachable but non-Ready phase = degraded.
+        let mut deg = baseline_diagnose_report();
+        deg.distro_registered = true;
+        deg.wire = WireReport {
+            reachable: true,
+            phase: Some("Starting".to_string()),
+            podman_ready: Some(false),
+            last_event: None,
+            error: None,
+        };
+        let s = summary_line(&deg);
+        assert!(s.contains("DEGRADED"), "reachable-but-not-Ready -> {s}");
     }
 
     #[test]

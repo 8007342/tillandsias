@@ -720,3 +720,107 @@ will be the first to ship the full diagnostic toolchain inline. Daily
 `/build-windows-tray` cron at 11:17 AM PDT will exercise this path
 during its build step (though the cron runs without `-Release`, so
 it won't directly test the packaging changes).
+
+---
+
+### 20260601T220000Z — ok (--diagnose human footer: Status: HEALTHY/DEGRADED self-summarizer)
+
+- agent_id: windows-bullo-claude-opus-20260601T220000Z
+- head_sha: 334eb9fe (linux-next + osx-next still unchanged this tick;
+  windows-next 23 ahead pre-this-commit, 24 ahead post)
+- version: 0.2.260528.1
+- build_commit: 334eb9fe
+- build_run_id: 20260601T220000Z
+
+**Sibling context**: no remote movement. linux-next + osx-next unchanged
+from prior tick. windows-next 0/24. Merge-tree clean.
+
+**Change made**: added a `Status: HEALTHY (exit 0)` / `Status: DEGRADED
+(exit 2) -- see rows above for the failing check(s)` footer to
+`--diagnose` human output. Today operators read all 13 rows to figure
+out the verdict; the JSON has the pre-computed `exit_code` (which my
+`--status-once --json` test verified is self-consistent with the
+process exit), but the human mode forces eyeballing. A summary line
+at the bottom means the binary self-summarizes — no need to invoke
+`tray-diagnose.ps1`'s wrapper just to get a verdict.
+
+Files touched (Windows-owned only):
+- `crates/tillandsias-windows-tray/src/notify_icon.rs`:
+  - **New `summary_line(r) -> String`** pure helper. Calls
+    `exit_code_from(r)` and maps to a string:
+    - `0 → "Status: HEALTHY (exit 0)"`
+    - `2 → "Status: DEGRADED (exit 2) -- see rows above for the failing check(s)"`
+    - other `→ "Status: UNKNOWN (exit N)"` (defensive; `exit_code_from`
+      only returns 0 or 2 today but the third branch protects against
+      future-additions that might add a 3rd state)
+  - `print_human` now ends with a blank line + `summary_line(r)`
+    after the recent-log-tail section.
+  - **New inline pin test `summary_line_classifies_exit_code`**:
+    asserts 3 cases — healthy (registered + Ready) → "HEALTHY"+"exit 0";
+    baseline (no distro/wire) → "DEGRADED"+"exit 2"; reachable-but-non-
+    Ready → "DEGRADED". Catches a future refactor that flips the
+    verdict-to-code mapping out of sync with `exit_code_from`.
+- `crates/tillandsias-windows-tray/tests/cli_integration.rs`:
+  - `diagnose_human_includes_pinned_section_labels` extended to also
+    assert the `"Status:"` substring is present in the captured
+    output. Was 17 substring assertions; now 18.
+- `openspec/litmus-tests/litmus-windows-tray-diagnose-cli-surface.yaml`:
+  - "exit-code contract tests attached" step renamed to mention
+    `summary_line_classifies_exit_code` and grep predicate extended
+    to require all 3 test names.
+- `cheatsheets/runtime/windows-tray-diagnostics.md`:
+  - `--diagnose` row description appended `"and a Status: HEALTHY/DEGRADED
+    (exit N) self-summarizing footer"`.
+
+**Build**: 37.09 s release.
+
+**Tests**: **52 passed** / 5 ignored / 0 failed (42 inline + 7
+cli_integration + 3 portable_smoke; +1 inline from
+`summary_line_classifies_exit_code`).
+
+**Smoke** (real hardware — `--diagnose` no-flags output, last 3 lines):
+```
+              (is the VM provisioned + running? wsl -d tillandsias --exec true)
+
+Status: DEGRADED (exit 2) -- see rows above for the failing check(s)
+```
+Footer renders correctly. exit 2 (expected; wire unreachable on this
+dev host with no VM running). The Status line is visually distinct
+from the row labels (no `--- ---` delimiters, no row-style colon-
+padded layout), making it obvious as a summary.
+
+**Litmus**:
+- `windows-native-tray`: 7/7 PASS (extended exit-code contract step
+  green; extended cli_integration pin step green).
+- `cargo fmt`: clean (rustfmt re-wrapped one `assert!` call — applied).
+- `cargo clippy --tests -D warnings`: clean.
+
+**Findings** (free-form):
+- The "see rows above for the failing check(s)" hint is operator-
+  friendly: it tells the reader where to look NEXT after seeing
+  DEGRADED. Without it, a reader scanning bottom-to-top might miss
+  that the rows have the answer.
+- The `UNKNOWN (exit N)` defensive branch is intentional. Today
+  `exit_code_from` returns only 0 or 2, but adding a 3rd state in
+  the future (e.g. "needs attention but not degraded") would silently
+  produce the wrong summary if I'd written `match` with only 2 arms.
+  The defensive third branch makes any such future change surface
+  via the unit test's untested case (i.e., I'd notice missing test
+  coverage rather than producing wrong output).
+- The Status line is now the **3rd place** the exit-code verdict is
+  surfaced: (1) process exit code, (2) `--diagnose --json exit_code`-
+  esque (actually that's `--status-once --json`'s field;
+  `--diagnose --json` doesn't have a pre-computed exit_code field,
+  the consumer derives it), (3) the new human-mode footer. The 2
+  surfaces that DO compute the verdict (`exit_code_from` + the new
+  `summary_line`) are pin-tested for cross-consistency.
+
+**Cross-host visibility note**: pure Windows-tray-side UX polish; no
+cross-host coordination needed.
+
+**Next iteration ask**: N/A (SECTION_KIND=ok). The `--diagnose` human
+output is now self-summarizing: operators see the verdict at the
+bottom without reading all 13 rows. The pre-existing
+`tray-diagnose.ps1`'s HEALTHY/DEGRADED summary becomes redundant for
+quick checks (though it still adds value via PASS/FAIL per-check
+breakdown + colorization).

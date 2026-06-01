@@ -42,8 +42,8 @@ critical_path:
     expected_behavior: "grep succeeds"
     timeout_ms: 3000
 
-  - step: "exit-code contract tests attached"
-    command: "grep -F 'fn exit_code_provisioned_zero_degraded_two' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn status_once_exit_codes' crates/tillandsias-windows-tray/src/notify_icon.rs"
+  - step: "exit-code contract tests attached (incl. summary_line classifier)"
+    command: "grep -F 'fn exit_code_provisioned_zero_degraded_two' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn status_once_exit_codes' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn summary_line_classifies_exit_code' crates/tillandsias-windows-tray/src/notify_icon.rs"
     expected_behavior: "grep succeeds"
     timeout_ms: 3000
 

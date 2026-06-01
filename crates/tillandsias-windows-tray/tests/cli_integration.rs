@@ -285,6 +285,9 @@ fn diagnose_human_includes_pinned_section_labels() {
         "--- host software ---",
         "--- WSL distro + rootfs ---",
         "--- control wire ---",
+        // Self-summarizing footer. summary_line is pinned in-tree;
+        // here we assert the footer is actually emitted by the binary.
+        "Status:",
     ] {
         assert!(
             stdout.contains(label),
