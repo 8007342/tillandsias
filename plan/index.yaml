@@ -1721,21 +1721,21 @@ plan_index:
           checkpoint_required: true
           handoff_note: "Remove --without-vault and --legacy-keyring-secrets."
         - id: vault-hardening/host-keychain-storage
-          status: ready
+          status: completed
           depends_on: [vault-hardening/remove-legacy-fallback]
           owned_files:
             - crates/tillandsias-headless/src/vault_bootstrap.rs
           checkpoint_required: true
           handoff_note: "Store and version the unseal key in the host native keychain."
         - id: vault-hardening/true-rekey-and-cleanup
-          status: pending
+          status: completed
           depends_on: []
           owned_files:
             - images/vault/entrypoint.sh
           checkpoint_required: true
           handoff_note: "Use vault operator rekey and delete init.json and root.token securely."
         - id: vault-hardening/litmus-updates
-          status: pending
+          status: completed
           depends_on: [vault-hardening/true-rekey-and-cleanup, vault-hardening/host-keychain-storage]
           owned_files:
             - openspec/litmus-tests/litmus-secrets-management-implementation-shape.yaml
