@@ -269,7 +269,7 @@ accessor.
 - type: architecture-pivot
 - owner_host: macos
 - capability_tags: [macos, vz, rust, fedora]
-- status: ready
+- status: claimed
 - depends_on: [m5/vfr-image-via-ci-rootfs]
 - gated_on: []
 - owned_files:
@@ -291,6 +291,13 @@ accessor.
   - evidence produced
   - next checkpoint
   - lease intent
+- events:
+  - type: claim
+    ts: "2026-06-02T20:30:30Z"
+    agent_id: "macos-tlatoani-codex-20260602T203030Z"
+    host: "macos"
+    lease_id: "m9-vz-fedora-cloud-20260602T203030Z"
+    expires_at: "2026-06-03T00:30:30Z"
 
 ### Item: m8/appkit-action-smoke-and-stub-polish
 
