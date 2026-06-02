@@ -313,17 +313,32 @@ bounded slices from. Each item is sized for one loop iteration. NOT for siblings
   double-print. `DiagnosticsHandle::Drop` aborts every spawned tail
   on closure exit (no explicit abort needed). Compile-pinning unit
   test asserts the signature stays compatible.
+WITH this, the 6-arm gap-3 typed-event chain is COMPLETE:
+  1. container_launch (emit_launch_event, gap-3 phase-1)
+  2. container_exit (Died → format_container_exit_event, phases
+     1b + 2c + 2e)
+  3. container_signal (signal-range exit_code, phase-2f)
+  4. resource_exhaustion (Oom → format_resource_exhaustion_event,
+     phase-2d)
+  5. container_stderr (DiagnosticsHandle typed tail, phase-2g)
+  6. internal_* (verbose level via DiagnosticsFilter, gap-5 phase-1)
+- **GAP 7 GRACEFUL SHUTDOWN** (implementation + verification):
+Implementation of the `graceful-shutdown` spec in `tillandsias-headless`.
+- Wire `graceful_shutdown_async` into the tray's `run_tray_mode_with_debug` exit path.
+- Update `MenuCommand::Quit` (id 31) in `tray/mod.rs` to flip the shutdown atomic instead of `std::process::exit(0)`.
+- Implement container stop-and-wait in `graceful_shutdown_async` using `PodmanClient`.
+- Implement verification phase polling `podman ps --filter name=tillandsias-` with 30s timeout and SIGKILL fallback.
+- Closes the 67→100 gap for `app-lifecycle` and `graceful-shutdown` specs on Linux.
+- Status: claimed.
+- Events:
+  - type: claim
+    ts: "2026-06-02T19:15:00Z"
+    agent_id: "linux-tillandsia-gemini-cli-20260602T1912"
+    host: "linux"
+    lease_id: "lease-linux-graceful-shutdown-implementation-20260602T1912"
+    expires_at: "2026-06-02T23:15:00Z"
 
-  WITH this, the 6-arm gap-3 typed-event chain is COMPLETE:
-    1. container_launch (emit_launch_event, gap-3 phase-1)
-    2. container_exit (Died → format_container_exit_event, phases
-       1b + 2c + 2e)
-    3. container_signal (signal-range exit_code, phase-2f)
-    4. resource_exhaustion (Oom → format_resource_exhaustion_event,
-       phase-2d)
-    5. container_stderr (DiagnosticsHandle typed tail, phase-2g)
-    6. internal_* (verbose level via DiagnosticsFilter, gap-5 phase-1)
-- **GAP 3 PHASE-2 PINNING**: new instant-phase litmus
+## Lease note
   `litmus-runtime-diagnostics-emitter-shape` greps the
   emitter-layer surfaces (`spawn_diagnostic_event_emitter`,
   `EmitterState { start_times: HashMap<String, i64> }`,
