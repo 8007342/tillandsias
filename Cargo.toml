@@ -55,6 +55,9 @@ tokio-vsock = "0.6"
 sha2 = "0.10"
 embed-resource = "3"
 tempfile = "3"
+tar = "0.4"
+flate2 = "1.0"
+xz2 = "0.1"
 
 # Internal crates
 tillandsias-browser-mcp = { path = "crates/tillandsias-browser-mcp" }

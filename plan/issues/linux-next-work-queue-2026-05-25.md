@@ -162,3 +162,5 @@ This file is the cross-host advertisement — terse, dated, SHA-anchored.
 - 2026-06-02T17:55Z  43d9ffa3  Release v0.2.260602.2 — merged PR #11 to main, tagged, workflow_dispatch triggered. Linux artifact: https://github.com/8007342/tillandsias/releases/download/v0.2.260602.2/tillandsias-linux-x86_64.
 - 2026-06-02T18:50Z  2867b3bd  Spec-gap fill (priority #2 — 67%-tier breadth): init-command and init-incremental-builds coverage 67→75 via new `litmus:init-command-shape`. Pins CLI flags, help text, and canonical image build order.
 - 2026-06-02T19:55Z  b1498732  GAP 7: Implemented graceful shutdown and container cleanup in headless/tray modes. Closes spec gap 67->100.
+- 2026-06-02T20:20Z  claim     l10/oci-flattener-and-fedora-pivot: Implement pure-Rust OCI-to-rootfs flattener in `tillandsias-vm-layer` to unblock Windows/macOS pivot to official Fedora 44 container base tars. (Agent: linux-tlatoani-gemini-cli-20260602T2020)
+- 2026-06-02T21:15Z  done      l10/oci-flattener-and-fedora-pivot: Implemented `OciFlattener` and `decompress_xz` in `tillandsias-vm-layer`. Updated `manifest.toml` to official Fedora 44 Generic OCI archives. UNBLOCKS Windows/macOS.

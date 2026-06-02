@@ -19,6 +19,8 @@ required-features = ["materialize"]
 tokio = { workspace = true, features = ["process", "io-util", "rt"] }
 serde = { workspace = true }
 async-trait = { workspace = true }
+thiserror = { workspace = true }
+tempfile = { workspace = true }
 # vsock port constant only (CONTROL_WIRE_VSOCK_PORT). VzRuntime::wait_ready
 # probes the in-VM headless's vsock listener after the VM reaches state ==
 # Running. No cycle: control-wire does NOT depend on vm-layer.
@@ -28,6 +30,9 @@ tillandsias-control-wire = { workspace = true }
 reqwest = { workspace = true, optional = true }
 sha2 = { workspace = true, optional = true }
 serde_json = { workspace = true, optional = true }
+tar = { workspace = true, optional = true }
+flate2 = { workspace = true, optional = true }
+xz2 = { workspace = true, optional = true }
 # Behind the `recipe` feature only — manifest.toml parsing.
 toml = { workspace = true, optional = true }
 
@@ -104,7 +109,7 @@ fake = []
 # @trace spec:vm-provisioning-lifecycle — verified, resumable artifact
 # downloads (rootfs + headless binary). Pulls reqwest+rustls; enabled by the
 # native tray crates, off for trait-only / cross-build checks.
-download = ["dep:reqwest", "dep:sha2", "dep:serde_json", "tokio/fs"]
+download = ["dep:reqwest", "dep:sha2", "dep:serde_json", "dep:tar", "dep:flate2", "dep:xz2", "tokio/fs"]
 # @trace spec:vm-provisioning-lifecycle — shared (co-owned) Recipefile +
 # manifest.toml parser for the recipe materializer. Pure parsing, no VM.
 recipe = ["dep:toml"]
@@ -113,4 +118,4 @@ recipe = ["dep:toml"]
 # ledger, GC. Linux-host owns the driver (lease linux-l-mat-2026-05-25T15Z);
 # per-OS converters (§3.7.1 macOS .img, §3.7.2 WSL --import) are sibling
 # claims and live in their own submodules.
-materialize = ["recipe", "dep:sha2", "dep:serde_json"]
+materialize = ["recipe", "dep:sha2", "dep:serde_json", "dep:tar", "dep:flate2", "dep:xz2"]

@@ -57,6 +57,19 @@ pub fn is_sha256_hex(s: &str) -> bool {
     s.len() == 64 && s.bytes().all(|b| b.is_ascii_hexdigit())
 }
 
+/// Decompresses an XZ file to a destination path using pure Rust.
+/// @trace spec:vm-provisioning-lifecycle
+#[cfg(feature = "download")]
+pub async fn decompress_xz(src: &Path, dest: &Path) -> Result<(), FetchError> {
+    use std::fs::File;
+    use std::io::BufReader;
+    let src_file = File::open(src).map_err(|e| format!("open xz source {}: {e}", src.display()))?;
+    let mut decoder = xz2::read::XzDecoder::new(BufReader::new(src_file));
+    let mut dest_file = File::create(dest).map_err(|e| format!("create xz dest {}: {e}", dest.display()))?;
+    std::io::copy(&mut decoder, &mut dest_file).map_err(|e| format!("xz decompression error: {e}"))?;
+    Ok(())
+}
+
 fn hex_lower(bytes: &[u8]) -> String {
     use std::fmt::Write as _;
     let mut s = String::with_capacity(bytes.len() * 2);
