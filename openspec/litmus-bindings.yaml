@@ -403,15 +403,17 @@ specs:
   litmus_tests:
   - litmus:init-log-cleanup
   - litmus:user-runtime-checkout-free-install
-  coverage_ratio: 67
-  last_verified: '2026-05-20'
+  - litmus:init-command-shape
+  coverage_ratio: 75
+  last_verified: '2026-06-02'
 - spec_id: init-incremental-builds
   status: active
   litmus_tests:
   - litmus:init-log-cleanup
   - litmus:user-runtime-checkout-free-install
-  coverage_ratio: 67
-  last_verified: '2026-05-20'
+  - litmus:init-command-shape
+  coverage_ratio: 75
+  last_verified: '2026-06-02'
 - spec_id: install-progress
   status: active
   litmus_tests:
