@@ -3088,3 +3088,9 @@ step 5 lands.
   now has 7 litmuses; coverage_ratio stays 100% on both.
 - YAML parses cleanly. No code changes.
 - Streak: 0 (productive iter). Next macOS iter eligible at ~18:35Z.
+
+### event: macOS m10 metadata alignment — 2026-06-02T20:07Z
+
+- m10/menu-project-threading-for-pty-launch was correctly implemented in `61e4233f`, but its status field was not fully marked done. Corrective bookkeeping applied: marked done and completed natively.
+- Tests remain 42/42 passing.
+- Streak: 0 (productive iter).
