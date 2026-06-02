@@ -37,8 +37,8 @@ critical_path:
     expected_behavior: "grep succeeds"
     timeout_ms: 3000
 
-  - step: "JSON schema-pin unit tests attached"
-    command: "grep -F 'fn diagnose_json_top_level_keys_pinned' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn diagnose_json_wire_object_keys_pinned' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn diagnose_json_manifest_pin_some_serializes_as_string' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn diagnose_json_manifest_pin_none_serializes_as_null' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn diagnose_json_recent_log_tail_is_array' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn status_once_json_keys_pinned' crates/tillandsias-windows-tray/src/notify_icon.rs"
+  - step: "JSON schema-pin unit tests attached (superset + exact-count)"
+    command: "grep -F 'fn diagnose_json_top_level_keys_pinned' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn diagnose_json_top_level_keys_exact_count' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn diagnose_json_wire_object_keys_pinned' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn diagnose_json_manifest_pin_some_serializes_as_string' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn diagnose_json_manifest_pin_none_serializes_as_null' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn diagnose_json_recent_log_tail_is_array' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn status_once_json_keys_pinned' crates/tillandsias-windows-tray/src/notify_icon.rs"
     expected_behavior: "grep succeeds"
     timeout_ms: 3000
 
@@ -82,8 +82,8 @@ critical_path:
     expected_behavior: "grep succeeds"
     timeout_ms: 3000
 
-  - step: "tray-diagnose.ps1 consumer script surfaces the 16-key JSON (build commit, install path, OS + WSL versions, log size, distro running, recent log)"
-    command: "grep -F 'cmd.exe /c' scripts/tray-diagnose.ps1 && grep -Fe '--diagnose --json' scripts/tray-diagnose.ps1 && grep -F 'build_commit' scripts/tray-diagnose.ps1 && grep -F 'recent_log_tail' scripts/tray-diagnose.ps1 && grep -F 'log_size_bytes' scripts/tray-diagnose.ps1 && grep -F 'os_version' scripts/tray-diagnose.ps1 && grep -F 'wsl_version' scripts/tray-diagnose.ps1 && grep -F 'distro_running' scripts/tray-diagnose.ps1"
+  - step: "tray-diagnose.ps1 consumer script surfaces the 16-key JSON + both binary + script verdicts"
+    command: "grep -F 'cmd.exe /c' scripts/tray-diagnose.ps1 && grep -Fe '--diagnose --json' scripts/tray-diagnose.ps1 && grep -F 'build_commit' scripts/tray-diagnose.ps1 && grep -F 'recent_log_tail' scripts/tray-diagnose.ps1 && grep -F 'log_size_bytes' scripts/tray-diagnose.ps1 && grep -F 'os_version' scripts/tray-diagnose.ps1 && grep -F 'wsl_version' scripts/tray-diagnose.ps1 && grep -F 'distro_running' scripts/tray-diagnose.ps1 && grep -F 'Binary --diagnose exit' scripts/tray-diagnose.ps1 && grep -F 'Script verdict' scripts/tray-diagnose.ps1"
     expected_behavior: "grep succeeds"
     timeout_ms: 3000
 

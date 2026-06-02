@@ -912,3 +912,119 @@ consistency tests provide the final piece of drift-protection:
 between the binary's surfaces themselves (not just binary vs
 test-helper). 53 tests total across 3 layers — a deeply tested
 windows-tray.
+
+---
+
+### 20260602T020000Z — ok (tray-diagnose.ps1 dual verdict + EXACT-count JSON schema pin)
+
+- agent_id: windows-bullo-claude-opus-20260602T020000Z
+- head_sha: d1e49f1c (linux-next + osx-next still unchanged this tick;
+  windows-next 25 ahead pre-this-commit, 26 ahead post)
+- version: 0.2.260528.1
+- build_commit: d1e49f1c
+- build_run_id: 20260602T020000Z
+
+**Sibling context**: no remote movement. linux-next + osx-next unchanged.
+windows-next 0/26. Merge-tree clean.
+
+**Change made**: two related drift-protection improvements:
+
+1. **`scripts/tray-diagnose.ps1` shows BOTH verdicts** — the binary's
+   `--diagnose` exit code (HEALTHY/DEGRADED) AND the script's own
+   classification (HEALTHY/DEGRADED based on its broader checks). The
+   two can disagree: the binary gates on the strict wire-readiness
+   invariant (distro registered + wire reachable + phase Ready); the
+   script gates on the wider host-machinery invariant (the binary's
+   checks + WSL + wt.exe + manifest pin). Today the script reported
+   only its own verdict; an operator seeing "DEGRADED" couldn't tell
+   if the binary agreed or if the script was stricter on a host-side
+   check. New output:
+   ```
+   Binary --diagnose exit: 2 (DEGRADED)
+   Script verdict: DEGRADED (1 failure(s)) - run 'tillandsias-tray --provision-once' to provision
+   ```
+   When they agree (today's smoke), the operator sees parity. When
+   they disagree (e.g., wire is Ready but wt.exe is missing), the
+   operator can see WHY at a glance.
+
+2. **New `diagnose_json_top_level_keys_exact_count` inline pin
+   test** — asserts the JSON has EXACTLY 16 top-level keys. The
+   existing `diagnose_json_top_level_keys_pinned` is a SUPERSET
+   check (`contains_key` per pinned name) — a 17th key could be
+   added without breaking it. The exact-count pin closes that gap:
+   any new field forces a coordinated bump (count + pinned-keys
+   list + cheatsheet schema + tray-diagnose + install-windows + 5
+   litmus pin steps). The 5-touchpoint drift-protection discipline
+   documented in `docs/CONTRIBUTING-WINDOWS.md` is now mechanically
+   enforced.
+
+Files touched (Windows-owned only):
+- `scripts/tray-diagnose.ps1`: replaced the single HEALTHY/DEGRADED
+  output line with a 2-line block showing both verdicts. New
+  `switch ($trayExit)` block computes the binary's verdict label
+  (HEALTHY / DEGRADED / UNKNOWN). Renamed existing output to "Script
+  verdict: ..." for clarity. Existing exit-code behavior unchanged
+  (script still exits with its own 0/2 classification).
+- `crates/tillandsias-windows-tray/src/notify_icon.rs`: new inline
+  test `diagnose_json_top_level_keys_exact_count` (15-line test +
+  10-line docblock explaining the superset-vs-exact distinction and
+  pointing at CONTRIBUTING-WINDOWS for the 5-touchpoint discipline).
+- `openspec/litmus-tests/litmus-windows-tray-diagnose-cli-surface.yaml`:
+  - "JSON schema-pin unit tests attached" step renamed to "(superset +
+    exact-count)" + grep predicate extended to require the new test
+    name.
+  - "tray-diagnose.ps1 consumer script" step renamed to "+ both binary
+    + script verdicts" + grep predicate extended to require the new
+    substrings `"Binary --diagnose exit"` and `"Script verdict"`.
+
+**Build**: tests recompile + run.
+
+**Tests**: 43 inline + 8 cli_integration + 3 portable_smoke = **54
+passed** / 5 ignored / 0 failed (+1 inline from
+`diagnose_json_top_level_keys_exact_count`).
+
+**Smoke** (real hardware — `scripts\tray-diagnose.ps1`, wire idled):
+- Identity + Windows host + Recipe / artifact + Control wire sections
+  unchanged from prior tick's tray-diagnose.ps1 enrichment.
+- Bottom 2 lines (NEW):
+  ```
+  Binary --diagnose exit: 2 (DEGRADED)
+  Script verdict: DEGRADED (1 failure(s)) - run 'tillandsias-tray --provision-once' to provision
+  ```
+  Both verdicts agree (DEGRADED + DEGRADED). Operator sees parity at
+  a glance.
+
+**Litmus**:
+- `windows-native-tray`: 7/7 PASS (renamed schema-pin + consumer-script
+  steps green).
+- `cargo fmt`: clean.
+- `cargo clippy --tests -D warnings`: clean.
+
+**Findings** (free-form):
+- The exact-count pin is a mechanical enforcer of the 5-touchpoint
+  discipline. Without it, a developer adding a 17th field could:
+  - Update `DiagnoseReport` ✓
+  - Update `baseline_diagnose_report` ✓
+  - Update `diagnose_json_top_level_keys_pinned` ✓
+  - Ship without updating cheatsheet / tray-diagnose / install-windows
+    / 5 litmus pin steps
+  Test would still pass (it's a superset check). Producer/consumer
+  drift would land silently. With the exact-count pin, the test fails
+  on the 17th key until ALL 5 touchpoints are updated.
+- The dual-verdict line in tray-diagnose.ps1 is operator-friendly
+  triage. "Binary says HEALTHY but script says DEGRADED" is a real
+  scenario that operators encounter (the binary doesn't gate on
+  wt.exe presence; if Windows Terminal isn't installed, the binary
+  says fine but Open Shell will fall back to bare console). Now
+  visible without operator inference.
+- 54 tests across 3 layers; `cli_integration` at 8 tests; all 5
+  documented surfaces drift-protected via litmus + inline pin tests +
+  the exact-count enforcer.
+
+**Cross-host visibility note**: pure Windows-tray-side polish; no
+cross-host coordination needed.
+
+**Next iteration ask**: N/A (SECTION_KIND=ok). The
+exact-count-as-enforcer pattern is the final mechanical lock on the
+"3-doc + 5-script + 6-litmus" drift-protection discipline. Future
+field additions surface immediately at test time.

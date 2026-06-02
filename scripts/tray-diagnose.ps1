@@ -158,10 +158,22 @@ if ($report.recent_log_tail -and $report.recent_log_tail.Count -gt 0) {
 }
 
 Write-Host
+# Surface BOTH verdicts: the binary's --diagnose exit (which gates on the
+# strict wire-readiness invariant: distro registered + wire reachable +
+# phase Ready) AND the script's own classification (which gates on the
+# wider host-machinery invariant: + WSL + wt.exe + manifest pin). The
+# two can disagree — the script is intentionally stricter — and showing
+# both lets an operator see WHY.
+$binVerdict = switch ($trayExit) {
+    0 { 'HEALTHY' }
+    2 { 'DEGRADED' }
+    default { "UNKNOWN (exit $trayExit)" }
+}
+Write-Host "Binary --diagnose exit: $trayExit ($binVerdict)" -ForegroundColor DarkGray
 if ($failures -eq 0) {
-    Write-Host 'HEALTHY (0 failures)' -ForegroundColor Green
+    Write-Host 'Script verdict: HEALTHY (0 failures)' -ForegroundColor Green
     exit 0
 } else {
-    Write-Host "DEGRADED ($failures failure(s)) - run 'tillandsias-tray --provision-once' to provision" -ForegroundColor Yellow
+    Write-Host "Script verdict: DEGRADED ($failures failure(s)) - run 'tillandsias-tray --provision-once' to provision" -ForegroundColor Yellow
     exit 2
 }

@@ -2448,6 +2448,30 @@ mod tests {
         assert_eq!(exit_code_from(&deg), 2, "phase != Ready -> 2");
     }
 
+    /// Pin the EXACT top-level key count of `DiagnoseReport`.
+    /// `diagnose_json_top_level_keys_pinned` above is a SUPERSET check
+    /// (`contains_key` for each pinned name) — it asserts the schema has
+    /// AT LEAST the 16 documented keys. This complement test asserts it
+    /// has EXACTLY 16. Catches a future field addition that doesn't
+    /// update the cheatsheet schema block / tray-diagnose.ps1 / litmus
+    /// pin step in lockstep — the "5-touchpoint drift-protection
+    /// discipline" from `docs/CONTRIBUTING-WINDOWS.md` becomes
+    /// enforceable. Bump this count + the pinned-keys list + the
+    /// 4 operator-facing surfaces together when adding a new field.
+    #[test]
+    fn diagnose_json_top_level_keys_exact_count() {
+        let v: serde_json::Value =
+            serde_json::to_value(baseline_diagnose_report()).expect("serialize");
+        let obj = v.as_object().expect("top-level JSON object");
+        assert_eq!(
+            obj.len(),
+            16,
+            "DiagnoseReport should have exactly 16 top-level keys; got {}: {:?}",
+            obj.len(),
+            obj.keys().collect::<Vec<_>>()
+        );
+    }
+
     /// `summary_line` must agree with [`exit_code_from`] for every
     /// possible exit-code path. A future refactor that flips the verdict
     /// out of sync (e.g. prints "HEALTHY" while exit_code_from returns 2)
