@@ -9,8 +9,6 @@
 //!
 //! @trace spec:windows-native-tray, spec:host-shell-architecture, spec:tillandsias-vault
 
-#![allow(dead_code)]
-
 use std::mem::size_of;
 
 use uuid::Uuid;

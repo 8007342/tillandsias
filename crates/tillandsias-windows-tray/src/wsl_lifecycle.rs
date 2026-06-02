@@ -10,19 +10,15 @@
 //!
 //! @trace spec:windows-native-tray, spec:vm-idiomatic-layer
 
-#![allow(dead_code)]
-
 use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
 use tillandsias_host_shell::provisioning::{ProvisionPhase, ProvisionProgress};
-use tillandsias_vm_layer::fetch::{
-    ProvisioningPins, RemoteArtifact, download_verified, is_sha256_hex,
-};
+use tillandsias_vm_layer::fetch::{RemoteArtifact, download_verified, is_sha256_hex};
 use tillandsias_vm_layer::materialize::{MaterializedRootfs, tar_to_wsl_import};
 use tillandsias_vm_layer::recipe::Manifest;
-use tillandsias_vm_layer::{ProvisionManifest, VmRuntime, wsl::WslRuntime};
+use tillandsias_vm_layer::{VmRuntime, wsl::WslRuntime};
 
 /// Committed per-release pins (rootfs + headless binary URLs and checksums).
 /// Embedded so an installed, checkout-free tray still provisions correctly.
@@ -36,12 +32,6 @@ const PROVISIONING_MANIFEST: &str = include_str!("../assets/provisioning-manifes
 /// question): embed at build time — one trusted artifact, no runtime fetch of
 /// the trust root.
 pub const RECIPE_MANIFEST: &str = include_str!("../../../images/vm/manifest.toml");
-
-/// Release tag the rootfs artifacts are published under. Tag-source decision
-/// (w5 consumer question): a build-time constant for v0.0.1. TODO: wire to the
-/// workspace CalVer version so it tracks releases automatically rather than
-/// being bumped by hand each release.
-pub const RECIPE_RELEASE_TAG: &str = "v0.2.260526.1";
 
 /// The single WSL2 distro the tray manages (see `tillandsias-vm-layer::wsl`,
 /// "one distro per host"). Also the `wsl.exe -d <name>` target the Open-Shell
@@ -119,75 +109,19 @@ impl WslLifecycle {
         self.runtime.stop(Duration::from_secs(30)).await
     }
 
-    /// Full first-run bootstrap. Reports progress through the
-    /// `ProvisionProgress` sink so the tray can update its condensed
-    /// status line.
-    ///
-    /// Sequence (idempotent at every step):
-    /// 1. `SettingUp` — verify cache directories exist.
-    /// 2. `DownloadingRootfs` — fetch Fedora 44 rootfs (skip if cached).
-    /// 3. `DownloadingTillandsias` — fetch the matching headless binary
-    ///    from the GitHub release (skip if cached).
-    /// 4. `InstallingTillandsias` — call `WslRuntime::provision` (which
-    ///    does `wsl --import` + drops the systemd unit). Skipped if the
-    ///    distro is already registered.
-    /// 5. `StartingVm` — `WslRuntime::start`.
-    /// 6. `Connecting` — the caller's vsock handshake step.
-    ///
-    /// @trace spec:vm-provisioning-lifecycle
-    pub async fn bootstrap(&self, progress: Arc<dyn ProvisionProgress>) -> Result<(), String> {
-        progress.report_phase(ProvisionPhase::SettingUp);
-        tokio::fs::create_dir_all(Self::cache_root())
-            .await
-            .map_err(|e| format!("create cache_root failed: {e}"))?;
-        tokio::fs::create_dir_all(Self::install_root())
-            .await
-            .map_err(|e| format!("create install_root failed: {e}"))?;
-
-        let pins = ProvisioningPins::from_json(PROVISIONING_MANIFEST)?;
-
-        progress.report_phase(ProvisionPhase::DownloadingRootfs);
-        let rootfs = download_rootfs(&Self::cache_root(), &pins).await?;
-
-        progress.report_phase(ProvisionPhase::DownloadingTillandsias);
-        let binary = download_headless_binary(&Self::cache_root(), &pins).await?;
-
-        progress.report_phase(ProvisionPhase::InstallingTillandsias);
-        let manifest = ProvisionManifest {
-            rootfs_tarball: rootfs,
-            tillandsias_binary: binary,
-            vsock_cid: 0, // WSL assigns dynamically
-            vsock_port: tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT,
-            shared_host_dir: user_src_dir(),
-        };
-        self.runtime.provision(&manifest).await?;
-
-        progress.report_phase(ProvisionPhase::StartingVm);
-        self.runtime.start().await?;
-
-        progress.report_phase(ProvisionPhase::Connecting);
-        Ok(())
-    }
-
-    /// Recipe-path first-run provisioning — the **w5 flip**. Supersedes the
-    /// legacy [`bootstrap`](Self::bootstrap) OCI-base + separate-binary path:
+    /// Recipe-path first-run provisioning — the **w11 Fedora pivot**. Supersedes the
+    /// legacy OCI-base + separate-binary path:
     ///
     /// 1. `SettingUp` — ensure cache/install dirs.
-    /// 2. `DownloadingRootfs` — resolve the CI-published rootfs from the
-    ///    embedded recipe manifest (l9 `[output]` URL + SHA) and
-    ///    `download_verified` it (SHA-gated; resumable).
-    /// 3. `InstallingTillandsias` — `materialize::wsl::tar_to_wsl_import` →
-    ///    `wsl --import`. No separate binary drop / unit install: the recipe
-    ///    rootfs self-installs the headless on first boot
-    ///    (`bootstrap/20-tillandsias.sh`) and already carries the systemd unit.
+    /// 2. `DownloadingRootfs` — resolve the OFFICIAL Fedora 44 WSL image from the
+    ///    embedded recipe manifest and `download_verified` it (SHA-gated; resumable).
+    /// 3. `InstallingTillandsias` — decompress `.tar.xz` -> `.tar`, then
+    ///    `wsl --import`. Post-import, inject `wsl.conf` and the bootstrap script
+    ///    that curl-installs `tillandsias-headless` on first boot.
     /// 4. `StartingVm` — `WslRuntime::start`.
     ///
-    /// Idempotency note: `WslRuntime::provision`'s skip-if-registered guard is
-    /// not yet shared here; callers should probe (`ensure_vm_provisioned`)
-    /// before invoking on an already-imported distro (follow-up).
-    ///
-    /// @trace plan/issues/tray-convergence-coordination.md (w5 flip),
-    /// spec:vm-provisioning-lifecycle.provision.first-run-downloads@v1
+    /// @trace plan/issues/rootfs-removal-fedora-wsl-pivot-2026-06-02.md (w11 flip),
+    /// spec:vm-provisioning-lifecycle.provision.first-run-downloads@v2
     pub async fn provision_via_recipe(
         &self,
         progress: Arc<dyn ProvisionProgress>,
@@ -211,18 +145,15 @@ impl WslLifecycle {
 
         let manifest = Manifest::from_toml(RECIPE_MANIFEST)
             .map_err(|e| format!("parse embedded recipe manifest: {e}"))?;
-        let artifact = recipe_rootfs_artifact(&manifest, RECIPE_RELEASE_TAG)?;
+        let artifact = recipe_rootfs_artifact(&manifest)?;
 
         progress.report_phase(ProvisionPhase::DownloadingRootfs);
-        let dest = Self::cache_root().join("rootfs").join(format!(
-            "tillandsias-rootfs-x86_64-{}.tar",
+        let cache_root = Self::cache_root();
+        let xz_dest = cache_root.join("rootfs").join(format!(
+            "fedora-44-wsl-{}.tar.xz",
             &artifact.sha256[..12]
         ));
-        // Live download-progress chip — converges with macOS slice 7's
-        // fetch-progress chip (`f5443276`). The closure dedups by integer
-        // percent so the chip updates at most ~100× per download (~3 MB
-        // increments for a 280 MB rootfs); unknown totals (no
-        // Content-Length) leave the previous phase chip in place.
+
         let progress_for_cb = progress.clone();
         let last_pct = std::sync::atomic::AtomicU8::new(101);
         let on_progress = move |downloaded: u64, total: Option<u64>| {
@@ -236,30 +167,44 @@ impl WslLifecycle {
             let mb = downloaded / (1024 * 1024);
             let total_mb = total / (1024 * 1024);
             progress_for_cb.report_message(&format!(
-                "\u{1F535} Downloading rootfs {mb} / {total_mb} MB ({pct}%)"
+                "\u{1F535} Downloading Fedora rootfs {mb} / {total_mb} MB ({pct}%)"
             ));
         };
-        download_verified(&artifact, &dest, &on_progress).await?;
+        download_verified(&artifact, &xz_dest, &on_progress).await?;
 
         progress.report_phase(ProvisionPhase::InstallingTillandsias);
+        progress.report_message("\u{1F4E6} Decompressing Fedora image...");
+        let tar_dest = xz_dest.with_extension(""); // .tar.xz -> .tar
+        if !tar_dest.exists() {
+            let status = tokio::process::Command::new("tar")
+                .arg("-xJf")
+                .arg(&xz_dest)
+                .arg("-C")
+                .arg(xz_dest.parent().unwrap())
+                .status()
+                .await
+                .map_err(|e| format!("decompress failed to spawn: {e}"))?;
+            if !status.success() {
+                return Err(format!("decompress exited {status}"));
+            }
+        }
+
         tar_to_wsl_import(
             "tillandsias",
             &Self::install_root(),
-            &MaterializedRootfs::Tar(dest),
+            &MaterializedRootfs::Tar(tar_dest),
         )
         .await?;
-        // Enable systemd via /etc/wsl.conf + terminate, so the next start boots
-        // under systemd and the recipe rootfs's first-boot headless self-install
-        // (fetch-headless.sh) + systemd unit run. No binary drop / unit install.
+
+        // Fedora official images need wsl.conf for systemd, and our bootstrap
+        // units for the vsock control wire.
+        progress.report_message("\u{2699}\u{FE0F} Configuring Fedora distro...");
         self.runtime.configure_recipe_distro().await?;
+        self.inject_bootstrap_logic().await?;
 
         progress.report_phase(ProvisionPhase::StartingVm);
         self.runtime.start().await?;
 
-        // Connecting: establish the control wire over HvSocket and complete the
-        // `Hello`/`HelloAck` handshake. The in-VM headless self-installs on first
-        // boot (fetch-headless) then systemd starts it, so retry while it comes
-        // up. (Transport + handshake proven E2E — see `crate::hvsocket`.)
         progress.report_phase(ProvisionPhase::Connecting);
         const CW_PORT: u32 = tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
         let mut last_err = String::from("(no attempt)");
@@ -275,6 +220,107 @@ impl WslLifecycle {
         Err(format!(
             "control-wire handshake did not succeed within budget: {last_err}"
         ))
+    }
+
+    /// Inject the `fetch-headless.sh` script and systemd units into the
+    /// official Fedora image via `wsl --exec`.
+    async fn inject_bootstrap_logic(&self) -> Result<(), String> {
+        // 1. fetch-headless.sh
+        let fetch_script = r#"#!/usr/bin/env bash
+set -euo pipefail
+DEST="/usr/local/bin/tillandsias-headless"
+if [[ -x "$DEST" ]]; then exit 0; fi
+ARCH="$(uname -m)"
+URL="https://github.com/8007342/tillandsias/releases/latest/download/tillandsias-headless-${ARCH}-unknown-linux-musl"
+curl --fail --location --retry 5 --retry-delay 3 --connect-timeout 20 --output "$DEST" "$URL"
+chmod 0755 "$DEST"
+"#;
+        self.wsl_root_write("/usr/local/lib/tillandsias/fetch-headless.sh", fetch_script, true).await?;
+
+        // 2. tillandsias-headless-fetch.service
+        let fetch_unit = r#"[Unit]
+Description=Fetch tillandsias-headless on first boot
+After=network-online.target
+Wants=network-online.target
+Before=tillandsias-headless.service
+ConditionPathExists=!/usr/local/bin/tillandsias-headless
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/lib/tillandsias/fetch-headless.sh
+TimeoutStartSec=300s
+[Install]
+WantedBy=multi-user.target
+"#;
+        self.wsl_root_write("/etc/systemd/system/tillandsias-headless-fetch.service", fetch_unit, false).await?;
+
+        // 3. tillandsias-headless.service
+        let headless_unit = r#"[Unit]
+Description=Tillandsias headless (in-VM vsock control wire)
+After=network-online.target tillandsias-headless-fetch.service
+Requires=tillandsias-headless-fetch.service
+[Service]
+Type=exec
+ExecStart=/usr/local/bin/tillandsias-headless --listen-vsock 42420
+Restart=on-failure
+RestartSec=2s
+[Install]
+WantedBy=multi-user.target
+"#;
+        self.wsl_root_write("/etc/systemd/system/tillandsias-headless.service", headless_unit, false).await?;
+
+        // Enable units
+        self.wsl_root_sh("systemctl enable tillandsias-headless-fetch.service tillandsias-headless.service").await?;
+
+        Ok(())
+    }
+
+    async fn wsl_root_write(&self, path: &str, content: &str, make_executable: bool) -> Result<(), String> {
+        let dir = Path::new(path).parent().unwrap().to_str().unwrap();
+        self.wsl_root_sh(&format!("mkdir -p {dir}")).await?;
+
+        let mut child = tokio::process::Command::new("wsl")
+            .arg("-d")
+            .arg(DISTRO_NAME)
+            .arg("-u")
+            .arg("root")
+            .arg("--")
+            .arg("sh")
+            .arg("-c")
+            .arg(format!("cat > {path} && if [ \"{make_executable}\" = \"true\" ]; then chmod +x {path}; fi"))
+            .stdin(std::process::Stdio::piped())
+            .spawn()
+            .map_err(|e| format!("wsl write {path} failed: {e}"))?;
+
+        if let Some(mut stdin) = child.stdin.take() {
+            use tokio::io::AsyncWriteExt;
+            stdin.write_all(content.as_bytes()).await.map_err(|e| format!("write stdin to {path} failed: {e}"))?;
+        }
+
+        let status = child.wait().await.map_err(|e| format!("wait for wsl write {path} failed: {e}"))?;
+        if !status.success() {
+            return Err(format!("wsl write {path} exited {status}"));
+        }
+        Ok(())
+    }
+
+    async fn wsl_root_sh(&self, script: &str) -> Result<(), String> {
+        let status = tokio::process::Command::new("wsl")
+            .arg("-d")
+            .arg(DISTRO_NAME)
+            .arg("-u")
+            .arg("root")
+            .arg("--")
+            .arg("sh")
+            .arg("-c")
+            .arg(script)
+            .status()
+            .await
+            .map_err(|e| format!("wsl root sh failed: {e}"))?;
+        if !status.success() {
+            return Err(format!("wsl root sh exited {status} for: {script}"));
+        }
+        Ok(())
     }
 
     /// One connect attempt that succeeds only when the VM is **operationally
@@ -338,69 +384,28 @@ pub(crate) fn user_src_dir() -> PathBuf {
     base.join("src")
 }
 
-/// Download + SHA-verify the pinned Fedora rootfs archive into the cache.
-///
-/// Returns the local path to the verified archive. NOTE: this is a Fedora
-/// **OCI image archive**, not a flat rootfs — `WslRuntime::provision` must
-/// flatten its layer(s) into a rootfs tar before `wsl --import` (Phase 2b).
-///
-/// @trace spec:vm-provisioning-lifecycle.provision.first-run-downloads@v1
-async fn download_rootfs(cache_root: &Path, pins: &ProvisioningPins) -> Result<PathBuf, String> {
-    let short = &pins.rootfs.sha256[..pins.rootfs.sha256.len().min(12)];
-    let dest = cache_root
-        .join("rootfs")
-        .join(format!("rootfs-fedora-44-{short}.oci.tar.xz"));
-    download_verified(&pins.rootfs, &dest, &|_, _| {}).await?;
-    Ok(dest)
-}
-
-/// Download + SHA-verify the pinned `tillandsias-linux-x86_64` headless
-/// binary (the in-VM process) into the cache.
-///
-/// @trace spec:vm-provisioning-lifecycle.provision.first-run-downloads@v1
-async fn download_headless_binary(
-    cache_root: &Path,
-    pins: &ProvisioningPins,
-) -> Result<PathBuf, String> {
-    let dest = cache_root.join("bin").join(format!(
-        "tillandsias-headless-{}",
-        pins.headless_release_tag
-    ));
-    download_verified(&pins.headless_binary, &dest, &|_, _| {}).await?;
-    Ok(dest)
-}
-
-/// Resolve the Windows rootfs artifact (`x86_64.tar`) to a verifiable download
-/// pin from the recipe `Manifest` (l9 contract) at the given release `tag`.
+/// Resolve the Windows rootfs artifact (`x86_64.tar.xz`) to a verifiable download
+/// pin from the recipe `Manifest` (l9 contract).
 ///
 /// Bridges the recipe `[output]` block — `artifact_url_template` +
-/// `expected_rootfs_sha["x86_64.tar"]` — into the [`RemoteArtifact`] that
-/// [`download_verified`] consumes, so the recipe-provisioning path reuses the
-/// existing verified-download machinery. The trailing step is
-/// [`materialize::wsl::tar_to_wsl_import`] on the downloaded tar.
+/// `expected_rootfs_sha["x86_64.tar.xz"]` — into the [`RemoteArtifact`] that
+/// [`download_verified`] consumes.
 ///
-/// Returns an error (rather than an unverifiable pin) while the recipe-publish
-/// CI has not yet backfilled a real SHA — the manifest still carries the
-/// `pending-ci` placeholder, which is NOT 64 hex digits. This is the honest gate
-/// until §2b publishes the first artifacts; the URL contract itself is settled.
-///
-/// @trace plan/issues/tray-convergence-coordination.md (w5-flip consumer contract),
-/// spec:vm-provisioning-lifecycle.provision.first-run-downloads@v1
-pub fn recipe_rootfs_artifact(manifest: &Manifest, tag: &str) -> Result<RemoteArtifact, String> {
+/// @trace plan/issues/rootfs-removal-fedora-wsl-pivot-2026-06-02.md
+pub fn recipe_rootfs_artifact(manifest: &Manifest) -> Result<RemoteArtifact, String> {
     const ARCH: &str = "x86_64";
-    const FORMAT: &str = "tar";
-    const SHA_KEY: &str = "x86_64.tar";
+    const FORMAT: &str = "tar.xz";
+    const SHA_KEY: &str = "x86_64.tar.xz";
 
     let url = manifest
-        .artifact_url(ARCH, FORMAT, tag)
+        .artifact_url(ARCH, FORMAT, "fedora-pivot")
         .ok_or_else(|| "manifest has no [output].artifact_url_template".to_string())?;
     let sha = manifest
         .expected_sha(SHA_KEY)
         .ok_or_else(|| format!("manifest [output].expected_rootfs_sha has no \"{SHA_KEY}\" pin"))?;
     if !is_sha256_hex(sha) {
         return Err(format!(
-            "rootfs SHA for {SHA_KEY} not yet published (manifest pin = {sha:?}); \
-             the recipe-publish CI (§2b) must run + backfill a real SHA first"
+            "rootfs SHA for {SHA_KEY} not yet published (manifest pin = {sha:?})"
         ));
     }
     Ok(RemoteArtifact {
@@ -428,62 +433,26 @@ mod tests {
     // The committed recipe manifest — used for a live-contract integration check.
     const REAL_MANIFEST: &str = include_str!("../../../images/vm/manifest.toml");
 
-    // A minimal synthetic manifest with a caller-chosen x86_64.tar SHA, so the
-    // resolver tests are robust to the committed manifest's SHA rolling per
-    // release (l9 step 3 backfilled real SHAs at a6163af2). Literal `{tag}` /
-    // `{arch}` / `{format}` braces are left for `artifact_url` to substitute.
+    // A minimal synthetic manifest with a caller-chosen x86_64.tar.xz SHA.
     fn manifest_with_x86_tar_sha(sha: &str) -> Manifest {
         const TMPL: &str = r#"recipe_version = 1
 [output]
-artifact_url_template = "https://github.com/8007342/tillandsias/releases/download/{tag}/tillandsias-rootfs-{arch}.{format}"
+artifact_url_template = "https://download.fedoraproject.org/pub/fedora/linux/releases/44/Cloud/{arch}/images/Fedora-Cloud-Base-WSL-44-1.2.{arch}.tar.xz"
 [output.expected_rootfs_sha]
-"x86_64.tar" = "__SHA__"
+"x86_64.tar.xz" = "__SHA__"
 "#;
         Manifest::from_toml(&TMPL.replace("__SHA__", sha)).expect("parse inline manifest")
-    }
-
-    #[test]
-    fn recipe_rootfs_artifact_gates_on_pending_ci_sha() {
-        let m = manifest_with_x86_tar_sha("pending-ci");
-        // A non-64-hex placeholder must refuse rather than hand back an
-        // unverifiable pin.
-        let err = recipe_rootfs_artifact(&m, "v0.2.260526.1").expect_err("pending-ci must gate");
-        assert!(err.contains("not yet published"), "unexpected error: {err}");
     }
 
     #[test]
     fn recipe_rootfs_artifact_resolves_url_and_sha() {
         let sha = "a".repeat(64);
         let m = manifest_with_x86_tar_sha(&sha);
-        let art = recipe_rootfs_artifact(&m, "v0.2.260526.1").expect("resolves with a real SHA");
+        let art = recipe_rootfs_artifact(&m).expect("resolves with a real SHA");
         assert_eq!(art.sha256, sha);
         assert_eq!(
             art.url,
-            "https://github.com/8007342/tillandsias/releases/download/\
-             v0.2.260526.1/tillandsias-rootfs-x86_64.tar"
-        );
-    }
-
-    /// Live-contract check: since l9 step 3 backfilled real SHAs, the COMMITTED
-    /// manifest now resolves to a verifiable artifact. Asserts shape (64-hex +
-    /// URL), not the exact SHA (which rolls per release) — and guards against a
-    /// regression back to `pending-ci`.
-    #[test]
-    fn recipe_rootfs_artifact_resolves_against_committed_manifest() {
-        let m = Manifest::from_toml(REAL_MANIFEST).expect("parse committed manifest");
-        let art = recipe_rootfs_artifact(&m, "v0.2.260526.1")
-            .expect("committed manifest carries a real x86_64.tar SHA (l9 step 3)");
-        assert_eq!(
-            art.sha256.len(),
-            64,
-            "expected a 64-hex SHA, got {:?}",
-            art.sha256
-        );
-        assert!(
-            art.url
-                .ends_with("/v0.2.260526.1/tillandsias-rootfs-x86_64.tar"),
-            "unexpected url: {}",
-            art.url
+            "https://download.fedoraproject.org/pub/fedora/linux/releases/44/Cloud/x86_64/images/Fedora-Cloud-Base-WSL-44-1.2.x86_64.tar.xz"
         );
     }
 }

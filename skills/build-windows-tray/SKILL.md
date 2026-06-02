@@ -167,9 +167,14 @@ Then APPEND a section per run:
 
 **Autonomous smoke** (post-install diagnose):
 - `--diagnose --json` exit: <0 | 2 | 1>
-- `--diagnose --json` keys present: [<comma-list>] — all 10 schema keys per
-  `litmus:windows-tray-diagnose-cli-surface`
-- distro registered: <bool>
+- `--diagnose --json` keys present: [<comma-list>] — all **16 schema keys**
+  per `litmus:windows-tray-diagnose-cli-surface` (count grows over time;
+  check the cheatsheet § `--diagnose --json` schema for the current list).
+- version: <workspace VERSION from JSON>
+- build_commit: <short SHA from JSON>
+- install_path: <path from JSON>
+- distro registered / running: <bool> / <bool>
+- WSL / OS: <wsl_version> / <os_version>
 - control wire reachable: <bool> (phase=<phase>, podman_ready=<bool>)
 - last_event: <string | null>
 
@@ -201,7 +206,7 @@ git commit -m "chore(windows-build-findings): YYYYMMDDTHHMMSSZ <SECTION_KIND>"
 git push origin windows-next
 ```
 
-### 7. Report
+### 8. Report
 
 Print a 5-line summary back to the user covering: the FF outcome, build status,
 install bytes/timestamp delta, `--diagnose --json` exit code + phase, and any
@@ -220,3 +225,23 @@ Edit this section over time. Each entry: date + what changed + why.
   The wrapper + `scripts/install-windows.ps1` both run end-to-end without
   the bypass. Skill body switched to prefer the script for builds + install
   while still showing the direct-cargo path for ad-hoc use.
+- **2026-05-31:** large session of windows-tray surface enrichment
+  shipped — too much to list per-commit, but the steady-state v0.2.260531.1
+  era windows-tray now has: 7 CLI modes (`--provision-once`,
+  `--status-once [--json]`, `--diagnose [--json]`, `--logs [--tail N] [--bak]`,
+  `--help`, `--version`, GUI); 16-key DiagnoseReport (5 binary identity +
+  2 host versions + 4 host facts + 1 manifest pin + 1 wire sub-object +
+  1 log array, see cheatsheet for the full schema); 4 Win11 toasts
+  (provisioning success/failure + wire degraded/recovered); 4 operator
+  env vars (`RUST_LOG`, `TILLANDSIAS_NO_PROVISION`, `BUILD_COMMIT_SHA_OVERRIDE`,
+  workspace VERSION via `build.rs`); install-windows.ps1 grew `-Purge`
+  mode with `wsl --unregister` + cache cleanup; tray.log size-rotation
+  at 5 MiB threshold with 1-bak ring; cli_integration test suite
+  exercising the real binary end-to-end (4 tests in
+  `tests/cli_integration.rs`). Schema-key claim in section 6 above
+  bumped 10 → 16 to match; `--diagnose` JSON keys grow over time and
+  the cheatsheet is the source of truth for the current set. Section
+  6 template enriched with `version` / `build_commit` / `install_path`
+  rows reflecting the new schema. Duplicate `### 7.` numbering fixed
+  (Report is `### 8.` now). No daily-flow changes — `install-windows.ps1`
+  end-to-end already exercises everything.

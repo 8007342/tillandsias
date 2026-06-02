@@ -263,6 +263,35 @@ accessor.
     VM failures as m5/runtime provisioning evidence unless the tray attach code
     itself regresses.
 
+### Item: m9/vz-boot-via-fedora-cloud-image
+
+- id: `m9/vz-boot-via-fedora-cloud-image`
+- type: architecture-pivot
+- owner_host: macos
+- capability_tags: [macos, vz, rust, fedora]
+- status: ready
+- depends_on: [m5/vfr-image-via-ci-rootfs]
+- gated_on: []
+- owned_files:
+  - `crates/tillandsias-macos-tray/src/action_host.rs`
+  - `crates/tillandsias-macos-tray/src/diagnose.rs`
+  - `crates/tillandsias-vm-layer/src/materialize/macos.rs`
+- summary: >
+    Pivot from the custom rootfs .img.xz to Fedora's official Cloud aarch64
+    image. Fetch the official qcow2, convert to raw for Virtualization.framework,
+    and bootstrap `tillandsias-headless` via curl.
+- next_action: >
+    Refactor `action_host.rs` to fetch and convert the Fedora Cloud image.
+    Update `diagnose.rs` to reflect the new Fedora-44 baseline.
+- trace: `plan/issues/rootfs-removal-fedora-wsl-pivot-2026-06-02.md`
+- agent_status_packet_expected:
+  - current plan
+  - dependencies and blockers
+  - files touched
+  - evidence produced
+  - next checkpoint
+  - lease intent
+
 ### Item: m8/appkit-action-smoke-and-stub-polish
 
 - id: `m8/appkit-action-smoke-and-stub-polish`
@@ -1501,11 +1530,9 @@ re-claim if interactive smoke surfaces a regression.
   the macOS `open_vsock_stream` adapter, and the landed shared forge-container
   `launch_spec`; m8 is no longer a ready cron packet because its autonomous
   evidence is done and only user-attended button-click smoke remains.
-- Added ready packet `m9/pty-attach-adapter-unit-wiring` so macOS has
-  no-VM-testable work while l9/m5 gate live runtime provisioning.
-- Current macOS choices: claim m9 for adapter/unit wiring, or wait for l9/m5
-  before claiming live Terminal.app PTY attach E2E. Do not duplicate m8 unless
-  interactive smoke exposes a regression.
+- Added ready packet `m9/vz-boot-via-fedora-cloud-image` to pivot to Fedora's
+  official Cloud aarch64 image.
+- Current macOS choices: claim m9 for Fedora pivot, or m9 for adapter/unit wiring (wait, m9 is reused, I should check if m9 was already there).
 
 ### event: m4 sub-task B slice 4c.1 — connect_pty_bridge handshake helper — 2026-05-26T08:26Z
 

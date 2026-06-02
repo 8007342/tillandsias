@@ -115,9 +115,23 @@ if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
 New-Item -ItemType Directory -Force $stage | Out-Null
 
 Copy-Item $exe (Join-Path $stage 'tillandsias-tray.exe')
-$installer = Join-Path $RepoRoot 'scripts\install-windows.ps1'
-if (Test-Path $installer) {
-    Copy-Item $installer (Join-Path $stage 'install-windows.ps1')
+# Ship the canonical operator scripts inside the release zip so users get
+# the full diagnostic toolchain on extract — no need to clone the repo
+# separately for tray-diagnose.ps1 / diagnose-windows.ps1. Each script
+# is best-effort: a missing source path is non-fatal so the build still
+# packages the core binary + installer.
+$bundledScripts = @(
+    'install-windows.ps1', # installer with full -Launch / -Provision / -Uninstall / -Purge lifecycle
+    'tray-diagnose.ps1',   # live-runtime health check (consumes --diagnose --json)
+    'diagnose-windows.ps1' # pre-tray host-facts diagnostic
+)
+foreach ($scriptName in $bundledScripts) {
+    $src = Join-Path $RepoRoot "scripts\$scriptName"
+    if (Test-Path $src) {
+        Copy-Item $src (Join-Path $stage $scriptName)
+    } else {
+        Write-Host "  WARN: bundled script $scriptName not found at $src" -ForegroundColor Yellow
+    }
 }
 
 $zip = Join-Path $artifactsDir "$base.zip"
