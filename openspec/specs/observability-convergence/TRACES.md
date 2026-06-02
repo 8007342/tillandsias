@@ -5,8 +5,8 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [crates/tillandsias-headless/src/main.rs#L3049](../../../crates/tillandsias-headless/src/main.rs#L3049)
-- [crates/tillandsias-headless/src/main.rs#L6219](../../../crates/tillandsias-headless/src/main.rs#L6219)
+- [crates/tillandsias-headless/src/main.rs#L3027](../../../crates/tillandsias-headless/src/main.rs#L3027)
+- [crates/tillandsias-headless/src/main.rs#L6042](../../../crates/tillandsias-headless/src/main.rs#L6042)
 - [crates/tillandsias-metrics/src/dashboard.rs#L8](../../../crates/tillandsias-metrics/src/dashboard.rs#L8)
 - [images/git/Containerfile#L63](../../../images/git/Containerfile#L63)
 - [scripts/check-convergence-velocity.sh#L5](../../../scripts/check-convergence-velocity.sh#L5)

@@ -58,9 +58,9 @@ const DEFAULT_VALIDATE_PORT: u16 = 9090;
 /// Initial reconnect backoff. Doubled per failure up to [`MAX_BACKOFF`].
 const MIN_BACKOFF: Duration = Duration::from_millis(250);
 
-/// Maximum reconnect backoff. Past this we keep retrying every 8 s; the
+/// Maximum reconnect backoff. Past this we keep retrying every 60 s; the
 /// upper bound keeps the log volume sane during long outages.
-const MAX_BACKOFF: Duration = Duration::from_secs(8);
+const MAX_BACKOFF: Duration = Duration::from_secs(60);
 
 #[tokio::main]
 async fn main() {

@@ -146,12 +146,14 @@ if [ "$INITIALIZED" != "true" ]; then
     # unseal; see PRODUCTION CAVEAT in the header.
     umask 077
     echo "$INIT_RESPONSE" > "$INIT_JSON"
-    chmod 0400 "$INIT_JSON"
     ENVELOPED_HEX="$(xor_hex "$SHAMIR_KEY_HEX" "$UNSEAL_KEY_HEX")"
     echo "$ENVELOPED_HEX" > "$INIT_ENVELOPE"
     echo "$ROOT_TOKEN" > /vault/data/root.token
     chmod 0400 "$INIT_ENVELOPE" /vault/data/root.token
-    log "vault initialized (init.json + envelope persisted, root token stashed)"
+    # @trace spec:tillandsias-vault — Secure Artifact Cleanup
+    # Plaintext init.json MUST NOT survive first boot initialization.
+    rm -f "$INIT_JSON"
+    log "vault initialized (envelope persisted, init.json deleted, root token stashed for handover)"
     UNSEAL_HEX="$SHAMIR_KEY_HEX"
 else
     log "subsequent boot: recovering shamir key from envelope"

@@ -5,10 +5,10 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [crates/tillandsias-core/src/config.rs#L435](../../../crates/tillandsias-core/src/config.rs#L435)
-- [crates/tillandsias-core/src/config.rs#L447](../../../crates/tillandsias-core/src/config.rs#L447)
-- [crates/tillandsias-core/src/config.rs#L828](../../../crates/tillandsias-core/src/config.rs#L828)
-- [crates/tillandsias-core/src/config.rs#L836](../../../crates/tillandsias-core/src/config.rs#L836)
+- [crates/tillandsias-core/src/config.rs#L522](../../../crates/tillandsias-core/src/config.rs#L522)
+- [crates/tillandsias-core/src/config.rs#L534](../../../crates/tillandsias-core/src/config.rs#L534)
+- [crates/tillandsias-core/src/config.rs#L915](../../../crates/tillandsias-core/src/config.rs#L915)
+- [crates/tillandsias-core/src/config.rs#L923](../../../crates/tillandsias-core/src/config.rs#L923)
 - [crates/tillandsias-logging/src/lib.rs#L1](../../../crates/tillandsias-logging/src/lib.rs#L1)
 - [crates/tillandsias-logging/src/logger.rs#L1](../../../crates/tillandsias-logging/src/logger.rs#L1)
 - [crates/tillandsias-logging/src/rotation.rs#L1](../../../crates/tillandsias-logging/src/rotation.rs#L1)

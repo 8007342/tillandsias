@@ -1324,6 +1324,16 @@ dependencies = [
 ]
 
 [[package]]
+name = "keyring"
+version = "3.6.3"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "eebcc3aff044e5944a8fbaf69eb277d11986064cba30c468730e8b9909fb551c"
+dependencies = [
+ "log",
+ "zeroize",
+]
+
+[[package]]
 name = "kqueue"
 version = "1.1.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2634,10 +2644,11 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-core"
-version = "0.2.260528"
+version = "0.2.260602"
 dependencies = [
  "async-trait",
  "dirs",
+ "keyring",
  "postcard",
  "resvg",
  "serde",
@@ -2654,14 +2665,16 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-headless"
-version = "0.2.260528"
+version = "0.2.260602"
 dependencies = [
+ "base64 0.22.1",
  "bytes",
  "chrono",
  "dirs",
  "futures",
  "hyper 1.9.0",
  "image",
+ "keyring",
  "libc",
  "nix 0.29.0",
  "reqwest",
@@ -2787,7 +2800,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-podman"
-version = "0.2.260528"
+version = "0.2.260602"
 dependencies = [
  "async-trait",
  "chrono",
@@ -2839,7 +2852,7 @@ dependencies = [
 
 [[package]]
 name = "tillandsias-scanner"
-version = "0.2.260528"
+version = "0.2.260602"
 dependencies = [
  "dirs",
  "notify",
