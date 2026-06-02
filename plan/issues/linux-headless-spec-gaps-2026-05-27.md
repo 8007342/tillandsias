@@ -8,6 +8,39 @@ bounded slices from. Each item is sized for one loop iteration. NOT for siblings
 
 ## Diagnostics / observability (USER PRIORITY — `--diagnostics` + logging layer)
 
+### Work Packet: spec-gap/app-lifecycle-tray-state-api-shape
+
+- id: `spec-gap/app-lifecycle-tray-state-api-shape`
+- owner_host: linux
+- capability_tags: [specs, litmus, testing]
+- status: claimed
+- lease:
+  - lease_id: `f0be1a9432d0`
+  - agent_id: `linux-macuahuitl-codex-2026-06-02T200202Z`
+  - host: linux
+  - acquired_at: `2026-06-02T20:02:02Z`
+  - expires_at: `2026-06-03T00:02:02Z`
+- owned_files:
+  - `openspec/litmus-bindings.yaml`
+  - `openspec/litmus-tests/litmus-app-lifecycle-tray-state-api-shape.yaml`
+  - `plan/issues/linux-headless-spec-gaps-2026-05-27.md`
+  - `plan/issues/linux-next-work-queue-2026-05-25.md`
+- expected_evidence:
+  - `./scripts/run-litmus-test.sh app-lifecycle --size instant` passes with the new companion test.
+  - `app-lifecycle` binding metadata moves from 67 to 75 and names the new test.
+- next_action: >
+    Add an instant companion litmus that pins the public `TrayState`
+    lifecycle API (`transition_lifecycle`, `is_ready_for_user_action`,
+    `can_start_project`, `is_shutting_down`) and the corresponding unit-test
+    names in `crates/tillandsias-core/src/state.rs`.
+- events:
+  - type: claim
+    ts: `2026-06-02T20:02:02Z`
+    agent_id: `linux-macuahuitl-codex-2026-06-02T200202Z`
+    host: linux
+    lease_id: `f0be1a9432d0`
+    expires_at: `2026-06-03T00:02:02Z`
+
 ### Work Packet: spec-gap/external-logs-layer-binding-hygiene
 
 - id: `spec-gap/external-logs-layer-binding-hygiene`
