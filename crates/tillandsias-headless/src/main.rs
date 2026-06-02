@@ -6997,7 +6997,7 @@ mod tests {
         assert!(has_arg(&args, "--rm"));
         assert!(has_arg(&args, "--entrypoint"));
         assert!(has_arg(&args, "/bin/bash"));
-        assert!(has_arg(&args, "tillandsias-forge:v1.2.3"));
+        assert!(has_arg(&args, "localhost/tillandsias-forge:v1.2.3"));
         assert!(
             args.iter()
                 .any(|arg| arg.contains("check_port proxy 3128 proxy"))

@@ -1701,7 +1701,7 @@ plan_index:
     - id: vault-hardening-architecture
       order: 22
       title: Vault Hardening Architecture (Phase 6.5)
-      status: ready
+      status: completed
       deliverable: plan/issues/vault-hardening-architecture-2026-06.md
       depends_on: [recent-work-spec-doc-methodology-audit]
       specs:

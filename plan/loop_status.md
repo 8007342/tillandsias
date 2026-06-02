@@ -1,44 +1,50 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-05-29T21:00:00Z
+LastExecutionTime: 2026-06-02T17:01:24Z
 
 ## This Loop
 
-- **Multi-Host Coordination**: Re-audited remote sibling branches (`origin/windows-next` and `origin/osx-next`). Both remain perfectly integrated with exactly zero branch drift ($D = 0 \le D_{max} = 5$).
-- **Release Verification**: Verified continuous healthy execution of current release artifacts across all platforms.
-- **Local CI & Litmus Validation**: Re-verified that all 138 workspace tests and 17/17 pre-build instant litmus checks pass cleanly with 100% success using the workspace build suite (`./build.sh --ci`).
-- **Convergence Velocity**: Verified stable convergence ($\mathcal{V}_c = 0$ as $\mathcal{R}_t = 0$ is fully achieved), passing all proximity thresholds with zero open high/medium uncertainty events.
-- **High-Velocity Alignment Event**: Inactive.
+- **Multi-Host Coordination**: Re-audited remote sibling branches (`origin/windows-next` and `origin/osx-next`).
+  - windows-next at `f5a882a2` — merged linux-next up to `2b9aef51` but is ~30 commits ahead of the common merge-base. ⚠ **Exceeds D_max=5**. Flagged for windows-host orchestrator attention.
+  - osx-next at `05b47860` — 185 commits behind linux-next, 2 commits of its own. Needs sync.
+  - main at `6e3d2335` — release v0.2.260601.1 published.
+- **Vault Hardening (Phase 6.5)**: Complete. All 4 subtasks shipped: legacy keyring fallback removed, host-keychain storage, true rekey + cleanup, litmus updates. Step 22 → completed.
+- **Bug Fixes**: `status_check_args_probe_proxy_git_and_inference_from_forge` test assertion fixed for `localhost/` image prefix. `opencode-repeat` unbound variable + invalid --prompt flag resolved. Headless verbose build output under `--debug` (gap:ON-005).
+- **Local CI & Litmus Validation**: `./build.sh --check` clean. `cargo test -p tillandsias-headless` 131/131 PASS. Instant litmus suite **97/97 PASS at 100%** across 87 active specs.
 
 ## Expected Next Loop
 
-- Sibling hosts to pull the latest `origin/linux-next` updates to maintain multi-host convergence.
-- macOS host to perform the user-attended m8 smoke of the rebuilt production `.app`.
+- windows-next orchestrator: resolve D_max exceedance (30 > 5 commits ahead of merge-base).
+- osx-next orchestrator: sync from origin/linux-next (185 behind).
+- All hosts: verify vault-hardening Phase 6.5 changes integrate cleanly.
 
 ## Resolved Since Previous Loop
 
-- Formally verified perfect remote branch alignment and local continuous integration stability at the 21:00 UTC cycle.
-- CentiColon progress dashboard successfully updated and rendered for the 21:00 UTC cycle (100% closed, PASS, 39 signature records).
-- Verified the new `build-windows-tray` and `probe-macos-tray-on-windows` daily-loop skills are integrated and operating correctly.
+- vault-hardening-architecture (plan/index.yaml step 22) status: completed.
+- `status_check_args_probe_proxy_git_and_inference_from_forge` test fixed (localhost/ prefix).
+- linux-next work-queue updated with vault-hardening, escalation, and fix commits.
 
 ## Current Major Blockers
 
 - macOS m8 user-attended interactive smoke remains the manual acceptance gate.
+- windows-next branch drift exceeds D_max ($30 > 5$) — orchestrator escalation required.
+- osx-next 185 commits behind linux-next — orchestrator sync required.
 
 ## Assignment Board
 
 - **Linux**:
-  - Primary: Step 21.6 `forge-diagnostics-improvement-loop` / `forge-improvement/iterate` task.
-  - Fallback: Monitor/optimize local VM integration pathways.
+  - Primary: Convergence maintenance. All planned steps completed. Next: monitor for new spec-gap or regression packets.
+  - Fallback: Spec coverage gap audit (identify next highest-impact coverage packet).
 - **Windows**:
-  - Primary: Fully complete and validated! Sibling convergence mirroring complete.
+  - Primary: Resolve D_max drift (30 commits ahead of merge-base).
 - **macOS**:
   - Primary: user-attended m8 smoke of the rebuilt production `.app`.
-  - Fallback: m10 project threading or m11 MenuStructure cleanup.
+  - Fallback: Sync from origin/linux-next (185 behind).
 
 ## Stale Or Pending Pings
 
-- None. Both sibling branches are in perfect convergence ($D=0$).
+- windows-next D_max exceedance — orchestrator escalation.
+- osx-next deep lag (185 commits) — orchestrator sync needed.
 
 ## Validation
 
