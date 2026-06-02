@@ -11,9 +11,10 @@ The `tillandsias-vault` spec has been hardened to mandate true native host keych
 
 ## Implementation Plan
 
-### 1. Remove Legacy Keyring Fallback
+### 1. Remove Legacy Keyring Fallback [COMPLETED]
 - **Files**: `crates/tillandsias-headless/src/main.rs`, `crates/tillandsias-headless/src/vault_bootstrap.rs`
-- **Action**: Completely remove support for `--legacy-keyring-secrets` and `--without-vault`. Vault must be initialized unconditionally on `--init` and used unconditionally on `--github-login`. Remove the `migrate_legacy_github_token` logic.
+- **Action**: Completely removed support for `--legacy-keyring-secrets` and `--without-vault`. Vault is now initialized unconditionally on `--init` and used unconditionally on `--github-login`. Removed the `migrate_legacy_github_token` logic and the `create_github_podman_secret` helper.
+- **Evidence**: Verified with `cargo check -p tillandsias-headless`. Legacy flags now trigger a fatal error.
 
 ### 2. Host OS Keychain Integration & Key Versioning
 - **Files**: `crates/tillandsias-headless/src/vault_bootstrap.rs`, `crates/tillandsias-core/Cargo.toml`

@@ -1713,7 +1713,7 @@ plan_index:
         - "Bootstrap artifacts like init.json are deleted immediately after initialization."
       tasks:
         - id: vault-hardening/remove-legacy-fallback
-          status: pending
+          status: completed
           depends_on: []
           owned_files:
             - crates/tillandsias-headless/src/main.rs
@@ -1721,7 +1721,7 @@ plan_index:
           checkpoint_required: true
           handoff_note: "Remove --without-vault and --legacy-keyring-secrets."
         - id: vault-hardening/host-keychain-storage
-          status: pending
+          status: ready
           depends_on: [vault-hardening/remove-legacy-fallback]
           owned_files:
             - crates/tillandsias-headless/src/vault_bootstrap.rs
