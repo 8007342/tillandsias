@@ -105,7 +105,8 @@ accessor.
 - type: feature
 - owner_host: macos
 - capability_tags: [appkit, menu-structure, pty, host-shell]
-- status: ready
+- status: done
+- completed_at: 2026-05-29T15:25Z
 - depends_on: [m4/pty-attach-appkit-terminal]
 - gated_on: []
 - blocks: []
@@ -145,7 +146,8 @@ accessor.
 - type: housekeeping
 - owner_host: macos
 - capability_tags: [appkit, menu-structure, clippy, rust]
-- status: ready
+- status: done
+- completed_at: 2026-05-29T16:55Z
 - depends_on: [m4/pty-attach-appkit-terminal, m5/vfr-image-via-ci-rootfs]
 - gated_on: []
 - blocks: []
