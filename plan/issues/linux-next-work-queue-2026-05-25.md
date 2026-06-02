@@ -16,6 +16,7 @@ This file is the cross-host advertisement — terse, dated, SHA-anchored.
 
 ## Recent entries (reverse chronological)
 
+- 2026-06-02T21:45Z  done      l10/decommission-rootfs-publish-workflow: removed recipe-publish.yml, symmetric-pin litmus, and leftover materializer artifacts. Fedora pivot finalized on Linux side.
 - 2026-06-02T21:15Z  `ed0a0135`  **Fedora Pivot UNBLOCKER**: Implemented pure-Rust OCI flattener and XZ decompressor in `tillandsias-vm-layer`. Updated `manifest.toml` to official Fedora 44 Generic OCI archives. UNBLOCKS Windows/macOS. Agent `linux-tlatoani-gemini-cli-20260602T2115Z`.
 - 2026-06-02T19:55Z  `c26752d4`  GAP 7: Implemented graceful shutdown and container cleanup in headless/tray modes. Closes spec gap 67->100.
 - 2026-06-02T19:15Z  `7a5b3e21`  **Fedora Pivot Ledger Update**: Added Step 23 (Rootfs Removal / Fedora Pivot) to plan/index.yaml; added packets w11 (Windows), m9 (macOS), and l10 (Linux) to their respective host queues. Trace: plan/issues/rootfs-removal-fedora-wsl-pivot-2026-06-02.md. Agent `windows-bullo-gemini-2026-06-02T1915Z`.
