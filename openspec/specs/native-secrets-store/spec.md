@@ -68,6 +68,7 @@ The functions `store_github_token`, `retrieve_github_token`, and `delete_github_
 Bind to tests in `openspec/litmus-bindings.yaml`:
 - `litmus:credential-isolation` — Verify token is stored in native keyring and never written to disk outside keyring
 - `litmus:socket-cleanup` — Proxy for transient socket cleanup on host-side stack operations; the keyring-specific socket lifecycle remains a separate follow-up split
+- `litmus:native-secrets-store-shape` — Instant drift-protection pinning KEYCHAIN_SERVICE constant, keyring crate import, read_github_token gh-auth path, TokenRefreshError::KeyringReadError variant, and @trace breadth across core crate
 
 Gating points:
 - `store_github_token(token)` writes to OS native keyring (GNOME Keyring on Linux, Keychain on macOS, Credential Manager on Windows)

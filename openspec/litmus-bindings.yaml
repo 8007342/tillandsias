@@ -467,8 +467,9 @@ specs:
   litmus_tests:
   - litmus:credential-isolation
   - litmus:socket-cleanup
-  coverage_ratio: 66
-  last_verified: '2026-05-03'
+  - litmus:native-secrets-store-shape
+  coverage_ratio: 75
+  last_verified: '2026-06-02'
 - spec_id: security-privacy-isolation
   status: active
   litmus_tests:
