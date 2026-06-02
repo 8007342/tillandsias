@@ -1,0 +1,114 @@
+# @trace spec:browser-isolation-framework
+#
+# Structural drift protection for browser-isolation-framework's
+# Containerfile + check-container-bases assertion.
+#
+# The existing `litmus:browser-ephemeral` (size: e2e) covers the
+# runtime launch behaviour. This companion is instant + grep-only;
+# pins the SOURCE-level surfaces the spec mandates so a refactor
+# that breaks the chromium-core extension or drops the @trace
+# headers fires pre-build.
+#
+# Pins the four browser-isolation-framework requirements:
+#   1. "Content-hash image identity with human aliases" — pin
+#      the Containerfile.framework trace + ARG/FROM pattern.
+#   2. "Image hierarchy locked to chromium-core" — pin the
+#      `FROM ${CHROMIUM_CORE_IMAGE}` line in
+#      Containerfile.framework AND the corresponding assertion
+#      in scripts/check-container-bases.sh.
+#   3. "Security model inheritance" — verified through
+#      Containerfile.framework extending the chromium-core
+#      base which already pins the security flags
+#      (browser-isolation-core).
+#   4. "Build invocation via build-image.sh" — pinned via the
+#      check-container-bases.sh sibling script existence.
+#
+# Companion litmus raises browser-isolation-framework coverage
+# 33 → 67.
+name: litmus:browser-isolation-framework-shape
+spec: browser-isolation-framework
+phase: pre-build
+description: >
+  Pin images/chromium/Containerfile.framework: 3-spec @trace
+  header, ARG-driven CHROMIUM_CORE_IMAGE reference, FROM-the-ARG
+  pattern; plus the matching assertion in
+  scripts/check-container-bases.sh.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains images/chromium/Containerfile.framework
+  - workspace contains scripts/check-container-bases.sh
+  - shell utilities (grep, test) are available in PATH
+
+critical_path:
+  - step: "Containerfile.framework carries the 3-spec trace at file head"
+    command: "grep -F '@trace spec:browser-isolation-framework, spec:chromium-debug-variant, spec:chromium-safe-variant' images/chromium/Containerfile.framework"
+    timeout_ms: 3000
+    expected_behavior: "spec:browser-isolation-framework"
+
+  - step: "Containerfile.framework extends chromium-core via the canonical ARG"
+    # Spec requirement: "Image hierarchy locked to chromium-core".
+    # The framework Containerfile MUST use `FROM ${CHROMIUM_CORE_IMAGE}`
+    # so the resolved local core image reference is parameterized.
+    # A regression hardcoding a tag (e.g. `FROM chromium:latest`)
+    # would break the content-addressed hierarchy.
+    command: "grep -F 'FROM ${CHROMIUM_CORE_IMAGE}' images/chromium/Containerfile.framework"
+    timeout_ms: 3000
+    expected_behavior: "CHROMIUM_CORE_IMAGE"
+
+  - step: "Containerfile.framework documents the chromium-core extension"
+    # The comment block at the head of the Containerfile documents
+    # the extension as a spec→implementation mapping. A refactor
+    # that strips the docs would lose the "Extends ... with:"
+    # narrative future contributors need.
+    command: "grep -F 'Extends tillandsias-chromium-core with:' images/chromium/Containerfile.framework"
+    timeout_ms: 3000
+    expected_behavior: "Extends tillandsias-chromium-core"
+
+  - step: "check-container-bases.sh asserts the framework extends chromium-core"
+    # Spec requirement: "Build invocation via build-image.sh". The
+    # check-container-bases.sh sibling script enforces the base
+    # at audit time via `expect_base`. A refactor that drops this
+    # assertion lets the framework drift to a different base.
+    #
+    # Split into two greps to avoid the YAML→runner double-
+    # unescape of `\"` → `"` that produces unbalanced quotes when
+    # the original line contains escaped double-quotes around
+    # the file path. (Sixth matcher/parser quirk this session.)
+    command: "grep -F 'Containerfile.framework' scripts/check-container-bases.sh && grep -F 'tillandsias-chromium-core' scripts/check-container-bases.sh"
+    timeout_ms: 3000
+    expected_behavior: "tillandsias-chromium-core"
+
+  - step: "check-container-bases.sh exists + executable"
+    command: "test -x scripts/check-container-bases.sh && echo 'ok: check-container-bases.sh executable'"
+    timeout_ms: 3000
+    expected_behavior: "ok: check-container-bases.sh executable"
+
+  - step: "Containerfile.framework exists at canonical path"
+    command: "test -f images/chromium/Containerfile.framework && echo 'ok: Containerfile.framework present'"
+    timeout_ms: 3000
+    expected_behavior: "ok: Containerfile.framework present"
+
+observability:
+  traces:
+    - "@trace spec:browser-isolation-framework"
+    - "@trace spec:browser-isolation-core"
+  expected_log: "Containerfile.framework chromium-core extension + check-container-bases assertion pinned"
+  log_fields:
+    spec: "browser-isolation-framework"
+    test: "browser-isolation-framework-shape"
+    containerfile_artifact: "images/chromium/Containerfile.framework"
+    bases_check_artifact: "scripts/check-container-bases.sh"
+
+rollback:
+  on_failure: >
+    A browser-isolation-framework surface drifted from the spec.
+    Restore: the `@trace spec:browser-isolation-framework, ...`
+    header on Containerfile.framework; the
+    `FROM ${CHROMIUM_CORE_IMAGE}` line (NEVER hardcode an image
+    tag — the content-addressed hierarchy depends on the ARG);
+    the `Extends tillandsias-chromium-core with:` documentation;
+    the `expect_base ... 'tillandsias-chromium-core:` assertion in
+    check-container-bases.sh.
+  command: "head -20 images/chromium/Containerfile.framework && grep -n 'Containerfile.framework' scripts/check-container-bases.sh"

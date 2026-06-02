@@ -1,0 +1,135 @@
+# @trace spec:mcp-on-demand
+#
+# Drift-protection for the mcp-on-demand opencode config + bridge
+# script surfaces. The spec has six requirements; the existing
+# `litmus:mcp-on-demand-shape` only covers the TraySocket mount
+# (prerequisite for Req 5). This litmus pins the on-demand contract
+# itself — opencode's mcp config declaring servers as `type: "local"`
+# with a `command:` array (NOT a persistent-daemon `url:` form) — and
+# the host-browser.sh bridge script that proxies stdio JSON-RPC
+# through the host control socket.
+#
+# Spec mapping:
+#
+#   Req 1 (on-demand startup): opencode config declares each MCP as
+#     `type: "local", command: [...]` — opencode-side launches the
+#     CLI lazily when the agent first invokes a tool, not eagerly at
+#     container start.
+#   Req 2 (multiple servers coexist): ≥3 distinct mcp entries in the
+#     config (host-browser + git-tools + project-info present today).
+#   Req 5 (browser tool variant — on-demand CLI not daemon):
+#     host-browser.sh exists, carries @trace spec:host-browser-mcp,
+#     uses TILLANDSIAS_CONTROL_SOCKET env var, and bridges stdio via
+#     `socat - UNIX-CONNECT:` to the tray.
+#   Req 6 (communication channel — Unix socket): same socat line.
+#
+# Combined with the existing `litmus:mcp-on-demand-shape` (TraySocket
+# mount in container_profile) and `litmus:host-browser-mcp-shape`
+# (browser MCP server + control-wire McpFrame), raises
+# mcp-on-demand coverage_ratio 33 → 75.
+name: litmus:mcp-on-demand-bridge-shape
+spec: mcp-on-demand
+phase: pre-build
+description: >
+  Pin the on-demand opencode mcp config + host-browser.sh bridge
+  surfaces: `type: "local"` + `command:` declarations (Req 1
+  on-demand contract), ≥3 mcp entries (Req 2 multiple servers),
+  bridge script @trace + TILLANDSIAS_CONTROL_SOCKET + `socat -
+  UNIX-CONNECT:` (Req 5 + Req 6).
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains images/default/config-overlay/opencode/config.json
+  - workspace contains images/default/config-overlay/mcp/host-browser.sh
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "opencode mcp config declares servers as type: local with command: array (Req 1)"
+    # Spec § "On-demand MCP server startup" mandates servers MUST NOT
+    # be started during container init. opencode's mcp config form
+    # `{ type: "local", command: [...] }` is the on-demand contract:
+    # opencode launches the CLI lazily on first invocation. A
+    # regression to `type: "remote", url: "..."` (persistent daemon)
+    # would silently break the spec's "no eager startup" requirement.
+    #
+    # `expected_behavior` uses a no-quote substring to dodge the
+    # YAML→shell escaped-quote round-trip matcher quirk #2.
+    command: "grep -F '\"type\": \"local\"' images/default/config-overlay/opencode/config.json"
+    timeout_ms: 3000
+    expected_behavior: "type"
+
+  - step: "≥3 mcp servers declared (Req 2 — multiple MCPs coexist independently)"
+    # Spec § "Multiple MCP servers coexist" — each MUST be started
+    # independently on-demand. Today: host-browser + git-tools +
+    # project-info + dependency-resolver + agent-profile. A
+    # regression that consolidates them would silently break
+    # independence — pin ≥3 distinct entries.
+    # Drop `\\{` from the regex — it doesn't survive YAML→shell
+    # un-escape and the entry-name is unique enough on its own.
+    command: "grep -cE '\"(host-browser|git-tools|project-info|dependency-resolver|agent-profile)\"' images/default/config-overlay/opencode/config.json | awk '{ if ($1+0 >= 3) print \"ok:\", $1, \"mcp entries\"; else { print \"FAIL: only\", $1, \"of >=3\"; exit 1 } }'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "host-browser MCP entry points at host-browser.sh in mcp config (Req 5)"
+    # Spec § "Browser tool variant — on-demand CLI" — the agent
+    # invokes a CLI script, not a persistent daemon. The path MUST be
+    # the inside-container ConfigOverlay path
+    # `/home/forge/.config-overlay/mcp/host-browser.sh`.
+    command: "grep -F '/home/forge/.config-overlay/mcp/host-browser.sh' images/default/config-overlay/opencode/config.json"
+    timeout_ms: 3000
+    expected_behavior: "/home/forge/.config-overlay/mcp/host-browser.sh"
+
+  - step: "host-browser.sh bridge script carries spec:host-browser-mcp trace"
+    # The bridge script implements the agent-side half of Req 5. The
+    # @trace marker is how the openspec walker resolves the script
+    # back to the spec — a regression dropping it would silently
+    # demote the script out of the host-browser-mcp graph.
+    command: "grep -F '@trace spec:host-browser-mcp' images/default/config-overlay/mcp/host-browser.sh"
+    timeout_ms: 3000
+    expected_behavior: "spec:host-browser-mcp"
+
+  - step: "host-browser.sh reads TILLANDSIAS_CONTROL_SOCKET env var (Req 6 — Unix socket channel)"
+    # Spec § "MCP server communication channel" Req 6 — Unix socket
+    # communication. The env var is the tray-controlled path the
+    # bridge dials. A regression to a hardcoded path or a different
+    # env var name would silently break the launch-time configuration.
+    command: "grep -F 'TILLANDSIAS_CONTROL_SOCKET' images/default/config-overlay/mcp/host-browser.sh"
+    timeout_ms: 3000
+    expected_behavior: "TILLANDSIAS_CONTROL_SOCKET"
+
+  - step: "host-browser.sh bridges via socat UNIX-CONNECT (Req 6 contract pin)"
+    # `socat - UNIX-CONNECT:<socket>` is the canonical pattern for
+    # bidirectional stdio↔unix-socket bridging. A refactor away from
+    # socat (e.g. nc -U or a bespoke loop) would change the framing
+    # semantics and could lose newline-delimited integrity. Pin the
+    # canonical form.
+    # `expected_behavior` drops the embedded quote to dodge matcher
+    # quirk #2 (YAML→shell un-escape leaves a literal backslash-quote
+    # in the matcher pattern that grep doesn't find).
+    command: "grep -F 'socat - \"UNIX-CONNECT:' images/default/config-overlay/mcp/host-browser.sh"
+    timeout_ms: 3000
+    expected_behavior: "socat - "
+
+observability:
+  traces:
+    - "@trace spec:mcp-on-demand"
+    - "@trace spec:host-browser-mcp"
+  expected_log: "mcp-on-demand bridge + on-demand contract surfaces pinned (Reqs 1 + 2 + 5 + 6)"
+  log_fields:
+    spec: "mcp-on-demand"
+    test: "mcp-on-demand-bridge-shape"
+    artifact: "images/default/config-overlay/opencode/config.json + images/default/config-overlay/mcp/host-browser.sh"
+
+rollback:
+  on_failure: >
+    A `spec:mcp-on-demand` source surface drifted. Restore: opencode
+    mcp config declares each server as
+    `{ "type": "local", "command": [...] }` (NOT
+    `{ "type": "remote", "url": ... }`); ≥3 mcp entries present;
+    host-browser entry points at `/home/forge/.config-overlay/mcp/
+    host-browser.sh`; `host-browser.sh` carries
+    `@trace spec:host-browser-mcp`, reads
+    `TILLANDSIAS_CONTROL_SOCKET`, and bridges via
+    `socat - "UNIX-CONNECT:$TILLANDSIAS_CONTROL_SOCKET"`.
+  command: "grep -nE 'type.*local|host-browser|TILLANDSIAS_CONTROL_SOCKET|UNIX-CONNECT' images/default/config-overlay/opencode/config.json images/default/config-overlay/mcp/host-browser.sh | head -20"

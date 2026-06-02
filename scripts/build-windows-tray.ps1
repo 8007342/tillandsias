@@ -65,8 +65,24 @@ $buildArgs = @('build', '-p', 'tillandsias-windows-tray')
 if (-not $DebugBuild) { $buildArgs += '--release' }
 
 Write-Host "Building tillandsias-tray ($profileName)..." -ForegroundColor Cyan
-& cargo @buildArgs
-if ($LASTEXITCODE -ne 0) { throw "cargo build failed (exit $LASTEXITCODE)" }
+# Cargo writes its progress messages ("Compiling...", "Finished...") to stderr.
+# Under `$ErrorActionPreference = 'Stop'` PowerShell wraps each stderr write
+# from a native exe as a NativeCommandError RemoteException, which the Stop
+# trap treats as a terminating error — aborting the build mid-stream the
+# moment cargo first writes "Compiling X". This is the well-known stderr-wrap
+# quirk documented in skills/build-windows-tray + cheatsheets/runtime/
+# windows-tray-diagnostics.md. Locally relax the preference around the cargo
+# invocation, capture $LASTEXITCODE explicitly, then restore — a real cargo
+# compile failure still surfaces via the exit code check below.
+$prevErrorActionPreference = $ErrorActionPreference
+$ErrorActionPreference = 'Continue'
+try {
+    & cargo @buildArgs
+    $cargoExit = $LASTEXITCODE
+} finally {
+    $ErrorActionPreference = $prevErrorActionPreference
+}
+if ($cargoExit -ne 0) { throw "cargo build failed (exit $cargoExit)" }
 
 $exe = Join-Path $RepoRoot "target\$profileName\tillandsias-tray.exe"
 if (-not (Test-Path $exe)) { throw "expected binary not found: $exe" }
@@ -99,9 +115,23 @@ if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
 New-Item -ItemType Directory -Force $stage | Out-Null
 
 Copy-Item $exe (Join-Path $stage 'tillandsias-tray.exe')
-$installer = Join-Path $RepoRoot 'scripts\install-windows.ps1'
-if (Test-Path $installer) {
-    Copy-Item $installer (Join-Path $stage 'install-windows.ps1')
+# Ship the canonical operator scripts inside the release zip so users get
+# the full diagnostic toolchain on extract — no need to clone the repo
+# separately for tray-diagnose.ps1 / diagnose-windows.ps1. Each script
+# is best-effort: a missing source path is non-fatal so the build still
+# packages the core binary + installer.
+$bundledScripts = @(
+    'install-windows.ps1', # installer with full -Launch / -Provision / -Uninstall / -Purge lifecycle
+    'tray-diagnose.ps1',   # live-runtime health check (consumes --diagnose --json)
+    'diagnose-windows.ps1' # pre-tray host-facts diagnostic
+)
+foreach ($scriptName in $bundledScripts) {
+    $src = Join-Path $RepoRoot "scripts\$scriptName"
+    if (Test-Path $src) {
+        Copy-Item $src (Join-Path $stage $scriptName)
+    } else {
+        Write-Host "  WARN: bundled script $scriptName not found at $src" -ForegroundColor Yellow
+    }
 }
 
 $zip = Join-Path $artifactsDir "$base.zip"

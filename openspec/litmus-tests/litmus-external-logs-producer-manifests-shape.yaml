@@ -1,0 +1,62 @@
+# @trace spec:external-logs-layer
+#
+# Drift protection for service producer manifests. The companion
+# litmus:external-logs-manifest-shape pins the default image manifest;
+# this one pins the enclave service producer manifests and the image
+# build COPY steps that make them visible at /etc/tillandsias.
+name: litmus:external-logs-producer-manifests-shape
+spec: external-logs-layer
+phase: pre-build
+description: >
+  Verify the git, proxy, inference, router, and vault producer manifests
+  stay traceable to external-logs-layer, declare canonical roles, expose
+  required files[] schema fields, restrict formats to text|jsonl, and are
+  copied into each producer image.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains service image directories under images/
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "service manifests carry the spec trace"
+    command: "for f in images/git/external-logs.yaml images/proxy/external-logs.yaml images/inference/external-logs.yaml images/router/external-logs.yaml images/vault/external-logs.yaml; do grep -E '@trace.*spec:external-logs-layer' \"$f\"; done"
+    timeout_ms: 3000
+    expected_behavior: "spec:external-logs-layer"
+
+  - step: "service manifests declare canonical producer roles"
+    command: "grep -F 'role: git-service' images/git/external-logs.yaml && grep -F 'role: proxy' images/proxy/external-logs.yaml && grep -F 'role: inference' images/inference/external-logs.yaml && grep -F 'role: router' images/router/external-logs.yaml && grep -F 'role: vault' images/vault/external-logs.yaml"
+    timeout_ms: 3000
+    expected_behavior: "role:"
+
+  - step: "service manifests expose required files schema fields"
+    command: "for f in images/git/external-logs.yaml images/proxy/external-logs.yaml images/inference/external-logs.yaml images/router/external-logs.yaml images/vault/external-logs.yaml; do grep -F 'files:' \"$f\" && grep -F 'name:' \"$f\" && grep -F 'purpose:' \"$f\" && grep -F 'format:' \"$f\" && grep -F 'rotate_at_mb:' \"$f\" && grep -F 'written_by:' \"$f\"; done"
+    timeout_ms: 3000
+    expected_behavior: "written_by:"
+
+  - step: "service manifest formats are restricted to text or jsonl"
+    command: "for f in images/git/external-logs.yaml images/proxy/external-logs.yaml images/inference/external-logs.yaml images/router/external-logs.yaml images/vault/external-logs.yaml; do if grep -Ev 'format:[[:space:]]*(text|jsonl)' \"$f\" | grep -E 'format:'; then echo \"FAIL: non-text/jsonl format in $f\"; exit 1; fi; done; echo 'ok: all service manifest formats are text or jsonl'"
+    timeout_ms: 3000
+    expected_behavior: "ok: all service manifest formats are text or jsonl"
+
+  - step: "producer Containerfiles copy the manifest to /etc/tillandsias"
+    command: "grep -F 'COPY external-logs.yaml /etc/tillandsias/external-logs.yaml' images/git/Containerfile && grep -F 'COPY external-logs.yaml /etc/tillandsias/external-logs.yaml' images/proxy/Containerfile && grep -F 'COPY external-logs.yaml /etc/tillandsias/external-logs.yaml' images/inference/Containerfile && grep -F 'COPY external-logs.yaml /etc/tillandsias/external-logs.yaml' images/router/Containerfile && grep -F 'COPY external-logs.yaml /etc/tillandsias/external-logs.yaml' images/vault/Containerfile"
+    timeout_ms: 3000
+    expected_behavior: "/etc/tillandsias/external-logs.yaml"
+
+observability:
+  traces:
+    - "@trace spec:external-logs-layer"
+  expected_log: "Service producer manifests and Containerfile COPY steps pinned per external-logs-layer spec"
+  log_fields:
+    spec: "external-logs-layer"
+    test: "external-logs-producer-manifests-shape"
+
+rollback:
+  on_failure: >
+    A service producer manifest or Containerfile build step drifted from
+    external-logs-layer. Restore the @trace line, canonical role, files[]
+    schema fields, text|jsonl format restriction, and COPY into
+    /etc/tillandsias/external-logs.yaml for each producer image.
+  command: "rg -n 'external-logs.yaml|role:|format:|COPY external-logs.yaml' images/{git,proxy,inference,router,vault}"

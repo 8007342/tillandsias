@@ -1,9 +1,12 @@
-//! Win32 NotifyIcon plumbing for the Windows tray.
+//! Win32 NotifyIcon plumbing + CLI diagnostic surface for the Windows tray.
 //!
-//! Owns the message pump, the menu builder, and the bridge between
-//! `tillandsias-host-shell` events and Win32 `Shell_NotifyIcon` updates.
+//! Owns the message pump, the menu builder, the bridge between
+//! `tillandsias-host-shell` events and Win32 `Shell_NotifyIcon` updates,
+//! AND every non-GUI CLI mode the tray binary exposes
+//! (`--diagnose [--json]`, `--status-once [--json]`, `--provision-once`,
+//! `--logs [--tail N] [--bak]`, `--version`, `--help`).
 //!
-//! ## Architecture
+//! ## Architecture (GUI mode)
 //!
 //! 1. We register a hidden message-only window via `RegisterClassExW` +
 //!    `CreateWindowExW`. All tray events route to this window's wndproc.
@@ -19,10 +22,46 @@
 //!    message loop via `LocalSet`. The `WslLifecycle` task lives there,
 //!    and progress callbacks flip the global menu state via a `Mutex`
 //!    behind the window handle.
+//! 5. Win11 toasts fire at 4 edge-triggered events: provisioning success
+//!    (`spawn_provisioning` Ok branch), provisioning failure (Err branch),
+//!    wire degraded (`mark_wire_unreachable`), wire recovered
+//!    (`mark_wire_recovered`). See `WIRE_DEGRADED_NOTIFIED` for the
+//!    flag pattern that prevents repeat toasts during a single
+//!    degradation episode.
+//!
+//! ## File structure (roughly top-to-bottom)
+//!
+//! - **Constants + globals**: `TRAY_ICON_ID`, `WM_TRAYICON`,
+//!   `WIRE_UNREACHABLE_CHIP_TEXT`, `RECIPE_RELEASE_TAG`
+//!   (cross-tray-pinned), `TRAY_LOG_MAX_BYTES`, `MENU_STATE`,
+//!   `PROVISIONING_ACTIVE`, `WIRE_DEGRADED_NOTIFIED`.
+//! - **GUI infrastructure**: `run`, `add_tray_icon`, `wndproc`, menu
+//!   building, tooltip + balloon helpers, status-text update.
+//! - **CLI mode entry points** (each takes its `DiagnoseFormat` if
+//!   applicable and returns the process exit code):
+//!   - `provision_once` — synchronous recipe-provision flow.
+//!   - `status_once(format)` — live control-wire VmStatus probe;
+//!     emits `StatusReport` (7 keys) in JSON mode.
+//!   - `diagnose(format)` — bundled 16-key `DiagnoseReport`.
+//!   - `logs(tail, bak)` — dump live `tray.log` or rotation backup.
+//!   - `version_line` / `help_text` — string-returning helpers
+//!     called by `main.rs` for `--version` / `--help`.
+//! - **Diagnostic sniffers** (each `Option<String>`-returning,
+//!   `None` on missing command / failure): `sniff_wsl_version`,
+//!   `sniff_windows_version`, `distro_running` (`bool`).
+//! - **Pure helpers**: `first_line`, `select_log_tail`,
+//!   `should_rotate_log`, `compose_chip_text`, `compose_tooltip`,
+//!   `status_exit_code`, `exit_code_from`, `vm_phase_status_text`,
+//!   `describe_wire_error`. All Win32-IO-free and pin-tested.
+//! - **Log lifecycle**: `log_dir`, `log_file_path`, `init_tracing`,
+//!   `maybe_rotate_log` (size-threshold rotation at 5 MiB).
+//! - **Inline `tests` module**: 41 pin tests covering schema, exit
+//!   codes, pure helpers, and the diagnostic surface against
+//!   `baseline_diagnose_report()`. End-to-end coverage against the
+//!   real binary lives in `tests/cli_integration.rs`.
 //!
 //! @trace spec:windows-native-tray
 
-#![allow(dead_code)]
 #![allow(unsafe_op_in_unsafe_fn)]
 
 use std::cell::RefCell;
@@ -128,13 +167,18 @@ fn update_status_text(text: &str, hwnd: HWND) {
         }
     }
     // Update the tooltip on the live icon so users can mouseover for a
-    // quick read.
+    // quick read. Includes the workspace VERSION via compose_tooltip so a
+    // mouseover answers "what version am I running + what state is it in?"
+    // in one glance.
     let mut nid: NOTIFYICONDATAW = unsafe { std::mem::zeroed() };
     nid.cbSize = std::mem::size_of::<NOTIFYICONDATAW>() as u32;
     nid.hWnd = hwnd;
     nid.uID = TRAY_ICON_ID;
     nid.uFlags = NIF_TIP;
-    write_utf16_into(&mut nid.szTip, text);
+    write_utf16_into(
+        &mut nid.szTip,
+        &compose_tooltip(env!("WORKSPACE_VERSION"), text),
+    );
     unsafe {
         let _ = Shell_NotifyIconW(NIM_MODIFY, &nid);
     }
@@ -167,6 +211,24 @@ fn show_balloon(hwnd: HWND, title: &str, message: &str, severity: BalloonSeverit
     };
     unsafe {
         let _ = Shell_NotifyIconW(NIM_MODIFY, &nid);
+    }
+}
+
+/// Compose the tray-icon tooltip from a workspace version string + the live
+/// status chip. Format: `"Tillandsias <version>\n<status>"`. Operators
+/// hovering the tray icon get version + state in one mouseover — no need
+/// to right-click the menu just to read the version footer or pop a
+/// `--diagnose` to confirm "is this the new build?". `write_utf16_into`
+/// truncates safely at 127 chars (szTip is u16; 128 with null terminator)
+/// if the composed string ever exceeds that.
+///
+/// Pure helper so a unit test can pin the format without touching Win32.
+/// Pinned by `compose_tooltip_includes_version_and_status`.
+fn compose_tooltip(version: &str, status: &str) -> String {
+    if status.is_empty() {
+        format!("Tillandsias {version}")
+    } else {
+        format!("Tillandsias {version}\n{status}")
     }
 }
 
@@ -339,15 +401,58 @@ fn log_file_path() -> std::path::PathBuf {
     log_dir().join("tray.log")
 }
 
+/// Rotation threshold for `tray.log`. When the existing file exceeds this
+/// size at tray-startup time, it gets renamed to `tray.log.bak` (overwriting
+/// any prior bak) and a fresh `tray.log` starts. 5 MiB at default `info`
+/// level fits ~50k lines — months of normal use; `RUST_LOG=debug` will
+/// rotate faster. Disk-usage upper bound after rotation: 10 MiB total per
+/// log directory (one live file + one historical backup). Pinned by
+/// `should_rotate_log_at_threshold_boundary`.
+const TRAY_LOG_MAX_BYTES: u64 = 5 * 1024 * 1024;
+
+/// Pure size-vs-threshold predicate for [`maybe_rotate_log`]. Strict `>`
+/// so the threshold itself doesn't trigger rotation (deterministic for
+/// the boundary case).
+fn should_rotate_log(current_size: u64, max_bytes: u64) -> bool {
+    current_size > max_bytes
+}
+
+/// Rotate `<dir>/tray.log` to `<dir>/tray.log.bak` if oversized. Best-effort:
+/// each filesystem op is `let _ =`'d so a rotation failure (file locked,
+/// permission denied, etc.) doesn't fail tray startup — we'd rather keep
+/// running with an oversized log than refuse to start. Called from
+/// [`init_tracing`] BEFORE the file appender is opened so the appender
+/// creates a fresh `tray.log` for this session.
+fn maybe_rotate_log(dir: &std::path::Path) {
+    let current = dir.join("tray.log");
+    let backup = dir.join("tray.log.bak");
+    let Ok(meta) = std::fs::metadata(&current) else {
+        return;
+    };
+    if !should_rotate_log(meta.len(), TRAY_LOG_MAX_BYTES) {
+        return;
+    }
+    // On Windows std::fs::rename fails if the destination already exists; remove
+    // the old backup first. Unix's rename atomically replaces; the redundant
+    // remove is harmless there.
+    let _ = std::fs::remove_file(&backup);
+    let _ = std::fs::rename(&current, &backup);
+}
+
 /// Initialize file-based tracing. A release tray is a GUI-subsystem binary with
 /// no console, so `tracing::{info,warn,error}!` events are lost unless routed to
 /// a file. Writes (synchronously — tray log volume is tiny, and this avoids a
 /// `WorkerGuard` that `process::exit` would skip flushing) to
 /// `%LOCALAPPDATA%\tillandsias\logs\tray.log`, honoring `RUST_LOG` (default
 /// `info`). Idempotent: a second call is a no-op (`try_init`).
+///
+/// Before opening the appender, [`maybe_rotate_log`] rotates the existing
+/// `tray.log` to `tray.log.bak` if it exceeds [`TRAY_LOG_MAX_BYTES`] so the
+/// log directory's disk footprint stays bounded at ~10 MiB.
 fn init_tracing() {
     let dir = log_dir();
     let _ = std::fs::create_dir_all(&dir);
+    maybe_rotate_log(&dir);
     let appender = tracing_appender::rolling::never(&dir, "tray.log");
     let filter = tracing_subscriber::EnvFilter::try_from_default_env()
         .unwrap_or_else(|_| tracing_subscriber::EnvFilter::new("info"));
@@ -372,6 +477,131 @@ fn open_log_file() {
 
 /// Headless diagnostic entry point (`tillandsias-tray --provision-once`): run the
 /// recipe provisioning flow to completion, printing each phase to stdout, and
+/// Pure tail-selection helper for [`logs`]. With `tail = Some(n)`, returns
+/// the last `n` lines; with `None`, returns all lines. `saturating_sub`
+/// handles `n > len` (return all lines) and `n = 0` (return none) without
+/// underflow. Pinned by `select_log_tail_handles_all_cases`.
+fn select_log_tail(content: &str, tail: Option<usize>) -> Vec<&str> {
+    let lines: Vec<&str> = content.lines().collect();
+    let start = match tail {
+        Some(n) => lines.len().saturating_sub(n),
+        None => 0,
+    };
+    lines[start..].to_vec()
+}
+
+/// `--logs` / `--logs --tail <N>` / `--logs --bak [--tail N]`: dump the
+/// tray log file to stdout for operators who want to inspect more than
+/// the 20 lines `--diagnose` surfaces in `recent_log_tail`. Honors the
+/// GUI-subsystem stdio quirk: support scripts should redirect to a file
+/// (`tray.exe --logs > out.txt 2>nul`) rather than rely on PowerShell
+/// pipe capture. Exit: 0 if the log file was read (even if empty), 1 if
+/// it's missing or unreadable. Does NOT touch WSL.
+///
+/// `bak = true` reads `tray.log.bak` (the rotation backup) instead of
+/// the live `tray.log`. Pairs with [`maybe_rotate_log`] / [`TRAY_LOG_MAX_BYTES`]:
+/// when the live file rotates, the prior session's history sits in the
+/// .bak file invisibly until an operator asks for it explicitly. Missing
+/// .bak (i.e. no rotation has fired yet) exits 1 with a descriptive
+/// eprintln pointing the operator at the live file.
+pub fn logs(tail: Option<usize>, bak: bool) -> i32 {
+    let path = if bak {
+        log_dir().join("tray.log.bak")
+    } else {
+        log_file_path()
+    };
+    let content = match std::fs::read_to_string(&path) {
+        Ok(c) => c,
+        Err(err) => {
+            if bak {
+                eprintln!(
+                    "[logs] no rotation backup at {} ({err}); the live log hasn't \
+                     exceeded TRAY_LOG_MAX_BYTES yet — drop --bak to read the live file.",
+                    path.display()
+                );
+            } else {
+                eprintln!("[logs] cannot read log file {}: {err}", path.display());
+            }
+            return 1;
+        }
+    };
+    for line in select_log_tail(&content, tail) {
+        println!("{line}");
+    }
+    0
+}
+
+/// Single-line `--version` / `-V` output. Format: `tillandsias-tray <version>
+/// (<short-commit>)`. Reuses the same `WORKSPACE_VERSION` + `BUILD_COMMIT_SHA`
+/// env vars `build.rs` bakes for the diagnose surface — so the three places a
+/// user can ask "what version am I running?" (`--version`, `--diagnose --json
+/// version` field, tray menu footer) all return the same string built from
+/// the same source. Pinned by `version_line_uses_workspace_version_and_commit`.
+pub fn version_line() -> String {
+    format!(
+        "tillandsias-tray {} ({})",
+        env!("WORKSPACE_VERSION"),
+        env!("BUILD_COMMIT_SHA")
+    )
+}
+
+/// Multi-line `--help` / `-h` text. Documents every CLI mode, its exit-code
+/// contract, the GUI-subsystem stdio quirk (so support scripts know to
+/// redirect instead of pipe), and points the reader at the canonical
+/// diagnostic flow. Pinned by `help_text_documents_all_cli_modes` — a
+/// future mode that gets added without its `--help` entry surfaces here
+/// pre-build instead of as a documentation-stale incident in the field.
+///
+/// Trailing newline so `print!(help_text())` matches stdio convention.
+pub fn help_text() -> String {
+    format!(
+        "tillandsias-tray {version} ({commit})\n\
+         A native Win32 NotifyIcon tray for Tillandsias on Windows.\n\
+         \n\
+         USAGE:\n    \
+            tillandsias-tray.exe [MODE] [OPTIONS]\n\
+         \n\
+         MODES:\n    \
+            (no flags)              Launch the interactive tray (GUI subsystem).\n    \
+            --provision-once        Provision the WSL utility VM to Ready, print\n                            \
+            progress, exit. Exit: 0 = Ready, 1 = failed.\n    \
+            --status-once [--json]  Connect to the live control wire, print VmStatus.\n                            \
+            Exit: 0 = Ready, 2 = reachable-not-Ready, 1 = unreachable.\n    \
+            --diagnose [--json]     Bundled health report (10+ keys). Exit: 0 healthy,\n                            \
+            2 degraded, 1 hard fail.\n    \
+            --logs [--tail N] [--bak]  Dump the tray log file to stdout (last N\n                            \
+            lines with --tail; the rotation backup tray.log.bak with --bak —\n                            \
+            see cheatsheet's Log file rotation). Exit: 0 = readable, 1 = missing.\n    \
+            --help, -h              Print this help and exit 0.\n    \
+            --version, -V           Print version + build commit and exit 0.\n\
+         \n\
+         OPTIONS (modify GUI mode):\n    \
+            --no-provision          Skip the WSL bootstrap so the menu comes up clean\n                            \
+            for local dev / testing. The install-windows.ps1 script passes this by\n                            \
+            default to the Start Menu shortcut (drop -Provision to use it).\n\
+         \n\
+         ENVIRONMENT:\n    \
+            RUST_LOG                Log filter for the tray's file logger. Default 'info'.\n                            \
+            Example: RUST_LOG=debug,tillandsias_windows_tray=trace\n    \
+            TILLANDSIAS_NO_PROVISION  Equivalent to --no-provision when set to any value.\n                            \
+            Useful when launching the tray via a method that can't pass flags.\n    \
+            BUILD_COMMIT_SHA_OVERRIDE  Overrides build.rs's git rev-parse during builds\n                            \
+            (CI / reproducible-source scenarios). Bakes at compile time, not runtime.\n\
+         \n\
+         OUTPUT NOTE:\n    \
+            The tray is a GUI-subsystem binary; PowerShell pipe capture of stdout\n    \
+            is unreliable (Rust treats a detached stdout as BrokenPipe and discards).\n    \
+            Support scripts MUST redirect to a file: `tillandsias-tray.exe \\\n        \
+                --diagnose --json > out.json 2>nul`\n    \
+            and branch on the exit code rather than the captured output.\n\
+         \n\
+         See cheatsheets/runtime/windows-tray-diagnostics.md for the full\n\
+         diagnose JSON schema + the canonical PowerShell consumer pattern.\n",
+        version = env!("WORKSPACE_VERSION"),
+        commit = env!("BUILD_COMMIT_SHA"),
+    )
+}
+
 /// return a process exit code (0 = VM reached Ready over the control wire, 1 =
 /// failed). A release tray is a GUI-subsystem binary with no console, so this
 /// gives an observable, scriptable end-to-end provision run for CI smoke and the
@@ -421,6 +651,45 @@ pub fn provision_once() -> i32 {
     })
 }
 
+/// Structured `--status-once` report. Mirrors the JSON shape of the `wire`
+/// sub-object inside `--diagnose --json` (same field names + types), plus an
+/// `exit_code` so a JSON consumer doesn't have to mirror the wire-state →
+/// exit-code derivation. Pinned by `status_once_json_keys_pinned`.
+#[derive(serde::Serialize)]
+struct StatusReport {
+    /// `true` once handshake succeeds. Mirrors `WireReport.reachable`.
+    reachable: bool,
+    /// Negotiated wire_version (`u16`) if handshake succeeded. Matches the
+    /// `WIRE_VERSION` const type in `tillandsias-control-wire`.
+    wire_version: Option<u16>,
+    /// Debug-formatted `VmPhase` if `VmStatusReply` arrived.
+    phase: Option<String>,
+    /// In-VM headless reports `true` once podman responds to a no-op exec.
+    podman_ready: Option<bool>,
+    /// Free-form headless event string (None if not surfaced).
+    last_event: Option<String>,
+    /// Set on any failure path (open / handshake / request / unexpected reply).
+    error: Option<String>,
+    /// Final exit code so JSON consumers don't need to re-derive
+    /// 0/2/1 from phase/reachable. See `--status-once` exit-code contract
+    /// (`status-once-exit-codes` pin).
+    exit_code: i32,
+}
+
+/// Compute the `--status-once` exit code from a freshly-collected status report.
+/// 0 = Ready, 2 = reachable but not Ready, 1 = control wire unreachable / hard
+/// error. Pure so a unit test can pin the matrix.
+fn status_exit_code(report: &StatusReport) -> i32 {
+    if !report.reachable {
+        return 1;
+    }
+    match report.phase.as_deref() {
+        Some("Ready") => 0,
+        Some(_) => 2,
+        None => 1,
+    }
+}
+
 /// Headless diagnostic entry point (`tillandsias-tray --status-once`): connect to
 /// an already-provisioned VM's HvSocket control wire, request `VmStatus`, and
 /// print the phase / podman_ready / last_event. Exit code: 0 = Ready, 2 =
@@ -428,10 +697,25 @@ pub fn provision_once() -> i32 {
 /// `--provision-once` for scriptable installed-tray health checks (the GUI tray
 /// has no console). Reuses the same handshake + `VmStatusRequest` path the
 /// provisioning Connecting loop uses.
-pub fn status_once() -> i32 {
-    use tillandsias_control_wire::{ControlMessage, VmPhase};
-
+///
+/// `format` mirrors the `--diagnose` format selector: `Human` prints the
+/// pre-existing `[status] …` lines for human eyeballs, `Json` emits a single
+/// `StatusReport` JSON object on stdout for support-tooling consumers.
+pub fn status_once(format: DiagnoseFormat) -> i32 {
     init_tracing();
+    let report = collect_status_report();
+    match format {
+        DiagnoseFormat::Human => print_status_human(&report),
+        DiagnoseFormat::Json => print_status_json(&report),
+    }
+    report.exit_code
+}
+
+/// Build a `StatusReport` by opening the control wire, performing the
+/// handshake, and issuing a `VmStatusRequest`. Captures every failure mode
+/// as an `error` string so the structured output is the same shape on the
+/// success and failure paths.
+fn collect_status_report() -> StatusReport {
     let port = tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
     let runtime = match tokio::runtime::Builder::new_current_thread()
         .enable_all()
@@ -439,32 +723,54 @@ pub fn status_once() -> i32 {
     {
         Ok(rt) => rt,
         Err(err) => {
-            eprintln!("[status] failed to build tokio runtime: {err}");
-            return 1;
+            return StatusReport {
+                reachable: false,
+                wire_version: None,
+                phase: None,
+                podman_ready: None,
+                last_event: None,
+                error: Some(format!("tokio runtime build failed: {err}")),
+                exit_code: 1,
+            };
         }
     };
-    runtime.block_on(async {
+    let mut report = runtime.block_on(async {
         use tillandsias_control_wire::transport::Transport;
-        use tillandsias_control_wire::{ControlEnvelope, WIRE_VERSION};
+        use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
         use tillandsias_host_shell::vsock_client::Client;
 
         let stream = match crate::hvsocket::open_hvsocket_stream(port).await {
             Ok(stream) => stream,
             Err(err) => {
-                eprintln!("[status] control wire unreachable on vsock {port}: {err}");
-                eprintln!("[status] (is the VM provisioned + running? try --provision-once)");
-                return 1;
+                return StatusReport {
+                    reachable: false,
+                    wire_version: None,
+                    phase: None,
+                    podman_ready: None,
+                    last_event: None,
+                    error: Some(format!(
+                        "control wire unreachable on vsock {port}: {err} (is the VM \
+                         provisioned + running? try --provision-once)"
+                    )),
+                    exit_code: 0,
+                };
             }
         };
         let mut client = Client::from_stream(Box::new(stream), Transport::Vsock { cid: 0, port });
         let wire_version = match client.handshake().await {
             Ok(v) => v,
             Err(err) => {
-                eprintln!("[status] handshake failed: {err}");
-                return 1;
+                return StatusReport {
+                    reachable: false,
+                    wire_version: None,
+                    phase: None,
+                    podman_ready: None,
+                    last_event: None,
+                    error: Some(format!("handshake failed: {err}")),
+                    exit_code: 0,
+                };
             }
         };
-        println!("[status] control wire up (wire_version {wire_version})");
         let seq = client.allocate_seq();
         let envelope = ControlEnvelope {
             wire_version: WIRE_VERSION,
@@ -474,8 +780,15 @@ pub fn status_once() -> i32 {
         let reply = match client.request(&envelope).await {
             Ok(reply) => reply,
             Err(err) => {
-                eprintln!("[status] VmStatusRequest failed: {err}");
-                return 1;
+                return StatusReport {
+                    reachable: true,
+                    wire_version: Some(wire_version),
+                    phase: None,
+                    podman_ready: None,
+                    last_event: None,
+                    error: Some(format!("VmStatusRequest failed: {err}")),
+                    exit_code: 0,
+                };
             }
         };
         match reply.body {
@@ -484,25 +797,77 @@ pub fn status_once() -> i32 {
                 podman_ready,
                 last_event,
                 ..
-            } => {
-                println!("[status] phase:        {phase:?}");
-                println!("[status] podman_ready: {podman_ready}");
-                println!(
-                    "[status] last_event:   {}",
-                    last_event.as_deref().unwrap_or("(none)")
-                );
-                if matches!(phase, VmPhase::Ready) {
-                    0
-                } else {
-                    2
-                }
-            }
-            other => {
-                eprintln!("[status] unexpected reply to VmStatusRequest: {other:?}");
-                1
-            }
+            } => StatusReport {
+                reachable: true,
+                wire_version: Some(wire_version),
+                phase: Some(format!("{phase:?}")),
+                podman_ready: Some(podman_ready),
+                last_event,
+                error: None,
+                exit_code: 0,
+            },
+            other => StatusReport {
+                reachable: true,
+                wire_version: Some(wire_version),
+                phase: None,
+                podman_ready: None,
+                last_event: None,
+                error: Some(format!("unexpected reply to VmStatusRequest: {other:?}")),
+                exit_code: 0,
+            },
         }
-    })
+    });
+    report.exit_code = status_exit_code(&report);
+    report
+}
+
+fn print_status_human(r: &StatusReport) {
+    if let Some(v) = r.wire_version {
+        println!("[status] control wire up (wire_version {v})");
+    }
+    if let Some(err) = &r.error {
+        eprintln!("[status] {err}");
+    } else {
+        if let Some(phase) = &r.phase {
+            println!("[status] phase:        {phase}");
+        }
+        if let Some(pr) = r.podman_ready {
+            println!("[status] podman_ready: {pr}");
+        }
+        println!(
+            "[status] last_event:   {}",
+            r.last_event.as_deref().unwrap_or("(none)")
+        );
+    }
+    // Self-summarizing footer (parallels print_human's Status: row).
+    // Always emits regardless of which path above ran, so the operator
+    // gets a verdict line on both healthy and error paths.
+    println!();
+    println!("{}", status_summary_line(r));
+}
+
+/// Pure summary line for [`print_status_human`]. Mirrors [`summary_line`]
+/// in shape but for the `--status-once` exit-code matrix (0 = Ready,
+/// 2 = reachable-not-Ready, 1 = unreachable). Pinned by
+/// `status_summary_line_classifies_exit_code` so a future refactor that
+/// flips the verdict-to-code mapping out of sync with [`status_exit_code`]
+/// is caught pre-build.
+fn status_summary_line(r: &StatusReport) -> String {
+    match status_exit_code(r) {
+        0 => "Status: READY (exit 0)".to_string(),
+        2 => "Status: REACHABLE-NOT-READY (exit 2) -- wire is up but VM phase isn't Ready"
+            .to_string(),
+        1 => "Status: UNREACHABLE (exit 1) -- control wire not connectable; is the VM running?"
+            .to_string(),
+        other => format!("Status: UNKNOWN (exit {other})"),
+    }
+}
+
+fn print_status_json(r: &StatusReport) {
+    match serde_json::to_string_pretty(r) {
+        Ok(json) => println!("{json}"),
+        Err(err) => eprintln!("[status] failed to serialize JSON: {err}"),
+    }
 }
 
 /// Pinned chip text for control-wire degradation. Naming + byte sequence MUST
@@ -512,18 +877,58 @@ pub fn status_once() -> i32 {
 /// `wire_unreachable_chip_text_pinned`.
 pub const WIRE_UNREACHABLE_CHIP_TEXT: &str = "\u{1F534} Wire unreachable";
 
+/// Edge-trigger flag for the wire-degraded → wire-recovered toast pair.
+/// `mark_wire_unreachable` sets it on the first transition into a degraded
+/// state and fires one balloon; subsequent polls while still degraded see
+/// the flag already set and stay silent. When a poll finally succeeds and
+/// the wire is back up, the success path clears the flag and fires a
+/// "wire recovered" balloon. Result: at most one degraded-toast + one
+/// recovered-toast per degradation episode, instead of one toast every 30 s
+/// while the wire is down.
+static WIRE_DEGRADED_NOTIFIED: std::sync::atomic::AtomicBool =
+    std::sync::atomic::AtomicBool::new(false);
+
 /// Mark the live status chip as wire-unreachable. Called from the poll loop
 /// when `refresh_vm_status` can't reach the in-VM headless — without this, a
 /// mid-session wire failure (headless crash, VM terminated externally, etc.)
 /// would leave the chip showing the last-known "Ready" state forever. Also
 /// clears `MenuState.podman_ready` so per-project actions are correctly
 /// re-gated. The next successful poll restores the phase + podman chip
-/// naturally.
+/// naturally + clears [`WIRE_DEGRADED_NOTIFIED`].
+///
+/// Edge-triggered toast: on the first transition into degraded, fires a
+/// single warning balloon so the user notices the change. Subsequent polls
+/// while still degraded stay silent (the chip text already shows the state).
 fn mark_wire_unreachable(hwnd: HWND) {
     if let Ok(mut guard) = MENU_STATE.lock() {
         guard.get_or_insert_with(MenuState::initial).podman_ready = false;
     }
     update_status_text(WIRE_UNREACHABLE_CHIP_TEXT, hwnd);
+    if !WIRE_DEGRADED_NOTIFIED.swap(true, std::sync::atomic::Ordering::SeqCst) {
+        show_balloon(
+            hwnd,
+            "Tillandsias \u{2014} wire degraded",
+            "The control wire to the in-VM headless is unreachable. The tray will keep \
+             retrying every 30 s and notify when the connection is back.",
+            BalloonSeverity::Warning,
+        );
+    }
+}
+
+/// Companion to [`mark_wire_unreachable`]: called from the poll-success path
+/// when a VmStatusReply arrives after a degraded interval. Resets the
+/// edge-trigger flag and fires a "wire recovered" balloon — but only if we
+/// had previously toasted a degradation, so a fresh-Ready transition
+/// (e.g. immediately after provisioning) doesn't spurious-toast.
+fn mark_wire_recovered(hwnd: HWND) {
+    if WIRE_DEGRADED_NOTIFIED.swap(false, std::sync::atomic::Ordering::SeqCst) {
+        show_balloon(
+            hwnd,
+            "Tillandsias \u{2014} wire recovered",
+            "Control wire back up. Per-project actions are available again.",
+            BalloonSeverity::Info,
+        );
+    }
 }
 
 /// Compose a one-line description of an `Error` reply the in-VM headless's
@@ -619,6 +1024,12 @@ async fn refresh_vm_status(hwnd: HWND) {
             // activity (e.g. "Ready · forge-foo created"), not just the phase.
             let base = vm_phase_status_text(phase, podman_ready);
             update_status_text(&compose_chip_text(&base, last_event.as_deref()), hwnd);
+            // Clear the wire-degraded edge-trigger and surface a "wire
+            // recovered" balloon if we had previously toasted a degradation.
+            // No-op on the steady-state-Ready case (first poll after
+            // provisioning succeeds — that ground-truth confirmation lives
+            // in the spawn_provisioning Ok path's balloon).
+            mark_wire_recovered(hwnd);
             tracing::debug!(?phase, podman_ready, "vm status polled");
         }
         // Per the control-dispatch convergence packet (5c67ddb9, aeb5499a) the
@@ -898,13 +1309,69 @@ pub enum DiagnoseFormat {
 #[derive(serde::Serialize)]
 struct DiagnoseReport {
     version: &'static str,
+    /// Short git SHA of the commit this binary was built from. Baked at
+    /// compile time by build.rs (`BUILD_COMMIT_SHA`); falls back to
+    /// `"unknown"` if git wasn't available or the build was from a source
+    /// tarball with no working tree. Useful for correlating a running tray
+    /// to a specific commit when an operator pastes `--diagnose --json`
+    /// into a bug report (the workspace `version` rolls only on release,
+    /// so two binaries from the same release tag can still differ).
+    build_commit: &'static str,
+    /// Path the running binary was invoked from (`std::env::current_exe()`).
+    /// Lets an operator confirm whether the tray that just produced this
+    /// report is the installed copy under `%LOCALAPPDATA%\Programs\
+    /// Tillandsias\` or a dev build run from `target\release\` — a common
+    /// "why isn't my fix showing up?" triage question. Falls back to
+    /// `"(unknown)"` if `current_exe` errors (rare; should not happen on
+    /// supported Windows hosts).
+    install_path: String,
     log_path: String,
     log_exists: bool,
+    /// Size in bytes of the live `tray.log` if it exists. `None` if the
+    /// log file is missing (fresh install before any tracing line writes).
+    /// Pairs with `log_exists`: when `log_exists = true`, `log_size_bytes
+    /// = Some(N)`. Lets operators see "is my log growing?" and "when will
+    /// rotation fire?" from `--diagnose` alone (rotation threshold is
+    /// TRAY_LOG_MAX_BYTES = 5 MiB; see Log file rotation in the cheatsheet).
+    log_size_bytes: Option<u64>,
+    /// First non-empty line of `wsl --version` stdout (e.g. on English hosts
+    /// `"WSL version: 2.7.3.0"`; on French `"Version WSL : 2.7.3.0"`).
+    /// Captured locale-as-is — emitting just the first line is locale-neutral
+    /// (the version number is always present) and avoids a parser that has
+    /// to know per-locale prefix strings. `None` if `wsl.exe` isn't on PATH
+    /// (WSL feature disabled) or the command fails. Lets operators answer
+    /// "is my WSL build old?" from `--diagnose --json` alone.
+    wsl_version: Option<String>,
+    /// First non-empty line of `cmd.exe /c ver` (e.g. `"Microsoft Windows
+    /// [version 10.0.26200.8524]"`). Surfaces the Windows OS major +
+    /// build number for triage — operators don't need `winver` / `systeminfo`
+    /// alongside `--diagnose`. Locale-neutral (the bracketed version
+    /// payload is invariant). `None` if `cmd.exe` isn't on PATH (extremely
+    /// unusual) or the command fails.
+    os_version: Option<String>,
     wt_present: bool,
+    /// Pre-computed `--diagnose` exit code, derived from
+    /// `distro_registered + wire.reachable + wire.phase` via
+    /// [`exit_code_from`]. Mirrors `StatusReport.exit_code` for the
+    /// `--status-once --json` shape: piped consumers (`tray.exe
+    /// --diagnose --json | jq .exit_code`) can read the verdict without
+    /// a separate process-exit-code capture step. Always matches the
+    /// process exit code (cross-pinned by the
+    /// `diagnose_human_includes_pinned_section_labels` test).
+    exit_code: i32,
     distro: &'static str,
     distro_registered: bool,
+    /// `true` if `wsl --list --running --quiet` lists the `tillandsias`
+    /// distro (i.e. the WSL utility VM is currently UP, not just registered).
+    /// `distro_registered` says "the distro exists on disk", `distro_running`
+    /// says "the distro is actually executing". Useful for triaging
+    /// "registered but idle" vs "registered + active" states. WSL2 idles
+    /// the utility VM down when no host-side session holds it open, so this
+    /// flag flips frequently — capturing it directly avoids the operator
+    /// having to run `wsl --list --running` separately.
+    distro_running: bool,
     release_tag: &'static str,
-    manifest_pin_x86_64_tar: Option<String>,
+    manifest_pin_x86_64_tar_xz: Option<String>,
     wire: WireReport,
     recent_log_tail: Vec<String>,
 }
@@ -928,6 +1395,81 @@ pub fn diagnose(format: DiagnoseFormat) -> i32 {
         DiagnoseFormat::Json => print_json(&report),
     }
     exit_code_from(&report)
+}
+
+/// Return the first non-whitespace-only line of `s`, trimmed. Pure for
+/// testability; the WSL-shell-out version below pipes its captured stdout
+/// through this. Returns `None` if `s` has no non-empty line. Explicitly
+/// strips U+FEFF (BOM) before whitespace-trimming so older WSL builds'
+/// UTF-16 LE BOM-prefixed first line still surfaces clean (str::trim
+/// alone doesn't strip U+FEFF — it's Unicode `Cf` Format, not
+/// White_Space).
+fn first_line(s: &str) -> Option<String> {
+    s.lines()
+        .map(|line| line.trim_start_matches('\u{FEFF}').trim())
+        .find(|line| !line.is_empty())
+        .map(|s| s.to_string())
+}
+
+/// Shell out to `wsl --version` and return the first non-empty line of its
+/// stdout (locale-as-is — e.g. `"WSL version: 2.7.3.0"` on English hosts,
+/// `"Version WSL : 2.7.3.0"` on French). `None` if `wsl.exe` isn't on
+/// PATH (WSL feature disabled), the command non-zero-exits, or its output
+/// has no non-empty line. `WSL_UTF8=1` forces UTF-8 output on recent
+/// builds (older builds emit UTF-16 LE BOM-prefixed; we tolerate the BOM
+/// via [`first_line`]'s `str::trim` — the BOM survives as `\u{FEFF}` which
+/// `trim` removes as whitespace per Unicode).
+fn sniff_wsl_version() -> Option<String> {
+    let output = std::process::Command::new("wsl")
+        .arg("--version")
+        .env("WSL_UTF8", "1")
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    first_line(&stdout)
+}
+
+/// `true` if `wsl --list --running --quiet` lists the `tillandsias` distro.
+/// Bypasses the locale-dependent "Aucune distribution en cours d'exécution"
+/// / "No distributions are running" stderr by using `--quiet`, which emits
+/// only distro names on stdout (one per line) and always exit-0 — empty
+/// output means no distros are running. `--quiet` output is UTF-16 on
+/// older WSL builds; `WSL_UTF8=1` forces UTF-8 (we tolerate either by
+/// trimming embedded null bytes from each line).
+fn distro_running() -> bool {
+    let Ok(output) = std::process::Command::new("wsl")
+        .args(["--list", "--running", "--quiet"])
+        .env("WSL_UTF8", "1")
+        .output()
+    else {
+        return false;
+    };
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    stdout
+        .lines()
+        .map(|line| line.trim().trim_matches('\u{0}').trim())
+        .any(|name| name == crate::wsl_lifecycle::DISTRO_NAME)
+}
+
+/// Shell out to `cmd.exe /c ver` and return the first non-empty line of
+/// its stdout (e.g. `"Microsoft Windows [version 10.0.26200.8524]"`).
+/// Same shape as [`sniff_wsl_version`]: `None` on missing cmd / non-zero
+/// exit / empty output. Pure formatting via [`first_line`]; the bracketed
+/// version payload (`"10.0.26200.8524"`) is locale-neutral so the whole
+/// line is safe to surface as-is.
+fn sniff_windows_version() -> Option<String> {
+    let output = std::process::Command::new("cmd")
+        .args(["/c", "ver"])
+        .output()
+        .ok()?;
+    if !output.status.success() {
+        return None;
+    }
+    let stdout = String::from_utf8_lossy(&output.stdout);
+    first_line(&stdout)
 }
 
 fn collect_report() -> DiagnoseReport {
@@ -959,7 +1501,7 @@ fn collect_report() -> DiagnoseReport {
         })
         .unwrap_or(false);
 
-    let manifest_pin = parse_rootfs_sha_pin(crate::wsl_lifecycle::RECIPE_MANIFEST, "x86_64.tar");
+    let manifest_pin = parse_rootfs_sha_pin(crate::wsl_lifecycle::RECIPE_MANIFEST, "x86_64.tar.xz");
 
     // Live control wire. Tokio runtime build is essentially infallible — on the
     // rare failure we still emit a (degraded) report rather than aborting.
@@ -1061,26 +1603,73 @@ fn collect_report() -> DiagnoseReport {
         })
         .unwrap_or_default();
 
-    DiagnoseReport {
-        version: env!("CARGO_PKG_VERSION"),
+    let install_path = std::env::current_exe()
+        .map(|p| p.display().to_string())
+        .unwrap_or_else(|_| "(unknown)".to_string());
+
+    let log_size_bytes = std::fs::metadata(&log).ok().map(|m| m.len());
+
+    let mut report = DiagnoseReport {
+        // WORKSPACE_VERSION baked by build.rs from the repo-root VERSION file
+        // so the JSON's `version` field matches the release tag instead of
+        // the crate's static `Cargo.toml` `0.1.0`. See build.rs for details.
+        version: env!("WORKSPACE_VERSION"),
+        build_commit: env!("BUILD_COMMIT_SHA"),
+        install_path,
+        // Provisional `exit_code` — corrected below once the rest of the
+        // struct is built, since `exit_code_from` derives it from
+        // `distro_registered + wire.reachable + wire.phase`. Keeping the
+        // field next to identity at the top of the JSON (alphabetical
+        // serde order means it lands BEFORE `wire`, which is the field
+        // it depends on).
+        exit_code: 0,
         log_path: log.display().to_string(),
         log_exists,
+        log_size_bytes,
+        wsl_version: sniff_wsl_version(),
+        os_version: sniff_windows_version(),
         wt_present,
         distro: crate::wsl_lifecycle::DISTRO_NAME,
         distro_registered,
-        release_tag: crate::wsl_lifecycle::RECIPE_RELEASE_TAG,
-        manifest_pin_x86_64_tar: manifest_pin,
+        distro_running: distro_running(),
+        release_tag: "fedora-44",
+        manifest_pin_x86_64_tar_xz: manifest_pin,
         wire,
         recent_log_tail,
-    }
+    };
+    report.exit_code = exit_code_from(&report);
+    report
 }
 
 fn print_human(r: &DiagnoseReport) {
     println!("tillandsias-tray --diagnose");
     println!("===========================");
+
+    println!("\n--- binary identity ---");
     println!("Version:      {}", r.version);
+    println!("Build commit: {}", r.build_commit);
+    println!("Install path: {}", r.install_path);
+
+    println!("\n--- logs ---");
     println!("Log file:     {}", r.log_path);
-    println!("Log exists:   {}", if r.log_exists { "yes" } else { "no" });
+    println!(
+        "Log exists:   {}{}",
+        if r.log_exists { "yes" } else { "no" },
+        match r.log_size_bytes {
+            Some(n) => format!(" ({n} bytes)"),
+            None => String::new(),
+        }
+    );
+
+    println!("\n--- host software ---");
+    println!(
+        "WSL:          {}",
+        r.wsl_version.as_deref().unwrap_or("(not detected)")
+    );
+    println!(
+        "OS:           {}",
+        r.os_version.as_deref().unwrap_or("(not detected)")
+    );
     println!(
         "wt.exe:       {}",
         if r.wt_present {
@@ -1089,23 +1678,28 @@ fn print_human(r: &DiagnoseReport) {
             "not found (bare console fallback will be used)"
         }
     );
+
+    println!("\n--- WSL distro + rootfs ---");
     println!(
-        "Distro `{}`:  {}",
+        "Distro `{}`:  {}{}",
         r.distro,
         if r.distro_registered {
             "registered \u{2713}"
         } else {
             "NOT registered (run --provision-once to provision)"
-        }
+        },
+        if r.distro_running { ", running" } else { "" }
     );
     println!("Release tag:  {}", r.release_tag);
     println!(
-        "Manifest pin: x86_64.tar {}",
-        r.manifest_pin_x86_64_tar
+        "Manifest pin: x86_64.tar.xz {}",
+        r.manifest_pin_x86_64_tar_xz
             .as_deref()
             .map(|sha| format!("{sha}\u{2026}"))
             .unwrap_or_else(|| "(not found / parse skipped)".to_string())
     );
+
+    println!("\n--- control wire ---");
     match (
         &r.wire.reachable,
         r.wire.phase.as_deref(),
@@ -1140,6 +1734,27 @@ fn print_human(r: &DiagnoseReport) {
         for line in &r.recent_log_tail {
             println!("{line}");
         }
+    }
+    // Self-summarizing footer — pre-computes the exit-code verdict so an
+    // operator scanning the output can read the bottom line first instead
+    // of working through the 13 rows. Mirrors `tray-diagnose.ps1`'s
+    // HEALTHY / DEGRADED summary but in the binary itself.
+    println!();
+    println!("{}", summary_line(r));
+}
+
+/// Pure summary line for [`print_human`]. Pinned by
+/// `summary_line_classifies_exit_code` so a future refactor that flips
+/// the verdict-to-code mapping out of sync with [`exit_code_from`] is
+/// caught pre-build. Matches the cheatsheet's documented exit-code
+/// table (`0` healthy / `2` degraded / `1` hard fail; print_human is
+/// never reached on exit 1).
+fn summary_line(r: &DiagnoseReport) -> String {
+    let code = exit_code_from(r);
+    match code {
+        0 => "Status: HEALTHY (exit 0)".to_string(),
+        2 => "Status: DEGRADED (exit 2) -- see rows above for the failing check(s)".to_string(),
+        other => format!("Status: UNKNOWN (exit {other})"),
     }
 }
 
@@ -1189,6 +1804,20 @@ fn spawn_provisioning(hwnd: HWND) {
             Ok(()) => {
                 tracing::info!("VM ready — control wire established");
                 update_status_text("\u{1F7E2} Ready", hwnd);
+                // Win11 toast confirming the tray is fully operational. Users
+                // installing for the first time get visible "yes, it worked"
+                // feedback without having to right-click the menu; subsequent
+                // launches reaffirm "this tray is what you expect" by including
+                // the workspace VERSION in the title. Mirrors the failure path
+                // below; both routes call show_balloon so the user always sees
+                // a toast at the end of provisioning, success or failure.
+                show_balloon(
+                    hwnd,
+                    &format!("Tillandsias {} \u{2014} ready", env!("WORKSPACE_VERSION")),
+                    "VM is up and the control wire is established. Right-click \
+                     the tray icon for projects + actions.",
+                    BalloonSeverity::Info,
+                );
                 // Parking this task holds `_keepalive` for the tray's lifetime;
                 // on Quit the LocalSet drops the task → kill_on_drop releases the
                 // VM to idle normally again. PROVISIONING_ACTIVE stays set (Ready),
@@ -1316,7 +1945,12 @@ unsafe fn add_tray_icon(hwnd: HWND) -> windows::core::Result<()> {
     nid.uFlags = NIF_MESSAGE | NIF_ICON | NIF_TIP;
     nid.uCallbackMessage = WM_TRAYICON;
     nid.hIcon = icon;
-    write_utf16_into(&mut nid.szTip, "Tillandsias");
+    // Initial tooltip — version-only until the first update_status_text call
+    // appends the live status chip. Uses compose_tooltip's "no status" branch.
+    write_utf16_into(
+        &mut nid.szTip,
+        &compose_tooltip(env!("WORKSPACE_VERSION"), ""),
+    );
     let ok = Shell_NotifyIconW(NIM_ADD, &nid);
     if !ok.as_bool() {
         return Err(windows::core::Error::from_win32());
@@ -1721,20 +2355,28 @@ mod tests {
     /// Pin the `--diagnose --json` schema so support tooling consuming the
     /// machine-readable output never breaks silently. The five tests below
     /// catch (a) renamed / removed top-level keys, (b) renamed / removed
-    /// nested `wire.*` keys, (c) the `manifest_pin_x86_64_tar` Option being
+    /// nested `wire.*` keys, (c) the `manifest_pin_x86_64_tar_xz` Option being
     /// (de)serialized in an unexpected way, (d) `recent_log_tail` ceasing to
     /// be an array. A schema change here is a schema change for tooling —
     /// adjust both deliberately together.
     fn baseline_diagnose_report() -> DiagnoseReport {
         DiagnoseReport {
             version: "0.0.0-test",
+            build_commit: "deadbeef",
+            install_path: "C:\\path\\to\\tillandsias-tray.exe".to_string(),
+            // Baseline is degraded (no distro, no wire) -> exit 2.
+            exit_code: 2,
             log_path: "C:\\path\\to\\tray.log".to_string(),
+            log_size_bytes: None,
+            wsl_version: Some("WSL version: 2.7.3.0".to_string()),
+            os_version: Some("Microsoft Windows [version 10.0.26200.8524]".to_string()),
             log_exists: false,
             wt_present: true,
             distro: "tillandsias",
             distro_registered: false,
+            distro_running: false,
             release_tag: "v0.0.0",
-            manifest_pin_x86_64_tar: Some("abcdef123456".to_string()),
+            manifest_pin_x86_64_tar_xz: Some("abcdef123456".to_string()),
             wire: WireReport {
                 reachable: false,
                 phase: None,
@@ -1753,13 +2395,20 @@ mod tests {
         let obj = v.as_object().expect("top-level JSON object");
         for key in [
             "version",
+            "build_commit",
+            "install_path",
+            "exit_code",
             "log_path",
             "log_exists",
+            "log_size_bytes",
+            "wsl_version",
+            "os_version",
             "wt_present",
             "distro",
             "distro_registered",
+            "distro_running",
             "release_tag",
-            "manifest_pin_x86_64_tar",
+            "manifest_pin_x86_64_tar_xz",
             "wire",
             "recent_log_tail",
         ] {
@@ -1789,10 +2438,10 @@ mod tests {
     #[test]
     fn diagnose_json_manifest_pin_some_serializes_as_string() {
         let mut r = baseline_diagnose_report();
-        r.manifest_pin_x86_64_tar = Some("a28cabe7c9df".to_string());
+        r.manifest_pin_x86_64_tar_xz = Some("a28cabe7c9df".to_string());
         let v: serde_json::Value = serde_json::to_value(r).expect("serialize");
         assert_eq!(
-            v["manifest_pin_x86_64_tar"],
+            v["manifest_pin_x86_64_tar_xz"],
             serde_json::Value::String("a28cabe7c9df".to_string())
         );
     }
@@ -1800,9 +2449,9 @@ mod tests {
     #[test]
     fn diagnose_json_manifest_pin_none_serializes_as_null() {
         let mut r = baseline_diagnose_report();
-        r.manifest_pin_x86_64_tar = None;
+        r.manifest_pin_x86_64_tar_xz = None;
         let v: serde_json::Value = serde_json::to_value(r).expect("serialize");
-        assert_eq!(v["manifest_pin_x86_64_tar"], serde_json::Value::Null);
+        assert_eq!(v["manifest_pin_x86_64_tar_xz"], serde_json::Value::Null);
     }
 
     /// The `--diagnose` / `--diagnose --json` exit code is a public contract
@@ -1842,6 +2491,73 @@ mod tests {
         assert_eq!(exit_code_from(&deg), 2, "phase != Ready -> 2");
     }
 
+    /// Pin the EXACT top-level key count of `DiagnoseReport`.
+    /// `diagnose_json_top_level_keys_pinned` above is a SUPERSET check
+    /// (`contains_key` for each pinned name) — it asserts the schema has
+    /// AT LEAST the 16 documented keys. This complement test asserts it
+    /// has EXACTLY 16. Catches a future field addition that doesn't
+    /// update the cheatsheet schema block / tray-diagnose.ps1 / litmus
+    /// pin step in lockstep — the "5-touchpoint drift-protection
+    /// discipline" from `docs/CONTRIBUTING-WINDOWS.md` becomes
+    /// enforceable. Bump this count + the pinned-keys list + the
+    /// 4 operator-facing surfaces together when adding a new field.
+    #[test]
+    fn diagnose_json_top_level_keys_exact_count() {
+        let v: serde_json::Value =
+            serde_json::to_value(baseline_diagnose_report()).expect("serialize");
+        let obj = v.as_object().expect("top-level JSON object");
+        assert_eq!(
+            obj.len(),
+            17,
+            "DiagnoseReport should have exactly 17 top-level keys; got {}: {:?}",
+            obj.len(),
+            obj.keys().collect::<Vec<_>>()
+        );
+    }
+
+    /// `summary_line` must agree with [`exit_code_from`] for every
+    /// possible exit-code path. A future refactor that flips the verdict
+    /// out of sync (e.g. prints "HEALTHY" while exit_code_from returns 2)
+    /// would silently lie to operators; this test catches that pre-build.
+    #[test]
+    fn summary_line_classifies_exit_code() {
+        // Healthy: registered + Ready wire.
+        let mut healthy = baseline_diagnose_report();
+        healthy.distro_registered = true;
+        healthy.wire = WireReport {
+            reachable: true,
+            phase: Some("Ready".to_string()),
+            podman_ready: Some(true),
+            last_event: None,
+            error: None,
+        };
+        let s = summary_line(&healthy);
+        assert!(
+            s.contains("HEALTHY") && s.contains("exit 0"),
+            "healthy report -> {s}"
+        );
+
+        // Baseline = degraded (no distro, no wire).
+        let s = summary_line(&baseline_diagnose_report());
+        assert!(
+            s.contains("DEGRADED") && s.contains("exit 2"),
+            "degraded report -> {s}"
+        );
+
+        // Reachable but non-Ready phase = degraded.
+        let mut deg = baseline_diagnose_report();
+        deg.distro_registered = true;
+        deg.wire = WireReport {
+            reachable: true,
+            phase: Some("Starting".to_string()),
+            podman_ready: Some(false),
+            last_event: None,
+            error: None,
+        };
+        let s = summary_line(&deg);
+        assert!(s.contains("DEGRADED"), "reachable-but-not-Ready -> {s}");
+    }
+
     #[test]
     fn diagnose_json_recent_log_tail_is_array() {
         let mut r = baseline_diagnose_report();
@@ -1852,6 +2568,337 @@ mod tests {
             .expect("recent_log_tail array");
         assert_eq!(tail.len(), 2);
         assert_eq!(tail[0], serde_json::Value::String("line one".to_string()));
+    }
+
+    /// `--version` / `-V` must report the same WORKSPACE_VERSION string
+    /// the diagnose JSON's `version` field uses, plus the build_commit
+    /// so an operator who runs `--version` then `--diagnose --json` sees
+    /// the same identifier in both. Pinned because the three places a
+    /// user can ask "what version am I running?" should be self-consistent.
+    #[test]
+    fn version_line_uses_workspace_version_and_commit() {
+        let line = version_line();
+        assert!(
+            line.contains(env!("WORKSPACE_VERSION")),
+            "version line missing WORKSPACE_VERSION: {line}"
+        );
+        assert!(
+            line.contains(env!("BUILD_COMMIT_SHA")),
+            "version line missing BUILD_COMMIT_SHA: {line}"
+        );
+        assert!(
+            line.starts_with("tillandsias-tray "),
+            "version line should start with binary name: {line}"
+        );
+        // Guard against the static-Cargo.toml regression class.
+        assert!(
+            !line.contains("0.1.0 ("),
+            "version line still reporting CARGO_PKG_VERSION shape: {line}"
+        );
+    }
+
+    /// `first_line` is the pure half of `sniff_wsl_version`. Pin all the
+    /// edge cases (empty / leading-blank / leading-whitespace / multi-line /
+    /// no-newline) so a future refactor can't silently flip semantics that
+    /// the cheatsheet's "first non-empty line, trimmed" promise relies on.
+    #[test]
+    fn first_line_handles_all_cases() {
+        // Empty input.
+        assert_eq!(first_line(""), None);
+        // Only whitespace + newlines.
+        assert_eq!(first_line("   \n\n  \n"), None);
+        // Simple multi-line: returns the first non-empty.
+        assert_eq!(
+            first_line("WSL version: 2.7.3.0\nKernel: 6.6\n"),
+            Some("WSL version: 2.7.3.0".to_string())
+        );
+        // Leading blank lines: skip to first non-empty.
+        assert_eq!(
+            first_line("\n\n  \nVersion WSL : 2.7.3.0\n"),
+            Some("Version WSL : 2.7.3.0".to_string())
+        );
+        // Leading whitespace on the first non-empty line: trimmed.
+        assert_eq!(
+            first_line("   trimmed line\nsecond line"),
+            Some("trimmed line".to_string())
+        );
+        // No newline: whole input is the first line.
+        assert_eq!(first_line("single line"), Some("single line".to_string()));
+        // BOM tolerance: U+FEFF is the byte-order mark. Older WSL builds emit
+        // it in UTF-16 LE before the actual first line; first_line strips it
+        // explicitly (via trim_start_matches('\u{FEFF}')) before whitespace
+        // trim, because str::trim alone does NOT strip U+FEFF (it's Cf
+        // Format, not Unicode White_Space).
+        assert_eq!(
+            first_line("\u{FEFF}WSL version: 2.7.3.0"),
+            Some("WSL version: 2.7.3.0".to_string())
+        );
+    }
+
+    /// Tray.log rotation kicks in strictly ABOVE the threshold so the
+    /// boundary case (file exactly at threshold) doesn't churn the
+    /// backup. Pin these 4 cases so a future refactor that flips to `>=`
+    /// surfaces here pre-build instead of as surprising rotation behavior
+    /// in the field.
+    #[test]
+    fn should_rotate_log_at_threshold_boundary() {
+        // Empty file: nothing to rotate.
+        assert!(!should_rotate_log(0, TRAY_LOG_MAX_BYTES));
+        // Below threshold: no rotation.
+        assert!(!should_rotate_log(
+            TRAY_LOG_MAX_BYTES - 1,
+            TRAY_LOG_MAX_BYTES
+        ));
+        // Exactly at threshold: no rotation (strict `>` semantics).
+        assert!(!should_rotate_log(TRAY_LOG_MAX_BYTES, TRAY_LOG_MAX_BYTES));
+        // Above threshold: rotate.
+        assert!(should_rotate_log(
+            TRAY_LOG_MAX_BYTES + 1,
+            TRAY_LOG_MAX_BYTES
+        ));
+        // Order-of-magnitude over: rotate.
+        assert!(should_rotate_log(
+            TRAY_LOG_MAX_BYTES * 100,
+            TRAY_LOG_MAX_BYTES
+        ));
+        // Sanity-check the threshold itself: 5 MiB matches what
+        // init_tracing's docblock + the cheatsheet promise.
+        assert_eq!(TRAY_LOG_MAX_BYTES, 5 * 1024 * 1024);
+    }
+
+    /// `compose_tooltip` is the pure formatter for the tray's mouseover
+    /// tooltip. Pin: includes "Tillandsias" prefix + version; when status
+    /// is empty produces a version-only single-line tooltip; when status
+    /// is non-empty joins with a newline. szTip is 128 chars in
+    /// NOTIFYICONDATAW; this format is well within bounds for any realistic
+    /// version + status combo.
+    #[test]
+    fn compose_tooltip_includes_version_and_status() {
+        // Version-only (initial tray setup before any status update).
+        assert_eq!(
+            compose_tooltip("0.2.260528.1", ""),
+            "Tillandsias 0.2.260528.1"
+        );
+        // Version + status (live tray after update_status_text).
+        let with_status = compose_tooltip("0.2.260528.1", "\u{1F534} Wire unreachable");
+        assert!(
+            with_status.starts_with("Tillandsias 0.2.260528.1"),
+            "tooltip should start with name + version: {with_status}"
+        );
+        assert!(
+            with_status.contains('\n'),
+            "tooltip should separate version and status with a newline: {with_status}"
+        );
+        assert!(
+            with_status.ends_with("\u{1F534} Wire unreachable"),
+            "tooltip should end with the status text verbatim: {with_status}"
+        );
+        // Length sanity: realistic worst-case fits within szTip's 128 u16.
+        let realistic_max = compose_tooltip(
+            "0.2.260528.1",
+            "\u{1F7E2} Ready \u{00B7} forge-something-with-a-longish-name created",
+        );
+        assert!(
+            realistic_max.encode_utf16().count() < 128,
+            "tooltip should fit szTip's 128-u16 buffer: {} chars",
+            realistic_max.encode_utf16().count()
+        );
+    }
+
+    /// `select_log_tail` is the pure half of `--logs --tail N`. Pin all
+    /// four edge cases (no tail, normal tail, tail > len, tail == 0) so a
+    /// future refactor can't silently flip semantics that the CLI
+    /// promises in its `--help` text.
+    #[test]
+    fn select_log_tail_handles_all_cases() {
+        let content = "a\nb\nc\nd\ne";
+
+        // tail = None: all lines.
+        assert_eq!(
+            select_log_tail(content, None),
+            vec!["a", "b", "c", "d", "e"]
+        );
+
+        // tail = Some(2): last 2 lines.
+        assert_eq!(select_log_tail(content, Some(2)), vec!["d", "e"]);
+
+        // tail > len: all lines (saturating_sub guards against underflow).
+        assert_eq!(
+            select_log_tail(content, Some(100)),
+            vec!["a", "b", "c", "d", "e"]
+        );
+
+        // tail = Some(0): no lines.
+        let empty: Vec<&str> = vec![];
+        assert_eq!(select_log_tail(content, Some(0)), empty);
+
+        // Empty content: no lines regardless of tail.
+        assert_eq!(select_log_tail("", None), empty);
+        assert_eq!(select_log_tail("", Some(5)), empty);
+    }
+
+    /// `--help` / `-h` must document every CLI mode by its exact flag name.
+    /// A future mode added without a help entry surfaces here pre-build
+    /// rather than being discovered field-side as undocumented.
+    #[test]
+    fn help_text_documents_all_cli_modes() {
+        let text = help_text();
+        for flag in [
+            "--provision-once",
+            "--status-once",
+            "--diagnose",
+            "--json",
+            "--logs",
+            "--tail",
+            "--bak",
+            "--help",
+            "-h",
+            "--version",
+            "-V",
+            // OPTIONS (modify GUI mode):
+            "--no-provision",
+        ] {
+            assert!(
+                text.contains(flag),
+                "help text missing CLI flag {flag}:\n{text}"
+            );
+        }
+        // ENVIRONMENT section: every operator-relevant env var the tray honors
+        // must be documented here so a future addition without docs surfaces
+        // at this pin instead of as undiscoverable-in-the-field.
+        for env_var in [
+            "RUST_LOG",
+            "TILLANDSIAS_NO_PROVISION",
+            "BUILD_COMMIT_SHA_OVERRIDE",
+        ] {
+            assert!(
+                text.contains(env_var),
+                "help text missing ENVIRONMENT entry {env_var}"
+            );
+        }
+        // Section headers (lock the multi-section structure).
+        for section in [
+            "USAGE:",
+            "MODES:",
+            "OPTIONS",
+            "ENVIRONMENT:",
+            "OUTPUT NOTE:",
+        ] {
+            assert!(
+                text.contains(section),
+                "help text missing section header {section}"
+            );
+        }
+        // Exit-code contract is part of the CLI promise — pin it.
+        for exit_code_marker in [
+            "Exit: 0",
+            "1 = failed",
+            "2 = reachable-not-Ready",
+            "2 degraded",
+        ] {
+            assert!(
+                text.contains(exit_code_marker),
+                "help text missing exit-code marker {exit_code_marker}"
+            );
+        }
+        // Pointer to the canonical cheatsheet.
+        assert!(
+            text.contains("cheatsheets/runtime/windows-tray-diagnostics.md"),
+            "help text missing cheatsheet pointer"
+        );
+        // Trailing newline so consumers can `print!(help_text())`.
+        assert!(text.ends_with('\n'), "help text missing trailing newline");
+    }
+
+    fn baseline_status_report() -> StatusReport {
+        StatusReport {
+            reachable: false,
+            wire_version: None,
+            phase: None,
+            podman_ready: None,
+            last_event: None,
+            error: Some("not provisioned".to_string()),
+            exit_code: 1,
+        }
+    }
+
+    /// Pin the `--status-once --json` top-level key set so a future refactor
+    /// that drops or renames a field surfaces here, not at the support-tooling
+    /// step. Mirrors `diagnose_json_top_level_keys_pinned` for the StatusReport
+    /// shape. Bound by `litmus:windows-tray-diagnose-cli-surface`.
+    #[test]
+    fn status_once_json_keys_pinned() {
+        let v: serde_json::Value =
+            serde_json::to_value(baseline_status_report()).expect("serialize");
+        let obj = v.as_object().expect("top-level JSON object");
+        for key in [
+            "reachable",
+            "wire_version",
+            "phase",
+            "podman_ready",
+            "last_event",
+            "error",
+            "exit_code",
+        ] {
+            assert!(
+                obj.contains_key(key),
+                "status-once --json missing top-level key: {key}"
+            );
+        }
+    }
+
+    /// `status_summary_line` must agree with [`status_exit_code`] for
+    /// every possible exit-code path (0 = Ready, 2 = reachable-not-Ready,
+    /// 1 = unreachable). Same shape as `summary_line_classifies_exit_code`
+    /// for `--diagnose`; pinning the status-mode footer keeps the two
+    /// summary-helper patterns symmetric. A refactor that flips one
+    /// without the other surfaces here pre-build.
+    #[test]
+    fn status_summary_line_classifies_exit_code() {
+        // Ready (exit 0).
+        let mut r = baseline_status_report();
+        r.reachable = true;
+        r.phase = Some("Ready".to_string());
+        let s = status_summary_line(&r);
+        assert!(s.contains("READY") && s.contains("exit 0"), "Ready -> {s}");
+        // Reachable-not-Ready (exit 2).
+        r.phase = Some("Starting".to_string());
+        let s = status_summary_line(&r);
+        assert!(
+            s.contains("REACHABLE-NOT-READY") && s.contains("exit 2"),
+            "non-Ready phase -> {s}"
+        );
+        // Unreachable (exit 1). Baseline has reachable=false.
+        let s = status_summary_line(&baseline_status_report());
+        assert!(
+            s.contains("UNREACHABLE") && s.contains("exit 1"),
+            "unreachable -> {s}"
+        );
+    }
+
+    /// `--status-once` exit-code contract (independent of the `--diagnose`
+    /// matrix; same semantics as the human-mode bash-script consumer expects):
+    /// 0 = Ready, 2 = reachable-but-not-Ready, 1 = unreachable. Pins the
+    /// matrix so a refactor can't silently flip the codes for the support
+    /// scripts that branch on them.
+    #[test]
+    fn status_once_exit_codes() {
+        // Unreachable → 1.
+        let mut r = baseline_status_report();
+        assert_eq!(status_exit_code(&r), 1, "unreachable -> 1");
+
+        // Reachable, phase Ready → 0.
+        r.reachable = true;
+        r.phase = Some("Ready".to_string());
+        assert_eq!(status_exit_code(&r), 0, "Ready -> 0");
+
+        // Reachable, phase non-Ready → 2.
+        r.phase = Some("Starting".to_string());
+        assert_eq!(status_exit_code(&r), 2, "non-Ready phase -> 2");
+
+        // Reachable, phase absent (e.g. unexpected reply variant) → 1.
+        r.phase = None;
+        assert_eq!(status_exit_code(&r), 1, "reachable but no phase -> 1");
     }
 
     /// The chip composer appends a non-empty `last_event` after a Unicode

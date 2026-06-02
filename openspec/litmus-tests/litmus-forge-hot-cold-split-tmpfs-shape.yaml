@@ -1,0 +1,266 @@
+# @trace spec:forge-hot-cold-split
+#
+# Drift-protection for the implemented portions of forge-hot-cold-
+# split. The spec has 7 requirements; this litmus pins:
+#
+#   Req 1 (HOT tier — 4 tmpfs paths): currently 3 of 4 are mounted
+#     in all 4 forge profiles (`/opt/cheatsheets`, `/tmp`, `/run/
+#     user/1000`). `/home/forge/src` is documented but NOT in the
+#     declarative profile mounts today — flagged as spec gap in
+#     the slice commit.
+#   Req 2 (Per-mount size caps via `--tmpfs=<path>:size=<N>m,
+#     mode=<oct>`): the 3 mounts carry their canonical caps
+#     (256/64/8 MB) and modes (1777/0700/0755).
+#   Req 6 (Agent transparency — TILLANDSIAS_CHEATSHEETS env var):
+#     literal `/opt/cheatsheets` value, declared as profile env var
+#     across all 4 forge profiles.
+#   Req 7 (Tmpfs-overlay lane config field): `ForgeConfig.pull_
+#     cache_ram_mb: Option<u32>` with serde default; the spec's
+#     auto-resolved tier table (64/128/1024 MB) is documented in
+#     the docblock.
+#   Req 5 partial (config fields): `ForgeConfig.hot_path_max_mb`
+#     (default 4096) and `hot_path_inflation` (default 4) exist,
+#     even though `compute_hot_budget` that uses them is NOT yet
+#     implemented.
+#
+# Entrypoint @trace pinning: all 4 forge entrypoint scripts plus
+# the terminal entrypoint carry `@trace spec:forge-hot-cold-split`
+# — Req 1 § "populate_hot_paths" runs from these scripts.
+#
+# Combined with the existing `litmus:forge-hot-cold-split-shape`
+# (cargo test target), raises forge-hot-cold-split coverage_ratio
+# 33 → 67. NOT closed (real spec gaps): Req 3 (--memory ceiling
+# launch args), Req 4 (check_host_ram + PreflightError),
+# `compute_hot_budget` helper, `/home/forge/src` tmpfs mount, and
+# the host-side TILLANDSIAS_PULL_CACHE_RAM_MB injection.
+name: litmus:forge-hot-cold-split-tmpfs-shape
+spec: forge-hot-cold-split
+phase: pre-build
+description: >
+  Pin the implemented forge-hot-cold-split surfaces: 4 forge
+  profiles × 3 tmpfs mounts with canonical size + mode literals
+  (Req 1 + Req 2), TILLANDSIAS_CHEATSHEETS env var = /opt/
+  cheatsheets (Req 6), ForgeConfig hot_path_max_mb + hot_path_
+  inflation + pull_cache_ram_mb fields (Req 5 + 7), and entrypoint
+  @trace markers.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-core/src/container_profile.rs
+  - workspace contains crates/tillandsias-core/src/config.rs
+  - workspace contains images/default/entrypoint-forge-{opencode,opencode-web,claude}.sh
+  - workspace contains images/default/entrypoint-terminal.sh
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "Req 1 + 2: 4 forge profiles each declare /opt/cheatsheets:size=8m,mode=0755 tmpfs"
+    # Spec § HOT tier mandates /opt/cheatsheets at 8 MB / mode 0755.
+    # 4 profiles × 1 line each = 4 declarations. A regression to a
+    # different size or mode would silently violate the spec's
+    # ENOSPC-on-overflow contract.
+    command: "grep -cF '/opt/cheatsheets:size=8m,mode=0755' crates/tillandsias-core/src/container_profile.rs | awk '{ if ($1+0 >= 4) print \"ok:\", $1, \"cheatsheets tmpfs sites\"; else { print \"FAIL: only\", $1, \"of >=4\"; exit 1 } }'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req 1 + 2: 4 forge profiles each declare /tmp:size=256m,mode=1777 tmpfs"
+    # Spec § HOT tier mandates /tmp at 256 MB / mode 1777
+    # (sticky bit). A regression to a smaller cap would silently
+    # break the spec's `dd if=/dev/zero of=/tmp/x` ENOSPC scenario.
+    command: "grep -cF '/tmp:size=256m,mode=1777' crates/tillandsias-core/src/container_profile.rs | awk '{ if ($1+0 >= 4) print \"ok:\", $1, \"tmp tmpfs sites\"; else { print \"FAIL: only\", $1, \"of >=4\"; exit 1 } }'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req 1 + 2: 4 forge profiles each declare /run/user/1000:size=64m,mode=0700 tmpfs"
+    # Spec § HOT tier mandates /run/user/1000 at 64 MB / mode 0700
+    # (user-only). A regression to mode 0755 would silently widen
+    # access to the per-user runtime dir.
+    command: "grep -cF '/run/user/1000:size=64m,mode=0700' crates/tillandsias-core/src/container_profile.rs | awk '{ if ($1+0 >= 4) print \"ok:\", $1, \"run-user tmpfs sites\"; else { print \"FAIL: only\", $1, \"of >=4\"; exit 1 } }'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req 6 agent transparency: TILLANDSIAS_CHEATSHEETS = /opt/cheatsheets profile env var"
+    # Spec § Agent transparency mandates the env var resolves to
+    # `/opt/cheatsheets` — unchanged from before the hot/cold
+    # split. The Literal("/opt/cheatsheets") pinning catches a
+    # regression to a different path (e.g. /opt/tillandsias-
+    # cheatsheets) that would silently break agent code referencing
+    # the canonical path.
+    command: "grep -cF 'name: \"TILLANDSIAS_CHEATSHEETS\"' crates/tillandsias-core/src/container_profile.rs | awk '{ if ($1+0 >= 2) print \"ok:\", $1, \"TILLANDSIAS_CHEATSHEETS env var sites\"; else { print \"FAIL: only\", $1, \"of >=2\"; exit 1 } }'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req 5 + 7 config fields: ForgeConfig has hot_path_max_mb + hot_path_inflation + pull_cache_ram_mb"
+    # Spec § Per-launch project source budget and § Tmpfs-overlay
+    # lane both require user-tunable config knobs. ForgeConfig is
+    # the canonical struct; pin all 3 fields. A regression dropping
+    # any would silently lose the override mechanism.
+    command: "grep -cE 'pub (hot_path_max_mb|hot_path_inflation|pull_cache_ram_mb):' crates/tillandsias-core/src/config.rs | awk '{ if ($1+0 >= 3) print \"ok:\", $1, \"ForgeConfig fields\"; else { print \"FAIL: only\", $1, \"of >=3\"; exit 1 } }'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req 5 default: hot_path_max_mb defaults to 4096 MB (spec § clamp ceiling)"
+    # Spec § "Budget exceeds max_mb → clamped at ceiling" mandates
+    # the default 4096 MB. A regression to a smaller ceiling would
+    # silently shrink large-project budgets.
+    command: "grep -F '4096' crates/tillandsias-core/src/config.rs && grep -F 'fn default_hot_path_max_mb' crates/tillandsias-core/src/config.rs"
+    timeout_ms: 3000
+    expected_behavior: "default_hot_path_max_mb"
+
+  - step: "all 4 forge entrypoint scripts + terminal entrypoint carry @trace spec:forge-hot-cold-split"
+    # Spec § "populate_hot_paths()" runs from these scripts;
+    # they ARE the in-container half of Req 1. A regression
+    # dropping any @trace marker would silently demote that script
+    # out of the forge-hot-cold-split graph.
+    command: "for f in images/default/entrypoint-forge-opencode.sh images/default/entrypoint-forge-claude.sh images/default/entrypoint-forge-codex.sh images/default/entrypoint-terminal.sh; do grep -Fq '@trace spec:forge-hot-cold-split' \"$f\" || { echo \"FAIL: $f missing @trace\"; exit 1; }; done && echo \"ok: 4 entrypoints carry @trace spec:forge-hot-cold-split\""
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req 5: compute_hot_budget pure helper present with canonical signature"
+    # Spec § "Per-launch project source budget" mandates a
+    # `compute_hot_budget(project_name, cache_dir)` recipe. The
+    # implementation lives in config.rs as a PURE function over
+    # (pack_size_kb, &ForgeConfig) — decoupled from git invocation
+    # so it stays unit-testable. The wider integration (git +
+    # mirror dir resolution + plumbing into the tmpfs mount sized
+    # arg) is the follow-on slice.
+    command: "grep -F 'pub fn compute_hot_budget(pack_size_kb: u64, config: &ForgeConfig) -> u32' crates/tillandsias-core/src/config.rs"
+    timeout_ms: 3000
+    expected_behavior: "compute_hot_budget"
+
+  - step: "Req 5: parse_size_pack_kb pure parser present"
+    # Step 1 of the spec recipe: parse `git count-objects -v -H`
+    # output. Pure string-in / u64-out so the parser is reusable
+    # across the git-runner and unit tests.
+    command: "grep -F 'pub fn parse_size_pack_kb(count_objects_output: &str) -> u64' crates/tillandsias-core/src/config.rs"
+    timeout_ms: 3000
+    expected_behavior: "parse_size_pack_kb"
+
+  - step: "Req 5: HOT_PATH_BUDGET_FLOOR_MB constant pins the 256 MB floor"
+    # Spec § Scenario "Empty mirror returns floor (256 MB)". The
+    # constant centralises the value so a refactor renaming it
+    # surfaces in this litmus, AND the unit test
+    # `compute_hot_budget_returns_floor_for_empty_mirror` uses
+    # the same constant — pinning both keeps them in lockstep.
+    command: "grep -F 'pub const HOT_PATH_BUDGET_FLOOR_MB: u32 = 256;' crates/tillandsias-core/src/config.rs"
+    timeout_ms: 3000
+    expected_behavior: "HOT_PATH_BUDGET_FLOOR_MB"
+
+  - step: "Req 5: 4 unit tests cover the compute_hot_budget recipe"
+    # Inflation / floor / ceiling / custom-config branches +
+    # the 2 parser tests = 6 total tests; pin >=4 by name presence
+    # so a regression that silently deletes a branch fails fast.
+    command: "grep -cE 'fn (compute_hot_budget|parse_size_pack_kb)_' crates/tillandsias-core/src/config.rs | awk '{ if ($1+0 >= 4) print \"ok:\", $1, \"compute_hot_budget + parse_size_pack_kb test cases\"; else { print \"FAIL: only\", $1, \"of >=4\"; exit 1 } }'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req 4 pre-flight RAM gate: check_host_ram + PreflightError surfaces"
+    # Spec § "Pre-flight RAM check refuses launch on insufficient
+    # host RAM" — the pure decision function lives in the preflight
+    # module. Pin both the function and the error variant so a
+    # refactor renaming either silently breaks the launch gate.
+    command: "grep -F 'pub fn check_host_ram(' crates/tillandsias-core/src/preflight.rs && grep -F 'pub enum PreflightError' crates/tillandsias-core/src/preflight.rs && grep -F 'InsufficientRam' crates/tillandsias-core/src/preflight.rs"
+    timeout_ms: 3000
+    expected_behavior: "InsufficientRam"
+
+  - step: "Req 4: 1.25× headroom factor expressed as 125/100 integer constants"
+    # Spec § "1.25× headroom factor between MemAvailable and required"
+    # mandates the exact multiplier. Pinning the literal constants
+    # (HOST_RAM_HEADROOM_NUM = 125, HOST_RAM_HEADROOM_DEN = 100)
+    # catches a regression that widens or narrows the headroom
+    # silently. Integer-only so the threshold computation is
+    # overflow-safe.
+    command: "grep -F 'pub const HOST_RAM_HEADROOM_NUM: u64 = 125;' crates/tillandsias-core/src/preflight.rs && grep -F 'pub const HOST_RAM_HEADROOM_DEN: u64 = 100;' crates/tillandsias-core/src/preflight.rs"
+    timeout_ms: 3000
+    expected_behavior: "HOST_RAM_HEADROOM"
+
+  - step: "Req 4: parse_mem_available_mb pure parser for Linux /proc/meminfo"
+    # Linux-native API per spec. Pure string-in / Option<u64>-out so
+    # the parser is reusable across the /proc/meminfo runner and
+    # unit tests. None on missing/unparseable so callers fail-closed.
+    command: "grep -F 'pub fn parse_mem_available_mb(meminfo_output: &str) -> Option<u64>' crates/tillandsias-core/src/preflight.rs"
+    timeout_ms: 3000
+    expected_behavior: "parse_mem_available_mb"
+
+  - step: "Req 4: >=5 unit tests cover the pre-flight RAM gate behaviour"
+    # Covers: ok-at-threshold, refuse-below-threshold, ceil-rounding,
+    # zero-required, max-required-no-panic, parser-canonical,
+    # parser-fallback-none, Display-impl. Pin >=5 by name presence.
+    command: "grep -cE 'fn (check_host_ram|parse_mem_available_mb|preflight_error)_' crates/tillandsias-core/src/preflight.rs | awk '{ if ($1+0 >= 5) print \"ok:\", $1, \"preflight test cases\"; else { print \"FAIL: only\", $1, \"of >=5\"; exit 1 } }'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req 3 --memory ceiling: compute_memory_ceiling_mb pure helper + 256 baseline"
+    # Spec § "--memory ceiling pairs with tmpfs caps" mandates
+    # `--memory = sum(tmpfs caps) + 256`. The baseline literal and
+    # the helper are both pinned: the constant catches a regression
+    # that silently shrinks the working-set headroom; the helper
+    # signature catches a rename of the canonical entry point.
+    command: "grep -F 'pub const FORGE_WORKING_SET_BASELINE_MB: u32 = 256;' crates/tillandsias-core/src/preflight.rs && grep -F 'pub fn compute_memory_ceiling_mb(tmpfs_sizes_mb: impl IntoIterator<Item = u32>) -> u32' crates/tillandsias-core/src/preflight.rs"
+    timeout_ms: 3000
+    expected_behavior: "compute_memory_ceiling_mb"
+
+  - step: "Req 3 tmpfs size parser: parse_tmpfs_size_mb extracts size=Nm"
+    # Pure parser for the canonical forge tmpfs format
+    # `/path:size=Nm,mode=NNNN`. The launch-time composition is
+    # `compute_memory_ceiling_mb(profile.tmpfs_mounts.iter().filter_map
+    # (parse_tmpfs_size_mb))` — pinning the parser signature catches
+    # a rename that would silently break that composition.
+    command: "grep -F 'pub fn parse_tmpfs_size_mb(tmpfs_spec: &str) -> Option<u32>' crates/tillandsias-core/src/preflight.rs"
+    timeout_ms: 3000
+    expected_behavior: "parse_tmpfs_size_mb"
+
+  - step: "Req 3: >=3 unit tests cover compute_memory_ceiling_mb + tmpfs parser"
+    # Covers: spec-example (4 mounts → sum + 256), empty profile →
+    # baseline, saturating-add, parser canonical (4 cases), parser
+    # fallback (5 cases). Pin >=3 by name presence.
+    command: "grep -cE 'fn (compute_memory_ceiling|parse_tmpfs_size_mb)_' crates/tillandsias-core/src/preflight.rs | awk '{ if ($1+0 >= 3) print \"ok:\", $1, \"memory-ceiling test cases\"; else { print \"FAIL: only\", $1, \"of >=3\"; exit 1 } }'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req 7 tmpfs-overlay tier table: 3 cap constants (64/128/1024 MB) + 2 boundary constants (8/32 GiB)"
+    # Spec § Tmpfs-overlay lane mandates exact cap values per tier.
+    # Pinning the literals catches a regression that silently shifts
+    # the boundary (e.g. raising MODEST cap to 128 MB or lowering
+    # the PLENTIFUL boundary to 16 GiB).
+    command: "grep -F 'pub const PULL_CACHE_RAM_MB_MODEST: u32 = 64;' crates/tillandsias-core/src/preflight.rs && grep -F 'pub const PULL_CACHE_RAM_MB_NORMAL: u32 = 128;' crates/tillandsias-core/src/preflight.rs && grep -F 'pub const PULL_CACHE_RAM_MB_PLENTIFUL: u32 = 1024;' crates/tillandsias-core/src/preflight.rs"
+    timeout_ms: 3000
+    expected_behavior: "PULL_CACHE_RAM_MB_"
+
+  - step: "Req 7 tmpfs-overlay resolver: resolve_pull_cache_ram_mb + parse_mem_total_mb helpers"
+    # Spec § "Tmpfs-overlay cap auto-detected at tray startup" — the
+    # resolver picks the tier from MemTotal, with the user's config
+    # override (Option<u32>) short-circuiting. The /proc/meminfo
+    # MemTotal parser is the Linux-native measurement step.
+    command: "grep -F 'pub fn resolve_pull_cache_ram_mb(mem_total_mb: u64, override_mb: Option<u32>) -> u32' crates/tillandsias-core/src/preflight.rs && grep -F 'pub fn parse_mem_total_mb(meminfo_output: &str) -> Option<u64>' crates/tillandsias-core/src/preflight.rs"
+    timeout_ms: 3000
+    expected_behavior: "resolve_pull_cache_ram_mb"
+
+  - step: "Req 7: >=3 unit tests cover the tmpfs-overlay tier-table + override + parser"
+    # Covers: tier-from-mem-total (3 tiers + boundary), user-override-
+    # wins, parser canonical, parser fallback. Pin >=3 by name.
+    command: "grep -cE 'fn (resolve_pull_cache_ram_mb|parse_mem_total_mb)_' crates/tillandsias-core/src/preflight.rs | awk '{ if ($1+0 >= 3) print \"ok:\", $1, \"tmpfs-overlay test cases\"; else { print \"FAIL: only\", $1, \"of >=3\"; exit 1 } }'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+observability:
+  traces:
+    - "@trace spec:forge-hot-cold-split"
+    - "@trace spec:cheatsheets-license-tiered"
+  expected_log: "forge-hot-cold-split tmpfs mounts + TILLANDSIAS_CHEATSHEETS + ForgeConfig + entrypoint @traces pinned (Reqs 1 + 2 + 5 + 6 + 7 partial)"
+  log_fields:
+    spec: "forge-hot-cold-split"
+    test: "forge-hot-cold-split-tmpfs-shape"
+    artifact: "crates/tillandsias-core/src/container_profile.rs + config.rs + images/default/entrypoint-*.sh"
+
+rollback:
+  on_failure: >
+    A `spec:forge-hot-cold-split` surface drifted. Restore the 3 tmpfs
+    mount declarations (`/opt/cheatsheets:size=8m,mode=0755`,
+    `/tmp:size=256m,mode=1777`, `/run/user/1000:size=64m,mode=0700`)
+    in all 4 forge profile builders; restore
+    `TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets` profile env vars;
+    restore `ForgeConfig.{hot_path_max_mb, hot_path_inflation,
+    pull_cache_ram_mb}` fields with 4096 default; restore
+    `@trace spec:forge-hot-cold-split` on the 4 entrypoint scripts.
+  command: "grep -nE 'tmpfs|TILLANDSIAS_CHEATSHEETS|hot_path_(max_mb|inflation)|pull_cache_ram_mb|spec:forge-hot-cold-split' crates/tillandsias-core/src/container_profile.rs crates/tillandsias-core/src/config.rs | head -30"

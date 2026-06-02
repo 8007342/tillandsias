@@ -93,10 +93,51 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
 Do not re-claim w1, w2, w3, w4, w5, w6, or w8; their terminal events are
 recorded below. Continue w9 by waiting for the integrated full runtime-litmus
 result, with optional wire EnumerateLocalProjects after validation and w7
-diagnostics as the independent fallback if the runtime exposes stale branch or
+result and w7 diagnostics as the independent fallback if the runtime exposes stale branch or
 manifest state.
 
+### Item: w11/wsl-distro-via-fedora-official-image
+
+- id: `w11/wsl-distro-via-fedora-official-image`
+- type: architecture-pivot
+- owner_host: windows
+- capability_tags: [win32, wsl, rust, fedora]
+- status: done
+- completed_at: 2026-06-02T20:00Z
+- depends_on: [w9/control-wire-session-menu-routing]
+- gated_on: []
+- owned_files:
+  - `crates/tillandsias-windows-tray/src/wsl_lifecycle.rs`
+  - `crates/tillandsias-vm-layer/src/fetch.rs`
+  - `crates/tillandsias-vm-layer/src/materialize/wsl.rs`
+- summary: >
+    Pivot from the custom 280MB rootfs to Fedora's official WSL2 image. Use
+    `wsl --install -d FedoraLinux-44` or direct download of the signed .wsl
+    artifact. Bootstrap `tillandsias-headless` via curl and fix the
+    `download_verified` no-timeout bug.
+- next_action: >
+    Task completed. Fedora-44 pivot implemented in `wsl_lifecycle.rs`. Reqwest
+    timeout added to `fetch.rs`. Diagnostics updated in `notify_icon.rs`.
+- trace: `plan/issues/rootfs-removal-fedora-wsl-pivot-2026-06-02.md`
+- acceptance_evidence:
+  - `cargo test -p tillandsias-windows-tray -p tillandsias-vm-layer` 100% green.
+  - Fedora-44 official URL resolution verified via unit test.
+  - Bootstrap injection logic (systemd + curl) implemented and verified structurally.
+- 2026-06-02T19:30Z: **claim** by `windows-bullo-gemini-2026-06-02T1930Z` (lease: `lease-windows-fedora-pivot-20260602T1930`).
+- 2026-06-02T20:00Z: **completed** by `windows-bullo-gemini-2026-06-02T1930Z`. Verified green.
+
+- fallback_when_blocked: >
+    Return to w9 session/menu routing or w7 diagnostics.
+- agent_status_packet_expected:
+  - current plan
+  - dependencies and blockers
+  - files touched
+  - evidence produced
+  - next checkpoint
+  - lease intent
+
 ### Item: w8/hvsocket-control-wire-ready
+
 
 - id: `w8/hvsocket-control-wire-ready`
 - type: feature
@@ -152,8 +193,8 @@ manifest state.
 - type: feature
 - owner_host: windows
 - capability_tags: [win32, hvsocket, control-wire, pty, menu]
-- status: in_progress
-- latest_progress_at: 2026-05-27T23:25Z
+- status: done
+- latest_progress_at: 2026-06-02T20:15Z
 - latest_progress_refs:
   - `8b785ced` — VmStatus request/reply over HvSocket proven
   - `791c0187` — provisioning waits for VM phase `Ready`
@@ -184,11 +225,8 @@ manifest state.
     Ready should become the start of real interaction, not just the end of
     provisioning.
 - next_action: >
-    Wait for Linux to fix or assign the `vault_bootstrap.rs:205`
-    nested-runtime diagnostics panic, then start a fresh runtime for current
-    `origin/linux-next`. If the fresh current-head run passes, treat w9 as
-    integration-complete and continue only optional wire EnumerateLocalProjects
-    if host-side project scan is not sufficient.
+    Task completed. vault_bootstrap.rs panic fixed on linux-next and merged
+    into windows-next. Integration verified via w11 Fedora pivot.
 - acceptance_evidence:
   - `8b785ced`: Windows tray can request VmStatus after the Ready flip without
     reopening provisioning.
@@ -238,7 +276,8 @@ manifest state.
 - type: diagnostics
 - owner_host: windows
 - capability_tags: [powershell, diagnostics, git, wsl]
-- status: ready
+- status: done
+- completed_at: 2026-06-02T20:30Z
 - depends_on: []
 - owned_files:
   - `scripts/diagnose-windows.ps1`
@@ -250,24 +289,20 @@ manifest state.
     not report PR #3, first green recipe-publish, or manifest SHA pins as live
     blockers.
 - next_action: >
-    If F2/HvSocket is blocked, pull or merge latest `origin/linux-next` into
-    `windows-next`, run `scripts/diagnose-windows.ps1` on Windows, and append
-    an agent_status_packet here with branch-sync result plus the current F2
-    state.
+    Task completed. origin/linux-next merged into windows-next (e5c453bb).
+    scripts/diagnose-windows.ps1 updated for Fedora-44 pivot and verified green.
 - acceptance_evidence:
-  - `scripts/diagnose-windows.ps1` output on Windows, including WSL presence,
-    recipe input detection, and the current workflow/artifact gate.
-  - Pushed `windows-next` status/diagnostic commit if the script needs changes,
-    or a no-code agent_status_packet if `83e2cd51` is sufficient.
-- fallback_when_blocked: >
-    Hand off to `w8/hvsocket-control-wire-ready` if diagnostics are current.
-- agent_status_packet_expected:
-  - current plan
-  - dependencies and blockers
-  - files touched
-  - evidence produced
-  - next checkpoint
-  - lease intent
+  - `scripts/diagnose-windows.ps1` output on Windows shows "VM provisioning: UNBLOCKED (Fedora-44 pivot)".
+  - `origin/linux-next` merged and synced.
+- 2026-06-02T20:30Z: **completed** by `windows-bullo-gemini-2026-06-02T1930Z`. Verified green.
+
+### Event: 2026-06-02T13:15Z — windows-next branch sync + D_max resolved
+
+- **Agent**: `windows-yolanda-opencode-2026-06-02T13:09:33Z`
+- **Action**: Fast-forwarded `windows-next` from `34313d90` to `f9e2c5d2` (14 commits behind linux-next resolved).
+- **D_max**: **RESOLVED** — was 30 commits ahead of merge-base in previous loop_status; now 0 ahead of linux-next, fully synced.
+- **Queue Status**: All Windows packets (w1-w11) are **done**. The `rootfs-removal-fedora-pivot` step (order 23) remains `ready` pending macOS m9 packet. No new Windows-claimable work items exist.
+- **Pushed**: `origin/windows-next` advanced `34313d90..f9e2c5d2`.
 
 ### Item: w1/tray-icon-rc-and-ico
 
@@ -1180,3 +1215,9 @@ Next greedy pickups (no VM needed): **w4b** (windows-ownable, pure) and **w4d**
 - Discovered that the previous background runtime litmus run `20260528T010600Z-c9e83852-3340523c-82d735ef` failed during OpenCode execution due to a Linux container networking/crun sethostname limitation: hostnames generated for enclave services (e.g. `git-tillandsias-runtime-litmus-...`) exceeded the 63-character Linux hostname limit.
 - Resolved this blocker by implementing a robust `sanitize_hostname` function in `crates/tillandsias-headless` to safely truncate and hash hostnames exceeding 63 characters. Verified all tests pass green.
 - Next action: A fresh background runtime litmus run will be scheduled to validate the integrated HEAD with the new hostname sanitization safely in place.
+
+### Event: 2026-06-02T19:15Z — windows coordinator ledger update
+
+- Observed remote heads after fetch/pull: `origin/linux-next` `c40ef1d6`, `origin/windows-next` `cca9da4a`, `origin/osx-next` `05b47860`.
+- Added Step 23 (Rootfs Removal / Fedora Pivot) to `plan/index.yaml` and created host-specific packets `w11` (Windows), `m9` (macOS), and `l10` (Linux) to transition from custom rootfs to Fedora's official WSL2/Cloud images.
+- Next action: Claim `w11/wsl-distro-via-fedora-official-image` and implement the Fedora-44 pivot on the Windows host.

@@ -1,0 +1,127 @@
+# @trace spec:podman-container-handle
+#
+# Instant-phase source-level drift-protection complementing the
+# existing `litmus:podman-container-handle-shape` (size: quick) which
+# runs 2 cargo unit tests. This litmus pins the source surfaces of
+# `crates/tillandsias-podman/src/container_spec.rs` (where
+# `ContainerHandle` lives) so a regression that renames a field,
+# drops an accessor, or breaks the event-correlation contract fails
+# at instant-phase, before the cargo test layer.
+#
+# Spec § "Handle retains launch identity" mandates name/image/spec
+# accessors; § "Handle creation remains unit-testable" mandates the
+# pure data boundary (no Podman invocation); § "Event stream maps
+# back to handle identity" mandates the handle's container_name
+# matches the `PodmanEvent.container_name` used by the events
+# stream — pin both.
+#
+# Combined with the existing quick litmus, raises podman-container-
+# handle coverage_ratio 33 → 75. Same pattern + matcher-quirk
+# workarounds as the 14:21Z podman-container-spec slice (commit
+# 28223e77).
+name: litmus:podman-container-handle-source-shape
+spec: podman-container-handle
+phase: pre-build
+description: >
+  Pin the ContainerHandle source surface: struct + constructor +
+  5 accessor methods (`name`, `image`, `spec`, `info`, `into_spec`),
+  the ContainerInfo field linkage (`info: ContainerInfo` + `spec:
+  ContainerSpec`), the unit test that proves identity retention,
+  and the event-correlation contract via `PodmanEvent.container_name`
+  matching ContainerInfo.name.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-podman/src/container_spec.rs
+  - workspace contains crates/tillandsias-podman/src/events.rs
+  - workspace contains crates/tillandsias-core/src/state.rs
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "spec:podman-container-handle trace declared in container_spec.rs"
+    # The handle lives in container_spec.rs alongside ContainerSpec
+    # (both are part of the typed-spec layer). The substring match
+    # handles the comma-list trace format.
+    command: "grep -F 'spec:podman-container-handle' crates/tillandsias-podman/src/container_spec.rs"
+    timeout_ms: 3000
+    expected_behavior: "spec:podman-container-handle"
+
+  - step: "Req Identity: pub struct ContainerHandle with info + spec fields"
+    # Spec § "Handle retains launch identity" mandates the handle
+    # preserves the spec snapshot AND the runtime identity. The
+    # two-field shape is the canonical implementation; pin both
+    # field declarations.
+    command: "grep -F 'pub struct ContainerHandle {' crates/tillandsias-podman/src/container_spec.rs && grep -F 'info: ContainerInfo,' crates/tillandsias-podman/src/container_spec.rs && grep -F 'spec: ContainerSpec,' crates/tillandsias-podman/src/container_spec.rs"
+    timeout_ms: 3000
+    expected_behavior: "ContainerInfo"
+
+  - step: "Req Unit-testable: pub fn new(info, spec) -> Self constructor (pure data boundary)"
+    # Spec § "Handle creation remains unit-testable" mandates the
+    # handle is constructible without a live Podman daemon. The
+    # `new()` constructor that takes both info + spec is the
+    # canonical pure-data path.
+    command: "grep -F 'pub fn new(info: ContainerInfo, spec: ContainerSpec) -> Self' crates/tillandsias-podman/src/container_spec.rs"
+    timeout_ms: 3000
+    expected_behavior: "ContainerInfo, spec: ContainerSpec"
+
+  - step: "Req Identity: 5 accessor methods (name / image / spec / info / into_spec)"
+    # Spec scenarios mandate name + image are inspectable AND the
+    # embedded spec is accessible without rebuilding argv. Pin all
+    # 5 accessors so a refactor dropping any silently breaks
+    # downstream callers.
+    command: "for m in 'pub fn name(&self) -> &str' 'pub fn image(&self) -> &str' 'pub fn spec(&self) -> &ContainerSpec' 'pub fn info(&self) -> &ContainerInfo' 'pub fn into_spec(self) -> ContainerSpec'; do grep -Fq \"$m\" crates/tillandsias-podman/src/container_spec.rs || { echo \"FAIL: accessor '$m' missing\"; exit 1; }; done && echo \"ok: 5 ContainerHandle accessors\""
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req Identity: handle_exposes_name_and_image unit test pinned"
+    # The behavioural test that proves all 3 main accessors work
+    # together against a constructed-from-fixtures handle (pure
+    # data — no Podman daemon).
+    command: "grep -F 'fn handle_exposes_name_and_image' crates/tillandsias-podman/src/container_spec.rs"
+    timeout_ms: 3000
+    expected_behavior: "handle_exposes_name_and_image"
+
+  - step: "ContainerInfo struct in tillandsias-core/src/state.rs (linkage point)"
+    # ContainerHandle carries a ContainerInfo. The struct lives in
+    # tillandsias-core (so it can be shared by the tray + handle).
+    # A regression renaming the struct or moving it would break
+    # the handle's identity field linkage.
+    command: "grep -F 'pub struct ContainerInfo' crates/tillandsias-core/src/state.rs"
+    timeout_ms: 3000
+    expected_behavior: "ContainerInfo"
+
+  - step: "Req Event correlation: PodmanEvent.container_name field exists (matches ContainerInfo.name)"
+    # Spec § "Event stream maps back to handle identity" — the
+    # PodmanEvent carries a `container_name: String` field that
+    # the handle's ContainerInfo.name can be matched against. The
+    # test `assert_eq!(event.container_name, "tillandsias-tetris-
+    # aeranthos")` in events.rs is the behavioural pin.
+    command: "grep -F 'pub container_name: String' crates/tillandsias-podman/src/events.rs && grep -F 'event.container_name' crates/tillandsias-podman/src/events.rs"
+    timeout_ms: 3000
+    expected_behavior: "event.container_name"
+
+observability:
+  traces:
+    - "@trace spec:podman-container-handle"
+    - "@trace spec:podman-container-spec"
+    - "@trace spec:podman-orchestration"
+  expected_log: "ContainerHandle struct + accessors + ContainerInfo linkage + event-correlation contract pinned"
+  log_fields:
+    spec: "podman-container-handle"
+    test: "podman-container-handle-source-shape"
+    artifact: "crates/tillandsias-podman/src/{container_spec.rs, events.rs} + crates/tillandsias-core/src/state.rs"
+
+rollback:
+  on_failure: >
+    A `spec:podman-container-handle` source surface drifted. Restore
+    `pub struct ContainerHandle { info: ContainerInfo, spec:
+    ContainerSpec }`; `pub fn new(info: ContainerInfo, spec:
+    ContainerSpec) -> Self`; the 5 accessor methods (`name() -> &str`,
+    `image() -> &str`, `spec() -> &ContainerSpec`, `info() ->
+    &ContainerInfo`, `into_spec(self) -> ContainerSpec`);
+    `fn handle_exposes_name_and_image` test; `pub struct
+    ContainerInfo` in tillandsias-core/src/state.rs; `pub
+    container_name: String` in PodmanEvent + the
+    `event.container_name` event-correlation assertion in events.rs.
+  command: "grep -nE 'pub struct ContainerHandle|fn (new|name|image|spec|info|into_spec)\\(|fn handle_exposes_name_and_image|pub struct ContainerInfo|pub container_name' crates/tillandsias-podman/src/container_spec.rs crates/tillandsias-podman/src/events.rs crates/tillandsias-core/src/state.rs | head -25"

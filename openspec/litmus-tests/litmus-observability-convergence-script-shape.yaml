@@ -1,0 +1,118 @@
+# @trace spec:observability-convergence
+#
+# Drift-protection for the observability-convergence computation
+# surfaces: convergence velocity checker (Python + shell wrapper),
+# evidence bundle generator, CI convergence script, dashboard test
+# harness, and dashboard renderer. The existing litmus
+# (litmus:observability-convergence-shape) covers the rendered
+# dashboard artefacts and spec-body dashboard contract; this litmus
+# pins the SCRIPT surfaces that implement the convergence metrics
+# pipeline.
+#
+# Coverage bump: 60 -> 75 (2nd binding).
+name: litmus:observability-convergence-script-shape
+spec: observability-convergence
+phase: pre-build
+description: >
+  Pin the observability-convergence script surfaces: Python velocity
+  checker with DEFAULT_V_MIN and MAX_ALLOWABLE_SINGLE_RESIDUAL_CC
+  constants, V_c formula, shell wrapper dispatch, evidence bundle
+  generator exit codes, CI convergence trace, dashboard test harness
+  group count, dashboard renderer trace, and spec-body convergence
+  score formula + staleness threshold + alert thresholds.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains scripts/check-convergence-velocity.sh
+  - workspace contains scripts/check-convergence-velocity.py
+  - workspace contains scripts/generate-evidence-bundle.sh
+  - workspace contains scripts/github-actions-convergence.sh
+  - workspace contains scripts/test-convergence-dashboard.sh
+  - workspace contains scripts/update-convergence-dashboard.sh
+  - workspace contains openspec/specs/observability-convergence/spec.md
+  - shell utilities (grep, wc) are available in PATH
+
+critical_path:
+  - step: "Req trace: @trace spec:observability-convergence on all 6 scripts"
+    # Spec § Observability mandates each convergence script carry
+    # the spec trace. Pin all 6.
+    command: "for f in scripts/check-convergence-velocity.sh scripts/check-convergence-velocity.py scripts/generate-evidence-bundle.sh scripts/github-actions-convergence.sh scripts/test-convergence-dashboard.sh scripts/update-convergence-dashboard.sh; do grep -Fq 'spec:observability-convergence' \"$f\" || { echo \"FAIL: $f missing@trace\"; exit 1; }; done && echo \"ok: 6 scripts traced\""
+    timeout_ms: 5000
+    expected_behavior: "ok: 6 scripts traced"
+
+  - step: "Req convergence velocity: Python checker DEFAULT_V_MIN = 1.0 constant"
+    # Spec § Convergence scoring § Scenario `Perfect convergence`
+    # and § Partial convergence describe weighted scoring. The
+    # Python checker enforces V_c >= 1.0 cc/cycle — pin the literal.
+    command: "grep -F 'DEFAULT_V_MIN = 1.0' scripts/check-convergence-velocity.py"
+    timeout_ms: 3000
+    expected_behavior: "DEFAULT_V_MIN = 1.0"
+
+  - step: "Req convergence velocity: Python checker MAX_ALLOWABLE_SINGLE_RESIDUAL_CC = 120"
+    # Spec § Proximity describes max single residual cc debt.
+    command: "grep -F 'MAX_ALLOWABLE_SINGLE_RESIDUAL_CC = 120' scripts/check-convergence-velocity.py"
+    timeout_ms: 3000
+    expected_behavior: "MAX_ALLOWABLE_SINGLE_RESIDUAL_CC = 120"
+
+  - step: "Req convergence score: V_c formula delta_R / delta_t in velocity checker"
+    # Spec § Convergence scoring describes weighted average. The
+    # Python implementation computes V_c = (R_{t-3} - R_t) / 3.0.
+    command: "grep -F 'v_c = (r_t_minus_3 - r_t) / 3.0' scripts/check-convergence-velocity.py"
+    timeout_ms: 3000
+    expected_behavior: "v_c = (r_t_minus_3 - r_t) / 3.0"
+
+  - step: "Req evidence bundle: generate-evidence-bundle.sh declares 4 exit codes (0/1/2/3)"
+    # Spec § Evidence bundle is the raw-material input for
+    # convergence analysis. The script's exit codes signal which
+    # phase (tests/traces/dir-creation) failed.
+    command: "grep -cF 'Exit Codes' scripts/generate-evidence-bundle.sh | grep -qF '1' && grep -F '#   0 = bundle created' scripts/generate-evidence-bundle.sh && grep -F '#   1 = cargo test' scripts/generate-evidence-bundle.sh && grep -F '#   2 = trace validation' scripts/generate-evidence-bundle.sh && grep -F '#   3 = output directory' scripts/generate-evidence-bundle.sh && echo 'ok: 4 exit codes'"
+    timeout_ms: 3000
+    expected_behavior: "ok: 4 exit codes"
+
+  - step: "Req test harness: test-convergence-dashboard.sh has >=6 test groups"
+    # Spec § Litmus Tests § Coverage computation requires testable
+    # assertions. The dashboard test script organizes assertions
+    # into groups (rendered md shape, rendered json shape, alert
+    # levels, trend metrics, resource metrics, signature shape,
+    # source-of-truth).
+    command: "COUNT=$(grep -cF '[group]' scripts/test-convergence-dashboard.sh); if [ \"$COUNT\" -ge 6 ]; then echo \"ok: $COUNT test groups\"; else echo \"FAIL: $COUNT groups (expected >=6)\"; exit 1; fi"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req staleness: spec body declares 30-day staleness threshold"
+    # Spec § Spec debt and staleness § Scenario `Spec with no
+    # recent traces` pins last_trace_date > 30 days.
+    command: "grep -F '30 days old' openspec/specs/observability-convergence/spec.md"
+    timeout_ms: 3000
+    expected_behavior: "30 days old"
+
+  - step: "Req alert thresholds: spec body declares red < 90%, yellow < 95%"
+    # Spec § Dashboard alert thresholds classifies red < 90,
+    # yellow < 95, green otherwise.
+    command: "grep -F 'red < 90%' openspec/specs/observability-convergence/spec.md && grep -F 'yellow < 95%' openspec/specs/observability-convergence/spec.md && echo 'ok: alert thresholds'"
+    timeout_ms: 3000
+    expected_behavior: "ok: alert thresholds"
+
+observability:
+  traces:
+    - "@trace spec:observability-convergence"
+  expected_log: "convergence computation script surfaces pinned: all 6 @trace, V_c formula, DEFAULT_V_MIN, MAX_ALLOWABLE_SINGLE_RESIDUAL_CC, evidence bundle exit code contract, test group count >= 6, staleness threshold, alert thresholds"
+  log_fields:
+    spec: "observability-convergence"
+    test: "observability-convergence-script-shape"
+    artifact: "scripts/ + openspec/specs/observability-convergence/spec.md"
+
+rollback:
+  on_failure: >
+    A `spec:observability-convergence` script surface drifted.
+    Restore: @trace spec:observability-convergence on all 6
+    scripts (check-convergence-velocity.{sh,py}, generate-
+    evidence-bundle.sh, github-actions-convergence.sh, test-
+    convergence-dashboard.sh, update-convergence-dashboard.sh);
+    Python DEFAULT_V_MIN=1.0 and MAX_ALLOWABLE_SINGLE_RESIDUAL_CC
+    =120 constants; V_c = (r_t_minus_3 - r_t) / 3.0 formula;
+    generate-evidence-bundle.sh 4 exit codes; >=6 test groups in
+    test-convergence-dashboard.sh; spec body staleness threshold
+    (30 days) and alert thresholds (red < 90%, yellow < 95%).
+  command: "grep -n 'spec:observability-convergence\\|DEFAULT_V_MIN\\|MAX_ALLOWABLE_SINGLE_RESIDUAL_CC\\|Exit Code\\|30 days\\|red < 90%' scripts/check-convergence-velocity.sh scripts/check-convergence-velocity.py scripts/generate-evidence-bundle.sh scripts/test-convergence-dashboard.sh openspec/specs/observability-convergence/spec.md 2>/dev/null | head -20"

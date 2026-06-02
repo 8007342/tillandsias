@@ -118,6 +118,8 @@ The pre-existing `git-push.log` file under `~/.local/state/tillandsias/container
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
 - `litmus:external-logs-layer-shape`
+- `litmus:external-logs-manifest-shape`
+- `litmus:external-logs-producer-manifests-shape`
 
 Gating points:
 - External logs are cleaned up; no persistent log state leaks
@@ -130,9 +132,11 @@ Start with the smallest executable boundary:
 
 1. `cargo test -p tillandsias-core external_logs_dir_points_to_state_sibling -- --exact`
 2. `cargo test -p tillandsias-core external_logs_role_dir_appends_role -- --exact`
-3. `./build.sh --ci-full --install --strict-all --filter external-logs-layer --strict external-logs-layer`
+3. `./scripts/run-litmus-test.sh external-logs-layer --size instant`
+4. `./build.sh --ci-full --install --strict-all --filter external-logs-layer --strict external-logs-layer`
 
 The first two steps validate the pure path-shaping contract without needing Podman.
+The instant litmus chain pins producer manifest shape without a live container.
 The final step keeps the spec in the global frontier scan once the unit seam is green.
 
 ## Observability

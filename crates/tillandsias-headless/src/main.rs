@@ -119,14 +119,7 @@ fn main() {
     let observatorium = user_args.iter().any(|a| a == "--observatorium");
     let cache_clear = user_args.iter().any(|a| a == "--cache-clear");
     let cache_verify = user_args.iter().any(|a| a == "--cache-verify");
-    // @trace spec:tillandsias-vault — Phase 6 promoted Vault to default. The
-    // historical `--with-vault` opt-in flag still parses (we route it to the
-    // same code path as a default init), `--without-vault` is the deprecated
-    // escape hatch, and `--legacy-keyring-secrets` re-enables the old
-    // podman-secret-from-keyring flow for backwards compatibility.
-    let with_vault = user_args.iter().any(|a| a == "--with-vault");
-    let without_vault = user_args.iter().any(|a| a == "--without-vault");
-    let legacy_keyring_secrets = user_args.iter().any(|a| a == "--legacy-keyring-secrets");
+
     let port_override = match user_args.iter().position(|a| a == "--port") {
         Some(i) => match user_args.get(i + 1).and_then(|p| p.parse::<u16>().ok()) {
             Some(port) => Some(port),
@@ -143,6 +136,9 @@ fn main() {
     let debug = debug || diagnostics;
     if debug {
         eprintln!("[tillandsias] version: {version}");
+        unsafe {
+            std::env::set_var("TILLANDSIAS_DEBUG", "1");
+        }
     }
 
     // USER PRIORITY (a) of the diagnostics-driven container-start
@@ -222,9 +218,6 @@ fn main() {
         "--cache-clear",
         "--cache-verify",
         "--listen-vsock",
-        "--with-vault",
-        "--without-vault",
-        "--legacy-keyring-secrets",
     ];
     if let Some(unsupported) = user_args
         .iter()
@@ -259,10 +252,9 @@ fn main() {
     });
 
     if github_login {
-        // @trace spec:tillandsias-vault, spec:secrets-management
-        // Phase 6: the default flow stores the token in Vault. The legacy
-        // podman-secret path is reachable via `--legacy-keyring-secrets`.
-        if let Err(e) = run_github_login(debug, legacy_keyring_secrets) {
+        // @trace spec:tillandsias-vault
+        // Phase 6: the default flow stores the token in Vault.
+        if let Err(e) = run_github_login(debug) {
             eprintln!("Error: {}", e);
             std::process::exit(1);
         }
@@ -290,43 +282,23 @@ fn main() {
             eprintln!("Error: {}", e);
             std::process::exit(1);
         }
-        // @trace spec:tillandsias-vault, spec:secrets-management
-        // Phase 6: Vault is the default secrets backend on Linux. The
-        // `--with-vault` opt-in flag is preserved as a no-op alias; the
-        // `--without-vault` escape hatch is honored only for debugging
-        // (logged as deprecated). The `--legacy-keyring-secrets` flag
-        // *additionally* keeps the keyring path live — Vault still comes
-        // up so containers minted with AppRole tokens succeed.
-        if with_vault && debug {
-            eprintln!("[tillandsias] --with-vault is now a no-op (Vault is the default backend)");
-        }
-        if !without_vault {
-            #[cfg(feature = "vault")]
-            {
-                if let Err(e) = vault_bootstrap::ensure_vault_running(debug) {
-                    eprintln!("Error bringing Vault up: {}", e);
-                    std::process::exit(1);
-                }
+
+        // @trace spec:tillandsias-vault
+        // Phase 6: Vault is the default secrets backend on Linux.
+        #[cfg(feature = "vault")]
+        {
+            if let Err(e) = vault_bootstrap::ensure_vault_running(debug) {
+                eprintln!("Error bringing Vault up: {}", e);
+                std::process::exit(1);
             }
-            #[cfg(not(feature = "vault"))]
-            {
-                if debug {
-                    eprintln!(
-                        "[tillandsias] vault feature not compiled; continuing without Vault (legacy keyring only)"
-                    );
-                }
+        }
+        #[cfg(not(feature = "vault"))]
+        {
+            if debug {
+                eprintln!("[tillandsias] vault feature not compiled; continuing without Vault");
             }
-        } else {
-            eprintln!(
-                "[tillandsias] --without-vault is DEPRECATED and will be removed in v0.3; \
-                 the keyring-only path remains available via `--legacy-keyring-secrets`"
-            );
         }
-        if legacy_keyring_secrets {
-            eprintln!(
-                "[tillandsias] --legacy-keyring-secrets is DEPRECATED and will be removed in v0.3"
-            );
-        }
+
         if status_check && let Err(e) = run_status_check(debug) {
             eprintln!("Error: {}", e);
             std::process::exit(1);
@@ -334,10 +306,19 @@ fn main() {
         if !opencode {
             return;
         }
-    } else if with_vault && debug {
+    }
+
+    if user_args
+        .iter()
+        .any(|a| a == "--without-vault" || a == "--legacy-keyring-secrets")
+    {
         eprintln!(
-            "[tillandsias] --with-vault has no effect outside --init (Vault is auto-started)"
+            "Error: --without-vault and --legacy-keyring-secrets have been REMOVED in v0.2.260602."
         );
+        eprintln!(
+            "Vault is now the mandatory secrets backend. See openspec/specs/tillandsias-vault/spec.md"
+        );
+        std::process::exit(1);
     }
 
     if status_check && !init {
@@ -564,19 +545,8 @@ fn print_usage(version: &str) {
     println!("  --force        Rebuild all images even if cached (use with --init)");
     println!("  --cache-verify Check cache integrity and report status");
     println!("  --cache-clear  Clear the initialization cache and build state");
-    println!(
-        "  --with-vault   DEPRECATED no-op: Vault is now the default secrets backend (Phase 6)"
-    );
-    println!(
-        "  --without-vault DEPRECATED escape hatch: skip launching the Vault container during --init"
-    );
-    println!(
-        "  --legacy-keyring-secrets DEPRECATED: keep the legacy keyring-based podman-secret flow alive"
-    );
     println!("  --status-check Verify services are online through a representative stack smoke");
-    println!(
-        "  --github-login Authenticate GitHub and store the token in Vault (or, with --legacy-keyring-secrets, a podman secret)"
-    );
+    println!("  --github-login Authenticate GitHub and store the token in Vault");
     println!("  --debug        Show command-level diagnostics and capture build logs");
     println!(
         "  --diagnostics  Stream real-time logs from all enclave containers (implies --debug)"
@@ -1028,7 +998,7 @@ fn image_build_args(image_name: &str, image_tag: &str) -> Vec<String> {
             .unwrap_or("latest");
         vec![
             "--build-arg".into(),
-            format!("CHROMIUM_CORE_IMAGE=tillandsias-chromium-core:v{core_version}"),
+            format!("CHROMIUM_CORE_IMAGE=localhost/tillandsias-chromium-core:v{core_version}"),
         ]
     } else {
         Vec::new()
@@ -1036,7 +1006,7 @@ fn image_build_args(image_name: &str, image_tag: &str) -> Vec<String> {
 }
 
 fn versioned_image_tag(image_name: &str, version: &str) -> String {
-    format!("tillandsias-{image_name}:v{version}")
+    format!("localhost/tillandsias-{image_name}:v{version}")
 }
 
 fn forge_image_tag(version: &str) -> String {
@@ -1187,7 +1157,7 @@ fn ca_bundle_needs_refresh(crt: &Path, key: &Path) -> bool {
 }
 
 fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
-    // @trace spec:secrets-management, spec:secret-rotation, spec:reverse-proxy-internal
+    // @trace spec:secret-rotation, spec:reverse-proxy-internal
     let certs_dir = PathBuf::from(CA_DIR);
     let crt = certs_dir.join("intermediate.crt");
     let key = certs_dir.join("intermediate.key");
@@ -1231,7 +1201,7 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
             accountability = true,
             category = "secrets",
             spec = "secret-rotation",
-            secret_type = "ca-certificate",
+            secret_name = "tillandsias-ca-cert",
             operation = "rotation_start",
             location = %crt.display(),
             "CA certificate rotation starting"
@@ -1271,7 +1241,7 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
                 accountability = true,
                 category = "secrets",
                 spec = "secret-rotation",
-                secret_type = "ca-certificate",
+                secret_name = "tillandsias-ca-cert",
                 operation = "rotation_failed",
                 location = %crt.display(),
                 error = %e,
@@ -1289,7 +1259,7 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
                         accountability = true,
                         category = "secrets",
                         spec = "secret-rotation",
-                        secret_type = "ca-certificate",
+                        secret_name = "tillandsias-ca-cert",
                         operation = "rotation_failed",
                         location = %crt.display(),
                         error = %e,
@@ -1304,7 +1274,7 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
                         accountability = true,
                         category = "secrets",
                         spec = "secret-rotation",
-                        secret_type = "ca-key",
+                        secret_name = "tillandsias-ca-key",
                         operation = "rotation_failed",
                         location = %key.display(),
                         error = %e,
@@ -1324,7 +1294,7 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
             accountability = true,
             category = "secrets",
             spec = "secret-rotation",
-            secret_type = "ca-certificate",
+            secret_name = "tillandsias-ca-cert",
             operation = "rotation_complete",
             location = %crt.display(),
             "CA certificate rotation completed successfully"
@@ -1463,7 +1433,7 @@ fn read_host_project_origin_url(project_path: &Path) -> Option<String> {
 /// `vault` feature is not compiled — the caller then falls back to the
 /// legacy `tillandsias-github-token` podman secret.
 ///
-/// @trace spec:tillandsias-vault, spec:secrets-management
+/// @trace spec:tillandsias-vault
 #[allow(unused_variables)]
 async fn mint_git_mirror_vault_token(project_name: &str, debug: bool) -> Option<String> {
     #[cfg(feature = "vault")]
@@ -1499,7 +1469,7 @@ async fn mint_git_mirror_vault_token(project_name: &str, debug: bool) -> Option<
 /// keyring mode: the container instead mounts `tillandsias-github-token`
 /// and the hook reads it directly from disk.
 ///
-/// @trace spec:tillandsias-vault, spec:secrets-management, spec:git-mirror-service
+/// @trace spec:tillandsias-vault, spec:git-mirror-service
 fn build_git_run_args(
     project_name: &str,
     certs_dir: &Path,
@@ -1602,6 +1572,18 @@ fn build_inference_run_args(
         "OLLAMA_DEBUG=1".into(),
         "--env".into(),
         "OLLAMA_KEEP_ALIVE=24h".into(),
+        "--env".into(),
+        "HTTP_PROXY=http://proxy:3128".into(),
+        "--env".into(),
+        "HTTPS_PROXY=http://proxy:3128".into(),
+        "--env".into(),
+        "http_proxy=http://proxy:3128".into(),
+        "--env".into(),
+        "https_proxy=http://proxy:3128".into(),
+        "--env".into(),
+        format!("NO_PROXY={ENCLAVE_NO_PROXY}"),
+        "--env".into(),
+        format!("no_proxy={ENCLAVE_NO_PROXY}"),
         "-v".into(),
         format!(
             "{}:/home/ollama/.ollama/models:rw",
@@ -2803,6 +2785,9 @@ fn build_image_with_logging(
     if let Some(stdout_reader) = stdout {
         let buf_reader = std::io::BufReader::new(stdout_reader);
         for line in buf_reader.lines().map_while(Result::ok) {
+            if _debug {
+                eprintln!("[tillandsias] build-{}: {}", image_name, line);
+            }
             // Write to log file if present
             if let Some(ref mut log) = log_handle {
                 let _ = writeln!(log, "{}", line);
@@ -3249,17 +3234,18 @@ fn podman_command() -> Command {
 /// image; the host only captures the token in memory and creates the Podman
 /// secret over stdin.
 ///
-/// @trace spec:gh-auth-script, spec:secrets-management, spec:podman-secrets-integration, spec:secret-rotation, spec:tillandsias-vault
-fn run_github_login(debug: bool, legacy_keyring_secrets: bool) -> Result<(), String> {
+/// @trace spec:gh-auth-script, spec:podman-secrets-integration, spec:secret-rotation, spec:tillandsias-vault
+fn run_github_login(debug: bool) -> Result<(), String> {
     require_desktop_user_session("tillandsias --github-login")?;
     report_runtime_lane("--github-login", debug);
 
-    // @trace spec:secret-rotation, spec:secrets-management
+    // @trace spec:secret-rotation
     info!(
         accountability = true,
         category = "secrets",
         spec = "secret-rotation",
         operation = "gh_auth_start",
+        secret_name = "tillandsias-github-token",
         "GitHub authentication and secret rotation starting"
     );
 
@@ -3339,52 +3325,38 @@ fn run_github_login(debug: bool, legacy_keyring_secrets: bool) -> Result<(), Str
         category = "secrets",
         spec = "secret-rotation",
         operation = "gh_auth_success",
+        secret_name = "tillandsias-github-token",
         "GitHub token retrieved successfully; initiating secret rotation"
     );
 
-    // @trace spec:tillandsias-vault, spec:secrets-management
-    // Phase 6: write to Vault by default. The legacy podman-secret path is
-    // available via --legacy-keyring-secrets and remains supported until
-    // v0.3.
+    // @trace spec:tillandsias-vault
+    // Phase 6: write to Vault exclusively.
     #[cfg(feature = "vault")]
-    let (vault_attempted, vault_failed): (bool, Option<String>) = {
-        if legacy_keyring_secrets {
-            (false, None)
-        } else {
-            match vault_bootstrap::write_github_token_to_vault(&token, debug) {
-                Ok(()) => {
-                    info!(
-                        accountability = true,
-                        category = "secrets",
-                        spec = "tillandsias-vault",
-                        operation = "gh_auth_vault_write",
-                        "GitHub token stored in Vault at secret/github/token"
-                    );
-                    (true, None)
-                }
-                Err(e) => (true, Some(e)),
+    {
+        match vault_bootstrap::write_github_token_to_vault(&token, debug) {
+            Ok(()) => {
+                info!(
+                    accountability = true,
+                    category = "secrets",
+                    spec = "tillandsias-vault",
+                    operation = "gh_auth_vault_write",
+                    secret_name = "tillandsias-github-token",
+                    "GitHub token stored in Vault at secret/github/token"
+                );
+            }
+            Err(e) => {
+                return Err(format!(
+                    "vault write failed: {e}\n\
+                     Hint: run `tillandsias --init` to bring Vault up."
+                ));
             }
         }
-    };
+    }
     #[cfg(not(feature = "vault"))]
-    let (vault_attempted, vault_failed): (bool, Option<String>) = (false, None);
-
-    if let Some(reason) = vault_failed {
-        return Err(format!(
-            "vault write failed: {reason}\n\
-             Hint: run `tillandsias --init` to bring Vault up, or pass \
-             `--legacy-keyring-secrets` to use the deprecated keyring path."
-        ));
+    {
+        return Err("vault feature not compiled; cannot store GitHub token".to_string());
     }
 
-    if !vault_attempted || legacy_keyring_secrets {
-        if vault_attempted && debug {
-            eprintln!(
-                "[tillandsias] also creating legacy podman secret (--legacy-keyring-secrets)"
-            );
-        }
-        create_github_podman_secret(&token, debug)?;
-    }
     drop(cleanup);
 
     info!(
@@ -3392,6 +3364,7 @@ fn run_github_login(debug: bool, legacy_keyring_secrets: bool) -> Result<(), Str
         category = "secrets",
         spec = "secret-rotation",
         operation = "gh_auth_complete",
+        secret_name = "tillandsias-github-token",
         "GitHub authentication and secret rotation completed successfully"
     );
 
@@ -3577,149 +3550,6 @@ impl Drop for LoginContainerCleanup {
         let mut command = podman_command();
         command.args(["rm", "-f", &self.name]);
         let _ = run_command_silent(command, self.debug);
-    }
-}
-
-fn create_github_podman_secret(token: &str, debug: bool) -> Result<(), String> {
-    // @trace spec:secrets-management, spec:secret-rotation, spec:podman-secrets-integration
-    info!(
-        accountability = true,
-        category = "secrets",
-        spec = "secret-rotation",
-        secret_type = "github-token",
-        operation = "rotation_start",
-        secret_name = "tillandsias-github-token",
-        "GitHub token secret rotation starting"
-    );
-
-    let mut remove = podman_command();
-    remove.args(["secret", "rm", "tillandsias-github-token"]);
-    if let Err(e) = run_command_silent(remove, debug) {
-        // Secret may not exist yet; this is not an error
-        debug!("Existing GitHub secret removal attempt: {}", e);
-    }
-
-    let mut child = podman_command()
-        .args([
-            "secret",
-            "create",
-            "--driver=file",
-            "tillandsias-github-token",
-            "-",
-        ])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| {
-            error!(
-                accountability = true,
-                category = "secrets",
-                spec = "secret-rotation",
-                secret_type = "github-token",
-                operation = "rotation_failed",
-                secret_name = "tillandsias-github-token",
-                error = %e,
-                "Failed to spawn podman secret create process"
-            );
-            format!("Failed to create GitHub Podman secret: {e}")
-        })?;
-
-    if debug {
-        eprintln!(
-            "[tillandsias] running: podman secret create --driver=file tillandsias-github-token -"
-        );
-    }
-
-    {
-        let stdin = child.stdin.as_mut().ok_or_else(|| {
-            error!(
-                accountability = true,
-                category = "secrets",
-                spec = "secret-rotation",
-                secret_type = "github-token",
-                operation = "rotation_failed",
-                secret_name = "tillandsias-github-token",
-                error = "stdin pipe not available",
-                "Failed to access podman secret create stdin"
-            );
-            "Failed to open podman secret stdin".to_string()
-        })?;
-        stdin.write_all(token.as_bytes()).map_err(|e| {
-            error!(
-                accountability = true,
-                category = "secrets",
-                spec = "secret-rotation",
-                secret_type = "github-token",
-                operation = "rotation_failed",
-                secret_name = "tillandsias-github-token",
-                error = %e,
-                "Failed to write token to podman secret stdin"
-            );
-            format!("Failed to write token to podman secret stdin: {e}")
-        })?;
-        stdin.write_all(b"\n").map_err(|e| {
-            error!(
-                accountability = true,
-                category = "secrets",
-                spec = "secret-rotation",
-                secret_type = "github-token",
-                operation = "rotation_failed",
-                secret_name = "tillandsias-github-token",
-                error = %e,
-                "Failed to finalize token input to podman secret"
-            );
-            format!("Failed to finish token input: {e}")
-        })?;
-    }
-    drop(child.stdin.take());
-
-    let output = child.wait_with_output().map_err(|e| {
-        error!(
-            accountability = true,
-            category = "secrets",
-            spec = "secret-rotation",
-            secret_type = "github-token",
-            operation = "rotation_failed",
-            secret_name = "tillandsias-github-token",
-            error = %e,
-            "Failed to wait for podman secret create completion"
-        );
-        format!("Failed waiting for podman secret create: {e}")
-    })?;
-    if output.status.success() {
-        info!(
-            accountability = true,
-            category = "secrets",
-            spec = "secret-rotation",
-            secret_type = "github-token",
-            operation = "rotation_complete",
-            secret_name = "tillandsias-github-token",
-            "GitHub token secret rotation completed successfully"
-        );
-        println!("GitHub token secret created: tillandsias-github-token");
-        Ok(())
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        error!(
-            accountability = true,
-            category = "secrets",
-            spec = "secret-rotation",
-            secret_type = "github-token",
-            operation = "rotation_failed",
-            secret_name = "tillandsias-github-token",
-            exit_code = output.status.code().unwrap_or(-1),
-            stderr = ?stderr,
-            "Podman secret create failed"
-        );
-        if stderr.is_empty() {
-            Err(format!(
-                "podman secret create exited with status {}",
-                output.status
-            ))
-        } else {
-            Err(stderr)
-        }
     }
 }
 
@@ -6801,21 +6631,121 @@ fn load_config(_path: &str) -> Result<(), String> {
 
 /// Phase 5, Task 21: Graceful shutdown with 30s timeout and SIGKILL fallback.
 /// @trace spec:linux-native-portable-executable, spec:graceful-shutdown, spec:signal-handling
-async fn graceful_shutdown_async() -> Result<(), String> {
-    // Phase 5, Task 23: Test signal handling with timeout
-    // Emit shutdown event
-    eprintln!("Starting graceful shutdown sequence");
+/// Graceful shutdown sequence for both headless and tray modes.
+///
+/// This function:
+/// 1. Stops all managed containers with 30s timeout via podman client.
+/// 2. Monitors container exit status.
+/// 3. Force-kills any remaining containers after timeout.
+/// 4. Cleanup ephemeral resources (sockets, mounts, logs).
+///
+/// @trace spec:graceful-shutdown, spec:app-lifecycle
+pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
+    debug!("starting graceful shutdown sequence");
 
-    // In a full implementation, this would:
-    // 1. Stop all containers with 30s timeout via podman client
-    // 2. Monitor container exit status
-    // 3. Force-kill any remaining containers after timeout
-    // 4. Cleanup secrets and ephemeral network resources
+    // 2. Stop all tillandsias-managed containers
+    let client = PodmanClient::new();
+    // Use a short timeout (500ms) for the availability check during shutdown.
+    let is_available = tokio::time::timeout(Duration::from_millis(500), client.is_available())
+        .await
+        .unwrap_or(false);
 
-    // Check if there are any tillandsias-managed containers running
-    // If not, return immediately (for testing and headless-only runs)
-    // If yes, wait up to 30 seconds for graceful shutdown
+    if is_available {
+        // Use a short timeout (1s) for the initial list operation.
+        match tokio::time::timeout(Duration::from_secs(1), client.list_containers("tillandsias-"))
+            .await
+        {
+            Ok(Ok(containers)) if !containers.is_empty() => {
+                let running_at_start: Vec<_> = containers
+                    .iter()
+                    .filter(|c| c.state == "running")
+                    .collect();
 
+                if !running_at_start.is_empty() {
+                    info!(
+                        count = running_at_start.len(),
+                        "stopping managed containers gracefully"
+                    );
+
+                    let mut stop_tasks = tokio::task::JoinSet::new();
+                    for container in running_at_start {
+                        let client = client.clone();
+                        let name = container.name.clone();
+                        stop_tasks.spawn(async move {
+                            debug!(container = %name, "sending stop signal");
+                            let _ = client.stop_container(&name, 30).await;
+                        });
+                    }
+
+                    // Wait for all stop tasks with a global timeout (30s stop + 5s buffer)
+                    let _ = tokio::time::timeout(Duration::from_secs(35), async {
+                        while stop_tasks.join_next().await.is_some() {}
+                    })
+                    .await;
+                }
+
+                // 3. Verification phase: poll for any remaining RUNNING containers and escalate to SIGKILL
+                // @trace spec:graceful-shutdown (Requirement: Force-kill fallback)
+                debug!("verifying all containers exited");
+                let start_poll = Instant::now();
+                while Instant::now().duration_since(start_poll) < Duration::from_secs(5) {
+                    match tokio::time::timeout(
+                        Duration::from_secs(1),
+                        client.list_containers("tillandsias-"),
+                    )
+                    .await
+                    {
+                        Ok(Ok(remaining)) => {
+                            let running: Vec<_> =
+                                remaining.into_iter().filter(|c| c.state == "running").collect();
+                            if running.is_empty() {
+                                debug!("verification clean: zero running managed containers remain");
+                                break;
+                            }
+
+                            // If we're near the end of the verification window, escalate to SIGKILL
+                            if Instant::now().duration_since(start_poll) > Duration::from_secs(4) {
+                                for c in running {
+                                    warn!(container = %c.name, "shutdown timeout exceeded; escalating to SIGKILL");
+                                    let _ = client.kill_container(&c.name, Some("KILL")).await;
+                                }
+                            }
+                        }
+                        _ => break,
+                    }
+                    tokio::time::sleep(Duration::from_millis(500)).await;
+                }
+            }
+            Ok(Ok(_)) => {
+                debug!("no managed containers found; skipping stop sequence");
+            }
+            _ => {
+                // Ignore errors during shutdown listing to ensure we reach the socket cleanup.
+            }
+        }
+    }
+
+    // 4. Cleanup ephemeral resources (sockets and logs)
+    // @trace spec:graceful-shutdown (Requirement: No stale sockets remain)
+    let socket_path = control_socket_host_dir().join("control.sock");
+    if socket_path.exists() {
+        debug!(path = %socket_path.display(), "removing control socket");
+        let _ = fs::remove_file(&socket_path);
+    }
+
+    // Cleanup temporary init logs in /tmp
+    // @trace spec:graceful-shutdown
+    if let Ok(entries) = fs::read_dir("/tmp") {
+        for entry in entries.flatten() {
+            if let Some(name) = entry.file_name().to_str() {
+                if name.starts_with("tillandsias-init-") && name.ends_with(".log") {
+                    let _ = fs::remove_file(entry.path());
+                }
+            }
+        }
+    }
+
+    // Use the exact string the signal_handling litmus and the spec expect.
     eprintln!("Graceful shutdown completed");
     Ok(())
 }
@@ -7163,32 +7093,6 @@ mod tests {
     }
 
     #[test]
-    fn git_run_args_emit_no_vault_env_in_legacy_path() {
-        // @trace spec:secrets-management — legacy fallback path
-        // When no vault token is supplied (e.g. vault feature disabled or
-        // bootstrap failed), the launcher MUST NOT inject vault env vars.
-        // The runtime layer's container_profile attaches the legacy
-        // github-token mount via a separate code path that gracefully
-        // tolerates a missing secret.
-        let certs = PathBuf::from("/tmp/ca");
-        let args = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None);
-
-        assert!(
-            !args.iter().any(|a| a.starts_with("VAULT_ADDR=")),
-            "VAULT_ADDR must not leak into legacy launches: {args:?}"
-        );
-        assert!(
-            !args.iter().any(|a| a.starts_with("VAULT_ROLE=")),
-            "VAULT_ROLE must not leak into legacy launches: {args:?}"
-        );
-        // No per-launch vault token secret should be mounted either.
-        assert!(
-            !args.iter().any(|a| a.contains("tillandsias-vault-token-")),
-            "no vault token podman secret should appear: {args:?}"
-        );
-    }
-
-    #[test]
     fn status_check_args_probe_proxy_git_and_inference_from_forge() {
         let args = build_status_check_forge_args(
             &PathBuf::from("/tmp/workspace"),
@@ -7200,7 +7104,7 @@ mod tests {
         assert!(has_arg(&args, "--rm"));
         assert!(has_arg(&args, "--entrypoint"));
         assert!(has_arg(&args, "/bin/bash"));
-        assert!(has_arg(&args, "tillandsias-forge:v1.2.3"));
+        assert!(has_arg(&args, "localhost/tillandsias-forge:v1.2.3"));
         assert!(
             args.iter()
                 .any(|arg| arg.contains("check_port proxy 3128 proxy"))
@@ -8009,13 +7913,13 @@ mod tests {
         // Test that versioned_image_tag produces the correct format.
         // @trace spec:init-command
         let tag = versioned_image_tag("forge", "0.1.260513");
-        assert_eq!(tag, "tillandsias-forge:v0.1.260513");
+        assert_eq!(tag, "localhost/tillandsias-forge:v0.1.260513");
 
         let tag = versioned_image_tag("proxy", "1.0.0");
-        assert_eq!(tag, "tillandsias-proxy:v1.0.0");
+        assert_eq!(tag, "localhost/tillandsias-proxy:v1.0.0");
 
         let tag = versioned_image_tag("chromium-framework", "0.2.100");
-        assert_eq!(tag, "tillandsias-chromium-framework:v0.2.100");
+        assert_eq!(tag, "localhost/tillandsias-chromium-framework:v0.2.100");
     }
 
     #[test]
@@ -8025,13 +7929,13 @@ mod tests {
         // @trace spec:init-command
         let args = image_build_args(
             "chromium-framework",
-            "tillandsias-chromium-framework:v1.0.0",
+            "localhost/tillandsias-chromium-framework:v1.0.0",
         );
 
         assert_eq!(args.len(), 2, "should have 2 args (--build-arg and value)");
         assert_eq!(args[0], "--build-arg");
         assert!(
-            args[1].contains("CHROMIUM_CORE_IMAGE=tillandsias-chromium-core:v1.0.0"),
+            args[1].contains("CHROMIUM_CORE_IMAGE=localhost/tillandsias-chromium-core:v1.0.0"),
             "should pass CHROMIUM_CORE_IMAGE with version: {}",
             args[1]
         );

@@ -1,0 +1,154 @@
+# @trace spec:proxy-container
+#
+# Drift-protection for the proxy container implementation across
+# images/proxy/{Containerfile, squid.conf, allowlist.txt,
+# entrypoint.sh}. spec:proxy-container has 12 requirements covering
+# image build, ssl-bump policy, dual-port architecture, allowlist,
+# CA chain injection, *.localhost enclave routing, privacy header
+# stripping, and lifecycle. The single existing binding
+# `litmus:enclave-isolation` (e2e, last_verified 2026-05-03) covered
+# the generic network-isolation invariant but no source-level pin.
+#
+# **Spec / implementation divergence flagged**: the spec § "SSL bump
+# policy and future activation" states the current policy is
+# splice-all. The actual `squid.conf` line 102 is `ssl_bump bump all`
+# (active interception, per the "transparent HTTPS caching across the
+# entire enclave + dev builds" comment block). This litmus pins what
+# the code does today (bump all), not the spec's outdated splice-all
+# claim — the spec text needs an update.
+name: litmus:proxy-container-shape
+spec: proxy-container
+phase: pre-build
+description: >
+  Pin the proxy container source surfaces: Containerfile (Alpine +
+  squid + UID 1000), squid.conf (dual-port, ssl_bump bump all,
+  *.localhost cache_peer router, allowlist dstdomain,
+  forwarded_for delete + via off), allowlist.txt (key OpenCode
+  egress domains + leading-dot Squid 6.x rule), entrypoint.sh
+  (cert init + podman-secret CA delivery).
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains images/proxy/Containerfile
+  - workspace contains images/proxy/squid.conf
+  - workspace contains images/proxy/allowlist.txt
+  - workspace contains images/proxy/entrypoint.sh
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "all 4 proxy files carry @trace spec:proxy-container"
+    # The proxy implementation is split across 4 files; each needs
+    # the spec-identity edge. A regression dropping any would
+    # silently demote that file out of the spec graph.
+    command: "for f in images/proxy/Containerfile images/proxy/squid.conf images/proxy/allowlist.txt images/proxy/entrypoint.sh; do grep -Fq '@trace spec:proxy-container' \"$f\" || { echo \"FAIL: $f missing @trace\"; exit 1; }; done && echo \"ok: 4 proxy files trace spec:proxy-container\""
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Containerfile: Alpine 3.20 base + squid/openssl/bash + non-root proxy UID 1000"
+    # Spec § "Proxy container image versioned and built via pipeline"
+    # Scenarios: Alpine-based with squid + SSL support; runs as
+    # non-root `proxy` UID 1000. A regression to a different base or
+    # root user would silently widen the attack surface.
+    command: "grep -F 'FROM docker.io/library/alpine:3.20' images/proxy/Containerfile && grep -F 'apk add --no-cache squid openssl bash' images/proxy/Containerfile && grep -F 'adduser -D -u 1000' images/proxy/Containerfile"
+    timeout_ms: 3000
+    expected_behavior: "alpine:3.20"
+
+  - step: "squid.conf: dual-port architecture (3128 strict + 3129 permissive) with ssl-bump on both"
+    # Spec § "Dual-port architecture" mandates 3128 (strict
+    # allowlist) + 3129 (permissive) both with ssl-bump configured.
+    # A regression to single-port or non-ssl-bump would silently
+    # break the spec's port-determines-policy contract.
+    command: "grep -F 'http_port 3128 ssl-bump' images/proxy/squid.conf && grep -F 'http_port 3129 ssl-bump' images/proxy/squid.conf"
+    timeout_ms: 3000
+    expected_behavior: "ssl-bump"
+
+  - step: "squid.conf: ssl_bump peek+stare+bump policy (current mode: BUMP all)"
+    # Spec § "SSL bump policy and future activation" claims splice-
+    # all is the current mode, but the actual squid.conf (line 102)
+    # uses `ssl_bump bump all` — active interception with caching
+    # per the inline "transparent HTTPS caching across the entire
+    # enclave + dev builds" comment. Pin the 3 ssl_bump lines that
+    # form the peek→stare→bump pipeline; a regression to a
+    # different terminal verdict (splice/terminate) would silently
+    # change the trust model.
+    command: "grep -F 'ssl_bump peek all' images/proxy/squid.conf && grep -F 'ssl_bump stare all' images/proxy/squid.conf && grep -F 'ssl_bump bump all' images/proxy/squid.conf"
+    timeout_ms: 3000
+    expected_behavior: "ssl_bump bump all"
+
+  - step: "squid.conf: allowlist sourced from /etc/squid/allowlist.txt"
+    # Spec § "Generous developer-focused domain allowlist" mandates
+    # /etc/squid/allowlist.txt is the canonical source. The
+    # dstdomain ACL syntax is the integration point; a refactor to
+    # an inline allowlist would silently lose the maintenance
+    # workflow.
+    command: "grep -F 'acl allowlist dstdomain \"/etc/squid/allowlist.txt\"' images/proxy/squid.conf"
+    timeout_ms: 3000
+    expected_behavior: "allowlist dstdomain"
+
+  - step: "squid.conf: *.localhost enclave routing via cache_peer router"
+    # Spec § "Forward proxy recognises *.localhost as enclave-
+    # internal" mandates an `acl localhost_subdomain dstdomain
+    # .localhost` + a `cache_peer router parent` directive. A
+    # regression breaking either would silently leak *.localhost
+    # to external DNS (RFC 6761 violation).
+    command: "grep -F 'acl localhost_subdomain dstdomain .localhost' images/proxy/squid.conf && grep -F 'cache_peer router parent' images/proxy/squid.conf && grep -F 'never_direct allow localhost_subdomain' images/proxy/squid.conf"
+    timeout_ms: 3000
+    expected_behavior: "never_direct"
+
+  - step: "squid.conf: forwarded_for delete + via off (Req Privacy and identity)"
+    # Spec § "Privacy and identity" mandates Forwarded /
+    # X-Forwarded-For / Via headers MUST NOT reach origin servers.
+    # Pinning both directives by literal so a regression to
+    # `forwarded_for on` or default Via would silently leak proxy
+    # identity.
+    command: "grep -F 'forwarded_for delete' images/proxy/squid.conf && grep -F 'via off' images/proxy/squid.conf"
+    timeout_ms: 3000
+    expected_behavior: "via off"
+
+  - step: "allowlist.txt: OpenCode default egress footprint covered (.models.dev + .openrouter.ai + .helicone.ai + .anthropic.com)"
+    # Spec § "Allowlist covers OpenCode's default egress footprint"
+    # mandates at minimum these 4 domains. The leading-dot form is
+    # also pinned by Squid 6.x's single-entry rule (§ "Allowlist
+    # entries follow Squid 6.x single-entry rule").
+    command: "grep -Fq '.models.dev' images/proxy/allowlist.txt && grep -Fq '.openrouter.ai' images/proxy/allowlist.txt && grep -Fq '.helicone.ai' images/proxy/allowlist.txt && grep -Fq '.anthropic.com' images/proxy/allowlist.txt && echo \"ok: 4 OpenCode-default domains present\""
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "entrypoint.sh: squid -z cache init + security_file_certgen + /run/secrets/tillandsias-ca-cert read"
+    # Spec § "Ephemeral CA chain (per-launch generation)" Scenario
+    # "Cert generation on proxy launch" — the cert generator
+    # binary `security_file_certgen` initialises the ssl_db; the
+    # CA cert is delivered via the podman secret. Pin the 3
+    # surfaces: cache init, certgen tooling, podman-secret read.
+    command: "grep -F 'squid -z' images/proxy/entrypoint.sh && grep -F 'security_file_certgen' images/proxy/entrypoint.sh && grep -F '/run/secrets/tillandsias-ca-cert' images/proxy/entrypoint.sh"
+    timeout_ms: 3000
+    expected_behavior: "security_file_certgen"
+
+observability:
+  traces:
+    - "@trace spec:proxy-container"
+    - "@trace spec:reverse-proxy-internal"
+    - "@trace spec:podman-secrets-integration"
+  expected_log: "proxy Containerfile + squid.conf + allowlist + entrypoint surfaces pinned"
+  log_fields:
+    spec: "proxy-container"
+    test: "proxy-container-shape"
+    artifact: "images/proxy/{Containerfile,squid.conf,allowlist.txt,entrypoint.sh}"
+
+rollback:
+  on_failure: >
+    A `spec:proxy-container` source surface drifted. Restore all 4
+    `@trace spec:proxy-container` markers; Alpine 3.20 base + apk
+    install of squid/openssl/bash + UID-1000 proxy user;
+    `http_port 3128 ssl-bump` + `http_port 3129 ssl-bump`;
+    `ssl_bump peek all` + `ssl_bump stare all` + `ssl_bump bump all`
+    pipeline; `acl allowlist dstdomain "/etc/squid/allowlist.txt"`;
+    `acl localhost_subdomain dstdomain .localhost` +
+    `cache_peer router parent` + `never_direct allow localhost_
+    subdomain`; `forwarded_for delete` + `via off`; the 4 OpenCode
+    egress allowlist entries (`.models.dev`, `.openrouter.ai`,
+    `.helicone.ai`, `.anthropic.com`); `squid -z` cache init +
+    `security_file_certgen` + `/run/secrets/tillandsias-ca-cert`
+    read in entrypoint.sh.
+  command: "grep -nE '@trace|FROM|squid|http_port|ssl_bump|allowlist|localhost_subdomain|forwarded_for|via off|tillandsias-ca-cert|security_file_certgen' images/proxy/Containerfile images/proxy/squid.conf images/proxy/entrypoint.sh | head -30"

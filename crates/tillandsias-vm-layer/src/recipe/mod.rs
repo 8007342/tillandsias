@@ -292,7 +292,7 @@ pub struct BaseImage {
 }
 
 /// `[output]` block. Per D6 the SHA map is keyed by `<arch>` or
-/// `<arch>.<format>` (e.g. `"aarch64.img"`, `"x86_64.tar"`).
+/// `<arch>.<format>` (e.g. `"aarch64.qcow2"`, `"x86_64.tar"`).
 #[derive(Debug, Clone, Default, Deserialize)]
 pub struct OutputSpec {
     #[serde(default)]
@@ -510,7 +510,7 @@ mod tests {
         assert!(m.base_for_arch("riscv64").is_none());
         // D6 format-matrix keys.
         assert_eq!(m.expected_sha("x86_64.tar"), Some("aaaa"));
-        assert_eq!(m.expected_sha("aarch64.img"), Some("cccc"));
+        assert_eq!(m.expected_sha("aarch64.qcow2"), Some("cccc"));
         assert_eq!(m.expected_sha("nope"), None);
     }
 
@@ -534,12 +534,12 @@ mod tests {
 
     /// @trace plan/issues/cross-host-blocker-roundup-2026-05-25.md l9
     #[test]
-    fn artifact_url_substitutes_macos_img_format() {
+    fn artifact_url_substitutes_macos_qcow2_format() {
         let m = Manifest::from_toml(FIXTURE_MANIFEST).expect("parse fixture");
         let url = m
-            .artifact_url("aarch64", "img", "v0.2.260526.1")
+            .artifact_url("aarch64", "qcow2", "v0.2.260526.1")
             .expect("template resolves");
-        assert!(url.contains("aarch64.img"), "got {url}");
+        assert!(url.contains("aarch64.qcow2"), "got {url}");
         assert!(url.contains("v0.2.260526.1"), "got {url}");
     }
 

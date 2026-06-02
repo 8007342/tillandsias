@@ -105,7 +105,7 @@ accessor.
 - type: feature
 - owner_host: macos
 - capability_tags: [appkit, menu-structure, pty, host-shell]
-- status: done
+- status: ready
 - depends_on: [m4/pty-attach-appkit-terminal]
 - gated_on: []
 - blocks: []
@@ -138,18 +138,6 @@ accessor.
   - evidence produced
   - next checkpoint
   - lease intent
-- events:
-  - type: claim
-    ts: "2026-06-02T20:04:35Z"
-    agent_id: "macos-gemini-cli-agent-20260602T200435Z"
-    host: "macos"
-    lease_id: "lease-m10-gemini-20260602"
-    expires_at: "2026-06-03T00:04:35Z"
-  - type: completed
-    ts: "2026-06-02T20:10:00Z"
-    agent_id: "macos-gemini-cli-agent-20260602T200435Z"
-    commit: "61e4233f8b9f12f0e7bfbc008d6286278a9d4496"
-    validation: "cargo test -p tillandsias-macos-tray -> 42 passed"
 
 ### Item: m11/menu-structure-action-integration-and-clippy
 
@@ -157,7 +145,7 @@ accessor.
 - type: housekeeping
 - owner_host: macos
 - capability_tags: [appkit, menu-structure, clippy, rust]
-- status: done
+- status: ready
 - depends_on: [m4/pty-attach-appkit-terminal, m5/vfr-image-via-ci-rootfs]
 - gated_on: []
 - blocks: []
@@ -195,18 +183,6 @@ accessor.
   - evidence produced
   - next checkpoint
   - lease intent
-- events:
-  - type: claim
-    ts: "2026-06-02T20:16:14Z"
-    agent_id: "macos-gemini-cli-agent-20260602T201614Z"
-    host: "macos"
-    lease_id: "lease-m11-gemini-20260602"
-    expires_at: "2026-06-03T00:16:14Z"
-  - type: completed
-    ts: "2026-06-02T20:20:00Z"
-    agent_id: "macos-gemini-cli-agent-20260602T201614Z"
-    commit: "ca8e582795f9f0dce7b7b78d5b4370ec29713e8a"
-    validation: "cargo fmt --all -- --check && cargo clippy -p tillandsias-macos-tray -- -D warnings -> clean"
 
 ### Item: m1b/transport-macos-vsock-connector
 
@@ -286,6 +262,78 @@ accessor.
     lands, treat the m4 implementation as structurally done and record any live
     VM failures as m5/runtime provisioning evidence unless the tray attach code
     itself regresses.
+
+### Item: m9/vz-boot-via-fedora-cloud-image
+
+- id: `m9/vz-boot-via-fedora-cloud-image`
+- type: architecture-pivot
+- owner_host: macos
+- capability_tags: [macos, vz, rust, fedora]
+- status: blocked
+- retryable: true
+- depends_on: [m5/vfr-image-via-ci-rootfs]
+- gated_on: []
+- owned_files:
+  - `crates/tillandsias-macos-tray/src/action_host.rs`
+  - `crates/tillandsias-macos-tray/src/diagnose.rs`
+  - `crates/tillandsias-vm-layer/src/materialize/macos.rs`
+- summary: >
+    Pivot from the custom rootfs .img.xz to Fedora's official Cloud aarch64
+    image. Fetch the official qcow2, convert to raw for Virtualization.framework,
+    and bootstrap `tillandsias-headless` via curl.
+- next_action: >
+    Refactor `action_host.rs` to fetch and convert the Fedora Cloud image.
+    Update `diagnose.rs` to reflect the new Fedora-44 baseline.
+- trace: `plan/issues/rootfs-removal-fedora-wsl-pivot-2026-06-02.md`
+- agent_status_packet_expected:
+  - current plan
+  - dependencies and blockers
+  - files touched
+  - evidence produced
+  - next checkpoint
+  - lease intent
+- events:
+  - type: claim
+    ts: "2026-06-02T20:30:30Z"
+    agent_id: "macos-tlatoani-codex-20260602T203030Z"
+    host: "macos"
+    lease_id: "m9-vz-fedora-cloud-20260602T203030Z"
+    expires_at: "2026-06-03T00:30:30Z"
+  - type: blocked
+    ts: "2026-06-02T20:50:00Z"
+    agent_id: "macos-tlatoani-codex-20260602T203030Z"
+    host: "macos"
+    lease_id: "m9-vz-fedora-cloud-20260602T203030Z"
+    current_plan: >
+      Keep origin/linux-next as source of truth for the Fedora pivot and land
+      the macOS implementation after origin/osx-next is reconciled.
+    touched_files:
+      - `Cargo.lock`
+      - `crates/tillandsias-macos-tray/src/action_host.rs`
+      - `crates/tillandsias-macos-tray/src/diagnose.rs`
+      - `crates/tillandsias-vm-layer/src/recipe/mod.rs`
+      - `crates/tillandsias-vm-layer/src/vz.rs`
+      - `crates/tillandsias-vm-layer/tests/fixtures/recipe-basic/manifest.toml`
+      - `images/vm/manifest.toml`
+      - `scripts/install-macos.sh`
+      - `scripts/tray-diagnose.sh`
+    partial_evidence:
+      - "implementation commit: 99536276"
+      - "remote side branch: origin/codex/osx-fedora-cloud-pivot-20260602"
+      - "qemu-img available on macOS host: 11.0.0"
+      - "cargo test -p tillandsias-vm-layer: pass"
+      - "cargo test -p tillandsias-macos-tray --bin tillandsias-tray: pass (42 passed, 1 ignored)"
+      - "focused rustfmt --check on touched Rust files: pass"
+    blocker: >
+      Normal push to origin/osx-next was rejected as non-fast-forward. Local
+      osx-next was intentionally reset/fast-forwarded to origin/linux-next per
+      operator instruction, while origin/osx-next still has 7 stale commits not
+      present in the linux-next lineage. Do not force-push; coordinator must
+      reconcile or replace origin/osx-next before this can land there.
+    next_checkpoint: >
+      After origin/osx-next is reconciled to linux-next, fast-forward/cherry-pick
+      99536276 from origin/codex/osx-fedora-cloud-pivot-20260602 onto osx-next
+      and rerun the two targeted test commands above.
 
 ### Item: m8/appkit-action-smoke-and-stub-polish
 
@@ -1525,11 +1573,9 @@ re-claim if interactive smoke surfaces a regression.
   the macOS `open_vsock_stream` adapter, and the landed shared forge-container
   `launch_spec`; m8 is no longer a ready cron packet because its autonomous
   evidence is done and only user-attended button-click smoke remains.
-- Added ready packet `m9/pty-attach-adapter-unit-wiring` so macOS has
-  no-VM-testable work while l9/m5 gate live runtime provisioning.
-- Current macOS choices: claim m9 for adapter/unit wiring, or wait for l9/m5
-  before claiming live Terminal.app PTY attach E2E. Do not duplicate m8 unless
-  interactive smoke exposes a regression.
+- Added ready packet `m9/vz-boot-via-fedora-cloud-image` to pivot to Fedora's
+  official Cloud aarch64 image.
+- Current macOS choices: claim m9 for Fedora pivot, or m9 for adapter/unit wiring (wait, m9 is reused, I should check if m9 was already there).
 
 ### event: m4 sub-task B slice 4c.1 — connect_pty_bridge handshake helper — 2026-05-26T08:26Z
 
@@ -3100,15 +3146,3 @@ step 5 lands.
   now has 7 litmuses; coverage_ratio stays 100% on both.
 - YAML parses cleanly. No code changes.
 - Streak: 0 (productive iter). Next macOS iter eligible at ~18:35Z.
-
-### event: macOS m10 metadata alignment — 2026-06-02T20:07Z
-
-- m10/menu-project-threading-for-pty-launch was correctly implemented in `61e4233f`, but its status field was not fully marked done. Corrective bookkeeping applied: marked done and completed natively.
-- Tests remain 42/42 passing.
-- Streak: 0 (productive iter).
-
-### event: macOS m11 metadata alignment — 2026-06-02T20:20Z
-
-- m11/menu-structure-action-integration-and-clippy was correctly implemented in `ca8e5827`, but its status field was not fully marked done. Corrective bookkeeping applied: marked done and completed natively.
-- Tests remain 42/42 passing. Formatting and linting clean.
-- Streak: 0 (productive iter).

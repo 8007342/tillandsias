@@ -16,8 +16,6 @@
 //!
 //! @trace plan/issues/tray-convergence-coordination.md (F2 — Windows transport)
 
-#![allow(dead_code)]
-
 /// The Linux kernel's vsock↔HvSocket service-GUID template suffix. A Linux
 /// vsock port `P` maps to the Hyper-V service GUID
 /// `PPPPPPPP-FACB-11E6-BD58-64006A7986D3`, where the leading 32 bits are the

@@ -50,10 +50,14 @@ reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-feature
 uuid = { version = "1", features = ["v4", "serde"] }
 regex = "1"
 serde_json = "1"
+keyring = "3"
 tokio-vsock = "0.6"
 sha2 = "0.10"
 embed-resource = "3"
 tempfile = "3"
+tar = "0.4"
+flate2 = "1.0"
+xz2 = "0.1"
 
 # Internal crates
 tillandsias-browser-mcp = { path = "crates/tillandsias-browser-mcp" }

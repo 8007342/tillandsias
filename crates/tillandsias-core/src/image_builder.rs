@@ -4,6 +4,8 @@
 ///
 /// @trace spec:user-runtime-lifecycle
 ///
+/// @trace spec:fix-windows-image-routing
+///
 /// The ImageBuilder trait defines the contract between Rust code (tray app)
 /// and shell test harnesses (Layer 3). Both use the same build logic but with
 /// different exit conditions:
@@ -15,6 +17,53 @@
 /// used in production, captures artifacts, and validates output.
 use std::collections::HashMap;
 use tracing::{debug, info, warn};
+
+/// Resolve the Containerfile path + build context dir for a given
+/// image type. Per `spec:fix-windows-image-routing` "Image Build
+/// Centralized in Helper": each image-name routes to its
+/// type-specific Containerfile so a regression that points two
+/// image types at the same file (e.g. both `proxy` and `git`
+/// using `images/default/Containerfile`) is impossible by
+/// construction — there's exactly one match arm per type.
+///
+/// Returns `(containerfile_path, context_dir)` where:
+///   * `containerfile_path` is the absolute path to the Containerfile
+///     under `<root_dir>/images/<type-specific-subdir>/Containerfile`.
+///   * `context_dir` is the parent directory (the build context
+///     podman uses for COPY/ADD operations).
+///
+/// Unknown image types return `ImageBuilderError::ContainerfileNotFound`
+/// with the unknown name in the message. Existence of the
+/// Containerfile is NOT checked here — callers (e.g.
+/// `prepare_build`) verify reachability separately so error
+/// surfaces stay specific to their failure mode.
+///
+/// @trace spec:fix-windows-image-routing
+pub(crate) fn image_build_paths(
+    root_dir: &str,
+    image_name: &str,
+) -> Result<(String, String), ImageBuilderError> {
+    let containerfile_path = match image_name {
+        "forge" => format!("{root_dir}/images/default/Containerfile"),
+        "proxy" => format!("{root_dir}/images/proxy/Containerfile"),
+        "git" => format!("{root_dir}/images/git/Containerfile"),
+        "inference" => format!("{root_dir}/images/inference/Containerfile"),
+        "web" => format!("{root_dir}/images/web/Containerfile"),
+        _ => {
+            return Err(ImageBuilderError::ContainerfileNotFound(format!(
+                "Unknown image type: {image_name}"
+            )));
+        }
+    };
+    let context_dir = std::path::Path::new(&containerfile_path)
+        .parent()
+        .and_then(|p| p.to_str())
+        .map(|s| s.to_string())
+        .ok_or_else(|| {
+            ImageBuilderError::Io("Containerfile path has no UTF-8 parent".to_string())
+        })?;
+    Ok((containerfile_path, context_dir))
+}
 
 // ============================================================================
 // Core Types
@@ -209,18 +258,7 @@ impl PodmanDirect {
         image_name: &str,
         image_tag: &str,
     ) -> Result<PodmanCall, ImageBuilderError> {
-        let containerfile_path = match image_name {
-            "forge" => format!("{}/images/default/Containerfile", self.root_dir),
-            "proxy" => format!("{}/images/proxy/Containerfile", self.root_dir),
-            "git" => format!("{}/images/git/Containerfile", self.root_dir),
-            "inference" => format!("{}/images/inference/Containerfile", self.root_dir),
-            "web" => format!("{}/images/web/Containerfile", self.root_dir),
-            _ => {
-                return Err(ImageBuilderError::ContainerfileNotFound(format!(
-                    "Unknown image type: {image_name}"
-                )));
-            }
-        };
+        let (containerfile_path, _context_dir) = image_build_paths(&self.root_dir, image_name)?;
 
         if !std::path::Path::new(&containerfile_path).exists() {
             return Err(ImageBuilderError::ContainerfileNotFound(containerfile_path));
@@ -585,6 +623,73 @@ mod tests {
                 call.args[idx + 1]
             );
             assert!(call.cwd.ends_with(&root_str));
+        }
+    }
+
+    /// `image_build_paths` is the canonical routing helper that
+    /// `spec:fix-windows-image-routing` "Image Build Centralized in
+    /// Helper" mandates. It returns `(containerfile_path,
+    /// context_dir)` for each known image type. Existence of the
+    /// Containerfile is NOT verified here — callers do that
+    /// separately so the error mode stays specific (helper says
+    /// "unknown type"; caller says "type known but file missing").
+    ///
+    /// @trace spec:fix-windows-image-routing
+    #[test]
+    fn image_build_paths_routes_each_known_type_to_its_containerfile() {
+        let cases = [
+            ("forge", "/images/default/Containerfile", "/images/default"),
+            ("proxy", "/images/proxy/Containerfile", "/images/proxy"),
+            ("git", "/images/git/Containerfile", "/images/git"),
+            (
+                "inference",
+                "/images/inference/Containerfile",
+                "/images/inference",
+            ),
+            ("web", "/images/web/Containerfile", "/images/web"),
+        ];
+        for (image_name, expected_cf_suffix, expected_ctx_suffix) in cases {
+            let (cf, ctx) = image_build_paths("/test-root", image_name)
+                .expect("each known type routes successfully");
+            assert!(
+                cf.ends_with(expected_cf_suffix),
+                "containerfile for {image_name}: expected …{expected_cf_suffix}, got {cf}"
+            );
+            assert!(
+                ctx.ends_with(expected_ctx_suffix),
+                "context dir for {image_name}: expected …{expected_ctx_suffix}, got {ctx}"
+            );
+            assert_eq!(
+                cf,
+                format!("{}/Containerfile", ctx),
+                "containerfile must equal context_dir/Containerfile (parent invariant)"
+            );
+        }
+    }
+
+    /// Unknown image types yield `ContainerfileNotFound` with the
+    /// requested name in the message. This is the spec-mandated
+    /// error mode for the Windows direct-podman build path to
+    /// surface "you asked for a type the helper doesn't know about"
+    /// distinctly from "type known but Containerfile missing".
+    ///
+    /// @trace spec:fix-windows-image-routing
+    #[test]
+    fn image_build_paths_rejects_unknown_image_type_with_named_error() {
+        let err = image_build_paths("/test-root", "unknown-flavour")
+            .expect_err("unknown type must error");
+        match err {
+            ImageBuilderError::ContainerfileNotFound(msg) => {
+                assert!(
+                    msg.contains("unknown-flavour"),
+                    "error message must name the unknown type; got {msg}"
+                );
+                assert!(
+                    msg.contains("Unknown image type"),
+                    "error must distinguish from 'file missing'; got {msg}"
+                );
+            }
+            other => panic!("expected ContainerfileNotFound, got {other:?}"),
         }
     }
 }

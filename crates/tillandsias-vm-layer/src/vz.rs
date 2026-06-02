@@ -3,7 +3,7 @@
 //! Uses `objc2-virtualization` to construct a `VZVirtualMachineConfiguration`
 //! with virtio-fs (for `~/src/` passthrough), virtio-vsock (for the control
 //! wire), and a virtio-console for early-boot diagnostics. Boots a Fedora
-//! guest from a pre-extracted rootfs image.
+//! guest from a raw disk image.
 //!
 //! macOS is the only target where the real VZ shell-out body will land
 //! (Phase 5). On other targets this module compiles with a link stub that
@@ -108,8 +108,70 @@ impl VzRuntime {
     /// `provision` for the idempotency short-circuit.
     pub fn is_provisioned(&self) -> bool {
         self.rootfs_image_path().exists()
-            && self.kernel_path().exists()
-            && self.initrd_path().exists()
+    }
+
+    /// Fetch Fedora's official Cloud qcow2 image and convert it to the
+    /// raw disk image Virtualization.framework boots.
+    ///
+    /// @trace plan/issues/rootfs-removal-fedora-wsl-pivot-2026-06-02.md
+    ///        m9/vz-boot-via-fedora-cloud-image
+    #[cfg(all(feature = "recipe", feature = "download"))]
+    pub async fn fetch_fedora_cloud_image(
+        &self,
+        manifest: &crate::recipe::Manifest,
+        on_phase: &(dyn Fn(&str) + Send + Sync),
+    ) -> Result<(), String> {
+        use crate::fetch::{RemoteArtifact, download_verified};
+
+        let arch = if cfg!(target_arch = "aarch64") {
+            "aarch64"
+        } else {
+            "x86_64"
+        };
+        let format = "qcow2";
+        let key = format!("{arch}.{format}");
+        let url = manifest
+            .artifact_url(arch, format, "fedora-44")
+            .ok_or_else(|| {
+                format!("manifest has no [output].artifact_url_template; cannot resolve {key} URL")
+            })?;
+        let sha256 = manifest
+            .expected_sha(&key)
+            .ok_or_else(|| {
+                format!(
+                    "manifest [output.expected_rootfs_sha] missing key {key:?}; \
+                     cannot verify Fedora Cloud image"
+                )
+            })?
+            .to_string();
+
+        if let Some(parent) = self.rootfs_image_path().parent() {
+            std::fs::create_dir_all(parent)
+                .map_err(|e| format!("mkdir {}: {e}", parent.display()))?;
+        }
+
+        let qcow2_dest = self.rootfs_image_path().with_extension("qcow2");
+        let artifact = RemoteArtifact {
+            url,
+            sha256,
+            bytes: None,
+        };
+        on_phase("Downloading Fedora Cloud image");
+        download_verified(&artifact, &qcow2_dest, &|downloaded, total| {
+            if let Some(total_bytes) = total {
+                let percent = ((downloaded * 100) / total_bytes.max(1)) as u64;
+                on_phase(&format!(
+                    "Downloading Fedora Cloud image {}/{} MB ({}%)",
+                    downloaded / 1_000_000,
+                    total_bytes / 1_000_000,
+                    percent
+                ));
+            }
+        })
+        .await
+        .map_err(|e| e.to_string())?;
+
+        convert_qcow2_to_raw(&qcow2_dest, &self.rootfs_image_path(), on_phase)
     }
 
     /// Fetch the recipe-published rootfs artifact (per l9 URL contract)
@@ -256,6 +318,44 @@ impl VzRuntime {
 
         crate::transport_macos::VsockStream::from_vsock_fd(fd).map_err(OpenVsockError::Stream)
     }
+}
+
+#[cfg(all(feature = "recipe", feature = "download"))]
+fn convert_qcow2_to_raw(
+    qcow2_path: &std::path::Path,
+    raw_dest: &std::path::Path,
+    on_phase: &(dyn Fn(&str) + Send + Sync),
+) -> Result<(), String> {
+    on_phase("Converting Fedora Cloud image");
+    let raw_part = raw_dest.with_extension("img.partial");
+    let status = std::process::Command::new("qemu-img")
+        .arg("convert")
+        .arg("-f")
+        .arg("qcow2")
+        .arg("-O")
+        .arg("raw")
+        .arg(qcow2_path)
+        .arg(&raw_part)
+        .status()
+        .map_err(|e| {
+            format!(
+                "spawn qemu-img: {e} (install qemu, e.g. `brew install qemu`, to convert Fedora Cloud qcow2)"
+            )
+        })?;
+    if !status.success() {
+        let _ = std::fs::remove_file(&raw_part);
+        return Err(format!("qemu-img convert failed: exit {status}"));
+    }
+    std::fs::rename(&raw_part, raw_dest).map_err(|e| {
+        let _ = std::fs::remove_file(&raw_part);
+        format!(
+            "rename {} -> {}: {e}",
+            raw_part.display(),
+            raw_dest.display()
+        )
+    })?;
+    on_phase("Fedora Cloud image ready");
+    Ok(())
 }
 
 /// Fetch the xz-compressed asset at `xz_url` to `xz_temp_dest`,
@@ -1153,18 +1253,11 @@ mod tests {
 
     /// @trace spec:vm-provisioning-lifecycle.provision.idempotency@v1
     #[test]
-    fn provisioned_check_requires_all_three_artifacts() {
+    fn provisioned_check_requires_root_disk() {
         let tmp = tempfile::tempdir().unwrap();
         let rt = VzRuntime::new(7, tmp.path().to_path_buf());
         std::fs::write(rt.rootfs_image_path(), b"").unwrap();
-        assert!(!rt.is_provisioned(), "rootfs alone is not enough");
-        std::fs::write(rt.kernel_path(), b"").unwrap();
-        assert!(!rt.is_provisioned(), "rootfs+kernel is not enough");
-        std::fs::write(rt.initrd_path(), b"").unwrap();
-        assert!(
-            rt.is_provisioned(),
-            "all three artifacts make it provisioned"
-        );
+        assert!(rt.is_provisioned(), "raw Fedora Cloud disk is enough");
     }
 
     /// @trace spec:macos-native-tray.lifecycle.vz-guest@v1

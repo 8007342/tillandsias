@@ -12,8 +12,8 @@
 # `local-ci.sh --ci-mode` script. None of these are currently
 # grep-pinned.
 #
-# Plus: both release.yml AND recipe-publish.yml are
-# workflow_dispatch-only by design — a regression flipping either
+# Plus: release.yml is
+# workflow_dispatch-only by design — a regression flipping it
 # to push-on-tag would silently break the manual-trigger contract
 # the merge-to-main-and-release skill (28ea3023) depends on.
 #
@@ -22,8 +22,8 @@ name: litmus:ci-release-toolchain-shape
 spec: ci-release
 phase: pre-build
 description: >
-  Pin musl-tools install + workflow_dispatch-only triggers on both
-  release.yml + recipe-publish.yml + the static convergence
+  Pin musl-tools install + workflow_dispatch-only triggers on
+  release.yml + the static convergence
   workflow + sibling local-ci.sh / github-actions-convergence.sh
   scripts. Companion to the existing musl-binary-policy litmus.
 severity: medium
@@ -31,7 +31,6 @@ size: instant
 
 preconditions:
   - workspace contains .github/workflows/release.yml
-  - workspace contains .github/workflows/recipe-publish.yml
   - workspace contains .github/workflows/github-actions-convergence.yml
   - workspace contains scripts/local-ci.sh
   - workspace contains scripts/github-actions-convergence.sh
@@ -54,15 +53,6 @@ critical_path:
     # trigger releases on every tag push, breaking the skill's
     # "manual authorship traceable" guarantee.
     command: "grep -F 'workflow_dispatch:' .github/workflows/release.yml"
-    timeout_ms: 3000
-    expected_behavior: "workflow_dispatch:"
-
-  - step: "recipe-publish workflow is workflow_dispatch-only"
-    # Same protection for the rootfs publishing workflow — separate
-    # cadence governed by recipe-convergence orchestration,
-    # explicitly NOT auto-triggered by the merge-to-main-and-release
-    # skill.
-    command: "grep -F 'workflow_dispatch:' .github/workflows/recipe-publish.yml"
     timeout_ms: 3000
     expected_behavior: "workflow_dispatch:"
 
@@ -89,7 +79,7 @@ critical_path:
 observability:
   traces:
     - "@trace spec:ci-release"
-  expected_log: "Release + recipe-publish + convergence workflow surfaces pinned per ci-release spec"
+  expected_log: "Release + convergence workflow surfaces pinned per ci-release spec"
   log_fields:
     spec: "ci-release"
     test: "ci-release-toolchain-shape"
@@ -100,9 +90,9 @@ rollback:
   on_failure: >
     A ci-release toolchain / workflow surface drifted. Restore:
     `musl-tools` install in release.yml; `workflow_dispatch:`
-    trigger on BOTH release.yml + recipe-publish.yml (NEVER auto-
+    trigger on release.yml (NEVER auto-
     trigger via push:tags); the `@trace spec:ci-release` line at
     the head of github-actions-convergence.yml; and the executable
     bit on local-ci.sh + github-actions-convergence.sh sibling
     scripts.
-  command: "grep -nE 'musl-tools|workflow_dispatch:' .github/workflows/release.yml .github/workflows/recipe-publish.yml && head -3 .github/workflows/github-actions-convergence.yml && ls -la scripts/local-ci.sh scripts/github-actions-convergence.sh"
+  command: "grep -nE 'musl-tools|workflow_dispatch:' .github/workflows/release.yml && head -3 .github/workflows/github-actions-convergence.yml && ls -la scripts/local-ci.sh scripts/github-actions-convergence.sh"

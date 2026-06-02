@@ -551,6 +551,13 @@ if [[ "$FLAG_INSTALL" == true ]]; then
     _info "Portable launcher installed: $INSTALL_BIN ($(du -h "$INSTALL_BIN" | cut -f1))"
     _info "Launcher is self-contained; native tray/wrapper surfaces may use platform libraries"
 
+    # Ensure container images exist for the newly installed version so post-build
+    # E2E litmus tests (which use the versioned images) can pass.
+    if [[ "$FLAG_CI_FULL" == true ]]; then
+        _step "Ensuring container images exist for version $(cat "$SCRIPT_DIR/VERSION")..."
+        "$INSTALL_BIN" --init 2>&1 || _warn "Failed to build images (non-fatal, post-build CI may fail)"
+    fi
+
     if [[ "$FLAG_CI_FULL" == true ]]; then
         _step "Running post-build status smoke..."
         if TILLANDSIAS_STATUS_CHECK_BIN="$INSTALL_BIN" bash "$SCRIPT_DIR/scripts/local-ci.sh" --phase post-build "${CI_ARG_LIST[@]}"; then

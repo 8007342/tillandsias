@@ -1,0 +1,133 @@
+# @trace spec:runtime-diagnostics
+#
+# Drift-protection pinning the source-level surfaces that map
+# `spec:runtime-diagnostics` requirements onto the diagnostic-event
+# emitter. The runtime-diagnostics spec was previously bound to a
+# single test (`litmus:runtime-diagnostics-shape`) that only checked
+# the git entrypoint — none of the spec's MUST-emit / MUST-detect
+# scenarios were pinned, despite a real implementation living in
+# `crates/tillandsias-podman/src/diagnostic_event_emitter.rs` since
+# gap-3 phase-2b.
+#
+# This companion litmus pins the spec-identity surfaces that the
+# broader `litmus:runtime-diagnostics-emitter-shape` doesn't focus
+# on:
+#
+#   - file-head `@trace spec:runtime-diagnostics` annotation (so
+#     openspec resolves the spec ↔ implementation edge)
+#   - the `"memory_oom"` resource-string literal in route_record's
+#     Oom arm (spec § "OOM kill detected" scenario MUST-log
+#     `oom_kill = true` and the scenario literal is the resource
+#     identifier)
+#   - the signal-line-BEFORE-exit-line emit ordering (spec § Abnormal
+#     exit and Termination signal scenarios — the kernel-delivered
+#     signal is the precipitating fact, the exit code is the
+#     consequence)
+#   - the unit test pinning the "clean exit yields no signal" branch
+#     (spec § Normal exit MUST emit `container_exit_code = 0` WITHOUT
+#     a signal line)
+#
+# Combined with the existing `litmus:runtime-diagnostics-shape` (git
+# entrypoint trace) + `litmus:runtime-diagnostics-emitter-shape`
+# (spawn helper, EmitterState, route_record arms, signal decoder,
+# wiring), raises runtime-diagnostics coverage_ratio 30 → 75.
+name: litmus:runtime-diagnostics-spec-mapping-shape
+spec: runtime-diagnostics
+phase: pre-build
+description: >
+  Pin the spec-identity surfaces mapping spec:runtime-diagnostics
+  onto the diagnostic event emitter: file-head trace, `memory_oom`
+  resource literal, signal-before-exit emit ordering, and the
+  "clean-exit yields no signal" test contract.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-podman/src/diagnostic_event_emitter.rs
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "diagnostic_event_emitter.rs file-head trace declares spec:runtime-diagnostics"
+    # The implementation lives here; the spec ↔ impl edge MUST be
+    # resolvable by grep. Added today alongside this litmus — a
+    # regression dropping the marker would silently demote the file
+    # out of the spec's TRACES.md graph and re-open the spec gap this
+    # slice closes.
+    command: "grep -F '@trace spec:runtime-diagnostics ' crates/tillandsias-podman/src/diagnostic_event_emitter.rs"
+    timeout_ms: 3000
+    expected_behavior: "spec:runtime-diagnostics"
+
+  - step: "memory_oom resource literal present in the Oom routing arm"
+    # spec § "OOM kill detected" scenario uses `oom_kill = true` as
+    # the log field; the codepath emits an `event:resource_exhaustion`
+    # with `resource=memory_oom` (the streaming-spec rendering of the
+    # same scenario). A refactor renaming the literal (e.g. `oom_mem`
+    # or `memory_kill`) would silently break downstream consumers
+    # filtering on the spec text.
+    command: "grep -F '\"memory_oom\"' crates/tillandsias-podman/src/diagnostic_event_emitter.rs"
+    timeout_ms: 3000
+    expected_behavior: "memory_oom"
+
+  - step: "format_resource_exhaustion_event invoked from the Oom arm"
+    # Spec § OOM kill detected MUST log `oom_kill = true` AND the
+    # tray-side renderer downstream reads the formatted line. Without
+    # this call, the Oom action would do nothing — silent gap.
+    command: "grep -F 'format_resource_exhaustion_event(&record.container_name, \"memory_oom\"' crates/tillandsias-podman/src/diagnostic_event_emitter.rs"
+    timeout_ms: 3000
+    expected_behavior: "format_resource_exhaustion_event"
+
+  - step: "signal line emit precedes exit line emit in Died arm"
+    # Spec § Abnormal exit + Termination signal: the signal is the
+    # precipitating fact, the exit code is the consequence. The Died
+    # arm MUST emit signal-first when an exit code maps to a signal,
+    # then exit. Verify by line-number ordering: the signal-event
+    # emit MUST appear before the container_exit emit within
+    # route_record. Captures both line numbers and compares.
+    command: "SIGNAL_LINE=$(grep -n 'event:container_signal' crates/tillandsias-podman/src/diagnostic_event_emitter.rs | head -1 | cut -d: -f1) && EXIT_LINE=$(grep -n 'event:container_exit' crates/tillandsias-podman/src/diagnostic_event_emitter.rs | tail -1 | cut -d: -f1) && [ -n \"$SIGNAL_LINE\" ] && [ -n \"$EXIT_LINE\" ] && [ \"$SIGNAL_LINE\" -lt \"$EXIT_LINE\" ] && echo \"ok: signal emit at line $SIGNAL_LINE precedes exit emit at line $EXIT_LINE\""
+    timeout_ms: 3000
+    expected_behavior: "ok: signal emit at line"
+
+  - step: "Died arm pairs signal_name lookup with conditional emission"
+    # The exact wiring: `record.exit_code.and_then(signal_name_from_exit_code)`
+    # — exit_code is Option<i32>, signal_name_from_exit_code returns
+    # Option<String>, and_then composes them so a None exit_code OR
+    # a clean-exit code (0..=128) skips the signal line entirely.
+    # Spec § Normal exit MUST NOT emit a spurious signal line.
+    command: "grep -F 'record.exit_code.and_then(signal_name_from_exit_code)' crates/tillandsias-podman/src/diagnostic_event_emitter.rs"
+    timeout_ms: 3000
+    expected_behavior: "signal_name_from_exit_code"
+
+  - step: "unit test pins the clean-exit-yields-no-signal branch (spec § Normal exit)"
+    # Spec § Normal exit MUST log `container_exit_code = 0` WITHOUT
+    # a preceding signal line. The test
+    # `signal_name_from_exit_code_returns_none_on_clean_or_out_of_range`
+    # is the behavioural pin — a regression making `0` return
+    # `Some("SIG-128")` would silently violate the spec. Pinning by
+    # test-name presence means a rename without spec re-alignment
+    # surfaces fast.
+    command: "grep -F 'fn signal_name_from_exit_code_returns_none_on_clean_or_out_of_range' crates/tillandsias-podman/src/diagnostic_event_emitter.rs"
+    timeout_ms: 3000
+    expected_behavior: "signal_name_from_exit_code_returns_none"
+
+observability:
+  traces:
+    - "@trace spec:runtime-diagnostics"
+    - "@trace spec:runtime-diagnostics-stream"
+  expected_log: "spec:runtime-diagnostics ↔ diagnostic_event_emitter spec-identity surfaces pinned"
+  log_fields:
+    spec: "runtime-diagnostics"
+    test: "runtime-diagnostics-spec-mapping-shape"
+    artifact: "crates/tillandsias-podman/src/diagnostic_event_emitter.rs"
+
+rollback:
+  on_failure: >
+    A `spec:runtime-diagnostics` ↔ implementation edge regressed.
+    Restore: `@trace spec:runtime-diagnostics` on
+    diagnostic_event_emitter.rs file head; `"memory_oom"` resource
+    literal in the route_record Oom arm calling
+    `format_resource_exhaustion_event(..., "memory_oom", None)`;
+    signal-event emit BEFORE exit-event emit in the Died arm;
+    `record.exit_code.and_then(signal_name_from_exit_code)` composition;
+    `fn signal_name_from_exit_code_returns_none_on_clean_or_out_of_range`
+    test attached.
+  command: "grep -nE 'spec:runtime-diagnostics|memory_oom|event:container_(signal|exit)|signal_name_from_exit_code' crates/tillandsias-podman/src/diagnostic_event_emitter.rs | head -20"

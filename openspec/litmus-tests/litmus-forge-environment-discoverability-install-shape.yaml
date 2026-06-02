@@ -1,0 +1,124 @@
+# @trace spec:forge-environment-discoverability
+#
+# Drift-protection for the 3 forge-discovery CLIs (tillandsias-
+# inventory + tillandsias-services + tillandsias-models). spec:
+# forge-environment-discoverability has 5 reqs spanning the 3
+# CLIs + the welcome banner + --help discipline.
+#
+# Existing bindings `litmus:forge-environment-discoverability-
+# shape` + `litmus:onboarding-cold-start-discovery` (last_verified
+# 2026-05-14) covered welcome-banner advertisement + onboarding
+# E2E but didn't trap the install-path wiring. That gap silently
+# allowed a refactor to drop the COPY+symlink block from the
+# Containerfile — leaving the welcome banner advertising commands
+# that didn't exist in PATH. The current slice restores the
+# install (from a74a13ec) and this litmus pins the restore so the
+# regression cannot recur.
+name: litmus:forge-environment-discoverability-install-shape
+spec: forge-environment-discoverability
+phase: pre-build
+description: >
+  Pin Containerfile COPY+symlink block for the 3 discovery CLIs
+  (cli/tillandsias-{inventory,services,models} → /opt/agents/
+  tillandsias-cli/bin/* → /usr/local/bin/* symlinks), the
+  bash-script source surfaces with @trace + --help + --json
+  branches, the inventory's >=6 category catalogue, the services'
+  proxy/git/inference enumeration, and the models' T0/T1 tier
+  mapping. Closes the regression window the previous unwiring
+  exploited.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains images/default/cli/{tillandsias-inventory,tillandsias-services,tillandsias-models}
+  - workspace contains images/default/Containerfile
+  - workspace contains images/default/forge-welcome.sh
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "Req trace: all 3 CLIs carry @trace spec:forge-environment-discoverability"
+    # Spec § Requirements 1/2/3 each mandate one CLI; all 3 CLIs
+    # need the trace annotation for the canonical graph. Substring
+    # match handles comma-list trace form.
+    command: "for c in tillandsias-inventory tillandsias-services tillandsias-models; do grep -Fq 'spec:forge-environment-discoverability' images/default/cli/$c || { echo \"FAIL: $c missing @trace\"; exit 1; }; done && echo \"ok: 3 CLIs traced\""
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req 1+2+3 install: Containerfile COPYs all 3 CLIs into /opt/agents/tillandsias-cli/bin/"
+    # Spec § Reqs mandate the CLIs are available as commands. The
+    # canonical install path mirrors other agents (`/opt/agents/
+    # tillandsias-cli/bin/`). Pin all 3 COPY directives so a
+    # refactor dropping any one surfaces.
+    command: "for c in tillandsias-inventory tillandsias-services tillandsias-models; do grep -Fq \"COPY cli/$c /opt/agents/tillandsias-cli/bin/$c\" images/default/Containerfile || { echo \"FAIL: $c COPY directive missing\"; exit 1; }; done && echo \"ok: 3 COPYs intact\""
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req 1+2+3 PATH discovery: Containerfile symlinks all 3 CLIs into /usr/local/bin/"
+    # The COPY puts them under /opt/agents/...; the symlinks expose
+    # them on the user PATH. A regression dropping the symlinks
+    # would silently break interactive discovery while keeping the
+    # files installed (a previous-failure-mode hybrid).
+    command: "for c in tillandsias-inventory tillandsias-services tillandsias-models; do grep -Fq \"ln -sf /opt/agents/tillandsias-cli/bin/$c /usr/local/bin/$c\" images/default/Containerfile || { echo \"FAIL: $c symlink missing\"; exit 1; }; done && echo \"ok: 3 symlinks intact\""
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req 1 inventory: >=6 categories enumerated"
+    # Spec § Req 1 mandates the inventory output. The category
+    # catalogue (Languages/Build/Test/Utils/Agents/Web/API) is the
+    # contract for what gets enumerated. Pin the 6-category floor
+    # via grep count on the canonical `"<Category>|` shape.
+    command: "CATS=$(grep -cE '^    \"(Languages|Build|Test|Utils|Agents|Web/API)\\|' images/default/cli/tillandsias-inventory); if [ \"$CATS\" -ge 6 ]; then echo \"ok: $CATS categories\"; else echo \"FAIL: $CATS categories (need >=6)\"; exit 1; fi"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req 2 services: proxy:3128 + git-service:9418 + inference enumerated"
+    # Spec § Req 2 § Scenarios mandate proxy (HTTP/HTTPS caching),
+    # git-service (git daemon), inference (ollama REST). Pin
+    # canonical ports: proxy:3128 (Squid), git-service:9418 (git
+    # protocol).
+    command: "grep -Fq 'proxy|proxy|3128|' images/default/cli/tillandsias-services && grep -Fq 'git-service|git-service|9418|' images/default/cli/tillandsias-services && grep -Fq 'inference' images/default/cli/tillandsias-services && echo \"ok: 3 services enumerated\""
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req 3 models: T0/T1 tier mapping for baked CPU-only models"
+    # Spec § Req 3 § Scenarios mandate T0=qwen2.5:0.5b + T1=llama3.
+    # 2:3b as the baked tier. The tier_for() shell function is
+    # the impl; pin both literals.
+    command: "grep -Fq 'qwen2.5:0.5b)' images/default/cli/tillandsias-models && grep -Fq 'llama3.2:3b)' images/default/cli/tillandsias-models && grep -Fq \"printf 'T0'\" images/default/cli/tillandsias-models && grep -Fq \"printf 'T1'\" images/default/cli/tillandsias-models && echo \"ok: T0/T1 mapping intact\""
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req 4 welcome banner: advertises all 3 CLIs by name"
+    # Spec § Req 4 mandates the welcome banner mentions the 3
+    # discovery commands. The forge-welcome.sh `Inventory/Services/
+    # Models` rows are the impl; pin all 3 advertisements (these
+    # are what regressed — banner advertised commands that the
+    # earlier unwiring made invalid).
+    command: "for c in tillandsias-inventory tillandsias-services tillandsias-models; do grep -Fq \"$c\" images/default/forge-welcome.sh || { echo \"FAIL: welcome banner doesn't advertise $c\"; exit 1; }; done && echo \"ok: banner advertises 3 CLIs\""
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+observability:
+  traces:
+    - "@trace spec:forge-environment-discoverability"
+  expected_log: "3 discovery CLIs (inventory + services + models) installed via COPY+symlink, advertised by welcome banner, with category-floor/canonical-port/tier-mapping invariants pinned"
+  log_fields:
+    spec: "forge-environment-discoverability"
+    test: "forge-environment-discoverability-install-shape"
+    artifact: "images/default/{Containerfile,cli/tillandsias-*,forge-welcome.sh}"
+
+rollback:
+  on_failure: >
+    A `spec:forge-environment-discoverability` source surface
+    drifted. Restore: `@trace spec:forge-environment-discoverability`
+    on all 3 CLIs; Containerfile COPY directives for each CLI
+    into `/opt/agents/tillandsias-cli/bin/` plus `ln -sf` symlinks
+    into `/usr/local/bin/`; inventory CATEGORIES with >=6 entries
+    spanning Languages/Build/Test/Utils/Agents/Web/API; services
+    SERVICES enumerating proxy:3128 + git-service:9418 +
+    inference; models tier_for mapping qwen2.5:0.5b='T0' +
+    llama3.2:3b='T1'; forge-welcome.sh banner mentioning all 3
+    CLI names. The COPY+symlink block was previously dropped
+    silently in a refactor — RESTORE FROM `a74a13ec` if both
+    Containerfile blocks (COPY + symlink) are missing.
+  command: "grep -nE 'COPY cli/tillandsias-(inventory|services|models)|ln -sf /opt/agents/tillandsias-cli|qwen2.5:0.5b|llama3.2:3b|proxy.proxy.3128' images/default/Containerfile images/default/cli/tillandsias-* 2>/dev/null | head -15"

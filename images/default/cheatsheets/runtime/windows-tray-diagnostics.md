@@ -2,7 +2,7 @@
 tags: [windows, tray, diagnostics, json, support, wsl2]
 languages: [rust, powershell]
 since: 2026-05-28
-last_verified: 2026-05-28
+last_verified: 2026-05-30
 sources:
   - internal
 authority: internal
@@ -32,8 +32,12 @@ A single binary, four diagnostic modes. Each is non-GUI, exits with a code suita
 |----------------------------|---------------------------------------------------------------------------------------------|-------------------------|
 | `--provision-once`         | Run `provision_via_recipe` to completion: fetch + verify + import + boot + handshake.       | `0` Ready / `1` failed  |
 | `--status-once`            | Connect to the live control wire, request `VmStatus`, print phase / `podman_ready` / `last_event`. | `0` Ready / `2` reachable-not-Ready / `1` unreachable |
+| `--status-once --json`     | Same status as a structured JSON object on stdout (StatusReport, see below).                | (same as `--status-once`) |
 | `--diagnose`               | Bundled human-readable health report (8 sections — see below).                              | `0` healthy / `2` degraded / `1` hard fail |
 | `--diagnose --json`        | Same report as a structured JSON object on stdout.                                          | (same as `--diagnose`)  |
+| `--logs [--tail N]`        | Dump the tray log file (`%LOCALAPPDATA%\tillandsias\logs\tray.log`) to stdout; `--tail N` for last N lines. | `0` readable / `1` missing |
+| `--help` / `-h`            | Print full usage with all CLI modes + exit-code contracts + stdio note.                     | `0`                     |
+| `--version` / `-V`         | Print `tillandsias-tray <workspace VERSION> (<build_commit>)` on one line.                  | `0`                     |
 
 GUI mode (no flags) launches the tray itself.
 
@@ -77,7 +81,8 @@ The JSON shape is pinned by unit tests in `notify_icon::tests::diagnose_json_*` 
 
 ```jsonc
 {
-  "version":                "0.1.0",       // string  — CARGO_PKG_VERSION baked at build
+  "version":                "0.2.260528.1", // string — workspace VERSION baked at build (was CARGO_PKG_VERSION pre-2026-05-30; see build.rs)
+  "build_commit":           "a963c16d",     // string — short git SHA the binary was built from, or "unknown" if git unavailable
   "log_path":               "C:\\...\\tray.log", // string  — fixed %LOCALAPPDATA%\tillandsias\logs\tray.log
   "log_exists":             true,          // bool
   "wt_present":             true,          // bool    — Windows Terminal on PATH (Open Shell prefers it)
@@ -95,6 +100,25 @@ The JSON shape is pinned by unit tests in `notify_icon::tests::diagnose_json_*` 
   "recent_log_tail": [                     // array of string — last 20 lines of tray.log
     "2026-05-28T... INFO ..."
   ]
+}
+```
+
+### `--status-once --json` schema
+
+A leaner JSON for the live-wire check — same fields the human mode prints,
+plus a pre-computed `exit_code` so consumers don't re-derive the matrix
+from phase + reachable. All seven keys are always present (None on the
+unreachable path becomes JSON `null`).
+
+```jsonc
+{
+  "reachable":    true,                    // bool   — handshake succeeded
+  "wire_version": 1,                       // u16    | null — negotiated WIRE_VERSION
+  "phase":        "Ready",                 // string | null — Debug-formatted VmPhase
+  "podman_ready": true,                    // bool   | null
+  "last_event":   "tillandsias-in-vm",     // string | null
+  "error":        null,                    // string | null — failure cause on the not-OK path
+  "exit_code":    0                        // i32    — 0/2/1 per the table above
 }
 ```
 

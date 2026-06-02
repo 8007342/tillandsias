@@ -1,0 +1,123 @@
+# @trace spec:host-chromium-on-demand
+#
+# Drift-protection for the host-chromium-on-demand installer +
+# launcher path. spec:host-chromium-on-demand mandates downloading
+# Chrome for Testing into a host cache on first launch, verifying
+# SHA-256 integrity, atomically repointing a `current` symlink,
+# garbage-collecting old versions, and launching with per-session
+# ephemeral profiles.
+#
+# Existing binding `litmus:browser-ephemeral` (e2e, last_verified
+# 2026-05-03) covered generic ephemeral isolation. The installer
+# script (`scripts/install-chromium.sh`) + the launcher's cache-
+# root resolution (`crates/tillandsias-browser-mcp/src/launcher.rs`)
+# were untrapped at source.
+name: litmus:host-chromium-on-demand-shape
+spec: host-chromium-on-demand
+phase: pre-build
+description: >
+  Pin the host-chromium-on-demand surfaces: install-chromium.sh
+  entrypoint + platform detection + 4 per-platform SHA-256 env vars
+  + atomic `ln -snf` symlink repoint + SKIP_CHROMIUM_DOWNLOAD escape
+  hatch + 2-version garbage collection; browser-mcp launcher cache-
+  root resolution (XDG_CACHE_HOME / ~/.cache / /tmp fallback chain).
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains scripts/install-chromium.sh
+  - workspace contains crates/tillandsias-browser-mcp/src/launcher.rs
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "install-chromium.sh file-head trace declares spec:host-chromium-on-demand"
+    # The installer is the host-side implementation site. The
+    # multi-spec @trace also calls out spec:download-telemetry +
+    # spec:chromium-safe-variant (related surfaces). Substring
+    # match handles the comma-list trace format.
+    command: "grep -F 'spec:host-chromium-on-demand, spec:download-telemetry, spec:chromium-safe-variant' scripts/install-chromium.sh"
+    timeout_ms: 3000
+    expected_behavior: "host-chromium-on-demand"
+
+  - step: "install_chromium() main entry point + chromium_platform() detector"
+    # Spec § "Download and Verify Bundled Chromium" mandates the
+    # platform-specific download. The two functions are the
+    # entrypoint + the platform-string resolver (linux64 / mac-arm64
+    # / mac-x64 / win64). Pin both signatures.
+    command: "grep -F 'install_chromium()' scripts/install-chromium.sh && grep -F 'chromium_platform()' scripts/install-chromium.sh"
+    timeout_ms: 3000
+    expected_behavior: "install_chromium"
+
+  - step: "4 per-platform SHA-256 env var contracts (LINUX64 / MAC_ARM64 / MAC_X64 / WIN64)"
+    # Spec § Req mandates SHA-256 verification per platform. The 4
+    # env-var lookups are the integrity gate; a regression dropping
+    # any platform would silently allow that arch's download to
+    # bypass integrity verification.
+    command: "grep -cE 'CHROMIUM_SHA256_(LINUX64|MAC_ARM64|MAC_X64|WIN64)' scripts/install-chromium.sh | awk '{ if ($1+0 >= 4) print \"ok:\", $1, \"per-platform SHA-256 env-var sites\"; else { print \"FAIL: only\", $1, \"of >=4\"; exit 1 } }'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req: atomic `ln -snf` symlink repoint of `current` (atomicity invariant)"
+    # Spec mandates the `current` symlink be atomically repointed
+    # ONLY AFTER the SHA-256 check passes and extraction completes.
+    # The `ln -snf` form is the canonical atomic POSIX-symlink-replace
+    # idiom; a regression to a non-atomic `rm + ln` pair would
+    # silently introduce a race where readers see no `current`.
+    command: "grep -F 'ln -snf' scripts/install-chromium.sh && grep -F '`current` symlink' scripts/install-chromium.sh"
+    timeout_ms: 3000
+    expected_behavior: "ln -snf"
+
+  - step: "SKIP_CHROMIUM_DOWNLOAD=1 escape hatch for air-gapped installs"
+    # Spec implies (and the script docblock states) air-gapped
+    # installs MUST be supported. The env-var gate at the top of
+    # install_chromium() is the escape hatch. A regression dropping
+    # it would silently break offline-install workflows.
+    command: "grep -F 'SKIP_CHROMIUM_DOWNLOAD' scripts/install-chromium.sh"
+    timeout_ms: 3000
+    expected_behavior: "SKIP_CHROMIUM_DOWNLOAD"
+
+  - step: "browser-mcp launcher: cache_root resolution chain (XDG_CACHE_HOME / ~/.cache / /tmp)"
+    # Spec § "Browser Detection" mandates the launcher returns the
+    # bundled Chromium. The cache-root resolution chain is how the
+    # launcher locates the installed binary: XDG_CACHE_HOME first
+    # (XDG compliance), then ~/.cache (legacy), then /tmp (last-
+    # resort writable fallback). Pin the 3-candidate chain so a
+    # regression dropping XDG support fails fast.
+    command: "grep -F 'XDG_CACHE_HOME' crates/tillandsias-browser-mcp/src/launcher.rs && grep -F '.cache/tillandsias/chromium' crates/tillandsias-browser-mcp/src/launcher.rs && grep -F '/tmp/tillandsias/chromium' crates/tillandsias-browser-mcp/src/launcher.rs"
+    timeout_ms: 3000
+    expected_behavior: "tillandsias/chromium"
+
+  - step: "browser-mcp launcher: resolve_browser_binary entry point + override path"
+    # Spec § Browser Detection mandates the launcher returns the
+    # bundled binary always. The `resolve_browser_binary(override_
+    # bin: Option<&Path>)` signature lets tests inject a test-fixture
+    # binary; production code passes None and gets the cache-resolved
+    # path. Pin the canonical entry-point signature.
+    command: "grep -F 'fn resolve_browser_binary(override_bin: Option<&Path>) -> Result<PathBuf, LaunchError>' crates/tillandsias-browser-mcp/src/launcher.rs"
+    timeout_ms: 3000
+    expected_behavior: "resolve_browser_binary"
+
+observability:
+  traces:
+    - "@trace spec:host-chromium-on-demand"
+    - "@trace spec:download-telemetry"
+    - "@trace spec:chromium-safe-variant"
+  expected_log: "install-chromium.sh + launcher cache-root resolution + 4 per-platform SHA-256 contracts + atomic symlink + air-gapped escape hatch pinned"
+  log_fields:
+    spec: "host-chromium-on-demand"
+    test: "host-chromium-on-demand-shape"
+    artifact: "scripts/install-chromium.sh + crates/tillandsias-browser-mcp/src/launcher.rs"
+
+rollback:
+  on_failure: >
+    A `spec:host-chromium-on-demand` source surface drifted. Restore
+    the install-chromium.sh file-head `@trace spec:host-chromium-
+    on-demand, spec:download-telemetry, spec:chromium-safe-variant`;
+    `install_chromium()` + `chromium_platform()` functions; 4 per-
+    platform `CHROMIUM_SHA256_*` env-var lookups; `ln -snf` atomic
+    `current` symlink repoint; `SKIP_CHROMIUM_DOWNLOAD` escape
+    hatch; browser-mcp `cache_root()` with 3-candidate
+    `XDG_CACHE_HOME / ~/.cache / /tmp` chain; `fn resolve_browser_
+    binary(override_bin: Option<&Path>) -> Result<PathBuf,
+    LaunchError>`.
+  command: "grep -nE 'install_chromium|chromium_platform|CHROMIUM_SHA256_|ln -snf|SKIP_CHROMIUM_DOWNLOAD|cache_root|resolve_browser_binary' scripts/install-chromium.sh crates/tillandsias-browser-mcp/src/launcher.rs | head -25"

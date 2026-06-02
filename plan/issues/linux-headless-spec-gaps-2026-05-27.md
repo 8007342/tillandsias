@@ -8,6 +8,92 @@ bounded slices from. Each item is sized for one loop iteration. NOT for siblings
 
 ## Diagnostics / observability (USER PRIORITY — `--diagnostics` + logging layer)
 
+### Work Packet: spec-gap/app-lifecycle-tray-state-api-shape
+
+- id: `spec-gap/app-lifecycle-tray-state-api-shape`
+- owner_host: linux
+- capability_tags: [specs, litmus, testing]
+- status: done
+- lease:
+  - lease_id: `f0be1a9432d0`
+  - agent_id: `linux-macuahuitl-codex-2026-06-02T200202Z`
+  - host: linux
+  - acquired_at: `2026-06-02T20:02:02Z`
+  - expires_at: `2026-06-03T00:02:02Z`
+- owned_files:
+  - `openspec/litmus-bindings.yaml`
+  - `openspec/litmus-tests/litmus-app-lifecycle-tray-state-api-shape.yaml`
+  - `plan/issues/linux-headless-spec-gaps-2026-05-27.md`
+  - `plan/issues/linux-next-work-queue-2026-05-25.md`
+- expected_evidence:
+  - `./scripts/run-litmus-test.sh app-lifecycle --size instant` passes with the new companion test.
+  - `app-lifecycle` binding metadata moves from 67 to 75 and names the new test.
+- next_action: >
+    Add an instant companion litmus that pins the public `TrayState`
+    lifecycle API (`transition_lifecycle`, `is_ready_for_user_action`,
+    `can_start_project`, `is_shutting_down`) and the corresponding unit-test
+    names in `crates/tillandsias-core/src/state.rs`.
+- events:
+  - type: claim
+    ts: `2026-06-02T20:02:02Z`
+    agent_id: `linux-macuahuitl-codex-2026-06-02T200202Z`
+    host: linux
+    lease_id: `f0be1a9432d0`
+    expires_at: `2026-06-03T00:02:02Z`
+  - type: completed
+    ts: `2026-06-02T20:04:21Z`
+    agent_id: `linux-macuahuitl-codex-2026-06-02T200202Z`
+    host: linux
+    lease_id: `f0be1a9432d0`
+    evidence_refs:
+      - `20fb5205` — added `litmus:app-lifecycle-tray-state-api-shape` and raised `app-lifecycle` coverage 67 -> 75.
+      - `./scripts/run-litmus-test.sh app-lifecycle --size instant` — PASS, 2/2 executed, 1 e2e skipped by size.
+      - `./build.sh --check` — PASS.
+      - `cargo fmt --all -- --check` — FAILED on unrelated Fedora pivot Rust formatting drift; this packet touched only litmus YAML.
+
+### Work Packet: spec-gap/external-logs-layer-binding-hygiene
+
+- id: `spec-gap/external-logs-layer-binding-hygiene`
+- owner_host: linux
+- capability_tags: [specs, litmus, docs, testing]
+- status: done
+- lease:
+  - lease_id: `f6f17a60a253`
+  - agent_id: `linux-macuahuitl-codex-2026-06-02T182536Z`
+  - host: linux
+  - acquired_at: `2026-06-02T18:25:36Z`
+  - expires_at: `2026-06-02T22:25:36Z`
+- owned_files:
+  - `openspec/specs/external-logs-layer/spec.md`
+  - `openspec/litmus-bindings.yaml`
+  - `openspec/litmus-tests/litmus-external-logs-producer-manifests-shape.yaml`
+  - `plan/issues/linux-headless-spec-gaps-2026-05-27.md`
+  - `plan/issues/linux-next-work-queue-2026-05-25.md`
+- expected_evidence:
+  - `litmus:external-logs-layer-shape` still passes.
+  - `litmus:external-logs-manifest-shape` still passes.
+  - `external-logs-layer` metadata reflects the already-bound manifest litmus and no longer advertises stale 67% coverage.
+- next_action: >
+    Align the external-logs-layer spec and litmus binding metadata with the
+    existing `litmus:external-logs-manifest-shape` test, then run the target
+    litmus chain.
+- events:
+  - type: claim
+    ts: `2026-06-02T18:25:36Z`
+    agent_id: `linux-macuahuitl-codex-2026-06-02T182536Z`
+    host: linux
+    lease_id: `f6f17a60a253`
+    expires_at: `2026-06-02T22:25:36Z`
+  - type: completed
+    ts: `2026-06-02T18:28:02Z`
+    agent_id: `linux-macuahuitl-codex-2026-06-02T182536Z`
+    host: linux
+    lease_id: `f6f17a60a253`
+    evidence_refs:
+      - `./scripts/run-litmus-test.sh external-logs-layer --size instant` — 3/3 PASS, including new `litmus:external-logs-producer-manifests-shape`
+      - `./build.sh --check` — PASS
+      - `cargo fmt --all -- --check` — FAILED on pre-existing Rust formatting drift in `crates/tillandsias-headless/src/main.rs` and `crates/tillandsias-headless/src/vault_bootstrap.rs`; this packet did not touch Rust files and did not apply unrelated formatting.
+
 0. **[RESOLVED] `--opencode --diagnostics` nested-runtime panic.**
    Was: runtime-litmus failed at `vault_bootstrap.rs:205` "Cannot start a
    runtime from within a runtime" — mint_approle_token_for_container built a
@@ -270,17 +356,35 @@ bounded slices from. Each item is sized for one loop iteration. NOT for siblings
   double-print. `DiagnosticsHandle::Drop` aborts every spawned tail
   on closure exit (no explicit abort needed). Compile-pinning unit
   test asserts the signature stays compatible.
-
-  WITH this, the 6-arm gap-3 typed-event chain is COMPLETE:
-    1. container_launch (emit_launch_event, gap-3 phase-1)
-    2. container_exit (Died → format_container_exit_event, phases
-       1b + 2c + 2e)
-    3. container_signal (signal-range exit_code, phase-2f)
-    4. resource_exhaustion (Oom → format_resource_exhaustion_event,
-       phase-2d)
-    5. container_stderr (DiagnosticsHandle typed tail, phase-2g)
-    6. internal_* (verbose level via DiagnosticsFilter, gap-5 phase-1)
-- **GAP 3 PHASE-2 PINNING**: new instant-phase litmus
+WITH this, the 6-arm gap-3 typed-event chain is COMPLETE:
+  1. container_launch (emit_launch_event, gap-3 phase-1)
+  2. container_exit (Died → format_container_exit_event, phases
+     1b + 2c + 2e)
+  3. container_signal (signal-range exit_code, phase-2f)
+  4. resource_exhaustion (Oom → format_resource_exhaustion_event,
+     phase-2d)
+  5. container_stderr (DiagnosticsHandle typed tail, phase-2g)
+  6. internal_* (verbose level via DiagnosticsFilter, gap-5 phase-1)
+- **GAP 7 GRACEFUL SHUTDOWN** (implementation + verification):
+  Implementation of the `graceful-shutdown` spec in `tillandsias-headless`.
+  - Wire `graceful_shutdown_async` into the tray's `run_tray_mode_with_debug` exit path.
+  - Update `MenuCommand::Quit` (id 31) in `tray/mod.rs` to flip the shutdown atomic instead of `std::process::exit(0)`.
+  - Implement container stop-and-wait in `graceful_shutdown_async` using `PodmanClient`.
+  - Implement verification phase polling `podman ps --filter name=tillandsias-` with 30s timeout and SIGKILL fallback.
+  - Closes the 67→100 gap for `app-lifecycle` and `graceful-shutdown` specs on Linux.
+  - Status: done.
+  - Events:
+    - type: claim
+      ts: "2026-06-02T19:15:00Z"
+      agent_id: "linux-tillandsia-gemini-cli-20260602T1912"
+      host: "linux"
+      lease_id: "lease-linux-graceful-shutdown-implementation-20260602T1912"
+      expires_at: "2026-06-02T23:15:00Z"
+    - type: completed
+      ts: "2026-06-02T19:55:00Z"
+      agent_id: "linux-tillandsia-gemini-cli-20260602T1912"
+      summary: "Implemented graceful shutdown in headless and tray modes. Verified via cargo test and signal_handling litmus."
+## Lease note
   `litmus-runtime-diagnostics-emitter-shape` greps the
   emitter-layer surfaces (`spawn_diagnostic_event_emitter`,
   `EmitterState { start_times: HashMap<String, i64> }`,

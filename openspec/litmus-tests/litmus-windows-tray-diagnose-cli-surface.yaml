@@ -27,8 +27,8 @@ preconditions:
   - shell utilities (grep) are available in PATH
 
 critical_path:
-  - step: "all four CLI modes wired in main.rs"
-    command: "grep -Fe '--provision-once' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--status-once' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--diagnose' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--json' crates/tillandsias-windows-tray/src/main.rs"
+  - step: "all seven CLI modes wired in main.rs (plus --bak for --logs rotation backup)"
+    command: "grep -Fe '--provision-once' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--status-once' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--diagnose' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--json' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--logs' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--bak' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--help' crates/tillandsias-windows-tray/src/main.rs && grep -Fe '--version' crates/tillandsias-windows-tray/src/main.rs"
     expected_behavior: "grep succeeds"
     timeout_ms: 3000
 
@@ -37,27 +37,62 @@ critical_path:
     expected_behavior: "grep succeeds"
     timeout_ms: 3000
 
-  - step: "JSON schema-pin unit tests attached"
-    command: "grep -F 'fn diagnose_json_top_level_keys_pinned' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn diagnose_json_wire_object_keys_pinned' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn diagnose_json_manifest_pin_some_serializes_as_string' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn diagnose_json_manifest_pin_none_serializes_as_null' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn diagnose_json_recent_log_tail_is_array' crates/tillandsias-windows-tray/src/notify_icon.rs"
+  - step: "JSON schema-pin unit tests attached (superset + exact-count)"
+    command: "grep -F 'fn diagnose_json_top_level_keys_pinned' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn diagnose_json_top_level_keys_exact_count' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn diagnose_json_wire_object_keys_pinned' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn diagnose_json_manifest_pin_some_serializes_as_string' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn diagnose_json_manifest_pin_none_serializes_as_null' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn diagnose_json_recent_log_tail_is_array' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn status_once_json_keys_pinned' crates/tillandsias-windows-tray/src/notify_icon.rs"
     expected_behavior: "grep succeeds"
     timeout_ms: 3000
 
-  - step: "exit-code contract test attached"
-    command: "grep -F 'fn exit_code_provisioned_zero_degraded_two' crates/tillandsias-windows-tray/src/notify_icon.rs"
+  - step: "exit-code contract tests attached (incl. summary_line classifiers for both --diagnose and --status-once)"
+    command: "grep -F 'fn exit_code_provisioned_zero_degraded_two' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn status_once_exit_codes' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn summary_line_classifies_exit_code' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn status_summary_line_classifies_exit_code' crates/tillandsias-windows-tray/src/notify_icon.rs"
     expected_behavior: "grep succeeds"
     timeout_ms: 3000
 
-  - step: "install-windows.ps1 contains the post-install --diagnose sanity check"
-    command: "grep -F 'cmd.exe' scripts/install-windows.ps1 && grep -Fe '--diagnose --json' scripts/install-windows.ps1 && grep -F 'install bits broken' scripts/install-windows.ps1"
+  - step: "--help / --version surface tests attached"
+    command: "grep -F 'fn version_line_uses_workspace_version_and_commit' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn help_text_documents_all_cli_modes' crates/tillandsias-windows-tray/src/notify_icon.rs"
     expected_behavior: "grep succeeds"
     timeout_ms: 3000
 
-  - step: "tray-diagnose.ps1 consumer script uses cmd-redirect"
-    command: "grep -F 'cmd.exe /c' scripts/tray-diagnose.ps1 && grep -Fe '--diagnose --json' scripts/tray-diagnose.ps1"
+  - step: "--logs tail-selector test attached"
+    command: "grep -F 'fn select_log_tail_handles_all_cases' crates/tillandsias-windows-tray/src/notify_icon.rs"
+    expected_behavior: "grep succeeds"
+    timeout_ms: 3000
+
+  - step: "tray tooltip composer test attached"
+    command: "grep -F 'fn compose_tooltip_includes_version_and_status' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn compose_tooltip' crates/tillandsias-windows-tray/src/notify_icon.rs"
+    expected_behavior: "grep succeeds"
+    timeout_ms: 3000
+
+  - step: "tray.log rotation boundary test attached"
+    command: "grep -F 'fn should_rotate_log_at_threshold_boundary' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn maybe_rotate_log' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'TRAY_LOG_MAX_BYTES' crates/tillandsias-windows-tray/src/notify_icon.rs"
+    expected_behavior: "grep succeeds"
+    timeout_ms: 3000
+
+  - step: "wsl --version + cmd /c ver sniffers + first-line helper test attached"
+    command: "grep -F 'fn first_line_handles_all_cases' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn sniff_wsl_version' crates/tillandsias-windows-tray/src/notify_icon.rs && grep -F 'fn sniff_windows_version' crates/tillandsias-windows-tray/src/notify_icon.rs"
+    expected_behavior: "grep succeeds"
+    timeout_ms: 3000
+
+  - step: "end-to-end cli_integration tests attached (7 of 7 stateless CLI modes + cross-surface version consistency)"
+    command: "grep -F 'fn version_line_has_workspace_version_and_commit' crates/tillandsias-windows-tray/tests/cli_integration.rs && grep -F 'fn help_text_includes_all_documented_surfaces' crates/tillandsias-windows-tray/tests/cli_integration.rs && grep -F 'fn diagnose_json_has_all_17_top_level_keys' crates/tillandsias-windows-tray/tests/cli_integration.rs && grep -F 'fn diagnose_human_includes_pinned_section_labels' crates/tillandsias-windows-tray/tests/cli_integration.rs && grep -F 'fn status_once_json_has_all_7_keys_and_exit_code_matches' crates/tillandsias-windows-tray/tests/cli_integration.rs && grep -F 'fn logs_no_flags_reads_live_log_and_exits_0' crates/tillandsias-windows-tray/tests/cli_integration.rs && grep -F 'fn logs_bak_when_missing_exits_1_with_pointer_to_live_file' crates/tillandsias-windows-tray/tests/cli_integration.rs && grep -F 'fn cross_surface_version_consistency' crates/tillandsias-windows-tray/tests/cli_integration.rs"
+    expected_behavior: "grep succeeds"
+    timeout_ms: 3000
+
+  - step: "install-windows.ps1 contains the post-install --version + --diagnose sanity checks AND surfaces OS + WSL versions"
+    command: "grep -F 'cmd.exe' scripts/install-windows.ps1 && grep -Fe '--diagnose --json' scripts/install-windows.ps1 && grep -Fe '--version' scripts/install-windows.ps1 && grep -F 'install bits broken' scripts/install-windows.ps1 && grep -F 'build_commit' scripts/install-windows.ps1 && grep -F 'os_version' scripts/install-windows.ps1 && grep -F 'wsl_version' scripts/install-windows.ps1"
+    expected_behavior: "grep succeeds"
+    timeout_ms: 3000
+
+  - step: "tray-diagnose.ps1 consumer script surfaces the 16-key JSON + both binary + script verdicts"
+    command: "grep -F 'cmd.exe /c' scripts/tray-diagnose.ps1 && grep -Fe '--diagnose --json' scripts/tray-diagnose.ps1 && grep -F 'build_commit' scripts/tray-diagnose.ps1 && grep -F 'recent_log_tail' scripts/tray-diagnose.ps1 && grep -F 'log_size_bytes' scripts/tray-diagnose.ps1 && grep -F 'os_version' scripts/tray-diagnose.ps1 && grep -F 'wsl_version' scripts/tray-diagnose.ps1 && grep -F 'distro_running' scripts/tray-diagnose.ps1 && grep -F 'Binary --diagnose exit' scripts/tray-diagnose.ps1 && grep -F 'Script verdict' scripts/tray-diagnose.ps1"
     expected_behavior: "grep succeeds"
     timeout_ms: 3000
 
   - step: "cheatsheet exists with the documented schema"
     command: "grep -F 'Windows tray diagnostics' cheatsheets/runtime/windows-tray-diagnostics.md && grep -F 'manifest_pin_x86_64_tar' cheatsheets/runtime/windows-tray-diagnostics.md"
+    expected_behavior: "grep succeeds"
+    timeout_ms: 3000
+
+  - step: "CONTRIBUTING-WINDOWS dev guide exists with the test pyramid + drift-protection checklist"
+    command: "grep -F 'Contributing to' docs/CONTRIBUTING-WINDOWS.md && grep -F 'Test pyramid' docs/CONTRIBUTING-WINDOWS.md && grep -F 'Operator-facing surface coverage' docs/CONTRIBUTING-WINDOWS.md"
     expected_behavior: "grep succeeds"
     timeout_ms: 3000

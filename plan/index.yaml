@@ -1643,6 +1643,24 @@ plan_index:
               agent_id: "linux-tlatoani-fedora-antigravity-20260529T1606"
               commits: ["7844b76711708d175daa99cad43a92aaeffc80f8"]
               validation_log: "fa7a2cb0-2de1-4271-abbb-57bb85ceef50/task-216"
+            - type: claim
+              ts: "2026-05-31T02:30:00Z"
+              agent_id: "linux-tlatoani-opencode-big-pickle-2026-05-31T023027Z"
+              host: "linux"
+              lease_id: "lease-linux-inference-proxy-wiring-20260531T0230"
+              expires_at: "2026-05-31T06:30:00Z"
+            - type: completed
+              ts: "2026-05-31T02:50:00Z"
+              agent_id: "linux-tlatoani-opencode-big-pickle-2026-05-31T023027Z"
+              lease_id: "lease-linux-inference-proxy-wiring-20260531T0230"
+              summary: >
+                Wired HTTP_PROXY/HTTPS_PROXY/http_proxy/https_proxy env vars
+                pointing at proxy:3128 + NO_PROXY/no_proxy using ENCLAVE_NO_PROXY
+                into build_inference_run_args. Resolved the 7th spec/impl divergence
+                (inference container proxy env vars). Updated spec.md divergence
+                block to ✅ Resolved. Updated litmus (grep -A 60, new proxy step).
+                Verification: cargo test (all pass), ./build.sh --check (pass),
+                litmus 96/96 PASS at 100%.
 
     - id: multi-host-plan-ledger-adoption
       order: 21
@@ -1679,3 +1697,105 @@ plan_index:
             - plan/index.yaml
           checkpoint_required: true
           handoff_note: "Platform sessions are using shared queues; keep queue item headers synchronized with terminal events, append stale/ping notes for missed leases, and record sibling branch heads in the integration-loop ledger before shared-file merges."
+
+    - id: vault-hardening-architecture
+      order: 22
+      title: Vault Hardening Architecture (Phase 6.5)
+      status: completed
+      deliverable: plan/issues/vault-hardening-architecture-2026-06.md
+      depends_on: [recent-work-spec-doc-methodology-audit]
+      specs:
+        - tillandsias-vault
+      exit_criteria:
+        - "Legacy keyring fallback (--legacy-keyring-secrets) is completely removed."
+        - "Vault auto-unseal key is stored in the host native keychain with versioning."
+        - "Vault initialization uses vault operator rekey instead of the XOR envelope."
+        - "Bootstrap artifacts like init.json are deleted immediately after initialization."
+      tasks:
+        - id: vault-hardening/remove-legacy-fallback
+          status: completed
+          depends_on: []
+          owned_files:
+            - crates/tillandsias-headless/src/main.rs
+            - crates/tillandsias-headless/src/vault_bootstrap.rs
+          checkpoint_required: true
+          handoff_note: "Remove --without-vault and --legacy-keyring-secrets."
+        - id: vault-hardening/host-keychain-storage
+          status: completed
+          depends_on: [vault-hardening/remove-legacy-fallback]
+          owned_files:
+            - crates/tillandsias-headless/src/vault_bootstrap.rs
+          checkpoint_required: true
+          handoff_note: "Store and version the unseal key in the host native keychain."
+        - id: vault-hardening/true-rekey-and-cleanup
+          status: completed
+          depends_on: []
+          owned_files:
+            - images/vault/entrypoint.sh
+          checkpoint_required: true
+          handoff_note: "Use vault operator rekey and delete init.json and root.token securely."
+        - id: vault-hardening/litmus-updates
+          status: completed
+          depends_on: [vault-hardening/true-rekey-and-cleanup, vault-hardening/host-keychain-storage]
+          owned_files:
+            - openspec/litmus-tests/litmus-secrets-management-implementation-shape.yaml
+            - openspec/litmus-tests/litmus-vault-auto-unseal-no-prompt.yaml
+            - openspec/litmus-tests/litmus-gh-auth-script-shape.yaml
+          checkpoint_required: true
+          handoff_note: "Update litmus tests to reflect the new Vault strict architecture."
+
+    - id: rootfs-removal-fedora-pivot
+      order: 23
+      title: Rootfs Removal / Fedora Pivot
+      status: ready
+      deliverable: plan/issues/rootfs-removal-fedora-wsl-pivot-2026-06-02.md
+      notes: plan/issues/fedora-pivot-unblocking-instructions.md
+      depends_on: [vault-hardening-architecture]
+      specs:
+        - host-shell-architecture
+      exit_criteria:
+        - "Windows tray uses official Fedora WSL2 image and curl bootstrap."
+        - "macOS tray uses official Fedora Cloud aarch64 image and curl bootstrap."
+        - "Linux rootfs publishing workflow and symmetric-pin litmus are removed."
+        - "Cross-host cheatsheets and diagnose reports reflect the new Fedora-44 baseline."
+      tasks:
+        - id: fedora-pivot/windows-wsl-official
+          status: completed
+          owner_host: windows
+          depends_on: []
+          owned_files:
+            - crates/tillandsias-windows-tray/src/wsl_lifecycle.rs
+            - crates/tillandsias-vm-layer/src/fetch.rs
+          checkpoint_required: true
+          handoff_note: "w11 DONE: pivoted to Fedora's .tar.xz and fixed fetch timeout."
+        - id: fedora-pivot/macos-cloud-official
+          status: ready
+          owner_host: macos
+          depends_on: []
+          owned_files:
+            - crates/tillandsias-macos-tray/src/action_host.rs
+            - crates/tillandsias-macos-tray/src/diagnose.rs
+          checkpoint_required: true
+          handoff_note: "m9/vz-boot-via-fedora-cloud-image: pivot to Fedora Cloud aarch64."
+        - id: fedora-pivot/linux-decommission-rootfs
+          status: completed
+          owner_host: linux
+          depends_on: []
+          owned_files:
+            - .github/workflows/recipe-publish.yml
+            - openspec/litmus-tests/litmus-recipe-release-tag-symmetric.yaml
+            - images/vm/manifest.toml
+          checkpoint_required: true
+          handoff_note: "l10/decommission-rootfs-publish-workflow: remove obsolete CI and litmus."
+          events:
+            - type: claim
+              ts: "2026-06-02T21:20:00Z"
+              agent_id: "linux-tlatoani-gemini-cli-20260602T2120Z"
+              host: "linux"
+              lease_id: "lease-linux-decommission-rootfs-20260602T2120Z"
+              expires_at: "2026-06-03T01:20:00Z"
+            - type: completed
+              ts: "2026-06-02T21:45:00Z"
+              agent_id: "linux-tlatoani-gemini-cli-20260602T2120Z"
+              summary: "Deleted recipe-publish.yml, symmetric-pin litmus, and leftover materializer artifacts. Fedora pivot finalized on Linux side."
+

@@ -102,18 +102,34 @@ try {
 $failures = 0
 Write-Host 'Identity:'
 Write-Check 'version           ' $true $report.version
-Write-Check 'log file exists   ' $report.log_exists $report.log_path
+$commit = if ($report.build_commit) { $report.build_commit } else { '(unknown)' }
+Write-Check 'build commit      ' $true $commit
+$installPath = if ($report.install_path) { $report.install_path } else { '(unknown)' }
+Write-Check 'install path      ' $true $installPath
+$logSizeDetail = if ($null -ne $report.log_size_bytes) { "$($report.log_path) ($($report.log_size_bytes) bytes)" } else { $report.log_path }
+Write-Check 'log file exists   ' $report.log_exists $logSizeDetail
 if (-not $report.log_exists) { $failures++ }
 
 Write-Host "`nWindows host:"
+# Surface OS + WSL versions for triage. Locale-as-is — the bracketed
+# version payload is invariant across locales.
+$osVersion = if ($report.os_version) { $report.os_version } else { '(not detected)' }
+Write-Check 'OS version        ' $true $osVersion
+$wslVersion = if ($report.wsl_version) { $report.wsl_version } else { '(not detected)' }
+Write-Check 'WSL version       ' ([bool]$report.wsl_version) $wslVersion
+if (-not $report.wsl_version) { $failures++ }
 Write-Check 'wt.exe present    ' $report.wt_present
 if (-not $report.wt_present) { $failures++ }
 Write-Check 'distro registered ' $report.distro_registered $report.distro
 if (-not $report.distro_registered) { $failures++ }
+# distro_running flips frequently because WSL2 idles VMs down; it's NOT a
+# failure when false. Surface as informational.
+$runDetail = if ($report.distro_running) { 'yes (VM up)' } else { 'no (idled -- normal when no tray session keepalives the VM)' }
+Write-Check 'distro running    ' $true $runDetail
 
 Write-Host "`nRecipe / artifact:"
 Write-Check 'release tag       ' $true $report.release_tag
-$pin = $report.manifest_pin_x86_64_tar
+$pin = $report.manifest_pin_x86_64_tar_xz
 $pinDetail = if ($pin) { "x86_64.tar $pin..." } else { '(not found)' }
 Write-Check 'manifest pin      ' ([bool]$pin) $pinDetail
 if (-not $pin) { $failures++ }
@@ -130,11 +146,34 @@ if (-not $wireOk) {
     }
 }
 
+# Recent log activity (sourced from the in-report recent_log_tail field —
+# 20 lines max). Useful for triaging "tray was up earlier and went south"
+# scenarios. If the operator wants more, `tillandsias-tray --logs --tail N`
+# dumps the full log to stdout.
+if ($report.recent_log_tail -and $report.recent_log_tail.Count -gt 0) {
+    Write-Host "`nRecent log activity (last $($report.recent_log_tail.Count) line(s) of tray.log):"
+    foreach ($line in $report.recent_log_tail) {
+        Write-Host "  $line" -ForegroundColor DarkGray
+    }
+}
+
 Write-Host
+# Surface BOTH verdicts: the binary's --diagnose exit (which gates on the
+# strict wire-readiness invariant: distro registered + wire reachable +
+# phase Ready) AND the script's own classification (which gates on the
+# wider host-machinery invariant: + WSL + wt.exe + manifest pin). The
+# two can disagree — the script is intentionally stricter — and showing
+# both lets an operator see WHY.
+$binVerdict = switch ($trayExit) {
+    0 { 'HEALTHY' }
+    2 { 'DEGRADED' }
+    default { "UNKNOWN (exit $trayExit)" }
+}
+Write-Host "Binary --diagnose exit: $trayExit ($binVerdict)" -ForegroundColor DarkGray
 if ($failures -eq 0) {
-    Write-Host 'HEALTHY (0 failures)' -ForegroundColor Green
+    Write-Host 'Script verdict: HEALTHY (0 failures)' -ForegroundColor Green
     exit 0
 } else {
-    Write-Host "DEGRADED ($failures failure(s)) - run 'tillandsias-tray --provision-once' to provision" -ForegroundColor Yellow
+    Write-Host "Script verdict: DEGRADED ($failures failure(s)) - run 'tillandsias-tray --provision-once' to provision" -ForegroundColor Yellow
     exit 2
 }
