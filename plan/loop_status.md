@@ -1,40 +1,25 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-02T23:30:00Z
+LastExecutionTime: 2026-06-02T21:34:00Z
 
 ## This Loop
 
-- **Multi-Host Coordination**: Full orchestration pass completed.
-  - **Divergence Alert**: `origin/osx-next` at `a826dcc5` — **11 commits ahead** of `origin/linux-next` (`7efd4b38`), exceeding D_max=5. Pattern D mediation triggered.
-  - **Synchronous Integration Wave**: Merged `origin/osx-next` into `linux-next` via `git merge --no-ff`. 10 files changed (303 insertions, 100 deletions). `./build.sh --check` ✓, `./build.sh --test` ✓ — **all tests passed**.
-  - **Divergence Resolved**: After push (`7efd4b38..d9b706d2`), `origin/linux-next` now contains all 11 osx-next commits. `git rev-list --count origin/linux-next..origin/osx-next` = 0.
-  - windows-next at `7efd4b38` (same as previous linux-next) — requires fast-forward to `d9b706d2`.
-  - main at `cb4c6204` — release v0.2.260602.3 published.
-
-## Expected Next Loop
-
-- Linux host: claim `forge-diagnostics/e2e-piggyback-orchestration` to unblock `forge-enhancements/curated-toolchain-backlog`.
-- Windows host: fast-forward `windows-next` to `origin/linux-next` (`d9b706d2`). Continue yielding if no claimable packets.
-- macOS host: user-attended m8 smoke remains the only open gate.
-- All hosts: monitor post-integration stability.
-
-## Resolved Since Previous Loop
-
-- **osx-next divergence** (11 commits, D_max exceeded) — fully integrated via orchestrator-led merge + push. Tests 100% green.
-- macOS code change `a826dcc5` (fix(macos): load tray status icon image) now in linux-next.
-- Plan files from osx-next now mirrored in linux-next.
-
-## Current Major Blockers
-
-- macOS m8 user-attended interactive smoke remains the manual acceptance gate.
-- forge-diagnostics pipeline stalled by unclaimed linux packet.
-- No Windows-eligible work available; queue fully drained.
+- **Full Orchestration Pass**: Audited all 4 sibling branches. 0 drift on all platform branches.
+  - `origin/linux-next` at `17f6c246`, `origin/windows-next` at `7efd4b38` (ancestor, 0 ahead), `origin/osx-next` at `a826dcc5` (ancestor, 0 ahead), `origin/main` at `cb4c6204`.
+  - `linux-next` is 72 commits ahead of `main`.
+  - Merge-base ancestry: windows-next ✓, osx-next ✓ — both clean ancestors.
+- **Plan Graph**: Fully drained. All 23 steps + all tasks in `plan/index.yaml` are `status: completed`.
+  - `plan.yaml` confirms `next_step: none`, `next_graph_node: none`.
+  - `forge-diagnostics/e2e-piggyback-orchestration` is `completed` per plan/index.yaml:1528 (loop_status.md was stale).
+  - No active leases, no stale pings.
+- **Convergence Metrics**: Residual correctness debt R ≈ 0. All spec gaps filled, diagnostics pipeline complete. V_c = 0 (steady state), V_min not applicable (R = 0).
+- **No integration needed**: 0 drift on both siblings. No unintegrated code.
 
 ## Assignment Board
 
 - **Linux**:
-  - Primary: Claim `forge-diagnostics/e2e-piggyback-orchestration` to unblock toolchain backlog.
-  - Fallback: Spec coverage gap audit, diagnostic pipeline work.
+  - Primary: YIELD — no claimable packets. Plan graph fully drained.
+  - Fallback: none (spec gaps, diagnostics, forge improvements all completed).
 - **Windows**:
   - Primary: YIELD — no claimable packets. Fast-forward `windows-next` to `origin/linux-next`.
 - **macOS**:
@@ -43,10 +28,11 @@ LastExecutionTime: 2026-06-02T23:30:00Z
 
 ## Stale Or Pending Pings
 
-- forge-diagnostics automation packet `e2e-piggyback-orchestration` (owner: linux, ready, unclaimed).
-- `windows-next` at stale commit `7efd4b38` — needs fast-forward to `d9b706d2`.
+- `windows-next` at `7efd4b38` — stale, needs fast-forward to `17f6c246` (or latest linux-next).
+- `plan/issues/release-checklist-2026-05-14.md` — `status: pending`, not a shaped packet. Orchestrator may evaluate if ready to close.
+- `plan/issues/osx-next-work-queue-2026-05-25.md` line 687 — `m1b/transport-macos-vsock-connector` status: pending. macOS-owned, not shaped for general dispatch.
 
 ## Validation
 
-- YAML check: `plan.yaml`, `plan/index.yaml`, `methodology/convergence.yaml`, and `methodology/distributed-work.yaml` are clean and 100% syntactically valid.
-- Merge verification: `./build.sh --check` and `./build.sh --test` passed on merged tree.
+- Ancestry checks: windows-next and osx-next both clean ancestors of linux-next.
+- All upstream work fully integrated. No outstanding merges.
