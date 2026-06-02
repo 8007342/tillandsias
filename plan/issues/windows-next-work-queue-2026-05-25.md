@@ -296,6 +296,14 @@ manifest state.
   - `origin/linux-next` merged and synced.
 - 2026-06-02T20:30Z: **completed** by `windows-bullo-gemini-2026-06-02T1930Z`. Verified green.
 
+### Event: 2026-06-02T13:15Z — windows-next branch sync + D_max resolved
+
+- **Agent**: `windows-yolanda-opencode-2026-06-02T13:09:33Z`
+- **Action**: Fast-forwarded `windows-next` from `34313d90` to `f9e2c5d2` (14 commits behind linux-next resolved).
+- **D_max**: **RESOLVED** — was 30 commits ahead of merge-base in previous loop_status; now 0 ahead of linux-next, fully synced.
+- **Queue Status**: All Windows packets (w1-w11) are **done**. The `rootfs-removal-fedora-pivot` step (order 23) remains `ready` pending macOS m9 packet. No new Windows-claimable work items exist.
+- **Pushed**: `origin/windows-next` advanced `34313d90..f9e2c5d2`.
+
 ### Item: w1/tray-icon-rc-and-ico
 
 - id: `w1/tray-icon-rc-and-ico`
