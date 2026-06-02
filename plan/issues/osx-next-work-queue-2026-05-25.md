@@ -97,6 +97,10 @@ m10/m11 remain optional follow-ups, but the current macOS loop is allowed to
 noop while waiting on user smoke feedback or the shared manifest `release_tag`
 accessor.
 
+## Work-loop Outcomes
+
+- 2026-06-02T20:54Z  a826dcc5  Resolved UX gap-1 by loading `icon.pdf` as the NSStatusItem template image; targeted macOS tray tests/check passed.
+
 ## Currently unblocked / active
 
 ### Item: m10/menu-project-threading-for-pty-launch

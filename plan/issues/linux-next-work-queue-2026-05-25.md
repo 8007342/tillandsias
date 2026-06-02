@@ -16,6 +16,7 @@ This file is the cross-host advertisement — terse, dated, SHA-anchored.
 
 ## Recent entries (reverse chronological)
 
+- 2026-06-02T22:55Z  `3fd88dd5`  **Windows branch sync + no-op completion**. windows-next fast-forwarded from `f9e2c5d2` to `3fd88dd5` (6 plan-only commits). Work discovery: no claimable Windows-eligible packet in plan graph; all steps completed. All Fedora pivot subtasks complete across all three hosts. Forge-diagnostics pipeline stalled on unclaimed linux packet. Windows worker yields until orchestrator sources new packets. Agent `windows-bullo-opencode-2026-06-02T22:50:00Z`.
 - 2026-06-02T13:15Z  `f9e2c5d2`  **Windows branch sync + D_max resolved**. windows-next fast-forwarded from `34313d90` to `f9e2c5d2` (14 commits). All Windows work-queue items (w1-w11) are done; D_max exceedance resolved (was 30 ahead, now 0). Agent `windows-yolanda-opencode-2026-06-02T13:09:33Z`.
 - 2026-06-02T20:04Z  `20fb5205`  Spec-gap fill (app-lifecycle): added `litmus:app-lifecycle-tray-state-api-shape` to pin the public `TrayState` lifecycle API and helper unit-test names; coverage 67 -> 75. Verification: target instant litmus PASS; `./build.sh --check` PASS; `cargo fmt --all -- --check` fails on unrelated Fedora pivot Rust formatting drift not touched by this packet.
 - 2026-06-02T21:45Z  done      l10/decommission-rootfs-publish-workflow: removed recipe-publish.yml, symmetric-pin litmus, and leftover materializer artifacts. Fedora pivot finalized on Linux side.
