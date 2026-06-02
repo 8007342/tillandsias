@@ -1,0 +1,62 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+# Gemini CLI repeat loop for Tillandsias.
+#
+# Mirror of opencode-repeat and claude-repeat, but for the `gemini` CLI.
+# Each iteration starts a FRESH context.
+
+WAIT=""
+SKILL=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --wait) WAIT="$2"; shift 2 ;;
+    --skill) SKILL="$2"; shift 2 ;;
+    *)
+      echo "usage: gemini-repeat --wait <duration> --skill <skill-name>" >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ -z "$WAIT" || -z "$SKILL" ]]; then
+  echo "usage: gemini-repeat --wait <duration> --skill <skill-name>" >&2
+  exit 2
+fi
+
+duration_to_seconds() {
+  local input="$1" rest total=0 number unit
+  rest=$input
+  if [[ "$rest" =~ ^[0-9]+$ ]]; then echo "$rest"; return 0; fi
+  while [[ -n "$rest" ]]; do
+    if [[ "$rest" =~ ^([0-9]+)([smhd])(.*)$ ]]; then
+      number="${BASH_REMATCH[1]}"
+      unit="${BASH_REMATCH[2]}"
+      rest="${BASH_REMATCH[3]}"
+      case "$unit" in
+        s) total=$((total + number)) ;;
+        m) total=$((total + number * 60)) ;;
+        h) total=$((total + number * 3600)) ;;
+        d) total=$((total + number * 86400)) ;;
+      esac
+    else
+      echo "gemini-repeat: invalid duration '$input'" >&2
+      exit 2
+    fi
+  done
+  echo "$total"
+}
+
+wait_seconds=$(duration_to_seconds "$WAIT")
+
+pdt() { date -u '+%Y-%m-%dT%H:%M:%SZ'; }
+
+while :; do
+  echo "[gemini-repeat] $(pdt) — running /${SKILL}"
+  gemini --prompt "use the /${SKILL} skill" --yolo --skip-trust
+  echo "[gemini-repeat] $(pdt) — done"
+  next=$(( $(date +%s) + wait_seconds ))
+  echo "[gemini-repeat] next at $(date -u -d "@$next" '+%Y-%m-%dT%H:%M:%SZ')"
+  sleep "$wait_seconds"
+done
