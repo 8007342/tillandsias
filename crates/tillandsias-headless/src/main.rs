@@ -993,7 +993,7 @@ fn image_build_args(image_name: &str, image_tag: &str) -> Vec<String> {
             .unwrap_or("latest");
         vec![
             "--build-arg".into(),
-            format!("CHROMIUM_CORE_IMAGE=tillandsias-chromium-core:v{core_version}"),
+            format!("CHROMIUM_CORE_IMAGE=localhost/tillandsias-chromium-core:v{core_version}"),
         ]
     } else {
         Vec::new()
@@ -1001,7 +1001,7 @@ fn image_build_args(image_name: &str, image_tag: &str) -> Vec<String> {
 }
 
 fn versioned_image_tag(image_name: &str, version: &str) -> String {
-    format!("tillandsias-{image_name}:v{version}")
+    format!("localhost/tillandsias-{image_name}:v{version}")
 }
 
 fn forge_image_tag(version: &str) -> String {
@@ -1196,7 +1196,7 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
             accountability = true,
             category = "secrets",
             spec = "secret-rotation",
-            secret_type = "ca-certificate",
+            secret_name = "tillandsias-ca-cert",
             operation = "rotation_start",
             location = %crt.display(),
             "CA certificate rotation starting"
@@ -1236,7 +1236,7 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
                 accountability = true,
                 category = "secrets",
                 spec = "secret-rotation",
-                secret_type = "ca-certificate",
+                secret_name = "tillandsias-ca-cert",
                 operation = "rotation_failed",
                 location = %crt.display(),
                 error = %e,
@@ -1254,7 +1254,7 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
                         accountability = true,
                         category = "secrets",
                         spec = "secret-rotation",
-                        secret_type = "ca-certificate",
+                        secret_name = "tillandsias-ca-cert",
                         operation = "rotation_failed",
                         location = %crt.display(),
                         error = %e,
@@ -1269,7 +1269,7 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
                         accountability = true,
                         category = "secrets",
                         spec = "secret-rotation",
-                        secret_type = "ca-key",
+                        secret_name = "tillandsias-ca-key",
                         operation = "rotation_failed",
                         location = %key.display(),
                         error = %e,
@@ -1289,7 +1289,7 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
             accountability = true,
             category = "secrets",
             spec = "secret-rotation",
-            secret_type = "ca-certificate",
+            secret_name = "tillandsias-ca-cert",
             operation = "rotation_complete",
             location = %crt.display(),
             "CA certificate rotation completed successfully"
@@ -3238,6 +3238,7 @@ fn run_github_login(debug: bool) -> Result<(), String> {
         category = "secrets",
         spec = "secret-rotation",
         operation = "gh_auth_start",
+        secret_name = "tillandsias-github-token",
         "GitHub authentication and secret rotation starting"
     );
 
@@ -3317,6 +3318,7 @@ fn run_github_login(debug: bool) -> Result<(), String> {
         category = "secrets",
         spec = "secret-rotation",
         operation = "gh_auth_success",
+        secret_name = "tillandsias-github-token",
         "GitHub token retrieved successfully; initiating secret rotation"
     );
 
@@ -3331,6 +3333,7 @@ fn run_github_login(debug: bool) -> Result<(), String> {
                     category = "secrets",
                     spec = "tillandsias-vault",
                     operation = "gh_auth_vault_write",
+        secret_name = "tillandsias-github-token",
                     "GitHub token stored in Vault at secret/github/token"
                 );
             }
@@ -3354,6 +3357,7 @@ fn run_github_login(debug: bool) -> Result<(), String> {
         category = "secrets",
         spec = "secret-rotation",
         operation = "gh_auth_complete",
+        secret_name = "tillandsias-github-token",
         "GitHub authentication and secret rotation completed successfully"
     );
 
@@ -7802,13 +7806,13 @@ mod tests {
         // Test that versioned_image_tag produces the correct format.
         // @trace spec:init-command
         let tag = versioned_image_tag("forge", "0.1.260513");
-        assert_eq!(tag, "tillandsias-forge:v0.1.260513");
+        assert_eq!(tag, "localhost/tillandsias-forge:v0.1.260513");
 
         let tag = versioned_image_tag("proxy", "1.0.0");
-        assert_eq!(tag, "tillandsias-proxy:v1.0.0");
+        assert_eq!(tag, "localhost/tillandsias-proxy:v1.0.0");
 
         let tag = versioned_image_tag("chromium-framework", "0.2.100");
-        assert_eq!(tag, "tillandsias-chromium-framework:v0.2.100");
+        assert_eq!(tag, "localhost/tillandsias-chromium-framework:v0.2.100");
     }
 
     #[test]
@@ -7818,13 +7822,13 @@ mod tests {
         // @trace spec:init-command
         let args = image_build_args(
             "chromium-framework",
-            "tillandsias-chromium-framework:v1.0.0",
+            "localhost/tillandsias-chromium-framework:v1.0.0",
         );
 
         assert_eq!(args.len(), 2, "should have 2 args (--build-arg and value)");
         assert_eq!(args[0], "--build-arg");
         assert!(
-            args[1].contains("CHROMIUM_CORE_IMAGE=tillandsias-chromium-core:v1.0.0"),
+            args[1].contains("CHROMIUM_CORE_IMAGE=localhost/tillandsias-chromium-core:v1.0.0"),
             "should pass CHROMIUM_CORE_IMAGE with version: {}",
             args[1]
         );

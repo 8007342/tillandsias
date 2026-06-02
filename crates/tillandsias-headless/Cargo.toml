@@ -1,6 +1,6 @@
 [package]
 name = "tillandsias-headless"
-version = "0.2.260528"
+version = "0.2.260602"
 edition = "2024"
 license = "GPL-3.0-or-later"
 authors = ["Tlatoani"]
@@ -27,6 +27,7 @@ libc = "0.2"
 chrono = { version = "0.4", features = ["serde"] }
 serde = { workspace = true }
 serde_json = "1"
+base64 = { workspace = true }
 sha2 = "0.10"
 tracing = { workspace = true }
 tracing-appender = { workspace = true }
@@ -35,10 +36,9 @@ tempfile = "3"
 reqwest = { workspace = true }
 
 # @trace spec:tillandsias-vault — Phase 6: Vault is now the default secrets
-# backend for Linux. The `vault` feature is enabled by default; the
-# `--legacy-keyring-secrets` runtime flag still routes through the old
-# podman-secret-from-keyring path for backwards compatibility.
+# backend for Linux. The `vault` feature is enabled by default.
 tillandsias-vault-client = { path = "../tillandsias-vault-client", optional = true }
+keyring = { workspace = true, optional = true }
 uuid = { workspace = true, optional = true }
 zeroize = { version = "1", optional = true }
 dirs = { workspace = true, optional = true }
@@ -80,6 +80,5 @@ tray = ["image", "zbus", "zvariant"]
 # crate's parallel `vsock` feature. PTY handler (control-wire-pty-attach)
 # rides this feature since PTY-over-vsock is the only client today.
 listen-vsock = ["tokio-vsock", "tillandsias-control-wire/vsock"]
-# @trace spec:tillandsias-vault — Phase 6 default-on. Build with
-# `--no-default-features` to ship the legacy keyring-only binary.
-vault = ["tillandsias-vault-client", "uuid", "zeroize", "dirs"]
+# @trace spec:tillandsias-vault — Phase 6 default-on.
+vault = ["tillandsias-vault-client", "uuid", "zeroize", "dirs", "keyring"]

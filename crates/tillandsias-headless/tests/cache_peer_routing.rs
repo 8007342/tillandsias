@@ -414,10 +414,10 @@ fn test_proxy_egress_isolation_tcp_reset() {
         .or_else(|_| fs::read_to_string("../../images/proxy/squid.conf"))
         .expect("Failed to read squid.conf");
 
-    // Verify strict_deny_acl exists and maps to strict_port
+    // Verify strict_deny_acl exists and maps to localport 3128
     assert!(
-        squid_conf.contains("acl strict_deny_acl strict_port"),
-        "strict_deny_acl must be defined as strict_port"
+        squid_conf.contains("acl strict_deny_acl localport 3128"),
+        "strict_deny_acl must be defined as localport 3128"
     );
 
     // Verify deny_info TCP_RESET is configured for strict_deny_acl

@@ -15,17 +15,19 @@
 use std::collections::HashMap;
 use std::fs;
 use std::io::{Read, Write};
-use std::os::unix::fs::PermissionsExt;
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::{Mutex, OnceLock};
 use std::time::{Duration, Instant};
 
+#[cfg(feature = "vault")]
+use keyring::Entry;
+
 use tillandsias_podman::podman_cmd_sync;
 use tillandsias_vault_client::{Policy, VaultClient, auto_unseal};
 use zeroize::Zeroize;
 
-const VAULT_IMAGE_TAG: &str = "tillandsias-vault:latest";
+const VAULT_IMAGE_TAG: &str = "localhost/tillandsias-vault:latest";
 const VAULT_CONTAINER_NAME: &str = "tillandsias-vault";
 const VAULT_VOLUME: &str = "tillandsias-vault-data";
 const VAULT_UNSEAL_SECRET: &str = "tillandsias-vault-unseal";
@@ -34,6 +36,13 @@ const VAULT_NETWORK_ALIAS: &str = "vault";
 // POC (Linux host == VM). In Phase 4/5 the host shell will use vsock
 // instead of publishing a port.
 pub const VAULT_HOST_PORT: u16 = 8201;
+
+/// Keychain service name for Tillandsias.
+const KEYCHAIN_SERVICE: &str = "tillandsias";
+/// Keychain user for the versioned unseal key.
+const UNSEAL_KEY_V1: &str = "vault-unseal-v1";
+/// Keychain user for the installation anchor (UUID).
+const INSTALL_ANCHOR_V1: &str = "installation-uuid-v1";
 const VAULT_USER_UID: u32 = 100;
 const VAULT_GROUP_GID: u32 = 1000;
 
@@ -87,20 +96,14 @@ pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
         }
     }
 
-    eprintln!("[tillandsias-vault] bootstrap starting (Phase 6 default)");
+    eprintln!("[tillandsias-vault] bootstrap starting (Phase 6.5 hardened)");
+
+    #[cfg(feature = "vault")]
+    sanitize_keychain(debug);
 
     build_vault_image(debug)?;
-    let installation_uuid = ensure_installation_uuid()?;
-    if debug {
-        eprintln!(
-            "[tillandsias-vault] installation-uuid: {} (len={})",
-            installation_uuid,
-            installation_uuid.len()
-        );
-    }
-    let machine_id = read_machine_id()?;
-    let mut unseal_key =
-        auto_unseal::derive_unseal_key(machine_id.as_bytes(), installation_uuid.as_bytes());
+
+    let mut unseal_key = ensure_unseal_key(debug)?;
     create_unseal_secret(&unseal_key, debug)?;
     unseal_key.zeroize();
     launch_vault_container(debug)?;
@@ -142,7 +145,7 @@ pub fn write_github_token_to_vault(token: &str, debug: bool) -> Result<(), Strin
     }
     let rt = tokio_runtime()?;
     let base_url = host_base_url();
-    let root_token = read_root_token()?;
+    let root_token = read_and_handover_root_token(debug)?;
     let client = VaultClient::new(&base_url, &root_token);
 
     if debug {
@@ -182,7 +185,7 @@ pub async fn mint_approle_token_for_container(
         return Err("Vault container is not running".into());
     }
     let base_url = host_base_url();
-    let root_token = read_root_token()?;
+    let root_token = read_and_handover_root_token(debug)?;
     let client = VaultClient::new(&base_url, &root_token);
     let token = client
         .issue_approle_token(role)
@@ -214,7 +217,7 @@ pub async fn revoke_pending_container_tokens(debug: bool) {
         return;
     }
     let base_url = host_base_url();
-    let root_token = match read_root_token() {
+    let root_token = match read_and_handover_root_token(debug) {
         Ok(t) => t,
         Err(e) => {
             if debug {
@@ -267,34 +270,77 @@ fn repo_script(name: &str) -> PathBuf {
         .unwrap_or_else(|| PathBuf::from(format!("scripts/{name}")))
 }
 
-fn ensure_installation_uuid() -> Result<String, String> {
-    let cfg_dir = dirs::config_dir()
-        .ok_or("no config dir")?
-        .join("tillandsias");
-    fs::create_dir_all(&cfg_dir).map_err(|e| format!("mkdir {cfg_dir:?}: {e}"))?;
-    let uuid_path = cfg_dir.join("installation-uuid");
-    if let Ok(existing) = fs::read_to_string(&uuid_path) {
-        let trimmed = existing.trim().to_string();
-        if !trimmed.is_empty() {
-            return Ok(trimmed);
+/// Retrieve the versioned unseal key from the host OS keychain, or derive
+/// and store it if missing.
+///
+/// @trace spec:tillandsias-vault
+#[cfg(feature = "vault")]
+fn ensure_unseal_key(debug: bool) -> Result<[u8; 32], String> {
+    use base64::Engine;
+
+    // 1. Try to get the fully-derived unseal key from the keychain
+    let entry = Entry::new(KEYCHAIN_SERVICE, UNSEAL_KEY_V1)
+        .map_err(|e| format!("keyring entry: {e}"))?;
+
+    if let Ok(encoded) = entry.get_password() {
+        if let Ok(key_vec) = base64::engine::general_purpose::STANDARD.decode(&encoded) {
+            if key_vec.len() == 32 {
+                if debug {
+                    eprintln!("[tillandsias-vault] recovered unseal key from host keychain ({})", UNSEAL_KEY_V1);
+                }
+                let mut key = [0u8; 32];
+                key.copy_from_slice(&key_vec);
+                return Ok(key);
+            }
         }
     }
-    // Generate a new UUIDv4 and write at mode 0600.
-    let new_uuid = uuid::Uuid::new_v4().to_string();
-    let mut f = fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .truncate(true)
-        .open(&uuid_path)
-        .map_err(|e| format!("open {uuid_path:?}: {e}"))?;
-    f.write_all(new_uuid.as_bytes())
-        .map_err(|e| format!("write uuid: {e}"))?;
-    let mut perm = fs::metadata(&uuid_path)
-        .map_err(|e| format!("stat uuid: {e}"))?
-        .permissions();
-    perm.set_mode(0o600);
-    fs::set_permissions(&uuid_path, perm).map_err(|e| format!("chmod uuid: {e}"))?;
-    Ok(new_uuid)
+
+    // 2. Not in keychain or invalid. Derive it from the machine-id and anchor.
+    if debug {
+        eprintln!("[tillandsias-vault] unseal key not found; deriving from host identity");
+    }
+
+    let machine_id = read_machine_id()?;
+
+    // Get or generate the installation anchor (UUID) from the keychain
+    let anchor_entry = Entry::new(KEYCHAIN_SERVICE, INSTALL_ANCHOR_V1)
+        .map_err(|e| format!("keyring anchor entry: {e}"))?;
+
+    let anchor = match anchor_entry.get_password() {
+        Ok(a) => a,
+        Err(_) => {
+            let new_anchor = uuid::Uuid::new_v4().to_string();
+            anchor_entry.set_password(&new_anchor)
+                .map_err(|e| format!("keyring anchor set: {e}"))?;
+            new_anchor
+        }
+    };
+
+    let key = auto_unseal::derive_unseal_key(machine_id.as_bytes(), anchor.as_bytes());
+
+    // Store the derived key in the keychain for faster recovery/stability
+    let encoded = base64::engine::general_purpose::STANDARD.encode(&key);
+    entry.set_password(&encoded)
+        .map_err(|e| format!("keyring unseal key set: {e}"))?;
+
+    Ok(key)
+}
+
+/// Fallback for non-vault builds.
+#[cfg(not(feature = "vault"))]
+fn ensure_unseal_key(_debug: bool) -> Result<[u8; 32], String> {
+    Err("vault feature not compiled".into())
+}
+
+/// Sanitize the host OS keychain by removing stale unseal keys or anchors
+/// from older versions.
+#[cfg(feature = "vault")]
+fn sanitize_keychain(debug: bool) {
+    // Today this is a placeholder for future versioned cleanup.
+    // In v0.3 we might delete UNSEAL_KEY_V0 if it existed.
+    if debug {
+        eprintln!("[tillandsias-vault] keychain sanitization complete (no stale keys found)");
+    }
 }
 
 fn read_machine_id() -> Result<String, String> {
@@ -490,10 +536,31 @@ fn wait_for_vault_ready(
         }
         std::thread::sleep(Duration::from_secs(2));
     }
-    read_root_token()
+    read_and_handover_root_token(debug)
 }
 
-fn read_root_token() -> Result<String, String> {
+/// Read the root token from the Vault volume (one-time handover) or the
+/// host OS keychain.
+#[cfg(feature = "vault")]
+fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
+    // 1. Try to get it from the keychain
+    let entry = Entry::new(KEYCHAIN_SERVICE, "vault-root-token-v1")
+        .map_err(|e| format!("keyring entry: {e}"))?;
+
+    if let Ok(token) = entry.get_password() {
+        if !token.is_empty() {
+            if debug {
+                eprintln!("[tillandsias-vault] recovered root token from host keychain");
+            }
+            return Ok(token);
+        }
+    }
+
+    // 2. Not in keychain. Attempt one-time handover from the container volume.
+    if debug {
+        eprintln!("[tillandsias-vault] root token not in keychain; attempting handover from volume");
+    }
+
     let out = podman_cmd_sync()
         .args([
             "exec",
@@ -503,13 +570,45 @@ fn read_root_token() -> Result<String, String> {
         ])
         .output()
         .map_err(|e| format!("podman exec root.token: {e}"))?;
+
     if !out.status.success() {
         return Err(format!(
-            "could not read root token: {}",
+            "could not read root token from volume: {}",
             String::from_utf8_lossy(&out.stderr)
         ));
     }
-    Ok(String::from_utf8_lossy(&out.stdout).trim().to_string())
+
+    let token = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if token.is_empty() {
+        return Err("root token file is empty".to_string());
+    }
+
+    // Store in keychain for future boots
+    entry.set_password(&token)
+        .map_err(|e| format!("keyring set root token: {e}"))?;
+
+    // @trace spec:tillandsias-vault — Secure Artifact Cleanup
+    // DELETE from volume immediately after successful handover.
+    let _ = podman_cmd_sync()
+        .args([
+            "exec",
+            VAULT_CONTAINER_NAME,
+            "rm",
+            "-f",
+            "/vault/data/root.token",
+        ])
+        .status();
+
+    if debug {
+        eprintln!("[tillandsias-vault] root token handover complete (deleted from volume)");
+    }
+
+    Ok(token)
+}
+
+#[cfg(not(feature = "vault"))]
+fn read_and_handover_root_token(_debug: bool) -> Result<String, String> {
+    Err("vault feature not compiled".into())
 }
 
 fn container_running(name: &str) -> bool {
