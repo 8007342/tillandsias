@@ -1028,3 +1028,102 @@ cross-host coordination needed.
 exact-count-as-enforcer pattern is the final mechanical lock on the
 "3-doc + 5-script + 6-litmus" drift-protection discipline. Future
 field additions surface immediately at test time.
+
+---
+
+### 20260602T040000Z — ok (--status-once human mode: parallel Status: READY/REACHABLE-NOT-READY/UNREACHABLE footer)
+
+- agent_id: windows-bullo-claude-opus-20260602T040000Z
+- head_sha: 37732518 (linux-next + osx-next still unchanged this tick;
+  windows-next 26 ahead pre-this-commit, 27 ahead post)
+- version: 0.2.260528.1
+- build_commit: 37732518
+- build_run_id: 20260602T040000Z
+
+**Sibling context**: no remote movement. linux-next + osx-next unchanged.
+windows-next 0/27. Merge-tree clean.
+
+**Change made**: added a self-summarizing footer to `--status-once`
+(no-JSON) human output. Mirrors the `--diagnose` Status footer
+shipped 2 ticks ago — same pattern, different exit-code matrix:
+- `0 → "Status: READY (exit 0)"`
+- `2 → "Status: REACHABLE-NOT-READY (exit 2) -- wire is up but VM phase isn't Ready"`
+- `1 → "Status: UNREACHABLE (exit 1) -- control wire not connectable; is the VM running?"`
+- `other → "Status: UNKNOWN (exit N)"` (defensive)
+
+The `--diagnose` 2-state matrix (0/2) and `--status-once` 3-state matrix
+(0/2/1) are different — the dedicated helpers keep them honest.
+
+Files touched (Windows-owned only):
+- `crates/tillandsias-windows-tray/src/notify_icon.rs`:
+  - **`print_status_human` restructured**: the prior code had an
+    early `return` after the error eprintln, which would have
+    suppressed the new footer on the unreachable path. Refactored
+    to `if/else` so both the error branch and the
+    phase/podman/last_event branch fall through to the always-
+    emitted footer.
+  - **New `status_summary_line(r: &StatusReport) -> String`** pure
+    helper. Same shape as `summary_line` for `--diagnose`; uses
+    `status_exit_code` rather than `exit_code_from`.
+  - **New inline pin test `status_summary_line_classifies_exit_code`**:
+    3 cases (Ready / non-Ready phase / unreachable) ensuring the
+    verdict-to-code mapping stays self-consistent with
+    `status_exit_code`. Parallels `summary_line_classifies_exit_code`
+    for the diagnose path.
+- `openspec/litmus-tests/litmus-windows-tray-diagnose-cli-surface.yaml`:
+  - Exit-code contract step renamed `"(incl. summary_line classifiers
+    for both --diagnose and --status-once)"` + grep predicate extended
+    to require the new test name.
+- `cheatsheets/runtime/windows-tray-diagnostics.md`:
+  - `--status-once` row description appended `"and a Status: READY/
+    REACHABLE-NOT-READY/UNREACHABLE (exit N) self-summarizing
+    footer"`.
+
+**Build**: 36.98 s release.
+
+**Tests**: **44 inline + 8 cli_integration + 3 portable_smoke = 55
+passed** / 5 ignored / 0 failed (+1 inline from
+`status_summary_line_classifies_exit_code`).
+
+**Smoke** (real hardware — `--status-once` no-flags output, wire
+unreachable):
+- Last line: `Status: UNREACHABLE (exit 1) -- control wire not
+  connectable; is the VM running?`
+- Process exit code: 1 — matches the footer's `(exit 1)`. Self-
+  consistency verified.
+
+**Litmus**:
+- `windows-native-tray`: 7/7 PASS (extended exit-code contract step
+  green; cheatsheet's `--status-once` row updated in lockstep).
+- `cargo fmt`: clean (rustfmt re-wrapped two `match` arm bodies +
+  one `assert!` — applied).
+- `cargo clippy --tests -D warnings`: clean.
+
+**Findings** (free-form):
+- The 4 self-summarizing-footer surfaces now form a complete pattern:
+  - `--diagnose` (human): `Status: HEALTHY / DEGRADED (exit N)`
+  - `--status-once` (human): `Status: READY / REACHABLE-NOT-READY /
+    UNREACHABLE (exit N)` (NEW)
+  - `--diagnose --json`: implicit via exit code only (the JSON shape
+    has the underlying fields; consumers can compute)
+  - `--status-once --json`: explicit `exit_code` field in the JSON
+- Both human-mode footers describe the same 3 facts: verdict label
+  + exit code + (optional) hint. The verdict labels DIFFER between
+  the two modes because the underlying questions differ:
+  `--diagnose` answers "is the host machinery + VM lifecycle in a
+  usable state?"; `--status-once` answers "is the wire connectable
+  AND the VM in the Ready phase?". Symmetric pattern, different
+  semantics — which the dedicated helpers preserve cleanly.
+- The `if/else` refactor in `print_status_human` to thread the
+  footer through both paths was a subtle bug avoidance: the prior
+  `return` after the error eprintln would have made `--status-once`
+  on the unreachable path print NO footer (the most operator-
+  important case, since unreachable is the "something is wrong"
+  state). Caught during implementation review, not in test.
+
+**Cross-host visibility note**: pure Windows-tray-side polish; no
+cross-host coordination needed.
+
+**Next iteration ask**: N/A (SECTION_KIND=ok). Both human-mode probe
+outputs now self-summarize. Cheatsheet updated; litmus pin extended;
+inline + cross-surface tests cover the pattern.

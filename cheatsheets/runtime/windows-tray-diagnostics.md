@@ -49,7 +49,7 @@ suitable for scripting.
 | Mode                       | What it does                                                                                | Exit codes              |
 |----------------------------|---------------------------------------------------------------------------------------------|-------------------------|
 | `--provision-once`         | Run `provision_via_recipe` to completion: fetch + verify + import + boot + handshake.       | `0` Ready / `1` failed  |
-| `--status-once`            | Connect to the live control wire, request `VmStatus`, print phase / `podman_ready` / `last_event`. | `0` Ready / `2` reachable-not-Ready / `1` unreachable |
+| `--status-once`            | Connect to the live control wire, request `VmStatus`, print phase / `podman_ready` / `last_event` + a `Status: READY/REACHABLE-NOT-READY/UNREACHABLE (exit N)` self-summarizing footer. | `0` Ready / `2` reachable-not-Ready / `1` unreachable |
 | `--status-once --json`     | Same status as a structured JSON object on stdout (StatusReport, see below).                | (same as `--status-once`) |
 | `--diagnose`               | Bundled human-readable health report (~13 rows in 5 grouped sections: binary identity, logs, host software, WSL distro + rootfs, control wire — followed by recent log tail and a `Status: HEALTHY/DEGRADED (exit N)` self-summarizing footer). | `0` healthy / `2` degraded / `1` hard fail |
 | `--diagnose --json`        | Same report as a structured JSON object on stdout (16 top-level keys, see schema below).    | (same as `--diagnose`)  |

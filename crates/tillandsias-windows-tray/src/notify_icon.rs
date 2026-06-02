@@ -827,18 +827,40 @@ fn print_status_human(r: &StatusReport) {
     }
     if let Some(err) = &r.error {
         eprintln!("[status] {err}");
-        return;
+    } else {
+        if let Some(phase) = &r.phase {
+            println!("[status] phase:        {phase}");
+        }
+        if let Some(pr) = r.podman_ready {
+            println!("[status] podman_ready: {pr}");
+        }
+        println!(
+            "[status] last_event:   {}",
+            r.last_event.as_deref().unwrap_or("(none)")
+        );
     }
-    if let Some(phase) = &r.phase {
-        println!("[status] phase:        {phase}");
+    // Self-summarizing footer (parallels print_human's Status: row).
+    // Always emits regardless of which path above ran, so the operator
+    // gets a verdict line on both healthy and error paths.
+    println!();
+    println!("{}", status_summary_line(r));
+}
+
+/// Pure summary line for [`print_status_human`]. Mirrors [`summary_line`]
+/// in shape but for the `--status-once` exit-code matrix (0 = Ready,
+/// 2 = reachable-not-Ready, 1 = unreachable). Pinned by
+/// `status_summary_line_classifies_exit_code` so a future refactor that
+/// flips the verdict-to-code mapping out of sync with [`status_exit_code`]
+/// is caught pre-build.
+fn status_summary_line(r: &StatusReport) -> String {
+    match status_exit_code(r) {
+        0 => "Status: READY (exit 0)".to_string(),
+        2 => "Status: REACHABLE-NOT-READY (exit 2) -- wire is up but VM phase isn't Ready"
+            .to_string(),
+        1 => "Status: UNREACHABLE (exit 1) -- control wire not connectable; is the VM running?"
+            .to_string(),
+        other => format!("Status: UNKNOWN (exit {other})"),
     }
-    if let Some(pr) = r.podman_ready {
-        println!("[status] podman_ready: {pr}");
-    }
-    println!(
-        "[status] last_event:   {}",
-        r.last_event.as_deref().unwrap_or("(none)")
-    );
 }
 
 fn print_status_json(r: &StatusReport) {
@@ -2802,6 +2824,35 @@ mod tests {
                 "status-once --json missing top-level key: {key}"
             );
         }
+    }
+
+    /// `status_summary_line` must agree with [`status_exit_code`] for
+    /// every possible exit-code path (0 = Ready, 2 = reachable-not-Ready,
+    /// 1 = unreachable). Same shape as `summary_line_classifies_exit_code`
+    /// for `--diagnose`; pinning the status-mode footer keeps the two
+    /// summary-helper patterns symmetric. A refactor that flips one
+    /// without the other surfaces here pre-build.
+    #[test]
+    fn status_summary_line_classifies_exit_code() {
+        // Ready (exit 0).
+        let mut r = baseline_status_report();
+        r.reachable = true;
+        r.phase = Some("Ready".to_string());
+        let s = status_summary_line(&r);
+        assert!(s.contains("READY") && s.contains("exit 0"), "Ready -> {s}");
+        // Reachable-not-Ready (exit 2).
+        r.phase = Some("Starting".to_string());
+        let s = status_summary_line(&r);
+        assert!(
+            s.contains("REACHABLE-NOT-READY") && s.contains("exit 2"),
+            "non-Ready phase -> {s}"
+        );
+        // Unreachable (exit 1). Baseline has reachable=false.
+        let s = status_summary_line(&baseline_status_report());
+        assert!(
+            s.contains("UNREACHABLE") && s.contains("exit 1"),
+            "unreachable -> {s}"
+        );
     }
 
     /// `--status-once` exit-code contract (independent of the `--diagnose`
