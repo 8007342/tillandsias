@@ -269,7 +269,8 @@ accessor.
 - type: architecture-pivot
 - owner_host: macos
 - capability_tags: [macos, vz, rust, fedora]
-- status: claimed
+- status: blocked
+- retryable: true
 - depends_on: [m5/vfr-image-via-ci-rootfs]
 - gated_on: []
 - owned_files:
@@ -298,6 +299,41 @@ accessor.
     host: "macos"
     lease_id: "m9-vz-fedora-cloud-20260602T203030Z"
     expires_at: "2026-06-03T00:30:30Z"
+  - type: blocked
+    ts: "2026-06-02T20:50:00Z"
+    agent_id: "macos-tlatoani-codex-20260602T203030Z"
+    host: "macos"
+    lease_id: "m9-vz-fedora-cloud-20260602T203030Z"
+    current_plan: >
+      Keep origin/linux-next as source of truth for the Fedora pivot and land
+      the macOS implementation after origin/osx-next is reconciled.
+    touched_files:
+      - `Cargo.lock`
+      - `crates/tillandsias-macos-tray/src/action_host.rs`
+      - `crates/tillandsias-macos-tray/src/diagnose.rs`
+      - `crates/tillandsias-vm-layer/src/recipe/mod.rs`
+      - `crates/tillandsias-vm-layer/src/vz.rs`
+      - `crates/tillandsias-vm-layer/tests/fixtures/recipe-basic/manifest.toml`
+      - `images/vm/manifest.toml`
+      - `scripts/install-macos.sh`
+      - `scripts/tray-diagnose.sh`
+    partial_evidence:
+      - "implementation commit: 99536276"
+      - "remote side branch: origin/codex/osx-fedora-cloud-pivot-20260602"
+      - "qemu-img available on macOS host: 11.0.0"
+      - "cargo test -p tillandsias-vm-layer: pass"
+      - "cargo test -p tillandsias-macos-tray --bin tillandsias-tray: pass (42 passed, 1 ignored)"
+      - "focused rustfmt --check on touched Rust files: pass"
+    blocker: >
+      Normal push to origin/osx-next was rejected as non-fast-forward. Local
+      osx-next was intentionally reset/fast-forwarded to origin/linux-next per
+      operator instruction, while origin/osx-next still has 7 stale commits not
+      present in the linux-next lineage. Do not force-push; coordinator must
+      reconcile or replace origin/osx-next before this can land there.
+    next_checkpoint: >
+      After origin/osx-next is reconciled to linux-next, fast-forward/cherry-pick
+      99536276 from origin/codex/osx-fedora-cloud-pivot-20260602 onto osx-next
+      and rerun the two targeted test commands above.
 
 ### Item: m8/appkit-action-smoke-and-stub-polish
 
