@@ -157,7 +157,7 @@ accessor.
 - type: housekeeping
 - owner_host: macos
 - capability_tags: [appkit, menu-structure, clippy, rust]
-- status: claimed
+- status: done
 - depends_on: [m4/pty-attach-appkit-terminal, m5/vfr-image-via-ci-rootfs]
 - gated_on: []
 - blocks: []
@@ -202,6 +202,11 @@ accessor.
     host: "macos"
     lease_id: "lease-m11-gemini-20260602"
     expires_at: "2026-06-03T00:16:14Z"
+  - type: completed
+    ts: "2026-06-02T20:20:00Z"
+    agent_id: "macos-gemini-cli-agent-20260602T201614Z"
+    commit: "ca8e582795f9f0dce7b7b78d5b4370ec29713e8a"
+    validation: "cargo fmt --all -- --check && cargo clippy -p tillandsias-macos-tray -- -D warnings -> clean"
 
 ### Item: m1b/transport-macos-vsock-connector
 
@@ -3100,4 +3105,10 @@ step 5 lands.
 
 - m10/menu-project-threading-for-pty-launch was correctly implemented in `61e4233f`, but its status field was not fully marked done. Corrective bookkeeping applied: marked done and completed natively.
 - Tests remain 42/42 passing.
+- Streak: 0 (productive iter).
+
+### event: macOS m11 metadata alignment — 2026-06-02T20:20Z
+
+- m11/menu-structure-action-integration-and-clippy was correctly implemented in `ca8e5827`, but its status field was not fully marked done. Corrective bookkeeping applied: marked done and completed natively.
+- Tests remain 42/42 passing. Formatting and linting clean.
 - Streak: 0 (productive iter).
