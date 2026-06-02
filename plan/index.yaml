@@ -1778,7 +1778,7 @@ plan_index:
           checkpoint_required: true
           handoff_note: "m9/vz-boot-via-fedora-cloud-image: pivot to Fedora Cloud aarch64."
         - id: fedora-pivot/linux-decommission-rootfs
-          status: ready
+          status: claimed
           owner_host: linux
           depends_on: []
           owned_files:
@@ -1787,4 +1787,11 @@ plan_index:
             - images/vm/manifest.toml
           checkpoint_required: true
           handoff_note: "l10/decommission-rootfs-publish-workflow: remove obsolete CI and litmus."
+          events:
+            - type: claim
+              ts: "2026-06-02T21:20:00Z"
+              agent_id: "linux-tlatoani-gemini-cli-20260602T2120Z"
+              host: "linux"
+              lease_id: "lease-linux-decommission-rootfs-20260602T2120Z"
+              expires_at: "2026-06-03T01:20:00Z"
 
