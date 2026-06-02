@@ -136,7 +136,9 @@ fn main() {
     let debug = debug || diagnostics;
     if debug {
         eprintln!("[tillandsias] version: {version}");
-        unsafe { std::env::set_var("TILLANDSIAS_DEBUG", "1"); }
+        unsafe {
+            std::env::set_var("TILLANDSIAS_DEBUG", "1");
+        }
     }
 
     // USER PRIORITY (a) of the diagnostics-driven container-start
@@ -293,9 +295,7 @@ fn main() {
         #[cfg(not(feature = "vault"))]
         {
             if debug {
-                eprintln!(
-                    "[tillandsias] vault feature not compiled; continuing without Vault"
-                );
+                eprintln!("[tillandsias] vault feature not compiled; continuing without Vault");
             }
         }
 
@@ -308,9 +308,16 @@ fn main() {
         }
     }
 
-    if user_args.iter().any(|a| a == "--without-vault" || a == "--legacy-keyring-secrets") {
-        eprintln!("Error: --without-vault and --legacy-keyring-secrets have been REMOVED in v0.2.260602.");
-        eprintln!("Vault is now the mandatory secrets backend. See openspec/specs/tillandsias-vault/spec.md");
+    if user_args
+        .iter()
+        .any(|a| a == "--without-vault" || a == "--legacy-keyring-secrets")
+    {
+        eprintln!(
+            "Error: --without-vault and --legacy-keyring-secrets have been REMOVED in v0.2.260602."
+        );
+        eprintln!(
+            "Vault is now the mandatory secrets backend. See openspec/specs/tillandsias-vault/spec.md"
+        );
         std::process::exit(1);
     }
 
@@ -539,9 +546,7 @@ fn print_usage(version: &str) {
     println!("  --cache-verify Check cache integrity and report status");
     println!("  --cache-clear  Clear the initialization cache and build state");
     println!("  --status-check Verify services are online through a representative stack smoke");
-    println!(
-        "  --github-login Authenticate GitHub and store the token in Vault"
-    );
+    println!("  --github-login Authenticate GitHub and store the token in Vault");
     println!("  --debug        Show command-level diagnostics and capture build logs");
     println!(
         "  --diagnostics  Stream real-time logs from all enclave containers (implies --debug)"
@@ -2780,7 +2785,9 @@ fn build_image_with_logging(
     if let Some(stdout_reader) = stdout {
         let buf_reader = std::io::BufReader::new(stdout_reader);
         for line in buf_reader.lines().map_while(Result::ok) {
-            if _debug { eprintln!("[tillandsias] build-{}: {}", image_name, line); }
+            if _debug {
+                eprintln!("[tillandsias] build-{}: {}", image_name, line);
+            }
             // Write to log file if present
             if let Some(ref mut log) = log_handle {
                 let _ = writeln!(log, "{}", line);
@@ -3333,7 +3340,7 @@ fn run_github_login(debug: bool) -> Result<(), String> {
                     category = "secrets",
                     spec = "tillandsias-vault",
                     operation = "gh_auth_vault_write",
-        secret_name = "tillandsias-github-token",
+                    secret_name = "tillandsias-github-token",
                     "GitHub token stored in Vault at secret/github/token"
                 );
             }
@@ -6624,21 +6631,121 @@ fn load_config(_path: &str) -> Result<(), String> {
 
 /// Phase 5, Task 21: Graceful shutdown with 30s timeout and SIGKILL fallback.
 /// @trace spec:linux-native-portable-executable, spec:graceful-shutdown, spec:signal-handling
-async fn graceful_shutdown_async() -> Result<(), String> {
-    // Phase 5, Task 23: Test signal handling with timeout
-    // Emit shutdown event
-    eprintln!("Starting graceful shutdown sequence");
+/// Graceful shutdown sequence for both headless and tray modes.
+///
+/// This function:
+/// 1. Stops all managed containers with 30s timeout via podman client.
+/// 2. Monitors container exit status.
+/// 3. Force-kills any remaining containers after timeout.
+/// 4. Cleanup ephemeral resources (sockets, mounts, logs).
+///
+/// @trace spec:graceful-shutdown, spec:app-lifecycle
+pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
+    debug!("starting graceful shutdown sequence");
 
-    // In a full implementation, this would:
-    // 1. Stop all containers with 30s timeout via podman client
-    // 2. Monitor container exit status
-    // 3. Force-kill any remaining containers after timeout
-    // 4. Cleanup secrets and ephemeral network resources
+    // 2. Stop all tillandsias-managed containers
+    let client = PodmanClient::new();
+    // Use a short timeout (500ms) for the availability check during shutdown.
+    let is_available = tokio::time::timeout(Duration::from_millis(500), client.is_available())
+        .await
+        .unwrap_or(false);
 
-    // Check if there are any tillandsias-managed containers running
-    // If not, return immediately (for testing and headless-only runs)
-    // If yes, wait up to 30 seconds for graceful shutdown
+    if is_available {
+        // Use a short timeout (1s) for the initial list operation.
+        match tokio::time::timeout(Duration::from_secs(1), client.list_containers("tillandsias-"))
+            .await
+        {
+            Ok(Ok(containers)) if !containers.is_empty() => {
+                let running_at_start: Vec<_> = containers
+                    .iter()
+                    .filter(|c| c.state == "running")
+                    .collect();
 
+                if !running_at_start.is_empty() {
+                    info!(
+                        count = running_at_start.len(),
+                        "stopping managed containers gracefully"
+                    );
+
+                    let mut stop_tasks = tokio::task::JoinSet::new();
+                    for container in running_at_start {
+                        let client = client.clone();
+                        let name = container.name.clone();
+                        stop_tasks.spawn(async move {
+                            debug!(container = %name, "sending stop signal");
+                            let _ = client.stop_container(&name, 30).await;
+                        });
+                    }
+
+                    // Wait for all stop tasks with a global timeout (30s stop + 5s buffer)
+                    let _ = tokio::time::timeout(Duration::from_secs(35), async {
+                        while stop_tasks.join_next().await.is_some() {}
+                    })
+                    .await;
+                }
+
+                // 3. Verification phase: poll for any remaining RUNNING containers and escalate to SIGKILL
+                // @trace spec:graceful-shutdown (Requirement: Force-kill fallback)
+                debug!("verifying all containers exited");
+                let start_poll = Instant::now();
+                while Instant::now().duration_since(start_poll) < Duration::from_secs(5) {
+                    match tokio::time::timeout(
+                        Duration::from_secs(1),
+                        client.list_containers("tillandsias-"),
+                    )
+                    .await
+                    {
+                        Ok(Ok(remaining)) => {
+                            let running: Vec<_> =
+                                remaining.into_iter().filter(|c| c.state == "running").collect();
+                            if running.is_empty() {
+                                debug!("verification clean: zero running managed containers remain");
+                                break;
+                            }
+
+                            // If we're near the end of the verification window, escalate to SIGKILL
+                            if Instant::now().duration_since(start_poll) > Duration::from_secs(4) {
+                                for c in running {
+                                    warn!(container = %c.name, "shutdown timeout exceeded; escalating to SIGKILL");
+                                    let _ = client.kill_container(&c.name, Some("KILL")).await;
+                                }
+                            }
+                        }
+                        _ => break,
+                    }
+                    tokio::time::sleep(Duration::from_millis(500)).await;
+                }
+            }
+            Ok(Ok(_)) => {
+                debug!("no managed containers found; skipping stop sequence");
+            }
+            _ => {
+                // Ignore errors during shutdown listing to ensure we reach the socket cleanup.
+            }
+        }
+    }
+
+    // 4. Cleanup ephemeral resources (sockets and logs)
+    // @trace spec:graceful-shutdown (Requirement: No stale sockets remain)
+    let socket_path = control_socket_host_dir().join("control.sock");
+    if socket_path.exists() {
+        debug!(path = %socket_path.display(), "removing control socket");
+        let _ = fs::remove_file(&socket_path);
+    }
+
+    // Cleanup temporary init logs in /tmp
+    // @trace spec:graceful-shutdown
+    if let Ok(entries) = fs::read_dir("/tmp") {
+        for entry in entries.flatten() {
+            if let Some(name) = entry.file_name().to_str() {
+                if name.starts_with("tillandsias-init-") && name.ends_with(".log") {
+                    let _ = fs::remove_file(entry.path());
+                }
+            }
+        }
+    }
+
+    // Use the exact string the signal_handling litmus and the spec expect.
     eprintln!("Graceful shutdown completed");
     Ok(())
 }

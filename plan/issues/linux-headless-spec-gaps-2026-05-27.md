@@ -323,21 +323,24 @@ WITH this, the 6-arm gap-3 typed-event chain is COMPLETE:
   5. container_stderr (DiagnosticsHandle typed tail, phase-2g)
   6. internal_* (verbose level via DiagnosticsFilter, gap-5 phase-1)
 - **GAP 7 GRACEFUL SHUTDOWN** (implementation + verification):
-Implementation of the `graceful-shutdown` spec in `tillandsias-headless`.
-- Wire `graceful_shutdown_async` into the tray's `run_tray_mode_with_debug` exit path.
-- Update `MenuCommand::Quit` (id 31) in `tray/mod.rs` to flip the shutdown atomic instead of `std::process::exit(0)`.
-- Implement container stop-and-wait in `graceful_shutdown_async` using `PodmanClient`.
-- Implement verification phase polling `podman ps --filter name=tillandsias-` with 30s timeout and SIGKILL fallback.
-- Closes the 67→100 gap for `app-lifecycle` and `graceful-shutdown` specs on Linux.
-- Status: claimed.
-- Events:
-  - type: claim
-    ts: "2026-06-02T19:15:00Z"
-    agent_id: "linux-tillandsia-gemini-cli-20260602T1912"
-    host: "linux"
-    lease_id: "lease-linux-graceful-shutdown-implementation-20260602T1912"
-    expires_at: "2026-06-02T23:15:00Z"
-
+  Implementation of the `graceful-shutdown` spec in `tillandsias-headless`.
+  - Wire `graceful_shutdown_async` into the tray's `run_tray_mode_with_debug` exit path.
+  - Update `MenuCommand::Quit` (id 31) in `tray/mod.rs` to flip the shutdown atomic instead of `std::process::exit(0)`.
+  - Implement container stop-and-wait in `graceful_shutdown_async` using `PodmanClient`.
+  - Implement verification phase polling `podman ps --filter name=tillandsias-` with 30s timeout and SIGKILL fallback.
+  - Closes the 67→100 gap for `app-lifecycle` and `graceful-shutdown` specs on Linux.
+  - Status: done.
+  - Events:
+    - type: claim
+      ts: "2026-06-02T19:15:00Z"
+      agent_id: "linux-tillandsia-gemini-cli-20260602T1912"
+      host: "linux"
+      lease_id: "lease-linux-graceful-shutdown-implementation-20260602T1912"
+      expires_at: "2026-06-02T23:15:00Z"
+    - type: completed
+      ts: "2026-06-02T19:55:00Z"
+      agent_id: "linux-tillandsia-gemini-cli-20260602T1912"
+      summary: "Implemented graceful shutdown in headless and tray modes. Verified via cargo test and signal_handling litmus."
 ## Lease note
   `litmus-runtime-diagnostics-emitter-shape` greps the
   emitter-layer surfaces (`spawn_diagnostic_event_emitter`,

@@ -139,8 +139,7 @@ pub fn run_with_vault_init(debug: bool) -> Result<(), String> {
 pub fn write_github_token_to_vault(token: &str, debug: bool) -> Result<(), String> {
     if !container_running(VAULT_CONTAINER_NAME) {
         return Err(
-            "Vault container is not running. Run `tillandsias --init` to bring it up."
-                .into(),
+            "Vault container is not running. Run `tillandsias --init` to bring it up.".into(),
         );
     }
     let rt = tokio_runtime()?;
@@ -279,14 +278,17 @@ fn ensure_unseal_key(debug: bool) -> Result<[u8; 32], String> {
     use base64::Engine;
 
     // 1. Try to get the fully-derived unseal key from the keychain
-    let entry = Entry::new(KEYCHAIN_SERVICE, UNSEAL_KEY_V1)
-        .map_err(|e| format!("keyring entry: {e}"))?;
+    let entry =
+        Entry::new(KEYCHAIN_SERVICE, UNSEAL_KEY_V1).map_err(|e| format!("keyring entry: {e}"))?;
 
     if let Ok(encoded) = entry.get_password() {
         if let Ok(key_vec) = base64::engine::general_purpose::STANDARD.decode(&encoded) {
             if key_vec.len() == 32 {
                 if debug {
-                    eprintln!("[tillandsias-vault] recovered unseal key from host keychain ({})", UNSEAL_KEY_V1);
+                    eprintln!(
+                        "[tillandsias-vault] recovered unseal key from host keychain ({})",
+                        UNSEAL_KEY_V1
+                    );
                 }
                 let mut key = [0u8; 32];
                 key.copy_from_slice(&key_vec);
@@ -310,7 +312,8 @@ fn ensure_unseal_key(debug: bool) -> Result<[u8; 32], String> {
         Ok(a) => a,
         Err(_) => {
             let new_anchor = uuid::Uuid::new_v4().to_string();
-            anchor_entry.set_password(&new_anchor)
+            anchor_entry
+                .set_password(&new_anchor)
                 .map_err(|e| format!("keyring anchor set: {e}"))?;
             new_anchor
         }
@@ -320,7 +323,8 @@ fn ensure_unseal_key(debug: bool) -> Result<[u8; 32], String> {
 
     // Store the derived key in the keychain for faster recovery/stability
     let encoded = base64::engine::general_purpose::STANDARD.encode(&key);
-    entry.set_password(&encoded)
+    entry
+        .set_password(&encoded)
         .map_err(|e| format!("keyring unseal key set: {e}"))?;
 
     Ok(key)
@@ -558,7 +562,9 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
 
     // 2. Not in keychain. Attempt one-time handover from the container volume.
     if debug {
-        eprintln!("[tillandsias-vault] root token not in keychain; attempting handover from volume");
+        eprintln!(
+            "[tillandsias-vault] root token not in keychain; attempting handover from volume"
+        );
     }
 
     let out = podman_cmd_sync()
@@ -584,7 +590,8 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
     }
 
     // Store in keychain for future boots
-    entry.set_password(&token)
+    entry
+        .set_password(&token)
         .map_err(|e| format!("keyring set root token: {e}"))?;
 
     // @trace spec:tillandsias-vault — Secure Artifact Cleanup
