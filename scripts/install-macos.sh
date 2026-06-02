@@ -184,7 +184,7 @@ if [[ -x "$TRAY_BIN" ]]; then
     # Skip silently if jq isn't installed.
     if command -v jq >/dev/null 2>&1; then
         DIAG_VERSION="$(echo "$DIAG_JSON" | jq -r '.version' 2>/dev/null || echo '?')"
-        DIAG_PIN="$(echo "$DIAG_JSON" | jq -r '.manifest_pin_aarch64_img // "?"' 2>/dev/null)"
+        DIAG_PIN="$(echo "$DIAG_JSON" | jq -r '.manifest_pin_aarch64_qcow2 // "?"' 2>/dev/null)"
         say "installed: version=$DIAG_VERSION pin=$DIAG_PIN…"
     fi
 else

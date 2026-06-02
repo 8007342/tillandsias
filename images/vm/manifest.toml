@@ -36,14 +36,14 @@ digest = "sha256:6859a7bc64539828e18f26a1005a76579c536444855486c75c87f988225e003
 # UNBLOCKS Windows/macOS from hosting giant custom blobs.
 #
 # @trace plan/issues/rootfs-removal-fedora-wsl-pivot-2026-06-02.md
-artifact_url_template = "https://download.fedoraproject.org/pub/fedora/linux/releases/44/Cloud/{arch}/images/Fedora-Cloud-Base-WSL-44-1.2.{arch}.tar.xz"
+artifact_url_template = "https://download.fedoraproject.org/pub/fedora/linux/releases/44/Cloud/{arch}/images/Fedora-Cloud-Base-Generic-44-1.7.{arch}.{format}"
 
 # Artifact SHAs (D6: dual-path materialization).
 # Format keys: "<arch>.<format>"
 [output.expected_rootfs_sha]
 "x86_64.tar.xz"  = "a28cabe7c9dfcf58e8a2c63d1885d968c5abbc4719c7e89152d4c5e492d38e99"
 "aarch64.tar.xz" = "a8435ed1a0c9294e9ca9f060eaacc3f059662908040037dec330d71a1b5f3028"
-"aarch64.qcow2"  = "6859a7bcc4a9d686ec3735c09bbf04aed00c08647586e2e75492fe5829730bee"
+"aarch64.qcow2"  = "55c60a3b80d3616a08705afd0459e75fe9f03c54aba7a46e4002a41a72fa0d5b"
 
 # Kernel command-line passed to the VM bootloader. Quiet boot + serial
 # console on hvc0 so the host can capture early-boot diagnostics.
