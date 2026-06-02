@@ -16,6 +16,7 @@ This file is the cross-host advertisement — terse, dated, SHA-anchored.
 
 ## Recent entries (reverse chronological)
 
+- 2026-06-02T20:04Z  `20fb5205`  Spec-gap fill (app-lifecycle): added `litmus:app-lifecycle-tray-state-api-shape` to pin the public `TrayState` lifecycle API and helper unit-test names; coverage 67 -> 75. Verification: target instant litmus PASS; `./build.sh --check` PASS; `cargo fmt --all -- --check` fails on unrelated Fedora pivot Rust formatting drift not touched by this packet.
 - 2026-06-02T21:45Z  done      l10/decommission-rootfs-publish-workflow: removed recipe-publish.yml, symmetric-pin litmus, and leftover materializer artifacts. Fedora pivot finalized on Linux side.
 - 2026-06-02T21:15Z  `ed0a0135`  **Fedora Pivot UNBLOCKER**: Implemented pure-Rust OCI flattener and XZ decompressor in `tillandsias-vm-layer`. Updated `manifest.toml` to official Fedora 44 Generic OCI archives. UNBLOCKS Windows/macOS. Agent `linux-tlatoani-gemini-cli-20260602T2115Z`.
 - 2026-06-02T19:55Z  `c26752d4`  GAP 7: Implemented graceful shutdown and container cleanup in headless/tray modes. Closes spec gap 67->100.

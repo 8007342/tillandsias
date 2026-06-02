@@ -13,7 +13,7 @@ bounded slices from. Each item is sized for one loop iteration. NOT for siblings
 - id: `spec-gap/app-lifecycle-tray-state-api-shape`
 - owner_host: linux
 - capability_tags: [specs, litmus, testing]
-- status: claimed
+- status: done
 - lease:
   - lease_id: `f0be1a9432d0`
   - agent_id: `linux-macuahuitl-codex-2026-06-02T200202Z`
@@ -40,6 +40,16 @@ bounded slices from. Each item is sized for one loop iteration. NOT for siblings
     host: linux
     lease_id: `f0be1a9432d0`
     expires_at: `2026-06-03T00:02:02Z`
+  - type: completed
+    ts: `2026-06-02T20:04:21Z`
+    agent_id: `linux-macuahuitl-codex-2026-06-02T200202Z`
+    host: linux
+    lease_id: `f0be1a9432d0`
+    evidence_refs:
+      - `20fb5205` — added `litmus:app-lifecycle-tray-state-api-shape` and raised `app-lifecycle` coverage 67 -> 75.
+      - `./scripts/run-litmus-test.sh app-lifecycle --size instant` — PASS, 2/2 executed, 1 e2e skipped by size.
+      - `./build.sh --check` — PASS.
+      - `cargo fmt --all -- --check` — FAILED on unrelated Fedora pivot Rust formatting drift; this packet touched only litmus YAML.
 
 ### Work Packet: spec-gap/external-logs-layer-binding-hygiene
 
