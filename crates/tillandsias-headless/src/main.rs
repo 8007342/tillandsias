@@ -136,6 +136,7 @@ fn main() {
     let debug = debug || diagnostics;
     if debug {
         eprintln!("[tillandsias] version: {version}");
+        unsafe { std::env::set_var("TILLANDSIAS_DEBUG", "1"); }
     }
 
     // USER PRIORITY (a) of the diagnostics-driven container-start
@@ -2779,6 +2780,7 @@ fn build_image_with_logging(
     if let Some(stdout_reader) = stdout {
         let buf_reader = std::io::BufReader::new(stdout_reader);
         for line in buf_reader.lines().map_while(Result::ok) {
+            if _debug { eprintln!("[tillandsias] build-{}: {}", image_name, line); }
             // Write to log file if present
             if let Some(ref mut log) = log_handle {
                 let _ = writeln!(log, "{}", line);
