@@ -1350,6 +1350,15 @@ struct DiagnoseReport {
     /// unusual) or the command fails.
     os_version: Option<String>,
     wt_present: bool,
+    /// Pre-computed `--diagnose` exit code, derived from
+    /// `distro_registered + wire.reachable + wire.phase` via
+    /// [`exit_code_from`]. Mirrors `StatusReport.exit_code` for the
+    /// `--status-once --json` shape: piped consumers (`tray.exe
+    /// --diagnose --json | jq .exit_code`) can read the verdict without
+    /// a separate process-exit-code capture step. Always matches the
+    /// process exit code (cross-pinned by the
+    /// `diagnose_human_includes_pinned_section_labels` test).
+    exit_code: i32,
     distro: &'static str,
     distro_registered: bool,
     /// `true` if `wsl --list --running --quiet` lists the `tillandsias`
@@ -1600,13 +1609,20 @@ fn collect_report() -> DiagnoseReport {
 
     let log_size_bytes = std::fs::metadata(&log).ok().map(|m| m.len());
 
-    DiagnoseReport {
+    let mut report = DiagnoseReport {
         // WORKSPACE_VERSION baked by build.rs from the repo-root VERSION file
         // so the JSON's `version` field matches the release tag instead of
         // the crate's static `Cargo.toml` `0.1.0`. See build.rs for details.
         version: env!("WORKSPACE_VERSION"),
         build_commit: env!("BUILD_COMMIT_SHA"),
         install_path,
+        // Provisional `exit_code` — corrected below once the rest of the
+        // struct is built, since `exit_code_from` derives it from
+        // `distro_registered + wire.reachable + wire.phase`. Keeping the
+        // field next to identity at the top of the JSON (alphabetical
+        // serde order means it lands BEFORE `wire`, which is the field
+        // it depends on).
+        exit_code: 0,
         log_path: log.display().to_string(),
         log_exists,
         log_size_bytes,
@@ -1620,7 +1636,9 @@ fn collect_report() -> DiagnoseReport {
         manifest_pin_x86_64_tar: manifest_pin,
         wire,
         recent_log_tail,
-    }
+    };
+    report.exit_code = exit_code_from(&report);
+    report
 }
 
 fn print_human(r: &DiagnoseReport) {
@@ -2346,6 +2364,8 @@ mod tests {
             version: "0.0.0-test",
             build_commit: "deadbeef",
             install_path: "C:\\path\\to\\tillandsias-tray.exe".to_string(),
+            // Baseline is degraded (no distro, no wire) -> exit 2.
+            exit_code: 2,
             log_path: "C:\\path\\to\\tray.log".to_string(),
             log_size_bytes: None,
             wsl_version: Some("WSL version: 2.7.3.0".to_string()),
@@ -2377,6 +2397,7 @@ mod tests {
             "version",
             "build_commit",
             "install_path",
+            "exit_code",
             "log_path",
             "log_exists",
             "log_size_bytes",
@@ -2487,8 +2508,8 @@ mod tests {
         let obj = v.as_object().expect("top-level JSON object");
         assert_eq!(
             obj.len(),
-            16,
-            "DiagnoseReport should have exactly 16 top-level keys; got {}: {:?}",
+            17,
+            "DiagnoseReport should have exactly 17 top-level keys; got {}: {:?}",
             obj.len(),
             obj.keys().collect::<Vec<_>>()
         );

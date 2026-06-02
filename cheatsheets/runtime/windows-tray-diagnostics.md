@@ -52,7 +52,7 @@ suitable for scripting.
 | `--status-once`            | Connect to the live control wire, request `VmStatus`, print phase / `podman_ready` / `last_event` + a `Status: READY/REACHABLE-NOT-READY/UNREACHABLE (exit N)` self-summarizing footer. | `0` Ready / `2` reachable-not-Ready / `1` unreachable |
 | `--status-once --json`     | Same status as a structured JSON object on stdout (StatusReport, see below).                | (same as `--status-once`) |
 | `--diagnose`               | Bundled human-readable health report (~13 rows in 5 grouped sections: binary identity, logs, host software, WSL distro + rootfs, control wire — followed by recent log tail and a `Status: HEALTHY/DEGRADED (exit N)` self-summarizing footer). | `0` healthy / `2` degraded / `1` hard fail |
-| `--diagnose --json`        | Same report as a structured JSON object on stdout (16 top-level keys, see schema below).    | (same as `--diagnose`)  |
+| `--diagnose --json`        | Same report as a structured JSON object on stdout (17 top-level keys, see schema below).    | (same as `--diagnose`)  |
 | `--logs [--tail N] [--bak]` | Dump the tray log to stdout; `--tail N` for last N lines, `--bak` for the rotation backup `tray.log.bak`. | `0` readable / `1` missing |
 | `--help` / `-h`            | Print full usage with all CLI modes + exit-code contracts + stdio note + ENVIRONMENT vars.  | `0`                     |
 | `--version` / `-V`         | Print `tillandsias-tray <workspace VERSION> (<build_commit>)` on one line.                  | `0`                     |
@@ -140,6 +140,7 @@ The JSON shape is pinned by unit tests in `notify_icon::tests::diagnose_json_*` 
   "version":                "0.2.260528.1", // string — workspace VERSION baked at build (was CARGO_PKG_VERSION pre-2026-05-30; see build.rs)
   "build_commit":           "a963c16d",     // string — short git SHA the binary was built from, or "unknown" if git unavailable
   "install_path":           "C:\\...\\tillandsias-tray.exe", // string — std::env::current_exe(), or "(unknown)" on rare failure
+  "exit_code":              2,             // i32    — pre-computed `--diagnose` exit (0 healthy / 2 degraded); mirrors StatusReport.exit_code so JSON consumers can read the verdict without process-exit capture
   "log_path":               "C:\\...\\tray.log", // string  — fixed %LOCALAPPDATA%\tillandsias\logs\tray.log
   "log_exists":             true,          // bool
   "log_size_bytes":         16384,         // u64 | null — size of the live tray.log (null if missing); pairs with TRAY_LOG_MAX_BYTES = 5 MiB rotation threshold

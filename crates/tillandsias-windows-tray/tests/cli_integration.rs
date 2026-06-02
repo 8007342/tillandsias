@@ -110,7 +110,7 @@ fn help_text_includes_all_documented_surfaces() {
 /// regression in a sniffer that fails the whole process instead of
 /// returning `None`.
 #[test]
-fn diagnose_json_has_all_16_top_level_keys() {
+fn diagnose_json_has_all_17_top_level_keys() {
     let output = Command::new(TRAY_EXE)
         .args(["--diagnose", "--json"])
         .output()
@@ -132,6 +132,7 @@ fn diagnose_json_has_all_16_top_level_keys() {
         "version",
         "build_commit",
         "install_path",
+        "exit_code",
         "log_path",
         "log_exists",
         "log_size_bytes",
