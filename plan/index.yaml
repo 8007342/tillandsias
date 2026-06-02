@@ -1749,6 +1749,7 @@ plan_index:
       title: Rootfs Removal / Fedora Pivot
       status: ready
       deliverable: plan/issues/rootfs-removal-fedora-wsl-pivot-2026-06-02.md
+      notes: plan/issues/fedora-pivot-unblocking-instructions.md
       depends_on: [vault-hardening-architecture]
       specs:
         - host-shell-architecture
