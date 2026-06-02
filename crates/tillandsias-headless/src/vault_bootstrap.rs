@@ -1,4 +1,4 @@
-// @trace spec:tillandsias-vault, spec:secrets-management
+// @trace spec:tillandsias-vault
 // @cheatsheet runtime/hashicorp-vault-tillandsias.md
 //
 //! Vault bootstrap path — Phase 6 promotes Vault to the default Linux secrets
@@ -11,10 +11,6 @@
 //! secret, then launches the vault container. After healthcheck, the four
 //! built-in policies are loaded, the AppRole backend is enabled, and per-kind
 //! roles (`git-mirror`, `forge`, `tray`, `inference`) are provisioned.
-//!
-//! The legacy keyring path (`scripts/create-secrets.sh`,
-//! `create_github_podman_secret`) is still reachable via
-//! `tillandsias --legacy-keyring-secrets`. It will be removed in v0.3.
 
 use std::collections::HashMap;
 use std::fs;
@@ -130,19 +126,7 @@ pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
 /// flag. Reduces to `ensure_vault_running`.
 #[allow(dead_code)]
 pub fn run_with_vault_init(debug: bool) -> Result<(), String> {
-    ensure_vault_running(debug)?;
-    // Best-effort migrate any pre-existing keyring podman secret into vault
-    // so legacy installs keep working through the switchover.
-    let rt = tokio_runtime()?;
-    let base_url = host_base_url();
-    let root_token = read_root_token()?;
-    let client = VaultClient::new(&base_url, &root_token);
-    if let Err(e) = rt.block_on(migrate_legacy_github_token(&client, debug))
-        && debug
-    {
-        eprintln!("[tillandsias-vault] legacy migration skipped: {e}");
-    }
-    Ok(())
+    ensure_vault_running(debug)
 }
 
 /// Write the GitHub token directly to Vault at `secret/github/token`.
@@ -152,8 +136,7 @@ pub fn run_with_vault_init(debug: bool) -> Result<(), String> {
 pub fn write_github_token_to_vault(token: &str, debug: bool) -> Result<(), String> {
     if !container_running(VAULT_CONTAINER_NAME) {
         return Err(
-            "Vault container is not running. Run `tillandsias --init` to bring it up, \
-             or pass `--legacy-keyring-secrets` to fall back to the deprecated keyring flow."
+            "Vault container is not running. Run `tillandsias --init` to bring it up."
                 .into(),
         );
     }
@@ -603,56 +586,6 @@ pub fn policy_role_name(policy: &Policy) -> &'static str {
         Policy::Tray => "tray",
         Policy::Inference => "inference",
     }
-}
-
-/// Best-effort migration from the legacy `tillandsias-github-token` podman
-/// secret into the new Vault path. Invoked when running `--with-vault`
-/// (now deprecated) so older installs upgrade in place; not run as part
-/// of the regular bootstrap.
-#[allow(dead_code)]
-async fn migrate_legacy_github_token(client: &VaultClient, debug: bool) -> Result<(), String> {
-    let out = podman_cmd_sync()
-        .args([
-            "run",
-            "--rm",
-            "--secret",
-            "tillandsias-github-token,mode=0400",
-            "docker.io/library/alpine:3.20",
-            "sh",
-            "-c",
-            "cat /run/secrets/tillandsias-github-token 2>/dev/null || true",
-        ])
-        .output()
-        .map_err(|e| format!("read existing token: {e}"))?;
-    let token_bytes = out.stdout;
-    let token = String::from_utf8_lossy(&token_bytes).trim().to_string();
-    if token.is_empty() {
-        return Err("tillandsias-github-token secret is empty or missing".to_string());
-    }
-    if debug {
-        eprintln!(
-            "[tillandsias-vault] migrating github token ({} chars) into vault at secret/github/token",
-            token.len()
-        );
-    }
-    client
-        .write_secret("secret/github/token", serde_json::json!({ "token": token }))
-        .await
-        .map_err(|e| format!("vault write_secret: {e}"))?;
-    let read_back = client
-        .read_secret("secret/github/token")
-        .await
-        .map_err(|e| format!("vault read_secret: {e}"))?;
-    if read_back["token"].as_str() != Some(token.as_str()) {
-        return Err("vault read-back did not match written token".to_string());
-    }
-    let _ = podman_cmd_sync()
-        .args(["secret", "rm", "tillandsias-github-token"])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
-    eprintln!("[tillandsias-vault] github token migrated to vault (old podman secret removed)");
-    Ok(())
 }
 
 #[cfg(test)]

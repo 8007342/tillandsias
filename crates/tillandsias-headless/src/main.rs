@@ -119,14 +119,7 @@ fn main() {
     let observatorium = user_args.iter().any(|a| a == "--observatorium");
     let cache_clear = user_args.iter().any(|a| a == "--cache-clear");
     let cache_verify = user_args.iter().any(|a| a == "--cache-verify");
-    // @trace spec:tillandsias-vault — Phase 6 promoted Vault to default. The
-    // historical `--with-vault` opt-in flag still parses (we route it to the
-    // same code path as a default init), `--without-vault` is the deprecated
-    // escape hatch, and `--legacy-keyring-secrets` re-enables the old
-    // podman-secret-from-keyring flow for backwards compatibility.
-    let with_vault = user_args.iter().any(|a| a == "--with-vault");
-    let without_vault = user_args.iter().any(|a| a == "--without-vault");
-    let legacy_keyring_secrets = user_args.iter().any(|a| a == "--legacy-keyring-secrets");
+
     let port_override = match user_args.iter().position(|a| a == "--port") {
         Some(i) => match user_args.get(i + 1).and_then(|p| p.parse::<u16>().ok()) {
             Some(port) => Some(port),
@@ -222,9 +215,6 @@ fn main() {
         "--cache-clear",
         "--cache-verify",
         "--listen-vsock",
-        "--with-vault",
-        "--without-vault",
-        "--legacy-keyring-secrets",
     ];
     if let Some(unsupported) = user_args
         .iter()
@@ -259,10 +249,9 @@ fn main() {
     });
 
     if github_login {
-        // @trace spec:tillandsias-vault, spec:secrets-management
-        // Phase 6: the default flow stores the token in Vault. The legacy
-        // podman-secret path is reachable via `--legacy-keyring-secrets`.
-        if let Err(e) = run_github_login(debug, legacy_keyring_secrets) {
+        // @trace spec:tillandsias-vault
+        // Phase 6: the default flow stores the token in Vault.
+        if let Err(e) = run_github_login(debug) {
             eprintln!("Error: {}", e);
             std::process::exit(1);
         }
@@ -290,43 +279,25 @@ fn main() {
             eprintln!("Error: {}", e);
             std::process::exit(1);
         }
-        // @trace spec:tillandsias-vault, spec:secrets-management
-        // Phase 6: Vault is the default secrets backend on Linux. The
-        // `--with-vault` opt-in flag is preserved as a no-op alias; the
-        // `--without-vault` escape hatch is honored only for debugging
-        // (logged as deprecated). The `--legacy-keyring-secrets` flag
-        // *additionally* keeps the keyring path live — Vault still comes
-        // up so containers minted with AppRole tokens succeed.
-        if with_vault && debug {
-            eprintln!("[tillandsias] --with-vault is now a no-op (Vault is the default backend)");
-        }
-        if !without_vault {
-            #[cfg(feature = "vault")]
-            {
-                if let Err(e) = vault_bootstrap::ensure_vault_running(debug) {
-                    eprintln!("Error bringing Vault up: {}", e);
-                    std::process::exit(1);
-                }
+
+        // @trace spec:tillandsias-vault
+        // Phase 6: Vault is the default secrets backend on Linux.
+        #[cfg(feature = "vault")]
+        {
+            if let Err(e) = vault_bootstrap::ensure_vault_running(debug) {
+                eprintln!("Error bringing Vault up: {}", e);
+                std::process::exit(1);
             }
-            #[cfg(not(feature = "vault"))]
-            {
-                if debug {
-                    eprintln!(
-                        "[tillandsias] vault feature not compiled; continuing without Vault (legacy keyring only)"
-                    );
-                }
+        }
+        #[cfg(not(feature = "vault"))]
+        {
+            if debug {
+                eprintln!(
+                    "[tillandsias] vault feature not compiled; continuing without Vault"
+                );
             }
-        } else {
-            eprintln!(
-                "[tillandsias] --without-vault is DEPRECATED and will be removed in v0.3; \
-                 the keyring-only path remains available via `--legacy-keyring-secrets`"
-            );
         }
-        if legacy_keyring_secrets {
-            eprintln!(
-                "[tillandsias] --legacy-keyring-secrets is DEPRECATED and will be removed in v0.3"
-            );
-        }
+
         if status_check && let Err(e) = run_status_check(debug) {
             eprintln!("Error: {}", e);
             std::process::exit(1);
@@ -334,10 +305,12 @@ fn main() {
         if !opencode {
             return;
         }
-    } else if with_vault && debug {
-        eprintln!(
-            "[tillandsias] --with-vault has no effect outside --init (Vault is auto-started)"
-        );
+    }
+
+    if user_args.iter().any(|a| a == "--without-vault" || a == "--legacy-keyring-secrets") {
+        eprintln!("Error: --without-vault and --legacy-keyring-secrets have been REMOVED in v0.2.260602.");
+        eprintln!("Vault is now the mandatory secrets backend. See openspec/specs/tillandsias-vault/spec.md");
+        std::process::exit(1);
     }
 
     if status_check && !init {
@@ -564,18 +537,9 @@ fn print_usage(version: &str) {
     println!("  --force        Rebuild all images even if cached (use with --init)");
     println!("  --cache-verify Check cache integrity and report status");
     println!("  --cache-clear  Clear the initialization cache and build state");
-    println!(
-        "  --with-vault   DEPRECATED no-op: Vault is now the default secrets backend (Phase 6)"
-    );
-    println!(
-        "  --without-vault DEPRECATED escape hatch: skip launching the Vault container during --init"
-    );
-    println!(
-        "  --legacy-keyring-secrets DEPRECATED: keep the legacy keyring-based podman-secret flow alive"
-    );
     println!("  --status-check Verify services are online through a representative stack smoke");
     println!(
-        "  --github-login Authenticate GitHub and store the token in Vault (or, with --legacy-keyring-secrets, a podman secret)"
+        "  --github-login Authenticate GitHub and store the token in Vault"
     );
     println!("  --debug        Show command-level diagnostics and capture build logs");
     println!(
@@ -1187,7 +1151,7 @@ fn ca_bundle_needs_refresh(crt: &Path, key: &Path) -> bool {
 }
 
 fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
-    // @trace spec:secrets-management, spec:secret-rotation, spec:reverse-proxy-internal
+    // @trace spec:secret-rotation, spec:reverse-proxy-internal
     let certs_dir = PathBuf::from(CA_DIR);
     let crt = certs_dir.join("intermediate.crt");
     let key = certs_dir.join("intermediate.key");
@@ -1463,7 +1427,7 @@ fn read_host_project_origin_url(project_path: &Path) -> Option<String> {
 /// `vault` feature is not compiled — the caller then falls back to the
 /// legacy `tillandsias-github-token` podman secret.
 ///
-/// @trace spec:tillandsias-vault, spec:secrets-management
+/// @trace spec:tillandsias-vault
 #[allow(unused_variables)]
 async fn mint_git_mirror_vault_token(project_name: &str, debug: bool) -> Option<String> {
     #[cfg(feature = "vault")]
@@ -1499,7 +1463,7 @@ async fn mint_git_mirror_vault_token(project_name: &str, debug: bool) -> Option<
 /// keyring mode: the container instead mounts `tillandsias-github-token`
 /// and the hook reads it directly from disk.
 ///
-/// @trace spec:tillandsias-vault, spec:secrets-management, spec:git-mirror-service
+/// @trace spec:tillandsias-vault, spec:git-mirror-service
 fn build_git_run_args(
     project_name: &str,
     certs_dir: &Path,
@@ -3261,12 +3225,12 @@ fn podman_command() -> Command {
 /// image; the host only captures the token in memory and creates the Podman
 /// secret over stdin.
 ///
-/// @trace spec:gh-auth-script, spec:secrets-management, spec:podman-secrets-integration, spec:secret-rotation, spec:tillandsias-vault
-fn run_github_login(debug: bool, legacy_keyring_secrets: bool) -> Result<(), String> {
+/// @trace spec:gh-auth-script, spec:podman-secrets-integration, spec:secret-rotation, spec:tillandsias-vault
+fn run_github_login(debug: bool) -> Result<(), String> {
     require_desktop_user_session("tillandsias --github-login")?;
     report_runtime_lane("--github-login", debug);
 
-    // @trace spec:secret-rotation, spec:secrets-management
+    // @trace spec:secret-rotation
     info!(
         accountability = true,
         category = "secrets",
@@ -3354,49 +3318,33 @@ fn run_github_login(debug: bool, legacy_keyring_secrets: bool) -> Result<(), Str
         "GitHub token retrieved successfully; initiating secret rotation"
     );
 
-    // @trace spec:tillandsias-vault, spec:secrets-management
-    // Phase 6: write to Vault by default. The legacy podman-secret path is
-    // available via --legacy-keyring-secrets and remains supported until
-    // v0.3.
+    // @trace spec:tillandsias-vault
+    // Phase 6: write to Vault exclusively.
     #[cfg(feature = "vault")]
-    let (vault_attempted, vault_failed): (bool, Option<String>) = {
-        if legacy_keyring_secrets {
-            (false, None)
-        } else {
-            match vault_bootstrap::write_github_token_to_vault(&token, debug) {
-                Ok(()) => {
-                    info!(
-                        accountability = true,
-                        category = "secrets",
-                        spec = "tillandsias-vault",
-                        operation = "gh_auth_vault_write",
-                        "GitHub token stored in Vault at secret/github/token"
-                    );
-                    (true, None)
-                }
-                Err(e) => (true, Some(e)),
+    {
+        match vault_bootstrap::write_github_token_to_vault(&token, debug) {
+            Ok(()) => {
+                info!(
+                    accountability = true,
+                    category = "secrets",
+                    spec = "tillandsias-vault",
+                    operation = "gh_auth_vault_write",
+                    "GitHub token stored in Vault at secret/github/token"
+                );
+            }
+            Err(e) => {
+                return Err(format!(
+                    "vault write failed: {e}\n\
+                     Hint: run `tillandsias --init` to bring Vault up."
+                ));
             }
         }
-    };
+    }
     #[cfg(not(feature = "vault"))]
-    let (vault_attempted, vault_failed): (bool, Option<String>) = (false, None);
-
-    if let Some(reason) = vault_failed {
-        return Err(format!(
-            "vault write failed: {reason}\n\
-             Hint: run `tillandsias --init` to bring Vault up, or pass \
-             `--legacy-keyring-secrets` to use the deprecated keyring path."
-        ));
+    {
+        return Err("vault feature not compiled; cannot store GitHub token".to_string());
     }
 
-    if !vault_attempted || legacy_keyring_secrets {
-        if vault_attempted && debug {
-            eprintln!(
-                "[tillandsias] also creating legacy podman secret (--legacy-keyring-secrets)"
-            );
-        }
-        create_github_podman_secret(&token, debug)?;
-    }
     drop(cleanup);
 
     info!(
@@ -3589,149 +3537,6 @@ impl Drop for LoginContainerCleanup {
         let mut command = podman_command();
         command.args(["rm", "-f", &self.name]);
         let _ = run_command_silent(command, self.debug);
-    }
-}
-
-fn create_github_podman_secret(token: &str, debug: bool) -> Result<(), String> {
-    // @trace spec:secrets-management, spec:secret-rotation, spec:podman-secrets-integration
-    info!(
-        accountability = true,
-        category = "secrets",
-        spec = "secret-rotation",
-        secret_type = "github-token",
-        operation = "rotation_start",
-        secret_name = "tillandsias-github-token",
-        "GitHub token secret rotation starting"
-    );
-
-    let mut remove = podman_command();
-    remove.args(["secret", "rm", "tillandsias-github-token"]);
-    if let Err(e) = run_command_silent(remove, debug) {
-        // Secret may not exist yet; this is not an error
-        debug!("Existing GitHub secret removal attempt: {}", e);
-    }
-
-    let mut child = podman_command()
-        .args([
-            "secret",
-            "create",
-            "--driver=file",
-            "tillandsias-github-token",
-            "-",
-        ])
-        .stdin(Stdio::piped())
-        .stdout(Stdio::null())
-        .stderr(Stdio::piped())
-        .spawn()
-        .map_err(|e| {
-            error!(
-                accountability = true,
-                category = "secrets",
-                spec = "secret-rotation",
-                secret_type = "github-token",
-                operation = "rotation_failed",
-                secret_name = "tillandsias-github-token",
-                error = %e,
-                "Failed to spawn podman secret create process"
-            );
-            format!("Failed to create GitHub Podman secret: {e}")
-        })?;
-
-    if debug {
-        eprintln!(
-            "[tillandsias] running: podman secret create --driver=file tillandsias-github-token -"
-        );
-    }
-
-    {
-        let stdin = child.stdin.as_mut().ok_or_else(|| {
-            error!(
-                accountability = true,
-                category = "secrets",
-                spec = "secret-rotation",
-                secret_type = "github-token",
-                operation = "rotation_failed",
-                secret_name = "tillandsias-github-token",
-                error = "stdin pipe not available",
-                "Failed to access podman secret create stdin"
-            );
-            "Failed to open podman secret stdin".to_string()
-        })?;
-        stdin.write_all(token.as_bytes()).map_err(|e| {
-            error!(
-                accountability = true,
-                category = "secrets",
-                spec = "secret-rotation",
-                secret_type = "github-token",
-                operation = "rotation_failed",
-                secret_name = "tillandsias-github-token",
-                error = %e,
-                "Failed to write token to podman secret stdin"
-            );
-            format!("Failed to write token to podman secret stdin: {e}")
-        })?;
-        stdin.write_all(b"\n").map_err(|e| {
-            error!(
-                accountability = true,
-                category = "secrets",
-                spec = "secret-rotation",
-                secret_type = "github-token",
-                operation = "rotation_failed",
-                secret_name = "tillandsias-github-token",
-                error = %e,
-                "Failed to finalize token input to podman secret"
-            );
-            format!("Failed to finish token input: {e}")
-        })?;
-    }
-    drop(child.stdin.take());
-
-    let output = child.wait_with_output().map_err(|e| {
-        error!(
-            accountability = true,
-            category = "secrets",
-            spec = "secret-rotation",
-            secret_type = "github-token",
-            operation = "rotation_failed",
-            secret_name = "tillandsias-github-token",
-            error = %e,
-            "Failed to wait for podman secret create completion"
-        );
-        format!("Failed waiting for podman secret create: {e}")
-    })?;
-    if output.status.success() {
-        info!(
-            accountability = true,
-            category = "secrets",
-            spec = "secret-rotation",
-            secret_type = "github-token",
-            operation = "rotation_complete",
-            secret_name = "tillandsias-github-token",
-            "GitHub token secret rotation completed successfully"
-        );
-        println!("GitHub token secret created: tillandsias-github-token");
-        Ok(())
-    } else {
-        let stderr = String::from_utf8_lossy(&output.stderr).trim().to_string();
-        error!(
-            accountability = true,
-            category = "secrets",
-            spec = "secret-rotation",
-            secret_type = "github-token",
-            operation = "rotation_failed",
-            secret_name = "tillandsias-github-token",
-            exit_code = output.status.code().unwrap_or(-1),
-            stderr = ?stderr,
-            "Podman secret create failed"
-        );
-        if stderr.is_empty() {
-            Err(format!(
-                "podman secret create exited with status {}",
-                output.status
-            ))
-        } else {
-            Err(stderr)
-        }
     }
 }
 
@@ -7171,32 +6976,6 @@ mod tests {
                 .iter()
                 .any(|a| a == "tillandsias-github-token,mode=0400"),
             "legacy github-token secret must not be mounted in vault flow: {args:?}"
-        );
-    }
-
-    #[test]
-    fn git_run_args_emit_no_vault_env_in_legacy_path() {
-        // @trace spec:secrets-management — legacy fallback path
-        // When no vault token is supplied (e.g. vault feature disabled or
-        // bootstrap failed), the launcher MUST NOT inject vault env vars.
-        // The runtime layer's container_profile attaches the legacy
-        // github-token mount via a separate code path that gracefully
-        // tolerates a missing secret.
-        let certs = PathBuf::from("/tmp/ca");
-        let args = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None);
-
-        assert!(
-            !args.iter().any(|a| a.starts_with("VAULT_ADDR=")),
-            "VAULT_ADDR must not leak into legacy launches: {args:?}"
-        );
-        assert!(
-            !args.iter().any(|a| a.starts_with("VAULT_ROLE=")),
-            "VAULT_ROLE must not leak into legacy launches: {args:?}"
-        );
-        // No per-launch vault token secret should be mounted either.
-        assert!(
-            !args.iter().any(|a| a.contains("tillandsias-vault-token-")),
-            "no vault token podman secret should appear: {args:?}"
         );
     }
 

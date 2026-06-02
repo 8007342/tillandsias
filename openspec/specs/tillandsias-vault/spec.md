@@ -8,31 +8,22 @@ phase: 6
 
 ## Purpose
 
-Run a HashiCorp Vault container as the default Linux secrets backend for
+Run a HashiCorp Vault container as the default and ONLY Linux secrets backend for
 Tillandsias. Vault stores long-lived external credentials, starting with the
 GitHub token at `secret/github/token`, and issues short-lived per-container
 tokens scoped by fine-grained ACL policies.
 
-Phase 6 promotes Vault from POC to default on Linux. The current Linux loop runs
-the Vault container under host-rootless podman and treats the Linux host as the
-VM boundary until the Windows WSL2 and macOS Virtualization.framework hosts
-route the same control plane through their host shells. The old native-keyring
-path is retained only behind deprecated flags:
-
-- `--without-vault` skips default Vault bootstrap for debugging.
-- `--legacy-keyring-secrets` also creates the old keyring-backed podman secret.
-- `--with-vault` is a no-op alias because Vault is now the default.
-- all legacy keyring-only paths are scheduled for removal in v0.3.
+Phase 6.5 hardens the Vault integration by removing the legacy keyring fallback,
+mandating the use of the host OS native keychain for auto-unseal key storage across
+all platforms (including Linux), and requiring a true `vault operator rekey` to
+eliminate the transitional XOR envelope.
 
 Cross-references:
-- `host-shell-architecture` - host process owns platform bootstrap and UUID
-  delivery.
+- `host-shell-architecture` - host process owns platform bootstrap and keychain delivery.
 - `vm-provisioning-lifecycle` - first-run Vault image/container provisioning.
 - `vsock-transport` - Windows/macOS host shells deliver host state to the VM.
-- `git-mirror-service` - consumes `git-mirror-policy` AppRole tokens for GitHub
-  push.
-- `secrets-management` - superseded native-keyring path retained only as a
-  deprecated fallback.
+- `git-mirror-service` - consumes `git-mirror-policy` AppRole tokens for GitHub push.
+- `secrets-management` - (REMOVED) the superseded native-keyring path is gone.
 
 ## Requirements
 
@@ -45,7 +36,7 @@ Cross-references:
 The `tillandsias-vault` container SHALL run with hostname/network alias `vault`
 and persistent storage at `/vault/data`, backed by the podman volume
 `tillandsias-vault-data`. Vault SHALL listen on `0.0.0.0:8200` inside its
-container/network namespace. On the Linux Phase 6 loop, the launcher MAY publish
+container/network namespace. On the Linux loop, the launcher MAY publish
 `127.0.0.1:8201:8200` so the host process can bootstrap policies and write
 tokens; it MUST NOT publish Vault on `0.0.0.0`, a non-loopback address, or a
 remote interface. Windows and macOS hosts SHALL keep Vault reachable through the
@@ -53,8 +44,8 @@ VM/control channel rather than exposing it to the external host network.
 
 @trace spec:tillandsias-vault
 
-#### Scenario: Linux default bootstrap starts Vault
-- **WHEN** `tillandsias --init` runs on Linux without `--without-vault`
+#### Scenario: Default bootstrap starts Vault
+- **WHEN** `tillandsias --init` runs
 - **THEN** the launcher SHALL build or reuse the `tillandsias-vault` image
 - **AND** the launcher SHALL start `tillandsias-vault` with
   `tillandsias-vault-data:/vault/data`
@@ -73,70 +64,75 @@ VM/control channel rather than exposing it to the external host network.
 - **THEN** no `--publish` argument SHALL expose Vault as `0.0.0.0:8200`,
   `0.0.0.0:8201`, `<host-ip>:8200`, or `<host-ip>:8201`.
 
-### Requirement: Auto-unseal derives from machine-id + installation-uuid
-- **ID**: tillandsias-vault.security.transparent-auto-unseal@v2
+### Requirement: Auto-unseal key securely stored in host native keychain with versioning
+- **ID**: tillandsias-vault.security.transparent-auto-unseal@v3
 - **Modality**: MUST
 - **Measurable**: true
-- **Invariants**: [tillandsias-vault.invariant.no-passphrase-prompt-ever, tillandsias-vault.invariant.unseal-key-tmpfs-only, tillandsias-vault.invariant.installation-uuid-platform-bound]
+- **Invariants**: [tillandsias-vault.invariant.no-passphrase-prompt-ever, tillandsias-vault.invariant.unseal-key-tmpfs-only, tillandsias-vault.invariant.host-keychain-storage, tillandsias-vault.invariant.keychain-sanitization]
 
 Vault SHALL auto-unseal on every boot with zero user interaction. The unseal key
-SHALL be derived through HKDF-SHA256 from the platform's installation UUID and
-the machine identity of the running Linux boundary. On Linux Phase 6 the UUID is
-stored at `~/.config/tillandsias/installation-uuid` with mode `0600`; Windows
-and macOS host shells SHALL store the equivalent UUID in platform keychain APIs
-and deliver it through the host-shell/VM channel. The derived unseal secret
-SHALL be loaded into a podman secret and mounted at `/run/secrets/vault-unseal`
-on tmpfs only.
+(derived via HKDF-SHA256 from the machine identity and an installation anchor) SHALL
+be stored directly in the host OS's native secure keychain (Secret Service/KWallet
+on Linux, Credential Manager on Windows, Keychain on macOS).
+
+The host MUST implement secret versioning (e.g., `tillandsias-vault-unseal-v1`).
+On launch, the host SHALL sanitize and delete any stale, older-version keys or
+keys associated with non-existent container instances to maintain a minimal
+attack surface. The unseal secret SHALL be loaded into a podman secret and
+mounted at `/run/secrets/vault-unseal` on tmpfs only.
+
+The transitional XOR envelope is FORBIDDEN. The unseal key provided by the host
+MUST be installed as the actual Shamir share via `vault operator rekey`. `init.json`
+MUST be deleted immediately after initialization.
 
 @trace spec:tillandsias-vault, spec:host-shell-architecture
 
-#### Scenario: First boot unseals without prompt
+#### Scenario: First boot unseals and rekeys without prompt
 - **WHEN** Vault is provisioned for the first time
-- **THEN** the launcher SHALL create a platform-bound installation UUID
-- **AND** the Linux boundary SHALL derive the unseal key via HKDF
-- **AND** Vault SHALL transition to `sealed=false` without any terminal prompt,
-  window prompt, or file dialog.
+- **THEN** the launcher SHALL generate and store the versioned unseal key in the host OS keychain
+- **AND** Vault SHALL initialize and immediately `vault operator rekey` to use this key as the active share
+- **AND** `init.json` SHALL be permanently deleted
+- **AND** Vault SHALL transition to `sealed=false` without any terminal prompt.
 
 #### Scenario: Subsequent boots unseal without prompt
 - **WHEN** Tillandsias restarts
-- **THEN** the launcher SHALL reuse the existing installation UUID
-- **AND** Vault SHALL unseal with the same derivation
+- **THEN** the launcher SHALL retrieve the live unseal key from the host OS keychain
+- **AND** Vault SHALL unseal using this key
 - **AND** the user SHALL see no credential or passphrase prompt.
 
 #### Scenario: Unseal key never lands on persistent disk
 - **WHEN** Vault is running
 - **THEN** `/run/secrets/vault-unseal` SHALL be tmpfs-backed
 - **AND** no persistent file under `/vault` or `/etc` SHALL contain the unseal
-  key bytes.
+  key bytes in plaintext or XOR'd form.
 
-### Requirement: Linux Vault is the default secret store
-- **ID**: tillandsias-vault.linux.default-secret-store@v1
+#### Scenario: Stale keychain entries are sanitized
+- **WHEN** the host launcher initializes
+- **THEN** it SHALL scan the host OS keychain for `tillandsias-vault-unseal-*`
+- **AND** SHALL delete any entries that are not the current version (`v1`) or belong to defunct installations.
+
+### Requirement: Vault is the ONLY secret store (Legacy Fallback Removed)
+- **ID**: tillandsias-vault.linux.only-secret-store@v2
 - **Modality**: MUST
 - **Measurable**: true
-- **Invariants**: [tillandsias-vault.invariant.vault-default-on-linux, tillandsias-vault.invariant.legacy-keyring-deprecated]
+- **Invariants**: [tillandsias-vault.invariant.vault-always-on, tillandsias-vault.invariant.legacy-keyring-removed]
 
-On Linux, `tillandsias --init` SHALL bootstrap Vault by default and
-`tillandsias --github-login` SHALL store the GitHub token in Vault at
-`secret/github/token`. The deprecated keyring-backed podman-secret flow SHALL be
-used only when explicitly requested with `--legacy-keyring-secrets`, when the
-binary is compiled without the `vault` feature, or when Vault bootstrap fails
-and the caller elects the legacy fallback.
+Vault is the exclusive secrets backend. The legacy keyring-backed podman-secret flow
+(`--legacy-keyring-secrets` and `--without-vault`) has been completely removed.
+`tillandsias --init` SHALL ALWAYS bootstrap Vault. `tillandsias --github-login` SHALL
+ALWAYS store the GitHub token in Vault at `secret/github/token`.
 
-@trace spec:tillandsias-vault, spec:secrets-management
+@trace spec:tillandsias-vault
 
 #### Scenario: GitHub login writes to Vault
-- **WHEN** the user runs `tillandsias --github-login` with the default feature set
+- **WHEN** the user runs `tillandsias --github-login`
 - **THEN** the host SHALL capture the GitHub token
 - **AND** SHALL write it to Vault at `secret/github/token`
-- **AND** SHALL NOT create `tillandsias-github-token` unless
-  `--legacy-keyring-secrets` is present.
+- **AND** the deprecated podman secret `tillandsias-github-token` SHALL NOT be created.
 
-#### Scenario: Legacy keyring path is explicit
-- **WHEN** `--legacy-keyring-secrets` is present
-- **THEN** the launcher MAY create the old `tillandsias-github-token` podman
-  secret
-- **AND** it SHALL log that the path is deprecated and scheduled for v0.3
-  removal.
+#### Scenario: Legacy flags are rejected
+- **WHEN** `--legacy-keyring-secrets` or `--without-vault` is passed
+- **THEN** the launcher SHALL exit with a fatal error indicating the flags are removed.
 
 ### Requirement: Policy taxonomy enforces least privilege per container kind
 - **ID**: tillandsias-vault.security.policy-taxonomy@v1

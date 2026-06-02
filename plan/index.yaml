@@ -1697,3 +1697,50 @@ plan_index:
             - plan/index.yaml
           checkpoint_required: true
           handoff_note: "Platform sessions are using shared queues; keep queue item headers synchronized with terminal events, append stale/ping notes for missed leases, and record sibling branch heads in the integration-loop ledger before shared-file merges."
+
+    - id: vault-hardening-architecture
+      order: 22
+      title: Vault Hardening Architecture (Phase 6.5)
+      status: ready
+      deliverable: plan/issues/vault-hardening-architecture-2026-06.md
+      depends_on: [recent-work-spec-doc-methodology-audit]
+      specs:
+        - tillandsias-vault
+      exit_criteria:
+        - "Legacy keyring fallback (--legacy-keyring-secrets) is completely removed."
+        - "Vault auto-unseal key is stored in the host native keychain with versioning."
+        - "Vault initialization uses vault operator rekey instead of the XOR envelope."
+        - "Bootstrap artifacts like init.json are deleted immediately after initialization."
+      tasks:
+        - id: vault-hardening/remove-legacy-fallback
+          status: completed
+          depends_on: []
+          owned_files:
+            - crates/tillandsias-headless/src/main.rs
+            - crates/tillandsias-headless/src/vault_bootstrap.rs
+          checkpoint_required: true
+          handoff_note: "Remove --without-vault and --legacy-keyring-secrets."
+        - id: vault-hardening/host-keychain-storage
+          status: completed
+          depends_on: [vault-hardening/remove-legacy-fallback]
+          owned_files:
+            - crates/tillandsias-headless/src/vault_bootstrap.rs
+          checkpoint_required: true
+          handoff_note: "Store and version the unseal key in the host native keychain."
+        - id: vault-hardening/true-rekey-and-cleanup
+          status: completed
+          depends_on: []
+          owned_files:
+            - images/vault/entrypoint.sh
+          checkpoint_required: true
+          handoff_note: "Use vault operator rekey and delete init.json and root.token securely."
+        - id: vault-hardening/litmus-updates
+          status: completed
+          depends_on: [vault-hardening/true-rekey-and-cleanup, vault-hardening/host-keychain-storage]
+          owned_files:
+            - openspec/litmus-tests/litmus-secrets-management-implementation-shape.yaml
+            - openspec/litmus-tests/litmus-vault-auto-unseal-no-prompt.yaml
+            - openspec/litmus-tests/litmus-gh-auth-script-shape.yaml
+          checkpoint_required: true
+          handoff_note: "Update litmus tests to reflect the new Vault strict architecture."
+

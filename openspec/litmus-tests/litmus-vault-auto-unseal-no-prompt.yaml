@@ -1,10 +1,11 @@
 # @trace spec:tillandsias-vault
 name: litmus:vault-auto-unseal-no-prompt
 spec: tillandsias-vault
-phase: 6
+phase: 6.5
 description: >
-  VM boots, vault container auto-unseals from machine-id + installation-uuid,
+  VM boots, vault container auto-unseals from host-OS-keychain-stored key,
   and 'vault status' reports sealed=false within 5s of vault container start.
+  Plaintext init.json and root.token MUST NOT exist on the persistent volume.
   At no point may a user-visible prompt (NSWindow, MessageBox, terminal
   password prompt, file dialog) surface. Exercises the no-passphrase-prompt-ever
   invariant.
@@ -13,9 +14,8 @@ size: e2e
 
 preconditions:
   - VM is provisioned with the vault container image present (tillandsias-vault)
-  - host has the installation-uuid stored in the platform-bound location
+  - host has the unseal key stored in the native OS keychain
   - test runs in a non-interactive environment (no TTY by default) — any prompt will surface as a hang or error
-  - the host shell pushes installation-uuid via vsock at VM start
 
 caveats:
   - requires_provisioned_vault: "Run after the vault POC is built into the in-VM enclave"
@@ -47,11 +47,17 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "succeeds (no prompt-related processes, no prompt strings in log)"
 
-  - step: "unseal key is on tmpfs and absent from disk"
+  - step: "unseal key is on tmpfs and absent from persistent disk"
     phase: runtime
     command: "bash -lc 'cargo run -p tillandsias-host-shell --example vm-exec -- bash -c \"findmnt /run/secrets | grep -q tmpfs && ! find /vault /etc -type f -exec grep -l 'unseal' {} + 2>/dev/null | grep -v audit\" && echo \"OK\"'"
     timeout_ms: 10000
     expected_behavior: "succeeds (unseal key path on tmpfs; no persistent file contains the key)"
+
+  - step: "bootstrap artifacts (init.json, root.token) are deleted from disk"
+    phase: runtime
+    command: "bash -lc 'cargo run -p tillandsias-host-shell --example vm-exec -- bash -c \"[ ! -f /vault/data/init.json ] && [ ! -f /vault/data/root.token ]\" && echo \"OK\"'"
+    timeout_ms: 5000
+    expected_behavior: "succeeds (files removed after first boot handover)"
 
 observability:
   traces:
