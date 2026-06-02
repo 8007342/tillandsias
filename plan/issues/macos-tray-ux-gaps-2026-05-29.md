@@ -84,7 +84,8 @@ Pick one gap per iteration. For each:
 - type: fix
 - owner_host: macos
 - capability_tags: [appkit, ux, rust, testing]
-- status: claimed
+- status: done
+- completed_at: 2026-06-02T20:54:10Z
 - depends_on: []
 - gated_on: []
 - blocks: [m8/appkit-action-smoke-and-stub-polish]
@@ -108,3 +109,20 @@ Pick one gap per iteration. For each:
     host: "macos"
     lease_id: "f342d3f7d1f8"
     expires_at: "2026-06-03T00:51:34Z"
+  - type: completed
+    ts: "2026-06-02T20:54:10Z"
+    agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260602T205104Z"
+    host: "macos"
+    lease_id: "f342d3f7d1f8"
+    commits:
+      - "a826dcc5 fix(macos): load tray status icon image"
+    validation:
+      - "cargo fmt --all: pass"
+      - "cargo test -p tillandsias-macos-tray --bin tillandsias-tray: pass (45 passed, 1 ignored)"
+      - "cargo check -p tillandsias-macos-tray: pass"
+      - "./build.sh --check: blocked on this host because podman is not installed on PATH"
+    outcome: >
+      gap-1 implementation now loads `Contents/Resources/icon.pdf` as an
+      AppKit template image for the NSStatusItem button, falls back to the
+      source-tree asset for dev runs, and only uses the text `T` if no icon
+      asset exists.
