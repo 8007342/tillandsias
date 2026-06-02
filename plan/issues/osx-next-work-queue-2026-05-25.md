@@ -269,8 +269,8 @@ accessor.
 - type: architecture-pivot
 - owner_host: macos
 - capability_tags: [macos, vz, rust, fedora]
-- status: blocked
-- retryable: true
+- status: done
+- completed_at: 2026-06-02T21:05Z
 - depends_on: [m5/vfr-image-via-ci-rootfs]
 - gated_on: []
 - owned_files:
@@ -334,6 +334,25 @@ accessor.
       After origin/osx-next is reconciled to linux-next, fast-forward/cherry-pick
       99536276 from origin/codex/osx-fedora-cloud-pivot-20260602 onto osx-next
       and rerun the two targeted test commands above.
+  - type: completed
+    ts: "2026-06-02T21:05:00Z"
+    agent_id: "macos-tlatoani-codex-20260602T203030Z"
+    host: "macos"
+    lease_id: "m9-vz-fedora-cloud-20260602T203030Z"
+    commits:
+      - "5f33042b chore(osx): resync branch to linux-next source of truth"
+    validation:
+      - "origin/osx-next repaired by normal forward push; no force push used"
+      - "origin/codex/osx-fedora-cloud-pivot-20260602 deleted"
+      - "git diff --name-status origin/linux-next..origin/osx-next contains only the 9 Fedora pivot files"
+      - "cargo test -p tillandsias-vm-layer: pass"
+      - "cargo test -p tillandsias-macos-tray --bin tillandsias-tray: pass (42 passed, 1 ignored)"
+      - "focused rustfmt --check on touched Rust files: pass"
+    outcome: >
+      macOS now fetches Fedora's official Cloud aarch64 qcow2, verifies the
+      Fedora-published SHA-256, converts it with qemu-img to rootfs.img for
+      Virtualization.framework, and reports the fedora-44 qcow2 pin in
+      diagnostics. Local osx-next tracks origin/osx-next again.
 
 ### Item: m8/appkit-action-smoke-and-stub-polish
 
