@@ -1,6 +1,6 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-02T17:01:24Z
+LastExecutionTime: 2026-06-02T18:45:00Z
 
 ## This Loop
 
@@ -10,7 +10,8 @@ LastExecutionTime: 2026-06-02T17:01:24Z
   - main at `6e3d2335` — release v0.2.260601.1 published.
 - **Vault Hardening (Phase 6.5)**: Complete. All 4 subtasks shipped: legacy keyring fallback removed, host-keychain storage, true rekey + cleanup, litmus updates. Step 22 → completed.
 - **Bug Fixes**: `status_check_args_probe_proxy_git_and_inference_from_forge` test assertion fixed for `localhost/` image prefix. `opencode-repeat` unbound variable + invalid --prompt flag resolved. Headless verbose build output under `--debug` (gap:ON-005).
-- **Local CI & Litmus Validation**: `./build.sh --check` clean. `cargo test -p tillandsias-headless` 131/131 PASS. Instant litmus suite **97/97 PASS at 100%** across 87 active specs.
+- **Spec Coverage Gap Fill (native-secrets-store)**: Created `litmus:native-secrets-store-shape` — 7-step instant pre-build shape test pinning KEYCHAIN_SERVICE constant, keyring::Entry import, read_github_token gh-auth path, TokenRefreshError::KeyringReadError variant, and @trace breadth. Coverage ratio raised from 66→75. Litmus verified: all 7 steps PASS.
+- **Local CI & Litmus Validation**: `./build.sh --check` clean. `cargo test -p tillandsias-headless` 131/131 PASS. Instant litmus suite **98/98 PASS at 100%** across 87 active specs.
 
 ## Expected Next Loop
 
@@ -23,6 +24,7 @@ LastExecutionTime: 2026-06-02T17:01:24Z
 - vault-hardening-architecture (plan/index.yaml step 22) status: completed.
 - `status_check_args_probe_proxy_git_and_inference_from_forge` test fixed (localhost/ prefix).
 - linux-next work-queue updated with vault-hardening, escalation, and fix commits.
+- native-secrets-store spec coverage gap filled (66→75) with new litmus:native-secrets-store-shape test.
 
 ## Current Major Blockers
 
@@ -34,7 +36,7 @@ LastExecutionTime: 2026-06-02T17:01:24Z
 
 - **Linux**:
   - Primary: Convergence maintenance. All planned steps completed. Next: monitor for new spec-gap or regression packets.
-  - Fallback: Spec coverage gap audit (identify next highest-impact coverage packet).
+  - Fallback: Spec coverage gap audit (identify next highest-impact coverage packet). native-secrets-store completed 66→75. Next: audit remaining specs <75% for linux-eligible packets.
 - **Windows**:
   - Primary: Resolve D_max drift (30 commits ahead of merge-base).
 - **macOS**:
