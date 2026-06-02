@@ -77,3 +77,34 @@ Pick one gap per iteration. For each:
 - **/test-e2e-macos-tray skill does not exist.** The user asked for a daily e2e loop on this skill. Options: (a) scaffold the skill (mirrors `/build-macos-tray` but adds menu-bar screenshot, AX menu dump, stderr tail), (b) skip the daily loop until the skill exists, (c) inline the e2e flow as a one-off prompt the daily cron runs. Deferred to user.
 - **No `--no-auto-boot` flag on the tray binary.** Without it, every smoke run starts the recipe-fetch path. Adding the flag would let both the autonomous-smoke and the future e2e suite test menu/icon without the recipe variable. Flagged in today's findings file (`macos-build-findings-2026-05-29.md:42`).
 - **Menu divergence is undocumented.** Need a screenshot or item dump from the user's host before gap-2 can be split into actionable sub-tasks.
+
+## Work Packet: macos-tray-ux/status-icon-template-image
+
+- id: `macos-tray-ux/status-icon-template-image`
+- type: fix
+- owner_host: macos
+- capability_tags: [appkit, ux, rust, testing]
+- status: claimed
+- depends_on: []
+- gated_on: []
+- blocks: [m8/appkit-action-smoke-and-stub-polish]
+- owned_files:
+  - `crates/tillandsias-macos-tray/src/status_item.rs`
+  - `crates/tillandsias-macos-tray/src/menu_disabled_v2.rs`
+- summary: >
+    Resolve gap-1 by assigning a real template image to the NSStatusItem
+    button instead of relying on the fallback text title.
+- next_action: >
+    Inspect the current status-item setup, load or generate a bundled-safe
+    template image for the menu bar, clear the text fallback when image
+    assignment succeeds, and add a focused test for the icon-state contract.
+- acceptance_evidence:
+  - `cargo test -p tillandsias-macos-tray --bin tillandsias-tray`
+  - Focused build or lint evidence on macOS if AppKit bindings are available.
+- events:
+  - type: claim
+    ts: "2026-06-02T20:51:34Z"
+    agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260602T205104Z"
+    host: "macos"
+    lease_id: "f342d3f7d1f8"
+    expires_at: "2026-06-03T00:51:34Z"
