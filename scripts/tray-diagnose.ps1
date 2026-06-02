@@ -129,7 +129,7 @@ Write-Check 'distro running    ' $true $runDetail
 
 Write-Host "`nRecipe / artifact:"
 Write-Check 'release tag       ' $true $report.release_tag
-$pin = $report.manifest_pin_x86_64_tar
+$pin = $report.manifest_pin_x86_64_tar_xz
 $pinDetail = if ($pin) { "x86_64.tar $pin..." } else { '(not found)' }
 Write-Check 'manifest pin      ' ([bool]$pin) $pinDetail
 if (-not $pin) { $failures++ }

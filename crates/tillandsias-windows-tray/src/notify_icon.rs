@@ -1371,7 +1371,7 @@ struct DiagnoseReport {
     /// having to run `wsl --list --running` separately.
     distro_running: bool,
     release_tag: &'static str,
-    manifest_pin_x86_64_tar: Option<String>,
+    manifest_pin_x86_64_tar_xz: Option<String>,
     wire: WireReport,
     recent_log_tail: Vec<String>,
 }
@@ -1501,7 +1501,7 @@ fn collect_report() -> DiagnoseReport {
         })
         .unwrap_or(false);
 
-    let manifest_pin = parse_rootfs_sha_pin(crate::wsl_lifecycle::RECIPE_MANIFEST, "x86_64.tar");
+    let manifest_pin = parse_rootfs_sha_pin(crate::wsl_lifecycle::RECIPE_MANIFEST, "x86_64.tar.xz");
 
     // Live control wire. Tokio runtime build is essentially infallible — on the
     // rare failure we still emit a (degraded) report rather than aborting.
@@ -1633,7 +1633,7 @@ fn collect_report() -> DiagnoseReport {
         distro_registered,
         distro_running: distro_running(),
         release_tag: "fedora-44",
-        manifest_pin_x86_64_tar: manifest_pin,
+        manifest_pin_x86_64_tar_xz: manifest_pin,
         wire,
         recent_log_tail,
     };
@@ -1692,8 +1692,8 @@ fn print_human(r: &DiagnoseReport) {
     );
     println!("Release tag:  {}", r.release_tag);
     println!(
-        "Manifest pin: x86_64.tar {}",
-        r.manifest_pin_x86_64_tar
+        "Manifest pin: x86_64.tar.xz {}",
+        r.manifest_pin_x86_64_tar_xz
             .as_deref()
             .map(|sha| format!("{sha}\u{2026}"))
             .unwrap_or_else(|| "(not found / parse skipped)".to_string())
@@ -2355,7 +2355,7 @@ mod tests {
     /// Pin the `--diagnose --json` schema so support tooling consuming the
     /// machine-readable output never breaks silently. The five tests below
     /// catch (a) renamed / removed top-level keys, (b) renamed / removed
-    /// nested `wire.*` keys, (c) the `manifest_pin_x86_64_tar` Option being
+    /// nested `wire.*` keys, (c) the `manifest_pin_x86_64_tar_xz` Option being
     /// (de)serialized in an unexpected way, (d) `recent_log_tail` ceasing to
     /// be an array. A schema change here is a schema change for tooling —
     /// adjust both deliberately together.
@@ -2376,7 +2376,7 @@ mod tests {
             distro_registered: false,
             distro_running: false,
             release_tag: "v0.0.0",
-            manifest_pin_x86_64_tar: Some("abcdef123456".to_string()),
+            manifest_pin_x86_64_tar_xz: Some("abcdef123456".to_string()),
             wire: WireReport {
                 reachable: false,
                 phase: None,
@@ -2408,7 +2408,7 @@ mod tests {
             "distro_registered",
             "distro_running",
             "release_tag",
-            "manifest_pin_x86_64_tar",
+            "manifest_pin_x86_64_tar_xz",
             "wire",
             "recent_log_tail",
         ] {
@@ -2438,10 +2438,10 @@ mod tests {
     #[test]
     fn diagnose_json_manifest_pin_some_serializes_as_string() {
         let mut r = baseline_diagnose_report();
-        r.manifest_pin_x86_64_tar = Some("a28cabe7c9df".to_string());
+        r.manifest_pin_x86_64_tar_xz = Some("a28cabe7c9df".to_string());
         let v: serde_json::Value = serde_json::to_value(r).expect("serialize");
         assert_eq!(
-            v["manifest_pin_x86_64_tar"],
+            v["manifest_pin_x86_64_tar_xz"],
             serde_json::Value::String("a28cabe7c9df".to_string())
         );
     }
@@ -2449,9 +2449,9 @@ mod tests {
     #[test]
     fn diagnose_json_manifest_pin_none_serializes_as_null() {
         let mut r = baseline_diagnose_report();
-        r.manifest_pin_x86_64_tar = None;
+        r.manifest_pin_x86_64_tar_xz = None;
         let v: serde_json::Value = serde_json::to_value(r).expect("serialize");
-        assert_eq!(v["manifest_pin_x86_64_tar"], serde_json::Value::Null);
+        assert_eq!(v["manifest_pin_x86_64_tar_xz"], serde_json::Value::Null);
     }
 
     /// The `--diagnose` / `--diagnose --json` exit code is a public contract
