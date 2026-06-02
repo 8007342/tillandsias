@@ -1,29 +1,28 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-02T22:50:00Z
+LastExecutionTime: 2026-06-02T23:30:00Z
 
 ## This Loop
 
-- **Multi-Host Coordination**: Re-audited remote sibling branches (`origin/windows-next` and `origin/osx-next`).
-  - windows-next at `3fd88dd5` (fast-forwarded from `f9e2c5d2`, 6 plan-only commits) — D_max resolved at 0 ahead, 0 behind linux-next. No code changes.
-  - osx-next at `17be73ad` — Fedora pivot completed across all hosts. m8 (user-attended smoke) is the remaining manual gate.
-  - linux-next at `3fd88dd5` — HEAD matches windows-next. All Fedora pivot ledger complete.
-  - main at `6e3d2335` — release v0.2.260601.1 published.
-- **Work Discovery**: Walked plan graph per distributed-work.yaml §2. No claimable Windows-eligible packet exists. All plan steps are completed or obsoleted. The only `owner_host: any` packet (`forge-enhancements/curated-toolchain-backlog`) depends on `forge-diagnostics/e2e-piggyback-orchestration` (owner: linux, status: ready) which is not yet done.
-- **Branch Sync**: windows-next fast-forwarded to `3fd88dd5` (commit of "claim macos tray status icon lease") and pushed to origin.
+- **Multi-Host Coordination**: Full orchestration pass completed.
+  - **Divergence Alert**: `origin/osx-next` at `a826dcc5` — **11 commits ahead** of `origin/linux-next` (`7efd4b38`), exceeding D_max=5. Pattern D mediation triggered.
+  - **Synchronous Integration Wave**: Merged `origin/osx-next` into `linux-next` via `git merge --no-ff`. 10 files changed (303 insertions, 100 deletions). `./build.sh --check` ✓, `./build.sh --test` ✓ — **all tests passed**.
+  - **Divergence Resolved**: After push (`7efd4b38..d9b706d2`), `origin/linux-next` now contains all 11 osx-next commits. `git rev-list --count origin/linux-next..origin/osx-next` = 0.
+  - windows-next at `7efd4b38` (same as previous linux-next) — requires fast-forward to `d9b706d2`.
+  - main at `cb4c6204` — release v0.2.260602.3 published.
 
 ## Expected Next Loop
 
-- Windows worker: yields until orchestrator creates new Windows-eligible packets.
-- Linux host: claim `forge-diagnostics/e2e-piggyback-orchestration` to unblock the `forge-enhancements/curated-toolchain-backlog` chain.
-- macOS host: user-attended m8 smoke of the rebuilt production `.app` remains the only open gate.
-- All hosts: monitor for post-Fedora-pivot regressions.
+- Linux host: claim `forge-diagnostics/e2e-piggyback-orchestration` to unblock `forge-enhancements/curated-toolchain-backlog`.
+- Windows host: fast-forward `windows-next` to `origin/linux-next` (`d9b706d2`). Continue yielding if no claimable packets.
+- macOS host: user-attended m8 smoke remains the only open gate.
+- All hosts: monitor post-integration stability.
 
 ## Resolved Since Previous Loop
 
-- windows-next sync from 6 behind → 0 behind linux-next.
-- No new regressions or stale drift found.
-- Fedora pivot fully complete across all three platforms.
+- **osx-next divergence** (11 commits, D_max exceeded) — fully integrated via orchestrator-led merge + push. Tests 100% green.
+- macOS code change `a826dcc5` (fix(macos): load tray status icon image) now in linux-next.
+- Plan files from osx-next now mirrored in linux-next.
 
 ## Current Major Blockers
 
@@ -37,15 +36,17 @@ LastExecutionTime: 2026-06-02T22:50:00Z
   - Primary: Claim `forge-diagnostics/e2e-piggyback-orchestration` to unblock toolchain backlog.
   - Fallback: Spec coverage gap audit, diagnostic pipeline work.
 - **Windows**:
-  - Primary: YIELD — no claimable packets. Standby for orchestrator-sourced work.
+  - Primary: YIELD — no claimable packets. Fast-forward `windows-next` to `origin/linux-next`.
 - **macOS**:
   - Primary: user-attended m8 smoke of the rebuilt production `.app`.
   - Fallback: new diagnostics-driven packets only.
 
 ## Stale Or Pending Pings
 
-- forge-diagnostics automation packet `e2e-piggyback-orchestration` (owner: linux, ready, unclaimed) — blocks the any-host toolchain backlog.
+- forge-diagnostics automation packet `e2e-piggyback-orchestration` (owner: linux, ready, unclaimed).
+- `windows-next` at stale commit `7efd4b38` — needs fast-forward to `d9b706d2`.
 
 ## Validation
 
 - YAML check: `plan.yaml`, `plan/index.yaml`, `methodology/convergence.yaml`, and `methodology/distributed-work.yaml` are clean and 100% syntactically valid.
+- Merge verification: `./build.sh --check` and `./build.sh --test` passed on merged tree.
