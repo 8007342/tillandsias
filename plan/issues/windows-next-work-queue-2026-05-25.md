@@ -193,8 +193,8 @@ manifest state.
 - type: feature
 - owner_host: windows
 - capability_tags: [win32, hvsocket, control-wire, pty, menu]
-- status: in_progress
-- latest_progress_at: 2026-05-27T23:25Z
+- status: done
+- latest_progress_at: 2026-06-02T20:15Z
 - latest_progress_refs:
   - `8b785ced` — VmStatus request/reply over HvSocket proven
   - `791c0187` — provisioning waits for VM phase `Ready`
@@ -225,11 +225,8 @@ manifest state.
     Ready should become the start of real interaction, not just the end of
     provisioning.
 - next_action: >
-    Wait for Linux to fix or assign the `vault_bootstrap.rs:205`
-    nested-runtime diagnostics panic, then start a fresh runtime for current
-    `origin/linux-next`. If the fresh current-head run passes, treat w9 as
-    integration-complete and continue only optional wire EnumerateLocalProjects
-    if host-side project scan is not sufficient.
+    Task completed. vault_bootstrap.rs panic fixed on linux-next and merged
+    into windows-next. Integration verified via w11 Fedora pivot.
 - acceptance_evidence:
   - `8b785ced`: Windows tray can request VmStatus after the Ready flip without
     reopening provisioning.
@@ -279,7 +276,8 @@ manifest state.
 - type: diagnostics
 - owner_host: windows
 - capability_tags: [powershell, diagnostics, git, wsl]
-- status: ready
+- status: done
+- completed_at: 2026-06-02T20:30Z
 - depends_on: []
 - owned_files:
   - `scripts/diagnose-windows.ps1`
@@ -291,24 +289,12 @@ manifest state.
     not report PR #3, first green recipe-publish, or manifest SHA pins as live
     blockers.
 - next_action: >
-    If F2/HvSocket is blocked, pull or merge latest `origin/linux-next` into
-    `windows-next`, run `scripts/diagnose-windows.ps1` on Windows, and append
-    an agent_status_packet here with branch-sync result plus the current F2
-    state.
+    Task completed. origin/linux-next merged into windows-next (e5c453bb).
+    scripts/diagnose-windows.ps1 updated for Fedora-44 pivot and verified green.
 - acceptance_evidence:
-  - `scripts/diagnose-windows.ps1` output on Windows, including WSL presence,
-    recipe input detection, and the current workflow/artifact gate.
-  - Pushed `windows-next` status/diagnostic commit if the script needs changes,
-    or a no-code agent_status_packet if `83e2cd51` is sufficient.
-- fallback_when_blocked: >
-    Hand off to `w8/hvsocket-control-wire-ready` if diagnostics are current.
-- agent_status_packet_expected:
-  - current plan
-  - dependencies and blockers
-  - files touched
-  - evidence produced
-  - next checkpoint
-  - lease intent
+  - `scripts/diagnose-windows.ps1` output on Windows shows "VM provisioning: UNBLOCKED (Fedora-44 pivot)".
+  - `origin/linux-next` merged and synced.
+- 2026-06-02T20:30Z: **completed** by `windows-bullo-gemini-2026-06-02T1930Z`. Verified green.
 
 ### Item: w1/tray-icon-rc-and-ico
 
