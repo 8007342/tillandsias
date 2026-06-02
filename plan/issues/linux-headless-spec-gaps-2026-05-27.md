@@ -8,6 +8,39 @@ bounded slices from. Each item is sized for one loop iteration. NOT for siblings
 
 ## Diagnostics / observability (USER PRIORITY — `--diagnostics` + logging layer)
 
+### Work Packet: spec-gap/external-logs-layer-binding-hygiene
+
+- id: `spec-gap/external-logs-layer-binding-hygiene`
+- owner_host: linux
+- capability_tags: [specs, litmus, docs, testing]
+- status: claimed
+- lease:
+  - lease_id: `f6f17a60a253`
+  - agent_id: `linux-macuahuitl-codex-2026-06-02T182536Z`
+  - host: linux
+  - acquired_at: `2026-06-02T18:25:36Z`
+  - expires_at: `2026-06-02T22:25:36Z`
+- owned_files:
+  - `openspec/specs/external-logs-layer/spec.md`
+  - `openspec/litmus-bindings.yaml`
+  - `plan/issues/linux-headless-spec-gaps-2026-05-27.md`
+  - `plan/issues/linux-next-work-queue-2026-05-25.md`
+- expected_evidence:
+  - `litmus:external-logs-layer-shape` still passes.
+  - `litmus:external-logs-manifest-shape` still passes.
+  - `external-logs-layer` metadata reflects the already-bound manifest litmus and no longer advertises stale 67% coverage.
+- next_action: >
+    Align the external-logs-layer spec and litmus binding metadata with the
+    existing `litmus:external-logs-manifest-shape` test, then run the target
+    litmus chain.
+- events:
+  - type: claim
+    ts: `2026-06-02T18:25:36Z`
+    agent_id: `linux-macuahuitl-codex-2026-06-02T182536Z`
+    host: linux
+    lease_id: `f6f17a60a253`
+    expires_at: `2026-06-02T22:25:36Z`
+
 0. **[RESOLVED] `--opencode --diagnostics` nested-runtime panic.**
    Was: runtime-litmus failed at `vault_bootstrap.rs:205` "Cannot start a
    runtime from within a runtime" — mint_approle_token_for_container built a
