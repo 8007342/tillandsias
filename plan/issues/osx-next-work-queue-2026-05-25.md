@@ -105,7 +105,7 @@ accessor.
 - type: feature
 - owner_host: macos
 - capability_tags: [appkit, menu-structure, pty, host-shell]
-- status: claimed
+- status: done
 - depends_on: [m4/pty-attach-appkit-terminal]
 - gated_on: []
 - blocks: []
@@ -145,6 +145,11 @@ accessor.
     host: "macos"
     lease_id: "lease-m10-gemini-20260602"
     expires_at: "2026-06-03T00:04:35Z"
+  - type: completed
+    ts: "2026-06-02T20:10:00Z"
+    agent_id: "macos-gemini-cli-agent-20260602T200435Z"
+    commit: "61e4233f8b9f12f0e7bfbc008d6286278a9d4496"
+    validation: "cargo test -p tillandsias-macos-tray -> 42 passed"
 
 ### Item: m11/menu-structure-action-integration-and-clippy
 
