@@ -82,7 +82,7 @@ pub struct DiagnoseReport {
     pub initrd_present: bool,
     pub initrd_bytes: Option<u64>,
     pub release_tag: &'static str,
-    pub manifest_pin_aarch64_img: Option<String>,
+    pub manifest_pin_aarch64_qcow2: Option<String>,
     pub provisioned: bool,
 }
 
@@ -111,10 +111,10 @@ fn collect_report() -> DiagnoseReport {
     let (rootfs_present, rootfs_bytes) = stat_file(&root.join("rootfs.img"));
     let (kernel_present, kernel_bytes) = stat_file(&root.join("vmlinuz"));
     let (initrd_present, initrd_bytes) = stat_file(&root.join("initramfs.img"));
-    let provisioned = rootfs_present && kernel_present && initrd_present;
+    let provisioned = rootfs_present;
 
     const BUNDLED_MANIFEST_TOML: &str = include_str!("../../../images/vm/manifest.toml");
-    let manifest_pin_aarch64_img = parse_aarch64_img_sha(BUNDLED_MANIFEST_TOML);
+    let manifest_pin_aarch64_qcow2 = parse_aarch64_qcow2_sha(BUNDLED_MANIFEST_TOML);
 
     DiagnoseReport {
         version: env!("CARGO_PKG_VERSION"),
@@ -127,8 +127,8 @@ fn collect_report() -> DiagnoseReport {
         kernel_bytes,
         initrd_present,
         initrd_bytes,
-        release_tag: crate::action_host::RECIPE_RELEASE_TAG,
-        manifest_pin_aarch64_img,
+        release_tag: crate::action_host::FEDORA_BASELINE,
+        manifest_pin_aarch64_qcow2,
         provisioned,
     }
 }
@@ -162,9 +162,9 @@ fn print_human(r: &DiagnoseReport) {
     print_artifact("  initramfs.img", r.initrd_present, r.initrd_bytes);
     println!("Release:    {}", r.release_tag);
     println!("Manifest:   bundled at build (compile-time include_str!)");
-    match &r.manifest_pin_aarch64_img {
-        Some(sha) => println!("  aarch64.img SHA-256 pin: {sha}\u{2026}"),
-        None => println!("  aarch64.img SHA-256 pin: (not found / parse skipped)"),
+    match &r.manifest_pin_aarch64_qcow2 {
+        Some(sha) => println!("  aarch64.qcow2 SHA-256 pin: {sha}\u{2026}"),
+        None => println!("  aarch64.qcow2 SHA-256 pin: (not found / parse skipped)"),
     }
     println!();
     println!("Control wire status:");
@@ -208,15 +208,15 @@ fn exit_code_from(r: &DiagnoseReport) -> i32 {
     if r.provisioned { 0 } else { 2 }
 }
 
-/// Extract the first 12-char SHA-256 prefix for `aarch64.img` from a
+/// Extract the first 12-char SHA-256 prefix for `aarch64.qcow2` from a
 /// manifest.toml body. Pure, testable — both the quoted-key form
-/// (`"aarch64.img" = "<sha>"`, the actual file) and the bare-key
-/// form (`aarch64.img = "<sha>"`) parse. Returns the 12-char prefix
+/// (`"aarch64.qcow2" = "<sha>"`, the actual file) and the bare-key
+/// form (`aarch64.qcow2 = "<sha>"`) parse. Returns the 12-char prefix
 /// or None if no valid pin is found.
-fn parse_aarch64_img_sha(manifest_toml: &str) -> Option<String> {
+fn parse_aarch64_qcow2_sha(manifest_toml: &str) -> Option<String> {
     for line in manifest_toml.lines() {
         let trimmed = line.trim().trim_start_matches('"');
-        if let Some(rest) = trimmed.strip_prefix("aarch64.img") {
+        if let Some(rest) = trimmed.strip_prefix("aarch64.qcow2") {
             let rest = rest.trim_start_matches(['"', ' ', '=', '"']);
             let sha: String = rest.chars().take_while(|c| c.is_ascii_hexdigit()).collect();
             if sha.len() >= 12 {
@@ -229,23 +229,22 @@ fn parse_aarch64_img_sha(manifest_toml: &str) -> Option<String> {
 
 #[cfg(test)]
 mod tests {
-    use super::parse_aarch64_img_sha;
+    use super::parse_aarch64_qcow2_sha;
 
-    /// `parse_aarch64_img_sha` reads the actual manifest.toml format
-    /// the recipe-publish CI emits (`"aarch64.img" = "<sha>"` inside
+    /// `parse_aarch64_qcow2_sha` reads the actual manifest.toml format
+    /// the Fedora pivot emits (`"aarch64.qcow2" = "<sha>"` inside
     /// `[output.expected_rootfs_sha]`). Asserts on a single 12-char
-    /// prefix so the test isn't sensitive to the live SHA changing
-    /// across CI runs.
+    /// prefix so the test isn't sensitive to the live SHA changing.
     #[test]
     fn parses_quoted_key_sha_form() {
         let manifest = r#"
 [output.expected_rootfs_sha]
 "aarch64.tar" = "ffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffffff"
-"aarch64.img" = "6859a7bcc4a9d686ec3735c09bbf04aed00c08647586e2e75492fe5829730bee"
+"aarch64.qcow2" = "55c60a3b80d3616a08705afd0459e75fe9f03c54aba7a46e4002a41a72fa0d5b"
 "#;
         assert_eq!(
-            parse_aarch64_img_sha(manifest),
-            Some("6859a7bcc4a9".to_string())
+            parse_aarch64_qcow2_sha(manifest),
+            Some("55c60a3b80d3".to_string())
         );
     }
 
@@ -255,9 +254,9 @@ mod tests {
     #[test]
     fn parses_bare_key_sha_form() {
         let manifest =
-            "aarch64.img = \"abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789\"";
+            "aarch64.qcow2 = \"abcdef0123456789abcdef0123456789abcdef0123456789abcdef0123456789\"";
         assert_eq!(
-            parse_aarch64_img_sha(manifest),
+            parse_aarch64_qcow2_sha(manifest),
             Some("abcdef012345".to_string())
         );
     }
@@ -269,8 +268,8 @@ mod tests {
     /// skipped)" instead of printing garbage.
     #[test]
     fn refuses_placeholder_pending_ci() {
-        let manifest = r#""aarch64.img" = "pending-ci""#;
-        assert_eq!(parse_aarch64_img_sha(manifest), None);
+        let manifest = r#""aarch64.qcow2" = "pending-ci""#;
+        assert_eq!(parse_aarch64_qcow2_sha(manifest), None);
     }
 
     // ────────────────────────────────────────────────────────────────
@@ -294,19 +293,19 @@ mod tests {
             image_root: "/Users/test/Library/Application Support/tillandsias".to_string(),
             rootfs_present: true,
             rootfs_bytes: Some(8_589_934_592),
-            kernel_present: true,
-            kernel_bytes: Some(11_534_336),
-            initrd_present: true,
-            initrd_bytes: Some(67_108_864),
-            release_tag: "v0.2.260526.1",
-            manifest_pin_aarch64_img: Some("6859a7bcc4a9".to_string()),
+            kernel_present: false,
+            kernel_bytes: None,
+            initrd_present: false,
+            initrd_bytes: None,
+            release_tag: "fedora-44",
+            manifest_pin_aarch64_qcow2: Some("55c60a3b80d3".to_string()),
             provisioned: true,
         }
     }
 
     /// Top-level JSON keys are the support-tooling contract.
     /// `tray-diagnose.sh` reads `.version`, `.in_app`, `.release_tag`,
-    /// `.manifest_pin_aarch64_img`, `.provisioned`, and the per-
+    /// `.manifest_pin_aarch64_qcow2`, `.provisioned`, and the per-
     /// artifact `_present` flags by name. A silent rename of any of
     /// these would degrade the consumer to "FAIL : null".
     #[test]
@@ -328,7 +327,7 @@ mod tests {
             "initrd_present",
             "initrd_bytes",
             "release_tag",
-            "manifest_pin_aarch64_img",
+            "manifest_pin_aarch64_qcow2",
             "provisioned",
         ] {
             assert!(
@@ -338,17 +337,17 @@ mod tests {
         }
     }
 
-    /// `manifest_pin_aarch64_img: None` must serialise as JSON null,
+    /// `manifest_pin_aarch64_qcow2: None` must serialise as JSON null,
     /// not the literal string "null" or the absent key. Consumer
-    /// path: `tray-diagnose.sh` reads `.manifest_pin_aarch64_img //
+    /// path: `tray-diagnose.sh` reads `.manifest_pin_aarch64_qcow2 //
     /// "(none)"` — `//` only triggers on null/missing, so a string
     /// "null" would silently render as PASS with bogus pin.
     #[test]
     fn diagnose_report_none_pin_serialises_as_null() {
         let mut report = baseline_diagnose_report();
-        report.manifest_pin_aarch64_img = None;
+        report.manifest_pin_aarch64_qcow2 = None;
         let value: serde_json::Value = serde_json::to_value(&report).unwrap();
-        assert_eq!(value["manifest_pin_aarch64_img"], serde_json::Value::Null);
+        assert_eq!(value["manifest_pin_aarch64_qcow2"], serde_json::Value::Null);
     }
 
     /// `bytes` fields are `Option<u64>`; missing artifacts MUST

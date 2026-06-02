@@ -181,10 +181,6 @@ Write-Host "Installing to $InstallDir..." -ForegroundColor Cyan
 Get-Process -Name 'tillandsias-tray' -ErrorAction SilentlyContinue | Stop-Process -Force
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 Copy-Item $builtExe $InstalledExe -Force
-# The icon is embedded in the exe via build.rs; copy the manifest assets too so
-# a future provisioning path can find the pinned manifest beside the binary.
-$assetSrc = Join-Path $RepoRoot 'crates\tillandsias-windows-tray\assets\provisioning-manifest.json'
-if (Test-Path $assetSrc) { Copy-Item $assetSrc (Join-Path $InstallDir 'provisioning-manifest.json') -Force }
 
 # --- Shortcuts --------------------------------------------------------------
 $launchArgs = if ($Provision) { '' } else { '--no-provision' }
@@ -245,6 +241,12 @@ if ($diagJson) {
         $pin = if ($report.manifest_pin_x86_64_tar) { "$($report.manifest_pin_x86_64_tar)..." } else { '(none)' }
         $commit = if ($report.build_commit) { $report.build_commit } else { '(unknown)' }
         Write-Host "  installed: version=$($report.version) commit=$commit pin=$pin (--diagnose exit $diagExit)" -ForegroundColor Green
+        # Surface the host-software triage line: OS build + WSL version captured
+        # at install time. Pairs with version+commit above as a complete
+        # "what binary + what host" snapshot for install-log triage.
+        $osVer = if ($report.os_version) { $report.os_version } else { '(not detected)' }
+        $wslVer = if ($report.wsl_version) { $report.wsl_version } else { '(not detected -- run wsl --install)' }
+        Write-Host "  host:      OS=$osVer; WSL=$wslVer" -ForegroundColor Green
         if ($report.wire.error) {
             Write-Host "  wire: $($report.wire.error)" -ForegroundColor Yellow
         }

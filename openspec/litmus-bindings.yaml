@@ -13,8 +13,9 @@ specs:
   litmus_tests:
   - litmus:environment-isolation
   - litmus:app-lifecycle-state-machine-shape
-  coverage_ratio: 67
-  last_verified: '2026-05-29'
+  - litmus:app-lifecycle-tray-state-api-shape
+  coverage_ratio: 75
+  last_verified: '2026-06-02'
 - spec_id: appimage-build-pipeline
   status: obsolete
   litmus_tests: []
@@ -230,8 +231,9 @@ specs:
   litmus_tests:
   - litmus:external-logs-layer-shape
   - litmus:external-logs-manifest-shape
-  coverage_ratio: 67
-  last_verified: '2026-05-29'
+  - litmus:external-logs-producer-manifests-shape
+  coverage_ratio: 75
+  last_verified: '2026-06-02'
 - spec_id: filesystem-scanner
   status: active
   litmus_tests:
@@ -402,15 +404,17 @@ specs:
   litmus_tests:
   - litmus:init-log-cleanup
   - litmus:user-runtime-checkout-free-install
-  coverage_ratio: 67
-  last_verified: '2026-05-20'
+  - litmus:init-command-shape
+  coverage_ratio: 75
+  last_verified: '2026-06-02'
 - spec_id: init-incremental-builds
   status: active
   litmus_tests:
   - litmus:init-log-cleanup
   - litmus:user-runtime-checkout-free-install
-  coverage_ratio: 67
-  last_verified: '2026-05-20'
+  - litmus:init-command-shape
+  coverage_ratio: 75
+  last_verified: '2026-06-02'
 - spec_id: install-progress
   status: active
   litmus_tests:

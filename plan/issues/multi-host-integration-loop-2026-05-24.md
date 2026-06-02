@@ -51,6 +51,35 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+### Cycle 2026-06-02T23:30Z — FORCED ORCHESTRATOR MERGED osx-next (Divergence D_max=5 exceeded — 11 commits ahead) + litmus ✅
+
+- host_id: linux-tlatoani-opencode · platform: linux · branch: linux-next
+- upstream_commit: `d9b706d2` (merge commit; linux-next was at `7efd4b38`
+  pre-merge — the windows-next sync + no-op completion commit).
+- orchestration_skill: `/multihost-orchestration` via Big Pickle
+- observed_sibling_heads: main=`cb4c6204` · linux-next=`7efd4b38` →
+  `d9b706d2` · windows-next=`7efd4b38` · osx-next=`a826dcc5`.
+- divergence_detected: **osx-next 11 commits ahead** (D_max=5). 
+  Pattern D mediation triggered:
+  1. Remote push lock flagged for osx-next (ledger freeze).
+  2. Forced rebase task assigned (see loop_status.md).
+  3. **Synchronous integration wave executed**: `git merge --no-ff origin/osx-next`
+     into linux-next. Merge resolved cleanly — 10 files, 303 insertions, 100 deletions.
+- osx-next commits absorbed:
+  - `a826dcc5` fix(macos): load tray status icon image (code)
+  - `10cc128f`, `17be73ad` Merge remote-tracking branch 'origin/linux-next'
+  - `5f33042b` chore(osx): resync branch
+  - `b54bbd47`–`c78dcbc3` plan ledger entries (m10/m11 completion)
+  - `05b47860`, `1723be2c` build/e2e findings docs
+- verification: `./build.sh --check` PASS · `./build.sh --test` PASS
+  (all workspace tests green, 0 failures).
+- push: `git push origin linux-next` — `7efd4b38..d9b706d2` — success.
+- windows-next: at `7efd4b38` (stale — needs fast-forward to `d9b706d2`).
+- osx-next: divergence resolved (0 commits ahead of linux-next post-merge).
+- convergence_velocity: R_t unchanged (all plan items completed). V_c = 0
+  (no residual debt to burn down). No High-Velocity Alignment Event needed.
+- ledger_push: plan/loop_status.md updated and committed below.
+
 ### Cycle 2026-05-31T01:43Z — MERGED windows-next (install-windows.ps1 -Purge mode + -Uninstall warning) + osx-next no-op (11 cycle stall, ~19h 16min) ✅
 
 - host_id: linux-tlatoani-fedora · platform: linux · branch: linux-next
@@ -3824,3 +3853,13 @@ gh workflow run release.yml --ref v0.2.260601.1
 ```
 
 **Recurring pattern:** This is the 3rd consecutive daily cycle blocked at the same step. The git proxy at 127.0.0.1 proxies regular branch pushes but returns 403 for all `refs/tags/*` pushes. Resolution requires either: (a) operator fixes the proxy to allow tag pushes, (b) a `create_tag` MCP tool is added to the GitHub MCP server, or (c) the release workflow is converted to trigger on `push: tags:` with an alternative tag-creation mechanism.
+
+### Cycle 2026-06-02T21:34Z — ORCHESTRATOR PASS: plan fully drained, 0 drift across siblings
+
+- **Sibling audit**: linux-next (`17f6c246`), windows-next (`7efd4b38`, ancestor, 0 ahead), osx-next (`a826dcc5`, ancestor, 0 ahead).
+- **Plan graph**: All 23 steps + all tasks completed. `plan.yaml: next_step: none`. forge-diagnostics pipeline completed (plan/index.yaml:1528).
+- **Divergence**: 0 commits on both siblings — no integration merge needed.
+- **Convergence metrics**: R ≈ 0, V_c = 0 (steady state, no residual debt).
+- **Leases**: All expired or completed; no stale leases reclaimed.
+- **Build/tests**: Not run — no code changes in this cycle (plan-only coordination pass).
+- **Outcome**: No-op orchestration cycle. All platform branches in sync. Orchestrator yields until new packets are shaped.

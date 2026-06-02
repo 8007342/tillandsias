@@ -2919,7 +2919,15 @@ impl DbusMenuIface {
         // action-wiring agent can plug in handlers in a single place.
         match id {
             31 => {
-                std::process::exit(0);
+                // Quit click: flip the shutdown atomic so the main loop
+                // breaks and the process runs the graceful shutdown sequence.
+                // Replaces the prior `std::process::exit(0)` which bypassed
+                // container cleanup.
+                // @trace spec:graceful-shutdown, spec:app-lifecycle
+                self.0.with_state(|state| {
+                    state.tray_icon_state = TrayIconState::Stopping;
+                });
+                self.0.shutdown.store(true, Ordering::SeqCst);
             }
             20 => {
                 // GitHubLogin click: launch the gh login flow AND refresh
@@ -3238,6 +3246,15 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
             spec = "signal-handling",
             "tray received shutdown signal; exiting gracefully (control-socket watcher already flipped phase=Stopping)"
         );
+        eprintln!("Received shutdown signal");
+
+        // Phase 5, Task 21: Execute the graceful shutdown sequence
+        // (stop containers, cleanup sockets, etc.) before exiting.
+        // @trace spec:graceful-shutdown, spec:app-lifecycle
+        if let Err(e) = crate::graceful_shutdown_async().await {
+            warn!("graceful shutdown failed: {e}");
+        }
+
         Ok::<(), String>(())
     })?;
 

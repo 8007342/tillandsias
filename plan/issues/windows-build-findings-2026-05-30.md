@@ -1045,3 +1045,192 @@ macOS-host territory.
 flow is now operator-grade: `-Launch`, `-Startup`, `-Provision`,
 `-DebugBuild`, `-Uninstall`, `-Purge` — full lifecycle coverage with
 clear semantics + leftover discoverability.
+
+---
+
+### 20260531T032000Z — ok (tray tooltip now includes workspace VERSION)
+
+- agent_id: windows-bullo-claude-opus-20260531T032000Z
+- head_sha: a61f80a5 (post-merge of linux-next +12 commits — cli-diagnostics
+  tombstone align 88→87 + inference-container 50→67 + 7th impl divergence
+  fix + claude-repeat new script + cycle 01:43Z merging my prior 14ccbda2;
+  no shared-contract churn)
+- version: 0.2.260528.1
+- build_commit: 14ccbda2
+- build_run_id: 20260531T032000Z
+
+**Sibling context** (no windows-tray action required):
+- linux-next +12 commits: linux-internal litmus pinning + the
+  cli-diagnostics spec tombstone (87 active specs now) + inference-container
+  fix.
+- osx-next still stalled at b4a45622 (~19h 16min, 11 cycles per integration
+  cycle 01:43Z — "deepest stall of session continues to extend").
+
+**Change made**: tray icon mouseover tooltip now includes the workspace
+VERSION. Before this commit: hovering the tray icon showed just the live
+status text (e.g. "🔴 Wire unreachable"). After: shows "Tillandsias
+<workspace VERSION>" on the first line and the live status on the
+second. Operators triaging via mouseover get version + state in one
+glance — no need to right-click the menu just to read the version
+footer or pop `--diagnose` to confirm the running build's identity.
+
+Files touched (Windows-owned only):
+- `crates/tillandsias-windows-tray/src/notify_icon.rs`:
+  - New pure `compose_tooltip(version: &str, status: &str) -> String`
+    helper. Empty-status branch returns single-line `"Tillandsias
+    <version>"` (initial tray-icon registration before any status
+    update). Non-empty-status branch returns 2-line `"Tillandsias
+    <version>\n<status>"`. Format is well within szTip's 128-u16 buffer
+    for any realistic version + status combo (asserted in pin test).
+  - Updated `update_status_text` (live tooltip update site, called
+    on every status change): now writes `compose_tooltip(WORKSPACE_VERSION,
+    text)` instead of raw `text`. Preserves the existing semantics
+    (`uFlags = NIF_TIP`, `Shell_NotifyIconW(NIM_MODIFY, &nid)`).
+  - Updated `add_tray_icon` (initial registration): now writes
+    `compose_tooltip(WORKSPACE_VERSION, "")` instead of the
+    hardcoded `"Tillandsias"`. The initial tooltip is now version-aware.
+  - +1 pin test `compose_tooltip_includes_version_and_status` covers:
+    empty-status branch produces single-line; non-empty produces 2-line
+    starting with `"Tillandsias <version>"` and ending with the status
+    verbatim; realistic worst-case fits within szTip's 128-u16 buffer.
+- `openspec/litmus-tests/litmus-windows-tray-diagnose-cli-surface.yaml`:
+  - New step "tray tooltip composer test attached" requires both the
+    `fn compose_tooltip_includes_version_and_status` pin test and the
+    `fn compose_tooltip` helper itself.
+
+**Build**: 39.28 s release. Binary 6,342,144 bytes (up 15,872 bytes from
+the prior install — composer + pin test + comment block).
+
+**Tests**: 39 + 3 = 42 passed / 5 ignored (+1 over prior tick's 38+3 =
+41 baseline; the new compose_tooltip test is the addition).
+
+**Smoke**:
+- Binary launches via `--diagnose --json`: exit 2 (expected steady
+  state), `version: 0.2.260528.1` (unchanged — the tooltip composer
+  reuses the same WORKSPACE_VERSION env var the diagnose surface uses,
+  so they're guaranteed self-consistent).
+- The tooltip itself is a Win32 mouseover surface that only manifests
+  when the GUI tray is running. Pure-function pin test + the binary's
+  continued ability to start (verified via `--diagnose` exit code) is
+  the verification chain. Visual mouseover unsmoked — would require
+  launching the GUI tray mid-loop which is undesirable.
+
+**Litmus**:
+- `windows-native-tray`: 7/7 PASS (new "tray tooltip composer test
+  attached" step green; full spec count now 87 due to today's
+  cli-diagnostics tombstone but bound litmus coverage unchanged).
+- `cargo fmt`: clean.
+- `cargo clippy -D warnings`: clean.
+
+**Findings** (free-form):
+- The tooltip is the 4th place a user can ask "what version am I
+  running?" — joining `--version`, `--diagnose --json version`, and the
+  tray menu's version footer. All four route through the same
+  `WORKSPACE_VERSION` env var the windows-tray's `build.rs` bakes from
+  `../../VERSION`, so they cannot disagree (compiler-enforced
+  self-consistency via `env!`).
+- Visual UX: when the user hovers the icon, they see the binary
+  identity AND the live state in one mouseover. The 2-line format
+  separates concerns cleanly (Win32 tooltips handle newlines fine).
+- The pin test's `realistic_max` case (with the longest realistic
+  status text I could construct — phase + middle-dot + forge name with
+  a long suffix) confirms the format stays under 128 u16 chars even
+  for worst-case live states. szTip silently truncates beyond that;
+  the assert means future format changes that would silently truncate
+  surface here pre-build.
+
+**Cross-host visibility note**: pure Windows-tray-side addition; no
+cross-host coordination needed. macOS-tray's NSStatusItem tooltip is
+structurally separate; if macOS wants symmetric tooltip enrichment,
+the `compose_tooltip` pattern is mirror-able.
+
+**Next iteration ask**: N/A (SECTION_KIND=ok). The 4 visible
+version-display surfaces (CLI --version, diagnose JSON, menu footer,
+tray tooltip) are now all wired to the same source of truth.
+
+---
+
+### 20260531T050000Z — ok (--help adds OPTIONS + ENVIRONMENT sections)
+
+- agent_id: windows-bullo-claude-opus-20260531T050000Z
+- head_sha: 89483d0d (post-merge of linux-next +7 commits — all linux-internal
+  litmus pinning + velocity-cooldown work-queue entries; no shared-contract
+  churn)
+- version: 0.2.260528.1
+- build_commit: 0256d198 (current windows-next pre-this-commit head)
+- build_run_id: 20260531T050000Z
+
+**Sibling context** (no windows-tray action required):
+- linux-next +7 commits: enclave-network source-shape 67→75,
+  observability-convergence 60→75 + velocity cooldown work-queue entries.
+  Integration loop hasn't fired since my prior commit 0256d198 (still 1
+  ahead of linux-next this tick; next 2h cycle will pull it in).
+- osx-next still stalled at b4a45622 (still no movement; integration loop
+  notes session-deepest stall continues).
+- merge-tree clean.
+
+**Change made**: `--help` text restructured to document the runtime
+`--no-provision` flag (was previously undocumented in help even though
+`install-windows.ps1` passes it by default) + the 3 operator-relevant
+env vars the tray honors (was completely missing).
+
+Files touched (Windows-owned):
+- `crates/tillandsias-windows-tray/src/notify_icon.rs`:
+  - `help_text()`: USAGE line updated to `[MODE] [OPTIONS]`. New OPTIONS
+    section documents `--no-provision`. New ENVIRONMENT section documents
+    `RUST_LOG`, `TILLANDSIAS_NO_PROVISION`, `BUILD_COMMIT_SHA_OVERRIDE`.
+    Existing MODES + OUTPUT NOTE + cheatsheet-pointer sections unchanged.
+  - Extended `help_text_documents_all_cli_modes` pin test: now also asserts
+    presence of `--no-provision` flag + all 3 ENVIRONMENT env-var names +
+    all 5 section headers (`USAGE:`, `MODES:`, `OPTIONS`, `ENVIRONMENT:`,
+    `OUTPUT NOTE:`). Locks the multi-section structure so a future refactor
+    that drops a section surfaces at pin-test time.
+- `cheatsheets/runtime/windows-tray-diagnostics.md`:
+  - Modes table row for `--help` updated to mention ENVIRONMENT vars
+    (so cheatsheet reader knows to look for them in --help output).
+  - New trailing paragraph documenting `--no-provision` option +
+    `TILLANDSIAS_NO_PROVISION` env equivalence.
+  - New `### Environment variables` subsection with a 3-row table
+    documenting all 3 env vars + their purposes.
+
+**Build**: 36.66 s release. Tests: 39 + 3 = 42 passed / 5 ignored
+(unchanged from prior tick — no new test added; existing
+`help_text_documents_all_cli_modes` test gained 11 new assertions but
+still counts as 1 test).
+
+**Smoke** (post-install, real hardware):
+- `--help` output: full 5-section render confirmed. OPTIONS section
+  shows `--no-provision` with its dev-mode purpose + install-script
+  reference. ENVIRONMENT section shows all 3 env vars with examples
+  (RUST_LOG: `RUST_LOG=debug,tillandsias_windows_tray=trace`).
+- `--version` unchanged: `tillandsias-tray 0.2.260528.1 (a963c16d)`.
+
+**Litmus**:
+- `windows-native-tray`: 7/7 PASS (extended pin test stays green).
+- `cargo fmt`: clean (rustfmt re-wrapped one array literal in the
+  section-headers pin loop — applied).
+- `cargo clippy -D warnings`: clean.
+
+**Findings** (free-form):
+- The help text now documents EVERY runtime knob the tray exposes,
+  not just the diagnostic modes. An operator running `tillandsias-tray
+  --help` gets a complete reference without having to read source code
+  or the install script to discover that `--no-provision` exists.
+- The section-header pin (5 sections enforced) means the structural
+  organization of `--help` is now a contract — a future refactor that
+  collapses sections without coordinating surfaces at pin-test time
+  rather than as a documentation-clarity regression.
+- `BUILD_COMMIT_SHA_OVERRIDE` documentation is subtle but important:
+  it's a build-time env var, not a runtime one — the help text says
+  so explicitly. CI scenarios (reproducible builds without git) that
+  want to set a specific commit SHA can now discover this option from
+  `--help` alone.
+
+**Cross-host visibility note**: pure Windows-tray-side documentation
+addition; no cross-host coordination needed. macOS-tray's --help (if it
+exists yet) has its own argparse surface.
+
+**Next iteration ask**: N/A (SECTION_KIND=ok). The CLI surface is now
+documented to operator-grade in every place an operator might look:
+`--help`, cheatsheet, modes table. Future tray changes that affect
+the operator surface should mechanically update both.

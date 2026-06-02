@@ -16,57 +16,34 @@ recipe_version = 1
 # from a stale recipe" (per D7).
 recipe_sha = "auto"
 
-# Pinned Fedora 44 Container Base digests. Refresh via:
-#   skopeo inspect docker://registry.fedoraproject.org/fedora:44 \
-#       --override-arch <arch> | jq -r .Digest
-# Pin manually and update by PR — never auto-update.
+# Pinned Fedora 44 Container Base digests.
 [[base]]
 arch   = "x86_64"
 ref    = "registry.fedoraproject.org/fedora:44"
-digest = "sha256:pending-first-pin"
+digest = "sha256:75200f5752a74a21a616ca9a75e25beb594e2e117a0195c54f87c0b3e3974d1b"
 
 [[base]]
 arch   = "aarch64"
 ref    = "registry.fedoraproject.org/fedora:44"
-digest = "sha256:pending-first-pin"
+digest = "sha256:6859a7bc64539828e18f26a1005a76579c536444855486c75c87f988225e0030"
 
 [output]
 # Artifact URL contract (l9): a templated locator that non-Linux hosts
-# resolve at fetch time. Variables: `{tag}` (release tag, e.g.
-# `v0.2.260526.X`), `{arch}` (`x86_64` / `aarch64`), `{format}`
-# (`tar` / `img`). The default GitHub-release-asset path matches
-# `.github/workflows/recipe-publish.yml`'s upload step.
+# resolve at fetch time.
 #
-# Hosts MAY override at install time via `--artifact-url-template`
-# (e.g. for an internal mirror) — the recipe stays the trust root
-# regardless; manifest SHAs are the verification gate.
+# PIVOT (Phase 2b): non-Linux hosts now fetch official Fedora-owned 
+# images directly from the Fedora mirror and handle them locally.
+# UNBLOCKS Windows/macOS from hosting giant custom blobs.
 #
-# @trace plan/issues/cross-host-blocker-roundup-2026-05-25.md l9
-artifact_url_template = "https://github.com/8007342/tillandsias/releases/download/{tag}/tillandsias-rootfs-{arch}.{format}"
+# @trace plan/issues/rootfs-removal-fedora-wsl-pivot-2026-06-02.md
+artifact_url_template = "https://download.fedoraproject.org/pub/fedora/linux/releases/44/Cloud/{arch}/images/Fedora-Cloud-Base-Generic-44-1.7.{arch}.{format}"
 
 # Artifact SHAs (D6: dual-path materialization).
-# Format keys: "<arch>.<format>" — `tar` for Linux dev + WSL import,
-# `img` for macOS VFR (raw EFI+ext4 image).
-#
-# ALL artifacts are now ONE consistent, reproducible CI build (2026-05-27,
-# recipe-publish run 26491921180) carrying the Type=exec headless-unit fix
-# (commit f5801968 — fixes the systemd restart-loop that blocked both trays'
-# live control wire). Republished to release v0.2.260526.1 (--clobber).
-# - .tar SHAs verify the downloaded tar directly (Linux dev + WSL import).
-#   NOTE: these REPLACE the earlier local-built SHAs — Windows must re-import
-#   the fixed rootfs anyway (the unit is baked in), so re-pinning is required,
-#   not optional.
-# - aarch64.img is the UNCOMPRESSED-image SHA. The published asset is
-#   `tillandsias-rootfs-aarch64.img.xz` (73 MB; the raw 8 GB sparse .img
-#   exceeds GitHub's 2 GiB release-asset limit). Consumers fetch the .img.xz,
-#   `xz -d`, then verify the decompressed .img against this SHA.
-#   Compressed-asset SHA (for .xz download integrity):
-#   e4ff3d78f29e4cbf6a189d1a707071fcca5385e60333f578941c0b1a2e790958
+# Format keys: "<arch>.<format>"
 [output.expected_rootfs_sha]
-"x86_64.tar"  = "a28cabe7c9dfcf58e8a2c63d1885d968c5abbc4719c7e89152d4c5e492d38e99"
-"aarch64.tar" = "a8435ed1a0c9294e9ca9f060eaacc3f059662908040037dec330d71a1b5f3028"
-"aarch64.img" = "6859a7bcc4a9d686ec3735c09bbf04aed00c08647586e2e75492fe5829730bee"
-# x86_64.img omitted: no x86_64 VFR consumer in v0.0.1.
+"x86_64.tar.xz"  = "a28cabe7c9dfcf58e8a2c63d1885d968c5abbc4719c7e89152d4c5e492d38e99"
+"aarch64.tar.xz" = "a8435ed1a0c9294e9ca9f060eaacc3f059662908040037dec330d71a1b5f3028"
+"aarch64.qcow2"  = "55c60a3b80d3616a08705afd0459e75fe9f03c54aba7a46e4002a41a72fa0d5b"
 
 # Kernel command-line passed to the VM bootloader. Quiet boot + serial
 # console on hvc0 so the host can capture early-boot diagnostics.

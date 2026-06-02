@@ -1,0 +1,42 @@
+# @trace spec:init-command, spec:init-incremental-builds
+name: litmus:init-command-shape
+spec: init-command, init-incremental-builds
+phase: pre-build
+description: Pin the --init CLI surface and the image build order in the headless runtime
+severity: medium
+size: quick
+backend: fake
+
+preconditions:
+  - cargo is available in PATH
+  - rg is available in PATH
+
+critical_path:
+  - step: "verify --init, --force, and --debug CLI flag registration"
+    command: "rg 'let init = user_args\\.iter\\(\\)\\.any\\(|a| a == \"--init\"\\);' crates/tillandsias-headless/src/main.rs && rg 'let force = user_args\\.iter\\(\\)\\.any\\(|a| a == \"--force\"\\);' crates/tillandsias-headless/src/main.rs && rg 'let debug = user_args\\.iter\\(\\)\\.any\\(|a| a == \"--debug\"\\);' crates/tillandsias-headless/src/main.rs"
+    timeout_ms: 5000
+
+  - step: "verify the help text matches the spec"
+    command: "rg 'println!\\(\"       tillandsias --init \\[--force\\] \\[--debug\\]\"\\);' crates/tillandsias-headless/src/main.rs"
+    timeout_ms: 5000
+
+  - step: "verify the eight images are defined in the canonical order"
+    command: "rg -U 'let images = \\[\n\\s+\"proxy\",\n\\s+\"git\",\n\\s+\"inference\",\n\\s+\"router\",\n\\s+\"chromium-core\",\n\\s+\"chromium-framework\",\n\\s+\"forge\",\n\\s+\"web\",\n\\s+\\];' crates/tillandsias-headless/src/main.rs"
+    timeout_ms: 5000
+
+  - step: "verify run_init uses PodmanClient for build orchestration"
+    command: "rg 'fn run_init\\(debug: bool, force: bool\\)' -A 50 crates/tillandsias-headless/src/main.rs | rg 'PodmanClient::new\\(\\)'"
+    timeout_ms: 5000
+
+observability:
+  traces:
+    - "@trace spec:init-command"
+    - "@trace spec:init-incremental-builds"
+  expected_log: "Headless init command shape and image build order are pinned"
+  log_fields:
+    spec: "init-command,init-incremental-builds"
+    test: "init-command-shape"
+    backend: "fake"
+
+rollback:
+  on_failure: "inspect crates/tillandsias-headless/src/main.rs for changes to run_init or CLI flag handling"

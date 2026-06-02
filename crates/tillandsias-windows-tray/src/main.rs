@@ -7,6 +7,11 @@
 //!
 //! @trace spec:windows-native-tray
 
+// Helpers in hvsocket / installation_uuid / wsl_lifecycle that aren't
+// wired into the active code paths yet (Credential Manager UUID flow,
+// pre-recipe download paths kept as architecture for future iteration).
+// Per-item allows would be noisy; this crate-level allow on the binary
+// preserves them without polluting the source files.
 #![allow(dead_code)]
 // Tell Windows this is a GUI subsystem binary — no console window pops up
 // on tray launch. Non-Windows builds ignore this attribute entirely.
@@ -95,7 +100,12 @@ fn main() {
                 None => break None,
             }
         };
-        std::process::exit(notify_icon::logs(tail));
+        // `--bak`: read `tray.log.bak` (the size-rotation backup; see
+        // TRAY_LOG_MAX_BYTES). Useful after a long-lived tray triggered
+        // rotation and the operator wants the prior session's history.
+        // Exit 1 if the backup doesn't exist.
+        let bak = std::env::args().any(|a| a == "--bak");
+        std::process::exit(notify_icon::logs(tail, bak));
     }
     notify_icon::run();
 }

@@ -8,26 +8,9 @@ can be expedited. This is a CRDT-style status board — every host: append your
 current blockers + ETAs under your section; tick others' asks when resolved.
 Do not delete another host's lines (supersede/strike-through only).
 
-## Coordinator refresh — 2026-05-27T23:25Z
+## Coordinator refresh — 2026-06-02T21:15Z
 
-- The original "Linux integration loop dormant" blocker is resolved. The loop
-  has repeatedly folded sibling state, and `origin/windows-next` through
-  `1e20d6d0` is now merged/tested into `origin/linux-next` by `edfb72c6` /
-  `b9cee2fd`.
-- Runtime-litmus `20260527T231258Z-b06a5997-1e20d6d0-b06a5997` failed at
-  `Disk quota exceeded`; old scratch worktrees were removed. Current shared
-  runtime gate is the replacement full installed runtime-litmus
-  `20260527T231940Z-b06a5997-1e20d6d0-b06a5997`, which passed build/install and
-  init but failed in OpenCode diagnostics with the `vault_bootstrap.rs:205`
-  nested-runtime panic.
-- Push-time rebase absorbed `origin/linux-next` `891bb757` and
-  `origin/osx-next` `f8778350`, so the next loop should start a fresh runtime
-  for current `origin/linux-next` after folding the active run.
-- Current host-specific blockers: macOS m8 user-attended smoke, release
-  workflow run `26544334121` still being monitored after the Linux Nix musl
-  pivot, Linux diagnostics panic fix, and first real non-empty forge
-  diagnostics summary. Optional Windows wire `EnumerateLocalProjects` is not a
-  blocker.
+- **RESOLVED (unblocks Windows/macOS):** Implemented pure-Rust OCI-to-rootfs flattener and XZ decompressor in `tillandsias-vm-layer` (commit pending). Updated `images/vm/manifest.toml` to pivot to official Fedora 44 Generic OCI archives. Non-Linux hosts can now provision directly from Fedora mirrors without hosting custom blobs.
 
 ## Windows host (windows-next) — status + the one blocker
 

@@ -1744,3 +1744,58 @@ plan_index:
           checkpoint_required: true
           handoff_note: "Update litmus tests to reflect the new Vault strict architecture."
 
+    - id: rootfs-removal-fedora-pivot
+      order: 23
+      title: Rootfs Removal / Fedora Pivot
+      status: completed
+      completed_at: 2026-06-02T21:05Z
+      deliverable: plan/issues/rootfs-removal-fedora-wsl-pivot-2026-06-02.md
+      notes: plan/issues/fedora-pivot-unblocking-instructions.md
+      depends_on: [vault-hardening-architecture]
+      specs:
+        - host-shell-architecture
+      exit_criteria:
+        - "Windows tray uses official Fedora WSL2 image and curl bootstrap."
+        - "macOS tray uses official Fedora Cloud aarch64 image and curl bootstrap."
+        - "Linux rootfs publishing workflow and symmetric-pin litmus are removed."
+        - "Cross-host cheatsheets and diagnose reports reflect the new Fedora-44 baseline."
+      tasks:
+        - id: fedora-pivot/windows-wsl-official
+          status: completed
+          owner_host: windows
+          depends_on: []
+          owned_files:
+            - crates/tillandsias-windows-tray/src/wsl_lifecycle.rs
+            - crates/tillandsias-vm-layer/src/fetch.rs
+          checkpoint_required: true
+          handoff_note: "w11 DONE: pivoted to Fedora's .tar.xz and fixed fetch timeout."
+        - id: fedora-pivot/macos-cloud-official
+          status: completed
+          owner_host: macos
+          depends_on: []
+          owned_files:
+            - crates/tillandsias-macos-tray/src/action_host.rs
+            - crates/tillandsias-macos-tray/src/diagnose.rs
+          checkpoint_required: true
+          handoff_note: "m9 DONE: origin/osx-next repaired and now carries the Fedora Cloud qcow2 pivot."
+        - id: fedora-pivot/linux-decommission-rootfs
+          status: completed
+          owner_host: linux
+          depends_on: []
+          owned_files:
+            - .github/workflows/recipe-publish.yml
+            - openspec/litmus-tests/litmus-recipe-release-tag-symmetric.yaml
+            - images/vm/manifest.toml
+          checkpoint_required: true
+          handoff_note: "l10/decommission-rootfs-publish-workflow: remove obsolete CI and litmus."
+          events:
+            - type: claim
+              ts: "2026-06-02T21:20:00Z"
+              agent_id: "linux-tlatoani-gemini-cli-20260602T2120Z"
+              host: "linux"
+              lease_id: "lease-linux-decommission-rootfs-20260602T2120Z"
+              expires_at: "2026-06-03T01:20:00Z"
+            - type: completed
+              ts: "2026-06-02T21:45:00Z"
+              agent_id: "linux-tlatoani-gemini-cli-20260602T2120Z"
+              summary: "Deleted recipe-publish.yml, symmetric-pin litmus, and leftover materializer artifacts. Fedora pivot finalized on Linux side."

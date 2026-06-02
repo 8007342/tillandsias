@@ -27,6 +27,7 @@ use crate::recipe::{Instruction, Manifest, Recipe};
 pub mod cache;
 pub mod exec;
 pub mod layer_key;
+pub mod oci;
 pub mod trace;
 /// §3.7.2 — Windows converter: `MaterializedRootfs::Tar` → `wsl --import`.
 /// windows-next sibling claim; the macOS `.img` converter is `macos` (m-owned).

@@ -1,0 +1,74 @@
+# @trace spec:app-lifecycle
+#
+# Companion drift-protection for app-lifecycle public TrayState APIs.
+#
+# The existing app-lifecycle state-machine litmus pins the enum and core
+# transition table. This test pins the public TrayState methods that callers
+# use to enforce that lifecycle state: transition_lifecycle,
+# is_ready_for_user_action, can_start_project, and is_shutting_down.
+name: litmus:app-lifecycle-tray-state-api-shape
+spec: app-lifecycle
+phase: pre-build
+description: >
+  Pin the public TrayState lifecycle API and unit-test names that enforce
+  action gating, project-start gating, shutdown detection, and guarded
+  lifecycle transitions.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-core/src/state.rs
+  - shell utilities (grep, awk) are available in PATH
+
+critical_path:
+  - step: "TrayState stores the guarded lifecycle state"
+    command: "grep -F 'pub lifecycle_state: TrayAppLifecycleState' crates/tillandsias-core/src/state.rs"
+    timeout_ms: 3000
+    expected_behavior: "pub lifecycle_state: TrayAppLifecycleState"
+
+  - step: "transition_lifecycle validates before mutating state"
+    command: "grep -F 'pub fn transition_lifecycle(' crates/tillandsias-core/src/state.rs && grep -F 'self.lifecycle_state.validate_transition(next_state)?;' crates/tillandsias-core/src/state.rs && grep -F 'self.lifecycle_state = next_state;' crates/tillandsias-core/src/state.rs"
+    timeout_ms: 3000
+    expected_behavior: "validate_transition"
+
+  - step: "ready-for-action gate allows only Idle or Running"
+    command: "grep -F 'pub fn is_ready_for_user_action(&self) -> bool' crates/tillandsias-core/src/state.rs && grep -F 'TrayAppLifecycleState::Idle | TrayAppLifecycleState::Running' crates/tillandsias-core/src/state.rs"
+    timeout_ms: 3000
+    expected_behavior: "is_ready_for_user_action"
+
+  - step: "project-start gate is exposed and spec traced"
+    command: "grep -F 'pub fn can_start_project(&self) -> bool' crates/tillandsias-core/src/state.rs && grep -B2 -F 'pub fn can_start_project(&self) -> bool' crates/tillandsias-core/src/state.rs | grep -F '@trace spec:app-lifecycle'"
+    timeout_ms: 3000
+    expected_behavior: "can_start_project"
+
+  - step: "shutdown gate treats Stopping and Error as terminal action blockers"
+    command: "grep -F 'pub fn is_shutting_down(&self) -> bool' crates/tillandsias-core/src/state.rs && grep -F 'TrayAppLifecycleState::Stopping | TrayAppLifecycleState::Error' crates/tillandsias-core/src/state.rs"
+    timeout_ms: 3000
+    expected_behavior: "is_shutting_down"
+
+  - step: "unit tests cover all public lifecycle helpers"
+    command: "grep -F 'fn tray_state_transitions_lifecycle()' crates/tillandsias-core/src/state.rs && grep -F 'fn tray_state_is_ready_for_user_action()' crates/tillandsias-core/src/state.rs && grep -F 'fn tray_state_can_start_project()' crates/tillandsias-core/src/state.rs && grep -F 'fn tray_state_is_shutting_down()' crates/tillandsias-core/src/state.rs"
+    timeout_ms: 3000
+    expected_behavior: "tray_state_is_shutting_down"
+
+  - step: "app-lifecycle trace breadth covers lifecycle helpers"
+    command: "grep -cF '@trace spec:app-lifecycle' crates/tillandsias-core/src/state.rs | awk '{ if ($1+0 >= 10) print \"ok:\", $1, \"app-lifecycle traces\"; else { print \"FAIL: only\", $1, \"app-lifecycle traces\"; exit 1 } }'"
+    timeout_ms: 3000
+    expected_behavior: "app-lifecycle traces"
+
+observability:
+  traces:
+    - "@trace spec:app-lifecycle"
+    - "@trace spec:tray-app"
+  expected_log: "TrayState lifecycle API and helper tests pinned per app-lifecycle spec"
+  log_fields:
+    spec: "app-lifecycle"
+    test: "app-lifecycle-tray-state-api-shape"
+    artifact: "crates/tillandsias-core/src/state.rs"
+
+rollback:
+  on_failure: >
+    A public TrayState lifecycle surface drifted. Restore lifecycle_state,
+    transition_lifecycle validation, the action/project/shutdown gates, and
+    the unit-test names that pin those helpers.
+  command: "grep -nE 'lifecycle_state|transition_lifecycle|is_ready_for_user_action|can_start_project|is_shutting_down|tray_state_' crates/tillandsias-core/src/state.rs | head -40"

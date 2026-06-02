@@ -31,8 +31,8 @@ use objc2::rc::Retained;
 use objc2::runtime::{AnyObject, Sel};
 use objc2::{ClassType, class, msg_send_id, sel};
 use objc2_app_kit::{
-    NSApplication, NSApplicationActivationPolicy, NSMenu, NSMenuItem, NSStatusBar, NSStatusItem,
-    NSVariableStatusItemLength,
+    NSApplication, NSApplicationActivationPolicy, NSImage, NSMenu, NSMenuItem, NSStatusBar,
+    NSStatusItem, NSVariableStatusItemLength,
 };
 use objc2_foundation::{MainThreadMarker, NSString};
 
@@ -146,10 +146,19 @@ pub fn install_status_item(
     // Set initial tooltip from the provisioning status text so the user
     // sees the condensed phase string on hover.
     if let Some(button) = unsafe { status_item.button(mtm) } {
-        // Default title (image will replace once assets/icon.pdf is loaded
-        // at packaging time).
-        let title = NSString::from_str("T");
-        unsafe { button.setTitle(&title) };
+        match load_status_icon_image() {
+            Some(image) => {
+                let empty = NSString::from_str("");
+                unsafe {
+                    button.setImage(Some(&image));
+                    button.setTitle(&empty);
+                }
+            }
+            None => {
+                let title = NSString::from_str(status_icon_fallback_title());
+                unsafe { button.setTitle(&title) };
+            }
+        }
 
         // Tooltip mirrors the status text of the current MenuStructure.
         let tooltip_str = status_tooltip(structure);
@@ -169,6 +178,46 @@ pub fn install_status_item(
         action_host.attach_status_handles(status_item.clone(), row);
     }
     status_item
+}
+
+/// Load the AppKit menu-bar template image.
+///
+/// Packaged runs read `Tillandsias.app/Contents/Resources/icon.pdf`; dev runs
+/// fall back to the source-tree asset so `cargo run` behaves like the bundle.
+fn load_status_icon_image() -> Option<Retained<NSImage>> {
+    let path = status_icon_path()?;
+    let path = NSString::from_str(path.to_str()?);
+    let image = unsafe { NSImage::initWithContentsOfFile(NSImage::alloc(), &path) }?;
+    unsafe { image.setTemplate(true) };
+    Some(image)
+}
+
+fn status_icon_path() -> Option<std::path::PathBuf> {
+    status_icon_candidate_paths()
+        .into_iter()
+        .find(|p| p.is_file())
+}
+
+fn status_icon_candidate_paths() -> Vec<std::path::PathBuf> {
+    let mut paths = Vec::new();
+
+    if let Ok(exe) = std::env::current_exe()
+        && let Some(macos_dir) = exe.parent()
+    {
+        let bundled = macos_dir
+            .parent()
+            .map(|contents_dir| contents_dir.join("Resources/icon.pdf"));
+        if let Some(path) = bundled {
+            paths.push(path);
+        }
+    }
+
+    paths.push(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/icon.pdf"));
+    paths
+}
+
+fn status_icon_fallback_title() -> &'static str {
+    "T"
 }
 
 /// Build the menu and return the first-row `NSMenuItem` (the one
@@ -317,4 +366,37 @@ fn default_image_root() -> std::path::PathBuf {
         .map(std::path::PathBuf::from)
         .unwrap_or_else(|| std::path::PathBuf::from("/tmp"));
     home.join("Library/Application Support/tillandsias")
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    /// @trace spec:macos-native-tray.ui.nsstatusitem-only@v1
+    #[test]
+    fn status_icon_candidates_include_source_tree_asset() {
+        let source_asset =
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/icon.pdf");
+        assert!(
+            status_icon_candidate_paths().contains(&source_asset),
+            "dev runs must be able to load the same icon asset as the bundle"
+        );
+    }
+
+    /// @trace spec:macos-native-tray.ui.nsstatusitem-only@v1
+    #[test]
+    fn status_icon_path_resolves_to_existing_pdf() {
+        let path = status_icon_path().expect("icon.pdf should exist in source tree or bundle");
+        assert_eq!(path.file_name().and_then(|s| s.to_str()), Some("icon.pdf"));
+    }
+
+    /// @trace spec:macos-native-tray.ui.nsstatusitem-only@v1
+    #[test]
+    fn status_text_fallback_is_only_a_missing_icon_fallback() {
+        assert_eq!(status_icon_fallback_title(), "T");
+        assert!(
+            status_icon_path().is_some(),
+            "normal builds should use the template image, not the text fallback"
+        );
+    }
 }

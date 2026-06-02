@@ -92,7 +92,7 @@ if ($wslReady) {
 
 # --- Cache / install layout --------------------------------------------------
 Section 'Provisioning cache + install layout'
-foreach ($pair in @(
+    foreach ($pair in @(
     @{ Label = 'cache root';      Path = $CacheRoot },
     @{ Label = 'recipe-cache';    Path = (Join-Path $CacheRoot 'recipe-cache') },
     @{ Label = 'downloaded rootfs'; Path = (Join-Path $CacheRoot 'rootfs') },
@@ -107,6 +107,7 @@ foreach ($pair in @(
         Info ("{0,-18} {1}  (absent)" -f $pair.Label, $pair.Path)
     }
 }
+Info "Note: rootfs downloads are now official Fedora-44 .tar.xz (w11 pivot)."
 
 # --- Installed tray ----------------------------------------------------------
 Section 'Installed tray'
@@ -163,12 +164,11 @@ if ($recipeComplete) {
 Section 'Readiness summary'
 Info 'Works now (no VM):    tray UI, right-click menu, ~/src project scan, agent'
 Info '                      selection, click->PtyIntent->launch_spec resolution.'
-Info 'Converter ready:      materialize::wsl::tar_to_wsl_import (w5 slice) integrated;'
-Info '                      vm-layer green incl. macOS converter.'
+Info 'Converter ready:      materialize::wsl::tar_to_wsl_import (w11 pivot) integrated;'
+Info '                      vm-layer green incl. Fedora-44 decompression.'
 if ($wslReady) {
-    Info 'VM provisioning:      UNBLOCKED. Proven E2E 2026-05-26/27 against live published'
-    Info '                      rootfs assets; daily release pipeline publishes per-arch'
-    Info '                      rootfs tars (see releases/latest on the GitHub repo).'
+    Info 'VM provisioning:      UNBLOCKED (Fedora-44 pivot). Provisions from official'
+    Info '                      Fedora .tar.xz image with post-import bootstrap.'
     Info '                      Run: install-windows.ps1 -Provision -Launch'
 } else {
     Warn 'VM provisioning:      install WSL2 first (wsl --install, elevated, reboot).'

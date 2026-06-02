@@ -933,11 +933,11 @@ async fn run_start(
 ) -> Result<(), String> {
     let vz = Arc::new(VzRuntime::new(TILLANDSIAS_GUEST_CID, image_root));
 
-    // First-launch flow (m5 integration): if no rootfs.img is present
-    // yet, fetch the recipe-published artifact via l9's artifact-URL
-    // contract before starting. The macOS tray bundles the manifest
-    // at build time (include_str!) so the .app doesn't need network
-    // for the manifest itself, only for the artifact bytes.
+    // First-launch flow (m9 Fedora pivot): if no rootfs.img is present
+    // yet, fetch Fedora's official Cloud qcow2 via the bundled manifest
+    // and convert it to the raw disk image VZ boots. The macOS tray
+    // bundles the manifest at build time (include_str!) so the .app
+    // doesn't need network for the manifest itself, only for the image.
     //
     // Once a successful fetch lands, subsequent launches hit the
     // cache (download_verified short-circuits when dest sha matches)
@@ -945,31 +945,21 @@ async fn run_start(
     if !vz.is_provisioned() {
         eprintln!(
             "[tillandsias-tray] Start VM: rootfs.img missing at {}; \
-             attempting recipe-artifact fetch",
+             attempting Fedora Cloud image fetch",
             vz.rootfs_image_path().display()
         );
         let manifest = tillandsias_vm_layer::recipe::Manifest::from_toml(BUNDLED_MANIFEST_TOML)
             .map_err(|e| format!("bundled manifest parse: {e}"))?;
-        // Per 2026-05-27 cross-host convergence vote (windows-host +
-        // macOS concur): the manifest is the trust root and should
-        // own the release tag alongside its pinned SHAs — pending
-        // Linux/recipe addition of `[output].release_tag` +
-        // `Manifest::release_tag()` accessor. Until that lands we
-        // hardcode `v0.2.260526.1` to match the tag the current
-        // pinned `aarch64.img` SHA corresponds to (Windows mirrors
-        // this pattern via its `RECIPE_RELEASE_TAG` const). Switch
-        // to `manifest.release_tag()` the moment it's available.
-        let tag = RECIPE_RELEASE_TAG.to_string();
-        vz.fetch_recipe_artifact(&manifest, &tag, on_phase)
+        vz.fetch_fedora_cloud_image(&manifest, on_phase)
             .await
             .map_err(|e| {
                 format!(
-                    "recipe-artifact fetch failed (tag={tag}): {e}\n\n\
-                 If the SHA pin is still 'pending-ci', wait for the next \
-                 recipe-publish CI run + the SHA-pin commit (l9 step 5)."
+                    "Fedora Cloud image fetch failed: {e}\n\n\
+                     Install qemu (`brew install qemu`) if conversion failed, \
+                     then retry Start VM."
                 )
             })?;
-        eprintln!("[tillandsias-tray] Start VM: rootfs.img fetched successfully");
+        eprintln!("[tillandsias-tray] Start VM: Fedora Cloud image ready");
     }
 
     vz.start().await?;
@@ -985,19 +975,7 @@ async fn run_start(
 /// rebuild of the macOS tray.
 const BUNDLED_MANIFEST_TOML: &str = include_str!("../../../images/vm/manifest.toml");
 
-/// Release tag the manifest's currently-pinned rootfs SHAs correspond
-/// to. Hardcoded for v0.0.1 pending Linux addition of
-/// `[output].release_tag` to `manifest.toml` + a
-/// `Manifest::release_tag()` accessor — at which point both trays
-/// switch to `manifest.release_tag()` (single trust root for both
-/// the URL template + SHA pin + release tag).
-///
-/// Windows mirrors this with its own `RECIPE_RELEASE_TAG` const; the
-/// two values MUST stay in sync until the manifest field lands.
-///
-/// @trace plan/issues/tray-convergence-coordination.md
-///        "Tag-source decision — windows vote" 2026-05-27
-pub(crate) const RECIPE_RELEASE_TAG: &str = "v0.2.260526.1";
+pub(crate) const FEDORA_BASELINE: &str = "fedora-44";
 
 impl TrayActionHost {
     /// Construct on the AppKit main thread. `mtm` proves we're on the
