@@ -26,7 +26,7 @@ pub const HOST_RAM_HEADROOM_NUM: u64 = 125;
 pub const HOST_RAM_HEADROOM_DEN: u64 = 100;
 
 /// Outcome of a successful pre-flight RAM check. Carries the measured
-/// + required + threshold trio so the caller can log the decision
+/// required, and threshold trio so the caller can log the decision
 /// without re-querying.
 ///
 /// @trace spec:forge-hot-cold-split

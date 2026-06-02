@@ -327,8 +327,8 @@ dns_nameservers 1.1.1.1 8.8.8.8
 
 # --- ACLs ---
 acl allowlist dstdomain "/etc/squid/allowlist.txt"
-acl strict_port myport 3128
-acl build_port myport 3129
+acl strict_port localport 3128
+acl build_port localport 3129
 acl SSL_ports port 443
 acl SSL_ports port 8443
 acl CONNECT method CONNECT
