@@ -93,10 +93,51 @@ Per the branch canon (`plan/issues/branch-and-coordination-canon-2026-05-25.md`)
 Do not re-claim w1, w2, w3, w4, w5, w6, or w8; their terminal events are
 recorded below. Continue w9 by waiting for the integrated full runtime-litmus
 result, with optional wire EnumerateLocalProjects after validation and w7
-diagnostics as the independent fallback if the runtime exposes stale branch or
+result and w7 diagnostics as the independent fallback if the runtime exposes stale branch or
 manifest state.
 
+### Item: w11/wsl-distro-via-fedora-official-image
+
+- id: `w11/wsl-distro-via-fedora-official-image`
+- type: architecture-pivot
+- owner_host: windows
+- capability_tags: [win32, wsl, rust, fedora]
+- status: done
+- completed_at: 2026-06-02T20:00Z
+- depends_on: [w9/control-wire-session-menu-routing]
+- gated_on: []
+- owned_files:
+  - `crates/tillandsias-windows-tray/src/wsl_lifecycle.rs`
+  - `crates/tillandsias-vm-layer/src/fetch.rs`
+  - `crates/tillandsias-vm-layer/src/materialize/wsl.rs`
+- summary: >
+    Pivot from the custom 280MB rootfs to Fedora's official WSL2 image. Use
+    `wsl --install -d FedoraLinux-44` or direct download of the signed .wsl
+    artifact. Bootstrap `tillandsias-headless` via curl and fix the
+    `download_verified` no-timeout bug.
+- next_action: >
+    Task completed. Fedora-44 pivot implemented in `wsl_lifecycle.rs`. Reqwest
+    timeout added to `fetch.rs`. Diagnostics updated in `notify_icon.rs`.
+- trace: `plan/issues/rootfs-removal-fedora-wsl-pivot-2026-06-02.md`
+- acceptance_evidence:
+  - `cargo test -p tillandsias-windows-tray -p tillandsias-vm-layer` 100% green.
+  - Fedora-44 official URL resolution verified via unit test.
+  - Bootstrap injection logic (systemd + curl) implemented and verified structurally.
+- 2026-06-02T19:30Z: **claim** by `windows-bullo-gemini-2026-06-02T1930Z` (lease: `lease-windows-fedora-pivot-20260602T1930`).
+- 2026-06-02T20:00Z: **completed** by `windows-bullo-gemini-2026-06-02T1930Z`. Verified green.
+
+- fallback_when_blocked: >
+    Return to w9 session/menu routing or w7 diagnostics.
+- agent_status_packet_expected:
+  - current plan
+  - dependencies and blockers
+  - files touched
+  - evidence produced
+  - next checkpoint
+  - lease intent
+
 ### Item: w8/hvsocket-control-wire-ready
+
 
 - id: `w8/hvsocket-control-wire-ready`
 - type: feature
@@ -1180,3 +1221,9 @@ Next greedy pickups (no VM needed): **w4b** (windows-ownable, pure) and **w4d**
 - Discovered that the previous background runtime litmus run `20260528T010600Z-c9e83852-3340523c-82d735ef` failed during OpenCode execution due to a Linux container networking/crun sethostname limitation: hostnames generated for enclave services (e.g. `git-tillandsias-runtime-litmus-...`) exceeded the 63-character Linux hostname limit.
 - Resolved this blocker by implementing a robust `sanitize_hostname` function in `crates/tillandsias-headless` to safely truncate and hash hostnames exceeding 63 characters. Verified all tests pass green.
 - Next action: A fresh background runtime litmus run will be scheduled to validate the integrated HEAD with the new hostname sanitization safely in place.
+
+### Event: 2026-06-02T19:15Z — windows coordinator ledger update
+
+- Observed remote heads after fetch/pull: `origin/linux-next` `c40ef1d6`, `origin/windows-next` `cca9da4a`, `origin/osx-next` `05b47860`.
+- Added Step 23 (Rootfs Removal / Fedora Pivot) to `plan/index.yaml` and created host-specific packets `w11` (Windows), `m9` (macOS), and `l10` (Linux) to transition from custom rootfs to Fedora's official WSL2/Cloud images.
+- Next action: Claim `w11/wsl-distro-via-fedora-official-image` and implement the Fedora-44 pivot on the Windows host.

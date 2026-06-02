@@ -42,30 +42,18 @@ digest = "sha256:pending-first-pin"
 # regardless; manifest SHAs are the verification gate.
 #
 # @trace plan/issues/cross-host-blocker-roundup-2026-05-25.md l9
-artifact_url_template = "https://github.com/8007342/tillandsias/releases/download/{tag}/tillandsias-rootfs-{arch}.{format}"
+# Pinned Fedora 44 Official WSL / Cloud images.
+# Switch from custom Tillandsias-built rootfs to stock Fedora-44.
+# @trace plan/issues/rootfs-removal-fedora-wsl-pivot-2026-06-02.md
+artifact_url_template = "https://download.fedoraproject.org/pub/fedora/linux/releases/44/Cloud/{arch}/images/Fedora-Cloud-Base-WSL-44-1.2.{arch}.tar.xz"
 
 # Artifact SHAs (D6: dual-path materialization).
-# Format keys: "<arch>.<format>" — `tar` for Linux dev + WSL import,
-# `img` for macOS VFR (raw EFI+ext4 image).
-#
-# ALL artifacts are now ONE consistent, reproducible CI build (2026-05-27,
-# recipe-publish run 26491921180) carrying the Type=exec headless-unit fix
-# (commit f5801968 — fixes the systemd restart-loop that blocked both trays'
-# live control wire). Republished to release v0.2.260526.1 (--clobber).
-# - .tar SHAs verify the downloaded tar directly (Linux dev + WSL import).
-#   NOTE: these REPLACE the earlier local-built SHAs — Windows must re-import
-#   the fixed rootfs anyway (the unit is baked in), so re-pinning is required,
-#   not optional.
-# - aarch64.img is the UNCOMPRESSED-image SHA. The published asset is
-#   `tillandsias-rootfs-aarch64.img.xz` (73 MB; the raw 8 GB sparse .img
-#   exceeds GitHub's 2 GiB release-asset limit). Consumers fetch the .img.xz,
-#   `xz -d`, then verify the decompressed .img against this SHA.
-#   Compressed-asset SHA (for .xz download integrity):
-#   e4ff3d78f29e4cbf6a189d1a707071fcca5385e60333f578941c0b1a2e790958
+# Format keys: "<arch>.<format>" — `tar.xz` for WSL import,
+# `qcow2` for macOS VFR (official Fedora Cloud image).
 [output.expected_rootfs_sha]
-"x86_64.tar"  = "a28cabe7c9dfcf58e8a2c63d1885d968c5abbc4719c7e89152d4c5e492d38e99"
-"aarch64.tar" = "a8435ed1a0c9294e9ca9f060eaacc3f059662908040037dec330d71a1b5f3028"
-"aarch64.img" = "6859a7bcc4a9d686ec3735c09bbf04aed00c08647586e2e75492fe5829730bee"
+"x86_64.tar.xz"  = "a28cabe7c9dfcf58e8a2c63d1885d968c5abbc4719c7e89152d4c5e492d38e99"
+"aarch64.tar.xz" = "a8435ed1a0c9294e9ca9f060eaacc3f059662908040037dec330d71a1b5f3028"
+"aarch64.qcow2"  = "6859a7bcc4a9d686ec3735c09bbf04aed00c08647586e2e75492fe5829730bee"
 # x86_64.img omitted: no x86_64 VFR consumer in v0.0.1.
 
 # Kernel command-line passed to the VM bootloader. Quiet boot + serial

@@ -181,10 +181,6 @@ Write-Host "Installing to $InstallDir..." -ForegroundColor Cyan
 Get-Process -Name 'tillandsias-tray' -ErrorAction SilentlyContinue | Stop-Process -Force
 New-Item -ItemType Directory -Force -Path $InstallDir | Out-Null
 Copy-Item $builtExe $InstalledExe -Force
-# The icon is embedded in the exe via build.rs; copy the manifest assets too so
-# a future provisioning path can find the pinned manifest beside the binary.
-$assetSrc = Join-Path $RepoRoot 'crates\tillandsias-windows-tray\assets\provisioning-manifest.json'
-if (Test-Path $assetSrc) { Copy-Item $assetSrc (Join-Path $InstallDir 'provisioning-manifest.json') -Force }
 
 # --- Shortcuts --------------------------------------------------------------
 $launchArgs = if ($Provision) { '' } else { '--no-provision' }

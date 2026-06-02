@@ -1632,7 +1632,7 @@ fn collect_report() -> DiagnoseReport {
         distro: crate::wsl_lifecycle::DISTRO_NAME,
         distro_registered,
         distro_running: distro_running(),
-        release_tag: crate::wsl_lifecycle::RECIPE_RELEASE_TAG,
+        release_tag: "fedora-44",
         manifest_pin_x86_64_tar: manifest_pin,
         wire,
         recent_log_tail,

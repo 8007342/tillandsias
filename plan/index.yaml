@@ -1744,3 +1744,46 @@ plan_index:
           checkpoint_required: true
           handoff_note: "Update litmus tests to reflect the new Vault strict architecture."
 
+    - id: rootfs-removal-fedora-pivot
+      order: 23
+      title: Rootfs Removal / Fedora Pivot
+      status: ready
+      deliverable: plan/issues/rootfs-removal-fedora-wsl-pivot-2026-06-02.md
+      depends_on: [vault-hardening-architecture]
+      specs:
+        - host-shell-architecture
+      exit_criteria:
+        - "Windows tray uses official Fedora WSL2 image and curl bootstrap."
+        - "macOS tray uses official Fedora Cloud aarch64 image and curl bootstrap."
+        - "Linux rootfs publishing workflow and symmetric-pin litmus are removed."
+        - "Cross-host cheatsheets and diagnose reports reflect the new Fedora-44 baseline."
+      tasks:
+        - id: fedora-pivot/windows-wsl-official
+          status: completed
+          owner_host: windows
+          depends_on: []
+          owned_files:
+            - crates/tillandsias-windows-tray/src/wsl_lifecycle.rs
+            - crates/tillandsias-vm-layer/src/fetch.rs
+          checkpoint_required: true
+          handoff_note: "w11 DONE: pivoted to Fedora's .tar.xz and fixed fetch timeout."
+        - id: fedora-pivot/macos-cloud-official
+          status: ready
+          owner_host: macos
+          depends_on: []
+          owned_files:
+            - crates/tillandsias-macos-tray/src/action_host.rs
+            - crates/tillandsias-macos-tray/src/diagnose.rs
+          checkpoint_required: true
+          handoff_note: "m9/vz-boot-via-fedora-cloud-image: pivot to Fedora Cloud aarch64."
+        - id: fedora-pivot/linux-decommission-rootfs
+          status: ready
+          owner_host: linux
+          depends_on: []
+          owned_files:
+            - .github/workflows/recipe-publish.yml
+            - openspec/litmus-tests/litmus-recipe-release-tag-symmetric.yaml
+            - images/vm/manifest.toml
+          checkpoint_required: true
+          handoff_note: "l10/decommission-rootfs-publish-workflow: remove obsolete CI and litmus."
+
