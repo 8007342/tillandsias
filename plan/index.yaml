@@ -1747,7 +1747,8 @@ plan_index:
     - id: rootfs-removal-fedora-pivot
       order: 23
       title: Rootfs Removal / Fedora Pivot
-      status: ready
+      status: completed
+      completed_at: 2026-06-02T21:05Z
       deliverable: plan/issues/rootfs-removal-fedora-wsl-pivot-2026-06-02.md
       notes: plan/issues/fedora-pivot-unblocking-instructions.md
       depends_on: [vault-hardening-architecture]
