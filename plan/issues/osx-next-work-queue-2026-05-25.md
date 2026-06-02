@@ -157,7 +157,7 @@ accessor.
 - type: housekeeping
 - owner_host: macos
 - capability_tags: [appkit, menu-structure, clippy, rust]
-- status: ready
+- status: claimed
 - depends_on: [m4/pty-attach-appkit-terminal, m5/vfr-image-via-ci-rootfs]
 - gated_on: []
 - blocks: []
@@ -195,6 +195,13 @@ accessor.
   - evidence produced
   - next checkpoint
   - lease intent
+- events:
+  - type: claim
+    ts: "2026-06-02T20:16:14Z"
+    agent_id: "macos-gemini-cli-agent-20260602T201614Z"
+    host: "macos"
+    lease_id: "lease-m11-gemini-20260602"
+    expires_at: "2026-06-03T00:16:14Z"
 
 ### Item: m1b/transport-macos-vsock-connector
 
