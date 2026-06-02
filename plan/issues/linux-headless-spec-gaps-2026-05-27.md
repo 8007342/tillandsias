@@ -13,7 +13,7 @@ bounded slices from. Each item is sized for one loop iteration. NOT for siblings
 - id: `spec-gap/external-logs-layer-binding-hygiene`
 - owner_host: linux
 - capability_tags: [specs, litmus, docs, testing]
-- status: claimed
+- status: done
 - lease:
   - lease_id: `f6f17a60a253`
   - agent_id: `linux-macuahuitl-codex-2026-06-02T182536Z`
@@ -23,6 +23,7 @@ bounded slices from. Each item is sized for one loop iteration. NOT for siblings
 - owned_files:
   - `openspec/specs/external-logs-layer/spec.md`
   - `openspec/litmus-bindings.yaml`
+  - `openspec/litmus-tests/litmus-external-logs-producer-manifests-shape.yaml`
   - `plan/issues/linux-headless-spec-gaps-2026-05-27.md`
   - `plan/issues/linux-next-work-queue-2026-05-25.md`
 - expected_evidence:
@@ -40,6 +41,15 @@ bounded slices from. Each item is sized for one loop iteration. NOT for siblings
     host: linux
     lease_id: `f6f17a60a253`
     expires_at: `2026-06-02T22:25:36Z`
+  - type: completed
+    ts: `2026-06-02T18:28:02Z`
+    agent_id: `linux-macuahuitl-codex-2026-06-02T182536Z`
+    host: linux
+    lease_id: `f6f17a60a253`
+    evidence_refs:
+      - `./scripts/run-litmus-test.sh external-logs-layer --size instant` — 3/3 PASS, including new `litmus:external-logs-producer-manifests-shape`
+      - `./build.sh --check` — PASS
+      - `cargo fmt --all -- --check` — FAILED on pre-existing Rust formatting drift in `crates/tillandsias-headless/src/main.rs` and `crates/tillandsias-headless/src/vault_bootstrap.rs`; this packet did not touch Rust files and did not apply unrelated formatting.
 
 0. **[RESOLVED] `--opencode --diagnostics` nested-runtime panic.**
    Was: runtime-litmus failed at `vault_bootstrap.rs:205` "Cannot start a

@@ -230,8 +230,9 @@ specs:
   litmus_tests:
   - litmus:external-logs-layer-shape
   - litmus:external-logs-manifest-shape
-  coverage_ratio: 67
-  last_verified: '2026-05-29'
+  - litmus:external-logs-producer-manifests-shape
+  coverage_ratio: 75
+  last_verified: '2026-06-02'
 - spec_id: filesystem-scanner
   status: active
   litmus_tests:
