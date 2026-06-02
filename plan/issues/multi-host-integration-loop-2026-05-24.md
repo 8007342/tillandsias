@@ -3863,3 +3863,33 @@ gh workflow run release.yml --ref v0.2.260601.1
 - **Leases**: All expired or completed; no stale leases reclaimed.
 - **Build/tests**: Not run — no code changes in this cycle (plan-only coordination pass).
 - **Outcome**: No-op orchestration cycle. All platform branches in sync. Orchestrator yields until new packets are shaped.
+
+---
+
+### ESCALATION: 2026-06-02T21:37Z — merge-to-main-and-release: Step 6 blocked (tag push + workflow dispatch both 403)
+
+**Cycle**: v0.2.260602.3 daily release
+
+**What completed**:
+- Step 0: Pre-flight verified, on linux-next, clean, 72 commits ahead of main.
+- Step 1: Computed version v0.2.260602.3 (prev tag v0.2.260602.2; tag not yet created).
+- Step 2: PR #13 opened (linux-next → main, 74 commits, 6316+/594-).
+- Step 3: CI clean (mergeable_state: clean, 0 required checks). PR #13 merged via merge commit SHA `082c0829`.
+- Step 4: main pulled; VERSION already at 0.2.260602.3 (from prior interrupted cycle) — no-op, no re-commit needed.
+
+**Blockers**:
+- Step 5 (tag push): `git push origin v0.2.260602.3` → HTTP 403 from proxy at `127.0.0.1:40401`. Tag created locally but not on remote. The proxy appears to block tag ref pushes.
+- Step 6 (workflow dispatch): `mcp__github__actions_run_trigger run_workflow release.yml` → `403 Resource not accessible by integration`. MCP integration lacks `actions: write` permission.
+- `gh` CLI not available in the remote container environment.
+
+**State left on remote**:
+- main HEAD: `082c0829` (all linux-next work merged, VERSION=0.2.260602.3).
+- No tag `v0.2.260602.3` on GitHub yet (exists locally only).
+- PR #13 closed/merged.
+- No GitHub Release published yet.
+
+**Required operator action** (one of):
+1. From a local machine with `gh` CLI: `gh workflow run release.yml --ref main` (the workflow reads VERSION=0.2.260602.3, builds, and creates the GitHub Release + tag automatically).
+2. Via GitHub web UI: go to https://github.com/8007342/tillandsias/actions/workflows/release.yml → "Run workflow" → branch: main → Run.
+
+The workflow's `gh release create "v${VERSION}"` step will create the tag `v0.2.260602.3` atomically as part of the release publication. No manual tag creation is needed.
