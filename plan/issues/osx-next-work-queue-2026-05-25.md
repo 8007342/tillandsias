@@ -102,6 +102,7 @@ accessor.
 - 2026-06-02T20:54Z  a826dcc5  Resolved UX gap-1 by loading `icon.pdf` as the NSStatusItem template image; targeted macOS tray tests/check passed.
 - 2026-06-02T21:10Z  YIELD    No claimable macOS packets found. Queue fully drained (all items done/blocked-user). App built + installed at /Applications/Tillandsias.app via `build-osx-tray.sh --ci-full --install`. Agent `macos-Tlatoanis-MacBook-Air-big-pickle-20260602T211038Z` yields until orchestrator sources new packets.
 - 2026-06-02T21:30Z  17f6c246  Resolved xz dylib signing crash: `lzma-sys` now statically links liblzma via `LZMA_API_STATIC=1` in `.cargo/config.toml`. Ad-hoc codesigned binary no longer loads Homebrew's liblzma.5.dylib (rejected by macOS due to Team ID mismatch). Build + verify PASS. Agent `macos-Tlatoanis-MacBook-Air-big-pickle-20260602T211038Z`.
+- 2026-06-03T00:54Z  ab075260  Added `--provision` CLI mode to tray binary (m13). Agent `macos-Tlatoanis-MacBook-Air-big-pickle-20260603T003837Z`.
 
 ## Currently unblocked / active
 
@@ -408,7 +409,7 @@ accessor.
 - type: feature
 - owner_host: macos
 - capability_tags: [rust, appkit, cli, diagnostics]
-- status: claimed
+- status: done
 - depends_on: []
 - gated_on: []
 - blocks:
@@ -445,6 +446,25 @@ accessor.
     host: "macos"
     lease_id: "m13-provision-cli-20260603T003837Z"
     expires_at: "2026-06-03T04:38:37Z"
+  - type: completed
+    ts: "2026-06-03T00:54:00Z"
+    agent_id: "macos-Tlatoanis-MacBook-Air-big-pickle-20260603T003837Z"
+    host: "macos"
+    lease_id: "m13-provision-cli-20260603T003837Z"
+    commits:
+      - "ab075260 feat(macos-tray): add --provision CLI mode for headless provisioning (m13)"
+    validation:
+      - "cargo check -p tillandsias-macos-tray: pass"
+      - "cargo test -p tillandsias-macos-tray: 45 passed, 1 ignored"
+      - "cargo clippy -p tillandsias-macos-tray -- -D warnings: pass (includes pre-existing vz.rs fix)"
+      - "cargo fmt --all: pass"
+    outcome: >
+      Added `--provision` CLI mode to the tray binary. The flag skips
+      NSApplication initialization and runs the full provisioning
+      pipeline: manifest parse → Fedora Cloud qcow2 download → qemu-img
+      convert to raw → SHA-256 verify. Progress is printed as JSON-line
+      objects to stdout. Unblocks m12/first-run-provisioning-autonomous-
+      smoke which can now script the unattended provisioning verification.
 
 ### Item: m8/appkit-action-smoke-and-stub-polish
 
