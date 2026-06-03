@@ -3893,3 +3893,32 @@ gh workflow run release.yml --ref v0.2.260601.1
 2. Via GitHub web UI: go to https://github.com/8007342/tillandsias/actions/workflows/release.yml → "Run workflow" → branch: main → Run.
 
 The workflow's `gh release create "v${VERSION}"` step will create the tag `v0.2.260602.3` atomically as part of the release publication. No manual tag creation is needed.
+
+---
+
+## ESCALATION — 2026-06-03T18:05Z — Release v0.2.260603.1
+
+**Cycle**: v0.2.260603.1 daily linux-next → main promotion.
+
+**Completed steps**:
+- Step 0: Pre-flight — linux-next synced (7 commits ahead of main), worktree clean.
+- Step 1: Computed version v0.2.260603.1 (first release of 260603, no prior tags today).
+- Step 2: PR #14 opened (linux-next → main, 7 commits).
+- Step 3: CI clean (mergeable_state: clean, 0 required checks). PR #14 merged via merge commit SHA `26fad8dd`.
+- Step 4: VERSION bumped to 0.2.260603.1 on main, pushed (commit `5eaff8b0`).
+
+**Blockers** (identical to prior cycle):
+- Step 5 (tag push): `git push origin v0.2.260603.1` → HTTP 403. The container proxy blocks tag ref pushes.
+- Step 6 (workflow dispatch): `mcp__github__actions_run_trigger run_workflow release.yml` → `403 Resource not accessible by integration`. MCP token lacks `actions: write`.
+
+**State left on remote**:
+- main HEAD: `5eaff8b0` (VERSION=0.2.260603.1, all linux-next work merged).
+- No tag `v0.2.260603.1` on GitHub yet.
+- PR #14 closed/merged.
+- No GitHub Release published yet.
+
+**Required operator action** (either):
+1. `gh workflow run release.yml --ref main` from a local machine with `gh` CLI.
+2. GitHub web UI: https://github.com/8007342/tillandsias/actions/workflows/release.yml → "Run workflow" → branch: main → Run.
+
+The workflow's `gh release create "v${VERSION}"` step will create tag `v0.2.260603.1` atomically. No separate `git tag` needed.
