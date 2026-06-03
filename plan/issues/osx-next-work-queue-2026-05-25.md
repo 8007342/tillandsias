@@ -103,6 +103,7 @@ accessor.
 - 2026-06-02T21:10Z  YIELD    No claimable macOS packets found. Queue fully drained (all items done/blocked-user). App built + installed at /Applications/Tillandsias.app via `build-osx-tray.sh --ci-full --install`. Agent `macos-Tlatoanis-MacBook-Air-big-pickle-20260602T211038Z` yields until orchestrator sources new packets.
 - 2026-06-02T21:30Z  17f6c246  Resolved xz dylib signing crash: `lzma-sys` now statically links liblzma via `LZMA_API_STATIC=1` in `.cargo/config.toml`. Ad-hoc codesigned binary no longer loads Homebrew's liblzma.5.dylib (rejected by macOS due to Team ID mismatch). Build + verify PASS. Agent `macos-Tlatoanis-MacBook-Air-big-pickle-20260602T211038Z`.
 - 2026-06-03T00:54Z  ab075260  Added `--provision` CLI mode to tray binary (m13). Agent `macos-Tlatoanis-MacBook-Air-big-pickle-20260603T003837Z`.
+- 2026-06-03T04:23Z  e2a0aee4  Added diagnose-macos-provision.sh autonomous smoke script (m12). Agent `macos-Tlatoanis-MacBook-Air-big-pickle-20260603T042045Z`.
 
 ## Currently unblocked / active
 
@@ -369,7 +370,8 @@ accessor.
 - type: diagnostics
 - owner_host: macos
 - capability_tags: [appkit, macos-bundle, diagnostics, rust, shell]
-- status: claimed
+- status: done
+- completed_at: 2026-06-03T04:23:00Z
 - depends_on: []
 - gated_on: []
 - blocks: []
@@ -409,6 +411,26 @@ accessor.
     host: "macos"
     lease_id: "m12-provision-smoke-20260603T042045Z"
     expires_at: "2026-06-03T08:20:45Z"
+  - type: completed
+    ts: "2026-06-03T04:23:00Z"
+    agent_id: "macos-Tlatoanis-MacBook-Air-big-pickle-20260603T042045Z"
+    host: "macos"
+    lease_id: "m12-provision-smoke-20260603T042045Z"
+    commits:
+      - "e2a0aee4 feat(scripts): add diagnose-macos-provision.sh autonomous smoke script (m12)"
+    validation:
+      - "scripts/diagnose-macos-provision.sh created, chmod +x, bash -n syntax OK"
+      - "cargo check -p tillandsias-macos-tray: pass"
+      - "cargo test -p tillandsias-macos-tray: 45 passed, 1 ignored"
+      - "cargo fmt --all: pass"
+    outcome: >
+      Created scripts/diagnose-macos-provision.sh — an unattended smoke test
+      for the macOS first-run provisioning pipeline. The script cleans the
+      image root, invokes tillandsias-tray --provision, verifies rootfs.img
+      exists and is non-zero, and re-verifies the downloaded qcow2 SHA-256
+      against the manifest pin. Exit codes: 0 = pass, 2 = degraded, 1 = hard
+      error. Pairs with m13 --provision CLI mode to form the full autonomous
+      provisioning verification.
 
 ### Item: m13/provision-headless-cli-mode
 
