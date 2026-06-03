@@ -101,6 +101,7 @@ accessor.
 
 - 2026-06-02T20:54Z  a826dcc5  Resolved UX gap-1 by loading `icon.pdf` as the NSStatusItem template image; targeted macOS tray tests/check passed.
 - 2026-06-02T21:10Z  YIELD    No claimable macOS packets found. Queue fully drained (all items done/blocked-user). App built + installed at /Applications/Tillandsias.app via `build-osx-tray.sh --ci-full --install`. Agent `macos-Tlatoanis-MacBook-Air-big-pickle-20260602T211038Z` yields until orchestrator sources new packets.
+- 2026-06-02T21:30Z  17f6c246  Resolved xz dylib signing crash: `lzma-sys` now statically links liblzma via `LZMA_API_STATIC=1` in `.cargo/config.toml`. Ad-hoc codesigned binary no longer loads Homebrew's liblzma.5.dylib (rejected by macOS due to Team ID mismatch). Build + verify PASS. Agent `macos-Tlatoanis-MacBook-Air-big-pickle-20260602T211038Z`.
 
 ## Currently unblocked / active
 
@@ -361,6 +362,90 @@ accessor.
       Virtualization.framework, and reports the fedora-44 qcow2 pin in
       diagnostics. Local osx-next tracks origin/osx-next again.
 
+### Item: m12/first-run-provisioning-autonomous-smoke
+
+- id: `m12/first-run-provisioning-autonomous-smoke`
+- type: diagnostics
+- owner_host: macos
+- capability_tags: [appkit, macos-bundle, diagnostics, rust, shell]
+- status: ready
+- depends_on: []
+- gated_on: []
+- blocks: []
+- owned_files:
+  - `scripts/diagnose-macos-provision.sh` (NEW)
+  - `crates/tillandsias-vm-layer/src/vz.rs` (provision path)
+  - `crates/tillandsias-vm-layer/src/fetch.rs` (decompress_xz)
+- summary: >
+    Scripted autonomous smoke that verifies the full first-run provisioning
+    pipeline on macOS: (1) clean image_root, (2) invoke `provision` path,
+    (3) wait for download + xz-decompress + qemu-img qcow2-to-raw conversion,
+    (4) verify rootfs.img exists and is non-zero, (5) verify SHA-256 of the
+    decompressed image matches the manifest pin. Does NOT boot the VM.
+    Designed to run unattended (no UI) via `Tillandsias.app --diagnose
+    --provision 2>&1 | tee smoke.log`.
+- next_action: >
+    Create `scripts/diagnose-macos-provision.sh` that uses the existing
+    `--diagnose` surface or a new `--provision` CLI mode to trigger
+    provisioning headlessly, then polls for completion and checks the
+    resulting rootfs.img. See `scripts/tray-diagnose.sh` for the existing
+    diagnostics pattern.
+- acceptance_evidence:
+  - `scripts/diagnose-macos-provision.sh` exits 0 on a clean first-run.
+  - rootfs.img is >0 bytes after provisioning and SHA matches manifest.
+- fallback_when_blocked: >
+    If the `--provision` CLI mode doesn't exist yet, claim
+    `m13/provision-headless-cli-mode` to add it first.
+- agent_status_packet_expected:
+  - current plan
+  - touched files
+  - evidence produced (smoke log, sha256, image size)
+  - next checkpoint
+
+### Item: m13/provision-headless-cli-mode
+
+- id: `m13/provision-headless-cli-mode`
+- type: feature
+- owner_host: macos
+- capability_tags: [rust, appkit, cli, diagnostics]
+- status: claimed
+- depends_on: []
+- gated_on: []
+- blocks:
+  - m12/first-run-provisioning-autonomous-smoke
+- owned_files:
+  - `crates/tillandsias-macos-tray/src/diagnose.rs`
+  - `crates/tillandsias-macos-tray/src/action_host.rs`
+- summary: >
+    Add a `--provision` (or `--provision-only`) CLI flag to the tray binary
+    that runs the provisioning pipeline (download, decompress, qcow2-convert,
+    SHA-verify) without launching the NSApplication event loop or the
+    menubar icon. Prints JSON progress lines to stdout for script consumption.
+    Required by m12 for headless autonomous smoke.
+- next_action: >
+    Add a CLI arg variant in `diagnose.rs`'s arg parser. If `--provision` is
+    set, skip NSApp init, call `VzRuntime::provision_raw()` directly, and
+    print structured status to stdout.
+- acceptance_evidence:
+  - `tillandsias-tray --provision` downloads, decompresses, and verifies
+    the rootfs image without showing a UI.
+  - `echo $?` is 0 on success.
+  - `echo $?` is non-zero if the manifest URL or SHA pin is invalid.
+  - rootfs.img exists and passes SHA check after completion.
+- fallback_when_blocked: >
+    No blockers expected — pure additive CLI mode.
+- agent_status_packet_expected:
+  - current plan
+  - touched files
+  - evidence produced (test run output, elided SHAs)
+- events:
+  - type: claim
+    ts: "2026-06-03T00:38:37Z"
+    agent_id: "macos-Tlatoanis-MacBook-Air-big-pickle-20260603T003837Z"
+    host: "macos"
+    lease_id: "m13-provision-cli-20260603T003837Z"
+    expires_at: "2026-06-03T04:38:37Z"
+
 ### Item: m8/appkit-action-smoke-and-stub-polish
 
 - id: `m8/appkit-action-smoke-and-stub-polish`
@@ -373,9 +458,12 @@ accessor.
 - gated_on:
   - user-attended menu click smoke for Start VM / Stop VM / Open Shell /
     GitHub Login / Quit
+  - m12/first-run-provisioning-autonomous-smoke (provision path must be
+    green before unattended Start VM menu smoke)
 - depends_on: []
 - cleared_gates:
   - m4 sub-task B slices 1-5 are complete through `3e7af023`
+  - xz static linkage resolved liblzma dyld crash (`.cargo/config.toml`)
 - blocks: []
 - owned_files:
   - `crates/tillandsias-macos-tray/src/action_host.rs`
@@ -387,21 +475,24 @@ accessor.
     Stop VM, Open Shell, GitHub Login, and Quit behavior in the unprovisioned
     state. Preserve the expected "not yet materialized" Start VM error and
     Terminal stub-window messages without panic, deadlock, or menu regression.
+    xz dylib crash resolved: the tray now statically links liblzma so
+    provisioning works without a system-installed Homebrew xz.
 - next_action: >
     A user-attended macOS session should run the seven-step interactive menu
     checklist from the 2026-05-26T07:10Z agent_status_packet. Do not reclaim
     this as a cron packet unless manual smoke surfaces a regression.
+    Autonomous loop should claim m12 first to prove the provision path.
 - acceptance_evidence:
   - `cargo test -p tillandsias-macos-tray` result on macOS.
   - `scripts/build-macos-tray.sh` or equivalent app-bundle build result.
   - Manual no-VM menu smoke notes for the four action-host menu items.
+  - Provision path succeeds (m12 green).
 - agent_status_packet_expected:
   - current plan
   - dependencies and blockers
   - files touched
   - evidence produced
   - next checkpoint
-  - lease intent
 
 ### Item: m9/pty-attach-adapter-unit-wiring
 
