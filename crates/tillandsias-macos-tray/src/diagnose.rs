@@ -44,6 +44,12 @@
 
 use std::path::PathBuf;
 
+/// Manifest bundled at build time so the binary doesn't need the repo or
+/// network to know its artifact-URL template + pinned SHAs. Same constant
+/// pattern as `action_host::BUNDLED_MANIFEST_TOML` — both the tray UI and
+/// the headless `--provision` mode consume it.
+const BUNDLED_MANIFEST_TOML: &str = include_str!("../../../images/vm/manifest.toml");
+
 /// Where the .app installer materializes VM artifacts on a macOS host.
 /// Mirrors `status_item::default_image_root` so `--diagnose` reads the
 /// same paths the live tray writes/reads.
@@ -113,7 +119,6 @@ fn collect_report() -> DiagnoseReport {
     let (initrd_present, initrd_bytes) = stat_file(&root.join("initramfs.img"));
     let provisioned = rootfs_present;
 
-    const BUNDLED_MANIFEST_TOML: &str = include_str!("../../../images/vm/manifest.toml");
     let manifest_pin_aarch64_qcow2 = parse_aarch64_qcow2_sha(BUNDLED_MANIFEST_TOML);
 
     DiagnoseReport {
@@ -206,6 +211,69 @@ fn print_json(r: &DiagnoseReport) {
 
 fn exit_code_from(r: &DiagnoseReport) -> i32 {
     if r.provisioned { 0 } else { 2 }
+}
+
+/// Entry point invoked from `main` when `--provision` is on argv.
+/// Downloads the Fedora Cloud qcow2, converts it to raw for
+/// Virtualization.framework, and SHA-verifies against the manifest
+/// pin — all without launching the NSApplication event loop.
+/// Prints JSON-line progress to stdout for script consumption.
+///
+/// Exit codes:
+///   * `0` — provisioned (or already provisioned)
+///   * `1` — hard failure (manifest parse, network, conversion, SHA)
+pub fn provision_main() -> i32 {
+    let image_root = image_root();
+    let vz = tillandsias_vm_layer::vz::VzRuntime::new(3, image_root);
+
+    if vz.is_provisioned() {
+        println!(
+            "{{\"status\":\"already_provisioned\",\"path\":\"{}\"}}",
+            vz.rootfs_image_path().display()
+        );
+        return 0;
+    }
+
+    let manifest = match tillandsias_vm_layer::recipe::Manifest::from_toml(BUNDLED_MANIFEST_TOML) {
+        Ok(m) => m,
+        Err(e) => {
+            let escaped =
+                serde_json::to_string(&e.to_string()).unwrap_or_else(|_| format!("\"{e}\""));
+            println!(
+                "{{\"error\":\"manifest parse: {}\",\"detail\":{}}}",
+                e, escaped
+            );
+            return 1;
+        }
+    };
+
+    let rt = match tokio::runtime::Runtime::new() {
+        Ok(r) => r,
+        Err(e) => {
+            println!("{{\"error\":\"tokio runtime: {e}\"}}");
+            return 1;
+        }
+    };
+
+    let on_phase = |phase: &str| {
+        let escaped = serde_json::to_string(phase).unwrap_or_else(|_| format!("\"{}\"", phase));
+        println!("{{\"phase\":{}}}", escaped);
+    };
+
+    match rt.block_on(vz.fetch_fedora_cloud_image(&manifest, &on_phase)) {
+        Ok(()) => {
+            println!(
+                "{{\"status\":\"provisioned\",\"path\":\"{}\"}}",
+                vz.rootfs_image_path().display()
+            );
+            0
+        }
+        Err(e) => {
+            let escaped = serde_json::to_string(&e).unwrap_or_else(|_| format!("\"{}\"", e));
+            println!("{{\"error\":{}}}", escaped);
+            1
+        }
+    }
 }
 
 /// Extract the first 12-char SHA-256 prefix for `aarch64.qcow2` from a

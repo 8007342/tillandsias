@@ -43,6 +43,9 @@ fn main() {
     // initialize, so the binary can be invoked from a terminal
     // session without putting a stray menu-bar icon up.
     let args: Vec<String> = std::env::args().collect();
+    if args.iter().any(|a| a == "--provision") {
+        std::process::exit(diagnose::provision_main());
+    }
     if args.iter().any(|a| a == "--diagnose") {
         let format = if args.iter().any(|a| a == "--json") {
             diagnose::DiagnoseFormat::Json
