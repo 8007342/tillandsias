@@ -369,7 +369,7 @@ accessor.
 - type: diagnostics
 - owner_host: macos
 - capability_tags: [appkit, macos-bundle, diagnostics, rust, shell]
-- status: ready
+- status: claimed
 - depends_on: []
 - gated_on: []
 - blocks: []
@@ -402,6 +402,13 @@ accessor.
   - touched files
   - evidence produced (smoke log, sha256, image size)
   - next checkpoint
+- events:
+  - type: claim
+    ts: "2026-06-03T04:20:45Z"
+    agent_id: "macos-Tlatoanis-MacBook-Air-big-pickle-20260603T042045Z"
+    host: "macos"
+    lease_id: "m12-provision-smoke-20260603T042045Z"
+    expires_at: "2026-06-03T08:20:45Z"
 
 ### Item: m13/provision-headless-cli-mode
 
