@@ -1,36 +1,34 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-02T21:34:00Z
+LastExecutionTime: 2026-06-03T19:12:00Z
 
 ## This Loop
 
 - **Full Orchestration Pass**: Audited all 4 sibling branches. 0 drift on all platform branches.
-  - `origin/linux-next` at `17f6c246`, `origin/windows-next` at `7efd4b38` (ancestor, 0 ahead), `origin/osx-next` at `a826dcc5` (ancestor, 0 ahead), `origin/main` at `cb4c6204`.
-  - `linux-next` is 72 commits ahead of `main`.
+  - `origin/linux-next` at `5ea73c96` (daily release cycle outcome recorded), `origin/windows-next` at `4f5e640a` (ancestor), `origin/osx-next` at `e2a0aee4` (ancestor, merged), `origin/main` at `5eaff8b0`.
+  - `linux-next` is 6 commits ahead of `main`.
   - Merge-base ancestry: windows-next ✓, osx-next ✓ — both clean ancestors.
 - **Plan Graph**: Fully drained. All 23 steps + all tasks in `plan/index.yaml` are `status: completed`.
   - `plan.yaml` confirms `next_step: none`, `next_graph_node: none`.
-  - `forge-diagnostics/e2e-piggyback-orchestration` is `completed` per plan/index.yaml:1528 (loop_status.md was stale).
   - No active leases, no stale pings.
 - **Convergence Metrics**: Residual correctness debt R ≈ 0. All spec gaps filled, diagnostics pipeline complete. V_c = 0 (steady state), V_min not applicable (R = 0).
-- **No integration needed**: 0 drift on both siblings. No unintegrated code.
+- **No integration needed**: 0 drift on both siblings. macOS features (`osx-next`) and remote release outcomes (`origin/linux-next`) are fully merged and integrated.
 
 ## Assignment Board
 
 - **Linux**:
   - Primary: YIELD — no claimable packets. Plan graph fully drained.
-  - Fallback: none (spec gaps, diagnostics, forge improvements all completed).
+  - Fallback: none.
 - **Windows**:
   - Primary: YIELD — no claimable packets. Fast-forward `windows-next` to `origin/linux-next`.
 - **macOS**:
   - Primary: user-attended m8 smoke of the rebuilt production `.app`.
-  - Fallback: new diagnostics-driven packets only.
+  - Fallback: none.
 
 ## Stale Or Pending Pings
 
-- `windows-next` at `7efd4b38` — stale, needs fast-forward to `17f6c246` (or latest linux-next).
+- `windows-next` at `4f5e640a` — stale, needs fast-forward to latest `linux-next` head.
 - `plan/issues/release-checklist-2026-05-14.md` — `status: pending`, not a shaped packet. Orchestrator may evaluate if ready to close.
-- `plan/issues/osx-next-work-queue-2026-05-25.md` line 687 — `m1b/transport-macos-vsock-connector` status: pending. macOS-owned, not shaped for general dispatch.
 
 ## Validation
 
