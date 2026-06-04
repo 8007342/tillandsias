@@ -64,6 +64,14 @@ RUN GOBIN=/usr/local/bin go install golang.org/x/tools/gopls@latest \
     && GOBIN=/usr/local/bin go install mvdan.cc/sh/v3/cmd/shfmt@latest
 
 # ── Rust toolchain ─────────────────────────────────────────────
+# `cargo-outdated` added to the cargo-binstall batch: dependency-freshness
+# checks, complementary to the already-shipped cargo-audit + cargo-deny
+# security scanners. Same RUN layer, same envelope — needs network only at
+# upstream-version-query time, governed by the existing proxy ACL (identical
+# to cargo-deny's advisory-db fetch). Last approved-but-unimplemented Rust
+# candidate from the curated-toolchain-backlog.
+# @trace plan/diagnostics/forge-enhancements-curated-toolchain-backlog-2026-05-29.md
+#   (cargo-outdated — approved)
 ENV RUSTUP_HOME=/usr/local/rustup \
     CARGO_HOME=/usr/local/cargo \
     PATH=/usr/local/cargo/bin:$PATH
@@ -75,7 +83,7 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
     && curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C /usr/local/bin \
     && cargo install cargo-chef cargo-watch cargo-audit wasm-pack trunk typos-cli watchexec-cli \
     && curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash \
-    && cargo binstall --no-confirm cargo-edit cargo-llvm-cov cargo-deny cargo-semver-checks cargo-expand cargo-criterion cargo-wasi \
+    && cargo binstall --no-confirm cargo-edit cargo-llvm-cov cargo-deny cargo-semver-checks cargo-expand cargo-criterion cargo-wasi cargo-outdated \
     && curl -LsSf https://github.com/bytecodealliance/wasmtime/releases/download/v45.0.0/wasmtime-v45.0.0-x86_64-linux.tar.xz | tar -xJf - --strip-components=1 -C /usr/local/bin wasmtime-v45.0.0-x86_64-linux/wasmtime \
     && ln -sf "$(rustup which rust-analyzer)" /usr/local/bin/rust-analyzer \
     && curl -LsSf https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz | tar -xzf - -C /usr/local/bin actionlint \
