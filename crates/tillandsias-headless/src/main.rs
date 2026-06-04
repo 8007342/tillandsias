@@ -5107,6 +5107,13 @@ pub(crate) fn run_opencode_web_mode(
         }
     }
     rt.block_on(async {
+        // @trace spec:runtime-diagnostics-stream
+        let diag_emitter =
+            tillandsias_podman::diagnostic_event_emitter::spawn_diagnostic_event_emitter(
+                debug,
+                "tillandsias-",
+            );
+
         cleanup_stack_containers(&client, project_name).await;
 
         client
@@ -5192,6 +5199,22 @@ pub(crate) fn run_opencode_web_mode(
             .map_err(|e| format!("[OpenCode Web] failed to start forge: {e}"))?;
         emit_opencode_web_event(project_name, "forge", "started", Some("opencode-web"))?;
 
+        // @trace spec:runtime-diagnostics-stream (Stderr line pass-through)
+        let _diag_logs_handle = if debug {
+            Some(
+                tillandsias_podman::DiagnosticsHandle::start_typed_event_stream(vec![
+                    "tillandsias-router".to_string(),
+                    "tillandsias-proxy".to_string(),
+                    git_container_name.clone(),
+                    "tillandsias-inference".to_string(),
+                    forge_container_name(project_name),
+                ])
+                .await,
+            )
+        } else {
+            None
+        };
+
         // @trace spec:subdomain-routing-via-reverse-proxy
         // After forge starts, ensure router is running and write dynamic routes.
         let router_image = versioned_image_tag("router", version);
@@ -5220,6 +5243,13 @@ pub(crate) fn run_opencode_web_mode(
         // After writing the dynamic Caddyfile, reload Caddy to activate the routes.
         // The reload is graceful (no container restart) via the admin API at localhost:2019.
         caddy_reload_routes(debug).await?;
+
+        // Stop the diagnostic-event emitter before this block closes;
+        // dropping `_diag_logs_handle` aborts its logs tails.
+        if let Some(handle) = diag_emitter {
+            handle.abort();
+            let _ = handle.await;
+        }
 
         Ok::<(), String>(())
     })?;
@@ -5663,6 +5693,28 @@ fn run_forge_agent_cli_mode(
     let rt = podman_runtime()?;
     let client = PodmanClient::new();
     rt.block_on(async {
+        // @trace spec:runtime-diagnostics-stream
+        let diag_emitter =
+            tillandsias_podman::diagnostic_event_emitter::spawn_diagnostic_event_emitter(
+                debug,
+                "tillandsias-",
+            );
+
+        // @trace spec:runtime-diagnostics-stream (Stderr line pass-through)
+        let _diag_logs_handle = if debug {
+            Some(
+                tillandsias_podman::DiagnosticsHandle::start_typed_event_stream(vec![
+                    "tillandsias-router".to_string(),
+                    "tillandsias-proxy".to_string(),
+                    format!("tillandsias-git-{project_name}"),
+                    "tillandsias-inference".to_string(),
+                ])
+                .await,
+            )
+        } else {
+            None
+        };
+
         let result = client
             .run_container_attached_observed(
                 mode.slug(),
@@ -5672,6 +5724,12 @@ fn run_forge_agent_cli_mode(
             )
             .await;
         cleanup_shared_stack_if_no_running_forge(&client, project_name, debug).await;
+
+        if let Some(handle) = diag_emitter {
+            handle.abort();
+            let _ = handle.await;
+        }
+
         result.map_err(|e| format!("[forge-launch] {} session exited: {e}", mode.slug()))
     })
 }

@@ -1632,6 +1632,18 @@ fn format_launch_event(
     line
 }
 
+/// Build the diagnostics-stream container-start line. Field order is
+/// `container`, `status` — pinned by unit test so litmus assertions can grep on it.
+///
+/// @trace spec:runtime-diagnostics-stream (scenario "Container start event")
+pub(crate) fn format_container_start_event(container_name: &str, status: &str) -> String {
+    format!(
+        "event:container_start container={} status={}",
+        shell_escape_field(container_name),
+        shell_escape_field(status)
+    )
+}
+
 /// Build the diagnostics-stream container-exit line. Field order is
 /// `container`, `exit_code`, optional `duration_seconds` — pinned by unit
 /// test so litmus assertions can grep on it.
@@ -2048,6 +2060,17 @@ mod tests {
         assert!(
             line.ends_with("detail=\"multi word detail\""),
             "got: {line}"
+        );
+    }
+
+    /// Pins the `event:container_start` wire shape from
+    /// spec:runtime-diagnostics-stream. Field order is `container`, `status`.
+    #[test]
+    fn container_start_event_shape() {
+        let running = format_container_start_event("tillandsias-myproject-foo", "running");
+        assert_eq!(
+            running,
+            "event:container_start container=tillandsias-myproject-foo status=running"
         );
     }
 
