@@ -2260,7 +2260,7 @@ plan_index:
     - id: multi-host-debt-payoff
       order: 31
       title: Multi-Host Simplification & Debt Payoff
-      status: ready
+      status: completed
       deliverable: plan/steps/31-multi-host-debt-payoff.md
       depends_on: [github-vault-integration]
       exit_criteria:
@@ -2310,3 +2310,18 @@ plan_index:
                 bake (scripts/build-image.sh), and runtime tmpfs hot-path
                 population (images/default/lib-common.sh). Confirmed agents
                 correctly surface RAM-served cheatsheets from /opt/cheatsheets.
+            - type: completed
+              ts: "2026-06-04T04:22:00Z"
+              agent_id: "linux-macuahuitl-codex-20260604T034952Z"
+              host: "linux"
+              lease_id: "lease-linux-docs-cheatsheet-sync-20260604T0416Z"
+              summary: >
+                Reconciled the one divergent host/image cheatsheet and added
+                an instant byte-for-byte synchronization, image-bake, and
+                agent-discovery litmus.
+              commits: ["7c8f47cd"]
+              evidence_refs:
+                - "diff -qr --exclude=.gitkeep cheatsheets images/default/cheatsheets — clean"
+                - "./scripts/check-cheatsheet-tiers.sh --strict — 208 validated"
+                - "bash scripts/validate-spec-cheatsheet-binding-fast.sh — 100% PASS"
+                - "./scripts/run-litmus-test.sh --phase pre-build --size instant --compact — 104/104 PASS"
