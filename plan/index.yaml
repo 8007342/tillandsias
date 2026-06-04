@@ -2206,8 +2206,15 @@ plan_index:
                 - "./scripts/run-litmus-test.sh gh-auth-script --size all --compact — 2/2 PASS"
                 - "./scripts/run-litmus-test.sh --phase pre-build --size instant --compact — 102/102 PASS"
         - id: secrets/vault-secret-capture
-          status: ready
+          status: claimed
           depends_on: []
+          events:
+            - type: claim
+              ts: "2026-06-04T03:58:00Z"
+              agent_id: "linux-macuahuitl-codex-20260604T034952Z"
+              host: "linux"
+              lease_id: "lease-linux-secrets-vault-secret-capture-20260604T0358Z"
+              expires_at: "2026-06-04T07:58:00Z"
 
     - id: multi-host-debt-payoff
       order: 31
