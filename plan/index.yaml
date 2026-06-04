@@ -1929,3 +1929,71 @@ plan_index:
         - id: release/bump-and-tag
           status: ready
           depends_on: [release/audit, release/docs]
+
+    - id: build-pipeline-optimization
+      order: 28
+      title: Build Pipeline Optimization & Forge Lean-Up
+      status: ready
+      deliverable: plan/steps/28-build-pipeline-optimization.md
+      depends_on: [release-v0_3_0-readiness]
+      exit_criteria:
+        - "Forge image build time reduced by >50%."
+        - "build.sh refactored to eliminate redundant CI/CD cycles."
+      tasks:
+        - id: build/forge-containerfile-audit
+          status: ready
+          depends_on: []
+        - id: build/sh-refactoring
+          status: ready
+          depends_on: []
+
+    - id: agent-launch-stability
+      order: 29
+      title: Agent Launch Stability & Race Condition Fixes
+      status: ready
+      deliverable: plan/steps/29-agent-launch-stability.md
+      depends_on: [build-pipeline-optimization]
+      exit_criteria:
+        - "Claude and OpenCode Web launch reliably."
+        - "Exponential backoff implemented for web route probing."
+      tasks:
+        - id: agent/claude-crash-investigation
+          status: ready
+          depends_on: []
+        - id: agent/opencode-web-backoff
+          status: ready
+          depends_on: []
+
+    - id: github-vault-integration
+      order: 30
+      title: GitHub & Vault Integration Integrity
+      status: ready
+      deliverable: plan/steps/30-github-vault-integration.md
+      depends_on: [agent-launch-stability]
+      exit_criteria:
+        - "github-login flow capturing and storing tokens correctly."
+        - "Tray correctly handles unauthenticated states."
+      tasks:
+        - id: secrets/github-login-repair
+          status: ready
+          depends_on: []
+        - id: secrets/vault-secret-capture
+          status: ready
+          depends_on: []
+
+    - id: multi-host-debt-payoff
+      order: 31
+      title: Multi-Host Simplification & Debt Payoff
+      status: ready
+      deliverable: plan/steps/31-multi-host-debt-payoff.md
+      depends_on: [github-vault-integration]
+      exit_criteria:
+        - "Methodology and cheatsheets 100% aligned."
+        - "Cross-platform installers convergent."
+      tasks:
+        - id: docs/methodology-audit
+          status: ready
+          depends_on: []
+        - id: docs/cheatsheet-sync
+          status: ready
+          depends_on: []
