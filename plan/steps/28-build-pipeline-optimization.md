@@ -13,7 +13,9 @@ Drastically reduce the build times for both the Tillandsias binary and the forge
     - [ ] Replace `go install` for `gopls`, `dlv`, `shfmt` with pre-built binary downloads from GitHub Releases.
     - [ ] Use `cargo-binstall --only-exec` where pre-built binary detection is reliable.
 - [ ] **npm Dependency Pining**: Ensure all npm-based agents (`opencode-ai`, `@anthropic-ai/claude-code`) are pinned to stable versions or use a faster installation method (e.g., bundled assets).
-- [ ] **build.sh Refactoring**: De-duplicate CI steps. Ensure `local-ci.sh` is only called once with the appropriate phase, and avoid redundant `cargo` builds when `--install` is combined with `--ci-full`.
+- [x] **build.sh Refactoring**: De-duplicate CI steps. Ensure `local-ci.sh` is only called once with the appropriate phase, and avoid redundant `cargo` builds when `--install` is combined with `--ci-full`.
+    - Completed in `4db56b6e`: one pre-build `local-ci.sh` dispatch, direct post-build/runtime litmus phases, no install-to-debug-build fallthrough, and evidence reuse instead of repeated Cargo/litmus runs.
+    - Evidence: `./build.sh --check` PASS; instant pre-build litmus `101/101` PASS across `87/87` active specs; `dev-build` instant litmus `2/2` PASS.
 - [ ] **Incremental Build Verification**: Verify that `init-build-state.json` correctly skips images that haven't changed, even when versions are bumped.
 
 ## Exit Criteria
