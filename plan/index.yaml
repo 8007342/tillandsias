@@ -2076,8 +2076,15 @@ plan_index:
         - "build.sh refactored to eliminate redundant CI/CD cycles."
       tasks:
         - id: build/forge-containerfile-audit
-          status: ready
+          status: claimed
           depends_on: []
+          events:
+            - type: claim
+              ts: "2026-06-04T03:10:45Z"
+              agent_id: "linux-macuahuitl-gemini-cli-20260604T0310Z"
+              host: "linux"
+              lease_id: "lease-linux-build-forge-containerfile-audit-20260604T0310Z"
+              expires_at: "2026-06-04T07:10:45Z"
         - id: build/sh-refactoring
           status: ready
           depends_on: []
