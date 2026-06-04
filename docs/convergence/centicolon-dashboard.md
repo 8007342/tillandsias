@@ -6,7 +6,7 @@
 
 _Generated at 2026-06-04T00:01:29Z for series `Local Development` (`local_development`)._
 
-_Source: `target/convergence/centicolon-signature.jsonl` · 142 signature records · latest release `0.2.260603.1` at commit `f8a46b8647c7`._
+_Source: `target/convergence/centicolon-signature.jsonl` · 142 signature records · latest release `0.3.260603.1` at commit `f8a46b8647c7`._
 
 ## Trend Sparklines
 
@@ -24,7 +24,7 @@ Each glyph below represents one signature record. The top strip is closed cc (ta
 
 | Field | Value |
 |---|---|
-| Release | `0.2.260603.1` |
+| Release | `0.3.260603.1` |
 | Commit | `f8a46b8647c7` |
 | Closed | `100.0%` |
 | Residual cc | `0` |

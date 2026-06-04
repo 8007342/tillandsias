@@ -502,7 +502,7 @@ accessor.
 - type: diagnostics
 - owner_host: macos
 - capability_tags: [appkit, macos-bundle, diagnostics]
-- status: claimed
+- status: blocked
 - autonomous_completed_at: 2026-05-26T07:10Z
 - acceptance_status: autonomous_reverified_2026-06-04; waits_on_user_attended_click_smoke
 - events:
@@ -519,6 +519,9 @@ accessor.
         build-osx-tray.sh --ci-full produced valid signed bundle and tarball.
         Post-build smoke verified PID alive 3s. Autonomous state is green.
         Unblocking step-25 parent for release-lane advancement.
+    - type: yield
+      ts: "2026-06-04T03:45:00Z"
+      summary: "Autonomous verification complete. Yielding for user-attended smoke feedback."
 - gated_on:
   - user-attended menu click smoke for Start VM / Stop VM / Open Shell /
     GitHub Login / Quit

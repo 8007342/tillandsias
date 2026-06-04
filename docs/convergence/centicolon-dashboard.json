@@ -105,7 +105,7 @@
     "kind": "closed",
     "start_release": "0.2.260602.2",
     "start_commit": "f8a46b8647c7",
-    "end_release": "0.2.260603.1",
+    "end_release": "0.3.260603.1",
     "end_commit": "f8a46b8647c7",
     "count": 14,
     "closed": "▅▆▇███████████",
@@ -113,7 +113,7 @@
   }
 ],
   "latest": {
-  "release": "0.2.260603.1",
+  "release": "0.3.260603.1",
   "date": "2026-06-03T22:09:12Z",
   "commit": "f8a46b8647c7",
   "total_cc": 140,
@@ -2370,7 +2370,7 @@
     "trend_glyph": ""
   },
   {
-    "release": "0.2.260603.1",
+    "release": "0.3.260603.1",
     "date": "2026-06-03T22:06:27Z",
     "commit": "f8a46b8647c7",
     "total_cc": 120,
@@ -2386,7 +2386,7 @@
     "trend_glyph": ""
   },
   {
-    "release": "0.2.260603.1",
+    "release": "0.3.260603.1",
     "date": "2026-06-03T22:09:12Z",
     "commit": "f8a46b8647c7",
     "total_cc": 140,
