@@ -124,8 +124,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:cheatsheet-tooling-structure
+  - litmus:cheatsheet-host-image-sync
   coverage_ratio: 100
-  last_verified: '2026-05-12'
+  last_verified: '2026-06-04'
 - spec_id: cheatsheets-license-tiered
   status: active
   litmus_tests:
