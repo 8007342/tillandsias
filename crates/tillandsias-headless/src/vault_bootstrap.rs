@@ -281,20 +281,16 @@ fn ensure_unseal_key(debug: bool) -> Result<[u8; 32], String> {
     let entry =
         Entry::new(KEYCHAIN_SERVICE, UNSEAL_KEY_V1).map_err(|e| format!("keyring entry: {e}"))?;
 
-    if let Ok(encoded) = entry.get_password() {
-        if let Ok(key_vec) = base64::engine::general_purpose::STANDARD.decode(&encoded) {
-            if key_vec.len() == 32 {
-                if debug {
-                    eprintln!(
-                        "[tillandsias-vault] recovered unseal key from host keychain ({})",
-                        UNSEAL_KEY_V1
-                    );
-                }
-                let mut key = [0u8; 32];
-                key.copy_from_slice(&key_vec);
-                return Ok(key);
-            }
+    if let Ok(encoded) = entry.get_password()
+        && let Ok(key_vec) = base64::engine::general_purpose::STANDARD.decode(&encoded)
+        && key_vec.len() == 32
+    {
+        if debug {
+            eprintln!("[tillandsias-vault] recovered unseal key from host keychain (v1, base64)");
         }
+        let mut key = [0u8; 32];
+        key.copy_from_slice(&key_vec);
+        return Ok(key);
     }
 
     // 2. Not in keychain or invalid. Derive it from the machine-id and anchor.
@@ -322,7 +318,7 @@ fn ensure_unseal_key(debug: bool) -> Result<[u8; 32], String> {
     let key = auto_unseal::derive_unseal_key(machine_id.as_bytes(), anchor.as_bytes());
 
     // Store the derived key in the keychain for faster recovery/stability
-    let encoded = base64::engine::general_purpose::STANDARD.encode(&key);
+    let encoded = base64::engine::general_purpose::STANDARD.encode(key);
     entry
         .set_password(&encoded)
         .map_err(|e| format!("keyring unseal key set: {e}"))?;
@@ -365,6 +361,7 @@ fn read_machine_id() -> Result<String, String> {
 
 fn create_unseal_secret(key: &[u8; 32], debug: bool) -> Result<(), String> {
     // Best-effort remove any prior secret.
+    // @trace spec:ephemeral-secret-refresh
     let _ = podman_cmd_sync()
         .args(["secret", "rm", VAULT_UNSEAL_SECRET])
         .stdout(Stdio::null())
@@ -410,6 +407,7 @@ fn create_unseal_secret(key: &[u8; 32], debug: bool) -> Result<(), String> {
 /// Create (or replace) a podman secret holding the supplied token bytes.
 /// Mode `0400`, file driver. Used for per-container AppRole tokens.
 fn create_token_podman_secret(name: &str, token: &str, debug: bool) -> Result<(), String> {
+    // @trace spec:ephemeral-secret-refresh
     let _ = podman_cmd_sync()
         .args(["secret", "rm", name])
         .stdout(Stdio::null())
@@ -551,13 +549,13 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
     let entry = Entry::new(KEYCHAIN_SERVICE, "vault-root-token-v1")
         .map_err(|e| format!("keyring entry: {e}"))?;
 
-    if let Ok(token) = entry.get_password() {
-        if !token.is_empty() {
-            if debug {
-                eprintln!("[tillandsias-vault] recovered root token from host keychain");
-            }
-            return Ok(token);
+    if let Ok(token) = entry.get_password()
+        && !token.is_empty()
+    {
+        if debug {
+            eprintln!("[tillandsias-vault] recovered root token from host keychain");
         }
+        return Ok(token);
     }
 
     // 2. Not in keychain. Attempt one-time handover from the container volume.

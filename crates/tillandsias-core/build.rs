@@ -53,6 +53,7 @@ const TRAY_ICONS: &[(&str, &str, &str)] = &[
     ("building", "ionantha", "bloom"),
     ("blooming", "ionantha", "bloom"),
     ("dried", "ionantha", "dried"),
+    ("stopping", "ionantha", "dried"),
 ];
 
 fn main() {
@@ -253,6 +254,11 @@ fn generate_icons_rs(out_dir: &Path) {
     writeln!(
         f,
         "        crate::genus::TrayIconState::Dried => PNG_TRAY_DRIED,"
+    )
+    .unwrap();
+    writeln!(
+        f,
+        "        crate::genus::TrayIconState::Stopping => PNG_TRAY_STOPPING,"
     )
     .unwrap();
     writeln!(f, "    }}").unwrap();

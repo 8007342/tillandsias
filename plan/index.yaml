@@ -1799,3 +1799,90 @@ plan_index:
               ts: "2026-06-02T21:45:00Z"
               agent_id: "linux-tlatoani-gemini-cli-20260602T2120Z"
               summary: "Deleted recipe-publish.yml, symmetric-pin litmus, and leftover materializer artifacts. Fedora pivot finalized on Linux side."
+
+    - id: diagnostics-stream-activation
+      order: 24
+      title: Diagnostics Stream & Event-Driven Observability
+      status: ready
+      deliverable: plan/steps/24-diagnostics-stream-activation.md
+      depends_on: [rootfs-removal-fedora-pivot]
+      specs:
+        - runtime-diagnostics-stream
+        - observability-metrics
+      exit_criteria:
+        - "Podman events are wired to the diagnostics emitter."
+        - "Event type diversity includes exit, signal, and OOM."
+        - "Bounded ring buffer with backpressure logging is active."
+      tasks:
+        - id: diagnostics/event-wiring
+          status: ready
+          depends_on: []
+        - id: diagnostics/event-diversity
+          status: ready
+          depends_on: [diagnostics/event-wiring]
+        - id: diagnostics/ring-buffer
+          status: ready
+          depends_on: [diagnostics/event-wiring]
+
+    - id: multi-host-ux-parity
+      order: 25
+      title: Multi-Host UX Parity & Menu Stabilization
+      status: ready
+      deliverable: plan/steps/25-multi-host-ux-parity.md
+      depends_on: [rootfs-removal-fedora-pivot]
+      specs:
+        - macos-native-tray
+        - windows-native-tray
+        - tray-menu
+      exit_criteria:
+        - "macOS menu structure matches host-shell parity contract."
+        - "macOS icon and assets rendered correctly."
+        - "Status text parity (Downloading, Ready) across all platforms."
+      tasks:
+        - id: ux-parity/macos-menu
+          status: ready
+          depends_on: []
+        - id: ux-parity/macos-assets
+          status: ready
+          depends_on: []
+        - id: ux-parity/status-text
+          status: ready
+          depends_on: []
+
+    - id: forge-toolchain-expansion
+      order: 26
+      title: Forge Toolchain Expansion (Post-Audit)
+      status: ready
+      deliverable: plan/steps/26-forge-toolchain-expansion.md
+      depends_on: [rootfs-removal-fedora-pivot]
+      exit_criteria:
+        - "Rust, Go, and Python toolchains added to the default image."
+        - "Isolation validation litmus checks remain green."
+      tasks:
+        - id: forge-expansion/rust-wasm
+          status: ready
+          depends_on: []
+        - id: forge-expansion/go-python
+          status: ready
+          depends_on: []
+
+    - id: release-v0_3_0-readiness
+      order: 27
+      title: Release v0.3.0 Milestone
+      status: ready
+      deliverable: plan/steps/27-release-v0_3_0-readiness.md
+      depends_on: [diagnostics-stream-activation, multi-host-ux-parity, forge-toolchain-expansion]
+      exit_criteria:
+        - "Final multi-host audit shows zero drift."
+        - "Documentation updated for the Fedora Pivot model."
+        - "VERSION bumped to 0.3.0 and tagged."
+      tasks:
+        - id: release/audit
+          status: ready
+          depends_on: []
+        - id: release/docs
+          status: ready
+          depends_on: []
+        - id: release/bump-and-tag
+          status: ready
+          depends_on: [release/audit, release/docs]

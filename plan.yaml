@@ -19,8 +19,9 @@ plan:
     verification: methodology/verification.yaml
 
   current_state:
-    last_completed_step: forge-diagnostics-improvement-loop (step 21.6)
-    next_step: none
+    last_completed_step: rootfs-removal-fedora-pivot (step 23)
+    next_step: diagnostics-stream-activation (step 24)
+
     next_graph_node: none
     plan_index: plan/index.yaml
     step_directory: plan/steps

@@ -112,7 +112,7 @@ fi
 log "capturing forge diagnostics -> $RAW_LOG (+ $STDERR_LOG)"
 # The forge is assumed already alive (piggy-back). Capture is best-effort: a
 # launch/timeout/parse failure is a finding, never a caller failure.
-if tillandsias . --opencode --diagnostics \
+if tillandsias . --opencode --diagnostics --port 19080 \
       --prompt "$(cat "$PROMPT_FILE")" < /dev/null 2>"$STDERR_LOG" \
       | tee "$RAW_LOG" >/dev/null; then
   if [[ -s "$RAW_LOG" ]]; then

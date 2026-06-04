@@ -149,10 +149,9 @@ impl WslLifecycle {
 
         progress.report_phase(ProvisionPhase::DownloadingRootfs);
         let cache_root = Self::cache_root();
-        let xz_dest = cache_root.join("rootfs").join(format!(
-            "fedora-44-wsl-{}.tar.xz",
-            &artifact.sha256[..12]
-        ));
+        let xz_dest = cache_root
+            .join("rootfs")
+            .join(format!("fedora-44-wsl-{}.tar.xz", &artifact.sha256[..12]));
 
         let progress_for_cb = progress.clone();
         let last_pct = std::sync::atomic::AtomicU8::new(101);
@@ -235,7 +234,12 @@ URL="https://github.com/8007342/tillandsias/releases/latest/download/tillandsias
 curl --fail --location --retry 5 --retry-delay 3 --connect-timeout 20 --output "$DEST" "$URL"
 chmod 0755 "$DEST"
 "#;
-        self.wsl_root_write("/usr/local/lib/tillandsias/fetch-headless.sh", fetch_script, true).await?;
+        self.wsl_root_write(
+            "/usr/local/lib/tillandsias/fetch-headless.sh",
+            fetch_script,
+            true,
+        )
+        .await?;
 
         // 2. tillandsias-headless-fetch.service
         let fetch_unit = r#"[Unit]
@@ -252,7 +256,12 @@ TimeoutStartSec=300s
 [Install]
 WantedBy=multi-user.target
 "#;
-        self.wsl_root_write("/etc/systemd/system/tillandsias-headless-fetch.service", fetch_unit, false).await?;
+        self.wsl_root_write(
+            "/etc/systemd/system/tillandsias-headless-fetch.service",
+            fetch_unit,
+            false,
+        )
+        .await?;
 
         // 3. tillandsias-headless.service
         let headless_unit = r#"[Unit]
@@ -267,15 +276,28 @@ RestartSec=2s
 [Install]
 WantedBy=multi-user.target
 "#;
-        self.wsl_root_write("/etc/systemd/system/tillandsias-headless.service", headless_unit, false).await?;
+        self.wsl_root_write(
+            "/etc/systemd/system/tillandsias-headless.service",
+            headless_unit,
+            false,
+        )
+        .await?;
 
         // Enable units
-        self.wsl_root_sh("systemctl enable tillandsias-headless-fetch.service tillandsias-headless.service").await?;
+        self.wsl_root_sh(
+            "systemctl enable tillandsias-headless-fetch.service tillandsias-headless.service",
+        )
+        .await?;
 
         Ok(())
     }
 
-    async fn wsl_root_write(&self, path: &str, content: &str, make_executable: bool) -> Result<(), String> {
+    async fn wsl_root_write(
+        &self,
+        path: &str,
+        content: &str,
+        make_executable: bool,
+    ) -> Result<(), String> {
         let dir = Path::new(path).parent().unwrap().to_str().unwrap();
         self.wsl_root_sh(&format!("mkdir -p {dir}")).await?;
 
@@ -287,17 +309,25 @@ WantedBy=multi-user.target
             .arg("--")
             .arg("sh")
             .arg("-c")
-            .arg(format!("cat > {path} && if [ \"{make_executable}\" = \"true\" ]; then chmod +x {path}; fi"))
+            .arg(format!(
+                "cat > {path} && if [ \"{make_executable}\" = \"true\" ]; then chmod +x {path}; fi"
+            ))
             .stdin(std::process::Stdio::piped())
             .spawn()
             .map_err(|e| format!("wsl write {path} failed: {e}"))?;
 
         if let Some(mut stdin) = child.stdin.take() {
             use tokio::io::AsyncWriteExt;
-            stdin.write_all(content.as_bytes()).await.map_err(|e| format!("write stdin to {path} failed: {e}"))?;
+            stdin
+                .write_all(content.as_bytes())
+                .await
+                .map_err(|e| format!("write stdin to {path} failed: {e}"))?;
         }
 
-        let status = child.wait().await.map_err(|e| format!("wait for wsl write {path} failed: {e}"))?;
+        let status = child
+            .wait()
+            .await
+            .map_err(|e| format!("wait for wsl write {path} failed: {e}"))?;
         if !status.success() {
             return Err(format!("wsl write {path} exited {status}"));
         }

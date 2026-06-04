@@ -127,9 +127,18 @@ First-class. Everything in this README applies as-is. The Linux binary is the so
 
 ### macOS
 
-**Coming soon.**
+**Coming soon / Beta.** Native AppKit menu-bar tray around a Fedora-hosted
+VM via Apple's Virtualization.framework. The VM runs the same headless
+tillandsias + podman enclave as Linux; the tray surfaces project actions
+through the macOS status bar and Terminal.app.
 
-Planned as a thin platform wrapper around the same Rust core, delegating container runtime to Podman Desktop or Docker Desktop. The tray will use the native macOS status bar API.
+**Install** (experimental):
+```bash
+curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install-macos.sh | bash
+```
+
+**Requirements**: macOS 14+ (Sonoma/Sequoia) on Apple Silicon (M1/M2/M3).
+Uses virtio-vsock for host-guest communication.
 
 ### Windows
 
