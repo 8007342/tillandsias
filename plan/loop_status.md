@@ -17,13 +17,14 @@ LastExecutionTime: 2026-06-04T03:05:00Z
 ## Blocking Tree (gated chain)
 
 - **Step 25 `multi-host-ux-parity` is COMPLETED**. The autonomous verification (m8) was renewed and the parent step flipped to unblock the release pipeline.
-- **Frontier: Step 27 `release-v0_3_0-readiness`**. `release/audit` and `release/docs` are completed. `release/bump-and-tag` is now READY.
-- Steps 28→29→30→31 chain sequentially behind step 27.
+- **Step 27 `release-v0_3_0-readiness` is COMPLETED**. Version bumped to 0.3.0 series, docs updated, audit green.
+- **Frontier: Step 28 `build-pipeline-optimization`**. Step 28 is now READY.
+- Steps 29→30→31 chain sequentially behind step 28.
 
 ## Assignment Board
 
-- **Linux**: READY. Can pick up `release/bump-and-tag` (Step 27) and perform the Linux-side release recovery tests.
-- **macOS**: ADVANCED. Re-verified m8 autonomous smoke, completed Step 25, updated release documentation. Yielding for user-attended feedback.
+- **Linux**: READY. Can pick up Step 28 tasks (`build/forge-containerfile-audit`, `build/sh-refactoring`).
+- **macOS**: ADVANCED. Completed Step 27. Yielding for next cycle or user feedback.
 - **Windows**: YIELD — fast-forward to latest linux-next.
 
 ## Stale Or Pending Pings
