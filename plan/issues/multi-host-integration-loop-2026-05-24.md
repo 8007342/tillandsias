@@ -3925,3 +3925,25 @@ The workflow's `gh release create "v${VERSION}"` step will create tag `v0.2.2606
 
 ### Cycle 2026-06-04T01:39Z — INTEGRATED osx-next parity tests (clean tree, on-demand)
 Merged `origin/osx-next` (2 ahead: `9acdf675`+`ae9c77fc`, macOS-cfg-gated tray tests, +56 lines) → linux-next via `--no-ff` (merge `c30f873e`); conflict-free, `./build.sh --check` PASS. No stale leases. Step 26 done; R≈1 (cc=0/green). CRITICAL ROOT BLOCKER unchanged: macOS must run the attended m8 smoke and flip step-25 `multi-host-ux-parity` parent → completed to reopen step-27 release tasks (linux-claimable). Linux YIELD/blocked; Windows yield+ff.
+
+### Cycle 2026-06-04T18:07Z — ESCALATION: VERSION conflict blocks linux-next → main PR
+
+**Step reached**: Step 3 (merge gate) — PR #15 opened, `mergeable_state: dirty`.
+
+**Root cause**: Commit `71bd4d2c` (by bulloncito@gmail.com, 2026-06-03) bumped VERSION directly on `linux-next` to `0.3.260603.1` as part of the v0.3.0 CalVer series transition. `main` HEAD (`5eaff8b0`) still has `0.2.260603.1`. This creates a 3-way merge conflict in `VERSION` (and Cargo.toml crate versions) that GitHub cannot auto-resolve.
+
+**Violation of skill guardrail**: The skill prohibits bumping VERSION on `linux-next` to avoid desyncing sibling branches. The bump was intentional (operator commit) and represents a major version series transition (0.2.x → 0.3.x).
+
+**State left on remote**:
+- PR #15 open (linux-next → main), `mergeable_state: dirty`, NOT merged.
+- No new tag created.
+- No workflow dispatch triggered.
+- `linux-next` HEAD: `27298be0` (VERSION=0.3.260603.1).
+- `main` HEAD: `5eaff8b0` (VERSION=0.2.260603.1).
+
+**Required operator action** (choose one):
+1. **Embrace 0.3.x series on main**: Manually resolve the VERSION conflict by merging linux-next into main locally (accepting linux-next's VERSION=0.3.x), then push main + tag + trigger `gh workflow run release.yml --ref <tag>`.
+2. **Rebase linux-next onto main**: `git rebase origin/main` on linux-next, resolving VERSION conflict by keeping 0.3.260604.1, then force-push linux-next and close/recreate PR #15. (WARNING: this rewrites linux-next history — coordinate with osx-next/windows-next hosts.)
+3. **Update skill version formula**: If 0.3.x is the new canonical series, update `skills/merge-to-main-and-release/SKILL.md` Step 1 to compute `0.3.YYMMDD.N` and re-run the skill.
+
+**Next cycle**: Will retry once one of the above is resolved. PR #15 remains open for reuse.
