@@ -399,4 +399,23 @@ mod tests {
             "normal builds should use the template image, not the text fallback"
         );
     }
+
+    /// @trace spec:macos-native-tray.ui.nsstatusitem-only@v1
+    ///
+    /// Drift-protection for gap-1 (`plan/issues/macos-tray-ux-gaps-2026-05-29.md`):
+    /// the menu-bar `NSImage` MUST be flagged as a template so AppKit tints it
+    /// for light/dark menu bars. The gap's named root cause is "the `NSImage`
+    /// is not being templated for menu-bar tinting" — this pins that the loaded
+    /// asset comes back as a template, so a regression that drops
+    /// `setTemplate(true)` (or swaps in a non-templatable asset) trips here
+    /// instead of only surfacing in a user-attended smoke.
+    #[test]
+    fn status_icon_image_loads_as_template() {
+        let image = load_status_icon_image()
+            .expect("icon.pdf should load from the source tree on a dev/build host");
+        assert!(
+            unsafe { image.isTemplate() },
+            "menu-bar icon must be a template image for menu-bar tinting (gap-1)"
+        );
+    }
 }
