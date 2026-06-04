@@ -2232,8 +2232,15 @@ plan_index:
                 - "./scripts/run-litmus-test.sh tillandsias-vault --size instant --compact — 3/3 PASS"
                 - "./scripts/run-litmus-test.sh --phase pre-build --size instant --compact — 103/103 PASS"
         - id: secrets/remote-projects-vault-migration
-          status: ready
+          status: claimed
           depends_on: [secrets/vault-secret-capture]
+          events:
+            - type: claim
+              ts: "2026-06-04T04:05:00Z"
+              agent_id: "linux-macuahuitl-codex-20260604T034952Z"
+              host: "linux"
+              lease_id: "lease-linux-secrets-remote-projects-vault-migration-20260604T0405Z"
+              expires_at: "2026-06-04T08:05:00Z"
 
     - id: multi-host-debt-payoff
       order: 31
