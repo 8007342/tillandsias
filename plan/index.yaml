@@ -2006,10 +2006,18 @@ plan_index:
         - "VERSION bumped to 0.3.0 and tagged."
       tasks:
         - id: release/audit
-          status: ready
+          status: completed
           depends_on: []
+          events:
+            - type: completed
+              ts: "2026-06-04T03:35:00Z"
+              agent_id: "macos-Tlatoanis-MacBook-Air-gemini-cli-20260604T0256Z"
+              summary: >
+                Performed final multi-host audit: osx-next and windows-next are
+                fully integrated as ancestors of linux-next. Verified zero-drift
+                on current HEAD across all platform branches.
         - id: release/docs
-          status: claimed
+          status: completed
           depends_on: []
           events:
             - type: claim
@@ -2018,6 +2026,13 @@ plan_index:
               host: "macos"
               lease_id: "lease-macos-release-docs-20260604T0325Z"
               expires_at: "2026-06-04T07:25:00Z"
+            - type: completed
+              ts: "2026-06-04T03:40:00Z"
+              agent_id: "macos-Tlatoanis-MacBook-Air-gemini-cli-20260604T0256Z"
+              summary: >
+                Updated README.md, VERIFICATION.md, and UPDATING.md for the
+                v0.3.0 Fedora Pivot model. Reintroduced and populated
+                RELEASE-NOTES.md with the v0.3.0 changelog.
         - id: release/bump-and-tag
           status: ready
           depends_on: [release/audit, release/docs]
