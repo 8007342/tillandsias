@@ -3922,3 +3922,6 @@ The workflow's `gh release create "v${VERSION}"` step will create the tag `v0.2.
 2. GitHub web UI: https://github.com/8007342/tillandsias/actions/workflows/release.yml → "Run workflow" → branch: main → Run.
 
 The workflow's `gh release create "v${VERSION}"` step will create tag `v0.2.260603.1` atomically. No separate `git tag` needed.
+
+### Cycle 2026-06-04T01:39Z — INTEGRATED osx-next parity tests (clean tree, on-demand)
+Merged `origin/osx-next` (2 ahead: `9acdf675`+`ae9c77fc`, macOS-cfg-gated tray tests, +56 lines) → linux-next via `--no-ff` (merge `c30f873e`); conflict-free, `./build.sh --check` PASS. No stale leases. Step 26 done; R≈1 (cc=0/green). CRITICAL ROOT BLOCKER unchanged: macOS must run the attended m8 smoke and flip step-25 `multi-host-ux-parity` parent → completed to reopen step-27 release tasks (linux-claimable). Linux YIELD/blocked; Windows yield+ff.
