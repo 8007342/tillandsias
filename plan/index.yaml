@@ -2110,8 +2110,15 @@ plan_index:
           status: ready
           depends_on: []
         - id: agent/opencode-web-backoff
-          status: ready
+          status: claimed
           depends_on: []
+          events:
+            - type: claim
+              ts: "2026-06-04T04:45:00Z"
+              agent_id: "macos-Tlatoanis-MacBook-Air-gemini-cli-20260604T0256Z"
+              host: "macos"
+              lease_id: "lease-macos-agent-opencode-web-backoff-20260604T0445Z"
+              expires_at: "2026-06-04T08:45:00Z"
 
     - id: github-vault-integration
       order: 30
