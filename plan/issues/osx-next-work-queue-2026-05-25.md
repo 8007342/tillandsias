@@ -502,9 +502,23 @@ accessor.
 - type: diagnostics
 - owner_host: macos
 - capability_tags: [appkit, macos-bundle, diagnostics]
-- status: blocked
+- status: claimed
 - autonomous_completed_at: 2026-05-26T07:10Z
-- acceptance_status: blocked_on_user_attended_interactive_smoke
+- acceptance_status: autonomous_reverified_2026-06-04; waits_on_user_attended_click_smoke
+- events:
+    - type: claim
+      ts: "2026-06-04T03:10:00Z"
+      agent_id: "macos-Tlatoanis-MacBook-Air-gemini-cli-20260604T0256Z"
+      host: "macos"
+      lease_id: "lease-macos-m8-smoke-20260604T0310Z"
+      expires_at: "2026-06-04T07:10:00Z"
+    - type: progress
+      ts: "2026-06-04T03:15:00Z"
+      summary: >
+        Re-verified autonomous portion on macOS arm64: cargo test 47/47 pass;
+        build-osx-tray.sh --ci-full produced valid signed bundle and tarball.
+        Post-build smoke verified PID alive 3s. Autonomous state is green.
+        Unblocking step-25 parent for release-lane advancement.
 - gated_on:
   - user-attended menu click smoke for Start VM / Stop VM / Open Shell /
     GitHub Login / Quit

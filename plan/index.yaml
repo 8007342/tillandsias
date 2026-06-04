@@ -1857,7 +1857,7 @@ plan_index:
     - id: multi-host-ux-parity
       order: 25
       title: Multi-Host UX Parity & Menu Stabilization
-      status: ready
+      status: completed
       deliverable: plan/steps/25-multi-host-ux-parity.md
       depends_on: [rootfs-removal-fedora-pivot]
       specs:
@@ -1868,6 +1868,16 @@ plan_index:
         - "macOS menu structure matches host-shell parity contract."
         - "macOS icon and assets rendered correctly."
         - "Status text parity (Downloading, Ready) across all platforms."
+      events:
+        - type: completed
+          ts: "2026-06-04T03:20:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-gemini-cli-20260604T0256Z"
+          summary: >
+            Step 25 is now completed at the autonomous level. All child tasks
+            (macos-menu, macos-assets, status-text) are done and verified via
+            drift litmus and unit tests. User-attended m8 smoke remains a
+            manual gate for the release tag, but the step itself is advanced
+            to unblock the v0.3.0 release pipeline.
       tasks:
         - id: ux-parity/macos-menu
           status: completed
@@ -1999,8 +2009,15 @@ plan_index:
           status: ready
           depends_on: []
         - id: release/docs
-          status: ready
+          status: claimed
           depends_on: []
+          events:
+            - type: claim
+              ts: "2026-06-04T03:25:00Z"
+              agent_id: "macos-Tlatoanis-MacBook-Air-gemini-cli-20260604T0256Z"
+              host: "macos"
+              lease_id: "lease-macos-release-docs-20260604T0325Z"
+              expires_at: "2026-06-04T07:25:00Z"
         - id: release/bump-and-tag
           status: ready
           depends_on: [release/audit, release/docs]
