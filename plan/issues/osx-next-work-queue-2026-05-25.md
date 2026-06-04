@@ -821,11 +821,18 @@ accessor.
 
 ### Item: m1b/transport-macos-vsock-connector (new, enqueued; mirrored above as ready)
 
+> SUPERSEDED 2026-06-04T01:58Z by the `status: done` entry above
+> (completed_at 2026-05-25T20:00Z). `crates/tillandsias-vm-layer/src/transport_macos.rs`
+> exists on osx-next and `wait_ready` already probes the control-wire vsock
+> port (sub-tasks A/B/C complete). This duplicate enqueue was never flipped
+> when the work landed; left in place (tombstone, not deleted) so the history
+> of the enqueue rationale survives. DO NOT re-claim — it is done.
+
 - id: `m1b/transport-macos-vsock-connector`
 - type: feature
 - owner_host: macos
 - capability_tags: [rust, vfr, objc2-virtualization, vsock, tokio, async-fd]
-- status: pending
+- status: superseded
 - depends_on: []
 - blocks: [m4, m5]  (and a future "wait_ready actually verifies vsock handshake")
 - owned_files:
