@@ -1876,7 +1876,7 @@ plan_index:
           status: ready
           depends_on: []
         - id: ux-parity/status-text
-          status: claimed
+          status: completed
           depends_on: []
           events:
             - type: claim
@@ -1885,6 +1885,11 @@ plan_index:
               host: "linux"
               lease_id: "lease-linux-ux-parity-status-text-20260604T0039Z"
               expires_at: "2026-06-04T04:39:00Z"
+            - type: completed
+              ts: "2026-06-04T00:40:00Z"
+              agent_id: "linux-tlatoani-gemini-cli-20260604T0039Z"
+              summary: "Verified status text formatting parity across all platforms. Both macOS and Windows trays utilize identical vm_phase_status_text, compose_chip_text, and describe_wire_error helpers, backed by symmetric unit and litmus tests."
+              commit: "ef249b7c"
 
 
     - id: forge-toolchain-expansion
