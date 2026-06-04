@@ -2286,5 +2286,12 @@ plan_index:
                 architecture. Verified zero-drift in high-level process docs.
               commits: ["a3d0f831"]
         - id: docs/cheatsheet-sync
-          status: ready
+          status: claimed
           depends_on: []
+          events:
+            - type: claim
+              ts: "2026-06-04T04:16:00Z"
+              agent_id: "linux-macuahuitl-codex-20260604T034952Z"
+              host: "linux"
+              lease_id: "lease-linux-docs-cheatsheet-sync-20260604T0416Z"
+              expires_at: "2026-06-04T08:16:00Z"
