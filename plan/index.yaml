@@ -2180,7 +2180,7 @@ plan_index:
         - "Tray correctly handles unauthenticated states."
       tasks:
         - id: secrets/github-login-repair
-          status: claimed
+          status: completed
           depends_on: []
           events:
             - type: claim
@@ -2189,6 +2189,22 @@ plan_index:
               host: "linux"
               lease_id: "lease-linux-secrets-github-login-repair-20260604T0349Z"
               expires_at: "2026-06-04T07:49:52Z"
+            - type: completed
+              ts: "2026-06-04T03:56:00Z"
+              agent_id: "linux-macuahuitl-codex-20260604T034952Z"
+              host: "linux"
+              lease_id: "lease-linux-secrets-github-login-repair-20260604T0349Z"
+              summary: >
+                Verified the containerized gh session before token extraction,
+                added advisory username confirmation, and aligned the active
+                gh-auth contract and regression checks with Vault-only
+                persistence.
+              commits: ["45e5e955"]
+              evidence_refs:
+                - "cargo test -p tillandsias-headless — PASS"
+                - "./build.sh --check — PASS"
+                - "./scripts/run-litmus-test.sh gh-auth-script --size all --compact — 2/2 PASS"
+                - "./scripts/run-litmus-test.sh --phase pre-build --size instant --compact — 102/102 PASS"
         - id: secrets/vault-secret-capture
           status: ready
           depends_on: []
