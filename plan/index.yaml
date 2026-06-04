@@ -2286,7 +2286,7 @@ plan_index:
                 architecture. Verified zero-drift in high-level process docs.
               commits: ["a3d0f831"]
         - id: docs/cheatsheet-sync
-          status: claimed
+          status: completed
           depends_on: []
           events:
             - type: claim
@@ -2295,3 +2295,18 @@ plan_index:
               host: "linux"
               lease_id: "lease-linux-docs-cheatsheet-sync-20260604T0416Z"
               expires_at: "2026-06-04T08:16:00Z"
+            - type: claim
+              ts: "2026-06-04T06:30:00Z"
+              agent_id: "macos-Tlatoanis-MacBook-Air-gemini-cli-20260604T0256Z"
+              host: "macos"
+              lease_id: "lease-macos-docs-cheatsheet-sync-20260604T0630Z"
+              expires_at: "2026-06-04T10:30:00Z"
+            - type: completed
+              ts: "2026-06-04T06:45:00Z"
+              agent_id: "macos-Tlatoanis-MacBook-Air-gemini-cli-20260604T0256Z"
+              summary: >
+                Verified cheatsheet synchronization lifecycle: repo sync
+                (cheatsheets/ -> images/default/cheatsheets/), image-build
+                bake (scripts/build-image.sh), and runtime tmpfs hot-path
+                population (images/default/lib-common.sh). Confirmed agents
+                correctly surface RAM-served cheatsheets from /opt/cheatsheets.
