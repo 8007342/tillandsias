@@ -176,6 +176,7 @@ specs:
   - litmus:forge-standalone-traceability
   - litmus:forge-diagnostics-e2e
   - litmus:default-image-containerfile-shape
+  - litmus:claude-launch-stability-shape
   coverage_ratio: 75
   last_verified: '2026-05-30'
 - spec_id: dev-build

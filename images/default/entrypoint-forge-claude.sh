@@ -55,23 +55,15 @@ trace_lifecycle "entrypoint" "claude-code starting"
 # daemon (Linux/podman). See lib-common.sh::clone_project_from_mirror.
 clone_project_from_mirror
 
-# ── Capture and scrub API key ────────────────────────────────
-# Only the agent process that needs it will receive it via exec env.
-_CLAUDE_KEY="${ANTHROPIC_API_KEY:-}"
-unset ANTHROPIC_API_KEY
-
 # ── Claude Code + OpenSpec (hard-installed) ────────────────
 # @trace spec:default-image, spec:forge-shell-tools
 require_claude
 require_openspec
 
-# ── Credential check ────────────────────────────────────────
-if [ -d "$HOME/.claude" ]; then
-    local_files="$(ls -1 "$HOME/.claude/" 2>/dev/null | wc -l | tr -d ' ')"
-    trace_lifecycle "credentials" "claude: ~/.claude/ mounted ($local_files files)"
-else
-    trace_lifecycle "credentials" "claude: ~/.claude/ NOT FOUND (first auth will prompt)"
-fi
+# @trace spec:forge-offline, spec:podman-secrets-integration
+# Claude starts credential-free. Authentication may happen interactively for
+# this ephemeral session, but host credentials and API keys never enter forge.
+trace_lifecycle "credentials" "claude: credential-free session"
 
 # ── SSH key auto-discovery ──────────────────────────────────
 # @trace gap:ON-007

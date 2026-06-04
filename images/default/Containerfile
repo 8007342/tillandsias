@@ -16,7 +16,7 @@ FROM registry.fedoraproject.org/fedora-minimal:44
 # DISTRO: microdnf (Fedora Minimal), NOT apk (Alpine) or dnf (standard Fedora)
 RUN microdnf install -y \
         bash coreutils findutils grep sed gawk tar gzip xz \
-        procps-ng shadow-utils ca-certificates \
+        procps-ng shadow-utils ca-certificates ncurses ncurses-term \
         fish zsh \
         git gh curl wget jq ripgrep fd-find bat git-delta git-lfs httpie yq \
         nodejs npm \
