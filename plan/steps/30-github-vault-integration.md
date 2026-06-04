@@ -1,6 +1,6 @@
 # Step 30 — GitHub & Vault Integration Integrity
 
-Status: ready
+Status: completed
 Owner: linux-host
 Depends on: [agent-launch-stability]
 
@@ -16,17 +16,19 @@ Fix the broken `tillandsias --github-login` flow and ensure the tray correctly h
 - [x] **GitHub Login Repair**:
     - [x] Verify the containerized `gh` session before token extraction and Vault persistence.
     - [x] Keep login Vault-only; creating the legacy Podman secret is forbidden by `spec:tillandsias-vault`.
-- [ ] **Tray UX Guard**:
-    - [ ] Implement `is_gh_authenticated()` check in `remote_projects.rs`.
-    - [ ] Show a "🔵 GitHub Login..." menu item in the tray when unauthenticated, instead of the project list.
-- [ ] **Remote Push Debugging**:
-    - [ ] Audit `rewrite_origin_for_enclave_push` and ensure the `git-service` can handle the forwarded traffic.
+- [x] **Tray UX Guard**:
+    - [x] Preserve the existing cached credential-health gate and one-shot GitHub login guidance.
+    - [x] Recognize Vault failures as the unauthenticated state instead of matching the retired legacy secret name.
+- [x] **Remote Push Debugging**:
+    - [x] Audit `rewrite_origin_for_enclave_push`; it routes supported GitHub HTTPS/SSH origins through `git://git-service/<project>`.
+    - [x] Confirm git-service uses scoped `git-mirror` AppRole access for upstream forwarding.
 - [x] **Vault Secret Capture**: Ensure the GitHub token is written to Vault and verified by read-back. Host-native keychain persistence is superseded by the Vault-exclusive contract.
-- [ ] **Remote Projects Vault Migration**: Replace the remaining legacy `tillandsias-github-token` mounts in `remote_projects.rs` with short-lived `git-mirror` AppRole Vault access.
+- [x] **Remote Projects Vault Migration**: Replace the remaining legacy `tillandsias-github-token` mounts in `remote_projects.rs` with short-lived `git-mirror` AppRole Vault access.
 
 ## Completion Evidence
 - `45e5e955` — verify GitHub login before Vault write.
 - `1bdd048e` — pin Vault-only GitHub token capture and read-back verification.
+- `88bbb84f` — migrate remote-project discovery and clone to scoped Vault leases.
 - Pre-build instant litmus: 103/103 PASS across 87/87 active specs.
 
 ## Exit Criteria

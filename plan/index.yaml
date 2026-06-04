@@ -2172,7 +2172,7 @@ plan_index:
     - id: github-vault-integration
       order: 30
       title: GitHub & Vault Integration Integrity
-      status: ready
+      status: completed
       deliverable: plan/steps/30-github-vault-integration.md
       depends_on: [agent-launch-stability]
       exit_criteria:
@@ -2232,7 +2232,7 @@ plan_index:
                 - "./scripts/run-litmus-test.sh tillandsias-vault --size instant --compact — 3/3 PASS"
                 - "./scripts/run-litmus-test.sh --phase pre-build --size instant --compact — 103/103 PASS"
         - id: secrets/remote-projects-vault-migration
-          status: claimed
+          status: completed
           depends_on: [secrets/vault-secret-capture]
           events:
             - type: claim
@@ -2241,6 +2241,21 @@ plan_index:
               host: "linux"
               lease_id: "lease-linux-secrets-remote-projects-vault-migration-20260604T0405Z"
               expires_at: "2026-06-04T08:05:00Z"
+            - type: completed
+              ts: "2026-06-04T04:12:00Z"
+              agent_id: "linux-macuahuitl-codex-20260604T034952Z"
+              host: "linux"
+              lease_id: "lease-linux-secrets-remote-projects-vault-migration-20260604T0405Z"
+              summary: >
+                Replaced remote-project discovery and clone legacy GitHub-token
+                mounts with scoped git-mirror AppRole leases and Vault reads,
+                and made the tray's unauthenticated guidance recognize Vault
+                failures.
+              commits: ["88bbb84f"]
+              evidence_refs:
+                - "cargo test -p tillandsias-headless --features tray remote_projects:: — 10/10 PASS"
+                - "./build.sh --check — PASS"
+                - "./scripts/run-litmus-test.sh tillandsias-vault --size instant --compact — 3/3 PASS"
 
     - id: multi-host-debt-payoff
       order: 31
