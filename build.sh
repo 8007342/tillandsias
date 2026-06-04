@@ -453,6 +453,36 @@ _run() {
     (cd "$SCRIPT_DIR" && "$@")
 }
 
+_run_litmus_phase() {
+    local phase="$1"
+    local size="$2"
+    local log_file="$3"
+    shift 3
+    local -a phase_args=()
+    local arg
+    for arg in "${CI_ARG_LIST[@]}"; do
+        # run-litmus-test runs the full selected phase by default; strict-all is
+        # a local-ci frontier-expansion flag and is not part of its CLI.
+        [[ "$arg" == "--strict-all" ]] || phase_args+=("$arg")
+    done
+
+    bash "$SCRIPT_DIR/scripts/run-litmus-test.sh" \
+        --phase "$phase" \
+        --size "$size" \
+        --compact \
+        "${phase_args[@]}" \
+        "$@" 2>&1 | tee "$log_file"
+}
+
+_run_local_ci_gate() {
+    local -a command=(bash "$SCRIPT_DIR/scripts/local-ci.sh" "$@")
+    if [[ "$FLAG_GRAPHS" == true ]]; then
+        "${command[@]}" >/tmp/tillandsias-ci-graphs.log 2>&1
+    else
+        "${command[@]}"
+    fi
+}
+
 # CI validation
 if [[ "$FLAG_CI" == true ]] || [[ "$FLAG_CI_FULL" == true ]]; then
     CI_ARG_LIST=()
@@ -476,17 +506,12 @@ if [[ "$FLAG_CI" == true ]] || [[ "$FLAG_CI_FULL" == true ]]; then
         CI_ARGS=(--phase pre-build --fast)
     fi
 
-    if [[ "$FLAG_GRAPHS" == true ]]; then
-        if bash "$SCRIPT_DIR/scripts/local-ci.sh" "${CI_ARGS[@]}" "${CI_ARG_LIST[@]}" >/tmp/tillandsias-ci-graphs.log 2>&1; then
-            :
-        else
-            cat /tmp/tillandsias-ci-graphs.log >&2 || true
-            _error "CI/CD validation failed — fix issues and retry"
-            exit 1
-        fi
-    elif bash "$SCRIPT_DIR/scripts/local-ci.sh" "${CI_ARGS[@]}" "${CI_ARG_LIST[@]}"; then
+    if _run_local_ci_gate "${CI_ARGS[@]}" "${CI_ARG_LIST[@]}"; then
         :
     else
+        if [[ "$FLAG_GRAPHS" == true ]]; then
+            cat /tmp/tillandsias-ci-graphs.log >&2 || true
+        fi
         _error "CI/CD validation failed — fix issues and retry"
         exit 1
     fi
@@ -560,7 +585,8 @@ if [[ "$FLAG_INSTALL" == true ]]; then
 
     if [[ "$FLAG_CI_FULL" == true ]]; then
         _step "Running post-build status smoke..."
-        if TILLANDSIAS_STATUS_CHECK_BIN="$INSTALL_BIN" bash "$SCRIPT_DIR/scripts/local-ci.sh" --phase post-build "${CI_ARG_LIST[@]}"; then
+        if TILLANDSIAS_STATUS_CHECK_BIN="$INSTALL_BIN" \
+            _run_litmus_phase post-build e2e /tmp/litmus-post-build.log; then
             _info "Post-build status smoke passed"
         else
             _error "Post-build status smoke failed"
@@ -569,19 +595,26 @@ if [[ "$FLAG_INSTALL" == true ]]; then
 
         _step "Running runtime residual litmus..."
         RUNTIME_STATUS_FILE="$SCRIPT_DIR/target/convergence/runtime-phase.status"
-        if bash "$SCRIPT_DIR/scripts/local-ci.sh" --phase runtime "${CI_ARG_LIST[@]}"; then
-            if [[ -f "$RUNTIME_STATUS_FILE" ]] && grep -q '^SKIP$' "$RUNTIME_STATUS_FILE"; then
-                _warn "Runtime residual litmus skipped (host Podman runtime unhealthy)"
-            else
+        mkdir -p "$(dirname "$RUNTIME_STATUS_FILE")"
+        rm -f /tmp/litmus-runtime.log
+        if podman_runtime_health_probe; then
+            if _run_litmus_phase runtime e2e /tmp/litmus-runtime.log; then
+                printf 'PASS\n' >"$RUNTIME_STATUS_FILE"
                 _info "Runtime residual litmus passed"
+            else
+                printf 'FAIL\n' >"$RUNTIME_STATUS_FILE"
+                _error "Runtime residual litmus failed"
+                exit 1
             fi
         else
-            _error "Runtime residual litmus failed"
-            exit 1
+            printf 'SKIP\n' >"$RUNTIME_STATUS_FILE"
+            if [[ -f "$RUNTIME_STATUS_FILE" ]] && grep -q '^SKIP$' "$RUNTIME_STATUS_FILE"; then
+                _warn "Runtime residual litmus skipped (host Podman runtime unhealthy)"
+            fi
         fi
 
         _step "Generating evidence bundle..."
-        if bash "$SCRIPT_DIR/scripts/generate-evidence-bundle.sh"; then
+        if bash "$SCRIPT_DIR/scripts/generate-evidence-bundle.sh" --reuse-ci-results; then
             _info "Evidence bundle generated for convergence validation"
         else
             _warn "Evidence bundle generation failed (non-fatal)"
@@ -649,8 +682,8 @@ if [[ "$FLAG_RELEASE" == true ]]; then
         _info "Binary: tillandsias ($(du -h "$RELEASE_BIN" | cut -f1))"
     fi
 
-# Default: debug build (only if no other build flag was set)
-elif [[ "$FLAG_TEST$FLAG_CHECK" == "falsefalse" ]]; then
+# Default: debug build (only if no other build or CI action was requested)
+elif [[ "$FLAG_TEST$FLAG_CHECK$FLAG_INSTALL$FLAG_CI$FLAG_CI_FULL" == "falsefalsefalsefalsefalse" ]]; then
     _step "Building workspace (debug)..."
     _run cargo build --workspace --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1
     _info "Debug build complete"

@@ -8,6 +8,8 @@
 # Usage:
 #   ./scripts/generate-evidence-bundle.sh                # Generate bundle in target/
 #   ./scripts/generate-evidence-bundle.sh /path/to/output  # Specify output directory
+#   ./scripts/generate-evidence-bundle.sh --reuse-ci-results
+#                                      # Reuse completed /tmp CI phase logs
 #
 # Output:
 #   - evidence-bundle-<timestamp>.tar.gz in target/convergence/
@@ -27,7 +29,15 @@ set -euo pipefail
 
 SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-OUTPUT_DIR="${1:-$PROJECT_ROOT/target/convergence}"
+OUTPUT_DIR="$PROJECT_ROOT/target/convergence"
+REUSE_CI_RESULTS=false
+for arg in "$@"; do
+    case "$arg" in
+        --reuse-ci-results) REUSE_CI_RESULTS=true ;;
+        -*) echo "Unknown flag: $arg" >&2; exit 3 ;;
+        *) OUTPUT_DIR="$arg" ;;
+    esac
+done
 TIMESTAMP=$(date -u +%Y%m%d-%H%M%S)
 BUNDLE_NAME="evidence-bundle-${TIMESTAMP}.tar.gz"
 BUNDLE_STAGING="${PROJECT_ROOT}/target/evidence-staging-$$"
@@ -57,14 +67,25 @@ _info "Generating evidence bundle ($TIMESTAMP)..."
 # ============================================================================
 # 1. Collect cargo test results
 # ============================================================================
-_info "Running cargo tests..."
 TEST_RESULTS_FILE="$BUNDLE_STAGING/test-results.json"
 
-set +e
-cargo test --workspace --manifest-path "$PROJECT_ROOT/Cargo.toml" \
-    --no-fail-fast 2>&1 | tee "$BUNDLE_STAGING/cargo-test-raw.log"
-_cargo_test_status=${PIPESTATUS[0]}
-set -e
+if [[ "$REUSE_CI_RESULTS" == true ]]; then
+    _info "Reusing cargo test results from pre-build CI..."
+    if [[ ! -f /tmp/test-check.log ]]; then
+        _error "Cannot reuse cargo test results: /tmp/test-check.log is missing"
+        exit 1
+    fi
+    cp /tmp/test-check.log "$BUNDLE_STAGING/cargo-test-raw.log"
+    _cargo_test_status=0
+else
+    _info "Running cargo tests..."
+    set +e
+    cargo test --workspace --manifest-path "$PROJECT_ROOT/Cargo.toml" \
+        --no-fail-fast 2>&1 | tee "$BUNDLE_STAGING/cargo-test-raw.log"
+    _cargo_test_status=${PIPESTATUS[0]}
+    set -e
+fi
+
 if [[ "$_cargo_test_status" -eq 0 ]] \
     && grep -q "test result:" "$BUNDLE_STAGING/cargo-test-raw.log"; then
 
@@ -120,10 +141,22 @@ _info "Trace validation complete: $TRACE_ERRORS errors, $TRACE_WARNINGS warnings
 # ============================================================================
 # 3. Collect litmus test results
 # ============================================================================
-_info "Running litmus tests..."
 LITMUS_RESULTS_FILE="$BUNDLE_STAGING/litmus-results.json"
 
-LITMUS_OUTPUT=$("$SCRIPT_DIR/run-litmus-test.sh" 2>&1 || true)
+if [[ "$REUSE_CI_RESULTS" == true ]]; then
+    _info "Reusing completed CI litmus phase logs..."
+    if [[ ! -f /tmp/litmus-pre-build.log || ! -f /tmp/litmus-post-build.log ]]; then
+        _error "Cannot reuse litmus results: pre-build or post-build phase log is missing"
+        exit 1
+    fi
+    LITMUS_OUTPUT="$(
+        cat /tmp/litmus-pre-build.log /tmp/litmus-post-build.log
+        [[ ! -f /tmp/litmus-runtime.log ]] || cat /tmp/litmus-runtime.log
+    )"
+else
+    _info "Running litmus tests..."
+    LITMUS_OUTPUT=$("$SCRIPT_DIR/run-litmus-test.sh" 2>&1 || true)
+fi
 LITMUS_PASSED=$(echo "$LITMUS_OUTPUT" | grep -c "PASS" || echo "0")
 LITMUS_FAILED=$(echo "$LITMUS_OUTPUT" | grep -c "FAIL" || echo "0")
 

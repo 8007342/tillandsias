@@ -185,8 +185,9 @@ specs:
   - litmus:binary-e2e-smoke
   - litmus:headless-init-status-check-source-built
   - litmus:podman-idiomatic-launch-routing
+  - litmus:build-ci-dispatch-shape
   coverage_ratio: 100
-  last_verified: '2026-05-16'
+  last_verified: '2026-06-04'
 - spec_id: direct-podman-calls
   status: obsolete
   litmus_tests: []
