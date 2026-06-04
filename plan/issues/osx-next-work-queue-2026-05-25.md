@@ -3354,3 +3354,4 @@ step 5 lands.
   the user-attended m8/w12 smoke (step-level gate, user-blocked).
 - Note: `cargo fmt --all` reflows sibling-owned crates; used targeted staging so
   only macos-tray test files were committed.
+- 2026-06-04T05:00Z  64ab348c  agent/opencode-web-backoff DONE — implemented exponential backoff (100ms..2s) and 30s timeout for web probes.
