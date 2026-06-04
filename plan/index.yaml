@@ -1815,8 +1815,15 @@ plan_index:
         - "Bounded ring buffer with backpressure logging is active."
       tasks:
         - id: diagnostics/event-wiring
-          status: ready
+          status: claimed
           depends_on: []
+          events:
+            - type: claim
+              ts: "2026-06-04T00:34:00Z"
+              agent_id: "linux-tlatoani-gemini-cli-20260604T0034Z"
+              host: "linux"
+              lease_id: "lease-linux-diagnostics-event-wiring-20260604T0034Z"
+              expires_at: "2026-06-04T04:34:00Z"
         - id: diagnostics/event-diversity
           status: ready
           depends_on: [diagnostics/event-wiring]

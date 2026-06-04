@@ -1,6 +1,6 @@
 # Step 24 — Diagnostics Stream & Event-Driven Observability
 
-Status: ready
+Status: in_progress
 Owner: linux-host
 Depends on: [forge-diagnostics-improvement-loop]
 
