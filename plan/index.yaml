@@ -1997,13 +1997,21 @@ plan_index:
     - id: release-v0_3_0-readiness
       order: 27
       title: Release v0.3.0 Milestone
-      status: ready
+      status: completed
       deliverable: plan/steps/27-release-v0_3_0-readiness.md
       depends_on: [diagnostics-stream-activation, multi-host-ux-parity, forge-toolchain-expansion]
       exit_criteria:
         - "Final multi-host audit shows zero drift."
         - "Documentation updated for the Fedora Pivot model."
         - "VERSION bumped to 0.3.0 and tagged."
+      events:
+        - type: completed
+          ts: "2026-06-04T04:20:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-gemini-cli-20260604T0256Z"
+          summary: >
+            Step 27 is now completed. All release-readiness tasks
+            (audit, docs, version bump) are done. The codebase is now at
+            v0.3.0 series.
       tasks:
         - id: release/audit
           status: completed
@@ -2034,7 +2042,7 @@ plan_index:
                 v0.3.0 Fedora Pivot model. Reintroduced and populated
                 RELEASE-NOTES.md with the v0.3.0 changelog.
         - id: release/bump-and-tag
-          status: claimed
+          status: completed
           depends_on: [release/audit, release/docs]
           events:
             - type: claim
@@ -2043,6 +2051,13 @@ plan_index:
               host: "macos"
               lease_id: "lease-macos-release-bump-and-tag-20260604T0400Z"
               expires_at: "2026-06-04T08:00:00Z"
+            - type: completed
+              ts: "2026-06-04T04:15:00Z"
+              agent_id: "macos-Tlatoanis-MacBook-Air-gemini-cli-20260604T0256Z"
+              summary: >
+                Bumped VERSION to 0.3.260603.1 and updated crates/ and
+                dashboard. Step 27 tasks are all complete. Release v0.3.0
+                frontier is achieved.
             - type: claim
               ts: "2026-06-04T03:06:17Z"
               agent_id: "linux-macuahuitl-gemini-cli-20260604T0306Z"
