@@ -2253,8 +2253,15 @@ plan_index:
         - "Cross-platform installers convergent."
       tasks:
         - id: docs/methodology-audit
-          status: ready
+          status: claimed
           depends_on: []
+          events:
+            - type: claim
+              ts: "2026-06-04T05:45:00Z"
+              agent_id: "macos-Tlatoanis-MacBook-Air-gemini-cli-20260604T0256Z"
+              host: "macos"
+              lease_id: "lease-macos-docs-methodology-audit-20260604T0545Z"
+              expires_at: "2026-06-04T09:45:00Z"
         - id: docs/cheatsheet-sync
           status: ready
           depends_on: []
