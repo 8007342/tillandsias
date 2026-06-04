@@ -2043,6 +2043,12 @@ plan_index:
               host: "macos"
               lease_id: "lease-macos-release-bump-and-tag-20260604T0400Z"
               expires_at: "2026-06-04T08:00:00Z"
+            - type: claim
+              ts: "2026-06-04T03:06:17Z"
+              agent_id: "linux-macuahuitl-gemini-cli-20260604T0306Z"
+              host: "linux"
+              lease_id: "lease-linux-release-bump-and-tag-20260604T0306Z"
+              expires_at: "2026-06-04T07:06:17Z"
 
     - id: build-pipeline-optimization
       order: 28
