@@ -2110,7 +2110,7 @@ plan_index:
           status: ready
           depends_on: []
         - id: agent/opencode-web-backoff
-          status: claimed
+          status: completed
           depends_on: []
           events:
             - type: claim
@@ -2119,6 +2119,16 @@ plan_index:
               host: "macos"
               lease_id: "lease-macos-agent-opencode-web-backoff-20260604T0445Z"
               expires_at: "2026-06-04T08:45:00Z"
+            - type: completed
+              ts: "2026-06-04T05:00:00Z"
+              agent_id: "macos-Tlatoanis-MacBook-Air-gemini-cli-20260604T0256Z"
+              summary: >
+                Implemented exponential backoff (100ms..2s) and 30s timeout
+                in wait_for_opencode_web_route and wait_for_authenticated_
+                opencode_web. Added explicit 502 retry log. Fixed pre-existing
+                libc dependency drift in tillandsias-podman to unblock macOS
+                check.
+              commits: ["64ab348c"]
 
     - id: github-vault-integration
       order: 30
