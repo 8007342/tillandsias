@@ -2180,8 +2180,15 @@ plan_index:
         - "Tray correctly handles unauthenticated states."
       tasks:
         - id: secrets/github-login-repair
-          status: ready
+          status: claimed
           depends_on: []
+          events:
+            - type: claim
+              ts: "2026-06-04T03:49:52Z"
+              agent_id: "linux-macuahuitl-codex-20260604T034952Z"
+              host: "linux"
+              lease_id: "lease-linux-secrets-github-login-repair-20260604T0349Z"
+              expires_at: "2026-06-04T07:49:52Z"
         - id: secrets/vault-secret-capture
           status: ready
           depends_on: []
