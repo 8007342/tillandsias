@@ -2266,6 +2266,15 @@ plan_index:
       exit_criteria:
         - "Methodology and cheatsheets 100% aligned."
         - "Cross-platform installers convergent."
+      events:
+        - type: completed
+          ts: "2026-06-04T07:00:00Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-gemini-cli-20260604T0256Z"
+          summary: >
+            Step 31 is now COMPLETED. Methodology and cheatsheets are
+            fully aligned with the v0.3.0 architecture. technical debt
+            from the Fedora Pivot has been addressed. The v0.3.0 wave
+            is 100% closed.
       tasks:
         - id: docs/methodology-audit
           status: completed
