@@ -3313,3 +3313,20 @@ step 5 lands.
   now has 7 litmuses; coverage_ratio stays 100% on both.
 - YAML parses cleanly. No code changes.
 - Streak: 0 (productive iter). Next macOS iter eligible at ~18:35Z.
+
+### Cycle 2026-06-04T01:55Z — step 25 UX-parity drift litmus (macOS), claude-code
+
+- 2026-06-04T01:55Z  ae9c77fc  ux-parity/macos-menu DONE — added
+  `render_ready_top_level_matches_macos_parity_contract` (menu_disabled_v2)
+  pinning the 9-item macOS Ready top-level ID sequence + v2-disabled GUI rows.
+  gap-2 verified resolved on osx-next HEAD at code level.
+- 2026-06-04T01:55Z  9acdf675  ux-parity/macos-assets DONE — added
+  `status_icon_image_loads_as_template` (status_item) asserting the menu-bar
+  NSImage is a template (gap-1 root cause). gap-1 verified resolved (icon.pdf
+  present, template load path green).
+- `cargo test -p tillandsias-macos-tray`: 47 passed / 1 ignored on macOS arm64.
+  host-shell: 40 passed. Code commits on osx-next; plan completion on linux-next.
+- Step 25 remaining: Windows EnumerateLocalProjects (optional, windows-owned) +
+  the user-attended m8/w12 smoke (step-level gate, user-blocked).
+- Note: `cargo fmt --all` reflows sibling-owned crates; used targeted staging so
+  only macos-tray test files were committed.

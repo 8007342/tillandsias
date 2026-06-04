@@ -1870,7 +1870,7 @@ plan_index:
         - "Status text parity (Downloading, Ready) across all platforms."
       tasks:
         - id: ux-parity/macos-menu
-          status: claimed
+          status: completed
           depends_on: []
           events:
             - type: claim
@@ -1879,8 +1879,24 @@ plan_index:
               host: "macos"
               lease_id: "lease-macos-ux-parity-macos-menu-20260604T0140Z"
               expires_at: "2026-06-04T05:40:00Z"
+            - type: completed
+              ts: "2026-06-04T01:55:00Z"
+              agent_id: "macos-Tlatoanis-MacBook-Air-claude-code-20260604T0140Z"
+              host: "macos"
+              lease_id: "lease-macos-ux-parity-macos-menu-20260604T0140Z"
+              summary: >
+                Verified macOS Ready-menu parity against the host-shell contract
+                on osx-next HEAD (gap-2 of macos-tray-ux-gaps-2026-05-29.md is
+                resolved at code level) and added a macOS-adapter drift litmus
+                (render_ready_top_level_matches_macos_parity_contract) pinning the
+                exact 9-item top-level ID sequence with target=MacosTray plus the
+                v2-disabled Observatorium/OpenCode Web rows. cargo test -p
+                tillandsias-macos-tray: 47 passed. Code on osx-next; user-attended
+                m8 smoke remains the step-level gate.
+              commits:
+                - "ae9c77fc test(macos-tray): pin macOS Ready menu 9-item parity contract (gap-2 drift) [osx-next]"
         - id: ux-parity/macos-assets
-          status: claimed
+          status: completed
           depends_on: []
           events:
             - type: claim
@@ -1889,6 +1905,20 @@ plan_index:
               host: "macos"
               lease_id: "lease-macos-ux-parity-macos-assets-20260604T0140Z"
               expires_at: "2026-06-04T05:40:00Z"
+            - type: completed
+              ts: "2026-06-04T01:55:00Z"
+              agent_id: "macos-Tlatoanis-MacBook-Air-claude-code-20260604T0140Z"
+              host: "macos"
+              lease_id: "lease-macos-ux-parity-macos-assets-20260604T0140Z"
+              summary: >
+                Verified gap-1 (status-icon "T") is resolved on osx-next HEAD:
+                icon.pdf present, template image loaded via load_status_icon_image,
+                text fallback only on missing asset. Added a drift litmus
+                (status_icon_image_loads_as_template) pinning the named root cause —
+                the NSImage is flagged as a template for menu-bar tinting. cargo
+                test -p tillandsias-macos-tray: 47 passed. Code on osx-next.
+              commits:
+                - "9acdf675 test(macos-tray): pin status-icon template-image contract (gap-1 drift) [osx-next]"
         - id: ux-parity/status-text
           status: completed
           depends_on: []
