@@ -1870,11 +1870,25 @@ plan_index:
         - "Status text parity (Downloading, Ready) across all platforms."
       tasks:
         - id: ux-parity/macos-menu
-          status: ready
+          status: claimed
           depends_on: []
+          events:
+            - type: claim
+              ts: "2026-06-04T01:40:00Z"
+              agent_id: "macos-Tlatoanis-MacBook-Air-claude-code-20260604T0140Z"
+              host: "macos"
+              lease_id: "lease-macos-ux-parity-macos-menu-20260604T0140Z"
+              expires_at: "2026-06-04T05:40:00Z"
         - id: ux-parity/macos-assets
-          status: ready
+          status: claimed
           depends_on: []
+          events:
+            - type: claim
+              ts: "2026-06-04T01:40:00Z"
+              agent_id: "macos-Tlatoanis-MacBook-Air-claude-code-20260604T0140Z"
+              host: "macos"
+              lease_id: "lease-macos-ux-parity-macos-assets-20260604T0140Z"
+              expires_at: "2026-06-04T05:40:00Z"
         - id: ux-parity/status-text
           status: completed
           depends_on: []
