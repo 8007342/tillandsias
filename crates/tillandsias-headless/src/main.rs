@@ -3326,6 +3326,20 @@ fn run_github_login(debug: bool) -> Result<(), String> {
     ]);
     run_command(login, debug)?;
 
+    let mut auth_status = podman_command();
+    auth_status.args([
+        "exec",
+        &container,
+        "gh",
+        "auth",
+        "status",
+        "--hostname",
+        "github.com",
+    ]);
+    run_command_silent(auth_status, debug).map_err(|e| {
+        format!("containerized gh authentication verification failed after login: {e}")
+    })?;
+
     let mut token_cmd = podman_command();
     token_cmd.args([
         "exec",
@@ -3348,6 +3362,10 @@ fn run_github_login(debug: bool) -> Result<(), String> {
         );
         return Err("containerized gh auth token returned an empty token".to_string());
     }
+
+    let mut username_cmd = podman_command();
+    username_cmd.args(["exec", &container, "gh", "api", "user", "--jq", ".login"]);
+    let username = command_output(username_cmd, debug).ok();
 
     info!(
         accountability = true,
@@ -3396,6 +3414,9 @@ fn run_github_login(debug: bool) -> Result<(), String> {
         secret_name = "tillandsias-github-token",
         "GitHub authentication and secret rotation completed successfully"
     );
+    if let Some(username) = username.filter(|value| !value.is_empty()) {
+        println!("[tillandsias] GitHub authentication complete for {username}");
+    }
 
     Ok(())
 }
@@ -7521,13 +7542,18 @@ mod tests {
             "run_status_check must route through the shared podman layer"
         );
 
-        let login_window = source_window(
-            source,
-            "fn run_github_login(debug: bool, legacy_keyring_secrets: bool)",
-        );
+        let login_window = source_window(source, "fn run_github_login(debug: bool)");
         assert!(
             login_window.contains("podman_command()"),
             "run_github_login must use the shared podman command constructor"
+        );
+        assert!(
+            login_window.contains("\"status\"") && login_window.contains("\"auth\""),
+            "run_github_login must verify the containerized gh session"
+        );
+        assert!(
+            login_window.contains("write_github_token_to_vault"),
+            "run_github_login must persist the token to Vault"
         );
 
         let opencode_window = source_window(

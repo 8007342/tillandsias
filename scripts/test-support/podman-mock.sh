@@ -145,8 +145,16 @@ case "$subcommand" in
         if [[ "$*" == *"gh auth login"* ]]; then
             exit 0
         fi
+        if [[ "$*" == *"gh auth status"* ]]; then
+            printf 'github.com: authenticated\n'
+            exit 0
+        fi
         if [[ "$*" == *"gh auth token"* ]]; then
             printf '%s\n' "${LITMUS_FAKE_GITHUB_TOKEN:-mock-github-token}"
+            exit 0
+        fi
+        if [[ "$*" == *"gh api user"* ]]; then
+            printf '%s\n' "${LITMUS_FAKE_GITHUB_USER:-mock-user}"
             exit 0
         fi
         printf 'mock-exec-output\n'
