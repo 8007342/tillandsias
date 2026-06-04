@@ -19,12 +19,12 @@ LastExecutionTime: 2026-06-04T03:05:00Z
 - **Step 25 `multi-host-ux-parity` is COMPLETED**. The autonomous verification (m8) was renewed and the parent step flipped to unblock the release pipeline.
 - **Step 27 `release-v0_3_0-readiness` is COMPLETED**. Version bumped to 0.3.0 series, docs updated, audit green.
 - **Frontier: Step 28 `build-pipeline-optimization`**. Step 28 is now READY.
-- Steps 29→30→31 chain sequentially behind step 28.
+- **Step 29 `agent-launch-stability`**: `agent/opencode-web-backoff` is COMPLETED (macOS). Exponential backoff and 30s timeout implemented in headless.
 
 ## Assignment Board
 
-- **Linux**: READY. Can pick up Step 28 tasks (`build/forge-containerfile-audit`, `build/sh-refactoring`).
-- **macOS**: ADVANCED. Completed Step 27. Yielding for next cycle or user feedback.
+- **Linux**: READY. Can pick up Step 28 tasks (`build/forge-containerfile-audit`, `build/sh-refactoring`). `build/forge-containerfile-audit` currently claimed.
+- **macOS**: ADVANCED. Completed Step 27 and `agent/opencode-web-backoff`. Yielding for next cycle or user feedback.
 - **Windows**: YIELD — fast-forward to latest linux-next.
 
 ## Stale Or Pending Pings
