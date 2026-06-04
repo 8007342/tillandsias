@@ -1903,7 +1903,7 @@ plan_index:
         - "Isolation validation litmus checks remain green."
       tasks:
         - id: forge-expansion/rust-wasm
-          status: claimed
+          status: completed
           depends_on: []
           events:
             - type: claim
@@ -1912,6 +1912,11 @@ plan_index:
               host: "linux"
               lease_id: "lease-linux-forge-expansion-rust-wasm-20260604T0124Z"
               expires_at: "2026-06-04T05:24:46Z"
+            - type: completed
+              ts: "2026-06-04T01:34:00Z"
+              agent_id: "linux-macuahuitl-claude-opus-20260604T0124Z"
+              summary: "Shipped cargo-outdated (final approved-but-unimplemented Rust candidate) into the default forge image's cargo-binstall batch; Rust ecosystem in the curated-toolchain-backlog now fully converged. Remaining Rust candidates (cargo-tarpaulin, cargo-tree, wasmer) are intentionally deferred/blocked. Verified: ./build.sh --check PASS, instant pre-build litmus 99/99 PASS."
+              commits: ["ba3c93ce"]
         - id: forge-expansion/go-python
           status: ready
           depends_on: []
