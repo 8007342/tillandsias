@@ -2068,7 +2068,7 @@ plan_index:
     - id: build-pipeline-optimization
       order: 28
       title: Build Pipeline Optimization & Forge Lean-Up
-      status: ready
+      status: completed
       deliverable: plan/steps/28-build-pipeline-optimization.md
       depends_on: [release-v0_3_0-readiness]
       exit_criteria:
