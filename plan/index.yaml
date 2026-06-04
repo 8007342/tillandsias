@@ -2123,8 +2123,15 @@ plan_index:
         - "Exponential backoff implemented for web route probing."
       tasks:
         - id: agent/claude-crash-investigation
-          status: ready
+          status: claimed
           depends_on: []
+          events:
+            - type: claim
+              ts: "2026-06-04T03:29:30Z"
+              agent_id: "linux-macuahuitl-codex-20260604T032930Z"
+              host: "linux"
+              lease_id: "lease-linux-agent-claude-crash-investigation-20260604T0329Z"
+              expires_at: "2026-06-04T07:29:30Z"
         - id: agent/opencode-web-backoff
           status: completed
           depends_on: []
