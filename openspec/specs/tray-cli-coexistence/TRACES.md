@@ -9,4 +9,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-headless/src/main.rs#L3594](../../../crates/tillandsias-headless/src/main.rs#L3594)
 - [crates/tillandsias-headless/src/main.rs#L3616](../../../crates/tillandsias-headless/src/main.rs#L3616)
 - [crates/tillandsias-headless/src/main.rs#L4609](../../../crates/tillandsias-headless/src/main.rs#L4609)
-- [crates/tillandsias-headless/src/main.rs#L8129](../../../crates/tillandsias-headless/src/main.rs#L8129)
+- [crates/tillandsias-headless/src/main.rs#L8187](../../../crates/tillandsias-headless/src/main.rs#L8187)

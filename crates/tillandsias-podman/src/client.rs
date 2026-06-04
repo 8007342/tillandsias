@@ -1771,7 +1771,7 @@ fn summary_line(value: &str) -> &str {
 /// Returns `None` when the failure does not match a known typed pattern —
 /// the caller then falls back to the generic stage-keyed hint.
 ///
-/// @trace plan/steps/15-tray-network-bootstrap.md, spec:tray-network-bootstrap
+/// @trace plan/steps/15-tray-network-bootstrap.md, spec:enclave-network
 pub(crate) fn classify_typed_launch_failure(
     failure: &crate::backend::CommandFailure,
 ) -> Option<String> {
