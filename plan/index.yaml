@@ -1903,8 +1903,15 @@ plan_index:
         - "Isolation validation litmus checks remain green."
       tasks:
         - id: forge-expansion/rust-wasm
-          status: ready
+          status: claimed
           depends_on: []
+          events:
+            - type: claim
+              ts: "2026-06-04T01:24:46Z"
+              agent_id: "linux-macuahuitl-claude-opus-20260604T0124Z"
+              host: "linux"
+              lease_id: "lease-linux-forge-expansion-rust-wasm-20260604T0124Z"
+              expires_at: "2026-06-04T05:24:46Z"
         - id: forge-expansion/go-python
           status: ready
           depends_on: []
