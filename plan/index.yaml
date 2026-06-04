@@ -2034,8 +2034,15 @@ plan_index:
                 v0.3.0 Fedora Pivot model. Reintroduced and populated
                 RELEASE-NOTES.md with the v0.3.0 changelog.
         - id: release/bump-and-tag
-          status: ready
+          status: claimed
           depends_on: [release/audit, release/docs]
+          events:
+            - type: claim
+              ts: "2026-06-04T04:00:00Z"
+              agent_id: "macos-Tlatoanis-MacBook-Air-gemini-cli-20260604T0256Z"
+              host: "macos"
+              lease_id: "lease-macos-release-bump-and-tag-20260604T0400Z"
+              expires_at: "2026-06-04T08:00:00Z"
 
     - id: build-pipeline-optimization
       order: 28
