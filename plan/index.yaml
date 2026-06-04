@@ -2115,7 +2115,7 @@ plan_index:
     - id: agent-launch-stability
       order: 29
       title: Agent Launch Stability & Race Condition Fixes
-      status: ready
+      status: completed
       deliverable: plan/steps/29-agent-launch-stability.md
       depends_on: [build-pipeline-optimization]
       exit_criteria:
@@ -2123,7 +2123,7 @@ plan_index:
         - "Exponential backoff implemented for web route probing."
       tasks:
         - id: agent/claude-crash-investigation
-          status: claimed
+          status: completed
           depends_on: []
           events:
             - type: claim
@@ -2132,6 +2132,22 @@ plan_index:
               host: "linux"
               lease_id: "lease-linux-agent-claude-crash-investigation-20260604T0329Z"
               expires_at: "2026-06-04T07:29:30Z"
+            - type: completed
+              ts: "2026-06-04T03:33:03Z"
+              agent_id: "linux-macuahuitl-codex-20260604T032930Z"
+              host: "linux"
+              lease_id: "lease-linux-agent-claude-crash-investigation-20260604T0329Z"
+              summary: >
+                Installed Claude TUI terminfo dependencies, removed dead API-key
+                capture and host-Claude-config assumptions, and added an instant
+                litmus that pins the credential-free forge boundary. Rejected
+                API-key reinjection and ~/.claude host mounting because they
+                violate forge-offline and podman-secrets-integration.
+              commits: ["e74ce61e"]
+              evidence_refs:
+                - "./build.sh --check — PASS"
+                - "./scripts/run-litmus-test.sh default-image --size instant --compact — 3/3 PASS"
+                - "./scripts/run-litmus-test.sh --phase pre-build --size instant --compact — 102/102 PASS across 87/87 active specs"
         - id: agent/opencode-web-backoff
           status: completed
           depends_on: []
