@@ -1876,8 +1876,16 @@ plan_index:
           status: ready
           depends_on: []
         - id: ux-parity/status-text
-          status: ready
+          status: claimed
           depends_on: []
+          events:
+            - type: claim
+              ts: "2026-06-04T00:39:00Z"
+              agent_id: "linux-tlatoani-gemini-cli-20260604T0039Z"
+              host: "linux"
+              lease_id: "lease-linux-ux-parity-status-text-20260604T0039Z"
+              expires_at: "2026-06-04T04:39:00Z"
+
 
     - id: forge-toolchain-expansion
       order: 26
