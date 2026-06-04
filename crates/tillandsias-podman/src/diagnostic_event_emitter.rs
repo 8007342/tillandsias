@@ -275,12 +275,7 @@ fn route_record(state: &mut EmitterState, record: &ContainerLifecycleRecord) {
                 state.start_times.insert(record.container_name.clone(), at);
             }
             let body = format_container_start_event(&record.container_name, "running");
-            emit_diagnostic_event(
-                true,
-                "event:container_start",
-                &record.container_name,
-                &body,
-            );
+            emit_diagnostic_event(true, "event:container_start", &record.container_name, &body);
         }
         ContainerLifecycleAction::Died => {
             // POSIX convention: a process killed by a signal exits
