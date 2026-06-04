@@ -30,6 +30,8 @@ versioning_system:
         Calendar date is naturally monotonic (time only moves forward). Enables
         instant identification of release age. Survives distribution across
         multiple time zones. Acts as reproducibility anchor for forensics.
+        In the Fedora Pivot (v0.3.0+), it anchors the version of the official
+        image used for bootstrapping.
 
     Build:
       meaning: "Local monotonic build counter — increments on every local build"
