@@ -1939,12 +1939,18 @@ plan_index:
     - id: forge-toolchain-expansion
       order: 26
       title: Forge Toolchain Expansion (Post-Audit)
-      status: ready
+      status: completed
       deliverable: plan/steps/26-forge-toolchain-expansion.md
       depends_on: [rootfs-removal-fedora-pivot]
       exit_criteria:
         - "Rust, Go, and Python toolchains added to the default image."
         - "Isolation validation litmus checks remain green."
+      events:
+        - type: completed
+          ts: "2026-06-04T01:34:45Z"
+          agent_id: "linux-macuahuitl-claude-opus-20260604T0133Z"
+          summary: "Both child tasks complete: forge-expansion/rust-wasm (cargo-outdated shipped, commit ba3c93ce) and forge-expansion/go-python (convergence/verify-only — all approved Go/Python candidates already implemented in images/default/Containerfile; flake8 intentionally deferred). Rust, Go, and Python toolchains all present on existing batched layers; isolation litmus 99/99 PASS. This unblocks one of the two gates on step 27 (release-v0_3_0-readiness); the remaining gate is step 25 multi-host-ux-parity (macOS-owned, in progress)."
+          commits: []
       tasks:
         - id: forge-expansion/rust-wasm
           status: completed
@@ -1962,8 +1968,21 @@ plan_index:
               summary: "Shipped cargo-outdated (final approved-but-unimplemented Rust candidate) into the default forge image's cargo-binstall batch; Rust ecosystem in the curated-toolchain-backlog now fully converged. Remaining Rust candidates (cargo-tarpaulin, cargo-tree, wasmer) are intentionally deferred/blocked. Verified: ./build.sh --check PASS, instant pre-build litmus 99/99 PASS."
               commits: ["ba3c93ce"]
         - id: forge-expansion/go-python
-          status: ready
+          status: completed
           depends_on: []
+          events:
+            - type: claim
+              ts: "2026-06-04T01:33:00Z"
+              agent_id: "linux-macuahuitl-claude-opus-20260604T0133Z"
+              host: "linux"
+              lease_id: "lease-linux-forge-expansion-go-python-20260604T0133Z"
+              expires_at: "2026-06-04T05:33:00Z"
+            - type: completed
+              ts: "2026-06-04T01:34:30Z"
+              agent_id: "linux-macuahuitl-claude-opus-20260604T0133Z"
+              summary: "Convergence/verify-only slice. Audited the Go and Python rows of the curated-toolchain-backlog against the LIVE images/default/Containerfile: every approved Go/Python candidate is already implemented — Python: black, pylint, bandit, python-lsp-server (pylsp), pyright, ruff on the pip3 install layer (L50-51); Go: gopls, dlv (delve), shfmt on the go-install layer (L62-64). The only non-implemented Go/Python candidate is flake8, intentionally DEFERRED (overlaps the shipped pylint). No Containerfile change needed; the Containerfile already covers the approved Go/Python set on existing batched layers (no redundant image layer). Verified: ./build.sh --check PASS, instant pre-build litmus 99/99 PASS (100% coverage). NOTE flagged not fixed: pre-existing sibling rustfmt drift in crates/tillandsias-podman/src/diagnostic_event_emitter.rs:275 (podman-owned)."
+              commits: []
+              evidence: "build.sh --check exit 0; scripts/run-litmus-test.sh --phase pre-build --size instant --compact = 99/99 PASS"
 
     - id: release-v0_3_0-readiness
       order: 27
