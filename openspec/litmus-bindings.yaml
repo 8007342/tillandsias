@@ -847,8 +847,9 @@ specs:
   - litmus:vault-auto-unseal-no-prompt
   - litmus:vault-policy-forge-cannot-read-github-token
   - litmus:git-mirror-safe-refspec-push
-  coverage_ratio: 75
-  last_verified: '2026-05-24'
+  - litmus:vault-github-token-capture-shape
+  coverage_ratio: 100
+  last_verified: '2026-06-04'
 - spec_id: headless-mode
   status: active
   litmus_tests:
