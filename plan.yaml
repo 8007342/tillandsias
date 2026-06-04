@@ -19,8 +19,8 @@ plan:
     verification: methodology/verification.yaml
 
   current_state:
-    last_completed_step: rootfs-removal-fedora-pivot (step 23)
-    next_step: diagnostics-stream-activation (step 24)
+    last_completed_step: diagnostics-stream-activation (step 24)
+    next_step: multi-host-ux-parity (step 25)
 
     next_graph_node: none
     plan_index: plan/index.yaml

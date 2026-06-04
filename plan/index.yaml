@@ -1803,7 +1803,7 @@ plan_index:
     - id: diagnostics-stream-activation
       order: 24
       title: Diagnostics Stream & Event-Driven Observability
-      status: ready
+      status: completed
       deliverable: plan/steps/24-diagnostics-stream-activation.md
       depends_on: [rootfs-removal-fedora-pivot]
       specs:
@@ -1813,9 +1813,15 @@ plan_index:
         - "Podman events are wired to the diagnostics emitter."
         - "Event type diversity includes exit, signal, and OOM."
         - "Bounded ring buffer with backpressure logging is active."
+      outcome: >
+        Fully activated the event-driven diagnostics stream in the Linux headless agent.
+        Wired spawn_diagnostic_event_emitter and DiagnosticsHandle across all active forge modes
+        (OpenCode, Claude, Codex, Maintenance/Bash, Observatorium, OpenCode Web).
+        Implemented container_start formatting and connected it to Started lifecycle action.
+        All 99 executed litmus tests passed cleanly.
       tasks:
         - id: diagnostics/event-wiring
-          status: claimed
+          status: completed
           depends_on: []
           events:
             - type: claim
@@ -1824,12 +1830,29 @@ plan_index:
               host: "linux"
               lease_id: "lease-linux-diagnostics-event-wiring-20260604T0034Z"
               expires_at: "2026-06-04T04:34:00Z"
+            - type: completed
+              ts: "2026-06-04T00:36:00Z"
+              agent_id: "linux-tlatoani-gemini-cli-20260604T0034Z"
+              summary: "Wired diagnostic event emitter and stderr logs handles into all active forge launch modes (OpenCode, Claude, Codex, Maintenance/Bash, Observatorium, OpenCode Web) and implemented format_container_start_event."
+              commit: "b943eb9e"
         - id: diagnostics/event-diversity
-          status: ready
+          status: completed
           depends_on: [diagnostics/event-wiring]
+          events:
+            - type: completed
+              ts: "2026-06-04T00:36:00Z"
+              agent_id: "linux-tlatoani-gemini-cli-20260604T0034Z"
+              summary: "Implemented exit, signal, and OOM event types along with container_start event type in the live stream and verified them via unit tests and litmus tests."
+              commit: "b943eb9e"
         - id: diagnostics/ring-buffer
-          status: ready
+          status: completed
           depends_on: [diagnostics/event-wiring]
+          events:
+            - type: completed
+              ts: "2026-06-04T00:36:00Z"
+              agent_id: "linux-tlatoani-gemini-cli-20260604T0034Z"
+              summary: "Verified the 10K capacity mpsc channel limits the ring buffer, and the BackpressureMeter logs when the depth exceeds 100 events."
+              commit: "b943eb9e"
 
     - id: multi-host-ux-parity
       order: 25
