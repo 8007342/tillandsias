@@ -199,6 +199,50 @@ pub async fn mint_approle_token_for_container(
     Ok((token, secret_name))
 }
 
+/// Short-lived podman-secret mount for a synchronous container command.
+///
+/// The underlying Vault token remains in the revocation registry and is
+/// revoked during normal shutdown. Dropping this lease immediately removes
+/// the podman secret so subsequent containers cannot reuse it.
+#[allow(dead_code)]
+pub struct AppRoleSecretLease {
+    secret_name: String,
+}
+
+impl AppRoleSecretLease {
+    #[allow(dead_code)]
+    pub fn secret_name(&self) -> &str {
+        &self.secret_name
+    }
+}
+
+impl Drop for AppRoleSecretLease {
+    fn drop(&mut self) {
+        let _ = podman_cmd_sync()
+            .args(["secret", "rm", &self.secret_name])
+            .stdout(Stdio::null())
+            .stderr(Stdio::null())
+            .status();
+    }
+}
+
+/// Mint a scoped AppRole token and expose it as a lease for a synchronous
+/// one-shot container command.
+#[allow(dead_code)]
+pub fn mint_approle_secret_lease(
+    role: &str,
+    container_instance: &str,
+    debug: bool,
+) -> Result<AppRoleSecretLease, String> {
+    let runtime = tokio_runtime()?;
+    let (_token, secret_name) = runtime.block_on(mint_approle_token_for_container(
+        role,
+        container_instance,
+        debug,
+    ))?;
+    Ok(AppRoleSecretLease { secret_name })
+}
+
 /// Drain and revoke every per-container token recorded in the in-process
 /// registry. Also removes the matching podman secret so the on-disk
 /// artifact (a short-lived random byte string) doesn't survive shutdown.

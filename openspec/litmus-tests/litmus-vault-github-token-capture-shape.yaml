@@ -8,6 +8,7 @@ size: instant
 
 preconditions:
   - workspace contains crates/tillandsias-headless/src/main.rs
+  - workspace contains crates/tillandsias-headless/src/remote_projects.rs
   - workspace contains crates/tillandsias-headless/src/vault_bootstrap.rs
   - workspace contains crates/tillandsias-headless/tests/vault_approle_provisioning.rs
 
@@ -36,6 +37,11 @@ critical_path:
     command: "BLOCK=$(sed -n '/fn run_github_login(debug: bool)/,/^}/p' crates/tillandsias-headless/src/main.rs); if printf '%s' \"$BLOCK\" | grep -qF 'create_github_podman_secret'; then exit 1; else echo 'ok: Vault-only GitHub token capture'; fi"
     timeout_ms: 3000
     expected_behavior: "ok: Vault-only GitHub token capture"
+
+  - step: "remote-project commands use scoped Vault leases instead of the legacy GitHub secret"
+    command: "grep -F 'mint_approle_secret_lease(\"git-mirror\"' crates/tillandsias-headless/src/remote_projects.rs && grep -F 'vault-cli read -field=token secret/github/token' crates/tillandsias-headless/src/remote_projects.rs && if grep -qF 'tillandsias-github-token' crates/tillandsias-headless/src/remote_projects.rs; then exit 1; else echo 'ok: remote projects are Vault-only'; fi"
+    timeout_ms: 3000
+    expected_behavior: "ok: remote projects are Vault-only"
 
 observability:
   traces:

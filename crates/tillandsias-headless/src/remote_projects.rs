@@ -150,8 +150,50 @@ fn debug_log_podman_result(op: &str, status: &std::process::ExitStatus, stderr: 
     }
 }
 
+struct RemoteVaultLease {
+    secret_name: String,
+    #[cfg(feature = "vault")]
+    _lease: Option<crate::vault_bootstrap::AppRoleSecretLease>,
+}
+
+impl RemoteVaultLease {
+    fn acquire(debug: bool) -> Result<Self, String> {
+        #[cfg(test)]
+        {
+            let _ = debug;
+            return Ok(Self {
+                secret_name: "test-vault-token".to_string(),
+                #[cfg(feature = "vault")]
+                _lease: None,
+            });
+        }
+        #[cfg(all(not(test), feature = "vault"))]
+        {
+            let instance = format!("remote-projects-{}", std::process::id());
+            let lease =
+                crate::vault_bootstrap::mint_approle_secret_lease("git-mirror", &instance, debug)?;
+            let secret_name = lease.secret_name().to_string();
+            Ok(Self {
+                secret_name,
+                _lease: Some(lease),
+            })
+        }
+        #[cfg(all(not(test), not(feature = "vault")))]
+        {
+            let _ = debug;
+            Err("vault feature not compiled; remote GitHub projects require Vault".to_string())
+        }
+    }
+
+    fn mount_arg(&self) -> String {
+        format!("{},target=vault-token,mode=0400", self.secret_name)
+    }
+}
+
 fn run_git_image_shell(script: &str, extra_args: &[&str], debug: bool) -> Result<String, String> {
     let image = git_image_tag();
+    let vault_lease = RemoteVaultLease::acquire(debug)?;
+    let vault_mount = vault_lease.mount_arg();
     if debug {
         debug_log_podman_invocation("run_git_image_shell", &image, true, script, extra_args);
     }
@@ -160,7 +202,11 @@ fn run_git_image_shell(script: &str, extra_args: &[&str], debug: bool) -> Result
         "run",
         "--rm",
         "--secret",
-        "tillandsias-github-token",
+        &vault_mount,
+        "--network",
+        "tillandsias-enclave",
+        "--env",
+        "VAULT_ADDR=http://vault:8200",
         "--entrypoint",
         "/bin/sh",
         &image,
@@ -194,7 +240,7 @@ fn fetch_github_projects(debug: bool) -> Result<Vec<GitHubProject>, String> {
     let script = r#"
 set -eu
 export GH_PAGER=cat
-cat /run/secrets/tillandsias-github-token 2>/dev/null | gh auth login --hostname github.com --with-token >/dev/null 2>&1
+vault-cli read -field=token secret/github/token | gh auth login --hostname github.com --with-token >/dev/null 2>&1
 exec gh api user/repos?per_page=100\&sort=pushed\&type=owner
 "#;
 
@@ -353,9 +399,11 @@ pub fn clone_project_from_github_with_debug(
     let script = r#"
 set -eu
 export GH_PAGER=cat
-cat /run/secrets/tillandsias-github-token 2>/dev/null | gh auth login --hostname github.com --with-token >/dev/null 2>&1
+vault-cli read -field=token secret/github/token | gh auth login --hostname github.com --with-token >/dev/null 2>&1
 exec gh repo clone "$1" "$2"
 "#;
+    let vault_lease = RemoteVaultLease::acquire(debug)?;
+    let vault_mount = vault_lease.mount_arg();
 
     if debug {
         if nwo != repo_url {
@@ -378,7 +426,11 @@ exec gh repo clone "$1" "$2"
             "run",
             "--rm",
             "--secret",
-            "tillandsias-github-token",
+            &vault_mount,
+            "--network",
+            "tillandsias-enclave",
+            "--env",
+            "VAULT_ADDR=http://vault:8200",
             "--security-opt=label=disable",
             "--userns=keep-id",
             "-v",
@@ -760,13 +812,13 @@ mod tests {
     #[test]
     fn debug_log_helpers_redact_token_but_show_shape() {
         // Sanity check: the script preview compresses whitespace and caps
-        // length so the auth-login `cat /run/secrets/...` line is visible
+        // length so the auth-login `vault-cli read ...` line is visible
         // without dumping a multi-line block to stderr.
         let preview = debug_script_preview(
             "
 set -eu
 export GH_PAGER=cat
-cat /run/secrets/tillandsias-github-token 2>/dev/null | gh auth login --hostname github.com --with-token >/dev/null 2>&1
+	vault-cli read -field=token secret/github/token | gh auth login --hostname github.com --with-token >/dev/null 2>&1
 exec gh repo clone \"$1\" \"$2\"
 ",
         );
@@ -780,6 +832,6 @@ exec gh repo clone \"$1\" \"$2\"
         );
         // Always shows the *name* (safe to log) — the token contents live
         // inside the file, never in the script string.
-        assert!(preview.contains("tillandsias-github-token"));
+        assert!(preview.contains("secret/github/token"));
     }
 }

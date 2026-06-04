@@ -110,20 +110,19 @@ pub(super) fn refresh_cloud_projects_if_stale(
         }
         Err(err) => {
             clear_cloud_refresh_in_flight(&state);
-            // Friendly path for the "no podman secret" case which fires
+            // Friendly path for the "no Vault credential" case which fires
             // every time on first launch before `tillandsias --github-login`
             // has been run. AboutToShow can refresh from several entry
             // points (initial fetch, root-menu, Cloud submenu) — gate the
             // user-facing line behind a per-session one-shot flag so the
             // stderr isn't spammed.
             //
-            // We match on the secret *name* rather than the full podman
-            // error text because podman's exact wording has churned
-            // ("no secret with name or id", "no such secret", etc.) but the
-            // name `tillandsias-github-token` is stable.
+            // Match the stable Vault vocabulary rather than exact transport
+            // wording so unavailable Vault, missing token, and policy failures
+            // all share the same one-shot login guidance.
             //
             // @trace spec:remote-projects, spec:tray-ux
-            if err.contains("tillandsias-github-token") {
+            if err.to_ascii_lowercase().contains("vault") {
                 let should_warn = match state.lock() {
                     Ok(mut guard) => {
                         let first = !guard.cloud_no_secret_warned;
