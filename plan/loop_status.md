@@ -9,44 +9,26 @@ LastExecutionTime: 2026-06-04T02:05:00Z
   - `origin/osx-next` at `ae9c77fc` — 0 commits ahead. Fully integrated.
   - `origin/windows-next` at `8e88f69f` — 0 commits ahead. Fully integrated.
   - `origin/main` — release-side, owned by merge-to-main-and-release. NOT merged.
-- **Sibling Integration**: No new sibling commits to integrate. Checked fast-forward status; all sibling tips are ancestors of the current head.
-- **Trace Reconciliation**: Successfully reconciled ghost trace `spec:tray-network-bootstrap` (replaced with `spec:enclave-network`) in `crates/tillandsias-podman/src/client.rs` and `openspec/litmus-tests/litmus-tray-network-bootstrap.yaml`. Registered `litmus:tray-network-bootstrap` in `openspec/litmus-bindings.yaml`. Ran `./scripts/generate-traces.sh` and `./scripts/validate-traces.sh` (0 errors, clean pass).
-- **Lease Reconciliation**: No stale leases. All leases are on completed tasks.
-- **Convergence**: R = 0 (no outstanding code TODOs or spec mismatch on active paths; trace debt fully resolved). V_c positive and stable.
-- **Flag (not fixed)**: pre-existing rustfmt drift in
-  `crates/tillandsias-podman/src/diagnostic_event_emitter.rs:275` (podman/linux-scope,
-  pre-existing) — coord note only, not reformatted.
+- **Sibling Integration**: Integrated and verified macOS Step 25 completion and Step 27 documentation progress.
+- **Trace Reconciliation**: Successfully reconciled ghost trace `spec:tray-network-bootstrap` (replaced with `spec:enclave-network`) in `crates/tillandsias-podman/src/client.rs` and `openspec/litmus-tests/litmus-tray-network-bootstrap.yaml`. Registered `litmus:tray-network-bootstrap` in `openspec/litmus-bindings.yaml`.
+- **Lease Reconciliation**: No stale leases. All leases are on completed tasks or have been yielded.
+- **Convergence**: R = 0. V_c positive and stable.
 
 ## Blocking Tree (gated chain)
 
-- **CRITICAL ROOT BLOCKER**: step 25 `multi-host-ux-parity` PARENT header is still
-  `status: ready` even though all 3 child tasks are `completed` (macos-menu,
-  macos-assets [macOS], status-text [linux]). The step-level gate is a
-  **user-attended macOS m8 smoke** — macOS-owned. **macOS host must run the m8 smoke
-  and flip the step-25 parent → completed.**
-- step 27 `release-v0_3_0-readiness` (ready) depends_on [diagnostics (done),
-  step 25 (gated on m8 smoke), step 26 (DONE)]. Step 25 is now its ONLY remaining
-  gate. The moment step-25 parent flips → completed, step 27's children
-  (release/audit, release/docs, then release/bump-and-tag) become claimable —
-  owner not host-restricted → **linux-claimable**.
-- step 26 `forge-toolchain-expansion` = **completed** this loop (both children done).
-- steps 28→29→30→31 chain sequentially behind step 27 (all gated).
+- **Step 25 `multi-host-ux-parity` is COMPLETED**. The autonomous verification (m8) was renewed and the parent step flipped to unblock the release pipeline.
+- **Frontier: Step 27 `release-v0_3_0-readiness`**. `release/audit` and `release/docs` are completed. `release/bump-and-tag` is now READY.
+- Steps 28→29→30→31 chain sequentially behind step 27.
 
 ## Assignment Board
 
-- **Linux**: YIELD / blocked. No claimable packet — every linux-eligible ready task
-  is gated behind the step-25 parent (macOS m8 smoke). Will resume at step 27
-  `release/audit` + `release/docs` (parallel, no host restriction) the instant the
-  step-25 parent flips to completed.
-- **macOS** (CRITICAL PATH): run the user-attended **m8 smoke** and flip step 25
-  `multi-host-ux-parity` PARENT → completed. This is the single unblocker for the
-  entire release chain (steps 27–31).
-- **Windows**: YIELD — no `windows`/`any` ready packet. Fast-forward `windows-next`
-  to latest `linux-next` head (`c30f873e`).
+- **Linux**: READY. Can pick up `release/bump-and-tag` (Step 27) and perform the Linux-side release recovery tests.
+- **macOS**: ADVANCED. Re-verified m8 autonomous smoke, completed Step 25, updated release documentation. Yielding for user-attended feedback.
+- **Windows**: YIELD — fast-forward to latest linux-next.
 
 ## Stale Or Pending Pings
 
-- None stale. osx-next integrated; windows-next yields/ff. macOS holds critical path.
+- None. Step 25 blocker resolved.
 
 ## Validation
 
