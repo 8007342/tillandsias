@@ -18,6 +18,6 @@ parking_lot = { workspace = true }
 # ISO-8601 UTC timestamps on the runtime-diagnostics launch-event stream.
 chrono = { workspace = true }
 
-[target.'cfg(target_os = "linux")'.dependencies]
+[target.'cfg(unix)'.dependencies]
 libc = "0.2"
 

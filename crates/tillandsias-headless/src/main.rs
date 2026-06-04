@@ -4481,14 +4481,28 @@ fn opencode_web_http_status(url: &str, cookie_header: Option<String>) -> Result<
 
 fn wait_for_opencode_web_route(project_name: &str, url: &str, debug: bool) -> Result<(), String> {
     let mut last_outcome = String::from("no HTTP probe attempted");
-    for attempt in 1..=20 {
+    let mut backoff = Duration::from_millis(100);
+    let max_backoff = Duration::from_secs(2);
+    let start = std::time::Instant::now();
+    let timeout = Duration::from_secs(30);
+    let mut attempt = 1;
+
+    while start.elapsed() < timeout {
         match opencode_web_http_status(url, None) {
             Ok(401) => return Ok(()),
+            Ok(502) => {
+                last_outcome = String::from("status 502 (starting)");
+                if debug {
+                    eprintln!(
+                        "[tillandsias] waiting for OpenCode Web auth gate: attempt {attempt} ({last_outcome})"
+                    );
+                }
+            }
             Ok(code) => {
                 last_outcome = format!("status {code}");
                 if debug {
                     eprintln!(
-                        "[tillandsias] waiting for OpenCode Web auth gate: attempt {attempt}/20 ({last_outcome})"
+                        "[tillandsias] waiting for OpenCode Web auth gate: attempt {attempt} ({last_outcome})"
                     );
                 }
             }
@@ -4496,18 +4510,20 @@ fn wait_for_opencode_web_route(project_name: &str, url: &str, debug: bool) -> Re
                 last_outcome = err;
                 if debug {
                     eprintln!(
-                        "[tillandsias] waiting for OpenCode Web auth gate: attempt {attempt}/20 ({last_outcome})"
+                        "[tillandsias] waiting for OpenCode Web auth gate: attempt {attempt} ({last_outcome})"
                     );
                 }
             }
         }
-        std::thread::sleep(Duration::from_millis(500));
+        std::thread::sleep(backoff);
+        backoff = (backoff * 2).min(max_backoff);
+        attempt += 1;
     }
 
     let forge_container = forge_container_name(project_name);
     let logs_tail = container_logs_tail(&forge_container, 50);
     Err(format!(
-        "OpenCode Web auth gate did not become ready in 10s.\n\
+        "OpenCode Web auth gate did not become ready in 30s.\n\
          URL: {url}\n\
          Last outcome: {last_outcome}\n\
          Forge container logs (last ≤50 lines):\n{logs_tail}\n\
@@ -4530,14 +4546,28 @@ fn wait_for_authenticated_opencode_web(
     );
 
     let mut last_outcome = String::from("no HTTP probe attempted");
-    for attempt in 1..=20 {
+    let mut backoff = Duration::from_millis(100);
+    let max_backoff = Duration::from_secs(2);
+    let start = std::time::Instant::now();
+    let timeout = Duration::from_secs(30);
+    let mut attempt = 1;
+
+    while start.elapsed() < timeout {
         match opencode_web_http_status(url, Some(cookie_header.clone())) {
             Ok(code) if (200..400).contains(&code) => return Ok(()),
+            Ok(502) => {
+                last_outcome = String::from("status 502 (starting)");
+                if debug {
+                    eprintln!(
+                        "[tillandsias] waiting for authenticated OpenCode Web app: attempt {attempt} ({last_outcome})"
+                    );
+                }
+            }
             Ok(code) => {
                 last_outcome = format!("status {code}");
                 if debug {
                     eprintln!(
-                        "[tillandsias] waiting for authenticated OpenCode Web app: attempt {attempt}/20 ({last_outcome})"
+                        "[tillandsias] waiting for authenticated OpenCode Web app: attempt {attempt} ({last_outcome})"
                     );
                 }
             }
@@ -4545,18 +4575,20 @@ fn wait_for_authenticated_opencode_web(
                 last_outcome = err;
                 if debug {
                     eprintln!(
-                        "[tillandsias] waiting for authenticated OpenCode Web app: attempt {attempt}/20 ({last_outcome})"
+                        "[tillandsias] waiting for authenticated OpenCode Web app: attempt {attempt} ({last_outcome})"
                     );
                 }
             }
         }
-        std::thread::sleep(Duration::from_millis(500));
+        std::thread::sleep(backoff);
+        backoff = (backoff * 2).min(max_backoff);
+        attempt += 1;
     }
 
     let forge_container = forge_container_name(project_name);
     let logs_tail = container_logs_tail(&forge_container, 50);
     Err(format!(
-        "OpenCode Web app did not become reachable with a registered session in 10s.\n\
+        "OpenCode Web app did not become reachable with a registered session in 30s.\n\
          URL: {url}\n\
          Last outcome: {last_outcome}\n\
          Forge container logs (last ≤50 lines):\n{logs_tail}\n\
