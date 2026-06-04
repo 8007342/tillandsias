@@ -23,7 +23,7 @@ LastExecutionTime: 2026-06-04T03:05:00Z
 
 ## Assignment Board
 
-- **Linux**: READY. Can pick up Step 28 tasks (`build/forge-containerfile-audit`, `build/sh-refactoring`). `build/forge-containerfile-audit` currently claimed.
+- **Linux**: ADVANCED. Completed `build/forge-containerfile-audit`. Ready to pick up `build/sh-refactoring`.
 - **macOS**: ADVANCED. Completed Step 27 and `agent/opencode-web-backoff`. Yielding for next cycle or user feedback.
 - **Windows**: YIELD — fast-forward to latest linux-next.
 

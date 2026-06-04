@@ -2076,7 +2076,7 @@ plan_index:
         - "build.sh refactored to eliminate redundant CI/CD cycles."
       tasks:
         - id: build/forge-containerfile-audit
-          status: claimed
+          status: completed
           depends_on: []
           events:
             - type: claim
@@ -2085,6 +2085,11 @@ plan_index:
               host: "linux"
               lease_id: "lease-linux-build-forge-containerfile-audit-20260604T0310Z"
               expires_at: "2026-06-04T07:10:45Z"
+            - type: completed
+              ts: "2026-06-04T03:20:00Z"
+              agent_id: "linux-macuahuitl-gemini-cli-20260604T0310Z"
+              summary: "Audited images/default/Containerfile. Replaced cargo install of watch/audit/wasm-pack/trunk/typos/watchexec with cargo-binstall downloads (compilation disabled). Replaced go install of delve and shfmt with official precompiled releases. Replaced go install of gopls with system package gopls (0.18.1). Verified via ./build.sh --ci-full."
+              commits: ["b37cad93"]
         - id: build/sh-refactoring
           status: done
           depends_on: []
