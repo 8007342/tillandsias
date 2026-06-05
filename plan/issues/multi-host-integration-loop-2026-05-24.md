@@ -3968,3 +3968,28 @@ Merged `origin/osx-next` (2 ahead: `9acdf675`+`ae9c77fc`, macOS-cfg-gated tray t
 2. **Push tag manually**: `git fetch origin main && git checkout main && git tag -a v0.2.260605.2 -m "Release 0.2.260605.2" && git push origin v0.2.260605.2`, then trigger the workflow as above.
 
 **Pattern**: Every release cycle since v0.2.260602.3 has been blocked at this step. The remote container environment's git credential and MCP OAuth token both lack `workflow` scope or the repo's Actions policy blocks `workflow_dispatch` from API clients. This is a persistent environment constraint, not a skill defect.
+
+### Cycle 2026-06-05T23:36Z — RESOLVED: v0.3.260603.1 released (operator-driven, 0.3.x transition)
+
+The blocked release chain is cleared. An operator-attended session (linux-JUN05,
+local `gh` CLI **with `workflow` scope**) drove the release end-to-end:
+
+- **Version series fixed**: `skills/merge-to-main-and-release` now derives the
+  `MAJOR.MINOR` series from the VERSION file instead of hardcoding `0.2`. The cron's
+  0.2.260605.x bumps on main are superseded; main reconciled to the operator's 0.3.x.
+- **main reconciled**: `60b09746` (VERSION 0.2.260605.2) → merge `3a941db3`
+  (VERSION **0.3.260603.1**), content byte-identical to `origin/linux-next`. Desync gone.
+- **Stale rootfs CI removed**: `.github/workflows/recipe-publish.yml` deleted (it fired
+  on `release.published` and published obsolete custom-rootfs `.tar`/`.img`; the Fedora
+  pivot supersedes it).
+- **Release dispatched + verified**: `gh workflow run release.yml --ref main` → run
+  27044586574 **success** (all 3 jobs). Published **v0.3.260603.1** (now Latest):
+  Linux musl (`tillandsias-linux-x86_64` + headless x86_64/aarch64), macOS arm64 thin
+  tray, Windows x64 thin tray — matching versions, Cosign-signed, per-platform
+  SHA256SUMS. Readback: downloaded `tillandsias-linux-x86_64` reports
+  `Tillandsias v0.3.260603.1`, statically linked. Rolling `latest`/`stable` → `3a941db3`.
+
+**Cron note for future cycles**: the scheduled `merge-to-main-and-release` routine still
+cannot `workflow_dispatch` (container token lacks `workflow` scope). It now produces 0.3.x
+versions but still needs an operator (local `gh`) or the GitHub UI to dispatch the actual
+release. Recommend pausing the cloud schedule until the dispatch-scope gap is addressed.
