@@ -2,6 +2,22 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
+## 2026-06-05 — NEW WAVE queued (pre-Vault audit)
+
+The macOS v0.0.1/v0.3.0 items below are done or blocked-on-user. A 2026-06-05
+pre-Vault obsolescence audit (`plan/issues/pre-vault-obsolescence-audit-2026-06-05.md`)
+queued **step 36 — macOS Vault keychain + vsock unseal-key parity**: store the unseal
+key + `installation-uuid` in macOS Keychain and deliver them to the in-VM vault container
+over vsock (the bootstrap in `crates/tillandsias-headless/src/vault_bootstrap.rs` is
+Linux-only today). This is **BLOCKED on linux step 32** (true-rekey lands the shared
+contract macOS mirrors) — not claimable until step 32 completes.
+
+Independent macOS work available now: user-attended **m8 smoke** of a v0.3.x
+`Tillandsias.app` (release acceptance) — gated by step 37 producing a v0.3.x build.
+No new autonomous macOS code packet until step 32 lands.
+
+---
+
 ## macOS UNBLOCKED for v0.0.1 — as of 2026-05-27T23:25Z
 
 **macOS has zero blocking asks for other hosts.** Every Linux- and

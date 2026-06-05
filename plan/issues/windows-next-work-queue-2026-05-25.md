@@ -2,6 +2,19 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/windows-next-thin-tray.md, plan/issues/tray-convergence-coordination.md, plan/issues/control-socket-protocol-convergence-2026-05-25.md, openspec/changes/control-wire-pty-attach/
 
+## 2026-06-05 — NEW WAVE queued (pre-Vault audit)
+
+w1-w11 below are done. A 2026-06-05 pre-Vault obsolescence audit
+(`plan/issues/pre-vault-obsolescence-audit-2026-06-05.md`) queued **step 36 — Windows
+Vault keychain + HvSocket unseal-key parity**: store the unseal key + `installation-uuid`
+in Windows Credential Manager and deliver them to the in-VM vault container over HvSocket
+(the bootstrap in `crates/tillandsias-headless/src/vault_bootstrap.rs` is Linux-only today).
+This is **BLOCKED on linux step 32** (true-rekey lands the shared contract Windows mirrors)
+— not claimable until step 32 completes. Optional independent item: wire
+`EnumerateLocalProjects`. No new autonomous Windows code packet until step 32 lands.
+
+---
+
 Status: **OPEN** as of 2026-05-27T23:25Z. Windows w1, w2, w3, w4, w6
 diagnostics, the w5 converter, the shared forge-container `launch_spec` /
 `intent_for_action` amendment, the l9 URL resolver, the w5
