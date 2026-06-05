@@ -3947,3 +3947,24 @@ Merged `origin/osx-next` (2 ahead: `9acdf675`+`ae9c77fc`, macOS-cfg-gated tray t
 3. **Update skill version formula**: If 0.3.x is the new canonical series, update `skills/merge-to-main-and-release/SKILL.md` Step 1 to compute `0.3.YYMMDD.N` and re-run the skill.
 
 **Next cycle**: Will retry once one of the above is resolved. PR #15 remains open for reuse.
+
+---
+
+## ESCALATION — 2026-06-05T21:27Z — v0.2.260605.2 release blocked (tag push + workflow dispatch 403)
+
+**Run**: merge-to-main-and-release skill, 2026-06-05 second cycle.
+
+**What succeeded**:
+- PR #16 (linux-next → main, 1 ledger commit) created and merged (SHA `da5faca8`).
+- VERSION bumped from 0.2.260605.1 → 0.2.260605.2 on main (commit `60b097465a9dc2ac83b7fa20a23374cd35595a02`).
+- Annotated tag `v0.2.260605.2` created locally.
+
+**What failed**:
+- `git push origin v0.2.260605.2` → HTTP 403 (same as all previous cycles in this remote container environment).
+- `mcp__github__actions_run_trigger` (workflow_dispatch on release.yml) → 403 "Resource not accessible by integration".
+
+**Operator action required** (choose one):
+1. **Trigger release.yml from GitHub UI** (preferred): Navigate to https://github.com/8007342/tillandsias/actions/workflows/release.yml → "Run workflow" → select `main` branch → leave version input blank → Run. The workflow reads VERSION=0.2.260605.2 from main, builds musl binaries, and creates tag+release automatically.
+2. **Push tag manually**: `git fetch origin main && git checkout main && git tag -a v0.2.260605.2 -m "Release 0.2.260605.2" && git push origin v0.2.260605.2`, then trigger the workflow as above.
+
+**Pattern**: Every release cycle since v0.2.260602.3 has been blocked at this step. The remote container environment's git credential and MCP OAuth token both lack `workflow` scope or the repo's Actions policy blocks `workflow_dispatch` from API clients. This is a persistent environment constraint, not a skill defect.

@@ -31,25 +31,30 @@ If the branch is not `linux-next`, log + exit without escalating — the release
 
 ## 1 — Compute the new version
 
-The canonical format is `0.2.YYMMDD.N` where:
+The canonical format is `MAJOR.MINOR.YYMMDD.N` where:
 
-- `YYMMDD` is today's UTC date (e.g. `260529` for 2026-05-29).
+- `MAJOR.MINOR` is the **current series, read from the `VERSION` file** — never hardcoded.
+  As of the 2026-06 CalVer transition the series is `0.3`. Deriving it from VERSION
+  means a future series bump (the operator edits VERSION's first two components) flows
+  through automatically instead of desyncing main vs linux-next (the 2026-06-04 incident).
+- `YYMMDD` is today's UTC date (e.g. `260605` for 2026-06-05).
 - `N` is the daily sequence (1 for the first release of the day, 2 for the second, etc.).
 
 ```bash
+series="$(cut -d. -f1-2 VERSION | tr -d '[:space:]')"   # e.g. "0.3"
 today=$(date -u +%y%m%d)
-prev_tag=$(git tag --list "v0.2.${today}.*" | sort -V | tail -1)
+prev_tag=$(git tag --list "v${series}.${today}.*" | sort -V | tail -1)
 if [[ -z "$prev_tag" ]]; then
     seq=1
 else
-    seq=$(( $(echo "$prev_tag" | sed -E "s/v0\.2\.${today}\.([0-9]+)/\1/") + 1 ))
+    seq=$(( $(echo "$prev_tag" | sed -E "s/v${series//./\\.}\.${today}\.([0-9]+)/\1/") + 1 ))
 fi
-new_version="0.2.${today}.${seq}"
+new_version="${series}.${today}.${seq}"
 new_tag="v${new_version}"
-echo "Computed: $new_tag"
+echo "Computed: $new_tag (series ${series} from VERSION)"
 ```
 
-This produces e.g. `v0.2.260529.1` for the first release of 2026-05-29, `v0.2.260529.2` for the second.
+This produces e.g. `v0.3.260605.1` for the first release of 2026-06-05, `v0.3.260605.2` for the second.
 
 ---
 
@@ -133,7 +138,7 @@ sleep 5
 gh run list --workflow=release.yml --branch="${new_tag}" --limit 1
 ```
 
-`recipe-publish.yml` is similarly `workflow_dispatch`-only and SHALL NOT be auto-triggered by this skill — it ships in-VM rootfs images on a different cadence governed by the recipe-convergence orchestration.
+(The old `recipe-publish.yml` custom-rootfs workflow was removed in the 2026-06 Fedora pivot — Windows/macOS now fetch official Fedora WSL/Cloud images directly, so there is no rootfs CI to coordinate with anymore.)
 
 ---
 
@@ -167,7 +172,9 @@ Push the ledger update to `linux-next` so other hosts and the next work-loop see
 - **NEVER `git push --force`** — main is protected.
 - **NEVER skip the workflow_dispatch step**: the release workflow is manual-only by design. If the user wants automatic-on-tag, they edit release.yml first.
 - **NEVER bump VERSION on linux-next**; only on main as part of the release commit. Sibling hosts (osx-next / windows-next) consume VERSION from their respective merge points; bumping it on linux-next desyncs them.
-- **NEVER auto-trigger `recipe-publish.yml`** — rootfs publishing has its own orchestration.
+- The release ships three platform artifacts to ONE GitHub release with matching versions:
+  Linux musl (`release` job), macOS arm64 thin tray (`macos-release`), Windows x64 thin tray
+  (`windows-release`). The macOS/Windows jobs `needs: release` and upload via `--clobber`.
 - **NEVER cancel an in-flight release** — let it complete or fail, then handle in the next cycle.
 
 ---
