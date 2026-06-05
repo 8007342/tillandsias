@@ -1,6 +1,6 @@
-# @trace plan/steps/15-tray-network-bootstrap.md, spec:tray-network-bootstrap
+# @trace plan/steps/15-tray-network-bootstrap.md, spec:enclave-network
 name: litmus:tray-network-bootstrap
-spec: tray-network-bootstrap
+spec: enclave-network
 description: >
   Verify every project-container spawn path in `tillandsias-headless` brings
   the enclave router up BEFORE the first per-project container, so Squid's
@@ -103,7 +103,7 @@ critical_path:
 
 observability:
   traces:
-    - "@trace spec:tray-network-bootstrap"
+    - "@trace spec:enclave-network"
     - "@trace plan/steps/15-tray-network-bootstrap.md"
 
 fixture:

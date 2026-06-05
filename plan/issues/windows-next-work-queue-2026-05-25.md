@@ -2,6 +2,19 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/windows-next-thin-tray.md, plan/issues/tray-convergence-coordination.md, plan/issues/control-socket-protocol-convergence-2026-05-25.md, openspec/changes/control-wire-pty-attach/
 
+## 2026-06-05 — NEW WAVE queued (pre-Vault audit)
+
+w1-w11 below are done. A 2026-06-05 pre-Vault obsolescence audit
+(`plan/issues/pre-vault-obsolescence-audit-2026-06-05.md`) queued **step 36 — Windows
+Vault keychain + HvSocket unseal-key parity**: store the unseal key + `installation-uuid`
+in Windows Credential Manager and deliver them to the in-VM vault container over HvSocket
+(the bootstrap in `crates/tillandsias-headless/src/vault_bootstrap.rs` is Linux-only today).
+This is **BLOCKED on linux step 32** (true-rekey lands the shared contract Windows mirrors)
+— not claimable until step 32 completes. Optional independent item: wire
+`EnumerateLocalProjects`. No new autonomous Windows code packet until step 32 lands.
+
+---
+
 Status: **OPEN** as of 2026-05-27T23:25Z. Windows w1, w2, w3, w4, w6
 diagnostics, the w5 converter, the shared forge-container `launch_spec` /
 `intent_for_action` amendment, the l9 URL resolver, the w5
@@ -1230,3 +1243,17 @@ Next greedy pickups (no VM needed): **w4b** (windows-ownable, pure) and **w4d**
 - Observed remote heads after fetch/pull: `origin/linux-next` `c40ef1d6`, `origin/windows-next` `cca9da4a`, `origin/osx-next` `05b47860`.
 - Added Step 23 (Rootfs Removal / Fedora Pivot) to `plan/index.yaml` and created host-specific packets `w11` (Windows), `m9` (macOS), and `l10` (Linux) to transition from custom rootfs to Fedora's official WSL2/Cloud images.
 - Next action: Claim `w11/wsl-distro-via-fedora-official-image` and implement the Fedora-44 pivot on the Windows host.
+
+### Event: 2026-06-04T01:26Z — windows worker /advance-work-from-plan: YIELD (frontier sibling-owned)
+
+- Agent ID: `windows-bullo-claude-2026-06-04T01:26:00Z`.
+- Observed remote heads after fetch: `origin/linux-next` `9aeba639`, `origin/windows-next` `4f5e640a` (pre-FF), `origin/osx-next` `e2a0aee4`, `origin/main` `5eaff8b0`.
+- Fast-forwarded `windows-next` `4f5e640a → 9aeba639` (15 commits; clean ancestor) and pushed to `origin/windows-next`. This pulled in newly-shaped roadmap steps 25–31 (`plan/steps/25..31`, `plan/index.yaml`).
+- Work discovery (post-FF): ready frontier is **step 25 (multi-host-ux-parity)** and **step 26 (forge-toolchain-expansion)**.
+  - Step 25 remaining ready tasks are `ux-parity/macos-menu` + `ux-parity/macos-assets` — **macOS scope** (`crates/tillandsias-macos-tray/`). `ux-parity/status-text` already completed by linux (`ef249b7c`). Step 25's Windows item (`EnumerateLocalProjects`) is explicitly **Optional** and held per prior directive — not reopened absent fresh runtime evidence.
+  - Step 26 is `owner_host: linux-host` (forge `images/default/` toolchain, Linux-only CI). Not Windows-claimable.
+  - Steps 27–31 (release-v0.3.0 → build-opt → agent-launch → github-vault → debt-payoff) are chain-blocked behind 25+26 completing. Step 31's `install-windows.ps1` hardening is Windows-relevant but gated at the tail of that chain.
+- No `owner_host: windows`/`any` ready task exists (`fedora-pivot/windows-wsl-official` = w11 already completed). 6 `cross-platform/*` packets remain `deferred` (orchestrator-gated cross-platform phase).
+- Windows tray remains green (build-findings 2026-06-02: 55 tests pass, drift-protection intact).
+- Defer rule: last integration cycle `2026-06-02T21:34Z` (>24h ago) — no defer.
+- Next action: **YIELD** — no Windows-eligible packet. Standby for orchestrator to either shape Windows tasks into step 25, or for siblings to advance 25→26 so the 27–31 chain (incl. Windows install-script hardening) unblocks.

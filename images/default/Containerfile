@@ -16,12 +16,12 @@ FROM registry.fedoraproject.org/fedora-minimal:44
 # DISTRO: microdnf (Fedora Minimal), NOT apk (Alpine) or dnf (standard Fedora)
 RUN microdnf install -y \
         bash coreutils findutils grep sed gawk tar gzip xz \
-        procps-ng shadow-utils ca-certificates \
+        procps-ng shadow-utils ca-certificates ncurses ncurses-term \
         fish zsh \
         git gh curl wget jq ripgrep fd-find bat git-delta git-lfs httpie yq \
         nodejs npm \
         java-25-openjdk-headless maven \
-        golang \
+        golang gopls \
         python3-pip \
         just \
         gdb lldb strace ltrace valgrind heaptrack \
@@ -59,11 +59,19 @@ RUN pip3 install --no-cache-dir pyright ruff poetry pipx uv mypy pytest \
 #
 # @trace plan/diagnostics/forge-enhancements-curated-toolchain-backlog-2026-05-29.md
 #   (shfmt — approved)
-RUN GOBIN=/usr/local/bin go install golang.org/x/tools/gopls@latest \
-    && GOBIN=/usr/local/bin go install github.com/go-delve/delve/cmd/dlv@latest \
-    && GOBIN=/usr/local/bin go install mvdan.cc/sh/v3/cmd/shfmt@latest
+RUN curl -LsSf https://github.com/go-delve/delve/releases/download/v1.26.3/dlv_1.26.3_linux_amd64.tar.gz | tar -xzf - -C /usr/local/bin dlv \
+    && curl -LsSf https://github.com/mvdan/sh/releases/download/v3.13.1/shfmt_v3.13.1_linux_amd64 -o /usr/local/bin/shfmt \
+    && chmod +x /usr/local/bin/shfmt
 
 # ── Rust toolchain ─────────────────────────────────────────────
+# `cargo-outdated` added to the cargo-binstall batch: dependency-freshness
+# checks, complementary to the already-shipped cargo-audit + cargo-deny
+# security scanners. Same RUN layer, same envelope — needs network only at
+# upstream-version-query time, governed by the existing proxy ACL (identical
+# to cargo-deny's advisory-db fetch). Last approved-but-unimplemented Rust
+# candidate from the curated-toolchain-backlog.
+# @trace plan/diagnostics/forge-enhancements-curated-toolchain-backlog-2026-05-29.md
+#   (cargo-outdated — approved)
 ENV RUSTUP_HOME=/usr/local/rustup \
     CARGO_HOME=/usr/local/cargo \
     PATH=/usr/local/cargo/bin:$PATH
@@ -73,9 +81,10 @@ RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
         --profile minimal \
         --component rust-analyzer --component clippy --component rustfmt \
     && curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C /usr/local/bin \
-    && cargo install cargo-chef cargo-watch cargo-audit wasm-pack trunk typos-cli watchexec-cli \
     && curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash \
-    && cargo binstall --no-confirm cargo-edit cargo-llvm-cov cargo-deny cargo-semver-checks cargo-expand cargo-criterion cargo-wasi \
+    && cargo binstall --no-confirm --disable-strategies compile \
+        cargo-chef cargo-watch cargo-audit wasm-pack trunk typos-cli watchexec-cli \
+        cargo-edit cargo-llvm-cov cargo-deny cargo-semver-checks cargo-expand cargo-criterion cargo-wasi cargo-outdated \
     && curl -LsSf https://github.com/bytecodealliance/wasmtime/releases/download/v45.0.0/wasmtime-v45.0.0-x86_64-linux.tar.xz | tar -xJf - --strip-components=1 -C /usr/local/bin wasmtime-v45.0.0-x86_64-linux/wasmtime \
     && ln -sf "$(rustup which rust-analyzer)" /usr/local/bin/rust-analyzer \
     && curl -LsSf https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz | tar -xzf - -C /usr/local/bin actionlint \

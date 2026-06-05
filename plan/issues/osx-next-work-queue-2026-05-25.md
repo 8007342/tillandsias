@@ -2,6 +2,22 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
+## 2026-06-05 — NEW WAVE queued (pre-Vault audit)
+
+The macOS v0.0.1/v0.3.0 items below are done or blocked-on-user. A 2026-06-05
+pre-Vault obsolescence audit (`plan/issues/pre-vault-obsolescence-audit-2026-06-05.md`)
+queued **step 36 — macOS Vault keychain + vsock unseal-key parity**: store the unseal
+key + `installation-uuid` in macOS Keychain and deliver them to the in-VM vault container
+over vsock (the bootstrap in `crates/tillandsias-headless/src/vault_bootstrap.rs` is
+Linux-only today). This is **BLOCKED on linux step 32** (true-rekey lands the shared
+contract macOS mirrors) — not claimable until step 32 completes.
+
+Independent macOS work available now: user-attended **m8 smoke** of a v0.3.x
+`Tillandsias.app` (release acceptance) — gated by step 37 producing a v0.3.x build.
+No new autonomous macOS code packet until step 32 lands.
+
+---
+
 ## macOS UNBLOCKED for v0.0.1 — as of 2026-05-27T23:25Z
 
 **macOS has zero blocking asks for other hosts.** Every Linux- and
@@ -504,7 +520,24 @@ accessor.
 - capability_tags: [appkit, macos-bundle, diagnostics]
 - status: blocked
 - autonomous_completed_at: 2026-05-26T07:10Z
-- acceptance_status: blocked_on_user_attended_interactive_smoke
+- acceptance_status: autonomous_reverified_2026-06-04; waits_on_user_attended_click_smoke
+- events:
+    - type: claim
+      ts: "2026-06-04T03:10:00Z"
+      agent_id: "macos-Tlatoanis-MacBook-Air-gemini-cli-20260604T0256Z"
+      host: "macos"
+      lease_id: "lease-macos-m8-smoke-20260604T0310Z"
+      expires_at: "2026-06-04T07:10:00Z"
+    - type: progress
+      ts: "2026-06-04T03:15:00Z"
+      summary: >
+        Re-verified autonomous portion on macOS arm64: cargo test 47/47 pass;
+        build-osx-tray.sh --ci-full produced valid signed bundle and tarball.
+        Post-build smoke verified PID alive 3s. Autonomous state is green.
+        Unblocking step-25 parent for release-lane advancement.
+    - type: yield
+      ts: "2026-06-04T03:45:00Z"
+      summary: "Autonomous verification complete. Yielding for user-attended smoke feedback."
 - gated_on:
   - user-attended menu click smoke for Start VM / Stop VM / Open Shell /
     GitHub Login / Quit
@@ -821,11 +854,18 @@ accessor.
 
 ### Item: m1b/transport-macos-vsock-connector (new, enqueued; mirrored above as ready)
 
+> SUPERSEDED 2026-06-04T01:58Z by the `status: done` entry above
+> (completed_at 2026-05-25T20:00Z). `crates/tillandsias-vm-layer/src/transport_macos.rs`
+> exists on osx-next and `wait_ready` already probes the control-wire vsock
+> port (sub-tasks A/B/C complete). This duplicate enqueue was never flipped
+> when the work landed; left in place (tombstone, not deleted) so the history
+> of the enqueue rationale survives. DO NOT re-claim — it is done.
+
 - id: `m1b/transport-macos-vsock-connector`
 - type: feature
 - owner_host: macos
 - capability_tags: [rust, vfr, objc2-virtualization, vsock, tokio, async-fd]
-- status: pending
+- status: superseded
 - depends_on: []
 - blocks: [m4, m5]  (and a future "wait_ready actually verifies vsock handshake")
 - owned_files:
@@ -3313,3 +3353,21 @@ step 5 lands.
   now has 7 litmuses; coverage_ratio stays 100% on both.
 - YAML parses cleanly. No code changes.
 - Streak: 0 (productive iter). Next macOS iter eligible at ~18:35Z.
+
+### Cycle 2026-06-04T01:55Z — step 25 UX-parity drift litmus (macOS), claude-code
+
+- 2026-06-04T01:55Z  ae9c77fc  ux-parity/macos-menu DONE — added
+  `render_ready_top_level_matches_macos_parity_contract` (menu_disabled_v2)
+  pinning the 9-item macOS Ready top-level ID sequence + v2-disabled GUI rows.
+  gap-2 verified resolved on osx-next HEAD at code level.
+- 2026-06-04T01:55Z  9acdf675  ux-parity/macos-assets DONE — added
+  `status_icon_image_loads_as_template` (status_item) asserting the menu-bar
+  NSImage is a template (gap-1 root cause). gap-1 verified resolved (icon.pdf
+  present, template load path green).
+- `cargo test -p tillandsias-macos-tray`: 47 passed / 1 ignored on macOS arm64.
+  host-shell: 40 passed. Code commits on osx-next; plan completion on linux-next.
+- Step 25 remaining: Windows EnumerateLocalProjects (optional, windows-owned) +
+  the user-attended m8/w12 smoke (step-level gate, user-blocked).
+- Note: `cargo fmt --all` reflows sibling-owned crates; used targeted staging so
+  only macos-tray test files were committed.
+- 2026-06-04T05:00Z  64ab348c  agent/opencode-web-backoff DONE — implemented exponential backoff (100ms..2s) and 30s timeout for web probes.

@@ -199,4 +199,41 @@ mod tests {
             .expect("present");
         assert!(!observ.tooltip.is_empty(), "tooltip must carry v2 reason");
     }
+
+    /// @trace spec:macos-native-tray.ui.menu-parity@v1
+    ///
+    /// Drift-protection for gap-2 (`plan/issues/macos-tray-ux-gaps-2026-05-29.md`):
+    /// the macOS Ready menu MUST surface exactly the 9 top-level items in the
+    /// parity-contract order — no macOS-only extras, no reordering, no missing
+    /// rows. `host_shell::menu_state` pins this sequence for the Windows target
+    /// (`menu_structure_matches_linux_tray_parity`); this pins it at the macOS
+    /// adapter (`render`) with `target = MacosTray`, so a divergence introduced
+    /// on the macOS side — the exact failure gap-2 reported ("a bunch of
+    /// incorrect menus") — trips here instead of only in a user-attended smoke.
+    #[test]
+    fn render_ready_top_level_matches_macos_parity_contract() {
+        let specs = render(&macos_ready_menu());
+        let top_ids: Vec<&str> = specs.iter().map(|s| s.id.as_str()).collect();
+        assert_eq!(
+            top_ids,
+            vec![
+                ids::STATUS,
+                ids::LOCAL_PROJECTS,
+                ids::CLOUD_PROJECTS,
+                ids::AGENTS,
+                ids::OBSERVATORIUM,
+                ids::OPENCODE_WEB,
+                ids::GITHUB_LOGIN,
+                ids::VERSION,
+                ids::QUIT,
+            ],
+            "macOS Ready menu must match the 9-item parity contract in order (gap-2)"
+        );
+        // The two GUI-passthrough rows stay disabled on the macOS v1 surface,
+        // so the parity menu never leaks an enabled Observatorium/OpenCode Web.
+        assert!(
+            !specs[4].enabled && !specs[5].enabled,
+            "Observatorium + OpenCode Web must be disabled on macOS v1 (gap-2)"
+        );
+    }
 }

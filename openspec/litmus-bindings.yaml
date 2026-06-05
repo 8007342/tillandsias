@@ -124,8 +124,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:cheatsheet-tooling-structure
+  - litmus:cheatsheet-host-image-sync
   coverage_ratio: 100
-  last_verified: '2026-05-12'
+  last_verified: '2026-06-04'
 - spec_id: cheatsheets-license-tiered
   status: active
   litmus_tests:
@@ -176,6 +177,7 @@ specs:
   - litmus:forge-standalone-traceability
   - litmus:forge-diagnostics-e2e
   - litmus:default-image-containerfile-shape
+  - litmus:claude-launch-stability-shape
   coverage_ratio: 75
   last_verified: '2026-05-30'
 - spec_id: dev-build
@@ -185,8 +187,9 @@ specs:
   - litmus:binary-e2e-smoke
   - litmus:headless-init-status-check-source-built
   - litmus:podman-idiomatic-launch-routing
+  - litmus:build-ci-dispatch-shape
   coverage_ratio: 100
-  last_verified: '2026-05-16'
+  last_verified: '2026-06-04'
 - spec_id: direct-podman-calls
   status: obsolete
   litmus_tests: []
@@ -209,8 +212,9 @@ specs:
   - litmus:enclave-isolation
   - litmus:binary-e2e-smoke
   - litmus:enclave-network-source-shape
-  coverage_ratio: 75
-  last_verified: '2026-05-31'
+  - litmus:tray-network-bootstrap
+  coverage_ratio: 80
+  last_verified: '2026-06-04'
 - spec_id: enforce-trace-presence
   status: obsolete
   litmus_tests: []
@@ -844,8 +848,9 @@ specs:
   - litmus:vault-auto-unseal-no-prompt
   - litmus:vault-policy-forge-cannot-read-github-token
   - litmus:git-mirror-safe-refspec-push
-  coverage_ratio: 75
-  last_verified: '2026-05-24'
+  - litmus:vault-github-token-capture-shape
+  coverage_ratio: 100
+  last_verified: '2026-06-04'
 - spec_id: headless-mode
   status: active
   litmus_tests:

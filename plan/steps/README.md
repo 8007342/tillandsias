@@ -1,48 +1,34 @@
-# Plan Step Notes
+# Plan step deliverables
 
-Each step file should be written as a cold-start handoff document.
+Each active plan step in `plan/index.yaml` points at a deliverable Markdown file.
+For in-flight steps that file lives here as `NN-<slug>.md`; once a step is
+completed and a hygiene cycle archives it, the file moves to
+`plan/archive/<date>/steps/` and the `deliverable:` pointer in `plan/index.yaml`
+is updated to the archived path.
 
-## Required Shape
+## Step file template
 
-- Objective
-- Owned files or file scopes
-- Dependency tail
-- Current evidence
-- Next action
-- Checkpoint and push expectation
-- Handoff note for the next agent
-- Repeat-mode progress report shape, if the step is intended to run under `./codex --repeat`
-- Clarify whether the step expects `./codex --quiet`, `./codex --quit`, or bounded repeat cycles with `--times`
+A step deliverable should be cold-start readable by a different future agent:
 
-## Writing Rules
+```markdown
+# Step NN — <title>
 
-- Assume the next reader may be a different agent with no hidden conversation history.
-- Write as if the current agent may be terminated after the checkpoint.
-- Include stable step or graph node IDs so repeated updates are idempotent.
-- Mention the current branch, checkpoint commit, blocker state, and residual risk.
-- Do not depend on scratch notes for canonical meaning.
-- Use plain repo paths in step notes; avoid `@`-style file references so the handoff stays readable outside the current harness.
+- **Status**: ready | in_progress | blocked | needs_clarification | completed
+- **Owner host**: linux | macos | windows | any | release
+- **Branch**: linux-next (plan writes) / <platform>-next (code)
+- **Depends on**: <step ids>
+- **Specs**: <openspec spec ids>
 
-## Scratch Notes
+## Goal
+<one paragraph>
 
-- Temporary notes belong under `plan/localwork/<step-id>/`.
-- Those notes are disposable and may be evicted by age.
-- Canonical progress lives in `plan.yaml`, `plan/index.yaml`, and the step file itself.
+## Tasks
+- [ ] <task> — owned files, acceptance evidence
 
-## Repeat Output
+## Evidence / handoff
+<what was verified; checkpoint SHA; residual risk; next action>
+```
 
-When a step is run under repeat mode, the agent should end with a compact JSON
-progress report that can be rendered into a small graph:
-
-- The agent should also emit an immediate bootstrap refinement note before edits begin.
-- The agent should refresh the same task note after each meaningful substep or blocker.
-- current progress before and after the run
-- delta for the run
-- a recent trend window
-- the latest milestone label and timestamp
-- next action and blockers
-- focus task, ready count, blocked count, and compact task tree if available
-- loop state so the wrapper can distinguish "waiting on agent" from
-  "sleeping until next iteration"
-
-The wrapper will use that report to print the human-facing graph.
+Keep notes idempotent and portable (plain repo paths, no `@`-style references).
+The active frontier and per-host claimable queues are tracked in
+`plan/index.yaml` and `plan/issues/<host>-next-work-queue-*.md`.

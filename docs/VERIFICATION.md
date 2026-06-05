@@ -69,13 +69,30 @@ The script checks that the `.cosign.bundle` file is present alongside the artifa
 Run `cosign verify-blob` directly with the bundle file:
 
 **Linux musl binary**
-
 ```bash
 cosign verify-blob \
   --bundle tillandsias-linux-x86_64.cosign.bundle \
   --certificate-identity-regexp "https://github.com/.*/tillandsias/" \
   --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
   tillandsias-linux-x86_64
+```
+
+**macOS .app tarball**
+```bash
+cosign verify-blob \
+  --bundle tillandsias-tray-0.3.0-macos-arm64.tar.gz.cosign.bundle \
+  --certificate-identity-regexp "https://github.com/.*/tillandsias/" \
+  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+  tillandsias-tray-0.3.0-macos-arm64.tar.gz
+```
+
+**Windows .zip**
+```bash
+cosign verify-blob \
+  --bundle tillandsias-tray-0.3.0-windows-x64.zip.cosign.bundle \
+  --certificate-identity-regexp "https://github.com/.*/tillandsias/" \
+  --certificate-oidc-issuer "https://token.actions.githubusercontent.com" \
+  tillandsias-tray-0.3.0-windows-x64.zip
 ```
 
 Replace the filenames with the actual artifact names from your release. The exact names vary by version.

@@ -1,0 +1,50 @@
+# @trace spec:dev-build
+name: litmus:build-ci-dispatch-shape
+spec: dev-build
+phase: pre-build
+description: Verify ci-full install dispatches each phase once and reuses completed CI evidence
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains build.sh
+  - workspace contains scripts/generate-evidence-bundle.sh
+  - bash, awk, and grep are available in PATH
+
+critical_path:
+  - step: "build and evidence scripts remain valid bash"
+    command: "bash -n build.sh scripts/generate-evidence-bundle.sh && echo 'ok: bash syntax'"
+    timeout_ms: 3000
+    expected_behavior: "ok: bash syntax"
+
+  - step: "ci-full pre-build gate has one local-ci invocation site"
+    command: "test \"$(grep -cF 'local -a command=(bash \"$SCRIPT_DIR/scripts/local-ci.sh\" \"$@\")' build.sh)\" -eq 1 && test \"$(awk '/# CI validation/{active=1} /# Install binary/{active=0} active' build.sh | grep -cF '_run_local_ci_gate')\" -eq 1 && echo 'ok: one pre-build local-ci invocation'"
+    timeout_ms: 3000
+    expected_behavior: "ok: one pre-build local-ci invocation"
+
+  - step: "install block dispatches post-build and runtime without local-ci"
+    command: "BLOCK=$(awk '/# Install binary/{active=1} /# Test build/{active=0} active' build.sh); test \"$(printf '%s' \"$BLOCK\" | grep -cF 'scripts/local-ci.sh')\" -eq 0 && printf '%s' \"$BLOCK\" | grep -F '_run_litmus_phase post-build e2e' && printf '%s' \"$BLOCK\" | grep -F '_run_litmus_phase runtime e2e' && echo 'ok: direct phase dispatch'"
+    timeout_ms: 3000
+    expected_behavior: "ok: direct phase dispatch"
+
+  - step: "ci-full install cannot fall through to a debug build"
+    command: "grep -F 'FLAG_TEST$FLAG_CHECK$FLAG_INSTALL$FLAG_CI$FLAG_CI_FULL' build.sh && echo 'ok: default-build guard includes install and CI flags'"
+    timeout_ms: 3000
+    expected_behavior: "ok: default-build guard includes install and CI flags"
+
+  - step: "evidence bundle reuses completed CI results"
+    command: "grep -F 'generate-evidence-bundle.sh\" --reuse-ci-results' build.sh && grep -F -- '--reuse-ci-results) REUSE_CI_RESULTS=true' scripts/generate-evidence-bundle.sh && grep -F 'Reusing cargo test results from pre-build CI' scripts/generate-evidence-bundle.sh && grep -F 'Reusing completed CI litmus phase logs' scripts/generate-evidence-bundle.sh && echo 'ok: evidence reuse enabled'"
+    timeout_ms: 3000
+    expected_behavior: "ok: evidence reuse enabled"
+
+observability:
+  traces:
+    - "@trace spec:dev-build"
+  expected_log: "ci-full install has one local-ci process, direct post/runtime dispatch, no debug-build fallthrough, and no evidence reruns"
+  log_fields:
+    spec: "dev-build"
+    test: "build-ci-dispatch-shape"
+
+rollback:
+  on_failure: "inspect build.sh phase dispatch and scripts/generate-evidence-bundle.sh reuse mode"
+  command: "grep -n 'local-ci.sh\\|_run_litmus_phase\\|reuse-ci-results\\|Default: debug build' build.sh scripts/generate-evidence-bundle.sh"

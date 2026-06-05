@@ -19,9 +19,18 @@ plan:
     verification: methodology/verification.yaml
 
   current_state:
-    last_completed_step: forge-diagnostics-improvement-loop (step 21.6)
-    next_step: none
-    next_graph_node: none
+    last_completed_step: multi-host-debt-payoff (step 31)
+    next_step: vault-hardening-true-rekey (step 32)
+
+    next_graph_node: vault-rekey/entrypoint
+    frontier_note: >
+      v0.3.0 graph (steps 24-31) drained 2026-06-04. The 2026-06-05 pre-Vault
+      obsolescence audit reopened a fresh wave (steps 32-37). Linux-claimable
+      ready leaves: 32 (vault true-rekey), 33 (doc cleanup), 34 (spec
+      reconciliation), 35 (code sweep). Step 36 (macOS+Windows keychain/vsock
+      parity) is blocked on 32. Step 37 (v0.3.0 release) is needs_clarification
+      (operator-gated VERSION conflict). Origin:
+      plan/issues/pre-vault-obsolescence-audit-2026-06-05.md.
     plan_index: plan/index.yaml
     step_directory: plan/steps
     checkpoint_branch: linux-next
@@ -44,6 +53,23 @@ plan:
     release_recovery_status: "Completed 2026-05-19: local build/init/tray chain passed, static-only GitHub convergence passed, v0.2.260519.3 musl release published, and Fedora Silverblue curl installer docs updated"
     user_runtime_checkout_free_status: "Completed 2026-05-20: installer PATH persistence, embedded/materialized runtime assets, checkout-free installed --init smoke from /tmp, ./build.sh --ci-full --install, GitHub Actions Convergence, and v0.2.260520.1 release workflow/readback all passed"
     ghost_trace_sweep_status: "Completed 2026-05-19: validate-traces reports 0 ghost-trace errors; remaining warnings are active in-flight OpenSpec changes"
+    pre_vault_audit_status: >
+      2026-06-05: audited headless/podman/orchestration/security/auth/vault/
+      browsers/github-token surfaces for pre-Vault obsolescence. Headline:
+      step 22 vault-hardening was marked completed but images/vault/entrypoint.sh
+      still ships the XOR init.envelope + persists root.token (spec forbids both;
+      guarding litmus is e2e-only). Plus stale pre-Vault docs/specs/code. Browsers,
+      enclave/proxy isolation, orchestration control-plane are clean. Shaped into
+      steps 32-37. Report: plan/issues/pre-vault-obsolescence-audit-2026-06-05.md.
+    release_blocker_status: >
+      2026-06-05: v0.3.0 unshipped. VERSION conflict (linux-next 0.3.260603.1 vs
+      main 0.2.260603.1, PR #15 dirty, no tag/release) — operator-gated, see step 37
+      and the 18:07Z escalation in plan/issues/multi-host-integration-loop-2026-05-24.md.
+    plan_hygiene_status: >
+      2026-06-05: archived completed steps 24-31 and 16 zero-ref completed-wave
+      issue files to plan/archive/2026-06-05/; restored plan/steps/README.md;
+      committed 9 untracked diagnostics summaries; removed the untracked
+      pre-hardening root vault audit doc after distilling it into the audit report.
 
   coordination:
     selection_model: dependency_graph

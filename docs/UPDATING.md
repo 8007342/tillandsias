@@ -1,29 +1,33 @@
 # Updating Tillandsias
 
-Tillandsias v0.2 updates are installed by re-running the release installer. The
-current release lane publishes a Linux musl-static binary named
-`tillandsias-linux-x86_64`; there is no active AppImage/Tauri auto-updater.
+Tillandsias v0.3 updates are installed by re-running the release installer or downloading the latest platform bundle.
 
-## Update
+## Update Flow
 
+### Linux
 ```bash
 curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install.sh | bash
 ```
 
-The installer replaces `~/.local/bin/tillandsias` atomically. It does not
-install host packages, fetch Chromium, or run container initialization.
+### macOS
+```bash
+curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install-macos.sh | bash
+```
 
-After updating:
+### Windows
+Download the latest [`tillandsias-tray-windows-x64.zip`](https://github.com/8007342/tillandsias/releases/latest) and run `scripts\install-windows.ps1 -Provision`.
+
+## The Fedora Pivot (v0.3.0)
+If you are updating from v0.2.x, the first run after update will re-provision your utility VM using the new **official Fedora images**. This is a one-time migration that improves reliability and eliminates the need for custom rootfs downloads.
+
+After updating, initialize the new runtime:
 
 ```bash
 tillandsias --init --debug
-tillandsias --debug --tray
 ```
 
 ## Verification
-
-Every release publishes `SHA256SUMS` and Cosign bundle signatures. See
-[VERIFICATION.md](VERIFICATION.md) for the signature verification flow.
+Every release publishes `SHA256SUMS` and Sigstore bundle signatures. See [VERIFICATION.md](VERIFICATION.md) for the signature verification flow.
 
 ## Offline Behavior
 

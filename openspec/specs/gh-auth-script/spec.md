@@ -7,7 +7,7 @@ status: active
 
 ## Purpose
 
-The interactive GitHub Login user experience. Both the CLI entry point (`tillandsias --github-login`) and the tray menu item ("GitHub Login") drive the same single Rust implementation: spin up an ephemeral container from the git service image, run `gh auth login` interactively, extract the resulting OAuth token on the host, persist it via the native keyring, and tear the container down. There is no external shell script — the flow lives entirely in `src-tauri/src/runner.rs::run_github_login`.
+The interactive GitHub Login user experience. Both the CLI entry point (`tillandsias --github-login`) and the tray menu item ("GitHub Login") drive the same single Rust implementation: spin up an ephemeral container from the git service image, run and verify `gh auth login` interactively, extract the resulting OAuth token on the host, persist it in Vault, and tear the container down. There is no external shell script; the flow lives in `crates/tillandsias-headless/src/main.rs::run_github_login`.
 
 ## Requirements
 
@@ -48,11 +48,16 @@ The login flow MUST run `gh auth login` inside a dedicated, short-lived containe
 - **AND** any pre-existing container with that name MUST be removed first with `podman rm -f`
 - **AND** `podman exec -it tillandsias-gh-login gh auth login --git-protocol https` MUST inherit the real TTY for the interactive device-code flow
 
-### Requirement: Host extracts the token and persists it in the native keyring
+### Requirement: Host verifies the session, extracts the token, and persists it in Vault
 
-After interactive `gh auth login` succeeds, the host MUST extract the OAuth token from inside the container and store it via `secrets::store_github_token` in the native keyring defined by `spec:native-secrets-store`.
+After interactive `gh auth login` succeeds, the host MUST verify the session, extract the OAuth token from inside the container, and store it in Vault at `secret/github/token` as defined by `spec:tillandsias-vault`.
 
-@trace spec:gh-auth-script, spec:native-secrets-store, spec:secrets-management
+@trace spec:gh-auth-script, spec:tillandsias-vault, spec:secrets-management
+
+#### Scenario: Session verification
+- **WHEN** the interactive `gh auth login` exits successfully
+- **THEN** the host MUST run `podman exec tillandsias-gh-login gh auth status --hostname github.com`
+- **AND** MUST abort before token persistence if verification fails
 
 #### Scenario: Token extraction
 - **WHEN** the interactive `gh auth login` exits successfully
@@ -64,10 +69,12 @@ After interactive `gh auth login` succeeds, the host MUST extract the OAuth toke
 - **THEN** the host MUST run `podman exec tillandsias-gh-login gh api user --jq .login` to capture the GitHub username for confirmation messages
 - **AND** failure MUST be non-fatal (the username is advisory only)
 
-#### Scenario: Persist in keyring
+#### Scenario: Persist in Vault
 - **WHEN** the token has been captured
-- **THEN** the host MUST call `secrets::store_github_token(token)`
-- **AND** MUST abort the flow with an error if the keyring write fails
+- **THEN** the host MUST write the token to Vault at `secret/github/token`
+- **AND** MUST verify the Vault write by reading the token back
+- **AND** MUST abort the flow with an error if either operation fails
+- **AND** MUST NOT create the deprecated `tillandsias-github-token` Podman secret
 
 ### Requirement: Drop guard tears down the login container on every exit path
 
@@ -99,8 +106,8 @@ Gating points:
 
 - `crates/tillandsias-headless/src/main.rs` — the single Rust implementation for `--github-login`
 - `scripts/test-support/github-login-fake.sh` — deterministic smoke harness for the login flow
-- `scripts/create-secrets.sh` — the host-side login bootstrap and secret creation path
-- `openspec/specs/secrets-management/spec.md` — keyring and secret lifetime contract
+- `crates/tillandsias-headless/src/vault_bootstrap.rs` — Vault write and read-back verification
+- `openspec/specs/tillandsias-vault/spec.md` — exclusive secret-store contract
 - `openspec/specs/git-mirror-service/spec.md` — ephemeral git-service container and gh auth integration
 
 ## Observability

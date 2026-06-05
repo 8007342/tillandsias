@@ -1,0 +1,41 @@
+# @trace spec:cheatsheet-tooling, spec:default-image
+name: litmus:cheatsheet-host-image-sync
+spec: cheatsheet-tooling
+phase: pre-build
+description: Keep host-readable and forge-image cheatsheet trees byte-identical
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains cheatsheets/
+  - workspace contains images/default/cheatsheets/
+  - diff is available in PATH
+
+critical_path:
+  - step: "host and forge-image cheatsheet trees are synchronized"
+    command: "diff -qr --exclude=.gitkeep cheatsheets images/default/cheatsheets && echo 'ok: cheatsheet trees synchronized'"
+    timeout_ms: 10000
+    expected_behavior: "ok: cheatsheet trees synchronized"
+
+  - step: "forge image bakes the synchronized cheatsheet tree"
+    command: "grep -F 'COPY cheatsheets/ /opt/cheatsheets-image/' images/default/Containerfile"
+    timeout_ms: 3000
+    expected_behavior: "COPY cheatsheets/ /opt/cheatsheets-image/"
+
+  - step: "agents discover the synchronized runtime view"
+    command: "grep -F 'TILLANDSIAS_CHEATSHEETS/INDEX.md' images/default/config-overlay/opencode/instructions/forge-discovery.md && grep -F 'export TILLANDSIAS_CHEATSHEETS=\"/opt/cheatsheets\"' images/default/lib-common.sh"
+    timeout_ms: 3000
+    expected_behavior: "TILLANDSIAS_CHEATSHEETS"
+
+observability:
+  traces:
+    - "@trace spec:cheatsheet-tooling"
+    - "@trace spec:default-image"
+  expected_log: "Host and forge-image cheatsheet trees remain synchronized and discoverable"
+  log_fields:
+    spec: "cheatsheet-tooling"
+    test: "cheatsheet-host-image-sync"
+
+rollback:
+  on_failure: "copy the canonical host cheatsheet tree into images/default/cheatsheets and regenerate indexes"
+  command: "diff -qr --exclude=.gitkeep cheatsheets images/default/cheatsheets"

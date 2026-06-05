@@ -128,6 +128,7 @@ ALWAYS store the GitHub token in Vault at `secret/github/token`.
 - **WHEN** the user runs `tillandsias --github-login`
 - **THEN** the host SHALL capture the GitHub token
 - **AND** SHALL write it to Vault at `secret/github/token`
+- **AND** SHALL read the token back and fail if the stored value does not match
 - **AND** the deprecated podman secret `tillandsias-github-token` SHALL NOT be created.
 
 #### Scenario: Legacy flags are rejected

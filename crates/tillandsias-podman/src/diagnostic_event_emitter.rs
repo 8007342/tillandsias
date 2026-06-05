@@ -64,7 +64,7 @@ use tracing::{debug, warn};
 
 use crate::client::{
     emit_diagnostic_event, format_container_exit_event, format_container_signal_event,
-    format_resource_exhaustion_event,
+    format_container_start_event, format_resource_exhaustion_event,
 };
 use crate::diagnostics::{ContainerLifecycleAction, ContainerLifecycleRecord};
 use crate::events::PodmanEventStream;
@@ -274,6 +274,8 @@ fn route_record(state: &mut EmitterState, record: &ContainerLifecycleRecord) {
             if let Some(at) = record.observed_at_unix {
                 state.start_times.insert(record.container_name.clone(), at);
             }
+            let body = format_container_start_event(&record.container_name, "running");
+            emit_diagnostic_event(true, "event:container_start", &record.container_name, &body);
         }
         ContainerLifecycleAction::Died => {
             // POSIX convention: a process killed by a signal exits

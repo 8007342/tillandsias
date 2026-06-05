@@ -247,6 +247,8 @@ pub enum TrayIconState {
     Blooming,
     /// Unrecoverable error (podman missing) — Ionantha dried (withered)
     Dried,
+    /// App is shutting down — Ionantha dried (fading out)
+    Stopping,
 }
 
 /// Allocates genera from the pool, avoiding duplicates per project.

@@ -4,8 +4,9 @@ multi_host_development:
   version: v0.1
   purpose: >
     Coordinate Linux, Windows, and macOS hosts working on sibling branches while
-    `plan/` remains the durable inter-agent ledger for long-running work,
-    failures, restarts, and idempotent recovery.
+    the Fedora Pivot (using official Fedora Cloud/WSL2 images) provides the
+    stable, zero-drift runtime enclave. `plan/` remains the durable inter-agent
+    ledger for long-running work, failures, restarts, and idempotent recovery.
 
   platform_branches:
     linux: linux-next

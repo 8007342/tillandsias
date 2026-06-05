@@ -2048,11 +2048,11 @@ reverse_proxy {upstream_host}:{port}\n    \
 }
 
 fn router_host_port_candidates(port_override: Option<u16>) -> Vec<u16> {
-    let mut candidates = vec![80, 8080];
+    let mut candidates = vec![80, 8080, 18080, 28080, 38080, 48080, 58080];
     if let Some(port) = port_override
         && !candidates.contains(&port)
     {
-        candidates.push(port);
+        candidates.insert(0, port);
     }
     candidates
 }
@@ -2062,7 +2062,8 @@ fn port_is_available(port: u16) -> bool {
 }
 
 fn select_router_host_port(port_override: Option<u16>, debug: bool) -> Result<u16, String> {
-    for candidate in router_host_port_candidates(port_override) {
+    let candidates = router_host_port_candidates(port_override);
+    for &candidate in &candidates {
         if port_is_available(candidate) {
             if debug {
                 eprintln!("[tillandsias] selected router host port {candidate}");
@@ -2071,12 +2072,14 @@ fn select_router_host_port(port_override: Option<u16>, debug: bool) -> Result<u1
         }
     }
 
-    Err(match port_override {
-        Some(port) => format!(
-            "Host ports 80 and 8080 are occupied; re-run with --port {port} or choose another free port"
-        ),
-        None => "Host ports 80 and 8080 are occupied; re-run with --port <free-port>".to_string(),
-    })
+    let checked = candidates
+        .iter()
+        .map(|p| p.to_string())
+        .collect::<Vec<_>>()
+        .join(", ");
+    Err(format!(
+        "No free router host ports found (checked {checked}); re-run with --port <free-port>"
+    ))
 }
 
 pub(crate) fn sanitize_hostname(raw: &str) -> String {
@@ -2759,21 +2762,42 @@ fn build_image_with_logging(
         .map_err(|e| format!("Failed to spawn build process: {e}"))?;
 
     let stdout = child.stdout.take();
-    let _stderr = child.stderr.take();
+    let stderr = child.stderr.take();
 
     // Open log file for writing all output
-    let mut log_handle = if let Some(log_path) = log_file {
-        Some(
-            fs::OpenOptions::new()
-                .create(true)
-                .truncate(true)
-                .write(true)
-                .open(log_path)
-                .map_err(|e| format!("Failed to open log file: {e}"))?,
-        )
+    // @trace gap:ON-005 — capture stdout/stderr for progress parsing
+    let log_handle = if let Some(log_path) = log_file {
+        let f = fs::OpenOptions::new()
+            .create(true)
+            .truncate(true)
+            .write(true)
+            .open(log_path)
+            .map_err(|e| format!("Failed to open log file: {e}"))?;
+        Some(Arc::new(std::sync::Mutex::new(f)))
     } else {
         None
     };
+
+    // Spawn thread to read stderr so it doesn't block the process when the pipe buffer fills up.
+    // podman build can be very noisy on stderr (e.g. download bars).
+    let image_name_str = image_name.to_string();
+    let log_handle_stderr = log_handle.clone();
+    let stderr_thread = std::thread::spawn(move || {
+        use std::io::BufRead;
+        if let Some(stderr_reader) = stderr {
+            let buf_reader = std::io::BufReader::new(stderr_reader);
+            for line in buf_reader.lines().map_while(Result::ok) {
+                if _debug {
+                    eprintln!("[tillandsias] build-{}: {}", image_name_str, line);
+                }
+                if let Some(ref log) = log_handle_stderr
+                    && let Ok(mut f) = log.lock()
+                {
+                    let _ = writeln!(f, "{}", line);
+                }
+            }
+        }
+    });
 
     // @trace gap:ON-005 — read and parse output for progress tracking
     // Process stdout to catch layer pull progress
@@ -2789,8 +2813,10 @@ fn build_image_with_logging(
                 eprintln!("[tillandsias] build-{}: {}", image_name, line);
             }
             // Write to log file if present
-            if let Some(ref mut log) = log_handle {
-                let _ = writeln!(log, "{}", line);
+            if let Some(ref log) = log_handle
+                && let Ok(mut f) = log.lock()
+            {
+                let _ = writeln!(f, "{}", line);
             }
 
             // @trace gap:ON-005 — parse podman progress indicators
@@ -2824,6 +2850,9 @@ fn build_image_with_logging(
     let status = child
         .wait()
         .map_err(|e| format!("Failed to wait for build process: {e}"))?;
+
+    // Wait for the stderr thread to finish logging
+    let _ = stderr_thread.join();
 
     if status.success() {
         if progress_percent < 100 {
@@ -3297,6 +3326,20 @@ fn run_github_login(debug: bool) -> Result<(), String> {
     ]);
     run_command(login, debug)?;
 
+    let mut auth_status = podman_command();
+    auth_status.args([
+        "exec",
+        &container,
+        "gh",
+        "auth",
+        "status",
+        "--hostname",
+        "github.com",
+    ]);
+    run_command_silent(auth_status, debug).map_err(|e| {
+        format!("containerized gh authentication verification failed after login: {e}")
+    })?;
+
     let mut token_cmd = podman_command();
     token_cmd.args([
         "exec",
@@ -3319,6 +3362,10 @@ fn run_github_login(debug: bool) -> Result<(), String> {
         );
         return Err("containerized gh auth token returned an empty token".to_string());
     }
+
+    let mut username_cmd = podman_command();
+    username_cmd.args(["exec", &container, "gh", "api", "user", "--jq", ".login"]);
+    let username = command_output(username_cmd, debug).ok();
 
     info!(
         accountability = true,
@@ -3367,6 +3414,9 @@ fn run_github_login(debug: bool) -> Result<(), String> {
         secret_name = "tillandsias-github-token",
         "GitHub authentication and secret rotation completed successfully"
     );
+    if let Some(username) = username.filter(|value| !value.is_empty()) {
+        println!("[tillandsias] GitHub authentication complete for {username}");
+    }
 
     Ok(())
 }
@@ -4452,14 +4502,28 @@ fn opencode_web_http_status(url: &str, cookie_header: Option<String>) -> Result<
 
 fn wait_for_opencode_web_route(project_name: &str, url: &str, debug: bool) -> Result<(), String> {
     let mut last_outcome = String::from("no HTTP probe attempted");
-    for attempt in 1..=20 {
+    let mut backoff = Duration::from_millis(100);
+    let max_backoff = Duration::from_secs(2);
+    let start = std::time::Instant::now();
+    let timeout = Duration::from_secs(30);
+    let mut attempt = 1;
+
+    while start.elapsed() < timeout {
         match opencode_web_http_status(url, None) {
             Ok(401) => return Ok(()),
+            Ok(502) => {
+                last_outcome = String::from("status 502 (starting)");
+                if debug {
+                    eprintln!(
+                        "[tillandsias] waiting for OpenCode Web auth gate: attempt {attempt} ({last_outcome})"
+                    );
+                }
+            }
             Ok(code) => {
                 last_outcome = format!("status {code}");
                 if debug {
                     eprintln!(
-                        "[tillandsias] waiting for OpenCode Web auth gate: attempt {attempt}/20 ({last_outcome})"
+                        "[tillandsias] waiting for OpenCode Web auth gate: attempt {attempt} ({last_outcome})"
                     );
                 }
             }
@@ -4467,18 +4531,20 @@ fn wait_for_opencode_web_route(project_name: &str, url: &str, debug: bool) -> Re
                 last_outcome = err;
                 if debug {
                     eprintln!(
-                        "[tillandsias] waiting for OpenCode Web auth gate: attempt {attempt}/20 ({last_outcome})"
+                        "[tillandsias] waiting for OpenCode Web auth gate: attempt {attempt} ({last_outcome})"
                     );
                 }
             }
         }
-        std::thread::sleep(Duration::from_millis(500));
+        std::thread::sleep(backoff);
+        backoff = (backoff * 2).min(max_backoff);
+        attempt += 1;
     }
 
     let forge_container = forge_container_name(project_name);
     let logs_tail = container_logs_tail(&forge_container, 50);
     Err(format!(
-        "OpenCode Web auth gate did not become ready in 10s.\n\
+        "OpenCode Web auth gate did not become ready in 30s.\n\
          URL: {url}\n\
          Last outcome: {last_outcome}\n\
          Forge container logs (last ≤50 lines):\n{logs_tail}\n\
@@ -4501,14 +4567,28 @@ fn wait_for_authenticated_opencode_web(
     );
 
     let mut last_outcome = String::from("no HTTP probe attempted");
-    for attempt in 1..=20 {
+    let mut backoff = Duration::from_millis(100);
+    let max_backoff = Duration::from_secs(2);
+    let start = std::time::Instant::now();
+    let timeout = Duration::from_secs(30);
+    let mut attempt = 1;
+
+    while start.elapsed() < timeout {
         match opencode_web_http_status(url, Some(cookie_header.clone())) {
             Ok(code) if (200..400).contains(&code) => return Ok(()),
+            Ok(502) => {
+                last_outcome = String::from("status 502 (starting)");
+                if debug {
+                    eprintln!(
+                        "[tillandsias] waiting for authenticated OpenCode Web app: attempt {attempt} ({last_outcome})"
+                    );
+                }
+            }
             Ok(code) => {
                 last_outcome = format!("status {code}");
                 if debug {
                     eprintln!(
-                        "[tillandsias] waiting for authenticated OpenCode Web app: attempt {attempt}/20 ({last_outcome})"
+                        "[tillandsias] waiting for authenticated OpenCode Web app: attempt {attempt} ({last_outcome})"
                     );
                 }
             }
@@ -4516,18 +4596,20 @@ fn wait_for_authenticated_opencode_web(
                 last_outcome = err;
                 if debug {
                     eprintln!(
-                        "[tillandsias] waiting for authenticated OpenCode Web app: attempt {attempt}/20 ({last_outcome})"
+                        "[tillandsias] waiting for authenticated OpenCode Web app: attempt {attempt} ({last_outcome})"
                     );
                 }
             }
         }
-        std::thread::sleep(Duration::from_millis(500));
+        std::thread::sleep(backoff);
+        backoff = (backoff * 2).min(max_backoff);
+        attempt += 1;
     }
 
     let forge_container = forge_container_name(project_name);
     let logs_tail = container_logs_tail(&forge_container, 50);
     Err(format!(
-        "OpenCode Web app did not become reachable with a registered session in 10s.\n\
+        "OpenCode Web app did not become reachable with a registered session in 30s.\n\
          URL: {url}\n\
          Last outcome: {last_outcome}\n\
          Forge container logs (last ≤50 lines):\n{logs_tail}\n\
@@ -5078,6 +5160,13 @@ pub(crate) fn run_opencode_web_mode(
         }
     }
     rt.block_on(async {
+        // @trace spec:runtime-diagnostics-stream
+        let diag_emitter =
+            tillandsias_podman::diagnostic_event_emitter::spawn_diagnostic_event_emitter(
+                debug,
+                "tillandsias-",
+            );
+
         cleanup_stack_containers(&client, project_name).await;
 
         client
@@ -5163,6 +5252,22 @@ pub(crate) fn run_opencode_web_mode(
             .map_err(|e| format!("[OpenCode Web] failed to start forge: {e}"))?;
         emit_opencode_web_event(project_name, "forge", "started", Some("opencode-web"))?;
 
+        // @trace spec:runtime-diagnostics-stream (Stderr line pass-through)
+        let _diag_logs_handle = if debug {
+            Some(
+                tillandsias_podman::DiagnosticsHandle::start_typed_event_stream(vec![
+                    "tillandsias-router".to_string(),
+                    "tillandsias-proxy".to_string(),
+                    git_container_name.clone(),
+                    "tillandsias-inference".to_string(),
+                    forge_container_name(project_name),
+                ])
+                .await,
+            )
+        } else {
+            None
+        };
+
         // @trace spec:subdomain-routing-via-reverse-proxy
         // After forge starts, ensure router is running and write dynamic routes.
         let router_image = versioned_image_tag("router", version);
@@ -5191,6 +5296,13 @@ pub(crate) fn run_opencode_web_mode(
         // After writing the dynamic Caddyfile, reload Caddy to activate the routes.
         // The reload is graceful (no container restart) via the admin API at localhost:2019.
         caddy_reload_routes(debug).await?;
+
+        // Stop the diagnostic-event emitter before this block closes;
+        // dropping `_diag_logs_handle` aborts its logs tails.
+        if let Some(handle) = diag_emitter {
+            handle.abort();
+            let _ = handle.await;
+        }
 
         Ok::<(), String>(())
     })?;
@@ -5634,6 +5746,28 @@ fn run_forge_agent_cli_mode(
     let rt = podman_runtime()?;
     let client = PodmanClient::new();
     rt.block_on(async {
+        // @trace spec:runtime-diagnostics-stream
+        let diag_emitter =
+            tillandsias_podman::diagnostic_event_emitter::spawn_diagnostic_event_emitter(
+                debug,
+                "tillandsias-",
+            );
+
+        // @trace spec:runtime-diagnostics-stream (Stderr line pass-through)
+        let _diag_logs_handle = if debug {
+            Some(
+                tillandsias_podman::DiagnosticsHandle::start_typed_event_stream(vec![
+                    "tillandsias-router".to_string(),
+                    "tillandsias-proxy".to_string(),
+                    format!("tillandsias-git-{project_name}"),
+                    "tillandsias-inference".to_string(),
+                ])
+                .await,
+            )
+        } else {
+            None
+        };
+
         let result = client
             .run_container_attached_observed(
                 mode.slug(),
@@ -5643,6 +5777,12 @@ fn run_forge_agent_cli_mode(
             )
             .await;
         cleanup_shared_stack_if_no_running_forge(&client, project_name, debug).await;
+
+        if let Some(handle) = diag_emitter {
+            handle.abort();
+            let _ = handle.await;
+        }
+
         result.map_err(|e| format!("[forge-launch] {} session exited: {e}", mode.slug()))
     })
 }
@@ -5883,23 +6023,23 @@ async fn run_headless_async(
     //
     // Wave 19c Gap OBS-005: Run metrics retention check before starting sampler
     // @trace gap:OBS-005
-    run_metrics_retention();
+    tokio::spawn(async move { run_metrics_retention() });
 
     // Wave 20d Gap OBS-012: Run evidence bundle retention check before metrics
     // @trace gap:OBS-012
-    run_evidence_bundle_retention();
+    tokio::spawn(async move { run_evidence_bundle_retention() });
 
     // Wave 20c Gap OBS-010: Run log field cardinality analysis
     // @trace gap:OBS-010
-    run_log_cardinality_analysis().await;
+    tokio::spawn(run_log_cardinality_analysis());
 
     // Wave 24a Gap OBS-011: Run trace budget enforcement checks
     // @trace gap:OBS-011
-    run_trace_budget_enforcement().await;
+    tokio::spawn(run_trace_budget_enforcement());
 
     // Wave 21c Gap TR-006: Run disk usage check and auto-evict old cached images
     // @trace gap:TR-006
-    run_disk_usage_check();
+    tokio::spawn(async move { run_disk_usage_check() });
 
     // Wave 21a Gap ON-009: Check and refresh GitHub token if expired
     // @trace gap:ON-009, spec:secret-rotation
@@ -6595,10 +6735,11 @@ fn spawn_metrics_http_server() -> Option<tokio::task::JoinHandle<()>> {
 /// without signal handlers and SIGTERM kills the process immediately —
 /// sibling-host clients polling `VmStatusRequest` never see `phase=Stopping`.
 pub(crate) fn install_shutdown_signal_handlers() -> Result<Arc<AtomicBool>, String> {
+    use signal_hook::consts::signal::*;
     let terminated = Arc::new(AtomicBool::new(false));
-    flag::register(libc::SIGTERM, Arc::clone(&terminated))
+    flag::register(SIGTERM, Arc::clone(&terminated))
         .map_err(|e| format!("Failed to register SIGTERM: {e}"))?;
-    flag::register(libc::SIGINT, Arc::clone(&terminated))
+    flag::register(SIGINT, Arc::clone(&terminated))
         .map_err(|e| format!("Failed to register SIGINT: {e}"))?;
     Ok(terminated)
 }
@@ -6652,14 +6793,15 @@ pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
 
     if is_available {
         // Use a short timeout (1s) for the initial list operation.
-        match tokio::time::timeout(Duration::from_secs(1), client.list_containers("tillandsias-"))
-            .await
+        match tokio::time::timeout(
+            Duration::from_secs(1),
+            client.list_containers("tillandsias-"),
+        )
+        .await
         {
             Ok(Ok(containers)) if !containers.is_empty() => {
-                let running_at_start: Vec<_> = containers
-                    .iter()
-                    .filter(|c| c.state == "running")
-                    .collect();
+                let running_at_start: Vec<_> =
+                    containers.iter().filter(|c| c.state == "running").collect();
 
                 if !running_at_start.is_empty() {
                     info!(
@@ -6696,10 +6838,14 @@ pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
                     .await
                     {
                         Ok(Ok(remaining)) => {
-                            let running: Vec<_> =
-                                remaining.into_iter().filter(|c| c.state == "running").collect();
+                            let running: Vec<_> = remaining
+                                .into_iter()
+                                .filter(|c| c.state == "running")
+                                .collect();
                             if running.is_empty() {
-                                debug!("verification clean: zero running managed containers remain");
+                                debug!(
+                                    "verification clean: zero running managed containers remain"
+                                );
                                 break;
                             }
 
@@ -6737,10 +6883,11 @@ pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
     // @trace spec:graceful-shutdown
     if let Ok(entries) = fs::read_dir("/tmp") {
         for entry in entries.flatten() {
-            if let Some(name) = entry.file_name().to_str() {
-                if name.starts_with("tillandsias-init-") && name.ends_with(".log") {
-                    let _ = fs::remove_file(entry.path());
-                }
+            if let Some(name) = entry.file_name().to_str()
+                && name.starts_with("tillandsias-init-")
+                && name.ends_with(".log")
+            {
+                let _ = fs::remove_file(entry.path());
             }
         }
     }
@@ -7395,13 +7542,18 @@ mod tests {
             "run_status_check must route through the shared podman layer"
         );
 
-        let login_window = source_window(
-            source,
-            "fn run_github_login(debug: bool, legacy_keyring_secrets: bool)",
-        );
+        let login_window = source_window(source, "fn run_github_login(debug: bool)");
         assert!(
             login_window.contains("podman_command()"),
             "run_github_login must use the shared podman command constructor"
+        );
+        assert!(
+            login_window.contains("\"status\"") && login_window.contains("\"auth\""),
+            "run_github_login must verify the containerized gh session"
+        );
+        assert!(
+            login_window.contains("write_github_token_to_vault"),
+            "run_github_login must persist the token to Vault"
         );
 
         let opencode_window = source_window(

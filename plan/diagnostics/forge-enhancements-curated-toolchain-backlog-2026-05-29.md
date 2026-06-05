@@ -56,7 +56,7 @@ unchanged before approval:
 | `cargo-deny` | **implemented** | 06:03Z | License + advisory checking, standard in production pipelines. | Needs network at FIRST RUN to fetch advisory-db; review proxy ACL. |
 | `cargo-semver-checks` | **implemented** | 06:03Z | Automated semver verification for library releases. | Single binary; cargo install. |
 | `cargo-expand` | **implemented** | 06:03Z | Macro-expansion debugging essential for Rust development. | Single binary; cargo install. |
-| `cargo-outdated` | approved | 06:03Z | Dependency-freshness checks. | Network needed for upstream version query; gate at proxy ACL. |
+| `cargo-outdated` | **implemented** | 06:03Z | Dependency-freshness checks. | Shipped via `cargo binstall cargo-outdated` on the existing Rust-toolchain RUN layer (no new image layer). Network needed only at upstream-version-query time, gated by the existing proxy ACL (same envelope as cargo-deny/cargo-audit). See Update 2026-06-04. |
 | `cargo-tree` | blocked | 06:03Z | Dependency-graph visualization (now in cargo core — VERIFY this is still needed). | n/a — likely already covered by `cargo tree`. Redundant. |
 | `cargo-criterion` | **implemented** | 06:03Z | Benchmarking harness front-end for criterion. | Single binary; cargo install. |
 | `cargo-wasi` | **implemented** | 06:03Z | WASI target convenience wrapper. | Single binary; depends on `wasmtime` being available. |
@@ -289,3 +289,25 @@ A new live diagnostic run (`diagnostics_20260529T151307Z-summary.md`) surfaced a
 | `markdownlint` | **implemented** | 15:13Z | Other (linter) | Markdown style and syntax linter for documentation and specs. | Installed via npm (`markdownlint-cli`). Local static analysis. |
 | `actionlint` | **implemented** | 15:13Z | Other (linter) | Linter for GitHub Actions workflow files. | Pinned static Go binary downloaded from upstream releases. Local static analysis. |
 | `vale` | **implemented** | 15:13Z | Other (linter) | Syntax-aware prose linter for documentation and specifications. | Pinned static Go binary downloaded from upstream releases. Local static analysis. |
+
+## Update 2026-06-04T01:24Z — cargo-outdated shipped (final approved Rust candidate)
+
+Implementing the Rust/Wasm slice of step 26 (`forge-toolchain-expansion`
+→ `forge-expansion/rust-wasm`). The Rust ecosystem table at the head of
+this file showed every Rust candidate as **implemented** except
+`cargo-outdated`, which sat at `approved`. With this change the Rust row
+set is fully converged.
+
+- `cargo-outdated` — added to the `cargo binstall` batch on the existing
+  Rust-toolchain RUN layer in `images/default/Containerfile`. No new image
+  layer. Network is needed only at upstream-version-query runtime, governed
+  by the existing proxy ACL — the same envelope already accepted for
+  `cargo-deny` (advisory-db fetch) and `cargo-audit`. Privacy/isolation
+  gate at the head of this file is satisfied unchanged: no new egress path,
+  no new credentials, no new mounts, security flags untouched.
+
+Remaining non-implemented Rust candidates are intentionally NOT shipped:
+`cargo-tarpaulin` (deferred — coverage handled by the shipped
+`cargo-llvm-cov`), `cargo-tree` (blocked — redundant with core
+`cargo tree`), `wasmer` (deferred — WASM runtime handled by the shipped
+`wasmtime`). No action needed on those.

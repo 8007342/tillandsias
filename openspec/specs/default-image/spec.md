@@ -459,6 +459,7 @@ equivalent key, so both agent runtimes see the eight `browser.*` tools.
 
 Bind to tests in `openspec/litmus-bindings.yaml`:
 - `litmus:ephemeral-guarantee`
+- `litmus:claude-launch-stability-shape` — Claude TUI runtime and credential-free launch boundary
 
 Gating points:
 - Default forge image is pulled fresh; cached images are cleared on container stop

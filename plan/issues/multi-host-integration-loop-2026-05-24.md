@@ -3893,3 +3893,57 @@ gh workflow run release.yml --ref v0.2.260601.1
 2. Via GitHub web UI: go to https://github.com/8007342/tillandsias/actions/workflows/release.yml → "Run workflow" → branch: main → Run.
 
 The workflow's `gh release create "v${VERSION}"` step will create the tag `v0.2.260602.3` atomically as part of the release publication. No manual tag creation is needed.
+
+---
+
+## ESCALATION — 2026-06-03T18:05Z — Release v0.2.260603.1
+
+**Cycle**: v0.2.260603.1 daily linux-next → main promotion.
+
+**Completed steps**:
+- Step 0: Pre-flight — linux-next synced (7 commits ahead of main), worktree clean.
+- Step 1: Computed version v0.2.260603.1 (first release of 260603, no prior tags today).
+- Step 2: PR #14 opened (linux-next → main, 7 commits).
+- Step 3: CI clean (mergeable_state: clean, 0 required checks). PR #14 merged via merge commit SHA `26fad8dd`.
+- Step 4: VERSION bumped to 0.2.260603.1 on main, pushed (commit `5eaff8b0`).
+
+**Blockers** (identical to prior cycle):
+- Step 5 (tag push): `git push origin v0.2.260603.1` → HTTP 403. The container proxy blocks tag ref pushes.
+- Step 6 (workflow dispatch): `mcp__github__actions_run_trigger run_workflow release.yml` → `403 Resource not accessible by integration`. MCP token lacks `actions: write`.
+
+**State left on remote**:
+- main HEAD: `5eaff8b0` (VERSION=0.2.260603.1, all linux-next work merged).
+- No tag `v0.2.260603.1` on GitHub yet.
+- PR #14 closed/merged.
+- No GitHub Release published yet.
+
+**Required operator action** (either):
+1. `gh workflow run release.yml --ref main` from a local machine with `gh` CLI.
+2. GitHub web UI: https://github.com/8007342/tillandsias/actions/workflows/release.yml → "Run workflow" → branch: main → Run.
+
+The workflow's `gh release create "v${VERSION}"` step will create tag `v0.2.260603.1` atomically. No separate `git tag` needed.
+
+### Cycle 2026-06-04T01:39Z — INTEGRATED osx-next parity tests (clean tree, on-demand)
+Merged `origin/osx-next` (2 ahead: `9acdf675`+`ae9c77fc`, macOS-cfg-gated tray tests, +56 lines) → linux-next via `--no-ff` (merge `c30f873e`); conflict-free, `./build.sh --check` PASS. No stale leases. Step 26 done; R≈1 (cc=0/green). CRITICAL ROOT BLOCKER unchanged: macOS must run the attended m8 smoke and flip step-25 `multi-host-ux-parity` parent → completed to reopen step-27 release tasks (linux-claimable). Linux YIELD/blocked; Windows yield+ff.
+
+### Cycle 2026-06-04T18:07Z — ESCALATION: VERSION conflict blocks linux-next → main PR
+
+**Step reached**: Step 3 (merge gate) — PR #15 opened, `mergeable_state: dirty`.
+
+**Root cause**: Commit `71bd4d2c` (by bulloncito@gmail.com, 2026-06-03) bumped VERSION directly on `linux-next` to `0.3.260603.1` as part of the v0.3.0 CalVer series transition. `main` HEAD (`5eaff8b0`) still has `0.2.260603.1`. This creates a 3-way merge conflict in `VERSION` (and Cargo.toml crate versions) that GitHub cannot auto-resolve.
+
+**Violation of skill guardrail**: The skill prohibits bumping VERSION on `linux-next` to avoid desyncing sibling branches. The bump was intentional (operator commit) and represents a major version series transition (0.2.x → 0.3.x).
+
+**State left on remote**:
+- PR #15 open (linux-next → main), `mergeable_state: dirty`, NOT merged.
+- No new tag created.
+- No workflow dispatch triggered.
+- `linux-next` HEAD: `27298be0` (VERSION=0.3.260603.1).
+- `main` HEAD: `5eaff8b0` (VERSION=0.2.260603.1).
+
+**Required operator action** (choose one):
+1. **Embrace 0.3.x series on main**: Manually resolve the VERSION conflict by merging linux-next into main locally (accepting linux-next's VERSION=0.3.x), then push main + tag + trigger `gh workflow run release.yml --ref <tag>`.
+2. **Rebase linux-next onto main**: `git rebase origin/main` on linux-next, resolving VERSION conflict by keeping 0.3.260604.1, then force-push linux-next and close/recreate PR #15. (WARNING: this rewrites linux-next history — coordinate with osx-next/windows-next hosts.)
+3. **Update skill version formula**: If 0.3.x is the new canonical series, update `skills/merge-to-main-and-release/SKILL.md` Step 1 to compute `0.3.YYMMDD.N` and re-run the skill.
+
+**Next cycle**: Will retry once one of the above is resolved. PR #15 remains open for reuse.

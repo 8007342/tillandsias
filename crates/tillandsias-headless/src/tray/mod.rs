@@ -941,6 +941,8 @@ struct TrayService {
     service_name: String,
     /// @trace gap:TR-005: Async executor for offloading blocking tasks
     task_executor: AsyncTaskExecutor,
+    /// Atomic flag to signal graceful shutdown to the main event loop.
+    shutdown: AtomicBool,
 }
 
 #[derive(Clone)]
@@ -1047,6 +1049,7 @@ impl TrayService {
             menu_path: MENU_PATH.to_string(),
             service_name: format!("org.freedesktop.StatusNotifierItem-{pid}-1"),
             task_executor,
+            shutdown: AtomicBool::new(false),
         }
     }
 

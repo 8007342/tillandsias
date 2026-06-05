@@ -159,7 +159,7 @@ impl VzRuntime {
         on_phase("Downloading Fedora Cloud image");
         download_verified(&artifact, &qcow2_dest, &|downloaded, total| {
             if let Some(total_bytes) = total {
-                let percent = ((downloaded * 100) / total_bytes.max(1)) as u64;
+                let percent = (downloaded * 100) / total_bytes.max(1);
                 on_phase(&format!(
                     "Downloading Fedora Cloud image {}/{} MB ({}%)",
                     downloaded / 1_000_000,

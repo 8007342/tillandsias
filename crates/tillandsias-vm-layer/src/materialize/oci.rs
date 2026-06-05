@@ -55,10 +55,7 @@ struct OciManifest {
 ///
 /// `oci_archive` can be a `.tar` or `.tar.xz`. If it's `.tar.xz`, it must be
 /// decompressed before calling this function, or the reader must handle it.
-pub fn flatten_to_tar<R: Read>(
-    oci_reader: R,
-    output_tar: &Path,
-) -> Result<(), OciError> {
+pub fn flatten_to_tar<R: Read>(oci_reader: R, output_tar: &Path) -> Result<(), OciError> {
     let mut archive = Archive::new(oci_reader);
     let scratch = TempDir::new()?;
     let rootfs_dir = scratch.path().join("rootfs");
@@ -75,22 +72,30 @@ pub fn flatten_to_tar<R: Read>(
         return Err(OciError::MissingIndex);
     }
     let index: OciIndex = serde_json::from_reader(BufReader::new(File::open(index_path)?))?;
-    
-    let manifest_digest = index.manifests.first()
+
+    let manifest_digest = index
+        .manifests
+        .first()
         .ok_or_else(|| OciError::MissingManifest("empty index".into()))?
-        .digest.strip_prefix("sha256:").unwrap_or(&index.manifests[0].digest);
+        .digest
+        .strip_prefix("sha256:")
+        .unwrap_or(&index.manifests[0].digest);
 
     // 3. Read the manifest to find the layers.
     let manifest_path = scratch.path().join("blobs/sha256").join(manifest_digest);
     if !manifest_path.exists() {
         return Err(OciError::MissingManifest(manifest_digest.to_string()));
     }
-    let manifest: OciManifest = serde_json::from_reader(BufReader::new(File::open(manifest_path)?))?;
+    let manifest: OciManifest =
+        serde_json::from_reader(BufReader::new(File::open(manifest_path)?))?;
 
     // 4. Extract each layer into the rootfs directory in order.
     // Layers are ordered from base to top.
     for layer in manifest.layers {
-        let layer_digest = layer.digest.strip_prefix("sha256:").unwrap_or(&layer.digest);
+        let layer_digest = layer
+            .digest
+            .strip_prefix("sha256:")
+            .unwrap_or(&layer.digest);
         let layer_path = scratch.path().join("blobs/sha256").join(layer_digest);
         if !layer_path.exists() {
             return Err(OciError::MissingLayer(layer_digest.to_string()));
@@ -99,12 +104,12 @@ pub fn flatten_to_tar<R: Read>(
         // Layers in OCI archives are often gzipped tars.
         let f = File::open(layer_path)?;
         let mut layer_archive = Archive::new(flate2::read::GzDecoder::new(f));
-        
+
         // Unpack the layer, handling whiteouts.
         for entry in layer_archive.entries()? {
             let mut entry = entry?;
             let path = entry.path()?.to_path_buf();
-            
+
             if let Some(name) = path.file_name().and_then(|n| n.to_str()) {
                 if name.starts_with(".wh.") {
                     // Whiteout file: remove the target file/dir.
@@ -124,7 +129,7 @@ pub fn flatten_to_tar<R: Read>(
                     continue;
                 }
             }
-            
+
             entry.unpack_in(&rootfs_dir)?;
         }
     }
@@ -140,10 +145,7 @@ pub fn flatten_to_tar<R: Read>(
 
 /// Decompresses an XZ-encoded OCI archive and flattens it.
 /// Helper for macOS/Windows first-run paths.
-pub fn flatten_oci_xz(
-    xz_path: &Path,
-    output_tar: &Path,
-) -> Result<(), OciError> {
+pub fn flatten_oci_xz(xz_path: &Path, output_tar: &Path) -> Result<(), OciError> {
     let f = File::open(xz_path)?;
     let xz_decoder = xz2::read::XzDecoder::new(BufReader::new(f));
     flatten_to_tar(xz_decoder, output_tar)
@@ -152,8 +154,8 @@ pub fn flatten_oci_xz(
 #[cfg(test)]
 mod tests {
     use super::*;
-    use flate2::write::GzEncoder;
     use flate2::Compression;
+    use flate2::write::GzEncoder;
 
     fn create_mock_layer(files: &[(&str, &[u8])]) -> Vec<u8> {
         let mut buf = Vec::new();
@@ -180,8 +182,11 @@ mod tests {
 
         // Create mock layers
         let layer1 = create_mock_layer(&[("etc/fedora-release", b"Fedora 44")]);
-        let layer2 = create_mock_layer(&[("usr/local/bin/tillandsias", b"binary"), ("etc/fedora-release", b"Fedora 44 modified")]);
-        
+        let layer2 = create_mock_layer(&[
+            ("usr/local/bin/tillandsias", b"binary"),
+            ("etc/fedora-release", b"Fedora 44 modified"),
+        ]);
+
         let layer1_digest = "sha256:layer1";
         let layer2_digest = "sha256:layer2";
         let manifest_digest = "sha256:manifest";
@@ -238,11 +243,19 @@ mod tests {
 
         // Verify output
         let mut out_tar = Archive::new(File::open(&output_path).unwrap());
-        let entries: Vec<_> = out_tar.entries().unwrap().map(|e| e.unwrap().path().unwrap().to_path_buf()).collect();
-        
+        let entries: Vec<_> = out_tar
+            .entries()
+            .unwrap()
+            .map(|e| e.unwrap().path().unwrap().to_path_buf())
+            .collect();
+
         assert!(entries.iter().any(|p| p == Path::new("etc/fedora-release")));
-        assert!(entries.iter().any(|p| p == Path::new("usr/local/bin/tillandsias")));
-        
+        assert!(
+            entries
+                .iter()
+                .any(|p| p == Path::new("usr/local/bin/tillandsias"))
+        );
+
         // Verify content (layer 2 should overwrite layer 1)
         let mut out_tar = Archive::new(File::open(&output_path).unwrap());
         for entry in out_tar.entries().unwrap() {

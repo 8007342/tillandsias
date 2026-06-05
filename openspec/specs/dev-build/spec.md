@@ -194,6 +194,7 @@ Bind to tests in `openspec/litmus-bindings.yaml`:
 - `litmus:podman-build-command-shape` — Validate pre-build command-shape contract for build-image.sh
 - `litmus:status-check-stack-verification` — Validate post-build smoke launches the stack and reports service-online evidence
 - `litmus:environment-isolation`
+- `litmus:build-ci-dispatch-shape` — Pin single-dispatch CI phases and completed-evidence reuse
 
 Gating points:
 - Dev builds are isolated from host system; no build artifacts leak to host

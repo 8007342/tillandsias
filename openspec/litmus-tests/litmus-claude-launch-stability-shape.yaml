@@ -1,0 +1,52 @@
+# @trace spec:default-image, spec:forge-offline, spec:podman-secrets-integration
+name: litmus:claude-launch-stability-shape
+spec: default-image
+phase: pre-build
+description: Pin Claude Code TUI dependencies and the credential-free launch boundary
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains images/default/Containerfile
+  - workspace contains images/default/entrypoint-forge-claude.sh
+  - workspace contains crates/tillandsias-headless/src/main.rs
+
+critical_path:
+  - step: "forge image installs Claude TUI and terminfo runtime"
+    command: "grep -E 'ca-certificates ncurses ncurses-term' images/default/Containerfile"
+    timeout_ms: 3000
+    expected_behavior: "ncurses ncurses-term"
+
+  - step: "Claude entrypoint remains valid bash"
+    command: "bash -n images/default/entrypoint-forge-claude.sh && echo 'ok: claude entrypoint syntax'"
+    timeout_ms: 3000
+    expected_behavior: "ok: claude entrypoint syntax"
+
+  - step: "Claude launch does not capture or export API keys"
+    command: "if grep -qE '_CLAUDE_KEY|export ANTHROPIC_API_KEY' images/default/entrypoint-forge-claude.sh; then exit 1; else echo 'ok: no API key injection'; fi"
+    timeout_ms: 3000
+    expected_behavior: "ok: no API key injection"
+
+  - step: "Claude launch reports the credential-free session boundary"
+    command: "grep -F 'claude: credential-free session' images/default/entrypoint-forge-claude.sh"
+    timeout_ms: 3000
+    expected_behavior: "claude: credential-free session"
+
+  - step: "interactive forge launch keeps host home and Claude config unmounted"
+    command: "BLOCK=$(sed -n '/pub(crate) fn build_forge_agent_run_args(/,/spec.build_run_args()/p' crates/tillandsias-headless/src/main.rs); if printf '%s' \"$BLOCK\" | grep -qE '\\.claude|ANTHROPIC_API_KEY'; then exit 1; else echo 'ok: no host Claude credentials mounted'; fi"
+    timeout_ms: 3000
+    expected_behavior: "ok: no host Claude credentials mounted"
+
+observability:
+  traces:
+    - "@trace spec:default-image"
+    - "@trace spec:forge-offline"
+    - "@trace spec:podman-secrets-integration"
+  expected_log: "Claude TUI dependencies present and credential-free boundary intact"
+  log_fields:
+    spec: "default-image"
+    test: "claude-launch-stability-shape"
+
+rollback:
+  on_failure: "restore ncurses/terminfo packages and remove Claude host-credential injection"
+  command: "grep -n 'ncurses\\|ANTHROPIC_API_KEY\\|\\.claude\\|credential-free' images/default/Containerfile images/default/entrypoint-forge-claude.sh crates/tillandsias-headless/src/main.rs"
