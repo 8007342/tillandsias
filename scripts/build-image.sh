@@ -373,6 +373,26 @@ if [[ "$IMAGE_NAME" == "chromium-framework" ]]; then
     fi
     BUILD_ARGS+=(--build-arg "CHROMIUM_CORE_IMAGE=${CHROMIUM_CORE_IMAGE}")
 fi
+
+# Forge's Rust toolchain layer uses cargo-binstall, which queries the GitHub API
+# per crate. Anonymous requests exhaust the 60/hour rate limit (HTTP 403) and,
+# with compile fallback disabled, fail the build. Forward the host's gh token (if
+# logged in) as a podman build secret so binstall authenticates (5000/hour). The
+# secret is mount-only — never baked into an image layer. Degrades cleanly: no
+# token -> prior anonymous behaviour.
+# @trace spec:default-image, spec:forge-as-only-runtime
+if [[ "$IMAGE_NAME" == "forge" ]]; then
+    if [[ -z "${GITHUB_TOKEN:-}" ]] && command -v gh >/dev/null 2>&1; then
+        GITHUB_TOKEN="$(gh auth token 2>/dev/null || true)"
+    fi
+    if [[ -n "${GITHUB_TOKEN:-}" ]]; then
+        export GITHUB_TOKEN
+        BUILD_ARGS+=(--secret "id=gh_token,env=GITHUB_TOKEN")
+        _info "Forwarding gh token to forge build (cargo-binstall GitHub API auth)"
+    else
+        _warn "No GITHUB_TOKEN / gh auth available; cargo-binstall may hit anonymous GitHub rate limits"
+    fi
+fi
 BUILD_ISOLATION="${TILLANDSIAS_BUILD_ISOLATION:-chroot}"
 # Reuse the host user namespace for the build container itself. This avoids
 # rootless build startup depending on newuidmap on hosts where /run/user/* is

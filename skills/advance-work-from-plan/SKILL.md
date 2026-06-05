@@ -172,7 +172,7 @@ If the 2h integration cron fired in the last 10 min (check the latest `### Cycle
 - **Velocity Limit Compliance ($C_{max}$)**: Do not push more than **2 commits per hour** if convergence velocity remains zero or negative ($\mathcal{V}_c \le 0$). High-frequency pushing without progress causes thrashing and triggers a 1-hour cooldown.
 - **Branch Drift Compliance ($D_{max}$)**: Do not allow your platform branch (`windows-next`, `osx-next`) to drift more than **$D_{max} = 5$ commits** ahead of the common `merge-base` with `linux-next`. If drift exceeds 5 commits, you MUST immediately halt feature work and run a pull-integration and rebase pass.
 - NEVER skip hooks or signing.
-- `release.yml` / `recipe-publish.yml` workflows are `workflow_dispatch` only — never auto-trigger.
+- `release.yml` is `workflow_dispatch` only — never auto-trigger. (The old `recipe-publish.yml` rootfs workflow was removed in the 2026-06 Fedora pivot.)
 - NEVER resolve cross-host plan conflicts by deletion — tombstone or supersede only.
 - When the worktree is dirty, only stage `plan/` files explicitly by path. Implementation code from a previous (uncommitted) iteration is NOT yours to touch.
 
