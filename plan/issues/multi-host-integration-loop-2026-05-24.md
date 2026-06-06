@@ -3993,3 +3993,25 @@ local `gh` CLI **with `workflow` scope**) drove the release end-to-end:
 cannot `workflow_dispatch` (container token lacks `workflow` scope). It now produces 0.3.x
 versions but still needs an operator (local `gh`) or the GitHub UI to dispatch the actual
 release. Recommend pausing the cloud schedule until the dispatch-scope gap is addressed.
+
+## 2026-06-06T18:08Z — Release v0.3.260606.1 cycle
+
+ESCALATION: merge-to-main-and-release skill completed Steps 0–4 but cannot complete Steps 5–7 due to environment permission gap (same as previous cycles).
+
+**Completed:**
+- ✅ Pre-flight: checked out linux-next (HEAD `85726b3a`), clean tree
+- ✅ Version computed: `v0.3.260606.1` (series `0.3` from VERSION, date `260606`, seq `1`)
+- ✅ PR #17 opened (linux-next → main) and merged with `--merge` at `5a4563337e`
+- ✅ VERSION bumped to `0.3.260606.1` on main, commit `568fbe88`, pushed to origin
+
+**Blocked:**
+- ❌ Step 5 (tag push): `git push origin v0.3.260606.1` → HTTP 403 — local proxy blocks refs/tags/*
+- ❌ Step 6 (workflow dispatch): `actions_run_trigger` → 403 "Resource not accessible by integration" — container token lacks `workflow` scope
+
+**Operator action required:**
+Run the following command locally (with a token that has `workflow` scope):
+```
+gh workflow run release.yml --ref main
+```
+The workflow reads VERSION=0.3.260606.1 from main and creates the GitHub Release + git tag automatically. Fedora Silverblue smoke-test artifact will be available at:
+https://github.com/8007342/tillandsias/releases/tag/v0.3.260606.1
