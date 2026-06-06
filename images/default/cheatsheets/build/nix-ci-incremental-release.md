@@ -32,13 +32,15 @@ Two independent causes, both fixable:
 
 - **Caching:** drop `magic-nix-cache-action` (deprecated/fragile post-EOL). Use **`nix-community/cache-nix-action`** (free, no account, GHA-cache-backed) OR **FlakeHub Cache** (`permissions: id-token: write` + FlakeHub account) for a non-branch-scoped store. Always dispatch the release on a **consistent ref (`main`)** so GHA-cache scope is stable.
 - **crane:** add `cargoArtifacts = craneLib.buildDepsOnly commonArgs;` once, then `craneLib.buildPackage (commonArgs // { inherit cargoArtifacts; ... })` per target. Now only changed crates rebuild; deps land in the cache and persist.
-- **Images: build once, push, pull — never build at runtime.** `flake.nix` already defines reproducible images via `dockerTools.buildLayeredImage` (`packages.forge-image`, `packages.web-image`) — no cargo-binstall, no GitHub API. Build these in CI, push to **GHCR** (`ghcr.io/<owner>/tillandsias-<image>:<version>`), and have `tillandsias --init` do `podman pull` only. Dev toolchains (rust/go/python/cargo-* tools) belong in the Nix image inputs (all in nixpkgs), not a runtime `cargo binstall`.
-- **Release hygiene:** the release runner builds the Linux musl binaries + signs + publishes only. No `--install`, no `--init`, no local image builds, no `cargo binstall`, no GitHub API calls from the build (publishing API calls are fine).
+- **Images: a RECIPE assembled at runtime by download-only — NO push-to-registry, NO compile.** We publish no images. The `Containerfile` is a *recipe* (embedded in the Linux binary); `tillandsias --init` runs it to ASSEMBLE predistributed third-party binaries pulled from **free public repos that need no login**: Fedora `microdnf` first (most forge tools are packaged), direct release-asset URLs second (`github.com/<o>/<r>/releases/download/<tag>/<asset>` is a public CDN — NOT the 60/hr GitHub API). Prefer LEAN; never `cargo install`/compile; never `cargo binstall` (it queries the rate-limited GitHub API → 403). The `flake.nix` Nix `dockerTools` images stay as a dev/reference convenience, not a release/publish artifact.
+- **Release artifacts (exactly three):** LINUX (headless + tray musl binaries — carry the Containerfile recipes, speak idiomatic podman/UX), MACOS-THIN-WRAPPER (idiomatic VM, native UX — built on a macOS runner), WINDOWS-THIN-WRAPPER (idiomatic WSL2, native UX — Windows runner today; candidate for Nix windows-gnu cross). Linux uses the Nix cache; macOS/Windows use `swatinem/rust-cache` (the cargo analog).
+- **Release hygiene:** release runners build/sign/publish ONLY. No `--install`, no `--init`, no image builds, no `cargo binstall`, no GitHub *API build* calls (publishing API calls are fine).
+- **Cross-compile reach:** Nix cross-compiles all Linux targets (headless x86_64/aarch64, tray x86_64). macOS = NOT cross-compilable (Apple SDK + codesign → macOS runner). Windows = possibly via `pkgsCross.mingwW64` (windows-gnu) — a spike, not guaranteed.
 
 ## Lifecycle boundaries (do not cross)
 
 | Phase | Allowed | Forbidden |
 | --- | --- | --- |
-| Release CI (release.yml) | `nix build` Linux headless musl, cosign, `gh release` | `--install`, `--init`, `cargo binstall`, building/​compiling container images |
-| Image publish CI | build image (Nix dockerTools / buildah) → push to GHCR | shipping a half-built image; runtime compilation |
-| User runtime (`--init`) | `podman pull <registry>/<image>:<version>` | building/​compiling ANY image or toolchain locally |
+| Release CI (release.yml) | `nix build` Linux musl (headless+tray); macOS/Windows wrapper builds on native runners; cosign; `gh release` | `--install`, `--init`, `cargo binstall`, building/publishing container images |
+| User runtime (`--init`) | run the Containerfile *recipe*: download prebuilt binaries from FREE PUBLIC no-login repos (Fedora `microdnf`, release-asset URLs) and ASSEMBLE | compiling / `cargo install` / `cargo binstall` / any login or rate-limited API |
+| Registry push | (none — we publish no images) | building/pushing any image from our side |

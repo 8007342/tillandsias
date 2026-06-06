@@ -90,3 +90,29 @@ The expensive part is the aarch64 `pkgsCross` cross-GCC — which, once cached, 
    `podman pull` auth at `--init`).
 4. **Forge toolchain**: ship the lean Nix `forge-image` as-is, or port the full dev toolchain
    (cargo-*/go/python) into the Nix image inputs so it's reproducible and registry-distributed?
+
+## Operator decisions + model correction (2026-06-05)
+
+1. **Cache** → `nix-community/cache-nix-action` (free community cache) for every Nix build that benefits
+   (all Linux targets). macOS/Windows tray builds already cache via `swatinem/rust-cache` (cargo analog).
+2. **aarch64 headless** → KEEP (it's the macOS VM's *Linux* agent; the cache makes it cheap). Release
+   artifacts are exactly: **LINUX (headless + tray)**, **MACOS thin wrapper**, **WINDOWS thin wrapper**.
+3. **No registry / no image publishing — MODEL CORRECTED.** We build/push NO images. The Containerfile
+   is a runtime RECIPE: at `--init` the idiomatic layer DOWNLOADS predistributed third-party binaries
+   from FREE PUBLIC no-login repos (Fedora `microdnf`; direct release-asset URLs
+   `github.com/.../releases/download/...` — NOT the rate-limited GitHub API) and ASSEMBLES them. Never
+   compiles. Step 40 rewritten accordingly.
+4. **Re-explained**: the only thing that compiles is `cargo install` (pre-step-28) and `cargo binstall`'s
+   compile-fallback. CURRENT `cargo binstall --disable-strategies compile` is download-only but queries
+   the GitHub API (60/hr → 403, needs token). Fix = Fedora packages + direct release-asset URLs
+   (download-only, no login, no rate limit); **prefer lean**; drop tools that can't be download-only.
+   My earlier "remove --disable-strategies compile" is WITHDRAWN (it re-enables compiling). The gh-token
+   band-aid (commit 8f3d6eb6) is reverted.
+
+## Cross-compile reach (operator question)
+- **Linux** (headless x86_64/aarch64, tray x86_64): YES — Nix cross-compiles, shares the Nix cache.
+- **macOS thin wrapper**: NO — Darwin needs Apple's SDK (license-restricted) + `codesign`/virtualization
+  entitlement (macOS-only) → must build on a macOS runner.
+- **Windows thin wrapper**: MAYBE — `pkgsCross.mingwW64` (`x86_64-pc-windows-gnu`) can cross-compile from
+  Linux and would join the Nix cache, but it's a real port from `-msvc` (windows-crate import libs,
+  ConPTY/HvSocket, `.rc`/`.ico` via windres). Optional spike, not a committed step.
