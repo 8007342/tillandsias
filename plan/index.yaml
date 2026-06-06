@@ -2543,3 +2543,118 @@ plan_index:
             - skills/merge-to-main-and-release/SKILL.md
           checkpoint_required: true
           handoff_note: "Operator-gated. Running escalation in the integration-loop ledger (18:07Z). Top live blocker but out of autonomous scope. See audit §2 and plan/steps/37."
+
+    # ----------------------------------------------------------------------
+    # Wave 2026-06-05b — incremental Nix release + registry-distributed images.
+    # Origin: plan/issues/nix-release-incremental-and-forge-distribution-2026-06-05.md
+    # Cheatsheet (cited): cheatsheets/build/nix-ci-incremental-release.md
+    # Operator goals: incremental Nix builds; Nix release = Linux headless only;
+    # --init pulls images from a registry (never compiles); release runners never
+    # run --install/--init/expensive dev steps. PLAN pending operator decisions.
+    # ----------------------------------------------------------------------
+
+    - id: nix-ci-incremental-caching
+      order: 38
+      title: Incremental Nix release builds (crane cargoArtifacts + durable cache)
+      status: ready
+      owner_host: linux
+      deliverable: plan/issues/nix-release-incremental-and-forge-distribution-2026-06-05.md
+      depends_on: []
+      specs:
+        - ci-release
+        - linux-native-portable-executable
+      exit_criteria:
+        - "flake.nix uses craneLib.buildDepsOnly -> cargoArtifacts, imported into each buildPackage (only changed crates rebuild)."
+        - "release.yml replaces deprecated magic-nix-cache-action with nix-community/cache-nix-action (or FlakeHub Cache per operator decision #1)."
+        - "A back-to-back release reuses cached cross-GCC + dep artifacts; the Nix build step drops from ~34 min to minutes."
+      tasks:
+        - id: nix-cache/crane-and-cache-action
+          status: ready
+          depends_on: []
+          owned_files:
+            - flake.nix
+            - .github/workflows/release.yml
+          checkpoint_required: true
+          handoff_note: "604 derivations rebuilt because flake.nix never uses buildDepsOnly/cargoArtifacts, and magic-nix-cache (EOL'd 2025-02) + failed FlakeHub login left no durable cache. See cheatsheet + issue doc."
+
+    - id: nix-release-linux-headless-only
+      order: 39
+      title: Nix release path builds only Linux (headless/tray) — decision-gated
+      status: needs_clarification
+      owner_host: linux
+      deliverable: plan/issues/nix-release-incremental-and-forge-distribution-2026-06-05.md
+      depends_on: [nix-ci-incremental-caching]
+      specs:
+        - ci-release
+      clarification_question: |
+        Keep the aarch64 headless (macOS VM's Linux agent) in the Nix release, or relocate it?
+        Recommended default: KEEP (it's a Linux musl binary; step 38's cache makes it cheap).
+        The Nix job already builds only Linux musl — Windows/macOS tray builds stay separate cargo jobs.
+      exit_criteria:
+        - "release.yml `release` job builds exactly the agreed Linux musl targets; no macOS/Windows compilation in the Nix path."
+        - "Lifecycle boundary documented (Nix = Linux only; trays = separate)."
+      tasks:
+        - id: nix-headless/scope-targets
+          status: needs_clarification
+          depends_on: [nix-cache/crane-and-cache-action]
+          owned_files:
+            - flake.nix
+            - .github/workflows/release.yml
+          checkpoint_required: true
+          handoff_note: "Gated on operator decision #2 (aarch64 headless keep/relocate)."
+
+    - id: forge-recipe-download-only-assembly
+      order: 40
+      title: Forge recipe = download-only assembly from free public no-login repos (no compile, no push)
+      status: ready
+      owner_host: linux
+      deliverable: plan/issues/nix-release-incremental-and-forge-distribution-2026-06-05.md
+      depends_on: []
+      operator_correction: >
+        2026-06-05: the earlier "build images in CI + push to a registry" model is REJECTED.
+        We publish NO images and push to NO registry. The Containerfile is a runtime RECIPE that
+        PULLS predistributed third-party binaries from free public no-login repos and ASSEMBLES
+        them (never compiles). Decisions resolved: cache=nix-community/cache-nix-action (free);
+        free public repos only (no signup/login); prefer lean; download-only (no cargo install,
+        no cargo binstall).
+      specs:
+        - default-image
+        - forge-as-only-runtime
+        - init-command
+      exit_criteria:
+        - "Every forge tool is sourced download-only from a FREE PUBLIC no-login, non-rate-limited repo: Fedora microdnf first, direct release-asset URLs (github.com/.../releases/download/...) second."
+        - "No cargo install / cargo binstall / compile anywhere in the recipe; prefer lean (drop tools that cannot be download-only)."
+        - "The gh-token build-secret band-aid (commit 8f3d6eb6) is reverted; no GitHub API call and no login at --init."
+        - "tillandsias --init assembles the image from downloads only; nothing compiles at user runtime."
+      tasks:
+        - id: forge-recipe/download-only
+          status: ready
+          depends_on: []
+          owned_files:
+            - images/default/Containerfile
+            - scripts/build-image.sh
+          checkpoint_required: true
+          handoff_note: "Replace cargo-binstall (GitHub-API rate-limited, needs token) with Fedora packages + direct release-asset URLs; revert the gh-token secret. Download-only, no compile, no login, prefer lean. See cheatsheet + issue doc."
+
+    - id: release-workflow-hygiene
+      order: 41
+      title: Release-workflow hygiene — no --install/--init/expensive dev steps on runners
+      status: ready
+      owner_host: linux
+      deliverable: plan/issues/nix-release-incremental-and-forge-distribution-2026-06-05.md
+      depends_on: []
+      specs:
+        - ci-release
+      exit_criteria:
+        - "release.yml runners do ONLY: Nix build (Linux headless) -> cheap validate -> cosign -> publish."
+        - "A CI grep gate / litmus asserts release.yml contains no --install|--init|cargo binstall|podman build."
+      tasks:
+        - id: release-hygiene/assert-minimal
+          status: ready
+          depends_on: []
+          owned_files:
+            - .github/workflows/release.yml
+            - openspec/specs/ci-release/spec.md
+            - openspec/litmus-tests
+          checkpoint_required: true
+          handoff_note: "release.yml already avoids --install/--init; pin it with an assertion so it can't drift back in."
