@@ -44,7 +44,7 @@ The GitHub OAuth token MUST be stored under a single, fixed keyring entry shared
 
 The functions `store_github_token`, `retrieve_github_token`, and `delete_github_token` MUST be the sole APIs for accessing the GitHub OAuth token, and MUST execute exclusively in the host Rust process. No container, entrypoint script, or subprocess MUST call the keyring directly.
 
-@trace spec:native-secrets-store, spec:secrets-management
+@trace spec:native-secrets-store, spec:tillandsias-vault
 
 #### Scenario: Store after successful authentication
 - **WHEN** the `--github-login` flow successfully extracts a token via `gh auth token`

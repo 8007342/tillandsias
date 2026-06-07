@@ -4,7 +4,7 @@
 ## Status
 
 active
-phase: 6
+phase: 6.5
 
 ## Purpose
 
@@ -23,7 +23,6 @@ Cross-references:
 - `vm-provisioning-lifecycle` - first-run Vault image/container provisioning.
 - `vsock-transport` - Windows/macOS host shells deliver host state to the VM.
 - `git-mirror-service` - consumes `git-mirror-policy` AppRole tokens for GitHub push.
-- `secrets-management` - (REMOVED) the superseded native-keyring path is gone.
 
 ## Requirements
 
@@ -112,13 +111,13 @@ MUST be deleted immediately after initialization.
 - **AND** SHALL delete any entries that are not the current version (`v1`) or belong to defunct installations.
 
 ### Requirement: Vault is the ONLY secret store (Legacy Fallback Removed)
-- **ID**: tillandsias-vault.linux.only-secret-store@v2
+- **ID**: tillandsias-vault.linux.only-secret-store@v3
 - **Modality**: MUST
 - **Measurable**: true
-- **Invariants**: [tillandsias-vault.invariant.vault-always-on, tillandsias-vault.invariant.legacy-keyring-removed]
+- **Invariants**: [tillandsias-vault.invariant.vault-always-on-linux, tillandsias-vault.invariant.legacy-flags-rejected]
 
 Vault is the exclusive secrets backend. The legacy keyring-backed podman-secret flow
-(`--legacy-keyring-secrets` and `--without-vault`) has been completely removed.
+(`--legacy-keyring-secrets` and `--without-vault`) was removed in v0.3.
 `tillandsias --init` SHALL ALWAYS bootstrap Vault. `tillandsias --github-login` SHALL
 ALWAYS store the GitHub token in Vault at `secret/github/token`.
 
@@ -126,10 +125,9 @@ ALWAYS store the GitHub token in Vault at `secret/github/token`.
 
 #### Scenario: GitHub login writes to Vault
 - **WHEN** the user runs `tillandsias --github-login`
-- **THEN** the host SHALL capture the GitHub token
+- **THEN** the host SHALL capture the GitHub token inside a git container
 - **AND** SHALL write it to Vault at `secret/github/token`
-- **AND** SHALL read the token back and fail if the stored value does not match
-- **AND** the deprecated podman secret `tillandsias-github-token` SHALL NOT be created.
+- **AND** SHALL read the token back and fail if the stored value does not match.
 
 #### Scenario: Legacy flags are rejected
 - **WHEN** `--legacy-keyring-secrets` or `--without-vault` is passed
@@ -250,14 +248,14 @@ separate, narrowly-scoped forge credential contract.
 - **Expression**: `installation_uuid_storage IN {linux_0600_config_file, windows_credential_manager, macos_keychain_services}`
 - **Measurable**: true
 
-### Invariant: Vault is default on Linux
-- **ID**: tillandsias-vault.invariant.vault-default-on-linux
-- **Expression**: `linux_init WITHOUT --without-vault STARTS tillandsias-vault`
+### Invariant: Vault is always-on on Linux
+- **ID**: tillandsias-vault.invariant.vault-always-on-linux
+- **Expression**: `linux_init ALWAYS STARTS tillandsias-vault`
 - **Measurable**: true
 
-### Invariant: Legacy keyring path is deprecated
-- **ID**: tillandsias-vault.invariant.legacy-keyring-deprecated
-- **Expression**: `legacy_keyring_secret_flow REQUIRES explicit_flag --legacy-keyring-secrets OR vault_feature_absent`
+### Invariant: Legacy flags are rejected
+- **ID**: tillandsias-vault.invariant.legacy-flags-rejected
+- **Expression**: `--legacy-keyring-secrets OR --without-vault TRIGGERS fatal_error "flag removed"`
 - **Measurable**: true
 
 ### Invariant: Policies are defined
@@ -320,7 +318,7 @@ wrappers into the shared host-shell crate.
 - `images/vault/policies/*.hcl` - shipped ACL policy bodies.
 - `cheatsheets/runtime/hashicorp-vault-tillandsias.md` - operational walkthrough
   and verification commands.
-- `openspec/specs/secrets-management/spec.md` - superseded native-keyring spec.
+
 
 ## Observability
 

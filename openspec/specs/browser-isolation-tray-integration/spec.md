@@ -107,7 +107,7 @@ project-local host route `http://opencode.<project>.localhost[:port]/`. The brow
 container SHALL inherit the runtime CA bundle for the session and shall only
 launch after the OpenCode Web OTP/session gate is healthy.
 
-@trace spec:podman-orchestration, spec:opencode-web-session-otp, spec:reverse-proxy-internal, spec:podman-secrets-integration, spec:secrets-management
+@trace spec:podman-orchestration, spec:opencode-web-session-otp, spec:reverse-proxy-internal, spec:podman-secrets-integration, spec:tillandsias-vault
 
 #### Scenario: Browser communicates with OpenCode Web
 - **WHEN** browser window is launched

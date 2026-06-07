@@ -85,10 +85,15 @@ Each Tillandsias-managed project SHALL operate with its own isolated Podman grap
 
 Credentials passed to containers SHALL use `podman secret create` at startup and `--secret <name>` at launch time. Embedding credentials in image layers (`ENV`, `RUN echo`) or passing them as `-e` environment variables is PROHIBITED.
 
-#### Scenario: Secret created at startup from host keyring
+#### Scenario: Ephemeral podman secrets created at startup
 - **WHEN** Tillandsias starts
-- **THEN** credentials are read from the Linux Secret Service (GNOME Keyring / pass)
-- **AND** each credential is registered as a named ephemeral podman secret via `podman secret create --driver=file`
+- **THEN** the Vault unseal key (HKDF-derived from machine-id + installation-uuid)
+  and the CA cert/key pair are registered as named ephemeral podman secrets via
+  `podman secret create --driver=file`
+- **AND** per-container Vault AppRole tokens are created as podman secrets at
+  container launch time
+- **AND** no credentials are read from the Linux Secret Service / GNOME Keyring
+  (all long-lived tokens live in Vault, not the host keyring)
 
 #### Scenario: Container reads secret from file, not env
 - **WHEN** a container is launched that requires a credential
@@ -97,7 +102,10 @@ Credentials passed to containers SHALL use `podman secret create` at startup and
 
 #### Scenario: Secrets cleaned up on exit
 - **WHEN** Tillandsias receives SIGTERM or SIGINT
-- **THEN** all `tillandsias-*` podman secrets are removed via `podman secret rm` before process exit
+- **THEN** all `tillandsias-*` podman secrets (ca-cert, ca-key, vault-unseal,
+  vault-token-*) are removed via `podman secret rm` before process exit
+- **AND** per-container Vault tokens are revoked via
+  `revoke_pending_container_tokens()`
 - **AND** no credential remains in podman's secret store after shutdown
 
 #### Scenario: Forge containers receive no secrets

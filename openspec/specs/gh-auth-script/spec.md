@@ -15,7 +15,7 @@ The interactive GitHub Login user experience. Both the CLI entry point (`tilland
 
 The CLI flag `--github-login` and the tray menu item "GitHub Login" MUST invoke the same `runner::run_github_login` function. The tray handler MUST spawn a terminal that re-executes the Tillandsias binary with `--github-login`; it MUST NOT reimplement the flow.
 
-@trace spec:gh-auth-script, spec:git-mirror-service, spec:secrets-management
+@trace spec:gh-auth-script, spec:git-mirror-service, spec:tillandsias-vault
 
 #### Scenario: Tray dispatches to the CLI flow
 - **WHEN** the user clicks "GitHub Login" in the tray
@@ -30,7 +30,7 @@ The CLI flag `--github-login` and the tray menu item "GitHub Login" MUST invoke 
 
 The login flow MUST run `gh auth login` inside a dedicated, short-lived container started from the git service image. It MUST NOT exec into a long-lived per-project git service container.
 
-@trace spec:gh-auth-script, spec:git-mirror-service, spec:secrets-management
+@trace spec:gh-auth-script, spec:git-mirror-service, spec:tillandsias-vault
 
 #### Scenario: Build image on demand
 - **WHEN** the git service image is not present locally
@@ -52,7 +52,7 @@ The login flow MUST run `gh auth login` inside a dedicated, short-lived containe
 
 After interactive `gh auth login` succeeds, the host MUST verify the session, extract the OAuth token from inside the container, and store it in Vault at `secret/github/token` as defined by `spec:tillandsias-vault`.
 
-@trace spec:gh-auth-script, spec:tillandsias-vault, spec:secrets-management
+@trace spec:gh-auth-script, spec:tillandsias-vault
 
 #### Scenario: Session verification
 - **WHEN** the interactive `gh auth login` exits successfully
@@ -80,7 +80,7 @@ After interactive `gh auth login` succeeds, the host MUST verify the session, ex
 
 The login container MUST be destroyed on every exit path so no `gh` on-disk state survives the flow.
 
-@trace spec:gh-auth-script, spec:secrets-management
+@trace spec:gh-auth-script, spec:tillandsias-vault
 
 #### Scenario: Successful completion
 - **WHEN** the flow completes successfully
