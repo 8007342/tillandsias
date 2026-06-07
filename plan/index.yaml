@@ -2347,11 +2347,13 @@ plan_index:
     - id: vault-hardening-true-rekey
       order: 32
       title: Vault hardening completion — true rekey + root.token cleanup
-      status: claimed
+      status: ready
       owner_host: linux
       deliverable: plan/steps/32-vault-hardening-true-rekey.md
       audit_origin: plan/issues/pre-vault-obsolescence-audit-2026-06-05.md
+      finding: plan/issues/vault-rekey-infeasible-finding-2026-06-07.md
       depends_on: []
+      blocks_until: spec-refinement-of-infeasible-rekey-mandate
       events:
         - type: claim
           ts: "2026-06-07T00:40:00Z"
@@ -2359,14 +2361,35 @@ plan_index:
           host: "linux"
           lease_id: "lease-linux-vault-true-rekey-20260607T0040Z"
           expires_at: "2026-06-07T04:40:00Z"
+        - type: progress
+          ts: "2026-06-07T01:05:00Z"
+          agent_id: "linux-fedora-claude-opus-2026-06-07T0040Z"
+          host: "linux"
+          lease_released: true
+          note: >
+            Research+design cycle done (workflow wf_30bb6edc-012). KEY FINDING (high
+            confidence, 11 official HashiCorp citations): the literal exit criterion
+            'install the host HKDF key via vault operator rekey' is INFEASIBLE — stock
+            Vault never lets you install a chosen Shamir share. Spec is self-inconsistent
+            and MUST be refined first. Confirmed brick bug: entrypoint.sh:167 cats
+            /vault/data/root.token every boot but host deletes it after handover →
+            recreate bricks Vault. Feasible mechanism designed (keychain-held
+            Vault-generated share) + exact spec edits + impl plan + instant guard, BUT the
+            adversarial verify leg hit the session token limit and did NOT run, so the
+            brick-prone entrypoint/vault_bootstrap rewrite is NOT yet safe to land. Lease
+            released; next cycle: (a) apply the spec refinement, (b) implement against the
+            corrected, feasible target, (c) run the adversarial gate + e2e (no-prompt boot,
+            no on-disk material, container-recreate survives). See finding doc.
       specs:
         - tillandsias-vault
       reopens: vault-hardening-architecture (step 22)
       exit_criteria:
-        - "images/vault/entrypoint.sh installs the host HKDF key via vault operator rekey; xor_hex/init.envelope recovery path removed."
-        - "root.token is captured to the host keychain and deleted from /vault/data; no boot-time cat of root.token."
+        - "SPEC REFINED FIRST: openspec/specs/tillandsias-vault/spec.md no longer mandates the infeasible `vault operator rekey`-installs-host-key mechanism; it states the feasible keychain-held Vault-generated-share model + defines the two dangling invariants (host-keychain-storage, keychain-sanitization). See finding doc §4."
+        - "images/vault/entrypoint.sh: xor_hex/init.envelope recovery path removed; the Vault-generated Shamir share is captured to the host keychain and supplied via the tmpfs podman secret each boot (NOT a literal rekey — infeasible)."
+        - "root.token + share handover live ONLY on tmpfs (/run); nothing under /vault/data holds key bytes; no boot-time cat of /vault/data/root.token; policy/auth/audit gated first-boot-only."
         - "The obsolete XOR 'PRODUCTION CAVEAT' header block is removed."
-        - "A guard for the no-envelope/no-persistence contract runs in a phase that actually executes (not e2e-only)."
+        - "A grep-only instant guard (litmus-vault-entrypoint-hardened-shape) asserts the no-envelope/no-persistence contract and runs in pre-build (not e2e-only)."
+        - "ADVERSARIAL + E2E VERIFIED before 'done': no-prompt first boot; /vault/data clean; share in keychain; container-recreate survives (the brick-bug fix); repeat-restart idempotent."
       tasks:
         - id: vault-rekey/entrypoint
           status: ready
@@ -2375,7 +2398,7 @@ plan_index:
             - images/vault/entrypoint.sh
             - crates/tillandsias-headless/src/vault_bootstrap.rs
           checkpoint_required: true
-          handoff_note: "Step 22 claimed rekey + root.token deletion complete, but entrypoint.sh:106-167 still uses the XOR envelope and persists root.token. Spec tillandsias-vault/spec.md:84-95 forbids both. Close the gap. See audit §2."
+          handoff_note: "BLOCKED ON SPEC: research (wf_30bb6edc-012) proved the spec's `vault operator rekey`-installs-host-key mandate is INFEASIBLE (stock Vault can't install a chosen Shamir share — 11 citations). Refine spec FIRST (finding §4), then implement the keychain-held-generated-share mechanism (finding §3,§5). Confirmed brick bug: entrypoint.sh:167 cats root.token every boot; vault_bootstrap.rs:709-717 deletes it after handover → recreate bricks Vault. Designed but NOT adversarially verified (verify leg hit token limit). MUST run adversarial review + e2e before landing. See plan/issues/vault-rekey-infeasible-finding-2026-06-07.md."
         - id: vault-rekey/litmus-gate
           status: ready
           depends_on: [vault-rekey/entrypoint]
@@ -2383,7 +2406,7 @@ plan_index:
             - openspec/litmus-tests/litmus-vault-auto-unseal-no-prompt.yaml
             - openspec/litmus-bindings.yaml
           checkpoint_required: true
-          handoff_note: "The no-prompt litmus is size:e2e so it never runs in the instant suite — add a structural guard so a regression to envelope/root.token persistence is caught."
+          handoff_note: "Add the grep-only instant guard litmus-vault-entrypoint-hardened-shape.yaml (concrete steps in finding §5 / raw workflow output guard_changes) + bind it in litmus-bindings.yaml. CORRECTION vs original: do NOT assert `operator rekey` (infeasible); assert the keychain-held-share mechanism instead, and ban only the PERSISTENT /vault/data/root.token path (the hardened design keeps a tmpfs /run/vault-handover/root.token). Land it in the SAME commit as the entrypoint hardening (goes red on today's tree)."
 
     - id: pre-vault-doc-cleanup
       order: 33
@@ -2512,7 +2535,7 @@ plan_index:
       deliverable: plan/steps/36-cross-platform-vault-keychain-parity.md
       audit_origin: plan/issues/pre-vault-obsolescence-audit-2026-06-05.md
       depends_on: [vault-hardening-true-rekey]
-      blocked_reason: "Mirrors the Linux rekey + keychain handover contract from step 32; not claimable until that lands."
+      blocked_reason: "Mirrors the Linux keychain handover contract from step 32; not claimable until that lands. NOTE 2026-06-07: the 'rekey' part is INFEASIBLE (see plan/issues/vault-rekey-infeasible-finding-2026-06-07.md) — this step must mirror 'capture the Vault-generated Shamir share → platform keychain → vsock/HvSocket delivery', NOT a literal vault operator rekey. Exit criteria below are reworded accordingly."
       specs:
         - tillandsias-vault
         - vsock-transport
