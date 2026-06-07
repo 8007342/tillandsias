@@ -2347,14 +2347,20 @@ plan_index:
     - id: vault-hardening-true-rekey
       order: 32
       title: Vault hardening completion — true rekey + root.token cleanup
-      status: ready
+      status: claimed
       owner_host: linux
       deliverable: plan/steps/32-vault-hardening-true-rekey.md
       audit_origin: plan/issues/pre-vault-obsolescence-audit-2026-06-05.md
       finding: plan/issues/vault-rekey-infeasible-finding-2026-06-07.md
       depends_on: []
-      blocks_until: spec-refinement-of-infeasible-rekey-mandate
       events:
+        - type: claim
+          ts: "2026-06-07T17:05:00Z"
+          agent_id: "linux-fedora-claude-opus-2026-06-07T1705Z"
+          host: "linux"
+          lease_id: "lease-linux-vault-true-rekey-20260607T1705Z"
+          expires_at: "2026-06-07T21:05:00Z"
+          note: "Re-claim (fresh session). Running the adversarial brick-verify (workflow w0akxzv0b) that failed on token limit last night, then implementing the keychain-held-share mechanism + spec refinement + github-login fix + github-logout."
         - type: claim
           ts: "2026-06-07T00:40:00Z"
           agent_id: "linux-fedora-claude-opus-2026-06-07T0040Z"
