@@ -2658,3 +2658,94 @@ plan_index:
             - openspec/litmus-tests
           checkpoint_required: true
           handoff_note: "release.yml already avoids --install/--init; pin it with an assertion so it can't drift back in."
+
+    - id: github-login-vault-native-flow
+      order: 42
+      title: GitHub-login Vault-native flow — gate on Vault, keep the token in-container, Vault over HTTPS
+      status: in_progress
+      owner_host: linux
+      deliverable: plan/steps/42-github-login-vault-native-flow.md
+      audit_origin: plan/issues/github-login-vault-native-flow-2026-06-06.md
+      depends_on: []
+      specs:
+        - tillandsias-vault
+        - tray-minimal-ux
+        - native-secrets-store
+      exit_criteria:
+        - "The tray's logged-in state derives from Vault secret/github/token, never host `gh auth status` (host keyring). Secret missing -> only `GitHub Login`, local projects hidden."
+        - "`gh auth login` and the Vault write happen inside one container; the GitHub token is never read into the host tillandsias process."
+        - "`tillandsias --github-login` brings Vault up (or fails fast) BEFORE the interactive paste, so a token is never captured and discarded."
+        - "Vault listener serves HTTPS with a cert issued by the intermediate CA; the vault client trusts that CA and speaks https://; no plaintext Vault traffic."
+        - "Win/mac host-shell GithubLoginState reflects the same Vault is_logged_in signal."
+      tasks:
+        - id: vault-flow/tray-gate-on-vault
+          status: completed
+          depends_on: []
+          owned_files:
+            - crates/tillandsias-headless/src/vault_bootstrap.rs
+            - crates/tillandsias-headless/src/tray/mod.rs
+          checkpoint_required: true
+          handoff_note: "DONE 2026-06-06. Added vault_bootstrap::is_github_logged_in (volume-guarded on-demand Vault read) + read_github_token_from_vault + vault_data_volume_exists; removed tray gh_auth_check; both gate sites now read Vault. clippy -D warnings clean, 143/143 tray tests pass."
+        - id: vault-flow/launch-gate-async
+          status: ready
+          depends_on: [vault-flow/tray-gate-on-vault]
+          owned_files:
+            - crates/tillandsias-headless/src/tray/mod.rs
+          checkpoint_required: true
+          handoff_note: "The launch constructor (tray/mod.rs new_with_debug, ~994) calls is_github_logged_in synchronously; when a vault volume exists it triggers ensure_vault_running on the launch path (worst case 60s health timeout). Make it async: default is_authenticated=false, spawn a background probe that bumps revision when the token is confirmed."
+        - id: vault-flow/login-in-container
+          status: ready
+          depends_on: []
+          owned_files:
+            - crates/tillandsias-headless/src/main.rs
+            - crates/tillandsias-headless/src/vault_bootstrap.rs
+            - images/vault/policies
+            - images/git/vault-cli.sh
+          checkpoint_required: true
+          handoff_note: "Refactor run_github_login (main.rs:3267) so gh auth login + vault write both run inside one container; token never extracted to host. Move the Vault running-check (vault_bootstrap.rs:140) BEFORE the interactive paste and bring Vault up on demand (ensure_vault_running). Add a write-capable AppRole lease + policy for secret/data/github/token (today only read-only git-mirror.hcl touches it). Re-trace the gh_auth_start accountability log off the removed secret-rotation/tillandsias-github-token symbol (overlaps step 35)."
+        - id: vault-flow/vault-https-via-ca
+          status: ready
+          depends_on: []
+          owned_files:
+            - images/vault/vault.hcl
+            - images/vault/Containerfile
+            - crates/tillandsias-headless/src/vault_bootstrap.rs
+            - crates/tillandsias-vault-client/src/lib.rs
+          checkpoint_required: true
+          handoff_note: "Put Vault behind HTTPS with the intermediate CA (/tmp/tillandsias-ca/intermediate.{crt,key}, generated main.rs:1159-1309; already used by Squid SSL-bump + router mount). vault.hcl: replace tls_disable=true with tls_cert_file/tls_key_file; mount the cert/key into the vault container (launch_vault_container, vault_bootstrap.rs:492); VaultClient::new (lib.rs:50) add_root_certificate(CA) + https://; flip host_base_url + Containerfile HEALTHCHECK + wait_for_vault_ready to https."
+        - id: vault-flow/xplat-gating-parity
+          status: blocked
+          owner_host: macos+windows
+          depends_on: [vault-flow/tray-gate-on-vault]
+          blocked_reason: "Mirrors the Linux is_logged_in gating contract; not claimable until 42a is on the durable branch as the reference, and overlaps the step 36 keychain/vsock parity which is itself blocked on step 32."
+          owned_files:
+            - crates/tillandsias-host-shell/src/menu_state.rs
+            - crates/tillandsias-macos-tray/src/menu_disabled_v2.rs
+            - crates/tillandsias-windows-tray/tests/portable_smoke.rs
+          checkpoint_required: true
+          handoff_note: "host-shell GithubLoginState (LoggedOut/LoggedIn) is only set in menu_disabled_v2.rs + tests, not from a live Vault read. Wire it to the same Vault is_logged_in signal (over vsock/HvSocket for the in-VM model). Flag, don't fix, any sibling-owned fmt/clippy drift."
+
+    - id: tray-quit-hang
+      order: 43
+      title: Tray Quit hangs for minutes / requires manual kill
+      status: ready
+      owner_host: linux
+      deliverable: plan/steps/43-tray-quit-hang.md
+      audit_origin: plan/issues/github-login-vault-native-flow-2026-06-06.md
+      depends_on: []
+      specs:
+        - graceful-shutdown
+        - app-lifecycle
+      exit_criteria:
+        - "Clicking Quit terminates the tray process within a bounded, short timeout (target < 5s); no orphaned tillandsias process remains."
+        - "Any blocking shutdown step (container stop/teardown, task-executor drain, vault token revoke, zbus loop) is time-bounded or backgrounded so it cannot wedge Quit."
+        - "A test or litmus asserts Quit returns within the bound."
+      tasks:
+        - id: quit-hang/diagnose-and-bound
+          status: ready
+          depends_on: []
+          owned_files:
+            - crates/tillandsias-headless/src/tray/mod.rs
+            - crates/tillandsias-headless/src/main.rs
+          checkpoint_required: true
+          handoff_note: "Operator 2026-06-06: clicking Quit hangs for a long time (sometimes minutes), often needs `kill` from a terminal. Quit sets shutdown atomic + tray_icon_state=Stopping (tray/mod.rs:2930-2933); find what blocks the actual exit — likely a synchronous container teardown, task_executor drain, vault token revoke (revoke_pending_container_tokens, main.rs:6102), or the zbus event loop not unblocking. Bound or background each shutdown step and force-exit after a deadline."

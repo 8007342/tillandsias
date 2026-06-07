@@ -20,7 +20,7 @@ use std::process::{Command, Stdio};
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc;
 use std::sync::{Arc, Mutex, OnceLock, RwLock};
-use std::time::{Duration, Instant};
+use std::time::Instant;
 
 use image::GenericImageView;
 use tracing::{Level, info, span, warn};
@@ -269,39 +269,11 @@ fn enclave_status_to_stage(status: EnclaveStatus) -> TrayStatusStage {
     }
 }
 
-/// Resolve the GitHub authentication state by running `gh auth status` with
-/// a hard 5s wall-clock timeout. Any non-zero exit (including the timeout
-/// itself) is treated as "not authenticated".
-///
-/// @trace spec:tray-minimal-ux, spec:gh-auth-script
-fn gh_auth_check() -> bool {
-    let mut child = match Command::new("gh")
-        .args(["auth", "status"])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .stdin(Stdio::null())
-        .spawn()
-    {
-        Ok(child) => child,
-        Err(_) => return false,
-    };
-
-    let deadline = Instant::now() + Duration::from_secs(5);
-    loop {
-        match child.try_wait() {
-            Ok(Some(status)) => return status.success(),
-            Ok(None) => {
-                if Instant::now() >= deadline {
-                    let _ = child.kill();
-                    let _ = child.wait();
-                    return false;
-                }
-                std::thread::sleep(Duration::from_millis(50));
-            }
-            Err(_) => return false,
-        }
-    }
-}
+// GitHub auth state is no longer derived from host `gh auth status` (which
+// read the host keyring — the wrong source of truth now that the login flow
+// stores the token in Vault at secret/github/token). The tray gates on
+// `crate::vault_bootstrap::is_github_logged_in()` instead.
+// @trace spec:tillandsias-vault — plan step `github-login-vault-native-flow`.
 
 #[derive(Debug, Clone, PartialEq, Eq)]
 struct ProjectEntry {
@@ -988,10 +960,13 @@ impl TrayUiState {
         // Compute hash of projects list for change detection
         let projects_hash = Self::hash_projects(&projects);
 
-        // @trace spec:tray-minimal-ux, spec:gh-auth-script
-        // Cache `gh auth status` once at tray launch. Refreshed on demand
-        // when the user clicks the GitHubLogin entry — never polled.
-        let is_authenticated = gh_auth_check();
+        // @trace spec:tillandsias-vault, spec:tray-minimal-ux
+        // Single source of truth for "logged in" is the Vault secret at
+        // secret/github/token — NOT host `gh auth status`. Cheap when no
+        // Vault data volume exists (the logged-out default); brings Vault up
+        // on demand only when a prior login left a data volume behind.
+        // Refreshed on demand when the user clicks GitHubLogin — never polled.
+        let is_authenticated = crate::vault_bootstrap::is_github_logged_in(debug);
 
         Self {
             root,
@@ -2942,7 +2917,12 @@ impl DbusMenuIface {
                 if service
                     .task_executor
                     .spawn_task(move || {
-                        let authed = gh_auth_check();
+                        // @trace spec:tillandsias-vault — gate on the Vault
+                        // secret, not host `gh auth status`. The login flow
+                        // stores the token in Vault, never in host gh, so the
+                        // host keyring is the wrong source of truth.
+                        let debug = service_for_task.snapshot().debug;
+                        let authed = crate::vault_bootstrap::is_github_logged_in(debug);
                         service_for_task.with_state(|state| {
                             state.is_authenticated = authed;
                             state.bump_revision();
@@ -2959,7 +2939,6 @@ impl DbusMenuIface {
                             service_for_task.with_state(|state| {
                                 state.cloud_no_secret_warned = false;
                             });
-                            let debug = service_for_task.snapshot().debug;
                             let _ = cloud::refresh_cloud_projects_if_stale(
                                 service_for_task.state_handle(),
                                 true,

@@ -169,6 +169,74 @@ pub fn write_github_token_to_vault(token: &str, debug: bool) -> Result<(), Strin
     Ok(())
 }
 
+/// Tray-facing source of truth for "is the user logged in to GitHub?".
+///
+/// Returns `true` iff a non-empty token is currently retrievable from Vault
+/// at `secret/github/token`. This replaces the legacy host-side
+/// `gh auth status` probe, which read the host keyring rather than Vault and
+/// therefore diverged from where the login flow actually stores the token.
+///
+/// Honors the "no Vault running at launch" model: if the Vault data volume
+/// has never been created the user has never logged in, so we answer `false`
+/// immediately without paying to bring Vault up. Only when a prior login left
+/// a data volume behind do we ensure Vault is running on demand (idiomatic
+/// podman) and read the token back.
+///
+/// @trace spec:tillandsias-vault, spec:tray-minimal-ux
+pub fn is_github_logged_in(debug: bool) -> bool {
+    if !vault_data_volume_exists() {
+        if debug {
+            eprintln!(
+                "[tillandsias-vault] is_logged_in: no `{VAULT_VOLUME}` volume; user has never logged in"
+            );
+        }
+        return false;
+    }
+    if let Err(e) = ensure_vault_running(debug) {
+        if debug {
+            eprintln!("[tillandsias-vault] is_logged_in: ensure_vault_running failed: {e}");
+        }
+        return false;
+    }
+    match read_github_token_from_vault(debug) {
+        Ok(token) => !token.trim().is_empty(),
+        Err(e) => {
+            if debug {
+                eprintln!("[tillandsias-vault] is_logged_in: token read failed: {e}");
+            }
+            false
+        }
+    }
+}
+
+/// Read the GitHub token back from Vault at `secret/github/token`. Returns the
+/// raw token (empty string if the key is absent); errs if Vault is not running
+/// or the read fails. Mirrors the read-back in `write_github_token_to_vault`.
+fn read_github_token_from_vault(debug: bool) -> Result<String, String> {
+    if !container_running(VAULT_CONTAINER_NAME) {
+        return Err("vault container is not running".into());
+    }
+    let rt = tokio_runtime()?;
+    let base_url = host_base_url();
+    let root_token = read_and_handover_root_token(debug)?;
+    let client = VaultClient::new(&base_url, &root_token);
+    let data = rt
+        .block_on(client.read_secret("secret/github/token"))
+        .map_err(|e| format!("vault read_secret failed: {e}"))?;
+    Ok(data["token"].as_str().unwrap_or("").to_string())
+}
+
+/// True iff the persistent Vault data volume exists. Cheap: a single
+/// `podman volume exists` with no Vault bring-up, so it can gate the more
+/// expensive on-demand launch in [`is_github_logged_in`].
+fn vault_data_volume_exists() -> bool {
+    podman_cmd_sync()
+        .args(["volume", "exists", VAULT_VOLUME])
+        .output()
+        .map(|o| o.status.success())
+        .unwrap_or(false)
+}
+
 /// Mint a fresh AppRole token for a container of the given `role` (e.g.
 /// `"git-mirror"`). The returned `(token, secret_name)` is registered in
 /// the in-process revocation registry so shutdown can revoke it. The
