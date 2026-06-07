@@ -1,6 +1,12 @@
 # Step 43 — Tray Quit hangs for minutes / requires manual kill
 
-- **Status**: ready
+- **Status**: claimed
+
+## Claim
+
+- **Claimed at**: 2026-06-07T00:54:02Z
+- **Agent**: linux-macuahuitl-big-pickle-20260607T005316
+- **Lease**: lease-linux-tray-quit-hang-20260607T005402Z (expires 2026-06-07T04:54:02Z)
 - **Owner host**: linux
 - **Branch**: linux-next
 - **Depends on**: []
