@@ -913,8 +913,21 @@ struct TrayService {
     service_name: String,
     /// @trace gap:TR-005: Async executor for offloading blocking tasks
     task_executor: AsyncTaskExecutor,
-    /// Atomic flag to signal graceful shutdown to the main event loop.
+    /// @trace spec:graceful-shutdown, spec:app-lifecycle
+    /// Atomic flag set by the Quit handler (menu id=31) to signal graceful
+    /// shutdown. The tray's main event loop polls the *signal-handler*
+    /// atomic (`signal_shutdown`) instead — that one is flipped by both the
+    /// Quit handler AND SIGTERM/SIGINT handlers, ensuring Quit click and
+    /// external signals converge on the same exit path.
     shutdown: AtomicBool,
+    /// Clone of the signal-handler atomic from
+    /// `install_shutdown_signal_handlers`. Set once after construction
+    /// via `attach_signal_shutdown` (which uses `OnceLock::set`) so the
+    /// Quit handler can flip the same atomic the main loop polls. The
+    /// main loop polls the signal-handler atomic directly — without this
+    /// backlink a Quit click would set `TrayService.shutdown` but never
+    /// break the main wait loop.
+    signal_shutdown: OnceLock<Arc<AtomicBool>>,
 }
 
 #[derive(Clone)]
@@ -1025,6 +1038,7 @@ impl TrayService {
             service_name: format!("org.freedesktop.StatusNotifierItem-{pid}-1"),
             task_executor,
             shutdown: AtomicBool::new(false),
+            signal_shutdown: OnceLock::new(),
         }
     }
 
@@ -1036,6 +1050,15 @@ impl TrayService {
         self.connection
             .get()
             .expect("tray connection should be attached before use")
+    }
+
+    /// Wire the signal-handler atomic so the Quit handler can flip the
+    /// same atomic the main event loop polls. Must be called once before
+    /// the main wait loop starts, typically right after construction in
+    /// `run_tray_mode_with_debug`. Uses `OnceLock::set` so `&self` is
+    /// sufficient — the `TrayService` is behind an `Arc`.
+    fn attach_signal_shutdown(&self, signal: Arc<AtomicBool>) {
+        let _ = self.signal_shutdown.set(signal);
     }
 
     fn snapshot(&self) -> TrayUiState {
@@ -2897,15 +2920,27 @@ impl DbusMenuIface {
         // action-wiring agent can plug in handlers in a single place.
         match id {
             31 => {
-                // Quit click: flip the shutdown atomic so the main loop
-                // breaks and the process runs the graceful shutdown sequence.
+                // Quit click: flip BOTH shutdown atomics so the process
+                // exits even if the main loop polls the signal-handler
+                // atomic (which it does — see `run_tray_mode_with_debug`).
                 // Replaces the prior `std::process::exit(0)` which bypassed
                 // container cleanup.
+                //
+                // `shutdown` is the TrayService-local flag retained for
+                // any in-process consumer that checks it.  `signal_shutdown`
+                // is a clone of the signal-handler atomic from
+                // `install_shutdown_signal_handlers` — the one the main
+                // wait loop actually polls — so this Quit click converges
+                // with SIGTERM/SIGINT on the same exit path.
+                //
                 // @trace spec:graceful-shutdown, spec:app-lifecycle
                 self.0.with_state(|state| {
                     state.tray_icon_state = TrayIconState::Stopping;
                 });
                 self.0.shutdown.store(true, Ordering::SeqCst);
+                if let Some(sig) = self.0.signal_shutdown.get() {
+                    sig.store(true, Ordering::SeqCst);
+                }
             }
             20 => {
                 // GitHubLogin click: launch the gh login flow AND refresh
@@ -3160,6 +3195,14 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
     // @trace spec:signal-handling, spec:tray-host-control-socket
     // @trace plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q2)
     let shutdown = crate::install_shutdown_signal_handlers()?;
+    // Wire the Quit handler to the same signal-handler atomic so the
+    // Quit button click triggers the main wait loop exit (not just the
+    // TrayService-local `shutdown` field).  Without this, Quit would
+    // set `TrayService.shutdown` but the loop below polls `shutdown` —
+    // a different atomic — so the process would never exit on Quit.
+    //
+    // @trace spec:graceful-shutdown, spec:app-lifecycle
+    service.attach_signal_shutdown(Arc::clone(&shutdown));
     start_control_socket_server(Arc::clone(&shutdown))?;
 
     // @trace spec:tray-ux, spec:remote-projects
@@ -3232,9 +3275,36 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
 
         // Phase 5, Task 21: Execute the graceful shutdown sequence
         // (stop containers, cleanup sockets, etc.) before exiting.
+        // Time-bound so a wedged container stop or vault round-trip
+        // cannot hang Quit indefinitely — if the deadline fires we
+        // exit anyway.
+        //
         // @trace spec:graceful-shutdown, spec:app-lifecycle
-        if let Err(e) = crate::graceful_shutdown_async().await {
-            warn!("graceful shutdown failed: {e}");
+        match tokio::time::timeout(
+            std::time::Duration::from_secs(45),
+            crate::graceful_shutdown_async(),
+        )
+        .await
+        {
+            Ok(Ok(())) => {}
+            Ok(Err(e)) => warn!("graceful shutdown failed: {e}"),
+            Err(_) => warn!("graceful shutdown timed out; exiting forcefully"),
+        }
+
+        // @trace spec:tillandsias-vault — revoke per-container AppRole
+        // tokens before exit so vault audit reflects clean shutdown.
+        // Time-bounded for the same reason as graceful shutdown.
+        #[cfg(feature = "vault")]
+        {
+            match tokio::time::timeout(
+                std::time::Duration::from_secs(10),
+                crate::vault_bootstrap::revoke_pending_container_tokens(false),
+            )
+            .await
+            {
+                Ok(()) => {}
+                Err(_) => warn!("vault token revocation timed out; exiting regardless"),
+            }
         }
 
         Ok::<(), String>(())
