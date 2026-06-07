@@ -2540,7 +2540,7 @@ plan_index:
     - id: legacy-secret-code-sweep
       order: 35
       title: Dead pre-Vault code & test-fixture sweep
-      status: ready
+      status: completed
       owner_host: linux
       deliverable: plan/steps/35-legacy-secret-code-sweep.md
       audit_origin: plan/issues/pre-vault-obsolescence-audit-2026-06-05.md
@@ -2568,7 +2568,7 @@ plan_index:
             - crates/tillandsias-headless/src/main.rs
             - crates/tillandsias-headless/Cargo.toml
           checkpoint_required: true
-          handoff_note: "Test fakes create tillandsias-github-token while litmus-vault-github-token-capture-shape.yaml:37 asserts the symbol is gone — direct contradiction. Flag (don't fix) any sibling-owned fmt/clippy drift. See audit §2."
+          handoff_note: "Completed by remote checkpoint 4991c2e6, with supplemental stale-reference and fixture cleanup rebased as 0c89c730. Newer no-host-token-extraction behavior was preserved during conflict resolution."
           events:
             - type: claim
               ts: "2026-06-08T18:48:00Z"
