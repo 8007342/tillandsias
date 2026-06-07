@@ -67,10 +67,11 @@ tillandsias-vault-client = { path = "../tillandsias-vault-client" }
 nix = { version = "0.29", features = ["fs", "ioctl", "process", "signal", "term"] }
 
 [features]
-# @trace spec:tillandsias-vault — Phase 6: Vault is now the default Linux
-# secrets backend. Building without the `vault` feature falls back to the
-# legacy keyring path unconditionally (`--legacy-keyring-secrets` becomes
-# implicit). The feature is part of `default` so a stock `cargo build` ships
+# @trace spec:tillandsias-vault — Phase 6/6.5: Vault is the only Linux
+# secrets backend. Building without the `vault` feature causes the
+# binary to emit a startup warning and refuse to mint git-mirror tokens
+# (no fallback path exists; the --legacy-keyring-secrets flag was removed
+# in v0.3). The feature is part of `default` so a stock `cargo build` ships
 # the Vault flow.
 default = ["vault"]
 # @trace spec:linux-native-portable-executable, spec:tray-ui-integration, spec:tray-app

@@ -6,10 +6,10 @@
 //! Per the convergence packet's Q4 answer, each host invokes `gh` from
 //! its OWN context:
 //!
-//!   * vsock (in-VM): reads a token from
-//!     `/run/secrets/tillandsias-github-token` and sets `GH_TOKEN`
-//!     env explicitly — the in-VM environment doesn't have the user's
-//!     local `gh auth` config.
+//!   * vsock (in-VM): fetches the GitHub token from Vault
+//!     (`vault-cli read -field=token secret/github/token`) and sets
+//!     `GH_TOKEN` env explicitly — the in-VM environment doesn't
+//!     have the user's local `gh auth` config.
 //!   * unix (Linux native host): passes `token: None` — the user's
 //!     local `gh auth` setup provides credentials and `gh` finds
 //!     them via its own config search path.

@@ -692,12 +692,12 @@ fn handle_control_connection(
                 ControlMessage::CloudRefreshRequest { seq } => {
                     // Linux-native CloudRefreshRequest handler (Q4
                     // answer of the convergence packet). Unlike the
-                    // vsock side (which reads a token from
-                    // /run/secrets/tillandsias-github-token), the
-                    // unix-side host invocation passes `token: None`
-                    // and lets `gh` use the user's local auth config
-                    // search path. Same wire reply shape, host-
-                    // appropriate execution context.
+                    // vsock side (which fetches the GitHub token from
+                    // Vault via vault-cli), the unix-side host
+                    // invocation passes `token: None` and lets `gh`
+                    // use the user's local auth config search path.
+                    // Same wire reply shape, host-appropriate
+                    // execution context.
                     //
                     // @trace spec:host-shell-architecture
                     // @trace plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q4)

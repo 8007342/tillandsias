@@ -56,9 +56,15 @@ _step "Removing ephemeral podman secrets..."
 # @trace spec:podman-secrets-integration, spec:tillandsias-vault
 SECRETS=(
     "tillandsias-ca-cert"
-    "tillandsias-github-token"
     "tillandsias-vault-unseal"
 )
+
+# Defensive cleanup: remove any stale tillandsias-github-token leftover
+# from pre-v0.3 sessions (the legacy keyring-backed podman secret was
+# removed in v0.3; no current Tillandsias creates this secret).
+if "$PODMAN" secret inspect tillandsias-github-token &>/dev/null; then
+    "$PODMAN" secret rm tillandsias-github-token 2>/dev/null || true
+fi
 
 # @trace spec:tillandsias-vault — the tray normally drains per-container
 # AppRole tokens on shutdown via the in-process revocation registry, but
