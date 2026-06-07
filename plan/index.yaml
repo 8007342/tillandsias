@@ -2388,11 +2388,18 @@ plan_index:
     - id: pre-vault-doc-cleanup
       order: 33
       title: Pre-Vault documentation cleanup (cheatsheets + image mirrors)
-      status: ready
+      status: claimed
       owner_host: linux
       deliverable: plan/steps/33-pre-vault-doc-cleanup.md
       audit_origin: plan/issues/pre-vault-obsolescence-audit-2026-06-05.md
       depends_on: []
+      events:
+        - type: claim
+          ts: "2026-06-07T00:59:12Z"
+          agent_id: "linux-macuahuitl-big-pickle-20260607T005316"
+          host: "linux"
+          lease_id: "lease-linux-doc-cleanup-20260607T005912Z"
+          expires_at: "2026-06-07T04:59:12Z"
       specs:
         - tillandsias-vault
         - secrets-management
