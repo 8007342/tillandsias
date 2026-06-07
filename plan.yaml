@@ -36,8 +36,8 @@ plan:
       auth) DONE this cycle (clippy clean, 143/143 tray tests); ready linux
       leaves 42a-async, 42b (login-in-container + fail-fast), 42c (Vault HTTPS via
       intermediate CA); 42d (win/mac gating parity) blocked on 42a + step 36.
-      Step 43 (tray Quit hang) opened from operator report, ready/linux. Origin:
-      plan/issues/github-login-vault-native-flow-2026-06-06.md.
+      Step 43 (tray Quit hang) completed 2026-06-07 (05e59599, linux-macuahuitl-big-pickle).
+      Origin: plan/issues/github-login-vault-native-flow-2026-06-06.md.
     plan_index: plan/index.yaml
     step_directory: plan/steps
     checkpoint_branch: linux-next

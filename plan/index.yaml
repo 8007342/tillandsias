@@ -2735,7 +2735,7 @@ plan_index:
     - id: tray-quit-hang
       order: 43
       title: Tray Quit hangs for minutes / requires manual kill
-      status: claimed
+      status: done
       owner_host: linux
       deliverable: plan/steps/43-tray-quit-hang.md
       audit_origin: plan/issues/github-login-vault-native-flow-2026-06-06.md
@@ -2747,6 +2747,21 @@ plan_index:
           host: "linux"
           lease_id: "lease-linux-tray-quit-hang-20260607T005402Z"
           expires_at: "2026-06-07T04:54:02Z"
+        - type: progress
+          ts: "2026-06-07T01:20:00Z"
+          agent_id: "linux-macuahuitl-big-pickle-20260607T005316"
+          host: "linux"
+          lease_id: "lease-linux-tray-quit-hang-20260607T005402Z"
+          note: "Root cause: Quit sets TrayService::shutdown but main loop polls signal-handler atomic. Added signal_shutdown backlink, 45s graceful-shutdown timeout, 10s vault-token-revoke timeout."
+        - type: completed
+          ts: "2026-06-07T01:21:00Z"
+          agent_id: "linux-macuahuitl-big-pickle-20260607T005316"
+          host: "linux"
+          lease_id: "lease-linux-tray-quit-hang-20260607T005402Z"
+          evidence_refs:
+            - "commit:05e59599"
+            - "cargo test --features tray: 23/23 PASS"
+            - "cargo clippy --features tray: -D warnings clean"
       specs:
         - graceful-shutdown
         - app-lifecycle
@@ -2756,10 +2771,10 @@ plan_index:
         - "A test or litmus asserts Quit returns within the bound."
       tasks:
         - id: quit-hang/diagnose-and-bound
-          status: ready
+          status: done
           depends_on: []
           owned_files:
             - crates/tillandsias-headless/src/tray/mod.rs
             - crates/tillandsias-headless/src/main.rs
           checkpoint_required: true
-          handoff_note: "Operator 2026-06-06: clicking Quit hangs for a long time (sometimes minutes), often needs `kill` from a terminal. Quit sets shutdown atomic + tray_icon_state=Stopping (tray/mod.rs:2930-2933); find what blocks the actual exit — likely a synchronous container teardown, task_executor drain, vault token revoke (revoke_pending_container_tokens, main.rs:6102), or the zbus event loop not unblocking. Bound or background each shutdown step and force-exit after a deadline."
+          handoff_note: "DONE 2026-06-07 (05e59599). Root cause: Quit handler set TrayService::shutdown but main loop polls signal-handler atomic. Added signal_shutdown OnceLock backlink, 45s graceful-shutdown timeout, 10s vault-revoke timeout. All 23 tray tests passing, clippy clean."

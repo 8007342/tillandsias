@@ -1,12 +1,19 @@
 # Step 43 — Tray Quit hangs for minutes / requires manual kill
 
-- **Status**: claimed
+- **Status**: completed
 
 ## Claim
 
 - **Claimed at**: 2026-06-07T00:54:02Z
 - **Agent**: linux-macuahuitl-big-pickle-20260607T005316
 - **Lease**: lease-linux-tray-quit-hang-20260607T005402Z (expires 2026-06-07T04:54:02Z)
+
+## Evidence
+
+- **Commit**: `05e59599`
+- **Root cause**: Quit handler set `TrayService::shutdown` but main loop polls the signal-handler atomic — different atomics, so Quit never exited.
+- **Fix**: Added `signal_shutdown` backlink to `TrayService` so Quit flips both atomics. Added time bounds (45s graceful shutdown, 10s vault revocation) to prevent indefinite hangs. Added vault token revocation to tray shutdown path.
+- **Verification**: `cargo check --features tray`, `clippy -D warnings`, `cargo test --features tray` (23/23 PASS), `cargo fmt --all -- --check` clean.
 - **Owner host**: linux
 - **Branch**: linux-next
 - **Depends on**: []
