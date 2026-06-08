@@ -2438,7 +2438,7 @@ plan_index:
         - "Repo and images/default/cheatsheets mirrors stay byte-identical (litmus:cheatsheet-host-image-sync PASS)."
       tasks:
         - id: doc-cleanup/cheatsheets
-          status: claimed
+          status: done
           depends_on: []
           owned_files:
             - cheatsheets/runtime/hashicorp-vault-tillandsias.md
@@ -2457,6 +2457,17 @@ plan_index:
               host: "linux"
               lease_id: "lease-linux-doc-cleanup-20260608T1902Z"
               expires_at: "2026-06-08T23:02:00Z"
+            - type: completed
+              ts: "2026-06-08T19:10:00Z"
+              agent_id: "linux-macuahuitl-advance-work-20260608T175625Z"
+              host: "linux"
+              lease_id: "lease-linux-doc-cleanup-20260608T1902Z"
+              evidence_refs:
+                - "commit:35eebed8"
+                - "tillandsias-secrets-architecture.md: removed legacy github-token from Rust example and audit log; updated checklist to vault-cli"
+                - "hashicorp-vault-tillandsias.md: removed 'same pattern as tillandsias-github-token today' reference"
+                - "git-mirror-lifecycle-audit.md: updated entrypoint code snippet, removed legacy fallback references"
+                - "Synced all changes to images/default/ mirrors"
 
     - id: pre-vault-spec-reconciliation
       order: 34
