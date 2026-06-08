@@ -13,6 +13,22 @@ This is **BLOCKED on linux step 32** (true-rekey lands the shared contract Windo
 — not claimable until step 32 completes. Optional independent item: wire
 `EnumerateLocalProjects`. No new autonomous Windows **step-36** code packet until step 32 lands.
 
+## 2026-06-08 — keyring-verify/windows (orchestrator packet) — DONE
+
+Linux orchestrator shaped `keyring-verify/windows` in
+`plan/issues/keyring-backend-xplat-verification-2026-06-08.md` (verify the `windows-native`
+keyring backend builds + persists across process runs; independent of step 32).
+
+- 2026-06-08T18:12Z **claim** by `windows-yolanda-wsl2-2026-06-08T1751Z`
+  (lease: `lease-windows-keyring-verify-20260608T1812`, expires 2026-06-08T22:12Z).
+- 2026-06-08T18:20Z **completed** — **VERIFIED PASS, no fix-forward needed.** windows-native
+  keyring v3.6.3 compiles on MSVC; a standalone two-process probe proved set-in-one-process →
+  get-in-a-fresh-process returns the value (mock keystore would not). Full evidence +
+  release-relevant premise correction (no shipped Windows binary links keyring; host uses
+  CredWriteW per w12; the in-VM Linux backend is what persists the unseal key on a Windows
+  install) appended under "Results — Windows" in the verification issue. `Cargo.toml`/`Cargo.lock`
+  left untouched (backend built clean as-is).
+
 ## 2026-06-08 — w12 claimed (vault keyring per-host parity tail, NOT step 36)
 
 `plan/issues/github-login-vault-lifecycle-2026-06-08.md` ("Per-host queue impact")

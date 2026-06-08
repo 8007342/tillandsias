@@ -92,3 +92,38 @@ _(append dated, host-tagged lines here)_
 
 - 2026-06-08T17:4xZ  linux  packets shaped + pushed to osx-next/windows-next/linux-next by the
   linux orchestrator after releasing v0.3.260608.4.
+
+### Results — Windows  (`keyring-verify/windows` → **VERIFIED PASS**)
+
+- 2026-06-08T18:20Z  windows  agent `windows-yolanda-wsl2-2026-06-08T1751Z`, host Yolanda (Win11 Home).
+  **windows-native keyring backend BUILDS and PERSISTS across process runs. No fix-forward needed.**
+  1. **Builds**: `cargo build -p tillandsias-windows-tray --locked` and `cargo check -p
+     tillandsias-core --locked` both green — `tillandsias-core` declares the workspace `keyring`
+     dep, so this compiles keyring v3.6.3 + the `windows-native` (Credential Manager) backend on
+     the MSVC toolchain (rustc 1.95.0, stable-x86_64-pc-windows-msvc). No missing-feature error.
+  2. **Persistence smoke (the actual point)** — standalone probe binary (built in a temp dir
+     against keyring v3.6.3 with the EXACT workspace feature set, so it is not committed to the
+     linux-owned `core` crate), run as **separate process invocations**:
+     - proc A `get` (before set): `GET ERR No matching entry found in secure storage` (baseline).
+     - proc B `set`: `SET ok`.
+     - proc C `get` (**fresh process**): `GET persist-ok` ✅ — the value survived the process
+       boundary. The pre-fix mock keystore would have returned `ERR` here; this is the definitive
+       native-backend proof.
+     - cleanup `del` → `get` → `ERR` (idempotent).
+- **Release-relevant finding (premise correction for windows-next):** in the thin-tray
+  architecture **no shipped Windows artifact actually links the `keyring` crate.** The shipped
+  binary is `tillandsias-windows-tray`, which depends on host-shell/vm-layer/control-wire and
+  uses the host's secrets via **raw Win32 `CredWriteW`/`CredReadW`** (`installation_uuid.rs`),
+  not keyring. The only keyring consumer is `tillandsias-headless::vault_bootstrap` (feature
+  `vault`), which does **not** build on Windows (`tokio-vsock` is Linux-only) and runs **inside
+  the WSL2 Fedora VM**, where the *Linux* `async-secret-service` backend (not `windows-native`)
+  is the one that persists the unseal key / root token. So on a Windows install the RC1 keyring
+  fix takes effect in-VM (Linux backend); the Windows *host* persistence is the CredWriteW path.
+  That host path now has its own automated cross-call proof — see windows-queue item **w12**
+  (`credential_manager_persists_uuid_across_calls`, green on this box). The `windows-native`
+  backend is nonetheless confirmed sound for when step 36 moves host-side keychain storage onto
+  it.
+- **Sibling finding flagged (not fixed — linux scope):** `cargo clippy -p
+  tillandsias-windows-tray -- -D warnings` fails on Windows due to 3 Windows-only-unused items in
+  `crates/tillandsias-core/src/singleton.rs` (`Instant`, `info`, `timeout`), invisible to
+  Linux-only CI. Detail in the windows work-queue w12 completion event.
