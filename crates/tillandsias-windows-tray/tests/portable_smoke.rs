@@ -2,10 +2,13 @@
 //! dev box. The real tray binary is Windows-only; these tests cover the
 //! portable surface (host-shell glue, menu state interop, stub modules).
 //!
-//! Windows-specific behavior (Win32 NotifyIcon registration, Credential
-//! Manager read/write) is covered by `#[cfg(target_os = "windows")]
-//! #[ignore]` tests below — to be unignored when a Win11 box is wired
-//! into CI.
+//! Windows-specific behavior is split: the Credential Manager read/write/
+//! delete round-trip now has *automated, hermetic* coverage in the
+//! `installation_uuid::tests::credential_manager_persists_uuid_across_calls`
+//! unit test (it runs on every `cargo test` on a Windows host — this crate
+//! is a binary, so that test can reach the binary-private module that
+//! integration tests here cannot). The Win32 NotifyIcon registration test
+//! below stays `#[ignore]` because it needs an interactive desktop session.
 //!
 //! @trace spec:windows-native-tray
 
@@ -90,18 +93,14 @@ fn logged_in_state_renders_github_user_disabled() {
     assert!(github.label.contains("bulloncito"));
 }
 
-/// Win11 + Credential Manager test — manually repro by running the test
-/// binary on a Win11 machine with `--ignored`. The body uses the Win32
-/// `CredWriteW` / `CredReadW` API, which is unavailable on Linux.
-///
-/// @trace spec:windows-native-tray
-#[cfg(target_os = "windows")]
-#[test]
-#[ignore = "requires Windows 11 box with Credential Manager"]
-fn installation_uuid_roundtrips_via_credential_manager() {
-    // Manual repro: run the test binary on Win11, then verify the
-    // credential appears under `cmdkey /list` as `tillandsias-vm-uuid`.
-}
+// The Credential Manager round-trip (CredWriteW/CredReadW/CredDeleteW) is
+// covered automatically and hermetically by
+// `installation_uuid::tests::credential_manager_persists_uuid_across_calls`
+// in the binary crate — see the module note above. That test must live in
+// the binary (not here) because `tillandsias-windows-tray` exposes no lib
+// target, so an integration test cannot reach the `installation_uuid`
+// module. Operators wanting to eyeball the *production* credential can run
+// the tray once and check `cmdkey /list` for `tillandsias-vm-uuid`.
 
 /// The Win32 NotifyIcon registration test must run inside an interactive
 /// Windows desktop session (the Shell needs a foreground UI). Marked

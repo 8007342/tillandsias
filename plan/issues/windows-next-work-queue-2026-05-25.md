@@ -11,7 +11,87 @@ in Windows Credential Manager and deliver them to the in-VM vault container over
 (the bootstrap in `crates/tillandsias-headless/src/vault_bootstrap.rs` is Linux-only today).
 This is **BLOCKED on linux step 32** (true-rekey lands the shared contract Windows mirrors)
 — not claimable until step 32 completes. Optional independent item: wire
-`EnumerateLocalProjects`. No new autonomous Windows code packet until step 32 lands.
+`EnumerateLocalProjects`. No new autonomous Windows **step-36** code packet until step 32 lands.
+
+## 2026-06-08 — keyring-verify/windows (orchestrator packet) — DONE
+
+Linux orchestrator shaped `keyring-verify/windows` in
+`plan/issues/keyring-backend-xplat-verification-2026-06-08.md` (verify the `windows-native`
+keyring backend builds + persists across process runs; independent of step 32).
+
+- 2026-06-08T18:12Z **claim** by `windows-yolanda-wsl2-2026-06-08T1751Z`
+  (lease: `lease-windows-keyring-verify-20260608T1812`, expires 2026-06-08T22:12Z).
+- 2026-06-08T18:20Z **completed** — **VERIFIED PASS, no fix-forward needed.** windows-native
+  keyring v3.6.3 compiles on MSVC; a standalone two-process probe proved set-in-one-process →
+  get-in-a-fresh-process returns the value (mock keystore would not). Full evidence +
+  release-relevant premise correction (no shipped Windows binary links keyring; host uses
+  CredWriteW per w12; the in-VM Linux backend is what persists the unseal key on a Windows
+  install) appended under "Results — Windows" in the verification issue. `Cargo.toml`/`Cargo.lock`
+  left untouched (backend built clean as-is).
+
+## 2026-06-08 — w12 claimed (vault keyring per-host parity tail, NOT step 36)
+
+`plan/issues/github-login-vault-lifecycle-2026-06-08.md` ("Per-host queue impact")
+asks the Windows owner to **verify the platform keychain actually persists secrets
+across runs** after the RC1 keyring backend fix (step 42 cross-platform tail). This is
+independent of step 32/36: the Windows host today persists only the `installation-uuid`
+anchor, and via raw Win32 `CredWriteW` (`installation_uuid.rs`), **not** the `keyring`
+crate — so the RC1 `Cargo.toml` change does not exercise the Windows persistence path at
+all. The existing automated proof was an **empty `#[ignore]` placeholder**
+(`tests/portable_smoke.rs:101`, "requires Windows 11 box") and Linux-only CI never
+compiles the real `CredReadW`/`CredWriteW` path. w12 closes that blind spot on real Win11
+hardware.
+
+### Item: w12/windows-credential-manager-persistence-proof
+
+- id: `w12/windows-credential-manager-persistence-proof`
+- type: drift-protection + verification
+- owner_host: windows
+- capability_tags: [win32, credential-manager, rust, testing]
+- status: done
+- completed_at: 2026-06-08T18:05Z
+- depends_on: []
+- gated_on: []
+- owned_files:
+  - `crates/tillandsias-windows-tray/src/installation_uuid.rs`
+  - `crates/tillandsias-windows-tray/tests/portable_smoke.rs`
+- summary: >
+    Replace the empty `installation_uuid_roundtrips_via_credential_manager` placeholder
+    with a real, hermetic, automated round-trip test against Windows Credential Manager,
+    proving a written secret is read back by a *later* call (persists across runs),
+    overwrite replaces it, and delete clears it. Add a `delete_installation_uuid_for`
+    primitive (idempotent `CredDeleteW`) — needed for test cleanup and for the eventual
+    step-36 key-rotation/uninstall path. Test uses a unique per-run target so it never
+    touches the production `tillandsias-vm-uuid` credential.
+- acceptance_evidence:
+  - `cargo test -p tillandsias-windows-tray` runs the new
+    `installation_uuid::tests::credential_manager_persists_uuid_across_calls` and it
+    PASSES on this Win11 host (Yolanda).
+  - `cargo build -p tillandsias-windows-tray` and `cargo fmt --check` clean.
+- 2026-06-08T17:51Z: **claim** by `windows-yolanda-wsl2-2026-06-08T1751Z`
+  (lease: `lease-windows-w12-credman-persist-20260608T1751`, expires 2026-06-08T21:51Z).
+- 2026-06-08T18:05Z: **completed** by `windows-yolanda-wsl2-2026-06-08T1751Z`.
+  - `installation_uuid.rs`: split public fns into target-parameterized internals
+    (`read_installation_uuid_from`/`write_installation_uuid_to`), added idempotent
+    `delete_installation_uuid_for` (`CredDeleteW`, ERROR_NOT_FOUND→Ok), and a hermetic
+    `#[cfg(test)]` round-trip test `credential_manager_persists_uuid_across_calls` on a
+    unique per-run target with RAII cleanup (never touches production `tillandsias-vm-uuid`).
+  - `tests/portable_smoke.rs`: removed the empty `#[ignore]`
+    `installation_uuid_roundtrips_via_credential_manager` placeholder; repointed the module
+    note to the new automated in-binary coverage.
+  - Evidence (Win11 host Yolanda): `cargo test -p tillandsias-windows-tray` →
+    `credential_manager_persists_uuid_across_calls ... ok`; full suite 43 + 8 + 3 green
+    (1 ignored = interactive desktop NotifyIcon). `cargo fmt -p tillandsias-windows-tray
+    -- --check` clean. windows-tray clippy: **zero findings in this crate**.
+  - **FINDING for linux owner (NOT fixed here — sibling scope):** `cargo clippy
+    -p tillandsias-windows-tray -- -D warnings` fails to compile on Windows because
+    `crates/tillandsias-core/src/singleton.rs` has 3 Windows-only-unused items
+    (`Instant` :8, `info` :9, `timeout` param :90 — the Windows `terminate_process` path
+    doesn't use them). Linux CI clippy is clean (they're used on the Linux path), so this
+    is a Linux-CI blind spot identical in shape to w12's own motivation. Minor sibling
+    cleanups also surfaced: `vm-layer/src/materialize/{cache.rs:134,oci.rs:113-116}`
+    (collapsible_if, manual strip_prefix). Suggest a `#[cfg(windows)]`/`_`-prefix guard in
+    singleton.rs and a clippy pass on the materializer.
 
 ---
 
@@ -1257,3 +1337,8 @@ Next greedy pickups (no VM needed): **w4b** (windows-ownable, pure) and **w4d**
 - Windows tray remains green (build-findings 2026-06-02: 55 tests pass, drift-protection intact).
 - Defer rule: last integration cycle `2026-06-02T21:34Z` (>24h ago) — no defer.
 - Next action: **YIELD** — no Windows-eligible packet. Standby for orchestrator to either shape Windows tasks into step 25, or for siblings to advance 25→26 so the 27–31 chain (incl. Windows install-script hardening) unblocks.
+
+
+## ORCHESTRATOR PACKET — 2026-06-08 (from linux-next)
+
+Ready, step-32-independent packet for this host: **keyring persistent-backend verification** after the v0.3.260608.4 fix (shared `Cargo.toml` `keyring` now enables a native backend; Windows must verify build + keychain persistence). Full spec + acceptance evidence: `plan/issues/keyring-backend-xplat-verification-2026-06-08.md`. Claim it on your next `/advance-work-from-plan` cycle.
