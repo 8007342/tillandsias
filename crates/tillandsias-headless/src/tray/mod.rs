@@ -974,12 +974,11 @@ impl TrayUiState {
         let projects_hash = Self::hash_projects(&projects);
 
         // @trace spec:tillandsias-vault, spec:tray-minimal-ux
-        // Single source of truth for "logged in" is the Vault secret at
-        // secret/github/token — NOT host `gh auth status`. Cheap when no
-        // Vault data volume exists (the logged-out default); brings Vault up
-        // on demand only when a prior login left a data volume behind.
-        // Refreshed on demand when the user clicks GitHubLogin — never polled.
-        let is_authenticated = crate::vault_bootstrap::is_github_logged_in(debug);
+        // Default to false at launch — a background probe (spawned in
+        // run_tray_mode_with_debug) asynchronously checks Vault and bumps
+        // the menu revision when the token is confirmed. This avoids a
+        // 60s Vault health timeout on the launch path.
+        let is_authenticated = false;
 
         Self {
             root,
@@ -3224,6 +3223,36 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
     // @trace spec:graceful-shutdown, spec:app-lifecycle
     service.attach_signal_shutdown(Arc::clone(&shutdown));
     start_control_socket_server(Arc::clone(&shutdown))?;
+
+    // @trace spec:tillandsias-vault, spec:tray-minimal-ux
+    // Asynchronous vault probe: is_github_logged_in can trigger a 60s Vault
+    // health timeout if the data volume exists but Vault isn't running (e.g.
+    // first tray launch after a --github-login). Instead of blocking the
+    // launch path, default is_authenticated=false and confirm in background.
+    {
+        let service_for_probe = service.clone();
+        let state_handle = service.state_handle();
+        let debug = service.snapshot().debug;
+        if service
+            .task_executor
+            .spawn_task(move || {
+                if crate::vault_bootstrap::is_github_logged_in(debug) {
+                    let mut state = state_handle.lock().expect("tray state lock");
+                    if !state.is_authenticated {
+                        state.is_authenticated = true;
+                        state.bump_revision();
+                    }
+                    drop(state);
+                    let _ = futures::executor::block_on(
+                        service_for_probe.rebuild_after_state_change(),
+                    );
+                }
+            })
+            .is_err()
+        {
+            warn!("task queue full: skipping background vault probe");
+        }
+    }
 
     // @trace spec:tray-ux, spec:remote-projects
     // Kick off the initial cloud-projects fetch on the async executor so the

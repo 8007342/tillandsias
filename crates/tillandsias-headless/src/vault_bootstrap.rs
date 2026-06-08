@@ -142,6 +142,7 @@ pub fn run_with_vault_init(debug: bool) -> Result<(), String> {
 /// mapping drift or a host reboot since then), we bring Vault up on demand via
 /// the same idempotent path `--init` uses. The token has already been pasted
 /// by this point, so failing fast with a stale hint would waste it.
+#[allow(dead_code)]
 pub fn write_github_token_to_vault(token: &str, debug: bool) -> Result<(), String> {
     if !container_running(VAULT_CONTAINER_NAME) {
         if debug {

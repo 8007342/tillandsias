@@ -31,9 +31,7 @@ FROM docker.io/library/alpine:3.20
 #
 # Security: ALL operations run as unprivileged 'git' user
 # @trace spec:tillandsias-vault — curl + jq are required by /usr/local/bin/vault-cli
-# so the post-receive hook can fetch the GitHub token from Vault at push time
-# (Phase 6 default flow). The legacy `/run/secrets/tillandsias-github-token`
-# mount remains supported when --legacy-keyring-secrets is in effect.
+# so the post-receive hook can fetch the GitHub token from Vault at push time.
 RUN apk add --no-cache \
         git \
         git-daemon \

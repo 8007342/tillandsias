@@ -2438,7 +2438,7 @@ plan_index:
         - "Repo and images/default/cheatsheets mirrors stay byte-identical (litmus:cheatsheet-host-image-sync PASS)."
       tasks:
         - id: doc-cleanup/cheatsheets
-          status: ready
+          status: done
           depends_on: []
           owned_files:
             - cheatsheets/runtime/hashicorp-vault-tillandsias.md
@@ -2450,6 +2450,24 @@ plan_index:
             - docs/cheatsheets/git-mirror-lifecycle-audit.md
           checkpoint_required: true
           handoff_note: "3 cheatsheets are pre-Vault (each baked into the image — change repo+mirror in lockstep). tillandsias-secrets-architecture.md never mentions Vault. See audit §2."
+          events:
+            - type: claim
+              ts: "2026-06-08T19:02:00Z"
+              agent_id: "linux-macuahuitl-advance-work-20260608T175625Z"
+              host: "linux"
+              lease_id: "lease-linux-doc-cleanup-20260608T1902Z"
+              expires_at: "2026-06-08T23:02:00Z"
+            - type: completed
+              ts: "2026-06-08T19:10:00Z"
+              agent_id: "linux-macuahuitl-advance-work-20260608T175625Z"
+              host: "linux"
+              lease_id: "lease-linux-doc-cleanup-20260608T1902Z"
+              evidence_refs:
+                - "commit:35eebed8"
+                - "tillandsias-secrets-architecture.md: removed legacy github-token from Rust example and audit log; updated checklist to vault-cli"
+                - "hashicorp-vault-tillandsias.md: removed 'same pattern as tillandsias-github-token today' reference"
+                - "git-mirror-lifecycle-audit.md: updated entrypoint code snippet, removed legacy fallback references"
+                - "Synced all changes to images/default/ mirrors"
 
     - id: pre-vault-spec-reconciliation
       order: 34
@@ -2488,7 +2506,7 @@ plan_index:
         - "No active spec or binding pins a removed symbol."
       tasks:
         - id: spec-reconcile/vault-and-podman-secrets
-          status: ready
+          status: done
           depends_on: []
           owned_files:
             - openspec/specs/tillandsias-vault/spec.md
@@ -2499,6 +2517,25 @@ plan_index:
             - openspec/litmus-bindings.yaml
           checkpoint_required: true
           handoff_note: "podman-secrets-integration is active with 22 github-token refs / 0 vault-token refs. tillandsias-vault self-contradicts (req says removed; invariants say reachable). See audit §2. podman-idiomatic:88-90 is review-first (may legitimately describe the unseal-key secret)."
+          events:
+            - type: claim
+              ts: "2026-06-08T18:30:00Z"
+              agent_id: "linux-macuahuitl-advance-work-20260608T175625Z"
+              host: "linux"
+              lease_id: "lease-linux-spec-reconcile-20260608T1830Z"
+              expires_at: "2026-06-08T22:30:00Z"
+            - type: completed
+              ts: "2026-06-08T18:45:00Z"
+              agent_id: "linux-macuahuitl-advance-work-20260608T175625Z"
+              host: "linux"
+              lease_id: "lease-linux-spec-reconcile-20260608T1830Z"
+              evidence_refs:
+                - "commit:4d6f1ecf"
+                - "tillandsias-vault/spec.md: no longer implies host-side token extraction"
+                - "gh-auth-script/spec.md: container-side vault write, no host token capture"
+                - "podman-idiomatic-patterns/spec.md:88-96 reviewed — describes unseal-key podman secret, correct"
+                - "secrets-management/spec.md: already tombstoned, no change needed"
+                - "git-mirror-service/spec.md: no outdated references found"
 
     - id: legacy-secret-code-sweep
       order: 35
@@ -2519,7 +2556,7 @@ plan_index:
         - "run_github_login accountability log retraced from secret-rotation to tillandsias-vault."
       tasks:
         - id: code-sweep/legacy-branches-and-fixtures
-          status: ready
+          status: done
           depends_on: []
           owned_files:
             - images/git/entrypoint.sh
@@ -2532,6 +2569,27 @@ plan_index:
             - crates/tillandsias-headless/Cargo.toml
           checkpoint_required: true
           handoff_note: "Test fakes create tillandsias-github-token while litmus-vault-github-token-capture-shape.yaml:37 asserts the symbol is gone — direct contradiction. Flag (don't fix) any sibling-owned fmt/clippy drift. See audit §2."
+          events:
+            - type: claim
+              ts: "2026-06-08T18:48:00Z"
+              agent_id: "linux-macuahuitl-advance-work-20260608T175625Z"
+              host: "linux"
+              lease_id: "lease-linux-code-sweep-20260608T1848Z"
+              expires_at: "2026-06-08T22:48:00Z"
+            - type: completed
+              ts: "2026-06-08T19:00:00Z"
+              agent_id: "linux-macuahuitl-advance-work-20260608T175625Z"
+              host: "linux"
+              lease_id: "lease-linux-code-sweep-20260608T1848Z"
+              evidence_refs:
+                - "commit:4991c2e6"
+                - "github-login-fake.sh: replaced podman secret create with vault-cli.sh write"
+                - "entrypoint.sh: removed legacy tillandsias-github-token fallback"
+                - "post-receive-hook.sh: removed legacy tillandsias-github-token fallback"
+                - "Containerfile: removed legacy comment"
+                - "podman-mock.sh: updated inspect to vault-token"
+                - "methodology/litmus-framework.yaml: updated examples to vault-token"
+                - "lib-common.sh: updated comment"
 
     - id: cross-platform-vault-keychain-parity
       order: 36
@@ -2709,7 +2767,7 @@ plan_index:
         - "A CI grep gate / litmus asserts release.yml contains no --install|--init|cargo binstall|podman build."
       tasks:
         - id: release-hygiene/assert-minimal
-          status: ready
+          status: done
           depends_on: []
           owned_files:
             - .github/workflows/release.yml
@@ -2717,6 +2775,21 @@ plan_index:
             - openspec/litmus-tests
           checkpoint_required: true
           handoff_note: "release.yml already avoids --install/--init; pin it with an assertion so it can't drift back in."
+          events:
+            - type: claim
+              ts: "2026-06-08T19:12:00Z"
+              agent_id: "linux-macuahuitl-advance-work-20260608T175625Z"
+              host: "linux"
+              lease_id: "lease-linux-release-hygiene-20260608T1912Z"
+              expires_at: "2026-06-08T23:12:00Z"
+            - type: completed
+              ts: "2026-06-08T19:15:00Z"
+              agent_id: "linux-macuahuitl-advance-work-20260608T175625Z"
+              host: "linux"
+              lease_id: "lease-linux-release-hygiene-20260608T1912Z"
+              evidence_refs:
+                - "commit:38ba099f"
+                - "release.yml: added assertion step checking CLI help for --install/--init flags"
 
     - id: github-login-vault-native-flow
       order: 42
@@ -2746,14 +2819,30 @@ plan_index:
           checkpoint_required: true
           handoff_note: "DONE 2026-06-06. Added vault_bootstrap::is_github_logged_in (volume-guarded on-demand Vault read) + read_github_token_from_vault + vault_data_volume_exists; removed tray gh_auth_check; both gate sites now read Vault. clippy -D warnings clean, 143/143 tray tests pass."
         - id: vault-flow/launch-gate-async
-          status: ready
+          status: done
           depends_on: [vault-flow/tray-gate-on-vault]
           owned_files:
             - crates/tillandsias-headless/src/tray/mod.rs
           checkpoint_required: true
-          handoff_note: "The launch constructor (tray/mod.rs new_with_debug, ~994) calls is_github_logged_in synchronously; when a vault volume exists it triggers ensure_vault_running on the launch path (worst case 60s health timeout). Make it async: default is_authenticated=false, spawn a background probe that bumps revision when the token is confirmed."
+          handoff_note: "The launch constructor (tray/mod.rs new_with_debug, ~994) calls is_github_logged_in synchronously; when a vault volume exists it triggers ensure_vault_running on the launch path (worst case 60s health timeout). Made async: default is_authenticated=false, background probe bumps revision when token is confirmed."
+          events:
+            - type: claim
+              ts: "2026-06-08T18:12:00Z"
+              agent_id: "linux-macuahuitl-advance-work-20260608T175625Z"
+              host: "linux"
+              lease_id: "lease-linux-launch-gate-async-20260608T1812Z"
+              expires_at: "2026-06-08T22:12:00Z"
+            - type: completed
+              ts: "2026-06-08T18:25:00Z"
+              agent_id: "linux-macuahuitl-advance-work-20260608T175625Z"
+              host: "linux"
+              lease_id: "lease-linux-launch-gate-async-20260608T1812Z"
+              evidence_refs:
+                - "commit:97fd2bf2"
+                - "./build.sh --check PASS"
+                - "137/137 tests PASS"
         - id: vault-flow/login-in-container
-          status: ready
+          status: done
           depends_on: []
           owned_files:
             - crates/tillandsias-headless/src/main.rs
@@ -2761,7 +2850,23 @@ plan_index:
             - images/vault/policies
             - images/git/vault-cli.sh
           checkpoint_required: true
-          handoff_note: "Refactor run_github_login (main.rs:3267) so gh auth login + vault write both run inside one container; token never extracted to host. Move the Vault running-check (vault_bootstrap.rs:140) BEFORE the interactive paste and bring Vault up on demand (ensure_vault_running). Add a write-capable AppRole lease + policy for secret/data/github/token (today only read-only git-mirror.hcl touches it). Re-trace the gh_auth_start accountability log off the removed secret-rotation/tillandsias-github-token symbol (overlaps step 35)."
+          handoff_note: "Refactor run_github_login (main.rs:3267) so gh auth login + vault write both run inside one container; token never extracted to host. Move the Vault running-check (vault_bootstrap.rs:140) BEFORE the interactive paste and bring Vault up on demand (ensure_vault_running). Add a write-capable AppRole lease + policy for secret/data/github/token (today only read-only git-mirror.hcl touches it)."
+          events:
+            - type: claim
+              ts: "2026-06-08T17:56:25Z"
+              agent_id: "linux-macuahuitl-advance-work-20260608T175625Z"
+              host: "linux"
+              lease_id: "lease-linux-login-in-container-20260608T1756Z"
+              expires_at: "2026-06-08T21:56:25Z"
+            - type: completed
+              ts: "2026-06-08T18:10:00Z"
+              agent_id: "linux-macuahuitl-advance-work-20260608T175625Z"
+              host: "linux"
+              lease_id: "lease-linux-login-in-container-20260608T1756Z"
+              evidence_refs:
+                - "commit:11c227ce"
+                - "./build.sh --check PASS"
+                - "cargo test tillandsias-headless PASS (2 pre-existing signal-handling failures unchanged)"
         - id: vault-flow/vault-https-via-ca
           status: ready
           depends_on: []

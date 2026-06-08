@@ -138,15 +138,12 @@ podman::secret::create(&secret_name, &token)?;
 ### Step 3: Per-Container Podman Secret Mount
 
 ```rust
-// In container launch: mount the vault-token + CA certs
-run_args.push("--secret=tillandsias-vault-token-git-mirror-abc123");
-if podman::secret::exists("tillandsias-ca-cert")? { {
-    run_args.push("--secret=tillandsias-github-token".to_string());
-}
-if podman::secret::exists("tillandsias-ca-cert")? {
-    run_args.push("--secret=tillandsias-ca-cert".to_string());
-    run_args.push("--secret=tillandsias-ca-key".to_string());
-}
+    // In container launch: mount the vault-token + CA certs
+    run_args.push("--secret", "tillandsias-vault-token-git-mirror-abc123");
+    if podman::secret::exists("tillandsias-ca-cert")? {
+        run_args.push("--secret", "tillandsias-ca-cert");
+        run_args.push("--secret", "tillandsias-ca-key");
+    }
 
 podman.run_container(&run_args).await?;
 ```
@@ -310,7 +307,6 @@ info!(
     category = "secrets",
     spec = "secrets-management",
     action = "secret_cleanup",
-    secret_name = "tillandsias-github-token",
     "Ephemeral secret removed on shutdown"
 );
 ```
@@ -382,7 +378,7 @@ tillandsias /path/to/project
 - [ ] Verify `ps -eaux` does NOT show secret content in process environment
 - [ ] Verify secrets are readable at `/run/secrets/<name>` inside containers
 - [ ] Verify proxy can load CA cert from `/run/secrets/tillandsias-ca-cert`
-- [ ] Verify git service can read token from `/run/secrets/tillandsias-github-token`
+- [ ] Verify git service can read token from Vault via `vault-cli` at push time
 - [ ] Verify SELinux does NOT deny container access to `/run/secrets/`
 - [ ] Verify `podman secret rm` succeeds and removes all ephemeral secrets on shutdown
 - [ ] Verify no secrets left in ~/.local/share/containers/storage/secrets/ after cleanup

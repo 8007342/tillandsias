@@ -3286,8 +3286,8 @@ fn podman_command() -> Command {
 /// Container-side bridge for the retired Tauri `--github-login` path.
 ///
 /// The host runtime only assumes Podman. GitHub CLI runs inside the git service
-/// image; the host only captures the token in memory and creates the Podman
-/// secret over stdin.
+/// image; the host never captures the token in host memory — the vault write
+/// executes entirely inside the container.
 ///
 /// @trace spec:gh-auth-script, spec:podman-secrets-integration, spec:secret-rotation, spec:tillandsias-vault
 fn run_github_login(debug: bool) -> Result<(), String> {
@@ -3312,29 +3312,67 @@ fn run_github_login(debug: bool) -> Result<(), String> {
 
     ensure_image_exists(&root, "git", &image, debug)?;
 
+    // Bring Vault online before the interactive paste so the user isn't
+    // left waiting after login.
+    #[cfg(feature = "vault")]
+    vault_bootstrap::ensure_vault_running(debug)?;
+
     let container = format!("tillandsias-gh-login-{}", std::process::id());
     let cleanup = LoginContainerCleanup {
         name: container.clone(),
         debug,
     };
 
-    let mut run = podman_command();
-    run.args([
-        "run",
-        "--detach",
-        "--rm",
-        "--name",
-        &container,
-        "--cap-drop=ALL",
-        "--security-opt=no-new-privileges",
-        "--userns=keep-id",
-        "--entrypoint",
-        "/bin/sh",
-        &image,
-        "-c",
-        "trap 'exit 0' TERM INT; while :; do sleep 3600 & wait $!; done",
-    ]);
-    run_command_silent(run, debug)?;
+    #[cfg(feature = "vault")]
+    let vault_lease;
+
+    #[cfg(feature = "vault")]
+    {
+        vault_lease =
+            vault_bootstrap::mint_approle_secret_lease("github-login", &container, debug)?;
+        let mut run = podman_command();
+        run.args([
+            "run",
+            "--detach",
+            "--rm",
+            "--name",
+            &container,
+            "--network",
+            ENCLAVE_NET,
+            "--secret",
+            &format!("{},target=vault-token", vault_lease.secret_name()),
+            "--cap-drop=ALL",
+            "--security-opt=no-new-privileges",
+            "--userns=keep-id",
+            "--entrypoint",
+            "/bin/sh",
+            &image,
+            "-c",
+            "trap 'exit 0' TERM INT; while :; do sleep 3600 & wait $!; done",
+        ]);
+        run_command_silent(run, debug)?;
+    }
+
+    #[cfg(not(feature = "vault"))]
+    {
+        let mut run = podman_command();
+        run.args([
+            "run",
+            "--detach",
+            "--rm",
+            "--name",
+            &container,
+            "--cap-drop=ALL",
+            "--security-opt=no-new-privileges",
+            "--userns=keep-id",
+            "--entrypoint",
+            "/bin/sh",
+            &image,
+            "-c",
+            "trap 'exit 0' TERM INT; while :; do sleep 3600 & wait $!; done",
+        ]);
+        run_command_silent(run, debug)?;
+    }
 
     let mut login = podman_command();
     login.args([
@@ -3366,69 +3404,61 @@ fn run_github_login(debug: bool) -> Result<(), String> {
         format!("containerized gh authentication verification failed after login: {e}")
     })?;
 
-    let mut token_cmd = podman_command();
-    token_cmd.args([
-        "exec",
-        &container,
-        "gh",
-        "auth",
-        "token",
-        "--hostname",
-        "github.com",
-    ]);
-    let token = command_output(token_cmd, debug)?;
-    if token.is_empty() {
-        error!(
-            accountability = true,
-            category = "secrets",
-            spec = "secret-rotation",
-            operation = "gh_auth_failed",
-            reason = "empty-token",
-            "GitHub authentication produced empty token"
-        );
-        return Err("containerized gh auth token returned an empty token".to_string());
-    }
-
-    let mut username_cmd = podman_command();
-    username_cmd.args(["exec", &container, "gh", "api", "user", "--jq", ".login"]);
-    let username = command_output(username_cmd, debug).ok();
-
     info!(
         accountability = true,
         category = "secrets",
         spec = "secret-rotation",
         operation = "gh_auth_success",
         secret_name = "tillandsias-github-token",
-        "GitHub token retrieved successfully; initiating secret rotation"
+        "GitHub authentication succeeded; writing token to Vault from inside container"
     );
 
-    // @trace spec:tillandsias-vault
-    // Phase 6: write to Vault exclusively.
+    // Write the token to Vault entirely inside the container — the token
+    // never leaves the container's memory space.
     #[cfg(feature = "vault")]
     {
-        match vault_bootstrap::write_github_token_to_vault(&token, debug) {
-            Ok(()) => {
-                info!(
-                    accountability = true,
-                    category = "secrets",
-                    spec = "tillandsias-vault",
-                    operation = "gh_auth_vault_write",
-                    secret_name = "tillandsias-github-token",
-                    "GitHub token stored in Vault at secret/github/token"
-                );
-            }
-            Err(e) => {
-                // write_github_token_to_vault now brings Vault up on demand, so
-                // a failure here means the bring-up itself failed — surface the
-                // underlying cause rather than a stale "run --init" hint.
-                return Err(format!("vault write failed: {e}"));
-            }
-        }
+        let mut vault_write = podman_command();
+        vault_write.args([
+            "exec",
+            &container,
+            "/bin/sh",
+            "-c",
+            "TOKEN=$(gh auth token --hostname github.com); vault-cli.sh write secret/github/token \"token=$TOKEN\"",
+        ]);
+        run_command_silent(vault_write, debug).map_err(|e| {
+            format!("in-container vault write failed: {e}")
+        })?;
+
+        let mut vault_verify = podman_command();
+        vault_verify.args([
+            "exec",
+            &container,
+            "vault-cli.sh",
+            "read",
+            "-field=token",
+            "secret/github/token",
+        ]);
+        run_command_silent(vault_verify, debug).map_err(|e| {
+            format!("in-container vault write verification failed: {e}")
+        })?;
+
+        info!(
+            accountability = true,
+            category = "secrets",
+            spec = "tillandsias-vault",
+            operation = "gh_auth_vault_write",
+            secret_name = "tillandsias-github-token",
+            "GitHub token stored in Vault at secret/github/token"
+        );
     }
     #[cfg(not(feature = "vault"))]
     {
         return Err("vault feature not compiled; cannot store GitHub token".to_string());
     }
+
+    let mut username_cmd = podman_command();
+    username_cmd.args(["exec", &container, "gh", "api", "user", "--jq", ".login"]);
+    let username = command_output(username_cmd, debug).ok();
 
     drop(cleanup);
 
@@ -7591,8 +7621,8 @@ mod tests {
             "run_github_login must verify the containerized gh session"
         );
         assert!(
-            login_window.contains("write_github_token_to_vault"),
-            "run_github_login must persist the token to Vault"
+            login_window.contains("vault-cli.sh write secret/github/token"),
+            "run_github_login must persist the token to Vault from inside the container"
         );
 
         let opencode_window = source_window(

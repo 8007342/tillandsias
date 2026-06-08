@@ -7,7 +7,7 @@ status: active
 
 ## Purpose
 
-The interactive GitHub Login user experience. Both the CLI entry point (`tillandsias --github-login`) and the tray menu item ("GitHub Login") drive the same single Rust implementation: spin up an ephemeral container from the git service image, run and verify `gh auth login` interactively, extract the resulting OAuth token on the host, persist it in Vault, and tear the container down. There is no external shell script; the flow lives in `crates/tillandsias-headless/src/main.rs::run_github_login`.
+The interactive GitHub Login user experience. Both the CLI entry point (`tillandsias --github-login`) and the tray menu item ("GitHub Login") drive the same single Rust implementation: spin up an ephemeral container from the git service image, run and verify `gh auth login` interactively, write the resulting OAuth token to Vault from inside the container, and tear the container down. There is no external shell script; the token is never extracted or stored on the host. The flow lives in `crates/tillandsias-headless/src/main.rs::run_github_login`.
 
 ## Requirements
 
@@ -48,33 +48,38 @@ The login flow MUST run `gh auth login` inside a dedicated, short-lived containe
 - **AND** any pre-existing container with that name MUST be removed first with `podman rm -f`
 - **AND** `podman exec -it tillandsias-gh-login gh auth login --git-protocol https` MUST inherit the real TTY for the interactive device-code flow
 
-### Requirement: Host verifies the session, extracts the token, and persists it in Vault
+### Requirement: Container verifies the session, writes the token to Vault, never reaches the host
 
-After interactive `gh auth login` succeeds, the host MUST verify the session, extract the OAuth token from inside the container, and store it in Vault at `secret/github/token` as defined by `spec:tillandsias-vault`.
+After interactive `gh auth login` succeeds, the git container MUST verify the session and write the OAuth token to Vault entirely inside the container — the token is never extracted or stored on the host.
 
 @trace spec:gh-auth-script, spec:tillandsias-vault
 
 #### Scenario: Session verification
 - **WHEN** the interactive `gh auth login` exits successfully
 - **THEN** the host MUST run `podman exec tillandsias-gh-login gh auth status --hostname github.com`
-- **AND** MUST abort before token persistence if verification fails
+- **AND** MUST abort before Vault persistence if verification fails
 
-#### Scenario: Token extraction
+#### Scenario: Vault write from inside the container
 - **WHEN** the interactive `gh auth login` exits successfully
-- **THEN** the host MUST run `podman exec tillandsias-gh-login gh auth token` and capture stdout
-- **AND** MUST abort with an error if the output is empty or the command fails
+- **THEN** the host MUST exec `TOKEN=$(gh auth token --hostname github.com); vault-cli.sh write secret/github/token "token=$TOKEN"` inside the container via `podman exec`
+- **AND** MUST abort with an error if the Vault write fails
+- **AND** the token MUST NOT be captured or stored in host memory
+
+#### Scenario: Vault write verification
+- **WHEN** the Vault write completes
+- **THEN** the host MUST exec `vault-cli.sh read -field=token secret/github/token` inside the container to verify the write
+- **AND** MUST abort with an error if verification fails
 
 #### Scenario: Username extraction (advisory)
-- **WHEN** the token has been captured
+- **WHEN** the Vault write is confirmed
 - **THEN** the host MUST run `podman exec tillandsias-gh-login gh api user --jq .login` to capture the GitHub username for confirmation messages
 - **AND** failure MUST be non-fatal (the username is advisory only)
 
-#### Scenario: Persist in Vault
-- **WHEN** the token has been captured
-- **THEN** the host MUST write the token to Vault at `secret/github/token`
-- **AND** MUST verify the Vault write by reading the token back
-- **AND** MUST abort the flow with an error if either operation fails
+#### Scenario: No host-side token extraction
+- **WHEN** the flow completes
+- **THEN** the host MUST NOT capture `gh auth token` stdout
 - **AND** MUST NOT create the deprecated `tillandsias-github-token` Podman secret
+- **AND** the token SHALL exist only inside the container and in Vault
 
 ### Requirement: Drop guard tears down the login container on every exit path
 

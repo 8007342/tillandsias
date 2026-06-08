@@ -297,16 +297,14 @@ Function: `build_inference_run_args()` (line 1313)
 
 **Actions (lines 22–82, idempotent on each restart):**
 
-1. **Load credential source**:
-   ```bash
-   if [ -r /run/secrets/vault-token ]; then
-       echo "Vault AppRole token loaded; GitHub token will be read at push time via vault-cli."
-   elif [ -f /run/secrets/tillandsias-github-token ]; then
-       echo "Legacy GitHub token loaded from podman secret (deprecated path)."
-   else
-       echo "No credential source available; authenticated git operations will fail."
-   fi
-   ```
+ 1. **Load credential source**:
+    ```bash
+    if [ -r /run/secrets/vault-token ] && command -v vault-cli >/dev/null 2>&1; then
+        echo "Vault AppRole token loaded; GitHub token will be read at push time via vault-cli."
+    else
+        echo "No credential source available; authenticated git operations will fail."
+    fi
+    ```
 
 2. **Load CA certificate secret** (lines 36–40):
    ```bash
@@ -473,8 +471,7 @@ forge:$ git push origin main
        TOKEN="$(vault-cli read -field=token secret/github/token 2>/dev/null || true)"
     fi
     ```
-    (The legacy `--legacy-keyring-secrets` fallback branch that read from
-    `tillandsias-github-token` was removed in v0.3.)
+    (The legacy `--legacy-keyring-secrets` fallback was removed in v0.3.)
 
 5. **Construct push URL in memory** (lines 60–68):
    ```bash
@@ -606,7 +603,7 @@ git push git://git-service/<PROJECT> <branch>
 **Post-receive hook:** `/srv/git/<PROJECT>/hooks/post-receive`
 - **Present on startup:** Yes (installed by `entrypoint.sh`)
 - **Executable:** Yes (`chmod +x` applied)
-- **Token-aware:** Yes (reads `/run/secrets/vault-token` by default, deprecated `/run/secrets/tillandsias-github-token` fallback only)
+- **Token-aware:** Yes (reads `/run/secrets/vault-token`)
 - **Redaction:** Yes (credentials stripped from logs)
 
 **Reachable from forge by hostname `git-service`:**
