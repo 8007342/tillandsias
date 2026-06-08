@@ -2880,7 +2880,7 @@ plan_index:
                 - "./build.sh --check PASS"
                 - "cargo test tillandsias-headless PASS (2 pre-existing signal-handling failures unchanged)"
         - id: vault-flow/vault-https-via-ca
-          status: claimed
+          status: done
           depends_on: []
           owned_files:
             - images/vault/vault.hcl
@@ -2896,6 +2896,22 @@ plan_index:
               host: "linux"
               lease_id: "lease-linux-vault-https-20260608T192030Z"
               expires_at: "2026-06-08T23:20:30Z"
+            - type: completed
+              ts: "2026-06-08T19:31:33Z"
+              agent_id: "linux-macuahuitl-codex-20260608T192030Z"
+              host: "linux"
+              lease_id: "lease-linux-vault-https-20260608T192030Z"
+              evidence_refs:
+                - "commit:96a7a7c7"
+                - "scripts/build-image.sh vault PASS (474 MB, 5s cached build)"
+                - "isolated Podman smoke PASS: https://127.0.0.1:18201 health verified with CA; SAN DNS:vault,DNS:localhost,IP:127.0.0.1"
+                - "bash scripts/run-litmus-test.sh --spec tillandsias-vault --phase pre-build --size instant --compact PASS"
+                - "bash scripts/run-litmus-test.sh --spec podman-secrets-integration --phase pre-build --size instant --compact PASS"
+                - "cargo test -p tillandsias-vault-client PASS"
+                - "cargo test -p tillandsias-headless vault_bootstrap::tests --features vault PASS"
+                - "./build.sh --check PASS"
+              known_repo_wide_failures:
+                - "./build.sh --ci --spec tillandsias-vault still fails pre-existing gates: VERSION behind v0.3.260608.2+, repo-wide fmt drift, unrelated clippy::type_complexity in main.rs:1043, and pre-existing signal_handling timeout."
         - id: vault-flow/xplat-gating-parity
           status: blocked
           owner_host: macos+windows
