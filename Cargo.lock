@@ -3027,6 +3027,7 @@ version = "0.1.260513"
 dependencies = [
  "chrono",
  "dirs",
+ "fs2",
  "parking_lot",
  "regex",
  "serde",

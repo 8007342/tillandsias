@@ -56,6 +56,7 @@ use tillandsias_core::image_builder::{
     ImageBuildAction, ImageBuildDecision, ImageBuildIdentity, ImageBuildObservation,
     ImageBuildReason, SOURCE_DIGEST_LABEL, decide_image_build,
 };
+use tillandsias_logging::{ImageBuildEvent, ImageBuildEventWriter};
 use tillandsias_podman::{
     ContainerSpec, MountMode, PodmanClient, current_runtime_lane, detect_gpu_devices,
     podman_cmd_sync, require_desktop_user_session, require_headless_service_account,
@@ -1148,6 +1149,75 @@ async fn apply_image_aliases(
         .image_tag(&identity.canonical_tag, &identity.latest_alias)
         .await
         .map_err(|e| format!("Failed to update latest image alias: {e}"))
+}
+
+fn image_build_action_label(action: ImageBuildAction) -> &'static str {
+    match action {
+        ImageBuildAction::Skip => "skip",
+        ImageBuildAction::Retag => "retag",
+        ImageBuildAction::Build => "build",
+        ImageBuildAction::ForceRebuild => "force_rebuild",
+    }
+}
+
+fn image_build_reason_label(reason: ImageBuildReason) -> &'static str {
+    match reason {
+        ImageBuildReason::DigestPresent => "digest_present",
+        ImageBuildReason::AliasMissing => "alias_missing",
+        ImageBuildReason::DigestMissing => "digest_missing",
+        ImageBuildReason::LabelMismatch => "label_mismatch",
+        ImageBuildReason::Forced => "forced",
+    }
+}
+
+fn image_build_cache_result(action: ImageBuildAction) -> &'static str {
+    match action {
+        ImageBuildAction::Skip | ImageBuildAction::Retag => "hit",
+        ImageBuildAction::Build => "miss",
+        ImageBuildAction::ForceRebuild => "unknown",
+    }
+}
+
+fn image_build_event(
+    event_type: &str,
+    build_id: &str,
+    image_name: &str,
+    identity: &ImageBuildIdentity,
+    decision: &ImageBuildDecision,
+) -> ImageBuildEvent {
+    ImageBuildEvent::lifecycle(
+        event_type,
+        build_id,
+        "tillandsias-init",
+        image_name,
+        &identity.canonical_tag,
+    )
+    .with_identity(
+        &identity.source_digest,
+        &identity.version_alias,
+        &identity.latest_alias,
+    )
+    .with_decision(
+        image_build_action_label(decision.action),
+        image_build_reason_label(decision.reason),
+    )
+    .with_cache("layers", image_build_cache_result(decision.action))
+}
+
+fn emit_image_build_event(event: &ImageBuildEvent, debug: bool) {
+    let writer = ImageBuildEventWriter::new(ImageBuildEventWriter::default_path());
+    if let Err(e) = writer.append(event) {
+        eprintln!(
+            "WARNING: failed to write image build telemetry to {}: {}",
+            writer.path().display(),
+            e
+        );
+    } else if debug {
+        eprintln!(
+            "[tillandsias] image-build telemetry: {}",
+            writer.path().display()
+        );
+    }
 }
 
 fn forge_image_tag(version: &str) -> String {
@@ -2765,12 +2835,36 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
             rt.block_on(observe_image_build(&client, &identity, force));
         let decision = decide_image_build(identity.clone(), &observation);
         identities.insert((*image).to_string(), identity.clone());
+        let build_id = format!(
+            "image-{}-{}",
+            image,
+            chrono::Utc::now()
+                .timestamp_nanos_opt()
+                .unwrap_or_else(|| chrono::Utc::now().timestamp_micros() * 1000)
+        );
+        let decision_event = image_build_event(
+            "image.build.decision",
+            &build_id,
+            image,
+            &identity,
+            &decision,
+        );
+        emit_image_build_event(&decision_event, debug);
 
         match decision.action {
             ImageBuildAction::Skip => {
                 if debug {
                     println!("SKIP {} (digest present)", image);
                 }
+                let completed = image_build_event(
+                    "image.build.completed",
+                    &build_id,
+                    image,
+                    &identity,
+                    &decision,
+                )
+                .with_outcome("skipped", 0, 0);
+                emit_image_build_event(&completed, debug);
                 state.mark_success(image);
                 state.set_image_identity(image, &decision, observed_image_id);
                 continue;
@@ -2780,9 +2874,28 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
                     println!("RETAG {} (aliases stale or missing)", image);
                 }
                 if let Err(e) = rt.block_on(apply_image_aliases(&client, &identity)) {
+                    let failed = image_build_event(
+                        "image.build.failed",
+                        &build_id,
+                        image,
+                        &identity,
+                        &decision,
+                    )
+                    .with_outcome("failure", 0, 1)
+                    .with_redacted_error("alias_update_failed", &e);
+                    emit_image_build_event(&failed, debug);
                     state.mark_failed(image);
                     failed_images.push((image.to_string(), e));
                 } else {
+                    let completed = image_build_event(
+                        "image.build.completed",
+                        &build_id,
+                        image,
+                        &identity,
+                        &decision,
+                    )
+                    .with_outcome("retagged", 0, 0);
+                    emit_image_build_event(&completed, debug);
                     state.mark_success(image);
                     state.set_image_identity(image, &decision, observed_image_id);
                 }
@@ -2801,18 +2914,38 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
         }
 
         let log_file = init_log_file(image, debug);
+        let build_started = Instant::now();
+        let started = image_build_event(
+            "image.build.started",
+            &build_id,
+            image,
+            &identity,
+            &decision,
+        );
+        emit_image_build_event(&started, debug);
         let result =
             build_image_with_logging(&root, image, &identity, &build_args, &log_file, debug);
+        let duration_ms = build_started.elapsed().as_millis() as u64;
 
         if let Err(e) = result {
             if debug {
                 eprintln!("FAILED {}: {}", image, e);
             }
+            let failed =
+                image_build_event("image.build.failed", &build_id, image, &identity, &decision)
+                    .with_outcome("failure", duration_ms, 1)
+                    .with_redacted_error("podman_build_failed", &e);
+            emit_image_build_event(&failed, debug);
             state.mark_failed(image);
             failed_images.push((image.to_string(), e));
         } else {
             let alias_result = rt.block_on(apply_image_aliases(&client, &identity));
             if let Err(e) = alias_result {
+                let failed =
+                    image_build_event("image.build.failed", &build_id, image, &identity, &decision)
+                        .with_outcome("failure", duration_ms, 1)
+                        .with_redacted_error("alias_update_failed", &e);
+                emit_image_build_event(&failed, debug);
                 state.mark_failed(image);
                 failed_images.push((image.to_string(), e));
             } else {
@@ -2821,6 +2954,16 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
                     .ok()
                     .and_then(|json| image_inspect_metadata(&json).ok())
                     .and_then(|(image_id, _)| image_id);
+                let mut completed = image_build_event(
+                    "image.build.completed",
+                    &build_id,
+                    image,
+                    &identity,
+                    &decision,
+                )
+                .with_outcome("success", duration_ms, 0);
+                completed.image_id = image_id.clone();
+                emit_image_build_event(&completed, debug);
                 state.mark_success(image);
                 state.set_image_identity(image, &decision, image_id);
                 if debug {
