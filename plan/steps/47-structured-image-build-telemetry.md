@@ -1,6 +1,6 @@
 # Step 47 — Structured image-build telemetry
 
-- **Status**: pending
+- **Status**: ready
 - **Owner host**: linux
 - **Branch**: linux-next
 - **Depends on**: step 45

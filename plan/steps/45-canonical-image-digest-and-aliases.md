@@ -1,6 +1,6 @@
 # Step 45 — Canonical image digest and alias engine
 
-- **Status**: claimed
+- **Status**: completed
 - **Owner host**: linux
 - **Branch**: linux-next
 - **Depends on**: none
@@ -28,13 +28,13 @@ aliases only.
   - Include path, mode, symlink target, content, build args, architecture/base
     inputs, and dependency image digest.
   - Return canonical digest tag plus version/latest aliases.
-- [ ] `image-identity/oci-validation`
+- [x] `image-identity/oci-validation`
   - Inspect the canonical tag and
     `io.tillandsias.image.source-digest` label before deciding to build.
   - Skip from OCI state even if local JSON/hash state is absent.
   - Retag aliases without building.
   - Treat label mismatch/image absence/source change/force as distinct reasons.
-- [ ] `image-identity/init-state-migration`
+- [x] `image-identity/init-state-migration`
   - Update init state schema without destroying older state.
   - Stop treating a version-only cache mismatch as rebuild-all.
   - Persist digest, image ID, aliases, and last decision atomically.
@@ -90,3 +90,14 @@ Checkpoint 2026-06-08T18:35:23Z:
 - The headless runtime asset digest now consumes the shared core engine.
 - Remaining work is live Podman label/alias observation plus backward-compatible
   init-state migration.
+
+Completion 2026-06-08T18:42:14Z:
+
+- Checkpoints: `453c7abb`, `45843b02`.
+- `--init` now inspects the canonical tag and
+  `io.tillandsias.image.source-digest`, skips independently of external state,
+  retags stale/missing aliases, and builds only for missing/mismatched digest or
+  explicit force.
+- VERSION changes no longer force rebuild-all.
+- The additive identity state records digest, image ID, aliases, action, and
+  reason while legacy JSON remains readable; writes remain atomic.

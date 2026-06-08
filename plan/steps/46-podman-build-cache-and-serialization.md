@@ -1,6 +1,6 @@
 # Step 46 — Podman build cache reuse and serialization
 
-- **Status**: pending
+- **Status**: ready
 - **Owner host**: linux
 - **Branch**: linux-next
 - **Depends on**: step 45

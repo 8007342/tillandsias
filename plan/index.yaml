@@ -2998,7 +2998,7 @@ plan_index:
     - id: canonical-image-digest-and-aliases
       order: 45
       title: Canonical image source digest, OCI labels, and alias decisions
-      status: in_progress
+      status: completed
       owner_host: linux
       deliverable: plan/steps/45-canonical-image-digest-and-aliases.md
       audit_origin: plan/issues/container-build-efficiency-telemetry-2026-06-08.md
@@ -3015,7 +3015,7 @@ plan_index:
         - "Chromium framework identity includes its core dependency digest."
       tasks:
         - id: image-identity/spec-and-digest
-          status: claimed
+          status: done
           owner_host: linux
           capability_tags: [rust, containers, hashing, testing]
           depends_on: []
@@ -3057,11 +3057,23 @@ plan_index:
                 - "cargo test -p tillandsias-headless runtime_assets::tests:: --no-default-features (2 passed)"
                 - "cargo clippy -p tillandsias-core --lib -- -D warnings"
                 - "./build.sh --check"
+            - type: completed
+              ts: "2026-06-08T18:42:14Z"
+              agent_id: "linux-macuahuitl-codex-20260608T183115Z"
+              host: "linux"
+              lease_id: "lease-linux-image-identity-20260608T183115Z"
+              evidence_refs:
+                - "commit:453c7abb"
+                - "commit:45843b02"
+                - "11 tillandsias-core image_builder tests passed"
+                - "Headless identity, inspect parsing, state migration, and image routing tests passed"
+                - "cargo check -p tillandsias-headless"
+                - "./build.sh --check"
 
     - id: podman-build-cache-and-serialization
       order: 46
       title: Reuse Podman layers/download caches and serialize storage mutations
-      status: pending
+      status: ready
       owner_host: linux
       deliverable: plan/steps/46-podman-build-cache-and-serialization.md
       audit_origin: plan/issues/container-build-efficiency-telemetry-2026-06-08.md
@@ -3078,7 +3090,7 @@ plan_index:
         - "Cache policy and observed result are available to telemetry."
       tasks:
         - id: image-cache/layers-locking-and-order
-          status: pending
+          status: ready
           owner_host: linux
           capability_tags: [containers, podman, shell, testing]
           depends_on:
@@ -3105,7 +3117,7 @@ plan_index:
     - id: structured-image-build-telemetry
       order: 47
       title: Structured image-build JSONL events and low-cardinality metrics
-      status: pending
+      status: ready
       owner_host: linux
       deliverable: plan/steps/47-structured-image-build-telemetry.md
       audit_origin: plan/issues/container-build-efficiency-telemetry-2026-06-08.md
@@ -3121,7 +3133,7 @@ plan_index:
         - "Metrics expose attempts, outcomes, duplicate builds, duration, size, and cache result with bounded labels."
       tasks:
         - id: image-telemetry/events-and-metrics
-          status: pending
+          status: ready
           owner_host: linux
           capability_tags: [rust, observability, logging, metrics, testing]
           depends_on:
