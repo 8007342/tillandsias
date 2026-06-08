@@ -1,6 +1,6 @@
 # Step 44 — Package-manager-first container recipes
 
-- **Status**: claimed
+- **Status**: completed
 - **Owner host**: linux
 - **Branch**: linux-next
 - **Depends on**: none
@@ -18,7 +18,7 @@ only where no suitable package exists.
 
 ## Tasks
 
-- [ ] `container-recipes/fedora-package-migration`
+- [x] `container-recipes/fedora-package-migration`
   - Owned files: `images/default/Containerfile`,
     `images/inference/Containerfile`, related image-local checksum manifests.
   - Re-run Fedora 44 `dnf5 repoquery` for every proposed package.
@@ -31,24 +31,12 @@ only where no suitable package exists.
   - Measure the Fedora `ollama` RPM dependency/size impact before choosing it;
     retain a pinned CPU-only direct asset if the RPM violates the lean image
     contract.
-- [ ] Add static litmus coverage that rejects:
+- [x] Add static litmus coverage that rejects:
   - shell-piped network installers
   - floating `latest` inputs
   - unverified direct release assets
   - Fedora tools installed outside `microdnf` when a reviewed package mapping
     exists
-
-## Next action
-
-Run:
-
-```bash
-dnf5 repoquery --info rustup rust cargo clippy rustfmt rust-analyzer \
-  cargo-deny delve shfmt ollama ruff poetry pipx uv black pylint \
-  yamllint python3-mypy python3-pytest pnpm yarnpkg
-```
-
-Then produce a before/after inventory table keyed by executable and source.
 
 ## Acceptance evidence
 
@@ -69,5 +57,17 @@ the audit issue. Do not silently fall back to a floating installer.
 
 ## Evidence / handoff
 
-Research baseline and package matrix:
-`plan/issues/container-build-efficiency-telemetry-2026-06-08.md`.
+- Implementation: `25cb5b3a`.
+- Fedora and Fedora updates package resolution succeeded inside
+  `fedora-minimal:44`; weak dependencies are disabled.
+- RPM Fusion free/nonfree provided none of the missing reviewed tools; COPR
+  candidates were unsuitable. The inventory is recorded in the audit issue.
+- Forge image built successfully: 5,696 MB, 42 seconds on cached retry.
+- Forge tool-presence smoke passed for all migrated and pinned executables.
+- Inference image built successfully: 187 MB, 40 seconds; Ollama reports
+  version 0.30.6.
+- Unchanged forge and inference build invocations skipped in 0.90 and 0.53
+  seconds respectively.
+- Default-image instant litmus: 3/3 executed tests passed.
+- Inference-container instant litmus: 2/2 executed tests passed.
+- `./build.sh --check`: passed.

@@ -2957,7 +2957,7 @@ plan_index:
     - id: package-manager-first-container-recipes
       order: 44
       title: Package-manager-first container recipes with pinned fallback assets
-      status: ready
+      status: completed
       owner_host: linux
       deliverable: plan/steps/44-package-manager-first-container-recipes.md
       audit_origin: plan/issues/container-build-efficiency-telemetry-2026-06-08.md
@@ -2973,7 +2973,7 @@ plan_index:
         - "The inference image remains measurably lean and CPU-only."
       tasks:
         - id: container-recipes/fedora-package-migration
-          status: ready
+          status: completed
           owner_host: linux
           capability_tags: [containers, fedora, packaging, testing]
           depends_on: []
@@ -3001,6 +3001,19 @@ plan_index:
               host: "linux"
               lease_id: "lease-linux-package-recipes-20260608T185543Z"
               expires_at: "2026-06-08T22:55:43Z"
+            - type: complete
+              ts: "2026-06-08T19:07:45Z"
+              agent_id: "linux-macuahuitl-codex-20260608T185543Z"
+              host: "linux"
+              implementation_commit: "25cb5b3a"
+              evidence:
+                - "forge image built: 5696 MB, 42 seconds on cached retry"
+                - "inference image built: 187 MB, 40 seconds"
+                - "forge tool-presence smoke passed"
+                - "unchanged forge/inference builds skipped in under one second"
+                - "default-image instant litmus: 3/3 executed passed"
+                - "inference-container instant litmus: 2/2 executed passed"
+                - "./build.sh --check passed"
 
     - id: canonical-image-digest-and-aliases
       order: 45
