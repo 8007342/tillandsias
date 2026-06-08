@@ -249,21 +249,20 @@ fn main() {
     // @trace spec:singleton-guard
     // Enforce singleton behavior. Newer instances signal and terminate older instances.
     // We gate all run modes and init to prevent port/state collisions.
-    let _singleton =
-        if !status_check && !github_login && !github_logout && !cache_clear && !cache_verify {
-            match tillandsias_core::singleton::SingletonGuard::acquire(
-                "launcher",
-                Duration::from_secs(5),
-            ) {
-                Ok(g) => Some(g),
-                Err(e) => {
-                    eprintln!("Error: Singleton acquisition failed: {e}");
-                    std::process::exit(1);
-                }
+    let _singleton = if !status_check && !github_login && !cache_clear && !cache_verify {
+        match tillandsias_core::singleton::SingletonGuard::acquire(
+            "launcher",
+            Duration::from_secs(5),
+        ) {
+            Ok(g) => Some(g),
+            Err(e) => {
+                eprintln!("Error: Singleton acquisition failed: {e}");
+                std::process::exit(1);
             }
-        } else {
-            None
-        };
+        }
+    } else {
+        None
+    };
 
     let config_path = user_args.iter().enumerate().find_map(|(i, a)| {
         if a.starts_with('-') {

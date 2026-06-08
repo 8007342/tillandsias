@@ -183,6 +183,7 @@ pub fn write_github_token_to_vault(token: &str, debug: bool) -> Result<(), Strin
 /// podman) and read the token back.
 ///
 /// @trace spec:tillandsias-vault, spec:tray-minimal-ux
+#[allow(dead_code)]
 pub fn is_github_logged_in(debug: bool) -> bool {
     if !vault_data_volume_exists() {
         if debug {
@@ -212,6 +213,7 @@ pub fn is_github_logged_in(debug: bool) -> bool {
 /// Read the GitHub token back from Vault at `secret/github/token`. Returns the
 /// raw token (empty string if the key is absent); errs if Vault is not running
 /// or the read fails. Mirrors the read-back in `write_github_token_to_vault`.
+#[allow(dead_code)]
 fn read_github_token_from_vault(debug: bool) -> Result<String, String> {
     if !container_running(VAULT_CONTAINER_NAME) {
         return Err("vault container is not running".into());
@@ -229,6 +231,7 @@ fn read_github_token_from_vault(debug: bool) -> Result<String, String> {
 /// True iff the persistent Vault data volume exists. Cheap: a single
 /// `podman volume exists` with no Vault bring-up, so it can gate the more
 /// expensive on-demand launch in [`is_github_logged_in`].
+#[allow(dead_code)]
 fn vault_data_volume_exists() -> bool {
     podman_cmd_sync()
         .args(["volume", "exists", VAULT_VOLUME])

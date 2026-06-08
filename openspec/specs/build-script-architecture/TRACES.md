@@ -5,5 +5,5 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [build.sh#L27](../../../build.sh#L27)
+- [build.sh#L28](../../../build.sh#L28)
 - [scripts/deferred-specs.sh#L2](../../../scripts/deferred-specs.sh#L2)
