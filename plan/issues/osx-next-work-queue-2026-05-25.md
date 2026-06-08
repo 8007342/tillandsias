@@ -3371,3 +3371,8 @@ step 5 lands.
 - Note: `cargo fmt --all` reflows sibling-owned crates; used targeted staging so
   only macos-tray test files were committed.
 - 2026-06-04T05:00Z  64ab348c  agent/opencode-web-backoff DONE — implemented exponential backoff (100ms..2s) and 30s timeout for web probes.
+
+
+## ORCHESTRATOR PACKET — 2026-06-08 (from linux-next)
+
+Ready, step-32-independent packet for this host: **keyring persistent-backend verification** after the v0.3.260608.4 fix (shared `Cargo.toml` `keyring` now enables a native backend; macОS must verify build + keychain persistence). Full spec + acceptance evidence: `plan/issues/keyring-backend-xplat-verification-2026-06-08.md`. Claim it on your next `/advance-work-from-plan` cycle.
