@@ -1,11 +1,14 @@
 // @trace spec:user-runtime-lifecycle, spec:linux-native-portable-executable, spec:init-command
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::collections::BTreeMap;
 use std::fs;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
-use tillandsias_core::image_builder::{ImageBuildSpec, image_build_identity};
+use tillandsias_core::image_builder::{
+    ImageBuildIdentity, ImageBuildSpec, image_build_identity as compute_image_build_identity,
+};
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct EmbeddedRuntimeAsset {
@@ -215,7 +218,13 @@ pub(crate) fn root_manifest_digest(root: &Path) -> Result<String, String> {
     Ok(manifest.manifest_digest)
 }
 
-pub(crate) fn image_source_digest(root: &Path, image_name: &str) -> Result<String, String> {
+pub(crate) fn image_identity(
+    root: &Path,
+    image_name: &str,
+    version: &str,
+    build_args: BTreeMap<String, String>,
+    dependency_digests: BTreeMap<String, String>,
+) -> Result<ImageBuildIdentity, String> {
     let rel = image_context_rel(image_name)?;
     let context = root.join(rel);
     if !context.is_dir() {
@@ -234,13 +243,11 @@ pub(crate) fn image_source_digest(root: &Path, image_name: &str) -> Result<Strin
         image_name: image_name.to_string(),
         context_root: context,
         containerfile,
-        build_args: Default::default(),
-        dependency_digests: Default::default(),
-        version: String::new(),
+        build_args,
+        dependency_digests,
+        version: version.to_string(),
     };
-    image_build_identity(&spec)
-        .map(|identity| identity.source_digest)
-        .map_err(|e| e.to_string())
+    compute_image_build_identity(&spec).map_err(|e| e.to_string())
 }
 
 fn image_context_rel(image_name: &str) -> Result<&'static str, String> {

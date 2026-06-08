@@ -36,6 +36,7 @@
 //! See `crates/tillandsias-logging/src/aggregator.rs` for log aggregation implementation.
 
 use signal_hook::flag;
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::io::{self, Read, Write};
 use std::os::unix::net::UnixStream;
@@ -51,6 +52,10 @@ use tillandsias_control_wire::{
     ControlEnvelope, ControlMessage, MAX_MESSAGE_BYTES, WIRE_VERSION, decode, encode,
 };
 use tillandsias_core::cache_validation;
+use tillandsias_core::image_builder::{
+    ImageBuildAction, ImageBuildDecision, ImageBuildIdentity, ImageBuildObservation,
+    ImageBuildReason, SOURCE_DIGEST_LABEL, decide_image_build,
+};
 use tillandsias_podman::{
     ContainerSpec, MountMode, PodmanClient, current_runtime_lane, detect_gpu_devices,
     podman_cmd_sync, require_desktop_user_session, require_headless_service_account,
@@ -711,6 +716,10 @@ struct InitBuildState {
     /// Map of image name -> digest of the source context used for the build.
     #[serde(default)]
     image_source_digests: std::collections::HashMap<String, String>,
+    /// Additive v2 identity records. Older state files deserialize with an
+    /// empty map and remain valid.
+    #[serde(default)]
+    image_identities: HashMap<String, InitImageIdentity>,
     /// Digest of the materialized runtime asset manifest, when available.
     #[serde(default)]
     runtime_asset_manifest_digest: Option<String>,
@@ -718,11 +727,24 @@ struct InitBuildState {
     timestamp: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct InitImageIdentity {
+    source_digest: String,
+    canonical_tag: String,
+    version_alias: String,
+    latest_alias: String,
+    #[serde(default)]
+    image_id: Option<String>,
+    last_action: ImageBuildAction,
+    last_reason: ImageBuildReason,
+}
+
 impl InitBuildState {
     fn new() -> Self {
         Self {
             images: std::collections::HashMap::new(),
             image_source_digests: std::collections::HashMap::new(),
+            image_identities: HashMap::new(),
             runtime_asset_manifest_digest: None,
             timestamp: chrono::Local::now().to_rfc3339(),
         }
@@ -776,6 +798,7 @@ impl InitBuildState {
         self.images.insert(image.to_string(), "failed".to_string());
     }
 
+    #[cfg(test)]
     fn was_successful(&self, image: &str) -> bool {
         self.images
             .get(image)
@@ -783,15 +806,26 @@ impl InitBuildState {
             .unwrap_or(false)
     }
 
-    fn set_image_source_digest(&mut self, image: &str, digest: String) {
-        self.image_source_digests.insert(image.to_string(), digest);
-    }
-
-    fn image_source_digest_matches(&self, image: &str, digest: &str) -> bool {
+    fn set_image_identity(
+        &mut self,
+        image: &str,
+        decision: &ImageBuildDecision,
+        image_id: Option<String>,
+    ) {
         self.image_source_digests
-            .get(image)
-            .map(|cached| cached == digest)
-            .unwrap_or(false)
+            .insert(image.to_string(), decision.identity.source_digest.clone());
+        self.image_identities.insert(
+            image.to_string(),
+            InitImageIdentity {
+                source_digest: decision.identity.source_digest.clone(),
+                canonical_tag: decision.identity.canonical_tag.clone(),
+                version_alias: decision.identity.version_alias.clone(),
+                latest_alias: decision.identity.latest_alias.clone(),
+                image_id,
+                last_action: decision.action,
+                last_reason: decision.reason,
+            },
+        );
     }
 
     fn set_runtime_asset_manifest_digest(&mut self, digest: Option<String>) {
@@ -998,41 +1032,122 @@ fn image_specs(root: &Path, image_name: &str) -> Result<(PathBuf, PathBuf), Stri
     Ok((containerfile, context_dir))
 }
 
-fn image_build_args(image_name: &str, image_tag: &str) -> Vec<String> {
-    if image_name == "chromium-framework" {
-        // @trace spec:init-command, spec:browser-isolation-framework
-        //
-        // chromium-framework depends on chromium-core image built in the previous step.
-        // Pass --build-arg CHROMIUM_CORE_IMAGE so the Containerfile can reference it:
-        //
-        //   FROM ${CHROMIUM_CORE_IMAGE}
-        //
-        // KNOWN BLOCKER: Nix-based image builds (via flake.nix + nix build) do NOT support
-        // ARG passing. The nix build system does not expose a way to pass --build-arg values
-        // through the Nix derivation. This is a pre-existing infrastructure limitation that
-        // prevents us from using `scripts/build-image.sh chromium-framework` when chromium-core
-        // just built. Workaround: build directly via podman (current implementation, which
-        // works correctly) OR enhance build-image.sh to support `--build-arg` passthrough.
-        //
-        // Reference: project_nix_image_builds_require_git_add.md
-        //
-        let core_version = image_tag
-            .split(':')
-            .next_back()
-            .map(|value| value.trim_start_matches('v'))
-            .filter(|value| !value.is_empty())
-            .unwrap_or("latest");
-        vec![
-            "--build-arg".into(),
-            format!("CHROMIUM_CORE_IMAGE=localhost/tillandsias-chromium-core:v{core_version}"),
-        ]
-    } else {
-        Vec::new()
-    }
-}
-
 fn versioned_image_tag(image_name: &str, version: &str) -> String {
     format!("localhost/tillandsias-{image_name}:v{version}")
+}
+
+fn image_build_inputs(
+    image_name: &str,
+    chromium_core: Option<&ImageBuildIdentity>,
+) -> Result<(BTreeMap<String, String>, BTreeMap<String, String>), String> {
+    let mut build_args = BTreeMap::new();
+    let mut dependency_digests = BTreeMap::new();
+    if image_name == "chromium-framework" {
+        let core = chromium_core.ok_or_else(|| {
+            "chromium-framework identity requires chromium-core identity".to_string()
+        })?;
+        build_args.insert(
+            "CHROMIUM_CORE_IMAGE".to_string(),
+            core.canonical_tag.clone(),
+        );
+        dependency_digests.insert("chromium-core".to_string(), core.source_digest.clone());
+    }
+    Ok((build_args, dependency_digests))
+}
+
+fn image_inspect_metadata(inspect_json: &str) -> Result<(Option<String>, Option<String>), String> {
+    let value: serde_json::Value = serde_json::from_str(inspect_json)
+        .map_err(|e| format!("Failed to parse podman image inspect JSON: {e}"))?;
+    let image = value
+        .as_array()
+        .and_then(|items| items.first())
+        .unwrap_or(&value);
+    let image_id = image
+        .get("Id")
+        .or_else(|| image.get("ID"))
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
+    let source_digest = image
+        .pointer("/Config/Labels")
+        .or_else(|| image.get("Labels"))
+        .and_then(|labels| labels.get(SOURCE_DIGEST_LABEL))
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
+    Ok((image_id, source_digest))
+}
+
+async fn observe_image_build(
+    client: &PodmanClient,
+    identity: &ImageBuildIdentity,
+    force: bool,
+) -> (ImageBuildObservation, Option<String>) {
+    let canonical_tag_exists = client.image_exists(&identity.canonical_tag).await;
+    let (canonical_image_id, canonical_source_digest) = if canonical_tag_exists {
+        client
+            .image_inspect(&identity.canonical_tag)
+            .await
+            .ok()
+            .and_then(|json| image_inspect_metadata(&json).ok())
+            .unwrap_or((None, None))
+    } else {
+        (None, None)
+    };
+
+    let version_alias_matches = alias_matches_image(
+        client,
+        &identity.version_alias,
+        canonical_image_id.as_deref(),
+    )
+    .await;
+    let latest_alias_matches = alias_matches_image(
+        client,
+        &identity.latest_alias,
+        canonical_image_id.as_deref(),
+    )
+    .await;
+
+    (
+        ImageBuildObservation {
+            canonical_tag_exists,
+            canonical_source_digest,
+            version_alias_matches,
+            latest_alias_matches,
+            force,
+        },
+        canonical_image_id,
+    )
+}
+
+async fn alias_matches_image(
+    client: &PodmanClient,
+    alias: &str,
+    canonical_image_id: Option<&str>,
+) -> bool {
+    let Some(canonical_image_id) = canonical_image_id else {
+        return false;
+    };
+    let Ok(json) = client.image_inspect(alias).await else {
+        return false;
+    };
+    image_inspect_metadata(&json)
+        .ok()
+        .and_then(|(image_id, _)| image_id)
+        .as_deref()
+        == Some(canonical_image_id)
+}
+
+async fn apply_image_aliases(
+    client: &PodmanClient,
+    identity: &ImageBuildIdentity,
+) -> Result<(), String> {
+    client
+        .image_tag(&identity.canonical_tag, &identity.version_alias)
+        .await
+        .map_err(|e| format!("Failed to update version image alias: {e}"))?;
+    client
+        .image_tag(&identity.canonical_tag, &identity.latest_alias)
+        .await
+        .map_err(|e| format!("Failed to update latest image alias: {e}"))
 }
 
 fn forge_image_tag(version: &str) -> String {
@@ -1107,7 +1222,22 @@ fn ensure_image_exists(
     let (containerfile, context_dir) = image_specs(root, image_name)?;
     let rt = podman_runtime()?;
     let client = PodmanClient::new();
-    let build_args = image_build_args(image_name, image_tag);
+    let build_args = if image_name == "chromium-framework" {
+        let version = image_tag
+            .split(':')
+            .next_back()
+            .unwrap_or("latest")
+            .trim_start_matches('v');
+        vec![
+            "--build-arg".to_string(),
+            format!(
+                "CHROMIUM_CORE_IMAGE={}",
+                versioned_image_tag("chromium-core", version)
+            ),
+        ]
+    } else {
+        Vec::new()
+    };
 
     rt.block_on(async move {
         if client.image_exists(image_tag).await {
@@ -2592,21 +2722,19 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
     ];
 
     // @trace spec:forge-staleness, spec:forge-cache-dual
-    // Check cache integrity before loading state. A cache version mismatch is
-    // expected after any version bump and is safely recoverable by rebuilding;
-    // treat it as if the user had passed --force so initialization just works.
-    let mut force = force;
+    // VERSION changes only move aliases. Content identity comes from the exact
+    // context digest and OCI label, so a cache-version mismatch never forces a
+    // rebuild by itself.
     let cache_status = check_cache_integrity(version)?;
-    if !force && cache_status.version_mismatch {
+    if cache_status.version_mismatch && debug {
         let cached_display = cache_status
             .cached_version
             .clone()
             .unwrap_or_else(|| "<unset>".to_string());
         eprintln!(
-            "[tillandsias] init: stale cache (cached {}, current {}); rebuilding all images",
+            "[tillandsias] init: version changed (cached {}, current {}); refreshing aliases only when source digests match",
             cached_display, version
         );
-        force = true;
     }
 
     // @trace spec:cache-recovery-mechanism
@@ -2621,48 +2749,60 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
     let rt = podman_runtime()?;
     let client = PodmanClient::new();
     let mut failed_images = Vec::new();
-
-    // If force is set, clear previous build state to rebuild all images
-    if force {
-        if debug {
-            println!("FORCE: rebuilding all images");
-        }
-        state = InitBuildState::new();
-    }
+    let mut identities = HashMap::<String, ImageBuildIdentity>::new();
 
     for image in &images {
-        let tag = versioned_image_tag(image, version);
-        let source_digest = runtime_assets::image_source_digest(&root, image)?;
+        let (build_args, dependency_digests) =
+            image_build_inputs(image, identities.get("chromium-core"))?;
+        let identity = runtime_assets::image_identity(
+            &root,
+            image,
+            version,
+            build_args.clone(),
+            dependency_digests,
+        )?;
+        let (observation, observed_image_id) =
+            rt.block_on(observe_image_build(&client, &identity, force));
+        let decision = decide_image_build(identity.clone(), &observation);
+        identities.insert((*image).to_string(), identity.clone());
 
-        // Check if image exists and was previously successful
-        let should_skip = rt.block_on(async { client.image_exists(&tag).await });
-
-        let source_changed = !state.image_source_digest_matches(image, &source_digest);
-
-        if should_skip && state.was_successful(image) && !force && !source_changed {
-            if debug {
-                println!("SKIP {} (cached)", image);
+        match decision.action {
+            ImageBuildAction::Skip => {
+                if debug {
+                    println!("SKIP {} (digest present)", image);
+                }
+                state.mark_success(image);
+                state.set_image_identity(image, &decision, observed_image_id);
+                continue;
             }
-            continue;
-        }
-
-        if source_changed && state.was_successful(image) && debug {
-            eprintln!("REBUILD {} (runtime assets changed)", image);
-        }
-
-        if !should_skip && state.was_successful(image) {
-            // Image deleted after successful build - rebuild
-            if debug {
-                println!("REBUILD {} (image deleted)", image);
+            ImageBuildAction::Retag => {
+                if debug {
+                    println!("RETAG {} (aliases stale or missing)", image);
+                }
+                if let Err(e) = rt.block_on(apply_image_aliases(&client, &identity)) {
+                    state.mark_failed(image);
+                    failed_images.push((image.to_string(), e));
+                } else {
+                    state.mark_success(image);
+                    state.set_image_identity(image, &decision, observed_image_id);
+                }
+                continue;
+            }
+            ImageBuildAction::Build => {
+                if debug {
+                    println!("BUILD {} ({:?})", image, decision.reason);
+                }
+            }
+            ImageBuildAction::ForceRebuild => {
+                if debug {
+                    println!("FORCE BUILD {}", image);
+                }
             }
         }
 
         let log_file = init_log_file(image, debug);
-        if debug {
-            println!("BUILD {}", image);
-        }
-
-        let result = build_image_with_logging(&root, image, &tag, &log_file, debug);
+        let result =
+            build_image_with_logging(&root, image, &identity, &build_args, &log_file, debug);
 
         if let Err(e) = result {
             if debug {
@@ -2671,10 +2811,21 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
             state.mark_failed(image);
             failed_images.push((image.to_string(), e));
         } else {
-            state.mark_success(image);
-            state.set_image_source_digest(image, source_digest);
-            if debug {
-                println!("SUCCESS {}", image);
+            let alias_result = rt.block_on(apply_image_aliases(&client, &identity));
+            if let Err(e) = alias_result {
+                state.mark_failed(image);
+                failed_images.push((image.to_string(), e));
+            } else {
+                let image_id = rt
+                    .block_on(client.image_inspect(&identity.canonical_tag))
+                    .ok()
+                    .and_then(|json| image_inspect_metadata(&json).ok())
+                    .and_then(|(image_id, _)| image_id);
+                state.mark_success(image);
+                state.set_image_identity(image, &decision, image_id);
+                if debug {
+                    println!("SUCCESS {}", image);
+                }
             }
         }
     }
@@ -2753,24 +2904,28 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
 fn build_image_with_logging(
     root: &Path,
     image_name: &str,
-    image_tag: &str,
+    identity: &ImageBuildIdentity,
+    build_args: &BTreeMap<String, String>,
     log_file: &Option<PathBuf>,
     _debug: bool,
 ) -> Result<(), String> {
     // @trace gap:ON-005 — show progress % during image pull
     let (containerfile, context_dir) = image_specs(root, image_name)?;
-    let build_args = image_build_args(image_name, image_tag);
 
     let mut command = podman_command();
-    command.args(["build", "-t", image_tag, "-f"]);
+    command.args(["build", "-t", &identity.canonical_tag]);
+    for (label, value) in &identity.labels {
+        command.arg("--label").arg(format!("{label}={value}"));
+    }
+    command.arg("-f");
     command.arg(
         containerfile
             .to_str()
             .ok_or_else(|| "Containerfile path contains invalid UTF-8".to_string())?,
     );
 
-    for arg in &build_args {
-        command.arg(arg);
+    for (name, value) in build_args {
+        command.arg("--build-arg").arg(format!("{name}={value}"));
     }
 
     command.arg(
@@ -8144,36 +8299,58 @@ mod tests {
     }
 
     #[test]
-    fn image_build_args_passes_chromium_core_image_for_framework() {
-        // Test that image_build_args correctly passes CHROMIUM_CORE_IMAGE
-        // when building chromium-framework.
-        // @trace spec:init-command
-        let args = image_build_args(
-            "chromium-framework",
-            "localhost/tillandsias-chromium-framework:v1.0.0",
-        );
+    fn image_build_inputs_include_chromium_core_identity_for_framework() {
+        let core = ImageBuildIdentity {
+            source_digest: "sha256:core".to_string(),
+            canonical_tag: "localhost/tillandsias-chromium-core:sha256-core".to_string(),
+            version_alias: "localhost/tillandsias-chromium-core:v1.0.0".to_string(),
+            latest_alias: "localhost/tillandsias-chromium-core:latest".to_string(),
+            labels: BTreeMap::new(),
+        };
+        let (build_args, dependency_digests) =
+            image_build_inputs("chromium-framework", Some(&core)).unwrap();
 
-        assert_eq!(args.len(), 2, "should have 2 args (--build-arg and value)");
-        assert_eq!(args[0], "--build-arg");
-        assert!(
-            args[1].contains("CHROMIUM_CORE_IMAGE=localhost/tillandsias-chromium-core:v1.0.0"),
-            "should pass CHROMIUM_CORE_IMAGE with version: {}",
-            args[1]
+        assert_eq!(
+            build_args.get("CHROMIUM_CORE_IMAGE"),
+            Some(&core.canonical_tag)
+        );
+        assert_eq!(
+            dependency_digests.get("chromium-core"),
+            Some(&core.source_digest)
         );
     }
 
     #[test]
-    fn image_build_args_empty_for_non_framework_images() {
-        // Test that image_build_args returns empty args for non-framework images.
-        // @trace spec:init-command
-        let args = image_build_args("proxy", "tillandsias-proxy:v1.0.0");
-        assert!(args.is_empty(), "proxy should have no build args");
+    fn image_build_inputs_are_empty_for_non_framework_images() {
+        for image in ["proxy", "forge", "git"] {
+            let (build_args, dependency_digests) = image_build_inputs(image, None).unwrap();
+            assert!(build_args.is_empty(), "{image} should have no build args");
+            assert!(
+                dependency_digests.is_empty(),
+                "{image} should have no dependency digests"
+            );
+        }
+    }
 
-        let args = image_build_args("forge", "tillandsias-forge:v1.0.0");
-        assert!(args.is_empty(), "forge should have no build args");
+    #[test]
+    fn image_inspect_metadata_reads_nested_labels_and_ids() {
+        let json = r#"[{"Id":"sha256:image","Config":{"Labels":{"io.tillandsias.image.source-digest":"sha256:source"}}}]"#;
+        let (image_id, source_digest) = image_inspect_metadata(json).unwrap();
+        assert_eq!(image_id.as_deref(), Some("sha256:image"));
+        assert_eq!(source_digest.as_deref(), Some("sha256:source"));
+    }
 
-        let args = image_build_args("git", "tillandsias-git:v1.0.0");
-        assert!(args.is_empty(), "git should have no build args");
+    #[test]
+    fn legacy_init_state_deserializes_without_identity_records() {
+        let legacy = r#"{
+            "images":{"forge":"success"},
+            "image_source_digests":{"forge":"old-digest"},
+            "runtime_asset_manifest_digest":null,
+            "timestamp":"2026-06-01T00:00:00Z"
+        }"#;
+        let state: InitBuildState = serde_json::from_str(legacy).unwrap();
+        assert!(state.was_successful("forge"));
+        assert!(state.image_identities.is_empty());
     }
 
     #[test]

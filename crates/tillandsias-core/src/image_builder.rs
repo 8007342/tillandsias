@@ -134,7 +134,7 @@ pub fn image_build_identity(
 
     let digest_hex = hex_digest(&hasher.finalize());
     let source_digest = format!("sha256:{digest_hex}");
-    let image_prefix = format!("tillandsias-{}", spec.image_name);
+    let image_prefix = format!("localhost/tillandsias-{}", spec.image_name);
     let canonical_tag = format!("{image_prefix}:sha256-{digest_hex}");
     let version_alias = format!("{image_prefix}:v{}", spec.version.trim());
     let latest_alias = format!("{image_prefix}:latest");
