@@ -1,26 +1,34 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-08T19:33:00Z
+LastExecutionTime: 2026-06-08T20:50:00Z
 
 ## This Loop
 
-- **Cycle type**: Linux work-queue exhaustion after container-build and Vault HTTPS advancement.
-- **Sibling Git Audit**: `origin/osx-next` reports its queue exhausted; `origin/windows-next`
-  has one unintegrated Unix-test cfg fix (`98acdbc6`). No sibling branch was modified.
-- **Convergence**: Positive — container steps 44-48 and Vault HTTPS step 42c are complete.
+- **Cycle type**: Operator-directed tray GitHub-login fix + orchestration audit.
+- **Sibling Git Audit**: heads — main `13752eb2` (v0.3.260608.4), linux-next `07e8c213`,
+  osx-next `cc58c9da` (drift 0, queue exhausted), windows-next `98acdbc6` (drift 1, < D_max).
+  No divergence/thrashing/deadlock. No stale leases. No sibling branch modified.
+- **Convergence**: Positive — tray popup-terminal fix landed; step 42c HTTPS already complete.
 
 ## What changed this cycle
 
-- Completed step 48 by removing Toolbox/placeholder wrapper paths, converging public wrappers on `scripts/build-image.sh`, and proving the digest/alias/force sequence with stateful fake Podman.
-- Updated active docs and image lifecycle cheatsheets with telemetry location and canonical image diagnostics.
-- Completed `vault-flow/vault-https-via-ca` at `96a7a7c7`: SAN-bearing CA-signed
-  leaf, secret-mounted TLS material, verified Rust/curl clients, cleanup registry,
-  and passing Vault/podman-secret litmus.
+- **Step 42i `vault-flow/tray-popup-terminal` DONE at `07e8c213`**: tray "GitHub Login" now
+  always opens a popup terminal window. Root cause: `launch_in_terminal`'s candidate list
+  (gnome-terminal/konsole/xterm) missed `ptyxis` — the only emulator on the operator's
+  Silverblue/GNOME host — and fell through to the inline fallback, prompting `gh auth login`
+  in the tray's launching terminal (wrong; a desktop-shortcut launch has no such terminal).
+  Added ptyxis + kgx, removed the inline fallback (returns Err + surfaces via set_status),
+  refined the gh-auth-script spec (popup + no-inline-fallback; CLI `--github-login` stays inline).
+- **Orchestration decision**: windows `98acdbc6` (unix-test cfg gate + doc) integration DEFERRED
+  to the final pre-release pass to avoid churning linux-next while Gemini holds the step-32 lease.
 
 ## Blocking Tree (new frontier)
 
-- **Step 32** (vault true-rekey): blocked on spec refinement — research proved `vault operator rekey`-installs-host-key mandate infeasible.
-- **Step 37** (release): operator-gated (PR #15 dirty, VERSION conflict).
+- **Step 32** (vault true-rekey): ACTIVELY CLAIMED by `linux-tlatoani-gemini-20260608T1937`
+  (lease `…1937Z`, expires 2026-06-08T23:38:00Z). Its two ready subtasks
+  (vault-rekey/entrypoint, vault-rekey/litmus-gate) are Gemini's — do not poach.
+- **Step 37** (release): operator-directed THIS session — full build + merge linux-next→main +
+  release pending completion of Gemini's step-32 work (so the release ships the vault hardening).
 - **Step 45** (canonical image digest/aliases) completed at `453c7abb` + `45843b02`.
 - **Step 46** completed at `6c890021`; **step 47** completed at `ec5cf96c` + `1c316e5c`.
 - **Step 44** completed at `25cb5b3a`.
@@ -32,9 +40,9 @@ LastExecutionTime: 2026-06-08T19:33:00Z
 
 ## Assignment Board
 
-- **Linux**: Queue blocked/exhausted. Wait for the active step 38 lease, or refine
-  step 32 from infeasible literal rekey to the reviewed keychain-held generated-share contract
-  before implementation/adversarial E2E.
+- **Linux**: No claimable leaf for a second agent — step 32 is Gemini's active lease.
+  This agent (claude) completed the operator's tray popup-terminal fix and is holding for
+  Gemini to finish step 32, after which it runs the final build + merge-to-main + release.
 - **macOS**: step 36 macOS keychain/vsock parity — **blocked on linux step 32**. Independent:
   user-attended **m8 smoke** of a v0.3.x build (release acceptance). Native keyring
   backend build + persistence verification is complete.
