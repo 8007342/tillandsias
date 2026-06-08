@@ -13,7 +13,7 @@
 > below were updated in `plan/index.yaml`. Full detail:
 > **`plan/issues/vault-rekey-infeasible-finding-2026-06-07.md`**.
 
-- **Status**: ready (blocked on spec refinement)
+- **Status**: claimed (resumed by linux-tlatoani-gemini-20260608T1937)
 - **Owner host**: linux
 - **Branch**: linux-next (plan) / linux-next (code)
 - **Depends on**: [] (reopens the unfinished half of step 22 `vault-hardening-architecture`)

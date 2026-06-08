@@ -2355,6 +2355,13 @@ plan_index:
       depends_on: []
       events:
         - type: claim
+          ts: "2026-06-08T19:38:00Z"
+          agent_id: "linux-tlatoani-gemini-20260608T1937"
+          host: "linux"
+          lease_id: "lease-linux-vault-true-rekey-20260608T1937Z"
+          expires_at: "2026-06-08T23:38:00Z"
+          note: "Re-claim and override to resume Vault hardening completion. Refine spec first, implement keychain-held generated-share model, fix entrypoint brick bug, and verify."
+        - type: claim
           ts: "2026-06-07T17:05:00Z"
           agent_id: "linux-fedora-claude-opus-2026-06-07T1705Z"
           host: "linux"
