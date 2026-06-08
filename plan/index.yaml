@@ -2767,7 +2767,7 @@ plan_index:
         - "A CI grep gate / litmus asserts release.yml contains no --install|--init|cargo binstall|podman build."
       tasks:
         - id: release-hygiene/assert-minimal
-          status: claimed
+          status: done
           depends_on: []
           owned_files:
             - .github/workflows/release.yml
@@ -2782,6 +2782,14 @@ plan_index:
               host: "linux"
               lease_id: "lease-linux-release-hygiene-20260608T1912Z"
               expires_at: "2026-06-08T23:12:00Z"
+            - type: completed
+              ts: "2026-06-08T19:15:00Z"
+              agent_id: "linux-macuahuitl-advance-work-20260608T175625Z"
+              host: "linux"
+              lease_id: "lease-linux-release-hygiene-20260608T1912Z"
+              evidence_refs:
+                - "commit:38ba099f"
+                - "release.yml: added assertion step checking CLI help for --install/--init flags"
 
     - id: github-login-vault-native-flow
       order: 42
