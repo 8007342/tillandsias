@@ -1,6 +1,6 @@
 # Step 48 — Image-build wrapper convergence and end-to-end proof
 
-- **Status**: claimed
+- **Status**: completed
 - **Owner host**: linux
 - **Branch**: linux-next
 - **Depends on**: steps 44, 45, 46, 47
@@ -18,7 +18,7 @@ only when the source digest changes.
 
 ## Tasks
 
-- [ ] `image-build-convergence/entrypoint`
+- [x] `image-build-convergence/entrypoint`
   - Owned files: `crates/tillandsias-core/src/bin/build-image.rs`,
     `crates/tillandsias-core/src/image_builder.rs`, top-level `build-*.sh`,
     `scripts/build-image.sh`.
@@ -26,7 +26,7 @@ only when the source digest changes.
   - Keep thin compatibility wrappers only where they add user-facing flags.
   - Route forge, proxy, git, inference, router, chromium-core,
     chromium-framework, vault, and web through one engine.
-- [ ] `image-build-convergence/e2e-litmus`
+- [x] `image-build-convergence/e2e-litmus`
   - Owned files: `openspec/litmus-tests/`,
     `openspec/litmus-bindings.yaml`, focused shell/Rust tests.
   - Assert the exact sequence:
@@ -39,15 +39,10 @@ only when the source digest changes.
     7. force rebuild is explicit
   - Assert no network installer piping, no floating latest source, and no
     duplicate build for one digest.
-- [ ] `image-build-convergence/docs-and-state`
+- [x] `image-build-convergence/docs-and-state`
   - Reconcile active spec language that still names the wrong forge path or
     outdated build behavior.
   - Document telemetry location and diagnostic commands.
-
-## Next action
-
-Inventory every public build entrypoint and map it to the canonical engine.
-Fail the packet if any path still constructs its own freshness decision.
 
 ## Acceptance evidence
 
@@ -76,6 +71,19 @@ Do not weaken the digest/alias assertions for all images.
 
 ## Evidence / handoff
 
-Current placeholders:
-`crates/tillandsias-core/src/bin/build-image.rs:19-85` and
-`crates/tillandsias-core/src/image_builder.rs:308-385`.
+- Implementation: `11b7b57c`.
+- Top-level git/proxy/inference/web wrappers now directly delegate to
+  `scripts/build-image.sh`; the Rust helper binary delegates to the same
+  script rather than carrying placeholder freshness logic.
+- `build-all-images.sh` uses the complete matrix and builds chromium-core
+  before chromium-framework.
+- `litmus:image-build-convergence-shape` proves first build, skip,
+  VERSION-only retag, context rebuild, missing alias retag, missing canonical
+  retag from alias, and explicit force rebuild with fake stateful Podman.
+- Forge-staleness instant litmus: 3/3 executed tests passed.
+- Init-incremental-builds instant litmus: 1/1 executed tests passed.
+- Podman-orchestration instant litmus: 4/4 executed tests passed.
+- `cargo clippy -p tillandsias-core --bin build-image -- -D warnings`: passed.
+- `./build.sh --check`: passed.
+- Real Podman wrapper smoke: `./build-proxy.sh` built
+  `tillandsias-proxy:ce5466e2...` at 22 MB in 65 seconds.
