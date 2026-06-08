@@ -2488,7 +2488,7 @@ plan_index:
         - "No active spec or binding pins a removed symbol."
       tasks:
         - id: spec-reconcile/vault-and-podman-secrets
-          status: claimed
+          status: done
           depends_on: []
           owned_files:
             - openspec/specs/tillandsias-vault/spec.md
@@ -2506,6 +2506,18 @@ plan_index:
               host: "linux"
               lease_id: "lease-linux-spec-reconcile-20260608T1830Z"
               expires_at: "2026-06-08T22:30:00Z"
+            - type: completed
+              ts: "2026-06-08T18:45:00Z"
+              agent_id: "linux-macuahuitl-advance-work-20260608T175625Z"
+              host: "linux"
+              lease_id: "lease-linux-spec-reconcile-20260608T1830Z"
+              evidence_refs:
+                - "commit:4d6f1ecf"
+                - "tillandsias-vault/spec.md: no longer implies host-side token extraction"
+                - "gh-auth-script/spec.md: container-side vault write, no host token capture"
+                - "podman-idiomatic-patterns/spec.md:88-96 reviewed — describes unseal-key podman secret, correct"
+                - "secrets-management/spec.md: already tombstoned, no change needed"
+                - "git-mirror-service/spec.md: no outdated references found"
 
     - id: legacy-secret-code-sweep
       order: 35
@@ -2526,7 +2538,7 @@ plan_index:
         - "run_github_login accountability log retraced from secret-rotation to tillandsias-vault."
       tasks:
         - id: code-sweep/legacy-branches-and-fixtures
-          status: ready
+          status: claimed
           depends_on: []
           owned_files:
             - images/git/entrypoint.sh
@@ -2539,6 +2551,13 @@ plan_index:
             - crates/tillandsias-headless/Cargo.toml
           checkpoint_required: true
           handoff_note: "Test fakes create tillandsias-github-token while litmus-vault-github-token-capture-shape.yaml:37 asserts the symbol is gone — direct contradiction. Flag (don't fix) any sibling-owned fmt/clippy drift. See audit §2."
+          events:
+            - type: claim
+              ts: "2026-06-08T18:48:00Z"
+              agent_id: "linux-macuahuitl-advance-work-20260608T175625Z"
+              host: "linux"
+              lease_id: "lease-linux-code-sweep-20260608T1848Z"
+              expires_at: "2026-06-08T22:48:00Z"
 
     - id: cross-platform-vault-keychain-parity
       order: 36
