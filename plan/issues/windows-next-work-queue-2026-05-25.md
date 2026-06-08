@@ -632,6 +632,14 @@ manifest state.
 
 <!-- Append events here when claiming/progressing items. Append-only. -->
 
+### Event: 2026-06-08T18:37Z — windows next branch sync + build check
+
+- **Agent**: `windows-bullo-gemini-3-5-flash-2026-06-08T18:37Z`
+- **Action**: Merged `origin/linux-next` into `windows-next`, resolving a conflict in [keyring-backend-xplat-verification-2026-06-08.md](file:///C:/Users/bullo/src/tillandsias/plan/issues/keyring-backend-xplat-verification-2026-06-08.md). Added a target-gate (`#![cfg(unix)]`) to [connect_loop.rs](file:///C:/Users/bullo/src/tillandsias/crates/tillandsias-router-sidecar/tests/connect_loop.rs) to fix target-agnostic compilation on Windows.
+- **Verification**: Verified compilation and tests on the Windows host. Target check `cargo check -p tillandsias-windows-tray --all-targets` compiles clean. Full suite `cargo test -p tillandsias-windows-tray` passes 100% green (43 passed, 5 ignored; 8 passed; 3 passed, 1 ignored).
+- **Queue Status**: All Windows-owned work items are **done** or **blocked** pending sibling work. Specifically, `xplat-vault/windows` (Step 36) is blocked on Linux `vault-hardening-true-rekey` (Step 32). Yielding to the orchestrator and sibling hosts.
+- **Pushed**: Pushed updated `windows-next` to `origin/windows-next`.
+
 ### Event: 2026-05-25 — windows host triage + w2 claim
 
 - **w1/tray-icon-rc-and-ico → BLOCKED (correction).** The queue says the
