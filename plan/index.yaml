@@ -2438,7 +2438,7 @@ plan_index:
         - "Repo and images/default/cheatsheets mirrors stay byte-identical (litmus:cheatsheet-host-image-sync PASS)."
       tasks:
         - id: doc-cleanup/cheatsheets
-          status: ready
+          status: done
           depends_on: []
           owned_files:
             - cheatsheets/runtime/hashicorp-vault-tillandsias.md
@@ -2450,6 +2450,24 @@ plan_index:
             - docs/cheatsheets/git-mirror-lifecycle-audit.md
           checkpoint_required: true
           handoff_note: "3 cheatsheets are pre-Vault (each baked into the image — change repo+mirror in lockstep). tillandsias-secrets-architecture.md never mentions Vault. See audit §2."
+          events:
+            - type: claim
+              ts: "2026-06-08T19:02:00Z"
+              agent_id: "linux-macuahuitl-advance-work-20260608T175625Z"
+              host: "linux"
+              lease_id: "lease-linux-doc-cleanup-20260608T1902Z"
+              expires_at: "2026-06-08T23:02:00Z"
+            - type: completed
+              ts: "2026-06-08T19:10:00Z"
+              agent_id: "linux-macuahuitl-advance-work-20260608T175625Z"
+              host: "linux"
+              lease_id: "lease-linux-doc-cleanup-20260608T1902Z"
+              evidence_refs:
+                - "commit:35eebed8"
+                - "tillandsias-secrets-architecture.md: removed legacy github-token from Rust example and audit log; updated checklist to vault-cli"
+                - "hashicorp-vault-tillandsias.md: removed 'same pattern as tillandsias-github-token today' reference"
+                - "git-mirror-lifecycle-audit.md: updated entrypoint code snippet, removed legacy fallback references"
+                - "Synced all changes to images/default/ mirrors"
 
     - id: pre-vault-spec-reconciliation
       order: 34
@@ -2488,7 +2506,7 @@ plan_index:
         - "No active spec or binding pins a removed symbol."
       tasks:
         - id: spec-reconcile/vault-and-podman-secrets
-          status: ready
+          status: done
           depends_on: []
           owned_files:
             - openspec/specs/tillandsias-vault/spec.md
@@ -2499,11 +2517,30 @@ plan_index:
             - openspec/litmus-bindings.yaml
           checkpoint_required: true
           handoff_note: "podman-secrets-integration is active with 22 github-token refs / 0 vault-token refs. tillandsias-vault self-contradicts (req says removed; invariants say reachable). See audit §2. podman-idiomatic:88-90 is review-first (may legitimately describe the unseal-key secret)."
+          events:
+            - type: claim
+              ts: "2026-06-08T18:30:00Z"
+              agent_id: "linux-macuahuitl-advance-work-20260608T175625Z"
+              host: "linux"
+              lease_id: "lease-linux-spec-reconcile-20260608T1830Z"
+              expires_at: "2026-06-08T22:30:00Z"
+            - type: completed
+              ts: "2026-06-08T18:45:00Z"
+              agent_id: "linux-macuahuitl-advance-work-20260608T175625Z"
+              host: "linux"
+              lease_id: "lease-linux-spec-reconcile-20260608T1830Z"
+              evidence_refs:
+                - "commit:4d6f1ecf"
+                - "tillandsias-vault/spec.md: no longer implies host-side token extraction"
+                - "gh-auth-script/spec.md: container-side vault write, no host token capture"
+                - "podman-idiomatic-patterns/spec.md:88-96 reviewed — describes unseal-key podman secret, correct"
+                - "secrets-management/spec.md: already tombstoned, no change needed"
+                - "git-mirror-service/spec.md: no outdated references found"
 
     - id: legacy-secret-code-sweep
       order: 35
       title: Dead pre-Vault code & test-fixture sweep
-      status: ready
+      status: completed
       owner_host: linux
       deliverable: plan/steps/35-legacy-secret-code-sweep.md
       audit_origin: plan/issues/pre-vault-obsolescence-audit-2026-06-05.md
@@ -2519,7 +2556,7 @@ plan_index:
         - "run_github_login accountability log retraced from secret-rotation to tillandsias-vault."
       tasks:
         - id: code-sweep/legacy-branches-and-fixtures
-          status: ready
+          status: done
           depends_on: []
           owned_files:
             - images/git/entrypoint.sh
@@ -2531,7 +2568,28 @@ plan_index:
             - crates/tillandsias-headless/src/main.rs
             - crates/tillandsias-headless/Cargo.toml
           checkpoint_required: true
-          handoff_note: "Test fakes create tillandsias-github-token while litmus-vault-github-token-capture-shape.yaml:37 asserts the symbol is gone — direct contradiction. Flag (don't fix) any sibling-owned fmt/clippy drift. See audit §2."
+          handoff_note: "Completed by remote checkpoint 4991c2e6, with supplemental stale-reference and fixture cleanup rebased as 0c89c730. Newer no-host-token-extraction behavior was preserved during conflict resolution."
+          events:
+            - type: claim
+              ts: "2026-06-08T18:48:00Z"
+              agent_id: "linux-macuahuitl-advance-work-20260608T175625Z"
+              host: "linux"
+              lease_id: "lease-linux-code-sweep-20260608T1848Z"
+              expires_at: "2026-06-08T22:48:00Z"
+            - type: completed
+              ts: "2026-06-08T19:00:00Z"
+              agent_id: "linux-macuahuitl-advance-work-20260608T175625Z"
+              host: "linux"
+              lease_id: "lease-linux-code-sweep-20260608T1848Z"
+              evidence_refs:
+                - "commit:4991c2e6"
+                - "github-login-fake.sh: replaced podman secret create with vault-cli.sh write"
+                - "entrypoint.sh: removed legacy tillandsias-github-token fallback"
+                - "post-receive-hook.sh: removed legacy tillandsias-github-token fallback"
+                - "Containerfile: removed legacy comment"
+                - "podman-mock.sh: updated inspect to vault-token"
+                - "methodology/litmus-framework.yaml: updated examples to vault-token"
+                - "lib-common.sh: updated comment"
 
     - id: cross-platform-vault-keychain-parity
       order: 36
@@ -2665,10 +2723,22 @@ plan_index:
     - id: forge-recipe-download-only-assembly
       order: 40
       title: Forge recipe = download-only assembly from free public no-login repos (no compile, no push)
-      status: ready
+      status: obsoleted
       owner_host: linux
       deliverable: plan/issues/nix-release-incremental-and-forge-distribution-2026-06-05.md
       depends_on: []
+      superseded_by:
+        - package-manager-first-container-recipes
+        - canonical-image-digest-and-aliases
+        - podman-build-cache-and-serialization
+        - structured-image-build-telemetry
+        - image-build-wrapper-convergence
+      progress_note: >
+        Superseded 2026-06-08 after repository + Fedora 44 research showed this
+        packet mixed five independently ownable concerns: package sourcing,
+        canonical digest identity, cache policy, telemetry, and wrapper
+        convergence. Detailed replacement graph and evidence:
+        plan/issues/container-build-efficiency-telemetry-2026-06-08.md.
       operator_correction: >
         2026-06-05: the earlier "build images in CI + push to a registry" model is REJECTED.
         We publish NO images and push to NO registry. The Containerfile is a runtime RECIPE that
@@ -2687,18 +2757,18 @@ plan_index:
         - "tillandsias --init assembles the image from downloads only; nothing compiles at user runtime."
       tasks:
         - id: forge-recipe/download-only
-          status: ready
+          status: obsoleted
           depends_on: []
           owned_files:
             - images/default/Containerfile
             - scripts/build-image.sh
           checkpoint_required: true
-          handoff_note: "Replace cargo-binstall (GitHub-API rate-limited, needs token) with Fedora packages + direct release-asset URLs; revert the gh-token secret. Download-only, no compile, no login, prefer lean. See cheatsheet + issue doc."
+          handoff_note: "Superseded by steps 44-48. Do not claim this broad file-overlapping packet; select the replacement matching package recipes, identity, cache, telemetry, or integration."
 
     - id: release-workflow-hygiene
       order: 41
       title: Release-workflow hygiene — no --install/--init/expensive dev steps on runners
-      status: ready
+      status: completed
       owner_host: linux
       deliverable: plan/issues/nix-release-incremental-and-forge-distribution-2026-06-05.md
       depends_on: []
@@ -2709,7 +2779,7 @@ plan_index:
         - "A CI grep gate / litmus asserts release.yml contains no --install|--init|cargo binstall|podman build."
       tasks:
         - id: release-hygiene/assert-minimal
-          status: ready
+          status: done
           depends_on: []
           owned_files:
             - .github/workflows/release.yml
@@ -2717,6 +2787,21 @@ plan_index:
             - openspec/litmus-tests
           checkpoint_required: true
           handoff_note: "release.yml already avoids --install/--init; pin it with an assertion so it can't drift back in."
+          events:
+            - type: claim
+              ts: "2026-06-08T19:12:00Z"
+              agent_id: "linux-macuahuitl-advance-work-20260608T175625Z"
+              host: "linux"
+              lease_id: "lease-linux-release-hygiene-20260608T1912Z"
+              expires_at: "2026-06-08T23:12:00Z"
+            - type: completed
+              ts: "2026-06-08T19:15:00Z"
+              agent_id: "linux-macuahuitl-advance-work-20260608T175625Z"
+              host: "linux"
+              lease_id: "lease-linux-release-hygiene-20260608T1912Z"
+              evidence_refs:
+                - "commit:38ba099f"
+                - "release.yml: added assertion step checking CLI help for --install/--init flags"
 
     - id: github-login-vault-native-flow
       order: 42
@@ -2746,14 +2831,30 @@ plan_index:
           checkpoint_required: true
           handoff_note: "DONE 2026-06-06. Added vault_bootstrap::is_github_logged_in (volume-guarded on-demand Vault read) + read_github_token_from_vault + vault_data_volume_exists; removed tray gh_auth_check; both gate sites now read Vault. clippy -D warnings clean, 143/143 tray tests pass."
         - id: vault-flow/launch-gate-async
-          status: ready
+          status: done
           depends_on: [vault-flow/tray-gate-on-vault]
           owned_files:
             - crates/tillandsias-headless/src/tray/mod.rs
           checkpoint_required: true
-          handoff_note: "The launch constructor (tray/mod.rs new_with_debug, ~994) calls is_github_logged_in synchronously; when a vault volume exists it triggers ensure_vault_running on the launch path (worst case 60s health timeout). Make it async: default is_authenticated=false, spawn a background probe that bumps revision when the token is confirmed."
+          handoff_note: "The launch constructor (tray/mod.rs new_with_debug, ~994) calls is_github_logged_in synchronously; when a vault volume exists it triggers ensure_vault_running on the launch path (worst case 60s health timeout). Made async: default is_authenticated=false, background probe bumps revision when token is confirmed."
+          events:
+            - type: claim
+              ts: "2026-06-08T18:12:00Z"
+              agent_id: "linux-macuahuitl-advance-work-20260608T175625Z"
+              host: "linux"
+              lease_id: "lease-linux-launch-gate-async-20260608T1812Z"
+              expires_at: "2026-06-08T22:12:00Z"
+            - type: completed
+              ts: "2026-06-08T18:25:00Z"
+              agent_id: "linux-macuahuitl-advance-work-20260608T175625Z"
+              host: "linux"
+              lease_id: "lease-linux-launch-gate-async-20260608T1812Z"
+              evidence_refs:
+                - "commit:97fd2bf2"
+                - "./build.sh --check PASS"
+                - "137/137 tests PASS"
         - id: vault-flow/login-in-container
-          status: ready
+          status: done
           depends_on: []
           owned_files:
             - crates/tillandsias-headless/src/main.rs
@@ -2761,7 +2862,23 @@ plan_index:
             - images/vault/policies
             - images/git/vault-cli.sh
           checkpoint_required: true
-          handoff_note: "Refactor run_github_login (main.rs:3267) so gh auth login + vault write both run inside one container; token never extracted to host. Move the Vault running-check (vault_bootstrap.rs:140) BEFORE the interactive paste and bring Vault up on demand (ensure_vault_running). Add a write-capable AppRole lease + policy for secret/data/github/token (today only read-only git-mirror.hcl touches it). Re-trace the gh_auth_start accountability log off the removed secret-rotation/tillandsias-github-token symbol (overlaps step 35)."
+          handoff_note: "Refactor run_github_login (main.rs:3267) so gh auth login + vault write both run inside one container; token never extracted to host. Move the Vault running-check (vault_bootstrap.rs:140) BEFORE the interactive paste and bring Vault up on demand (ensure_vault_running). Add a write-capable AppRole lease + policy for secret/data/github/token (today only read-only git-mirror.hcl touches it)."
+          events:
+            - type: claim
+              ts: "2026-06-08T17:56:25Z"
+              agent_id: "linux-macuahuitl-advance-work-20260608T175625Z"
+              host: "linux"
+              lease_id: "lease-linux-login-in-container-20260608T1756Z"
+              expires_at: "2026-06-08T21:56:25Z"
+            - type: completed
+              ts: "2026-06-08T18:10:00Z"
+              agent_id: "linux-macuahuitl-advance-work-20260608T175625Z"
+              host: "linux"
+              lease_id: "lease-linux-login-in-container-20260608T1756Z"
+              evidence_refs:
+                - "commit:11c227ce"
+                - "./build.sh --check PASS"
+                - "cargo test tillandsias-headless PASS (2 pre-existing signal-handling failures unchanged)"
         - id: vault-flow/vault-https-via-ca
           status: ready
           depends_on: []
@@ -2830,3 +2947,249 @@ plan_index:
             - crates/tillandsias-headless/src/main.rs
           checkpoint_required: true
           handoff_note: "DONE 2026-06-07 (05e59599). Root cause: Quit handler set TrayService::shutdown but main loop polls signal-handler atomic. Added signal_shutdown OnceLock backlink, 45s graceful-shutdown timeout, 10s vault-revoke timeout. All 23 tray tests passing, clippy clean."
+
+    # ----------------------------------------------------------------------
+    # Wave 2026-06-08 — container recipe, image identity, cache, telemetry.
+    # Origin: plan/issues/container-build-efficiency-telemetry-2026-06-08.md
+    # Supersedes the broad step 40 implementation packet.
+    # ----------------------------------------------------------------------
+
+    - id: package-manager-first-container-recipes
+      order: 44
+      title: Package-manager-first container recipes with pinned fallback assets
+      status: ready
+      owner_host: linux
+      deliverable: plan/steps/44-package-manager-first-container-recipes.md
+      audit_origin: plan/issues/container-build-efficiency-telemetry-2026-06-08.md
+      depends_on: []
+      specs:
+        - default-image
+        - inference-container
+        - user-runtime-lifecycle
+      exit_criteria:
+        - "Active Containerfiles contain no curl-to-shell installers or mutable latest inputs."
+        - "Fedora 44 packages are used wherever a reviewed suitable package exists."
+        - "Remaining direct assets are version-pinned and checksum-verified."
+        - "The inference image remains measurably lean and CPU-only."
+      tasks:
+        - id: container-recipes/fedora-package-migration
+          status: ready
+          owner_host: linux
+          capability_tags: [containers, fedora, packaging, testing]
+          depends_on: []
+          owned_files:
+            - images/default/Containerfile
+            - images/inference/Containerfile
+            - openspec/litmus-tests
+          next_action: >
+            Re-run the Fedora 44 dnf5 repoquery matrix from the step file, then
+            write an executable-by-executable before/after source inventory.
+          acceptance_evidence:
+            - "Static litmus rejects curl|sh, curl|bash, @latest, latest/VERSION, and releases/latest/download."
+            - "Every retained direct asset has a pinned version and verified SHA-256."
+            - "Forge tool-presence smoke and inference CPU-only/size smoke pass."
+            - "./build.sh --check passes."
+          fallback_when_blocked: >
+            Land the static source-policy litmus and record exact package/version
+            blockers; never restore a floating installer.
+          checkpoint_required: true
+          handoff_note: "Research matrix is in the audit origin. Revalidate package availability at claim time."
+
+    - id: canonical-image-digest-and-aliases
+      order: 45
+      title: Canonical image source digest, OCI labels, and alias decisions
+      status: in_progress
+      owner_host: linux
+      deliverable: plan/steps/45-canonical-image-digest-and-aliases.md
+      audit_origin: plan/issues/container-build-efficiency-telemetry-2026-06-08.md
+      depends_on: []
+      specs:
+        - default-image
+        - init-incremental-builds
+        - forge-staleness
+        - user-runtime-lifecycle
+      exit_criteria:
+        - "One deterministic ImageBuildSpec/decision contract owns hashing, canonical tags, labels, and aliases."
+        - "An existing correctly labeled digest image skips without relying on an external hash/state file."
+        - "A VERSION-only change retags aliases and does not rebuild."
+        - "Chromium framework identity includes its core dependency digest."
+      tasks:
+        - id: image-identity/spec-and-digest
+          status: claimed
+          owner_host: linux
+          capability_tags: [rust, containers, hashing, testing]
+          depends_on: []
+          owned_files:
+            - crates/tillandsias-headless/src/runtime_assets.rs
+            - crates/tillandsias-core/src/image_builder.rs
+            - crates/tillandsias-core/tests
+          next_action: >
+            Add table-driven deterministic context-hash tests covering content,
+            relative path, mode, symlink, checkout-root independence, generated
+            or gitignored input, VERSION-only alias change, and chromium
+            dependency digest before wiring Podman.
+          acceptance_evidence:
+            - "Digest determinism and change-sensitivity unit tests pass."
+            - "Missing state + matching OCI digest label returns skip."
+            - "VERSION-only change returns retag."
+            - "Atomic backward-compatible init-state migration tests pass."
+            - "Targeted cargo tests and ./build.sh --check pass."
+          fallback_when_blocked: >
+            Land the Rust digest/decision library plus deterministic JSON
+            fixtures first; do not duplicate hashing in shell.
+          checkpoint_required: true
+          handoff_note: "Checkpoint the public decision/result shape before steps 46 or 47 touch call sites."
+          events:
+            - type: claim
+              ts: "2026-06-08T18:31:15Z"
+              agent_id: "linux-macuahuitl-codex-20260608T183115Z"
+              host: "linux"
+              lease_id: "lease-linux-image-identity-20260608T183115Z"
+              expires_at: "2026-06-08T22:31:15Z"
+
+    - id: podman-build-cache-and-serialization
+      order: 46
+      title: Reuse Podman layers/download caches and serialize storage mutations
+      status: pending
+      owner_host: linux
+      deliverable: plan/steps/46-podman-build-cache-and-serialization.md
+      audit_origin: plan/issues/container-build-efficiency-telemetry-2026-06-08.md
+      depends_on:
+        - canonical-image-digest-and-aliases
+      specs:
+        - init-incremental-builds
+        - dev-build
+        - user-runtime-lifecycle
+      exit_criteria:
+        - "Normal builds do not pass --no-cache or delete package caches."
+        - "Late-context changes reuse stable OS/toolchain layers."
+        - "Concurrent public build invocations cannot corrupt Podman storage."
+        - "Cache policy and observed result are available to telemetry."
+      tasks:
+        - id: image-cache/layers-locking-and-order
+          status: pending
+          owner_host: linux
+          capability_tags: [containers, podman, shell, testing]
+          depends_on:
+            - image-identity/spec-and-digest
+          owned_files:
+            - scripts/build-image.sh
+            - build-all-images.sh
+            - crates/tillandsias-podman/src/client.rs
+            - images
+          next_action: >
+            Capture cold, unchanged, and late-COPY baseline timings/layer output
+            with Podman version and network-byte evidence before changing cache policy.
+          acceptance_evidence:
+            - "Unchanged digest invokes zero podman build commands."
+            - "Late COPY-only rebuild reuses package/toolchain layers."
+            - "Explicit diagnostic no-cache mode remains available and observable."
+            - "Concurrent wrapper test proves serialization or safe scheduling."
+          fallback_when_blocked: >
+            Land layer reuse plus the storage lock even if package-manager cache
+            mounts need a follow-up compatibility packet.
+          checkpoint_required: true
+          handoff_note: "Do not create a second freshness algorithm; consume step 45 decisions."
+
+    - id: structured-image-build-telemetry
+      order: 47
+      title: Structured image-build JSONL events and low-cardinality metrics
+      status: pending
+      owner_host: linux
+      deliverable: plan/steps/47-structured-image-build-telemetry.md
+      audit_origin: plan/issues/container-build-efficiency-telemetry-2026-06-08.md
+      depends_on:
+        - canonical-image-digest-and-aliases
+      specs:
+        - runtime-logging
+        - observability-metrics
+        - init-incremental-builds
+      exit_criteria:
+        - "Every skip, retag, build, force, success, and failure emits a correlated privacy-safe JSONL event."
+        - "Concurrent writers cannot corrupt the stream; telemetry failure is visible and non-fatal."
+        - "Metrics expose attempts, outcomes, duplicate builds, duration, size, and cache result with bounded labels."
+      tasks:
+        - id: image-telemetry/events-and-metrics
+          status: pending
+          owner_host: linux
+          capability_tags: [rust, observability, logging, metrics, testing]
+          depends_on:
+            - image-identity/spec-and-digest
+          owned_files:
+            - crates/tillandsias-logging
+            - crates/tillandsias-metrics
+            - crates/tillandsias-headless/src/main.rs
+            - crates/tillandsias-headless/src/metrics_server.rs
+            - crates/tillandsias-podman/src/client.rs
+          next_action: >
+            Extend ImageBuildEvent and add serialization/redaction/concurrent
+            append tests for decision, start, completed, and failed events.
+          acceptance_evidence:
+            - "All lifecycle event fixtures serialize with one build_id."
+            - "Secret and URL-query redaction tests pass."
+            - "Concurrent append and non-fatal writer failure tests pass."
+            - "Prometheus output has stable units and bounded labels."
+          fallback_when_blocked: >
+            Complete JSONL schema/writer/runtime wiring first and split metrics
+            projection only if an active file-scope collision is recorded.
+          checkpoint_required: true
+          handoff_note: "Human output and telemetry must be rendered from the same step-45 decision/result object."
+
+    - id: image-build-wrapper-convergence
+      order: 48
+      title: Converge all image build entrypoints and prove hash-only rebuilds
+      status: pending
+      owner_host: linux
+      deliverable: plan/steps/48-image-build-wrapper-convergence.md
+      audit_origin: plan/issues/container-build-efficiency-telemetry-2026-06-08.md
+      depends_on:
+        - package-manager-first-container-recipes
+        - canonical-image-digest-and-aliases
+        - podman-build-cache-and-serialization
+        - structured-image-build-telemetry
+      specs:
+        - default-image
+        - init-command
+        - init-incremental-builds
+        - forge-staleness
+        - litmus-framework
+      exit_criteria:
+        - "All wrappers and tillandsias --init call one canonical build engine."
+        - "No Toolbox placeholder/fallback or 'ImageBuilder trait not yet integrated' path remains."
+        - "End-to-end litmus proves unchanged digest means zero podman build invocations."
+        - "The full image matrix preserves dependency ordering and emits one telemetry schema."
+      tasks:
+        - id: image-build-convergence/wrappers-and-e2e
+          status: pending
+          owner_host: linux
+          capability_tags: [rust, shell, containers, integration, testing]
+          depends_on:
+            - container-recipes/fedora-package-migration
+            - image-identity/spec-and-digest
+            - image-cache/layers-locking-and-order
+            - image-telemetry/events-and-metrics
+          owned_files:
+            - crates/tillandsias-core/src/bin/build-image.rs
+            - crates/tillandsias-core/src/image_builder.rs
+            - scripts/build-image.sh
+            - build-forge.sh
+            - build-git.sh
+            - build-proxy.sh
+            - build-inference.sh
+            - build-web.sh
+            - build-all-images.sh
+            - openspec/litmus-tests
+            - openspec/litmus-bindings.yaml
+          next_action: >
+            Inventory every public image-build entrypoint and map it to the
+            canonical engine; fail the packet if any path still makes an
+            independent freshness decision.
+          acceptance_evidence:
+            - "First build/build skip/VERSION retag/source rebuild/missing alias/missing image/force sequence passes."
+            - "No wrapper invokes Toolbox or placeholder detection."
+            - "Focused tests, instant litmus, ./build.sh --check, and one real Podman matrix smoke pass."
+          fallback_when_blocked: >
+            Complete all unaffected images and split one named retryable
+            image-specific child; do not weaken shared digest assertions.
+          checkpoint_required: true
+          handoff_note: "Integration packet only; claim after steps 44-47 are durable."

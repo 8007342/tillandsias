@@ -1,34 +1,33 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-05T00:00:00Z
+LastExecutionTime: 2026-06-08T18:30:15Z
 
 ## This Loop
 
-- **Cycle type**: pre-Vault obsolescence audit + plan hygiene (Linux, `linux-next`).
-- **Sibling Git Audit**: see the integration-loop ledger for live sibling heads. No
-  branch changes made this cycle (plan-only writes on `linux-next`).
-- **Convergence**: R > 0 again — the v0.3.0 graph drained, but a fresh audit reopened
-  steps 32-37. V_c reset; wave is **no longer closed**.
+- **Cycle type**: Shared-ledger reconciliation plus container-build research shaping (Linux, `linux-next`).
+- **Sibling Git Audit**: Newer Vault-native completion history retained; no sibling branch was modified.
+- **Convergence**: Positive — completed work remains durable and five independently claimable container-build packets replace broad step 40.
 
 ## What changed this cycle
 
-- Audited headless/podman/orchestration/security/auth/vault/browsers/github-token for
-  pre-Vault obsolescence. Report: `plan/issues/pre-vault-obsolescence-audit-2026-06-05.md`.
-- Archived completed steps 24-31 + 16 zero-ref issue files → `plan/archive/2026-06-05/`.
-- Added steps 32-37; refreshed `plan.yaml` `current_state` and the per-host queues.
+- Retained completed Vault login-in-container, async launch-gate, spec reconciliation, code sweep, documentation cleanup, and release-hygiene events.
+- Audited every active Containerfile, public build wrapper, shell/Rust freshness path, Podman cache flag, and existing image-build event type.
+- Verified Fedora 44 package candidates and documented package-manager-first replacements.
+- Marked broad step 40 obsoleted and shaped steps 44-48 with disjoint ownership, dependencies, acceptance evidence, and fallbacks.
+- Research report: `plan/issues/container-build-efficiency-telemetry-2026-06-08.md`.
 
 ## Blocking Tree (new frontier)
 
-- **Root blocker (release)**: step 37 — v0.3.0 VERSION conflict, **operator-gated** (PR #15
-  dirty; no tag/release). Blocks the downstream release; needs an operator decision.
-- **Step 32** (vault true-rekey, linux, ready) is the root of the technical chain — it
-  unblocks step 36 (macOS+Windows keychain/vsock parity).
-- Steps 33, 34, 35 (linux, ready) are independent leaves — claimable in parallel.
+- **Step 32** (vault true-rekey): blocked on spec refinement — research proved `vault operator rekey`-installs-host-key mandate infeasible.
+- **Step 37** (release): operator-gated (PR #15 dirty, VERSION conflict).
+- **Step 45** (canonical image digest/aliases) is ready and unlocks steps 46 and 47.
+- **Step 44** (package-manager-first recipes) is an independent ready leaf.
+- Other ready leaves: `vault-flow/vault-https-via-ca` and `nix-cache/crane-and-cache-action`.
+- **Step 48** integrates the container-build chain after steps 44-47.
 
 ## Assignment Board
 
-- **Linux**: ACTIVE. Ready leaves: 32 (vault true-rekey), 33 (doc cleanup), 34 (spec
-  reconciliation), 35 (code sweep). Highest-impact-first: 32 (closes a security divergence).
+- **Linux**: Take step 45 first when one agent is available; run steps 44 and 45 in parallel when multiple agents are available.
 - **macOS**: step 36 macOS keychain/vsock parity — **blocked on linux step 32**. Independent:
   user-attended **m8 smoke** of a v0.3.x build (release acceptance).
 - **Windows**: step 36 windows keychain/vsock parity — **blocked on linux step 32**.
@@ -37,8 +36,3 @@ LastExecutionTime: 2026-06-05T00:00:00Z
 ## Stale Or Pending Pings
 
 - Step 37 escalation awaiting operator (see integration-loop ledger 18:07Z).
-
-## Notes
-
-- Pre-existing dangling `deliverable:` pointers for steps 8-20 (files long since removed)
-  remain — out of scope this cycle, flagged for a future hygiene pass.

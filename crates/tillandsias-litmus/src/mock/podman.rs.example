@@ -169,14 +169,14 @@ mod tests {
     use super::*;
 
     #[tokio::test]
-    async fn test_secret_creation_records_exact_call() {
+    async fn test_vault_token_write_records_exact_call() {
         let mut podman = InMemoryPodmanMock::new();
 
-        // Simulate what handlers::github_login_create_secret does
+        // Simulate what handlers::write_token_to_vault does
         podman
             .exec(
-                "podman",
-                &["secret", "create", "--driver", "file", "tillandsias-github-token"],
+                "vault-cli",
+                &["write", "secret/github/token", "token=<gh_token>"],
                 &[],
             )
             .await
@@ -184,17 +184,16 @@ mod tests {
 
         // Assert: we can find the exact call
         let matches = podman.calls_matching(CallMatcher::All(vec![
-            CallMatcher::ByCmd("secret"),
-            CallMatcher::ByFlag("--driver", "file"),
+            CallMatcher::ByCmd("vault-cli"),
+            CallMatcher::ByCmd("write"),
         ]));
 
         assert!(
             !matches.is_empty(),
-            "Expected to find podman secret create with --driver=file"
+            "Expected to find vault-cli write call"
         );
-        assert_eq!(matches[0].args[0], "secret");
-        assert_eq!(matches[0].args[1], "create");
-        assert_eq!(matches[0].args[4], "tillandsias-github-token");
+        assert_eq!(matches[0].args[0], "write");
+        assert_eq!(matches[0].args[1], "secret/github/token");
     }
 
     #[tokio::test]

@@ -164,9 +164,9 @@ litmus_framework:
       A LitmusSignal validates exactly one semantic requirement from a spec.
       Success/failure are unambiguous. Multiple signals compose into a test.
     example: |
-      /// Signal: "tillandsias-git image is launched with secret mount"
-      /// Spec requirement: "Credentials are read from /run/secrets/tillandsias-github-token"
-      /// @trace spec:secrets-management
+      /// Signal: "tillandsias-git image is launched with vault-token mount"
+      /// Spec requirement: "Credentials are read from Vault at secret/github/token"
+      /// @trace spec:tillandsias-vault
       pub struct GitSecretMountSignal;
 
       #[async_trait]
@@ -184,25 +184,25 @@ litmus_framework:
               // Launch git-service container
               ctx.podman.exec(
                   "podman",
-                  &["run", "--rm", "--secret", "tillandsias-github-token",
+                  &["run", "--rm", "--secret", "vault-token",
                     "tillandsias-git:v0.1.2", "git", "clone", "--depth=1", "..."],
                   &[],
               )?;
 
-              // Assert: the podman call included the secret mount
+              // Assert: the podman call included the vault secret mount
               let calls = ctx.podman.calls_matching(
                   CallMatcher::All(vec![
                       CallMatcher::ByCmd("run"),
                       CallMatcher::ByImage("tillandsias-git"),
-                      CallMatcher::ByFlag("--secret", "tillandsias-github-token"),
+                      CallMatcher::ByFlag("--secret", "vault-token"),
                   ])
               );
 
               if calls.is_empty() {
                   return SignalResult::Fail {
-                      reason: "podman run did not include --secret flag",
-                      spec_trace: "spec:secrets-management (secret mount requirement)",
-                      recovery: "Check handlers::setup_secrets() passes --secret to podman run",
+                      reason: "podman run did not include --secret flag for vault-token",
+                      spec_trace: "spec:tillandsias-vault (vault token mount requirement)",
+                      recovery: "Check vault_bootstrap::mint_approle_secret_lease passes --secret to podman run",
                   };
               }
 
@@ -243,7 +243,7 @@ litmus_framework:
           pub fn new() -> Self {
               Self {
                   signals: vec![
-                      Box::new(CreateSecretSignal::new("tillandsias-github-token")),
+                      Box::new(CreateSecretSignal::new("vault-token")),
                       Box::new(GitSecretMountSignal),
                       Box::new(GitAuthenticateSignal),
                       Box::new(CleanupSecretSignal),
@@ -395,7 +395,7 @@ litmus_framework:
       - "[ ] Evidence bundle generation (CentiColon dashboard, JSONL signature)"
 
   example_unit_test_to_assertion:
-    prompt: "Verify tillandsias --github-login produces `podman secret create --driver=file tillandsias-github-token`"
+    prompt: "Verify tillandsias --github-login runs vault-cli.sh write from inside the container"
 
     traditional_unit_test: |
       #[tokio::test]
@@ -406,14 +406,14 @@ litmus_framework:
       // Problem: doesn't test podman calls, passes if only partial state is correct
 
     litmus_translation: |
-      /// Litmus Signal: "GitHub login creates podman secret"
-      /// @trace spec:secrets-management, spec:github-credential-health
-      pub struct CreateGitHubSecretSignal {
+      /// Litmus Signal: "GitHub login writes token to Vault from inside container"
+      /// @trace spec:tillandsias-vault
+      pub struct CreateGitHubTokenSignal {
           secret_name: String,
       }
 
       #[async_trait]
-      impl LitmusSignal for CreateGitHubSecretSignal {
+      impl LitmusSignal for CreateGitHubTokenSignal {
           async fn preconditions_met(&self, runtime: &MockPodmanRuntime) -> Result<()> {
               // Ensure no prior secret exists
               if runtime.secret_exists(&self.secret_name)? {
@@ -462,7 +462,7 @@ litmus_framework:
       // Composition: GitHubLoginTest includes this signal + cleanup
       pub struct GitHubLoginTest {
           signals: vec![
-              CreateGitHubSecretSignal { secret_name: "tillandsias-github-token".into() },
+              CreateGitHubTokenSignal { secret_name: "vault-token".into() },
               // ... other signals
           ],
       }

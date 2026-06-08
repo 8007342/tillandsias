@@ -127,3 +127,4 @@ _(append dated, host-tagged lines here)_
   tillandsias-windows-tray -- -D warnings` fails on Windows due to 3 Windows-only-unused items in
   `crates/tillandsias-core/src/singleton.rs` (`Instant`, `info`, `timeout`), invisible to
   Linux-only CI. Detail in the windows work-queue w12 completion event.
+

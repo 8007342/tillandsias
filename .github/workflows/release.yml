@@ -134,6 +134,18 @@ jobs:
           test -f SHA256SUMS
           ls -la
 
+      - name: Assert no --install/--init in CI steps or CLI subcommands
+        run: |
+          # The release workflow SHALL NOT invoke --install or --init on the
+          # binary — those are user-facing setup steps, not CI responsibilities.
+          # Assert the binary's help output does NOT contain them as flags.
+          HELP="$(release-artifacts/tillandsias-linux-x86_64 --help 2>&1 || true)"
+          if grep -qE '\-\-install|\-\-init' <<<"$HELP"; then
+            echo "::error::tillandsias binary accepts --install or --init flag (should not in CI)"
+            exit 1
+          fi
+          echo "✓ No --install/--init flags in CLI (CI-safe)"
+
       - name: Create or update GitHub Release
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}

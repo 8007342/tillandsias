@@ -45,7 +45,7 @@ case "$subcommand" in
         exit 0
         ;;
     inspect)
-        printf '{"Secrets":["tillandsias-github-token","tillandsias-ca-cert","tillandsias-ca-key"]}\n'
+        printf '{"Secrets":["vault-token","tillandsias-ca-cert","tillandsias-ca-key"]}\n'
         ;;
     info)
         printf '{}\n'
