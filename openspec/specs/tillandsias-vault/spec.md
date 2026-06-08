@@ -125,9 +125,10 @@ ALWAYS store the GitHub token in Vault at `secret/github/token`.
 
 #### Scenario: GitHub login writes to Vault
 - **WHEN** the user runs `tillandsias --github-login`
-- **THEN** the host SHALL capture the GitHub token inside a git container
+- **THEN** the git container SHALL capture the GitHub token
 - **AND** SHALL write it to Vault at `secret/github/token`
 - **AND** SHALL read the token back and fail if the stored value does not match.
+- **AND** the token SHALL NOT be extracted or stored on the host.
 
 #### Scenario: Legacy flags are rejected
 - **WHEN** `--legacy-keyring-secrets` or `--without-vault` is passed
