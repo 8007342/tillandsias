@@ -4015,3 +4015,25 @@ gh workflow run release.yml --ref main
 ```
 The workflow reads VERSION=0.3.260606.1 from main and creates the GitHub Release + git tag automatically. Fedora Silverblue smoke-test artifact will be available at:
 https://github.com/8007342/tillandsias/releases/tag/v0.3.260606.1
+
+---
+
+ESCALATION: merge-to-main-and-release skill completed Steps 0–4 but cannot complete Steps 5–7 due to environment permission gap (same as previous cycles). **2026-06-08T01:38Z**
+
+**Completed:**
+- ✅ Pre-flight: checked out linux-next (HEAD `452e2a3f`), clean tree
+- ✅ Version computed: `v0.3.260608.1` (series `0.3` from VERSION, date `260608`, seq `1`)
+- ✅ PR #18 opened (linux-next → main) and merged with `--merge` at `53e9d461`
+- ✅ VERSION bumped to `0.3.260608.1` on main, commit `fffa5969`, pushed to origin
+
+**Blocked:**
+- ❌ Step 5 (tag push): `git push origin v0.3.260608.1` → HTTP 403 — local proxy blocks refs/tags/*
+- ❌ Step 6 (workflow dispatch): `actions_run_trigger` → 403 "Resource not accessible by integration" — container token lacks `workflow` scope
+
+**Operator action required:**
+Run the following command locally (with a token that has `workflow` scope):
+```
+gh workflow run release.yml --ref main
+```
+The workflow reads VERSION=0.3.260608.1 from main and creates the GitHub Release + git tag automatically. Fedora Silverblue smoke-test artifact will be available at:
+https://github.com/8007342/tillandsias/releases/tag/v0.3.260608.1
