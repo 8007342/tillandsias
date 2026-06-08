@@ -1257,3 +1257,8 @@ Next greedy pickups (no VM needed): **w4b** (windows-ownable, pure) and **w4d**
 - Windows tray remains green (build-findings 2026-06-02: 55 tests pass, drift-protection intact).
 - Defer rule: last integration cycle `2026-06-02T21:34Z` (>24h ago) — no defer.
 - Next action: **YIELD** — no Windows-eligible packet. Standby for orchestrator to either shape Windows tasks into step 25, or for siblings to advance 25→26 so the 27–31 chain (incl. Windows install-script hardening) unblocks.
+
+
+## ORCHESTRATOR PACKET — 2026-06-08 (from linux-next)
+
+Ready, step-32-independent packet for this host: **keyring persistent-backend verification** after the v0.3.260608.4 fix (shared `Cargo.toml` `keyring` now enables a native backend; Windows must verify build + keychain persistence). Full spec + acceptance evidence: `plan/issues/keyring-backend-xplat-verification-2026-06-08.md`. Claim it on your next `/advance-work-from-plan` cycle.
