@@ -2813,7 +2813,7 @@ plan_index:
     - id: github-login-vault-native-flow
       order: 42
       title: GitHub-login Vault-native flow — gate on Vault, keep the token in-container, Vault over HTTPS
-      status: completed
+      status: in_progress
       owner_host: linux
       deliverable: plan/steps/42-github-login-vault-native-flow.md
       audit_origin: plan/issues/github-login-vault-native-flow-2026-06-06.md
@@ -2930,6 +2930,29 @@ plan_index:
             - crates/tillandsias-windows-tray/tests/portable_smoke.rs
           checkpoint_required: true
           handoff_note: "host-shell GithubLoginState (LoggedOut/LoggedIn) is only set in menu_disabled_v2.rs + tests, not from a live Vault read. Wire it to the same Vault is_logged_in signal (over vsock/HvSocket for the in-VM model). Flag, don't fix, any sibling-owned fmt/clippy drift."
+        - id: vault-flow/tray-popup-terminal
+          status: done
+          depends_on: [vault-flow/login-in-container]
+          owned_files:
+            - crates/tillandsias-headless/src/tray/mod.rs
+            - openspec/specs/gh-auth-script/spec.md
+          checkpoint_required: true
+          handoff_note: "Tray GitHub Login must always open a POPUP terminal window, never prompt inline. Operator on Fedora Silverblue/GNOME (only ptyxis on PATH) saw `gh auth login` prompt in the tray's launching terminal because launch_in_terminal's candidate list (gnome-terminal/konsole/xterm) missed ptyxis and then fell through to running the command inline. A desktop-shortcut launch has no controlling terminal at all, so the inline fallback is always wrong for the tray. Fix: add ptyxis (modern GNOME/Fedora default) + kgx (GNOME Console) to the candidate list with correct argv (`ptyxis --new-window -T <title> -- exe args`, `kgx -- exe args`); remove the inline fallback so launch_in_terminal returns Err when no emulator is found; handle_github_login surfaces that Err via set_status. The inline `tillandsias --github-login` CLI path (main.rs) is unchanged and stays inline for headless/SSH terminals."
+          events:
+            - type: claim
+              ts: "2026-06-08T20:30:00Z"
+              agent_id: "linux-macuahuitl-claude-20260608T203000Z"
+              host: "linux"
+              lease_id: "lease-linux-tray-popup-terminal-20260608T2030Z"
+              expires_at: "2026-06-09T00:30:00Z"
+            - type: completed
+              ts: "2026-06-08T20:45:00Z"
+              agent_id: "linux-macuahuitl-claude-20260608T203000Z"
+              host: "linux"
+              lease_id: "lease-linux-tray-popup-terminal-20260608T2030Z"
+              evidence_refs:
+                - "ptyxis 50.1 is the only emulator on the operator's Silverblue host; candidate list now leads with it"
+                - "cargo build -p tillandsias-headless PASS; cargo fmt clean"
 
     - id: tray-quit-hang
       order: 43

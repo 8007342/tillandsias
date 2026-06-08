@@ -19,12 +19,20 @@ The CLI flag `--github-login` and the tray menu item "GitHub Login" MUST invoke 
 
 #### Scenario: Tray dispatches to the CLI flow
 - **WHEN** the user clicks "GitHub Login" in the tray
-- **THEN** `handlers::handle_github_login` MUST locate `std::env::current_exe()` and spawn it in a new terminal with `--github-login`
+- **THEN** `handlers::handle_github_login` MUST locate `std::env::current_exe()` and spawn it in a new popup terminal window with `--github-login`
 - **AND** the terminal session MUST execute `runner::run_github_login` exactly as the CLI does
+- **AND** the launcher MUST try modern emulators first (ptyxis, gnome-terminal, kgx) before legacy ones (konsole, xterm)
+- **AND** it MUST NOT fall back to running the flow inline in the tray's controlling terminal, because the tray may be started from a desktop shortcut with no such terminal
+
+#### Scenario: No terminal emulator available
+- **WHEN** the user clicks "GitHub Login" in the tray
+- **AND** no supported terminal emulator is found on `PATH`
+- **THEN** `launch_in_terminal` MUST return an error rather than executing the flow inline
+- **AND** the tray MUST surface the failure via the status line so the click does not appear to silently do nothing
 
 #### Scenario: CLI flag triggers the flow directly
-- **WHEN** the user runs `tillandsias --github-login`
-- **THEN** `runner::run_github_login` MUST be invoked in the current terminal
+- **WHEN** the user runs `tillandsias --github-login` from a terminal (including a headless SSH session)
+- **THEN** `runner::run_github_login` MUST be invoked inline in the current terminal, with no popup
 
 ### Requirement: Interactive login uses an ephemeral git-service-image container
 

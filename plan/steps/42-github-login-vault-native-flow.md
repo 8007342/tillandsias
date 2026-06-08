@@ -1,6 +1,6 @@
 # Step 42 — GitHub-login Vault-native flow
 
-- **Status**: in_progress (42a + 42e/42f/42g/42h done 2026-06-08; 42a-async/42b/42c ready; 42d blocked)
+- **Status**: in_progress (42a + 42a-async/42b/42c + 42e/42f/42g/42h + 42i done 2026-06-08; 42d blocked)
 - **Owner host**: linux (42d: macos+windows)
 - **Branch**: linux-next
 - **Depends on**: []
@@ -49,6 +49,17 @@ idiomatic on-demand podman check (no Vault assumed running at launch).
   "run `--init`" hint (RC4). Separately, `tillandsias-podman::env_remove_if_present` only
   unsets podman env overrides when present → clean default-lane `running:` command (operator
   noise complaint).
+
+- **42i `vault-flow/tray-popup-terminal` — DONE 2026-06-08.** Tray "GitHub Login" must always
+  open a popup terminal window; it must never prompt inline. On Fedora Silverblue/GNOME the only
+  emulator on `PATH` is `ptyxis`, which `launch_in_terminal` did not know about, so it fell through
+  its `gnome-terminal`/`konsole`/`xterm` list to the inline fallback and ran `gh auth login` in the
+  terminal that happened to launch the tray (wrong — a desktop-shortcut launch has no such
+  terminal). Added `ptyxis` (`--new-window -T <title> -- exe args`) and `kgx` (GNOME Console,
+  `-- exe args`) to the candidate list, modern-first; removed the inline fallback so the helper
+  returns `Err` when no emulator is found; `handle_github_login` surfaces that error via
+  `set_status`. The inline `tillandsias --github-login` CLI path is unchanged and stays inline for
+  headless/SSH terminals. Spec `gh-auth-script` scenarios updated to require popup + no-inline-fallback.
 
 ## Evidence
 

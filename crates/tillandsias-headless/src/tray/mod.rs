@@ -1414,13 +1414,35 @@ fn build_launch_spec(project: &ProjectEntry, kind: LaunchKind, image: &str) -> C
     }
 }
 
+// Tray-initiated interactive flows (GitHub login, root maintenance shell) must
+// surface in a *popup* terminal window. The tray can be started from a desktop
+// shortcut with no controlling terminal at all, so we never fall back to running
+// the command inline — that would either prompt in whatever terminal happened to
+// launch the tray (the bug operators hit on GNOME/Fedora) or silently fail under
+// a desktop shortcut. The inline path is reserved for `tillandsias --github-login`
+// invoked directly from a terminal, which is handled in main.rs.
+//
+// Candidate order prefers the modern GNOME/Fedora default (ptyxis) and GNOME
+// Console (kgx) ahead of the legacy emulators so Silverblue hosts get a real
+// window instead of the inline prompt.
 fn launch_in_terminal(title: &str, executable: &str, args: &[String]) -> Result<(), String> {
-    for candidate in ["gnome-terminal", "konsole", "xterm"] {
+    for candidate in ["ptyxis", "gnome-terminal", "kgx", "konsole", "xterm"] {
         if terminal_present(candidate) {
             let mut child = Command::new(candidate);
             match candidate {
+                // Ptyxis (GNOME/Fedora default since 47): `-- COMMAND` runs the
+                // command in a fresh window with its own PTY.
+                "ptyxis" => {
+                    child.args(["--new-window", "-T", title, "--", executable]);
+                    child.args(args);
+                }
                 "gnome-terminal" => {
                     child.args(["--title", title, "--", executable]);
+                    child.args(args);
+                }
+                // GNOME Console accepts a trailing `-- COMMAND`; it has no title flag.
+                "kgx" => {
+                    child.args(["--", executable]);
                     child.args(args);
                 }
                 "konsole" => {
@@ -1441,20 +1463,15 @@ fn launch_in_terminal(title: &str, executable: &str, args: &[String]) -> Result<
             }
             child
                 .spawn()
-                .map_err(|e| format!("failed to launch terminal: {e}"))?;
+                .map_err(|e| format!("failed to launch {candidate}: {e}"))?;
             return Ok(());
         }
     }
 
-    let status = Command::new(executable)
-        .args(args)
-        .status()
-        .map_err(|e| format!("failed to run command: {e}"))?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(format!("command exited with {status}"))
-    }
+    Err("no supported terminal emulator found \
+         (looked for ptyxis, gnome-terminal, kgx, konsole, xterm); \
+         install one to run interactive tray actions in a popup window"
+        .to_string())
 }
 
 fn terminal_present(candidate: &str) -> bool {
@@ -1839,6 +1856,14 @@ fn handle_github_login(service: Arc<TrayService>) {
             let args = vec!["--github-login".to_string()];
             if let Err(err) = launch_in_terminal("GitHub Login", "tillandsias", &args) {
                 warn!("GitHub login terminal spawn failed: {err}");
+                // Surface to the tray UX: a desktop-shortcut launch has no
+                // controlling terminal, so a log-only failure would look like
+                // the click did nothing.
+                let _ = futures::executor::block_on(service_for_emit.set_status(
+                    format!("🥀 GitHub login: {err}"),
+                    TrayIconState::Dried,
+                    None,
+                ));
             }
             let _ = futures::executor::block_on(service_for_emit.rebuild_after_state_change());
         })
@@ -3243,9 +3268,8 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
                         state.bump_revision();
                     }
                     drop(state);
-                    let _ = futures::executor::block_on(
-                        service_for_probe.rebuild_after_state_change(),
-                    );
+                    let _ =
+                        futures::executor::block_on(service_for_probe.rebuild_after_state_change());
                 }
             })
             .is_err()
