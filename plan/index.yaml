@@ -3073,7 +3073,7 @@ plan_index:
     - id: podman-build-cache-and-serialization
       order: 46
       title: Reuse Podman layers/download caches and serialize storage mutations
-      status: ready
+      status: in_progress
       owner_host: linux
       deliverable: plan/steps/46-podman-build-cache-and-serialization.md
       audit_origin: plan/issues/container-build-efficiency-telemetry-2026-06-08.md
@@ -3090,7 +3090,7 @@ plan_index:
         - "Cache policy and observed result are available to telemetry."
       tasks:
         - id: image-cache/layers-locking-and-order
-          status: ready
+          status: claimed
           owner_host: linux
           capability_tags: [containers, podman, shell, testing]
           depends_on:
@@ -3113,6 +3113,13 @@ plan_index:
             mounts need a follow-up compatibility packet.
           checkpoint_required: true
           handoff_note: "Do not create a second freshness algorithm; consume step 45 decisions."
+          events:
+            - type: claim
+              ts: "2026-06-08T18:43:15Z"
+              agent_id: "linux-macuahuitl-codex-20260608T184315Z"
+              host: "linux"
+              lease_id: "lease-linux-image-cache-20260608T184315Z"
+              expires_at: "2026-06-08T22:43:15Z"
 
     - id: structured-image-build-telemetry
       order: 47

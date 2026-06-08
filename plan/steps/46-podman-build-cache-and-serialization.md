@@ -1,11 +1,13 @@
 # Step 46 — Podman build cache reuse and serialization
 
-- **Status**: ready
+- **Status**: claimed
 - **Owner host**: linux
 - **Branch**: linux-next
 - **Depends on**: step 45
 - **Specs**: init-incremental-builds, dev-build, user-runtime-lifecycle
 - **Audit origin**: plan/issues/container-build-efficiency-telemetry-2026-06-08.md
+- **Lease**: `lease-linux-image-cache-20260608T184315Z`
+- **Agent**: `linux-macuahuitl-codex-20260608T184315Z`
 
 ## Goal
 
