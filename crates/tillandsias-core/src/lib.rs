@@ -10,6 +10,7 @@ pub mod image_builder;
 pub mod preflight;
 pub mod project;
 pub mod secrets;
+pub mod singleton;
 pub mod state;
 pub mod tools;
 

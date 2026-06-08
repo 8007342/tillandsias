@@ -706,6 +706,11 @@ pub fn podman_cmd() -> tokio::process::Command {
     #[cfg(target_os = "linux")]
     unsafe {
         cmd.pre_exec(|| {
+            // Set PR_SET_PDEATHSIG so the child dies when the parent (launcher) dies.
+            // This prevents orphaned podman-cli processes when tillandsias is killed.
+            // @trace spec:graceful-shutdown
+            libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL);
+
             for fd in 3..1024 {
                 let fd_flags = libc::fcntl(fd, libc::F_GETFD);
                 if fd_flags != -1 && (fd_flags & libc::FD_CLOEXEC) == 0 {
@@ -759,6 +764,11 @@ pub fn podman_cmd_sync() -> std::process::Command {
         use std::os::unix::process::CommandExt;
         unsafe {
             cmd.pre_exec(|| {
+                // Set PR_SET_PDEATHSIG so the child dies when the parent (launcher) dies.
+                // This prevents orphaned podman-cli processes when tillandsias is killed.
+                // @trace spec:graceful-shutdown
+                libc::prctl(libc::PR_SET_PDEATHSIG, libc::SIGKILL);
+
                 for fd in 3..1024 {
                     let fd_flags = libc::fcntl(fd, libc::F_GETFD);
                     if fd_flags != -1 && (fd_flags & libc::FD_CLOEXEC) == 0 {
