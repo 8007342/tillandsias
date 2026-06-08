@@ -1,34 +1,37 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-08T19:15:00Z
+LastExecutionTime: 2026-06-08T18:30:15Z
 
 ## This Loop
 
-- **Cycle type**: Vault-native flow completion — login in-container, async gate, spec reconciliation, code sweep, doc cleanup, release hygiene (Linux, `linux-next`).
-- **Sibling Git Audit**: 9 commits pushed to `linux-next` since `2dd62a75`. No branch changes.
-- **Convergence**: Positive — 3 tasks completed, queue draining.
+- **Cycle type**: Shared-ledger reconciliation plus container-build research shaping (Linux, `linux-next`).
+- **Sibling Git Audit**: Newer Vault-native completion history retained; no sibling branch was modified.
+- **Convergence**: Positive — completed work remains durable and five independently claimable container-build packets replace broad step 40.
 
 ## What changed this cycle
 
-- **vault-flow/login-in-container** (step 42b): GitHub token written from inside container via `vault-cli.sh write` — never extracted to host memory.
-- **vault-flow/launch-gate-async**: Tray startup no longer blocks 60s on Vault health; async probe bumps revision when authenticated.
-- **spec-reconcile/vault-and-podman-secrets**: Specs reconciled for in-container vault write, no-host-extraction mandate added.
-- **code-sweep/legacy-branches-and-fixtures**: All `tillandsias-github-token` references removed from 7 owned files (test fakes, entrypoints, hook, Containerfile, methodology).
-- **doc-cleanup/cheatsheets**: 3 pre-Vault cheatsheets updated (repo + image mirrors), audit doc synced.
-- **release-hygiene/assert-minimal**: CI release workflow now asserts no `--install`/`--init` flags in CLI help.
+- Retained completed Vault login-in-container, async launch-gate, spec reconciliation, code sweep, documentation cleanup, and release-hygiene events.
+- Audited every active Containerfile, public build wrapper, shell/Rust freshness path, Podman cache flag, and existing image-build event type.
+- Verified Fedora 44 package candidates and documented package-manager-first replacements.
+- Marked broad step 40 obsoleted and shaped steps 44-48 with disjoint ownership, dependencies, acceptance evidence, and fallbacks.
+- Research report: `plan/issues/container-build-efficiency-telemetry-2026-06-08.md`.
 
 ## Blocking Tree (new frontier)
 
 - **Step 32** (vault true-rekey): blocked on spec refinement — research proved `vault operator rekey`-installs-host-key mandate infeasible.
 - **Step 37** (release): operator-gated (PR #15 dirty, VERSION conflict).
-- Steps 33 (doc cleanup), 34 (spec reconcile), 35 (code sweep) — all completed this cycle.
-- Remaining ready leaves: `vault-flow/vault-https-via-ca`, `nix-cache/crane-and-cache-action`, `forge-recipe/download-only`.
+- **Step 45** (canonical image digest/aliases) is ready and unlocks steps 46 and 47.
+- **Step 44** (package-manager-first recipes) is an independent ready leaf.
+- Other ready leaves: `vault-flow/vault-https-via-ca` and `nix-cache/crane-and-cache-action`.
+- **Step 48** integrates the container-build chain after steps 44-47.
 
 ## Assignment Board
 
-- **Linux**: All small/obvious work exhausted. Remaining ready tasks are non-trivial architecture changes (vault-https, nix-cache, forge-recipe) or spec-blocked (rekey).
-- **macOS**: step 36 keychain/vsock parity — blocked on linux step 32.
-- **Windows**: step 36 keychain/vsock parity — blocked on linux step 32.
+- **Linux**: Take step 45 first when one agent is available; run steps 44 and 45 in parallel when multiple agents are available.
+- **macOS**: step 36 macOS keychain/vsock parity — **blocked on linux step 32**. Independent:
+  user-attended **m8 smoke** of a v0.3.x build (release acceptance).
+- **Windows**: step 36 windows keychain/vsock parity — **blocked on linux step 32**.
+  Optional: wire `EnumerateLocalProjects`.
 
 ## Stale Or Pending Pings
 
