@@ -38,6 +38,16 @@ plan:
       intermediate CA); 42d (win/mac gating parity) blocked on 42a + step 36.
       Step 43 (tray Quit hang) completed 2026-06-07 (05e59599, linux-macuahuitl-big-pickle).
       Origin: plan/issues/github-login-vault-native-flow-2026-06-06.md.
+      2026-06-08 operator wave (Silverblue v0.3.260608.3 --github-login still failed after a
+      successful --init): root-caused to FOUR layered defects + env-override noise and fixed
+      linux-side (step 42 tasks 42e-42h). Keystone: keyring crate had no backend feature →
+      mock keystore → unseal key/root token never persisted → Vault unsealable on any boot
+      after the first (42e, async-secret-service/apple-native/windows-native; musl release
+      still statically linked). Plus vault volume userns drift (42f `:U`), entrypoint dying on
+      the handed-over root.token (42g), and --github-login not self-healing (42h). Verified
+      end-to-end on linux. Cross-platform tail: osx-next/windows-next owners must verify the
+      apple-native/windows-native keyring backend builds + persists (step 42d / step 36).
+      Origin: plan/issues/github-login-vault-lifecycle-2026-06-08.md.
     plan_index: plan/index.yaml
     step_directory: plan/steps
     checkpoint_branch: linux-next

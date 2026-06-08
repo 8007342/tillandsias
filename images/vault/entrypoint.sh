@@ -164,7 +164,18 @@ else
     fi
     ENVELOPED_HEX="$(tr -d '\n' < "$INIT_ENVELOPE")"
     UNSEAL_HEX="$(xor_hex "$ENVELOPED_HEX" "$UNSEAL_KEY_HEX")"
-    ROOT_TOKEN="$(cat /vault/data/root.token)"
+    # The root token is a ONE-TIME handover: the host (`wait_for_vault_ready` ->
+    # `read_and_handover_root_token`) reads /vault/data/root.token after first
+    # boot, stashes it in the host keychain, and deletes the on-disk copy. So on
+    # every subsequent boot this file is legitimately absent. Tolerate that
+    # instead of dying under `set -e` — vault's policies/auth/kv/audit all live
+    # in persistent storage, so a relaunch only needs to UNSEAL, not re-provision.
+    if [ -r /vault/data/root.token ]; then
+        ROOT_TOKEN="$(cat /vault/data/root.token)"
+    else
+        ROOT_TOKEN=""
+        log "subsequent boot: root token already handed over to host; will unseal only"
+    fi
 fi
 
 # ---------------------------------------------------------------------------
@@ -187,6 +198,16 @@ if [ "$SEALED" = "true" ]; then
     log "vault unsealed (sealed=false)"
 else
     log "vault already unsealed"
+fi
+
+# Without a root token (subsequent boot — see one-time-handover note above) the
+# server is already unsealed and fully provisioned from persistent storage, so
+# the token-authenticated re-provisioning below is both impossible and
+# unnecessary. Skip straight to serving.
+if [ -z "$ROOT_TOKEN" ]; then
+    log "vault is unsealed and serving (provisioning persisted from a prior boot)"
+    wait "$VAULT_PID"
+    exit 0
 fi
 
 export VAULT_TOKEN="$ROOT_TOKEN"

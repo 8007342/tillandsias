@@ -135,12 +135,22 @@ pub fn run_with_vault_init(debug: bool) -> Result<(), String> {
 /// Write the GitHub token directly to Vault at `secret/github/token`.
 ///
 /// Used by the new (Phase 6) `tillandsias --github-login` flow. Returns
-/// `Err` if Vault is not running or the write fails.
+/// `Err` if Vault cannot be brought up or the write fails.
+///
+/// Self-healing: rather than telling the operator to run `tillandsias --init`
+/// (which they may already have done — Vault can have died from a userns
+/// mapping drift or a host reboot since then), we bring Vault up on demand via
+/// the same idempotent path `--init` uses. The token has already been pasted
+/// by this point, so failing fast with a stale hint would waste it.
 pub fn write_github_token_to_vault(token: &str, debug: bool) -> Result<(), String> {
     if !container_running(VAULT_CONTAINER_NAME) {
-        return Err(
-            "Vault container is not running. Run `tillandsias --init` to bring it up.".into(),
-        );
+        if debug {
+            eprintln!(
+                "[tillandsias-vault] {VAULT_CONTAINER_NAME} not running; bringing Vault up on demand before token write"
+            );
+        }
+        ensure_vault_running(debug)
+            .map_err(|e| format!("could not bring Vault up to store the GitHub token: {e}"))?;
     }
     let rt = tokio_runtime()?;
     let base_url = host_base_url();
@@ -587,7 +597,16 @@ fn launch_vault_container(debug: bool) -> Result<(), String> {
         "{},mode=0400,uid={},gid={}",
         VAULT_UNSEAL_SECRET, VAULT_USER_UID, VAULT_GROUP_GID
     );
-    let volume_arg = format!("{}:/vault/data", VAULT_VOLUME);
+    // `:U` makes podman recursively chown the named volume to the container
+    // process's mapped uid/gid (the image's `vault` user) on every launch.
+    // Without it, a userns mapping shift between launches — which Fedora
+    // Silverblue/ostree updates and `podman system reset` routinely cause —
+    // leaves `/vault/data` owned by a uid the `vault` user can no longer
+    // write, so the server dies on boot with "permission denied" on
+    // /vault/data/core/_migration and `--github-login` then reports Vault as
+    // not running. `:U` re-asserts ownership and self-repairs that drift.
+    // @trace spec:tillandsias-vault
+    let volume_arg = format!("{}:/vault/data:U", VAULT_VOLUME);
     let port_arg = format!("127.0.0.1:{}:8200", VAULT_HOST_PORT);
     let status = podman_cmd_sync()
         .args([

@@ -50,7 +50,29 @@ reqwest = { version = "0.11", features = ["json", "rustls-tls"], default-feature
 uuid = { version = "1", features = ["v4", "serde"] }
 regex = "1"
 serde_json = "1"
-keyring = "3"
+# A backend feature MUST be enabled or keyring v3 silently falls back to the
+# in-memory *mock* keystore: set_password/get_password appear to succeed but
+# persist nothing across process invocations. That made the Vault unseal key,
+# the installation anchor, and the root-token handover all ephemeral, so every
+# `--init`/relaunch re-derived a different unseal key and could never unseal an
+# existing volume. Enable the persistent platform-native backend on each OS.
+# These features are target-gated inside the keyring crate, so enabling all
+# three is safe — only the host platform's backend is actually compiled.
+#   - linux: async-secret-service (D-Bus Secret Service; persists to the login
+#            keyring on disk, survives reboots). We use the *async* backend
+#            because it speaks D-Bus via pure-Rust `zbus` rather than the
+#            `libdbus-sys` C bindings the sync backend needs — keeping the musl
+#            static release build self-contained (no libdbus-1 system dep).
+#            Pairs with `tokio` (runtime) + `crypto-rust` (session encryption).
+#   - macos: apple-native (Keychain Services).
+#   - windows: windows-native (Credential Manager).
+keyring = { version = "3", features = [
+    "async-secret-service",
+    "tokio",
+    "crypto-rust",
+    "apple-native",
+    "windows-native",
+] }
 tokio-vsock = "0.6"
 sha2 = "0.10"
 embed-resource = "3"

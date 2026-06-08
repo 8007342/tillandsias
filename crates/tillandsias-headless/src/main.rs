@@ -3418,10 +3418,10 @@ fn run_github_login(debug: bool) -> Result<(), String> {
                 );
             }
             Err(e) => {
-                return Err(format!(
-                    "vault write failed: {e}\n\
-                     Hint: run `tillandsias --init` to bring Vault up."
-                ));
+                // write_github_token_to_vault now brings Vault up on demand, so
+                // a failure here means the bring-up itself failed — surface the
+                // underlying cause rather than a stale "run --init" hint.
+                return Err(format!("vault write failed: {e}"));
             }
         }
     }

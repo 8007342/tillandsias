@@ -434,6 +434,23 @@ fn local_transport_should_isolate_storage() -> bool {
         || env::var_os("TILLANDSIAS_PODMAN_STORAGE_CONF").is_some()
 }
 
+/// Remove an env var from the child command's environment only when it is
+/// actually present in our own environment.
+///
+/// Unsetting an absent variable is a behavioural no-op, but `Command`'s `Debug`
+/// rendering still prints it as `env -u VAR`. In the default
+/// desktop-user-session lane none of the `TILLANDSIAS_PODMAN_*` / `CONTAINER_*`
+/// overrides are set, so unconditional removals produced a long, finicky
+/// `env -u … env -u …` prefix in the `[tillandsias] running:` log that implied
+/// the runtime depends on a pile of overrides when it does not. Gating the
+/// removal on presence keeps the displayed command clean — the defensive unset
+/// only appears when there is genuinely something to defend against.
+fn env_remove_if_present(cmd: &mut std::process::Command, var: &str) {
+    if env::var_os(var).is_some() {
+        cmd.env_remove(var);
+    }
+}
+
 fn configure_podman_environment(cmd: &mut std::process::Command) {
     let remote_url = podman_remote_url();
     configure_podman_environment_with_transport(cmd, remote_url.as_deref());
@@ -444,14 +461,14 @@ fn configure_podman_environment_with_transport(
     remote_url: Option<&str>,
 ) {
     let runtime_dir = podman_runtime_dir();
-    cmd.env_remove("TILLANDSIAS_PODMAN_GRAPHROOT");
-    cmd.env_remove("TILLANDSIAS_PODMAN_RUNROOT");
-    cmd.env_remove("TILLANDSIAS_PODMAN_RUNTIME_DIR");
-    cmd.env_remove("TILLANDSIAS_PODMAN_WRAPPER_DIR");
-    cmd.env_remove("TILLANDSIAS_PODMAN_STORAGE_CONF");
-    cmd.env_remove("TILLANDSIAS_PODMAN_REMOTE_URL");
-    cmd.env_remove("CONTAINER_HOST");
-    cmd.env_remove("CONTAINER_CONNECTION");
+    env_remove_if_present(cmd, "TILLANDSIAS_PODMAN_GRAPHROOT");
+    env_remove_if_present(cmd, "TILLANDSIAS_PODMAN_RUNROOT");
+    env_remove_if_present(cmd, "TILLANDSIAS_PODMAN_RUNTIME_DIR");
+    env_remove_if_present(cmd, "TILLANDSIAS_PODMAN_WRAPPER_DIR");
+    env_remove_if_present(cmd, "TILLANDSIAS_PODMAN_STORAGE_CONF");
+    env_remove_if_present(cmd, "TILLANDSIAS_PODMAN_REMOTE_URL");
+    env_remove_if_present(cmd, "CONTAINER_HOST");
+    env_remove_if_present(cmd, "CONTAINER_CONNECTION");
 
     if let Some(remote_url) = remote_url {
         let remote_runtime_dir = runtime_dir;
@@ -695,8 +712,8 @@ pub fn log_podman_failure(label: &str, status: &str, stderr: &str) {
 /// explicitly sets piped stdio so handles remain valid after FreeConsole().
 pub fn podman_cmd() -> tokio::process::Command {
     let mut cmd = tokio::process::Command::new(find_podman_path());
-    cmd.env_remove("LD_LIBRARY_PATH");
-    cmd.env_remove("LD_PRELOAD");
+    env_remove_if_present(cmd.as_std_mut(), "LD_LIBRARY_PATH");
+    env_remove_if_present(cmd.as_std_mut(), "LD_PRELOAD");
     configure_podman_environment(cmd.as_std_mut());
 
     // Close inherited file descriptors >= 3 before exec'ing podman.
@@ -741,8 +758,8 @@ pub fn podman_cmd() -> tokio::process::Command {
 /// Same as [`podman_cmd`] but returns a `std::process::Command` for synchronous use.
 pub fn podman_cmd_sync() -> std::process::Command {
     let mut cmd = std::process::Command::new(find_podman_path());
-    cmd.env_remove("LD_LIBRARY_PATH");
-    cmd.env_remove("LD_PRELOAD");
+    env_remove_if_present(&mut cmd, "LD_LIBRARY_PATH");
+    env_remove_if_present(&mut cmd, "LD_PRELOAD");
     configure_podman_environment(&mut cmd);
 
     // Prevent flashing console windows. See podman_cmd() for rationale.
