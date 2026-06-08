@@ -1,11 +1,12 @@
 # Step 42 — GitHub-login Vault-native flow
 
-- **Status**: in_progress (42a done; 42a-async/42b/42c ready; 42d blocked)
+- **Status**: in_progress (42a + 42e/42f/42g/42h done 2026-06-08; 42a-async/42b/42c ready; 42d blocked)
 - **Owner host**: linux (42d: macos+windows)
 - **Branch**: linux-next
 - **Depends on**: []
 - **Specs**: tillandsias-vault, tray-minimal-ux, native-secrets-store
-- **Audit origin**: plan/issues/github-login-vault-native-flow-2026-06-06.md
+- **Audit origin**: plan/issues/github-login-vault-native-flow-2026-06-06.md,
+  plan/issues/github-login-vault-lifecycle-2026-06-08.md
 
 ## Goal
 
@@ -29,10 +30,34 @@ idiomatic on-demand podman check (no Vault assumed running at launch).
   client trusts CA + `https://`.
 - **42d `vault-flow/xplat-gating-parity` — blocked.** Wire win/mac `GithubLoginState` to the
   same Vault signal. Depends on 42a; overlaps step 36 (blocked on step 32).
+- **42e `vault-flow/keyring-persistent-backend` — DONE 2026-06-08.** Root `Cargo.toml`
+  `keyring` had no backend feature → mock (non-persistent) keystore → unseal key + root
+  token never survived a process exit, so Vault could never be unsealed on any boot after
+  the first. Enabled `async-secret-service`+`tokio`+`crypto-rust` (linux, pure-Rust zbus →
+  musl-static-safe), `apple-native` (macos), `windows-native` (windows). Verified: key now
+  persists (`secret-tool` lists it), re-init recovers it and unseals, musl release links
+  statically with no libdbus. **Keystone fix.** Origin: lifecycle-2026-06-08 issue RC1.
+- **42f `vault-flow/volume-userns-U` — DONE 2026-06-08.** `launch_vault_container` mounts the
+  data volume with `:U` so podman re-chowns it to the container vault uid each launch,
+  surviving userns mapping drift (Silverblue/ostree, `podman system reset`). Reproduced the
+  `permission denied`/`Exited(1)` failure and verified `:U` repairs it. RC2.
+- **42g `vault-flow/entrypoint-handover-tolerant` — DONE 2026-06-08.**
+  `images/vault/entrypoint.sh` subsequent-boot path no longer dies on the (deliberately
+  deleted) handed-over `/vault/data/root.token`; absent token ⇒ unseal-only + serve. RC3.
+- **42h `vault-flow/github-login-self-heal` + env hygiene — DONE 2026-06-08.**
+  `write_github_token_to_vault` brings Vault up on demand instead of erroring with the stale
+  "run `--init`" hint (RC4). Separately, `tillandsias-podman::env_remove_if_present` only
+  unsets podman env overrides when present → clean default-lane `running:` command (operator
+  noise complaint).
 
 ## Evidence
 
-- Symptom + cleanup + design: see audit origin issue.
+- Symptom + cleanup + design (2026-06-06): see first audit origin issue.
+- 2026-06-08 RCs + reproductions + verification: plan/issues/github-login-vault-lifecycle-2026-06-08.md.
 - 42a code: `crates/tillandsias-headless/src/vault_bootstrap.rs` (is_github_logged_in,
   read_github_token_from_vault, vault_data_volume_exists), `crates/tillandsias-headless/src/tray/mod.rs`
   (gh_auth_check removed; gate at constructor + post-login refresh).
+- 42e–42h code: `Cargo.toml` (keyring features), `crates/tillandsias-headless/src/vault_bootstrap.rs`
+  (`:U` volume, self-heal), `images/vault/entrypoint.sh` (handover-tolerant subsequent boot),
+  `crates/tillandsias-podman/src/lib.rs` (`env_remove_if_present`),
+  `crates/tillandsias-headless/src/main.rs` (error hint removed).
