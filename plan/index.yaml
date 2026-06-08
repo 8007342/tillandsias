@@ -2753,7 +2753,7 @@ plan_index:
           checkpoint_required: true
           handoff_note: "The launch constructor (tray/mod.rs new_with_debug, ~994) calls is_github_logged_in synchronously; when a vault volume exists it triggers ensure_vault_running on the launch path (worst case 60s health timeout). Make it async: default is_authenticated=false, spawn a background probe that bumps revision when the token is confirmed."
         - id: vault-flow/login-in-container
-          status: ready
+          status: claimed
           depends_on: []
           owned_files:
             - crates/tillandsias-headless/src/main.rs
@@ -2762,6 +2762,13 @@ plan_index:
             - images/git/vault-cli.sh
           checkpoint_required: true
           handoff_note: "Refactor run_github_login (main.rs:3267) so gh auth login + vault write both run inside one container; token never extracted to host. Move the Vault running-check (vault_bootstrap.rs:140) BEFORE the interactive paste and bring Vault up on demand (ensure_vault_running). Add a write-capable AppRole lease + policy for secret/data/github/token (today only read-only git-mirror.hcl touches it). Re-trace the gh_auth_start accountability log off the removed secret-rotation/tillandsias-github-token symbol (overlaps step 35)."
+          events:
+            - type: claim
+              ts: "2026-06-08T17:56:25Z"
+              agent_id: "linux-macuahuitl-advance-work-20260608T175625Z"
+              host: "linux"
+              lease_id: "lease-linux-login-in-container-20260608T1756Z"
+              expires_at: "2026-06-08T21:56:25Z"
         - id: vault-flow/vault-https-via-ca
           status: ready
           depends_on: []
