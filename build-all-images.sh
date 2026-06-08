@@ -33,12 +33,23 @@ _step "Building all container images (mode: $PARALLEL)..."
 IMAGES=("git" "proxy" "forge" "inference" "web")
 
 if [[ "$PARALLEL" == "--parallel" ]]; then
-    _step "Building in parallel..."
+    _step "Building in parallel (individual builds serialize Podman storage with a lock)..."
+    pids=()
     for image in "${IMAGES[@]}"; do
         _info "  Starting $image..."
         "$ROOT/build-${image}.sh" &
+        pids+=("$!")
     done
-    wait
+    failed=0
+    for pid in "${pids[@]}"; do
+        if ! wait "$pid"; then
+            failed=1
+        fi
+    done
+    if [[ "$failed" -ne 0 ]]; then
+        echo "❌ One or more image builds failed"
+        exit 1
+    fi
     _info "All builds completed"
 else
     _step "Building sequentially..."

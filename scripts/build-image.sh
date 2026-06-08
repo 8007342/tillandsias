@@ -12,6 +12,7 @@
 #
 # Environment:
 #   TILLANDSIAS_BUILD_VERBOSE=1   Show raw podman build output
+#   TILLANDSIAS_BUILD_NO_CACHE=1  Diagnostic: pass podman build --no-cache
 
 set -euo pipefail
 
@@ -68,6 +69,7 @@ _verbose_info() {
 IMAGE_NAME="forge"
 FLAG_FORCE=false
 FLAG_TAG=""
+FLAG_NO_CACHE="${TILLANDSIAS_BUILD_NO_CACHE:-false}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
@@ -77,12 +79,15 @@ while [[ $# -gt 0 ]]; do
         --force)
             FLAG_FORCE=true
             ;;
+        --no-cache|--diagnostic-no-cache)
+            FLAG_NO_CACHE=true
+            ;;
         --tag)
             shift
             FLAG_TAG="$1"
             ;;
         --help|-h)
-            echo "Usage: scripts/build-image.sh [forge|web|proxy|git|inference] [--force] [--tag <tag>]"
+            echo "Usage: scripts/build-image.sh [forge|web|proxy|git|inference] [--force] [--no-cache] [--tag <tag>]"
             echo ""
             echo "Build a container image using podman (Containerfile-based, reproducible)."
             echo ""
@@ -96,11 +101,12 @@ while [[ $# -gt 0 ]]; do
             echo "  chromium-framework Build the debug browser container (with Node.js+Playwright)"
             echo "  vault              Build the HashiCorp Vault enclave container (Phase 3 POC)"
             echo "  --force            Rebuild even if sources haven't changed"
+            echo "  --no-cache         Diagnostic rebuild with podman layer cache disabled"
             echo "  --tag <tag>        Override the canonical image tag (default: content hash)"
             echo "                     Human aliases still track v$(cat "$ROOT/VERSION") and :latest"
             echo ""
             echo "Note: This script uses podman build with embedded Containerfiles."
-            echo "No Nix required. Builds use no persistent package cache."
+            echo "No Nix required. Normal builds reuse Podman layers and package caches."
             exit 0
             ;;
         *)
@@ -152,6 +158,18 @@ fi
 # Step 1: Aggressive stale-state cleanup + staleness detection
 # ---------------------------------------------------------------------------
 mkdir -p "$CACHE_DIR"
+LOCK_FILE="$CACHE_DIR/.podman-build.lock"
+
+_acquire_build_lock() {
+    if command -v flock >/dev/null 2>&1; then
+        exec 9>"$LOCK_FILE"
+        _verbose_info "Waiting for image-build storage lock: $LOCK_FILE"
+        flock 9
+        _verbose_info "Acquired image-build storage lock"
+    else
+        _warn "flock not found; image builds are not cross-process serialized"
+    fi
+}
 
 _remove_stale_hashes() {
     local hash
@@ -255,6 +273,7 @@ if [[ -z "$FLAG_TAG" ]]; then
 fi
 IMAGE_TAG="$IMAGE_CANONICAL_TAG"
 
+_acquire_build_lock
 _remove_stale_image_tags
 
 _step "Building image: ${BOLD}${IMAGE_TAG}${NC}"
@@ -337,12 +356,14 @@ _detect_distro() {
 DISTRO="$(_detect_distro "$CONTAINERFILE")"
 _info "Detected base distro: ${BOLD}${DISTRO}${NC}"
 
-# Package-manager caches are intentionally not persisted by build scripts.
+# Package-manager caches are intentionally retained across builds. Containerfile
+# cache mounts can reuse this directory where supported; normal Podman layer
+# reuse handles the rest. Use --no-cache only for diagnostics.
 # @trace spec:user-runtime-lifecycle, spec:init-incremental-builds
 CACHE_MOUNT_ARGS=()
 PACKAGE_CACHE="$HOME/.cache/tillandsias/packages"
-if [[ -n "$HOME" ]]; then
-    rm -rf "$PACKAGE_CACHE" 2>/dev/null || true
+if [[ -n "${HOME:-}" ]]; then
+    mkdir -p "$PACKAGE_CACHE"
 fi
 
 # Build args: pass a resolved chromium-core image reference for framework images
@@ -432,24 +453,30 @@ if [[ "$IMAGE_NAME" == "forge" ]]; then
 fi
 trap 'rm -f "$BUILD_LOG"' EXIT
 
+NO_CACHE_ARGS=()
+if [[ "$FLAG_NO_CACHE" == true || "$FLAG_NO_CACHE" == "1" ]]; then
+    _warn "Diagnostic no-cache mode enabled; Podman layers will not be reused"
+    NO_CACHE_ARGS+=(--no-cache)
+fi
+
 if _verbose_enabled; then
     "$PODMAN" build \
-        --no-cache \
         --format docker \
         --isolation "$BUILD_ISOLATION" \
         --userns "$BUILD_USERNS" \
         --tag "$IMAGE_TAG" \
+        "${NO_CACHE_ARGS[@]}" \
         "${BUILD_ARGS[@]}" \
         "${CACHE_MOUNT_ARGS[@]}" \
         -f "$CONTAINERFILE" \
         "$IMAGE_DIR/"
 else
     if ! "$PODMAN" build \
-        --no-cache \
         --format docker \
         --isolation "$BUILD_ISOLATION" \
         --userns "$BUILD_USERNS" \
         --tag "$IMAGE_TAG" \
+        "${NO_CACHE_ARGS[@]}" \
         "${BUILD_ARGS[@]}" \
         "${CACHE_MOUNT_ARGS[@]}" \
         -f "$CONTAINERFILE" \
