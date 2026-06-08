@@ -13,7 +13,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::fs::{self, OpenOptions};
-use std::io::{self, Write};
+use std::io::{self, Read, Seek, SeekFrom, Write};
 use std::path::{Path, PathBuf};
 use uuid::Uuid;
 
@@ -363,11 +363,22 @@ impl ImageBuildEvent {
 #[derive(Debug, Clone)]
 pub struct ImageBuildEventWriter {
     path: PathBuf,
+    max_bytes_override: Option<u64>,
 }
+
+const DEFAULT_IMAGE_BUILD_EVENT_MAX_BYTES: u64 = 50 * 1024 * 1024;
 
 impl ImageBuildEventWriter {
     pub fn new(path: impl Into<PathBuf>) -> Self {
-        Self { path: path.into() }
+        Self {
+            path: path.into(),
+            max_bytes_override: None,
+        }
+    }
+
+    pub fn with_max_bytes(mut self, max_bytes: u64) -> Self {
+        self.max_bytes_override = Some(max_bytes);
+        self
     }
 
     pub fn default_path() -> PathBuf {
@@ -403,16 +414,64 @@ impl ImageBuildEventWriter {
         }
         let mut file = OpenOptions::new()
             .create(true)
-            .append(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
             .open(&self.path)?;
         file.lock_exclusive()?;
-        let result = writeln!(file, "{line}").and_then(|_| file.flush());
+        file.seek(SeekFrom::End(0))?;
+        let result = writeln!(file, "{line}")
+            .and_then(|_| file.flush())
+            .and_then(|_| self.enforce_retention(&mut file));
         let _ = file.unlock();
         result
     }
 
     pub fn path(&self) -> &Path {
         &self.path
+    }
+
+    fn max_bytes(&self) -> u64 {
+        if let Some(max_bytes) = self.max_bytes_override {
+            return max_bytes;
+        }
+        std::env::var("TILLANDSIAS_IMAGE_BUILD_EVENT_MAX_BYTES")
+            .ok()
+            .and_then(|value| value.parse::<u64>().ok())
+            .unwrap_or(DEFAULT_IMAGE_BUILD_EVENT_MAX_BYTES)
+    }
+
+    fn enforce_retention(&self, file: &mut fs::File) -> io::Result<()> {
+        let max_bytes = self.max_bytes();
+        if max_bytes == 0 || file.metadata()?.len() <= max_bytes {
+            return Ok(());
+        }
+
+        file.seek(SeekFrom::Start(0))?;
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)?;
+
+        let mut retained = Vec::new();
+        let mut retained_bytes = 0_u64;
+        for line in contents.lines().rev() {
+            let line_bytes = line.len() as u64 + 1;
+            if retained_bytes + line_bytes > max_bytes && !retained.is_empty() {
+                break;
+            }
+            retained.push(line);
+            retained_bytes += line_bytes;
+            if retained_bytes >= max_bytes {
+                break;
+            }
+        }
+        retained.reverse();
+
+        file.set_len(0)?;
+        file.seek(SeekFrom::Start(0))?;
+        for line in retained {
+            writeln!(file, "{line}")?;
+        }
+        file.flush()
     }
 }
 
@@ -922,6 +981,34 @@ mod tests {
         for line in contents.lines() {
             let parsed: serde_json::Value = serde_json::from_str(line).unwrap();
             assert_eq!(parsed["event_type"], "image.build.completed");
+        }
+    }
+
+    #[test]
+    fn test_image_build_event_writer_retains_recent_jsonl() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("state/image-build-events.jsonl");
+        let writer = ImageBuildEventWriter::new(&path).with_max_bytes(700);
+
+        for index in 0..8 {
+            let event = ImageBuildEvent::lifecycle(
+                "image.build.completed",
+                format!("build-{index}"),
+                "tillandsias-init",
+                "forge",
+                "localhost/tillandsias-forge:sha256-retention",
+            )
+            .with_outcome("success", 100 + index, 0)
+            .with_context("sequence", json!(index));
+            writer.append(&event).unwrap();
+        }
+
+        let contents = std::fs::read_to_string(path).unwrap();
+        assert!(contents.len() <= 700);
+        assert!(!contents.contains("\"build_id\":\"build-0\""));
+        assert!(contents.contains("\"build_id\":\"build-7\""));
+        for line in contents.lines() {
+            serde_json::from_str::<serde_json::Value>(line).unwrap();
         }
     }
 
