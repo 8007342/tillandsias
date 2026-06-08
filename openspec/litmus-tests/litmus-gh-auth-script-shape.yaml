@@ -58,7 +58,7 @@ critical_path:
     expected_behavior: "gh_auth_start"
 
   - step: "login verifies gh authentication before Vault persistence"
-    command: "grep -F 'containerized gh authentication verification failed after login' crates/tillandsias-headless/src/main.rs && grep -F 'write_github_token_to_vault(&token, debug)' crates/tillandsias-headless/src/main.rs"
+    command: "grep -F 'containerized gh authentication verification failed after login' crates/tillandsias-headless/src/main.rs && grep -F 'in-container vault write failed' crates/tillandsias-headless/src/main.rs"
     timeout_ms: 3000
     expected_behavior: "containerized gh authentication verification failed after login"
 

@@ -13,10 +13,10 @@ preconditions:
   - workspace contains crates/tillandsias-headless/tests/vault_approle_provisioning.rs
 
 critical_path:
-  - step: "GitHub login writes the captured token through the Vault helper"
-    command: "grep -F 'write_github_token_to_vault(&token, debug)' crates/tillandsias-headless/src/main.rs"
+  - step: "GitHub login writes the token from inside the container without host-side extraction"
+    command: "grep -F 'vault-cli.sh write secret/github/token \"token=\\$TOKEN\"' crates/tillandsias-headless/src/main.rs"
     timeout_ms: 3000
-    expected_behavior: "write_github_token_to_vault"
+    expected_behavior: "vault-cli.sh write"
 
   - step: "Vault helper writes the canonical secret path"
     command: "grep -F 'client.write_secret(\"secret/github/token\"' crates/tillandsias-headless/src/vault_bootstrap.rs"
@@ -24,9 +24,9 @@ critical_path:
     expected_behavior: "secret/github/token"
 
   - step: "Vault helper verifies the write by reading the token back"
-    command: "grep -F 'client.read_secret(\"secret/github/token\")' crates/tillandsias-headless/src/vault_bootstrap.rs && grep -F 'vault read-back did not match written token' crates/tillandsias-headless/src/vault_bootstrap.rs"
+    command: "grep -F 'vault-cli.sh read -field=token secret/github/token' crates/tillandsias-headless/src/main.rs && grep -F 'in-container vault write verification failed' crates/tillandsias-headless/src/main.rs"
     timeout_ms: 3000
-    expected_behavior: "vault read-back did not match written token"
+    expected_behavior: "in-container vault write verification failed"
 
   - step: "integration test exercises the Vault KV v2 round trip"
     command: "grep -F 'async fn write_github_token_round_trips_through_kv_v2_envelope()' crates/tillandsias-headless/tests/vault_approle_provisioning.rs"
@@ -54,4 +54,4 @@ observability:
 
 rollback:
   on_failure: "restore Vault-only GitHub token capture and read-back verification"
-  command: "grep -nE 'write_github_token_to_vault|secret/github/token|read-back' crates/tillandsias-headless/src/main.rs crates/tillandsias-headless/src/vault_bootstrap.rs"
+  command: "grep -nE 'vault-cli.sh read -field=token|vault-cli.sh write secret/github/token|in-container vault write' crates/tillandsias-headless/src/main.rs"
