@@ -1,11 +1,13 @@
 # Step 47 — Structured image-build telemetry
 
-- **Status**: ready
+- **Status**: claimed
 - **Owner host**: linux
 - **Branch**: linux-next
 - **Depends on**: step 45
 - **Specs**: runtime-logging, observability-metrics, init-incremental-builds
 - **Audit origin**: plan/issues/container-build-efficiency-telemetry-2026-06-08.md
+- **Lease**: `lease-linux-image-telemetry-20260608T184647Z`
+- **Agent**: `linux-macuahuitl-codex-20260608T184647Z`
 
 ## Goal
 
