@@ -28,7 +28,7 @@ trace: Cargo.toml (keyring features), plan/issues/github-login-vault-lifecycle-2
 
 ## Packet `keyring-verify/macos` — owner host: **macos** (`osx-next`)
 
-- **status**: ready
+- **status**: done
 - **depends_on**: [] (decoupled from step 32 / 42d gating work)
 - **owned_files**: `Cargo.toml`, `Cargo.lock`, `plan/issues/osx-next-work-queue-2026-05-25.md`,
   `plan/issues/keyring-backend-xplat-verification-2026-06-08.md` (this file — append results
@@ -127,4 +127,30 @@ _(append dated, host-tagged lines here)_
   tillandsias-windows-tray -- -D warnings` fails on Windows due to 3 Windows-only-unused items in
   `crates/tillandsias-core/src/singleton.rs` (`Instant`, `info`, `timeout`), invisible to
   Linux-only CI. Detail in the windows work-queue w12 completion event.
+
+### Results — macOS (`keyring-verify/macos`) — VERIFIED PASS
+
+- 2026-06-08T17:52Z  macos  **PASS, no fix-forward needed.** Host `aarch64-apple-darwin`
+  (Tlatoanis-MacBook-Air). Both legs of the packet pass with the existing `apple-native`
+  feature — no extra keyring feature or code tweak required; `Cargo.toml`/`Cargo.lock` untouched.
+  - **Builds (apple-native compiles):** `cargo check -p tillandsias-core`,
+    `-p tillandsias-macos-tray`, and `-p tillandsias-headless --features vault` all finish clean.
+    `keyring v3.6.3` pulls the Apple backend chain — `security-framework v3.7.0`,
+    `security-framework-sys v2.17.0`, `core-foundation v0.10.1` — and compiles with no
+    missing-backend / mock-fallback error. (Only warnings are pre-existing dead-code/unused in
+    the linux-gated `tillandsias-podman` crate — not keyring, not macOS scope.)
+  - **Persistence across separate process invocations (the actual point):** a throwaway verifier
+    under `plan/localwork/keychain-verify` (gitignored scratch) mirrors `vault_bootstrap.rs`'s
+    exact config — `Entry::new("tillandsias", <account>)`, same workspace keyring feature set.
+    - Process #1 `set_password("persist-token-…")` → `OK write`.
+    - Process #2 (fresh process) `get_password()` → `value-matches` ⇒ the value **survived the
+      process exit**, which the old in-memory mock backend (RC1) never could.
+    - Independently confirmed via `security find-generic-password -s tillandsias -a
+      vault-unseal-verify-v1` → real login-Keychain item `class: "genp"`, `"svce"="tillandsias"`.
+    - `delete_credential()` → `OK delete`; subsequent fresh-process read returns `No matching
+      entry found` (clean teardown — no residue in the operator's Keychain).
+  - **Note for the linux orchestrator:** closes the macOS half of step 42e's cross-platform tail.
+    Step 42d (wire macOS `GithubLoginState` to the Vault signal) and step 36 (Keychain unseal-key
+    → in-VM vault over vsock) remain correctly blocked on step 32 — this packet verified only the
+    keyring *backend* (build + persist) on macOS, which is green. Windows leg still open.
 
