@@ -332,6 +332,7 @@ specs:
   litmus_tests:
   - litmus:forge-staleness-shape
   - litmus:forge-staleness-invariants-shape
+  - litmus:image-build-convergence-shape
   coverage_ratio: 67
   last_verified: '2026-05-29'
 - spec_id: forge-standalone
@@ -409,6 +410,7 @@ specs:
   - litmus:init-log-cleanup
   - litmus:user-runtime-checkout-free-install
   - litmus:init-command-shape
+  - litmus:image-build-convergence-shape
   coverage_ratio: 75
   last_verified: '2026-06-02'
 - spec_id: init-incremental-builds
@@ -417,6 +419,7 @@ specs:
   - litmus:init-log-cleanup
   - litmus:user-runtime-checkout-free-install
   - litmus:init-command-shape
+  - litmus:image-build-convergence-shape
   coverage_ratio: 75
   last_verified: '2026-06-02'
 - spec_id: install-progress

@@ -1,42 +1,8 @@
 #!/usr/bin/env bash
 # @trace spec:web-image, spec:user-runtime-lifecycle, spec:litmus-framework
-# Quick-start litmus test: rebuild web image using prod code path.
+# Compatibility wrapper for the canonical image build engine.
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-ROOT="$SCRIPT_DIR"
-TOOLBOX_NAME="$(basename "$ROOT")"
-TMP_BUILD_LOG="/tmp/build-web.log"
-
-GREEN='\033[0;32m'
-CYAN='\033[0;36m'
-RED='\033[0;31m'
-NC='\033[0m'
-
-_info()  { echo -e "${GREEN}[build-web]${NC} $*"; }
-_step()  { echo -e "${CYAN}[build-web]${NC} $*"; }
-_error() { echo -e "${RED}[build-web]${NC} $*" >&2; }
-
-trap '_error "Interrupted"; exit 130' SIGTERM SIGINT
-
-_step "Building web image (host-level orchestrator)..."
-
-if ! toolbox -c "$TOOLBOX_NAME" run cargo run --bin build-image -- web "$@" 2>&1 | tee "$TMP_BUILD_LOG"; then
-    _error "Cargo prepare failed"
-    tail -20 "$TMP_BUILD_LOG" >&2
-    exit 1
-fi
-
-if grep -q "ImageBuilder trait not yet integrated" "$TMP_BUILD_LOG"; then
-    _step "ImageBuilder not integrated; using direct podman build (host)..."
-    "$ROOT/scripts/build-image.sh" web || exit 1
-else
-    _step "ImageBuilder integrated; executing via PodmanExecutor..."
-fi
-
-_info "Web image rebuilt successfully"
-_info "Current image: $(podman images | grep tillandsias-web | head -1 | awk '{print $3}')"
-_info "Next step: restart tillandsias binary or containers to pick up new image"
-
-exit 0
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+exec "$ROOT/scripts/build-image.sh" web "$@"

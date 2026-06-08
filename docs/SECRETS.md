@@ -50,13 +50,14 @@ These directories are transparently mounted into containers at the paths where t
 
 Build and setup scripts (`build-image.sh`, `ensure-builder.sh`, etc.) are embedded directly in the signed Tillandsias binary rather than existing as loose files on disk. This prevents tampering with the scripts that manage container creation, image building, and secrets mounting. An attacker cannot modify the scripts without invalidating the binary signature.
 
-### Nix content-addressed store verification
+### OCI source-digest verification
 
-All container images are built through Nix inside the `tillandsias-builder` toolbox. Nix provides content-addressed verification by design: every store path includes a cryptographic hash of its inputs. If any source file, dependency, or build instruction changes, the resulting hash changes. This means:
-
-- Build outputs are reproducible -- the same inputs always produce the same hash
-- Tampering is detectable -- any modification to a store path invalidates its hash
-- Dependencies are locked -- `flake.lock` pins exact dependency versions with hashes
+Container images are built directly with rootless Podman. Tillandsias computes
+a deterministic digest over the exact image context, build arguments, file
+modes, symlink targets, and dependency-image digests. The canonical image tag
+and OCI labels carry that digest; `v<VERSION>` and `latest` are aliases only.
+An unchanged source digest skips `podman build`, while changed inputs produce a
+new canonical image.
 
 ---
 
@@ -98,14 +99,14 @@ All mounts use `--userns=keep-id` so file ownership maps correctly between host 
 | Stolen laptop | System keyring locked by OS login; Phase 2 encrypted secrets unreadable without session |
 | Tampered build scripts | Phase 1: scripts embedded in signed binary, cannot be modified independently |
 | Tampered container image | Phase 2: image hash verification; Phase 3: signed images |
-| Tampered Nix store | Content-addressed verification -- any modification invalidates the hash |
+| Tampered build input | Deterministic source digest changes the canonical image identity |
 
 **Trust zones:**
 
 | Component | Trust Level |
 |-----------|-------------|
 | Tray App (signed binary) | Trusted -- manages keyring, mounts secrets, embeds scripts |
-| Builder Toolbox | Trusted -- isolated Nix environment, reproducible builds |
+| Podman build engine | Trusted -- rootless, serialized, source-digest keyed |
 | Forge Container | Untrusted -- has mounted secrets, but agent is restricted |
 | User Code | Hostile -- no secret access beyond what the forge explicitly provides |
 
@@ -119,7 +120,7 @@ The chain of trust ensures that every component from source to running container
 
 Build and setup scripts are embedded directly in the signed Tillandsias binary. This establishes a single trust anchor: the signed binary itself. The chain works as follows:
 
-1. **Source scripts** (`build-image.sh`, `ensure-builder.sh`, etc.) are compiled into the binary at build time
+1. **Runtime image sources and build logic** are compiled into the binary at build time
 2. **Binary is signed** -- the Tauri release process produces a signed application bundle
 3. **At runtime**, the binary extracts its embedded scripts to a temporary directory, executes them, and cleans up
 4. **No loose scripts on disk** to tamper with between runs
@@ -130,11 +131,11 @@ This means the user only needs to trust one artifact (the signed binary) rather 
 
 After building a container image, Tillandsias records its content hash. On every container start, the image hash is verified against the recorded value:
 
-1. `build-image.sh` produces a tarball via `nix build`
-2. The tarball is loaded into podman (`podman load`)
-3. The image digest (sha256) is recorded in `~/.cache/tillandsias/image-hashes.toml`
-4. On container launch, `podman inspect --format '{{.Digest}}'` is compared against the recorded hash
-5. If the hash does not match, the container launch is blocked and the user is notified
+1. The canonical builder computes the source digest before invoking Podman
+2. Podman builds the image with `io.tillandsias.image.source-digest` and related OCI labels
+3. The canonical tag is keyed by the source digest
+4. `v<VERSION>` and `latest` are refreshed as aliases without rebuilding
+5. Missing canonical images rebuild; missing aliases retag an existing canonical image
 
 This detects image tampering, accidental corruption, and stale image references.
 
@@ -142,7 +143,7 @@ This detects image tampering, accidental corruption, and stale image references.
 
 Full image signing using `sigstore/cosign` or podman's native signing support:
 
-1. After `nix build` produces the image tarball, it is signed with a project key
+1. After Podman produces the image, it is signed with a project key
 2. The signature is stored alongside the image (or in a transparency log)
 3. On container launch, the signature is verified before the image is used
 4. Public key is embedded in the signed Tillandsias binary (bootstrapping trust from the application signature)
@@ -151,43 +152,31 @@ This closes the loop: the signed binary trusts its embedded scripts, the scripts
 
 ---
 
-## Nix Store Protection
+## Podman Build Cache Protection
 
-### Builder toolbox isolation
+Image builds run through `scripts/build-image.sh` for developer wrappers and
+the compiled Rust build path for installed runtime assets. Podman storage
+mutations are serialized with a cross-process lock, normal builds reuse layers,
+and `--no-cache` is an explicit diagnostic mode.
 
-Container images are built inside a dedicated `tillandsias-builder` toolbox, separate from both the host system and the development toolbox (`tillandsias`). This provides:
+The structured event stream is written to
+`$XDG_STATE_HOME/tillandsias/image-build-events.jsonl` or
+`~/.local/state/tillandsias/image-build-events.jsonl`. It records decisions,
+outcomes, duration, size, and bounded cache metadata without secrets.
 
-- **Dependency isolation** -- Nix and its store (`/nix/store`) exist only inside the builder toolbox, not on the host or in development environments
-- **Minimal attack surface** -- the builder toolbox contains only Nix and build dependencies, no development tools, user code, or credentials
-- **Clean rebuilds** -- `scripts/ensure-builder.sh` can recreate the builder toolbox from scratch, and `build.sh --toolbox-reset` destroys and recreates it
-- **No cross-contamination** -- the builder cannot access the development toolbox's state, and vice versa
+### Future encrypted build cache at rest
 
-The builder toolbox is created on demand by `scripts/ensure-builder.sh` and used exclusively by `scripts/build-image.sh`.
-
-### Content-addressed verification
-
-Nix's content-addressed store provides built-in integrity guarantees:
-
-- Every store path (e.g., `/nix/store/abc123-package-1.0/`) includes a hash derived from all inputs (source, dependencies, build instructions)
-- Changing any input produces a different hash, which means a different store path
-- `flake.lock` pins every dependency to an exact revision and hash -- no implicit updates
-- `nix build` verifies all fetched sources against their expected hashes before building
-- The final image tarball's path includes a hash of the entire build graph
-
-This means: if the `flake.nix`, `flake.lock`, or any source file is tampered with, the build either fails (hash mismatch on fetch) or produces a detectably different output (different store path).
-
-### Phase 2: Encrypted Nix store at rest
-
-When no build is in progress, the Nix store inside the builder toolbox contains the build cache and outputs. Phase 2 protects this at rest:
+When no build is in progress, the Podman layer and package caches contain build
+outputs. A future encrypted-at-rest phase may protect those cache directories:
 
 **Option A: gocryptfs overlay**
-- The builder toolbox's `/nix/store` is backed by a gocryptfs-encrypted directory on the host
+- Podman package/layer cache directories are backed by a gocryptfs-encrypted directory on the host
 - Encryption key stored in the system keyring
 - Unlocked when `build-image.sh` runs, locked when the build completes
-- Transparent to Nix -- it sees a normal filesystem
+- Transparent to Podman and package managers -- they see a normal filesystem
 
 **Option B: LUKS-encrypted loop device**
-- A LUKS-encrypted loop file is mounted as `/nix/store` inside the builder toolbox
+- A LUKS-encrypted loop file backs the Podman storage/cache directory
 - Higher performance than gocryptfs for large stores (block-level encryption)
 - Requires more setup but provides stronger guarantees
 
@@ -288,10 +277,12 @@ idle-lock-minutes = 30          # 0 = lock only when last container stops
 | Volume mounts into containers via podman | Active |
 | Agent blocked from reading credential paths | Active |
 | Build scripts embedded in signed binary | Active |
-| Nix content-addressed store verification | Active (builder toolbox) |
-| Builder toolbox isolation | Active |
+| Deterministic OCI source digest and canonical tag | Active |
+| Rootless serialized Podman build engine | Active |
 
-**Scope boundary:** No encryption, no keyring integration, no image signing. Security relies on UNIX permissions, binary signing, and Nix's content-addressed store.
+**Scope boundary:** No image signing. Security relies on OS keyring-backed
+credentials, UNIX permissions, binary signing, deterministic source identity,
+and rootless Podman isolation.
 
 ### Phase 2: Encryption at rest + image verification
 
@@ -301,8 +292,8 @@ idle-lock-minutes = 30          # 0 = lock only when last container stops
 | System keyring integration | Store/retrieve encryption key |
 | Auto-unlock on first container start | Tray app manages mount lifecycle |
 | Auto-lock on last container stop | Reference-counted unmount |
-| Encrypted Nix store at rest | gocryptfs overlay on builder toolbox `/nix/store` |
-| Image hash verification on launch | `image-hashes.toml` + `podman inspect` check |
+| Encrypted Podman/package cache at rest | gocryptfs overlay on cache/storage directories |
+| Image identity verification | OCI source-digest labels + canonical tag |
 | Idle-lock timeout | Configurable in config.toml |
 
 **Scope boundary:** No image signing, no multi-device sync, no secret rotation automation.

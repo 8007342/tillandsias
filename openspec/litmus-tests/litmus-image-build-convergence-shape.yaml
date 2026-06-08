@@ -1,0 +1,47 @@
+# @trace spec:init-incremental-builds, spec:forge-staleness, spec:litmus-framework
+name: litmus:image-build-convergence-shape
+spec: init-incremental-builds, forge-staleness
+phase: pre-build
+description: Prove canonical image wrapper build/skip/retag/rebuild/force behavior with fake Podman
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/build-image.sh
+  - workspace contains scripts/test-image-build-convergence.sh
+  - fake Podman wrapper is available through scripts/run-litmus-test.sh
+
+critical_path:
+  - step: "wrapper convergence sequence has one build per digest and explicit force"
+    command: "LITMUS_PODMAN_MODE=fake scripts/test-image-build-convergence.sh proxy"
+    timeout_ms: 30000
+    expected_behavior: "ok: image build convergence sequence"
+
+  - step: "top-level wrappers do not invoke Toolbox or placeholder branches"
+    command: "! grep -RInE 'toolbox|ImageBuilder trait not yet integrated' build-*.sh crates/tillandsias-core/src/bin/build-image.rs && echo 'ok: no placeholder wrapper path'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "all-image wrapper contains full dependency-ordered matrix"
+    command: "grep -F 'chromium-core' build-all-images.sh && grep -F 'chromium-framework' build-all-images.sh && grep -F 'scripts/build-image.sh' build-all-images.sh && echo 'ok: full matrix wrapper'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+observability:
+  traces:
+    - "@trace spec:init-incremental-builds"
+    - "@trace spec:forge-staleness"
+    - "@trace spec:litmus-framework"
+  expected_log: "canonical image wrapper convergence proved with fake Podman"
+  log_fields:
+    spec: "init-incremental-builds,forge-staleness"
+    test: "image-build-convergence-shape"
+    backend: "fake-podman"
+
+rollback:
+  on_failure: >
+    Inspect scripts/build-image.sh, build-*.sh, and
+    crates/tillandsias-core/src/bin/build-image.rs. Public wrappers must
+    delegate to the canonical image engine and must not recreate independent
+    freshness decisions.
+  command: "grep -RInE 'toolbox|ImageBuilder trait not yet integrated|scripts/build-image.sh' build-*.sh crates/tillandsias-core/src/bin/build-image.rs scripts/build-image.sh | head -80"
