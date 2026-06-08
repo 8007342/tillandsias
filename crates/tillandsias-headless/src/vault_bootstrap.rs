@@ -31,6 +31,9 @@ const VAULT_IMAGE_TAG: &str = "localhost/tillandsias-vault:latest";
 const VAULT_CONTAINER_NAME: &str = "tillandsias-vault";
 const VAULT_VOLUME: &str = "tillandsias-vault-data";
 const VAULT_UNSEAL_SECRET: &str = "tillandsias-vault-unseal";
+const VAULT_TLS_CERT_SECRET: &str = "tillandsias-vault-tls-cert";
+const VAULT_TLS_KEY_SECRET: &str = "tillandsias-vault-tls-key";
+const VAULT_TLS_CA_SECRET: &str = "tillandsias-vault-tls-ca";
 const VAULT_NETWORK_ALIAS: &str = "vault";
 // Loopback port we publish for the host-process to reach vault during the
 // POC (Linux host == VM). In Phase 4/5 the host shell will use vsock
@@ -62,7 +65,171 @@ fn revocation_registry() -> &'static Mutex<HashMap<String, String>> {
 
 /// Default base URL the Linux tray uses to talk to the local Vault container.
 pub fn host_base_url() -> String {
-    format!("http://127.0.0.1:{VAULT_HOST_PORT}")
+    format!("https://127.0.0.1:{VAULT_HOST_PORT}")
+}
+
+fn tls_material_dir(debug: bool) -> Result<PathBuf, String> {
+    crate::ensure_ca_bundle(debug)
+}
+
+fn vault_tls_cert(certs_dir: &std::path::Path) -> PathBuf {
+    certs_dir.join("vault.crt")
+}
+
+fn vault_tls_key(certs_dir: &std::path::Path) -> PathBuf {
+    certs_dir.join("vault.key")
+}
+
+fn vault_tls_leaf_needs_refresh(
+    ca_cert: &std::path::Path,
+    cert: &std::path::Path,
+    key: &std::path::Path,
+) -> bool {
+    if !cert.exists() || !key.exists() {
+        return true;
+    }
+    if let (Ok(ca_meta), Ok(cert_meta)) = (fs::metadata(ca_cert), fs::metadata(cert))
+        && let (Ok(ca_modified), Ok(cert_modified)) = (ca_meta.modified(), cert_meta.modified())
+        && ca_modified > cert_modified
+    {
+        return true;
+    }
+    match Command::new("openssl")
+        .args(["x509", "-checkend", "86400", "-noout", "-in"])
+        .arg(cert)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+    {
+        Ok(status) => !status.success(),
+        Err(_) => true,
+    }
+}
+
+fn ensure_vault_tls_leaf(certs_dir: &std::path::Path, debug: bool) -> Result<(), String> {
+    let ca_cert = certs_dir.join("intermediate.crt");
+    let ca_key = certs_dir.join("intermediate.key");
+    let cert = vault_tls_cert(certs_dir);
+    let key = vault_tls_key(certs_dir);
+    if !vault_tls_leaf_needs_refresh(&ca_cert, &cert, &key) {
+        return Ok(());
+    }
+
+    let lock_dir = certs_dir.join(".vault-tls-generation.lock");
+    let mut acquired_lock = false;
+    for _ in 0..50 {
+        match fs::create_dir(&lock_dir) {
+            Ok(()) => {
+                acquired_lock = true;
+                break;
+            }
+            Err(e) if e.kind() == std::io::ErrorKind::AlreadyExists => {
+                std::thread::sleep(Duration::from_millis(100));
+            }
+            Err(e) => return Err(format!("acquire Vault TLS generation lock: {e}")),
+        }
+    }
+    if !acquired_lock {
+        return Err("timed out waiting for Vault TLS generation lock".to_string());
+    }
+    struct LockDir(PathBuf);
+    impl Drop for LockDir {
+        fn drop(&mut self) {
+            let _ = fs::remove_dir(&self.0);
+        }
+    }
+    let _lock = LockDir(lock_dir);
+    if !vault_tls_leaf_needs_refresh(&ca_cert, &cert, &key) {
+        return Ok(());
+    }
+
+    let unique = format!(
+        "{}.{}",
+        std::process::id(),
+        chrono::Utc::now().timestamp_nanos_opt().unwrap_or_default()
+    );
+    let csr = certs_dir.join(format!("vault.csr.{unique}.tmp"));
+    let tmp_cert = certs_dir.join(format!("vault.crt.{unique}.tmp"));
+    let tmp_key = certs_dir.join(format!("vault.key.{unique}.tmp"));
+    if debug {
+        eprintln!(
+            "[tillandsias-vault] refreshing Vault TLS leaf certificate at {}",
+            cert.display()
+        );
+    }
+
+    let req_status = Command::new("openssl")
+        .args(["req", "-newkey", "rsa:2048", "-nodes", "-keyout"])
+        .arg(&tmp_key)
+        .arg("-out")
+        .arg(&csr)
+        .args([
+            "-subj",
+            "/C=US/ST=Privacy/L=Local/O=Tillandsias/CN=vault",
+            "-addext",
+            "subjectAltName=DNS:vault,DNS:localhost,IP:127.0.0.1",
+        ])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map_err(|e| format!("spawn openssl req for Vault TLS leaf: {e}"))?;
+    if !req_status.success() {
+        let _ = fs::remove_file(&csr);
+        let _ = fs::remove_file(&tmp_key);
+        return Err(format!(
+            "openssl req for Vault TLS leaf failed: {req_status}"
+        ));
+    }
+
+    let sign_status = Command::new("openssl")
+        .args(["x509", "-req", "-in"])
+        .arg(&csr)
+        .arg("-CA")
+        .arg(&ca_cert)
+        .arg("-CAkey")
+        .arg(&ca_key)
+        .args([
+            "-CAcreateserial",
+            "-days",
+            "30",
+            "-sha256",
+            "-copy_extensions",
+            "copy",
+            "-out",
+        ])
+        .arg(&tmp_cert)
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status()
+        .map_err(|e| format!("spawn openssl x509 for Vault TLS leaf: {e}"))?;
+    let _ = fs::remove_file(&csr);
+    if !sign_status.success() {
+        let _ = fs::remove_file(&tmp_cert);
+        let _ = fs::remove_file(&tmp_key);
+        return Err(format!(
+            "openssl x509 for Vault TLS leaf failed: {sign_status}"
+        ));
+    }
+
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&tmp_cert, fs::Permissions::from_mode(0o644))
+            .map_err(|e| format!("set Vault TLS cert permissions: {e}"))?;
+        fs::set_permissions(&tmp_key, fs::Permissions::from_mode(0o600))
+            .map_err(|e| format!("set Vault TLS key permissions: {e}"))?;
+    }
+    fs::rename(&tmp_key, &key).map_err(|e| format!("publish Vault TLS key: {e}"))?;
+    fs::rename(&tmp_cert, &cert).map_err(|e| format!("publish Vault TLS cert: {e}"))?;
+    Ok(())
+}
+
+fn vault_client(base_url: &str, token: &str, debug: bool) -> Result<VaultClient, String> {
+    let certs_dir = tls_material_dir(debug)?;
+    let ca_pem = fs::read(certs_dir.join("intermediate.crt"))
+        .map_err(|e| format!("read Vault CA certificate: {e}"))?;
+    VaultClient::new_with_ca_certificate(base_url, token, &ca_pem)
+        .map_err(|e| format!("build Vault TLS client: {e}"))
 }
 
 /// Public entry point: bring Vault up as part of the standard init flow.
@@ -71,11 +238,14 @@ pub fn host_base_url() -> String {
 /// healthy. Called automatically from `run_init`; the previous `--with-vault`
 /// opt-in is now a no-op.
 pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
+    let certs_dir = tls_material_dir(debug)?;
+    ensure_vault_tls_leaf(&certs_dir, debug)?;
+
     if container_running(VAULT_CONTAINER_NAME) {
         // Already up. Probe health to make sure it's serving.
         let rt = tokio_runtime()?;
         let base_url = host_base_url();
-        let client = VaultClient::new(&base_url, "");
+        let client = vault_client(&base_url, "", debug)?;
         match rt.block_on(client.health()) {
             Ok(h) if h.initialized && !h.sealed => {
                 if debug {
@@ -102,6 +272,7 @@ pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
     sanitize_keychain(debug);
 
     build_vault_image(debug)?;
+    refresh_vault_tls_secrets(&certs_dir, debug)?;
 
     let mut unseal_key = ensure_unseal_key(debug)?;
     create_unseal_secret(&unseal_key, debug)?;
@@ -111,7 +282,7 @@ pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
     let rt = tokio_runtime()?;
     let base_url = host_base_url();
     let root_token = wait_for_vault_ready(&rt, &base_url, debug)?;
-    let client = VaultClient::new(&base_url, &root_token);
+    let client = vault_client(&base_url, &root_token, debug)?;
 
     rt.block_on(load_policies(&client, debug))?;
     rt.block_on(provision_approle_roles(&client, debug))?;
@@ -156,7 +327,7 @@ pub fn write_github_token_to_vault(token: &str, debug: bool) -> Result<(), Strin
     let rt = tokio_runtime()?;
     let base_url = host_base_url();
     let root_token = read_and_handover_root_token(debug)?;
-    let client = VaultClient::new(&base_url, &root_token);
+    let client = vault_client(&base_url, &root_token, debug)?;
 
     if debug {
         eprintln!(
@@ -232,7 +403,7 @@ fn read_github_token_from_vault(debug: bool) -> Result<String, String> {
     let rt = tokio_runtime()?;
     let base_url = host_base_url();
     let root_token = read_and_handover_root_token(debug)?;
-    let client = VaultClient::new(&base_url, &root_token);
+    let client = vault_client(&base_url, &root_token, debug)?;
     let data = rt
         .block_on(client.read_secret("secret/github/token"))
         .map_err(|e| format!("vault read_secret failed: {e}"))?;
@@ -267,7 +438,7 @@ pub async fn mint_approle_token_for_container(
     }
     let base_url = host_base_url();
     let root_token = read_and_handover_root_token(debug)?;
-    let client = VaultClient::new(&base_url, &root_token);
+    let client = vault_client(&base_url, &root_token, debug)?;
     let token = client
         .issue_approle_token(role)
         .await
@@ -351,7 +522,15 @@ pub async fn revoke_pending_container_tokens(debug: bool) {
             return;
         }
     };
-    let client = VaultClient::new(&base_url, &root_token);
+    let client = match vault_client(&base_url, &root_token, debug) {
+        Ok(client) => client,
+        Err(e) => {
+            if debug {
+                eprintln!("[tillandsias-vault] revoke: cannot build TLS client: {e}; skipping");
+            }
+            return;
+        }
+    };
     for (secret_name, token) in entries {
         if let Err(e) = client.revoke_token(&token).await
             && debug
@@ -571,6 +750,60 @@ fn create_token_podman_secret(name: &str, token: &str, debug: bool) -> Result<()
     Ok(())
 }
 
+fn create_file_podman_secret(
+    name: &str,
+    path: &std::path::Path,
+    debug: bool,
+) -> Result<(), String> {
+    let contents =
+        fs::read(path).map_err(|e| format!("read podman secret source {}: {e}", path.display()))?;
+    let _ = podman_cmd_sync()
+        .args(["secret", "rm", name])
+        .stdout(Stdio::null())
+        .stderr(Stdio::null())
+        .status();
+    if debug {
+        eprintln!(
+            "[tillandsias-vault] refreshing podman secret {name} from {}",
+            path.display()
+        );
+    }
+    let mut child = podman_cmd_sync()
+        .args(["secret", "create", "--driver=file", name, "-"])
+        .stdin(Stdio::piped())
+        .stdout(Stdio::null())
+        .stderr(Stdio::piped())
+        .spawn()
+        .map_err(|e| format!("spawn podman secret create {name}: {e}"))?;
+    child
+        .stdin
+        .as_mut()
+        .ok_or("no stdin")?
+        .write_all(&contents)
+        .map_err(|e| format!("write podman secret {name}: {e}"))?;
+    drop(child.stdin.take());
+    let out = child
+        .wait_with_output()
+        .map_err(|e| format!("wait podman secret create {name}: {e}"))?;
+    if !out.status.success() {
+        return Err(format!(
+            "podman secret create {name} failed: {}",
+            String::from_utf8_lossy(&out.stderr)
+        ));
+    }
+    Ok(())
+}
+
+fn refresh_vault_tls_secrets(certs_dir: &std::path::Path, debug: bool) -> Result<(), String> {
+    create_file_podman_secret(VAULT_TLS_CERT_SECRET, &vault_tls_cert(certs_dir), debug)?;
+    create_file_podman_secret(VAULT_TLS_KEY_SECRET, &vault_tls_key(certs_dir), debug)?;
+    create_file_podman_secret(
+        VAULT_TLS_CA_SECRET,
+        &certs_dir.join("intermediate.crt"),
+        debug,
+    )
+}
+
 fn launch_vault_container(debug: bool) -> Result<(), String> {
     // Tear down any previous container with the same name (idempotent).
     let _ = podman_cmd_sync()
@@ -597,6 +830,18 @@ fn launch_vault_container(debug: bool) -> Result<(), String> {
     let secret_arg = format!(
         "{},mode=0400,uid={},gid={}",
         VAULT_UNSEAL_SECRET, VAULT_USER_UID, VAULT_GROUP_GID
+    );
+    let tls_cert_arg = format!(
+        "{},mode=0400,uid={},gid={}",
+        VAULT_TLS_CERT_SECRET, VAULT_USER_UID, VAULT_GROUP_GID
+    );
+    let tls_key_arg = format!(
+        "{},mode=0400,uid={},gid={}",
+        VAULT_TLS_KEY_SECRET, VAULT_USER_UID, VAULT_GROUP_GID
+    );
+    let tls_ca_arg = format!(
+        "{},mode=0400,uid={},gid={}",
+        VAULT_TLS_CA_SECRET, VAULT_USER_UID, VAULT_GROUP_GID
     );
     // `:U` makes podman recursively chown the named volume to the container
     // process's mapped uid/gid (the image's `vault` user) on every launch.
@@ -625,10 +870,25 @@ fn launch_vault_container(debug: bool) -> Result<(), String> {
             VAULT_NETWORK_ALIAS,
             "--secret",
             &secret_arg,
+            "--secret",
+            &tls_cert_arg,
+            "--secret",
+            &tls_key_arg,
+            "--secret",
+            &tls_ca_arg,
             "--volume",
             &volume_arg,
+            "--rm",
+            "--cap-drop",
+            "ALL",
             "--cap-add",
             "IPC_LOCK",
+            "--security-opt",
+            "no-new-privileges",
+            "--security-opt",
+            "label=disable",
+            "--userns",
+            "keep-id",
             "-p",
             &port_arg,
             VAULT_IMAGE_TAG,
@@ -649,7 +909,7 @@ fn wait_for_vault_ready(
     debug: bool,
 ) -> Result<String, String> {
     let deadline = Instant::now() + Duration::from_secs(60);
-    let client = VaultClient::new(base_url, ""); // health doesn't need a token
+    let client = vault_client(base_url, "", debug)?; // health doesn't need a token
     loop {
         match rt.block_on(client.health()) {
             Ok(h) if h.initialized && !h.sealed => {
@@ -842,7 +1102,7 @@ mod tests {
     #[test]
     fn host_base_url_targets_loopback() {
         let url = host_base_url();
-        assert!(url.starts_with("http://127.0.0.1:"), "got {url}");
+        assert!(url.starts_with("https://127.0.0.1:"), "got {url}");
         assert!(url.ends_with(&VAULT_HOST_PORT.to_string()));
     }
 

@@ -54,7 +54,9 @@ INIT_JSON="/vault/data/init.json"
 INIT_ENVELOPE="/vault/data/init.envelope"
 VAULT_CONFIG="/vault/config/vault.hcl"
 POLICY_DIR="/vault/config/policies"
-export VAULT_ADDR="http://127.0.0.1:8200"
+export VAULT_ADDR="https://127.0.0.1:8200"
+export VAULT_CACERT="/run/secrets/tillandsias-vault-tls-ca"
+export CURL_CA_BUNDLE="$VAULT_CACERT"
 
 log "starting Tillandsias Vault entrypoint"
 

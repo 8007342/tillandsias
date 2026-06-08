@@ -1747,7 +1747,9 @@ fn build_git_run_args(
         args.push("--secret".into());
         args.push(format!("{secret_name},target=vault-token,mode=0400"));
         args.push("--env".into());
-        args.push("VAULT_ADDR=http://vault:8200".into());
+        args.push("VAULT_ADDR=https://vault:8200".into());
+        args.push("--env".into());
+        args.push("CURL_CA_BUNDLE=/etc/tillandsias/ca.crt".into());
         args.push("--env".into());
         args.push("VAULT_ROLE=git-mirror".into());
     }
@@ -7588,8 +7590,12 @@ mod tests {
         // The container needs VAULT_ADDR + VAULT_ROLE to know how to talk
         // to Vault and which role to authenticate as.
         assert!(
-            has_arg(&args, "VAULT_ADDR=http://vault:8200"),
+            has_arg(&args, "VAULT_ADDR=https://vault:8200"),
             "missing VAULT_ADDR env: {args:?}"
+        );
+        assert!(
+            has_arg(&args, "CURL_CA_BUNDLE=/etc/tillandsias/ca.crt"),
+            "missing Vault CA env: {args:?}"
         );
         assert!(
             has_arg(&args, "VAULT_ROLE=git-mirror"),

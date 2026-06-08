@@ -14,7 +14,7 @@ preconditions:
 
 critical_path:
   - step: "GitHub login writes the token from inside the container without host-side extraction"
-    command: "grep -F 'vault-cli.sh write secret/github/token \"token=\\$TOKEN\"' crates/tillandsias-headless/src/main.rs"
+    command: "grep -F 'vault-cli.sh write secret/github/token' crates/tillandsias-headless/src/main.rs && grep -F 'token=$TOKEN' crates/tillandsias-headless/src/main.rs"
     timeout_ms: 3000
     expected_behavior: "vault-cli.sh write"
 
@@ -24,7 +24,7 @@ critical_path:
     expected_behavior: "secret/github/token"
 
   - step: "Vault helper verifies the write by reading the token back"
-    command: "grep -F 'vault-cli.sh read -field=token secret/github/token' crates/tillandsias-headless/src/main.rs && grep -F 'in-container vault write verification failed' crates/tillandsias-headless/src/main.rs"
+    command: "grep -F 'vault_verify.args' crates/tillandsias-headless/src/main.rs && grep -F '\"-field=token\"' crates/tillandsias-headless/src/main.rs && grep -F '\"secret/github/token\"' crates/tillandsias-headless/src/main.rs && grep -F 'in-container vault write verification failed' crates/tillandsias-headless/src/main.rs"
     timeout_ms: 3000
     expected_behavior: "in-container vault write verification failed"
 

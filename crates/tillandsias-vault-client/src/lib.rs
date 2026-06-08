@@ -1,7 +1,7 @@
 //! HashiCorp Vault client for Tillandsias.
 //!
 //! Talks to the in-enclave `tillandsias-vault` container over its
-//! enclave-local TCP listener (`http://vault:8200`). All secrets are
+//! enclave-local TLS listener (`https://vault:8200`). All secrets are
 //! short-lived tokens scoped by Vault ACL policy. The host process holds
 //! only the root token at provisioning time; per-container tokens are
 //! AppRole-minted with 1h TTLs.
@@ -48,12 +48,39 @@ pub struct VaultClient {
 
 impl VaultClient {
     /// Create a new client. `base_url` should be the Vault root WITHOUT
-    /// the `/v1` prefix (e.g. `http://vault:8200`).
+    /// the `/v1` prefix (e.g. `https://vault:8200`).
     pub fn new(base_url: impl Into<String>, token: impl Into<String>) -> Self {
+        Self::with_client(
+            base_url,
+            token,
+            reqwest::Client::builder()
+                .timeout(Duration::from_secs(10))
+                .build()
+                .expect("reqwest client build should not fail on default config"),
+        )
+    }
+
+    /// Create a client that trusts the PEM-encoded CA which issued the
+    /// enclave Vault server certificate.
+    pub fn new_with_ca_certificate(
+        base_url: impl Into<String>,
+        token: impl Into<String>,
+        ca_pem: &[u8],
+    ) -> Result<Self, VaultError> {
+        let certificate = reqwest::Certificate::from_pem(ca_pem)
+            .map_err(|e| VaultError::Other(format!("invalid Vault CA certificate: {e}")))?;
         let client = reqwest::Client::builder()
             .timeout(Duration::from_secs(10))
-            .build()
-            .expect("reqwest client build should not fail on default config");
+            .add_root_certificate(certificate)
+            .build()?;
+        Ok(Self::with_client(base_url, token, client))
+    }
+
+    fn with_client(
+        base_url: impl Into<String>,
+        token: impl Into<String>,
+        client: reqwest::Client,
+    ) -> Self {
         Self {
             base_url: base_url.into(),
             token: token.into(),
@@ -385,9 +412,19 @@ mod tests {
 
     #[test]
     fn url_joins_correctly_with_or_without_trailing_slash() {
-        let c = VaultClient::new("http://vault:8200", "root");
-        assert_eq!(c.url("sys/health"), "http://vault:8200/v1/sys/health");
-        let c2 = VaultClient::new("http://vault:8200/", "root");
-        assert_eq!(c2.url("/sys/health"), "http://vault:8200/v1/sys/health");
+        let c = VaultClient::new("https://vault:8200", "root");
+        assert_eq!(c.url("sys/health"), "https://vault:8200/v1/sys/health");
+        let c2 = VaultClient::new("https://vault:8200/", "root");
+        assert_eq!(c2.url("/sys/health"), "https://vault:8200/v1/sys/health");
+    }
+
+    #[test]
+    fn invalid_ca_certificate_is_rejected() {
+        VaultClient::new_with_ca_certificate(
+            "https://vault:8200",
+            "root",
+            b"-----BEGIN CERTIFICATE-----\nAAAA\n-----END CERTIFICATE-----\n",
+        )
+        .expect_err("invalid PEM must fail");
     }
 }

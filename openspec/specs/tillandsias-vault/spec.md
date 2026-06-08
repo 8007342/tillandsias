@@ -35,7 +35,10 @@ Cross-references:
 The `tillandsias-vault` container SHALL run with hostname/network alias `vault`
 and persistent storage at `/vault/data`, backed by the podman volume
 `tillandsias-vault-data`. Vault SHALL listen on `0.0.0.0:8200` inside its
-container/network namespace. On the Linux loop, the launcher MAY publish
+container/network namespace using a leaf certificate signed by the enclave CA.
+The leaf certificate SHALL cover `vault`, `localhost`, and `127.0.0.1`, and its
+private key SHALL enter the container only through a Podman secret. On the
+Linux loop, the launcher MAY publish
 `127.0.0.1:8201:8200` so the host process can bootstrap policies and write
 tokens; it MUST NOT publish Vault on `0.0.0.0`, a non-loopback address, or a
 remote interface. Windows and macOS hosts SHALL keep Vault reachable through the
@@ -49,7 +52,8 @@ VM/control channel rather than exposing it to the external host network.
 - **AND** the launcher SHALL start `tillandsias-vault` with
   `tillandsias-vault-data:/vault/data`
 - **AND** Vault SHALL be reachable by the host only at `127.0.0.1:8201`
-- **AND** Vault SHALL be reachable by enclave peers at `http://vault:8200`
+- **AND** Vault SHALL be reachable by enclave peers at `https://vault:8200`
+- **AND** host and enclave clients SHALL verify Vault with the enclave CA
 - **AND** Vault SHALL NOT be published on a non-loopback address.
 
 #### Scenario: Vault data survives restart
@@ -191,7 +195,8 @@ per-container token before exiting.
 - **AND** SHALL create a podman secret named
   `tillandsias-vault-token-git-mirror-<container-instance>`
 - **AND** SHALL mount that secret at `/run/secrets/vault-token`
-- **AND** SHALL set `VAULT_ADDR=http://vault:8200`.
+- **AND** SHALL set `VAULT_ADDR=https://vault:8200`
+- **AND** SHALL trust the enclave CA mounted at `/etc/tillandsias/ca.crt`.
 
 #### Scenario: Tokens are not exposed via env or args
 - **WHEN** `podman inspect <container>` is run
@@ -226,7 +231,7 @@ separate, narrowly-scoped forge credential contract.
 
 ### Invariant: Vault listener is boundary-scoped
 - **ID**: tillandsias-vault.invariant.vault-listener-boundary-scoped
-- **Expression**: `vault.listener.container EQ 0.0.0.0:8200 AND host_publish IN {none, 127.0.0.1:8201:8200}`
+- **Expression**: `vault.listener.container EQ tls://0.0.0.0:8200 AND vault.leaf.sans CONTAINS {vault, localhost, 127.0.0.1} AND host_publish IN {none, 127.0.0.1:8201:8200}`
 - **Measurable**: true
 
 ### Invariant: Vault storage is persistent

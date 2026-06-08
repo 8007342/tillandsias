@@ -7,7 +7,7 @@
 # pulling in the upstream `vault` CLI binary (~80MB).
 #
 # Lifecycle:
-#   * VAULT_ADDR        — e.g. http://vault:8200 (set by the launcher)
+#   * VAULT_ADDR        — e.g. https://vault:8200 (set by the launcher)
 #   * /run/secrets/vault-token — short-lived AppRole token (mounted by
 #     podman --secret <name>,target=vault-token; the launcher mints it via
 #     `vault-client::issue_approle_token("git-mirror")`).
@@ -20,7 +20,7 @@
 
 set -eu
 
-VAULT_ADDR="${VAULT_ADDR:-http://vault:8200}"
+VAULT_ADDR="${VAULT_ADDR:-https://vault:8200}"
 VAULT_TOKEN_FILE="${VAULT_TOKEN_FILE:-/run/secrets/vault-token}"
 
 usage() {

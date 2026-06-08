@@ -1,0 +1,55 @@
+# @trace spec:tillandsias-vault
+name: litmus:vault-https-shape
+spec: tillandsias-vault
+phase: pre-build
+description: Pin Vault HTTPS, CA trust, server identity, and secret-mounted TLS material
+severity: critical
+size: instant
+
+preconditions:
+  - workspace contains images/vault/vault.hcl
+  - workspace contains crates/tillandsias-headless/src/vault_bootstrap.rs
+  - workspace contains crates/tillandsias-vault-client/src/lib.rs
+
+critical_path:
+  - step: "Vault listener requires secret-mounted TLS material"
+    command: "grep -F 'tls_cert_file   = \"/run/secrets/tillandsias-vault-tls-cert\"' images/vault/vault.hcl && grep -F 'tls_key_file    = \"/run/secrets/tillandsias-vault-tls-key\"' images/vault/vault.hcl"
+    timeout_ms: 3000
+    expected_behavior: "tillandsias-vault-tls-key"
+
+  - step: "Vault advertises HTTPS addresses"
+    command: "grep -F 'api_addr     = \"https://vault:8200\"' images/vault/vault.hcl && grep -F 'VAULT_ADDR=\"https://127.0.0.1:8200\"' images/vault/entrypoint.sh"
+    timeout_ms: 3000
+    expected_behavior: "https://vault:8200"
+
+  - step: "Vault leaf certificate covers network and loopback identities"
+    command: "grep -F 'subjectAltName=DNS:vault,DNS:localhost,IP:127.0.0.1' crates/tillandsias-headless/src/vault_bootstrap.rs"
+    timeout_ms: 3000
+    expected_behavior: "DNS:vault"
+
+  - step: "Launcher passes the leaf certificate key and CA as Podman secrets"
+    command: "grep -F 'VAULT_TLS_CERT_SECRET' crates/tillandsias-headless/src/vault_bootstrap.rs && grep -F 'VAULT_TLS_KEY_SECRET' crates/tillandsias-headless/src/vault_bootstrap.rs && grep -F 'VAULT_TLS_CA_SECRET' crates/tillandsias-headless/src/vault_bootstrap.rs"
+    timeout_ms: 3000
+    expected_behavior: "VAULT_TLS_CA_SECRET"
+
+  - step: "Rust clients add the enclave CA as a trusted root"
+    command: "grep -F '.add_root_certificate(certificate)' crates/tillandsias-vault-client/src/lib.rs && grep -F 'VaultClient::new_with_ca_certificate' crates/tillandsias-headless/src/vault_bootstrap.rs"
+    timeout_ms: 3000
+    expected_behavior: "new_with_ca_certificate"
+
+  - step: "Container peers use HTTPS and the mounted CA bundle"
+    command: "grep -F 'VAULT_ADDR=https://vault:8200' crates/tillandsias-headless/src/main.rs crates/tillandsias-headless/src/remote_projects.rs && grep -F 'CURL_CA_BUNDLE=/etc/tillandsias/ca.crt' crates/tillandsias-headless/src/main.rs crates/tillandsias-headless/src/remote_projects.rs"
+    timeout_ms: 3000
+    expected_behavior: "CURL_CA_BUNDLE=/etc/tillandsias/ca.crt"
+
+observability:
+  traces:
+    - "@trace spec:tillandsias-vault"
+  expected_log: "Vault traffic is authenticated with the enclave CA"
+  log_fields:
+    spec: "tillandsias-vault"
+    test: "vault-https-shape"
+
+rollback:
+  on_failure: "restore the HTTPS listener, SAN leaf generation, CA trust, and Podman-secret mounts"
+  command: "grep -nE 'tls_(cert|key)_file|new_with_ca_certificate|subjectAltName=DNS:vault|VAULT_ADDR=https' images/vault/vault.hcl crates/tillandsias-headless/src/vault_bootstrap.rs crates/tillandsias-vault-client/src/lib.rs"

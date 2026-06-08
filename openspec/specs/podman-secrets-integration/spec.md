@@ -28,7 +28,10 @@ and MUST match across all references (creation, mounting, entrypoint reading).
 | `tillandsias-ca-root` | Root CA certificate (for cert chain validation) | `main.rs:ensure_ca_bundle()` | None (archive only) | N/A |
 | `tillandsias-ca-cert` | Intermediate CA certificate (for MITM proxy) | `main.rs:ensure_ca_bundle()` | proxy, forge | `/run/secrets/tillandsias-ca-cert` |
 | `tillandsias-ca-key` | Intermediate CA private key (for MITM proxy) | `main.rs:ensure_ca_bundle()` | proxy, forge | `/run/secrets/tillandsias-ca-key` |
-| `tillandsias-vault-unseal` | Vault auto-unseal HKDF key | `vault_bootstrap.rs:generate_unseal_key()` | vault container | `/run/secrets/vault-unseal` |
+| `tillandsias-vault-unseal` | Vault auto-unseal HKDF key | `vault_bootstrap.rs:ensure_unseal_key()` | vault container | `/run/secrets/tillandsias-vault-unseal` |
+| `tillandsias-vault-tls-cert` | Vault HTTPS leaf certificate | `vault_bootstrap.rs:ensure_vault_tls_leaf()` | vault container | `/run/secrets/tillandsias-vault-tls-cert` |
+| `tillandsias-vault-tls-key` | Vault HTTPS leaf private key | `vault_bootstrap.rs:ensure_vault_tls_leaf()` | vault container | `/run/secrets/tillandsias-vault-tls-key` |
+| `tillandsias-vault-tls-ca` | Vault HTTPS issuer CA certificate | `vault_bootstrap.rs:refresh_vault_tls_secrets()` | vault container | `/run/secrets/tillandsias-vault-tls-ca` |
 | `tillandsias-vault-token-<role>-<id>` | Per-container AppRole token | `vault_bootstrap.rs:mint_container_token()` | git service | `/run/secrets/vault-token` |
 
 **Critical**: Secret name references MUST be identical in:
@@ -193,6 +196,9 @@ MUST be idempotent.
   (if exists)
 - **AND** MUST call `podman secret rm tillandsias-ca-cert` and
   `podman secret rm tillandsias-ca-key`
+- **AND** MUST call `podman secret rm tillandsias-vault-tls-cert`,
+  `podman secret rm tillandsias-vault-tls-key`, and
+  `podman secret rm tillandsias-vault-tls-ca`
 - **AND** `tillandsias-vault-token-*` secrets are revoked by Vault token
   revocation in `revoke_pending_container_tokens()`
 - **AND** accountability log entries MUST record `action="secret_cleanup"`,
