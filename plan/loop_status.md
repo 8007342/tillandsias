@@ -1,6 +1,6 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-08T18:42:14Z
+LastExecutionTime: 2026-06-08T18:45:44Z
 
 ## This Loop
 
@@ -21,14 +21,14 @@ LastExecutionTime: 2026-06-08T18:42:14Z
 - **Step 32** (vault true-rekey): blocked on spec refinement — research proved `vault operator rekey`-installs-host-key mandate infeasible.
 - **Step 37** (release): operator-gated (PR #15 dirty, VERSION conflict).
 - **Step 45** (canonical image digest/aliases) completed at `453c7abb` + `45843b02`.
-- **Steps 46 and 47** are now ready.
+- **Step 46** completed at `6c890021`; **step 47** remains ready.
 - **Step 44** (package-manager-first recipes) is an independent ready leaf.
 - Other ready leaves: `vault-flow/vault-https-via-ca` and `nix-cache/crane-and-cache-action`.
 - **Step 48** integrates the container-build chain after steps 44-47.
 
 ## Assignment Board
 
-- **Linux**: Take step 46 next; step 47 and step 44 are independent ready leaves for parallel agents.
+- **Linux**: Take step 47 next; step 44 remains an independent ready leaf for a parallel agent.
 - **macOS**: step 36 macOS keychain/vsock parity — **blocked on linux step 32**. Independent:
   user-attended **m8 smoke** of a v0.3.x build (release acceptance).
 - **Windows**: step 36 windows keychain/vsock parity — **blocked on linux step 32**.

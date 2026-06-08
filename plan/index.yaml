@@ -3073,7 +3073,7 @@ plan_index:
     - id: podman-build-cache-and-serialization
       order: 46
       title: Reuse Podman layers/download caches and serialize storage mutations
-      status: in_progress
+      status: completed
       owner_host: linux
       deliverable: plan/steps/46-podman-build-cache-and-serialization.md
       audit_origin: plan/issues/container-build-efficiency-telemetry-2026-06-08.md
@@ -3090,7 +3090,7 @@ plan_index:
         - "Cache policy and observed result are available to telemetry."
       tasks:
         - id: image-cache/layers-locking-and-order
-          status: claimed
+          status: done
           owner_host: linux
           capability_tags: [containers, podman, shell, testing]
           depends_on:
@@ -3120,6 +3120,16 @@ plan_index:
               host: "linux"
               lease_id: "lease-linux-image-cache-20260608T184315Z"
               expires_at: "2026-06-08T22:43:15Z"
+            - type: completed
+              ts: "2026-06-08T18:45:44Z"
+              agent_id: "linux-macuahuitl-codex-20260608T184315Z"
+              host: "linux"
+              lease_id: "lease-linux-image-cache-20260608T184315Z"
+              evidence_refs:
+                - "commit:6c890021"
+                - "podman-orchestration instant litmus: 4/4 executed tests passed"
+                - "bash -n scripts/build-image.sh build-all-images.sh"
+                - "./build.sh --check"
 
     - id: structured-image-build-telemetry
       order: 47

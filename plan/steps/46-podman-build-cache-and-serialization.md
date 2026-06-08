@@ -1,6 +1,6 @@
 # Step 46 — Podman build cache reuse and serialization
 
-- **Status**: claimed
+- **Status**: completed
 - **Owner host**: linux
 - **Branch**: linux-next
 - **Depends on**: step 45
@@ -17,7 +17,7 @@ mutations.
 
 ## Tasks
 
-- [ ] `image-cache/layer-policy`
+- [x] `image-cache/layer-policy`
   - Owned files: `scripts/build-image.sh`,
     `crates/tillandsias-podman/src/client.rs`, image Containerfiles only for
     cache-mount directives.
@@ -28,13 +28,13 @@ mutations.
     package managers where Podman supports them.
   - Stop deleting `$HOME/.cache/tillandsias/packages` before every build.
   - Keep cache IDs partitioned by package manager, architecture, and base image.
-- [ ] `image-cache/storage-lock`
+- [x] `image-cache/storage-lock`
   - Owned files: `scripts/build-image.sh`, `build-all-images.sh`, shared shell
     helper if needed.
   - Add a cross-process build lock or a proven bounded scheduler.
   - Make `--parallel` either dependency-aware and storage-safe or retire it with
     a clear replacement.
-- [ ] `image-cache/containerfile-order`
+- [x] `image-cache/containerfile-order`
   - Audit stable expensive layers versus frequently changed COPY layers.
   - Move cheatsheets/config/entrypoints after toolchain layers where behavior
     permits.
@@ -71,3 +71,17 @@ the exact cache-mount failure. Do not restore unconditional `--no-cache`.
 
 Baseline defects: `scripts/build-image.sh:340-346` and `435-456`;
 `build-all-images.sh:35-41`.
+
+## Completion
+
+Completed 2026-06-08T18:45:44Z at `6c890021`.
+
+- Normal builds no longer pass `--no-cache`; `--no-cache` and
+  `TILLANDSIAS_BUILD_NO_CACHE=1` are explicit diagnostic controls.
+- The shared package-cache directory is retained instead of deleted.
+- A cross-process `flock` covers image cleanup, retagging, build, and prune
+  mutations.
+- Parallel aggregate builds propagate every child failure while individual
+  builds serialize Podman storage.
+- The bound Podman-orchestration instant litmus passed 4/4 executed tests and
+  `./build.sh --check` passed.

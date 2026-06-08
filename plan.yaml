@@ -19,10 +19,10 @@ plan:
     verification: methodology/verification.yaml
 
   current_state:
-    last_completed_step: canonical-image-digest-and-aliases (step 45)
-    next_step: podman-build-cache-and-serialization (step 46); parallel ready leaves include steps 47, 44, 38, and 42c
+    last_completed_step: podman-build-cache-and-serialization (step 46)
+    next_step: structured-image-build-telemetry (step 47); parallel ready leaves include steps 44, 38, and 42c
 
-    next_graph_node: image-cache/layers-locking-and-order
+    next_graph_node: image-telemetry/events-and-metrics
     frontier_note: >
       v0.3.0 graph (steps 24-31) drained 2026-06-04. The 2026-06-05 pre-Vault
       obsolescence audit reopened a fresh wave (steps 32-37). Step 32 is blocked
@@ -53,8 +53,9 @@ plan:
       canonical digest/aliases are ready in parallel; steps 46 cache reuse and
       47 telemetry depend on 45; step 48 converges wrappers after 44-47.
       Step 45 completed 2026-06-08 (453c7abb, 45843b02), unlocking ready steps
-      46 and 47. Step 46 is the preferred next leaf because it removes
-      unconditional no-cache behavior and serializes Podman storage mutations.
+      46 and 47. Step 46 completed 2026-06-08 (6c890021): normal builds reuse
+      Podman layers/package caches, diagnostic no-cache is explicit, and image
+      storage mutations are serialized. Step 47 is the next dependency-chain leaf.
       Origin: plan/issues/container-build-efficiency-telemetry-2026-06-08.md.
     plan_index: plan/index.yaml
     step_directory: plan/steps
