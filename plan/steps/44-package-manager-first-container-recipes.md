@@ -1,11 +1,13 @@
 # Step 44 — Package-manager-first container recipes
 
-- **Status**: ready
+- **Status**: claimed
 - **Owner host**: linux
 - **Branch**: linux-next
 - **Depends on**: none
 - **Specs**: default-image, inference-container, user-runtime-lifecycle
 - **Audit origin**: plan/issues/container-build-efficiency-telemetry-2026-06-08.md
+- **Lease**: `lease-linux-package-recipes-20260608T185543Z`
+- **Agent**: `linux-macuahuitl-codex-20260608T185543Z`
 
 ## Goal
 
