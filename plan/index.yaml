@@ -2673,7 +2673,7 @@ plan_index:
     - id: nix-ci-incremental-caching
       order: 38
       title: Incremental Nix release builds (crane cargoArtifacts + durable cache)
-      status: ready
+      status: in_progress
       owner_host: linux
       deliverable: plan/issues/nix-release-incremental-and-forge-distribution-2026-06-05.md
       depends_on: []
@@ -2686,7 +2686,7 @@ plan_index:
         - "A back-to-back release reuses cached cross-GCC + dep artifacts; the Nix build step drops from ~34 min to minutes."
       tasks:
         - id: nix-cache/crane-and-cache-action
-          status: ready
+          status: claimed
           depends_on: []
           owned_files:
             - flake.nix
@@ -2994,6 +2994,13 @@ plan_index:
             blockers; never restore a floating installer.
           checkpoint_required: true
           handoff_note: "Research matrix is in the audit origin. Revalidate package availability at claim time."
+          events:
+            - type: claim
+              ts: "2026-06-08T18:55:43Z"
+              agent_id: "linux-macuahuitl-codex-20260608T185543Z"
+              host: "linux"
+              lease_id: "lease-linux-package-recipes-20260608T185543Z"
+              expires_at: "2026-06-08T22:55:43Z"
 
     - id: canonical-image-digest-and-aliases
       order: 45
