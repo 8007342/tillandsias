@@ -2,6 +2,19 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
+## 2026-06-08 — keyring-verify/macos COMPLETE (apple-native backend verified)
+
+- 2026-06-08T17:52Z  (this commit: `verify(keyring): apple-native …`)  `keyring-verify/macos`
+  PASS — `apple-native` keyring backend builds (core + macos-tray + headless/vault;
+  security-framework chain compiles) and persists across separate process runs through the real
+  login Keychain (write→fresh-process read matches; `security find-generic-password` confirms;
+  clean delete). No fix-forward needed. Full evidence:
+  `plan/issues/keyring-backend-xplat-verification-2026-06-08.md` Results — macOS. Closes the
+  macOS half of step 42e's cross-platform tail; step 42d / step 36 stay blocked on step 32 (this
+  verified the keyring backend, not vsock unseal delivery).
+
+---
+
 ## 2026-06-05 — NEW WAVE queued (pre-Vault audit)
 
 The macOS v0.0.1/v0.3.0 items below are done or blocked-on-user. A 2026-06-05
