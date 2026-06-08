@@ -17,6 +17,9 @@ FROM registry.fedoraproject.org/fedora-minimal:44
 RUN microdnf install -y bash curl ca-certificates zstd tar gzip pciutils \
     && microdnf clean all
 
+ARG OLLAMA_VERSION=0.30.6
+ARG OLLAMA_LINUX_AMD64_SHA256=a6d29b68cb7f74023ad1fbb86330d051ccdd1321a79ea12257b8b9409b095930
+
 # @trace spec:inference-container
 # -- Install ollama binary directly (CPU-only) --
 # The official install script downloads ~2GB including GPU libraries
@@ -30,7 +33,8 @@ RUN microdnf install -y bash curl ca-certificates zstd tar gzip pciutils \
 # The tarball extracts to: bin/ollama (~200MB) + lib/ollama/ (~1.8GB).
 # We only need bin/ollama for CPU inference.
 RUN curl -fsSL -o /tmp/ollama.tar.zst \
-    "https://github.com/ollama/ollama/releases/latest/download/ollama-linux-amd64.tar.zst" \
+    "https://github.com/ollama/ollama/releases/download/v${OLLAMA_VERSION}/ollama-linux-amd64.tar.zst" \
+    && echo "${OLLAMA_LINUX_AMD64_SHA256}  /tmp/ollama.tar.zst" | sha256sum -c - \
     && mkdir -p /usr/local/bin \
     && zstd -d /tmp/ollama.tar.zst -o /tmp/ollama.tar \
     && tar -xf /tmp/ollama.tar -C /usr/local bin/ollama \

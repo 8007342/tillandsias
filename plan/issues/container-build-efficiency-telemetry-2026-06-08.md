@@ -134,6 +134,35 @@ unchanged` false.
 - `images/inference/Containerfile:33`: Ollama uses `releases/latest/download`.
 - Multiple direct release tarballs lack explicit checksum verification.
 
+### Package-source decision, verified 2026-06-08
+
+Fedora 44 `dnf5 repoquery` and a Fedora Minimal `microdnf --assumeno`
+transaction verified these migrations:
+
+| Executable group | Before | After |
+| --- | --- | --- |
+| Rust compiler/components | rustup pipe-to-shell | Fedora `rust`, `cargo`, `clippy`, `rustfmt`, `rust-analyzer` |
+| Cargo policy tool | cargo-binstall | Fedora `cargo-deny` |
+| Go debugger/shell formatter | unchecked GitHub assets | Fedora `delve`, `shfmt` |
+| Python developer tools | unpinned pip | Fedora `ruff`, `poetry`, `pipx`, `uv`, `black`, `pylint`, `yamllint`, `python3-mypy`, `python3-pytest`, `python3-lsp-server` |
+| JS package managers | unpinned npm | Fedora `pnpm`, `yarnpkg` |
+| Agent and remaining language tools | floating npm/pip | exact npm/pip versions |
+| nextest, cargo-binstall, Wasmtime, actionlint, Vale, Dart | unchecked/floating assets | exact upstream release URL plus embedded SHA-256 |
+| Ollama CPU binary | `releases/latest/download` | exact v0.30.6 URL plus upstream SHA-256 |
+
+RPM Fusion free and nonfree Fedora 44 metadata was queried directly for
+`cargo-binstall`, `cargo-nextest`, `actionlint`, `vale`, `dart`, `ollama`,
+`wasmtime`, `pyright`, `bandit`, and `markdownlint-cli`; none were present.
+Adding RPM Fusion would therefore remove no direct asset while adding
+repositories, keys, and metadata refreshes. Fedora COPR candidates for Dart
+were stale, failed, beta, or lacked Fedora 44 coverage; COPR remains
+owner-scoped and unofficial, so none were admitted to the base image.
+
+The Fedora Ollama RPM measured 52.1 MiB compressed and 940.9 MiB installed.
+The checksum-verified CPU-only extraction produced a complete Tillandsias
+inference image of 187 MB, so the RPM remains unsuitable for the lean
+inference contract.
+
 The sibling Alpine Containerfiles already use `apk add --no-cache` correctly.
 They are in scope for common identity/telemetry and checksum policy, but not for
 conversion to DNF.

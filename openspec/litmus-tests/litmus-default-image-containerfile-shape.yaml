@@ -59,13 +59,28 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok:"
 
-  - step: "Req Agents: npm install of opencode + openspec + claude + codex"
+  - step: "Req Agents: pinned npm install of opencode + openspec + claude + codex"
     # Spec § Req mandates OpenCode + OpenSpec + Claude Code + Codex
     # are available in PATH. The npm install line installs all 4 in
     # one invocation; pin the canonical package names.
-    command: "grep -F 'opencode-ai@latest @fission-ai/openspec @anthropic-ai/claude-code @openai/codex' images/default/Containerfile"
+    command: "for package in 'opencode-ai@1.16.2' '@fission-ai/openspec@1.4.1' '@anthropic-ai/claude-code@2.1.168' '@openai/codex@0.137.0'; do grep -Fq \"$package\" images/default/Containerfile || { echo \"FAIL: pinned agent '$package' missing\"; exit 1; }; done && echo 'ok: agents pinned'"
     timeout_ms: 3000
-    expected_behavior: "opencode-ai"
+    expected_behavior: "ok:"
+
+  - step: "Req Package source policy: no piped installers or floating release inputs"
+    command: "if grep -En 'curl[^|]*[|][^#]*(sh|bash)|@latest|latest/VERSION|releases/latest/download|get[.]nexte[.]st/latest' images/default/Containerfile images/inference/Containerfile; then echo 'FAIL: mutable or pipe-to-shell image input'; exit 1; fi; echo 'ok: image inputs pinned'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req Fedora-first tools: reviewed packages live in the microdnf layer"
+    command: "for package in 'rust cargo clippy rustfmt rust-analyzer cargo-deny' 'delve' 'shellcheck shfmt' 'ruff poetry pipx uv black pylint yamllint' 'pnpm yarnpkg'; do grep -Fq \"$package\" images/default/Containerfile || { echo \"FAIL: Fedora package group '$package' missing\"; exit 1; }; done && echo 'ok: Fedora package groups present'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req Direct assets: every retained archive has an adjacent SHA-256 check"
+    command: "for variable in CARGO_NEXTEST_SHA256 CARGO_BINSTALL_SHA256 WASMTIME_SHA256 ACTIONLINT_SHA256 VALE_SHA256 DART_SHA256 OLLAMA_LINUX_AMD64_SHA256; do grep -Fq \"ARG ${variable}=\" images/default/Containerfile images/inference/Containerfile || { echo \"FAIL: '$variable' missing\"; exit 1; }; done; checks=$(grep -hF 'sha256sum -c -' images/default/Containerfile images/inference/Containerfile | wc -l); [ \"$checks\" -eq 7 ] || { echo \"FAIL: expected 7 checksum verifications, found $checks\"; exit 1; }; echo 'ok: direct assets verified'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
 
   - step: "Req Non-root user: useradd -u 1000 forge"
     # Spec § Req mandates forge UID 1000 to match host user UID
@@ -117,8 +132,10 @@ rollback:
     `@trace spec:default-image` on Containerfile; `FROM registry.
     fedoraproject.org/fedora-minimal:44`; `microdnf install -y`
     with git/gh/ripgrep/nodejs/python3-pip + the broader dev
-    toolchain; npm install of `opencode-ai@latest @fission-ai/
-    openspec @anthropic-ai/claude-code @openai/codex`; `useradd
+    toolchain; pinned npm installs of `opencode-ai`, `@fission-ai/
+    openspec`, `@anthropic-ai/claude-code`, and `@openai/codex`;
+    no pipe-to-shell/floating image inputs; checksum verification
+    for every retained direct release asset; `useradd
     -u 1000 -m -s /bin/bash forge`; COPY directives for all 4
     forge entrypoint scripts (opencode, opencode-web, claude,
     codex); build-image.sh's `forge|web|proxy|git|inference|
