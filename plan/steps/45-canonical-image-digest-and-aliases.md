@@ -1,12 +1,14 @@
 # Step 45 — Canonical image digest and alias engine
 
-- **Status**: ready
+- **Status**: claimed
 - **Owner host**: linux
 - **Branch**: linux-next
 - **Depends on**: none
 - **Specs**: default-image, init-incremental-builds, forge-staleness,
   user-runtime-lifecycle
 - **Audit origin**: plan/issues/container-build-efficiency-telemetry-2026-06-08.md
+- **Lease**: `lease-linux-image-identity-20260608T183115Z`
+- **Agent**: `linux-macuahuitl-codex-20260608T183115Z`
 
 ## Goal
 

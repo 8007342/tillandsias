@@ -2998,7 +2998,7 @@ plan_index:
     - id: canonical-image-digest-and-aliases
       order: 45
       title: Canonical image source digest, OCI labels, and alias decisions
-      status: ready
+      status: in_progress
       owner_host: linux
       deliverable: plan/steps/45-canonical-image-digest-and-aliases.md
       audit_origin: plan/issues/container-build-efficiency-telemetry-2026-06-08.md
@@ -3015,7 +3015,7 @@ plan_index:
         - "Chromium framework identity includes its core dependency digest."
       tasks:
         - id: image-identity/spec-and-digest
-          status: ready
+          status: claimed
           owner_host: linux
           capability_tags: [rust, containers, hashing, testing]
           depends_on: []
@@ -3039,6 +3039,13 @@ plan_index:
             fixtures first; do not duplicate hashing in shell.
           checkpoint_required: true
           handoff_note: "Checkpoint the public decision/result shape before steps 46 or 47 touch call sites."
+          events:
+            - type: claim
+              ts: "2026-06-08T18:31:15Z"
+              agent_id: "linux-macuahuitl-codex-20260608T183115Z"
+              host: "linux"
+              lease_id: "lease-linux-image-identity-20260608T183115Z"
+              expires_at: "2026-06-08T22:31:15Z"
 
     - id: podman-build-cache-and-serialization
       order: 46
