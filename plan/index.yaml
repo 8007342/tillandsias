@@ -2806,7 +2806,7 @@ plan_index:
     - id: github-login-vault-native-flow
       order: 42
       title: GitHub-login Vault-native flow — gate on Vault, keep the token in-container, Vault over HTTPS
-      status: in_progress
+      status: completed
       owner_host: linux
       deliverable: plan/steps/42-github-login-vault-native-flow.md
       audit_origin: plan/issues/github-login-vault-native-flow-2026-06-06.md
@@ -3150,7 +3150,7 @@ plan_index:
         - "Metrics expose attempts, outcomes, duplicate builds, duration, size, and cache result with bounded labels."
       tasks:
         - id: image-telemetry/events-and-metrics
-          status: claimed
+          status: completed
           owner_host: linux
           capability_tags: [rust, observability, logging, metrics, testing]
           depends_on:
@@ -3181,6 +3181,19 @@ plan_index:
               host: "linux"
               lease_id: "lease-linux-image-telemetry-20260608T184647Z"
               expires_at: "2026-06-08T22:46:47Z"
+            - type: complete
+              ts: "2026-06-08T18:52:48Z"
+              agent_id: "linux-macuahuitl-codex-20260608T184647Z"
+              host: "linux"
+              implementation_commits:
+                - "ec5cf96c"
+                - "1c316e5c"
+              evidence:
+                - "logging image_build tests: 12 passed"
+                - "headless bounded-label metrics test: 1 passed"
+                - "logging clippy with -D warnings passed"
+                - "headless cargo check passed"
+                - "./build.sh --check passed"
 
     - id: image-build-wrapper-convergence
       order: 48
