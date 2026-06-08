@@ -2746,14 +2746,21 @@ plan_index:
           checkpoint_required: true
           handoff_note: "DONE 2026-06-06. Added vault_bootstrap::is_github_logged_in (volume-guarded on-demand Vault read) + read_github_token_from_vault + vault_data_volume_exists; removed tray gh_auth_check; both gate sites now read Vault. clippy -D warnings clean, 143/143 tray tests pass."
         - id: vault-flow/launch-gate-async
-          status: ready
+          status: claimed
           depends_on: [vault-flow/tray-gate-on-vault]
           owned_files:
             - crates/tillandsias-headless/src/tray/mod.rs
           checkpoint_required: true
           handoff_note: "The launch constructor (tray/mod.rs new_with_debug, ~994) calls is_github_logged_in synchronously; when a vault volume exists it triggers ensure_vault_running on the launch path (worst case 60s health timeout). Make it async: default is_authenticated=false, spawn a background probe that bumps revision when the token is confirmed."
+          events:
+            - type: claim
+              ts: "2026-06-08T18:12:00Z"
+              agent_id: "linux-macuahuitl-advance-work-20260608T175625Z"
+              host: "linux"
+              lease_id: "lease-linux-launch-gate-async-20260608T1812Z"
+              expires_at: "2026-06-08T22:12:00Z"
         - id: vault-flow/login-in-container
-          status: claimed
+          status: done
           depends_on: []
           owned_files:
             - crates/tillandsias-headless/src/main.rs
@@ -2761,7 +2768,7 @@ plan_index:
             - images/vault/policies
             - images/git/vault-cli.sh
           checkpoint_required: true
-          handoff_note: "Refactor run_github_login (main.rs:3267) so gh auth login + vault write both run inside one container; token never extracted to host. Move the Vault running-check (vault_bootstrap.rs:140) BEFORE the interactive paste and bring Vault up on demand (ensure_vault_running). Add a write-capable AppRole lease + policy for secret/data/github/token (today only read-only git-mirror.hcl touches it). Re-trace the gh_auth_start accountability log off the removed secret-rotation/tillandsias-github-token symbol (overlaps step 35)."
+          handoff_note: "Refactor run_github_login (main.rs:3267) so gh auth login + vault write both run inside one container; token never extracted to host. Move the Vault running-check (vault_bootstrap.rs:140) BEFORE the interactive paste and bring Vault up on demand (ensure_vault_running). Add a write-capable AppRole lease + policy for secret/data/github/token (today only read-only git-mirror.hcl touches it)."
           events:
             - type: claim
               ts: "2026-06-08T17:56:25Z"
@@ -2769,6 +2776,15 @@ plan_index:
               host: "linux"
               lease_id: "lease-linux-login-in-container-20260608T1756Z"
               expires_at: "2026-06-08T21:56:25Z"
+            - type: completed
+              ts: "2026-06-08T18:10:00Z"
+              agent_id: "linux-macuahuitl-advance-work-20260608T175625Z"
+              host: "linux"
+              lease_id: "lease-linux-login-in-container-20260608T1756Z"
+              evidence_refs:
+                - "commit:11c227ce"
+                - "./build.sh --check PASS"
+                - "cargo test tillandsias-headless PASS (2 pre-existing signal-handling failures unchanged)"
         - id: vault-flow/vault-https-via-ca
           status: ready
           depends_on: []
