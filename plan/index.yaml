@@ -3046,6 +3046,17 @@ plan_index:
               host: "linux"
               lease_id: "lease-linux-image-identity-20260608T183115Z"
               expires_at: "2026-06-08T22:31:15Z"
+            - type: checkpoint
+              ts: "2026-06-08T18:35:23Z"
+              agent_id: "linux-macuahuitl-codex-20260608T183115Z"
+              host: "linux"
+              lease_id: "lease-linux-image-identity-20260608T183115Z"
+              summary: "Canonical ImageBuildSpec, path-independent framed context hashing, OCI-state decision types, alias derivation, and headless runtime digest convergence implemented. Remaining: live Podman label inspection/retag wiring and init-state schema migration."
+              evidence_refs:
+                - "cargo test -p tillandsias-core --lib image_builder:: (11 passed)"
+                - "cargo test -p tillandsias-headless runtime_assets::tests:: --no-default-features (2 passed)"
+                - "cargo clippy -p tillandsias-core --lib -- -D warnings"
+                - "./build.sh --check"
 
     - id: podman-build-cache-and-serialization
       order: 46

@@ -19,7 +19,7 @@ aliases only.
 
 ## Tasks
 
-- [ ] `image-identity/spec-and-digest`
+- [x] `image-identity/spec-and-digest`
   - Owned files: `crates/tillandsias-headless/src/runtime_assets.rs`,
     `crates/tillandsias-core/src/image_builder.rs`, a narrowly scoped new shared
     module if required, and focused unit tests.
@@ -79,3 +79,14 @@ that the shell-convergence packet can consume; do not duplicate hashing logic.
 
 The current split-brain paths and exact failure modes are documented in the
 audit origin.
+
+Checkpoint 2026-06-08T18:35:23Z:
+
+- `ImageBuildSpec`, `ImageBuildIdentity`, `ImageBuildDecision`, and OCI-state
+  observation/reason types now live in `tillandsias-core`.
+- Digest tests cover checkout-root independence, content/path/mode/symlink
+  changes, generated inputs, build args, dependency digests, and VERSION-only
+  alias changes.
+- The headless runtime asset digest now consumes the shared core engine.
+- Remaining work is live Podman label/alias observation plus backward-compatible
+  init-state migration.

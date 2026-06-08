@@ -15,8 +15,269 @@
 ///
 /// This enables convergence testing: the test harness exercises the exact code path
 /// used in production, captures artifacts, and validates output.
-use std::collections::HashMap;
+use serde::{Deserialize, Serialize};
+use sha2::{Digest, Sha256};
+use std::collections::{BTreeMap, HashMap};
+use std::fs;
+#[cfg(unix)]
+use std::os::unix::fs::PermissionsExt;
+use std::path::{Path, PathBuf};
 use tracing::{debug, info, warn};
+
+pub const SOURCE_DIGEST_LABEL: &str = "io.tillandsias.image.source-digest";
+
+/// Inputs that determine one container image's immutable identity.
+///
+/// The source digest deliberately excludes `version`: versioned and `latest`
+/// tags are aliases for the same content-addressed image.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ImageBuildSpec {
+    pub image_name: String,
+    pub context_root: PathBuf,
+    pub containerfile: PathBuf,
+    #[serde(default)]
+    pub build_args: BTreeMap<String, String>,
+    #[serde(default)]
+    pub dependency_digests: BTreeMap<String, String>,
+    pub version: String,
+}
+
+/// Content-addressed identity and mutable aliases derived from an image spec.
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ImageBuildIdentity {
+    pub source_digest: String,
+    pub canonical_tag: String,
+    pub version_alias: String,
+    pub latest_alias: String,
+    pub labels: BTreeMap<String, String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ImageBuildAction {
+    Skip,
+    Retag,
+    Build,
+    ForceRebuild,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq, Serialize, Deserialize)]
+#[serde(rename_all = "snake_case")]
+pub enum ImageBuildReason {
+    DigestPresent,
+    AliasMissing,
+    DigestMissing,
+    LabelMismatch,
+    Forced,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+pub struct ImageBuildDecision {
+    pub action: ImageBuildAction,
+    pub reason: ImageBuildReason,
+    pub identity: ImageBuildIdentity,
+}
+
+/// Observable Podman state needed to make a freshness decision.
+///
+/// No external JSON/hash state participates in this decision. The canonical
+/// tag and its source-digest label are the durable identity.
+#[derive(Debug, Clone, PartialEq, Eq, Default)]
+pub struct ImageBuildObservation {
+    pub canonical_tag_exists: bool,
+    pub canonical_source_digest: Option<String>,
+    pub version_alias_matches: bool,
+    pub latest_alias_matches: bool,
+    pub force: bool,
+}
+
+/// Compute a checkout-root-independent digest over the exact context tree and
+/// all non-filesystem build inputs.
+pub fn image_build_identity(
+    spec: &ImageBuildSpec,
+) -> Result<ImageBuildIdentity, ImageBuilderError> {
+    let context_root = spec
+        .context_root
+        .canonicalize()
+        .map_err(|e| ImageBuilderError::Io(format!("canonicalize build context: {e}")))?;
+    let containerfile = spec
+        .containerfile
+        .canonicalize()
+        .map_err(|e| ImageBuilderError::Io(format!("canonicalize Containerfile: {e}")))?;
+    if !containerfile.starts_with(&context_root) {
+        return Err(ImageBuilderError::Io(
+            "Containerfile must be inside the build context".to_string(),
+        ));
+    }
+
+    let mut entries = Vec::new();
+    collect_context_entries(&context_root, &context_root, &mut entries)?;
+    entries.sort_by(|a, b| a.relative_path.cmp(&b.relative_path));
+
+    let mut hasher = Sha256::new();
+    hash_field(&mut hasher, b"schema", b"tillandsias-image-build-v1");
+    hash_field(&mut hasher, b"image_name", spec.image_name.as_bytes());
+    for entry in entries {
+        hash_field(&mut hasher, b"path", entry.relative_path.as_bytes());
+        hash_field(&mut hasher, b"kind", entry.kind.as_bytes());
+        hash_field(&mut hasher, b"mode", &entry.mode.to_be_bytes());
+        hash_field(&mut hasher, b"payload", &entry.payload);
+    }
+    for (name, value) in &spec.build_args {
+        hash_field(&mut hasher, b"build_arg_name", name.as_bytes());
+        hash_field(&mut hasher, b"build_arg_value", value.as_bytes());
+    }
+    for (name, digest) in &spec.dependency_digests {
+        hash_field(&mut hasher, b"dependency_name", name.as_bytes());
+        hash_field(&mut hasher, b"dependency_digest", digest.as_bytes());
+    }
+
+    let digest_hex = hex_digest(&hasher.finalize());
+    let source_digest = format!("sha256:{digest_hex}");
+    let image_prefix = format!("tillandsias-{}", spec.image_name);
+    let canonical_tag = format!("{image_prefix}:sha256-{digest_hex}");
+    let version_alias = format!("{image_prefix}:v{}", spec.version.trim());
+    let latest_alias = format!("{image_prefix}:latest");
+    let labels = BTreeMap::from([
+        (SOURCE_DIGEST_LABEL.to_string(), source_digest.clone()),
+        (
+            "io.tillandsias.image.name".to_string(),
+            spec.image_name.clone(),
+        ),
+        (
+            "io.tillandsias.image.version".to_string(),
+            spec.version.trim().to_string(),
+        ),
+        (
+            "org.opencontainers.image.version".to_string(),
+            spec.version.trim().to_string(),
+        ),
+    ]);
+
+    Ok(ImageBuildIdentity {
+        source_digest,
+        canonical_tag,
+        version_alias,
+        latest_alias,
+        labels,
+    })
+}
+
+pub fn decide_image_build(
+    identity: ImageBuildIdentity,
+    observation: &ImageBuildObservation,
+) -> ImageBuildDecision {
+    let (action, reason) = if observation.force {
+        (ImageBuildAction::ForceRebuild, ImageBuildReason::Forced)
+    } else if !observation.canonical_tag_exists {
+        (ImageBuildAction::Build, ImageBuildReason::DigestMissing)
+    } else if observation.canonical_source_digest.as_deref()
+        != Some(identity.source_digest.as_str())
+    {
+        (ImageBuildAction::Build, ImageBuildReason::LabelMismatch)
+    } else if !observation.version_alias_matches || !observation.latest_alias_matches {
+        (ImageBuildAction::Retag, ImageBuildReason::AliasMissing)
+    } else {
+        (ImageBuildAction::Skip, ImageBuildReason::DigestPresent)
+    };
+
+    ImageBuildDecision {
+        action,
+        reason,
+        identity,
+    }
+}
+
+struct ContextEntry {
+    relative_path: String,
+    kind: &'static str,
+    mode: u32,
+    payload: Vec<u8>,
+}
+
+fn collect_context_entries(
+    context_root: &Path,
+    dir: &Path,
+    out: &mut Vec<ContextEntry>,
+) -> Result<(), ImageBuilderError> {
+    let mut paths = fs::read_dir(dir)
+        .map_err(|e| ImageBuilderError::Io(format!("read build context: {e}")))?
+        .map(|entry| entry.map(|entry| entry.path()))
+        .collect::<Result<Vec<_>, _>>()
+        .map_err(|e| ImageBuilderError::Io(format!("read build context entry: {e}")))?;
+    paths.sort();
+
+    for path in paths {
+        let metadata = fs::symlink_metadata(&path)
+            .map_err(|e| ImageBuilderError::Io(format!("read build context metadata: {e}")))?;
+        let relative_path = path
+            .strip_prefix(context_root)
+            .map_err(|e| ImageBuilderError::Io(format!("relativize build context path: {e}")))?
+            .to_str()
+            .ok_or_else(|| {
+                ImageBuilderError::Io("build context path contains invalid UTF-8".to_string())
+            })?
+            .replace('\\', "/");
+        let mode = portable_mode(&metadata);
+
+        if metadata.file_type().is_symlink() {
+            let target = fs::read_link(&path)
+                .map_err(|e| ImageBuilderError::Io(format!("read context symlink: {e}")))?;
+            let target = target.to_str().ok_or_else(|| {
+                ImageBuilderError::Io("build context symlink contains invalid UTF-8".to_string())
+            })?;
+            out.push(ContextEntry {
+                relative_path,
+                kind: "symlink",
+                mode,
+                payload: target.as_bytes().to_vec(),
+            });
+        } else if metadata.is_dir() {
+            collect_context_entries(context_root, &path, out)?;
+        } else if metadata.is_file() {
+            let payload = fs::read(&path)
+                .map_err(|e| ImageBuilderError::Io(format!("read build context file: {e}")))?;
+            out.push(ContextEntry {
+                relative_path,
+                kind: "file",
+                mode,
+                payload,
+            });
+        }
+    }
+    Ok(())
+}
+
+#[cfg(unix)]
+fn portable_mode(metadata: &fs::Metadata) -> u32 {
+    metadata.permissions().mode() & 0o777
+}
+
+#[cfg(not(unix))]
+fn portable_mode(metadata: &fs::Metadata) -> u32 {
+    if metadata.permissions().readonly() {
+        0o444
+    } else {
+        0o644
+    }
+}
+
+fn hash_field(hasher: &mut Sha256, name: &[u8], value: &[u8]) {
+    hasher.update((name.len() as u64).to_be_bytes());
+    hasher.update(name);
+    hasher.update((value.len() as u64).to_be_bytes());
+    hasher.update(value);
+}
+
+fn hex_digest(bytes: &[u8]) -> String {
+    const HEX: &[u8; 16] = b"0123456789abcdef";
+    let mut out = String::with_capacity(bytes.len() * 2);
+    for byte in bytes {
+        out.push(HEX[(byte >> 4) as usize] as char);
+        out.push(HEX[(byte & 0x0f) as usize] as char);
+    }
+    out
+}
 
 /// Resolve the Containerfile path + build context dir for a given
 /// image type. Per `spec:fix-windows-image-routing` "Image Build
@@ -49,6 +310,10 @@ pub(crate) fn image_build_paths(
         "git" => format!("{root_dir}/images/git/Containerfile"),
         "inference" => format!("{root_dir}/images/inference/Containerfile"),
         "web" => format!("{root_dir}/images/web/Containerfile"),
+        "router" => format!("{root_dir}/images/router/Containerfile"),
+        "chromium-core" => format!("{root_dir}/images/chromium/Containerfile.core"),
+        "chromium-framework" => format!("{root_dir}/images/chromium/Containerfile.framework"),
+        "vault" => format!("{root_dir}/images/vault/Containerfile"),
         _ => {
             return Err(ImageBuilderError::ContainerfileNotFound(format!(
                 "Unknown image type: {image_name}"
@@ -548,7 +813,10 @@ impl ImageBuilder for PodmanMock {
 mod tests {
     use super::*;
     use std::fs;
+    #[cfg(unix)]
+    use std::os::unix::fs::{symlink, PermissionsExt};
     use std::path::PathBuf;
+    use tempfile::TempDir;
 
     fn temp_image_root() -> PathBuf {
         let root =
@@ -560,6 +828,20 @@ mod tests {
             fs::write(dir.join("Containerfile"), "FROM alpine\n").unwrap();
         }
         root
+    }
+
+    fn write_digest_fixture(root: &Path) -> ImageBuildSpec {
+        fs::create_dir_all(root.join("nested")).unwrap();
+        fs::write(root.join("Containerfile"), "FROM scratch\nCOPY . /app\n").unwrap();
+        fs::write(root.join("nested/config.toml"), "enabled = true\n").unwrap();
+        ImageBuildSpec {
+            image_name: "forge".to_string(),
+            context_root: root.to_path_buf(),
+            containerfile: root.join("Containerfile"),
+            build_args: BTreeMap::new(),
+            dependency_digests: BTreeMap::new(),
+            version: "0.3.1".to_string(),
+        }
     }
 
     #[tokio::test]
@@ -647,6 +929,18 @@ mod tests {
                 "/images/inference",
             ),
             ("web", "/images/web/Containerfile", "/images/web"),
+            ("router", "/images/router/Containerfile", "/images/router"),
+            (
+                "chromium-core",
+                "/images/chromium/Containerfile.core",
+                "/images/chromium",
+            ),
+            (
+                "chromium-framework",
+                "/images/chromium/Containerfile.framework",
+                "/images/chromium",
+            ),
+            ("vault", "/images/vault/Containerfile", "/images/vault"),
         ];
         for (image_name, expected_cf_suffix, expected_ctx_suffix) in cases {
             let (cf, ctx) = image_build_paths("/test-root", image_name)
@@ -660,9 +954,9 @@ mod tests {
                 "context dir for {image_name}: expected …{expected_ctx_suffix}, got {ctx}"
             );
             assert_eq!(
-                cf,
-                format!("{}/Containerfile", ctx),
-                "containerfile must equal context_dir/Containerfile (parent invariant)"
+                Path::new(&cf).parent(),
+                Some(Path::new(&ctx)),
+                "containerfile must live directly under its context directory"
             );
         }
     }
@@ -691,5 +985,162 @@ mod tests {
             }
             other => panic!("expected ContainerfileNotFound, got {other:?}"),
         }
+    }
+
+    #[test]
+    fn image_digest_is_checkout_root_independent_and_deterministic() {
+        let left = TempDir::new().unwrap();
+        let right = TempDir::new().unwrap();
+        let left_spec = write_digest_fixture(left.path());
+        let right_spec = write_digest_fixture(right.path());
+
+        let first = image_build_identity(&left_spec).unwrap();
+        let repeated = image_build_identity(&left_spec).unwrap();
+        let other_checkout = image_build_identity(&right_spec).unwrap();
+
+        assert_eq!(first.source_digest, repeated.source_digest);
+        assert_eq!(first.source_digest, other_checkout.source_digest);
+        assert_eq!(first.canonical_tag, other_checkout.canonical_tag);
+    }
+
+    #[test]
+    fn image_digest_changes_for_content_path_and_generated_inputs() {
+        let temp = TempDir::new().unwrap();
+        let spec = write_digest_fixture(temp.path());
+        let baseline = image_build_identity(&spec).unwrap();
+
+        fs::write(temp.path().join("nested/config.toml"), "enabled = false\n").unwrap();
+        let content_changed = image_build_identity(&spec).unwrap();
+        assert_ne!(baseline.source_digest, content_changed.source_digest);
+
+        fs::rename(
+            temp.path().join("nested/config.toml"),
+            temp.path().join("nested/renamed.toml"),
+        )
+        .unwrap();
+        let path_changed = image_build_identity(&spec).unwrap();
+        assert_ne!(content_changed.source_digest, path_changed.source_digest);
+
+        fs::write(temp.path().join("generated-sidecar"), b"generated bytes").unwrap();
+        let generated_changed = image_build_identity(&spec).unwrap();
+        assert_ne!(path_changed.source_digest, generated_changed.source_digest);
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn image_digest_changes_for_mode_and_symlink_target() {
+        let temp = TempDir::new().unwrap();
+        let spec = write_digest_fixture(temp.path());
+        let script = temp.path().join("tool.sh");
+        fs::write(&script, "#!/bin/sh\n").unwrap();
+        fs::set_permissions(&script, fs::Permissions::from_mode(0o644)).unwrap();
+        let baseline = image_build_identity(&spec).unwrap();
+
+        fs::set_permissions(&script, fs::Permissions::from_mode(0o755)).unwrap();
+        let mode_changed = image_build_identity(&spec).unwrap();
+        assert_ne!(baseline.source_digest, mode_changed.source_digest);
+
+        fs::write(temp.path().join("target-a"), "a").unwrap();
+        fs::write(temp.path().join("target-b"), "b").unwrap();
+        let link = temp.path().join("active-target");
+        symlink("target-a", &link).unwrap();
+        let first_target = image_build_identity(&spec).unwrap();
+        fs::remove_file(&link).unwrap();
+        symlink("target-b", &link).unwrap();
+        let second_target = image_build_identity(&spec).unwrap();
+        assert_ne!(first_target.source_digest, second_target.source_digest);
+    }
+
+    #[test]
+    fn image_digest_includes_build_args_and_dependency_digests() {
+        let temp = TempDir::new().unwrap();
+        let mut spec = write_digest_fixture(temp.path());
+        let baseline = image_build_identity(&spec).unwrap();
+
+        spec.build_args
+            .insert("TARGETARCH".to_string(), "amd64".to_string());
+        let build_arg_changed = image_build_identity(&spec).unwrap();
+        assert_ne!(baseline.source_digest, build_arg_changed.source_digest);
+
+        spec.dependency_digests.insert(
+            "chromium-core".to_string(),
+            "sha256:core-digest-a".to_string(),
+        );
+        let dependency_a = image_build_identity(&spec).unwrap();
+        spec.dependency_digests.insert(
+            "chromium-core".to_string(),
+            "sha256:core-digest-b".to_string(),
+        );
+        let dependency_b = image_build_identity(&spec).unwrap();
+        assert_ne!(dependency_a.source_digest, dependency_b.source_digest);
+    }
+
+    #[test]
+    fn version_changes_aliases_without_changing_canonical_identity() {
+        let temp = TempDir::new().unwrap();
+        let mut spec = write_digest_fixture(temp.path());
+        let first = image_build_identity(&spec).unwrap();
+        spec.version = "0.3.2".to_string();
+        let second = image_build_identity(&spec).unwrap();
+
+        assert_eq!(first.source_digest, second.source_digest);
+        assert_eq!(first.canonical_tag, second.canonical_tag);
+        assert_ne!(first.version_alias, second.version_alias);
+        assert_eq!(first.latest_alias, second.latest_alias);
+    }
+
+    #[test]
+    fn build_decision_uses_oci_identity_without_external_state() {
+        let temp = TempDir::new().unwrap();
+        let identity = image_build_identity(&write_digest_fixture(temp.path())).unwrap();
+
+        let skip = decide_image_build(
+            identity.clone(),
+            &ImageBuildObservation {
+                canonical_tag_exists: true,
+                canonical_source_digest: Some(identity.source_digest.clone()),
+                version_alias_matches: true,
+                latest_alias_matches: true,
+                force: false,
+            },
+        );
+        assert_eq!(skip.action, ImageBuildAction::Skip);
+        assert_eq!(skip.reason, ImageBuildReason::DigestPresent);
+
+        let retag = decide_image_build(
+            identity.clone(),
+            &ImageBuildObservation {
+                canonical_tag_exists: true,
+                canonical_source_digest: Some(identity.source_digest.clone()),
+                version_alias_matches: false,
+                latest_alias_matches: true,
+                force: false,
+            },
+        );
+        assert_eq!(retag.action, ImageBuildAction::Retag);
+        assert_eq!(retag.reason, ImageBuildReason::AliasMissing);
+
+        let mismatch = decide_image_build(
+            identity.clone(),
+            &ImageBuildObservation {
+                canonical_tag_exists: true,
+                canonical_source_digest: Some("sha256:other".to_string()),
+                version_alias_matches: true,
+                latest_alias_matches: true,
+                force: false,
+            },
+        );
+        assert_eq!(mismatch.action, ImageBuildAction::Build);
+        assert_eq!(mismatch.reason, ImageBuildReason::LabelMismatch);
+
+        let forced = decide_image_build(
+            identity,
+            &ImageBuildObservation {
+                force: true,
+                ..Default::default()
+            },
+        );
+        assert_eq!(forced.action, ImageBuildAction::ForceRebuild);
+        assert_eq!(forced.reason, ImageBuildReason::Forced);
     }
 }
