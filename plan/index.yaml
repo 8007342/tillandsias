@@ -2488,7 +2488,7 @@ plan_index:
         - "No active spec or binding pins a removed symbol."
       tasks:
         - id: spec-reconcile/vault-and-podman-secrets
-          status: ready
+          status: claimed
           depends_on: []
           owned_files:
             - openspec/specs/tillandsias-vault/spec.md
@@ -2499,6 +2499,13 @@ plan_index:
             - openspec/litmus-bindings.yaml
           checkpoint_required: true
           handoff_note: "podman-secrets-integration is active with 22 github-token refs / 0 vault-token refs. tillandsias-vault self-contradicts (req says removed; invariants say reachable). See audit §2. podman-idiomatic:88-90 is review-first (may legitimately describe the unseal-key secret)."
+          events:
+            - type: claim
+              ts: "2026-06-08T18:30:00Z"
+              agent_id: "linux-macuahuitl-advance-work-20260608T175625Z"
+              host: "linux"
+              lease_id: "lease-linux-spec-reconcile-20260608T1830Z"
+              expires_at: "2026-06-08T22:30:00Z"
 
     - id: legacy-secret-code-sweep
       order: 35
@@ -2746,12 +2753,12 @@ plan_index:
           checkpoint_required: true
           handoff_note: "DONE 2026-06-06. Added vault_bootstrap::is_github_logged_in (volume-guarded on-demand Vault read) + read_github_token_from_vault + vault_data_volume_exists; removed tray gh_auth_check; both gate sites now read Vault. clippy -D warnings clean, 143/143 tray tests pass."
         - id: vault-flow/launch-gate-async
-          status: claimed
+          status: done
           depends_on: [vault-flow/tray-gate-on-vault]
           owned_files:
             - crates/tillandsias-headless/src/tray/mod.rs
           checkpoint_required: true
-          handoff_note: "The launch constructor (tray/mod.rs new_with_debug, ~994) calls is_github_logged_in synchronously; when a vault volume exists it triggers ensure_vault_running on the launch path (worst case 60s health timeout). Make it async: default is_authenticated=false, spawn a background probe that bumps revision when the token is confirmed."
+          handoff_note: "The launch constructor (tray/mod.rs new_with_debug, ~994) calls is_github_logged_in synchronously; when a vault volume exists it triggers ensure_vault_running on the launch path (worst case 60s health timeout). Made async: default is_authenticated=false, background probe bumps revision when token is confirmed."
           events:
             - type: claim
               ts: "2026-06-08T18:12:00Z"
@@ -2759,6 +2766,15 @@ plan_index:
               host: "linux"
               lease_id: "lease-linux-launch-gate-async-20260608T1812Z"
               expires_at: "2026-06-08T22:12:00Z"
+            - type: completed
+              ts: "2026-06-08T18:25:00Z"
+              agent_id: "linux-macuahuitl-advance-work-20260608T175625Z"
+              host: "linux"
+              lease_id: "lease-linux-launch-gate-async-20260608T1812Z"
+              evidence_refs:
+                - "commit:97fd2bf2"
+                - "./build.sh --check PASS"
+                - "137/137 tests PASS"
         - id: vault-flow/login-in-container
           status: done
           depends_on: []
