@@ -28,7 +28,7 @@ trace: Cargo.toml (keyring features), plan/issues/github-login-vault-lifecycle-2
 
 ## Packet `keyring-verify/macos` — owner host: **macos** (`osx-next`)
 
-- **status**: ready
+- **status**: done
 - **depends_on**: [] (decoupled from step 32 / 42d gating work)
 - **owned_files**: `Cargo.toml`, `Cargo.lock`, `plan/issues/osx-next-work-queue-2026-05-25.md`,
   `plan/issues/keyring-backend-xplat-verification-2026-06-08.md` (this file — append results

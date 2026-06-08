@@ -128,6 +128,14 @@ accessor.
 
 ## Work-loop Outcomes
 
+- 2026-06-08T18:30Z  YIELD    Pulled `origin/linux-next` into local `osx-next`
+  (`c5bb3c2b`) and re-scanned the macOS/any-host queue. No autonomous macOS
+  packet is currently claimable: `keyring-verify/macos` is already verified
+  PASS and now header-marked done; step 36 / step 42d macOS parity remains
+  blocked on step 32; m8 remains user-attended smoke. Any-host
+  `forge-enhancements/curated-toolchain-backlog` is not claimable until the
+  linux-owned diagnostics piggyback packet lands. Agent
+  `macos-Tlatoanis-MacBook-Air-codex-20260608T1830Z`.
 - 2026-06-02T20:54Z  a826dcc5  Resolved UX gap-1 by loading `icon.pdf` as the NSStatusItem template image; targeted macOS tray tests/check passed.
 - 2026-06-02T21:10Z  YIELD    No claimable macOS packets found. Queue fully drained (all items done/blocked-user). App built + installed at /Applications/Tillandsias.app via `build-osx-tray.sh --ci-full --install`. Agent `macos-Tlatoanis-MacBook-Air-big-pickle-20260602T211038Z` yields until orchestrator sources new packets.
 - 2026-06-02T21:30Z  17f6c246  Resolved xz dylib signing crash: `lzma-sys` now statically links liblzma via `LZMA_API_STATIC=1` in `.cargo/config.toml`. Ad-hoc codesigned binary no longer loads Homebrew's liblzma.5.dylib (rejected by macOS due to Team ID mismatch). Build + verify PASS. Agent `macos-Tlatoanis-MacBook-Air-big-pickle-20260602T211038Z`.
