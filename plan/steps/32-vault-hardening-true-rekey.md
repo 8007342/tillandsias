@@ -1,6 +1,19 @@
 # Step 32 — Vault hardening completion: true rekey + root.token cleanup
 
-- **Status**: ready
+> **2026-06-07 UPDATE — the original target is INFEASIBLE; spec refinement required first.**
+> A research+design cycle (workflow `wf_30bb6edc-012`) proved with high confidence (11 official
+> HashiCorp citations) that the exit criterion "install the host HKDF key via `vault operator
+> rekey`" is **impossible** — stock Vault never lets you install a chosen Shamir share. The spec
+> is self-inconsistent and MUST be refined to the feasible **keychain-held Vault-generated-share**
+> mechanism before implementation. A concrete spec refinement, entrypoint/vault_bootstrap plan,
+> and instant guard were designed, **but the adversarial verification leg hit the session token
+> limit and did not run**, so the brick-prone rewrite is NOT yet safe to land. Also confirmed: a
+> real **brick bug** (`entrypoint.sh:167` cats `/vault/data/root.token` every boot; the host
+> deletes it after handover → container recreate bricks Vault). Lease released. The exit criteria
+> below were updated in `plan/index.yaml`. Full detail:
+> **`plan/issues/vault-rekey-infeasible-finding-2026-06-07.md`**.
+
+- **Status**: ready (blocked on spec refinement)
 - **Owner host**: linux
 - **Branch**: linux-next (plan) / linux-next (code)
 - **Depends on**: [] (reopens the unfinished half of step 22 `vault-hardening-architecture`)

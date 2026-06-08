@@ -27,102 +27,64 @@ committed_for_project: false
 
 ## Overview
 
-Tillandsias follows **ephemeral-first security**: all secrets are created at session start, live in memory/tmpfs only, and are destroyed when the session ends. No secrets persist to disk.
+Tillandsias runs a local HashiCorp Vault instance (rootless podman) as the single
+secrets backend on Linux. All sensitive material — GitHub tokens, per-container
+AppRole tokens, the Vault unseal key — lives inside Vault or in tmpfs-only podman
+secrets. The legacy OS-keyring + `tillandsias-github-token` podman-secret path
+was removed in v0.3.
 
 ### Secret Types
 
 | Secret | Scope | Lifetime | Storage | Used By |
 |--------|-------|----------|---------|---------|
-| **CA Cert + Key** | Per-session | Tray uptime | tmpfs | Proxy (SSL bump) |
-| **GitHub Token** | Per-session | Until logout | Ephemeral tmpfs | Git service, health probe |
-| **SSH Keys** (future) | Per-session | Until logout | Ephemeral tmpfs | Git clone/push |
-| **Database Password** (future) | Per-session | Container lifetime | Ephemeral tmpfs | Inference container |
+| **Vault unseal key** | Per-installation | Indefinite (HKDF-derived) | tmpfs podman secret | Vault container |
+| **GitHub Token** (in Vault) | Per-user session | Until logout | Vault `secret/github/token` | git-mirror container |
+| **Per-container AppRole token** | Per-container lifetime | 1h TTL, 24h max | tmpfs podman secret `vault-token` | git-mirror, forge |
+| **CA Cert + Key** | Per-session | Tray uptime | tmpfs podman secret | Proxy (SSL bump) |
 
-## Secret Names Reference
+### Vault Secret Paths
 
-All secrets in Tillandsias use explicit, hardcoded names. These names are **critical** — they must match exactly across all code paths.
+| Path | Content | Written By | Read By |
+|------|---------|-----------|---------|
+| `secret/github/token` | GitHub OAuth token | `tillandsias --github-login` | git-mirror via `vault-cli` |
+| `auth/approle/role/<name>/role-id` | AppRole Role ID | Tray bootstrap | Container entrypoint |
+| `auth/approle/role/<name>/secret-id` | AppRole Secret ID | Tray bootstrap | Container entrypoint |
+
+### Podman Secret Names
 
 | Secret Name | Type | Lifetime | Container | Path |
 |---|---|---|---|---|
-| `tillandsias-ca-root` | X.509 cert | Session | (none) | Archive |
-| `tillandsias-ca-cert` | X.509 cert | Session | proxy, forge | `/run/secrets/tillandsias-ca-cert` |
-| `tillandsias-ca-key` | Private key | Session | proxy, forge | `/run/secrets/tillandsias-ca-key` |
-| `tillandsias-github-token` | OAuth token | Session | git service | `/run/secrets/tillandsias-github-token` |
+| `tillandsias-vault-unseal` | HKDF-derived key hex | Tray uptime (tmpfs) | vault | `/run/secrets/vault-unseal` |
+| `tillandsias-vault-token-<role>-<id>` | AppRole token | Container lifetime (tmpfs) | per-role | `/run/secrets/vault-token` |
+| `tillandsias-ca-cert` | X.509 cert | Session (tmpfs) | proxy, forge | `/run/secrets/tillandsias-ca-cert` |
+| `tillandsias-ca-key` | Private key | Session (tmpfs) | proxy, forge | `/run/secrets/tillandsias-ca-key` |
 
-**How to verify names match**: grep for these strings in:
-```bash
-grep -r "tillandsias-ca-cert\|tillandsias-ca-key\|tillandsias-github-token" \
-  src-tauri/src/handlers.rs \
-  src-tauri/src/launch.rs \
-  images/*/entrypoint.sh
-```
+### Architecture: Vault-Native Secret Flow
 
-All matches should show the same names in creation, mounting, and reading contexts.
+1. **Tray startup** derives the Vault unseal key from `machine-id` + `installation-uuid`
+   via HKDF and creates the `tillandsias-vault-unseal` tmpfs podman secret.
 
-## Architecture: Three-Layer Secret Flow
+2. **Vault container** initialises on first boot, runs `vault operator rekey` to
+   install the HKDF-derived key as the active Shamir share, and deletes
+   `init.json`. The root token is captured by `tillandsias-headless` and stored
+   in the host keychain; `root.token` is deleted from the Vault data volume.
 
-### Layer 1: Secret Source (Host)
+3. **`tillandsias --github-login`** runs `gh auth login` inside a container,
+   reads the resulting token, and writes it to Vault at `secret/github/token`
+   using a write-capable AppRole lease.
 
-Source | Driver | Lifetime | Security |
-|--------|--------|----------|---------|
-| **OS Keyring** (GNOME Keyring, KDE Wallet) | `secret-tool` command | User session | Encrypted by OS, user-locked |
-| **GitHub OAuth** (web login) | HTTP callback | User session | TLS-protected, user authenticates |
-| **SSH Agent** (ssh-add) | SSH_AUTH_SOCK | User session | Agent-only access, no caching |
-| **Environment** (CI/CD pipelines) | `$GITHUB_TOKEN` | Job duration | Scoped to job, auto-revoked |
+4. **Per-container token minting**: For each container launch (git-mirror, forge,
+   etc.), the tray mints a scoped AppRole token via `vault token create
+   -policy=<role-policy> -ttl=1h`, creates a tmpfs podman secret
+   `tillandsias-vault-token-<role>-<id>`, and mounts it at `/run/secrets/vault-token`.
 
-**Tillandsias tray reads from OS keyring or prompts user for fresh auth.**
+5. **Inside the container**, the baked `vault-cli` helper reads the GitHub token:
+   ```sh
+   TOKEN="$(vault-cli read -field=token secret/github/token)"
+   ```
 
-### Layer 2: Tray Process (Ephemeral Conversion)
-
-```rust
-// In handlers.rs during tray initialization:
-
-// 1. Retrieve from OS keyring (sync, D-Bus to Secret Service)
-let token = secrets::retrieve_github_token()?;  // Returns String
-
-// 2. Create CA certificate (new per-session)
-let ca = ca::generate_ephemeral_ca()?;  // Returns (cert, key) PEM strings
-
-// 3. Create podman secrets (ephemeral, tmpfs-backed)
-podman::secret::create("tillandsias-github-token", token)?;
-podman::secret::create("tillandsias-ca-cert", ca.cert)?;
-podman::secret::create("tillandsias-ca-key", ca.key)?;
-
-// 4. At shutdown, remove secrets (automatic cleanup)
-// podman secret rm tillandsias-github-token
-// podman secret rm tillandsias-ca-cert
-// podman secret rm tillandsias-ca-key
-```
-
-### Layer 3: Container Access (Read-Only)
-
-Containers receive secrets via `--secret=<name>` flag:
-
-```bash
-podman run \
-  --secret=tillandsias-github-token \
-  --secret=tillandsias-ca-cert \
-  --secret=tillandsias-ca-key \
-  tillandsias-git
-```
-
-Inside container:
-
-```bash
-#!/bin/bash
-# In git service entrypoint
-
-# GitHub token (for authenticated git operations)
-GITHUB_TOKEN=$(cat /run/secrets/tillandsias-github-token)
-export GIT_ASKPASS_OVERRIDE="true"  # Use env var, not prompt
-git config credential.helper "store --file=/dev/null"  # Prevent caching
-git clone "https://$GITHUB_TOKEN@github.com/user/repo.git"
-
-# CA certificate (for MITM proxy)
-cp /run/secrets/tillandsias-ca-cert /tmp/ca.pem
-chmod 644 /tmp/ca.pem
-export CURL_CA_BUNDLE=/tmp/ca.pem
-```
+6. **On shutdown**, the tray revokes all minted AppRole tokens via
+   `vault token revoke <token>` and removes the corresponding podman secrets.
 
 ## Security Guarantees
 
@@ -143,42 +105,42 @@ export CURL_CA_BUNDLE=/tmp/ca.pem
 - **Filesystem permissions**: Only tray process (UID 1000) can read `.../secrets/` dir
 - **Memory protection**: Tillandsias tray uses `Zeroizing<String>` to wipe from RAM
 
-## Implementation: Podman Secrets Migration
+## Implementation: Vault-Native Secret Flow
 
-### Step 1: Tray Initialization
+### Step 1: Vault Bootstrap (`images/vault/entrypoint.sh`)
 
-```rust
-// src-tauri/src/handlers.rs: ensure_infrastructure_ready()
+```bash
+# Derive unseal key from machine-id + installation-uuid via HKDF
+UNSEAL_KEY_HEX=$(xxd -p -c 64 < /run/secrets/vault-unseal)
 
-// Retrieve GitHub token from OS keyring
-match secrets::retrieve_github_token() {
-    Ok(Some(token)) => {
-        // Create ephemeral secret
-        podman::secret::create("tillandsias-github-token", token)?;
-    }
-    Ok(None) => {
-        // No token — user hasn't authenticated yet
-        warn!("No GitHub token found — cloning will require authentication");
-    }
-    Err(e) => {
-        // Keyring unavailable (non-fatal for local projects)
-        warn!("Keyring unavailable: {e}");
-    }
-}
+# Initialize on first boot, then rekey
+if ! vault status 2>/dev/null | grep -q 'Initialized.*true'; then
+  vault operator init -key-shares=1 -key-threshold=1 \
+    -recovery-shares=0 -format=json > /vault/data/init.json
+  ROOT_TOKEN=$(jq -r '.root_token' < /vault/data/init.json)
+  vault operator rekey -init -key-shares=1 -key-threshold=1 \
+    <(echo "$UNSEAL_KEY_HEX") 2>/dev/null
+  rm /vault/data/init.json
+fi
 
-// Generate ephemeral CA certificate
-let (ca_cert, ca_key) = ca::generate_ephemeral_ca()?;
-podman::secret::create("tillandsias-ca-cert", ca_cert)?;
-podman::secret::create("tillandsias-ca-key", ca_key)?;
+vault operator unseal "$UNSEAL_KEY_HEX"
 ```
 
-### Step 2: Container Launch
+### Step 2: Tray Token Minting (`vault_bootstrap.rs`)
 
 ```rust
-// src-tauri/src/launch.rs: launch_container()
+// Mint a scoped AppRole token for a container kind
+let token = client.create_token("git-mirror-policy", 3600).await?;
+let secret_name = format!("tillandsias-vault-token-git-mirror-{}", id);
+podman::secret::create(&secret_name, &token)?;
+```
 
-// Add secrets to podman run arguments
-if podman::secret::exists("tillandsias-github-token")? {
+### Step 3: Per-Container Podman Secret Mount
+
+```rust
+// In container launch: mount the vault-token + CA certs
+run_args.push("--secret=tillandsias-vault-token-git-mirror-abc123");
+if podman::secret::exists("tillandsias-ca-cert")? { {
     run_args.push("--secret=tillandsias-github-token".to_string());
 }
 if podman::secret::exists("tillandsias-ca-cert")? {
@@ -226,16 +188,13 @@ exec squid -N
 #!/bin/bash
 set -e
 
-# GitHub token (if available)
-if [[ -f /run/secrets/tillandsias-github-token ]]; then
-    GITHUB_TOKEN=$(cat /run/secrets/tillandsias-github-token)
-    export GIT_CREDENTIAL_CACHE_DAEMON_TIMEOUT=1  # One-shot use
-    
-    # Configure git to use token-based auth
-    git config --global credential.helper store
-fi
+# GitHub token — read from Vault via the baked vault-cli helper.
+# The AppRole token is mounted at /run/secrets/vault-token by the
+# tray at container launch time.
+TOKEN="$(vault-cli read -field=token secret/github/token)"
+export GIT_CREDENTIAL_CACHE_DAEMON_TIMEOUT=1
 
-# CA certificate (if available)
+# CA certificate (mounted as tmpfs podman secret)
 if [[ -f /run/secrets/tillandsias-ca-cert ]]; then
     export GIT_SSL_CAINFO="/run/secrets/tillandsias-ca-cert"
 fi
@@ -244,70 +203,31 @@ fi
 exec git daemon --verbose --listen=0.0.0.0 --base-path=/var/lib/git
 ```
 
-### Step 4: Shutdown Cleanup
+### Step 4: Shutdown Cleanup (`vault_bootstrap.rs`)
 
 ```rust
-// src-tauri/src/main.rs: shutdown path
+// Revoke all per-container AppRole tokens
+vault_bootstrap::revoke_pending_container_tokens(false).await;
 
-pub async fn cleanup_all_secrets() {
-    let secrets = vec![
-        "tillandsias-github-token",
-        "tillandsias-ca-cert",
-        "tillandsias-ca-key",
-    ];
-    
-    for secret in secrets {
-        match podman::secret::remove(secret).await {
-            Ok(()) => {
-                info!(
-                    accountability = true,
-                    spec = "secrets-management",
-                    secret = secret,
-                    "Cleaned up ephemeral secret on shutdown"
-                );
-            }
-            Err(e) => {
-                warn!(
-                    spec = "secrets-management",
-                    secret = secret,
-                    error = %e,
-                    "Failed to clean up secret (will be cleaned by podman GC)"
-                );
-            }
-        }
-    }
-}
+// CA cert podman secrets cleaned by podman GC on container stop
 ```
 
-## Comparison: Before vs. After
+## Comparison: Old (Podman Secret) vs. Current (Vault-Native)
 
-### Before (Bind Mounts + Environment Variables)
-
-```rust
-// ❌ INSECURE
-// CA certs exposed in podman inspect, permission issues with --userns=keep-id
-let run_args = vec![
-    "-v", &format!("{}:/etc/squid/certs/intermediate.crt:ro", ca_cert_path),
-    "-v", &format!("{}:/etc/squid/certs/intermediate.key:ro", ca_key_path),
-    // ❌ Token visible in podman ps, process env
-    "-e", &format!("GITHUB_TOKEN={}", token),
-];
-```
-
-### After (Podman Secrets)
+### Old (Keyring → Podman Secret — removed in v0.3)
 
 ```rust
-// ✅ SECURE
-// Secrets not in command-line, not in process list, not in logs
-podman::secret::create("tillandsias-ca-cert", ca_cert)?;
-podman::secret::create("tillandsias-ca-key", ca_key)?;
+// ❌ REMOVED — token extracted to host process, podman secret persisted
 podman::secret::create("tillandsias-github-token", token)?;
+let run_args = vec!["--secret=tillandsias-github-token"];
+```
 
-let run_args = vec![
-    "--secret=tillandsias-ca-cert",
-    "--secret=tillandsias-ca-key",
-    "--secret=tillandsias-github-token",
-];
+### Current (Vault-native — v0.3+)
+
+```rust
+// ✅ Token stays inside a container; tray only holds a short-lived
+// AppRole token that can read secret/github/token.
+let token = vault_client.read("secret/github/token").await?;
 ```
 
 ## Threat Mitigation
@@ -336,28 +256,27 @@ let run_args = vec![
 - **After**: Secrets are ephemeral, removed on tray shutdown
 - **Mitigation**: `podman secret rm` on exit ensures no disk residue
 
-## File Locations (After Migration)
+## File Locations (Vault-Native)
 
 ```
 Host System
-├── OS Keyring (GNOME Keyring / KDE Wallet)
-│   └── tillandsias/github → GitHub token (encrypted by OS)
-├── Tray Process (main.rs)
-│   └── RAM: temporary String (zeroized on drop)
-└── Podman Secrets Storage (~/.local/share/containers/storage/secrets/)
-    ├── filedriver/
-    │   ├── tillandsias-github-token
-    │   ├── tillandsias-ca-cert
-    │   └── tillandsias-ca-key
+└── ~/.local/share/containers/storage/secrets/
+    ├── tillandsias-vault-unseal (tmpfs, HKDF-derived key)
+    ├── tillandsias-vault-token-git-mirror-<id> (tmpfs, AppRole token)
+    ├── tillandsias-vault-token-forge-<id> (tmpfs, AppRole token)
+    ├── tillandsias-ca-cert (tmpfs)
+    └── tillandsias-ca-key (tmpfs)
+
+Vault Container (tillandsias-vault-data volume)
+├── secret/github/token (persisted GitHub token)
+├── auth/approle/role/<name>/role-id
+└── auth/approle/role/<name>/secret-id
 
 Container Runtime
-├── /run/secrets/ (tmpfs, auto-created by podman)
-│   ├── tillandsias-github-token (readable, 644)
-│   ├── tillandsias-ca-cert (readable, 644)
-│   └── tillandsias-ca-key (readable, 600)
-└── /tmp/ (tmpfs for entrypoint-copied files, ephemeral)
-    ├── ca.pem (copied from secret, auto-cleanup on exit)
-    └── cert-db/ (squid cache)
+└── /run/secrets/ (tmpfs, created by podman)
+    ├── vault-token (AppRole token, 644)
+    ├── tillandsias-ca-cert (644)
+    └── tillandsias-ca-key (600)
 ```
 
 ## Monitoring and Logging
@@ -365,17 +284,17 @@ Container Runtime
 ### Audit Events (Tillandsias Accountability Logging)
 
 ```rust
-// Log secret operations for compliance
+// Log token minting for compliance
 info!(
     accountability = true,
     category = "secrets",
-    spec = "secrets-management",
-    action = "secret_create",
-    secret_name = "tillandsias-github-token",
-    "Ephemeral secret created at session start"
+    spec = "tillandsias-vault",
+    action = "token_create",
+    role = "git-mirror",
+    "AppRole token minted for container launch"
 );
 
-// Log secret access inside containers (via entrypoint)
+// Log Vault read from inside container
 info!(
     accountability = true,
     category = "secrets",

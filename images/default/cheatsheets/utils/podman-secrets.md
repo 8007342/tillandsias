@@ -327,38 +327,50 @@ podman secret create tillandsias-ca /tmp/ca.crt
 podman run --secret=tillandsias-ca tillandsias-proxy
 ```
 
-### For GitHub Tokens
+### For Vault Unseal Key
 
 ```bash
-# Retrieve from OS keyring or prompt user
-TOKEN=$(secret-tool lookup tillandsias github)
+# The Vault unseal key is HKDF-derived from machine-id + installation-uuid
+# by tillandsias-headless and written to a tmpfs-only podman secret:
+podman secret create --replace tillandsias-vault-unseal <(xxd -r -p)
 
-# Create ephemeral secret (lives only for this session)
-podman secret create tillandsias-github-token --env GITHUB_TOKEN
-
-# Git service reads from /run/secrets/
-podman run --secret=tillandsias-github-token tillandsias-git
+# Vault container mounts it at /run/secrets/vault-unseal:
+podman run --secret=tillandsias-vault-unseal tillandsias-vault
 ```
 
-### For Encrypted Credentials (Future)
+### For Per-Container AppRole Tokens
 
 ```bash
-# If using pass driver:
-podman secret create --driver=pass tillandsias-github-token github.com/tillandsias
+# Tray mints a scoped token and creates a tmpfs podman secret:
+TOKEN=$(vault token create -policy=git-mirror-policy -ttl=1h -field=token)
+podman secret create tillandsias-vault-token-git-mirror-<id> <(echo "$TOKEN")
 
-# If using shell driver with secret-tool:
-podman secret create --driver=shell tillandsias-github "secret-tool lookup tillandsias github"
+# Container mounts it at /run/secrets/vault-token and uses vault-cli to read
+# the GitHub token from Vault:
+podman run --secret=tillandsias-vault-token-git-mirror-abc123 tillandsias-git
+```
+
+### For CA Certificates
+
+```bash
+# CA certs are created per-session and live in tmpfs-only podman secrets:
+podman secret create tillandsias-ca-cert < /path/to/intermediate.crt
+podman secret create tillandsias-ca-key < /path/to/intermediate.key
+
+# Proxy container mounts both:
+podman run \
+  --secret=tillandsias-ca-cert \
+  --secret=tillandsias-ca-key \
+  tillandsias-proxy
 ```
 
 ## Implementation Checklist
 
-- [ ] Replace CA cert bind mounts with `podman secret` in handlers.rs
-- [ ] Replace GitHub token environment variable with `podman secret`
-- [ ] Update proxy entrypoint to read from `/run/secrets/tillandsias-ca`
-- [ ] Update git service entrypoint to read from `/run/secrets/tillandsias-github-token`
-- [ ] Add secret cleanup on tray shutdown (remove ephemeral secrets)
-- [ ] Add audit logging for secret operations (creation, access, deletion)
-- [ ] Document in CLAUDE.md: "All container secrets are ephemeral, created at session start, destroyed on exit"
+- [x] Vault bootstrap creates `tillandsias-vault-unseal` tmpfs secret (HKDF-derived)
+- [x] Tray mints per-container AppRole tokens as `tillandsias-vault-token-<role>-<id>`
+- [x] Git service reads GitHub token from Vault via `vault-cli`, not from a podman secret
+- [x] CA certs use tmpfs podman secrets `tillandsias-ca-cert` / `tillandsias-ca-key`
+- [ ] Add audit logging for Vault operations (token mint, secret read)
 
 ## Troubleshooting
 

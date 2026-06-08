@@ -11,8 +11,9 @@ Per-project bare mirror repositories live inside a named Podman volume mounted
 at `/srv/git` in the git service container. Git daemon serves clones and pushes
 over the enclave network. Post-receive hooks forward only the refs changed by
 the forge push to the configured remote. GitHub credentials arrive through the
-Phase 6 Vault AppRole path by default, with the deprecated keyring-backed
-podman secret kept as a temporary fallback.
+Phase 6.5 Vault AppRole path. The git service reads the GitHub token from Vault
+at push time via Vault CLI; the token never crosses the host-container boundary
+as a podman secret.
 ## Requirements
 ### Requirement: Bare mirror repository management
 The system SHALL create and maintain a bare mirror repository for each project
@@ -117,17 +118,15 @@ in the forge push. If no remote is configured, the hook SHALL be a no-op.
 - **AND** the commits SHALL remain safe in the local mirror
 - **AND** the user can refresh credentials via "GitHub Login" in the tray
 
-### Requirement: GitHub token delivery uses Vault AppRole by default
+### Requirement: GitHub token delivery uses Vault AppRole
 The git service container SHALL receive a short-lived Vault AppRole token scoped
-to `git-mirror-policy` by default. The launcher SHALL mount that token as a
-podman secret at `/run/secrets/vault-token`; the hook SHALL read the GitHub
-token from Vault at `secret/github/token` through `vault-cli` only at push time.
-The deprecated `tillandsias-github-token` podman secret MAY be mounted only when
-the user explicitly selects the legacy keyring path. No D-Bus socket, keyring
-API, bind-mounted token file, or askpass helper SHALL cross the enclave
-boundary.
+to `git-mirror-policy`. The launcher SHALL mount that token as a podman secret
+at `/run/secrets/vault-token`; the hook SHALL read the GitHub token from Vault
+at `secret/github/token` through `vault-cli` only at push time. No D-Bus socket,
+keyring API, bind-mounted token file, or askpass helper SHALL cross the enclave
+boundary. The deprecated `--legacy-keyring-secrets` fallback was removed in v0.3.
 
-@trace spec:git-mirror-service, spec:secrets-management, spec:native-secrets-store
+@trace spec:git-mirror-service
 
 #### Scenario: Vault token mount on launch
 - **WHEN** the git service container is launched and Vault is running
@@ -137,8 +136,8 @@ boundary.
 - **AND** the container SHALL receive `VAULT_ADDR=http://vault:8200` and
   `VAULT_ROLE=git-mirror`
 
-#### Scenario: No token means no credential mount
-- **WHEN** Vault has no GitHub token and the legacy keyring path is not selected
+#### Scenario: No Vault token means no credential mount
+- **WHEN** Vault has no GitHub token
 - **THEN** the git service container SHALL start without a token mount
 - **AND** authenticated pushes SHALL fail loudly until the user re-authenticates via "GitHub Login"
 
@@ -148,12 +147,6 @@ boundary.
 - **THEN** the hook SHALL run `vault-cli read -field=token secret/github/token`
 - **AND** construct the HTTPS auth URL in memory only
 - **AND** the token SHALL not appear in process arguments, environment variables, or logs
-
-#### Scenario: Legacy keyring secret fallback
-- **WHEN** the git service starts with `--legacy-keyring-secrets`
-- **THEN** the container MAY receive `--secret=tillandsias-github-token`
-- **AND** the hook MAY read `/run/secrets/tillandsias-github-token`
-- **AND** no Vault env vars SHALL be injected for the legacy-only git launch
 
 ### Requirement: Git service container lifecycle
 The git service container SHALL be started per-project when the first forge container launches and stopped when all forge containers for that project stop. The container name SHALL be `tillandsias-git-<project>`.
@@ -296,7 +289,7 @@ Gating points:
 - git daemon serves clones from enclave network only; external clones fail
 - Post-receive hook forwards only changed refs to remote if configured, logs result with no credentials
 - Startup retry-push uses explicit branch/tag refspecs, never `--mirror` or `--all`
-- Vault AppRole token allows the git service to read `secret/github/token`; legacy keyring secret is explicit and deprecated
+- Vault AppRole token is the only credential path (legacy keyring fallback removed in v0.3)
 - Forge containers cannot access any credentials (no D-Bus, no token files, no git config)
 - Mirror sync event-driven by filesystem watcher, zero polling
 - Sync skips if host has uncommitted changes, diverged branch, or detached HEAD

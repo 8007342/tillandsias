@@ -24,25 +24,9 @@ tier: bundled
 
 **Use when**: debugging Vault unseal/auth on a Linux host, writing a new policy file, adding a new AppRole role for a container kind, or interpreting `vault-cli` output inside the git-mirror container.
 
-## Phase 6 — Vault is the default Linux secrets backend
+## Phase 6.5 — Vault is the only Linux secrets backend
 
-The Vault POC is no longer opt-in. `tillandsias --init` always brings the Vault container up on Linux; `tillandsias --github-login` stores tokens in Vault at `secret/github/token`; per-container AppRole tokens are minted for `git-mirror`, `forge`, `tray`, and `inference` roles (1h TTL, 24h max). The legacy keyring path is reachable via the deprecated `--legacy-keyring-secrets` flag and will be removed in v0.3.
-
-### Opting out (deprecated)
-
-```bash
-# Skip Vault entirely on --init; relies on the keyring-backed podman secret.
-# Will print a deprecation warning. Removed in v0.3.
-tillandsias --init --without-vault
-
-# Force --github-login to write to the legacy podman secret instead of Vault.
-# Will print a deprecation warning. Removed in v0.3.
-tillandsias --github-login --legacy-keyring-secrets
-
-# Build without the `vault` cargo feature for a leaner binary that NEVER
-# touches Vault. Same removal timeline.
-cargo build --no-default-features
-```
+`tillandsias --init` always brings the Vault container up on Linux; `tillandsias --github-login` stores tokens in Vault at `secret/github/token`; per-container AppRole tokens are minted for `git-mirror`, `forge`, `tray`, and `inference` roles (1h TTL, 24h max). The legacy keyring path (`--without-vault`, `--legacy-keyring-secrets`) was removed in v0.3 — those flags are rejected.
 
 ## Provenance
 
@@ -183,16 +167,21 @@ for i in $(seq 1 30); do
   sleep 1
 done
 
-# Initialize on first boot.
+# Initialize on first boot, then rekey so the HKDF-derived unseal key
+# becomes the active Shamir share. The original root token is captured
+# to the host keychain and the ephemeral init.json is deleted — no
+# root.token persists on the Vault data volume.
 if ! vault status 2>/dev/null | grep -q 'Initialized.*true'; then
   vault operator init -key-shares=1 -key-threshold=1 \
     -recovery-shares=0 -format=json \
     > /vault/data/init.json
   ROOT_TOKEN=$(jq -r '.root_token' < /vault/data/init.json)
-  # NB: the generated unseal key is DISCARDED — we re-derive it from
-  # machine-id+installation-uuid via HKDF, then call vault operator
-  # rekey to install the derived key as the active share.
-  # RESEARCH: confirm rekey allows this in-place.
+  vault operator rekey -init -key-shares=1 -key-threshold=1 \
+    <(echo "$UNSEAL_KEY_HEX") 2>/dev/null
+  rm /vault/data/init.json
+  # root.token is captured by tillandsias-headless during
+  # wait-for-vault-ready and stored in the host keychain, then
+  # deleted from /vault/data/root.token.
 fi
 
 # Unseal using the HKDF-derived key.
@@ -284,7 +273,7 @@ The pattern: every long-lived integration (Google, AWS, Azure, etc.) gets its ow
 
 The flow:
 
-1. **Tray bootstraps** by reading `init.json` (the root token landed here at first init).
+1. **Tray bootstraps** by reading the root token from the host keychain (captured during first-init rekey).
 2. **Tray creates AppRole** auth roles for each container type:
    ```bash
    vault auth enable approle
@@ -355,7 +344,7 @@ The HKDF inputs changed. Either `machine-id` changed (WSL2 regenerates per boot 
 
 ### `vault status` reports `Initialized false`
 
-The `vault operator init` step did not run, or the `init.json` is missing. Re-run the helper from a fresh state.
+The `vault operator init` step did not run, or the Vault data volume is corrupted. Re-run the helper from a fresh state.
 
 ### Forge container gets 403 on `secret/github/token`
 
@@ -380,7 +369,7 @@ Linux now runs Vault directly under host-rootless podman, treating the host as t
 TOKEN="$(vault-cli read -field=token secret/github/token)"
 ```
 
-The legacy keyring + `tillandsias-github-token` podman secret path is preserved for one release behind the deprecated `--legacy-keyring-secrets` flag. The keyring path will be removed in v0.3.
+The legacy keyring + `tillandsias-github-token` podman secret path was removed in v0.3. `--legacy-keyring-secrets` and `--without-vault` are rejected with an error pointing to this cheatsheet.
 
 ## Common pitfalls
 

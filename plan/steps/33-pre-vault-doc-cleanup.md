@@ -1,6 +1,12 @@
 # Step 33 — Pre-Vault documentation cleanup (cheatsheets + mirrors)
 
-- **Status**: ready
+- **Status**: claimed
+
+## Claim
+
+- **Claimed at**: 2026-06-07T00:59:12Z
+- **Agent**: linux-macuahuitl-big-pickle-20260607T005316
+- **Lease**: lease-linux-doc-cleanup-20260607T005912Z (expires 2026-06-07T04:59:12Z)
 - **Owner host**: linux
 - **Branch**: linux-next
 - **Depends on**: [] (independent of step 32; do not block on it)

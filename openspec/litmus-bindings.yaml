@@ -628,13 +628,11 @@ specs:
   last_verified: '2026-05-30'
   tombstone: superseded:podman-secrets-integration
 - spec_id: secrets-management
-  status: active
-  litmus_tests:
-  - litmus:credential-isolation
-  - litmus:gh-auth-script-shape
-  - litmus:secrets-management-implementation-shape
-  coverage_ratio: 75
-  last_verified: '2026-05-30'
+  status: obsolete
+  litmus_tests: []
+  coverage_ratio: 0
+  last_verified: '2026-06-07'
+  tombstone: superseded:tillandsias-vault
 - spec_id: simplified-tray-ux
   status: active
   litmus_tests:

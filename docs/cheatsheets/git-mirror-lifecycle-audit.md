@@ -30,7 +30,7 @@ tier: bundled
 - **Push lands at GitHub:** YES (design complete; implemented in wave 24)
 - **Top breakages found:** 0 critical after the wave 24 safety fix
 - **Safety invariant:** NEVER use `git push --mirror` from the sparse enclave mirror; forward only refs provided to `post-receive`
-- **Credential source:** Vault AppRole token at `/run/secrets/vault-token` by default; legacy `tillandsias-github-token` only behind `--legacy-keyring-secrets`
+- **Credential source:** Vault AppRole token at `/run/secrets/vault-token` always (the legacy `--legacy-keyring-secrets` fallback was removed in v0.3)
 - **Key divergence:** User's mental model (bind-mounted filesystem) differs from actual implementation (named podman volume + git daemon TCP protocol)
 - **Certificate status:** Proxy allowlist includes `.github.com` (✓), no HTTPS interception issues expected
 
@@ -165,7 +165,7 @@ tier: bundled
 │                                                                         │
 │ 8. Secrets (ephemeral, created at tray startup):                       │
 │    - tillandsias-vault-token-* (→ /run/secrets/vault-token in git)     │
-│    - tillandsias-github-token only with --legacy-keyring-secrets        │
+│    - (legacy tillandsias-github-token removed in v0.3)                     │
 │    - tillandsias-ca-cert, tillandsias-ca-key (for proxy + forge)       │
 └─────────────────────────────────────────────────────────────────────────┘
 
@@ -471,12 +471,10 @@ forge:$ git push origin main
    TOKEN=""
    if [ -r /run/secrets/vault-token ] && command -v vault-cli >/dev/null 2>&1; then
        TOKEN="$(vault-cli read -field=token secret/github/token 2>/dev/null || true)"
-   fi
-   if [ -z "$TOKEN" ] && [ -r /run/secrets/tillandsias-github-token ]; then
-       TOKEN="$(cat /run/secrets/tillandsias-github-token 2>/dev/null || true)"
-   fi
-   ```
-   The second branch is the deprecated `--legacy-keyring-secrets` fallback.
+    fi
+    ```
+    (The legacy `--legacy-keyring-secrets` fallback branch that read from
+    `tillandsias-github-token` was removed in v0.3.)
 
 5. **Construct push URL in memory** (lines 60–68):
    ```bash
@@ -695,11 +693,11 @@ GitHub token itself is stored in Vault at `secret/github/token` by
 **Cleanup:** Tray shutdown revokes minted Vault tokens and removes the generated
 podman secret. The Vault container and its encrypted volume persist.
 
-### `tillandsias-github-token` (deprecated fallback)
+### `tillandsias-github-token` (removed in v0.3)
 
-The legacy keyring-backed podman secret is mounted only when
-`--legacy-keyring-secrets` is selected. It remains for one release as a
-compatibility bridge and is expected to disappear in v0.3.
+The legacy keyring-backed podman secret fallback (`--legacy-keyring-secrets`)
+was removed in v0.3. The token now lives exclusively in Vault at
+`secret/github/token`.
 
 ### `tillandsias-ca-cert` and `tillandsias-ca-key`
 
@@ -778,7 +776,7 @@ podman run --rm -v tillandsias-mirror-tillandsias:/srv/git \
 ```bash
 podman secret list
 # Expect: tillandsias-ca-cert, tillandsias-ca-key, tillandsias-vault-token-* for git launches.
-# Deprecated fallback: tillandsias-github-token only when --legacy-keyring-secrets is selected.
+# (Legacy tillandsias-github-token removed in v0.3 — all tokens go through Vault.)
 ```
 
 ---
