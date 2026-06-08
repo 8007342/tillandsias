@@ -5,8 +5,12 @@ use fs2::FileExt;
 use std::fs::{File, OpenOptions};
 use std::io::{Read, Seek, SeekFrom, Write};
 use std::process;
-use std::time::{Duration, Instant};
-use tracing::{debug, info, warn};
+use std::time::Duration;
+#[cfg(unix)]
+use std::time::Instant;
+#[cfg(unix)]
+use tracing::info;
+use tracing::{debug, warn};
 
 /// A guard that ensures only one instance of the application is running.
 pub struct SingletonGuard {
@@ -87,6 +91,7 @@ impl SingletonGuard {
         Ok(Self { _file: file })
     }
 
+    #[allow(unused_variables)]
     fn terminate_process(pid: i32, timeout: Duration) {
         #[cfg(unix)]
         {
