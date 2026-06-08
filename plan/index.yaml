@@ -2880,7 +2880,7 @@ plan_index:
                 - "./build.sh --check PASS"
                 - "cargo test tillandsias-headless PASS (2 pre-existing signal-handling failures unchanged)"
         - id: vault-flow/vault-https-via-ca
-          status: ready
+          status: claimed
           depends_on: []
           owned_files:
             - images/vault/vault.hcl
@@ -2889,6 +2889,13 @@ plan_index:
             - crates/tillandsias-vault-client/src/lib.rs
           checkpoint_required: true
           handoff_note: "Put Vault behind HTTPS with the intermediate CA (/tmp/tillandsias-ca/intermediate.{crt,key}, generated main.rs:1159-1309; already used by Squid SSL-bump + router mount). vault.hcl: replace tls_disable=true with tls_cert_file/tls_key_file; mount the cert/key into the vault container (launch_vault_container, vault_bootstrap.rs:492); VaultClient::new (lib.rs:50) add_root_certificate(CA) + https://; flip host_base_url + Containerfile HEALTHCHECK + wait_for_vault_ready to https."
+          events:
+            - type: claim
+              ts: "2026-06-08T19:20:30Z"
+              agent_id: "linux-macuahuitl-codex-20260608T192030Z"
+              host: "linux"
+              lease_id: "lease-linux-vault-https-20260608T192030Z"
+              expires_at: "2026-06-08T23:20:30Z"
         - id: vault-flow/xplat-gating-parity
           status: blocked
           owner_host: macos+windows
