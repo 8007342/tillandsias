@@ -3142,6 +3142,26 @@ async fn build_connection(service: Arc<TrayService>) -> Result<Connection, Strin
         .build()
         .await
         .map_err(|e| e.to_string())?;
+
+    // @trace spec:singleton-guard
+    // Request well-known name to enforce singleton behavior at the D-Bus level.
+    let dbus_proxy = fdo::DBusProxy::new(&conn)
+        .await
+        .map_err(|e| format!("failed to create D-Bus proxy: {e}"))?;
+    match dbus_proxy
+        .request_name(
+            "org.tillandsias.Launcher".try_into().unwrap(),
+            fdo::RequestNameFlags::DoNotQueue.into(),
+        )
+        .await
+    {
+        Ok(fdo::RequestNameReply::PrimaryOwner) => {
+            tracing::debug!("acquired D-Bus name org.tillandsias.Launcher");
+        }
+        Ok(_) => return Err("Another tray instance is already running (D-Bus name taken)".into()),
+        Err(e) => warn!("failed to request D-Bus singleton name: {e}"),
+    }
+
     Ok(conn)
 }
 

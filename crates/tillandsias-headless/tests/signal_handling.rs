@@ -32,6 +32,10 @@ fn assert_shutdown(signal: libc::c_int, signal_name: &str) {
 
     let mut child = Command::new(binary)
         .arg("--headless")
+        .env(
+            "TILLANDSIAS_LOCK_NAME",
+            format!("test-signal-{}", signal_name),
+        )
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()

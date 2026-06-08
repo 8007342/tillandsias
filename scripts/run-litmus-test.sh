@@ -31,6 +31,19 @@
 
 set -eo pipefail
 
+# @trace spec:graceful-shutdown
+# Set pgid so we can signal the whole group on exit.
+# This ensures all children (like tillandsias-podman-cli) are killed.
+if [[ "$(uname)" == "Linux" ]]; then
+    # Create new process group if we are the session leader or in a new shell
+    if [[ -t 0 ]]; then
+        # Only do this if running interactively or in a real TTY
+        # (prevents issues in some CI environments)
+        set -m
+    fi
+    trap 'kill -TERM -$$ 2>/dev/null || true' EXIT
+fi
+
 # ============================================================================
 # CONFIGURATION & GLOBALS
 # ============================================================================
@@ -105,6 +118,7 @@ PATH="\$new_path" exec "$PROJECT_ROOT/scripts/tillandsias-podman" raw "\${args[@
 EOF
 chmod 755 "$LITMUS_RUNTIME_DIR/bin/podman"
 export PATH="$LITMUS_RUNTIME_DIR/bin:$PATH"
+export TILLANDSIAS_NO_SINGLETON=1
 export LITMUS_PODMAN_CALLS_FILE="${LITMUS_PODMAN_CALLS_FILE:-$PROJECT_ROOT/target/litmus-podman/calls.log}"
 
 # Default timeout in seconds (can be overridden via --timeout)

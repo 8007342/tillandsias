@@ -23,6 +23,7 @@
 # =============================================================================
 
 set -euo pipefail
+export TILLANDSIAS_NO_SINGLETON=1
 
 # @trace spec:linux-native-portable-executable, spec:dev-build, spec:build-script-architecture, spec:windows-cross-build
 

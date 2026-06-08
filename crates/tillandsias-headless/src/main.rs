@@ -74,6 +74,13 @@ mod vault_bootstrap;
 const VERSION: &str = include_str!("../../../VERSION");
 
 fn main() {
+    #[cfg(unix)]
+    {
+        // Set pgid so we can signal the whole group on exit.
+        // This ensures all children (even if they try to detach) can be tracked.
+        let _ = unsafe { libc::setpgid(0, 0) };
+    }
+
     let version = VERSION.trim();
 
     // Parse CLI arguments
@@ -238,6 +245,26 @@ fn main() {
 
     let headless = user_args.iter().any(|a| a == "--headless");
     let tray = user_args.iter().any(|a| a == "--tray");
+
+    // @trace spec:singleton-guard
+    // Enforce singleton behavior. Newer instances signal and terminate older instances.
+    // We gate all run modes and init to prevent port/state collisions.
+    let _singleton =
+        if !status_check && !github_login && !github_logout && !cache_clear && !cache_verify {
+            match tillandsias_core::singleton::SingletonGuard::acquire(
+                "launcher",
+                Duration::from_secs(5),
+            ) {
+                Ok(g) => Some(g),
+                Err(e) => {
+                    eprintln!("Error: Singleton acquisition failed: {e}");
+                    std::process::exit(1);
+                }
+            }
+        } else {
+            None
+        };
+
     let config_path = user_args.iter().enumerate().find_map(|(i, a)| {
         if a.starts_with('-') {
             return None;
@@ -6889,6 +6916,19 @@ pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
             {
                 let _ = fs::remove_file(entry.path());
             }
+        }
+    }
+
+    // 5. Force-terminate the process group to clean up any remaining stray children
+    // (like orphaned tillandsias-podman-cli instances).
+    // @trace spec:graceful-shutdown
+    #[cfg(unix)]
+    {
+        debug!("sending SIGTERM to process group");
+        unsafe {
+            // Signal our own process group. Use a negative PID to target the group.
+            // Ignore failure (ESRCH means group is already gone).
+            let _ = libc::kill(-libc::getpgrp(), libc::SIGTERM);
         }
     }
 
