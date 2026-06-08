@@ -3218,7 +3218,7 @@ plan_index:
     - id: image-build-wrapper-convergence
       order: 48
       title: Converge all image build entrypoints and prove hash-only rebuilds
-      status: pending
+      status: in_progress
       owner_host: linux
       deliverable: plan/steps/48-image-build-wrapper-convergence.md
       audit_origin: plan/issues/container-build-efficiency-telemetry-2026-06-08.md
@@ -3240,7 +3240,7 @@ plan_index:
         - "The full image matrix preserves dependency ordering and emits one telemetry schema."
       tasks:
         - id: image-build-convergence/wrappers-and-e2e
-          status: pending
+          status: claimed
           owner_host: linux
           capability_tags: [rust, shell, containers, integration, testing]
           depends_on:
@@ -3273,3 +3273,10 @@ plan_index:
             image-specific child; do not weaken shared digest assertions.
           checkpoint_required: true
           handoff_note: "Integration packet only; claim after steps 44-47 are durable."
+          events:
+            - type: claim
+              ts: "2026-06-08T19:08:43Z"
+              agent_id: "linux-macuahuitl-codex-20260608T190843Z"
+              host: "linux"
+              lease_id: "lease-linux-image-wrapper-convergence-20260608T190843Z"
+              expires_at: "2026-06-08T23:08:43Z"

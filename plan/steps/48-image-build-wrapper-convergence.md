@@ -1,12 +1,14 @@
 # Step 48 — Image-build wrapper convergence and end-to-end proof
 
-- **Status**: pending
+- **Status**: claimed
 - **Owner host**: linux
 - **Branch**: linux-next
 - **Depends on**: steps 44, 45, 46, 47
 - **Specs**: default-image, init-command, init-incremental-builds,
   forge-staleness, litmus-framework
 - **Audit origin**: plan/issues/container-build-efficiency-telemetry-2026-06-08.md
+- **Lease**: `lease-linux-image-wrapper-convergence-20260608T190843Z`
+- **Agent**: `linux-macuahuitl-codex-20260608T190843Z`
 
 ## Goal
 
