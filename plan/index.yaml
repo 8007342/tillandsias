@@ -2354,6 +2354,19 @@ plan_index:
       finding: plan/issues/vault-rekey-infeasible-finding-2026-06-07.md
       depends_on: []
       events:
+        - type: lease-reclaimed
+          ts: "2026-06-09T01:12:00Z"
+          agent_id: "linux-tlatoani-claude-20260609T0111Z"
+          host: "linux"
+          reclaimed_lease_id: "lease-linux-vault-true-rekey-20260608T1937Z"
+          note: "Gemini lease (expires 2026-06-08T23:38:00Z) expired with no completion/progress event; operator confirmed Gemini is not working. Reclaiming for an opus session to refine the spec, implement the keychain-held generated-share mechanism, fix the entrypoint brick bug, and adversarially verify + e2e before landing."
+        - type: claim
+          ts: "2026-06-09T01:12:00Z"
+          agent_id: "linux-tlatoani-claude-20260609T0111Z"
+          host: "linux"
+          lease_id: "lease-linux-vault-true-rekey-20260609T0112Z"
+          expires_at: "2026-06-09T05:12:00Z"
+          note: "Spec-first: refine tillandsias-vault spec away from the infeasible rekey mandate to the keychain-held Vault-generated-share model; then implement entrypoint.sh + vault_bootstrap.rs hardening + instant guard litmus; adversarial review + e2e before done."
         - type: claim
           ts: "2026-06-08T19:38:00Z"
           agent_id: "linux-tlatoani-gemini-20260608T1937"
