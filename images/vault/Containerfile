@@ -22,7 +22,7 @@ RUN apk add --no-cache bash jq curl coreutils \
     && mkdir -p /vault/data /vault/config /vault/audit /run/secrets \
     && chown -R vault:vault /vault/data /vault/config /vault/audit
 
-# Vault config: enclave-only listener, file backend, audit device.
+# Vault config: CA-authenticated TLS listener, file backend, audit device.
 COPY vault.hcl /vault/config/vault.hcl
 
 # Policy templates — read by the entrypoint after Vault is unsealed and
@@ -47,6 +47,6 @@ USER vault
 EXPOSE 8200
 
 HEALTHCHECK --interval=2s --timeout=5s --start-period=5s --retries=15 \
-    CMD curl -fsS http://127.0.0.1:8200/v1/sys/health?standbyok=true || exit 1
+    CMD curl --cacert /run/secrets/tillandsias-vault-tls-ca -fsS https://127.0.0.1:8200/v1/sys/health?standbyok=true || exit 1
 
 ENTRYPOINT ["/usr/local/bin/tillandsias-vault-entrypoint.sh"]

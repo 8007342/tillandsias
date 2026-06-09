@@ -32,7 +32,9 @@ pub use budget_enforcer::BudgetEnforcer;
 pub use cardinality::{CardinalityAnalyzer, CardinalityReport};
 pub use dead_trace_detector::{DeadTrace, DeadTraceAudit, extract_dead_specs, find_dead_traces};
 pub use error::{LoggingError, Result};
-pub use event_collector::{EventCollector, EventMetadata, ImageBuildEvent, SecretRotationEvent};
+pub use event_collector::{
+    EventCollector, EventMetadata, ImageBuildEvent, ImageBuildEventWriter, SecretRotationEvent,
+};
 pub use log_entry::LogEntry;
 pub use logger::Logger;
 pub use query::{AggregationOp, Filter, JsonFilter, Query, QueryExecutor, parse};

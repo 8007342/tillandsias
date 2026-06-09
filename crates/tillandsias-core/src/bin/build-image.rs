@@ -1,86 +1,64 @@
-//! Quick-start litmus test for image building.
+//! Compatibility entrypoint for the canonical image build engine.
 //!
-//! Usage:
-//!   cargo run --bin build-image -- forge
-//!   cargo run --bin build-image -- git
-//!   cargo run --bin build-image -- proxy
-//!
-//! This exercises the exact ImageBuilder code path that tillandsias app uses.
-//! Records podman calls for litmus assertion (test harness mode).
-//!
-//! In toolbox:
-//!   toolbox run cargo run --bin build-image -- forge
+//! This binary intentionally contains no independent freshness or Podman
+//! logic. It resolves the repository root and delegates every argument to
+//! `scripts/build-image.sh`, the same engine used by public shell wrappers.
 //!
 //! @trace spec:user-runtime-lifecycle, spec:litmus-framework
 
 use std::env;
-use std::process;
+use std::path::{Path, PathBuf};
+use std::process::{self, Command};
 
-// TODO: When ImageBuilder trait is implemented, import and use it here
-// For now, this is a stub that documents the pattern
-
-fn main() {
-    let args: Vec<String> = env::args().collect();
-
-    if args.len() < 2 {
-        eprintln!("Usage: {} <image_name> [--assert-calls]", args[0]);
-        eprintln!();
-        eprintln!("Examples:");
-        eprintln!(
-            "  {} forge          # Build forge, record podman calls",
-            args[0]
-        );
-        eprintln!(
-            "  {} git            # Build git, record podman calls",
-            args[0]
-        );
-        eprintln!(
-            "  {} proxy          # Build proxy, record podman calls",
-            args[0]
-        );
-        eprintln!();
-        eprintln!("With --assert-calls: verify exact podman invocation against spec");
-        process::exit(1);
+fn find_repo_root() -> Result<PathBuf, String> {
+    if let Some(root) = env::var_os("TILLANDSIAS_ROOT") {
+        let root = PathBuf::from(root);
+        if root.join("scripts/build-image.sh").is_file() {
+            return Ok(root);
+        }
+        return Err(format!(
+            "TILLANDSIAS_ROOT does not contain scripts/build-image.sh: {}",
+            root.display()
+        ));
     }
 
-    let image_name = &args[1];
-    let assert_calls = args.len() > 2 && args[2] == "--assert-calls";
+    let mut current = env::current_dir().map_err(|error| error.to_string())?;
+    loop {
+        if current.join("scripts/build-image.sh").is_file() {
+            return Ok(current);
+        }
+        if !current.pop() {
+            break;
+        }
+    }
 
-    println!("[litmus] Building image: {}", image_name);
-    println!(
-        "[litmus] Mode: {}",
-        if assert_calls { "assert" } else { "record" }
-    );
+    let manifest_root = Path::new(env!("CARGO_MANIFEST_DIR")).join("../..");
+    if manifest_root.join("scripts/build-image.sh").is_file() {
+        return manifest_root
+            .canonicalize()
+            .map_err(|error| error.to_string());
+    }
 
-    // TODO: Replace with real ImageBuilder implementation:
-    //
-    // let builder = if assert_calls {
-    //     Box::new(PodmanCapture::new()) as Box<dyn ImageBuilder>
-    // } else {
-    //     Box::new(PodmanDirect::new())
-    // };
-    //
-    // match builder.build(image_name).await {
-    //     Ok(result) => {
-    //         println!("[litmus✓] Build succeeded");
-    //         println!("  Image tag: {}", result.image_tag);
-    //         println!("  Size: {} MB", result.size_mb);
-    //         println!("  Staleness: {}", result.was_stale);
-    //         if let Some(call) = builder.last_podman_call() {
-    //             println!("  Podman call: {:?}", call);
-    //             if assert_calls {
-    //                 // Verify against spec
-    //             }
-    //         }
-    //         process::exit(0);
-    //     }
-    //     Err(e) => {
-    //         eprintln!("[litmus✗] Build failed: {}", e);
-    //         process::exit(1);
-    //     }
-    // }
+    Err("unable to locate repository root containing scripts/build-image.sh".to_string())
+}
 
-    println!("[litmus→] ImageBuilder trait not yet integrated");
-    println!("[litmus→] This is a placeholder for the convergence pattern");
-    process::exit(0);
+fn run() -> Result<i32, String> {
+    let root = find_repo_root()?;
+    let script = root.join("scripts/build-image.sh");
+    let status = Command::new(&script)
+        .args(env::args_os().skip(1))
+        .current_dir(&root)
+        .status()
+        .map_err(|error| format!("failed to execute {}: {error}", script.display()))?;
+    Ok(status.code().unwrap_or(1))
+}
+
+fn main() {
+    match run() {
+        Ok(code) => process::exit(code),
+        Err(error) => {
+            eprintln!("build-image: {error}");
+            process::exit(1);
+        }
+    }
 }

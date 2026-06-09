@@ -36,6 +36,7 @@
 //! See `crates/tillandsias-logging/src/aggregator.rs` for log aggregation implementation.
 
 use signal_hook::flag;
+use std::collections::{BTreeMap, HashMap};
 use std::fs;
 use std::io::{self, Read, Write};
 use std::os::unix::net::UnixStream;
@@ -51,6 +52,11 @@ use tillandsias_control_wire::{
     ControlEnvelope, ControlMessage, MAX_MESSAGE_BYTES, WIRE_VERSION, decode, encode,
 };
 use tillandsias_core::cache_validation;
+use tillandsias_core::image_builder::{
+    ImageBuildAction, ImageBuildDecision, ImageBuildIdentity, ImageBuildObservation,
+    ImageBuildReason, SOURCE_DIGEST_LABEL, decide_image_build,
+};
+use tillandsias_logging::{ImageBuildEvent, ImageBuildEventWriter};
 use tillandsias_podman::{
     ContainerSpec, MountMode, PodmanClient, current_runtime_lane, detect_gpu_devices,
     podman_cmd_sync, require_desktop_user_session, require_headless_service_account,
@@ -711,6 +717,10 @@ struct InitBuildState {
     /// Map of image name -> digest of the source context used for the build.
     #[serde(default)]
     image_source_digests: std::collections::HashMap<String, String>,
+    /// Additive v2 identity records. Older state files deserialize with an
+    /// empty map and remain valid.
+    #[serde(default)]
+    image_identities: HashMap<String, InitImageIdentity>,
     /// Digest of the materialized runtime asset manifest, when available.
     #[serde(default)]
     runtime_asset_manifest_digest: Option<String>,
@@ -718,11 +728,24 @@ struct InitBuildState {
     timestamp: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+struct InitImageIdentity {
+    source_digest: String,
+    canonical_tag: String,
+    version_alias: String,
+    latest_alias: String,
+    #[serde(default)]
+    image_id: Option<String>,
+    last_action: ImageBuildAction,
+    last_reason: ImageBuildReason,
+}
+
 impl InitBuildState {
     fn new() -> Self {
         Self {
             images: std::collections::HashMap::new(),
             image_source_digests: std::collections::HashMap::new(),
+            image_identities: HashMap::new(),
             runtime_asset_manifest_digest: None,
             timestamp: chrono::Local::now().to_rfc3339(),
         }
@@ -776,6 +799,7 @@ impl InitBuildState {
         self.images.insert(image.to_string(), "failed".to_string());
     }
 
+    #[cfg(test)]
     fn was_successful(&self, image: &str) -> bool {
         self.images
             .get(image)
@@ -783,15 +807,26 @@ impl InitBuildState {
             .unwrap_or(false)
     }
 
-    fn set_image_source_digest(&mut self, image: &str, digest: String) {
-        self.image_source_digests.insert(image.to_string(), digest);
-    }
-
-    fn image_source_digest_matches(&self, image: &str, digest: &str) -> bool {
+    fn set_image_identity(
+        &mut self,
+        image: &str,
+        decision: &ImageBuildDecision,
+        image_id: Option<String>,
+    ) {
         self.image_source_digests
-            .get(image)
-            .map(|cached| cached == digest)
-            .unwrap_or(false)
+            .insert(image.to_string(), decision.identity.source_digest.clone());
+        self.image_identities.insert(
+            image.to_string(),
+            InitImageIdentity {
+                source_digest: decision.identity.source_digest.clone(),
+                canonical_tag: decision.identity.canonical_tag.clone(),
+                version_alias: decision.identity.version_alias.clone(),
+                latest_alias: decision.identity.latest_alias.clone(),
+                image_id,
+                last_action: decision.action,
+                last_reason: decision.reason,
+            },
+        );
     }
 
     fn set_runtime_asset_manifest_digest(&mut self, digest: Option<String>) {
@@ -952,9 +987,33 @@ fn init_log_file(image_name: &str, debug: bool) -> Option<PathBuf> {
         image_name
     )))
 }
+enum RuntimeOrHandle {
+    Runtime(tokio::runtime::Runtime),
+    Handle(tokio::runtime::Handle),
+}
 
-fn podman_runtime() -> Result<tokio::runtime::Runtime, String> {
-    tokio::runtime::Runtime::new().map_err(|e| format!("Failed to create async runtime: {e}"))
+impl RuntimeOrHandle {
+    fn block_on<F: std::future::Future>(&self, f: F) -> F::Output {
+        match self {
+            Self::Runtime(rt) => rt.block_on(f),
+            Self::Handle(handle) => {
+                // If we are already in an async context, we cannot block the current thread.
+                // However, zbus / tokio allows block_in_place if we are on a multi-threaded runtime.
+                // A safer way is tokio::task::block_in_place or running it inside a helper.
+                tokio::task::block_in_place(move || handle.block_on(f))
+            }
+        }
+    }
+}
+
+fn podman_runtime() -> Result<RuntimeOrHandle, String> {
+    if let Ok(handle) = tokio::runtime::Handle::try_current() {
+        Ok(RuntimeOrHandle::Handle(handle))
+    } else {
+        tokio::runtime::Runtime::new()
+            .map(RuntimeOrHandle::Runtime)
+            .map_err(|e| format!("Failed to create async runtime: {e}"))
+    }
 }
 
 fn report_runtime_lane(context: &str, debug: bool) {
@@ -998,41 +1057,192 @@ fn image_specs(root: &Path, image_name: &str) -> Result<(PathBuf, PathBuf), Stri
     Ok((containerfile, context_dir))
 }
 
-fn image_build_args(image_name: &str, image_tag: &str) -> Vec<String> {
+fn versioned_image_tag(image_name: &str, version: &str) -> String {
+    format!("localhost/tillandsias-{image_name}:v{version}")
+}
+
+#[allow(clippy::type_complexity)]
+fn image_build_inputs(
+    image_name: &str,
+    chromium_core: Option<&ImageBuildIdentity>,
+) -> Result<(BTreeMap<String, String>, BTreeMap<String, String>), String> {
+    let mut build_args = BTreeMap::new();
+    let mut dependency_digests = BTreeMap::new();
     if image_name == "chromium-framework" {
-        // @trace spec:init-command, spec:browser-isolation-framework
-        //
-        // chromium-framework depends on chromium-core image built in the previous step.
-        // Pass --build-arg CHROMIUM_CORE_IMAGE so the Containerfile can reference it:
-        //
-        //   FROM ${CHROMIUM_CORE_IMAGE}
-        //
-        // KNOWN BLOCKER: Nix-based image builds (via flake.nix + nix build) do NOT support
-        // ARG passing. The nix build system does not expose a way to pass --build-arg values
-        // through the Nix derivation. This is a pre-existing infrastructure limitation that
-        // prevents us from using `scripts/build-image.sh chromium-framework` when chromium-core
-        // just built. Workaround: build directly via podman (current implementation, which
-        // works correctly) OR enhance build-image.sh to support `--build-arg` passthrough.
-        //
-        // Reference: project_nix_image_builds_require_git_add.md
-        //
-        let core_version = image_tag
-            .split(':')
-            .next_back()
-            .map(|value| value.trim_start_matches('v'))
-            .filter(|value| !value.is_empty())
-            .unwrap_or("latest");
-        vec![
-            "--build-arg".into(),
-            format!("CHROMIUM_CORE_IMAGE=localhost/tillandsias-chromium-core:v{core_version}"),
-        ]
+        let core = chromium_core.ok_or_else(|| {
+            "chromium-framework identity requires chromium-core identity".to_string()
+        })?;
+        build_args.insert(
+            "CHROMIUM_CORE_IMAGE".to_string(),
+            core.canonical_tag.clone(),
+        );
+        dependency_digests.insert("chromium-core".to_string(), core.source_digest.clone());
+    }
+    Ok((build_args, dependency_digests))
+}
+
+fn image_inspect_metadata(inspect_json: &str) -> Result<(Option<String>, Option<String>), String> {
+    let value: serde_json::Value = serde_json::from_str(inspect_json)
+        .map_err(|e| format!("Failed to parse podman image inspect JSON: {e}"))?;
+    let image = value
+        .as_array()
+        .and_then(|items| items.first())
+        .unwrap_or(&value);
+    let image_id = image
+        .get("Id")
+        .or_else(|| image.get("ID"))
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
+    let source_digest = image
+        .pointer("/Config/Labels")
+        .or_else(|| image.get("Labels"))
+        .and_then(|labels| labels.get(SOURCE_DIGEST_LABEL))
+        .and_then(serde_json::Value::as_str)
+        .map(str::to_string);
+    Ok((image_id, source_digest))
+}
+
+async fn observe_image_build(
+    client: &PodmanClient,
+    identity: &ImageBuildIdentity,
+    force: bool,
+) -> (ImageBuildObservation, Option<String>) {
+    let canonical_tag_exists = client.image_exists(&identity.canonical_tag).await;
+    let (canonical_image_id, canonical_source_digest) = if canonical_tag_exists {
+        client
+            .image_inspect(&identity.canonical_tag)
+            .await
+            .ok()
+            .and_then(|json| image_inspect_metadata(&json).ok())
+            .unwrap_or((None, None))
     } else {
-        Vec::new()
+        (None, None)
+    };
+
+    let version_alias_matches = alias_matches_image(
+        client,
+        &identity.version_alias,
+        canonical_image_id.as_deref(),
+    )
+    .await;
+    let latest_alias_matches = alias_matches_image(
+        client,
+        &identity.latest_alias,
+        canonical_image_id.as_deref(),
+    )
+    .await;
+
+    (
+        ImageBuildObservation {
+            canonical_tag_exists,
+            canonical_source_digest,
+            version_alias_matches,
+            latest_alias_matches,
+            force,
+        },
+        canonical_image_id,
+    )
+}
+
+async fn alias_matches_image(
+    client: &PodmanClient,
+    alias: &str,
+    canonical_image_id: Option<&str>,
+) -> bool {
+    let Some(canonical_image_id) = canonical_image_id else {
+        return false;
+    };
+    let Ok(json) = client.image_inspect(alias).await else {
+        return false;
+    };
+    image_inspect_metadata(&json)
+        .ok()
+        .and_then(|(image_id, _)| image_id)
+        .as_deref()
+        == Some(canonical_image_id)
+}
+
+async fn apply_image_aliases(
+    client: &PodmanClient,
+    identity: &ImageBuildIdentity,
+) -> Result<(), String> {
+    client
+        .image_tag(&identity.canonical_tag, &identity.version_alias)
+        .await
+        .map_err(|e| format!("Failed to update version image alias: {e}"))?;
+    client
+        .image_tag(&identity.canonical_tag, &identity.latest_alias)
+        .await
+        .map_err(|e| format!("Failed to update latest image alias: {e}"))
+}
+
+fn image_build_action_label(action: ImageBuildAction) -> &'static str {
+    match action {
+        ImageBuildAction::Skip => "skip",
+        ImageBuildAction::Retag => "retag",
+        ImageBuildAction::Build => "build",
+        ImageBuildAction::ForceRebuild => "force_rebuild",
     }
 }
 
-fn versioned_image_tag(image_name: &str, version: &str) -> String {
-    format!("localhost/tillandsias-{image_name}:v{version}")
+fn image_build_reason_label(reason: ImageBuildReason) -> &'static str {
+    match reason {
+        ImageBuildReason::DigestPresent => "digest_present",
+        ImageBuildReason::AliasMissing => "alias_missing",
+        ImageBuildReason::DigestMissing => "digest_missing",
+        ImageBuildReason::LabelMismatch => "label_mismatch",
+        ImageBuildReason::Forced => "forced",
+    }
+}
+
+fn image_build_cache_result(action: ImageBuildAction) -> &'static str {
+    match action {
+        ImageBuildAction::Skip | ImageBuildAction::Retag => "hit",
+        ImageBuildAction::Build => "miss",
+        ImageBuildAction::ForceRebuild => "unknown",
+    }
+}
+
+fn image_build_event(
+    event_type: &str,
+    build_id: &str,
+    image_name: &str,
+    identity: &ImageBuildIdentity,
+    decision: &ImageBuildDecision,
+) -> ImageBuildEvent {
+    ImageBuildEvent::lifecycle(
+        event_type,
+        build_id,
+        "tillandsias-init",
+        image_name,
+        &identity.canonical_tag,
+    )
+    .with_identity(
+        &identity.source_digest,
+        &identity.version_alias,
+        &identity.latest_alias,
+    )
+    .with_decision(
+        image_build_action_label(decision.action),
+        image_build_reason_label(decision.reason),
+    )
+    .with_cache("layers", image_build_cache_result(decision.action))
+}
+
+fn emit_image_build_event(event: &ImageBuildEvent, debug: bool) {
+    let writer = ImageBuildEventWriter::new(ImageBuildEventWriter::default_path());
+    if let Err(e) = writer.append(event) {
+        eprintln!(
+            "WARNING: failed to write image build telemetry to {}: {}",
+            writer.path().display(),
+            e
+        );
+    } else if debug {
+        eprintln!(
+            "[tillandsias] image-build telemetry: {}",
+            writer.path().display()
+        );
+    }
 }
 
 fn forge_image_tag(version: &str) -> String {
@@ -1107,7 +1317,22 @@ fn ensure_image_exists(
     let (containerfile, context_dir) = image_specs(root, image_name)?;
     let rt = podman_runtime()?;
     let client = PodmanClient::new();
-    let build_args = image_build_args(image_name, image_tag);
+    let build_args = if image_name == "chromium-framework" {
+        let version = image_tag
+            .split(':')
+            .next_back()
+            .unwrap_or("latest")
+            .trim_start_matches('v');
+        vec![
+            "--build-arg".to_string(),
+            format!(
+                "CHROMIUM_CORE_IMAGE={}",
+                versioned_image_tag("chromium-core", version)
+            ),
+        ]
+    } else {
+        Vec::new()
+    };
 
     rt.block_on(async move {
         if client.image_exists(image_tag).await {
@@ -1547,7 +1772,9 @@ fn build_git_run_args(
         args.push("--secret".into());
         args.push(format!("{secret_name},target=vault-token,mode=0400"));
         args.push("--env".into());
-        args.push("VAULT_ADDR=http://vault:8200".into());
+        args.push("VAULT_ADDR=https://vault:8200".into());
+        args.push("--env".into());
+        args.push("CURL_CA_BUNDLE=/etc/tillandsias/ca.crt".into());
         args.push("--env".into());
         args.push("VAULT_ROLE=git-mirror".into());
     }
@@ -2592,21 +2819,19 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
     ];
 
     // @trace spec:forge-staleness, spec:forge-cache-dual
-    // Check cache integrity before loading state. A cache version mismatch is
-    // expected after any version bump and is safely recoverable by rebuilding;
-    // treat it as if the user had passed --force so initialization just works.
-    let mut force = force;
+    // VERSION changes only move aliases. Content identity comes from the exact
+    // context digest and OCI label, so a cache-version mismatch never forces a
+    // rebuild by itself.
     let cache_status = check_cache_integrity(version)?;
-    if !force && cache_status.version_mismatch {
+    if cache_status.version_mismatch && debug {
         let cached_display = cache_status
             .cached_version
             .clone()
             .unwrap_or_else(|| "<unset>".to_string());
         eprintln!(
-            "[tillandsias] init: stale cache (cached {}, current {}); rebuilding all images",
+            "[tillandsias] init: version changed (cached {}, current {}); refreshing aliases only when source digests match",
             cached_display, version
         );
-        force = true;
     }
 
     // @trace spec:cache-recovery-mechanism
@@ -2621,60 +2846,156 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
     let rt = podman_runtime()?;
     let client = PodmanClient::new();
     let mut failed_images = Vec::new();
-
-    // If force is set, clear previous build state to rebuild all images
-    if force {
-        if debug {
-            println!("FORCE: rebuilding all images");
-        }
-        state = InitBuildState::new();
-    }
+    let mut identities = HashMap::<String, ImageBuildIdentity>::new();
 
     for image in &images {
-        let tag = versioned_image_tag(image, version);
-        let source_digest = runtime_assets::image_source_digest(&root, image)?;
+        let (build_args, dependency_digests) =
+            image_build_inputs(image, identities.get("chromium-core"))?;
+        let identity = runtime_assets::image_identity(
+            &root,
+            image,
+            version,
+            build_args.clone(),
+            dependency_digests,
+        )?;
+        let (observation, observed_image_id) =
+            rt.block_on(observe_image_build(&client, &identity, force));
+        let decision = decide_image_build(identity.clone(), &observation);
+        identities.insert((*image).to_string(), identity.clone());
+        let build_id = format!(
+            "image-{}-{}",
+            image,
+            chrono::Utc::now()
+                .timestamp_nanos_opt()
+                .unwrap_or_else(|| chrono::Utc::now().timestamp_micros() * 1000)
+        );
+        let decision_event = image_build_event(
+            "image.build.decision",
+            &build_id,
+            image,
+            &identity,
+            &decision,
+        );
+        emit_image_build_event(&decision_event, debug);
 
-        // Check if image exists and was previously successful
-        let should_skip = rt.block_on(async { client.image_exists(&tag).await });
-
-        let source_changed = !state.image_source_digest_matches(image, &source_digest);
-
-        if should_skip && state.was_successful(image) && !force && !source_changed {
-            if debug {
-                println!("SKIP {} (cached)", image);
+        match decision.action {
+            ImageBuildAction::Skip => {
+                if debug {
+                    println!("SKIP {} (digest present)", image);
+                }
+                let completed = image_build_event(
+                    "image.build.completed",
+                    &build_id,
+                    image,
+                    &identity,
+                    &decision,
+                )
+                .with_outcome("skipped", 0, 0);
+                emit_image_build_event(&completed, debug);
+                state.mark_success(image);
+                state.set_image_identity(image, &decision, observed_image_id);
+                continue;
             }
-            continue;
-        }
-
-        if source_changed && state.was_successful(image) && debug {
-            eprintln!("REBUILD {} (runtime assets changed)", image);
-        }
-
-        if !should_skip && state.was_successful(image) {
-            // Image deleted after successful build - rebuild
-            if debug {
-                println!("REBUILD {} (image deleted)", image);
+            ImageBuildAction::Retag => {
+                if debug {
+                    println!("RETAG {} (aliases stale or missing)", image);
+                }
+                if let Err(e) = rt.block_on(apply_image_aliases(&client, &identity)) {
+                    let failed = image_build_event(
+                        "image.build.failed",
+                        &build_id,
+                        image,
+                        &identity,
+                        &decision,
+                    )
+                    .with_outcome("failure", 0, 1)
+                    .with_redacted_error("alias_update_failed", &e);
+                    emit_image_build_event(&failed, debug);
+                    state.mark_failed(image);
+                    failed_images.push((image.to_string(), e));
+                } else {
+                    let completed = image_build_event(
+                        "image.build.completed",
+                        &build_id,
+                        image,
+                        &identity,
+                        &decision,
+                    )
+                    .with_outcome("retagged", 0, 0);
+                    emit_image_build_event(&completed, debug);
+                    state.mark_success(image);
+                    state.set_image_identity(image, &decision, observed_image_id);
+                }
+                continue;
+            }
+            ImageBuildAction::Build => {
+                if debug {
+                    println!("BUILD {} ({:?})", image, decision.reason);
+                }
+            }
+            ImageBuildAction::ForceRebuild => {
+                if debug {
+                    println!("FORCE BUILD {}", image);
+                }
             }
         }
 
         let log_file = init_log_file(image, debug);
-        if debug {
-            println!("BUILD {}", image);
-        }
-
-        let result = build_image_with_logging(&root, image, &tag, &log_file, debug);
+        let build_started = Instant::now();
+        let started = image_build_event(
+            "image.build.started",
+            &build_id,
+            image,
+            &identity,
+            &decision,
+        );
+        emit_image_build_event(&started, debug);
+        let result =
+            build_image_with_logging(&root, image, &identity, &build_args, &log_file, debug);
+        let duration_ms = build_started.elapsed().as_millis() as u64;
 
         if let Err(e) = result {
             if debug {
                 eprintln!("FAILED {}: {}", image, e);
             }
+            let failed =
+                image_build_event("image.build.failed", &build_id, image, &identity, &decision)
+                    .with_outcome("failure", duration_ms, 1)
+                    .with_redacted_error("podman_build_failed", &e);
+            emit_image_build_event(&failed, debug);
             state.mark_failed(image);
             failed_images.push((image.to_string(), e));
         } else {
-            state.mark_success(image);
-            state.set_image_source_digest(image, source_digest);
-            if debug {
-                println!("SUCCESS {}", image);
+            let alias_result = rt.block_on(apply_image_aliases(&client, &identity));
+            if let Err(e) = alias_result {
+                let failed =
+                    image_build_event("image.build.failed", &build_id, image, &identity, &decision)
+                        .with_outcome("failure", duration_ms, 1)
+                        .with_redacted_error("alias_update_failed", &e);
+                emit_image_build_event(&failed, debug);
+                state.mark_failed(image);
+                failed_images.push((image.to_string(), e));
+            } else {
+                let image_id = rt
+                    .block_on(client.image_inspect(&identity.canonical_tag))
+                    .ok()
+                    .and_then(|json| image_inspect_metadata(&json).ok())
+                    .and_then(|(image_id, _)| image_id);
+                let mut completed = image_build_event(
+                    "image.build.completed",
+                    &build_id,
+                    image,
+                    &identity,
+                    &decision,
+                )
+                .with_outcome("success", duration_ms, 0);
+                completed.image_id = image_id.clone();
+                emit_image_build_event(&completed, debug);
+                state.mark_success(image);
+                state.set_image_identity(image, &decision, image_id);
+                if debug {
+                    println!("SUCCESS {}", image);
+                }
             }
         }
     }
@@ -2753,24 +3074,28 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
 fn build_image_with_logging(
     root: &Path,
     image_name: &str,
-    image_tag: &str,
+    identity: &ImageBuildIdentity,
+    build_args: &BTreeMap<String, String>,
     log_file: &Option<PathBuf>,
     _debug: bool,
 ) -> Result<(), String> {
     // @trace gap:ON-005 — show progress % during image pull
     let (containerfile, context_dir) = image_specs(root, image_name)?;
-    let build_args = image_build_args(image_name, image_tag);
 
     let mut command = podman_command();
-    command.args(["build", "-t", image_tag, "-f"]);
+    command.args(["build", "-t", &identity.canonical_tag]);
+    for (label, value) in &identity.labels {
+        command.arg("--label").arg(format!("{label}={value}"));
+    }
+    command.arg("-f");
     command.arg(
         containerfile
             .to_str()
             .ok_or_else(|| "Containerfile path contains invalid UTF-8".to_string())?,
     );
 
-    for arg in &build_args {
-        command.arg(arg);
+    for (name, value) in build_args {
+        command.arg("--build-arg").arg(format!("{name}={value}"));
     }
 
     command.arg(
@@ -3286,8 +3611,8 @@ fn podman_command() -> Command {
 /// Container-side bridge for the retired Tauri `--github-login` path.
 ///
 /// The host runtime only assumes Podman. GitHub CLI runs inside the git service
-/// image; the host only captures the token in memory and creates the Podman
-/// secret over stdin.
+/// image; the host never captures the token in host memory — the vault write
+/// executes entirely inside the container.
 ///
 /// @trace spec:gh-auth-script, spec:podman-secrets-integration, spec:secret-rotation, spec:tillandsias-vault
 fn run_github_login(debug: bool) -> Result<(), String> {
@@ -3312,29 +3637,67 @@ fn run_github_login(debug: bool) -> Result<(), String> {
 
     ensure_image_exists(&root, "git", &image, debug)?;
 
+    // Bring Vault online before the interactive paste so the user isn't
+    // left waiting after login.
+    #[cfg(feature = "vault")]
+    vault_bootstrap::ensure_vault_running(debug)?;
+
     let container = format!("tillandsias-gh-login-{}", std::process::id());
     let cleanup = LoginContainerCleanup {
         name: container.clone(),
         debug,
     };
 
-    let mut run = podman_command();
-    run.args([
-        "run",
-        "--detach",
-        "--rm",
-        "--name",
-        &container,
-        "--cap-drop=ALL",
-        "--security-opt=no-new-privileges",
-        "--userns=keep-id",
-        "--entrypoint",
-        "/bin/sh",
-        &image,
-        "-c",
-        "trap 'exit 0' TERM INT; while :; do sleep 3600 & wait $!; done",
-    ]);
-    run_command_silent(run, debug)?;
+    #[cfg(feature = "vault")]
+    let vault_lease;
+
+    #[cfg(feature = "vault")]
+    {
+        vault_lease =
+            vault_bootstrap::mint_approle_secret_lease("github-login", &container, debug)?;
+        let mut run = podman_command();
+        run.args([
+            "run",
+            "--detach",
+            "--rm",
+            "--name",
+            &container,
+            "--network",
+            ENCLAVE_NET,
+            "--secret",
+            &format!("{},target=vault-token", vault_lease.secret_name()),
+            "--cap-drop=ALL",
+            "--security-opt=no-new-privileges",
+            "--userns=keep-id",
+            "--entrypoint",
+            "/bin/sh",
+            &image,
+            "-c",
+            "trap 'exit 0' TERM INT; while :; do sleep 3600 & wait $!; done",
+        ]);
+        run_command_silent(run, debug)?;
+    }
+
+    #[cfg(not(feature = "vault"))]
+    {
+        let mut run = podman_command();
+        run.args([
+            "run",
+            "--detach",
+            "--rm",
+            "--name",
+            &container,
+            "--cap-drop=ALL",
+            "--security-opt=no-new-privileges",
+            "--userns=keep-id",
+            "--entrypoint",
+            "/bin/sh",
+            &image,
+            "-c",
+            "trap 'exit 0' TERM INT; while :; do sleep 3600 & wait $!; done",
+        ]);
+        run_command_silent(run, debug)?;
+    }
 
     let mut login = podman_command();
     login.args([
@@ -3366,69 +3729,59 @@ fn run_github_login(debug: bool) -> Result<(), String> {
         format!("containerized gh authentication verification failed after login: {e}")
     })?;
 
-    let mut token_cmd = podman_command();
-    token_cmd.args([
-        "exec",
-        &container,
-        "gh",
-        "auth",
-        "token",
-        "--hostname",
-        "github.com",
-    ]);
-    let token = command_output(token_cmd, debug)?;
-    if token.is_empty() {
-        error!(
-            accountability = true,
-            category = "secrets",
-            spec = "secret-rotation",
-            operation = "gh_auth_failed",
-            reason = "empty-token",
-            "GitHub authentication produced empty token"
-        );
-        return Err("containerized gh auth token returned an empty token".to_string());
-    }
-
-    let mut username_cmd = podman_command();
-    username_cmd.args(["exec", &container, "gh", "api", "user", "--jq", ".login"]);
-    let username = command_output(username_cmd, debug).ok();
-
     info!(
         accountability = true,
         category = "secrets",
         spec = "secret-rotation",
         operation = "gh_auth_success",
         secret_name = "tillandsias-github-token",
-        "GitHub token retrieved successfully; initiating secret rotation"
+        "GitHub authentication succeeded; writing token to Vault from inside container"
     );
 
-    // @trace spec:tillandsias-vault
-    // Phase 6: write to Vault exclusively.
+    // Write the token to Vault entirely inside the container — the token
+    // never leaves the container's memory space.
     #[cfg(feature = "vault")]
     {
-        match vault_bootstrap::write_github_token_to_vault(&token, debug) {
-            Ok(()) => {
-                info!(
-                    accountability = true,
-                    category = "secrets",
-                    spec = "tillandsias-vault",
-                    operation = "gh_auth_vault_write",
-                    secret_name = "tillandsias-github-token",
-                    "GitHub token stored in Vault at secret/github/token"
-                );
-            }
-            Err(e) => {
-                // write_github_token_to_vault now brings Vault up on demand, so
-                // a failure here means the bring-up itself failed — surface the
-                // underlying cause rather than a stale "run --init" hint.
-                return Err(format!("vault write failed: {e}"));
-            }
-        }
+        let mut vault_write = podman_command();
+        vault_write.args([
+            "exec",
+            &container,
+            "/bin/sh",
+            "-c",
+            "TOKEN=$(gh auth token --hostname github.com); vault-cli.sh write secret/github/token \"token=$TOKEN\"",
+        ]);
+        run_command_silent(vault_write, debug)
+            .map_err(|e| format!("in-container vault write failed: {e}"))?;
+
+        let mut vault_verify = podman_command();
+        vault_verify.args([
+            "exec",
+            &container,
+            "vault-cli.sh",
+            "read",
+            "-field=token",
+            "secret/github/token",
+        ]);
+        run_command_silent(vault_verify, debug)
+            .map_err(|e| format!("in-container vault write verification failed: {e}"))?;
+
+        info!(
+            accountability = true,
+            category = "secrets",
+            spec = "tillandsias-vault",
+            operation = "gh_auth_vault_write",
+            secret_name = "tillandsias-github-token",
+            "GitHub token stored in Vault at secret/github/token"
+        );
     }
     #[cfg(not(feature = "vault"))]
     {
         return Err("vault feature not compiled; cannot store GitHub token".to_string());
     }
+
+    let mut username_cmd = podman_command();
+    username_cmd.args(["exec", &container, "gh", "api", "user", "--jq", ".login"]);
+    let username = command_output(username_cmd, debug).ok();
 
     drop(cleanup);
 
@@ -7260,8 +7613,12 @@ mod tests {
         // The container needs VAULT_ADDR + VAULT_ROLE to know how to talk
         // to Vault and which role to authenticate as.
         assert!(
-            has_arg(&args, "VAULT_ADDR=http://vault:8200"),
+            has_arg(&args, "VAULT_ADDR=https://vault:8200"),
             "missing VAULT_ADDR env: {args:?}"
+        );
+        assert!(
+            has_arg(&args, "CURL_CA_BUNDLE=/etc/tillandsias/ca.crt"),
+            "missing Vault CA env: {args:?}"
         );
         assert!(
             has_arg(&args, "VAULT_ROLE=git-mirror"),
@@ -7591,8 +7948,8 @@ mod tests {
             "run_github_login must verify the containerized gh session"
         );
         assert!(
-            login_window.contains("write_github_token_to_vault"),
-            "run_github_login must persist the token to Vault"
+            login_window.contains("vault-cli.sh write secret/github/token"),
+            "run_github_login must persist the token to Vault from inside the container"
         );
 
         let opencode_window = source_window(
@@ -8114,36 +8471,58 @@ mod tests {
     }
 
     #[test]
-    fn image_build_args_passes_chromium_core_image_for_framework() {
-        // Test that image_build_args correctly passes CHROMIUM_CORE_IMAGE
-        // when building chromium-framework.
-        // @trace spec:init-command
-        let args = image_build_args(
-            "chromium-framework",
-            "localhost/tillandsias-chromium-framework:v1.0.0",
-        );
+    fn image_build_inputs_include_chromium_core_identity_for_framework() {
+        let core = ImageBuildIdentity {
+            source_digest: "sha256:core".to_string(),
+            canonical_tag: "localhost/tillandsias-chromium-core:sha256-core".to_string(),
+            version_alias: "localhost/tillandsias-chromium-core:v1.0.0".to_string(),
+            latest_alias: "localhost/tillandsias-chromium-core:latest".to_string(),
+            labels: BTreeMap::new(),
+        };
+        let (build_args, dependency_digests) =
+            image_build_inputs("chromium-framework", Some(&core)).unwrap();
 
-        assert_eq!(args.len(), 2, "should have 2 args (--build-arg and value)");
-        assert_eq!(args[0], "--build-arg");
-        assert!(
-            args[1].contains("CHROMIUM_CORE_IMAGE=localhost/tillandsias-chromium-core:v1.0.0"),
-            "should pass CHROMIUM_CORE_IMAGE with version: {}",
-            args[1]
+        assert_eq!(
+            build_args.get("CHROMIUM_CORE_IMAGE"),
+            Some(&core.canonical_tag)
+        );
+        assert_eq!(
+            dependency_digests.get("chromium-core"),
+            Some(&core.source_digest)
         );
     }
 
     #[test]
-    fn image_build_args_empty_for_non_framework_images() {
-        // Test that image_build_args returns empty args for non-framework images.
-        // @trace spec:init-command
-        let args = image_build_args("proxy", "tillandsias-proxy:v1.0.0");
-        assert!(args.is_empty(), "proxy should have no build args");
+    fn image_build_inputs_are_empty_for_non_framework_images() {
+        for image in ["proxy", "forge", "git"] {
+            let (build_args, dependency_digests) = image_build_inputs(image, None).unwrap();
+            assert!(build_args.is_empty(), "{image} should have no build args");
+            assert!(
+                dependency_digests.is_empty(),
+                "{image} should have no dependency digests"
+            );
+        }
+    }
 
-        let args = image_build_args("forge", "tillandsias-forge:v1.0.0");
-        assert!(args.is_empty(), "forge should have no build args");
+    #[test]
+    fn image_inspect_metadata_reads_nested_labels_and_ids() {
+        let json = r#"[{"Id":"sha256:image","Config":{"Labels":{"io.tillandsias.image.source-digest":"sha256:source"}}}]"#;
+        let (image_id, source_digest) = image_inspect_metadata(json).unwrap();
+        assert_eq!(image_id.as_deref(), Some("sha256:image"));
+        assert_eq!(source_digest.as_deref(), Some("sha256:source"));
+    }
 
-        let args = image_build_args("git", "tillandsias-git:v1.0.0");
-        assert!(args.is_empty(), "git should have no build args");
+    #[test]
+    fn legacy_init_state_deserializes_without_identity_records() {
+        let legacy = r#"{
+            "images":{"forge":"success"},
+            "image_source_digests":{"forge":"old-digest"},
+            "runtime_asset_manifest_digest":null,
+            "timestamp":"2026-06-01T00:00:00Z"
+        }"#;
+        let state: InitBuildState = serde_json::from_str(legacy).unwrap();
+        assert!(state.was_successful("forge"));
+        assert!(state.image_identities.is_empty());
     }
 
     #[test]

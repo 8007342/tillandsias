@@ -8,9 +8,14 @@
 //! All events are JSON-serialized with timestamp, metadata, and no PII/secrets.
 
 use chrono::{DateTime, Utc};
+use fs2::FileExt;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
+use std::fs::{self, OpenOptions};
+use std::io::{self, Read, Seek, SeekFrom, Write};
+use std::path::{Path, PathBuf};
+use uuid::Uuid;
 
 #[cfg(test)]
 use serde_json::json;
@@ -141,12 +146,63 @@ pub struct ImageBuildEvent {
     pub builder: String,
 
     /// Image size in bytes (0 if unknown or skipped)
-    #[serde(skip_serializing_if = "is_zero")]
+    #[serde(default, skip_serializing_if = "is_zero")]
     pub image_size_bytes: u64,
 
     /// Error details if build failed
     #[serde(skip_serializing_if = "Option::is_none")]
     pub error: Option<String>,
+
+    #[serde(default = "image_build_schema_version")]
+    pub schema_version: u8,
+    #[serde(default = "new_event_id")]
+    pub event_id: String,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub build_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub source_digest: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub canonical_tag: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub version_alias: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub latest_alias: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub decision: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub reason: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_policy: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub cache_result: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub duration_ms: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub image_id: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub bytes_downloaded: Option<u64>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub exit_code: Option<i32>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_class: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub error_summary: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub containerfile: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub context_file_count: Option<usize>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub podman_version: Option<String>,
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub host_platform: Option<String>,
+}
+
+fn image_build_schema_version() -> u8 {
+    1
+}
+
+fn new_event_id() -> String {
+    Uuid::new_v4().to_string()
 }
 
 /// Helper to skip zero-valued size fields in JSON
@@ -179,7 +235,102 @@ impl ImageBuildEvent {
             builder: builder_str,
             image_size_bytes: 0,
             error: None,
+            schema_version: image_build_schema_version(),
+            event_id: new_event_id(),
+            build_id: None,
+            source_digest: None,
+            canonical_tag: None,
+            version_alias: None,
+            latest_alias: None,
+            decision: None,
+            reason: None,
+            cache_policy: None,
+            cache_result: None,
+            duration_ms: None,
+            image_id: None,
+            bytes_downloaded: None,
+            exit_code: None,
+            error_class: None,
+            error_summary: None,
+            containerfile: None,
+            context_file_count: None,
+            podman_version: None,
+            host_platform: None,
         }
+    }
+
+    pub fn lifecycle(
+        event_type: impl Into<String>,
+        build_id: impl Into<String>,
+        actor: impl Into<String>,
+        image_name: impl Into<String>,
+        canonical_tag: impl Into<String>,
+    ) -> Self {
+        let actor = actor.into();
+        let canonical_tag = canonical_tag.into();
+        let mut event = Self::new(
+            image_name,
+            canonical_tag.clone(),
+            0.0,
+            "pending",
+            actor.clone(),
+        );
+        event.metadata.event_type = event_type.into();
+        event.metadata.actor = actor;
+        event.metadata.spec_trace = Some("spec:init-incremental-builds".to_string());
+        event.build_id = Some(build_id.into());
+        event.canonical_tag = Some(canonical_tag);
+        event.host_platform = Some(std::env::consts::OS.to_string());
+        event
+    }
+
+    pub fn with_identity(
+        mut self,
+        source_digest: impl Into<String>,
+        version_alias: impl Into<String>,
+        latest_alias: impl Into<String>,
+    ) -> Self {
+        self.source_digest = Some(source_digest.into());
+        self.version_alias = Some(version_alias.into());
+        self.latest_alias = Some(latest_alias.into());
+        self
+    }
+
+    pub fn with_decision(mut self, decision: impl Into<String>, reason: impl Into<String>) -> Self {
+        self.decision = Some(decision.into());
+        self.reason = Some(reason.into());
+        self
+    }
+
+    pub fn with_cache(mut self, policy: impl Into<String>, result: impl Into<String>) -> Self {
+        self.cache_policy = Some(policy.into());
+        self.cache_result = Some(result.into());
+        self
+    }
+
+    pub fn with_outcome(
+        mut self,
+        status: impl Into<String>,
+        duration_ms: u64,
+        exit_code: i32,
+    ) -> Self {
+        self.build_status = status.into();
+        self.duration_ms = Some(duration_ms);
+        self.build_duration_seconds = duration_ms as f64 / 1000.0;
+        self.exit_code = Some(exit_code);
+        self
+    }
+
+    pub fn with_redacted_error(
+        mut self,
+        error_class: impl Into<String>,
+        summary: impl AsRef<str>,
+    ) -> Self {
+        let summary = redact_error_summary(summary.as_ref());
+        self.error_class = Some(error_class.into());
+        self.error_summary = Some(summary.clone());
+        self.error = Some(summary);
+        self
     }
 
     /// Set image size in bytes
@@ -207,6 +358,137 @@ impl ImageBuildEvent {
     pub fn to_json(&self) -> serde_json::Result<String> {
         serde_json::to_string(self)
     }
+}
+
+#[derive(Debug, Clone)]
+pub struct ImageBuildEventWriter {
+    path: PathBuf,
+    max_bytes_override: Option<u64>,
+}
+
+const DEFAULT_IMAGE_BUILD_EVENT_MAX_BYTES: u64 = 50 * 1024 * 1024;
+
+impl ImageBuildEventWriter {
+    pub fn new(path: impl Into<PathBuf>) -> Self {
+        Self {
+            path: path.into(),
+            max_bytes_override: None,
+        }
+    }
+
+    pub fn with_max_bytes(mut self, max_bytes: u64) -> Self {
+        self.max_bytes_override = Some(max_bytes);
+        self
+    }
+
+    pub fn default_path() -> PathBuf {
+        if let Some(state_home) = std::env::var_os("XDG_STATE_HOME") {
+            return PathBuf::from(state_home)
+                .join("tillandsias")
+                .join("image-build-events.jsonl");
+        }
+        if let Some(home) = std::env::var_os("HOME") {
+            return PathBuf::from(home)
+                .join(".local")
+                .join("state")
+                .join("tillandsias")
+                .join("image-build-events.jsonl");
+        }
+        std::env::temp_dir()
+            .join("tillandsias")
+            .join("image-build-events.jsonl")
+    }
+
+    pub fn append(&self, event: &ImageBuildEvent) -> io::Result<()> {
+        if let Some(parent) = self.path.parent() {
+            fs::create_dir_all(parent)?;
+        }
+        let line = event
+            .to_json()
+            .map_err(|e| io::Error::new(io::ErrorKind::InvalidData, e))?;
+        if !EventCollector::validate_no_secrets(&line) {
+            return Err(io::Error::new(
+                io::ErrorKind::InvalidData,
+                "image build event failed secret redaction validation",
+            ));
+        }
+        let mut file = OpenOptions::new()
+            .create(true)
+            .truncate(false)
+            .read(true)
+            .write(true)
+            .open(&self.path)?;
+        file.lock_exclusive()?;
+        file.seek(SeekFrom::End(0))?;
+        let result = writeln!(file, "{line}")
+            .and_then(|_| file.flush())
+            .and_then(|_| self.enforce_retention(&mut file));
+        let _ = file.unlock();
+        result
+    }
+
+    pub fn path(&self) -> &Path {
+        &self.path
+    }
+
+    fn max_bytes(&self) -> u64 {
+        if let Some(max_bytes) = self.max_bytes_override {
+            return max_bytes;
+        }
+        std::env::var("TILLANDSIAS_IMAGE_BUILD_EVENT_MAX_BYTES")
+            .ok()
+            .and_then(|value| value.parse::<u64>().ok())
+            .unwrap_or(DEFAULT_IMAGE_BUILD_EVENT_MAX_BYTES)
+    }
+
+    fn enforce_retention(&self, file: &mut fs::File) -> io::Result<()> {
+        let max_bytes = self.max_bytes();
+        if max_bytes == 0 || file.metadata()?.len() <= max_bytes {
+            return Ok(());
+        }
+
+        file.seek(SeekFrom::Start(0))?;
+        let mut contents = String::new();
+        file.read_to_string(&mut contents)?;
+
+        let mut retained = Vec::new();
+        let mut retained_bytes = 0_u64;
+        for line in contents.lines().rev() {
+            let line_bytes = line.len() as u64 + 1;
+            if retained_bytes + line_bytes > max_bytes && !retained.is_empty() {
+                break;
+            }
+            retained.push(line);
+            retained_bytes += line_bytes;
+            if retained_bytes >= max_bytes {
+                break;
+            }
+        }
+        retained.reverse();
+
+        file.set_len(0)?;
+        file.seek(SeekFrom::Start(0))?;
+        for line in retained {
+            writeln!(file, "{line}")?;
+        }
+        file.flush()
+    }
+}
+
+fn redact_error_summary(summary: &str) -> String {
+    let without_query = summary
+        .split_whitespace()
+        .map(|word| word.split_once('?').map(|(base, _)| base).unwrap_or(word))
+        .collect::<Vec<_>>()
+        .join(" ");
+    let mut redacted = without_query;
+    for marker in ["ghp_", "ghu_", "ghs_", "ghr_", "token=", "password="] {
+        if let Some(index) = redacted.to_ascii_lowercase().find(marker) {
+            redacted.truncate(index);
+            redacted.push_str("[REDACTED]");
+        }
+    }
+    redacted.chars().take(512).collect()
 }
 
 /// Tray window lifecycle event (OBS-021 enhancement).
@@ -645,6 +927,108 @@ mod tests {
         assert_eq!(parsed["builder"], "nix-build");
         assert_eq!(parsed["image_size_bytes"], 256 * 1024 * 1024);
         assert_eq!(parsed["event_type"], "image.built");
+    }
+
+    #[test]
+    fn test_image_build_lifecycle_schema_serialization() {
+        let event = ImageBuildEvent::lifecycle(
+            "image.build.decision",
+            "build-1",
+            "tillandsias-init",
+            "forge",
+            "localhost/tillandsias-forge:sha256-abc",
+        )
+        .with_identity(
+            "sha256:abc",
+            "localhost/tillandsias-forge:v1",
+            "localhost/tillandsias-forge:latest",
+        )
+        .with_decision("skip", "digest_present")
+        .with_cache("layers", "hit");
+
+        let json = event.to_json().unwrap();
+        let parsed: serde_json::Value = serde_json::from_str(&json).unwrap();
+        assert_eq!(parsed["schema_version"], 1);
+        assert_eq!(parsed["event_type"], "image.build.decision");
+        assert_eq!(parsed["build_id"], "build-1");
+        assert_eq!(parsed["source_digest"], "sha256:abc");
+        assert_eq!(parsed["decision"], "skip");
+        assert_eq!(parsed["reason"], "digest_present");
+        assert_eq!(parsed["cache_policy"], "layers");
+        assert_eq!(parsed["cache_result"], "hit");
+        assert!(parsed["event_id"].as_str().unwrap().len() >= 32);
+    }
+
+    #[test]
+    fn test_image_build_event_writer_appends_jsonl_with_lock() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("state/image-build-events.jsonl");
+        let writer = ImageBuildEventWriter::new(&path);
+        let event = ImageBuildEvent::lifecycle(
+            "image.build.completed",
+            "build-2",
+            "tillandsias-init",
+            "git",
+            "localhost/tillandsias-git:sha256-def",
+        )
+        .with_outcome("success", 1250, 0);
+
+        writer.append(&event).unwrap();
+        writer.append(&event).unwrap();
+
+        let contents = std::fs::read_to_string(path).unwrap();
+        assert_eq!(contents.lines().count(), 2);
+        for line in contents.lines() {
+            let parsed: serde_json::Value = serde_json::from_str(line).unwrap();
+            assert_eq!(parsed["event_type"], "image.build.completed");
+        }
+    }
+
+    #[test]
+    fn test_image_build_event_writer_retains_recent_jsonl() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("state/image-build-events.jsonl");
+        let writer = ImageBuildEventWriter::new(&path).with_max_bytes(700);
+
+        for index in 0..8 {
+            let event = ImageBuildEvent::lifecycle(
+                "image.build.completed",
+                format!("build-{index}"),
+                "tillandsias-init",
+                "forge",
+                "localhost/tillandsias-forge:sha256-retention",
+            )
+            .with_outcome("success", 100 + index, 0)
+            .with_context("sequence", json!(index));
+            writer.append(&event).unwrap();
+        }
+
+        let contents = std::fs::read_to_string(path).unwrap();
+        assert!(contents.len() <= 700);
+        assert!(!contents.contains("\"build_id\":\"build-0\""));
+        assert!(contents.contains("\"build_id\":\"build-7\""));
+        for line in contents.lines() {
+            serde_json::from_str::<serde_json::Value>(line).unwrap();
+        }
+    }
+
+    #[test]
+    fn test_image_build_error_summary_redacts_tokens_and_url_queries() {
+        let event = ImageBuildEvent::lifecycle(
+            "image.build.failed",
+            "build-3",
+            "tillandsias-init",
+            "forge",
+            "localhost/tillandsias-forge:sha256-bad",
+        )
+        .with_redacted_error(
+            "podman_build_failed",
+            "GET https://example.invalid/path?token=secret failed ghp_abc123",
+        );
+        let json = event.to_json().unwrap();
+        assert!(EventCollector::validate_no_secrets(&json));
+        assert!(!json.contains("token=secret"));
+        assert!(!json.contains("ghp_abc123"));
     }
 
     #[test]

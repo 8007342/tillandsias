@@ -213,7 +213,7 @@ configure_git_identity() {
 # pristine so the host's normal workflow keeps working). The rule redirects
 # any push or fetch against the GitHub URL onto the enclave-local git mirror
 # reachable at `git://git-service/<project>`. The mirror owns the GitHub token
-# (via /run/secrets/tillandsias-github-token) and forwards through its
+# (fetched from Vault at push time by the post-receive hook via vault-cli) and
 # post-receive hook.
 #
 # Net effect inside the forge:

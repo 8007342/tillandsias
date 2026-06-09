@@ -1,10 +1,14 @@
 // @trace spec:user-runtime-lifecycle, spec:linux-native-portable-executable, spec:init-command
 use serde::{Deserialize, Serialize};
 use sha2::{Digest, Sha256};
+use std::collections::BTreeMap;
 use std::fs;
 #[cfg(unix)]
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
+use tillandsias_core::image_builder::{
+    ImageBuildIdentity, ImageBuildSpec, image_build_identity as compute_image_build_identity,
+};
 
 #[derive(Clone, Copy, Debug)]
 pub(crate) struct EmbeddedRuntimeAsset {
@@ -214,7 +218,13 @@ pub(crate) fn root_manifest_digest(root: &Path) -> Result<String, String> {
     Ok(manifest.manifest_digest)
 }
 
-pub(crate) fn image_source_digest(root: &Path, image_name: &str) -> Result<String, String> {
+pub(crate) fn image_identity(
+    root: &Path,
+    image_name: &str,
+    version: &str,
+    build_args: BTreeMap<String, String>,
+    dependency_digests: BTreeMap<String, String>,
+) -> Result<ImageBuildIdentity, String> {
     let rel = image_context_rel(image_name)?;
     let context = root.join(rel);
     if !context.is_dir() {
@@ -224,29 +234,20 @@ pub(crate) fn image_source_digest(root: &Path, image_name: &str) -> Result<Strin
         ));
     }
 
-    let mut files = Vec::new();
-    collect_regular_files(&context, &mut files)?;
-    files.sort();
-
-    let mut hasher = Sha256::new();
-    hasher.update(image_name.as_bytes());
-    hasher.update([0]);
-    for file in files {
-        let rel_path = file
-            .strip_prefix(root)
-            .map_err(|e| format!("Failed to relativize runtime asset path: {e}"))?
-            .to_string_lossy()
-            .replace('\\', "/");
-        hasher.update(rel_path.as_bytes());
-        hasher.update([0]);
-        let bytes =
-            fs::read(&file).map_err(|e| format!("Failed to read runtime asset for digest: {e}"))?;
-        hasher.update(bytes);
-        hasher.update([0]);
-    }
-
-    let digest = hasher.finalize();
-    Ok(hex_digest(&digest))
+    let containerfile = match image_name {
+        "chromium-core" => context.join("Containerfile.core"),
+        "chromium-framework" => context.join("Containerfile.framework"),
+        _ => context.join("Containerfile"),
+    };
+    let spec = ImageBuildSpec {
+        image_name: image_name.to_string(),
+        context_root: context,
+        containerfile,
+        build_args,
+        dependency_digests,
+        version: version.to_string(),
+    };
+    compute_image_build_identity(&spec).map_err(|e| e.to_string())
 }
 
 fn image_context_rel(image_name: &str) -> Result<&'static str, String> {
@@ -260,33 +261,6 @@ fn image_context_rel(image_name: &str) -> Result<&'static str, String> {
         "chromium-core" | "chromium-framework" => Ok("images/chromium"),
         other => Err(format!("Unknown image type: {other}")),
     }
-}
-
-fn collect_regular_files(dir: &Path, out: &mut Vec<PathBuf>) -> Result<(), String> {
-    let mut entries = fs::read_dir(dir)
-        .map_err(|e| format!("Failed to read runtime asset dir {}: {e}", dir.display()))?
-        .map(|entry| entry.map(|e| e.path()))
-        .collect::<Result<Vec<_>, _>>()
-        .map_err(|e| format!("Failed to read runtime asset dir entry: {e}"))?;
-    entries.sort();
-
-    for path in entries {
-        let metadata = fs::symlink_metadata(&path)
-            .map_err(|e| format!("Failed to read runtime asset metadata: {e}"))?;
-        if metadata.file_type().is_symlink() {
-            return Err(format!(
-                "Runtime asset tree must not contain symlinks: {}",
-                path.display()
-            ));
-        }
-        if metadata.is_dir() {
-            collect_regular_files(&path, out)?;
-        } else if metadata.is_file() {
-            out.push(path);
-        }
-    }
-
-    Ok(())
 }
 
 pub(crate) fn embedded_manifest_digest() -> String {

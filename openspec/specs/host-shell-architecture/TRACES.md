@@ -55,6 +55,6 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-macos-tray/src/installation_uuid.rs#L106](../../../crates/tillandsias-macos-tray/src/installation_uuid.rs#L106)
 - [crates/tillandsias-macos-tray/src/installation_uuid.rs#L148](../../../crates/tillandsias-macos-tray/src/installation_uuid.rs#L148)
 - [crates/tillandsias-macos-tray/src/installation_uuid.rs#L168](../../../crates/tillandsias-macos-tray/src/installation_uuid.rs#L168)
-- [crates/tillandsias-windows-tray/src/installation_uuid.rs#L10](../../../crates/tillandsias-windows-tray/src/installation_uuid.rs#L10)
+- [crates/tillandsias-windows-tray/src/installation_uuid.rs#L17](../../../crates/tillandsias-windows-tray/src/installation_uuid.rs#L17)
 - [crates/tillandsias-windows-tray/src/notify_icon.rs#L293](../../../crates/tillandsias-windows-tray/src/notify_icon.rs#L293)
 - [crates/tillandsias-windows-tray/src/notify_icon.rs#L2129](../../../crates/tillandsias-windows-tray/src/notify_icon.rs#L2129)

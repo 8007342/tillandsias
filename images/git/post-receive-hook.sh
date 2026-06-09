@@ -99,19 +99,12 @@ log_msg "[git-mirror] Forwarding $CREATE_UPDATE_COUNT update(s) and $DELETE_COUN
 # @trace spec:tillandsias-vault, spec:secrets-management, spec:cross-platform, spec:git-mirror-service
 # Construct an EPHEMERAL auth URL by reading the GitHub token at push time.
 #
-# Phase 6 default flow: read from Vault via vault-cli using the AppRole
-# token mounted at /run/secrets/vault-token. The token lives in this
-# process variable only; it never touches disk.
-#
-# Legacy fallback: when /run/secrets/vault-token is absent (e.g. running
-# under --legacy-keyring-secrets) we read the token from the older
-# tillandsias-github-token podman secret.
+# Vault-only flow: read from Vault via vault-cli using the AppRole token
+# mounted at /run/secrets/vault-token. The token lives in this process
+# variable only; it never touches disk.
 TOKEN=""
 if [ -r /run/secrets/vault-token ] && command -v vault-cli >/dev/null 2>&1; then
     TOKEN="$(vault-cli read -field=token secret/github/token 2>/dev/null || true)"
-fi
-if [ -z "$TOKEN" ] && [ -r /run/secrets/tillandsias-github-token ]; then
-    TOKEN="$(cat /run/secrets/tillandsias-github-token 2>/dev/null || true)"
 fi
 
 # Redact for log output. Always.

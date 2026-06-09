@@ -2,7 +2,7 @@
 tags: [containers, images, podman, oci, lifecycle]
 languages: [bash]
 since: 2026-05-06
-last_verified: 2026-05-20
+last_verified: 2026-06-08
 sources:
   - https://docs.podman.io/en/latest/markdown/podman-image.1.html
   - https://github.com/opencontainers/image-spec
@@ -27,16 +27,16 @@ committed_for_project: false
 - [OCI Image Specification](https://github.com/opencontainers/image-spec) — defines image structure and behavior
 - [Podman Storage](https://docs.podman.io/en/latest/markdown/podman-storage.1.html) — how podman stores and manages images locally
 - [Container Image Naming](https://docs.podman.io/en/latest/markdown/podman.1.html#image-names) — image name format and resolution
-- **Last updated:** 2026-05-05
+- **Last updated:** 2026-06-08
 
 ## Tillandsias Images Overview
 
 | Image | Purpose | Base | Size | Lifecycle |
 |-------|---------|------|------|-----------|
-| **tillandsias-forge** | Dev environment (code editor, tools, agents) | Fedora Minimal 44 | ~456 MB | Build once per release, cached |
+| **tillandsias-forge** | Dev environment (code editor, tools, agents) | Fedora Minimal 44 | ~5.7 GB | Build once per source digest, cached |
 | **tillandsias-git** | Git mirror + daemon + credentials | Alpine 3.20 | ~77 MB | Build as-needed for --github-login |
 | **tillandsias-proxy** | HTTPS caching proxy (squid + SSL bump) | Alpine 3.20 | ~27 MB | Build as-needed, rarely changes |
-| **tillandsias-inference** | Ollama + local LLM | Alpine 3.20 | ~300 MB | Build once per release, cached |
+| **tillandsias-inference** | Ollama CPU binary + local LLM | Fedora Minimal 44 | ~187 MB | Build once per source digest, cached |
 | **tillandsias-router** | Caddy reverse proxy and route reload helper | Alpine 3.20 | small | Build once per release, cached |
 | **tillandsias-web** | OpenCode web UI runtime | Runtime image context | variable | Build once per release, cached |
 | **tillandsias-chromium-core** | Browser isolation core | Runtime image context | variable | Build once per release, cached |
@@ -67,6 +67,8 @@ changes.
 
 **Trigger**: 
 - `tillandsias --init --debug` (explicit: build missing/stale runtime images)
+- `scripts/build-image.sh <image>` (canonical developer build engine)
+- `build-*.sh` compatibility wrappers delegate to the canonical script
 - `./build.sh --ci-full --install` followed by installed-binary init validation
 - `tillandsias --github-login` checks if git image exists, builds if missing
 - OpenCode/OpenCode Web/tray paths preflight the images they need
@@ -76,7 +78,11 @@ changes.
 tillandsias --init --debug
 ```
 
-**Output**: Image tagged as `tillandsias-<name>:v<VERSION>`
+**Output**:
+- Canonical tag: `tillandsias-<name>:<SOURCE_DIGEST>`
+- Human aliases: `tillandsias-<name>:v<VERSION>` and `tillandsias-<name>:latest`
+- OCI labels include `io.tillandsias.image.source-digest`,
+  `io.tillandsias.image.version`, and `io.tillandsias.image.name`
 - Example: `tillandsias-forge:v0.1.260505.11`
 - Stored in podman's local image storage: `~/.local/share/containers/storage/`
 
@@ -85,6 +91,8 @@ tillandsias --init --debug
 - Compares to `~/.cache/tillandsias/init-build-state.json`.
 - Rebuilds when the local image is missing, the previous build failed,
   `--force` is passed, or the image source digest changed.
+- A VERSION-only change or missing alias retags the existing canonical image
+  without invoking `podman build`.
 
 ### 3. Runtime (Container Start)
 
@@ -196,6 +204,7 @@ short-name-mode = "disabled"         # Fail fast on ambiguous names
 | **Local images** | `~/.local/share/containers/storage/` | Persistent until pruned |
 | **Runtime assets** | `~/.local/share/tillandsias/runtime/<VERSION>/` | Rewritten only when missing/corrupt/stale |
 | **Image build state** | `~/.cache/tillandsias/init-build-state.json` | Persistent, tracks success and source digests |
+| **Build telemetry** | `$XDG_STATE_HOME/tillandsias/image-build-events.jsonl` | Bounded JSONL decisions and outcomes |
 | **Proxy cache** (dev) | `~/.cache/tillandsias/dev-proxy-cache/` | Ephemeral, cleared between builds |
 | **CA certificates** (dev) | `~/.cache/tillandsias/ca-*.pem` | Ephemeral, regenerated per build |
 
@@ -217,6 +226,16 @@ podman image exists tillandsias-forge:v0.1.260505.11 && echo "OK" || echo "NOT F
 
 # Force rebuild (keeps runtime assets and projects intact)
 tillandsias --init --force --debug
+
+# Developer build and explicit no-cache diagnostic
+scripts/build-image.sh forge
+scripts/build-image.sh forge --force --no-cache
+
+# Inspect structured build telemetry
+tail -n 50 "${XDG_STATE_HOME:-$HOME/.local/state}/tillandsias/image-build-events.jsonl"
+
+# Inspect bounded Prometheus projection
+curl -fsS http://127.0.0.1:9464/metrics | grep tillandsias_image_build
 
 # Inspect materialized runtime assets
 find ~/.local/share/tillandsias/runtime -maxdepth 3 -type f | sort | head

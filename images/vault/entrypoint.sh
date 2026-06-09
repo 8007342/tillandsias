@@ -6,31 +6,17 @@
 #
 # Lifecycle:
 #   1. Wait for /run/secrets/tillandsias-vault-unseal (32 bytes raw, no newline)
-#      — the host (tray) creates this podman secret from a key derived via
-#      HKDF over (machine-id || installation-uuid). The user NEVER sees a
-#      passphrase prompt; this is the core property the spec litmus tests.
+#      — the host (tray/headless) creates this podman secret from the keychain.
+#      The user NEVER sees a passphrase prompt; this is the core property the spec litmus tests.
 #   2. Start `vault server` in the background.
-#   3. On first boot (no /vault/data/init.json), `vault operator init` with
-#      key-shares=1, key-threshold=1. Stash root token + generated unseal
-#      key in /vault/data/init.json (mode 0400, owner vault).
-#   4. Unseal Vault using the generated unseal key from init.json.
+#   3. On first boot (not initialized), `vault operator init` with key-shares=1, key-threshold=1.
+#      Stash root token + generated unseal key in /run/vault-handover/ for host capture.
+#   4. Unseal Vault using the generated unseal key.
 #   5. Load the four policy templates (git-mirror, forge, tray, inference).
 #   6. Enable the `approle` auth backend if not already enabled.
 #   7. Enable the KV v2 secret engine at `secret/` if not already enabled.
 #   8. Enable the file audit device at /vault/audit/audit.json.
 #   9. Tail the server log (it is already streaming to stdout).
-#
-# IMPORTANT — PRODUCTION CAVEAT:
-#   This POC uses the GENERATED Shamir unseal key (from `vault operator
-#   init`) rather than the HKDF-derived key from
-#   /run/secrets/tillandsias-vault-unseal directly. The HKDF key currently
-#   acts as an ENVELOPE: the entrypoint XORs the init.json contents with
-#   HKDF(machine-id || installation-uuid) so the at-rest copy is bound to
-#   the host/VM identity, and the unseal key never lands on disk in
-#   plaintext. Production must replace this with `vault operator rekey`
-#   to install the derived key as the active share so loss of /vault/data
-#   doesn't lock the user out indefinitely. See `RESEARCH ITEM` notes in
-#   openspec/specs/tillandsias-vault/spec.md.
 #
 # All stderr is duplicated to /vault/audit/entrypoint.log for tray-side
 # tailing, then re-emitted on stdout so `podman logs` and the
@@ -50,11 +36,11 @@ log() {
 }
 
 UNSEAL_SECRET_PATH="/run/secrets/tillandsias-vault-unseal"
-INIT_JSON="/vault/data/init.json"
-INIT_ENVELOPE="/vault/data/init.envelope"
 VAULT_CONFIG="/vault/config/vault.hcl"
 POLICY_DIR="/vault/config/policies"
-export VAULT_ADDR="http://127.0.0.1:8200"
+export VAULT_ADDR="https://127.0.0.1:8200"
+export VAULT_CACERT="/run/secrets/tillandsias-vault-tls-ca"
+export CURL_CA_BUNDLE="$VAULT_CACERT"
 
 log "starting Tillandsias Vault entrypoint"
 
@@ -72,7 +58,7 @@ while [ ! -r "$UNSEAL_SECRET_PATH" ]; do
     sleep 1
 done
 
-# 32 raw bytes; convert to hex once for the XOR envelope.
+# 32 raw bytes; convert to hex once
 UNSEAL_KEY_HEX="$(xxd -p -c 64 < "$UNSEAL_SECRET_PATH" | tr -d '\n')"
 if [ "${#UNSEAL_KEY_HEX}" -lt 64 ]; then
     log "FATAL: unseal secret too short (got ${#UNSEAL_KEY_HEX} hex chars, want >=64)"
@@ -101,35 +87,13 @@ done
 log "vault API responsive"
 
 # ---------------------------------------------------------------------------
-# Step 3: Initialize on first boot, or recover from envelope on later boots.
+# Step 3: Initialize on first boot, or read unseal key on subsequent boots.
 # ---------------------------------------------------------------------------
-xor_hex() {
-    # XOR two equal-length hex strings, output hex.
-    # Pure bash + printf; no python dependency in the vault image.
-    local a="$1" b="$2"
-    local len_a=${#a} len_b=${#b}
-    local n=$len_a
-    if [ "$len_b" -lt "$n" ]; then n=$len_b; fi
-    # Process two hex chars (1 byte) at a time.
-    local i=0 out=""
-    while [ "$i" -lt "$n" ]; do
-        local byte_a="0x${a:$i:2}"
-        local byte_b="0x${b:$i:2}"
-        local xored=$(( byte_a ^ byte_b ))
-        out+=$(printf '%02x' "$xored")
-        i=$((i + 2))
-    done
-    printf '%s' "$out"
-}
-
 # Detect initialized state from vault itself (more reliable than file probe).
 INITIALIZED="$(curl -fsS "$VAULT_ADDR/v1/sys/init" | jq -r '.initialized')"
 
 if [ "$INITIALIZED" != "true" ]; then
     log "first boot: running vault operator init"
-    # With the default Shamir seal, only secret_shares/secret_threshold
-    # are valid. recovery_* are reserved for auto-unseal seals (transit,
-    # awskms, etc.) which would create a chicken-and-egg here.
     INIT_RESPONSE="$(curl -fsS -X POST \
         -d '{"secret_shares":1,"secret_threshold":1}' \
         "$VAULT_ADDR/v1/sys/init")"
@@ -141,41 +105,20 @@ if [ "$INITIALIZED" != "true" ]; then
         kill "$VAULT_PID" 2>/dev/null || true
         exit 1
     fi
-    # Stash plaintext init.json (mode 0400). The host-bound HKDF key
-    # envelopes the shamir key on disk so a stolen volume alone cannot
-    # unseal; see PRODUCTION CAVEAT in the header.
+    
+    # Secure handover via tmpfs inside the container.
+    HANDOVER_DIR="/run/vault-handover"
     umask 077
-    echo "$INIT_RESPONSE" > "$INIT_JSON"
-    ENVELOPED_HEX="$(xor_hex "$SHAMIR_KEY_HEX" "$UNSEAL_KEY_HEX")"
-    echo "$ENVELOPED_HEX" > "$INIT_ENVELOPE"
-    echo "$ROOT_TOKEN" > /vault/data/root.token
-    chmod 0400 "$INIT_ENVELOPE" /vault/data/root.token
-    # @trace spec:tillandsias-vault — Secure Artifact Cleanup
-    # Plaintext init.json MUST NOT survive first boot initialization.
-    rm -f "$INIT_JSON"
-    log "vault initialized (envelope persisted, init.json deleted, root token stashed for handover)"
+    mkdir -p "$HANDOVER_DIR"
+    echo "$SHAMIR_KEY_B64" > "$HANDOVER_DIR/unseal.key"
+    echo "$ROOT_TOKEN" > "$HANDOVER_DIR/root.token"
+    
+    log "vault initialized (handover artifacts written to tmpfs)"
     UNSEAL_HEX="$SHAMIR_KEY_HEX"
 else
-    log "subsequent boot: recovering shamir key from envelope"
-    if [ ! -r "$INIT_ENVELOPE" ]; then
-        log "FATAL: vault is initialized but $INIT_ENVELOPE is missing — re-bootstrap required"
-        kill "$VAULT_PID" 2>/dev/null || true
-        exit 1
-    fi
-    ENVELOPED_HEX="$(tr -d '\n' < "$INIT_ENVELOPE")"
-    UNSEAL_HEX="$(xor_hex "$ENVELOPED_HEX" "$UNSEAL_KEY_HEX")"
-    # The root token is a ONE-TIME handover: the host (`wait_for_vault_ready` ->
-    # `read_and_handover_root_token`) reads /vault/data/root.token after first
-    # boot, stashes it in the host keychain, and deletes the on-disk copy. So on
-    # every subsequent boot this file is legitimately absent. Tolerate that
-    # instead of dying under `set -e` — vault's policies/auth/kv/audit all live
-    # in persistent storage, so a relaunch only needs to UNSEAL, not re-provision.
-    if [ -r /vault/data/root.token ]; then
-        ROOT_TOKEN="$(cat /vault/data/root.token)"
-    else
-        ROOT_TOKEN=""
-        log "subsequent boot: root token already handed over to host; will unseal only"
-    fi
+    log "subsequent boot: using unseal key from secret"
+    UNSEAL_HEX="$UNSEAL_KEY_HEX"
+    ROOT_TOKEN=""
 fi
 
 # ---------------------------------------------------------------------------
@@ -191,7 +134,7 @@ if [ "$SEALED" = "true" ]; then
         "$VAULT_ADDR/v1/sys/unseal")"
     NOW_SEALED="$(echo "$RESPONSE" | jq -r '.sealed')"
     if [ "$NOW_SEALED" != "false" ]; then
-        log "FATAL: unseal call returned sealed=$NOW_SEALED — wrong key or corrupt envelope"
+        log "FATAL: unseal call returned sealed=$NOW_SEALED — wrong key"
         kill "$VAULT_PID" 2>/dev/null || true
         exit 1
     fi

@@ -7,7 +7,7 @@
 # pulling in the upstream `vault` CLI binary (~80MB).
 #
 # Lifecycle:
-#   * VAULT_ADDR        — e.g. http://vault:8200 (set by the launcher)
+#   * VAULT_ADDR        — e.g. https://vault:8200 (set by the launcher)
 #   * /run/secrets/vault-token — short-lived AppRole token (mounted by
 #     podman --secret <name>,target=vault-token; the launcher mints it via
 #     `vault-client::issue_approle_token("git-mirror")`).
@@ -20,17 +20,19 @@
 
 set -eu
 
-VAULT_ADDR="${VAULT_ADDR:-http://vault:8200}"
+VAULT_ADDR="${VAULT_ADDR:-https://vault:8200}"
 VAULT_TOKEN_FILE="${VAULT_TOKEN_FILE:-/run/secrets/vault-token}"
 
 usage() {
     cat <<EOF >&2
 Usage: vault-cli read [-field=<key>] <path>
+       vault-cli write <path> <field>=<value> [<field>=<value> ...]
        vault-cli health
 
 Examples:
   vault-cli read -field=token secret/github/token
   vault-cli read secret/github/token
+  vault-cli write secret/github/token token=ghp_example
 EOF
 }
 
@@ -98,6 +100,50 @@ cmd_read() {
     fi
 }
 
+cmd_write() {
+    if [ $# -lt 2 ]; then
+        usage
+        exit 4
+    fi
+    path="$1"
+    shift
+    # Build JSON data object from key=value arguments
+    data=""
+    sep=""
+    for kv in "$@"; do
+        key="${kv%%=*}"
+        value="${kv#*=}"
+        # JSON-encode the value: escape backslash, quote, newline, tab
+        encoded="$(printf '%s' "$value" | sed 's/[\"\\/]/\\&/g; s/
+/\\n/g; s/	/\\t/g')"
+        data="${data}${sep}\"${key}\": \"${encoded}\""
+        sep=", "
+    done
+    # Normalise the KV-v2 mount (same as cmd_read)
+    case "$path" in
+        */data/*) kv_path="$path" ;;
+        */data) kv_path="$path" ;;
+        */)     kv_path="${path%/}" ;;
+        *)
+            mount="${path%%/*}"
+            rest="${path#*/}"
+            if [ "$rest" = "$path" ]; then
+                kv_path="$mount"
+            else
+                kv_path="$mount/data/$rest"
+            fi
+            ;;
+    esac
+    token="$(read_token)"
+    json_body="{\"data\": {$data}}"
+    if ! response="$(curl -fsS -H "X-Vault-Token: $token" \
+        -d "$json_body" "$VAULT_ADDR/v1/$kv_path" 2>&1)"; then
+        echo "vault-cli: HTTP error writing $kv_path: $response" >&2
+        exit 2
+    fi
+    printf '%s' "$response" | jq -r '.data // empty'
+}
+
 cmd_health() {
     curl -fsS "$VAULT_ADDR/v1/sys/health?sealedcode=200&uninitcode=200&standbyok=true" \
         || { echo "vault-cli: health probe failed" >&2; exit 2; }
@@ -105,6 +151,7 @@ cmd_health() {
 
 case "${1:-}" in
     read) shift; cmd_read "$@" ;;
+    write) shift; cmd_write "$@" ;;
     health) cmd_health ;;
     -h|--help|help|"") usage; exit 0 ;;
     *) echo "vault-cli: unknown subcommand: $1" >&2; usage; exit 4 ;;

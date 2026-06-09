@@ -881,7 +881,7 @@ if [[ "$CI_PHASE" == "all" || "$CI_PHASE" == "pre-build" ]]; then
 
     # Headless signal shutdown contract
     # @trace spec:headless-mode, spec:graceful-shutdown
-    if run_rust_on_host cargo test -p tillandsias-headless --test signal_handling 2>&1 | tee /tmp/signal-handling-check.log; then
+    if TILLANDSIAS_NO_TRAY=1 run_rust_on_host cargo test -p tillandsias-headless --test signal_handling 2>&1 | tee /tmp/signal-handling-check.log; then
         log_pass "Headless shutdown signal tests pass"
         archive_check_log "signal-handling" "pass" /tmp/signal-handling-check.log
     else

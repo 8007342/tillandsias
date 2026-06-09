@@ -13,15 +13,47 @@ else
     state_dir="$(dirname "$calls_file")/.fake-podman-state"
 fi
 secret_dir="$state_dir/secrets"
+image_dir="$state_dir/images"
 mkdir -p "$secret_dir"
+mkdir -p "$image_dir"
+
+image_key() {
+    printf '%s' "$1" | sed 's|/|__slash__|g; s|:|__colon__|g'
+}
+
+image_path() {
+    printf '%s/%s' "$image_dir" "$(image_key "$1")"
+}
+
+stateful_images_enabled() {
+    [[ "${LITMUS_PODMAN_STATEFUL_IMAGES:-0}" == "1" ]]
+}
 
 case "$subcommand" in
     build)
+        if stateful_images_enabled; then
+            tag=""
+            previous=""
+            for arg in "$@"; do
+                if [[ "$previous" == "--tag" || "$previous" == "-t" ]]; then
+                    tag="$arg"
+                    break
+                fi
+                previous="$arg"
+            done
+            if [[ -n "$tag" ]]; then
+                printf 'mock-build-id\n' >"$(image_path "$tag")"
+            fi
+        fi
         printf 'mock-build-id\n'
         ;;
     image)
         case "${2:-}" in
             exists)
+                if stateful_images_enabled; then
+                    [[ -f "$(image_path "${3:-}")" ]]
+                    exit $?
+                fi
                 exit 0
                 ;;
             inspect)
@@ -41,11 +73,41 @@ case "$subcommand" in
         esac
         ;;
     images)
+        if stateful_images_enabled; then
+            for image in "$image_dir"/*; do
+                [[ -e "$image" ]] || continue
+                basename "$image" | sed 's|__slash__|/|g; s|__colon__|:|g'
+            done
+            exit 0
+        fi
         # Intentionally emit no existing tags so stale-image cleanup is a no-op.
         exit 0
         ;;
+    tag)
+        if stateful_images_enabled; then
+            source_tag="${2:-}"
+            dest_tag="${3:-}"
+            if [[ -z "$source_tag" || -z "$dest_tag" ]]; then
+                exit 1
+            fi
+            if [[ ! -f "$(image_path "$source_tag")" ]]; then
+                exit 1
+            fi
+            cp "$(image_path "$source_tag")" "$(image_path "$dest_tag")"
+        fi
+        exit 0
+        ;;
+    rmi)
+        if stateful_images_enabled; then
+            for arg in "$@"; do
+                [[ "$arg" == "rmi" || "$arg" == "-f" ]] && continue
+                rm -f "$(image_path "$arg")"
+            done
+        fi
+        exit 0
+        ;;
     inspect)
-        printf '{"Secrets":["tillandsias-github-token","tillandsias-ca-cert","tillandsias-ca-key"]}\n'
+        printf '{"Secrets":["vault-token","tillandsias-ca-cert","tillandsias-ca-key"]}\n'
         ;;
     info)
         printf '{}\n'

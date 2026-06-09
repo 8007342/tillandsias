@@ -19,16 +19,16 @@ plan:
     verification: methodology/verification.yaml
 
   current_state:
-    last_completed_step: multi-host-debt-payoff (step 31)
-    next_step: vault-hardening-true-rekey (step 32)
+    last_completed_step: podman-build-cache-and-serialization (step 46)
+    next_step: structured-image-build-telemetry (step 47); parallel ready leaves include steps 44, 38, and 42c
 
-    next_graph_node: vault-rekey/entrypoint
+    next_graph_node: image-telemetry/events-and-metrics
     frontier_note: >
       v0.3.0 graph (steps 24-31) drained 2026-06-04. The 2026-06-05 pre-Vault
-      obsolescence audit reopened a fresh wave (steps 32-37). Linux-claimable
-      ready leaves: 32 (vault true-rekey), 33 (doc cleanup), 34 (spec
-      reconciliation), 35 (code sweep). Step 36 (macOS+Windows keychain/vsock
-      parity) is blocked on 32. Step 37 (v0.3.0 release) is needs_clarification
+      obsolescence audit reopened a fresh wave (steps 32-37). Step 32 is blocked
+      because the literal true-rekey mandate proved infeasible; step 36
+      (macOS+Windows keychain/vsock parity) remains blocked on the corrected
+      Linux handover contract. Steps 33-35 are complete. Step 37 (v0.3.0 release) is needs_clarification
       (operator-gated VERSION conflict). Origin:
       plan/issues/pre-vault-obsolescence-audit-2026-06-05.md.
       2026-06-06 operator wave: step 42 (github-login Vault-native flow) opened
@@ -48,6 +48,15 @@ plan:
       end-to-end on linux. Cross-platform tail: osx-next/windows-next owners must verify the
       apple-native/windows-native keyring backend builds + persists (step 42d / step 36).
       Origin: plan/issues/github-login-vault-lifecycle-2026-06-08.md.
+      2026-06-08 container-build research superseded broad step 40 with a
+      five-packet wave: step 44 package-manager-first recipes and step 45
+      canonical digest/aliases are ready in parallel; steps 46 cache reuse and
+      47 telemetry depend on 45; step 48 converges wrappers after 44-47.
+      Step 45 completed 2026-06-08 (453c7abb, 45843b02), unlocking ready steps
+      46 and 47. Step 46 completed 2026-06-08 (6c890021): normal builds reuse
+      Podman layers/package caches, diagnostic no-cache is explicit, and image
+      storage mutations are serialized. Step 47 is the next dependency-chain leaf.
+      Origin: plan/issues/container-build-efficiency-telemetry-2026-06-08.md.
     plan_index: plan/index.yaml
     step_directory: plan/steps
     checkpoint_branch: linux-next

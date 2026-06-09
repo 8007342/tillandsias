@@ -285,7 +285,7 @@ The flow:
    ```bash
    vault write -f auth/approle/role/git-mirror/secret-id
    ```
-   The resulting `role_id` + `secret_id` are injected into the container via podman secret (ephemeral; same pattern as `tillandsias-github-token` today).
+   The resulting `role_id` + `secret_id` are injected into the container via podman secret (ephemeral; tmpfs-only).
 4. **Container at startup** does the AppRole login:
    ```bash
    vault write auth/approle/login \

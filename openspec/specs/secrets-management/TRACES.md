@@ -6,10 +6,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 ## Annotated locations
 
 - [crates/tillandsias-core/src/container_profile.rs#L46](../../../crates/tillandsias-core/src/container_profile.rs#L46)
-- [crates/tillandsias-core/src/container_profile.rs#L161](../../../crates/tillandsias-core/src/container_profile.rs#L161)
-- [crates/tillandsias-core/src/container_profile.rs#L168](../../../crates/tillandsias-core/src/container_profile.rs#L168)
 - [crates/tillandsias-core/src/container_profile.rs#L221](../../../crates/tillandsias-core/src/container_profile.rs#L221)
-- [crates/tillandsias-core/src/container_profile.rs#L547](../../../crates/tillandsias-core/src/container_profile.rs#L547)
 - [crates/tillandsias-core/src/container_profile.rs#L856](../../../crates/tillandsias-core/src/container_profile.rs#L856)
 - [crates/tillandsias-core/src/container_profile.rs#L992](../../../crates/tillandsias-core/src/container_profile.rs#L992)
 - [crates/tillandsias-core/src/container_profile.rs#L1013](../../../crates/tillandsias-core/src/container_profile.rs#L1013)
@@ -27,7 +24,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-router-sidecar/tests/router_e2e_test.rs#L497](../../../crates/tillandsias-router-sidecar/tests/router_e2e_test.rs#L497)
 - [crates/tillandsias-router-sidecar/tests/router_e2e_test.rs#L532](../../../crates/tillandsias-router-sidecar/tests/router_e2e_test.rs#L532)
 - [crates/tillandsias-router-sidecar/tests/router_e2e_test.rs#L564](../../../crates/tillandsias-router-sidecar/tests/router_e2e_test.rs#L564)
-- [images/default/Containerfile#L165](../../../images/default/Containerfile#L165)
+- [images/default/Containerfile#L177](../../../images/default/Containerfile#L177)
 - [images/default/entrypoint-forge-opencode-web.sh#L12](../../../images/default/entrypoint-forge-opencode-web.sh#L12)
 - [images/default/lib-common.sh#L60](../../../images/default/lib-common.sh#L60)
 - [images/default/lib-common.sh#L180](../../../images/default/lib-common.sh#L180)

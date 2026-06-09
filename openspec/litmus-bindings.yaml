@@ -332,6 +332,7 @@ specs:
   litmus_tests:
   - litmus:forge-staleness-shape
   - litmus:forge-staleness-invariants-shape
+  - litmus:image-build-convergence-shape
   coverage_ratio: 67
   last_verified: '2026-05-29'
 - spec_id: forge-standalone
@@ -409,6 +410,7 @@ specs:
   - litmus:init-log-cleanup
   - litmus:user-runtime-checkout-free-install
   - litmus:init-command-shape
+  - litmus:image-build-convergence-shape
   coverage_ratio: 75
   last_verified: '2026-06-02'
 - spec_id: init-incremental-builds
@@ -417,6 +419,7 @@ specs:
   - litmus:init-log-cleanup
   - litmus:user-runtime-checkout-free-install
   - litmus:init-command-shape
+  - litmus:image-build-convergence-shape
   coverage_ratio: 75
   last_verified: '2026-06-02'
 - spec_id: install-progress
@@ -836,10 +839,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:credential-isolation
-  - litmus:secrets-management-implementation-shape
   - litmus:podman-secrets-integration-shape
   coverage_ratio: 75
-  last_verified: '2026-05-30'
+  last_verified: '2026-06-08'
 - spec_id: tillandsias-vault
   status: active
   litmus_tests:
@@ -847,8 +849,10 @@ specs:
   - litmus:vault-policy-forge-cannot-read-github-token
   - litmus:git-mirror-safe-refspec-push
   - litmus:vault-github-token-capture-shape
+  - litmus:vault-https-shape
+  - litmus:vault-entrypoint-hardened-shape
   coverage_ratio: 100
-  last_verified: '2026-06-04'
+  last_verified: '2026-06-08'
 - spec_id: headless-mode
   status: active
   litmus_tests:

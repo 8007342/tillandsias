@@ -11,9 +11,13 @@ preconditions:
   - VERSION file exists at project root
 
 critical_path:
-  - step: "assert build-image uses a direct podman build invocation"
-    command: "grep -F 'build --no-cache --format docker --tag' scripts/build-image.sh && grep -F 'podman build' scripts/build-image.sh"
+  - step: "assert build-image uses direct podman build with normal layer reuse"
+    command: "grep -F 'podman build' scripts/build-image.sh && grep -F 'NO_CACHE_ARGS+=(--no-cache)' scripts/build-image.sh && ! grep -Fq 'build --no-cache --format docker --tag' scripts/build-image.sh"
     timeout_ms: 30000
+
+  - step: "assert image builds serialize podman storage mutations"
+    command: "grep -F 'flock 9' scripts/build-image.sh && grep -F '.podman-build.lock' scripts/build-image.sh"
+    timeout_ms: 2000
 
   - step: "assert image existence probe happens before the build"
     command: "grep -F 'image exists' scripts/build-image.sh"

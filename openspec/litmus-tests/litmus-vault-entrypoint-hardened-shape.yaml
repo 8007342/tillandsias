@@ -1,0 +1,44 @@
+# @trace spec:tillandsias-vault
+name: litmus:vault-entrypoint-hardened-shape
+spec: tillandsias-vault
+phase: pre-build
+description: Pin the hardened Vault entrypoint shape and tmpfs secret handover contract
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains images/vault/entrypoint.sh
+  - workspace contains crates/tillandsias-headless/src/vault_bootstrap.rs
+
+critical_path:
+  - step: "XOR envelope is removed from Vault entrypoint"
+    command: "if grep -qE 'init.envelope|xor_hex' images/vault/entrypoint.sh; then exit 1; else echo 'ok: XOR envelope removed'; fi"
+    timeout_ms: 3000
+    expected_behavior: "ok: XOR envelope removed"
+
+  - step: "Vault entrypoint does not read persistent root.token on boot"
+    command: "if grep -qF 'cat /vault/data/root.token' images/vault/entrypoint.sh; then exit 1; else echo 'ok: no persistent root token cat'; fi"
+    timeout_ms: 3000
+    expected_behavior: "ok: no persistent root token cat"
+
+  - step: "Vault entrypoint writes handover artifacts to tmpfs"
+    command: "grep -F 'HANDOVER_DIR=\"/run/vault-handover\"' images/vault/entrypoint.sh && grep -F 'echo \"$SHAMIR_KEY_B64\" > \"$HANDOVER_DIR/unseal.key\"' images/vault/entrypoint.sh && grep -F 'echo \"$ROOT_TOKEN\" > \"$HANDOVER_DIR/root.token\"' images/vault/entrypoint.sh"
+    timeout_ms: 3000
+    expected_behavior: "$HANDOVER_DIR/root.token"
+
+  - step: "Host bootstrap reads token and unseal key from tmpfs and deletes the directory"
+    command: "grep -F '\"exec\"' crates/tillandsias-headless/src/vault_bootstrap.rs && grep -F '\"cat\"' crates/tillandsias-headless/src/vault_bootstrap.rs && grep -F '\"/run/vault-handover/root.token\"' crates/tillandsias-headless/src/vault_bootstrap.rs && grep -F '\"/run/vault-handover/unseal.key\"' crates/tillandsias-headless/src/vault_bootstrap.rs && grep -F '\"rm\"' crates/tillandsias-headless/src/vault_bootstrap.rs && grep -F '\"-rf\"' crates/tillandsias-headless/src/vault_bootstrap.rs && grep -F '\"/run/vault-handover\"' crates/tillandsias-headless/src/vault_bootstrap.rs"
+    timeout_ms: 3000
+    expected_behavior: "/run/vault-handover"
+
+observability:
+  traces:
+    - "@trace spec:tillandsias-vault"
+  expected_log: "Hardened Vault entrypoint and tmpfs secret handover verified"
+  log_fields:
+    spec: "tillandsias-vault"
+    test: "vault-entrypoint-hardened-shape"
+
+rollback:
+  on_failure: "restore Vault-only GitHub token capture and read-back verification"
+  command: "grep -nE 'unseal.key|root.token|vault-handover' images/vault/entrypoint.sh"

@@ -14,7 +14,7 @@ FROM registry.fedoraproject.org/fedora-minimal:44
 # eza, bat, fd-find, fzf, htop, tree, zoxide) removed to save ~90MB.
 # Users who need them can install via the tools overlay or microdnf.
 # DISTRO: microdnf (Fedora Minimal), NOT apk (Alpine) or dnf (standard Fedora)
-RUN microdnf install -y \
+RUN microdnf install -y --setopt=install_weak_deps=0 \
         bash coreutils findutils grep sed gawk tar gzip xz \
         procps-ng shadow-utils ca-certificates ncurses ncurses-term \
         fish zsh \
@@ -22,10 +22,13 @@ RUN microdnf install -y \
         nodejs npm \
         java-25-openjdk-headless maven \
         golang gopls \
-        python3-pip \
+        rust cargo clippy rustfmt rust-analyzer cargo-deny \
+        python3-pip python3-mypy python3-pytest python3-lsp-server \
+        ruff poetry pipx uv black pylint yamllint \
+        pnpm yarnpkg \
         just \
-        gdb lldb strace ltrace valgrind heaptrack \
-        shellcheck \
+        gdb lldb strace ltrace valgrind heaptrack delve \
+        shellcheck shfmt \
         gcc gcc-c++ make cmake openssl-devel pkgconfig unzip \
     && git lfs install --system \
     && microdnf clean all
@@ -35,7 +38,11 @@ RUN microdnf install -y \
 # @trace spec:default-image, spec:layered-tools-overlay
 # Install the coding agents at image build time so the forge launches
 # with no runtime installer and no dependency on host cache state.
-RUN npm install -g --prefix /usr/local opencode-ai@latest @fission-ai/openspec @anthropic-ai/claude-code @openai/codex
+RUN npm install -g --prefix /usr/local \
+        opencode-ai@1.16.2 \
+        @fission-ai/openspec@1.4.1 \
+        @anthropic-ai/claude-code@2.1.168 \
+        @openai/codex@0.137.0
 
 # ── Python packages and developer tools ─────────────────────────
 # Python additions: black + pylint + bandit. Web additions: prettier +
@@ -47,21 +54,15 @@ RUN npm install -g --prefix /usr/local opencode-ai@latest @fission-ai/openspec @
 #
 # @trace plan/diagnostics/forge-enhancements-curated-toolchain-backlog-2026-05-29.md
 #   (black, pylint, bandit, prettier, eslint — approved)
-RUN pip3 install --no-cache-dir pyright ruff poetry pipx uv mypy pytest \
-        black pylint bandit python-lsp-server yamllint \
-    && npm install -g yarn pnpm typescript typescript-language-server \
-        prettier eslint markdownlint-cli
-
-# ── Go tools ───────────────────────────────────────────────────
-# `shfmt` added alongside gopls + dlv: the shell formatter is upstream
-# at mvdan.cc/sh and the Go toolchain is already present. Same RUN
-# layer, same envelope. Approved curated-backlog candidate (045a6720).
-#
-# @trace plan/diagnostics/forge-enhancements-curated-toolchain-backlog-2026-05-29.md
-#   (shfmt — approved)
-RUN curl -LsSf https://github.com/go-delve/delve/releases/download/v1.26.3/dlv_1.26.3_linux_amd64.tar.gz | tar -xzf - -C /usr/local/bin dlv \
-    && curl -LsSf https://github.com/mvdan/sh/releases/download/v3.13.1/shfmt_v3.13.1_linux_amd64 -o /usr/local/bin/shfmt \
-    && chmod +x /usr/local/bin/shfmt
+RUN pip3 install --no-cache-dir \
+        pyright==1.1.410 \
+        bandit==1.9.2 \
+    && npm install -g \
+        typescript@6.0.3 \
+        typescript-language-server@5.3.0 \
+        prettier@3.8.3 \
+        eslint@10.4.1 \
+        markdownlint-cli@0.48.0
 
 # ── Rust toolchain ─────────────────────────────────────────────
 # `cargo-outdated` added to the cargo-binstall batch: dependency-freshness
@@ -72,9 +73,19 @@ RUN curl -LsSf https://github.com/go-delve/delve/releases/download/v1.26.3/dlv_1
 # candidate from the curated-toolchain-backlog.
 # @trace plan/diagnostics/forge-enhancements-curated-toolchain-backlog-2026-05-29.md
 #   (cargo-outdated — approved)
-ENV RUSTUP_HOME=/usr/local/rustup \
-    CARGO_HOME=/usr/local/cargo \
+ENV CARGO_HOME=/usr/local/cargo \
     PATH=/usr/local/cargo/bin:$PATH
+
+ARG CARGO_BINSTALL_VERSION=1.20.0
+ARG CARGO_BINSTALL_SHA256=4d7875788d0505547c220d2b02d3619aac0dd19b7033eba7005a8d09ff1dc433
+ARG CARGO_NEXTEST_VERSION=0.9.137
+ARG CARGO_NEXTEST_SHA256=38fd6275e111b200bbbed1bd2ae91cbb0d7edd28504879875cff2b3d96f3f311
+ARG WASMTIME_VERSION=45.0.0
+ARG WASMTIME_SHA256=9d92e6dc04630f617e0e5d532327a5a917ac4898587e07f4fb7a5fc7fffef760
+ARG ACTIONLINT_VERSION=1.7.12
+ARG ACTIONLINT_SHA256=8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
+ARG VALE_VERSION=3.14.2
+ARG VALE_SHA256=469cf88ec58a374dca14b2564c4391d2c9a1c632210aa0b642758b794082e05f
 
 # `cargo binstall` queries the GitHub API per crate to locate release binaries.
 # Unauthenticated requests hit the 60/hour anonymous rate limit (HTTP 403) and,
@@ -84,32 +95,33 @@ ENV RUSTUP_HOME=/usr/local/rustup \
 # When no secret is provided the cat falls back to empty (prior anonymous behaviour).
 # @trace spec:default-image, spec:forge-as-only-runtime
 RUN --mount=type=secret,id=gh_token \
-    curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y \
-        --default-toolchain stable \
-        --profile minimal \
-        --component rust-analyzer --component clippy --component rustfmt \
-    && curl -LsSf https://get.nexte.st/latest/linux | tar zxf - -C /usr/local/bin \
-    && curl -L --proto '=https' --tlsv1.2 -sSf https://raw.githubusercontent.com/cargo-bins/cargo-binstall/main/install-from-binstall-release.sh | bash \
+    mkdir -p /usr/local/cargo/bin \
+    && curl -LsSf "https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-${CARGO_NEXTEST_VERSION}/cargo-nextest-${CARGO_NEXTEST_VERSION}-x86_64-unknown-linux-gnu.tar.gz" -o /tmp/cargo-nextest.tar.gz \
+    && echo "${CARGO_NEXTEST_SHA256}  /tmp/cargo-nextest.tar.gz" | sha256sum -c - \
+    && tar -xzf /tmp/cargo-nextest.tar.gz -C /usr/local/bin \
+    && curl -LsSf "https://github.com/cargo-bins/cargo-binstall/releases/download/v${CARGO_BINSTALL_VERSION}/cargo-binstall-x86_64-unknown-linux-musl.tgz" -o /tmp/cargo-binstall.tgz \
+    && echo "${CARGO_BINSTALL_SHA256}  /tmp/cargo-binstall.tgz" | sha256sum -c - \
+    && tar -xzf /tmp/cargo-binstall.tgz -C /usr/local/cargo/bin cargo-binstall \
     && GITHUB_TOKEN="$(cat /run/secrets/gh_token 2>/dev/null || true)" \
        cargo binstall --no-confirm --disable-strategies compile \
-        cargo-chef cargo-watch cargo-audit wasm-pack trunk typos-cli watchexec-cli \
-        cargo-edit cargo-llvm-cov cargo-deny cargo-semver-checks cargo-expand cargo-criterion cargo-wasi cargo-outdated \
-    && curl -LsSf https://github.com/bytecodealliance/wasmtime/releases/download/v45.0.0/wasmtime-v45.0.0-x86_64-linux.tar.xz | tar -xJf - --strip-components=1 -C /usr/local/bin wasmtime-v45.0.0-x86_64-linux/wasmtime \
-    && ln -sf "$(rustup which rust-analyzer)" /usr/local/bin/rust-analyzer \
-    && curl -LsSf https://github.com/rhysd/actionlint/releases/download/v1.7.12/actionlint_1.7.12_linux_amd64.tar.gz | tar -xzf - -C /usr/local/bin actionlint \
-    && curl -LsSf https://github.com/errata-ai/vale/releases/download/v3.14.2/vale_3.14.2_Linux_64-bit.tar.gz | tar -xzf - -C /usr/local/bin vale
-# Symlink resolves the rustup-component installation path
-# ($RUSTUP_HOME/toolchains/<triple>/bin/rust-analyzer) into /usr/local/bin
-# so LSP clients that launch the binary by name (rather than via the cargo
-# dispatch shim that `clippy` + `rustfmt` get for free) can find it. Closes
-# the rust-analyzer PATH-symlink gap surfaced by the 08:08Z forge diagnostic
-# run and approved by the orchestrator at 045a6720.
-# @trace plan/diagnostics/forge-enhancements-curated-toolchain-backlog-2026-05-29.md
-#   (rust-analyzer PATH symlink — approved)
+        cargo-chef@0.1.77 cargo-watch@8.5.3 cargo-audit@0.22.2 wasm-pack@0.15.0 trunk@0.22.0-beta.1 typos-cli@1.47.2 watchexec-cli@2.5.1 \
+        cargo-edit@0.13.11 cargo-llvm-cov@0.8.7 cargo-semver-checks@0.48.0 cargo-expand@1.0.122 cargo-criterion@1.1.0 cargo-wasi@0.1.28 cargo-outdated@0.19.0 \
+    && curl -LsSf "https://github.com/bytecodealliance/wasmtime/releases/download/v${WASMTIME_VERSION}/wasmtime-v${WASMTIME_VERSION}-x86_64-linux.tar.xz" -o /tmp/wasmtime.tar.xz \
+    && echo "${WASMTIME_SHA256}  /tmp/wasmtime.tar.xz" | sha256sum -c - \
+    && tar -xJf /tmp/wasmtime.tar.xz --strip-components=1 -C /usr/local/bin "wasmtime-v${WASMTIME_VERSION}-x86_64-linux/wasmtime" \
+    && curl -LsSf "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" -o /tmp/actionlint.tar.gz \
+    && echo "${ACTIONLINT_SHA256}  /tmp/actionlint.tar.gz" | sha256sum -c - \
+    && tar -xzf /tmp/actionlint.tar.gz -C /usr/local/bin actionlint \
+    && curl -LsSf "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_Linux_64-bit.tar.gz" -o /tmp/vale.tar.gz \
+    && echo "${VALE_SHA256}  /tmp/vale.tar.gz" | sha256sum -c - \
+    && tar -xzf /tmp/vale.tar.gz -C /usr/local/bin vale \
+    && rm -f /tmp/cargo-nextest.tar.gz /tmp/cargo-binstall.tgz /tmp/wasmtime.tar.xz /tmp/actionlint.tar.gz /tmp/vale.tar.gz
 
 # ── Dart SDK ───────────────────────────────────────────────────
-RUN LATEST_DART=$(curl -sSf https://storage.googleapis.com/dart-archive/channels/stable/release/latest/VERSION | jq -r .version) \
-    && curl -LsSf https://storage.googleapis.com/dart-archive/channels/stable/release/${LATEST_DART}/sdk/dartsdk-linux-x64-release.zip -o /tmp/dart.zip \
+ARG DART_VERSION=3.12.1
+ARG DART_SHA256=6a2bbf64a133c9c86a62a532dbd3e0b4db4ac365abd456e9f9d1c5df61fcdbf8
+RUN curl -LsSf "https://storage.googleapis.com/dart-archive/channels/stable/release/${DART_VERSION}/sdk/dartsdk-linux-x64-release.zip" -o /tmp/dart.zip \
+    && echo "${DART_SHA256}  /tmp/dart.zip" | sha256sum -c - \
     && mkdir -p /opt \
     && unzip -q /tmp/dart.zip -d /opt \
     && rm -f /tmp/dart.zip

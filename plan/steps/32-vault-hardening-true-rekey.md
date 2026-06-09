@@ -13,7 +13,11 @@
 > below were updated in `plan/index.yaml`. Full detail:
 > **`plan/issues/vault-rekey-infeasible-finding-2026-06-07.md`**.
 
-- **Status**: ready (blocked on spec refinement)
+- **Status**: DONE 2026-06-09 at `379f58f2`. Spec refined to the keychain-held
+  Vault-generated-share model; entrypoint + vault_bootstrap hardened; brick bug
+  fixed; instant guard added; isolated podman e2e PASS 7/7 (container recreate
+  survives). Unblocks step 36 (macOS/Windows keychain/vsock parity) and step 42d
+  against the corrected non-rekey contract.
 - **Owner host**: linux
 - **Branch**: linux-next (plan) / linux-next (code)
 - **Depends on**: [] (reopens the unfinished half of step 22 `vault-hardening-architecture`)

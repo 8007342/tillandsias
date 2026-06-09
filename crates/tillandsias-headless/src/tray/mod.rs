@@ -692,12 +692,12 @@ fn handle_control_connection(
                 ControlMessage::CloudRefreshRequest { seq } => {
                     // Linux-native CloudRefreshRequest handler (Q4
                     // answer of the convergence packet). Unlike the
-                    // vsock side (which reads a token from
-                    // /run/secrets/tillandsias-github-token), the
-                    // unix-side host invocation passes `token: None`
-                    // and lets `gh` use the user's local auth config
-                    // search path. Same wire reply shape, host-
-                    // appropriate execution context.
+                    // vsock side (which fetches the GitHub token from
+                    // Vault via vault-cli), the unix-side host
+                    // invocation passes `token: None` and lets `gh`
+                    // use the user's local auth config search path.
+                    // Same wire reply shape, host-appropriate
+                    // execution context.
                     //
                     // @trace spec:host-shell-architecture
                     // @trace plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q4)
@@ -974,12 +974,11 @@ impl TrayUiState {
         let projects_hash = Self::hash_projects(&projects);
 
         // @trace spec:tillandsias-vault, spec:tray-minimal-ux
-        // Single source of truth for "logged in" is the Vault secret at
-        // secret/github/token — NOT host `gh auth status`. Cheap when no
-        // Vault data volume exists (the logged-out default); brings Vault up
-        // on demand only when a prior login left a data volume behind.
-        // Refreshed on demand when the user clicks GitHubLogin — never polled.
-        let is_authenticated = crate::vault_bootstrap::is_github_logged_in(debug);
+        // Default to false at launch — a background probe (spawned in
+        // run_tray_mode_with_debug) asynchronously checks Vault and bumps
+        // the menu revision when the token is confirmed. This avoids a
+        // 60s Vault health timeout on the launch path.
+        let is_authenticated = false;
 
         Self {
             root,
@@ -1415,13 +1414,35 @@ fn build_launch_spec(project: &ProjectEntry, kind: LaunchKind, image: &str) -> C
     }
 }
 
+// Tray-initiated interactive flows (GitHub login, root maintenance shell) must
+// surface in a *popup* terminal window. The tray can be started from a desktop
+// shortcut with no controlling terminal at all, so we never fall back to running
+// the command inline — that would either prompt in whatever terminal happened to
+// launch the tray (the bug operators hit on GNOME/Fedora) or silently fail under
+// a desktop shortcut. The inline path is reserved for `tillandsias --github-login`
+// invoked directly from a terminal, which is handled in main.rs.
+//
+// Candidate order prefers the modern GNOME/Fedora default (ptyxis) and GNOME
+// Console (kgx) ahead of the legacy emulators so Silverblue hosts get a real
+// window instead of the inline prompt.
 fn launch_in_terminal(title: &str, executable: &str, args: &[String]) -> Result<(), String> {
-    for candidate in ["gnome-terminal", "konsole", "xterm"] {
+    for candidate in ["ptyxis", "gnome-terminal", "kgx", "konsole", "xterm"] {
         if terminal_present(candidate) {
             let mut child = Command::new(candidate);
             match candidate {
+                // Ptyxis (GNOME/Fedora default since 47): `-- COMMAND` runs the
+                // command in a fresh window with its own PTY.
+                "ptyxis" => {
+                    child.args(["--new-window", "-T", title, "--", executable]);
+                    child.args(args);
+                }
                 "gnome-terminal" => {
                     child.args(["--title", title, "--", executable]);
+                    child.args(args);
+                }
+                // GNOME Console accepts a trailing `-- COMMAND`; it has no title flag.
+                "kgx" => {
+                    child.args(["--", executable]);
                     child.args(args);
                 }
                 "konsole" => {
@@ -1442,20 +1463,15 @@ fn launch_in_terminal(title: &str, executable: &str, args: &[String]) -> Result<
             }
             child
                 .spawn()
-                .map_err(|e| format!("failed to launch terminal: {e}"))?;
+                .map_err(|e| format!("failed to launch {candidate}: {e}"))?;
             return Ok(());
         }
     }
 
-    let status = Command::new(executable)
-        .args(args)
-        .status()
-        .map_err(|e| format!("failed to run command: {e}"))?;
-    if status.success() {
-        Ok(())
-    } else {
-        Err(format!("command exited with {status}"))
-    }
+    Err("no supported terminal emulator found \
+         (looked for ptyxis, gnome-terminal, kgx, konsole, xterm); \
+         install one to run interactive tray actions in a popup window"
+        .to_string())
 }
 
 fn terminal_present(candidate: &str) -> bool {
@@ -1840,6 +1856,14 @@ fn handle_github_login(service: Arc<TrayService>) {
             let args = vec!["--github-login".to_string()];
             if let Err(err) = launch_in_terminal("GitHub Login", "tillandsias", &args) {
                 warn!("GitHub login terminal spawn failed: {err}");
+                // Surface to the tray UX: a desktop-shortcut launch has no
+                // controlling terminal, so a log-only failure would look like
+                // the click did nothing.
+                let _ = futures::executor::block_on(service_for_emit.set_status(
+                    format!("🥀 GitHub login: {err}"),
+                    TrayIconState::Dried,
+                    None,
+                ));
             }
             let _ = futures::executor::block_on(service_for_emit.rebuild_after_state_change());
         })
@@ -3224,6 +3248,35 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
     // @trace spec:graceful-shutdown, spec:app-lifecycle
     service.attach_signal_shutdown(Arc::clone(&shutdown));
     start_control_socket_server(Arc::clone(&shutdown))?;
+
+    // @trace spec:tillandsias-vault, spec:tray-minimal-ux
+    // Asynchronous vault probe: is_github_logged_in can trigger a 60s Vault
+    // health timeout if the data volume exists but Vault isn't running (e.g.
+    // first tray launch after a --github-login). Instead of blocking the
+    // launch path, default is_authenticated=false and confirm in background.
+    {
+        let service_for_probe = service.clone();
+        let state_handle = service.state_handle();
+        let debug = service.snapshot().debug;
+        if service
+            .task_executor
+            .spawn_task(move || {
+                if crate::vault_bootstrap::is_github_logged_in(debug) {
+                    let mut state = state_handle.lock().expect("tray state lock");
+                    if !state.is_authenticated {
+                        state.is_authenticated = true;
+                        state.bump_revision();
+                    }
+                    drop(state);
+                    let _ =
+                        futures::executor::block_on(service_for_probe.rebuild_after_state_change());
+                }
+            })
+            .is_err()
+        {
+            warn!("task queue full: skipping background vault probe");
+        }
+    }
 
     // @trace spec:tray-ux, spec:remote-projects
     // Kick off the initial cloud-projects fetch on the async executor so the

@@ -1,7 +1,6 @@
 #!/usr/bin/env bash
 # @trace spec:user-runtime-lifecycle, spec:litmus-framework
-# Rebuild all container images using quick-start litmus tests.
-# This exercises the exact ImageBuilder code paths that tillandsias app uses.
+# Build the complete local image matrix through the canonical build engine.
 #
 # Usage:
 #   ./build-all-images.sh           # Rebuild all (sequential)
@@ -30,21 +29,43 @@ _step()  { echo -e "${CYAN}[build-all]${NC} $*"; }
 
 _step "Building all container images (mode: $PARALLEL)..."
 
-IMAGES=("git" "proxy" "forge" "inference" "web")
+IMAGES=(
+    proxy
+    git
+    inference
+    router
+    vault
+    forge
+    web
+)
 
 if [[ "$PARALLEL" == "--parallel" ]]; then
-    _step "Building in parallel..."
-    for image in "${IMAGES[@]}"; do
+    _step "Building chromium-core before parallel dependents..."
+    "$ROOT/scripts/build-image.sh" chromium-core
+
+    _step "Building remaining images in parallel (storage mutations remain serialized)..."
+    pids=()
+    for image in "${IMAGES[@]}" chromium-framework; do
         _info "  Starting $image..."
-        "$ROOT/build-${image}.sh" &
+        "$ROOT/scripts/build-image.sh" "$image" &
+        pids+=("$!")
     done
-    wait
+    failed=0
+    for pid in "${pids[@]}"; do
+        if ! wait "$pid"; then
+            failed=1
+        fi
+    done
+    if [[ "$failed" -ne 0 ]]; then
+        echo "❌ One or more image builds failed"
+        exit 1
+    fi
     _info "All builds completed"
 else
     _step "Building sequentially..."
-    for image in "${IMAGES[@]}"; do
+    for image in "${IMAGES[@]:0:4}" chromium-core chromium-framework "${IMAGES[@]:4}"; do
         _step "Building $image..."
-        "$ROOT/build-${image}.sh" || {
+        "$ROOT/scripts/build-image.sh" "$image" || {
             echo "❌ Failed to build $image"
             exit 1
         }

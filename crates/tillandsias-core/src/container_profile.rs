@@ -154,18 +154,18 @@ pub struct SecretMount {
 
 /// The types of secrets a profile can request.
 ///
-/// Tokens live exclusively in the host OS keyring (Linux Secret Service,
-/// macOS Keychain, Windows Credential Manager). The host resolves the token
-/// into a podman secret before launch. The container never sees D-Bus, the
-/// keyring, or any host credential beyond the mounted secret file.
-/// @trace spec:secrets-management, spec:native-secrets-store
+/// In the Phase 6.5 Vault-native model, the host mints an ephemeral Vault
+/// AppRole token and mounts it as a podman secret. The container calls
+/// vault-cli to fetch the actual GitHub token at push time.
+/// @trace spec:tillandsias-vault
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum SecretKind {
-    /// Mount the GitHub OAuth token secret at
-    /// `/run/secrets/tillandsias-github-token`.
-    /// The host creates the podman secret from the OS keyring before launch
-    /// and removes it when the tray shuts down.
-    /// @trace spec:git-mirror-service, spec:secrets-management, spec:native-secrets-store
+    /// Mount the GitHub OAuth token — resolved from Vault via AppRole.
+    /// In the Vault-native flow, the git-mirror container receives a
+    /// Vault AppRole token at `/run/secrets/vault-token` and calls
+    /// `vault-cli read -field=token secret/github/token` at push time.
+    /// (Legacy keyring-backed `tillandsias-github-token` removed in v0.3.)
+    /// @trace spec:git-mirror-service, spec:tillandsias-vault
     GitHubToken,
 }
 
@@ -533,18 +533,18 @@ pub fn inference_profile() -> ContainerProfile {
     }
 }
 
-/// Git service container — bare mirror + git daemon + podman GitHub secret.
+/// Git service container — bare mirror + git daemon + Vault-backed secret.
 ///
 /// Runs a local git daemon inside the enclave network. Forge containers clone
 /// and fetch from this service instead of hitting the internet directly.
 ///
 /// Mounts: log dir always; mirror volume added dynamically per-project.
-/// Credentials: the host creates a podman secret named
-/// `tillandsias-github-token` from the OS keyring and mounts it into the
-/// container at `/run/secrets/tillandsias-github-token`. The container never
-/// sees D-Bus, the host keyring, or any other host secret.
+/// Credentials: the host mounts a Vault AppRole token at
+/// `/run/secrets/vault-token`; the post-receive hook calls
+/// `vault-cli read -field=token secret/github/token` at push time.
+/// (Legacy keyring-backed `tillandsias-github-token` removed in v0.3.)
 ///
-/// @trace spec:git-mirror-service, spec:secrets-management, spec:native-secrets-store
+/// @trace spec:git-mirror-service, spec:tillandsias-vault
 pub fn git_service_profile() -> ContainerProfile {
     ContainerProfile {
         entrypoint: "/usr/local/bin/entrypoint.sh",

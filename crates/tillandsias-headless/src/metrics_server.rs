@@ -10,10 +10,14 @@
 //! error to the scraper — we return `500 Internal Server Error` with the
 //! error body, never a fabricated healthy `200`.
 
+use std::collections::{BTreeMap, HashSet};
+use std::fs;
 use std::net::SocketAddr;
+use std::path::Path;
 use std::sync::Arc;
 use std::sync::Mutex;
 use std::time::Duration;
+use tillandsias_logging::{ImageBuildEvent, ImageBuildEventWriter};
 use tillandsias_metrics::{MetricsSampler, prometheus_exporter::PrometheusExporter};
 use tokio::io::{AsyncReadExt, AsyncWriteExt};
 use tokio::net::TcpStream;
@@ -58,7 +62,7 @@ impl Default for MetricsServerState {
 /// This is the core function that generates Prometheus-formatted metrics text.
 /// It can be called from any HTTP server implementation.
 pub fn format_prometheus_metrics(state: &MetricsServerState) -> Result<String, String> {
-    state
+    let mut output = state
         .sampler
         .lock()
         .map_err(|e| format!("Failed to acquire sampler lock: {}", e))
@@ -67,7 +71,112 @@ pub fn format_prometheus_metrics(state: &MetricsServerState) -> Result<String, S
                 .exporter
                 .format_metrics(&mut sampler)
                 .map_err(|e| format!("Failed to format metrics: {}", e))
-        })
+        })?;
+    output.push_str(&format_image_build_metrics(
+        &ImageBuildEventWriter::default_path(),
+    )?);
+    Ok(output)
+}
+
+fn format_image_build_metrics(path: &Path) -> Result<String, String> {
+    let contents = match fs::read_to_string(path) {
+        Ok(contents) => contents,
+        Err(e) if e.kind() == std::io::ErrorKind::NotFound => return Ok(String::new()),
+        Err(e) => return Err(format!("Failed to read image build telemetry: {e}")),
+    };
+
+    let mut event_counts = BTreeMap::<(String, String, String, String, String, String), u64>::new();
+    let mut duration_ms = BTreeMap::<String, (u64, u64)>::new();
+    let mut size_bytes = BTreeMap::<String, u64>::new();
+    let mut bytes_downloaded = BTreeMap::<String, u64>::new();
+    let mut seen_builds = HashSet::<(String, String)>::new();
+    let mut duplicate_builds = BTreeMap::<String, u64>::new();
+
+    for line in contents.lines().filter(|line| !line.trim().is_empty()) {
+        let event: ImageBuildEvent = serde_json::from_str(line)
+            .map_err(|e| format!("Failed to parse image build telemetry: {e}"))?;
+        let image = metric_label(&event.image_name);
+        let event_type = metric_label(&event.metadata.event_type);
+        let decision = metric_label(event.decision.as_deref().unwrap_or("unknown"));
+        let reason = metric_label(event.reason.as_deref().unwrap_or("unknown"));
+        let status = metric_label(&event.build_status);
+        let cache_result = metric_label(event.cache_result.as_deref().unwrap_or("unknown"));
+        *event_counts
+            .entry((
+                image.clone(),
+                event_type,
+                decision.clone(),
+                reason,
+                status,
+                cache_result,
+            ))
+            .or_default() += 1;
+
+        if let Some(duration) = event.duration_ms {
+            let entry = duration_ms.entry(image.clone()).or_default();
+            entry.0 = entry.0.saturating_add(duration);
+            entry.1 = entry.1.saturating_add(1);
+        }
+        if event.image_size_bytes > 0 {
+            size_bytes.insert(image.clone(), event.image_size_bytes);
+        }
+        if let Some(bytes) = event.bytes_downloaded {
+            *bytes_downloaded.entry(image.clone()).or_default() += bytes;
+        }
+        if decision == "build"
+            && event.metadata.event_type == "image.build.completed"
+            && event.build_status == "success"
+            && let Some(digest) = event.source_digest
+            && !seen_builds.insert((image.clone(), digest))
+        {
+            *duplicate_builds.entry(image).or_default() += 1;
+        }
+    }
+
+    let mut output = String::new();
+    output.push_str("# TYPE tillandsias_image_build_events_total counter\n");
+    for ((image, event_type, decision, reason, status, cache_result), count) in event_counts {
+        output.push_str(&format!(
+            "tillandsias_image_build_events_total{{image=\"{image}\",event_type=\"{event_type}\",decision=\"{decision}\",reason=\"{reason}\",status=\"{status}\",cache_result=\"{cache_result}\"}} {count}\n"
+        ));
+    }
+    output.push_str("# TYPE tillandsias_image_build_duration_milliseconds_sum counter\n");
+    output.push_str("# TYPE tillandsias_image_build_duration_milliseconds_count counter\n");
+    for (image, (sum, count)) in duration_ms {
+        output.push_str(&format!(
+            "tillandsias_image_build_duration_milliseconds_sum{{image=\"{image}\"}} {sum}\n"
+        ));
+        output.push_str(&format!(
+            "tillandsias_image_build_duration_milliseconds_count{{image=\"{image}\"}} {count}\n"
+        ));
+    }
+    output.push_str("# TYPE tillandsias_image_build_size_bytes gauge\n");
+    for (image, size) in size_bytes {
+        output.push_str(&format!(
+            "tillandsias_image_build_size_bytes{{image=\"{image}\"}} {size}\n"
+        ));
+    }
+    output.push_str("# TYPE tillandsias_image_build_bytes_downloaded_total counter\n");
+    for (image, bytes) in bytes_downloaded {
+        output.push_str(&format!(
+            "tillandsias_image_build_bytes_downloaded_total{{image=\"{image}\"}} {bytes}\n"
+        ));
+    }
+    output.push_str("# TYPE tillandsias_image_build_duplicates_total counter\n");
+    for (image, count) in duplicate_builds {
+        output.push_str(&format!(
+            "tillandsias_image_build_duplicates_total{{image=\"{image}\"}} {count}\n"
+        ));
+    }
+    Ok(output)
+}
+
+fn metric_label(value: &str) -> String {
+    value
+        .chars()
+        .filter(|c| c.is_ascii_alphanumeric() || matches!(c, '_' | '-' | '.'))
+        .take(64)
+        .collect()
 }
 
 /// Outcome of routing one HTTP request line. Kept separate from the IO
@@ -343,6 +452,40 @@ mod tests {
 
         assert!(type_lines > 0, "Should have TYPE comments");
         assert!(help_lines > 0, "Should have HELP comments");
+    }
+
+    #[test]
+    fn image_build_metrics_use_bounded_labels_and_stable_units() {
+        let temp = tempfile::tempdir().unwrap();
+        let path = temp.path().join("image-build-events.jsonl");
+        let writer = ImageBuildEventWriter::new(&path);
+        let first = ImageBuildEvent::lifecycle(
+            "image.build.completed",
+            "build-1",
+            "tillandsias-init",
+            "forge",
+            "localhost/tillandsias-forge:sha256-abc",
+        )
+        .with_identity(
+            "sha256:abc",
+            "localhost/tillandsias-forge:v1",
+            "localhost/tillandsias-forge:latest",
+        )
+        .with_decision("build", "digest_missing")
+        .with_cache("layers", "miss")
+        .with_outcome("success", 1250, 0)
+        .with_size(1234);
+        let second = first.clone();
+        writer.append(&first).unwrap();
+        writer.append(&second).unwrap();
+
+        let metrics = format_image_build_metrics(&path).unwrap();
+        assert!(metrics.contains("tillandsias_image_build_events_total"));
+        assert!(metrics.contains("tillandsias_image_build_duration_milliseconds_sum"));
+        assert!(metrics.contains("tillandsias_image_build_size_bytes"));
+        assert!(metrics.contains("tillandsias_image_build_duplicates_total{image=\"forge\"} 1"));
+        assert!(!metrics.contains("sha256:abc"));
+        assert!(!metrics.contains("build-1"));
     }
 
     /// Routing matrix pinning: each branch maps to exactly one decision so

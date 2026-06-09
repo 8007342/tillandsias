@@ -74,29 +74,29 @@ Combines atomic signals into a coherent test. Executes signals sequentially; fir
 
 ## Example: GitHub Login Test
 
-**Spec Requirement:** `spec:secrets-management` — "Credentials are read from ephemeral podman secrets, never stored on disk or logged."
+**Spec Requirement:** `spec:tillandsias-vault` — "GitHub token is written to Vault and retrieved via vault-cli at push time."
 
 **Test Structure:**
 
 ```
 GitHubLoginTest
-├── CreateGitHubSecretSignal
-│   └── Assert: `podman secret create --driver=file tillandsias-github-token`
-├── GitSecretMountSignal
-│   └── Assert: `podman run ... --secret tillandsias-github-token ...`
+├── VaultTokenWriteSignal
+│   └── Assert: `vault-cli write secret/github/token token=<redacted>`
+├── VaultTokenReadSignal
+│   └── Assert: `vault-cli read -field=token secret/github/token`
 ├── GitAuthenticateSignal
-│   └── Assert: git command succeeds with token from `/run/secrets/tillandsias-github-token`
-└── CleanupSecretSignal
-    └── Assert: `podman secret rm tillandsias-github-token`
+│   └── Assert: git push succeeds with token from Vault
+└── CleanupVaultTokenSignal
+    └── Assert: `vault-cli delete secret/github/token`
 ```
 
 **Signal Implementation:**
 
 ```rust
-/// Signal: "GitHub login creates podman secret with --driver=file"
-/// @trace spec:secrets-management
-pub struct CreateGitHubSecretSignal {
-    secret_name: String,
+/// Signal: "GitHub login writes token to Vault"
+/// @trace spec:tillandsias-vault
+pub struct VaultTokenWriteSignal {
+    vault_path: String,
 }
 
 #[async_trait]

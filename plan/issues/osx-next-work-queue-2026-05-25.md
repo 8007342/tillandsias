@@ -2,6 +2,19 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
+## 2026-06-08 — keyring-verify/macos COMPLETE (apple-native backend verified)
+
+- 2026-06-08T17:52Z  (this commit: `verify(keyring): apple-native …`)  `keyring-verify/macos`
+  PASS — `apple-native` keyring backend builds (core + macos-tray + headless/vault;
+  security-framework chain compiles) and persists across separate process runs through the real
+  login Keychain (write→fresh-process read matches; `security find-generic-password` confirms;
+  clean delete). No fix-forward needed. Full evidence:
+  `plan/issues/keyring-backend-xplat-verification-2026-06-08.md` Results — macOS. Closes the
+  macOS half of step 42e's cross-platform tail; step 42d / step 36 stay blocked on step 32 (this
+  verified the keyring backend, not vsock unseal delivery).
+
+---
+
 ## 2026-06-05 — NEW WAVE queued (pre-Vault audit)
 
 The macOS v0.0.1/v0.3.0 items below are done or blocked-on-user. A 2026-06-05
@@ -115,6 +128,14 @@ accessor.
 
 ## Work-loop Outcomes
 
+- 2026-06-08T18:30Z  YIELD    Pulled `origin/linux-next` into local `osx-next`
+  (`c5bb3c2b`) and re-scanned the macOS/any-host queue. No autonomous macOS
+  packet is currently claimable: `keyring-verify/macos` is already verified
+  PASS and now header-marked done; step 36 / step 42d macOS parity remains
+  blocked on step 32; m8 remains user-attended smoke. Any-host
+  `forge-enhancements/curated-toolchain-backlog` is not claimable until the
+  linux-owned diagnostics piggyback packet lands. Agent
+  `macos-Tlatoanis-MacBook-Air-codex-20260608T1830Z`.
 - 2026-06-02T20:54Z  a826dcc5  Resolved UX gap-1 by loading `icon.pdf` as the NSStatusItem template image; targeted macOS tray tests/check passed.
 - 2026-06-02T21:10Z  YIELD    No claimable macOS packets found. Queue fully drained (all items done/blocked-user). App built + installed at /Applications/Tillandsias.app via `build-osx-tray.sh --ci-full --install`. Agent `macos-Tlatoanis-MacBook-Air-big-pickle-20260602T211038Z` yields until orchestrator sources new packets.
 - 2026-06-02T21:30Z  17f6c246  Resolved xz dylib signing crash: `lzma-sys` now statically links liblzma via `LZMA_API_STATIC=1` in `.cargo/config.toml`. Ad-hoc codesigned binary no longer loads Homebrew's liblzma.5.dylib (rejected by macOS due to Team ID mismatch). Build + verify PASS. Agent `macos-Tlatoanis-MacBook-Air-big-pickle-20260602T211038Z`.
@@ -3371,3 +3392,8 @@ step 5 lands.
 - Note: `cargo fmt --all` reflows sibling-owned crates; used targeted staging so
   only macos-tray test files were committed.
 - 2026-06-04T05:00Z  64ab348c  agent/opencode-web-backoff DONE — implemented exponential backoff (100ms..2s) and 30s timeout for web probes.
+
+
+## ORCHESTRATOR PACKET — 2026-06-08 (from linux-next)
+
+Ready, step-32-independent packet for this host: **keyring persistent-backend verification** after the v0.3.260608.4 fix (shared `Cargo.toml` `keyring` now enables a native backend; macОS must verify build + keychain persistence). Full spec + acceptance evidence: `plan/issues/keyring-backend-xplat-verification-2026-06-08.md`. Claim it on your next `/advance-work-from-plan` cycle.
