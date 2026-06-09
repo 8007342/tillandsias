@@ -1,14 +1,14 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-08T20:50:00Z
+LastExecutionTime: 2026-06-09T01:26:00Z
 
 ## This Loop
 
-- **Cycle type**: Operator-directed tray GitHub-login fix + orchestration audit.
-- **Sibling Git Audit**: heads — main `13752eb2` (v0.3.260608.4), linux-next `07e8c213`,
-  osx-next `cc58c9da` (drift 0, queue exhausted), windows-next `98acdbc6` (drift 1, < D_max).
-  No divergence/thrashing/deadlock. No stale leases. No sibling branch modified.
-- **Convergence**: Positive — tray popup-terminal fix landed; step 42c HTTPS already complete.
+- **Cycle type**: Operator-directed tray fix + step-32 takeover + full release.
+- **Sibling Git Audit**: main now `c9d00a3b` (v0.3.260609.1 bump), linux-next `aa7b96a4`,
+  osx-next `cc58c9da` (drift 0), windows-next `98acdbc6` (integrated into linux-next this cycle).
+  No divergence/thrashing/deadlock.
+- **Convergence**: Strongly positive — tray popup fix + step-32 vault hardening landed and shipped.
 
 ## What changed this cycle
 
@@ -24,11 +24,15 @@ LastExecutionTime: 2026-06-08T20:50:00Z
 
 ## Blocking Tree (new frontier)
 
-- **Step 32** (vault true-rekey): ACTIVELY CLAIMED by `linux-tlatoani-gemini-20260608T1937`
-  (lease `…1937Z`, expires 2026-06-08T23:38:00Z). Its two ready subtasks
-  (vault-rekey/entrypoint, vault-rekey/litmus-gate) are Gemini's — do not poach.
-- **Step 37** (release): operator-directed THIS session — full build + merge linux-next→main +
-  release pending completion of Gemini's step-32 work (so the release ships the vault hardening).
+- **Step 32** (vault true-rekey): **DONE 2026-06-09 at `379f58f2`.** Gemini's lease expired
+  (operator confirmed idle); reclaimed and completed. Keychain-held generated-share unseal,
+  brick-bug fix, instant guard; isolated podman e2e 7/7 (container recreate survives). Unblocks
+  steps 36 + 42d on the corrected non-rekey contract.
+- **Step 37** (release): **DONE 2026-06-09** — v0.3.260609.1 merged (PR #23) + tagged +
+  workflow_dispatch triggered (run 27177886625).
+- **Step 36 / 42d** (macOS+Windows keychain/vsock parity): now UNBLOCKED — re-spec against the
+  keychain-held-share mechanism (capture Vault-generated share → platform keychain → vsock/HvSocket).
+- **Step 38** (nix-cache/crane): claimed by another Linux agent.
 - **Step 45** (canonical image digest/aliases) completed at `453c7abb` + `45843b02`.
 - **Step 46** completed at `6c890021`; **step 47** completed at `ec5cf96c` + `1c316e5c`.
 - **Step 44** completed at `25cb5b3a`.
@@ -40,9 +44,9 @@ LastExecutionTime: 2026-06-08T20:50:00Z
 
 ## Assignment Board
 
-- **Linux**: No claimable leaf for a second agent — step 32 is Gemini's active lease.
-  This agent (claude) completed the operator's tray popup-terminal fix and is holding for
-  Gemini to finish step 32, after which it runs the final build + merge-to-main + release.
+- **Linux**: Queue exhausted. Tray popup fix + step 32 done and shipped in v0.3.260609.1.
+  Remaining ready leaf (step 38 nix-cache) is another agent's claim. Next frontier: re-spec
+  steps 36/42d against the now-landed keychain-held-share contract.
 - **macOS**: step 36 macOS keychain/vsock parity — **blocked on linux step 32**. Independent:
   user-attended **m8 smoke** of a v0.3.x build (release acceptance). Native keyring
   backend build + persistence verification is complete.
@@ -52,4 +56,5 @@ LastExecutionTime: 2026-06-08T20:50:00Z
 
 ## Stale Or Pending Pings
 
-- Step 37 escalation awaiting operator (see integration-loop ledger 18:07Z).
+- Release v0.3.260609.1 build in flight (run 27177886625); artifact URL to be recorded in the
+  linux-next work-queue ledger on completion.
