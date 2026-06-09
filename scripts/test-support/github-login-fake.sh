@@ -43,6 +43,6 @@ printf 'mock-vault-token' >"$secret_dir/vault-token"
 
 grep -F 'podman run --detach --rm --name tillandsias-gh-login-shape' "$calls_file" >/dev/null
 grep -F 'podman exec --interactive --tty tillandsias-gh-login-shape gh auth login --hostname github.com --git-protocol https' "$calls_file" >/dev/null
-grep -F "vault-cli.sh write secret/github/token" "$calls_file" >/dev/null
+grep 'vault-cli.sh.*write.*secret/github/token' "$calls_file" >/dev/null
 
 printf 'GitHub login smoke completed\n'

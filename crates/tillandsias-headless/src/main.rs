@@ -987,9 +987,33 @@ fn init_log_file(image_name: &str, debug: bool) -> Option<PathBuf> {
         image_name
     )))
 }
+enum RuntimeOrHandle {
+    Runtime(tokio::runtime::Runtime),
+    Handle(tokio::runtime::Handle),
+}
 
-fn podman_runtime() -> Result<tokio::runtime::Runtime, String> {
-    tokio::runtime::Runtime::new().map_err(|e| format!("Failed to create async runtime: {e}"))
+impl RuntimeOrHandle {
+    fn block_on<F: std::future::Future>(&self, f: F) -> F::Output {
+        match self {
+            Self::Runtime(rt) => rt.block_on(f),
+            Self::Handle(handle) => {
+                // If we are already in an async context, we cannot block the current thread.
+                // However, zbus / tokio allows block_in_place if we are on a multi-threaded runtime.
+                // A safer way is tokio::task::block_in_place or running it inside a helper.
+                tokio::task::block_in_place(move || handle.block_on(f))
+            }
+        }
+    }
+}
+
+fn podman_runtime() -> Result<RuntimeOrHandle, String> {
+    if let Ok(handle) = tokio::runtime::Handle::try_current() {
+        Ok(RuntimeOrHandle::Handle(handle))
+    } else {
+        tokio::runtime::Runtime::new()
+            .map(RuntimeOrHandle::Runtime)
+            .map_err(|e| format!("Failed to create async runtime: {e}"))
+    }
 }
 
 fn report_runtime_lane(context: &str, debug: bool) {
@@ -1037,6 +1061,7 @@ fn versioned_image_tag(image_name: &str, version: &str) -> String {
     format!("localhost/tillandsias-{image_name}:v{version}")
 }
 
+#[allow(clippy::type_complexity)]
 fn image_build_inputs(
     image_name: &str,
     chromium_core: Option<&ImageBuildIdentity>,
@@ -3725,9 +3750,8 @@ fn run_github_login(debug: bool) -> Result<(), String> {
             "-c",
             "TOKEN=$(gh auth token --hostname github.com); vault-cli.sh write secret/github/token \"token=$TOKEN\"",
         ]);
-        run_command_silent(vault_write, debug).map_err(|e| {
-            format!("in-container vault write failed: {e}")
-        })?;
+        run_command_silent(vault_write, debug)
+            .map_err(|e| format!("in-container vault write failed: {e}"))?;
 
         let mut vault_verify = podman_command();
         vault_verify.args([
@@ -3738,9 +3762,8 @@ fn run_github_login(debug: bool) -> Result<(), String> {
             "-field=token",
             "secret/github/token",
         ]);
-        run_command_silent(vault_verify, debug).map_err(|e| {
-            format!("in-container vault write verification failed: {e}")
-        })?;
+        run_command_silent(vault_verify, debug)
+            .map_err(|e| format!("in-container vault write verification failed: {e}"))?;
 
         info!(
             accountability = true,

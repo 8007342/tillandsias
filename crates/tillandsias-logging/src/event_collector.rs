@@ -146,7 +146,7 @@ pub struct ImageBuildEvent {
     pub builder: String,
 
     /// Image size in bytes (0 if unknown or skipped)
-    #[serde(skip_serializing_if = "is_zero")]
+    #[serde(default, skip_serializing_if = "is_zero")]
     pub image_size_bytes: u64,
 
     /// Error details if build failed

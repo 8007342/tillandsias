@@ -317,6 +317,7 @@ mod tests {
 
     #[test]
     fn test_token_refresh_config_defaults() {
+        // @trace spec:native-secrets-store
         let config = TokenRefreshConfig::default();
         assert_eq!(config.refresh_threshold, Duration::from_secs(6 * 60 * 60));
         assert_eq!(config.api_timeout, Duration::from_secs(10));
