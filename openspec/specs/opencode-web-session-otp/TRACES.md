@@ -71,7 +71,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-router-sidecar/src/main.rs#L30](../../../crates/tillandsias-router-sidecar/src/main.rs#L30)
 - [crates/tillandsias-router-sidecar/src/main.rs#L124](../../../crates/tillandsias-router-sidecar/src/main.rs#L124)
 - [crates/tillandsias-router-sidecar/src/main.rs#L202](../../../crates/tillandsias-router-sidecar/src/main.rs#L202)
-- [crates/tillandsias-router-sidecar/tests/connect_loop.rs#L8](../../../crates/tillandsias-router-sidecar/tests/connect_loop.rs#L8)
+- [crates/tillandsias-router-sidecar/tests/connect_loop.rs#L10](../../../crates/tillandsias-router-sidecar/tests/connect_loop.rs#L10)
 - [crates/tillandsias-router-sidecar/tests/router_e2e_test.rs#L15](../../../crates/tillandsias-router-sidecar/tests/router_e2e_test.rs#L15)
 - [crates/tillandsias-router-sidecar/tests/router_e2e_test.rs#L32](../../../crates/tillandsias-router-sidecar/tests/router_e2e_test.rs#L32)
 - [crates/tillandsias-router-sidecar/tests/router_e2e_test.rs#L48](../../../crates/tillandsias-router-sidecar/tests/router_e2e_test.rs#L48)

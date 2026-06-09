@@ -30,4 +30,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-headless/src/tray/mod.rs#L3338](../../../crates/tillandsias-headless/src/tray/mod.rs#L3338)
 - [crates/tillandsias-router-sidecar/src/main.rs#L30](../../../crates/tillandsias-router-sidecar/src/main.rs#L30)
 - [crates/tillandsias-router-sidecar/src/main.rs#L124](../../../crates/tillandsias-router-sidecar/src/main.rs#L124)
-- [crates/tillandsias-router-sidecar/tests/connect_loop.rs#L8](../../../crates/tillandsias-router-sidecar/tests/connect_loop.rs#L8)
+- [crates/tillandsias-router-sidecar/tests/connect_loop.rs#L10](../../../crates/tillandsias-router-sidecar/tests/connect_loop.rs#L10)

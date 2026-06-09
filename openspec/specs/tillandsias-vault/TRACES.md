@@ -33,7 +33,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-headless/src/vault_bootstrap.rs#L367](../../../crates/tillandsias-headless/src/vault_bootstrap.rs#L367)
 - [crates/tillandsias-headless/src/vault_bootstrap.rs#L580](../../../crates/tillandsias-headless/src/vault_bootstrap.rs#L580)
 - [crates/tillandsias-headless/src/vault_bootstrap.rs#L861](../../../crates/tillandsias-headless/src/vault_bootstrap.rs#L861)
-- [crates/tillandsias-headless/src/vault_bootstrap.rs#L1044](../../../crates/tillandsias-headless/src/vault_bootstrap.rs#L1044)
+- [crates/tillandsias-headless/src/vault_bootstrap.rs#L1011](../../../crates/tillandsias-headless/src/vault_bootstrap.rs#L1011)
 - [crates/tillandsias-headless/src/vsock_server.rs#L441](../../../crates/tillandsias-headless/src/vsock_server.rs#L441)
 - [crates/tillandsias-headless/src/vsock_server.rs#L639](../../../crates/tillandsias-headless/src/vsock_server.rs#L639)
 - [crates/tillandsias-headless/tests/vault_approle_provisioning.rs#L7](../../../crates/tillandsias-headless/tests/vault_approle_provisioning.rs#L7)
