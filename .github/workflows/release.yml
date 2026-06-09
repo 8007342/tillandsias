@@ -134,17 +134,25 @@ jobs:
           test -f SHA256SUMS
           ls -la
 
-      - name: Assert no --install/--init in CI steps or CLI subcommands
+      - name: Assert retired setup/secrets flags are gone from the CLI
         run: |
-          # The release workflow SHALL NOT invoke --install or --init on the
-          # binary — those are user-facing setup steps, not CI responsibilities.
-          # Assert the binary's help output does NOT contain them as flags.
+          # PLEASE REVIEW: osx-next — this guard (added in 38ba099f) banned BOTH
+          # --install AND --init from the binary's --help, but --init is a
+          # supported, spec-mandated user flag: tillandsias-vault
+          # (linux.only-secret-store@v3) states "tillandsias --init SHALL ALWAYS
+          # bootstrap Vault". Banning it blocked every release after
+          # v0.3.260608.4 (the binary correctly advertises --init in --help).
+          # Corrected to guard only the flags v0.3 actually RETIRED
+          # (--install/--without-vault/--legacy-keyring-secrets per the
+          # "Legacy Fallback Removed" requirement); --init stays a valid flag.
+          # The "CI must not invoke setup steps" intent is preserved: the
+          # release workflow never runs the binary with --init.
           HELP="$(release-artifacts/tillandsias-linux-x86_64 --help 2>&1 || true)"
-          if grep -qE '\-\-install|\-\-init' <<<"$HELP"; then
-            echo "::error::tillandsias binary accepts --install or --init flag (should not in CI)"
+          if grep -qE '\-\-install|\-\-without-vault|\-\-legacy-keyring-secrets' <<<"$HELP"; then
+            echo "::error::tillandsias binary still advertises a retired setup/secrets flag (--install/--without-vault/--legacy-keyring-secrets)"
             exit 1
           fi
-          echo "✓ No --install/--init flags in CLI (CI-safe)"
+          echo "✓ No retired --install/--without-vault/--legacy-keyring-secrets flags (--init is a supported user flag; CI never invokes it)"
 
       - name: Create or update GitHub Release
         env:
