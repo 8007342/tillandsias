@@ -11,4 +11,5 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [build-inference.sh#L2](../../../build-inference.sh#L2)
 - [build-proxy.sh#L2](../../../build-proxy.sh#L2)
 - [build-web.sh#L2](../../../build-web.sh#L2)
-- [crates/tillandsias-core/src/bin/build-image.rs#L14](../../../crates/tillandsias-core/src/bin/build-image.rs#L14)
+- [crates/tillandsias-core/src/bin/build-image.rs#L7](../../../crates/tillandsias-core/src/bin/build-image.rs#L7)
+- [scripts/test-image-build-convergence.sh#L2](../../../scripts/test-image-build-convergence.sh#L2)
