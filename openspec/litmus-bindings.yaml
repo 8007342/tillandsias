@@ -850,6 +850,7 @@ specs:
   - litmus:git-mirror-safe-refspec-push
   - litmus:vault-github-token-capture-shape
   - litmus:vault-https-shape
+  - litmus:vault-entrypoint-hardened-shape
   coverage_ratio: 100
   last_verified: '2026-06-08'
 - spec_id: headless-mode

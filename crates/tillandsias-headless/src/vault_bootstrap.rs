@@ -42,8 +42,8 @@ pub const VAULT_HOST_PORT: u16 = 8201;
 
 /// Keychain service name for Tillandsias.
 const KEYCHAIN_SERVICE: &str = "tillandsias";
-/// Keychain user for the versioned unseal key.
-const UNSEAL_KEY_V1: &str = "vault-unseal-v1";
+/// Keychain user for the versioned Shamir unseal share.
+const VAULT_SHAMIR_SHARE_V1: &str = "vault-shamir-share-v1";
 /// Keychain user for the installation anchor (UUID).
 const INSTALL_ANCHOR_V1: &str = "installation-uuid-v1";
 const VAULT_USER_UID: u32 = 100;
@@ -582,25 +582,32 @@ fn repo_script(name: &str) -> PathBuf {
 fn ensure_unseal_key(debug: bool) -> Result<[u8; 32], String> {
     use base64::Engine;
 
-    // 1. Try to get the fully-derived unseal key from the keychain
-    let entry =
-        Entry::new(KEYCHAIN_SERVICE, UNSEAL_KEY_V1).map_err(|e| format!("keyring entry: {e}"))?;
+    // 1. Try to get the Shamir share from the keychain
+    let entry = Entry::new(KEYCHAIN_SERVICE, VAULT_SHAMIR_SHARE_V1)
+        .map_err(|e| format!("keyring entry for shamir share: {e}"))?;
 
-    if let Ok(encoded) = entry.get_password()
+    let encoded_res = std::thread::spawn(move || entry.get_password())
+        .join()
+        .map_err(|_| "Failed to join thread reading Shamir share from keychain")?;
+
+    if let Ok(encoded) = encoded_res
         && let Ok(key_vec) = base64::engine::general_purpose::STANDARD.decode(&encoded)
         && key_vec.len() == 32
     {
         if debug {
-            eprintln!("[tillandsias-vault] recovered unseal key from host keychain (v1, base64)");
+            eprintln!(
+                "[tillandsias-vault] recovered Shamir unseal share from host keychain (v1, base64)"
+            );
         }
         let mut key = [0u8; 32];
         key.copy_from_slice(&key_vec);
         return Ok(key);
     }
 
-    // 2. Not in keychain or invalid. Derive it from the machine-id and anchor.
+    // 2. Not in keychain (first boot). Return a dummy/filler unseal key derived from machine-id.
+    // The container will generate the real Shamir share during init, which the host will capture later.
     if debug {
-        eprintln!("[tillandsias-vault] unseal key not found; deriving from host identity");
+        eprintln!("[tillandsias-vault] Shamir share not found; deriving first-boot dummy key K");
     }
 
     let machine_id = read_machine_id()?;
@@ -620,15 +627,8 @@ fn ensure_unseal_key(debug: bool) -> Result<[u8; 32], String> {
         }
     };
 
-    let key = auto_unseal::derive_unseal_key(machine_id.as_bytes(), anchor.as_bytes());
-
-    // Store the derived key in the keychain for faster recovery/stability
-    let encoded = base64::engine::general_purpose::STANDARD.encode(key);
-    entry
-        .set_password(&encoded)
-        .map_err(|e| format!("keyring unseal key set: {e}"))?;
-
-    Ok(key)
+    let dummy_key = auto_unseal::derive_unseal_key(machine_id.as_bytes(), anchor.as_bytes());
+    Ok(dummy_key)
 }
 
 /// Fallback for non-vault builds.
@@ -641,10 +641,17 @@ fn ensure_unseal_key(_debug: bool) -> Result<[u8; 32], String> {
 /// from older versions.
 #[cfg(feature = "vault")]
 fn sanitize_keychain(debug: bool) {
-    // Today this is a placeholder for future versioned cleanup.
-    // In v0.3 we might delete UNSEAL_KEY_V0 if it existed.
-    if debug {
-        eprintln!("[tillandsias-vault] keychain sanitization complete (no stale keys found)");
+    // Delete the legacy unseal key v1 (which held the derived HKDF key rather than the Shamir share)
+    if let Ok(entry) = Entry::new(KEYCHAIN_SERVICE, "vault-unseal-v1") {
+        if let Err(e) = entry.delete_credential() {
+            if debug {
+                eprintln!(
+                    "[tillandsias-vault] sanitize: failed to delete legacy vault-unseal-v1: {e}"
+                );
+            }
+        } else if debug {
+            eprintln!("[tillandsias-vault] sanitize: deleted legacy vault-unseal-v1");
+        }
     }
 }
 
@@ -878,6 +885,8 @@ fn launch_vault_container(debug: bool) -> Result<(), String> {
             &tls_ca_arg,
             "--volume",
             &volume_arg,
+            "--tmpfs",
+            "/run/vault-handover:size=1m,mode=0777",
             "--rm",
             "--cap-drop",
             "ALL",
@@ -941,10 +950,14 @@ fn wait_for_vault_ready(
 #[cfg(feature = "vault")]
 fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
     // 1. Try to get it from the keychain
-    let entry = Entry::new(KEYCHAIN_SERVICE, "vault-root-token-v1")
-        .map_err(|e| format!("keyring entry: {e}"))?;
+    let entry_token = Entry::new(KEYCHAIN_SERVICE, "vault-root-token-v1")
+        .map_err(|e| format!("keyring entry for root token: {e}"))?;
 
-    if let Ok(token) = entry.get_password()
+    let token_res = std::thread::spawn(move || entry_token.get_password())
+        .join()
+        .map_err(|_| "Failed to join thread reading root token from keychain")?;
+
+    if let Ok(token) = token_res
         && !token.is_empty()
     {
         if debug {
@@ -953,54 +966,97 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
         return Ok(token);
     }
 
-    // 2. Not in keychain. Attempt one-time handover from the container volume.
+    // 2. Not in keychain. Attempt one-time handover from the container's tmpfs.
     if debug {
         eprintln!(
-            "[tillandsias-vault] root token not in keychain; attempting handover from volume"
+            "[tillandsias-vault] root token not in keychain; attempting handover from tmpfs /run/vault-handover/"
         );
     }
 
-    let out = podman_cmd_sync()
+    // Read the root token
+    let out_token = podman_cmd_sync()
         .args([
             "exec",
             VAULT_CONTAINER_NAME,
             "cat",
-            "/vault/data/root.token",
+            "/run/vault-handover/root.token",
         ])
         .output()
         .map_err(|e| format!("podman exec root.token: {e}"))?;
 
-    if !out.status.success() {
+    if !out_token.status.success() {
         return Err(format!(
-            "could not read root token from volume: {}",
-            String::from_utf8_lossy(&out.stderr)
+            "could not read root token from tmpfs: {}",
+            String::from_utf8_lossy(&out_token.stderr)
         ));
     }
 
-    let token = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    let token = String::from_utf8_lossy(&out_token.stdout)
+        .trim()
+        .to_string();
     if token.is_empty() {
         return Err("root token file is empty".to_string());
     }
 
-    // Store in keychain for future boots
-    entry
-        .set_password(&token)
+    // Read the Shamir share (unseal key)
+    let out_share = podman_cmd_sync()
+        .args([
+            "exec",
+            VAULT_CONTAINER_NAME,
+            "cat",
+            "/run/vault-handover/unseal.key",
+        ])
+        .output()
+        .map_err(|e| format!("podman exec unseal.key: {e}"))?;
+
+    if !out_share.status.success() {
+        return Err(format!(
+            "could not read Shamir share from tmpfs: {}",
+            String::from_utf8_lossy(&out_share.stderr)
+        ));
+    }
+
+    let share_b64 = String::from_utf8_lossy(&out_share.stdout)
+        .trim()
+        .to_string();
+    if share_b64.is_empty() {
+        return Err("Shamir share file is empty".to_string());
+    }
+
+    // Store root token in keychain
+    let entry_token_write = Entry::new(KEYCHAIN_SERVICE, "vault-root-token-v1")
+        .map_err(|e| format!("keyring entry for root token write: {e}"))?;
+    let token_clone = token.clone();
+    std::thread::spawn(move || entry_token_write.set_password(&token_clone))
+        .join()
+        .map_err(|_| "Failed to join thread writing root token to keychain")?
         .map_err(|e| format!("keyring set root token: {e}"))?;
 
+    // Store Shamir share in keychain
+    let entry_share = Entry::new(KEYCHAIN_SERVICE, VAULT_SHAMIR_SHARE_V1)
+        .map_err(|e| format!("keyring entry for shamir share: {e}"))?;
+    let share_clone = share_b64.clone();
+    std::thread::spawn(move || entry_share.set_password(&share_clone))
+        .join()
+        .map_err(|_| "Failed to join thread writing Shamir share to keychain")?
+        .map_err(|e| format!("keyring set Shamir share: {e}"))?;
+
     // @trace spec:tillandsias-vault — Secure Artifact Cleanup
-    // DELETE from volume immediately after successful handover.
+    // DELETE handover directory from tmpfs immediately after successful handover.
     let _ = podman_cmd_sync()
         .args([
             "exec",
             VAULT_CONTAINER_NAME,
             "rm",
-            "-f",
-            "/vault/data/root.token",
+            "-rf",
+            "/run/vault-handover",
         ])
         .status();
 
     if debug {
-        eprintln!("[tillandsias-vault] root token handover complete (deleted from volume)");
+        eprintln!(
+            "[tillandsias-vault] root token + Shamir share handover complete (deleted from tmpfs)"
+        );
     }
 
     Ok(token)
