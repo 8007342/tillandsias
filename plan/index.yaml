@@ -2347,7 +2347,7 @@ plan_index:
     - id: vault-hardening-true-rekey
       order: 32
       title: Vault hardening completion — true rekey + root.token cleanup
-      status: claimed
+      status: done
       owner_host: linux
       deliverable: plan/steps/32-vault-hardening-true-rekey.md
       audit_origin: plan/issues/pre-vault-obsolescence-audit-2026-06-05.md
@@ -2418,21 +2418,49 @@ plan_index:
         - "ADVERSARIAL + E2E VERIFIED before 'done': no-prompt first boot; /vault/data clean; share in keychain; container-recreate survives (the brick-bug fix); repeat-restart idempotent."
       tasks:
         - id: vault-rekey/entrypoint
-          status: ready
+          status: done
           depends_on: []
           owned_files:
             - images/vault/entrypoint.sh
             - crates/tillandsias-headless/src/vault_bootstrap.rs
+            - openspec/specs/tillandsias-vault/spec.md
           checkpoint_required: true
-          handoff_note: "BLOCKED ON SPEC: research (wf_30bb6edc-012) proved the spec's `vault operator rekey`-installs-host-key mandate is INFEASIBLE (stock Vault can't install a chosen Shamir share — 11 citations). Refine spec FIRST (finding §4), then implement the keychain-held-generated-share mechanism (finding §3,§5). Confirmed brick bug: entrypoint.sh:167 cats root.token every boot; vault_bootstrap.rs:709-717 deletes it after handover → recreate bricks Vault. Designed but NOT adversarially verified (verify leg hit token limit). MUST run adversarial review + e2e before landing. See plan/issues/vault-rekey-infeasible-finding-2026-06-07.md."
+          handoff_note: "DONE 2026-06-09 at 379f58f2. Spec refined off the infeasible rekey mandate to the keychain-held Vault-generated-share model (host-keychain-storage + keychain-sanitization invariants defined). entrypoint.sh: XOR envelope + init.json/init.envelope + persistent root.token removed; first boot writes share(b64)+root token to tmpfs /run/vault-handover, unseals with the generated share; subsequent boots unseal from the podman secret and exit early (no root token cat — brick bug fixed). vault_bootstrap.rs: first-boot dummy filler key, post-first-healthy-boot capture of share+token from tmpfs into keychain (vault-shamir-share-v1) then tmpfs delete; later boots feed the keychain share back as the raw-bytes podman secret; keychain calls on a dedicated thread (no async-runtime panic); sanitize deletes legacy vault-unseal-v1; container mounts a tmpfs handover dir."
+          events:
+            - type: claim
+              ts: "2026-06-09T01:12:00Z"
+              agent_id: "linux-tlatoani-claude-20260609T0111Z"
+              host: "linux"
+              lease_id: "lease-linux-vault-true-rekey-20260609T0112Z"
+              expires_at: "2026-06-09T05:12:00Z"
+            - type: completed
+              ts: "2026-06-09T01:55:00Z"
+              agent_id: "linux-tlatoani-claude-20260609T0111Z"
+              host: "linux"
+              lease_id: "lease-linux-vault-true-rekey-20260609T0112Z"
+              evidence_refs:
+                - "commit:379f58f2 (vault hardening source + spec + litmus guard)"
+                - "cargo build/clippy -D warnings clean (--features vault)"
+                - "vault_bootstrap unit tests PASS"
+                - "isolated podman e2e PASS 7/7: no-prompt first boot; /vault/data clean (no init.json/init.envelope/root.token); share captured to tmpfs; CONTAINER RECREATE SURVIVES (unseals from captured share, no cat/FATAL brick error); repeat-restart idempotent"
+                - "./build.sh --check PASS"
         - id: vault-rekey/litmus-gate
-          status: ready
+          status: done
           depends_on: [vault-rekey/entrypoint]
           owned_files:
-            - openspec/litmus-tests/litmus-vault-auto-unseal-no-prompt.yaml
+            - openspec/litmus-tests/litmus-vault-entrypoint-hardened-shape.yaml
             - openspec/litmus-bindings.yaml
           checkpoint_required: true
-          handoff_note: "Add the grep-only instant guard litmus-vault-entrypoint-hardened-shape.yaml (concrete steps in finding §5 / raw workflow output guard_changes) + bind it in litmus-bindings.yaml. CORRECTION vs original: do NOT assert `operator rekey` (infeasible); assert the keychain-held-share mechanism instead, and ban only the PERSISTENT /vault/data/root.token path (the hardened design keeps a tmpfs /run/vault-handover/root.token). Land it in the SAME commit as the entrypoint hardening (goes red on today's tree)."
+          handoff_note: "DONE 2026-06-09 at 379f58f2 (same commit as the entrypoint hardening). Added the instant grep-only guard litmus-vault-entrypoint-hardened-shape.yaml asserting the keychain-held-share mechanism: no init.envelope/xor_hex, no persistent `cat /vault/data/root.token`, tmpfs /run/vault-handover handover written by the entrypoint and read+deleted by the host. Bound at 100% in litmus-bindings.yaml. All 4 guard assertions pass on the hardened tree."
+          events:
+            - type: completed
+              ts: "2026-06-09T01:55:00Z"
+              agent_id: "linux-tlatoani-claude-20260609T0111Z"
+              host: "linux"
+              lease_id: "lease-linux-vault-true-rekey-20260609T0112Z"
+              evidence_refs:
+                - "commit:379f58f2"
+                - "4/4 hardened-shape guard assertions PASS"
 
     - id: pre-vault-doc-cleanup
       order: 33
