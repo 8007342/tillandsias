@@ -1,3 +1,5 @@
+#![cfg(unix)]
+
 //! Integration tests for the sidecar's control-socket connect loop.
 //!
 //! Spins up a minimal mock UDS server speaking enough of the protocol to
