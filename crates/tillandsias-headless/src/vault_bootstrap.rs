@@ -945,18 +945,98 @@ fn wait_for_vault_ready(
     read_and_handover_root_token(debug)
 }
 
-/// Read the root token from the Vault volume (one-time handover) or the
-/// host OS keychain.
+/// Read a single handover file from the running Vault container's tmpfs.
+/// Returns `None` when the file is absent (a subsequent boot — the entrypoint
+/// only writes the handover on a fresh `operator init`) or empty.
+#[cfg(feature = "vault")]
+fn read_handover_file(name: &str) -> Option<String> {
+    let out = podman_cmd_sync()
+        .args([
+            "exec",
+            VAULT_CONTAINER_NAME,
+            "cat",
+            &format!("/run/vault-handover/{name}"),
+        ])
+        .output()
+        .ok()?;
+    if !out.status.success() {
+        return None;
+    }
+    let value = String::from_utf8_lossy(&out.stdout).trim().to_string();
+    if value.is_empty() { None } else { Some(value) }
+}
+
+/// Write (or overwrite) a host keychain entry, isolating the (potentially
+/// blocking, runtime-using) secret-service call on its own thread.
+#[cfg(feature = "vault")]
+fn keychain_set_blocking(user: &str, value: &str) -> Result<(), String> {
+    let entry =
+        Entry::new(KEYCHAIN_SERVICE, user).map_err(|e| format!("keyring entry {user}: {e}"))?;
+    let value = value.to_string();
+    std::thread::spawn(move || entry.set_password(&value))
+        .join()
+        .map_err(|_| format!("join thread writing {user} to keychain"))?
+        .map_err(|e| format!("keyring set {user}: {e}"))
+}
+
+/// Read the root token, capturing a fresh first-boot handover when present.
+///
+/// CRITICAL ORDERING: the container tmpfs handover (`/run/vault-handover/`) is
+/// written ONLY when the entrypoint runs a fresh `operator init` — i.e. the
+/// data volume was just created. Whenever those artifacts exist we MUST capture
+/// them and OVERWRITE the keychain, even if a stale token/share from a previous
+/// (now-discarded) volume still lives there. The previous version returned early
+/// on any keychain root token and so never refreshed the share — re-initializing
+/// the data volume (Silverblue userns drift, `podman volume rm`, a reset) left
+/// the keychain pinned to the OLD share, and every later boot then failed to
+/// unseal the NEW volume ("cipher: message authentication failed", HTTP 400) —
+/// an unrecoverable brick. Capturing handover-first makes a fresh init always
+/// re-pair the keychain with the live volume.
 #[cfg(feature = "vault")]
 fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
-    // 1. Try to get it from the keychain
+    // 1. Fresh-init handover takes precedence over any stale keychain state.
+    if let Some(token) = read_handover_file("root.token") {
+        let share_b64 = read_handover_file("unseal.key").ok_or(
+            "vault wrote a handover root token but no Shamir share — refusing to \
+             persist an unusable keychain pairing",
+        )?;
+        if debug {
+            eprintln!(
+                "[tillandsias-vault] fresh-init handover present; capturing root token + Shamir share into keychain (overwriting any stale entries)"
+            );
+        }
+        keychain_set_blocking("vault-root-token-v1", &token)?;
+        keychain_set_blocking(VAULT_SHAMIR_SHARE_V1, &share_b64)?;
+
+        // @trace spec:tillandsias-vault — Secure Artifact Cleanup
+        // Delete the handover files from tmpfs immediately. Remove the files
+        // (not the mount dir) so the unprivileged exec user can't trip on the
+        // root-owned tmpfs mount point.
+        let _ = podman_cmd_sync()
+            .args([
+                "exec",
+                VAULT_CONTAINER_NAME,
+                "rm",
+                "-f",
+                "/run/vault-handover/root.token",
+                "/run/vault-handover/unseal.key",
+            ])
+            .status();
+
+        if debug {
+            eprintln!(
+                "[tillandsias-vault] root token + Shamir share handover complete (deleted from tmpfs)"
+            );
+        }
+        return Ok(token);
+    }
+
+    // 2. Subsequent boot (no fresh handover): use the keychain root token.
     let entry_token = Entry::new(KEYCHAIN_SERVICE, "vault-root-token-v1")
         .map_err(|e| format!("keyring entry for root token: {e}"))?;
-
     let token_res = std::thread::spawn(move || entry_token.get_password())
         .join()
         .map_err(|_| "Failed to join thread reading root token from keychain")?;
-
     if let Ok(token) = token_res
         && !token.is_empty()
     {
@@ -966,100 +1046,13 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
         return Ok(token);
     }
 
-    // 2. Not in keychain. Attempt one-time handover from the container's tmpfs.
-    if debug {
-        eprintln!(
-            "[tillandsias-vault] root token not in keychain; attempting handover from tmpfs /run/vault-handover/"
-        );
-    }
-
-    // Read the root token
-    let out_token = podman_cmd_sync()
-        .args([
-            "exec",
-            VAULT_CONTAINER_NAME,
-            "cat",
-            "/run/vault-handover/root.token",
-        ])
-        .output()
-        .map_err(|e| format!("podman exec root.token: {e}"))?;
-
-    if !out_token.status.success() {
-        return Err(format!(
-            "could not read root token from tmpfs: {}",
-            String::from_utf8_lossy(&out_token.stderr)
-        ));
-    }
-
-    let token = String::from_utf8_lossy(&out_token.stdout)
-        .trim()
-        .to_string();
-    if token.is_empty() {
-        return Err("root token file is empty".to_string());
-    }
-
-    // Read the Shamir share (unseal key)
-    let out_share = podman_cmd_sync()
-        .args([
-            "exec",
-            VAULT_CONTAINER_NAME,
-            "cat",
-            "/run/vault-handover/unseal.key",
-        ])
-        .output()
-        .map_err(|e| format!("podman exec unseal.key: {e}"))?;
-
-    if !out_share.status.success() {
-        return Err(format!(
-            "could not read Shamir share from tmpfs: {}",
-            String::from_utf8_lossy(&out_share.stderr)
-        ));
-    }
-
-    let share_b64 = String::from_utf8_lossy(&out_share.stdout)
-        .trim()
-        .to_string();
-    if share_b64.is_empty() {
-        return Err("Shamir share file is empty".to_string());
-    }
-
-    // Store root token in keychain
-    let entry_token_write = Entry::new(KEYCHAIN_SERVICE, "vault-root-token-v1")
-        .map_err(|e| format!("keyring entry for root token write: {e}"))?;
-    let token_clone = token.clone();
-    std::thread::spawn(move || entry_token_write.set_password(&token_clone))
-        .join()
-        .map_err(|_| "Failed to join thread writing root token to keychain")?
-        .map_err(|e| format!("keyring set root token: {e}"))?;
-
-    // Store Shamir share in keychain
-    let entry_share = Entry::new(KEYCHAIN_SERVICE, VAULT_SHAMIR_SHARE_V1)
-        .map_err(|e| format!("keyring entry for shamir share: {e}"))?;
-    let share_clone = share_b64.clone();
-    std::thread::spawn(move || entry_share.set_password(&share_clone))
-        .join()
-        .map_err(|_| "Failed to join thread writing Shamir share to keychain")?
-        .map_err(|e| format!("keyring set Shamir share: {e}"))?;
-
-    // @trace spec:tillandsias-vault — Secure Artifact Cleanup
-    // DELETE handover directory from tmpfs immediately after successful handover.
-    let _ = podman_cmd_sync()
-        .args([
-            "exec",
-            VAULT_CONTAINER_NAME,
-            "rm",
-            "-rf",
-            "/run/vault-handover",
-        ])
-        .status();
-
-    if debug {
-        eprintln!(
-            "[tillandsias-vault] root token + Shamir share handover complete (deleted from tmpfs)"
-        );
-    }
-
-    Ok(token)
+    Err(
+        "vault is initialized but no first-boot handover is present and the host \
+         keychain has no root token — the keychain and the data volume are out of \
+         sync. Reset with `podman volume rm tillandsias-vault-data` and re-run \
+         `tillandsias --init` to re-bootstrap."
+            .to_string(),
+    )
 }
 
 #[cfg(not(feature = "vault"))]
