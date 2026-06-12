@@ -448,9 +448,10 @@ BUILD_LOG="$ROOT/build-${IMAGE_NAME}.log"
 rm -f "$BUILD_LOG"
 if [[ "$IMAGE_NAME" == "forge" ]]; then
     _step "Refreshing cheatsheets in build context..."
-    rm -rf "$IMAGE_DIR/cheatsheets" "$IMAGE_DIR/cheatsheet-sources"
+    rm -rf "$IMAGE_DIR/cheatsheets" "$IMAGE_DIR/cheatsheet-sources" "$IMAGE_DIR/skills"
     cp -rp "$ROOT/cheatsheets" "$IMAGE_DIR/cheatsheets"
     cp -rp "$ROOT/cheatsheet-sources" "$IMAGE_DIR/cheatsheet-sources"
+    cp -rp "$ROOT/skills" "$IMAGE_DIR/skills"
 fi
 # Log preservation: the build output is kept in $ROOT/build-*.log for agent iteration
 
