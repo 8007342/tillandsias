@@ -36,6 +36,7 @@ fn assert_shutdown(signal: libc::c_int, signal_name: &str) {
             "TILLANDSIAS_LOCK_NAME",
             format!("test-signal-{}", signal_name),
         )
+        .env("TILLANDSIAS_STOP_TIMEOUT", "2")
         .stdout(Stdio::piped())
         .stderr(Stdio::piped())
         .spawn()
@@ -55,9 +56,18 @@ fn assert_shutdown(signal: libc::c_int, signal_name: &str) {
 
     // Generous ceiling: this asserts the process does not HANG on shutdown, not
     // that it shuts down within a tight wall-clock budget. A 5s ceiling flaked
-    // under concurrent `--ci-full` load even though graceful shutdown completed.
-    wait_with_timeout(&mut child, Duration::from_secs(30))
-        .unwrap_or_else(|err| panic!("{signal_name} shutdown litmus failed: {err}"));
+    // under concurrent `--ci-full` load; 30s still flaked (graceful shutdown
+    // self-reported ~32s under full parallel image/litmus load while exiting
+    // cleanly with code 0). Keep a wide hang-detection ceiling.
+    if let Err(err) = wait_with_timeout(&mut child, Duration::from_secs(60)) {
+        let mut stdout_buf = String::new();
+        let mut stderr_buf = String::new();
+        let _ = stdout.read_to_string(&mut stdout_buf);
+        let _ = stderr.read_to_string(&mut stderr_buf);
+        panic!(
+            "{signal_name} shutdown litmus failed: {err}\n--- CHILD STDOUT ---\n{stdout_buf}\n--- CHILD STDERR ---\n{stderr_buf}\n"
+        );
+    }
 
     let status = child.wait().expect("failed to collect child status");
     let elapsed = start.elapsed();
@@ -67,7 +77,7 @@ fn assert_shutdown(signal: libc::c_int, signal_name: &str) {
         "{signal_name} should stop the direct binary cleanly, got {status:?}"
     );
     assert!(
-        elapsed < Duration::from_secs(30),
+        elapsed < Duration::from_secs(60),
         "{signal_name} shutdown should finish without hanging, took {elapsed:?}"
     );
 
