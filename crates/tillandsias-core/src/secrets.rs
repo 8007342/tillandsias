@@ -171,6 +171,10 @@ pub fn should_refresh_token(token: &str, _config: &TokenRefreshConfig) -> Result
     let client = std::process::Command::new("curl")
         .args([
             "-s",
+            "--max-time",
+            "1",
+            "--connect-timeout",
+            "1",
             "-H",
             &format!("Authorization: token {}", token),
             "-H",
@@ -248,6 +252,10 @@ pub fn validate_token_file(token_path: &Path) -> Result<bool> {
     let output = Command::new("curl")
         .args([
             "-s",
+            "--max-time",
+            "1",
+            "--connect-timeout",
+            "1",
             "-o",
             "/dev/null",
             "-w",
