@@ -49,7 +49,7 @@ reports; the two standing findings below are the starting backlog.
 - id: `finding/build-sh-runtime-litmus-skip`
 - owner_host: linux
 - capability_tags: [bash, ci, testing, podman]
-- status: ready
+- status: completed
 - discovered_by: `./build.sh --ci-full --install` on 2026-06-12 (commit `53ce48b1`)
 - evidence:
   - `build.sh:601` calls `podman_runtime_health_probe`, which is defined ONLY in
@@ -85,7 +85,7 @@ reports; the two standing findings below are the starting backlog.
 - id: `finding/router-wire-version-mismatch`
 - owner_host: linux
 - capability_tags: [rust, control-wire, vsock, testing]
-- status: ready
+- status: completed
 - discovered_by: `tillandsias --bash <proj> --debug` during the git-mirror push smoke, 2026-06-12
 - evidence:
   - Repeating router warning during enclave bring-up:
