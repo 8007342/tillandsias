@@ -254,6 +254,10 @@ pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
                         h.version
                     );
                 }
+                let root_token = read_and_handover_root_token(debug)?;
+                let client = vault_client(&base_url, &root_token, debug)?;
+                rt.block_on(load_policies(&client, debug))?;
+                rt.block_on(provision_approle_roles(&client, debug))?;
                 return Ok(());
             }
             other => {
@@ -1133,6 +1137,7 @@ pub fn policy_role_name(policy: &Policy) -> &'static str {
         Policy::Forge => "forge",
         Policy::Tray => "tray",
         Policy::Inference => "inference",
+        Policy::GithubLogin => "github-login",
     }
 }
 
@@ -1146,6 +1151,7 @@ mod tests {
         assert_eq!(policy_role_name(&Policy::Forge), "forge");
         assert_eq!(policy_role_name(&Policy::Tray), "tray");
         assert_eq!(policy_role_name(&Policy::Inference), "inference");
+        assert_eq!(policy_role_name(&Policy::GithubLogin), "github-login");
     }
 
     #[test]

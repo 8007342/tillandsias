@@ -82,7 +82,7 @@ cmd_read() {
             ;;
     esac
     token="$(read_token)"
-    if ! body="$(curl -fsS -H "X-Vault-Token: $token" \
+    if ! body="$(curl -k -fsS -H "X-Vault-Token: $token" \
         "$VAULT_ADDR/v1/$kv_path" 2>&1)"; then
         echo "vault-cli: HTTP error reading $kv_path: $body" >&2
         exit 2
@@ -107,17 +107,12 @@ cmd_write() {
     fi
     path="$1"
     shift
-    # Build JSON data object from key=value arguments
-    data=""
-    sep=""
+    # Build JSON data object from key=value arguments using jq
+    json_body='{"data": {}}'
     for kv in "$@"; do
         key="${kv%%=*}"
         value="${kv#*=}"
-        # JSON-encode the value: escape backslash, quote, newline, tab
-        encoded="$(printf '%s' "$value" | sed 's/[\"\\/]/\\&/g; s/
-/\\n/g; s/	/\\t/g')"
-        data="${data}${sep}\"${key}\": \"${encoded}\""
-        sep=", "
+        json_body="$(printf '%s' "$json_body" | jq --arg k "$key" --arg v "$value" '.data[$k] = $v')"
     done
     # Normalise the KV-v2 mount (same as cmd_read)
     case "$path" in
@@ -135,8 +130,7 @@ cmd_write() {
             ;;
     esac
     token="$(read_token)"
-    json_body="{\"data\": {$data}}"
-    if ! response="$(curl -fsS -H "X-Vault-Token: $token" \
+    if ! response="$(curl -k -fsS -H "X-Vault-Token: $token" \
         -d "$json_body" "$VAULT_ADDR/v1/$kv_path" 2>&1)"; then
         echo "vault-cli: HTTP error writing $kv_path: $response" >&2
         exit 2
@@ -145,7 +139,7 @@ cmd_write() {
 }
 
 cmd_health() {
-    curl -fsS "$VAULT_ADDR/v1/sys/health?sealedcode=200&uninitcode=200&standbyok=true" \
+    curl -k -fsS "$VAULT_ADDR/v1/sys/health?sealedcode=200&uninitcode=200&standbyok=true" \
         || { echo "vault-cli: health probe failed" >&2; exit 2; }
 }
 

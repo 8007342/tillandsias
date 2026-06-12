@@ -17,6 +17,7 @@ const GIT_MIRROR_HCL: &str = include_str!("../../../images/vault/policies/git-mi
 const FORGE_HCL: &str = include_str!("../../../images/vault/policies/forge.hcl");
 const TRAY_HCL: &str = include_str!("../../../images/vault/policies/tray.hcl");
 const INFERENCE_HCL: &str = include_str!("../../../images/vault/policies/inference.hcl");
+const GITHUB_LOGIN_HCL: &str = include_str!("../../../images/vault/policies/github-login.hcl");
 
 /// Named policy bound to a Vault token.
 ///
@@ -24,12 +25,14 @@ const INFERENCE_HCL: &str = include_str!("../../../images/vault/policies/inferen
 /// - `Forge` — read-only on `secret/data/ca/proxy-cert` only; never sees tokens.
 /// - `Tray` — full CRUD on `secret/*` for rotation flows.
 /// - `Inference` — empty placeholder (no secrets needed today).
+/// - `GithubLogin` — write-capable policy for the one-shot github-login container.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash, Serialize, Deserialize)]
 pub enum Policy {
     GitMirror,
     Forge,
     Tray,
     Inference,
+    GithubLogin,
 }
 
 impl Policy {
@@ -41,6 +44,7 @@ impl Policy {
             Policy::Forge => "forge-policy",
             Policy::Tray => "tray-policy",
             Policy::Inference => "inference-policy",
+            Policy::GithubLogin => "github-login-policy",
         }
     }
 
@@ -53,6 +57,7 @@ impl Policy {
             Policy::Forge => "images/vault/policies/forge.hcl",
             Policy::Tray => "images/vault/policies/tray.hcl",
             Policy::Inference => "images/vault/policies/inference.hcl",
+            Policy::GithubLogin => "images/vault/policies/github-login.hcl",
         }
     }
 
@@ -65,6 +70,7 @@ impl Policy {
             Policy::Forge => FORGE_HCL,
             Policy::Tray => TRAY_HCL,
             Policy::Inference => INFERENCE_HCL,
+            Policy::GithubLogin => GITHUB_LOGIN_HCL,
         }
     }
 
@@ -75,6 +81,7 @@ impl Policy {
             Policy::Forge,
             Policy::Tray,
             Policy::Inference,
+            Policy::GithubLogin,
         ]
     }
 }
@@ -115,6 +122,7 @@ mod tests {
         assert_eq!(Policy::Forge.name(), "forge-policy");
         assert_eq!(Policy::Tray.name(), "tray-policy");
         assert_eq!(Policy::Inference.name(), "inference-policy");
+        assert_eq!(Policy::GithubLogin.name(), "github-login-policy");
     }
 
     #[test]

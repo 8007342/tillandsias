@@ -97,6 +97,11 @@ pub(super) fn refresh_cloud_projects_if_stale(
         guard.cloud_refresh_in_flight = true;
     }
 
+    // From here on, the in-flight latch is released no matter how we exit.
+    let _flight = InFlightGuard {
+        state: state.clone(),
+    };
+
     let result = remote_projects::discover_github_projects_result_with_debug(debug);
     let entries = match result {
         Ok(projects) => {
@@ -109,7 +114,7 @@ pub(super) fn refresh_cloud_projects_if_stale(
             github_projects_to_entries(projects)
         }
         Err(err) => {
-            clear_cloud_refresh_in_flight(&state);
+            // `_flight` (InFlightGuard) clears the latch on return.
             // Friendly path for the "no Vault credential" case which fires
             // every time on first launch before `tillandsias --github-login`
             // has been run. AboutToShow can refresh from several entry
@@ -192,6 +197,24 @@ pub(super) fn refresh_cloud_projects_if_stale(
 fn clear_cloud_refresh_in_flight(state: &Arc<Mutex<TrayUiState>>) {
     if let Ok(mut guard) = state.lock() {
         guard.cloud_refresh_in_flight = false;
+    }
+}
+
+/// RAII guard that guarantees `cloud_refresh_in_flight` is cleared on *every*
+/// exit from a refresh — normal return, early `?`, error branch, or panic.
+///
+/// Without this, any path that sets the in-flight latch but fails to clear it
+/// (e.g. a fetch that hangs, or a future early-return) permanently suppresses
+/// all later refreshes (`cloud_refresh_due` returns `false` while in-flight),
+/// freezing the ☁️ Cloud submenu on `(loading…)`.
+/// @trace spec:tray-ux, spec:remote-projects
+struct InFlightGuard {
+    state: Arc<Mutex<TrayUiState>>,
+}
+
+impl Drop for InFlightGuard {
+    fn drop(&mut self) {
+        clear_cloud_refresh_in_flight(&self.state);
     }
 }
 

@@ -33,8 +33,13 @@ fi
 FULL_VERSION="$(tr -d '[:space:]' < "$VERSION_FILE")"
 IFS='.' read -r MAJOR MINOR YYMMDD BUILD <<< "$FULL_VERSION"
 
-# Get today's date in YYMMDD format
-TODAY_YYMMDD="$(date +%y%m%d)"
+# Get today's date in YYMMDD format.
+# MUST be UTC: release tags (merge-to-main-and-release) and all multi-host
+# coordination timestamps are UTC. Using local time here regressed VERSION on
+# hosts west of UTC — e.g. a PDT build late on UTC-day N saw the UTC-dated
+# VERSION as "ahead of today", reset the build counter to a prior day, and then
+# failed verify-version-monotonic against the already-published UTC tag.
+TODAY_YYMMDD="$(date -u +%y%m%d)"
 
 # Handle flags
 case "${1:-}" in
