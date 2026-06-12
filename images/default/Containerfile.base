@@ -73,10 +73,11 @@ RUN --mount=type=secret,id=gh_token \
     && env GOPATH=/usr/local/go go install github.com/rhysd/actionlint/cmd/actionlint@v${ACTIONLINT_VERSION} \
     && ln -s /usr/local/go/bin/actionlint /usr/local/bin/actionlint \
     # Vale via microdnf RPM install
-    && microdnf install -y https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_linux_amd64.rpm \
+    && curl -LsSf "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_Linux_64-bit.tar.gz" -o /tmp/vale.tar.gz \
+    && tar -xzf /tmp/vale.tar.gz -C /usr/local/bin vale \
     # Wasmtime and Dart
     && curl -LsSf "https://github.com/bytecodealliance/wasmtime/releases/download/v${WASMTIME_VERSION}/wasmtime-v${WASMTIME_VERSION}-x86_64-linux.tar.xz" -o /tmp/wasmtime.tar.xz \
     && tar -xJf /tmp/wasmtime.tar.xz --strip-components=1 -C /usr/local/bin "wasmtime-v${WASMTIME_VERSION}-x86_64-linux/wasmtime" \
     && curl -LsSf "https://storage.googleapis.com/dart-archive/channels/stable/release/${DART_VERSION}/sdk/dartsdk-linux-x64-release.zip" -o /tmp/dart.zip \
     && mkdir -p /opt && unzip -q /tmp/dart.zip -d /opt \
-    && rm -f /tmp/cargo-binstall.tgz /tmp/wasmtime.tar.xz /tmp/dart.zip /tmp/cargo-nextest.tar.gz
+    && rm -f /tmp/cargo-binstall.tgz /tmp/wasmtime.tar.xz /tmp/dart.zip /tmp/cargo-nextest.tar.gz /tmp/vale.tar.gz
