@@ -76,6 +76,17 @@ methodology:
           browsers, tools) using minimal tokens, preventing them from manually exploring
           the filesystem to find pre-installed binaries.
         steerable: true
+      smoke-curl-install-and-test-e2e:
+        path: skills/smoke-curl-install-and-test-e2e/SKILL.md
+        tier: worker
+        purpose: >
+          Clean-room acceptance gate for a PUBLISHED release: curl-install the latest
+          release binary, `podman system reset --force`, `tillandsias --debug --init`
+          from a pristine store, then `--opencode` forge-continuous-enhancement. Files
+          every issue observed (install/reset/init harness findings AND in-forge agent
+          findings) as plan/issues work packets for /advance-work-from-plan pickup.
+        destructive: true   # Step 2 wipes ALL podman state; gate on operator go-ahead
+        steerable: true
 
   invariant_summary:
     - specs_define_intent
