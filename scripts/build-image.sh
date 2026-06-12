@@ -470,6 +470,7 @@ if [[ -f "$IMAGE_DIR/Containerfile.base" ]]; then
             --userns "$BUILD_USERNS" \
             --tag "$BASE_IMAGE_TAG" \
             "${NO_CACHE_ARGS[@]}" \
+            "${BUILD_ARGS[@]}" \
             "${CACHE_MOUNT_ARGS[@]}" \
             -f "$IMAGE_DIR/Containerfile.base" \
             "$IMAGE_DIR/"
@@ -480,6 +481,7 @@ if [[ -f "$IMAGE_DIR/Containerfile.base" ]]; then
             --userns "$BUILD_USERNS" \
             --tag "$BASE_IMAGE_TAG" \
             "${NO_CACHE_ARGS[@]}" \
+            "${BUILD_ARGS[@]}" \
             "${CACHE_MOUNT_ARGS[@]}" \
             -f "$IMAGE_DIR/Containerfile.base" \
             "$IMAGE_DIR/" >"$BUILD_LOG" 2>&1; then
