@@ -191,7 +191,7 @@ Rules for good findings:
   PASS entry to the report (release tag + "init clean, forge run clean") so the
   convergence record shows the release was exercised.
 
-Commit the report (and any forge-pushed findings) and update the host work-queue
+Commit the report (and any forge-pushed findings) to the appropriate host branch (`linux-next`, `osx-next`, or `windows-next`) and push. **DO NOT push directly to `main` or open PRs against `main`.** Update the host work-queue
 ledger with a one-line outcome, exactly as `/advance-work-from-plan` §6
 prescribes.
 
@@ -207,6 +207,7 @@ prescribes.
   files*. Fixes are the job of `/advance-work-from-plan` workers claiming the
   packets you filed.
 - **Never** paste secrets into logs or packets; redact tokens and auth URLs.
+- **Never** push directly to `main` or create PRs to `main`. Always use the appropriate host branch (`linux-next`, `osx-next`, or `windows-next`).
 - Findings are intake, not authority — durable conclusions still land in
   `openspec/specs/`, `methodology/`, or cheatsheets via the normal flow.
 

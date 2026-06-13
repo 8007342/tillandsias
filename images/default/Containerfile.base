@@ -1,0 +1,83 @@
+# Tillandsias Forge — Fedora Minimal Base
+# Heavy dependencies cached to improve rapid rebuilds of the final image.
+FROM registry.fedoraproject.org/fedora-minimal:44
+
+# ── System packages ────────────────────────────────────────────
+RUN microdnf install -y --setopt=install_weak_deps=0 \
+        bash coreutils findutils grep sed gawk tar gzip xz \
+        procps-ng shadow-utils ca-certificates ncurses ncurses-term \
+        fish zsh \
+        git gh curl wget jq ripgrep fd-find bat git-delta git-lfs httpie yq \
+        nodejs npm \
+        java-25-openjdk-headless maven \
+        golang gopls \
+        rust cargo clippy rustfmt rust-analyzer cargo-deny \
+        python3-pip python3-mypy python3-pytest python3-lsp-server \
+        ruff poetry pipx uv black pylint yamllint \
+        pnpm yarnpkg \
+        just \
+        gdb lldb strace ltrace valgrind heaptrack delve \
+        shellcheck shfmt \
+        gcc gcc-c++ make cmake openssl-devel pkgconfig unzip \
+    && git lfs install --system \
+    && microdnf clean all
+
+# ── Agent binaries ─────────────────────────────────────────────
+RUN npm install -g --prefix /usr/local \
+        opencode-ai@1.16.2 \
+        @fission-ai/openspec@1.4.1 \
+        @anthropic-ai/claude-code@2.1.168 \
+        @openai/codex@0.137.0
+
+# ── Python packages and developer tools ─────────────────────────
+RUN pip3 install --no-cache-dir \
+        pyright==1.1.410 \
+        bandit==1.9.2 \
+    && npm install -g \
+        typescript@6.0.3 \
+        typescript-language-server@5.3.0 \
+        prettier@3.8.3 \
+        eslint@10.4.1 \
+        markdownlint-cli@0.48.0
+
+# ── Toolchains (Rust, Go, Dart, etc) ───────────────────────────
+ENV CARGO_HOME=/usr/local/cargo \
+    PATH=/usr/local/cargo/bin:$PATH
+
+ARG CARGO_BINSTALL_VERSION=1.20.0
+ARG CARGO_NEXTEST_VERSION=0.9.137
+ARG WASMTIME_VERSION=45.0.0
+ARG ACTIONLINT_VERSION=1.7.12
+ARG VALE_VERSION=3.14.2
+ARG DART_VERSION=3.12.1
+
+ARG CARGO_NEXTEST_SHA256=38fd6275e111b200bbbed1bd2ae91cbb0d7edd28504879875cff2b3d96f3f311
+
+RUN --mount=type=secret,id=gh_token \
+    mkdir -p /usr/local/cargo/bin \
+    # Cargo binstall direct download (not rate limited)
+    && curl -LsSf "https://github.com/cargo-bins/cargo-binstall/releases/download/v${CARGO_BINSTALL_VERSION}/cargo-binstall-x86_64-unknown-linux-musl.tgz" -o /tmp/cargo-binstall.tgz \
+    && tar -xzf /tmp/cargo-binstall.tgz -C /usr/local/cargo/bin cargo-binstall \
+    # Nextest manual binary install
+    && curl -LsSf "https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-${CARGO_NEXTEST_VERSION}/cargo-nextest-${CARGO_NEXTEST_VERSION}-x86_64-unknown-linux-gnu.tar.gz" -o /tmp/cargo-nextest.tar.gz \
+    && echo "${CARGO_NEXTEST_SHA256}  /tmp/cargo-nextest.tar.gz" | sha256sum -c - \
+    && tar -xzf /tmp/cargo-nextest.tar.gz -C /usr/local/bin \
+    # Cargo tools using binstall. Providing gh_token to avoid 403, and allowing compile fallback
+    && GITHUB_TOKEN="$(cat /run/secrets/gh_token 2>/dev/null || true)" \
+       cargo binstall --no-confirm --disable-strategies compile \
+        cargo-chef@0.1.77 cargo-watch@8.5.3 cargo-audit@0.22.2 wasm-pack@0.15.0 trunk@0.22.0-beta.1 typos-cli@1.47.2 watchexec-cli@2.5.1 \
+        cargo-edit@0.13.11 cargo-llvm-cov@0.8.7 cargo-semver-checks@0.48.0 cargo-expand@1.0.122 cargo-criterion@1.1.0 cargo-wasi@0.1.28 \
+    # cargo-outdated lacks binaries and OOMs when compiled concurrently, limit to 1 job
+    && cargo install cargo-outdated@0.19.0 --locked --jobs 1 \
+    # Actionlint via go install
+    && env GOPATH=/usr/local/go go install github.com/rhysd/actionlint/cmd/actionlint@v${ACTIONLINT_VERSION} \
+    && ln -s /usr/local/go/bin/actionlint /usr/local/bin/actionlint \
+    # Vale via microdnf RPM install
+    && curl -LsSf "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_Linux_64-bit.tar.gz" -o /tmp/vale.tar.gz \
+    && tar -xzf /tmp/vale.tar.gz -C /usr/local/bin vale \
+    # Wasmtime and Dart
+    && curl -LsSf "https://github.com/bytecodealliance/wasmtime/releases/download/v${WASMTIME_VERSION}/wasmtime-v${WASMTIME_VERSION}-x86_64-linux.tar.xz" -o /tmp/wasmtime.tar.xz \
+    && tar -xJf /tmp/wasmtime.tar.xz --strip-components=1 -C /usr/local/bin "wasmtime-v${WASMTIME_VERSION}-x86_64-linux/wasmtime" \
+    && curl -LsSf "https://storage.googleapis.com/dart-archive/channels/stable/release/${DART_VERSION}/sdk/dartsdk-linux-x64-release.zip" -o /tmp/dart.zip \
+    && mkdir -p /opt && unzip -q /tmp/dart.zip -d /opt \
+    && rm -f /tmp/cargo-binstall.tgz /tmp/wasmtime.tar.xz /tmp/dart.zip /tmp/cargo-nextest.tar.gz /tmp/vale.tar.gz

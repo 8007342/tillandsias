@@ -7,10 +7,11 @@ You've just attached to a development environment. Before writing code, discover
 
 ## Quick Start
 
-1. Run `tillandsias-inventory` to list pre-installed tools and versions
-2. Read `$TILLANDSIAS_CHEATSHEETS/INDEX.md` to see all knowledge references
-3. Check `openspec/changes/` for in-flight work or open tasks
-4. Only assume a tool is missing AFTER checking inventory
+1. Use the `/forge-quick-intro` skill immediately when starting a new session in a new environment to quickly jumpstart your awareness of the forge capabilities with minimal token overhead.
+2. Run `tillandsias-inventory` to list pre-installed tools and versions
+3. Read `$TILLANDSIAS_CHEATSHEETS/INDEX.md` to see all knowledge references
+4. Check `openspec/changes/` for in-flight work or open tasks
+5. Only assume a tool is missing AFTER checking inventory
 
 ## The Inventory Command
 

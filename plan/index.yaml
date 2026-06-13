@@ -3386,3 +3386,31 @@ plan_index:
                 - "core build-image clippy with -D warnings passed"
                 - "./build.sh --check passed"
                 - "real ./build-proxy.sh Podman smoke built 22 MB image"
+
+    - id: forge-package-manager-and-telemetry
+      order: 49
+      title: Package Manager Migration, Base Image Split, and Telemetry
+      status: completed
+      owner_host: linux
+      deliverable: plan/issues/forge-package-manager-and-telemetry-2026-06-12.md
+      audit_origin: plan/issues/forge-package-manager-and-telemetry-2026-06-12.md
+      depends_on: []
+      exit_criteria:
+        - "images/default/Containerfile split into Containerfile.base and Containerfile."
+        - "curl/tar installs migrated to dnf/microdnf where possible."
+        - "Foreign repos tracked in a dependency list for tellme system."
+        - "Telemetry added to build scripts to record install duration and sizes into JSON lines."
+        - "Dashboard Markdown file created with Mermaid graphs."
+      tasks:
+        - id: forge-refactor/containerfile-split
+          status: completed
+          owner_host: linux
+          depends_on: []
+        - id: forge-refactor/dnf-migration
+          status: completed
+          owner_host: linux
+          depends_on: [forge-refactor/containerfile-split]
+        - id: forge-refactor/telemetry-dashboard
+          status: completed
+          owner_host: linux
+          depends_on: []

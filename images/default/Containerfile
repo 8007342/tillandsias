@@ -1,131 +1,9 @@
-# Tillandsias Forge — Fedora Minimal
-# Standard glibc, SELinux-ready, FHS-compliant.
-# Pre-built binaries (OpenCode, Claude Code) execute directly — no linker hacks.
+# Tillandsias Forge — User Runtime Image
 # @trace spec:default-image
-# DISTRO: Fedora Minimal 44 — microdnf (NOT dnf), glibc, bash default.
-#         Both curl AND wget installed explicitly.
-#         User creation: useradd (NOT Alpine's adduser -D).
-#         CA bundle at /etc/pki/tls/certs/ca-bundle.crt.
-FROM registry.fedoraproject.org/fedora-minimal:44
-
-# @trace spec:default-image
-# ── System packages ────────────────────────────────────────────
-# LEAN forge: essential dev tools only. Terminal UX tools (mc, vim, nano,
-# eza, bat, fd-find, fzf, htop, tree, zoxide) removed to save ~90MB.
-# Users who need them can install via the tools overlay or microdnf.
-# DISTRO: microdnf (Fedora Minimal), NOT apk (Alpine) or dnf (standard Fedora)
-RUN microdnf install -y --setopt=install_weak_deps=0 \
-        bash coreutils findutils grep sed gawk tar gzip xz \
-        procps-ng shadow-utils ca-certificates ncurses ncurses-term \
-        fish zsh \
-        git gh curl wget jq ripgrep fd-find bat git-delta git-lfs httpie yq \
-        nodejs npm \
-        java-25-openjdk-headless maven \
-        golang gopls \
-        rust cargo clippy rustfmt rust-analyzer cargo-deny \
-        python3-pip python3-mypy python3-pytest python3-lsp-server \
-        ruff poetry pipx uv black pylint yamllint \
-        pnpm yarnpkg \
-        just \
-        gdb lldb strace ltrace valgrind heaptrack delve \
-        shellcheck shfmt \
-        gcc gcc-c++ make cmake openssl-devel pkgconfig unzip \
-    && git lfs install --system \
-    && microdnf clean all
-
-
-# ── Agent binaries ─────────────────────────────────────────────
-# @trace spec:default-image, spec:layered-tools-overlay
-# Install the coding agents at image build time so the forge launches
-# with no runtime installer and no dependency on host cache state.
-RUN npm install -g --prefix /usr/local \
-        opencode-ai@1.16.2 \
-        @fission-ai/openspec@1.4.1 \
-        @anthropic-ai/claude-code@2.1.168 \
-        @openai/codex@0.137.0
-
-# ── Python packages and developer tools ─────────────────────────
-# Python additions: black + pylint + bandit. Web additions: prettier +
-# eslint. All 5 are orchestrator-approved curated-backlog candidates
-# (045a6720); they fit on the existing pip3 + npm install RUN layer
-# without adding a new image layer. Same envelope as the existing
-# python/node infrastructure — no new egress, no new creds, no new
-# mounts.
-#
-# @trace plan/diagnostics/forge-enhancements-curated-toolchain-backlog-2026-05-29.md
-#   (black, pylint, bandit, prettier, eslint — approved)
-RUN pip3 install --no-cache-dir \
-        pyright==1.1.410 \
-        bandit==1.9.2 \
-    && npm install -g \
-        typescript@6.0.3 \
-        typescript-language-server@5.3.0 \
-        prettier@3.8.3 \
-        eslint@10.4.1 \
-        markdownlint-cli@0.48.0
-
-# ── Rust toolchain ─────────────────────────────────────────────
-# `cargo-outdated` added to the cargo-binstall batch: dependency-freshness
-# checks, complementary to the already-shipped cargo-audit + cargo-deny
-# security scanners. Same RUN layer, same envelope — needs network only at
-# upstream-version-query time, governed by the existing proxy ACL (identical
-# to cargo-deny's advisory-db fetch). Last approved-but-unimplemented Rust
-# candidate from the curated-toolchain-backlog.
-# @trace plan/diagnostics/forge-enhancements-curated-toolchain-backlog-2026-05-29.md
-#   (cargo-outdated — approved)
-ENV CARGO_HOME=/usr/local/cargo \
-    PATH=/usr/local/cargo/bin:$PATH
-
-ARG CARGO_BINSTALL_VERSION=1.20.0
-ARG CARGO_BINSTALL_SHA256=4d7875788d0505547c220d2b02d3619aac0dd19b7033eba7005a8d09ff1dc433
-ARG CARGO_NEXTEST_VERSION=0.9.137
-ARG CARGO_NEXTEST_SHA256=38fd6275e111b200bbbed1bd2ae91cbb0d7edd28504879875cff2b3d96f3f311
-ARG WASMTIME_VERSION=45.0.0
-ARG WASMTIME_SHA256=9d92e6dc04630f617e0e5d532327a5a917ac4898587e07f4fb7a5fc7fffef760
-ARG ACTIONLINT_VERSION=1.7.12
-ARG ACTIONLINT_SHA256=8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
-ARG VALE_VERSION=3.14.2
-ARG VALE_SHA256=469cf88ec58a374dca14b2564c4391d2c9a1c632210aa0b642758b794082e05f
-
-# `cargo binstall` queries the GitHub API per crate to locate release binaries.
-# Unauthenticated requests hit the 60/hour anonymous rate limit (HTTP 403) and,
-# with compile fallback disabled, fail the whole layer. A build secret carries
-# the host's gh token (when present) so binstall authenticates (5000/hour). The
-# secret is mount-only — it never lands in an image layer or `podman history`.
-# When no secret is provided the cat falls back to empty (prior anonymous behaviour).
-# @trace spec:default-image, spec:forge-as-only-runtime
-RUN --mount=type=secret,id=gh_token \
-    mkdir -p /usr/local/cargo/bin \
-    && curl -LsSf "https://github.com/nextest-rs/nextest/releases/download/cargo-nextest-${CARGO_NEXTEST_VERSION}/cargo-nextest-${CARGO_NEXTEST_VERSION}-x86_64-unknown-linux-gnu.tar.gz" -o /tmp/cargo-nextest.tar.gz \
-    && echo "${CARGO_NEXTEST_SHA256}  /tmp/cargo-nextest.tar.gz" | sha256sum -c - \
-    && tar -xzf /tmp/cargo-nextest.tar.gz -C /usr/local/bin \
-    && curl -LsSf "https://github.com/cargo-bins/cargo-binstall/releases/download/v${CARGO_BINSTALL_VERSION}/cargo-binstall-x86_64-unknown-linux-musl.tgz" -o /tmp/cargo-binstall.tgz \
-    && echo "${CARGO_BINSTALL_SHA256}  /tmp/cargo-binstall.tgz" | sha256sum -c - \
-    && tar -xzf /tmp/cargo-binstall.tgz -C /usr/local/cargo/bin cargo-binstall \
-    && GITHUB_TOKEN="$(cat /run/secrets/gh_token 2>/dev/null || true)" \
-       cargo binstall --no-confirm --disable-strategies compile \
-        cargo-chef@0.1.77 cargo-watch@8.5.3 cargo-audit@0.22.2 wasm-pack@0.15.0 trunk@0.22.0-beta.1 typos-cli@1.47.2 watchexec-cli@2.5.1 \
-        cargo-edit@0.13.11 cargo-llvm-cov@0.8.7 cargo-semver-checks@0.48.0 cargo-expand@1.0.122 cargo-criterion@1.1.0 cargo-wasi@0.1.28 cargo-outdated@0.19.0 \
-    && curl -LsSf "https://github.com/bytecodealliance/wasmtime/releases/download/v${WASMTIME_VERSION}/wasmtime-v${WASMTIME_VERSION}-x86_64-linux.tar.xz" -o /tmp/wasmtime.tar.xz \
-    && echo "${WASMTIME_SHA256}  /tmp/wasmtime.tar.xz" | sha256sum -c - \
-    && tar -xJf /tmp/wasmtime.tar.xz --strip-components=1 -C /usr/local/bin "wasmtime-v${WASMTIME_VERSION}-x86_64-linux/wasmtime" \
-    && curl -LsSf "https://github.com/rhysd/actionlint/releases/download/v${ACTIONLINT_VERSION}/actionlint_${ACTIONLINT_VERSION}_linux_amd64.tar.gz" -o /tmp/actionlint.tar.gz \
-    && echo "${ACTIONLINT_SHA256}  /tmp/actionlint.tar.gz" | sha256sum -c - \
-    && tar -xzf /tmp/actionlint.tar.gz -C /usr/local/bin actionlint \
-    && curl -LsSf "https://github.com/errata-ai/vale/releases/download/v${VALE_VERSION}/vale_${VALE_VERSION}_Linux_64-bit.tar.gz" -o /tmp/vale.tar.gz \
-    && echo "${VALE_SHA256}  /tmp/vale.tar.gz" | sha256sum -c - \
-    && tar -xzf /tmp/vale.tar.gz -C /usr/local/bin vale \
-    && rm -f /tmp/cargo-nextest.tar.gz /tmp/cargo-binstall.tgz /tmp/wasmtime.tar.xz /tmp/actionlint.tar.gz /tmp/vale.tar.gz
-
-# ── Dart SDK ───────────────────────────────────────────────────
-ARG DART_VERSION=3.12.1
-ARG DART_SHA256=6a2bbf64a133c9c86a62a532dbd3e0b4db4ac365abd456e9f9d1c5df61fcdbf8
-RUN curl -LsSf "https://storage.googleapis.com/dart-archive/channels/stable/release/${DART_VERSION}/sdk/dartsdk-linux-x64-release.zip" -o /tmp/dart.zip \
-    && echo "${DART_SHA256}  /tmp/dart.zip" | sha256sum -c - \
-    && mkdir -p /opt \
-    && unzip -q /tmp/dart.zip -d /opt \
-    && rm -f /tmp/dart.zip
-ENV PATH=/opt/dart-sdk/bin:$PATH
+# Builds upon the heavy base image to inject configuration,
+# skills, and entrypoints. Rapidly rebuildable.
+ARG BASE_IMAGE=localhost/tillandsias-forge-base:latest
+FROM ${BASE_IMAGE}
 
 # ── Environment exports for diagnostics and agent discovery ─────
 ENV TILLANDSIAS_CHEATSHEETS=/opt/cheatsheets \
@@ -216,12 +94,7 @@ RUN chmod +x /etc/tillandsias/shell-helpers.sh || true
 # @trace spec:forge-environment-discoverability
 # Restored from a74a13ec (feat(forge): discoverability CLIs). The
 # COPY+symlink block was silently dropped in a later refactor while
-# the bash scripts under cli/ and the welcome-banner references
-# stayed put — leaving an unwired surface where the welcome banner
-# advertised `tillandsias-inventory` / `tillandsias-services` /
-# `tillandsias-models` but the binaries were absent from PATH.
-# `/opt/agents/tillandsias-cli/bin/` mirrors the other-agent
-# install convention; symlinks expose them on the user PATH.
+# the bash scripts under cli/ stayed put.
 RUN mkdir -p /opt/agents/tillandsias-cli/bin
 COPY cli/tillandsias-inventory /opt/agents/tillandsias-cli/bin/tillandsias-inventory
 COPY cli/tillandsias-services /opt/agents/tillandsias-cli/bin/tillandsias-services
@@ -230,6 +103,12 @@ RUN chmod +x /opt/agents/tillandsias-cli/bin/* \
     && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-inventory /usr/local/bin/tillandsias-inventory \
     && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-services /usr/local/bin/tillandsias-services \
     && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-models /usr/local/bin/tillandsias-models
+
+# ── Skills mapping ─────────────────────────────────────────────
+# @trace spec:forge-skills-mapping
+# Copy all AI skills so agents running inside the forge have immediate access.
+RUN mkdir -p /opt/skills
+COPY skills/ /opt/skills/
 
 # ── Locale files ───────────────────────────────────────────────
 # @trace spec:environment-runtime
