@@ -2642,12 +2642,11 @@ plan_index:
     - id: cross-platform-vault-keychain-parity
       order: 36
       title: Cross-platform Vault keychain + vsock unseal-key parity
-      status: blocked
+      status: ready
       owner_host: macos+windows
       deliverable: plan/steps/36-cross-platform-vault-keychain-parity.md
       audit_origin: plan/issues/pre-vault-obsolescence-audit-2026-06-05.md
       depends_on: [vault-hardening-true-rekey]
-      blocked_reason: "Mirrors the Linux keychain handover contract from step 32; not claimable until that lands. NOTE 2026-06-07: the 'rekey' part is INFEASIBLE (see plan/issues/vault-rekey-infeasible-finding-2026-06-07.md) — this step must mirror 'capture the Vault-generated Shamir share → platform keychain → vsock/HvSocket delivery', NOT a literal vault operator rekey. Exit criteria below are reworded accordingly."
       specs:
         - tillandsias-vault
         - vsock-transport
@@ -2658,7 +2657,7 @@ plan_index:
         - "tillandsias-vault.security.transparent-auto-unseal@v3 honored on all platforms (spec mandates keychain on all, not just Linux)."
       tasks:
         - id: xplat-vault/macos
-          status: blocked
+          status: claimed
           owner_host: macos
           depends_on: [vault-hardening-true-rekey]
           owned_files:
@@ -2666,6 +2665,13 @@ plan_index:
             - crates/tillandsias-vm-layer/src/vz.rs
           checkpoint_required: true
           handoff_note: "macOS Keychain unseal-key + installation-uuid vsock delivery. Bootstrap is Linux-only today (vault_bootstrap.rs). See audit §3."
+          events:
+            - type: claim
+              ts: "2026-06-13T14:30:00Z"
+              agent_id: "macos-tlatoani-antigravity-20260613T143000Z"
+              host: "macos"
+              lease_id: "lease-macos-xplat-vault-20260613T143000Z"
+              expires_at: "2026-06-13T18:30:00Z"
         - id: xplat-vault/windows
           status: done
           owner_host: windows
