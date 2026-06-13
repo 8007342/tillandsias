@@ -1048,7 +1048,7 @@ fn report_runtime_lane(context: &str, debug: bool) {
 
 fn image_specs(root: &Path, image_name: &str) -> Result<(PathBuf, PathBuf), String> {
     let rel = match image_name {
-        "forge" => "images/default",
+        "forge-base" | "forge" => "images/default",
         "proxy" => "images/proxy",
         "git" => "images/git",
         "inference" => "images/inference",
@@ -1063,6 +1063,7 @@ fn image_specs(root: &Path, image_name: &str) -> Result<(PathBuf, PathBuf), Stri
 
     let context_dir = root.join(rel);
     let containerfile = match image_name {
+        "forge-base" => context_dir.join("Containerfile.base"),
         "chromium-core" => context_dir.join("Containerfile.core"),
         "chromium-framework" => context_dir.join("Containerfile.framework"),
         _ => context_dir.join("Containerfile"),
@@ -1085,12 +1086,12 @@ fn versioned_image_tag(image_name: &str, version: &str) -> String {
 #[allow(clippy::type_complexity)]
 fn image_build_inputs(
     image_name: &str,
-    chromium_core: Option<&ImageBuildIdentity>,
+    identities: &HashMap<String, ImageBuildIdentity>,
 ) -> Result<(BTreeMap<String, String>, BTreeMap<String, String>), String> {
     let mut build_args = BTreeMap::new();
     let mut dependency_digests = BTreeMap::new();
     if image_name == "chromium-framework" {
-        let core = chromium_core.ok_or_else(|| {
+        let core = identities.get("chromium-core").ok_or_else(|| {
             "chromium-framework identity requires chromium-core identity".to_string()
         })?;
         build_args.insert(
@@ -1098,6 +1099,12 @@ fn image_build_inputs(
             core.canonical_tag.clone(),
         );
         dependency_digests.insert("chromium-core".to_string(), core.source_digest.clone());
+    } else if image_name == "forge" {
+        let base = identities
+            .get("forge-base")
+            .ok_or_else(|| "forge identity requires forge-base identity".to_string())?;
+        build_args.insert("BASE_IMAGE".to_string(), base.canonical_tag.clone());
+        dependency_digests.insert("forge-base".to_string(), base.source_digest.clone());
     }
     Ok((build_args, dependency_digests))
 }
@@ -2707,7 +2714,8 @@ fn build_opencode_forge_args(
 ///    - `inference` — ollama-based LLM inference container
 ///    - `chromium-core` — Base Chromium image for browser isolation
 ///    - `chromium-framework` — Chromium browser with framework integration (depends on chromium-core)
-///    - `forge` — Dev environment: coding agents, compilation, package management
+///    - `forge-base` — Heavy, reusable Forge toolchain layer
+///    - `forge` — Dev environment configuration (depends on forge-base)
 /// 4. **Track progress**: For each image, report:
 ///    - SKIP: Image already cached and build previously successful
 ///    - REBUILD: Image deleted after successful build (rebuild)
@@ -2852,6 +2860,7 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
         "router",
         "chromium-core",
         "chromium-framework",
+        "forge-base",
         "forge",
         "web",
     ];
@@ -2887,8 +2896,7 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
     let mut identities = HashMap::<String, ImageBuildIdentity>::new();
 
     for image in &images {
-        let (build_args, dependency_digests) =
-            image_build_inputs(image, identities.get("chromium-core"))?;
+        let (build_args, dependency_digests) = image_build_inputs(image, &identities)?;
         let identity = runtime_assets::image_identity(
             &root,
             image,
@@ -3261,6 +3269,7 @@ fn cleanup_init_logs() {
         "router",
         "chromium-core",
         "chromium-framework",
+        "forge-base",
         "forge",
     ] {
         let log_path = PathBuf::from(format!("/tmp/tillandsias-init-{}.log", image));
@@ -8527,6 +8536,12 @@ mod tests {
         // @trace spec:init-command
         let root = find_checkout_root().expect("should find repo root");
 
+        // Test forge base image (uses "images/default/Containerfile.base")
+        let (containerfile, context) =
+            image_specs(&root, "forge-base").expect("forge base image specs should be resolvable");
+        assert!(containerfile.ends_with("images/default/Containerfile.base"));
+        assert!(context.ends_with("images/default"));
+
         // Test forge image (uses "images/default/Containerfile")
         let (containerfile, context) =
             image_specs(&root, "forge").expect("forge image specs should be resolvable");
@@ -8617,8 +8632,9 @@ mod tests {
             latest_alias: "localhost/tillandsias-chromium-core:latest".to_string(),
             labels: BTreeMap::new(),
         };
+        let identities = HashMap::from([("chromium-core".to_string(), core.clone())]);
         let (build_args, dependency_digests) =
-            image_build_inputs("chromium-framework", Some(&core)).unwrap();
+            image_build_inputs("chromium-framework", &identities).unwrap();
 
         assert_eq!(
             build_args.get("CHROMIUM_CORE_IMAGE"),
@@ -8632,14 +8648,37 @@ mod tests {
 
     #[test]
     fn image_build_inputs_are_empty_for_non_framework_images() {
-        for image in ["proxy", "forge", "git"] {
-            let (build_args, dependency_digests) = image_build_inputs(image, None).unwrap();
+        for image in ["proxy", "forge-base", "git"] {
+            let (build_args, dependency_digests) =
+                image_build_inputs(image, &HashMap::new()).unwrap();
             assert!(build_args.is_empty(), "{image} should have no build args");
             assert!(
                 dependency_digests.is_empty(),
                 "{image} should have no dependency digests"
             );
         }
+    }
+
+    #[test]
+    fn image_build_inputs_include_forge_base_identity_for_forge() {
+        let base = ImageBuildIdentity {
+            source_digest: "sha256:forge-base".to_string(),
+            canonical_tag: "localhost/tillandsias-forge-base:sha256-forge-base".to_string(),
+            version_alias: "localhost/tillandsias-forge-base:v1.0.0".to_string(),
+            latest_alias: "localhost/tillandsias-forge-base:latest".to_string(),
+            labels: BTreeMap::new(),
+        };
+        let identities = HashMap::from([("forge-base".to_string(), base)]);
+        let (build_args, dependency_digests) = image_build_inputs("forge", &identities).unwrap();
+
+        assert_eq!(
+            build_args.get("BASE_IMAGE"),
+            Some(&"localhost/tillandsias-forge-base:sha256-forge-base".to_string())
+        );
+        assert_eq!(
+            dependency_digests.get("forge-base"),
+            Some(&"sha256:forge-base".to_string())
+        );
     }
 
     #[test]
@@ -8694,14 +8733,15 @@ mod tests {
     #[test]
     fn init_command_defines_required_images_in_order() {
         // Test that run_init builds images in the correct order: proxy, git,
-        // inference, router, chromium-core, chromium-framework, forge, web.
+        // inference, router, chromium-core, chromium-framework, forge-base, forge, web.
         // @trace spec:init-command, spec:init-incremental-builds
         // NOTE: This test validates the IMAGE BUILD ORDER, which is critical for
         // chromium-framework (depends on chromium-core) and inter-image dependencies.
         // The actual build execution is skipped here; we test the order specification.
 
         // The images array from run_init defines the build order:
-        // proxy -> git -> inference -> router -> chromium-core -> chromium-framework -> forge -> web
+        // proxy -> git -> inference -> router -> chromium-core -> chromium-framework
+        // -> forge-base -> forge -> web
         let images = [
             "proxy",
             "git",
@@ -8709,6 +8749,7 @@ mod tests {
             "router",
             "chromium-core",
             "chromium-framework",
+            "forge-base",
             "forge",
             "web",
         ];
@@ -8738,6 +8779,12 @@ mod tests {
         assert!(
             core_idx < framework_idx,
             "chromium-core must be built before chromium-framework"
+        );
+        let forge_base_idx = images.iter().position(|&i| i == "forge-base").unwrap();
+        let forge_idx = images.iter().position(|&i| i == "forge").unwrap();
+        assert!(
+            forge_base_idx < forge_idx,
+            "forge-base must be built before forge"
         );
     }
 

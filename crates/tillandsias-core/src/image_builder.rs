@@ -305,6 +305,7 @@ pub(crate) fn image_build_paths(
     image_name: &str,
 ) -> Result<(String, String), ImageBuilderError> {
     let containerfile_path = match image_name {
+        "forge-base" => format!("{root_dir}/images/default/Containerfile.base"),
         "forge" => format!("{root_dir}/images/default/Containerfile"),
         "proxy" => format!("{root_dir}/images/proxy/Containerfile"),
         "git" => format!("{root_dir}/images/git/Containerfile"),
@@ -920,6 +921,11 @@ mod tests {
     #[test]
     fn image_build_paths_routes_each_known_type_to_its_containerfile() {
         let cases = [
+            (
+                "forge-base",
+                "/images/default/Containerfile.base",
+                "/images/default",
+            ),
             ("forge", "/images/default/Containerfile", "/images/default"),
             ("proxy", "/images/proxy/Containerfile", "/images/proxy"),
             ("git", "/images/git/Containerfile", "/images/git"),
