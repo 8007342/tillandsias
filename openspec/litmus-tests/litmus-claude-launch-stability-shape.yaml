@@ -7,13 +7,14 @@ severity: high
 size: instant
 
 preconditions:
+  - workspace contains images/default/Containerfile.base
   - workspace contains images/default/Containerfile
   - workspace contains images/default/entrypoint-forge-claude.sh
   - workspace contains crates/tillandsias-headless/src/main.rs
 
 critical_path:
   - step: "forge image installs Claude TUI and terminfo runtime"
-    command: "grep -E 'ca-certificates ncurses ncurses-term' images/default/Containerfile"
+    command: "grep -E 'ca-certificates ncurses ncurses-term' images/default/Containerfile.base"
     timeout_ms: 3000
     expected_behavior: "ncurses ncurses-term"
 
@@ -49,4 +50,4 @@ observability:
 
 rollback:
   on_failure: "restore ncurses/terminfo packages and remove Claude host-credential injection"
-  command: "grep -n 'ncurses\\|ANTHROPIC_API_KEY\\|\\.claude\\|credential-free' images/default/Containerfile images/default/entrypoint-forge-claude.sh crates/tillandsias-headless/src/main.rs"
+  command: "grep -n 'ncurses\\|ANTHROPIC_API_KEY\\|\\.claude\\|credential-free' images/default/Containerfile.base images/default/Containerfile images/default/entrypoint-forge-claude.sh crates/tillandsias-headless/src/main.rs"
