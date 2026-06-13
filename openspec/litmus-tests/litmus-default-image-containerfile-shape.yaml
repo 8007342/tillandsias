@@ -23,7 +23,7 @@ severity: medium
 size: instant
 
 preconditions:
-  - workspace contains images/default/Containerfile
+  - workspace contains images/default/Containerfile.base and images/default/Containerfile
   - workspace contains scripts/build-image.sh
   - workspace contains images/default/entrypoint-forge-{opencode,opencode-web,claude,codex}.sh
   - shell utilities (grep) are available in PATH
@@ -35,7 +35,7 @@ critical_path:
     # spec:forge-standalone-runner (a related but different spec),
     # so pin the @trace on Containerfile + a default-image
     # cross-reference in build-image.sh.
-    command: "grep -F '@trace spec:default-image' images/default/Containerfile && grep -F 'forge' scripts/build-image.sh"
+    command: "grep -F '@trace spec:default-image' images/default/Containerfile.base images/default/Containerfile && grep -F 'forge' scripts/build-image.sh"
     timeout_ms: 3000
     expected_behavior: "spec:default-image"
 
@@ -44,7 +44,7 @@ critical_path:
     # current LTS-equivalent; a regression to a different distro
     # (Alpine/Debian) would silently break the microdnf + glibc +
     # bash + useradd contract documented in the file-head note.
-    command: "grep -F 'FROM registry.fedoraproject.org/fedora-minimal:44' images/default/Containerfile"
+    command: "grep -F 'FROM registry.fedoraproject.org/fedora-minimal:44' images/default/Containerfile.base && grep -F 'ARG BASE_IMAGE=localhost/tillandsias-forge-base:latest' images/default/Containerfile"
     timeout_ms: 3000
     expected_behavior: "fedora-minimal:44"
 
@@ -55,7 +55,7 @@ critical_path:
     # package manager (dnf, apk) or dropping core tools (git/gh/
     # nodejs/python3) would silently break the agent's discovery
     # contract.
-    command: "grep -F 'microdnf install -y' images/default/Containerfile && for t in git gh ripgrep nodejs python3-pip; do grep -Fq \"$t\" images/default/Containerfile || { echo \"FAIL: tool '$t' missing\"; exit 1; }; done && echo \"ok: core dev tools present\""
+    command: "grep -F 'microdnf install -y' images/default/Containerfile.base && for t in git gh ripgrep nodejs python3-pip; do grep -Fq \"$t\" images/default/Containerfile.base || { echo \"FAIL: tool '$t' missing\"; exit 1; }; done && echo \"ok: core dev tools present\""
     timeout_ms: 3000
     expected_behavior: "ok:"
 
@@ -63,22 +63,27 @@ critical_path:
     # Spec § Req mandates OpenCode + OpenSpec + Claude Code + Codex
     # are available in PATH. The npm install line installs all 4 in
     # one invocation; pin the canonical package names.
-    command: "for package in 'opencode-ai@1.16.2' '@fission-ai/openspec@1.4.1' '@anthropic-ai/claude-code@2.1.168' '@openai/codex@0.137.0'; do grep -Fq \"$package\" images/default/Containerfile || { echo \"FAIL: pinned agent '$package' missing\"; exit 1; }; done && echo 'ok: agents pinned'"
+    command: "for package in 'opencode-ai@1.16.2' '@fission-ai/openspec@1.4.1' '@anthropic-ai/claude-code@2.1.168' '@openai/codex@0.137.0'; do grep -Fq \"$package\" images/default/Containerfile.base || { echo \"FAIL: pinned agent '$package' missing\"; exit 1; }; done && echo 'ok: agents pinned'"
     timeout_ms: 3000
     expected_behavior: "ok:"
 
   - step: "Req Package source policy: no piped installers or floating release inputs"
-    command: "if grep -En 'curl[^|]*[|][^#]*(sh|bash)|@latest|latest/VERSION|releases/latest/download|get[.]nexte[.]st/latest' images/default/Containerfile images/inference/Containerfile; then echo 'FAIL: mutable or pipe-to-shell image input'; exit 1; fi; echo 'ok: image inputs pinned'"
+    command: "if grep -En 'curl[^|]*[|][^#]*(sh|bash)|@latest|latest/VERSION|releases/latest/download|get[.]nexte[.]st/latest' images/default/Containerfile.base images/default/Containerfile images/inference/Containerfile; then echo 'FAIL: mutable or pipe-to-shell image input'; exit 1; fi; echo 'ok: image inputs pinned'"
     timeout_ms: 3000
     expected_behavior: "ok:"
 
   - step: "Req Fedora-first tools: reviewed packages live in the microdnf layer"
-    command: "for package in 'rust cargo clippy rustfmt rust-analyzer cargo-deny' 'delve' 'shellcheck shfmt' 'ruff poetry pipx uv black pylint yamllint' 'pnpm yarnpkg'; do grep -Fq \"$package\" images/default/Containerfile || { echo \"FAIL: Fedora package group '$package' missing\"; exit 1; }; done && echo 'ok: Fedora package groups present'"
+    command: "for package in 'rust cargo clippy rustfmt rust-analyzer cargo-deny' 'delve' 'shellcheck shfmt' 'ruff poetry pipx uv black pylint yamllint' 'pnpm yarnpkg'; do grep -Fq \"$package\" images/default/Containerfile.base || { echo \"FAIL: Fedora package group '$package' missing\"; exit 1; }; done && echo 'ok: Fedora package groups present'"
     timeout_ms: 3000
     expected_behavior: "ok:"
 
   - step: "Req Direct assets: every retained archive has an adjacent SHA-256 check"
-    command: "for variable in CARGO_NEXTEST_SHA256 CARGO_BINSTALL_SHA256 WASMTIME_SHA256 ACTIONLINT_SHA256 VALE_SHA256 DART_SHA256 OLLAMA_LINUX_AMD64_SHA256; do grep -Fq \"ARG ${variable}=\" images/default/Containerfile images/inference/Containerfile || { echo \"FAIL: '$variable' missing\"; exit 1; }; done; checks=$(grep -hF 'sha256sum -c -' images/default/Containerfile images/inference/Containerfile | wc -l); [ \"$checks\" -eq 7 ] || { echo \"FAIL: expected 7 checksum verifications, found $checks\"; exit 1; }; echo 'ok: direct assets verified'"
+    command: "for variable in CARGO_NEXTEST_SHA256 CARGO_CHEF_SHA256 CARGO_WATCH_SHA256 CARGO_AUDIT_SHA256 WASM_PACK_SHA256 TRUNK_SHA256 TYPOS_CLI_SHA256 WATCHEXEC_CLI_SHA256 CARGO_EDIT_SHA256 CARGO_LLVM_COV_SHA256 CARGO_SEMVER_CHECKS_SHA256 CARGO_EXPAND_SHA256 CARGO_CRITERION_SHA256 CARGO_WASI_SHA256 CARGO_OUTDATED_SHA256 WASMTIME_SHA256 ACTIONLINT_SHA256 VALE_SHA256 DART_SHA256 OLLAMA_LINUX_AMD64_SHA256; do grep -Fq \"ARG ${variable}=\" images/default/Containerfile.base images/inference/Containerfile || { echo \"FAIL: '$variable' missing\"; exit 1; }; done; checks=$(grep -hF 'sha256sum -c -' images/default/Containerfile.base images/inference/Containerfile | wc -l); [ \"$checks\" -eq 5 ] || { echo \"FAIL: expected 5 checksum-verification sites, found $checks\"; exit 1; }; echo 'ok: direct assets verified'"
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+  - step: "Req User-runtime assembly: cargo tools use immutable archives without API installers or compilation"
+    command: "if grep -En 'cargo (binstall|install)|go install' images/default/Containerfile.base; then echo 'FAIL: user --init must assemble prebuilt tools without API installers or compilation'; exit 1; fi; for tool in cargo-chef cargo-watch cargo-audit wasm-pack trunk typos-cli watchexec-cli cargo-edit cargo-llvm-cov cargo-semver-checks cargo-expand cargo-criterion cargo-wasi cargo-outdated; do grep -Fq \"install_archive $tool \" images/default/Containerfile.base || { echo \"FAIL: pinned archive missing for $tool\"; exit 1; }; done; echo 'ok: cargo tools use immutable release archives'"
     timeout_ms: 3000
     expected_behavior: "ok:"
 

@@ -230,6 +230,23 @@ pub enum ControlMessage {
     ///
     /// @trace openspec/changes/control-wire-pty-attach/proposal.md
     PtyClose { session_id: u32, exit: PtyExit },
+    /// Host -> guest: deliver Vault unseal share + installation UUID for in-VM auto-unseal.
+    DeliverCredentials {
+        seq: u64,
+        unseal_share_b64: Option<String>,
+        installation_uuid: String,
+        root_token: Option<String>,
+    },
+    /// Guest -> host: acknowledge `DeliverCredentials` delivery.
+    DeliverCredentialsReply { seq_in_reply_to: u64, success: bool },
+    /// Host -> guest: query for newly generated Vault root token + Shamir share.
+    GetVaultHandover { seq: u64 },
+    /// Guest -> host: response with the newly generated Vault root token + Shamir share.
+    VaultHandoverReply {
+        seq_in_reply_to: u64,
+        unseal_share_b64: Option<String>,
+        root_token: Option<String>,
+    },
 }
 
 /// Direction tag for `PtyData` frames.
@@ -347,6 +364,10 @@ impl ControlMessage {
             ControlMessage::PtyData { .. } => "PtyData",
             ControlMessage::PtyResize { .. } => "PtyResize",
             ControlMessage::PtyClose { .. } => "PtyClose",
+            ControlMessage::DeliverCredentials { .. } => "DeliverCredentials",
+            ControlMessage::DeliverCredentialsReply { .. } => "DeliverCredentialsReply",
+            ControlMessage::GetVaultHandover { .. } => "GetVaultHandover",
+            ControlMessage::VaultHandoverReply { .. } => "VaultHandoverReply",
         }
     }
 }

@@ -13,6 +13,14 @@ This is **BLOCKED on linux step 32** (true-rekey lands the shared contract Windo
 — not claimable until step 32 completes. Optional independent item: wire
 `EnumerateLocalProjects`. No new autonomous Windows **step-36** code packet until step 32 lands.
 
+## 2026-06-13 — xplat-vault/windows (step 36) — DONE
+
+Store the unseal key + `installation-uuid` + `root-token` in Windows Credential Manager and deliver them to the in-VM vault container over HvSocket.
+
+- 2026-06-13T06:43Z **claim** by `windows-bullo-gemini-2026-06-13T06:43:00Z` (lease: `lease-windows-xplat-vault-20260613T0643Z`, expires 2026-06-13T10:43Z).
+- 2026-06-13T06:45Z **completed** — **VERIFIED PASS.** unseal key, installation UUID, and root token are stored in Windows Credential Manager on the host and delivered to the guest VM over HvSocket right after handshake. The guest VM uses these memory-stored credentials to initialize/unseal Vault, and hands back the newly generated credentials on fresh init to be persisted on the host. Full suite of 54 tests passes.
+  - Commit: `d5b6ef3cc7cc813b44c26c793fe9d933671d4554`
+
 ## 2026-06-08 — keyring-verify/windows (orchestrator packet) — DONE
 
 Linux orchestrator shaped `keyring-verify/windows` in

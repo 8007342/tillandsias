@@ -11,7 +11,7 @@ Run summary: curl-install passed, `podman system reset --force` passed and left 
 - id: `smoke-finding/forge-cargo-binstall-quickinstall-403`
 - owner_host: linux
 - capability_tags: [rust, podman, testing, release, forge]
-- status: ready
+- status: done
 - discovered_by: `/smoke-curl-install-and-test-e2e` on release `v0.3.260612.3`
 - evidence:
   - `target/smoke-e2e/03-init.log:3548` - `[tillandsias] build-forge: ... cargo-audit-0.22.2 ... Received status code 403 Forbidden, will wait for 120s and retry`
@@ -27,3 +27,21 @@ Run summary: curl-install passed, `podman system reset --force` passed and left 
     ts: `2026-06-12T22:18:27Z`
     agent_id: `linux-yoga-codex-20260612T221827Z`
     host: linux
+  - type: claim
+    ts: `2026-06-13T06:45:23Z`
+    agent_id: `linux-macuahuitl-codex-20260613T064130Z`
+    host: linux
+    lease_id: `2915acc31b42`
+    expires_at: `2026-06-13T10:45:23Z`
+  - type: completed
+    ts: `2026-06-13T06:57:24Z`
+    agent_id: `linux-macuahuitl-codex-20260613T064130Z`
+    host: linux
+    lease_id: `2915acc31b42`
+    implementation_commit: `9c4b8781`
+    evidence: >
+      Replaced cargo-binstall, cargo install, and go install paths in the
+      release-critical forge base image with pinned, SHA-256-verified release
+      archives. A clean Podman build of Containerfile.base completed, all
+      expected executables were present in the resulting image, the
+      default-image litmus passed, and ./build.sh --check passed.

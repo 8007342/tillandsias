@@ -374,6 +374,9 @@ WantedBy=multi-user.target
             .handshake()
             .await
             .map_err(|e| format!("handshake: {e}"))?;
+        crate::installation_uuid::deliver_credentials_and_check_handover(&mut client)
+            .await
+            .map_err(|e| format!("credentials delivery failed: {e}"))?;
         let seq = client.allocate_seq();
         let envelope = ControlEnvelope {
             wire_version: WIRE_VERSION,

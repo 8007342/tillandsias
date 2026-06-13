@@ -49,6 +49,7 @@ fn main() {
     );
 
     let required = [
+        "images/default/Containerfile.base",
         "images/default/Containerfile",
         "images/proxy/Containerfile",
         "images/proxy/allowlist.txt",
