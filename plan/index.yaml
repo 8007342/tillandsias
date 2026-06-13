@@ -3390,7 +3390,7 @@ plan_index:
     - id: forge-package-manager-and-telemetry
       order: 49
       title: Package Manager Migration, Base Image Split, and Telemetry
-      status: ready
+      status: completed
       owner_host: linux
       deliverable: plan/issues/forge-package-manager-and-telemetry-2026-06-12.md
       audit_origin: plan/issues/forge-package-manager-and-telemetry-2026-06-12.md
@@ -3403,14 +3403,14 @@ plan_index:
         - "Dashboard Markdown file created with Mermaid graphs."
       tasks:
         - id: forge-refactor/containerfile-split
-          status: pending
+          status: completed
           owner_host: linux
           depends_on: []
         - id: forge-refactor/dnf-migration
-          status: pending
+          status: completed
           owner_host: linux
           depends_on: [forge-refactor/containerfile-split]
         - id: forge-refactor/telemetry-dashboard
-          status: pending
+          status: completed
           owner_host: linux
           depends_on: []

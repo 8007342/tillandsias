@@ -94,12 +94,7 @@ RUN chmod +x /etc/tillandsias/shell-helpers.sh || true
 # @trace spec:forge-environment-discoverability
 # Restored from a74a13ec (feat(forge): discoverability CLIs). The
 # COPY+symlink block was silently dropped in a later refactor while
-# the bash scripts under cli/ and the welcome-banner references
-# stayed put — leaving an unwired surface where the welcome banner
-# advertised `tillandsias-inventory` / `tillandsias-services` /
-# `tillandsias-models` but the binaries were absent from PATH.
-# `/opt/agents/tillandsias-cli/bin/` mirrors the other-agent
-# install convention; symlinks expose them on the user PATH.
+# the bash scripts under cli/ stayed put.
 RUN mkdir -p /opt/agents/tillandsias-cli/bin
 COPY cli/tillandsias-inventory /opt/agents/tillandsias-cli/bin/tillandsias-inventory
 COPY cli/tillandsias-services /opt/agents/tillandsias-cli/bin/tillandsias-services
@@ -108,6 +103,12 @@ RUN chmod +x /opt/agents/tillandsias-cli/bin/* \
     && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-inventory /usr/local/bin/tillandsias-inventory \
     && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-services /usr/local/bin/tillandsias-services \
     && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-models /usr/local/bin/tillandsias-models
+
+# ── Skills mapping ─────────────────────────────────────────────
+# @trace spec:forge-skills-mapping
+# Copy all AI skills so agents running inside the forge have immediate access.
+RUN mkdir -p /opt/skills
+COPY skills/ /opt/skills/
 
 # ── Locale files ───────────────────────────────────────────────
 # @trace spec:environment-runtime
