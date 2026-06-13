@@ -3,7 +3,7 @@
 - id: `smoke-finding/forge-base-image-missing-in-init`
 - owner_host: linux
 - capability_tags: [rust, podman, testing, release]
-- status: claimed
+- status: done
 - discovered_by: `/smoke-curl-install-and-test-e2e` on release `v0.3.260613.1`
 - evidence:
   - `target/smoke-e2e/03-init.log` — Error: creating build container: unable to copy from source docker://localhost/tillandsias-forge-base:latest: initializing source docker://localhost/tillandsias-forge-base:latest: pinging container registry localhost: Get "http://localhost/v2/": dial tcp [::1]:80: connect: connection refused
@@ -22,3 +22,16 @@
     host: linux
     lease_id: `7d22726a7511`
     expires_at: `2026-06-13T10:41:30Z`
+  - type: completed
+    ts: `2026-06-13T06:46:40Z`
+    agent_id: `linux-macuahuitl-codex-20260613T064130Z`
+    host: linux
+    lease_id: `7d22726a7511`
+    evidence_refs:
+      - `commit:0fe1c468`
+      - `cargo test -p tillandsias-core image_build_paths_routes_each_known_type_to_its_containerfile`
+      - `cargo test -p tillandsias-headless image_build_inputs_ --no-default-features`
+      - `cargo test -p tillandsias-headless init_command_defines_required_images_in_order --no-default-features`
+      - `cargo test -p tillandsias-headless runtime_assets::tests::embedded_assets_include_required_runtime_contexts --no-default-features`
+      - `cargo clippy -p tillandsias-headless -- -D warnings`
+      - `./build.sh --check`
