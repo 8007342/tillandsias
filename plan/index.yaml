@@ -2667,7 +2667,7 @@ plan_index:
           checkpoint_required: true
           handoff_note: "macOS Keychain unseal-key + installation-uuid vsock delivery. Bootstrap is Linux-only today (vault_bootstrap.rs). See audit §3."
         - id: xplat-vault/windows
-          status: blocked
+          status: done
           owner_host: windows
           depends_on: [vault-hardening-true-rekey]
           owned_files:
@@ -2675,6 +2675,20 @@ plan_index:
             - crates/tillandsias-windows-tray/src/hvsocket.rs
           checkpoint_required: true
           handoff_note: "Windows Credential Manager unseal-key + installation-uuid HvSocket delivery."
+          events:
+            - type: claim
+              ts: "2026-06-13T06:43:00Z"
+              agent_id: "windows-bullo-gemini-2026-06-13T06:43:00Z"
+              host: "windows"
+              lease_id: "lease-windows-xplat-vault-20260613T0643Z"
+              expires_at: "2026-06-13T10:43:00Z"
+            - type: completed
+              ts: "2026-06-13T06:45:00Z"
+              agent_id: "windows-bullo-gemini-2026-06-13T06:43:00Z"
+              host: "windows"
+              lease_id: "lease-windows-xplat-vault-20260613T0643Z"
+              evidence_refs:
+                - "commit:d5b6ef3cc7cc813b44c26c793fe9d933671d4554"
 
     - id: version-conflict-release
       order: 37
