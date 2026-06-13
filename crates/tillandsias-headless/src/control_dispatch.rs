@@ -111,6 +111,10 @@ pub fn decide_route(msg: &ControlMessage, transport: TransportKind) -> DispatchO
             Unsupported
         }
 
+        // DeliverCredentials and GetVaultHandover are vsock-only (for in-VM credential delivery/handover)
+        (DeliverCredentials { .. } | GetVaultHandover { .. }, Vsock) => Handle,
+        (DeliverCredentials { .. } | GetVaultHandover { .. }, UnixSocket) => Unsupported,
+
         // McpFrame is the host-browser-mcp tunnel between forge and tray
         // — it flows ONLY across the local Unix socket (the forge in-VM
         // has no direct host-browser dependency). Vsock side rejects.
@@ -127,7 +131,9 @@ pub fn decide_route(msg: &ControlMessage, transport: TransportKind) -> DispatchO
             | Error { .. }
             | VmStatusReply { .. }
             | LocalProjectsReply { .. }
-            | CloudRefreshReply { .. },
+            | CloudRefreshReply { .. }
+            | DeliverCredentialsReply { .. }
+            | VaultHandoverReply { .. },
             _,
         ) => ResponseOnly,
 
@@ -272,6 +278,34 @@ mod tests {
                 },
                 "PtyClose",
             ),
+            (
+                ControlMessage::DeliverCredentials {
+                    seq: 1,
+                    unseal_share_b64: None,
+                    installation_uuid: "uuid".to_string(),
+                    root_token: None,
+                },
+                "DeliverCredentials",
+            ),
+            (
+                ControlMessage::DeliverCredentialsReply {
+                    seq_in_reply_to: 1,
+                    success: true,
+                },
+                "DeliverCredentialsReply",
+            ),
+            (
+                ControlMessage::GetVaultHandover { seq: 1 },
+                "GetVaultHandover",
+            ),
+            (
+                ControlMessage::VaultHandoverReply {
+                    seq_in_reply_to: 1,
+                    unseal_share_b64: None,
+                    root_token: None,
+                },
+                "VaultHandoverReply",
+            ),
         ]
     }
 
@@ -289,9 +323,16 @@ mod tests {
                 | "VmShutdownRequest"
                 | "EnumerateLocalProjects"
                 | "CloudRefreshRequest" => DispatchOutcome::Handle,
-                "PtyOpen" | "PtyData" | "PtyResize" | "PtyClose" => DispatchOutcome::Unsupported,
-                "HelloAck" | "IssueAck" | "Error" | "VmStatusReply" | "LocalProjectsReply"
-                | "CloudRefreshReply" => DispatchOutcome::ResponseOnly,
+                "PtyOpen" | "PtyData" | "PtyResize" | "PtyClose" | "DeliverCredentials"
+                | "GetVaultHandover" => DispatchOutcome::Unsupported,
+                "HelloAck"
+                | "IssueAck"
+                | "Error"
+                | "VmStatusReply"
+                | "LocalProjectsReply"
+                | "CloudRefreshReply"
+                | "DeliverCredentialsReply"
+                | "VaultHandoverReply" => DispatchOutcome::ResponseOnly,
                 _ => unreachable!("test fixture missing case for {name}"),
             };
             assert_eq!(
@@ -318,10 +359,18 @@ mod tests {
                 | "PtyOpen"
                 | "PtyData"
                 | "PtyResize"
-                | "PtyClose" => DispatchOutcome::Handle,
+                | "PtyClose"
+                | "DeliverCredentials"
+                | "GetVaultHandover" => DispatchOutcome::Handle,
                 "IssueWebSession" | "EvictProject" | "McpFrame" => DispatchOutcome::Unsupported,
-                "HelloAck" | "IssueAck" | "Error" | "VmStatusReply" | "LocalProjectsReply"
-                | "CloudRefreshReply" => DispatchOutcome::ResponseOnly,
+                "HelloAck"
+                | "IssueAck"
+                | "Error"
+                | "VmStatusReply"
+                | "LocalProjectsReply"
+                | "CloudRefreshReply"
+                | "DeliverCredentialsReply"
+                | "VaultHandoverReply" => DispatchOutcome::ResponseOnly,
                 _ => unreachable!("test fixture missing case for {name}"),
             };
             assert_eq!(
@@ -386,6 +435,15 @@ mod tests {
             ControlMessage::CloudRefreshReply {
                 seq_in_reply_to: 1,
                 projects: vec![],
+            },
+            ControlMessage::DeliverCredentialsReply {
+                seq_in_reply_to: 1,
+                success: true,
+            },
+            ControlMessage::VaultHandoverReply {
+                seq_in_reply_to: 1,
+                unseal_share_b64: None,
+                root_token: None,
             },
         ];
         for msg in &resp {

@@ -368,35 +368,53 @@ struct AsyncTaskExecutor {
     is_running: Arc<AtomicBool>,
 }
 
+/// Number of worker threads draining the task queue. This MUST be > 1: a
+/// single worker serializes every offloaded operation, so one slow task (a
+/// containerized `gh` cloud fetch, or a multi-second enclave bring-up for an
+/// agent launch) blocks all others — the menu freezes on `(loading…)` and a
+/// subsequent agent-launch click never runs. A small pool keeps independent
+/// menu actions responsive without unbounded thread growth.
+/// @trace gap:TR-005, spec:tray-ux
+const ASYNC_EXECUTOR_WORKERS: usize = 4;
+
 impl AsyncTaskExecutor {
-    /// Create a new async task executor with a bounded queue.
+    /// Create a new async task executor with a bounded queue, drained by a
+    /// small pool of worker threads so that one long-running task cannot stall
+    /// every other queued menu action.
     /// @trace gap:TR-005
     fn new(queue_size: usize) -> Self {
         let (sender, receiver) = mpsc::sync_channel::<Box<dyn FnOnce() + Send>>(queue_size);
         let is_running = Arc::new(AtomicBool::new(true));
-        let is_running_clone = is_running.clone();
+        // The receiver is shared across workers behind a mutex; each worker
+        // briefly locks to dequeue one task, then releases the lock *before*
+        // running it so peers can pick up the next task concurrently.
+        let receiver = Arc::new(Mutex::new(receiver));
 
-        // Spawn executor thread
-        std::thread::spawn(move || {
-            let span = span!(Level::TRACE, "async_task_executor");
-            let _guard = span.enter();
+        for worker in 0..ASYNC_EXECUTOR_WORKERS {
+            let is_running_clone = is_running.clone();
+            let receiver = receiver.clone();
+            std::thread::spawn(move || {
+                let span = span!(Level::TRACE, "async_task_executor", worker);
+                let _guard = span.enter();
 
-            while is_running_clone.load(Ordering::Relaxed) {
-                match receiver.recv_timeout(std::time::Duration::from_millis(100)) {
-                    Ok(task) => {
-                        task();
-                    }
-                    Err(mpsc::RecvTimeoutError::Timeout) => {
-                        // Continue waiting
-                        continue;
-                    }
-                    Err(mpsc::RecvTimeoutError::Disconnected) => {
-                        // Sender dropped, exit executor
-                        break;
+                while is_running_clone.load(Ordering::Relaxed) {
+                    let next = {
+                        let rx = match receiver.lock() {
+                            Ok(rx) => rx,
+                            Err(_) => break, // poisoned — bail this worker
+                        };
+                        rx.recv_timeout(std::time::Duration::from_millis(100))
+                    };
+                    match next {
+                        Ok(task) => {
+                            task();
+                        }
+                        Err(mpsc::RecvTimeoutError::Timeout) => continue,
+                        Err(mpsc::RecvTimeoutError::Disconnected) => break,
                     }
                 }
-            }
-        });
+            });
+        }
 
         Self { sender, is_running }
     }
@@ -3254,6 +3272,16 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
     // health timeout if the data volume exists but Vault isn't running (e.g.
     // first tray launch after a --github-login). Instead of blocking the
     // launch path, default is_authenticated=false and confirm in background.
+    //
+    // Once auth is confirmed we ALSO kick the initial cloud-projects fetch
+    // from inside this same task. The previous design gated a separate init
+    // fetch on `service.snapshot().is_authenticated`, but that snapshot is
+    // read on the launch thread *before* this probe has flipped the flag, so
+    // the gate was always false and the initial fetch was silently skipped —
+    // leaving the ☁️ Cloud submenu stuck on `(loading…)` until the user
+    // happened to open it twice. Chaining the fetch onto the probe removes the
+    // TOCTOU: the list is populated exactly once auth is known good.
+    // @trace spec:tray-ux, spec:remote-projects
     {
         let service_for_probe = service.clone();
         let state_handle = service.state_handle();
@@ -3262,46 +3290,31 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
             .task_executor
             .spawn_task(move || {
                 if crate::vault_bootstrap::is_github_logged_in(debug) {
-                    let mut state = state_handle.lock().expect("tray state lock");
-                    if !state.is_authenticated {
-                        state.is_authenticated = true;
-                        state.bump_revision();
+                    {
+                        let mut state = state_handle.lock().expect("tray state lock");
+                        if !state.is_authenticated {
+                            state.is_authenticated = true;
+                            state.bump_revision();
+                        }
                     }
-                    drop(state);
                     let _ =
                         futures::executor::block_on(service_for_probe.rebuild_after_state_change());
+
+                    // Prepopulate the cloud list so the submenu is ready on the
+                    // user's first open instead of racing an AboutToShow.
+                    match cloud::refresh_cloud_projects_if_stale(state_handle, false, debug) {
+                        Ok(outcome) if outcome.menu_changed() => {
+                            let _ = futures::executor::block_on(
+                                service_for_probe.rebuild_after_state_change(),
+                            );
+                        }
+                        _ => {}
+                    }
                 }
             })
             .is_err()
         {
             warn!("task queue full: skipping background vault probe");
-        }
-    }
-
-    // @trace spec:tray-ux, spec:remote-projects
-    // Kick off the initial cloud-projects fetch on the async executor so the
-    // ☁️ Cloud submenu populates without blocking tray startup. If the user
-    // isn't authenticated this is effectively a no-op inside cloud.rs.
-    if service.snapshot().is_authenticated {
-        let service_for_init = service.clone();
-        let state_handle = service.state_handle();
-        let debug = service.snapshot().debug;
-        if service
-            .task_executor
-            .spawn_task(move || {
-                match cloud::refresh_cloud_projects_if_stale(state_handle, false, debug) {
-                    Ok(outcome) if outcome.menu_changed() => {
-                        let _ = futures::executor::block_on(
-                            service_for_init.rebuild_after_state_change(),
-                        );
-                    }
-                    Ok(_) => {}
-                    Err(_) => {}
-                }
-            })
-            .is_err()
-        {
-            warn!("task queue full: skipping initial cloud refresh");
         }
     }
 

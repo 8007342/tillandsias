@@ -2642,12 +2642,11 @@ plan_index:
     - id: cross-platform-vault-keychain-parity
       order: 36
       title: Cross-platform Vault keychain + vsock unseal-key parity
-      status: blocked
+      status: ready
       owner_host: macos+windows
       deliverable: plan/steps/36-cross-platform-vault-keychain-parity.md
       audit_origin: plan/issues/pre-vault-obsolescence-audit-2026-06-05.md
       depends_on: [vault-hardening-true-rekey]
-      blocked_reason: "Mirrors the Linux keychain handover contract from step 32; not claimable until that lands. NOTE 2026-06-07: the 'rekey' part is INFEASIBLE (see plan/issues/vault-rekey-infeasible-finding-2026-06-07.md) — this step must mirror 'capture the Vault-generated Shamir share → platform keychain → vsock/HvSocket delivery', NOT a literal vault operator rekey. Exit criteria below are reworded accordingly."
       specs:
         - tillandsias-vault
         - vsock-transport
@@ -2658,7 +2657,7 @@ plan_index:
         - "tillandsias-vault.security.transparent-auto-unseal@v3 honored on all platforms (spec mandates keychain on all, not just Linux)."
       tasks:
         - id: xplat-vault/macos
-          status: blocked
+          status: claimed
           owner_host: macos
           depends_on: [vault-hardening-true-rekey]
           owned_files:
@@ -2666,8 +2665,15 @@ plan_index:
             - crates/tillandsias-vm-layer/src/vz.rs
           checkpoint_required: true
           handoff_note: "macOS Keychain unseal-key + installation-uuid vsock delivery. Bootstrap is Linux-only today (vault_bootstrap.rs). See audit §3."
+          events:
+            - type: claim
+              ts: "2026-06-13T14:30:00Z"
+              agent_id: "macos-tlatoani-antigravity-20260613T143000Z"
+              host: "macos"
+              lease_id: "lease-macos-xplat-vault-20260613T143000Z"
+              expires_at: "2026-06-13T18:30:00Z"
         - id: xplat-vault/windows
-          status: blocked
+          status: done
           owner_host: windows
           depends_on: [vault-hardening-true-rekey]
           owned_files:
@@ -2675,6 +2681,20 @@ plan_index:
             - crates/tillandsias-windows-tray/src/hvsocket.rs
           checkpoint_required: true
           handoff_note: "Windows Credential Manager unseal-key + installation-uuid HvSocket delivery."
+          events:
+            - type: claim
+              ts: "2026-06-13T06:43:00Z"
+              agent_id: "windows-bullo-gemini-2026-06-13T06:43:00Z"
+              host: "windows"
+              lease_id: "lease-windows-xplat-vault-20260613T0643Z"
+              expires_at: "2026-06-13T10:43:00Z"
+            - type: completed
+              ts: "2026-06-13T06:45:00Z"
+              agent_id: "windows-bullo-gemini-2026-06-13T06:43:00Z"
+              host: "windows"
+              lease_id: "lease-windows-xplat-vault-20260613T0643Z"
+              evidence_refs:
+                - "commit:d5b6ef3cc7cc813b44c26c793fe9d933671d4554"
 
     - id: version-conflict-release
       order: 37
@@ -3386,3 +3406,31 @@ plan_index:
                 - "core build-image clippy with -D warnings passed"
                 - "./build.sh --check passed"
                 - "real ./build-proxy.sh Podman smoke built 22 MB image"
+
+    - id: forge-package-manager-and-telemetry
+      order: 49
+      title: Package Manager Migration, Base Image Split, and Telemetry
+      status: completed
+      owner_host: linux
+      deliverable: plan/issues/forge-package-manager-and-telemetry-2026-06-12.md
+      audit_origin: plan/issues/forge-package-manager-and-telemetry-2026-06-12.md
+      depends_on: []
+      exit_criteria:
+        - "images/default/Containerfile split into Containerfile.base and Containerfile."
+        - "curl/tar installs migrated to dnf/microdnf where possible."
+        - "Foreign repos tracked in a dependency list for tellme system."
+        - "Telemetry added to build scripts to record install duration and sizes into JSON lines."
+        - "Dashboard Markdown file created with Mermaid graphs."
+      tasks:
+        - id: forge-refactor/containerfile-split
+          status: completed
+          owner_host: linux
+          depends_on: []
+        - id: forge-refactor/dnf-migration
+          status: completed
+          owner_host: linux
+          depends_on: [forge-refactor/containerfile-split]
+        - id: forge-refactor/telemetry-dashboard
+          status: completed
+          owner_host: linux
+          depends_on: []

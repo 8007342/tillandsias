@@ -235,6 +235,7 @@ pub(crate) fn image_identity(
     }
 
     let containerfile = match image_name {
+        "forge-base" => context.join("Containerfile.base"),
         "chromium-core" => context.join("Containerfile.core"),
         "chromium-framework" => context.join("Containerfile.framework"),
         _ => context.join("Containerfile"),
@@ -252,7 +253,7 @@ pub(crate) fn image_identity(
 
 fn image_context_rel(image_name: &str) -> Result<&'static str, String> {
     match image_name {
-        "forge" => Ok("images/default"),
+        "forge-base" | "forge" => Ok("images/default"),
         "proxy" => Ok("images/proxy"),
         "git" => Ok("images/git"),
         "inference" => Ok("images/inference"),
@@ -312,6 +313,7 @@ mod tests {
             .collect::<std::collections::HashSet<_>>();
 
         for required in [
+            "images/default/Containerfile.base",
             "images/default/Containerfile",
             "images/proxy/allowlist.txt",
             "images/router/tillandsias-router-sidecar",

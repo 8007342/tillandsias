@@ -444,19 +444,55 @@ _podman_rootless_diagnostic() {
 # that build containers don't have. Proxy is for runtime containers only.
 # @trace spec:user-runtime-lifecycle, spec:init-incremental-builds
 
-BUILD_LOG="$(mktemp "${TMPDIR:-/tmp}/tillandsias-build-image.XXXXXX.log")"
+BUILD_LOG="$ROOT/build-${IMAGE_NAME}.log"
+rm -f "$BUILD_LOG"
 if [[ "$IMAGE_NAME" == "forge" ]]; then
     _step "Refreshing cheatsheets in build context..."
-    rm -rf "$IMAGE_DIR/cheatsheets" "$IMAGE_DIR/cheatsheet-sources"
+    rm -rf "$IMAGE_DIR/cheatsheets" "$IMAGE_DIR/cheatsheet-sources" "$IMAGE_DIR/skills"
     cp -rp "$ROOT/cheatsheets" "$IMAGE_DIR/cheatsheets"
     cp -rp "$ROOT/cheatsheet-sources" "$IMAGE_DIR/cheatsheet-sources"
+    cp -rp "$ROOT/skills" "$IMAGE_DIR/skills"
 fi
-trap 'rm -f "$BUILD_LOG"' EXIT
+# Log preservation: the build output is kept in $ROOT/build-*.log for agent iteration
 
 NO_CACHE_ARGS=()
 if [[ "$FLAG_NO_CACHE" == true || "$FLAG_NO_CACHE" == "1" ]]; then
     _warn "Diagnostic no-cache mode enabled; Podman layers will not be reused"
     NO_CACHE_ARGS+=(--no-cache)
+fi
+
+if [[ -f "$IMAGE_DIR/Containerfile.base" ]]; then
+    _step "Building base image (Containerfile.base)..."
+    BASE_IMAGE_TAG="${IMAGE_LABEL_PREFIX}-base:latest"
+    if _verbose_enabled; then
+        "$PODMAN" build \
+            --format docker \
+            --isolation "$BUILD_ISOLATION" \
+            --userns "$BUILD_USERNS" \
+            --tag "$BASE_IMAGE_TAG" \
+            "${NO_CACHE_ARGS[@]}" \
+            "${BUILD_ARGS[@]}" \
+            "${CACHE_MOUNT_ARGS[@]}" \
+            -f "$IMAGE_DIR/Containerfile.base" \
+            "$IMAGE_DIR/"
+    else
+        if ! "$PODMAN" build \
+            --format docker \
+            --isolation "$BUILD_ISOLATION" \
+            --userns "$BUILD_USERNS" \
+            --tag "$BASE_IMAGE_TAG" \
+            "${NO_CACHE_ARGS[@]}" \
+            "${BUILD_ARGS[@]}" \
+            "${CACHE_MOUNT_ARGS[@]}" \
+            -f "$IMAGE_DIR/Containerfile.base" \
+            "$IMAGE_DIR/" >"$BUILD_LOG" 2>&1; then
+            _error "podman build failed for ${BASE_IMAGE_TAG}"
+            _error "Last build log lines:"
+            tail -80 "$BUILD_LOG" >&2 || true
+            exit 1
+        fi
+    fi
+    BUILD_ARGS+=(--build-arg "BASE_IMAGE=localhost/${BASE_IMAGE_TAG}")
 fi
 
 if _verbose_enabled; then
@@ -539,6 +575,7 @@ if [[ -n "$IMAGE_SIZE" ]]; then
     SIZE_DISPLAY="${SIZE_MB} MB"
 else
     SIZE_DISPLAY="unknown"
+    IMAGE_SIZE=0
 fi
 
 echo ""
@@ -550,6 +587,23 @@ fi
 _info "Size:     ${SIZE_DISPLAY}"
 _info "Time:     ${BUILD_DURATION}s"
 _info "----------------------------------------------"
+
+# Telemetry tracking
+TELEMETRY_DIR="$HOME/.cache/tillandsias/telemetry"
+mkdir -p "$TELEMETRY_DIR"
+METRICS_FILE="$TELEMETRY_DIR/build-metrics.jsonl"
+TS="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+echo "{\"timestamp\": \"$TS\", \"image\": \"$IMAGE_NAME\", \"duration_s\": $BUILD_DURATION, \"size_bytes\": $IMAGE_SIZE, \"hash\": \"$CURRENT_HASH\"}" >> "$METRICS_FILE"
+
+# Logarithmic semantic distillation (keep recent, thin out old)
+# Just keep the last 500 lines for now to prevent runaway growth
+tail -n 500 "$METRICS_FILE" > "${METRICS_FILE}.tmp" && mv "${METRICS_FILE}.tmp" "$METRICS_FILE"
+
+# Generate simple dashboard if it doesn't exist or update it
+DASHBOARD_FILE="$ROOT/plan/metrics-dashboard.md"
+if [[ -f "$ROOT/scripts/generate-dashboard.sh" ]]; then
+    "$ROOT/scripts/generate-dashboard.sh" "$METRICS_FILE" "$DASHBOARD_FILE" || true
+fi
 
 # Explicit success exit (podman build may return non-zero even on success)
 exit 0

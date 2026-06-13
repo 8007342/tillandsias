@@ -16,8 +16,6 @@
 //!
 //! @trace spec:windows-native-tray, spec:host-shell-architecture, spec:tillandsias-vault
 
-use std::mem::size_of;
-
 use uuid::Uuid;
 use windows::Win32::Foundation::FILETIME;
 use windows::Win32::Security::Credentials::{
@@ -59,10 +57,8 @@ pub fn ensure_installation_uuid() -> Result<Uuid, String> {
     Ok(fresh)
 }
 
-/// Read the UUID stored under an arbitrary `target`. The public
-/// [`read_installation_uuid`] delegates here with [`TARGET_NAME`]; tests use
-/// a unique target so they never touch the production credential.
-fn read_installation_uuid_from(target: &str) -> Result<Option<Uuid>, String> {
+/// Read a generic string credential stored under `target` from Windows Credential Manager.
+pub fn read_credential_string(target: &str) -> Result<Option<String>, String> {
     let target_w = to_pwstr(target);
     let mut cred_ptr = std::ptr::null_mut::<CREDENTIALW>();
     let result = unsafe {
@@ -74,11 +70,10 @@ fn read_installation_uuid_from(target: &str) -> Result<Option<Uuid>, String> {
         )
     };
     if let Err(err) = result {
-        // ERROR_NOT_FOUND = no credential, which is normal pre-bootstrap.
         if err.code().0 as u32 == HRESULT_ERROR_NOT_FOUND {
             return Ok(None);
         }
-        return Err(format!("CredReadW failed: {err:?}"));
+        return Err(format!("CredReadW failed for {target}: {err:?}"));
     }
     if cred_ptr.is_null() {
         return Ok(None);
@@ -88,21 +83,17 @@ fn read_installation_uuid_from(target: &str) -> Result<Option<Uuid>, String> {
         std::slice::from_raw_parts(cred.CredentialBlob, cred.CredentialBlobSize as usize)
     };
     let text = std::str::from_utf8(blob)
-        .map_err(|e| format!("credential blob is not UTF-8: {e}"))?
+        .map_err(|e| format!("credential blob for {target} is not UTF-8: {e}"))?
         .to_string();
     unsafe {
         CredFree(cred_ptr as *mut _);
     }
-    Uuid::parse_str(text.trim())
-        .map(Some)
-        .map_err(|e| format!("credential blob is not a UUID: {e}"))
+    Ok(Some(text.trim().to_string()))
 }
 
-/// Persist `uuid` under an arbitrary `target`. The public
-/// [`write_installation_uuid`] delegates here with [`TARGET_NAME`].
-fn write_installation_uuid_to(target: &str, uuid: Uuid) -> Result<(), String> {
+/// Persist a generic string credential `value` under `target` in Windows Credential Manager.
+pub fn write_credential_string(target: &str, value: &str) -> Result<(), String> {
     let target_w = to_pwstr(target);
-    let value = uuid.to_string();
     let value_bytes = value.as_bytes();
 
     let cred = CREDENTIALW {
@@ -119,9 +110,27 @@ fn write_installation_uuid_to(target: &str, uuid: Uuid) -> Result<(), String> {
         TargetAlias: PWSTR::null(),
         UserName: PWSTR::null(),
     };
-    let _ = size_of::<CREDENTIALW>();
     let result = unsafe { CredWriteW(&cred, 0) };
-    result.map_err(|err| format!("CredWriteW failed: {err:?}"))
+    result.map_err(|err| format!("CredWriteW failed for {target}: {err:?}"))
+}
+
+/// Read the UUID stored under an arbitrary `target`. The public
+/// [`read_installation_uuid`] delegates here with [`TARGET_NAME`]; tests use
+/// a unique target so they never touch the production credential.
+fn read_installation_uuid_from(target: &str) -> Result<Option<Uuid>, String> {
+    if let Some(text) = read_credential_string(target)? {
+        Uuid::parse_str(&text)
+            .map(Some)
+            .map_err(|e| format!("credential blob is not a UUID: {e}"))
+    } else {
+        Ok(None)
+    }
+}
+
+/// Persist `uuid` under an arbitrary `target`. The public
+/// [`write_installation_uuid`] delegates here with [`TARGET_NAME`].
+fn write_installation_uuid_to(target: &str, uuid: Uuid) -> Result<(), String> {
+    write_credential_string(target, &uuid.to_string())
 }
 
 /// Remove the credential stored under `target` from Windows Credential
@@ -138,6 +147,78 @@ pub fn delete_installation_uuid_for(target: &str) -> Result<(), String> {
         }
         return Err(format!("CredDeleteW failed: {err:?}"));
     }
+    Ok(())
+}
+
+/// Connects to the in-VM agent, delivers the host Credential Manager-backed `vault-shamir-share-v1`
+/// and `tillandsias-vm-uuid` on connection startup, and retrieves any pending handover credentials.
+pub async fn deliver_credentials_and_check_handover(
+    client: &mut tillandsias_host_shell::vsock_client::Client,
+) -> Result<(), String> {
+    let uuid = ensure_installation_uuid()?;
+    let share = read_credential_string("vault-shamir-share-v1")?;
+    let token = read_credential_string("vault-root-token-v1")?;
+
+    let seq = client.allocate_seq();
+    let env = tillandsias_control_wire::ControlEnvelope {
+        wire_version: tillandsias_control_wire::WIRE_VERSION,
+        seq,
+        body: tillandsias_control_wire::ControlMessage::DeliverCredentials {
+            seq,
+            unseal_share_b64: share,
+            installation_uuid: uuid.to_string(),
+            root_token: token,
+        },
+    };
+    let reply = client
+        .request(&env)
+        .await
+        .map_err(|e| format!("DeliverCredentials request failed: {e}"))?;
+
+    match reply.body {
+        tillandsias_control_wire::ControlMessage::DeliverCredentialsReply {
+            success: true, ..
+        } => {}
+        tillandsias_control_wire::ControlMessage::Error { message, .. } => {
+            return Err(format!("DeliverCredentials failed: {message}"));
+        }
+        other => {
+            return Err(format!("unexpected reply to DeliverCredentials: {other:?}"));
+        }
+    }
+
+    let seq = client.allocate_seq();
+    let env = tillandsias_control_wire::ControlEnvelope {
+        wire_version: tillandsias_control_wire::WIRE_VERSION,
+        seq,
+        body: tillandsias_control_wire::ControlMessage::GetVaultHandover { seq },
+    };
+    let reply = client
+        .request(&env)
+        .await
+        .map_err(|e| format!("GetVaultHandover request failed: {e}"))?;
+
+    match reply.body {
+        tillandsias_control_wire::ControlMessage::VaultHandoverReply {
+            unseal_share_b64,
+            root_token,
+            ..
+        } => {
+            if let Some(s) = unseal_share_b64 {
+                write_credential_string("vault-shamir-share-v1", &s)?;
+            }
+            if let Some(t) = root_token {
+                write_credential_string("vault-root-token-v1", &t)?;
+            }
+        }
+        tillandsias_control_wire::ControlMessage::Error { message, .. } => {
+            return Err(format!("GetVaultHandover failed: {message}"));
+        }
+        other => {
+            return Err(format!("unexpected reply to GetVaultHandover: {other:?}"));
+        }
+    }
+
     Ok(())
 }
 

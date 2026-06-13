@@ -96,6 +96,14 @@ plan:
       issue files to plan/archive/2026-06-05/; restored plan/steps/README.md;
       committed 9 untracked diagnostics summaries; removed the untracked
       pre-hardening root vault audit doc after distilling it into the audit report.
+    future_intentions: >
+      - Move CURL installers and manual TAR/GZ manipulation in Containerfile to DNF.
+      - Add telemetry to measure install times and download sizes during forge build; save output in dev environment for analysis.
+      - Enable iterative forge enhancement via the `/forge-continuous-enhancement` skill running inside the tillandsias repository.
+      - Ensure opencode and codex/claude permission files are highly permissive by default ("near full YOLO mode") for the forge safe environment.
+      - Implement a global `tellme` discoverability script: `tellme about [...]` for static cheatsheets, and `tellme howto [...]` using a <1B inference model ("forge-expert").
+      - Train "forge-expert" at launch time and retrain on commits to answer questions with no tool usage.
+      - Establish Windows and macOS feature parity with Linux headless/tray; address glitches and false claims of completion.
 
   coordination:
     selection_model: dependency_graph

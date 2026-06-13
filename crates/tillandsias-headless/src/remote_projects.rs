@@ -8,10 +8,21 @@
 
 use serde::{Deserialize, Serialize};
 use std::env;
+use std::io::Read;
 use std::path::Path;
+use std::process::{Command, Output, Stdio};
 use std::sync::{Mutex, OnceLock};
-use std::time::{SystemTime, UNIX_EPOCH};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 use tracing::{debug, warn};
+
+/// Hard ceiling on a single containerized `gh` invocation. Cold container
+/// create + Vault read + `gh auth login` + the GitHub API call realistically
+/// finishes in a few seconds; anything past this is a stall (DNS/proxy/GitHub
+/// hang). Without a bound, `command.output()` blocks the worker forever and —
+/// because the tray latches `cloud_refresh_in_flight` for the duration — the
+/// ☁️ Cloud submenu wedges on `(loading…)` and never refreshes again.
+/// @trace spec:remote-projects, spec:tray-ux
+const GH_INVOCATION_TIMEOUT: Duration = Duration::from_secs(25);
 
 /// Cached GitHub project metadata.
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -169,6 +180,11 @@ impl RemoteVaultLease {
         }
         #[cfg(all(not(test), feature = "vault"))]
         {
+            // Ensure Vault is online before minting the lease. Without this, a
+            // Cloud-submenu open that lands before the tray's background vault
+            // probe has finished would hit "Vault container is not running" and
+            // surface a misleading "run --github-login" hint. @trace spec:remote-projects
+            crate::vault_bootstrap::ensure_vault_running(debug)?;
             let instance = format!("remote-projects-{}", std::process::id());
             let lease =
                 crate::vault_bootstrap::mint_approle_secret_lease("git-mirror", &instance, debug)?;
@@ -186,7 +202,71 @@ impl RemoteVaultLease {
     }
 
     fn mount_arg(&self) -> String {
-        format!("{},target=vault-token,mode=0400", self.secret_name)
+        // uid/gid ownership is load-bearing — see GIT_VAULT_TOKEN_SECRET_OPTS:
+        // without it the git user can't read the root-owned 0400 secret and the
+        // containerized `gh` fetch gets no GitHub token. @trace spec:remote-projects
+        format!(
+            "{},{}",
+            self.secret_name,
+            crate::GIT_VAULT_TOKEN_SECRET_OPTS
+        )
+    }
+}
+
+/// Run a `Command` to completion but abort if it outruns `timeout`.
+///
+/// stdout/stderr are drained on dedicated threads so a large `gh api` response
+/// (≈100 repos of JSON can exceed the OS pipe buffer) can't deadlock the wait
+/// loop. On timeout the child is killed and reaped so we never leak a hung
+/// `podman run`.
+fn run_command_with_timeout(mut command: Command, timeout: Duration) -> Result<Output, String> {
+    command.stdout(Stdio::piped()).stderr(Stdio::piped());
+    let mut child = command
+        .spawn()
+        .map_err(|err| format!("failed to spawn containerized gh: {err}"))?;
+
+    let mut stdout_pipe = child.stdout.take();
+    let mut stderr_pipe = child.stderr.take();
+    let out_handle = std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        if let Some(pipe) = stdout_pipe.as_mut() {
+            let _ = pipe.read_to_end(&mut buf);
+        }
+        buf
+    });
+    let err_handle = std::thread::spawn(move || {
+        let mut buf = Vec::new();
+        if let Some(pipe) = stderr_pipe.as_mut() {
+            let _ = pipe.read_to_end(&mut buf);
+        }
+        buf
+    });
+
+    let deadline = Instant::now() + timeout;
+    loop {
+        match child.try_wait() {
+            Ok(Some(status)) => {
+                let stdout = out_handle.join().unwrap_or_default();
+                let stderr = err_handle.join().unwrap_or_default();
+                return Ok(Output {
+                    status,
+                    stdout,
+                    stderr,
+                });
+            }
+            Ok(None) => {
+                if Instant::now() >= deadline {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                    return Err(format!(
+                        "containerized gh timed out after {}s (killed)",
+                        timeout.as_secs()
+                    ));
+                }
+                std::thread::sleep(Duration::from_millis(50));
+            }
+            Err(err) => return Err(format!("failed to wait on containerized gh: {err}")),
+        }
     }
 }
 
@@ -224,9 +304,7 @@ fn run_git_image_shell(script: &str, extra_args: &[&str], debug: bool) -> Result
     ]);
     command.args(extra_args);
 
-    let output = command
-        .output()
-        .map_err(|err| format!("failed to spawn containerized gh: {err}"))?;
+    let output = run_command_with_timeout(command, GH_INVOCATION_TIMEOUT)?;
 
     if debug {
         debug_log_podman_result("run_git_image_shell", &output.status, &output.stderr);

@@ -124,6 +124,7 @@ fn main() {
     let force = user_args.iter().any(|a| a == "--force");
     let status_check = user_args.iter().any(|a| a == "--status-check");
     let github_login = user_args.iter().any(|a| a == "--github-login");
+    let list_cloud_projects = user_args.iter().any(|a| a == "--list-cloud-projects");
     let opencode = user_args.iter().any(|a| a == "--opencode");
     let codex = user_args.iter().any(|a| a == "--codex");
     let claude = user_args.iter().any(|a| a == "--claude");
@@ -220,6 +221,7 @@ fn main() {
         "--init",
         "--status-check",
         "--github-login",
+        "--list-cloud-projects",
         "--opencode",
         "--codex",
         "--claude",
@@ -255,7 +257,12 @@ fn main() {
     // @trace spec:singleton-guard
     // Enforce singleton behavior. Newer instances signal and terminate older instances.
     // We gate all run modes and init to prevent port/state collisions.
-    let _singleton = if !status_check && !github_login && !cache_clear && !cache_verify {
+    let _singleton = if !status_check
+        && !github_login
+        && !list_cloud_projects
+        && !cache_clear
+        && !cache_verify
+    {
         match tillandsias_core::singleton::SingletonGuard::acquire(
             "launcher",
             Duration::from_secs(5),
@@ -287,6 +294,17 @@ fn main() {
         // @trace spec:tillandsias-vault
         // Phase 6: the default flow stores the token in Vault.
         if let Err(e) = run_github_login(debug) {
+            eprintln!("Error: {}", e);
+            std::process::exit(1);
+        }
+        return;
+    }
+
+    if list_cloud_projects {
+        // Headless diagnostic: run the exact containerized GitHub fetch the
+        // tray's ☁️ Cloud submenu uses, with timing, so the remote-projects
+        // path can be verified without the GUI. @trace spec:remote-projects
+        if let Err(e) = run_list_cloud_projects(debug) {
             eprintln!("Error: {}", e);
             std::process::exit(1);
         }
@@ -579,6 +597,9 @@ fn print_usage(version: &str) {
     println!("  --cache-clear  Clear the initialization cache and build state");
     println!("  --status-check Verify services are online through a representative stack smoke");
     println!("  --github-login Authenticate GitHub and store the token in Vault");
+    println!(
+        "  --list-cloud-projects  List remote GitHub repos via the saved Vault token (diagnostic)"
+    );
     println!("  --debug        Show command-level diagnostics and capture build logs");
     println!(
         "  --diagnostics  Stream real-time logs from all enclave containers (implies --debug)"
@@ -1027,7 +1048,7 @@ fn report_runtime_lane(context: &str, debug: bool) {
 
 fn image_specs(root: &Path, image_name: &str) -> Result<(PathBuf, PathBuf), String> {
     let rel = match image_name {
-        "forge" => "images/default",
+        "forge-base" | "forge" => "images/default",
         "proxy" => "images/proxy",
         "git" => "images/git",
         "inference" => "images/inference",
@@ -1042,6 +1063,7 @@ fn image_specs(root: &Path, image_name: &str) -> Result<(PathBuf, PathBuf), Stri
 
     let context_dir = root.join(rel);
     let containerfile = match image_name {
+        "forge-base" => context_dir.join("Containerfile.base"),
         "chromium-core" => context_dir.join("Containerfile.core"),
         "chromium-framework" => context_dir.join("Containerfile.framework"),
         _ => context_dir.join("Containerfile"),
@@ -1064,12 +1086,12 @@ fn versioned_image_tag(image_name: &str, version: &str) -> String {
 #[allow(clippy::type_complexity)]
 fn image_build_inputs(
     image_name: &str,
-    chromium_core: Option<&ImageBuildIdentity>,
+    identities: &HashMap<String, ImageBuildIdentity>,
 ) -> Result<(BTreeMap<String, String>, BTreeMap<String, String>), String> {
     let mut build_args = BTreeMap::new();
     let mut dependency_digests = BTreeMap::new();
     if image_name == "chromium-framework" {
-        let core = chromium_core.ok_or_else(|| {
+        let core = identities.get("chromium-core").ok_or_else(|| {
             "chromium-framework identity requires chromium-core identity".to_string()
         })?;
         build_args.insert(
@@ -1077,6 +1099,12 @@ fn image_build_inputs(
             core.canonical_tag.clone(),
         );
         dependency_digests.insert("chromium-core".to_string(), core.source_digest.clone());
+    } else if image_name == "forge" {
+        let base = identities
+            .get("forge-base")
+            .ok_or_else(|| "forge identity requires forge-base identity".to_string())?;
+        build_args.insert("BASE_IMAGE".to_string(), base.canonical_tag.clone());
+        dependency_digests.insert("forge-base".to_string(), base.source_digest.clone());
     }
     Ok((build_args, dependency_digests))
 }
@@ -1710,6 +1738,22 @@ async fn mint_git_mirror_vault_token(project_name: &str, debug: bool) -> Option<
     }
 }
 
+/// Podman `--secret` mount options for the per-launch Vault AppRole token.
+///
+/// `uid=1000,gid=1000` is REQUIRED, not cosmetic. The git image runs its
+/// workload as the unprivileged `git` user (uid/gid 1000 — see
+/// `images/git/Containerfile`) under `--userns=keep-id`. Podman defaults a
+/// `--secret` mount to `root:root`, so a `mode=0400` file is owner-only and
+/// the `git` user gets `Permission denied`. `vault-cli` then reports
+/// "no Vault token at /run/secrets/vault-token" and the ENTIRE credential
+/// chain fails silently: the ☁️ Cloud submenu never lists remote projects and
+/// the git-mirror post-receive hook can't fetch the GitHub token, so pushes
+/// fall back to interactive auth. Owning the secret as uid 1000 keeps it
+/// `0400` (least privilege) while remaining readable in-container.
+/// @trace spec:git-mirror-service, spec:tillandsias-vault, spec:remote-projects
+pub(crate) const GIT_VAULT_TOKEN_SECRET_OPTS: &str =
+    "target=vault-token,uid=1000,gid=1000,mode=0400";
+
 /// Build the podman launch args for the per-project git-mirror container.
 ///
 /// `vault_token_secret` is the name of the podman secret holding a fresh
@@ -1766,11 +1810,12 @@ fn build_git_run_args(
     if let Some(secret_name) = vault_token_secret {
         // @trace spec:tillandsias-vault — git-mirror reads the GitHub token
         // via vault-cli using this short-lived AppRole token at hook time.
-        // The token is mounted as a podman secret (mode 0400) at the
-        // stable path /run/secrets/vault-token regardless of the per-launch
-        // secret name; podman's --secret target= rewrites the mount.
+        // The token is mounted as a podman secret (owned by the git user,
+        // mode 0400 — see GIT_VAULT_TOKEN_SECRET_OPTS) at the stable path
+        // /run/secrets/vault-token regardless of the per-launch secret name;
+        // podman's --secret target= rewrites the mount.
         args.push("--secret".into());
-        args.push(format!("{secret_name},target=vault-token,mode=0400"));
+        args.push(format!("{secret_name},{GIT_VAULT_TOKEN_SECRET_OPTS}"));
         args.push("--env".into());
         args.push("VAULT_ADDR=https://vault:8200".into());
         args.push("--env".into());
@@ -2669,7 +2714,8 @@ fn build_opencode_forge_args(
 ///    - `inference` — ollama-based LLM inference container
 ///    - `chromium-core` — Base Chromium image for browser isolation
 ///    - `chromium-framework` — Chromium browser with framework integration (depends on chromium-core)
-///    - `forge` — Dev environment: coding agents, compilation, package management
+///    - `forge-base` — Heavy, reusable Forge toolchain layer
+///    - `forge` — Dev environment configuration (depends on forge-base)
 /// 4. **Track progress**: For each image, report:
 ///    - SKIP: Image already cached and build previously successful
 ///    - REBUILD: Image deleted after successful build (rebuild)
@@ -2814,6 +2860,7 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
         "router",
         "chromium-core",
         "chromium-framework",
+        "forge-base",
         "forge",
         "web",
     ];
@@ -2849,8 +2896,7 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
     let mut identities = HashMap::<String, ImageBuildIdentity>::new();
 
     for image in &images {
-        let (build_args, dependency_digests) =
-            image_build_inputs(image, identities.get("chromium-core"))?;
+        let (build_args, dependency_digests) = image_build_inputs(image, &identities)?;
         let identity = runtime_assets::image_identity(
             &root,
             image,
@@ -3223,6 +3269,7 @@ fn cleanup_init_logs() {
         "router",
         "chromium-core",
         "chromium-framework",
+        "forge-base",
         "forge",
     ] {
         let log_path = PathBuf::from(format!("/tmp/tillandsias-init-{}.log", image));
@@ -3608,6 +3655,30 @@ fn podman_command() -> Command {
     podman_cmd_sync()
 }
 
+/// In-container token entry for `--github-login`.
+///
+/// We deliberately avoid `gh auth login`'s interactive masked prompt: it puts
+/// the container pty into raw, char-at-a-time mode, and a long token pasted
+/// over `podman exec -it` can pick up bracketed-paste escape bytes
+/// (`ESC[200~ … ESC[201~`) or be truncated, so gh ends up validating garbage
+/// and GitHub returns `401 Bad credentials`.
+///
+/// Instead we read the token with a plain shell `read` (cooked line mode, which
+/// does not enable bracketed paste, so the terminal delivers the pasted text
+/// verbatim) and pipe it straight into `gh auth login --with-token`. The token
+/// is read, held, and consumed entirely inside the container — the host process
+/// still never sees it. `read -rs` keeps the input hidden, matching the old UX.
+const GH_LOGIN_TOKEN_SCRIPT: &str = r#"
+printf 'Paste your GitHub authentication token (input hidden), then press Enter: ' > /dev/tty
+IFS= read -rs TOKEN < /dev/tty
+printf '\n' > /dev/tty
+if [ -z "$TOKEN" ]; then
+  printf 'No token entered; aborting GitHub login.\n' >&2
+  exit 1
+fi
+printf '%s' "$TOKEN" | gh auth login --hostname github.com --git-protocol https --with-token
+"#;
+
 /// Container-side bridge for the retired Tauri `--github-login` path.
 ///
 /// The host runtime only assumes Podman. GitHub CLI runs inside the git service
@@ -3665,7 +3736,10 @@ fn run_github_login(debug: bool) -> Result<(), String> {
             "--network",
             ENCLAVE_NET,
             "--secret",
-            &format!("{},target=vault-token", vault_lease.secret_name()),
+            &format!(
+                "{},{GIT_VAULT_TOKEN_SECRET_OPTS}",
+                vault_lease.secret_name()
+            ),
             "--cap-drop=ALL",
             "--security-opt=no-new-privileges",
             "--userns=keep-id",
@@ -3699,19 +3773,18 @@ fn run_github_login(debug: bool) -> Result<(), String> {
         run_command_silent(run, debug)?;
     }
 
+    // Token entry runs inside the container via a robust `read` + `--with-token`
+    // pipe (see GH_LOGIN_TOKEN_SCRIPT) rather than gh's raw-mode masked prompt,
+    // which corrupts pasted tokens over `podman exec -it`.
     let mut login = podman_command();
     login.args([
         "exec",
         "--interactive",
         "--tty",
         &container,
-        "gh",
-        "auth",
-        "login",
-        "--hostname",
-        "github.com",
-        "--git-protocol",
-        "https",
+        "/bin/bash",
+        "-c",
+        GH_LOGIN_TOKEN_SCRIPT,
     ]);
     run_command(login, debug)?;
 
@@ -3798,6 +3871,51 @@ fn run_github_login(debug: bool) -> Result<(), String> {
     }
 
     Ok(())
+}
+
+/// Headless diagnostic for the remote-projects path. Brings Vault online and
+/// runs the same containerized `gh api user/repos` fetch the tray uses, then
+/// prints the result and how long it took. This is the deterministic way to
+/// confirm "list remote projects with the saved token" without the tray's
+/// async menu lifecycle.
+/// @trace spec:remote-projects
+#[cfg(all(feature = "vault", any(feature = "tray", feature = "listen-vsock")))]
+fn run_list_cloud_projects(debug: bool) -> Result<(), String> {
+    require_desktop_user_session("tillandsias --list-cloud-projects")?;
+    report_runtime_lane("--list-cloud-projects", debug);
+
+    vault_bootstrap::ensure_vault_running(debug)?;
+    if !vault_bootstrap::is_github_logged_in(debug) {
+        return Err(
+            "no GitHub credential in Vault — run `tillandsias --github-login` first".to_string(),
+        );
+    }
+
+    let start = std::time::Instant::now();
+    let projects = remote_projects::discover_github_projects_result_with_debug(debug)?;
+    let elapsed = start.elapsed();
+
+    println!(
+        "[tillandsias] fetched {} remote project(s) in {:.2}s",
+        projects.len(),
+        elapsed.as_secs_f64()
+    );
+    for project in &projects {
+        let desc = project.description.as_deref().unwrap_or("");
+        println!("  {}/{}  {}", project.owner, project.name, desc);
+    }
+    if projects.is_empty() {
+        println!("  (no owned, non-archived repositories returned)");
+    }
+    Ok(())
+}
+
+#[cfg(not(all(feature = "vault", any(feature = "tray", feature = "listen-vsock"))))]
+fn run_list_cloud_projects(_debug: bool) -> Result<(), String> {
+    Err(
+        "this build lacks remote-projects support (requires the `vault` and `tray` features)"
+            .to_string(),
+    )
 }
 
 #[derive(Default)]
@@ -6203,6 +6321,16 @@ pub(crate) fn launch_forge_agent(
         );
     }
 
+    // Unconditional progress receipt: bringing the enclave online can take
+    // several seconds (and minutes on the very first run if the proxy/git/
+    // inference/forge images still need building). Without this line a menu
+    // click looks like it did nothing until the terminal window finally opens.
+    // @trace spec:tray-ux
+    eprintln!(
+        "[tillandsias] launch_forge_agent: preparing enclave for '{project_name}' ({} agent); the terminal opens once it's ready…",
+        mode.slug()
+    );
+
     let certs_dir = ensure_enclave_for_project(project_name, Some(&canonical), debug)?;
 
     let argv =
@@ -7602,12 +7730,31 @@ mod tests {
         let args = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, Some(secret));
 
         // The vault token secret MUST be mounted at the stable path
-        // /run/secrets/vault-token so the in-container vault-cli helper
-        // reads it without knowing the per-launch secret name.
-        let secret_arg = format!("{secret},target=vault-token,mode=0400");
+        // /run/secrets/vault-token, owned by the git user (uid 1000) so the
+        // in-container vault-cli helper can actually read it under keep-id.
+        let secret_arg = format!("{secret},{GIT_VAULT_TOKEN_SECRET_OPTS}");
         assert!(
             args.iter().any(|a| a == &secret_arg),
             "expected vault token secret arg `{secret_arg}` in args: {args:?}"
+        );
+
+        // Regression pin (literal, NOT derived from the constant): the secret
+        // MUST be owned by the git user (uid/gid 1000). Podman defaults
+        // `--secret` to root:root, and a root-owned mode 0400 file is
+        // unreadable by the container's unprivileged `git` user under
+        // `--userns=keep-id` — `vault-cli` then reports "no Vault token at
+        // /run/secrets/vault-token" and the git-mirror push silently falls back
+        // to interactive auth. Asserting the literal here (rather than
+        // reformatting the constant) is what actually catches a regression.
+        // @trace spec:git-mirror-service, spec:tillandsias-vault
+        let mounted = args
+            .iter()
+            .find(|a| a.contains("target=vault-token"))
+            .expect("vault-token secret must be mounted");
+        assert!(
+            mounted.contains("uid=1000") && mounted.contains("gid=1000"),
+            "vault-token secret must be owned by the git user (uid/gid 1000) \
+             so it is readable under keep-id; got `{mounted}`"
         );
 
         // The container needs VAULT_ADDR + VAULT_ROLE to know how to talk
@@ -8389,6 +8536,12 @@ mod tests {
         // @trace spec:init-command
         let root = find_checkout_root().expect("should find repo root");
 
+        // Test forge base image (uses "images/default/Containerfile.base")
+        let (containerfile, context) =
+            image_specs(&root, "forge-base").expect("forge base image specs should be resolvable");
+        assert!(containerfile.ends_with("images/default/Containerfile.base"));
+        assert!(context.ends_with("images/default"));
+
         // Test forge image (uses "images/default/Containerfile")
         let (containerfile, context) =
             image_specs(&root, "forge").expect("forge image specs should be resolvable");
@@ -8479,8 +8632,9 @@ mod tests {
             latest_alias: "localhost/tillandsias-chromium-core:latest".to_string(),
             labels: BTreeMap::new(),
         };
+        let identities = HashMap::from([("chromium-core".to_string(), core.clone())]);
         let (build_args, dependency_digests) =
-            image_build_inputs("chromium-framework", Some(&core)).unwrap();
+            image_build_inputs("chromium-framework", &identities).unwrap();
 
         assert_eq!(
             build_args.get("CHROMIUM_CORE_IMAGE"),
@@ -8494,14 +8648,37 @@ mod tests {
 
     #[test]
     fn image_build_inputs_are_empty_for_non_framework_images() {
-        for image in ["proxy", "forge", "git"] {
-            let (build_args, dependency_digests) = image_build_inputs(image, None).unwrap();
+        for image in ["proxy", "forge-base", "git"] {
+            let (build_args, dependency_digests) =
+                image_build_inputs(image, &HashMap::new()).unwrap();
             assert!(build_args.is_empty(), "{image} should have no build args");
             assert!(
                 dependency_digests.is_empty(),
                 "{image} should have no dependency digests"
             );
         }
+    }
+
+    #[test]
+    fn image_build_inputs_include_forge_base_identity_for_forge() {
+        let base = ImageBuildIdentity {
+            source_digest: "sha256:forge-base".to_string(),
+            canonical_tag: "localhost/tillandsias-forge-base:sha256-forge-base".to_string(),
+            version_alias: "localhost/tillandsias-forge-base:v1.0.0".to_string(),
+            latest_alias: "localhost/tillandsias-forge-base:latest".to_string(),
+            labels: BTreeMap::new(),
+        };
+        let identities = HashMap::from([("forge-base".to_string(), base)]);
+        let (build_args, dependency_digests) = image_build_inputs("forge", &identities).unwrap();
+
+        assert_eq!(
+            build_args.get("BASE_IMAGE"),
+            Some(&"localhost/tillandsias-forge-base:sha256-forge-base".to_string())
+        );
+        assert_eq!(
+            dependency_digests.get("forge-base"),
+            Some(&"sha256:forge-base".to_string())
+        );
     }
 
     #[test]
@@ -8556,14 +8733,15 @@ mod tests {
     #[test]
     fn init_command_defines_required_images_in_order() {
         // Test that run_init builds images in the correct order: proxy, git,
-        // inference, router, chromium-core, chromium-framework, forge, web.
+        // inference, router, chromium-core, chromium-framework, forge-base, forge, web.
         // @trace spec:init-command, spec:init-incremental-builds
         // NOTE: This test validates the IMAGE BUILD ORDER, which is critical for
         // chromium-framework (depends on chromium-core) and inter-image dependencies.
         // The actual build execution is skipped here; we test the order specification.
 
         // The images array from run_init defines the build order:
-        // proxy -> git -> inference -> router -> chromium-core -> chromium-framework -> forge -> web
+        // proxy -> git -> inference -> router -> chromium-core -> chromium-framework
+        // -> forge-base -> forge -> web
         let images = [
             "proxy",
             "git",
@@ -8571,6 +8749,7 @@ mod tests {
             "router",
             "chromium-core",
             "chromium-framework",
+            "forge-base",
             "forge",
             "web",
         ];
@@ -8600,6 +8779,12 @@ mod tests {
         assert!(
             core_idx < framework_idx,
             "chromium-core must be built before chromium-framework"
+        );
+        let forge_base_idx = images.iter().position(|&i| i == "forge-base").unwrap();
+        let forge_idx = images.iter().position(|&i| i == "forge").unwrap();
+        assert!(
+            forge_base_idx < forge_idx,
+            "forge-base must be built before forge"
         );
     }
 
