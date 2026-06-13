@@ -535,6 +535,46 @@ async fn handle_connection(
                 // emitted by the pump task on child exit.
                 pty_store.close_host_initiated(session_id).await;
             }
+            ControlMessage::DeliverCredentials {
+                seq,
+                unseal_share_b64,
+                installation_uuid,
+                root_token,
+            } => {
+                crate::vault_bootstrap::set_in_vm_credentials(
+                    unseal_share_b64,
+                    installation_uuid,
+                    root_token,
+                );
+                let reply = ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: env.seq,
+                    body: ControlMessage::DeliverCredentialsReply {
+                        seq_in_reply_to: seq,
+                        success: true,
+                    },
+                };
+                if write_envelope(&mut stream, &reply).await.is_err() {
+                    return;
+                }
+            }
+            ControlMessage::GetVaultHandover { seq } => {
+                let (unseal_share_b64, root_token) = crate::vault_bootstrap::get_pending_handover();
+                crate::vault_bootstrap::clear_pending_handover();
+
+                let reply = ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: env.seq,
+                    body: ControlMessage::VaultHandoverReply {
+                        seq_in_reply_to: seq,
+                        unseal_share_b64,
+                        root_token,
+                    },
+                };
+                if write_envelope(&mut stream, &reply).await.is_err() {
+                    return;
+                }
+            }
             // Convergence-packet pre-filter caught Unsupported and
             // ResponseOnly above; reaching this arm means the matrix
             // says Handle but no handler exists yet. Surface the gap

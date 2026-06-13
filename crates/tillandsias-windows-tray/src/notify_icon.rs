@@ -771,6 +771,11 @@ fn collect_status_report() -> StatusReport {
                 };
             }
         };
+        if let Err(err) =
+            crate::installation_uuid::deliver_credentials_and_check_handover(&mut client).await
+        {
+            tracing::warn!(%err, "credentials delivery failed during status_once");
+        }
         let seq = client.allocate_seq();
         let envelope = ControlEnvelope {
             wire_version: WIRE_VERSION,
@@ -995,6 +1000,11 @@ async fn refresh_vm_status(hwnd: HWND) {
         mark_wire_unreachable(hwnd);
         return;
     }
+    if let Err(err) =
+        crate::installation_uuid::deliver_credentials_and_check_handover(&mut client).await
+    {
+        tracing::warn!(%err, "vm status poll: credentials delivery/handover failed");
+    }
     let seq = client.allocate_seq();
     let envelope = ControlEnvelope {
         wire_version: WIRE_VERSION,
@@ -1089,6 +1099,11 @@ async fn refresh_local_projects(_hwnd: HWND) {
     if let Err(err) = client.handshake().await {
         tracing::debug!(%err, "local projects refresh: handshake failed");
         return;
+    }
+    if let Err(err) =
+        crate::installation_uuid::deliver_credentials_and_check_handover(&mut client).await
+    {
+        tracing::warn!(%err, "local projects refresh: credentials delivery/handover failed");
     }
     let seq = client.allocate_seq();
     let envelope = ControlEnvelope {
@@ -1230,6 +1245,11 @@ async fn refresh_cloud_projects(_hwnd: HWND) {
     if let Err(err) = client.handshake().await {
         tracing::debug!(%err, "cloud refresh: handshake failed");
         return;
+    }
+    if let Err(err) =
+        crate::installation_uuid::deliver_credentials_and_check_handover(&mut client).await
+    {
+        tracing::warn!(%err, "cloud refresh: credentials delivery/handover failed");
     }
     let seq = client.allocate_seq();
     let envelope = ControlEnvelope {
@@ -1538,6 +1558,9 @@ fn collect_report() -> DiagnoseReport {
                     last_event: None,
                     error: Some(format!("handshake: {err}")),
                 };
+            }
+            if let Err(err) = crate::installation_uuid::deliver_credentials_and_check_handover(&mut client).await {
+                tracing::warn!(%err, "credentials delivery / handover check failed during monitor cycle");
             }
             let seq = client.allocate_seq();
             let envelope = ControlEnvelope {

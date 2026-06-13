@@ -46,6 +46,96 @@ const KEYCHAIN_SERVICE: &str = "tillandsias";
 const VAULT_SHAMIR_SHARE_V1: &str = "vault-shamir-share-v1";
 /// Keychain user for the installation anchor (UUID).
 const INSTALL_ANCHOR_V1: &str = "installation-uuid-v1";
+
+#[cfg(feature = "vault")]
+#[derive(Debug, Clone)]
+pub struct InVmCredentials {
+    pub unseal_share_b64: Option<String>,
+    pub installation_uuid: String,
+    pub root_token: Option<String>,
+}
+
+#[cfg(feature = "vault")]
+#[derive(Debug, Clone)]
+pub struct PendingHandover {
+    pub unseal_share_b64: Option<String>,
+    pub root_token: Option<String>,
+}
+
+#[cfg(feature = "vault")]
+pub static IN_VM_CREDENTIALS: OnceLock<Mutex<Option<InVmCredentials>>> = OnceLock::new();
+#[cfg(feature = "vault")]
+pub static PENDING_HANDOVER: OnceLock<Mutex<Option<PendingHandover>>> = OnceLock::new();
+
+#[cfg(feature = "vault")]
+pub fn set_in_vm_credentials(
+    unseal_share_b64: Option<String>,
+    installation_uuid: String,
+    root_token: Option<String>,
+) {
+    let cell = IN_VM_CREDENTIALS.get_or_init(|| Mutex::new(None));
+    if let Ok(mut guard) = cell.lock() {
+        *guard = Some(InVmCredentials {
+            unseal_share_b64,
+            installation_uuid,
+            root_token,
+        });
+    }
+}
+
+#[cfg(feature = "vault")]
+pub fn get_pending_handover() -> (Option<String>, Option<String>) {
+    let cell = PENDING_HANDOVER.get_or_init(|| Mutex::new(None));
+    if let Ok(guard) = cell.lock() {
+        if let Some(handover) = &*guard {
+            return (
+                handover.unseal_share_b64.clone(),
+                handover.root_token.clone(),
+            );
+        }
+    }
+    (None, None)
+}
+
+#[cfg(feature = "vault")]
+pub fn clear_pending_handover() {
+    let cell = PENDING_HANDOVER.get_or_init(|| Mutex::new(None));
+    if let Ok(mut guard) = cell.lock() {
+        *guard = None;
+    }
+}
+
+#[cfg(feature = "vault")]
+pub fn is_running_in_vm() -> bool {
+    if let Some(cell) = IN_VM_CREDENTIALS.get() {
+        if let Ok(guard) = cell.lock() {
+            return guard.is_some();
+        }
+    }
+    false
+}
+
+#[cfg(not(feature = "vault"))]
+pub fn set_in_vm_credentials(
+    _unseal_share_b64: Option<String>,
+    _installation_uuid: String,
+    _root_token: Option<String>,
+) {
+}
+
+#[cfg(not(feature = "vault"))]
+pub fn get_pending_handover() -> (Option<String>, Option<String>) {
+    (None, None)
+}
+
+#[cfg(not(feature = "vault"))]
+pub fn clear_pending_handover() {}
+
+#[cfg(not(feature = "vault"))]
+pub fn is_running_in_vm() -> bool {
+    false
+}
+
 const VAULT_USER_UID: u32 = 100;
 const VAULT_GROUP_GID: u32 = 1000;
 
@@ -586,6 +676,40 @@ fn repo_script(name: &str) -> PathBuf {
 fn ensure_unseal_key(debug: bool) -> Result<[u8; 32], String> {
     use base64::Engine;
 
+    if is_running_in_vm() {
+        if let Some(cell) = IN_VM_CREDENTIALS.get()
+            && let Ok(guard) = cell.lock()
+            && let Some(creds) = &*guard
+        {
+            if let Some(encoded) = &creds.unseal_share_b64 {
+                if let Ok(key_vec) = base64::engine::general_purpose::STANDARD.decode(encoded)
+                    && key_vec.len() == 32
+                {
+                    if debug {
+                        eprintln!(
+                            "[tillandsias-vault] recovered Shamir unseal share from host-delivered credentials (v1, base64)"
+                        );
+                    }
+                    let mut key = [0u8; 32];
+                    key.copy_from_slice(&key_vec);
+                    return Ok(key);
+                }
+            }
+            // 2. Not in host credentials (first boot). Return derived dummy key from delivered installation_uuid.
+            if debug {
+                eprintln!(
+                    "[tillandsias-vault] Shamir share not present in host credentials; deriving first-boot dummy key K"
+                );
+            }
+            let machine_id = read_machine_id()?;
+            let dummy_key = auto_unseal::derive_unseal_key(
+                machine_id.as_bytes(),
+                creds.installation_uuid.as_bytes(),
+            );
+            return Ok(dummy_key);
+        }
+    }
+
     // 1. Try to get the Shamir share from the keychain
     let entry = Entry::new(KEYCHAIN_SERVICE, VAULT_SHAMIR_SHARE_V1)
         .map_err(|e| format!("keyring entry for shamir share: {e}"))?;
@@ -1009,8 +1133,23 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
                 "[tillandsias-vault] fresh-init handover present; capturing root token + Shamir share into keychain (overwriting any stale entries)"
             );
         }
-        keychain_set_blocking("vault-root-token-v1", &token)?;
-        keychain_set_blocking(VAULT_SHAMIR_SHARE_V1, &share_b64)?;
+        if is_running_in_vm() {
+            if debug {
+                eprintln!(
+                    "[tillandsias-vault] running in VM; storing fresh-init handover in memory for host query"
+                );
+            }
+            let cell = PENDING_HANDOVER.get_or_init(|| Mutex::new(None));
+            if let Ok(mut guard) = cell.lock() {
+                *guard = Some(PendingHandover {
+                    unseal_share_b64: Some(share_b64),
+                    root_token: Some(token.clone()),
+                });
+            }
+        } else {
+            keychain_set_blocking("vault-root-token-v1", &token)?;
+            keychain_set_blocking(VAULT_SHAMIR_SHARE_V1, &share_b64)?;
+        }
 
         // @trace spec:tillandsias-vault — Secure Artifact Cleanup
         // Delete the handover files from tmpfs immediately. Remove the files
@@ -1036,6 +1175,22 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
     }
 
     // 2. Subsequent boot (no fresh handover): use the keychain root token.
+    if is_running_in_vm() {
+        if let Some(cell) = IN_VM_CREDENTIALS.get()
+            && let Ok(guard) = cell.lock()
+            && let Some(creds) = &*guard
+            && let Some(token) = &creds.root_token
+        {
+            if debug {
+                eprintln!(
+                    "[tillandsias-vault] recovered root token from host-delivered credentials"
+                );
+            }
+            return Ok(token.clone());
+        }
+        return Err("running in VM but no root token delivered from host".to_string());
+    }
+
     let entry_token = Entry::new(KEYCHAIN_SERVICE, "vault-root-token-v1")
         .map_err(|e| format!("keyring entry for root token: {e}"))?;
     let token_res = std::thread::spawn(move || entry_token.get_password())
