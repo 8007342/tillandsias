@@ -2642,7 +2642,7 @@ plan_index:
     - id: cross-platform-vault-keychain-parity
       order: 36
       title: Cross-platform Vault keychain + vsock unseal-key parity
-      status: ready
+      status: done
       owner_host: macos+windows
       deliverable: plan/steps/36-cross-platform-vault-keychain-parity.md
       audit_origin: plan/issues/pre-vault-obsolescence-audit-2026-06-05.md
@@ -2657,7 +2657,7 @@ plan_index:
         - "tillandsias-vault.security.transparent-auto-unseal@v3 honored on all platforms (spec mandates keychain on all, not just Linux)."
       tasks:
         - id: xplat-vault/macos
-          status: claimed
+          status: done
           owner_host: macos
           depends_on: [vault-hardening-true-rekey]
           owned_files:
@@ -2672,6 +2672,13 @@ plan_index:
               host: "macos"
               lease_id: "lease-macos-xplat-vault-20260613T143000Z"
               expires_at: "2026-06-13T18:30:00Z"
+            - type: completed
+              ts: "2026-06-13T14:32:00Z"
+              agent_id: "macos-tlatoani-antigravity-20260613T143000Z"
+              host: "macos"
+              lease_id: "lease-macos-xplat-vault-20260613T143000Z"
+              evidence_refs:
+                - "commit:3686caaa0da8e1f0b6ec09497119de1f1dcec5d0"
         - id: xplat-vault/windows
           status: done
           owner_host: windows
