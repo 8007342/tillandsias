@@ -49,6 +49,16 @@ pub struct VzRuntime {
     vm: std::sync::Mutex<Option<vm_handle::VmHandle>>,
 }
 
+#[cfg(target_os = "macos")]
+impl Drop for VzRuntime {
+    fn drop(&mut self) {
+        let cidata_path = self.image_root.join("cidata.iso");
+        if cidata_path.exists() {
+            let _ = std::fs::remove_file(&cidata_path);
+        }
+    }
+}
+
 /// Send+Sync wrapper around `Retained<VZVirtualMachine>` so `VzRuntime` can
 /// satisfy `Send + Sync` (required by the `VmRuntime` trait).
 ///
@@ -63,9 +73,24 @@ pub struct VzRuntime {
 #[cfg(target_os = "macos")]
 mod vm_handle {
     use objc2::rc::Retained;
+    use objc2_foundation::NSError;
     use objc2_virtualization::VZVirtualMachine;
 
     pub(crate) struct VmHandle(pub Retained<VZVirtualMachine>);
+
+    impl VmHandle {
+        pub(crate) fn start_and_report(self, tx: std::sync::mpsc::Sender<Result<(), String>>) {
+            let handler = block2::RcBlock::new(move |err: *mut NSError| {
+                let result = if err.is_null() {
+                    Ok(())
+                } else {
+                    Err(unsafe { (*err).localizedDescription() }.to_string())
+                };
+                let _ = tx.send(result);
+            });
+            unsafe { self.0.startWithCompletionHandler(&handler) };
+        }
+    }
 
     // SAFETY: see module docstring.
     unsafe impl Send for VmHandle {}
@@ -317,6 +342,125 @@ impl VzRuntime {
         .map_err(OpenVsockError::Connect)?;
 
         crate::transport_macos::VsockStream::from_vsock_fd(fd).map_err(OpenVsockError::Stream)
+    }
+
+    /// Generate a `cidata.iso` image using `hdiutil makehybrid`.
+    #[cfg(target_os = "macos")]
+    fn generate_cidata_iso(&self, dest: &Path) -> Result<(), String> {
+        let temp_dir = self.image_root.join("cidata_tmp");
+        if temp_dir.exists() {
+            let _ = std::fs::remove_dir_all(&temp_dir);
+        }
+        std::fs::create_dir_all(&temp_dir)
+            .map_err(|e| format!("failed to create cidata temp dir: {e}"))?;
+
+        // 1. Write user-data
+        let user_data_content = r#"#!/bin/bash
+set -euo pipefail
+
+# Inject SSH keys for debugging
+mkdir -p /root/.ssh
+chmod 700 /root/.ssh
+echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDGkwkOhAxGExE4dJUbIOMaVf8g0m0nSAp/JGzOxILfW tlatoani@Tlatoanis-MacBook-Air.local" >> /root/.ssh/authorized_keys
+chmod 600 /root/.ssh/authorized_keys
+
+mkdir -p /home/fedora/.ssh
+chmod 700 /home/fedora/.ssh
+echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDGkwkOhAxGExE4dJUbIOMaVf8g0m0nSAp/JGzOxILfW tlatoani@Tlatoanis-MacBook-Air.local" >> /home/fedora/.ssh/authorized_keys
+chown -R fedora:fedora /home/fedora/.ssh
+chmod 600 /home/fedora/.ssh/authorized_keys
+
+# Create directory
+mkdir -p /usr/local/lib/tillandsias
+
+# Write fetch-headless.sh
+cat > /usr/local/lib/tillandsias/fetch-headless.sh << 'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+DEST="/usr/local/bin/tillandsias-headless"
+if [[ -x "$DEST" ]]; then exit 0; fi
+ARCH="$(uname -m)"
+URL="https://github.com/8007342/tillandsias/releases/latest/download/tillandsias-headless-${ARCH}-unknown-linux-musl"
+curl --fail --location --retry 5 --retry-delay 3 --connect-timeout 20 --output "$DEST" "$URL"
+chmod 0755 "$DEST"
+EOF
+chmod 0755 /usr/local/lib/tillandsias/fetch-headless.sh
+
+# Write tillandsias-headless-fetch.service
+cat > /etc/systemd/system/tillandsias-headless-fetch.service << 'EOF'
+[Unit]
+Description=Fetch tillandsias-headless on first boot
+After=network-online.target
+Wants=network-online.target
+Before=tillandsias-headless.service
+ConditionPathExists=!/usr/local/bin/tillandsias-headless
+[Service]
+Type=oneshot
+RemainAfterExit=yes
+ExecStart=/usr/local/lib/tillandsias/fetch-headless.sh
+TimeoutStartSec=300s
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Write tillandsias-headless.service
+cat > /etc/systemd/system/tillandsias-headless.service << 'EOF'
+[Unit]
+Description=Tillandsias headless (in-VM vsock control wire)
+After=network-online.target tillandsias-headless-fetch.service
+Requires=tillandsias-headless-fetch.service
+[Service]
+Type=exec
+ExecStart=/usr/local/bin/tillandsias-headless --listen-vsock 42420
+Restart=on-failure
+RestartSec=2s
+[Install]
+WantedBy=multi-user.target
+EOF
+
+# Reload and enable services
+systemctl daemon-reload
+systemctl enable tillandsias-headless-fetch.service tillandsias-headless.service
+systemctl start tillandsias-headless-fetch.service tillandsias-headless.service
+"#;
+
+        std::fs::write(temp_dir.join("user-data"), user_data_content)
+            .map_err(|e| format!("failed to write user-data: {e}"))?;
+
+        // 2. Write meta-data
+        let meta_data_content = r#"instance-id: tillandsias-vm-1
+local-hostname: tillandsias-vm
+"#;
+
+        std::fs::write(temp_dir.join("meta-data"), meta_data_content)
+            .map_err(|e| format!("failed to write meta-data: {e}"))?;
+
+        // 3. run hdiutil makehybrid -o <dest> -joliet -iso -default-volume-name CIDATA <temp_dir>
+        if dest.exists() {
+            let _ = std::fs::remove_file(dest);
+        }
+
+        let output = std::process::Command::new("hdiutil")
+            .arg("makehybrid")
+            .arg("-o")
+            .arg(dest)
+            .arg("-joliet")
+            .arg("-iso")
+            .arg("-default-volume-name")
+            .arg("CIDATA")
+            .arg(&temp_dir)
+            .output()
+            .map_err(|e| format!("failed to run hdiutil: {e}"))?;
+
+        // Clean up temp dir
+        let _ = std::fs::remove_dir_all(&temp_dir);
+
+        if !output.status.success() {
+            let stderr = String::from_utf8_lossy(&output.stderr);
+            return Err(format!("hdiutil failed: {stderr}"));
+        }
+
+        Ok(())
     }
 }
 
@@ -621,6 +765,8 @@ pub mod boot {
         /// useful for "does the framework accept the rest of my config"
         /// smoke tests, but won't actually boot anything.
         pub root_disk: Option<PathBuf>,
+        /// Optional cloud-init CIDATA ISO path.
+        pub cidata_iso: Option<PathBuf>,
         /// Persistent EFI variable store path. `None` skips NVRAM, which
         /// makes the EFI bootloader invalid; callers should always pass
         /// `Some(...)` for a bootable VM (the file is created if missing).
@@ -640,6 +786,7 @@ pub mod boot {
                 cpu_count: 2,
                 memory_bytes: 2 * 1024 * 1024 * 1024,
                 root_disk: None,
+                cidata_iso: None,
                 nvram: None,
                 serial_writer_fd: None,
             }
@@ -688,7 +835,9 @@ pub mod boot {
             let efi_super: &VZBootLoader = &efi;
             cfg.setBootLoader(Some(efi_super));
 
-            // virtio-blk root disk (optional).
+            // Storage devices (root disk and optional cidata ISO).
+            let mut storage_devices = Vec::new();
+
             if let Some(path) = &spec.root_disk {
                 let url = ns_url_for_path(path);
                 let att = VZDiskImageStorageDeviceAttachment::initWithURL_readOnly_error(
@@ -701,8 +850,27 @@ pub mod boot {
                     VZVirtioBlockDeviceConfiguration::alloc(),
                     &att,
                 );
+                storage_devices.push(Retained::cast(blk));
+            }
+
+            if let Some(path) = &spec.cidata_iso {
+                let url = ns_url_for_path(path);
+                let att = VZDiskImageStorageDeviceAttachment::initWithURL_readOnly_error(
+                    VZDiskImageStorageDeviceAttachment::alloc(),
+                    &url,
+                    true,
+                )
+                .map_err(|e| format!("cidata attach: {}", e.localizedDescription()))?;
+                let blk = VZVirtioBlockDeviceConfiguration::initWithAttachment(
+                    VZVirtioBlockDeviceConfiguration::alloc(),
+                    &att,
+                );
+                storage_devices.push(Retained::cast(blk));
+            }
+
+            if !storage_devices.is_empty() {
                 let arr: Retained<NSArray<VZStorageDeviceConfiguration>> =
-                    NSArray::from_id_slice(&[Retained::cast(blk)]);
+                    NSArray::from_id_slice(&storage_devices);
                 cfg.setStorageDevices(&arr);
             }
 
@@ -801,6 +969,43 @@ pub mod boot {
         }
     }
 
+    /// Schedule `f` onto libdispatch's main queue. VZ start/stop APIs assert
+    /// queue affinity, while the tray calls into this runtime from worker
+    /// tasks to avoid blocking AppKit.
+    pub fn dispatch_to_main_queue<F>(f: F)
+    where
+        F: FnOnce() + Send + 'static,
+    {
+        unsafe extern "C" {
+            static _dispatch_main_q: std::ffi::c_void;
+            fn dispatch_async_f(
+                queue: *const std::ffi::c_void,
+                context: *mut std::ffi::c_void,
+                work: extern "C" fn(*mut std::ffi::c_void),
+            );
+        }
+
+        extern "C" fn trampoline<F: FnOnce()>(ctx: *mut std::ffi::c_void) {
+            // SAFETY: `ctx` is created by Box::into_raw immediately below and
+            // is consumed exactly once by libdispatch.
+            unsafe {
+                let boxed = Box::from_raw(ctx as *mut F);
+                (*boxed)();
+            }
+        }
+
+        let boxed: Box<F> = Box::new(f);
+        let ctx = Box::into_raw(boxed) as *mut std::ffi::c_void;
+        // SAFETY: `_dispatch_main_q` is libdispatch's process-wide main queue.
+        unsafe {
+            dispatch_async_f(
+                &_dispatch_main_q as *const std::ffi::c_void,
+                ctx,
+                trampoline::<F>,
+            );
+        }
+    }
+
     // ─── small helpers ────────────────────────────────────────────────────
 
     fn ns_url_for_path(p: &Path) -> Retained<NSURL> {
@@ -892,7 +1097,6 @@ impl VmRuntime for VzRuntime {
 
     async fn start(&self) -> Result<(), VmError> {
         use objc2::ClassType;
-        use objc2_foundation::NSError;
         use objc2_virtualization::VZVirtualMachine;
         use std::time::Instant;
 
@@ -921,12 +1125,16 @@ impl VmRuntime for VzRuntime {
             }
         }
 
+        let cidata_iso_path = self.image_root.join("cidata.iso");
+        self.generate_cidata_iso(&cidata_iso_path)?;
+
         let spec = boot::VzBootConfig {
             cpu_count: std::thread::available_parallelism()
                 .map(|n| n.get().min(4))
                 .unwrap_or(2),
             memory_bytes: 4 * 1024 * 1024 * 1024,
             root_disk: Some(rootfs),
+            cidata_iso: Some(cidata_iso_path),
             nvram: Some(self.image_root.join("nvram.bin")),
             serial_writer_fd: None,
         };
@@ -943,15 +1151,8 @@ impl VmRuntime for VzRuntime {
         // elapses. The pump blocks this thread; the caller must run start()
         // on `tokio::task::spawn_blocking` if invoked from an async runtime.
         let (tx, rx) = std::sync::mpsc::channel::<Result<(), String>>();
-        let handler = block2::RcBlock::new(move |err: *mut NSError| {
-            let result = if err.is_null() {
-                Ok(())
-            } else {
-                Err(unsafe { (*err).localizedDescription() }.to_string())
-            };
-            let _ = tx.send(result);
-        });
-        unsafe { vm.startWithCompletionHandler(&handler) };
+        let vm_for_start = vm_handle::VmHandle(vm.clone());
+        boot::dispatch_to_main_queue(move || vm_for_start.start_and_report(tx));
 
         let deadline = Instant::now() + Duration::from_secs(30);
         loop {
@@ -1012,13 +1213,13 @@ impl VmRuntime for VzRuntime {
         }
 
         let deadline = Instant::now() + drain_timeout;
-        loop {
+        let stop_res = loop {
             // VZ state enum: 0=Stopped, 1=Running, 2=Paused, 3=Error, 4=Starting,
             // 5=Pausing, 6=Resuming, 7=Stopping, 8=Saving, 9=Restoring.
             let state = unsafe { vm.state() }.0;
             if state == 0 {
                 // Stopped cleanly.
-                return Ok(());
+                break Ok(());
             }
             if Instant::now() >= deadline {
                 // Drain timeout — try a hard stop. `stop:completionHandler:`
@@ -1036,13 +1237,24 @@ impl VmRuntime for VzRuntime {
                     }
                     boot::pump_cf_loop_for(Duration::from_millis(100));
                 }
-                return Err(format!(
+                break Err(format!(
                     "VzRuntime::stop: drain_timeout ({}s) expired; force-stop dispatched",
                     drain_timeout.as_secs()
                 ));
             }
             boot::pump_cf_loop_for(Duration::from_millis(250));
+        };
+
+        // Explicitly drop handle to release VZ and unlock any files.
+        drop(handle);
+
+        // Clean up the cidata ISO.
+        let cidata_path = self.image_root.join("cidata.iso");
+        if cidata_path.exists() {
+            let _ = std::fs::remove_file(&cidata_path);
         }
+
+        stop_res
     }
 
     async fn exec(&self, _argv: &[&str]) -> Result<ExitStatus, VmError> {

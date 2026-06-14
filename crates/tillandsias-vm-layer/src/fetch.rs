@@ -175,9 +175,8 @@ pub async fn download_verified(
 
     let client = reqwest::Client::builder()
         .connect_timeout(std::time::Duration::from_secs(10))
-        // Set a timeout for the initial response + each chunk. 30s is enough
-        // for headers/stalls; the overall download time is not capped.
-        .timeout(std::time::Duration::from_secs(30))
+        // Do not set a total request timeout here: large VM images can take
+        // minutes on slow links, and retry/resume handles interrupted bodies.
         .build()
         .map_err(|e| format!("build http client: {e}"))?;
     let mut req = client.get(&artifact.url);

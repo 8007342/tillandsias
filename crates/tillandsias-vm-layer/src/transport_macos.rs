@@ -39,7 +39,78 @@ use objc2_foundation::NSError;
 use objc2_virtualization::{VZVirtioSocketConnection, VZVirtioSocketDevice, VZVirtualMachine};
 use tokio::io::{AsyncRead, AsyncWrite, ReadBuf, unix::AsyncFd};
 
-use crate::vz::boot::pump_cf_loop_for;
+use crate::vz::boot::{dispatch_to_main_queue, pump_cf_loop_for};
+
+struct VmForConnect(Retained<VZVirtualMachine>);
+
+// SAFETY: mirrors `vz::vm_handle::VmHandle`; VZ VM-management calls are
+// dispatched onto the main queue before touching the retained object.
+unsafe impl Send for VmForConnect {}
+
+struct SocketConnection(Retained<VZVirtioSocketConnection>);
+
+// SAFETY: `VZVirtioSocketConnection` owns an established POSIX fd. We only
+// move the retained connection back to the waiting worker after the
+// main-queue `connectToPort` completion fires, then keep it alive in `VsockFd`.
+unsafe impl Send for SocketConnection {}
+unsafe impl Sync for SocketConnection {}
+
+impl VmForConnect {
+    fn connect_and_report(
+        self,
+        port: u32,
+        tx: std::sync::mpsc::Sender<Result<SocketConnection, ConnectError>>,
+    ) {
+        // Walk the VM's runtime socket-devices list. VFR exposes exactly one
+        // VZVirtioSocketDevice per VZVirtioSocketDeviceConfiguration added to
+        // the VZVirtualMachineConfiguration; we use the first.
+        let devices = unsafe { self.0.socketDevices() };
+        if devices.count() == 0 {
+            let _ = tx.send(Err(ConnectError::NoSocketDevice));
+            return;
+        }
+        // SAFETY: index 0 is within bounds (count > 0 checked above).
+        let first = unsafe { devices.objectAtIndex(0) };
+        // Downcast: VZVirtioSocketDevice IS a VZSocketDevice subclass and is
+        // the only kind VFR instantiates from our config, so the cast is sound.
+        // Verify via -isKindOfClass: before the unsafe cast to fail-closed on
+        // any future framework addition.
+        use objc2::ClassType;
+        let is_virtio: bool = unsafe {
+            let cls = <VZVirtioSocketDevice as ClassType>::class();
+            let obj: &objc2::runtime::AnyObject = first.as_ref().as_ref();
+            objc2::msg_send![obj, isKindOfClass: cls]
+        };
+        if !is_virtio {
+            let _ = tx.send(Err(ConnectError::UnexpectedSocketDeviceKind));
+            return;
+        }
+        // SAFETY: verified above via isKindOfClass.
+        let vsock_dev: Retained<VZVirtioSocketDevice> = unsafe { Retained::cast(first) };
+
+        let handler = block2::RcBlock::new(
+            move |conn_ptr: *mut VZVirtioSocketConnection, err_ptr: *mut NSError| {
+                let result = if !err_ptr.is_null() {
+                    let desc = unsafe { (*err_ptr).localizedDescription() }.to_string();
+                    Err(ConnectError::VzError(desc))
+                } else if conn_ptr.is_null() {
+                    Err(ConnectError::NullConnection)
+                } else {
+                    // SAFETY: VZ delivers an owned reference per documented
+                    // semantics; we wrap it in `Retained` so the retain count
+                    // is balanced when `Retained` drops.
+                    let conn = unsafe { Retained::retain(conn_ptr) };
+                    match conn {
+                        Some(c) => Ok(SocketConnection(c)),
+                        None => Err(ConnectError::NullConnection),
+                    }
+                };
+                let _ = tx.send(result);
+            },
+        );
+        unsafe { vsock_dev.connectToPort_completionHandler(port, &handler) };
+    }
+}
 
 /// Raw vsock fd + the keep-alive `VZVirtioSocketConnection` that owns it.
 /// Drop the wrapper to release both. The `Retained` field is what keeps the
@@ -296,68 +367,21 @@ impl std::error::Error for ConnectError {}
 ///
 /// @trace spec:vsock-transport, spec:vm-idiomatic-layer
 pub fn connect_to_vm_vsock(
-    vm: &VZVirtualMachine,
+    vm: &Retained<VZVirtualMachine>,
     port: u32,
     timeout: Duration,
 ) -> Result<VsockFd, ConnectError> {
-    use block2::RcBlock;
-
-    // Walk the VM's runtime socket-devices list. VFR exposes exactly one
-    // VZVirtioSocketDevice per VZVirtioSocketDeviceConfiguration added to
-    // the VZVirtualMachineConfiguration; we use the first.
-    let devices = unsafe { vm.socketDevices() };
-    if devices.count() == 0 {
-        return Err(ConnectError::NoSocketDevice);
-    }
-    // SAFETY: index 0 is within bounds (count > 0 checked above).
-    let first = unsafe { devices.objectAtIndex(0) };
-    // Downcast: VZVirtioSocketDevice IS a VZSocketDevice subclass and is
-    // the only kind VFR instantiates from our config, so the cast is sound.
-    // Verify via -isKindOfClass: before the unsafe cast to fail-closed on
-    // any future framework addition.
-    use objc2::ClassType;
-    let is_virtio: bool = unsafe {
-        let cls = <VZVirtioSocketDevice as ClassType>::class();
-        let obj: &objc2::runtime::AnyObject = first.as_ref().as_ref();
-        objc2::msg_send![obj, isKindOfClass: cls]
-    };
-    if !is_virtio {
-        return Err(ConnectError::UnexpectedSocketDeviceKind);
-    }
-    // SAFETY: verified above via isKindOfClass.
-    let vsock_dev: Retained<VZVirtioSocketDevice> = unsafe { Retained::cast(first) };
-
     // Bridge VZ's dispatch-queue completion handler to this thread via a
     // mpsc channel; pump CFRunLoop until the result arrives or `timeout`
     // elapses.
-    let (tx, rx) =
-        std::sync::mpsc::channel::<Result<Retained<VZVirtioSocketConnection>, ConnectError>>();
-    let handler = RcBlock::new(
-        move |conn_ptr: *mut VZVirtioSocketConnection, err_ptr: *mut NSError| {
-            let result = if !err_ptr.is_null() {
-                let desc = unsafe { (*err_ptr).localizedDescription() }.to_string();
-                Err(ConnectError::VzError(desc))
-            } else if conn_ptr.is_null() {
-                Err(ConnectError::NullConnection)
-            } else {
-                // SAFETY: VZ delivers an owned reference per documented
-                // semantics; we wrap it in `Retained` so the retain count
-                // is balanced when `Retained` drops.
-                let conn = unsafe { Retained::retain(conn_ptr) };
-                match conn {
-                    Some(c) => Ok(c),
-                    None => Err(ConnectError::NullConnection),
-                }
-            };
-            let _ = tx.send(result);
-        },
-    );
-    unsafe { vsock_dev.connectToPort_completionHandler(port, &handler) };
+    let (tx, rx) = std::sync::mpsc::channel::<Result<SocketConnection, ConnectError>>();
+    let vm_for_connect = VmForConnect(vm.clone());
+    dispatch_to_main_queue(move || vm_for_connect.connect_and_report(port, tx));
 
     let deadline = Instant::now() + timeout;
     loop {
         if let Ok(result) = rx.try_recv() {
-            let conn = result?;
+            let SocketConnection(conn) = result?;
             let fd = unsafe { conn.fileDescriptor() };
             return Ok(VsockFd {
                 fd,

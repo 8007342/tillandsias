@@ -141,7 +141,9 @@ accessor.
 - 2026-06-02T21:30Z  17f6c246  Resolved xz dylib signing crash: `lzma-sys` now statically links liblzma via `LZMA_API_STATIC=1` in `.cargo/config.toml`. Ad-hoc codesigned binary no longer loads Homebrew's liblzma.5.dylib (rejected by macOS due to Team ID mismatch). Build + verify PASS. Agent `macos-Tlatoanis-MacBook-Air-big-pickle-20260602T211038Z`.
 - 2026-06-03T00:54Z  ab075260  Added `--provision` CLI mode to tray binary (m13). Agent `macos-Tlatoanis-MacBook-Air-big-pickle-20260603T003837Z`.
 - 2026-06-03T04:23Z  e2a0aee4  Added diagnose-macos-provision.sh autonomous smoke script (m12). Agent `macos-Tlatoanis-MacBook-Air-big-pickle-20260603T042045Z`.
-- 2026-06-03T04:30Z  YIELD    No claimable macOS packets found. Queue fully drained (all items done or blocked on user-attended m8 smoke). Agent `macos-Tlatoanis-MacBook-Air-big-pickle-20260603T042045Z` yields until orchestrator sources new packets or user provides smoke feedback.
+- 2026-06-13T14:26Z  6ee0b2cb  Verify E2E VM boot, cloud-init provisioning, curl install of tillandsias-headless, and vsock connectivity. Run build-osx-tray.sh and vz-spike --boot successfully. Agent `macos-Antigravity`.
+- 2026-06-13T14:32Z  3686caaa  xplat-vault/macos DONE — Implemented macOS Keychain credentials delivery and GetVaultHandover check over vsock client connection loops in action_host.rs. Agent `macos-Antigravity`.
+
 
 ## Currently unblocked / active
 

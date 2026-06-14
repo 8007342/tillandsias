@@ -280,6 +280,12 @@ async fn poll_vm_status_once(
         .await
         .map_err(|e| format!("control-wire handshake: {e}"))?;
 
+    if let Err(err) =
+        crate::installation_uuid::deliver_credentials_and_check_handover(&mut client).await
+    {
+        tracing::warn!(%err, "credentials delivery / handover check failed during status poll");
+    }
+
     let envelope = ControlEnvelope {
         wire_version: WIRE_VERSION,
         seq: client.allocate_seq(),
@@ -437,6 +443,12 @@ async fn poll_local_projects_once(
         .await
         .map_err(|e| format!("control-wire handshake: {e}"))?;
 
+    if let Err(err) =
+        crate::installation_uuid::deliver_credentials_and_check_handover(&mut client).await
+    {
+        tracing::warn!(%err, "credentials delivery / handover check failed during local projects poll");
+    }
+
     let seq = client.allocate_seq();
     let envelope = ControlEnvelope {
         wire_version: WIRE_VERSION,
@@ -521,6 +533,12 @@ async fn poll_cloud_projects_once(
         .handshake()
         .await
         .map_err(|e| format!("control-wire handshake: {e}"))?;
+
+    if let Err(err) =
+        crate::installation_uuid::deliver_credentials_and_check_handover(&mut client).await
+    {
+        tracing::warn!(%err, "credentials delivery / handover check failed during cloud projects poll");
+    }
 
     let seq = client.allocate_seq();
     let envelope = ControlEnvelope {
