@@ -196,6 +196,17 @@ impl WslLifecycle {
         )
         .await?;
 
+        // The Fedora Container Base OCI image is init-less and minimal: it ships
+        // no systemd (so `systemctl enable` in inject_bootstrap_logic exits 127),
+        // no podman (the in-VM forge runtime), and no dbus (systemd-logind — and
+        // thus the user-runtime lane's XDG_RUNTIME_DIR — needs it). Install them
+        // BEFORE configure_recipe_distro flips wsl.conf to systemd-as-PID1, so the
+        // post-flip boot actually finds a systemd to run.
+        // @trace plan/issues/smoke-e2e-findings-v0.3.260614.1-2026-06-14.md
+        //   (smoke-finding/container-base-missing-systemd-podman)
+        progress.report_message("\u{1F4E6} Installing systemd + podman in Fedora base...");
+        self.ensure_base_packages().await?;
+
         // Fedora official images need wsl.conf for systemd, and our bootstrap
         // units for the vsock control wire.
         progress.report_message("\u{2699}\u{FE0F} Configuring Fedora distro...");
@@ -220,6 +231,38 @@ impl WslLifecycle {
         Err(format!(
             "control-wire handshake did not succeed within budget: {last_err}"
         ))
+    }
+
+    /// Install + configure what the Fedora **Container Base** OCI image lacks
+    /// but a working in-VM tillandsias runtime needs. That image is init-less
+    /// and stripped, so a clean import has none of:
+    ///   * `systemd` — WSL boots it as PID1 (wsl.conf `systemd=true`) and runs
+    ///     the headless units; without it `systemctl enable` exits 127.
+    ///   * `podman` — the in-VM forge/container runtime.
+    ///   * `dbus-broker` — `systemd-logind` needs it, and logind in turn provides
+    ///     the user-runtime lane's `/run/user/<uid>` (XDG_RUNTIME_DIR).
+    ///   * `newuidmap`/`newgidmap` filecaps — container images strip the setuid
+    ///     caps `shadow-utils` ships, so rootless podman dies with
+    ///     "newuidmap: write to uid_map failed: Operation not permitted". Restore
+    ///     them with `setcap`.
+    ///   * `openssl` CLI — enclave bring-up shells out to `openssl req` to mint
+    ///     the Vault HTTPS CA; the minimal base has the libs but not the binary,
+    ///     so without it init dies "bringing Vault up: ... (os error 2)".
+    ///
+    /// Runs BEFORE `configure_recipe_distro` flips wsl.conf to systemd-as-PID1,
+    /// so the post-flip boot actually finds a systemd to run. Idempotent: `rpm -q`
+    /// guards the install and `setcap` is safe to repeat, so the registered-distro
+    /// fast path and re-provision stay cheap.
+    ///
+    /// @trace plan/issues/smoke-e2e-findings-v0.3.260614.1-2026-06-14.md
+    ///   (smoke-finding/container-base-missing-systemd-podman)
+    async fn ensure_base_packages(&self) -> Result<(), String> {
+        const SETUP: &str = r#"set -e
+rpm -q systemd podman dbus-broker libcap shadow-utils openssl >/dev/null 2>&1 || dnf install -y systemd podman dbus-broker libcap shadow-utils openssl
+for b in /usr/bin/newuidmap /usr/sbin/newuidmap; do [ -e "$b" ] && setcap cap_setuid+ep "$b" || true; done
+for b in /usr/bin/newgidmap /usr/sbin/newgidmap; do [ -e "$b" ] && setcap cap_setgid+ep "$b" || true; done
+"#;
+        self.wsl_root_sh(SETUP).await
     }
 
     /// Inject the `fetch-headless.sh` script and systemd units into the

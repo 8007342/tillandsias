@@ -13,6 +13,28 @@ This is **BLOCKED on linux step 32** (true-rekey lands the shared contract Windo
 — not claimable until step 32 completes. Optional independent item: wire
 `EnumerateLocalProjects`. No new autonomous Windows **step-36** code packet until step 32 lands.
 
+## 2026-06-14 — recipe completion: Fedora-44 WSL2 provisioning FIXED + verified; 2 Vault blockers filed
+
+Operator directive: complete the recipe so it launches Fedora44 in WSL2, curl-installs
+tillandsias, and runs `tillandsias --init --debug` inside. Drove the full chain on real
+Win11 hardware (the Linux rootfs fix `bf6b0d03` had never been built/run on Windows).
+
+- 2026-06-14T08:46Z `0d6858ee`+openssl  **RECIPE FIX (durable, in-tree, VALIDATED).**
+  `wsl_lifecycle.rs::ensure_base_packages()` installs systemd+podman+dbus-broker+libcap+
+  shadow-utils+openssl and restores newuidmap/newgidmap caps before the systemd flip.
+  Clean `--provision-once` now: download→OCI-flatten→`wsl --import`→install→systemd boot→
+  in-VM headless fetched (39MB) + ACTIVE on vsock 42420, reachable over HvSocket
+  (`--status-once`: reachable:true, wire_version:2, phase:Starting). `container-base-missing-systemd-podman` → DONE.
+- Proven: curl-install of Linux tillandsias inside the WSL2 works; ALL 9 enclave images +
+  the Vault image BUILD successfully inside.
+- **BLOCKED at Vault first-boot** (filed, Linux-runtime scope):
+  `smoke-finding/init-vault-firstboot-hang-headless` — standalone `tillandsias --init`
+  hangs after "deriving first-boot dummy key K" (no vault container; timeout INIT_EXIT=137;
+  Vault HEALTHCHECK ignored under OCI format). And `smoke-finding/provision-once-ready-budget-too-short`
+  (windows) — 60s Ready budget + no keepalive can't cover cold first-boot.
+- Rootless user-lane prereqs documented (linger, cgroupfs, gnome-keyring/dbus Secret Service).
+  All in `plan/issues/smoke-e2e-findings-v0.3.260614.1-2026-06-14.md`.
+
 ## 2026-06-14 — smoke E2E of published v0.3.260614.1 — HALTED at provisioning (rootfs 404)
 
 Windows-equivalent run of `/smoke-curl-install-and-test-e2e` against the fresh
