@@ -9,7 +9,7 @@ Discovered by `/smoke-curl-install-and-test-e2e` skill execution.
 - id: `smoke-finding/rootless-podman-ipv6-timeout`
 - owner_host: linux
 - capability_tags: [podman, runtime, testing]
-- status: ready
+- status: done
 - discovered_by: `/smoke-curl-install-and-test-e2e` on release `v0.3.260609.3`
 - evidence:
   - `target/smoke-e2e/03-init.log:17` — `[tillandsias] build-proxy: fetch https://dl-cdn.alpinelinux.org/alpine/v3.20/main/x86_64/APKINDEX.tar.gz` (hung indefinitely)
@@ -23,6 +23,20 @@ Discovered by `/smoke-curl-install-and-test-e2e` skill execution.
     ts: `2026-06-12T21:44:00Z`
     agent_id: `linux-tlatoani-gemini-3.5-flash-2026-06-12`
     host: linux
+  - type: claim
+    ts: `2026-06-14T00:25:00Z`
+    agent_id: `linux-tlatoani-gemini-20260614T001417Z`
+    host: linux
+    lease_id: `lease-linux-rootless-podman-ipv6-20260614T002500Z`
+    expires_at: `2026-06-14T04:25:00Z`
+  - type: completed
+    ts: `2026-06-14T00:26:00Z`
+    agent_id: `linux-tlatoani-gemini-20260614T001417Z`
+    host: linux
+    commits:
+      - `9b493d7a`
+    validation_logs:
+      - `/home/tlatoani/.gemini/antigravity/brain/993e15ab-af60-4fef-bab0-6fa945ba436e/.system_generated/tasks/task-427.log`
 
 ---
 
@@ -31,7 +45,7 @@ Discovered by `/smoke-curl-install-and-test-e2e` skill execution.
 - id: `smoke-finding/vault-init-build-path-spawn`
 - owner_host: linux
 - capability_tags: [rust, vault, testing, release]
-- status: ready
+- status: done
 - discovered_by: `/smoke-curl-install-and-test-e2e` on release `v0.3.260609.3`
 - evidence:
   - `target/smoke-e2e/03-init.log:3769` — `[tillandsias-vault] running /build/source/scripts/build-image.sh vault`
@@ -45,3 +59,17 @@ Discovered by `/smoke-curl-install-and-test-e2e` skill execution.
     ts: `2026-06-12T21:50:00Z`
     agent_id: `linux-tlatoani-gemini-3.5-flash-2026-06-12`
     host: linux
+  - type: claim
+    ts: `2026-06-14T00:19:00Z`
+    agent_id: `linux-tlatoani-gemini-20260614T001417Z`
+    host: linux
+    lease_id: `lease-linux-vault-init-build-path-20260614T001900Z`
+    expires_at: `2026-06-14T04:19:00Z`
+  - type: completed
+    ts: `2026-06-14T00:25:00Z`
+    agent_id: `linux-tlatoani-gemini-20260614T001417Z`
+    host: linux
+    commits:
+      - `c35077f5`
+    validation_logs:
+      - `/home/tlatoani/.gemini/antigravity/brain/993e15ab-af60-4fef-bab0-6fa945ba436e/.system_generated/tasks/task-293.log`

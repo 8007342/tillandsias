@@ -260,6 +260,7 @@ fn image_context_rel(image_name: &str) -> Result<&'static str, String> {
         "web" => Ok("images/web"),
         "router" => Ok("images/router"),
         "chromium-core" | "chromium-framework" => Ok("images/chromium"),
+        "vault" => Ok("images/vault"),
         other => Err(format!("Unknown image type: {other}")),
     }
 }
@@ -315,6 +316,7 @@ mod tests {
         for required in [
             "images/default/Containerfile.base",
             "images/default/Containerfile",
+            "images/default/skills/advance-work-from-plan/SKILL.md",
             "images/proxy/allowlist.txt",
             "images/router/tillandsias-router-sidecar",
             "scripts/manage-cache.sh",
@@ -323,6 +325,81 @@ mod tests {
                 paths.contains(required),
                 "missing embedded asset {required}"
             );
+        }
+    }
+
+    #[test]
+    fn every_containerfile_copy_source_exists_in_embedded_assets() {
+        let embedded_paths = EMBEDDED_RUNTIME_ASSETS
+            .iter()
+            .map(|asset| asset.path)
+            .collect::<std::collections::HashSet<_>>();
+
+        // List of all containerfiles and their context directories
+        let containerfiles = [
+            ("images/default/Containerfile.base", "images/default"),
+            ("images/default/Containerfile", "images/default"),
+            ("images/proxy/Containerfile", "images/proxy"),
+            ("images/git/Containerfile", "images/git"),
+            ("images/inference/Containerfile", "images/inference"),
+            ("images/web/Containerfile", "images/web"),
+            ("images/router/Containerfile", "images/router"),
+            ("images/chromium/Containerfile.core", "images/chromium"),
+            ("images/chromium/Containerfile.framework", "images/chromium"),
+            ("images/vault/Containerfile", "images/vault"),
+        ];
+
+        for (cf_rel_path, context_dir) in containerfiles {
+            let cf_asset = EMBEDDED_RUNTIME_ASSETS
+                .iter()
+                .find(|asset| asset.path == cf_rel_path)
+                .unwrap_or_else(|| panic!("Containerfile asset not embedded: {cf_rel_path}"));
+
+            let cf_content = std::str::from_utf8(cf_asset.bytes)
+                .unwrap_or_else(|e| panic!("Containerfile {cf_rel_path} is not valid UTF-8: {e}"));
+
+            for line in cf_content.lines() {
+                let trimmed = line.trim();
+                if trimmed.starts_with("COPY ") {
+                    let tokens = trimmed.split_whitespace().skip(1);
+                    let mut sources = Vec::new();
+                    let mut dest = None;
+
+                    for token in tokens {
+                        if token.starts_with("--") {
+                            continue;
+                        }
+                        if let Some(d) = dest {
+                            sources.push(d);
+                        }
+                        dest = Some(token);
+                    }
+
+                    assert!(!sources.is_empty(), "No sources found in COPY line: {line}");
+
+                    for src in sources {
+                        let clean_src = src.trim_matches(|c| c == '"' || c == '\'' || c == '/');
+                        let expected_prefix = if clean_src.is_empty() {
+                            format!("{context_dir}/")
+                        } else {
+                            format!("{context_dir}/{clean_src}")
+                        };
+
+                        let found = embedded_paths.iter().any(|path| {
+                            if path == &expected_prefix {
+                                true
+                            } else {
+                                path.starts_with(&format!("{expected_prefix}/"))
+                            }
+                        });
+
+                        assert!(
+                            found,
+                            "Containerfile {cf_rel_path} COPY source {src} (resolved as {expected_prefix}) not found in embedded assets"
+                        );
+                    }
+                }
+            }
         }
     }
 

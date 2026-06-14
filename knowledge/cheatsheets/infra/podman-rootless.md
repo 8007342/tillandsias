@@ -81,6 +81,8 @@ Rootless containers never gain privileges beyond the invoking user on the host:
 
 **cgroup v2.** Rootless resource limits (CPU, memory) require cgroup v2 with delegation enabled. Verify with `cat /sys/fs/cgroup/user.slice/user-$(id -u).slice/cgroup.controllers`.
 
+**IPv6 network timeout on hosts with broken IPv6.** Since Podman 5.0, the default rootless networking backend is `pasta`. If the host OS is assigned a dynamically allocated IPv6 address but does not have a functional IPv6 default route or internet access, network requests (like package fetching inside `podman build`) will hang or time out. Fix: configure rootless Podman to disable IPv6 by writing `pasta_options = ["--ipv4-only"]` under the `[network]` section in `~/.config/containers/containers.conf`.
+
 ## Upstream Sources
 
 - [Rootless tutorial](https://github.com/containers/podman/blob/main/docs/tutorials/rootless_tutorial.md) -- step-by-step setup
