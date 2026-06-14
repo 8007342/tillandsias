@@ -5,6 +5,12 @@ use std::io::Write;
 use std::os::unix::fs::PermissionsExt;
 use std::path::{Path, PathBuf};
 
+#[derive(Debug, Clone, Eq, PartialEq)]
+struct Asset {
+    source: PathBuf,
+    dest: String,
+}
+
 fn main() {
     let manifest_dir = PathBuf::from(std::env::var("CARGO_MANIFEST_DIR").unwrap());
     let repo_root = manifest_dir
@@ -15,21 +21,26 @@ fn main() {
     let generated = out_dir.join("runtime_assets_generated.rs");
 
     let mut assets = Vec::new();
-    collect_files(&repo_root.join("images"), &mut assets);
-    collect_files(&repo_root.join("observatorium"), &mut assets);
+    collect_assets(&repo_root.join("images"), &repo_root.join("images"), repo_root, "", &mut assets);
+    collect_assets(&repo_root.join("observatorium"), &repo_root.join("observatorium"), repo_root, "", &mut assets);
+    collect_assets(&repo_root.join("skills"), &repo_root.join("skills"), repo_root, "images/default/skills", &mut assets);
+
     for rel in ["scripts/manage-cache.sh", "scripts/run-observatorium.sh"] {
         let path = repo_root.join(rel);
         if path.is_file() {
-            assets.push(path);
+            assets.push(Asset {
+                source: path.clone(),
+                dest: rel.to_string(),
+            });
         } else {
             panic!("required runtime asset missing: {}", path.display());
         }
     }
 
-    assets.sort();
+    assets.sort_by(|a, b| a.dest.cmp(&b.dest));
 
-    for path in &assets {
-        println!("cargo:rerun-if-changed={}", path.display());
+    for asset in &assets {
+        println!("cargo:rerun-if-changed={}", asset.source.display());
     }
     println!(
         "cargo:rerun-if-changed={}",
@@ -38,6 +49,10 @@ fn main() {
     println!(
         "cargo:rerun-if-changed={}",
         repo_root.join("observatorium").display()
+    );
+    println!(
+        "cargo:rerun-if-changed={}",
+        repo_root.join("skills").display()
     );
     println!(
         "cargo:rerun-if-changed={}",
@@ -64,6 +79,7 @@ fn main() {
         "observatorium/index.html",
         "scripts/manage-cache.sh",
         "scripts/run-observatorium.sh",
+        "skills/advance-work-from-plan/SKILL.md",
     ];
     for rel in required {
         if !repo_root.join(rel).is_file() {
@@ -83,18 +99,13 @@ fn main() {
     )
     .unwrap();
 
-    for path in assets {
-        let rel = path
-            .strip_prefix(repo_root)
-            .expect("asset under repo root")
-            .to_string_lossy()
-            .replace('\\', "/");
-        let abs = path.to_string_lossy();
-        let executable = is_executable(&path);
+    for asset in assets {
+        let abs = asset.source.to_string_lossy();
+        let executable = is_executable(&asset.source);
         writeln!(
             file,
             "    EmbeddedRuntimeAsset {{ path: {:?}, bytes: include_bytes!({:?}), executable: {} }},",
-            rel, abs, executable
+            asset.dest, abs, executable
         )
         .unwrap();
     }
@@ -102,7 +113,7 @@ fn main() {
     writeln!(file, "];").unwrap();
 }
 
-fn collect_files(dir: &Path, out: &mut Vec<PathBuf>) {
+fn collect_assets(dir: &Path, collection_root: &Path, repo_root: &Path, dest_prefix: &str, out: &mut Vec<Asset>) {
     if !dir.is_dir() {
         panic!(
             "required runtime asset directory missing: {}",
@@ -125,10 +136,33 @@ fn collect_files(dir: &Path, out: &mut Vec<PathBuf>) {
                 path.display()
             );
         }
+
+        let rel_repo = path
+            .strip_prefix(repo_root)
+            .expect("asset under repo root")
+            .to_string_lossy()
+            .replace('\\', "/");
+
+        // Skip images/default/skills if we are collecting the images/ directory recursively.
+        if dest_prefix.is_empty() && rel_repo.starts_with("images/default/skills") {
+            continue;
+        }
+
         if meta.is_dir() {
-            collect_files(&path, out);
+            collect_assets(&path, collection_root, repo_root, dest_prefix, out);
         } else if meta.is_file() {
-            out.push(path);
+            let dest = if !dest_prefix.is_empty() {
+                let sub_rel = path
+                    .strip_prefix(collection_root)
+                    .expect("sub-asset under collection root")
+                    .to_string_lossy()
+                    .replace('\\', "/");
+                format!("{dest_prefix}/{sub_rel}")
+            } else {
+                rel_repo.clone()
+            };
+
+            out.push(Asset { source: path, dest });
         }
     }
 }
