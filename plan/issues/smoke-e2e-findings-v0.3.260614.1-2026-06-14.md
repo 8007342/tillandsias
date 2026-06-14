@@ -55,7 +55,7 @@ artifact**, so every clean Windows (and macOS, same template) provision 404s.
 - id: `smoke-finding/fedora-rootfs-artifact-url-404`
 - owner_host: linux            # canonical fix is in images/vm/manifest.toml (recipe scope); blocks windows+macos
 - capability_tags: [recipe, vm-layer, fedora, podman, release, wsl]
-- status: ready
+- status: claimed
 - discovered_by: `/smoke-curl-install-and-test-e2e` on release `v0.3.260614.1`
 - severity: high — blocks ALL clean-room Windows/macOS provisioning (and HEAD: the
   current `images/vm/manifest.toml` still pins the same dead URL, so a re-cut
@@ -90,6 +90,12 @@ artifact**, so every clean Windows (and macOS, same template) provision 404s.
     ts: "2026-06-14T02:25:31Z"
     agent_id: "windows-yolanda-claude-20260614T004000Z"
     host: windows
+  - type: claim
+    ts: "2026-06-14T02:30:29Z"
+    agent_id: "linux-macuahuitl-codex-20260614T023029Z"
+    host: linux
+    lease_id: "a78bab78943e"
+    expires_at: "2026-06-14T06:30:29Z"
 
 ---
 
