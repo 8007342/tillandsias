@@ -27,7 +27,6 @@ use tillandsias_podman::podman_cmd_sync;
 use tillandsias_vault_client::{Policy, VaultClient, auto_unseal};
 use zeroize::Zeroize;
 
-const VAULT_IMAGE_TAG: &str = "localhost/tillandsias-vault:latest";
 const VAULT_CONTAINER_NAME: &str = "tillandsias-vault";
 const VAULT_VOLUME: &str = "tillandsias-vault-data";
 const VAULT_UNSEAL_SECRET: &str = "tillandsias-vault-unseal";
@@ -365,13 +364,13 @@ pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
     #[cfg(feature = "vault")]
     sanitize_keychain(debug);
 
-    build_vault_image(debug)?;
+    let vault_image_tag = build_vault_image(debug)?;
     refresh_vault_tls_secrets(&certs_dir, debug)?;
 
     let mut unseal_key = ensure_unseal_key(debug)?;
     create_unseal_secret(&unseal_key, debug)?;
     unseal_key.zeroize();
-    launch_vault_container(debug)?;
+    launch_vault_container(&vault_image_tag, debug)?;
 
     let rt = tokio_runtime()?;
     let base_url = host_base_url();
@@ -639,7 +638,7 @@ pub async fn revoke_pending_container_tokens(debug: bool) {
     }
 }
 
-fn build_vault_image(debug: bool) -> Result<(), String> {
+fn build_vault_image(debug: bool) -> Result<String, String> {
     let version = crate::VERSION.trim();
     let root = crate::resolve_runtime_asset_root(version, debug)?;
     let build_args = std::collections::BTreeMap::new();
@@ -668,7 +667,7 @@ fn build_vault_image(debug: bool) -> Result<(), String> {
 
     crate::build_image_with_logging(&root, "vault", &identity, &build_args, &log_file, debug)?;
 
-    Ok(())
+    Ok(identity.canonical_tag)
 }
 
 /// Retrieve the versioned unseal key from the host OS keychain, or derive
@@ -942,7 +941,25 @@ fn refresh_vault_tls_secrets(certs_dir: &std::path::Path, debug: bool) -> Result
     )
 }
 
-fn launch_vault_container(debug: bool) -> Result<(), String> {
+fn canonical_vault_launch_tag(image_tag: &str) -> Result<&str, String> {
+    let digest = image_tag
+        .strip_prefix("localhost/tillandsias-vault:sha256-")
+        .ok_or_else(|| {
+            format!(
+                "refusing to launch Vault from non-canonical image tag {image_tag}; expected localhost/tillandsias-vault:sha256-<digest>"
+            )
+        })?;
+    if digest.len() != 64 || !digest.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(format!(
+            "refusing to launch Vault from malformed canonical image tag {image_tag}"
+        ));
+    }
+    Ok(image_tag)
+}
+
+fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
+    let image_tag = canonical_vault_launch_tag(image_tag)?;
+
     // Tear down any previous container with the same name (idempotent).
     let _ = podman_cmd_sync()
         .args(["rm", "-f", VAULT_CONTAINER_NAME])
@@ -1031,7 +1048,7 @@ fn launch_vault_container(debug: bool) -> Result<(), String> {
             "keep-id",
             "-p",
             &port_arg,
-            VAULT_IMAGE_TAG,
+            image_tag,
         ])
         .stdout(Stdio::null())
         .stderr(Stdio::inherit())
@@ -1325,5 +1342,17 @@ mod tests {
         assert_eq!(APPROLE_TOKEN_TTL_SECS, 3_600);
         // 24h ceiling matches the spec's max_ttl guidance.
         assert_eq!(APPROLE_TOKEN_MAX_TTL_SECS, 86_400);
+    }
+
+    #[test]
+    fn vault_launch_requires_the_content_addressed_image_tag() {
+        let digest = "a".repeat(64);
+        let canonical = format!("localhost/tillandsias-vault:sha256-{digest}");
+        assert_eq!(
+            canonical_vault_launch_tag(&canonical).expect("canonical tag"),
+            canonical
+        );
+        assert!(canonical_vault_launch_tag("localhost/tillandsias-vault:latest").is_err());
+        assert!(canonical_vault_launch_tag("localhost/tillandsias-vault:sha256-short").is_err());
     }
 }
