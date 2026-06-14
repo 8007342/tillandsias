@@ -1,12 +1,12 @@
 {
-  "generated_at": "2026-06-14T07:07:09Z",
+  "generated_at": "2026-06-14T09:03:52Z",
   "title": "Progression Trends",
   "series_namespace": "local_development",
   "series_label": "Local Development",
   "source_file": "target/convergence/centicolon-signature.jsonl",
-  "record_count": 68,
-  "sparkline_closed": "██▁███████████████████████████▁██▁██████▅█████▁█▁█▁███████▇███▆▇████",
-  "sparkline_residual": "▁▁█▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁█▁▁█▁▁▁▁▁▁▄▁▁▁▁▁█▁█▁█▁▁▁▁▁▁▁▂▁▁▁▃▂▁▁▁▁",
+  "record_count": 69,
+  "sparkline_closed": "██▁███████████████████████████▁██▁██████▅█████▁█▁█▁███████▇███▆▇█████",
+  "sparkline_residual": "▁▁█▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁▁█▁▁█▁▁▁▁▁▁▄▁▁▁▁▁█▁█▁█▁▁▁▁▁▁▁▂▁▁▁▃▂▁▁▁▁▁",
   "alert_level": "green",
   "alert_thresholds": {
     "red_below_percent_closed": 90,
@@ -83,19 +83,19 @@
     "kind": "closed",
     "start_release": "0.3.260613.1",
     "start_commit": "cfb03a553dbe",
-    "end_release": "0.3.260614.1",
-    "end_commit": "6235e4f3660d",
-    "count": 4,
-    "closed": "████",
-    "residual": "▁▁▁▁"
+    "end_release": "0.3.260614.2",
+    "end_commit": "7a13484064d5",
+    "count": 5,
+    "closed": "█████",
+    "residual": "▁▁▁▁▁"
   }
 ],
   "latest": {
-  "release": "0.3.260614.1",
-  "date": "2026-06-14T06:21:35Z",
-  "commit": "6235e4f3660d",
-  "total_cc": 750,
-  "earned_cc": 750,
+  "release": "0.3.260614.2",
+  "date": "2026-06-14T07:03:11Z",
+  "commit": "7a13484064d5",
+  "total_cc": 1010,
+  "earned_cc": 1010,
   "residual_cc": 0,
   "percent_closed": 100,
   "worst_spec": "n/a",
@@ -103,7 +103,7 @@
   "evidence": "target/convergence/evidence-bundle.json",
   "projection": "docs/convergence/centicolon-dashboard.md",
   "ci_result": "PASS",
-  "ci_run_id": "local-ci-20260614T062135Z",
+  "ci_run_id": "local-ci-20260614T070311Z",
   "trend_glyph": ""
 },
   "history": [
@@ -1193,6 +1193,22 @@
     "projection": "docs/convergence/centicolon-dashboard.md",
     "ci_result": "PASS",
     "ci_run_id": "local-ci-20260614T062135Z",
+    "trend_glyph": ""
+  },
+  {
+    "release": "0.3.260614.2",
+    "date": "2026-06-14T07:03:11Z",
+    "commit": "7a13484064d5",
+    "total_cc": 1010,
+    "earned_cc": 1010,
+    "residual_cc": 0,
+    "percent_closed": 100,
+    "worst_spec": "n/a",
+    "worst_reason": "n/a",
+    "evidence": "target/convergence/evidence-bundle.json",
+    "projection": "docs/convergence/centicolon-dashboard.md",
+    "ci_result": "PASS",
+    "ci_run_id": "local-ci-20260614T070311Z",
     "trend_glyph": ""
   }
 ]
