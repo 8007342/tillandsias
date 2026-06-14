@@ -3006,7 +3006,7 @@ plan_index:
               known_repo_wide_failures:
                 - "./build.sh --ci --spec tillandsias-vault still fails pre-existing gates: VERSION behind v0.3.260608.2+, repo-wide fmt drift, unrelated clippy::type_complexity in main.rs:1043, and pre-existing signal_handling timeout."
         - id: vault-flow/xplat-gating-parity
-          status: in_progress
+          status: ready
           owner_host: macos+windows
           depends_on: [vault-flow/tray-gate-on-vault]
           unblocked_note: "Original blockers cleared: step 32 (vault-hardening-true-rekey) DONE, step 36 (xplat-vault/windows + /macos) DONE, and 42a (vault-flow/tray-gate-on-vault) completed and merged to windows-next. Windows slice is now in progress."
@@ -3050,6 +3050,12 @@ plan_index:
                 - "cargo test -p tillandsias-control-wire: 26/26 PASS"
                 - "cargo test -p tillandsias-windows-tray: 44 + 8 + 3 PASS (1 interactive ignored)"
                 - "cargo fmt -p tillandsias-control-wire -p tillandsias-windows-tray -- --check: clean"
+            - type: lease-reclaimed
+              ts: "2026-06-14T11:05:00Z"
+              agent_id: "linux-next-orchestrator-20260614T110000Z"
+              host: "linux"
+              reclaimed_lease_id: "lease-windows-xplat-gating-parity-20260614T0040Z"
+              note: "Windows lease (expired 2026-06-14T04:40:00Z) reclaimed. The Windows slice is completed and landed on windows-next, but Linux/headless vsock-dispatcher handling and macOS menu mirroring remain pending. Resetting status to ready for macos+windows owners."
         - id: vault-flow/tray-popup-terminal
           status: done
           depends_on: [vault-flow/login-in-container]

@@ -1,13 +1,13 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-14T10:05:00Z
+LastExecutionTime: 2026-06-14T11:05:00Z
 
 ## This Loop
 
 - **Cycle type**: Multi-host orchestration & E2E smoke verification.
 - **Sibling Git Audit**:
   - `main` at `3395626c`
-  - `linux-next` (local) at `f6d03c4e`
+  - `linux-next` (local) at `e95c261f`
   - `windows-next` at `9e71ad4d` (integrated)
   - `osx-next` at `fe10ac02` (integrated)
   - Drift: 0 commits (all siblings fully merged into `linux-next`). No deadlocks or thrashing detected.
@@ -26,5 +26,6 @@ LastExecutionTime: 2026-06-14T10:05:00Z
 
 ## Stale Or Pending Pings
 
-- None.
+- Windows lease for `vault-flow/xplat-gating-parity` (expired at `2026-06-14T04:40:00Z`) reclaimed. Task reset to `ready`.
+
 
