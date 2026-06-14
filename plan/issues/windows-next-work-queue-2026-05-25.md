@@ -13,6 +13,26 @@ This is **BLOCKED on linux step 32** (true-rekey lands the shared contract Windo
 — not claimable until step 32 completes. Optional independent item: wire
 `EnumerateLocalProjects`. No new autonomous Windows **step-36** code packet until step 32 lands.
 
+## 2026-06-14 — vault-flow/xplat-gating-parity (Windows slice) — LANDED (joint packet still open)
+
+Live GitHub-login gate for the Windows tray. The GitHub token lives in-VM behind
+Vault, so — unlike the Linux tray's in-process `is_github_logged_in` — the Windows
+tray must ask the in-VM headless over HvSocket. Original blockers all cleared
+(step 32 rekey, step 36 keychain/vsock, 42a tray-gate-on-vault).
+
+- 2026-06-14T00:40Z **claim** by `windows-yolanda-claude-20260614T004000Z`
+  (lease: `lease-windows-xplat-gating-parity-20260614T0040Z`, expires 2026-06-14T04:40Z).
+- 2026-06-14T00:50Z `a747a1bc`  control-wire GithubLoginStatus{Request,Reply} (additive,
+  no WIRE bump) + windows-tray `refresh_github_login` poller sets `MENU_STATE.login`
+  from the live in-VM signal; graceful degrade on Error{Unsupported}. control-wire
+  26/26, windows-tray 44+8+3 green, fmt clean, no new clippy in touched files.
+- **REMAINING (siblings, not Windows-ownable):** (1) LINUX/headless — add the in-VM
+  vsock-dispatcher handler for `GithubLoginStatusRequest` → `is_github_logged_in`
+  (`vault_bootstrap.rs:463`) → reply `GithubLoginStatusReply{logged_in, handle}`.
+  Until then the in-VM headless returns Error{Unsupported} and the tray shows
+  last-known login. (2) MACOS — mirror `refresh_github_login` over vz vsock in the
+  macOS tray. Task stays `in_progress` in plan/index.yaml until both land.
+
 ## 2026-06-13 — xplat-vault/windows (step 36) — DONE
 
 Store the unseal key + `installation-uuid` + `root-token` in Windows Credential Manager and deliver them to the in-VM vault container over HvSocket.
