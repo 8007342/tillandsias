@@ -1,5 +1,26 @@
 # Local build/install smoke findings — 2026-06-14
 
+## Current Run (Blocked)
+
+- Discovered by: `/build-install-and-smoke-test-e2e`
+- Host: Linux (`macuahuitl`)
+- Branch: `linux-next`
+- Commit under test: `73dcb4965ee9cdb9010ab90d0a877003415f422b`
+- Installed build: `Tillandsias v0.3.260614.3`
+- Evidence: `target/build-install-smoke-e2e/20260614T073632Z/`
+- Passed gates:
+  - `./build.sh --ci-full --install` exited 0.
+  - Pre-build CI passed 14/14 checks; pre-build litmus passed 129/129.
+  - Post-build litmus passed 6/6; runtime litmus passed 5/5.
+  - `podman system reset --force` exited 0 and the clean-store check found
+    zero containers, images, and volumes.
+  - `tillandsias --init --debug` exited 0 and built every image from the
+    pristine store; Vault remained healthy and unsealed.
+- Outcome: BLOCKED at
+  `tillandsias . --opencode --prompt "Use the /forge-continuous-enhancement skill"`.
+  Two consecutive attempts exited 143 with empty stdout/stderr before any forge
+  agent container started.
+
 ## Verification Run (Pass)
 
 - Discovered by: `/build-install-and-smoke-test-e2e`
@@ -127,3 +148,58 @@
     ts: "2026-06-14T06:03:05Z"
     agent_id: "linux-macuahuitl-codex-20260614T055748Z"
     host: linux
+
+## Work Packet: local-smoke/cli-tray-singleton-self-termination
+
+- id: `local-smoke/cli-tray-singleton-self-termination`
+- type: fix
+- title: Prevent detached tray startup from terminating foreground CLI modes
+- owner_host: linux
+- capability_tags: [rust, lifecycle, singleton, tray, opencode, testing]
+- status: ready
+- discovered_by: `/build-install-and-smoke-test-e2e`
+- owned_files:
+  - `crates/tillandsias-headless/src/main.rs`
+  - `crates/tillandsias-core/src/singleton.rs`
+  - `openspec/specs/singleton-guard/spec.md`
+  - `openspec/specs/tray-cli-coexistence/spec.md`
+  - `openspec/litmus-tests/`
+- evidence:
+  - `target/build-install-smoke-e2e/20260614T073632Z/07-forge-continuous-enhancement-exit.txt`
+    — first launch exited 143 with an empty adjacent log.
+  - `target/build-install-smoke-e2e/20260614T073632Z/09-forge-retry-exit.txt`
+    — retry reproduced exit 143 with an empty adjacent log.
+  - `crates/tillandsias-headless/src/main.rs:260` — foreground `--opencode`
+    acquires the global `launcher` singleton before mode dispatch.
+  - `crates/tillandsias-headless/src/main.rs:382` and
+    `crates/tillandsias-headless/src/main.rs:4257` — that foreground process
+    spawns the same executable as detached `--tray`.
+  - `crates/tillandsias-core/src/singleton.rs:64` — the child tray finds the
+    parent's lock busy and terminates the lock owner with SIGTERM before taking
+    the same lock. Exit 143 is `128 + SIGTERM`.
+- repro:
+  - `tillandsias . --opencode --prompt "Use the /forge-continuous-enhancement skill"`
+- next_action: >
+    Separate tray lifetime ownership from foreground CLI lifetime ownership.
+    Start by adding a regression test around the mode-to-singleton policy, then
+    give the tray a distinct lock or exempt foreground CLI modes from the
+    destructive launcher singleton while preserving collision protection for
+    long-lived runtime modes. Verify that spawning the detached tray cannot
+    signal its foreground parent and that an already-running tray is reused.
+- acceptance_evidence:
+  - "The repro no longer exits 143 and starts an OpenCode forge agent container."
+  - "A foreground CLI launch can coexist with the detached tray control socket."
+  - "A second tray launch still collapses safely without terminating the foreground CLI."
+  - "Focused singleton/tray tests and `./build.sh --check` pass."
+- fallback_when_blocked: >
+    Add a deterministic process-level regression harness using
+    `TILLANDSIAS_LOCK_NAME` and a stub tray child so the parent/child singleton
+    interaction can be proven without starting Podman.
+- events:
+  - type: discovered
+    ts: "2026-06-14T07:53:03Z"
+    agent_id: "linux-macuahuitl-codex-20260614T073632Z"
+    host: linux
+    note: >
+      Full build, install, destructive reset, and pristine init passed. The
+      final forge gate reproduced the singleton parent-kill twice.
