@@ -1,0 +1,4 @@
+interface:
+  display_name: "Build, Install, and Smoke Test E2E"
+  short_description: "Build and run destructive local Linux smoke"
+  default_prompt: "Use $build-install-and-smoke-test-e2e to build, install, reset Podman, initialize Tillandsias, and run the forge enhancement smoke."
