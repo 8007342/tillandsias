@@ -640,32 +640,35 @@ pub async fn revoke_pending_container_tokens(debug: bool) {
 }
 
 fn build_vault_image(debug: bool) -> Result<(), String> {
-    let script = repo_script("build-image.sh");
-    if debug {
-        eprintln!("[tillandsias-vault] running {} vault", script.display());
-    }
-    let status = Command::new(&script)
-        .arg("vault")
-        .stdin(Stdio::null())
-        .status()
-        .map_err(|e| format!("failed to spawn {}: {e}", script.display()))?;
-    if !status.success() {
-        return Err(format!("build-image.sh vault exited with {}", status));
-    }
-    Ok(())
-}
+    let version = crate::VERSION.trim();
+    let root = crate::resolve_runtime_asset_root(version, debug)?;
+    let build_args = std::collections::BTreeMap::new();
+    let dependency_digests = std::collections::BTreeMap::new();
+    let identity = crate::runtime_assets::image_identity(
+        &root,
+        "vault",
+        version,
+        build_args.clone(),
+        dependency_digests,
+    )?;
 
-fn repo_script(name: &str) -> PathBuf {
-    // The headless binary lives in <repo>/target/.../tillandsias. The build
-    // hash detection in build-image.sh is git-aware, so we run from
-    // CARGO_MANIFEST_DIR's grandparent (the repo root) via the absolute
-    // path baked at build time.
-    let manifest = PathBuf::from(env!("CARGO_MANIFEST_DIR"));
-    manifest
-        .parent()
-        .and_then(|p| p.parent())
-        .map(|p| p.join("scripts").join(name))
-        .unwrap_or_else(|| PathBuf::from(format!("scripts/{name}")))
+    if debug {
+        eprintln!(
+            "[tillandsias-vault] building image vault with tag {}",
+            identity.canonical_tag
+        );
+    }
+
+    let cache_dir = crate::init_cache_dir()?;
+    let log_file = if debug {
+        Some(cache_dir.join("tillandsias-init-vault.log"))
+    } else {
+        None
+    };
+
+    crate::build_image_with_logging(&root, "vault", &identity, &build_args, &log_file, debug)?;
+
+    Ok(())
 }
 
 /// Retrieve the versioned unseal key from the host OS keychain, or derive

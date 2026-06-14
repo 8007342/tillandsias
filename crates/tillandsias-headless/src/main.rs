@@ -77,7 +77,7 @@ mod runtime_assets;
 // @trace spec:tillandsias-vault — Phase 6 default bootstrap (was Phase 3 opt-in).
 mod vault_bootstrap;
 
-const VERSION: &str = include_str!("../../../VERSION");
+pub(crate) const VERSION: &str = include_str!("../../../VERSION");
 
 fn main() {
     #[cfg(unix)]
@@ -646,7 +646,7 @@ fn find_developer_checkout_root() -> Result<PathBuf, String> {
     )
 }
 
-fn resolve_runtime_asset_root(version: &str, debug: bool) -> Result<PathBuf, String> {
+pub(crate) fn resolve_runtime_asset_root(version: &str, debug: bool) -> Result<PathBuf, String> {
     // @trace spec:user-runtime-lifecycle, spec:linux-native-portable-executable
     if std::env::var_os("TILLANDSIAS_ROOT").is_some() {
         let root = find_developer_checkout_root()?;
@@ -964,7 +964,7 @@ fn check_cache_integrity(version: &str) -> Result<CacheIntegrityStatus, String> 
     })
 }
 
-fn init_cache_dir() -> Result<PathBuf, String> {
+pub(crate) fn init_cache_dir() -> Result<PathBuf, String> {
     let mut candidates = Vec::new();
     if let Ok(cache_home) = std::env::var("XDG_CACHE_HOME") {
         candidates.push(PathBuf::from(cache_home).join("tillandsias"));
@@ -1056,6 +1056,7 @@ fn image_specs(root: &Path, image_name: &str) -> Result<(PathBuf, PathBuf), Stri
         "router" => "images/router",
         "chromium-core" => "images/chromium",
         "chromium-framework" => "images/chromium",
+        "vault" => "images/vault",
         other => {
             return Err(format!("Unknown image type: {other}"));
         }
@@ -3117,7 +3118,7 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
 /// ## Build Arguments
 /// - `--build-arg CHROMIUM_CORE_IMAGE=<image>` for chromium-framework only
 /// - chromium-framework MUST be built after chromium-core to resolve the ARG
-fn build_image_with_logging(
+pub(crate) fn build_image_with_logging(
     root: &Path,
     image_name: &str,
     identity: &ImageBuildIdentity,

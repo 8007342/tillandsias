@@ -21,9 +21,27 @@ fn main() {
     let generated = out_dir.join("runtime_assets_generated.rs");
 
     let mut assets = Vec::new();
-    collect_assets(&repo_root.join("images"), &repo_root.join("images"), repo_root, "", &mut assets);
-    collect_assets(&repo_root.join("observatorium"), &repo_root.join("observatorium"), repo_root, "", &mut assets);
-    collect_assets(&repo_root.join("skills"), &repo_root.join("skills"), repo_root, "images/default/skills", &mut assets);
+    collect_assets(
+        &repo_root.join("images"),
+        &repo_root.join("images"),
+        repo_root,
+        "",
+        &mut assets,
+    );
+    collect_assets(
+        &repo_root.join("observatorium"),
+        &repo_root.join("observatorium"),
+        repo_root,
+        "",
+        &mut assets,
+    );
+    collect_assets(
+        &repo_root.join("skills"),
+        &repo_root.join("skills"),
+        repo_root,
+        "images/default/skills",
+        &mut assets,
+    );
 
     for rel in ["scripts/manage-cache.sh", "scripts/run-observatorium.sh"] {
         let path = repo_root.join(rel);
@@ -113,7 +131,13 @@ fn main() {
     writeln!(file, "];").unwrap();
 }
 
-fn collect_assets(dir: &Path, collection_root: &Path, repo_root: &Path, dest_prefix: &str, out: &mut Vec<Asset>) {
+fn collect_assets(
+    dir: &Path,
+    collection_root: &Path,
+    repo_root: &Path,
+    dest_prefix: &str,
+    out: &mut Vec<Asset>,
+) {
     if !dir.is_dir() {
         panic!(
             "required runtime asset directory missing: {}",

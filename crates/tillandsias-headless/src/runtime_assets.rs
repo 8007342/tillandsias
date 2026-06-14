@@ -260,6 +260,7 @@ fn image_context_rel(image_name: &str) -> Result<&'static str, String> {
         "web" => Ok("images/web"),
         "router" => Ok("images/router"),
         "chromium-core" | "chromium-framework" => Ok("images/chromium"),
+        "vault" => Ok("images/vault"),
         other => Err(format!("Unknown image type: {other}")),
     }
 }
@@ -353,7 +354,7 @@ mod tests {
                 .iter()
                 .find(|asset| asset.path == cf_rel_path)
                 .unwrap_or_else(|| panic!("Containerfile asset not embedded: {cf_rel_path}"));
-            
+
             let cf_content = std::str::from_utf8(cf_asset.bytes)
                 .unwrap_or_else(|e| panic!("Containerfile {cf_rel_path} is not valid UTF-8: {e}"));
 
