@@ -14,7 +14,7 @@ halted before the OpenCode continuous-enhancement step.
 - id: `smoke-finding/forge-skills-missing-from-runtime-assets`
 - owner_host: linux
 - capability_tags: [rust, podman, testing, release, forge]
-- status: claimed
+- status: done
 - discovered_by: `/smoke-curl-install-and-test-e2e` on release `v0.3.260613.2`
 - evidence:
   - `target/smoke-e2e/03-init.log:3779` - `SUCCESS forge-base`
@@ -39,3 +39,12 @@ halted before the OpenCode continuous-enhancement step.
     host: linux
     lease_id: `lease-linux-forge-skills-missing-20260614T001417Z`
     expires_at: `2026-06-14T04:14:17Z`
+  - type: completed
+    ts: `2026-06-14T00:17:35Z`
+    agent_id: `linux-tlatoani-gemini-20260614T001417Z`
+    host: linux
+    lease_id: `lease-linux-forge-skills-missing-20260614T001417Z`
+    evidence_refs:
+      - `commit:2b4bf178`
+      - `cargo test -p tillandsias-headless`
+      - `./build.sh --test`
