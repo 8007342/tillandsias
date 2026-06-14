@@ -55,7 +55,7 @@ artifact**, so every clean Windows (and macOS, same template) provision 404s.
 - id: `smoke-finding/fedora-rootfs-artifact-url-404`
 - owner_host: linux            # canonical fix is in images/vm/manifest.toml (recipe scope); blocks windows+macos
 - capability_tags: [recipe, vm-layer, fedora, podman, release, wsl]
-- status: claimed
+- status: done
 - discovered_by: `/smoke-curl-install-and-test-e2e` on release `v0.3.260614.1`
 - severity: high — blocks ALL clean-room Windows/macOS provisioning (and HEAD: the
   current `images/vm/manifest.toml` still pins the same dead URL, so a re-cut
@@ -96,6 +96,22 @@ artifact**, so every clean Windows (and macOS, same template) provision 404s.
     host: linux
     lease_id: "a78bab78943e"
     expires_at: "2026-06-14T06:30:29Z"
+  - type: completed
+    ts: "2026-06-14T02:43:55Z"
+    agent_id: "linux-macuahuitl-codex-20260614T023029Z"
+    host: linux
+    lease_id: "a78bab78943e"
+    implementation_commits:
+      - "bf6b0d03"
+    evidence:
+      - "Fedora x86_64 OCI archive resolved through redirects to HTTP 200 and matched SHA-256 75200f5752a74a21a616ca9a75e25beb594e2e117a0195c54f87c0b3e3974d1b."
+      - "Fedora archive manifest contains one application/vnd.oci.image.layer.v1.tar+gzip layer; the Windows path now preserves that layer tar's Unix metadata."
+      - "Fedora aarch64 Generic qcow2 URL resolved through redirects to HTTP 200."
+      - "cargo test -p tillandsias-vm-layer --features recipe,materialize,download: 56 passed, 2 ignored."
+      - "cargo test -p tillandsias-windows-tray: 3 passed."
+      - "./build.sh --check: passed."
+      - "./build.sh --test: passed."
+      - "Windows GNU cross-check reached native dependency compilation but could not complete because this Linux host lacks the MinGW C headers/toolchain."
 
 ---
 
