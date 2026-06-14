@@ -200,3 +200,64 @@ The forge continuous-enhancement step was not run because init was unhealthy.
   / PowerShell `Start-Process -RedirectStandardOutput` path captures it fine
   (2936 bytes). Future smoke-runners on Windows should use the documented form,
   not a git-bash pipe/redirect.
+
+---
+
+## 2026-06-14 — Windows-host verification of the rootfs fix (bf6b0d03) + recipe completion
+
+The Linux owner fixed `smoke-finding/fedora-rootfs-artifact-url-404` at `bf6b0d03`
+(repoint to the Fedora **Container Base OCI** archive + flatten the gzip layer for
+`wsl --import`), but flagged it could not be built/run on a Linux host ("Windows
+GNU cross-check could not complete — no MinGW toolchain"). This is the **real
+Windows-hardware verification** of that fix, driven from a clean WSL state on
+Win11 (Yolanda). Operator directive: complete the recipe so it launches Fedora 44
+in WSL2, curl-installs the Linux tillandsias, and runs `tillandsias --init --debug`
+inside.
+
+**Locally built tray `0.3.260614.2 (73dcb496)` (the fix is not in the published
+binary). Clean-room: no WSL distro registered.**
+
+### Verified WORKING (bf6b0d03 fix, on real Windows)
+- `--provision-once` download → SHA-verify (`75200f57…`, matches Fedora's official
+  `Fedora-Container-44-1.7-x86_64-CHECKSUM`) → OCI flatten → `wsl --import` all
+  succeed. Fedora 44 is imported as distro `tillandsias`. The 404 is gone.
+
+### Work Packet: smoke-finding/container-base-missing-systemd-podman
+- id: `smoke-finding/container-base-missing-systemd-podman`
+- owner_host: windows            # fix lives in windows-tray wsl_lifecycle.rs (Windows scope)
+- capability_tags: [windows, wsl, vm-layer, podman, fedora]
+- status: in_progress            # fix applied + unit/build green; full --init re-verify in flight
+- discovered_by: `/smoke-curl-install-and-test-e2e` (Windows-equivalent) on `bf6b0d03`
+- severity: high — the OCI Container Base reaches `wsl --import` but provisioning then
+  fails; the recipe never reaches Ready, and the user-runtime lane can't build images.
+- evidence (chain of blockers, each verified live in the imported distro):
+  1. `10-provision-fixed.err`: `systemctl: command not found` → `systemctl enable …` exit 127.
+     The `Fedora Linux 44 (Container Image)` base ships **no systemd** (PID1 was WSL `init`),
+     **no podman**, and (weak-dep) **no dbus** (so `systemd-logind` is dead → no
+     `/run/user/<uid>`).
+  2. After `dnf install systemd podman dbus-broker` + `wsl.conf [boot] systemd=true` +
+     restart → PID1=systemd 259.6, podman 5.8.2, logind active, `enable-linger` creates
+     `/run/user/1000`.
+  3. Rootless podman then fails: `newuidmap: write to uid_map failed: Operation not
+     permitted … should have setuid or filecaps`. Container images **strip the
+     shadow-utils setuid filecaps**; `setcap cap_setuid+ep /usr/bin/newuidmap` +
+     `cap_setgid+ep /usr/bin/newgidmap` fixes `podman unshare`.
+  4. Image `RUN` steps then fail: `crun … sd-bus call: Permission denied` — rootless
+     podman defaults to the **systemd cgroup manager** with no user session bus.
+     `~/.config/containers/containers.conf` `[engine] cgroup_manager = "cgroupfs"`
+     lets a build's RUN step succeed (verified: trivial build exit 0).
+- fix applied (durable, Windows scope): `wsl_lifecycle.rs` `ensure_base_packages()` —
+  installs `systemd podman dbus-broker libcap shadow-utils` and restores the
+  `newuidmap`/`newgidmap` filecaps, BEFORE `configure_recipe_distro` flips to
+  systemd-PID1. `rpm -q`-guarded + idempotent. Compiles; windows-tray 44+8+3 tests green.
+- next_action: >
+    Re-run `--provision-once` from clean to confirm the recipe now reaches Ready with
+    the in-tree fix (not manual steps). Decide whether the user-runtime lane bits
+    (non-root user + `loginctl enable-linger` + `cgroup_manager=cgroupfs`) belong in the
+    recipe or remain operator setup — the tray's headless model runs as root, but the
+    operator's `tillandsias --init` acceptance is a user-lane rootless run.
+- events:
+  - type: discovered
+    ts: "2026-06-14T08:09:02Z"
+    agent_id: "windows-yolanda-claude-20260614T004000Z"
+    host: windows
