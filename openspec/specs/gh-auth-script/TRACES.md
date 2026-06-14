@@ -8,7 +8,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-core/tests/gh_auth_deploy_key.rs#L2](../../../crates/tillandsias-core/tests/gh_auth_deploy_key.rs#L2)
 - [crates/tillandsias-core/tests/gh_auth_deploy_key.rs#L134](../../../crates/tillandsias-core/tests/gh_auth_deploy_key.rs#L134)
 - [crates/tillandsias-core/tests/gh_auth_deploy_key.rs#L135](../../../crates/tillandsias-core/tests/gh_auth_deploy_key.rs#L135)
-- [crates/tillandsias-headless/src/main.rs#L3785](../../../crates/tillandsias-headless/src/main.rs#L3785)
+- [crates/tillandsias-headless/src/main.rs#L3793](../../../crates/tillandsias-headless/src/main.rs#L3793)
 - [crates/tillandsias-headless/src/remote_projects.rs#L1](../../../crates/tillandsias-headless/src/remote_projects.rs#L1)
 - [crates/tillandsias-headless/src/tray/cloud.rs#L1](../../../crates/tillandsias-headless/src/tray/cloud.rs#L1)
 - [crates/tillandsias-headless/src/tray/mod.rs#L346](../../../crates/tillandsias-headless/src/tray/mod.rs#L346)
