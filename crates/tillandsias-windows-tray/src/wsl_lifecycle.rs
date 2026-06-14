@@ -218,10 +218,18 @@ impl WslLifecycle {
 
         progress.report_phase(ProvisionPhase::Connecting);
         const CW_PORT: u32 = tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
+
+        // Hold a keepalive across the connect loop so the VM doesn't idle out mid-wait.
+        let _keepalive = self.spawn_keepalive().ok();
+
         let mut last_err = String::from("(no attempt)");
-        for attempt in 1..=12u32 {
+        for attempt in 1..=36u32 {
             match self.try_connect_until_ready(CW_PORT, attempt).await {
-                Ok(()) => return Ok(()),
+                Ok(VmPhase::Ready) | Ok(VmPhase::Starting) => return Ok(()),
+                Ok(other) => {
+                    last_err = format!("VM in phase {other:?}");
+                    tokio::time::sleep(Duration::from_secs(5)).await;
+                }
                 Err(e) => {
                     last_err = e;
                     tokio::time::sleep(Duration::from_secs(5)).await;
@@ -402,7 +410,7 @@ WantedBy=multi-user.target
     /// During first boot the headless reports `Provisioning`/`Starting` while it
     /// self-installs; the caller retries until this returns `Ok`. (Request path
     /// proven E2E: `VmStatusReply { phase: Ready, podman_ready: true }`.)
-    async fn try_connect_until_ready(&self, port: u32, attempt: u32) -> Result<(), String> {
+    async fn try_connect_until_ready(&self, port: u32, attempt: u32) -> Result<VmPhase, String> {
         use tillandsias_control_wire::transport::Transport;
         use tillandsias_control_wire::{ControlEnvelope, ControlMessage, VmPhase, WIRE_VERSION};
         use tillandsias_host_shell::vsock_client::Client;
@@ -433,21 +441,15 @@ WantedBy=multi-user.target
             .map_err(|e| format!("VmStatusRequest: {e}"))?;
 
         match reply.body {
-            ControlMessage::VmStatusReply {
-                phase: VmPhase::Ready,
-                ..
-            } => {
+            ControlMessage::VmStatusReply { phase, .. } => {
                 tracing::info!(
                     wire_version,
                     attempt,
-                    "VM operationally Ready (control wire up)"
+                    "VM handshake success (phase={phase:?})"
                 );
                 // NOTE: `stream` is dropped here; holding it for the session +
                 // routing menu actions over it is the next w9 increment.
-                Ok(())
-            }
-            ControlMessage::VmStatusReply { phase, .. } => {
-                Err(format!("VM not yet Ready (phase {phase:?})"))
+                Ok(phase)
             }
             other => Err(format!("unexpected reply to VmStatusRequest: {other:?}")),
         }

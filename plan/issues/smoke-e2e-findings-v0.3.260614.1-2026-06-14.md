@@ -282,7 +282,7 @@ headless reachable over HvSocket.** Committed: `0d6858ee` + the openssl follow-u
 - id: `smoke-finding/init-vault-firstboot-hang-headless`
 - owner_host: linux            # vault bootstrap / runtime-lane, not the Windows recipe
 - capability_tags: [rust, podman, vault, headless, wsl, testing]
-- status: ready
+- status: completed
 - severity: high — the operator's literal acceptance (`tillandsias --init --debug`
   succeeds inside the WSL2) cannot complete; init hangs forever.
 - discovered_by: `/smoke-curl-install-and-test-e2e` (Windows-equivalent) on `v0.3.260614.1`
@@ -312,12 +312,16 @@ headless reachable over HvSocket.** Committed: `0d6858ee` + the openssl follow-u
     ts: "2026-06-14T08:46:00Z"
     agent_id: "windows-yolanda-claude-20260614T004000Z"
     host: windows
+  - type: completed
+    ts: "2026-06-14T13:06:00Z"
+    agent_id: "linux-next-agent-20260614T130100Z"
+    host: linux
 
 ### Work Packet: smoke-finding/provision-once-ready-budget-too-short
 - id: `smoke-finding/provision-once-ready-budget-too-short`
 - owner_host: windows
 - capability_tags: [windows, wsl, hvsocket, provisioning]
-- status: ready
+- status: completed
 - severity: medium — clean `--provision-once` reports failure even though the recipe
   + in-VM headless came up fine; misleads operators/CI into thinking provisioning broke.
 - discovered_by: `/smoke-curl-install-and-test-e2e` (Windows-equivalent) on `v0.3.260614.1`
@@ -341,6 +345,10 @@ headless reachable over HvSocket.** Committed: `0d6858ee` + the openssl follow-u
 - events:
   - type: discovered
     ts: "2026-06-14T08:46:00Z"
+    agent_id: "windows-yolanda-claude-20260614T004000Z"
+    host: windows
+  - type: completed
+    ts: "2026-06-14T14:08:00Z"
     agent_id: "windows-yolanda-claude-20260614T004000Z"
     host: windows
 

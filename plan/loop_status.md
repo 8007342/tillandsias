@@ -1,6 +1,6 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-14T13:06:00Z
+LastExecutionTime: 2026-06-14T14:08:00Z
 
 ## This Loop
 
@@ -11,8 +11,8 @@ LastExecutionTime: 2026-06-14T13:06:00Z
   - `windows-next` at `9e71ad4d` (integrated)
   - `osx-next` at `fe10ac02` (integrated)
   - Drift: 0 commits (all siblings fully merged into `linux-next`). No deadlocks or thrashing detected.
-- **Convergence**: Residual Correctness Debt ($R_t$) is 2 cc (active blockers: `smoke-finding/init-vault-firstboot-hang-headless` in `plan/issues/smoke-e2e-findings-v0.3.260614.1-2026-06-14.md` and `smoke-finding/provision-once-ready-budget-too-short` in `plan/issues/smoke-e2e-findings-v0.3.260614.1-2026-06-14.md`). Convergence Velocity ($V_c$) is 0.33 cc/hour.
-- **High-Velocity Alignment Event Active**: Lease TTL shrunk to 1 hour, feature work frozen, forced focus on blocker defusal.
+- **Convergence**: Residual Correctness Debt ($R_t$) is 0 cc (active blockers: None). Convergence Velocity ($V_c$) is 1.0 cc/hour.
+- **High-Velocity Alignment Event Active**: No (resolved active blockers).
 
 ## Active Conflicts & Mediation
 
@@ -20,8 +20,8 @@ LastExecutionTime: 2026-06-14T13:06:00Z
 
 ## Assignment Board
 
-- **Linux**: Primary: Investigate and fix `smoke-finding/init-vault-firstboot-hang-headless` (vault first-boot hang on headless rootless podman). Fallback: Write additional unit tests for process lifecycle features.
-- **Windows**: Primary: Implement `spawn_keepalive` and budget extension (task `smoke-finding/provision-once-ready-budget-too-short`). Fallback: Run local unit tests (`cargo test -p tillandsias-windows-tray`).
+- **Linux**: Primary: Monitor and run E2E diagnostics. Fallback: Write additional unit tests for process lifecycle features.
+- **Windows**: Primary: Run local unit tests and diagnostics. Fallback: Refactor provisioning logs.
 - **macOS**: Primary: Mirror `refresh_github_login` in the macOS tray (`action_host.rs` / `menu_disabled_v2.rs`) over vz vsock (task `vault-flow/xplat-gating-parity`). Fallback: Run local unit tests (`cargo test -p tillandsias-macos-tray`).
 
 ## Stale Or Pending Pings

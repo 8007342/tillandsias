@@ -10,11 +10,11 @@ fn headless_binary() -> PathBuf {
 fn test_cli_coexistence_with_tray() {
     let binary = headless_binary();
     let temp_dir = tempfile::tempdir().expect("failed to create temp dir");
-    
+
     // We run a CLI mode (like --opencode with a non-existent path)
     // and verify that the detached tray started by it does NOT kill it.
     let lock_name = "test-singleton-coexist";
-    
+
     let mut child = Command::new(binary)
         .arg("/nonexistent-path-for-coexist-test")
         .arg("--opencode")
@@ -30,7 +30,7 @@ fn test_cli_coexistence_with_tray() {
 
     // Give it a bit to execute
     let status = child.wait().expect("failed to wait for CLI process");
-    
+
     // Read stdout/stderr for diagnostics
     let mut stdout_buf = String::new();
     let mut stderr_buf = String::new();
@@ -40,7 +40,7 @@ fn test_cli_coexistence_with_tray() {
     if let Some(mut err) = child.stderr.take() {
         let _ = err.read_to_string(&mut stderr_buf);
     }
-    
+
     println!("--- CLI STDOUT ---");
     println!("{}", stdout_buf);
     println!("--- CLI STDERR ---");
