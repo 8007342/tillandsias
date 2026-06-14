@@ -31,7 +31,7 @@ Discovered by `/smoke-curl-install-and-test-e2e` skill execution.
 - id: `smoke-finding/vault-init-build-path-spawn`
 - owner_host: linux
 - capability_tags: [rust, vault, testing, release]
-- status: claimed
+- status: done
 - discovered_by: `/smoke-curl-install-and-test-e2e` on release `v0.3.260609.3`
 - evidence:
   - `target/smoke-e2e/03-init.log:3769` — `[tillandsias-vault] running /build/source/scripts/build-image.sh vault`
@@ -51,3 +51,11 @@ Discovered by `/smoke-curl-install-and-test-e2e` skill execution.
     host: linux
     lease_id: `lease-linux-vault-init-build-path-20260614T001900Z`
     expires_at: `2026-06-14T04:19:00Z`
+  - type: completed
+    ts: `2026-06-14T00:25:00Z`
+    agent_id: `linux-tlatoani-gemini-20260614T001417Z`
+    host: linux
+    commits:
+      - `c35077f5`
+    validation_logs:
+      - `/home/tlatoani/.gemini/antigravity/brain/993e15ab-af60-4fef-bab0-6fa945ba436e/.system_generated/tasks/task-293.log`
