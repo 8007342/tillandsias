@@ -128,7 +128,7 @@ The forge continuous-enhancement step was not run because init was unhealthy.
 - id: `smoke-finding/vault-digest-image-missing-latest-alias`
 - owner_host: linux
 - capability_tags: [rust, podman, vault, testing, release]
-- status: claimed
+- status: done
 - discovered_by: `/smoke-curl-install-and-test-e2e` on release `v0.3.260614.1`
 - evidence:
   - `target/smoke-e2e/03-init.log:3994` — Vault commits
@@ -161,6 +161,20 @@ The forge continuous-enhancement step was not run because init was unhealthy.
     host: linux
     lease_id: "f5d0682267ce"
     expires_at: "2026-06-14T09:57:48Z"
+  - type: completed
+    ts: "2026-06-14T06:01:50Z"
+    agent_id: "linux-macuahuitl-codex-20260614T055748Z"
+    host: linux
+    lease_id: "f5d0682267ce"
+    implementation_commits:
+      - "11f0ba1d"
+    evidence:
+      - "Vault bootstrap now carries the successful build's canonical `sha256-*` tag directly into `podman run`; the mutable `:latest` launch dependency is removed."
+      - "`vault_launch_requires_the_content_addressed_image_tag` passes with default features and rejects `:latest` plus malformed digest tags."
+      - "All four focused `vault_bootstrap::tests` pass with the Vault feature."
+      - "`cargo fmt --all -- --check` passes."
+      - "`./build.sh --check` passes."
+      - "Strict feature-minimal clippy remains red on ten pre-existing dead-code/collapsible-if warnings outside this patch."
 
 ---
 
