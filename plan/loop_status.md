@@ -1,13 +1,13 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-14T15:30:00Z
+LastExecutionTime: 2026-06-14T18:10:00Z
 
 ## This Loop
 
 - **Cycle type**: Multi-host orchestration & E2E smoke verification.
 - **Sibling Git Audit**:
   - `main` at `3395626c` (integrated)
-  - `linux-next` (local) at `637a3a69`
+  - `linux-next` (local) at `2dc8b7ff`
   - `windows-next` at `9e71ad4d` (integrated)
   - `osx-next` at `fe10ac02` (integrated)
   - Drift: 0 commits (all siblings fully merged into `linux-next`). No deadlocks or thrashing detected.
@@ -20,10 +20,10 @@ LastExecutionTime: 2026-06-14T15:30:00Z
 
 ## Assignment Board
 
-- **Linux**: Primary: Completed Linux/headless vsock-dispatcher handler for GithubLoginStatusRequest. Reconciled and merged origin/main.
-- **Windows**: Primary: Run local unit tests and diagnostics. Fallback: Refactor provisioning logs.
-- **macOS**: Primary: Mirror `refresh_github_login` in the macOS tray (`action_host.rs` / `menu_disabled_v2.rs`) over vz vsock (task `vault-flow/xplat-gating-parity`). Fallback: Run local unit tests (`cargo test -p tillandsias-macos-tray`).
+- **Linux**: Primary: Completed step 39 `nix-release-linux-headless-only` task by verifying the targets built via Nix match the operator's keep decision and that the lifecycle boundary is cleanly documented. Next: proceed with step 40 (`forge-recipe-download-only-assembly` is obsoleted, so step 41 or next open tasks). Fallback: Complete remaining steps of CI/CD optimization.
+- **Windows**: Primary: Complete Windows slice of `vault-flow/xplat-gating-parity` (already landed on windows-next, awaiting integration). Fallback: Run local unit tests and diagnostics.
+- **macOS**: Primary: Complete macOS slice of `vault-flow/xplat-gating-parity` (mirror `refresh_github_login` in the macOS tray over vz vsock). Fallback: Run local unit tests (`cargo test -p tillandsias-macos-tray`).
 
 ## Stale Or Pending Pings
 
-- None. All leases are active or correctly reset.
+- None.

@@ -55,33 +55,64 @@
           doCheck = false; # release builds don't run tests (./build.sh does)
         };
 
-        tillandsias-x86_64-musl = craneLib.buildPackage (commonCraneArgs // {
-          pname = "tillandsias";
-          version = "0.0.0";
-          CARGO_BUILD_TARGET = "x86_64-unknown-linux-musl";
-          cargoExtraArgs = "--bin tillandsias --features tray";
-        });
+        tillandsias-x86_64-musl =
+          let
+            cargoArtifacts = craneLib.buildDepsOnly (commonCraneArgs // {
+              CARGO_BUILD_TARGET = "x86_64-unknown-linux-musl";
+              cargoExtraArgs = "--bin tillandsias --features tray";
+            });
+          in
+          craneLib.buildPackage (commonCraneArgs // {
+            inherit cargoArtifacts;
+            pname = "tillandsias";
+            version = "0.0.0";
+            CARGO_BUILD_TARGET = "x86_64-unknown-linux-musl";
+            cargoExtraArgs = "--bin tillandsias --features tray";
+          });
 
-        tillandsias-headless-x86_64-musl = craneLib.buildPackage (commonCraneArgs // {
-          pname = "tillandsias-headless-x86_64";
-          version = "0.0.0";
-          CARGO_BUILD_TARGET = "x86_64-unknown-linux-musl";
-          cargoExtraArgs = "-p tillandsias-headless --bin tillandsias --features listen-vsock";
-        });
+        tillandsias-headless-x86_64-musl =
+          let
+            cargoArtifacts = craneLib.buildDepsOnly (commonCraneArgs // {
+              CARGO_BUILD_TARGET = "x86_64-unknown-linux-musl";
+              cargoExtraArgs = "-p tillandsias-headless --bin tillandsias --features listen-vsock";
+            });
+          in
+          craneLib.buildPackage (commonCraneArgs // {
+            inherit cargoArtifacts;
+            pname = "tillandsias-headless-x86_64";
+            version = "0.0.0";
+            CARGO_BUILD_TARGET = "x86_64-unknown-linux-musl";
+            cargoExtraArgs = "-p tillandsias-headless --bin tillandsias --features listen-vsock";
+          });
 
-        tillandsias-headless-aarch64-musl = craneLib.buildPackage (commonCraneArgs // {
-          pname = "tillandsias-headless-aarch64";
-          version = "0.0.0";
-          CARGO_BUILD_TARGET = "aarch64-unknown-linux-musl";
-          cargoExtraArgs = "-p tillandsias-headless --bin tillandsias --features listen-vsock";
-          # aarch64-musl cross toolchain (ring's build.rs + linker).
-          depsBuildBuild = [ crossPkgs.stdenv.cc ];
-          CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER = aarch64Cc;
-          CC_aarch64_unknown_linux_musl = aarch64Cc;
-          AR_aarch64_unknown_linux_musl = aarch64Ar;
-          TARGET_CC = aarch64Cc;
-          HOST_CC = "${pkgs.stdenv.cc}/bin/cc";
-        });
+        tillandsias-headless-aarch64-musl =
+          let
+            cargoArtifacts = craneLib.buildDepsOnly (commonCraneArgs // {
+              CARGO_BUILD_TARGET = "aarch64-unknown-linux-musl";
+              cargoExtraArgs = "-p tillandsias-headless --bin tillandsias --features listen-vsock";
+              # aarch64-musl cross toolchain (ring's build.rs + linker).
+              depsBuildBuild = [ crossPkgs.stdenv.cc ];
+              CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER = aarch64Cc;
+              CC_aarch64_unknown_linux_musl = aarch64Cc;
+              AR_aarch64_unknown_linux_musl = aarch64Ar;
+              TARGET_CC = aarch64Cc;
+              HOST_CC = "${pkgs.stdenv.cc}/bin/cc";
+            });
+          in
+          craneLib.buildPackage (commonCraneArgs // {
+            inherit cargoArtifacts;
+            pname = "tillandsias-headless-aarch64";
+            version = "0.0.0";
+            CARGO_BUILD_TARGET = "aarch64-unknown-linux-musl";
+            cargoExtraArgs = "-p tillandsias-headless --bin tillandsias --features listen-vsock";
+            # aarch64-musl cross toolchain (ring's build.rs + linker).
+            depsBuildBuild = [ crossPkgs.stdenv.cc ];
+            CARGO_TARGET_AARCH64_UNKNOWN_LINUX_MUSL_LINKER = aarch64Cc;
+            CC_aarch64_unknown_linux_musl = aarch64Cc;
+            AR_aarch64_unknown_linux_musl = aarch64Ar;
+            TARGET_CC = aarch64Cc;
+            HOST_CC = "${pkgs.stdenv.cc}/bin/cc";
+          });
 
         # Local files — changing these triggers rebuild
         forgeEntrypoint = ./images/default/entrypoint.sh;

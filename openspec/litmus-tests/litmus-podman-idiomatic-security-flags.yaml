@@ -69,4 +69,4 @@ observability:
 
 rollback:
   on_failure: "cleanup test container and verify security enforcement in crates/tillandsias-podman/src/container_spec.rs"
-  command: "CONTAINER_ID=$(cat /tmp/tillandsias-security-test-container.id 2>/dev/null); test -n \"$CONTAINER_ID\" && podman kill \"$CONTAINER_ID\" 2>/dev/null || true; rm -f /tmp/tillandsias-security-test-container.id; grep -n 'cap-drop=ALL\\|userns=keep-id\\|no-new-privileges' /var/home/machiyotl/src/tillandsias/crates/tillandsias-podman/src/container_spec.rs | head -10"
+  command: "CONTAINER_ID=$(cat /tmp/tillandsias-security-test-container.id 2>/dev/null); test -n \"$CONTAINER_ID\" && podman kill \"$CONTAINER_ID\" 2>/dev/null || true; rm -f /tmp/tillandsias-security-test-container.id; grep -n 'cap-drop=ALL\\|userns=keep-id\\|no-new-privileges' crates/tillandsias-podman/src/container_spec.rs | head -10"

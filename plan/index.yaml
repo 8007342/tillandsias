@@ -2760,7 +2760,7 @@ plan_index:
     - id: nix-ci-incremental-caching
       order: 38
       title: Incremental Nix release builds (crane cargoArtifacts + durable cache)
-      status: in_progress
+      status: completed
       owner_host: linux
       deliverable: plan/issues/nix-release-incremental-and-forge-distribution-2026-06-05.md
       depends_on: []
@@ -2773,18 +2773,29 @@ plan_index:
         - "A back-to-back release reuses cached cross-GCC + dep artifacts; the Nix build step drops from ~34 min to minutes."
       tasks:
         - id: nix-cache/crane-and-cache-action
-          status: claimed
+          status: completed
           depends_on: []
           owned_files:
             - flake.nix
             - .github/workflows/release.yml
           checkpoint_required: true
-          handoff_note: "604 derivations rebuilt because flake.nix never uses buildDepsOnly/cargoArtifacts, and magic-nix-cache (EOL'd 2025-02) + failed FlakeHub login left no durable cache. See cheatsheet + issue doc."
+          handoff_note: "Split crane builds with buildDepsOnly cargoArtifacts and replaced magic-nix-cache-action with nix-community/cache-nix-action."
+          events:
+            - type: lease-reclaimed
+              ts: "2026-06-14T17:03:00Z"
+              agent_id: "linux-next-orchestrator-20260614T170300Z"
+              host: "linux"
+              note: "Untracked claim warning: Task was marked claimed but had no active lease events. Resetting status to ready."
+            - type: completed
+              ts: "2026-06-14T17:09:30Z"
+              agent_id: "linux-next-orchestrator-20260614T170930Z"
+              host: "linux"
+              note: "Completed the buildDepsOnly crane split and replaced magic-nix-cache with nix-community/cache-nix-action."
 
     - id: nix-release-linux-headless-only
       order: 39
       title: Nix release path builds only Linux (headless/tray) — decision-gated
-      status: ready
+      status: completed
       owner_host: linux
       deliverable: plan/issues/nix-release-incremental-and-forge-distribution-2026-06-05.md
       depends_on: [nix-ci-incremental-caching]
@@ -2799,7 +2810,7 @@ plan_index:
         - "Lifecycle boundary documented (Nix = Linux only; trays = separate)."
       tasks:
         - id: nix-headless/scope-targets
-          status: ready
+          status: completed
           depends_on: [nix-cache/crane-and-cache-action]
           owned_files:
             - flake.nix
@@ -2812,6 +2823,11 @@ plan_index:
               agent_id: "linux-next-orchestrator-20260614T0707Z"
               host: "linux"
               note: "Operator decided to KEEP the aarch64 headless target in the Nix release."
+            - type: completed
+              ts: "2026-06-14T18:10:00Z"
+              agent_id: "linux-next-orchestrator-20260614T181000Z"
+              host: "linux"
+              note: "Verified that release.yml builds exactly the agreed Linux musl targets and documented lifecycle boundary in cheatsheets/build/nix-ci-incremental-release.md."
 
     - id: forge-recipe-download-only-assembly
       order: 40
