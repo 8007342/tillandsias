@@ -495,7 +495,7 @@ pub fn is_github_logged_in(debug: bool) -> bool {
 /// raw token (empty string if the key is absent); errs if Vault is not running
 /// or the read fails. Mirrors the read-back in `write_github_token_to_vault`.
 #[allow(dead_code)]
-fn read_github_token_from_vault(debug: bool) -> Result<String, String> {
+pub(crate) fn read_github_token_from_vault(debug: bool) -> Result<String, String> {
     if !container_running(VAULT_CONTAINER_NAME) {
         return Err("vault container is not running".into());
     }

@@ -129,6 +129,33 @@ pub fn parse_gh_repo_list(json: &str) -> Vec<CloudProjectEntry> {
     out
 }
 
+/// Fetch the user's GitHub username (handle) via `gh api user --jq .login`.
+///
+/// `token: Some(t)` sets `GH_TOKEN=t` on the spawned process. `token: None`
+/// lets `gh` use its own auth config.
+pub fn fetch_github_username(token: Option<&str>) -> Option<String> {
+    let mut cmd = std::process::Command::new("gh");
+    cmd.args(["api", "user", "--jq", ".login"]);
+    if let Some(t) = token {
+        cmd.env("GH_TOKEN", t);
+    }
+    let output = cmd.output().ok()?;
+    if output.status.success() {
+        let username = String::from_utf8_lossy(&output.stdout).trim().to_string();
+        if !username.is_empty() {
+            return Some(username);
+        }
+    } else {
+        warn!(
+            spec = "host-shell-architecture",
+            status = ?output.status.code(),
+            stderr = %String::from_utf8_lossy(&output.stderr).trim(),
+            "fetch_github_username: gh api user failed"
+        );
+    }
+    None
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

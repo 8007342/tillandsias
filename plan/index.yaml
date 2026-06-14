@@ -3056,6 +3056,16 @@ plan_index:
               host: "linux"
               reclaimed_lease_id: "lease-windows-xplat-gating-parity-20260614T0040Z"
               note: "Windows lease (expired 2026-06-14T04:40:00Z) reclaimed. The Windows slice is completed and landed on windows-next, but Linux/headless vsock-dispatcher handling and macOS menu mirroring remain pending. Resetting status to ready for macos+windows owners."
+            - type: progress
+              ts: "2026-06-14T15:30:00Z"
+              agent_id: "linux-next-orchestrator-20260614T153000Z"
+              host: "linux"
+              note: >
+                Linux/headless slice completed. Added the in-VM vsock-dispatcher
+                handler for ControlMessage::GithubLoginStatusRequest which queries
+                vault_bootstrap::is_github_logged_in and replies with
+                GithubLoginStatusReply containing the status and username handle.
+                Verified that cargo test and clippy pass.
         - id: vault-flow/tray-popup-terminal
           status: done
           depends_on: [vault-flow/login-in-container]

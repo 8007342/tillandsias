@@ -281,6 +281,7 @@ async fn handle_connection(
                 "EnumerateLocalProjects".into(),
                 "CloudRefreshRequest".into(),
                 "VmShutdownRequest".into(),
+                "GithubLoginStatusRequest".into(),
                 CAP_PTY_ATTACH_V1.into(),
             ],
         },
@@ -447,6 +448,30 @@ async fn handle_connection(
                     body: ControlMessage::CloudRefreshReply {
                         seq_in_reply_to: seq,
                         projects,
+                    },
+                };
+                if write_envelope(&mut stream, &reply).await.is_err() {
+                    return;
+                }
+            }
+            ControlMessage::GithubLoginStatusRequest { seq } => {
+                let logged_in = crate::vault_bootstrap::is_github_logged_in(false);
+                let handle = if logged_in {
+                    if let Ok(token) = crate::vault_bootstrap::read_github_token_from_vault(false) {
+                        crate::cloud_projects::fetch_github_username(Some(&token))
+                    } else {
+                        None
+                    }
+                } else {
+                    None
+                };
+                let reply = ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: env.seq,
+                    body: ControlMessage::GithubLoginStatusReply {
+                        seq_in_reply_to: seq,
+                        logged_in,
+                        handle,
                     },
                 };
                 if write_envelope(&mut stream, &reply).await.is_err() {
