@@ -1,5 +1,16 @@
 # Local build/install smoke findings — 2026-06-14
 
+## Verification Run (Pass)
+
+- Discovered by: `/build-install-and-smoke-test-e2e`
+- Host: Linux (`macuahuitl`)
+- Branch: `linux-next`
+- Commit under test: `6235e4f3660dead7df961ecd4600a98b5e66ac19`
+- Evidence: `target/build-install-smoke-e2e/20260614T062133Z/`
+- Outcome: PASS (All build, installation, reset, init, and diagnostics checks successfully completed).
+
+## Initial Run (Halted)
+
 - Discovered by: `/build-install-and-smoke-test-e2e`
 - Host: Linux (`macuahuitl`)
 - Branch: `linux-next`
@@ -14,7 +25,7 @@
 - id: `local-smoke/headless-clippy-clean`
 - owner_host: linux
 - capability_tags: [rust, clippy, headless, testing]
-- status: ready
+- status: completed
 - discovered_by: `/build-install-and-smoke-test-e2e`
 - owned_files:
   - `crates/tillandsias-headless/src/vault_bootstrap.rs`
@@ -48,7 +59,7 @@
 - id: `local-smoke/forge-base-split-validator-drift`
 - owner_host: linux
 - capability_tags: [bash, containers, forge, litmus, testing]
-- status: ready
+- status: completed
 - discovered_by: `/build-install-and-smoke-test-e2e`
 - owned_files:
   - `scripts/check-container-bases.sh`
@@ -89,7 +100,7 @@
 - id: `local-smoke/windows-cheatsheet-image-mirror-drift`
 - owner_host: any
 - capability_tags: [docs, cheatsheets, windows, testing]
-- status: ready
+- status: completed
 - discovered_by: `/build-install-and-smoke-test-e2e`
 - owned_files:
   - `cheatsheets/runtime/windows-tray-diagnostics.md`
