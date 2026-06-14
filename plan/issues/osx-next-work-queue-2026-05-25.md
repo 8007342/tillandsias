@@ -147,6 +147,35 @@ accessor.
 
 ## Currently unblocked / active
 
+### Item: vault-flow/xplat-gating-parity (macOS slice)
+
+- id: `vault-flow/xplat-gating-parity`
+- type: feature
+- owner_host: macos
+- capability_tags: [appkit, menu-structure, pty, host-shell]
+- status: ready
+- depends_on: []
+- gated_on: []
+- blocks: []
+- owned_files:
+  - `crates/tillandsias-macos-tray/src/action_host.rs`
+  - `crates/tillandsias-macos-tray/src/menu_disabled_v2.rs`
+- summary: >
+    Mirror `refresh_github_login` in the macOS tray (action_host.rs / menu_disabled_v2.rs)
+    over vz vsock so the macOS GitHub menu item reflects the same live signal from the
+    in-VM headless agent. Gracefully degrade to last-known login state on Error or Unsupported.
+- next_action: >
+    Add `refresh_github_login` poller to action_host.rs and update the menu state via
+    the GithubLoginStatusRequest control wire message.
+- acceptance_evidence:
+  - `cargo test -p tillandsias-macos-tray --bin tillandsias-tray` on macOS.
+- agent_status_packet_expected:
+  - current plan
+  - touched files
+  - evidence produced
+
+
+
 ### Item: m10/menu-project-threading-for-pty-launch
 
 - id: `m10/menu-project-threading-for-pty-launch`
