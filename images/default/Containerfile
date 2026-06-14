@@ -2,7 +2,7 @@
 # @trace spec:default-image
 # Builds upon the heavy base image to inject configuration,
 # skills, and entrypoints. Rapidly rebuildable.
-ARG BASE_IMAGE=localhost/tillandsias-forge-base:latest
+ARG BASE_IMAGE=localhost/tillandsias-forge-base
 FROM ${BASE_IMAGE}
 
 # ── Environment exports for diagnostics and agent discovery ─────

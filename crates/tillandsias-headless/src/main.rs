@@ -2854,12 +2854,11 @@ fn is_ipv6_functional() -> bool {
         "2606:4700:4700::1111:53", // Cloudflare DNS
     ];
     for addr_str in &addresses {
-        if let Ok(addr) = addr_str.parse::<std::net::SocketAddr>() {
-            if std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(800))
+        if let Ok(addr) = addr_str.parse::<std::net::SocketAddr>()
+            && std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(800))
                 .is_ok()
-            {
-                return true;
-            }
+        {
+            return true;
         }
     }
     false
@@ -2927,13 +2926,13 @@ fn auto_detect_and_configure_ipv6_workaround(debug: bool) {
                     "[tillandsias] init: IPv6 connectivity check failed. Injecting pasta_options = [\"--ipv4-only\"] to prevent rootless Podman timeouts."
                 );
             }
-            if let Err(e) = ensure_pasta_options_ipv4_only(&conf_path) {
-                if debug {
-                    eprintln!(
-                        "[tillandsias] init: failed to configure containers.conf: {}",
-                        e
-                    );
-                }
+            if let Err(e) = ensure_pasta_options_ipv4_only(&conf_path)
+                && debug
+            {
+                eprintln!(
+                    "[tillandsias] init: failed to configure containers.conf: {}",
+                    e
+                );
             }
         } else if debug {
             eprintln!("[tillandsias] init: IPv6 connectivity is functional.");

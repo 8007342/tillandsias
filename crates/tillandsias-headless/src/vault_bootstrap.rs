@@ -48,6 +48,7 @@ const INSTALL_ANCHOR_V1: &str = "installation-uuid-v1";
 
 #[cfg(feature = "vault")]
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct InVmCredentials {
     pub unseal_share_b64: Option<String>,
     pub installation_uuid: String,
@@ -56,6 +57,7 @@ pub struct InVmCredentials {
 
 #[cfg(feature = "vault")]
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct PendingHandover {
     pub unseal_share_b64: Option<String>,
     pub root_token: Option<String>,
@@ -64,9 +66,11 @@ pub struct PendingHandover {
 #[cfg(feature = "vault")]
 pub static IN_VM_CREDENTIALS: OnceLock<Mutex<Option<InVmCredentials>>> = OnceLock::new();
 #[cfg(feature = "vault")]
+#[allow(dead_code)]
 pub static PENDING_HANDOVER: OnceLock<Mutex<Option<PendingHandover>>> = OnceLock::new();
 
 #[cfg(feature = "vault")]
+#[allow(dead_code)]
 pub fn set_in_vm_credentials(
     unseal_share_b64: Option<String>,
     installation_uuid: String,
@@ -83,20 +87,22 @@ pub fn set_in_vm_credentials(
 }
 
 #[cfg(feature = "vault")]
+#[allow(dead_code)]
 pub fn get_pending_handover() -> (Option<String>, Option<String>) {
     let cell = PENDING_HANDOVER.get_or_init(|| Mutex::new(None));
-    if let Ok(guard) = cell.lock() {
-        if let Some(handover) = &*guard {
-            return (
-                handover.unseal_share_b64.clone(),
-                handover.root_token.clone(),
-            );
-        }
+    if let Ok(guard) = cell.lock()
+        && let Some(handover) = &*guard
+    {
+        return (
+            handover.unseal_share_b64.clone(),
+            handover.root_token.clone(),
+        );
     }
     (None, None)
 }
 
 #[cfg(feature = "vault")]
+#[allow(dead_code)]
 pub fn clear_pending_handover() {
     let cell = PENDING_HANDOVER.get_or_init(|| Mutex::new(None));
     if let Ok(mut guard) = cell.lock() {
@@ -106,10 +112,10 @@ pub fn clear_pending_handover() {
 
 #[cfg(feature = "vault")]
 pub fn is_running_in_vm() -> bool {
-    if let Some(cell) = IN_VM_CREDENTIALS.get() {
-        if let Ok(guard) = cell.lock() {
-            return guard.is_some();
-        }
+    if let Some(cell) = IN_VM_CREDENTIALS.get()
+        && let Ok(guard) = cell.lock()
+    {
+        return guard.is_some();
     }
     false
 }
@@ -678,38 +684,36 @@ fn build_vault_image(debug: bool) -> Result<String, String> {
 fn ensure_unseal_key(debug: bool) -> Result<[u8; 32], String> {
     use base64::Engine;
 
-    if is_running_in_vm() {
-        if let Some(cell) = IN_VM_CREDENTIALS.get()
-            && let Ok(guard) = cell.lock()
-            && let Some(creds) = &*guard
+    if is_running_in_vm()
+        && let Some(cell) = IN_VM_CREDENTIALS.get()
+        && let Ok(guard) = cell.lock()
+        && let Some(creds) = &*guard
+    {
+        if let Some(encoded) = &creds.unseal_share_b64
+            && let Ok(key_vec) = base64::engine::general_purpose::STANDARD.decode(encoded)
+            && key_vec.len() == 32
         {
-            if let Some(encoded) = &creds.unseal_share_b64 {
-                if let Ok(key_vec) = base64::engine::general_purpose::STANDARD.decode(encoded)
-                    && key_vec.len() == 32
-                {
-                    if debug {
-                        eprintln!(
-                            "[tillandsias-vault] recovered Shamir unseal share from host-delivered credentials (v1, base64)"
-                        );
-                    }
-                    let mut key = [0u8; 32];
-                    key.copy_from_slice(&key_vec);
-                    return Ok(key);
-                }
-            }
-            // 2. Not in host credentials (first boot). Return derived dummy key from delivered installation_uuid.
             if debug {
                 eprintln!(
-                    "[tillandsias-vault] Shamir share not present in host credentials; deriving first-boot dummy key K"
+                    "[tillandsias-vault] recovered Shamir unseal share from host-delivered credentials (v1, base64)"
                 );
             }
-            let machine_id = read_machine_id()?;
-            let dummy_key = auto_unseal::derive_unseal_key(
-                machine_id.as_bytes(),
-                creds.installation_uuid.as_bytes(),
-            );
-            return Ok(dummy_key);
+            let mut key = [0u8; 32];
+            key.copy_from_slice(&key_vec);
+            return Ok(key);
         }
+        // 2. Not in host credentials (first boot). Return derived dummy key from delivered installation_uuid.
+        if debug {
+            eprintln!(
+                "[tillandsias-vault] Shamir share not present in host credentials; deriving first-boot dummy key K"
+            );
+        }
+        let machine_id = read_machine_id()?;
+        let dummy_key = auto_unseal::derive_unseal_key(
+            machine_id.as_bytes(),
+            creds.installation_uuid.as_bytes(),
+        );
+        return Ok(dummy_key);
     }
 
     // 1. Try to get the Shamir share from the keychain

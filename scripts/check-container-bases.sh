@@ -54,7 +54,8 @@ expect_base() {
     fi
 }
 
-expect_base "images/default/Containerfile" "registry.fedoraproject.org/fedora-minimal:44"
+expect_base "images/default/Containerfile" "registry.fedoraproject.org/fedora-minimal:44" '${BASE_IMAGE}'
+expect_base "images/default/Containerfile.base" "registry.fedoraproject.org/fedora-minimal:44"
 expect_base "images/inference/Containerfile" "registry.fedoraproject.org/fedora-minimal:44"
 expect_base "images/chromium/Containerfile.core" "registry.fedoraproject.org/fedora-minimal:44"
 expect_base "images/chromium/Containerfile.framework" 'tillandsias-chromium-core:${CHROMIUM_CORE_TAG}' '${CHROMIUM_CORE_IMAGE}'
