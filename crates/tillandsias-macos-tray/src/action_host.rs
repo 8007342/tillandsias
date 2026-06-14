@@ -619,14 +619,14 @@ async fn poll_github_login_once(
 
     match reply.body {
         ControlMessage::GithubLoginStatusReply {
-            logged_in,
-            handle,
-            ..
+            logged_in, handle, ..
         } => {
             if logged_in {
-                Ok(tillandsias_host_shell::menu_state::GithubLoginState::LoggedIn {
-                    handle: handle.unwrap_or_default(),
-                })
+                Ok(
+                    tillandsias_host_shell::menu_state::GithubLoginState::LoggedIn {
+                        handle: handle.unwrap_or_default(),
+                    },
+                )
             } else {
                 Ok(tillandsias_host_shell::menu_state::GithubLoginState::LoggedOut)
             }
@@ -637,7 +637,6 @@ async fn poll_github_login_once(
         )),
     }
 }
-
 
 /// Default vsock CID for the Tillandsias guest. Matches what the
 /// in-VM headless binds; the host always connects to this CID.
