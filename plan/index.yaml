@@ -3022,7 +3022,7 @@ plan_index:
               known_repo_wide_failures:
                 - "./build.sh --ci --spec tillandsias-vault still fails pre-existing gates: VERSION behind v0.3.260608.2+, repo-wide fmt drift, unrelated clippy::type_complexity in main.rs:1043, and pre-existing signal_handling timeout."
         - id: vault-flow/xplat-gating-parity
-          status: ready
+          status: done
           owner_host: macos+windows
           depends_on: [vault-flow/tray-gate-on-vault]
           unblocked_note: "Original blockers cleared: step 32 (vault-hardening-true-rekey) DONE, step 36 (xplat-vault/windows + /macos) DONE, and 42a (vault-flow/tray-gate-on-vault) completed and merged to windows-next. Windows slice is now in progress."
@@ -3082,6 +3082,16 @@ plan_index:
                 vault_bootstrap::is_github_logged_in and replies with
                 GithubLoginStatusReply containing the status and username handle.
                 Verified that cargo test and clippy pass.
+            - type: completed
+              ts: "2026-06-14T22:18:00Z"
+              agent_id: "macos-antigravity-20260614T221800Z"
+              host: "macos"
+              note: >
+                macOS slice completed and merged to osx-next. The xplat gating parity
+                feature is now fully implemented across Windows and macOS trays, and supported
+                by the in-VM headless control wire dispatcher.
+              evidence_refs:
+                - "cargo test -p tillandsias-macos-tray: 20/20 PASS"
         - id: vault-flow/tray-popup-terminal
           status: done
           depends_on: [vault-flow/login-in-container]
