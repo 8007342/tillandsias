@@ -254,15 +254,23 @@ fn main() {
     let headless = user_args.iter().any(|a| a == "--headless");
     let tray = user_args.iter().any(|a| a == "--tray");
 
+    let is_cli_mode = opencode
+        || codex
+        || claude
+        || bash
+        || opencode_web
+        || observatorium
+        || init
+        || status_check
+        || github_login
+        || list_cloud_projects
+        || cache_clear
+        || cache_verify;
+
     // @trace spec:singleton-guard
     // Enforce singleton behavior. Newer instances signal and terminate older instances.
     // We gate all run modes and init to prevent port/state collisions.
-    let _singleton = if !status_check
-        && !github_login
-        && !list_cloud_projects
-        && !cache_clear
-        && !cache_verify
-    {
+    let _singleton = if !is_cli_mode {
         match tillandsias_core::singleton::SingletonGuard::acquire(
             "launcher",
             Duration::from_secs(5),

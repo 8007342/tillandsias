@@ -156,7 +156,7 @@
 - title: Prevent detached tray startup from terminating foreground CLI modes
 - owner_host: linux
 - capability_tags: [rust, lifecycle, singleton, tray, opencode, testing]
-- status: ready
+- status: completed
 - discovered_by: `/build-install-and-smoke-test-e2e`
 - owned_files:
   - `crates/tillandsias-headless/src/main.rs`
@@ -203,3 +203,10 @@
     note: >
       Full build, install, destructive reset, and pristine init passed. The
       final forge gate reproduced the singleton parent-kill twice.
+  - type: fixed
+    ts: "2026-06-14T13:06:00Z"
+    agent_id: "linux-antigravity"
+    host: linux
+    note: >
+      Exempted CLI modes from the SingletonGuard check in main.rs. Created process-level
+      regression test in singleton_coexistence.rs and verified the fix.
