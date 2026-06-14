@@ -115,6 +115,49 @@ artifact**, so every clean Windows (and macOS, same template) provision 404s.
 
 ---
 
+## Linux canonical smoke: HALTED at Vault launch
+
+The published Linux installer and checksum verification passed, the full
+Podman reset left an empty store, and all application images built successfully
+from scratch. Init then failed before Vault initialization because the image was
+built only under its content-addressed tag while the runtime launched `:latest`.
+The forge continuous-enhancement step was not run because init was unhealthy.
+
+### Work Packet: smoke-finding/vault-digest-image-missing-latest-alias
+
+- id: `smoke-finding/vault-digest-image-missing-latest-alias`
+- owner_host: linux
+- capability_tags: [rust, podman, vault, testing, release]
+- status: ready
+- discovered_by: `/smoke-curl-install-and-test-e2e` on release `v0.3.260614.1`
+- evidence:
+  - `target/smoke-e2e/03-init.log:3994` — Vault commits
+    `localhost/tillandsias-vault:sha256-256304745261e6a7ab1aa7bcb94d132e592c0a1c0112096a9ae5d6558ccc6f38`.
+  - `target/smoke-e2e/03-init.log:4010` — runtime tries to pull
+    `localhost/tillandsias-vault:latest`.
+  - `target/smoke-e2e/03-init.log:4014` — localhost registry connection is
+    refused because no local `:latest` image exists.
+  - `target/smoke-e2e/03-init.log:4015` — init exits with
+    `podman run vault failed: exit status: 125`.
+  - `target/smoke-e2e/03-images-after-failure.txt` — Vault has only the
+    content-addressed tag; other built images have digest, version, and latest
+    aliases.
+- repro:
+  - `podman system reset --force && tillandsias --debug --init`
+- next_action: >
+    Make Vault consume the same canonical image decision and alias path as the
+    other init-built images: either launch the exact content-addressed tag
+    returned by the build or create the version and latest aliases before
+    launch. Add a clean-store regression test that proves Vault launch never
+    attempts a registry pull after a successful local build.
+- events:
+  - type: discovered
+    ts: "2026-06-14T03:46:47Z"
+    agent_id: "linux-macuahuitl-codex-20260614T033837Z"
+    host: linux
+
+---
+
 ## PASS / clean observations (no packet — recorded so the release is on the convergence ledger)
 
 - Published artifact integrity: `tillandsias-tray-...-windows-x64.zip` SHA256
@@ -127,6 +170,11 @@ artifact**, so every clean Windows (and macOS, same template) provision 404s.
   `--provision-once`).
 - Clean-room hygiene: the failed provision left **no** partial WSL distro
   registered (download fails before `wsl --import`), so retry is idempotent.
+- Linux installer integrity: public `install.sh` verified the release checksum,
+  installed `Tillandsias v0.3.260614.1`, and found Podman 5.8.2.
+- Linux clean-store build: proxy, git, inference, router, Chromium core,
+  Chromium framework, forge base, forge, web, and Vault images all built
+  successfully before the Vault alias mismatch halted init.
 - Runner note (not a product bug): the GUI-subsystem binary's stdout is **not**
   captured by git-bash `>` redirection, but the **documented** `cmd /c "... > out.json 2>nul"`
   / PowerShell `Start-Process -RedirectStandardOutput` path captures it fine
