@@ -566,6 +566,79 @@ async fn poll_cloud_projects_once(
     }
 }
 
+/// One-shot GithubLoginStatusRequest over the in-VM control wire. Mirrors
+/// `tillandsias-windows-tray::notify_icon::refresh_github_login` but
+/// drives the macOS-specific vsock path via `VzRuntime::open_vsock_stream`.
+///
+/// Returns the mapped `GithubLoginState` so the caller can write it into the
+/// held `MenuState.login` and re-render the menu.
+/// Best-effort: a transient wire error / Error{Unsupported} returns `Err(String)`
+/// so the caller can log + leave the last-known login state untouched (matches
+/// windows-tray's policy).
+async fn poll_github_login_once(
+    vz: &VzRuntime,
+) -> Result<tillandsias_host_shell::menu_state::GithubLoginState, String> {
+    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
+    use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
+    use tillandsias_host_shell::vsock_client::Client;
+
+    let connect_timeout = Duration::from_secs(5);
+    let stream = vz
+        .open_vsock_stream(CONTROL_WIRE_VSOCK_PORT, connect_timeout)
+        .await
+        .map_err(|e| format!("vsock connect: {e}"))?;
+
+    let mut client = Client::from_stream(
+        Box::new(stream),
+        Transport::Vsock {
+            cid: TILLANDSIAS_GUEST_CID,
+            port: CONTROL_WIRE_VSOCK_PORT,
+        },
+    );
+    client
+        .handshake()
+        .await
+        .map_err(|e| format!("control-wire handshake: {e}"))?;
+
+    if let Err(err) =
+        crate::installation_uuid::deliver_credentials_and_check_handover(&mut client).await
+    {
+        tracing::warn!(%err, "credentials delivery / handover check failed during github login poll");
+    }
+
+    let seq = client.allocate_seq();
+    let envelope = ControlEnvelope {
+        wire_version: WIRE_VERSION,
+        seq,
+        body: ControlMessage::GithubLoginStatusRequest { seq },
+    };
+    let reply = client
+        .request(&envelope)
+        .await
+        .map_err(|e| format!("GithubLoginStatusRequest: {e}"))?;
+
+    match reply.body {
+        ControlMessage::GithubLoginStatusReply {
+            logged_in,
+            handle,
+            ..
+        } => {
+            if logged_in {
+                Ok(tillandsias_host_shell::menu_state::GithubLoginState::LoggedIn {
+                    handle: handle.unwrap_or_default(),
+                })
+            } else {
+                Ok(tillandsias_host_shell::menu_state::GithubLoginState::LoggedOut)
+            }
+        }
+        ControlMessage::Error { code, message, .. } => Err(describe_wire_error(code, &message)),
+        other => Err(format!(
+            "unexpected reply to GithubLoginStatusRequest: {other:?}"
+        )),
+    }
+}
+
+
 /// Default vsock CID for the Tillandsias guest. Matches what the
 /// in-VM headless binds; the host always connects to this CID.
 const TILLANDSIAS_GUEST_CID: u32 = 3;
@@ -1519,6 +1592,23 @@ fn spawn_vm_status_poller(
                     }
                     Err(e) => {
                         eprintln!("[tillandsias-tray] cloud-projects poll: {e}");
+                    }
+                }
+                match poll_github_login_once(&vz).await {
+                    Ok(login_state) => {
+                        let mut guard = menu_state.lock().unwrap();
+                        if guard.login != login_state {
+                            guard.login = login_state;
+                            rebuild_needed = true;
+                            eprintln!(
+                                "[tillandsias-tray] github-login: \
+                                 menu_state updated"
+                            );
+                        }
+                        drop(guard);
+                    }
+                    Err(e) => {
+                        eprintln!("[tillandsias-tray] github-login poll: {e}");
                     }
                 }
             }
