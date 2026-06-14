@@ -128,7 +128,7 @@ The forge continuous-enhancement step was not run because init was unhealthy.
 - id: `smoke-finding/vault-digest-image-missing-latest-alias`
 - owner_host: linux
 - capability_tags: [rust, podman, vault, testing, release]
-- status: ready
+- status: claimed
 - discovered_by: `/smoke-curl-install-and-test-e2e` on release `v0.3.260614.1`
 - evidence:
   - `target/smoke-e2e/03-init.log:3994` — Vault commits
@@ -155,6 +155,12 @@ The forge continuous-enhancement step was not run because init was unhealthy.
     ts: "2026-06-14T03:46:47Z"
     agent_id: "linux-macuahuitl-codex-20260614T033837Z"
     host: linux
+  - type: claim
+    ts: "2026-06-14T05:57:48Z"
+    agent_id: "linux-macuahuitl-codex-20260614T055748Z"
+    host: linux
+    lease_id: "f5d0682267ce"
+    expires_at: "2026-06-14T09:57:48Z"
 
 ---
 
