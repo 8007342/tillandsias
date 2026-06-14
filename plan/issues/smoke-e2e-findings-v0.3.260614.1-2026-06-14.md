@@ -226,7 +226,7 @@ binary). Clean-room: no WSL distro registered.**
 - id: `smoke-finding/container-base-missing-systemd-podman`
 - owner_host: windows            # fix lives in windows-tray wsl_lifecycle.rs (Windows scope)
 - capability_tags: [windows, wsl, vm-layer, podman, fedora]
-- status: in_progress            # fix applied + unit/build green; full --init re-verify in flight
+- status: done                   # fix applied + VALIDATED end-to-end via the code path (see below)
 - discovered_by: `/smoke-curl-install-and-test-e2e` (Windows-equivalent) on `bf6b0d03`
 - severity: high — the OCI Container Base reaches `wsl --import` but provisioning then
   fails; the recipe never reaches Ready, and the user-runtime lane can't build images.
@@ -261,3 +261,96 @@ binary). Clean-room: no WSL distro registered.**
     ts: "2026-06-14T08:09:02Z"
     agent_id: "windows-yolanda-claude-20260614T004000Z"
     host: windows
+
+### VALIDATION — `container-base-missing-systemd-podman` fix proven via the code path
+
+A clean re-provision (`wsl --unregister tillandsias` then locally-built tray
+`0.3.260614.2` `--provision-once`) exercised the in-tree `ensure_base_packages()`
+(NOT manual commands): `30-provision-intree.{log,err}` shows
+download(cached)→OCI-flatten→`wsl --import`→**"📦 Installing systemd + podman in
+Fedora base…"** (82 pkgs incl. systemd/podman/dbus-broker/openssl + `setcap`)→
+"⚙️ Configuring Fedora distro…"→systemd boot ("ready")→Connecting. The in-VM
+`tillandsias-headless.service` then **fetched (39 MB) and is ACTIVE** on vsock
+42420 (`app.started`), and with the VM held warm `--status-once --json` returns
+`reachable:true, wire_version:2, phase:"Starting"` (`32-status-keepalive.json`).
+→ **The Windows recipe now launches a working Fedora 44 WSL2 with the in-VM
+headless reachable over HvSocket.** Committed: `0d6858ee` + the openssl follow-up.
+
+## Two remaining blockers — both at Vault first-boot (Linux-runtime scope)
+
+### Work Packet: smoke-finding/init-vault-firstboot-hang-headless
+- id: `smoke-finding/init-vault-firstboot-hang-headless`
+- owner_host: linux            # vault bootstrap / runtime-lane, not the Windows recipe
+- capability_tags: [rust, podman, vault, headless, wsl, testing]
+- status: ready
+- severity: high — the operator's literal acceptance (`tillandsias --init --debug`
+  succeeds inside the WSL2) cannot complete; init hangs forever.
+- discovered_by: `/smoke-curl-install-and-test-e2e` (Windows-equivalent) on `v0.3.260614.1`
+- evidence:
+  - `25/26/27-wsl-init-*.log`: after all 9 enclave images + the Vault image build
+    SUCCESS, CA gen + TLS secrets load, init prints `[tillandsias-vault] Shamir
+    share not found; deriving first-boot dummy key K` then **hangs** — no Vault
+    container is ever created (`podman ps -a` empty).
+  - `28-wsl-init-timeout.log`: `timeout --signal=KILL 240 tillandsias --init` →
+    `INIT_EXIT=137` (killed; never returned).
+  - Vault Containerfile `HEALTHCHECK` is **ignored** under OCI image format
+    ("HEALTHCHECK is not supported for OCI image format and will be ignored"), so a
+    readiness wait that polls container health would never observe healthy.
+- repro (inside a Fedora-44 WSL2 as a rootless user, after the env prereqs below):
+  - `tillandsias --init --debug` → builds all images, then hangs at "deriving
+    first-boot dummy key K".
+- next_action: >
+    Investigate the Vault first-boot bring-up on headless rootless podman: (a) does
+    `podman run` for the vault container ever get invoked (no container appears)? (b)
+    is the readiness wait keyed on the OCI-ignored HEALTHCHECK (→ never healthy →
+    infinite wait)? Add a bounded timeout + actionable error instead of a hang, and a
+    health probe that doesn't depend on the ignored Containerfile HEALTHCHECK (e.g.
+    poll `https://127.0.0.1:8200/v1/sys/health` directly). Cross-ref the Linux
+    smoke's `smoke-finding/vault-digest-image-missing-latest-alias`.
+- events:
+  - type: discovered
+    ts: "2026-06-14T08:46:00Z"
+    agent_id: "windows-yolanda-claude-20260614T004000Z"
+    host: windows
+
+### Work Packet: smoke-finding/provision-once-ready-budget-too-short
+- id: `smoke-finding/provision-once-ready-budget-too-short`
+- owner_host: windows
+- capability_tags: [windows, wsl, hvsocket, provisioning]
+- status: ready
+- severity: medium — clean `--provision-once` reports failure even though the recipe
+  + in-VM headless came up fine; misleads operators/CI into thinking provisioning broke.
+- discovered_by: `/smoke-curl-install-and-test-e2e` (Windows-equivalent) on `v0.3.260614.1`
+- evidence:
+  - `wsl_lifecycle.rs::provision_via_recipe` connect loop is `for attempt in 1..=12`
+    × `sleep(5s)` = **60 s**, and `try_connect_until_ready` only returns Ok on
+    `VmPhase::Ready`. On a cold box the in-VM headless must first curl a 39 MB binary
+    and the enclave/Vault must come up before Ready — far longer than 60 s — so
+    `--provision-once` exits 1 (`30-provision-intree`: reached "Connecting" then
+    failed) while the headless is in fact reachable (`32-status-keepalive.json`:
+    `reachable:true, phase:"Starting"`).
+  - One-shot `--provision-once`/`--status-once` also don't hold a `spawn_keepalive`,
+    so the utility VM can idle out mid-wait (`WSA 10060` on the next connect).
+- next_action: >
+    Hold a `spawn_keepalive` across the connect loop and extend/transform the budget:
+    either wait on `tillandsias-headless-fetch.service` completion before counting
+    Ready attempts, or treat a successful handshake at `phase:Starting` as
+    "provisioned, enclave converging" (exit 0 with a distinct phase) rather than a
+    hard failure. Gate full-Ready on the resolution of
+    `smoke-finding/init-vault-firstboot-hang-headless`.
+- events:
+  - type: discovered
+    ts: "2026-06-14T08:46:00Z"
+    agent_id: "windows-yolanda-claude-20260614T004000Z"
+    host: windows
+
+## Rootless user-lane prerequisites discovered (for `tillandsias --init` on headless Linux)
+Running the standalone Linux `tillandsias --init` as a non-root user in a headless
+WSL2 required, in order: a non-root user; `loginctl enable-linger <user>` (for
+`/run/user/<uid>`); `setcap` on `newuidmap`/`newgidmap` (now in the recipe);
+`~/.config/containers/containers.conf` `[engine] cgroup_manager="cgroupfs"` (no
+systemd user-session bus → crun `sd-bus call: Permission denied`); and a Secret
+Service (`dnf install gnome-keyring dbus-x11` + a `dbus-launch` session running
+`gnome-keyring-daemon --start --components=secrets`) for the Vault unseal-key
+keyring anchor. These are environment prereqs `install.sh`/`--init` could detect &
+report (or document) on headless Linux instead of failing cryptically. Owner: linux.
