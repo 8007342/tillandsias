@@ -2847,9 +2847,106 @@ fn detect_and_recover_cache_corruption(debug: bool) -> Result<bool, String> {
     }
 }
 
+#[cfg(target_os = "linux")]
+fn is_ipv6_functional() -> bool {
+    let addresses = [
+        "2001:4860:4860::8888:53", // Google DNS
+        "2606:4700:4700::1111:53", // Cloudflare DNS
+    ];
+    for addr_str in &addresses {
+        if let Ok(addr) = addr_str.parse::<std::net::SocketAddr>() {
+            if std::net::TcpStream::connect_timeout(&addr, std::time::Duration::from_millis(800))
+                .is_ok()
+            {
+                return true;
+            }
+        }
+    }
+    false
+}
+
+#[cfg(target_os = "linux")]
+fn get_user_containers_conf() -> Option<PathBuf> {
+    let config_dir = if let Ok(xdg) = std::env::var("XDG_CONFIG_HOME") {
+        PathBuf::from(xdg)
+    } else if let Ok(home) = std::env::var("HOME") {
+        PathBuf::from(home).join(".config")
+    } else {
+        return None;
+    };
+    Some(config_dir.join("containers").join("containers.conf"))
+}
+
+#[cfg(target_os = "linux")]
+fn ensure_pasta_options_ipv4_only(path: &std::path::Path) -> Result<(), String> {
+    if !path.exists() {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|e| format!("failed to create config directory: {e}"))?;
+        }
+        fs::write(path, "[network]\npasta_options = [\"--ipv4-only\"]\n")
+            .map_err(|e| format!("failed to write containers.conf: {e}"))?;
+        return Ok(());
+    }
+
+    let content =
+        fs::read_to_string(path).map_err(|e| format!("failed to read containers.conf: {e}"))?;
+
+    if content.contains("pasta_options") {
+        return Ok(());
+    }
+
+    let mut new_content = String::new();
+    let mut network_found = false;
+
+    for line in content.lines() {
+        new_content.push_str(line);
+        new_content.push('\n');
+
+        if line.trim() == "[network]" {
+            new_content.push_str("pasta_options = [\"--ipv4-only\"]\n");
+            network_found = true;
+        }
+    }
+
+    if !network_found {
+        new_content.push_str("\n[network]\npasta_options = [\"--ipv4-only\"]\n");
+    }
+
+    fs::write(path, new_content).map_err(|e| format!("failed to update containers.conf: {e}"))?;
+
+    Ok(())
+}
+
+#[cfg(target_os = "linux")]
+fn auto_detect_and_configure_ipv6_workaround(debug: bool) {
+    if let Some(conf_path) = get_user_containers_conf() {
+        if !is_ipv6_functional() {
+            if debug {
+                eprintln!(
+                    "[tillandsias] init: IPv6 connectivity check failed. Injecting pasta_options = [\"--ipv4-only\"] to prevent rootless Podman timeouts."
+                );
+            }
+            if let Err(e) = ensure_pasta_options_ipv4_only(&conf_path) {
+                if debug {
+                    eprintln!(
+                        "[tillandsias] init: failed to configure containers.conf: {}",
+                        e
+                    );
+                }
+            }
+        } else if debug {
+            eprintln!("[tillandsias] init: IPv6 connectivity is functional.");
+        }
+    }
+}
+
 fn run_init(debug: bool, force: bool) -> Result<(), String> {
     require_desktop_user_session("tillandsias --init")?;
     report_runtime_lane("--init", debug);
+
+    #[cfg(target_os = "linux")]
+    auto_detect_and_configure_ipv6_workaround(debug);
 
     let version = VERSION.trim();
     let root = resolve_runtime_asset_root(version, debug)?;
@@ -7422,6 +7519,45 @@ pub(crate) async fn graceful_shutdown_async() -> Result<(), String> {
 mod tests {
     use super::*;
     use std::path::PathBuf;
+
+    #[test]
+    #[cfg(target_os = "linux")]
+    fn test_ensure_pasta_options_ipv4_only() {
+        let temp_dir = tempfile::tempdir().unwrap();
+        let conf_path = temp_dir.path().join("containers.conf");
+
+        // Case 1: File does not exist
+        ensure_pasta_options_ipv4_only(&conf_path).unwrap();
+        let content = std::fs::read_to_string(&conf_path).unwrap();
+        assert!(content.contains("[network]"));
+        assert!(content.contains("pasta_options = [\"--ipv4-only\"]"));
+
+        // Case 2: File exists but does not contain [network]
+        std::fs::write(&conf_path, "[containers]\nlog_size_max = 1000\n").unwrap();
+        ensure_pasta_options_ipv4_only(&conf_path).unwrap();
+        let content = std::fs::read_to_string(&conf_path).unwrap();
+        assert!(content.contains("[containers]"));
+        assert!(content.contains("[network]"));
+        assert!(content.contains("pasta_options = [\"--ipv4-only\"]"));
+
+        // Case 3: File exists and contains [network] but not pasta_options
+        std::fs::write(&conf_path, "[network]\nevents_logger = \"file\"\n").unwrap();
+        ensure_pasta_options_ipv4_only(&conf_path).unwrap();
+        let content = std::fs::read_to_string(&conf_path).unwrap();
+        assert!(content.contains("events_logger = \"file\""));
+        assert!(content.contains("pasta_options = [\"--ipv4-only\"]"));
+
+        // Case 4: File already contains pasta_options
+        std::fs::write(
+            &conf_path,
+            "[network]\npasta_options = [\"--something-else\"]\n",
+        )
+        .unwrap();
+        ensure_pasta_options_ipv4_only(&conf_path).unwrap();
+        let content = std::fs::read_to_string(&conf_path).unwrap();
+        assert!(content.contains("pasta_options = [\"--something-else\"]"));
+        assert!(!content.contains("pasta_options = [\"--ipv4-only\"]"));
+    }
     use std::sync::{Mutex, OnceLock};
 
     fn has_arg(args: &[String], needle: &str) -> bool {
