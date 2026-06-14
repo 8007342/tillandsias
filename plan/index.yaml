@@ -2988,16 +2988,50 @@ plan_index:
               known_repo_wide_failures:
                 - "./build.sh --ci --spec tillandsias-vault still fails pre-existing gates: VERSION behind v0.3.260608.2+, repo-wide fmt drift, unrelated clippy::type_complexity in main.rs:1043, and pre-existing signal_handling timeout."
         - id: vault-flow/xplat-gating-parity
-          status: blocked
+          status: in_progress
           owner_host: macos+windows
           depends_on: [vault-flow/tray-gate-on-vault]
-          blocked_reason: "Mirrors the Linux is_logged_in gating contract; not claimable until 42a is on the durable branch as the reference, and overlaps the step 36 keychain/vsock parity which is itself blocked on step 32."
+          unblocked_note: "Original blockers cleared: step 32 (vault-hardening-true-rekey) DONE, step 36 (xplat-vault/windows + /macos) DONE, and 42a (vault-flow/tray-gate-on-vault) completed and merged to windows-next. Windows slice is now in progress."
           owned_files:
             - crates/tillandsias-host-shell/src/menu_state.rs
             - crates/tillandsias-macos-tray/src/menu_disabled_v2.rs
             - crates/tillandsias-windows-tray/tests/portable_smoke.rs
+            - crates/tillandsias-control-wire/src/lib.rs
+            - crates/tillandsias-windows-tray/src/notify_icon.rs
           checkpoint_required: true
-          handoff_note: "host-shell GithubLoginState (LoggedOut/LoggedIn) is only set in menu_disabled_v2.rs + tests, not from a live Vault read. Wire it to the same Vault is_logged_in signal (over vsock/HvSocket for the in-VM model). Flag, don't fix, any sibling-owned fmt/clippy drift."
+          handoff_note: "host-shell GithubLoginState (LoggedOut/LoggedIn) is only set in menu_disabled_v2.rs + tests, not from a live Vault read. Wire it to the same Vault is_logged_in signal (over vsock/HvSocket for the in-VM model). Flag, don't fix, any sibling-owned fmt/clippy drift. WINDOWS SLICE LANDED (see events): new wire-safe GithubLoginStatus{Request,Reply} pair + Windows tray refresh_github_login poller sets MENU_STATE.login from the live in-VM signal. TWO HANDOFFS REMAIN: (1) LINUX/headless owner — add the in-VM vsock-dispatcher handler for ControlMessage::GithubLoginStatusRequest that calls vault_bootstrap::is_github_logged_in(debug) and replies GithubLoginStatusReply{logged_in, handle}; until then the in-VM headless returns Error{Unsupported} and the Windows tray degrades to last-known login state (graceful). is_github_logged_in already exists at crates/tillandsias-headless/src/vault_bootstrap.rs:463. (2) MACOS owner — mirror refresh_github_login in the macOS tray (action_host.rs / menu_disabled_v2.rs) over vz vsock so the macOS GitHub menu item reflects the same live signal."
+          events:
+            - type: claim
+              ts: "2026-06-14T00:40:00Z"
+              agent_id: "windows-yolanda-claude-20260614T004000Z"
+              host: "windows"
+              lease_id: "lease-windows-xplat-gating-parity-20260614T0040Z"
+              expires_at: "2026-06-14T04:40:00Z"
+            - type: progress
+              ts: "2026-06-14T00:45:00Z"
+              agent_id: "windows-yolanda-claude-20260614T004000Z"
+              host: "windows"
+              lease_id: "lease-windows-xplat-gating-parity-20260614T0040Z"
+              note: >
+                Windows slice landed on windows-next. (a) control-wire: added the
+                trailing GithubLoginStatusRequest/GithubLoginStatusReply variant
+                pair — additive per the WIRE_VERSION doc (no version bump;
+                postcard additive-enum encoding). (b) windows-tray: refresh_github_login
+                poller (mirrors refresh_cloud_projects) queries the in-VM headless
+                over HvSocket on the slow (~5 min) menu-refresh cadence and sets
+                MENU_STATE.login via the pure github_login_state_from_reply mapper.
+                Degrades gracefully to last-known state on Error{Unsupported}/wire
+                error. Evidence: control-wire 26/26 (incl. 3 new GithubLoginStatus
+                tests), windows-tray 44 unit + 8 cli + 3 portable_smoke green,
+                cargo fmt clean, no new clippy findings in touched files.
+                Pre-existing sibling clippy drift FLAGGED not fixed: vm-layer
+                materialize/oci.rs:114 + cache.rs (manual_strip/collapsible_if,
+                Linux-CI blind spot per w12 finding) and control-wire transport.rs
+                test-helper dead-code on the non-unix path.
+              evidence_refs:
+                - "cargo test -p tillandsias-control-wire: 26/26 PASS"
+                - "cargo test -p tillandsias-windows-tray: 44 + 8 + 3 PASS (1 interactive ignored)"
+                - "cargo fmt -p tillandsias-control-wire -p tillandsias-windows-tray -- --check: clean"
         - id: vault-flow/tray-popup-terminal
           status: done
           depends_on: [vault-flow/login-in-container]
