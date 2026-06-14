@@ -2064,6 +2064,12 @@ plan_index:
               host: "linux"
               lease_id: "lease-linux-release-bump-and-tag-20260604T0306Z"
               expires_at: "2026-06-04T07:06:17Z"
+            - type: released
+              ts: "2026-06-14T07:07:00Z"
+              agent_id: "linux-next-orchestrator-20260614T0707Z"
+              host: "linux"
+              lease_id: "lease-linux-release-bump-and-tag-20260604T0306Z"
+              note: "Reclaiming expired lease; task already completed by macOS sibling."
 
     - id: build-pipeline-optimization
       order: 28
@@ -2706,7 +2712,7 @@ plan_index:
     - id: version-conflict-release
       order: 37
       title: Resolve v0.3.0 VERSION conflict & cut the release
-      status: needs_clarification
+      status: ready
       owner_host: release
       deliverable: plan/steps/37-version-conflict-release.md
       audit_origin: plan/issues/pre-vault-obsolescence-audit-2026-06-05.md
@@ -2726,7 +2732,7 @@ plan_index:
         - "Tag v0.3.x exists on GitHub; release.yml dispatched; assets published and read back."
       tasks:
         - id: release/version-conflict-resolution
-          status: needs_clarification
+          status: ready
           owner_host: release
           depends_on: []
           owned_files:
@@ -2734,7 +2740,13 @@ plan_index:
             - plan/issues/multi-host-integration-loop-2026-05-24.md
             - skills/merge-to-main-and-release/SKILL.md
           checkpoint_required: true
-          handoff_note: "Operator-gated. Running escalation in the integration-loop ledger (18:07Z). Top live blocker but out of autonomous scope. See audit §2 and plan/steps/37."
+          handoff_note: "Operator-gated. Option 1 chosen by operator; awaiting release execution."
+          events:
+            - type: progress
+              ts: "2026-06-14T07:33:00Z"
+              agent_id: "linux-next-orchestrator-20260614T0707Z"
+              host: "linux"
+              note: "Operator selected Option 1: Embrace the 0.3.x series on main (merge accepting 0.3.x, tag v0.3.x, dispatch release.yml)."
 
     # ----------------------------------------------------------------------
     # Wave 2026-06-05b — incremental Nix release + registry-distributed images.
@@ -2772,7 +2784,7 @@ plan_index:
     - id: nix-release-linux-headless-only
       order: 39
       title: Nix release path builds only Linux (headless/tray) — decision-gated
-      status: needs_clarification
+      status: ready
       owner_host: linux
       deliverable: plan/issues/nix-release-incremental-and-forge-distribution-2026-06-05.md
       depends_on: [nix-ci-incremental-caching]
@@ -2787,13 +2799,19 @@ plan_index:
         - "Lifecycle boundary documented (Nix = Linux only; trays = separate)."
       tasks:
         - id: nix-headless/scope-targets
-          status: needs_clarification
+          status: ready
           depends_on: [nix-cache/crane-and-cache-action]
           owned_files:
             - flake.nix
             - .github/workflows/release.yml
           checkpoint_required: true
-          handoff_note: "Gated on operator decision #2 (aarch64 headless keep/relocate)."
+          handoff_note: "Operator decision resolved: KEEP the aarch64 headless target in the Nix release."
+          events:
+            - type: progress
+              ts: "2026-06-14T07:33:00Z"
+              agent_id: "linux-next-orchestrator-20260614T0707Z"
+              host: "linux"
+              note: "Operator decided to KEEP the aarch64 headless target in the Nix release."
 
     - id: forge-recipe-download-only-assembly
       order: 40
@@ -3309,7 +3327,7 @@ plan_index:
     - id: structured-image-build-telemetry
       order: 47
       title: Structured image-build JSONL events and low-cardinality metrics
-      status: in_progress
+      status: completed
       owner_host: linux
       deliverable: plan/steps/47-structured-image-build-telemetry.md
       audit_origin: plan/issues/container-build-efficiency-telemetry-2026-06-08.md

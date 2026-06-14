@@ -9,7 +9,7 @@ xychart-beta
     title "Forge Build Duration (seconds)"
     x-axis "Builds" 1 -> 1
     y-axis "Seconds"
-    line [10]
+    line []
 ```
 
 ## Image Size Over Time
@@ -19,7 +19,7 @@ xychart-beta
     title "Forge Image Size (MB)"
     x-axis "Builds" 1 -> 1
     y-axis "MB"
-    bar [6053]
+    bar [0]
 ```
 
-*Metrics are extracted from `/home/tlatoani/.cache/tillandsias/telemetry/build-metrics.jsonl` via semantic distillation.*
+*Metrics are extracted from `/tmp/tmp.TtQJTyM506/home/.cache/tillandsias/telemetry/build-metrics.jsonl` via semantic distillation.*

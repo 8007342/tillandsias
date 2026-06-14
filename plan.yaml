@@ -19,10 +19,9 @@ plan:
     verification: methodology/verification.yaml
 
   current_state:
-    last_completed_step: podman-build-cache-and-serialization (step 46)
-    next_step: structured-image-build-telemetry (step 47); parallel ready leaves include steps 44, 38, and 42c
-
-    next_graph_node: image-telemetry/events-and-metrics
+    last_completed_step: forge-package-manager-and-telemetry (step 49)
+    next_step: github-login-vault-native-flow (step 42 task xplat-gating-parity); parallel ready leaves include step 38
+    next_graph_node: vault-flow/xplat-gating-parity
     frontier_note: >
       v0.3.0 graph (steps 24-31) drained 2026-06-04. The 2026-06-05 pre-Vault
       obsolescence audit reopened a fresh wave (steps 32-37). Step 32 is blocked
