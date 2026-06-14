@@ -245,6 +245,9 @@ impl WslLifecycle {
     ///     caps `shadow-utils` ships, so rootless podman dies with
     ///     "newuidmap: write to uid_map failed: Operation not permitted". Restore
     ///     them with `setcap`.
+    ///   * `openssl` CLI — enclave bring-up shells out to `openssl req` to mint
+    ///     the Vault HTTPS CA; the minimal base has the libs but not the binary,
+    ///     so without it init dies "bringing Vault up: ... (os error 2)".
     ///
     /// Runs BEFORE `configure_recipe_distro` flips wsl.conf to systemd-as-PID1,
     /// so the post-flip boot actually finds a systemd to run. Idempotent: `rpm -q`
@@ -255,7 +258,7 @@ impl WslLifecycle {
     ///   (smoke-finding/container-base-missing-systemd-podman)
     async fn ensure_base_packages(&self) -> Result<(), String> {
         const SETUP: &str = r#"set -e
-rpm -q systemd podman dbus-broker libcap shadow-utils >/dev/null 2>&1 || dnf install -y systemd podman dbus-broker libcap shadow-utils
+rpm -q systemd podman dbus-broker libcap shadow-utils openssl >/dev/null 2>&1 || dnf install -y systemd podman dbus-broker libcap shadow-utils openssl
 for b in /usr/bin/newuidmap /usr/sbin/newuidmap; do [ -e "$b" ] && setcap cap_setuid+ep "$b" || true; done
 for b in /usr/bin/newgidmap /usr/sbin/newgidmap; do [ -e "$b" ] && setcap cap_setgid+ep "$b" || true; done
 "#;
