@@ -1,17 +1,17 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-14T11:05:00Z
+LastExecutionTime: 2026-06-14T12:05:00Z
 
 ## This Loop
 
 - **Cycle type**: Multi-host orchestration & E2E smoke verification.
 - **Sibling Git Audit**:
   - `main` at `3395626c`
-  - `linux-next` (local) at `e95c261f`
+  - `linux-next` (local) at `493a244a`
   - `windows-next` at `9e71ad4d` (integrated)
   - `osx-next` at `fe10ac02` (integrated)
   - Drift: 0 commits (all siblings fully merged into `linux-next`). No deadlocks or thrashing detected.
-- **Convergence**: Residual Correctness Debt ($R_t$) is 3 cc (active blockers: `local-smoke/cli-tray-singleton-self-termination` in `plan/issues/build-install-smoke-e2e-findings-2026-06-14.md`, `smoke-finding/init-vault-firstboot-hang-headless` in `plan/issues/smoke-e2e-findings-v0.3.260614.1-2026-06-14.md`, and `smoke-finding/provision-once-ready-budget-too-short` in `plan/issues/smoke-e2e-findings-v0.3.260614.1-2026-06-14.md`). Convergence Velocity ($V_c$) is -1.00 cc/hour.
+- **Convergence**: Residual Correctness Debt ($R_t$) is 3 cc (active blockers: `local-smoke/cli-tray-singleton-self-termination` in `plan/issues/build-install-smoke-e2e-findings-2026-06-14.md`, `smoke-finding/init-vault-firstboot-hang-headless` in `plan/issues/smoke-e2e-findings-v0.3.260614.1-2026-06-14.md`, and `smoke-finding/provision-once-ready-budget-too-short` in `plan/issues/smoke-e2e-findings-v0.3.260614.1-2026-06-14.md`). Convergence Velocity ($V_c$) is 0.00 cc/hour.
 - **High-Velocity Alignment Event Active**: Lease TTL shrunk to 1 hour, feature work frozen, forced focus on blocker defusal.
 
 ## Active Conflicts & Mediation
@@ -26,6 +26,4 @@ LastExecutionTime: 2026-06-14T11:05:00Z
 
 ## Stale Or Pending Pings
 
-- Windows lease for `vault-flow/xplat-gating-parity` (expired at `2026-06-14T04:40:00Z`) reclaimed. Task reset to `ready`.
-
-
+- None. All leases are active or correctly reset.
