@@ -143,7 +143,7 @@ fn diagnose_json_has_all_17_top_level_keys() {
         "distro_registered",
         "distro_running",
         "release_tag",
-        "manifest_pin_x86_64_tar_xz",
+        "manifest_pin_x86_64_oci_tar_xz",
         "wire",
         "recent_log_tail",
     ] {

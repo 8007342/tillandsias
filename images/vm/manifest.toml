@@ -28,22 +28,20 @@ ref    = "registry.fedoraproject.org/fedora:44"
 digest = "sha256:6859a7bc64539828e18f26a1005a76579c536444855486c75c87f988225e0030"
 
 [output]
-# Artifact URL contract (l9): a templated locator that non-Linux hosts
-# resolve at fetch time.
-#
 # PIVOT (Phase 2b): non-Linux hosts now fetch official Fedora-owned 
 # images directly from the Fedora mirror and handle them locally.
 # UNBLOCKS Windows/macOS from hosting giant custom blobs.
 #
 # @trace plan/issues/rootfs-removal-fedora-wsl-pivot-2026-06-02.md
-artifact_url_template = "https://download.fedoraproject.org/pub/fedora/linux/releases/44/Cloud/{arch}/images/Fedora-Cloud-Base-Generic-44-1.7.{arch}.{format}"
+[output.artifact_urls]
+"x86_64.oci.tar.xz" = "https://download.fedoraproject.org/pub/fedora/linux/releases/44/Container/x86_64/images/Fedora-Container-Base-Generic-44-1.7.x86_64.oci.tar.xz"
+"aarch64.oci.tar.xz" = "https://download.fedoraproject.org/pub/fedora/linux/releases/44/Container/aarch64/images/Fedora-Container-Base-Generic-44-1.7.aarch64.oci.tar.xz"
+"aarch64.qcow2" = "https://download.fedoraproject.org/pub/fedora/linux/releases/44/Cloud/aarch64/images/Fedora-Cloud-Base-Generic-44-1.7.aarch64.qcow2"
 
-# Artifact SHAs (D6: dual-path materialization).
-# Format keys: "<arch>.<format>"
 [output.expected_rootfs_sha]
-"x86_64.tar.xz"  = "a28cabe7c9dfcf58e8a2c63d1885d968c5abbc4719c7e89152d4c5e492d38e99"
-"aarch64.tar.xz" = "a8435ed1a0c9294e9ca9f060eaacc3f059662908040037dec330d71a1b5f3028"
-"aarch64.qcow2"  = "55c60a3b80d3616a08705afd0459e75fe9f03c54aba7a46e4002a41a72fa0d5b"
+"x86_64.oci.tar.xz" = "75200f5752a74a21a616ca9a75e25beb594e2e117a0195c54f87c0b3e3974d1b"
+"aarch64.oci.tar.xz" = "eca19542a48a8e39b84e869713a1fa2408cbcc578de26c25ae72e3334ef968c1"
+"aarch64.qcow2" = "55c60a3b80d3616a08705afd0459e75fe9f03c54aba7a46e4002a41a72fa0d5b"
 
 # Kernel command-line passed to the VM bootloader. Quiet boot + serial
 # console on hvc0 so the host can capture early-boot diagnostics.

@@ -88,7 +88,7 @@ critical_path:
     timeout_ms: 3000
 
   - step: "cheatsheet exists with the documented schema"
-    command: "grep -F 'Windows tray diagnostics' cheatsheets/runtime/windows-tray-diagnostics.md && grep -F 'manifest_pin_x86_64_tar' cheatsheets/runtime/windows-tray-diagnostics.md"
+    command: "grep -F 'Windows tray diagnostics' cheatsheets/runtime/windows-tray-diagnostics.md && grep -F 'manifest_pin_x86_64_oci_tar_xz' cheatsheets/runtime/windows-tray-diagnostics.md"
     expected_behavior: "grep succeeds"
     timeout_ms: 3000
 

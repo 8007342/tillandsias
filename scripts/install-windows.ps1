@@ -238,7 +238,7 @@ if ($diagExit -eq 1) {
 if ($diagJson) {
     try {
         $report = $diagJson | ConvertFrom-Json -ErrorAction Stop
-        $pin = if ($report.manifest_pin_x86_64_tar) { "$($report.manifest_pin_x86_64_tar)..." } else { '(none)' }
+        $pin = if ($report.manifest_pin_x86_64_oci_tar_xz) { "$($report.manifest_pin_x86_64_oci_tar_xz)..." } else { '(none)' }
         $commit = if ($report.build_commit) { $report.build_commit } else { '(unknown)' }
         Write-Host "  installed: version=$($report.version) commit=$commit pin=$pin (--diagnose exit $diagExit)" -ForegroundColor Green
         # Surface the host-software triage line: OS build + WSL version captured
