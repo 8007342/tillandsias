@@ -87,6 +87,16 @@ methodology:
           findings) as plan/issues work packets for /advance-work-from-plan pickup.
         destructive: true   # Step 2 wipes ALL podman state; gate on operator go-ahead
         steerable: true
+      build-install-and-smoke-test-e2e:
+        path: skills/build-install-and-smoke-test-e2e/SKILL.md
+        tier: worker
+        purpose: >
+          Local linux-next acceptance gate: run the full local CI and install,
+          wipe Podman, initialize the installed build from a pristine store,
+          then launch forge-continuous-enhancement against the current checkout.
+          Failures stop the sequence and become ready plan/issues packets.
+        destructive: true   # Explicit invocation authorizes the Podman reset; do not reconfirm.
+        steerable: true
 
   invariant_summary:
     - specs_define_intent

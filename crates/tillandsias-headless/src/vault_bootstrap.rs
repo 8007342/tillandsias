@@ -27,7 +27,6 @@ use tillandsias_podman::podman_cmd_sync;
 use tillandsias_vault_client::{Policy, VaultClient, auto_unseal};
 use zeroize::Zeroize;
 
-const VAULT_IMAGE_TAG: &str = "localhost/tillandsias-vault:latest";
 const VAULT_CONTAINER_NAME: &str = "tillandsias-vault";
 const VAULT_VOLUME: &str = "tillandsias-vault-data";
 const VAULT_UNSEAL_SECRET: &str = "tillandsias-vault-unseal";
@@ -49,6 +48,7 @@ const INSTALL_ANCHOR_V1: &str = "installation-uuid-v1";
 
 #[cfg(feature = "vault")]
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct InVmCredentials {
     pub unseal_share_b64: Option<String>,
     pub installation_uuid: String,
@@ -57,6 +57,7 @@ pub struct InVmCredentials {
 
 #[cfg(feature = "vault")]
 #[derive(Debug, Clone)]
+#[allow(dead_code)]
 pub struct PendingHandover {
     pub unseal_share_b64: Option<String>,
     pub root_token: Option<String>,
@@ -65,9 +66,11 @@ pub struct PendingHandover {
 #[cfg(feature = "vault")]
 pub static IN_VM_CREDENTIALS: OnceLock<Mutex<Option<InVmCredentials>>> = OnceLock::new();
 #[cfg(feature = "vault")]
+#[allow(dead_code)]
 pub static PENDING_HANDOVER: OnceLock<Mutex<Option<PendingHandover>>> = OnceLock::new();
 
 #[cfg(feature = "vault")]
+#[allow(dead_code)]
 pub fn set_in_vm_credentials(
     unseal_share_b64: Option<String>,
     installation_uuid: String,
@@ -84,20 +87,22 @@ pub fn set_in_vm_credentials(
 }
 
 #[cfg(feature = "vault")]
+#[allow(dead_code)]
 pub fn get_pending_handover() -> (Option<String>, Option<String>) {
     let cell = PENDING_HANDOVER.get_or_init(|| Mutex::new(None));
-    if let Ok(guard) = cell.lock() {
-        if let Some(handover) = &*guard {
-            return (
-                handover.unseal_share_b64.clone(),
-                handover.root_token.clone(),
-            );
-        }
+    if let Ok(guard) = cell.lock()
+        && let Some(handover) = &*guard
+    {
+        return (
+            handover.unseal_share_b64.clone(),
+            handover.root_token.clone(),
+        );
     }
     (None, None)
 }
 
 #[cfg(feature = "vault")]
+#[allow(dead_code)]
 pub fn clear_pending_handover() {
     let cell = PENDING_HANDOVER.get_or_init(|| Mutex::new(None));
     if let Ok(mut guard) = cell.lock() {
@@ -107,10 +112,10 @@ pub fn clear_pending_handover() {
 
 #[cfg(feature = "vault")]
 pub fn is_running_in_vm() -> bool {
-    if let Some(cell) = IN_VM_CREDENTIALS.get() {
-        if let Ok(guard) = cell.lock() {
-            return guard.is_some();
-        }
+    if let Some(cell) = IN_VM_CREDENTIALS.get()
+        && let Ok(guard) = cell.lock()
+    {
+        return guard.is_some();
     }
     false
 }
@@ -365,13 +370,13 @@ pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
     #[cfg(feature = "vault")]
     sanitize_keychain(debug);
 
-    build_vault_image(debug)?;
+    let vault_image_tag = build_vault_image(debug)?;
     refresh_vault_tls_secrets(&certs_dir, debug)?;
 
     let mut unseal_key = ensure_unseal_key(debug)?;
     create_unseal_secret(&unseal_key, debug)?;
     unseal_key.zeroize();
-    launch_vault_container(debug)?;
+    launch_vault_container(&vault_image_tag, debug)?;
 
     let rt = tokio_runtime()?;
     let base_url = host_base_url();
@@ -490,7 +495,7 @@ pub fn is_github_logged_in(debug: bool) -> bool {
 /// raw token (empty string if the key is absent); errs if Vault is not running
 /// or the read fails. Mirrors the read-back in `write_github_token_to_vault`.
 #[allow(dead_code)]
-fn read_github_token_from_vault(debug: bool) -> Result<String, String> {
+pub(crate) fn read_github_token_from_vault(debug: bool) -> Result<String, String> {
     if !container_running(VAULT_CONTAINER_NAME) {
         return Err("vault container is not running".into());
     }
@@ -639,7 +644,7 @@ pub async fn revoke_pending_container_tokens(debug: bool) {
     }
 }
 
-fn build_vault_image(debug: bool) -> Result<(), String> {
+fn build_vault_image(debug: bool) -> Result<String, String> {
     let version = crate::VERSION.trim();
     let root = crate::resolve_runtime_asset_root(version, debug)?;
     let build_args = std::collections::BTreeMap::new();
@@ -668,7 +673,25 @@ fn build_vault_image(debug: bool) -> Result<(), String> {
 
     crate::build_image_with_logging(&root, "vault", &identity, &build_args, &log_file, debug)?;
 
-    Ok(())
+    Ok(identity.canonical_tag)
+}
+
+#[cfg(feature = "vault")]
+fn with_keyring_timeout<F, T, E>(f: F) -> Result<T, String>
+where
+    F: FnOnce() -> Result<T, E> + Send + 'static,
+    T: Send + 'static,
+    E: std::fmt::Display + Send + 'static,
+{
+    let (tx, rx) = std::sync::mpsc::channel();
+    std::thread::spawn(move || {
+        let res = f().map_err(|e| e.to_string());
+        let _ = tx.send(res);
+    });
+    match rx.recv_timeout(Duration::from_secs(2)) {
+        Ok(res) => res,
+        Err(_) => Err("keyring operation timed out after 2s".to_string()),
+    }
 }
 
 /// Retrieve the versioned unseal key from the host OS keychain, or derive
@@ -679,55 +702,71 @@ fn build_vault_image(debug: bool) -> Result<(), String> {
 fn ensure_unseal_key(debug: bool) -> Result<[u8; 32], String> {
     use base64::Engine;
 
-    if is_running_in_vm() {
-        if let Some(cell) = IN_VM_CREDENTIALS.get()
-            && let Ok(guard) = cell.lock()
-            && let Some(creds) = &*guard
+    if is_running_in_vm()
+        && let Some(cell) = IN_VM_CREDENTIALS.get()
+        && let Ok(guard) = cell.lock()
+        && let Some(creds) = &*guard
+    {
+        if let Some(encoded) = &creds.unseal_share_b64
+            && let Ok(key_vec) = base64::engine::general_purpose::STANDARD.decode(encoded)
+            && key_vec.len() == 32
         {
-            if let Some(encoded) = &creds.unseal_share_b64 {
-                if let Ok(key_vec) = base64::engine::general_purpose::STANDARD.decode(encoded)
-                    && key_vec.len() == 32
-                {
-                    if debug {
-                        eprintln!(
-                            "[tillandsias-vault] recovered Shamir unseal share from host-delivered credentials (v1, base64)"
-                        );
-                    }
-                    let mut key = [0u8; 32];
-                    key.copy_from_slice(&key_vec);
-                    return Ok(key);
-                }
-            }
-            // 2. Not in host credentials (first boot). Return derived dummy key from delivered installation_uuid.
             if debug {
                 eprintln!(
-                    "[tillandsias-vault] Shamir share not present in host credentials; deriving first-boot dummy key K"
+                    "[tillandsias-vault] recovered Shamir unseal share from host-delivered credentials (v1, base64)"
                 );
             }
-            let machine_id = read_machine_id()?;
-            let dummy_key = auto_unseal::derive_unseal_key(
-                machine_id.as_bytes(),
-                creds.installation_uuid.as_bytes(),
-            );
-            return Ok(dummy_key);
+            let mut key = [0u8; 32];
+            key.copy_from_slice(&key_vec);
+            return Ok(key);
         }
+        // 2. Not in host credentials (first boot). Return derived dummy key from delivered installation_uuid.
+        if debug {
+            eprintln!(
+                "[tillandsias-vault] Shamir share not present in host credentials; deriving first-boot dummy key K"
+            );
+        }
+        let machine_id = read_machine_id()?;
+        let dummy_key = auto_unseal::derive_unseal_key(
+            machine_id.as_bytes(),
+            creds.installation_uuid.as_bytes(),
+        );
+        return Ok(dummy_key);
     }
 
     // 1. Try to get the Shamir share from the keychain
     let entry = Entry::new(KEYCHAIN_SERVICE, VAULT_SHAMIR_SHARE_V1)
         .map_err(|e| format!("keyring entry for shamir share: {e}"))?;
 
-    let encoded_res = std::thread::spawn(move || entry.get_password())
-        .join()
-        .map_err(|_| "Failed to join thread reading Shamir share from keychain")?;
+    let encoded_res = with_keyring_timeout(move || entry.get_password());
+    let encoded = match encoded_res {
+        Ok(encoded) => encoded,
+        Err(e) => {
+            if debug {
+                eprintln!(
+                    "[tillandsias-vault] keyring Shamir share get failed/timed out ({e}); checking file fallback"
+                );
+            }
+            let cache_dir =
+                crate::init_cache_dir().map_err(|err| format!("init cache dir: {err}"))?;
+            let fallback_file = cache_dir.join(format!("fallback_{}", VAULT_SHAMIR_SHARE_V1));
+            if fallback_file.is_file() {
+                fs::read_to_string(&fallback_file)
+                    .map(|s| s.trim().to_string())
+                    .unwrap_or_default()
+            } else {
+                String::new()
+            }
+        }
+    };
 
-    if let Ok(encoded) = encoded_res
+    if !encoded.is_empty()
         && let Ok(key_vec) = base64::engine::general_purpose::STANDARD.decode(&encoded)
         && key_vec.len() == 32
     {
         if debug {
             eprintln!(
-                "[tillandsias-vault] recovered Shamir unseal share from host keychain (v1, base64)"
+                "[tillandsias-vault] recovered Shamir unseal share from host keychain or fallback (v1, base64)"
             );
         }
         let mut key = [0u8; 32];
@@ -747,14 +786,63 @@ fn ensure_unseal_key(debug: bool) -> Result<[u8; 32], String> {
     let anchor_entry = Entry::new(KEYCHAIN_SERVICE, INSTALL_ANCHOR_V1)
         .map_err(|e| format!("keyring anchor entry: {e}"))?;
 
-    let anchor = match anchor_entry.get_password() {
+    let anchor = match with_keyring_timeout(move || anchor_entry.get_password()) {
         Ok(a) => a,
-        Err(_) => {
-            let new_anchor = uuid::Uuid::new_v4().to_string();
-            anchor_entry
-                .set_password(&new_anchor)
-                .map_err(|e| format!("keyring anchor set: {e}"))?;
-            new_anchor
+        Err(e) => {
+            if debug {
+                eprintln!(
+                    "[tillandsias-vault] keyring anchor get failed/timed out ({e}); checking file fallback"
+                );
+            }
+            let cache_dir =
+                crate::init_cache_dir().map_err(|err| format!("init cache dir: {err}"))?;
+            let fallback_file = cache_dir.join("installation_anchor");
+            let mut loaded = None;
+            if fallback_file.is_file()
+                && let Ok(a) = fs::read_to_string(&fallback_file)
+            {
+                let trimmed = a.trim().to_string();
+                if !trimmed.is_empty() {
+                    if debug {
+                        eprintln!(
+                            "[tillandsias-vault] loaded installation anchor from file fallback"
+                        );
+                    }
+                    loaded = Some(trimmed);
+                }
+            }
+            match loaded {
+                Some(a) => a,
+                None => {
+                    // Generate a new one
+                    let new_anchor = uuid::Uuid::new_v4().to_string();
+                    if let Err(write_err) = fs::write(&fallback_file, &new_anchor) {
+                        if debug {
+                            eprintln!(
+                                "[tillandsias-vault] failed to write installation anchor fallback: {write_err}"
+                            );
+                        }
+                    } else {
+                        #[cfg(unix)]
+                        {
+                            use std::os::unix::fs::PermissionsExt;
+                            let _ = fs::set_permissions(
+                                &fallback_file,
+                                fs::Permissions::from_mode(0o600),
+                            );
+                        }
+                    }
+                    // Try to set in keyring asynchronously (best effort, don't hang if it blocks)
+                    if let Ok(anchor_entry_clone) = Entry::new(KEYCHAIN_SERVICE, INSTALL_ANCHOR_V1)
+                    {
+                        let new_anchor_clone = new_anchor.clone();
+                        let _ = std::thread::spawn(move || {
+                            let _ = anchor_entry_clone.set_password(&new_anchor_clone);
+                        });
+                    }
+                    new_anchor
+                }
+            }
         }
     };
 
@@ -774,14 +862,20 @@ fn ensure_unseal_key(_debug: bool) -> Result<[u8; 32], String> {
 fn sanitize_keychain(debug: bool) {
     // Delete the legacy unseal key v1 (which held the derived HKDF key rather than the Shamir share)
     if let Ok(entry) = Entry::new(KEYCHAIN_SERVICE, "vault-unseal-v1") {
-        if let Err(e) = entry.delete_credential() {
-            if debug {
-                eprintln!(
-                    "[tillandsias-vault] sanitize: failed to delete legacy vault-unseal-v1: {e}"
-                );
+        let delete_res = with_keyring_timeout(move || entry.delete_credential());
+        match delete_res {
+            Err(e) => {
+                if debug {
+                    eprintln!(
+                        "[tillandsias-vault] sanitize: failed/timed out deleting legacy vault-unseal-v1: {e}"
+                    );
+                }
             }
-        } else if debug {
-            eprintln!("[tillandsias-vault] sanitize: deleted legacy vault-unseal-v1");
+            Ok(_) => {
+                if debug {
+                    eprintln!("[tillandsias-vault] sanitize: deleted legacy vault-unseal-v1");
+                }
+            }
         }
     }
 }
@@ -942,7 +1036,25 @@ fn refresh_vault_tls_secrets(certs_dir: &std::path::Path, debug: bool) -> Result
     )
 }
 
-fn launch_vault_container(debug: bool) -> Result<(), String> {
+fn canonical_vault_launch_tag(image_tag: &str) -> Result<&str, String> {
+    let digest = image_tag
+        .strip_prefix("localhost/tillandsias-vault:sha256-")
+        .ok_or_else(|| {
+            format!(
+                "refusing to launch Vault from non-canonical image tag {image_tag}; expected localhost/tillandsias-vault:sha256-<digest>"
+            )
+        })?;
+    if digest.len() != 64 || !digest.bytes().all(|byte| byte.is_ascii_hexdigit()) {
+        return Err(format!(
+            "refusing to launch Vault from malformed canonical image tag {image_tag}"
+        ));
+    }
+    Ok(image_tag)
+}
+
+fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
+    let image_tag = canonical_vault_launch_tag(image_tag)?;
+
     // Tear down any previous container with the same name (idempotent).
     let _ = podman_cmd_sync()
         .args(["rm", "-f", VAULT_CONTAINER_NAME])
@@ -1031,7 +1143,7 @@ fn launch_vault_container(debug: bool) -> Result<(), String> {
             "keep-id",
             "-p",
             &port_arg,
-            VAULT_IMAGE_TAG,
+            image_tag,
         ])
         .stdout(Stdio::null())
         .stderr(Stdio::inherit())
@@ -1104,10 +1216,26 @@ fn keychain_set_blocking(user: &str, value: &str) -> Result<(), String> {
     let entry =
         Entry::new(KEYCHAIN_SERVICE, user).map_err(|e| format!("keyring entry {user}: {e}"))?;
     let value = value.to_string();
-    std::thread::spawn(move || entry.set_password(&value))
-        .join()
-        .map_err(|_| format!("join thread writing {user} to keychain"))?
-        .map_err(|e| format!("keyring set {user}: {e}"))
+    let value_clone = value.clone();
+    match with_keyring_timeout(move || entry.set_password(&value_clone)) {
+        Ok(()) => Ok(()),
+        Err(e) => {
+            eprintln!(
+                "[tillandsias-vault] WARNING: failed to write {user} to OS keyring ({e}); writing to fallback file"
+            );
+            let cache_dir =
+                crate::init_cache_dir().map_err(|err| format!("init cache dir: {err}"))?;
+            let fallback_file = cache_dir.join(format!("fallback_{}", user));
+            fs::write(&fallback_file, &value)
+                .map_err(|err| format!("write fallback file: {err}"))?;
+            #[cfg(unix)]
+            {
+                use std::os::unix::fs::PermissionsExt;
+                let _ = fs::set_permissions(&fallback_file, fs::Permissions::from_mode(0o600));
+            }
+            Ok(())
+        }
+    }
 }
 
 /// Read the root token, capturing a fresh first-boot handover when present.
@@ -1196,21 +1324,37 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
 
     let entry_token = Entry::new(KEYCHAIN_SERVICE, "vault-root-token-v1")
         .map_err(|e| format!("keyring entry for root token: {e}"))?;
-    let token_res = std::thread::spawn(move || entry_token.get_password())
-        .join()
-        .map_err(|_| "Failed to join thread reading root token from keychain")?;
-    if let Ok(token) = token_res
-        && !token.is_empty()
-    {
+    let token_res = with_keyring_timeout(move || entry_token.get_password());
+    let token = match token_res {
+        Ok(t) => t,
+        Err(e) => {
+            if debug {
+                eprintln!(
+                    "[tillandsias-vault] keyring root token get failed/timed out ({e}); checking file fallback"
+                );
+            }
+            let cache_dir =
+                crate::init_cache_dir().map_err(|err| format!("init cache dir: {err}"))?;
+            let fallback_file = cache_dir.join("fallback_vault-root-token-v1");
+            if fallback_file.is_file() {
+                fs::read_to_string(&fallback_file)
+                    .map(|s| s.trim().to_string())
+                    .unwrap_or_default()
+            } else {
+                String::new()
+            }
+        }
+    };
+    if !token.is_empty() {
         if debug {
-            eprintln!("[tillandsias-vault] recovered root token from host keychain");
+            eprintln!("[tillandsias-vault] recovered root token from host keychain or fallback");
         }
         return Ok(token);
     }
 
     Err(
         "vault is initialized but no first-boot handover is present and the host \
-         keychain has no root token — the keychain and the data volume are out of \
+         keychain has no root token or fallback — the keychain and the data volume are out of \
          sync. Reset with `podman volume rm tillandsias-vault-data` and re-run \
          `tillandsias --init` to re-bootstrap."
             .to_string(),
@@ -1325,5 +1469,17 @@ mod tests {
         assert_eq!(APPROLE_TOKEN_TTL_SECS, 3_600);
         // 24h ceiling matches the spec's max_ttl guidance.
         assert_eq!(APPROLE_TOKEN_MAX_TTL_SECS, 86_400);
+    }
+
+    #[test]
+    fn vault_launch_requires_the_content_addressed_image_tag() {
+        let digest = "a".repeat(64);
+        let canonical = format!("localhost/tillandsias-vault:sha256-{digest}");
+        assert_eq!(
+            canonical_vault_launch_tag(&canonical).expect("canonical tag"),
+            canonical
+        );
+        assert!(canonical_vault_launch_tag("localhost/tillandsias-vault:latest").is_err());
+        assert!(canonical_vault_launch_tag("localhost/tillandsias-vault:sha256-short").is_err());
     }
 }

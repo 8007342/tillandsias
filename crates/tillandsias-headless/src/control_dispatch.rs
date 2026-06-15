@@ -115,6 +115,10 @@ pub fn decide_route(msg: &ControlMessage, transport: TransportKind) -> DispatchO
         (DeliverCredentials { .. } | GetVaultHandover { .. }, Vsock) => Handle,
         (DeliverCredentials { .. } | GetVaultHandover { .. }, UnixSocket) => Unsupported,
 
+        // GithubLoginStatusRequest is vsock-only.
+        (GithubLoginStatusRequest { .. }, Vsock) => Handle,
+        (GithubLoginStatusRequest { .. }, UnixSocket) => Unsupported,
+
         // McpFrame is the host-browser-mcp tunnel between forge and tray
         // — it flows ONLY across the local Unix socket (the forge in-VM
         // has no direct host-browser dependency). Vsock side rejects.
@@ -133,7 +137,8 @@ pub fn decide_route(msg: &ControlMessage, transport: TransportKind) -> DispatchO
             | LocalProjectsReply { .. }
             | CloudRefreshReply { .. }
             | DeliverCredentialsReply { .. }
-            | VaultHandoverReply { .. },
+            | VaultHandoverReply { .. }
+            | GithubLoginStatusReply { .. },
             _,
         ) => ResponseOnly,
 
@@ -306,6 +311,18 @@ mod tests {
                 },
                 "VaultHandoverReply",
             ),
+            (
+                ControlMessage::GithubLoginStatusRequest { seq: 1 },
+                "GithubLoginStatusRequest",
+            ),
+            (
+                ControlMessage::GithubLoginStatusReply {
+                    seq_in_reply_to: 1,
+                    logged_in: true,
+                    handle: Some("test-user".to_string()),
+                },
+                "GithubLoginStatusReply",
+            ),
         ]
     }
 
@@ -323,8 +340,13 @@ mod tests {
                 | "VmShutdownRequest"
                 | "EnumerateLocalProjects"
                 | "CloudRefreshRequest" => DispatchOutcome::Handle,
-                "PtyOpen" | "PtyData" | "PtyResize" | "PtyClose" | "DeliverCredentials"
-                | "GetVaultHandover" => DispatchOutcome::Unsupported,
+                "PtyOpen"
+                | "PtyData"
+                | "PtyResize"
+                | "PtyClose"
+                | "DeliverCredentials"
+                | "GetVaultHandover"
+                | "GithubLoginStatusRequest" => DispatchOutcome::Unsupported,
                 "HelloAck"
                 | "IssueAck"
                 | "Error"
@@ -332,7 +354,8 @@ mod tests {
                 | "LocalProjectsReply"
                 | "CloudRefreshReply"
                 | "DeliverCredentialsReply"
-                | "VaultHandoverReply" => DispatchOutcome::ResponseOnly,
+                | "VaultHandoverReply"
+                | "GithubLoginStatusReply" => DispatchOutcome::ResponseOnly,
                 _ => unreachable!("test fixture missing case for {name}"),
             };
             assert_eq!(
@@ -361,7 +384,8 @@ mod tests {
                 | "PtyResize"
                 | "PtyClose"
                 | "DeliverCredentials"
-                | "GetVaultHandover" => DispatchOutcome::Handle,
+                | "GetVaultHandover"
+                | "GithubLoginStatusRequest" => DispatchOutcome::Handle,
                 "IssueWebSession" | "EvictProject" | "McpFrame" => DispatchOutcome::Unsupported,
                 "HelloAck"
                 | "IssueAck"
@@ -370,7 +394,8 @@ mod tests {
                 | "LocalProjectsReply"
                 | "CloudRefreshReply"
                 | "DeliverCredentialsReply"
-                | "VaultHandoverReply" => DispatchOutcome::ResponseOnly,
+                | "VaultHandoverReply"
+                | "GithubLoginStatusReply" => DispatchOutcome::ResponseOnly,
                 _ => unreachable!("test fixture missing case for {name}"),
             };
             assert_eq!(
@@ -444,6 +469,11 @@ mod tests {
                 seq_in_reply_to: 1,
                 unseal_share_b64: None,
                 root_token: None,
+            },
+            ControlMessage::GithubLoginStatusReply {
+                seq_in_reply_to: 1,
+                logged_in: true,
+                handle: Some("user".to_string()),
             },
         ];
         for msg in &resp {

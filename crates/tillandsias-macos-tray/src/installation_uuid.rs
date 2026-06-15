@@ -1,4 +1,4 @@
-//! Persist + read the Tillandsias installation UUID from the macOS Keychain.
+//! Persist + read the Tillandsias credentials from the macOS Keychain.
 //!
 //! Per `tillandsias-vault` spec, the host stores exactly one secret in the
 //! OS keychain: a stable random UUID used as the anchor for the in-VM
@@ -7,19 +7,19 @@
 //! is therefore important enough to use the Keychain rather than a plain
 //! file under `~/Library/Application Support/`.
 //!
+//! Under Step 36, the host also stores Vault's generated unseal share and
+//! root token in the Keychain once captured from the VM, delivering them
+//! on VM start.
+//!
 //! Implementation: we shell out to the `security` CLI rather than linking
 //! `Security.framework` directly. `security add-generic-password` /
 //! `security find-generic-password` are stable since Mac OS X 10.4 and
-//! avoid the Cocoa code-signing requirements of the direct API. The
-//! account name `tillandsias-vm-uuid` is what the spec mandates.
+//! avoid the Cocoa code-signing requirements of the direct API.
 //!
 //! macOS-only.
 //!
 //! @trace spec:host-shell-architecture.security.no-host-credentials@v1,
 //!        spec:tillandsias-vault
-
-#![allow(dead_code)]
-#![allow(unused)]
 
 use std::process::Command;
 
@@ -37,57 +37,51 @@ pub const KEYCHAIN_SERVICE: &str = "tillandsias";
 ///
 /// @trace spec:host-shell-architecture.security.no-host-credentials@v1
 pub fn read_or_generate() -> std::io::Result<String> {
-    if let Some(existing) = read_uuid()? {
+    if let Some(existing) = read_credential_string(KEYCHAIN_ACCOUNT)? {
         return Ok(existing);
     }
     let new = generate_uuid();
-    write_uuid(&new)?;
+    write_credential_string(KEYCHAIN_ACCOUNT, &new)?;
     Ok(new)
 }
 
-/// Look up the existing UUID. Returns `Ok(None)` if the keychain has no
-/// entry under our account name; returns `Err` only for unexpected I/O.
-fn read_uuid() -> std::io::Result<Option<String>> {
+/// Read a generic string credential stored under `target` from the macOS keychain.
+pub fn read_credential_string(target: &str) -> std::io::Result<Option<String>> {
     let output = Command::new("security")
         .args([
             "find-generic-password",
             "-a",
-            KEYCHAIN_ACCOUNT,
+            target,
             "-s",
             KEYCHAIN_SERVICE,
             "-w",
         ])
         .output()?;
     if !output.status.success() {
-        // `security` exits 44 (errSecItemNotFound) when the entry is
-        // missing. Treat any non-zero exit as "missing" rather than
-        // surfacing the noisy stderr to the tray.
+        // `security` exits 44 (errSecItemNotFound) when the entry is missing.
         return Ok(None);
     }
-    let uuid = String::from_utf8(output.stdout)
+    let secret = String::from_utf8(output.stdout)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidData, e))?
         .trim()
         .to_string();
-    if uuid.is_empty() {
+    if secret.is_empty() {
         return Ok(None);
     }
-    Ok(Some(uuid))
+    Ok(Some(secret))
 }
 
-/// Add the UUID under the conventional account+service pair.
-///
-/// `-U` makes the call idempotent: it updates the entry if it already
-/// exists rather than failing with errSecDuplicateItem.
-fn write_uuid(uuid: &str) -> std::io::Result<()> {
+/// Persist a generic string credential `value` under `target` in the macOS keychain.
+pub fn write_credential_string(target: &str, value: &str) -> std::io::Result<()> {
     let status = Command::new("security")
         .args([
             "add-generic-password",
             "-a",
-            KEYCHAIN_ACCOUNT,
+            target,
             "-s",
             KEYCHAIN_SERVICE,
             "-w",
-            uuid,
+            value,
             "-U",
         ])
         .status()?;
@@ -96,6 +90,97 @@ fn write_uuid(uuid: &str) -> std::io::Result<()> {
             "security add-generic-password exited {status}"
         )));
     }
+    Ok(())
+}
+
+/// Remove the credential stored under `target` from the macOS keychain.
+pub fn delete_credential_string(target: &str) -> std::io::Result<()> {
+    let _status = Command::new("security")
+        .args([
+            "delete-generic-password",
+            "-a",
+            target,
+            "-s",
+            KEYCHAIN_SERVICE,
+        ])
+        .status()?;
+    // We treat already-absent or successfully deleted as Ok for idempotency.
+    Ok(())
+}
+
+/// Connects to the in-VM agent, delivers the host Keychain-backed `vault-shamir-share-v1`
+/// and `tillandsias-vm-uuid` on connection startup, and retrieves any pending handover credentials.
+pub async fn deliver_credentials_and_check_handover(
+    client: &mut tillandsias_host_shell::vsock_client::Client,
+) -> Result<(), String> {
+    let uuid = read_or_generate().map_err(|e| format!("read_or_generate UUID failed: {e}"))?;
+    let share = read_credential_string("vault-shamir-share-v1")
+        .map_err(|e| format!("read share failed: {e}"))?;
+    let token = read_credential_string("vault-root-token-v1")
+        .map_err(|e| format!("read token failed: {e}"))?;
+
+    let seq = client.allocate_seq();
+    let env = tillandsias_control_wire::ControlEnvelope {
+        wire_version: tillandsias_control_wire::WIRE_VERSION,
+        seq,
+        body: tillandsias_control_wire::ControlMessage::DeliverCredentials {
+            seq,
+            unseal_share_b64: share,
+            installation_uuid: uuid,
+            root_token: token,
+        },
+    };
+    let reply = client
+        .request(&env)
+        .await
+        .map_err(|e| format!("DeliverCredentials request failed: {e}"))?;
+
+    match reply.body {
+        tillandsias_control_wire::ControlMessage::DeliverCredentialsReply {
+            success: true, ..
+        } => {}
+        tillandsias_control_wire::ControlMessage::Error { message, .. } => {
+            return Err(format!("DeliverCredentials failed: {message}"));
+        }
+        other => {
+            return Err(format!("unexpected reply to DeliverCredentials: {other:?}"));
+        }
+    }
+
+    let seq = client.allocate_seq();
+    let env = tillandsias_control_wire::ControlEnvelope {
+        wire_version: tillandsias_control_wire::WIRE_VERSION,
+        seq,
+        body: tillandsias_control_wire::ControlMessage::GetVaultHandover { seq },
+    };
+    let reply = client
+        .request(&env)
+        .await
+        .map_err(|e| format!("GetVaultHandover request failed: {e}"))?;
+
+    match reply.body {
+        tillandsias_control_wire::ControlMessage::VaultHandoverReply {
+            unseal_share_b64,
+            root_token,
+            ..
+        } => {
+            if let Some(s) = unseal_share_b64 {
+                write_credential_string("vault-shamir-share-v1", &s)
+                    .map_err(|e| format!("write share failed: {e}"))?;
+            }
+            if let Some(t) = root_token {
+                write_credential_string("vault-root-token-v1", &t)
+                    .map_err(|e| format!("write token failed: {e}"))?;
+            }
+        }
+        tillandsias_control_wire::ControlMessage::Error { message, .. } => {
+            return Err(format!("GetVaultHandover failed: {message}"));
+        }
+        other => {
+            return Err(format!("unexpected reply to GetVaultHandover: {other:?}"));
+        }
+    }
+
     Ok(())
 }
 
@@ -144,6 +229,51 @@ fn generate_uuid() -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// RAII cleanup so the test's unique target credential is removed even if
+    /// an assertion panics mid-test.
+    struct CredCleanup(String);
+    impl Drop for CredCleanup {
+        fn drop(&mut self) {
+            let _ = delete_credential_string(&self.0);
+        }
+    }
+
+    /// Round-trip proof against the real macOS Keychain.
+    #[test]
+    fn keychain_persists_credentials_across_calls() {
+        let target = format!("tillandsias-test-target-{}", generate_uuid());
+        let _cleanup = CredCleanup(target.clone());
+
+        assert_eq!(
+            read_credential_string(&target).unwrap(),
+            None,
+            "fresh target should have no credential yet"
+        );
+
+        let value = "my-test-secret-value-123";
+        write_credential_string(&target, value).unwrap();
+        assert_eq!(
+            read_credential_string(&target).unwrap(),
+            Some(value.to_string()),
+            "value written in one call must be readable in a later call"
+        );
+
+        let value2 = "my-test-secret-value-456";
+        write_credential_string(&target, value2).unwrap();
+        assert_eq!(
+            read_credential_string(&target).unwrap(),
+            Some(value2.to_string()),
+            "overwrite must replace the previously stored value"
+        );
+
+        delete_credential_string(&target).unwrap();
+        assert_eq!(
+            read_credential_string(&target).unwrap(),
+            None,
+            "delete must remove the credential"
+        );
+    }
 
     /// @trace spec:host-shell-architecture.security.no-host-credentials@v1
     #[test]

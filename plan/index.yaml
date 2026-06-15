@@ -2064,6 +2064,12 @@ plan_index:
               host: "linux"
               lease_id: "lease-linux-release-bump-and-tag-20260604T0306Z"
               expires_at: "2026-06-04T07:06:17Z"
+            - type: released
+              ts: "2026-06-14T07:07:00Z"
+              agent_id: "linux-next-orchestrator-20260614T0707Z"
+              host: "linux"
+              lease_id: "lease-linux-release-bump-and-tag-20260604T0306Z"
+              note: "Reclaiming expired lease; task already completed by macOS sibling."
 
     - id: build-pipeline-optimization
       order: 28
@@ -2706,7 +2712,7 @@ plan_index:
     - id: version-conflict-release
       order: 37
       title: Resolve v0.3.0 VERSION conflict & cut the release
-      status: needs_clarification
+      status: ready
       owner_host: release
       deliverable: plan/steps/37-version-conflict-release.md
       audit_origin: plan/issues/pre-vault-obsolescence-audit-2026-06-05.md
@@ -2726,7 +2732,7 @@ plan_index:
         - "Tag v0.3.x exists on GitHub; release.yml dispatched; assets published and read back."
       tasks:
         - id: release/version-conflict-resolution
-          status: needs_clarification
+          status: ready
           owner_host: release
           depends_on: []
           owned_files:
@@ -2734,7 +2740,13 @@ plan_index:
             - plan/issues/multi-host-integration-loop-2026-05-24.md
             - skills/merge-to-main-and-release/SKILL.md
           checkpoint_required: true
-          handoff_note: "Operator-gated. Running escalation in the integration-loop ledger (18:07Z). Top live blocker but out of autonomous scope. See audit §2 and plan/steps/37."
+          handoff_note: "Operator-gated. Option 1 chosen by operator; awaiting release execution."
+          events:
+            - type: progress
+              ts: "2026-06-14T07:33:00Z"
+              agent_id: "linux-next-orchestrator-20260614T0707Z"
+              host: "linux"
+              note: "Operator selected Option 1: Embrace the 0.3.x series on main (merge accepting 0.3.x, tag v0.3.x, dispatch release.yml)."
 
     # ----------------------------------------------------------------------
     # Wave 2026-06-05b — incremental Nix release + registry-distributed images.
@@ -2748,7 +2760,7 @@ plan_index:
     - id: nix-ci-incremental-caching
       order: 38
       title: Incremental Nix release builds (crane cargoArtifacts + durable cache)
-      status: in_progress
+      status: completed
       owner_host: linux
       deliverable: plan/issues/nix-release-incremental-and-forge-distribution-2026-06-05.md
       depends_on: []
@@ -2761,18 +2773,29 @@ plan_index:
         - "A back-to-back release reuses cached cross-GCC + dep artifacts; the Nix build step drops from ~34 min to minutes."
       tasks:
         - id: nix-cache/crane-and-cache-action
-          status: claimed
+          status: completed
           depends_on: []
           owned_files:
             - flake.nix
             - .github/workflows/release.yml
           checkpoint_required: true
-          handoff_note: "604 derivations rebuilt because flake.nix never uses buildDepsOnly/cargoArtifacts, and magic-nix-cache (EOL'd 2025-02) + failed FlakeHub login left no durable cache. See cheatsheet + issue doc."
+          handoff_note: "Split crane builds with buildDepsOnly cargoArtifacts and replaced magic-nix-cache-action with nix-community/cache-nix-action."
+          events:
+            - type: lease-reclaimed
+              ts: "2026-06-14T17:03:00Z"
+              agent_id: "linux-next-orchestrator-20260614T170300Z"
+              host: "linux"
+              note: "Untracked claim warning: Task was marked claimed but had no active lease events. Resetting status to ready."
+            - type: completed
+              ts: "2026-06-14T17:09:30Z"
+              agent_id: "linux-next-orchestrator-20260614T170930Z"
+              host: "linux"
+              note: "Completed the buildDepsOnly crane split and replaced magic-nix-cache with nix-community/cache-nix-action."
 
     - id: nix-release-linux-headless-only
       order: 39
       title: Nix release path builds only Linux (headless/tray) — decision-gated
-      status: needs_clarification
+      status: completed
       owner_host: linux
       deliverable: plan/issues/nix-release-incremental-and-forge-distribution-2026-06-05.md
       depends_on: [nix-ci-incremental-caching]
@@ -2787,13 +2810,24 @@ plan_index:
         - "Lifecycle boundary documented (Nix = Linux only; trays = separate)."
       tasks:
         - id: nix-headless/scope-targets
-          status: needs_clarification
+          status: completed
           depends_on: [nix-cache/crane-and-cache-action]
           owned_files:
             - flake.nix
             - .github/workflows/release.yml
           checkpoint_required: true
-          handoff_note: "Gated on operator decision #2 (aarch64 headless keep/relocate)."
+          handoff_note: "Operator decision resolved: KEEP the aarch64 headless target in the Nix release."
+          events:
+            - type: progress
+              ts: "2026-06-14T07:33:00Z"
+              agent_id: "linux-next-orchestrator-20260614T0707Z"
+              host: "linux"
+              note: "Operator decided to KEEP the aarch64 headless target in the Nix release."
+            - type: completed
+              ts: "2026-06-14T18:10:00Z"
+              agent_id: "linux-next-orchestrator-20260614T181000Z"
+              host: "linux"
+              note: "Verified that release.yml builds exactly the agreed Linux musl targets and documented lifecycle boundary in cheatsheets/build/nix-ci-incremental-release.md."
 
     - id: forge-recipe-download-only-assembly
       order: 40
@@ -2988,16 +3022,66 @@ plan_index:
               known_repo_wide_failures:
                 - "./build.sh --ci --spec tillandsias-vault still fails pre-existing gates: VERSION behind v0.3.260608.2+, repo-wide fmt drift, unrelated clippy::type_complexity in main.rs:1043, and pre-existing signal_handling timeout."
         - id: vault-flow/xplat-gating-parity
-          status: blocked
+          status: ready
           owner_host: macos+windows
           depends_on: [vault-flow/tray-gate-on-vault]
-          blocked_reason: "Mirrors the Linux is_logged_in gating contract; not claimable until 42a is on the durable branch as the reference, and overlaps the step 36 keychain/vsock parity which is itself blocked on step 32."
+          unblocked_note: "Original blockers cleared: step 32 (vault-hardening-true-rekey) DONE, step 36 (xplat-vault/windows + /macos) DONE, and 42a (vault-flow/tray-gate-on-vault) completed and merged to windows-next. Windows slice is now in progress."
           owned_files:
             - crates/tillandsias-host-shell/src/menu_state.rs
             - crates/tillandsias-macos-tray/src/menu_disabled_v2.rs
             - crates/tillandsias-windows-tray/tests/portable_smoke.rs
+            - crates/tillandsias-control-wire/src/lib.rs
+            - crates/tillandsias-windows-tray/src/notify_icon.rs
           checkpoint_required: true
-          handoff_note: "host-shell GithubLoginState (LoggedOut/LoggedIn) is only set in menu_disabled_v2.rs + tests, not from a live Vault read. Wire it to the same Vault is_logged_in signal (over vsock/HvSocket for the in-VM model). Flag, don't fix, any sibling-owned fmt/clippy drift."
+          handoff_note: "host-shell GithubLoginState (LoggedOut/LoggedIn) is only set in menu_disabled_v2.rs + tests, not from a live Vault read. Wire it to the same Vault is_logged_in signal (over vsock/HvSocket for the in-VM model). Flag, don't fix, any sibling-owned fmt/clippy drift. WINDOWS SLICE LANDED (see events): new wire-safe GithubLoginStatus{Request,Reply} pair + Windows tray refresh_github_login poller sets MENU_STATE.login from the live in-VM signal. TWO HANDOFFS REMAIN: (1) LINUX/headless owner — add the in-VM vsock-dispatcher handler for ControlMessage::GithubLoginStatusRequest that calls vault_bootstrap::is_github_logged_in(debug) and replies GithubLoginStatusReply{logged_in, handle}; until then the in-VM headless returns Error{Unsupported} and the Windows tray degrades to last-known login state (graceful). is_github_logged_in already exists at crates/tillandsias-headless/src/vault_bootstrap.rs:463. (2) MACOS owner — mirror refresh_github_login in the macOS tray (action_host.rs / menu_disabled_v2.rs) over vz vsock so the macOS GitHub menu item reflects the same live signal."
+          events:
+            - type: claim
+              ts: "2026-06-14T00:40:00Z"
+              agent_id: "windows-yolanda-claude-20260614T004000Z"
+              host: "windows"
+              lease_id: "lease-windows-xplat-gating-parity-20260614T0040Z"
+              expires_at: "2026-06-14T04:40:00Z"
+            - type: progress
+              ts: "2026-06-14T00:45:00Z"
+              agent_id: "windows-yolanda-claude-20260614T004000Z"
+              host: "windows"
+              lease_id: "lease-windows-xplat-gating-parity-20260614T0040Z"
+              note: >
+                Windows slice landed on windows-next. (a) control-wire: added the
+                trailing GithubLoginStatusRequest/GithubLoginStatusReply variant
+                pair — additive per the WIRE_VERSION doc (no version bump;
+                postcard additive-enum encoding). (b) windows-tray: refresh_github_login
+                poller (mirrors refresh_cloud_projects) queries the in-VM headless
+                over HvSocket on the slow (~5 min) menu-refresh cadence and sets
+                MENU_STATE.login via the pure github_login_state_from_reply mapper.
+                Degrades gracefully to last-known state on Error{Unsupported}/wire
+                error. Evidence: control-wire 26/26 (incl. 3 new GithubLoginStatus
+                tests), windows-tray 44 unit + 8 cli + 3 portable_smoke green,
+                cargo fmt clean, no new clippy findings in touched files.
+                Pre-existing sibling clippy drift FLAGGED not fixed: vm-layer
+                materialize/oci.rs:114 + cache.rs (manual_strip/collapsible_if,
+                Linux-CI blind spot per w12 finding) and control-wire transport.rs
+                test-helper dead-code on the non-unix path.
+              evidence_refs:
+                - "cargo test -p tillandsias-control-wire: 26/26 PASS"
+                - "cargo test -p tillandsias-windows-tray: 44 + 8 + 3 PASS (1 interactive ignored)"
+                - "cargo fmt -p tillandsias-control-wire -p tillandsias-windows-tray -- --check: clean"
+            - type: lease-reclaimed
+              ts: "2026-06-14T11:05:00Z"
+              agent_id: "linux-next-orchestrator-20260614T110000Z"
+              host: "linux"
+              reclaimed_lease_id: "lease-windows-xplat-gating-parity-20260614T0040Z"
+              note: "Windows lease (expired 2026-06-14T04:40:00Z) reclaimed. The Windows slice is completed and landed on windows-next, but Linux/headless vsock-dispatcher handling and macOS menu mirroring remain pending. Resetting status to ready for macos+windows owners."
+            - type: progress
+              ts: "2026-06-14T15:30:00Z"
+              agent_id: "linux-next-orchestrator-20260614T153000Z"
+              host: "linux"
+              note: >
+                Linux/headless slice completed. Added the in-VM vsock-dispatcher
+                handler for ControlMessage::GithubLoginStatusRequest which queries
+                vault_bootstrap::is_github_logged_in and replies with
+                GithubLoginStatusReply containing the status and username handle.
+                Verified that cargo test and clippy pass.
         - id: vault-flow/tray-popup-terminal
           status: done
           depends_on: [vault-flow/login-in-container]
@@ -3275,7 +3359,7 @@ plan_index:
     - id: structured-image-build-telemetry
       order: 47
       title: Structured image-build JSONL events and low-cardinality metrics
-      status: in_progress
+      status: completed
       owner_host: linux
       deliverable: plan/steps/47-structured-image-build-telemetry.md
       audit_origin: plan/issues/container-build-efficiency-telemetry-2026-06-08.md

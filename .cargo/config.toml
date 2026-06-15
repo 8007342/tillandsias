@@ -10,3 +10,8 @@ rustflags = [
 [build]
 # Use musl target by default in development for portable launcher checks
 # target = "x86_64-unknown-linux-musl"
+
+[env]
+# Keep macOS .app bundles self-contained. Dynamic Homebrew liblzma is rejected
+# under the app's ad-hoc signature because it has a different Team ID.
+LZMA_API_STATIC = "1"

@@ -247,6 +247,31 @@ pub enum ControlMessage {
         unseal_share_b64: Option<String>,
         root_token: Option<String>,
     },
+    /// Host → in-VM headless: query whether the in-VM GitHub login is active.
+    /// On Windows/macOS the GitHub token lives inside the VM (behind Vault), so
+    /// the host tray cannot read it directly the way the Linux tray calls
+    /// `is_github_logged_in` in-process. This mirrors that check over the wire
+    /// so the cross-platform trays can gate GitHub-dependent menu items on a
+    /// live login signal rather than a hardcoded `LoggedOut`.
+    ///
+    /// New trailing variant: additive per the `WIRE_VERSION` doc (does not bump
+    /// the version). Older in-VM headless binaries reject it with
+    /// `Error::UnknownVariant`; same-generation binaries without the handler
+    /// reply `Error { Unsupported }`. Either way the host tray degrades to its
+    /// last-known login state.
+    ///
+    /// @trace spec:tillandsias-vault, spec:host-shell-architecture
+    GithubLoginStatusRequest { seq: u64 },
+    /// In-VM headless → host: current GitHub login state from a live Vault read.
+    /// `logged_in` is the authoritative signal; `handle` carries the GitHub
+    /// login (e.g. for the disabled "GitHub: <user>" menu item) when known.
+    ///
+    /// @trace spec:tillandsias-vault, spec:host-shell-architecture
+    GithubLoginStatusReply {
+        seq_in_reply_to: u64,
+        logged_in: bool,
+        handle: Option<String>,
+    },
 }
 
 /// Direction tag for `PtyData` frames.
@@ -368,6 +393,8 @@ impl ControlMessage {
             ControlMessage::DeliverCredentialsReply { .. } => "DeliverCredentialsReply",
             ControlMessage::GetVaultHandover { .. } => "GetVaultHandover",
             ControlMessage::VaultHandoverReply { .. } => "VaultHandoverReply",
+            ControlMessage::GithubLoginStatusRequest { .. } => "GithubLoginStatusRequest",
+            ControlMessage::GithubLoginStatusReply { .. } => "GithubLoginStatusReply",
         }
     }
 }
@@ -765,6 +792,45 @@ mod tests {
                 msg.kind()
             );
         }
+    }
+
+    #[test]
+    fn github_login_status_request_roundtrip() {
+        roundtrip(&ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 7,
+            body: ControlMessage::GithubLoginStatusRequest { seq: 7 },
+        });
+    }
+
+    #[test]
+    fn github_login_status_reply_roundtrip() {
+        roundtrip(&ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 7,
+            body: ControlMessage::GithubLoginStatusReply {
+                seq_in_reply_to: 7,
+                logged_in: true,
+                handle: Some("octocat".to_string()),
+            },
+        });
+    }
+
+    #[test]
+    fn github_login_status_kinds() {
+        assert_eq!(
+            ControlMessage::GithubLoginStatusRequest { seq: 1 }.kind(),
+            "GithubLoginStatusRequest"
+        );
+        assert_eq!(
+            ControlMessage::GithubLoginStatusReply {
+                seq_in_reply_to: 1,
+                logged_in: false,
+                handle: None,
+            }
+            .kind(),
+            "GithubLoginStatusReply"
+        );
     }
 
     #[test]

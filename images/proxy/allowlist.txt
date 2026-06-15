@@ -78,6 +78,7 @@
 # --- AI/ML ---
 .ollama.com
 .ollama.ai
+.r2.cloudflarestorage.com
 .huggingface.co
 .openai.com
 .anthropic.com

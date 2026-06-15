@@ -4917,23 +4917,24 @@ mod tests {
         // @trace gap:TR-005: Verify queue is bounded and rejects when full
         let executor = AsyncTaskExecutor::new(2);
 
-        // First two tasks should succeed (fill the queue)
-        assert!(
-            executor
-                .spawn_task(|| {
-                    std::thread::sleep(std::time::Duration::from_secs(10));
-                })
-                .is_ok()
-        );
-        assert!(
-            executor
-                .spawn_task(|| {
-                    std::thread::sleep(std::time::Duration::from_secs(10));
-                })
-                .is_ok()
-        );
+        // Give worker threads (4 of them) a moment to start and block on the receiver.
+        std::thread::sleep(std::time::Duration::from_millis(100));
 
-        // Third task should fail (queue full)
+        // To fill the executor capacity completely, we need to spawn:
+        // 4 (active workers) + 2 (bounded queue size) = 6 tasks.
+        // All of them should be accepted.
+        for _ in 0..6 {
+            assert!(
+                executor
+                    .spawn_task(|| {
+                        std::thread::sleep(std::time::Duration::from_secs(10));
+                    })
+                    .is_ok()
+            );
+            std::thread::sleep(std::time::Duration::from_millis(20));
+        }
+
+        // The 7th task must fail because all workers are busy and the queue is full.
         assert!(executor.spawn_task(|| {}).is_err());
     }
 

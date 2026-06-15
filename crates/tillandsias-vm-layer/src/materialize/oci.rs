@@ -89,6 +89,24 @@ pub fn flatten_to_tar<R: Read>(oci_reader: R, output_tar: &Path) -> Result<(), O
     let manifest: OciManifest =
         serde_json::from_reader(BufReader::new(File::open(manifest_path)?))?;
 
+    // Fedora Container Base is a single gzip-compressed layer. Preserve that
+    // layer's tar metadata verbatim instead of unpacking it onto the host
+    // filesystem, where Windows would lose Unix modes, ownership, and symlinks.
+    if manifest.layers.len() == 1 {
+        let layer_digest = manifest.layers[0]
+            .digest
+            .strip_prefix("sha256:")
+            .unwrap_or(&manifest.layers[0].digest);
+        let layer_path = scratch.path().join("blobs/sha256").join(layer_digest);
+        if !layer_path.exists() {
+            return Err(OciError::MissingLayer(layer_digest.to_string()));
+        }
+        let mut layer = flate2::read::GzDecoder::new(File::open(layer_path)?);
+        let mut output = File::create(output_tar)?;
+        io::copy(&mut layer, &mut output)?;
+        return Ok(());
+    }
+
     // 4. Extract each layer into the rootfs directory in order.
     // Layers are ordered from base to top.
     for layer in manifest.layers {

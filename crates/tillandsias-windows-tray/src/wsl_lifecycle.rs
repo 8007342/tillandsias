@@ -16,7 +16,9 @@ use std::time::Duration;
 
 use tillandsias_host_shell::provisioning::{ProvisionPhase, ProvisionProgress};
 use tillandsias_vm_layer::fetch::{RemoteArtifact, download_verified, is_sha256_hex};
-use tillandsias_vm_layer::materialize::{MaterializedRootfs, tar_to_wsl_import};
+use tillandsias_vm_layer::materialize::{
+    MaterializedRootfs, oci::flatten_oci_xz, tar_to_wsl_import,
+};
 use tillandsias_vm_layer::recipe::Manifest;
 use tillandsias_vm_layer::{VmRuntime, wsl::WslRuntime};
 
@@ -79,7 +81,7 @@ impl WslLifecycle {
     }
 
     pub fn rootfs_cache_path(sha256_short: &str) -> PathBuf {
-        Self::cache_root().join(format!("rootfs-fedora-44-{}.tar.xz", sha256_short))
+        Self::cache_root().join(format!("rootfs-fedora-44-{}.oci.tar.xz", sha256_short))
     }
 
     pub fn binary_cache_path(version: &str) -> PathBuf {
@@ -113,10 +115,10 @@ impl WslLifecycle {
     /// legacy OCI-base + separate-binary path:
     ///
     /// 1. `SettingUp` — ensure cache/install dirs.
-    /// 2. `DownloadingRootfs` — resolve the OFFICIAL Fedora 44 WSL image from the
-    ///    embedded recipe manifest and `download_verified` it (SHA-gated; resumable).
-    /// 3. `InstallingTillandsias` — decompress `.tar.xz` -> `.tar`, then
-    ///    `wsl --import`. Post-import, inject `wsl.conf` and the bootstrap script
+    /// 2. `DownloadingRootfs` — resolve the official Fedora 44 Container OCI
+    ///    archive and `download_verified` it (SHA-gated; resumable).
+    /// 3. `InstallingTillandsias` — flatten the OCI layers into a rootfs tar,
+    ///    then `wsl --import`. Post-import, inject `wsl.conf` and the bootstrap script
     ///    that curl-installs `tillandsias-headless` on first boot.
     /// 4. `StartingVm` — `WslRuntime::start`.
     ///
@@ -149,9 +151,10 @@ impl WslLifecycle {
 
         progress.report_phase(ProvisionPhase::DownloadingRootfs);
         let cache_root = Self::cache_root();
-        let xz_dest = cache_root
-            .join("rootfs")
-            .join(format!("fedora-44-wsl-{}.tar.xz", &artifact.sha256[..12]));
+        let xz_dest = cache_root.join("rootfs").join(format!(
+            "fedora-44-wsl-{}.oci.tar.xz",
+            &artifact.sha256[..12]
+        ));
 
         let progress_for_cb = progress.clone();
         let last_pct = std::sync::atomic::AtomicU8::new(101);
@@ -172,20 +175,18 @@ impl WslLifecycle {
         download_verified(&artifact, &xz_dest, &on_progress).await?;
 
         progress.report_phase(ProvisionPhase::InstallingTillandsias);
-        progress.report_message("\u{1F4E6} Decompressing Fedora image...");
-        let tar_dest = xz_dest.with_extension(""); // .tar.xz -> .tar
+        progress.report_message("\u{1F4E6} Flattening Fedora OCI image...");
+        let tar_dest = xz_dest.with_file_name(format!(
+            "fedora-44-wsl-{}.rootfs.tar",
+            &artifact.sha256[..12]
+        ));
         if !tar_dest.exists() {
-            let status = tokio::process::Command::new("tar")
-                .arg("-xJf")
-                .arg(&xz_dest)
-                .arg("-C")
-                .arg(xz_dest.parent().unwrap())
-                .status()
+            let source = xz_dest.clone();
+            let destination = tar_dest.clone();
+            tokio::task::spawn_blocking(move || flatten_oci_xz(&source, &destination))
                 .await
-                .map_err(|e| format!("decompress failed to spawn: {e}"))?;
-            if !status.success() {
-                return Err(format!("decompress exited {status}"));
-            }
+                .map_err(|e| format!("Fedora OCI flatten task failed: {e}"))?
+                .map_err(|e| format!("flatten Fedora OCI archive failed: {e}"))?;
         }
 
         tar_to_wsl_import(
@@ -194,6 +195,17 @@ impl WslLifecycle {
             &MaterializedRootfs::Tar(tar_dest),
         )
         .await?;
+
+        // The Fedora Container Base OCI image is init-less and minimal: it ships
+        // no systemd (so `systemctl enable` in inject_bootstrap_logic exits 127),
+        // no podman (the in-VM forge runtime), and no dbus (systemd-logind — and
+        // thus the user-runtime lane's XDG_RUNTIME_DIR — needs it). Install them
+        // BEFORE configure_recipe_distro flips wsl.conf to systemd-as-PID1, so the
+        // post-flip boot actually finds a systemd to run.
+        // @trace plan/issues/smoke-e2e-findings-v0.3.260614.1-2026-06-14.md
+        //   (smoke-finding/container-base-missing-systemd-podman)
+        progress.report_message("\u{1F4E6} Installing systemd + podman in Fedora base...");
+        self.ensure_base_packages().await?;
 
         // Fedora official images need wsl.conf for systemd, and our bootstrap
         // units for the vsock control wire.
@@ -206,10 +218,18 @@ impl WslLifecycle {
 
         progress.report_phase(ProvisionPhase::Connecting);
         const CW_PORT: u32 = tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
+
+        // Hold a keepalive across the connect loop so the VM doesn't idle out mid-wait.
+        let _keepalive = self.spawn_keepalive().ok();
+
         let mut last_err = String::from("(no attempt)");
-        for attempt in 1..=12u32 {
+        for attempt in 1..=36u32 {
             match self.try_connect_until_ready(CW_PORT, attempt).await {
-                Ok(()) => return Ok(()),
+                Ok(VmPhase::Ready) | Ok(VmPhase::Starting) => return Ok(()),
+                Ok(other) => {
+                    last_err = format!("VM in phase {other:?}");
+                    tokio::time::sleep(Duration::from_secs(5)).await;
+                }
                 Err(e) => {
                     last_err = e;
                     tokio::time::sleep(Duration::from_secs(5)).await;
@@ -219,6 +239,38 @@ impl WslLifecycle {
         Err(format!(
             "control-wire handshake did not succeed within budget: {last_err}"
         ))
+    }
+
+    /// Install + configure what the Fedora **Container Base** OCI image lacks
+    /// but a working in-VM tillandsias runtime needs. That image is init-less
+    /// and stripped, so a clean import has none of:
+    ///   * `systemd` — WSL boots it as PID1 (wsl.conf `systemd=true`) and runs
+    ///     the headless units; without it `systemctl enable` exits 127.
+    ///   * `podman` — the in-VM forge/container runtime.
+    ///   * `dbus-broker` — `systemd-logind` needs it, and logind in turn provides
+    ///     the user-runtime lane's `/run/user/<uid>` (XDG_RUNTIME_DIR).
+    ///   * `newuidmap`/`newgidmap` filecaps — container images strip the setuid
+    ///     caps `shadow-utils` ships, so rootless podman dies with
+    ///     "newuidmap: write to uid_map failed: Operation not permitted". Restore
+    ///     them with `setcap`.
+    ///   * `openssl` CLI — enclave bring-up shells out to `openssl req` to mint
+    ///     the Vault HTTPS CA; the minimal base has the libs but not the binary,
+    ///     so without it init dies "bringing Vault up: ... (os error 2)".
+    ///
+    /// Runs BEFORE `configure_recipe_distro` flips wsl.conf to systemd-as-PID1,
+    /// so the post-flip boot actually finds a systemd to run. Idempotent: `rpm -q`
+    /// guards the install and `setcap` is safe to repeat, so the registered-distro
+    /// fast path and re-provision stay cheap.
+    ///
+    /// @trace plan/issues/smoke-e2e-findings-v0.3.260614.1-2026-06-14.md
+    ///   (smoke-finding/container-base-missing-systemd-podman)
+    async fn ensure_base_packages(&self) -> Result<(), String> {
+        const SETUP: &str = r#"set -e
+rpm -q systemd podman dbus-broker libcap shadow-utils openssl >/dev/null 2>&1 || dnf install -y systemd podman dbus-broker libcap shadow-utils openssl
+for b in /usr/bin/newuidmap /usr/sbin/newuidmap; do [ -e "$b" ] && setcap cap_setuid+ep "$b" || true; done
+for b in /usr/bin/newgidmap /usr/sbin/newgidmap; do [ -e "$b" ] && setcap cap_setgid+ep "$b" || true; done
+"#;
+        self.wsl_root_sh(SETUP).await
     }
 
     /// Inject the `fetch-headless.sh` script and systemd units into the
@@ -358,7 +410,7 @@ WantedBy=multi-user.target
     /// During first boot the headless reports `Provisioning`/`Starting` while it
     /// self-installs; the caller retries until this returns `Ok`. (Request path
     /// proven E2E: `VmStatusReply { phase: Ready, podman_ready: true }`.)
-    async fn try_connect_until_ready(&self, port: u32, attempt: u32) -> Result<(), String> {
+    async fn try_connect_until_ready(&self, port: u32, attempt: u32) -> Result<VmPhase, String> {
         use tillandsias_control_wire::transport::Transport;
         use tillandsias_control_wire::{ControlEnvelope, ControlMessage, VmPhase, WIRE_VERSION};
         use tillandsias_host_shell::vsock_client::Client;
@@ -389,21 +441,15 @@ WantedBy=multi-user.target
             .map_err(|e| format!("VmStatusRequest: {e}"))?;
 
         match reply.body {
-            ControlMessage::VmStatusReply {
-                phase: VmPhase::Ready,
-                ..
-            } => {
+            ControlMessage::VmStatusReply { phase, .. } => {
                 tracing::info!(
                     wire_version,
                     attempt,
-                    "VM operationally Ready (control wire up)"
+                    "VM handshake success (phase={phase:?})"
                 );
                 // NOTE: `stream` is dropped here; holding it for the session +
                 // routing menu actions over it is the next w9 increment.
-                Ok(())
-            }
-            ControlMessage::VmStatusReply { phase, .. } => {
-                Err(format!("VM not yet Ready (phase {phase:?})"))
+                Ok(phase)
             }
             other => Err(format!("unexpected reply to VmStatusRequest: {other:?}")),
         }
@@ -417,22 +463,22 @@ pub(crate) fn user_src_dir() -> PathBuf {
     base.join("src")
 }
 
-/// Resolve the Windows rootfs artifact (`x86_64.tar.xz`) to a verifiable download
-/// pin from the recipe `Manifest` (l9 contract).
+/// Resolve the Windows rootfs artifact (`x86_64.oci.tar.xz`) to a verifiable
+/// download pin from the recipe `Manifest` (l9 contract).
 ///
-/// Bridges the recipe `[output]` block — `artifact_url_template` +
-/// `expected_rootfs_sha["x86_64.tar.xz"]` — into the [`RemoteArtifact`] that
+/// Bridges the recipe `[output]` block's exact URL and
+/// `expected_rootfs_sha["x86_64.oci.tar.xz"]` into the [`RemoteArtifact`] that
 /// [`download_verified`] consumes.
 ///
 /// @trace plan/issues/rootfs-removal-fedora-wsl-pivot-2026-06-02.md
 pub fn recipe_rootfs_artifact(manifest: &Manifest) -> Result<RemoteArtifact, String> {
     const ARCH: &str = "x86_64";
-    const FORMAT: &str = "tar.xz";
-    const SHA_KEY: &str = "x86_64.tar.xz";
+    const FORMAT: &str = "oci.tar.xz";
+    const SHA_KEY: &str = "x86_64.oci.tar.xz";
 
     let url = manifest
         .artifact_url(ARCH, FORMAT, "fedora-pivot")
-        .ok_or_else(|| "manifest has no [output].artifact_url_template".to_string())?;
+        .ok_or_else(|| format!("manifest has no artifact URL for \"{SHA_KEY}\""))?;
     let sha = manifest
         .expected_sha(SHA_KEY)
         .ok_or_else(|| format!("manifest [output].expected_rootfs_sha has no \"{SHA_KEY}\" pin"))?;
@@ -466,13 +512,13 @@ mod tests {
     // The committed recipe manifest — used for a live-contract integration check.
     const REAL_MANIFEST: &str = include_str!("../../../images/vm/manifest.toml");
 
-    // A minimal synthetic manifest with a caller-chosen x86_64.tar.xz SHA.
+    // A minimal synthetic manifest with a caller-chosen x86_64 OCI archive SHA.
     fn manifest_with_x86_tar_sha(sha: &str) -> Manifest {
         const TMPL: &str = r#"recipe_version = 1
-[output]
-artifact_url_template = "https://download.fedoraproject.org/pub/fedora/linux/releases/44/Cloud/{arch}/images/Fedora-Cloud-Base-WSL-44-1.2.{arch}.tar.xz"
+[output.artifact_urls]
+"x86_64.oci.tar.xz" = "https://download.fedoraproject.org/pub/fedora/linux/releases/44/Container/x86_64/images/Fedora-Container-Base-Generic-44-1.7.x86_64.oci.tar.xz"
 [output.expected_rootfs_sha]
-"x86_64.tar.xz" = "__SHA__"
+"x86_64.oci.tar.xz" = "__SHA__"
 "#;
         Manifest::from_toml(&TMPL.replace("__SHA__", sha)).expect("parse inline manifest")
     }
@@ -485,7 +531,7 @@ artifact_url_template = "https://download.fedoraproject.org/pub/fedora/linux/rel
         assert_eq!(art.sha256, sha);
         assert_eq!(
             art.url,
-            "https://download.fedoraproject.org/pub/fedora/linux/releases/44/Cloud/x86_64/images/Fedora-Cloud-Base-WSL-44-1.2.x86_64.tar.xz"
+            "https://download.fedoraproject.org/pub/fedora/linux/releases/44/Container/x86_64/images/Fedora-Container-Base-Generic-44-1.7.x86_64.oci.tar.xz"
         );
     }
 }

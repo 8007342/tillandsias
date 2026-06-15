@@ -127,6 +127,14 @@ reports; the two standing findings below are the starting backlog.
     ts: `2026-06-12T21:24:00Z`
     agent_id: `linux-macuahuitl-claude-2026-06-12T2124Z`
     host: linux
+  - type: run
+    ts: `2026-06-14T03:46:47Z`
+    agent_id: `linux-macuahuitl-codex-20260614T033837Z`
+    host: linux
+    release: `v0.3.260614.1`
+    outcome: halted-at-init
+    finding: `smoke-finding/vault-digest-image-missing-latest-alias`
+    evidence: `target/smoke-e2e/03-init.log`
 
 ---
 

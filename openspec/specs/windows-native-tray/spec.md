@@ -203,12 +203,12 @@ the v0.0.1 series so support tooling (`scripts/tray-diagnose.ps1`,
 - **WHEN** the binary runs
 - **THEN** stdout SHALL be a parseable JSON object with the documented top
   level keys (`version`, `log_path`, `log_exists`, `wt_present`, `distro`,
-  `distro_registered`, `release_tag`, `manifest_pin_x86_64_tar`, `wire`,
+  `distro_registered`, `release_tag`, `manifest_pin_x86_64_oci_tar_xz`, `wire`,
   `recent_log_tail`)
 - **AND** the `wire` nested object SHALL contain (`reachable`, `phase`,
   `podman_ready`, `last_event`, `error`)
-- **AND** `manifest_pin_x86_64_tar` SHALL serialise as a JSON string when
-  the embedded manifest has an `x86_64.tar` pin and as JSON `null` when it
+- **AND** `manifest_pin_x86_64_oci_tar_xz` SHALL serialise as a JSON string when
+  the embedded manifest has an `x86_64.oci.tar.xz` pin and as JSON `null` when it
   does not (a non-hex placeholder like `"pending-ci"` MUST serialise as
   `null`, not a garbage substring)
 - **AND** `recent_log_tail` SHALL serialise as a JSON array (empty array

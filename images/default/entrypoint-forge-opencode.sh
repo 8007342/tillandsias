@@ -153,7 +153,7 @@ if [ "$IS_DIAGNOSTICS" = "true" ]; then
     if [ -n "${TILLANDSIAS_OPENCODE_PROMPT:-}" ]; then
         exec "$OC_BIN" run --dangerously-skip-permissions "$TILLANDSIAS_OPENCODE_PROMPT"
     else
-        exec "$OC_BIN" run --dangerously-skip-permissions
+        exec "$OC_BIN" run --dangerously-skip-permissions "run /startup"
     fi
 else
     trace_lifecycle "exec" "launching opencode ($OC_BIN)"

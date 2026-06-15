@@ -13,6 +13,65 @@ This is **BLOCKED on linux step 32** (true-rekey lands the shared contract Windo
 — not claimable until step 32 completes. Optional independent item: wire
 `EnumerateLocalProjects`. No new autonomous Windows **step-36** code packet until step 32 lands.
 
+## 2026-06-14 — recipe completion: Fedora-44 WSL2 provisioning FIXED + verified; 2 Vault blockers filed
+
+Operator directive: complete the recipe so it launches Fedora44 in WSL2, curl-installs
+tillandsias, and runs `tillandsias --init --debug` inside. Drove the full chain on real
+Win11 hardware (the Linux rootfs fix `bf6b0d03` had never been built/run on Windows).
+
+- 2026-06-14T08:46Z `0d6858ee`+openssl  **RECIPE FIX (durable, in-tree, VALIDATED).**
+  `wsl_lifecycle.rs::ensure_base_packages()` installs systemd+podman+dbus-broker+libcap+
+  shadow-utils+openssl and restores newuidmap/newgidmap caps before the systemd flip.
+  Clean `--provision-once` now: download→OCI-flatten→`wsl --import`→install→systemd boot→
+  in-VM headless fetched (39MB) + ACTIVE on vsock 42420, reachable over HvSocket
+  (`--status-once`: reachable:true, wire_version:2, phase:Starting). `container-base-missing-systemd-podman` → DONE.
+- Proven: curl-install of Linux tillandsias inside the WSL2 works; ALL 9 enclave images +
+  the Vault image BUILD successfully inside.
+- **BLOCKED at Vault first-boot** (filed, Linux-runtime scope):
+  `smoke-finding/init-vault-firstboot-hang-headless` — standalone `tillandsias --init`
+  hangs after "deriving first-boot dummy key K" (no vault container; timeout INIT_EXIT=137;
+  Vault HEALTHCHECK ignored under OCI format). And `smoke-finding/provision-once-ready-budget-too-short`
+  (windows) — 60s Ready budget + no keepalive can't cover cold first-boot.
+- Rootless user-lane prereqs documented (linger, cgroupfs, gnome-keyring/dbus Secret Service).
+  All in `plan/issues/smoke-e2e-findings-v0.3.260614.1-2026-06-14.md`.
+
+## 2026-06-14 — smoke E2E of published v0.3.260614.1 — HALTED at provisioning (rootfs 404)
+
+Windows-equivalent run of `/smoke-curl-install-and-test-e2e` against the fresh
+release (no Linux runtime on this host; operator chose the Windows path).
+Downloaded + SHA-verified + unzipped the published Windows tray, drove headless
+`--diagnose`/`--provision-once`/`--status-once`.
+
+- 2026-06-14T02:25Z  **FINDING (high)** `smoke-finding/fedora-rootfs-artifact-url-404`:
+  `--provision-once` 404s downloading `Fedora-Cloud-Base-Generic-44-1.7.x86_64.tar.xz`.
+  Fedora 44 publishes no Generic `.tar.xz` (only `.qcow2` 200 / GCE `.tar.gz` 200) and
+  no WSL image; `images/vm/manifest.toml` pins a non-existent artifact → blocks ALL
+  clean Windows+macOS provisioning (and HEAD still pins it). Filed to
+  `plan/issues/smoke-e2e-findings-v0.3.260614.1-2026-06-14.md` (owner_host: linux,
+  manifest/recipe scope). Smoke halted before Vault init / GitHub-login E2E.
+- PASS observations: zip SHA OK, `--version` = `0.3.260614.1 (3395626c)`, diagnose/status
+  exit-code contracts correct, clean-room left clean (no partial distro).
+
+## 2026-06-14 — vault-flow/xplat-gating-parity (Windows slice) — LANDED (joint packet still open)
+
+Live GitHub-login gate for the Windows tray. The GitHub token lives in-VM behind
+Vault, so — unlike the Linux tray's in-process `is_github_logged_in` — the Windows
+tray must ask the in-VM headless over HvSocket. Original blockers all cleared
+(step 32 rekey, step 36 keychain/vsock, 42a tray-gate-on-vault).
+
+- 2026-06-14T00:40Z **claim** by `windows-yolanda-claude-20260614T004000Z`
+  (lease: `lease-windows-xplat-gating-parity-20260614T0040Z`, expires 2026-06-14T04:40Z).
+- 2026-06-14T00:50Z `a747a1bc`  control-wire GithubLoginStatus{Request,Reply} (additive,
+  no WIRE bump) + windows-tray `refresh_github_login` poller sets `MENU_STATE.login`
+  from the live in-VM signal; graceful degrade on Error{Unsupported}. control-wire
+  26/26, windows-tray 44+8+3 green, fmt clean, no new clippy in touched files.
+- **REMAINING (siblings, not Windows-ownable):** (1) LINUX/headless — add the in-VM
+  vsock-dispatcher handler for `GithubLoginStatusRequest` → `is_github_logged_in`
+  (`vault_bootstrap.rs:463`) → reply `GithubLoginStatusReply{logged_in, handle}`.
+  Until then the in-VM headless returns Error{Unsupported} and the tray shows
+  last-known login. (2) MACOS — mirror `refresh_github_login` over vz vsock in the
+  macOS tray. Task stays `in_progress` in plan/index.yaml until both land.
+
 ## 2026-06-13 — xplat-vault/windows (step 36) — DONE
 
 Store the unseal key + `installation-uuid` + `root-token` in Windows Credential Manager and deliver them to the in-VM vault container over HvSocket.

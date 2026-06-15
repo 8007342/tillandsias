@@ -73,7 +73,7 @@ use std::sync::Mutex;
 
 use tillandsias_host_shell::menu_action::{self, MenuAction};
 use tillandsias_host_shell::menu_state::{
-    self, MenuItem, MenuState, MenuStructure, ProjectEntry, SelectedAgent,
+    self, GithubLoginState, MenuItem, MenuState, MenuStructure, ProjectEntry, SelectedAgent,
 };
 use tillandsias_host_shell::provisioning::{ProvisionPhase, ProvisionProgress};
 use tillandsias_host_shell::pty::{intent_for_action, launch_spec};
@@ -1285,6 +1285,102 @@ async fn refresh_cloud_projects(_hwnd: HWND) {
     }
 }
 
+/// Map a `GithubLoginStatusReply` ({logged_in, handle}) onto the shared menu
+/// `GithubLoginState`. A logged-in reply with no handle still renders as
+/// logged-in (the GitHub item becomes the disabled "GitHub: <user>" line, with
+/// an empty handle degrading to a generic label upstream); a logged-out reply
+/// is `LoggedOut` regardless of any stale handle. Pure + total so the wire→menu
+/// mapping is unit-testable on the Windows host without a live VM.
+fn github_login_state_from_reply(logged_in: bool, handle: Option<String>) -> GithubLoginState {
+    if logged_in {
+        GithubLoginState::LoggedIn {
+            handle: handle.unwrap_or_default(),
+        }
+    } else {
+        GithubLoginState::LoggedOut
+    }
+}
+
+/// Poll the in-VM headless for the live GitHub login state and merge it into the
+/// shared `MenuState.login`. The GitHub token lives inside the VM (behind
+/// Vault), so — unlike the Linux tray, which calls `is_github_logged_in`
+/// in-process — the Windows tray must ask the in-VM headless over HvSocket.
+/// This is the cross-platform mirror of the Linux `vault-flow/tray-gate-on-vault`
+/// gating contract (plan `vault-flow/xplat-gating-parity`).
+///
+/// Best-effort and forward-compatible: if the in-VM headless predates the
+/// `GithubLoginStatusRequest` handler it replies `Error { Unsupported }` (or
+/// rejects the unknown variant), and the last-known login state is left
+/// untouched. Mirrors the `refresh_cloud_projects` shape exactly.
+async fn refresh_github_login(_hwnd: HWND) {
+    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
+    use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
+    use tillandsias_host_shell::vsock_client::Client;
+
+    let stream = match crate::hvsocket::open_hvsocket_stream(CONTROL_WIRE_VSOCK_PORT).await {
+        Ok(stream) => stream,
+        Err(err) => {
+            tracing::debug!(%err, "github login refresh: control wire unreachable");
+            return;
+        }
+    };
+    let mut client = Client::from_stream(
+        Box::new(stream),
+        Transport::Vsock {
+            cid: 0,
+            port: CONTROL_WIRE_VSOCK_PORT,
+        },
+    );
+    if let Err(err) = client.handshake().await {
+        tracing::debug!(%err, "github login refresh: handshake failed");
+        return;
+    }
+    if let Err(err) =
+        crate::installation_uuid::deliver_credentials_and_check_handover(&mut client).await
+    {
+        tracing::warn!(%err, "github login refresh: credentials delivery/handover failed");
+    }
+    let seq = client.allocate_seq();
+    let envelope = ControlEnvelope {
+        wire_version: WIRE_VERSION,
+        seq,
+        body: ControlMessage::GithubLoginStatusRequest { seq },
+    };
+    let reply = match client.request(&envelope).await {
+        Ok(reply) => reply,
+        Err(err) => {
+            tracing::debug!(%err, "github login refresh: request failed");
+            return;
+        }
+    };
+    match reply.body {
+        ControlMessage::GithubLoginStatusReply {
+            logged_in, handle, ..
+        } => {
+            let state = github_login_state_from_reply(logged_in, handle);
+            if let Ok(mut guard) = MENU_STATE.lock() {
+                guard.get_or_insert_with(MenuState::initial).login = state;
+            }
+            tracing::debug!(logged_in, "github login state refreshed (VM-side)");
+        }
+        // The in-VM handler may not be wired yet (Linux owns the in-VM
+        // populate); surface its Error so an operator sees why the GitHub item
+        // didn't reflect a live login.
+        ControlMessage::Error { code, message, .. } => {
+            tracing::debug!(
+                "github login refresh: {}",
+                describe_wire_error(code, &message)
+            );
+        }
+        other => {
+            tracing::debug!(
+                "github login refresh: unexpected reply variant {}",
+                other.kind()
+            );
+        }
+    }
+}
+
 /// Parse the SHA-256 pin for `key` (e.g. `"x86_64.tar"`) out of the embedded
 /// recipe `manifest.toml` `[output.expected_rootfs_sha]` table, returning its
 /// first 12 hex chars. Tolerates both the quoted-key form the recipe-publish CI
@@ -1391,7 +1487,7 @@ struct DiagnoseReport {
     /// having to run `wsl --list --running` separately.
     distro_running: bool,
     release_tag: &'static str,
-    manifest_pin_x86_64_tar_xz: Option<String>,
+    manifest_pin_x86_64_oci_tar_xz: Option<String>,
     wire: WireReport,
     recent_log_tail: Vec<String>,
 }
@@ -1521,7 +1617,8 @@ fn collect_report() -> DiagnoseReport {
         })
         .unwrap_or(false);
 
-    let manifest_pin = parse_rootfs_sha_pin(crate::wsl_lifecycle::RECIPE_MANIFEST, "x86_64.tar.xz");
+    let manifest_pin =
+        parse_rootfs_sha_pin(crate::wsl_lifecycle::RECIPE_MANIFEST, "x86_64.oci.tar.xz");
 
     // Live control wire. Tokio runtime build is essentially infallible — on the
     // rare failure we still emit a (degraded) report rather than aborting.
@@ -1656,7 +1753,7 @@ fn collect_report() -> DiagnoseReport {
         distro_registered,
         distro_running: distro_running(),
         release_tag: "fedora-44",
-        manifest_pin_x86_64_tar_xz: manifest_pin,
+        manifest_pin_x86_64_oci_tar_xz: manifest_pin,
         wire,
         recent_log_tail,
     };
@@ -1715,8 +1812,8 @@ fn print_human(r: &DiagnoseReport) {
     );
     println!("Release tag:  {}", r.release_tag);
     println!(
-        "Manifest pin: x86_64.tar.xz {}",
-        r.manifest_pin_x86_64_tar_xz
+        "Manifest pin: x86_64.oci.tar.xz {}",
+        r.manifest_pin_x86_64_oci_tar_xz
             .as_deref()
             .map(|sha| format!("{sha}\u{2026}"))
             .unwrap_or_else(|| "(not found / parse skipped)".to_string())
@@ -1866,6 +1963,13 @@ fn spawn_provisioning(hwnd: HWND) {
                             if tick.is_multiple_of(10) {
                                 refresh_local_projects(hwnd).await;
                                 refresh_cloud_projects(hwnd).await;
+                                // Live GitHub login gate: the token lives in the
+                                // VM behind Vault, so poll the in-VM headless
+                                // (cross-platform mirror of the Linux in-process
+                                // is_github_logged_in gate; plan
+                                // vault-flow/xplat-gating-parity). Slow cadence
+                                // — login changes rarely vs VM health.
+                                refresh_github_login(hwnd).await;
                             }
                             tick = tick.wrapping_add(1);
                             tokio::time::sleep(std::time::Duration::from_secs(30)).await;
@@ -2375,10 +2479,40 @@ mod tests {
         );
     }
 
+    /// The `GithubLoginStatusReply` → `GithubLoginState` mapping is the live
+    /// GitHub-login gate for the Windows tray (plan
+    /// `vault-flow/xplat-gating-parity`). Pin it so the wire→menu contract
+    /// can't drift: logged-in carries the handle, logged-out is `LoggedOut`
+    /// regardless of a stale handle, and a logged-in reply with no handle is
+    /// still logged-in (empty handle) rather than silently dropping to out.
+    #[test]
+    fn github_login_state_maps_from_reply() {
+        assert_eq!(
+            github_login_state_from_reply(true, Some("octocat".to_string())),
+            GithubLoginState::LoggedIn {
+                handle: "octocat".to_string()
+            }
+        );
+        assert_eq!(
+            github_login_state_from_reply(false, Some("octocat".to_string())),
+            GithubLoginState::LoggedOut
+        );
+        assert_eq!(
+            github_login_state_from_reply(true, None),
+            GithubLoginState::LoggedIn {
+                handle: String::new()
+            }
+        );
+        assert_eq!(
+            github_login_state_from_reply(false, None),
+            GithubLoginState::LoggedOut
+        );
+    }
+
     /// Pin the `--diagnose --json` schema so support tooling consuming the
     /// machine-readable output never breaks silently. The five tests below
     /// catch (a) renamed / removed top-level keys, (b) renamed / removed
-    /// nested `wire.*` keys, (c) the `manifest_pin_x86_64_tar_xz` Option being
+    /// nested `wire.*` keys, (c) the `manifest_pin_x86_64_oci_tar_xz` Option being
     /// (de)serialized in an unexpected way, (d) `recent_log_tail` ceasing to
     /// be an array. A schema change here is a schema change for tooling —
     /// adjust both deliberately together.
@@ -2399,7 +2533,7 @@ mod tests {
             distro_registered: false,
             distro_running: false,
             release_tag: "v0.0.0",
-            manifest_pin_x86_64_tar_xz: Some("abcdef123456".to_string()),
+            manifest_pin_x86_64_oci_tar_xz: Some("abcdef123456".to_string()),
             wire: WireReport {
                 reachable: false,
                 phase: None,
@@ -2431,7 +2565,7 @@ mod tests {
             "distro_registered",
             "distro_running",
             "release_tag",
-            "manifest_pin_x86_64_tar_xz",
+            "manifest_pin_x86_64_oci_tar_xz",
             "wire",
             "recent_log_tail",
         ] {
@@ -2461,20 +2595,20 @@ mod tests {
     #[test]
     fn diagnose_json_manifest_pin_some_serializes_as_string() {
         let mut r = baseline_diagnose_report();
-        r.manifest_pin_x86_64_tar_xz = Some("a28cabe7c9df".to_string());
+        r.manifest_pin_x86_64_oci_tar_xz = Some("75200f5752a7".to_string());
         let v: serde_json::Value = serde_json::to_value(r).expect("serialize");
         assert_eq!(
-            v["manifest_pin_x86_64_tar_xz"],
-            serde_json::Value::String("a28cabe7c9df".to_string())
+            v["manifest_pin_x86_64_oci_tar_xz"],
+            serde_json::Value::String("75200f5752a7".to_string())
         );
     }
 
     #[test]
     fn diagnose_json_manifest_pin_none_serializes_as_null() {
         let mut r = baseline_diagnose_report();
-        r.manifest_pin_x86_64_tar_xz = None;
+        r.manifest_pin_x86_64_oci_tar_xz = None;
         let v: serde_json::Value = serde_json::to_value(r).expect("serialize");
-        assert_eq!(v["manifest_pin_x86_64_tar_xz"], serde_json::Value::Null);
+        assert_eq!(v["manifest_pin_x86_64_oci_tar_xz"], serde_json::Value::Null);
     }
 
     /// The `--diagnose` / `--diagnose --json` exit code is a public contract

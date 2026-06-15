@@ -116,6 +116,7 @@ mod macos_main {
             cpu_count: 2,
             memory_bytes: 2 * 1024 * 1024 * 1024,
             root_disk: args.disk.clone(),
+            cidata_iso: None,
             nvram: args.nvram.clone(),
             serial_writer_fd: None,
         };

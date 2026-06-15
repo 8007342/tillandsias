@@ -297,6 +297,11 @@ pub struct BaseImage {
 pub struct OutputSpec {
     #[serde(default)]
     pub expected_rootfs_sha: HashMap<String, String>,
+    /// Exact artifact locators keyed by `<arch>.<format>`. These take
+    /// precedence over `artifact_url_template`, allowing hosts to consume
+    /// different official Fedora image families without guessing paths.
+    #[serde(default)]
+    pub artifact_urls: HashMap<String, String>,
     /// l9: artifact-URL contract. A template with `{tag}`, `{arch}`,
     /// and `{format}` placeholders that non-Linux hosts resolve at
     /// fetch time. The default points at the GitHub release asset
@@ -333,20 +338,20 @@ impl Manifest {
             .map(|s| s.as_str())
     }
 
-    /// l9: resolve the artifact URL for `(arch, format, tag)`. Returns
-    /// `None` if no template is configured. Format is the trailing key
-    /// segment (`"tar"` or `"img"`), arch is `"x86_64"` / `"aarch64"`,
-    /// tag is the release tag (`"v0.2.260526.X"` etc.).
+    /// l9: resolve the artifact URL for `(arch, format, tag)`. An exact
+    /// `<arch>.<format>` entry wins; otherwise the optional template is used.
     ///
     /// Substitution is positional `replace`; we don't pull in a full
     /// template engine because the variable surface is fixed.
     ///
     /// @trace plan/issues/cross-host-blocker-roundup-2026-05-25.md l9
     pub fn artifact_url(&self, arch: &str, format: &str, tag: &str) -> Option<String> {
-        let tmpl = self
-            .output
-            .as_ref()
-            .and_then(|o| o.artifact_url_template.as_ref())?;
+        let output = self.output.as_ref()?;
+        let key = format!("{arch}.{format}");
+        if let Some(url) = output.artifact_urls.get(&key) {
+            return Some(url.clone());
+        }
+        let tmpl = output.artifact_url_template.as_ref()?;
         Some(
             tmpl.replace("{arch}", arch)
                 .replace("{format}", format)
@@ -361,6 +366,7 @@ mod tests {
 
     const FIXTURE_RECIPE: &str = include_str!("../../tests/fixtures/recipe-basic/Recipefile");
     const FIXTURE_MANIFEST: &str = include_str!("../../tests/fixtures/recipe-basic/manifest.toml");
+    const PRODUCTION_MANIFEST: &str = include_str!("../../../../images/vm/manifest.toml");
 
     #[test]
     fn parses_full_recipe_and_accessors() {
@@ -385,6 +391,47 @@ mod tests {
             .filter(|i| matches!(i, Instruction::Run { .. }))
             .count();
         assert_eq!(runs, 4);
+    }
+
+    #[test]
+    fn exact_artifact_url_precedes_template() {
+        let manifest = Manifest::from_toml(
+            r#"
+recipe_version = 1
+[output]
+artifact_url_template = "https://example.invalid/{arch}/{format}/{tag}"
+[output.artifact_urls]
+"x86_64.oci.tar.xz" = "https://download.example/fedora.oci.tar.xz"
+"#,
+        )
+        .expect("parse manifest");
+
+        assert_eq!(
+            manifest.artifact_url("x86_64", "oci.tar.xz", "ignored"),
+            Some("https://download.example/fedora.oci.tar.xz".to_string())
+        );
+        assert_eq!(
+            manifest.artifact_url("aarch64", "qcow2", "v1"),
+            Some("https://example.invalid/aarch64/qcow2/v1".to_string())
+        );
+    }
+
+    #[test]
+    fn production_manifest_resolves_published_fedora_artifacts() {
+        let manifest = Manifest::from_toml(PRODUCTION_MANIFEST).expect("parse production manifest");
+
+        assert_eq!(
+            manifest.artifact_url("x86_64", "oci.tar.xz", "ignored"),
+            Some("https://download.fedoraproject.org/pub/fedora/linux/releases/44/Container/x86_64/images/Fedora-Container-Base-Generic-44-1.7.x86_64.oci.tar.xz".to_string())
+        );
+        assert_eq!(
+            manifest.expected_sha("x86_64.oci.tar.xz"),
+            Some("75200f5752a74a21a616ca9a75e25beb594e2e117a0195c54f87c0b3e3974d1b")
+        );
+        assert_eq!(
+            manifest.artifact_url("aarch64", "qcow2", "ignored"),
+            Some("https://download.fedoraproject.org/pub/fedora/linux/releases/44/Cloud/aarch64/images/Fedora-Cloud-Base-Generic-44-1.7.aarch64.qcow2".to_string())
+        );
     }
 
     #[test]

@@ -30,12 +30,16 @@ jobs:
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
 
-      - name: Magic Nix Cache
+      - name: Nix Cache
         # Caches the nix store across runs via the GitHub Actions cache backend.
         # Critical for cost: the aarch64 cross-GCC is built from source by
         # pkgsCross (not in cache.nixos.org), so without this every release run
         # rebuilds GCC. With it, that's a one-time cost.
-        uses: DeterminateSystems/magic-nix-cache-action@565684385bcd71bad329742eefe8d12f2e765b39 # v13
+        uses: nix-community/cache-nix-action@v7
+        with:
+          primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.lock') }}
+          restore-prefixes-first-match: |
+            nix-${{ runner.os }}-
 
       - name: Resolve and validate version
         env:

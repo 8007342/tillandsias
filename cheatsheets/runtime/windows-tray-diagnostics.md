@@ -151,7 +151,7 @@ The JSON shape is pinned by unit tests in `notify_icon::tests::diagnose_json_*` 
   "distro_registered":      true,          // bool    — `wsl -l -q` listed `distro`
   "distro_running":         false,         // bool    — `wsl -l --running -q` listed `distro` (WSL2 idles VMs down; flips frequently)
   "release_tag":            "v0.2.260526.1", // string  — embedded RECIPE_RELEASE_TAG
-  "manifest_pin_x86_64_tar": "a28cabe7c9df", // string | null — first 12 hex of the x86_64.tar SHA-256 pin
+  "manifest_pin_x86_64_oci_tar_xz": "75200f5752a7", // string | null — first 12 hex of the x86_64 OCI archive SHA-256 pin
   "wire": {
     "reachable":   true,                   // bool    — open + handshake succeeded
     "phase":       "Ready",                // string | null — Debug-formatted VmPhase

@@ -29,6 +29,7 @@ size: instant
 
 preconditions:
   - workspace contains images/default/Containerfile
+  - workspace contains images/default/Containerfile.base
   - workspace contains images/default/shell/{bashrc,zshrc,config.fish}
   - workspace contains images/default/config-overlay/shell-helpers.{sh,fish}
   - shell utilities (grep, sed) are available in PATH
@@ -46,7 +47,7 @@ critical_path:
     # Spec § Req mandates fish and zsh available. The lean-forge
     # install line keeps both on their own line for readability —
     # pin the literal so a regression dropping either surfaces.
-    command: "grep -F 'fish zsh' images/default/Containerfile"
+    command: "grep -F 'fish zsh' images/default/Containerfile.base"
     timeout_ms: 3000
     expected_behavior: "fish zsh"
 
@@ -56,7 +57,7 @@ critical_path:
     # keeping bat + fd-find as the survivors. The divergence is
     # documented in the Containerfile docblock + an `⚠ Implementation
     # reality` block in spec.md. Pin the surviving subset.
-    command: "grep -F 'ripgrep fd-find bat' images/default/Containerfile"
+    command: "grep -F 'ripgrep fd-find bat' images/default/Containerfile.base"
     timeout_ms: 3000
     expected_behavior: "fd-find"
 
@@ -67,7 +68,7 @@ critical_path:
     # leave a stale docblock claiming they're gone — and vice
     # versa, a docblock rewrite doesn't silently re-promise the
     # tools without the install line catching up.
-    command: "grep -F 'LEAN forge' images/default/Containerfile && grep -F '~90MB' images/default/Containerfile"
+    command: "grep -F 'LEAN forge' images/default/Containerfile.base && grep -F '~90MB' images/default/Containerfile.base"
     timeout_ms: 3000
     expected_behavior: "LEAN forge"
 
@@ -114,13 +115,13 @@ observability:
   log_fields:
     spec: "forge-shell-tools"
     test: "forge-shell-tools-implementation-shape"
-    artifact: "images/default/{Containerfile,shell/*,config-overlay/shell-helpers.*}"
+    artifact: "images/default/{Containerfile,Containerfile.base,shell/*,config-overlay/shell-helpers.*}"
 
 rollback:
   on_failure: >
     A `spec:forge-shell-tools` source surface drifted. Restore:
     `@trace spec:forge-shell-tools` on both shell-helpers files;
-    `fish zsh \\` on its own line in Containerfile microdnf
+    `fish zsh \\` on its own line in Containerfile.base microdnf
     install; `ripgrep fd-find bat` install subset (lean-forge
     surviving terminal tools); `LEAN forge` docblock + `~90MB`
     savings note acknowledging the dropped 8 (mc/vim/nano/eza/
@@ -130,6 +131,6 @@ rollback:
     fish` (POSIX vs fish-native split); shell-helpers.fish with
     >=10 `function ` definitions; `alias ll='` in both bashrc
     and zshrc. If a tools refactor genuinely re-adds the dropped
-    8, update the Containerfile install line + drop the divergence
+    8, update the Containerfile.base install line + drop the divergence
     block from spec.md + relax this litmus before landing.
-  command: "grep -nE 'spec:forge-shell-tools|fish zsh|fd-find|LEAN forge|shell-helpers\\.(sh|fish)|alias ll' images/default/Containerfile images/default/shell/{bashrc,zshrc,config.fish} images/default/config-overlay/shell-helpers.{sh,fish} 2>/dev/null | head -15"
+  command: "grep -nE 'spec:forge-shell-tools|fish zsh|fd-find|LEAN forge|shell-helpers\\.(sh|fish)|alias ll' images/default/Containerfile.base images/default/shell/{bashrc,zshrc,config.fish} images/default/config-overlay/shell-helpers.{sh,fish} 2>/dev/null | head -15"
