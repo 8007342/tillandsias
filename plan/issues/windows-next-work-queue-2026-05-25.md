@@ -13,6 +13,15 @@ This is **BLOCKED on linux step 32** (true-rekey lands the shared contract Windo
 — not claimable until step 32 completes. Optional independent item: wire
 `EnumerateLocalProjects`. No new autonomous Windows **step-36** code packet until step 32 lands.
 
+## 2026-06-15 — `coord/windows-sync-and-verify-20260615` — DONE
+
+Verification packet (depends on the P0 fix below — windows-tray didn't compile before it).
+windows-next integrated linux-next head `d3681430` (HEAD `fabcaecd`); focused tests pass
+(control-wire 26/26, windows-tray 44+8+3); WSL probe contracts intact (`--diagnose` exit 2;
+`--status-once` exit 1 idle / exit 2 reachable with `wire_version:2`). Also confirmed my
+earlier `smoke-finding/provision-once-ready-budget-too-short` is now implemented by the
+merged change (keepalive across connect, budget 12→36, accepts `VmPhase::Starting`).
+
 ## 2026-06-15 — P0 release blocker `windows-tray/vmphase-import-scope-release-break` — DONE
 
 The windows-release job of release.yml failed for v0.3.260615.1 (E0425 + 2× E0433):

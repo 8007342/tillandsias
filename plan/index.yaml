@@ -3717,7 +3717,7 @@ plan_index:
           checkpoint_required: true
           handoff_note: "Research verdict is complete; this packet only converges the source of intent."
         - id: coord/windows-sync-and-verify-20260615
-          status: ready
+          status: done
           owner_host: windows
           estimated_hours: 3
           capability_tags: [git, windows, wsl2, integration, testing]
@@ -3737,3 +3737,24 @@ plan_index:
             pure unit-test subset that does not require WSL.
           checkpoint_required: true
           handoff_note: "Verification packet only; do not start optional feature work while the alignment event is active."
+          events:
+            - type: claim
+              ts: "2026-06-15T20:45:00Z"
+              agent_id: windows-yolanda-claude-20260615T204000Z
+              host: windows
+              lease_id: lease-windows-coord-sync-20260615T2045Z
+              expires_at: "2026-06-16T00:45:00Z"
+            - type: completed
+              ts: "2026-06-15T20:50:00Z"
+              agent_id: windows-yolanda-claude-20260615T204000Z
+              host: windows
+              lease_id: lease-windows-coord-sync-20260615T2045Z
+              evidence:
+                - "windows-next integrated linux-next head d3681430 (merge pushed; HEAD fabcaecd includes the P0 VmPhase fix)."
+                - "Focused tests pass: tillandsias-control-wire 26/26; tillandsias-windows-tray 44 unit + 8 cli + 3 portable_smoke (1 interactive ignored)."
+                - "WSL probe contracts intact: --diagnose --json exit 2 (degraded, distro_registered=true, wsl 2.7.3.0); --status-once exit 1 (unreachable, actionable error) when VM idle and exit 2 with reachable:true, wire_version:2, phase:Starting when held warm."
+              note: >
+                Done alongside P0 windows-tray/vmphase-import-scope-release-break
+                (fabcaecd) which was a prerequisite — windows-tray did not compile
+                before the VmPhase import hoist, so no Windows verification was
+                possible until it landed.
