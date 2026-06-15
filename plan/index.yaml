@@ -3544,3 +3544,54 @@ plan_index:
           status: completed
           owner_host: linux
           depends_on: []
+
+    - id: local-build-smoke-regressions
+      order: 50
+      title: Local build smoke regressions from 2026-06-15
+      status: ready
+      owner_host: linux
+      deliverable: plan/issues/build-install-smoke-e2e-findings-2026-06-14.md
+      audit_origin: plan/issues/build-install-smoke-e2e-findings-2026-06-14.md
+      depends_on: []
+      exit_criteria:
+        - "A supplied OpenCode forge prompt begins execution without manual input."
+        - "Evidence-bundle litmus totals describe the current run and report zero false failures."
+        - "The local build/install/reset/init/forge smoke reaches a terminal pass."
+      tasks:
+        - id: local-smoke/evidence-bundle-litmus-count-regression
+          status: ready
+          owner_host: linux
+          estimated_hours: 3
+          capability_tags: [bash, ci, evidence, litmus, testing]
+          depends_on: []
+          owned_files:
+            - scripts/generate-evidence-bundle.sh
+            - build.sh
+            - scripts/local-ci.sh
+          next_action: >
+            Fix cross-phase litmus counter aggregation and add all-pass plus
+            one-failure fixtures.
+          acceptance_evidence:
+            - "All-pass ci-full reports zero failed litmus tests."
+            - "One-failure fixture reports exactly one failure."
+          checkpoint_required: true
+          handoff_note: "Runtime residual execution is fixed; only the evidence aggregation remains."
+        - id: local-smoke/opencode-interactive-prompt-not-consumed
+          status: ready
+          owner_host: linux
+          estimated_hours: 5
+          capability_tags: [shell, opencode, forge, containers, testing]
+          depends_on: []
+          owned_files:
+            - images/default/entrypoint-forge-opencode.sh
+            - openspec/litmus-tests
+            - openspec/litmus-bindings.yaml
+          next_action: >
+            Use a supported OpenCode 1.16.x prompt execution path and add a
+            container-level regression proving the requested prompt starts.
+          acceptance_evidence:
+            - "Prompted forge launch executes /forge-continuous-enhancement."
+            - "Promptless forge launch remains interactive."
+            - "Focused litmus and ./build.sh --check pass."
+          checkpoint_required: true
+          handoff_note: "The completed singleton fix is verified; the forge and OpenCode start successfully, and only prompt consumption is broken."
