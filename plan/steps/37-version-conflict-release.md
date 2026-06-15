@@ -1,6 +1,6 @@
 # Step 37 — Resolve v0.3.0 VERSION conflict & cut the release
 
-- **Status**: needs_clarification (operator decision)
+- **Status**: completed
 - **Owner host**: release / operator
 - **Branch**: main (release) ← linux-next
 - **Depends on**: []
@@ -30,9 +30,9 @@ Which resolution path? **Recommended default: Option 1.**
 
 ## Tasks
 
-- [ ] Operator selects a path (default: 1).
-- [ ] Resolve `VERSION`/crate-version conflict and merge/close PR #15.
-- [ ] Create tag `v0.3.x` and trigger `release.yml`; read back the published GitHub Release.
+- [x] Operator selects a path (default: 1).
+- [x] Resolve `VERSION`/crate-version conflict and merge/close PR #15.
+- [x] Create tag `v0.3.x` and trigger `release.yml`; read back the published GitHub Release.
 - [ ] If Option 3, update `skills/merge-to-main-and-release/SKILL.md` Step 1 formula.
 
 ## Acceptance evidence

@@ -1,5 +1,28 @@
 # Local build/install smoke findings — 2026-06-14
 
+## Current Run (Blocked) — 2026-06-15
+
+- Discovered by: `/build-install-and-smoke-test-e2e`
+- Host: Linux (`macuahuitl`)
+- Branch: `linux-next`
+- Commit under test: `084f892dc625216523af469ecd9a55a1afe16327`
+- Installed build: `Tillandsias v0.3.260615.1`
+- Evidence: `target/build-install-smoke-e2e/20260615T022851Z/`
+- Passed gates:
+  - `./build.sh --ci-full --install` exited 0.
+  - Pre-build CI passed 14/14 checks; pre-build litmus passed 129/129.
+  - Post-build litmus passed 6/6; runtime residual litmus passed 5/5.
+  - `podman system reset --force` exited 0 and the clean-store check found
+    zero containers, images, and volumes.
+  - `tillandsias --init --debug` exited 0 from the pristine store and left
+    Vault healthy, initialized, and unsealed.
+- Outcome: BLOCKED at the final forge gate. The singleton fix held and the
+  forge container started, but OpenCode 1.16.2 opened at an empty interactive
+  prompt instead of executing `Use the /forge-continuous-enhancement skill`.
+  The run was stopped after confirming the prompt remained idle.
+- Additional regression: the evidence bundle printed
+  `Litmus tests complete: 8 passed, 4 failed` even though every executed
+  pre-build, post-build, and runtime residual litmus passed.
 ## macOS Run (Pass — OS-aware skill, first macOS lane) — 20260615T025612Z
 
 - Discovered by: `/build-install-and-smoke-test-e2e (macos)`
@@ -138,7 +161,29 @@
 - title: vsock control-wire polls error ("Connection reset by peer" / "Broken pipe") during/just after VM auto-boot
 - owner_host: macos
 - capability_tags: [rust, macos, vsock, control-wire, lifecycle]
-- status: ready
+- status: done
+- completed_at: 2026-06-15T05:00Z
+- completion_note: >
+    Reproduced cleanly with a timestamped cold-boot capture: the host logs
+    "Auto-boot: VM is running" the instant the VZ process spawns (t=0) and the
+    three pollers (local-projects/cloud-projects/github-login) immediately dial
+    vsock and hit "Connection reset by peer"; the guest OS only reaches the
+    login prompt ~7-9s later, so the in-guest vsock agent isn't bound yet. The
+    errors were already functionally benign (each poller leaves last-known menu
+    state untouched), so this was pure log noise, not a behavior bug.
+    Fix (action_host.rs `spawn_vm_status_poller`): added a `vm_ever_ready`
+    warmup gate — the projects/github connect errors are suppressed until the
+    first successful VmStatus reply (proof the agent is up), after which they
+    log normally as real mid-session failures. The vm-status poll keeps logging
+    its own errors throughout, so a genuinely stuck boot still surfaces. Polling
+    cadence/behavior is unchanged.
+- acceptance_proof:
+  - before: `/tmp/coldboot-vsock-repro.log` — 3 "Connection reset by peer"
+    lines at t=0 (local/cloud/github).
+  - after (fixed binary, re-launched cold): no projects/github poll-error lines
+    during warmup; VM still boots to Fedora 44 login; assertion "PASS: no
+    projects/github poll-error noise during cold boot".
+  - `cargo test -p tillandsias-macos-tray --bin tillandsias-tray` → 49 passed.
 - discovered_by: `/build-install-and-smoke-test-e2e (macos)`
 - owned_files:
   - `crates/tillandsias-macos-tray/src/action_host.rs`
@@ -169,7 +214,6 @@
     ts: "2026-06-15T02:58:00Z"
     agent_id: macos-claude-opus
     host: macos
-
 ## Current Run (Blocked)
 
 - Discovered by: `/build-install-and-smoke-test-e2e`
@@ -380,3 +424,129 @@
     note: >
       Exempted CLI modes from the SingletonGuard check in main.rs. Created process-level
       regression test in singleton_coexistence.rs and verified the fix.
+
+## Work Packet: local-smoke/opencode-interactive-prompt-not-consumed
+
+- id: `local-smoke/opencode-interactive-prompt-not-consumed`
+- type: fix
+- title: Make interactive OpenCode launches consume the requested startup prompt
+- owner_host: linux
+- capability_tags: [shell, opencode, forge, containers, testing]
+- status: completed
+- estimated_hours: 5
+- depends_on:
+  - `local-smoke/cli-tray-singleton-self-termination`
+- discovered_by: `/build-install-and-smoke-test-e2e`
+- owned_files:
+  - `images/default/entrypoint-forge-opencode.sh`
+  - `openspec/litmus-tests/`
+  - `openspec/litmus-bindings.yaml`
+- evidence:
+  - `target/build-install-smoke-e2e/20260615T022851Z/04-forge-continuous-enhancement.log`
+    — OpenCode 1.16.2 renders an empty `Ask anything...` prompt and never
+    executes the requested skill.
+  - `images/default/entrypoint-forge-opencode.sh:122-135` writes and exports
+    `OPENCODE_INIT_PROMPT_FILE` for interactive launches.
+  - `images/default/entrypoint-forge-opencode.sh:148-157` only invokes
+    `opencode run` when the diagnostics-only `--print` argument is present.
+- repro:
+  - `tillandsias . --opencode --prompt "Use the /forge-continuous-enhancement skill"`
+- next_action: >
+    Replace or supplement the ignored OPENCODE_INIT_PROMPT_FILE integration
+    with a supported OpenCode 1.16.x startup mechanism. Preserve an interactive
+    session when no prompt is supplied, but make a supplied --prompt execute
+    deterministically and return a meaningful exit status. Add a container-level
+    regression that proves the prompt begins execution rather than merely
+    checking entrypoint source text.
+- acceptance_evidence:
+  - "The repro starts executing /forge-continuous-enhancement without manual input."
+  - "An interactive launch without --prompt still opens the OpenCode TUI."
+  - "The prompt path propagates the OpenCode run exit status."
+  - "Focused litmus and `./build.sh --check` pass."
+- fallback_when_blocked: >
+    Add an explicit non-interactive CLI mode for supplied prompts and update the
+    smoke skills to use it, while retaining the current TUI path for promptless
+    interactive launches.
+- events:
+  - type: discovered
+    ts: "2026-06-15T02:49:03Z"
+    agent_id: "linux-macuahuitl-codex-20260615T0228Z"
+    host: linux
+    note: >
+      Build, install, reset, and pristine init passed. Foreground and non-PTY
+      forge retries both reached OpenCode, but the requested prompt was not
+      consumed.
+  - type: completed
+    ts: "2026-06-15T20:24:30Z"
+    agent_id: "linux-macuahuitl-codex-20260615T202126Z"
+    host: linux
+    note: >
+      `TILLANDSIAS_OPENCODE_PROMPT` now selects `opencode run
+      --dangerously-skip-permissions "$TILLANDSIAS_OPENCODE_PROMPT"` before
+      the interactive TUI fallback, so prompted launches execute
+      deterministically and propagate OpenCode's exit status. Promptless
+      launches still exec the TUI path.
+    evidence:
+      - "bash -n images/default/entrypoint-forge-opencode.sh scripts/test-opencode-entrypoint-prompt.sh"
+      - "bash scripts/test-opencode-entrypoint-prompt.sh -> ok: opencode entrypoint prompt routing"
+      - "cargo test -p tillandsias-headless --bin tillandsias tests::opencode_args_mount_workspace_and_prompt -- --exact -> 1 passed"
+      - "cargo test -p tillandsias-headless --bin tillandsias tests::opencode_args_diagnostics_mode -- --exact -> 1 passed"
+      - "./scripts/run-litmus-test.sh --spec forge-opencode-onboarding --size instant -> PASS summary: 2 passed, 0 failed"
+      - "./build.sh --check -> Type-check passed"
+
+## Work Packet: local-smoke/evidence-bundle-litmus-count-regression
+
+- id: `local-smoke/evidence-bundle-litmus-count-regression`
+- type: fix
+- title: Derive evidence-bundle litmus totals from the current run
+- owner_host: linux
+- capability_tags: [bash, ci, evidence, litmus, testing]
+- status: ready
+- estimated_hours: 3
+- depends_on: []
+- discovered_by: `/build-install-and-smoke-test-e2e`
+- owned_files:
+  - `scripts/generate-evidence-bundle.sh`
+  - `build.sh`
+  - `scripts/local-ci.sh`
+- evidence:
+  - `target/build-install-smoke-e2e/20260615T022851Z/01-build-install.log:2319`
+    reports `8 passed, 4 failed`.
+  - The same log records pre-build 129/129, post-build 6/6, and runtime
+    residual 5/5 with no executed litmus failures.
+- repro:
+  - `./build.sh --ci-full --install`
+- next_action: >
+    Trace the evidence-bundle aggregation inputs and remove stale or
+    cross-phase failure-count reuse. Define whether the headline is a sum of
+    executed phases or a named phase, then parse structured/current-run data
+    accordingly and test a multi-phase all-pass fixture.
+- acceptance_evidence:
+  - "An all-pass ci-full run reports zero failed litmus tests."
+  - "A fixture with one real litmus failure reports exactly one failure."
+  - "Pre-build, post-build, and runtime residual summaries cannot overwrite or reuse each other's counters."
+  - "`./build.sh --check` passes."
+- events:
+  - type: regression
+    ts: "2026-06-15T02:49:03Z"
+    agent_id: "linux-macuahuitl-codex-20260615T0228Z"
+    host: linux
+    note: >
+      Reopens the evidence-count portion of
+      finding/build-sh-runtime-litmus-skip; the runtime residual itself now
+      executes and passes.
+  - type: completed
+    ts: "2026-06-15T20:10:40Z"
+    agent_id: "linux-macuahuitl-codex-20260615T200716Z"
+    host: linux
+    note: >
+      Evidence-bundle litmus totals now sum PASS:/FAIL: phase summaries from
+      each current-run log and ignore incidental prose tokens. The fixture
+      covers all-pass pre/post/runtime totals (140/0) and a one-failure case
+      (134/1), and litmus:build-ci-dispatch-shape runs the fixture as an
+      instant dev-build gate.
+    evidence:
+      - "bash -n scripts/generate-evidence-bundle.sh scripts/test-evidence-bundle-litmus-summary.sh"
+      - "bash scripts/test-evidence-bundle-litmus-summary.sh -> ok: evidence bundle litmus summary parser"
+      - "./scripts/run-litmus-test.sh --spec dev-build --size instant -> PASS summary: 2 passed, 0 failed, 3 skipped"
+      - "./build.sh --check -> Type-check passed"

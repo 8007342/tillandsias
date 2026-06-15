@@ -43,7 +43,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-host-shell/src/vsock_client.rs#L243](../../../crates/tillandsias-host-shell/src/vsock_client.rs#L243)
 - [crates/tillandsias-macos-tray/src/action_host.rs#L255](../../../crates/tillandsias-macos-tray/src/action_host.rs#L255)
 - [crates/tillandsias-macos-tray/src/action_host.rs#L338](../../../crates/tillandsias-macos-tray/src/action_host.rs#L338)
-- [crates/tillandsias-macos-tray/src/action_host.rs#L1386](../../../crates/tillandsias-macos-tray/src/action_host.rs#L1386)
+- [crates/tillandsias-macos-tray/src/action_host.rs#L1458](../../../crates/tillandsias-macos-tray/src/action_host.rs#L1458)
 - [crates/tillandsias-vm-layer/Cargo.toml#L27](../../../crates/tillandsias-vm-layer/Cargo.toml#L27)
 - [crates/tillandsias-vm-layer/Cargo.toml#L42](../../../crates/tillandsias-vm-layer/Cargo.toml#L42)
 - [crates/tillandsias-vm-layer/examples/vz-spike.rs#L23](../../../crates/tillandsias-vm-layer/examples/vz-spike.rs#L23)

@@ -1,6 +1,6 @@
 # Step 42 — GitHub-login Vault-native flow
 
-- **Status**: in_progress (42a + 42a-async/42b/42c + 42e/42f/42g/42h + 42i done 2026-06-08; 42d blocked)
+- **Status**: completed
 - **Owner host**: linux (42d: macos+windows)
 - **Branch**: linux-next
 - **Depends on**: []
@@ -22,14 +22,14 @@ idiomatic on-demand podman check (no Vault assumed running at launch).
   (volume-guarded on-demand Vault read) replaces `tray::gh_auth_check`. Both gate sites read
   Vault. Verified: `cargo check`/`clippy -D warnings` clean under `--features tray`; 143/143
   tray tests pass.
-- **42a-async `vault-flow/launch-gate-async` — ready.** Move the launch-time probe off the
-  synchronous constructor path.
-- **42b `vault-flow/login-in-container` — ready.** `gh auth login` + Vault write inside one
+- **42a-async `vault-flow/launch-gate-async` — DONE 2026-06-08.** Move the launch-time probe off the
+  synchronous constructor path. Background probe bumps revision when token is confirmed.
+- **42b `vault-flow/login-in-container` — DONE 2026-06-08.** `gh auth login` + Vault write inside one
   container; fail-fast/bring-up before paste; write-capable AppRole lease.
-- **42c `vault-flow/vault-https-via-ca` — ready.** Vault listener TLS via the intermediate CA;
+- **42c `vault-flow/vault-https-via-ca` — DONE 2026-06-08.** Vault listener TLS via the intermediate CA;
   client trusts CA + `https://`.
-- **42d `vault-flow/xplat-gating-parity` — blocked.** Wire win/mac `GithubLoginState` to the
-  same Vault signal. Depends on 42a; overlaps step 36 (blocked on step 32).
+- **42d `vault-flow/xplat-gating-parity` — DONE 2026-06-14.** Wire win/mac `GithubLoginState` to the
+  same Vault signal. Both Windows and macOS slices are fully completed and integrated.
 - **42e `vault-flow/keyring-persistent-backend` — DONE 2026-06-08.** Root `Cargo.toml`
   `keyring` had no backend feature → mock (non-persistent) keystore → unseal key + root
   token never survived a process exit, so Vault could never be unsealed on any boot after

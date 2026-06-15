@@ -2712,7 +2712,7 @@ plan_index:
     - id: version-conflict-release
       order: 37
       title: Resolve v0.3.0 VERSION conflict & cut the release
-      status: ready
+      status: completed
       owner_host: release
       deliverable: plan/steps/37-version-conflict-release.md
       audit_origin: plan/issues/pre-vault-obsolescence-audit-2026-06-05.md
@@ -2732,7 +2732,7 @@ plan_index:
         - "Tag v0.3.x exists on GitHub; release.yml dispatched; assets published and read back."
       tasks:
         - id: release/version-conflict-resolution
-          status: ready
+          status: done
           owner_host: release
           depends_on: []
           owned_files:
@@ -2740,13 +2740,22 @@ plan_index:
             - plan/issues/multi-host-integration-loop-2026-05-24.md
             - skills/merge-to-main-and-release/SKILL.md
           checkpoint_required: true
-          handoff_note: "Operator-gated. Option 1 chosen by operator; awaiting release execution."
+          handoff_note: "Operator-gated. Option 1 chosen by operator; release successfully executed."
           events:
             - type: progress
               ts: "2026-06-14T07:33:00Z"
               agent_id: "linux-next-orchestrator-20260614T0707Z"
               host: "linux"
               note: "Operator selected Option 1: Embrace the 0.3.x series on main (merge accepting 0.3.x, tag v0.3.x, dispatch release.yml)."
+            - type: completed
+              ts: "2026-06-15T01:02:00Z"
+              agent_id: "linux-next-orchestrator-20260615T010000Z"
+              host: "release"
+              evidence_refs:
+                - "v0.3.260614.1 tag exists on GitHub"
+                - "main carries 0.3.260614.1 version"
+                - "PR #29 merged"
+              note: "Operator-gated release completed via daily promotion skill. v0.3.260614.1 is the latest release."
 
     # ----------------------------------------------------------------------
     # Wave 2026-06-05b — incremental Nix release + registry-distributed images.
@@ -2915,7 +2924,7 @@ plan_index:
     - id: github-login-vault-native-flow
       order: 42
       title: GitHub-login Vault-native flow — gate on Vault, keep the token in-container, Vault over HTTPS
-      status: in_progress
+      status: completed
       owner_host: linux
       deliverable: plan/steps/42-github-login-vault-native-flow.md
       audit_origin: plan/issues/github-login-vault-native-flow-2026-06-06.md
@@ -3022,7 +3031,7 @@ plan_index:
               known_repo_wide_failures:
                 - "./build.sh --ci --spec tillandsias-vault still fails pre-existing gates: VERSION behind v0.3.260608.2+, repo-wide fmt drift, unrelated clippy::type_complexity in main.rs:1043, and pre-existing signal_handling timeout."
         - id: vault-flow/xplat-gating-parity
-          status: ready
+          status: done
           owner_host: macos+windows
           depends_on: [vault-flow/tray-gate-on-vault]
           unblocked_note: "Original blockers cleared: step 32 (vault-hardening-true-rekey) DONE, step 36 (xplat-vault/windows + /macos) DONE, and 42a (vault-flow/tray-gate-on-vault) completed and merged to windows-next. Windows slice is now in progress."
@@ -3082,6 +3091,16 @@ plan_index:
                 vault_bootstrap::is_github_logged_in and replies with
                 GithubLoginStatusReply containing the status and username handle.
                 Verified that cargo test and clippy pass.
+            - type: completed
+              ts: "2026-06-14T22:18:00Z"
+              agent_id: "macos-antigravity-20260614T221800Z"
+              host: "macos"
+              note: >
+                macOS slice completed and merged to osx-next. The xplat gating parity
+                feature is now fully implemented across Windows and macOS trays, and supported
+                by the in-VM headless control wire dispatcher.
+              evidence_refs:
+                - "cargo test -p tillandsias-macos-tray: 20/20 PASS"
         - id: vault-flow/tray-popup-terminal
           status: done
           depends_on: [vault-flow/login-in-container]
@@ -3525,3 +3544,217 @@ plan_index:
           status: completed
           owner_host: linux
           depends_on: []
+
+    - id: local-build-smoke-regressions
+      order: 50
+      title: Local build smoke regressions from 2026-06-15
+      status: ready
+      owner_host: linux
+      deliverable: plan/issues/build-install-smoke-e2e-findings-2026-06-14.md
+      audit_origin: plan/issues/build-install-smoke-e2e-findings-2026-06-14.md
+      depends_on: []
+      exit_criteria:
+        - "A supplied OpenCode forge prompt begins execution without manual input."
+        - "Evidence-bundle litmus totals describe the current run and report zero false failures."
+        - "The local build/install/reset/init/forge smoke reaches a terminal pass."
+      tasks:
+        - id: local-smoke/evidence-bundle-litmus-count-regression
+          status: completed
+          owner_host: linux
+          estimated_hours: 3
+          capability_tags: [bash, ci, evidence, litmus, testing]
+          depends_on: []
+          owned_files:
+            - scripts/generate-evidence-bundle.sh
+            - build.sh
+            - scripts/local-ci.sh
+          next_action: >
+            Fix cross-phase litmus counter aggregation and add all-pass plus
+            one-failure fixtures.
+          acceptance_evidence:
+            - "All-pass ci-full reports zero failed litmus tests."
+            - "One-failure fixture reports exactly one failure."
+          checkpoint_required: true
+          handoff_note: "Runtime residual execution is fixed; only the evidence aggregation remains."
+          events:
+            - type: claim
+              ts: "2026-06-15T20:07:16Z"
+              agent_id: "linux-macuahuitl-codex-20260615T200716Z"
+              host: "linux"
+              lease_id: "lease-linux-evidence-bundle-20260615T200716Z"
+              expires_at: "2026-06-15T21:07:16Z"
+            - type: complete
+              ts: "2026-06-15T20:10:40Z"
+              agent_id: "linux-macuahuitl-codex-20260615T200716Z"
+              host: "linux"
+              lease_id: "lease-linux-evidence-bundle-20260615T200716Z"
+              note: >
+                Fixed evidence-bundle litmus aggregation to parse authoritative
+                PASS:/FAIL: phase summaries instead of raw token counts. Added
+                all-pass and one-failure fixtures plus a dev-build instant
+                litmus step.
+              evidence:
+                - "bash -n scripts/generate-evidence-bundle.sh scripts/test-evidence-bundle-litmus-summary.sh"
+                - "bash scripts/test-evidence-bundle-litmus-summary.sh -> ok: evidence bundle litmus summary parser"
+                - "./scripts/run-litmus-test.sh --spec dev-build --size instant -> PASS summary: 2 passed, 0 failed, 3 skipped"
+                - "./build.sh --check -> Type-check passed"
+        - id: local-smoke/opencode-interactive-prompt-not-consumed
+          status: completed
+          owner_host: linux
+          estimated_hours: 5
+          capability_tags: [shell, opencode, forge, containers, testing]
+          depends_on: []
+          owned_files:
+            - images/default/entrypoint-forge-opencode.sh
+            - openspec/litmus-tests
+            - openspec/litmus-bindings.yaml
+          next_action: >
+            Use a supported OpenCode 1.16.x prompt execution path and add a
+            container-level regression proving the requested prompt starts.
+          acceptance_evidence:
+            - "Prompted forge launch executes /forge-continuous-enhancement."
+            - "Promptless forge launch remains interactive."
+            - "Focused litmus and ./build.sh --check pass."
+          checkpoint_required: true
+          handoff_note: "The completed singleton fix is verified; the forge and OpenCode start successfully, and only prompt consumption is broken."
+          events:
+            - type: claim
+              ts: "2026-06-15T20:21:26Z"
+              agent_id: "linux-macuahuitl-codex-20260615T202126Z"
+              host: "linux"
+              lease_id: "lease-linux-opencode-prompt-20260615T202126Z"
+              expires_at: "2026-06-15T21:21:26Z"
+            - type: complete
+              ts: "2026-06-15T20:24:30Z"
+              agent_id: "linux-macuahuitl-codex-20260615T202126Z"
+              host: "linux"
+              lease_id: "lease-linux-opencode-prompt-20260615T202126Z"
+              note: >
+                Supplied OpenCode prompts now launch through the supported
+                `opencode run --dangerously-skip-permissions` path and
+                promptless launches retain the TUI path.
+              evidence:
+                - "bash -n images/default/entrypoint-forge-opencode.sh scripts/test-opencode-entrypoint-prompt.sh"
+                - "bash scripts/test-opencode-entrypoint-prompt.sh -> ok: opencode entrypoint prompt routing"
+                - "cargo test -p tillandsias-headless --bin tillandsias tests::opencode_args_mount_workspace_and_prompt -- --exact -> 1 passed"
+                - "cargo test -p tillandsias-headless --bin tillandsias tests::opencode_args_diagnostics_mode -- --exact -> 1 passed"
+                - "./scripts/run-litmus-test.sh --spec forge-opencode-onboarding --size instant -> PASS summary: 2 passed, 0 failed"
+                - "./build.sh --check -> Type-check passed"
+
+    - id: multihost-smoke-followups-20260615
+      order: 51
+      title: Cross-host smoke follow-ups and sibling verification
+      status: ready
+      deliverable: plan/issues/build-install-smoke-e2e-findings-2026-06-14.md
+      audit_origin: plan/issues/build-install-smoke-e2e-findings-2026-06-14.md
+      depends_on: []
+      exit_criteria:
+        - "macOS cold boot reaches stable vsock polling without user-visible reset or broken-pipe noise."
+        - "Parked local macOS UX changes are explicitly merged or rejected without dropping unique work."
+        - "The macOS substrate spec records the Virtualization.framework decision."
+        - "Windows verifies the integrated linux-next head before taking new feature work."
+      tasks:
+        - id: macos-tray/cold-boot-vsock-poll-races
+          status: ready
+          owner_host: macos
+          estimated_hours: 5
+          capability_tags: [rust, macos, vsock, control-wire, lifecycle]
+          depends_on: []
+          owned_files:
+            - crates/tillandsias-macos-tray/src/action_host.rs
+            - crates/tillandsias-vm-layer/src/transport_macos.rs
+            - crates/tillandsias-control-wire/src/lib.rs
+          next_action: >
+            Reproduce a clean cold boot, correlate guest listener readiness with
+            host polling, and add bounded retry/backoff or readiness-aware noise
+            suppression with focused tests.
+          acceptance_evidence:
+            - "Cold boot reaches a healthy control-wire poll state."
+            - "Expected pre-readiness failures are bounded and not user-visible."
+            - "Focused macOS tray and control-wire tests pass."
+          fallback_when_blocked: >
+            Complete apple-container/spec-amendment without touching runtime code.
+          checkpoint_required: true
+          handoff_note: "The initial observation was confounded by the now-fixed --version VM boot; re-observe cleanly first."
+        - id: osx-next/reconcile-local-ux-parity-divergence
+          status: ready
+          owner_host: macos
+          estimated_hours: 5
+          capability_tags: [git, macos, tray, ux, host-shell, windows]
+          depends_on: []
+          owned_files:
+            - scripts/install-macos.sh
+            - methodology/convergence.yaml
+            - crates/tillandsias-host-shell/src/menu_state.rs
+            - crates/tillandsias-macos-tray/src/action_host.rs
+          next_action: >
+            Compare each unique parked commit and stash hunk with current
+            osx-next, merge only still-canonical pieces, and explicitly record
+            rejected pieces before deleting the backup branch and stash.
+          acceptance_evidence:
+            - "Every unique parked change has a merge-or-reject disposition."
+            - "Retained changes pass focused tests and formatting."
+            - "The backup branch and stash are removed only after reconciliation."
+          fallback_when_blocked: >
+            Produce a per-file disposition table without applying the broken stash.
+          checkpoint_required: true
+          handoff_note: "Do not apply stash@{0} wholesale; notify_icon.rs is known broken WIP."
+        - id: apple-container/spec-amendment
+          status: ready
+          owner_host: macos
+          estimated_hours: 3
+          capability_tags: [macos, docs, openspec, vm-layer]
+          depends_on: []
+          owned_files:
+            - openspec/specs/macos-native-tray
+            - methodology
+          next_action: >
+            Record single-VM Virtualization.framework as the selected macOS
+            substrate and document why apple/container is not adopted.
+          acceptance_evidence:
+            - "The active macOS substrate spec states the decision and constraints."
+            - "No active methodology text still requires apple/container."
+          checkpoint_required: true
+          handoff_note: "Research verdict is complete; this packet only converges the source of intent."
+        - id: coord/windows-sync-and-verify-20260615
+          status: done
+          owner_host: windows
+          estimated_hours: 3
+          capability_tags: [git, windows, wsl2, integration, testing]
+          depends_on: []
+          owned_files:
+            - plan/issues/windows-next-work-queue-2026-05-25.md
+          next_action: >
+            Integrate the new linux-next coordination head into windows-next,
+            then run the focused Windows tray/control-wire tests and one
+            non-destructive WSL status/diagnostics probe.
+          acceptance_evidence:
+            - "windows-next contains the integrated linux-next head."
+            - "Focused Windows tray and control-wire tests pass."
+            - "WSL status/diagnostics retains its exit-code and wire-version contract."
+          fallback_when_blocked: >
+            Record the exact integration or host-runtime blocker and run the
+            pure unit-test subset that does not require WSL.
+          checkpoint_required: true
+          handoff_note: "Verification packet only; do not start optional feature work while the alignment event is active."
+          events:
+            - type: claim
+              ts: "2026-06-15T20:45:00Z"
+              agent_id: windows-yolanda-claude-20260615T204000Z
+              host: windows
+              lease_id: lease-windows-coord-sync-20260615T2045Z
+              expires_at: "2026-06-16T00:45:00Z"
+            - type: completed
+              ts: "2026-06-15T20:50:00Z"
+              agent_id: windows-yolanda-claude-20260615T204000Z
+              host: windows
+              lease_id: lease-windows-coord-sync-20260615T2045Z
+              evidence:
+                - "windows-next integrated linux-next head d3681430 (merge pushed; HEAD fabcaecd includes the P0 VmPhase fix)."
+                - "Focused tests pass: tillandsias-control-wire 26/26; tillandsias-windows-tray 44 unit + 8 cli + 3 portable_smoke (1 interactive ignored)."
+                - "WSL probe contracts intact: --diagnose --json exit 2 (degraded, distro_registered=true, wsl 2.7.3.0); --status-once exit 1 (unreachable, actionable error) when VM idle and exit 2 with reachable:true, wire_version:2, phase:Starting when held warm."
+              note: >
+                Done alongside P0 windows-tray/vmphase-import-scope-release-break
+                (fabcaecd) which was a prerequisite — windows-tray did not compile
+                before the VmPhase import hoist, so no Windows verification was
+                possible until it landed.

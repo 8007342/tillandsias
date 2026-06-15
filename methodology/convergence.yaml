@@ -224,6 +224,22 @@ minimax_convergence_strategy:
     Raising average convergence by improving low-risk obligations while a
     high-risk maximum residual remains unresolved.
 
+cross_platform_ux_parity_policy:
+  description: >
+    The Linux tray implementation is the "Golden UX". The macOS and Windows trays
+    MUST follow feature parity with the Linux tray implementation. They should all map
+    UX features, items, and behaviors identically at all steps. Platform-specific
+    startup sequences (e.g., WSL2 or macOS VM boot) are the only acceptable deviation
+    in the initial phase, but they must align with the unified emoji progression.
+  rule: >
+    Any modification to the tray UX or menu structure must be designed for all
+    platforms. Divergence in global versus per-project action placement, visibility
+    rules, or visual separators is a convergence violation.
+  enforcement:
+    - macos_and_windows_trays_must_consume_and_render_identical_menu_structures
+    - menu_state_must_reflect_linux_golden_ux_exactly
+    - deviations_must_be_recorded_as_bugs
+
 hot_path_nonblocking_policy:
   description: >
     Steady-state runtime paths MUST remain event-driven and yield-returning.

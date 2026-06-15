@@ -2,6 +2,20 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
+## 2026-06-15 — macOS primary (coordinator-assigned) VERIFIED: merged cold-boot vsock suppression
+
+- 2026-06-15T05:20Z  `4715a4cb`  PASS — verified the cold-boot vsock poll-error
+  suppression as merged into `linux-next` (`d3681430`). The `vm_ever_ready`
+  warmup gate in `crates/tillandsias-macos-tray/src/action_host.rs` is present
+  and **byte-for-byte identical** between `origin/osx-next` and the
+  `origin/linux-next` merge (no merge mangling; macOS source confined to that
+  one file). `cargo check -p tillandsias-macos-tray` clean;
+  `cargo test -p tillandsias-macos-tray --bin tillandsias-tray` → 49 passed, 0
+  failed, 1 ignored. Closes the coordinator's macOS primary for this cycle. The
+  fallback `osx-next/reconcile-local-ux-parity-divergence` stays blocked on a
+  user merge/discard decision (parked branch `osx-next-local-pre-pull-2026-06-14`
+  + broken-WIP `stash@{0}`).
+
 ## 2026-06-08 — keyring-verify/macos COMPLETE (apple-native backend verified)
 
 - 2026-06-08T17:52Z  (this commit: `verify(keyring): apple-native …`)  `keyring-verify/macos`
@@ -143,6 +157,7 @@ accessor.
 - 2026-06-03T04:23Z  e2a0aee4  Added diagnose-macos-provision.sh autonomous smoke script (m12). Agent `macos-Tlatoanis-MacBook-Air-big-pickle-20260603T042045Z`.
 - 2026-06-13T14:26Z  6ee0b2cb  Verify E2E VM boot, cloud-init provisioning, curl install of tillandsias-headless, and vsock connectivity. Run build-osx-tray.sh and vz-spike --boot successfully. Agent `macos-Antigravity`.
 - 2026-06-13T14:32Z  3686caaa  xplat-vault/macos DONE — Implemented macOS Keychain credentials delivery and GetVaultHandover check over vsock client connection loops in action_host.rs. Agent `macos-Antigravity`.
+- 2026-06-14T22:15Z  d150a105  vault-flow/xplat-gating-parity (macOS slice) DONE — Implemented refresh_github_login poller in action_host.rs over vz vsock using GithubLoginStatusRequest. Agent `macos-Antigravity`.
 
 
 ## Currently unblocked / active
@@ -153,7 +168,8 @@ accessor.
 - type: feature
 - owner_host: macos
 - capability_tags: [appkit, menu-structure, pty, host-shell]
-- status: ready
+- status: done
+- completed_at: 2026-06-15T04:30Z
 - depends_on: []
 - gated_on: []
 - blocks: []
@@ -169,6 +185,22 @@ accessor.
     the GithubLoginStatusRequest control wire message.
 - acceptance_evidence:
   - `cargo test -p tillandsias-macos-tray --bin tillandsias-tray` on macOS.
+- completion_note: >
+    Already implemented in commit d150a105 ("feat(macos-tray): wire
+    refresh_github_login poller to VM over vsock") — verified on macOS this
+    cycle; the packet was simply left open (coordination lag) while Linux and
+    Windows were "awaiting macOS slice completion". `poll_github_login_once`
+    (action_host.rs:578) sends `GithubLoginStatusRequest` and maps
+    `GithubLoginStatusReply` → `GithubLoginState`; the poller loop
+    (action_host.rs:1597) writes it into `MenuState.login`, and on `Err`
+    (unexpected/Unsupported reply or wire error) it logs and leaves the
+    last-known login state untouched — the required graceful degradation.
+    Observed running live against the VM in the 2026-06-15 smoke logs
+    ("github-login poll: …"). This closes the cross-host step; Linux + Windows
+    are no longer blocked on macOS.
+- acceptance_proof:
+  - `cargo test -p tillandsias-macos-tray --bin tillandsias-tray` → 49 passed,
+    0 failed, 1 ignored (2026-06-15, osx-next).
 - agent_status_packet_expected:
   - current plan
   - touched files

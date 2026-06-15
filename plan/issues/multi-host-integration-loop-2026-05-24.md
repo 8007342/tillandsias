@@ -51,6 +51,23 @@ full runtime litmus against the latest integrated code.
 
 ## Cycle Log (reverse chronological — keep latest 20 verbatim)
 
+## Coordination cycle 2026-06-15T03:20Z
+
+- Integrated five `origin/osx-next` commits into `linux-next` in isolated
+  worktree merge `64f1aa41`; Windows was already an ancestor.
+- Resolved the shared smoke-findings conflict by semantic union, retaining the
+  Linux prompt/evidence regressions and the macOS smoke pass plus three findings.
+- Canonicalized six open tasks: two Linux smoke regressions, three macOS
+  follow-ups, and one Windows sync/verification packet.
+- Residual correctness debt rose from 0 to 6 open issues with zero CentiColon
+  residual. High-Velocity Alignment is active: one-hour leases, no optional
+  feature work, blocker/reconciliation/verification only.
+- No deadlocks, wrong-direction implementation, or code thrashing detected.
+- Full installed validation passed at the integrated merge:
+  `./build.sh --ci-full --install` exit 0, `tillandsias --debug --init` exit 0,
+  and unattended OpenCode diagnostics exit 0. The evidence bundle reproduced
+  the already-queued false `8 passed, 4 failed` aggregation.
+
 ### Cycle 2026-06-02T23:30Z — FORCED ORCHESTRATOR MERGED osx-next (Divergence D_max=5 exceeded — 11 commits ahead) + litmus ✅
 
 - host_id: linux-tlatoani-opencode · platform: linux · branch: linux-next
