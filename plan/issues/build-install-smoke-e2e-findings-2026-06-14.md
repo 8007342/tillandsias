@@ -410,7 +410,7 @@
 - title: Make interactive OpenCode launches consume the requested startup prompt
 - owner_host: linux
 - capability_tags: [shell, opencode, forge, containers, testing]
-- status: ready
+- status: completed
 - estimated_hours: 5
 - depends_on:
   - `local-smoke/cli-tray-singleton-self-termination`
@@ -454,6 +454,23 @@
       Build, install, reset, and pristine init passed. Foreground and non-PTY
       forge retries both reached OpenCode, but the requested prompt was not
       consumed.
+  - type: completed
+    ts: "2026-06-15T20:24:30Z"
+    agent_id: "linux-macuahuitl-codex-20260615T202126Z"
+    host: linux
+    note: >
+      `TILLANDSIAS_OPENCODE_PROMPT` now selects `opencode run
+      --dangerously-skip-permissions "$TILLANDSIAS_OPENCODE_PROMPT"` before
+      the interactive TUI fallback, so prompted launches execute
+      deterministically and propagate OpenCode's exit status. Promptless
+      launches still exec the TUI path.
+    evidence:
+      - "bash -n images/default/entrypoint-forge-opencode.sh scripts/test-opencode-entrypoint-prompt.sh"
+      - "bash scripts/test-opencode-entrypoint-prompt.sh -> ok: opencode entrypoint prompt routing"
+      - "cargo test -p tillandsias-headless --bin tillandsias tests::opencode_args_mount_workspace_and_prompt -- --exact -> 1 passed"
+      - "cargo test -p tillandsias-headless --bin tillandsias tests::opencode_args_diagnostics_mode -- --exact -> 1 passed"
+      - "./scripts/run-litmus-test.sh --spec forge-opencode-onboarding --size instant -> PASS summary: 2 passed, 0 failed"
+      - "./build.sh --check -> Type-check passed"
 
 ## Work Packet: local-smoke/evidence-bundle-litmus-count-regression
 

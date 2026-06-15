@@ -3599,7 +3599,7 @@ plan_index:
                 - "./scripts/run-litmus-test.sh --spec dev-build --size instant -> PASS summary: 2 passed, 0 failed, 3 skipped"
                 - "./build.sh --check -> Type-check passed"
         - id: local-smoke/opencode-interactive-prompt-not-consumed
-          status: claimed
+          status: completed
           owner_host: linux
           estimated_hours: 5
           capability_tags: [shell, opencode, forge, containers, testing]
@@ -3624,6 +3624,22 @@ plan_index:
               host: "linux"
               lease_id: "lease-linux-opencode-prompt-20260615T202126Z"
               expires_at: "2026-06-15T21:21:26Z"
+            - type: complete
+              ts: "2026-06-15T20:24:30Z"
+              agent_id: "linux-macuahuitl-codex-20260615T202126Z"
+              host: "linux"
+              lease_id: "lease-linux-opencode-prompt-20260615T202126Z"
+              note: >
+                Supplied OpenCode prompts now launch through the supported
+                `opencode run --dangerously-skip-permissions` path and
+                promptless launches retain the TUI path.
+              evidence:
+                - "bash -n images/default/entrypoint-forge-opencode.sh scripts/test-opencode-entrypoint-prompt.sh"
+                - "bash scripts/test-opencode-entrypoint-prompt.sh -> ok: opencode entrypoint prompt routing"
+                - "cargo test -p tillandsias-headless --bin tillandsias tests::opencode_args_mount_workspace_and_prompt -- --exact -> 1 passed"
+                - "cargo test -p tillandsias-headless --bin tillandsias tests::opencode_args_diagnostics_mode -- --exact -> 1 passed"
+                - "./scripts/run-litmus-test.sh --spec forge-opencode-onboarding --size instant -> PASS summary: 2 passed, 0 failed"
+                - "./build.sh --check -> Type-check passed"
 
     - id: multihost-smoke-followups-20260615
       order: 51
