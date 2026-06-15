@@ -3559,7 +3559,7 @@ plan_index:
         - "The local build/install/reset/init/forge smoke reaches a terminal pass."
       tasks:
         - id: local-smoke/evidence-bundle-litmus-count-regression
-          status: ready
+          status: claimed
           owner_host: linux
           estimated_hours: 3
           capability_tags: [bash, ci, evidence, litmus, testing]
@@ -3576,6 +3576,13 @@ plan_index:
             - "One-failure fixture reports exactly one failure."
           checkpoint_required: true
           handoff_note: "Runtime residual execution is fixed; only the evidence aggregation remains."
+          events:
+            - type: claim
+              ts: "2026-06-15T20:07:16Z"
+              agent_id: "linux-macuahuitl-codex-20260615T200716Z"
+              host: "linux"
+              lease_id: "lease-linux-evidence-bundle-20260615T200716Z"
+              expires_at: "2026-06-15T21:07:16Z"
         - id: local-smoke/opencode-interactive-prompt-not-consumed
           status: ready
           owner_host: linux
