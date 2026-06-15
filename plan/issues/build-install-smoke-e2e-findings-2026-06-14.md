@@ -23,7 +23,175 @@
 - Additional regression: the evidence bundle printed
   `Litmus tests complete: 8 passed, 4 failed` even though every executed
   pre-build, post-build, and runtime residual litmus passed.
+## macOS Run (Pass — OS-aware skill, first macOS lane) — 20260615T025612Z
 
+- Discovered by: `/build-install-and-smoke-test-e2e (macos)`
+- Host: macOS (Apple Silicon), branch `osx-next`
+- Commit under test: `d150a105653b0a528fd3cf742fd8e0e5e9acd6aa`
+- Built/installed: `tillandsias-tray 0.3.260614.9` → `~/Applications/Tillandsias.app`
+- Evidence: `target/build-install-smoke-e2e/20260615T025612Z/`
+- Passed gates:
+  - `scripts/build-macos-tray.sh` exited 0 (13.49s); ad-hoc codesign valid +
+    Designated Requirement satisfied; tarball
+    `tillandsias-tray-0.3.260614.9-macos-arm64.tar.gz` (1.54 MiB) + `SHA256SUMS`.
+  - Local install (atomic `.new`+`mv` into `~/Applications`) succeeded.
+  - **DESTRUCTIVE destruction of the "MacosContainer"**: `rm -rf` of
+    `~/Library/Application Support/tillandsias` (4.8 GiB VFR VM state) +
+    `~/Library/Caches/tillandsias`. Verified gone.
+  - Cold re-provision (`tillandsias-tray --provision`) exited 0: re-downloaded
+    the 528 MB Fedora Cloud image → converted → materialized `rootfs.img`
+    (5 GiB). `--diagnose --json` reports `provisioned: true`,
+    `rootfs_present: true`, `release_tag: fedora-44`, stable schema.
+- Forge lane: **n/a (linux-only)** — recorded, not run, per the OS-aware skill.
+- Outcome: **PASS** end-to-end on the macOS substrate. Three findings filed
+  below (none blocked the run; #1/#2 are latent CLI/path bugs surfaced by the
+  smoke, #3 is a cold-boot vsock observation).
+- Skill iteration: this run also fixed two path bugs **in the skill itself**
+  (the §2 destroy-gate and §3 post-provision check were testing a non-existent
+  `…/tillandsias/vm/rootfs.img`; the disk is at `…/tillandsias/rootfs.img`).
+
+## Work Packet: macos-tray/version-help-flags-boot-vm
+
+- id: `macos-tray/version-help-flags-boot-vm`
+- type: fix
+- title: macOS tray treats `--version`/`--help`/any unknown flag as "launch the tray + boot the VM"
+- owner_host: macos
+- capability_tags: [rust, macos, tray, cli, lifecycle]
+- status: done
+- discovered_by: `/build-install-and-smoke-test-e2e (macos)`
+- owned_files:
+  - `crates/tillandsias-macos-tray/src/main.rs`
+- evidence:
+  - `crates/tillandsias-macos-tray/src/main.rs:46,49` — `main()` only intercepts
+    `--provision` and `--diagnose`; every other argv (incl. `--version`,
+    `--help`) falls through to `status_item::run()`.
+  - `target/build-install-smoke-e2e/20260615T025612Z/01-installed-version.txt:5,7`
+    — invoking `tillandsias-tray --version` printed
+    `Auto-boot: spawning worker …` then `Auto-boot: VM is running` and never
+    exited (it put up the menu-bar tray and booted the VFR VM); the smoke had to
+    SIGKILL it.
+- repro:
+  - `~/Applications/Tillandsias.app/Contents/MacOS/tillandsias-tray --version`
+    (boots the VM and runs the tray instead of printing a version and exiting)
+- next_action: >
+    Add fast-exit handling for `--version` (print the crate version, exit 0) and
+    `--help` before the `status_item::run()` fallthrough — mirror the
+    `--provision`/`--diagnose` argv guards. Consider a strict-unknown-flag policy
+    so a typo'd flag never silently boots a VM. This also unblocks the smoke
+    skill's `--version` probe (it currently can't read a version off the macOS
+    binary).
+- events:
+  - type: discovered
+    ts: "2026-06-15T02:58:00Z"
+    agent_id: macos-claude-opus
+    host: macos
+  - type: completed
+    ts: "2026-06-15T03:14:00Z"
+    agent_id: macos-claude-opus
+    host: macos
+    note: >
+      Added --version/-V and --help/-h fast-exit handlers in main.rs before the
+      status_item::run() fallthrough. Verified on the release binary: all four
+      flags print and exit 0 with no VM boot / no menu-bar icon; pgrep confirms
+      no tray spawned. `cargo test -p tillandsias-macos-tray` = 48 passed.
+      Follow-up (not done here, to avoid breaking the .app launch which receives
+      OS-injected argv): a strict unknown-flag policy.
+
+## Work Packet: macos-tray/image-root-vm-subdir-divergence
+
+- id: `macos-tray/image-root-vm-subdir-divergence`
+- type: fix
+- title: `vz_lifecycle::image_root()` points at a `/vm` subdir that nothing else uses
+- owner_host: macos
+- capability_tags: [rust, macos, vm-layer, cleanup]
+- status: done
+- discovered_by: `/build-install-and-smoke-test-e2e (macos)`
+- owned_files:
+  - `crates/tillandsias-macos-tray/src/vz_lifecycle.rs`
+  - `crates/tillandsias-macos-tray/src/diagnose.rs`
+  - `crates/tillandsias-macos-tray/src/status_item.rs`
+- evidence:
+  - `crates/tillandsias-macos-tray/src/vz_lifecycle.rs:38-47` — `image_root()`
+    returns `~/Library/Application Support/tillandsias/vm` (with `/vm`) and is
+    wired into a `VzRuntime::new(...)` at `vz_lifecycle.rs:34`.
+  - `crates/tillandsias-macos-tray/src/diagnose.rs:56-60` — the `image_root()`
+    used by `--provision`/`--diagnose` returns `…/tillandsias` (NO `/vm`).
+  - `crates/tillandsias-macos-tray/src/status_item.rs:364` — the live auto-boot
+    path (`default_image_root()`) also uses the top-level dir.
+  - `target/build-install-smoke-e2e/20260615T025612Z/03-vm-layout.txt` — the
+    provisioned `rootfs.img`/`rootfs.qcow2` land at the **top level** of
+    `…/tillandsias`, not under `…/tillandsias/vm/`.
+  - `target/build-install-smoke-e2e/20260615T025612Z/01-installed-version.txt:5`
+    — the auto-boot worker logs `image_root=…/tillandsias` (top-level).
+- repro:
+  - `tillandsias-tray --provision` then
+    `ls "$HOME/Library/Application Support/tillandsias"` → disk is top-level,
+    while `vz_lifecycle::image_root()` would look under `…/tillandsias/vm`.
+- next_action: >
+    Pick one canonical state-dir path and converge all four sources on it
+    (top-level appears to be the live one). Either delete/rewire the divergent
+    `vz_lifecycle::image_root()` (and confirm its `VzRuntime` instance is not a
+    live boot path that would look in an empty `/vm` dir) or move provisioning to
+    the `/vm` subdir consistently. Fix the misleading doc comment. Add a unit
+    test asserting provision-dir == boot-dir == diagnose-dir.
+- events:
+  - type: discovered
+    ts: "2026-06-15T02:58:00Z"
+    agent_id: macos-claude-opus
+    host: macos
+  - type: completed
+    ts: "2026-06-15T03:20:00Z"
+    agent_id: macos-claude-opus
+    host: macos
+    note: >
+      Confirmed `VzLifecycle` is fully DEAD CODE (declared `mod vz_lifecycle`
+      but never constructed), so the `/vm` path was a latent trap, not a live
+      boot bug. Converged `vz_lifecycle::image_root()` to the canonical
+      top-level `…/tillandsias` path (matching diagnose/status_item/provision),
+      fixed the misleading module + fn doc comments, and added a guard unit test
+      `image_root_is_top_level_not_vm_subdir`. cargo test -p
+      tillandsias-macos-tray = 49 passed. Follow-up (not done, bigger refactor):
+      collapse the three path sources into one shared helper so they cannot
+      drift independently.
+
+## Work Packet: macos-tray/cold-boot-vsock-poll-races
+
+- id: `macos-tray/cold-boot-vsock-poll-races`
+- type: investigate
+- title: vsock control-wire polls error ("Connection reset by peer" / "Broken pipe") during/just after VM auto-boot
+- owner_host: macos
+- capability_tags: [rust, macos, vsock, control-wire, lifecycle]
+- status: ready
+- discovered_by: `/build-install-and-smoke-test-e2e (macos)`
+- owned_files:
+  - `crates/tillandsias-macos-tray/src/action_host.rs`
+  - `crates/tillandsias-vm-layer/src/transport_macos.rs`
+  - `crates/tillandsias-control-wire/src/lib.rs`
+- evidence:
+  - `target/build-install-smoke-e2e/20260615T025612Z/01-installed-version.txt:8-10`
+    — `local-projects` / `cloud-projects` / `github-login` polls all log
+    `vsock connect: VZ connect error: … Connection reset by peer` immediately
+    after `Auto-boot: VM is running`.
+  - same file `:18-21` — once the guest reaches the login prompt, `vm-status
+    poll` then logs `VmStatusRequest: Broken pipe (os error 32)` repeatedly.
+- notes: >
+    Observed against a warm pre-existing VM that was mid-boot (the tray was
+    spawned by the erroneous `--version` invocation — see
+    `macos-tray/version-help-flags-boot-vm` — then killed). Lower confidence as a
+    standalone defect: the polls may simply be racing the in-guest agent before
+    it binds its vsock port. Worth confirming whether the host pollers back off /
+    retry cleanly until the agent is listening, vs. surfacing these as user-
+    visible errors. Re-observe on a clean cold boot without the `--version` path.
+- next_action: >
+    Reproduce on a clean `--provision` + normal tray launch, time when the guest
+    vsock agent starts listening vs. when the host pollers first dial, and add a
+    bounded retry/backoff (or suppress pre-readiness errors) so cold-boot does
+    not emit reset/broken-pipe noise.
+- events:
+  - type: discovered
+    ts: "2026-06-15T02:58:00Z"
+    agent_id: macos-claude-opus
+    host: macos
 ## Current Run (Blocked)
 
 - Discovered by: `/build-install-and-smoke-test-e2e`

@@ -43,6 +43,31 @@ fn main() {
     // initialize, so the binary can be invoked from a terminal
     // session without putting a stray menu-bar icon up.
     let args: Vec<String> = std::env::args().collect();
+    // Fast-exit metadata flags MUST short-circuit before the tray/VM fallthrough
+    // below — otherwise `--version`/`--help` boot the Virtualization.framework VM
+    // and put up a menu-bar icon instead of printing and exiting (see plan
+    // packet macos-tray/version-help-flags-boot-vm).
+    if args.iter().any(|a| a == "--version" || a == "-V") {
+        println!("tillandsias-tray {}", env!("CARGO_PKG_VERSION"));
+        std::process::exit(0);
+    }
+    if args.iter().any(|a| a == "--help" || a == "-h") {
+        println!(
+            "tillandsias-tray {}\n\n\
+             Native macOS menu-bar tray for Tillandsias.\n\n\
+             USAGE:\n    \
+             tillandsias-tray [FLAGS]\n\n\
+             FLAGS:\n    \
+             (no flags)    Launch the menu-bar tray and auto-boot the VM\n    \
+             --provision   Provision the VM disk from the manifest, then exit\n    \
+             --diagnose    Print a static health report, then exit\n    \
+             --json        With --diagnose, emit JSON instead of human text\n    \
+             -V, --version Print version and exit\n    \
+             -h, --help    Print this help and exit",
+            env!("CARGO_PKG_VERSION")
+        );
+        std::process::exit(0);
+    }
     if args.iter().any(|a| a == "--provision") {
         std::process::exit(diagnose::provision_main());
     }
