@@ -70,16 +70,16 @@ TMP="$(mktemp -d -t tillandsias-install.XXXXXX)"
 trap 'rm -rf "$TMP"' EXIT
 
 # ── download ─────────────────────────────────────────────────────────────
-SHA_URL="${BASE}/SHA256SUMS"
-say "fetching SHA256SUMS"
-curl -fsSL "$SHA_URL" -o "$TMP/SHA256SUMS" \
+SHA_URL="${BASE}/SHA256SUMS-macos"
+say "fetching SHA256SUMS-macos"
+curl -fsSL "$SHA_URL" -o "$TMP/SHA256SUMS-macos" \
     || die "could not download $SHA_URL"
 
-# Find the macOS tarball name from SHA256SUMS. v0.0.1: only one entry
+# Find the macOS tarball name from SHA256SUMS-macos. v0.0.1: only one entry
 # matches the prefix/suffix, but be robust.
-ASSET_NAME="$(awk -v p="$ASSET_PREFIX" -v s="$ASSET_SUFFIX" '$2 ~ p && $2 ~ s {print $2; exit}' "$TMP/SHA256SUMS")"
+ASSET_NAME="$(awk -v p="$ASSET_PREFIX" -v s="$ASSET_SUFFIX" '$2 ~ p && $2 ~ s {print $2; exit}' "$TMP/SHA256SUMS-macos")"
 [[ -n "$ASSET_NAME" ]] \
-    || die "no ${ASSET_PREFIX}*${ASSET_SUFFIX} entry in SHA256SUMS"
+    || die "no ${ASSET_PREFIX}*${ASSET_SUFFIX} entry in SHA256SUMS-macos"
 say "asset: $ASSET_NAME"
 
 ASSET_URL="${BASE}/${ASSET_NAME}"
@@ -87,7 +87,7 @@ say "downloading $ASSET_URL"
 curl -fSL --progress-bar "$ASSET_URL" -o "$TMP/$ASSET_NAME"
 
 # ── verify SHA-256 ───────────────────────────────────────────────────────
-EXPECTED="$(grep -F "  $ASSET_NAME" "$TMP/SHA256SUMS" | awk '{print $1}')"
+EXPECTED="$(grep -F "  $ASSET_NAME" "$TMP/SHA256SUMS-macos" | awk '{print $1}')"
 ACTUAL="$(shasum -a 256 "$TMP/$ASSET_NAME" | awk '{print $1}')"
 if [[ "$EXPECTED" != "$ACTUAL" ]]; then
     die "SHA-256 mismatch: expected $EXPECTED, got $ACTUAL"
