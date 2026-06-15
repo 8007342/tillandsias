@@ -3595,3 +3595,100 @@ plan_index:
             - "Focused litmus and ./build.sh --check pass."
           checkpoint_required: true
           handoff_note: "The completed singleton fix is verified; the forge and OpenCode start successfully, and only prompt consumption is broken."
+
+    - id: multihost-smoke-followups-20260615
+      order: 51
+      title: Cross-host smoke follow-ups and sibling verification
+      status: ready
+      deliverable: plan/issues/build-install-smoke-e2e-findings-2026-06-14.md
+      audit_origin: plan/issues/build-install-smoke-e2e-findings-2026-06-14.md
+      depends_on: []
+      exit_criteria:
+        - "macOS cold boot reaches stable vsock polling without user-visible reset or broken-pipe noise."
+        - "Parked local macOS UX changes are explicitly merged or rejected without dropping unique work."
+        - "The macOS substrate spec records the Virtualization.framework decision."
+        - "Windows verifies the integrated linux-next head before taking new feature work."
+      tasks:
+        - id: macos-tray/cold-boot-vsock-poll-races
+          status: ready
+          owner_host: macos
+          estimated_hours: 5
+          capability_tags: [rust, macos, vsock, control-wire, lifecycle]
+          depends_on: []
+          owned_files:
+            - crates/tillandsias-macos-tray/src/action_host.rs
+            - crates/tillandsias-vm-layer/src/transport_macos.rs
+            - crates/tillandsias-control-wire/src/lib.rs
+          next_action: >
+            Reproduce a clean cold boot, correlate guest listener readiness with
+            host polling, and add bounded retry/backoff or readiness-aware noise
+            suppression with focused tests.
+          acceptance_evidence:
+            - "Cold boot reaches a healthy control-wire poll state."
+            - "Expected pre-readiness failures are bounded and not user-visible."
+            - "Focused macOS tray and control-wire tests pass."
+          fallback_when_blocked: >
+            Complete apple-container/spec-amendment without touching runtime code.
+          checkpoint_required: true
+          handoff_note: "The initial observation was confounded by the now-fixed --version VM boot; re-observe cleanly first."
+        - id: osx-next/reconcile-local-ux-parity-divergence
+          status: ready
+          owner_host: macos
+          estimated_hours: 5
+          capability_tags: [git, macos, tray, ux, host-shell, windows]
+          depends_on: []
+          owned_files:
+            - scripts/install-macos.sh
+            - methodology/convergence.yaml
+            - crates/tillandsias-host-shell/src/menu_state.rs
+            - crates/tillandsias-macos-tray/src/action_host.rs
+          next_action: >
+            Compare each unique parked commit and stash hunk with current
+            osx-next, merge only still-canonical pieces, and explicitly record
+            rejected pieces before deleting the backup branch and stash.
+          acceptance_evidence:
+            - "Every unique parked change has a merge-or-reject disposition."
+            - "Retained changes pass focused tests and formatting."
+            - "The backup branch and stash are removed only after reconciliation."
+          fallback_when_blocked: >
+            Produce a per-file disposition table without applying the broken stash.
+          checkpoint_required: true
+          handoff_note: "Do not apply stash@{0} wholesale; notify_icon.rs is known broken WIP."
+        - id: apple-container/spec-amendment
+          status: ready
+          owner_host: macos
+          estimated_hours: 3
+          capability_tags: [macos, docs, openspec, vm-layer]
+          depends_on: []
+          owned_files:
+            - openspec/specs/macos-native-tray
+            - methodology
+          next_action: >
+            Record single-VM Virtualization.framework as the selected macOS
+            substrate and document why apple/container is not adopted.
+          acceptance_evidence:
+            - "The active macOS substrate spec states the decision and constraints."
+            - "No active methodology text still requires apple/container."
+          checkpoint_required: true
+          handoff_note: "Research verdict is complete; this packet only converges the source of intent."
+        - id: coord/windows-sync-and-verify-20260615
+          status: ready
+          owner_host: windows
+          estimated_hours: 3
+          capability_tags: [git, windows, wsl2, integration, testing]
+          depends_on: []
+          owned_files:
+            - plan/issues/windows-next-work-queue-2026-05-25.md
+          next_action: >
+            Integrate the new linux-next coordination head into windows-next,
+            then run the focused Windows tray/control-wire tests and one
+            non-destructive WSL status/diagnostics probe.
+          acceptance_evidence:
+            - "windows-next contains the integrated linux-next head."
+            - "Focused Windows tray and control-wire tests pass."
+            - "WSL status/diagnostics retains its exit-code and wire-version contract."
+          fallback_when_blocked: >
+            Record the exact integration or host-runtime blocker and run the
+            pure unit-test subset that does not require WSL.
+          checkpoint_required: true
+          handoff_note: "Verification packet only; do not start optional feature work while the alignment event is active."
