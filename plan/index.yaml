@@ -3599,7 +3599,7 @@ plan_index:
                 - "./scripts/run-litmus-test.sh --spec dev-build --size instant -> PASS summary: 2 passed, 0 failed, 3 skipped"
                 - "./build.sh --check -> Type-check passed"
         - id: local-smoke/opencode-interactive-prompt-not-consumed
-          status: ready
+          status: claimed
           owner_host: linux
           estimated_hours: 5
           capability_tags: [shell, opencode, forge, containers, testing]
@@ -3617,6 +3617,13 @@ plan_index:
             - "Focused litmus and ./build.sh --check pass."
           checkpoint_required: true
           handoff_note: "The completed singleton fix is verified; the forge and OpenCode start successfully, and only prompt consumption is broken."
+          events:
+            - type: claim
+              ts: "2026-06-15T20:21:26Z"
+              agent_id: "linux-macuahuitl-codex-20260615T202126Z"
+              host: "linux"
+              lease_id: "lease-linux-opencode-prompt-20260615T202126Z"
+              expires_at: "2026-06-15T21:21:26Z"
 
     - id: multihost-smoke-followups-20260615
       order: 51
