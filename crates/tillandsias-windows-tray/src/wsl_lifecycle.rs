@@ -14,6 +14,7 @@ use std::path::{Path, PathBuf};
 use std::sync::Arc;
 use std::time::Duration;
 
+use tillandsias_control_wire::VmPhase;
 use tillandsias_host_shell::provisioning::{ProvisionPhase, ProvisionProgress};
 use tillandsias_vm_layer::fetch::{RemoteArtifact, download_verified, is_sha256_hex};
 use tillandsias_vm_layer::materialize::{
@@ -412,7 +413,7 @@ WantedBy=multi-user.target
     /// proven E2E: `VmStatusReply { phase: Ready, podman_ready: true }`.)
     async fn try_connect_until_ready(&self, port: u32, attempt: u32) -> Result<VmPhase, String> {
         use tillandsias_control_wire::transport::Transport;
-        use tillandsias_control_wire::{ControlEnvelope, ControlMessage, VmPhase, WIRE_VERSION};
+        use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
         use tillandsias_host_shell::vsock_client::Client;
 
         // Open the HvSocket transport, then drive the standard host-shell Client
