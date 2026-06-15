@@ -34,7 +34,7 @@
 - title: macOS tray treats `--version`/`--help`/any unknown flag as "launch the tray + boot the VM"
 - owner_host: macos
 - capability_tags: [rust, macos, tray, cli, lifecycle]
-- status: ready
+- status: done
 - discovered_by: `/build-install-and-smoke-test-e2e (macos)`
 - owned_files:
   - `crates/tillandsias-macos-tray/src/main.rs`
@@ -62,6 +62,17 @@
     ts: "2026-06-15T02:58:00Z"
     agent_id: macos-claude-opus
     host: macos
+  - type: completed
+    ts: "2026-06-15T03:14:00Z"
+    agent_id: macos-claude-opus
+    host: macos
+    note: >
+      Added --version/-V and --help/-h fast-exit handlers in main.rs before the
+      status_item::run() fallthrough. Verified on the release binary: all four
+      flags print and exit 0 with no VM boot / no menu-bar icon; pgrep confirms
+      no tray spawned. `cargo test -p tillandsias-macos-tray` = 48 passed.
+      Follow-up (not done here, to avoid breaking the .app launch which receives
+      OS-injected argv): a strict unknown-flag policy.
 
 ## Work Packet: macos-tray/image-root-vm-subdir-divergence
 
