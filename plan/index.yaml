@@ -2915,7 +2915,7 @@ plan_index:
     - id: github-login-vault-native-flow
       order: 42
       title: GitHub-login Vault-native flow — gate on Vault, keep the token in-container, Vault over HTTPS
-      status: in_progress
+      status: completed
       owner_host: linux
       deliverable: plan/steps/42-github-login-vault-native-flow.md
       audit_origin: plan/issues/github-login-vault-native-flow-2026-06-06.md

@@ -20,33 +20,19 @@ plan:
 
   current_state:
     last_completed_step: forge-package-manager-and-telemetry (step 49)
-    next_step: github-login-vault-native-flow (step 42 task xplat-gating-parity); parallel ready leaves include step 38
-    next_graph_node: vault-flow/xplat-gating-parity
+    next_step: version-conflict-release (step 37 task release/version-conflict-resolution); operator-gated
+    next_graph_node: release/version-conflict-resolution
     frontier_note: >
       v0.3.0 graph (steps 24-31) drained 2026-06-04. The 2026-06-05 pre-Vault
       obsolescence audit reopened a fresh wave (steps 32-37). Step 32 is blocked
       because the literal true-rekey mandate proved infeasible; step 36
-      (macOS+Windows keychain/vsock parity) remains blocked on the corrected
-      Linux handover contract. Steps 33-35 are complete. Step 37 (v0.3.0 release) is needs_clarification
-      (operator-gated VERSION conflict). Origin:
-      plan/issues/pre-vault-obsolescence-audit-2026-06-05.md.
-      2026-06-06 operator wave: step 42 (github-login Vault-native flow) opened
-      from a live --github-login failure; 42a (tray gates on Vault, not host gh
-      auth) DONE this cycle (clippy clean, 143/143 tray tests); ready linux
-      leaves 42a-async, 42b (login-in-container + fail-fast), 42c (Vault HTTPS via
-      intermediate CA); 42d (win/mac gating parity) blocked on 42a + step 36.
-      Step 43 (tray Quit hang) completed 2026-06-07 (05e59599, linux-macuahuitl-big-pickle).
-      Origin: plan/issues/github-login-vault-native-flow-2026-06-06.md.
-      2026-06-08 operator wave (Silverblue v0.3.260608.3 --github-login still failed after a
-      successful --init): root-caused to FOUR layered defects + env-override noise and fixed
-      linux-side (step 42 tasks 42e-42h). Keystone: keyring crate had no backend feature →
-      mock keystore → unseal key/root token never persisted → Vault unsealable on any boot
-      after the first (42e, async-secret-service/apple-native/windows-native; musl release
-      still statically linked). Plus vault volume userns drift (42f `:U`), entrypoint dying on
-      the handed-over root.token (42g), and --github-login not self-healing (42h). Verified
-      end-to-end on linux. Cross-platform tail: osx-next/windows-next owners must verify the
-      apple-native/windows-native keyring backend builds + persists (step 42d / step 36).
-      Origin: plan/issues/github-login-vault-lifecycle-2026-06-08.md.
+      (macOS+Windows keychain/vsock parity) is completed and integrated.
+      Steps 33-35 are complete. Step 37 (v0.3.0 release) is ready and operator-gated
+      (waiting for manual release/VERSION conflict resolution).
+      2026-06-06 operator wave: step 42 (github-login Vault-native flow) is fully completed
+      across Linux, macOS, and Windows. All integration slices are merged and verified.
+      Origin: plan/issues/github-login-vault-native-flow-2026-06-06.md and
+      plan/issues/github-login-vault-lifecycle-2026-06-08.md.
       2026-06-08 container-build research superseded broad step 40 with a
       five-packet wave: step 44 package-manager-first recipes and step 45
       canonical digest/aliases are ready in parallel; steps 46 cache reuse and
