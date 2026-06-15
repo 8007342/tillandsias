@@ -18,6 +18,16 @@
 - Forge lane: n/a (linux-only).
 - Outcome: **PASS** — one quality finding filed (provision progress log spam).
 
+## macOS Run 2 (Pass — verifies throttle fix, no new findings) — commit 21f62c3a
+
+- Discovered by: `/build-install-and-smoke-test-e2e (macos)` (outer-loop iter 2)
+- Re-ran the full lane after fixing macos-tray/provision-progress-log-spam.
+- All gates PASS (build/codesign, --version no-boot, install, destroy 1.x GiB,
+  cold re-provision provisioned:true fedora-44, diagnose schema stable).
+- **Throttle verified**: provision log = **105 lines** (was 64,477 — ~614×
+  reduction); `0 phase strings appear >1x` (perfect dedup).
+- **No new findings.** macOS smoke loop is clean end-to-end on this commit.
+
 ## Work Packet: macos-tray/provision-progress-log-spam
 
 - id: `macos-tray/provision-progress-log-spam`
