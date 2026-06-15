@@ -2,6 +2,20 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
+## 2026-06-15 — macOS primary (coordinator-assigned) VERIFIED: merged cold-boot vsock suppression
+
+- 2026-06-15T05:20Z  `4715a4cb`  PASS — verified the cold-boot vsock poll-error
+  suppression as merged into `linux-next` (`d3681430`). The `vm_ever_ready`
+  warmup gate in `crates/tillandsias-macos-tray/src/action_host.rs` is present
+  and **byte-for-byte identical** between `origin/osx-next` and the
+  `origin/linux-next` merge (no merge mangling; macOS source confined to that
+  one file). `cargo check -p tillandsias-macos-tray` clean;
+  `cargo test -p tillandsias-macos-tray --bin tillandsias-tray` → 49 passed, 0
+  failed, 1 ignored. Closes the coordinator's macOS primary for this cycle. The
+  fallback `osx-next/reconcile-local-ux-parity-divergence` stays blocked on a
+  user merge/discard decision (parked branch `osx-next-local-pre-pull-2026-06-14`
+  + broken-WIP `stash@{0}`).
+
 ## 2026-06-08 — keyring-verify/macos COMPLETE (apple-native backend verified)
 
 - 2026-06-08T17:52Z  (this commit: `verify(keyring): apple-native …`)  `keyring-verify/macos`
