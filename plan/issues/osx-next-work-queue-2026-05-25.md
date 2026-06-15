@@ -155,7 +155,7 @@ accessor.
 - owner_host: macos
 - capability_tags: [appkit, menu-structure, pty, host-shell]
 - status: done
-- completed_at: 2026-06-14T22:15Z
+- completed_at: 2026-06-15T04:30Z
 - depends_on: []
 - gated_on: []
 - blocks: []
@@ -171,6 +171,22 @@ accessor.
     the GithubLoginStatusRequest control wire message.
 - acceptance_evidence:
   - `cargo test -p tillandsias-macos-tray --bin tillandsias-tray` on macOS.
+- completion_note: >
+    Already implemented in commit d150a105 ("feat(macos-tray): wire
+    refresh_github_login poller to VM over vsock") — verified on macOS this
+    cycle; the packet was simply left open (coordination lag) while Linux and
+    Windows were "awaiting macOS slice completion". `poll_github_login_once`
+    (action_host.rs:578) sends `GithubLoginStatusRequest` and maps
+    `GithubLoginStatusReply` → `GithubLoginState`; the poller loop
+    (action_host.rs:1597) writes it into `MenuState.login`, and on `Err`
+    (unexpected/Unsupported reply or wire error) it logs and leaves the
+    last-known login state untouched — the required graceful degradation.
+    Observed running live against the VM in the 2026-06-15 smoke logs
+    ("github-login poll: …"). This closes the cross-host step; Linux + Windows
+    are no longer blocked on macOS.
+- acceptance_proof:
+  - `cargo test -p tillandsias-macos-tray --bin tillandsias-tray` → 49 passed,
+    0 failed, 1 ignored (2026-06-15, osx-next).
 - agent_status_packet_expected:
   - current plan
   - touched files

@@ -140,7 +140,16 @@ toward our model, not as an API to depend on yet.
 - id: `apple-container/spec-amendment`
 - owner_host: macos
 - capability_tags: [macos, docs, openspec, vm-layer]
-- status: ready
+- status: done
+- completed_at: 2026-06-15T04:40Z
+- completion_note: >
+    Amended openspec/specs/macos-native-tray/spec.md under the
+    "Virtualization.framework guest lifecycle is owned by this binary"
+    requirement: added the 2026-06-14 substrate decision (single long-lived VFR
+    VM + vsock, NOT apple/container per-container) and a new scenario
+    "Substrate is Virtualization.framework directly, not apple/container"
+    asserting zero runtime dependency on the apple/container product and a
+    macOS-26 floor. Links back to this evaluation file.
 - discovered_by: `/build-install-and-smoke-test-e2e` research dive (2026-06-14)
 - evidence:
   - this file (verdict: keep Virtualization.framework directly; do not adopt apple/container)

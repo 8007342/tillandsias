@@ -1547,6 +1547,16 @@ fn spawn_vm_status_poller(
         // list is a slower-changing input than VmStatus so we don't
         // need every-tick granularity.
         let mut tick: u32 = 0;
+        // Cold-boot warmup gate: the host marks the VM "running" the instant the
+        // VZ process spawns, but the in-guest vsock agent only binds once the
+        // guest OS finishes booting (~10s+ later). The projects/github pollers
+        // fire at tick 0 and predictably hit "Connection reset by peer" until
+        // then. Those errors are benign (each poller leaves last-known state
+        // untouched) but printed loudly on every boot. Suppress the *projects/
+        // github* connect errors until the VM has reported ready at least once;
+        // the vm-status poll below keeps logging its own errors, so a genuinely
+        // stuck boot still surfaces. See plan: macos-tray/cold-boot-vsock-poll-races.
+        let mut vm_ever_ready = false;
         loop {
             // Cloud + local projects: first tick + every 10 ticks.
             // The cadence rationale (slower than VmStatus) is in the
@@ -1571,7 +1581,9 @@ fn spawn_vm_status_poller(
                         drop(guard);
                     }
                     Err(e) => {
-                        eprintln!("[tillandsias-tray] local-projects poll: {e}");
+                        if vm_ever_ready {
+                            eprintln!("[tillandsias-tray] local-projects poll: {e}");
+                        }
                     }
                 }
                 match poll_cloud_projects_once(&vz).await {
@@ -1590,7 +1602,9 @@ fn spawn_vm_status_poller(
                         drop(guard);
                     }
                     Err(e) => {
-                        eprintln!("[tillandsias-tray] cloud-projects poll: {e}");
+                        if vm_ever_ready {
+                            eprintln!("[tillandsias-tray] cloud-projects poll: {e}");
+                        }
                     }
                 }
                 match poll_github_login_once(&vz).await {
@@ -1607,7 +1621,9 @@ fn spawn_vm_status_poller(
                         drop(guard);
                     }
                     Err(e) => {
-                        eprintln!("[tillandsias-tray] github-login poll: {e}");
+                        if vm_ever_ready {
+                            eprintln!("[tillandsias-tray] github-login poll: {e}");
+                        }
                     }
                 }
             }
@@ -1617,6 +1633,11 @@ fn spawn_vm_status_poller(
 
             match poll_vm_status_once(&vz).await {
                 Ok((phase, podman_ready, last_event)) => {
+                    // A successful VmStatus reply means the in-guest vsock agent
+                    // is up; from here on the projects/github poll errors are
+                    // real (mid-session) and worth logging — end cold-boot
+                    // warmup suppression.
+                    vm_ever_ready = true;
                     // Reflect podman_ready into the held MenuState so
                     // the menu rebuild flips per-project action gating
                     // (`Attach Here` etc.). Same pattern windows-tray
