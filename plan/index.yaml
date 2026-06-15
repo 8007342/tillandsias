@@ -3559,7 +3559,7 @@ plan_index:
         - "The local build/install/reset/init/forge smoke reaches a terminal pass."
       tasks:
         - id: local-smoke/evidence-bundle-litmus-count-regression
-          status: claimed
+          status: completed
           owner_host: linux
           estimated_hours: 3
           capability_tags: [bash, ci, evidence, litmus, testing]
@@ -3583,6 +3583,21 @@ plan_index:
               host: "linux"
               lease_id: "lease-linux-evidence-bundle-20260615T200716Z"
               expires_at: "2026-06-15T21:07:16Z"
+            - type: complete
+              ts: "2026-06-15T20:10:40Z"
+              agent_id: "linux-macuahuitl-codex-20260615T200716Z"
+              host: "linux"
+              lease_id: "lease-linux-evidence-bundle-20260615T200716Z"
+              note: >
+                Fixed evidence-bundle litmus aggregation to parse authoritative
+                PASS:/FAIL: phase summaries instead of raw token counts. Added
+                all-pass and one-failure fixtures plus a dev-build instant
+                litmus step.
+              evidence:
+                - "bash -n scripts/generate-evidence-bundle.sh scripts/test-evidence-bundle-litmus-summary.sh"
+                - "bash scripts/test-evidence-bundle-litmus-summary.sh -> ok: evidence bundle litmus summary parser"
+                - "./scripts/run-litmus-test.sh --spec dev-build --size instant -> PASS summary: 2 passed, 0 failed, 3 skipped"
+                - "./build.sh --check -> Type-check passed"
         - id: local-smoke/opencode-interactive-prompt-not-consumed
           status: ready
           owner_host: linux

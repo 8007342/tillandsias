@@ -37,14 +37,19 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: evidence reuse enabled"
 
+  - step: "evidence bundle litmus totals use phase summaries"
+    command: "bash scripts/test-evidence-bundle-litmus-summary.sh"
+    timeout_ms: 3000
+    expected_behavior: "ok: evidence bundle litmus summary parser"
+
 observability:
   traces:
     - "@trace spec:dev-build"
-  expected_log: "ci-full install has one local-ci process, direct post/runtime dispatch, no debug-build fallthrough, and no evidence reruns"
+  expected_log: "ci-full install has one local-ci process, direct post/runtime dispatch, no debug-build fallthrough, no evidence reruns, and evidence litmus totals come from phase summaries"
   log_fields:
     spec: "dev-build"
     test: "build-ci-dispatch-shape"
 
 rollback:
   on_failure: "inspect build.sh phase dispatch and scripts/generate-evidence-bundle.sh reuse mode"
-  command: "grep -n 'local-ci.sh\\|_run_litmus_phase\\|reuse-ci-results\\|Default: debug build' build.sh scripts/generate-evidence-bundle.sh"
+  command: "grep -n 'local-ci.sh\\|_run_litmus_phase\\|reuse-ci-results\\|litmus_count_\\|Default: debug build' build.sh scripts/generate-evidence-bundle.sh"

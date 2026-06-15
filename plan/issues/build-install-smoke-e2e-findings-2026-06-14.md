@@ -161,7 +161,7 @@
 - title: vsock control-wire polls error ("Connection reset by peer" / "Broken pipe") during/just after VM auto-boot
 - owner_host: macos
 - capability_tags: [rust, macos, vsock, control-wire, lifecycle]
-- status: ready
+- status: completed
 - discovered_by: `/build-install-and-smoke-test-e2e (macos)`
 - owned_files:
   - `crates/tillandsias-macos-tray/src/action_host.rs`
@@ -496,3 +496,18 @@
       Reopens the evidence-count portion of
       finding/build-sh-runtime-litmus-skip; the runtime residual itself now
       executes and passes.
+  - type: completed
+    ts: "2026-06-15T20:10:40Z"
+    agent_id: "linux-macuahuitl-codex-20260615T200716Z"
+    host: linux
+    note: >
+      Evidence-bundle litmus totals now sum PASS:/FAIL: phase summaries from
+      each current-run log and ignore incidental prose tokens. The fixture
+      covers all-pass pre/post/runtime totals (140/0) and a one-failure case
+      (134/1), and litmus:build-ci-dispatch-shape runs the fixture as an
+      instant dev-build gate.
+    evidence:
+      - "bash -n scripts/generate-evidence-bundle.sh scripts/test-evidence-bundle-litmus-summary.sh"
+      - "bash scripts/test-evidence-bundle-litmus-summary.sh -> ok: evidence bundle litmus summary parser"
+      - "./scripts/run-litmus-test.sh --spec dev-build --size instant -> PASS summary: 2 passed, 0 failed, 3 skipped"
+      - "./build.sh --check -> Type-check passed"
