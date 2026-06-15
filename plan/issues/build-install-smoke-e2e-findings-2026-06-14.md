@@ -81,7 +81,7 @@
 - title: `vz_lifecycle::image_root()` points at a `/vm` subdir that nothing else uses
 - owner_host: macos
 - capability_tags: [rust, macos, vm-layer, cleanup]
-- status: ready
+- status: done
 - discovered_by: `/build-install-and-smoke-test-e2e (macos)`
 - owned_files:
   - `crates/tillandsias-macos-tray/src/vz_lifecycle.rs`
@@ -116,6 +116,20 @@
     ts: "2026-06-15T02:58:00Z"
     agent_id: macos-claude-opus
     host: macos
+  - type: completed
+    ts: "2026-06-15T03:20:00Z"
+    agent_id: macos-claude-opus
+    host: macos
+    note: >
+      Confirmed `VzLifecycle` is fully DEAD CODE (declared `mod vz_lifecycle`
+      but never constructed), so the `/vm` path was a latent trap, not a live
+      boot bug. Converged `vz_lifecycle::image_root()` to the canonical
+      top-level `…/tillandsias` path (matching diagnose/status_item/provision),
+      fixed the misleading module + fn doc comments, and added a guard unit test
+      `image_root_is_top_level_not_vm_subdir`. cargo test -p
+      tillandsias-macos-tray = 49 passed. Follow-up (not done, bigger refactor):
+      collapse the three path sources into one shared helper so they cannot
+      drift independently.
 
 ## Work Packet: macos-tray/cold-boot-vsock-poll-races
 
