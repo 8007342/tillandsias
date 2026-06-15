@@ -138,7 +138,29 @@
 - title: vsock control-wire polls error ("Connection reset by peer" / "Broken pipe") during/just after VM auto-boot
 - owner_host: macos
 - capability_tags: [rust, macos, vsock, control-wire, lifecycle]
-- status: ready
+- status: done
+- completed_at: 2026-06-15T05:00Z
+- completion_note: >
+    Reproduced cleanly with a timestamped cold-boot capture: the host logs
+    "Auto-boot: VM is running" the instant the VZ process spawns (t=0) and the
+    three pollers (local-projects/cloud-projects/github-login) immediately dial
+    vsock and hit "Connection reset by peer"; the guest OS only reaches the
+    login prompt ~7-9s later, so the in-guest vsock agent isn't bound yet. The
+    errors were already functionally benign (each poller leaves last-known menu
+    state untouched), so this was pure log noise, not a behavior bug.
+    Fix (action_host.rs `spawn_vm_status_poller`): added a `vm_ever_ready`
+    warmup gate — the projects/github connect errors are suppressed until the
+    first successful VmStatus reply (proof the agent is up), after which they
+    log normally as real mid-session failures. The vm-status poll keeps logging
+    its own errors throughout, so a genuinely stuck boot still surfaces. Polling
+    cadence/behavior is unchanged.
+- acceptance_proof:
+  - before: `/tmp/coldboot-vsock-repro.log` — 3 "Connection reset by peer"
+    lines at t=0 (local/cloud/github).
+  - after (fixed binary, re-launched cold): no projects/github poll-error lines
+    during warmup; VM still boots to Fedora 44 login; assertion "PASS: no
+    projects/github poll-error noise during cold boot".
+  - `cargo test -p tillandsias-macos-tray --bin tillandsias-tray` → 49 passed.
 - discovered_by: `/build-install-and-smoke-test-e2e (macos)`
 - owned_files:
   - `crates/tillandsias-macos-tray/src/action_host.rs`
