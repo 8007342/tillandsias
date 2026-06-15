@@ -1,52 +1,51 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-15T20:28:17Z
+LastExecutionTime: 2026-06-15T20:48:36Z
 
 ## This Loop
 
-- **Cycle type**: Linux queue drain followed by sibling integration.
+- **Cycle type**: Multihost integration after sibling branch advances.
 - **Sibling Git Audit**:
   - `main` at `2adefdb4` (release v0.3.260615.1)
-  - `linux-next` started this orchestration at `d9a421e5`
-  - `windows-next` at `9e71ad4d` and already an ancestor of linux-next
-  - `osx-next` at `4715a4cb` with 4 commits ahead; merged into linux-next with
-    semantic union of plan conflicts
-- **Linux worker queue**: exhausted for canonical Linux-ready leaves. Completed
-  `local-smoke/evidence-bundle-litmus-count-regression` (`dbd2d333`) and
-  `local-smoke/opencode-interactive-prompt-not-consumed` (`d9a421e5`).
-- **Integrated validation**: focused merge validation passed with
-  `cargo check -p tillandsias-macos-tray`; Linux worker slices also passed their
-  focused litmus/tests and `./build.sh --check`. Full destructive runtime smoke
-  remains the next acceptance gate after this integration commit.
-- **Convergence**: local-smoke Linux blockers are closed. Active residuals are
-  now sibling-owned macOS/Windows follow-ups plus the Windows release blocker.
-- **High-Velocity Alignment Event Active**: Yes. Lease TTL remains 1 hour; keep
-  work on smoke blockers, sibling integration, and release-blocker verification.
+  - `linux-next` started at `d3681430`
+  - `windows-next` advanced to `0710071b` (2 commits ahead) and was merged
+  - `osx-next` advanced to `11bd4e40` (3 commits ahead) and was merged
+  - Post-merge drift: 0 commits; both sibling heads are ancestors of linux-next
+- **Integrated work**:
+  - Windows P0 release blocker fixed: `windows-tray/vmphase-import-scope-release-break`.
+  - Windows sync/verify packet completed.
+  - macOS cold-boot vsock suppression verified.
+  - macOS local UX parity divergence resolved and merged.
+- **Validation**:
+  - `./build.sh --check` PASS (`Type-check passed`; dev proxy startup warning is nonfatal).
+  - `cargo check -p tillandsias-windows-tray` PASS.
+  - `cargo check -p tillandsias-macos-tray` PASS.
+  - `methodology/convergence.yaml` and `plan/index.yaml` parse as YAML.
+- **Convergence**: Local Linux smoke blockers are closed; sibling branches are
+  synchronized into linux-next. Remaining release confidence gate is a full
+  build/install/reset/init/forge smoke on the integrated head.
+- **High-Velocity Alignment Event Active**: Yes. Keep leases at 1 hour and focus
+  on release blockers, sibling sync, and smoke verification.
 
 ## Active Conflicts & Mediation
 
-- Resolved two append-only plan conflicts from `origin/osx-next`:
-  `plan/issues/build-install-smoke-e2e-findings-2026-06-14.md` retained Linux
-  completions and macOS cold-boot completion metadata; `osx-next-work-queue`
-  retained the latest macOS completion timestamp.
-- No Linux/macOS code write collision. macOS source change is confined to
-  `crates/tillandsias-macos-tray/src/action_host.rs`.
-- New P0 Windows release blocker filed by macOS:
-  `windows-tray/vmphase-import-scope-release-break`.
+- No merge conflicts in this pass.
+- No active deadlock detected.
+- No write-write thrash detected; sibling changes were scoped to their platform
+  code plus append-only plan ledgers.
 
 ## Assignment Board
 
-- **Linux primary**: no canonical implementation leaf open. Fallback: run the
-  local build/install smoke gate on the merged head and file any new findings.
-- **Windows primary**: `windows-tray/vmphase-import-scope-release-break`.
-  Fallback: `coord/windows-sync-and-verify-20260615`.
-- **macOS primary**: verify merged cold-boot vsock suppression from `4715a4cb`.
-  Fallback: finish `osx-next/reconcile-local-ux-parity-divergence` if still
-  locally parked on the macOS host.
+- **Linux primary**: run full local build/install smoke on integrated
+  `linux-next`; fallback: file any new smoke findings as ready packets.
+- **Windows primary**: verify the integrated `VmPhase` import fix on a real
+  Windows build/release lane; fallback: Windows tray/control-wire focused tests.
+- **macOS primary**: verify the merged installer policy and UX-parity
+  reconciliation on macOS; fallback: cold-boot vsock suppression smoke.
 
 ## Stale Or Pending Pings
 
-- Windows release artifact is missing for v0.3.260615.1 until the VmPhase import
-  scope issue is fixed and release rerun or superseded.
-- Full Linux build/install/reset/init/forge smoke should be rerun on the merged
-  head now that both Linux local-smoke fixes are integrated.
+- Published v0.3.260615.1 still lacks a Windows artifact; either rerun the
+  release Windows job after the fix lands on main or let the next release pick
+  it up.
+- Full destructive Linux smoke is pending for the current integrated head.
