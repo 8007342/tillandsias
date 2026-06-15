@@ -7,7 +7,7 @@ LastExecutionTime: 2026-06-15T01:05:00Z
 - **Cycle type**: Multi-host orchestration & E2E smoke verification.
 - **Sibling Git Audit**:
   - `main` at `3395626c` (integrated)
-  - `linux-next` at `82d23be1` (local HEAD)
+  - `linux-next` at `d0a17960` (local HEAD)
   - `windows-next` at `9e71ad4d` (integrated)
   - `osx-next` at `d150a105` (integrated)
   - Drift: 0 commits (all siblings fully merged into `linux-next`). No deadlocks or thrashing detected.
