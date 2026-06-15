@@ -105,6 +105,19 @@ time and pinned for the lifetime of the guest. The binary SHALL NOT touch
 `objc2-virtualization` types directly — all VZ API calls go through the
 layer.
 
+**Substrate decision (2026-06-14): a single long-lived Virtualization.framework
+VM, NOT Apple's `apple/container`.** The macOS substrate mirrors the
+single-VM-plus-vsock-control-wire model that WSL2 provides on Windows — one
+persistent Linux guest the tray drives directly via `VZVirtualMachine` +
+`VZVirtioSocketDevice`. Tillandsias SHALL NOT adopt Apple's `apple/container`
+product as the runtime: it spins one micro-VM *per container* behind an XPC
+daemon, exposes no vsock at its CLI, and gates full functionality on macOS 26.
+That altitude is wrong for a single-guest control-wire architecture and would
+provide *less* control than Virtualization.framework directly (the primitive
+`apple/container` is itself built on). Apple's newer single-VM "container
+machine" is a convergence signal to watch, not a dependency. Full evaluation:
+`plan/issues/apple-containerization-evaluation-2026-06-14.md`.
+
 @trace spec:macos-native-tray, spec:vm-idiomatic-layer
 
 #### Scenario: VZ guest boots on first run
@@ -126,6 +139,13 @@ layer.
   `objc2_virtualization::` or `VZVirtualMachine`
 - **THEN** the only matches SHALL be inside `crates/tillandsias-vm-layer/src/vz.rs`
 - **AND** the tray crate itself SHALL contain zero such matches
+
+#### Scenario: Substrate is Virtualization.framework directly, not apple/container
+- **WHEN** the workspace is searched for a runtime dependency on Apple's
+  `apple/container` / `Containerization` product or a per-container VM model
+- **THEN** there SHALL be none — the macOS runtime is one long-lived VFR guest
+- **AND** the host↔guest channel SHALL be virtio-vsock via `VZVirtioSocketDevice`
+  (no dependency on the `container` CLI, its XPC daemon, or a macOS-26 floor)
 
 ### Requirement: Terminal attach routes through Terminal.app or iTerm2 via `vm-exec`
 - **ID**: macos-native-tray.lifecycle.terminal-attach@v1
