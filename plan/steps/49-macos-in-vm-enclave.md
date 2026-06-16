@@ -97,8 +97,9 @@ artifacts are published.
 - [x] 49a — **Decision**: Option 1 (cloud-init). Recorded above.
 - [x] 49b — Wire podman install + podman.socket into the macOS cloud-init (`vz.rs` user-data).
       Landed at `b7321f50` on osx-next. E2E gate PASS at `f39203b5`.
-- [ ] 49c — Headless must report `podman_ready=true` / phase `Ready` once the
-      enclave is up; verify over vsock from the host (vm-status poll).
+- [x] 49c — Headless reports `podman_ready=true` / phase `Ready` once the
+      enclave is up; verified over vsock from the host (vm-status poll).
+      Confirmed at ~32s post-boot (2026-06-16T23:28Z).
 - [ ] 49d — Re-run the macOS m8 user-attended smoke; projects list, github-login
       terminal yields a working shell, Attach Here opens a forge shell.
 - [ ] 49e — Add an automated post-provision assertion (host-side) that the VM
@@ -133,3 +134,10 @@ a second enclave definition (tombstone/supersede, never duplicate).
     - "cargo test -p tillandsias-vm-layer: 15/15 PASS"
     - "cargo check: clean"
     - "E2E gate (build-install-smoke-e2e): build+install+provision+diagnose PASS at f39203b5"
+- type: completed
+  task: "49c"
+  ts: "2026-06-16T23:28:00Z"
+  agent_id: "macos-tlatoani-big-pickle-20260616T231619Z"
+  host: "macos"
+  evidence:
+    - "Headless reached phase=Ready podman_ready=true ~32s post-boot (was ~84s Failed before 49b)"
