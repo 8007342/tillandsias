@@ -9,11 +9,8 @@ set -euo pipefail
 # One-shot unattended:
 #   ./codex --quiet "prompt"
 #
-# Unattended loop, sleeping after each completed round:
-#   ./codex --wait 3h "prompt"
-#
-# Trusted unattended coordination, required for git fetch/push:
-#   ./codex --wait 45m /coordinate-multihost-work
+# Unattended loops are handled by ./repeat:
+#   ./repeat --agent codex --prompt "Use the /meta-orchestration skill"
 
 script_dir="$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")" && pwd)"
 repo_root="$(git -C "$script_dir" rev-parse --show-toplevel 2>/dev/null || printf '%s\n' "$script_dir")"
@@ -36,8 +33,6 @@ export CODEX_PROJECT_ROOT="$repo_root"
 repo_codex_profile="$repo_root/.codex/tillandsias.profile.sh"
 
 QUIET=0
-WAIT_INTERVAL=""
-TIMES=""
 TRUSTED_EXEC="${CODEX_TRUSTED_EXEC:-0}"
 codex_args=()
 
@@ -45,19 +40,15 @@ usage() {
   cat >&2 <<'EOF'
 Usage:
   ./codex [--quiet] "prompt"
-  ./codex --wait <duration> [--times <n>] "prompt"
 
 Options:
   --quiet, -q          Run `codex exec` once instead of launching the TUI.
-  --wait <duration>   Run `codex exec`, then sleep duration, repeat forever.
-  --repeat <duration> Compatibility alias for --wait.
-  --times <n>         Limit --wait/--repeat to n rounds.
   --trusted           Run `codex exec` without Codex's sandbox/approval layer.
                       Intended for unattended coordination loops that must
                       fetch, rebase, commit, and push.
   --                  End wrapper options.
 
-Duration examples: 30m, 2h, 2h30m, 45s.
+Use ./repeat --agent codex --prompt "..." for recurring unattended runs.
 EOF
 }
 
@@ -66,22 +57,6 @@ while [[ $# -gt 0 ]]; do
     --quiet|-q)
       QUIET=1
       shift
-      ;;
-    --wait|--repeat)
-      if [[ $# -lt 2 ]]; then
-        printf 'codex: %s requires a duration such as 30m, 2h, or 2h30m\n' "$1" >&2
-        exit 2
-      fi
-      WAIT_INTERVAL="$2"
-      shift 2
-      ;;
-    --times)
-      if [[ $# -lt 2 || ! "$2" =~ ^[0-9]+$ || "$2" -lt 1 ]]; then
-        printf 'codex: --times requires a positive integer\n' >&2
-        exit 2
-      fi
-      TIMES="$2"
-      shift 2
       ;;
     --trusted)
       TRUSTED_EXEC=1
@@ -113,10 +88,6 @@ if [[ ${#codex_args[@]} -eq 1 && "${codex_args[0]}" == "/coordinate-multihost-wo
   codex_args=("Use the coordinate-multihost-work skill to run one Tillandsias multi-host coordination loop.")
 fi
 
-if [[ -n "$WAIT_INTERVAL" ]]; then
-  TRUSTED_EXEC=1
-fi
-
 common_args=(-p tillandsias)
 profile_additional_args=()
 profile_additional_dir_args=()
@@ -135,41 +106,6 @@ if (( ${#codex_profile_add_dirs[@]} > 0 )); then
     profile_additional_dir_args+=(--add-dir "$dir")
   done
 fi
-
-duration_to_seconds() {
-  local input="$1"
-  local rest="$input"
-  local total=0
-  local number unit
-
-  if [[ "$rest" =~ ^[0-9]+$ ]]; then
-    printf '%s\n' "$rest"
-    return 0
-  fi
-
-  while [[ -n "$rest" ]]; do
-    if [[ "$rest" =~ ^([0-9]+)([smhd])(.*)$ ]]; then
-      number="${BASH_REMATCH[1]}"
-      unit="${BASH_REMATCH[2]}"
-      rest="${BASH_REMATCH[3]}"
-      case "$unit" in
-        s) total=$((total + number)) ;;
-        m) total=$((total + number * 60)) ;;
-        h) total=$((total + number * 3600)) ;;
-        d) total=$((total + number * 86400)) ;;
-      esac
-    else
-      printf 'codex: invalid duration %q. Use forms like 30m, 2h, 2h30m, or 45s.\n' "$input" >&2
-      return 2
-    fi
-  done
-
-  if [[ "$total" -lt 1 ]]; then
-    printf 'codex: duration must be greater than zero\n' >&2
-    return 2
-  fi
-  printf '%s\n' "$total"
-}
 
 timestamp_utc() {
   date -u '+%Y-%m-%dT%H:%M:%SZ'
@@ -211,28 +147,6 @@ run_exec_once() {
     "${profile_additional_dir_args[@]}" \
     "${codex_args[@]}"
 }
-
-if [[ -n "$WAIT_INTERVAL" ]]; then
-  wait_seconds="$(duration_to_seconds "$WAIT_INTERVAL")"
-  cycle=0
-  while :; do
-    cycle=$((cycle + 1))
-    printf '[codex-wait] %s cycle %d start repo=%s wait=%s\n' "$(timestamp_utc)" "$cycle" "$repo_root" "$WAIT_INTERVAL" >&2
-    run_exec_once
-    status=$?
-    printf '[codex-wait] %s cycle %d complete exit=%d\n' "$(timestamp_utc)" "$cycle" "$status" >&2
-    if [[ "$status" -ne 0 ]]; then
-      exit "$status"
-    fi
-    if [[ -n "$TIMES" && "$cycle" -ge "$TIMES" ]]; then
-      exit 0
-    fi
-    next_epoch=$(( $(date +%s) + wait_seconds ))
-    next_pacific="$(timestamp_pacific_from_epoch "$next_epoch")"
-    printf '[codex-wait] %s sleeping %s before next cycle at %s (America/Los_Angeles)\n' "$(timestamp_utc)" "$WAIT_INTERVAL" "$next_pacific" >&2
-    sleep "$wait_seconds"
-  done
-fi
 
 if [[ "$QUIET" -eq 1 ]]; then
   run_exec_once

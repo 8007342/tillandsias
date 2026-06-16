@@ -1545,7 +1545,7 @@ plan_index:
 
     - id: forge-diagnostics-improvement-loop
       order: 21.6
-      title: Forge Diagnostics Improvement Loop — /diagnose-forge + opencode-repeat
+      title: Forge Diagnostics Improvement Loop - /diagnose-forge + repeat
       status: completed
       deliverable: plan/forge-improvements/
       depends_on: [forge-diagnostics-automation]
@@ -1560,7 +1560,7 @@ plan_index:
         - forge-staleness
         - forge-standalone
       exit_criteria:
-        - "Repeat loop runs successfully: ./opencode-repeat --wait 45m --command diagnose-forge"
+        - "Repeat loop runs successfully: ./repeat --agent opencode --wait 45m --prompt \"Use the /diagnose-forge skill\""
         - "/diagnose-forge command extracts actionable gaps from diagnostics output"
         - "Proposals are filed in plan/forge-improvements/proposals/ with structured frontmatter"
         - "Approved proposals are implemented against the forge Containerfile and entrypoint"
@@ -1571,9 +1571,9 @@ plan_index:
           status: completed
           depends_on: []
           owned_files:
-            - opencode-repeat
+            - repeat
           checkpoint_required: true
-          handoff_note: "opencode-repeat wrapper created. Supports --wait, --times, --command. Calls opencode run --dangerously-skip-permissions in a loop."
+          handoff_note: "Superseded by ./repeat. The unified wrapper supports --wait, --repeat, --prompt, and --agent, and calls opencode run --dangerously-skip-permissions when --agent opencode is selected."
         - id: forge-improvement/diagnose-command
           status: completed
           depends_on: [forge-improvement/repeat-wrapper]

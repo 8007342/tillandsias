@@ -17,6 +17,11 @@ gate in order and **stop at the first failure**.
 | macOS   | `osx-next`     | `scripts/build-macos-tray.sh`    | `rm -rf ~/Library/Application Support/tillandsias` + `~/Library/Caches/tillandsias` | `…tillandsias-tray --provision` | no (N/A)   |
 | Windows | `windows-next` | `scripts/build-windows-tray.ps1` | `wsl --unregister tillandsias` (+ cached rootfs)              | tray cold launch / `--provision` | no (N/A)   |
 
+This skill is for local-build install testing. On immutable Linux
+(`/run/ostree-booted` or `rpm-ostree` present), do not run this skill; use
+`/smoke-curl-install-and-test-e2e` instead. Mutable Linux, macOS, and Windows
+hosts run this skill for their native local build/install path.
+
 > Architecture note: on macOS the runtime substrate is **not** a Podman/Docker
 > store and **not** Apple's `apple/container` per-container product — it is a
 > single long-lived Linux VM that the tray drives directly through
@@ -295,6 +300,8 @@ the convergence record shows the build was exercised on this host.
 - **Never** push directly to `main`, open a release PR, or `--force`.
 - Do **not** implement product fixes during this skill — fixes are the job of
   `/advance-work-from-plan` workers claiming the packets you file.
+- Before a successful exit, commit and push the PASS/finding report. Do not
+  leave a local-only smoke result.
 
 ## Guardrails
 

@@ -8,8 +8,7 @@ description: Clean-room end-to-end smoke test of a PUBLISHED release. Curl-insta
 This skill validates that a **published release** actually works for a real
 operator starting from nothing. It is the acceptance gate that catches what
 `./build.sh --ci-full` cannot: problems that only appear when the signed,
-downloadable binary bootstraps the whole enclave from a wiped Podman store on a
-clean host.
+downloadable artifact bootstraps the whole enclave from a wiped host substrate.
 
 ## Authority
 
@@ -20,11 +19,22 @@ become `plan/issues/` work packets so they flow through the normal
 
 ---
 
-## ⚠️ DESTRUCTIVE — read before running
+## Host Matrix
 
-Step 2 runs **`podman system reset --force`**, which **irreversibly deletes ALL
-Podman state for this user**: every container, image, volume, network, and
-secret — including:
+| Host | Installer | Destructive substrate | Re-provision |
+|---|---|---|---|
+| immutable Linux | `scripts/install.sh` via release curl URL | `podman system reset --force` | `tillandsias --debug --init` |
+| mutable Linux | `scripts/install.sh` via release curl URL | `podman system reset --force` | `tillandsias --debug --init` |
+| macOS | `scripts/install-macos.sh` via release curl URL | remove Tillandsias app state/cache VM dirs | installed tray `--provision` + `--diagnose --json` |
+| Windows | `scripts/install-windows.ps1` release path when available | `wsl --unregister tillandsias` plus cache purge | installed tray provision/diagnose |
+
+This is the only e2e install skill allowed on immutable Linux.
+
+## DESTRUCTIVE — read before running
+
+On Linux, Step 2 runs **`podman system reset --force`**, which irreversibly
+deletes ALL Podman state for this user: every container, image, volume, network,
+and secret — including:
 
 - the `tillandsias-vault-data` volume (Vault's sealed store),
 - every project mirror volume (`tillandsias-mirror-*`),
@@ -43,11 +53,14 @@ to hide.
 
 ---
 
+On macOS, the destructive substrate is the Tillandsias Virtualization.framework
+state and cache directories. On Windows, it is the `tillandsias` WSL2 distro and
+download cache.
+
 ## 0 — Pre-flight
 
 1. **Identify host + branch** (Linux → `linux-next`, macOS → `osx-next`,
-   Windows → `windows-next`). This runbook targets a Linux runtime host; the
-   `--opencode` forge lane is Linux/Podman today.
+   Windows → `windows-next`). The `--opencode` forge lane is Linux/Podman today.
 2. **Record the release under test:**
    ```bash
    gh release view --json tagName,publishedAt -q '.tagName + "  " + .publishedAt'
@@ -65,14 +78,32 @@ to hide.
 
 ## 1 — Curl-install the latest release
 
-Install the published binary the canonical way an operator would — do NOT use a
+Install the published artifact the canonical way an operator would — do NOT use a
 locally built `target/` binary; the whole point is to test the *download*.
+
+Linux:
 
 ```bash
 curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install.sh | bash 2>&1 \
   | tee target/smoke-e2e/01-install.log
 hash -r
 tillandsias --version | tee target/smoke-e2e/01-version.txt
+```
+
+macOS:
+
+```bash
+curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install-macos.sh | bash 2>&1 \
+  | tee target/smoke-e2e/01-install-macos.log
+"$HOME/Applications/Tillandsias.app/Contents/MacOS/tillandsias-tray" --version 2>&1 \
+  | tee target/smoke-e2e/01-version.txt || true
+```
+
+Windows PowerShell:
+
+```powershell
+# Use the published Windows installer once release artifacts expose it.
+# Until then, file a finding that curl-install Windows release coverage is blocked.
 ```
 
 Verify the installed version matches the release tag from Step 0. If the install
@@ -82,7 +113,7 @@ the rest of the smoke is invalid on a bad install.
 
 ---
 
-## 2 — Full Podman reset (DESTRUCTIVE — see warning above)
+## 2 — Full substrate reset (DESTRUCTIVE — see warning above)
 
 ```bash
 podman system reset --force 2>&1 | tee target/smoke-e2e/02-reset.log
@@ -95,6 +126,10 @@ podman ps -a --format '{{.Names}}'; podman volume ls -q; podman images -q
 All three should be empty. If the reset errors or leaves residue → file a
 finding (capability: `podman`, `runtime`) and note it, then continue only if the
 store is actually clean.
+
+On macOS, stop the tray and remove `~/Library/Application Support/tillandsias`
+and `~/Library/Caches/tillandsias`. On Windows, run `wsl --shutdown` and
+`wsl --unregister tillandsias`, tolerating an already-absent distro.
 
 ---
 
@@ -194,6 +229,9 @@ Rules for good findings:
 Commit the report (and any forge-pushed findings) to the appropriate host branch (`linux-next`, `osx-next`, or `windows-next`) and push. **DO NOT push directly to `main` or open PRs against `main`.** Update the host work-queue
 ledger with a one-line outcome, exactly as `/advance-work-from-plan` §6
 prescribes.
+
+Before a successful exit, the PASS/finding report must be committed and pushed.
+Do not leave a local-only release smoke result.
 
 ---
 

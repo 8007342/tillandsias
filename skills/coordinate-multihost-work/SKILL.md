@@ -13,6 +13,11 @@ Do coordination, spec, plan, methodology, and cheatsheet work. Do not change imp
 
 This skill is also the active runtime orchestrator. If a sibling branch has eligible code ahead of `linux-next`, pull/merge what can be merged, then start or monitor the full runtime litmus run.
 
+Before a successful exit, push every coordination update to `origin/linux-next`.
+The local worktree must be clean and not ahead of upstream. If a push cannot be
+completed after three fetch/rebase retries, record the failed push as a blocker
+in `plan/loop_status.md` and stop.
+
 ---
 
 ## Start Of Loop & Sibling Git History Audit
@@ -103,6 +108,8 @@ To guarantee convergence in finite time, the orchestrator MUST track and enforce
     3.  Failed-retryable work with narrow diagnostic chains.
     4.  Ready leaf work in the owning host queue.
 -   **No Idle Hosts**: Every active host MUST have at least one claimed or ready unblocked primary packet, plus one named independent fallback packet (e.g. in packaging, docs-distillation, or CI testing) so that a host never sits idle when its primary path is gated.
+-   A host waiting for remote integration MUST be assigned an independent
+    fallback unless all eligible work is blocked.
 -   **Assign Stable Work Items**: Each assignment must specify: `id`, `owner_host`, `status`, dependencies, owned files, next concrete action, expected evidence, and `agent_status_packet` expectations.
 
 ---
