@@ -124,6 +124,14 @@ rm -rf "$INSTALL_DIR/Tillandsias.app.bak"
 mv "$INSTALL_DIR/Tillandsias.app.new" "$INSTALL_DIR/Tillandsias.app"
 INSTALLED_BIN="$INSTALL_DIR/Tillandsias.app/Contents/MacOS/tillandsias-tray"
 "$INSTALLED_BIN" --version 2>&1 | tee "$LOG_DIR/01-installed-version.txt" || true
+
+# FRESHNESS GATE: the installed binary embeds its git SHA in --version
+# (build.rs). macOS resolves names/bundles loosely, so assert we are testing a
+# HEAD build, not a stale artifact picked up from elsewhere.
+EMB_SHA="$("$INSTALLED_BIN" --version | sed -E 's/.*git ([0-9a-f]+)(-dirty)?,.*/\1/')"
+HEAD_SHA="$(git rev-parse --short HEAD)"
+printf 'embedded=%s head=%s\n' "$EMB_SHA" "$HEAD_SHA" | tee "$LOG_DIR/01-freshness.txt"
+test "$EMB_SHA" = "$HEAD_SHA"   # FAIL the run if the installed binary != HEAD
 ```
 
 ### 1·Windows (PowerShell)
@@ -306,7 +314,16 @@ the convergence record shows the build was exercised on this host.
 - **macOS**: never `sudo` the install (use `~/Applications`, not
   `/Applications`); never kill a tray PID you did not spawn except in the §1/§2
   best-effort `pkill` that the install/destroy replace genuinely requires.
+- **macOS freshness**: assert the installed binary's `--version` git SHA equals
+  `git rev-parse --short HEAD` (§1·macOS gate). macOS resolves bundles/names
+  loosely; without this you can silently test a stale artifact.
+- **This skill does NOT validate the interaction surface.** A macOS/Windows PASS
+  here means build + install + destroy + re-provision + `--diagnose` succeeded —
+  it does NOT exercise the live vsock control wire, menu UX, PTY attach, project
+  enumeration, or icon rendering (only reachable from a running tray a user
+  clicks). A green run is **not** release acceptance. The mandatory gate for
+  macOS release acceptance is the **user-attended m8 smoke** (see
+  `plan/issues/macos-m8-interactive-smoke-failures-2026-06-16.md`). Do not report
+  this skill's PASS as "the tray works".
 - Findings are intake, not authority — durable conclusions still land in
   `openspec/specs/`, `methodology/`, or cheatsheets via the normal flow.
-</content>
-</invoke>

@@ -173,3 +173,122 @@ mistake. Recover them from git (objects still reachable by SHA) as fix input.
 - Cold-boot vsock poll-error suppression: confirmed no warmup error spam in the
   interactive launch (the intended effect held) — but see the masking caveat
   in the packet above.
+
+---
+
+## Sequencing & consequences (what must be implemented next, in order)
+
+```
+F2 vm-reports-failed  ──►  Step 49 (in-VM enclave)  ──► unblocks ──► F4 (PTY), F5 (projects)
+   [KEYSTONE]                                                         [downstream of F2]
+
+F1 icon            ── DONE (1ada1f28)
+F3 collapsed menu  ── independent of F2; shared host-shell, needs xplat coordination
+provenance         ── DONE (3505a521)
+diagnosability     ── parallel aid for F2 (surface the Failed reason)
+```
+
+- **Do F2 / Step 49 first.** It is the keystone: F4 and F5 cannot be properly
+  fixed or verified until the in-VM enclave exists. Attempting F4/F5 before F2
+  only adds "fail visibly" polish on a fundamentally non-functional surface.
+- **F3 (collapsed menu)** can proceed in parallel but touches SHARED
+  `host-shell/menu_state.rs` — Linux + Windows trays must move together (parity
+  policy). Treat as a cross-host change, not a solo macOS edit.
+- **Release-acceptance consequence:** the macOS m8 user-attended smoke is the
+  step-level release gate (per plan/index.yaml). It is currently **RED**. No
+  macOS release should be claimed "verified" until Step 49 lands and m8 is re-run
+  green. Update the coordinator's macOS gate accordingly.
+
+## Meta-finding: autonomous smoke gave false PASS confidence
+
+Every `/build-install-and-smoke-test-e2e` macOS run this cycle reported PASS, but
+each validated only build / install / destroy / provision / `--diagnose` — i.e.
+the disk is present and the binary runs. It NEVER exercised the live vsock
+control wire, menu UX, PTY attach, project enumeration, or icon rendering, all of
+which are only reachable from a running tray a user clicks. The first interactive
+test (m8) failed immediately.
+
+**Consequence (process):** the macOS autonomous smoke must NOT be read as release
+acceptance. Either (a) add an automated interaction probe (drive the menu model +
+assert the VM reaches Ready over vsock + a scripted attach), or (b) keep the
+mandatory user-attended m8 gate and stop labeling autonomous runs "PASS" without
+it. Recorded as `macos-tray/smoke-does-not-cover-interaction-surface` below; the
+`/build-install-and-smoke-test-e2e` SKILL.md gets a caveat note (this change).
+
+---
+
+## Work Packet: macos-tray/build-provenance-unverifiable  [DONE]
+
+- id: `macos-tray/build-provenance-unverifiable`
+- type: fix
+- owner_host: macos
+- capability_tags: [rust, macos, build, testing]
+- status: done
+- completed_at: 2026-06-16T22:22Z
+- discovered_by: operator (running binary showed a stale-looking version; risk of
+  testing an old artifact because macOS resolves names loosely)
+- completion_note: >
+    Added crates/tillandsias-macos-tray/build.rs embedding the git short SHA
+    (+ -dirty) and build timestamp; surfaced in `--version`
+    ("tillandsias-tray 0.1.0 (git <sha>, built <ts>)"). Verified: installed app
+    reports git 3505a521 == HEAD, built today. Audit confirmed no stale copies in
+    /Applications and nothing on PATH; the absolute-path binary tests use is the
+    fresh build. Commit 3505a521.
+- consequence (follow-up packet below): every smoke/interactive run should assert
+    the running binary's `--version` SHA equals `git rev-parse --short HEAD`.
+
+## Work Packet: testing/assert-binary-sha-equals-head  [MEDIUM]
+
+- id: `testing/assert-binary-sha-equals-head`
+- type: fix
+- owner_host: any
+- capability_tags: [testing, ci, macos, bash]
+- status: ready
+- next_action: >
+    Add a guard to `/build-install-and-smoke-test-e2e` (and the build-macos-tray
+    skill) preflight: after build+install, run the installed binary's
+    `--version`, extract the git SHA, and FAIL the run if it != `git rev-parse
+    --short HEAD` (or is `-dirty` when a clean build was expected). This makes
+    "are we testing the latest binary?" a hard gate, not a manual check. Mirror
+    on Windows tray once it embeds the same stamp.
+
+## Work Packet: macos-tray/vm-failed-reason-not-surfaced  [MEDIUM-HIGH]
+
+- id: `macos-tray/vm-failed-reason-not-surfaced`
+- type: fix
+- owner_host: macos (host render) + linux (in-VM agent populates reason)
+- capability_tags: [rust, macos, control-wire, vsock, diagnosability]
+- status: ready
+- discovered_by: m8 user-attended smoke (2026-06-16)
+- evidence:
+  - `VmStatusReply` ALREADY carries `last_event: Option<String>`
+    (control-wire/src/lib.rs:157) and the host ALREADY renders it via
+    `compose_chip_text` — but on phase=Failed the chip showed a bare "VM Failed",
+    so the in-VM agent does not populate the reason.
+  - Console forwarding added in b7bde09c (StandardOutput/Error=journal+console on
+    the in-VM units) did NOT surface output — likely the kernel `console=` arg is
+    not `hvc0`, or the headless does not log readiness checks to stdout.
+- next_action: >
+    (a) In-VM headless: when reporting phase=Failed/podman_ready=false, populate
+    `VmStatusReply.last_event` with the concrete reason (e.g. "podman not
+    installed", "forge image missing", "enclave build failed: <err>"). (b) macOS
+    host: confirm the kernel cmdline sets `console=hvc0` so journal+console
+    actually reaches the serial the tray captures; otherwise drop b7bde09c's
+    forwarding as ineffective. Goal: a Failed VM tells the user/agent WHY,
+    on-screen and in the captured log.
+
+## Work Packet: macos-tray/smoke-does-not-cover-interaction-surface  [MEDIUM]
+
+- id: `macos-tray/smoke-does-not-cover-interaction-surface`
+- type: process
+- owner_host: any
+- capability_tags: [testing, methodology, macos]
+- status: ready
+- discovered_by: m8 user-attended smoke (2026-06-16)
+- next_action: >
+    Either add an automated interaction probe to the macOS smoke (assert the VM
+    reaches Ready over vsock; drive the MenuStructure; scripted attach), or make
+    the mandatory user-attended m8 gate explicit and stop reporting autonomous
+    runs as release-"PASS" without it. Add a caveat to
+    skills/build-install-and-smoke-test-e2e/SKILL.md (done in this change) and to
+    the macОS coordinator gate in plan/loop_status.md.
