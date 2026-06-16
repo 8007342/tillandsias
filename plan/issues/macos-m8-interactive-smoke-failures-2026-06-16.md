@@ -146,7 +146,13 @@ mistake. Recover them from git (objects still reachable by SHA) as fix input.
 - type: bug
 - owner_host: macos
 - capability_tags: [rust, macos, vsock, diagnosability, logging]
-- status: ready
+- status: partially-done (diagnosability landed b93b58e1; project-population blocked on step 49)
+- progress:
+  - DONE (b93b58e1): vm-status now logs phase transitions, so a Failed/degraded
+    VM is no longer silent — empirically captured `phase=Starting` → `phase=Failed`
+    (~60s), `podman_ready=false`. Resolves the masking/diagnosability half.
+  - BLOCKED: project lists are empty because there is no in-VM enclave to
+    enumerate from — fixed only when `plan/steps/49-macos-in-vm-enclave.md` lands.
 - discovered_by: m8 user-attended smoke (2026-06-16)
 - owned_files:
   - `crates/tillandsias-macos-tray/src/action_host.rs`

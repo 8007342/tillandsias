@@ -31,6 +31,24 @@ INSIDE the guest VM. That path was specced but never wired into the macOS
 first-boot. `images/vm/bootstrap/30-enclave.sh` (the recipe enclave step) exists
 but is NOT invoked by the macOS cloud-init.
 
+## Empirical evidence (2026-06-16, after the phase-logging diagnosability fix b93b58e1)
+
+A clean provision + tray launch produces this phase progression (now visible in
+the captured serial/tray log; it was silent before):
+
+```
+~24s  vm-status: phase=Starting  podman_ready=false  event=tillandsias-in-vm
+~84s  vm-status: phase=Failed     podman_ready=false  event=tillandsias-in-vm
+```
+
+Interpretation: the in-VM headless DOES attempt enclave startup (phase
+`Starting`), waits ~60s, then **times out to `Failed`**. `podman_ready` is never
+true → there is no working podman/forge in the guest. `last_event` carries only
+an identifier (`tillandsias-in-vm`), not a reason — so even the field that COULD
+explain the failure is unpopulated (see `macos-tray/vm-failed-reason-not-surfaced`).
+This confirms the root cause: the headless expects a podman/forge enclave that
+the macOS cloud-init never provisions, and a ~60s startup wait fails.
+
 ## Goal
 
 Make a freshly-provisioned macOS VM bring up the full forge enclave inside the
