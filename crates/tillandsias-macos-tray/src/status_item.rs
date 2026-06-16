@@ -180,39 +180,38 @@ pub fn install_status_item(
     status_item
 }
 
-/// Load the AppKit menu-bar template image.
-///
-/// Packaged runs read `Tillandsias.app/Contents/Resources/icon.pdf`; dev runs
-/// fall back to the source-tree asset so `cargo run` behaves like the bundle.
+/// Packaged runs read `Tillandsias.app/Contents/Resources/tray-icon.png`; dev runs
+/// read `crates/tillandsias-macos-tray/assets/tray-icon.png`.
 fn load_status_icon_image() -> Option<Retained<NSImage>> {
     let path = status_icon_path()?;
-    let path = NSString::from_str(path.to_str()?);
-    let image = unsafe { NSImage::initWithContentsOfFile(NSImage::alloc(), &path) }?;
+    let path_str = NSString::from_str(path.to_str()?);
+    let image = unsafe { NSImage::initByReferencingFile(NSImage::alloc(), &path_str) }?;
     unsafe { image.setTemplate(true) };
     Some(image)
 }
 
+/// Locate `tray-icon.png` by checking the app bundle (`Resources/tray-icon.png`),
+/// then falling back to the `CARGO_MANIFEST_DIR` for `cargo run`.
 fn status_icon_path() -> Option<std::path::PathBuf> {
     status_icon_candidate_paths()
         .into_iter()
-        .find(|p| p.is_file())
+        .find(|p| p.exists())
 }
 
 fn status_icon_candidate_paths() -> Vec<std::path::PathBuf> {
     let mut paths = Vec::new();
-
-    if let Ok(exe) = std::env::current_exe()
-        && let Some(macos_dir) = exe.parent()
-    {
-        let bundled = macos_dir
+    if let Some(mut exedir) = std::env::current_exe().ok() {
+        exedir.pop(); // typically 'MacOS' inside the bundle
+        if let Some(bundled) = exedir
             .parent()
-            .map(|contents_dir| contents_dir.join("Resources/icon.pdf"));
-        if let Some(path) = bundled {
-            paths.push(path);
+            .and_then(|p| p.parent())
+            .map(|contents_dir| contents_dir.join("Resources/tray-icon.png"))
+        {
+            paths.push(bundled);
         }
     }
-
-    paths.push(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/icon.pdf"));
+    // Fallback for `cargo run` inside the workspace:
+    paths.push(std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/tray-icon.png"));
     paths
 }
 
@@ -376,7 +375,7 @@ mod tests {
     #[test]
     fn status_icon_candidates_include_source_tree_asset() {
         let source_asset =
-            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/icon.pdf");
+            std::path::PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("assets/tray-icon.png");
         assert!(
             status_icon_candidate_paths().contains(&source_asset),
             "dev runs must be able to load the same icon asset as the bundle"
@@ -385,9 +384,9 @@ mod tests {
 
     /// @trace spec:macos-native-tray.ui.nsstatusitem-only@v1
     #[test]
-    fn status_icon_path_resolves_to_existing_pdf() {
-        let path = status_icon_path().expect("icon.pdf should exist in source tree or bundle");
-        assert_eq!(path.file_name().and_then(|s| s.to_str()), Some("icon.pdf"));
+    fn status_icon_path_resolves_to_existing_png() {
+        let path = status_icon_path().expect("tray-icon.png should exist in source tree or bundle");
+        assert_eq!(path.file_name().and_then(|s| s.to_str()), Some("tray-icon.png"));
     }
 
     /// @trace spec:macos-native-tray.ui.nsstatusitem-only@v1
@@ -412,7 +411,7 @@ mod tests {
     #[test]
     fn status_icon_image_loads_as_template() {
         let image = load_status_icon_image()
-            .expect("icon.pdf should load from the source tree on a dev/build host");
+            .expect("tray-icon.png should load from the source tree on a dev/build host");
         assert!(
             unsafe { image.isTemplate() },
             "menu-bar icon must be a template image for menu-bar tinting (gap-1)"
