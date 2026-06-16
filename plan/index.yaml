@@ -3928,7 +3928,7 @@ plan_index:
     - id: enclave-network-level-egress-deny
       order: 54
       title: Enforce forge egress at the network layer (enclave --internal + dual-homed proxy)
-      status: ready
+      status: claimed
       owner_host: linux
       deliverable: crates/tillandsias-core/src/container_profile.rs
       audit_origin: plan/issues/enclave-egress-network-enforcement-gap-2026-06-16.md
@@ -3975,3 +3975,10 @@ plan_index:
                 network-enforced (direct curl reaches internet, HTTP 200;
                 internal=false). Supersedes the cycle-1 rejection of
                 2026-06-16-network-isolation-regression.
+          - type: claim
+            ts: "2026-06-16T22:30:46Z"
+            agent_id: "linux-tlatoani-opencode-big-pickle-20260616T223046Z"
+            host: linux
+            lease_id: "enclave-network-egress-deny-2026-06-16"
+            expires_at: "2026-06-17T02:30:46Z"
+
