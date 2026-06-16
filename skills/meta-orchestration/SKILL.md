@@ -85,7 +85,12 @@ Rules:
 
 - Local-build e2e uses `/build-install-and-smoke-test-e2e`.
 - Published-release e2e uses `/smoke-curl-install-and-test-e2e`.
-- Destructive substrate reset is expected on dedicated smoke hosts.
+- Destructive substrate reset is expected setup on Tillandsias smoke hosts.
+  `podman system reset --force` is a precondition for Linux idempotence tests,
+  not a blocker. Do not pause, ask for confirmation, or skip the e2e gate for
+  fear of wiping Podman when `TILLANDSIAS_DESTRUCTIVE_RESET_OK` is unset or `1`.
+  Only treat reset as blocked when the environment explicitly sets
+  `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0`.
 - If the plan records a latest tested release older than the current GitHub
   release, prioritize curl-install e2e.
 - File every finding as a plan packet; write a PASS report for clean runs.

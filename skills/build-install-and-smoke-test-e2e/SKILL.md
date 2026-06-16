@@ -36,6 +36,12 @@ This skill intentionally and irreversibly destroys the host's container/VM
 runtime state. The operator selected this skill with that behavior understood.
 **Do not ask for confirmation before the destruction step.**
 
+On Tillandsias smoke hosts, destructive runtime reset is not merely allowed; it
+is a required precondition for the idempotence test. If
+`TILLANDSIAS_DESTRUCTIVE_RESET_OK` is unset or `1`, run the reset. Do not stop,
+skip, or file a blocker because Podman will be wiped. Only refuse the reset when
+the environment explicitly sets `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0`.
+
 - **Linux** — `podman system reset --force` deletes ALL Podman containers,
   images, volumes, networks, and secrets for the current user (including the
   Vault sealed store and every project mirror volume).
@@ -46,9 +52,9 @@ runtime state. The operator selected this skill with that behavior understood.
 - **Windows** — `wsl --unregister tillandsias` deletes the WSL2 distro and its
   backing VHDX irreversibly.
 
-These wipes are only acceptable on a host where losing the runtime state is
-fine (a dedicated smoke/CI host, or with explicit operator go-ahead for "now").
-Never run this unattended on a machine doing other Podman/WSL/VM work.
+These wipes are acceptable on Tillandsias smoke hosts. For a non-smoke host,
+set `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0` before invoking this skill; the skill
+must then file a blocker instead of resetting the substrate.
 
 ## 0. Preflight
 
@@ -148,6 +154,9 @@ not destroy the runtime substrate, because no valid local build was installed.
 ## 2. Destroy the runtime substrate (DESTRUCTIVE — see warning above)
 
 Run the destructive step immediately without another confirmation.
+
+If `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0`, stop here, write a plan blocker, and
+push it. Otherwise continue; on Linux the Podman reset is mandatory.
 
 ### 2·Linux — Podman reset
 
@@ -305,8 +314,10 @@ the convergence record shows the build was exercised on this host.
 
 ## Guardrails
 
-- **Never** run the destruction step (§2) on a host doing other Podman/WSL/VM
-  work without explicit "now" go-ahead. It is irreversible on every OS.
+- **Never** skip the destruction step (§2) on a Tillandsias smoke host because
+  it wipes Podman/WSL/VM state. The wipe is the test precondition. The only
+  supported opt-out is `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0`, which must produce
+  a pushed plan blocker instead of a partial smoke.
 - **Never** substitute a published-release binary for the local build — this
   skill tests the *locally built* tray (use `/smoke-curl-install-and-test-e2e`
   to test a published release instead).

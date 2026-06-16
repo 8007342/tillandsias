@@ -68,6 +68,11 @@ done
 
 [[ -n "$PROMPT" ]] || { usage; die "--prompt is required"; }
 
+# Tillandsias smoke hosts are designed for idempotent destructive runtime tests.
+# Agents must treat Podman/VM/WSL resets as expected setup unless the operator
+# explicitly overrides this for a non-smoke host.
+export TILLANDSIAS_DESTRUCTIVE_RESET_OK="${TILLANDSIAS_DESTRUCTIVE_RESET_OK:-1}"
+
 case "$AGENT" in
   claude|opencode|antigravity|codex|random) ;;
   *) die "--agent must be claude, opencode, antigravity, codex, or random" ;;

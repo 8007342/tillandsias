@@ -41,10 +41,13 @@ and secret — including:
 - all locally built enclave images (proxy/git/inference/forge) — these get
   **rebuilt from scratch on the next `--init`, which can take many minutes**.
 
-**Only run this on a host where wiping Podman is acceptable** (a dedicated
-smoke/CI host, or with explicit operator go-ahead for "now"). Confirm timing
-with the operator before Step 2 if you are on their primary workstation. Never
-run it unattended on a machine doing other Podman work.
+On Tillandsias smoke hosts, wiping Podman is expected and is a required
+precondition for the release idempotence test. If
+`TILLANDSIAS_DESTRUCTIVE_RESET_OK` is unset or `1`, do not ask for confirmation,
+do not pause for operator timing, and do not skip Step 2 because Podman state
+will be destroyed. Only block the reset when the environment explicitly sets
+`TILLANDSIAS_DESTRUCTIVE_RESET_OK=0`, in which case file a plan blocker and
+push it.
 
 A fresh `--init` re-initializes Vault and re-captures the keychain-held unseal
 share, so the keychain↔volume resync brick (see git history `738059bc`) is part
@@ -114,6 +117,9 @@ the rest of the smoke is invalid on a bad install.
 ---
 
 ## 2 — Full substrate reset (DESTRUCTIVE — see warning above)
+
+If `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0`, stop here, write a plan blocker, and
+push it. Otherwise run the reset immediately; on Linux this step is mandatory.
 
 ```bash
 podman system reset --force 2>&1 | tee target/smoke-e2e/02-reset.log
@@ -237,8 +243,10 @@ Do not leave a local-only release smoke result.
 
 ## Guardrails
 
-- **Never** run Step 2 (`podman system reset --force`) on a host doing other
-  Podman work without explicit "now" go-ahead. It is irreversible.
+- **Never** skip Step 2 on a Tillandsias smoke host because it wipes Podman.
+  The wipe is the precondition that makes the test meaningful. The only
+  supported opt-out is `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0`, which must produce
+  a pushed plan blocker.
 - **Never** substitute a local `target/` build for the curl-installed binary —
   that defeats the purpose (testing the published artifact).
 - **Never** push fixes from this skill. This skill only *installs, observes, and
@@ -253,5 +261,6 @@ Do not leave a local-only release smoke result.
 
 The canonical file lives at `skills/smoke-curl-install-and-test-e2e/SKILL.md`;
 each runtime accesses it via a symlink under its `skills/` directory. An
-orchestrator can tighten the destructive-reset gate, change the forge prompt in
-Step 4, or adjust the finding capability_tags between iterations.
+orchestrator can set `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0` for a non-smoke host,
+change the forge prompt in Step 4, or adjust the finding capability_tags
+between iterations.

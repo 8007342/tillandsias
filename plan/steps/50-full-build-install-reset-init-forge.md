@@ -21,7 +21,9 @@ forge prompt execution.
 ## Evidence / handoff
 
 Podman wipe is expected and always acceptable on this host. Do not stop for
-operator approval before resetting Podman during this smoke.
+operator approval before resetting Podman during this smoke. The harness
+default is `TILLANDSIAS_DESTRUCTIVE_RESET_OK=1`; setting it to `0` is the only
+supported way for a non-smoke host to block the destructive reset.
 
 Completed 2026-06-16 on integrated `linux-next` head.
 

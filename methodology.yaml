@@ -104,7 +104,11 @@ methodology:
           curl-install the latest release artifact, destroy the host runtime
           substrate, re-provision from pristine state, and file every issue
           observed as plan/issues work packets for /advance-work-from-plan pickup.
-        destructive: true   # Step 2 wipes ALL podman state; gate on operator go-ahead
+        destructive: true
+        destructive_reset_policy: >
+          Podman reset is an expected precondition on Tillandsias smoke hosts.
+          Do not stop for confirmation when TILLANDSIAS_DESTRUCTIVE_RESET_OK is
+          unset or 1; only skip/block if it is explicitly 0.
         steerable: true
       build-install-and-smoke-test-e2e:
         path: skills/build-install-and-smoke-test-e2e/SKILL.md
@@ -115,7 +119,11 @@ methodology:
           substrate, re-provision from pristine state, and file failures as
           ready plan/issues packets. Immutable Linux uses the curl-install e2e
           skill instead.
-        destructive: true   # Explicit invocation authorizes the Podman reset; do not reconfirm.
+        destructive: true
+        destructive_reset_policy: >
+          Explicit invocation authorizes the Podman/VM/WSL reset. Podman reset
+          is an expected precondition on Tillandsias smoke hosts; do not
+          reconfirm unless TILLANDSIAS_DESTRUCTIVE_RESET_OK=0.
         steerable: true
 
   invariant_summary:
