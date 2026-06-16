@@ -48,7 +48,15 @@ fn main() {
     // and put up a menu-bar icon instead of printing and exiting (see plan
     // packet macos-tray/version-help-flags-boot-vm).
     if args.iter().any(|a| a == "--version" || a == "-V") {
-        println!("tillandsias-tray {}", env!("CARGO_PKG_VERSION"));
+        // Include git SHA + build time (embedded by build.rs) so freshness is
+        // verifiable — the crate version and VERSION file alone can't tell a
+        // stale artifact from a HEAD build.
+        println!(
+            "tillandsias-tray {} (git {}, built {})",
+            env!("CARGO_PKG_VERSION"),
+            env!("TILLANDSIAS_GIT_SHA"),
+            env!("TILLANDSIAS_BUILD_TIME"),
+        );
         std::process::exit(0);
     }
     if args.iter().any(|a| a == "--help" || a == "-h") {
