@@ -8,24 +8,6 @@ the items below are immediate work.
 
 ## Immediate
 
-### forge-git-identity-anonymization → transparent agentic attribution (REDESIGNED)
-
-- status: ready
-- owner_host: linux
-- source: `plan/index.yaml` order 53
-- next_action: **DECISION MADE (operator, 2026-06-16): do NOT anonymize.**
-  Preserve the real GitHub-login username/email as the commit AUTHOR, and add
-  machine-parseable agent/model attribution trailers so Claude/ChatGPT/OpenCode/
-  Antigravity/local-model commits are distinguishable (`Co-Authored-By` +
-  structured `Generated-By: tool=… model=… params=…`; encode size/quant for
-  local models). Implement at the container_profile / commit-trailer layer.
-- blocker: none (was blocked-on-decision; now resolved)
-- convention + sources: `cheatsheets/concurrent-git/commit-attribution.md`
-- evidence_required:
-  - real GitHub-login author/email preserved on forge commits (attribution intact)
-  - each forge commit carries a machine-parseable agent+model trailer
-  - different agents/models → distinguishable trailers (local models include params)
-
 ### enclave/network-level-egress-deny
 
 - status: ready
@@ -109,6 +91,11 @@ The 2026-06-16 critical/high forge proposals were triaged in
 
 ## Recently Closed This Coordination Pass
 
+- Completed `privacy/forge-git-identity-anonymization` / order 53: implementation
+  commit `e31792e8` preserves real Git author identity and appends machine-parseable
+  agent/model trailers. Acceptance fixture verified Codex and OpenCode trailers
+  differ, including local-model params; shell syntax and `./build.sh --check`
+  passed on 2026-06-16T23:29Z.
 - Completed `coord/critical-forge-proposal-triage-20260616`: triaged all three
   2026-06-16 critical/high forge proposals (1 accepted → order 53, 1 rejected
   with evidence, 1 deferred with rootless-feasibility rationale). Decisions

@@ -3876,7 +3876,7 @@ plan_index:
     - id: forge-git-identity-anonymization
       order: 53
       title: Transparent agentic git attribution — preserve human author, mark agent+model (redesigned from anonymize)
-      status: in_progress
+      status: completed
       owner_host: linux
       deliverable: cheatsheets/concurrent-git/commit-attribution.md
       audit_origin: plan/forge-improvements/proposals/2026-06-16-git-pii-scrub.md
@@ -3888,7 +3888,7 @@ plan_index:
         - "`./build.sh --check` and a new/updated litmus pass."
       tasks:
         - id: privacy/forge-git-identity-anonymization
-          status: in_progress
+          status: completed
           owner_host: linux
           estimated_hours: 3
           capability_tags: [rust, privacy, forge, containers, security]
@@ -3935,6 +3935,22 @@ plan_index:
                 core.hooksPath; set TILLANDSIAS_AGENT_NAME/GENERATED_BY
                 in each forge entrypoint. Preserves human author; adds
                 Co-Authored-By and Generated-By trailers.
+            - type: completed
+              ts: "2026-06-16T23:29:05Z"
+              agent_id: "linux-macuahuitl-codex-20260616T232905Z"
+              host: linux
+              note: >
+                Acceptance verified against implementation commit e31792e8:
+                focused throwaway git fixture preserved the real author
+                (Real User <real@example.com>) while appending
+                distinct Generated-By trailers for Codex and OpenCode,
+                including local-model params. Shell syntax checks passed for
+                lib-common plus forge entrypoints; ./build.sh --check passed.
+              evidence:
+                - "target/agent-attribution-verify/repo fixture commit: author preserved, Codex trailer Generated-By: tool=codex model=gpt-5"
+                - "target/agent-attribution-verify/repo fixture commit: author preserved, OpenCode trailer Generated-By: tool=opencode model=llama-3.1-70b params=q4"
+                - "bash -n images/default/lib-common.sh images/default/entrypoint-forge-*.sh images/default/entrypoint-terminal.sh"
+                - "./build.sh --check -> Type-check passed"
 
     - id: enclave-network-level-egress-deny
       order: 54
@@ -3997,7 +4013,7 @@ plan_index:
               agent_id: "linux-tlatoani-opencode-big-pickle-20260616T223046Z"
               host: linux
               lease_id: "enclave-network-egress-deny-2026-06-16"
-               note: >
+              note: >
                 Implementation complete: added --internal to enclave network,
                 dual-homed proxy (main.rs:1663), git daemon (main.rs:1799),
                 and git helper containers (remote_projects.rs:287,517) to bridge
@@ -4093,4 +4109,3 @@ plan_index:
           host: "macos"
           lease_id: "step49-macos-vm-enclave-20260616T231619Z"
           expires_at: "2026-06-17T03:16:19Z"
-
