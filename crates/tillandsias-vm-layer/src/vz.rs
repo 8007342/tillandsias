@@ -408,6 +408,8 @@ Type=oneshot
 RemainAfterExit=yes
 ExecStart=/usr/local/lib/tillandsias/fetch-headless.sh
 TimeoutStartSec=300s
+StandardOutput=journal+console
+StandardError=journal+console
 [Install]
 WantedBy=multi-user.target
 EOF
@@ -423,6 +425,8 @@ Type=exec
 ExecStart=/usr/local/bin/tillandsias-headless --listen-vsock 42420
 Restart=on-failure
 RestartSec=2s
+StandardOutput=journal+console
+StandardError=journal+console
 [Install]
 WantedBy=multi-user.target
 EOF
