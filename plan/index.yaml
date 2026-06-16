@@ -2355,7 +2355,7 @@ plan_index:
       title: Vault hardening completion — true rekey + root.token cleanup
       status: done
       owner_host: linux
-      deliverable: plan/steps/32-vault-hardening-true-rekey.md
+      deliverable: plan/archive/2026-06-16/steps/32-vault-hardening-true-rekey.md
       audit_origin: plan/issues/pre-vault-obsolescence-audit-2026-06-05.md
       finding: plan/issues/vault-rekey-infeasible-finding-2026-06-07.md
       depends_on: []
@@ -2473,7 +2473,7 @@ plan_index:
       title: Pre-Vault documentation cleanup (cheatsheets + image mirrors)
       status: done
       owner_host: linux
-      deliverable: plan/steps/33-pre-vault-doc-cleanup.md
+      deliverable: plan/archive/2026-06-16/steps/33-pre-vault-doc-cleanup.md
       audit_origin: plan/issues/pre-vault-obsolescence-audit-2026-06-05.md
       depends_on: []
       events:
@@ -2528,7 +2528,7 @@ plan_index:
       title: Pre-Vault spec & litmus reconciliation
       status: done
       owner_host: linux
-      deliverable: plan/steps/34-pre-vault-spec-reconciliation.md
+      deliverable: plan/archive/2026-06-16/steps/34-pre-vault-spec-reconciliation.md
       audit_origin: plan/issues/pre-vault-obsolescence-audit-2026-06-05.md
       depends_on: []
       events:
@@ -2596,7 +2596,7 @@ plan_index:
       title: Dead pre-Vault code & test-fixture sweep
       status: completed
       owner_host: linux
-      deliverable: plan/steps/35-legacy-secret-code-sweep.md
+      deliverable: plan/archive/2026-06-16/steps/35-legacy-secret-code-sweep.md
       audit_origin: plan/issues/pre-vault-obsolescence-audit-2026-06-05.md
       depends_on: []
       specs:
@@ -2650,7 +2650,7 @@ plan_index:
       title: Cross-platform Vault keychain + vsock unseal-key parity
       status: done
       owner_host: macos+windows
-      deliverable: plan/steps/36-cross-platform-vault-keychain-parity.md
+      deliverable: plan/archive/2026-06-16/steps/36-cross-platform-vault-keychain-parity.md
       audit_origin: plan/issues/pre-vault-obsolescence-audit-2026-06-05.md
       depends_on: [vault-hardening-true-rekey]
       specs:
@@ -2714,7 +2714,7 @@ plan_index:
       title: Resolve v0.3.0 VERSION conflict & cut the release
       status: completed
       owner_host: release
-      deliverable: plan/steps/37-version-conflict-release.md
+      deliverable: plan/archive/2026-06-16/steps/37-version-conflict-release.md
       audit_origin: plan/issues/pre-vault-obsolescence-audit-2026-06-05.md
       depends_on: []
       specs:
@@ -2926,7 +2926,7 @@ plan_index:
       title: GitHub-login Vault-native flow — gate on Vault, keep the token in-container, Vault over HTTPS
       status: completed
       owner_host: linux
-      deliverable: plan/steps/42-github-login-vault-native-flow.md
+      deliverable: plan/archive/2026-06-16/steps/42-github-login-vault-native-flow.md
       audit_origin: plan/issues/github-login-vault-native-flow-2026-06-06.md
       depends_on: []
       specs:
@@ -3130,7 +3130,7 @@ plan_index:
       title: Tray Quit hangs for minutes / requires manual kill
       status: done
       owner_host: linux
-      deliverable: plan/steps/43-tray-quit-hang.md
+      deliverable: plan/archive/2026-06-16/steps/43-tray-quit-hang.md
       audit_origin: plan/issues/github-login-vault-native-flow-2026-06-06.md
       depends_on: []
       events:
@@ -3183,7 +3183,7 @@ plan_index:
       title: Package-manager-first container recipes with pinned fallback assets
       status: completed
       owner_host: linux
-      deliverable: plan/steps/44-package-manager-first-container-recipes.md
+      deliverable: plan/archive/2026-06-16/steps/44-package-manager-first-container-recipes.md
       audit_origin: plan/issues/container-build-efficiency-telemetry-2026-06-08.md
       depends_on: []
       specs:
@@ -3244,7 +3244,7 @@ plan_index:
       title: Canonical image source digest, OCI labels, and alias decisions
       status: completed
       owner_host: linux
-      deliverable: plan/steps/45-canonical-image-digest-and-aliases.md
+      deliverable: plan/archive/2026-06-16/steps/45-canonical-image-digest-and-aliases.md
       audit_origin: plan/issues/container-build-efficiency-telemetry-2026-06-08.md
       depends_on: []
       specs:
@@ -3319,7 +3319,7 @@ plan_index:
       title: Reuse Podman layers/download caches and serialize storage mutations
       status: completed
       owner_host: linux
-      deliverable: plan/steps/46-podman-build-cache-and-serialization.md
+      deliverable: plan/archive/2026-06-16/steps/46-podman-build-cache-and-serialization.md
       audit_origin: plan/issues/container-build-efficiency-telemetry-2026-06-08.md
       depends_on:
         - canonical-image-digest-and-aliases
@@ -3380,7 +3380,7 @@ plan_index:
       title: Structured image-build JSONL events and low-cardinality metrics
       status: completed
       owner_host: linux
-      deliverable: plan/steps/47-structured-image-build-telemetry.md
+      deliverable: plan/archive/2026-06-16/steps/47-structured-image-build-telemetry.md
       audit_origin: plan/issues/container-build-efficiency-telemetry-2026-06-08.md
       depends_on:
         - canonical-image-digest-and-aliases
@@ -3444,7 +3444,7 @@ plan_index:
       title: Converge all image build entrypoints and prove hash-only rebuilds
       status: completed
       owner_host: linux
-      deliverable: plan/steps/48-image-build-wrapper-convergence.md
+      deliverable: plan/archive/2026-06-16/steps/48-image-build-wrapper-convergence.md
       audit_origin: plan/issues/container-build-efficiency-telemetry-2026-06-08.md
       depends_on:
         - package-manager-first-container-recipes
@@ -3548,9 +3548,9 @@ plan_index:
     - id: local-build-smoke-regressions
       order: 50
       title: Local build smoke regressions from 2026-06-15
-      status: ready
+      status: completed
       owner_host: linux
-      deliverable: plan/issues/build-install-smoke-e2e-findings-2026-06-14.md
+      deliverable: plan/steps/50-full-build-install-reset-init-forge.md
       audit_origin: plan/issues/build-install-smoke-e2e-findings-2026-06-14.md
       depends_on: []
       exit_criteria:
@@ -3640,11 +3640,48 @@ plan_index:
                 - "cargo test -p tillandsias-headless --bin tillandsias tests::opencode_args_diagnostics_mode -- --exact -> 1 passed"
                 - "./scripts/run-litmus-test.sh --spec forge-opencode-onboarding --size instant -> PASS summary: 2 passed, 0 failed"
                 - "./build.sh --check -> Type-check passed"
+        - id: local-smoke/full-build-install-reset-init-forge
+          status: completed
+          owner_host: linux
+          estimated_hours: 4
+          capability_tags: [linux, podman, smoke, release, forge]
+          depends_on:
+            - local-smoke/evidence-bundle-litmus-count-regression
+            - local-smoke/opencode-interactive-prompt-not-consumed
+          owned_files:
+            - plan/issues/build-install-smoke-e2e-findings-2026-06-14.md
+            - plan/issues/build-install-smoke-e2e-findings-2026-06-15.md
+            - plan/loop_status.md
+          next_action: >
+            Run the full destructive Linux build/install/reset/init/forge smoke
+            on the current integrated linux-next head. Podman wipe is expected
+            and always acceptable on this host; do not treat it as an operator
+            blocker.
+          acceptance_evidence:
+            - "Local build/install completes from source."
+            - "Podman reset leaves a clean substrate and pristine init succeeds."
+            - "Forge starts and executes the supplied OpenCode prompt."
+            - "Any new issue is filed as a dated smoke-finding packet."
+          checkpoint_required: true
+          handoff_note: >
+            Completed by the 2026-06-16 destructive Linux smoke pass.
+          events:
+            - type: complete
+              ts: "2026-06-16T07:47:45Z"
+              agent_id: linux-codex-20260616T072454Z
+              host: linux
+              evidence:
+                - "./build.sh --ci-full --install -> pass; installed Tillandsias v0.3.260616.1"
+                - "target/convergence/evidence-bundle-20260616-073151.tar.gz -> 140 litmus checks passed, 0 failed"
+                - "podman system reset --force -> empty containers/images/volumes verified"
+                - "tillandsias --init --debug -> init_exit=0"
+                - "tillandsias . --opencode --prompt \"Use the /forge-continuous-enhancement skill\" -> forge_exit=0"
+                - "log_dir: target/build-install-smoke-e2e/20260616T072454Z"
 
     - id: multihost-smoke-followups-20260615
       order: 51
       title: Cross-host smoke follow-ups and sibling verification
-      status: ready
+      status: completed
       deliverable: plan/issues/build-install-smoke-e2e-findings-2026-06-14.md
       audit_origin: plan/issues/build-install-smoke-e2e-findings-2026-06-14.md
       depends_on: []
@@ -3655,7 +3692,7 @@ plan_index:
         - "Windows verifies the integrated linux-next head before taking new feature work."
       tasks:
         - id: macos-tray/cold-boot-vsock-poll-races
-          status: ready
+          status: completed
           owner_host: macos
           estimated_hours: 5
           capability_tags: [rust, macos, vsock, control-wire, lifecycle]
@@ -3676,8 +3713,16 @@ plan_index:
             Complete apple-container/spec-amendment without touching runtime code.
           checkpoint_required: true
           handoff_note: "The initial observation was confounded by the now-fixed --version VM boot; re-observe cleanly first."
+          events:
+            - type: completed
+              ts: "2026-06-15T05:20:00Z"
+              agent_id: macos-claude-opus
+              host: macos
+              evidence:
+                - "origin/osx-next commit 4715a4cb suppresses benign pre-readiness vsock poll errors."
+                - "Verified merged into linux-next at d3681430; cargo check and macOS tray tests passed."
         - id: osx-next/reconcile-local-ux-parity-divergence
-          status: ready
+          status: completed
           owner_host: macos
           estimated_hours: 5
           capability_tags: [git, macos, tray, ux, host-shell, windows]
@@ -3699,8 +3744,16 @@ plan_index:
             Produce a per-file disposition table without applying the broken stash.
           checkpoint_required: true
           handoff_note: "Do not apply stash@{0} wholesale; notify_icon.rs is known broken WIP."
+          events:
+            - type: completed
+              ts: "2026-06-15T05:45:00Z"
+              agent_id: macos-claude-opus
+              host: macos
+              evidence:
+                - "Commit 2979fc32 cherry-picked the valid installer and policy changes."
+                - "Broken/superseded parked branch and stash hunks were explicitly discarded."
         - id: apple-container/spec-amendment
-          status: ready
+          status: completed
           owner_host: macos
           estimated_hours: 3
           capability_tags: [macos, docs, openspec, vm-layer]
@@ -3716,6 +3769,13 @@ plan_index:
             - "No active methodology text still requires apple/container."
           checkpoint_required: true
           handoff_note: "Research verdict is complete; this packet only converges the source of intent."
+          events:
+            - type: completed
+              ts: "2026-06-15T04:40:00Z"
+              agent_id: macos-claude-opus
+              host: macos
+              evidence:
+                - "openspec/specs/macos-native-tray/spec.md records single-VM Virtualization.framework, not apple/container."
         - id: coord/windows-sync-and-verify-20260615
           status: done
           owner_host: windows
@@ -3758,3 +3818,42 @@ plan_index:
                 (fabcaecd) which was a prerequisite — windows-tray did not compile
                 before the VmPhase import hoist, so no Windows verification was
                 possible until it landed.
+
+    - id: critical-forge-proposal-triage-20260616
+      order: 52
+      title: Triage critical forge proposals from 2026-06-16 smoke
+      status: ready
+      owner_host: linux
+      deliverable: plan/issues/ACTIVE.md
+      audit_origin: plan/issues/forge-enhancements-run-2026-06-16.md
+      depends_on:
+        - local-build-smoke-regressions
+      exit_criteria:
+        - "Network isolation regression proposal is accepted into a release-blocking packet or rejected with evidence."
+        - "Git PII scrub proposal is accepted into a privacy packet or rejected with evidence."
+        - "Podman-in-forge proposal is accepted, split, or deferred with rootless feasibility rationale."
+      tasks:
+        - id: coord/critical-forge-proposal-triage-20260616
+          status: ready
+          owner_host: linux
+          estimated_hours: 2
+          capability_tags: [coordination, security, privacy, forge, triage]
+          depends_on: []
+          owned_files:
+            - plan/issues/ACTIVE.md
+            - plan/issues/forge-enhancements-run-2026-06-16.md
+            - plan/forge-improvements/proposals/2026-06-16-network-isolation-regression.md
+            - plan/forge-improvements/proposals/2026-06-16-git-pii-scrub.md
+            - plan/forge-improvements/proposals/2026-06-16-podman-in-forge.md
+          next_action: >
+            Review the critical/high proposals surfaced by the clean 2026-06-16
+            forge smoke and promote only approved fixes into concrete plan work
+            packets.
+          acceptance_evidence:
+            - "Accepted proposals have concrete owner, deliverable, and validation evidence."
+            - "Rejected/deferred proposals record the evidence or rationale."
+          checkpoint_required: true
+          handoff_note: >
+            Keep the full toolchain wish list in the forge backlog. Only the
+            security/privacy/build-enablement findings should remain on the
+            immediate active frontier.

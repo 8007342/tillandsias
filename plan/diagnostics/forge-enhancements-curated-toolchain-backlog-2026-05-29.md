@@ -311,3 +311,66 @@ Remaining non-implemented Rust candidates are intentionally NOT shipped:
 `cargo-llvm-cov`), `cargo-tree` (blocked — redundant with core
 `cargo tree`), `wasmer` (deferred — WASM runtime handled by the shipped
 `wasmtime`). No action needed on those.
+
+## Update 2026-06-16T08:00Z — delta from 25 unprocessed diagnostics (2026-05-29 → 2026-06-16)
+
+### Provenance
+
+Processing 25 diagnostics files generated between 2026-05-29T17:09Z and
+2026-06-16T07:28Z. The last previously processed file was
+`diagnostics_20260529T151307Z-summary.md`. Full scan report filed in
+`plan/issues/forge-enhancements-run-2026-06-16.md`.
+
+### Summary
+
+- **11 files**: 100% completeness, clean bill of health (no missing tools, no risks)
+- **1 file**: Unparseable JSON (diagnostics_20260603T215926Z) — no actionable data
+- **13 files**: Various gaps at 96-100% completeness
+
+### New candidates (proposed — see plan/forge-improvements/proposals/)
+
+The following were surfaced by 2+ diagnostic runs and are NOT covered by
+existing proposals or the deferred/blocked list below. Each has a dedicated
+proposal filed in `plan/forge-improvements/proposals/`.
+
+| Candidate | Status | Source runs | Rationale | Privacy/isolation notes |
+|---|---|---|---|---|
+| `external_curl` isolation regression | **proposed** | 06-14T1505, 06-14T2306 (×2) | Network isolation fix not holding — forge reaches external internet directly | CRITICAL — isolation regression; see 2026-06-16-network-isolation-regression proposal |
+| Git PII scrub | **proposed** | 06-04T0023, 06-14T0704 (×2) | GIT_AUTHOR_NAME/EMAIL visible to container processes | PRIVACY — see 2026-06-16-git-pii-scrub proposal |
+| `podman` | **proposed** | 06-14T0625, 06-14T1605, 06-14T1804 (×3) | Build scripts (build.sh, local-ci.sh) use podman but it's absent inside forge | Needs rootless investigation; see 2026-06-16-podman-in-forge proposal |
+| `clang`/`clangd`/`clang-tidy`/`clang-format` | **proposed** | 06-03T0442, 06-04T0023, 06-14T0625, 06-14T0704, 06-14T2306 (×5) | C/C++ LSP and static analysis; GCC present but Clang toolchain absent | microdnf install — same envelope |
+| `protoc`/`buf`/`grpcurl` | **proposed** | 06-03T0442, 06-03T1928, 06-03T2206, 06-14T0625, 06-14T1605 (×5) | Protobuf compilation, linting, gRPC debugging | Static binaries; same envelope |
+| `yaml-language-server`/`bash-language-server`/`lua-language-server`/`taplo` | **proposed** | 06-04T0023, 06-14T1605, 06-14T1804 (×3) | LSP coverage for YAML, shell, Lua, TOML files | npm install — same envelope |
+| `golangci-lint` | **proposed** | 06-04T0023, 06-14T0625, 06-14T1505 (×3) | Go linter aggregator; gopls present but no linter | go install — same envelope |
+| `tmux`/`fzf`/`eza`/`starship`/`zoxide`/`lazygit` | **proposed** | 06-03T0442, 06-03T2206, 06-14T0625, 06-14T1605, 06-14T2306 (×5) | Shell UX enhancements | microdnf + cargo install; same envelope |
+| `terraform`/`tofu`/`kubectl`/`helm` | **proposed** | 06-04T0023, 06-14T0625 (×2) | IaC and Kubernetes tooling | Static binaries; credentials configured at runtime |
+| `sqlite3`/`redis-cli`/`hadolint`/`pre-commit` | **proposed** | 06-03T1928, 06-04T0023, 06-14T0625, 06-14T0704, 06-14T1605 (×5) | DB CLIs, Containerfile linter, git hooks | microdnf + pip3 install; same envelope |
+| `deno`/`bun`/`gradle` | **proposed** | 06-04T0023, 06-14T0625, 06-14T2306 (×3) | Alternative JS runtimes, Java build tool | Size budget review needed |
+| `cargo-udeps`/`lldb-mi`/`markdownlint-cli2` | **proposed** | 06-14T1505 (×1) | Rust extras: unused-deps, debugger IDE, doc linting | cargo/npm install; same envelope |
+| `tokei`/`hyperfine`/`sd`/`wasm-opt` | **proposed** | 06-14T0625, 06-14T1605, 06-14T2205 (×3) | Code stats, benchmarking, sed replacement, WASM opt | cargo/microdnf install; same envelope |
+
+### Persistent deferred/blocked items (status unchanged)
+
+| Candidate | Previous status | Rationale |
+|---|---|---|
+| `flutter` | deferred | Large image size (~1 GB); gate at size budget |
+| `nix` | deferred | Rootless mode investigation needed |
+| `cargo-tarpaulin` | deferred | Coverage handled by shipped cargo-llvm-cov |
+| `wasmer` | deferred | WASM runtime handled by shipped wasmtime |
+
+### Noise / one-hit items
+
+The following appeared in exactly one diagnostics file and did not recur:
+`zig`, `dotnet`, `eza` (covered by bundled UX proposal above), `cargo-public-api`,
+`rust-gdb`, `rust-lldb`, `nixd`. These are not actionable unless they recur in
+future runs.
+
+### Diagnostic quality notes
+
+- `diagnostics_20260603T215926Z-summary.md` produced unparseable JSON (extra data
+  after the JSON root). This is a known diagnostics-agent edge case; the agent
+  appended content after the closing brace. The diagnostics prompt generator
+  should be hardened to ensure only valid JSON is emitted.
+- Inference container stderr spiked to 843-1134 lines on 06-14T1505 and
+  06-14T2306 runs, suggesting an inference service issue. This is outside the
+  forge-image scope and should be investigated as a runtime reliability concern.

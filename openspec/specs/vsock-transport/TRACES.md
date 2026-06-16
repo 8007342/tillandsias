@@ -54,7 +54,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-vm-layer/src/transport_macos.rs#L368](../../../crates/tillandsias-vm-layer/src/transport_macos.rs#L368)
 - [crates/tillandsias-vm-layer/src/transport_macos.rs#L429](../../../crates/tillandsias-vm-layer/src/transport_macos.rs#L429)
 - [crates/tillandsias-vm-layer/src/transport_macos.rs#L440](../../../crates/tillandsias-vm-layer/src/transport_macos.rs#L440)
-- [crates/tillandsias-vm-layer/src/vz.rs#L308](../../../crates/tillandsias-vm-layer/src/vz.rs#L308)
+- [crates/tillandsias-vm-layer/src/vz.rs#L317](../../../crates/tillandsias-vm-layer/src/vz.rs#L317)
 - [crates/tillandsias-windows-tray/src/hvsocket.rs#L190](../../../crates/tillandsias-windows-tray/src/hvsocket.rs#L190)
 - [crates/tillandsias-windows-tray/src/hvsocket.rs#L200](../../../crates/tillandsias-windows-tray/src/hvsocket.rs#L200)
 - [crates/tillandsias-windows-tray/src/hvsocket.rs#L270](../../../crates/tillandsias-windows-tray/src/hvsocket.rs#L270)
