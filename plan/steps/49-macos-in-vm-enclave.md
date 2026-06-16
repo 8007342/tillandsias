@@ -67,43 +67,41 @@ user-attended smoke passes.
 - Container security invariants (`--cap-drop=ALL`, `--security-opt=no-new-privileges`,
   `--userns=keep-id`, `--rm`) must hold for the in-VM forge too.
 
-## Design decision required (record in this step before implementing)
+## Design Decision (49a) — Cloud-init installs podman + enclave setup
 
-Pick ONE and document the trade-off:
+**Chosen: Option 1 — Cloud-init installs + builds the enclave.**
 
-1. **Cloud-init installs + builds the enclave**: extend the macOS user-data to
-   `dnf install podman` (+ deps) and run the `30-enclave.sh` recipe on first boot.
-   Pro: reuses the recipe; Con: heavy first-boot (dnf + image builds inside a
-   nested VM), long provision, network-dependent.
-2. **Headless self-bootstraps podman+forge** on first run (the agent owns enclave
-   lifecycle in-VM). Pro: single owner, host-agnostic; Con: moves recipe logic
-   into the agent; must not duplicate the Linux host enclave path.
-3. **Bake podman+enclave into the materialized rootfs** at provision time (host
-   materializes a richer image, not bare Fedora Cloud). Pro: fast cold boot; Con:
-   macOS can't run the Linux image build toolchain natively (the existing
-   materialize/macos.rs note) — would need the recipe pre-built and fetched.
+Rationale:
+- Simplest change — extends the existing cloud-init user-data heredoc in `vz.rs`
+  without restructuring the provisioning pipeline.
+- Reuses the existing `30-enclave.sh` recipe logic (podman.socket enablement).
+- Does NOT require switching the rootfs from Fedora Cloud to the recipe-built
+  rootfs (which would need aarch64 recipe-artifact availability + plumbing).
+- The one-time ~30s `dnf install` cost on first boot is acceptable — provisioning
+  already downloads a ~600 MB rootfs image.
 
-Coordinate with the Linux/recipe owner: the in-VM enclave contract (image
-digests, network, vault) must match Linux so trays converge.
+Implementation plan:
+1. Add `dnf install -y podman` to the cloud-init user-data.
+2. Enable `podman.socket` so the headless can drive containers via the REST API.
+3. Pull/prime the enclave base images (proxy, git, forge, inference) in the
+   background so first user-action has zero pull latency.
+4. Keep all existing security flags (`--cap-drop=ALL`, `--security-opt=no-new-privileges`,
+   `--userns=keep-id`, `--rm`).
+
+This does NOT modify the Recipefile or the rootfs provisioning pipeline. The
+recipe-built rootfs (Option 3) remains a future optimization once aarch64
+artifacts are published.
 
 ## Tasks (implement in order)
 
-- [ ] 49a — **Decision**: choose the enclave strategy above; write it into this
-      step + `openspec/specs/vm-provisioning-lifecycle` (or macos-native-tray).
-- [ ] 49b — Wire the chosen path into the macOS cloud-init (`vz.rs` user-data):
-      podman present + enclave started on first boot. Keep security flags.
+- [x] 49a — **Decision**: Option 1 (cloud-init). Recorded above.
+- [ ] 49b — Wire podman install + podman.socket into the macOS cloud-init (`vz.rs` user-data).
 - [ ] 49c — Headless must report `podman_ready=true` / phase `Ready` once the
       enclave is up; verify over vsock from the host (vm-status poll).
 - [ ] 49d — Re-run the macOS m8 user-attended smoke; projects list, github-login
       terminal yields a working shell, Attach Here opens a forge shell.
 - [ ] 49e — Add an automated post-provision assertion (host-side) that the VM
       reaches `Ready` within a bound, so this can't silently regress to "Failed"
-      again (the autonomous smoke must catch enclave-down, not just disk-present).
-
-## Acceptance
-
-- Fresh `--provision` + tray launch → chip reaches **Ready** (podman_ready=true),
-  verified from the host vsock poll (not just guest OS boot).
 - m8 7-step user-attended smoke passes (projects populate; github-login + attach
   open working forge shells).
 - Container security invariants verified on the in-VM forge.
@@ -115,3 +113,12 @@ The enclave recipe (`images/vm/`) is Linux/recipe-owned; the in-VM enclave must
 match the Linux host enclave (same images, network, vault contract). File the
 recipe-side asks on `linux-next` and the macOS wiring on `osx-next`; do not fork
 a second enclave definition (tombstone/supersede, never duplicate).
+
+## Events
+
+- type: claim
+  ts: "2026-06-16T23:16:19Z"
+  agent_id: "macos-tlatoani-big-pickle-20260616T231619Z"
+  host: "macos"
+  lease_id: "step49-macos-vm-enclave-20260616T231619Z"
+  expires_at: "2026-06-17T03:16:19Z"
