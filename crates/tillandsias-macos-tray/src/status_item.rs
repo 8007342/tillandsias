@@ -386,7 +386,10 @@ mod tests {
     #[test]
     fn status_icon_path_resolves_to_existing_png() {
         let path = status_icon_path().expect("tray-icon.png should exist in source tree or bundle");
-        assert_eq!(path.file_name().and_then(|s| s.to_str()), Some("tray-icon.png"));
+        assert_eq!(
+            path.file_name().and_then(|s| s.to_str()),
+            Some("tray-icon.png")
+        );
     }
 
     /// @trace spec:macos-native-tray.ui.nsstatusitem-only@v1
