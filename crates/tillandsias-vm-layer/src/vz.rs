@@ -182,15 +182,24 @@ impl VzRuntime {
             bytes: None,
         };
         on_phase("Downloading Fedora Cloud image");
+        // Throttle to integer-percent changes. `download_verified` invokes this
+        // callback per chunk (~100x per MB), so emitting unconditionally spammed
+        // ~64k identical "N/528 MB (P%)" phase lines for one 528 MB download
+        // (see plan: macos-tray/provision-progress-log-spam). Mirror the rootfs
+        // path's `last_percent` throttle. The callback bound is `Fn + Send +
+        // Sync`, so use an atomic (Cell is not Sync).
+        let last_percent = std::sync::atomic::AtomicI32::new(-1);
         download_verified(&artifact, &qcow2_dest, &|downloaded, total| {
             if let Some(total_bytes) = total {
-                let percent = (downloaded * 100) / total_bytes.max(1);
-                on_phase(&format!(
-                    "Downloading Fedora Cloud image {}/{} MB ({}%)",
-                    downloaded / 1_000_000,
-                    total_bytes / 1_000_000,
-                    percent
-                ));
+                let percent = ((downloaded * 100) / total_bytes.max(1)) as i32;
+                if last_percent.swap(percent, std::sync::atomic::Ordering::Relaxed) != percent {
+                    on_phase(&format!(
+                        "Downloading Fedora Cloud image {}/{} MB ({}%)",
+                        downloaded / 1_000_000,
+                        total_bytes / 1_000_000,
+                        percent
+                    ));
+                }
             }
         })
         .await
