@@ -95,7 +95,8 @@ artifacts are published.
 ## Tasks (implement in order)
 
 - [x] 49a — **Decision**: Option 1 (cloud-init). Recorded above.
-- [ ] 49b — Wire podman install + podman.socket into the macOS cloud-init (`vz.rs` user-data).
+- [x] 49b — Wire podman install + podman.socket into the macOS cloud-init (`vz.rs` user-data).
+      Landed at `b7321f50` on osx-next. E2E gate PASS at `f39203b5`.
 - [ ] 49c — Headless must report `podman_ready=true` / phase `Ready` once the
       enclave is up; verify over vsock from the host (vm-status poll).
 - [ ] 49d — Re-run the macOS m8 user-attended smoke; projects list, github-login
@@ -122,3 +123,13 @@ a second enclave definition (tombstone/supersede, never duplicate).
   host: "macos"
   lease_id: "step49-macos-vm-enclave-20260616T231619Z"
   expires_at: "2026-06-17T03:16:19Z"
+- type: completed
+  task: "49b"
+  ts: "2026-06-16T23:17:00Z"
+  agent_id: "macos-tlatoani-big-pickle-20260616T231619Z"
+  host: "macos"
+  commits: ["b7321f50"]
+  evidence:
+    - "cargo test -p tillandsias-vm-layer: 15/15 PASS"
+    - "cargo check: clean"
+    - "E2E gate (build-install-smoke-e2e): build+install+provision+diagnose PASS at f39203b5"
