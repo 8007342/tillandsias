@@ -83,3 +83,18 @@ v0.3.260616.1 already published this day).
 - Outcome: **PASS** end-to-end. No new product issues; same two known
   non-blocking observations as the prior run (build VERSION auto-bump; forge
   `OpenSpec init failed` warning) — already recorded, not re-filed.
+
+---
+
+## Fourth run (Pass — full E2E) — 20260616T180437Z
+
+- Discovered by: `/build-install-and-smoke-test-e2e (linux)`, commit `afebcf1a`,
+  installed `Tillandsias v0.3.260616.3`, evidence `target/build-install-smoke-e2e/20260616T180437Z/`.
+- All gates green: build/CI/install rc=0; podman reset → empty store; cold
+  `--init` rc=0 (Vault healthy, no exited containers, no panics/wire mismatch);
+  forge lane rc=0 (no new findings — existing telemetry packets A–C still the
+  backlog). No new product issues; same known non-blocking observations.
+- Note: 4th green E2E of 2026-06-16 on code unchanged since v0.3.260616.1;
+  this run re-validates the destroy→cold-reprovision pipeline against current
+  upstream image pulls (the value of a periodic destructive smoke even with no
+  code delta).
