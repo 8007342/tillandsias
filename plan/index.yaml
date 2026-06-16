@@ -4053,6 +4053,7 @@ plan_index:
               evidence:
                 - "cargo test -p tillandsias-vm-layer: 15/15 PASS"
                 - "cargo check -p tillandsias-vm-layer: clean"
+                - "E2E gate: build+install+provision+diagnose PASS at f39203b5"
         - id: macos-enclave/verify-ready
           status: pending
           owner_host: macos
