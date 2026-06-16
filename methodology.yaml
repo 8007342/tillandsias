@@ -147,6 +147,21 @@ methodology:
     - forge_continuous_enhancement_via_self_hosting_agents
     - forge_discoverability_via_baked_in_tellme_and_launch_trained_local_inference
 
+  runtime_language_policy:
+    tlatoani_hard_no_python:
+      rule: >
+        Python is not allowed for Tillandsias runtime, harness, or repository
+        scripts. One-off interactive use is still discouraged and must not be
+        copied into committed scripts, skills, litmus tests, or runbooks.
+      approved_default_languages:
+        - Rust
+        - POSIX shell only when it dispatches existing binaries or Rust tools
+        - PowerShell only for Windows host integration
+      exception_process: >
+        Anything else requires explicit approval from The Tlatoani before it is
+        committed or used by recurring automation.
+      checker: scripts/check-no-python-scripts.sh
+
   semantic_distillation:
     rule: >
       Root files stay terse. Detailed rationale belongs in the owning component

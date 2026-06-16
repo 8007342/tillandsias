@@ -3113,6 +3113,13 @@ dependencies = [
 ]
 
 [[package]]
+name = "tillandsias-policy"
+version = "0.1.0"
+dependencies = [
+ "serde_yaml",
+]
+
+[[package]]
 name = "tillandsias-repeat-graph"
 version = "0.1.0"
 dependencies = [
@@ -3150,6 +3157,10 @@ dependencies = [
  "tokio",
  "tracing",
 ]
+
+[[package]]
+name = "tillandsias-static-server"
+version = "0.1.0"
 
 [[package]]
 name = "tillandsias-vault-client"

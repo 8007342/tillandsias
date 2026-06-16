@@ -1,6 +1,6 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-16T11:10:00Z
+Last updated: 2026-06-16T22:20:06Z
 
 This file is the first stop for agents inspecting `plan/issues/`. Historical
 issue reports remain in this directory for evidence and auditability, but only
@@ -41,6 +41,20 @@ the items below are immediate work.
 - note: corrects the cycle-1 rejection below — enclave egress is
   proxy-cooperative, not network-enforced (empirically: direct curl reaches the
   internet, HTTP 200). Verify-heavy (rebuild + reinit), so its own cycle.
+
+### policy/no-python-runtime-scripts
+
+- status: active
+- owner_host: linux
+- source: `plan/issues/no-python-runtime-policy-2026-06-16.md`
+- next_action: Rewrite or retire the remaining Python-backed repository scripts
+  in Rust, then make `scripts/check-no-python-scripts.sh` pass.
+- blocker: existing cheatsheet/provenance maintenance scripts still execute
+  Python; each needs a Rust replacement or explicit Tlatoani approval.
+- evidence_required:
+  - `scripts/check-no-python-scripts.sh` exits 0
+  - no `*.py` executable scripts remain under `scripts/`
+  - no harness, skill, litmus, or repeat path shells out to `python`/`python3`
 
 ## Triaged 2026-06-16 (no longer needs triage)
 

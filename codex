@@ -113,16 +113,7 @@ timestamp_utc() {
 
 timestamp_pacific_from_epoch() {
   local epoch="$1"
-  if command -v python >/dev/null 2>&1; then
-    python - "$epoch" <<'PY'
-from datetime import datetime
-from zoneinfo import ZoneInfo
-import sys
-print(datetime.fromtimestamp(int(sys.argv[1]), ZoneInfo("America/Los_Angeles")).strftime("%Y-%m-%d %H:%M:%S %Z"))
-PY
-  else
-    TZ=America/Los_Angeles date -d "@$epoch" '+%Y-%m-%d %H:%M:%S %Z'
-  fi
+  TZ=America/Los_Angeles date -d "@$epoch" '+%Y-%m-%d %H:%M:%S %Z'
 }
 
 run_tui_once() {
