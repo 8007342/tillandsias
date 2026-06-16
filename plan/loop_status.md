@@ -1,19 +1,19 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-16T23:29:05Z
+LastExecutionTime: 2026-06-16T23:35:28Z
 
 ## This Loop
 
-- **Cycle type**: advance-work-from-plan (acceptance verification on linux-next).
+- **Cycle type**: multihost coordination after advance-work queue drain.
 - **Sibling Git Audit**:
   - `main` at `9493a3ef` (release v0.3.260616.1 published)
-  - `linux-next` at `4f09f9c7` (merged osx-next 6 commits)
+  - `linux-next` at `d9665185` (order-53 verification complete)
   - `windows-next` at `0710071b` — ANCESTOR of linux-next (integrated)
-  - `osx-next` at `524c228e` — MERGED into linux-next (6 osx-next commits integrated)
-  - Drift 0/0; no Dmax alert. osx-next brought up to date via direct merge.
+  - `osx-next` at `9d2bcea6` — ANCESTOR of linux-next (step 49b/49c/49e integrated)
+  - Drift 0/0; no Dmax alert.
 - **Completed since last pass** (coordination merge):
-  - Merged 6 osx-next commits into linux-next: macOS tray icon fix (PNG), VM serial console forward, m8 failure tracing/docs, step 49 keystone documentation, macOS tray --version SHA embedding, build-macos-tray.sh updates.
-  - Build check and core tests (177/177) pass.
+  - Integrated osx-next step 49 evidence through `9d2bcea6`; macOS in-VM enclave now reaches Ready unattended, with automated assertion script.
+  - Completed order-53 acceptance verification and pushed `d9665185`.
 - **Order-53** `privacy/forge-git-identity-anonymization` — completed. Implementation `e31792e8` preserves the real Git author and appends distinct machine-parseable agent/model trailers; focused fixture, shell syntax checks, and `./build.sh --check` passed.
 - **Order-54** `enclave/network-level-egress-deny` — checkpointed (e11ff704), pending full smoke + git-mirror push verification. Lease active.
 
@@ -27,8 +27,8 @@ LastExecutionTime: 2026-06-16T23:29:05Z
 
 ## Convergence Velocity
 
-- Vc **positive**: osx-next integrated, order-53 implemented. Order-54 needs
-  acceptance smoke before shipping.
+- Vc **positive**: osx-next integrated, order-53 verified/completed. Order-54
+  remains leased and needs acceptance smoke before completion.
 
 ## Assignment Board
 
@@ -37,10 +37,13 @@ LastExecutionTime: 2026-06-16T23:29:05Z
   before final done.
 - **Windows primary**: none; keep `windows-next` synced. *Fallback*: any
   Windows-owned smoke finding.
-- **macOS primary**: none; `m8/appkit-action-smoke-and-stub-polish` is
-  user-attended. *Fallback*: macOS smoke re-run.
+- **macOS primary**: step 49d / m8 interactive smoke — user-attended, not
+  autonomous-claimable. *Fallback*: macOS smoke re-run.
 
 ## Stale Or Pending Pings
 
 - v0.3.260616.1 published green across Linux/macOS/Windows.
-- Sibling branches now fully integrated (drift 0/0).
+- Sibling branches fully integrated (drift 0/0).
+- Linux unattended queue is blocked/exhausted: order 54 lease active until
+  2026-06-17T02:30:46Z; no-Python script policy remains blocked on rewrite scope
+  or explicit approval.
