@@ -36,14 +36,34 @@ mistake. Recover them from git (objects still reachable by SHA) as fix input.
     headless agent is reachable over vsock but self-reports Failed.
 - impact: cascades to F4 (no podman/forge → empty projects) and F5 (PTY attach
   to a forge container that isn't up hangs).
+- ROOT CAUSE (diagnosed 2026-06-16): the macOS cloud-init user-data in
+    `vz.rs` (~line 360-437) provisions ONLY `tillandsias-headless-fetch.service`
+    + `tillandsias-headless.service` — it has **zero podman / enclave / forge /
+    dnf setup** (`grep -cE 'podman|dnf|enclave|forge' vz.rs` = 0). The in-VM
+    headless agent therefore boots and answers vsock (vm-status connects, no
+    error lines) but finds no podman and no forge enclave → `podman_ready=false`
+    → reports Failed. The macOS in-VM enclave path is INCOMPLETE: unlike Linux
+    (podman on the host), macOS must run podman+forge INSIDE the guest, but the
+    cloud-init never installs/configures podman nor builds the enclave from the
+    recipe. This is the keystone for the empty project lists (F5) and the hung
+    GitHub-Login PTY (F4 — no forge container to attach to).
+- diagnosis_evidence:
+  - `crates/tillandsias-vm-layer/src/vz.rs` user-data: only headless services;
+    `grep -cE 'podman|dnf install|enclave|forge'` = 0.
+  - `/tmp/m8-headless-reason.log`: guest boots, no vm-status error lines (agent
+    up), no enclave activity on console.
+  - `images/vm/bootstrap/30-enclave.sh` exists (the recipe enclave step) but is
+    NOT wired into the macOS cloud-init.
 - next_action: >
-    Find why the in-VM bootstrap reports Failed despite a clean guest boot.
-    Capture the in-VM tillandsias-headless / fetch-headless / vault bootstrap
-    journal (serial console after login, or a vsock log channel). Likely
-    candidates: podman rootless not ready, forge image missing, or vault
-    bootstrap (the macOS keychain↔vsock unseal path) failing. Surface the
-    failure REASON to the host (extend VmStatusReply with a reason string) so
-    the chip/diagnose shows it instead of a bare "Failed".
+    Decide the macOS enclave strategy and wire it into the cloud-init (vz.rs
+    user-data): install podman in the guest (dnf) + materialize/start the forge
+    enclave from the recipe (reuse images/vm/bootstrap/30-enclave.sh), OR have
+    tillandsias-headless self-bootstrap podman+forge on first run. Cross-host:
+    the enclave recipe is Linux/recipe-owned; coordinate the in-VM enclave
+    contract. Separately (diagnosability, partly done in b7bde09c): make the
+    headless log its podman/enclave readiness checks to a channel the host can
+    see (console= kernel arg → hvc0, or extend VmStatusReply.last_event with the
+    Failed reason — the field already exists and the host already renders it).
 
 ## Work Packet: macos-tray/menubar-icon-renders-as-white-blob  [HIGH]
 
@@ -51,7 +71,7 @@ mistake. Recover them from git (objects still reachable by SHA) as fix input.
 - type: bug
 - owner_host: macos
 - capability_tags: [macos, appkit, assets]
-- status: ready
+- status: done (commit 1ada1f28 — user-confirmed icon renders; styling polish deferred)
 - discovered_by: m8 user-attended smoke (2026-06-16)
 - owned_files:
   - `crates/tillandsias-macos-tray/src/status_item.rs`
