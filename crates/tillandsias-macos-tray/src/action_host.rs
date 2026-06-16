@@ -1557,6 +1557,11 @@ fn spawn_vm_status_poller(
         // the vm-status poll below keeps logging its own errors, so a genuinely
         // stuck boot still surfaces. See plan: macos-tray/cold-boot-vsock-poll-races.
         let mut vm_ever_ready = false;
+        // Last VM phase we logged, so phase transitions surface in the log
+        // exactly once (no per-poll spam). A Failed/degraded VM must NOT be
+        // silent — m8 finding F2: the chip showed "VM Failed" while the log said
+        // nothing, leaving the failure undiagnosable.
+        let mut last_logged_phase: Option<tillandsias_control_wire::VmPhase> = None;
         loop {
             // Cloud + local projects: first tick + every 10 ticks.
             // The cadence rationale (slower than VmStatus) is in the
@@ -1638,6 +1643,20 @@ fn spawn_vm_status_poller(
                     // real (mid-session) and worth logging — end cold-boot
                     // warmup suppression.
                     vm_ever_ready = true;
+                    // Log phase transitions once so a Failed/degraded VM is
+                    // never silent in the log (m8 F2). Especially: phase=Failed
+                    // with podman_ready=false is the macOS "VM Failed" the user
+                    // sees — surface it + any agent-provided last_event reason.
+                    if last_logged_phase != Some(phase) {
+                        last_logged_phase = Some(phase);
+                        eprintln!(
+                            "[tillandsias-tray] vm-status: phase={phase:?} podman_ready={podman_ready}{}",
+                            last_event
+                                .as_deref()
+                                .map(|e| format!(" event={e}"))
+                                .unwrap_or_default()
+                        );
+                    }
                     // Reflect podman_ready into the held MenuState so
                     // the menu rebuild flips per-project action gating
                     // (`Attach Here` etc.). Same pattern windows-tray
