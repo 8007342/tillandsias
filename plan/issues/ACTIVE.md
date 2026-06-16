@@ -1,6 +1,6 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-16T09:42:00Z
+Last updated: 2026-06-16T11:10:00Z
 
 This file is the first stop for agents inspecting `plan/issues/`. Historical
 issue reports remain in this directory for evidence and auditability, but only
@@ -24,6 +24,28 @@ the items below are immediate work.
   - diagnostics shows no real host git identity vars inside the forge
   - an in-forge `git commit` still succeeds with the substituted identity
   - a litmus/unit test pins the substitution against silent re-leak
+- note (2026-06-16): genuine product fork on attribution — anonymizing by
+  default changes the user's GitHub commit attribution (forge commits like
+  `b8987bd6` currently use the real identity), and the email is already public
+  in the user's commits, so the privacy benefit is marginal. Needs an
+  attribution decision (default-anon vs opt-in-real) before implementing; do not
+  guess autonomously.
+
+### enclave/network-level-egress-deny
+
+- status: ready
+- owner_host: linux
+- source: `plan/issues/enclave-egress-network-enforcement-gap-2026-06-16.md`
+- next_action: Make `tillandsias-enclave` `--internal` so forge containers have
+  no NAT egress; route allowlisted egress only through the dual-homed proxy.
+- blocker: none
+- evidence_required:
+  - direct (`--noproxy`) external curl from an enclave container FAILS on a clean init
+  - allowlisted proxy egress + forge→proxy/inference/git-service still work
+  - new litmus pins direct-egress-denied on the live enclave network
+- note: corrects the cycle-1 rejection below — enclave egress is
+  proxy-cooperative, not network-enforced (empirically: direct curl reaches the
+  internet, HTTP 200). Verify-heavy (rebuild + reinit), so its own cycle.
 
 ## Triaged 2026-06-16 (no longer needs triage)
 
@@ -32,11 +54,13 @@ The 2026-06-16 critical/high forge proposals were triaged in
 
 - `2026-06-16-git-pii-scrub.md` → **accepted**, promoted to the Immediate
   packet above (order 53).
-- `2026-06-16-network-isolation-regression.md` → **rejected** — the 2026-06-14
-  external_curl regression does not reproduce on 2026-06-16 (diagnostics
-  100%/25-of-25, `ephemeral-guarantee` litmus green). Low-priority backlog
-  follow-up noted: add an enclave-network egress litmus (the existing litmus
-  uses `--network=none` and would not catch this regression class).
+- `2026-06-16-network-isolation-regression.md` → **REOPENED / reframed**
+  (supersedes the original "rejected"). The rejection was based on the
+  proxy-cooperative `external_curl` probe + `--network=none` litmus, neither of
+  which tests direct egress. On re-test, a direct connection from an enclave
+  container reaches the internet (HTTP 200): enclave egress is proxy-cooperative,
+  not network-enforced. Reshaped as the `enclave/network-level-egress-deny`
+  packet above (`enclave-egress-network-enforcement-gap-2026-06-16.md`).
 - `2026-06-16-podman-in-forge.md` → **deferred** — rootless podman-in-forge is
   infeasible under `--cap-drop=ALL`/`--userns=keep-id`/`no-new-privileges`
   without weakening isolation; kept in the forge backlog.

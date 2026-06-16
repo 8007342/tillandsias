@@ -3920,3 +3920,47 @@ plan_index:
               note: >
                 Promoted from accepted proposal 2026-06-16-git-pii-scrub during
                 the critical-forge-proposal triage cycle.
+
+    - id: enclave-network-level-egress-deny
+      order: 54
+      title: Enforce forge egress at the network layer (enclave --internal + dual-homed proxy)
+      status: ready
+      owner_host: linux
+      deliverable: crates/tillandsias-core/src/container_profile.rs
+      audit_origin: plan/issues/enclave-egress-network-enforcement-gap-2026-06-16.md
+      depends_on: []
+      exit_criteria:
+        - "Direct (--noproxy) external curl from a container on tillandsias-enclave FAILS on a clean init."
+        - "Allowlisted proxy egress and forge->proxy/inference/git-service still work; forge lane stays green."
+        - "A new litmus pins direct-egress-denied on the live enclave network (not --network=none), committed with the fix."
+      tasks:
+        - id: enclave/network-level-egress-deny
+          status: ready
+          owner_host: linux
+          estimated_hours: 4
+          capability_tags: [rust, podman, networking, security, enclave]
+          depends_on: []
+          owned_files:
+            - crates/tillandsias-core/src/container_profile.rs
+            - crates/tillandsias-headless/src/main.rs
+            - openspec/litmus-tests/
+            - openspec/specs/enclave-network/spec.md
+          next_action: >
+            Create tillandsias-enclave with --internal so forge containers have
+            no NAT route off-host; the dual-homed proxy remains the single
+            allowlisted egress path. Verify in-enclave aliases still resolve and
+            allowlisted proxy egress still works.
+          acceptance_evidence:
+            - "Direct external curl from an enclave container fails on a clean init."
+            - "Allowlisted egress via proxy still succeeds; build/init/forge stay green."
+            - "New live-enclave egress-deny litmus passes (added with the fix, not before)."
+          events:
+            - type: discovered
+              ts: "2026-06-16T11:10:00Z"
+              agent_id: "linux-macuahuitl-claude-opus-20260616T093524Z"
+              host: linux
+              note: >
+                Empirically confirmed enclave egress is proxy-cooperative not
+                network-enforced (direct curl reaches internet, HTTP 200;
+                internal=false). Supersedes the cycle-1 rejection of
+                2026-06-16-network-isolation-regression.
