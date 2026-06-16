@@ -1,6 +1,6 @@
 ---
 name: meta-orchestration
-description: Host-aware Tillandsias recurring runtime loop: sync remote state, drain claimable plan work, run eligible e2e smoke gates, coordinate integrations on mutable Linux, release when warranted, update plan, commit, and push before exit.
+description: "Host-aware Tillandsias recurring runtime loop: sync remote state, drain claimable plan work, run eligible e2e smoke gates, coordinate integrations on mutable Linux, release when warranted, update plan, commit, and push before exit."
 ---
 
 # Meta Orchestration
