@@ -3939,7 +3939,7 @@ plan_index:
         - "A new litmus pins direct-egress-denied on the live enclave network (not --network=none), committed with the fix."
       tasks:
         - id: enclave/network-level-egress-deny
-          status: ready
+          status: checkpoint
           owner_host: linux
           estimated_hours: 4
           capability_tags: [rust, podman, networking, security, enclave]
@@ -3951,15 +3951,15 @@ plan_index:
             - openspec/litmus-tests/
             - openspec/specs/enclave-network/spec.md
           next_action: >
-            REFINED (2026-06-16 feasibility): blanket --internal alone is WRONG —
-            git-service (single-homed, no proxy env) reaches GitHub directly and
-            would lose egress. Correct fix: (1) add --internal to
-            ensure_enclave_network (main.rs:1414); (2) dual-home git-service to
-            the bridge (remote_projects.rs:287,517 → "tillandsias-enclave,bridge"
-            like the proxy). Verify no other enclave-only container needs direct
-            egress (esp. inference/ollama pulls). Full-smoke verify incl. a real
-            git-mirror push BEFORE shipping — a wrong change breaks the release
-            pipeline for all hosts. See
+            IMPLEMENTED (2026-06-16): (1) added --internal to
+            ensure_enclave_network (main.rs:1424); (2) dual-homed proxy
+            (main.rs:1663 → tillandsias-enclave,bridge); (3) dual-homed git
+            daemon (main.rs:1799 → tillandsias-enclave,bridge); (4) dual-homed
+            git helper containers (remote_projects.rs:287,517 →
+            tillandsias-enclave,bridge). Verification: 474 unit tests pass,
+            cargo fmt --check clean. Remaining: run --init on a clean host to
+            confirm (a) direct curl on enclave fails, (b) proxy/forge/git work,
+            (c) a real git-mirror push succeeds. See
             plan/issues/enclave-egress-network-enforcement-gap-2026-06-16.md.
           acceptance_evidence:
             - "Direct external curl from an enclave container fails on a clean init."
@@ -3981,4 +3981,15 @@ plan_index:
             host: linux
             lease_id: "enclave-network-egress-deny-2026-06-16"
             expires_at: "2026-06-17T02:30:46Z"
+          - type: progress
+            ts: "2026-06-16T22:35:00Z"
+            agent_id: "linux-tlatoani-opencode-big-pickle-20260616T223046Z"
+            host: linux
+            lease_id: "enclave-network-egress-deny-2026-06-16"
+            note: >
+              Implementation complete: added --internal to enclave network,
+              dual-homed proxy (main.rs:1663), git daemon (main.rs:1799),
+              and git helper containers (remote_projects.rs:287,517) to bridge
+              for egress. All 474 tests pass; formatting clean. Full smoke
+              with real git-mirror push still needed before flipping to done.
 
