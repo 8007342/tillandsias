@@ -4,11 +4,11 @@ set -euo pipefail
 usage() {
   cat >&2 <<'EOF'
 Usage:
-  ./repeat --prompt "<prompt>" [--repeat <times>] [--wait <duration>] [--agent claude|opencode|antigravity|codex|random]
+  ./repeat --prompt "<prompt>" [--times <n>] [--wait <duration>] [--agent claude|opencode|antigravity|codex|random]
 
 Options:
   --prompt <prompt>      Required prompt for every fresh agent cycle.
-  --repeat <times>      Optional positive integer cycle count. Omit to run forever.
+  --times <n>           Optional positive integer cycle count. Omit to run forever.
   --wait <duration>     Sleep after a cycle completes and before the next starts. Default: 45m.
                          Forms: 45s, 30m, 2h, 1d, 2h30m, or raw seconds.
   --agent <agent>       claude, opencode, antigravity, codex, or random. Default: random.
@@ -25,7 +25,7 @@ die() {
 }
 
 PROMPT=""
-REPEAT_COUNT=""
+TIMES_COUNT=""
 WAIT_INTERVAL="45m"
 AGENT="random"
 
@@ -36,10 +36,10 @@ while [[ $# -gt 0 ]]; do
       PROMPT="$2"
       shift 2
       ;;
-    --repeat)
-      [[ $# -ge 2 ]] || die "--repeat requires a positive integer"
-      [[ "$2" =~ ^[0-9]+$ && "$2" -ge 1 ]] || die "--repeat requires a positive integer"
-      REPEAT_COUNT="$2"
+    --times)
+      [[ $# -ge 2 ]] || die "--times requires a positive integer"
+      [[ "$2" =~ ^[0-9]+$ && "$2" -ge 1 ]] || die "--times requires a positive integer"
+      TIMES_COUNT="$2"
       shift 2
       ;;
     --wait)
@@ -155,7 +155,9 @@ run_agent() {
       ;;
     claude)
       bin="$(resolve_bin CLAUDE_BIN claude)" || return $?
-      "$bin" --print --dangerously-skip-permissions --add-dir "$REPO_ROOT" "$PROMPT"
+      # --add-dir is variadic and would swallow a positional prompt, so feed the
+      # prompt over stdin (the documented alternative for --print).
+      printf '%s' "$PROMPT" | "$bin" --print --dangerously-skip-permissions --add-dir "$REPO_ROOT"
       ;;
     opencode)
       bin="$(resolve_bin OPENCODE_BIN opencode)" || return $?
@@ -163,7 +165,8 @@ run_agent() {
       ;;
     antigravity)
       bin="$(resolve_bin ANTIGRAVITY_BIN agy)" || return $?
-      "$bin" --print --dangerously-skip-permissions --add-dir "$REPO_ROOT" "$PROMPT"
+      # agy print mode takes its task from stdin, not a positional argument.
+      printf '%s' "$PROMPT" | "$bin" --print --dangerously-skip-permissions --add-dir "$REPO_ROOT"
       ;;
     *)
       die "internal error: unsupported selected agent '$selected'"
@@ -183,7 +186,7 @@ while :; do
   printf '[repeat] %s cycle=%d agent=%s exit=%d\n' "$(timestamp_utc)" "$CYCLE" "$SELECTED_AGENT" "$STATUS" >&2
   [[ "$STATUS" -eq 0 ]] || exit "$STATUS"
 
-  if [[ -n "$REPEAT_COUNT" && "$CYCLE" -ge "$REPEAT_COUNT" ]]; then
+  if [[ -n "$TIMES_COUNT" && "$CYCLE" -ge "$TIMES_COUNT" ]]; then
     exit 0
   fi
 
