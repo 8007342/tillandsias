@@ -1,6 +1,6 @@
 # Forge enhancements diagnostics run - 2026-06-16
 
-Status: triage-ready
+Status: triaged (2026-06-16, coord/critical-forge-proposal-triage-20260616)
 
 The destructive Linux smoke launched the forge successfully and processed the
 diagnostics backlog. It found no terminal smoke failure, but it filed a backlog
@@ -30,3 +30,13 @@ Only these items are immediate enough to surface in `plan/issues/ACTIVE.md`:
 
 The remaining 2026-06-16 proposals stay in the forge backlog and should not
 crowd the immediate active queue unless triage promotes them.
+
+## Triage Outcome — 2026-06-16
+
+- network-isolation-regression → **rejected** (not reproducing; 2026-06-16
+  diagnostics 100%/25-of-25 + `ephemeral-guarantee` litmus green; backlog note
+  for an enclave-network egress litmus).
+- git-pii-scrub → **accepted** → promoted to `plan/index.yaml` order 53
+  `privacy/forge-git-identity-anonymization` (now on the ACTIVE frontier).
+- podman-in-forge → **deferred** (rootless infeasible under the forge isolation
+  envelope; kept in backlog).

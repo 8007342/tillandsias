@@ -3822,7 +3822,7 @@ plan_index:
     - id: critical-forge-proposal-triage-20260616
       order: 52
       title: Triage critical forge proposals from 2026-06-16 smoke
-      status: ready
+      status: done
       owner_host: linux
       deliverable: plan/issues/ACTIVE.md
       audit_origin: plan/issues/forge-enhancements-run-2026-06-16.md
@@ -3834,7 +3834,7 @@ plan_index:
         - "Podman-in-forge proposal is accepted, split, or deferred with rootless feasibility rationale."
       tasks:
         - id: coord/critical-forge-proposal-triage-20260616
-          status: ready
+          status: done
           owner_host: linux
           estimated_hours: 2
           capability_tags: [coordination, security, privacy, forge, triage]
@@ -3857,3 +3857,66 @@ plan_index:
             Keep the full toolchain wish list in the forge backlog. Only the
             security/privacy/build-enablement findings should remain on the
             immediate active frontier.
+          events:
+            - type: completed
+              ts: "2026-06-16T09:42:00Z"
+              agent_id: "linux-macuahuitl-claude-opus-20260616T093524Z"
+              host: linux
+              note: >
+                Triaged all three 2026-06-16 critical/high forge proposals.
+                network-isolation-regression -> rejected (not reproducing;
+                2026-06-16 diagnostics 100%/25-of-25 + ephemeral-guarantee
+                litmus green; backlog note filed for an enclave-network egress
+                litmus). git-pii-scrub -> accepted, promoted to order 53
+                privacy/forge-git-identity-anonymization (confirmed real
+                injection at container_profile.rs + main.rs:4122-4125).
+                podman-in-forge -> deferred (rootless infeasible under
+                cap-drop=ALL/userns=keep-id/no-new-privileges; kept in backlog).
+
+    - id: forge-git-identity-anonymization
+      order: 53
+      title: Anonymize git identity inside the forge (no host PII leak)
+      status: ready
+      owner_host: linux
+      deliverable: images/default/entrypoint-forge-opencode.sh
+      audit_origin: plan/forge-improvements/proposals/2026-06-16-git-pii-scrub.md
+      depends_on: []
+      exit_criteria:
+        - "A diagnostics run shows no real host GIT_AUTHOR_*/GIT_COMMITTER_* PII inside the forge container."
+        - "An in-forge `git commit` still succeeds with a substituted (anonymized or configured-forge) identity — attribution is not broken."
+        - "A litmus or unit test pins the substitution so the real host identity cannot silently re-leak."
+      tasks:
+        - id: privacy/forge-git-identity-anonymization
+          status: ready
+          owner_host: linux
+          estimated_hours: 3
+          capability_tags: [rust, privacy, forge, containers, security]
+          depends_on: []
+          owned_files:
+            - crates/tillandsias-core/src/container_profile.rs
+            - crates/tillandsias-headless/src/main.rs
+            - images/default/entrypoint-forge-opencode.sh
+            - openspec/litmus-tests/
+          next_action: >
+            Substitute the host user's real git identity with an anonymized /
+            configured-forge identity at the container_profile / launch layer so
+            GIT_AUTHOR_*/GIT_COMMITTER_* never carry real PII into the forge,
+            while keeping in-forge commits attributable. Decide whether a real
+            identity should be opt-in. Bare unset is WRONG — it breaks
+            enclave-mirror commit attribution.
+          acceptance_evidence:
+            - "Diagnostics: isolation_or_privacy_risks no longer lists git identity vars."
+            - "`git commit` inside the forge succeeds with the substituted identity."
+            - "`./build.sh --check` and a new/updated litmus pass."
+          fallback_when_blocked: >
+            If a clean substitution point is unclear, document the exact launch
+            call site and propose the env-var override design in the proposal
+            file, then yield for review.
+          events:
+            - type: discovered
+              ts: "2026-06-16T09:42:00Z"
+              agent_id: "linux-macuahuitl-claude-opus-20260616T093524Z"
+              host: linux
+              note: >
+                Promoted from accepted proposal 2026-06-16-git-pii-scrub during
+                the critical-forge-proposal triage cycle.

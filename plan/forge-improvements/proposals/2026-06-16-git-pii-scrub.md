@@ -2,8 +2,16 @@
 title: Scrub Git PII from container environment
 gap: "isolation_or_privacy_risks: GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL, GIT_COMMITTER_NAME, GIT_COMMITTER_EMAIL expose real user identity to all container processes"
 category: env-var
-status: proposed
+status: accepted
 proposed_at: 2026-06-16T08:00:00Z
+triaged_at: 2026-06-16T09:40:00Z
+triage_decision: >
+  ACCEPTED into a privacy work packet (privacy/forge-git-identity-anonymization,
+  plan/index.yaml order 53). Confirmed real exposure: container_profile.rs and
+  main.rs:4122-4125 deliberately inject the host user's real GIT_AUTHOR_*/
+  GIT_COMMITTER_* into the forge. The fix MUST preserve git commit attribution
+  inside the forge — use an anonymized/forge identity, NOT bare removal (bare
+  unset would break enclave-mirror commits). See triage note at end.
 changes:
   - file: images/default/entrypoint-forge-opencode.sh
     description: |
@@ -48,3 +56,31 @@ could contain this PII.
 2. Alternative: use anonymized placeholder values if Git needs identity to
    function inside the forge.
 3. Verify in diagnostics that these vars are no longer visible.
+
+## Triage decision — 2026-06-16 (linux, coord/critical-forge-proposal-triage-20260616)
+
+**ACCEPTED. Confirmed real, current exposure.** Promoted to plan packet
+`privacy/forge-git-identity-anonymization` (plan/index.yaml order 53).
+
+Code evidence the host user's real identity is injected into the forge by
+design (so this is not a stale diagnostics artifact):
+
+- `crates/tillandsias-core/src/container_profile.rs:354-366,636-648` — defines
+  `GIT_AUTHOR_NAME`/`GIT_AUTHOR_EMAIL`/`GIT_COMMITTER_NAME`/`GIT_COMMITTER_EMAIL`
+  as container env vars sourced from the configured git author name/email.
+- `crates/tillandsias-headless/src/main.rs:4122-4125` — populates those four
+  vars with the real `(name, email)` pair passed into the container launch.
+- Forge entrypoint (`images/default/entrypoint-forge-opencode.sh`) does **not**
+  scrub or override them (grep: zero matches).
+
+**Design constraint for the implementer (why bare "unset" is wrong):** the
+forge legitimately needs a git identity to author commits pushed to the enclave
+mirror. Removing the vars would break attribution. The correct fix is the
+proposal's option 2 — substitute an anonymized/forge identity (e.g.
+`Tillandsias Forge <forge@localhost>` or a per-project pseudonymous identity)
+at the `container_profile` / launch layer so the real host PII never enters the
+container while commits still succeed. Decide whether a user-configurable real
+identity should be opt-in. Validation: a diagnostics run shows no real-PII git
+vars inside the forge AND an in-forge `git commit` still succeeds with the
+substituted identity.
+

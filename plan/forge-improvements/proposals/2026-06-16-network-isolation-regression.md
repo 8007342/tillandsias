@@ -2,8 +2,14 @@
 title: Fix recurring network isolation regression (external_curl reaches internet)
 gap: "isolation_or_privacy_risks: network_isolation.external_curl fails — forge container reaches external internet directly, bypassing proxy block"
 category: network
-status: proposed
+status: rejected
 proposed_at: 2026-06-16T08:00:00Z
+triaged_at: 2026-06-16T09:40:00Z
+triage_decision: >
+  REJECTED as a release blocker — the 2026-06-14 external_curl regression does
+  not reproduce on 2026-06-16. Both 2026-06-16 diagnostics runs report
+  network_isolation passing at 100% (25/25, no isolation/privacy risks). One
+  follow-up backlog item filed (enclave-network egress litmus). See triage note.
 changes:
   - file: images/proxy/Containerfile
     description: |
@@ -53,3 +59,31 @@ fixed before any other proposals are implemented.
 3. Add a runtime check in the forge entrypoint that verifies egress isolation
    and fails fast if it's missing.
 4. Consider a dual-layer approach: proxy-level deny AND iptables egress drop.
+
+## Triage decision — 2026-06-16 (linux, coord/critical-forge-proposal-triage-20260616)
+
+**REJECTED as a release blocker. Not currently reproducing.**
+
+Evidence the regression is resolved on the current head (`591d4dde`,
+v0.3.260616.2):
+
+- `plan/diagnostics/diagnostics_20260616T072847Z-summary.md` — completeness
+  100% (25/25), no `isolation_or_privacy_risks`.
+- `plan/diagnostics/diagnostics_20260616T081755Z-summary.md` — completeness
+  100% (25/25), no `isolation_or_privacy_risks`. `external_curl` reports BLOCKED.
+- `target/build-install-smoke-e2e/20260616T081336Z/01-build-install.log` —
+  `litmus:ephemeral-guarantee` ("attempt external network connection from
+  forge") and `litmus:forge-as-only-runtime` both PASS in the runtime residual
+  litmus phase.
+
+**Caveat (filed as a low-priority backlog follow-up, NOT a blocker):**
+`openspec/litmus-tests/litmus-ephemeral-guarantee.yaml:19` exercises egress with
+`--network=none`, which trivially blocks all traffic and does **not** exercise
+the *enclave-network* egress-deny path that the 2026-06-14 regression actually
+lived on. The diagnostics' `external_curl` check (run on the real enclave
+network) is currently the only signal that catches that regression class.
+Recommend adding an enclave-network egress litmus so a re-regression is caught
+at build time rather than only by the in-forge diagnostics pass. Tracked in the
+forge backlog as `litmus/enclave-network-egress-deny` (low priority — the
+behavior is currently correct; this is detection hardening only).
+
