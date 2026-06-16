@@ -3876,18 +3876,19 @@ plan_index:
     - id: forge-git-identity-anonymization
       order: 53
       title: Transparent agentic git attribution — preserve human author, mark agent+model (redesigned from anonymize)
-      status: ready
+      status: in_progress
       owner_host: linux
       deliverable: cheatsheets/concurrent-git/commit-attribution.md
       audit_origin: plan/forge-improvements/proposals/2026-06-16-git-pii-scrub.md
       depends_on: []
       exit_criteria:
-        - "A diagnostics run shows no real host GIT_AUTHOR_*/GIT_COMMITTER_* PII inside the forge container."
-        - "An in-forge `git commit` still succeeds with a substituted (anonymized or configured-forge) identity — attribution is not broken."
-        - "A litmus or unit test pins the substitution so the real host identity cannot silently re-leak."
+        - "Real GitHub-login author/email preserved on forge commits (contributor attribution intact)."
+        - "Each forge commit carries a machine-parseable agent+model trailer (git log --format='%(trailers:key=Generated-By)' resolves it)."
+        - "Different agents/models produce distinguishable trailers; local models include size/params."
+        - "`./build.sh --check` and a new/updated litmus pass."
       tasks:
         - id: privacy/forge-git-identity-anonymization
-          status: ready
+          status: in_progress
           owner_host: linux
           estimated_hours: 3
           capability_tags: [rust, privacy, forge, containers, security]
@@ -3924,6 +3925,16 @@ plan_index:
               note: >
                 Promoted from accepted proposal 2026-06-16-git-pii-scrub during
                 the critical-forge-proposal triage cycle.
+            - type: claim
+              ts: "2026-06-16T22:45:00Z"
+              agent_id: "linux-macuahuitl-big-pickle-20260616T224000Z"
+              host: linux
+              note: >
+                Claimed by Big Pickle on linux-next. Implementation:
+                install prepare-commit-msg hook in lib-common.sh via
+                core.hooksPath; set TILLANDSIAS_AGENT_NAME/GENERATED_BY
+                in each forge entrypoint. Preserves human author; adds
+                Co-Authored-By and Generated-By trailers.
 
     - id: enclave-network-level-egress-deny
       order: 54

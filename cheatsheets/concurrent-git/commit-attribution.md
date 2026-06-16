@@ -115,3 +115,41 @@ Generated-By: tool=claude-code model=claude-opus-4-8 ctx=1m
 - `concurrent-git/agent-handoff.md`
 - `concurrent-git/branches.md`
 - `agents/claude-code.md`
+
+## Implementation (Tillandsias forge)
+
+### Mechanism
+
+A `prepare-commit-msg` git hook is installed at container start via
+`core.hooksPath` in the global git config. The hook lives at
+`~/.cache/tillandsias/git-hooks/prepare-commit-msg` and is written by
+`lib-common.sh::_install_agent_trailer_hook()` (called from
+`configure_git_identity()`).
+
+### Env var contract
+
+| Env var | Set by | Purpose |
+|---|---|---|
+| `TILLANDSIAS_AGENT_NAME` | Each forge entrypoint | Human-readable name for `Co-Authored-By` trailer |
+| `TILLANDSIAS_GENERATED_BY` | Each forge entrypoint | Structured `key=value` tokens for `Generated-By` trailer |
+
+### Current values per entrypoint
+
+| Entrypoint | `TILLANDSIAS_AGENT_NAME` | `TILLANDSIAS_GENERATED_BY` |
+|---|---|---|
+| `entrypoint-forge-opencode.sh` | `OpenCode` | `tool=opencode` |
+| `entrypoint-forge-claude.sh` | `Claude Code` | `tool=claude-code` |
+| `entrypoint-forge-codex.sh` | `OpenAI Codex` | `tool=codex` |
+| `entrypoint-forge-opencode-web.sh` | `OpenCode` | `tool=opencode` |
+| `entrypoint-terminal.sh` | `(empty)` | `tool=terminal` |
+
+### Hook behaviour
+
+- Only fires when `TILLANDSIAS_AGENT_NAME` is non-empty at commit time.
+- Skips merge, squash, and amend commits (preserves existing messages).
+- Idempotent: checks for existing `Generated-By:` trailer before appending.
+- Uses `core.hooksPath` in global git config so the host's `.git/hooks/` is
+  never modified (critical for host-mount mode).
+- The actual agent env vars are evaluated at **commit time**, not at hook
+  install time, so an agent can update `TILLANDSIAS_GENERATED_BY` before
+  committing (e.g. to add `model=...`).
