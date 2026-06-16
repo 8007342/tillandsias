@@ -1,8 +1,39 @@
 # Enclave egress isolation is proxy-cooperative, not network-enforced — 2026-06-16
 
-Status: ready (work packet below)
+Status: ready (work packet below) — feasibility analyzed 2026-06-16; naive
+`--internal` ruled out, surgical design identified (see "Feasibility" section).
 Discovered by: `/advance-work-from-plan` (linux, cycle while investigating the
 cycle-1 triage of `2026-06-16-network-isolation-regression.md`)
+
+## Feasibility analysis (2026-06-16, second advance-work cycle)
+
+A blanket `--internal` on `tillandsias-enclave` is **NOT viable as-is** — it
+would break the git-mirror → GitHub push pipeline:
+
+- `git_service_profile()` (container_profile.rs:548-570) has `env_vars: vec![]`
+  — **no `HTTP_PROXY`/`HTTPS_PROXY`**. git-service reaches GitHub **directly**.
+- git-service is launched `--network tillandsias-enclave` **only** (single-homed)
+  at `remote_projects.rs:287` and `:517`. It is NOT dual-homed like the proxy.
+- Therefore making the enclave internal removes git-service's only egress route
+  → the upstream GitHub push (how releases + coordination propagate) breaks.
+
+**Refined (correct) design** — internal enclave + dual-home git-service:
+1. Add `--internal` to `ensure_enclave_network` (main.rs:1414).
+2. Dual-home git-service to the bridge (change its launch network from
+   `tillandsias-enclave` to `tillandsias-enclave,bridge`, mirroring the proxy at
+   container_profile.rs:206-207) at `remote_projects.rs:287,517`.
+   Net effect: forge/inference/vault stay enclave-only (no direct egress —
+   FIXED); proxy + git-service keep their bridge leg for allowlisted /
+   direct-GitHub egress.
+3. **Open verification point**: confirm no OTHER enclave-only container needs
+   direct external egress — especially `inference` (ollama model pulls). If it
+   does, dual-home it too or route it via the proxy. The allowlist already
+   covers `.github.com`, `.crates.io`, `.fedoraproject.org`, `.alpine-linux.org`,
+   `.amazonaws.com`.
+4. Verify with a FULL smoke: rebuild + reinit + a real git-mirror push to GitHub
+   + forge lane, AND the new direct-egress-denied litmus. Do NOT ship without
+   the git-push verification — getting it wrong breaks the release pipeline for
+   all hosts. This is why the packet stays verify-heavy / its own cycle.
 
 ## Summary
 
