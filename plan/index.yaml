@@ -3875,10 +3875,10 @@ plan_index:
 
     - id: forge-git-identity-anonymization
       order: 53
-      title: Anonymize git identity inside the forge (no host PII leak)
+      title: Transparent agentic git attribution — preserve human author, mark agent+model (redesigned from anonymize)
       status: ready
       owner_host: linux
-      deliverable: images/default/entrypoint-forge-opencode.sh
+      deliverable: cheatsheets/concurrent-git/commit-attribution.md
       audit_origin: plan/forge-improvements/proposals/2026-06-16-git-pii-scrub.md
       depends_on: []
       exit_criteria:
@@ -3898,15 +3898,19 @@ plan_index:
             - images/default/entrypoint-forge-opencode.sh
             - openspec/litmus-tests/
           next_action: >
-            Substitute the host user's real git identity with an anonymized /
-            configured-forge identity at the container_profile / launch layer so
-            GIT_AUTHOR_*/GIT_COMMITTER_* never carry real PII into the forge,
-            while keeping in-forge commits attributable. Decide whether a real
-            identity should be opt-in. Bare unset is WRONG — it breaks
-            enclave-mirror commit attribution.
+            REDESIGNED 2026-06-16 (operator direction): do NOT anonymize.
+            PRESERVE the real GitHub-login username/email as the commit AUTHOR,
+            and ADD machine-parseable agent/model attribution trailers so
+            Claude/ChatGPT/OpenCode/Antigravity/local-model commits are
+            distinguishable (Co-Authored-By + structured `Generated-By: tool=…
+            model=… params=…`, encoding model size/quant for local models).
+            Implement at the container_profile / commit-trailer layer; keep the
+            human author intact. Convention + sources:
+            cheatsheets/concurrent-git/commit-attribution.md.
           acceptance_evidence:
-            - "Diagnostics: isolation_or_privacy_risks no longer lists git identity vars."
-            - "`git commit` inside the forge succeeds with the substituted identity."
+            - "Real GitHub-login author/email preserved on forge commits (contributor attribution intact)."
+            - "Each forge commit carries a machine-parseable agent+model trailer (git log --format='%(trailers:key=Generated-By)' resolves it)."
+            - "Different agents/models produce distinguishable trailers; local models include size/params."
             - "`./build.sh --check` and a new/updated litmus pass."
           fallback_when_blocked: >
             If a clean substitution point is unclear, document the exact launch

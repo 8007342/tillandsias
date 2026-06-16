@@ -8,28 +8,23 @@ the items below are immediate work.
 
 ## Immediate
 
-### privacy/forge-git-identity-anonymization
+### forge-git-identity-anonymization → transparent agentic attribution (REDESIGNED)
 
 - status: ready
 - owner_host: linux
 - source: `plan/index.yaml` order 53
-- next_action: Substitute the host user's real git identity with an anonymized
-  / configured-forge identity at the `container_profile` / launch layer so
-  `GIT_AUTHOR_*`/`GIT_COMMITTER_*` never carry real PII into the forge, while
-  keeping in-forge commits attributable. Bare unset is WRONG (breaks
-  enclave-mirror commit attribution).
-- blocker: none
-- accepted_from: `plan/forge-improvements/proposals/2026-06-16-git-pii-scrub.md`
+- next_action: **DECISION MADE (operator, 2026-06-16): do NOT anonymize.**
+  Preserve the real GitHub-login username/email as the commit AUTHOR, and add
+  machine-parseable agent/model attribution trailers so Claude/ChatGPT/OpenCode/
+  Antigravity/local-model commits are distinguishable (`Co-Authored-By` +
+  structured `Generated-By: tool=… model=… params=…`; encode size/quant for
+  local models). Implement at the container_profile / commit-trailer layer.
+- blocker: none (was blocked-on-decision; now resolved)
+- convention + sources: `cheatsheets/concurrent-git/commit-attribution.md`
 - evidence_required:
-  - diagnostics shows no real host git identity vars inside the forge
-  - an in-forge `git commit` still succeeds with the substituted identity
-  - a litmus/unit test pins the substitution against silent re-leak
-- note (2026-06-16): genuine product fork on attribution — anonymizing by
-  default changes the user's GitHub commit attribution (forge commits like
-  `b8987bd6` currently use the real identity), and the email is already public
-  in the user's commits, so the privacy benefit is marginal. Needs an
-  attribution decision (default-anon vs opt-in-real) before implementing; do not
-  guess autonomously.
+  - real GitHub-login author/email preserved on forge commits (attribution intact)
+  - each forge commit carries a machine-parseable agent+model trailer
+  - different agents/models → distinguishable trailers (local models include params)
 
 ### enclave/network-level-egress-deny
 
