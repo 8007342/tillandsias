@@ -67,18 +67,24 @@ reports; the two standing findings below are the starting backlog.
   - run `./build.sh --ci-full` and observe the `command not found` at the runtime
     litmus step.
 - next_action: >
-    Move `podman_runtime_health_probe` into `scripts/common.sh` (sourced by both
-    build.sh and local-ci.sh) and make it use `"$REPO_ROOT"`-anchored paths
-    (`"$REPO_ROOT/VERSION"`, `"$REPO_ROOT/scripts/tillandsias-podman"`) since
-    common.sh does not currently define REPO_ROOT — define/guard it. Remove the
-    duplicate from local-ci.sh. Verify the runtime residual litmus actually RUNS
-    on a host with a healthy podman runtime. Shared CI infra → coordinate before
-    editing build.sh/common.sh/local-ci.sh.
+    The runtime-health-probe portion is fixed and the runtime residual now runs.
+    Complete the residual evidence-count fix in
+    `local-smoke/evidence-bundle-litmus-count-regression`: remove stale
+    cross-phase counter reuse and prove an all-pass ci-full run reports zero
+    failures.
 - events:
   - type: discovered
     ts: `2026-06-12T20:34:00Z`
     agent_id: `linux-macuahuitl-claude-2026-06-12T2124Z`
     host: linux
+  - type: regression
+    ts: `2026-06-15T02:49:03Z`
+    agent_id: `linux-macuahuitl-codex-20260615T0228Z`
+    host: linux
+    note: >
+      Runtime residual litmus passed 5/5, but the generated evidence bundle
+      still reported 8 passed and 4 failed. Residual work is tracked by
+      local-smoke/evidence-bundle-litmus-count-regression.
 
 ### Work Packet: finding/router-wire-version-mismatch
 
@@ -119,9 +125,11 @@ reports; the two standing findings below are the starting backlog.
 - recurring: true   # re-run after every published release
 - next_action: >
     Run `/smoke-curl-install-and-test-e2e` against the latest published release.
-    DESTRUCTIVE (`podman system reset --force`) — only on a host where wiping
-    Podman is acceptable, or with operator "now" go-ahead. File each issue as a
-    `smoke-finding/*` packet in a dated `plan/issues/smoke-e2e-findings-*` report.
+    DESTRUCTIVE (`podman system reset --force`) is expected setup on
+    Tillandsias smoke hosts and must not require another confirmation unless
+    `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0`. File each issue as a
+    `smoke-finding/*` packet in a dated `plan/issues/smoke-e2e-findings-*`
+    report.
 - events:
   - type: discovered
     ts: `2026-06-12T21:24:00Z`

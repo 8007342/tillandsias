@@ -13,6 +13,30 @@ This is **BLOCKED on linux step 32** (true-rekey lands the shared contract Windo
 — not claimable until step 32 completes. Optional independent item: wire
 `EnumerateLocalProjects`. No new autonomous Windows **step-36** code packet until step 32 lands.
 
+## 2026-06-15 — `coord/windows-sync-and-verify-20260615` — DONE
+
+Verification packet (depends on the P0 fix below — windows-tray didn't compile before it).
+windows-next integrated linux-next head `d3681430` (HEAD `fabcaecd`); focused tests pass
+(control-wire 26/26, windows-tray 44+8+3); WSL probe contracts intact (`--diagnose` exit 2;
+`--status-once` exit 1 idle / exit 2 reachable with `wire_version:2`). Also confirmed my
+earlier `smoke-finding/provision-once-ready-budget-too-short` is now implemented by the
+merged change (keepalive across connect, budget 12→36, accepts `VmPhase::Starting`).
+
+## 2026-06-15 — P0 release blocker `windows-tray/vmphase-import-scope-release-break` — DONE
+
+The windows-release job of release.yml failed for v0.3.260615.1 (E0425 + 2× E0433):
+a non-Windows host changed `try_connect_until_ready` to return `Result<VmPhase, String>`
+and added `VmPhase::Starting` handling but left the `VmPhase` import inside the fn body,
+so it wasn't in scope for the signature/sibling fn (couldn't compile-verify on macOS).
+
+- 2026-06-15T20:40Z **claim** by `windows-yolanda-claude-20260615T204000Z`
+  (lease `lease-windows-vmphase-import-20260615T2040Z`).
+- 2026-06-15T20:42Z **DONE** — hoisted `use tillandsias_control_wire::VmPhase;` to module
+  scope, dropped the redundant body-local import. Verified on Win11: `cargo build`
+  (debug + `--release`, mirrors build-windows-tray.ps1) Finished 0 errors/0 unused-import
+  warning; 44+8+3 tests pass; fmt + clippy clean. Re-run release.yml --ref v0.3.260615.1
+  (operator-gated) to publish the missing Windows artifact.
+
 ## 2026-06-14 — recipe completion: Fedora-44 WSL2 provisioning FIXED + verified; 2 Vault blockers filed
 
 Operator directive: complete the recipe so it launches Fedora44 in WSL2, curl-installs

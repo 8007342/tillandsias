@@ -3,13 +3,27 @@ set -euo pipefail
 
 CLAUDE_BIN="${CLAUDE_BIN:-${HOME}/.local/bin/claude}"
 if [[ ! -x "$CLAUDE_BIN" ]]; then
-  CLAUDE_BIN="$(command -v claude)"
+  CLAUDE_BIN="$(command -v claude 2>/dev/null || true)"
+fi
+if [[ -z "$CLAUDE_BIN" || ! -x "$CLAUDE_BIN" ]]; then
+  printf 'claude: unable to find executable claude binary. Set CLAUDE_BIN=/path/to/claude.\n' >&2
+  exit 127
 fi
 
+usage() {
+  cat >&2 <<'EOF'
+Usage:
+  ./claude [--quiet] "prompt"
+
+Options:
+  --quiet, -q   Run `claude --print` once instead of launching the TUI.
+  --help, -h    Show this help.
+
+Use ./repeat --agent claude --prompt "..." for recurring unattended runs.
+EOF
+}
+
 QUIET=0
-QUIT=0
-REPEAT_INTERVAL=""
-REPEAT_TIMES=""
 claude_args=()
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -17,25 +31,9 @@ while [[ $# -gt 0 ]]; do
       QUIET=1
       shift
       ;;
-    --quit|-v|--verbose)
-      QUIT=1
-      shift
-      ;;
-    --times)
-      if [[ $# -lt 2 ]]; then
-        printf 'claude: --times requires a count such as 10\n' >&2
-        exit 2
-      fi
-      REPEAT_TIMES="$2"
-      shift 2
-      ;;
-    --repeat)
-      if [[ $# -lt 2 ]]; then
-        printf 'claude: --repeat requires an interval such as 30m or 2h30m\n' >&2
-        exit 2
-      fi
-      REPEAT_INTERVAL="$2"
-      shift 2
+    --help|-h)
+      usage
+      exit 0
       ;;
     --)
       shift
@@ -49,182 +47,13 @@ while [[ $# -gt 0 ]]; do
   esac
 done
 
-common_args=()
-
-progress_bar() {
-  local value="${1:-0}"
-  local width="${2:-10}"
-  local filled=$(( value * width / 100 ))
-  local empty=$(( width - filled ))
-  local bar=""
-  local i
-  for ((i = 0; i < filled; i++)); do
-    bar+="█"
-  done
-  for ((i = 0; i < empty; i++)); do
-    bar+="░"
-  done
-  printf '%s' "$bar"
-}
-
-sparkline_char() {
-  local value="${1:-0}"
-  case $(( value * 7 / 100 )) in
-    0) printf '▁' ;;
-    1) printf '▂' ;;
-    2) printf '▃' ;;
-    3) printf '▄' ;;
-    4) printf '▅' ;;
-    5) printf '▆' ;;
-    6) printf '▇' ;;
-    *) printf '█' ;;
-  esac
-}
-
-sparkline_for_values() {
-  local value
-  for value in "$@"; do
-    sparkline_char "$value"
-  done
-}
-
-format_elapsed() {
-  local total="${1:-0}"
-  local hours=$(( total / 3600 ))
-  local minutes=$(( (total % 3600) / 60 ))
-  local seconds=$(( total % 60 ))
-  if [[ "$hours" -gt 0 ]]; then
-    printf '%02d:%02d:%02d' "$hours" "$minutes" "$seconds"
-  else
-    printf '%02d:%02d' "$minutes" "$seconds"
-  fi
-}
-
-format_timestamp() {
-  local epoch="${1:-0}"
-  date -d "@$epoch" '+%H:%M:%S'
-}
-
-run_tui_once() {
-  "$CLAUDE_BIN" \
-    "${common_args[@]}" \
-    "${claude_args[@]}"
-}
-
-run_quiet_once() {
-  "$CLAUDE_BIN" \
-    --print \
-    --output-format text \
-    "${common_args[@]}" \
-    "${claude_args[@]}"
-}
-
-run_repeat_quiet() {
-  REPEAT_SUPERVISOR_BIN="$PWD/target/debug/tillandsias-repeat-loop"
-  REPEAT_RENDERER_BIN="$PWD/target/debug/tillandsias-repeat-graph"
-  if [[ ! -x "$REPEAT_SUPERVISOR_BIN" || ! -x "$REPEAT_RENDERER_BIN" ]]; then
-    cargo build --quiet --offline --manifest-path "$PWD/crates/tillandsias-repeat-graph/Cargo.toml"
-  fi
-  if [[ ! -x "$REPEAT_SUPERVISOR_BIN" ]]; then
-    printf '[claude-repeat] unable to locate repeat supervisor binary: %s\n' "$REPEAT_SUPERVISOR_BIN" >&2
-    exit 2
-  fi
-  local repeat_args=(
-    --prompt "${claude_args[*]}"
-    --interval "$REPEAT_INTERVAL"
-    --codex-bin "$CLAUDE_BIN"
-    --renderer-bin "$REPEAT_RENDERER_BIN"
-    --state-root "${AGENT_STATE_DIR:-${PWD}/plan/localwork/agents}"
-    --plan-root "$PWD/plan"
-    --trend-window "${CLAUDE_REPEAT_TREND_WINDOW:-5}"
-    --refresh-secs "${CLAUDE_REPEAT_REFRESH_SECS:-2}"
-  )
-  if [[ -n "$REPEAT_TIMES" ]]; then
-    repeat_args+=(--times "$REPEAT_TIMES")
-  fi
-  exec "$REPEAT_SUPERVISOR_BIN" "${repeat_args[@]}"
-}
-
-run_repeat_quit() {
-  local cycle=0
-  local max_cycles="${REPEAT_TIMES:-0}"
-  while :; do
-    cycle=$((cycle + 1))
-    printf '[claude-repeat] cycle %02d start | waiting on agent | interval=%s | elapsed=%s\n' \
-      "$cycle" "$REPEAT_INTERVAL" "$(format_elapsed 0)"
-    run_tui_once
-    local status=$?
-    printf '[claude-repeat] cycle %02d complete | exit=%d\n' "$cycle" "$status"
-    if [[ "$status" -ne 0 ]]; then
-      exit "$status"
-    fi
-    if [[ -n "$REPEAT_INTERVAL" ]]; then
-      if [[ "${CLAUDE_REPEAT_SKIP_BUILD:-0}" != 1 && -x "$PWD/build.sh" ]]; then
-        build_log="$(mktemp /tmp/claude-repeat-build.XXXXXX)"
-        if "$PWD/build.sh" --ci-full --graphs >"$build_log" 2>&1; then
-          if [[ -f "$PWD/docs/convergence/centicolon-dashboard.md" ]]; then
-            cat "$PWD/docs/convergence/centicolon-dashboard.md"
-          else
-            cat "$build_log"
-          fi
-        else
-          cat "$build_log" >&2 || true
-          rm -f "$build_log"
-          exit 1
-        fi
-        rm -f "$build_log"
-      fi
-      if [[ "$max_cycles" -gt 0 && "$cycle" -ge "$max_cycles" ]]; then
-        exit 0
-      fi
-      printf '[claude-repeat] cycle %02d sleeping until next iteration | sleep=%s\n' "$cycle" "$REPEAT_INTERVAL"
-      sleep "$REPEAT_INTERVAL"
-    else
-      exit 0
-    fi
-  done
-}
-
-if [[ -n "$REPEAT_INTERVAL" ]]; then
-  if [[ "$QUIET" -eq 1 ]]; then
-    if [[ -n "$REPEAT_TIMES" ]]; then
-      cycle=0
-      while :; do
-        cycle=$((cycle + 1))
-        run_quiet_once
-        status=$?
-        if [[ "$status" -ne 0 ]]; then
-          exit "$status"
-        fi
-        if [[ "${CLAUDE_REPEAT_SKIP_BUILD:-0}" != 1 && -x "$PWD/build.sh" ]]; then
-          build_log="$(mktemp /tmp/claude-repeat-build.XXXXXX)"
-          if "$PWD/build.sh" --ci-full --graphs >"$build_log" 2>&1; then
-            if [[ -f "$PWD/docs/convergence/centicolon-dashboard.md" ]]; then
-              cat "$PWD/docs/convergence/centicolon-dashboard.md"
-            else
-              cat "$build_log"
-            fi
-          else
-            cat "$build_log" >&2 || true
-            rm -f "$build_log"
-            exit 1
-          fi
-          rm -f "$build_log"
-        fi
-        if [[ "$cycle" -ge "$REPEAT_TIMES" ]]; then
-          exit 0
-        fi
-        sleep "$REPEAT_INTERVAL"
-      done
-    fi
-    run_repeat_quiet
-  fi
-  run_repeat_quit
+if [[ ${#claude_args[@]} -eq 0 ]]; then
+  usage
+  exit 2
 fi
 
 if [[ "$QUIET" -eq 1 ]]; then
-  run_quiet_once
-  exit $?
+  exec "$CLAUDE_BIN" --print --output-format text "${claude_args[@]}"
 fi
 
-run_tui_once
+exec "$CLAUDE_BIN" "${claude_args[@]}"

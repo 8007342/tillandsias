@@ -15,6 +15,11 @@ if [ -f /opt/config-overlay/mcp/agent-profile.sh ]; then
     source /opt/config-overlay/mcp/agent-profile.sh
 fi
 
+# @trace spec:forge-git-identity-anonymization
+# Agent attribution for git commit trailers.
+export TILLANDSIAS_AGENT_NAME="OpenAI Codex"
+export TILLANDSIAS_GENERATED_BY="tool=codex"
+
 # @trace spec:forge-hot-cold-split, spec:agent-cheatsheets
 # Populate tmpfs hot mount (/opt/cheatsheets) from image-baked lower layer.
 # The --tmpfs mount is already in place (podman establishes it before exec).

@@ -31,9 +31,15 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 OUTPUT_DIR="$PROJECT_ROOT/target/convergence"
 REUSE_CI_RESULTS=false
+LITMUS_COUNT_FIXTURE=false
+LITMUS_COUNT_FIXTURE_FILES=()
 for arg in "$@"; do
     case "$arg" in
         --reuse-ci-results) REUSE_CI_RESULTS=true ;;
+        --litmus-count-fixture=*)
+            LITMUS_COUNT_FIXTURE=true
+            IFS=':' read -r -a LITMUS_COUNT_FIXTURE_FILES <<< "${arg#*=}"
+            ;;
         -*) echo "Unknown flag: $arg" >&2; exit 3 ;;
         *) OUTPUT_DIR="$arg" ;;
     esac
@@ -51,6 +57,81 @@ NC='\033[0m'
 _info()  { echo -e "${GREEN}[evidence]${NC} $*"; }
 _warn()  { echo -e "${YELLOW}[evidence]${NC} $*"; }
 _error() { echo -e "${RED}[evidence]${NC} $*" >&2; }
+
+_sum_litmus_field() {
+    local field="$1"
+    local file="$2"
+
+    awk -v field="$field" '
+        BEGIN { total = 0; found = 0 }
+        {
+            line = $0
+            while (match(line, "(^|[[:space:]])" field "[[:space:]]*:[[:space:]]*[0-9]+")) {
+                value = substr(line, RSTART, RLENGTH)
+                sub(".*:", "", value)
+                gsub(/[[:space:]]/, "", value)
+                total += value
+                found = 1
+                line = substr(line, RSTART + RLENGTH)
+            }
+        }
+        END {
+            if (found) {
+                print total
+            } else {
+                print ""
+            }
+        }
+    ' "$file"
+}
+
+_count_litmus_status_lines() {
+    local status="$1"
+    local file="$2"
+
+    grep -Ec "(^|[[:space:]])${status}([[:space:]:-]|$)" "$file" || true
+}
+
+litmus_count_passed() {
+    local file="$1"
+    local summary_count
+
+    summary_count="$(_sum_litmus_field "PASS" "$file")"
+    if [[ -n "$summary_count" ]]; then
+        printf '%s\n' "$summary_count"
+    else
+        _count_litmus_status_lines "PASS" "$file"
+    fi
+}
+
+litmus_count_failed() {
+    local file="$1"
+    local summary_count
+
+    summary_count="$(_sum_litmus_field "FAIL" "$file")"
+    if [[ -n "$summary_count" ]]; then
+        printf '%s\n' "$summary_count"
+    else
+        _count_litmus_status_lines "FAIL" "$file"
+    fi
+}
+
+if [[ "$LITMUS_COUNT_FIXTURE" == true ]]; then
+    if [[ "${#LITMUS_COUNT_FIXTURE_FILES[@]}" -eq 0 ]]; then
+        _error "No litmus fixture files provided"
+        exit 3
+    fi
+
+    fixture_passed=0
+    fixture_failed=0
+    for litmus_file in "${LITMUS_COUNT_FIXTURE_FILES[@]}"; do
+        fixture_passed=$((fixture_passed + $(litmus_count_passed "$litmus_file")))
+        fixture_failed=$((fixture_failed + $(litmus_count_failed "$litmus_file")))
+    done
+
+    printf 'passed=%s failed=%s\n' "$fixture_passed" "$fixture_failed"
+    exit 0
+fi
 
 # Cleanup on exit
 trap 'rm -rf "$BUNDLE_STAGING"' EXIT
@@ -149,16 +230,26 @@ if [[ "$REUSE_CI_RESULTS" == true ]]; then
         _error "Cannot reuse litmus results: pre-build or post-build phase log is missing"
         exit 1
     fi
+    LITMUS_SOURCE_FILES=(/tmp/litmus-pre-build.log /tmp/litmus-post-build.log)
+    if [[ -f /tmp/litmus-runtime.log ]]; then
+        LITMUS_SOURCE_FILES+=(/tmp/litmus-runtime.log)
+    fi
     LITMUS_OUTPUT="$(
-        cat /tmp/litmus-pre-build.log /tmp/litmus-post-build.log
-        [[ ! -f /tmp/litmus-runtime.log ]] || cat /tmp/litmus-runtime.log
+        cat "${LITMUS_SOURCE_FILES[@]}"
     )"
 else
     _info "Running litmus tests..."
-    LITMUS_OUTPUT=$("$SCRIPT_DIR/run-litmus-test.sh" 2>&1 || true)
+    LITMUS_RUN_LOG="$BUNDLE_STAGING/litmus-run.log"
+    "$SCRIPT_DIR/run-litmus-test.sh" > "$LITMUS_RUN_LOG" 2>&1 || true
+    LITMUS_SOURCE_FILES=("$LITMUS_RUN_LOG")
+    LITMUS_OUTPUT=$(cat "$LITMUS_RUN_LOG")
 fi
-LITMUS_PASSED=$(echo "$LITMUS_OUTPUT" | grep -c "PASS" || echo "0")
-LITMUS_FAILED=$(echo "$LITMUS_OUTPUT" | grep -c "FAIL" || echo "0")
+LITMUS_PASSED=0
+LITMUS_FAILED=0
+for litmus_file in "${LITMUS_SOURCE_FILES[@]}"; do
+    LITMUS_PASSED=$((LITMUS_PASSED + $(litmus_count_passed "$litmus_file")))
+    LITMUS_FAILED=$((LITMUS_FAILED + $(litmus_count_failed "$litmus_file")))
+done
 
 cat > "$LITMUS_RESULTS_FILE" <<EOF
 {

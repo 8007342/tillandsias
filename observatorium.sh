@@ -13,8 +13,12 @@ done
 
 echo "Starting Observatorium HTTP server on port $PORT..."
 
-# Start python http server in the background (using host python for speed)
-python3 -m http.server $PORT --directory "$REPO_ROOT" >/dev/null 2>&1 &
+SERVER_BIN="$REPO_ROOT/target/debug/tillandsias-static-server"
+if [[ ! -x "$SERVER_BIN" ]]; then
+    cargo build --quiet -p tillandsias-static-server
+fi
+
+"$SERVER_BIN" --root "$REPO_ROOT" --port "$PORT" >/dev/null 2>&1 &
 SERVER_PID=$!
 
 # Ensure server stops when script exits

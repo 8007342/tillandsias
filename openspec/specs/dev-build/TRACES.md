@@ -11,3 +11,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-headless/src/main.rs#L3566](../../../crates/tillandsias-headless/src/main.rs#L3566)
 - [scripts/build-image.sh#L19](../../../scripts/build-image.sh#L19)
 - [scripts/local-ci.sh#L804](../../../scripts/local-ci.sh#L804)
+- [scripts/test-evidence-bundle-litmus-summary.sh#L2](../../../scripts/test-evidence-bundle-litmus-summary.sh#L2)

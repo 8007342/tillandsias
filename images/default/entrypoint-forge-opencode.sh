@@ -16,6 +16,12 @@ if [ -f /opt/config-overlay/mcp/agent-profile.sh ]; then
     source /opt/config-overlay/mcp/agent-profile.sh
 fi
 
+# @trace spec:forge-git-identity-anonymization
+# Agent attribution for git commit trailers. These env vars are consumed
+# by the prepare-commit-msg hook installed in lib-common.sh.
+export TILLANDSIAS_AGENT_NAME="OpenCode"
+export TILLANDSIAS_GENERATED_BY="tool=opencode"
+
 # @trace spec:forge-hot-cold-split, spec:agent-cheatsheets, spec:forge-opencode-onboarding
 # Populate tmpfs hot mount (/opt/cheatsheets) from image-baked lower layer.
 # The --tmpfs mount is already in place (podman establishes it before exec).
@@ -145,16 +151,15 @@ for arg in "$@"; do
     fi
 done
 
-if [ "$IS_DIAGNOSTICS" = "true" ]; then
+if [ -n "${TILLANDSIAS_OPENCODE_PROMPT:-}" ]; then
+    trace_lifecycle "exec" "launching prompted opencode run"
+    exec "$OC_BIN" run --dangerously-skip-permissions "$TILLANDSIAS_OPENCODE_PROMPT"
+elif [ "$IS_DIAGNOSTICS" = "true" ]; then
     trace_lifecycle "exec" "launching unattended opencode run"
     # Execute the unattended loop run command.
     # We ignore the other passed arguments (--print, --output-format, json) as they are intended for the orchestrator,
     # and instead run opencode unattended using the synthetic prompt or command.
-    if [ -n "${TILLANDSIAS_OPENCODE_PROMPT:-}" ]; then
-        exec "$OC_BIN" run --dangerously-skip-permissions "$TILLANDSIAS_OPENCODE_PROMPT"
-    else
-        exec "$OC_BIN" run --dangerously-skip-permissions "run /startup"
-    fi
+    exec "$OC_BIN" run --dangerously-skip-permissions "run /startup"
 else
     trace_lifecycle "exec" "launching opencode ($OC_BIN)"
     exec "$OC_BIN" "$@"

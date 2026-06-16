@@ -21,6 +21,11 @@ if [ -f /opt/config-overlay/mcp/agent-profile.sh ]; then
     source /opt/config-overlay/mcp/agent-profile.sh
 fi
 
+# @trace spec:forge-git-identity-anonymization
+# Agent attribution for git commit trailers.
+export TILLANDSIAS_AGENT_NAME="OpenCode"
+export TILLANDSIAS_GENERATED_BY="tool=opencode"
+
 # @trace spec:proxy-container
 # Trust the Tillandsias enclave CA chain for HTTPS proxy caching.
 # System trust store updates require root (denied under --cap-drop=ALL).

@@ -197,6 +197,50 @@ configure_git_identity() {
     git config user.name "$name" 2>/dev/null || true
     git config user.email "$email" 2>/dev/null || true
     trace_lifecycle "git-identity" "configured"
+    _install_agent_trailer_hook
+}
+
+# @trace spec:forge-git-identity-anonymization
+# Install a prepare-commit-msg hook that appends agent attribution trailers
+# (Co-Authored-By, Generated-By) when TILLANDSIAS_AGENT_NAME is set at
+# commit time. Uses core.hooksPath in global git config so the host's
+# .git/hooks/ is never touched.
+_install_agent_trailer_hook() {
+    local hooks_dir="$HOME/.cache/tillandsias/git-hooks"
+    local hook_file="$hooks_dir/prepare-commit-msg"
+    mkdir -p "$hooks_dir" 2>/dev/null || return 0
+
+    # Idempotent: skip if hook already installed
+    if [ -f "$hook_file" ] && grep -q "TILLANDSIAS_AGENT" "$hook_file" 2>/dev/null; then
+        return 0
+    fi
+
+    cat > "$hook_file" <<-'HOOK'
+#!/usr/bin/env bash
+# prepare-commit-msg hook — Tillandsias forge attribution (auto-installed)
+# @trace spec:forge-git-identity-anonymization
+# Appends Co-Authored-By and Generated-By trailers for agentic commits.
+COMMIT_MSG_FILE="$1"
+COMMIT_SOURCE="${2:-}"
+
+[ -n "${TILLANDSIAS_AGENT_NAME:-}" ] || exit 0
+
+case "${COMMIT_SOURCE}" in
+    merge|squash|commit) exit 0 ;;
+esac
+
+grep -q "^Generated-By:" "$COMMIT_MSG_FILE" 2>/dev/null && exit 0
+
+{
+    echo ""
+    echo "Co-Authored-By: ${TILLANDSIAS_AGENT_NAME} <noreply@tillandsias>"
+    echo "Generated-By: ${TILLANDSIAS_GENERATED_BY:-tool=${TILLANDSIAS_AGENT_NAME}}"
+} >> "$COMMIT_MSG_FILE"
+HOOK
+
+    chmod 0755 "$hook_file" 2>/dev/null || true
+    git config --global core.hooksPath "$hooks_dir" 2>/dev/null || true
+    trace_lifecycle "git-hook" "agent trailer hook installed (core.hooksPath=${hooks_dir})"
 }
 
 # @trace spec:git-mirror-service, spec:forge-offline, spec:enclave-network

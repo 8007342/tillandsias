@@ -30,14 +30,19 @@ critical_path:
     timeout_ms: 10000
     expected_behavior: "opencode bootstrap present"
 
+  - step: "verify supplied prompts run through supported OpenCode run mode"
+    command: "bash scripts/test-opencode-entrypoint-prompt.sh"
+    timeout_ms: 10000
+    expected_behavior: "ok: opencode entrypoint prompt routing"
+
 observability:
   traces:
     - "@trace spec:forge-opencode-onboarding"
-  expected_log: "OpenCode onboarding bundle and bootstrap remain visible in the forge launch path"
+  expected_log: "OpenCode onboarding bundle, bootstrap, and prompted run path remain visible in the forge launch path"
   log_fields:
     spec: "forge-opencode-onboarding"
     test: "forge-opencode-onboarding-shape"
 
 rollback:
   on_failure: "inspect images/default/config-overlay/opencode/config.json, images/default/config-overlay/opencode/instructions/methodology.md, and images/default/entrypoint-forge-opencode.sh for onboarding drift"
-  command: "grep -Fq instructions/methodology.md images/default/config-overlay/opencode/config.json && grep -Fq 'run /startup' images/default/entrypoint-forge-opencode.sh"
+  command: "grep -Fq instructions/methodology.md images/default/config-overlay/opencode/config.json && grep -Fq 'run /startup' images/default/entrypoint-forge-opencode.sh && grep -Fq 'launching prompted opencode run' images/default/entrypoint-forge-opencode.sh"

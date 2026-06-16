@@ -3,7 +3,17 @@ task_id: p3-backlog/wave-25-undocumented-gaps
 wave: 25
 iteration: 12
 date: 2026-05-14
-status: in_progress
+status: stale-reclaimed
+reclaimed_at: 2026-06-16T20:26:00Z
+reclaimed_by: linux-macuahuitl-claude-opus (multihost-orchestration)
+reclaim_note: >
+  Reclaimed a month-stale `in_progress` flag (2026-05-14, iteration 12, no lease
+  / no `expires_at` / no progress or completed event for ~33 days). Per the
+  orchestration stale-lease reconciliation rule, reset out of the active
+  `in_progress` state so it no longer reads as live work. This is a P3 worklog,
+  off the active frontier. If OBS-025 / TR-010 are still genuine gaps, they will
+  resurface via a fresh gap-triage audit rather than from this abandoned wave
+  log; treat that audit as the canonical source, not this file.
 ---
 
 # Wave 25d — Undocumented P3 Gaps: OBS-025 + TR-010

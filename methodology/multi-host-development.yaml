@@ -70,6 +70,11 @@ multi_host_development:
       changed ledgers. The warning condition is repeated lack of remote progress
       across the expected cadence, or remote-ahead combined with a local dirty
       tree, conflict, sandbox, or credential issue that prevents reconciliation.
+    repeat_entrypoint: >
+      Long-running unattended hosts should use `./repeat --prompt "Use the
+      /meta-orchestration skill"`. The repeat launcher resolves the current
+      Git worktree root so multiple Tillandsias checkouts on one host stay
+      isolated.
 
   fast_forward_guard:
     before_updating_platform_branch:
@@ -162,6 +167,9 @@ multi_host_development:
       - "git commit with `chore(plan): <subject>` or `docs(plan): <subject>`."
       - "git push origin linux-next. On rejection: `git fetch && git rebase origin/linux-next` and retry up to 3 times."
       - "Switch back to your code branch (windows-next / osx-next) when done."
+      - "Do not exit a skill successfully with local-only commits or uncommitted tracked changes."
+      - "Incomplete but coherent work must be checkpoint-committed, pushed, and recorded in the owning plan item."
+      - "Prefer separate `git worktree` directories for concurrent platform branches instead of switching branches with dirty state."
 
   branch_canon:
     rule: >

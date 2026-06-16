@@ -18,7 +18,7 @@ trace: crates/tillandsias-windows-tray/src/wsl_lifecycle.rs
 - owner_host: windows
 - capability_tags: [rust, windows, control-wire, release]
 - priority: P0
-- status: ready
+- status: done
 - discovered_by: `/merge-to-main-and-release` (osx-next promotion, v0.3.260615.1)
 - owned_files:
   - `crates/tillandsias-windows-tray/src/wsl_lifecycle.rs`
@@ -53,3 +53,27 @@ trace: crates/tillandsias-windows-tray/src/wsl_lifecycle.rs
     ts: "2026-06-15T04:10:00Z"
     agent_id: macos-claude-opus
     host: macos
+  - type: claim
+    ts: "2026-06-15T20:40:00Z"
+    agent_id: windows-yolanda-claude-20260615T204000Z
+    host: windows
+    lease_id: lease-windows-vmphase-import-20260615T2040Z
+    expires_at: "2026-06-16T00:40:00Z"
+  - type: completed
+    ts: "2026-06-15T20:42:00Z"
+    agent_id: windows-yolanda-claude-20260615T204000Z
+    host: windows
+    lease_id: lease-windows-vmphase-import-20260615T2040Z
+    resolution: >
+      Hoisted `use tillandsias_control_wire::VmPhase;` to module scope (top of
+      wsl_lifecycle.rs) and dropped the redundant body-local `VmPhase` from
+      try_connect_until_ready's import (cleared the `unused import: VmPhase`
+      warning). The body-local import kept ControlEnvelope/ControlMessage/WIRE_VERSION.
+    evidence:
+      - "cargo build -p tillandsias-windows-tray (MSVC, Win11 Yolanda): Finished, 0 errors (was E0425 + 2x E0433)."
+      - "cargo build -p tillandsias-windows-tray --release (mirrors build-windows-tray.ps1): Finished, no unused-import warning."
+      - "cargo test -p tillandsias-windows-tray: 44 + 8 + 3 pass; cargo fmt --check clean; clippy clean on the crate."
+    next_action: >
+      Re-run release.yml --ref v0.3.260615.1 (windows-release job uploads via
+      --clobber) to publish the missing Windows tray artifact, or let the next
+      release pick it up. Operator-gated (actions:write).

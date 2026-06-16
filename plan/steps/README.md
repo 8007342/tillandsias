@@ -6,6 +6,13 @@ completed and a hygiene cycle archives it, the file moves to
 `plan/archive/<date>/steps/` and the `deliverable:` pointer in `plan/index.yaml`
 is updated to the archived path.
 
+Current active frontier:
+
+- No active step deliverable currently lives in this directory.
+- Immediate work is tracked in `plan/issues/ACTIVE.md`; the completed
+  destructive Linux smoke deliverable remains here as
+  `50-full-build-install-reset-init-forge.md` until the next archive pass.
+
 ## Step file template
 
 A step deliverable should be cold-start readable by a different future agent:

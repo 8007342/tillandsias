@@ -184,6 +184,7 @@ accessor.
 - 2026-06-03T04:23Z  e2a0aee4  Added diagnose-macos-provision.sh autonomous smoke script (m12). Agent `macos-Tlatoanis-MacBook-Air-big-pickle-20260603T042045Z`.
 - 2026-06-13T14:26Z  6ee0b2cb  Verify E2E VM boot, cloud-init provisioning, curl install of tillandsias-headless, and vsock connectivity. Run build-osx-tray.sh and vz-spike --boot successfully. Agent `macos-Antigravity`.
 - 2026-06-13T14:32Z  3686caaa  xplat-vault/macos DONE — Implemented macOS Keychain credentials delivery and GetVaultHandover check over vsock client connection loops in action_host.rs. Agent `macos-Antigravity`.
+- 2026-06-14T22:15Z  d150a105  vault-flow/xplat-gating-parity (macOS slice) DONE — Implemented refresh_github_login poller in action_host.rs over vz vsock using GithubLoginStatusRequest. Agent `macos-Antigravity`.
 
 
 ## Currently unblocked / active

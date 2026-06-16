@@ -20,10 +20,18 @@ date -u +%Y-%m-%dT%H:%MZ
 git rev-parse --abbrev-ref HEAD              # MUST be linux-next
 git fetch origin --prune
 git pull --ff-only origin linux-next         # local linux-next == origin/linux-next
-git status --short                           # MUST be clean (stash auto-artifact churn)
+git status --short                           # MUST be clean
 ```
 
-If the worktree is dirty with auto-artifact churn (`Cargo.lock`, `VERSION`, `TRACES.md`, `docs/convergence/*`), stash it — do NOT commit those as part of a release. Use `git stash` with no path arguments; the dirty files do not belong in the release commit.
+If the worktree is dirty, stop and file/update a plan blocker. Do not stash
+release inputs or auto-artifact churn; local state is volatile and hidden stashes
+make release evidence unrecoverable.
+
+Also verify there are no local-only commits:
+
+```bash
+test "$(git rev-list --count origin/linux-next..HEAD)" -eq 0
+```
 
 If the branch is not `linux-next`, log + exit without escalating — the release flow only ships from the Linux integration branch.
 
@@ -163,6 +171,9 @@ Append a one-line entry to `plan/issues/linux-next-work-queue-2026-05-25.md`:
 ```
 
 Push the ledger update to `linux-next` so other hosts and the next work-loop see the release happened.
+
+Before success, confirm the release ledger update was pushed and the local
+branch is not ahead of upstream.
 
 ---
 
