@@ -102,8 +102,12 @@ artifacts are published.
       Confirmed at ~32s post-boot (2026-06-16T23:28Z).
 - [ ] 49d — Re-run the macOS m8 user-attended smoke; projects list, github-login
       terminal yields a working shell, Attach Here opens a forge shell.
-- [ ] 49e — Add an automated post-provision assertion (host-side) that the VM
+- [x] 49e — Add an automated post-provision assertion (host-side) that the VM
       reaches `Ready` within a bound, so this can't silently regress to "Failed"
+      Implemented in `scripts/diagnose-macos-enclave.sh`. Validated: phase=Ready
+      at ~31s on the provisioned VM.
+- [ ] 49d — Re-run the macOS m8 user-attended smoke; projects list, github-login
+      terminal yields a working shell, Attach Here opens a forge shell.
 - m8 7-step user-attended smoke passes (projects populate; github-login + attach
   open working forge shells).
 - Container security invariants verified on the in-VM forge.
@@ -141,3 +145,13 @@ a second enclave definition (tombstone/supersede, never duplicate).
   host: "macos"
   evidence:
     - "Headless reached phase=Ready podman_ready=true ~32s post-boot (was ~84s Failed before 49b)"
+- type: completed
+  task: "49e"
+  ts: "2026-06-16T23:30:00Z"
+  agent_id: "macos-tlatoani-big-pickle-20260616T231619Z"
+  host: "macos"
+  files: ["scripts/diagnose-macos-enclave.sh"]
+  evidence:
+    - "Script validate: phase=Ready at ~31s on provisioned VM"
+    - "Exits 0 on Ready, 2 on Failed/timeout"
+    - "120s timeout with polling"

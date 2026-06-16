@@ -4055,21 +4055,37 @@ plan_index:
                 - "cargo check -p tillandsias-vm-layer: clean"
                 - "E2E gate: build+install+provision+diagnose PASS at f39203b5"
         - id: macos-enclave/verify-ready
-          status: pending
+          status: done
           owner_host: macos
           depends_on: [macos-enclave/vz-cloud-init]
           owned_files:
             - crates/tillandsias-vm-layer/src/vz.rs
           checkpoint_required: true
-          handoff_note: "Verify headless reports podman_ready=true / phase=Ready after podman+enclave provisions."
+          handoff_note: "Verified at 2026-06-16T23:28Z. Headless reaches phase=Ready podman_ready=true ~32s post-boot (was ~84s Failed before 49b)."
+          events:
+            - type: completed
+              ts: "2026-06-16T23:28:00Z"
+              agent_id: "macos-tlatoani-big-pickle-20260616T231619Z"
+              host: "macos"
+              evidence:
+                - "Launch tray, poll vm-status: phase=Ready podman_ready=true at ~32s"
+                - "Confirmed by diagnose-macos-enclave.sh: exits 0, Ready at ~31s"
         - id: macos-enclave/automated-gate
-          status: pending
+          status: done
           owner_host: macos
           depends_on: [macos-enclave/verify-ready]
           owned_files:
-            - crates/tillandsias-macos-tray/src/action_host.rs
+            - scripts/diagnose-macos-enclave.sh
           checkpoint_required: true
-          handoff_note: "Add host-side post-provision assertion that the VM reaches Ready within a bound."
+          handoff_note: "Implemented as scripts/diagnose-macos-enclave.sh. Polls tray log for phase=Ready within 120s. Exits 0 on Ready, 2 on Failed/timeout. Validated: Ready at ~31s."
+          events:
+            - type: completed
+              ts: "2026-06-16T23:30:00Z"
+              agent_id: "macos-tlatoani-big-pickle-20260616T231619Z"
+              host: "macos"
+              evidence:
+                - "Script written and tested: scripts/diagnose-macos-enclave.sh"
+                - "Phase=Ready at ~31s on provisioned VM"
       events:
         - type: claim
           ts: "2026-06-16T23:16:19Z"
