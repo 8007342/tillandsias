@@ -3997,10 +3997,73 @@ plan_index:
               agent_id: "linux-tlatoani-opencode-big-pickle-20260616T223046Z"
               host: linux
               lease_id: "enclave-network-egress-deny-2026-06-16"
-              note: >
+               note: >
                 Implementation complete: added --internal to enclave network,
                 dual-homed proxy (main.rs:1663), git daemon (main.rs:1799),
                 and git helper containers (remote_projects.rs:287,517) to bridge
                 for egress. All 474 tests pass; formatting clean. Full smoke
                 with real git-mirror push still needed before flipping to done.
+
+    - id: macos-in-vm-enclave-provisioning
+      order: 55
+      title: macOS in-VM enclave provisioning (keystone unblocking all macOS tray interaction)
+      status: claimed
+      owner_host: macos
+      deliverable: plan/steps/49-macos-in-vm-enclave.md
+      audit_origin: plan/issues/macos-m8-interactive-smoke-failures-2026-06-16.md
+      depends_on: []
+      blocks:
+        - macos-tray/github-login-pty-hangs-gray
+        - macos-tray/empty-project-lists-and-poll-error-masking
+        - macOS m8 release-acceptance gate
+      specs:
+        - vm-provisioning-lifecycle
+        - vm-idiomatic-layer
+        - macos-native-tray
+        - forge-as-only-runtime
+      exit_criteria:
+        - "macOS VM provisions podman on first boot via cloud-init"
+        - "podman.socket enabled; headless can drive containers via REST API"
+        - "headless reports podman_ready=true / phase=Ready over vsock"
+        - "m8 user-attended interactive smoke passes (projects populate, github-login+attach work)"
+      tasks:
+        - id: macos-enclave/design-decision
+          status: done
+          owner_host: macos
+          depends_on: []
+          owned_files:
+            - plan/steps/49-macos-in-vm-enclave.md
+          checkpoint_required: false
+          handoff_note: "Option 1 (cloud-init installs podman + enclave) chosen. See step 49 file for rationale."
+        - id: macos-enclave/vz-cloud-init
+          status: claimed
+          owner_host: macos
+          depends_on: [macos-enclave/design-decision]
+          owned_files:
+            - crates/tillandsias-vm-layer/src/vz.rs
+          checkpoint_required: true
+          handoff_note: "Add dnf install podman, podman.socket enable, and enclave image priming to the cloud-init user-data heredoc."
+        - id: macos-enclave/verify-ready
+          status: pending
+          owner_host: macos
+          depends_on: [macos-enclave/vz-cloud-init]
+          owned_files:
+            - crates/tillandsias-vm-layer/src/vz.rs
+          checkpoint_required: true
+          handoff_note: "Verify headless reports podman_ready=true / phase=Ready after podman+enclave provisions."
+        - id: macos-enclave/automated-gate
+          status: pending
+          owner_host: macos
+          depends_on: [macos-enclave/verify-ready]
+          owned_files:
+            - crates/tillandsias-macos-tray/src/action_host.rs
+          checkpoint_required: true
+          handoff_note: "Add host-side post-provision assertion that the VM reaches Ready within a bound."
+      events:
+        - type: claim
+          ts: "2026-06-16T23:16:19Z"
+          agent_id: "macos-tlatoani-big-pickle-20260616T231619Z"
+          host: "macos"
+          lease_id: "step49-macos-vm-enclave-20260616T231619Z"
+          expires_at: "2026-06-17T03:16:19Z"
 
