@@ -4036,13 +4036,23 @@ plan_index:
           checkpoint_required: false
           handoff_note: "Option 1 (cloud-init installs podman + enclave) chosen. See step 49 file for rationale."
         - id: macos-enclave/vz-cloud-init
-          status: claimed
+          status: done
           owner_host: macos
           depends_on: [macos-enclave/design-decision]
           owned_files:
             - crates/tillandsias-vm-layer/src/vz.rs
           checkpoint_required: true
-          handoff_note: "Add dnf install podman, podman.socket enable, and enclave image priming to the cloud-init user-data heredoc."
+          handoff_note: "Completed at b7321f50 on osx-next. Added dnf install podman + podman.socket enable/start to cloud-init user-data. 15/15 vm-layer tests pass."
+          events:
+            - type: completed
+              ts: "2026-06-16T23:17:00Z"
+              agent_id: "macos-tlatoani-big-pickle-20260616T231619Z"
+              host: "macos"
+              lease_id: "step49-macos-vm-enclave-20260616T231619Z"
+              commits: ["b7321f50"]
+              evidence:
+                - "cargo test -p tillandsias-vm-layer: 15/15 PASS"
+                - "cargo check -p tillandsias-vm-layer: clean"
         - id: macos-enclave/verify-ready
           status: pending
           owner_host: macos

@@ -2,6 +2,16 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
+## 2026-06-16T23:17Z — step 49a+b: enclave design decision + cloud-init podman install LANDED
+
+Claimed step 49 (macos-in-vm-enclave). Design decision: Option 1 (cloud-init
+installs podman). Implemented 49b: `dnf install -y podman` + `podman.socket`
+enable/start added to the cloud-init user-data in vz.rs at `b7321f50` on osx-next.
+15/15 vm-layer tests pass.
+
+Remaining: 49c (verify headless reports Ready after podman), 49d (m8 re-smoke),
+49e (automated post-provision assertion). Next: build-osx-tray and verify locally.
+
 ## 2026-06-16 — macOS m8 user-attended smoke FAILED — tray non-functional at interaction layer
 
 The first interactive macOS smoke (operator-driven) exposed that the macOS tray
