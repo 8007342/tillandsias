@@ -17,6 +17,11 @@ gate in order and **stop at the first failure**.
 | macOS   | `osx-next`     | `scripts/build-macos-tray.sh`    | `rm -rf ~/Library/Application Support/tillandsias` + `~/Library/Caches/tillandsias` | `…tillandsias-tray --provision` | no (N/A)   |
 | Windows | `windows-next` | `scripts/build-windows-tray.ps1` | `wsl --unregister tillandsias` (+ cached rootfs)              | tray cold launch / `--provision` | no (N/A)   |
 
+This skill is for local-build install testing. On immutable Linux
+(`/run/ostree-booted` or `rpm-ostree` present), do not run this skill; use
+`/smoke-curl-install-and-test-e2e` instead. Mutable Linux, macOS, and Windows
+hosts run this skill for their native local build/install path.
+
 > Architecture note: on macOS the runtime substrate is **not** a Podman/Docker
 > store and **not** Apple's `apple/container` per-container product — it is a
 > single long-lived Linux VM that the tray drives directly through
@@ -31,6 +36,12 @@ This skill intentionally and irreversibly destroys the host's container/VM
 runtime state. The operator selected this skill with that behavior understood.
 **Do not ask for confirmation before the destruction step.**
 
+On Tillandsias smoke hosts, destructive runtime reset is not merely allowed; it
+is a required precondition for the idempotence test. If
+`TILLANDSIAS_DESTRUCTIVE_RESET_OK` is unset or `1`, run the reset. Do not stop,
+skip, or file a blocker because Podman will be wiped. Only refuse the reset when
+the environment explicitly sets `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0`.
+
 - **Linux** — `podman system reset --force` deletes ALL Podman containers,
   images, volumes, networks, and secrets for the current user (including the
   Vault sealed store and every project mirror volume).
@@ -41,9 +52,9 @@ runtime state. The operator selected this skill with that behavior understood.
 - **Windows** — `wsl --unregister tillandsias` deletes the WSL2 distro and its
   backing VHDX irreversibly.
 
-These wipes are only acceptable on a host where losing the runtime state is
-fine (a dedicated smoke/CI host, or with explicit operator go-ahead for "now").
-Never run this unattended on a machine doing other Podman/WSL/VM work.
+These wipes are acceptable on Tillandsias smoke hosts. For a non-smoke host,
+set `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0` before invoking this skill; the skill
+must then file a blocker instead of resetting the substrate.
 
 ## 0. Preflight
 
@@ -124,6 +135,14 @@ rm -rf "$INSTALL_DIR/Tillandsias.app.bak"
 mv "$INSTALL_DIR/Tillandsias.app.new" "$INSTALL_DIR/Tillandsias.app"
 INSTALLED_BIN="$INSTALL_DIR/Tillandsias.app/Contents/MacOS/tillandsias-tray"
 "$INSTALLED_BIN" --version 2>&1 | tee "$LOG_DIR/01-installed-version.txt" || true
+
+# FRESHNESS GATE: the installed binary embeds its git SHA in --version
+# (build.rs). macOS resolves names/bundles loosely, so assert we are testing a
+# HEAD build, not a stale artifact picked up from elsewhere.
+EMB_SHA="$("$INSTALLED_BIN" --version | sed -E 's/.*git ([0-9a-f]+)(-dirty)?,.*/\1/')"
+HEAD_SHA="$(git rev-parse --short HEAD)"
+printf 'embedded=%s head=%s\n' "$EMB_SHA" "$HEAD_SHA" | tee "$LOG_DIR/01-freshness.txt"
+test "$EMB_SHA" = "$HEAD_SHA"   # FAIL the run if the installed binary != HEAD
 ```
 
 ### 1·Windows (PowerShell)
@@ -143,6 +162,9 @@ not destroy the runtime substrate, because no valid local build was installed.
 ## 2. Destroy the runtime substrate (DESTRUCTIVE — see warning above)
 
 Run the destructive step immediately without another confirmation.
+
+If `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0`, stop here, write a plan blocker, and
+push it. Otherwise continue; on Linux the Podman reset is mandatory.
 
 ### 2·Linux — Podman reset
 
@@ -295,18 +317,31 @@ the convergence record shows the build was exercised on this host.
 - **Never** push directly to `main`, open a release PR, or `--force`.
 - Do **not** implement product fixes during this skill — fixes are the job of
   `/advance-work-from-plan` workers claiming the packets you file.
+- Before a successful exit, commit and push the PASS/finding report. Do not
+  leave a local-only smoke result.
 
 ## Guardrails
 
-- **Never** run the destruction step (§2) on a host doing other Podman/WSL/VM
-  work without explicit "now" go-ahead. It is irreversible on every OS.
+- **Never** skip the destruction step (§2) on a Tillandsias smoke host because
+  it wipes Podman/WSL/VM state. The wipe is the test precondition. The only
+  supported opt-out is `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0`, which must produce
+  a pushed plan blocker instead of a partial smoke.
 - **Never** substitute a published-release binary for the local build — this
   skill tests the *locally built* tray (use `/smoke-curl-install-and-test-e2e`
   to test a published release instead).
 - **macOS**: never `sudo` the install (use `~/Applications`, not
   `/Applications`); never kill a tray PID you did not spawn except in the §1/§2
   best-effort `pkill` that the install/destroy replace genuinely requires.
+- **macOS freshness**: assert the installed binary's `--version` git SHA equals
+  `git rev-parse --short HEAD` (§1·macOS gate). macOS resolves bundles/names
+  loosely; without this you can silently test a stale artifact.
+- **This skill does NOT validate the interaction surface.** A macOS/Windows PASS
+  here means build + install + destroy + re-provision + `--diagnose` succeeded —
+  it does NOT exercise the live vsock control wire, menu UX, PTY attach, project
+  enumeration, or icon rendering (only reachable from a running tray a user
+  clicks). A green run is **not** release acceptance. The mandatory gate for
+  macOS release acceptance is the **user-attended m8 smoke** (see
+  `plan/issues/macos-m8-interactive-smoke-failures-2026-06-16.md`). Do not report
+  this skill's PASS as "the tray works".
 - Findings are intake, not authority — durable conclusions still land in
   `openspec/specs/`, `methodology/`, or cheatsheets via the normal flow.
-</content>
-</invoke>

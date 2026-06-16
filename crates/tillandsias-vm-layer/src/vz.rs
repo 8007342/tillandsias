@@ -379,6 +379,11 @@ echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDGkwkOhAxGExE4dJUbIOMaVf8g0m0nSAp/JGz
 chown -R fedora:fedora /home/fedora/.ssh
 chmod 600 /home/fedora/.ssh/authorized_keys
 
+# Install podman + dependencies for the enclave
+dnf install -y podman
+systemctl enable podman.socket
+systemctl start podman.socket
+
 # Create directory
 mkdir -p /usr/local/lib/tillandsias
 
@@ -408,6 +413,8 @@ Type=oneshot
 RemainAfterExit=yes
 ExecStart=/usr/local/lib/tillandsias/fetch-headless.sh
 TimeoutStartSec=300s
+StandardOutput=journal+console
+StandardError=journal+console
 [Install]
 WantedBy=multi-user.target
 EOF
@@ -423,6 +430,8 @@ Type=exec
 ExecStart=/usr/local/bin/tillandsias-headless --listen-vsock 42420
 Restart=on-failure
 RestartSec=2s
+StandardOutput=journal+console
+StandardError=journal+console
 [Install]
 WantedBy=multi-user.target
 EOF

@@ -48,6 +48,18 @@ Capture: `cargo build` wall-clock + the final summary line (`built <name>
 **Failure handling**: if exit ≠ 0, jump to §5 "file failure finding" with
 section_kind=`build-failed`. Do NOT proceed to install/smoke.
 
+**Freshness gate** (the binary embeds its git SHA in `--version` via build.rs):
+assert the built binary is a HEAD build, not a stale artifact macOS resolved
+loosely. FAIL the run if it doesn't match.
+
+```bash
+EMB_SHA="$(dist/Tillandsias.app/Contents/MacOS/tillandsias-tray --version \
+  | sed -E 's/.*git ([0-9a-f]+)(-dirty)?,.*/\1/')"
+HEAD_SHA="$(git rev-parse --short HEAD)"
+test "$EMB_SHA" = "$HEAD_SHA" \
+  || { echo "STALE BINARY: --version git $EMB_SHA != HEAD $HEAD_SHA"; exit 1; }
+```
+
 **Success criteria**:
 - `dist/Tillandsias.app/Contents/MacOS/tillandsias-tray` exists + executable
 - `dist/tillandsias-tray-${VERSION}-macos-arm64.tar.gz` exists

@@ -4,12 +4,12 @@ plan:
   repo_root: .
 
   launcher:
-    wrapper: ./codex
+    wrapper: ./repeat
     default_profile: tillandsias
     current_directory: true
-    prompt_template: './codex "Look at ./plan.yaml and continue implementation using ./methodology.yaml"'
-    repeat_template: './codex --repeat 30m "Look at ./plan.yaml and continue implementation using ./methodology.yaml"'
-    big_pickle_template: './opencode-repeat --wait 45m --command diagnose-forge'
+    prompt_template: './repeat --repeat 1 --prompt "Use the /advance-work-from-plan skill"'
+    repeat_template: './repeat --prompt "Use the /meta-orchestration skill"'
+    big_pickle_template: './repeat --agent opencode --wait 45m --prompt "Use the /diagnose-forge skill"'
 
   methodology:
     root: methodology.yaml
@@ -133,8 +133,8 @@ plan:
     - "Retired specs stay tombstoned or obsolete; do not revive them in later passes."
     - "If a step becomes stale because another step obsoleted its dependency, mark it obsoleted rather than completing it."
     - "Local work is ephemeral; remote origin is the durable copy."
-    - "The `./codex --repeat <duration> \"<prompt>\"` wrapper contract is the default autonomous entrypoint."
-    - "Use `./codex --quiet` for noninteractive sessions, `./codex --quit` for one-shot TUI runs, and `./codex --repeat <duration> --times <n>` for bounded repeat cycles."
+    - "The `./repeat --prompt \"Use the /meta-orchestration skill\"` wrapper contract is the default autonomous entrypoint."
+    - "Use `./repeat --agent codex --repeat <times> --wait <duration> --prompt \"...\"` for bounded Codex cycles, or omit `--repeat` to run forever."
     - "The repeat interval is the sleep between sessions; each session should show live agent-work updates while running."
     - "Repeat-mode dashboards should show only active work and repaint when the running agent emits a new update."
     - "The repeat-mode dashboard is rendered by the compiled Rust helper at `crates/tillandsias-repeat-graph`."

@@ -2,8 +2,21 @@
 title: Scrub Git PII from container environment
 gap: "isolation_or_privacy_risks: GIT_AUTHOR_NAME, GIT_AUTHOR_EMAIL, GIT_COMMITTER_NAME, GIT_COMMITTER_EMAIL expose real user identity to all container processes"
 category: env-var
-status: accepted
+status: accepted-redesigned
 proposed_at: 2026-06-16T08:00:00Z
+redesigned_at: 2026-06-16T21:30:00Z
+redesign_decision: >
+  SUPERSEDES the anonymization framing below per operator direction
+  (2026-06-16). Do NOT anonymize. Goal flips from "hide PII" to "transparent
+  agentic attribution": preserve the real GitHub-login username/email as the
+  commit AUTHOR (accountability + contributor graph), and mark which agent+model
+  produced each commit via a machine-parseable trailer (Co-Authored-By +
+  structured Generated-By: tool=… model=… params=…), so Claude/ChatGPT/OpenCode/
+  Antigravity/local-model commits are distinguishable and auditable. Rationale:
+  the email is already public in the user's own commits, so anonymizing buys
+  little privacy while harming transparency; GitHub shows contributor
+  attribution and agentic work should be honest. Convention + sources distilled
+  in cheatsheets/concurrent-git/commit-attribution.md.
 triaged_at: 2026-06-16T09:40:00Z
 triage_decision: >
   ACCEPTED into a privacy work packet (privacy/forge-git-identity-anonymization,

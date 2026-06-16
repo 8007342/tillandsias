@@ -8,8 +8,7 @@ description: Clean-room end-to-end smoke test of a PUBLISHED release. Curl-insta
 This skill validates that a **published release** actually works for a real
 operator starting from nothing. It is the acceptance gate that catches what
 `./build.sh --ci-full` cannot: problems that only appear when the signed,
-downloadable binary bootstraps the whole enclave from a wiped Podman store on a
-clean host.
+downloadable artifact bootstraps the whole enclave from a wiped host substrate.
 
 ## Authority
 
@@ -20,21 +19,35 @@ become `plan/issues/` work packets so they flow through the normal
 
 ---
 
-## ⚠️ DESTRUCTIVE — read before running
+## Host Matrix
 
-Step 2 runs **`podman system reset --force`**, which **irreversibly deletes ALL
-Podman state for this user**: every container, image, volume, network, and
-secret — including:
+| Host | Installer | Destructive substrate | Re-provision |
+|---|---|---|---|
+| immutable Linux | `scripts/install.sh` via release curl URL | `podman system reset --force` | `tillandsias --debug --init` |
+| mutable Linux | `scripts/install.sh` via release curl URL | `podman system reset --force` | `tillandsias --debug --init` |
+| macOS | `scripts/install-macos.sh` via release curl URL | remove Tillandsias app state/cache VM dirs | installed tray `--provision` + `--diagnose --json` |
+| Windows | `scripts/install-windows.ps1` release path when available | `wsl --unregister tillandsias` plus cache purge | installed tray provision/diagnose |
+
+This is the only e2e install skill allowed on immutable Linux.
+
+## DESTRUCTIVE — read before running
+
+On Linux, Step 2 runs **`podman system reset --force`**, which irreversibly
+deletes ALL Podman state for this user: every container, image, volume, network,
+and secret — including:
 
 - the `tillandsias-vault-data` volume (Vault's sealed store),
 - every project mirror volume (`tillandsias-mirror-*`),
 - all locally built enclave images (proxy/git/inference/forge) — these get
   **rebuilt from scratch on the next `--init`, which can take many minutes**.
 
-**Only run this on a host where wiping Podman is acceptable** (a dedicated
-smoke/CI host, or with explicit operator go-ahead for "now"). Confirm timing
-with the operator before Step 2 if you are on their primary workstation. Never
-run it unattended on a machine doing other Podman work.
+On Tillandsias smoke hosts, wiping Podman is expected and is a required
+precondition for the release idempotence test. If
+`TILLANDSIAS_DESTRUCTIVE_RESET_OK` is unset or `1`, do not ask for confirmation,
+do not pause for operator timing, and do not skip Step 2 because Podman state
+will be destroyed. Only block the reset when the environment explicitly sets
+`TILLANDSIAS_DESTRUCTIVE_RESET_OK=0`, in which case file a plan blocker and
+push it.
 
 A fresh `--init` re-initializes Vault and re-captures the keychain-held unseal
 share, so the keychain↔volume resync brick (see git history `738059bc`) is part
@@ -43,11 +56,14 @@ to hide.
 
 ---
 
+On macOS, the destructive substrate is the Tillandsias Virtualization.framework
+state and cache directories. On Windows, it is the `tillandsias` WSL2 distro and
+download cache.
+
 ## 0 — Pre-flight
 
 1. **Identify host + branch** (Linux → `linux-next`, macOS → `osx-next`,
-   Windows → `windows-next`). This runbook targets a Linux runtime host; the
-   `--opencode` forge lane is Linux/Podman today.
+   Windows → `windows-next`). The `--opencode` forge lane is Linux/Podman today.
 2. **Record the release under test:**
    ```bash
    gh release view --json tagName,publishedAt -q '.tagName + "  " + .publishedAt'
@@ -65,14 +81,32 @@ to hide.
 
 ## 1 — Curl-install the latest release
 
-Install the published binary the canonical way an operator would — do NOT use a
+Install the published artifact the canonical way an operator would — do NOT use a
 locally built `target/` binary; the whole point is to test the *download*.
+
+Linux:
 
 ```bash
 curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install.sh | bash 2>&1 \
   | tee target/smoke-e2e/01-install.log
 hash -r
 tillandsias --version | tee target/smoke-e2e/01-version.txt
+```
+
+macOS:
+
+```bash
+curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install-macos.sh | bash 2>&1 \
+  | tee target/smoke-e2e/01-install-macos.log
+"$HOME/Applications/Tillandsias.app/Contents/MacOS/tillandsias-tray" --version 2>&1 \
+  | tee target/smoke-e2e/01-version.txt || true
+```
+
+Windows PowerShell:
+
+```powershell
+# Use the published Windows installer once release artifacts expose it.
+# Until then, file a finding that curl-install Windows release coverage is blocked.
 ```
 
 Verify the installed version matches the release tag from Step 0. If the install
@@ -82,7 +116,10 @@ the rest of the smoke is invalid on a bad install.
 
 ---
 
-## 2 — Full Podman reset (DESTRUCTIVE — see warning above)
+## 2 — Full substrate reset (DESTRUCTIVE — see warning above)
+
+If `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0`, stop here, write a plan blocker, and
+push it. Otherwise run the reset immediately; on Linux this step is mandatory.
 
 ```bash
 podman system reset --force 2>&1 | tee target/smoke-e2e/02-reset.log
@@ -95,6 +132,10 @@ podman ps -a --format '{{.Names}}'; podman volume ls -q; podman images -q
 All three should be empty. If the reset errors or leaves residue → file a
 finding (capability: `podman`, `runtime`) and note it, then continue only if the
 store is actually clean.
+
+On macOS, stop the tray and remove `~/Library/Application Support/tillandsias`
+and `~/Library/Caches/tillandsias`. On Windows, run `wsl --shutdown` and
+`wsl --unregister tillandsias`, tolerating an already-absent distro.
 
 ---
 
@@ -195,12 +236,17 @@ Commit the report (and any forge-pushed findings) to the appropriate host branch
 ledger with a one-line outcome, exactly as `/advance-work-from-plan` §6
 prescribes.
 
+Before a successful exit, the PASS/finding report must be committed and pushed.
+Do not leave a local-only release smoke result.
+
 ---
 
 ## Guardrails
 
-- **Never** run Step 2 (`podman system reset --force`) on a host doing other
-  Podman work without explicit "now" go-ahead. It is irreversible.
+- **Never** skip Step 2 on a Tillandsias smoke host because it wipes Podman.
+  The wipe is the precondition that makes the test meaningful. The only
+  supported opt-out is `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0`, which must produce
+  a pushed plan blocker.
 - **Never** substitute a local `target/` build for the curl-installed binary —
   that defeats the purpose (testing the published artifact).
 - **Never** push fixes from this skill. This skill only *installs, observes, and
@@ -215,5 +261,6 @@ prescribes.
 
 The canonical file lives at `skills/smoke-curl-install-and-test-e2e/SKILL.md`;
 each runtime accesses it via a symlink under its `skills/` directory. An
-orchestrator can tighten the destructive-reset gate, change the forge prompt in
-Step 4, or adjust the finding capability_tags between iterations.
+orchestrator can set `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0` for a non-smoke host,
+change the forge prompt in Step 4, or adjust the finding capability_tags
+between iterations.

@@ -1,0 +1,89 @@
+markdown_distillation:
+  version: v1
+  updated: 2026-06-16
+  rule: >
+    Ad hoc Markdown is intake only. Durable architecture, process, release,
+    implementation, or research claims must live in methodology YAML,
+    OpenSpec specs, provenance-backed cheatsheets, or plan issues/steps.
+  canonical_markdown_roots:
+    - README.md
+    - TRACES.md
+    - CLAUDE.md
+    - docs/
+    - cheatsheets/
+    - methodology/events/README.md
+    - methodology/specs/
+    - openspec/
+    - plan/
+    - skills/
+    - crates/
+  archived_intake_root: plan/archive/2026-06-16/markdown-intake/
+  validation_rule: >
+    New Markdown outside canonical roots is allowed only for runtime command or
+    skill surfaces. Otherwise add an inventory row and archive/distill it before
+    merging.
+  inventory:
+    - original: .claude/IMPLEMENTATION_STATUS.md
+      archived: plan/archive/2026-06-16/markdown-intake/.claude/IMPLEMENTATION_STATUS.md
+      canonical: [plan/index.yaml, plan/steps/, openspec/specs/, TRACES.md]
+      status: archived
+    - original: .claude/PHASES_3_5_IMPLEMENTATION.md
+      archived: plan/archive/2026-06-16/markdown-intake/.claude/PHASES_3_5_IMPLEMENTATION.md
+      canonical: [openspec/specs/, methodology/multi-host-development.yaml]
+      status: archived
+    - original: CACHE_SEMANTICS_ARCHITECTURE.md
+      archived: plan/archive/2026-06-16/markdown-intake/root/CACHE_SEMANTICS_ARCHITECTURE.md
+      canonical: [openspec/specs/forge-cache-dual/, cheatsheets/runtime/cache-architecture.md]
+      status: archived
+    - original: CONVERGENCE_WORKFLOW.md
+      archived: plan/archive/2026-06-16/markdown-intake/root/CONVERGENCE_WORKFLOW.md
+      canonical: [methodology/convergence.yaml, docs/convergence/]
+      status: archived
+    - original: DIAGNOSTICS_STREAM_IMPLEMENTATION.md
+      archived: plan/archive/2026-06-16/markdown-intake/root/DIAGNOSTICS_STREAM_IMPLEMENTATION.md
+      canonical: [openspec/specs/runtime-diagnostics-stream/, methodology/forge-diagnostics.yaml]
+      status: archived
+    - original: ForgeAudit_20260519T164526Z.md
+      archived: plan/archive/2026-06-16/markdown-intake/root/ForgeAudit_20260519T164526Z.md
+      canonical: [docs/cheatsheets/git-mirror-lifecycle-audit.md, plan/issues/]
+      status: archived
+    - original: IMPLEMENTATION_REPORT.md
+      archived: plan/archive/2026-06-16/markdown-intake/root/IMPLEMENTATION_REPORT.md
+      canonical: [openspec/specs/, TRACES.md, plan/steps/]
+      status: archived
+    - original: IMPLEMENTATION_ROADMAP.md
+      archived: plan/archive/2026-06-16/markdown-intake/root/IMPLEMENTATION_ROADMAP.md
+      canonical: [plan/index.yaml, methodology/bootstrap/router.yaml]
+      status: archived
+    - original: LITMUS_FRAMEWORK_DESIGN_SUMMARY.md
+      archived: plan/archive/2026-06-16/markdown-intake/root/LITMUS_FRAMEWORK_DESIGN_SUMMARY.md
+      canonical: [methodology/litmus.yaml, methodology/verification.yaml]
+      status: archived
+    - original: README-ABOUT.md
+      archived: plan/archive/2026-06-16/markdown-intake/root/README-ABOUT.md
+      canonical: [README.md, openspec/specs/, cheatsheets/]
+      status: archived
+    - original: RELEASE-HANDOFF.md
+      archived: plan/archive/2026-06-16/markdown-intake/root/RELEASE-HANDOFF.md
+      canonical: [skills/merge-to-main-and-release/SKILL.md, docs/VERIFICATION.md, docs/UPDATING.md]
+      status: archived
+    - original: RELEASE-NOTES.md
+      archived: plan/archive/2026-06-16/markdown-intake/root/RELEASE-NOTES.md
+      canonical: [GitHub releases, plan/issues/linux-next-work-queue-2026-05-25.md]
+      status: archived
+    - original: research/
+      archived: plan/archive/2026-06-16/markdown-intake/research/
+      canonical: [cheatsheets/, docs/cheatsheets/, openspec/specs/, plan/issues/]
+      status: archived
+    - original: knowledge/
+      archived: plan/archive/2026-06-16/markdown-intake/knowledge/
+      canonical: [cheatsheets/, methodology/catalog.yaml]
+      status: archived
+    - original: observatorium/
+      archived: plan/archive/2026-06-16/markdown-intake/observatorium/
+      canonical: [openspec/specs/observatorium-readiness/, docs/]
+      status: archived
+    - original: "@methodology/events/G01-version-tag-format-parsing.md"
+      archived: plan/archive/2026-06-16/markdown-intake/@methodology/events/G01-version-tag-format-parsing.md
+      canonical: [methodology/event/, methodology/versioning.yaml]
+      status: archived

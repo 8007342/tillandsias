@@ -8,6 +8,12 @@
 
 source /usr/local/lib/tillandsias/lib-common.sh
 
+# @trace spec:forge-git-identity-anonymization
+# Terminal entrypoint is human-driven; set agent attribution to empty so
+# the prepare-commit-msg hook is a no-op unless an agent session is active.
+export TILLANDSIAS_AGENT_NAME=""
+export TILLANDSIAS_GENERATED_BY="tool=terminal"
+
 # @trace spec:simplified-tray-ux
 # EXIT trap: pause on error so user can read git cloning errors before terminal closes
 exit_pause() {

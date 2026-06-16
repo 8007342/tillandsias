@@ -2,6 +2,65 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
+## 2026-06-16T23:35Z — step 49 done (49a/b/c/e completed); 49d next (user-attended m8 smoke)
+
+### Achieved this cycle:
+
+1. **49a** — Design decision: Option 1 (cloud-init installs podman).
+2. **49b** — Wire `dnf install -y podman` + `podman.socket` into cloud-init
+   user-data in `vz.rs` (`b7321f50` on osx-next). cargo test 15/15 PASS.
+3. **Build + E2E gate**: `build-install-and-smoke-test-e2e` ran on macOS:
+   build → install → freshness check → destroy substrate → cold re-provision
+   → diagnose. All PASS (f39203b5, osx-next).
+4. **49c** — Verified headless agent reports `phase=Ready podman_ready=true`
+   ~32s post-VM-boot over vsock. Was ~84s -> `Failed` before 49b.
+5. **49e** — Automated post-provision gate: `scripts/diagnose-macos-enclave.sh`
+   polls tray log for Ready within 120s; exits 0 on Ready, 2 on Failed/timeout.
+
+### Remaining:
+- **49d**: User-attended m8 interactive smoke — needs an operator to launch the
+  tray, click around (projects populate, github-login terminal, attach shell).
+  Ready to test now that enclave reaches Ready.
+- Downstream packets unblocked: `github-login-pty-hangs-gray`,
+  `empty-project-lists-poll-error-masking`, m8 release-acceptance gate.
+
+## 2026-06-16T23:17Z — step 49a+b: enclave design decision + cloud-init podman install LANDED
+
+Claimed step 49 (macos-in-vm-enclave). Design decision: Option 1 (cloud-init
+installs podman). Implemented 49b: `dnf install -y podman` + `podman.socket`
+enable/start added to the cloud-init user-data in vz.rs at `b7321f50` on osx-next.
+15/15 vm-layer tests pass.
+
+Remaining: 49c (verify headless reports Ready after podman), 49d (m8 re-smoke),
+49e (automated post-provision assertion). Next: build-osx-tray and verify locally.
+
+## 2026-06-16 — macOS m8 user-attended smoke FAILED — tray non-functional at interaction layer
+
+The first interactive macOS smoke (operator-driven) exposed that the macOS tray
+does not work past launch. Full findings + sequencing:
+`plan/issues/macos-m8-interactive-smoke-failures-2026-06-16.md`. Keystone is a
+new dedicated step: `plan/steps/49-macos-in-vm-enclave.md`.
+
+**Claim order (top = do first):**
+1. `plan/steps/49-macos-in-vm-enclave.md` — **KEYSTONE / CRITICAL.** macOS VM
+   provisions only the headless agent, no podman/forge enclave → chip "VM
+   Failed", empty projects, hung github-login PTY. Cross-host (recipe = Linux).
+   Blocks the two packets below + the m8 release gate.
+2. `macos-tray/menu-not-collapsed-github-gated` — F3, shared host-shell menu;
+   re-implement the collapsed login-gated menu on CURRENT code (design input:
+   discarded 78b0b3e5). Coordinate Linux+Windows (parity policy).
+3. `macos-tray/vm-failed-reason-not-surfaced` — populate VmStatusReply.last_event
+   + fix console=hvc0 so a Failed VM says WHY.
+4. `macos-tray/github-login-pty-hangs-gray` (F4) + `macos-tray/empty-project-lists-and-poll-error-masking` (F5)
+   — downstream of step 49; verify after it lands; also "fail visibly" + de-mask.
+5. `testing/assert-binary-sha-equals-head` — freshness gate (partly done: builds
+   now embed the SHA via build.rs; wire the assertion into the smoke skills).
+- DONE this session: `macos-tray/menubar-icon-renders-as-white-blob` (1ada1f28),
+  `macos-tray/build-provenance-unverifiable` (3505a521),
+  diagnosability-forwarding (b7bde09c, partial).
+- **Release gate:** macOS m8 acceptance is RED until step 49 lands and m8 re-runs
+  green. Autonomous `/build-install-and-smoke-test-e2e` PASS is NOT acceptance.
+
 ## 2026-06-15 — macOS primary (coordinator-assigned) VERIFIED: merged cold-boot vsock suppression
 
 - 2026-06-15T05:20Z  `4715a4cb`  PASS — verified the cold-boot vsock poll-error

@@ -1,0 +1,249 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+usage() {
+  cat >&2 <<'EOF'
+Usage:
+  ./repeat --prompt "<prompt>" [--times <n>] [--wait <duration>] [--timeout <duration>] [--agent claude|opencode|antigravity|codex|random]
+
+Options:
+  --prompt <prompt>      Required prompt for every fresh agent cycle.
+  --times <n>           Optional positive integer cycle count. Omit to run forever.
+  --wait <duration>     Sleep after a cycle completes and before the next starts. Default: 45m.
+                         Forms: 45s, 30m, 2h, 1d, 2h30m, or raw seconds.
+  --timeout <duration>  Hard cap on a single agent cycle. A hung harness (e.g. a
+                         CLI stuck in a reconnect loop) is killed and the loop
+                         moves on. Default: 30m. Use 0 to disable.
+  --agent <agent>       claude, opencode, antigravity, codex, or random. Default: random.
+  --help, -h            Show this help.
+
+Resilience: a failed or silent cycle (non-zero exit, timeout, or an exit-0 run
+that produced no output -- the usual shape of a quota/auth failure) is logged as
+a warning and the loop continues to the next cycle rather than tearing down. A
+missing/non-executable harness binary still aborts, since retrying cannot help.
+
+Each cycle starts a fresh FULL YOLO noninteractive agent session at the root of
+the caller's Tillandsias Git worktree.
+EOF
+}
+
+die() {
+  printf 'repeat: %s\n' "$*" >&2
+  exit 2
+}
+
+PROMPT=""
+TIMES_COUNT=""
+WAIT_INTERVAL="45m"
+TIMEOUT_INTERVAL="30m"
+AGENT="random"
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --prompt)
+      [[ $# -ge 2 ]] || die "--prompt requires a value"
+      PROMPT="$2"
+      shift 2
+      ;;
+    --times)
+      [[ $# -ge 2 ]] || die "--times requires a positive integer"
+      [[ "$2" =~ ^[0-9]+$ && "$2" -ge 1 ]] || die "--times requires a positive integer"
+      TIMES_COUNT="$2"
+      shift 2
+      ;;
+    --wait)
+      [[ $# -ge 2 ]] || die "--wait requires a duration"
+      WAIT_INTERVAL="$2"
+      shift 2
+      ;;
+    --timeout)
+      [[ $# -ge 2 ]] || die "--timeout requires a duration"
+      TIMEOUT_INTERVAL="$2"
+      shift 2
+      ;;
+    --agent)
+      [[ $# -ge 2 ]] || die "--agent requires a value"
+      AGENT="$2"
+      shift 2
+      ;;
+    --help|-h)
+      usage
+      exit 0
+      ;;
+    --)
+      shift
+      [[ $# -eq 0 ]] || die "unexpected positional arguments: $*"
+      ;;
+    *)
+      die "unknown argument: $1"
+      ;;
+  esac
+done
+
+[[ -n "$PROMPT" ]] || { usage; die "--prompt is required"; }
+
+# Tillandsias smoke hosts are designed for idempotent destructive runtime tests.
+# Agents must treat Podman/VM/WSL resets as expected setup unless the operator
+# explicitly overrides this for a non-smoke host.
+export TILLANDSIAS_DESTRUCTIVE_RESET_OK="${TILLANDSIAS_DESTRUCTIVE_RESET_OK:-1}"
+
+case "$AGENT" in
+  claude|opencode|antigravity|codex|random) ;;
+  *) die "--agent must be claude, opencode, antigravity, codex, or random" ;;
+esac
+
+CALLER_PWD="$(pwd -P)"
+REPO_ROOT="$(git -C "$CALLER_PWD" rev-parse --show-toplevel 2>/dev/null || true)"
+[[ -n "$REPO_ROOT" ]] || die "current directory is not inside a Git worktree"
+cd "$REPO_ROOT"
+
+duration_to_seconds() {
+  local input="$1"
+  local rest="$input"
+  local total=0
+  local number unit
+
+  if [[ "$rest" =~ ^[0-9]+$ ]]; then
+    [[ "$rest" -ge 1 ]] || die "duration must be greater than zero"
+    printf '%s\n' "$rest"
+    return 0
+  fi
+
+  while [[ -n "$rest" ]]; do
+    if [[ "$rest" =~ ^([0-9]+)([smhd])(.*)$ ]]; then
+      number="${BASH_REMATCH[1]}"
+      unit="${BASH_REMATCH[2]}"
+      rest="${BASH_REMATCH[3]}"
+      case "$unit" in
+        s) total=$((total + number)) ;;
+        m) total=$((total + number * 60)) ;;
+        h) total=$((total + number * 3600)) ;;
+        d) total=$((total + number * 86400)) ;;
+      esac
+    else
+      die "invalid duration '$input'; use 45m, 2h, 2h30m, 45s, 1d, or seconds"
+    fi
+  done
+
+  [[ "$total" -ge 1 ]] || die "duration must be greater than zero"
+  printf '%s\n' "$total"
+}
+
+timestamp_utc() {
+  date -u '+%Y-%m-%dT%H:%M:%SZ'
+}
+
+resolve_bin() {
+  local env_name="$1"
+  local fallback="$2"
+  local value="${!env_name:-}"
+  if [[ -n "$value" ]]; then
+    [[ -x "$value" ]] || { printf 'repeat: %s is not executable: %s\n' "$env_name" "$value" >&2; return 127; }
+    printf '%s\n' "$value"
+    return 0
+  fi
+  command -v "$fallback" 2>/dev/null || {
+    printf 'repeat: unable to find %s; set %s=/path/to/%s\n' "$fallback" "$env_name" "$fallback" >&2
+    return 127
+  }
+}
+
+select_agent() {
+  if [[ "$AGENT" != "random" ]]; then
+    printf '%s\n' "$AGENT"
+    return
+  fi
+  local agents=(claude opencode antigravity codex)
+  local index
+  index=$((RANDOM % ${#agents[@]}))
+  printf '%s\n' "${agents[$index]}"
+}
+
+run_agent() {
+  local selected="$1"
+  local bin
+
+  # Per-cycle hard timeout. timeout(1) sends TERM, then KILL after a grace
+  # window, so a harness wedged in a reconnect loop cannot hang the loop. A
+  # timed-out cycle exits 124, which the caller treats as a non-fatal warning.
+  local -a run=()
+  if [[ "$TIMEOUT_SECONDS" -gt 0 ]]; then
+    run=(timeout --signal=TERM --kill-after=30s "$TIMEOUT_SECONDS")
+  fi
+
+  case "$selected" in
+    codex)
+      bin="$(resolve_bin CODEX_BIN codex)" || return $?
+      "${run[@]}" "$bin" exec --color never --dangerously-bypass-approvals-and-sandbox -p tillandsias -C "$REPO_ROOT" "$PROMPT"
+      ;;
+    claude)
+      bin="$(resolve_bin CLAUDE_BIN claude)" || return $?
+      # claude has no --prompt flag; the prompt is positional. Place it before
+      # --add-dir (which is variadic) so the directory list does not swallow it.
+      "${run[@]}" "$bin" --print --dangerously-skip-permissions "$PROMPT" --add-dir "$REPO_ROOT"
+      ;;
+    opencode)
+      bin="$(resolve_bin OPENCODE_BIN opencode)" || return $?
+      (cd "$REPO_ROOT" && "${run[@]}" "$bin" run --dangerously-skip-permissions "$PROMPT")
+      ;;
+    antigravity)
+      bin="$(resolve_bin ANTIGRAVITY_BIN agy)" || return $?
+      # agy's --prompt is only an alias for --print (print mode on/off); the task
+      # text is a positional argument. Go flag parsing stops at the first
+      # non-flag arg, so --add-dir does not consume the prompt.
+      (cd "$REPO_ROOT" && "${run[@]}" "$bin" --print --dangerously-skip-permissions --add-dir "$REPO_ROOT" "$PROMPT")
+      ;;
+    *)
+      die "internal error: unsupported selected agent '$selected'"
+      ;;
+  esac
+}
+
+WAIT_SECONDS="$(duration_to_seconds "$WAIT_INTERVAL")"
+if [[ "$TIMEOUT_INTERVAL" == "0" ]]; then
+  TIMEOUT_SECONDS=0
+else
+  TIMEOUT_SECONDS="$(duration_to_seconds "$TIMEOUT_INTERVAL")"
+fi
+CYCLE=0
+
+while :; do
+  CYCLE=$((CYCLE + 1))
+  SELECTED_AGENT="$(select_agent)"
+  printf '[repeat] %s cycle=%d agent=%s repo=%s start\n' "$(timestamp_utc)" "$CYCLE" "$SELECTED_AGENT" "$REPO_ROOT" >&2
+
+  # Tee the cycle's output so the operator still sees it live while we measure
+  # how much was produced. Many harnesses exit 0 even on quota/auth failure
+  # (e.g. agy returns 0 with empty output on an HTTP 429); an empty successful
+  # run is the most reliable cross-harness signal that the cycle did no work.
+  CYCLE_OUTPUT="$(mktemp)"
+  set +e
+  run_agent "$SELECTED_AGENT" 2>&1 | tee "$CYCLE_OUTPUT"
+  STATUS=${PIPESTATUS[0]}
+  set -e
+  OUTPUT_BYTES="$(wc -c < "$CYCLE_OUTPUT" | tr -d '[:space:]')"
+  rm -f "$CYCLE_OUTPUT"
+
+  printf '[repeat] %s cycle=%d agent=%s exit=%d bytes=%s\n' "$(timestamp_utc)" "$CYCLE" "$SELECTED_AGENT" "$STATUS" "$OUTPUT_BYTES" >&2
+
+  # A missing or non-executable harness binary cannot be fixed by retrying, so
+  # abort the whole loop. resolve_bin reports those as exit 127.
+  if [[ "$STATUS" -eq 127 ]]; then
+    die "harness '$SELECTED_AGENT' binary unavailable; aborting"
+  fi
+
+  if [[ "$STATUS" -eq 124 ]]; then
+    printf '[repeat] %s cycle=%d agent=%s WARN timed out after %ss; killed, continuing\n' "$(timestamp_utc)" "$CYCLE" "$SELECTED_AGENT" "$TIMEOUT_SECONDS" >&2
+  elif [[ "$STATUS" -ne 0 ]]; then
+    printf '[repeat] %s cycle=%d agent=%s WARN non-zero exit; continuing to next cycle\n' "$(timestamp_utc)" "$CYCLE" "$SELECTED_AGENT" >&2
+  elif [[ "$OUTPUT_BYTES" -eq 0 ]]; then
+    printf '[repeat] %s cycle=%d agent=%s WARN exit 0 but produced no output (likely quota/auth failure); continuing\n' "$(timestamp_utc)" "$CYCLE" "$SELECTED_AGENT" >&2
+  fi
+
+  if [[ -n "$TIMES_COUNT" && "$CYCLE" -ge "$TIMES_COUNT" ]]; then
+    exit 0
+  fi
+
+  printf '[repeat] %s sleeping=%s before next cycle\n' "$(timestamp_utc)" "$WAIT_INTERVAL" >&2
+  sleep "$WAIT_SECONDS"
+done

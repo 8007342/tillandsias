@@ -125,9 +125,11 @@ reports; the two standing findings below are the starting backlog.
 - recurring: true   # re-run after every published release
 - next_action: >
     Run `/smoke-curl-install-and-test-e2e` against the latest published release.
-    DESTRUCTIVE (`podman system reset --force`) — only on a host where wiping
-    Podman is acceptable, or with operator "now" go-ahead. File each issue as a
-    `smoke-finding/*` packet in a dated `plan/issues/smoke-e2e-findings-*` report.
+    DESTRUCTIVE (`podman system reset --force`) is expected setup on
+    Tillandsias smoke hosts and must not require another confirmation unless
+    `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0`. File each issue as a
+    `smoke-finding/*` packet in a dated `plan/issues/smoke-e2e-findings-*`
+    report.
 - events:
   - type: discovered
     ts: `2026-06-12T21:24:00Z`

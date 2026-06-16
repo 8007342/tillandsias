@@ -9,7 +9,7 @@ Run the canonical `advance-work-from-plan` skill — the **Worker tier** of
 the two-tier execution model documented in
 `methodology/distributed-work.yaml` (`agent_execution_roles` +
 `worker_agent_protocol`). Complementary to the **Orchestrator tier**
-(`/multihost-orchestration` → `/coordinate-multihost-work`).
+(`/meta-orchestration` → `/multihost-orchestration` → `/coordinate-multihost-work`).
 
 **Input**: `$ARGUMENTS` (optional). If a packet, work-queue path, or
 specific task ID is given, prefer it as the slice source.

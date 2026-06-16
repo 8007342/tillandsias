@@ -22,6 +22,7 @@ methodology:
     forge_diagnostics: methodology/forge-diagnostics.yaml
     multi_host_development: methodology/multi-host-development.yaml
     distributed_work: methodology/distributed-work.yaml
+    markdown_distillation: methodology/markdown-distillation.yaml
     plan_root: plan.yaml
     plan_index: plan/index.yaml
     plan_step_notes: plan/steps/README.md
@@ -46,7 +47,7 @@ methodology:
       advance-work-from-plan:
         path: skills/advance-work-from-plan/SKILL.md
         tier: worker   # see methodology/distributed-work.yaml agent_execution_roles
-        complement_of: skills/multihost-orchestration  # the orchestrator tier
+        complement_of: skills/meta-orchestration
         authoritative_spec: methodology/distributed-work.yaml worker_agent_protocol
         purpose: >
           Discover, claim, implement, checkpoint, and complete units of
@@ -60,6 +61,25 @@ methodology:
         cadence: "~30 min in active sessions; on-demand otherwise"
         host_awareness: detects linux/macOS/Windows → active branch + write scope
         steerable: true   # orchestrator may edit between iterations
+      meta-orchestration:
+        path: skills/meta-orchestration/SKILL.md
+        tier: orchestrator
+        purpose: >
+          Host-aware recurring loop for `./repeat --prompt "Use the
+          /meta-orchestration skill"`: sync remote state, drain
+          /advance-work-from-plan, run eligible local-build and curl-install
+          e2e gates, coordinate integrations on mutable Linux, release when
+          warranted, and push every durable result before exit.
+        cadence: "45m repeat loop or on-demand"
+        host_awareness: detects immutable Linux, mutable Linux, macOS, and Windows
+        steerable: true
+      coordinate-multihost-work:
+        path: skills/coordinate-multihost-work/SKILL.md
+        tier: orchestrator
+        purpose: >
+          Canonical mutable-Linux multi-host coordination pass. The
+          multihost-orchestration skill name is a compatibility alias.
+        steerable: true
       forge-continuous-enhancement:
         path: skills/forge-continuous-enhancement/SKILL.md
         tier: worker
@@ -80,22 +100,30 @@ methodology:
         path: skills/smoke-curl-install-and-test-e2e/SKILL.md
         tier: worker
         purpose: >
-          Clean-room acceptance gate for a PUBLISHED release: curl-install the latest
-          release binary, `podman system reset --force`, `tillandsias --debug --init`
-          from a pristine store, then `--opencode` forge-continuous-enhancement. Files
-          every issue observed (install/reset/init harness findings AND in-forge agent
-          findings) as plan/issues work packets for /advance-work-from-plan pickup.
-        destructive: true   # Step 2 wipes ALL podman state; gate on operator go-ahead
+          Host-aware clean-room acceptance gate for a PUBLISHED release:
+          curl-install the latest release artifact, destroy the host runtime
+          substrate, re-provision from pristine state, and file every issue
+          observed as plan/issues work packets for /advance-work-from-plan pickup.
+        destructive: true
+        destructive_reset_policy: >
+          Podman reset is an expected precondition on Tillandsias smoke hosts.
+          Do not stop for confirmation when TILLANDSIAS_DESTRUCTIVE_RESET_OK is
+          unset or 1; only skip/block if it is explicitly 0.
         steerable: true
       build-install-and-smoke-test-e2e:
         path: skills/build-install-and-smoke-test-e2e/SKILL.md
         tier: worker
         purpose: >
-          Local linux-next acceptance gate: run the full local CI and install,
-          wipe Podman, initialize the installed build from a pristine store,
-          then launch forge-continuous-enhancement against the current checkout.
-          Failures stop the sequence and become ready plan/issues packets.
-        destructive: true   # Explicit invocation authorizes the Podman reset; do not reconfirm.
+          Host-aware local-build acceptance gate for mutable Linux, macOS, and
+          Windows: build and install the current checkout, destroy the native
+          substrate, re-provision from pristine state, and file failures as
+          ready plan/issues packets. Immutable Linux uses the curl-install e2e
+          skill instead.
+        destructive: true
+        destructive_reset_policy: >
+          Explicit invocation authorizes the Podman/VM/WSL reset. Podman reset
+          is an expected precondition on Tillandsias smoke hosts; do not
+          reconfirm unless TILLANDSIAS_DESTRUCTIVE_RESET_OK=0.
         steerable: true
 
   invariant_summary:
@@ -119,7 +147,23 @@ methodology:
     - forge_continuous_enhancement_via_self_hosting_agents
     - forge_discoverability_via_baked_in_tellme_and_launch_trained_local_inference
 
+  runtime_language_policy:
+    tlatoani_hard_no_python:
+      rule: >
+        Python is not allowed for Tillandsias runtime, harness, or repository
+        scripts. One-off interactive use is still discouraged and must not be
+        copied into committed scripts, skills, litmus tests, or runbooks.
+      approved_default_languages:
+        - Rust
+        - POSIX shell only when it dispatches existing binaries or Rust tools
+        - PowerShell only for Windows host integration
+      exception_process: >
+        Anything else requires explicit approval from The Tlatoani before it is
+        committed or used by recurring automation.
+      checker: scripts/check-no-python-scripts.sh
+
   semantic_distillation:
     rule: >
       Root files stay terse. Detailed rationale belongs in the owning component
-      listed in methodology/catalog.yaml.
+      listed in methodology/catalog.yaml. Ad hoc Markdown intake is inventoried
+      and archived through methodology/markdown-distillation.yaml.

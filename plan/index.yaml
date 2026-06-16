@@ -1545,7 +1545,7 @@ plan_index:
 
     - id: forge-diagnostics-improvement-loop
       order: 21.6
-      title: Forge Diagnostics Improvement Loop — /diagnose-forge + opencode-repeat
+      title: Forge Diagnostics Improvement Loop - /diagnose-forge + repeat
       status: completed
       deliverable: plan/forge-improvements/
       depends_on: [forge-diagnostics-automation]
@@ -1560,7 +1560,7 @@ plan_index:
         - forge-staleness
         - forge-standalone
       exit_criteria:
-        - "Repeat loop runs successfully: ./opencode-repeat --wait 45m --command diagnose-forge"
+        - "Repeat loop runs successfully: ./repeat --agent opencode --wait 45m --prompt \"Use the /diagnose-forge skill\""
         - "/diagnose-forge command extracts actionable gaps from diagnostics output"
         - "Proposals are filed in plan/forge-improvements/proposals/ with structured frontmatter"
         - "Approved proposals are implemented against the forge Containerfile and entrypoint"
@@ -1571,9 +1571,9 @@ plan_index:
           status: completed
           depends_on: []
           owned_files:
-            - opencode-repeat
+            - repeat
           checkpoint_required: true
-          handoff_note: "opencode-repeat wrapper created. Supports --wait, --times, --command. Calls opencode run --dangerously-skip-permissions in a loop."
+          handoff_note: "Superseded by ./repeat. The unified wrapper supports --wait, --repeat, --prompt, and --agent, and calls opencode run --dangerously-skip-permissions when --agent opencode is selected."
         - id: forge-improvement/diagnose-command
           status: completed
           depends_on: [forge-improvement/repeat-wrapper]
@@ -3875,19 +3875,20 @@ plan_index:
 
     - id: forge-git-identity-anonymization
       order: 53
-      title: Anonymize git identity inside the forge (no host PII leak)
-      status: ready
+      title: Transparent agentic git attribution — preserve human author, mark agent+model (redesigned from anonymize)
+      status: completed
       owner_host: linux
-      deliverable: images/default/entrypoint-forge-opencode.sh
+      deliverable: cheatsheets/concurrent-git/commit-attribution.md
       audit_origin: plan/forge-improvements/proposals/2026-06-16-git-pii-scrub.md
       depends_on: []
       exit_criteria:
-        - "A diagnostics run shows no real host GIT_AUTHOR_*/GIT_COMMITTER_* PII inside the forge container."
-        - "An in-forge `git commit` still succeeds with a substituted (anonymized or configured-forge) identity — attribution is not broken."
-        - "A litmus or unit test pins the substitution so the real host identity cannot silently re-leak."
+        - "Real GitHub-login author/email preserved on forge commits (contributor attribution intact)."
+        - "Each forge commit carries a machine-parseable agent+model trailer (git log --format='%(trailers:key=Generated-By)' resolves it)."
+        - "Different agents/models produce distinguishable trailers; local models include size/params."
+        - "`./build.sh --check` and a new/updated litmus pass."
       tasks:
         - id: privacy/forge-git-identity-anonymization
-          status: ready
+          status: completed
           owner_host: linux
           estimated_hours: 3
           capability_tags: [rust, privacy, forge, containers, security]
@@ -3898,15 +3899,19 @@ plan_index:
             - images/default/entrypoint-forge-opencode.sh
             - openspec/litmus-tests/
           next_action: >
-            Substitute the host user's real git identity with an anonymized /
-            configured-forge identity at the container_profile / launch layer so
-            GIT_AUTHOR_*/GIT_COMMITTER_* never carry real PII into the forge,
-            while keeping in-forge commits attributable. Decide whether a real
-            identity should be opt-in. Bare unset is WRONG — it breaks
-            enclave-mirror commit attribution.
+            REDESIGNED 2026-06-16 (operator direction): do NOT anonymize.
+            PRESERVE the real GitHub-login username/email as the commit AUTHOR,
+            and ADD machine-parseable agent/model attribution trailers so
+            Claude/ChatGPT/OpenCode/Antigravity/local-model commits are
+            distinguishable (Co-Authored-By + structured `Generated-By: tool=…
+            model=… params=…`, encoding model size/quant for local models).
+            Implement at the container_profile / commit-trailer layer; keep the
+            human author intact. Convention + sources:
+            cheatsheets/concurrent-git/commit-attribution.md.
           acceptance_evidence:
-            - "Diagnostics: isolation_or_privacy_risks no longer lists git identity vars."
-            - "`git commit` inside the forge succeeds with the substituted identity."
+            - "Real GitHub-login author/email preserved on forge commits (contributor attribution intact)."
+            - "Each forge commit carries a machine-parseable agent+model trailer (git log --format='%(trailers:key=Generated-By)' resolves it)."
+            - "Different agents/models produce distinguishable trailers; local models include size/params."
             - "`./build.sh --check` and a new/updated litmus pass."
           fallback_when_blocked: >
             If a clean substitution point is unclear, document the exact launch
@@ -3920,3 +3925,187 @@ plan_index:
               note: >
                 Promoted from accepted proposal 2026-06-16-git-pii-scrub during
                 the critical-forge-proposal triage cycle.
+            - type: claim
+              ts: "2026-06-16T22:45:00Z"
+              agent_id: "linux-macuahuitl-big-pickle-20260616T224000Z"
+              host: linux
+              note: >
+                Claimed by Big Pickle on linux-next. Implementation:
+                install prepare-commit-msg hook in lib-common.sh via
+                core.hooksPath; set TILLANDSIAS_AGENT_NAME/GENERATED_BY
+                in each forge entrypoint. Preserves human author; adds
+                Co-Authored-By and Generated-By trailers.
+            - type: completed
+              ts: "2026-06-16T23:29:05Z"
+              agent_id: "linux-macuahuitl-codex-20260616T232905Z"
+              host: linux
+              note: >
+                Acceptance verified against implementation commit e31792e8:
+                focused throwaway git fixture preserved the real author
+                (Real User <real@example.com>) while appending
+                distinct Generated-By trailers for Codex and OpenCode,
+                including local-model params. Shell syntax checks passed for
+                lib-common plus forge entrypoints; ./build.sh --check passed.
+              evidence:
+                - "target/agent-attribution-verify/repo fixture commit: author preserved, Codex trailer Generated-By: tool=codex model=gpt-5"
+                - "target/agent-attribution-verify/repo fixture commit: author preserved, OpenCode trailer Generated-By: tool=opencode model=llama-3.1-70b params=q4"
+                - "bash -n images/default/lib-common.sh images/default/entrypoint-forge-*.sh images/default/entrypoint-terminal.sh"
+                - "./build.sh --check -> Type-check passed"
+
+    - id: enclave-network-level-egress-deny
+      order: 54
+      title: Enforce forge egress at the network layer (enclave --internal + dual-homed proxy)
+      status: claimed
+      owner_host: linux
+      deliverable: crates/tillandsias-core/src/container_profile.rs
+      audit_origin: plan/issues/enclave-egress-network-enforcement-gap-2026-06-16.md
+      depends_on: []
+      exit_criteria:
+        - "Direct (--noproxy) external curl from a container on tillandsias-enclave FAILS on a clean init."
+        - "Allowlisted proxy egress and forge->proxy/inference/git-service still work; forge lane stays green."
+        - "A new litmus pins direct-egress-denied on the live enclave network (not --network=none), committed with the fix."
+      tasks:
+        - id: enclave/network-level-egress-deny
+          status: checkpoint
+          owner_host: linux
+          estimated_hours: 4
+          capability_tags: [rust, podman, networking, security, enclave]
+          depends_on: []
+          owned_files:
+            - crates/tillandsias-core/src/container_profile.rs
+            - crates/tillandsias-headless/src/main.rs
+            - crates/tillandsias-headless/src/remote_projects.rs
+            - openspec/litmus-tests/
+            - openspec/specs/enclave-network/spec.md
+          next_action: >
+            IMPLEMENTED (2026-06-16): (1) added --internal to
+            ensure_enclave_network (main.rs:1424); (2) dual-homed proxy
+            (main.rs:1663 → tillandsias-enclave,bridge); (3) dual-homed git
+            daemon (main.rs:1799 → tillandsias-enclave,bridge); (4) dual-homed
+            git helper containers (remote_projects.rs:287,517 →
+            tillandsias-enclave,bridge). Verification: 474 unit tests pass,
+            cargo fmt --check clean. Remaining: run --init on a clean host to
+            confirm (a) direct curl on enclave fails, (b) proxy/forge/git work,
+            (c) a real git-mirror push succeeds. See
+            plan/issues/enclave-egress-network-enforcement-gap-2026-06-16.md.
+          acceptance_evidence:
+            - "Direct external curl from an enclave container fails on a clean init."
+            - "Allowlisted egress via proxy still succeeds; build/init/forge stay green."
+            - "New live-enclave egress-deny litmus passes (added with the fix, not before)."
+          events:
+            - type: discovered
+              ts: "2026-06-16T11:10:00Z"
+              agent_id: "linux-macuahuitl-claude-opus-20260616T093524Z"
+              host: linux
+              note: >
+                Empirically confirmed enclave egress is proxy-cooperative not
+                network-enforced (direct curl reaches internet, HTTP 200;
+                internal=false). Supersedes the cycle-1 rejection of
+                2026-06-16-network-isolation-regression.
+            - type: claim
+              ts: "2026-06-16T22:30:46Z"
+              agent_id: "linux-tlatoani-opencode-big-pickle-20260616T223046Z"
+              host: linux
+              lease_id: "enclave-network-egress-deny-2026-06-16"
+              expires_at: "2026-06-17T02:30:46Z"
+            - type: progress
+              ts: "2026-06-16T22:35:00Z"
+              agent_id: "linux-tlatoani-opencode-big-pickle-20260616T223046Z"
+              host: linux
+              lease_id: "enclave-network-egress-deny-2026-06-16"
+              note: >
+                Implementation complete: added --internal to enclave network,
+                dual-homed proxy (main.rs:1663), git daemon (main.rs:1799),
+                and git helper containers (remote_projects.rs:287,517) to bridge
+                for egress. All 474 tests pass; formatting clean. Full smoke
+                with real git-mirror push still needed before flipping to done.
+
+    - id: macos-in-vm-enclave-provisioning
+      order: 55
+      title: macOS in-VM enclave provisioning (keystone unblocking all macOS tray interaction)
+      status: claimed
+      owner_host: macos
+      deliverable: plan/steps/49-macos-in-vm-enclave.md
+      audit_origin: plan/issues/macos-m8-interactive-smoke-failures-2026-06-16.md
+      depends_on: []
+      blocks:
+        - macos-tray/github-login-pty-hangs-gray
+        - macos-tray/empty-project-lists-and-poll-error-masking
+        - macOS m8 release-acceptance gate
+      specs:
+        - vm-provisioning-lifecycle
+        - vm-idiomatic-layer
+        - macos-native-tray
+        - forge-as-only-runtime
+      exit_criteria:
+        - "macOS VM provisions podman on first boot via cloud-init"
+        - "podman.socket enabled; headless can drive containers via REST API"
+        - "headless reports podman_ready=true / phase=Ready over vsock"
+        - "m8 user-attended interactive smoke passes (projects populate, github-login+attach work)"
+      tasks:
+        - id: macos-enclave/design-decision
+          status: done
+          owner_host: macos
+          depends_on: []
+          owned_files:
+            - plan/steps/49-macos-in-vm-enclave.md
+          checkpoint_required: false
+          handoff_note: "Option 1 (cloud-init installs podman + enclave) chosen. See step 49 file for rationale."
+        - id: macos-enclave/vz-cloud-init
+          status: done
+          owner_host: macos
+          depends_on: [macos-enclave/design-decision]
+          owned_files:
+            - crates/tillandsias-vm-layer/src/vz.rs
+          checkpoint_required: true
+          handoff_note: "Completed at b7321f50 on osx-next. Added dnf install podman + podman.socket enable/start to cloud-init user-data. 15/15 vm-layer tests pass."
+          events:
+            - type: completed
+              ts: "2026-06-16T23:17:00Z"
+              agent_id: "macos-tlatoani-big-pickle-20260616T231619Z"
+              host: "macos"
+              lease_id: "step49-macos-vm-enclave-20260616T231619Z"
+              commits: ["b7321f50"]
+              evidence:
+                - "cargo test -p tillandsias-vm-layer: 15/15 PASS"
+                - "cargo check -p tillandsias-vm-layer: clean"
+                - "E2E gate: build+install+provision+diagnose PASS at f39203b5"
+        - id: macos-enclave/verify-ready
+          status: done
+          owner_host: macos
+          depends_on: [macos-enclave/vz-cloud-init]
+          owned_files:
+            - crates/tillandsias-vm-layer/src/vz.rs
+          checkpoint_required: true
+          handoff_note: "Verified at 2026-06-16T23:28Z. Headless reaches phase=Ready podman_ready=true ~32s post-boot (was ~84s Failed before 49b)."
+          events:
+            - type: completed
+              ts: "2026-06-16T23:28:00Z"
+              agent_id: "macos-tlatoani-big-pickle-20260616T231619Z"
+              host: "macos"
+              evidence:
+                - "Launch tray, poll vm-status: phase=Ready podman_ready=true at ~32s"
+                - "Confirmed by diagnose-macos-enclave.sh: exits 0, Ready at ~31s"
+        - id: macos-enclave/automated-gate
+          status: done
+          owner_host: macos
+          depends_on: [macos-enclave/verify-ready]
+          owned_files:
+            - scripts/diagnose-macos-enclave.sh
+          checkpoint_required: true
+          handoff_note: "Implemented as scripts/diagnose-macos-enclave.sh. Polls tray log for phase=Ready within 120s. Exits 0 on Ready, 2 on Failed/timeout. Validated: Ready at ~31s."
+          events:
+            - type: completed
+              ts: "2026-06-16T23:30:00Z"
+              agent_id: "macos-tlatoani-big-pickle-20260616T231619Z"
+              host: "macos"
+              evidence:
+                - "Script written and tested: scripts/diagnose-macos-enclave.sh"
+                - "Phase=Ready at ~31s on provisioned VM"
+      events:
+        - type: claim
+          ts: "2026-06-16T23:16:19Z"
+          agent_id: "macos-tlatoani-big-pickle-20260616T231619Z"
+          host: "macos"
+          lease_id: "step49-macos-vm-enclave-20260616T231619Z"
+          expires_at: "2026-06-17T03:16:19Z"

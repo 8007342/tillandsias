@@ -219,10 +219,10 @@ Coordinates the cross-host cheatsheet updates. See
 
 ## Trace for future autonomous cycles
 
-A `./claude-repeat --skill advance-work-from-plan` or `--skill loop` cycle
-that lands on a host with a matching `w11/`, `m9/`, or `l10/` packet should
-read this doc first (its path is recorded in the packet's `next_action`),
-then execute the corresponding slice with the discipline this doc lays out.
+A `./repeat --prompt "Use the /meta-orchestration skill"` cycle that lands on
+a host with a matching `w11/`, `m9/`, or `l10/` packet should read this doc
+first (its path is recorded in the packet's `next_action`), then execute the
+corresponding slice with the discipline this doc lays out.
 The 5-touchpoint drift-protection discipline (impl + inline pin + cheatsheet
 + tray-diagnose.ps1 + install-windows.ps1 + litmus YAML) STILL APPLIES for
 the diagnose-schema changes that come with the field-semantics shift.

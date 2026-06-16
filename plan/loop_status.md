@@ -1,69 +1,49 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-16T10:43:22Z
+LastExecutionTime: 2026-06-16T23:35:28Z
 
 ## This Loop
 
-- **Cycle type**: Hourly multihost orchestration pass (audit + reconciliation;
-  no integration needed — siblings already merged).
+- **Cycle type**: multihost coordination after advance-work queue drain.
 - **Sibling Git Audit**:
-  - `main` at `bb5231f7` (release v0.3.260615.2)
-  - `linux-next` at `08ca1d60`
+  - `main` at `9493a3ef` (release v0.3.260616.1 published)
+  - `linux-next` at `d9665185` (order-53 verification complete)
   - `windows-next` at `0710071b` — ANCESTOR of linux-next (integrated)
-  - `osx-next` at `534e1aeb` — ANCESTOR of linux-next (integrated)
-  - Drift: windows-next 0, osx-next 0 ahead of linux-next. No Dmax alert.
-- **linux-next ↔ main**: linux-next is **8 commits ahead** of main; main is
-  **2 ahead** (`bb5231f7` VERSION bump + `90b27c34` merge #31). These two
-  main-only commits are the standing release-merge/CalVer reconciliation that
-  the next `/merge-to-main-and-release` pass must fold in (linux-next VERSION
-  `0.3.260616.1` vs main `0.3.260615.2`).
-- **Completed since last pass**:
-  - `coord/critical-forge-proposal-triage-20260616` (order 52) → **done**.
-    git-pii-scrub accepted → new ready packet `privacy/forge-git-identity-
-    anonymization` (order 53); network-isolation-regression rejected
-    (not reproducing); podman-in-forge deferred (rootless infeasible).
-  - Build/install destructive smoke E2E **PASS** (run 20260616T081336Z).
+  - `osx-next` at `9d2bcea6` — ANCESTOR of linux-next (step 49b/49c/49e integrated)
+  - Drift 0/0; no Dmax alert.
+- **Completed since last pass** (coordination merge):
+  - Integrated osx-next step 49 evidence through `9d2bcea6`; macOS in-VM enclave now reaches Ready unattended, with automated assertion script.
+  - Completed order-53 acceptance verification and pushed `d9665185`.
+- **Order-53** `privacy/forge-git-identity-anonymization` — completed. Implementation `e31792e8` preserves the real Git author and appends distinct machine-parseable agent/model trailers; focused fixture, shell syntax checks, and `./build.sh --check` passed.
+- **Order-54** `enclave/network-level-egress-deny` — checkpointed (e11ff704), pending full smoke + git-mirror push verification. Lease active.
 
 ## Active Conflicts & Mediation
 
-- No merge conflicts, deadlocks (Pattern A), spec divergence (Pattern B),
-  thrashing (Pattern C), or branch drift (Pattern D) detected this pass.
-- Sibling changes remained scoped to platform code + append-only plan ledgers.
+- None this pass.
 
 ## Leases & Hygiene
 
-- No `claimed`/`in_progress` tasks in `plan/index.yaml`; no active leases to
-  reclaim. (Expired 2026-05-29/05-31 lease records are on completed tasks.)
-- **Stale marker flagged for triage**: `plan/issues/undocumented-p3-gaps-wave-25.md`
-  is `status: in_progress` from 2026-05-14 with no lease/expires_at — an
-  abandoned P3 Haiku-worker flag, off the active frontier. Next owner should
-  close or re-`ready` it; not modified this pass to avoid non-frontier churn.
+- Lease `enclave-network-egress-deny-2026-06-16` active, expires 2026-06-17T02:30:46Z.
 
 ## Convergence Velocity
 
-- Vc **positive** this window: one shaped packet completed + one new ready
-  packet promoted; smoke green; zero new blockers. R is decreasing.
-- **High-Velocity Alignment Event: STOOD DOWN.** Local Linux smoke blockers are
-  closed and sibling branches are synchronized; remaining work is a clean
-  release plus the order-53 privacy packet. Leases may return to the standard
-  4-hour TTL. Cmax not violated (≤2 commits/hr with positive Vc).
+- Vc **positive**: osx-next integrated, order-53 verified/completed. Order-54
+  remains leased and needs acceptance smoke before completion.
 
 ## Assignment Board
 
-- **Linux primary**: `privacy/forge-git-identity-anonymization` (order 53) —
-  anonymize git identity in the forge without breaking commit attribution.
-  *Fallback*: file/start the `litmus/enclave-network-egress-deny` backlog
-  hardening, or triage the stale wave-25 P3 marker.
-- **Windows primary**: no implementation packet; keep `windows-next` synced with
-  `linux-next`. *Fallback*: claim any Windows-owned smoke finding that appears.
-- **macOS primary**: no autonomous packet; `m8/appkit-action-smoke-and-stub-polish`
-  remains user-attended (not an agent blocker). *Fallback*: macOS smoke re-run.
+- **Linux primary**: `enclave/network-level-egress-deny` (order 54) —
+  **checkpointed** (e11ff704). Needs full-smoke with real git-mirror push
+  before final done.
+- **Windows primary**: none; keep `windows-next` synced. *Fallback*: any
+  Windows-owned smoke finding.
+- **macOS primary**: step 49d / m8 interactive smoke — user-attended, not
+  autonomous-claimable. *Fallback*: macOS smoke re-run.
 
 ## Stale Or Pending Pings
 
-- `/merge-to-main-and-release` pending: open/refresh linux-next → main PR
-  (8 commits), reconcile VERSION to the release target, then tag +
-  workflow_dispatch.
-- v0.3.260615.2 published green across Linux, macOS, and Windows.
-- `m8/appkit-action-smoke-and-stub-polish` blocked on user-attended macOS click
-  smoke.
+- v0.3.260616.1 published green across Linux/macOS/Windows.
+- Sibling branches fully integrated (drift 0/0).
+- Linux unattended queue is blocked/exhausted: order 54 lease active until
+  2026-06-17T02:30:46Z; no-Python script policy remains blocked on rewrite scope
+  or explicit approval.

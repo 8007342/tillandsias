@@ -10,7 +10,7 @@ to the same file).
 This is the **Worker tier** of the two-tier execution model documented
 in `methodology/distributed-work.yaml` (`agent_execution_roles` +
 `worker_agent_protocol`). Complementary to the **Orchestrator tier**
-(`/multihost-orchestration` → `/coordinate-multihost-work`).
+(`/meta-orchestration` → `/multihost-orchestration` → `/coordinate-multihost-work`).
 
 ## Input
 

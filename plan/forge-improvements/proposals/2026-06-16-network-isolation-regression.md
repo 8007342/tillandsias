@@ -2,9 +2,19 @@
 title: Fix recurring network isolation regression (external_curl reaches internet)
 gap: "isolation_or_privacy_risks: network_isolation.external_curl fails — forge container reaches external internet directly, bypassing proxy block"
 category: network
-status: rejected
+status: reopened
 proposed_at: 2026-06-16T08:00:00Z
 triaged_at: 2026-06-16T09:40:00Z
+retriaged_at: 2026-06-16T11:10:00Z
+retriage_decision: >
+  SUPERSEDES the rejection below. The rejection relied on the diagnostics
+  external_curl probe + litmus-ephemeral-guarantee, both of which only test the
+  PROXY-COOPERATIVE path (proxy-aware curl / --network=none). Direct egress on
+  the live enclave network was never tested. On re-test it SUCCEEDS (HTTP 200):
+  enclave egress is proxy-cooperative, not network-enforced. Reframed and
+  reshaped as plan/issues/enclave-egress-network-enforcement-gap-2026-06-16.md
+  (packet enclave/network-level-egress-deny). Not a flapping regression — a
+  standing architectural gap.
 triage_decision: >
   REJECTED as a release blocker — the 2026-06-14 external_curl regression does
   not reproduce on 2026-06-16. Both 2026-06-16 diagnostics runs report

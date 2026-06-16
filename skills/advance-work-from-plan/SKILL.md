@@ -15,7 +15,7 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
     ```bash
     git fetch origin
     git checkout linux-next
-    git pull --ff-only
+    git pull --ff-only origin linux-next
     ```
 2.  **Host and Identity**: Identify your platform (`linux`, `windows`, `macos`), your agent name, and your intended capabilities (`rust`, `podman`, `docs`, `testing`, etc.).
 3.  **Host Detection Table**:
@@ -155,6 +155,22 @@ If the 2h integration cron fired in the last 10 min (check the latest `### Cycle
     -   Update any local dependency mirror tables in the same pass.
 3.  **Commit & Push Ledger**: Commit and push the final plan edits to `origin/linux-next`.
 
+### Mandatory Exit Discipline
+
+A successful invocation MUST NOT exit with local-only work:
+
+- If implementation is complete, update the owning plan item status and append a
+  completion event with evidence before the final commit.
+- If implementation is incomplete but coherent, commit a checkpoint and append a
+  progress event with remaining work and the next action.
+- If implementation is blocked, append a blocked/failed event with the exact
+  blocker and smallest next diagnostic command.
+- Push every checkpoint/completion to the appropriate remote branch before
+  returning success.
+- Before final success, verify `git status --short --branch` is clean and not
+  ahead of upstream. If not, finish the commit/push or mark the plan item
+  blocked with the reason.
+
 ### Yield & Triage (Failure/Blockage)
 1.  **Emit Blocked or Failed Event**: If you encounter an unresolvable error, blocker, or spec gap:
     -   Append a `blocked` or `failed` event to `events:` detailing the exact reason, the named blocker, and the smallest next diagnostic command.
@@ -175,6 +191,8 @@ If the 2h integration cron fired in the last 10 min (check the latest `### Cycle
 - `release.yml` is `workflow_dispatch` only — never auto-trigger. (The old `recipe-publish.yml` rootfs workflow was removed in the 2026-06 Fedora pivot.)
 - NEVER resolve cross-host plan conflicts by deletion — tombstone or supersede only.
 - When the worktree is dirty, only stage `plan/` files explicitly by path. Implementation code from a previous (uncommitted) iteration is NOT yours to touch.
+- Treat every local-only commit as volatile. If it matters, push it before
+  ending; if it cannot be pushed after three retries, file a blocked event.
 
 ---
 
