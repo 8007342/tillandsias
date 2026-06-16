@@ -1,6 +1,6 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-16T22:20:06Z
+Last updated: 2026-06-16T23:35:00Z
 
 This file is the first stop for agents inspecting `plan/issues/`. Historical
 issue reports remain in this directory for evidence and auditability, but only
@@ -78,24 +78,34 @@ The 2026-06-16 critical/high forge proposals were triaged in
 
 ### m8/appkit-action-smoke-and-stub-polish
 
-- status: blocked
+- status: unblocked (was blocked on step 49)
 - owner_host: macos
 - source: `plan/issues/osx-next-work-queue-2026-05-25.md`
-- blocker: user-attended macOS click smoke. Autonomous build/test evidence is
-  green; this is not claimable by an unattended implementation agent.
+- next_action: user-attended macOS interactive smoke — enclave now reaches Ready
+- blocker: user-attended click smoke; not claimable by unattended agent
 
 ### macOS in-VM enclave (step 49)
 
-- status: in_progress
+- status: in_progress (49d remaining — user-attended)
 - owner_host: macos
 - source: `plan/steps/49-macos-in-vm-enclave.md`, `plan/index.yaml` order 55
-- next_action: 49b implemented (podman install in cloud-init); verify building and installing the tray.
-- blocker: none
+- next_action: 49d — user-attended m8 interactive smoke (projects populate, github-login, attach shell)
+- completed: 49a (design), 49b (cloud-init podman install, b7321f50), 49c (headless reached Ready ~32s), 49e (automated assertion script, diagnose-macos-enclave.sh)
+- blocker: user-attention required — 49d cannot be validated unattended
 - lease: `step49-macos-vm-enclave-20260616T231619Z` (expires 2026-06-17T03:16Z)
 - evidence_required:
-  - cargo test passes
-  - build-osx-tray produces a valid bundle
-  - VM reaches Ready phase after provisioning
+  - [x] cargo test passes
+  - [x] build-osx-tray produces a valid bundle (E2E gate PASS)
+  - [x] VM reaches Ready phase after provisioning (49c verified)
+  - [ ] m8 interactive smoke passes (49d) — user-attended
+
+## Achieved This Cycle (2026-06-16T23:16–23:35Z, macos)
+
+- **Step 49a**: Design decision (Option 1 — cloud-init installs podman).
+- **Step 49b**: Implemented — `dnf install -y podman` + `podman.socket` in vz.rs cloud-init (b7321f50). E2E gate PASS (build+install+provision+diagnose).
+- **Step 49c**: Verified — headless reaches `phase=Ready podman_ready=true` ~32s post-boot (was ~84s `Failed`). Enclave provisioning resolved.
+- **Step 49e**: Automated assertion — `scripts/diagnose-macos-enclave.sh`, polls tray log for Ready within 120s. Validated.
+- **Step 49d**: Remaining — user-attended m8 interactive smoke.
 
 ## Recently Closed This Coordination Pass
 
