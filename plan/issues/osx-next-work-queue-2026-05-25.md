@@ -2,6 +2,28 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
+## 2026-06-16T23:35Z — step 49 done (49a/b/c/e completed); 49d next (user-attended m8 smoke)
+
+### Achieved this cycle:
+
+1. **49a** — Design decision: Option 1 (cloud-init installs podman).
+2. **49b** — Wire `dnf install -y podman` + `podman.socket` into cloud-init
+   user-data in `vz.rs` (`b7321f50` on osx-next). cargo test 15/15 PASS.
+3. **Build + E2E gate**: `build-install-and-smoke-test-e2e` ran on macOS:
+   build → install → freshness check → destroy substrate → cold re-provision
+   → diagnose. All PASS (f39203b5, osx-next).
+4. **49c** — Verified headless agent reports `phase=Ready podman_ready=true`
+   ~32s post-VM-boot over vsock. Was ~84s -> `Failed` before 49b.
+5. **49e** — Automated post-provision gate: `scripts/diagnose-macos-enclave.sh`
+   polls tray log for Ready within 120s; exits 0 on Ready, 2 on Failed/timeout.
+
+### Remaining:
+- **49d**: User-attended m8 interactive smoke — needs an operator to launch the
+  tray, click around (projects populate, github-login terminal, attach shell).
+  Ready to test now that enclave reaches Ready.
+- Downstream packets unblocked: `github-login-pty-hangs-gray`,
+  `empty-project-lists-poll-error-masking`, m8 release-acceptance gate.
+
 ## 2026-06-16T23:17Z — step 49a+b: enclave design decision + cloud-init podman install LANDED
 
 Claimed step 49 (macos-in-vm-enclave). Design decision: Option 1 (cloud-init
