@@ -84,6 +84,19 @@ The 2026-06-16 critical/high forge proposals were triaged in
 - blocker: user-attended macOS click smoke. Autonomous build/test evidence is
   green; this is not claimable by an unattended implementation agent.
 
+### macOS in-VM enclave (step 49)
+
+- status: in_progress
+- owner_host: macos
+- source: `plan/steps/49-macos-in-vm-enclave.md`, `plan/index.yaml` order 55
+- next_action: 49b implemented (podman install in cloud-init); verify building and installing the tray.
+- blocker: none
+- lease: `step49-macos-vm-enclave-20260616T231619Z` (expires 2026-06-17T03:16Z)
+- evidence_required:
+  - cargo test passes
+  - build-osx-tray produces a valid bundle
+  - VM reaches Ready phase after provisioning
+
 ## Recently Closed This Coordination Pass
 
 - Completed `coord/critical-forge-proposal-triage-20260616`: triaged all three
