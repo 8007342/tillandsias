@@ -379,6 +379,11 @@ echo "ssh-ed25519 AAAAC3NzaC1lZDI1NTE5AAAAIDGkwkOhAxGExE4dJUbIOMaVf8g0m0nSAp/JGz
 chown -R fedora:fedora /home/fedora/.ssh
 chmod 600 /home/fedora/.ssh/authorized_keys
 
+# Install podman + dependencies for the enclave
+dnf install -y podman
+systemctl enable podman.socket
+systemctl start podman.socket
+
 # Create directory
 mkdir -p /usr/local/lib/tillandsias
 
