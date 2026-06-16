@@ -249,7 +249,7 @@ it. Recorded as `macos-tray/smoke-does-not-cover-interaction-surface` below; the
 - type: fix
 - owner_host: any
 - capability_tags: [testing, ci, macos, bash]
-- status: ready
+- status: done (smoke + build-macos-tray skills both gate --version SHA == HEAD; Windows mirror pending its own SHA stamp)
 - next_action: >
     Add a guard to `/build-install-and-smoke-test-e2e` (and the build-macos-tray
     skill) preflight: after build+install, run the installed binary's
@@ -289,7 +289,7 @@ it. Recorded as `macos-tray/smoke-does-not-cover-interaction-surface` below; the
 - type: process
 - owner_host: any
 - capability_tags: [testing, methodology, macos]
-- status: ready
+- status: partially-done (SKILL.md caveat + m8-gate doc landed; automated interaction probe still open)
 - discovered_by: m8 user-attended smoke (2026-06-16)
 - next_action: >
     Either add an automated interaction probe to the macOS smoke (assert the VM
