@@ -28,11 +28,12 @@ the items below are immediate work.
 
 ### nanoclawv2-orchestration
 
-- status: ready
+- status: claimed
 - owner_host: linux
 - source: `plan/issues/nanoclawv2-orchestration.md`
 - next_action: Draft the NanoClawV2 implementation task graph from the new
   spec, then wire the launcher leaf, broker surface, and smoke hooks.
+- lease: `nanoclawv2-orchestration-202606172207` (expires 2026-06-18T02:07Z)
 - blocker: none
 - evidence_required:
   - NanoClawV2 launch leaf exists and is branch-aware

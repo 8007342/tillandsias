@@ -1,7 +1,7 @@
 # NanoClawV2 orchestration engine and launcher leaf
 
 - branch: linux-next
-- status: ready
+- status: claimed
 - owner_host: linux
 - source: `openspec/changes/nanoclawv2-orchestration/`
 - scope:
@@ -11,8 +11,14 @@
   - add smoke coverage for launch + one approved action
 - current_progress: proposal, design, tasks, and spec are scaffolded; no code
   has been changed yet
-- next_action: claim the packet and wire the launcher, broker, and smoke
-  hooks
+- next_action: wire the launcher, broker, and smoke hooks
+- events:
+  - type: claim
+    ts: "2026-06-17T22:07:00Z"
+    agent_id: "linux-macuahuitl-gemini-202606172205"
+    host: "linux"
+    lease_id: "nanoclawv2-orchestration-202606172207"
+    expires_at: "2026-06-18T02:07:00Z"
 - blocker: none
 - evidence_required:
   - proposal.md, design.md, tasks.md, and spec.md are written and consistent
