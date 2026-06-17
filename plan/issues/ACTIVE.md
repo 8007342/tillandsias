@@ -1,12 +1,44 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-17T19:27:22Z
+Last updated: 2026-06-17T20:14:00Z
 
 This file is the first stop for agents inspecting `plan/issues/`. Historical
 issue reports remain in this directory for evidence and auditability, but only
 the items below are immediate work.
 
 ## Immediate
+
+### cheatsheet/reconcile-committed-tier (release-pipeline blocker)
+
+- status: ready
+- owner_host: linux
+- source: `plan/issues/cheatsheet-tier-committed-ci-blocker-2026-06-17.md`
+- next_action: Resolve the invalid `tier: committed` on
+  `cheatsheets/concurrent-git/commit-attribution.md` (order-53) and the coupled
+  host↔image cheatsheet-tree drift. Recommend Option A (retier `bundled` + sync
+  image tree + regenerate both INDEX.md).
+- blocker: none (decision Options A/B/C documented in the source packet)
+- severity: high — `./build.sh --ci-full` FAILS, so the local-build e2e gate and
+  `/merge-to-main-and-release` are blocked for all hosts until this is green.
+- evidence_required:
+  - `scripts/check-cheatsheet-tiers.sh` exits 0
+  - `litmus:cheatsheet-host-image-sync` passes
+  - `./build.sh --ci-full` reaches CHECKS PASSED
+
+### smoke-finding/rootless-bridge-network-missing
+
+- status: fix-implemented (code + unit tests + litmus landed; runtime e2e blocked)
+- owner_host: linux
+- source: `plan/issues/smoke-e2e-findings-v0.3.260616.2-2026-06-17.md`
+- next_action: After `cheatsheet/reconcile-committed-tier` lands and CI-full is
+  green, rerun `/build-install-and-smoke-test-e2e` to capture runtime acceptance
+  (clean init → `tillandsias-egress` created → forge lane starts past proxy spawn).
+- blocker: runtime acceptance blocked behind `cheatsheet/reconcile-committed-tier`
+  (CI-full halts before install on pre-existing cheatsheet failures).
+- evidence (done): replaced the nonexistent `bridge` egress leg with a managed
+  `tillandsias-egress` network (commit `4c6d11d8`); updated
+  `litmus:enclave-network-source-shape` STEP 5 to pin the new const +
+  `ensure_egress_network`; `./build.sh --check` + `tillandsias-headless` suite green.
 
 ### nanoclawv2-orchestration
 

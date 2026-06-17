@@ -117,6 +117,33 @@ assumption is false on this clean Linux rootless runtime after
     evidence_refs:
       - "crates/tillandsias-headless/src/main.rs (EGRESS_NET, ENCLAVE_EGRESS_NETS, ensure_egress_network)"
       - "crates/tillandsias-headless/src/remote_projects.rs:291,523"
+  - type: e2e-blocked
+    ts: "2026-06-17T20:12:00Z"
+    agent_id: "linux-tlatoani-claude-opus-4-8-meta-orchestration"
+    host: linux
+    note: >
+      Ran the local-build e2e gate (`/build-install-and-smoke-test-e2e`) to get
+      runtime acceptance (clean init → egress network created → forge lane starts
+      past proxy spawn). The fix also (correctly) broke the drift-protection
+      litmus `litmus:enclave-network-source-shape` STEP 5, which pinned the old
+      `tillandsias-enclave,bridge` literal in container_profile.rs; updated that
+      step to pin the new `ENCLAVE_EGRESS_NETS` const + `ensure_egress_network`
+      (verified passing). HOWEVER `./build.sh --ci-full --install` HALTS before
+      install on TWO PRE-EXISTING, unrelated cheatsheet CI failures from order-53
+      (`cheatsheet-tiers` invalid tier `committed`, `litmus:cheatsheet-host-image-sync`
+      tree drift). So runtime acceptance for this bridge fix is BLOCKED behind
+      that gate. Filed `cheatsheet/reconcile-committed-tier`
+      (plan/issues/cheatsheet-tier-committed-ci-blocker-2026-06-17.md). Code-level
+      verification for THIS fix is complete (type-check + unit tests
+      `enclave_egress_dual_home_targets_managed_egress_network`,
+      `ensure_enclave_network_also_ensures_egress_network` + the updated litmus);
+      runtime acceptance resumes once the cheatsheet packet lands and CI-full goes
+      green.
+    blocked_on: "cheatsheet/reconcile-committed-tier"
+    smallest_next_action: >
+      Land cheatsheet/reconcile-committed-tier (recommend Option A: retier to
+      bundled + sync image tree), then rerun `/build-install-and-smoke-test-e2e`
+      on linux to capture init/forge-lane acceptance for the bridge fix.
 
 ## Second-run additional finding (2026-06-17T06:51Z)
 
