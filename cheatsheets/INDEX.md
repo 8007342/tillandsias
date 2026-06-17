@@ -64,7 +64,7 @@ Curated reference for tools, languages, and runtimes shipped with the Tillandsia
 
 - agent-handoff.md                 — you're an agent picking up work from `plan/`, you need to claim something, chec… [bundled, partial-verify]
 - branches.md                      — starting any work session on any platform host, or any time you're unsure which… [bundled, partial-verify]
-- commit-attribution.md            — deciding how AI-agent / LLM-authored commits are attributed in git
+- commit-attribution.md            — deciding how AI-agent / LLM-authored commits are attributed in git [bundled, partial-verify]
 - plan-discipline.md               — you're writing or updating anything under `plan/`, `methodology/`, `openspec/`,… [bundled, partial-verify]
 
 ## data
