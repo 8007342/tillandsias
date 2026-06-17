@@ -173,48 +173,97 @@ select_agent() {
   printf '%s\n' "${AGENT_LIST[$index]}"
 }
 
+# Resolve a timeout(1) implementation once. GNU coreutils ships `timeout` on
+# Linux; macOS ships neither it nor `gtimeout` unless coreutils is installed
+# (`brew install coreutils`). When a binary is present we prefer it; otherwise
+# run_with_timeout falls back to a portable bash watchdog. Empty means "fall
+# back".
+TIMEOUT_CMD=""
+if command -v timeout >/dev/null 2>&1; then
+  TIMEOUT_CMD="timeout"
+elif command -v gtimeout >/dev/null 2>&1; then
+  TIMEOUT_CMD="gtimeout"
+fi
+
+# run_with_timeout <command...> -- apply the per-cycle hard timeout so a harness
+# wedged in a reconnect loop cannot hang the loop. Sends TERM at the deadline,
+# KILL after a 30s grace window, and reports exit 124 on timeout (matching
+# timeout(1)), which the caller treats as a non-fatal warning.
+run_with_timeout() {
+  if [[ "$TIMEOUT_SECONDS" -le 0 ]]; then
+    "$@"
+    return $?
+  fi
+
+  if [[ -n "$TIMEOUT_CMD" ]]; then
+    "$TIMEOUT_CMD" --signal=TERM --kill-after=30s "$TIMEOUT_SECONDS" "$@"
+    return $?
+  fi
+
+  # Portable fallback for hosts without a timeout(1) binary (stock macOS). A
+  # marker file lets us distinguish a watchdog kill from an ordinary signal so
+  # we can normalize the exit code to 124.
+  local marker
+  marker="$(mktemp)"
+  "$@" &
+  local cmd_pid=$!
+  (
+    sleep "$TIMEOUT_SECONDS"
+    if kill -0 "$cmd_pid" 2>/dev/null; then
+      printf 1 > "$marker"
+      kill -TERM "$cmd_pid" 2>/dev/null
+      # Poll the 30s grace window so the watchdog self-terminates the moment
+      # the harness honors TERM, instead of always sleeping the full grace.
+      g=0
+      while [[ "$g" -lt 30 ]] && kill -0 "$cmd_pid" 2>/dev/null; do
+        sleep 1
+        g=$((g + 1))
+      done
+      kill -KILL "$cmd_pid" 2>/dev/null
+    fi
+  ) &
+  local watcher_pid=$!
+
+  local status=0
+  wait "$cmd_pid" 2>/dev/null || status=$?
+
+  # Cycle finished on its own: stop the watchdog so its sleep does not linger.
+  kill -TERM "$watcher_pid" 2>/dev/null || true
+  wait "$watcher_pid" 2>/dev/null || true
+
+  if [[ "$(cat "$marker" 2>/dev/null)" == "1" ]]; then
+    status=124
+  fi
+  rm -f "$marker"
+  return "$status"
+}
+
 run_agent() {
   local selected="$1"
   local bin
 
-  # Per-cycle hard timeout. timeout(1) sends TERM, then KILL after a grace
-  # window; the grace only starts after the hard cap elapses, so a harness
-  # wedged in a reconnect loop cannot hang the loop. A timed-out cycle exits
-  # 124, which the caller treats as a non-fatal warning.
-  local -a run=()
-  if [[ "$TIMEOUT_SECONDS" -gt 0 ]]; then
-    run=(timeout --signal=TERM --kill-after=30s "$TIMEOUT_SECONDS")
-  fi
-
   case "$selected" in
     codex)
       bin="$(resolve_bin CODEX_BIN codex)" || return $?
-      "${run[@]}" "$bin" --dangerously-bypass-approvals-and-sandbox exec -p tillandsias -C "$REPO_ROOT" --add-dir "$REPO_ROOT" "$PROMPT"
+      run_with_timeout "$bin" exec --color never --dangerously-bypass-approvals-and-sandbox -p tillandsias -C "$REPO_ROOT" "$PROMPT"
       ;;
     claude)
       bin="$(resolve_bin CLAUDE_BIN claude)" || return $?
-      "${run[@]}" "$bin" --print --output-format text --dangerously-skip-permissions "$PROMPT" --add-dir "$REPO_ROOT"
+      run_with_timeout "$bin" --print --output-format text --dangerously-skip-permissions "$PROMPT" --add-dir "$REPO_ROOT"
       ;;
     opencode)
       bin="$(resolve_bin OPENCODE_BIN opencode)" || return $?
-      (cd "$REPO_ROOT" && "${run[@]}" "$bin" run --dangerously-skip-permissions "$PROMPT")
+      (cd "$REPO_ROOT" && run_with_timeout "$bin" run --dangerously-skip-permissions "$PROMPT")
       ;;
     gemini)
       bin="$(resolve_bin GEMINI_BIN gemini)" || return $?
-      if command -v jq >/dev/null 2>&1; then
-        # Gemini's plain text mode is final-message only. Stream JSON gives live
-        # turn progress, and jq strips it down to just assistant text so the
-        # operator sees useful output without the event spam.
-        (cd "$REPO_ROOT" && "${run[@]}" "$bin" --prompt="$PROMPT" --yolo --output-format stream-json --include-directories "$REPO_ROOT" | jq -r 'select(.type=="message" and .role=="assistant") | .content')
-      else
-        (cd "$REPO_ROOT" && "${run[@]}" "$bin" --prompt="$PROMPT" --yolo --output-format text --include-directories "$REPO_ROOT")
-      fi
+      (cd "$REPO_ROOT" && run_with_timeout "$bin" --prompt="$PROMPT" --yolo --include-directories "$REPO_ROOT")
       ;;
     antigravity)
       bin="$(resolve_bin ANTIGRAVITY_BIN agy)" || return $?
       # agy reads the prompt from stdin in print mode; piping it avoids the
       # variadic --add-dir parser swallowing the task text as another path.
-      (cd "$REPO_ROOT" && printf '%s\n' "$PROMPT" | "${run[@]}" "$bin" --print --dangerously-skip-permissions --add-dir "$REPO_ROOT")
+      (cd "$REPO_ROOT" && printf '%s\n' "$PROMPT" | run_with_timeout "$bin" --print --dangerously-skip-permissions --add-dir "$REPO_ROOT")
       ;;
     *)
       die "internal error: unsupported selected agent '$selected'"
@@ -235,13 +284,18 @@ while :; do
   SELECTED_AGENT="$(select_agent)"
   printf '[repeat] %s cycle=%d agent=%s repo=%s start\n' "$(timestamp_utc)" "$CYCLE" "$SELECTED_AGENT" "$REPO_ROOT" >&2
 
-  # Tee the cycle's output so the operator still sees it live while we measure
-  # how much was produced. Many harnesses exit 0 even on quota/auth failure
-  # (e.g. agy returns 0 with empty output on an HTTP 429); an empty successful
-  # run is the most reliable cross-harness signal that the cycle did no work.
+  # Stream the cycle's output line-by-line so the operator sees progress live
+  # (a plain `tee` buffers on macOS BSD, hiding real-time output). Also capture
+  # to disk so we can measure how much was produced.
+  # Many harnesses exit 0 even on quota/auth failure (e.g. agy returns 0 with
+  # empty output on an HTTP 429); an empty successful run is the most reliable
+  # cross-harness signal that the cycle did no work.
   CYCLE_OUTPUT="$(mktemp)"
   set +e
-  run_agent "$SELECTED_AGENT" 2>&1 | tee "$CYCLE_OUTPUT"
+  run_agent "$SELECTED_AGENT" 2>&1 | while IFS= read -r line || [[ -n "$line" ]]; do
+    printf '%s\n' "$line"
+    printf '%s\n' "$line" >> "$CYCLE_OUTPUT"
+  done
   STATUS=${PIPESTATUS[0]}
   set -e
   OUTPUT_BYTES="$(wc -c < "$CYCLE_OUTPUT" | tr -d '[:space:]')"

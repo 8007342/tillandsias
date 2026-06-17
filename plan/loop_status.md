@@ -1,13 +1,12 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-17T22:22:30Z
+LastExecutionTime: 2026-06-17T23:11:03Z
 
 ## This Loop
 
 - **Cycle type**: meta-orchestration worker drain on `linux_mutable` (Linux, no
-  `/run/ostree-booted`, no `rpm-ostree`). Started on `linux-next` with a dirty
-  worktree: uncommitted traces regeneration + VERSION bump to `0.3.260617.3` +
-  diagnostics summary + e2e scripts. Committed checkpoint `a67043e4`.
+  `/run/ostree-booted`, no `rpm-ostree`). Started on `linux-next` at `ef1f1899`.
+  Worktree was clean.
 - **Worker drain**: No eligible ready work for Linux.
   - `release/version-tag-sequence-mismatch` — BLOCKED (policy decision).
   - `nanoclawv2-orchestration` — CLAIMED (lease `-202606172207`, active until
@@ -16,12 +15,13 @@ LastExecutionTime: 2026-06-17T22:22:30Z
     active until 2026-06-18T02:15Z).
 - **Sibling branch audit**:
   - `main`: `dcfde74c` (latest published release v0.3.260616.2).
-  - `linux-next`: `a67043e4` (1 ahead of origin — checkpoint).
-  - `windows-next`: `38e6e972`; 0 commits ahead — ancestor of `linux-next`.
-  - `osx-next`: `9d2bcea6`; 0 commits ahead — ancestor of `linux-next`.
-  - No drift, no deadlocks, no thrashing detected.
-- **E2E gates**: Skipped — no new runtime change to test. Only traces/dashboard
-  regeneration checkpoint landed.
+  - `linux-next`: `ef1f1899` (current HEAD).
+  - `windows-next`: `38e6e972`; ancestor of `linux-next`.
+  - `osx-next`: `a97ee0be` — 2 commits not yet in `linux-next`.
+- **Merge**: Integrated 2 `origin/osx-next` commits into `linux-next`:
+  `a97ee0be` (macOS meta-orch cycle) and `807f95f9` (repeat macOS timeout
+  fallback). Resolved conflicts in `ACTIVE.md`, `loop_status.md`, `repeat`.
+- **E2E gates**: Skipped — no new runtime change to test.
 
 ## Active Conflicts & Mediation
 

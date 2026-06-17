@@ -1,6 +1,6 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-17T22:22:30Z
+Last updated: 2026-06-17T23:11:03Z
 
 This file is the first stop for agents inspecting `plan/issues/`. Historical
 issue reports remain in this directory for evidence and auditability, but only
@@ -113,7 +113,16 @@ The 2026-06-16 critical/high forge proposals were triaged in
   - [x] VM reaches Ready phase after provisioning (49c verified)
   - [ ] m8 interactive smoke passes (49d) — user-attended
 
-## Achieved This Cycle (2026-06-16T23:16–23:35Z, macos)
+## Achieved This Cycle (2026-06-17T22:57Z, macos)
+
+- **repeat**: Added macOS-compatible timeout fallback (`run_with_timeout`) so the
+  repeat loop works on stock macOS without GNU coreutils. Commit `807f95f9`.
+- **advance-work-from-plan drain**: No eligible autonomous macOS work found.
+  All plan items are completed or blocked-on-user (step 49d = user-attended m8
+  smoke). Ready macOS bugfix packets in m8 failures file remain but require
+  a running VM or interactive session to verify.
+
+## Previous Cycle (2026-06-16T23:16–23:35Z, macos)
 
 - **Step 49a**: Design decision (Option 1 — cloud-init installs podman).
 - **Step 49b**: Implemented — `dnf install -y podman` + `podman.socket` in vz.rs cloud-init (b7321f50). E2E gate PASS (build+install+provision+diagnose).
