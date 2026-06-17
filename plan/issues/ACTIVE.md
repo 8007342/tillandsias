@@ -1,26 +1,12 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-17T20:30:00Z
+Last updated: 2026-06-17T20:40:00Z
 
 This file is the first stop for agents inspecting `plan/issues/`. Historical
 issue reports remain in this directory for evidence and auditability, but only
 the items below are immediate work.
 
 ## Immediate
-
-### smoke-finding/rootless-bridge-network-missing
-
-- status: fix-implemented (code + unit tests + litmus landed; runtime e2e now UNBLOCKED)
-- owner_host: linux
-- source: `plan/issues/smoke-e2e-findings-v0.3.260616.2-2026-06-17.md`
-- next_action: `cheatsheet/reconcile-committed-tier` LANDED (CI-full green), so
-  rerun `/build-install-and-smoke-test-e2e` to capture runtime acceptance
-  (clean init → `tillandsias-egress` created → forge lane starts past proxy spawn).
-- blocker: none (was: behind cheatsheet blocker; cleared 2026-06-17T20:30Z).
-- evidence (done): replaced the nonexistent `bridge` egress leg with a managed
-  `tillandsias-egress` network (commit `4c6d11d8`); updated
-  `litmus:enclave-network-source-shape` STEP 5 to pin the new const +
-  `ensure_egress_network`; `./build.sh --check` + `tillandsias-headless` suite green.
 
 ### nanoclawv2-orchestration
 
@@ -44,11 +30,12 @@ the items below are immediate work.
   no NAT egress; route allowlisted egress only through the dual-homed proxy.
 - blocker: none
 - latest_smoke: >
-    Release v0.3.260616.2 clean-room smoke on 2026-06-17 passed install,
-    destructive reset, and init, but failed the OpenCode forge lane before
-    forge start: the proxy launch used `--network tillandsias-enclave,bridge`
-    and clean rootless Podman had no `bridge` network. See
-    `plan/issues/smoke-e2e-findings-v0.3.260616.2-2026-06-17.md`.
+    Local build/install smoke on 2026-06-17 passed build/install, destructive
+    reset, clean init, and the OpenCode forge lane on installed
+    v0.3.260617.2. Init created managed `tillandsias-egress` before internal
+    `tillandsias-enclave`, and forge diagnostics reported 25/25 checks passed
+    with no failed container launches. The separate direct-egress-denied probe
+    remains required for this packet.
 - evidence_required:
   - direct (`--noproxy`) external curl from an enclave container FAILS on a clean init
   - allowlisted proxy egress + forge→proxy/inference/git-service still work
@@ -124,6 +111,15 @@ The 2026-06-16 critical/high forge proposals were triaged in
 
 ## Recently Closed This Coordination Pass
 
+- Completed `smoke-finding/rootless-bridge-network-missing`: local
+  `/build-install-and-smoke-test-e2e` on 2026-06-17 tested commit `6a44f4c6`
+  with installed `Tillandsias v0.3.260617.2`; build/install, destructive Podman
+  reset, clean init, and prompted OpenCode forge lane all exited 0. Evidence:
+  `target/build-install-smoke-e2e/20260617T201922Z`; init log shows
+  `podman network create --driver bridge tillandsias-egress` followed by
+  internal `tillandsias-enclave`, and forge diagnostics summary
+  `plan/diagnostics/diagnostics_20260617T202340Z-summary.md` reports 25/25
+  checks passed.
 - Completed `cheatsheet/reconcile-committed-tier` (release-pipeline blocker) on
   2026-06-17T20:30Z via Option A: retiered order-53
   `cheatsheets/concurrent-git/commit-attribution.md` from invalid `tier:

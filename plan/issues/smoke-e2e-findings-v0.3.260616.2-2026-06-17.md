@@ -38,7 +38,7 @@ assumption is false on this clean Linux rootless runtime after
 - id: `smoke-finding/rootless-bridge-network-missing`
 - owner_host: linux
 - capability_tags: [rust, podman, networking, enclave, release]
-- status: fix-implemented (code landed + unit-verified; pending local-build e2e acceptance)
+- status: runtime-accepted on local build v0.3.260617.2; ready for release
 - discovered_by: `/smoke-curl-install-and-test-e2e` on release `v0.3.260616.2`
 - related_packet: `enclave/network-level-egress-deny`
 - severity: high - blocks the published Linux forge lane after a clean
@@ -56,14 +56,9 @@ assumption is false on this clean Linux rootless runtime after
   - `tillandsias --debug --init`
   - `tillandsias . --opencode --prompt "Use the /forge-continuous-enhancement skill"`
 - next_action: >
-    Replace the hard-coded `bridge` network assumption in the dual-homed
-    proxy/git-service launch paths with a clean-rootless-safe egress network
-    strategy. Either discover Podman's default rootless network name, create an
-    explicit Tillandsias-managed external egress network during init, or attach
-    the second leg using a supported Podman default that exists after reset.
-    Then rerun the release smoke acceptance: clean init, direct enclave egress
-    denied, proxy egress succeeds, git-mirror push works, and the OpenCode
-    forge lane starts.
+    Ship the managed `tillandsias-egress` fix in the next release. Keep the
+    broader `enclave/network-level-egress-deny` direct-egress probe as its own
+    follow-up packet.
 - events:
   - type: discovered
     ts: "2026-06-17T00:34:41Z"
@@ -144,6 +139,30 @@ assumption is false on this clean Linux rootless runtime after
       Land cheatsheet/reconcile-committed-tier (recommend Option A: retier to
       bundled + sync image tree), then rerun `/build-install-and-smoke-test-e2e`
       on linux to capture init/forge-lane acceptance for the bridge fix.
+  - type: runtime-accepted
+    ts: "2026-06-17T20:40:00Z"
+    agent_id: "linux-tlatoani-codex-meta-orchestration"
+    host: linux
+    tested_commit: "6a44f4c618150cc30c9a1764e86455059c608764"
+    installed_version: "Tillandsias v0.3.260617.2"
+    evidence_dir: "target/build-install-smoke-e2e/20260617T201922Z"
+    note: >
+      Local build/install e2e passed after the cheatsheet CI blocker landed:
+      `./build.sh --ci-full --install` exited 0, destructive
+      `podman system reset --force` exited 0, clean `tillandsias --init
+      --debug` exited 0, and the prompted OpenCode forge lane exited 0. Init
+      created `tillandsias-egress` (`podman network create --driver bridge
+      tillandsias-egress`) before the internal `tillandsias-enclave`, removing
+      the clean-rootless dependency on nonexistent `bridge`. Forge diagnostics
+      for the same installed build reported 25/25 checks passed and no failed
+      container launch events.
+    evidence_refs:
+      - "target/build-install-smoke-e2e/20260617T201922Z/01-build-install-exit.txt"
+      - "target/build-install-smoke-e2e/20260617T201922Z/02-reset-exit.txt"
+      - "target/build-install-smoke-e2e/20260617T201922Z/03-init-exit.txt"
+      - "target/build-install-smoke-e2e/20260617T201922Z/03-init.log:4006"
+      - "target/build-install-smoke-e2e/20260617T201922Z/04-forge-exit.txt"
+      - "plan/diagnostics/diagnostics_20260617T202340Z-summary.md"
 
 ## Second-run additional finding (2026-06-17T06:51Z)
 
