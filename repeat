@@ -191,9 +191,11 @@ run_agent() {
       ;;
     claude)
       bin="$(resolve_bin CLAUDE_BIN claude)" || return $?
-      # claude has no --prompt flag; the prompt is positional. Place it before
-      # --add-dir (which is variadic) so the directory list does not swallow it.
-      "${run[@]}" "$bin" --print --dangerously-skip-permissions "$PROMPT" --add-dir "$REPO_ROOT"
+      # Claude's default print mode can buffer the whole answer. Force stream
+      # JSON with partial messages so repeat sees incremental output as it
+      # arrives, while still running non-interactively. Claude requires
+      # --verbose for stream-json in print mode.
+      "${run[@]}" "$bin" --print --verbose --output-format stream-json --include-partial-messages --dangerously-skip-permissions "$PROMPT" --add-dir "$REPO_ROOT"
       ;;
     opencode)
       bin="$(resolve_bin OPENCODE_BIN opencode)" || return $?
@@ -201,10 +203,9 @@ run_agent() {
       ;;
     antigravity)
       bin="$(resolve_bin ANTIGRAVITY_BIN agy)" || return $?
-      # agy's --prompt is only an alias for --print (print mode on/off); the task
-      # text is a positional argument. Go flag parsing stops at the first
-      # non-flag arg, so --add-dir does not consume the prompt.
-      (cd "$REPO_ROOT" && "${run[@]}" "$bin" --print --dangerously-skip-permissions --add-dir "$REPO_ROOT" "$PROMPT")
+      # agy reads the prompt from stdin in print mode; piping it avoids the
+      # variadic --add-dir parser swallowing the task text as another path.
+      (cd "$REPO_ROOT" && printf '%s\n' "$PROMPT" | "${run[@]}" "$bin" --print --dangerously-skip-permissions --add-dir "$REPO_ROOT")
       ;;
     *)
       die "internal error: unsupported selected agent '$selected'"
