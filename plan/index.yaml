@@ -4019,6 +4019,26 @@ plan_index:
                 and git helper containers (remote_projects.rs:287,517) to bridge
                 for egress. All 474 tests pass; formatting clean. Full smoke
                 with real git-mirror push still needed before flipping to done.
+            - type: progress
+              ts: "2026-06-17T00:34:41Z"
+              agent_id: "linux-tlatoani-codex-20260617T003441Z"
+              host: linux
+              lease_id: "enclave-network-egress-deny-2026-06-16"
+              note: >
+                Release-smoke acceptance failed on published v0.3.260616.2 after
+                clean curl install, destructive Podman reset, and successful
+                fresh init. OpenCode forge launch failed starting the proxy
+                because the dual-homed launch used
+                --network tillandsias-enclave,bridge, but clean rootless Podman
+                had no network named bridge. Filed
+                smoke-finding/rootless-bridge-network-missing; checkpoint stays
+                open until the egress leg is made clean-rootless-safe and forge
+                lane acceptance passes.
+              evidence:
+                - "target/smoke-e2e/01-version.txt: Tillandsias v0.3.260616.2"
+                - "target/smoke-e2e/03-init-exit.txt: init exit: 0"
+                - "target/smoke-e2e/04-opencode.log: Error: unable to find network with name or ID bridge: network not found"
+                - "plan/issues/smoke-e2e-findings-v0.3.260616.2-2026-06-17.md"
 
     - id: macos-in-vm-enclave-provisioning
       order: 55

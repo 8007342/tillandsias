@@ -16,6 +16,12 @@ the items below are immediate work.
 - next_action: Make `tillandsias-enclave` `--internal` so forge containers have
   no NAT egress; route allowlisted egress only through the dual-homed proxy.
 - blocker: none
+- latest_smoke: >
+    Release v0.3.260616.2 clean-room smoke on 2026-06-17 passed install,
+    destructive reset, and init, but failed the OpenCode forge lane before
+    forge start: the proxy launch used `--network tillandsias-enclave,bridge`
+    and clean rootless Podman had no `bridge` network. See
+    `plan/issues/smoke-e2e-findings-v0.3.260616.2-2026-06-17.md`.
 - evidence_required:
   - direct (`--noproxy`) external curl from an enclave container FAILS on a clean init
   - allowlisted proxy egress + forge→proxy/inference/git-service still work
