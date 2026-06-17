@@ -1,6 +1,6 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-17T21:48:45Z
+Last updated: 2026-06-17T21:51:38Z
 
 This file is the first stop for agents inspecting `plan/issues/`. Historical
 issue reports remain in this directory for evidence and auditability, but only
