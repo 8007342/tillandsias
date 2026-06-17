@@ -1,11 +1,11 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-17T23:11:03Z
+LastExecutionTime: 2026-06-17T23:58:06Z
 
 ## This Loop
 
 - **Cycle type**: meta-orchestration worker drain on `linux_mutable` (Linux, no
-  `/run/ostree-booted`, no `rpm-ostree`). Started on `linux-next` at `ef1f1899`.
+  `/run/ostree-booted`, no `rpm-ostree`). Started on `linux-next` at `68e04f6e`.
   Worktree was clean.
 - **Worker drain**: No eligible ready work for Linux.
   - `release/version-tag-sequence-mismatch` — BLOCKED (policy decision).
@@ -15,12 +15,11 @@ LastExecutionTime: 2026-06-17T23:11:03Z
     active until 2026-06-18T02:15Z).
 - **Sibling branch audit**:
   - `main`: `dcfde74c` (latest published release v0.3.260616.2).
-  - `linux-next`: `ef1f1899` (current HEAD).
-  - `windows-next`: `38e6e972`; ancestor of `linux-next`.
-  - `osx-next`: `a97ee0be` — 2 commits not yet in `linux-next`.
-- **Merge**: Integrated 2 `origin/osx-next` commits into `linux-next`:
-  `a97ee0be` (macOS meta-orch cycle) and `807f95f9` (repeat macOS timeout
-  fallback). Resolved conflicts in `ACTIVE.md`, `loop_status.md`, `repeat`.
+  - `linux-next`: `68e04f6e` (current HEAD, merged osx-next).
+  - `windows-next`: `38e6e972`; ancestor of `linux-next` (0 drift).
+  - `osx-next`: `a97ee0be`; ancestor of `linux-next` (0 drift).
+- **Merge**: No new sibling commits since last cycle; osx-next and windows-next
+  are already ancestors of `linux-next`.
 - **E2E gates**: Skipped — no new runtime change to test.
 
 ## Active Conflicts & Mediation
