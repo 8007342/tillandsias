@@ -192,11 +192,7 @@ run_agent() {
       ;;
     claude)
       bin="$(resolve_bin CLAUDE_BIN claude)" || return $?
-      # Claude's default print mode can buffer the whole answer. Force stream
-      # JSON with partial messages so repeat sees incremental output as it
-      # arrives, while still running non-interactively. Claude requires
-      # --verbose for stream-json in print mode.
-      "${run[@]}" "$bin" --print --verbose --output-format stream-json --include-partial-messages --dangerously-skip-permissions "$PROMPT" --add-dir "$REPO_ROOT"
+      "${run[@]}" "$bin" --print --output-format text --dangerously-skip-permissions "$PROMPT" --add-dir "$REPO_ROOT"
       ;;
     opencode)
       bin="$(resolve_bin OPENCODE_BIN opencode)" || return $?
