@@ -56,7 +56,7 @@ trace: Cargo.toml (keyring features), plan/issues/github-login-vault-lifecycle-2
 
 ## Packet `keyring-verify/windows` — owner host: **windows** (`windows-next`)
 
-- **status**: ready
+- **status**: done
 - **depends_on**: []
 - **owned_files**: `Cargo.toml`, `Cargo.lock`, `plan/issues/windows-next-work-queue-2026-05-25.md`,
   `plan/issues/keyring-backend-xplat-verification-2026-06-08.md` (append to "Results")
