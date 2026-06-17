@@ -201,7 +201,14 @@ run_agent() {
       ;;
     gemini)
       bin="$(resolve_bin GEMINI_BIN gemini)" || return $?
-      (cd "$REPO_ROOT" && "${run[@]}" "$bin" --prompt="$PROMPT" --yolo --include-directories "$REPO_ROOT")
+      if command -v jq >/dev/null 2>&1; then
+        # Gemini's plain text mode is final-message only. Stream JSON gives live
+        # turn progress, and jq strips it down to just assistant text so the
+        # operator sees useful output without the event spam.
+        (cd "$REPO_ROOT" && "${run[@]}" "$bin" --prompt="$PROMPT" --yolo --output-format stream-json --include-directories "$REPO_ROOT" | jq -r 'select(.type=="message" and .role=="assistant") | .content')
+      else
+        (cd "$REPO_ROOT" && "${run[@]}" "$bin" --prompt="$PROMPT" --yolo --output-format text --include-directories "$REPO_ROOT")
+      fi
       ;;
     antigravity)
       bin="$(resolve_bin ANTIGRAVITY_BIN agy)" || return $?
