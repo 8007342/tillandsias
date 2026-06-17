@@ -189,15 +189,7 @@ run_agent() {
   case "$selected" in
     codex)
       bin="$(resolve_bin CODEX_BIN codex)" || return $?
-      local codex_last_message status
-      codex_last_message="$(mktemp)"
-      "${run[@]}" "$bin" exec --json --output-last-message "$codex_last_message" --color never --dangerously-bypass-approvals-and-sandbox -p tillandsias -C "$REPO_ROOT" "$PROMPT"
-      status=$?
-      if [[ -s "$codex_last_message" ]]; then
-        cat "$codex_last_message"
-      fi
-      rm -f "$codex_last_message"
-      return "$status"
+      "${run[@]}" "$bin" --dangerously-bypass-approvals-and-sandbox exec -p tillandsias -C "$REPO_ROOT" --add-dir "$REPO_ROOT" "$PROMPT"
       ;;
     claude)
       bin="$(resolve_bin CLAUDE_BIN claude)" || return $?
