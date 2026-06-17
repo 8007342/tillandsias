@@ -51,7 +51,7 @@ the image-tree INDEX was not.
 - id: `cheatsheet/reconcile-committed-tier`
 - type: fix
 - owner_host: linux
-- status: ready
+- status: done (resolved via Option A on 2026-06-17T20:30Z, commit `0eef1443`)
 - severity: high — blocks `./build.sh --ci-full --install` (the local-build e2e
   gate) and the `/merge-to-main-and-release` pipeline for all hosts.
 - capability_tags: [docs, cheatsheets, tooling, ci, release]
@@ -99,3 +99,16 @@ the image-tree INDEX was not.
       fails on this pre-existing order-53 cheatsheet inconsistency. Filing as a
       separate ready packet; not guess-fixed mid-gate because the tier model is a
       deliberate decision (Options A/B/C above).
+  - type: resolved
+    ts: "2026-06-17T20:30:00Z"
+    agent_id: "linux-tlatoani-claude-opus-4-8-meta-orchestration"
+    host: linux
+    commit: "0eef1443"
+    note: >
+      Applied Option A: retiered commit-attribution.md committed→bundled
+      (bundled_into_image true), synced into images/default/cheatsheets/
+      concurrent-git/, regenerated host INDEX.md and synced image INDEX.md
+      byte-identical. Verified: check-cheatsheet-tiers.sh exits 0 (210
+      validated); host-image-sync litmus critical_path passes (trees
+      byte-identical); ./build.sh --ci-full → ALL CHECKS PASSED (14/14).
+      Release pipeline + local-build e2e gate unblocked for all hosts.

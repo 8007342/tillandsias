@@ -1,6 +1,6 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-17T20:14:00Z
+Last updated: 2026-06-17T20:30:00Z
 
 This file is the first stop for agents inspecting `plan/issues/`. Historical
 issue reports remain in this directory for evidence and auditability, but only
@@ -8,33 +8,15 @@ the items below are immediate work.
 
 ## Immediate
 
-### cheatsheet/reconcile-committed-tier (release-pipeline blocker)
-
-- status: ready
-- owner_host: linux
-- source: `plan/issues/cheatsheet-tier-committed-ci-blocker-2026-06-17.md`
-- next_action: Resolve the invalid `tier: committed` on
-  `cheatsheets/concurrent-git/commit-attribution.md` (order-53) and the coupled
-  host↔image cheatsheet-tree drift. Recommend Option A (retier `bundled` + sync
-  image tree + regenerate both INDEX.md).
-- blocker: none (decision Options A/B/C documented in the source packet)
-- severity: high — `./build.sh --ci-full` FAILS, so the local-build e2e gate and
-  `/merge-to-main-and-release` are blocked for all hosts until this is green.
-- evidence_required:
-  - `scripts/check-cheatsheet-tiers.sh` exits 0
-  - `litmus:cheatsheet-host-image-sync` passes
-  - `./build.sh --ci-full` reaches CHECKS PASSED
-
 ### smoke-finding/rootless-bridge-network-missing
 
-- status: fix-implemented (code + unit tests + litmus landed; runtime e2e blocked)
+- status: fix-implemented (code + unit tests + litmus landed; runtime e2e now UNBLOCKED)
 - owner_host: linux
 - source: `plan/issues/smoke-e2e-findings-v0.3.260616.2-2026-06-17.md`
-- next_action: After `cheatsheet/reconcile-committed-tier` lands and CI-full is
-  green, rerun `/build-install-and-smoke-test-e2e` to capture runtime acceptance
+- next_action: `cheatsheet/reconcile-committed-tier` LANDED (CI-full green), so
+  rerun `/build-install-and-smoke-test-e2e` to capture runtime acceptance
   (clean init → `tillandsias-egress` created → forge lane starts past proxy spawn).
-- blocker: runtime acceptance blocked behind `cheatsheet/reconcile-committed-tier`
-  (CI-full halts before install on pre-existing cheatsheet failures).
+- blocker: none (was: behind cheatsheet blocker; cleared 2026-06-17T20:30Z).
 - evidence (done): replaced the nonexistent `bridge` egress leg with a managed
   `tillandsias-egress` network (commit `4c6d11d8`); updated
   `litmus:enclave-network-source-shape` STEP 5 to pin the new const +
@@ -142,6 +124,16 @@ The 2026-06-16 critical/high forge proposals were triaged in
 
 ## Recently Closed This Coordination Pass
 
+- Completed `cheatsheet/reconcile-committed-tier` (release-pipeline blocker) on
+  2026-06-17T20:30Z via Option A: retiered order-53
+  `cheatsheets/concurrent-git/commit-attribution.md` from invalid `tier:
+  committed` to `bundled` (`bundled_into_image: true`), synced it into
+  `images/default/cheatsheets/concurrent-git/`, and regenerated/synced both
+  INDEX.md trees byte-identical (commit `0eef1443`). Acceptance:
+  `check-cheatsheet-tiers.sh` exits 0 (210 validated); host-image-sync litmus
+  critical_path passes; `./build.sh --ci-full` → ALL CHECKS PASSED (14/14).
+  Unblocks the local-build e2e gate and `/merge-to-main-and-release` for all
+  hosts.
 - Completed `privacy/forge-git-identity-anonymization` / order 53: implementation
   commit `e31792e8` preserves real Git author identity and appends machine-parseable
   agent/model trailers. Acceptance fixture verified Codex and OpenCode trailers
