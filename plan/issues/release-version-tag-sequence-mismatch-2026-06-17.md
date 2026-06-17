@@ -59,3 +59,20 @@ Discovered during `/meta-orchestration` release pre-flight after pushing
     `linux-next -> main` PR, and recent `release.yml` runs had no queued or
     running release. Release was stopped only because the next tag policy and
     current `VERSION` disagree.
+
+- type: progress
+  ts: "2026-06-17T23:45:00Z"
+  agent_id: "linux-tillandsias-gemini-cli-2026-06-17T2220Z"
+  host: "linux"
+  note: >
+    Resolved by updating the merge-to-main-and-release skill to preserve
+    VERSION if it is ahead of the tag-derived sequence. Commit 764e8745
+    implemented this fix. Unblocked for release.
+
+- type: completed
+  ts: "2026-06-17T23:45:00Z"
+  agent_id: "linux-tillandsias-gemini-cli-2026-06-17T2220Z"
+  host: "linux"
+  evidence:
+    - commit: 764e874591a27e3661601633519888995393010b
+    - skill: skills/merge-to-main-and-release/SKILL.md

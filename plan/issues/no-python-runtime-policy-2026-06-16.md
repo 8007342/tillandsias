@@ -70,3 +70,11 @@ Rewrite or retire the existing Python-backed maintenance scripts:
 
 The checker intentionally fails until these scripts are rewritten in Rust or
 explicitly approved by The Tlatoani.
+
+- type: progress
+  ts: "2026-06-17T23:57:00Z"
+  agent_id: "linux-tillandsias-gemini-cli-2026-06-17T2220Z"
+  host: "linux"
+  note: >
+    Retired check-convergence-velocity.py. The shell wrapper is now a
+    no-op stub. 3 down, 10 to go. Commit cae63645.
