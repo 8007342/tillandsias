@@ -14,10 +14,11 @@ Options:
   --timeout <duration>  Hard cap on a single agent cycle. A hung harness (e.g. a
                          CLI stuck in a reconnect loop) is killed and the loop
                          moves on. Default: 30m. Use 0 to disable.
-  --agent <agents>      claude, opencode, antigravity, codex, random (all four),
-                         or a comma-separated subset (e.g. claude,opencode,codex)
-                         to temporarily skip a harness that is down. One agent is
-                         chosen at random per cycle. Default: random.
+  --agent <agents>      claude, opencode, gemini, antigravity, codex, random
+                         (claude/opencode/gemini/codex), or a comma-separated
+                         subset (e.g. claude,opencode,codex) to temporarily
+                         skip a harness that is down. One agent is chosen at
+                         random per cycle. Default: random.
   --help, -h            Show this help.
 
 Resilience: a failed or silent cycle (non-zero exit, timeout, or an exit-0 run
@@ -96,7 +97,7 @@ export TILLANDSIAS_DESTRUCTIVE_RESET_OK="${TILLANDSIAS_DESTRUCTIVE_RESET_OK:-1}"
 # resolved set; a one-element set therefore always runs that agent.
 declare -a AGENT_LIST=()
 if [[ "$AGENT" == "random" ]]; then
-  AGENT_LIST=(claude opencode antigravity codex)
+  AGENT_LIST=(claude opencode gemini codex)
 else
   IFS=',' read -r -a AGENT_LIST <<< "$AGENT"
 fi
@@ -105,7 +106,7 @@ fi
 for agent_name in "${AGENT_LIST[@]}"; do
   [[ -n "$agent_name" ]] || die "--agent has an empty entry (check for stray commas)"
   case "$agent_name" in
-    claude|opencode|antigravity|codex) ;;
+    claude|opencode|gemini|antigravity|codex) ;;
     random) die "--agent: 'random' cannot be combined in a list; use it alone for all agents" ;;
     *) die "--agent must be claude, opencode, antigravity, codex, random, or a comma-separated subset" ;;
   esac
@@ -200,6 +201,10 @@ run_agent() {
     opencode)
       bin="$(resolve_bin OPENCODE_BIN opencode)" || return $?
       (cd "$REPO_ROOT" && "${run[@]}" "$bin" run --dangerously-skip-permissions "$PROMPT")
+      ;;
+    gemini)
+      bin="$(resolve_bin GEMINI_BIN gemini)" || return $?
+      (cd "$REPO_ROOT" && "${run[@]}" "$bin" --prompt="$PROMPT" --yolo --include-directories "$REPO_ROOT")
       ;;
     antigravity)
       bin="$(resolve_bin ANTIGRAVITY_BIN agy)" || return $?
