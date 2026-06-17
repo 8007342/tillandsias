@@ -710,6 +710,17 @@ fn run_command_silent(mut command: Command, debug: bool) -> Result<(), String> {
 
 const ENCLAVE_NET: &str = "tillandsias-enclave";
 const ENCLAVE_SUBNET: &str = "10.0.42.0/24";
+/// Managed egress network. The enclave network is `--internal` (no NAT egress),
+/// so the proxy and git-service are dual-homed onto this network to retain a
+/// single allowlisted/direct egress leg. Self-contained on purpose: Podman's
+/// rootless default network is named `podman` (not `bridge`) and is absent after
+/// `podman system reset --force`, so the dual-home leg must target a network
+/// Tillandsias creates itself, or it cannot resolve on a clean runtime.
+/// @trace spec:enclave-network, spec:proxy-container
+const EGRESS_NET: &str = "tillandsias-egress";
+/// The dual-homed network spec attached to egress-capable enclave containers
+/// (proxy, git-service): enclave leg for in-enclave DNS + the egress leg for NAT.
+const ENCLAVE_EGRESS_NETS: &str = "tillandsias-enclave,tillandsias-egress";
 const ENCLAVE_NO_PROXY: &str =
     "localhost,127.0.0.1,0.0.0.0,::1,inference,proxy,git-service,10.0.42.0/24";
 const CA_DIR: &str = "/tmp/tillandsias-ca";
@@ -1412,6 +1423,11 @@ fn ensure_versioned_images(
 }
 
 fn ensure_enclave_network(debug: bool) -> Result<(), String> {
+    // The dual-homed proxy/git-service need the egress network to exist on every
+    // path that ensures the enclave, so ensure it first — even when the enclave
+    // network already exists (early return below would otherwise skip it).
+    ensure_egress_network(debug)?;
+
     if tillandsias_podman::network_exists_sync(ENCLAVE_NET) {
         return Ok(());
     }
@@ -1427,6 +1443,23 @@ fn ensure_enclave_network(debug: bool) -> Result<(), String> {
         ENCLAVE_SUBNET,
         ENCLAVE_NET,
     ]);
+    run_command(command, debug)
+}
+
+/// Create the managed egress network used to dual-home the proxy and
+/// git-service. Driver `bridge` with Podman-allocated IPAM (no fixed subnet, to
+/// avoid clashing with the host's existing networks). Idempotent: returns early
+/// when the network already exists. This is the egress leg that replaces the
+/// previously hard-coded `bridge` name, which never resolved on a clean rootless
+/// runtime after `podman system reset --force`.
+/// @trace spec:enclave-network, spec:proxy-container
+fn ensure_egress_network(debug: bool) -> Result<(), String> {
+    if tillandsias_podman::network_exists_sync(EGRESS_NET) {
+        return Ok(());
+    }
+
+    let mut command = podman_command();
+    command.args(["network", "create", "--driver", "bridge", EGRESS_NET]);
     run_command(command, debug)
 }
 
@@ -1661,7 +1694,7 @@ fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
         "--hostname".into(),
         "proxy".into(),
         "--network".into(),
-        format!("{ENCLAVE_NET},bridge").into(),
+        ENCLAVE_EGRESS_NETS.into(),
         "--cap-drop=ALL".into(),
         "--security-opt=no-new-privileges".into(),
         "--security-opt=label=disable".into(),
@@ -1797,7 +1830,7 @@ fn build_git_run_args(
         "--network-alias".into(),
         "git-service".into(),
         "--network".into(),
-        format!("{ENCLAVE_NET},bridge").into(),
+        ENCLAVE_EGRESS_NETS.into(),
         "--cap-drop=ALL".into(),
         "--security-opt=no-new-privileges".into(),
         "--security-opt=label=disable".into(),
@@ -7804,6 +7837,47 @@ mod tests {
         assert!(!has_arg(&args, "10.0.42.2"));
         assert!(has_arg(&args, "DEBUG_PROXY=1"));
         assert!(has_arg(&args, "tillandsias-proxy:v1"));
+    }
+
+    // Regression: smoke-finding/rootless-bridge-network-missing. The dual-home
+    // second leg must target the managed `tillandsias-egress` network, never the
+    // literal `bridge` (which does not exist on rootless Podman after a reset —
+    // the rootless default network is named `podman`).
+    #[test]
+    fn enclave_egress_dual_home_targets_managed_egress_network() {
+        let certs = PathBuf::from("/tmp/ca");
+        let proxy = build_proxy_run_args(&certs, "tillandsias-proxy:v1");
+        let git = build_git_run_args("alpha", &certs, "tillandsias-git:v1", None, None);
+
+        for (name, args) in [("proxy", &proxy), ("git", &git)] {
+            assert!(
+                has_arg(args, "tillandsias-enclave,tillandsias-egress"),
+                "{name} must dual-home onto the managed egress network: {args:?}"
+            );
+            assert!(
+                !has_arg(args, "tillandsias-enclave,bridge"),
+                "{name} must not reference the nonexistent `bridge` network: {args:?}"
+            );
+        }
+    }
+
+    // Regression: the egress network must be ensured on every enclave-bootstrap
+    // path (including the early-return-when-enclave-exists case), or the
+    // dual-home leg cannot resolve on a clean runtime.
+    #[test]
+    fn ensure_enclave_network_also_ensures_egress_network() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let window = source_window(source, "fn ensure_enclave_network(");
+        let ensure_idx = window
+            .find("ensure_egress_network(debug)?")
+            .expect("ensure_enclave_network must call ensure_egress_network");
+        let early_return_idx = window
+            .find("return Ok(());")
+            .expect("ensure_enclave_network has an early return");
+        assert!(
+            ensure_idx < early_return_idx,
+            "ensure_egress_network must run before the enclave-exists early return"
+        );
     }
 
     #[test]

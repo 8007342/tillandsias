@@ -38,7 +38,7 @@ assumption is false on this clean Linux rootless runtime after
 - id: `smoke-finding/rootless-bridge-network-missing`
 - owner_host: linux
 - capability_tags: [rust, podman, networking, enclave, release]
-- status: ready
+- status: fix-implemented (code landed + unit-verified; pending local-build e2e acceptance)
 - discovered_by: `/smoke-curl-install-and-test-e2e` on release `v0.3.260616.2`
 - related_packet: `enclave/network-level-egress-deny`
 - severity: high - blocks the published Linux forge lane after a clean
@@ -93,6 +93,30 @@ assumption is false on this clean Linux rootless runtime after
     evidence_refs:
       - "target/smoke-e2e/04-opencode.log:3"
       - "target/smoke-e2e/04-opencode.log:4"
+  - type: fix-implemented
+    ts: "2026-06-17T19:55:00Z"
+    agent_id: "linux-tlatoani-claude-opus-4-8-meta-orchestration"
+    host: linux
+    note: >
+      Replaced the hard-coded `bridge` egress leg with a self-contained managed
+      egress network `tillandsias-egress`. New `ensure_egress_network()` creates
+      a normal (NAT-capable) bridge network with Podman-allocated IPAM, invoked
+      from `ensure_enclave_network()` BEFORE its enclave-exists early return so
+      the egress network is guaranteed on every bootstrap path. Both dual-homed
+      launch sites (proxy main.rs:1697, git-service main.rs:1833) and both
+      remote_projects git launches (run_git_image_shell, clone_project_from_github)
+      now attach `tillandsias-enclave,tillandsias-egress` via the shared
+      `ENCLAVE_EGRESS_NETS` const (literal in remote_projects). Added two
+      drift-protection unit tests: `enclave_egress_dual_home_targets_managed_egress_network`
+      (proxy+git dual-home to egress, never `bridge`) and
+      `ensure_enclave_network_also_ensures_egress_network` (egress ensured before
+      the early return). `cargo fmt --check`, `./build.sh --check`, and the full
+      `tillandsias-headless` suite (84 passed / 1 ignored / 0 failed) are green.
+      Acceptance (clean init → direct enclave egress denied + proxy egress +
+      git-mirror push + forge lane start) pending the local-build e2e gate.
+    evidence_refs:
+      - "crates/tillandsias-headless/src/main.rs (EGRESS_NET, ENCLAVE_EGRESS_NETS, ensure_egress_network)"
+      - "crates/tillandsias-headless/src/remote_projects.rs:291,523"
 
 ## Second-run additional finding (2026-06-17T06:51Z)
 

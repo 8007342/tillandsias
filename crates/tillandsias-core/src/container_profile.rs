@@ -203,8 +203,10 @@ pub struct LaunchContext {
 
     /// Optional podman network to attach the container to.
     /// When `Some`, adds `--network=<value>` to the podman args.
-    /// Forge containers use `Some("tillandsias-enclave")`, proxy uses
-    /// `Some("tillandsias-enclave,bridge")` for dual-homing.
+    /// Forge containers use `Some("tillandsias-enclave")`, proxy/git-service use
+    /// `Some("tillandsias-enclave,tillandsias-egress")` for dual-homing (the
+    /// enclave network is `--internal`; the managed `tillandsias-egress` network
+    /// is their only NAT leg).
     /// @trace spec:enclave-network, spec:proxy-container
     pub network: Option<String>,
 
