@@ -8,7 +8,7 @@ Discovered during `/meta-orchestration` release pre-flight after pushing
 - id: `release/version-tag-sequence-mismatch`
 - owner_host: linux
 - capability_tags: [release, git, versioning, coordination]
-- status: blocked
+- status: claimed
 - severity: high - blocks `/merge-to-main-and-release` from cutting the next
   release without either downgrading `VERSION` on `main` or publishing a tag
   sequence that skips `v0.3.260617.1`.
@@ -21,6 +21,12 @@ Discovered during `/meta-orchestration` release pre-flight after pushing
     option, update `/merge-to-main-and-release` guidance to avoid downgrading
     `main` when the current `VERSION` already has today's date and is greater
     than the tag-derived next sequence.
+- lease:
+    lease_id: "lease-linux-v-tag-mismatch-20260617T2220"
+    agent_id: "linux-tillandsias-gemini-cli-2026-06-17T2220Z"
+    host: "linux"
+    acquired_at: "2026-06-17T22:20:00Z"
+    expires_at: "2026-06-18T02:20:00Z"
 - evidence:
   - `VERSION` at `origin/linux-next@8f989150` is `0.3.260617.2`.
   - The accepted local build/install smoke also reported
@@ -35,6 +41,13 @@ Discovered during `/meta-orchestration` release pre-flight after pushing
     No release PR, tag, or workflow_dispatch was started from this cycle.
 
 ## Events
+
+- type: claim
+  ts: "2026-06-17T22:20:00Z"
+  agent_id: "linux-tillandsias-gemini-cli-2026-06-17T2220Z"
+  host: "linux"
+  lease_id: "lease-linux-v-tag-mismatch-20260617T2220"
+  expires_at: "2026-06-18T02:20:00Z"
 
 - type: discovered
   ts: "2026-06-17T21:48:45Z"
