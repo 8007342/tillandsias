@@ -1,6 +1,6 @@
 [package]
 name = "tillandsias-headless"
-version = "0.3.260616"
+version = "0.3.260617"
 edition = "2024"
 license = "GPL-3.0-or-later"
 authors = ["Tlatoani"]
