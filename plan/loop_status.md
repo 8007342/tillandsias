@@ -1,14 +1,18 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-17T21:51:38Z
+LastExecutionTime: 2026-06-17T22:02:00Z
 
 ## This Loop
 
-- **Cycle type**: meta-orchestration no-op on `linux_mutable` (Linux, no
+- **Cycle type**: meta-orchestration worker drain on `linux_mutable` (Linux, no
   `/run/ostree-booted`, no `rpm-ostree`). Started clean on `linux-next`,
-  fetched `origin`, and deferred worker claims because the previous
-  coordination pass landed at 2026-06-17T21:48Z inside the worker 10-minute
-  settle window.
+  fetched `origin`. Discovered that `enclave/network-level-egress-deny` was
+  already fully implemented in commits `e11ff704` and `4c6d11d8`. Verified
+  live: `tillandsias-enclave` is `Internal=true`; direct (`--noproxy`) egress
+  from enclave container returns HTTP=000 (FAILED). Existing
+  `litmus:enclave-network-source-shape` pins the `--internal` const and
+  dual-homed ENCLAVE_EGRESS_NETS. Marked packet `done` in ACTIVE.md and issue
+  file. Release remains blocked on `release/version-tag-sequence-mismatch`.
 - **Branch audit after fetch**:
   - `main`: `dcfde74c` (latest published release remains v0.3.260616.2).
   - `linux-next`: clean at `origin/linux-next@9fc2e917`.
@@ -46,9 +50,11 @@ LastExecutionTime: 2026-06-17T21:51:38Z
   after retiering commit-attribution to bundled and syncing the image tree.
 - **CLEARED**: `smoke-finding/rootless-bridge-network-missing` has local-build
   runtime acceptance on installed v0.3.260617.2.
-- **OPEN**: `enclave/network-level-egress-deny` still needs a direct
-  `--noproxy` external egress denial probe; this pass accepted the managed
-  egress network and forge/proxy launch path only.
+- **CLEARED**: `enclave/network-level-egress-deny` — implementation landed in
+  `e11ff704` and `4c6d11d8`. Verified live: `tillandsias-enclave` is
+  `Internal=true`; direct (`--noproxy`) egress from enclave FAILS (HTTP=000);
+  existing source-shape litmus pins the `--internal` const and dual-homed
+  ENCLAVE_EGRESS_NETS. Marked `done`.
 - **OPEN / user-attended**: macOS step 49d / m8 interactive smoke remains
   operator-gated after automated VM Ready evidence passed.
 - **BLOCKED**: `release/version-tag-sequence-mismatch` needs a release policy
@@ -60,8 +66,7 @@ LastExecutionTime: 2026-06-17T21:51:38Z
 
 - **Linux primary**: resolve `release/version-tag-sequence-mismatch`, then run
   `/merge-to-main-and-release`.
-  *Fallback*: `nanoclawv2-orchestration` (order 56, ready) or the direct
-  `enclave/network-level-egress-deny` probe in its own verification cycle.
+  *Fallback*: `nanoclawv2-orchestration` (order 56, ready).
 - **Windows primary**: sync `windows-next` forward from `linux-next` after this
   push; otherwise no Windows-owned code delta is pending.
 - **macOS primary**: step 49d / m8 interactive smoke; fallback is rerunning the

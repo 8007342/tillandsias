@@ -41,26 +41,18 @@ the items below are immediate work.
 
 ### enclave/network-level-egress-deny
 
-- status: ready
+- status: done
 - owner_host: linux
 - source: `plan/issues/enclave-egress-network-enforcement-gap-2026-06-16.md`
-- next_action: Make `tillandsias-enclave` `--internal` so forge containers have
-  no NAT egress; route allowlisted egress only through the dual-homed proxy.
-- blocker: none
-- latest_smoke: >
-    Local build/install smoke on 2026-06-17 passed build/install, destructive
-    reset, clean init, and the OpenCode forge lane on installed
-    v0.3.260617.2. Init created managed `tillandsias-egress` before internal
-    `tillandsias-enclave`, and forge diagnostics reported 25/25 checks passed
-    with no failed container launches. The separate direct-egress-denied probe
-    remains required for this packet.
-- evidence_required:
-  - direct (`--noproxy`) external curl from an enclave container FAILS on a clean init
-  - allowlisted proxy egress + forge→proxy/inference/git-service still work
-  - new litmus pins direct-egress-denied on the live enclave network
-- note: corrects the cycle-1 rejection below — enclave egress is
-  proxy-cooperative, not network-enforced (empirically: direct curl reaches the
-  internet, HTTP 200). Verify-heavy (rebuild + reinit), so its own cycle.
+- completed_evidence:
+  - Implementation landed in `e11ff704` (adds `--internal` to enclave network,
+    dual-homes git-service) and `4c6d11d8` (replaces nonexistent `bridge` egress
+    leg with managed `tillandsias-egress`).
+  - Litmus updated in `8d50c134`; existing `litmus:enclave-network-source-shape`
+    pins the `--internal` const and dual-homed ENCLAVE_EGRESS_NETS.
+  - Live verification on 2026-06-17: `podman network inspect tillandsias-enclave`
+    confirms `Internal=true`; direct (`--noproxy`) curl returns HTTP=000 (FAILED).
+  - Local-build e2e gate passed (build/install/reset/init/forge lane).
 
 ### policy/no-python-runtime-scripts
 
@@ -129,6 +121,11 @@ The 2026-06-16 critical/high forge proposals were triaged in
 
 ## Recently Closed This Coordination Pass
 
+- **Completed `enclave/network-level-egress-deny`**: implementation was already
+  landed in commits `e11ff704` and `4c6d11d8`. Verified live on 2026-06-17:
+  `tillandsias-enclave` is `Internal=true`; direct egress from enclave
+  container FAILS (HTTP=000). Litmus `litmus:enclave-network-source-shape`
+  pins the implementation surfaces. Marked `done` in ACTIVE.md and issue file.
 - Completed `smoke-finding/rootless-bridge-network-missing`: local
   `/build-install-and-smoke-test-e2e` on 2026-06-17 tested commit `6a44f4c6`
   with installed `Tillandsias v0.3.260617.2`; build/install, destructive Podman
