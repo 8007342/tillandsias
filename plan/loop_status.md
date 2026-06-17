@@ -1,68 +1,75 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-17T20:32:00Z
+LastExecutionTime: 2026-06-17T20:54:02Z
 
 ## This Loop
 
-- **Cycle type**: meta-orchestration (linux_mutable coordinator) — startup
-  checkpoint + worker drain (CI-blocker fix) + plan reconciliation; local-build
-  e2e gate now unblocked and queued.
+- **Cycle type**: meta-orchestration compatibility pass via
+  `coordinate-multihost-work` because `/meta-orchestration` is registered in
+  repo methodology but not exposed as an installed Codex skill in this session.
 - **Sibling Git Audit** (origin):
-  - `main` at `dcfde74c` (release v0.3.260616.2 published; merge/version artifacts only)
-  - `linux-next` at `9338643c`→ this cycle adds `0eef1443` (CI-blocker fix) + dashboards
-  - `windows-next` at `0710071b` — BEHIND linux-next (0 ahead); nothing to merge
-  - `osx-next` at `9d2bcea6` — BEHIND linux-next (0 ahead); nothing to merge
-  - Drift: linux ahead of both siblings; no Dmax alert. main carries only
-    release/merge artifacts (VERSION 0.3.260616.2) not present on linux-next
-    (active dev branch at VERSION 0.3.260616.3).
-- **Completed this pass**:
-  - Resolved `cheatsheet/reconcile-committed-tier` (release-pipeline blocker)
-    via Option A (`0eef1443`): retiered order-53 commit-attribution.md
-    committed→bundled (bundled_into_image true), synced into the image
-    cheatsheet tree, regenerated host INDEX.md + synced image INDEX.md
-    byte-identical. **`./build.sh --ci-full` → ALL CHECKS PASSED (14/14)** —
-    first green CI-full since the order-53 cheatsheet landed.
-  - Regenerated convergence dashboards from the green CI-full run.
+  - `main` at `dcfde74c` (latest published release line remains
+    v0.3.260616.2).
+  - `linux-next` at `bd863b5f` (includes repeat timeout fix, release/version
+    checkpoint, cheatsheet CI-blocker closure, trace dashboards, and the
+    rootless bridge-network fix chain).
+  - `windows-next` at `6a44f4c6`; 0 commits ahead of `linux-next`.
+  - `osx-next` at `9d2bcea6`; 0 commits ahead of `linux-next`.
+  - Drift: no sibling branch is ahead of `linux-next`; no Dmax alert, no merge
+    wave needed.
+- **Completed / confirmed this pass**:
+  - Fresh-read coordination ledgers after fetch. The order-53 cheatsheet tier
+    blocker remains **closed** by `0eef1443`; CI-full was green after retiering
+    commit-attribution to bundled and syncing the image cheatsheet tree.
+  - Confirmed no active async runtime-litmus pointer exists at
+    `plan/localwork/runtime-litmus/current`.
 
 ## Active Conflicts & Mediation
 
-- None. Siblings behind linux-next; no integration work pending.
+- None detected. No deadlock, wrong-direction sibling progress, write/write
+  thrash, or divergent branch path requiring mediation.
 
 ## Blockers
 
-- **CLEARED**: the order-53 cheatsheet CI-blocker is resolved (CI-full green).
-  The local-build e2e gate AND `/merge-to-main-and-release` are unblocked for
-  all hosts.
-- **Bridge-fix runtime acceptance** (`smoke-finding/rootless-bridge-network-missing`)
-  is now runnable: rerun `/build-install-and-smoke-test-e2e` to capture clean
-  init → `tillandsias-egress` created → forge lane past proxy spawn. Not yet
-  captured this cycle.
+- **Release/runtime acceptance still open**:
+  `smoke-finding/rootless-bridge-network-missing` / bridge-fix acceptance needs
+  a clean local-build e2e rerun on mutable Linux: build/install -> destructive
+  Podman reset -> fresh `--debug --init` -> forge lane past proxy spawn.
+- **macOS release acceptance still user-attended**: step 49d / m8 interactive
+  smoke remains operator-gated after automated VM Ready evidence passed.
 
 ## Leases & Hygiene
 
-- No active linux leases.
+- Current Codex checkout was on `windows-next` with a local ahead commit and an
+  untracked `repeat.ps1`; coordination edits were made in a separate
+  `linux-next` worktree to avoid touching local user state.
+- No active linux leases observed in the refreshed loop board.
 
 ## Convergence Velocity
 
-- Vc **positive**: release-pipeline unblocked — CI-full green for the first time
-  since order-53; the bridge-network egress regression fix can now be runtime-
-  accepted and a clean release cut.
+- Vc **positive but not complete**: the CI-full blocker was cleared and sibling
+  drift is zero; residual correctness debt is now concentrated in one Linux
+  runtime acceptance gate plus one user-attended macOS smoke gate.
+- High-Velocity Alignment Event: **Inactive** for branch drift/thrashing; keep
+  release-blocking verification ahead of optional feature work.
 
 ## Assignment Board
 
-- **Linux primary**: rerun `/build-install-and-smoke-test-e2e` for bridge-fix
-  runtime acceptance → then `/merge-to-main-and-release` once acceptance is
-  captured and green. *Backlog*: nanoclawv2-orchestration (order 56, ready),
-  `enclave/network-level-egress-deny` (verify-heavy, own cycle),
-  `policy/no-python-runtime-scripts` (blocked on rewrite scope/approval).
-- **Windows primary**: none; keep `windows-next` synced. *Fallback*: any
-  Windows-owned smoke finding.
-- **macOS primary**: step 49d / m8 interactive smoke — user-attended, not
-  autonomous-claimable. *Fallback*: macOS smoke re-run.
+- **Linux primary**: run `/build-install-and-smoke-test-e2e` for bridge-fix
+  runtime acceptance on mutable Linux, then `/merge-to-main-and-release` after
+  acceptance is captured green.
+- **Linux fallback**: `nanoclawv2-orchestration` (order 56, ready) only after
+  release-blocking acceptance is not runnable.
+- **Windows primary**: keep `windows-next` synced to `linux-next`; no unmerged
+  Windows code delta. *Fallback*: Windows-owned smoke findings if a fresh run
+  produces one.
+- **macOS primary**: step 49d / m8 interactive smoke. *Fallback*: rerun the
+  macOS automated Ready gate if operator smoke reports a VM/provisioning
+  regression.
 
 ## Stale Or Pending Pings
 
-- Latest published release: v0.3.260616.2 (forge-lane egress regression fixed in
-  code; CI-full now green; pending local-build e2e runtime acceptance before a
-  clean release ships).
-- Sibling branches behind linux-next (no integration work pending).
+- No sibling merge is pending.
+- Runtime acceptance cannot be certified from this Windows coordination session;
+  next mutable-Linux orchestration pass should run the local-build e2e gate or
+  record the concrete host/runtime blocker.
