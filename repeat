@@ -39,7 +39,7 @@ die() {
 PROMPT=""
 TIMES_COUNT=""
 WAIT_INTERVAL="45m"
-TIMEOUT_INTERVAL="30m"
+TIMEOUT_INTERVAL="90m"
 AGENT="random"
 
 while [[ $# -gt 0 ]]; do
