@@ -1,6 +1,6 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-17T22:03:00Z
+Last updated: 2026-06-17T22:22:30Z
 
 This file is the first stop for agents inspecting `plan/issues/`. Historical
 issue reports remain in this directory for evidence and auditability, but only
@@ -57,9 +57,10 @@ the items below are immediate work.
 
 ### policy/no-python-runtime-scripts
 
-- status: active
+- status: claimed
 - owner_host: linux
 - source: `plan/issues/no-python-runtime-policy-2026-06-16.md`
+- lease: `no-python-slice-1-202606172215` (expires 2026-06-18T02:15Z)
 - next_action: Rewrite or retire the remaining Python-backed repository scripts
   in Rust, then make `scripts/check-no-python-scripts.sh` pass.
 - blocker: existing cheatsheet/provenance maintenance scripts still execute
