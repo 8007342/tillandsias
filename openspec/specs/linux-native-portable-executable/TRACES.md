@@ -5,11 +5,11 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [.cargo/config.toml#L1](../../../.cargo/config.toml#L1)
 - [build.sh#L28](../../../build.sh#L28)
 - [build.sh#L343](../../../build.sh#L343)
-- [crates/tillandsias-headless/Cargo.toml#L77](../../../crates/tillandsias-headless/Cargo.toml#L77)
+- [.cargo/config.toml#L1](../../../.cargo/config.toml#L1)
 - [crates/tillandsias-headless/build.rs#L1](../../../crates/tillandsias-headless/build.rs#L1)
+- [crates/tillandsias-headless/Cargo.toml#L77](../../../crates/tillandsias-headless/Cargo.toml#L77)
 - [crates/tillandsias-headless/src/main.rs#L1](../../../crates/tillandsias-headless/src/main.rs#L1)
 - [crates/tillandsias-headless/src/main.rs#L459](../../../crates/tillandsias-headless/src/main.rs#L459)
 - [crates/tillandsias-headless/src/main.rs#L658](../../../crates/tillandsias-headless/src/main.rs#L658)
