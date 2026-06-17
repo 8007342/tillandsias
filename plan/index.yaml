@@ -4129,3 +4129,34 @@ plan_index:
           host: "macos"
           lease_id: "step49-macos-vm-enclave-20260616T231619Z"
           expires_at: "2026-06-17T03:16:19Z"
+
+    - id: nanoclawv2-orchestration
+      order: 56
+      title: NanoClawV2 orchestration engine and launcher leaf
+      status: ready
+      owner_host: linux
+      deliverable: plan/issues/nanoclawv2-orchestration.md
+      audit_origin: plan/issues/nanoclawv2-orchestration.md
+      depends_on: []
+      specs:
+        - nanoclawv2-orchestration
+        - tray-app
+        - podman-orchestration
+        - mcp-on-demand
+      exit_criteria:
+        - "🦞 NanoClawV2 launches for a project and remains branch-aware."
+        - "Only approved orchestration actions are reachable from NanoClawV2."
+        - "Smoke coverage proves launch and one approved action."
+      tasks:
+        - id: nanoclawv2/spec-and-plan
+          status: completed
+          owner_host: linux
+          depends_on: []
+          owned_files:
+            - openspec/changes/nanoclawv2-orchestration/proposal.md
+            - openspec/changes/nanoclawv2-orchestration/design.md
+            - openspec/changes/nanoclawv2-orchestration/tasks.md
+            - openspec/changes/nanoclawv2-orchestration/specs/nanoclawv2-orchestration/spec.md
+            - plan/issues/nanoclawv2-orchestration.md
+          checkpoint_required: false
+          handoff_note: "Spec and plan scaffolded; implementation work can now be claimed."

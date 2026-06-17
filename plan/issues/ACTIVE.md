@@ -1,12 +1,25 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-16T23:35:00Z
+Last updated: 2026-06-17T19:27:22Z
 
 This file is the first stop for agents inspecting `plan/issues/`. Historical
 issue reports remain in this directory for evidence and auditability, but only
 the items below are immediate work.
 
 ## Immediate
+
+### nanoclawv2-orchestration
+
+- status: ready
+- owner_host: linux
+- source: `plan/issues/nanoclawv2-orchestration.md`
+- next_action: Draft the NanoClawV2 implementation task graph from the new
+  spec, then wire the launcher leaf, broker surface, and smoke hooks.
+- blocker: none
+- evidence_required:
+  - NanoClawV2 launch leaf exists and is branch-aware
+  - only approved orchestration actions are reachable
+  - smoke coverage proves launch and one approved action
 
 ### enclave/network-level-egress-deny
 
