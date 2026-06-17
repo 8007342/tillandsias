@@ -1,12 +1,30 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-17T20:40:00Z
+Last updated: 2026-06-17T21:48:45Z
 
 This file is the first stop for agents inspecting `plan/issues/`. Historical
 issue reports remain in this directory for evidence and auditability, but only
 the items below are immediate work.
 
 ## Immediate
+
+### release/version-tag-sequence-mismatch
+
+- status: blocked
+- owner_host: linux
+- source: `plan/issues/release-version-tag-sequence-mismatch-2026-06-17.md`
+- next_action: Choose the release policy for 2026-06-17: cut
+  `v0.3.260617.2` to match accepted local-build evidence, or reset
+  `linux-next` to `VERSION=0.3.260617.1` and rerun local-build e2e before
+  release.
+- blocker: `/merge-to-main-and-release` tag formula sees no
+  `v0.3.260617.*` remote tags and would compute `v0.3.260617.1`, but
+  `linux-next` and the accepted smoke evidence are already at
+  `0.3.260617.2`.
+- evidence_required:
+  - release PR/tag/workflow uses a version that matches the accepted smoke
+    evidence, or fresh smoke evidence is captured for the lower version
+  - no `main` VERSION downgrade occurs during release
 
 ### nanoclawv2-orchestration
 

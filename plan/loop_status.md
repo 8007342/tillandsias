@@ -1,18 +1,18 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-17T21:45:21Z
+LastExecutionTime: 2026-06-17T21:48:45Z
 
 ## This Loop
 
 - **Cycle type**: meta-orchestration on `linux_mutable` (Linux, no
   `/run/ostree-booted`, no `rpm-ostree`). Started dirty with staged
   plan/report/version/trace updates and a conflicted `plan/loop_status.md`;
-  resolved that startup conflict, preserved the completed smoke evidence, and
-  checkpointed it.
+  resolved that startup conflict, preserved the completed smoke evidence,
+  checkpointed it, pushed `linux-next`, and stopped release pre-flight on a
+  version/tag mismatch.
 - **Branch audit after fetch**:
   - `main`: `dcfde74c` (latest published release remains v0.3.260616.2).
-  - `linux-next`: local `4af3103d`, 3 commits ahead of
-    `origin/linux-next@e0a68ab3`; exit action is push.
+  - `linux-next`: pushed to `origin/linux-next@8f989150`.
   - `windows-next`: `38e6e972`; merged into `linux-next` by `4af3103d`.
     `linux-next` is now 6 commits ahead / 0 behind that branch.
   - `osx-next`: `9d2bcea6`; 0 ahead / 26 behind `linux-next`.
@@ -29,6 +29,9 @@ LastExecutionTime: 2026-06-17T21:45:21Z
     reported 25/25 checks passed and zero failed container launches.
   - Merged Windows plan/status commit `38e6e972` into `linux-next`; it marks
     keyring backend Windows verification done and updates the Windows queue.
+  - Ran release pre-flight: no open `linux-next -> main` PR and no in-flight
+    `release.yml`; release was not started because `VERSION=0.3.260617.2` but
+    no remote `v0.3.260617.*` tag exists.
 
 ## Active Conflicts & Mediation
 
@@ -49,11 +52,15 @@ LastExecutionTime: 2026-06-17T21:45:21Z
   egress network and forge/proxy launch path only.
 - **OPEN / user-attended**: macOS step 49d / m8 interactive smoke remains
   operator-gated after automated VM Ready evidence passed.
+- **BLOCKED**: `release/version-tag-sequence-mismatch` needs a release policy
+  decision before `/merge-to-main-and-release`; the literal tag formula would
+  compute `v0.3.260617.1` and downgrade `main` from the accepted
+  `0.3.260617.2` evidence.
 
 ## Assignment Board
 
-- **Linux primary**: push this loop's commits to `origin/linux-next`; then run
-  `/merge-to-main-and-release` when no release is already in flight.
+- **Linux primary**: resolve `release/version-tag-sequence-mismatch`, then run
+  `/merge-to-main-and-release`.
   *Fallback*: `nanoclawv2-orchestration` (order 56, ready) or the direct
   `enclave/network-level-egress-deny` probe in its own verification cycle.
 - **Windows primary**: sync `windows-next` forward from `linux-next` after this
@@ -66,4 +73,5 @@ LastExecutionTime: 2026-06-17T21:45:21Z
 
 - Latest published release: v0.3.260616.2 still contains the clean-rootless
   forge-lane regression. Local build v0.3.260617.2 has accepted the managed
-  egress fix; next clean release is queued after this pushed checkpoint.
+  egress fix; next clean release is blocked only on the version/tag sequence
+  decision.
