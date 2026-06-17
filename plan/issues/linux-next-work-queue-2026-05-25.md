@@ -16,6 +16,7 @@ This file is the cross-host advertisement — terse, dated, SHA-anchored.
 
 ## Recent entries (reverse chronological)
 
+- 2026-06-17T00:25Z  `dcfde74c`  Release **v0.3.260616.2 PUBLISHED** — merged PR #33 to main, bumped VERSION on main, tagged, and workflow_dispatch run 27655511548 completed green across Linux musl / macOS arm64 tray / Windows x64 tray. Linux artifact: https://github.com/8007342/tillandsias/releases/download/v0.3.260616.2/tillandsias-linux-x86_64
 - 2026-06-16T23:29Z  `e31792e8`  **Completed privacy/forge-git-identity-anonymization acceptance.** Verified transparent agentic git attribution preserves the real author and appends distinct `Generated-By` trailers for Codex and OpenCode, including local-model params. Shell syntax checks and `./build.sh --check` pass.
 - 2026-06-16T22:47Z  `4f09f9c7`  **Coord merge of osx-next into linux-next.** Integrated 6 osx-next commits: macOS tray icon fix (PNG template), VM serial console forward, m8 failure tracing/docs, step 49 keystone documentation, macOS tray --version SHA embedding, build-macos-tray.sh updates. Build check and core tests 177/177 pass.
 - 2026-06-16T22:35Z  `e11ff704`  **Checkpoint enclave/network-level-egress-deny.** Added `--internal` to enclave network; dual-homed proxy, git daemon, and git helper containers to bridge. All 474 tests pass. Full smoke with real git-mirror push still needed before done.
