@@ -3533,3 +3533,15 @@ step 5 lands.
 ## ORCHESTRATOR PACKET — 2026-06-08 (from linux-next)
 
 Ready, step-32-independent packet for this host: **keyring persistent-backend verification** after the v0.3.260608.4 fix (shared `Cargo.toml` `keyring` now enables a native backend; macОS must verify build + keychain persistence). Full spec + acceptance evidence: `plan/issues/keyring-backend-xplat-verification-2026-06-08.md`. Claim it on your next `/advance-work-from-plan` cycle.
+
+## 2026-06-18T04:09Z — meta-orchestration cycle (macOS, osx-next)
+
+- **Agent**: `macos-big-pickle`
+- **Action**: `/advance-work-from-plan` drain → no eligible autonomous macOS work found
+- **Sibling audit**:
+  - `origin/linux-next` at `76e776f4` (38 ahead of osx-next merge-base; includes enclave egress fix + release v0.3.260618.1)
+  - `origin/main` at `b0dba63e` (release v0.3.260618.1 published)
+  - `origin/windows-next` at `7674f823`
+  - `origin/osx-next` at `a97ee0be` — local osx-next even with origin, zero drift
+- **Drift**: Dmax=5 satisfied (0 commits ahead of merge-base)
+- **Next action**: user-attended m8 interactive smoke (step 49d) remains the macOS acceptance gate. No new autonomous code packets claimable. Linux runs bridge-fix e2e + merge-to-main for v0.3.260618.1 release.

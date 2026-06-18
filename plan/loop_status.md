@@ -1,36 +1,33 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-18T04:10Z
+LastExecutionTime: 2026-06-18T04:19Z
 
 ## This Loop
 
-- **Cycle type**: meta-orchestration coordination + sibling drift audit.
+- **Cycle type**: meta-orchestration coordination + sibling drift audit + osx-next merge.
 - **Worker drain**: no implementation packet claimed this pass. Reclaimable
   Linux packets remain `nanoclawv2-orchestration` and
   `policy/no-python-runtime-scripts`; targeted GitHub-login runtime evidence is
   still the highest-signal Linux probe.
 - **Sibling branch audit**:
   - `main`: `b0dba63e` (tagged `v0.3.260618.1`).
-  - `linux-next`: `76e776f4` before this pass.
-  - `windows-next`: `7674f823`; had 1 plan-only commit ahead of
-    `linux-next`, merged cleanly into this coordination checkpoint.
-  - `osx-next`: `a97ee0be`; ancestor of `linux-next` (0 drift).
-- **E2E gates**: Curl-install smoke for published `v0.3.260618.1` PASS:
-  installer checksum/version, destructive Podman reset, empty-store check,
-  fresh `tillandsias --debug --init`, and prompted OpenCode forge lane all
-  exited 0. Report:
-  `plan/issues/smoke-e2e-findings-v0.3.260618.1-2026-06-18.md`.
+  - `linux-next`: `30b498be` before this pass.
+  - `windows-next`: `7674f823`; ancestor of `linux-next` (0 drift ahead).
+  - `osx-next`: `c8a6fef9`; had 1 plan-only commit ahead of
+    `linux-next`, merged into this coordination checkpoint.
+- **E2E gates**: Not run this pass — no runtime crate/image delta since the
+  accepted v0.3.260618.1 release smoke.
 
 ## Active Conflicts & Mediation
 
-- No active merge conflicts. The Windows drift was a ledger-only
-  meta-orchestration entry; no code merge or runtime merge was required.
-- `osx-next` remains integrated. After this checkpoint, both sibling branches
+- No active merge conflicts. The osx-next drift was a single plan-only
+  meta-orchestration ledger entry; no code merge or runtime merge was required.
+- `osx-next` is now integrated into `linux-next`. Both sibling branches
   are represented in `linux-next`.
 - High-Velocity Alignment Event: **Inactive**; no deadlock, thrash, or
   wrong-direction sibling work found in this pass.
 - Convergence velocity: **stable positive / no event triggered**. Residual debt
-  is unchanged except the sibling drift count is reduced from 1 to 0.
+  is unchanged.
 
 ## Blockers
 
