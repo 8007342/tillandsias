@@ -92,3 +92,9 @@ outbound HTTPS to `api.github.com`.
       transient gh helper container. The helper was launched only on
       `tillandsias-enclave`, and `gh auth login` could not connect to
       `api.github.com`.
+  - type: claim
+    ts: "2026-06-18T02:28:05Z"
+    agent_id: "linux-bigpickle-20260618T0228Z"
+    host: linux
+    lease_id: "lease-linux-github-login-egress-fix-20260618T0228"
+    expires_at: "2026-06-18T06:28:05Z"
