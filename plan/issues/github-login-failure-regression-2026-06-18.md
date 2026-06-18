@@ -224,7 +224,7 @@ Suggested instrumented repro for the builder:
   ts: "2026-06-18T04:33:47Z"
   agent_id: "linux-tlatoani-opus-worker2-20260618T043347Z"
   host: linux
-  fix_commit: "be41b40f0266d5a77ea51e802160b7b43f818782"
+  fix_commit: "62e73c707dc5db690f46e7b0343e0dff13b24eb8"
   note: >
     Minimal fix: added `ensure_enclave_network(debug)?;` in run_github_login
     immediately after `ensure_image_exists(...)` and before the Vault/helper

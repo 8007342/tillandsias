@@ -73,7 +73,7 @@ the items below are immediate work.
 ### bug/github-login-failure
 
 - status: fix-landed (runtime validation pending) — 2026-06-18,
-  commit `be41b40f` on `linux-next` (linux-tlatoani-opus-worker2-20260618T043347Z)
+  commit `62e73c70` on `linux-next` (linux-tlatoani-opus-worker2-20260618T043347Z)
 - owner_host: linux
 - source: `plan/issues/github-login-failure-regression-2026-06-18.md`
 - severity: high — blocks GitHub auth from both CLI and tray across recent builds
