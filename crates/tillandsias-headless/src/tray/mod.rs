@@ -1094,6 +1094,26 @@ impl TrayService {
         f(&mut state)
     }
 
+    /// Re-scan `~/src` and store the result into `state.projects`.
+    ///
+    /// `state.projects` (the `🏠 ~/src` submenu source) is otherwise seeded
+    /// only once at startup, so a freshly cloned checkout never appears in the
+    /// live menu. This is the missing post-startup writer: any path that
+    /// changes the on-disk `~/src` contents (clone today, fs-watch later)
+    /// calls this, then `rebuild_after_state_change`, to surface the change
+    /// without a tray restart.
+    ///
+    /// @trace spec:tray-ux, spec:remote-projects
+    /// @trace plan/issues/clone-tray-ux-not-refreshed-2026-06-18.md
+    fn refresh_local_projects(&self) {
+        let projects = discover_projects();
+        self.with_state(|state| {
+            state.projects_hash = TrayUiState::hash_projects(&projects);
+            state.projects = projects;
+            state.bump_revision();
+        });
+    }
+
     fn refresh_snapshot(&self) -> TrayUiState {
         self.snapshot()
     }
@@ -1265,9 +1285,18 @@ fn discover_projects() -> Vec<ProjectEntry> {
         Ok(home) => PathBuf::from(home),
         Err(_) => return Vec::new(),
     };
-    let src = home.join("src");
+    discover_projects_in(&home.join("src"))
+}
+
+/// Scan a project-root directory (e.g. `~/src`) and return one
+/// [`ProjectEntry`] per immediate subdirectory, sorted by name.
+///
+/// Factored out of [`discover_projects`] so the scan-and-sort contract that
+/// backs the post-clone local refresh can be unit-tested against a temp dir
+/// without mutating the process-global `HOME`.
+fn discover_projects_in(src: &Path) -> Vec<ProjectEntry> {
     let mut projects = Vec::new();
-    let entries = match std::fs::read_dir(&src) {
+    let entries = match std::fs::read_dir(src) {
         Ok(entries) => entries,
         Err(_) => return Vec::new(),
     };
@@ -1767,6 +1796,20 @@ fn handle_launch_cloud_project(service: Arc<TrayService>, cloud: ProjectEntry, k
                     ));
                     return;
                 }
+
+                // Clone succeeded on disk. Clear the "⏳ Cloning …" status and
+                // re-scan ~/src so the freshly cloned checkout appears in the
+                // 🏠 ~/src submenu without a tray restart. Without this the tray
+                // stays stuck on "Cloning …" and the local list goes stale —
+                // see plan/issues/clone-tray-ux-not-refreshed-2026-06-18.md.
+                // @trace spec:tray-ux, spec:remote-projects
+                let _ = futures::executor::block_on(service_for_emit.set_status(
+                    format!("✓ Cloned {}", cloud.name),
+                    TrayIconState::Mature,
+                    None,
+                ));
+                service_for_emit.refresh_local_projects();
+                let _ = futures::executor::block_on(service_for_emit.rebuild_after_state_change());
             } else {
                 // Best-effort refresh — git fetch is non-fatal if it fails.
                 let _ = Command::new("git")
@@ -4984,5 +5027,62 @@ mod tests {
         // Should be able to spawn a task
         let result = service.task_executor.spawn_task(|| {});
         assert!(result.is_ok(), "TrayService executor should be ready");
+    }
+
+    /// Regression: a freshly cloned checkout must appear in `~/src` without a
+    /// tray restart. `refresh_local_projects` is the post-startup writer that
+    /// re-scans the project root into `state.projects`; before the fix for
+    /// plan/issues/clone-tray-ux-not-refreshed-2026-06-18.md there was no such
+    /// writer, so the `🏠 ~/src` submenu stayed frozen at its startup snapshot.
+    ///
+    /// This exercises the scan-and-store contract (`discover_projects_in` +
+    /// store + revision bump) the clone-success path relies on, against a temp
+    /// dir so we never mutate the process-global `HOME`.
+    /// @trace spec:tray-ux, spec:remote-projects
+    #[test]
+    fn refresh_local_projects_picks_up_new_checkout() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let src = tmp.path();
+
+        // Initial scan: one existing checkout.
+        std::fs::create_dir(src.join("alpha")).expect("mkdir alpha");
+        let initial = discover_projects_in(src);
+        assert_eq!(initial.len(), 1);
+        assert_eq!(initial[0].name, "alpha");
+
+        // Seed a TrayService whose state reflects the initial scan, then
+        // simulate a clone landing a second checkout on disk.
+        let mut state = test_state(SelectedAgent::OpenCode, true);
+        state.projects = initial;
+        state.projects_hash = TrayUiState::hash_projects(&state.projects);
+        let service = TrayService::new(state);
+        let rev_before = service.snapshot().revision;
+
+        std::fs::create_dir(src.join("beta")).expect("mkdir beta");
+
+        // The runtime helper scans $HOME/src; here we replicate its body
+        // against the temp root to assert the store + revision-bump contract
+        // without touching HOME.
+        let rescanned = discover_projects_in(src);
+        service.with_state(|st| {
+            st.projects_hash = TrayUiState::hash_projects(&rescanned);
+            st.projects = rescanned;
+            st.bump_revision();
+        });
+
+        let after = service.snapshot();
+        assert_eq!(
+            after
+                .projects
+                .iter()
+                .map(|p| p.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["alpha", "beta"],
+            "rescan must surface the newly cloned checkout, sorted"
+        );
+        assert!(
+            after.revision > rev_before,
+            "refresh must bump the menu revision so the submenu re-renders"
+        );
     }
 }
