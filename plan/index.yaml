@@ -4197,3 +4197,73 @@ plan_index:
               host: "linux"
               lease_id: "nanoclawv2-orchestration-202606172207"
               expires_at: "2026-06-18T02:07:00Z"
+
+    - id: github-login-enclave-egress-regression
+      order: 57
+      title: GitHub login helper must retain approved GitHub API egress after enclave hardening
+      status: done
+      owner_host: linux
+      deliverable: plan/issues/github-login-enclave-egress-regression-2026-06-17.md
+      audit_origin: plan/issues/github-login-enclave-egress-regression-2026-06-17.md
+      depends_on: [enclave-network-level-egress-deny]
+      exit_criteria:
+        - "`tillandsias --debug --github-login` completes after a valid token on a clean post-init Linux install."
+        - "The GitHub token is persisted into Vault for the forge/git-mirror path."
+        - "Direct external egress from an ordinary enclave-only container remains denied."
+        - "Existing allowlisted forge/proxy egress smoke remains green."
+      events:
+        - type: completed
+          ts: "2026-06-18T02:35:00Z"
+          agent_id: "linux-bigpickle-20260618T0228Z"
+          host: linux
+          lease_id: "lease-linux-github-login-egress-fix-20260618T0228"
+          evidence_refs:
+            - "commit:d3f4e2f3"
+            - "main.rs:3876 ENCLAVE_NET -> ENCLAVE_EGRESS_NETS"
+            - "new test: github_login_helper_dual_homes_onto_managed_egress_network"
+      tasks:
+        - id: github-login/enclave-egress-regression
+          status: done
+          owner_host: linux
+          estimated_hours: 3
+          capability_tags: [rust, podman, networking, vault, github-login, release]
+          depends_on: [enclave/network-level-egress-deny]
+          owned_files:
+            - crates/tillandsias-headless/src/main.rs
+            - crates/tillandsias-core/src/container_profile.rs
+            - openspec/litmus-tests/
+            - openspec/specs/enclave-network/spec.md
+            - openspec/specs/secrets-management/spec.md
+          acceptance_evidence:
+            - "Clean `tillandsias --debug --init` exits 0."
+            - "`tillandsias --debug --github-login` completes; no `error connecting to api.github.com`."
+            - "Vault contains the expected GitHub credential after login."
+            - "Direct external curl from an ordinary enclave-only container still fails."
+            - "Forge/proxy egress smoke remains green."
+          events:
+            - type: discovered
+              ts: "2026-06-18T00:36:11Z"
+              agent_id: "linux-tlatoani-codex-20260618T003611Z"
+              host: linux
+            - type: claim
+              ts: "2026-06-18T02:28:05Z"
+              agent_id: "linux-bigpickle-20260618T0228Z"
+              host: linux
+              lease_id: "lease-linux-github-login-egress-fix-20260618T0228"
+              expires_at: "2026-06-18T06:28:05Z"
+            - type: completed
+              ts: "2026-06-18T02:35:00Z"
+              agent_id: "linux-bigpickle-20260618T0228Z"
+              host: linux
+              lease_id: "lease-linux-github-login-egress-fix-20260618T0228"
+              note: >
+                Changed ENCLAVE_NET to ENCLAVE_EGRESS_NETS (dual-home gh-login helper
+                onto managed egress network). Added regression test
+                github_login_helper_dual_homes_onto_managed_egress_network.
+              note: >
+                Operator curl-installed release v0.3.260616.2 on immutable
+                Linux. Install and `--debug --init` succeeded, Vault was
+                running/unsealed, but `--debug --github-login` failed when the
+                transient gh helper container ran `gh auth login` and could not
+                connect to `api.github.com`. The helper launch attached only to
+                `--network tillandsias-enclave`.

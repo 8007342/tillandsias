@@ -2647,7 +2647,13 @@ fn build_opencode_forge_args(
     ];
     match mode {
         ForgeMode::Cli => {
-            if !diagnostics {
+            // When a prompt is provided, the entrypoint execs
+            // `opencode run --dangerously-skip-permissions "<prompt>"` which is
+            // non-interactive.  Skip --interactive --tty so podman does not
+            // attempt to claim the terminal (which causes SIGTTIN/SIGTTOU /
+            // stopped T state when the parent is in a harness PTY).
+            // @trace plan/issues/build-install-smoke-e2e-findings-2026-06-14.md
+            if !diagnostics && prompt.is_none() {
                 args.push("--interactive".into());
                 args.push("--tty".into());
             }
@@ -3847,6 +3853,14 @@ fn run_github_login(debug: bool) -> Result<(), String> {
 
     ensure_image_exists(&root, "git", &image, debug)?;
 
+    // The helper dual-homes onto `tillandsias-egress` (see the run args below)
+    // to reach api.github.com, since `tillandsias-enclave` is `--internal`.
+    // `--github-login` can run without a prior full `--init`, so the managed
+    // egress network may not exist yet — ensure both networks here, otherwise
+    // the dual-home leg fails to resolve. ensure_enclave_network ensures the
+    // egress network first.
+    ensure_enclave_network(debug)?;
+
     // Bring Vault online before the interactive paste so the user isn't
     // left waiting after login.
     #[cfg(feature = "vault")]
@@ -3873,7 +3887,7 @@ fn run_github_login(debug: bool) -> Result<(), String> {
             "--name",
             &container,
             "--network",
-            ENCLAVE_NET,
+            ENCLAVE_EGRESS_NETS,
             "--secret",
             &format!(
                 "{},{GIT_VAULT_TOKEN_SECRET_OPTS}",
@@ -3900,6 +3914,9 @@ fn run_github_login(debug: bool) -> Result<(), String> {
             "--rm",
             "--name",
             &container,
+            // Dual-home for api.github.com egress (see the vault branch above).
+            "--network",
+            ENCLAVE_EGRESS_NETS,
             "--cap-drop=ALL",
             "--security-opt=no-new-privileges",
             "--userns=keep-id",
@@ -7861,6 +7878,30 @@ mod tests {
         }
     }
 
+    // Regression: github-login/enclave-egress-regression. The GitHub login
+    // helper must dual-home onto the managed egress network so `gh auth login`
+    // can reach api.github.com from the internal enclave.
+    #[test]
+    fn github_login_helper_dual_homes_onto_managed_egress_network() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let login_window = source_window(source, "fn run_github_login(debug: bool)");
+        assert!(
+            login_window.contains("ENCLAVE_EGRESS_NETS"),
+            "run_github_login must use ENCLAVE_EGRESS_NETS not ENCLAVE_NET: {login_window}"
+        );
+        assert!(
+            !login_window.contains("ENCLAVE_NET,"),
+            "run_github_login must not reference ENCLAVE_NET (no egress): {login_window}"
+        );
+        // The dual-home leg only resolves if the managed egress network exists.
+        // `--github-login` can run without a prior full `--init`, so the login
+        // path must ensure the networks itself.
+        assert!(
+            login_window.contains("ensure_enclave_network(debug)?"),
+            "run_github_login must ensure the enclave+egress networks before launching the helper: {login_window}"
+        );
+    }
+
     // Regression: the egress network must be ensured on every enclave-bootstrap
     // path (including the early-return-when-enclave-exists case), or the
     // dual-home leg cannot resolve on a clean runtime.
@@ -8052,8 +8093,9 @@ mod tests {
             true,
         );
 
-        assert!(has_arg(&args, "--interactive"));
-        assert!(has_arg(&args, "--tty"));
+        // Prompted mode is non-interactive; podman should not claim a TTY.
+        assert!(!has_arg(&args, "--interactive"));
+        assert!(!has_arg(&args, "--tty"));
         assert!(has_arg(&args, "--entrypoint"));
         assert!(has_arg(
             &args,

@@ -1,6 +1,6 @@
 # No Python Runtime Policy - 2026-06-16
 
-Status: active
+Status: in_progress
 Owner: linux-next
 
 ## Policy
@@ -29,21 +29,41 @@ programs.
   artifact; icons are now OS-native tray assets, not generated PNG blobs.
   File removed.
 
+### Slice 2 — 2026-06-18
+
+- **Rewrote** `scripts/check-cheatsheet-tiers.sh` — the shell wrapper now
+  builds and dispatches the existing Rust `tillandsias-policy` binary, and the
+  former embedded Python validator lives in
+  `crates/tillandsias-policy/src/main.rs` as `check-cheatsheet-tiers`.
+- **Refreshed trace indexes** with the Rust policy trace annotations so
+  `cheatsheets-license-tiered` points at the load-bearing implementation.
+
+### Slice 3 — 2026-06-18
+
+- **Retired** `scripts/bind-provenance-local-paths.sh` to a tombstone-only
+  wrapper. The script already exited before the legacy implementation; this
+  slice removed the unreachable Python body while preserving the exit-0
+  replacement notice.
+
 ## Remaining Work
 
 Rewrite or retire the existing Python-backed maintenance scripts:
 
-- `scripts/check-cheatsheet-tiers.sh`
+- ~~`scripts/check-cheatsheet-tiers.sh`~~ **rewritten in Rust dispatcher**
+  (slice 2, 2026-06-18)
 - `scripts/check-cheatsheet-sources.sh`
-- `scripts/bind-provenance-local-paths.sh`
+- ~~`scripts/bind-provenance-local-paths.sh`~~ **retired to tombstone-only
+  wrapper** (slice 3, 2026-06-18)
 - `scripts/audit-cheatsheet-sources.sh`
 - `scripts/fetch-cheatsheet-source.sh`
 - `scripts/regenerate-source-index.sh`
 - `scripts/regenerate-cheatsheet-index.sh`
 - `scripts/distill-forge-diagnostics.sh`
 - `scripts/refresh-cheatsheet-sources.sh`
-- `scripts/check-convergence-velocity.sh`
-- `scripts/check-convergence-velocity.py`
+- ~~`scripts/check-convergence-velocity.sh`~~ **retired to explicit no-op
+  wrapper** (2026-06-18; Rust replacement still desired for real enforcement)
+- ~~`scripts/check-convergence-velocity.py`~~ **retired** (slice 1 follow-up,
+  2026-06-17)
 - ~~`scripts/generate-icons.py`~~ **retired** (slice 1, 2026-06-17)
 - ~~`scripts/migrate-cheatsheets-to-v2.py`~~ **retired** (slice 1, 2026-06-17)
 
@@ -78,3 +98,94 @@ explicitly approved by The Tlatoani.
   note: >
     Retired check-convergence-velocity.py. The shell wrapper is now a
     no-op stub. 3 down, 10 to go. Commit cae63645.
+
+- type: progress
+  ts: "2026-06-18T05:38:00Z"
+  agent_id: "linux-macuahuitl-codex-20260618T0509Z"
+  host: "linux"
+  note: >
+    Reconciled the observability-convergence script-shape litmus with the
+    retired Python checker. The litmus now pins the 5 active shell surfaces and
+    requires the `check-convergence-velocity.sh` Python-retired/no-op warning.
+    Targeted observability litmus passed (2/2), and the subsequent
+    `./build.sh --ci-full --install` gate passed. Remaining checker output is
+    now the cheatsheet/provenance/diagnostics shell scripts that still embed
+    python/python3 snippets.
+
+- type: claim
+  ts: "2026-06-18T10:01:31Z"
+  agent_id: "linux-macuahuitl-codex-20260618T095856Z"
+  host: linux
+  lease_id: "no-python-slice-2-202606181001"
+  expires_at: "2026-06-18T14:01:31Z"
+  note: >
+    Reclaiming the expired no-Python policy packet for a narrow slice: port
+    `scripts/check-cheatsheet-tiers.sh` from embedded Python to the existing
+    Rust `tillandsias-policy` checker while preserving its strict/quiet
+    behavior and tier-validation output.
+
+- type: progress
+  ts: "2026-06-18T10:09:38Z"
+  agent_id: "linux-macuahuitl-codex-20260618T095856Z"
+  host: linux
+  lease_id: "no-python-slice-2-202606181001"
+  note: >
+    Slice 2 checkpoint: ported `scripts/check-cheatsheet-tiers.sh` to the Rust
+    `tillandsias-policy check-cheatsheet-tiers` subcommand. The wrapper no
+    longer embeds Python and strict tier validation still reports 210
+    cheatsheets validated. Trace indexes were regenerated so the
+    `cheatsheets-license-tiered` spec points at the new Rust implementation.
+  files_touched:
+    - crates/tillandsias-policy/src/main.rs
+    - scripts/check-cheatsheet-tiers.sh
+    - TRACES.md
+    - openspec/specs/*/TRACES.md
+  evidence:
+    - cargo test -p tillandsias-policy
+    - cargo clippy -p tillandsias-policy -- -D warnings
+    - ./scripts/check-cheatsheet-tiers.sh --strict
+    - ./scripts/check-no-python-scripts.sh still fails on the remaining
+      cheatsheet/provenance/diagnostics/source-index scripts, with
+      `check-cheatsheet-tiers.sh` removed from the violation list.
+  next_checkpoint: >
+    Continue with one of the remaining Python-backed cheatsheet/source scripts,
+    preferably `scripts/check-cheatsheet-sources.sh` or
+    `scripts/bind-provenance-local-paths.sh`.
+
+- type: claim
+  ts: "2026-06-18T14:17:43Z"
+  agent_id: "linux-macuahuitl-codex-20260618T141743Z"
+  host: linux
+  lease_id: "no-python-slice-3-202606181417"
+  expires_at: "2026-06-18T18:17:43Z"
+  note: >
+    Reclaiming the expired no-Python policy packet for a narrow slice: strip
+    the legacy Python body from the already-retired
+    `scripts/bind-provenance-local-paths.sh` tombstone wrapper, preserving the
+    early-exit notice while removing a checker violation.
+
+- type: progress
+  ts: "2026-06-18T14:19:33Z"
+  agent_id: "linux-macuahuitl-codex-20260618T141743Z"
+  host: linux
+  lease_id: "no-python-slice-3-202606181417"
+  note: >
+    Slice 3 checkpoint: replaced `scripts/bind-provenance-local-paths.sh` with
+    a compact tombstone-only wrapper. The obsolete script still exits 0 with
+    the same replacement notice, but no longer carries the unreachable Python
+    provenance-rewrite body.
+  files_touched:
+    - scripts/bind-provenance-local-paths.sh
+  evidence:
+    - scripts/bind-provenance-local-paths.sh exits 0 and prints the tombstone
+      notice
+    - bash -n scripts/bind-provenance-local-paths.sh
+    - cargo test -p tillandsias-policy
+    - git diff --check
+    - ./scripts/check-no-python-scripts.sh still fails on the remaining
+      cheatsheet/provenance/diagnostics/source-index scripts, with
+      `bind-provenance-local-paths.sh` removed from the violation list.
+  next_checkpoint: >
+    Continue with one of the remaining Python-backed active maintenance
+    scripts, preferably `scripts/check-cheatsheet-sources.sh`,
+    `scripts/audit-cheatsheet-sources.sh`, or `scripts/regenerate-source-index.sh`.
