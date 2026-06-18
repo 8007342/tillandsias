@@ -184,6 +184,14 @@ The 2026-06-16 critical/high forge proposals were triaged in
   `policy/no-python-runtime-scripts` remain available for Linux claim.
 - **No e2e gate run**: no runtime crate/image delta since released v0.3.260618.1.
 
+## This Cycle (2026-06-18T07:25Z, windows)
+
+- **Worker drain**: No Windows-owned ready work found in `plan/index.yaml`;
+  yielded.
+- **E2E gates**: Windows build/install, destructive WSL unregister, and cold
+  re-provision PASS.
+  Evidence: `plan/issues/build-install-smoke-e2e-findings-2026-06-18.md`.
+
 ## This Cycle (2026-06-18T05:38Z, linux)
 
 - **Fixed stale no-Python litmus drift**:
