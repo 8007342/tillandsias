@@ -1,5 +1,76 @@
 # Local build/install smoke findings — 2026-06-14
 
+## Current Run (Partial Pass / Blocked Final Lanes) — 2026-06-18
+
+- Discovered by: `/meta-orchestration` invoking `/build-install-and-smoke-test-e2e`
+- Host: Linux (`macuahuitl`)
+- Branch: `linux-next`
+- Commit under test: `3d9e2badbaa6083d80460b4951266cc5785c6ac2`
+- Installed build: `Tillandsias v0.3.260618.1`
+- Evidence: `target/build-install-smoke-e2e/20260618T051641Z/`
+- Passed gates:
+  - Targeted `./scripts/run-litmus-test.sh --spec observability-convergence --phase pre-build`
+    passed after the stale no-Python litmus fix (2/2 executed).
+  - `./build.sh --ci-full --install` exited 0. Pre-build litmus passed 129/129,
+    post-build status smoke passed 6/6, and runtime residual litmus passed 5/5.
+  - `podman system reset --force` exited 0 and the clean-store inventory was empty.
+  - Fresh `tillandsias --init --debug` exited 0 from the pristine store and
+    bootstrapped Vault.
+  - Direct enclave-only HTTPS probe from `localhost/tillandsias-git` on only
+    `tillandsias-enclave` could not resolve/reach `api.github.com`
+    (`DIRECT_EGRESS_DENIED rc=6`).
+  - Post-init `tillandsias --status-check --debug` exited 0.
+- Blocked lanes:
+  - `tillandsias --debug --github-login` remains operator-attended. A timed PTY
+    automation attempt was aborted because it can echo the host `gh` token before
+    the helper reaches its hidden container prompt; no incomplete smoke log was
+    retained. Continue tracking under
+    `plan/issues/github-login-enclave-egress-regression-2026-06-17.md`.
+  - The final forge continuous-enhancement lane did not start a forge workload in
+    this harness: `tillandsias` and `podman run` entered stopped `T` state before
+    a forge container appeared, and `04-forge-continuous-enhancement.log` had no
+    runtime output.
+
+## Work Packet: local-smoke/forge-pty-stopped-before-container-start
+
+- id: `local-smoke/forge-pty-stopped-before-container-start`
+- type: investigation
+- title: Local smoke forge lane can stop in the harness PTY before container startup
+- owner_host: linux
+- capability_tags: [linux, podman, pty, smoke, opencode]
+- status: ready
+- discovered_by: `/meta-orchestration` local build/install smoke
+- owned_files:
+  - `crates/tillandsias-headless/src/main.rs`
+  - `images/default/entrypoint-forge-opencode.sh`
+  - `skills/build-install-and-smoke-test-e2e/SKILL.md`
+- evidence:
+  - `target/build-install-smoke-e2e/20260618T051641Z/04-forge-exit.txt`:
+    `forge_exit=blocked-stopped-pty`.
+  - Process inspection during the run showed `tillandsias . --opencode --prompt
+    "Use the /forge-continuous-enhancement skill"` and its child `podman run`
+    both in stopped `T` state.
+  - `podman ps` did not show `tillandsias-tillandsias-forge`; the smoke log was
+    empty before the blocked marker was written.
+  - The same post-init runtime passed `tillandsias --status-check --debug`,
+    including launch and cleanup of a representative forge stack, so this is not
+    yet evidence of a general forge image/runtime regression.
+- next_action: >
+    Reproduce the final `tillandsias . --opencode --prompt ...` smoke lane from
+    a normal operator terminal and from the automation harness. Determine
+    whether the stopped `T` state is caused by the Codex PTY wrapper,
+    foreground/background job control around `podman run --tty`, or the
+    launcher itself. If it is harness-only, make the smoke skill use an execution
+    mode that cannot SIGTTIN/SIGTTOU the foreground `podman run`; if it is a
+    launcher issue, add a focused regression test around prompt-mode OpenCode
+    launch.
+- acceptance_evidence:
+  - `tillandsias . --opencode --prompt "Use the /forge-continuous-enhancement skill"`
+    exits 0 or produces actionable runtime logs in the local smoke harness.
+  - `podman ps` shows the expected forge container while the lane is active.
+  - A local build/install smoke run records a non-empty final forge log and no
+    stopped `T` process state.
+
 ## Current Run (Blocked) — 2026-06-15
 
 - Discovered by: `/build-install-and-smoke-test-e2e`

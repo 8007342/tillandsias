@@ -1,6 +1,6 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-18T04:19Z
+Last updated: 2026-06-18T05:38Z
 
 This file is the first stop for agents inspecting `plan/issues/`. Historical
 issue reports remain in this directory for evidence and auditability, but only
@@ -57,9 +57,14 @@ the items below are immediate work.
   - direct external curl from an ordinary enclave-only container still fails
   - forge/proxy egress smoke remains green
 - latest_evidence_note: >
-    Release `v0.3.260618.1` curl-install smoke passed init and the prompted
-    forge lane on 2026-06-18, but did not exercise `--github-login`; keep the
-    targeted GitHub-login runtime check open.
+    Local build/install smoke for `v0.3.260618.1` passed on 2026-06-18:
+    `./build.sh --ci-full --install`, destructive Podman reset, clean
+    `tillandsias --init --debug`, direct enclave-only HTTPS denial to
+    `api.github.com`, and `tillandsias --status-check --debug` all passed.
+    The actual `tillandsias --debug --github-login` token paste remains open:
+    a noninteractive timed PTY attempt was aborted because it can echo the host
+    `gh` token before the hidden container prompt. Next run must be
+    operator-attended with a fresh/rotated token.
 
 ### enclave/network-level-egress-deny
 
@@ -90,6 +95,23 @@ the items below are immediate work.
   - `scripts/check-no-python-scripts.sh` exits 0
   - no `*.py` executable scripts remain under `scripts/`
   - no harness, skill, litmus, or repeat path shells out to `python`/`python3`
+
+### local-smoke/forge-pty-stopped-before-container-start
+
+- status: ready
+- owner_host: linux
+- source: `plan/issues/build-install-smoke-e2e-findings-2026-06-14.md`
+- next_action: Reproduce the final
+  `tillandsias . --opencode --prompt "Use the /forge-continuous-enhancement skill"`
+  lane from a normal operator terminal and from the automation harness, then
+  determine whether the stopped `T` state is harness PTY/job-control only or a
+  launcher regression.
+- blocker: none known; the same local install passed `--status-check`, so this
+  is not yet evidence of a general forge image/runtime failure.
+- evidence_required:
+  - final local-smoke forge lane exits 0 or emits actionable runtime logs
+  - expected forge container is visible while the lane is active
+  - no stopped `T` process state in the harness
 
 ## Triaged 2026-06-16 (no longer needs triage)
 
@@ -160,6 +182,24 @@ The 2026-06-16 critical/high forge proposals were triaged in
 - **Reclaimable packets unchanged**: `nanoclawv2-orchestration` and
   `policy/no-python-runtime-scripts` remain available for Linux claim.
 - **No e2e gate run**: no runtime crate/image delta since released v0.3.260618.1.
+
+## This Cycle (2026-06-18T05:38Z, linux)
+
+- **Fixed stale no-Python litmus drift**:
+  `litmus:observability-convergence-script-shape` no longer requires the
+  retired `scripts/check-convergence-velocity.py`; it now pins the 5 active
+  shell surfaces and the explicit Python-retired/no-op wrapper warning.
+- **Local build smoke evidence**: `./scripts/run-litmus-test.sh --spec
+  observability-convergence --phase pre-build` PASS (2/2), then
+  `./build.sh --ci-full --install` PASS (pre-build 129/129, post-build 6/6,
+  runtime residual 5/5), installing `Tillandsias v0.3.260618.1`.
+- **Clean runtime evidence**: destructive `podman system reset --force` PASS,
+  pristine `tillandsias --init --debug` PASS, direct enclave-only HTTPS to
+  `api.github.com` denied, and `tillandsias --status-check --debug` PASS.
+- **Blocked probes**: `tillandsias --debug --github-login` remains
+  operator-attended because timed PTY token injection is unsafe; the forge
+  continuous-enhancement lane entered stopped `T` state before container
+  startup in this harness (`forge_exit=blocked-stopped-pty`).
 
 ## This Cycle (2026-06-18T02:28Z, linux)
 

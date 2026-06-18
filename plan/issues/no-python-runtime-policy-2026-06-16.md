@@ -42,8 +42,10 @@ Rewrite or retire the existing Python-backed maintenance scripts:
 - `scripts/regenerate-cheatsheet-index.sh`
 - `scripts/distill-forge-diagnostics.sh`
 - `scripts/refresh-cheatsheet-sources.sh`
-- `scripts/check-convergence-velocity.sh`
-- `scripts/check-convergence-velocity.py`
+- ~~`scripts/check-convergence-velocity.sh`~~ **retired to explicit no-op
+  wrapper** (2026-06-18; Rust replacement still desired for real enforcement)
+- ~~`scripts/check-convergence-velocity.py`~~ **retired** (slice 1 follow-up,
+  2026-06-17)
 - ~~`scripts/generate-icons.py`~~ **retired** (slice 1, 2026-06-17)
 - ~~`scripts/migrate-cheatsheets-to-v2.py`~~ **retired** (slice 1, 2026-06-17)
 
@@ -78,3 +80,16 @@ explicitly approved by The Tlatoani.
   note: >
     Retired check-convergence-velocity.py. The shell wrapper is now a
     no-op stub. 3 down, 10 to go. Commit cae63645.
+
+- type: progress
+  ts: "2026-06-18T05:38:00Z"
+  agent_id: "linux-macuahuitl-codex-20260618T0509Z"
+  host: "linux"
+  note: >
+    Reconciled the observability-convergence script-shape litmus with the
+    retired Python checker. The litmus now pins the 5 active shell surfaces and
+    requires the `check-convergence-velocity.sh` Python-retired/no-op warning.
+    Targeted observability litmus passed (2/2), and the subsequent
+    `./build.sh --ci-full --install` gate passed. Remaining checker output is
+    now the cheatsheet/provenance/diagnostics shell scripts that still embed
+    python/python3 snippets.
