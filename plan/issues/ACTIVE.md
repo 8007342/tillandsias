@@ -1,6 +1,6 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-18T04:19Z
+Last updated: 2026-06-18T04:30Z
 
 This file is the first stop for agents inspecting `plan/issues/`. Historical
 issue reports remain in this directory for evidence and auditability, but only
@@ -39,10 +39,19 @@ the items below are immediate work.
 
 ### github-login/enclave-egress-regression
 
-- status: done
+- status: REOPENED 2026-06-18 — superseded by `bug/github-login-failure`
+- reopened_reason: >
+    The Tlatoani reports `--github-login` still fails from both CLI and tray
+    across the last several builds. The `d3f4e2f3` fix only renamed the network
+    constant and was never live-validated (release smoke never ran
+    `--github-login`). Investigation found a likely deeper root cause:
+    `run_github_login` launches the helper on the enclave+egress networks but
+    never calls `ensure_enclave_network`/`ensure_egress_network`, so the
+    `podman run --network …` fails on a clean store. Tracked in the new packet
+    `bug/github-login-failure` (see below).
 - owner_host: linux
 - source: `plan/issues/github-login-enclave-egress-regression-2026-06-17.md`
-- fix_commit: `d3f4e2f3` on `linux-next`
+- prior_fix_commit: `d3f4e2f3` on `linux-next` (insufficient)
 - fix_summary: >
     Changed the GitHub login helper container from single-homed `ENCLAVE_NET`
     to dual-homed `ENCLAVE_EGRESS_NETS` (tillandsias-enclave,tillandsias-egress).
@@ -61,6 +70,37 @@ the items below are immediate work.
     forge lane on 2026-06-18, but did not exercise `--github-login`; keep the
     targeted GitHub-login runtime check open.
 
+### bug/github-login-failure
+
+- status: open (operator-reported 2026-06-18; reclaimable)
+- owner_host: linux
+- source: `plan/issues/github-login-failure-regression-2026-06-18.md`
+- severity: high — blocks GitHub auth from both CLI and tray across recent builds
+- next_action: Make `run_github_login` ensure the enclave + egress networks
+  exist before launching the helper (call `ensure_enclave_network`/
+  `ensure_egress_network`), then live-validate `tillandsias --debug --github-login`
+  on a clean post-init install and confirm the tray path surfaces inner errors.
+- supersedes: `github-login/enclave-egress-regression`
+- blocker: none
+- evidence_required:
+  - `tillandsias --debug --github-login` completes on a clean store
+  - tray GitHub-login flow succeeds (or surfaces the real error)
+
+### bug/clone-tray-ux-not-refreshed
+
+- status: open (operator-reported 2026-06-18; reclaimable)
+- owner_host: linux
+- source: `plan/issues/clone-tray-ux-not-refreshed-2026-06-18.md`
+- severity: medium — clone succeeds on disk but tray stays on "Cloning…" and
+  `~/src` never refreshes
+- next_action: In `tray/mod.rs` `handle_launch_cloud_project`, on clone success
+  clear the status, re-scan `~/src` (post-startup writer for `state.projects`),
+  and rebuild the menu — mirror the dead-code `handle_clone_project` pattern.
+- blocker: none
+- evidence_required:
+  - after a successful clone the tray status clears and `~/src` lists the new
+    checkout without a restart
+
 ### enclave/network-level-egress-deny
 
 - status: done
@@ -78,12 +118,17 @@ the items below are immediate work.
 
 ### policy/no-python-runtime-scripts
 
-- status: stalled (lease expired 2026-06-18T02:15Z; reclaimable)
+- status: in-progress (slices 2 & 3 landed 2026-06-18; reclaimable for next slice)
 - owner_host: linux
 - source: `plan/issues/no-python-runtime-policy-2026-06-16.md`
-- lease: `no-python-slice-1-202606172215` (EXPIRED at 2026-06-18T02:15Z)
+- progress: slice 2 ported `check-cheatsheet-tiers.sh`, slice 3 ported
+  `check-cheatsheet-sources.sh` (both now thin wrappers over the Rust
+  `tillandsias-cheatsheet-tools` crate). 8 scripts remain.
 - next_action: Rewrite or retire the remaining Python-backed repository scripts
-  in Rust, then make `scripts/check-no-python-scripts.sh` pass.
+  in Rust (audit-cheatsheet-sources, bind-provenance-local-paths,
+  distill-forge-diagnostics, fetch-cheatsheet-source, refresh-cheatsheet-sources,
+  regenerate-cheatsheet-index, regenerate-source-index, check-convergence-velocity
+  wrapper), then make `scripts/check-no-python-scripts.sh` pass.
 - blocker: existing cheatsheet/provenance maintenance scripts still execute
   Python; each needs a Rust replacement or explicit Tlatoani approval.
 - evidence_required:
