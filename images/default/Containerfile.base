@@ -31,6 +31,12 @@ RUN npm install -g --prefix /usr/local \
         @anthropic-ai/claude-code@2.1.168 \
         @openai/codex@0.137.0
 
+# ── marksman Markdown LSP server ────────────────────────────────
+# Single self-contained .NET binary from GitHub releases.
+ARG MARKSMAN_VERSION=2026-02-08
+RUN curl -LsSf "https://github.com/artempyanykh/marksman/releases/download/${MARKSMAN_VERSION}/marksman-linux-x64" -o /usr/local/bin/marksman \
+    && chmod +x /usr/local/bin/marksman
+
 # ── Python packages and developer tools ─────────────────────────
 RUN pip3 install --no-cache-dir \
         pyright==1.1.410 \

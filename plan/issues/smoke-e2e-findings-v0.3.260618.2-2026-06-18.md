@@ -86,23 +86,38 @@ enclave, then the host pushed `62964f02` to `origin/linux-next`.
 - id: `smoke-finding/forge-marksman-missing`
 - owner_host: linux
 - capability_tags: [forge, runtime-tool, markdown, diagnostics]
-- status: ready
+- status: done
 - discovered_by: `/smoke-curl-install-and-test-e2e` on release
   `v0.3.260618.2`
 - evidence:
   - `target/smoke-e2e/04-opencode.log:228` - in-forge run filed new gaps.
   - `plan/forge-improvements/proposals/2026-06-18-install-marksman.md` -
     detailed proposal for adding a Markdown LSP server.
+  - `images/default/Containerfile.base:37-38` - marksman installed from GitHub releases
 - repro:
   - Run `tillandsias . --opencode --prompt "Use the /forge-continuous-enhancement skill"` and inspect diagnostics proposal output.
 - next_action: >
-    Decide the safest install source for `marksman`, add it to the forge image
-    LSP/tooling layer, and rerun diagnostics.
+    Verify marksman is functional in the forge after next image rebuild. Rerun forge diagnostics to confirm it's no longer reported as missing.
 - events:
   - type: discovered
     ts: "2026-06-18T20:50:00Z"
     agent_id: "linux-macuahuitl-codex-20260618T2038Z"
     host: linux
+  - type: claim
+    ts: "2026-06-18T21:20:00Z"
+    agent_id: "linux-macuahuitl-opencode-big-pickle-20260618T211847Z"
+    host: linux
+    lease_id: "lease-marksman-install-20260618T212000"
+    expires_at: "2026-06-19T01:20:00Z"
+  - type: completed
+    ts: "2026-06-18T21:22:00Z"
+    agent_id: "linux-macuahuitl-opencode-big-pickle-20260618T211847Z"
+    host: linux
+    lease_id: "lease-marksman-install-20260618T212000"
+    evidence_refs:
+      - "images/default/Containerfile.base:37-38" -- marksman installed from GitHub release
+      - "plan/forge-improvements/proposals/2026-06-18-install-marksman.md" -- proposal updated with implementation details
+    note: "Installed marksman Markdown LSP server in Containerfile.base. Pinned to version 2026-02-08 (latest). Single binary at /usr/local/bin/marksman. Verifiable at next forge image rebuild."
 
 ### Work Packet: smoke-finding/forge-nix-store-missing
 

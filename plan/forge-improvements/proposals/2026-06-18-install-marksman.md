@@ -5,11 +5,12 @@ category: runtime-tool
 status: proposed
 proposed_at: 2026-06-18T06:00:00Z
 changes:
-  - file: images/default/Containerfile
+  - file: images/default/Containerfile.base
     description: |
-      Install marksman (Markdown LSP server) from GitHub releases or via
-      dotnet tool install. Add to the existing LSP layer alongside other
-      language servers.
+      Install marksman (Markdown LSP server) from GitHub releases.
+      Single self-contained .NET binary downloaded from
+      github.com/artempyanykh/marksman/releases and placed at
+      /usr/local/bin/marksman.
 ---
 
 ## Gap
@@ -37,4 +38,13 @@ files.
   GitHub releases at build time
 - Also available via npm (`marksman` or `@microsoft/marksman`)
 - No daemon, no root, no new network egress beyond initial download
-- **Safe within the existing privacy/isolation envelope.**
+- **Safe within the existing privacy/isolation envelope.
+
+## Implementation Note
+
+Installed in `images/default/Containerfile.base:37-38` via:
+```
+RUN curl -LsSf ".../marksman-linux-x64" -o /usr/local/bin/marksman && chmod +x /usr/local/bin/marksman
+```
+The forge image inherits it from `Containerfile.base` via the `FROM` chain.
+Version pinned: `2026-02-08` (latest). HTTPS download at build time; no runtime egress.**
