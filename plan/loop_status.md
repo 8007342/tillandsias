@@ -1,30 +1,35 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-18T16:00Z
+LastExecutionTime: 2026-06-18T20:50Z
 
 ## This Loop
 
-- **Cycle type**: meta-orchestration coordination pass after worker-drain audit.
-- **Startup**: clean mutable-Linux host on `linux-next`; fetched origin and
-  confirmed local `linux-next` is up to date at `87d2201f`.
+- **Cycle type**: meta-orchestration release-smoke pass after fetch/worker and
+  sibling audit.
+- **Startup**: clean mutable-Linux host on `linux-next`; fetched origin,
+  fast-forwarded from `7bc7b5bb` to `36cd9020`, then pushed forge findings
+  commit `62964f02` and this smoke ledger commit.
 - **Sibling heads after fetch**:
-  - `main`: `b0dba63e` (tagged `v0.3.260618.1`).
-  - `linux-next`: `87d2201f`.
-  - `windows-next`: `e332afb6` (ancestor of linux-next, 0 ahead / 9 behind).
-  - `osx-next`: `c7d32fb9` (ancestor of linux-next, 0 ahead / 11 behind).
-- **Worker drain**: no implementation packet claimed. `policy/no-python-runtime-scripts`
-  is actively leased until 2026-06-18T18:17Z; `nanoclawv2-orchestration` is
-  reclaimable but its first useful implementation slice spans launcher, broker,
-  image, and smoke hooks (estimated 4h) and should be picked up by a dedicated
-  worker cycle. `local-smoke/evidence-bundle-litmus-count-regression` is ready
-  (3h est.) but exceeds the meta-orchestration cycle budget.
+  - `main`: `6dfafdf1` (tagged `v0.3.260618.2`).
+  - `linux-next`: `36cd9020` at audit start, then `62964f02` after forge
+    proposals.
+  - `windows-next`: `e332afb6` (ancestor of linux-next, 0 ahead / 12 behind).
+  - `osx-next`: `c7d32fb9` (ancestor of linux-next, 0 ahead / 14 behind).
+- **Worker drain**: no implementation packet claimed before the release gate.
+  The latest release was newer than recorded curl-install smoke evidence, so
+  `/smoke-curl-install-and-test-e2e` was prioritized.
 - **Integration/runtime**: no sibling branch is ahead of linux-next, and
   `plan/localwork/runtime-litmus/current` is absent. No full litmus was started.
-- **Release/e2e freshness**: GitHub reports latest release `v0.3.260618.1`,
-  published 2026-06-18T01:34:43Z at `b0dba63e`; plan has curl-install smoke
-  PASS evidence for that release at 2026-06-18T03:31:55Z.
-- **E2E gates**: skipped; this pass changed only plan ledgers and found no
-  runtime/image/installer/release artifact delta since the current smoke.
+- **Release/e2e freshness**: GitHub latest release is `v0.3.260618.2`,
+  published 2026-06-18T18:07:14Z at `6dfafdf1`; curl-install smoke now has
+  PASS-with-findings evidence at 2026-06-18T20:50Z.
+- **E2E gates**: curl-install gate passed install, destructive reset, empty
+  store verification, fresh init, and prompted OpenCode forge lane. Report:
+  `plan/issues/smoke-e2e-findings-v0.3.260618.2-2026-06-18.md`.
+- **New findings**: in-forge `/forge-continuous-enhancement` filed three ready
+  follow-ups: `smoke-finding/forge-ripgrep-missing`,
+  `smoke-finding/forge-marksman-missing`, and
+  `smoke-finding/forge-nix-store-missing`.
 
 ## Active Conflicts & Mediation
 
@@ -33,8 +38,9 @@ LastExecutionTime: 2026-06-18T16:00Z
 - Branch drift: none; both sibling branches are integrated.
 - Wrong-direction progress: none detected in the audited sibling status packets.
 - High-Velocity Alignment Event: **Inactive**.
-- Convergence velocity: **flat this pass**; no implementation packet was claimed,
-  but branch residual drift remains zero and no new blocker was introduced.
+- Convergence velocity: **positive for smoke coverage**; newest published
+  release is tested, branch residual drift remains zero, and three forge gaps
+  are now claimable.
 
 ## Blockers
 
@@ -42,7 +48,7 @@ LastExecutionTime: 2026-06-18T16:00Z
   `github-login/enclave-egress-regression` is fixed in `d3f4e2f3`, but the
   actual `tillandsias --debug --github-login` token paste remains
   operator-attended with a fresh/rotated token.
-- **IN PROGRESS (linux)**: `policy/no-python-runtime-scripts` remains leased until
+- **RECLAIMABLE (linux)**: `policy/no-python-runtime-scripts` lease expired at
   2026-06-18T18:17Z; remaining Python-backed scripts are listed in
   `plan/issues/no-python-runtime-policy-2026-06-16.md`.
 - **RECLAIMABLE (linux)**: `nanoclawv2-orchestration` lease expired at
@@ -55,9 +61,9 @@ LastExecutionTime: 2026-06-18T16:00Z
 
 - **Linux primary**: operator-attended `tillandsias --debug --github-login` on
   a clean post-init install with a fresh/rotated token.
-- **Linux fallback**: after the no-Python lease expires or checkpoints, port or
-  retire another active Python-backed script; otherwise reclaim
-  `nanoclawv2-orchestration` in a dedicated worker cycle.
+- **Linux fallback**: claim one of the new forge tool packets, continue
+  no-Python cleanup, or reclaim `nanoclawv2-orchestration` in a dedicated
+  worker cycle.
 - **Windows primary**: resolve the Smart App Control decision, then rerun the
   native local-build e2e gate.
 - **Windows fallback**: keep `windows-next` synced and report SAC status.

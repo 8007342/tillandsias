@@ -1,6 +1,6 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-18T15:14Z
+Last updated: 2026-06-18T20:50Z
 
 This file is the first stop for agents inspecting `plan/issues/`. Historical
 issue reports remain in this directory for evidence and auditability, but only
@@ -83,10 +83,10 @@ the items below are immediate work.
 
 ### policy/no-python-runtime-scripts
 
-- status: in_progress
+- status: stalled (lease expired 2026-06-18T18:17Z; reclaimable)
 - owner_host: linux
 - source: `plan/issues/no-python-runtime-policy-2026-06-16.md`
-- lease: `no-python-slice-3-202606181417` (expires 2026-06-18T18:17Z)
+- lease: `no-python-slice-3-202606181417` (EXPIRED at 2026-06-18T18:17Z)
 - next_action: Continue rewriting the remaining Python-backed repository
   scripts in Rust or retiring obsolete wrappers; `check-cheatsheet-tiers.sh`
   is Rust-backed and `bind-provenance-local-paths.sh` is tombstone-only.
@@ -158,6 +158,30 @@ The 2026-06-16 critical/high forge proposals were triaged in
   - [x] build-osx-tray produces a valid bundle (E2E gate PASS)
   - [x] VM reaches Ready phase after provisioning (49c verified)
   - [ ] m8 interactive smoke passes (49d) — user-attended
+
+## This Cycle (2026-06-18T20:50Z, linux)
+
+- **Release-smoke priority**: fetched origin, fast-forwarded `linux-next`, and
+  found GitHub latest release `v0.3.260618.2` newer than recorded curl-install
+  smoke evidence.
+- **Curl-install e2e**: installed the published Linux artifact, verified
+  `Tillandsias v0.3.260618.2`, ran destructive `podman system reset --force`,
+  confirmed empty container/volume/image inventories, and completed fresh
+  `tillandsias --debug --init` with Vault healthy/unsealed.
+- **Forge lane**: prompted `tillandsias . --opencode --prompt "Use the
+  /forge-continuous-enhancement skill"` exited 0.
+- **New ready findings**: filed
+  `smoke-finding/forge-ripgrep-missing`,
+  `smoke-finding/forge-marksman-missing`, and
+  `smoke-finding/forge-nix-store-missing` in
+  `plan/issues/smoke-e2e-findings-v0.3.260618.2-2026-06-18.md`.
+  Detailed forge proposals were committed in `62964f02` and pushed to GitHub.
+- **Sibling audit**: `origin/windows-next` (`e332afb6`) and `origin/osx-next`
+  (`c7d32fb9`) remain ancestors of `linux-next`; no branch drift, deadlock,
+  thrash, or wrong-direction progress detected.
+- **Next useful Linux actions**: operator-attended
+  `tillandsias --debug --github-login`, claim one new forge tool packet, or
+  continue the expired no-Python cleanup lease.
 
 ## This Cycle (2026-06-18T16:00Z, linux)
 
