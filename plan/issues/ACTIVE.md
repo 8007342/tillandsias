@@ -83,12 +83,13 @@ the items below are immediate work.
 
 ### policy/no-python-runtime-scripts
 
-- status: claimed
+- status: in_progress
 - owner_host: linux
 - source: `plan/issues/no-python-runtime-policy-2026-06-16.md`
 - lease: `no-python-slice-2-202606181001` (expires 2026-06-18T14:01Z)
-- next_action: Rewrite or retire the remaining Python-backed repository scripts
-  in Rust, then make `scripts/check-no-python-scripts.sh` pass.
+- next_action: Continue rewriting the remaining Python-backed repository
+  scripts in Rust; `check-cheatsheet-tiers.sh` is now Rust-backed and removed
+  from the no-Python checker output.
 - blocker: existing cheatsheet/provenance maintenance scripts still execute
   Python; each needs a Rust replacement or explicit Tlatoani approval.
 - evidence_required:

@@ -1,6 +1,6 @@
 # No Python Runtime Policy - 2026-06-16
 
-Status: claimed
+Status: in_progress
 Owner: linux-next
 
 ## Policy
@@ -29,11 +29,21 @@ programs.
   artifact; icons are now OS-native tray assets, not generated PNG blobs.
   File removed.
 
+### Slice 2 — 2026-06-18
+
+- **Rewrote** `scripts/check-cheatsheet-tiers.sh` — the shell wrapper now
+  builds and dispatches the existing Rust `tillandsias-policy` binary, and the
+  former embedded Python validator lives in
+  `crates/tillandsias-policy/src/main.rs` as `check-cheatsheet-tiers`.
+- **Refreshed trace indexes** with the Rust policy trace annotations so
+  `cheatsheets-license-tiered` points at the load-bearing implementation.
+
 ## Remaining Work
 
 Rewrite or retire the existing Python-backed maintenance scripts:
 
-- `scripts/check-cheatsheet-tiers.sh`
+- ~~`scripts/check-cheatsheet-tiers.sh`~~ **rewritten in Rust dispatcher**
+  (slice 2, 2026-06-18)
 - `scripts/check-cheatsheet-sources.sh`
 - `scripts/bind-provenance-local-paths.sh`
 - `scripts/audit-cheatsheet-sources.sh`
@@ -105,3 +115,31 @@ explicitly approved by The Tlatoani.
     `scripts/check-cheatsheet-tiers.sh` from embedded Python to the existing
     Rust `tillandsias-policy` checker while preserving its strict/quiet
     behavior and tier-validation output.
+
+- type: progress
+  ts: "2026-06-18T10:09:38Z"
+  agent_id: "linux-macuahuitl-codex-20260618T095856Z"
+  host: linux
+  lease_id: "no-python-slice-2-202606181001"
+  note: >
+    Slice 2 checkpoint: ported `scripts/check-cheatsheet-tiers.sh` to the Rust
+    `tillandsias-policy check-cheatsheet-tiers` subcommand. The wrapper no
+    longer embeds Python and strict tier validation still reports 210
+    cheatsheets validated. Trace indexes were regenerated so the
+    `cheatsheets-license-tiered` spec points at the new Rust implementation.
+  files_touched:
+    - crates/tillandsias-policy/src/main.rs
+    - scripts/check-cheatsheet-tiers.sh
+    - TRACES.md
+    - openspec/specs/*/TRACES.md
+  evidence:
+    - cargo test -p tillandsias-policy
+    - cargo clippy -p tillandsias-policy -- -D warnings
+    - ./scripts/check-cheatsheet-tiers.sh --strict
+    - ./scripts/check-no-python-scripts.sh still fails on the remaining
+      cheatsheet/provenance/diagnostics/source-index scripts, with
+      `check-cheatsheet-tiers.sh` removed from the violation list.
+  next_checkpoint: >
+    Continue with one of the remaining Python-backed cheatsheet/source scripts,
+    preferably `scripts/check-cheatsheet-sources.sh` or
+    `scripts/bind-provenance-local-paths.sh`.

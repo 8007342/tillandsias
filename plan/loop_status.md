@@ -1,26 +1,32 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-18T09:08Z
+LastExecutionTime: 2026-06-18T10:09Z
 
 ## This Loop
 
-- **Cycle type**: meta-orchestration coordination merge after sibling drift.
+- **Cycle type**: meta-orchestration worker drain with a no-Python policy
+  checkpoint.
 - **Startup**: clean `linux-next`; host classified `linux_mutable`; fetched
-  origin and fast-forward checked `origin/linux-next` with no local drift.
-- **Worker drain**: no new implementation claim this cycle. The remaining
-  reclaimable Linux packets (`nanoclawv2-orchestration` and
-  `policy/no-python-runtime-scripts`) are both larger slices; this pass produced
-  a coherent coordination merge because `origin/osx-next` advanced.
-- **Merged sibling work**: integrated plan-only macOS commit `965fc1ae`
-  (`chore(plan): record macOS meta-orch cycle 2026-06-18T07:11Z`) into
-  `linux-next`; resolved the expected `plan/loop_status.md` semantic conflict.
+  origin and fast-forward checked `origin/linux-next` with no local drift at
+  start (`0f191e7c`, then lease claim `6adef34f`).
+- **Worker drain**: reclaimed `policy/no-python-runtime-scripts` with lease
+  `no-python-slice-2-202606181001` and shipped a coherent slice. The former
+  embedded Python validator in `scripts/check-cheatsheet-tiers.sh` now lives in
+  Rust under `tillandsias-policy check-cheatsheet-tiers`; the shell wrapper only
+  builds/dispatches the Rust tool.
+- **Merged sibling work**: no new sibling branch merge this cycle.
 - **Sibling branch audit**:
   - `main`: `b0dba63e` (tagged `v0.3.260618.1`).
-  - `linux-next`: includes this coordination merge after `d36f9ba1`.
+  - `linux-next`: advanced locally with no-Python claim/checkpoint work after
+    `6adef34f`.
   - `windows-next`: `7674f823`; ancestor of `linux-next` (0 drift ahead).
-  - `osx-next`: `965fc1ae`; integrated by this pass.
-- **E2E gates**: skipped for this coordination-only merge. No crate, script,
-  image, or release artifact changed.
+  - `osx-next`: `965fc1ae`; already integrated.
+- **Verification**: `cargo test -p tillandsias-policy` PASS,
+  `cargo clippy -p tillandsias-policy -- -D warnings` PASS, and
+  `./scripts/check-cheatsheet-tiers.sh --strict` PASS (210 validated).
+- **E2E gates**: skipped for this policy/checker-only slice. No runtime crate,
+  image, installer, or release artifact behavior changed; focused checker and
+  Rust validation covered the modified surface.
 
 ## Active Conflicts & Mediation
 
@@ -37,9 +43,11 @@ LastExecutionTime: 2026-06-18T09:08Z
   init, direct enclave-denial, and status-check evidence captured. The actual
   `tillandsias --debug --github-login` token paste remains operator-attended;
   do not use timed PTY token injection.
-- **RECLAIMABLE**: `nanoclawv2-orchestration` and
-  `policy/no-python-runtime-scripts` leases have expired. Both are available
-  for fresh Linux claim.
+- **IN PROGRESS**: `policy/no-python-runtime-scripts` is claimed until
+  2026-06-18T14:01Z. `check-cheatsheet-tiers.sh` is converted; remaining
+  Python-backed scripts are still listed by `scripts/check-no-python-scripts.sh`.
+- **RECLAIMABLE**: `nanoclawv2-orchestration` lease has expired and remains
+  available for fresh Linux claim.
 - **OPEN / user-attended**: macOS step 49d / m8 interactive smoke remains
   operator-gated after automated VM Ready evidence passed.
 
@@ -47,9 +55,9 @@ LastExecutionTime: 2026-06-18T09:08Z
 
 - **Linux primary**: operator-attended `tillandsias --debug --github-login`
   on a clean post-init install with a fresh/rotated token.
-- **Linux fallback**: reclaim `nanoclawv2-orchestration` or
-  `policy/no-python-runtime-scripts` if the attended GitHub-login probe is not
-  available.
+- **Linux fallback**: continue `policy/no-python-runtime-scripts` within the
+  active lease, or reclaim `nanoclawv2-orchestration` if a larger orchestration
+  slice is preferred.
 - **Windows primary**: fast-forward/sync from `linux-next`; no Windows-owned
   code delta is pending.
 - **macOS primary**: step 49d / m8 interactive smoke; fallback is rerunning the
