@@ -31,6 +31,14 @@ LastExecutionTime: 2026-06-18T20:50Z
   `smoke-finding/forge-marksman-missing`, and
   `smoke-finding/forge-nix-store-missing`.
 
+## Progress Since Last Loop
+
+- **smoke-finding/forge-ripgrep-missing**: COMPLETED — FALSE POSITIVE (ripgrep 14.1.1 already at Containerfile.base:12)
+- **smoke-finding/forge-marksman-missing**: COMPLETED — marksman installed at Containerfile.base:37-38
+- **smoke-finding/forge-nix-store-missing**: COMPLETED — CLARIFIED (nix is host-side only by design; nix-first.md corrected; TILLANDSIAS_SHARED_CACHE does not exist in source code)
+
+All three forge follow-ups from the v0.3.260618.2 smoke run are now processed. Next available claimable work: `policy/no-python-runtime-scripts` (RECLAIMABLE) or `nanoclawv2-orchestration` (RECLAIMABLE).
+
 ## Active Conflicts & Mediation
 
 - Deadlocks: none detected.

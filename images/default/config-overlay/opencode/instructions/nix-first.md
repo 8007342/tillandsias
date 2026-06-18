@@ -111,23 +111,20 @@ After `nix develop` (on the host), you can `cargo build` inside the forge.
 
 ## Where Nix Integrates with This Forge
 
-1. **Host side (your machine)**: You run `nix develop` or `nix build`
-2. **Forge side (inside this container)**: You see the result via `/nix/store/<hash>-<pkg>/` (RO mount)
-3. **No building inside the forge**: The forge has nix installed but can't write to `/nix/store/` (EROFS by design)
+Nix is a **host-side** tool. The forge container delegates all nix operations to the host.
+
+1. **Host side (your machine)**: You run `nix develop` or `nix build` in your project directory on the host machine.
+2. **Forge side (inside this container)**: After `nix develop` on the host, tools installed by nix are available on your host PATH. The forge container does NOT have nix installed — `nix` commands must be run on the host, not inside the forge.
 
 ## Common Errors
 
 **Error: "nix: command not found"**  
-→ You're running this inside the forge, not on the host  
+→ This is expected inside the forge — nix is not installed in the container.  
 → Exit the container: `exit` or Ctrl+D  
-→ Run `nix develop` on your local machine first, then attach to the forge
-
-**Error: "EROFS: Read-only file system /nix/store"**  
-→ You tried to write to `/nix/store/` inside the forge  
-→ Declare the dep in `flake.nix`, run `nix develop` on the host, then re-attach to the forge
+→ Run `nix develop` on your host machine first, then re-attach
 
 **Error: "flake.nix: No such file or directory"**  
-→ Run `git init && nix flake init` at the project root first  
+→ Run `git init && nix flake init` at the project root first (on your host)  
 → Or copy/paste one of the patterns above into a new `flake.nix`
 
 ## Checking It Works

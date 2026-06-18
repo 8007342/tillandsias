@@ -124,23 +124,44 @@ enclave, then the host pushed `62964f02` to `origin/linux-next`.
 - id: `smoke-finding/forge-nix-store-missing`
 - owner_host: linux
 - capability_tags: [forge, runtime-tool, nix, diagnostics]
-- status: ready
+- status: done
 - discovered_by: `/smoke-curl-install-and-test-e2e` on release
   `v0.3.260618.2`
 - evidence:
   - `target/smoke-e2e/04-opencode.log:228` - in-forge run filed new gaps.
   - `plan/forge-improvements/proposals/2026-06-18-provision-nix-store.md` -
     detailed proposal for reconciling Nix instructions and `/nix/store`.
+  - `images/default/config-overlay/opencode/instructions/nix-first.md` -
+    updated to remove misleading forge-side nix claims, clarify nix is host-only.
+  - `rg TILLANDSIAS_SHARED_CACHE` — env var does not exist in any source file
 - repro:
   - Run `tillandsias . --opencode --prompt "Use the /forge-continuous-enhancement skill"` and inspect diagnostics proposal output.
 - next_action: >
-    Either provision Nix in the forge image or remove/replace the misleading
-    Nix-first contract and `TILLANDSIAS_SHARED_CACHE=/nix/store` expectation.
+    CLARIFIED — nix is host-side only by design. The forge container does not
+    need nix. nix-first.md was corrected to remove misleading claims about
+    forge-side nix installation and /nix/store mounting.
+    TILLANDSIAS_SHARED_CACHE does not exist in the codebase.
 - events:
   - type: discovered
     ts: "2026-06-18T20:50:00Z"
     agent_id: "linux-macuahuitl-codex-20260618T2038Z"
     host: linux
+  - type: claim
+    ts: "2026-06-18T21:25:00Z"
+    agent_id: "linux-tlatoani-opencode-big-pickle-20260618T212500Z"
+    host: linux
+    lease_id: "lease-nix-store-clarify-20260618T212500"
+    expires_at: "2026-06-19T01:25:00Z"
+  - type: completed
+    ts: "2026-06-18T21:28:00Z"
+    agent_id: "linux-tlatoani-opencode-big-pickle-20260618T212500Z"
+    host: linux
+    lease_id: "lease-nix-store-clarify-20260618T212500"
+    evidence_refs:
+      - "images/default/config-overlay/opencode/instructions/nix-first.md" -- corrected nix documentation (forge-side vs host-side)
+      - "plan/forge-improvements/proposals/2026-06-18-provision-nix-store.md" -- updated resolution section
+      - "rg TILLANDSIAS_SHARED_CACHE" -- env var not present in any source file
+    note: "CLARIFIED — nix is host-side only by design. nix-first.md was updated to remove misleading claims about nix being in the container. TILLANDSIAS_SHARED_CACHE does not exist. No code changes needed; documentation drift fixed."
 
 ### Event
 

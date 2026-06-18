@@ -43,3 +43,12 @@ making the instruction file and env var misleading.
 - Download of packages goes through the existing proxy ACL
 - No new credentials, mounts, or privileges required
 - **Safe within the existing privacy/isolation envelope.**
+
+## Resolution
+
+CLARIFIED — nix is a **host-side** tool by design. The forge container does NOT
+include nix; nix operations (`nix develop`, `nix build`) run on the host before
+attaching to the forge. The instruction file `nix-first.md` was updated to
+remove misleading claims about nix being installed inside the container or
+`/nix/store` being mounted. The env var `TILLANDSIAS_SHARED_CACHE=/nix/store`
+was already removed from the codebase (not found in any source file).
