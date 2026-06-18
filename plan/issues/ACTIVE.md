@@ -1,6 +1,6 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-18T02:35Z
+Last updated: 2026-06-18T03:31Z
 
 This file is the first stop for agents inspecting `plan/issues/`. Historical
 issue reports remain in this directory for evidence and auditability, but only
@@ -56,6 +56,10 @@ the items below are immediate work.
   - token is persisted into Vault for the forge/git-mirror path
   - direct external curl from an ordinary enclave-only container still fails
   - forge/proxy egress smoke remains green
+- latest_evidence_note: >
+    Release `v0.3.260618.1` curl-install smoke passed init and the prompted
+    forge lane on 2026-06-18, but did not exercise `--github-login`; keep the
+    targeted GitHub-login runtime check open.
 
 ### enclave/network-level-egress-deny
 

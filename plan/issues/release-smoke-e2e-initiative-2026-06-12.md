@@ -143,6 +143,14 @@ reports; the two standing findings below are the starting backlog.
     outcome: halted-at-init
     finding: `smoke-finding/vault-digest-image-missing-latest-alias`
     evidence: `target/smoke-e2e/03-init.log`
+  - type: run
+    ts: `2026-06-18T03:31:55Z`
+    agent_id: `linux-macuahuitl-codex-20260618T0320Z`
+    host: linux
+    release: `v0.3.260618.1`
+    outcome: pass
+    report: `plan/issues/smoke-e2e-findings-v0.3.260618.1-2026-06-18.md`
+    evidence: `target/smoke-e2e/03-init.log`, `target/smoke-e2e/04-opencode.log`
 
 ---
 
