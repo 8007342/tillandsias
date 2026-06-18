@@ -3873,7 +3873,7 @@ fn run_github_login(debug: bool) -> Result<(), String> {
             "--name",
             &container,
             "--network",
-            ENCLAVE_NET,
+            ENCLAVE_EGRESS_NETS,
             "--secret",
             &format!(
                 "{},{GIT_VAULT_TOKEN_SECRET_OPTS}",
@@ -7859,6 +7859,23 @@ mod tests {
                 "{name} must not reference the nonexistent `bridge` network: {args:?}"
             );
         }
+    }
+
+    // Regression: github-login/enclave-egress-regression. The GitHub login
+    // helper must dual-home onto the managed egress network so `gh auth login`
+    // can reach api.github.com from the internal enclave.
+    #[test]
+    fn github_login_helper_dual_homes_onto_managed_egress_network() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let login_window = source_window(source, "fn run_github_login(debug: bool)");
+        assert!(
+            login_window.contains("ENCLAVE_EGRESS_NETS"),
+            "run_github_login must use ENCLAVE_EGRESS_NETS not ENCLAVE_NET: {login_window}"
+        );
+        assert!(
+            !login_window.contains("ENCLAVE_NET,"),
+            "run_github_login must not reference ENCLAVE_NET (no egress): {login_window}"
+        );
     }
 
     // Regression: the egress network must be ensured on every enclave-bootstrap

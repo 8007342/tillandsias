@@ -33,7 +33,7 @@ outbound HTTPS to `api.github.com`.
 - id: `github-login/enclave-egress-regression`
 - owner_host: linux
 - capability_tags: [rust, podman, networking, vault, github-login, release]
-- status: ready
+- status: done
 - discovered_by: operator curl-install smoke on immutable Linux
 - release: `v0.3.260616.2`
 - related_packets:
@@ -98,3 +98,20 @@ outbound HTTPS to `api.github.com`.
     host: linux
     lease_id: "lease-linux-github-login-egress-fix-20260618T0228"
     expires_at: "2026-06-18T06:28:05Z"
+  - type: completed
+    ts: "2026-06-18T02:35:00Z"
+    agent_id: "linux-bigpickle-20260618T0228Z"
+    host: linux
+    lease_id: "lease-linux-github-login-egress-fix-20260618T0228"
+    evidence_refs:
+      - "main.rs:3876 ENCLAVE_NET → ENCLAVE_EGRESS_NETS (dual-home gh-login helper)"
+      - "new test: github_login_helper_dual_homes_onto_managed_egress_network"
+    note: >
+      Root cause: the GitHub login helper was launched with only
+      --network tillandsias-enclave (internal, no egress), so gh auth login
+      could not reach api.github.com. Fix: changed to ENCLAVE_EGRESS_NETS
+      (tillandsias-enclave,tillandsias-egress) dual-homing the helper
+      container onto the managed egress network, consistent with the proxy
+      and git-service pattern. Added source-level regression test pinning
+      ENCLAVE_EGRESS_NETS in run_github_login. cargo test --workspace and
+      cargo fmt --all -- --check pass.
