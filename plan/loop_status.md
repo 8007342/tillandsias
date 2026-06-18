@@ -1,36 +1,40 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-18T01:14:30Z
+LastExecutionTime: 2026-06-18T01:40:39Z
 
 ## This Loop
 
-- **Cycle type**: meta-orchestration on `linux_immutable` (Linux with
-  `rpm-ostree` present). Started on clean `linux-next` at `4247bf17`.
-  Worktree was clean and `git pull --ff-only origin linux-next` was already up
-  to date.
+- **Cycle type**: meta-orchestration release follow-through on Linux. Continued
+  the in-flight `v0.3.260618.1` release after PR #34 had been merged and the
+  tag/workflow_dispatch run existed. Fast-forwarded over concurrent plan-only
+  ledger updates (`4247bf17`, `d12736ab`) before writing this final release
+  result.
 - **Worker drain**: No lease was claimed this cycle.
   - `nanoclawv2-orchestration` is still actively claimed by
     `nanoclawv2-orchestration-202606172207` until 2026-06-18T02:07Z.
   - `policy/no-python-runtime-scripts` is still actively claimed by
     `no-python-slice-1-202606172215` until 2026-06-18T02:15Z.
   - `github-login/enclave-egress-regression` remains ready for Linux after the
-    active release/smoke coordination settles.
+    next published-release smoke confirms whether the new release still
+    reproduces the helper egress failure.
 - **Sibling branch audit**:
   - `main`: `b0dba63e` (tagged `v0.3.260618.1`).
-  - `linux-next`: `4247bf17` (current HEAD).
+  - `linux-next`: `d12736ab` before this ledger update.
   - `windows-next`: `38e6e972`; ancestor of `linux-next` (0 drift).
   - `osx-next`: `a97ee0be`; ancestor of `linux-next` (0 drift).
-- **Release state**: `gh release view` still reports latest published release
-  `v0.3.260616.2` (published 2026-06-17T00:19:59Z). Tag
-  `v0.3.260618.1` exists on `origin/main`, and `release.yml` run
-  27729620789 is in progress from workflow_dispatch on that tag. At
-  2026-06-18T01:14Z the Linux release job was still in step 7,
-  "Build musl-static binaries via Nix", and `gh release view v0.3.260618.1`
-  returned "release not found".
-- **E2E gates**: Curl-install smoke was not run this cycle because immutable
-  Linux can only smoke a published release artifact. The latest published
-  artifact (`v0.3.260616.2`) already has a smoke finding, while
-  `v0.3.260618.1` is not yet published.
+- **Release state**: `v0.3.260618.1` is now published:
+  https://github.com/8007342/tillandsias/releases/tag/v0.3.260618.1.
+  PR #34 merged `linux-next` to `main`, `VERSION` was bumped on `main` in
+  `b0dba63e`, the tag was pushed, and workflow_dispatch run 27729620789
+  completed green across Linux musl (38m15s), macOS arm64 tray (1m22s), and
+  Windows x64 tray (3m42s). Linux artifact:
+  https://github.com/8007342/tillandsias/releases/download/v0.3.260618.1/tillandsias-linux-x86_64.
+  Non-fatal annotation observed: Determinate/FlakeHub login warning at
+  `.github#55`; the run still concluded success.
+- **E2E gates**: Curl-install smoke was not run in this release-follow-through
+  cycle. The next immutable Linux action is to run
+  `/smoke-curl-install-and-test-e2e` against latest (`v0.3.260618.1`) and file
+  PASS or findings.
 
 ## Active Conflicts & Mediation
 
@@ -42,12 +46,9 @@ LastExecutionTime: 2026-06-18T01:14:30Z
 
 ## Blockers
 
-- **OPEN / release in flight**: `v0.3.260618.1` has been tagged on `main`, but
-  the release workflow has not yet produced a GitHub release object. Next
-  immutable Linux action: when run 27729620789 completes and
-  `gh release view` reports `v0.3.260618.1` as published, run
-  `/smoke-curl-install-and-test-e2e` against the latest release and file PASS
-  or findings.
+- **CLEARED / release in flight**: `v0.3.260618.1` is published and the release
+  workflow completed green. Next immutable Linux action: run
+  `/smoke-curl-install-and-test-e2e` against latest and file PASS or findings.
 - **OPEN / ready**: `github-login/enclave-egress-regression` remains ready.
   It should not be hidden by the new release tag; after the next published
   smoke, either confirm it persists or close/supersede it with evidence.
@@ -56,8 +57,8 @@ LastExecutionTime: 2026-06-18T01:14:30Z
 
 ## Assignment Board
 
-- **Immutable Linux primary**: wait for `v0.3.260618.1` release publication,
-  then run `/smoke-curl-install-and-test-e2e`.
+- **Immutable Linux primary**: run `/smoke-curl-install-and-test-e2e` against
+  latest published release `v0.3.260618.1`.
 - **Linux worker fallback**: after active leases expire or checkpoint,
   `github-login/enclave-egress-regression` is the highest-signal ready Linux
   packet, followed by the currently leased `nanoclawv2-orchestration` and
@@ -71,8 +72,9 @@ LastExecutionTime: 2026-06-18T01:14:30Z
 
 ## Stale Or Pending Pings
 
-- Latest published release `v0.3.260616.2` contains the clean-rootless
-  forge-lane regression and the GitHub login helper egress regression.
-- Tag `v0.3.260618.1` exists but is not yet a published release as of
-  2026-06-18T01:14Z; smoke should key off the GitHub release object, not the
-  tag alone.
+- Latest published release is `v0.3.260618.1`; curl-install smoke has not yet
+  been run against it.
+- Prior release `v0.3.260616.2` reproduced the clean-rootless forge-lane
+  regression and the GitHub login helper egress regression. Treat
+  `v0.3.260618.1` smoke as the current truth before closing or superseding
+  those findings.
