@@ -1,6 +1,6 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-18T09:08Z
+Last updated: 2026-06-18T10:23Z
 
 This file is the first stop for agents inspecting `plan/issues/`. Historical
 issue reports remain in this directory for evidence and auditability, but only
@@ -184,6 +184,27 @@ The 2026-06-16 critical/high forge proposals were triaged in
 - **Reclaimable packets unchanged**: `nanoclawv2-orchestration` and
   `policy/no-python-runtime-scripts` remain available for Linux claim.
 - **No e2e gate run**: no runtime crate/image delta since released v0.3.260618.1.
+
+## This Cycle (2026-06-18T10:23Z, windows)
+
+- **Recovered 13 stranded commits**: a prior Windows cycle committed the
+  07:25Z meta-orchestration record, the forge PTY fix (`d761b418`), and the
+  `v0.3.260618.1` plan/TRACES batch but never pushed. Pushed
+  `7674f823..8ab39e97` to `origin/windows-next` (ff-safe).
+- **Synced `linux-next`**: merged `origin/linux-next` (`2e7a53b6`, incl.
+  `fix(policy): port cheatsheet tier check to Rust`) into `windows-next`;
+  resolved `plan/loop_status.md` by taking the newer Linux coordinator content.
+- **Added `repeat.ps1`**: committed the Windows launcher that locates bash and
+  delegates to `./repeat` (parse-validated). Previously untracked local-only.
+- **Worker drain**: No Windows-owned ready work in `plan/index.yaml`; all
+  Windows-owned packets are `done`/`completed`. Yielded.
+- **E2E gates**: BLOCKED. Smart App Control is enforcing on this host
+  (`VerifiedAndReputablePolicyState=1`) and blocks execution of unsigned cargo
+  build-script binaries (`os error 4551`), so the native local-build e2e cannot
+  run. Curl-install e2e skipped (latest release `v0.3.260618.1` == latest
+  tested). Production WSL2 substrate verified healthy via non-destructive probe
+  (`wsl -l -v`: `tillandsias` registered, VERSION 2).
+  Finding: `plan/issues/windows-smart-app-control-build-block-2026-06-18.md`.
 
 ## This Cycle (2026-06-18T07:25Z, windows)
 
