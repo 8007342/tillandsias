@@ -151,3 +151,60 @@ How a rebuild reaches the menu (for the fix):
     a clone. The legacy handle_clone_project shows the success-status+rebuild
     pattern but is dead code and also never re-scans ~/src. Filed as an open bug
     packet for pickup by /advance-work-from-plan.
+
+- type: claimed
+  ts: "2026-06-18T04:40:39Z"
+  agent_id: linux-tlatoani-opus-worker3-20260618T044039Z
+  host: linux
+  note: >
+    Claimed bug/clone-tray-ux-not-refreshed on linux-next. Root cause confirmed
+    against current code: handle_launch_cloud_project (tray/mod.rs ~1716-1798)
+    sets "⏳ Cloning …" but the clone-success path returns no clearing status —
+    control falls through to handle_launch_project still showing the cloning
+    line. state.projects is seeded once at startup (run_tray_mode_with_debug,
+    discover_projects()) with no post-startup writer (grep confirms no other
+    `state.projects =`), so a fresh checkout never reaches build_local_projects_
+    submenu's 🏠 ~/src list. The EnumerateLocalProjects control handler scans but
+    only replies over the socket; it does not write back into the live
+    state.projects. Matches the packet's analysis exactly.
+
+- type: progress
+  ts: "2026-06-18T04:40:39Z"
+  agent_id: linux-tlatoani-opus-worker3-20260618T044039Z
+  host: linux
+  fix_commit: 8e9fa2d9
+  note: >
+    Implemented the minimal fix in crates/tillandsias-headless/src/tray/mod.rs:
+    (1) Added TrayService::refresh_local_projects() — the missing post-startup
+    writer: re-scans ~/src via discover_projects(), stores into state.projects,
+    updates projects_hash, bumps revision. (2) On the clone-success path in
+    handle_launch_cloud_project (after clone_project_from_github succeeds) it now
+    sets "✓ Cloned <name>" (TrayIconState::Mature), calls refresh_local_projects(),
+    then rebuild_after_state_change() before handing off to handle_launch_project.
+    The 🥀 Clone failed path is unchanged; the git-fetch (already-on-disk) branch
+    is unchanged. (3) Extracted discover_projects_in(&Path) from discover_projects()
+    so the scan-and-sort contract is unit-testable without mutating the
+    process-global HOME. (4) Added regression test
+    refresh_local_projects_picks_up_new_checkout (uses tempfile) asserting a
+    rescan surfaces a newly created checkout, sorted, and bumps the menu revision.
+    Did NOT remove the dead legacy handle_clone_project, and did NOT centralize
+    both handlers into one helper beyond refresh_local_projects (handle_clone_
+    project is dead and out of scope). Validated: cargo build/clippy --features
+    tray (clean; pre-existing fetch_github_username dead_code + vault-cfg clippy
+    suggestion are unrelated), cargo fmt --check clean, the new test passes, and
+    ./build.sh --check passes (the "Failed to start dev proxy container" dev-cache
+    warning is the known unrelated local issue).
+
+- type: completed-pending-runtime
+  ts: "2026-06-18T04:40:39Z"
+  agent_id: linux-tlatoani-opus-worker3-20260618T044039Z
+  host: linux
+  fix_commit: 8e9fa2d9
+  note: >
+    Source-level fix landed on linux-next (commit 8e9fa2d9). Acceptance evidence
+    for the status-clear, ~/src-refresh, and rebuild is covered at the unit level
+    and by code inspection. OUTSTANDING / open evidence item: full runtime
+    validation — actually cloning a not-yet-on-disk repo from ☁️ Cloud > on a
+    live tray with a logged-in GitHub session and visually confirming the status
+    clears to "✓ Cloned …" and 🏠 ~/src gains the new checkout without a restart —
+    requires an operator and is left open. Not pushed; no merge-to-main/release.

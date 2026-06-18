@@ -104,18 +104,22 @@ the items below are immediate work.
 
 ### bug/clone-tray-ux-not-refreshed
 
-- status: open (operator-reported 2026-06-18; reclaimable)
+- status: fix-landed (runtime validation pending) — commit `8e9fa2d9` on
+  linux-next
 - owner_host: linux
 - source: `plan/issues/clone-tray-ux-not-refreshed-2026-06-18.md`
-- severity: medium — clone succeeds on disk but tray stays on "Cloning…" and
-  `~/src` never refreshes
-- next_action: In `tray/mod.rs` `handle_launch_cloud_project`, on clone success
-  clear the status, re-scan `~/src` (post-startup writer for `state.projects`),
-  and rebuild the menu — mirror the dead-code `handle_clone_project` pattern.
+- severity: medium — clone succeeds on disk but tray stayed on "Cloning…" and
+  `~/src` never refreshed
+- fix: `tray/mod.rs` `handle_launch_cloud_project` now, on clone success, sets a
+  "✓ Cloned <name>" status, calls the new `TrayService::refresh_local_projects()`
+  (re-scans `~/src` into `state.projects` + bumps revision — the missing
+  post-startup writer), then `rebuild_after_state_change()`. Regression test
+  `refresh_local_projects_picks_up_new_checkout` added.
 - blocker: none
 - evidence_required:
-  - after a successful clone the tray status clears and `~/src` lists the new
-    checkout without a restart
+  - [open] runtime: actually clone a not-yet-on-disk repo from `☁️ Cloud >` on a
+    live tray and observe the status clears AND `🏠 ~/src` lists the new checkout
+    without a restart (needs an operator with a logged-in GitHub session)
 
 ### enclave/network-level-egress-deny
 
