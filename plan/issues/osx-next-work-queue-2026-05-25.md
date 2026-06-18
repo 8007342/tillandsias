@@ -956,6 +956,28 @@ accessor.
 
 ## Events
 
+### event: meta-orchestration cycle 2026-06-18T13:16Z — macOS (osx-next)
+
+- agent_id: `macos-big-pickle`
+- action: advance-work-from-plan drain — no eligible autonomous macOS work found
+- step 49 status: 49a/b/c/e DONE; 49d remains user-attended (not autonomous-claimable)
+- linux-next advanced to f12793cf (meta-orch idle loop, merged sibling cycles)
+- windows-next at e332afb6 (repeat.ps1 launcher + plan cycle)
+- siblings: main=b0dba63e, linux-next=f12793cf, windows-next=e332afb6, osx-next=df70be22
+- untracked artifacts remain (same as prior cycles)
+- no eligible shaped work packets for macOS autonomous claim
+- E2E gates skipped (no code changes, latest release is current v0.3.260618.1)
+
+### event: meta-orchestration cycle 2026-06-18T07:11Z — macOS (osx-next)
+
+- agent_id: `macos-big-pickle`
+- action: advance-work-from-plan drain — no eligible autonomous macOS work found
+- step 49 status: 49a/b/c/e DONE; 49d remains user-attended (not autonomous-claimable)
+- linux-next advanced to d36f9ba1 (forge PTY verification evidence clarification)
+- siblings: main=b0dba63e, linux-next=d36f9ba1, windows-next=7674f823, osx-next=c8a6fef9
+- no eligible shaped work packets for macOS autonomous claim
+- pushed osx-next checkpoint to origin
+
 ### event: meta-orchestration cycle 2026-06-17T22:57Z — macOS (osx-next)
 
 - agent_id: `macos-big-pickle`

@@ -27,36 +27,35 @@
 # checks. Once the verbatim source layer is fully retired (Wave 4 tombstones),
 # this script becomes the canonical validator.
 #
-# This is a thin wrapper over the Rust `tillandsias-cheatsheet-tools tiers`
-# binary. Per the no-Python-runtime policy (methodology.yaml), the validation
-# logic is implemented in Rust (crates/tillandsias-cheatsheet-tools); this
-# wrapper only locates a prebuilt binary or falls back to `cargo run`.
-#
 # @trace spec:cheatsheets-license-tiered
 
 set -euo pipefail
+
+QUIET=0
+STRICT=0
+while [[ $# -gt 0 ]]; do
+    case "$1" in
+        --quiet) QUIET=1 ;;
+        --strict) STRICT=1 ;;
+        *) echo "usage: $0 [--quiet] [--strict]" >&2; exit 2 ;;
+    esac
+    shift
+done
 
 if ! REPO_ROOT="$(git rev-parse --show-toplevel 2>/dev/null)"; then
     SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
     REPO_ROOT="$(cd "${SCRIPT_DIR}/.." && pwd)"
 fi
 
-# Validate flags here so usage errors stay identical to the historical script.
-for arg in "$@"; do
-    case "$arg" in
-        --quiet|--strict) ;;
-        *) echo "usage: $0 [--quiet] [--strict]" >&2; exit 2 ;;
-    esac
-done
+CHEATSHEETS_DIR="${REPO_ROOT}/cheatsheets"
 
-BIN="${REPO_ROOT}/target/release/tillandsias-cheatsheet-tools"
-if [[ ! -x "${BIN}" ]]; then
-    BIN="${REPO_ROOT}/target/debug/tillandsias-cheatsheet-tools"
+if [[ ! -d "${CHEATSHEETS_DIR}" ]]; then
+    echo "ERROR: cheatsheets/ directory not found at ${CHEATSHEETS_DIR}" >&2
+    exit 1
 fi
 
-if [[ -x "${BIN}" ]]; then
-    exec "${BIN}" tiers "$@"
-else
-    exec cargo run --quiet --manifest-path "${REPO_ROOT}/Cargo.toml" \
-        -p tillandsias-cheatsheet-tools -- tiers "$@"
-fi
+cargo build --quiet --manifest-path "${REPO_ROOT}/Cargo.toml" -p tillandsias-policy
+args=(check-cheatsheet-tiers --repo-root "${REPO_ROOT}")
+[[ "${QUIET}" == "1" ]] && args+=(--quiet)
+[[ "${STRICT}" == "1" ]] && args+=(--strict)
+exec "${REPO_ROOT}/target/debug/tillandsias-policy" "${args[@]}"

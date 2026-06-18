@@ -2647,7 +2647,13 @@ fn build_opencode_forge_args(
     ];
     match mode {
         ForgeMode::Cli => {
-            if !diagnostics {
+            // When a prompt is provided, the entrypoint execs
+            // `opencode run --dangerously-skip-permissions "<prompt>"` which is
+            // non-interactive.  Skip --interactive --tty so podman does not
+            // attempt to claim the terminal (which causes SIGTTIN/SIGTTOU /
+            // stopped T state when the parent is in a harness PTY).
+            // @trace plan/issues/build-install-smoke-e2e-findings-2026-06-14.md
+            if !diagnostics && prompt.is_none() {
                 args.push("--interactive".into());
                 args.push("--tty".into());
             }
@@ -3847,14 +3853,12 @@ fn run_github_login(debug: bool) -> Result<(), String> {
 
     ensure_image_exists(&root, "git", &image, debug)?;
 
-    // The helper container dual-homes onto ENCLAVE_EGRESS_NETS
-    // (tillandsias-enclave,tillandsias-egress). On a clean/cleaned rootless
-    // Podman store those networks may not exist yet, so `podman run --network
-    // tillandsias-enclave,tillandsias-egress …` would fail before login can
-    // start. Ensure both networks idempotently first, matching every other
-    // enclave-bootstrap flow (run_status_check, etc.). ensure_enclave_network
-    // also ensures the egress leg.
-    // @trace spec:enclave-network, spec:proxy-container
+    // The helper dual-homes onto `tillandsias-egress` (see the run args below)
+    // to reach api.github.com, since `tillandsias-enclave` is `--internal`.
+    // `--github-login` can run without a prior full `--init`, so the managed
+    // egress network may not exist yet — ensure both networks here, otherwise
+    // the dual-home leg fails to resolve. ensure_enclave_network ensures the
+    // egress network first.
     ensure_enclave_network(debug)?;
 
     // Bring Vault online before the interactive paste so the user isn't
@@ -3910,6 +3914,9 @@ fn run_github_login(debug: bool) -> Result<(), String> {
             "--rm",
             "--name",
             &container,
+            // Dual-home for api.github.com egress (see the vault branch above).
+            "--network",
+            ENCLAVE_EGRESS_NETS,
             "--cap-drop=ALL",
             "--security-opt=no-new-privileges",
             "--userns=keep-id",
@@ -7886,28 +7893,12 @@ mod tests {
             !login_window.contains("ENCLAVE_NET,"),
             "run_github_login must not reference ENCLAVE_NET (no egress): {login_window}"
         );
-    }
-
-    // Regression: bug/github-login-failure. run_github_login launches the gh
-    // helper on ENCLAVE_EGRESS_NETS, but on a clean/cleaned rootless Podman
-    // store those networks may not exist yet. It must ensure the networks
-    // (via ensure_enclave_network, which also ensures the egress leg) BEFORE
-    // the helper `podman run`, or the launch fails and login never starts.
-    #[test]
-    fn github_login_ensures_networks_before_helper_launch() {
-        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
-        let login_window = source_window(source, "fn run_github_login(debug: bool)");
-        let ensure_idx = login_window.find("ensure_enclave_network(debug)?").expect(
-            "run_github_login must call ensure_enclave_network before launching the helper",
-        );
-        // Match the actual `--network ENCLAVE_EGRESS_NETS` launch arg, not the
-        // explanatory comment above the ensure call (which also names the const).
-        let network_arg_idx = login_window
-            .find("            ENCLAVE_EGRESS_NETS,")
-            .expect("run_github_login must dual-home the helper onto ENCLAVE_EGRESS_NETS");
+        // The dual-home leg only resolves if the managed egress network exists.
+        // `--github-login` can run without a prior full `--init`, so the login
+        // path must ensure the networks itself.
         assert!(
-            ensure_idx < network_arg_idx,
-            "ensure_enclave_network must run before the helper `podman run --network ENCLAVE_EGRESS_NETS`"
+            login_window.contains("ensure_enclave_network(debug)?"),
+            "run_github_login must ensure the enclave+egress networks before launching the helper: {login_window}"
         );
     }
 
@@ -8102,8 +8093,9 @@ mod tests {
             true,
         );
 
-        assert!(has_arg(&args, "--interactive"));
-        assert!(has_arg(&args, "--tty"));
+        // Prompted mode is non-interactive; podman should not claim a TTY.
+        assert!(!has_arg(&args, "--interactive"));
+        assert!(!has_arg(&args, "--tty"));
         assert!(has_arg(&args, "--entrypoint"));
         assert!(has_arg(
             &args,

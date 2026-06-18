@@ -133,6 +133,12 @@ pub fn parse_gh_repo_list(json: &str) -> Vec<CloudProjectEntry> {
 ///
 /// `token: Some(t)` sets `GH_TOKEN=t` on the spawned process. `token: None`
 /// lets `gh` use its own auth config.
+///
+/// Gated to `listen-vsock`: the sole caller is the in-VM vsock dispatcher's
+/// `GithubLoginStatusRequest` handler (`vsock_server.rs`, same cfg). Without
+/// this gate the function is dead code under `--features tray` and trips the
+/// `-D warnings` clippy gate (the CI `Run clippy` step builds `--features tray`).
+#[cfg(feature = "listen-vsock")]
 pub fn fetch_github_username(token: Option<&str>) -> Option<String> {
     let mut cmd = std::process::Command::new("gh");
     cmd.args(["api", "user", "--jq", ".login"]);
