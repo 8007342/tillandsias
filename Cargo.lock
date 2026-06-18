@@ -2918,6 +2918,10 @@ dependencies = [
 ]
 
 [[package]]
+name = "tillandsias-cheatsheet-tools"
+version = "0.1.0"
+
+[[package]]
 name = "tillandsias-control-wire"
 version = "0.1.170"
 dependencies = [

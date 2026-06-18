@@ -33,7 +33,8 @@ programs.
 
 Rewrite or retire the existing Python-backed maintenance scripts:
 
-- `scripts/check-cheatsheet-tiers.sh`
+- ~~`scripts/check-cheatsheet-tiers.sh`~~ **rewritten** (slice 2, 2026-06-18) →
+  thin wrapper over Rust `tillandsias-cheatsheet-tools tiers`
 - `scripts/check-cheatsheet-sources.sh`
 - `scripts/bind-provenance-local-paths.sh`
 - `scripts/audit-cheatsheet-sources.sh`
@@ -78,3 +79,24 @@ explicitly approved by The Tlatoani.
   note: >
     Retired check-convergence-velocity.py. The shell wrapper is now a
     no-op stub. 3 down, 10 to go. Commit cae63645.
+
+- type: claim
+  ts: "2026-06-18T04:21:00Z"
+  agent_id: "linux-tlatoani-opus-202606180421"
+  host: linux
+  lease_id: "no-python-slice-2-202606180421"
+  expires_at: "2026-06-18T08:21:00Z"
+
+- type: progress
+  ts: "2026-06-18T04:22:00Z"
+  agent_id: "linux-tlatoani-opus-202606180421"
+  host: linux
+  note: >
+    Slice 2: Rewrote scripts/check-cheatsheet-tiers.sh as a thin wrapper over a
+    new Rust crate `tillandsias-cheatsheet-tools` (subcommand `tiers`). Faithful
+    port of the former Python frontmatter parser, tier validation, pull-on-demand
+    section checks, CRDT override discipline, and flake.nix/Containerfile package
+    discovery. Wrapper locates target/{release,debug} binary or falls back to
+    `cargo run`. Validated: `cargo build -p tillandsias-cheatsheet-tools` clean;
+    `scripts/check-cheatsheet-tiers.sh` reports 210 cheatsheets validated, exit 0.
+    4 down, 9 to go.
