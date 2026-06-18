@@ -33,7 +33,14 @@ outbound HTTPS to `api.github.com`.
 - id: `github-login/enclave-egress-regression`
 - owner_host: linux
 - capability_tags: [rust, podman, networking, vault, github-login, release]
-- status: done
+- status: in_progress
+- reopened: >
+    2026-06-18 — the code fix (d3f4e2f3) merged to `linux-next` and the packet
+    was marked `done`, but NO published release contains it. The latest release
+    `v0.3.260618.1` predates d3f4e2f3, so the operator still hits the bug on
+    every installable release. `done` means "merged", not "shipped"; this packet
+    is not closed until a published release carries the fix. See the
+    `release_gate` acceptance and the events below.
 - discovered_by: operator curl-install smoke on immutable Linux
 - release: `v0.3.260616.2`
 - related_packets:
@@ -80,6 +87,13 @@ outbound HTTPS to `api.github.com`.
     path.
   - Direct external curl from an ordinary enclave-only container still fails.
   - The existing forge/proxy egress smoke remains green.
+- release_gate: >
+    The packet closes ONLY when the fix is in a PUBLISHED GitHub release (a
+    release object, not just a tag) AND an operator re-run of
+    `tillandsias --github-login` on that release saves the token into Vault
+    without the api.github.com connection error. Code-merged-to-linux-next is
+    necessary but not sufficient — the 2026-06-18 reopen happened precisely
+    because a merged-but-unreleased fix left every installable release broken.
 - events:
   - type: discovered
     ts: "2026-06-18T00:36:11Z"
@@ -115,3 +129,34 @@ outbound HTTPS to `api.github.com`.
       and git-service pattern. Added source-level regression test pinning
       ENCLAVE_EGRESS_NETS in run_github_login. cargo test --workspace and
       cargo fmt --all -- --check pass.
+  - type: reopened
+    ts: "2026-06-18T17:22:00Z"
+    agent_id: "linux-tlatoani-claude-opus-20260618T170827Z"
+    host: linux
+    note: >
+      Operator re-hit `error connecting to api.github.com` on `--github-login`
+      from a published release. Investigation: the fix (d3f4e2f3) is NOT an
+      ancestor of any published release — `git merge-base --is-ancestor
+      d3f4e2f3 v0.3.260618.1` is false, and v0.3.260618.1 is the latest
+      published release. The packet was marked `done` on merge-to-linux-next,
+      but no release ever shipped it, so every installable binary is still
+      broken. Reopened with an explicit release_gate. Root cause empirically
+      re-confirmed on the mutable Linux builder: git-image container on
+      `tillandsias-enclave` alone → curl api.github.com HTTP=000; on
+      `tillandsias-enclave,tillandsias-egress` → HTTP=200.
+  - type: hardened
+    ts: "2026-06-18T17:22:00Z"
+    agent_id: "linux-tlatoani-claude-opus-20260618T170827Z"
+    host: linux
+    evidence_refs:
+      - "run_github_login now calls ensure_enclave_network(debug)? before launching the helper (login works without a prior full --init)."
+      - "non-vault branch of run_github_login also dual-homes onto ENCLAVE_EGRESS_NETS."
+      - "augmented test github_login_helper_dual_homes_onto_managed_egress_network to pin the ensure_enclave_network call."
+      - "cloud_projects::fetch_github_username gated behind listen-vsock — it was dead code under --features tray and broke `cargo clippy --features tray -- -D warnings`, blocking a clean release build."
+    note: >
+      Built on top of upstream d3f4e2f3. Local validation on the mutable Linux
+      builder (rustup stable): `cargo fmt --check --all` OK; `cargo clippy
+      --workspace --features tray -- -D warnings` clean; `cargo test --workspace
+      --lib`, `cargo test -p tillandsias-headless --bin tillandsias`, and the
+      `--features tray` bin tests all green (153 tray bin tests pass). Next:
+      merge to main + push a release so the fix reaches an installable binary.
