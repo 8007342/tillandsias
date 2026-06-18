@@ -98,13 +98,17 @@ the items below are immediate work.
 
 ### local-smoke/forge-pty-stopped-before-container-start
 
-- status: claimed
+- status: done
 - owner_host: linux
 - source: `plan/issues/build-install-smoke-e2e-findings-2026-06-14.md`
-- next_action: Diagnose and fix the stopped T state — remove `--tty` from prompted forge launch when a prompt is provided, since `opencode run` is non-interactive.
-- lease: `forge-pty-stopped-202606180635` (expires at 2026-06-18T10:35:56Z)
-- blocker: none known; the same local install passed `--status-check`, so this
-  is not yet evidence of a general forge image/runtime failure.
+- fix_commit: `d761b418` on `linux-next`
+- fix_summary: >
+    In `build_opencode_forge_args`, skip `--interactive --tty` when a
+    prompt is provided via `--prompt`, because the entrypoint execs
+    `opencode run --dangerously-skip-permissions` which is non-interactive.
+    Podman no longer attempts to claim the terminal, avoiding the
+    SIGTTIN/SIGTTOU / stopped T state in harness PTYs.
+- blocker: cleared by `d761b418`.
 - evidence_required:
   - final local-smoke forge lane exits 0 or emits actionable runtime logs
   - expected forge container is visible while the lane is active
