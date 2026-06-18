@@ -1,60 +1,45 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-18T06:39Z
+LastExecutionTime: 2026-06-18T09:08Z
 
 ## This Loop
 
-- **Cycle type**: meta-orchestration follow-up on local-smoke forge PTY blocker.
-- **Worker drain**: claimed and completed
-  `local-smoke/forge-pty-stopped-before-container-start`.
-- **Fix**: `d761b418` changes prompted forge launch to omit
-  `--interactive --tty` when `--prompt` is present. Prompted mode runs
-  `opencode run`, so it is non-interactive; removing the TTY prevents Podman
-  from stopping in harness PTYs via SIGTTIN/SIGTTOU.
+- **Cycle type**: meta-orchestration coordination merge after sibling drift.
+- **Startup**: clean `linux-next`; host classified `linux_mutable`; fetched
+  origin and fast-forward checked `origin/linux-next` with no local drift.
+- **Worker drain**: no new implementation claim this cycle. The remaining
+  reclaimable Linux packets (`nanoclawv2-orchestration` and
+  `policy/no-python-runtime-scripts`) are both larger slices; this pass produced
+  a coherent coordination merge because `origin/osx-next` advanced.
+- **Merged sibling work**: integrated plan-only macOS commit `965fc1ae`
+  (`chore(plan): record macOS meta-orch cycle 2026-06-18T07:11Z`) into
+  `linux-next`; resolved the expected `plan/loop_status.md` semantic conflict.
 - **Sibling branch audit**:
   - `main`: `b0dba63e` (tagged `v0.3.260618.1`).
-  - `linux-next`: `8249b9fa` after this pass.
+  - `linux-next`: includes this coordination merge after `d36f9ba1`.
   - `windows-next`: `7674f823`; ancestor of `linux-next` (0 drift ahead).
-  - `osx-next`: `c8a6fef9`; ancestor of `linux-next` (0 drift ahead).
-- **E2E gates**:
-  - Pre-fix non-interactive targeted reproduction PASS:
-    `tillandsias . --opencode --prompt "Use the /forge-continuous-enhancement skill"`
-    exited 0 and launched the in-forge agent that diagnosed the PTY-specific
-    launcher bug; evidence under `target/local-forge-lane-repro/20260618T063403Z/`.
-  - `cargo build -p tillandsias-headless` PASS.
-  - `cargo test -p tillandsias-headless -- opencode_args_mount_workspace_and_prompt`
-    PASS.
-  - Full `cargo test -p tillandsias-headless` was run in the forge and had 3
-    pre-existing/environment-sensitive failures; the changed targeted test
-    passed after update.
+  - `osx-next`: `965fc1ae`; integrated by this pass.
+- **E2E gates**: skipped for this coordination-only merge. No crate, script,
+  image, or release artifact changed.
 
 ## Active Conflicts & Mediation
 
-- No active merge conflicts. Both sibling branches remain represented in
-  `linux-next`.
+- No active merge conflicts after this pass.
 - High-Velocity Alignment Event: **Inactive**; no deadlock, thrash, or
-  wrong-direction sibling work found in this pass.
-- Convergence velocity: **positive / no event triggered**. One ready blocker
-  was closed.
+  wrong-direction sibling work found.
+- Convergence velocity: **neutral/positive**. Sibling plan drift was reduced to
+  zero and no new correctness debt was added.
 
 ## Blockers
 
-- **CLEARED / local build-init smoke**: local `v0.3.260618.1` build/install,
-  destructive reset, fresh init, direct enclave egress denial, and status-check
-  all pass.
-- **CLEARED / forge continuous lane in harness**:
-  `local-smoke/forge-pty-stopped-before-container-start` is fixed and marked
-  done by source-level fix plus targeted verification. Full post-fix local
-  build/install smoke remains eligible for the next destructive e2e cycle.
 - **PARTIAL / targeted runtime evidence still needed**:
-  `github-login/enclave-egress-regression` is fixed in `d3f4e2f3`; this cycle
-  adds clean-init, direct enclave-denial, and status-check evidence. The actual
-  `tillandsias --debug --github-login` token paste remains operator-attended.
-  A timed PTY automation attempt was aborted because it can echo the host `gh`
-  token before the helper reaches its hidden `/dev/tty` prompt; no incomplete
-  smoke log was retained. Use a fresh/rotated token for the next attended run.
-- **RECLAIMABLE**: `nanoclawv2-orchestration` and `policy/no-python-runtime-scripts`
-  leases have expired. Both are available for fresh claim.
+  `github-login/enclave-egress-regression` is fixed in `d3f4e2f3`, with clean
+  init, direct enclave-denial, and status-check evidence captured. The actual
+  `tillandsias --debug --github-login` token paste remains operator-attended;
+  do not use timed PTY token injection.
+- **RECLAIMABLE**: `nanoclawv2-orchestration` and
+  `policy/no-python-runtime-scripts` leases have expired. Both are available
+  for fresh Linux claim.
 - **OPEN / user-attended**: macOS step 49d / m8 interactive smoke remains
   operator-gated after automated VM Ready evidence passed.
 
@@ -75,4 +60,4 @@ LastExecutionTime: 2026-06-18T06:39Z
 
 - Next useful Linux runtime probe: operator-attended
   `tillandsias --debug --github-login` on a clean post-init install to close the
-  remaining helper-egress runtime evidence; do not use timed PTY token injection.
+  remaining helper-egress runtime evidence.

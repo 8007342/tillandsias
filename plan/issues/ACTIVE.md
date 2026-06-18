@@ -1,6 +1,6 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-18T05:38Z
+Last updated: 2026-06-18T09:08Z
 
 This file is the first stop for agents inspecting `plan/issues/`. Historical
 issue reports remain in this directory for evidence and auditability, but only
@@ -201,6 +201,19 @@ The 2026-06-16 critical/high forge proposals were triaged in
   operator-attended because timed PTY token injection is unsafe; the forge
   continuous-enhancement lane entered stopped `T` state before container
   startup in this harness (`forge_exit=blocked-stopped-pty`).
+
+## This Cycle (2026-06-18T09:08Z, linux)
+
+- **Merged osx-next plan-ledger commit** `965fc1ae` into `linux-next`:
+  macOS meta-orchestration cycle entry (no eligible autonomous macOS work,
+  step 49d remains user-attended).
+- **Resolved plan cache conflict** in `plan/loop_status.md` by keeping the
+  latest Linux smoke/forge PTY evidence and adding the macOS no-work cycle as
+  integrated sibling state.
+- **Reclaimable packets unchanged**: `nanoclawv2-orchestration` and
+  `policy/no-python-runtime-scripts` remain available for Linux claim.
+- **No e2e gate run**: this was a plan-only coordination merge with no crate,
+  script, image, or release artifact delta.
 
 ## This Cycle (2026-06-18T02:28Z, linux)
 
