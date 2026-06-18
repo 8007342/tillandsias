@@ -1,6 +1,6 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-18T09:08Z
+Last updated: 2026-06-18T10:15Z
 
 This file is the first stop for agents inspecting `plan/issues/`. Historical
 issue reports remain in this directory for evidence and auditability, but only
@@ -158,7 +158,22 @@ The 2026-06-16 critical/high forge proposals were triaged in
   - [x] VM reaches Ready phase after provisioning (49c verified)
   - [ ] m8 interactive smoke passes (49d) — user-attended
 
-## Achieved This Cycle (2026-06-17T22:57Z, macos)
+## Achieved This Cycle (2026-06-18T10:15Z, macos)
+
+- **meta-orchestration sync**: Fast-forwarded `osx-next` to current shared
+  `linux-next` state (`2e7a53b6`) so macOS has the latest plan/code frontier.
+- **startup hygiene finding**: Tracked worktree was clean, but untracked
+  artifacts remain: `build-osx-tray.sh`,
+  `plan/issues/macos-windows-tray-ux-parity-audit-2026-06-13.md`,
+  `research/`, and `src-tauri/`. They are not ignored and appear meaningful, so
+  this cycle left them untouched and skipped new autonomous implementation work.
+- **advance-work-from-plan drain**: No eligible autonomous macOS work was
+  claimed. The active macOS item remains step 49d / m8 interactive smoke, which
+  is user-attended and not suitable for unattended validation.
+- **E2E gates**: Skipped; this checkpoint changed only plan ledger text and
+  branch sync state.
+
+## Previous macOS Cycle (2026-06-17T22:57Z, macos)
 
 - **repeat**: Added macOS-compatible timeout fallback (`run_with_timeout`) so the
   repeat loop works on stock macOS without GNU coreutils. Commit `807f95f9`.

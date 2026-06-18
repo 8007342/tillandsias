@@ -1,32 +1,35 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-18T10:09Z
+LastExecutionTime: 2026-06-18T10:15Z
 
 ## This Loop
 
-- **Cycle type**: meta-orchestration worker drain with a no-Python policy
-  checkpoint.
-- **Startup**: clean `linux-next`; host classified `linux_mutable`; fetched
-  origin and fast-forward checked `origin/linux-next` with no local drift at
-  start (`0f191e7c`, then lease claim `6adef34f`).
-- **Worker drain**: reclaimed `policy/no-python-runtime-scripts` with lease
-  `no-python-slice-2-202606181001` and shipped a coherent slice. The former
-  embedded Python validator in `scripts/check-cheatsheet-tiers.sh` now lives in
-  Rust under `tillandsias-policy check-cheatsheet-tiers`; the shell wrapper only
-  builds/dispatches the Rust tool.
-- **Merged sibling work**: no new sibling branch merge this cycle.
+- **Cycle type**: meta-orchestration macOS sync and hygiene checkpoint.
+- **Startup**: host classified `macos`; branch `osx-next`; fetched origin.
+  Tracked worktree was clean, but untracked startup artifacts were present:
+  `build-osx-tray.sh`,
+  `plan/issues/macos-windows-tray-ux-parity-audit-2026-06-13.md`,
+  `research/`, and `src-tauri/`. They are not ignored and appear to be
+  meaningful prior macOS tray artifacts, so this cycle left them untouched and
+  did not claim new implementation work.
+- **Shared-state sync**: fast-forwarded `osx-next` from `965fc1ae` to
+  `2e7a53b6`, matching current `origin/linux-next` shared plan/code state.
+- **Worker drain**: skipped after startup hygiene classification; autonomous
+  macOS work remains blocked on the user-attended m8 interactive smoke
+  (step 49d).
+- **Merged sibling work**: no macOS-originated implementation work merged.
 - **Sibling branch audit**:
   - `main`: `b0dba63e` (tagged `v0.3.260618.1`).
-  - `linux-next`: advanced locally with no-Python claim/checkpoint work after
-    `6adef34f`.
+  - `linux-next`: `2e7a53b6` (no-Python checker slice and plan updates).
   - `windows-next`: `7674f823`; ancestor of `linux-next` (0 drift ahead).
-  - `osx-next`: `965fc1ae`; already integrated.
-- **Verification**: `cargo test -p tillandsias-policy` PASS,
-  `cargo clippy -p tillandsias-policy -- -D warnings` PASS, and
-  `./scripts/check-cheatsheet-tiers.sh --strict` PASS (210 validated).
-- **E2E gates**: skipped for this policy/checker-only slice. No runtime crate,
-  image, installer, or release artifact behavior changed; focused checker and
-  Rust validation covered the modified surface.
+  - `osx-next`: local `2e7a53b6` before this ledger commit; remote
+    `965fc1ae`, now ready to push after this checkpoint.
+- **Verification**: no build/test run. This cycle changed only plan ledger text
+  and performed a git fast-forward sync; the startup artifacts were not
+  validated.
+- **E2E gates**: skipped. The remaining macOS gate is operator-attended m8
+  interactive smoke, and this cycle introduced no runtime, installer, or VM
+  behavior change.
 
 ## Active Conflicts & Mediation
 
@@ -50,6 +53,9 @@ LastExecutionTime: 2026-06-18T10:09Z
   available for fresh Linux claim.
 - **OPEN / user-attended**: macOS step 49d / m8 interactive smoke remains
   operator-gated after automated VM Ready evidence passed.
+- **STARTUP HYGIENE / macOS**: untracked artifacts listed above remain in the
+  worktree. They need owner review or a dedicated cleanup/checkpoint before an
+  unattended macOS implementation slice should claim new work in this checkout.
 
 ## Assignment Board
 
