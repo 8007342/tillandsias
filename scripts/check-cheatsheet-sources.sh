@@ -17,10 +17,10 @@
 # Exits 0 only if all ERROR-level checks pass.
 # Warnings are printed but do not cause a non-zero exit.
 #
-# This is a thin wrapper over the Rust `tillandsias-cheatsheet-tools sources`
-# binary. Per the no-Python-runtime policy (methodology.yaml), the validation
-# logic is implemented in Rust (crates/tillandsias-cheatsheet-tools); this
-# wrapper only locates a prebuilt binary or falls back to `cargo run`.
+# This is a thin wrapper over the Rust `tillandsias-policy
+# check-cheatsheet-sources` subcommand. Per the no-Python-runtime policy
+# (methodology.yaml), the validation logic is implemented in Rust
+# (crates/tillandsias-policy); this wrapper only builds and execs the binary.
 #
 # @trace spec:cheatsheet-source-layer
 # OpenSpec change: cheatsheet-source-layer
@@ -42,14 +42,6 @@ for arg in "$@"; do
     esac
 done
 
-BIN="${REPO_ROOT}/target/release/tillandsias-cheatsheet-tools"
-if [[ ! -x "${BIN}" ]]; then
-    BIN="${REPO_ROOT}/target/debug/tillandsias-cheatsheet-tools"
-fi
-
-if [[ -x "${BIN}" ]]; then
-    exec "${BIN}" sources "$@"
-else
-    exec cargo run --quiet --manifest-path "${REPO_ROOT}/Cargo.toml" \
-        -p tillandsias-cheatsheet-tools -- sources "$@"
-fi
+cargo build --quiet --manifest-path "${REPO_ROOT}/Cargo.toml" -p tillandsias-policy
+exec "${REPO_ROOT}/target/debug/tillandsias-policy" \
+    check-cheatsheet-sources --repo-root "${REPO_ROOT}" "$@"

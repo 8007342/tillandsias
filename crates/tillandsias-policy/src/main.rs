@@ -1,3 +1,4 @@
+use std::collections::BTreeSet;
 use std::env;
 use std::fs;
 use std::path::{Path, PathBuf};
@@ -7,6 +8,8 @@ fn main() {
     let args: Vec<String> = env::args().collect();
     match args.get(1).map(String::as_str) {
         Some("check-cheatsheet-tiers") => check_cheatsheet_tiers(&args[2..]),
+        Some("check-cheatsheet-sources") => check_cheatsheet_sources(&args[2..]),
+        Some("audit-cheatsheet-sources") => audit_cheatsheet_sources(&args[2..]),
         Some("check-no-python-scripts") => check_no_python_scripts(),
         Some("validate-yaml") => validate_yaml(&args[2..]),
         Some("--help") | Some("-h") | None => usage(),
@@ -23,6 +26,8 @@ fn usage() {
     eprintln!(
         "  tillandsias-policy check-cheatsheet-tiers [--repo-root <path>] [--quiet] [--strict]"
     );
+    eprintln!("  tillandsias-policy check-cheatsheet-sources [--repo-root <path>] [--no-sha]");
+    eprintln!("  tillandsias-policy audit-cheatsheet-sources [--repo-root <path>]");
     eprintln!("  tillandsias-policy check-no-python-scripts");
     eprintln!("  tillandsias-policy validate-yaml <file>...");
 }
@@ -605,6 +610,673 @@ fn push_unique(values: &mut Vec<String>, value: String) {
     if !values.iter().any(|existing| existing == &value) {
         values.push(value);
     }
+}
+
+// ===========================================================================
+// `check-cheatsheet-sources` subcommand — faithful port of the former
+// scripts/check-cheatsheet-sources.sh (via tillandsias-cheatsheet-tools sources).
+//
+// Validates cheatsheet <-> verbatim-source binding per §5 of
+// docs/strategy/cheatsheet-source-layer-plan.md:
+//   1. Every cheatsheet ## Provenance URL must be in INDEX.json (WARNING when
+//      unfetched — not yet blocking).
+//   2. Every local: path must exist OR have a sidecar with redistribution
+//      do-not-bundle / manual-review-required (ERROR otherwise).
+//   3. Orphan detection: every INDEX entry should be cited (WARNING).
+//   4. SHA-256 verification of present files (skippable with --no-sha).
+//
+// Exit 0 only if all ERROR-level checks pass; warnings never fail.
+//
+// @trace spec:cheatsheet-source-layer
+// ===========================================================================
+
+fn check_cheatsheet_sources(args: &[String]) {
+    let mut no_sha = false;
+    let mut repo_root = env::current_dir().unwrap_or_else(|err| {
+        eprintln!("failed to read current dir: {err}");
+        process::exit(2);
+    });
+
+    let mut idx = 0;
+    while idx < args.len() {
+        match args[idx].as_str() {
+            "--no-sha" => no_sha = true,
+            "--repo-root" => {
+                idx += 1;
+                let Some(value) = args.get(idx) else {
+                    eprintln!("--repo-root requires a path");
+                    process::exit(2);
+                };
+                repo_root = PathBuf::from(value);
+            }
+            other => {
+                eprintln!("error: unknown argument: {other}");
+                eprintln!("usage: check-cheatsheet-sources [--repo-root <path>] [--no-sha]");
+                process::exit(2);
+            }
+        }
+        idx += 1;
+    }
+
+    let root = repo_root;
+    let sources_dir = root.join("cheatsheet-sources");
+    let cheatsheets_dir = root.join("cheatsheets");
+    let index_file = sources_dir.join("INDEX.json");
+
+    // Sanity: INDEX.json must exist. Mirrors the shell early-exit (exit 0).
+    if !index_file.is_file() {
+        println!(
+            "warning: {} does not exist — no sources fetched yet; nothing to validate",
+            index_file.display()
+        );
+        println!("  Run: scripts/fetch-cheatsheet-source.sh <URL> --cite cheatsheets/<path>");
+        return;
+    }
+
+    let index_text = match fs::read_to_string(&index_file) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("ERROR: cannot read {}: {e}", index_file.display());
+            process::exit(1);
+        }
+    };
+    let index: serde_json::Value = match serde_json::from_str(&index_text) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("ERROR: {} is not valid JSON: {e}", index_file.display());
+            process::exit(1);
+        }
+    };
+    let entries: Vec<&serde_json::Value> = index
+        .get("entries")
+        .and_then(|v| v.as_array())
+        .map(|a| a.iter().collect())
+        .unwrap_or_default();
+
+    // url_set: union of url/fetch_url/final_redirect values.
+    let mut url_set: BTreeSet<String> = BTreeSet::new();
+    for entry in &entries {
+        for key in ["url", "fetch_url", "final_redirect"] {
+            if let Some(u) = entry.get(key).and_then(|v| v.as_str())
+                && !u.is_empty()
+            {
+                url_set.insert(u.to_string());
+            }
+        }
+    }
+
+    let mut errors: Vec<String> = Vec::new();
+    let mut warnings: Vec<String> = Vec::new();
+
+    // Collect cheatsheet files (sorted by path string), excluding INDEX/TEMPLATE.
+    let mut md_files: Vec<PathBuf> = Vec::new();
+    collect_markdown_files(&cheatsheets_dir, &mut md_files);
+    md_files.sort_by(|a, b| a.to_string_lossy().cmp(&b.to_string_lossy()));
+    md_files.retain(|p| {
+        let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
+        name != "INDEX.md" && name != "TEMPLATE.md"
+    });
+
+    let mut cited_local_paths: BTreeSet<String> = BTreeSet::new();
+    let mut checked_urls = 0usize;
+    let mut checked_local = 0usize;
+
+    // Checks 1 & 2.
+    for cs_file in &md_files {
+        let rel_cs = cs_file
+            .strip_prefix(&root)
+            .unwrap_or(cs_file)
+            .to_string_lossy()
+            .to_string();
+        let text = match fs::read_to_string(cs_file) {
+            Ok(t) => t,
+            Err(_) => continue,
+        };
+        let (urls, local_paths) = extract_provenance(&text);
+
+        for url in &urls {
+            checked_urls += 1;
+            if !url_set.contains(url) {
+                warnings.push(format!("UNFETCHED: {rel_cs}: URL not in INDEX.json: {url}"));
+            }
+        }
+
+        for local_path in &local_paths {
+            checked_local += 1;
+            cited_local_paths.insert(local_path.clone());
+            let abs_path = root.join(local_path);
+            let meta_path = root.join(format!("{local_path}.meta.yaml"));
+
+            if abs_path.is_file() {
+                // File exists — good.
+            } else if meta_path.is_file() {
+                let redist = read_redistribution(&meta_path);
+                if redist == "do-not-bundle" || redist == "manual-review-required" {
+                    // Expected; sidecar-only is OK.
+                } else {
+                    errors.push(format!(
+                        "MISSING FILE: {rel_cs}: local: path has sidecar but no verbatim file and redistribution is '{redist}': {local_path}"
+                    ));
+                }
+            } else {
+                errors.push(format!(
+                    "MISSING: {rel_cs}: local: path does not exist (no file, no sidecar): {local_path}"
+                ));
+            }
+        }
+    }
+
+    // Check 3: orphan detection.
+    for entry in &entries {
+        let lp = entry
+            .get("local_path")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        if lp.is_empty() {
+            continue;
+        }
+        let cited_by = entry
+            .get("cited_by")
+            .and_then(|v| v.as_array())
+            .map(|a| !a.is_empty())
+            .unwrap_or(false);
+        if !cited_local_paths.contains(lp) && !cited_by {
+            warnings.push(format!(
+                "ORPHAN: {lp} is in INDEX.json but not cited by any cheatsheet"
+            ));
+        }
+    }
+
+    // Check 4: SHA-256 verification.
+    let mut sha_ok = 0usize;
+    if !no_sha {
+        use sha2::{Digest, Sha256};
+        for entry in &entries {
+            let lp = entry
+                .get("local_path")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let expected_sha = entry
+                .get("content_sha256")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            if lp.is_empty() || expected_sha.is_empty() {
+                continue;
+            }
+            let abs_path = root.join(lp);
+            let bytes = match fs::read(&abs_path) {
+                Ok(b) => b,
+                Err(_) => continue, // File absent (do-not-bundle / not fetched) — skip.
+            };
+            let actual_sha = format!("{:x}", Sha256::digest(&bytes));
+            if actual_sha != expected_sha {
+                errors.push(format!(
+                    "SHA MISMATCH: {lp}: expected {}... got {}... (content modified after fetch)",
+                    &expected_sha[..expected_sha.len().min(16)],
+                    &actual_sha[..actual_sha.len().min(16)]
+                ));
+            } else {
+                sha_ok += 1;
+            }
+        }
+    }
+
+    // Report.
+    let sha_note = if no_sha {
+        " (SHA check skipped)".to_string()
+    } else {
+        format!(", {sha_ok} SHA verifications")
+    };
+    println!(
+        "check-cheatsheet-sources: {} cheatsheets, {} INDEX entries, {checked_urls} provenance URLs, {checked_local} local: paths checked{sha_note}",
+        md_files.len(),
+        entries.len()
+    );
+
+    if !warnings.is_empty() {
+        println!("\nWarnings ({}):", warnings.len());
+        for w in &warnings {
+            println!("  WARNING: {w}");
+        }
+    }
+
+    if !errors.is_empty() {
+        println!("\nErrors ({}):", errors.len());
+        for e in &errors {
+            println!("  ERROR: {e}");
+        }
+        process::exit(1);
+    }
+
+    println!("OK: all checks passed.");
+}
+
+/// Read `redistribution:` field from a sidecar meta.yaml (first match wins).
+fn read_redistribution(meta_path: &Path) -> String {
+    let text = match fs::read_to_string(meta_path) {
+        Ok(t) => t,
+        Err(_) => return String::new(),
+    };
+    for line in text.lines() {
+        let line = line.trim_end();
+        if let Some(rest) = line.strip_prefix("redistribution:") {
+            // Mirror Python's `^redistribution:\s*(\S+)` — first whitespace-delimited token.
+            return rest.split_whitespace().next().unwrap_or("").to_string();
+        }
+    }
+    String::new()
+}
+
+/// Faithful port of the former Python `extract_provenance`.
+/// Returns (urls, local_paths) parsed from the cheatsheet's ## Provenance section.
+fn extract_provenance(text: &str) -> (Vec<String>, Vec<String>) {
+    let mut urls: Vec<String> = Vec::new();
+    let mut local_paths: Vec<String> = Vec::new();
+    let mut in_provenance = false;
+
+    for line in text.lines() {
+        let stripped = line.trim();
+        if is_provenance_heading(stripped) {
+            in_provenance = true;
+            continue;
+        }
+        if in_provenance && is_h2_heading(stripped) {
+            in_provenance = false;
+            continue;
+        }
+        if !in_provenance {
+            continue;
+        }
+
+        // Angle-bracketed URLs: <https://...>
+        extract_angle_urls(stripped, &mut urls);
+        // Bare URLs not in angle brackets / backticks.
+        extract_bare_urls(stripped, &mut urls);
+        // local: `path`
+        if let Some(lp) = extract_local_path(stripped) {
+            local_paths.push(lp);
+        }
+    }
+
+    (urls, local_paths)
+}
+
+/// Match `^##\s+Provenance` after stripping.
+fn is_provenance_heading(stripped: &str) -> bool {
+    if let Some(rest) = stripped.strip_prefix("##") {
+        let rest = rest.trim_start();
+        // require at least one whitespace after ## (\s+), then "Provenance"
+        rest.starts_with("Provenance")
+            && stripped
+                .as_bytes()
+                .get(2)
+                .is_some_and(|b| b.is_ascii_whitespace())
+    } else {
+        false
+    }
+}
+
+/// Match `^##\s+` after stripping.
+fn is_h2_heading(stripped: &str) -> bool {
+    stripped.starts_with("##")
+        && stripped
+            .as_bytes()
+            .get(2)
+            .is_some_and(|b| b.is_ascii_whitespace())
+}
+
+/// Port of `re.finditer(r'<(https://[^>]+)>', line)`.
+fn extract_angle_urls(line: &str, urls: &mut Vec<String>) {
+    let bytes = line.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'<' {
+            let rest = &line[i + 1..];
+            if rest.starts_with("https://")
+                && let Some(close) = rest.find('>')
+            {
+                let u = &rest[..close];
+                if !u.is_empty() {
+                    urls.push(u.to_string());
+                }
+                i += 1 + close + 1;
+                continue;
+            }
+        }
+        i += 1;
+    }
+}
+
+/// Port of `re.finditer(r'(?<![<`])(https://\S+?)(?:[,\s>)]|$)', line)` with
+/// the subsequent `.rstrip('.,)')` and dedup against existing urls.
+fn extract_bare_urls(line: &str, urls: &mut Vec<String>) {
+    let bytes = line.as_bytes();
+    let mut search = 0;
+    while let Some(rel) = line[search..].find("https://") {
+        let start = search + rel;
+        // Negative lookbehind: previous char must not be '<' or '`'.
+        let prev_ok = start == 0 || !matches!(bytes[start - 1], b'<' | b'`');
+        if !prev_ok {
+            search = start + "https://".len();
+            continue;
+        }
+        // Python pattern is `https://\S+?` (non-greedy, ≥1 char after the
+        // scheme) terminated by `[,\s>)]|$`, with a trailing `.rstrip('.,)')`.
+        // The `\S+?` body must consume at least one NON-whitespace character;
+        // if the char right after the scheme is whitespace (or EOL), there is
+        // no match at all (e.g. `git+https:// VCS` yields nothing). When that
+        // mandatory char is itself a `,`/`)`/`.`, `\S+?` consumes it and the
+        // rstrip later removes it — Python emits a bare `https://` there.
+        let scheme_end = start + "https://".len();
+        if scheme_end >= bytes.len() || bytes[scheme_end].is_ascii_whitespace() {
+            search = scheme_end.max(start + 1);
+            continue;
+        }
+        // Consume the mandatory first char, then \S+ up to the first
+        // terminator (`,`, `>`, `)`) or whitespace.
+        let mut end = scheme_end + 1;
+        while end < bytes.len() && !bytes[end].is_ascii_whitespace() {
+            if matches!(bytes[end], b',' | b'>' | b')') {
+                break;
+            }
+            end += 1;
+        }
+        let mut u = line[start..end].to_string();
+        // .rstrip('.,)')
+        while u.ends_with('.') || u.ends_with(',') || u.ends_with(')') {
+            u.pop();
+        }
+        if !u.is_empty() && !urls.contains(&u) {
+            urls.push(u);
+        }
+        search = end.max(start + 1);
+    }
+}
+
+/// Port of `re.search(r'local:\s*`([^`]+)`', line)`.
+fn extract_local_path(line: &str) -> Option<String> {
+    let idx = line.find("local:")?;
+    let after = &line[idx + "local:".len()..];
+    let after = after.trim_start();
+    let after = after.strip_prefix('`')?;
+    let close = after.find('`')?;
+    let path = &after[..close];
+    if path.is_empty() {
+        None
+    } else {
+        Some(path.to_string())
+    }
+}
+
+// ===========================================================================
+// `audit-cheatsheet-sources` subcommand — faithful port of the former
+// scripts/audit-cheatsheet-sources.sh (via tillandsias-cheatsheet-tools audit).
+//
+// Emits a CSV (Python csv.writer dialect: CRLF line terminators, minimal
+// quoting) with one row per cheatsheet Provenance URL:
+//   cheatsheet_path, source_url, in_index_json, license_allowlisted,
+//   allowlist_key, sha256_present, local_path_if_fetched
+// Cheatsheets with no Provenance URLs emit a single "(no provenance URLs)" row.
+// Exit code is always 0; errors are encoded as cell values.
+//
+// @trace spec:cheatsheet-source-layer
+// ===========================================================================
+
+fn audit_cheatsheet_sources(args: &[String]) {
+    let mut repo_root = env::current_dir().unwrap_or_else(|err| {
+        eprintln!("failed to read current dir: {err}");
+        process::exit(2);
+    });
+
+    let mut idx = 0;
+    while idx < args.len() {
+        match args[idx].as_str() {
+            "--repo-root" => {
+                idx += 1;
+                let Some(value) = args.get(idx) else {
+                    eprintln!("--repo-root requires a path");
+                    process::exit(2);
+                };
+                repo_root = PathBuf::from(value);
+            }
+            other => {
+                eprintln!("error: unknown argument: {other}");
+                eprintln!("usage: audit-cheatsheet-sources [--repo-root <path>]");
+                process::exit(2);
+            }
+        }
+        idx += 1;
+    }
+
+    let root = repo_root;
+    let sources_dir = root.join("cheatsheet-sources");
+    let cheatsheets_dir = root.join("cheatsheets");
+    let allowlist_path = sources_dir.join("license-allowlist.toml");
+    let index_file = sources_dir.join("INDEX.json");
+
+    // --- Load INDEX.json into url -> entry map. ---
+    // Mirror Python: build url_to_entry from url/fetch_url/final_redirect keys.
+    let mut url_to_entry: std::collections::HashMap<String, serde_json::Value> =
+        std::collections::HashMap::new();
+    if index_file.is_file()
+        && let Ok(text) = fs::read_to_string(&index_file)
+        && let Ok(index) = serde_json::from_str::<serde_json::Value>(&text)
+        && let Some(entries) = index.get("entries").and_then(|v| v.as_array())
+    {
+        for entry in entries {
+            for key in ["url", "fetch_url", "final_redirect"] {
+                if let Some(u) = entry.get(key).and_then(|v| v.as_str())
+                    && !u.is_empty()
+                {
+                    url_to_entry.insert(u.to_string(), entry.clone());
+                }
+            }
+        }
+    }
+
+    // --- Load allowlist domain keys. ---
+    let allowlisted_domains = load_allowlist_domains(&allowlist_path);
+
+    // --- Walk cheatsheets (sorted by path string), excluding INDEX/TEMPLATE. ---
+    let mut md_files: Vec<PathBuf> = Vec::new();
+    collect_markdown_files(&cheatsheets_dir, &mut md_files);
+    md_files.sort_by(|a, b| a.to_string_lossy().cmp(&b.to_string_lossy()));
+    md_files.retain(|p| {
+        let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
+        name != "INDEX.md" && name != "TEMPLATE.md"
+    });
+
+    let mut out = String::new();
+    write_csv_row(
+        &mut out,
+        &[
+            "cheatsheet_path",
+            "source_url",
+            "in_index_json",
+            "license_allowlisted",
+            "allowlist_key",
+            "sha256_present",
+            "local_path_if_fetched",
+        ],
+    );
+
+    for cs_file in &md_files {
+        let rel_cs = cs_file
+            .strip_prefix(&root)
+            .unwrap_or(cs_file)
+            .to_string_lossy()
+            .to_string();
+        let text = match fs::read_to_string(cs_file) {
+            Ok(t) => t,
+            Err(_) => continue, // open() would raise in Python; glob hits are readable.
+        };
+        let urls = extract_provenance_urls_audit(&text);
+
+        if urls.is_empty() {
+            write_csv_row(
+                &mut out,
+                &[&rel_cs, "(no provenance URLs)", "N/A", "N/A", "", "N/A", ""],
+            );
+            continue;
+        }
+
+        for url in &urls {
+            let in_index = url_to_entry.contains_key(url);
+            let allowlist_key = is_allowlisted(url, &allowlisted_domains);
+            let allowlisted = !allowlist_key.is_empty();
+
+            let mut local_path = String::new();
+            let mut sha_present = false;
+            if in_index {
+                let entry = &url_to_entry[url];
+                local_path = entry
+                    .get("local_path")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                sha_present = entry
+                    .get("content_sha256")
+                    .and_then(|v| v.as_str())
+                    .map(|s| !s.is_empty())
+                    .unwrap_or(false);
+            }
+
+            write_csv_row(
+                &mut out,
+                &[
+                    &rel_cs,
+                    url,
+                    if in_index { "yes" } else { "no" },
+                    if allowlisted { "yes" } else { "no" },
+                    &allowlist_key,
+                    if sha_present { "yes" } else { "no" },
+                    &local_path,
+                ],
+            );
+        }
+    }
+
+    print!("{out}");
+}
+
+/// Parse allowlist `[domains."<key>"]` headers into a set of keys.
+/// Mirrors Python `re.match(r'\[domains\."([^"]+)"\]', line.strip())`.
+fn load_allowlist_domains(allowlist_path: &Path) -> BTreeSet<String> {
+    let mut domains: BTreeSet<String> = BTreeSet::new();
+    let Ok(text) = fs::read_to_string(allowlist_path) else {
+        return domains;
+    };
+    for line in text.lines() {
+        let stripped = line.trim();
+        if let Some(key) = parse_domains_header(stripped) {
+            domains.insert(key);
+        }
+    }
+    domains
+}
+
+/// Match `^\[domains\."([^"]+)"\]` (anchored, since Python uses re.match).
+fn parse_domains_header(stripped: &str) -> Option<String> {
+    let rest = stripped.strip_prefix("[domains.\"")?;
+    let close = rest.find('"')?;
+    let key = &rest[..close];
+    if key.is_empty() {
+        return None;
+    }
+    // Remainder after the closing quote must start with `]`.
+    let after = &rest[close + 1..];
+    if after.starts_with(']') {
+        Some(key.to_string())
+    } else {
+        None
+    }
+}
+
+/// Faithful port of the audit script's `is_allowlisted`.
+/// Returns the matching allowlist key, or "" if none.
+fn is_allowlisted(url: &str, allowlisted_domains: &BTreeSet<String>) -> String {
+    let u = if let Some(rest) = url.strip_prefix("https://") {
+        rest
+    } else if let Some(rest) = url.strip_prefix("http://") {
+        rest
+    } else {
+        url
+    };
+    let host = u.split('/').next().unwrap_or("");
+    // path_parts = u[len(host):].lstrip('/').split('/')
+    let after_host = &u[host.len()..];
+    let trimmed = after_host.trim_start_matches('/');
+    let path_parts: Vec<&str> = trimmed.split('/').collect();
+
+    // for depth in range(min(3, len(path_parts)), -1, -1)
+    let max_depth = 3.min(path_parts.len());
+    for depth in (0..=max_depth).rev() {
+        let candidate = if depth > 0 {
+            format!("{host}/{}", path_parts[..depth].join("/"))
+        } else {
+            host.to_string()
+        };
+        if allowlisted_domains.contains(&candidate) {
+            return candidate;
+        }
+    }
+    String::new()
+}
+
+/// Provenance-URL extractor for the audit command. Differs from
+/// `extract_provenance`: it skips lines containing `**Last updated:**`,
+/// does NOT collect local: paths, and dedups across the whole section.
+fn extract_provenance_urls_audit(text: &str) -> Vec<String> {
+    let mut urls: Vec<String> = Vec::new();
+    let mut in_provenance = false;
+    for line in text.lines() {
+        let stripped = line.trim();
+        if is_provenance_heading(stripped) {
+            in_provenance = true;
+            continue;
+        }
+        if in_provenance && is_h2_heading(stripped) {
+            in_provenance = false;
+            continue;
+        }
+        if !in_provenance {
+            continue;
+        }
+        if stripped.contains("**Last updated:**") {
+            continue;
+        }
+        extract_angle_urls(stripped, &mut urls);
+        extract_bare_urls(stripped, &mut urls);
+    }
+    urls
+}
+
+/// Write one CSV row using Python's csv.writer default dialect:
+/// minimal quoting (only when a field contains a comma, double-quote, CR, or
+/// LF), doubled quotes for escaping, and a `\r\n` line terminator.
+fn write_csv_row(out: &mut String, fields: &[&str]) {
+    for (i, field) in fields.iter().enumerate() {
+        if i > 0 {
+            out.push(',');
+        }
+        let needs_quote = field
+            .chars()
+            .any(|c| c == ',' || c == '"' || c == '\r' || c == '\n');
+        if needs_quote {
+            out.push('"');
+            for c in field.chars() {
+                if c == '"' {
+                    out.push('"');
+                }
+                out.push(c);
+            }
+            out.push('"');
+        } else {
+            out.push_str(field);
+        }
+    }
+    out.push('\r');
+    out.push('\n');
 }
 
 #[cfg(test)]

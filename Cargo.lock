@@ -2918,14 +2918,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "tillandsias-cheatsheet-tools"
-version = "0.1.0"
-dependencies = [
- "serde_json",
- "sha2",
-]
-
-[[package]]
 name = "tillandsias-control-wire"
 version = "0.1.170"
 dependencies = [
@@ -3124,7 +3116,9 @@ dependencies = [
 name = "tillandsias-policy"
 version = "0.1.0"
 dependencies = [
+ "serde_json",
  "serde_yaml",
+ "sha2",
 ]
 
 [[package]]

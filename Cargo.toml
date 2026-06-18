@@ -1,7 +1,6 @@
 [workspace]
 members = [
     "crates/tillandsias-browser-mcp",
-    "crates/tillandsias-cheatsheet-tools",
     "crates/tillandsias-control-wire",
     "crates/tillandsias-core",
     "crates/tillandsias-headless",

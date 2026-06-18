@@ -149,12 +149,15 @@ the items below are immediate work.
 - progress: `check-cheatsheet-tiers.sh` is Rust-backed via
   `tillandsias-policy check-cheatsheet-tiers`; `bind-provenance-local-paths.sh`,
   `regenerate-source-index.sh`, `refresh-cheatsheet-sources.sh` are tombstone-only;
-  `check-convergence-velocity` retired. Consolidation in progress: `sources` and
-  `audit` validators being re-homed into `tillandsias-policy` (decision: single
-  policy crate owns all cheatsheet validation).
-- next_action: Finish re-homing sources+audit into `tillandsias-policy`, then port
-  the remaining Python-runtime scripts (`fetch-cheatsheet-source.sh`,
-  `regenerate-cheatsheet-index.sh`, `distill-forge-diagnostics.sh`), then make
+  `check-convergence-velocity` retired. Consolidation DONE (2026-06-18): `sources`
+  and `audit` validators are now re-homed into `tillandsias-policy` as the
+  `check-cheatsheet-sources` and `audit-cheatsheet-sources` subcommands, both
+  byte-for-byte parity-verified; the `tillandsias-cheatsheet-tools` crate has been
+  deleted and removed from the workspace. A single policy crate now owns all
+  cheatsheet validation (tiers + sources + audit).
+- next_action: Port the remaining Python-runtime scripts
+  (`fetch-cheatsheet-source.sh`, `regenerate-cheatsheet-index.sh`,
+  `distill-forge-diagnostics.sh`), then make
   `scripts/check-no-python-scripts.sh` pass.
 - blocker: those three scripts still execute Python; each needs a Rust
   replacement or explicit Tlatoani approval.

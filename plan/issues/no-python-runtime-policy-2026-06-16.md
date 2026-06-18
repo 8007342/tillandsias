@@ -51,10 +51,12 @@ Rewrite or retire the existing Python-backed maintenance scripts:
 
 - ~~`scripts/check-cheatsheet-tiers.sh`~~ **rewritten in Rust dispatcher**
   (slice 2, 2026-06-18)
-- `scripts/check-cheatsheet-sources.sh`
+- ~~`scripts/check-cheatsheet-sources.sh`~~ **Rust-backed via
+  `tillandsias-policy check-cheatsheet-sources`** (consolidation, 2026-06-18)
 - ~~`scripts/bind-provenance-local-paths.sh`~~ **retired to tombstone-only
   wrapper** (slice 3, 2026-06-18)
-- `scripts/audit-cheatsheet-sources.sh`
+- ~~`scripts/audit-cheatsheet-sources.sh`~~ **Rust-backed via
+  `tillandsias-policy audit-cheatsheet-sources`** (consolidation, 2026-06-18)
 - `scripts/fetch-cheatsheet-source.sh`
 - ~~`scripts/regenerate-source-index.sh`~~ **retired to tombstone-only wrapper**
   (slice 4, 2026-06-18)
@@ -214,3 +216,52 @@ explicitly approved by The Tlatoani.
     Continue with one of the remaining Python-backed scripts:
     `scripts/regenerate-cheatsheet-index.sh` is a good candidate next —
     single python3 invocation, well-scoped replacement in Rust.
+
+- type: progress
+  ts: "2026-06-18T23:00:10Z"
+  agent_id: "linux-tlatoani-opus-consolidate-20260618T230010Z"
+  host: linux
+  note: >
+    Consolidation: re-homed the `sources` and `audit` cheatsheet validators
+    into the existing `tillandsias-policy` crate as two new subcommands —
+    `check-cheatsheet-sources` (with `--no-sha`) and `audit-cheatsheet-sources`
+    — both accepting `--repo-root <path>` like the shipped
+    `check-cheatsheet-tiers` subcommand. Repointed
+    `scripts/check-cheatsheet-sources.sh` and
+    `scripts/audit-cheatsheet-sources.sh` to build+exec `tillandsias-policy`
+    with the new subcommands. Deleted the now-redundant
+    `crates/tillandsias-cheatsheet-tools` crate (its `tiers` subcommand was
+    already superseded by policy's shipped tiers logic) and removed it from the
+    workspace `members` list; Cargo.lock regenerated. Added `serde_json` and
+    `sha2` (workspace deps) to `tillandsias-policy/Cargo.toml`.
+  files_touched:
+    - crates/tillandsias-policy/src/main.rs
+    - crates/tillandsias-policy/Cargo.toml
+    - scripts/check-cheatsheet-sources.sh
+    - scripts/audit-cheatsheet-sources.sh
+    - Cargo.toml
+    - Cargo.lock
+    - crates/tillandsias-cheatsheet-tools/ (deleted)
+  evidence:
+    - cargo build (workspace) clean
+    - cargo clippy --workspace clean
+    - cargo fmt --check clean
+    - ./build.sh --check passes (pre-existing dev-proxy warning unrelated)
+    - byte-for-byte parity vs pre-refactor baselines:
+        diff /tmp/baseline-sources.out <(scripts/check-cheatsheet-sources.sh) → identical, exit 0
+        diff /tmp/baseline-audit.out   <(scripts/audit-cheatsheet-sources.sh) → identical, exit 0
+    - scripts/check-cheatsheet-tiers.sh still exits 0
+    - scripts/check-cheatsheet-sources.sh --no-sha exits 0 with sane output
+
+- type: completed
+  ts: "2026-06-18T23:00:10Z"
+  agent_id: "linux-tlatoani-opus-consolidate-20260618T230010Z"
+  host: linux
+  note: >
+    sources + audit cheatsheet validators consolidated into
+    `tillandsias-policy`; `tillandsias-cheatsheet-tools` crate deleted. The
+    cheatsheet validation trio (tiers, sources, audit) now lives in one Rust
+    crate. Remaining Python-runtime scripts:
+    `scripts/fetch-cheatsheet-source.sh`,
+    `scripts/regenerate-cheatsheet-index.sh`,
+    `scripts/distill-forge-diagnostics.sh`.
