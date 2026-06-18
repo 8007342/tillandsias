@@ -1,6 +1,6 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-18T05:38Z
+Last updated: 2026-06-18T09:08Z
 
 This file is the first stop for agents inspecting `plan/issues/`. Historical
 issue reports remain in this directory for evidence and auditability, but only
@@ -83,12 +83,13 @@ the items below are immediate work.
 
 ### policy/no-python-runtime-scripts
 
-- status: stalled (lease expired 2026-06-18T02:15Z; reclaimable)
+- status: in_progress
 - owner_host: linux
 - source: `plan/issues/no-python-runtime-policy-2026-06-16.md`
-- lease: `no-python-slice-1-202606172215` (EXPIRED at 2026-06-18T02:15Z)
-- next_action: Rewrite or retire the remaining Python-backed repository scripts
-  in Rust, then make `scripts/check-no-python-scripts.sh` pass.
+- lease: `no-python-slice-2-202606181001` (expires 2026-06-18T14:01Z)
+- next_action: Continue rewriting the remaining Python-backed repository
+  scripts in Rust; `check-cheatsheet-tiers.sh` is now Rust-backed and removed
+  from the no-Python checker output.
 - blocker: existing cheatsheet/provenance maintenance scripts still execute
   Python; each needs a Rust replacement or explicit Tlatoani approval.
 - evidence_required:
@@ -209,6 +210,19 @@ The 2026-06-16 critical/high forge proposals were triaged in
   operator-attended because timed PTY token injection is unsafe; the forge
   continuous-enhancement lane entered stopped `T` state before container
   startup in this harness (`forge_exit=blocked-stopped-pty`).
+
+## This Cycle (2026-06-18T09:08Z, linux)
+
+- **Merged osx-next plan-ledger commit** `965fc1ae` into `linux-next`:
+  macOS meta-orchestration cycle entry (no eligible autonomous macOS work,
+  step 49d remains user-attended).
+- **Resolved plan cache conflict** in `plan/loop_status.md` by keeping the
+  latest Linux smoke/forge PTY evidence and adding the macOS no-work cycle as
+  integrated sibling state.
+- **Reclaimable packets unchanged**: `nanoclawv2-orchestration` and
+  `policy/no-python-runtime-scripts` remain available for Linux claim.
+- **No e2e gate run**: this was a plan-only coordination merge with no crate,
+  script, image, or release artifact delta.
 
 ## This Cycle (2026-06-18T02:28Z, linux)
 
