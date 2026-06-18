@@ -39,6 +39,27 @@ LastExecutionTime: 2026-06-18T20:50Z
 
 All three forge follow-ups from the v0.3.260618.2 smoke run are now processed. No-Python cleanup progressed: slice 4 stripped dead Python from two tombstoned cheatsheet-source scripts (0e7aed90). 5 Python-backed scripts remain. Next available claimable work: remaining no-Python scripts, `nanoclawv2-orchestration` (RECLAIMABLE), or forge diagnostics chain.
 
+## Loop 2026-06-18T23:20Z (worker drain — no-python slice)
+
+- **Cycle type**: meta-orchestration worker drain on mutable Linux.
+- **Startup**: clean `linux-next`, in sync with origin (`5613b40e`); fetched
+  origin/prune. Siblings: windows-next `e332afb6`, osx-next `c7d32fb9` (both
+  ancestors of linux-next); main `6dfafdf1`.
+- **Packet claimed + completed**: `policy/no-python-runtime-scripts` —
+  `distill-forge-diagnostics.sh` slice. Ported to a `tillandsias-policy
+  distill-forge-diagnostics` subcommand; shell reduced to a thin build+exec
+  wrapper. 45/45 target/forge-diagnostics logs byte-for-byte parity-verified vs
+  the former CPython extractor. clippy/fmt/test/`build.sh --check` green;
+  workspace + serde_json consumers re-tested after enabling `preserve_order`.
+- **Remaining Python-backed scripts**: 2 — `fetch-cheatsheet-source.sh` (6
+  python3 sites, large) and `regenerate-cheatsheet-index.sh` (1 site).
+- **Other claimable**: `nanoclawv2-orchestration` (RECLAIMABLE; large
+  multi-component build with open architecture questions — needs a task-graph
+  decomposition cycle before code).
+- **E2E**: not run this cycle (worker slice; left budget for orchestrator).
+- **Release**: not warranted from this cycle alone (tooling-only change; no
+  shipped-binary behavior change).
+
 ## Active Conflicts & Mediation
 
 - Deadlocks: none detected.

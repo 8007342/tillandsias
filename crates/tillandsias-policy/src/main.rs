@@ -11,6 +11,7 @@ fn main() {
         Some("check-cheatsheet-sources") => check_cheatsheet_sources(&args[2..]),
         Some("audit-cheatsheet-sources") => audit_cheatsheet_sources(&args[2..]),
         Some("check-no-python-scripts") => check_no_python_scripts(),
+        Some("distill-forge-diagnostics") => distill_forge_diagnostics(&args[2..]),
         Some("validate-yaml") => validate_yaml(&args[2..]),
         Some("--help") | Some("-h") | None => usage(),
         Some(other) => {
@@ -29,6 +30,9 @@ fn usage() {
     eprintln!("  tillandsias-policy check-cheatsheet-sources [--repo-root <path>] [--no-sha]");
     eprintln!("  tillandsias-policy audit-cheatsheet-sources [--repo-root <path>]");
     eprintln!("  tillandsias-policy check-no-python-scripts");
+    eprintln!(
+        "  tillandsias-policy distill-forge-diagnostics [--repo-root <path>] [--latest <path>] [--all]"
+    );
     eprintln!("  tillandsias-policy validate-yaml <file>...");
 }
 
@@ -1279,6 +1283,1033 @@ fn write_csv_row(out: &mut String, fields: &[&str]) {
     out.push('\n');
 }
 
+// ===========================================================================
+// `distill-forge-diagnostics` subcommand — faithful port of the former
+// scripts/distill-forge-diagnostics.sh (which shelled out to python3 only for
+// the JSON-flatten step). Reads the latest (or a given, or all) raw forge
+// diagnostics log(s) from target/forge-diagnostics/, flattens the capabilities
+// JSON, and writes a dated markdown summary to plan/diagnostics/ — including
+// regression detection vs the previous run, an envelope-line fallback for the
+// metadata header, and container-start stream forensics from the .stderr.log
+// companion.
+//
+// @trace spec:default-image, spec:forge-as-only-runtime
+// @trace spec:cli-diagnostics, spec:runtime-diagnostics-stream
+// @trace spec:podman-idiomatic-patterns
+// @trace plan/issues/forge-diagnostics-automation-2026-05-27.md
+// ===========================================================================
+
+const C_RED: &str = "\u{1b}[0;31m";
+const C_GREEN: &str = "\u{1b}[0;32m";
+const C_YELLOW: &str = "\u{1b}[1;33m";
+const C_NC: &str = "\u{1b}[0m";
+
+fn distill_info(msg: &str) {
+    println!("{C_GREEN}[distill]{C_NC} {msg}");
+}
+
+fn distill_warn(msg: &str) {
+    println!("{C_YELLOW}[distill]{C_NC} {msg}");
+}
+
+fn distill_error(msg: &str) {
+    eprintln!("{C_RED}[distill]{C_NC} {msg}");
+}
+
+fn distill_forge_diagnostics(args: &[String]) {
+    let mut repo_root = env::current_dir().unwrap_or_else(|err| {
+        eprintln!("failed to read current dir: {err}");
+        process::exit(2);
+    });
+    let mut latest_log: Option<String> = None;
+    let mut process_all = false;
+
+    let mut idx = 0;
+    while idx < args.len() {
+        match args[idx].as_str() {
+            "--latest" => {
+                idx += 1;
+                latest_log = args.get(idx).cloned();
+            }
+            "--all" => process_all = true,
+            "--repo-root" => {
+                idx += 1;
+                let Some(value) = args.get(idx) else {
+                    eprintln!("--repo-root requires a path");
+                    process::exit(2);
+                };
+                repo_root = PathBuf::from(value);
+            }
+            "--help" | "-h" => {
+                println!(
+                    "Usage: distill-forge-diagnostics [--repo-root <path>] [--latest <path>] [--all]"
+                );
+                return;
+            }
+            other => {
+                distill_error(&format!("Unknown flag: {other}"));
+                process::exit(2);
+            }
+        }
+        idx += 1;
+    }
+
+    let diagnostics_dir = repo_root.join("target/forge-diagnostics");
+    let plan_dir = repo_root.join("plan/diagnostics");
+
+    if let Err(err) = fs::create_dir_all(&diagnostics_dir) {
+        distill_error(&format!(
+            "failed to create {}: {err}",
+            diagnostics_dir.display()
+        ));
+        process::exit(2);
+    }
+    if let Err(err) = fs::create_dir_all(&plan_dir) {
+        distill_error(&format!("failed to create {}: {err}", plan_dir.display()));
+        process::exit(2);
+    }
+
+    // Resolve default latest log when neither --latest nor --all given.
+    if latest_log.is_none() && !process_all {
+        latest_log = newest_diagnostics_log(&diagnostics_dir).map(|p| p.display().to_string());
+    }
+
+    if latest_log.is_none() && !process_all {
+        distill_warn(&format!(
+            "No diagnostics logs found in {}",
+            rel_display(&repo_root, &diagnostics_dir)
+        ));
+        distill_info("Run the forge diagnostics litmus test first to generate one.");
+        process::exit(0);
+    }
+
+    if process_all {
+        // Iterate diagnostics_*.log in shell-glob (lexical) order.
+        let mut logs = list_diagnostics_logs(&diagnostics_dir);
+        logs.sort();
+        for log in logs {
+            let _ = distill_one(&repo_root, &plan_dir, &log);
+        }
+    } else if let Some(log) = latest_log {
+        let _ = distill_one(&repo_root, &plan_dir, &PathBuf::from(log));
+    }
+
+    distill_info(&format!(
+        "Done. Summaries available in {}/",
+        rel_display(&repo_root, &plan_dir)
+    ));
+}
+
+/// Display a path relative to repo_root when possible, else absolute — mirrors
+/// the shell which `cd`s to REPO_ROOT and uses relative `target/...` strings.
+fn rel_display(root: &Path, path: &Path) -> String {
+    path.strip_prefix(root)
+        .unwrap_or(path)
+        .display()
+        .to_string()
+}
+
+/// `ls -t diagnostics_*.log | head -1` — newest by mtime.
+fn newest_diagnostics_log(dir: &Path) -> Option<PathBuf> {
+    let mut logs: Vec<(std::time::SystemTime, PathBuf)> = Vec::new();
+    let entries = fs::read_dir(dir).ok()?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        if is_diagnostics_log(&path) {
+            let mtime = entry
+                .metadata()
+                .and_then(|m| m.modified())
+                .unwrap_or(std::time::UNIX_EPOCH);
+            logs.push((mtime, path));
+        }
+    }
+    // Newest first; tie-break on path desc to be deterministic.
+    logs.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| b.1.cmp(&a.1)));
+    logs.into_iter().next().map(|(_, p)| p)
+}
+
+fn list_diagnostics_logs(dir: &Path) -> Vec<PathBuf> {
+    let mut logs = Vec::new();
+    if let Ok(entries) = fs::read_dir(dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if is_diagnostics_log(&path) {
+                logs.push(path);
+            }
+        }
+    }
+    logs
+}
+
+fn is_diagnostics_log(path: &Path) -> bool {
+    if !path.is_file() {
+        return false;
+    }
+    let name = path
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or_default();
+    name.starts_with("diagnostics_") && name.ends_with(".log") && !name.ends_with(".stderr.log")
+}
+
+/// Flattened capability entry from the diagnostics JSON.
+struct FlattenedDiagnostics {
+    /// Ordered `section.key=STATUS` / `section=value` lines plus DIAGNOSTIC:,
+    /// MISSING_TOOL:, etc., exactly as the python extractor printed them.
+    lines: Vec<String>,
+    timestamp: String,
+    forge_version: String,
+    parse_error: Option<String>,
+}
+
+/// Faithful port of the python JSON-flatten step (lines 86-129 of the script).
+/// Returns the printed-line stream plus extracted timestamp/forge_version.
+fn flatten_diagnostics_json(content: &str) -> FlattenedDiagnostics {
+    let mut lines: Vec<String> = Vec::new();
+
+    // Mirror the CPython extractor's control flow:
+    //   match = re.search(r'\{.*\}', content, re.DOTALL)
+    //   data  = json.loads(match.group(0)) if match else json.loads(content)
+    // re.search with DOTALL finds the FIRST '{' through the LAST '}' (greedy).
+    let brace_match = match (content.find('{'), content.rfind('}')) {
+        (Some(a), Some(b)) if b >= a => Some(&content[a..=b]),
+        _ => None,
+    };
+    let (to_parse, no_brace) = match brace_match {
+        Some(slice) => (slice, false),
+        None => (content, true),
+    };
+
+    let data: serde_json::Value = match serde_json::from_str(to_parse) {
+        Ok(v) => v,
+        Err(_) => {
+            // CPython surfaces a `json.JSONDecodeError`; for the common
+            // no-value case (empty file, or text not starting with a JSON
+            // value) the message is `Expecting value: line 1 column C
+            // (char N)` where N is the offset of the first non-whitespace
+            // char on the failing slice. Reproduce that exact message for
+            // the no-brace path (the dominant real-world case); fall back to
+            // a clear generic string otherwise.
+            let msg = if no_brace {
+                expecting_value_message(content)
+            } else {
+                "Failed to parse JSON".to_string()
+            };
+            return FlattenedDiagnostics {
+                lines: Vec::new(),
+                timestamp: "unknown".to_string(),
+                forge_version: "unknown".to_string(),
+                parse_error: Some(msg),
+            };
+        }
+    };
+
+    // caps = data.get('capabilities', {})
+    if let Some(caps) = data.get("capabilities").and_then(|v| v.as_object()) {
+        for (section, values) in caps {
+            if let Some(map) = values.as_object() {
+                for (key, val) in map {
+                    let status = if json_value_is_missing(val) {
+                        "MISSING"
+                    } else {
+                        "OK"
+                    };
+                    lines.push(format!("{section}.{key}={status}"));
+                }
+            } else {
+                lines.push(format!("{section}={}", json_scalar_str(values)));
+            }
+        }
+    }
+
+    // diag = data.get('diagnostics', [])
+    if let Some(diag) = data.get("diagnostics").and_then(|v| v.as_array()) {
+        for d in diag {
+            lines.push(format!("DIAGNOSTIC: {}", json_scalar_str(d)));
+        }
+    }
+
+    for t in data
+        .get("missing_tools")
+        .and_then(|v| v.as_array())
+        .into_iter()
+        .flatten()
+    {
+        lines.push(format!("MISSING_TOOL: {}", json_scalar_str(t)));
+    }
+
+    for e in data
+        .get("proposed_enhancements")
+        .and_then(|v| v.as_array())
+        .into_iter()
+        .flatten()
+    {
+        if let Some(obj) = e.as_object() {
+            let ecosystem = obj
+                .get("ecosystem")
+                .map(json_scalar_str)
+                .unwrap_or_else(|| "other".to_string());
+            let tool = obj
+                .get("tool")
+                .map(json_scalar_str)
+                .unwrap_or_else(|| "?".to_string());
+            let why = obj.get("why").map(json_scalar_str).unwrap_or_default();
+            lines.push(format!("PROPOSED_ENHANCEMENT: {ecosystem}: {tool} — {why}"));
+        } else {
+            lines.push(format!("PROPOSED_ENHANCEMENT: {}", json_scalar_str(e)));
+        }
+    }
+
+    for r in data
+        .get("isolation_or_privacy_risks")
+        .and_then(|v| v.as_array())
+        .into_iter()
+        .flatten()
+    {
+        lines.push(format!("ISOLATION_RISK: {}", json_scalar_str(r)));
+    }
+
+    let timestamp = data
+        .get("diagnostics_timestamp")
+        .map(json_scalar_str)
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "unknown".to_string());
+    let forge_version = data
+        .get("forge_version")
+        .map(json_scalar_str)
+        .filter(|s| !s.is_empty())
+        .unwrap_or_else(|| "unknown".to_string());
+
+    FlattenedDiagnostics {
+        lines,
+        timestamp,
+        forge_version,
+        parse_error: None,
+    }
+}
+
+/// Reproduce CPython `json`'s "Expecting value" error message for content that
+/// does not begin with a JSON value. CPython skips leading whitespace
+/// (` \t\n\r`) then raises at that position with line/column/char computed over
+/// characters: `Expecting value: line L column C (char N)`.
+fn expecting_value_message(content: &str) -> String {
+    // json's whitespace class is exactly SPACE, TAB, LF, CR.
+    let chars: Vec<char> = content.chars().collect();
+    let skip_ws = |start: usize| {
+        let mut i = start;
+        while i < chars.len() && matches!(chars[i], ' ' | '\t' | '\n' | '\r') {
+            i += 1;
+        }
+        i
+    };
+    let mut idx = skip_ws(0);
+    // CPython dispatches on the first non-ws char. `[` opens an array: it
+    // consumes the bracket, skips whitespace, and (when the next token is not
+    // `]` or a value) raises "Expecting value" at that inner position. Walk
+    // through nested array openings so the reported offset matches CPython for
+    // logs that begin with `[…]`-shaped prose (e.g. `[lifecycle] …`).
+    while idx < chars.len() && chars[idx] == '[' {
+        let inner = skip_ws(idx + 1);
+        if inner < chars.len() && chars[inner] == ']' {
+            break; // empty array — would parse; stop (no value error here).
+        }
+        idx = inner;
+        // If the inner token is another array opener, keep descending;
+        // otherwise this is where CPython raises.
+        if idx < chars.len() && chars[idx] == '[' {
+            continue;
+        }
+        break;
+    }
+    // line = count of '\n' in chars[..idx] + 1; column = idx - (index after last '\n') + 1.
+    let mut line = 1usize;
+    let mut last_nl: Option<usize> = None;
+    for (i, c) in chars.iter().enumerate().take(idx) {
+        if *c == '\n' {
+            line += 1;
+            last_nl = Some(i);
+        }
+    }
+    let col = match last_nl {
+        Some(nl) => idx - nl, // idx - (nl+1) + 1
+        None => idx + 1,
+    };
+    format!("Expecting value: line {line} column {col} (char {idx})")
+}
+
+/// Python truthiness + membership: status='MISSING' when
+/// `not val or val in ('unset','N/A','BLOCKED','NOT_FOUND','NONE')`.
+fn json_value_is_missing(val: &serde_json::Value) -> bool {
+    // `not val` covers falsey: null, false, 0, 0.0, "", [], {}.
+    let falsey = match val {
+        serde_json::Value::Null => true,
+        serde_json::Value::Bool(b) => !b,
+        serde_json::Value::Number(n) => n.as_f64().map(|f| f == 0.0).unwrap_or(false),
+        serde_json::Value::String(s) => s.is_empty(),
+        serde_json::Value::Array(a) => a.is_empty(),
+        serde_json::Value::Object(o) => o.is_empty(),
+    };
+    if falsey {
+        return true;
+    }
+    if let Some(s) = val.as_str() {
+        matches!(s, "unset" | "N/A" | "BLOCKED" | "NOT_FOUND" | "NONE")
+    } else {
+        false
+    }
+}
+
+/// Render a JSON value the way Python's f-string `{val}` / `str(val)` would.
+/// Top-level scalars: strings unquoted, bools True/False, null None, numbers
+/// verbatim. Nested containers (dicts/lists, e.g. a risk object) use Python's
+/// `repr()` form — single-quoted keys/strings, `True/False/None` literals, and
+/// insertion order (preserved via serde_json's `preserve_order` feature) — to
+/// match the former CPython extractor's `print(f'… {d}')`.
+fn json_scalar_str(val: &serde_json::Value) -> String {
+    match val {
+        serde_json::Value::String(s) => s.clone(),
+        serde_json::Value::Bool(b) => {
+            if *b {
+                "True".to_string()
+            } else {
+                "False".to_string()
+            }
+        }
+        serde_json::Value::Null => "None".to_string(),
+        serde_json::Value::Number(n) => n.to_string(),
+        other => python_repr(other),
+    }
+}
+
+/// Python `repr()` of a JSON value, used when a list/dict element is itself a
+/// container (mirrors CPython's f-string formatting of nested structures).
+fn python_repr(val: &serde_json::Value) -> String {
+    match val {
+        serde_json::Value::Null => "None".to_string(),
+        serde_json::Value::Bool(b) => {
+            if *b {
+                "True".to_string()
+            } else {
+                "False".to_string()
+            }
+        }
+        serde_json::Value::Number(n) => n.to_string(),
+        serde_json::Value::String(s) => python_repr_str(s),
+        serde_json::Value::Array(a) => {
+            let inner: Vec<String> = a.iter().map(python_repr).collect();
+            format!("[{}]", inner.join(", "))
+        }
+        serde_json::Value::Object(o) => {
+            let inner: Vec<String> = o
+                .iter()
+                .map(|(k, v)| format!("{}: {}", python_repr_str(k), python_repr(v)))
+                .collect();
+            format!("{{{}}}", inner.join(", "))
+        }
+    }
+}
+
+/// CPython `repr()` of a str: prefers single quotes, switches to double quotes
+/// only if the string contains a single quote but no double quote. Escapes
+/// backslash, the active quote, and the standard control chars.
+fn python_repr_str(s: &str) -> String {
+    let has_single = s.contains('\'');
+    let has_double = s.contains('"');
+    let quote = if has_single && !has_double { '"' } else { '\'' };
+    let mut out = String::with_capacity(s.len() + 2);
+    out.push(quote);
+    for ch in s.chars() {
+        match ch {
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            c if c == quote => {
+                out.push('\\');
+                out.push(c);
+            }
+            c => out.push(c),
+        }
+    }
+    out.push(quote);
+    out
+}
+
+fn distill_one(repo_root: &Path, plan_dir: &Path, log_file: &Path) -> Result<(), ()> {
+    let log_basename = log_file
+        .file_name()
+        .and_then(|n| n.to_str())
+        .unwrap_or_default()
+        .strip_suffix(".log")
+        .unwrap_or_else(|| {
+            log_file
+                .file_name()
+                .and_then(|n| n.to_str())
+                .unwrap_or_default()
+        })
+        .to_string();
+    let summary_file = plan_dir.join(format!("{log_basename}-summary.md"));
+
+    if !log_file.is_file() {
+        distill_error(&format!(
+            "Log file not found: {}",
+            rel_display(repo_root, log_file)
+        ));
+        return Err(());
+    }
+
+    distill_info(&format!("Distilling: {}", rel_display(repo_root, log_file)));
+
+    let content = fs::read_to_string(log_file).unwrap_or_default();
+    let flat = flatten_diagnostics_json(&content);
+    let lines = &flat.lines;
+    let mut timestamp = flat.timestamp.clone();
+    let mut forge_version = flat.forge_version.clone();
+    let parse_error = flat.parse_error.clone();
+
+    // Metrics.
+    let ok_count = lines.iter().filter(|l| l.ends_with("=OK")).count();
+    let missing_count = lines.iter().filter(|l| l.ends_with("=MISSING")).count();
+    let total_checks = ok_count + missing_count;
+    let completeness_pct = (ok_count * 100).checked_div(total_checks).unwrap_or(0);
+
+    // Regression detection vs previous summary (2nd-newest *-summary.md).
+    let regression_note = compute_regression_note(plan_dir, completeness_pct);
+
+    // Envelope-line fallback for metadata header.
+    let envelope = read_envelope(log_file);
+    let mut envelope_host_platform = "unknown".to_string();
+    let mut envelope_agent = "unknown".to_string();
+    if let Some(env_fields) = &envelope {
+        if !env_fields.host_platform.is_empty() {
+            envelope_host_platform = env_fields.host_platform.clone();
+        }
+        if !env_fields.agent.is_empty() {
+            envelope_agent = env_fields.agent.clone();
+        }
+        if timestamp == "unknown" && !env_fields.timestamp.is_empty() {
+            timestamp = env_fields.timestamp.clone();
+        }
+        if forge_version == "unknown" && !env_fields.tversion.is_empty() {
+            forge_version = format!(
+                "{} (from-envelope; in-forge JSON missing)",
+                env_fields.tversion
+            );
+        }
+    }
+
+    // Build the summary.
+    let mut s = String::new();
+    s.push_str(&format!("# Forge Diagnostics Summary — {timestamp}\n\n"));
+    s.push_str("## Metadata\n\n");
+    s.push_str(&format!(
+        "- **Source log**: `{}`\n",
+        rel_display(repo_root, log_file)
+    ));
+    s.push_str(&format!("- **Forge version**: {forge_version}\n"));
+    s.push_str(&format!("- **Host platform**: {envelope_host_platform}\n"));
+    s.push_str(&format!("- **Agent**: {envelope_agent}\n"));
+    s.push_str(&format!(
+        "- **Completeness**: {ok_count} / {total_checks} checks passed ({completeness_pct}%)\n"
+    ));
+
+    if let Some(note) = &regression_note {
+        s.push_str("\n## Change vs Previous Run\n\n");
+        s.push_str(note);
+        s.push('\n');
+    }
+
+    if missing_count > 0 {
+        s.push_str("\n## Missing Capabilities\n\n");
+        for line in lines {
+            if let Some(cap) = line.strip_suffix("=MISSING") {
+                s.push_str(&format!("- `{cap}`\n"));
+            }
+        }
+    }
+
+    if let Some(pe) = &parse_error {
+        s.push_str("\n## Parse Errors\n\n");
+        s.push_str(&format!("- {pe}\n"));
+    }
+
+    // Recommended actions.
+    s.push_str("\n## Recommended Actions\n\n");
+    for line in lines {
+        if let Some(cap) = line.strip_suffix("=MISSING") {
+            s.push_str(&recommended_action(cap));
+            s.push('\n');
+        }
+    }
+    if missing_count == 0 {
+        s.push_str(
+            "- All forge capabilities nominal. Consider removing checked items from the diagnostics prompt.\n",
+        );
+    }
+
+    // Isolation / privacy risks.
+    let risks: Vec<String> = lines
+        .iter()
+        .filter_map(|l| l.strip_prefix("ISOLATION_RISK: ").map(|r| format!("- {r}")))
+        .collect();
+    if !risks.is_empty() {
+        s.push_str("\n## ⚠️ Isolation / Privacy Risks (investigate before any enhancement)\n\n");
+        s.push_str(&risks.join("\n"));
+        s.push('\n');
+    }
+
+    // Forge enhancement candidates.
+    let missing_tools: Vec<String> = lines
+        .iter()
+        .filter_map(|l| l.strip_prefix("MISSING_TOOL: ").map(|t| format!("- {t}")))
+        .collect();
+    let enhancements: Vec<String> = lines
+        .iter()
+        .filter_map(|l| {
+            l.strip_prefix("PROPOSED_ENHANCEMENT: ")
+                .map(|e| format!("- {e}"))
+        })
+        .collect();
+    if !missing_tools.is_empty() || !enhancements.is_empty() {
+        s.push_str("\n## Forge Enhancement Candidates (→ curated-toolchain-backlog)\n\n");
+        s.push_str(
+            "Candidates only — orchestrator approves against the privacy/isolation gate.\n\n",
+        );
+        if !missing_tools.is_empty() {
+            s.push_str("### Missing tools\n");
+            s.push_str(&missing_tools.join("\n"));
+            s.push('\n');
+        }
+        if !enhancements.is_empty() {
+            s.push_str("### Proposed enhancements\n");
+            s.push_str(&enhancements.join("\n"));
+            s.push('\n');
+        }
+    }
+
+    // Container-start stream forensics from the .stderr.log companion.
+    append_container_start_stream(repo_root, log_file, &mut s);
+
+    if let Err(err) = fs::write(&summary_file, &s) {
+        distill_error(&format!(
+            "failed to write {}: {err}",
+            rel_display(repo_root, &summary_file)
+        ));
+        return Err(());
+    }
+
+    distill_info(&format!(
+        "Summary written: {}",
+        rel_display(repo_root, &summary_file)
+    ));
+    distill_info(&format!(
+        "Completeness: {completeness_pct}% ({ok_count}/{total_checks})"
+    ));
+    Ok(())
+}
+
+/// `ls -t *-summary.md | head -2 | tail -1` then parse its Completeness %.
+fn compute_regression_note(plan_dir: &Path, completeness_pct: usize) -> Option<String> {
+    let mut summaries: Vec<(std::time::SystemTime, PathBuf)> = Vec::new();
+    let entries = fs::read_dir(plan_dir).ok()?;
+    for entry in entries.flatten() {
+        let path = entry.path();
+        let name = path
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or_default();
+        if name.ends_with("-summary.md") {
+            let mtime = entry
+                .metadata()
+                .and_then(|m| m.modified())
+                .unwrap_or(std::time::UNIX_EPOCH);
+            summaries.push((mtime, path));
+        }
+    }
+    // Newest first.
+    summaries.sort_by(|a, b| b.0.cmp(&a.0).then_with(|| b.1.cmp(&a.1)));
+    // head -2 | tail -1 → the 2nd entry.
+    let prev = summaries.get(1)?;
+    let text = fs::read_to_string(&prev.1).ok()?;
+    // The shell grep is `grep -o 'Completeness:[[:space:]]*[0-9]\+%'`, which
+    // does NOT match the `**Completeness**: …` summary line (the `**` breaks the
+    // literal `Completeness:`). When there's no match the shell falls back to
+    // `echo "0"`, so prev_pct is 0 in practice. We reproduce that exactly:
+    // parse a bare `Completeness:` (no markdown bold) or default to 0.
+    let prev_pct = parse_completeness_pct(&text).unwrap_or(0);
+    if prev_pct > completeness_pct {
+        Some(format!(
+            "**REGRESSION**: Completeness dropped from {prev_pct}% to {completeness_pct}%"
+        ))
+    } else if completeness_pct > prev_pct {
+        Some(format!(
+            "Improvement: completeness rose from {prev_pct}% to {completeness_pct}%"
+        ))
+    } else {
+        None
+    }
+}
+
+/// grep -o 'Completeness:[[:space:]]*[0-9]\+%' | first integer.
+fn parse_completeness_pct(text: &str) -> Option<usize> {
+    let idx = text.find("Completeness:")?;
+    let rest = &text[idx + "Completeness:".len()..];
+    let rest = rest.trim_start();
+    let digits: String = rest.chars().take_while(|c| c.is_ascii_digit()).collect();
+    if digits.is_empty() {
+        return None;
+    }
+    // Require a trailing % to match the grep pattern `[0-9]\+%`.
+    let after = &rest[digits.len()..];
+    if !after.starts_with('%') {
+        return None;
+    }
+    digits.parse().ok()
+}
+
+struct EnvelopeFields {
+    timestamp: String,
+    tversion: String,
+    host_platform: String,
+    agent: String,
+}
+
+/// Recover framing fields from the last `event:diagnostics_envelope ` line in
+/// the `<log>.stderr.log` companion.
+fn read_envelope(log_file: &Path) -> Option<EnvelopeFields> {
+    let stderr_log = envelope_stderr_path(log_file);
+    let meta = fs::metadata(&stderr_log).ok()?;
+    if meta.len() == 0 {
+        return None;
+    }
+    let text = fs::read_to_string(&stderr_log).ok()?;
+    let line = text
+        .lines()
+        .rfind(|l| l.starts_with("event:diagnostics_envelope "))?;
+    Some(EnvelopeFields {
+        timestamp: extract_kv(line, "timestamp="),
+        tversion: extract_kv(line, "tillandsias_version="),
+        host_platform: extract_kv(line, "host_platform="),
+        agent: extract_kv(line, "agent="),
+    })
+}
+
+/// `${log_file%.log}.stderr.log`.
+fn envelope_stderr_path(log_file: &Path) -> PathBuf {
+    let s = log_file.to_string_lossy();
+    let base = s.strip_suffix(".log").unwrap_or(&s);
+    PathBuf::from(format!("{base}.stderr.log"))
+}
+
+/// grep -oE 'key=[^ ]+' | cut -d= -f2- on a space-delimited k=v line.
+fn extract_kv(line: &str, key: &str) -> String {
+    for token in line.split(' ') {
+        if let Some(rest) = token.strip_prefix(key) {
+            return rest.to_string();
+        }
+    }
+    String::new()
+}
+
+fn append_container_start_stream(repo_root: &Path, log_file: &Path, s: &mut String) {
+    let stderr_log = envelope_stderr_path(log_file);
+    let Ok(meta) = fs::metadata(&stderr_log) else {
+        return;
+    };
+    if meta.len() == 0 {
+        return;
+    }
+    let Ok(text) = fs::read_to_string(&stderr_log) else {
+        return;
+    };
+    let log_lines: Vec<&str> = text.lines().collect();
+
+    let total_events = log_lines
+        .iter()
+        .filter(|l| l.contains("event:container_launch "))
+        .count();
+    let running_events = log_lines
+        .iter()
+        .filter(|l| l.contains("event:container_launch ") && l.contains(" state=running "))
+        .count();
+    let failed_events = log_lines
+        .iter()
+        .filter(|l| l.contains("event:container_launch ") && l.contains(" state=failed"))
+        .count();
+
+    // Distinct (stage, state) tuples: grep -oE 'event:container_launch stage=[^ ]+ state=[^ ]+' | sort -u.
+    // The original pipes through coreutils `sort -u`, whose collation is
+    // locale-dependent (en_US.UTF-8 orders e.g. `opencode-git` before
+    // `opencode state`). We reproduce that exact ordering by deferring to the
+    // same `sort -u` binary rather than a byte-order set, so output is
+    // byte-identical to the shell on any given host.
+    let mut stage_state_matches: Vec<String> = Vec::new();
+    for line in &log_lines {
+        if let Some(m) = extract_stage_state(line) {
+            stage_state_matches.push(m);
+        }
+    }
+    let stage_states = sort_unique_via_coreutil(&stage_state_matches);
+
+    s.push_str("\n## Container-Start Stream (from .stderr.log companion)\n\n");
+    s.push_str(&format!(
+        "- **Source**: `{}`\n",
+        rel_display(repo_root, &stderr_log)
+    ));
+    s.push_str(&format!("- **Total launch events**: {total_events}\n"));
+    s.push_str(&format!("- **state=running**: {running_events}\n"));
+    s.push_str(&format!("- **state=failed**: {failed_events}\n"));
+    if !stage_states.is_empty() {
+        s.push_str("\n### Distinct stage → state pairings\n\n");
+        s.push_str("```\n");
+        for ss in &stage_states {
+            s.push_str(ss);
+            s.push('\n');
+        }
+        s.push_str("```\n");
+    }
+    let _ = &stage_states;
+    if failed_events > 0 {
+        s.push_str("\n### ❌ Failed launches\n\n");
+        s.push_str("```\n");
+        for line in &log_lines {
+            if line.contains("event:container_launch ") && line.contains(" state=failed") {
+                s.push_str(line);
+                s.push('\n');
+            }
+        }
+        s.push_str("```\n");
+    }
+
+    // Typed-event arms.
+    let exit_lines: Vec<&&str> = log_lines
+        .iter()
+        .filter(|l| l.contains("event:container_exit "))
+        .collect();
+    let signal_lines: Vec<&&str> = log_lines
+        .iter()
+        .filter(|l| l.contains("event:container_signal "))
+        .collect();
+    let resource_lines: Vec<&&str> = log_lines
+        .iter()
+        .filter(|l| l.contains("event:resource_exhaustion "))
+        .collect();
+    let stderr_lines: Vec<&&str> = log_lines
+        .iter()
+        .filter(|l| l.contains("event:container_stderr "))
+        .collect();
+    let exit_count = exit_lines.len();
+    let signal_count = signal_lines.len();
+    let resource_count = resource_lines.len();
+    let stderr_count = stderr_lines.len();
+
+    if exit_count > 0 || signal_count > 0 || resource_count > 0 || stderr_count > 0 {
+        s.push_str("\n### Typed-event arms\n\n");
+        s.push_str("| event type | count |\n");
+        s.push_str("|---|---:|\n");
+        if exit_count > 0 {
+            s.push_str(&format!(
+                "| event:container_exit       | {exit_count}     |\n"
+            ));
+        }
+        if signal_count > 0 {
+            s.push_str(&format!(
+                "| event:container_signal     | {signal_count}   |\n"
+            ));
+        }
+        if resource_count > 0 {
+            s.push_str(&format!(
+                "| event:resource_exhaustion  | {resource_count} |\n"
+            ));
+        }
+        if stderr_count > 0 {
+            s.push_str(&format!(
+                "| event:container_stderr     | {stderr_count}   |\n"
+            ));
+        }
+
+        if exit_count > 0 {
+            s.push_str("\n#### container_exit lines (head 10)\n");
+            s.push_str("```\n");
+            for line in exit_lines.iter().take(10) {
+                s.push_str(line);
+                s.push('\n');
+            }
+            s.push_str("```\n");
+        }
+        if signal_count > 0 {
+            s.push_str("\n#### container_signal lines (head 10)\n");
+            s.push_str("```\n");
+            for line in signal_lines.iter().take(10) {
+                s.push_str(line);
+                s.push('\n');
+            }
+            s.push_str("```\n");
+        }
+        if resource_count > 0 {
+            s.push_str("\n#### resource_exhaustion lines (head 10)\n");
+            s.push_str("```\n");
+            for line in resource_lines.iter().take(10) {
+                s.push_str(line);
+                s.push('\n');
+            }
+            s.push_str("```\n");
+        }
+        if stderr_count > 0 {
+            // grep -oE 'event:container_stderr container=[^ ]+' | sort | uniq -c | sort -rn | head -5
+            let by_container = top_stderr_containers(&log_lines);
+            if !by_container.is_empty() {
+                s.push_str("\n#### container_stderr — top 5 containers by line count\n");
+                s.push_str("```\n");
+                for entry in &by_container {
+                    s.push_str(entry);
+                    s.push('\n');
+                }
+                s.push_str("```\n");
+            }
+        }
+    }
+}
+
+/// Reproduce `... | sort -u` using the same coreutils binary the original
+/// pipeline used, so the locale-dependent collation is byte-identical to the
+/// shell. Falls back to a byte-order dedup if `sort` is unavailable.
+fn sort_unique_via_coreutil(lines: &[String]) -> Vec<String> {
+    if lines.is_empty() {
+        return Vec::new();
+    }
+    let input = {
+        let mut buf = lines.join("\n");
+        buf.push('\n');
+        buf
+    };
+    use std::io::Write;
+    use std::process::{Command, Stdio};
+    let child = Command::new("sort")
+        .arg("-u")
+        .stdin(Stdio::piped())
+        .stdout(Stdio::piped())
+        .spawn();
+    if let Ok(mut child) = child {
+        if let Some(mut stdin) = child.stdin.take() {
+            let _ = stdin.write_all(input.as_bytes());
+        }
+        if let Ok(output) = child.wait_with_output() {
+            return String::from_utf8_lossy(&output.stdout)
+                .lines()
+                .map(|l| l.to_string())
+                .collect();
+        }
+    }
+    // Fallback: byte-order unique.
+    let mut set: BTreeSet<String> = BTreeSet::new();
+    for l in lines {
+        set.insert(l.clone());
+    }
+    set.into_iter().collect()
+}
+
+/// Extract `event:container_launch stage=<x> state=<y>` (matching grep -oE).
+fn extract_stage_state(line: &str) -> Option<String> {
+    let idx = line.find("event:container_launch stage=")?;
+    let rest = &line[idx..];
+    // event:container_launch stage=<nonspace> state=<nonspace>
+    let mut parts = rest.split(' ');
+    let _ev = parts.next()?; // event:container_launch
+    let stage = parts.next()?; // stage=...
+    if !stage.starts_with("stage=") {
+        return None;
+    }
+    let state = parts.next()?; // state=...
+    if !state.starts_with("state=") {
+        return None;
+    }
+    Some(format!("event:container_launch {stage} {state}"))
+}
+
+/// Reproduce `grep -oE 'event:container_stderr container=[^ ]+' | sort | uniq -c
+/// | sort -rn | head -5`, including the leading whitespace of `uniq -c`.
+fn top_stderr_containers(log_lines: &[&str]) -> Vec<String> {
+    let mut matches: Vec<String> = Vec::new();
+    for line in log_lines {
+        let mut search = 0;
+        while let Some(rel) = line[search..].find("event:container_stderr container=") {
+            let start = search + rel;
+            let after = &line[start..];
+            // up to first space
+            let token_end = after.find(' ').unwrap_or(after.len());
+            // but the prefix "event:container_stderr " contains a space; grep -oE
+            // matches the full regex 'event:container_stderr container=[^ ]+'.
+            // Reconstruct: literal "event:container_stderr container=" + [^ ]+.
+            let prefix = "event:container_stderr container=";
+            let val_start = start + prefix.len();
+            if val_start <= line.len() {
+                let val_region = &line[val_start..];
+                let val_len = val_region.find(' ').unwrap_or(val_region.len());
+                let matched = &line[start..val_start + val_len];
+                matches.push(matched.to_string());
+            }
+            search = start + token_end.max(1);
+        }
+    }
+    // sort | uniq -c
+    matches.sort();
+    let mut counts: Vec<(usize, String)> = Vec::new();
+    for m in matches {
+        if let Some(last) = counts.last_mut()
+            && last.1 == m
+        {
+            last.0 += 1;
+            continue;
+        }
+        counts.push((1, m));
+    }
+    // sort -rn (by count desc; uniq output order for ties is by value asc, but
+    // sort -rn is not stable on the count key — GNU sort uses the whole line as
+    // tiebreak which keeps value asc reversed... match practical behavior:
+    // sort -rn sorts numerically desc, ties keep input order).
+    counts.sort_by_key(|b| std::cmp::Reverse(b.0));
+    counts
+        .into_iter()
+        .take(5)
+        .map(|(c, m)| format!("{:>7} {m}", c))
+        .collect()
+}
+
+/// Per-capability recommended-action text (the shell case statement).
+fn recommended_action(cap: &str) -> String {
+    match cap {
+        "agent_available.claude" => {
+            "- Install claude-code in Containerfile (npm install -g @anthropic-ai/claude-code)".to_string()
+        }
+        "agent_available.codex" => {
+            "- Install codex in Containerfile (npm install -g @openai/codex)".to_string()
+        }
+        "network_isolation.external_curl" => {
+            "- Verify enclave network isolation: forge should not reach external internet directly".to_string()
+        }
+        "network_isolation.inference_reachable" => {
+            "- Ensure inference container is running and reachable on 'inference:11434'".to_string()
+        }
+        "agent_instructions.paths" => {
+            "- Check that cache-discipline.md is properly mounted into ~/.config/opencode/instructions/".to_string()
+        }
+        "shell.tillandsias_help" => {
+            "- Ensure tillandsias-help shell function is sourced (check shell-helpers.sh)".to_string()
+        }
+        "openspec.opsx_bin" => "- Install openspec CLI in Containerfile".to_string(),
+        _ => {
+            if let Some(rest) = cap.strip_prefix("hot_paths.") {
+                format!("- Verify tmpfs mount sizes in build_podman_args() for {rest}")
+            } else if let Some(rest) = cap.strip_prefix("cache_routing.") {
+                format!("- Ensure {rest} is exported in lib-common.sh")
+            } else {
+                format!("- Investigate missing capability: {cap}")
+            }
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1302,5 +2333,103 @@ mod tests {
             "value=$(python -c 'print(1)')"
         ));
         assert!(!has_python_runtime_reference("# python3 in a comment"));
+    }
+
+    #[test]
+    fn diagnostics_missing_status_matches_python_truthiness() {
+        use serde_json::json;
+        assert!(json_value_is_missing(&json!("")));
+        assert!(json_value_is_missing(&json!("unset")));
+        assert!(json_value_is_missing(&json!("BLOCKED")));
+        assert!(json_value_is_missing(&json!("NOT_FOUND")));
+        assert!(json_value_is_missing(&json!(null)));
+        assert!(json_value_is_missing(&json!(false)));
+        assert!(json_value_is_missing(&json!(0)));
+        assert!(!json_value_is_missing(&json!("/usr/bin/opencode")));
+        assert!(!json_value_is_missing(&json!("yes")));
+        assert!(!json_value_is_missing(&json!(true)));
+    }
+
+    #[test]
+    fn flattens_capabilities_and_metadata() {
+        let raw = r#"prefix junk
+{"diagnostics_timestamp":"2026-06-16T07:28:47Z","forge_version":"0.3.0",
+ "capabilities":{"agent_available":{"claude":"NOT_FOUND","opencode":"/usr/bin/opencode"}},
+ "diagnostics":["check ran"],
+ "missing_tools":["ripgrep"],
+ "proposed_enhancements":[{"ecosystem":"rust","tool":"bacon","why":"watch"}],
+ "isolation_or_privacy_risks":["leak X"]}
+trailing"#;
+        let flat = flatten_diagnostics_json(raw);
+        assert_eq!(flat.timestamp, "2026-06-16T07:28:47Z");
+        assert_eq!(flat.forge_version, "0.3.0");
+        assert!(flat.parse_error.is_none());
+        assert!(
+            flat.lines
+                .contains(&"agent_available.claude=MISSING".to_string())
+        );
+        assert!(
+            flat.lines
+                .contains(&"agent_available.opencode=OK".to_string())
+        );
+        assert!(flat.lines.contains(&"DIAGNOSTIC: check ran".to_string()));
+        assert!(flat.lines.contains(&"MISSING_TOOL: ripgrep".to_string()));
+        assert!(
+            flat.lines
+                .contains(&"PROPOSED_ENHANCEMENT: rust: bacon — watch".to_string())
+        );
+        assert!(flat.lines.contains(&"ISOLATION_RISK: leak X".to_string()));
+    }
+
+    #[test]
+    fn parse_error_when_no_json() {
+        let flat = flatten_diagnostics_json("no json here at all");
+        assert!(flat.parse_error.is_some());
+        assert_eq!(flat.timestamp, "unknown");
+    }
+
+    #[test]
+    fn python_repr_matches_cpython_dict_form() {
+        use serde_json::json;
+        // Insertion order preserved (preserve_order feature); single-quoted.
+        let v = json!({"risk": "x", "detail": "it's bad"});
+        assert_eq!(python_repr(&v), "{'risk': 'x', 'detail': \"it's bad\"}");
+        assert_eq!(python_repr(&json!([1, true, null])), "[1, True, None]");
+    }
+
+    #[test]
+    fn expecting_value_message_matches_cpython() {
+        // Empty file → char 0.
+        assert_eq!(
+            expecting_value_message(""),
+            "Expecting value: line 1 column 1 (char 0)"
+        );
+        // Leading whitespace then junk → position of first non-ws char.
+        assert_eq!(
+            expecting_value_message(" x"),
+            "Expecting value: line 1 column 2 (char 1)"
+        );
+        // Starts with `[` (valid array opener); CPython fails at the inner
+        // non-value token at char 1.
+        assert_eq!(
+            expecting_value_message("[lifecycle] foo"),
+            "Expecting value: line 1 column 2 (char 1)"
+        );
+    }
+
+    #[test]
+    fn completeness_pct_parsing_matches_shell_grep() {
+        // The shell grep matches a bare `Completeness:[[:space:]]*[0-9]+%`.
+        assert_eq!(parse_completeness_pct("Completeness: 100%"), Some(100));
+        assert_eq!(parse_completeness_pct("Completeness:50%"), Some(50));
+        // The `**Completeness**:` summary line does NOT contain the literal
+        // `Completeness:` substring, so (like the shell) it does not match.
+        assert_eq!(
+            parse_completeness_pct("- **Completeness**: 9 / 12 checks passed (75%)"),
+            None
+        );
+        // Digits without a trailing % do not match the grep pattern.
+        assert_eq!(parse_completeness_pct("Completeness: 9 / 12"), None);
+        assert_eq!(parse_completeness_pct("no completeness here"), None);
     }
 }

@@ -1,6 +1,6 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-18T21:00Z
+Last updated: 2026-06-18T23:20Z
 
 This file is the first stop for agents inspecting `plan/issues/`. Historical
 issue reports remain in this directory for evidence and auditability, but only
@@ -155,11 +155,16 @@ the items below are immediate work.
   byte-for-byte parity-verified; the `tillandsias-cheatsheet-tools` crate has been
   deleted and removed from the workspace. A single policy crate now owns all
   cheatsheet validation (tiers + sources + audit).
-- next_action: Port the remaining Python-runtime scripts
-  (`fetch-cheatsheet-source.sh`, `regenerate-cheatsheet-index.sh`,
-  `distill-forge-diagnostics.sh`), then make
+  `distill-forge-diagnostics.sh` DONE (2026-06-18,
+  `linux-tlatoani-opus-meta1-20260618T230426Z`): ported to a
+  `tillandsias-policy distill-forge-diagnostics` subcommand and reduced to a
+  thin build+exec wrapper; 45/45 target/forge-diagnostics logs verified
+  byte-for-byte identical vs the former CPython extractor.
+- next_action: Port the remaining 2 Python-runtime scripts
+  (`fetch-cheatsheet-source.sh` — 6 python3 sites, large;
+  `regenerate-cheatsheet-index.sh` — 1 python3 site), then make
   `scripts/check-no-python-scripts.sh` pass.
-- blocker: those three scripts still execute Python; each needs a Rust
+- blocker: those two scripts still execute Python; each needs a Rust
   replacement or explicit Tlatoani approval.
 - evidence_required:
   - `scripts/check-no-python-scripts.sh` exits 0

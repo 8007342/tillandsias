@@ -265,3 +265,73 @@ explicitly approved by The Tlatoani.
     `scripts/fetch-cheatsheet-source.sh`,
     `scripts/regenerate-cheatsheet-index.sh`,
     `scripts/distill-forge-diagnostics.sh`.
+
+- type: claim
+  ts: "2026-06-18T23:05:00Z"
+  agent_id: "linux-tlatoani-opus-meta1-20260618T230426Z"
+  host: linux
+  note: >
+    Claiming the next no-python slice: port
+    scripts/distill-forge-diagnostics.sh to a
+    tillandsias-policy distill-forge-diagnostics subcommand following the
+    established check-cheatsheet-tiers pattern; reduce the shell to a thin
+    build+exec wrapper; prove byte-for-byte parity vs the Python over the
+    target/forge-diagnostics corpus before replacing.
+
+- type: completed
+  ts: "2026-06-18T23:19:24Z"
+  agent_id: "linux-tlatoani-opus-meta1-20260618T230426Z"
+  host: linux
+  note: >
+    Ported scripts/distill-forge-diagnostics.sh to a new
+    `tillandsias-policy distill-forge-diagnostics` subcommand (the script's only
+    Python use was a JSON-flatten step). The shell script is now a thin
+    build+exec wrapper, matching the check-cheatsheet-tiers pattern. The
+    subcommand reimplements the full pipeline in Rust: capabilities JSON
+    flatten, completeness metrics, regression-vs-previous detection,
+    envelope-line metadata fallback, missing-capability + recommended-action
+    rendering, isolation-risk / enhancement-candidate sections, and the
+    container-start `.stderr.log` stream forensics (launch/exit/signal/
+    resource/stderr typed-event arms).
+  parity_evidence: >
+    Controlled per-log harness (each log distilled into an isolated empty
+    plan/diagnostics so regression-detection inputs are identical for both
+    implementations) over the full target/forge-diagnostics corpus:
+    45/45 real diagnostics logs BYTE-FOR-BYTE identical (diff -q) between the
+    former CPython-backed script and the Rust subcommand. To reach exact
+    parity the Rust port faithfully reproduces several CPython-isms:
+      - dict insertion order for capability/recommendation listing
+        (serde_json `preserve_order` feature) and Python `repr()` rendering of
+        nested risk/enhancement objects (single quotes, True/False/None);
+      - the `Completeness:[[:space:]]*[0-9]+%` grep that never matches the
+        `**Completeness**:` summary line, so prev_pct effectively defaults to 0
+        (REGRESSION never fires, Improvement fires only when pct>0) — bug
+        preserved for parity;
+      - the locale-dependent `sort -u` collation of the stage→state block,
+        reproduced by deferring to the same coreutils `sort -u` binary;
+      - the CPython `json` "Expecting value: line L column C (char N)" message
+        for empty / non-JSON logs (including the `[`-array-opener offset case).
+  intentional_deviation:
+      In `--all`, the Rust subcommand skips `*.stderr.log` companion files
+      (the shell glob `diagnostics_*.log` accidentally matched them and emitted
+      junk `*.stderr-summary.md`). Distilling a stderr companion as a
+      diagnostics JSON log is meaningless; excluding it is a bug-fix, not a
+      regression. All real `diagnostics_<ts>.log` outputs are unaffected.
+  files_touched:
+    - crates/tillandsias-policy/src/main.rs (new distill-forge-diagnostics subcommand + 4 unit tests)
+    - crates/tillandsias-policy/Cargo.toml (serde_json preserve_order feature)
+    - scripts/distill-forge-diagnostics.sh (reduced to thin build+exec wrapper)
+  validation:
+    - cargo build -p tillandsias-policy clean
+    - cargo clippy -p tillandsias-policy clean (0 warnings)
+    - cargo fmt --check clean
+    - cargo test -p tillandsias-policy: 8 passed
+    - cargo build --workspace clean (preserve_order feature unification)
+    - serde_json consumers re-tested (logging/litmus/headless/vault/browser-mcp/
+      metrics/vm-layer/podman): all green — no preserve_order regressions
+    - ./build.sh --check passes (pre-existing dev-proxy warning unrelated)
+    - tillandsias-policy check-no-python-scripts: distill-forge-diagnostics.sh
+      no longer reported as a violation
+  remaining_python_scripts:
+    - scripts/fetch-cheatsheet-source.sh (6 python3 sites — large; next slice)
+    - scripts/regenerate-cheatsheet-index.sh (1 python3 site — next slice)
