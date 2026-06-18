@@ -21,6 +21,20 @@ programs.
 
 ## Slices Completed
 
+### Slice 3 — 2026-06-18
+
+- **Rewrote** `scripts/check-cheatsheet-sources.sh` as a thin wrapper over a new
+  `sources` subcommand on the existing Rust crate `tillandsias-cheatsheet-tools`.
+  Faithful port of the former Python verbatim-source validator: INDEX.json
+  parsing (serde_json), `## Provenance` URL + `local:` path extraction (matching
+  the original regexes including angle-bracket vs. bare-URL handling, negative
+  lookbehind for `` ` `` / `<`, and `.,)` rstrip), sidecar `redistribution:`
+  discipline, orphan detection, and SHA-256 manifest verification (sha2),
+  skippable with `--no-sha`. Verified byte-for-byte output parity against the
+  retired Python script across a fixture exercising all error/warning paths
+  (missing file, bad redistribution, SHA mismatch, orphan, unfetched URL) plus
+  tricky URL forms. 5 down, 8 to go.
+
 ### Slice 1 — 2026-06-17
 
 - **Retired** `scripts/migrate-cheatsheets-to-v2.py` — one-shot migration,
@@ -35,7 +49,8 @@ Rewrite or retire the existing Python-backed maintenance scripts:
 
 - ~~`scripts/check-cheatsheet-tiers.sh`~~ **rewritten** (slice 2, 2026-06-18) →
   thin wrapper over Rust `tillandsias-cheatsheet-tools tiers`
-- `scripts/check-cheatsheet-sources.sh`
+- ~~`scripts/check-cheatsheet-sources.sh`~~ **rewritten** (slice 3, 2026-06-18) →
+  thin wrapper over Rust `tillandsias-cheatsheet-tools sources`
 - `scripts/bind-provenance-local-paths.sh`
 - `scripts/audit-cheatsheet-sources.sh`
 - `scripts/fetch-cheatsheet-source.sh`
@@ -100,3 +115,30 @@ explicitly approved by The Tlatoani.
     `cargo run`. Validated: `cargo build -p tillandsias-cheatsheet-tools` clean;
     `scripts/check-cheatsheet-tiers.sh` reports 210 cheatsheets validated, exit 0.
     4 down, 9 to go.
+
+- type: claim
+  ts: "2026-06-18T04:24:00Z"
+  agent_id: "linux-tlatoani-opus-worker1-202606180424"
+  host: linux
+  lease_id: "no-python-slice-3-202606180424"
+  expires_at: "2026-06-18T08:24:00Z"
+
+- type: completed
+  ts: "2026-06-18T04:30:00Z"
+  agent_id: "linux-tlatoani-opus-worker1-202606180424"
+  host: linux
+  lease_id: "no-python-slice-3-202606180424"
+  note: >
+    Slice 3: Ported scripts/check-cheatsheet-sources.sh to a Rust `sources`
+    subcommand on tillandsias-cheatsheet-tools; shell script is now a thin
+    wrapper (locate target/{release,debug} binary, else `cargo run`). serde_json
+    + sha2 added as crate deps (both already workspace deps). Validated:
+    `cargo build -p tillandsias-cheatsheet-tools` clean, `cargo clippy` clean,
+    `cargo fmt --check` clean, `./build.sh --check` passes. Confirmed byte-for-byte
+    output parity vs. the retired Python implementation across a fixture covering
+    every error/warning branch (missing local, sidecar bad-redistribution, SHA
+    mismatch, orphan, unfetched URL) and tricky URL forms; the no-INDEX early-exit
+    and `--no-sha` paths also match. Wrapper emits identical no-INDEX message
+    (exit 0) on the live repo (no cheatsheet-sources/INDEX.json yet). The crate
+    file is the single source of both `tiers` and `sources` validators.
+    5 down, 8 to go. Committed on linux-next (this commit).

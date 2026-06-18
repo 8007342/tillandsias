@@ -6,24 +6,32 @@
 //   tiers [--quiet] [--strict]   tier-aware cheatsheet frontmatter validation
 //                                (faithful port of scripts/check-cheatsheet-tiers.sh's
 //                                 former Python implementation)
+//   sources [--no-sha]           validate cheatsheet <-> verbatim-source binding
+//                                (faithful port of scripts/check-cheatsheet-sources.sh's
+//                                 former Python implementation)
 //
 // @trace spec:cheatsheets-license-tiered
+// @trace spec:cheatsheet-source-layer
 
 use std::collections::{BTreeSet, HashMap};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
+const USAGE: &str =
+    "usage: tillandsias-cheatsheet-tools <tiers [--quiet] [--strict] | sources [--no-sha]>";
+
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
         Some("tiers") => cmd_tiers(&args[1..]),
+        Some("sources") => cmd_sources(&args[1..]),
         Some(other) => {
             eprintln!("unknown subcommand: {other}");
-            eprintln!("usage: tillandsias-cheatsheet-tools tiers [--quiet] [--strict]");
+            eprintln!("{USAGE}");
             ExitCode::from(2)
         }
         None => {
-            eprintln!("usage: tillandsias-cheatsheet-tools tiers [--quiet] [--strict]");
+            eprintln!("{USAGE}");
             ExitCode::from(2)
         }
     }
@@ -453,6 +461,380 @@ fn leading_ident(s: &str) -> Option<String> {
         }
     }
     Some(s[..i].to_string())
+}
+
+// ===========================================================================
+// `sources` subcommand — faithful port of scripts/check-cheatsheet-sources.sh.
+//
+// Validates cheatsheet <-> verbatim-source binding per §5 of
+// docs/strategy/cheatsheet-source-layer-plan.md:
+//   1. Every cheatsheet ## Provenance URL must be in INDEX.json (WARNING when
+//      unfetched — not yet blocking).
+//   2. Every local: path must exist OR have a sidecar with redistribution
+//      do-not-bundle / manual-review-required (ERROR otherwise).
+//   3. Orphan detection: every INDEX entry should be cited (WARNING).
+//   4. SHA-256 verification of present files (skippable with --no-sha).
+//
+// Exit 0 only if all ERROR-level checks pass; warnings never fail.
+// ===========================================================================
+
+fn cmd_sources(args: &[String]) -> ExitCode {
+    let mut no_sha = false;
+    match args.first().map(String::as_str) {
+        Some("--no-sha") => {
+            no_sha = true;
+            if args.len() > 1 {
+                eprintln!("error: unexpected argument: {}", args[1]);
+                eprintln!("usage: check-cheatsheet-sources [--no-sha]");
+                return ExitCode::from(2);
+            }
+        }
+        Some(other) => {
+            eprintln!("error: unknown argument: {other}");
+            eprintln!("usage: check-cheatsheet-sources [--no-sha]");
+            return ExitCode::from(2);
+        }
+        None => {}
+    }
+
+    let root = repo_root();
+    let sources_dir = root.join("cheatsheet-sources");
+    let cheatsheets_dir = root.join("cheatsheets");
+    let index_file = sources_dir.join("INDEX.json");
+
+    // Sanity: INDEX.json must exist. Mirrors the shell early-exit (exit 0).
+    if !index_file.is_file() {
+        println!(
+            "warning: {} does not exist — no sources fetched yet; nothing to validate",
+            index_file.display()
+        );
+        println!("  Run: scripts/fetch-cheatsheet-source.sh <URL> --cite cheatsheets/<path>");
+        return ExitCode::SUCCESS;
+    }
+
+    let index_text = match std::fs::read_to_string(&index_file) {
+        Ok(t) => t,
+        Err(e) => {
+            eprintln!("ERROR: cannot read {}: {e}", index_file.display());
+            return ExitCode::from(1);
+        }
+    };
+    let index: serde_json::Value = match serde_json::from_str(&index_text) {
+        Ok(v) => v,
+        Err(e) => {
+            eprintln!("ERROR: {} is not valid JSON: {e}", index_file.display());
+            return ExitCode::from(1);
+        }
+    };
+    let entries: Vec<&serde_json::Value> = index
+        .get("entries")
+        .and_then(|v| v.as_array())
+        .map(|a| a.iter().collect())
+        .unwrap_or_default();
+
+    // url_to_entry: map url/fetch_url/final_redirect -> exists.
+    let mut url_set: BTreeSet<String> = BTreeSet::new();
+    for entry in &entries {
+        for key in ["url", "fetch_url", "final_redirect"] {
+            if let Some(u) = entry.get(key).and_then(|v| v.as_str())
+                && !u.is_empty()
+            {
+                url_set.insert(u.to_string());
+            }
+        }
+    }
+
+    let mut errors: Vec<String> = Vec::new();
+    let mut warnings: Vec<String> = Vec::new();
+
+    // Collect cheatsheet files (sorted by path string), excluding INDEX/TEMPLATE.
+    let mut md_files: Vec<PathBuf> = Vec::new();
+    collect_md(&cheatsheets_dir, &mut md_files);
+    md_files.sort_by(|a, b| a.to_string_lossy().cmp(&b.to_string_lossy()));
+    md_files.retain(|p| {
+        let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
+        name != "INDEX.md" && name != "TEMPLATE.md"
+    });
+
+    let mut cited_local_paths: BTreeSet<String> = BTreeSet::new();
+    let mut checked_urls = 0usize;
+    let mut checked_local = 0usize;
+
+    // Checks 1 & 2.
+    for cs_file in &md_files {
+        let rel_cs = cs_file
+            .strip_prefix(&root)
+            .unwrap_or(cs_file)
+            .to_string_lossy()
+            .to_string();
+        let text = match std::fs::read_to_string(cs_file) {
+            Ok(t) => t,
+            Err(_) => continue,
+        };
+        let (urls, local_paths) = extract_provenance(&text);
+
+        for url in &urls {
+            checked_urls += 1;
+            if !url_set.contains(url) {
+                warnings.push(format!("UNFETCHED: {rel_cs}: URL not in INDEX.json: {url}"));
+            }
+        }
+
+        for local_path in &local_paths {
+            checked_local += 1;
+            cited_local_paths.insert(local_path.clone());
+            let abs_path = root.join(local_path);
+            let meta_path = root.join(format!("{local_path}.meta.yaml"));
+
+            if abs_path.is_file() {
+                // File exists — good.
+            } else if meta_path.is_file() {
+                let redist = read_redistribution(&meta_path);
+                if redist == "do-not-bundle" || redist == "manual-review-required" {
+                    // Expected; sidecar-only is OK.
+                } else {
+                    errors.push(format!(
+                        "MISSING FILE: {rel_cs}: local: path has sidecar but no verbatim file and redistribution is '{redist}': {local_path}"
+                    ));
+                }
+            } else {
+                errors.push(format!(
+                    "MISSING: {rel_cs}: local: path does not exist (no file, no sidecar): {local_path}"
+                ));
+            }
+        }
+    }
+
+    // Check 3: orphan detection.
+    for entry in &entries {
+        let lp = entry
+            .get("local_path")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        if lp.is_empty() {
+            continue;
+        }
+        let cited_by = entry
+            .get("cited_by")
+            .and_then(|v| v.as_array())
+            .map(|a| !a.is_empty())
+            .unwrap_or(false);
+        if !cited_local_paths.contains(lp) && !cited_by {
+            warnings.push(format!(
+                "ORPHAN: {lp} is in INDEX.json but not cited by any cheatsheet"
+            ));
+        }
+    }
+
+    // Check 4: SHA-256 verification.
+    let mut sha_ok = 0usize;
+    if !no_sha {
+        use sha2::{Digest, Sha256};
+        for entry in &entries {
+            let lp = entry
+                .get("local_path")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            let expected_sha = entry
+                .get("content_sha256")
+                .and_then(|v| v.as_str())
+                .unwrap_or("");
+            if lp.is_empty() || expected_sha.is_empty() {
+                continue;
+            }
+            let abs_path = root.join(lp);
+            let bytes = match std::fs::read(&abs_path) {
+                Ok(b) => b,
+                Err(_) => continue, // File absent (do-not-bundle / not fetched) — skip.
+            };
+            let actual_sha = format!("{:x}", Sha256::digest(&bytes));
+            if actual_sha != expected_sha {
+                errors.push(format!(
+                    "SHA MISMATCH: {lp}: expected {}... got {}... (content modified after fetch)",
+                    &expected_sha[..expected_sha.len().min(16)],
+                    &actual_sha[..actual_sha.len().min(16)]
+                ));
+            } else {
+                sha_ok += 1;
+            }
+        }
+    }
+
+    // Report.
+    let sha_note = if no_sha {
+        " (SHA check skipped)".to_string()
+    } else {
+        format!(", {sha_ok} SHA verifications")
+    };
+    println!(
+        "check-cheatsheet-sources: {} cheatsheets, {} INDEX entries, {checked_urls} provenance URLs, {checked_local} local: paths checked{sha_note}",
+        md_files.len(),
+        entries.len()
+    );
+
+    if !warnings.is_empty() {
+        println!("\nWarnings ({}):", warnings.len());
+        for w in &warnings {
+            println!("  WARNING: {w}");
+        }
+    }
+
+    if !errors.is_empty() {
+        println!("\nErrors ({}):", errors.len());
+        for e in &errors {
+            println!("  ERROR: {e}");
+        }
+        return ExitCode::from(1);
+    }
+
+    println!("OK: all checks passed.");
+    ExitCode::SUCCESS
+}
+
+/// Read `redistribution:` field from a sidecar meta.yaml (first match wins).
+fn read_redistribution(meta_path: &Path) -> String {
+    let text = match std::fs::read_to_string(meta_path) {
+        Ok(t) => t,
+        Err(_) => return String::new(),
+    };
+    for line in text.lines() {
+        let line = line.trim_end();
+        if let Some(rest) = line.strip_prefix("redistribution:") {
+            // Mirror Python's `^redistribution:\s*(\S+)` — first whitespace-delimited token.
+            return rest.split_whitespace().next().unwrap_or("").to_string();
+        }
+    }
+    String::new()
+}
+
+/// Faithful port of the former Python `extract_provenance`.
+/// Returns (urls, local_paths) parsed from the cheatsheet's ## Provenance section.
+fn extract_provenance(text: &str) -> (Vec<String>, Vec<String>) {
+    let mut urls: Vec<String> = Vec::new();
+    let mut local_paths: Vec<String> = Vec::new();
+    let mut in_provenance = false;
+
+    for line in text.lines() {
+        let stripped = line.trim();
+        if is_provenance_heading(stripped) {
+            in_provenance = true;
+            continue;
+        }
+        if in_provenance && is_h2_heading(stripped) {
+            in_provenance = false;
+            continue;
+        }
+        if !in_provenance {
+            continue;
+        }
+
+        // Angle-bracketed URLs: <https://...>
+        extract_angle_urls(stripped, &mut urls);
+        // Bare URLs not in angle brackets / backticks.
+        extract_bare_urls(stripped, &mut urls);
+        // local: `path`
+        if let Some(lp) = extract_local_path(stripped) {
+            local_paths.push(lp);
+        }
+    }
+
+    (urls, local_paths)
+}
+
+/// Match `^##\s+Provenance` after stripping.
+fn is_provenance_heading(stripped: &str) -> bool {
+    if let Some(rest) = stripped.strip_prefix("##") {
+        let rest = rest.trim_start();
+        // require at least one whitespace after ## (\s+), then "Provenance"
+        rest.starts_with("Provenance")
+            && stripped
+                .as_bytes()
+                .get(2)
+                .is_some_and(|b| b.is_ascii_whitespace())
+    } else {
+        false
+    }
+}
+
+/// Match `^##\s+` after stripping.
+fn is_h2_heading(stripped: &str) -> bool {
+    stripped.starts_with("##")
+        && stripped
+            .as_bytes()
+            .get(2)
+            .is_some_and(|b| b.is_ascii_whitespace())
+}
+
+/// Port of `re.finditer(r'<(https://[^>]+)>', line)`.
+fn extract_angle_urls(line: &str, urls: &mut Vec<String>) {
+    let bytes = line.as_bytes();
+    let mut i = 0;
+    while i < bytes.len() {
+        if bytes[i] == b'<' {
+            let rest = &line[i + 1..];
+            if rest.starts_with("https://")
+                && let Some(close) = rest.find('>')
+            {
+                let u = &rest[..close];
+                if !u.is_empty() {
+                    urls.push(u.to_string());
+                }
+                i += 1 + close + 1;
+                continue;
+            }
+        }
+        i += 1;
+    }
+}
+
+/// Port of `re.finditer(r'(?<![<`])(https://\S+?)(?:[,\s>)]|$)', line)` with
+/// the subsequent `.rstrip('.,)')` and dedup against existing urls.
+fn extract_bare_urls(line: &str, urls: &mut Vec<String>) {
+    let bytes = line.as_bytes();
+    let mut search = 0;
+    while let Some(rel) = line[search..].find("https://") {
+        let start = search + rel;
+        // Negative lookbehind: previous char must not be '<' or '`'.
+        let prev_ok = start == 0 || !matches!(bytes[start - 1], b'<' | b'`');
+        if !prev_ok {
+            search = start + "https://".len();
+            continue;
+        }
+        // Consume \S+ (non-whitespace), then trim the trailing terminator set.
+        let mut end = start;
+        while end < bytes.len() && !bytes[end].is_ascii_whitespace() {
+            // The non-greedy `https://\S+?` with terminator `[,\s>)]` stops at
+            // first comma, '>' or ')' as well as whitespace.
+            if matches!(bytes[end], b',' | b'>' | b')') && end > start {
+                break;
+            }
+            end += 1;
+        }
+        let mut u = line[start..end].to_string();
+        // .rstrip('.,)')
+        while u.ends_with('.') || u.ends_with(',') || u.ends_with(')') {
+            u.pop();
+        }
+        if !u.is_empty() && !urls.contains(&u) {
+            urls.push(u);
+        }
+        search = end.max(start + 1);
+    }
+}
+
+/// Port of `re.search(r'local:\s*`([^`]+)`', line)`.
+fn extract_local_path(line: &str) -> Option<String> {
+    let idx = line.find("local:")?;
+    let after = &line[idx + "local:".len()..];
+    let after = after.trim_start();
+    let after = after.strip_prefix('`')?;
+    let close = after.find('`')?;
+    let path = &after[..close];
+    if path.is_empty() {
+        None
+    } else {
+        Some(path.to_string())
+    }
 }
 
 /// Port of re.findall(r"[a-zA-Z][a-zA-Z0-9_-]*", line).
