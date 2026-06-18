@@ -37,7 +37,7 @@ LastExecutionTime: 2026-06-18T20:50Z
 - **smoke-finding/forge-marksman-missing**: COMPLETED — marksman installed at Containerfile.base:37-38
 - **smoke-finding/forge-nix-store-missing**: COMPLETED — CLARIFIED (nix is host-side only by design; nix-first.md corrected; TILLANDSIAS_SHARED_CACHE does not exist in source code)
 
-All three forge follow-ups from the v0.3.260618.2 smoke run are now processed. Next available claimable work: `policy/no-python-runtime-scripts` (RECLAIMABLE) or `nanoclawv2-orchestration` (RECLAIMABLE).
+All three forge follow-ups from the v0.3.260618.2 smoke run are now processed. No-Python cleanup progressed: slice 4 stripped dead Python from two tombstoned cheatsheet-source scripts (0e7aed90). 5 Python-backed scripts remain. Next available claimable work: remaining no-Python scripts, `nanoclawv2-orchestration` (RECLAIMABLE), or forge diagnostics chain.
 
 ## Active Conflicts & Mediation
 
