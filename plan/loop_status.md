@@ -1,35 +1,32 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-18T05:38Z
+LastExecutionTime: 2026-06-18T06:39Z
 
 ## This Loop
 
-- **Cycle type**: meta-orchestration local-build smoke + plan evidence push.
-- **Worker drain**: no full implementation packet claimed. A stale
-  no-Python-policy litmus was fixed because it blocked the local-build gate:
-  `litmus:observability-convergence-script-shape` now pins the 5 active shell
-  surfaces and the explicit Python-retired/no-op convergence wrapper.
+- **Cycle type**: meta-orchestration follow-up on local-smoke forge PTY blocker.
+- **Worker drain**: claimed and completed
+  `local-smoke/forge-pty-stopped-before-container-start`.
+- **Fix**: `d761b418` changes prompted forge launch to omit
+  `--interactive --tty` when `--prompt` is present. Prompted mode runs
+  `opencode run`, so it is non-interactive; removing the TTY prevents Podman
+  from stopping in harness PTYs via SIGTTIN/SIGTTOU.
 - **Sibling branch audit**:
   - `main`: `b0dba63e` (tagged `v0.3.260618.1`).
-  - `linux-next`: `3d9e2bad` before this pass.
+  - `linux-next`: `8249b9fa` after this pass.
   - `windows-next`: `7674f823`; ancestor of `linux-next` (0 drift ahead).
   - `osx-next`: `c8a6fef9`; ancestor of `linux-next` (0 drift ahead).
 - **E2E gates**:
-  - `./scripts/run-litmus-test.sh --spec observability-convergence --phase pre-build`
-    PASS after the litmus update (2/2 executed).
-  - `./build.sh --ci-full --install` PASS, installing
-    `Tillandsias v0.3.260618.1` from the local build. Pre-build litmus 129/129,
-    post-build status smoke 6/6, runtime residual litmus 5/5.
-  - Destructive `podman system reset --force` PASS and left an empty store.
-  - Fresh `tillandsias --init --debug` PASS (`init_exit=0`) from the pristine
-    store.
-  - Direct enclave-only HTTPS probe PASS: `localhost/tillandsias-git` on only
-    `tillandsias-enclave` could not resolve/reach `api.github.com` without the
-    proxy (`DIRECT_EGRESS_DENIED rc=6`).
-  - Post-init `tillandsias --status-check --debug` PASS (`status_check_exit=0`).
-  - Forge continuous-enhancement lane BLOCKED in this PTY: the `tillandsias`
-    and `podman run` processes entered stopped `T` state before a forge
-    container appeared; no forge log output was produced.
+  - Targeted reproduction PASS:
+    `tillandsias . --opencode --prompt "Use the /forge-continuous-enhancement skill"`
+    exited 0; evidence under
+    `target/local-forge-lane-repro/20260618T063403Z/`.
+  - `cargo build -p tillandsias-headless` PASS.
+  - `cargo test -p tillandsias-headless -- opencode_args_mount_workspace_and_prompt`
+    PASS.
+  - Full `cargo test -p tillandsias-headless` was run in the forge and had 3
+    pre-existing/environment-sensitive failures; the changed targeted test
+    passed after update.
 
 ## Active Conflicts & Mediation
 
@@ -37,15 +34,17 @@ LastExecutionTime: 2026-06-18T05:38Z
   `linux-next`.
 - High-Velocity Alignment Event: **Inactive**; no deadlock, thrash, or
   wrong-direction sibling work found in this pass.
-- Convergence velocity: **stable positive / no event triggered**. Residual debt
-  improved slightly by removing the stale Python convergence-checker litmus
-  dependency from the local build gate.
+- Convergence velocity: **positive / no event triggered**. One ready blocker
+  was closed.
 
 ## Blockers
 
 - **CLEARED / local build-init smoke**: local `v0.3.260618.1` build/install,
   destructive reset, fresh init, direct enclave egress denial, and status-check
   all pass.
+- **CLEARED / forge continuous lane in harness**:
+  `local-smoke/forge-pty-stopped-before-container-start` is fixed and marked
+  done. The prompted forge lane now exits 0 in the harness.
 - **PARTIAL / targeted runtime evidence still needed**:
   `github-login/enclave-egress-regression` is fixed in `d3f4e2f3`; this cycle
   adds clean-init, direct enclave-denial, and status-check evidence. The actual
@@ -53,10 +52,6 @@ LastExecutionTime: 2026-06-18T05:38Z
   A timed PTY automation attempt was aborted because it can echo the host `gh`
   token before the helper reaches its hidden `/dev/tty` prompt; no incomplete
   smoke log was retained. Use a fresh/rotated token for the next attended run.
-- **BLOCKED / forge-continuous lane in this harness**: local forge launch under
-  this PTY stopped before container startup (`forge_exit=blocked-stopped-pty`).
-  Treat this as a harness/PTY blocker, not proof of a runtime forge regression;
-  `--status-check` still launched and cleaned a representative forge stack.
 - **RECLAIMABLE**: `nanoclawv2-orchestration` and `policy/no-python-runtime-scripts`
   leases have expired. Both are available for fresh claim.
 - **OPEN / user-attended**: macOS step 49d / m8 interactive smoke remains
@@ -64,15 +59,13 @@ LastExecutionTime: 2026-06-18T05:38Z
 
 ## Assignment Board
 
-- **Linux primary**: run targeted
-  operator-attended `tillandsias --debug --github-login` on a clean post-init
-  install, using a fresh/rotated token, to close `github-login/enclave-egress-regression`
-  runtime evidence.
+- **Linux primary**: operator-attended `tillandsias --debug --github-login`
+  on a clean post-init install with a fresh/rotated token.
 - **Linux fallback**: reclaim `nanoclawv2-orchestration` or
   `policy/no-python-runtime-scripts` if the attended GitHub-login probe is not
   available.
-- **Windows primary**: fast-forward/sync from `linux-next` after this push; no
-  Windows-owned code delta is pending.
+- **Windows primary**: fast-forward/sync from `linux-next`; no Windows-owned
+  code delta is pending.
 - **macOS primary**: step 49d / m8 interactive smoke; fallback is rerunning the
   macOS automated Ready gate if operator smoke reports a VM/provisioning
   regression.
@@ -82,5 +75,3 @@ LastExecutionTime: 2026-06-18T05:38Z
 - Next useful Linux runtime probe: operator-attended
   `tillandsias --debug --github-login` on a clean post-init install to close the
   remaining helper-egress runtime evidence; do not use timed PTY token injection.
-- Known forge entrypoint warning `OpenSpec init failed; /opsx commands may not
-  work` remains non-blocking and already recorded in the 2026-06-16 smoke report.

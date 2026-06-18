@@ -1,6 +1,6 @@
 # Local build/install smoke findings — 2026-06-14
 
-## Current Run (Partial Pass / Blocked Final Lanes) — 2026-06-18
+## Current Run (Partial Pass / Follow-up Cleared Forge PTY Lane) — 2026-06-18
 
 - Discovered by: `/meta-orchestration` invoking `/build-install-and-smoke-test-e2e`
 - Host: Linux (`macuahuitl`)
@@ -26,10 +26,15 @@
     the helper reaches its hidden container prompt; no incomplete smoke log was
     retained. Continue tracking under
     `plan/issues/github-login-enclave-egress-regression-2026-06-17.md`.
-  - The final forge continuous-enhancement lane did not start a forge workload in
+  - The original final forge continuous-enhancement lane did not start a forge workload in
     this harness: `tillandsias` and `podman run` entered stopped `T` state before
     a forge container appeared, and `04-forge-continuous-enhancement.log` had no
     runtime output.
+- Follow-up:
+  - 2026-06-18T06:34Z reproduced the prompted forge lane from the harness and
+    confirmed it reaches the forge and exits 0 after `d761b418`.
+  - Evidence: `target/local-forge-lane-repro/20260618T063403Z/01-opencode.log`
+    and `target/local-forge-lane-repro/20260618T063403Z/01-opencode-exit.txt`.
 
 ## Work Packet: local-smoke/forge-pty-stopped-before-container-start
 
@@ -38,7 +43,7 @@
 - title: Local smoke forge lane can stop in the harness PTY before container startup
 - owner_host: linux
 - capability_tags: [linux, podman, pty, smoke, opencode]
-- status: ready
+- status: done
 - discovered_by: `/meta-orchestration` local build/install smoke
 - owned_files:
   - `crates/tillandsias-headless/src/main.rs`
@@ -55,21 +60,37 @@
   - The same post-init runtime passed `tillandsias --status-check --debug`,
     including launch and cleanup of a representative forge stack, so this is not
     yet evidence of a general forge image/runtime regression.
-- next_action: >
-    Reproduce the final `tillandsias . --opencode --prompt ...` smoke lane from
-    a normal operator terminal and from the automation harness. Determine
-    whether the stopped `T` state is caused by the Codex PTY wrapper,
-    foreground/background job control around `podman run --tty`, or the
-    launcher itself. If it is harness-only, make the smoke skill use an execution
-    mode that cannot SIGTTIN/SIGTTOU the foreground `podman run`; if it is a
-    launcher issue, add a focused regression test around prompt-mode OpenCode
-    launch.
+- resolution: >
+    Fixed in `d761b418`: prompted forge launch no longer passes
+    `--interactive --tty`, because `--prompt` uses non-interactive
+    `opencode run`. This avoids Podman attempting to claim the harness PTY and
+    entering stopped `T` state.
 - acceptance_evidence:
   - `tillandsias . --opencode --prompt "Use the /forge-continuous-enhancement skill"`
-    exits 0 or produces actionable runtime logs in the local smoke harness.
-  - `podman ps` shows the expected forge container while the lane is active.
-  - A local build/install smoke run records a non-empty final forge log and no
-    stopped `T` process state.
+    exited 0 in `target/local-forge-lane-repro/20260618T063403Z/01-opencode-exit.txt`.
+  - Prompted-mode unit coverage updated in `opencode_args_mount_workspace_and_prompt`.
+  - `cargo build -p tillandsias-headless` passed.
+  - `cargo test -p tillandsias-headless -- opencode_args_mount_workspace_and_prompt`
+    passed.
+- events:
+  - type: claim
+    ts: "2026-06-18T06:35:56Z"
+    agent_id: "forge-big-pickle"
+    host: linux
+    lease_id: "forge-pty-stopped-202606180635"
+    expires_at: "2026-06-18T10:35:56Z"
+  - type: completed
+    ts: "2026-06-18T06:39:31Z"
+    agent_id: "linux-macuahuitl-codex-20260618T0631Z"
+    host: linux
+    lease_id: "forge-pty-stopped-202606180635"
+    commits:
+      - "d761b418"
+      - "8249b9fa"
+    evidence_refs:
+      - "target/local-forge-lane-repro/20260618T063403Z/01-opencode-exit.txt"
+      - "cargo build -p tillandsias-headless"
+      - "cargo test -p tillandsias-headless -- opencode_args_mount_workspace_and_prompt"
 
 ## Current Run (Blocked) — 2026-06-15
 
