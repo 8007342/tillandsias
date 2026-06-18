@@ -17,10 +17,10 @@ LastExecutionTime: 2026-06-18T06:39Z
   - `windows-next`: `7674f823`; ancestor of `linux-next` (0 drift ahead).
   - `osx-next`: `c8a6fef9`; ancestor of `linux-next` (0 drift ahead).
 - **E2E gates**:
-  - Targeted reproduction PASS:
+  - Pre-fix non-interactive targeted reproduction PASS:
     `tillandsias . --opencode --prompt "Use the /forge-continuous-enhancement skill"`
-    exited 0; evidence under
-    `target/local-forge-lane-repro/20260618T063403Z/`.
+    exited 0 and launched the in-forge agent that diagnosed the PTY-specific
+    launcher bug; evidence under `target/local-forge-lane-repro/20260618T063403Z/`.
   - `cargo build -p tillandsias-headless` PASS.
   - `cargo test -p tillandsias-headless -- opencode_args_mount_workspace_and_prompt`
     PASS.
@@ -44,7 +44,8 @@ LastExecutionTime: 2026-06-18T06:39Z
   all pass.
 - **CLEARED / forge continuous lane in harness**:
   `local-smoke/forge-pty-stopped-before-container-start` is fixed and marked
-  done. The prompted forge lane now exits 0 in the harness.
+  done by source-level fix plus targeted verification. Full post-fix local
+  build/install smoke remains eligible for the next destructive e2e cycle.
 - **PARTIAL / targeted runtime evidence still needed**:
   `github-login/enclave-egress-regression` is fixed in `d3f4e2f3`; this cycle
   adds clean-init, direct enclave-denial, and status-check evidence. The actual

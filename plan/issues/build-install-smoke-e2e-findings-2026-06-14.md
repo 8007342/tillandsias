@@ -31,8 +31,9 @@
     a forge container appeared, and `04-forge-continuous-enhancement.log` had no
     runtime output.
 - Follow-up:
-  - 2026-06-18T06:34Z reproduced the prompted forge lane from the harness and
-    confirmed it reaches the forge and exits 0 after `d761b418`.
+  - 2026-06-18T06:34Z reproduced the prompted forge lane from a non-interactive
+    host invocation and confirmed it reaches the forge and exits 0. That run
+    launched the in-forge agent that diagnosed the PTY-specific launcher bug.
   - Evidence: `target/local-forge-lane-repro/20260618T063403Z/01-opencode.log`
     and `target/local-forge-lane-repro/20260618T063403Z/01-opencode-exit.txt`.
 
@@ -67,11 +68,14 @@
     entering stopped `T` state.
 - acceptance_evidence:
   - `tillandsias . --opencode --prompt "Use the /forge-continuous-enhancement skill"`
-    exited 0 in `target/local-forge-lane-repro/20260618T063403Z/01-opencode-exit.txt`.
+    exited 0 in the non-interactive host reproduction at
+    `target/local-forge-lane-repro/20260618T063403Z/01-opencode-exit.txt`.
   - Prompted-mode unit coverage updated in `opencode_args_mount_workspace_and_prompt`.
   - `cargo build -p tillandsias-headless` passed.
   - `cargo test -p tillandsias-headless -- opencode_args_mount_workspace_and_prompt`
     passed.
+  - Full post-fix local build/install smoke remains eligible for the next
+    destructive e2e cycle.
 - events:
   - type: claim
     ts: "2026-06-18T06:35:56Z"
