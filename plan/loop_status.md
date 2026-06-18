@@ -1,31 +1,28 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-18T14:19Z
+LastExecutionTime: 2026-06-18T15:14Z
 
 ## This Loop
 
-- **Cycle type**: meta-orchestration worker drain plus coordination audit.
+- **Cycle type**: meta-orchestration coordination pass after worker-drain audit.
 - **Startup**: clean mutable-Linux host on `linux-next`; fetched origin and
-  fast-forwarded from `41a3fab1` to `36cb4dc6`, then pushed lease claim
-  `e769a899` for `policy/no-python-runtime-scripts`.
+  confirmed local `linux-next` is up to date at `54f5625f`.
 - **Sibling heads after fetch**:
   - `main`: `b0dba63e` (tagged `v0.3.260618.1`).
-  - `linux-next`: `36cb4dc6` before local lease/progress commits.
-  - `windows-next`: `e332afb6` (ancestor of linux-next, 0 drift).
-  - `osx-next`: `c7d32fb9` (ancestor of linux-next, 0 drift).
-- **Worker drain**: reclaimed expired
-  `policy/no-python-runtime-scripts` as `no-python-slice-3-202606181417` and
-  completed a narrow slice: `scripts/bind-provenance-local-paths.sh` is now a
-  tombstone-only wrapper with the unreachable Python body removed.
+  - `linux-next`: `54f5625f`.
+  - `windows-next`: `e332afb6` (ancestor of linux-next, 0 ahead / 8 behind).
+  - `osx-next`: `c7d32fb9` (ancestor of linux-next, 0 ahead / 10 behind).
+- **Worker drain**: no implementation packet claimed. The no-Python packet is
+  actively leased until 2026-06-18T18:17Z; `nanoclawv2-orchestration` is
+  reclaimable but its first useful implementation slice spans launcher, broker,
+  image, and smoke hooks and should be picked up by a dedicated worker cycle.
 - **Integration/runtime**: no sibling branch is ahead of linux-next, and
   `plan/localwork/runtime-litmus/current` is absent. No full litmus was started.
-- **Verification**: `scripts/bind-provenance-local-paths.sh` PASS, `bash -n`
-  PASS, `cargo test -p tillandsias-policy` PASS, `git diff --check` PASS.
-  `./scripts/check-no-python-scripts.sh` still fails on remaining active
-  Python-backed scripts, with `bind-provenance-local-paths.sh` removed from the
-  violation list.
-- **E2E gates**: skipped; only a retired maintenance wrapper and plan ledgers
-  changed, with no runtime/image/installer/release artifact delta.
+- **Release/e2e freshness**: GitHub reports latest release `v0.3.260618.1`,
+  published 2026-06-18T01:34:43Z at `b0dba63e`; plan has curl-install smoke
+  PASS evidence for that release at 2026-06-18T03:31:55Z.
+- **E2E gates**: skipped; this pass changed only plan ledgers and found no
+  runtime/image/installer/release artifact delta since the current smoke.
 
 ## Active Conflicts & Mediation
 
@@ -34,8 +31,8 @@ LastExecutionTime: 2026-06-18T14:19Z
 - Branch drift: none; both sibling branches are integrated.
 - Wrong-direction progress: none detected in the audited sibling status packets.
 - High-Velocity Alignment Event: **Inactive**.
-- Convergence velocity: **positive** for policy debt; one no-Python violation
-  was retired and branch residual drift remains zero.
+- Convergence velocity: **flat this pass**; no implementation packet was claimed,
+  but branch residual drift remains zero and no new blocker was introduced.
 
 ## Blockers
 
@@ -43,7 +40,7 @@ LastExecutionTime: 2026-06-18T14:19Z
   `github-login/enclave-egress-regression` is fixed in `d3f4e2f3`, but the
   actual `tillandsias --debug --github-login` token paste remains
   operator-attended with a fresh/rotated token.
-- **IN PROGRESS (linux)**: `policy/no-python-runtime-scripts` is leased until
+- **IN PROGRESS (linux)**: `policy/no-python-runtime-scripts` remains leased until
   2026-06-18T18:17Z; remaining Python-backed scripts are listed in
   `plan/issues/no-python-runtime-policy-2026-06-16.md`.
 - **RECLAIMABLE (linux)**: `nanoclawv2-orchestration` lease expired at
@@ -56,9 +53,9 @@ LastExecutionTime: 2026-06-18T14:19Z
 
 - **Linux primary**: operator-attended `tillandsias --debug --github-login` on
   a clean post-init install with a fresh/rotated token.
-- **Linux fallback**: continue `policy/no-python-runtime-scripts` within the
-  active lease by porting or retiring the remaining active scripts, or reclaim
-  `nanoclawv2-orchestration` in a longer worker cycle.
+- **Linux fallback**: after the no-Python lease expires or checkpoints, port or
+  retire another active Python-backed script; otherwise reclaim
+  `nanoclawv2-orchestration` in a dedicated worker cycle.
 - **Windows primary**: resolve the Smart App Control decision, then rerun the
   native local-build e2e gate.
 - **Windows fallback**: keep `windows-next` synced and report SAC status.
