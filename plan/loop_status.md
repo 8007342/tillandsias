@@ -1,18 +1,18 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-18T04:09:01Z
+LastExecutionTime: 2026-06-18T07:11:51Z
 
 ## This Loop
 
 - **Cycle type**: meta-orchestration (macOS) — worker drain (no
   eligible autonomous macOS work found) + plan reconciliation. Step 49a/b/c/e
-  complete; 49d remains user-attended m8 interactive smoke.
+  complete; 49d remains user-attended m8 interactive smoke. linux-next advanced
+  (d36f9ba1 — forge PTY verification evidence clarification). No sibling drift.
 - **Sibling Git Audit** (origin):
   - `main` at `b0dba63e` (release v0.3.260618.1 published)
-  - `linux-next` at `76e776f4` (38 commits ahead of osx-next merge-base; includes
-    enclave-egress bridge-to-managed fix + release v0.3.260618.1)
+  - `linux-next` at `d36f9ba1` (forge PTY verification evidence clarification)
   - `windows-next` at `7674f823`
-  - `osx-next` at `a97ee0be` — even with origin, 0 behind linux-next merge-base
+  - `osx-next` at `c8a6fef9` — even with origin, 0 behind linux-next merge-base
 - **Completed this pass**: none (no eligible autonomous macOS work to claim)
 
 ## Active Conflicts & Mediation
