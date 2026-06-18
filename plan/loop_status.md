@@ -1,21 +1,23 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-18T15:14Z
+LastExecutionTime: 2026-06-18T16:00Z
 
 ## This Loop
 
 - **Cycle type**: meta-orchestration coordination pass after worker-drain audit.
 - **Startup**: clean mutable-Linux host on `linux-next`; fetched origin and
-  confirmed local `linux-next` is up to date at `54f5625f`.
+  confirmed local `linux-next` is up to date at `87d2201f`.
 - **Sibling heads after fetch**:
   - `main`: `b0dba63e` (tagged `v0.3.260618.1`).
-  - `linux-next`: `54f5625f`.
-  - `windows-next`: `e332afb6` (ancestor of linux-next, 0 ahead / 8 behind).
-  - `osx-next`: `c7d32fb9` (ancestor of linux-next, 0 ahead / 10 behind).
-- **Worker drain**: no implementation packet claimed. The no-Python packet is
-  actively leased until 2026-06-18T18:17Z; `nanoclawv2-orchestration` is
+  - `linux-next`: `87d2201f`.
+  - `windows-next`: `e332afb6` (ancestor of linux-next, 0 ahead / 9 behind).
+  - `osx-next`: `c7d32fb9` (ancestor of linux-next, 0 ahead / 11 behind).
+- **Worker drain**: no implementation packet claimed. `policy/no-python-runtime-scripts`
+  is actively leased until 2026-06-18T18:17Z; `nanoclawv2-orchestration` is
   reclaimable but its first useful implementation slice spans launcher, broker,
-  image, and smoke hooks and should be picked up by a dedicated worker cycle.
+  image, and smoke hooks (estimated 4h) and should be picked up by a dedicated
+  worker cycle. `local-smoke/evidence-bundle-litmus-count-regression` is ready
+  (3h est.) but exceeds the meta-orchestration cycle budget.
 - **Integration/runtime**: no sibling branch is ahead of linux-next, and
   `plan/localwork/runtime-litmus/current` is absent. No full litmus was started.
 - **Release/e2e freshness**: GitHub reports latest release `v0.3.260618.1`,

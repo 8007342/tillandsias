@@ -159,18 +159,18 @@ The 2026-06-16 critical/high forge proposals were triaged in
   - [x] VM reaches Ready phase after provisioning (49c verified)
   - [ ] m8 interactive smoke passes (49d) — user-attended
 
-## This Cycle (2026-06-18T15:14Z, linux)
+## This Cycle (2026-06-18T16:00Z, linux)
 
 - **Meta-orchestration audit**: fetched origin on a clean mutable-Linux
-  `linux-next` checkout and confirmed local HEAD is up to date at `54f5625f`.
+  `linux-next` checkout and confirmed local HEAD is up to date at `87d2201f`.
 - **Sibling audit**: `origin/windows-next` (`e332afb6`) and `origin/osx-next`
   (`c7d32fb9`) are both ancestors of `origin/linux-next`; each has 0 commits
   ahead of linux-next, with no branch drift, deadlock, thrash, or wrong-direction
   progress detected.
-- **Worker drain**: no implementation packet was claimed. The no-Python packet
-  remains actively leased until 2026-06-18T18:17Z, and the reclaimable
-  `nanoclawv2-orchestration` packet needs a dedicated launcher/broker/image/smoke
-  implementation cycle rather than an incidental coordination pass.
+- **Worker drain**: no implementation packet was claimed. `policy/no-python-runtime-scripts`
+  remains actively leased until 2026-06-18T18:17Z; `nanoclawv2-orchestration`
+  remains reclaimable (~4h) and `local-smoke/evidence-bundle-litmus-count-regression`
+  is ready (~3h) but both exceed the meta-orchestration cycle budget.
 - **Release/e2e freshness**: `gh release view` reports latest release
   `v0.3.260618.1`, published 2026-06-18T01:34:43Z from `b0dba63e`; existing
   release-smoke evidence for the same version passed at 2026-06-18T03:31:55Z.
