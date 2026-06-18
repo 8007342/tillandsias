@@ -1,6 +1,6 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-18T13:26Z
+Last updated: 2026-06-18T14:19Z
 
 This file is the first stop for agents inspecting `plan/issues/`. Historical
 issue reports remain in this directory for evidence and auditability, but only
@@ -88,10 +88,11 @@ the items below are immediate work.
 - source: `plan/issues/no-python-runtime-policy-2026-06-16.md`
 - lease: `no-python-slice-3-202606181417` (expires 2026-06-18T18:17Z)
 - next_action: Continue rewriting the remaining Python-backed repository
-  scripts in Rust; `check-cheatsheet-tiers.sh` is now Rust-backed and removed
-  from the no-Python checker output.
-- blocker: existing cheatsheet/provenance maintenance scripts still execute
-  Python; each needs a Rust replacement or explicit Tlatoani approval.
+  scripts in Rust or retiring obsolete wrappers; `check-cheatsheet-tiers.sh`
+  is Rust-backed and `bind-provenance-local-paths.sh` is tombstone-only.
+- blocker: existing active cheatsheet/provenance/diagnostics/source-index
+  maintenance scripts still execute Python; each needs a Rust replacement or
+  explicit Tlatoani approval.
 - evidence_required:
   - `scripts/check-no-python-scripts.sh` exits 0
   - no `*.py` executable scripts remain under `scripts/`
@@ -157,6 +158,24 @@ The 2026-06-16 critical/high forge proposals were triaged in
   - [x] build-osx-tray produces a valid bundle (E2E gate PASS)
   - [x] VM reaches Ready phase after provisioning (49c verified)
   - [ ] m8 interactive smoke passes (49d) — user-attended
+
+## This Cycle (2026-06-18T14:19Z, linux)
+
+- **Worker drain**: reclaimed expired
+  `policy/no-python-runtime-scripts` lease as
+  `no-python-slice-3-202606181417` and completed a narrow tombstone cleanup.
+- **No-Python slice 3**: replaced
+  `scripts/bind-provenance-local-paths.sh` with a compact tombstone-only
+  wrapper. The wrapper still exits 0 with the replacement notice, and the
+  unreachable Python legacy body no longer appears in
+  `./scripts/check-no-python-scripts.sh`.
+- **Verification**: `scripts/bind-provenance-local-paths.sh` PASS, `bash -n`
+  PASS, `cargo test -p tillandsias-policy` PASS, `git diff --check` PASS.
+  The no-Python checker still fails on the remaining active
+  cheatsheet/provenance/diagnostics/source-index scripts.
+- **E2E gates**: skipped. This cycle changed an already-retired maintenance
+  wrapper and plan ledgers only; no runtime, image, installer, or release
+  artifact behavior changed.
 
 ## This Cycle (2026-06-18T13:26Z, linux)
 

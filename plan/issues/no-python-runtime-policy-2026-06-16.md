@@ -38,6 +38,13 @@ programs.
 - **Refreshed trace indexes** with the Rust policy trace annotations so
   `cheatsheets-license-tiered` points at the load-bearing implementation.
 
+### Slice 3 — 2026-06-18
+
+- **Retired** `scripts/bind-provenance-local-paths.sh` to a tombstone-only
+  wrapper. The script already exited before the legacy implementation; this
+  slice removed the unreachable Python body while preserving the exit-0
+  replacement notice.
+
 ## Remaining Work
 
 Rewrite or retire the existing Python-backed maintenance scripts:
@@ -45,7 +52,8 @@ Rewrite or retire the existing Python-backed maintenance scripts:
 - ~~`scripts/check-cheatsheet-tiers.sh`~~ **rewritten in Rust dispatcher**
   (slice 2, 2026-06-18)
 - `scripts/check-cheatsheet-sources.sh`
-- `scripts/bind-provenance-local-paths.sh`
+- ~~`scripts/bind-provenance-local-paths.sh`~~ **retired to tombstone-only
+  wrapper** (slice 3, 2026-06-18)
 - `scripts/audit-cheatsheet-sources.sh`
 - `scripts/fetch-cheatsheet-source.sh`
 - `scripts/regenerate-source-index.sh`
@@ -155,3 +163,29 @@ explicitly approved by The Tlatoani.
     the legacy Python body from the already-retired
     `scripts/bind-provenance-local-paths.sh` tombstone wrapper, preserving the
     early-exit notice while removing a checker violation.
+
+- type: progress
+  ts: "2026-06-18T14:19:33Z"
+  agent_id: "linux-macuahuitl-codex-20260618T141743Z"
+  host: linux
+  lease_id: "no-python-slice-3-202606181417"
+  note: >
+    Slice 3 checkpoint: replaced `scripts/bind-provenance-local-paths.sh` with
+    a compact tombstone-only wrapper. The obsolete script still exits 0 with
+    the same replacement notice, but no longer carries the unreachable Python
+    provenance-rewrite body.
+  files_touched:
+    - scripts/bind-provenance-local-paths.sh
+  evidence:
+    - scripts/bind-provenance-local-paths.sh exits 0 and prints the tombstone
+      notice
+    - bash -n scripts/bind-provenance-local-paths.sh
+    - cargo test -p tillandsias-policy
+    - git diff --check
+    - ./scripts/check-no-python-scripts.sh still fails on the remaining
+      cheatsheet/provenance/diagnostics/source-index scripts, with
+      `bind-provenance-local-paths.sh` removed from the violation list.
+  next_checkpoint: >
+    Continue with one of the remaining Python-backed active maintenance
+    scripts, preferably `scripts/check-cheatsheet-sources.sh`,
+    `scripts/audit-cheatsheet-sources.sh`, or `scripts/regenerate-source-index.sh`.
