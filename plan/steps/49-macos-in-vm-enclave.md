@@ -155,3 +155,15 @@ a second enclave definition (tombstone/supersede, never duplicate).
     - "Script validate: phase=Ready at ~31s on provisioned VM"
     - "Exits 0 on Ready, 2 on Failed/timeout"
     - "120s timeout with polling"
+- type: claim
+  task: "49d"
+  ts: "2026-06-18T23:18:15Z"
+  agent_id: "macos-Tlatoanis-MacBook-Air-vz-20260618T231815Z"
+  host: "macos"
+  lease_id: "step49d-m8-smoke-20260618T231815Z"
+  expires_at: "2026-06-19T03:18:15Z"
+  note: >
+    Operator-attended m8 interactive smoke claimed for live execution. Rebuild +
+    install at HEAD (freshness gate: installed --version SHA must equal
+    git rev-parse --short HEAD), then drive the 7-step menu checklist while the
+    host captures the vsock/enclave side via scripts/diagnose-macos-enclave.sh.

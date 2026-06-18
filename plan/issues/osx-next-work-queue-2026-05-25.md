@@ -2,6 +2,13 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
+## 2026-06-18T23:18Z — CLAIM 49d: operator-attended m8 interactive smoke (live now)
+
+Operator at the macOS terminal is driving the user-attended m8 smoke now. Lease
+`step49d-m8-smoke-20260618T231815Z`. Plan: rebuild+install at HEAD (freshness
+gate --version SHA == HEAD), then run the 7-step menu checklist while the host
+captures the enclave/vsock side. Findings will land as a fresh m8 results file.
+
 ## 2026-06-16T23:35Z — step 49 done (49a/b/c/e completed); 49d next (user-attended m8 smoke)
 
 ### Achieved this cycle:
