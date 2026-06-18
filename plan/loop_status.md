@@ -1,27 +1,19 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-17T22:57:20Z
+LastExecutionTime: 2026-06-18T04:09:01Z
 
 ## This Loop
 
-- **Cycle type**: meta-orchestration (macOS) — checkpoint + worker drain (no
-  eligible autonomous macOS work found) + plan reconciliation. Step 49 49a/b/c/e
+- **Cycle type**: meta-orchestration (macOS) — worker drain (no
+  eligible autonomous macOS work found) + plan reconciliation. Step 49a/b/c/e
   complete; 49d remains user-attended m8 interactive smoke.
 - **Sibling Git Audit** (origin):
-  - `main` at `dcfde74c` (release v0.3.260616.2 published; merge/version artifacts only)
-  - `linux-next` at `ef1f1899`
-  - `windows-next` at `38e6e972` — behind linux-next; nothing to merge
-  - `osx-next` at `9d2bcea6` — local osx-next ahead 18 commits (includes repeat
-    macOS timeout fallback + previous plan/cheatsheet reconciliation work); push
-    pending this cycle
-- **Completed this pass**:
-  - Resolved `cheatsheet/reconcile-committed-tier` (release-pipeline blocker)
-    via Option A (`0eef1443`): retiered order-53 commit-attribution.md
-    committed→bundled (bundled_into_image true), synced into the image
-    cheatsheet tree, regenerated host INDEX.md + synced image INDEX.md
-    byte-identical. **`./build.sh --ci-full` → ALL CHECKS PASSED (14/14)** —
-    first green CI-full since the order-53 cheatsheet landed.
-  - Regenerated convergence dashboards from the green CI-full run.
+  - `main` at `b0dba63e` (release v0.3.260618.1 published)
+  - `linux-next` at `76e776f4` (38 commits ahead of osx-next merge-base; includes
+    enclave-egress bridge-to-managed fix + release v0.3.260618.1)
+  - `windows-next` at `7674f823`
+  - `osx-next` at `a97ee0be` — even with origin, 0 behind linux-next merge-base
+- **Completed this pass**: none (no eligible autonomous macOS work to claim)
 
 ## Active Conflicts & Mediation
 
@@ -29,23 +21,21 @@ LastExecutionTime: 2026-06-17T22:57:20Z
 
 ## Blockers
 
-- **CLEARED**: the order-53 cheatsheet CI-blocker is resolved (CI-full green).
-  The local-build e2e gate AND `/merge-to-main-and-release` are unblocked for
-  all hosts.
 - **Bridge-fix runtime acceptance** (`smoke-finding/rootless-bridge-network-missing`)
-  is now runnable: rerun `/build-install-and-smoke-test-e2e` to capture clean
-  init → `tillandsias-egress` created → forge lane past proxy spawn. Not yet
-  captured this cycle.
+  is unblocked since cheatsheet CI-blocker cleared; linux must rerun
+  `/build-install-and-smoke-test-e2e` to capture runtime acceptance before
+  a clean release.
 
 ## Leases & Hygiene
 
-- No active linux leases.
+- No active leases.
+- osx-next at a97ee0be — zero drift (Dmax=5 satisfied).
 
 ## Convergence Velocity
 
-- Vc **positive**: release-pipeline unblocked — CI-full green for the first time
-  since order-53; the bridge-network egress regression fix can now be runtime-
-  accepted and a clean release cut.
+- Vc **positive**: release v0.3.260618.1 tagged on linux-next; enclave egress
+  bridge-to-managed fix included. macOS acceptance gated on user-attended m8
+  interactive smoke (step 49d).
 
 ## Assignment Board
 
@@ -61,7 +51,6 @@ LastExecutionTime: 2026-06-17T22:57:20Z
 
 ## Stale Or Pending Pings
 
-- Latest published release: v0.3.260616.2 (forge-lane egress regression fixed in
-  code; CI-full now green; pending local-build e2e runtime acceptance before a
-  clean release ships).
-- Sibling branches behind linux-next (no integration work pending).
+- Latest published release: v0.3.260618.1 (containing enclave egress fix).
+- Bridge-fix runtime acceptance not yet captured by linux e2e.
+- macOS waiting on user-attended m8 interactive smoke (step 49d).
