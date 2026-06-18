@@ -1,6 +1,6 @@
 # No Python Runtime Policy - 2026-06-16
 
-Status: active
+Status: claimed
 Owner: linux-next
 
 ## Policy
@@ -93,3 +93,15 @@ explicitly approved by The Tlatoani.
     `./build.sh --ci-full --install` gate passed. Remaining checker output is
     now the cheatsheet/provenance/diagnostics shell scripts that still embed
     python/python3 snippets.
+
+- type: claim
+  ts: "2026-06-18T10:01:31Z"
+  agent_id: "linux-macuahuitl-codex-20260618T095856Z"
+  host: linux
+  lease_id: "no-python-slice-2-202606181001"
+  expires_at: "2026-06-18T14:01:31Z"
+  note: >
+    Reclaiming the expired no-Python policy packet for a narrow slice: port
+    `scripts/check-cheatsheet-tiers.sh` from embedded Python to the existing
+    Rust `tillandsias-policy` checker while preserving its strict/quiet
+    behavior and tier-validation output.

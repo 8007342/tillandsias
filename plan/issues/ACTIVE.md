@@ -83,10 +83,10 @@ the items below are immediate work.
 
 ### policy/no-python-runtime-scripts
 
-- status: stalled (lease expired 2026-06-18T02:15Z; reclaimable)
+- status: claimed
 - owner_host: linux
 - source: `plan/issues/no-python-runtime-policy-2026-06-16.md`
-- lease: `no-python-slice-1-202606172215` (EXPIRED at 2026-06-18T02:15Z)
+- lease: `no-python-slice-2-202606181001` (expires 2026-06-18T14:01Z)
 - next_action: Rewrite or retire the remaining Python-backed repository scripts
   in Rust, then make `scripts/check-no-python-scripts.sh` pass.
 - blocker: existing cheatsheet/provenance maintenance scripts still execute
