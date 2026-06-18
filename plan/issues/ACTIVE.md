@@ -98,14 +98,11 @@ the items below are immediate work.
 
 ### local-smoke/forge-pty-stopped-before-container-start
 
-- status: ready
+- status: claimed
 - owner_host: linux
 - source: `plan/issues/build-install-smoke-e2e-findings-2026-06-14.md`
-- next_action: Reproduce the final
-  `tillandsias . --opencode --prompt "Use the /forge-continuous-enhancement skill"`
-  lane from a normal operator terminal and from the automation harness, then
-  determine whether the stopped `T` state is harness PTY/job-control only or a
-  launcher regression.
+- next_action: Diagnose and fix the stopped T state — remove `--tty` from prompted forge launch when a prompt is provided, since `opencode run` is non-interactive.
+- lease: `forge-pty-stopped-202606180635` (expires at 2026-06-18T10:35:56Z)
 - blocker: none known; the same local install passed `--status-check`, so this
   is not yet evidence of a general forge image/runtime failure.
 - evidence_required:
