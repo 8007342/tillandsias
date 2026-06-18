@@ -192,3 +192,63 @@ Suggested instrumented repro for the builder:
     egress-fix packet (d3f4e2f3) was closed without ever live-validating
     --github-login. Filed as an open bug packet for pickup by
     /advance-work-from-plan.
+
+- type: claimed
+  ts: "2026-06-18T04:33:47Z"
+  agent_id: "linux-tlatoani-opus-worker2-20260618T043347Z"
+  host: linux
+  note: >
+    Claimed bug/github-login-failure for fix. Targeted work packet from
+    advance-work-from-plan worker protocol.
+
+- type: progress
+  ts: "2026-06-18T04:33:47Z"
+  agent_id: "linux-tlatoani-opus-worker2-20260618T043347Z"
+  host: linux
+  note: >
+    Confirmed the hypothesised root cause against the actual code.
+    run_github_login (main.rs:3828) launches the gh helper with
+    `--network ENCLAVE_EGRESS_NETS` (tillandsias-enclave,tillandsias-egress) at
+    main.rs:3884/3899 but never calls ensure_enclave_network or
+    ensure_egress_network anywhere in its body. ensure_enclave_network
+    (main.rs:1425) idempotently creates the enclave net AND calls
+    ensure_egress_network (main.rs:1429) before its early return, so a single
+    call ensures BOTH networks — this is exactly how sibling flows do it
+    (e.g. run_status_check at main.rs:3611). On a clean/cleaned rootless Podman
+    store where tillandsias-egress (or the enclave net) does not exist yet,
+    `podman run --network tillandsias-enclave,tillandsias-egress …` fails at
+    run_command_silent, which is the operator's CLI+tray login failure (the tray
+    shells out to `tillandsias --github-login`, sharing the same failure).
+
+- type: fix-landed
+  ts: "2026-06-18T04:33:47Z"
+  agent_id: "linux-tlatoani-opus-worker2-20260618T043347Z"
+  host: linux
+  fix_commit: "be41b40f0266d5a77ea51e802160b7b43f818782"
+  note: >
+    Minimal fix: added `ensure_enclave_network(debug)?;` in run_github_login
+    immediately after `ensure_image_exists(...)` and before the Vault/helper
+    `podman run`, matching the idiom of every other enclave-bootstrap flow.
+    This idempotently ensures both tillandsias-enclave and tillandsias-egress
+    exist before the dual-homed helper launch. Added regression test
+    `github_login_ensures_networks_before_helper_launch` (source-level: asserts
+    the ensure_enclave_network call appears BEFORE the `--network
+    ENCLAVE_EGRESS_NETS` launch arg in run_github_login). The pre-existing
+    `github_login_helper_dual_homes_onto_managed_egress_network` test is retained.
+    Validated: `cargo build -p tillandsias-headless` clean; both github_login
+    unit tests pass; `cargo clippy -p tillandsias-headless` clean;
+    `cargo fmt --check` clean; `./build.sh --check` passed (type-check green;
+    the dev squid proxy "Failed to start" line is a pre-existing, unrelated
+    local-cache warning, not a check failure).
+  evidence_open: >
+    Full RUNTIME validation still requires an operator / e2e gate and is NOT
+    demonstrated here (runtime podman login is not available in this worker
+    context): (1) `tillandsias --debug --github-login` completing after a valid
+    token on a clean post-init store without printing `Error:` / exit 1;
+    (2) the token persisting to Vault at secret/github/token; (3) the tray
+    GitHub Login click producing a stored token + visible status. Keep these
+    acceptance_evidence items OPEN until an operator runs them. The
+    investigation-checklist items 4 (rootless dual-home NAT audit), 6 (live
+    behavioral gate), and 7 (tray inner-error surfacing) are likewise NOT
+    addressed by this minimal network-ensure fix and remain open should runtime
+    validation reveal a deeper egress/NAT or UX-surfacing problem.

@@ -39,7 +39,7 @@ the items below are immediate work.
 
 ### github-login/enclave-egress-regression
 
-- status: REOPENED 2026-06-18 — superseded by `bug/github-login-failure`
+- status: ADDRESSED 2026-06-18 — root cause fixed under `bug/github-login-failure` (runtime validation pending)
 - reopened_reason: >
     The Tlatoani reports `--github-login` still fails from both CLI and tray
     across the last several builds. The `d3f4e2f3` fix only renamed the network
@@ -72,14 +72,30 @@ the items below are immediate work.
 
 ### bug/github-login-failure
 
-- status: open (operator-reported 2026-06-18; reclaimable)
+- status: fix-landed (runtime validation pending) — 2026-06-18,
+  commit `be41b40f` on `linux-next` (linux-tlatoani-opus-worker2-20260618T043347Z)
 - owner_host: linux
 - source: `plan/issues/github-login-failure-regression-2026-06-18.md`
 - severity: high — blocks GitHub auth from both CLI and tray across recent builds
-- next_action: Make `run_github_login` ensure the enclave + egress networks
-  exist before launching the helper (call `ensure_enclave_network`/
-  `ensure_egress_network`), then live-validate `tillandsias --debug --github-login`
-  on a clean post-init install and confirm the tray path surfaces inner errors.
+- fix_summary: >
+    Added `ensure_enclave_network(debug)?;` at the top of run_github_login
+    (after ensure_image_exists, before the helper podman run). This idempotently
+    ensures BOTH tillandsias-enclave and tillandsias-egress exist before the
+    dual-homed helper launch, matching every sibling enclave-bootstrap flow.
+    Root cause confirmed: the helper launched on ENCLAVE_EGRESS_NETS but the
+    networks were never ensured, so on a clean store `podman run --network
+    tillandsias-enclave,tillandsias-egress …` failed. Added regression test
+    `github_login_ensures_networks_before_helper_launch`. Build/clippy/fmt/
+    ./build.sh --check all clean.
+- runtime_validation_pending: >
+    Operator/e2e gate still required — `tillandsias --debug --github-login` on a
+    clean post-init store (no Error:/exit 1), token persisted to Vault, and the
+    tray GitHub Login click. Not demonstrated in the worker context (no runtime
+    podman login available). Keep acceptance_evidence open.
+- next_action: Live-validate `tillandsias --debug --github-login` on a clean
+  post-init install; confirm token persists to Vault and the tray path surfaces
+  inner errors. If login still fails after the networks exist, audit rootless
+  dual-home egress NAT (checklist items 4/6/7 in the source packet).
 - supersedes: `github-login/enclave-egress-regression`
 - blocker: none
 - evidence_required:

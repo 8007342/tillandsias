@@ -3847,6 +3847,16 @@ fn run_github_login(debug: bool) -> Result<(), String> {
 
     ensure_image_exists(&root, "git", &image, debug)?;
 
+    // The helper container dual-homes onto ENCLAVE_EGRESS_NETS
+    // (tillandsias-enclave,tillandsias-egress). On a clean/cleaned rootless
+    // Podman store those networks may not exist yet, so `podman run --network
+    // tillandsias-enclave,tillandsias-egress …` would fail before login can
+    // start. Ensure both networks idempotently first, matching every other
+    // enclave-bootstrap flow (run_status_check, etc.). ensure_enclave_network
+    // also ensures the egress leg.
+    // @trace spec:enclave-network, spec:proxy-container
+    ensure_enclave_network(debug)?;
+
     // Bring Vault online before the interactive paste so the user isn't
     // left waiting after login.
     #[cfg(feature = "vault")]
@@ -7875,6 +7885,29 @@ mod tests {
         assert!(
             !login_window.contains("ENCLAVE_NET,"),
             "run_github_login must not reference ENCLAVE_NET (no egress): {login_window}"
+        );
+    }
+
+    // Regression: bug/github-login-failure. run_github_login launches the gh
+    // helper on ENCLAVE_EGRESS_NETS, but on a clean/cleaned rootless Podman
+    // store those networks may not exist yet. It must ensure the networks
+    // (via ensure_enclave_network, which also ensures the egress leg) BEFORE
+    // the helper `podman run`, or the launch fails and login never starts.
+    #[test]
+    fn github_login_ensures_networks_before_helper_launch() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let login_window = source_window(source, "fn run_github_login(debug: bool)");
+        let ensure_idx = login_window.find("ensure_enclave_network(debug)?").expect(
+            "run_github_login must call ensure_enclave_network before launching the helper",
+        );
+        // Match the actual `--network ENCLAVE_EGRESS_NETS` launch arg, not the
+        // explanatory comment above the ensure call (which also names the const).
+        let network_arg_idx = login_window
+            .find("            ENCLAVE_EGRESS_NETS,")
+            .expect("run_github_login must dual-home the helper onto ENCLAVE_EGRESS_NETS");
+        assert!(
+            ensure_idx < network_arg_idx,
+            "ensure_enclave_network must run before the helper `podman run --network ENCLAVE_EGRESS_NETS`"
         );
     }
 
