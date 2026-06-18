@@ -142,3 +142,10 @@ explicitly approved by The Tlatoani.
     (exit 0) on the live repo (no cheatsheet-sources/INDEX.json yet). The crate
     file is the single source of both `tiers` and `sources` validators.
     5 down, 8 to go. Committed on linux-next (this commit).
+
+- type: claim
+  ts: "2026-06-18T04:45:00Z"
+  agent_id: "linux-tlatoani-opus-worker4-20260618T044308Z"
+  host: linux
+  lease_id: "no-python-slice-4-20260618T044308Z"
+  expires_at: "2026-06-18T08:45:00Z"
