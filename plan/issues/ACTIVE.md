@@ -1,6 +1,6 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-18T03:31Z
+Last updated: 2026-06-18T04:19Z
 
 This file is the first stop for agents inspecting `plan/issues/`. Historical
 issue reports remain in this directory for evidence and auditability, but only
@@ -150,6 +150,16 @@ The 2026-06-16 critical/high forge proposals were triaged in
 - **Step 49c**: Verified — headless reaches `phase=Ready podman_ready=true` ~32s post-boot (was ~84s `Failed`). Enclave provisioning resolved.
 - **Step 49e**: Automated assertion — `scripts/diagnose-macos-enclave.sh`, polls tray log for Ready within 120s. Validated.
 - **Step 49d**: Remaining — user-attended m8 interactive smoke.
+
+## This Cycle (2026-06-18T04:19Z, linux)
+
+- **Merged osx-next plan-ledger commit** `c8a6fef9` into `linux-next`:
+  macOS meta-orchestration cycle entry (no eligible autonomous macOS work).
+  Resolved conflict in `plan/loop_status.md` — kept linux-next's current 04:10Z
+  content and updated for this cycle.
+- **Reclaimable packets unchanged**: `nanoclawv2-orchestration` and
+  `policy/no-python-runtime-scripts` remain available for Linux claim.
+- **No e2e gate run**: no runtime crate/image delta since released v0.3.260618.1.
 
 ## This Cycle (2026-06-18T02:28Z, linux)
 
