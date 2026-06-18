@@ -1,17 +1,19 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-18T03:31Z
+LastExecutionTime: 2026-06-18T04:10Z
 
 ## This Loop
 
-- **Cycle type**: meta-orchestration release-smoke gate on mutable Linux.
-- **Worker drain**: no new packet claimed this pass. Existing reclaimable Linux
-  packets remain `nanoclawv2-orchestration` and
-  `policy/no-python-runtime-scripts`.
+- **Cycle type**: meta-orchestration coordination + sibling drift audit.
+- **Worker drain**: no implementation packet claimed this pass. Reclaimable
+  Linux packets remain `nanoclawv2-orchestration` and
+  `policy/no-python-runtime-scripts`; targeted GitHub-login runtime evidence is
+  still the highest-signal Linux probe.
 - **Sibling branch audit**:
   - `main`: `b0dba63e` (tagged `v0.3.260618.1`).
-  - `linux-next`: `76f90224`.
-  - `windows-next`: `38e6e972`; ancestor of `linux-next` (0 drift).
+  - `linux-next`: `76e776f4` before this pass.
+  - `windows-next`: `7674f823`; had 1 plan-only commit ahead of
+    `linux-next`, merged cleanly into this coordination checkpoint.
   - `osx-next`: `a97ee0be`; ancestor of `linux-next` (0 drift).
 - **E2E gates**: Curl-install smoke for published `v0.3.260618.1` PASS:
   installer checksum/version, destructive Podman reset, empty-store check,
@@ -21,11 +23,14 @@ LastExecutionTime: 2026-06-18T03:31Z
 
 ## Active Conflicts & Mediation
 
-- No active merge conflicts.
-- Sibling branch drift remains resolved; both platform branches are ancestors of
-  `linux-next`.
+- No active merge conflicts. The Windows drift was a ledger-only
+  meta-orchestration entry; no code merge or runtime merge was required.
+- `osx-next` remains integrated. After this checkpoint, both sibling branches
+  are represented in `linux-next`.
 - High-Velocity Alignment Event: **Inactive**; no deadlock, thrash, or
   wrong-direction sibling work found in this pass.
+- Convergence velocity: **stable positive / no event triggered**. Residual debt
+  is unchanged except the sibling drift count is reduced from 1 to 0.
 
 ## Blockers
 
@@ -42,14 +47,14 @@ LastExecutionTime: 2026-06-18T03:31Z
 
 ## Assignment Board
 
-- **Immutable Linux primary**: no current curl-smoke debt; wait for the next
-  published release.
-- **Linux worker fallback**: after leases expire (both already expired),
-  `nanoclawv2-orchestration` and `policy/no-python-runtime-scripts` are the
-  highest-signal ready Linux packets.
-- **Windows primary**: sync `windows-next` forward from `linux-next` after the
-  next coordination push if needed; otherwise no Windows-owned code delta is
-  pending.
+- **Linux primary**: run targeted
+  `tillandsias --debug --github-login` on a clean post-init install to close
+  `github-login/enclave-egress-regression` runtime evidence.
+- **Linux fallback**: reclaim `nanoclawv2-orchestration` or
+  `policy/no-python-runtime-scripts` if the attended GitHub-login probe is not
+  available.
+- **Windows primary**: fast-forward/sync from `linux-next` after this push; no
+  Windows-owned code delta is pending.
 - **macOS primary**: step 49d / m8 interactive smoke; fallback is rerunning the
   macOS automated Ready gate if operator smoke reports a VM/provisioning
   regression.
