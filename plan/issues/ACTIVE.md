@@ -1,6 +1,6 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-18T10:59Z
+Last updated: 2026-06-18T13:26Z
 
 This file is the first stop for agents inspecting `plan/issues/`. Historical
 issue reports remain in this directory for evidence and auditability, but only
@@ -157,6 +157,23 @@ The 2026-06-16 critical/high forge proposals were triaged in
   - [x] build-osx-tray produces a valid bundle (E2E gate PASS)
   - [x] VM reaches Ready phase after provisioning (49c verified)
   - [ ] m8 interactive smoke passes (49d) — user-attended
+
+## This Cycle (2026-06-18T13:26Z, linux)
+
+- **Merged osx-next plan-only cycle**: integrated `origin/osx-next` commit
+  `c7d32fb9` into `linux-next`. It recorded a macOS no-eligible-work
+  meta-orchestration cycle and touched only `plan/issues/osx-next-work-queue-2026-05-25.md`
+  plus `plan/loop_status.md`.
+- **Worker drain**: no small unclaimed Linux implementation packet was claimed.
+  `policy/no-python-runtime-scripts` remains leased until 2026-06-18T14:01Z;
+  `nanoclawv2-orchestration` remains reclaimable, but the next implementation
+  slice is estimated at 4h and should be picked up by a dedicated worker cycle.
+- **E2E gates**: skipped. No implementation/runtime/image/installer files
+  changed, and release `v0.3.260618.1` already has current curl-install smoke
+  evidence.
+- **Next useful Linux evidence**: operator-attended
+  `tillandsias --debug --github-login` on a clean post-init install with a
+  fresh/rotated token.
 
 ## Achieved This Cycle (2026-06-18T10:15Z, macos)
 

@@ -1,66 +1,64 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-18T11:48Z
+LastExecutionTime: 2026-06-18T13:26Z
 
 ## This Loop
 
-- **Cycle type**: meta-orchestration coordination — worker drain found no
-  unclaimed ready Linux work; sibling branches at 0 drift; no new merge needed.
+- **Cycle type**: meta-orchestration coordination + sibling plan merge.
 - **Startup**: host classified `linux_mutable`; branch `linux-next` at
-  `05dc18c6`; fetched origin (siblings unchanged since last cycle).
-- **Worker drain**: no eligible unclaimed Linux ready work. Plan graph fully
-  drained (plan/index.yaml: all 57 steps completed/done/obsoleted).
-  `policy/no-python-runtime-scripts` claimed until 2026-06-18T14:01Z;
-  `nanoclawv2-orchestration` lease expired at 2026-06-18T02:07Z (~9.7h ago),
-  reclaimable but estimated 4h.
-- **Sibling merge**: not needed — both `origin/windows-next` and
-  `origin/osx-next` are ancestors of `linux-next`; no new sibling commits
-  since the last integration cycle.
-- **Sibling branch audit**:
+  `f12793cf`; fetched origin at 2026-06-18T13:24Z. Worktree was clean.
+- **Sibling heads after fetch**:
   - `main`: `b0dba63e` (tagged `v0.3.260618.1`).
-  - `linux-next`: `05dc18c6`.
-  - `windows-next`: `e332afb6` (ancestor, 0 drift).
-  - `osx-next`: `df70be22` (ancestor, 0 drift).
-- **Verification**: no build/test run. No implementation files changed.
-- **E2E gates**: skipped. No runtime crate/image delta since last tested
-  release; latest release v0.3.260618.1 matches last tested release.
+  - `linux-next`: `f12793cf`.
+  - `windows-next`: `e332afb6` (ancestor of linux-next, 0 drift).
+  - `osx-next`: `c7d32fb9` (1 plan-only commit ahead of linux-next).
+- **Worker drain**: no small unclaimed Linux packet was claimed. The
+  `policy/no-python-runtime-scripts` lease remains active until
+  2026-06-18T14:01Z. `nanoclawv2-orchestration` is reclaimable after an
+  expired lease, but the next implementation slice is estimated at 4h and is
+  better picked up by a dedicated worker cycle.
+- **Sibling merge**: merged `origin/osx-next` commit `c7d32fb9` into
+  `linux-next`; it only updated `plan/issues/osx-next-work-queue-2026-05-25.md`
+  and this cache. Resolved `plan/loop_status.md` by semantic rewrite.
+- **Verification**: no build/test run. No implementation, runtime, image, or
+  installer files changed.
+- **E2E gates**: skipped. Latest release `v0.3.260618.1` already has current
+  curl-install smoke evidence, and this cycle changed plan ledgers only.
 
 ## Active Conflicts & Mediation
 
-- No active merge conflicts after this pass. `plan/loop_status.md` cache
-  conflict from the `linux-next` merge was resolved in favor of the newer Linux
-  content, then rewritten for this Windows cycle.
+- No active code merge conflicts after this pass.
 - High-Velocity Alignment Event: **Inactive**.
-- Convergence velocity: **positive** — 13 stranded commits recovered and
-  `windows-next` re-synced to `linux-next`; no new correctness debt.
+- Convergence velocity: **neutral/positive**. Sibling plan drift was reduced to
+  zero without adding correctness debt.
 
 ## Blockers
 
-- **NEW / operator-attended (windows)**: Smart App Control enforce mode blocks
-  native local builds on this host. The native local-build e2e gate is blocked
-  until SAC is turned off or builds move into the WSL2 distro. Finding:
-  `plan/issues/windows-smart-app-control-build-block-2026-06-18.md`.
-- **PARTIAL / targeted runtime evidence still needed**:
-  `github-login/enclave-egress-regression` fixed in `d3f4e2f3`; the
-  `tillandsias --debug --github-login` token paste remains operator-attended on
-  Linux (no timed PTY token injection).
-- **IN PROGRESS (linux)**: `policy/no-python-runtime-scripts` leased until
-  2026-06-18T14:01Z; `check-cheatsheet-tiers.sh` is now Rust-backed.
-- **RECLAIMABLE (linux)**: `nanoclawv2-orchestration` lease expired; available.
+- **PARTIAL / targeted runtime evidence still needed (linux)**:
+  `github-login/enclave-egress-regression` is fixed in `d3f4e2f3`, but the
+  actual `tillandsias --debug --github-login` token paste remains
+  operator-attended with a fresh/rotated token.
+- **IN PROGRESS (linux)**: `policy/no-python-runtime-scripts` is leased until
+  2026-06-18T14:01Z; `check-cheatsheet-tiers.sh` is Rust-backed, with remaining
+  Python-backed scripts listed in `plan/issues/no-python-runtime-policy-2026-06-16.md`.
+- **RECLAIMABLE (linux)**: `nanoclawv2-orchestration` lease expired at
+  2026-06-18T02:07Z; next slice is the launcher/broker/smoke implementation.
 - **BLOCKED (windows)**: Smart App Control enforce mode blocks native local
   builds (`plan/issues/windows-smart-app-control-build-block-2026-06-18.md`).
 - **OPEN / user-attended (macos)**: step 49d / m8 interactive smoke.
 
 ## Assignment Board
 
-- **Linux primary**: operator-attended `tillandsias --debug --github-login`
-  on a clean post-init install with a fresh/rotated token; else continue
-  `policy/no-python-runtime-scripts` or reclaim `nanoclawv2-orchestration`.
-- **Windows primary**: operator decision on Smart App Control (off, or build in
-  WSL2) to unblock the native local-build e2e gate. Keep `windows-next` synced.
-- **macOS primary**: step 49d / m8 interactive smoke.
+- **Linux primary**: operator-attended `tillandsias --debug --github-login` on
+  a clean post-init install with a fresh/rotated token.
+- **Linux fallback**: continue `policy/no-python-runtime-scripts` within the
+  active lease, or reclaim `nanoclawv2-orchestration` in a longer worker cycle.
+- **Windows primary**: resolve the Smart App Control decision, then rerun the
+  native local-build e2e gate.
+- **macOS primary**: step 49d / m8 interactive smoke; no unattended macOS code
+  packet is currently claimable.
 
 ## Stale Or Pending Pings
 
-- Next useful Windows probe: re-run `/build-install-and-smoke-test-e2e` once the
-  Smart App Control block is resolved by the operator.
+- Next useful Linux runtime probe: operator-attended
+  `tillandsias --debug --github-login` on a clean post-init install.
