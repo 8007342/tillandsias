@@ -1,35 +1,36 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-18T00:47:10Z
+LastExecutionTime: 2026-06-18T01:14:30Z
 
 ## This Loop
 
-- **Cycle type**: meta-orchestration + multi-host coordination on
-  `linux_mutable` (Linux, no `/run/ostree-booted`, no `rpm-ostree`). Started on
-  clean `linux-next` at `8f33fde7`.
-  Worktree was clean.
-- **Worker drain**: No eligible ready work for Linux.
-  - `release/version-tag-sequence-mismatch` — DONE; `764e8745` fixed the
-    release skill to preserve current-day VERSION values that are ahead of the
-    tag-derived sequence.
-  - `nanoclawv2-orchestration` — CLAIMED (lease `nanoclawv2-orchestration-202606172207`, active until
-    2026-06-18T02:07Z).
-  - `policy/no-python-runtime-scripts` — CLAIMED (lease `no-python-slice-1-202606172215`,
-    active until 2026-06-18T02:15Z).
+- **Cycle type**: meta-orchestration on `linux_immutable` (Linux with
+  `rpm-ostree` present). Started on clean `linux-next` at `4247bf17`.
+  Worktree was clean and `git pull --ff-only origin linux-next` was already up
+  to date.
+- **Worker drain**: No lease was claimed this cycle.
+  - `nanoclawv2-orchestration` is still actively claimed by
+    `nanoclawv2-orchestration-202606172207` until 2026-06-18T02:07Z.
+  - `policy/no-python-runtime-scripts` is still actively claimed by
+    `no-python-slice-1-202606172215` until 2026-06-18T02:15Z.
+  - `github-login/enclave-egress-regression` remains ready for Linux after the
+    active release/smoke coordination settles.
 - **Sibling branch audit**:
-  - `main`: `dcfde74c` (latest published release v0.3.260616.2).
-  - `linux-next`: `8f33fde7` (current HEAD).
+  - `main`: `b0dba63e` (tagged `v0.3.260618.1`).
+  - `linux-next`: `4247bf17` (current HEAD).
   - `windows-next`: `38e6e972`; ancestor of `linux-next` (0 drift).
   - `osx-next`: `a97ee0be`; ancestor of `linux-next` (0 drift).
-- **Merge**: No sibling integration needed; osx-next and windows-next are
-  already ancestors of `linux-next`.
-- **Release pre-flight**: no open `linux-next -> main` PR, no in-flight
-  `release.yml` run, and no remote `v0.3.260617.*` tags. Current
-  `VERSION=0.3.260617.3`; accepted local-build runtime evidence is
-  v0.3.260617.2, and the post-smoke delta is VERSION/plan/repeat/scripts/skills
-  only.
-- **E2E gates**: Skipped — no new runtime crate/image delta after the accepted
-  local-build smoke.
+- **Release state**: `gh release view` still reports latest published release
+  `v0.3.260616.2` (published 2026-06-17T00:19:59Z). Tag
+  `v0.3.260618.1` exists on `origin/main`, and `release.yml` run
+  27729620789 is in progress from workflow_dispatch on that tag. At
+  2026-06-18T01:14Z the Linux release job was still in step 7,
+  "Build musl-static binaries via Nix", and `gh release view v0.3.260618.1`
+  returned "release not found".
+- **E2E gates**: Curl-install smoke was not run this cycle because immutable
+  Linux can only smoke a published release artifact. The latest published
+  artifact (`v0.3.260616.2`) already has a smoke finding, while
+  `v0.3.260618.1` is not yet published.
 
 ## Active Conflicts & Mediation
 
@@ -41,32 +42,37 @@ LastExecutionTime: 2026-06-18T00:47:10Z
 
 ## Blockers
 
-- **CLEARED**: order-53 cheatsheet CI blocker is resolved; CI-full was green
-  after retiering commit-attribution to bundled and syncing the image tree.
-- **CLEARED**: `smoke-finding/rootless-bridge-network-missing` has local-build
-  runtime acceptance on installed v0.3.260617.2.
-- **CLEARED**: `enclave/network-level-egress-deny` — implementation landed in
-  `e11ff704` and `4c6d11d8`. Verified live: `tillandsias-enclave` is
-  `Internal=true`; direct (`--noproxy`) egress from enclave FAILS (HTTP=000);
-  existing source-shape litmus pins the `--internal` const and dual-homed
-  ENCLAVE_EGRESS_NETS. Marked `done`.
+- **OPEN / release in flight**: `v0.3.260618.1` has been tagged on `main`, but
+  the release workflow has not yet produced a GitHub release object. Next
+  immutable Linux action: when run 27729620789 completes and
+  `gh release view` reports `v0.3.260618.1` as published, run
+  `/smoke-curl-install-and-test-e2e` against the latest release and file PASS
+  or findings.
+- **OPEN / ready**: `github-login/enclave-egress-regression` remains ready.
+  It should not be hidden by the new release tag; after the next published
+  smoke, either confirm it persists or close/supersede it with evidence.
 - **OPEN / user-attended**: macOS step 49d / m8 interactive smoke remains
   operator-gated after automated VM Ready evidence passed.
-- **CLEARED**: `release/version-tag-sequence-mismatch` is closed by `764e8745`.
 
 ## Assignment Board
 
-- **Linux primary**: `/merge-to-main-and-release` for the next clean release;
-  fallback is `nanoclawv2-orchestration` once its active lease expires or
-  checkpoints.
-- **Windows primary**: sync `windows-next` forward from `linux-next` after this
-  push; otherwise no Windows-owned code delta is pending.
+- **Immutable Linux primary**: wait for `v0.3.260618.1` release publication,
+  then run `/smoke-curl-install-and-test-e2e`.
+- **Linux worker fallback**: after active leases expire or checkpoint,
+  `github-login/enclave-egress-regression` is the highest-signal ready Linux
+  packet, followed by the currently leased `nanoclawv2-orchestration` and
+  `policy/no-python-runtime-scripts` packets.
+- **Windows primary**: sync `windows-next` forward from `linux-next` after the
+  next coordination push if needed; otherwise no Windows-owned code delta is
+  pending.
 - **macOS primary**: step 49d / m8 interactive smoke; fallback is rerunning the
   macOS automated Ready gate if operator smoke reports a VM/provisioning
   regression.
 
 ## Stale Or Pending Pings
 
-- Latest published release: v0.3.260616.2 still contains the clean-rootless
-  forge-lane regression. Local build v0.3.260617.2 accepted the managed egress
-  fix; the release-sequence blocker is now cleared.
+- Latest published release `v0.3.260616.2` contains the clean-rootless
+  forge-lane regression and the GitHub login helper egress regression.
+- Tag `v0.3.260618.1` exists but is not yet a published release as of
+  2026-06-18T01:14Z; smoke should key off the GitHub release object, not the
+  tag alone.
