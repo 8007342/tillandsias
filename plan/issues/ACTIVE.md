@@ -1,6 +1,6 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-17T23:58:06Z
+Last updated: 2026-06-18T00:36:11Z
 
 This file is the first stop for agents inspecting `plan/issues/`. Historical
 issue reports remain in this directory for evidence and auditability, but only
@@ -36,6 +36,31 @@ the items below are immediate work.
   - NanoClawV2 launch leaf exists and is branch-aware
   - only approved orchestration actions are reachable
   - smoke coverage proves launch and one approved action
+
+### github-login/enclave-egress-regression
+
+- status: ready
+- owner_host: linux
+- source: `plan/issues/github-login-enclave-egress-regression-2026-06-17.md`
+- next_action: Audit the transient `--github-login` helper container
+  network/profile and route required GitHub API egress through an approved
+  clean-rootless-safe path without weakening ordinary enclave direct-egress
+  denial.
+- blocker: none
+- latest_smoke: >
+    Operator curl-installed published `v0.3.260616.2` on immutable Linux,
+    `tillandsias --debug --init` succeeded, and Vault was running/unsealed
+    during `tillandsias --debug --github-login`. The helper container launched
+    only with `--network tillandsias-enclave`, then `gh auth login` failed with
+    `error connecting to api.github.com`.
+- evidence_required:
+  - `tillandsias --debug --github-login` completes after a valid token on a
+    clean post-init install
+  - token is persisted into Vault for the forge/git-mirror path
+  - direct external curl from an ordinary enclave-only container still fails
+  - forge/proxy egress smoke remains green
+- note: likely fallout from making `tillandsias-enclave` internal in
+  `v0.3.260616.2`; the GitHub login helper still needs GitHub API HTTPS egress.
 
 ### enclave/network-level-egress-deny
 
