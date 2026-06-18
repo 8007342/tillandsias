@@ -86,7 +86,7 @@ the items below are immediate work.
 - status: in_progress
 - owner_host: linux
 - source: `plan/issues/no-python-runtime-policy-2026-06-16.md`
-- lease: `no-python-slice-2-202606181001` (expires 2026-06-18T14:01Z)
+- lease: `no-python-slice-3-202606181417` (expires 2026-06-18T18:17Z)
 - next_action: Continue rewriting the remaining Python-backed repository
   scripts in Rust; `check-cheatsheet-tiers.sh` is now Rust-backed and removed
   from the no-Python checker output.

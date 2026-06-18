@@ -143,3 +143,15 @@ explicitly approved by The Tlatoani.
     Continue with one of the remaining Python-backed cheatsheet/source scripts,
     preferably `scripts/check-cheatsheet-sources.sh` or
     `scripts/bind-provenance-local-paths.sh`.
+
+- type: claim
+  ts: "2026-06-18T14:17:43Z"
+  agent_id: "linux-macuahuitl-codex-20260618T141743Z"
+  host: linux
+  lease_id: "no-python-slice-3-202606181417"
+  expires_at: "2026-06-18T18:17:43Z"
+  note: >
+    Reclaiming the expired no-Python policy packet for a narrow slice: strip
+    the legacy Python body from the already-retired
+    `scripts/bind-provenance-local-paths.sh` tombstone wrapper, preserving the
+    early-exit notice while removing a checker violation.
