@@ -56,10 +56,12 @@ Rewrite or retire the existing Python-backed maintenance scripts:
   wrapper** (slice 3, 2026-06-18)
 - `scripts/audit-cheatsheet-sources.sh`
 - `scripts/fetch-cheatsheet-source.sh`
-- `scripts/regenerate-source-index.sh`
+- ~~`scripts/regenerate-source-index.sh`~~ **retired to tombstone-only wrapper**
+  (slice 4, 2026-06-18)
 - `scripts/regenerate-cheatsheet-index.sh`
 - `scripts/distill-forge-diagnostics.sh`
-- `scripts/refresh-cheatsheet-sources.sh`
+- ~~`scripts/refresh-cheatsheet-sources.sh`~~ **retired to tombstone-only
+  wrapper** (slice 4, 2026-06-18)
 - ~~`scripts/check-convergence-velocity.sh`~~ **retired to explicit no-op
   wrapper** (2026-06-18; Rust replacement still desired for real enforcement)
 - ~~`scripts/check-convergence-velocity.py`~~ **retired** (slice 1 follow-up,
@@ -165,27 +167,50 @@ explicitly approved by The Tlatoani.
     early-exit notice while removing a checker violation.
 
 - type: progress
-  ts: "2026-06-18T14:19:33Z"
-  agent_id: "linux-macuahuitl-codex-20260618T141743Z"
+   ts: "2026-06-18T14:19:33Z"
+   agent_id: "linux-macuahuitl-codex-20260618T141743Z"
+   host: linux
+   lease_id: "no-python-slice-3-202606181417"
+   note: >
+     Slice 3 checkpoint: replaced `scripts/bind-provenance-local-paths.sh` with
+     a compact tombstone-only wrapper. The obsolete script still exits 0 with
+     the same replacement notice, but no longer carries the unreachable Python
+     provenance-rewrite body.
+   files_touched:
+     - scripts/bind-provenance-local-paths.sh
+   evidence:
+     - scripts/bind-provenance-local-paths.sh exits 0 and prints the tombstone
+       notice
+     - bash -n scripts/bind-provenance-local-paths.sh
+     - cargo test -p tillandsias-policy
+     - git diff --check
+     - ./scripts/check-no-python-scripts.sh still fails on the remaining
+       cheatsheet/provenance/diagnostics/source-index scripts, with
+       `bind-provenance-local-paths.sh` removed from the violation list.
+   next_checkpoint: >
+     Continue with one of the remaining Python-backed active maintenance
+     scripts, preferably `scripts/check-cheatsheet-sources.sh`,
+     `scripts/audit-cheatsheet-sources.sh`, or `scripts/regenerate-source-index.sh`.
+
+- type: progress
+  ts: "2026-06-18T21:35:00Z"
+  agent_id: "linux-tlatoani-opencode-big-pickle-20260618T213500Z"
   host: linux
-  lease_id: "no-python-slice-3-202606181417"
+  lease_id: "no-python-slice-4-202606182135"
   note: >
-    Slice 3 checkpoint: replaced `scripts/bind-provenance-local-paths.sh` with
-    a compact tombstone-only wrapper. The obsolete script still exits 0 with
-    the same replacement notice, but no longer carries the unreachable Python
-    provenance-rewrite body.
+    Slice 4 checkpoint: stripped unreachable Python bodies from two tombstoned
+    scripts: `scripts/regenerate-source-index.sh` and
+    `scripts/refresh-cheatsheet-sources.sh`. Both scripts still exit 0 with the
+    same tombstone notices, but no longer carry dead Python code.
   files_touched:
-    - scripts/bind-provenance-local-paths.sh
+    - scripts/regenerate-source-index.sh
+    - scripts/refresh-cheatsheet-sources.sh
   evidence:
-    - scripts/bind-provenance-local-paths.sh exits 0 and prints the tombstone
-      notice
-    - bash -n scripts/bind-provenance-local-paths.sh
-    - cargo test -p tillandsias-policy
-    - git diff --check
-    - ./scripts/check-no-python-scripts.sh still fails on the remaining
-      cheatsheet/provenance/diagnostics/source-index scripts, with
-      `bind-provenance-local-paths.sh` removed from the violation list.
+    - bash -n scripts/regenerate-source-index.sh && bash -n scripts/refresh-cheatsheet-sources.sh
+    - ./scripts/check-no-python-scripts.sh no longer flags either script
+    - 5 Python-backed scripts remain: check-cheatsheet-sources.sh, audit-cheatsheet-sources.sh,
+      fetch-cheatsheet-source.sh, regenerate-cheatsheet-index.sh, distill-forge-diagnostics.sh
   next_checkpoint: >
-    Continue with one of the remaining Python-backed active maintenance
-    scripts, preferably `scripts/check-cheatsheet-sources.sh`,
-    `scripts/audit-cheatsheet-sources.sh`, or `scripts/regenerate-source-index.sh`.
+    Continue with one of the remaining Python-backed scripts:
+    `scripts/regenerate-cheatsheet-index.sh` is a good candidate next —
+    single python3 invocation, well-scoped replacement in Rust.
