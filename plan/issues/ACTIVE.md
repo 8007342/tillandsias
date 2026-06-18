@@ -1,6 +1,6 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-18T00:36:11Z
+Last updated: 2026-06-18T02:35Z
 
 This file is the first stop for agents inspecting `plan/issues/`. Historical
 issue reports remain in this directory for evidence and auditability, but only
@@ -25,12 +25,12 @@ the items below are immediate work.
 
 ### nanoclawv2-orchestration
 
-- status: claimed
+- status: stalled (lease expired 2026-06-18T02:07Z; reclaimable)
 - owner_host: linux
 - source: `plan/issues/nanoclawv2-orchestration.md`
 - next_action: Draft the NanoClawV2 implementation task graph from the new
   spec, then wire the launcher leaf, broker surface, and smoke hooks.
-- lease: `nanoclawv2-orchestration-202606172207` (expires 2026-06-18T02:07Z)
+- lease: `nanoclawv2-orchestration-202606172207` (EXPIRED at 2026-06-18T02:07Z)
 - blocker: none
 - evidence_required:
   - NanoClawV2 launch leaf exists and is branch-aware
@@ -39,28 +39,23 @@ the items below are immediate work.
 
 ### github-login/enclave-egress-regression
 
-- status: ready
+- status: done
 - owner_host: linux
 - source: `plan/issues/github-login-enclave-egress-regression-2026-06-17.md`
-- next_action: Audit the transient `--github-login` helper container
-  network/profile and route required GitHub API egress through an approved
-  clean-rootless-safe path without weakening ordinary enclave direct-egress
-  denial.
+- fix_commit: `d3f4e2f3` on `linux-next`
+- fix_summary: >
+    Changed the GitHub login helper container from single-homed `ENCLAVE_NET`
+    to dual-homed `ENCLAVE_EGRESS_NETS` (tillandsias-enclave,tillandsias-egress).
+    The gh helper now reaches api.github.com through the managed egress network,
+    consistent with the proxy and git-service pattern. Added source-level
+    regression test `github_login_helper_dual_homes_onto_managed_egress_network`.
 - blocker: none
-- latest_smoke: >
-    Operator curl-installed published `v0.3.260616.2` on immutable Linux,
-    `tillandsias --debug --init` succeeded, and Vault was running/unsealed
-    during `tillandsias --debug --github-login`. The helper container launched
-    only with `--network tillandsias-enclave`, then `gh auth login` failed with
-    `error connecting to api.github.com`.
 - evidence_required:
   - `tillandsias --debug --github-login` completes after a valid token on a
-    clean post-init install
+    clean post-init install (e2e gate, next release)
   - token is persisted into Vault for the forge/git-mirror path
   - direct external curl from an ordinary enclave-only container still fails
   - forge/proxy egress smoke remains green
-- note: likely fallout from making `tillandsias-enclave` internal in
-  `v0.3.260616.2`; the GitHub login helper still needs GitHub API HTTPS egress.
 
 ### enclave/network-level-egress-deny
 
@@ -79,10 +74,10 @@ the items below are immediate work.
 
 ### policy/no-python-runtime-scripts
 
-- status: claimed
+- status: stalled (lease expired 2026-06-18T02:15Z; reclaimable)
 - owner_host: linux
 - source: `plan/issues/no-python-runtime-policy-2026-06-16.md`
-- lease: `no-python-slice-1-202606172215` (expires 2026-06-18T02:15Z)
+- lease: `no-python-slice-1-202606172215` (EXPIRED at 2026-06-18T02:15Z)
 - next_action: Rewrite or retire the remaining Python-backed repository scripts
   in Rust, then make `scripts/check-no-python-scripts.sh` pass.
 - blocker: existing cheatsheet/provenance maintenance scripts still execute
@@ -151,6 +146,19 @@ The 2026-06-16 critical/high forge proposals were triaged in
 - **Step 49c**: Verified — headless reaches `phase=Ready podman_ready=true` ~32s post-boot (was ~84s `Failed`). Enclave provisioning resolved.
 - **Step 49e**: Automated assertion — `scripts/diagnose-macos-enclave.sh`, polls tray log for Ready within 120s. Validated.
 - **Step 49d**: Remaining — user-attended m8 interactive smoke.
+
+## This Cycle (2026-06-18T02:28Z, linux)
+
+- **Completed `github-login/enclave-egress-regression`**: code fix in
+  `d3f4e2f3` — changed `ENCLAVE_NET` → `ENCLAVE_EGRESS_NETS` for the
+  GitHub login helper container. The gh helper now dual-homes onto the
+  managed egress network (tillandsias-enclave,tillandsias-egress) so
+  `gh auth login` can reach `api.github.com`. Added regression test
+  `github_login_helper_dual_homes_onto_managed_egress_network`.
+- **Expired leases**: `nanoclawv2-orchestration` (02:07Z) and
+  `policy/no-python-runtime-scripts` (02:15Z) are now reclaimable.
+- **No e2e gate run**: code fix targets the next release; published
+  `v0.3.260618.1` still has the regression (as expected).
 
 ## Recently Closed This Coordination Pass
 

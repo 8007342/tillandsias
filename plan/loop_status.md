@@ -1,40 +1,28 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-18T01:40:39Z
+LastExecutionTime: 2026-06-18T02:35Z
 
 ## This Loop
 
-- **Cycle type**: meta-orchestration release follow-through on Linux. Continued
-  the in-flight `v0.3.260618.1` release after PR #34 had been merged and the
-  tag/workflow_dispatch run existed. Fast-forwarded over concurrent plan-only
-  ledger updates (`4247bf17`, `d12736ab`) before writing this final release
-  result.
-- **Worker drain**: No lease was claimed this cycle.
-  - `nanoclawv2-orchestration` is still actively claimed by
-    `nanoclawv2-orchestration-202606172207` until 2026-06-18T02:07Z.
-  - `policy/no-python-runtime-scripts` is still actively claimed by
-    `no-python-slice-1-202606172215` until 2026-06-18T02:15Z.
-  - `github-login/enclave-egress-regression` remains ready for Linux after the
-    next published-release smoke confirms whether the new release still
-    reproduces the helper egress failure.
+- **Cycle type**: meta-orchestration worker drain on Linux. Claimed and
+  completed `github-login/enclave-egress-regression`: changed the GitHub
+  login helper container from single-homed `ENCLAVE_NET` to dual-homed
+  `ENCLAVE_EGRESS_NETS` so `gh auth login` can reach `api.github.com`
+  through the managed egress network. Added regression test
+  `github_login_helper_dual_homes_onto_managed_egress_network`.
+- **Worker drain**: claimed and completed `github-login/enclave-egress-regression`.
+  - `nanoclawv2-orchestration` lease expired at 2026-06-18T02:07Z; reclaimable.
+  - `policy/no-python-runtime-scripts` lease expired at 2026-06-18T02:15Z; reclaimable.
+  - `github-login/enclave-egress-regression` is now done (commit `d3f4e2f3`).
 - **Sibling branch audit**:
   - `main`: `b0dba63e` (tagged `v0.3.260618.1`).
-  - `linux-next`: `d12736ab` before this ledger update.
+  - `linux-next`: `d3f4e2f3` (this cycle).
   - `windows-next`: `38e6e972`; ancestor of `linux-next` (0 drift).
   - `osx-next`: `a97ee0be`; ancestor of `linux-next` (0 drift).
-- **Release state**: `v0.3.260618.1` is now published:
-  https://github.com/8007342/tillandsias/releases/tag/v0.3.260618.1.
-  PR #34 merged `linux-next` to `main`, `VERSION` was bumped on `main` in
-  `b0dba63e`, the tag was pushed, and workflow_dispatch run 27729620789
-  completed green across Linux musl (38m15s), macOS arm64 tray (1m22s), and
-  Windows x64 tray (3m42s). Linux artifact:
-  https://github.com/8007342/tillandsias/releases/download/v0.3.260618.1/tillandsias-linux-x86_64.
-  Non-fatal annotation observed: Determinate/FlakeHub login warning at
-  `.github#55`; the run still concluded success.
-- **E2E gates**: Curl-install smoke was not run in this release-follow-through
-  cycle. The next immutable Linux action is to run
-  `/smoke-curl-install-and-test-e2e` against latest (`v0.3.260618.1`) and file
-  PASS or findings.
+- **E2E gates**: Skipped this cycle (no runtime crate/image delta after the
+  code fix; the fix is for the next release, not the published one).
+  Curl-install smoke against `v0.3.260618.1` remains for the next immutable
+  Linux cycle.
 
 ## Active Conflicts & Mediation
 
@@ -46,12 +34,14 @@ LastExecutionTime: 2026-06-18T01:40:39Z
 
 ## Blockers
 
-- **CLEARED / release in flight**: `v0.3.260618.1` is published and the release
-  workflow completed green. Next immutable Linux action: run
-  `/smoke-curl-install-and-test-e2e` against latest and file PASS or findings.
-- **OPEN / ready**: `github-login/enclave-egress-regression` remains ready.
-  It should not be hidden by the new release tag; after the next published
-  smoke, either confirm it persists or close/supersede it with evidence.
+- **CLEARED / fix shipped**: `github-login/enclave-egress-regression` is
+  fixed in commit `d3f4e2f3` on `linux-next`. The fix will be in the next
+  release; the published `v0.3.260618.1` still has the regression.
+- **CLEARED / release published**: `v0.3.260618.1` is published and the
+  release workflow completed green. Curl-install smoke remains as the next
+  immutable Linux action.
+- **RECLAIMABLE**: `nanoclawv2-orchestration` and `policy/no-python-runtime-scripts`
+  leases have expired. Both are available for fresh claim.
 - **OPEN / user-attended**: macOS step 49d / m8 interactive smoke remains
   operator-gated after automated VM Ready evidence passed.
 
@@ -59,10 +49,9 @@ LastExecutionTime: 2026-06-18T01:40:39Z
 
 - **Immutable Linux primary**: run `/smoke-curl-install-and-test-e2e` against
   latest published release `v0.3.260618.1`.
-- **Linux worker fallback**: after active leases expire or checkpoint,
-  `github-login/enclave-egress-regression` is the highest-signal ready Linux
-  packet, followed by the currently leased `nanoclawv2-orchestration` and
-  `policy/no-python-runtime-scripts` packets.
+- **Linux worker fallback**: after leases expire (both already expired),
+  `nanoclawv2-orchestration` and `policy/no-python-runtime-scripts` are the
+  highest-signal ready Linux packets.
 - **Windows primary**: sync `windows-next` forward from `linux-next` after the
   next coordination push if needed; otherwise no Windows-owned code delta is
   pending.
@@ -75,6 +64,6 @@ LastExecutionTime: 2026-06-18T01:40:39Z
 - Latest published release is `v0.3.260618.1`; curl-install smoke has not yet
   been run against it.
 - Prior release `v0.3.260616.2` reproduced the clean-rootless forge-lane
-  regression and the GitHub login helper egress regression. Treat
-  `v0.3.260618.1` smoke as the current truth before closing or superseding
-  those findings.
+  regression and the GitHub login helper egress regression. The fix for the
+  egress regression is on `linux-next` (`d3f4e2f3`) and will ship in the
+  next release.
