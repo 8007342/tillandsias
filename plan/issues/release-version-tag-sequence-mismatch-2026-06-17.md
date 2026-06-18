@@ -8,7 +8,7 @@ Discovered during `/meta-orchestration` release pre-flight after pushing
 - id: `release/version-tag-sequence-mismatch`
 - owner_host: linux
 - capability_tags: [release, git, versioning, coordination]
-- status: claimed
+- status: done
 - severity: high - blocks `/merge-to-main-and-release` from cutting the next
   release without either downgrading `VERSION` on `main` or publishing a tag
   sequence that skips `v0.3.260617.1`.

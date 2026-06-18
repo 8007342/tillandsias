@@ -10,17 +10,14 @@ the items below are immediate work.
 
 ### release/version-tag-sequence-mismatch
 
-- status: blocked
+- status: done
 - owner_host: linux
 - source: `plan/issues/release-version-tag-sequence-mismatch-2026-06-17.md`
-- next_action: Choose the release policy for 2026-06-17: cut
-  `v0.3.260617.2` to match accepted local-build evidence, or reset
-  `linux-next` to `VERSION=0.3.260617.1` and rerun local-build e2e before
-  release.
-- blocker: `/merge-to-main-and-release` tag formula sees no
-  `v0.3.260617.*` remote tags and would compute `v0.3.260617.1`, but
-  `linux-next` and the accepted smoke evidence are already at
-  `0.3.260617.2`.
+- next_action: No worker action; the packet is closed. `/merge-to-main-and-release`
+  can now preserve the current `VERSION` when it is already ahead of the
+  tag-derived sequence for the UTC day.
+- blocker: cleared by `764e8745` (`fix(release): preserve VERSION if ahead of
+  tag sequence`).
 - evidence_required:
   - release PR/tag/workflow uses a version that matches the accepted smoke
     evidence, or fresh smoke evidence is captured for the lower version
@@ -132,6 +129,11 @@ The 2026-06-16 critical/high forge proposals were triaged in
 
 ## Recently Closed This Coordination Pass
 
+- **Completed `release/version-tag-sequence-mismatch`**: commit `764e8745`
+  updated `/merge-to-main-and-release` so a current-day `VERSION` that is ahead
+  of the tag-derived sequence is preserved instead of being downgraded.
+  The packet header is now `done`; there are no remote `v0.3.260617.*` tags,
+  no open `linux-next -> main` PR, and no in-flight `release.yml` run.
 - **Completed `enclave/network-level-egress-deny`**: implementation was already
   landed in commits `e11ff704` and `4c6d11d8`. Verified live on 2026-06-17:
   `tillandsias-enclave` is `Internal=true`; direct egress from enclave
