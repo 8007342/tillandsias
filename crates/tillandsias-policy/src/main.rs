@@ -129,7 +129,18 @@ fn inspect_file(root: &Path, path: &Path, violations: &mut Vec<String>) {
         return;
     };
     let rel = path.strip_prefix(root).unwrap_or(path).display();
+
+    // Tombstone discipline: a retired script (`@tombstone`) exits early with a
+    // notice and never executes its legacy body, which is preserved for
+    // traceability through the retention window (see methodology.yaml). Stop
+    // scanning at that early `exit 0` guard — the dead legacy below it cannot
+    // run, so Python references there are not runtime references.
+    let is_tombstone = content.contains("@tombstone");
+
     for (idx, line) in content.lines().enumerate() {
+        if is_tombstone && line.trim() == "exit 0" {
+            break;
+        }
         if has_python_runtime_reference(line) {
             violations.push(format!("{rel}:{}: {}", idx + 1, line.trim()));
         }

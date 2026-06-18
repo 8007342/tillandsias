@@ -9,6 +9,10 @@
 //   sources [--no-sha]           validate cheatsheet <-> verbatim-source binding
 //                                (faithful port of scripts/check-cheatsheet-sources.sh's
 //                                 former Python implementation)
+//   audit                        CSV migration triage of cheatsheet Provenance
+//                                URLs vs INDEX.json + license-allowlist.toml
+//                                (faithful port of scripts/audit-cheatsheet-sources.sh's
+//                                 former Python implementation)
 //
 // @trace spec:cheatsheets-license-tiered
 // @trace spec:cheatsheet-source-layer
@@ -18,13 +22,14 @@ use std::path::{Path, PathBuf};
 use std::process::ExitCode;
 
 const USAGE: &str =
-    "usage: tillandsias-cheatsheet-tools <tiers [--quiet] [--strict] | sources [--no-sha]>";
+    "usage: tillandsias-cheatsheet-tools <tiers [--quiet] [--strict] | sources [--no-sha] | audit>";
 
 fn main() -> ExitCode {
     let args: Vec<String> = std::env::args().skip(1).collect();
     match args.first().map(String::as_str) {
         Some("tiers") => cmd_tiers(&args[1..]),
         Some("sources") => cmd_sources(&args[1..]),
+        Some("audit") => cmd_audit(&args[1..]),
         Some(other) => {
             eprintln!("unknown subcommand: {other}");
             eprintln!("{USAGE}");
@@ -800,12 +805,23 @@ fn extract_bare_urls(line: &str, urls: &mut Vec<String>) {
             search = start + "https://".len();
             continue;
         }
-        // Consume \S+ (non-whitespace), then trim the trailing terminator set.
-        let mut end = start;
+        // Python pattern is `https://\S+?` (non-greedy, ≥1 char after the
+        // scheme) terminated by `[,\s>)]|$`, with a trailing `.rstrip('.,)')`.
+        // The `\S+?` body must consume at least one NON-whitespace character;
+        // if the char right after the scheme is whitespace (or EOL), there is
+        // no match at all (e.g. `git+https:// VCS` yields nothing). When that
+        // mandatory char is itself a `,`/`)`/`.`, `\S+?` consumes it and the
+        // rstrip later removes it — Python emits a bare `https://` there.
+        let scheme_end = start + "https://".len();
+        if scheme_end >= bytes.len() || bytes[scheme_end].is_ascii_whitespace() {
+            search = scheme_end.max(start + 1);
+            continue;
+        }
+        // Consume the mandatory first char, then \S+ up to the first
+        // terminator (`,`, `>`, `)`) or whitespace.
+        let mut end = scheme_end + 1;
         while end < bytes.len() && !bytes[end].is_ascii_whitespace() {
-            // The non-greedy `https://\S+?` with terminator `[,\s>)]` stops at
-            // first comma, '>' or ')' as well as whitespace.
-            if matches!(bytes[end], b',' | b'>' | b')') && end > start {
+            if matches!(bytes[end], b',' | b'>' | b')') {
                 break;
             }
             end += 1;
@@ -835,6 +851,255 @@ fn extract_local_path(line: &str) -> Option<String> {
     } else {
         Some(path.to_string())
     }
+}
+
+// ===========================================================================
+// `audit` subcommand — faithful port of scripts/audit-cheatsheet-sources.sh.
+//
+// Emits a CSV (Python csv.writer dialect: CRLF line terminators, minimal
+// quoting) with one row per cheatsheet Provenance URL:
+//   cheatsheet_path, source_url, in_index_json, license_allowlisted,
+//   allowlist_key, sha256_present, local_path_if_fetched
+// Cheatsheets with no Provenance URLs emit a single "(no provenance URLs)" row.
+// Exit code is always 0; errors are encoded as cell values.
+// ===========================================================================
+
+fn cmd_audit(args: &[String]) -> ExitCode {
+    if let Some(first) = args.first() {
+        eprintln!("error: unknown argument: {first}");
+        eprintln!("usage: tillandsias-cheatsheet-tools audit");
+        return ExitCode::from(2);
+    }
+
+    let root = repo_root();
+    let sources_dir = root.join("cheatsheet-sources");
+    let cheatsheets_dir = root.join("cheatsheets");
+    let allowlist_path = sources_dir.join("license-allowlist.toml");
+    let index_file = sources_dir.join("INDEX.json");
+
+    // --- Load INDEX.json into url -> entry map. ---
+    // Mirror Python: build url_to_entry from url/fetch_url/final_redirect keys.
+    let mut url_to_entry: HashMap<String, serde_json::Value> = HashMap::new();
+    if index_file.is_file()
+        && let Ok(text) = std::fs::read_to_string(&index_file)
+        && let Ok(index) = serde_json::from_str::<serde_json::Value>(&text)
+        && let Some(entries) = index.get("entries").and_then(|v| v.as_array())
+    {
+        for entry in entries {
+            for key in ["url", "fetch_url", "final_redirect"] {
+                if let Some(u) = entry.get(key).and_then(|v| v.as_str())
+                    && !u.is_empty()
+                {
+                    url_to_entry.insert(u.to_string(), entry.clone());
+                }
+            }
+        }
+    }
+
+    // --- Load allowlist domain keys. ---
+    let allowlisted_domains = load_allowlist_domains(&allowlist_path);
+
+    // --- Walk cheatsheets (sorted by path string), excluding INDEX/TEMPLATE. ---
+    let mut md_files: Vec<PathBuf> = Vec::new();
+    collect_md(&cheatsheets_dir, &mut md_files);
+    md_files.sort_by(|a, b| a.to_string_lossy().cmp(&b.to_string_lossy()));
+    md_files.retain(|p| {
+        let name = p.file_name().and_then(|s| s.to_str()).unwrap_or("");
+        name != "INDEX.md" && name != "TEMPLATE.md"
+    });
+
+    let mut out = String::new();
+    write_csv_row(
+        &mut out,
+        &[
+            "cheatsheet_path",
+            "source_url",
+            "in_index_json",
+            "license_allowlisted",
+            "allowlist_key",
+            "sha256_present",
+            "local_path_if_fetched",
+        ],
+    );
+
+    for cs_file in &md_files {
+        let rel_cs = cs_file
+            .strip_prefix(&root)
+            .unwrap_or(cs_file)
+            .to_string_lossy()
+            .to_string();
+        let text = match std::fs::read_to_string(cs_file) {
+            Ok(t) => t,
+            Err(_) => continue, // open() would raise in Python; glob hits are readable.
+        };
+        let urls = extract_provenance_urls_audit(&text);
+
+        if urls.is_empty() {
+            write_csv_row(
+                &mut out,
+                &[&rel_cs, "(no provenance URLs)", "N/A", "N/A", "", "N/A", ""],
+            );
+            continue;
+        }
+
+        for url in &urls {
+            let in_index = url_to_entry.contains_key(url);
+            let allowlist_key = is_allowlisted(url, &allowlisted_domains);
+            let allowlisted = !allowlist_key.is_empty();
+
+            let mut local_path = String::new();
+            let mut sha_present = false;
+            if in_index {
+                let entry = &url_to_entry[url];
+                local_path = entry
+                    .get("local_path")
+                    .and_then(|v| v.as_str())
+                    .unwrap_or("")
+                    .to_string();
+                sha_present = entry
+                    .get("content_sha256")
+                    .and_then(|v| v.as_str())
+                    .map(|s| !s.is_empty())
+                    .unwrap_or(false);
+            }
+
+            write_csv_row(
+                &mut out,
+                &[
+                    &rel_cs,
+                    url,
+                    if in_index { "yes" } else { "no" },
+                    if allowlisted { "yes" } else { "no" },
+                    &allowlist_key,
+                    if sha_present { "yes" } else { "no" },
+                    &local_path,
+                ],
+            );
+        }
+    }
+
+    print!("{out}");
+    ExitCode::SUCCESS
+}
+
+/// Parse allowlist `[domains."<key>"]` headers into a set of keys.
+/// Mirrors Python `re.match(r'\[domains\."([^"]+)"\]', line.strip())`.
+fn load_allowlist_domains(allowlist_path: &Path) -> BTreeSet<String> {
+    let mut domains: BTreeSet<String> = BTreeSet::new();
+    let Ok(text) = std::fs::read_to_string(allowlist_path) else {
+        return domains;
+    };
+    for line in text.lines() {
+        let stripped = line.trim();
+        if let Some(key) = parse_domains_header(stripped) {
+            domains.insert(key);
+        }
+    }
+    domains
+}
+
+/// Match `^\[domains\."([^"]+)"\]` (anchored, since Python uses re.match).
+fn parse_domains_header(stripped: &str) -> Option<String> {
+    let rest = stripped.strip_prefix("[domains.\"")?;
+    let close = rest.find('"')?;
+    let key = &rest[..close];
+    if key.is_empty() {
+        return None;
+    }
+    // Remainder after the closing quote must start with `]`.
+    let after = &rest[close + 1..];
+    if after.starts_with(']') {
+        Some(key.to_string())
+    } else {
+        None
+    }
+}
+
+/// Faithful port of the audit script's `is_allowlisted`.
+/// Returns the matching allowlist key, or "" if none.
+fn is_allowlisted(url: &str, allowlisted_domains: &BTreeSet<String>) -> String {
+    let u = if let Some(rest) = url.strip_prefix("https://") {
+        rest
+    } else if let Some(rest) = url.strip_prefix("http://") {
+        rest
+    } else {
+        url
+    };
+    let host = u.split('/').next().unwrap_or("");
+    // path_parts = u[len(host):].lstrip('/').split('/')
+    let after_host = &u[host.len()..];
+    let trimmed = after_host.trim_start_matches('/');
+    let path_parts: Vec<&str> = trimmed.split('/').collect();
+
+    // for depth in range(min(3, len(path_parts)), -1, -1)
+    let max_depth = 3.min(path_parts.len());
+    for depth in (0..=max_depth).rev() {
+        let candidate = if depth > 0 {
+            format!("{host}/{}", path_parts[..depth].join("/"))
+        } else {
+            host.to_string()
+        };
+        if allowlisted_domains.contains(&candidate) {
+            return candidate;
+        }
+    }
+    String::new()
+}
+
+/// Provenance-URL extractor for the audit command. Differs from
+/// `extract_provenance`: it skips lines containing `**Last updated:**`,
+/// does NOT collect local: paths, and dedups across the whole section.
+fn extract_provenance_urls_audit(text: &str) -> Vec<String> {
+    let mut urls: Vec<String> = Vec::new();
+    let mut in_provenance = false;
+    for line in text.lines() {
+        let stripped = line.trim();
+        if is_provenance_heading(stripped) {
+            in_provenance = true;
+            continue;
+        }
+        if in_provenance && is_h2_heading(stripped) {
+            in_provenance = false;
+            continue;
+        }
+        if !in_provenance {
+            continue;
+        }
+        if stripped.contains("**Last updated:**") {
+            continue;
+        }
+        extract_angle_urls(stripped, &mut urls);
+        extract_bare_urls(stripped, &mut urls);
+    }
+    urls
+}
+
+/// Write one CSV row using Python's csv.writer default dialect:
+/// minimal quoting (only when a field contains a comma, double-quote, CR, or
+/// LF), doubled quotes for escaping, and a `\r\n` line terminator.
+fn write_csv_row(out: &mut String, fields: &[&str]) {
+    for (i, field) in fields.iter().enumerate() {
+        if i > 0 {
+            out.push(',');
+        }
+        let needs_quote = field
+            .chars()
+            .any(|c| c == ',' || c == '"' || c == '\r' || c == '\n');
+        if needs_quote {
+            out.push('"');
+            for c in field.chars() {
+                if c == '"' {
+                    out.push('"');
+                }
+                out.push(c);
+            }
+            out.push('"');
+        } else {
+            out.push_str(field);
+        }
+    }
+    out.push('\r');
+    out.push('\n');
 }
 
 /// Port of re.findall(r"[a-zA-Z][a-zA-Z0-9_-]*", line).

@@ -52,7 +52,8 @@ Rewrite or retire the existing Python-backed maintenance scripts:
 - ~~`scripts/check-cheatsheet-sources.sh`~~ **rewritten** (slice 3, 2026-06-18) →
   thin wrapper over Rust `tillandsias-cheatsheet-tools sources`
 - `scripts/bind-provenance-local-paths.sh`
-- `scripts/audit-cheatsheet-sources.sh`
+- ~~`scripts/audit-cheatsheet-sources.sh`~~ **rewritten** (slice 4, 2026-06-18) →
+  thin wrapper over Rust `tillandsias-cheatsheet-tools audit`
 - `scripts/fetch-cheatsheet-source.sh`
 - `scripts/regenerate-source-index.sh`
 - `scripts/regenerate-cheatsheet-index.sh`
@@ -149,3 +150,22 @@ explicitly approved by The Tlatoani.
   host: linux
   lease_id: "no-python-slice-4-20260618T044308Z"
   expires_at: "2026-06-18T08:45:00Z"
+
+- type: completed
+  ts: "2026-06-18T09:30:00Z"
+  agent_id: "linux-tlatoani-opus-worker4-20260618T044308Z"
+  host: linux
+  lease_id: "no-python-slice-4-20260618T044308Z"
+  note: >
+    Slice 4: Ported scripts/audit-cheatsheet-sources.sh to a Rust `audit`
+    subcommand on tillandsias-cheatsheet-tools (reuses the slice-3 INDEX.json /
+    Provenance / SHA helpers); shell script is now a thin wrapper. Also hardened
+    tillandsias-policy: the no-python checker now stops scanning a tombstoned
+    script (`@tombstone`) at its early `exit 0` guard so preserved dead legacy
+    bodies are not flagged as runtime references. Validated: cargo build/clippy/
+    fmt --check clean; confirmed output parity (identical CSV + exit 0) vs the
+    retired Python on the live repo. Worker was interrupted by a session limit
+    before committing; the orchestrator verified parity and committed the slice.
+    6 done. Remaining python-runtime scripts (per check-no-python-scripts.sh):
+    distill-forge-diagnostics.sh, fetch-cheatsheet-source.sh,
+    regenerate-cheatsheet-index.sh.
