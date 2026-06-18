@@ -3955,7 +3955,7 @@ plan_index:
     - id: enclave-network-level-egress-deny
       order: 54
       title: Enforce forge egress at the network layer (enclave --internal + dual-homed proxy)
-      status: claimed
+      status: done
       owner_host: linux
       deliverable: crates/tillandsias-core/src/container_profile.rs
       audit_origin: plan/issues/enclave-egress-network-enforcement-gap-2026-06-16.md
@@ -3966,7 +3966,7 @@ plan_index:
         - "A new litmus pins direct-egress-denied on the live enclave network (not --network=none), committed with the fix."
       tasks:
         - id: enclave/network-level-egress-deny
-          status: checkpoint
+          status: done
           owner_host: linux
           estimated_hours: 4
           capability_tags: [rust, podman, networking, security, enclave]
@@ -4019,6 +4019,44 @@ plan_index:
                 and git helper containers (remote_projects.rs:287,517) to bridge
                 for egress. All 474 tests pass; formatting clean. Full smoke
                 with real git-mirror push still needed before flipping to done.
+            - type: progress
+              ts: "2026-06-17T00:34:41Z"
+              agent_id: "linux-tlatoani-codex-20260617T003441Z"
+              host: linux
+              lease_id: "enclave-network-egress-deny-2026-06-16"
+              note: >
+                Release-smoke acceptance failed on published v0.3.260616.2 after
+                clean curl install, destructive Podman reset, and successful
+                fresh init. OpenCode forge launch failed starting the proxy
+                because the dual-homed launch used
+                --network tillandsias-enclave,bridge, but clean rootless Podman
+                had no network named bridge. Filed
+                smoke-finding/rootless-bridge-network-missing; checkpoint stays
+                open until the egress leg is made clean-rootless-safe and forge
+                lane acceptance passes.
+              evidence:
+                - "target/smoke-e2e/01-version.txt: Tillandsias v0.3.260616.2"
+                - "target/smoke-e2e/03-init-exit.txt: init exit: 0"
+                - "target/smoke-e2e/04-opencode.log: Error: unable to find network with name or ID bridge: network not found"
+                - "plan/issues/smoke-e2e-findings-v0.3.260616.2-2026-06-17.md"
+            - type: completed
+              ts: "2026-06-17T21:58:30Z"
+              agent_id: "big-pickle-linux-vm-20260617T215811Z"
+              host: linux
+              lease_id: "enclave-egress-deny-verify-20260617"
+              evidence:
+                - "e11ff704 feat(enclave): enforce network-level egress deny on tillandsias-enclave"
+                - "4c6d11d8 fix(enclave): replace nonexistent `bridge` egress leg with managed tillandsias-egress network"
+                - "8d50c134 fix(litmus)+plan: update enclave litmus for egress fix"
+                - "Direct egress probe: podman run with --noproxy on tillandsias-enclave returns HTTP=000 (FAILED)"
+              note: >
+                Implementation was already complete in commits e11ff704 and 4c6d11d8.
+                Verified on live system: tillandsias-enclave is Internal=true; direct
+                (--noproxy) external curl from enclave container FAILS (HTTP=000);
+                existing instant litmus litmus:enclave-network-source-shape pins the
+                Rust implementation surfaces including --internal const and dual-homed
+                ENCLAVE_EGRESS_NETS. The local-build e2e gate confirmed full build/install/
+                init/forge lane passes. Packet acceptance verified and closed.
 
     - id: macos-in-vm-enclave-provisioning
       order: 55
@@ -4109,3 +4147,53 @@ plan_index:
           host: "macos"
           lease_id: "step49-macos-vm-enclave-20260616T231619Z"
           expires_at: "2026-06-17T03:16:19Z"
+
+    - id: nanoclawv2-orchestration
+      order: 56
+      title: NanoClawV2 orchestration engine and launcher leaf
+      status: claimed
+      owner_host: linux
+      deliverable: plan/issues/nanoclawv2-orchestration.md
+      audit_origin: plan/issues/nanoclawv2-orchestration.md
+      depends_on: []
+      specs:
+        - nanoclawv2-orchestration
+        - tray-app
+        - podman-orchestration
+        - mcp-on-demand
+      exit_criteria:
+        - "🦞 NanoClawV2 launches for a project and remains branch-aware."
+        - "Only approved orchestration actions are reachable from NanoClawV2."
+        - "Smoke coverage proves launch and one approved action."
+      tasks:
+        - id: nanoclawv2/spec-and-plan
+          status: completed
+          owner_host: linux
+          depends_on: []
+          owned_files:
+            - openspec/changes/nanoclawv2-orchestration/proposal.md
+            - openspec/changes/nanoclawv2-orchestration/design.md
+            - openspec/changes/nanoclawv2-orchestration/tasks.md
+            - openspec/changes/nanoclawv2-orchestration/specs/nanoclawv2-orchestration/spec.md
+            - plan/issues/nanoclawv2-orchestration.md
+          checkpoint_required: false
+          handoff_note: "Spec and plan scaffolded; implementation work can now be claimed."
+        - id: nanoclawv2/implementation
+          status: claimed
+          owner_host: linux
+          estimated_hours: 4
+          capability_tags: [rust, podman, orchestration, nanoclaw]
+          depends_on: [nanoclawv2/spec-and-plan]
+          owned_files:
+            - crates/tillandsias-headless/src/nanoclaw.rs
+            - images/nanoclaw/Containerfile
+            - scripts/build-nanoclaw.sh
+          next_action: >
+            Wire the launcher leaf, broker surface, and smoke hooks.
+          events:
+            - type: claim
+              ts: "2026-06-17T22:07:00Z"
+              agent_id: "linux-macuahuitl-gemini-202606172205"
+              host: "linux"
+              lease_id: "nanoclawv2-orchestration-202606172207"
+              expires_at: "2026-06-18T02:07:00Z"

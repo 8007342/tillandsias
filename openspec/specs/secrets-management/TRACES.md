@@ -6,10 +6,10 @@ Run `./scripts/generate-traces.sh` to regenerate.
 ## Annotated locations
 
 - [crates/tillandsias-core/src/container_profile.rs#L46](../../../crates/tillandsias-core/src/container_profile.rs#L46)
-- [crates/tillandsias-core/src/container_profile.rs#L221](../../../crates/tillandsias-core/src/container_profile.rs#L221)
-- [crates/tillandsias-core/src/container_profile.rs#L856](../../../crates/tillandsias-core/src/container_profile.rs#L856)
-- [crates/tillandsias-core/src/container_profile.rs#L992](../../../crates/tillandsias-core/src/container_profile.rs#L992)
-- [crates/tillandsias-core/src/container_profile.rs#L1013](../../../crates/tillandsias-core/src/container_profile.rs#L1013)
+- [crates/tillandsias-core/src/container_profile.rs#L223](../../../crates/tillandsias-core/src/container_profile.rs#L223)
+- [crates/tillandsias-core/src/container_profile.rs#L858](../../../crates/tillandsias-core/src/container_profile.rs#L858)
+- [crates/tillandsias-core/src/container_profile.rs#L994](../../../crates/tillandsias-core/src/container_profile.rs#L994)
+- [crates/tillandsias-core/src/container_profile.rs#L1015](../../../crates/tillandsias-core/src/container_profile.rs#L1015)
 - [crates/tillandsias-core/src/secrets.rs#L240](../../../crates/tillandsias-core/src/secrets.rs#L240)
 - [crates/tillandsias-core/tests/gh_auth_deploy_key.rs#L2](../../../crates/tillandsias-core/tests/gh_auth_deploy_key.rs#L2)
 - [crates/tillandsias-headless/tests/vault_approle_provisioning.rs#L7](../../../crates/tillandsias-headless/tests/vault_approle_provisioning.rs#L7)

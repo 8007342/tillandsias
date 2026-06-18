@@ -1,6 +1,6 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-16T23:35:00Z
+Last updated: 2026-06-17T23:58:06Z
 
 This file is the first stop for agents inspecting `plan/issues/`. Historical
 issue reports remain in this directory for evidence and auditability, but only
@@ -8,27 +8,56 @@ the items below are immediate work.
 
 ## Immediate
 
-### enclave/network-level-egress-deny
+### release/version-tag-sequence-mismatch
 
-- status: ready
+- status: done
 - owner_host: linux
-- source: `plan/issues/enclave-egress-network-enforcement-gap-2026-06-16.md`
-- next_action: Make `tillandsias-enclave` `--internal` so forge containers have
-  no NAT egress; route allowlisted egress only through the dual-homed proxy.
+- source: `plan/issues/release-version-tag-sequence-mismatch-2026-06-17.md`
+- next_action: No worker action; the packet is closed. `/merge-to-main-and-release`
+  can now preserve the current `VERSION` when it is already ahead of the
+  tag-derived sequence for the UTC day.
+- blocker: cleared by `764e8745` (`fix(release): preserve VERSION if ahead of
+  tag sequence`).
+- evidence_required:
+  - release PR/tag/workflow uses a version that matches the accepted smoke
+    evidence, or fresh smoke evidence is captured for the lower version
+  - no `main` VERSION downgrade occurs during release
+
+### nanoclawv2-orchestration
+
+- status: claimed
+- owner_host: linux
+- source: `plan/issues/nanoclawv2-orchestration.md`
+- next_action: Draft the NanoClawV2 implementation task graph from the new
+  spec, then wire the launcher leaf, broker surface, and smoke hooks.
+- lease: `nanoclawv2-orchestration-202606172207` (expires 2026-06-18T02:07Z)
 - blocker: none
 - evidence_required:
-  - direct (`--noproxy`) external curl from an enclave container FAILS on a clean init
-  - allowlisted proxy egress + forge→proxy/inference/git-service still work
-  - new litmus pins direct-egress-denied on the live enclave network
-- note: corrects the cycle-1 rejection below — enclave egress is
-  proxy-cooperative, not network-enforced (empirically: direct curl reaches the
-  internet, HTTP 200). Verify-heavy (rebuild + reinit), so its own cycle.
+  - NanoClawV2 launch leaf exists and is branch-aware
+  - only approved orchestration actions are reachable
+  - smoke coverage proves launch and one approved action
+
+### enclave/network-level-egress-deny
+
+- status: done
+- owner_host: linux
+- source: `plan/issues/enclave-egress-network-enforcement-gap-2026-06-16.md`
+- completed_evidence:
+  - Implementation landed in `e11ff704` (adds `--internal` to enclave network,
+    dual-homes git-service) and `4c6d11d8` (replaces nonexistent `bridge` egress
+    leg with managed `tillandsias-egress`).
+  - Litmus updated in `8d50c134`; existing `litmus:enclave-network-source-shape`
+    pins the `--internal` const and dual-homed ENCLAVE_EGRESS_NETS.
+  - Live verification on 2026-06-17: `podman network inspect tillandsias-enclave`
+    confirms `Internal=true`; direct (`--noproxy`) curl returns HTTP=000 (FAILED).
+  - Local-build e2e gate passed (build/install/reset/init/forge lane).
 
 ### policy/no-python-runtime-scripts
 
-- status: active
+- status: claimed
 - owner_host: linux
 - source: `plan/issues/no-python-runtime-policy-2026-06-16.md`
+- lease: `no-python-slice-1-202606172215` (expires 2026-06-18T02:15Z)
 - next_action: Rewrite or retire the remaining Python-backed repository scripts
   in Rust, then make `scripts/check-no-python-scripts.sh` pass.
 - blocker: existing cheatsheet/provenance maintenance scripts still execute
@@ -81,7 +110,16 @@ The 2026-06-16 critical/high forge proposals were triaged in
   - [x] VM reaches Ready phase after provisioning (49c verified)
   - [ ] m8 interactive smoke passes (49d) — user-attended
 
-## Achieved This Cycle (2026-06-16T23:16–23:35Z, macos)
+## Achieved This Cycle (2026-06-17T22:57Z, macos)
+
+- **repeat**: Added macOS-compatible timeout fallback (`run_with_timeout`) so the
+  repeat loop works on stock macOS without GNU coreutils. Commit `807f95f9`.
+- **advance-work-from-plan drain**: No eligible autonomous macOS work found.
+  All plan items are completed or blocked-on-user (step 49d = user-attended m8
+  smoke). Ready macOS bugfix packets in m8 failures file remain but require
+  a running VM or interactive session to verify.
+
+## Previous Cycle (2026-06-16T23:16–23:35Z, macos)
 
 - **Step 49a**: Design decision (Option 1 — cloud-init installs podman).
 - **Step 49b**: Implemented — `dnf install -y podman` + `podman.socket` in vz.rs cloud-init (b7321f50). E2E gate PASS (build+install+provision+diagnose).
@@ -91,6 +129,35 @@ The 2026-06-16 critical/high forge proposals were triaged in
 
 ## Recently Closed This Coordination Pass
 
+- **Completed `release/version-tag-sequence-mismatch`**: commit `764e8745`
+  updated `/merge-to-main-and-release` so a current-day `VERSION` that is ahead
+  of the tag-derived sequence is preserved instead of being downgraded.
+  The packet header is now `done`; there are no remote `v0.3.260617.*` tags,
+  no open `linux-next -> main` PR, and no in-flight `release.yml` run.
+- **Completed `enclave/network-level-egress-deny`**: implementation was already
+  landed in commits `e11ff704` and `4c6d11d8`. Verified live on 2026-06-17:
+  `tillandsias-enclave` is `Internal=true`; direct egress from enclave
+  container FAILS (HTTP=000). Litmus `litmus:enclave-network-source-shape`
+  pins the implementation surfaces. Marked `done` in ACTIVE.md and issue file.
+- Completed `smoke-finding/rootless-bridge-network-missing`: local
+  `/build-install-and-smoke-test-e2e` on 2026-06-17 tested commit `6a44f4c6`
+  with installed `Tillandsias v0.3.260617.2`; build/install, destructive Podman
+  reset, clean init, and prompted OpenCode forge lane all exited 0. Evidence:
+  `target/build-install-smoke-e2e/20260617T201922Z`; init log shows
+  `podman network create --driver bridge tillandsias-egress` followed by
+  internal `tillandsias-enclave`, and forge diagnostics summary
+  `plan/diagnostics/diagnostics_20260617T202340Z-summary.md` reports 25/25
+  checks passed.
+- Completed `cheatsheet/reconcile-committed-tier` (release-pipeline blocker) on
+  2026-06-17T20:30Z via Option A: retiered order-53
+  `cheatsheets/concurrent-git/commit-attribution.md` from invalid `tier:
+  committed` to `bundled` (`bundled_into_image: true`), synced it into
+  `images/default/cheatsheets/concurrent-git/`, and regenerated/synced both
+  INDEX.md trees byte-identical (commit `0eef1443`). Acceptance:
+  `check-cheatsheet-tiers.sh` exits 0 (210 validated); host-image-sync litmus
+  critical_path passes; `./build.sh --ci-full` → ALL CHECKS PASSED (14/14).
+  Unblocks the local-build e2e gate and `/merge-to-main-and-release` for all
+  hosts.
 - Completed `privacy/forge-git-identity-anonymization` / order 53: implementation
   commit `e31792e8` preserves real Git author identity and appends machine-parseable
   agent/model trailers. Acceptance fixture verified Codex and OpenCode trailers

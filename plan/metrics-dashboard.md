@@ -22,4 +22,4 @@ xychart-beta
     bar [0]
 ```
 
-*Metrics are extracted from `/tmp/tmp.YSSRzBw9NM/home/.cache/tillandsias/telemetry/build-metrics.jsonl` via semantic distillation.*
+*Metrics are extracted from `/tmp/tmp.PHUZ9prruN/home/.cache/tillandsias/telemetry/build-metrics.jsonl` via semantic distillation.*

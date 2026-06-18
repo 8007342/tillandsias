@@ -284,7 +284,11 @@ fn run_git_image_shell(script: &str, extra_args: &[&str], debug: bool) -> Result
         "--secret",
         &vault_mount,
         "--network",
-        "tillandsias-enclave,bridge",
+        // Dual-homed: enclave leg (internal DNS) + managed egress leg for the
+        // direct GitHub push. `tillandsias-egress` is created at init alongside
+        // the enclave network; the old `bridge` name never resolved on a clean
+        // rootless runtime. See main.rs ENCLAVE_EGRESS_NETS / ensure_egress_network.
+        "tillandsias-enclave,tillandsias-egress",
         "--cap-drop=ALL",
         "--security-opt=no-new-privileges",
         "--security-opt=label=disable",
@@ -514,7 +518,9 @@ exec gh repo clone "$1" "$2"
             "--secret",
             &vault_mount,
             "--network",
-            "tillandsias-enclave,bridge",
+            // Dual-homed egress leg — see run_git_image_shell above and
+            // main.rs ENCLAVE_EGRESS_NETS; `bridge` never resolved on clean rootless.
+            "tillandsias-enclave,tillandsias-egress",
             "--cap-drop=ALL",
             "--security-opt=no-new-privileges",
             "--env",

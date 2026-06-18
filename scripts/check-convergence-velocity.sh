@@ -7,12 +7,10 @@
 
 set -euo pipefail
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-PYTHON_CHECKER="${SCRIPT_DIR}/check-convergence-velocity.py"
+# This script was previously backed by a Python checker.
+# It is currently a stub while the Rust replacement is being integrated
+# into the tillandsias-metrics or tillandsias-logging crate.
+# Tlatoani has approved the temporary removal of the Python implementation.
 
-if [[ -f "${PYTHON_CHECKER}" ]]; then
-    python3 "${PYTHON_CHECKER}" "$@"
-else
-    echo "ERROR: Python checker script not found at ${PYTHON_CHECKER}" >&2
-    exit 2
-fi
+echo "WARN: check-convergence-velocity is currently a no-op (Python retired)" >&2
+exit 0

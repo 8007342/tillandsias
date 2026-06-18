@@ -4,7 +4,7 @@ set -euo pipefail
 usage() {
   cat >&2 <<'EOF'
 Usage:
-  ./repeat --prompt "<prompt>" [--times <n>] [--wait <duration>] [--timeout <duration>] [--agent claude|opencode|antigravity|codex|random]
+  ./repeat --prompt "<prompt>" [--times <n>] [--wait <duration>] [--timeout <duration>] [--agent <agents>]
 
 Options:
   --prompt <prompt>      Required prompt for every fresh agent cycle.
@@ -13,8 +13,12 @@ Options:
                          Forms: 45s, 30m, 2h, 1d, 2h30m, or raw seconds.
   --timeout <duration>  Hard cap on a single agent cycle. A hung harness (e.g. a
                          CLI stuck in a reconnect loop) is killed and the loop
-                         moves on. Default: 30m. Use 0 to disable.
-  --agent <agent>       claude, opencode, antigravity, codex, or random. Default: random.
+                         moves on. Default: 90m. Use 0 to disable.
+  --agent <agents>      claude, opencode, gemini, antigravity, codex, random
+                         (claude/opencode/gemini/codex), or a comma-separated
+                         subset (e.g. claude,opencode,codex) to temporarily
+                         skip a harness that is down. One agent is chosen at
+                         random per cycle. Default: random.
   --help, -h            Show this help.
 
 Resilience: a failed or silent cycle (non-zero exit, timeout, or an exit-0 run
@@ -35,7 +39,7 @@ die() {
 PROMPT=""
 TIMES_COUNT=""
 WAIT_INTERVAL="45m"
-TIMEOUT_INTERVAL="30m"
+TIMEOUT_INTERVAL="90m"
 AGENT="random"
 
 while [[ $# -gt 0 ]]; do
@@ -87,10 +91,26 @@ done
 # explicitly overrides this for a non-smoke host.
 export TILLANDSIAS_DESTRUCTIVE_RESET_OK="${TILLANDSIAS_DESTRUCTIVE_RESET_OK:-1}"
 
-case "$AGENT" in
-  claude|opencode|antigravity|codex|random) ;;
-  *) die "--agent must be claude, opencode, antigravity, codex, or random" ;;
-esac
+# --agent accepts a single agent, the keyword "random" (all four), or a
+# comma-separated subset (e.g. claude,opencode,codex) to temporarily exclude a
+# harness that is down. Each cycle picks one agent uniformly at random from the
+# resolved set; a one-element set therefore always runs that agent.
+declare -a AGENT_LIST=()
+if [[ "$AGENT" == "random" ]]; then
+  AGENT_LIST=(claude opencode gemini codex)
+else
+  IFS=',' read -r -a AGENT_LIST <<< "$AGENT"
+fi
+
+[[ "${#AGENT_LIST[@]}" -ge 1 ]] || die "--agent requires at least one agent"
+for agent_name in "${AGENT_LIST[@]}"; do
+  [[ -n "$agent_name" ]] || die "--agent has an empty entry (check for stray commas)"
+  case "$agent_name" in
+    claude|opencode|gemini|antigravity|codex) ;;
+    random) die "--agent: 'random' cannot be combined in a list; use it alone for all agents" ;;
+    *) die "--agent must be claude, opencode, antigravity, codex, random, or a comma-separated subset" ;;
+  esac
+done
 
 CALLER_PWD="$(pwd -P)"
 REPO_ROOT="$(git -C "$CALLER_PWD" rev-parse --show-toplevel 2>/dev/null || true)"
@@ -149,49 +169,101 @@ resolve_bin() {
 }
 
 select_agent() {
-  if [[ "$AGENT" != "random" ]]; then
-    printf '%s\n' "$AGENT"
-    return
+  local index=$((RANDOM % ${#AGENT_LIST[@]}))
+  printf '%s\n' "${AGENT_LIST[$index]}"
+}
+
+# Resolve a timeout(1) implementation once. GNU coreutils ships `timeout` on
+# Linux; macOS ships neither it nor `gtimeout` unless coreutils is installed
+# (`brew install coreutils`). When a binary is present we prefer it; otherwise
+# run_with_timeout falls back to a portable bash watchdog. Empty means "fall
+# back".
+TIMEOUT_CMD=""
+if command -v timeout >/dev/null 2>&1; then
+  TIMEOUT_CMD="timeout"
+elif command -v gtimeout >/dev/null 2>&1; then
+  TIMEOUT_CMD="gtimeout"
+fi
+
+# run_with_timeout <command...> -- apply the per-cycle hard timeout so a harness
+# wedged in a reconnect loop cannot hang the loop. Sends TERM at the deadline,
+# KILL after a 30s grace window, and reports exit 124 on timeout (matching
+# timeout(1)), which the caller treats as a non-fatal warning.
+run_with_timeout() {
+  if [[ "$TIMEOUT_SECONDS" -le 0 ]]; then
+    "$@"
+    return $?
   fi
-  local agents=(claude opencode antigravity codex)
-  local index
-  index=$((RANDOM % ${#agents[@]}))
-  printf '%s\n' "${agents[$index]}"
+
+  if [[ -n "$TIMEOUT_CMD" ]]; then
+    "$TIMEOUT_CMD" --signal=TERM --kill-after=30s "$TIMEOUT_SECONDS" "$@"
+    return $?
+  fi
+
+  # Portable fallback for hosts without a timeout(1) binary (stock macOS). A
+  # marker file lets us distinguish a watchdog kill from an ordinary signal so
+  # we can normalize the exit code to 124.
+  local marker
+  marker="$(mktemp)"
+  "$@" &
+  local cmd_pid=$!
+  (
+    sleep "$TIMEOUT_SECONDS"
+    if kill -0 "$cmd_pid" 2>/dev/null; then
+      printf 1 > "$marker"
+      kill -TERM "$cmd_pid" 2>/dev/null
+      # Poll the 30s grace window so the watchdog self-terminates the moment
+      # the harness honors TERM, instead of always sleeping the full grace.
+      g=0
+      while [[ "$g" -lt 30 ]] && kill -0 "$cmd_pid" 2>/dev/null; do
+        sleep 1
+        g=$((g + 1))
+      done
+      kill -KILL "$cmd_pid" 2>/dev/null
+    fi
+  ) &
+  local watcher_pid=$!
+
+  local status=0
+  wait "$cmd_pid" 2>/dev/null || status=$?
+
+  # Cycle finished on its own: stop the watchdog so its sleep does not linger.
+  kill -TERM "$watcher_pid" 2>/dev/null || true
+  wait "$watcher_pid" 2>/dev/null || true
+
+  if [[ "$(cat "$marker" 2>/dev/null)" == "1" ]]; then
+    status=124
+  fi
+  rm -f "$marker"
+  return "$status"
 }
 
 run_agent() {
   local selected="$1"
   local bin
 
-  # Per-cycle hard timeout. timeout(1) sends TERM, then KILL after a grace
-  # window, so a harness wedged in a reconnect loop cannot hang the loop. A
-  # timed-out cycle exits 124, which the caller treats as a non-fatal warning.
-  local -a run=()
-  if [[ "$TIMEOUT_SECONDS" -gt 0 ]]; then
-    run=(timeout --signal=TERM --kill-after=30s "$TIMEOUT_SECONDS")
-  fi
-
   case "$selected" in
     codex)
       bin="$(resolve_bin CODEX_BIN codex)" || return $?
-      "${run[@]}" "$bin" exec --color never --dangerously-bypass-approvals-and-sandbox -p tillandsias -C "$REPO_ROOT" "$PROMPT"
+      run_with_timeout "$bin" exec --color never --dangerously-bypass-approvals-and-sandbox -p tillandsias -C "$REPO_ROOT" "$PROMPT"
       ;;
     claude)
       bin="$(resolve_bin CLAUDE_BIN claude)" || return $?
-      # claude has no --prompt flag; the prompt is positional. Place it before
-      # --add-dir (which is variadic) so the directory list does not swallow it.
-      "${run[@]}" "$bin" --print --dangerously-skip-permissions "$PROMPT" --add-dir "$REPO_ROOT"
+      run_with_timeout "$bin" --print --output-format text --dangerously-skip-permissions "$PROMPT" --add-dir "$REPO_ROOT"
       ;;
     opencode)
       bin="$(resolve_bin OPENCODE_BIN opencode)" || return $?
-      (cd "$REPO_ROOT" && "${run[@]}" "$bin" run --dangerously-skip-permissions "$PROMPT")
+      (cd "$REPO_ROOT" && run_with_timeout "$bin" run --dangerously-skip-permissions "$PROMPT")
+      ;;
+    gemini)
+      bin="$(resolve_bin GEMINI_BIN gemini)" || return $?
+      (cd "$REPO_ROOT" && run_with_timeout "$bin" --prompt="$PROMPT" --yolo --include-directories "$REPO_ROOT")
       ;;
     antigravity)
       bin="$(resolve_bin ANTIGRAVITY_BIN agy)" || return $?
-      # agy's --prompt is only an alias for --print (print mode on/off); the task
-      # text is a positional argument. Go flag parsing stops at the first
-      # non-flag arg, so --add-dir does not consume the prompt.
-      (cd "$REPO_ROOT" && "${run[@]}" "$bin" --print --dangerously-skip-permissions --add-dir "$REPO_ROOT" "$PROMPT")
+      # agy reads the prompt from stdin in print mode; piping it avoids the
+      # variadic --add-dir parser swallowing the task text as another path.
+      (cd "$REPO_ROOT" && printf '%s\n' "$PROMPT" | run_with_timeout "$bin" --print --dangerously-skip-permissions --add-dir "$REPO_ROOT")
       ;;
     *)
       die "internal error: unsupported selected agent '$selected'"
@@ -212,13 +284,18 @@ while :; do
   SELECTED_AGENT="$(select_agent)"
   printf '[repeat] %s cycle=%d agent=%s repo=%s start\n' "$(timestamp_utc)" "$CYCLE" "$SELECTED_AGENT" "$REPO_ROOT" >&2
 
-  # Tee the cycle's output so the operator still sees it live while we measure
-  # how much was produced. Many harnesses exit 0 even on quota/auth failure
-  # (e.g. agy returns 0 with empty output on an HTTP 429); an empty successful
-  # run is the most reliable cross-harness signal that the cycle did no work.
+  # Stream the cycle's output line-by-line so the operator sees progress live
+  # (a plain `tee` buffers on macOS BSD, hiding real-time output). Also capture
+  # to disk so we can measure how much was produced.
+  # Many harnesses exit 0 even on quota/auth failure (e.g. agy returns 0 with
+  # empty output on an HTTP 429); an empty successful run is the most reliable
+  # cross-harness signal that the cycle did no work.
   CYCLE_OUTPUT="$(mktemp)"
   set +e
-  run_agent "$SELECTED_AGENT" 2>&1 | tee "$CYCLE_OUTPUT"
+  run_agent "$SELECTED_AGENT" 2>&1 | while IFS= read -r line || [[ -n "$line" ]]; do
+    printf '%s\n' "$line"
+    printf '%s\n' "$line" >> "$CYCLE_OUTPUT"
+  done
   STATUS=${PIPESTATUS[0]}
   set -e
   OUTPUT_BYTES="$(wc -c < "$CYCLE_OUTPUT" | tr -d '[:space:]')"

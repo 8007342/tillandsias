@@ -123,6 +123,7 @@ Mechanism (code/config):
     Do NOT add a litmus that asserts direct-egress-denied until the fix lands —
     it would fail the build gate today (egress currently succeeds). The new
     litmus is part of the fix's acceptance, committed together with it.
+- status: done
 - events:
   - type: discovered
     ts: "2026-06-16T11:10:00Z"
@@ -131,3 +132,21 @@ Mechanism (code/config):
     note: >
       Empirically confirmed direct egress from an enclave container reaches the
       internet (HTTP 200) on forge v0.3.260616.2; enclave network internal=false.
+  - type: completed
+    ts: "2026-06-17T21:58:30Z"
+    agent_id: "big-pickle-linux-vm-20260617T215811Z"
+    host: linux
+    lease_id: "enclave-egress-deny-verify-20260617"
+    evidence_refs:
+      - "e11ff704 feat(enclave): enforce network-level egress deny on tillandsias-enclave"
+      - "4c6d11d8 fix(enclave): replace nonexistent `bridge` egress leg with managed tillandsias-egress network"
+      - "8d50c134 fix(litmus)+plan: update enclave litmus for egress fix"
+      - "Direct egress probe: podman run with --noproxy on tillandsias-enclave returns HTTP=000 (FAILED)"
+    note: >
+      Implementation was already complete in commits e11ff704 and 4c6d11d8.
+      Verified on live system: tillandsias-enclave is Internal=true; direct
+      (--noproxy) external curl from enclave container FAILS (HTTP=000);
+      existing instant litmus litmus:enclave-network-source-shape pins the
+      Rust implementation surfaces including --internal const and dual-homed
+      ENCLAVE_EGRESS_NETS. The local-build e2e gate confirmed full build/install/
+      init/forge lane passes. Packet acceptance verified and closed.

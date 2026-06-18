@@ -1441,3 +1441,10 @@ Next greedy pickups (no VM needed): **w4b** (windows-ownable, pure) and **w4d**
 ## ORCHESTRATOR PACKET — 2026-06-08 (from linux-next)
 
 Ready, step-32-independent packet for this host: **keyring persistent-backend verification** after the v0.3.260608.4 fix (shared `Cargo.toml` `keyring` now enables a native backend; Windows must verify build + keychain persistence). Full spec + acceptance evidence: `plan/issues/keyring-backend-xplat-verification-2026-06-08.md`. Claim it on your next `/advance-work-from-plan` cycle.
+
+## 2026-06-17 — meta-orchestration cycle (windows-next)
+
+- **Pushed**: `bd863b5f chore(repeat): raise default timeout` to `origin/windows-next`.
+- **Ledger fix**: `plan/issues/keyring-backend-xplat-verification-2026-06-08.md` — packet `keyring-verify/windows` status `ready→done` (VERIFIED PASS on 2026-06-08, never updated). Evidence was already present in Results section.
+- **Worker drain**: no other eligible ready work for Windows. All Windows items completed (`fedora-pivot/windows-wsl-official`, `xplat-vault/windows`, `vault-flow/xplat-gating-parity`, `coord/windows-sync-and-verify`, `keyring-verify/windows`, `windows-tray/vmphase-import-scope-release-break`) or deferred (cross-platform phase).
+- **Untracked**: `repeat.ps1` (Windows wrapper for repeat loop) — user work, not committed.

@@ -956,6 +956,20 @@ accessor.
 
 ## Events
 
+### event: meta-orchestration cycle 2026-06-17T22:57Z — macOS (osx-next)
+
+- agent_id: `macos-big-pickle`
+- action: advance-work-from-plan drain — no eligible autonomous macOS work found
+- checkpoint: committed `repeat` macOS timeout fallback (BSD timeout/run_with_timeout)
+- step 49 status: 49a/b/c/e DONE; 49d remains user-attended (not autonomous-claimable)
+- ready macOS packets in m8 failures file: `macos-tray/vm-failed-reason-not-surfaced`,
+  `macos-tray/github-login-pty-hangs-gray`, `macos-tray/empty-project-lists-and-poll-error-masking`
+  — all downstream of step 49 which is now complete, but each requires either a
+  running VM or user interaction to verify
+- linux-owned active items (not macOS-claimable): `nanoclawv2-orchestration`,
+  `enclave/network-level-egress-deny`, `policy/no-python-runtime-scripts`
+- pushed osx-next checkpoint (commit 807f95f9) to origin
+
 <!-- Append events here when claiming/progressing items. Append-only. -->
 
 ### event: m3 claimed + done — 2026-05-25T16:45Z

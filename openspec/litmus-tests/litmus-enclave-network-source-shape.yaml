@@ -7,7 +7,7 @@
 #   1. Internal podman network for container isolation
 #      → ENCLAVE_NET / ENCLAVE_NETWORK constants, ensure_enclave_network()
 #   2. Container attachment to enclave network
-#      → forge singles ENCLAVE_NET, proxy dual-homed bridge+enclave
+#      → forge singles ENCLAVE_NET, proxy/git dual-homed enclave+egress
 #   3. Enclave lifecycle telemetry
 #      → @trace annotations, accountability logging
 #
@@ -21,8 +21,8 @@ description: >
   Pin the Rust implementation surfaces for spec:enclave-network:
   canonical ENCLAVE_NET constant in main.rs, shared ENCLAVE_NETWORK
   in podman/src/lib.rs, ensure_enclave_network entry point, forge-only
-  vs proxy-dual-homed network attachment patterns, and the naming unit
-  test.
+  vs proxy/git dual-homed (enclave + managed egress) network attachment
+  patterns, and the naming unit test.
 severity: high
 size: instant
 
@@ -53,8 +53,14 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok:"
 
-  - step: "proxy container is dual-homed bridge+enclave (Req 2)"
-    command: "grep -F 'tillandsias-enclave,bridge' crates/tillandsias-core/src/container_profile.rs && echo PROXY_DUAL_HOMED"
+  - step: "proxy/git dual-homed onto enclave + managed egress network (Req 2)"
+    # The enclave network is `--internal`; egress-capable containers (proxy,
+    # git-service) dual-home onto the Tillandsias-managed `tillandsias-egress`
+    # network. The old literal `bridge` leg never resolved on rootless Podman
+    # after `podman system reset --force` (default net is `podman`, not
+    # `bridge`) — see smoke-finding/rootless-bridge-network-missing. Pin the
+    # const value AND the egress-network bootstrap function so neither regresses.
+    command: "grep -F 'const ENCLAVE_EGRESS_NETS: &str = \"tillandsias-enclave,tillandsias-egress\"' crates/tillandsias-headless/src/main.rs && grep -F 'fn ensure_egress_network(' crates/tillandsias-headless/src/main.rs && echo PROXY_DUAL_HOMED"
     timeout_ms: 3000
     expected_behavior: "PROXY_DUAL_HOMED"
 

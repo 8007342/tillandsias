@@ -57,9 +57,22 @@ if [[ -z "$prev_tag" ]]; then
 else
     seq=$(( $(echo "$prev_tag" | sed -E "s/v${series//./\\.}\.${today}\.([0-9]+)/\1/") + 1 ))
 fi
-new_version="${series}.${today}.${seq}"
+new_version_computed="${series}.${today}.${seq}"
+
+# Check if current VERSION is already ahead of the computed sequence
+current_version=$(cat VERSION | tr -d '[:space:]')
+if [[ "$current_version" =~ ^${series//./\\.}.${today}\.[0-9]+$ ]]; then
+    if [[ "$(printf '%s\n%s' "$current_version" "$new_version_computed" | sort -V | tail -1)" == "$current_version" ]]; then
+        new_version="$current_version"
+    else
+        new_version="$new_version_computed"
+    fi
+else
+    new_version="$new_version_computed"
+fi
+
 new_tag="v${new_version}"
-echo "Computed: $new_tag (series ${series} from VERSION)"
+echo "Computed: $new_tag (series ${series} from VERSION, current ${current_version})"
 ```
 
 This produces e.g. `v0.3.260605.1` for the first release of 2026-06-05, `v0.3.260605.2` for the second.
