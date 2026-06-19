@@ -8,6 +8,23 @@ the items below are immediate work.
 
 ## Immediate
 
+### local-smoke/linux-musl-tray-binary-name-collision
+
+- status: ready
+- owner_host: linux
+- source: `plan/issues/build-install-smoke-e2e-findings-2026-06-19.md`
+- severity: high — blocks local-build E2E and therefore release confidence for
+  integrated `linux-next`
+- next_action: Make the Linux musl install build avoid cross-platform tray
+  binary output collisions, then rerun `/build-install-and-smoke-test-e2e` from
+  the build/install gate.
+- blocker: none
+- evidence_required:
+  - `./build.sh --ci-full --install` exits 0 on Linux
+  - no Cargo `output filename collision` warning for `tillandsias-tray`
+  - destructive Podman reset, fresh `tillandsias --init --debug`, and Linux
+    forge lane are reached or produce their own later finding
+
 ### release/version-tag-sequence-mismatch
 
 - status: done

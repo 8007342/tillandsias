@@ -1,106 +1,77 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-18T20:50Z
+LastExecutionTime: 2026-06-19T22:34Z
 
 ## This Loop
 
-- **Cycle type**: meta-orchestration release-smoke pass after fetch/worker and
-  sibling audit.
-- **Startup**: clean mutable-Linux host on `linux-next`; fetched origin,
-  fast-forwarded from `7bc7b5bb` to `36cd9020`, then pushed forge findings
-  commit `62964f02` and this smoke ledger commit.
+- **Cycle type**: meta-orchestration on mutable Linux: startup checkpoint,
+  worker-drain deferral, sibling integration, local-build e2e attempt.
+- **Startup**: began dirty on `linux-next` with coherent NanoClawV2 launcher,
+  repeat/meta, convergence, version, and trace updates. Validated YAML,
+  targeted tray test, and simplified-tray litmus, then pushed checkpoint
+  `1dfd2bea`.
 - **Sibling heads after fetch**:
-  - `main`: `6dfafdf1` (tagged `v0.3.260618.2`).
-  - `linux-next`: `36cd9020` at audit start, then `62964f02` after forge
-    proposals.
-  - `windows-next`: `e332afb6` (ancestor of linux-next, 0 ahead / 12 behind).
-  - `osx-next`: `c7d32fb9` (ancestor of linux-next, 0 ahead / 14 behind).
-- **Worker drain**: no implementation packet claimed before the release gate.
-  The latest release was newer than recorded curl-install smoke evidence, so
-  `/smoke-curl-install-and-test-e2e` was prioritized.
-- **Integration/runtime**: no sibling branch is ahead of linux-next, and
-  `plan/localwork/runtime-litmus/current` is absent. No full litmus was started.
-- **Release/e2e freshness**: GitHub latest release is `v0.3.260618.2`,
-  published 2026-06-18T18:07:14Z at `6dfafdf1`; curl-install smoke now has
-  PASS-with-findings evidence at 2026-06-18T20:50Z.
-- **E2E gates**: curl-install gate passed install, destructive reset, empty
-  store verification, fresh init, and prompted OpenCode forge lane. Report:
-  `plan/issues/smoke-e2e-findings-v0.3.260618.2-2026-06-18.md`.
-- **New findings**: in-forge `/forge-continuous-enhancement` filed three ready
-  follow-ups: `smoke-finding/forge-ripgrep-missing`,
-  `smoke-finding/forge-marksman-missing`, and
-  `smoke-finding/forge-nix-store-missing`.
-
-## Progress Since Last Loop
-
-- **smoke-finding/forge-ripgrep-missing**: COMPLETED — FALSE POSITIVE (ripgrep 14.1.1 already at Containerfile.base:12)
-- **smoke-finding/forge-marksman-missing**: COMPLETED — marksman installed at Containerfile.base:37-38
-- **smoke-finding/forge-nix-store-missing**: COMPLETED — CLARIFIED (nix is host-side only by design; nix-first.md corrected; TILLANDSIAS_SHARED_CACHE does not exist in source code)
-
-All three forge follow-ups from the v0.3.260618.2 smoke run are now processed. No-Python cleanup progressed: slice 4 stripped dead Python from two tombstoned cheatsheet-source scripts (0e7aed90). 5 Python-backed scripts remain. Next available claimable work: remaining no-Python scripts, `nanoclawv2-orchestration` (RECLAIMABLE), or forge diagnostics chain.
-
-## Loop 2026-06-18T23:20Z (worker drain — no-python slice)
-
-- **Cycle type**: meta-orchestration worker drain on mutable Linux.
-- **Startup**: clean `linux-next`, in sync with origin (`5613b40e`); fetched
-  origin/prune. Siblings: windows-next `e332afb6`, osx-next `c7d32fb9` (both
-  ancestors of linux-next); main `6dfafdf1`.
-- **Packet claimed + completed**: `policy/no-python-runtime-scripts` —
-  `distill-forge-diagnostics.sh` slice. Ported to a `tillandsias-policy
-  distill-forge-diagnostics` subcommand; shell reduced to a thin build+exec
-  wrapper. 45/45 target/forge-diagnostics logs byte-for-byte parity-verified vs
-  the former CPython extractor. clippy/fmt/test/`build.sh --check` green;
-  workspace + serde_json consumers re-tested after enabling `preserve_order`.
-- **Remaining Python-backed scripts**: 2 — `fetch-cheatsheet-source.sh` (6
-  python3 sites, large) and `regenerate-cheatsheet-index.sh` (1 site).
-- **Other claimable**: `nanoclawv2-orchestration` (RECLAIMABLE; large
-  multi-component build with open architecture questions — needs a task-graph
-  decomposition cycle before code).
-- **E2E**: not run this cycle (worker slice; left budget for orchestrator).
-- **Release**: not warranted from this cycle alone (tooling-only change; no
-  shipped-binary behavior change).
+  - `main`: `6dfafdf1` (latest release tag `v0.3.260618.2`).
+  - `linux-next`: `1dfd2bea` before integration; `5b3058c4` after merging
+    `origin/osx-next`; this ledger checkpoint follows.
+  - `windows-next`: `e332afb6` (ancestor of linux-next, 0 ahead / 37 behind).
+  - `osx-next`: `f75c74cb` (was 7 ahead / 3 behind; merged cleanly).
+- **Worker drain**: no new implementation packet claimed. Immediate Linux
+  work is either operator-attended (`--github-login`) or too large for this
+  post-checkpoint loop (`policy/no-python-runtime-scripts`,
+  `nanoclawv2-orchestration`).
+- **Integration**: merged `origin/osx-next` into `linux-next` as `5b3058c4`.
+  Targeted validation passed: `cargo test -p tillandsias-host-shell`,
+  `cargo test -p tillandsias-windows-tray --test portable_smoke`, and
+  `cargo test -p tillandsias-headless --features tray
+  project_submenu_has_seven_leaves_in_order`.
+- **E2E gates**: latest published release is still `v0.3.260618.2`, already
+  curl-smoked on 2026-06-18. Local-build e2e was attempted for integrated
+  `linux-next`; it stopped before Podman reset.
+- **New finding**: `local-smoke/linux-musl-tray-binary-name-collision` filed
+  in `plan/issues/build-install-smoke-e2e-findings-2026-06-19.md`.
 
 ## Active Conflicts & Mediation
 
 - Deadlocks: none detected.
 - Thrashing/write-write collision: none detected.
-- Branch drift: none; both sibling branches are integrated.
-- Wrong-direction progress: none detected in the audited sibling status packets.
-- High-Velocity Alignment Event: **Inactive**.
-- Convergence velocity: **positive for smoke coverage**; newest published
-  release is tested, branch residual drift remains zero, and three forge gaps
-  are now claimable.
+- Branch drift: osx-next integrated; windows-next already ancestor.
+- Wrong-direction progress: none detected.
+- High-Velocity Alignment Event: inactive.
+- Convergence velocity: positive for sibling integration, negative for local
+  smoke because the local-build gate now has a new ready blocker.
 
 ## Blockers
 
-- **PARTIAL / targeted runtime evidence still needed (linux)**:
-  `github-login/enclave-egress-regression` is fixed in `d3f4e2f3`, but the
-  actual `tillandsias --debug --github-login` token paste remains
-  operator-attended with a fresh/rotated token.
-- **RECLAIMABLE (linux)**: `policy/no-python-runtime-scripts` lease expired at
-  2026-06-18T18:17Z; remaining Python-backed scripts are listed in
-  `plan/issues/no-python-runtime-policy-2026-06-16.md`.
-- **RECLAIMABLE (linux)**: `nanoclawv2-orchestration` lease expired at
-  2026-06-18T02:07Z; next slice is launcher/broker/smoke implementation.
+- **READY (linux)**: `local-smoke/linux-musl-tray-binary-name-collision` blocks
+  local-build E2E at `./build.sh --ci-full --install`; Cargo collides on
+  macOS and Windows tray bins named `tillandsias-tray` in the musl target dir.
+- **PARTIAL / operator-attended (linux)**:
+  `tillandsias --debug --github-login` still needs live validation with a
+  fresh/rotated token after the earlier network fix.
+- **RECLAIMABLE (linux)**: `policy/no-python-runtime-scripts` and
+  `nanoclawv2-orchestration`.
 - **BLOCKED (windows)**: Smart App Control enforce mode blocks native local
-  builds (`plan/issues/windows-smart-app-control-build-block-2026-06-18.md`).
-- **OPEN / user-attended (macos)**: step 49d / m8 interactive smoke.
+  builds.
+- **OPEN / user-attended (macos)**: step 49d / m8 interactive smoke; newest
+  macOS evidence is now integrated.
 
 ## Assignment Board
 
-- **Linux primary**: operator-attended `tillandsias --debug --github-login` on
-  a clean post-init install with a fresh/rotated token.
-- **Linux fallback**: claim one of the new forge tool packets, continue
-  no-Python cleanup, or reclaim `nanoclawv2-orchestration` in a dedicated
-  worker cycle.
-- **Windows primary**: resolve the Smart App Control decision, then rerun the
-  native local-build e2e gate.
+- **Linux primary**: fix `local-smoke/linux-musl-tray-binary-name-collision`,
+  then rerun `/build-install-and-smoke-test-e2e`.
+- **Linux fallback**: continue no-Python cleanup or reclaim
+  `nanoclawv2-orchestration` if the build blocker is already claimed.
+- **Windows primary**: resolve Smart App Control decision, then rerun native
+  local-build e2e.
 - **Windows fallback**: keep `windows-next` synced and report SAC status.
-- **macOS primary**: step 49d / m8 interactive smoke.
-- **macOS fallback**: no unattended code packet currently claimable; keep queue
-  synchronized and report any user-smoke evidence.
+- **macOS primary**: continue step 49d / m8 interactive smoke follow-up for
+  GitHub Login / local project enumeration.
+- **macOS fallback**: keep queue synchronized and report any user-smoke
+  evidence.
 
 ## Stale Or Pending Pings
 
-- Next useful Linux runtime probe: operator-attended
-  `tillandsias --debug --github-login` on a clean post-init install.
+- Next useful Linux runtime probe after the build blocker clears:
+  operator-attended `tillandsias --debug --github-login` on a clean post-init
+  install.

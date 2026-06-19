@@ -69,9 +69,7 @@ fn agent_picker_lists_three_agents_in_canonical_order() {
     state.target = TargetSurface::WindowsTray;
     state.gui_passthrough_available = true;
     // Agents only surface once authenticated (login-gated body, F3).
-    state.login = GithubLoginState::LoggedIn {
-        handle: "u".into(),
-    };
+    state.login = GithubLoginState::LoggedIn { handle: "u".into() };
     let menu = build(&state);
     let items = match menu {
         MenuStructure::Ready { items } => items,
