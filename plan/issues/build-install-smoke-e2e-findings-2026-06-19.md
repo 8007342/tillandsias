@@ -20,7 +20,7 @@ No runtime substrate was destroyed in this run.
 - id: `local-smoke/linux-musl-tray-binary-name-collision`
 - type: fix
 - owner_host: linux
-- status: ready
+- status: claimed
 - capability_tags: [rust, build, release, testing]
 - severity: high
 - source: this smoke report
@@ -35,6 +35,18 @@ No runtime substrate was destroyed in this run.
     - no Cargo `output filename collision` warning for `tillandsias-tray`
     - destructive Podman reset, fresh `tillandsias --init --debug`, and Linux
       forge lane are reached or produce their own later finding
+
+## Events
+
+- type: claim
+  ts: "2026-06-19T23:25:53Z"
+  agent_id: "linux-macuahuitl-codex-20260619T232553Z"
+  host: "linux"
+  lease_id: "lease-linux-musl-tray-collision-20260619T2325Z"
+  expires_at: "2026-06-20T03:25:53Z"
+  note: >
+    Claiming the Linux musl tray binary-name collision blocker so the
+    local-build E2E gate can resume from the build/install phase.
 
 ## Evidence
 

@@ -1,6 +1,6 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-18T23:20Z
+Last updated: 2026-06-19T23:25Z
 
 This file is the first stop for agents inspecting `plan/issues/`. Historical
 issue reports remain in this directory for evidence and auditability, but only
@@ -10,7 +10,7 @@ the items below are immediate work.
 
 ### local-smoke/linux-musl-tray-binary-name-collision
 
-- status: ready
+- status: claimed
 - owner_host: linux
 - source: `plan/issues/build-install-smoke-e2e-findings-2026-06-19.md`
 - severity: high — blocks local-build E2E and therefore release confidence for
@@ -19,6 +19,8 @@ the items below are immediate work.
   binary output collisions, then rerun `/build-install-and-smoke-test-e2e` from
   the build/install gate.
 - blocker: none
+- lease: `lease-linux-musl-tray-collision-20260619T2325Z` (expires
+  2026-06-20T03:25:53Z)
 - evidence_required:
   - `./build.sh --ci-full --install` exits 0 on Linux
   - no Cargo `output filename collision` warning for `tillandsias-tray`
