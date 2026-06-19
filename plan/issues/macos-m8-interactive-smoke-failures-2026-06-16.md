@@ -132,13 +132,24 @@ mistake. Recover them from git (objects still reachable by SHA) as fix input.
 - evidence:
   - User: clicking GitHub Login opens a black terminal that stays gray
     (no shell); a retry "flickers" an error then goes gray, too fast to read.
-- impact: likely downstream of the VM-Failed state (no forge container to attach
-  to), but the UX is a dead gray window with no error surfaced.
+  - 2026-06-18 re-smoke at HEAD e4ef0db0: VM now reaches Ready (podman_ready=true)
+    but GitHub Login STILL opens a gray terminal immediately. F4 has an
+    INDEPENDENT root cause beyond the VM-Failed state.
+- impact: previously believed to be purely downstream of the VM-Failed state,
+  but 2026-06-18 re-smoke proves the PTY attach fails even when the VM is Ready.
+  The forge container may not start despite podman_ready, or the PTY attach path
+  has its own wiring bug. The UX is still a dead gray window with no error surfaced.
 - next_action: >
-    Reproduce after the VM-Failed root cause is fixed. Regardless, the PTY
-    attach must FAIL VISIBLY: when the forge/agent isn't reachable, print the
-    error into the terminal and keep it open (don't flash-and-gray). Capture the
-    flickered error (redirect the attach command's stderr to a persistent log).
+    Investigate why PTY attach fails with a Ready VM. Hypotheses:
+    (a) forge container not started despite podman_ready=true — headless may
+    report Ready as soon as podman socket is available, before forge container
+    is actually up. Check in-VM state via vsock after Ready reported.
+    (b) PTY attach wiring bug in pty_vsock_bridge.rs / terminal_attach.rs
+    independent of VM state.
+    (c) target port/container not reachable despite podman being ready.
+    Regardless, the PTY attach must FAIL VISIBLY: print the error into the
+    terminal and keep it open (don't flash-and-gray). Capture the flickered
+    error (redirect the attach command's stderr to a persistent log).
 
 ## Work Packet: macos-tray/empty-project-lists-and-poll-error-masking  [MEDIUM-HIGH]
 
