@@ -9,9 +9,12 @@
   - add a baked NanoClawV2 container image
   - add a narrow host control surface for approved orchestration actions
   - add smoke coverage for launch + one approved action
-- current_progress: proposal, design, tasks, and spec are scaffolded; no code
-  has been changed yet
-- next_action: wire the launcher, broker, and smoke hooks
+- current_progress: proposal, design, tasks, and spec scaffolded. Slice 1
+  (image infrastructure) in progress: images/nanoclawv2/Containerfile created,
+  config overlay with orchestration instructions, entrypoint, build-image.sh
+  registration added. Slice 1 still pending build verification and commit.
+- next_action: complete slice 1 verification (./build.sh --check), commit,
+  then proceed to slice 2 (tray launcher leaf)
 - events:
   - type: claim
     ts: "2026-06-17T22:07:00Z"
@@ -19,6 +22,12 @@
     host: "linux"
     lease_id: "nanoclawv2-orchestration-202606172207"
     expires_at: "2026-06-18T02:07:00Z"
+  - type: claim
+    ts: "2026-06-19T00:24:30Z"
+    agent_id: "linux-big-pickle-20260619002430"
+    host: "linux"
+    lease_id: "nanoclawv2-orchestration-202606190024"
+    expires_at: "2026-06-19T04:24:30Z"
 - blocker: none
 - evidence_required:
   - proposal.md, design.md, tasks.md, and spec.md are written and consistent
