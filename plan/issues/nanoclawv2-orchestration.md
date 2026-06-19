@@ -28,6 +28,12 @@
     host: "linux"
     lease_id: "nanoclawv2-orchestration-202606190024"
     expires_at: "2026-06-19T04:24:30Z"
+  - type: claim
+    ts: "2026-06-19T21:34:00Z"
+    agent_id: "linux-tlatoani-gemini-2026-06-19T21:34Z"
+    host: "linux"
+    lease_id: "nanoclawv2-orchestration-202606192134"
+    expires_at: "2026-06-20T01:34:00Z"
 - blocker: none
 - evidence_required:
   - proposal.md, design.md, tasks.md, and spec.md are written and consistent
