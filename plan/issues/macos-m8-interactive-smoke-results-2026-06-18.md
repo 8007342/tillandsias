@@ -27,7 +27,48 @@ Hypotheses for the independent root cause:
 
 The menu not being collapsed (F3 / `macos-tray/menu-not-collapsed-github-gated`) is unchanged. It is not downstream of any remaining blocker — it is a shared host-shell change that needs cross-host coordination.
 
+## Freshness gate (this run)
+
+Installed `--version` = `git e4ef0db0` == `git rev-parse --short HEAD` at smoke
+time (built 2026-06-18T23:19:22Z, clean build, no `-dirty`). Gate **PASS** — the
+tray under test was the current HEAD, not a stale artifact. Host-side capture:
+`/tmp/m8-smoke.log` (tray launched from terminal so stderr was captured live).
+
+```
+[tillandsias-tray] vm-status: phase=Ready podman_ready=true event=tillandsias-in-vm   # ~9s
+[tillandsias-tray] click: id=github-login action=GithubLogin
+[tillandsias-tray] GitHub login: spawning attach worker (project=None)
+[tillandsias-tray] GitHub login: PTY attached at /dev/ttys002   # PTY opened host-side, but Terminal stayed gray
+[tillandsias-tray] click: id=local-projects action=Inert        # F5: item inert, no enumeration
+[tillandsias-tray] Quit: draining (timeout=60s) … VZ.requestStop  # clean exit
+```
+
+## CRITICAL CAVEAT: F4/F5 ran against a STALE in-VM headless agent
+
+The VM re-used the **Jun-16-provisioned** `rootfs.img`. The `tillandsias-headless`
+agent baked into that disk PREDATES the github-login egress fixes that landed
+and shipped THIS day:
+- `62e73c70 fix(headless): ensure enclave+egress networks before github-login helper launch`
+- `777eb745 fix(github-login): harden gh-login egress`
+- both shipped in release **v0.3.260618.2** (integrated into osx-next at `0025f419`).
+
+So the F4 gray-terminal result does NOT yet test BigPickle's egress fix. Before
+concluding F4 has a purely host-side root cause, the VM must be re-provisioned so
+it fetches the v0.3.260618.2 headless. BigPickle's hypothesis (forge container
+not up despite `podman_ready=true`) is exactly what `62e73c70` addresses on the
+in-VM side — a re-provision is the discriminating test.
+
 ## Action items
 
-1. Investigate F4 independent cause: does the forge container actually start? Check in-VM state via vsock after Ready is reported
-2. F3 implementation: the shared host-shell `menu_state.rs` needs the collapsed github-gated contract implemented
+1. **Re-provision the macOS VM** (destroy `rootfs.img`, cold boot → fetch the
+   v0.3.260618.2 in-VM headless with the egress fix), then operator re-runs the
+   GitHub Login step. This settles whether F4 is now fixed in-VM or is a residual
+   host-side PTY-bridge bug.
+2. Investigate F4 residual cause if it persists after (1): does the forge
+   container actually start? Check in-VM state via vsock after Ready is reported;
+   ensure the PTY bridge FAILS VISIBLY (print the error, keep the terminal open).
+3. F3 implementation: the shared host-shell `menu_state.rs` needs the collapsed
+   github-gated contract implemented (cross-host coordination: Linux + Windows).
+   This is the top remaining macOS-visible defect and is independent of the VM.
+4. The `local-projects action=Inert` (F5) is a symptom of the F3 wrong menu model
+   plus the stale agent; retest after (1) + (3).
