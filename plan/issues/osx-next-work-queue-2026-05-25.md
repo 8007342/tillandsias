@@ -2,12 +2,24 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
-## 2026-06-18T23:18Z — CLAIM 49d: operator-attended m8 interactive smoke (live now)
+## 2026-06-18T21:30Z — 49d results: partial — F2 fixed; F4 has independent root cause
 
-Operator at the macOS terminal is driving the user-attended m8 smoke now. Lease
-`step49d-m8-smoke-20260618T231815Z`. Plan: rebuild+install at HEAD (freshness
-gate --version SHA == HEAD), then run the 7-step menu checklist while the host
-captures the enclave/vsock side. Findings will land as a fresh m8 results file.
+Operator completed the m8 interactive smoke at HEAD `e4ef0db0`.
+
+### Results
+- **Icon**: PASS (F1 fixed by `1ada1f28`)
+- **VM Ready**: PASS (status chip showed `Ready tillandsias-in-vm`; F2 closed by step 49b/c)
+- **Menu collapsed**: FAIL — menu showed "old messy UX" (F3 still open)
+- **GitHub Login**: FAIL — terminal opens and goes full gray immediately even with VM Ready (F4 UNEXPECTEDLY has an independent root cause, not resolved by step 49)
+- **Quit**: PASS
+
+### Key discovery
+F4 (`github-login-pty-hangs-gray`) previously marked as downstream of F2 is NOT
+resolved by step 49. The VM reaches Ready but GitHub Login PTY still hangs gray.
+Needs its own investigation — possible causes: forge container not started despite
+podman_ready, PTY attach wiring bug, or port/container not reachable.
+
+Full results: `plan/issues/macos-m8-interactive-smoke-results-2026-06-18.md`
 
 ## 2026-06-16T23:35Z — step 49 done (49a/b/c/e completed); 49d next (user-attended m8 smoke)
 
@@ -998,6 +1010,17 @@ accessor.
 - linux-owned active items (not macOS-claimable): `nanoclawv2-orchestration`,
   `enclave/network-level-egress-deny`, `policy/no-python-runtime-scripts`
 - pushed osx-next checkpoint (commit 807f95f9) to origin
+
+### event: meta-orchestration cycle 2026-06-18T21:30Z — macOS (osx-next)
+
+- agent_id: `macos-big-pickle`
+- action: 49d user-attended m8 interactive smoke executed
+- step 49 status: 49a/b/c/e DONE; 49d PARTIAL (icon PASS, VM Ready PASS, menu FAIL, github-login FAIL)
+- key discovery: F4 (`github-login-pty-hangs-gray`) has an INDEPENDENT root cause
+  beyond the VM state — VM reaches Ready but PTY still goes gray immediately
+- F3 (`menu-not-collapsed-github-gated`) remains open (shared host-shell change)
+- results file: `plan/issues/macos-m8-interactive-smoke-results-2026-06-18.md`
+- untracked artifacts remain: `build-osx-tray.sh`, `research/`, `src-tauri/`
 
 <!-- Append events here when claiming/progressing items. Append-only. -->
 

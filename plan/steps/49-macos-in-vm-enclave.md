@@ -167,3 +167,25 @@ a second enclave definition (tombstone/supersede, never duplicate).
     install at HEAD (freshness gate: installed --version SHA must equal
     git rev-parse --short HEAD), then drive the 7-step menu checklist while the
     host captures the vsock/enclave side via scripts/diagnose-macos-enclave.sh.
+- type: progress
+  task: "49d"
+  ts: "2026-06-18T21:30:00Z"
+  agent_id: "macos-Tlatoanis-MacBook-Air-big-pickle-20260618T213000Z"
+  host: "macos"
+  lease_id: "step49d-m8-smoke-20260618T231815Z"
+  outcome: >
+    User-attended m8 interactive smoke at HEAD e4ef0db0.
+    Icon PASS (F1), VM Ready PASS (F2 closed), Menu collapsed FAIL (F3 open),
+    GitHub Login FAIL (F4 has independent root cause beyond step 49), Quit PASS.
+    F4 is NOT resolved by step 49 alone — it needs independent investigation.
+  evidence:
+    - Icon renders correctly as crisp tinted glyph (1ada1f28 working)
+    - Status chip shows Ready tillandsias-in-vm ~32s post-boot
+    - Menu shows old always-expanded UX instead of collapsed github-gated form
+    - GitHub Login terminal opens and goes full gray immediately
+    - Quit exits cleanly
+  next_action: >
+    F3: implement shared host-shell collapsed menu (cross-host coordination).
+    F4: investigate why PTY attach fails even with VM Ready — does the forge
+    container actually start? Check in-VM state via vsock after Ready reported.
+  results_file: plan/issues/macos-m8-interactive-smoke-results-2026-06-18.md
