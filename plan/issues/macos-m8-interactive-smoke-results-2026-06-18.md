@@ -127,6 +127,14 @@ contract on `linux-next`; wire the macOS `launch_spec` arg on `osx-next`.
 ## m8 gate status
 
 RED → **less red.** Keystone F2 ✅, icon F1 ✅, menu F3 ✅, Quit ✅. The single
-remaining blocker is F4 (in-VM github-login entrypoint, cross-host). No projects
-(F5) until a user can authenticate, which F4 gates. Do not mark the m8 release
-gate GREEN until F4 lands and login → projects → attach works end-to-end.
+remaining blocker is F4 (GitHub Login), now traced to FIVE stacked layers — see
+the full empirical deep-dive: **`plan/issues/macos-github-login-deep-dive-2026-06-18.md`**.
+The deepest/current blocker is **layer 5**: the orchestrated in-VM `--github-login`
+builds + launches Vault (healthy inside the container) but the host-side health
+probe to the published `127.0.0.1:8201` times out (TCP opens, no data even with
+`-k`) — a podman port-publish-vs-backend issue on aarch64, cross-host
+(headless/enclave/recipe). Layers 2–3 (point macOS `launch_spec` at the
+orchestrated `--github-login` + cloud-init `loginctl enable-linger root` for
+`XDG_RUNTIME_DIR`) are shaped but must land WITH layer 5 — shipping them alone
+still dies at Vault. No projects (F5) until login works. Do not mark m8 GREEN
+until layers 5 + 2/3 land and login → projects → attach works end-to-end.
