@@ -73,7 +73,7 @@ FLAG_NO_CACHE="${TILLANDSIAS_BUILD_NO_CACHE:-false}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        forge|web|proxy|git|inference|router|chromium-core|chromium-framework|vault)
+        forge|web|proxy|git|inference|router|chromium-core|chromium-framework|vault|nanoclawv2)
             IMAGE_NAME="$1"
             ;;
         --force)
@@ -87,7 +87,7 @@ while [[ $# -gt 0 ]]; do
             FLAG_TAG="$1"
             ;;
         --help|-h)
-            echo "Usage: scripts/build-image.sh [forge|web|proxy|git|inference] [--force] [--no-cache] [--tag <tag>]"
+            echo "Usage: scripts/build-image.sh [forge|web|proxy|git|inference|router|chromium-core|chromium-framework|vault|nanoclawv2] [--force] [--no-cache] [--tag <tag>]"
             echo ""
             echo "Build a container image using podman (Containerfile-based, reproducible)."
             echo ""
@@ -100,6 +100,7 @@ while [[ $# -gt 0 ]]; do
             echo "  chromium-core      Build the secure browser container (minimal)"
             echo "  chromium-framework Build the debug browser container (with Node.js+Playwright)"
             echo "  vault              Build the HashiCorp Vault enclave container (Phase 3 POC)"
+            echo "  nanoclawv2         Build the NanoClawV2 orchestration container"
             echo "  --force            Rebuild even if sources haven't changed"
             echo "  --no-cache         Diagnostic rebuild with podman layer cache disabled"
             echo "  --tag <tag>        Override the canonical image tag (default: content hash)"
@@ -146,6 +147,7 @@ case "$IMAGE_NAME" in
     chromium-core) CONTAINERFILE="$ROOT/images/chromium/Containerfile.core" ;;
     chromium-framework) CONTAINERFILE="$ROOT/images/chromium/Containerfile.framework" ;;
     vault)     CONTAINERFILE="$ROOT/images/vault/Containerfile" ;;
+    nanoclawv2) CONTAINERFILE="$ROOT/images/nanoclawv2/Containerfile" ;;
     *)         CONTAINERFILE="$ROOT/images/default/Containerfile" ;;
 esac
 

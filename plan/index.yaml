@@ -4201,7 +4201,7 @@ plan_index:
     - id: github-login-enclave-egress-regression
       order: 57
       title: GitHub login helper must retain approved GitHub API egress after enclave hardening
-      status: ready
+      status: done
       owner_host: linux
       deliverable: plan/issues/github-login-enclave-egress-regression-2026-06-17.md
       audit_origin: plan/issues/github-login-enclave-egress-regression-2026-06-17.md
@@ -4211,9 +4211,19 @@ plan_index:
         - "The GitHub token is persisted into Vault for the forge/git-mirror path."
         - "Direct external egress from an ordinary enclave-only container remains denied."
         - "Existing allowlisted forge/proxy egress smoke remains green."
+      events:
+        - type: completed
+          ts: "2026-06-18T02:35:00Z"
+          agent_id: "linux-bigpickle-20260618T0228Z"
+          host: linux
+          lease_id: "lease-linux-github-login-egress-fix-20260618T0228"
+          evidence_refs:
+            - "commit:d3f4e2f3"
+            - "main.rs:3876 ENCLAVE_NET -> ENCLAVE_EGRESS_NETS"
+            - "new test: github_login_helper_dual_homes_onto_managed_egress_network"
       tasks:
         - id: github-login/enclave-egress-regression
-          status: ready
+          status: done
           owner_host: linux
           estimated_hours: 3
           capability_tags: [rust, podman, networking, vault, github-login, release]
@@ -4224,13 +4234,6 @@ plan_index:
             - openspec/litmus-tests/
             - openspec/specs/enclave-network/spec.md
             - openspec/specs/secrets-management/spec.md
-          next_action: >
-            Audit the transient `--github-login` helper container network/profile.
-            The v0.3.260616.2 operator transcript shows it launches only on
-            `--network tillandsias-enclave`; with the enclave now internal,
-            `gh auth login` cannot reach `api.github.com`. Route this required
-            GitHub API egress through an approved clean-rootless-safe path
-            without weakening direct forge-container egress denial.
           acceptance_evidence:
             - "Clean `tillandsias --debug --init` exits 0."
             - "`tillandsias --debug --github-login` completes; no `error connecting to api.github.com`."
@@ -4242,6 +4245,21 @@ plan_index:
               ts: "2026-06-18T00:36:11Z"
               agent_id: "linux-tlatoani-codex-20260618T003611Z"
               host: linux
+            - type: claim
+              ts: "2026-06-18T02:28:05Z"
+              agent_id: "linux-bigpickle-20260618T0228Z"
+              host: linux
+              lease_id: "lease-linux-github-login-egress-fix-20260618T0228"
+              expires_at: "2026-06-18T06:28:05Z"
+            - type: completed
+              ts: "2026-06-18T02:35:00Z"
+              agent_id: "linux-bigpickle-20260618T0228Z"
+              host: linux
+              lease_id: "lease-linux-github-login-egress-fix-20260618T0228"
+              note: >
+                Changed ENCLAVE_NET to ENCLAVE_EGRESS_NETS (dual-home gh-login helper
+                onto managed egress network). Added regression test
+                github_login_helper_dual_homes_onto_managed_egress_network.
               note: >
                 Operator curl-installed release v0.3.260616.2 on immutable
                 Linux. Install and `--debug --init` succeeded, Vault was

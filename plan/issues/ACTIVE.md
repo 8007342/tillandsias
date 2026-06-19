@@ -1,6 +1,6 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-18T10:15Z
+Last updated: 2026-06-18T23:20Z
 
 This file is the first stop for agents inspecting `plan/issues/`. Historical
 issue reports remain in this directory for evidence and auditability, but only
@@ -39,10 +39,19 @@ the items below are immediate work.
 
 ### github-login/enclave-egress-regression
 
-- status: done
+- status: ADDRESSED 2026-06-18 — root cause fixed under `bug/github-login-failure` (runtime validation pending)
+- reopened_reason: >
+    The Tlatoani reports `--github-login` still fails from both CLI and tray
+    across the last several builds. The `d3f4e2f3` fix only renamed the network
+    constant and was never live-validated (release smoke never ran
+    `--github-login`). Investigation found a likely deeper root cause:
+    `run_github_login` launches the helper on the enclave+egress networks but
+    never calls `ensure_enclave_network`/`ensure_egress_network`, so the
+    `podman run --network …` fails on a clean store. Tracked in the new packet
+    `bug/github-login-failure` (see below).
 - owner_host: linux
 - source: `plan/issues/github-login-enclave-egress-regression-2026-06-17.md`
-- fix_commit: `d3f4e2f3` on `linux-next`
+- prior_fix_commit: `d3f4e2f3` on `linux-next` (insufficient)
 - fix_summary: >
     Changed the GitHub login helper container from single-homed `ENCLAVE_NET`
     to dual-homed `ENCLAVE_EGRESS_NETS` (tillandsias-enclave,tillandsias-egress).
@@ -66,6 +75,57 @@ the items below are immediate work.
     `gh` token before the hidden container prompt. Next run must be
     operator-attended with a fresh/rotated token.
 
+### bug/github-login-failure
+
+- status: fix-landed (runtime validation pending) — 2026-06-18,
+  commit `62e73c70` on `linux-next` (linux-tlatoani-opus-worker2-20260618T043347Z)
+- owner_host: linux
+- source: `plan/issues/github-login-failure-regression-2026-06-18.md`
+- severity: high — blocks GitHub auth from both CLI and tray across recent builds
+- fix_summary: >
+    Added `ensure_enclave_network(debug)?;` at the top of run_github_login
+    (after ensure_image_exists, before the helper podman run). This idempotently
+    ensures BOTH tillandsias-enclave and tillandsias-egress exist before the
+    dual-homed helper launch, matching every sibling enclave-bootstrap flow.
+    Root cause confirmed: the helper launched on ENCLAVE_EGRESS_NETS but the
+    networks were never ensured, so on a clean store `podman run --network
+    tillandsias-enclave,tillandsias-egress …` failed. Added regression test
+    `github_login_ensures_networks_before_helper_launch`. Build/clippy/fmt/
+    ./build.sh --check all clean.
+- runtime_validation_pending: >
+    Operator/e2e gate still required — `tillandsias --debug --github-login` on a
+    clean post-init store (no Error:/exit 1), token persisted to Vault, and the
+    tray GitHub Login click. Not demonstrated in the worker context (no runtime
+    podman login available). Keep acceptance_evidence open.
+- next_action: Live-validate `tillandsias --debug --github-login` on a clean
+  post-init install; confirm token persists to Vault and the tray path surfaces
+  inner errors. If login still fails after the networks exist, audit rootless
+  dual-home egress NAT (checklist items 4/6/7 in the source packet).
+- supersedes: `github-login/enclave-egress-regression`
+- blocker: none
+- evidence_required:
+  - `tillandsias --debug --github-login` completes on a clean store
+  - tray GitHub-login flow succeeds (or surfaces the real error)
+
+### bug/clone-tray-ux-not-refreshed
+
+- status: fix-landed (runtime validation pending) — commit `8e9fa2d9` on
+  linux-next
+- owner_host: linux
+- source: `plan/issues/clone-tray-ux-not-refreshed-2026-06-18.md`
+- severity: medium — clone succeeds on disk but tray stayed on "Cloning…" and
+  `~/src` never refreshed
+- fix: `tray/mod.rs` `handle_launch_cloud_project` now, on clone success, sets a
+  "✓ Cloned <name>" status, calls the new `TrayService::refresh_local_projects()`
+  (re-scans `~/src` into `state.projects` + bumps revision — the missing
+  post-startup writer), then `rebuild_after_state_change()`. Regression test
+  `refresh_local_projects_picks_up_new_checkout` added.
+- blocker: none
+- evidence_required:
+  - [open] runtime: actually clone a not-yet-on-disk repo from `☁️ Cloud >` on a
+    live tray and observe the status clears AND `🏠 ~/src` lists the new checkout
+    without a restart (needs an operator with a logged-in GitHub session)
+
 ### enclave/network-level-egress-deny
 
 - status: done
@@ -83,15 +143,29 @@ the items below are immediate work.
 
 ### policy/no-python-runtime-scripts
 
-- status: in_progress
+- status: in-progress (reclaimable for next slice)
 - owner_host: linux
 - source: `plan/issues/no-python-runtime-policy-2026-06-16.md`
-- lease: `no-python-slice-2-202606181001` (expires 2026-06-18T14:01Z)
-- next_action: Continue rewriting the remaining Python-backed repository
-  scripts in Rust; `check-cheatsheet-tiers.sh` is now Rust-backed and removed
-  from the no-Python checker output.
-- blocker: existing cheatsheet/provenance maintenance scripts still execute
-  Python; each needs a Rust replacement or explicit Tlatoani approval.
+- progress: `check-cheatsheet-tiers.sh` is Rust-backed via
+  `tillandsias-policy check-cheatsheet-tiers`; `bind-provenance-local-paths.sh`,
+  `regenerate-source-index.sh`, `refresh-cheatsheet-sources.sh` are tombstone-only;
+  `check-convergence-velocity` retired. Consolidation DONE (2026-06-18): `sources`
+  and `audit` validators are now re-homed into `tillandsias-policy` as the
+  `check-cheatsheet-sources` and `audit-cheatsheet-sources` subcommands, both
+  byte-for-byte parity-verified; the `tillandsias-cheatsheet-tools` crate has been
+  deleted and removed from the workspace. A single policy crate now owns all
+  cheatsheet validation (tiers + sources + audit).
+  `distill-forge-diagnostics.sh` DONE (2026-06-18,
+  `linux-tlatoani-opus-meta1-20260618T230426Z`): ported to a
+  `tillandsias-policy distill-forge-diagnostics` subcommand and reduced to a
+  thin build+exec wrapper; 45/45 target/forge-diagnostics logs verified
+  byte-for-byte identical vs the former CPython extractor.
+- next_action: Port the remaining 2 Python-runtime scripts
+  (`fetch-cheatsheet-source.sh` — 6 python3 sites, large;
+  `regenerate-cheatsheet-index.sh` — 1 python3 site), then make
+  `scripts/check-no-python-scripts.sh` pass.
+- blocker: those two scripts still execute Python; each needs a Rust
+  replacement or explicit Tlatoani approval.
 - evidence_required:
   - `scripts/check-no-python-scripts.sh` exits 0
   - no `*.py` executable scripts remain under `scripts/`
@@ -158,6 +232,103 @@ The 2026-06-16 critical/high forge proposals were triaged in
   - [x] VM reaches Ready phase after provisioning (49c verified)
   - [ ] m8 interactive smoke passes (49d) — user-attended
 
+## This Cycle (2026-06-18T20:50Z, linux)
+
+- **Release-smoke priority**: fetched origin, fast-forwarded `linux-next`, and
+  found GitHub latest release `v0.3.260618.2` newer than recorded curl-install
+  smoke evidence.
+- **Curl-install e2e**: installed the published Linux artifact, verified
+  `Tillandsias v0.3.260618.2`, ran destructive `podman system reset --force`,
+  confirmed empty container/volume/image inventories, and completed fresh
+  `tillandsias --debug --init` with Vault healthy/unsealed.
+- **Forge lane**: prompted `tillandsias . --opencode --prompt "Use the
+  /forge-continuous-enhancement skill"` exited 0.
+- **New ready findings**: filed
+  `smoke-finding/forge-ripgrep-missing`,
+  `smoke-finding/forge-marksman-missing`, and
+  `smoke-finding/forge-nix-store-missing` in
+  `plan/issues/smoke-e2e-findings-v0.3.260618.2-2026-06-18.md`.
+  Detailed forge proposals were committed in `62964f02` and pushed to GitHub.
+- **Sibling audit**: `origin/windows-next` (`e332afb6`) and `origin/osx-next`
+  (`c7d32fb9`) remain ancestors of `linux-next`; no branch drift, deadlock,
+  thrash, or wrong-direction progress detected.
+- **Next useful Linux actions**: operator-attended
+  `tillandsias --debug --github-login`, claim one new forge tool packet, or
+  continue the expired no-Python cleanup lease.
+
+## This Cycle (2026-06-18T16:00Z, linux)
+
+- **Meta-orchestration audit**: fetched origin on a clean mutable-Linux
+  `linux-next` checkout and confirmed local HEAD is up to date at `87d2201f`.
+- **Sibling audit**: `origin/windows-next` (`e332afb6`) and `origin/osx-next`
+  (`c7d32fb9`) are both ancestors of `origin/linux-next`; each has 0 commits
+  ahead of linux-next, with no branch drift, deadlock, thrash, or wrong-direction
+  progress detected.
+- **Worker drain**: no implementation packet was claimed. `policy/no-python-runtime-scripts`
+  remains actively leased until 2026-06-18T18:17Z; `nanoclawv2-orchestration`
+  remains reclaimable (~4h) and `local-smoke/evidence-bundle-litmus-count-regression`
+  is ready (~3h) but both exceed the meta-orchestration cycle budget.
+- **Release/e2e freshness**: `gh release view` reports latest release
+  `v0.3.260618.1`, published 2026-06-18T01:34:43Z from `b0dba63e`; existing
+  release-smoke evidence for the same version passed at 2026-06-18T03:31:55Z.
+- **E2E gates**: skipped. This cycle changed only plan ledger text and found no
+  runtime, image, installer, or release artifact delta since the current smoke.
+- **Next useful Linux actions**: operator-attended
+  `tillandsias --debug --github-login`, continue no-Python cleanup after the
+  active lease checkpoints/expires, or reclaim NanoClawV2 in a longer worker
+  cycle.
+
+## This Cycle (2026-06-18T14:19Z, linux)
+
+- **Worker drain**: reclaimed expired
+  `policy/no-python-runtime-scripts` lease as
+  `no-python-slice-3-202606181417` and completed a narrow tombstone cleanup.
+- **No-Python slice 3**: replaced
+  `scripts/bind-provenance-local-paths.sh` with a compact tombstone-only
+  wrapper. The wrapper still exits 0 with the replacement notice, and the
+  unreachable Python legacy body no longer appears in
+  `./scripts/check-no-python-scripts.sh`.
+- **Verification**: `scripts/bind-provenance-local-paths.sh` PASS, `bash -n`
+  PASS, `cargo test -p tillandsias-policy` PASS, `git diff --check` PASS.
+  The no-Python checker still fails on the remaining active
+  cheatsheet/provenance/diagnostics/source-index scripts.
+- **E2E gates**: skipped. This cycle changed an already-retired maintenance
+  wrapper and plan ledgers only; no runtime, image, installer, or release
+  artifact behavior changed.
+
+## This Cycle (2026-06-18T13:26Z, linux)
+
+- **Merged osx-next plan-only cycle**: integrated `origin/osx-next` commit
+  `c7d32fb9` into `linux-next`. It recorded a macOS no-eligible-work
+  meta-orchestration cycle and touched only `plan/issues/osx-next-work-queue-2026-05-25.md`
+  plus `plan/loop_status.md`.
+- **Worker drain**: no small unclaimed Linux implementation packet was claimed.
+  `policy/no-python-runtime-scripts` remains leased until 2026-06-18T14:01Z;
+  `nanoclawv2-orchestration` remains reclaimable, but the next implementation
+  slice is estimated at 4h and should be picked up by a dedicated worker cycle.
+- **E2E gates**: skipped. No implementation/runtime/image/installer files
+  changed, and release `v0.3.260618.1` already has current curl-install smoke
+  evidence.
+- **Next useful Linux evidence**: operator-attended
+  `tillandsias --debug --github-login` on a clean post-init install with a
+  fresh/rotated token.
+
+## This Cycle (2026-06-18T13:31Z, linux)
+
+- **Meta-orchestration audit**: `/meta-orchestration` was requested, but the
+  local available skill is `coordinate-multihost-work`; used that workflow and
+  recorded the mismatch in `plan/loop_status.md`.
+- **Sibling audit**: `origin/windows-next` (`e332afb6`) and `origin/osx-next`
+  (`c7d32fb9`) are both ancestors of `origin/linux-next` (`41a3fab1`), 0 drift.
+  No deadlock, thrash, wrong-direction progress, or pending runtime-litmus
+  marker was found.
+- **No implementation work claimed**: `policy/no-python-runtime-scripts` remains
+  leased until 2026-06-18T14:01Z; `nanoclawv2-orchestration` remains reclaimable
+  for a longer worker cycle.
+- **Next useful evidence unchanged**: operator-attended
+  `tillandsias --debug --github-login`; Windows Smart App Control decision;
+  macOS step 49d / m8 interactive smoke.
+
 ## Achieved This Cycle (2026-06-18T10:15Z, macos)
 
 - **meta-orchestration sync**: Fast-forwarded `osx-next` to current shared
@@ -199,6 +370,35 @@ The 2026-06-16 critical/high forge proposals were triaged in
 - **Reclaimable packets unchanged**: `nanoclawv2-orchestration` and
   `policy/no-python-runtime-scripts` remain available for Linux claim.
 - **No e2e gate run**: no runtime crate/image delta since released v0.3.260618.1.
+
+## This Cycle (2026-06-18T10:23Z, windows)
+
+- **Recovered 13 stranded commits**: a prior Windows cycle committed the
+  07:25Z meta-orchestration record, the forge PTY fix (`d761b418`), and the
+  `v0.3.260618.1` plan/TRACES batch but never pushed. Pushed
+  `7674f823..8ab39e97` to `origin/windows-next` (ff-safe).
+- **Synced `linux-next`**: merged `origin/linux-next` (`2e7a53b6`, incl.
+  `fix(policy): port cheatsheet tier check to Rust`) into `windows-next`;
+  resolved `plan/loop_status.md` by taking the newer Linux coordinator content.
+- **Added `repeat.ps1`**: committed the Windows launcher that locates bash and
+  delegates to `./repeat` (parse-validated). Previously untracked local-only.
+- **Worker drain**: No Windows-owned ready work in `plan/index.yaml`; all
+  Windows-owned packets are `done`/`completed`. Yielded.
+- **E2E gates**: BLOCKED. Smart App Control is enforcing on this host
+  (`VerifiedAndReputablePolicyState=1`) and blocks execution of unsigned cargo
+  build-script binaries (`os error 4551`), so the native local-build e2e cannot
+  run. Curl-install e2e skipped (latest release `v0.3.260618.1` == latest
+  tested). Production WSL2 substrate verified healthy via non-destructive probe
+  (`wsl -l -v`: `tillandsias` registered, VERSION 2).
+  Finding: `plan/issues/windows-smart-app-control-build-block-2026-06-18.md`.
+
+## This Cycle (2026-06-18T07:25Z, windows)
+
+- **Worker drain**: No Windows-owned ready work found in `plan/index.yaml`;
+  yielded.
+- **E2E gates**: Windows build/install, destructive WSL unregister, and cold
+  re-provision PASS.
+  Evidence: `plan/issues/build-install-smoke-e2e-findings-2026-06-18.md`.
 
 ## This Cycle (2026-06-18T05:38Z, linux)
 

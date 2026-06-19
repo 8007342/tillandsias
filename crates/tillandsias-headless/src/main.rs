@@ -3853,6 +3853,14 @@ fn run_github_login(debug: bool) -> Result<(), String> {
 
     ensure_image_exists(&root, "git", &image, debug)?;
 
+    // The helper dual-homes onto `tillandsias-egress` (see the run args below)
+    // to reach api.github.com, since `tillandsias-enclave` is `--internal`.
+    // `--github-login` can run without a prior full `--init`, so the managed
+    // egress network may not exist yet — ensure both networks here, otherwise
+    // the dual-home leg fails to resolve. ensure_enclave_network ensures the
+    // egress network first.
+    ensure_enclave_network(debug)?;
+
     // Bring Vault online before the interactive paste so the user isn't
     // left waiting after login.
     #[cfg(feature = "vault")]
@@ -3906,6 +3914,9 @@ fn run_github_login(debug: bool) -> Result<(), String> {
             "--rm",
             "--name",
             &container,
+            // Dual-home for api.github.com egress (see the vault branch above).
+            "--network",
+            ENCLAVE_EGRESS_NETS,
             "--cap-drop=ALL",
             "--security-opt=no-new-privileges",
             "--userns=keep-id",
@@ -7881,6 +7892,13 @@ mod tests {
         assert!(
             !login_window.contains("ENCLAVE_NET,"),
             "run_github_login must not reference ENCLAVE_NET (no egress): {login_window}"
+        );
+        // The dual-home leg only resolves if the managed egress network exists.
+        // `--github-login` can run without a prior full `--init`, so the login
+        // path must ensure the networks itself.
+        assert!(
+            login_window.contains("ensure_enclave_network(debug)?"),
+            "run_github_login must ensure the enclave+egress networks before launching the helper: {login_window}"
         );
     }
 
