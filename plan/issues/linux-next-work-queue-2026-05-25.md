@@ -16,6 +16,7 @@ This file is the cross-host advertisement — terse, dated, SHA-anchored.
 
 ## Recent entries (reverse chronological)
 
+- 2026-06-19T21:35Z  `this commit`  (advance-work nanoclawv2 slice 1) Verified and checkpointed slice 1: image infrastructure config, opencode path fix in entrypoint.sh.
 - 2026-06-18T21:35Z  `0e7aed90`  (advance-work no-python slice 4) Stripped unreachable Python bodies from tombstoned scripts/regenerate-source-index.sh and scripts/refresh-cheatsheet-sources.sh (both @tombstone obsolete:cheatsheet-source-layer). Both still exit 0 with tombstone notices. 2 fewer checker violations; 5 Python-backed scripts remain.
 - 2026-06-18T21:28Z  `64df8c4b`  (advance-work forge-nix-store) CLARIFIED smoke-finding/forge-nix-store-missing: nix is host-side only by design. nix-first.md corrected; TILLANDSIAS_SHARED_CACHE does not exist. All 3 forge smoke findings from v0.3.260618.2 are now processed.
 - 2026-06-18T21:22Z  `48a34dc5`  (advance-work forge-marksman) Claimed and completed smoke-finding/forge-marksman-missing: installed marksman Markdown LSP server in Containerfile.base:37-38 from GitHub releases (version 2026-02-08, single binary at /usr/local/bin/marksman). Also updated the marksman proposal with implementation details and the forge-diagnostics prompt should no longer report marksman as missing after the next image rebuild.

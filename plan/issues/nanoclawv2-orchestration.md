@@ -10,11 +10,11 @@
   - add a narrow host control surface for approved orchestration actions
   - add smoke coverage for launch + one approved action
 - current_progress: proposal, design, tasks, and spec scaffolded. Slice 1
-  (image infrastructure) in progress: images/nanoclawv2/Containerfile created,
+  (image infrastructure) completed: images/nanoclawv2/Containerfile created,
   config overlay with orchestration instructions, entrypoint, build-image.sh
-  registration added. Slice 1 still pending build verification and commit.
-- next_action: complete slice 1 verification (./build.sh --check), commit,
-  then proceed to slice 2 (tray launcher leaf)
+  registration added, build verification passed, and committed. Slice 2 (tray launcher leaf) in progress.
+- next_action: implement slice 2 (tray launcher leaf), add branch-aware logic,
+  and verify smoke coverage for launch.
 - events:
   - type: claim
     ts: "2026-06-17T22:07:00Z"
@@ -34,6 +34,15 @@
     host: "linux"
     lease_id: "nanoclawv2-orchestration-202606192134"
     expires_at: "2026-06-20T01:34:00Z"
+  - type: progress
+    ts: "2026-06-19T21:35:00Z"
+    agent_id: "linux-tlatoani-gemini-2026-06-19T21:34Z"
+    host: "linux"
+    lease_id: "nanoclawv2-orchestration-202606192134"
+    note: >
+      Slice 1 checkpoint: verified (./build.sh --check passed) and committed.
+      images/nanoclawv2/entrypoint.sh opencode path fixed.
+      Ready to start Slice 2 (tray launcher leaf).
 - blocker: none
 - evidence_required:
   - proposal.md, design.md, tasks.md, and spec.md are written and consistent
