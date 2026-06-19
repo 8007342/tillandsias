@@ -58,17 +58,75 @@ it fetches the v0.3.260618.2 headless. BigPickle's hypothesis (forge container
 not up despite `podman_ready=true`) is exactly what `62e73c70` addresses on the
 in-VM side — a re-provision is the discriminating test.
 
+## Round 3 retest (post-fix, build `8f3d87c1`) — F3 FIXED; F4 root-caused
+
+After landing the F3 login-gate fix (`8f3d87c1`) and re-provisioning the VM with
+the v0.3.260618.2 headless, the operator re-ran the smoke:
+
+| # | Item | Status | Notes |
+|---|------|--------|-------|
+| F3 | Collapsed/github-gated menu | ✅ **FIXED** | operator: "src and cloud menus correctly gated and not displayed, I can only see the Ready tillandsias-in-vm message" + GitHub Login. Login-gated collapse works. |
+| F4 | GitHub Login PTY | ❌ **STILL GRAY** (root-caused) | even with the fresh headless + re-provision, the terminal still goes full gray. NOT the egress fix; independent host/in-VM path bug — see root cause below. |
+
+### F4 root cause (definitive)
+
+The macOS tray's GitHub Login does a generic PTY attach whose in-VM command is
+`launch_spec(GithubLogin, project=None)` =
+**`["gh", "auth", "login"]` run on the bare VM** (`host-shell/src/pty/mod.rs:142,161`).
+
+Chain of failure:
+1. The bare Fedora VM installs **only podman** (`vm-layer/src/vz.rs:382-385`); `gh`
+   is **not** on the bare VM — it lives inside the enclave/git container.
+2. The in-VM headless execs `gh` → not found → process exits immediately → PTY
+   EOF → Terminal opens but stays gray (host log shows `PTY attached at
+   /dev/ttysNNN` then nothing; vsock connect + handshake + PtyOpen all succeed,
+   so the host side is healthy — the in-VM command is the problem).
+3. The **correct** flow is the orchestrated `--github-login`
+   (`headless/src/main.rs:301 → run_github_login`, main.rs:3834): it pulls the
+   git image, ensures `tillandsias-enclave,tillandsias-egress`, brings Vault up,
+   and runs `gh auth login` **inside** a properly-networked, Vault-leased
+   container. The Linux tray invokes exactly this via `tillandsias --github-login`
+   (`headless/src/tray/mod.rs:1910`).
+
+Why it can't be a one-line macOS fix:
+- Pointing `launch_spec(GithubLogin)` at `["tillandsias-headless","--github-login"]`
+  would hit `require_desktop_user_session` (`tillandsias-podman/src/lib.rs:161`),
+  which **rejects the headless service-account lane**. The in-VM headless runs as
+  a systemd service (`tillandsias-headless.service`), so a PTY subprocess inherits
+  that lane and the guard returns `Err` before any gh login starts.
+
+### F4 fix (cross-host — headless/Linux-owned, macOS-coordinated)
+
+Add an in-VM **interactive github-login entrypoint driven over vsock/PTY** that:
+- runs the `run_github_login` orchestration (enclave+egress nets, Vault lease,
+  gh device-code paste in the git container) **without** requiring the desktop
+  user-session lane — the authenticated host tray IS the trusted desktop session,
+  so the in-VM driver should treat a tray-initiated vsock PTY as authorized;
+- surfaces the interactive device-code prompt + any error back through the PTY so
+  the macOS Terminal shows progress instead of a silent gray window (also
+  satisfies `macos-tray/github-login-pty-hangs-gray`'s "fail visibly" clause).
+Then change the macOS (+ Windows) `launch_spec(GithubLogin)` to target that
+entrypoint instead of bare `gh auth login`. Coordinate the control-wire/headless
+contract on `linux-next`; wire the macOS `launch_spec` arg on `osx-next`.
+
 ## Action items
 
-1. **Re-provision the macOS VM** (destroy `rootfs.img`, cold boot → fetch the
-   v0.3.260618.2 in-VM headless with the egress fix), then operator re-runs the
-   GitHub Login step. This settles whether F4 is now fixed in-VM or is a residual
-   host-side PTY-bridge bug.
-2. Investigate F4 residual cause if it persists after (1): does the forge
-   container actually start? Check in-VM state via vsock after Ready is reported;
-   ensure the PTY bridge FAILS VISIBLY (print the error, keep the terminal open).
-3. F3 implementation: the shared host-shell `menu_state.rs` needs the collapsed
-   github-gated contract implemented (cross-host coordination: Linux + Windows).
-   This is the top remaining macOS-visible defect and is independent of the VM.
-4. The `local-projects action=Inert` (F5) is a symptom of the F3 wrong menu model
-   plus the stale agent; retest after (1) + (3).
+- [x] Re-provision the macOS VM with the v0.3.260618.2 headless — DONE this
+      session; enclave reaches `phase=Ready podman_ready=true` ~9-17s.
+- [x] F3 collapsed/login-gated menu in shared `host-shell/menu_state.rs` — DONE
+      (`8f3d87c1`), operator-confirmed. Windows + macOS adapters + tests updated.
+- [ ] **F4 (cross-host):** add the in-VM interactive github-login-over-PTY
+      entrypoint (see "F4 fix" above) on `linux-next`/headless, then point the
+      macOS+Windows `launch_spec(GithubLogin)` at it on `osx-next`. Until then the
+      macOS GitHub Login is non-functional (gray terminal). Owns:
+      `macos-tray/github-login-pty-hangs-gray` (re-scoped from "downstream of F2"
+      to "bare-VM `gh` has no binary; needs orchestrated in-VM entrypoint").
+- [ ] F5 projects: re-test once F4 lands (projects come from the in-VM forge that
+      github-login authenticates against). Logged-out is correctly empty now (F3).
+
+## m8 gate status
+
+RED → **less red.** Keystone F2 ✅, icon F1 ✅, menu F3 ✅, Quit ✅. The single
+remaining blocker is F4 (in-VM github-login entrypoint, cross-host). No projects
+(F5) until a user can authenticate, which F4 gates. Do not mark the m8 release
+gate GREEN until F4 lands and login → projects → attach works end-to-end.
