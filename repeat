@@ -238,6 +238,20 @@ run_with_timeout() {
   return "$status"
 }
 
+# Trick CLI agents (like claude and agy) into thinking they are connected to
+# an interactive terminal. This defeats block buffering when piped.
+run_in_pty() {
+  python3 -u -c '
+import pty, sys, os
+try:
+    status = pty.spawn(sys.argv[1:])
+    sys.exit(os.WEXITSTATUS(status))
+except Exception:
+    sys.exit(1)
+' "$@"
+}
+
+
 run_agent() {
   local selected="$1"
   local bin
@@ -249,7 +263,7 @@ run_agent() {
       ;;
     claude)
       bin="$(resolve_bin CLAUDE_BIN claude)" || return $?
-      run_with_timeout "$bin" --print --output-format text --dangerously-skip-permissions "$PROMPT" --add-dir "$REPO_ROOT"
+      run_in_pty run_with_timeout "$bin" --print --output-format text --dangerously-skip-permissions "$PROMPT" --add-dir "$REPO_ROOT"
       ;;
     opencode)
       bin="$(resolve_bin OPENCODE_BIN opencode)" || return $?
@@ -261,9 +275,8 @@ run_agent() {
       ;;
     antigravity)
       bin="$(resolve_bin ANTIGRAVITY_BIN agy)" || return $?
-      # agy reads the prompt from stdin in print mode; piping it avoids the
-      # variadic --add-dir parser swallowing the task text as another path.
-      (cd "$REPO_ROOT" && printf '%s\n' "$PROMPT" | run_with_timeout "$bin" --print --dangerously-skip-permissions --add-dir "$REPO_ROOT")
+      # agy reads the prompt as a positional argument. We place it before variadic args.
+      (cd "$REPO_ROOT" && run_in_pty run_with_timeout "$bin" --print "$PROMPT" --dangerously-skip-permissions --add-dir "$REPO_ROOT")
       ;;
     *)
       die "internal error: unsupported selected agent '$selected'"
@@ -293,6 +306,7 @@ while :; do
   CYCLE_OUTPUT="$(mktemp)"
   set +e
   run_agent "$SELECTED_AGENT" 2>&1 | while IFS= read -r line || [[ -n "$line" ]]; do
+    line="${line%$'\r'}"
     printf '%s\n' "$line"
     printf '%s\n' "$line" >> "$CYCLE_OUTPUT"
   done

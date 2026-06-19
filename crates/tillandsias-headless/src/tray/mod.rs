@@ -299,6 +299,7 @@ enum LaunchKind {
     /// terminal. @trace spec:tray-ux
     Codex,
     Maintenance,
+    NanoClawV2,
 }
 
 // @trace spec:tray-minimal-ux
@@ -1335,6 +1336,7 @@ fn action_slug(kind: LaunchKind) -> &'static str {
         LaunchKind::Claude => "claude",
         LaunchKind::Codex => "codex",
         LaunchKind::Maintenance => "terminal",
+        LaunchKind::NanoClawV2 => "nanoclawv2",
     }
 }
 
@@ -1458,6 +1460,7 @@ fn build_launch_spec(project: &ProjectEntry, kind: LaunchKind, image: &str) -> C
             .interactive()
             .tty()
             .entrypoint("/usr/local/bin/entrypoint-terminal.sh"),
+        LaunchKind::NanoClawV2 => spec.interactive().tty(),
     }
 }
 
@@ -1577,6 +1580,23 @@ fn launch_project_action(
                 _ => unreachable!("non-interactive kinds branched above"),
             };
             super::launch_forge_agent(&project.name, &project.path, mode, debug)
+        }
+        LaunchKind::NanoClawV2 => {
+            let image = format!("localhost/tillandsias-nanoclawv2:v{}", _version);
+            let spec = build_launch_spec(&project, LaunchKind::NanoClawV2, &image);
+            let podman_args = spec.build_run_argv();
+            let mut shell_args = vec![
+                "-c".to_string(),
+                "podman \"$@\"; echo; echo \"[nanoclawv2] Finished — press Enter to close\"; read"
+                    .to_string(),
+                "nanoclawv2-shell".to_string(),
+            ];
+            shell_args.extend(podman_args);
+            launch_in_terminal(
+                &format!("Tillandsias — {} — NanoClawV2", project.name),
+                "bash",
+                &shell_args,
+            )
         }
     }
 }
@@ -2106,7 +2126,8 @@ fn build_separator_item(id: i32) -> MenuNode {
 // | +3     | OpenCode Web    | 📐      |
 // | +4     | Observatorium   | 🔭      |
 // | +5     | Maintenance     | 🔧      |
-// | +6     | (submenu node)  | —       |
+// | +6     | NanoClawV2      | 🦞      |
+// | +7     | (submenu node)  | —       |
 //
 // Helpers: [`local_project_base`], [`cloud_project_base`], and
 // [`project_action_from_id`] are the only place this layout is encoded.
@@ -2118,16 +2139,18 @@ enum LeafAction {
     OpenCodeWeb,
     Observatorium,
     Maintenance,
+    NanoClawV2,
 }
 
 impl LeafAction {
-    const ALL: [LeafAction; 6] = [
+    const ALL: [LeafAction; 7] = [
         LeafAction::Claude,
         LeafAction::Codex,
         LeafAction::OpenCode,
         LeafAction::OpenCodeWeb,
         LeafAction::Observatorium,
         LeafAction::Maintenance,
+        LeafAction::NanoClawV2,
     ];
 
     fn offset(self) -> i32 {
@@ -2138,6 +2161,7 @@ impl LeafAction {
             LeafAction::OpenCodeWeb => 3,
             LeafAction::Observatorium => 4,
             LeafAction::Maintenance => 5,
+            LeafAction::NanoClawV2 => 6,
         }
     }
 
@@ -2149,6 +2173,7 @@ impl LeafAction {
             LeafAction::OpenCodeWeb => "\u{1F4D0} OpenCode Web",
             LeafAction::Observatorium => "\u{1F52D} Observatorium",
             LeafAction::Maintenance => "\u{1F527} Maintenance",
+            LeafAction::NanoClawV2 => "\u{1F99E} NanoClawV2",
         }
     }
 
@@ -2176,8 +2201,8 @@ const LOADING_CLOUD_ID: i32 = 0x7FFF_FFFE;
 /// `handle_cloud_overflow_click`); a future GtkWindow picker would replace
 /// that fallback in place. @trace spec:tray-ux
 const CLOUD_OVERFLOW_ID: i32 = 0x7FFF_FFFC;
-const PROJECT_LEAF_COUNT: i32 = 6;
-const PROJECT_SUBMENU_OFFSET: i32 = 6;
+const PROJECT_LEAF_COUNT: i32 = 7;
+const PROJECT_SUBMENU_OFFSET: i32 = 7;
 
 /// Maximum number of cloud projects rendered as top-level entries inside the
 /// `☁️ Cloud >` submenu before an overflow item replaces the tail.
@@ -2269,7 +2294,7 @@ fn project_action_from_id(
 }
 
 // @trace spec:tray-minimal-ux
-/// Build the per-project submenu (six leaves, no nesting).
+/// Build the per-project submenu (seven leaves, no nesting).
 ///
 /// The submenu node's id is `base + PROJECT_SUBMENU_OFFSET`; each leaf is
 /// `base + LeafAction::offset()`. All leaves are emitted with `enabled=true`
@@ -3099,6 +3124,7 @@ impl DbusMenuIface {
                             LeafAction::Observatorium => LaunchKind::Observatorium,
                             LeafAction::Maintenance => LaunchKind::Maintenance,
                             LeafAction::Codex => LaunchKind::Codex,
+                            LeafAction::NanoClawV2 => LaunchKind::NanoClawV2,
                         };
                         match scope {
                             ProjectScope::Local => {
@@ -3622,7 +3648,7 @@ mod tests {
     /// @trace spec:signal-handling, spec:vm-provisioning-lifecycle
     #[test]
     fn watch_shutdown_blocking_flips_phase_to_stopping_when_atomic_flips() {
-        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::atomic::AtomicBool;
         use std::thread;
         use std::time::{Duration, Instant};
 
@@ -3674,7 +3700,7 @@ mod tests {
     /// @trace spec:vm-provisioning-lifecycle
     #[test]
     fn watch_shutdown_blocking_does_not_clobber_terminal_failed() {
-        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::atomic::AtomicBool;
         use std::thread;
         use std::time::Duration;
 
@@ -4318,10 +4344,10 @@ mod tests {
     }
 
     #[test]
-    fn project_submenu_has_six_leaves_in_order() {
-        // Per-project submenus are 6-leaf flat menus: Claude, Codex,
-        // OpenCode, OpenCode Web, Observatorium, Maintenance. Order is locked by
-        // `LeafAction::offset`.
+    fn project_submenu_has_seven_leaves_in_order() {
+        // Per-project submenus are 7-leaf flat menus: Claude, Codex,
+        // OpenCode, OpenCode Web, Observatorium, Maintenance, NanoClawV2.
+        // Order is locked by `LeafAction::offset`.
         let project = ProjectEntry {
             name: "alpha".to_string(),
             path: PathBuf::from("/tmp/alpha"),
@@ -4335,11 +4361,11 @@ mod tests {
             .build();
         let submenu = build_project_submenu(&state, &project, ProjectScope::Local);
 
-        // Six leaves, no sub-submenus.
-        assert_eq!(submenu.2.len(), 6);
+        // Seven leaves, no sub-submenus.
+        assert_eq!(submenu.2.len(), 7);
         let leaf_labels = labels(&submenu);
         // labels() walks the layout depth-first; index 0 is the submenu
-        // container, indices 1..=6 are the leaves in offset order.
+        // container, indices 1..=7 are the leaves in offset order.
         assert_eq!(leaf_labels[0], "alpha");
         assert!(leaf_labels[1].contains("Claude"));
         assert!(leaf_labels[2].contains("Codex"));
@@ -4347,6 +4373,7 @@ mod tests {
         assert!(leaf_labels[4].contains("OpenCode Web"));
         assert!(leaf_labels[5].contains("Observatorium"));
         assert!(leaf_labels[6].contains("Maintenance"));
+        assert!(leaf_labels[7].contains("NanoClawV2"));
     }
 
     #[test]

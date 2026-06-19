@@ -60,7 +60,7 @@ All `plan/`, `methodology/`, `openspec/`, and `cheatsheets/` writes go to
 
 ## Worker Drain
 
-Run `/advance-work-from-plan` in fresh cycles until one of these is true:
+When choosing the builder role, run `/advance-work-from-plan` repeatedly in a `./plan` friendly way in fresh cycles until one of these is true:
 
 - no eligible ready work remains for this host;
 - every eligible item is blocked;

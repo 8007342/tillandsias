@@ -49,7 +49,7 @@ critical_path:
     expected_behavior: "ok: cheatsheet-sources dir present"
 
   - step: "validator points at the canonical INDEX.json path"
-    command: "grep -F 'INDEX_FILE=\"${SOURCES_DIR}/INDEX.json\"' scripts/check-cheatsheet-sources.sh"
+    command: "grep -F 'let index_file = sources_dir.join(\"INDEX.json\");' crates/tillandsias-policy/src/main.rs"
     timeout_ms: 3000
     expected_behavior: "INDEX.json"
 
@@ -82,7 +82,7 @@ critical_path:
     # Grep avoids the em-dash punctuation in the warning text
     # (UTF-8 round-trip via YAML→shell can fuzz); pins the
     # `no sources fetched yet` literal which is unambiguous ASCII.
-    command: "grep -F 'no sources fetched yet' scripts/check-cheatsheet-sources.sh"
+    command: "grep -F 'no sources fetched yet; nothing to validate' crates/tillandsias-policy/src/main.rs"
     timeout_ms: 3000
     expected_behavior: "no sources fetched yet"
 
