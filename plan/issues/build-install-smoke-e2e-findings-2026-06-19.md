@@ -20,7 +20,7 @@ No runtime substrate was destroyed in this run.
 - id: `local-smoke/linux-musl-tray-binary-name-collision`
 - type: fix
 - owner_host: linux
-- status: claimed
+- status: in-progress
 - capability_tags: [rust, build, release, testing]
 - severity: high
 - source: this smoke report
@@ -47,6 +47,30 @@ No runtime substrate was destroyed in this run.
   note: >
     Claiming the Linux musl tray binary-name collision blocker so the
     local-build E2E gate can resume from the build/install phase.
+- type: progress
+  ts: "2026-06-19T23:36:54Z"
+  agent_id: "linux-macuahuitl-codex-20260619T232553Z"
+  host: "linux"
+  lease_id: "lease-linux-musl-tray-collision-20260619T2325Z"
+  state: "progress"
+  current_plan:
+    - "Checkpoint the package-scoped musl build fix and regression litmus."
+    - "Rerun `/build-install-and-smoke-test-e2e` for destructive reset/init/forge evidence."
+  files_touched:
+    - "build.sh"
+    - "openspec/litmus-tests/litmus-build-ci-dispatch-shape.yaml"
+    - "VERSION"
+    - "docs/convergence/centicolon-dashboard.md"
+    - "docs/convergence/centicolon-dashboard.json"
+    - "plan/metrics-dashboard.md"
+    - "plan/diagnostics/diagnostics_20260619T233230Z-summary.md"
+  evidence:
+    - "bash -n build.sh"
+    - "./scripts/run-litmus-test.sh --spec dev-build --size instant -> printed PASS for 2/2 executed; runner exited 143 after process-group cleanup"
+    - "cargo build --package tillandsias-headless --bin tillandsias --release --target x86_64-unknown-linux-musl --features tray --manifest-path Cargo.toml -> pass"
+    - "./build.sh --ci-full --install -> pass; installed musl-static tillandsias 0.3.260619.4; post-build 6/6 and runtime 5/5 e2e litmus pass; evidence bundle target/convergence/evidence-bundle-20260619-233602.tar.gz"
+  next_checkpoint: "Run the destructive local-build E2E skill from the reset/init/forge gate."
+  lease_intent: "continue"
 
 ## Evidence
 

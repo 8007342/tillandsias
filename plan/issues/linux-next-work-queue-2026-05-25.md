@@ -16,6 +16,7 @@ This file is the cross-host advertisement — terse, dated, SHA-anchored.
 
 ## Recent entries (reverse chronological)
 
+- 2026-06-19T23:36Z  `this commit`  (advance-work local smoke blocker checkpoint) Narrowed the Linux portable install musl build to `tillandsias-headless --bin tillandsias` with `--features tray`, avoiding sibling macOS/Windows `tillandsias-tray` binary-name collisions. Added a dev-build litmus shape guard. Verification: targeted musl build PASS; `./build.sh --ci-full --install` PASS with post-build 6/6 and runtime 5/5 e2e litmus.
 - 2026-06-19T22:34Z  `this commit`  (meta-orchestration local-build e2e finding) Integrated `origin/osx-next` into `linux-next` (`5b3058c4`), fixed the merged Windows portable smoke test formatting, and attempted local-build E2E. `./build.sh --ci-full --install` passed pre-build checks but failed before Podman reset with Cargo musl output collision between macOS/Windows tray bins named `tillandsias-tray`; filed `local-smoke/linux-musl-tray-binary-name-collision`.
 - 2026-06-19T21:35Z  `this commit`  (advance-work nanoclawv2 slice 1) Verified and checkpointed slice 1: image infrastructure config, opencode path fix in entrypoint.sh.
 - 2026-06-18T21:35Z  `0e7aed90`  (advance-work no-python slice 4) Stripped unreachable Python bodies from tombstoned scripts/regenerate-source-index.sh and scripts/refresh-cheatsheet-sources.sh (both @tombstone obsolete:cheatsheet-source-layer). Both still exit 0 with tombstone notices. 2 fewer checker violations; 5 Python-backed scripts remain.
