@@ -2,6 +2,17 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
+## 2026-06-20T04:51Z — meta-orch cycle 2 (macOS): merge + drain, no eligible work
+
+Fetched origin; fast-forwarded `osx-next` to `origin/linux-next` (`a3c8b23d`).
+Startup hygiene finding: untracked user artifacts remain unchanged —
+`build-osx-tray.sh`, `plan/issues/macos-windows-tray-ux-parity-audit-2026-06-13.md`,
+`research/`, `src-tauri/`. Not overwritten. Worker drain: NO eligible autonomous
+macOS work — `enclave/macos-vault-unreachable-via-publish-aarch64` still `ready`,
+owner=linux; `macos-tray/github-login-route-to-orchestrated-flow` CLAIMED+blocked
+on vault fix; step 49d user-attended. E2E skipped — no macOS runtime delta.
+Next: re-check after linux vault fix lands; untracked user work unchanged.
+
 ## 2026-06-20T01:38Z — meta-orch cycle 1 (macOS): merge + drain, no eligible work
 
 Fetched origin; merged `origin/linux-next` (`b5c11dc7`) into osx-next
