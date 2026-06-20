@@ -1,14 +1,16 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-20T17:13Z
+Last updated: 2026-06-20T17:55Z
 
-## This Cycle (2026-06-20T17:13Z, linux)
+## This Cycle (2026-06-20T17:55Z, linux)
 
 - **Meta-orchestration sync**: Started clean on mutable-Linux `linux-next`, fetched origin, fast-forwarded to `origin/linux-next@267ddcf5`, then pushed plan claim commit `68b9ed99`.
 - **Worker drain**: Completed the remaining `agent-concurrency-collisions-2026-06-20` slice. Linux build/install and init E2E steps now run through a process-cleanup wrapper that terminates only newly leaked host-side `tillandsias` launcher PIDs and fails a successful smoke command that leaked a process.
 - **Stale-binary guardrail**: Gate 1 now verifies `command -v tillandsias` resolves to `$HOME/.local/bin/tillandsias` and `tillandsias --version` matches the post-build `VERSION` file after the local autoincremental build-number bump.
-- **Verification**: shell syntax checks, no-leak wrapper smoke, deliberate leaked fake `tillandsias` termination with expected exit 70, `git diff --check`, and `./build.sh --check` passed. The existing user tray process (`tillandsias --tray`) remained untouched.
-- **Ledger hygiene**: `local-smoke/onboarding-cold-start-discovery-cheatsheet-signal` is now reflected as done from the 16:53Z smoke findings completion event; the macOS aarch64 Vault published-port blocker remains the primary immediate item.
+- **In-cycle E2E hardening**: Fixed fake-Podman image-build telemetry extraction, preserved successful litmus runner exits by cleaning only descendants, and forced non-interactive E2E/diagnostics smoke paths to run headless with `TILLANDSIAS_NO_TRAY=1`.
+- **Verification**: shell syntax checks, no-leak wrapper smoke, deliberate leaked fake `tillandsias` termination with expected exit 70, fake-Podman image-build convergence litmus, `scripts/run-litmus-test.sh init-incremental-builds --size instant`, `git diff --check`, and `./build.sh --check` passed.
+- **E2E gates**: Final local-build E2E passed all gates at `target/build-install-smoke-e2e/20260620T173320Z`: build/install, destructive Podman reset, pristine init, and prompted in-forge `/forge-continuous-enhancement` all exited 0 on `Tillandsias v0.3.260620.7`.
+- **Ledger hygiene**: `local-smoke/onboarding-cold-start-discovery-cheatsheet-signal`, `local-smoke/image-build-convergence-fake-progress-telemetry`, and `local-smoke/noninteractive-smoke-tray-leak` are now reflected as done in the 2026-06-20 smoke findings; the macOS aarch64 Vault published-port blocker remains the primary immediate item.
 
 ## This Cycle (2026-06-20T13:56Z, linux)
 

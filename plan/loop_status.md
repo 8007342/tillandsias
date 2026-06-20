@@ -1,15 +1,17 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-20T17:13Z
+LastExecutionTime: 2026-06-20T17:55Z
 
-## This Loop (2026-06-20T17:13Z, linux)
+## This Loop (2026-06-20T17:55Z, linux)
 
 - **Cycle type**: meta-orchestration worker drain on mutable Linux.
 - **Startup**: clean mutable-Linux host on `linux-next`; fetched origin, fast-forwarded to `origin/linux-next@267ddcf5`, then pushed plan claim commit `68b9ed99`.
 - **Worker drain**: completed the remaining `agent-concurrency-collisions-2026-06-20` slice. Added `scripts/with-tillandsias-process-cleanup.sh`, wired Linux build/install and init E2E steps through it, and added gate-1 assertions that the installed launcher path and version match the post-build `VERSION` file.
-- **Verification**: shell syntax checks PASS; wrapper no-leak smoke PASS; deliberate leaked fake `tillandsias` process was terminated and returned expected exit 70; `git diff --check` PASS; `./build.sh --check` PASS with the known non-fatal dev-proxy warning. Existing user tray process `/home/tlatoani/.local/bin/tillandsias --tray` remained running and untouched.
-- **Ledger hygiene**: the 16:53Z smoke findings completion records the welcome-banner `INDEX.md` signal restored and all local-build E2E gates passing; ACTIVE now marks that blocker done.
-- **Next**: macOS vault aarch64 published-port reachability remains the critical cross-host blocker. `forge-build-telemetry-2026-06-20` remains actively leased by `linux-big-pickle-20260620T170000Z` until 21:00Z.
+- **E2E fixes discovered in-cycle**: local-build E2E first exposed a fake-Podman progress parser failure in `litmus:image-build-convergence-shape`, then exposed a non-interactive diagnostics path that spawned a detached tray companion. Fixed telemetry fallback in `scripts/build-image.sh`, descendant-only litmus runner cleanup in `scripts/run-litmus-test.sh`, and `TILLANDSIAS_NO_TRAY=1` guards in Linux E2E/diagnostics smoke paths.
+- **Verification**: shell syntax checks PASS; wrapper no-leak smoke PASS; deliberate leaked fake `tillandsias` process was terminated and returned expected exit 70; fake-Podman image-build convergence litmus PASS; `scripts/run-litmus-test.sh init-incremental-builds --size instant` PASS; `git diff --check` PASS; `./build.sh --check` PASS with the known non-fatal dev-proxy warning.
+- **E2E gates**: final local-build E2E at `target/build-install-smoke-e2e/20260620T173320Z` passed build/install (`build_install_exit=0`), destructive Podman reset (`reset_exit=0`), pristine init (`init_exit=0`), and prompted in-forge `/forge-continuous-enhancement` (`forge_exit=0`) on installed `Tillandsias v0.3.260620.7`.
+- **In-forge outcome**: `/forge-continuous-enhancement` filed `plan/forge-improvements/proposals/2026-06-20-diagnostics-prompt-optimize.md`; the in-forge GitHub push failed due missing credentials, so the host will push the final clean tip.
+- **Next**: macOS vault aarch64 published-port reachability remains the critical cross-host blocker. `forge-build-telemetry-2026-06-20` implementation is present in `83a3600a` and this cycle fixed its fake-progress litmus regression.
 
 ## This Loop (2026-06-20T13:56Z, linux)
 

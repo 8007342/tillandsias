@@ -1,6 +1,6 @@
 # Build/install smoke E2E findings - 2026-06-20
 
-Status: active
+Status: done
 Owner: linux
 Discovered by: /build-install-and-smoke-test-e2e (linux)
 
@@ -8,7 +8,7 @@ Discovered by: /build-install-and-smoke-test-e2e (linux)
 
 Initial local-build E2E stopped at gate 3 (`tillandsias --init --debug`) after a successful build/install and destructive Podman reset. The initialization failed because the recently introduced `wasmtime` migration from curl+tar to DNF package management broke the container image build. Specifically, `registry.fedoraproject.org/fedora-minimal:44` does not contain the `wasmtime` package in its default microdnf repositories, yielding `No match for argument: wasmtime` and halting the `forge-base` build.
 
-The wasmtime blocker is fixed, but the 2026-06-20T13:49Z local-build E2E rerun stopped at gate 1 before destructive reset. The build/install command reached post-build status smoke and failed `litmus:onboarding-cold-start-discovery` because `images/default/forge-welcome.sh` no longer surfaces the required `INDEX.md` cheatsheet discovery signal.
+The wasmtime and onboarding blockers are fixed. The final 2026-06-20T17:33Z mutable-Linux run at `target/build-install-smoke-e2e/20260620T173320Z` passed all gates on installed `Tillandsias v0.3.260620.7`: build/install, destructive Podman reset, pristine init, and prompted in-forge `/forge-continuous-enhancement` all exited 0. The rerun also closed two harness regressions discovered during this cycle: fake-Podman image-build progress telemetry now falls back cleanly when progress output is not JSON, and non-interactive smoke/diagnostics paths run with `TILLANDSIAS_NO_TRAY=1` so they do not leave detached tray launchers behind.
 
 ## Packets
 
@@ -52,6 +52,44 @@ The wasmtime blocker is fixed, but the 2026-06-20T13:49Z local-build E2E rerun s
     - `grep -Fq 'Cheatsheets' images/default/forge-welcome.sh && grep -Fq 'TILLANDSIAS_CHEATSHEETS' images/default/forge-welcome.sh && grep -Fq 'INDEX.md' images/default/forge-welcome.sh`
     - `litmus:onboarding-cold-start-discovery` passes in the post-build smoke set.
     - Local-build E2E advances past gate 1.
+
+### local-smoke/image-build-convergence-fake-progress-telemetry
+
+- id: `local-smoke/image-build-convergence-fake-progress-telemetry`
+- type: fix
+- owner_host: linux
+- status: done
+- capability_tags: [build, telemetry, litmus, testing]
+- severity: medium
+- source: this smoke report
+- discovered_by: `/build-install-and-smoke-test-e2e` on `34a2fd81` / `0.3.260620.6`
+- next_action: >
+    Keep `_extract_build_telemetry` tolerant of non-JSON/fake Podman progress
+    logs so the convergence-shape litmus reports zero telemetry instead of
+    aborting under `set -euo pipefail`.
+- evidence_required:
+    - `PATH="$PWD/target/litmus-runtime/bin:$PATH" LITMUS_PODMAN_MODE=fake scripts/test-image-build-convergence.sh proxy` passes.
+    - Local-build E2E gate 1 advances past `litmus:image-build-convergence-shape`.
+
+### local-smoke/noninteractive-smoke-tray-leak
+
+- id: `local-smoke/noninteractive-smoke-tray-leak`
+- type: fix
+- owner_host: linux
+- status: done
+- capability_tags: [e2e, tray, diagnostics, process-cleanup]
+- severity: high
+- source: this smoke report
+- discovered_by: `/build-install-and-smoke-test-e2e` on `34a2fd81` / `0.3.260620.6`
+- next_action: >
+    Keep build/install, init, diagnostics, and prompted forge smoke lanes
+    explicitly headless with `TILLANDSIAS_NO_TRAY=1`; these non-interactive
+    harnesses should fail only on real command failure, not on detached tray
+    companions.
+- evidence_required:
+    - `target/build-install-smoke-e2e/20260620T173320Z/00-process-cleanup.log` reports no new host-side `tillandsias` leaks after gate 1.
+    - `target/build-install-smoke-e2e/20260620T173320Z/04-process-cleanup.log` reports no new host-side `tillandsias` leaks after the prompted forge lane.
+    - `pgrep -u "$(id -u)" -x tillandsias -a` is empty after the run.
 
 ## Events
 
@@ -123,6 +161,48 @@ The wasmtime blocker is fixed, but the 2026-06-20T13:49Z local-build E2E rerun s
     - "Stopped before destructive Podman reset; gates 2 and 3 were not run."
     - "The nanoclawv2 image-type message occurred earlier in gate 1 and remained non-fatal in this run."
     - "Forge diagnostics annex wrote plan/diagnostics/diagnostics_20260620T135318Z-summary.md with 25/25 checks passing."
+
+- type: progress
+  ts: "2026-06-20T17:16:12Z"
+  agent_id: "linux-macuahuitl-codex-20260620T171300Z"
+  host: "linux"
+  state: "failed"
+  evidence:
+    - "target/build-install-smoke-e2e/20260620T171612Z/01-build-install-exit.txt: build_install_exit=1"
+    - "pre-build litmus failed at litmus:image-build-convergence-shape before destructive reset"
+  notes:
+    - "The fake Podman progress stream was not JSON; `_extract_build_telemetry` aborted inside the jq/sort/awk pipeline under `set -euo pipefail`."
+    - "Fixed by making telemetry extraction return `0|0|0` on parse failure or empty output."
+
+- type: progress
+  ts: "2026-06-20T17:31:02Z"
+  agent_id: "linux-macuahuitl-codex-20260620T171300Z"
+  host: "linux"
+  state: "failed"
+  evidence:
+    - "target/build-install-smoke-e2e/20260620T172347Z/01-build-install-exit.txt: build_install_exit=0"
+    - "target/build-install-smoke-e2e/20260620T172347Z/00-process-cleanup.log: process cleanup detected and terminated a leaked `tillandsias --tray` launcher"
+  notes:
+    - "The non-interactive diagnostics lane spawned a detached tray companion in a graphical session."
+    - "Fixed by setting `TILLANDSIAS_NO_TRAY=1` in Linux E2E build/init scripts, diagnostics annex, diagnostics litmus, and local/curl smoke runbooks."
+
+- type: complete
+  ts: "2026-06-20T17:55:26Z"
+  agent_id: "linux-macuahuitl-codex-20260620T171300Z"
+  host: "linux"
+  lease_id: "concurrency-process-cleanup-20260620T171300Z"
+  evidence:
+    - "target/build-install-smoke-e2e/20260620T173320Z/01-build-install-exit.txt: build_install_exit=0"
+    - "target/build-install-smoke-e2e/20260620T173320Z/02-reset-exit.txt: reset_exit=0"
+    - "target/build-install-smoke-e2e/20260620T173320Z/03-init-exit.txt: init_exit=0"
+    - "target/build-install-smoke-e2e/20260620T173320Z/04-forge-exit.txt: forge_exit=0"
+    - "target/build-install-smoke-e2e/20260620T173320Z/01-installed-version.txt: Tillandsias v0.3.260620.7"
+    - "target/convergence/evidence-bundle-20260620-174005.tar.gz"
+  notes:
+    - "Pre-build litmus passed 129/129 with 100% coverage, post-build smoke passed 6/6, and runtime residual smoke passed 5/5."
+    - "The destructive Podman reset left containers, volumes, and images empty before fresh init."
+    - "The prompted forge lane ran `/forge-continuous-enhancement`, exited 0, and filed `plan/forge-improvements/proposals/2026-06-20-diagnostics-prompt-optimize.md`."
+    - "Final host process check found no live `tillandsias` processes."
 
 ## Evidence
 
