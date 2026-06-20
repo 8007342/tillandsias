@@ -1,0 +1,69 @@
+#!/usr/bin/env bash
+set -euo pipefail
+
+WAIT=""
+SKILL=""
+
+while [[ $# -gt 0 ]]; do
+  case "$1" in
+    --wait) WAIT="$2"; shift 2 ;;
+    --skill) SKILL="$2"; shift 2 ;;
+    *)
+      echo "usage: codex-repeat --wait <duration> --skill <skill-name>" >&2
+      exit 2
+      ;;
+  esac
+done
+
+if [[ -z "$WAIT" || -z "$SKILL" ]]; then
+  echo "usage: codex-repeat --wait <duration> --skill <skill-name>" >&2
+  exit 2
+fi
+
+duration_to_seconds() {
+  local input="$1" rest total=0 number unit
+  rest=$input
+  if [[ "$rest" =~ ^[0-9]+$ ]]; then echo "$rest"; return 0; fi
+  while [[ -n "$rest" ]]; do
+    if [[ "$rest" =~ ^([0-9]+)([smhd])(.*)$ ]]; then
+      number="${BASH_REMATCH[1]}"
+      unit="${BASH_REMATCH[2]}"
+      rest="${BASH_REMATCH[3]}"
+      case "$unit" in
+        s) total=$((total + number)) ;;
+        m) total=$((total + number * 60)) ;;
+        h) total=$((total + number * 3600)) ;;
+        d) total=$((total + number * 86400)) ;;
+      esac
+    else
+      echo "codex-repeat: invalid duration '$input'" >&2
+      exit 2
+    fi
+  done
+  echo "$total"
+}
+
+wait_seconds=$(duration_to_seconds "$WAIT")
+
+pdt() { TZ=America/Los_Angeles date '+%Y-%m-%d %H:%M:%S %Z'; }
+pdt_at() { TZ=America/Los_Angeles date -d "@$1" '+%Y-%m-%d %H:%M:%S %Z'; }
+
+CODEX_BIN="${CODEX_BIN:-$(command -v codex)}"
+
+stream_codex() {
+  "$CODEX_BIN" exec \
+    --color never \
+    --dangerously-bypass-approvals-and-sandbox \
+    "Use the ${SKILL} skill. If it is not preloaded, read ./skills/${SKILL}/SKILL.md and follow it." \
+    </dev/null
+}
+
+while :; do
+  echo "[codex-repeat] $(pdt) running /${SKILL}"
+  stream_codex
+  last="$(pdt)"
+  next=$(( $(date +%s) + wait_seconds ))
+  echo "[codex-repeat] last at $last"
+  echo "[codex-repeat] next at $(pdt_at "$next")"
+  sleep "$wait_seconds"
+done
