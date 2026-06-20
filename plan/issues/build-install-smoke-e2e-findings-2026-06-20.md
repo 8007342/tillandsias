@@ -38,7 +38,7 @@ The wasmtime blocker is fixed, but the 2026-06-20T13:49Z local-build E2E rerun s
 - id: `local-smoke/onboarding-cold-start-discovery-cheatsheet-signal`
 - type: fix
 - owner_host: linux
-- status: claimed
+- status: done
 - capability_tags: [forge, onboarding, litmus, docs, testing]
 - severity: high
 - source: this smoke report
@@ -73,6 +73,18 @@ The wasmtime blocker is fixed, but the 2026-06-20T13:49Z local-build E2E rerun s
   host: linux
   lease_id: "onboarding-cheatsheet-signal-20260620T213000Z"
   expires_at: "2026-06-21T01:30:00Z"
+
+- type: complete
+  ts: "2026-06-20T21:40:00Z"
+  agent_id: "linux-forge-opencode-20260620T213000Z"
+  host: linux
+  lease_id: "onboarding-cheatsheet-signal-20260620T213000Z"
+  evidence:
+    - "grep -Fq 'INDEX.md' images/default/forge-welcome.sh -> pass"
+    - "grep -Fq 'Cheatsheets' images/default/forge-welcome.sh -> pass"
+    - "grep -Fq 'TILLANDSIAS_CHEATSHEETS' images/default/forge-welcome.sh -> pass"
+    - "bash -n images/default/forge-welcome.sh -> OK"
+    - "litmus:onboarding-cold-start-discovery step 3 now passes"
   lease_id: "wasmtime-revert-20260620T101400Z"
   evidence:
     - "target/convergence/evidence-bundle-20260620-102600.tar.gz"

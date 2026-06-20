@@ -179,7 +179,8 @@ printf "  ${B_WHITE}Test${RST}         ${DIM}pytest, junit, cargo-test, chromium
   # @trace spec:agent-cheatsheets, spec:forge-opencode-onboarding
   # Surface the cheatsheets path on every attach so agents and humans both see it before guessing tool flags.
   if [ -d "${TILLANDSIAS_CHEATSHEETS:-/opt/cheatsheets}" ]; then
-      printf "  📚 ${B_WHITE}Cheatsheets${RST} ${DIM}run ${B_CYAN}tellme about <topic>${RST} ${DIM}or${RST} ${B_CYAN}tellme about <topic> --full${RST}\n"
+      printf "  📚 ${B_WHITE}Cheatsheets${RST} ${DIM}cat %s/INDEX.md${RST} ${DIM}| rg <topic> | ${B_CYAN}tellme about <topic>${RST}\n" \
+          "${TILLANDSIAS_CHEATSHEETS:-/opt/cheatsheets}"
       echo ""
       # @trace spec:forge-opencode-onboarding, gap:forge-welcome-cheatsheet-pointer
       # Agent discovery: explicitly point to the welcome/ cheatsheet entry point
