@@ -4271,7 +4271,7 @@ plan_index:
     - id: future-intentions-drain
       order: 58
       title: Drain future intentions into planned tasks
-      status: in_progress
+      status: completed
       deliverable: plan/steps/58-future-intentions-drain.md
       depends_on: []
       outcome: >
@@ -4312,10 +4312,20 @@ plan_index:
                 exercise FCE as side effect of build/install/reset cycles. No code
                 change needed.
         - id: future-intentions-drain/windows-macos-feature-parity
-          status: ready
+          status: completed
           depends_on: [future-intentions-drain/drain-tasks]
           owned_files:
             - plan/issues/windows-macos-feature-parity-2026-06-12.md
             - plan/issues/ACTIVE.md
             - plan/issues/osx-next-work-queue-2026-05-25.md
             - plan/issues/windows-next-work-queue-2026-05-25.md
+          events:
+            - type: completed
+              ts: "2026-06-20T21:45:00Z"
+              agent_id: "linux-forge-opencode-20260620T213000Z"
+              host: linux
+              note: >
+                Drain completed. The future intention was expanded into a structured
+                cross-host parity issue (waves A-D). Remaining implementation is
+                delegated to macOS/Windows host queues. No further plan-level work
+                needed for this task.

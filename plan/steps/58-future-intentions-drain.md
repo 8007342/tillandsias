@@ -1,6 +1,6 @@
 # Step 58 - Drain future intentions into planned tasks
 
-- **Status**: ready
+- **Status**: completed
 - **Owner host**: any
 - **Branch**: linux-next
 - **Depends on**: None
@@ -35,3 +35,4 @@ The `plan.yaml` file currently contains several "future intentions" that have no
 - 2026-06-20T05:10Z (linux-tlatoani-big-pickle): Implemented containerfile-dnf-migration slice 1 — migrated wasmtime from curl+tar to microdnf install wasmtime. Scope correction: buf already absent from Containerfile, ollama intentionally avoids DNF (GPU bloat). Commit `7293c902`.
 - 2026-06-20T05:16Z (linux-tlatoani-big-pickle): Drained items 5-6 (tellme + forge-expert) — updated `plan/issues/tellme-discoverability-and-forge-expert-2026-06-12.md` with structured gap analysis, 4-slice implementation plan, and acceptance criteria. Removed from `future_intentions`, added to `drained_items`.
 - 2026-06-20T05:44Z (linux-macuahuitl-codex): Drained item 7 (Windows/macOS feature parity) — expanded `plan/issues/windows-macos-feature-parity-2026-06-12.md` into a structured cross-host parity packet with blocker closure, launch-route parity, menu truth, and e2e acceptance waves. Removed the last orphan from `future_intentions`, added to `drained_items`.
+- 2026-06-20T21:45Z (linux-forge-opencode-20260620T213000Z): Completed step 58 — all 7 future intentions drained, all tasks completed. Remaining implementation for Windows/macOS parity is delegated to host-specific work queues.
