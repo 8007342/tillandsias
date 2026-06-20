@@ -1,25 +1,70 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-20T06:00Z
+LastExecutionTime: 2026-06-20T07:20Z
 
-## This Loop (2026-06-20T06:00Z, linux)
+## This Loop (2026-06-20T07:20Z, linux)
 
-- **Cycle type**: meta-orchestration on mutable Linux (Fedora 44): worker drain
-  plus coordination audit.
-- **Startup**: began clean on `linux-next` at `f871f8b2`; no tracked or
-  untracked worktree changes. Host classified as `linux_mutable`.
-- **Worker drain**: Claimed `nanoclawv2-orchestration` reclaimable lease. Slice 2
-  completed: registered nanoclawv2 in Rust image builder (image_specs,
-  image_build_inputs with forge-base dependency, run_init image array). All tests
-  pass, clippy clean. Committed `58996d8f`.
-- **Sibling coordination**: no merge needed. `origin/windows-next` and
-  `origin/osx-next` heads checked — both remain ancestors of
-  `origin/linux-next`; drift is 0 commits for both.
-- **E2E gates**: skipped. The nanoclawv2 --init registration is additive (image
-  was already buildable via build-image.sh); no runtime crate delta to smoke-test.
-  Latest GitHub release remains `v0.3.260618.2`.
-- **Release decision**: deferred. No release-blocking change; VERSION remains
-  `0.3.260619.5`, no `v0.3.260620.*` tag exists.
+- **Cycle type**: meta-orchestration worker drain on mutable Linux.
+- **Startup**: clean mutable-Linux host on `linux-next`; fetched origin, in sync with `origin/linux-next` at `36cd9020`.
+- **Sibling heads after fetch**:
+  - `main`: `6dfafdf1` (tagged `v0.3.260618.2`).
+  - `linux-next`: `36cd9020`
+  - `windows-next`: `e332afb6` (ancestor of linux-next, 0 ahead).
+  - `osx-next`: `c7d32fb9` (ancestor of linux-next, 0 ahead).
+- **Worker drain**: claimed and completed `policy/no-python-runtime-scripts` final slice. Ported the final two Python-backed scripts — `fetch-cheatsheet-source.sh` (6 python3 sites) and `regenerate-cheatsheet-index.sh` (1 python3 site) — into `tillandsias-policy` as subcommands, reducing shell scripts to thin compile+exec wrappers. `scripts/check-no-python-scripts.sh` passes successfully with exit code 0.
+- **Integration/runtime**: no sibling branch is ahead of linux-next.
+- **Release/e2e freshness**: no release warranted from this tooling-only cycle.
+- **E2E gates**: not run this cycle (worker slice).
+- **New findings**: none.
+
+## Progress Since Last Loop
+
+- **policy/no-python-runtime-scripts**: COMPLETED — All scripts rewritten in Rust or retired to tombstones. Check-no-python-scripts passes cleanly.
+
+## Loop 2026-06-20T06:00Z (worker drain — nanoclawv2 slice)
+
+- **Cycle type**: meta-orchestration on mutable Linux (Fedora 44): worker drain plus coordination audit.
+- **Startup**: began clean on `linux-next` at `f871f8b2`; no tracked or untracked worktree changes. Host classified as `linux_mutable`.
+- **Worker drain**: Claimed `nanoclawv2-orchestration` reclaimable lease. Slice 2 completed: registered nanoclawv2 in Rust image builder (image_specs, image_build_inputs with forge-base dependency, run_init image array). All tests pass, clippy clean. Committed `58996d8f`.
+- **Sibling coordination**: no merge needed. `origin/windows-next` and `origin/osx-next` heads checked — both remain ancestors of `origin/linux-next`; drift is 0 commits for both.
+- **E2E gates**: skipped. The nanoclawv2 --init registration is additive (image was already buildable via build-image.sh; no runtime crate delta to smoke-test). Latest GitHub release remains `v0.3.260618.2`.
+- **Release decision**: deferred. No release-blocking change; VERSION remains `0.3.260619.5`, no `v0.3.260620.*` tag exists.
+
+## Loop 2026-06-18T20:50Z (release-smoke pass)
+
+- **Cycle type**: meta-orchestration release-smoke pass after fetch/worker and sibling audit.
+- **Startup**: clean mutable-Linux host on `linux-next`; fetched origin, fast-forwarded from `7bc7b5bb` to `36cd9020`, then pushed forge findings commit `62964f02` and this smoke ledger commit.
+- **Sibling heads after fetch**:
+  - `main`: `6dfafdf1` (tagged `v0.3.260618.2`).
+  - `linux-next`: `36cd9020` at audit start, then `62964f02` after forge proposals.
+  - `windows-next`: `e332afb6` (ancestor of linux-next, 0 ahead / 12 behind).
+  - `osx-next`: `c7d32fb9` (ancestor of linux-next, 0 ahead / 14 behind).
+- **Worker drain**: no implementation packet claimed before the release gate. The latest release was newer than recorded curl-install smoke evidence, so `/smoke-curl-install-and-test-e2e` was prioritized.
+- **Integration/runtime**: no sibling branch is ahead of linux-next, and `plan/localwork/runtime-litmus/current` is absent. No full litmus was started.
+- **Release/e2e freshness**: GitHub latest release is `v0.3.260618.2`, published 2026-06-18T18:07:14Z at `6dfafdf1`; curl-install smoke now has PASS-with-findings evidence at 2026-06-18T20:50Z.
+- **E2E gates**: curl-install gate passed install, destructive reset, empty store verification, fresh init, and prompted OpenCode forge lane. Report: `plan/issues/smoke-e2e-findings-v0.3.260618.2-2026-06-18.md`.
+- **New findings**: in-forge `/forge-continuous-enhancement` filed three ready follow-ups: `smoke-finding/forge-ripgrep-missing`, `smoke-finding/forge-marksman-missing`, and `smoke-finding/forge-nix-store-missing`.
+
+## Loop 2026-06-18T23:20Z (worker drain — no-python slice)
+
+- **Cycle type**: meta-orchestration worker drain on mutable Linux.
+- **Startup**: clean `linux-next`, in sync with origin (`5613b40e`); fetched
+  origin/prune. Siblings: windows-next `e332afb6`, osx-next `c7d32fb9` (both
+  ancestors of linux-next); main `6dfafdf1`.
+- **Packet claimed + completed**: `policy/no-python-runtime-scripts` —
+  `distill-forge-diagnostics.sh` slice. Ported to a `tillandsias-policy
+  distill-forge-diagnostics` subcommand; shell reduced to a thin build+exec
+  wrapper. 45/45 target/forge-diagnostics logs byte-for-byte parity-verified vs
+  the former CPython extractor. clippy/fmt/test/`build.sh --check` green;
+  workspace + serde_json consumers re-tested after enabling `preserve_order`.
+- **Remaining Python-backed scripts**: 2 — `fetch-cheatsheet-source.sh` (6
+  python3 sites, large) and `regenerate-cheatsheet-index.sh` (1 site).
+- **Other claimable**: `nanoclawv2-orchestration` (RECLAIMABLE; large
+  multi-component build with open architecture questions — needs a task-graph
+  decomposition cycle before code).
+- **E2E**: not run this cycle (worker slice; left budget for orchestrator).
+- **Release**: not warranted from this cycle alone (tooling-only change; no
+  shipped-binary behavior change).
 
 ## Active Conflicts & Mediation
 

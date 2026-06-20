@@ -241,15 +241,10 @@ run_with_timeout() {
 # Trick CLI agents (like claude and agy) into thinking they are connected to
 # an interactive terminal. This defeats block buffering when piped.
 run_in_pty() {
-  python3 -u -c '
-import pty, sys, os
-try:
-    status = pty.spawn(sys.argv[1:])
-    sys.exit(os.WEXITSTATUS(status))
-except Exception:
-    sys.exit(1)
-' "$@"
+  cargo build --quiet --manifest-path "${REPO_ROOT}/Cargo.toml" -p tillandsias-policy
+  "${REPO_ROOT}/target/debug/tillandsias-policy" run-in-pty "$@"
 }
+
 
 
 run_agent() {

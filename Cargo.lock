@@ -3116,6 +3116,7 @@ dependencies = [
 name = "tillandsias-policy"
 version = "0.1.0"
 dependencies = [
+ "nix 0.29.0",
  "serde_json",
  "serde_yaml",
  "sha2",

@@ -12,7 +12,10 @@ fn main() {
         Some("audit-cheatsheet-sources") => audit_cheatsheet_sources(&args[2..]),
         Some("check-no-python-scripts") => check_no_python_scripts(),
         Some("distill-forge-diagnostics") => distill_forge_diagnostics(&args[2..]),
+        Some("regenerate-cheatsheet-index") => regenerate_cheatsheet_index(&args[2..]),
+        Some("fetch-cheatsheet-source") => fetch_cheatsheet_source(&args[2..]),
         Some("validate-yaml") => validate_yaml(&args[2..]),
+        Some("run-in-pty") => run_in_pty_cmd(&args[2..]),
         Some("--help") | Some("-h") | None => usage(),
         Some(other) => {
             eprintln!("unknown command: {other}");
@@ -33,7 +36,15 @@ fn usage() {
     eprintln!(
         "  tillandsias-policy distill-forge-diagnostics [--repo-root <path>] [--latest <path>] [--all]"
     );
+    eprintln!("  tillandsias-policy regenerate-cheatsheet-index [--repo-root <path>] [--check]");
+    eprintln!(
+        "  tillandsias-policy fetch-cheatsheet-source [--repo-root <path>] <URL> [--cite <path>] [--manual-review] [--force]"
+    );
+    eprintln!(
+        "  tillandsias-policy fetch-cheatsheet-source [--repo-root <path>] --tier=bundled [--max-age-days N] [--dry-run]"
+    );
     eprintln!("  tillandsias-policy validate-yaml <file>...");
+    eprintln!("  tillandsias-policy run-in-pty <command>...");
 }
 
 // @trace spec:cheatsheets-license-tiered
@@ -2310,6 +2321,2029 @@ fn recommended_action(cap: &str) -> String {
     }
 }
 
+// ===========================================================================
+// fetch-cheatsheet-source — verbatim fetcher for the cheatsheet-source layer.
+//
+// Faithful Rust port of scripts/fetch-cheatsheet-source.sh. The script's six
+// python3 sites handled: YAML frontmatter parsing, structural-drift heading
+// fingerprint, allowlist field extraction (x2), cited_by extraction, and
+// ## Provenance local: line insertion — all reimplemented below. Network fetch
+// is delegated to the `curl` binary exactly as the shell did.
+//
+// @trace spec:cheatsheet-source-layer, spec:cheatsheets-license-tiered
+// ===========================================================================
+
+const FETCHER_VERSION: u32 = 1;
+
+fn fetch_die(msg: &str) -> ! {
+    eprintln!("error: {msg}");
+    process::exit(1);
+}
+
+fn fetch_info(msg: &str) {
+    println!("  {msg}");
+}
+
+struct FetchConfig {
+    repo_root: PathBuf,
+    sources_dir: PathBuf,
+    allowlist: PathBuf,
+    scripts_dir: PathBuf,
+    cache_dir: PathBuf,
+    user_agent: String,
+}
+
+fn fetch_cheatsheet_source(args: &[String]) {
+    let mut repo_root: Option<PathBuf> = None;
+    let mut url = String::new();
+    let mut cite_path = String::new();
+    let mut manual_review = false;
+    let mut force = false;
+    let mut tier_mode = String::new();
+    let mut max_age_days = String::new();
+    let mut dry_run = false;
+
+    let mut idx = 0;
+    while idx < args.len() {
+        let arg = args[idx].as_str();
+        match arg {
+            "--repo-root" => {
+                idx += 1;
+                let Some(value) = args.get(idx) else {
+                    eprintln!("--repo-root requires a path");
+                    process::exit(2);
+                };
+                repo_root = Some(PathBuf::from(value));
+            }
+            "--cite" => {
+                idx += 1;
+                let Some(value) = args.get(idx) else {
+                    eprintln!("error: --cite requires a path argument");
+                    process::exit(2);
+                };
+                cite_path = value.clone();
+            }
+            "--manual-review" => manual_review = true,
+            "--force" => force = true,
+            "--canonicalize" => { /* reserved; silently accepted */ }
+            "--dry-run" => dry_run = true,
+            "--max-age-days" => {
+                idx += 1;
+                let Some(value) = args.get(idx) else {
+                    eprintln!("error: --max-age-days requires a numeric argument");
+                    process::exit(2);
+                };
+                max_age_days = value.clone();
+            }
+            _ if arg.starts_with("--tier=") => {
+                tier_mode = arg["--tier=".len()..].to_string();
+                if tier_mode != "bundled" {
+                    eprintln!("error: --tier={tier_mode} not supported (only 'bundled' for now)");
+                    process::exit(2);
+                }
+            }
+            _ if arg.starts_with("--max-age-days=") => {
+                max_age_days = arg["--max-age-days=".len()..].to_string();
+            }
+            _ if arg.starts_with("--") => {
+                eprintln!("error: unknown option: {arg}");
+                process::exit(2);
+            }
+            _ => {
+                if url.is_empty() {
+                    url = arg.to_string();
+                } else {
+                    eprintln!("error: unexpected argument: {arg}");
+                    process::exit(2);
+                }
+            }
+        }
+        idx += 1;
+    }
+
+    let repo_root = repo_root.unwrap_or_else(|| {
+        env::current_dir().unwrap_or_else(|err| {
+            eprintln!("failed to read current dir: {err}");
+            process::exit(2);
+        })
+    });
+
+    let sources_dir = match env::var("CHEATSHEET_SOURCES_DIR") {
+        Ok(v) if !v.is_empty() => PathBuf::from(v),
+        _ => repo_root.join("cheatsheet-sources"),
+    };
+    let allowlist = if repo_root.join("cheatsheets/license-allowlist.toml").is_file() {
+        repo_root.join("cheatsheets/license-allowlist.toml")
+    } else {
+        repo_root.join("cheatsheet-sources/license-allowlist.toml")
+    };
+    let cache_dir = match env::var("CACHE_DIR") {
+        Ok(v) if !v.is_empty() => PathBuf::from(v),
+        _ => {
+            let base = env::var("XDG_CACHE_HOME")
+                .ok()
+                .filter(|v| !v.is_empty())
+                .map(PathBuf::from)
+                .unwrap_or_else(|| {
+                    PathBuf::from(env::var("HOME").unwrap_or_default()).join(".cache")
+                });
+            base.join("tillandsias")
+        }
+    };
+    let cfg = FetchConfig {
+        repo_root: repo_root.clone(),
+        sources_dir,
+        allowlist,
+        scripts_dir: repo_root.join("scripts"),
+        cache_dir,
+        user_agent: format!(
+            "tillandsias-cheatsheet-fetcher/{FETCHER_VERSION} (+https://github.com/8007342/tillandsias)"
+        ),
+    };
+
+    // Bundled-tier dispatch.
+    if !tier_mode.is_empty() {
+        if !url.is_empty() {
+            eprintln!("error: --tier={tier_mode} does not accept a positional URL argument");
+            process::exit(2);
+        }
+        fetch_bundled_tier_main(&cfg, &max_age_days, dry_run);
+        return;
+    }
+
+    if url.is_empty() {
+        eprintln!(
+            "usage: fetch-cheatsheet-source.sh <URL> [--cite cheatsheets/<path>] [--manual-review] [--force]"
+        );
+        eprintln!("   or: fetch-cheatsheet-source.sh --tier=bundled [--max-age-days N] [--dry-run]");
+        process::exit(2);
+    }
+
+    fetch_single_url(&cfg, &url, &cite_path, manual_review, force);
+}
+
+/// SHA-256 hex of bytes (full digest).
+fn sha256_hex(bytes: &[u8]) -> String {
+    use sha2::{Digest, Sha256};
+    let mut hasher = Sha256::new();
+    hasher.update(bytes);
+    let digest = hasher.finalize();
+    let mut s = String::with_capacity(64);
+    for b in digest {
+        s.push_str(&format!("{b:02x}"));
+    }
+    s
+}
+
+/// Parse YAML frontmatter to key=value / key+=item lines, faithful port of the
+/// `parse_frontmatter` PYEOF (a tiny YAML subset). Returns the emitted lines.
+fn fetch_parse_frontmatter_lines(text: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    // Frontmatter is the block between the first two "---" lines: ^---\n(...)\n---\n
+    if !text.starts_with("---\n") {
+        return out;
+    }
+    let rest = &text[4..];
+    let Some(end) = rest.find("\n---\n") else {
+        return out;
+    };
+    let fm = &rest[..end];
+
+    let mut current_list_key: Option<String> = None;
+    for line in fm.lines() {
+        if line.trim().is_empty() || line.trim_start().starts_with('#') {
+            continue;
+        }
+        // List item: ^\s+-\s+(.*)$
+        if let Some(item) = fetch_match_list_item(line) {
+            if let Some(key) = &current_list_key {
+                let v = item.trim().trim_matches('"').trim_matches('\'');
+                out.push(format!("{key}+={v}"));
+                continue;
+            }
+        }
+        // key: value  (^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.*)$)
+        if let Some((key, value)) = fetch_match_kv(line) {
+            let value = value.trim();
+            if value.is_empty() || value == "|" || value == ">" {
+                current_list_key = Some(key.to_string());
+            } else {
+                current_list_key = None;
+                let v = value.trim_matches('"').trim_matches('\'');
+                out.push(format!("{key}={v}"));
+            }
+        }
+    }
+    out
+}
+
+/// Match `^\s+-\s+(.*)$`: leading whitespace, dash, whitespace, capture rest.
+fn fetch_match_list_item(line: &str) -> Option<&str> {
+    let trimmed = line.strip_prefix(|c: char| c == ' ' || c == '\t')?;
+    let after_ws = trimmed.trim_start_matches([' ', '\t']);
+    let after_dash = after_ws.strip_prefix('-')?;
+    if !after_dash.starts_with([' ', '\t']) {
+        return None;
+    }
+    Some(after_dash.trim_start_matches([' ', '\t']))
+}
+
+/// Match `^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.*)$`.
+fn fetch_match_kv(line: &str) -> Option<(&str, &str)> {
+    let (key, value) = line.split_once(':')?;
+    let key = key.trim_end_matches([' ', '\t']);
+    if key.is_empty() {
+        return None;
+    }
+    let mut chars = key.chars();
+    let first = chars.next()?;
+    if !(first == '_' || first.is_ascii_alphabetic()) {
+        return None;
+    }
+    if !chars.all(|c| c == '_' || c.is_ascii_alphanumeric()) {
+        return None;
+    }
+    Some((key, value.trim_start_matches([' ', '\t'])))
+}
+
+/// Returns true if the cheatsheet declares tier: bundled.
+fn fetch_is_bundled_tier(text: &str) -> bool {
+    fetch_parse_frontmatter_lines(text)
+        .iter()
+        .any(|l| l == "tier=bundled")
+}
+
+/// Extract source URLs (prefer source_urls+=, fall back to sources+=), filter
+/// to https://.
+fn fetch_extract_source_urls(text: &str) -> Vec<String> {
+    let lines = fetch_parse_frontmatter_lines(text);
+    let mut urls: Vec<String> = lines
+        .iter()
+        .filter_map(|l| l.strip_prefix("source_urls+="))
+        .map(|s| s.to_string())
+        .collect();
+    if urls.is_empty() {
+        urls = lines
+            .iter()
+            .filter_map(|l| l.strip_prefix("sources+="))
+            .map(|s| s.to_string())
+            .collect();
+    }
+    urls.into_iter().filter(|u| u.starts_with("https://")).collect()
+}
+
+/// Compute the bundled-tier cache key:
+///   SHA-256( "\n".join(sort -u(urls)) + "\n" + "max-age-days=N\n" )[:16]
+/// The shell pipes the URLs through `sort -u`, so we must use the same locale
+/// collation for byte-for-byte parity.
+fn fetch_bundled_cache_key(max_age: &str, urls: &[String]) -> String {
+    let sorted = locale_sort_unique(urls);
+    let mut buf = String::new();
+    for u in &sorted {
+        buf.push_str(u);
+        buf.push('\n');
+    }
+    buf.push_str(&format!("max-age-days={max_age}\n"));
+    let hex = sha256_hex(buf.as_bytes());
+    hex.chars().take(16).collect()
+}
+
+/// Equivalent to `printf '%s\n' "${items[@]}" | sort -u`: locale-collated,
+/// de-duplicated. Falls back to a byte-wise sort+dedup if `sort` is missing.
+fn locale_sort_unique(items: &[String]) -> Vec<String> {
+    use std::io::Write;
+    if items.is_empty() {
+        return Vec::new();
+    }
+    let mut input = String::new();
+    for it in items {
+        input.push_str(it);
+        input.push('\n');
+    }
+    let child = std::process::Command::new("sort")
+        .arg("-u")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .spawn();
+    let byte_fallback = || {
+        let mut v: Vec<String> = items.to_vec();
+        v.sort();
+        v.dedup();
+        v
+    };
+    let Ok(mut child) = child else {
+        return byte_fallback();
+    };
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = stdin.write_all(input.as_bytes());
+    }
+    let Ok(output) = child.wait_with_output() else {
+        return byte_fallback();
+    };
+    if !output.status.success() {
+        return byte_fallback();
+    }
+    String::from_utf8_lossy(&output.stdout)
+        .lines()
+        .map(|l| l.to_string())
+        .collect()
+}
+
+fn fetch_bundled_tier_main(cfg: &FetchConfig, max_age_days: &str, dry_run: bool) {
+    let cheatsheets_dir = cfg.repo_root.join("cheatsheets");
+    if !cheatsheets_dir.is_dir() {
+        fetch_die(&format!(
+            "cheatsheets/ directory not found at {}",
+            cheatsheets_dir.display()
+        ));
+    }
+
+    fetch_info(&format!(
+        "scanning {} for tier: bundled cheatsheets",
+        cheatsheets_dir.display()
+    ));
+
+    let mut all_files = Vec::new();
+    collect_markdown_files(&cheatsheets_dir, &mut all_files);
+    // The shell uses `find ... -print0` whose order is filesystem order; the
+    // bundled list order only affects per-file fetch ordering (not the cache
+    // key, which sorts). For dry-run output (sorted -u) ordering is normalised.
+    let mut bundled_files: Vec<(PathBuf, String)> = Vec::new();
+    for f in all_files {
+        if let Ok(text) = fs::read_to_string(&f) {
+            if fetch_is_bundled_tier(&text) {
+                bundled_files.push((f, text));
+            }
+        }
+    }
+
+    if bundled_files.is_empty() {
+        fetch_info("no tier: bundled cheatsheets found");
+        println!("key=");
+        println!("dir=");
+        return;
+    }
+
+    fetch_info(&format!("found {} bundled cheatsheet(s)", bundled_files.len()));
+
+    // Union of source URLs across all bundled cheatsheets (in file order).
+    let mut all_urls: Vec<String> = Vec::new();
+    let mut file_urls: Vec<(PathBuf, Vec<String>)> = Vec::new();
+    for (f, text) in &bundled_files {
+        let urls = fetch_extract_source_urls(text);
+        for u in &urls {
+            all_urls.push(u.clone());
+        }
+        file_urls.push((f.clone(), urls));
+    }
+
+    if all_urls.is_empty() {
+        fetch_info("warning: no source URLs found across bundled cheatsheets");
+        println!("key=");
+        println!("dir=");
+        return;
+    }
+
+    let max_age = if max_age_days.is_empty() {
+        "unset"
+    } else {
+        max_age_days
+    };
+    let key = fetch_bundled_cache_key(max_age, &all_urls);
+    let key_dir = cfg.cache_dir.join("cheatsheet-source-bake").join(&key);
+
+    fetch_info(&format!("cache key: {key}"));
+    fetch_info(&format!("cache dir: {}", key_dir.display()));
+
+    if dry_run {
+        fetch_info("[dry-run] would fetch the following URLs:");
+        for u in locale_sort_unique(&all_urls) {
+            fetch_info(&format!("  {u}"));
+        }
+        println!("key={key}");
+        println!("dir={}", key_dir.display());
+        return;
+    }
+
+    let _ = fs::create_dir_all(&key_dir);
+
+    let total = all_urls.len();
+    let mut fetched = 0usize;
+    let mut failed = 0usize;
+    let skipped = 0usize;
+    let mut seen: std::collections::HashSet<String> = std::collections::HashSet::new();
+
+    for (f, urls) in &file_urls {
+        for url in urls {
+            if seen.contains(url) {
+                continue;
+            }
+            seen.insert(url.clone());
+            let cited_by = f
+                .strip_prefix(&cfg.repo_root)
+                .unwrap_or(f)
+                .display()
+                .to_string();
+            fetch_info(&format!("[{fetched}/{total}] {url} (cited by {cited_by})"));
+
+            // Re-invoke this binary for each URL with CHEATSHEET_SOURCES_DIR set,
+            // mirroring the shell's self-re-invocation, suppressing output.
+            let exe = env::current_exe().unwrap_or_else(|_| PathBuf::from("tillandsias-policy"));
+            let status = std::process::Command::new(&exe)
+                .arg("fetch-cheatsheet-source")
+                .arg("--repo-root")
+                .arg(&cfg.repo_root)
+                .arg(url)
+                .arg("--manual-review")
+                .env("CHEATSHEET_SOURCES_DIR", &key_dir)
+                .stdout(std::process::Stdio::null())
+                .stderr(std::process::Stdio::null())
+                .status();
+
+            if matches!(status, Ok(s) if s.success()) {
+                fetched += 1;
+                // Locate the produced file (path mirrors URL host structure).
+                let host_part = url.strip_prefix("https://").unwrap_or(url);
+                let host = host_part.split('/').next().unwrap_or("");
+                let mut path_part = &host_part[host.len()..];
+                if let Some(q) = path_part.find('?') {
+                    path_part = &path_part[..q];
+                }
+                if let Some(h) = path_part.find('#') {
+                    path_part = &path_part[..h];
+                }
+                let path_part = path_part.trim_end_matches('/');
+                let path_part = if path_part.is_empty() || path_part == "/" {
+                    "/index.html"
+                } else {
+                    path_part
+                };
+                let mut produced = key_dir.join(format!("{host}{path_part}"));
+                let mut sidecar = PathBuf::new();
+                let meta = PathBuf::from(format!("{}.meta.yaml", produced.display()));
+                let norepublish = PathBuf::from(format!("{}.norepublish", produced.display()));
+                let norepublish_meta =
+                    PathBuf::from(format!("{}.norepublish.meta.yaml", produced.display()));
+                if meta.is_file() {
+                    sidecar = meta;
+                } else if norepublish_meta.is_file() {
+                    sidecar = norepublish_meta;
+                    produced = norepublish;
+                }
+                if sidecar.is_file() && produced.is_file() {
+                    let ctype = fs::read_to_string(&sidecar)
+                        .ok()
+                        .and_then(|s| {
+                            s.lines()
+                                .find_map(|l| l.strip_prefix("content_type:").map(|v| v.trim().to_string()))
+                        })
+                        .unwrap_or_default();
+                    let fp = fetch_structural_drift_fingerprint(&produced, &ctype);
+                    fetch_sidecar_set_fingerprint(&sidecar, &fp);
+                    fetch_info(&format!("fingerprint: {fp}"));
+                }
+            } else {
+                failed += 1;
+                fetch_info(&format!("warning: fetch failed for {url} (continuing)"));
+            }
+        }
+    }
+
+    fetch_info(&format!(
+        "bundled-tier bake complete: fetched={fetched} failed={failed} skipped={skipped}"
+    ));
+    println!("key={key}");
+    println!("dir={}", key_dir.display());
+}
+
+/// Compute structural-drift fingerprint over <h1>+<h2>+<h3> headings.
+/// Non-HTML → "n/a". Mirrors the htmlq-or-Python fallback (we always use the
+/// internal heading extractor, which matches the Python html.parser path).
+fn fetch_structural_drift_fingerprint(file: &Path, content_type: &str) -> String {
+    let is_html = if content_type.starts_with("text/html")
+        || content_type.starts_with("application/xhtml")
+    {
+        true
+    } else if content_type.is_empty() {
+        // Sniff first 8192 bytes for an opening html/body/h1/h2/h3 tag.
+        match fs::read(file) {
+            Ok(bytes) => {
+                let head = &bytes[..bytes.len().min(8192)];
+                let lower = String::from_utf8_lossy(head).to_ascii_lowercase();
+                lower.contains("<html")
+                    || lower.contains("<body")
+                    || lower.contains("<h1")
+                    || lower.contains("<h2")
+                    || lower.contains("<h3")
+            }
+            Err(_) => false,
+        }
+    } else {
+        false
+    };
+    if !is_html {
+        return "n/a".to_string();
+    }
+    let Ok(bytes) = fs::read(file) else {
+        return "n/a".to_string();
+    };
+    let text = String::from_utf8_lossy(&bytes);
+    let parts = extract_headings(&text);
+    if parts.is_empty() {
+        "n/a".to_string()
+    } else {
+        let joined = parts.join("\n");
+        sha256_hex(joined.as_bytes()).chars().take(16).collect()
+    }
+}
+
+/// Extract text content of h1/h2/h3 tags in document order, mirroring the
+/// Python HTMLParser HeadingExtractor (whitespace-trimmed, empties dropped).
+fn extract_headings(html: &str) -> Vec<String> {
+    let mut parts = Vec::new();
+    let bytes = html.as_bytes();
+    let lower = html.to_ascii_lowercase();
+    let mut i = 0;
+    while i < bytes.len() {
+        // Find next heading open tag.
+        let Some(rel) = find_heading_open(&lower[i..]) else {
+            break;
+        };
+        let open_start = i + rel;
+        // Find end of the open tag '>'.
+        let Some(gt_rel) = lower[open_start..].find('>') else {
+            break;
+        };
+        let content_start = open_start + gt_rel + 1;
+        // The tag name is h1/h2/h3 at open_start+1.
+        let tag = &lower[open_start + 1..open_start + 3];
+        let close = format!("</{tag}");
+        let Some(close_rel) = lower[content_start..].find(&close) else {
+            break;
+        };
+        let content_end = content_start + close_rel;
+        let raw = &html[content_start..content_end];
+        let text = strip_tags(raw);
+        let trimmed = text.trim();
+        if !trimmed.is_empty() {
+            parts.push(trimmed.to_string());
+        }
+        // Advance past the close tag.
+        i = content_end + close.len();
+    }
+    parts
+}
+
+/// Find the byte offset of the next `<h1`, `<h2`, or `<h3` followed by `>` or
+/// whitespace (mirrors HTMLParser start-tag recognition for those tags).
+fn find_heading_open(lower: &str) -> Option<usize> {
+    let bytes = lower.as_bytes();
+    let mut i = 0;
+    while i + 2 < bytes.len() {
+        if bytes[i] == b'<'
+            && bytes[i + 1] == b'h'
+            && (bytes[i + 2] == b'1' || bytes[i + 2] == b'2' || bytes[i + 2] == b'3')
+        {
+            let after = bytes.get(i + 3).copied();
+            if matches!(after, Some(b'>') | Some(b' ') | Some(b'\t') | Some(b'\n') | Some(b'\r') | Some(b'/')) {
+                return Some(i);
+            }
+        }
+        i += 1;
+    }
+    None
+}
+
+/// Strip nested HTML tags from heading inner content (Python's handle_data only
+/// collects text nodes between start/end of the heading).
+fn strip_tags(s: &str) -> String {
+    let mut out = String::new();
+    let mut in_tag = false;
+    for ch in s.chars() {
+        match ch {
+            '<' => in_tag = true,
+            '>' => in_tag = false,
+            _ if !in_tag => out.push(ch),
+            _ => {}
+        }
+    }
+    out
+}
+
+/// Append or replace `structural_drift_fingerprint:` in a sidecar .meta.yaml.
+fn fetch_sidecar_set_fingerprint(sidecar: &Path, fingerprint: &str) {
+    let Ok(content) = fs::read_to_string(sidecar) else {
+        return;
+    };
+    if content
+        .lines()
+        .any(|l| l.starts_with("structural_drift_fingerprint:"))
+    {
+        let new: String = content
+            .lines()
+            .map(|l| {
+                if l.starts_with("structural_drift_fingerprint:") {
+                    format!("structural_drift_fingerprint: {fingerprint}")
+                } else {
+                    l.to_string()
+                }
+            })
+            .collect::<Vec<_>>()
+            .join("\n");
+        // Preserve a trailing newline like awk's print output.
+        let new = format!("{new}\n");
+        let _ = fs::write(sidecar, new);
+    } else {
+        let mut content = content;
+        content.push_str(&format!("structural_drift_fingerprint: {fingerprint}\n"));
+        let _ = fs::write(sidecar, content);
+    }
+}
+
+/// Allowlist field record (publisher, license, redistribution, license_url).
+struct AllowlistFields {
+    publisher: String,
+    license: String,
+    redistribution: String,
+    license_url: String,
+}
+
+/// Port of the allowlist-extraction PYEOF: find `[domains."<key>"]` and read
+/// `k = v` lines until the next `[` section.
+fn fetch_allowlist_fields(content: &str, key: &str) -> Option<AllowlistFields> {
+    let header = format!("[domains.\"{key}\"]\n");
+    let start = content.find(&header)? + header.len();
+    let section = &content[start..];
+    // Up to next "\n[" or end.
+    let end = section.find("\n[").map(|p| p + 1).unwrap_or(section.len());
+    let section = &section[..end];
+    let mut publisher = String::new();
+    let mut license = String::new();
+    let mut redistribution = String::from("do-not-bundle");
+    let mut license_url = String::new();
+    for line in section.lines() {
+        let line = line.trim();
+        if line.starts_with('#') {
+            continue;
+        }
+        if let Some((k, v)) = line.split_once('=') {
+            let k = k.trim();
+            let v = v.trim().trim_matches('"');
+            match k {
+                "publisher" => publisher = v.to_string(),
+                "license" => license = v.to_string(),
+                "redistribution" => redistribution = v.to_string(),
+                "license_url" => license_url = v.to_string(),
+                _ => {}
+            }
+        }
+    }
+    Some(AllowlistFields {
+        publisher,
+        license,
+        redistribution,
+        license_url,
+    })
+}
+
+/// Compute deterministic on-disk path from URL (port of compute_dest_path).
+fn fetch_compute_dest_path(sources_dir: &Path, url: &str) -> PathBuf {
+    let u = url.strip_prefix("https://").unwrap_or(url);
+    let host = u.split('/').next().unwrap_or("");
+    let mut path = &u[host.len()..];
+    if let Some(q) = path.find('?') {
+        path = &path[..q];
+    }
+    if let Some(h) = path.find('#') {
+        path = &path[..h];
+    }
+    let path = path.trim_end_matches('/');
+    let path = if path.is_empty() || path == "/" {
+        "/index.html"
+    } else {
+        path
+    };
+    sources_dir.join(format!("{host}{path}"))
+}
+
+/// Build URL candidates (RFC .txt preference, single-page variants), port of
+/// build_url_candidates.
+fn fetch_build_url_candidates(base_url: &str, raw_host: &str) -> Vec<String> {
+    let mut candidates: Vec<String> = Vec::new();
+    if raw_host.contains("rfc-editor.org") || raw_host.contains("ietf.org") {
+        if base_url.ends_with(".html") || base_url.ends_with(".htm") {
+            let txt = base_url
+                .strip_suffix(".html")
+                .or_else(|| base_url.strip_suffix(".htm"))
+                .map(|b| format!("{b}.txt"))
+                .unwrap_or_else(|| base_url.to_string());
+            candidates.push(txt);
+        }
+    }
+    candidates.push(base_url.to_string());
+
+    // Dedup preserving order.
+    let mut seen: Vec<String> = Vec::new();
+    let mut final_list: Vec<String> = Vec::new();
+    for u in &candidates {
+        if !seen.contains(u) {
+            final_list.push(u.clone());
+            seen.push(u.clone());
+        }
+    }
+
+    let base_stripped = base_url.split('?').next().unwrap_or(base_url);
+    let base_no_slash = base_stripped.trim_end_matches('/');
+    for variant in [
+        format!("{base_stripped}?print=1"),
+        format!("{base_no_slash}/print/"),
+        format!("{base_no_slash}/single-page/"),
+    ] {
+        if !seen.contains(&variant) {
+            final_list.push(variant.clone());
+            seen.push(variant);
+        }
+    }
+    final_list
+}
+
+fn fetch_single_url(
+    cfg: &FetchConfig,
+    url_in: &str,
+    cite_path: &str,
+    manual_review: bool,
+    force: bool,
+) {
+    if !url_in.starts_with("https://") {
+        fetch_die(&format!("only https:// URLs are allowed (got: {url_in})"));
+    }
+
+    let mut url = url_in.to_string();
+    let original_url = url_in.to_string();
+
+    // GitHub blob → raw rewrite.
+    {
+        let u_no_scheme = url.strip_prefix("https://").unwrap_or(&url).to_string();
+        let host = u_no_scheme.split('/').next().unwrap_or("").to_string();
+        let path = u_no_scheme[host.len()..].to_string();
+        if host == "github.com" && path.contains("/blob/") {
+            let raw_path = path.replacen("/blob/", "/", 1);
+            url = format!("https://raw.githubusercontent.com{raw_path}");
+            fetch_info(&format!("GitHub blob → raw rewrite: {url}"));
+        }
+    }
+
+    // Allowlist lookup.
+    if !cfg.allowlist.is_file() {
+        fetch_die(&format!("allowlist not found at {}", cfg.allowlist.display()));
+    }
+    let allowlist_content = fs::read_to_string(&cfg.allowlist).unwrap_or_default();
+
+    let u_no_scheme = url.strip_prefix("https://").unwrap_or(&url).to_string();
+    let raw_host = u_no_scheme.split('/').next().unwrap_or("").to_string();
+    let url_path = u_no_scheme[raw_host.len()..].to_string();
+
+    let mut publisher = String::new();
+    let mut license = String::new();
+    let mut redistribution = String::new();
+    let mut license_url = String::new();
+    let mut allowlist_match = String::new();
+    let mut found = false;
+
+    // Try host + first {3,2,1,0} path segments (most specific first).
+    for depth in [3usize, 2, 1, 0] {
+        let mut candidate = raw_host.clone();
+        if depth > 0 && !url_path.is_empty() {
+            let trimmed = url_path.trim_start_matches('/');
+            let segs: Vec<&str> = trimmed.split('/').filter(|s| !s.is_empty()).take(depth).collect();
+            if !segs.is_empty() {
+                candidate = format!("{raw_host}/{}", segs.join("/"));
+            }
+        }
+        let header = format!("[domains.\"{candidate}\"]");
+        if allowlist_content.contains(&header) {
+            if let Some(f) = fetch_allowlist_fields(&allowlist_content, &candidate) {
+                publisher = f.publisher;
+                license = f.license;
+                redistribution = f.redistribution;
+                license_url = f.license_url;
+            }
+            allowlist_match = candidate;
+            found = true;
+            break;
+        }
+    }
+
+    if !found {
+        if !manual_review {
+            fetch_die(&format!(
+                "host '{raw_host}' is not in the license allowlist.\nPass --manual-review to fetch anyway (redistribution will be marked 'manual-review-required').\nAdd the domain to {} to suppress this warning.",
+                cfg.allowlist.display()
+            ));
+        }
+        publisher = "unknown".to_string();
+        license = "unknown".to_string();
+        redistribution = "manual-review-required".to_string();
+        license_url = String::new();
+        allowlist_match = String::new();
+        fetch_info("warning: domain not in allowlist; proceeding with --manual-review");
+    }
+
+    let mut dest_path = fetch_compute_dest_path(&cfg.sources_dir, &url);
+    let norepublish = PathBuf::from(format!("{}.norepublish", dest_path.display()));
+    let skip_fetch = (dest_path.is_file() || norepublish.is_file()) && !force;
+    if skip_fetch {
+        fetch_info(&format!(
+            "already fetched: {} (use --force to re-fetch)",
+            dest_path.display()
+        ));
+    }
+
+    let mut fetch_url = url.clone();
+    let mut final_url = url.clone();
+    let mut http_status = String::from("0");
+    let mut content_type = String::new();
+
+    if !skip_fetch {
+        println!("fetching: {url}");
+        let candidates = fetch_build_url_candidates(&url, &raw_host);
+        let tmp_body = env::temp_dir().join(format!(
+            "tillandsias-fetch-body-{}",
+            std::process::id()
+        ));
+        let mut tried: Vec<String> = Vec::new();
+        let mut got = false;
+        for candidate_url in &candidates {
+            tried.push(candidate_url.clone());
+            fetch_info(&format!("trying: {candidate_url}"));
+            let output = std::process::Command::new("curl")
+                .args([
+                    "-L",
+                    "--proto",
+                    "=https",
+                    "--tlsv1.2",
+                    "-A",
+                    &cfg.user_agent,
+                    "--max-time",
+                    "60",
+                    "--connect-timeout",
+                    "15",
+                    "--max-redirs",
+                    "5",
+                    "--write-out",
+                    "%{http_code}\n%{url_effective}\n%{content_type}",
+                    "--silent",
+                    "--output",
+                ])
+                .arg(&tmp_body)
+                .arg("--dump-header")
+                .arg(env::temp_dir().join(format!("tillandsias-fetch-hdr-{}", std::process::id())))
+                .arg(candidate_url)
+                .output();
+            let Ok(output) = output else {
+                fetch_info(&format!("curl failed for {candidate_url}; trying next"));
+                continue;
+            };
+            if !output.status.success() {
+                fetch_info(&format!("curl failed for {candidate_url}; trying next"));
+                continue;
+            }
+            let writeout = String::from_utf8_lossy(&output.stdout);
+            let lines: Vec<&str> = writeout.lines().collect();
+            let n = lines.len();
+            let status_line = if n >= 3 { lines[n - 3] } else { "" };
+            let effective = if n >= 2 { lines[n - 2] } else { "" };
+            let ctype = if n >= 1 { lines[n - 1] } else { "" };
+            http_status = status_line.to_string();
+            let body_len = fs::metadata(&tmp_body).map(|m| m.len()).unwrap_or(0);
+            if http_status == "200" && body_len > 0 {
+                content_type = ctype.to_string();
+                fetch_url = candidate_url.clone();
+                final_url = effective.to_string();
+                fetch_info(&format!("fetched {http_status}: {final_url} ({body_len} bytes)"));
+                got = true;
+                break;
+            } else {
+                fetch_info(&format!("  → HTTP {http_status} or empty body; trying next"));
+            }
+        }
+        if !got {
+            let _ = fs::remove_file(&tmp_body);
+            fetch_die(&format!(
+                "all URL candidates failed or returned empty body for {url}\nTried: {}",
+                tried.join(" ")
+            ));
+        }
+
+        // Recompute dest for the URL that actually succeeded.
+        dest_path = fetch_compute_dest_path(&cfg.sources_dir, &fetch_url);
+        if let Some(parent) = dest_path.parent() {
+            let _ = fs::create_dir_all(parent);
+        }
+        if redistribution == "do-not-bundle" || redistribution == "manual-review-required" {
+            dest_path = PathBuf::from(format!("{}.norepublish", dest_path.display()));
+        }
+        if let Ok(bytes) = fs::read(&tmp_body) {
+            let _ = fs::write(&dest_path, bytes);
+        }
+        let _ = fs::remove_file(&tmp_body);
+        fetch_info(&format!("stored: {}", dest_path.display()));
+    } else {
+        if norepublish.is_file() {
+            dest_path = norepublish;
+        }
+        fetch_url = url.clone();
+        final_url = url.clone();
+        let meta = PathBuf::from(format!("{}.meta.yaml", dest_path.display()));
+        if meta.is_file() {
+            let content = fs::read_to_string(&meta).unwrap_or_default();
+            http_status = content
+                .lines()
+                .find_map(|l| l.strip_prefix("http_status:").map(|v| v.trim().to_string()))
+                .unwrap_or_else(|| "200".to_string());
+            content_type = content
+                .lines()
+                .find_map(|l| l.strip_prefix("content_type:").map(|v| v.trim().to_string()))
+                .unwrap_or_default();
+        } else {
+            http_status = "200".to_string();
+            content_type = String::new();
+        }
+    }
+
+    // SHA-256 + length.
+    let mut content_sha256 = String::new();
+    let mut content_length: u64 = 0;
+    if dest_path.is_file() {
+        if let Ok(bytes) = fs::read(&dest_path) {
+            content_sha256 = sha256_hex(&bytes);
+            content_length = bytes.len() as u64;
+        }
+    }
+
+    // Write sidecar.
+    let fetch_ts = fetch_utc_timestamp();
+    let meta_path = PathBuf::from(format!("{}.meta.yaml", dest_path.display()));
+
+    // Read existing cited_by (idempotent) — port of cited_by PYEOF.
+    let mut cited_by_list: Vec<String> = Vec::new();
+    if meta_path.is_file() {
+        let content = fs::read_to_string(&meta_path).unwrap_or_default();
+        cited_by_list = fetch_extract_cited_by(&content);
+    }
+
+    if !cite_path.is_empty() {
+        let cite_norm = cite_path
+            .strip_prefix(&format!("{}/", cfg.repo_root.display()))
+            .unwrap_or(cite_path)
+            .to_string();
+        if !cited_by_list.iter().any(|e| e == &cite_norm) {
+            cited_by_list.push(cite_norm);
+        }
+    }
+
+    let cited_by_yaml = if cited_by_list.is_empty() {
+        "cited_by:\n  []".to_string()
+    } else {
+        let mut s = String::from("cited_by:");
+        for item in &cited_by_list {
+            s.push_str(&format!("\n  - {item}"));
+        }
+        s
+    };
+
+    let render = "static";
+    // local_path relative to repo root (bash: ${DEST_PATH#${REPO_ROOT}/}).
+    let local_path = strip_repo_prefix(&dest_path, &cfg.repo_root);
+
+    let sidecar_text = format!(
+        "url: {original_url}\nfetch_url: {fetch_url}\nfinal_redirect: {final_url}\nfetched: {fetch_ts}\nfetcher_version: {FETCHER_VERSION}\ncontent_sha256: {content_sha256}\ncontent_length: {content_length}\ncontent_type: {content_type}\nhttp_status: {http_status}\npublisher: {publisher}\nlicense: {license}\nlicense_url: {license_url}\nredistribution: {redistribution}\nallowlist_match: {allowlist_match}\nrender: {render}\nlocal_path: {local_path}\n{cited_by_yaml}\nnotes: \"\"\n"
+    );
+    let _ = fs::write(&meta_path, &sidecar_text);
+    fetch_info(&format!("sidecar: {}", meta_path.display()));
+
+    // --cite: append local: line to the cheatsheet's ## Provenance section.
+    if !cite_path.is_empty() {
+        let cheatsheet_abs = if cite_path.starts_with('/') {
+            PathBuf::from(cite_path)
+        } else if cite_path.starts_with("cheatsheets/") {
+            cfg.repo_root.join(cite_path)
+        } else {
+            cfg.repo_root.join("cheatsheets").join(cite_path)
+        };
+        if !cheatsheet_abs.is_file() {
+            eprintln!(
+                "warning: cheatsheet not found at {}; skipping --cite",
+                cheatsheet_abs.display()
+            );
+        } else {
+            let local_cite_path = strip_repo_prefix(&dest_path, &cfg.repo_root);
+            let source_url = fetch_url.clone();
+            let content = fs::read_to_string(&cheatsheet_abs).unwrap_or_default();
+            if content.contains(&format!("local: `{local_cite_path}")) {
+                fetch_info(&format!("already cited in {}", cheatsheet_abs.display()));
+            } else {
+                let (new_content, inserted) =
+                    fetch_insert_local_line(&content, &source_url, &original_url, &local_cite_path);
+                let _ = fs::write(&cheatsheet_abs, &new_content);
+                if inserted {
+                    eprintln!(
+                        "  → inserted local: line into {}",
+                        cheatsheet_abs.display()
+                    );
+                } else {
+                    eprintln!(
+                        "  warning: could not find insertion point in {}; please add manually:",
+                        cheatsheet_abs.display()
+                    );
+                    eprintln!("    local: `{local_cite_path}`");
+                }
+                fetch_info(&format!(
+                    "updated provenance in: {}",
+                    cheatsheet_abs.display()
+                ));
+            }
+        }
+    }
+
+    // Regenerate INDEX.json via regenerate-source-index.sh if executable.
+    let regen = cfg.scripts_dir.join("regenerate-source-index.sh");
+    if fetch_is_executable(&regen) {
+        let _ = std::process::Command::new(&regen).status();
+    } else {
+        fetch_info(
+            "warning: regenerate-source-index.sh not found or not executable; INDEX.json not updated",
+        );
+    }
+
+    println!("done: {url}");
+}
+
+/// Bash `${path#${repo_root}/}` — strip the repo-root prefix if present,
+/// otherwise return the path unchanged (as a display string).
+fn strip_repo_prefix(path: &Path, repo_root: &Path) -> String {
+    let p = path.display().to_string();
+    let prefix = format!("{}/", repo_root.display());
+    p.strip_prefix(&prefix).map(|s| s.to_string()).unwrap_or(p)
+}
+
+fn fetch_is_executable(path: &Path) -> bool {
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::metadata(path)
+            .map(|m| m.is_file() && m.permissions().mode() & 0o111 != 0)
+            .unwrap_or(false)
+    }
+    #[cfg(not(unix))]
+    {
+        path.is_file()
+    }
+}
+
+fn fetch_utc_timestamp() -> String {
+    // date -u +"%Y-%m-%dT%H:%M:%SZ" via the system `date` for byte-parity.
+    let out = std::process::Command::new("date")
+        .args(["-u", "+%Y-%m-%dT%H:%M:%SZ"])
+        .output();
+    match out {
+        Ok(o) if o.status.success() => String::from_utf8_lossy(&o.stdout).trim().to_string(),
+        _ => String::new(),
+    }
+}
+
+/// Port of the cited_by PYEOF: extract items from a `cited_by:\n  - ...` block.
+fn fetch_extract_cited_by(content: &str) -> Vec<String> {
+    let mut items = Vec::new();
+    let mut in_block = false;
+    for line in content.lines() {
+        if line == "cited_by:" {
+            in_block = true;
+            continue;
+        }
+        if in_block {
+            if let Some(rest) = line.strip_prefix("  - ") {
+                items.push(rest.to_string());
+            } else {
+                break;
+            }
+        }
+    }
+    items
+}
+
+/// Port of the provenance-insertion PYEOF. Returns (new_content, inserted).
+fn fetch_insert_local_line(
+    content: &str,
+    source_url: &str,
+    original_url: &str,
+    local_path: &str,
+) -> (String, bool) {
+    let local_line = format!("  local: `{local_path}`");
+
+    // If already present, return unchanged.
+    if content
+        .lines()
+        .any(|l| l.contains(&format!("local: `{local_path}`")))
+    {
+        return (content.to_string(), false);
+    }
+
+    // splitlines(keepends=True): preserve line endings.
+    let lines = split_keepends(content);
+    let mut new_lines: Vec<String> = Vec::new();
+    let mut inserted = false;
+    let mut in_provenance = false;
+
+    for line in &lines {
+        new_lines.push(line.clone());
+        let bare = line.trim_end_matches(['\n', '\r']);
+        if regen_is_h2_provenance(bare) {
+            in_provenance = true;
+            continue;
+        }
+        if in_provenance && regen_is_h2(bare) {
+            in_provenance = false;
+            continue;
+        }
+        if in_provenance && !inserted {
+            let stripped = bare.trim();
+            if stripped.contains(source_url) || stripped.contains(original_url) {
+                new_lines.push(format!("{local_line}\n"));
+                inserted = true;
+            }
+        }
+    }
+
+    if !inserted && in_provenance {
+        let mut out: Vec<String> = Vec::new();
+        for line in &new_lines {
+            if line.contains("**Last updated:**") && !inserted {
+                out.push(format!("{local_line}\n"));
+                inserted = true;
+            }
+            out.push(line.clone());
+        }
+        new_lines = out;
+    }
+
+    if !inserted {
+        let mut out: Vec<String> = Vec::new();
+        let mut in_prov = false;
+        for line in &new_lines {
+            let bare = line.trim_end_matches(['\n', '\r']);
+            if regen_is_h2_provenance(bare) {
+                in_prov = true;
+            }
+            if in_prov && line.contains("**Last updated:**") && !inserted {
+                out.push(format!("{local_line}\n"));
+                inserted = true;
+            }
+            out.push(line.clone());
+        }
+        new_lines = out;
+    }
+
+    (new_lines.join(""), inserted)
+}
+
+/// Python str.splitlines(keepends=True) over \n (sufficient for our inputs).
+fn split_keepends(s: &str) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut cur = String::new();
+    for ch in s.chars() {
+        cur.push(ch);
+        if ch == '\n' {
+            out.push(std::mem::take(&mut cur));
+        }
+    }
+    if !cur.is_empty() {
+        out.push(cur);
+    }
+    out
+}
+
+// ===========================================================================
+// regenerate-cheatsheet-index — rebuild cheatsheets/INDEX.md from frontmatter.
+//
+// Faithful Rust port of scripts/regenerate-cheatsheet-index.sh (the script's
+// only python3 use was the INDEX.json verify-marker lookup table).
+//
+// @trace spec:cheatsheet-tooling, spec:cheatsheet-source-layer
+// @trace spec:cheatsheets-license-tiered
+// ===========================================================================
+
+const REGEN_INDEX_HEADER: &str = "# Cheatsheets Index\n\n@trace spec:cheatsheet-tooling, spec:cheatsheet-source-layer\n\n> AUTO-GENERATED by `scripts/regenerate-cheatsheet-index.sh`. Do NOT hand-edit.\n> Source of truth = the YAML frontmatter on each cheatsheet file.\n> To refresh: `scripts/regenerate-cheatsheet-index.sh`.\n\nCurated reference for tools, languages, and runtimes shipped with the Tillandsias forge. Optimised for `cat | rg`: one line per cheatsheet, `<filename> — <one-line description>`.\n\n**Discovery**: agents inside the forge find cheatsheets at `$TILLANDSIAS_CHEATSHEETS/INDEX.md` (resolves to `/opt/cheatsheets/INDEX.md`). Humans read them on GitHub.\n\n**Authoring**: copy `cheatsheets/TEMPLATE.md` into the right category subdirectory, fill the YAML frontmatter (`tags`, `since`, `last_verified`, `sources`, `authority`, `status`), then run `scripts/regenerate-cheatsheet-index.sh` to refresh this file.\n";
+
+/// Parsed result of one cheatsheet's frontmatter+body, mirroring the awk
+/// `parse_cheatsheet` emitter (7 \x1f-separated fields).
+struct CheatsheetParse {
+    status: String,
+    title: String,
+    description: String,
+    tier: String,
+    image_baked_sha256: String,
+    package: String,
+    committed_for_project: String,
+}
+
+/// Faithful port of the awk `parse_cheatsheet` function in the shell script.
+fn regen_parse_cheatsheet(text: &str) -> CheatsheetParse {
+    let mut in_fm = false;
+    let mut saw_fm_open = false;
+    let mut saw_fm_close = false;
+    let mut status = String::from("none");
+    let mut title = String::new();
+    let mut description = String::new();
+    let mut second_line = String::new();
+    let mut use_when_next = false;
+    let mut nonempty_body_count = 0u32;
+    let mut tier = String::new();
+    let mut image_baked_sha256 = String::new();
+    let mut package = String::new();
+    let mut committed_for_project = String::new();
+
+    for (idx, line) in text.lines().enumerate() {
+        let line_no = idx + 1;
+
+        // Frontmatter open: only if --- is on line 1.
+        if line_no == 1 && line == "---" {
+            in_fm = true;
+            saw_fm_open = true;
+            continue;
+        }
+        // Frontmatter close.
+        if in_fm && line == "---" {
+            in_fm = false;
+            saw_fm_close = true;
+            continue;
+        }
+        if in_fm {
+            if let Some(v) = awk_match_capture(line, "status:", |c| c.is_ascii_alphabetic()) {
+                status = v.to_ascii_lowercase();
+            }
+            if let Some(v) =
+                awk_match_capture(line, "tier:", |c| c.is_ascii_alphabetic() || c == '-')
+            {
+                tier = v;
+            }
+            if let Some(v) =
+                awk_match_capture(line, "image_baked_sha256:", |c| c.is_ascii_hexdigit())
+            {
+                image_baked_sha256 = v;
+            }
+            if let Some(v) = awk_match_capture(line, "package:", |c| {
+                c.is_ascii_alphanumeric() || c == '_' || c == '-'
+            }) {
+                package = v;
+            }
+            if let Some(rest) = line.strip_prefix("committed_for_project:") {
+                let t = rest.trim_start();
+                if let Some(v) = t.strip_prefix("true") {
+                    if v.is_empty() || !v.starts_with(|c: char| c.is_ascii_alphanumeric()) {
+                        committed_for_project = "true".to_string();
+                    }
+                } else if let Some(v) = t.strip_prefix("false") {
+                    if v.is_empty() || !v.starts_with(|c: char| c.is_ascii_alphanumeric()) {
+                        committed_for_project = "false".to_string();
+                    }
+                }
+            }
+            continue;
+        }
+
+        // Body parsing.
+
+        // First H1 -> title.
+        if title.is_empty() {
+            if let Some(rest) = match_h1(line) {
+                title = rest.to_string();
+                continue;
+            }
+        }
+
+        if description.is_empty() {
+            // Inline form: `**Use when**: blah`
+            if let Some(rest) = match_use_when_inline(line) {
+                description = rest.to_string();
+            }
+            // Heading form: `## Use when` -> next non-empty line is desc.
+            else if is_use_when_heading(line) {
+                use_when_next = true;
+            } else if use_when_next && !line.trim().is_empty() {
+                description = line.to_string();
+                use_when_next = false;
+            }
+        }
+
+        // Track second non-empty body line as fallback description.
+        if !line.trim().is_empty() {
+            nonempty_body_count += 1;
+            if nonempty_body_count == 2 && second_line.is_empty() {
+                second_line = line.to_string();
+            }
+        }
+    }
+
+    if description.is_empty() {
+        description = second_line;
+    }
+    description = description.trim().to_string();
+
+    if saw_fm_open && !saw_fm_close {
+        status = "none".to_string();
+    }
+    if !saw_fm_open {
+        status = "none".to_string();
+    }
+
+    CheatsheetParse {
+        status,
+        title,
+        description,
+        tier,
+        image_baked_sha256,
+        package,
+        committed_for_project,
+    }
+}
+
+/// Mirror awk `match($0, /^key:[[:space:]]*(<charclass>+)/, m)`: requires the
+/// line to start with `key`, then optional whitespace, then capture the maximal
+/// run of characters matching `pred` (must be at least one char to "match").
+fn awk_match_capture(line: &str, key: &str, pred: impl Fn(char) -> bool) -> Option<String> {
+    let rest = line.strip_prefix(key)?;
+    let rest = rest.trim_start_matches([' ', '\t']);
+    let captured: String = rest.chars().take_while(|&c| pred(c)).collect();
+    if captured.is_empty() {
+        None
+    } else {
+        Some(captured)
+    }
+}
+
+/// awk `/^#[[:space:]]+(.*)/` — H1 line: `#` then >=1 space, capture the rest.
+fn match_h1(line: &str) -> Option<&str> {
+    let rest = line.strip_prefix('#')?;
+    if rest.starts_with([' ', '\t']) {
+        Some(rest.trim_start_matches([' ', '\t']))
+    } else {
+        None
+    }
+}
+
+/// awk `/^\*\*Use when\*\*:[[:space:]]*(.+)/` — capture must be non-empty (.+).
+fn match_use_when_inline(line: &str) -> Option<&str> {
+    let rest = line.strip_prefix("**Use when**:")?;
+    let rest = rest.trim_start_matches([' ', '\t']);
+    if rest.is_empty() { None } else { Some(rest) }
+}
+
+/// awk `/^##[[:space:]]+Use when[[:space:]]*$/`.
+fn is_use_when_heading(line: &str) -> bool {
+    let Some(rest) = line.strip_prefix("##") else {
+        return false;
+    };
+    if !rest.starts_with([' ', '\t']) {
+        return false;
+    }
+    let rest = rest.trim_start_matches([' ', '\t']);
+    let Some(rest) = rest.strip_prefix("Use when") else {
+        return false;
+    };
+    rest.chars().all(|c| c == ' ' || c == '\t')
+}
+
+/// Faithful port of the awk `truncate_desc` function: trim, strip a leading
+/// `**bold**:` marker, collapse internal whitespace, cap at `max` chars
+/// (replacing with `<max-1 chars>…` when longer). Char-based to match gawk in
+/// a UTF-8 locale.
+fn regen_truncate_desc(s: &str, max: usize) -> String {
+    let mut s = s.trim().to_string();
+    // sub(/^\*\*[^*]+\*\*:[[:space:]]*/, "", s) — leading bold marker.
+    if let Some(after_open) = s.strip_prefix("**") {
+        if let Some(close_idx) = after_open.find("**") {
+            let inner = &after_open[..close_idx];
+            let tail = &after_open[close_idx + 2..];
+            if !inner.contains('*') && !inner.is_empty() {
+                if let Some(rest) = tail.strip_prefix(':') {
+                    s = rest.trim_start_matches([' ', '\t']).to_string();
+                }
+            }
+        }
+    }
+    // gsub(/[[:space:]]+/, " ", s) — collapse all whitespace runs to one space.
+    let collapsed = collapse_whitespace(&s);
+    let chars: Vec<char> = collapsed.chars().collect();
+    if chars.len() > max {
+        let prefix: String = chars[..max - 1].iter().collect();
+        format!("{prefix}…")
+    } else {
+        collapsed
+    }
+}
+
+fn collapse_whitespace(s: &str) -> String {
+    let mut out = String::with_capacity(s.len());
+    let mut in_ws = false;
+    for ch in s.chars() {
+        if ch.is_whitespace() {
+            if !in_ws {
+                out.push(' ');
+                in_ws = true;
+            }
+        } else {
+            out.push(ch);
+            in_ws = false;
+        }
+    }
+    out
+}
+
+/// One rendered row: (rel_path, marker, desc_with_verify_marker).
+struct RegenRow {
+    rel: String,
+    marker: String,
+    desc: String,
+}
+
+/// Build the verify-marker lookup table from cheatsheet-sources/INDEX.json.
+/// Maps repo-relative cheatsheet path -> marker string ("verified:<sha8>",
+/// "partial-verify", or "" for none). Faithful port of the VERIFY_PYEOF block.
+fn regen_build_verify_lookup(
+    repo_root: &Path,
+    cheatsheets_dir: &Path,
+    sources_index: &Path,
+) -> std::collections::HashMap<String, String> {
+    let mut lookup = std::collections::HashMap::new();
+    let Ok(index_text) = fs::read_to_string(sources_index) else {
+        return lookup;
+    };
+    let Ok(index): Result<serde_json::Value, _> = serde_json::from_str(&index_text) else {
+        return lookup;
+    };
+    let empty = Vec::new();
+    let entries = index
+        .get("entries")
+        .and_then(|e| e.as_array())
+        .unwrap_or(&empty);
+
+    // url -> entry (first wins), over keys url, fetch_url, final_redirect.
+    let mut url_to_entry: std::collections::HashMap<String, &serde_json::Value> =
+        std::collections::HashMap::new();
+    for entry in entries {
+        for key in ["url", "fetch_url", "final_redirect"] {
+            if let Some(u) = entry.get(key).and_then(|v| v.as_str()) {
+                if !u.is_empty() {
+                    url_to_entry.entry(u.to_string()).or_insert(entry);
+                }
+            }
+        }
+    }
+
+    let mut files = Vec::new();
+    collect_markdown_files(cheatsheets_dir, &mut files);
+    files.retain(|f| {
+        !matches!(
+            f.file_name().and_then(|n| n.to_str()),
+            Some("INDEX.md") | Some("TEMPLATE.md")
+        )
+    });
+    locale_sort_by(&mut files, |p| p.display().to_string());
+
+    for cs_file in files {
+        let rel = cs_file
+            .strip_prefix(repo_root)
+            .unwrap_or(&cs_file)
+            .display()
+            .to_string();
+        let Ok(text) = fs::read_to_string(&cs_file) else {
+            continue;
+        };
+        let (urls, _local_paths) = regen_extract_provenance_info(&text);
+        if urls.is_empty() {
+            lookup.insert(rel, String::new());
+            continue;
+        }
+        let fetched: Vec<&serde_json::Value> =
+            urls.iter().filter_map(|u| url_to_entry.get(u).copied()).collect();
+        let unfetched_count = urls.iter().filter(|u| !url_to_entry.contains_key(*u)).count();
+        if fetched.is_empty() {
+            lookup.insert(rel, String::new());
+            continue;
+        }
+        if unfetched_count > 0 {
+            lookup.insert(rel, "partial-verify".to_string());
+        } else {
+            let mut sha_prefix = String::new();
+            for entry in &fetched {
+                if let Some(sha) = entry.get("content_sha256").and_then(|v| v.as_str()) {
+                    if !sha.is_empty() {
+                        sha_prefix = sha.chars().take(8).collect();
+                        break;
+                    }
+                }
+            }
+            if sha_prefix.is_empty() {
+                lookup.insert(rel, "partial-verify".to_string());
+            } else {
+                lookup.insert(rel, format!("verified:{sha_prefix}"));
+            }
+        }
+    }
+    lookup
+}
+
+/// Port of the Python `extract_provenance_info`: scan the `## Provenance`
+/// section for URLs (both `<https://...>` and bare https tokens) and
+/// `local: \`...\`` paths.
+fn regen_extract_provenance_info(text: &str) -> (Vec<String>, Vec<String>) {
+    let mut urls: Vec<String> = Vec::new();
+    let mut local_paths: Vec<String> = Vec::new();
+    let mut in_provenance = false;
+    for line in text.lines() {
+        let stripped = line.trim();
+        if regen_is_h2_provenance(stripped) {
+            in_provenance = true;
+            continue;
+        }
+        if in_provenance && regen_is_h2(stripped) {
+            in_provenance = false;
+            continue;
+        }
+        if !in_provenance {
+            continue;
+        }
+        // <https://...>
+        let mut rest = stripped;
+        while let Some(open) = rest.find("<https://") {
+            let after = &rest[open + 1..];
+            if let Some(close) = after.find('>') {
+                let url = &after[..close];
+                urls.push(url.to_string());
+                rest = &after[close + 1..];
+            } else {
+                break;
+            }
+        }
+        // Bare https tokens not preceded by < or ` and trimmed of .,) suffixes.
+        for bare in regen_bare_https(stripped) {
+            if !urls.contains(&bare) {
+                urls.push(bare);
+            }
+        }
+        // local: `path`
+        if let Some(pos) = stripped.find("local:") {
+            let after = &stripped[pos + "local:".len()..];
+            let after = after.trim_start_matches([' ', '\t']);
+            if let Some(rest) = after.strip_prefix('`') {
+                if let Some(end) = rest.find('`') {
+                    local_paths.push(rest[..end].to_string());
+                }
+            }
+        }
+    }
+    (urls, local_paths)
+}
+
+fn regen_is_h2(s: &str) -> bool {
+    if let Some(rest) = s.strip_prefix("##") {
+        rest.starts_with([' ', '\t'])
+    } else {
+        false
+    }
+}
+
+fn regen_is_h2_provenance(s: &str) -> bool {
+    if let Some(rest) = s.strip_prefix("##") {
+        let rest = rest.trim_start_matches([' ', '\t']);
+        rest.starts_with("Provenance")
+    } else {
+        false
+    }
+}
+
+/// Mirror the Python `(?<![<`])(https://\S+?)(?:[,\s>)]|$)` finditer, then
+/// `.rstrip('.,)')`. Returns bare https tokens NOT immediately preceded by
+/// `<` or a backtick.
+fn regen_bare_https(s: &str) -> Vec<String> {
+    let bytes = s.as_bytes();
+    let mut out = Vec::new();
+    let mut search_from = 0;
+    while let Some(rel) = s[search_from..].find("https://") {
+        let start = search_from + rel;
+        // Negative lookbehind for `<` or backtick.
+        let preceded_bad = start > 0 && (bytes[start - 1] == b'<' || bytes[start - 1] == b'`');
+        // Find the minimal run up to a terminator [,\s>)] or end of string.
+        let tail = &s[start..];
+        let mut end_off = tail.len();
+        for (i, ch) in tail.char_indices() {
+            if i == 0 {
+                continue;
+            }
+            if ch == ',' || ch.is_whitespace() || ch == '>' || ch == ')' {
+                end_off = i;
+                break;
+            }
+        }
+        let token = &tail[..end_off];
+        let trimmed = token.trim_end_matches(['.', ',', ')']);
+        if !preceded_bad && !trimmed.is_empty() {
+            out.push(trimmed.to_string());
+        }
+        search_from = start + 8; // advance past "https://"
+    }
+    out
+}
+
+fn regenerate_cheatsheet_index(args: &[String]) {
+    let mut check_mode = false;
+    let mut repo_root = env::current_dir().unwrap_or_else(|err| {
+        eprintln!("failed to read current dir: {err}");
+        process::exit(2);
+    });
+
+    let mut idx = 0;
+    while idx < args.len() {
+        match args[idx].as_str() {
+            "--check" => check_mode = true,
+            "--repo-root" => {
+                idx += 1;
+                let Some(value) = args.get(idx) else {
+                    eprintln!("--repo-root requires a path");
+                    process::exit(2);
+                };
+                repo_root = PathBuf::from(value);
+            }
+            other => {
+                eprintln!("error: unknown argument: {other}");
+                eprintln!("usage: regenerate-cheatsheet-index.sh [--check]");
+                process::exit(2);
+            }
+        }
+        idx += 1;
+    }
+
+    let cheatsheets_dir = repo_root.join("cheatsheets");
+    let index_file = cheatsheets_dir.join("INDEX.md");
+    if !cheatsheets_dir.is_dir() {
+        eprintln!(
+            "error: cheatsheets directory not found at {}",
+            cheatsheets_dir.display()
+        );
+        process::exit(2);
+    }
+
+    let sources_index = repo_root.join("cheatsheet-sources/INDEX.json");
+    let verify_lookup = if sources_index.is_file() {
+        regen_build_verify_lookup(&repo_root, &cheatsheets_dir, &sources_index)
+    } else {
+        std::collections::HashMap::new()
+    };
+
+    let rendered = regen_render_index(&cheatsheets_dir, &verify_lookup);
+
+    if check_mode {
+        if !index_file.is_file() {
+            eprintln!("check: {} does not exist", index_file.display());
+            process::exit(1);
+        }
+        let current = fs::read_to_string(&index_file).unwrap_or_default();
+        if current != rendered {
+            eprintln!(
+                "check: {} is out of date — run scripts/regenerate-cheatsheet-index.sh",
+                index_file.display()
+            );
+            process::exit(1);
+        }
+        return;
+    }
+
+    let current = fs::read_to_string(&index_file).ok();
+    if current.as_deref() == Some(rendered.as_str()) {
+        println!("INDEX.md unchanged.");
+    } else {
+        if let Err(err) = fs::write(&index_file, &rendered) {
+            eprintln!("error: failed to write {}: {err}", index_file.display());
+            process::exit(1);
+        }
+        println!("INDEX.md regenerated: {}", index_file.display());
+    }
+}
+
+/// Render one cheatsheet file into an optional row (None = deprecated/hidden).
+fn regen_process_file(
+    file: &Path,
+    sub: &str,
+    verify_lookup: &std::collections::HashMap<String, String>,
+) -> Option<RegenRow> {
+    let fname = file.file_name().and_then(|n| n.to_str()).unwrap_or("");
+    let rel = if sub.is_empty() {
+        fname.to_string()
+    } else {
+        format!("{sub}/{fname}")
+    };
+
+    let text = fs::read_to_string(file).unwrap_or_default();
+    let parsed = regen_parse_cheatsheet(&text);
+
+    if parsed.status == "deprecated" {
+        return None;
+    }
+
+    let marker = match parsed.status.as_str() {
+        "current" => "",
+        "stale" => "[STALE]",
+        _ => "[DRAFT]", // draft | none | anything else
+    };
+
+    // Verify marker lookup keyed by cheatsheets/<category>/[sub/]<filename>.
+    let category_path = file
+        .parent()
+        .and_then(|p| p.file_name())
+        .and_then(|n| n.to_str())
+        .unwrap_or("");
+    let category_rel = if sub.is_empty() {
+        format!("cheatsheets/{category_path}/{fname}")
+    } else {
+        format!("cheatsheets/{category_path}/{sub}/{fname}")
+    };
+
+    let mut verify_marker = String::new();
+    if !verify_lookup.is_empty() {
+        // The shell does `grep -F "${category_rel}"` then takes the first
+        // match's field — i.e. a substring match. Reproduce: first key that
+        // contains category_rel (sorted for determinism, matching file order).
+        let mut keys: Vec<String> = verify_lookup.keys().cloned().collect();
+        locale_sort_by(&mut keys, |k| k.clone());
+        if let Some(k) = keys.into_iter().find(|k| k.contains(&category_rel)) {
+            let raw = &verify_lookup[&k];
+            if let Some(sha) = raw.strip_prefix("verified:") {
+                verify_marker = format!(" [verified: {sha}]");
+            } else if raw == "partial-verify" {
+                verify_marker = " [partial-verify]".to_string();
+            }
+        }
+    }
+
+    // Tier badges supersede the legacy verify_marker when tier is set.
+    let tier_marker = match parsed.tier.as_str() {
+        "bundled" => {
+            if !parsed.image_baked_sha256.is_empty() {
+                let prefix: String = parsed.image_baked_sha256.chars().take(8).collect();
+                Some(format!(" [bundled, verified: {prefix}]"))
+            } else {
+                Some(" [bundled, partial-verify]".to_string())
+            }
+        }
+        "distro-packaged" => {
+            if !parsed.package.is_empty() {
+                Some(format!(" [distro-packaged: {}]", parsed.package))
+            } else {
+                Some(" [distro-packaged: MISSING]".to_string())
+            }
+        }
+        "pull-on-demand" => {
+            if parsed.committed_for_project == "true" {
+                Some(" [pull-on-demand: project-committed]".to_string())
+            } else {
+                Some(" [pull-on-demand: stub]".to_string())
+            }
+        }
+        _ => None,
+    };
+    if let Some(tm) = tier_marker {
+        verify_marker = tm;
+    }
+
+    let description = if parsed.description.is_empty() {
+        parsed.title.clone()
+    } else {
+        parsed.description.clone()
+    };
+    let desc = regen_truncate_desc(&description, 80);
+
+    Some(RegenRow {
+        rel,
+        marker: marker.to_string(),
+        desc: format!("{desc}{verify_marker}"),
+    })
+}
+
+/// Sort `items` by the locale collation that the system `sort` binary uses
+/// (the shell pipes `find` output through `sort`/`sort -z`). We defer to the
+/// real `sort` binary so the result is byte-for-byte identical to the shell
+/// regardless of how glibc collation orders punctuation like `-` vs `.`. The
+/// `key` closure yields the string `sort` would see for each item. Falls back
+/// to a stable Rust sort if the `sort` binary is unavailable.
+fn locale_sort_by<T, F>(items: &mut Vec<T>, key: F)
+where
+    T: Clone,
+    F: Fn(&T) -> String,
+{
+    use std::io::Write;
+    if items.len() < 2 {
+        return;
+    }
+    // Map key -> list of items (handles duplicate keys deterministically).
+    let mut buckets: std::collections::HashMap<String, std::collections::VecDeque<T>> =
+        std::collections::HashMap::new();
+    let mut input = Vec::new();
+    for item in items.iter() {
+        let k = key(item);
+        input.extend_from_slice(k.as_bytes());
+        input.push(0);
+        buckets.entry(k).or_default().push_back(item.clone());
+    }
+
+    let child = std::process::Command::new("sort")
+        .arg("-z")
+        .stdin(std::process::Stdio::piped())
+        .stdout(std::process::Stdio::piped())
+        .spawn();
+
+    let Ok(mut child) = child else {
+        // Fallback: byte-wise sort by key.
+        items.sort_by(|a, b| key(a).cmp(&key(b)));
+        return;
+    };
+    if let Some(mut stdin) = child.stdin.take() {
+        let _ = stdin.write_all(&input);
+    }
+    let Ok(output) = child.wait_with_output() else {
+        items.sort_by(|a, b| key(a).cmp(&key(b)));
+        return;
+    };
+    if !output.status.success() {
+        items.sort_by(|a, b| key(a).cmp(&key(b)));
+        return;
+    }
+
+    let mut sorted: Vec<T> = Vec::with_capacity(items.len());
+    for part in output.stdout.split(|&b| b == 0) {
+        if part.is_empty() {
+            continue;
+        }
+        let k = String::from_utf8_lossy(part).to_string();
+        if let Some(bucket) = buckets.get_mut(&k) {
+            if let Some(item) = bucket.pop_front() {
+                sorted.push(item);
+            }
+        }
+    }
+    // Safety: only replace if we recovered every item.
+    if sorted.len() == items.len() {
+        *items = sorted;
+    } else {
+        items.sort_by(|a, b| key(a).cmp(&key(b)));
+    }
+}
+
+/// Build the full INDEX.md text (post canonicalisation), matching the shell.
+fn regen_render_index(
+    cheatsheets_dir: &Path,
+    verify_lookup: &std::collections::HashMap<String, String>,
+) -> String {
+    let mut out = String::new();
+    out.push_str(REGEN_INDEX_HEADER);
+    out.push('\n');
+
+    // Categories = immediate subdirectories, sorted by name.
+    let mut categories: Vec<PathBuf> = Vec::new();
+    if let Ok(entries) = fs::read_dir(cheatsheets_dir) {
+        for entry in entries.flatten() {
+            if entry.path().is_dir() {
+                categories.push(entry.path());
+            }
+        }
+    }
+    // Categories: `find -printf '%f\n' | sort` — sort by basename using the
+    // system locale collation (matches the committed INDEX.md exactly).
+    locale_sort_by(&mut categories, |p| {
+        p.file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("")
+            .to_string()
+    });
+
+    for category in &categories {
+        let category_name = category
+            .file_name()
+            .and_then(|n| n.to_str())
+            .unwrap_or("");
+        let mut rows: Vec<RegenRow> = Vec::new();
+
+        // Files directly under cheatsheets/<category>/, sorted by path.
+        let mut direct: Vec<PathBuf> = Vec::new();
+        if let Ok(entries) = fs::read_dir(category) {
+            for entry in entries.flatten() {
+                let p = entry.path();
+                if p.is_file() && p.extension().and_then(|e| e.to_str()) == Some("md") {
+                    direct.push(p);
+                }
+            }
+        }
+        // `find ... -print0 | sort -z` sorts by full path with locale collation.
+        locale_sort_by(&mut direct, |p| p.display().to_string());
+        for file in &direct {
+            if let Some(row) = regen_process_file(file, "", verify_lookup) {
+                rows.push(row);
+            }
+        }
+
+        // Files one level deeper: cheatsheets/<category>/<sub>/*.md, subdirs sorted.
+        let mut subdirs: Vec<PathBuf> = Vec::new();
+        if let Ok(entries) = fs::read_dir(category) {
+            for entry in entries.flatten() {
+                if entry.path().is_dir() {
+                    subdirs.push(entry.path());
+                }
+            }
+        }
+        locale_sort_by(&mut subdirs, |p| p.display().to_string());
+        for subdir in &subdirs {
+            let sub = subdir.file_name().and_then(|n| n.to_str()).unwrap_or("");
+            let mut subfiles: Vec<PathBuf> = Vec::new();
+            if let Ok(entries) = fs::read_dir(subdir) {
+                for entry in entries.flatten() {
+                    let p = entry.path();
+                    if p.is_file() && p.extension().and_then(|e| e.to_str()) == Some("md") {
+                        subfiles.push(p);
+                    }
+                }
+            }
+            locale_sort_by(&mut subfiles, |p| p.display().to_string());
+            for file in &subfiles {
+                if let Some(row) = regen_process_file(file, sub, verify_lookup) {
+                    rows.push(row);
+                }
+            }
+        }
+
+        // Section header.
+        out.push_str(&format!("## {category_name}\n"));
+        out.push('\n');
+        if rows.is_empty() {
+            out.push_str("(empty)\n");
+        } else {
+            // Compute longest "<path> [MARKER]" so descriptions align.
+            let mut max_left = 0usize;
+            for row in &rows {
+                let width = if row.marker.is_empty() {
+                    row.rel.chars().count()
+                } else {
+                    row.rel.chars().count() + 1 + row.marker.chars().count()
+                };
+                if width > max_left {
+                    max_left = width;
+                }
+            }
+            if max_left < 32 {
+                max_left = 32;
+            }
+            for row in &rows {
+                let left = if row.marker.is_empty() {
+                    row.rel.clone()
+                } else {
+                    format!("{} {}", row.rel, row.marker)
+                };
+                // printf '- %-*s — %s\n' — left-justify to max_left (char count).
+                let pad = max_left.saturating_sub(left.chars().count());
+                out.push_str(&format!("- {left}{} — {}\n", " ".repeat(pad), row.desc));
+            }
+        }
+        out.push('\n');
+    }
+
+    // Canonicalise: collapse runs of blank lines, drop trailing blank lines.
+    regen_canonicalize(&out)
+}
+
+/// Port of the awk blank-line canonicaliser: emit non-blank lines verbatim;
+/// blank lines are buffered and only emitted (as a single run separator) when
+/// a subsequent non-blank line appears — so trailing blanks are dropped and
+/// internal blank runs collapse to exactly the count that precedes content...
+/// Actually the awk prints `blank` empty lines before each non-blank line,
+/// where `blank` is the number of consecutive blanks just seen. Reproduce
+/// exactly.
+fn regen_canonicalize(text: &str) -> String {
+    let mut result = String::new();
+    let mut blank: usize = 0;
+    for line in text.lines() {
+        if line.is_empty() {
+            blank += 1;
+            continue;
+        }
+        for _ in 0..blank {
+            result.push('\n');
+        }
+        blank = 0;
+        result.push_str(line);
+        result.push('\n');
+    }
+    result
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -2431,5 +4465,91 @@ trailing"#;
         // Digits without a trailing % do not match the grep pattern.
         assert_eq!(parse_completeness_pct("Completeness: 9 / 12"), None);
         assert_eq!(parse_completeness_pct("no completeness here"), None);
+    }
+}
+
+#[cfg(unix)]
+fn run_in_pty_cmd(args: &[String]) {
+    use nix::pty::{forkpty, ForkptyResult};
+    use nix::unistd::execvp;
+    use std::ffi::CString;
+    use std::os::unix::io::AsRawFd;
+    use std::os::unix::io::FromRawFd;
+    use std::io::{self, Read, Write};
+
+    if args.is_empty() {
+        eprintln!("error: run-in-pty requires a command");
+        process::exit(2);
+    }
+
+    let program = CString::new(args[0].as_bytes()).unwrap();
+    let c_args: Vec<CString> = args
+        .iter()
+        .map(|s| CString::new(s.as_bytes()).unwrap())
+        .collect();
+
+    match unsafe { forkpty(None, None) } {
+        Ok(ForkptyResult::Parent { child, master }) => {
+            let master_fd = master.as_raw_fd();
+            let mut master_file = unsafe { std::fs::File::from_raw_fd(master_fd) };
+            let mut stdout = io::stdout();
+            let mut buf = [0u8; 4096];
+            
+            loop {
+                match master_file.read(&mut buf) {
+                    Ok(0) => break, // EOF
+                    Ok(n) => {
+                        let _ = stdout.write_all(&buf[..n]);
+                        let _ = stdout.flush();
+                    }
+                    Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(std::time::Duration::from_millis(10));
+                    }
+                    Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                    Err(_) => break, // EIO on child exit
+                }
+            }
+            
+            use nix::sys::wait::waitpid;
+            match waitpid(child, None) {
+                Ok(nix::sys::wait::WaitStatus::Exited(_, code)) => {
+                    process::exit(code);
+                }
+                Ok(nix::sys::wait::WaitStatus::Signaled(_, sig, _)) => {
+                    process::exit(128 + sig as i32);
+                }
+                _ => {
+                    process::exit(1);
+                }
+            }
+        }
+        Ok(ForkptyResult::Child) => {
+            let err = execvp(&program, &c_args);
+            eprintln!("failed to exec: {err:?}");
+            process::exit(1);
+        }
+        Err(err) => {
+            eprintln!("forkpty failed: {err:?}");
+            process::exit(1);
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn run_in_pty_cmd(args: &[String]) {
+    if args.is_empty() {
+        eprintln!("error: run-in-pty requires a command");
+        process::exit(2);
+    }
+    let mut cmd = process::Command::new(&args[0]);
+    cmd.args(&args[1..]);
+    match cmd.status() {
+        Ok(status) => {
+            process::exit(status.code().unwrap_or(1));
+        }
+        Err(err) => {
+            eprintln!("failed to run command: {err:?}");
+            process::exit(1);
+        }
     }
 }

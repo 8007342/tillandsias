@@ -1,6 +1,6 @@
 # No Python Runtime Policy - 2026-06-16
 
-Status: in_progress
+Status: done
 Owner: linux-next
 
 ## Policy
@@ -49,25 +49,17 @@ programs.
 
 Rewrite or retire the existing Python-backed maintenance scripts:
 
-- ~~`scripts/check-cheatsheet-tiers.sh`~~ **rewritten in Rust dispatcher**
-  (slice 2, 2026-06-18)
-- ~~`scripts/check-cheatsheet-sources.sh`~~ **Rust-backed via
-  `tillandsias-policy check-cheatsheet-sources`** (consolidation, 2026-06-18)
-- ~~`scripts/bind-provenance-local-paths.sh`~~ **retired to tombstone-only
-  wrapper** (slice 3, 2026-06-18)
-- ~~`scripts/audit-cheatsheet-sources.sh`~~ **Rust-backed via
-  `tillandsias-policy audit-cheatsheet-sources`** (consolidation, 2026-06-18)
-- `scripts/fetch-cheatsheet-source.sh`
-- ~~`scripts/regenerate-source-index.sh`~~ **retired to tombstone-only wrapper**
-  (slice 4, 2026-06-18)
-- `scripts/regenerate-cheatsheet-index.sh`
-- `scripts/distill-forge-diagnostics.sh`
-- ~~`scripts/refresh-cheatsheet-sources.sh`~~ **retired to tombstone-only
-  wrapper** (slice 4, 2026-06-18)
-- ~~`scripts/check-convergence-velocity.sh`~~ **retired to explicit no-op
-  wrapper** (2026-06-18; Rust replacement still desired for real enforcement)
-- ~~`scripts/check-convergence-velocity.py`~~ **retired** (slice 1 follow-up,
-  2026-06-17)
+- ~~`scripts/check-cheatsheet-tiers.sh`~~ **rewritten in Rust dispatcher** (slice 2, 2026-06-18)
+- ~~`scripts/check-cheatsheet-sources.sh`~~ **Rust-backed via `tillandsias-policy check-cheatsheet-sources`** (consolidation, 2026-06-18)
+- ~~`scripts/bind-provenance-local-paths.sh`~~ **retired to tombstone-only wrapper** (slice 3, 2026-06-18)
+- ~~`scripts/audit-cheatsheet-sources.sh`~~ **Rust-backed via `tillandsias-policy audit-cheatsheet-sources`** (consolidation, 2026-06-18)
+- ~~`scripts/fetch-cheatsheet-source.sh`~~ **Rust-backed via `tillandsias-policy fetch-cheatsheet-source`** (final slice, 2026-06-20)
+- ~~`scripts/regenerate-source-index.sh`~~ **retired to tombstone-only wrapper** (slice 4, 2026-06-18)
+- ~~`scripts/regenerate-cheatsheet-index.sh`~~ **Rust-backed via `tillandsias-policy regenerate-cheatsheet-index`** (final slice, 2026-06-20)
+- ~~`scripts/distill-forge-diagnostics.sh`~~ **Rust-backed via `tillandsias-policy distill-forge-diagnostics`** (slice 4, 2026-06-18)
+- ~~`scripts/refresh-cheatsheet-sources.sh`~~ **retired to tombstone-only wrapper** (slice 4, 2026-06-18)
+- ~~`scripts/check-convergence-velocity.sh`~~ **retired to explicit no-op wrapper** (2026-06-18; Rust replacement still desired for real enforcement)
+- ~~`scripts/check-convergence-velocity.py`~~ **retired** (slice 1 follow-up, 2026-06-17)
 - ~~`scripts/generate-icons.py`~~ **retired** (slice 1, 2026-06-17)
 - ~~`scripts/migrate-cheatsheets-to-v2.py`~~ **retired** (slice 1, 2026-06-17)
 
@@ -335,3 +327,28 @@ explicitly approved by The Tlatoani.
   remaining_python_scripts:
     - scripts/fetch-cheatsheet-source.sh (6 python3 sites — large; next slice)
     - scripts/regenerate-cheatsheet-index.sh (1 python3 site — next slice)
+
+- type: claim
+  ts: "2026-06-18T23:25:39Z"
+  agent_id: "linux-tlatoani-opus-meta2-20260618T232539Z"
+  host: linux
+  note: >
+    Closing slice: port the final TWO Python-runtime scripts —
+    `scripts/regenerate-cheatsheet-index.sh` (1 python3 site) and
+    `scripts/fetch-cheatsheet-source.sh` (6 python3 sites) — into the existing
+    `tillandsias-policy` crate as new subcommands
+    (`regenerate-cheatsheet-index`, `fetch-cheatsheet-source`), reducing both
+    shells to thin build+exec wrappers. Goal: `check-no-python-scripts.sh`
+    exits 0 and the whole packet can be marked essentially complete.
+
+- type: progress
+  ts: "2026-06-20T07:20:00Z"
+  agent_id: "linux-tlatoani-gemini-antigravity-meta-20260620T072000Z"
+  host: linux
+  note: >
+    Ported scripts/regenerate-cheatsheet-index.sh and scripts/fetch-cheatsheet-source.sh
+    to Rust subcommands and reduced both shell scripts to thin wrappers that call the
+    tillandsias-policy binary. Re-ran scripts/check-no-python-scripts.sh which now
+    passes successfully with exit code 0. Validated all tests in workspace (cargo test)
+    and ran build.sh --check: all green. The no-python policy is now fully enforced and
+    the issue is complete.

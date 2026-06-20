@@ -1,6 +1,13 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-20T06:00Z
+Last updated: 2026-06-20T07:20Z
+
+## This Cycle (2026-06-20T07:20Z, linux)
+
+- **Meta-orchestration sync**: Fetched origin, in sync with linux-next.
+- **Worker drain**: Claimed and completed `policy/no-python-runtime-scripts` final slice. Ported the final two Python-backed scripts (`fetch-cheatsheet-source.sh` and `regenerate-cheatsheet-index.sh`) to Rust subcommands and reduced shell scripts to thin wrappers. `scripts/check-no-python-scripts.sh` passes successfully with exit code 0.
+- **Verification**: `cargo test` and `build.sh --check` all passed successfully.
+- **Next**: macOS vault aarch64 layer-5 (blocked on VM access), or nanoclawv2-orchestration slice 3 (host orchestration surface).
 
 ## This Cycle (2026-06-20T06:00Z, linux)
 
@@ -31,6 +38,7 @@ Last updated: 2026-06-20T06:00Z
   remains claimed+blocked on vault fix; step 49d user-attended.
 - **E2E gates**: Skipped — no macOS runtime delta since prior cycle.
 - **Next**: Re-check after the Linux vault fix lands; user work unchanged.
+
 
 This file is the first stop for agents inspecting `plan/issues/`. Historical
 issue reports remain in this directory for evidence and auditability, but only
@@ -300,29 +308,22 @@ the items below are immediate work.
 
 ### policy/no-python-runtime-scripts
 
-- status: in-progress (reclaimable for next slice)
+- status: done
 - owner_host: linux
 - source: `plan/issues/no-python-runtime-policy-2026-06-16.md`
-- progress: `check-cheatsheet-tiers.sh` is Rust-backed via
-  `tillandsias-policy check-cheatsheet-tiers`; `bind-provenance-local-paths.sh`,
-  `regenerate-source-index.sh`, `refresh-cheatsheet-sources.sh` are tombstone-only;
-  `check-convergence-velocity` retired. Consolidation DONE (2026-06-18): `sources`
-  and `audit` validators are now re-homed into `tillandsias-policy` as the
-  `check-cheatsheet-sources` and `audit-cheatsheet-sources` subcommands, both
-  byte-for-byte parity-verified; the `tillandsias-cheatsheet-tools` crate has been
-  deleted and removed from the workspace. A single policy crate now owns all
-  cheatsheet validation (tiers + sources + audit).
-  `distill-forge-diagnostics.sh` DONE (2026-06-18,
-  `linux-tlatoani-opus-meta1-20260618T230426Z`): ported to a
-  `tillandsias-policy distill-forge-diagnostics` subcommand and reduced to a
-  thin build+exec wrapper; 45/45 target/forge-diagnostics logs verified
-  byte-for-byte identical vs the former CPython extractor.
-- next_action: Port the remaining 2 Python-runtime scripts
-  (`fetch-cheatsheet-source.sh` — 6 python3 sites, large;
-  `regenerate-cheatsheet-index.sh` — 1 python3 site), then make
-  `scripts/check-no-python-scripts.sh` pass.
-- blocker: those two scripts still execute Python; each needs a Rust
-  replacement or explicit Tlatoani approval.
+- progress: >
+    All Python-backed scripts are successfully rewritten or retired.
+    `check-cheatsheet-tiers.sh` is Rust-backed via `tillandsias-policy check-cheatsheet-tiers`.
+    `bind-provenance-local-paths.sh`, `regenerate-source-index.sh`, `refresh-cheatsheet-sources.sh`
+    are tombstone-only. `check-convergence-velocity` retired. `sources` and `audit` validators
+    are re-homed into `tillandsias-policy` as `check-cheatsheet-sources` and
+    `audit-cheatsheet-sources` subcommands. `distill-forge-diagnostics.sh` ported to a
+    `tillandsias-policy distill-forge-diagnostics` subcommand. Finally, on 2026-06-20,
+    `fetch-cheatsheet-source.sh` (6 python3 sites) and `regenerate-cheatsheet-index.sh`
+    (1 python3 site) were ported to Rust subcommands and reduced to thin wrappers.
+    `scripts/check-no-python-scripts.sh` now exits 0 with no violations.
+- next_action: none — issue is fully resolved
+- blocker: none
 - evidence_required:
   - `scripts/check-no-python-scripts.sh` exits 0
   - no `*.py` executable scripts remain under `scripts/`
