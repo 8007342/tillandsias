@@ -1,0 +1,38 @@
+# Secure Agent Forge: Integration & Development Plan
+
+This plan details the integration of OneCLI and ZeroClaw into a secure, Rust-based, Fedora/Podman local enclave environment. Work is divided into well-defined "Packets" for automatic pickup by Linux host workers.
+
+## Meta-Orchestration Directive
+**Skill: `/meta-orchestration` (Reduction Engine)**
+When executing any packet, if the problem becomes too ambiguous or uncertain, the worker MUST invoke the `/meta-orchestration` skill. This acts as a reduction engine to split the ambiguous problem into a dedicated research phase and smaller, well-defined development work packets before proceeding.
+
+---
+
+## Architecture: Layered Fedora 44 Container Strategy
+To ensure incredibly fast installation and development updates, the container images will be structured in three layers:
+1. **Layer 1 (Base):** A clean `fedora:44` base image populated with essential tools.
+2. **Layer 2 (Engine):** The `zeroclaw` Rust engine image, built on top of Layer 1.
+3. **Layer 3 (Forge):** The custom Forge environment, built on top of the Layer 2 ZeroClaw image.
+
+---
+
+## Work Packets
+
+### Packet 1: Core Container Layering & Podman Migration
+**Objective:** Establish the Fedora 44 container pipeline and migrate to ZeroClaw.
+*   **Task 1.1:** Create `Containerfile.base` using `fedora:44` and install base OS dependencies and networking tools.
+*   **Task 1.2:** Create `Containerfile.zeroclaw` (FROM the base image) that compiles and installs the ZeroClaw Rust binary.
+*   **Task 1.3:** Create `Containerfile.forge` (FROM the zeroclaw image) to set up the Forge specific environment and dependencies.
+*   **Task 1.4:** Update all orchestrator scripts to utilize `podman` in rootless mode instead of `docker`.
+
+### Packet 2: Enclave & OneCLI Security Hardening
+**Objective:** Wrap the OneCLI proxy in a hardware-backed enclave with TLS+CA and E2E signage.
+*   **Task 2.1:** Compile and deploy the OneCLI Rust core inside the hardware-backed enclave.
+*   **Task 2.2:** Implement an mTLS client in OneCLI. It must present a hardware-attested, CA-signed X.509 certificate to the central Vault to request secrets securely.
+*   **Task 2.3:** Implement E2E Signage. Add an egress middleware to OneCLI that cryptographically signs all outgoing payload requests using the enclave's private key.
+
+### Packet 3: Local Inference & Air-Gapped IPC
+**Objective:** Secure local communication and model integration without network egress.
+*   **Task 3.1:** Implement and verify ZeroClaw's SQLite-based file-polling (`inbound.db`/`outbound.db`) via Podman volumes for zero-egress IPC.
+*   **Task 3.2:** Develop a Rust-based MCP server on the host connected to local inference containers.
+*   **Task 3.3:** Map the host MCP server into the Fedora 44 Forge container via a local Unix socket (or strict localhost port-forward) to allow the Forge to list, find, and load models securely.
