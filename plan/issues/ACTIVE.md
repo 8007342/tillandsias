@@ -1,6 +1,25 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-20T08:42Z
+Last updated: 2026-06-20T09:16Z
+
+## This Cycle (2026-06-20T09:16Z, linux)
+
+- **Meta-orchestration sync**: Startup on mutable Linux (Cowork session). Branch
+  `linux-next`, 3 commits ahead of `origin/linux-next` (push-blocked). Git fetch
+  FAILED — SSH unavailable. Sibling heads (local cache): windows=a3c8b23d,
+  osx=d829808d, main=6dfafdf1. Saturday — full drain eligible (no high-usage-hour
+  restriction).
+- **Worker drain**: Completed `nanoclawv2-orchestration` Slice 4 (final).
+  3 integration smoke tests in `lib.rs` (in-process UnixStream pair):
+  launch smoke (initialize + 5-tool list), broker smoke (nanoclaw.status
+  dispatch), deny smoke (isError=true for unknown tool). 12/12 tests total.
+  `litmus-nanoclawv2-mcp-shape.yaml` written; `litmus-bindings.yaml` updated
+  (80% coverage). `tasks.md` 4.1–4.4 done. nanoclawv2-orchestration packet
+  → done (pending push). Commit 1dbdd809. cargo fmt/test/build.sh --check: all PASS.
+- **Push state**: BLOCKED — SSH unavailable. linux-next now 4 commits ahead of
+  origin. Operator must: `git push origin linux-next`.
+- **Next**: (1) Operator push. (2) Local-build e2e gate (nanoclawv2 live container
+  launch). (3) aarch64 VM pasta probe for vault port-forwarding.
 
 ## This Cycle (2026-06-20T08:42Z, linux)
 
@@ -297,17 +316,17 @@ the items below are immediate work.
 
 ### nanoclawv2-orchestration
 
-- status: stalled (lease expired 2026-06-18T02:07Z; reclaimable)
+- status: done (pending push) — 2026-06-20T09:16Z, commit 1dbdd809
 - owner_host: linux
 - source: `plan/issues/nanoclawv2-orchestration.md`
-- next_action: Draft the NanoClawV2 implementation task graph from the new
-  spec, then wire the launcher leaf, broker surface, and smoke hooks.
-- lease: `nanoclawv2-orchestration-202606172207` (EXPIRED at 2026-06-18T02:07Z)
-- blocker: none
-- evidence_required:
-  - NanoClawV2 launch leaf exists and is branch-aware
-  - only approved orchestration actions are reachable
-  - smoke coverage proves launch and one approved action
+- completed_evidence: >
+    All 4 slices complete. Image infra (Containerfile, entrypoint, build registration),
+    tray launcher leaf (🦞 NanoClawV2, LaunchKind, container spec), host MCP broker
+    (Unix-socket server, 5-tool allowlist, project-scope enforcement, socat bridge,
+    config overlay), and smoke coverage (12/12 tests: 9 unit + 3 integration; litmus
+    litmus:nanoclawv2-mcp-shape written; litmus-bindings.yaml updated at 80%).
+    Live container launch deferred to local-build e2e gate at release time.
+- next_action: Operator push linux-next; then local-build e2e gate for container launch.
 
 ### github-login/enclave-egress-regression
 

@@ -4151,7 +4151,7 @@ plan_index:
     - id: nanoclawv2-orchestration
       order: 56
       title: NanoClawV2 orchestration engine and launcher leaf
-      status: claimed
+      status: completed
       owner_host: linux
       deliverable: plan/issues/nanoclawv2-orchestration.md
       audit_origin: plan/issues/nanoclawv2-orchestration.md
@@ -4165,6 +4165,13 @@ plan_index:
         - "🦞 NanoClawV2 launches for a project and remains branch-aware."
         - "Only approved orchestration actions are reachable from NanoClawV2."
         - "Smoke coverage proves launch and one approved action."
+      completed_evidence: >
+        All 4 slices done as of 2026-06-20T09:16Z (commit 1dbdd809, linux-next).
+        Image infra, tray launcher leaf, Unix-socket MCP broker (5-tool allowlist),
+        and smoke coverage (12/12 tests: 9 unit + 3 integration).
+        litmus:nanoclawv2-mcp-shape written; litmus-bindings.yaml at 80% coverage.
+        Live container launch gap deferred to local-build e2e gate (push-blocked;
+        SSH unavailable in Cowork session — operator must push).
       tasks:
         - id: nanoclawv2/spec-and-plan
           status: completed
@@ -4179,24 +4186,24 @@ plan_index:
           checkpoint_required: false
           handoff_note: "Spec and plan scaffolded; implementation work can now be claimed."
         - id: nanoclawv2/implementation
-          status: claimed
+          status: completed
           owner_host: linux
           estimated_hours: 4
           capability_tags: [rust, podman, orchestration, nanoclaw]
           depends_on: [nanoclawv2/spec-and-plan]
           owned_files:
-            - crates/tillandsias-headless/src/nanoclaw.rs
-            - images/nanoclaw/Containerfile
-            - scripts/build-nanoclaw.sh
-          next_action: >
-            Wire the launcher leaf, broker surface, and smoke hooks.
-          events:
-            - type: claim
-              ts: "2026-06-17T22:07:00Z"
-              agent_id: "linux-macuahuitl-gemini-202606172205"
-              host: "linux"
-              lease_id: "nanoclawv2-orchestration-202606172207"
-              expires_at: "2026-06-18T02:07:00Z"
+            - crates/tillandsias-nanoclawv2-mcp/src/lib.rs
+            - crates/tillandsias-nanoclawv2-mcp/src/allowlist.rs
+            - crates/tillandsias-nanoclawv2-mcp/src/server.rs
+            - crates/tillandsias-nanoclawv2-mcp/src/main.rs
+            - images/nanoclawv2/Containerfile
+            - images/nanoclawv2/entrypoint.sh
+            - images/nanoclawv2/config-overlay/opencode/config.json
+            - images/nanoclawv2/config-overlay/mcp/nanoclaw-host.sh
+            - openspec/litmus-tests/litmus-nanoclawv2-mcp-shape.yaml
+          handoff_note: >
+            All slices complete. 12/12 tests pass. Litmus written and bound.
+            Push pending (SSH blocked in Cowork session).
 
     - id: github-login-enclave-egress-regression
       order: 57

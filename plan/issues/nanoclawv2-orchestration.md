@@ -10,17 +10,18 @@
   - add a narrow host control surface for approved orchestration actions
   - add smoke coverage for launch + one approved action
 - current_progress: >
-    Slice 1 (image infra), Slice 2 (tray launcher leaf), and Slice 3 (host
-    orchestration surface) complete. New crate `tillandsias-nanoclawv2-mcp`
-    implements the Unix-socket MCP server with a 5-tool allowlist
-    (advance_work, build, service_launch, forge_delegate, status) and
-    project-scope enforcement. Tray `launch_nanoclawv2` spawns the server,
-    derives a per-project socket, bind-mounts it into the container, and
-    passes `TILLANDSIAS_NANOCLAW_SOCKET`. Config overlay wired with
-    `nanoclaw-host.sh` socat bridge and locked OpenCode config.
-    9/9 allowlist unit tests pass; `./build.sh --check` PASS.
-- next_action: Slice 4 — smoke coverage (launch smoke + broker smoke for one
-  approved action + published-release extension).
+    ALL SLICES COMPLETE (1–4). Slice 4 (2026-06-20T09:04Z): 3 integration
+    smoke tests added in lib.rs — launch_smoke_initialize_and_tools_list
+    (initialize handshake + 5-tool list), broker_smoke_status_action_returns_tool_result
+    (nanoclaw.status end-to-end), broker_smoke_denied_tool_returns_tool_error_not_rpc_error
+    (deny path returns isError=true, not RPC error). 12/12 tests pass total.
+    litmus-nanoclawv2-mcp-shape.yaml written (pre-build, 7 critical_path steps).
+    litmus-bindings.yaml updated (80% coverage; live container gap deferred to
+    e2e gate). tasks.md: all 4.x tasks marked done.
+    cargo fmt PASS; cargo test 12/12 PASS; ./build.sh --check PASS.
+    Commit: 1dbdd809. Push blocked (SSH unavailable in Cowork session).
+- status: done (pending push)
+- next_action: Operator push `git push origin linux-next` (4 commits ahead).
 - events:
   - type: claim
     ts: "2026-06-20T05:56:00Z"
@@ -73,7 +74,9 @@
 - open_questions:
   - whether the image should be named `nanoclaw` or `nanoclawv2` in the
     Containerfile tree while keeping the user-facing label `🦞 NanoClawV2`
-  - Slice 4 smoke coverage still needed before the feature is release-ready
+    (deferred; consistent use of nanoclawv2 throughout all slices — no action needed)
+  - live container launch smoke (requires runtime podman + built image) — deferred
+    to local-build e2e gate at release time (noted in litmus-bindings.yaml gap)
   - type: progress
     ts: "2026-06-20T08:33Z"
     agent_id: "linux-macuahuitl-claude-20260620T0822Z"
@@ -93,3 +96,18 @@
       cargo fmt --all -- --check: PASS. ./build.sh --check: PASS. Transport
       decision: MCP-only via Unix socket (same pattern as browser-mcp). Open
       question on image naming deferred to Slice 4 review.
+  - type: progress
+    ts: "2026-06-20T09:16Z"
+    agent_id: "linux-macuahuitl-claude-20260620T0904Z"
+    host: "linux"
+    lease_id: "nanoclawv2-orchestration-20260620T055600"
+    note: >
+      Slice 4 complete: 3 integration tests in lib.rs (in-process UnixStream
+      pair, no filesystem socket). launch_smoke_initialize_and_tools_list verifies
+      initialize handshake and 5-tool list. broker_smoke_status_action_returns_tool_result
+      proves nanoclaw.status flows through allowlist→execute→envelope path.
+      broker_smoke_denied_tool_returns_tool_error_not_rpc_error confirms deny path
+      returns isError=true tool result, not a JSON-RPC error. 12/12 total tests
+      pass. litmus-nanoclawv2-mcp-shape.yaml written (pre-build, 7 steps).
+      litmus-bindings.yaml updated. tasks.md 4.1–4.4 done. Commit 1dbdd809.
+      Push blocked — SSH unavailable in Cowork. linux-next now 4 ahead of origin.

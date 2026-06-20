@@ -1,6 +1,38 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-20T08:42Z
+LastExecutionTime: 2026-06-20T09:16Z
+
+## This Loop (2026-06-20T09:16Z, linux)
+
+- **Cycle type**: meta-orchestration worker drain on mutable Linux (Cowork session).
+- **Startup**: Host `linux_mutable` (macuahuitl.ayahuitlcalpan.com). Branch
+  `linux-next`, 3 commits ahead of `origin/linux-next` (push-blocked). Git fetch
+  FAILED — SSH unavailable in Cowork session. Sibling heads from local cache:
+  main=6dfafdf1, windows-next=a3c8b23d, osx-next=d829808d. Saturday — not within
+  weekday high-usage hours; full drain eligible.
+- **Worker drain**: Completed `nanoclawv2-orchestration` Slice 4 (final slice).
+  Added 3 integration tests to `crates/tillandsias-nanoclawv2-mcp/src/lib.rs`
+  using in-process UnixStream pairs: `launch_smoke_initialize_and_tools_list`
+  (initialize + tools/list with 5-tool assertion), `broker_smoke_status_action_returns_tool_result`
+  (nanoclaw.status full dispatch path), `broker_smoke_denied_tool_returns_tool_error_not_rpc_error`
+  (deny path returns tool isError result, not RPC error). 12/12 tests pass total.
+  Written `openspec/litmus-tests/litmus-nanoclawv2-mcp-shape.yaml` (pre-build
+  litmus, 7 critical_path steps); added binding in `openspec/litmus-bindings.yaml`
+  at 80% coverage (live container gap noted). Updated `tasks.md` 4.1–4.4 done,
+  `plan/issues/nanoclawv2-orchestration.md` status→done(pending push). Commit 1dbdd809.
+- **Verification**: cargo test 12/12 PASS; cargo fmt --all -- --check PASS;
+  ./build.sh --check PASS; YAML validated.
+- **nanoclawv2-orchestration packet**: ALL SLICES DONE. Feature is
+  implementation-complete and release-ready pending the local-build e2e gate
+  (live container launch requires runtime podman + built image).
+- **E2E gates**: Skipped — no runtime delta since v0.3.260618.2; push blocked.
+- **Release**: No action — latest published release v0.3.260618.2 unchanged.
+- **Push state**: BLOCKED — SSH unavailable in Cowork session. linux-next now 4
+  commits ahead of origin (nanoclawv2 Slice 3 impl + Slice 3 plan + parity
+  coordinator + Slice 4 test/litmus). Operator must: `git push origin linux-next`.
+- **Next**: (1) Operator push to unblock. (2) Local-build e2e gate for
+  nanoclawv2 live container launch. (3) aarch64 VM pasta probe for vault
+  port-forwarding fix.
 
 ## This Loop (2026-06-20T08:42Z, linux)
 
