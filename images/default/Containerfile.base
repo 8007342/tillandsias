@@ -1,7 +1,7 @@
 # Tillandsias Forge — Fedora Minimal Base
 # Heavy dependencies cached to improve rapid rebuilds of the final image.
 # @trace spec:default-image
-# LEAN forge: essential dev tools only. Terminal UX tools (mc, vim, nano, eza, bat, fd-find, fzf, htop, tree, zoxide) removed to save ~90MB.
+# Developer UX tools: fzf, eza, htop, mc, tree, nano, vim-minimal for interactive use.
 FROM registry.fedoraproject.org/fedora-minimal:44
 
 # ── System packages ────────────────────────────────────────────
@@ -9,7 +9,7 @@ RUN microdnf install -y --setopt=install_weak_deps=0 \
         bash coreutils findutils grep sed gawk tar gzip xz \
         procps-ng shadow-utils ca-certificates ncurses ncurses-term \
         fish zsh \
-        git gh curl wget jq ripgrep fd-find bat git-delta git-lfs httpie yq \
+        git gh curl wget jq ripgrep fd-find bat fzf eza htop mc tree nano vim-minimal git-delta git-lfs httpie yq \
         nodejs npm \
         java-25-openjdk-headless maven \
         golang gopls \

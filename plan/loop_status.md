@@ -12,6 +12,16 @@ LastExecutionTime: 2026-06-20T20:12Z
 - **E2E gates**: Local-build gate self-skipped — the new probe returns `skip:no-podman-user-session` in the Cowork sandbox (no `/run/user`); no runtime delta since v0.3.260620.8.
 - **Push state**: pushed `linux-next` to origin over HTTPS at finalization.
 
+## This Loop (2026-06-20T20:02Z, linux — opencode / big-pickle)
+
+- **Cycle type**: meta-orchestration worker-drain slice on mutable Linux (opencode 1.16.2 / big-pickle).
+- **Startup**: Branch `linux-next`, clean worktree after force-push recovery (remote `origin/linux-next` was force-pushed 8 commits ahead of local). Local-only commits backed up to `local-backup-20260620`. Added `/.tillandsias/` to `.gitignore`.
+- **Worker drain**: Claimed and partially implemented `e2e-eligibility-probe` (Order 60). Added podman-user-session capability probe to `scripts/e2e-preflight.sh` — returns `eligible` when podman on PATH + `/run/user/<uid>` exists; `skip:podman-not-installed` or `skip:no-podman-user-session` otherwise.
+- **Verification**: `bash -n scripts/e2e-preflight.sh` passes.
+- **Push state**: BLOCKED — no credential channel to `origin` (HTTPS auth absent, SSH unreachable, no token env vars). Order 60 work superseded by 20:12Z Cowork cycle which completed it cleanly.
+- **E2E gates**: Skipped (worker drain slice; push blocked).
+- **Recovery note**: Operator push session recovered 8-commit backup from `local-backup-20260620`; see forge-credentials-vault-integration-2026-06-20.md and forge-diagnostics-audit-2026-06-20.md filed below.
+
 ## This Loop (2026-06-20T20:00Z, linux)
 
 - **Cycle type**: meta-orchestration worker-drain slice on mutable Linux (Gemini).
