@@ -10,16 +10,18 @@ LastExecutionTime: 2026-06-20T19:05Z
   Earlier SSH/HTTPS push blocker is cleared.
 - **Coordinator check**: windows-next=a3c8b23d, osx-next=d829808d both ancestors of
   linux-next HEAD. No sibling merge needed.
-- **Worker drain**: No runnable plan work. Closed stale step-58 `future-intentions-drain`
-  (parent + item-7 parity drain subtask) in `plan/index.yaml` to match the closed
-  step file (future_intentions=[]). Parity implementation remains under
-  `macos-in-vm-enclave-provisioning` and the aarch64 vault blocker.
-- **Ledger bug fixed**: removed duplicate `note:` key in step-65 github-login-egress
-  event (silent data loss); moved discovery note to the `discovered` event.
-  `tillandsias-policy validate-yaml plan/index.yaml` → `ok`.
+- **Worker drain**: No runnable plan work. Identified two stale `plan/index.yaml`
+  items — step-58 `future-intentions-drain` open despite its closed step file
+  (future_intentions=[]), and a duplicate `note:` key in step-65's
+  github-login-egress event. Edited both; a concurrent agent committed the
+  identical fixes as `1d6db6dd` before this cycle's commit, so they landed via
+  that commit (now an ancestor of HEAD) rather than `9c8f3f9a`. Validator returns
+  `ok: plan/index.yaml`. Collision logged in
+  `plan/issues/agent-concurrency-collisions-2026-06-20.md`.
+- **Coordinator**: siblings already ancestors of HEAD; no merge or release action.
 - **E2E gates**: Skipped — no podman user session in Cowork sandbox (no `/run/user`).
   No runtime delta since v0.3.260620.7.
-- **Push state**: HTTPS push attempted at finalization (see below).
+- **Push state**: pushed `linux-next` to origin over HTTPS at finalization.
 
 ## This Loop (2026-06-20T18:35Z, linux)
 
