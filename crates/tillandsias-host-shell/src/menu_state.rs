@@ -317,20 +317,31 @@ fn truncate_80(s: &str) -> String {
 /// labels + click IDs into their native menu APIs; they MUST NOT reorder
 /// or filter items.
 ///
-/// ## Top-level item contract (Ready)
+/// ## Top-level item contract (Ready) — login-gated, mirrors the Linux golden
 ///
+/// The body is **auth-gated**: exactly one of `{github-login}` OR the
+/// `{projects + agents + browser}` block is emitted, never both — matching the
+/// Linux tray's `build_menu` ("Exactly one of {GitHubLogin} OR {~/src, Cloud}").
+/// This keeps the collapsed, short menu the parity policy requires and stops the
+/// tray surfacing project/agent actions before the user has authenticated.
+///
+/// Logged **out** (collapsed) — 4 items:
 /// 1. `status` — disabled, current status line
-/// 2. `local-projects` — submenu of `~/src` entries (or `(no projects yet)` placeholder when empty)
-/// 3. `cloud-projects` — submenu capped at `MAX_CLOUD_PROJECTS_IN_MENU` with an overflow leaf when overflowing
+/// 2. `github-login` — `🔑 GitHub Login` leaf
+/// 3. `version` — disabled footer
+/// 4. `quit`
+///
+/// Logged **in** (expanded) — 8 items:
+/// 1. `status`
+/// 2. `local-projects` — submenu of `~/src` entries (or placeholder when empty)
+/// 3. `cloud-projects` — submenu capped at `MAX_CLOUD_PROJECTS_IN_MENU` + overflow leaf
 /// 4. `agents` — submenu with three checkmark items (Claude/Codex/OpenCode)
-/// 5. `observatorium` — leaf (disabled with reason when `gui_passthrough_available == false` or target=MacosTray)
+/// 5. `observatorium` — leaf (disabled when `gui_passthrough_available == false` or target=MacosTray)
 /// 6. `opencode-web` — leaf (same disabled rule)
-/// 7. `github-login` — leaf (`🔑 GitHub Login` when logged-out; `GitHub: <user>` disabled when logged-in)
+/// 7. `version` — disabled footer
+/// 8. `quit`
 ///
-/// The `version` and `quit` items follow as a trailing footer, so the
-/// `Ready` menu has exactly 9 top-level items.
-///
-/// @trace spec:host-shell-architecture, spec:windows-native-tray
+/// @trace spec:host-shell-architecture, spec:windows-native-tray, spec:macos-native-tray
 pub fn build(state: &MenuState) -> MenuStructure {
     let mut items = Vec::new();
 
@@ -341,23 +352,26 @@ pub fn build(state: &MenuState) -> MenuStructure {
         "current status",
     ));
 
-    // (2) Local projects — submenu.
-    items.push(build_local_projects(state));
-
-    // (3) Cloud projects — submenu (cap + overflow).
-    items.push(build_cloud_projects(state));
-
-    // (4) Agents — submenu with three checkmark items.
-    items.push(build_agents(state));
-
-    // (5) Observatorium — leaf (gated by GUI passthrough or macOS v2).
-    items.push(build_observatorium(state));
-
-    // (6) OpenCode Web — same gating.
-    items.push(build_opencode_web(state));
-
-    // (7) GitHub login.
-    items.push(build_github_login(state));
+    // (2) Auth-gated body. Mirror the Linux golden `build_menu`: emit exactly
+    //     one of {GitHub Login} OR {projects + agents + browser items}, never
+    //     both, so the logged-out menu collapses to a single login leaf.
+    match &state.login {
+        GithubLoginState::LoggedOut => {
+            items.push(MenuItem::leaf(ids::GITHUB_LOGIN, "\u{1F511} GitHub Login"));
+        }
+        GithubLoginState::LoggedIn { .. } => {
+            // Local projects — submenu.
+            items.push(build_local_projects(state));
+            // Cloud projects — submenu (cap + overflow).
+            items.push(build_cloud_projects(state));
+            // Agents — submenu with three checkmark items.
+            items.push(build_agents(state));
+            // Observatorium — leaf (gated by GUI passthrough or macOS v2).
+            items.push(build_observatorium(state));
+            // OpenCode Web — same gating.
+            items.push(build_opencode_web(state));
+        }
+    }
 
     // Footer.
     items.push(MenuItem::disabled(
@@ -467,17 +481,6 @@ fn build_opencode_web(state: &MenuState) -> MenuItem {
     }
 }
 
-fn build_github_login(state: &MenuState) -> MenuItem {
-    match &state.login {
-        GithubLoginState::LoggedOut => MenuItem::leaf(ids::GITHUB_LOGIN, "\u{1F511} GitHub Login"),
-        GithubLoginState::LoggedIn { handle } => MenuItem::disabled(
-            ids::GITHUB_LOGIN,
-            format!("GitHub: {}", handle),
-            "logged in",
-        ),
-    }
-}
-
 fn build_project_submenu(scope: &str, project: &ProjectEntry, podman_ready: bool) -> MenuItem {
     let id = format!("project.{}.{}", scope, project.name);
     let attach_id = format!("{}.attach", id);
@@ -509,9 +512,12 @@ mod tests {
 
     /// @trace spec:host-shell-architecture, spec:windows-native-tray
     ///
-    /// Build a `MenuState` with 5 local + 22 cloud projects and assert the
-    /// resulting `MenuStructure` matches the documented parity contract:
-    /// - exactly 9 top-level items (7 contract items + version + quit footer)
+    /// Build a `MenuState` with 5 local + 22 cloud projects (logged-in) and
+    /// assert the resulting `MenuStructure` matches the login-gated parity
+    /// contract:
+    /// - exactly 8 top-level items when authenticated (status + 5-item body +
+    ///   version + quit footer); the `github-login` item is mutually exclusive
+    ///   with the project body and therefore absent here
     /// - cloud submenu caps at `MAX_CLOUD_PROJECTS_IN_MENU` + 1 overflow leaf
     /// - agent submenu has 3 items (Claude/Codex/OpenCode)
     #[test]
@@ -551,8 +557,9 @@ mod tests {
             other => panic!("expected MenuStructure::Ready, got {other:?}"),
         };
 
-        // 7 contract items + version + quit footer = 9 top-level items.
-        assert_eq!(items.len(), 9, "top-level item count");
+        // status + 5-item authed body + version + quit footer = 8 top-level
+        // items. `github-login` is mutually exclusive with the project body.
+        assert_eq!(items.len(), 8, "top-level item count (authenticated)");
 
         let actual_ids: Vec<&str> = items.iter().map(|i| i.id.as_str()).collect();
         assert_eq!(
@@ -564,11 +571,14 @@ mod tests {
                 ids::AGENTS,
                 ids::OBSERVATORIUM,
                 ids::OPENCODE_WEB,
-                ids::GITHUB_LOGIN,
                 ids::VERSION,
                 ids::QUIT,
             ],
-            "top-level IDs must follow the parity contract",
+            "top-level IDs must follow the login-gated parity contract",
+        );
+        assert!(
+            !actual_ids.contains(&ids::GITHUB_LOGIN),
+            "github-login must NOT appear alongside the project body",
         );
 
         // Local projects: 5 children, each a submenu with attach + maintenance.
@@ -608,16 +618,53 @@ mod tests {
         // gui_passthrough_available && target=WindowsTray.
         assert!(items[4].enabled);
         assert!(items[5].enabled);
+    }
 
-        // GitHub login: "GitHub: tlatoani" (disabled).
-        assert!(!items[6].enabled);
-        assert!(items[6].label.contains("tlatoani"));
+    /// @trace spec:host-shell-architecture, spec:macos-native-tray.ui.menu-parity@v1
+    ///
+    /// Logged-out collapses to exactly {status, github-login, version, quit} —
+    /// the project/agent/browser body is gated behind authentication (mirrors
+    /// the Linux golden's mutually-exclusive auth row).
+    #[test]
+    fn logged_out_menu_collapses_to_login_leaf() {
+        let state = MenuState {
+            login: GithubLoginState::LoggedOut,
+            // Projects present but must NOT surface while logged out.
+            local_projects: vec![ProjectEntry {
+                name: "secret".into(),
+                path: "/home/u/src/secret".into(),
+                ready: false,
+            }],
+            ..MenuState::initial()
+        };
+        let items = match build(&state) {
+            MenuStructure::Ready { items } => items,
+            other => panic!("expected Ready, got {other:?}"),
+        };
+        let ids_seen: Vec<&str> = items.iter().map(|i| i.id.as_str()).collect();
+        assert_eq!(
+            ids_seen,
+            vec![ids::STATUS, ids::GITHUB_LOGIN, ids::VERSION, ids::QUIT],
+            "logged-out menu must collapse to the login-gated short list",
+        );
+        // The login item is an actionable leaf.
+        let login = &items[1];
+        assert!(login.enabled);
+        assert!(login.children.is_empty());
+        // None of the gated bodies leaked through.
+        for gated in [ids::LOCAL_PROJECTS, ids::CLOUD_PROJECTS, ids::AGENTS] {
+            assert!(
+                !ids_seen.contains(&gated),
+                "{gated} must be hidden while logged out",
+            );
+        }
     }
 
     /// @trace spec:macos-native-tray.ui.menu-parity@v1
     #[test]
     fn macos_target_disables_observatorium_and_opencode_web_for_v2() {
         let state = MenuState {
+            login: GithubLoginState::LoggedIn { handle: "u".into() },
             gui_passthrough_available: true,
             target: TargetSurface::MacosTray,
             ..MenuState::initial()
@@ -645,6 +692,7 @@ mod tests {
     #[test]
     fn wslg_unavailable_disables_browser_items_with_specific_reason() {
         let state = MenuState {
+            login: GithubLoginState::LoggedIn { handle: "u".into() },
             gui_passthrough_available: false,
             target: TargetSurface::WindowsTray,
             ..MenuState::initial()
@@ -738,6 +786,7 @@ mod tests {
     #[test]
     fn cloud_projects_under_cap_show_no_overflow() {
         let state = MenuState {
+            login: GithubLoginState::LoggedIn { handle: "u".into() },
             cloud_projects: (0..3)
                 .map(|i| ProjectEntry {
                     name: format!("c-{i}"),

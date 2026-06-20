@@ -25,7 +25,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-host-shell/src/lifecycle.rs#L14](../../../crates/tillandsias-host-shell/src/lifecycle.rs#L14)
 - [crates/tillandsias-host-shell/src/lifecycle.rs#L101](../../../crates/tillandsias-host-shell/src/lifecycle.rs#L101)
 - [crates/tillandsias-host-shell/src/menu_state.rs#L250](../../../crates/tillandsias-host-shell/src/menu_state.rs#L250)
-- [crates/tillandsias-host-shell/src/menu_state.rs#L671](../../../crates/tillandsias-host-shell/src/menu_state.rs#L671)
+- [crates/tillandsias-host-shell/src/menu_state.rs#L719](../../../crates/tillandsias-host-shell/src/menu_state.rs#L719)
 - [crates/tillandsias-host-shell/src/provisioning.rs#L13](../../../crates/tillandsias-host-shell/src/provisioning.rs#L13)
 - [crates/tillandsias-host-shell/src/provisioning.rs#L89](../../../crates/tillandsias-host-shell/src/provisioning.rs#L89)
 - [crates/tillandsias-host-shell/src/provisioning.rs#L126](../../../crates/tillandsias-host-shell/src/provisioning.rs#L126)

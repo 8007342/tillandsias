@@ -2,7 +2,7 @@
 name: litmus:build-ci-dispatch-shape
 spec: dev-build
 phase: pre-build
-description: Verify ci-full install dispatches each phase once and reuses completed CI evidence
+description: Verify ci-full install dispatches each phase once, builds only the Linux musl launcher, and reuses completed CI evidence
 severity: high
 size: instant
 
@@ -32,6 +32,11 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok: default-build guard includes install and CI flags"
 
+  - step: "install musl build targets only the Linux launcher"
+    command: "BLOCK=$(awk '/# Install binary/{active=1} /# Test build/{active=0} active' build.sh); printf '%s' \"$BLOCK\" | grep -F 'cargo build --package tillandsias-headless --bin tillandsias --release --target x86_64-unknown-linux-musl --features tray'; test \"$(printf '%s' \"$BLOCK\" | grep -cF 'cargo build --workspace --release --target x86_64-unknown-linux-musl')\" -eq 0 && echo 'ok: install musl build is package-scoped'"
+    timeout_ms: 3000
+    expected_behavior: "ok: install musl build is package-scoped"
+
   - step: "evidence bundle reuses completed CI results"
     command: "grep -F 'generate-evidence-bundle.sh\" --reuse-ci-results' build.sh && grep -F -- '--reuse-ci-results) REUSE_CI_RESULTS=true' scripts/generate-evidence-bundle.sh && grep -F 'Reusing cargo test results from pre-build CI' scripts/generate-evidence-bundle.sh && grep -F 'Reusing completed CI litmus phase logs' scripts/generate-evidence-bundle.sh && echo 'ok: evidence reuse enabled'"
     timeout_ms: 3000
@@ -45,7 +50,7 @@ critical_path:
 observability:
   traces:
     - "@trace spec:dev-build"
-  expected_log: "ci-full install has one local-ci process, direct post/runtime dispatch, no debug-build fallthrough, no evidence reruns, and evidence litmus totals come from phase summaries"
+  expected_log: "ci-full install has one local-ci process, direct post/runtime dispatch, no debug-build fallthrough, package-scoped Linux musl build, no evidence reruns, and evidence litmus totals come from phase summaries"
   log_fields:
     spec: "dev-build"
     test: "build-ci-dispatch-shape"

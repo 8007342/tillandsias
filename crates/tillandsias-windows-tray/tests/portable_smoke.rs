@@ -16,17 +16,34 @@ use tillandsias_host_shell::menu_state::{
     GithubLoginState, MenuState, MenuStructure, ProjectEntry, SelectedAgent, TargetSurface, build,
 };
 
-/// The Windows tray paints the host-shell `MenuStructure` verbatim. Build
-/// one and assert it has the seven canonical top-level groups + footer.
+/// The Windows tray paints the host-shell `MenuStructure` verbatim. The menu
+/// is login-gated (mirrors the Linux golden, F3): logged-out collapses to the
+/// short {status, github-login, version, quit} list; logged-in surfaces the
+/// project/agent/browser body with no `github-login` row (mutually exclusive).
 #[test]
 fn portable_menu_build_is_invokable_from_windows_tray_path() {
-    let state = MenuState {
+    // Logged-out: collapsed short list.
+    let out = MenuState {
         target: TargetSurface::WindowsTray,
         gui_passthrough_available: true,
         ..MenuState::initial()
     };
-    let menu = build(&state);
-    match menu {
+    match build(&out) {
+        MenuStructure::Ready { items } => {
+            let ids: Vec<&str> = items.iter().map(|i| i.id.as_str()).collect();
+            assert_eq!(ids, vec!["status", "github-login", "version", "quit"]);
+        }
+        other => panic!("expected Ready, got {other:?}"),
+    }
+
+    // Logged-in: full project/agent/browser body, no github-login row.
+    let logged_in = MenuState {
+        target: TargetSurface::WindowsTray,
+        gui_passthrough_available: true,
+        login: GithubLoginState::LoggedIn { handle: "u".into() },
+        ..MenuState::initial()
+    };
+    match build(&logged_in) {
         MenuStructure::Ready { items } => {
             assert!(items.iter().any(|i| i.id == "status"));
             assert!(items.iter().any(|i| i.id == "local-projects"));
@@ -34,8 +51,11 @@ fn portable_menu_build_is_invokable_from_windows_tray_path() {
             assert!(items.iter().any(|i| i.id == "agents"));
             assert!(items.iter().any(|i| i.id == "observatorium"));
             assert!(items.iter().any(|i| i.id == "opencode-web"));
-            assert!(items.iter().any(|i| i.id == "github-login"));
             assert!(items.iter().any(|i| i.id == "quit"));
+            assert!(
+                !items.iter().any(|i| i.id == "github-login"),
+                "github-login is gated out when logged in (F3 mutual exclusivity)"
+            );
         }
         other => panic!("expected Ready, got {other:?}"),
     }
@@ -48,6 +68,8 @@ fn agent_picker_lists_three_agents_in_canonical_order() {
     state.selected_agent = SelectedAgent::Codex;
     state.target = TargetSurface::WindowsTray;
     state.gui_passthrough_available = true;
+    // Agents only surface once authenticated (login-gated body, F3).
+    state.login = GithubLoginState::LoggedIn { handle: "u".into() };
     let menu = build(&state);
     let items = match menu {
         MenuStructure::Ready { items } => items,
@@ -65,10 +87,12 @@ fn agent_picker_lists_three_agents_in_canonical_order() {
     assert!(!agents.children[2].checked);
 }
 
-/// LoggedIn surfaces "GitHub: <user>" as a disabled item with the user's
-/// handle in the label.
+/// LoggedIn gates OUT the `github-login` row (mutually exclusive with the
+/// project body, mirroring the Linux golden). The authenticated user instead
+/// sees the project/agent body; the account identity is conveyed elsewhere
+/// (status line), not as a top-level menu row. (F3)
 #[test]
-fn logged_in_state_renders_github_user_disabled() {
+fn logged_in_state_gates_out_github_login_row() {
     let mut state = MenuState::initial();
     state.target = TargetSurface::WindowsTray;
     state.gui_passthrough_available = true;
@@ -85,12 +109,12 @@ fn logged_in_state_renders_github_user_disabled() {
         MenuStructure::Ready { items } => items,
         _ => panic!("expected Ready"),
     };
-    let github = items
-        .iter()
-        .find(|i| i.id == "github-login")
-        .expect("github");
-    assert!(!github.enabled);
-    assert!(github.label.contains("bulloncito"));
+    assert!(
+        !items.iter().any(|i| i.id == "github-login"),
+        "github-login must be gated out when authenticated"
+    );
+    // The project body is what surfaces instead.
+    assert!(items.iter().any(|i| i.id == "local-projects"));
 }
 
 // The Credential Manager round-trip (CredWriteW/CredReadW/CredDeleteW) is

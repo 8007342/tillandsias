@@ -8,6 +8,56 @@ the items below are immediate work.
 
 ## Immediate
 
+### local-smoke/linux-musl-tray-binary-name-collision
+
+- status: done
+- owner_host: linux
+- source: `plan/issues/build-install-smoke-e2e-findings-2026-06-19.md`
+- severity: high — blocks local-build E2E and therefore release confidence for
+  integrated `linux-next`
+- next_action: No worker action; the packet is closed after the full local-build
+  E2E gate passed on Linux.
+- blocker: none
+- lease: `lease-linux-musl-tray-collision-20260619T2325Z` (expires
+  2026-06-20T03:25:53Z)
+- completed_evidence: >
+    Fixed in `307ef0eb` by narrowing the Linux install musl build to
+    `tillandsias-headless --bin tillandsias --features tray`. Local-build E2E
+    then passed on tested commit `307ef0eb3d47d3229ad58cdd821e909bd7eeefbc`:
+    `./build.sh --ci-full --install`, destructive `podman system reset
+    --force`, fresh `tillandsias --init --debug`, and Linux `--opencode
+    --prompt "Use the /forge-continuous-enhancement skill"` all exited 0.
+    Installed version: `Tillandsias v0.3.260619.5`. Evidence:
+    `target/build-install-smoke-e2e/20260619T233855Z`.
+- evidence_required:
+  - `./build.sh --ci-full --install` exits 0 on Linux
+  - no Cargo `output filename collision` warning for `tillandsias-tray`
+  - destructive Podman reset, fresh `tillandsias --init --debug`, and Linux
+    forge lane are reached or produce their own later finding
+
+### local-smoke/opencode-forge-continuous-enhancement-prompt-noop
+
+- status: done (commit 89eebe49)
+- owner_host: linux
+- source: `plan/issues/opencode-forge-continuous-enhancement-prompt-noop-2026-06-19.md`
+- severity: high — the prompted Linux forge lane can exit 0 without actually
+  running `/forge-continuous-enhancement`, making smoke/release evidence
+  semantically weak
+- next_action: None — fix landed. Created missing symlink
+  `.opencode/skills/forge-continuous-enhancement` → `../../skills/forge-continuous-enhancement`.
+- blocker: none
+- discovered_evidence: >
+    Local-build E2E log `target/build-install-smoke-e2e/20260619T233855Z`
+    recorded `forge_exit=0`, but `04-forge-continuous-enhancement.log:16-19`
+    shows `Skill "diagnose-forge"`, `That's not a skill in my available list`,
+    and `What would you like me to do?` instead of
+    `/forge-continuous-enhancement` execution.
+- evidence_required:
+  - prompted OpenCode forge lane exits 0 only after intended skill start and
+    completion, or explicit no-work-needed completion
+  - E2E transcript distinguishes command success from semantic no-op
+  - regression coverage pins accepted transcript marker(s)
+
 ### release/version-tag-sequence-mismatch
 
 - status: done
