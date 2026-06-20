@@ -4560,3 +4560,112 @@ plan_index:
             Reduced from meta-orch-enhancement-opportunities-2026-06-20 candidate 4.
             tillandsias-policy not on PATH in Cowork; python forbidden for committed
             automation; yq absent, ruby/node present.
+
+    - id: release-nix-cache-ref-scoping
+      order: 64
+      title: Release Nix store cache never restored across releases (GHA ref-scoping)
+      status: ready
+      kind: bug
+      deliverable: plan/issues/release-nix-cache-ref-scoping-2026-06-20.md
+      depends_on: []
+      pickup_role: "Build/CI-capable host (verification needs a release run)"
+      outcome: >
+        The release Nix closure (incl. aarch64 cross-GCC) builds once and is
+        restored on every subsequent release regardless of tag, eliminating the
+        ~10 min full rebuild + 2.2 GB re-upload that runs on every release today.
+        Fixed via FlakeHub Cache or default-branch cache warming; verified by a
+        measured delta build across two consecutive releases.
+      tasks:
+        - id: release-nix-cache-ref-scoping/choose-approach
+          status: ready
+          depends_on: []
+          owned_files:
+            - plan/issues/release-nix-cache-ref-scoping-2026-06-20.md
+          checkpoint_required: true
+          handoff_note: >
+            Decide FlakeHub Cache (opt 1) vs warm-cache-on-main (opt 2); record
+            rationale in the packet. Default: opt 1 if FlakeHub public-repo free
+            tier is adequate, else opt 2.
+        - id: release-nix-cache-ref-scoping/implement-cache-fix
+          status: ready
+          depends_on: [release-nix-cache-ref-scoping/choose-approach]
+          owned_files:
+            - .github/workflows/release.yml
+          checkpoint_required: true
+          handoff_note: >
+            Implement the chosen approach in release.yml; add purge of unreusable
+            per-tag Nix caches to stay under the 10 GB GHA limit.
+        - id: release-nix-cache-ref-scoping/verify-incremental
+          status: ready
+          depends_on: [release-nix-cache-ref-scoping/implement-cache-fix]
+          owned_files:
+            - plan/issues/release-nix-cache-ref-scoping-2026-06-20.md
+          checkpoint_required: true
+          handoff_note: >
+            Cut two consecutive releases; assert the second's nix build time and
+            cache-save bytes drop substantially. Record before/after as completed.
+      events:
+        - type: finding
+          ts: "2026-06-20T19:55:00Z"
+          agent_id: "linux-claude-opus48-20260620T1955Z"
+          host: linux_mutable
+          note: >
+            Confirmed via the Actions caches API that the 2.2 GB Nix store cache is
+            saved once per release tag ref with an identical key and never on the
+            main default-branch scope, so tag-dispatched releases can never restore
+            it (GHA ref isolation); repo cache already over the 10 GB limit.
+            Web-verified the correct approach (FlakeHub Cache, or default-branch
+            cache warming for the GHA-cache path).
+
+    - id: release-build-monitoring
+      order: 65
+      title: Release build monitoring — catch silent duration/cache-hit regressions
+      status: ready
+      kind: enhancement
+      deliverable: plan/issues/release-build-monitoring-2026-06-20.md
+      depends_on: []
+      pickup_role: "Build/CI-capable host"
+      outcome: >
+        Release runs emit per-step timing + cache hit/miss, the ledger records
+        per-release build duration, and an unchanged-flake.lock cache miss (or a
+        nix build over threshold) trips a warning — so a silently slow release
+        fails loud instead of surviving for months.
+      tasks:
+        - id: release-build-monitoring/capture-release-timings
+          status: ready
+          depends_on: []
+          owned_files:
+            - .github/workflows/release.yml
+          checkpoint_required: true
+          handoff_note: >
+            Emit nix build + cache-save durations to the job summary and a small
+            JSON artifact; capture cache hit/miss.
+        - id: release-build-monitoring/assert-cache-hit
+          status: ready
+          depends_on: [release-build-monitoring/capture-release-timings, release-nix-cache-ref-scoping/implement-cache-fix]
+          owned_files:
+            - .github/workflows/release.yml
+          checkpoint_required: true
+          handoff_note: >
+            Soft gate: unchanged flake.lock + full cross-GCC rebuild (or nix build
+            > ~20 min) emits ::warning:: (escalate to ::error:: once fix is proven).
+        - id: release-build-monitoring/ledger-release-timings
+          status: ready
+          depends_on: []
+          owned_files:
+            - skills/merge-to-main-and-release/SKILL.md
+            - plan/issues/linux-next-work-queue-2026-05-25.md
+          checkpoint_required: true
+          handoff_note: >
+            Extend the release skill's step 8 to record total run time + nix build
+            duration (via gh run view --json jobs) per release entry.
+      events:
+        - type: finding
+          ts: "2026-06-20T19:55:00Z"
+          agent_id: "linux-claude-opus48-20260620T1955Z"
+          host: linux_mutable
+          note: >
+            The ref-scoping waste ran unnoticed for many releases because nothing
+            watches release build performance. Adds a lightweight performance gate
+            (job-summary timings + unchanged-lock cache-miss tripwire + ledger
+            duration trend) so the next silent slowdown surfaces.

@@ -1,6 +1,25 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-20T19:40Z
+Last updated: 2026-06-20T19:56Z
+
+## This Cycle (2026-06-20T19:56Z, linux_mutable — interactive Claude Code CLI, release + cache diagnosis)
+
+- **Release**: Cut v0.3.260620.8 — merged PR #37 (linux-next→main, 26 commits),
+  bumped VERSION on main (`31b01c32`), tagged, triggered workflow_dispatch run
+  27881936382 (in progress; ~45 min build).
+- **Root-caused the slow release (operator-flagged silent issue)**: every release
+  rebuilds the full Nix closure + re-uploads a 2.2 GB store cache (~10 min) because
+  the GHA cache is **ref-scoped** and releases dispatch on fresh tags — the Nix
+  store cache is saved once per tag ref with an identical key and never on `main`,
+  so no release can ever restore another's cache. Repo cache also over the 10 GB
+  limit (LRU eviction). The workflow uses `cache-nix-action`, **not** Magic Nix
+  Cache as assumed. Web-verified correct fix: FlakeHub Cache (binary cache, not
+  ref-scoped) or warm the cache on the `main` default branch.
+- **Filed two ordered packets**: order 64 `release-nix-cache-ref-scoping` (the fix,
+  with options + verification) and order 65 `release-build-monitoring` (perf gate
+  so the next silent slowdown fails loud). Both `ready`.
+- **Next**: pick fix approach (FlakeHub vs warm-on-main) on a build/CI-capable
+  host; surface v0.3.260620.8 artifact when the build completes.
 
 ## This Cycle (2026-06-20T19:40Z, linux_mutable — Cowork meta-orch, Tlatoāni-directed)
 
