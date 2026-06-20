@@ -2,6 +2,19 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
+## 2026-06-20T01:38Z — meta-orch cycle 1 (macOS): merge + drain, no eligible work
+
+Fetched origin; merged `origin/linux-next` (`b5c11dc7`) into osx-next
+(`fa70e30f`), resolving append-ledger conflicts in ACTIVE.md +
+linux-next-work-queue (kept both sides). Compile sanity PASS (host-shell +
+macos-tray). Worker drain: NO eligible macOS ready work — `macos-tray/
+github-login-route-to-orchestrated-flow` is blocked on the layer-5 packet
+`enclave/macos-vault-unreachable-via-publish-aarch64` (owner=linux, pinged);
+step 49d blocked on same; all other macOS items done. E2E: current (release
+v0.3.260618.2 smoke recent; macOS local build + m8 deep-dive this session; no
+macOS-runtime delta). Next: self-paced loop — re-check for the Linux vault fix /
+new sibling work. Cadence: ~3h while the cross-host blocker is pending.
+
 ## 2026-06-20T01:34Z — F4 fully root-caused (5 layers); packets filed + claimed
 
 m8 49d round-3: F1/F2/F3/Quit PASS, F3 login-gated menu shipped (`8f3d87c1`) and
