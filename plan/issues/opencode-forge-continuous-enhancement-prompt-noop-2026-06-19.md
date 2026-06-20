@@ -1,6 +1,6 @@
 # OpenCode forge continuous-enhancement prompt no-op - 2026-06-19
 
-Status: claimed
+Status: done
 Owner: linux
 Discovered by: /build-install-and-smoke-test-e2e (linux)
 
@@ -17,7 +17,7 @@ running the intended in-forge work.
 - id: `local-smoke/opencode-forge-continuous-enhancement-prompt-noop`
 - type: fix
 - owner_host: linux
-- status: claimed
+- status: done
 - capability_tags: [linux, opencode, forge, smoke, testing]
 - severity: high
 - source: this smoke report
@@ -39,6 +39,16 @@ running the intended in-forge work.
     agent_id: linux-tlatoani-opencode-big-pickle-20260620T0050Z
     host: linux
     lease_id: forge-continuous-enhancement-symlink-20260620T0050Z
+  - type: completed
+    ts: 2026-06-20T00:55:00Z
+    agent_id: linux-tlatoani-opencode-big-pickle-20260620T0050Z
+    host: linux
+    lease_id: forge-continuous-enhancement-symlink-20260620T0050Z
+    evidence_refs:
+      - commit: 89eebe49
+      - symlink: .opencode/skills/forge-continuous-enhancement -> ../../skills/forge-continuous-enhancement
+      - test: cargo test -p tillandsias-headless PASS
+      - test: bash scripts/test-opencode-entrypoint-prompt.sh PASS
 - evidence_required:
     - prompted OpenCode forge lane exits 0 only after the intended skill starts
       and completes, or after it records an explicit no-work-needed result
