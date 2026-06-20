@@ -69,13 +69,13 @@ plan:
       pre-hardening root vault audit doc after distilling it into the audit report.
     future_intentions: >
       - Add telemetry to measure install times and download sizes during forge build; save output in dev environment for analysis.
-      - Ensure opencode and codex/claude permission files are highly permissive by default ("near full YOLO mode") for the forge safe environment.
       - Implement a global `tellme` discoverability script: `tellme about [...]` for static cheatsheets, and `tellme howto [...]` using a <1B inference model ("forge-expert").
       - Train "forge-expert" at launch time and retrain on commits to answer questions with no tool usage.
       - Establish Windows and macOS feature parity with Linux headless/tray; address glitches and false claims of completion.
     drained_items:
       - "2026-06-20: Move CURL installers and manual TAR/GZ manipulation in Containerfile to DNF. → plan/issues/containerfile-dnf-migration-2026-06-20.md"
       - "2026-06-20: Enable iterative forge enhancement via the /forge-continuous-enhancement skill. → plan/issues/forge-continuous-enhancement-automation-2026-06-20.md"
+      - "2026-06-20: Ensure opencode and codex/claude permission files are highly permissive by default (YOLO mode). → plan/issues/forge-permission-files-audit-2026-06-20.md"
 
   coordination:
     selection_model: dependency_graph

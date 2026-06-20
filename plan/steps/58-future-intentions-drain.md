@@ -18,6 +18,7 @@ The `plan.yaml` file currently contains several "future intentions" that have no
 
 - [x] Item 1 drained: "Move CURL installers and manual TAR/GZ manipulation in Containerfile to DNF." → `plan/issues/containerfile-dnf-migration-2026-06-20.md` (ready)
 - [x] Item 2 drained: "Enable iterative forge enhancement via the `/forge-continuous-enhancement` skill." → `plan/issues/forge-continuous-enhancement-automation-2026-06-20.md` (ready)
+- [x] Item 3 drained: "Ensure opencode and codex/claude permission files are highly permissive by default." → `plan/issues/forge-permission-files-audit-2026-06-20.md` (done — already fully YOLO mode, no code changes needed)
 - [ ] Drain next item from `future_intentions` in `plan.yaml`.
 - [ ] Convert each drained item into its own issue (e.g., inside `plan/issues/`) and its corresponding step in `plan/index.yaml` and `plan/steps/`.
 - [ ] Elaborate on the issue, expanding on what needs to be done.
@@ -28,3 +29,4 @@ The `plan.yaml` file currently contains several "future intentions" that have no
 
 - 2026-06-20T01:45Z (linux-macuahuitl-big-pickle): Drained item 1 — created `plan/issues/containerfile-dnf-migration-2026-06-20.md` with full audit, feasibility analysis, and implementation plan. Removed from `future_intentions`.
 - 2026-06-20T02:37Z (linux-macuahuitl-big-pickle): Drained item 2 — created `plan/issues/forge-continuous-enhancement-automation-2026-06-20.md` with gap analysis and recommendation. Removed from `future_intentions`.
+- 2026-06-20T03:24Z (linux-tlatoani-big-pickle): Drained item 3 — created `plan/issues/forge-permission-files-audit-2026-06-20.md` confirming all agents (opencode, codex, claude, gemini) already operate in fully permissive YOLO mode via `"permission": "allow"` config and `--dangerously-skip-permissions` / equivalent flags. Removed from `future_intentions`.
