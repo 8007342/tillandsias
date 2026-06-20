@@ -1,6 +1,7 @@
 use std::collections::BTreeSet;
 use std::env;
 use std::fs;
+use std::io::{self, Read};
 use std::path::{Path, PathBuf};
 use std::process;
 
@@ -13,6 +14,10 @@ fn main() {
         Some("check-no-python-scripts") => check_no_python_scripts(),
         Some("distill-forge-diagnostics") => distill_forge_diagnostics(&args[2..]),
         Some("validate-forge-diagnostics-json") => validate_forge_diagnostics_json(&args[2..]),
+        Some("json-get-string") => json_get_string(&args[2..]),
+        Some("assert-menu-items") => assert_menu_items(&args[2..]),
+        Some("assert-disabled-v2") => assert_disabled_v2(&args[2..]),
+        Some("vault-unsealed-epoch") => vault_unsealed_epoch(&args[2..]),
         Some("regenerate-cheatsheet-index") => regenerate_cheatsheet_index(&args[2..]),
         Some("fetch-cheatsheet-source") => fetch_cheatsheet_source(&args[2..]),
         Some("validate-yaml") => validate_yaml(&args[2..]),
@@ -38,6 +43,10 @@ fn usage() {
         "  tillandsias-policy distill-forge-diagnostics [--repo-root <path>] [--latest <path>] [--all]"
     );
     eprintln!("  tillandsias-policy validate-forge-diagnostics-json <diagnostics-log>");
+    eprintln!("  tillandsias-policy json-get-string <json.path> < stdin-json");
+    eprintln!("  tillandsias-policy assert-menu-items <menu-json-file> <id>...");
+    eprintln!("  tillandsias-policy assert-disabled-v2 <menu-json-file> <id>...");
+    eprintln!("  tillandsias-policy vault-unsealed-epoch < stdin-json");
     eprintln!("  tillandsias-policy regenerate-cheatsheet-index [--repo-root <path>] [--check]");
     eprintln!(
         "  tillandsias-policy fetch-cheatsheet-source [--repo-root <path>] <URL> [--cite <path>] [--manual-review] [--force]"
@@ -471,6 +480,162 @@ fn validate_yaml(files: &[String]) {
     }
 }
 
+fn json_get_string(args: &[String]) {
+    if args.len() != 1 {
+        eprintln!("Usage: json-get-string <json.path> < stdin-json");
+        process::exit(2);
+    }
+
+    let data = read_json_stdin("json-get-string");
+    let value = json_path(&data, &args[0]).unwrap_or_else(|| {
+        eprintln!("json-get-string: missing path {}", args[0]);
+        process::exit(1);
+    });
+    match value {
+        serde_json::Value::String(s) => println!("{s}"),
+        serde_json::Value::Null => {
+            eprintln!("json-get-string: {} is null", args[0]);
+            process::exit(1);
+        }
+        other => println!("{}", json_scalar_str(other)),
+    }
+}
+
+fn assert_menu_items(args: &[String]) {
+    if args.len() < 2 {
+        eprintln!("Usage: assert-menu-items <menu-json-file> <id>...");
+        process::exit(2);
+    }
+
+    let path = Path::new(&args[0]);
+    let data = read_json_file(path);
+    let ids = menu_item_ids(path, &data);
+    let missing: Vec<&str> = args[1..]
+        .iter()
+        .map(String::as_str)
+        .filter(|id| !ids.contains(*id))
+        .collect();
+    if !missing.is_empty() {
+        eprintln!(
+            "{}: missing menu item id(s): {}",
+            path.display(),
+            missing.join(", ")
+        );
+        process::exit(1);
+    }
+    println!("OK");
+}
+
+fn assert_disabled_v2(args: &[String]) {
+    if args.len() < 2 {
+        eprintln!("Usage: assert-disabled-v2 <menu-json-file> <id>...");
+        process::exit(2);
+    }
+
+    let path = Path::new(&args[0]);
+    let data = read_json_file(path);
+    let items = data.as_array().unwrap_or_else(|| {
+        eprintln!("{}: menu JSON must be an array", path.display());
+        process::exit(1);
+    });
+
+    for id in &args[1..] {
+        let item = items
+            .iter()
+            .find(|item| item.get("id").and_then(|v| v.as_str()) == Some(id.as_str()))
+            .unwrap_or_else(|| {
+                eprintln!("{}: missing menu item id {id}", path.display());
+                process::exit(1);
+            });
+        if item.get("disabled").and_then(|v| v.as_bool()) != Some(true) {
+            eprintln!("{}: menu item {id} is not disabled", path.display());
+            process::exit(1);
+        }
+        let reason = item
+            .get("disabled_reason")
+            .and_then(|v| v.as_str())
+            .unwrap_or("");
+        if !reason.contains("v2") {
+            eprintln!(
+                "{}: menu item {id} disabled_reason lacks v2 marker",
+                path.display()
+            );
+            process::exit(1);
+        }
+    }
+    println!("OK");
+}
+
+fn vault_unsealed_epoch(args: &[String]) {
+    if !args.is_empty() {
+        eprintln!("Usage: vault-unsealed-epoch < stdin-json");
+        process::exit(2);
+    }
+
+    let data = read_json_stdin("vault-unsealed-epoch");
+    let sealed = data.get("sealed").and_then(|v| v.as_bool()).unwrap_or(true);
+    if sealed {
+        eprintln!("vault-unsealed-epoch: vault is sealed");
+        process::exit(1);
+    }
+    let now = std::time::SystemTime::now()
+        .duration_since(std::time::UNIX_EPOCH)
+        .unwrap_or_else(|err| {
+            eprintln!("vault-unsealed-epoch: system clock before Unix epoch: {err}");
+            process::exit(1);
+        })
+        .as_secs();
+    println!("{now}");
+}
+
+fn read_json_stdin(context: &str) -> serde_json::Value {
+    let mut input = String::new();
+    io::stdin()
+        .read_to_string(&mut input)
+        .unwrap_or_else(|err| {
+            eprintln!("{context}: failed to read stdin: {err}");
+            process::exit(1);
+        });
+    serde_json::from_str(&input).unwrap_or_else(|err| {
+        eprintln!("{context}: invalid JSON: {err}");
+        process::exit(1);
+    })
+}
+
+fn read_json_file(path: &Path) -> serde_json::Value {
+    let input = fs::read_to_string(path).unwrap_or_else(|err| {
+        eprintln!("{}: {err}", path.display());
+        process::exit(1);
+    });
+    serde_json::from_str(&input).unwrap_or_else(|err| {
+        eprintln!("{}: invalid JSON: {err}", path.display());
+        process::exit(1);
+    })
+}
+
+fn json_path<'a>(value: &'a serde_json::Value, path: &str) -> Option<&'a serde_json::Value> {
+    let mut current = value;
+    for segment in path.split('.') {
+        if segment.is_empty() {
+            return None;
+        }
+        current = current.get(segment)?;
+    }
+    Some(current)
+}
+
+fn menu_item_ids(path: &Path, data: &serde_json::Value) -> BTreeSet<String> {
+    let items = data.as_array().unwrap_or_else(|| {
+        eprintln!("{}: menu JSON must be an array", path.display());
+        process::exit(1);
+    });
+    items
+        .iter()
+        .filter_map(|item| item.get("id").and_then(|v| v.as_str()))
+        .map(str::to_string)
+        .collect()
+}
+
 fn check_no_python_scripts() {
     let root = env::current_dir().unwrap_or_else(|err| {
         eprintln!("failed to read current dir: {err}");
@@ -538,6 +703,7 @@ fn is_script_or_harness(root: &Path, path: &Path) -> bool {
 
     matches!(ext, "sh" | "bash" | "ps1" | "bat" | "py")
         || rel_str.starts_with("scripts/")
+        || (rel_str.starts_with("openspec/litmus-tests/") && matches!(ext, "yaml" | "yml"))
         || matches!(
             file_name,
             "codex" | "claude" | "repeat" | "observatorium.sh" | "build.sh" | "verify.sh"
@@ -582,6 +748,10 @@ fn has_python_runtime_reference(line: &str) -> bool {
         || lower.starts_with("python3 ")
         || lower.starts_with("python -")
         || lower.starts_with("python3 -")
+        || lower.contains("python -c")
+        || lower.contains("python3 -c")
+        || lower.contains("python /tmp/")
+        || lower.contains("python3 /tmp/")
         || lower.contains("$(python ")
         || lower.contains("$(python3 ")
         || lower.contains("`python ")
@@ -4476,7 +4646,49 @@ mod tests {
         assert!(has_python_runtime_reference(
             "value=$(python -c 'print(1)')"
         ));
+        assert!(has_python_runtime_reference(
+            "command: \"python3 -c 'import json'\""
+        ));
+        assert!(has_python_runtime_reference(
+            "python3 /tmp/opencode-mock.py"
+        ));
         assert!(!has_python_runtime_reference("# python3 in a comment"));
+    }
+
+    #[test]
+    fn litmus_yaml_files_are_scanned_for_python_runtime_drift() {
+        let root = Path::new("/repo");
+        assert!(is_script_or_harness(
+            root,
+            Path::new("/repo/openspec/litmus-tests/litmus-example.yaml")
+        ));
+        assert!(!is_script_or_harness(
+            root,
+            Path::new("/repo/plan/issues/no-python-litmus-drift-2026-06-20.md")
+        ));
+    }
+
+    #[test]
+    fn menu_assertion_helpers_accept_expected_shape() {
+        use serde_json::json;
+        let menu = json!([
+            {"id": "status_text"},
+            {"id": "observatorium", "disabled": true, "disabled_reason": "v2 terminal-only"}
+        ]);
+        let ids = menu_item_ids(Path::new("menu.json"), &menu);
+        assert!(ids.contains("status_text"));
+        assert!(ids.contains("observatorium"));
+    }
+
+    #[test]
+    fn json_path_extracts_nested_values() {
+        use serde_json::json;
+        let data = json!({"auth": {"client_token": "hvs.test"}});
+        assert_eq!(
+            json_path(&data, "auth.client_token").and_then(|v| v.as_str()),
+            Some("hvs.test")
+        );
+        assert!(json_path(&data, "auth.missing").is_none());
     }
 
     #[test]

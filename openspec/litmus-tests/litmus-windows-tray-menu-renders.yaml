@@ -50,7 +50,7 @@ critical_path:
 
   - step: "assert parity contract: status_text, projects, agents (claude/codex/opencode), observatorium, opencode-web, github-login"
     phase: runtime
-    command: "python3 -c \"import json; m=json.load(open('/tmp/litmus-win-menu.json')); ids={i['id'] for i in m}; need={'status_text','projects','agents.claude','agents.codex','agents.opencode','observatorium','opencode_web','github_login'}; missing=need-ids; assert not missing, f'missing: {missing}'; print('OK')\""
+    command: "cargo run --quiet -p tillandsias-policy -- assert-menu-items /tmp/litmus-win-menu.json status_text projects agents.claude agents.codex agents.opencode observatorium opencode_web github_login"
     timeout_ms: 5000
     expected_behavior: "succeeds; prints OK"
 

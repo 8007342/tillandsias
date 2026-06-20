@@ -9,7 +9,7 @@ trace: methodology.yaml (runtime_language_policy),
 - id: `policy/no-python-litmus-drift`
 - type: fix
 - owner_host: any
-- status: claimed
+- status: done
 - capability_tags: [litmus, rust, policy, testing]
 - discovered_by: `forge-diagnostics/e2e-piggyback-orchestration` no-Python
   drift slice on linux-next, 2026-06-20T07:38Z.
@@ -71,3 +71,23 @@ The diagnostics E2E litmus is no longer in this inventory after the
   host: "linux"
   lease_id: "no-python-litmus-drift-20260620T074937Z"
   expires_at: "2026-06-20T11:49:37Z"
+- type: completed
+  ts: "2026-06-20T07:56:41Z"
+  agent_id: "linux-macuahuitl-codex-20260620T074937Z"
+  host: "linux"
+  lease_id: "no-python-litmus-drift-20260620T074937Z"
+  evidence_refs:
+    - "crates/tillandsias-policy/src/main.rs: added JSON/menu/Vault helper commands and extended check-no-python-scripts to scan litmus YAML"
+    - "openspec/litmus-tests/litmus-browser-isolation-e2e.yaml: replaced Python OTP generation and mock server"
+    - "openspec/litmus-tests/litmus-vault-policy-forge-cannot-read-github-token.yaml: replaced JSON token extraction"
+    - "openspec/litmus-tests/litmus-vault-auto-unseal-no-prompt.yaml: replaced Vault status JSON parsing"
+    - "openspec/litmus-tests/litmus-macos-tray-menu-renders.yaml: replaced menu JSON assertions"
+    - "openspec/litmus-tests/litmus-windows-tray-menu-renders.yaml: replaced menu JSON assertions"
+    - "cargo test -p tillandsias-policy"
+    - "cargo run --quiet -p tillandsias-policy -- validate-yaml <five touched litmus files>"
+    - "cargo run --quiet -p tillandsias-policy -- check-no-python-scripts"
+    - "scripts/check-no-python-scripts.sh"
+    - "cargo fmt --all -- --check"
+    - "git diff --check"
+    - "rg -n \"python3 -c|python3 /tmp|python -c|\\$\\(python|\\$\\(python3\" openspec/litmus-tests (no matches)"
+    - "./build.sh --check"

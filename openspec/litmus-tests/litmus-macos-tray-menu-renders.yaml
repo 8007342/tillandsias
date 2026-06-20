@@ -56,13 +56,13 @@ critical_path:
 
   - step: "assert parity contract present"
     phase: runtime
-    command: "python3 -c \"import json; m=json.load(open('/tmp/litmus-mac-menu.json')); ids={i['id'] for i in m}; need={'status_text','projects','agents.claude','agents.codex','agents.opencode','observatorium','opencode_web','github_login'}; missing=need-ids; assert not missing, f'missing: {missing}'; print('OK')\""
+    command: "cargo run --quiet -p tillandsias-policy -- assert-menu-items /tmp/litmus-mac-menu.json status_text projects agents.claude agents.codex agents.opencode observatorium opencode_web github_login"
     timeout_ms: 5000
     expected_behavior: "succeeds"
 
   - step: "assert observatorium and opencode_web are disabled with v2 reason"
     phase: runtime
-    command: "python3 -c \"import json; m={i['id']:i for i in json.load(open('/tmp/litmus-mac-menu.json'))}; assert m['observatorium']['disabled'] is True, 'observatorium not disabled'; assert 'v2' in m['observatorium']['disabled_reason'], 'no v2 marker'; assert m['opencode_web']['disabled'] is True; assert 'v2' in m['opencode_web']['disabled_reason']; print('OK')\""
+    command: "cargo run --quiet -p tillandsias-policy -- assert-disabled-v2 /tmp/litmus-mac-menu.json observatorium opencode_web"
     timeout_ms: 5000
     expected_behavior: "succeeds (both items disabled with v2 reason)"
 

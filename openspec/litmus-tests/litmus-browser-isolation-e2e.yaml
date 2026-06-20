@@ -43,17 +43,31 @@ critical_path:
     expected_behavior: "3"
 
   - step: "generate OTP token (base64url-encoded random 32 bytes)"
-    command: "OTP_TOKEN=$(python3 -c 'import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode().rstrip(\"=\"))' 2>/dev/null || echo 'AEJDRUZHSElKS0xNTk9QUVJTVFVWV1hZWmFiY2RlZmdoaWprbG1ub3BLWVK') && echo \"$OTP_TOKEN\" && [ ${#OTP_TOKEN} -ge 40 ]"
+    command: "OTP_TOKEN=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=[:space:]') && echo \"$OTP_TOKEN\" && [ ${#OTP_TOKEN} -ge 40 ]"
     timeout_ms: 5000
     expected_behavior: "[A-Za-z0-9_-]{40,}"
 
   - step: "create mock OpenCode service inside forge (simple HTTP server)"
-    command: "podman exec tillandsias-test-forge-e2e sh -c 'cat > /tmp/opencode-mock.py << \"EOF\"\nimport http.server\nimport socketserver\nimport json\n\nclass Handler(http.server.SimpleHTTPRequestHandler):\n    def do_GET(self):\n        self.send_response(200)\n        self.send_header(\"Content-Type\", \"application/json\")\n        self.end_headers()\n        self.wfile.write(json.dumps({\"status\": \"opencode-ready\", \"path\": self.path}).encode())\n    def log_message(self, format, *args):\n        pass  # suppress logging\n\nwith socketserver.TCPServer((\"0.0.0.0\", 4096), Handler) as httpd:\n    print(\"OpenCode mock listening on :4096\")\n    httpd.serve_forever()\nEOF\npython3 /tmp/opencode-mock.py &\nsleep 1 && echo MOCK_STARTED' 2>/dev/null | tail -1"
+    command: |
+      podman exec tillandsias-test-forge-e2e sh -c 'cat > /tmp/opencode-mock.sh << "EOF"
+      #!/bin/sh
+      while true; do
+        {
+          printf "HTTP/1.1 200 OK\r\n"
+          printf "Content-Type: application/json\r\n"
+          printf "Connection: close\r\n\r\n"
+          printf "{\"status\":\"opencode-ready\",\"path\":\"/\"}\n"
+        } | nc -l -p 4096
+      done
+      EOF
+      chmod +x /tmp/opencode-mock.sh
+      /tmp/opencode-mock.sh >/tmp/opencode-mock.log 2>&1 &
+      sleep 1 && echo MOCK_STARTED' 2>/dev/null | tail -1
     timeout_ms: 10000
     expected_behavior: "MOCK_STARTED"
 
   - step: "push OTP token into router sidecar via socket"
-    command: "OTP_TOKEN=$(python3 -c 'import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode().rstrip(\"=\"))' 2>/dev/null || echo 'TestOTPToken123456901234567890AB') && podman exec tillandsias-test-router-e2e mkdir -p /tmp/sidecar && podman exec tillandsias-test-router-e2e sh -c \"echo '{\\\"project\\\":\\\"opencode.test-project.localhost\\\",\\\"token\\\":\\\"'$OTP_TOKEN'\\\"}' > /tmp/sidecar/session.json\" && echo OK"
+    command: "OTP_TOKEN=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=[:space:]') && podman exec tillandsias-test-router-e2e mkdir -p /tmp/sidecar && podman exec tillandsias-test-router-e2e sh -c \"echo '{\\\"project\\\":\\\"opencode.test-project.localhost\\\",\\\"token\\\":\\\"'$OTP_TOKEN'\\\"}' > /tmp/sidecar/session.json\" && echo OK"
     timeout_ms: 10000
     expected_behavior: "OK"
 
@@ -73,12 +87,12 @@ critical_path:
     expected_behavior: "READY"
 
   - step: "request from forge through proxy to router with valid OTP (E2E chain)"
-    command: "OTP=$(python3 -c 'import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode().rstrip(\"=\"))' 2>/dev/null || echo 'TestOTPToken123456901234567890AB') && podman exec tillandsias-test-forge-e2e curl -s -w '\\n%{http_code}' -H \"Cookie: tillandsias_session=$OTP\" http://opencode.test-project.localhost/ --proxy http://proxy:3128 2>&1 | tail -2"
+    command: "OTP=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=[:space:]') && podman exec tillandsias-test-forge-e2e curl -s -w '\\n%{http_code}' -H \"Cookie: tillandsias_session=$OTP\" http://opencode.test-project.localhost/ --proxy http://proxy:3128 2>&1 | tail -2"
     timeout_ms: 5000
     expected_behavior: "200|opencode-ready"
 
   - step: "verify latency < 500ms for E2E request"
-    command: "OTP=$(python3 -c 'import base64, os; print(base64.urlsafe_b64encode(os.urandom(32)).decode().rstrip(\"=\"))' 2>/dev/null || echo 'TestOTPToken123456901234567890AB') && podman exec tillandsias-test-forge-e2e curl -s -w '%{time_total}' -H \"Cookie: tillandsias_session=$OTP\" http://opencode.test-project.localhost/ --proxy http://proxy:3128 -o /dev/null 2>&1 | awk '{if ($1 < 0.5) print \"PASS\"; else print \"FAIL: \" $1}'"
+    command: "OTP=$(openssl rand -base64 32 | tr '+/' '-_' | tr -d '=[:space:]') && podman exec tillandsias-test-forge-e2e curl -s -w '%{time_total}' -H \"Cookie: tillandsias_session=$OTP\" http://opencode.test-project.localhost/ --proxy http://proxy:3128 -o /dev/null 2>&1 | awk '{if ($1 < 0.5) print \"PASS\"; else print \"FAIL: \" $1}'"
     timeout_ms: 10000
     expected_behavior: "PASS"
 
