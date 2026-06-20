@@ -336,9 +336,19 @@ WantedBy=multi-user.target
         )
         .await?;
 
-        // Enable units
+        // Enable AND start the units now. `inject_bootstrap_logic` runs after
+        // `configure_recipe_distro` has already flipped wsl.conf to
+        // systemd-as-PID1, so by this point systemd is up and multi-user.target
+        // is already reached. A bare `systemctl enable` only writes the
+        // WantedBy symlinks; it does NOT start a unit whose target was already
+        // active this boot. The subsequent `runtime.start()` is a no-op on an
+        // already-running distro, so without `--now` the headless-fetch +
+        // headless units stay `inactive (dead)`, the in-VM binary is never
+        // fetched, the vsock control wire never binds, and provision-once hangs
+        // in `Connecting` until the budget expires.
+        // @trace plan/issues/windows-cold-provision-headless-units-not-started-2026-06-19.md
         self.wsl_root_sh(
-            "systemctl enable tillandsias-headless-fetch.service tillandsias-headless.service",
+            "systemctl enable --now tillandsias-headless-fetch.service tillandsias-headless.service",
         )
         .await?;
 
