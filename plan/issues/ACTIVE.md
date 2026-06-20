@@ -1,6 +1,15 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-20T09:00Z
+Last updated: 2026-06-20T13:56Z
+
+## This Cycle (2026-06-20T13:56Z, linux)
+
+- **Meta-orchestration sync**: Started clean on mutable-Linux `linux-next`, fetched origin, fast-forwarded to `origin/linux-next`, pushed claim commit `824cbc67`, then pushed implementation commit `bb4196df`.
+- **Worker drain**: Completed the first `agent-concurrency-collisions-2026-06-20` slice by adding a shared smoke lock and routing Linux build-install E2E gate scripts through it.
+- **Coordination**: Post-push audit found `origin/windows-next@a3c8b23d` and `origin/osx-next@d829808d` are both ancestors of `origin/linux-next@bb4196df`; sibling-ahead drift is 0.
+- **E2E gates**: Ran local-build E2E under the new lock. Gate 1 failed before destructive reset because post-build `litmus:onboarding-cold-start-discovery` could not find the welcome banner `INDEX.md` cheatsheet signal (`build_install_exit=1`; log dir `target/build-install-smoke-e2e/20260620T134849Z`).
+- **New finding**: Filed `local-smoke/onboarding-cold-start-discovery-cheatsheet-signal` in `plan/issues/build-install-smoke-e2e-findings-2026-06-20.md`.
+- **Next**: Restore the welcome banner cheatsheet `INDEX.md` signal, rerun local-build E2E from gate 1, then continue the remaining concurrency cleanup/stale-binary/autoincremental guardrail work. macOS vault aarch64 remains the critical cross-host blocker.
 
 ## This Cycle (2026-06-20T09:00Z, linux)
 
@@ -113,6 +122,31 @@ issue reports remain in this directory for evidence and auditability, but only
 the items below are immediate work.
 
 ## Immediate
+
+### local-smoke/onboarding-cold-start-discovery-cheatsheet-signal
+
+- status: ready
+- owner_host: linux
+- source: `plan/issues/build-install-smoke-e2e-findings-2026-06-20.md`
+- severity: high - blocks the local-build E2E gate before destructive reset.
+- discovered_by: `/build-install-and-smoke-test-e2e` on tested commit `bb4196df90e60953dbf9c510b20d19d25d115b2f` / installed version `0.3.260620.3`.
+- problem: >
+    The post-build smoke set fails `litmus:onboarding-cold-start-discovery`
+    step 3. `images/default/forge-welcome.sh` still includes `Cheatsheets`
+    and `TILLANDSIAS_CHEATSHEETS`, but no longer includes the required
+    `INDEX.md` discovery signal.
+- evidence:
+  - `target/build-install-smoke-e2e/20260620T134849Z/01-build-install-exit.txt`: `build_install_exit=1`
+  - `target/build-install-smoke-e2e/20260620T134849Z/01-build-install.log:2215`: `Executing litmus:onboarding-cold-start-discovery`
+  - `target/build-install-smoke-e2e/20260620T134849Z/01-build-install.log:2218`: `verify welcome banner surfaces cheatsheet path [FAIL]`
+  - `target/build-install-smoke-e2e/20260620T134849Z/01-build-install.log:2219`: `expected=cheatsheet discovery signal present`
+  - `target/build-install-smoke-e2e/20260620T134849Z/00-smoke-lock.log`: lock acquired at `2026-06-20T13:49:31Z`, released at `2026-06-20T13:56:24Z` with `exit=1`.
+- next_action: >
+    Restore the `INDEX.md` cheatsheet discovery text in
+    `images/default/forge-welcome.sh`, verify the three required literals with
+    grep, then rerun `litmus:onboarding-cold-start-discovery` or full
+    local-build E2E.
+- blocker: none
 
 ### enclave/macos-vault-unreachable-via-publish-aarch64
 

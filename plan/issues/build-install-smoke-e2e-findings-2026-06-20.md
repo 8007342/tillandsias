@@ -1,12 +1,14 @@
 # Build/install smoke E2E findings - 2026-06-20
 
-Status: completed
+Status: active
 Owner: linux
 Discovered by: /build-install-and-smoke-test-e2e (linux)
 
 ## Summary
 
 Initial local-build E2E stopped at gate 3 (`tillandsias --init --debug`) after a successful build/install and destructive Podman reset. The initialization failed because the recently introduced `wasmtime` migration from curl+tar to DNF package management broke the container image build. Specifically, `registry.fedoraproject.org/fedora-minimal:44` does not contain the `wasmtime` package in its default microdnf repositories, yielding `No match for argument: wasmtime` and halting the `forge-base` build.
+
+The wasmtime blocker is fixed, but the 2026-06-20T13:49Z local-build E2E rerun stopped at gate 1 before destructive reset. The build/install command reached post-build status smoke and failed `litmus:onboarding-cold-start-discovery` because `images/default/forge-welcome.sh` no longer surfaces the required `INDEX.md` cheatsheet discovery signal.
 
 ## Packets
 
@@ -30,6 +32,26 @@ Initial local-build E2E stopped at gate 3 (`tillandsias --init --debug`) after a
     - `tillandsias --init --debug` completes successfully on a pristine store.
     - `podman run --rm localhost/tillandsias-forge-base:latest wasmtime --version` returns a valid version.
     - E2E gate 3 passes.
+
+### local-smoke/onboarding-cold-start-discovery-cheatsheet-signal
+
+- id: `local-smoke/onboarding-cold-start-discovery-cheatsheet-signal`
+- type: fix
+- owner_host: linux
+- status: ready
+- capability_tags: [forge, onboarding, litmus, docs, testing]
+- severity: high
+- source: this smoke report
+- discovered_by: `/build-install-and-smoke-test-e2e` on `bb4196df90e60953dbf9c510b20d19d25d115b2f` / `0.3.260620.3`
+- next_action: >
+    Restore the cheatsheet discovery signal in `images/default/forge-welcome.sh`
+    so the welcome banner contains `Cheatsheets`, `TILLANDSIAS_CHEATSHEETS`,
+    and `INDEX.md`, then rerun the post-build onboarding litmus or the full
+    local-build E2E gate.
+- evidence_required:
+    - `grep -Fq 'Cheatsheets' images/default/forge-welcome.sh && grep -Fq 'TILLANDSIAS_CHEATSHEETS' images/default/forge-welcome.sh && grep -Fq 'INDEX.md' images/default/forge-welcome.sh`
+    - `litmus:onboarding-cold-start-discovery` passes in the post-build smoke set.
+    - Local-build E2E advances past gate 1.
 
 ## Events
 
@@ -64,6 +86,23 @@ Initial local-build E2E stopped at gate 3 (`tillandsias --init --debug`) after a
   notes:
     - "The build-install and destructive reset gates succeeded. The init gate failed at build-forge-base."
 
+- type: progress
+  ts: "2026-06-20T13:56:24Z"
+  agent_id: "linux-macuahuitl-codex-20260620T134055Z"
+  host: "linux"
+  state: "failed"
+  evidence:
+    - "target/build-install-smoke-e2e/20260620T134849Z/01-build-install-exit.txt: build_install_exit=1"
+    - "target/build-install-smoke-e2e/20260620T134849Z/00-smoke-lock.log: acquired build-install-smoke-e2e lock at 2026-06-20T13:49:31Z and released at 2026-06-20T13:56:24Z with exit=1"
+    - "target/build-install-smoke-e2e/20260620T134849Z/01-build-install.log:2215: executing litmus:onboarding-cold-start-discovery"
+    - "target/build-install-smoke-e2e/20260620T134849Z/01-build-install.log:2218: verify welcome banner surfaces cheatsheet path [FAIL]"
+    - "target/build-install-smoke-e2e/20260620T134849Z/01-build-install.log:2219: expected=cheatsheet discovery signal present"
+    - "target/build-install-smoke-e2e/20260620T134849Z/01-build-install.log:2250: Post-build status smoke failed"
+  notes:
+    - "Stopped before destructive Podman reset; gates 2 and 3 were not run."
+    - "The nanoclawv2 image-type message occurred earlier in gate 1 and remained non-fatal in this run."
+    - "Forge diagnostics annex wrote plan/diagnostics/diagnostics_20260620T135318Z-summary.md with 25/25 checks passing."
+
 ## Evidence
 
 ### Failure log excerpt
@@ -93,3 +132,26 @@ Initial local-build E2E stopped at gate 3 (`tillandsias --init --debug`) after a
 
 - This failure confirms that `wasmtime` is not packaged in Fedora's standard minimal repositories for F44. The migration performed in commit `7293c902` must be reverted or fixed.
 - The error `Error: Unknown image type: nanoclawv2` also occurred during the failure teardown/cleanup path because the recent `nanoclawv2` image configuration update (commit `58996d8f`) registered it as an image target, but the initialization fails when querying its status or building it (since it's a new image type that might not have a corresponding Containerfile or directory structure, or it was not fully implemented). This should be verified during the fix.
+
+### 2026-06-20T13:49Z locked local-build rerun
+
+- log_dir: `target/build-install-smoke-e2e/20260620T134849Z`
+- tested commit at preflight: `bb4196df90e60953dbf9c510b20d19d25d115b2f`
+- installed version: `Tillandsias v0.3.260620.3`
+- build/install exit: `build_install_exit=1`
+- destructive reset exit: not run
+- init exit: not run
+- lock evidence: `target/build-install-smoke-e2e/20260620T134849Z/00-smoke-lock.log`
+- key log lines from `01-build-install.log`:
+  ```
+  Error: Unknown image type: nanoclawv2
+  [build] Failed to build images (non-fatal, post-build CI may fail)
+  ...
+  Executing litmus:onboarding-cold-start-discovery...
+    [STEP 3/10] verify welcome banner surfaces cheatsheet path ... [FAIL]
+           expected=cheatsheet discovery signal present
+    [FAIL] spec=forge-environment-discoverability test=litmus:onboarding-cold-start-discovery
+  ...
+  Status: [FAIL]
+  [build] Post-build status smoke failed
+  ```

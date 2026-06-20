@@ -1,6 +1,22 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-20T09:00Z
+LastExecutionTime: 2026-06-20T13:56Z
+
+## This Loop (2026-06-20T13:56Z, linux)
+
+- **Cycle type**: meta-orchestration worker drain, coordination audit, and local-build E2E gate on mutable Linux.
+- **Startup**: clean mutable-Linux host on `linux-next`; fetched origin, fast-forwarded to `origin/linux-next`, then pushed claim commit `824cbc67` and implementation commit `bb4196df`.
+- **Sibling heads after post-push audit**:
+  - `main`: `6dfafdf1`.
+  - `linux-next`: `bb4196df`.
+  - `windows-next`: `a3c8b23d` (ancestor of linux-next; 0 sibling-ahead drift).
+  - `osx-next`: `d829808d` (ancestor of linux-next; 0 sibling-ahead drift).
+- **Worker drain**: completed the first `agent-concurrency-collisions-2026-06-20` slice. Added `scripts/with-smoke-lock.sh`, routed Linux build-install E2E gate scripts through the shared `build-install-smoke-e2e` lock, and updated local-build/curl-install e2e runbooks to log lock evidence.
+- **Verification before E2E**: shell syntax checks, helper success/failure lock smokes, `git diff --check`, and `scripts/with-smoke-lock.sh --name build-install-smoke-e2e -- ./build.sh --check` passed.
+- **E2E gates**: local-build E2E started at `target/build-install-smoke-e2e/20260620T134849Z` and acquired the new lock at `2026-06-20T13:49:31Z`. Gate 1 failed with `build_install_exit=1` at `2026-06-20T13:56:24Z`; destructive reset and init gates were not run. Root failure was post-build `litmus:onboarding-cold-start-discovery` step 3: missing welcome banner `INDEX.md` cheatsheet discovery signal.
+- **Findings**: filed `local-smoke/onboarding-cold-start-discovery-cheatsheet-signal` in `plan/issues/build-install-smoke-e2e-findings-2026-06-20.md`. The diagnostics annex wrote `plan/diagnostics/diagnostics_20260620T135318Z-summary.md` with 25/25 checks passing.
+- **Release/e2e freshness**: no release action because local-build E2E did not clear gate 1.
+- **Next**: fix the welcome banner `INDEX.md` signal and rerun local-build E2E; continue remaining concurrency cleanup/stale-binary/autoincremental guardrails after the gate is unblocked.
 
 ## This Loop (2026-06-20T09:00Z, linux)
 
@@ -86,6 +102,8 @@ LastExecutionTime: 2026-06-20T09:00Z
 
 ## Progress Since Last Loop
 
+- **agent-concurrency-collisions-2026-06-20**: first slice completed; smoke gates now use a shared lock helper with durable wait/acquire/release logs.
+- **local-build E2E**: rerun under the new lock stopped at gate 1 with `local-smoke/onboarding-cold-start-discovery-cheatsheet-signal`; gates 2 and 3 were not run.
 - **policy/no-python-litmus-drift**: COMPLETED; no active litmus YAML command
   fields shell out to Python, and the no-Python checker now scans litmus YAML.
 - **forge-diagnostics/e2e-piggyback-orchestration**: COMPLETED no-Python
@@ -164,15 +182,14 @@ LastExecutionTime: 2026-06-20T09:00Z
 
 ## Blockers
 
-- **BLOCKER (linux)**: `local-smoke/wasmtime-dnf-migration-failure` blocks the E2E initialization gate on mutable Linux due to missing `wasmtime` package in Fedora minimal 44 repositories.
+- **BLOCKER (linux)**: `local-smoke/onboarding-cold-start-discovery-cheatsheet-signal` blocks the local-build E2E gate before destructive reset because the welcome banner no longer includes the `INDEX.md` cheatsheet discovery signal required by `litmus:onboarding-cold-start-discovery`.
 - **CRITICAL (linux -> macOS)**:
   `enclave/macos-vault-unreachable-via-publish-aarch64`. Current Linux tree
   already has Vault API listener `0.0.0.0:8200` and host CA loading from
   `/tmp/tillandsias-ca/intermediate.crt`; next useful evidence is the aarch64
   VM probe:
   `curl --cacert /tmp/tillandsias-ca/intermediate.crt https://127.0.0.1:8201/v1/sys/health?standbyok=true`.
-- **CLAIMED (linux)**: `nanoclawv2-orchestration` is actively leased by
-  `linux-tlatoani-big-pickle-20260620T055600Z` until 2026-06-20T09:56Z.
+- **RECONCILE (linux)**: the old `nanoclawv2-orchestration` lease expired; plan state now points toward the ZeroClaw migration path, so reread the packet before taking any legacy NanoClawV2 work.
 - **READY (cross-host)**: `future-intentions-drain/windows-macos-feature-parity`
   packet now shaped and ready for host-specific work.
 
