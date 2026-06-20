@@ -167,3 +167,17 @@ methodology:
       Root files stay terse. Detailed rationale belongs in the owning component
       listed in methodology/catalog.yaml. Ad hoc Markdown intake is inventoried
       and archived through methodology/markdown-distillation.yaml.
+
+  cooperative_work_discipline:
+    rule: >
+      Instead of using heavy tools like JIRA, we treat project management as code.
+      Issues, tasks, and specifications are managed via Git history, Markdown (.md), and YAML (.yaml) files in the ./plan directory.
+      Agents must self-improve by logging inefficiencies (e.g., repeated steps, invalidated caches due to uncoordinated build scripts) directly into plan/issues/ as actionable items.
+
+  clean_workspace_discipline:
+    rule: >
+      Every iteration of work MUST start and end with a completely clean work state (only committed code).
+      Once work is reported as completed, all temporary local artifacts are disposable and must be discarded.
+      Agents encountering a dirty space have a one-off chance to clean up or commit work; otherwise, they must discard uncommitted artifacts.
+      Rely heavily on .gitignore for generated artifacts and dashboards to keep the tree clean.
+
