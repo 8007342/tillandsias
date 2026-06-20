@@ -223,9 +223,10 @@ Before exit:
    promoted to a `plan/index.yaml` packet. An unfiled finding blocks exit.
 2. Refresh `plan/issues/ACTIVE.md` and `plan/loop_status.md` if this cycle
    changed active work, blockers, tested release, or host assignments.
-3. Validate touched YAML with a parser. Use the approved non-Python validator
-   for the host (`tillandsias-policy validate-yaml` where built); Python is not
-   permitted for committed automation (see
+3. Validate touched YAML with a parser. The approved validator is
+   `tillandsias-policy validate-yaml <files>` where built, with
+   `ruby -ryaml -e "YAML.load_file('<file>')"` as the sanctioned fallback.
+   Python is not permitted for committed automation (see
    `plan/issues/meta-orch-enhancement-opportunities-2026-06-20.md` order 63).
 4. Commit targeted files only.
 5. Push the relevant branch.

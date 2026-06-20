@@ -1,7 +1,7 @@
 # Meta-Orchestration Enhancement Opportunities — 2026-06-20
 
 - branch: linux-next
-- status: triaged (all candidates promoted to plan/index.yaml orders 60–63)
+- status: in_progress (Candidate 4 completed, candidates 1-3 ready)
 - owner_host: any (each candidate names its capability requirement)
 - source: meta-orchestration field observations, Cowork scheduled-task runtime,
   cycles 2026-06-20T19:05Z and 2026-06-20T19:15Z (linux_mutable)
@@ -132,3 +132,18 @@ host — the findings are now durable plan state and cannot be lost.
     skills/meta-orchestration/SKILL.md so future cycles keep reducing filed
     findings under verifiable constraints and raise the scan bar (warnings,
     errors, deprecation notices) as the terminal-finding rate falls.
+- type: claim
+  ts: "2026-06-20T19:58:00Z"
+  agent_id: "linux-macuahuitl-gemini-antigravity"
+  host: "linux_mutable"
+  note: >
+    Claimed Candidate 4 (non-Python validator) for implementation.
+- type: completed
+  ts: "2026-06-20T20:00:00Z"
+  agent_id: "linux-macuahuitl-gemini-antigravity"
+  host: "linux_mutable"
+  note: >
+    Completed Candidate 4. Documented Ruby's standard YAML library fallback
+    `ruby -ryaml -e "YAML.load_file('<file>')"` in the Finalization section of
+    skills/meta-orchestration/SKILL.md.
+

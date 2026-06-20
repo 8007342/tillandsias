@@ -1,8 +1,18 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-20T19:40Z
+LastExecutionTime: 2026-06-20T20:00Z
+
+## This Loop (2026-06-20T20:00Z, linux)
+
+- **Cycle type**: meta-orchestration worker-drain slice on mutable Linux (Gemini).
+- **Startup**: Branch `linux-next`, clean worktree. Fast-forwarded to `origin/linux-next@9411b549`. Startup credential channel check passed via keyring.
+- **Worker drain**: Claimed and completed `cowork-nonpython-ledger-validation/decide-and-document` (Order 63). Documented the approved fallback YAML validator `ruby -ryaml -e "YAML.load_file('<file>')"` in the Finalization section of `skills/meta-orchestration/SKILL.md` for environments where `tillandsias-policy` is not pre-built, eliminating the discouraged Python fallback. Updated `plan/index.yaml` and `plan/issues/meta-orch-enhancement-opportunities-2026-06-20.md` to reflect task closure.
+- **Verification**: Validated `plan/index.yaml` with both `tillandsias-policy validate-yaml` and the fallback Ruby one-liner.
+- **E2E gates**: Skipped (worker drain slice).
+- **Push state**: pushed `linux-next` to origin over HTTPS.
 
 ## This Loop (2026-06-20T19:40Z, linux — Tlatoāni-directed)
+
 
 - **Governance**: Bar-raises are Tlatoāni-gated. Convergence point = zero residual
   findings at the current approved bar. Loop proposes bar-raise candidates but

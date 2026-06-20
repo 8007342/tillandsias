@@ -4529,7 +4529,7 @@ plan_index:
     - id: cowork-nonpython-ledger-validation
       order: 63
       title: Approved non-Python YAML/ledger validator for the Cowork runtime
-      status: ready
+      status: done
       kind: research
       deliverable: plan/issues/meta-orch-enhancement-opportunities-2026-06-20.md
       depends_on: []
@@ -4540,7 +4540,7 @@ plan_index:
         never reach for the policy-forbidden python3 fallback.
       tasks:
         - id: cowork-nonpython-ledger-validation/decide-and-document
-          status: ready
+          status: completed
           depends_on: []
           owned_files:
             - skills/meta-orchestration/SKILL.md
@@ -4560,6 +4560,24 @@ plan_index:
             Reduced from meta-orch-enhancement-opportunities-2026-06-20 candidate 4.
             tillandsias-policy not on PATH in Cowork; python forbidden for committed
             automation; yq absent, ruby/node present.
+        - type: claim
+          ts: "2026-06-20T19:58:00Z"
+          agent_id: "linux-macuahuitl-gemini-antigravity"
+          host: linux_mutable
+          note: >
+            Claimed the decide-and-document task on mutable Linux.
+        - type: completed
+          ts: "2026-06-20T20:00:00Z"
+          agent_id: "linux-macuahuitl-gemini-antigravity"
+          host: linux_mutable
+          evidence:
+            - "ruby -ryaml -e \"YAML.load_file('plan/index.yaml')\" runs green"
+            - "skills/meta-orchestration/SKILL.md updated with ruby fallback"
+          note: >
+            Verified that Ruby has built-in yaml parsing (`YAML.load_file`) in
+            standard Linux/Cowork environments, which exits non-zero on syntax
+            errors. Documented it as the sanctioned fallback in the skill's
+            Finalization step. No-python policy remains unviolated.
 
     - id: release-nix-cache-ref-scoping
       order: 64
