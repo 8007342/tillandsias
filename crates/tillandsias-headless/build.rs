@@ -42,6 +42,13 @@ fn main() {
         "images/default/skills",
         &mut assets,
     );
+    collect_assets(
+        &repo_root.join("skills"),
+        &repo_root.join("skills"),
+        repo_root,
+        "images/nanoclawv2/skills",
+        &mut assets,
+    );
 
     for rel in ["scripts/manage-cache.sh", "scripts/run-observatorium.sh"] {
         let path = repo_root.join(rel);
