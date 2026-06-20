@@ -233,12 +233,13 @@ the items below are immediate work.
 
 ### forge-audit/install-terminal-tools
 
-- status: ready
+- status: done
 - owner_host: linux
 - source: `plan/issues/forge-diagnostics-audit-2026-06-20.md`
 - severity: medium — welcome banner advertises tools not installed, no text editor available
-- next_action: Install fzf, eza, htop, mc, tree, micro via microdnf in Containerfile.base. Sync welcome banner tips to match installed tools.
+- next_action: ✅ COMPLETED — fzf, eza, htop, mc, tree, nano, vim-minimal installed. Spec divergence block removed. Litmus updated.
 - blocker: none
+- completed_by: forge-agent inside forge container (2026-06-20T17:11Z)
 
 ### forge-audit/tellme-missing
 

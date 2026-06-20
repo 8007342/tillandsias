@@ -160,20 +160,19 @@ The `/usr/local/bin/` directory contains entrypoints for opend encode-web, claud
 
 ## Action Packets
 
-### Packet A: Install missing terminal tools
+### Packet A: Install missing terminal tools (COMPLETED)
 
 - id: `forge-audit/install-terminal-tools`
 - severity: medium
 - owner_host: linux
 - capability_tags: [containerfiles, dnf, images]
-- next_action: Install fzf, eza, htop, mc, tree, micro (or vim) in `images/default/Containerfile.base` via microdnf. Remove tips for tools not installed, or install them.
-- owned_files:
-  - images/default/Containerfile.base
-  - images/default/forge-welcome.sh
+- next_action: ✅ **DONE** — fzf, eza, htop, mc, tree, nano, vim-minimal added to microdnf install line in `images/default/Containerfile.base:12`. Docblock updated. Litmus test `litmus:forge-shell-tools-implementation-shape` updated to check full tool set. Spec `forge-shell-tools/spec.md` divergence block removed (all 10 terminal tools now installed). Welcome banner tips are all accurate.
 - evidence_required:
-  - microdnf install succeeds for: fzf, eza, htop, mc, tree, micro
-  - All welcome banner tips match actually-installed tools
-  - `bash -n images/default/forge-welcome.sh` passes
+  - ✅ microdnf install succeeds for: fzf, eza, htop, mc, tree, nano, vim-minimal
+  - ✅ All welcome banner tips match actually-installed tools
+  - ✅ `bash -n images/default/forge-welcome.sh` passes
+- completed_in: `9e2be241` (forge audit findings) + `this commit` (implementation)
+- completed_by: forge-agent inside forge container
 
 ### Packet B: Fix marksman LSP runtime availability
 

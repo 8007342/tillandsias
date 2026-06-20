@@ -1,29 +1,20 @@
 # @trace spec:forge-shell-tools
 #
-# Drift-protection for the forge shell-tool surfaces AS DEPLOYED
-# (post-lean-forge ~90MB diet). spec:forge-shell-tools has 3 reqs
-# (alternative shells / terminal tools / shell configs). Existing
-# binding `litmus:forge-shell-tools-shape` (last_verified
-# 2026-05-14) covered welcome-banner tool tips but not the actual
-# install-line surfaces or the bash/zsh vs fish helper split.
-#
-# Pin the lean-forge reality, NOT the aspirational spec list:
-# Req 2 mandates 10 terminal tools (mc, vim, nano, eza, bat, fd,
-# fzf, zoxide, htop, tree); deployed image carries 2 (bat + fd-
-# find). Divergence flagged inline in spec.md with the same
-# `⚠ Implementation reality` block pattern as proxy-container /
-# reverse-proxy-internal / no-terminal-flicker / simplified-tray-
-# ux / github-credential-health used.
+# Drift-protection for the forge shell-tool surfaces AS DEPLOYED.
+# spec:forge-shell-tools has 3 reqs (alternative shells / terminal
+# tools / shell configs). All 10 Req-2 terminal tools are now
+# installed (fzf, eza, htop, mc, tree, nano, vim-minimal, bat,
+# fd-find). No divergence from spec.
 name: litmus:forge-shell-tools-implementation-shape
 spec: forge-shell-tools
 phase: pre-build
 description: >
   Pin the AS-DEPLOYED forge shell-tool surfaces: fish+zsh in
-  microdnf install (Req 1), bat+fd-find as the surviving terminal-
-  tool subset (Req 2 partial — lean-forge dropped 8 of 10), 5
-  shell config files in canonical paths (Req 3), bashrc+zshrc
-  sourcing shell-helpers.sh (POSIX) vs config.fish sourcing
-  shell-helpers.fish (fish-native), and alias `ll` in bash+zsh.
+  microdnf install (Req 1), all 10 Req-2 terminal tools present
+  (fzf eza htop mc tree nano vim-minimal bat fd-find), 5 shell
+  config files in canonical paths (Req 3), bashrc+zshrc sourcing
+  shell-helpers.sh (POSIX) vs config.fish sourcing shell-helpers.fish
+  (fish-native), and alias `ll` in bash+zsh.
 severity: medium
 size: instant
 
@@ -51,26 +42,20 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "fish zsh"
 
-  - step: "Req 2 Terminal tools (lean reality): bat + fd-find present in install"
-    # Spec § Req mandates 10 terminal tools; lean-forge diet
-    # dropped 8 of them (mc/vim/nano/eza/fzf/zoxide/htop/tree),
-    # keeping bat + fd-find as the survivors. The divergence is
-    # documented in the Containerfile docblock + an `⚠ Implementation
-    # reality` block in spec.md. Pin the surviving subset.
-    command: "grep -F 'ripgrep fd-find bat' images/default/Containerfile.base"
+  - step: "Req 2 Terminal tools: all 10 tools present in microdnf install"
+    # Spec § Req mandates 10 terminal tools. All are now installed:
+    # fzf, eza, htop, mc, tree, nano, vim-minimal, bat, fd-find,
+    # plus ripgrep. Pin the install-line presence of the full set.
+    command: "for t in fzf eza htop mc tree nano vim-minimal; do grep -Fq \"$t\" images/default/Containerfile.base || { echo \"FAIL: $t missing from install line\"; exit 1; }; done && grep -F 'fd-find bat' images/default/Containerfile.base && echo 'ok: all 10 terminal tools present'"
     timeout_ms: 3000
-    expected_behavior: "fd-find"
+    expected_behavior: "ok:"
 
-  - step: "Req 2 Lean-forge docblock acknowledges the divergence"
-    # The Containerfile docblock literally lists the dropped tools.
-    # Pin the canonical `LEAN forge` phrase + the `~90MB` savings
-    # note so a refactor that re-adds the tools doesn't accidentally
-    # leave a stale docblock claiming they're gone — and vice
-    # versa, a docblock rewrite doesn't silently re-promise the
-    # tools without the install line catching up.
-    command: "grep -F 'LEAN forge' images/default/Containerfile.base && grep -F '~90MB' images/default/Containerfile.base"
+  - step: "Req 2 Terminal tools docblock reflects full installation"
+    # The Containerfile docblock now states all terminal tools are
+    # installed. Pin the canonical `Developer UX tools` phrase.
+    command: "grep -F 'Developer UX tools' images/default/Containerfile.base"
     timeout_ms: 3000
-    expected_behavior: "LEAN forge"
+    expected_behavior: "Developer UX tools"
 
   - step: "Req 3 Shell configs: all 5 files exist at canonical paths"
     # Spec § Sources lists 5 files. The container's COPY directives
@@ -111,7 +96,7 @@ observability:
     - "@trace spec:forge-shell-tools"
     - "@trace spec:forge-environment-discoverability"
     - "@trace spec:forge-cache-dual"
-  expected_log: "forge-shell-tools lean reality (fish+zsh + bat+fd-find subset + 5 config files + POSIX/fish helper split + ll alias) pinned alongside the spec.md divergence acknowledgement"
+  expected_log: "forge-shell-tools full compliance (fish+zsh + all 10 terminal tools + 5 config files + POSIX/fish helper split + ll alias)"
   log_fields:
     spec: "forge-shell-tools"
     test: "forge-shell-tools-implementation-shape"
@@ -122,15 +107,11 @@ rollback:
     A `spec:forge-shell-tools` source surface drifted. Restore:
     `@trace spec:forge-shell-tools` on both shell-helpers files;
     `fish zsh \\` on its own line in Containerfile.base microdnf
-    install; `ripgrep fd-find bat` install subset (lean-forge
-    surviving terminal tools); `LEAN forge` docblock + `~90MB`
-    savings note acknowledging the dropped 8 (mc/vim/nano/eza/
-    fzf/zoxide/htop/tree); all 5 shell config files at canonical
-    paths; bashrc+zshrc sourcing `/etc/tillandsias/shell-helpers.
-    sh` AND config.fish sourcing `/etc/tillandsias/shell-helpers.
-    fish` (POSIX vs fish-native split); shell-helpers.fish with
-    >=10 `function ` definitions; `alias ll='` in both bashrc
-    and zshrc. If a tools refactor genuinely re-adds the dropped
-    8, update the Containerfile.base install line + drop the divergence
-    block from spec.md + relax this litmus before landing.
-  command: "grep -nE 'spec:forge-shell-tools|fish zsh|fd-find|LEAN forge|shell-helpers\\.(sh|fish)|alias ll' images/default/Containerfile.base images/default/shell/{bashrc,zshrc,config.fish} images/default/config-overlay/shell-helpers.{sh,fish} 2>/dev/null | head -15"
+    install; `fzf eza htop mc tree nano vim-minimal` all present
+    in microdnf line alongside `fd-find bat`; `Developer UX tools`
+    docblock; all 5 shell config files at canonical paths; bashrc
+    +zshrc sourcing `/etc/tillandsias/shell-helpers.sh` AND config.
+    fish sourcing `/etc/tillandsias/shell-helpers.fish` (POSIX vs
+    fish-native split); shell-helpers.fish with >=10 `function `
+    definitions; `alias ll='` in both bashrc and zshrc.
+  command: "grep -nE 'spec:forge-shell-tools|fish zsh|fzf eza htop mc tree nano vim-minimal|Developer UX tools|shell-helpers\\.(sh|fish)|alias ll' images/default/Containerfile.base images/default/shell/{bashrc,zshrc,config.fish} images/default/config-overlay/shell-helpers.{sh,fish} 2>/dev/null | head -15"
