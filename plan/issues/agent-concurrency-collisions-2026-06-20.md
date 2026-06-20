@@ -1,7 +1,7 @@
 # Agent Concurrency & Build Collisions on Shared Host
 
 - branch: linux-next
-- status: ready
+- status: claimed
 - owner_host: linux
 - source: meta-orchestration feedback
 - scope:
@@ -61,3 +61,13 @@
     reason: >
       Locking slice complete and pushed in this checkpoint; remaining scope is
       process cleanup plus stale-binary/autoincremental build-number hardening.
+  - type: claim
+    ts: "2026-06-20T17:07:43Z"
+    agent_id: "linux-macuahuitl-codex-20260620T170743Z"
+    host: "linux"
+    lease_id: "agent-concurrency-process-stale-20260620T170743Z"
+    expires_at: "2026-06-20T21:07:43Z"
+    note: >
+      Claiming a narrow Linux slice: analyze recent smoke/diagnostic artifacts
+      for process leaks, stale installed binaries, or port collisions; then add
+      focused process-cleanup and stale-binary guardrails with targeted evidence.
