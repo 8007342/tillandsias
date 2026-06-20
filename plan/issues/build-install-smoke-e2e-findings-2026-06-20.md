@@ -15,7 +15,7 @@ Initial local-build E2E stopped at gate 3 (`tillandsias --init --debug`) after a
 - id: `local-smoke/wasmtime-dnf-migration-failure`
 - type: fix
 - owner_host: linux
-- status: ready
+- status: claimed
 - capability_tags: [containerfiles, dnf, images, testing]
 - severity: high
 - source: this smoke report
@@ -23,12 +23,22 @@ Initial local-build E2E stopped at gate 3 (`tillandsias --init --debug`) after a
     Revert the wasmtime migration to DNF in `images/default/Containerfile.base`
     and restore the curl+tar extraction with SHA256 verification, or identify a
     reliable repository/COPR supplying wasmtime for Fedora minimal 44.
+- lease_id: "wasmtime-revert-20260620T101400Z"
+- agent_id: "linux-tlatoani-gemini-20260620T101400Z"
+- expires_at: "2026-06-20T14:14:00Z"
 - evidence_required:
     - `tillandsias --init --debug` completes successfully on a pristine store.
     - `podman run --rm localhost/tillandsias-forge-base:latest wasmtime --version` returns a valid version.
     - E2E gate 3 passes.
 
 ## Events
+
+- type: claim
+  ts: "2026-06-20T10:14:00Z"
+  agent_id: "linux-tlatoani-gemini-20260620T101400Z"
+  host: linux
+  lease_id: "wasmtime-revert-20260620T101400Z"
+  expires_at: "2026-06-20T14:14:00Z"
 
 - type: progress
   ts: "2026-06-20T08:59:38Z"

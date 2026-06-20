@@ -193,7 +193,10 @@ the items below are immediate work.
 
 ### local-smoke/wasmtime-dnf-migration-failure
 
-- status: ready
+- status: claimed
+- lease_id: "wasmtime-revert-20260620T101400Z"
+- agent_id: "linux-tlatoani-gemini-20260620T101400Z"
+- expires_at: "2026-06-20T14:14:00Z"
 - owner_host: linux
 - source: `plan/issues/build-install-smoke-e2e-findings-2026-06-20.md`
 - severity: high — blocks local-build E2E and therefore release confidence for integrated `linux-next`
