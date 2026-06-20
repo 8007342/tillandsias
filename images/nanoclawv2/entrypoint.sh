@@ -11,6 +11,6 @@ BRANCH="${TILLANDSIAS_PROJECT_BRANCH:-$(git rev-parse --abbrev-ref HEAD 2>/dev/n
 echo "[nanoclawv2] Starting orchestration for ${PROJECT} (${BRANCH})"
 echo "[nanoclawv2] Allowed actions: advance-work-from-plan, build, service-launch, forge-delegate, status"
 
-exec /usr/local/sbin/opencode run \
+exec /usr/local/bin/opencode run \
   --dangerously-skip-permissions \
   --prompt "Use the /advance-work-from-plan skill to advance work for the project at ${PROJECT}"

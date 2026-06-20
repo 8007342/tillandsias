@@ -20,8 +20,8 @@ plan:
 
   current_state:
     last_completed_step: version-conflict-release (step 37)
-    next_step: none
-    next_graph_node: none
+    next_step: future-intentions-drain (step 58)
+    next_graph_node: future-intentions-drain/drain-tasks
     frontier_note: >
       All steps in the v0.3.0 implementation plan (steps 0-49) are fully completed,
       verified, and integrated across Linux, macOS, and Windows. The final operator-gated

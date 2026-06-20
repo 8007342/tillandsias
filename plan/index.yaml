@@ -4267,3 +4267,22 @@ plan_index:
                 transient gh helper container ran `gh auth login` and could not
                 connect to `api.github.com`. The helper launch attached only to
                 `--network tillandsias-enclave`.
+
+    - id: future-intentions-drain
+      order: 58
+      title: Drain future intentions into planned tasks
+      status: ready
+      deliverable: plan/steps/58-future-intentions-drain.md
+      depends_on: []
+      outcome: >
+        All future intentions are broken down into active planned issues, and discussions 
+        on architectural decisions with The Tlatoāni are initiated.
+      tasks:
+        - id: future-intentions-drain/drain-tasks
+          status: ready
+          depends_on: []
+          owned_files:
+            - plan.yaml
+            - plan/index.yaml
+            - plan/steps/58-future-intentions-drain.md
+            - plan/issues/

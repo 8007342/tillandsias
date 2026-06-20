@@ -56,4 +56,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-podman/src/runtime.rs#L11](../../../crates/tillandsias-podman/src/runtime.rs#L11)
 - [images/git/Containerfile#L51](../../../images/git/Containerfile#L51)
 - [scripts/build-image.sh#L19](../../../scripts/build-image.sh#L19)
-- [scripts/build-image.sh#L336](../../../scripts/build-image.sh#L336)
+- [scripts/build-image.sh#L338](../../../scripts/build-image.sh#L338)
