@@ -4279,7 +4279,7 @@ plan_index:
         on architectural decisions with The Tlatoāni are initiated.
       tasks:
         - id: future-intentions-drain/drain-tasks
-          status: in_progress
+          status: completed
           depends_on: []
           owned_files:
             - plan.yaml
@@ -4287,7 +4287,7 @@ plan_index:
             - plan/steps/58-future-intentions-drain.md
             - plan/issues/
         - id: future-intentions-drain/containerfile-dnf-migration
-          status: ready
+          status: completed
           depends_on: [future-intentions-drain/drain-tasks]
           owned_files:
             - plan/issues/containerfile-dnf-migration-2026-06-20.md
@@ -4301,3 +4301,11 @@ plan_index:
             - plan/issues/forge-continuous-enhancement-automation-2026-06-20.md
             - .opencode/skills/forge-continuous-enhancement/SKILL.md
             - methodology.yaml
+        - id: future-intentions-drain/windows-macos-feature-parity
+          status: ready
+          depends_on: [future-intentions-drain/drain-tasks]
+          owned_files:
+            - plan/issues/windows-macos-feature-parity-2026-06-12.md
+            - plan/issues/ACTIVE.md
+            - plan/issues/osx-next-work-queue-2026-05-25.md
+            - plan/issues/windows-next-work-queue-2026-05-25.md

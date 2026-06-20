@@ -24,7 +24,7 @@ The `plan.yaml` file currently contains several "future intentions" that have no
 - [x] Elaborate on the issue, expanding on what needs to be done.
 - [x] **Important**: Where architectural decisions are required, formalize these as requirements to have discussions with "The Tlatoāni" for approval. Much of the work is self-evident to create tasks from it, but architecture choices need approval.
 - [x] Remove the drained item from `future_intentions` once it has been fully formalized into the `./plan`.
-- [ ] Items 1–6 drained; remaining: Windows/macOS parity (item 7). Drain next item.
+- [x] Items 1-7 drained; no orphaned `future_intentions` remain in `plan.yaml`.
 
 ## Progress
 
@@ -34,3 +34,4 @@ The `plan.yaml` file currently contains several "future intentions" that have no
 - 2026-06-20T04:13Z (linux-tlatoani-big-pickle): Drained item 4 — created `plan/issues/forge-build-telemetry-2026-06-20.md` with full instrumentation gap analysis, three-slice implementation plan, and Podman JSON progress recommendation. Removed from `future_intentions`, added to `drained_items`.
 - 2026-06-20T05:10Z (linux-tlatoani-big-pickle): Implemented containerfile-dnf-migration slice 1 — migrated wasmtime from curl+tar to microdnf install wasmtime. Scope correction: buf already absent from Containerfile, ollama intentionally avoids DNF (GPU bloat). Commit `7293c902`.
 - 2026-06-20T05:16Z (linux-tlatoani-big-pickle): Drained items 5-6 (tellme + forge-expert) — updated `plan/issues/tellme-discoverability-and-forge-expert-2026-06-12.md` with structured gap analysis, 4-slice implementation plan, and acceptance criteria. Removed from `future_intentions`, added to `drained_items`.
+- 2026-06-20T05:44Z (linux-macuahuitl-codex): Drained item 7 (Windows/macOS feature parity) — expanded `plan/issues/windows-macos-feature-parity-2026-06-12.md` into a structured cross-host parity packet with blocker closure, launch-route parity, menu truth, and e2e acceptance waves. Removed the last orphan from `future_intentions`, added to `drained_items`.
