@@ -4418,7 +4418,7 @@ plan_index:
     - id: e2e-eligibility-probe
       order: 60
       title: Host e2e-eligibility probe (stop re-deriving the podman-session skip)
-      status: ready
+      status: completed
       kind: optimization
       deliverable: plan/issues/meta-orch-enhancement-opportunities-2026-06-20.md
       depends_on: []
@@ -4430,7 +4430,7 @@ plan_index:
         recorded once per host run.
       tasks:
         - id: e2e-eligibility-probe/implement
-          status: ready
+          status: completed
           depends_on: []
           owned_files:
             - scripts/e2e-preflight.sh
@@ -4452,6 +4452,27 @@ plan_index:
             Reduced from meta-orch-enhancement-opportunities-2026-06-20 candidate 1.
             Cowork cycles 09:00Z/17:45Z/18:35Z/19:05Z/19:15Z all re-derived the
             same e2e-skip verdict; e2e-preflight.sh has no session probe.
+        - type: claim
+          ts: "2026-06-20T20:05:00Z"
+          agent_id: "linux-claude-opus48-cowork-20260620T2004Z"
+          host: linux_mutable
+          note: >
+            Claimed e2e-eligibility-probe/implement on mutable Linux (Cowork).
+        - type: completed
+          ts: "2026-06-20T20:12:00Z"
+          agent_id: "linux-claude-opus48-cowork-20260620T2004Z"
+          host: linux_mutable
+          evidence:
+            - "scripts/e2e-preflight.sh: added e2e_eligibility_verdict() + `eligibility` standalone mode emitting one line ^(eligible|skip:[a-z0-9-]+)$; verdict recorded once per run to LOG_DIR/00-e2e-eligibility.txt"
+            - "Live sandbox verdict: skip:no-podman-user-session (no /run/user/1000); podman-not-functional and well-formed-grammar branches also exercised live"
+            - "Bound litmus:e2e-eligibility-probe-shape (openspec/litmus-tests/) + registered meta-orchestration spec in openspec/litmus-bindings.yaml"
+            - "run-litmus-test.sh meta-orchestration --phase pre-build --size instant => 4/4 OK, PASS"
+            - "skills/meta-orchestration/SKILL.md E2E Gates now consult `scripts/e2e-preflight.sh eligibility`"
+          note: >
+            Verdict is structured + recorded once per host run; the recurring prose
+            re-derivation of the podman-session skip is retired. The `eligible`
+            branch is the guarded terminal fall-through (sandbox cannot provide a
+            working rootless podman to assert it live).
 
     - id: credential-channel-check
       order: 61

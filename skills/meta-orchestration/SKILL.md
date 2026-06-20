@@ -185,6 +185,15 @@ Run eligible e2e gates after worker drain:
 | macos | yes | yes |
 | windows | yes | yes |
 
+Before running any local-build e2e gate, consult the structured host-eligibility
+verdict instead of re-deriving the skip reason in prose: run
+`scripts/e2e-preflight.sh eligibility`, which prints exactly one line matching
+`^(eligible|skip:[a-z0-9-]+)$`. Proceed with the local-build gate only on
+`eligible`; on any `skip:<reason>` (e.g. `skip:no-podman-user-session` in the
+Cowork sandbox, which has no `/run/user/<uid>`) record the verdict once and skip
+the local-build gate without re-litigating it. Pinned by
+`litmus:e2e-eligibility-probe-shape`.
+
 Rules:
 
 - Local-build e2e uses `/build-install-and-smoke-test-e2e`.

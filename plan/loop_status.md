@@ -1,6 +1,16 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-20T20:00Z
+LastExecutionTime: 2026-06-20T20:12Z
+
+## This Loop (2026-06-20T20:12Z, linux)
+
+- **Cycle type**: meta-orchestration worker-drain slice on mutable Linux (Claude Opus 4.8, Cowork).
+- **Startup**: Branch `linux-next`, clean worktree. Fast-forwarded `d3974cdf..cfc475db` to `origin/linux-next`. Credential Channel Guard passed via `.git/.gh-credentials` + `credential.helper=store` (HTTPS).
+- **Worker drain**: Completed `e2e-eligibility-probe` (Order 60). Structured host-eligibility verdict probe added to `scripts/e2e-preflight.sh` (`eligibility` mode, grammar `^(eligible|skip:[a-z0-9-]+)$`), wired into the skill's E2E Gates, retiring the per-cycle prose re-derivation of the podman-session skip.
+- **Verification**: `litmus:e2e-eligibility-probe-shape` bound + `meta-orchestration` spec registered; `run-litmus-test.sh meta-orchestration --phase pre-build --size instant` → 4/4 OK, PASS. YAML validated with `ruby -ryaml`.
+- **Coordinator**: windows-next + osx-next both ancestors of HEAD — no merge, no release.
+- **E2E gates**: Local-build gate self-skipped — the new probe returns `skip:no-podman-user-session` in the Cowork sandbox (no `/run/user`); no runtime delta since v0.3.260620.8.
+- **Push state**: pushed `linux-next` to origin over HTTPS at finalization.
 
 ## This Loop (2026-06-20T20:00Z, linux)
 

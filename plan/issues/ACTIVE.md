@@ -1,6 +1,14 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-20T20:00Z
+Last updated: 2026-06-20T20:12Z
+
+## This Cycle (2026-06-20T20:12Z, linux_mutable — Claude Opus 4.8 Cowork meta-orch)
+
+- **Startup**: Clean worktree on `linux-next`, fast-forwarded `d3974cdf..cfc475db` to `origin/linux-next`. Credential Channel Guard passed (`.git/.gh-credentials` non-empty + `credential.helper=store` over HTTPS; `gh auth status` keyring-empty, which the guard correctly tolerates).
+- **Worker drain**: Claimed and completed `e2e-eligibility-probe/implement` (Order 60). Added `e2e_eligibility_verdict()` + an `eligibility` standalone mode to `scripts/e2e-preflight.sh` emitting one line `^(eligible|skip:[a-z0-9-]+)$` (reasons: `no-podman-binary`, `no-podman-user-session`, `podman-not-functional`); recorded once per run to `LOG_DIR/00-e2e-eligibility.txt`. Wired the skill's E2E Gates to consult it. The recurring prose re-derivation of the podman-session skip is retired.
+- **Verification**: Bound `litmus:e2e-eligibility-probe-shape` and registered the `meta-orchestration` spec in `openspec/litmus-bindings.yaml`. `run-litmus-test.sh meta-orchestration --phase pre-build --size instant` → **4/4 OK, PASS**. Live sandbox verdict `skip:no-podman-user-session` (no `/run/user/1000`); `podman-not-functional` + well-formed-grammar branches also exercised live. YAML validated with `ruby -ryaml`.
+- **Coordinator**: `origin/windows-next@a3c8b23d` and `origin/osx-next@d829808d` both ancestors of `linux-next` HEAD — no sibling merge, no release (loop-tooling + ledger delta only, no runtime change).
+- **Next**: Order 61 `credential-channel-check` (executable guard, needs Rust path), Order 64 `release-nix-cache-ref-scoping` + Order 65 `release-build-monitoring` (build/CI-capable host).
 
 ## This Cycle (2026-06-20T20:00Z, linux_mutable — Gemini-Antigravity worker)
 

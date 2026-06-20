@@ -1,0 +1,63 @@
+# @trace spec:meta-orchestration
+#
+# Pins the host e2e-eligibility probe (plan order 60). The meta-orchestration
+# E2E Gates must consult a structured verdict (`eligible` | `skip:<reason>`)
+# emitted once per host run instead of re-deriving "no /run/user => no podman
+# user session => skip" in prose every cycle. This test falsifies drift in the
+# probe's grammar, its no-session branch, and the skill's wiring to it.
+name: litmus:e2e-eligibility-probe-shape
+spec: meta-orchestration
+phase: pre-build
+description: >
+  Pin scripts/e2e-preflight.sh's e2e_eligibility_verdict probe: the
+  `eligibility` standalone mode, the falsifiable verdict grammar
+  ^(eligible|skip:[a-z0-9-]+)$, the deterministic no-user-session branch, and
+  the meta-orchestration skill's consultation of the probe in its E2E Gates.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains scripts/e2e-preflight.sh
+  - workspace contains skills/meta-orchestration/SKILL.md
+  - podman binary is available in PATH
+  - shell utilities (grep, bash) are available in PATH
+
+critical_path:
+  - step: "probe defines e2e_eligibility_verdict and the standalone eligibility mode"
+    command: "grep -q 'e2e_eligibility_verdict()' scripts/e2e-preflight.sh && grep -q '\"eligibility\"' scripts/e2e-preflight.sh && echo 'ok: probe-defined'"
+    timeout_ms: 3000
+    expected_behavior: "ok: probe-defined"
+
+  - step: "a missing rootless runtime dir yields the deterministic no-session skip verdict"
+    command: "XDG_RUNTIME_DIR=/nonexistent-litmus-e2e-elig bash scripts/e2e-preflight.sh eligibility"
+    timeout_ms: 5000
+    expected_behavior: "skip:no-podman-user-session"
+
+  - step: "the probe emits exactly one well-formed verdict line"
+    command: "n=$(bash scripts/e2e-preflight.sh eligibility | grep -cE '^(eligible|skip:[a-z0-9-]+)$'); [ \"$n\" = \"1\" ] && echo \"ok: well-formed verdict ($n line)\" || { echo \"FAIL: $n lines\"; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: well-formed verdict"
+
+  - step: "the meta-orchestration skill E2E Gates consult the probe"
+    command: "grep -q 'e2e-preflight.sh eligibility' skills/meta-orchestration/SKILL.md && echo 'ok: skill-consults-probe'"
+    timeout_ms: 3000
+    expected_behavior: "ok: skill-consults-probe"
+
+observability:
+  traces:
+    - "@trace spec:meta-orchestration"
+  expected_log: "e2e-eligibility verdict probe pinned (grammar + no-session branch + skill wiring)"
+  log_fields:
+    spec: "meta-orchestration"
+    test: "e2e-eligibility-probe-shape"
+    artifact: "scripts/e2e-preflight.sh + skills/meta-orchestration/SKILL.md"
+
+rollback:
+  on_failure: >
+    The e2e-eligibility probe drifted. Restore e2e_eligibility_verdict() in
+    scripts/e2e-preflight.sh emitting exactly one line matching
+    ^(eligible|skip:[a-z0-9-]+)$ (reasons: no-podman-binary,
+    no-podman-user-session, podman-not-functional), the `eligibility` standalone
+    mode, and the E2E Gates consultation of `scripts/e2e-preflight.sh eligibility`
+    in skills/meta-orchestration/SKILL.md.
+  command: "grep -nE 'e2e_eligibility_verdict|eligibility|skip:(no-podman-binary|no-podman-user-session|podman-not-functional)' scripts/e2e-preflight.sh | head -20"
