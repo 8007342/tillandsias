@@ -1,6 +1,19 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-20T12:04Z
+Last updated: 2026-06-20T13:04Z
+
+## This Cycle (2026-06-20T13:04Z, linux)
+
+- **Meta-orchestration sync**: Startup on mutable Linux (Cowork session). Branch
+  `linux-next`, 9 commits ahead of `origin/linux-next` (push-blocked, persistent
+  SSH constraint). Git fetch FAILED — SSH unavailable. Saturday — full drain eligible.
+- **Worker drain**: No new plan work eligible for linux without SSH/aarch64 VM.
+  All prior housekeeping complete. Litmus 107/107 PASS verified.
+- **E2E gates**: Skipped — no runtime delta; push blocked.
+- **Push state**: BLOCKED — SSH unavailable. linux-next 9 commits ahead of origin.
+  Operator must: `git push origin linux-next`.
+- **Next**: (1) Operator push. (2) Local-build e2e (nanoclawv2 live container
+  launch). (3) aarch64 VM pasta probe for vault port-forwarding.
 
 ## This Cycle (2026-06-20T12:04Z, linux)
 
