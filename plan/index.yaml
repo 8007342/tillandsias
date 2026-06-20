@@ -4294,3 +4294,10 @@ plan_index:
             - images/default/Containerfile.base
             - images/inference/Containerfile
             - scripts/build-image.sh
+        - id: future-intentions-drain/forge-continuous-enhancement
+          status: ready
+          depends_on: [future-intentions-drain/drain-tasks]
+          owned_files:
+            - plan/issues/forge-continuous-enhancement-automation-2026-06-20.md
+            - .opencode/skills/forge-continuous-enhancement/SKILL.md
+            - methodology.yaml
