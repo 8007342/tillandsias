@@ -1,6 +1,6 @@
 ---
 name: smoke-curl-install-and-test-e2e
-description: Clean-room end-to-end smoke test of a PUBLISHED release. Curl-installs the latest release binary from GitHub, does a full `podman system reset --force`, runs `tillandsias --debug --init` from a pristine state, and (if init is clean) launches `tillandsias . --opencode --prompt "Use the /forge-continuous-enhancement skill"`. Every issue observed — by this skill's agent during install/reset/init, or by the agents running inside the forge under /forge-continuous-enhancement — is filed as a plan/issues work packet for later pickup by /advance-work-from-plan.
+description: Clean-room end-to-end smoke test of a PUBLISHED release. Curl-installs the latest release binary from GitHub, does a full `podman system reset --force`, runs `tillandsias --debug --init` from a pristine state, and (if init is clean) launches `tillandsias . --opencode --prompt "Use the /meta-orchestration skill"`. Every issue observed — by this skill's agent during install/reset/init, or by the agents running inside the forge under meta-orchestration — is filed as a plan/issues work packet for later pickup by /advance-work-from-plan.
 ---
 
 # Smoke: Curl-Install and Test End-to-End
@@ -176,7 +176,7 @@ halted at init and why.
 ```bash
 TILLANDSIAS_SMOKE_LOCK_LOG=target/smoke-e2e/00-smoke-lock.log \
   scripts/with-smoke-lock.sh --name release-smoke-e2e -- \
-  env TILLANDSIAS_NO_TRAY=1 tillandsias . --opencode --prompt "Use the /forge-continuous-enhancement skill" 2>&1 \
+  env TILLANDSIAS_NO_TRAY=1 tillandsias . --opencode --prompt "Use the /meta-orchestration skill" 2>&1 \
   | tee target/smoke-e2e/04-opencode.log
 ```
 

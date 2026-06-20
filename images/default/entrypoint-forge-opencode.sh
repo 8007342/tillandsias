@@ -21,6 +21,7 @@ fi
 # by the prepare-commit-msg hook installed in lib-common.sh.
 export TILLANDSIAS_AGENT_NAME="OpenCode"
 export TILLANDSIAS_GENERATED_BY="tool=opencode"
+export TILLANDSIAS_HOST_KIND="forge"
 
 # @trace spec:forge-hot-cold-split, spec:agent-cheatsheets, spec:forge-opencode-onboarding
 # Populate tmpfs hot mount (/opt/cheatsheets) from image-baked lower layer.

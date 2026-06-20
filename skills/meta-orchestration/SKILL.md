@@ -35,8 +35,9 @@ If a push fails after three fetch/rebase retries, mark the active plan item
 
 Detect host at the start of every cycle:
 
+- `forge`: Inside the Tillandsias developer forge container (typically detected by checking if `TILLANDSIAS_HOST_KIND` is set to `forge`).
 - `linux_immutable`: Linux with `/run/ostree-booted` present or `rpm-ostree` on PATH.
-- `linux_mutable`: Linux without the immutable marker.
+- `linux_mutable`: Linux without the immutable marker (and not inside the forge container).
 - `macos`: Darwin.
 - `windows`: Windows, MSYS, MINGW, or PowerShell host.
 
@@ -69,7 +70,7 @@ When choosing the builder role, run `/advance-work-from-plan` repeatedly in a `.
 - every eligible item is blocked;
 - a terminal failure was filed;
 - the current cycle has already produced a coherent commit and the next packet
-  would exceed the recurring-loop budget.
+  would exceed the recurring-loop budget (note: if running inside a `forge` container under smoke tests, ignore this limit and drain as many ready forge tasks as possible in a single loop run to make progress in large batches).
 
 Each worker cycle must obey the non-negotiable exit contract above.
 

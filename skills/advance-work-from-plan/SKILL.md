@@ -17,13 +17,14 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
     git checkout linux-next
     git pull --ff-only origin linux-next
     ```
-2.  **Host and Identity**: Identify your platform (`linux`, `windows`, `macos`), your agent name, and your intended capabilities (`rust`, `podman`, `docs`, `testing`, etc.).
+2.  **Host and Identity**: Identify your platform (`linux`, `windows`, `macos`, `forge`), your agent name, and your intended capabilities (`rust`, `podman`, `docs`, `testing`, etc.).
 3.  **Host Detection Table**:
-    | uname/$OS | Platform Name | Canonical Branch |
-    |-----------|---------------|------------------|
-    | Linux     | `linux`       | `linux-next`     |
-    | macOS     | `macos`       | `osx-next`       |
-    | Windows   | `windows`     | `windows-next`   |
+    | uname/$OS / env | Platform Name | Canonical Branch |
+    |-----------------|---------------|------------------|
+    | Inside Forge    | `forge`       | `linux-next`     |
+    | Linux           | `linux`       | `linux-next`     |
+    | macOS           | `macos`       | `osx-next`       |
+    | Windows         | `windows`     | `windows-next`   |
 4.  **Create Agent ID**: Compose a unique ID: `<platform>-<workstation>-<backend>-<utc-timestamp>`.
 5.  **Read Authoritative Ledgers**: Read:
     -   `methodology.yaml`
@@ -43,16 +44,17 @@ This skill is the recurring scheduled execution loop for worker agents. It allow
     -   (Linux only) `plan/issues/linux-headless-spec-gaps-2026-05-27.md` — diagnostics + headless backlog.
     -   Any other `plan/issues/*.md` referencing your host or "any host".
 2.  **Filter Eligible Packets**: Find tasks where:
-    -   `owner_host` matches your platform or is `any`.
+    -   `owner_host` matches your platform (e.g. `forge`), is `any`, or is a forge diagnostics task (e.g., `forge-improvements/*` or `smoke-finding/forge-*`).
     -   `status` is `ready`, `pending` (if dependencies are unblocked), or `failed-retryable`.
     -   `capability_tags` intersect with your capabilities.
     -   There is no active unexpired lease.
 3.  **Selection Priority (Top Wins)**:
+    -   **If running on `forge` host**: Prioritize forge diagnostics, toolchain improvements, and onboarding tasks (e.g. `forge-improvements/proposals/` and `smoke-finding/forge-*` packets) to unblock other builders.
     -   **Diagnostics-driven container-start verification** (USER PRIORITY, linux runtime-host today): work that strengthens the `--diagnostics` → annex → distill → litmus chain. See `scripts/forge-diagnostics-annex.sh`, `scripts/distill-forge-diagnostics.sh`, `openspec/litmus-tests/litmus-forge-diagnostics-e2e.yaml`, `methodology/forge-diagnostics.yaml` piggyback_protocol.
     -   **Spec gap fills**: `openspec/specs/<spec>/spec.md` requirements without implementation coverage. Focus on `headless-mode`, `podman-idiomatic-patterns`, `runtime-diagnostics-stream`, `logging-accountability`, `observability-metrics`.
     -   **Drift-protection litmus**: instant-phase tests pinning surfaces that recent work added (formatter literals, env-var contracts, public API names, unit-test names).
     -   **Clippy / idiomatic-podman hardening**.
-4.  **Constraint**: ONE logical commit per cycle. If a slice estimates >2h, split it and ship the first half.
+4.  **Constraint**: ONE logical commit per cycle. If a slice estimates >2h, split it and ship the first half. (Exception: When running on the `forge` platform inside E2E smoke tests, the single-commit limit is relaxed; you should claim, implement, and complete as many ready forge-related tasks as possible in a single session to maximize progress in large batches.)
 5.  **Delegate Parallelizable Research**: Use sub-agents for file inventories, grep searches, etc., but keep ownership of specs, verification, and commits.
 
 ---
