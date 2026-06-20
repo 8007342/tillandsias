@@ -1,6 +1,6 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-18T23:20Z
+Last updated: 2026-06-20T01:01Z
 
 This file is the first stop for agents inspecting `plan/issues/`. Historical
 issue reports remain in this directory for evidence and auditability, but only
@@ -328,6 +328,27 @@ The 2026-06-16 critical/high forge proposals were triaged in
 - **Next useful evidence unchanged**: operator-attended
   `tillandsias --debug --github-login`; Windows Smart App Control decision;
   macOS step 49d / m8 interactive smoke.
+
+## This Cycle (2026-06-20T01:01Z, windows)
+
+- **SAC blocker RESOLVED**: operator turned Smart App Control off
+  (`VerifiedAndReputablePolicyState=0`). Confirmed native builds work via the
+  exact failing site: `cargo check -p tillandsias-policy` ran serde's
+  build-script clean (6.46s), no os error 4551.
+  `plan/issues/windows-smart-app-control-build-block-2026-06-18.md` → RESOLVED.
+- **Synced**: fast-forwarded `windows-next` from `41a3fab1` to shared frontier
+  `origin/linux-next` `1dfd2bea` (all 5 prior local plan commits were already in
+  linux-next; clean ff, no merge conflicts).
+- **E2E gate (local-build, windows)**: PASS. build → install (freshness SHA ==
+  HEAD) → `wsl --unregister tillandsias` → cold `--provision-once` → VM Ready.
+  Forge lane N/A (Linux-only). Report:
+  `plan/issues/build-install-smoke-e2e-windows-2026-06-19.md`.
+- **Worker fix landed (windows)**: the e2e gate surfaced a cold-provision hang —
+  headless units `enable`d but never started. Fixed `enable` → `enable --now` in
+  `wsl_lifecycle.rs::inject_bootstrap_logic`; re-verified end-to-end (auto VM
+  Ready, no manual start). `windows/cold-provision-headless-units-not-started`
+  → done. Packet:
+  `plan/issues/windows-cold-provision-headless-units-not-started-2026-06-19.md`.
 
 ## Achieved This Cycle (2026-06-18T10:15Z, macos)
 
