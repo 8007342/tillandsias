@@ -1,8 +1,24 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-20T04:13Z
+LastExecutionTime: 2026-06-20T04:51Z
 
-## This Loop
+## This Loop (2026-06-20T04:51Z, macos)
+
+- **Cycle type**: macOS meta-orchestration: sync osx-next, worker drain.
+- **Startup**: began on `osx-next`. Untracked user work present
+  (`build-osx-tray.sh`, `research/`, `src-tauri/`,
+  `plan/issues/macos-windows-tray-ux-parity-audit-2026-06-13.md`) — left untouched.
+- **Merge**: fast-forwarded `osx-next` to `origin/linux-next` (`a3c8b23d`).
+- **Sibling heads after fetch**: linux-next: `a3c8b23d`, windows-next: `a3c8b23d`,
+  osx-next: `a3c8b23d`, main: `6dfafdf1`.
+- **Worker drain**: No eligible autonomous macOS work. Vault blocker remains with
+  `enclave/macos-vault-unreachable-via-publish-aarch64` (owner=linux, status=ready).
+  `macos-tray/github-login-route-to-orchestrated-flow` claimed+blocked.
+  Step 49d user-attended.
+- **E2E gates**: Skipped — no macOS runtime delta.
+- **Next**: Re-check after Linux vault fix; untracked user work unchanged.
+
+## This Loop (2026-06-20T04:13Z, linux)
 
 - **Cycle type**: meta-orchestration on mutable Linux (Fedora 44): worker drain
   (future-intentions step 58).

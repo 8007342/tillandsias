@@ -1,6 +1,20 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-20T03:24Z
+Last updated: 2026-06-20T04:51Z
+
+## This Cycle (2026-06-20T04:51Z, macos)
+
+- **Meta-orchestration sync**: Fast-forwarded `osx-next` to current
+  `origin/linux-next` (`a3c8b23d`) — includes the latest linux+windows work
+  (drain commits, cold-provision headless fix, Windows SAC e2e evidence).
+- **Startup hygiene finding**: Untracked user artifacts remain unmodified —
+  `build-osx-tray.sh`, `plan/issues/macos-windows-tray-ux-parity-audit-2026-06-13.md`,
+  `research/`, `src-tauri/`. Left untouched per policy.
+- **Worker drain**: No eligible autonomous macOS work. `enclave/macos-vault-unreachable-via-publish-aarch64`
+  still `ready` (owner=linux); `macos-tray/github-login-route-to-orchestrated-flow`
+  remains claimed+blocked on vault fix; step 49d user-attended.
+- **E2E gates**: Skipped — no macOS runtime delta since prior cycle.
+- **Next**: Re-check after the Linux vault fix lands; user work unchanged.
 
 This file is the first stop for agents inspecting `plan/issues/`. Historical
 issue reports remain in this directory for evidence and auditability, but only
