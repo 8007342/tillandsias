@@ -1,12 +1,15 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-20T21:45Z
+Last updated: 2026-06-20T17:15Z
 
-## This Cycle (2026-06-20T21:45Z, linux, forge container)
+## This Cycle (2026-06-20T17:15Z, linux, forge container)
 
-- **Worker drain**: Completed `future-intentions-drain/windows-macos-feature-parity` (step 58, final task) — the last future intention was already drained into a structured cross-host parity issue; marked the task `completed` in `plan/index.yaml` and step file.
-- **E2E gates**: Skipped — forge container has no podman; plan-only cycle.
-- **Checkpoint**: See `plan/issues/forge-continuous-enhancement-findings-2026-06-20.md` for this cycle's forge findings.
+- **Research**: Comprehensive vault infrastructure audit (Hashicorp Vault at `https://vault:8200`, AppRole auth, KV v2 engine, GitHub token pattern as canonical "login once → store in vault → inject at runtime").
+- **Research**: Determined agent auth status — Claude/Codex/Antigravity have NO vault integration. Claude uses `ANTHROPIC_API_KEY`, Codex uses `OPENAI_API_KEY`, Antigravity (`agy`) uses similar env var.
+- **Research**: Antigravity CLI is the `agy` binary, invoked in `repeat` script line 271-275. Not in forge image yet.
+- **Worker drain**: Implemented `forge-audit/install-terminal-tools` — added fzf, eza, htop, mc, tree, nano, vim-minimal to Containerfile.base, removed spec divergence block, updated litmus test.
+- **Filed 12 new packets**: Vault policies + login commands for Claude/Codex/Antigravity + credential injection + entrypoint probe + antigravity entrypoint + forge runner host type + e2e meta-orch integration + opencode config tune + resource limits tune + antigravity welcome integration.
+- **See**: `plan/issues/forge-credentials-vault-integration-2026-06-20.md` for full design and packets.
 
 ## This Cycle (2026-06-20T13:56Z, linux)
 
@@ -276,6 +279,114 @@ the items below are immediate work.
 - severity: low (medium on resource-constrained hosts) — no cgroup limits on forge container
 - next_action: Add --memory=6g --cpus=3 to forge container launch args
 - blocker: none
+
+### forge-credentials/vault-policies
+
+- status: ready
+- owner_host: linux
+- source: `plan/issues/forge-credentials-vault-integration-2026-06-20.md`
+- severity: high — blocks all credential injection for Claude/Codex/Antigravity
+- next_action: Add vault ACL policies + AppRole roles for anthropic/openai/antigravity token storage
+- blocker: none
+
+### forge-credentials/claude-login-command
+
+- status: ready
+- owner_host: linux
+- source: `plan/issues/forge-credentials-vault-integration-2026-06-20.md`
+- severity: high — enables first-launch Claude auth via vault
+- next_action: Build `tillandsias --anthropic-login` following GitHub login pattern
+- blocker: forge-credentials/vault-policies
+
+### forge-credentials/codex-login-command
+
+- status: ready
+- owner_host: linux
+- source: `plan/issues/forge-credentials-vault-integration-2026-06-20.md`
+- severity: high — enables first-launch Codex auth via vault
+- next_action: Build `tillandsias --openai-login` following GitHub login pattern
+- blocker: forge-credentials/vault-policies
+
+### forge-credentials/antigravity-login-command
+
+- status: ready
+- owner_host: linux
+- source: `plan/issues/forge-credentials-vault-integration-2026-06-20.md`
+- severity: high — enables first-launch Antigravity auth via vault
+- next_action: Build `tillandsias --antigravity-login` following GitHub login pattern
+- blocker: forge-credentials/vault-policies
+
+### forge-credentials/inject-from-vault
+
+- status: ready
+- owner_host: linux
+- source: `plan/issues/forge-credentials-vault-integration-2026-06-20.md`
+- severity: high — transparent credential injection at forge launch
+- next_action: Modify build_forge_agent_run_args to read vault and inject ANTHROPIC_API_KEY etc
+- blocker: forge-credentials/vault-policies, forge-credentials/claude-login-command, forge-credentials/codex-login-command, forge-credentials/antigravity-login-command
+
+### forge-credentials/vault-probe-entrypoint
+
+- status: ready
+- owner_host: linux
+- source: `plan/issues/forge-credentials-vault-integration-2026-06-20.md`
+- severity: medium — adds credential status feedback to entrypoints and welcome banner
+- next_action: Add vault credential probe to entrypoints + credential status line in welcome banner
+- blocker: forge-credentials/inject-from-vault
+
+### forge-credentials/antigravity-entrypoint-and-image
+
+- status: ready
+- owner_host: linux
+- source: `plan/issues/forge-credentials-vault-integration-2026-06-20.md`
+- severity: medium — Antigravity CLI not in forge image
+- next_action: Add agy binary to Containerfile.base + create entrypoint-forge-antigravity.sh
+- blocker: none
+
+### forge-runner/host-type
+
+- status: ready
+- owner_host: linux
+- source: `plan/issues/forge-credentials-vault-integration-2026-06-20.md`
+- severity: medium — enables meta-orchestration to recognize and dispatch forge-runner-capable work
+- next_action: Add `forge_runner` as a host kind in meta-orchestration / advance-work-from-plan skills
+- blocker: none
+
+### e2e/meta-orchestration-integration
+
+- status: ready
+- owner_host: linux
+- source: `plan/issues/forge-credentials-vault-integration-2026-06-20.md`
+- severity: medium — E2E tests should run /meta-orchestration inside the forge and capture findings
+- next_action: Modify local-build and curl-install E2E to run /meta-orchestration skill inside the forge
+- blocker: none
+
+### forge-credentials/opencode-config-tune
+
+- status: ready
+- owner_host: linux
+- source: `plan/issues/forge-credentials-vault-integration-2026-06-20.md`
+- severity: low — vault credential MCP tool and agent instructions
+- next_action: Add vault-credentials MCP tool + update methodology instructions
+- blocker: forge-credentials/inject-from-vault
+
+### forge-tune/resource-limits-and-performance
+
+- status: ready
+- owner_host: linux
+- source: `plan/issues/forge-diagnostics-audit-2026-06-20.md`
+- severity: low — cgroup limits, version metadata, image version env var
+- next_action: Add --memory=6g --cpus=3, TILLANDSIAS_IMAGE_VERSION, /etc/tillandsias-version
+- blocker: none
+
+### forge-credentials/antigravity-welcome-integration
+
+- status: ready
+- owner_host: linux
+- source: `plan/issues/forge-credentials-vault-integration-2026-06-20.md`
+- severity: low — add agy to welcome banner
+- next_action: Add antigravity agent listing to forge-welcome.sh
+- blocker: forge-credentials/antigravity-entrypoint-and-image
 
 ### local-smoke/wasmtime-dnf-migration-failure
 
