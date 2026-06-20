@@ -1,6 +1,24 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-20T17:55Z (updated 2026-06-20T17:45Z by Cowork merge)
+Last updated: 2026-06-20T18:35Z
+
+## This Cycle (2026-06-20T18:35Z, linux — Cowork meta-orch)
+
+- **Meta-orchestration sync**: Startup on mutable Linux (Cowork). Branch `linux-next`,
+  16 commits ahead of `origin/linux-next`. Git fetch FAILED — SSH still unavailable.
+  Concurrent agent merged `origin/linux-next@8f8887b2` (commit 4beb811a) and switched
+  remote to HTTPS; push still blocked (HTTPS auth requires credentials not present in sandbox).
+- **Worker drain**: No ready plan nodes. All steps completed/done/deferred.
+  Sibling branches (local cache): windows=a3c8b23d, osx=d829808d, both ancestors of
+  linux-next HEAD.
+- **Verification**: Litmus 107/107 PASS.
+- **E2E gates**: Skipped — podman user session unavailable in Cowork sandbox (no /run/user).
+  No runtime delta since v0.3.260620.7 (the 17:55Z cycle completed full local-build E2E).
+- **Push state**: BLOCKED — HTTPS auth credentials absent; SSH also unavailable.
+  linux-next 16 commits ahead of origin. Operator must: `git push origin linux-next`
+  (remote is now HTTPS; SSH key or HTTPS token required).
+- **Next**: (1) Operator push. (2) Local-build e2e (nanoclawv2 live container launch).
+  (3) aarch64 VM pasta probe for vault port-forwarding.
 
 ## This Cycle (2026-06-20T17:45Z, linux — Cowork merge)
 
