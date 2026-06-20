@@ -87,7 +87,9 @@ locally built `target/` binary; the whole point is to test the *download*.
 Linux:
 
 ```bash
-curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install.sh | bash 2>&1 \
+TILLANDSIAS_SMOKE_LOCK_LOG=target/smoke-e2e/00-smoke-lock.log \
+  scripts/with-smoke-lock.sh --name release-smoke-e2e -- \
+  bash -c 'curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install.sh | bash' 2>&1 \
   | tee target/smoke-e2e/01-install.log
 hash -r
 tillandsias --version | tee target/smoke-e2e/01-version.txt
@@ -122,7 +124,9 @@ If `TILLANDSIAS_DESTRUCTIVE_RESET_OK=0`, stop here, write a plan blocker, and
 push it. Otherwise run the reset immediately; on Linux this step is mandatory.
 
 ```bash
-podman system reset --force 2>&1 | tee target/smoke-e2e/02-reset.log
+TILLANDSIAS_SMOKE_LOCK_LOG=target/smoke-e2e/00-smoke-lock.log \
+  scripts/with-smoke-lock.sh --name release-smoke-e2e -- \
+  podman system reset --force 2>&1 | tee target/smoke-e2e/02-reset.log
 ```
 
 Confirm afterward that the store is empty:
@@ -142,7 +146,9 @@ and `~/Library/Caches/tillandsias`. On Windows, run `wsl --shutdown` and
 ## 3 — Fresh init from a pristine state
 
 ```bash
-tillandsias --debug --init 2>&1 | tee target/smoke-e2e/03-init.log
+TILLANDSIAS_SMOKE_LOCK_LOG=target/smoke-e2e/00-smoke-lock.log \
+  scripts/with-smoke-lock.sh --name release-smoke-e2e -- \
+  tillandsias --debug --init 2>&1 | tee target/smoke-e2e/03-init.log
 INIT_RC=${PIPESTATUS[0]}
 echo "init exit: $INIT_RC"
 ```
@@ -168,7 +174,9 @@ halted at init and why.
 ## 4 — Forge continuous-enhancement run (only if Step 3 was clean)
 
 ```bash
-tillandsias . --opencode --prompt "Use the /forge-continuous-enhancement skill" 2>&1 \
+TILLANDSIAS_SMOKE_LOCK_LOG=target/smoke-e2e/00-smoke-lock.log \
+  scripts/with-smoke-lock.sh --name release-smoke-e2e -- \
+  tillandsias . --opencode --prompt "Use the /forge-continuous-enhancement skill" 2>&1 \
   | tee target/smoke-e2e/04-opencode.log
 ```
 

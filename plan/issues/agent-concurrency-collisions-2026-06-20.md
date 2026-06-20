@@ -1,19 +1,24 @@
 # Agent Concurrency & Build Collisions on Shared Host
 
 - branch: linux-next
-- status: claimed
+- status: ready
 - owner_host: linux
-- lease_id: agent-concurrency-e2e-lock-20260620T134055Z
-- agent_id: linux-macuahuitl-codex-20260620T134055Z
-- expires_at: "2026-06-20T17:40:55Z"
 - source: meta-orchestration feedback
 - scope:
   - Investigate OOM or port-collision errors among concurrently running agents (OpenCode, Codex, Claude, Gemini).
   - Implement a local `.lock` file system to serialize access to shared local resources (e.g., e2e test execution and port binding).
   - Enforce explicit termination of `tillandsias` background test processes after tests complete.
   - Integrate autoincremental build numbers for local builds to detect and discard stale binaries instantly.
-- current_progress: Optimization issue filed during meta-orchestration exit. The overlapping parallel builds on this shared host are causing significant resource contention and test failures.
-- next_action: Analyze recent `smoke*.log` and `diag*.log` artifacts for explicit collision failures. Draft the `.lock` file protocol for the e2e test gates.
+- current_progress: >
+    Slice 1 completed: `scripts/with-smoke-lock.sh` now provides a reusable
+    smoke/e2e lock with `flock` plus `mkdir` fallback, Linux build-install
+    e2e step scripts use the shared `build-install-smoke-e2e` lock, and the
+    local-build/curl-install e2e skill runbooks route Linux gates through the
+    same helper.
+- next_action: >
+    Analyze recent `smoke*.log` and `diag*.log` artifacts for explicit
+    process-leak, stale-binary, or port-collision failures; then implement the
+    remaining process-termination and autoincremental build-number guardrails.
 - blocker: none
 - events:
   - type: finding
@@ -32,3 +37,27 @@
       Claiming a narrow Linux slice: add a reusable smoke/e2e lock helper,
       wire destructive Linux smoke scripts through it, and record targeted
       validation evidence.
+  - type: progress
+    ts: "2026-06-20T13:46:14Z"
+    agent_id: "linux-macuahuitl-codex-20260620T134055Z"
+    host: "linux"
+    lease_id: "agent-concurrency-e2e-lock-20260620T134055Z"
+    note: >
+      Implemented the shared smoke/e2e lock helper and wired it into the
+      Linux build-install e2e scripts plus both Linux e2e runbooks. The helper
+      records wait/acquire/release lines into each smoke evidence directory
+      when `TILLANDSIAS_SMOKE_LOCK_LOG` is set.
+    evidence:
+      - "bash -n scripts/with-smoke-lock.sh scripts/e2e-step1-linux.sh scripts/e2e-step2-linux.sh scripts/e2e-step3-linux.sh — PASS"
+      - "scripts/with-smoke-lock.sh success-path smoke invocation — PASS"
+      - "scripts/with-smoke-lock.sh failing-command smoke invocation returned exit 7 and logged release — PASS"
+      - "git diff --check — PASS"
+      - "scripts/with-smoke-lock.sh --name build-install-smoke-e2e -- ./build.sh --check — PASS"
+  - type: released
+    ts: "2026-06-20T13:46:14Z"
+    agent_id: "linux-macuahuitl-codex-20260620T134055Z"
+    host: "linux"
+    lease_id: "agent-concurrency-e2e-lock-20260620T134055Z"
+    reason: >
+      Locking slice complete and pushed in this checkpoint; remaining scope is
+      process cleanup plus stale-binary/autoincremental build-number hardening.

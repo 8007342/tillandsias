@@ -99,7 +99,9 @@ Per-OS build-script guard:
 ### 1·Linux
 
 ```bash
-./build.sh --ci-full --install 2>&1 | tee "$LOG_DIR/01-build-install.log"
+TILLANDSIAS_SMOKE_LOCK_LOG="$LOG_DIR/00-smoke-lock.log" \
+  scripts/with-smoke-lock.sh --name build-install-smoke-e2e -- \
+  ./build.sh --ci-full --install 2>&1 | tee "$LOG_DIR/01-build-install.log"
 BUILD_RC=${PIPESTATUS[0]}
 printf 'build_install_exit=%s\n' "$BUILD_RC" | tee "$LOG_DIR/01-build-install-exit.txt"
 test "$BUILD_RC" -eq 0
@@ -169,7 +171,9 @@ push it. Otherwise continue; on Linux the Podman reset is mandatory.
 ### 2·Linux — Podman reset
 
 ```bash
-podman system reset --force 2>&1 | tee "$LOG_DIR/02-reset.log"
+TILLANDSIAS_SMOKE_LOCK_LOG="$LOG_DIR/00-smoke-lock.log" \
+  scripts/with-smoke-lock.sh --name build-install-smoke-e2e -- \
+  podman system reset --force 2>&1 | tee "$LOG_DIR/02-reset.log"
 RESET_RC=${PIPESTATUS[0]}; printf 'reset_exit=%s\n' "$RESET_RC" | tee "$LOG_DIR/02-reset-exit.txt"
 test "$RESET_RC" -eq 0
 CONTAINERS="$(podman ps -aq)"; VOLUMES="$(podman volume ls -q)"; IMAGES="$(podman images -q)"
@@ -224,7 +228,9 @@ gate**.
 ### 3·Linux
 
 ```bash
-tillandsias --init --debug 2>&1 | tee "$LOG_DIR/03-init.log"
+TILLANDSIAS_SMOKE_LOCK_LOG="$LOG_DIR/00-smoke-lock.log" \
+  scripts/with-smoke-lock.sh --name build-install-smoke-e2e -- \
+  tillandsias --init --debug 2>&1 | tee "$LOG_DIR/03-init.log"
 INIT_RC=${PIPESTATUS[0]}; printf 'init_exit=%s\n' "$INIT_RC" | tee "$LOG_DIR/03-init-exit.txt"
 test "$INIT_RC" -eq 0
 ```
@@ -281,7 +287,9 @@ findings.
 ### 4·Linux
 
 ```bash
-tillandsias . --opencode \
+TILLANDSIAS_SMOKE_LOCK_LOG="$LOG_DIR/00-smoke-lock.log" \
+  scripts/with-smoke-lock.sh --name build-install-smoke-e2e -- \
+  tillandsias . --opencode \
   --prompt "Use the /forge-continuous-enhancement skill" 2>&1 \
   | tee "$LOG_DIR/04-forge-continuous-enhancement.log"
 FORGE_RC=${PIPESTATUS[0]}; printf 'forge_exit=%s\n' "$FORGE_RC" | tee "$LOG_DIR/04-forge-exit.txt"
