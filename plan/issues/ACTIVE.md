@@ -1,6 +1,27 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-20T19:15Z
+Last updated: 2026-06-20T19:24Z
+
+## This Cycle (2026-06-20T19:24Z, linux_mutable — interactive Claude Code CLI meta-orch)
+
+- **Startup**: Pulled `origin/linux-next` (23 commits, `8f8887b2..66e1029f`),
+  worktree clean, in sync. Credential Channel Guard passed (`gh auth status`
+  green, repo+workflow scopes).
+- **Worker drain — file-feedback**: Submitted the Anthropic feedback packet
+  `cowork-headless-credential-isolation` to the canonical Claude Code feedback
+  channel as **https://github.com/anthropics/claude-code/issues/69776** (state
+  OPEN, author 8007342), payload verbatim with the tillandsias reference link and
+  reporter reference included. The `/bug` in-CLI path is interactive-only (not a
+  callable tool); the GitHub issue is the verifiable channel named in the task.
+  Node `cowork-headless-credential-isolation` is now **fully resolved** —
+  `file-feedback` + `runtime-guard` both completed.
+- **Coordinator check**: `origin/windows-next@a3c8b23d` and
+  `origin/osx-next@d829808d` both ancestors of `linux-next` HEAD — no sibling
+  merge, no release (no code delta this cycle; docs/ledger only).
+- **E2E gates**: Skipped — no runtime/code delta; this cycle only filed feedback
+  and updated the ledger.
+- **Next**: (1) aarch64 macOS VM pasta/published-port probe for Vault
+  reachability. (2) Local-build e2e on a host with a podman user session.
 
 ## This Cycle (2026-06-20T19:15Z, linux — Cowork meta-orch)
 

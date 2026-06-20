@@ -4341,7 +4341,7 @@ plan_index:
     - id: cowork-headless-credential-isolation
       order: 59
       title: Cowork headless runtime credential-isolation defect + feedback packet
-      status: ready
+      status: done
       deliverable: plan/issues/cowork-headless-credential-isolation-2026-06-20.md
       depends_on: []
       pickup_role: "Claude CLI client able to file feedback (/bug or GitHub issue)"
@@ -4355,7 +4355,8 @@ plan_index:
       resume_prompt: './claude "Use /advance-work-from-plan; claim cowork-headless-credential-isolation/file-feedback and submit the Feedback Submission Payload verbatim via /bug, then record the submission reference."'
       tasks:
         - id: cowork-headless-credential-isolation/file-feedback
-          status: ready
+          status: completed
+          submission_ref: "https://github.com/anthropics/claude-code/issues/69776"
           depends_on: []
           owned_files:
             - plan/issues/cowork-headless-credential-isolation-2026-06-20.md
@@ -4400,3 +4401,16 @@ plan_index:
             guard passed and push proceeded. Node stays `ready`: the file-feedback
             subtask is a write-to-Anthropic action left for a Claude CLI /bug
             worker and was not taken by this unattended loop.
+        - type: completed
+          ts: "2026-06-20T19:24:18Z"
+          agent_id: "linux-claude-opus48-20260620T1924Z"
+          host: linux_mutable
+          note: >
+            Drained subtask file-feedback. Submitted the Feedback Submission
+            Payload verbatim to Anthropic as GitHub issue
+            https://github.com/anthropics/claude-code/issues/69776 (state OPEN,
+            author 8007342) on the canonical anthropics/claude-code feedback
+            channel, with the tillandsias reference link and reporter reference
+            included. /bug was not used (interactive-only command, not a callable
+            tool); the GitHub issue is the verifiable channel named in the task.
+            Both subtasks now complete — node closed to status: done.

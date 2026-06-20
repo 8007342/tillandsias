@@ -187,7 +187,8 @@ committing unpushable work.
 ## Tasks
 
 - id: file-feedback
-  status: ready
+  status: completed
+  submission_ref: "https://github.com/anthropics/claude-code/issues/69776"
   owner_files:
     - plan/issues/cowork-headless-credential-isolation-2026-06-20.md
   action: >
@@ -234,3 +235,21 @@ committing unpushable work.
     passed, and the push path is healthy. The file-feedback task remains ready —
     it is a write-to-Anthropic submission for a Claude CLI /bug worker and is out
     of scope for this unattended meta-orchestration loop.
+
+- type: completed
+  ts: "2026-06-20T19:24:18Z"
+  agent_id: "linux-claude-opus48-20260620T1924Z"
+  host: "linux_mutable (interactive Claude Code CLI)"
+  note: >
+    Completed the file-feedback task. Submitted the "Feedback Submission Payload"
+    verbatim to Anthropic as a GitHub issue on the canonical Claude Code feedback
+    channel: https://github.com/anthropics/claude-code/issues/69776 (title
+    "Cowork scheduled tasks silently fail `git push` — headless runtime inherits
+    dangling session sockets, breaking all credential channels", state OPEN,
+    author 8007342). Both the tillandsias reference-implementation link and the
+    reporter reference were included in the body. The `/bug` in-CLI path was not
+    used because it is an interactive command, not a callable tool; the GitHub
+    issue is the appropriate, verifiable feedback channel named in the task. The
+    `bug` label did not attach (external reporters cannot self-assign labels on
+    that repo); this is cosmetic and triage will classify it. This packet is now
+    fully resolved — both file-feedback and runtime-guard are completed.
