@@ -180,4 +180,7 @@ methodology:
       Once work is reported as completed, all temporary local artifacts are disposable and must be discarded.
       Agents encountering a dirty space have a one-off chance to clean up or commit work; otherwise, they must discard uncommitted artifacts.
       Rely heavily on .gitignore for generated artifacts and dashboards to keep the tree clean.
+      Any running `tillandsias` background binaries or test processes MUST be explicitly terminated after tests complete.
+      Local builds MUST use an autoincremental build number so agents can quickly detect and discard stale binaries.
+      Shared local resources (like e2e test execution) MUST use a `.lock` file system to prevent concurrent execution collisions between agents.
 
