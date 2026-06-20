@@ -7,10 +7,18 @@ Drained from `plan.yaml` `future_intentions` item (post-item-3):
 
 Trace: plan.yaml, plan/steps/58-future-intentions-drain.md
 
-Status: ready
+Status: claimed
 Owner host: linux
 Capability tags: [build, telemetry, containerfiles, shell]
 Dependencies: none
+
+events:
+  - type: claim
+    ts: "2026-06-20T17:00:00Z"
+    agent_id: "linux-big-pickle-20260620T170000Z"
+    host: linux
+    lease_id: "forge-build-telemetry-20260620T170000Z"
+    expires_at: "2026-06-20T21:00:00Z"
 
 ## Current State
 
