@@ -1,6 +1,20 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-20T19:24Z
+Last updated: 2026-06-20T19:40Z
+
+## This Cycle (2026-06-20T19:40Z, linux_mutable — Cowork meta-orch, Tlatoāni-directed)
+
+- **Governance decision (Tlatoāni)**: The reduction engine's scan bar is fixed
+  and the convergence point is "zero residual findings at the current approved
+  bar." Raising the bar is **not** autonomous — the loop may only *propose*
+  bar-raise candidates (research/exploration issues); enabling any bar-raise is a
+  one-off scope expansion The Tlatoāni must approve every time. Recorded as the
+  authoritative `bar_raise_governance` section in `methodology/convergence.yaml`;
+  rewrote the skill's "Raising the bar" subsection to match (propose-not-escalate,
+  stop at the current bar). Future automatable approvals possible but not yet
+  policy; absence of policy is not implicit approval.
+- This resolves the open design question from the prior cycle (an ever-rising bar
+  has no fixed point) by making each bar-raise an operator-owned discontinuity.
 
 ## This Cycle (2026-06-20T19:24Z, linux_mutable — interactive Claude Code CLI meta-orch)
 

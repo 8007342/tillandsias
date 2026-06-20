@@ -1,6 +1,14 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-20T19:15Z
+LastExecutionTime: 2026-06-20T19:40Z
+
+## This Loop (2026-06-20T19:40Z, linux — Tlatoāni-directed)
+
+- **Governance**: Bar-raises are Tlatoāni-gated. Convergence point = zero residual
+  findings at the current approved bar. Loop proposes bar-raise candidates but
+  must not self-escalate. Authoritative rule added to
+  `methodology/convergence.yaml` (`bar_raise_governance`); skill subsection
+  rewritten to match. No code/runtime delta; docs/methodology only.
 
 ## This Loop (2026-06-20T19:15Z, linux)
 

@@ -130,15 +130,34 @@ while increasing verification level (`convergence.yaml` → `drift_control`). A
 must be rejected. Shaping a finding into a well-formed `ready` packet *is* a
 valid reduction step when the current host cannot yet implement it.
 
-### Raise the bar as findings fall
+### Raising the bar is Tlatoāni-gated (do not self-escalate)
 
-As terminal findings become rarer, the engine must look harder, not idle. When a
-cycle finds nothing newly broken at the current scan depth, escalate the scan:
-build/test/runtime logs for warnings, non-fatal errors, deprecation notices,
-flaky-test signals, slow steps, and stale caches — and file what surfaces. The
-bar rises monotonically so Tillandsias keeps self-improving autonomously instead
-of declaring premature convergence. Premature "all green" with an un-raised bar
-is itself an optimization finding worth filing.
+The scan bar is a fixed, declared depth. Reducing all open findings to zero **at
+the current bar is a legitimate, clear convergence point** — a fixed point of
+the refinement operator — not premature convergence. The loop MUST NOT raise the
+bar on its own. Autonomous bar-raising would make the convergence point
+undefined (the loop could never report "done"), which is exactly the failure
+this rule prevents. See `methodology/convergence.yaml` → `bar_raise_governance`.
+
+What the loop does as it approaches zero residual at the current bar:
+
+1. Keep reducing open findings at the current bar until none remain.
+2. Then *propose* bar-raise candidates — file them as `research/` or
+   `exploration/` issues describing the deeper scan that could be enabled (e.g.
+   treat build/test/runtime warnings, non-fatal errors, deprecation notices,
+   flaky-test signals, slow steps, or stale caches as findings). A proposal is a
+   candidate, not an enabled scan.
+3. STOP there. Enabling any bar-raise — actually treating a deeper signal class
+   as findings — is an explicit, one-off decision that **The Tlatoāni must
+   approve every time.** Record the approval (who/when/scope) before the deeper
+   scan becomes part of the loop's contract.
+
+Rationale: much of the system is "build what works, then improve from there," so
+each bar-raise is a deliberate scope expansion the operator owns, not an
+emergent behavior. Automatable approval of *some* low-risk bar-raises may come
+later; until The Tlatoāni declares such a policy, every bar-raise is manual.
+Reaching zero at the current bar and filing bar-raise candidates is a complete,
+successful cycle — not an excuse to escalate unprompted.
 
 See `plan/issues/meta-orch-enhancement-opportunities-2026-06-20.md` for a worked
 example of capture → reduce → promote.
