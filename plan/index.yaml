@@ -4919,3 +4919,92 @@ plan_index:
             server using pre-seeded CAs, not a filesystem shortcut. Past sessions
             have used file:// insteadOf hacks that appeared to work but bypassed
             the post-receive relay to GitHub entirely.
+
+    - packet_id: smoke-finding/forge-base-pip-build-network-timeout
+      order: 70
+      title: "forge-base pip3 large-payload timeout in podman build network context"
+      status: ready
+      kind: bug
+      deliverable: plan/issues/smoke-e2e-findings-v0.3.260620.8-2026-06-20.md
+      depends_on: []
+      pickup_role: "Linux mutable host (podman build environment)"
+      outcome: >
+        `tillandsias --init` on a fresh Fedora 44 immutable host builds forge-base
+        without pyright download failing. Verified by a clean curl-install e2e
+        on an immutable Linux host reaching init_exit=0.
+      tasks:
+        - id: smoke-finding/forge-base-pip-build-network-timeout/quick-fix
+          status: ready
+          depends_on: []
+          owned_files:
+            - images/default/Containerfile.base
+          checkpoint_required: true
+          handoff_note: >
+            Add PIP_DEFAULT_TIMEOUT=120 env var or --timeout 120 flag to the
+            pip3 install step in Containerfile.base STEP 6. Verify by running
+            podman build on a fresh store on immutable Linux (or simulate the
+            pasta network context).
+        - id: smoke-finding/forge-base-pip-build-network-timeout/root-investigation
+          status: ready
+          depends_on: [smoke-finding/forge-base-pip-build-network-timeout/quick-fix]
+          owned_files:
+            - scripts/build-image.sh
+            - containers.conf
+          checkpoint_required: false
+          handoff_note: >
+            Investigate why podman build pasta network drops large TCP streams
+            (0 bytes/6.1 MB) while podman run downloads the same URL at 10 MB/s.
+            Candidate fixes: --network=host for builds, pasta MTU config, or
+            containers.conf network_mode override. Document in
+            plan/issues/smoke-e2e-findings-v0.3.260620.8-2026-06-20.md.
+      events:
+        - type: finding
+          ts: "2026-06-20T20:57Z"
+          agent_id: "linux-claude-sonnet46-immutable-20260620T2034Z"
+          host: linux_immutable
+          note: >
+            Discovered during curl-install e2e of v0.3.260620.8. pip3 install
+            pyright==1.1.410 (6.1 MB whl) receives 0 bytes and times out after
+            15s in podman build context, but same URL downloads in <1s from host
+            and from running containers. Two consecutive init attempts confirm
+            this is not a transient PyPI outage. Blocks forge-base → forge →
+            nanoclawv2 build; blocks full init on immutable Linux hosts.
+
+    - packet_id: smoke-finding/init-all-or-nothing-forge-blocks-core
+      order: 71
+      title: "init all-or-nothing: forge-base failure prevents core enclave from starting"
+      status: ready
+      kind: enhancement
+      deliverable: plan/issues/smoke-e2e-findings-v0.3.260620.8-2026-06-20.md
+      depends_on: []
+      pickup_role: "Linux mutable host"
+      outcome: >
+        When forge-base fails to build, `tillandsias --init` starts the core
+        services (vault, proxy, git, inference, router) that successfully built,
+        and marks forge as unavailable rather than exiting 1 with no containers.
+      tasks:
+        - id: smoke-finding/init-all-or-nothing/optional-images
+          status: ready
+          depends_on: []
+          owned_files:
+            - crates/tillandsias-headless/src/init.rs
+            - crates/tillandsias-core/src/image_registry.rs
+          checkpoint_required: true
+          handoff_note: >
+            Identify the image dependency graph in the init path. Mark forge /
+            forge-base / nanoclawv2 as optional (warn-on-failure) rather than
+            required (error-on-failure). Core images (proxy, git, inference,
+            router, vault) must all succeed; forge is best-effort. After
+            optional-image changes, verify that a successful forge-base failure
+            still starts proxy/git/inference/router/vault.
+      events:
+        - type: finding
+          ts: "2026-06-20T20:57Z"
+          agent_id: "linux-claude-sonnet46-immutable-20260620T2034Z"
+          host: linux_immutable
+          note: >
+            forge-base pip failure causes init exit=1 and zero containers started,
+            even though proxy/git/inference/router all built successfully and are
+            independent of forge-base. On immutable Linux the forge is not the
+            primary use case; blocking vault and git-mirror on a forge build
+            failure is disproportionate.

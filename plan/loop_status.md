@@ -1,6 +1,18 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-20T20:12Z
+LastExecutionTime: 2026-06-20T21:00Z
+
+## This Loop (2026-06-20T20:34Z, linux_immutable — curl-install e2e)
+
+- **Cycle type**: curl-install e2e gate on immutable Linux (Fedora 44, Claude Sonnet 4.6).
+- **Startup**: `linux-next @ a08eb971`, clean worktree, in sync with remote. Credential channel: `gh auth status` ✓ (keyring). No eligible worker packets for linux_immutable.
+- **E2E gates**: Ran curl-install e2e for `v0.3.260620.8` (first test of this release).
+  - Install: PASS (17 MB/s, SHA256 ok).
+  - Substrate reset: PASS.
+  - Init: FAIL — `forge-base` pip3 `pyright==1.1.410` (6.1 MB) received 0 bytes × 6 attempts in `podman build` network; root cause: pasta build-network TCP stream issue. Core images all built; no containers started.
+  - Forge run: SKIPPED.
+- **Findings**: Filed orders 70–71 in `plan/index.yaml`. Smoke report: `plan/issues/smoke-e2e-findings-v0.3.260620.8-2026-06-20.md`.
+- **Push state**: pushing `linux-next` to origin over HTTPS (gh auth).
 
 ## This Loop (2026-06-20T20:12Z, linux)
 

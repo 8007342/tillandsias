@@ -1,6 +1,19 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-20T20:12Z
+Last updated: 2026-06-20T21:00Z
+
+## This Cycle (2026-06-20T20:34Z, linux_immutable — Claude Sonnet 4.6 curl-install e2e)
+
+- **Host**: linux_immutable (Fedora 44 Workstation), `linux-next @ a08eb971`, no eligible worker packets.
+- **Curl-install e2e**: Tested release `v0.3.260620.8` (published 20:09Z today).
+  - Install: **PASS** — `v0.3.260620.8` downloaded (17 MB/s), SHA256 verified.
+  - Substrate reset: **PASS** — `podman system reset --force` clean.
+  - `--init`: **FAIL** — `forge-base` pip3 install of `pyright==1.1.410` (6.1 MB) timed out (0 bytes received) in `podman build` network context on both first attempt and retry. Root cause: pasta build-network TCP stream issue vs runtime network. Core images (proxy, git, inference, router, chromium, web) built successfully. No containers started.
+  - Forge opencode run: **SKIPPED** (forge not built).
+- **New findings** (orders 70–71):
+  - Order 70 `smoke-finding/forge-base-pip-build-network-timeout`: pip3 large-payload download fails in `podman build` but not `podman run` — pasta MTU/network difference. Quick fix: `PIP_DEFAULT_TIMEOUT=120` in Containerfile.base.
+  - Order 71 `smoke-finding/init-all-or-nothing-forge-blocks-core`: init exits 1 and starts zero containers when any image fails, even forge-independent ones. Fix: make forge/forge-base/nanoclawv2 optional in init dependency graph.
+- **Next**: Order 70 (quick fix: Containerfile.base pip timeout) should unblock curl-install e2e on immutable Linux. Assign to linux_mutable host with forge build capability.
 
 ## This Cycle (2026-06-20T20:12Z, linux_mutable — Claude Opus 4.8 Cowork meta-orch)
 
