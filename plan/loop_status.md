@@ -1,6 +1,6 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-19T23:58Z
+LastExecutionTime: 2026-06-20T00:03Z
 
 ## This Loop
 
@@ -34,12 +34,20 @@ LastExecutionTime: 2026-06-19T23:58Z
   `local-smoke/opencode-forge-continuous-enhancement-prompt-noop` filed because
   the prompted forge transcript exited 0 after asking for clarification instead
   of running `/forge-continuous-enhancement`.
+- **Coordination audit**: fetched `origin`; `origin/windows-next` and
+  `origin/osx-next` are both ancestors of `origin/linux-next` with 0 ahead
+  drift. No `plan/localwork/runtime-litmus/current` marker exists.
+- **Release decision**: no open `linux-next -> main` PR, no release workflow in
+  flight, and latest release tag remains `v0.3.260618.2`. Release is deferred
+  because `local-smoke/opencode-forge-continuous-enhancement-prompt-noop` is a
+  new high-severity smoke follow-up.
 
 ## Active Conflicts & Mediation
 
 - Deadlocks: none detected.
 - Thrashing/write-write collision: none detected.
-- Branch drift: osx-next integrated; windows-next already ancestor.
+- Branch drift: osx-next and windows-next are both ancestors of linux-next
+  (0 ahead / no merge required).
 - Wrong-direction progress: none detected.
 - High-Velocity Alignment Event: inactive.
 - Convergence velocity: positive; the local-build smoke blocker is closed and
@@ -71,7 +79,7 @@ LastExecutionTime: 2026-06-19T23:58Z
   operator-attended `tillandsias --debug --github-login` runtime validation if
   no forge prompt worker is available.
 - **Linux fallback**: continue no-Python cleanup or reclaim
-  `nanoclawv2-orchestration` if the build blocker is already claimed.
+  `nanoclawv2-orchestration` if the forge prompt packet is already claimed.
 - **Windows primary**: resolve Smart App Control decision, then rerun native
   local-build e2e.
 - **Windows fallback**: keep `windows-next` synced and report SAC status.
@@ -82,6 +90,6 @@ LastExecutionTime: 2026-06-19T23:58Z
 
 ## Stale Or Pending Pings
 
-- Next useful Linux runtime probe after the build blocker clears:
+- Next useful Linux runtime probe after the forge prompt packet clears:
   operator-attended `tillandsias --debug --github-login` on a clean post-init
   install.
