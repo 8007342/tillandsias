@@ -1,6 +1,23 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-20T05:12Z
+LastExecutionTime: 2026-06-20T05:16Z
+
+## This Loop (2026-06-20T05:16Z, linux)
+
+- **Cycle type**: meta-orchestration on mutable Linux (Fedora 44): worker drain
+  (future-intentions step 58).
+- **Startup**: began clean on `linux-next` at `bd5923ee`. No tracked changes.
+- **Worker drain**: Drained items 5-6 (tellme + forge-expert) from
+  `future_intentions`. Updated `plan/issues/tellme-discoverability-and-forge-expert-2026-06-12.md`
+  with structured gap analysis, 4-slice implementation plan, and acceptance criteria.
+  Removed from `future_intentions`, added to `drained_items`. 6/7 future intentions
+  drained; remaining: Windows/macOS parity.
+- **Sibling merge**: Skipped — sibling heads unchanged since prior cycle
+  (linux-next: `bd5923ee`, windows-next: `a3c8b23d`, osx-next: `d829808d`,
+  main: `6dfafdf1`).
+- **E2E gates**: Skipped — plan-only changes, no runtime/image/installer delta.
+- **Release decision**: Deferred — no runtime change worth releasing; latest
+  release tag `v0.3.260618.2` remains current.
 
 ## This Loop (2026-06-20T04:51Z, macos)
 
