@@ -4150,8 +4150,8 @@ plan_index:
 
     - id: nanoclawv2-orchestration
       order: 56
-      title: NanoClawV2 orchestration engine and launcher leaf
-      status: completed
+      title: ZeroClaw orchestration engine and launcher leaf (Supersedes NanoClawV2)
+      status: superseded_migrating_to_zeroclaw
       owner_host: linux
       deliverable: plan/issues/nanoclawv2-orchestration.md
       audit_origin: plan/issues/nanoclawv2-orchestration.md
@@ -4162,16 +4162,9 @@ plan_index:
         - podman-orchestration
         - mcp-on-demand
       exit_criteria:
-        - "🦞 NanoClawV2 launches for a project and remains branch-aware."
-        - "Only approved orchestration actions are reachable from NanoClawV2."
+        - "🦞 ZeroClaw launches for a project and remains branch-aware (superseding NanoClawV2)."
+        - "Only approved orchestration actions are reachable from ZeroClaw."
         - "Smoke coverage proves launch and one approved action."
-      completed_evidence: >
-        All 4 slices done as of 2026-06-20T09:16Z (commit 1dbdd809, linux-next).
-        Image infra, tray launcher leaf, Unix-socket MCP broker (5-tool allowlist),
-        and smoke coverage (12/12 tests: 9 unit + 3 integration).
-        litmus:nanoclawv2-mcp-shape written; litmus-bindings.yaml at 80% coverage.
-        Live container launch gap deferred to local-build e2e gate (push-blocked;
-        SSH unavailable in Cowork session — operator must push).
       tasks:
         - id: nanoclawv2/spec-and-plan
           status: completed
@@ -4186,24 +4179,24 @@ plan_index:
           checkpoint_required: false
           handoff_note: "Spec and plan scaffolded; implementation work can now be claimed."
         - id: nanoclawv2/implementation
-          status: completed
+          status: claimed
           owner_host: linux
           estimated_hours: 4
-          capability_tags: [rust, podman, orchestration, nanoclaw]
+          capability_tags: [rust, podman, orchestration, zeroclaw]
           depends_on: [nanoclawv2/spec-and-plan]
           owned_files:
-            - crates/tillandsias-nanoclawv2-mcp/src/lib.rs
-            - crates/tillandsias-nanoclawv2-mcp/src/allowlist.rs
-            - crates/tillandsias-nanoclawv2-mcp/src/server.rs
-            - crates/tillandsias-nanoclawv2-mcp/src/main.rs
-            - images/nanoclawv2/Containerfile
-            - images/nanoclawv2/entrypoint.sh
-            - images/nanoclawv2/config-overlay/opencode/config.json
-            - images/nanoclawv2/config-overlay/mcp/nanoclaw-host.sh
-            - openspec/litmus-tests/litmus-nanoclawv2-mcp-shape.yaml
-          handoff_note: >
-            All slices complete. 12/12 tests pass. Litmus written and bound.
-            Push pending (SSH blocked in Cowork session).
+            - crates/tillandsias-headless/src/zeroclaw.rs
+            - images/zeroclaw/Containerfile
+            - scripts/build-zeroclaw.sh
+          next_action: >
+            HALT NanoClaw work. Migrate all existing NanoClawV2 implementation files to ZeroClaw. Update Containerfile to use fedora:44 base and compile ZeroClaw Rust binary. Wire the launcher leaf, broker surface, and smoke hooks for ZeroClaw.
+          events:
+            - type: claim
+              ts: "2026-06-17T22:07:00Z"
+              agent_id: "linux-macuahuitl-gemini-202606172205"
+              host: "linux"
+              lease_id: "nanoclawv2-orchestration-202606172207"
+              expires_at: "2026-06-18T02:07:00Z"
 
     - id: github-login-enclave-egress-regression
       order: 57
@@ -4267,6 +4260,7 @@ plan_index:
                 Changed ENCLAVE_NET to ENCLAVE_EGRESS_NETS (dual-home gh-login helper
                 onto managed egress network). Added regression test
                 github_login_helper_dual_homes_onto_managed_egress_network.
+              note: >
                 Operator curl-installed release v0.3.260616.2 on immutable
                 Linux. Install and `--debug --init` succeeded, Vault was
                 running/unsealed, but `--debug --github-login` failed when the
@@ -4277,7 +4271,7 @@ plan_index:
     - id: future-intentions-drain
       order: 58
       title: Drain future intentions into planned tasks
-      status: done
+      status: in_progress
       deliverable: plan/steps/58-future-intentions-drain.md
       depends_on: []
       outcome: >
@@ -4318,34 +4312,10 @@ plan_index:
                 exercise FCE as side effect of build/install/reset cycles. No code
                 change needed.
         - id: future-intentions-drain/windows-macos-feature-parity
-          status: completed
-          owner_host: linux
+          status: ready
           depends_on: [future-intentions-drain/drain-tasks]
           owned_files:
             - plan/issues/windows-macos-feature-parity-2026-06-12.md
             - plan/issues/ACTIVE.md
             - plan/issues/osx-next-work-queue-2026-05-25.md
             - plan/issues/windows-next-work-queue-2026-05-25.md
-          events:
-            - type: coordinator_review
-              ts: "2026-06-20T08:42Z"
-              agent_id: "linux-macuahuitl-claude-20260620T0842Z"
-              host: linux
-              lease_id: "windows-macos-parity-coord-20260620T0842Z"
-              expires_at: "2026-06-20T12:42Z"
-              note: >
-                Coordinator pass: sibling branches in sync (windows a3c8b23d, osx
-                d829808d, both ancestors of linux-next). Wave A vault aarch64
-                blocker code-inspected — no Linux-side fix possible without VM
-                probe. Potential aarch64 workaround documented (pasta netns).
-                Packet remains open; no implementation change this cycle.
-            - type: completed
-              ts: "2026-06-20T11:04Z"
-              agent_id: "linux-macuahuitl-claude-20260620T1104Z"
-              host: linux
-              note: >
-                Drain sub-task closed. The drain outcome (creating the structured
-                parity issue + plan step) is complete. Ongoing parity coordinator
-                work (Wave A–D implementation, aarch64 pasta probe) is tracked in
-                plan/issues/windows-macos-feature-parity-2026-06-12.md and the
-                macos-in-vm-enclave-provisioning step. Releasing drain claim.

@@ -2775,12 +2775,12 @@ fn fetch_parse_frontmatter_lines(text: &str) -> Vec<String> {
             continue;
         }
         // List item: ^\s+-\s+(.*)$
-        if let Some(item) = fetch_match_list_item(line) {
-            if let Some(key) = &current_list_key {
-                let v = item.trim().trim_matches('"').trim_matches('\'');
-                out.push(format!("{key}+={v}"));
-                continue;
-            }
+        if let Some(item) = fetch_match_list_item(line)
+            && let Some(key) = &current_list_key
+        {
+            let v = item.trim().trim_matches('"').trim_matches('\'');
+            out.push(format!("{key}+={v}"));
+            continue;
         }
         // key: value  (^([A-Za-z_][A-Za-z0-9_]*)\s*:\s*(.*)$)
         if let Some((key, value)) = fetch_match_kv(line) {
@@ -2932,10 +2932,10 @@ fn fetch_bundled_tier_main(cfg: &FetchConfig, max_age_days: &str, dry_run: bool)
     // key, which sorts). For dry-run output (sorted -u) ordering is normalised.
     let mut bundled_files: Vec<(PathBuf, String)> = Vec::new();
     for f in all_files {
-        if let Ok(text) = fs::read_to_string(&f) {
-            if fetch_is_bundled_tier(&text) {
-                bundled_files.push((f, text));
-            }
+        if let Ok(text) = fs::read_to_string(&f)
+            && fetch_is_bundled_tier(&text)
+        {
+            bundled_files.push((f, text));
         }
     }
 
@@ -3299,15 +3299,15 @@ fn fetch_compute_dest_path(sources_dir: &Path, url: &str) -> PathBuf {
 /// build_url_candidates.
 fn fetch_build_url_candidates(base_url: &str, raw_host: &str) -> Vec<String> {
     let mut candidates: Vec<String> = Vec::new();
-    if raw_host.contains("rfc-editor.org") || raw_host.contains("ietf.org") {
-        if base_url.ends_with(".html") || base_url.ends_with(".htm") {
-            let txt = base_url
-                .strip_suffix(".html")
-                .or_else(|| base_url.strip_suffix(".htm"))
-                .map(|b| format!("{b}.txt"))
-                .unwrap_or_else(|| base_url.to_string());
-            candidates.push(txt);
-        }
+    if (raw_host.contains("rfc-editor.org") || raw_host.contains("ietf.org"))
+        && (base_url.ends_with(".html") || base_url.ends_with(".htm"))
+    {
+        let txt = base_url
+            .strip_suffix(".html")
+            .or_else(|| base_url.strip_suffix(".htm"))
+            .map(|b| format!("{b}.txt"))
+            .unwrap_or_else(|| base_url.to_string());
+        candidates.push(txt);
     }
     candidates.push(base_url.to_string());
 
@@ -3555,11 +3555,11 @@ fn fetch_single_url(
     // SHA-256 + length.
     let mut content_sha256 = String::new();
     let mut content_length: u64 = 0;
-    if dest_path.is_file() {
-        if let Ok(bytes) = fs::read(&dest_path) {
-            content_sha256 = sha256_hex(&bytes);
-            content_length = bytes.len() as u64;
-        }
+    if dest_path.is_file()
+        && let Ok(bytes) = fs::read(&dest_path)
+    {
+        content_sha256 = sha256_hex(&bytes);
+        content_length = bytes.len() as u64;
     }
 
     // Write sidecar.
@@ -3881,10 +3881,10 @@ fn regen_parse_cheatsheet(text: &str) -> CheatsheetParse {
                     if v.is_empty() || !v.starts_with(|c: char| c.is_ascii_alphanumeric()) {
                         committed_for_project = "true".to_string();
                     }
-                } else if let Some(v) = t.strip_prefix("false") {
-                    if v.is_empty() || !v.starts_with(|c: char| c.is_ascii_alphanumeric()) {
-                        committed_for_project = "false".to_string();
-                    }
+                } else if let Some(v) = t.strip_prefix("false")
+                    && (v.is_empty() || !v.starts_with(|c: char| c.is_ascii_alphanumeric()))
+                {
+                    committed_for_project = "false".to_string();
                 }
             }
             continue;
@@ -3893,11 +3893,11 @@ fn regen_parse_cheatsheet(text: &str) -> CheatsheetParse {
         // Body parsing.
 
         // First H1 -> title.
-        if title.is_empty() {
-            if let Some(rest) = match_h1(line) {
-                title = rest.to_string();
-                continue;
-            }
+        if title.is_empty()
+            && let Some(rest) = match_h1(line)
+        {
+            title = rest.to_string();
+            continue;
         }
 
         if description.is_empty() {
@@ -3999,15 +3999,16 @@ fn is_use_when_heading(line: &str) -> bool {
 fn regen_truncate_desc(s: &str, max: usize) -> String {
     let mut s = s.trim().to_string();
     // sub(/^\*\*[^*]+\*\*:[[:space:]]*/, "", s) — leading bold marker.
-    if let Some(after_open) = s.strip_prefix("**") {
-        if let Some(close_idx) = after_open.find("**") {
-            let inner = &after_open[..close_idx];
-            let tail = &after_open[close_idx + 2..];
-            if !inner.contains('*') && !inner.is_empty() {
-                if let Some(rest) = tail.strip_prefix(':') {
-                    s = rest.trim_start_matches([' ', '\t']).to_string();
-                }
-            }
+    if let Some(after_open) = s.strip_prefix("**")
+        && let Some(close_idx) = after_open.find("**")
+    {
+        let inner = &after_open[..close_idx];
+        let tail = &after_open[close_idx + 2..];
+        if !inner.contains('*')
+            && !inner.is_empty()
+            && let Some(rest) = tail.strip_prefix(':')
+        {
+            s = rest.trim_start_matches([' ', '\t']).to_string();
         }
     }
     // gsub(/[[:space:]]+/, " ", s) — collapse all whitespace runs to one space.
@@ -4071,10 +4072,10 @@ fn regen_build_verify_lookup(
         std::collections::HashMap::new();
     for entry in entries {
         for key in ["url", "fetch_url", "final_redirect"] {
-            if let Some(u) = entry.get(key).and_then(|v| v.as_str()) {
-                if !u.is_empty() {
-                    url_to_entry.entry(u.to_string()).or_insert(entry);
-                }
+            if let Some(u) = entry.get(key).and_then(|v| v.as_str())
+                && !u.is_empty()
+            {
+                url_to_entry.entry(u.to_string()).or_insert(entry);
             }
         }
     }
@@ -4120,11 +4121,11 @@ fn regen_build_verify_lookup(
         } else {
             let mut sha_prefix = String::new();
             for entry in &fetched {
-                if let Some(sha) = entry.get("content_sha256").and_then(|v| v.as_str()) {
-                    if !sha.is_empty() {
-                        sha_prefix = sha.chars().take(8).collect();
-                        break;
-                    }
+                if let Some(sha) = entry.get("content_sha256").and_then(|v| v.as_str())
+                    && !sha.is_empty()
+                {
+                    sha_prefix = sha.chars().take(8).collect();
+                    break;
                 }
             }
             if sha_prefix.is_empty() {
@@ -4179,10 +4180,10 @@ fn regen_extract_provenance_info(text: &str) -> (Vec<String>, Vec<String>) {
         if let Some(pos) = stripped.find("local:") {
             let after = &stripped[pos + "local:".len()..];
             let after = after.trim_start_matches([' ', '\t']);
-            if let Some(rest) = after.strip_prefix('`') {
-                if let Some(end) = rest.find('`') {
-                    local_paths.push(rest[..end].to_string());
-                }
+            if let Some(rest) = after.strip_prefix('`')
+                && let Some(end) = rest.find('`')
+            {
+                local_paths.push(rest[..end].to_string());
             }
         }
     }
@@ -4447,18 +4448,18 @@ where
 
     let Ok(mut child) = child else {
         // Fallback: byte-wise sort by key.
-        items.sort_by(|a, b| key(a).cmp(&key(b)));
+        items.sort_by_key(|a| key(a));
         return;
     };
     if let Some(mut stdin) = child.stdin.take() {
         let _ = stdin.write_all(&input);
     }
     let Ok(output) = child.wait_with_output() else {
-        items.sort_by(|a, b| key(a).cmp(&key(b)));
+        items.sort_by_key(|a| key(a));
         return;
     };
     if !output.status.success() {
-        items.sort_by(|a, b| key(a).cmp(&key(b)));
+        items.sort_by_key(|a| key(a));
         return;
     }
 
@@ -4468,17 +4469,17 @@ where
             continue;
         }
         let k = String::from_utf8_lossy(part).to_string();
-        if let Some(bucket) = buckets.get_mut(&k) {
-            if let Some(item) = bucket.pop_front() {
-                sorted.push(item);
-            }
+        if let Some(bucket) = buckets.get_mut(&k)
+            && let Some(item) = bucket.pop_front()
+        {
+            sorted.push(item);
         }
     }
     // Safety: only replace if we recovered every item.
     if sorted.len() == items.len() {
         *items = sorted;
     } else {
-        items.sort_by(|a, b| key(a).cmp(&key(b)));
+        items.sort_by_key(|a| key(a));
     }
 }
 

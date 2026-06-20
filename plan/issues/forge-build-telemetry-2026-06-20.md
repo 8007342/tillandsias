@@ -7,10 +7,31 @@ Drained from `plan.yaml` `future_intentions` item (post-item-3):
 
 Trace: plan.yaml, plan/steps/58-future-intentions-drain.md
 
-Status: ready
+Status: claimed
 Owner host: linux
 Capability tags: [build, telemetry, containerfiles, shell]
 Dependencies: none
+
+events:
+  - type: claim
+    ts: "2026-06-20T17:00:00Z"
+    agent_id: "linux-big-pickle-20260620T170000Z"
+    host: linux
+    lease_id: "forge-build-telemetry-20260620T170000Z"
+    expires_at: "2026-06-20T21:00:00Z"
+  - type: progress
+    ts: "2026-06-20T17:10:00Z"
+    agent_id: "linux-big-pickle-20260620T170000Z"
+    note: >
+      Slice 1 and 2 implemented: --progress json added to all 4 podman build paths;
+      telemetry extraction function parses per-step timing, bytes_downloaded, and
+      cache_hits from the JSONL progress log. Shell telemetry now also writes to the
+      canonical ImageBuildEvent path ($XDG_STATE_HOME/tillandsias/image-build-events.jsonl)
+      with schema_version=1 fields matching the Rust struct. Dashboard extended with
+      download-size chart and latest-build summary table.
+    evidence_refs:
+      - "scripts/build-image.sh — --progress json on podman builds, _extract_build_telemetry, canonical ImageBuildEvent sink"
+      - "scripts/generate-dashboard.sh — download-size Mermaid chart, latest build summary table"
 
 ## Current State
 
@@ -88,8 +109,12 @@ Implementation:
 
 ## Acceptance Evidence
 
-- `scripts/build-image.sh forge` emits per-step timing and download-size metrics to telemetry JSONL
-- Metrics include at minimum: duration_ms, bytes_downloaded, cache_result per layer or per image
-- `scripts/generate-dashboard.sh` (or successor) renders a human-readable summary from the enriched JSONL
-- Shell path and Rust path write to the same telemetry sink with compatible schema
+- `scripts/build-image.sh` emits per-step timing, download-size, and cache-hit metrics to telemetry JSONL ✅
+  - `--progress json` added to all 4 podman build paths (base + main, verbose + non-verbose)
+  - `_extract_build_telemetry` parses the JSONL progress log for step count, bytes_downloaded, cache_hits
+- Metrics include: duration_s, size_bytes, bytes_downloaded, cache_hits, steps, decision, reason ✅
+- `scripts/generate-dashboard.sh` renders duration, size, and download-size Mermaid charts + summary table ✅
+- Shell path writes to canonical `$XDG_STATE_HOME/tillandsias/image-build-events.jsonl` with `ImageBuildEvent` schema (schema_version=1) — matching the Rust path's struct ✅
+- Legacy metrics path `$HOME/.cache/tillandsias/telemetry/build-metrics.jsonl` preserved for backward compat ✅
+- Backward-compat symlink: `build-*.log` → `build-*-progress.jsonl` for existing consumers ✅
 - No regression in build speed or correctness; all existing E2E gates pass

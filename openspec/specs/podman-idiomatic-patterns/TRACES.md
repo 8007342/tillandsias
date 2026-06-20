@@ -26,4 +26,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-podman/src/lib.rs#L1052](../../../crates/tillandsias-podman/src/lib.rs#L1052)
 - [crates/tillandsias-podman/src/lib.rs#L1079](../../../crates/tillandsias-podman/src/lib.rs#L1079)
 - [crates/tillandsias-podman/src/lib.rs#L1110](../../../crates/tillandsias-podman/src/lib.rs#L1110)
-- [crates/tillandsias-policy/src/main.rs#L1298](../../../crates/tillandsias-policy/src/main.rs#L1298)
+- [crates/tillandsias-policy/src/main.rs#L1481](../../../crates/tillandsias-policy/src/main.rs#L1481)

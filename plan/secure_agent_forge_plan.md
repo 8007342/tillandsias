@@ -60,3 +60,8 @@ The following issues require further research and reduction by the worker agents
 *   **Context:** We changed our traces implementation, but we must maintain robust observability across the triad of **Code**, **Cheatsheets**, and **Specs**. This ensures our iterative implementation remains monotonically convergent.
 *   **Ambiguity:** How does the new traces implementation map exactly to cheatsheets and specs in the current architecture?
 *   **Goal:** Research the integration points for the triad under the new tracing model and append tasks to build out the logging/tracing infrastructure in the Observatorium.
+
+### Issue D: Multi-Agent Concurrent Resource Contention
+*   **Context:** OpenCode, Codex, Claude, and Gemini are all building simultaneously on this shared Linux host across different checkouts. Simultaneous compilations and e2e tests might clash.
+*   **Ambiguity:** Are these agents experiencing collisions, port conflicts, or OOM errors? Do they need further isolation?
+*   **Goal:** Agents must report evidence of overlapping build/test failures in their logs. Implement a local `.lock` file system to serialize access to shared local resources (like e2e test execution) so agents can work concurrently without stepping on each other's toes. This must be a constant point of autonomous improvement.

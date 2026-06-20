@@ -21,6 +21,7 @@ be committed and pushed to the correct remote branch.
 
 - No uncommitted tracked changes.
 - All temporary local artifacts are considered disposable and MUST be discarded. You must leave a completely clean work state.
+- Ensure any `tillandsias` background binaries or test processes are fully terminated.
 - No local-only commits.
 - No completed work without a `plan/` event or finding.
 - No e2e pass/fail without a dated plan report.

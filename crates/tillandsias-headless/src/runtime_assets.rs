@@ -261,6 +261,7 @@ fn image_context_rel(image_name: &str) -> Result<&'static str, String> {
         "router" => Ok("images/router"),
         "chromium-core" | "chromium-framework" => Ok("images/chromium"),
         "vault" => Ok("images/vault"),
+        "nanoclawv2" => Ok("images/nanoclawv2"),
         other => Err(format!("Unknown image type: {other}")),
     }
 }
@@ -347,6 +348,7 @@ mod tests {
             ("images/chromium/Containerfile.core", "images/chromium"),
             ("images/chromium/Containerfile.framework", "images/chromium"),
             ("images/vault/Containerfile", "images/vault"),
+            ("images/nanoclawv2/Containerfile", "images/nanoclawv2"),
         ];
 
         for (cf_rel_path, context_dir) in containerfiles {

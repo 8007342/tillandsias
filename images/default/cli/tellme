@@ -1,0 +1,306 @@
+#!/usr/bin/env bash
+# tellme — search and lookup cheatsheets and dependency references in the forge.
+#
+# Usage: tellme about <topic> [--full]
+#        tellme about --list
+#        tellme --help
+#
+# @trace spec:forge-environment-discoverability
+# @cheatsheet runtime/cheatsheet-architecture-v2.md, runtime/cheatsheet-frontmatter-spec.md
+
+set -euo pipefail
+
+# Find cheatsheets directory
+cheatsheets_dir="${TILLANDSIAS_CHEATSHEETS:-/opt/cheatsheets}"
+if [ ! -d "$cheatsheets_dir" ]; then
+    SCRIPT_DIR="$(cd "$(dirname "${B_SOURCE[0]:-$0}")" && pwd)"
+    if [ -d "$SCRIPT_DIR/../cheatsheets" ]; then
+        cheatsheets_dir="$SCRIPT_DIR/../cheatsheets"
+    elif [ -d "$SCRIPT_DIR/../../cheatsheets" ]; then
+        cheatsheets_dir="$SCRIPT_DIR/../../cheatsheets"
+    fi
+fi
+
+INDEX_PATH="$cheatsheets_dir/INDEX.md"
+
+show_help() {
+    echo "Usage: tellme about <topic> [--full]"
+    echo "       tellme about --list"
+    echo "       tellme howto \"<query>\""
+    echo "       tellme --help"
+    echo ""
+    echo "Options:"
+    echo "  --list    Show all categories of cheatsheets"
+    echo "  --full    Show full content of the matching cheatsheet"
+    echo "  -h|--help Show this help message"
+    echo ""
+    echo "Examples:"
+    echo "  tellme about languages"
+    echo "  tellme about python"
+    echo "  tellme about git-workflows --full"
+    echo "  tellme howto \"how do I run python unit tests\""
+}
+
+if [ $# -eq 0 ]; then
+    show_help
+    exit 0
+fi
+
+case "${1:-}" in
+    -h|--help)
+        show_help
+        exit 0
+        ;;
+    howto)
+        if [ -z "${2:-}" ]; then
+            echo "tellme howto: query missing" >&2
+            echo "usage: tellme howto \"<query>\"" >&2
+            exit 2
+        fi
+        query="$2"
+        
+        INFERENCE_URL="${TILLANDSIAS_INFERENCE_URL:-http://inference:11434}"
+        
+        # Verify inference service is reachable and get models
+        raw_models="$(curl -fsS --max-time 3 "${INFERENCE_URL%/}/api/tags" 2>/dev/null || true)"
+        if [ -z "$raw_models" ]; then
+            echo "Error: inference container not running (${INFERENCE_URL%/}/api/tags unreachable)" >&2
+            exit 1
+        fi
+        
+        models_list=$(echo "$raw_models" | jq -r '.models[].name' 2>/dev/null || true)
+        if [ -z "$models_list" ]; then
+            echo "Error: no models loaded at $INFERENCE_URL" >&2
+            exit 1
+        fi
+        
+        # Select model: check for qwen2.5:0.5b first, then llama3.2:3b, then first model
+        chosen_model=""
+        for m in qwen2.5:0.5b llama3.2:3b; do
+            if echo "$models_list" | grep -q "^$m$"; then
+                chosen_model="$m"
+                break
+            fi
+        done
+        if [ -z "$chosen_model" ]; then
+            chosen_model=$(echo "$models_list" | head -n 1)
+        fi
+        
+        # 1. RAG Context Building
+        # Extract alphanumeric keywords from query, lowercase them, ignore small words/stop words
+        keywords=$(echo "$query" | tr -cs 'a-zA-Z0-9' ' ' | tr 'A-Z' 'a-z' | xargs -n1 | awk 'length($0) > 2' | sed -E 's/(ing|ed|s|es)$//' | sort -u)
+        
+        matching_files=()
+        if [ -n "$keywords" ] && [ -f "$INDEX_PATH" ]; then
+            # Find matching cheatsheets, boosting filename matches
+            matching_lines=$(echo "$keywords" | while read -r kw; do
+                [ -n "$kw" ] || continue
+                grep -i -- "- .*$kw" "$INDEX_PATH" || true
+                grep -i -- "- *$kw.*\.md" "$INDEX_PATH" || true
+                grep -i -- "- *$kw.*\.md" "$INDEX_PATH" || true
+            done | sort | uniq -c | sort -nr)
+            
+            if [ -n "$matching_lines" ]; then
+                while IFS= read -r line; do
+                    f=$(echo "$line" | sed -E 's/^[[:space:]]*[0-9]+[[:space:]]+-[[:space:]]+([^[:space:]]+).*/\1/')
+                    if [ -n "$f" ]; then
+                        matching_files+=("$f")
+                    fi
+                done <<< "$matching_lines"
+            fi
+        fi
+        
+        # Build context from top 3 cheatsheets (first 100 lines after frontmatter)
+        context=""
+        count=0
+        for f in "${matching_files[@]}"; do
+            [ $count -ge 3 ] && break
+            if [ -f "$cheatsheets_dir/$f" ]; then
+                file_content=$(head -n 120 "$cheatsheets_dir/$f" | awk 'NR==1 && /^---$/ { fm=1; next } fm && /^---$/ { fm=0; next } fm { next } { print }' | head -n 100)
+                if [ -n "$file_content" ]; then
+                    context+=$'\n'
+                    context+="=== Cheatsheet: $f ==="$'\n'
+                    context+="$file_content"$'\n'
+                    count=$((count+1))
+                fi
+            fi
+        done
+        
+        # Print info about model and cheatsheets used
+        echo -e "\033[1;30m[Using model: $chosen_model]\033[0m"
+        if [ $count -gt 0 ]; then
+            echo -e "\033[1;30m[RAG Context: using top $count matching cheatsheet(s)]\033[0m"
+        else
+            echo -e "\033[1;30m[RAG Context: no matching cheatsheets, using general knowledge]\033[0m"
+        fi
+        echo ""
+        
+        # Format the system prompt and context
+        prompt="System: You are an expert developer assistant for the Tillandsias Forge.
+Using the following cheatsheet context, answer the user's question concisely. If the context does not contain the answer, use your general knowledge of Linux, Docker/Podman, containers, and programming in the Tillandsias Forge. Keep your response brief, action-oriented, and focused on command/code snippets.
+
+Context:
+$context
+
+User: $query
+Assistant:"
+        
+        # Safe JSON generation using jq
+        payload=$(jq -n \
+          --arg model "$chosen_model" \
+          --arg prompt "$prompt" \
+          '{model: $model, prompt: $prompt, stream: true}')
+        
+        # Call curl and stream response to stdout
+        curl -s -N -X POST "${INFERENCE_URL%/}/api/generate" \
+          -H "Content-Type: application/json" \
+          -d "$payload" | \
+          jq -j --unbuffered '.response' | tr -d '\r'
+        
+        echo ""
+        ;;
+    about)
+        if [ -z "${2:-}" ]; then
+            echo "tellme about: topic or flag missing" >&2
+            echo "usage: tellme about <topic> [--full] or tellme about --list" >&2
+            exit 2
+        fi
+        
+        if [ "$2" = "--list" ]; then
+            if [ ! -f "$INDEX_PATH" ]; then
+                echo "Error: Cheatsheet index not found at $INDEX_PATH" >&2
+                exit 1
+            fi
+            grep '^## ' "$INDEX_PATH" | sed 's/^## //'
+            exit 0
+        fi
+        
+        topic="$2"
+        full=0
+        if [ "${3:-}" = "--full" ] || [ "${3:-}" = "-f" ]; then
+            full=1
+        fi
+        
+        # 1. Handle dependencies special topic
+        is_dep_query=0
+        if [[ "$topic" =~ ^(dependency|dependencies|package|packages)$ ]]; then
+            is_dep_query=1
+            echo "Tillandsias Forge Dependency Reference:"
+            echo "The forge image builds on Fedora minimal. Main system dependencies:"
+            echo "  - Languages: Java 25, Python 3.13, Node 22, Go, Rust (cargo), Dart (flutter)"
+            echo "  - Build tools: Maven, Gradle, npm, yarn, pnpm, pipx, uv, poetry, make, cmake, ninja, nix"
+            echo "  - Test frameworks: pytest, junit, cargo-test, chromium-headless, firefox"
+            echo "  - Utils: jq, yq, protoc, grpcurl, shellcheck, shfmt, rg, fd, fzf, curl, wget, git, gh, xmlstarlet"
+            echo "  - Agent tools: claude-code, opencode, openspec, codex"
+            echo ""
+            echo "For the exact version and binary paths of these dependencies, run:"
+            echo "  tillandsias-inventory"
+            echo ""
+            echo "For enclave services:"
+            echo "  tillandsias-services"
+            echo "--------------------------------------------------------"
+        fi
+        
+        if [ ! -f "$INDEX_PATH" ]; then
+            echo "Error: Cheatsheet index not found at $INDEX_PATH" >&2
+            exit 1
+        fi
+        
+        if [ $full -eq 1 ]; then
+            # Find matching cheatsheet files
+            # Check exact file matches first
+            matches=()
+            if [ -f "$cheatsheets_dir/$topic" ]; then
+                matches+=("$cheatsheets_dir/$topic")
+            elif [ -f "$cheatsheets_dir/$topic.md" ]; then
+                matches+=("$cheatsheets_dir/$topic.md")
+            else
+                # Search recursively for matching filename
+                while IFS= read -r -d '' file; do
+                    matches+=("$file")
+                done < <(find "$cheatsheets_dir" -type f -iname "*${topic}*.md" -print0 2>/dev/null)
+            fi
+            
+            # De-duplicate matches
+            unique_matches=()
+            for m in "${matches[@]}"; do
+                found_match=0
+                for um in "${unique_matches[@]}"; do
+                    if [ "$um" = "$m" ]; then
+                        found_match=1
+                        break
+                    fi
+                done
+                if [ $found_match -eq 0 ]; then
+                    unique_matches+=("$m")
+                fi
+            done
+            
+            if [ ${#unique_matches[@]} -eq 0 ]; then
+                echo "No cheatsheet found matching '$topic'." >&2
+                exit 1
+            elif [ ${#unique_matches[@]} -eq 1 ]; then
+                if command -v bat >/dev/null 2>&1; then
+                    bat --style=plain "${unique_matches[0]}"
+                else
+                    cat "${unique_matches[0]}"
+                fi
+                exit 0
+            else
+                echo "Multiple matching cheatsheets found for '$topic':"
+                for m in "${unique_matches[@]}"; do
+                    rel="${m#$cheatsheets_dir/}"
+                    echo "  - $rel"
+                done
+                echo "Please specify a more specific name, e.g.:"
+                rel_example="${unique_matches[0]#$cheatsheets_dir/}"
+                base_example="$(basename "$rel_example" .md)"
+                echo "  tellme about $base_example --full"
+                exit 1
+            fi
+        else
+            # Print category section if topic matches a category name exactly
+            category_match=$(grep -Ei "^## $topic$" "$INDEX_PATH" || true)
+            if [ -n "$category_match" ]; then
+                awk -v category="$topic" '
+                  BEGIN { IGNORECASE = 1; found = 0 }
+                  $0 ~ "^## " category "$" { found = 1; print; next }
+                  found && /^## / { found = 0 }
+                  found { print }
+                ' "$INDEX_PATH"
+                exit 0
+            fi
+            
+            # Substring match categories or cheatsheet lines
+            search_results=$(awk -v topic="$topic" '
+              BEGIN { IGNORECASE = 1; current_cat = ""; cat_printed = 0 }
+              /^## / { current_cat = substr($0, 4); cat_printed = 0; next }
+              /^- / {
+                if ($0 ~ topic) {
+                  if (!cat_printed && current_cat != "") {
+                    print "\n## " current_cat
+                    cat_printed = 1
+                  }
+                  print $0
+                }
+              }
+            ' "$INDEX_PATH")
+            
+            if [ -n "$search_results" ]; then
+                printf '%s\n' "$search_results"
+            else
+                if [ $is_dep_query -eq 1 ]; then
+                    exit 0
+                fi
+                echo "No matching cheatsheets or categories found for '$topic'." >&2
+                echo "Run 'tellme about --list' to see all categories." >&2
+                exit 1
+            fi
+        fi
+        ;;
+    *)
+        echo "tellme: unknown command/option '${1:-}'" >&2
+        echo "usage: tellme about <topic> [--full] or tellme about --list" >&2
+        exit 2
+        ;;
+esac

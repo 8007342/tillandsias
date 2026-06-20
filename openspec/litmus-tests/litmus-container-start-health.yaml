@@ -37,7 +37,7 @@ critical_path:
     # event:container_launch stream we assert on. Non-fatal exit: we judge by
     # the captured stream, not the agent's exit code.
     # Uses --port 19080 to avoid conflicts with host's running tray.
-    command: "tillandsias . --opencode --diagnostics --port 19080 --prompt \"report ready and exit\" >/dev/null 2> \"target/forge-diagnostics/container-start_$(date -u +%Y%m%dT%H%M%SZ).stderr.log\" || true"
+    command: "TILLANDSIAS_NO_TRAY=1 tillandsias . --opencode --diagnostics --port 19080 --prompt \"report ready and exit\" >/dev/null 2> \"target/forge-diagnostics/container-start_$(date -u +%Y%m%dT%H%M%SZ).stderr.log\" || true"
     timeout_ms: 600000
 
   - step: "at least one container reached state=running via the idiomatic layer"

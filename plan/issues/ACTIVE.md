@@ -1,222 +1,41 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-20T18:04Z
+Last updated: 2026-06-20T17:55Z (updated 2026-06-20T17:45Z by Cowork merge)
 
-## This Cycle (2026-06-20T18:04Z, linux)
+## This Cycle (2026-06-20T17:45Z, linux — Cowork merge)
 
-- **Meta-orchestration sync**: Startup on mutable Linux (Cowork session). Branch
-  `linux-next`, 14 commits ahead of `origin/linux-next` (push-blocked, persistent
-  SSH constraint). Git fetch FAILED — SSH unavailable. Saturday — full drain eligible.
-- **Worker drain**: No ready plan nodes for linux. All plan steps completed/done/deferred.
-  Sibling branches (local cache): windows=a3c8b23d and osx=d829808d are both ancestors
-  of linux-next HEAD — no merge needed.
-- **Verification**: Litmus 107/107 PASS.
-- **E2E gates**: Skipped — podman user session unavailable in Cowork sandbox (no /run/user).
-  Push blocked; no runtime delta since v0.3.260618.2.
-- **Push state**: BLOCKED — SSH unavailable. linux-next 14 commits ahead of origin.
-  Operator must: `git push origin linux-next`.
-- **Next**: (1) Operator push. (2) Local-build e2e (nanoclawv2 live container launch).
-  (3) aarch64 VM pasta probe for vault port-forwarding.
+- **Fix**: Switched git remote from SSH to HTTPS (`https://github.com/8007342/tillandsias.git`). SSH was unavailable in the Cowork sandbox; HTTPS auth works via host credential store. All prior cycles today were blocked by this; unblocked now.
+- **Merge**: Merged `origin/linux-next@8f8887b2` into local `linux-next` (was 15 ahead / 28 behind). Resolved conflicts in `plan/index.yaml`, `plan/issues/ACTIVE.md`, `plan/issues/nanoclawv2-orchestration.md`, `plan/loop_status.md`, `plan/metrics-dashboard.md` — all resolved by taking `origin/linux-next` (authoritative; stale SSH-blocked cycle records in HEAD were superseded).
+- **Worker drain**: None — upstream already fully drained by the 17:55Z cycle (E2E all green, forge improvements complete, v0.3.260620.7).
+- **Next**: Push merge commit to origin/linux-next.
 
-## This Cycle (2026-06-20T17:40Z, linux)
 
-- **Meta-orchestration sync**: Startup on mutable Linux (Cowork session). Branch
-  `linux-next`, 13 commits ahead of `origin/linux-next` (push-blocked, persistent
-  SSH constraint). Git fetch FAILED — SSH unavailable. Saturday — full drain eligible.
-- **Worker drain**: No ready plan nodes for linux. All plan steps completed/done/deferred.
-  Sibling branches (local cache): windows=a3c8b23d and osx=d829808d are both ancestors
-  of linux-next HEAD — no merge needed.
-- **Verification**: Litmus 107/107 PASS.
-- **E2E gates**: Skipped — podman user session unavailable in Cowork sandbox (no /run/user).
-  Push blocked; no runtime delta since v0.3.260618.2.
-- **Push state**: BLOCKED — SSH unavailable. linux-next 13 commits ahead of origin.
-  Operator must: `git push origin linux-next`.
-- **Next**: (1) Operator push. (2) Local-build e2e (nanoclawv2 live container launch).
-  (3) aarch64 VM pasta probe for vault port-forwarding.
+## This Cycle (2026-06-20T17:55Z, linux)
 
-## This Cycle (2026-06-20T16:04Z, linux)
+- **Meta-orchestration sync**: Started clean on mutable-Linux `linux-next`, fetched origin, fast-forwarded to `origin/linux-next@267ddcf5`, then pushed plan claim commit `68b9ed99`.
+- **Worker drain**: Completed the remaining `agent-concurrency-collisions-2026-06-20` slice. Linux build/install and init E2E steps now run through a process-cleanup wrapper that terminates only newly leaked host-side `tillandsias` launcher PIDs and fails a successful smoke command that leaked a process.
+- **Stale-binary guardrail**: Gate 1 now verifies `command -v tillandsias` resolves to `$HOME/.local/bin/tillandsias` and `tillandsias --version` matches the post-build `VERSION` file after the local autoincremental build-number bump.
+- **In-cycle E2E hardening**: Fixed fake-Podman image-build telemetry extraction, preserved successful litmus runner exits by cleaning only descendants, and forced non-interactive E2E/diagnostics smoke paths to run headless with `TILLANDSIAS_NO_TRAY=1`.
+- **Verification**: shell syntax checks, no-leak wrapper smoke, deliberate leaked fake `tillandsias` termination with expected exit 70, fake-Podman image-build convergence litmus, `scripts/run-litmus-test.sh init-incremental-builds --size instant`, `git diff --check`, and `./build.sh --check` passed.
+- **E2E gates**: Final local-build E2E passed all gates at `target/build-install-smoke-e2e/20260620T173320Z`: build/install, destructive Podman reset, pristine init, and prompted in-forge `/forge-continuous-enhancement` all exited 0 on `Tillandsias v0.3.260620.7`.
+- **Ledger hygiene**: `local-smoke/onboarding-cold-start-discovery-cheatsheet-signal`, `local-smoke/image-build-convergence-fake-progress-telemetry`, and `local-smoke/noninteractive-smoke-tray-leak` are now reflected as done in the 2026-06-20 smoke findings; the macOS aarch64 Vault published-port blocker remains the primary immediate item.
 
-- **Meta-orchestration sync**: Startup on mutable Linux (Cowork session). Branch
-  `linux-next`, 12 commits ahead of `origin/linux-next` (push-blocked, persistent
-  SSH constraint). Git fetch FAILED — SSH unavailable. Saturday — full drain eligible.
-- **Worker drain**: No ready plan nodes for linux. All plan steps completed/done/deferred.
-  Sibling branches (local cache): windows=a3c8b23d and osx=d829808d are both ancestors
-  of linux-next HEAD — no merge needed.
-- **Verification**: Litmus 107/107 PASS.
-- **E2E gates**: Skipped — podman user session unavailable in Cowork sandbox (no /run/user).
-  Push blocked; no runtime delta since v0.3.260618.2.
-- **Push state**: BLOCKED — SSH unavailable. linux-next 12 commits ahead of origin.
-  Operator must: `git push origin linux-next`.
-- **Next**: (1) Operator push. (2) Local-build e2e (nanoclawv2 live container launch).
-  (3) aarch64 VM pasta probe for vault port-forwarding.
+## This Cycle (2026-06-20T13:56Z, linux)
 
-## This Cycle (2026-06-20T15:04Z, linux)
+- **Meta-orchestration sync**: Started clean on mutable-Linux `linux-next`, fetched origin, fast-forwarded to `origin/linux-next`, pushed claim commit `824cbc67`, then pushed implementation commit `bb4196df`.
+- **Worker drain**: Completed the first `agent-concurrency-collisions-2026-06-20` slice by adding a shared smoke lock and routing Linux build-install E2E gate scripts through it.
+- **Coordination**: Post-push audit found `origin/windows-next@a3c8b23d` and `origin/osx-next@d829808d` are both ancestors of `origin/linux-next@bb4196df`; sibling-ahead drift is 0.
+- **E2E gates**: Ran local-build E2E under the new lock. Gate 1 failed before destructive reset because post-build `litmus:onboarding-cold-start-discovery` could not find the welcome banner `INDEX.md` cheatsheet signal (`build_install_exit=1`; log dir `target/build-install-smoke-e2e/20260620T134849Z`).
+- **New finding**: Filed `local-smoke/onboarding-cold-start-discovery-cheatsheet-signal` in `plan/issues/build-install-smoke-e2e-findings-2026-06-20.md`.
+- **Next**: Restore the welcome banner cheatsheet `INDEX.md` signal, rerun local-build E2E from gate 1, then continue the remaining concurrency cleanup/stale-binary/autoincremental guardrail work. macOS vault aarch64 remains the critical cross-host blocker.
 
-- **Meta-orchestration sync**: Startup on mutable Linux (Cowork session). Branch
-  `linux-next`, 11 commits ahead of `origin/linux-next` (push-blocked, persistent
-  SSH constraint). Git fetch FAILED — SSH unavailable. Saturday — full drain eligible.
-- **Worker drain**: No ready plan nodes for linux. All plan steps completed/done/deferred.
-  Sibling branches (local cache): windows=a3c8b23d and osx=d829808d are both ancestors
-  of linux-next HEAD — no merge needed.
-- **Verification**: Litmus 107/107 PASS.
-- **E2E gates**: Skipped — podman user session unavailable in Cowork sandbox.
-  Push blocked; no runtime delta since v0.3.260618.2.
-- **Push state**: BLOCKED — SSH unavailable. linux-next 11 commits ahead of origin.
-  Operator must: `git push origin linux-next`.
-- **Next**: (1) Operator push. (2) Local-build e2e (nanoclawv2 live container launch).
-  (3) aarch64 VM pasta probe for vault port-forwarding.
+## This Cycle (2026-06-20T09:00Z, linux)
 
-## This Cycle (2026-06-20T14:05Z, linux)
-
-- **Meta-orchestration sync**: Startup on mutable Linux (Cowork session). Branch
-  `linux-next`, 10 commits ahead of `origin/linux-next` (push-blocked, persistent
-  SSH constraint). Git fetch FAILED — SSH unavailable. Saturday — full drain eligible.
-- **Worker drain**: No ready plan nodes for linux. All plan steps completed/done/deferred.
-  Sibling branches (local cache): windows=a3c8b23d and osx=d829808d are both ancestors
-  of linux-next HEAD — no merge needed.
-- **Verification**: Litmus 107/107 PASS. `./build.sh --check` PASS.
-- **E2E gates**: Skipped — podman user session unavailable in Cowork sandbox (same
-  constraint as all prior cycles today). Push blocked.
-- **Push state**: BLOCKED — SSH unavailable. linux-next 10 commits ahead of origin.
-  Operator must: `git push origin linux-next`.
-- **Next**: (1) Operator push. (2) Local-build e2e (nanoclawv2 live container launch).
-  (3) aarch64 VM pasta probe for vault port-forwarding.
-
-## This Cycle (2026-06-20T13:04Z, linux)
-
-- **Meta-orchestration sync**: Startup on mutable Linux (Cowork session). Branch
-  `linux-next`, 9 commits ahead of `origin/linux-next` (push-blocked, persistent
-  SSH constraint). Git fetch FAILED — SSH unavailable. Saturday — full drain eligible.
-- **Worker drain**: No new plan work eligible for linux without SSH/aarch64 VM.
-  All prior housekeeping complete. Litmus 107/107 PASS verified.
-- **E2E gates**: Skipped — no runtime delta; push blocked.
-- **Push state**: BLOCKED — SSH unavailable. linux-next 9 commits ahead of origin.
-  Operator must: `git push origin linux-next`.
-- **Next**: (1) Operator push. (2) Local-build e2e (nanoclawv2 live container
-  launch). (3) aarch64 VM pasta probe for vault port-forwarding.
-
-## This Cycle (2026-06-20T12:04Z, linux)
-
-- **Meta-orchestration sync**: Startup on mutable Linux (Cowork session). Branch
-  `linux-next`, 7→8 commits ahead of `origin/linux-next` (push-blocked). Git fetch
-  FAILED — SSH public key unavailable in Cowork sandbox. Sibling heads (local cache):
-  windows=a3c8b23d, osx=d829808d, main=6dfafdf1. Saturday — full drain eligible.
-- **Worker drain**: No new plan work eligible for linux without SSH/aarch64 VM.
-  Housekeeping only: committed `codex-repeat` + 15 `plan/forge-improvements/proposals/`
-  files that had been untracked since May 28–Jun 2, causing noise in every cycle.
-  Commit c1bd9f21. Worktree now clean.
-- **E2E gates**: Skipped — no runtime delta; push blocked.
-- **Push state**: BLOCKED — SSH unavailable. linux-next now 8 commits ahead of
-  origin. Operator must: `git push origin linux-next`.
-- **Next**: (1) Operator push. (2) Local-build e2e (nanoclawv2 live container
-  launch). (3) aarch64 VM pasta probe for vault port-forwarding.
-
-## This Cycle (2026-06-20T11:04Z, linux)
-
-- **Meta-orchestration sync**: Startup on mutable Linux (Cowork session). Branch
-  `linux-next`, 6 commits ahead of `origin/linux-next` (push-blocked, persistent
-  SSH constraint across all Cowork sessions today). Git fetch FAILED — SSH
-  unavailable. Sibling heads (local cache): windows=a3c8b23d, osx=d829808d,
-  main=6dfafdf1. Saturday — full drain eligible.
-- **Worker drain**: Closed `future-intentions-drain` (step 58). All 7 future
-  intentions drained as of prior cycles; parent step was still `in_progress`
-  despite all sub-tasks complete. Marked step `done`, released
-  `windows-macos-feature-parity` claim (drain outcome achieved; implementation
-  tracking lives in parity issue file + macos-in-vm-enclave-provisioning step).
-  No ready plan work remains eligible for linux without SSH or aarch64 VM.
-- **E2E gates**: Skipped — push blocked, no runtime delta since v0.3.260618.2.
-- **Push state**: BLOCKED — SSH unavailable in Cowork session. linux-next now 7
-  commits ahead of origin. Operator must: `git push origin linux-next`.
-- **Next**: (1) Operator push to unblock. (2) Local-build e2e gate (nanoclawv2
-  live container launch). (3) aarch64 VM pasta probe for vault port-forwarding.
-
-## This Cycle (2026-06-20T10:04Z, linux)
-
-- **Meta-orchestration sync**: Startup on mutable Linux (Cowork session). Branch
-  `linux-next`, 5 commits ahead of `origin/linux-next` (push-blocked). Git fetch
-  FAILED — SSH unavailable. Sibling heads (local cache): windows=a3c8b23d,
-  osx=d829808d, main=6dfafdf1. Saturday — full drain eligible.
-- **Worker drain**: Fixed litmus drift from `containerfile-dnf-migration` (completed
-  2026-06-20T05:10Z). The migration removed `WASMTIME_SHA256` ARG and its
-  `sha256sum -c -` site from `Containerfile.base`, but the litmus
-  `litmus:default-image-containerfile-shape` step 7 still checked for that
-  variable and expected 5 sha256sum sites. Fixed: removed `WASMTIME_SHA256` from
-  the checked-variable list, updated expected site count 5→4. Pre-build litmus
-  now 107/107 PASS (was 106/107).
-- **Verification**: `scripts/run-litmus-test.sh --size instant --phase pre-build
-  --compact` → 107/107 PASS. `tillandsias-policy validate-yaml` clean.
-  `./build.sh --check` PASS.
-- **E2E gates**: Skipped — no runtime delta; push blocked.
-- **Push state**: BLOCKED — SSH unavailable in Cowork session. linux-next now 6
-  commits ahead of origin. Operator must: `git push origin linux-next`.
-- **Next**: (1) Operator push. (2) Local-build e2e gate (nanoclawv2 live container
-  launch). (3) aarch64 VM pasta probe for vault port-forwarding.
-
-## This Cycle (2026-06-20T09:16Z, linux)
-
-- **Meta-orchestration sync**: Startup on mutable Linux (Cowork session). Branch
-  `linux-next`, 3 commits ahead of `origin/linux-next` (push-blocked). Git fetch
-  FAILED — SSH unavailable. Sibling heads (local cache): windows=a3c8b23d,
-  osx=d829808d, main=6dfafdf1. Saturday — full drain eligible (no high-usage-hour
-  restriction).
-- **Worker drain**: Completed `nanoclawv2-orchestration` Slice 4 (final).
-  3 integration smoke tests in `lib.rs` (in-process UnixStream pair):
-  launch smoke (initialize + 5-tool list), broker smoke (nanoclaw.status
-  dispatch), deny smoke (isError=true for unknown tool). 12/12 tests total.
-  `litmus-nanoclawv2-mcp-shape.yaml` written; `litmus-bindings.yaml` updated
-  (80% coverage). `tasks.md` 4.1–4.4 done. nanoclawv2-orchestration packet
-  → done (pending push). Commit 1dbdd809. cargo fmt/test/build.sh --check: all PASS.
-- **Push state**: BLOCKED — SSH unavailable. linux-next now 4 commits ahead of
-  origin. Operator must: `git push origin linux-next`.
-- **Next**: (1) Operator push. (2) Local-build e2e gate (nanoclawv2 live container
-  launch). (3) aarch64 VM pasta probe for vault port-forwarding.
-
-## This Cycle (2026-06-20T08:42Z, linux)
-
-- **Meta-orchestration sync**: Startup on mutable Linux (Cowork session). Branch
-  `linux-next`, 2 commits ahead of `origin/linux-next` (nanoclawv2 Slice 3 +
-  plan packet from 08:33Z cycle). Git fetch FAILED — SSH unavailable in Cowork
-  session. Sibling heads from local cache: windows-next=a3c8b23d, osx-next=d829808d
-  (both ancestors of linux-next). Worktree tracked-clean; untracked proposals
-  and `codex-repeat` ignored (not new, persisted from prior cycles).
-- **Worker drain**: Coordinator review of `future-intentions-drain/windows-macos-feature-parity`.
-  Code-inspected vault_bootstrap.rs: vault launch uses `--userns keep-id
-  -p 127.0.0.1:8201:8200 --network tillandsias-enclave`. On aarch64, rootlessport
-  accepts SYN but bytes don't reach Vault's API (known podman aarch64 bridge+publish
-  issue). Documented potential workaround: `--network=pasta` bypasses rootlessport/bridge
-  netns indirection. No code change — aarch64 VM probe required to confirm.
-  Windows-next: a3c8b23d in sync; step-36 blocked on linux step-32.
-- **E2E gates**: Skipped — no runtime delta, push blocked.
-- **Push state**: BLOCKED — SSH unavailable in Cowork sandbox. Local linux-next
-  now 3 commits ahead of origin (Slice 3 impl + Slice 3 plan + this coordinator
-  packet). Operator action required: `git push origin linux-next`.
-- **Next**: (1) Operator push. (2) aarch64 VM: test `--network=pasta` for vault
-  health probe. (3) nanoclawv2 Slice 4 (smoke coverage) in a session with SSH.
-
-## This Cycle (2026-06-20T08:22Z, linux)
-
-- **Meta-orchestration sync**: Pulled latest linux-next (88d0a4a7). Sibling
-  windows-next and osx-next at 0 drift. Stash cleared pre-existing untracked
-  proposals; worktree clean at start.
-- **Worker drain**: Completed `nanoclawv2-orchestration` Slice 3. New crate
-  `crates/tillandsias-nanoclawv2-mcp` implements the host control surface:
-  Unix-socket MCP server (`src/main.rs` listener, `src/server.rs` JSON-RPC
-  dispatch, `src/allowlist.rs` 5-tool project-locked allowlist). Config overlay
-  `images/nanoclawv2/config-overlay/opencode/config.json` wires the MCP-only
-  surface; `nanoclaw-host.sh` socat bridge passes stdio through the host socket.
-  Tray `launch_nanoclawv2()` spawns `tillandsias-nanoclawv2-mcp` before the
-  container, derives per-project socket path, bind-mounts it, sets
-  `TILLANDSIAS_NANOCLAW_SOCKET`. Containerfile updated to COPY overlay.
-- **Verification**: `cargo test -p tillandsias-nanoclawv2-mcp` 9/9 PASS;
-  `cargo fmt --all -- --check` PASS; `./build.sh --check` PASS.
-- **Coordination**: sibling audit post-implementation confirms windows-next and
-  osx-next remain ancestors of linux-next; no merge needed.
-- **Push state**: BLOCKED — commit db79d2ad staged locally on linux-next; SSH
-  credentials unavailable in sandbox (no keys in /etc/ssh / agent). Same
-  constraint as all prior Cowork-session cycles. Push requires operator
-  `git push origin linux-next` or a subsequent session with credentials.
-- **Next**: nanoclawv2-orchestration Slice 4 (smoke: launch + one broker action
-  + release extension), or macOS vault aarch64 probe if VM access available.
+- **Meta-orchestration sync**: Started clean on mutable-Linux `linux-next`, fetched origin, confirmed local branch was aligned with `origin/linux-next`.
+- **E2E gates**: Ran local-build E2E via `/build-install-and-smoke-test-e2e`. The build/install and destructive reset gates succeeded, but the init gate failed with `No match for argument: wasmtime`.
+- **New finding**: Filed `local-smoke/wasmtime-dnf-migration-failure` in `plan/issues/build-install-smoke-e2e-findings-2026-06-20.md` to track the failure.
+- **Coordination**: Sibling heads are ancestors of `linux-next`.
+- **Next**: Revert wasmtime migration to DNF or fix package availability, resolve macOS vault aarch64 blocker.
 
 ## This Cycle (2026-06-20T07:49Z, linux)
 
@@ -322,6 +141,30 @@ the items below are immediate work.
 
 ## Immediate
 
+### local-smoke/onboarding-cold-start-discovery-cheatsheet-signal
+
+- status: done
+- owner_host: linux
+- source: `plan/issues/build-install-smoke-e2e-findings-2026-06-20.md`
+- severity: high - blocks the local-build E2E gate before destructive reset.
+- discovered_by: `/build-install-and-smoke-test-e2e` on tested commit `bb4196df90e60953dbf9c510b20d19d25d115b2f` / installed version `0.3.260620.3`.
+- problem: >
+    The post-build smoke set fails `litmus:onboarding-cold-start-discovery`
+    step 3. `images/default/forge-welcome.sh` still includes `Cheatsheets`
+    and `TILLANDSIAS_CHEATSHEETS`, but no longer includes the required
+    `INDEX.md` discovery signal.
+- evidence:
+  - `target/build-install-smoke-e2e/20260620T134849Z/01-build-install-exit.txt`: `build_install_exit=1`
+  - `target/build-install-smoke-e2e/20260620T134849Z/01-build-install.log:2215`: `Executing litmus:onboarding-cold-start-discovery`
+  - `target/build-install-smoke-e2e/20260620T134849Z/01-build-install.log:2218`: `verify welcome banner surfaces cheatsheet path [FAIL]`
+  - `target/build-install-smoke-e2e/20260620T134849Z/01-build-install.log:2219`: `expected=cheatsheet discovery signal present`
+  - `target/build-install-smoke-e2e/20260620T134849Z/00-smoke-lock.log`: lock acquired at `2026-06-20T13:49:31Z`, released at `2026-06-20T13:56:24Z` with `exit=1`.
+- next_action: >
+    None. The smoke findings ledger records a 2026-06-20T16:53Z completion
+    event restoring the welcome banner `Cheatsheets`/`TILLANDSIAS_CHEATSHEETS`/
+    `INDEX.md` signal and reporting all local-build E2E gates passing.
+- blocker: none
+
 ### enclave/macos-vault-unreachable-via-publish-aarch64
 
 - status: ready (items 1–2 confirmed in code; remaining: aarch64 VM testing)
@@ -399,6 +242,27 @@ the items below are immediate work.
   - cargo test -p tillandsias-host-shell / -p tillandsias-macos-tray green
   - m8 login → projects (F5) → attach works end-to-end on a fresh provision
 
+### local-smoke/wasmtime-dnf-migration-failure
+
+- status: done
+- lease_id: "wasmtime-revert-20260620T101400Z"
+- agent_id: "linux-tlatoani-gemini-20260620T101400Z"
+- expires_at: "2026-06-20T14:14:00Z"
+- owner_host: linux
+- source: `plan/issues/build-install-smoke-e2e-findings-2026-06-20.md`
+- severity: high — blocks local-build E2E and therefore release confidence for integrated `linux-next`
+- next_action: none — fix landed and E2E verified.
+- blocker: none
+- completed_evidence: >
+    Reverted the wasmtime DNF installation migration to restoration of direct archive fetch with SHA256 checksum verification.
+    Updated the default-image litmus test (litmus-default-image-containerfile-shape.yaml) to expect 5 checksum-verification sites.
+    Ran `./build.sh --ci-full --install`, which successfully completed all pre-build litmus tests, built, installed, and passed all runtime E2E residual checks.
+    Evidence bundle: target/convergence/evidence-bundle-20260620-102600.tar.gz.
+- evidence_required:
+  - `tillandsias --init --debug` completes successfully on a pristine store.
+  - `podman run --rm localhost/tillandsias-forge-base:latest wasmtime --version` returns a valid version.
+  - E2E gate 3 passes.
+
 ### local-smoke/linux-musl-tray-binary-name-collision
 
 - status: done
@@ -466,17 +330,17 @@ the items below are immediate work.
 
 ### nanoclawv2-orchestration
 
-- status: done (pending push) — 2026-06-20T09:16Z, commit 1dbdd809
+- status: stalled (lease expired 2026-06-18T02:07Z; reclaimable)
 - owner_host: linux
 - source: `plan/issues/nanoclawv2-orchestration.md`
-- completed_evidence: >
-    All 4 slices complete. Image infra (Containerfile, entrypoint, build registration),
-    tray launcher leaf (🦞 NanoClawV2, LaunchKind, container spec), host MCP broker
-    (Unix-socket server, 5-tool allowlist, project-scope enforcement, socat bridge,
-    config overlay), and smoke coverage (12/12 tests: 9 unit + 3 integration; litmus
-    litmus:nanoclawv2-mcp-shape written; litmus-bindings.yaml updated at 80%).
-    Live container launch deferred to local-build e2e gate at release time.
-- next_action: Operator push linux-next; then local-build e2e gate for container launch.
+- next_action: Draft the NanoClawV2 implementation task graph from the new
+  spec, then wire the launcher leaf, broker surface, and smoke hooks.
+- lease: `nanoclawv2-orchestration-202606172207` (EXPIRED at 2026-06-18T02:07Z)
+- blocker: none
+- evidence_required:
+  - NanoClawV2 launch leaf exists and is branch-aware
+  - only approved orchestration actions are reachable
+  - smoke coverage proves launch and one approved action
 
 ### github-login/enclave-egress-regression
 
