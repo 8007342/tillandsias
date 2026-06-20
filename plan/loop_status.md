@@ -1,6 +1,27 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-20T11:04Z
+LastExecutionTime: 2026-06-20T12:04Z
+
+## This Loop (2026-06-20T12:04Z, linux)
+
+- **Cycle type**: meta-orchestration housekeeping on mutable Linux (Cowork session).
+- **Startup**: Host `linux_mutable` (macuahuitl.ayahuitlcalpan.com). Branch
+  `linux-next`, 7 commits ahead of `origin/linux-next` (push-blocked, persistent
+  SSH constraint across all Cowork sessions today). Git fetch FAILED — SSH public
+  key not available in Cowork sandbox. Saturday — full drain eligible.
+- **Worker drain**: No new implementation work eligible (no SSH, no aarch64 VM,
+  no ready plan nodes for linux). Performed housekeeping: committed 16 long-standing
+  untracked files — `codex-repeat` (companion script to `./repeat`, untracked since
+  Jun 2) and 15 `plan/forge-improvements/proposals/` files (untracked since May
+  28-29 despite sibling proposals being tracked). These files caused noise in every
+  cycle git-status report. Commit c1bd9f21.
+- **Verification**: pre-build litmus 107/107 PASS (pre-existing from prior cycle).
+  `git status --short` now clean (no untracked files).
+- **E2E gates**: Skipped — no runtime delta; push blocked.
+- **Push state**: BLOCKED — SSH unavailable in Cowork session. linux-next now 8
+  commits ahead of origin. Operator must: `git push origin linux-next`.
+- **Next**: (1) Operator push. (2) Local-build e2e gate (nanoclawv2 live container
+  launch). (3) aarch64 VM pasta probe for vault port-forwarding.
 
 ## This Loop (2026-06-20T11:04Z, linux)
 

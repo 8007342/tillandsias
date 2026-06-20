@@ -1,6 +1,22 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-20T11:04Z
+Last updated: 2026-06-20T12:04Z
+
+## This Cycle (2026-06-20T12:04Z, linux)
+
+- **Meta-orchestration sync**: Startup on mutable Linux (Cowork session). Branch
+  `linux-next`, 7→8 commits ahead of `origin/linux-next` (push-blocked). Git fetch
+  FAILED — SSH public key unavailable in Cowork sandbox. Sibling heads (local cache):
+  windows=a3c8b23d, osx=d829808d, main=6dfafdf1. Saturday — full drain eligible.
+- **Worker drain**: No new plan work eligible for linux without SSH/aarch64 VM.
+  Housekeeping only: committed `codex-repeat` + 15 `plan/forge-improvements/proposals/`
+  files that had been untracked since May 28–Jun 2, causing noise in every cycle.
+  Commit c1bd9f21. Worktree now clean.
+- **E2E gates**: Skipped — no runtime delta; push blocked.
+- **Push state**: BLOCKED — SSH unavailable. linux-next now 8 commits ahead of
+  origin. Operator must: `git push origin linux-next`.
+- **Next**: (1) Operator push. (2) Local-build e2e (nanoclawv2 live container
+  launch). (3) aarch64 VM pasta probe for vault port-forwarding.
 
 ## This Cycle (2026-06-20T11:04Z, linux)
 
