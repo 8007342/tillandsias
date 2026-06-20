@@ -3,10 +3,18 @@
 trace: plan.yaml (future_intentions item 1),
        plan/steps/58-future-intentions-drain.md
 
-Status: ready
+Status: claimed
 Owner host: linux
 Capability tags: [images, containerfiles, dnf, packaging]
 Dependencies: none
+
+events:
+  - type: claim
+    ts: "2026-06-20T05:01:15Z"
+    agent_id: "linux-tlatoani-big-pickle-20260620T050115Z"
+    host: linux
+    lease_id: "containerfile-dnf-migration-20260620T050115Z"
+    expires_at: "2026-06-20T09:01:15Z"
 
 ## Objective
 
