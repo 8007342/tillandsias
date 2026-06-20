@@ -37,16 +37,15 @@ the items below are immediate work.
 
 ### local-smoke/opencode-forge-continuous-enhancement-prompt-noop
 
-- status: ready
+- status: claimed (linux-tlatoani-opencode-big-pickle-20260620T0050Z)
 - owner_host: linux
 - source: `plan/issues/opencode-forge-continuous-enhancement-prompt-noop-2026-06-19.md`
 - severity: high — the prompted Linux forge lane can exit 0 without actually
   running `/forge-continuous-enhancement`, making smoke/release evidence
   semantically weak
-- next_action: Make `tillandsias . --opencode --prompt "Use the
-  /forge-continuous-enhancement skill"` reliably enter and complete the
-  in-forge skill, or fail nonzero when the prompt is consumed as a
-  no-op/clarification response. Add transcript-level regression coverage.
+- next_action: Create missing symlink `.opencode/skills/forge-continuous-enhancement`
+  → `skills/forge-continuous-enhancement` so the in-forge OpenCode can discover
+  and load the `/forge-continuous-enhancement` skill.
 - blocker: none
 - discovered_evidence: >
     Local-build E2E log `target/build-install-smoke-e2e/20260619T233855Z`
