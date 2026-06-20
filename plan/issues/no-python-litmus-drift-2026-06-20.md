@@ -9,7 +9,7 @@ trace: methodology.yaml (runtime_language_policy),
 - id: `policy/no-python-litmus-drift`
 - type: fix
 - owner_host: any
-- status: ready
+- status: claimed
 - capability_tags: [litmus, rust, policy, testing]
 - discovered_by: `forge-diagnostics/e2e-piggyback-orchestration` no-Python
   drift slice on linux-next, 2026-06-20T07:38Z.
@@ -65,3 +65,9 @@ The diagnostics E2E litmus is no longer in this inventory after the
     Fixed the diagnostics E2E instance in this cycle, then filed this packet for
     the broader remaining litmus YAML inventory to keep the implementation slice
     bounded.
+- type: claim
+  ts: "2026-06-20T07:49:37Z"
+  agent_id: "linux-macuahuitl-codex-20260620T074937Z"
+  host: "linux"
+  lease_id: "no-python-litmus-drift-20260620T074937Z"
+  expires_at: "2026-06-20T11:49:37Z"
