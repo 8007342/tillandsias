@@ -1,6 +1,28 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-20T09:16Z
+Last updated: 2026-06-20T10:04Z
+
+## This Cycle (2026-06-20T10:04Z, linux)
+
+- **Meta-orchestration sync**: Startup on mutable Linux (Cowork session). Branch
+  `linux-next`, 5 commits ahead of `origin/linux-next` (push-blocked). Git fetch
+  FAILED — SSH unavailable. Sibling heads (local cache): windows=a3c8b23d,
+  osx=d829808d, main=6dfafdf1. Saturday — full drain eligible.
+- **Worker drain**: Fixed litmus drift from `containerfile-dnf-migration` (completed
+  2026-06-20T05:10Z). The migration removed `WASMTIME_SHA256` ARG and its
+  `sha256sum -c -` site from `Containerfile.base`, but the litmus
+  `litmus:default-image-containerfile-shape` step 7 still checked for that
+  variable and expected 5 sha256sum sites. Fixed: removed `WASMTIME_SHA256` from
+  the checked-variable list, updated expected site count 5→4. Pre-build litmus
+  now 107/107 PASS (was 106/107).
+- **Verification**: `scripts/run-litmus-test.sh --size instant --phase pre-build
+  --compact` → 107/107 PASS. `tillandsias-policy validate-yaml` clean.
+  `./build.sh --check` PASS.
+- **E2E gates**: Skipped — no runtime delta; push blocked.
+- **Push state**: BLOCKED — SSH unavailable in Cowork session. linux-next now 6
+  commits ahead of origin. Operator must: `git push origin linux-next`.
+- **Next**: (1) Operator push. (2) Local-build e2e gate (nanoclawv2 live container
+  launch). (3) aarch64 VM pasta probe for vault port-forwarding.
 
 ## This Cycle (2026-06-20T09:16Z, linux)
 

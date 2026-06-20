@@ -1,6 +1,28 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-20T09:16Z
+LastExecutionTime: 2026-06-20T10:04Z
+
+## This Loop (2026-06-20T10:04Z, linux)
+
+- **Cycle type**: meta-orchestration litmus drift fix on mutable Linux (Cowork session).
+- **Startup**: Host `linux_mutable` (macuahuitl.ayahuitlcalpan.com). Branch
+  `linux-next`, 5 commits ahead of `origin/linux-next` (push-blocked from prior
+  cycles). Git fetch FAILED — SSH unavailable. Saturday, not within high-usage hours.
+- **Worker drain**: Detected and fixed litmus drift introduced by
+  `containerfile-dnf-migration` (2026-06-20T05:10Z). That task removed
+  `WASMTIME_SHA256` ARG and its sha256sum verification site from
+  `Containerfile.base` (wasmtime now installed via `dnf install wasmtime`) but
+  did not update `litmus-default-image-containerfile-shape.yaml` step 7.
+  Fix: removed `WASMTIME_SHA256` from the variable loop; changed expected
+  sha256sum site count 5→4. Pre-build litmus: 107/107 PASS (was 106/107 FAIL).
+- **Sibling heads** (local cache): main=6dfafdf1, windows-next=a3c8b23d,
+  osx-next=d829808d — unchanged from prior cycle; both siblings remain ancestors
+  of local linux-next.
+- **E2E gates**: Skipped — litmus-only change, no runtime/image delta.
+- **Push state**: BLOCKED — SSH unavailable in Cowork session. linux-next now 6
+  commits ahead of origin. Operator must: `git push origin linux-next`.
+- **Next**: (1) Operator push. (2) Local-build e2e gate (nanoclawv2 live
+  container launch). (3) aarch64 VM pasta probe for vault port-forwarding.
 
 ## This Loop (2026-06-20T09:16Z, linux)
 
