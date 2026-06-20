@@ -231,6 +231,51 @@ the items below are immediate work.
   - cargo test -p tillandsias-host-shell / -p tillandsias-macos-tray green
   - m8 login → projects (F5) → attach works end-to-end on a fresh provision
 
+### forge-audit/install-terminal-tools
+
+- status: ready
+- owner_host: linux
+- source: `plan/issues/forge-diagnostics-audit-2026-06-20.md`
+- severity: medium — welcome banner advertises tools not installed, no text editor available
+- next_action: Install fzf, eza, htop, mc, tree, micro via microdnf in Containerfile.base. Sync welcome banner tips to match installed tools.
+- blocker: none
+
+### forge-audit/tellme-missing
+
+- status: ready
+- owner_host: linux
+- source: `plan/issues/forge-diagnostics-audit-2026-06-20.md`
+- severity: medium — tellme advertised in banner but not found at runtime
+- next_action: Ensure tellme binary is included in forge image and discoverable via PATH
+- blocker: none
+
+### forge-audit/cheatsheets-population
+
+- status: ready
+- owner_host: linux
+- source: `plan/issues/forge-diagnostics-audit-2026-06-20.md`
+- severity: medium — /opt/cheatsheets empty at runtime, cheatsheet banner section inactive
+- next_action: Verify/populate /opt/cheatsheets during forge startup
+- blocker: none
+
+### forge-audit/version-metadata
+
+- status: ready
+- owner_host: linux
+- source: `plan/issues/forge-diagnostics-audit-2026-06-20.md`
+- severity: low — version marker absent, inventory shows "vunset"
+- next_action: Add /etc/tillandsias-version and TILLANDSIAS_IMAGE_VERSION env var
+- blocker: none
+
+### forge-audit/cgroup-resource-limits
+
+- status: ready
+- owner_host: linux
+- source: `plan/issues/forge-diagnostics-audit-2026-06-20.md`
+- severity: low (medium on resource-constrained hosts) — no cgroup limits on forge container
+- next_action: Add --memory=6g --cpus=3 to forge container launch args
+- blocker: none
+
 ### local-smoke/wasmtime-dnf-migration-failure
 
 - status: done
