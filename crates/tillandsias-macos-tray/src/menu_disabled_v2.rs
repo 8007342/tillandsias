@@ -202,14 +202,17 @@ mod tests {
 
     /// @trace spec:macos-native-tray.ui.menu-parity@v1
     ///
-    /// Drift-protection for gap-2 (`plan/issues/macos-tray-ux-gaps-2026-05-29.md`):
-    /// the macOS Ready menu MUST surface exactly the 9 top-level items in the
-    /// parity-contract order — no macOS-only extras, no reordering, no missing
-    /// rows. `host_shell::menu_state` pins this sequence for the Windows target
-    /// (`menu_structure_matches_linux_tray_parity`); this pins it at the macOS
-    /// adapter (`render`) with `target = MacosTray`, so a divergence introduced
-    /// on the macOS side — the exact failure gap-2 reported ("a bunch of
-    /// incorrect menus") — trips here instead of only in a user-attended smoke.
+    /// Drift-protection for gap-2 (`plan/issues/macos-tray-ux-gaps-2026-05-29.md`)
+    /// + F3 (`plan/issues/macos-m8-interactive-smoke-failures-2026-06-16.md`):
+    /// when authenticated, the macOS Ready menu MUST surface exactly the 8
+    /// login-gated top-level items in parity-contract order — no macOS-only
+    /// extras, no reordering, no missing rows, and crucially NO `github-login`
+    /// row alongside the project body (it is mutually exclusive with login, per
+    /// the Linux golden). `host_shell::menu_state` pins this sequence for the
+    /// Windows target (`menu_structure_matches_linux_tray_parity`); this pins it
+    /// at the macOS adapter (`render`) with `target = MacosTray`, so a
+    /// divergence introduced on the macOS side trips here instead of only in a
+    /// user-attended smoke.
     #[test]
     fn render_ready_top_level_matches_macos_parity_contract() {
         let specs = render(&macos_ready_menu());
@@ -223,17 +226,42 @@ mod tests {
                 ids::AGENTS,
                 ids::OBSERVATORIUM,
                 ids::OPENCODE_WEB,
-                ids::GITHUB_LOGIN,
                 ids::VERSION,
                 ids::QUIT,
             ],
-            "macOS Ready menu must match the 9-item parity contract in order (gap-2)"
+            "macOS authed Ready menu must match the 8-item login-gated contract (gap-2/F3)"
+        );
+        assert!(
+            !top_ids.contains(&ids::GITHUB_LOGIN),
+            "github-login must not appear alongside the project body (F3)"
         );
         // The two GUI-passthrough rows stay disabled on the macOS v1 surface,
         // so the parity menu never leaks an enabled Observatorium/OpenCode Web.
         assert!(
             !specs[4].enabled && !specs[5].enabled,
             "Observatorium + OpenCode Web must be disabled on macOS v1 (gap-2)"
+        );
+    }
+
+    /// @trace spec:macos-native-tray.ui.menu-parity@v1
+    ///
+    /// F3 drift-protection at the macOS adapter: a logged-out tray MUST collapse
+    /// to {status, github-login, version, quit} — the project/agent/browser body
+    /// stays gated behind authentication, the exact defect the 2026-06-16 m8
+    /// smoke reported ("GitHub Login which should gate the others").
+    #[test]
+    fn render_logged_out_collapses_to_login_leaf_on_macos() {
+        let state = MenuState {
+            login: GithubLoginState::LoggedOut,
+            target: TargetSurface::MacosTray,
+            ..MenuState::initial()
+        };
+        let specs = render(&build(&state));
+        let top_ids: Vec<&str> = specs.iter().map(|s| s.id.as_str()).collect();
+        assert_eq!(
+            top_ids,
+            vec![ids::STATUS, ids::GITHUB_LOGIN, ids::VERSION, ids::QUIT],
+            "logged-out macOS menu must collapse to the login-gated short list (F3)"
         );
     }
 }

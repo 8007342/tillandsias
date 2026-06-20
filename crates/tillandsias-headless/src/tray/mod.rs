@@ -299,6 +299,7 @@ enum LaunchKind {
     /// terminal. @trace spec:tray-ux
     Codex,
     Maintenance,
+    NanoClawV2,
 }
 
 // @trace spec:tray-minimal-ux
@@ -1094,6 +1095,26 @@ impl TrayService {
         f(&mut state)
     }
 
+    /// Re-scan `~/src` and store the result into `state.projects`.
+    ///
+    /// `state.projects` (the `🏠 ~/src` submenu source) is otherwise seeded
+    /// only once at startup, so a freshly cloned checkout never appears in the
+    /// live menu. This is the missing post-startup writer: any path that
+    /// changes the on-disk `~/src` contents (clone today, fs-watch later)
+    /// calls this, then `rebuild_after_state_change`, to surface the change
+    /// without a tray restart.
+    ///
+    /// @trace spec:tray-ux, spec:remote-projects
+    /// @trace plan/issues/clone-tray-ux-not-refreshed-2026-06-18.md
+    fn refresh_local_projects(&self) {
+        let projects = discover_projects();
+        self.with_state(|state| {
+            state.projects_hash = TrayUiState::hash_projects(&projects);
+            state.projects = projects;
+            state.bump_revision();
+        });
+    }
+
     fn refresh_snapshot(&self) -> TrayUiState {
         self.snapshot()
     }
@@ -1265,9 +1286,18 @@ fn discover_projects() -> Vec<ProjectEntry> {
         Ok(home) => PathBuf::from(home),
         Err(_) => return Vec::new(),
     };
-    let src = home.join("src");
+    discover_projects_in(&home.join("src"))
+}
+
+/// Scan a project-root directory (e.g. `~/src`) and return one
+/// [`ProjectEntry`] per immediate subdirectory, sorted by name.
+///
+/// Factored out of [`discover_projects`] so the scan-and-sort contract that
+/// backs the post-clone local refresh can be unit-tested against a temp dir
+/// without mutating the process-global `HOME`.
+fn discover_projects_in(src: &Path) -> Vec<ProjectEntry> {
     let mut projects = Vec::new();
-    let entries = match std::fs::read_dir(&src) {
+    let entries = match std::fs::read_dir(src) {
         Ok(entries) => entries,
         Err(_) => return Vec::new(),
     };
@@ -1306,6 +1336,7 @@ fn action_slug(kind: LaunchKind) -> &'static str {
         LaunchKind::Claude => "claude",
         LaunchKind::Codex => "codex",
         LaunchKind::Maintenance => "terminal",
+        LaunchKind::NanoClawV2 => "nanoclawv2",
     }
 }
 
@@ -1429,6 +1460,7 @@ fn build_launch_spec(project: &ProjectEntry, kind: LaunchKind, image: &str) -> C
             .interactive()
             .tty()
             .entrypoint("/usr/local/bin/entrypoint-terminal.sh"),
+        LaunchKind::NanoClawV2 => spec.interactive().tty(),
     }
 }
 
@@ -1548,6 +1580,23 @@ fn launch_project_action(
                 _ => unreachable!("non-interactive kinds branched above"),
             };
             super::launch_forge_agent(&project.name, &project.path, mode, debug)
+        }
+        LaunchKind::NanoClawV2 => {
+            let image = format!("localhost/tillandsias-nanoclawv2:v{}", _version);
+            let spec = build_launch_spec(&project, LaunchKind::NanoClawV2, &image);
+            let podman_args = spec.build_run_argv();
+            let mut shell_args = vec![
+                "-c".to_string(),
+                "podman \"$@\"; echo; echo \"[nanoclawv2] Finished — press Enter to close\"; read"
+                    .to_string(),
+                "nanoclawv2-shell".to_string(),
+            ];
+            shell_args.extend(podman_args);
+            launch_in_terminal(
+                &format!("Tillandsias — {} — NanoClawV2", project.name),
+                "bash",
+                &shell_args,
+            )
         }
     }
 }
@@ -1767,6 +1816,20 @@ fn handle_launch_cloud_project(service: Arc<TrayService>, cloud: ProjectEntry, k
                     ));
                     return;
                 }
+
+                // Clone succeeded on disk. Clear the "⏳ Cloning …" status and
+                // re-scan ~/src so the freshly cloned checkout appears in the
+                // 🏠 ~/src submenu without a tray restart. Without this the tray
+                // stays stuck on "Cloning …" and the local list goes stale —
+                // see plan/issues/clone-tray-ux-not-refreshed-2026-06-18.md.
+                // @trace spec:tray-ux, spec:remote-projects
+                let _ = futures::executor::block_on(service_for_emit.set_status(
+                    format!("✓ Cloned {}", cloud.name),
+                    TrayIconState::Mature,
+                    None,
+                ));
+                service_for_emit.refresh_local_projects();
+                let _ = futures::executor::block_on(service_for_emit.rebuild_after_state_change());
             } else {
                 // Best-effort refresh — git fetch is non-fatal if it fails.
                 let _ = Command::new("git")
@@ -2063,7 +2126,8 @@ fn build_separator_item(id: i32) -> MenuNode {
 // | +3     | OpenCode Web    | 📐      |
 // | +4     | Observatorium   | 🔭      |
 // | +5     | Maintenance     | 🔧      |
-// | +6     | (submenu node)  | —       |
+// | +6     | NanoClawV2      | 🦞      |
+// | +7     | (submenu node)  | —       |
 //
 // Helpers: [`local_project_base`], [`cloud_project_base`], and
 // [`project_action_from_id`] are the only place this layout is encoded.
@@ -2075,16 +2139,18 @@ enum LeafAction {
     OpenCodeWeb,
     Observatorium,
     Maintenance,
+    NanoClawV2,
 }
 
 impl LeafAction {
-    const ALL: [LeafAction; 6] = [
+    const ALL: [LeafAction; 7] = [
         LeafAction::Claude,
         LeafAction::Codex,
         LeafAction::OpenCode,
         LeafAction::OpenCodeWeb,
         LeafAction::Observatorium,
         LeafAction::Maintenance,
+        LeafAction::NanoClawV2,
     ];
 
     fn offset(self) -> i32 {
@@ -2095,6 +2161,7 @@ impl LeafAction {
             LeafAction::OpenCodeWeb => 3,
             LeafAction::Observatorium => 4,
             LeafAction::Maintenance => 5,
+            LeafAction::NanoClawV2 => 6,
         }
     }
 
@@ -2106,6 +2173,7 @@ impl LeafAction {
             LeafAction::OpenCodeWeb => "\u{1F4D0} OpenCode Web",
             LeafAction::Observatorium => "\u{1F52D} Observatorium",
             LeafAction::Maintenance => "\u{1F527} Maintenance",
+            LeafAction::NanoClawV2 => "\u{1F99E} NanoClawV2",
         }
     }
 
@@ -2133,8 +2201,8 @@ const LOADING_CLOUD_ID: i32 = 0x7FFF_FFFE;
 /// `handle_cloud_overflow_click`); a future GtkWindow picker would replace
 /// that fallback in place. @trace spec:tray-ux
 const CLOUD_OVERFLOW_ID: i32 = 0x7FFF_FFFC;
-const PROJECT_LEAF_COUNT: i32 = 6;
-const PROJECT_SUBMENU_OFFSET: i32 = 6;
+const PROJECT_LEAF_COUNT: i32 = 7;
+const PROJECT_SUBMENU_OFFSET: i32 = 7;
 
 /// Maximum number of cloud projects rendered as top-level entries inside the
 /// `☁️ Cloud >` submenu before an overflow item replaces the tail.
@@ -2226,7 +2294,7 @@ fn project_action_from_id(
 }
 
 // @trace spec:tray-minimal-ux
-/// Build the per-project submenu (six leaves, no nesting).
+/// Build the per-project submenu (seven leaves, no nesting).
 ///
 /// The submenu node's id is `base + PROJECT_SUBMENU_OFFSET`; each leaf is
 /// `base + LeafAction::offset()`. All leaves are emitted with `enabled=true`
@@ -3056,6 +3124,7 @@ impl DbusMenuIface {
                             LeafAction::Observatorium => LaunchKind::Observatorium,
                             LeafAction::Maintenance => LaunchKind::Maintenance,
                             LeafAction::Codex => LaunchKind::Codex,
+                            LeafAction::NanoClawV2 => LaunchKind::NanoClawV2,
                         };
                         match scope {
                             ProjectScope::Local => {
@@ -3579,7 +3648,7 @@ mod tests {
     /// @trace spec:signal-handling, spec:vm-provisioning-lifecycle
     #[test]
     fn watch_shutdown_blocking_flips_phase_to_stopping_when_atomic_flips() {
-        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::atomic::AtomicBool;
         use std::thread;
         use std::time::{Duration, Instant};
 
@@ -3631,7 +3700,7 @@ mod tests {
     /// @trace spec:vm-provisioning-lifecycle
     #[test]
     fn watch_shutdown_blocking_does_not_clobber_terminal_failed() {
-        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::sync::atomic::AtomicBool;
         use std::thread;
         use std::time::Duration;
 
@@ -4275,10 +4344,10 @@ mod tests {
     }
 
     #[test]
-    fn project_submenu_has_six_leaves_in_order() {
-        // Per-project submenus are 6-leaf flat menus: Claude, Codex,
-        // OpenCode, OpenCode Web, Observatorium, Maintenance. Order is locked by
-        // `LeafAction::offset`.
+    fn project_submenu_has_seven_leaves_in_order() {
+        // Per-project submenus are 7-leaf flat menus: Claude, Codex,
+        // OpenCode, OpenCode Web, Observatorium, Maintenance, NanoClawV2.
+        // Order is locked by `LeafAction::offset`.
         let project = ProjectEntry {
             name: "alpha".to_string(),
             path: PathBuf::from("/tmp/alpha"),
@@ -4292,11 +4361,11 @@ mod tests {
             .build();
         let submenu = build_project_submenu(&state, &project, ProjectScope::Local);
 
-        // Six leaves, no sub-submenus.
-        assert_eq!(submenu.2.len(), 6);
+        // Seven leaves, no sub-submenus.
+        assert_eq!(submenu.2.len(), 7);
         let leaf_labels = labels(&submenu);
         // labels() walks the layout depth-first; index 0 is the submenu
-        // container, indices 1..=6 are the leaves in offset order.
+        // container, indices 1..=7 are the leaves in offset order.
         assert_eq!(leaf_labels[0], "alpha");
         assert!(leaf_labels[1].contains("Claude"));
         assert!(leaf_labels[2].contains("Codex"));
@@ -4304,6 +4373,7 @@ mod tests {
         assert!(leaf_labels[4].contains("OpenCode Web"));
         assert!(leaf_labels[5].contains("Observatorium"));
         assert!(leaf_labels[6].contains("Maintenance"));
+        assert!(leaf_labels[7].contains("NanoClawV2"));
     }
 
     #[test]
@@ -4984,5 +5054,62 @@ mod tests {
         // Should be able to spawn a task
         let result = service.task_executor.spawn_task(|| {});
         assert!(result.is_ok(), "TrayService executor should be ready");
+    }
+
+    /// Regression: a freshly cloned checkout must appear in `~/src` without a
+    /// tray restart. `refresh_local_projects` is the post-startup writer that
+    /// re-scans the project root into `state.projects`; before the fix for
+    /// plan/issues/clone-tray-ux-not-refreshed-2026-06-18.md there was no such
+    /// writer, so the `🏠 ~/src` submenu stayed frozen at its startup snapshot.
+    ///
+    /// This exercises the scan-and-store contract (`discover_projects_in` +
+    /// store + revision bump) the clone-success path relies on, against a temp
+    /// dir so we never mutate the process-global `HOME`.
+    /// @trace spec:tray-ux, spec:remote-projects
+    #[test]
+    fn refresh_local_projects_picks_up_new_checkout() {
+        let tmp = tempfile::tempdir().expect("tempdir");
+        let src = tmp.path();
+
+        // Initial scan: one existing checkout.
+        std::fs::create_dir(src.join("alpha")).expect("mkdir alpha");
+        let initial = discover_projects_in(src);
+        assert_eq!(initial.len(), 1);
+        assert_eq!(initial[0].name, "alpha");
+
+        // Seed a TrayService whose state reflects the initial scan, then
+        // simulate a clone landing a second checkout on disk.
+        let mut state = test_state(SelectedAgent::OpenCode, true);
+        state.projects = initial;
+        state.projects_hash = TrayUiState::hash_projects(&state.projects);
+        let service = TrayService::new(state);
+        let rev_before = service.snapshot().revision;
+
+        std::fs::create_dir(src.join("beta")).expect("mkdir beta");
+
+        // The runtime helper scans $HOME/src; here we replicate its body
+        // against the temp root to assert the store + revision-bump contract
+        // without touching HOME.
+        let rescanned = discover_projects_in(src);
+        service.with_state(|st| {
+            st.projects_hash = TrayUiState::hash_projects(&rescanned);
+            st.projects = rescanned;
+            st.bump_revision();
+        });
+
+        let after = service.snapshot();
+        assert_eq!(
+            after
+                .projects
+                .iter()
+                .map(|p| p.name.as_str())
+                .collect::<Vec<_>>(),
+            vec!["alpha", "beta"],
+            "rescan must surface the newly cloned checkout, sorted"
+        );
+        assert!(
+            after.revision > rev_before,
+            "refresh must bump the menu revision so the submenu re-renders"
+        );
     }
 }

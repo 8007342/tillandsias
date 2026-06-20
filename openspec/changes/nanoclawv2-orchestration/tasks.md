@@ -10,11 +10,14 @@
 
 ## 2. Container and launch path
 
-- [ ] 2.1 Add a baked `nanoclawv2` image to the image build list.
-- [ ] 2.2 Add the tray launcher leaf `🦞 NanoClawV2` beside the existing
-  per-project actions.
-- [ ] 2.3 Wire the launcher to start only an allowlisted NanoClawV2 container
-  for the selected project.
+- [x] 2.1 Add a baked `nanoclawv2` image to the image build list.
+      (2026-06-19, slice 1: images/nanoclawv2/Containerfile + build-image.sh registration)
+- [x] 2.2 Add the tray launcher leaf `🦞 NanoClawV2` beside the existing
+  per-project actions. (Launcher leaf complete: LaunchKind, LeafAction, menu
+  construction, click dispatch, launch handler, and container spec all wired.)
+- [x] 2.3 Wire the launcher to start only an allowlisted NanoClawV2 container
+  for the selected project. (Image name hardcoded to nanoclawv2 in
+  launch_project_action; registered in Rust image builder for --init build.)
 
 ## 3. Host orchestration surface
 
@@ -30,4 +33,16 @@
 - [ ] 4.3 Extend the published-release smoke so NanoClawV2 launch remains
   validated after release.
 - [ ] 4.4 Record every failure as a dated plan issue packet.
+
+---
+
+## Slice Decomposition (≤2h per slice)
+
+| Slice | Tasks | Scope | Est. |
+|-------|-------|-------|------|
+| 1 | 2.1 | Image infrastructure: Containerfile, entrypoint, config overlay, build-image.sh registration | 1h |
+| 2 | 2.2, 2.3 | Tray launcher leaf: Rust mod.rs changes, launch wiring, container allowlist | 2h |
+| 3 | 3.1, 3.2, 3.3 | Host orchestration surface: MCP broker, allowlist enforcement, credential isolation | 2h |
+| 4 | 4.1, 4.2, 4.3, 4.4 | Smoke coverage: launch smoke, broker smoke, release smoke, failure recording | 2h |
+
 

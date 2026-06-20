@@ -31,6 +31,12 @@ RUN npm install -g --prefix /usr/local \
         @anthropic-ai/claude-code@2.1.168 \
         @openai/codex@0.137.0
 
+# ── marksman Markdown LSP server ────────────────────────────────
+# Single self-contained .NET binary from GitHub releases.
+ARG MARKSMAN_VERSION=2026-02-08
+RUN curl -LsSf "https://github.com/artempyanykh/marksman/releases/download/${MARKSMAN_VERSION}/marksman-linux-x64" -o /usr/local/bin/marksman \
+    && chmod +x /usr/local/bin/marksman
+
 # ── Python packages and developer tools ─────────────────────────
 RUN pip3 install --no-cache-dir \
         pyright==1.1.410 \
@@ -67,9 +73,9 @@ ARG CARGO_EXPAND_SHA256=62269d2fe935295eb30f34ce87ed1ba3ea81df4630a189456a05530f
 ARG CARGO_CRITERION_SHA256=91fe290bcd53e0f8f85616d529297aebb5556097fc413e03e2399907c9fa3e5c
 ARG CARGO_WASI_SHA256=9d88aaf77742e3b7e0edb9f59fae71b02eb0f1c86098e1d65c8ead80514f0d76
 ARG CARGO_OUTDATED_SHA256=9e6f0195f07b2e13187936589b5a761119a7fc5b984ae0808148994c7bab2cce
-ARG WASMTIME_SHA256=9d92e6dc04630f617e0e5d532327a5a917ac4898587e07f4fb7a5fc7fffef760
 ARG ACTIONLINT_SHA256=8aca8db96f1b94770f1b0d72b6dddcb1ebb8123cb3712530b08cc387b349a3d8
 ARG VALE_SHA256=469cf88ec58a374dca14b2564c4391d2c9a1c632210aa0b642758b794082e05f
+ARG WASMTIME_SHA256=9d92e6dc04630f617e0e5d532327a5a917ac4898587e07f4fb7a5fc7fffef760
 ARG DART_SHA256=6a2bbf64a133c9c86a62a532dbd3e0b4db4ac365abd456e9f9d1c5df61fcdbf8
 
 RUN set -eux; \

@@ -1,0 +1,30 @@
+# Tillandsias NanoClawV2 — Project-scoped orchestration container
+# @trace spec:nanoclawv2-orchestration, spec:default-image
+ARG BASE_IMAGE=localhost/tillandsias-forge-base
+FROM ${BASE_IMAGE}
+
+RUN useradd -u 1000 -m -s /bin/bash forge
+
+# ── Directory structure ────────────────────────────────────────
+RUN mkdir -p /home/forge/src \
+    && mkdir -p /home/forge/.cache/tillandsias \
+    && mkdir -p /home/forge/.config/opencode/instructions \
+    && mkdir -p /opt/skills
+
+# ── NanoClawV2 instructions overlay ────────────────────────────
+# Only approved orchestration instructions — no forge tooling docs.
+COPY config-overlay/opencode/instructions/ /home/forge/.config/opencode/instructions/
+
+# ── Skills mapping ─────────────────────────────────────────────
+COPY skills/ /opt/skills/
+
+# ── Entrypoint ─────────────────────────────────────────────────
+COPY entrypoint.sh /usr/local/bin/entrypoint-nanoclawv2.sh
+RUN chmod +x /usr/local/bin/entrypoint-nanoclawv2.sh
+
+RUN chown -R 1000:1000 /home/forge /opt
+
+USER 1000:1000
+WORKDIR /home/forge/src
+ENTRYPOINT ["/usr/local/bin/entrypoint-nanoclawv2.sh"]
+ENV HOME=/home/forge USER=forge

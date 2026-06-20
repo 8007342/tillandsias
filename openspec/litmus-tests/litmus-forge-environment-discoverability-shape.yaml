@@ -9,6 +9,7 @@ preconditions:
   - workspace contains images/default/cli/tillandsias-inventory
   - workspace contains images/default/cli/tillandsias-services
   - workspace contains images/default/cli/tillandsias-models
+  - workspace contains images/default/cli/tellme
   - workspace contains images/default/forge-welcome.sh
 
 critical_path:
@@ -27,8 +28,13 @@ critical_path:
     timeout_ms: 10000
     expected_behavior: "models help present"
 
+  - step: "verify tellme help advertises the usage syntax"
+    command: "grep -Fq 'Usage: tellme about <topic> [--full]' images/default/cli/tellme && grep -Fq 'tellme howto' images/default/cli/tellme && echo 'tellme help present'"
+    timeout_ms: 10000
+    expected_behavior: "tellme help present"
+
   - step: "verify the welcome banner points to the discovery commands"
-    command: "grep -Fq 'tillandsias-inventory' images/default/forge-welcome.sh && grep -Fq 'tillandsias-services' images/default/forge-welcome.sh && grep -Fq 'tillandsias-models' images/default/forge-welcome.sh && echo 'welcome banner points to discovery commands'"
+    command: "grep -Fq 'tillandsias-inventory' images/default/forge-welcome.sh && grep -Fq 'tillandsias-services' images/default/forge-welcome.sh && grep -Fq 'tillandsias-models' images/default/forge-welcome.sh && grep -Fq 'tellme' images/default/forge-welcome.sh && echo 'welcome banner points to discovery commands'"
     timeout_ms: 10000
     expected_behavior: "welcome banner points to discovery commands"
 

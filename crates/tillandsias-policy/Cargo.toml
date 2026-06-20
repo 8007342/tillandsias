@@ -7,3 +7,11 @@ authors.workspace = true
 
 [dependencies]
 serde_yaml.workspace = true
+# `preserve_order` keeps `serde_json::Map` iteration in JSON insertion order so
+# the distill-forge-diagnostics capability/recommendation listing is byte-for-
+# byte identical to the former CPython extractor (which iterated dict order).
+serde_json = { workspace = true, features = ["preserve_order"] }
+sha2.workspace = true
+
+[target.'cfg(unix)'.dependencies]
+nix = { version = "0.29", features = ["process", "term"] }

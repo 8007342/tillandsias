@@ -160,3 +160,21 @@ outbound HTTPS to `api.github.com`.
       --lib`, `cargo test -p tillandsias-headless --bin tillandsias`, and the
       `--features tray` bin tests all green (153 tray bin tests pass). Next:
       merge to main + push a release so the fix reaches an installable binary.
+  - type: released
+    ts: "2026-06-18T18:07:14Z"
+    agent_id: "linux-tlatoani-claude-opus-20260618T170827Z"
+    host: linux
+    evidence_refs:
+      - "PR #35 (linux-next → main) merged; VERSION bumped to 0.3.260618.2 (commit 6dfafdf1)."
+      - "Tag v0.3.260618.2 pushed; both d3f4e2f3 and 777eb745 verified ancestors of the tagged commit."
+      - "release.yml workflow_dispatch run 27777425993 completed: conclusion=success."
+      - "Published release object v0.3.260618.2 (isDraft=false, publishedAt 2026-06-18T18:07:14Z) carries tillandsias-linux-x86_64 + musl headless artifacts."
+    note: >
+      The fix is now in a PUBLISHED release — the first half of the release_gate
+      is satisfied (a release object, not just a tag). FlakeHub cache-login
+      annotation on the run was non-fatal (overall conclusion success; Linux
+      artifacts uploaded). REMAINING for closure: an operator re-run of
+      `tillandsias --github-login` on v0.3.260618.2 that saves the token into
+      Vault without the api.github.com connection error. Keeping status
+      in_progress until that operator confirmation lands (the lesson from the
+      premature `done`: do not close on release-built alone).

@@ -73,7 +73,7 @@ FLAG_NO_CACHE="${TILLANDSIAS_BUILD_NO_CACHE:-false}"
 
 while [[ $# -gt 0 ]]; do
     case "$1" in
-        forge|web|proxy|git|inference|router|chromium-core|chromium-framework|vault)
+        forge|web|proxy|git|inference|router|chromium-core|chromium-framework|vault|nanoclawv2)
             IMAGE_NAME="$1"
             ;;
         --force)
@@ -87,7 +87,7 @@ while [[ $# -gt 0 ]]; do
             FLAG_TAG="$1"
             ;;
         --help|-h)
-            echo "Usage: scripts/build-image.sh [forge|web|proxy|git|inference] [--force] [--no-cache] [--tag <tag>]"
+            echo "Usage: scripts/build-image.sh [forge|web|proxy|git|inference|router|chromium-core|chromium-framework|vault|nanoclawv2] [--force] [--no-cache] [--tag <tag>]"
             echo ""
             echo "Build a container image using podman (Containerfile-based, reproducible)."
             echo ""
@@ -100,6 +100,7 @@ while [[ $# -gt 0 ]]; do
             echo "  chromium-core      Build the secure browser container (minimal)"
             echo "  chromium-framework Build the debug browser container (with Node.js+Playwright)"
             echo "  vault              Build the HashiCorp Vault enclave container (Phase 3 POC)"
+            echo "  nanoclawv2         Build the NanoClawV2 orchestration container"
             echo "  --force            Rebuild even if sources haven't changed"
             echo "  --no-cache         Diagnostic rebuild with podman layer cache disabled"
             echo "  --tag <tag>        Override the canonical image tag (default: content hash)"
@@ -146,6 +147,7 @@ case "$IMAGE_NAME" in
     chromium-core) CONTAINERFILE="$ROOT/images/chromium/Containerfile.core" ;;
     chromium-framework) CONTAINERFILE="$ROOT/images/chromium/Containerfile.framework" ;;
     vault)     CONTAINERFILE="$ROOT/images/vault/Containerfile" ;;
+    nanoclawv2) CONTAINERFILE="$ROOT/images/nanoclawv2/Containerfile" ;;
     *)         CONTAINERFILE="$ROOT/images/default/Containerfile" ;;
 esac
 
@@ -445,12 +447,15 @@ _podman_rootless_diagnostic() {
 # @trace spec:user-runtime-lifecycle, spec:init-incremental-builds
 
 BUILD_LOG="$ROOT/build-${IMAGE_NAME}.log"
-rm -f "$BUILD_LOG"
-if [[ "$IMAGE_NAME" == "forge" ]]; then
-    _step "Refreshing cheatsheets in build context..."
+BUILD_PROGRESS_LOG="$ROOT/build-${IMAGE_NAME}-progress.jsonl"
+rm -f "$BUILD_LOG" "$BUILD_PROGRESS_LOG"
+if [[ "$IMAGE_NAME" == "forge" || "$IMAGE_NAME" == "nanoclawv2" ]]; then
+    _step "Refreshing cheatsheets and/or skills in build context..."
     rm -rf "$IMAGE_DIR/cheatsheets" "$IMAGE_DIR/cheatsheet-sources" "$IMAGE_DIR/skills"
-    cp -rp "$ROOT/cheatsheets" "$IMAGE_DIR/cheatsheets"
-    cp -rp "$ROOT/cheatsheet-sources" "$IMAGE_DIR/cheatsheet-sources"
+    if [[ "$IMAGE_NAME" == "forge" ]]; then
+        cp -rp "$ROOT/cheatsheets" "$IMAGE_DIR/cheatsheets"
+        cp -rp "$ROOT/cheatsheet-sources" "$IMAGE_DIR/cheatsheet-sources"
+    fi
     cp -rp "$ROOT/skills" "$IMAGE_DIR/skills"
 fi
 # Log preservation: the build output is kept in $ROOT/build-*.log for agent iteration
@@ -467,6 +472,7 @@ if [[ -f "$IMAGE_DIR/Containerfile.base" ]]; then
     if _verbose_enabled; then
         "$PODMAN" build \
             --format docker \
+            --progress json \
             --isolation "$BUILD_ISOLATION" \
             --userns "$BUILD_USERNS" \
             --tag "$BASE_IMAGE_TAG" \
@@ -474,10 +480,11 @@ if [[ -f "$IMAGE_DIR/Containerfile.base" ]]; then
             "${BUILD_ARGS[@]}" \
             "${CACHE_MOUNT_ARGS[@]}" \
             -f "$IMAGE_DIR/Containerfile.base" \
-            "$IMAGE_DIR/"
+            "$IMAGE_DIR/" | tee "$BUILD_PROGRESS_LOG"
     else
         if ! "$PODMAN" build \
             --format docker \
+            --progress json \
             --isolation "$BUILD_ISOLATION" \
             --userns "$BUILD_USERNS" \
             --tag "$BASE_IMAGE_TAG" \
@@ -485,10 +492,10 @@ if [[ -f "$IMAGE_DIR/Containerfile.base" ]]; then
             "${BUILD_ARGS[@]}" \
             "${CACHE_MOUNT_ARGS[@]}" \
             -f "$IMAGE_DIR/Containerfile.base" \
-            "$IMAGE_DIR/" >"$BUILD_LOG" 2>&1; then
+            "$IMAGE_DIR/" >"$BUILD_PROGRESS_LOG" 2>&1; then
             _error "podman build failed for ${BASE_IMAGE_TAG}"
             _error "Last build log lines:"
-            tail -80 "$BUILD_LOG" >&2 || true
+            tail -80 "$BUILD_PROGRESS_LOG" >&2 || true
             exit 1
         fi
     fi
@@ -498,6 +505,7 @@ fi
 if _verbose_enabled; then
     "$PODMAN" build \
         --format docker \
+        --progress json \
         --isolation "$BUILD_ISOLATION" \
         --userns "$BUILD_USERNS" \
         --tag "$IMAGE_TAG" \
@@ -505,10 +513,11 @@ if _verbose_enabled; then
         "${BUILD_ARGS[@]}" \
         "${CACHE_MOUNT_ARGS[@]}" \
         -f "$CONTAINERFILE" \
-        "$IMAGE_DIR/"
+        "$IMAGE_DIR/" | tee "$BUILD_PROGRESS_LOG"
 else
     if ! "$PODMAN" build \
         --format docker \
+        --progress json \
         --isolation "$BUILD_ISOLATION" \
         --userns "$BUILD_USERNS" \
         --tag "$IMAGE_TAG" \
@@ -516,13 +525,13 @@ else
         "${BUILD_ARGS[@]}" \
         "${CACHE_MOUNT_ARGS[@]}" \
         -f "$CONTAINERFILE" \
-        "$IMAGE_DIR/" >"$BUILD_LOG" 2>&1; then
-        if grep -Eqi 'newuidmap|read-only file system|cannot set up namespace|uid_map' "$BUILD_LOG"; then
-            _podman_rootless_diagnostic "$BUILD_LOG"
+        "$IMAGE_DIR/" >"$BUILD_PROGRESS_LOG" 2>&1; then
+        if grep -Eqi 'newuidmap|read-only file system|cannot set up namespace|uid_map' "$BUILD_PROGRESS_LOG"; then
+            _podman_rootless_diagnostic "$BUILD_PROGRESS_LOG"
         fi
         _error "podman build failed for ${IMAGE_TAG}"
         _error "Last build log lines:"
-        tail -80 "$BUILD_LOG" >&2 || true
+        tail -80 "$BUILD_PROGRESS_LOG" >&2 || true
         exit 1
     fi
 fi
@@ -550,6 +559,11 @@ _remove_stale_image_tags
 
     _remove_stale_image_tags
     "$PODMAN" image prune -f 2>/dev/null || true
+
+# Create backward-compat symlink from build-*.log to the JSON progress log
+if [[ -f "$BUILD_PROGRESS_LOG" ]]; then
+    ln -sf "$(basename "$BUILD_PROGRESS_LOG")" "$BUILD_LOG"
+fi
 
 # ---------------------------------------------------------------------------
 # Step 5: Save hash for staleness detection
@@ -588,16 +602,114 @@ _info "Size:     ${SIZE_DISPLAY}"
 _info "Time:     ${BUILD_DURATION}s"
 _info "----------------------------------------------"
 
-# Telemetry tracking
+# Telemetry extraction from podman JSON progress
+# @trace plan:forge-build-telemetry-2026-06-20
+_extract_build_telemetry() {
+    local progress_log="$1"
+    local parsed
+    [[ -s "$progress_log" ]] || { echo "0|0|0"; return 0; }
+    command -v jq &>/dev/null || { echo "0|0|0"; return 0; }
+
+    parsed="$(jq -r '
+        if .progressDetail and .progressDetail.total and .id then
+            "BYTES\t\(.id)\t\(.progressDetail.total)"
+        elif .stream then
+            if .stream | test("Using cache") then
+                "CACHE_HIT"
+            elif .stream | test("^Step ") then
+                "STEP"
+            else empty end
+        else empty end
+    ' "$progress_log" 2>/dev/null | sort -u -t $'\t' -k1,2 | awk -F'\t' '
+    BEGIN { bytes=0; hits=0; steps=0 }
+    /^BYTES/ { bytes+=$3 }
+    /^CACHE_HIT/ { hits++ }
+    /^STEP/ { steps++ }
+    END { print bytes "|" hits "|" steps }
+    ')" || { echo "0|0|0"; return 0; }
+    echo "${parsed:-0|0|0}"
+}
+
+# Telemetry tracking — shell path (legacy)
 TELEMETRY_DIR="$HOME/.cache/tillandsias/telemetry"
 mkdir -p "$TELEMETRY_DIR"
 METRICS_FILE="$TELEMETRY_DIR/build-metrics.jsonl"
-TS="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
-echo "{\"timestamp\": \"$TS\", \"image\": \"$IMAGE_NAME\", \"duration_s\": $BUILD_DURATION, \"size_bytes\": $IMAGE_SIZE, \"hash\": \"$CURRENT_HASH\"}" >> "$METRICS_FILE"
 
-# Logarithmic semantic distillation (keep recent, thin out old)
-# Just keep the last 500 lines for now to prevent runaway growth
+# Extract per-step telemetry from podman progress log
+TELEMETRY_EXTRACT="$(_extract_build_telemetry "$BUILD_PROGRESS_LOG")"
+BYTES_DOWNLOADED="${TELEMETRY_EXTRACT%%|*}"
+REST="${TELEMETRY_EXTRACT#*|}"
+CACHE_HIT_COUNT="${REST%%|*}"
+STEP_COUNT="${REST#*|}"
+TS="$(date -u +"%Y-%m-%dT%H:%M:%SZ")"
+
+# Legacy metrics format (backward compat)
+echo "{\"timestamp\": \"$TS\", \"image\": \"$IMAGE_NAME\", \"duration_s\": $BUILD_DURATION, \"size_bytes\": $IMAGE_SIZE, \"hash\": \"$CURRENT_HASH\", \"bytes_downloaded\": ${BYTES_DOWNLOADED:-0}, \"cache_hits\": ${CACHE_HIT_COUNT:-0}, \"steps\": ${STEP_COUNT:-0}}" >> "$METRICS_FILE"
 tail -n 500 "$METRICS_FILE" > "${METRICS_FILE}.tmp" && mv "${METRICS_FILE}.tmp" "$METRICS_FILE"
+
+# Telemetry tracking — canonical ImageBuildEvent path (converged with Rust)
+# @trace plan:forge-build-telemetry-2026-06-20, slice 2
+if [[ -n "${XDG_STATE_HOME:-}" ]]; then
+    CANONICAL_TELEMETRY_DIR="$XDG_STATE_HOME/tillandsias"
+else
+    CANONICAL_TELEMETRY_DIR="$HOME/.local/state/tillandsias"
+fi
+mkdir -p "$CANONICAL_TELEMETRY_DIR"
+CANONICAL_METRICS_FILE="$CANONICAL_TELEMETRY_DIR/image-build-events.jsonl"
+
+# Build decision: was this a build, skip, or force?
+BUILD_DECISION="build"
+BUILD_REASON="source_hash_changed"
+if [[ "$FLAG_FORCE" == true ]]; then
+    BUILD_DECISION="force"
+    BUILD_REASON="user_requested"
+elif [[ -f "$HASH_FILE" ]] && [[ "$CURRENT_HASH" == "$(cat "$HASH_FILE" 2>/dev/null || true)" ]]; then
+    BUILD_DECISION="skip"
+    BUILD_REASON="source_hash_unchanged"
+fi
+
+# Cache result based on telemetry extraction
+CACHE_RESULT="unknown"
+if [[ "$FLAG_NO_CACHE" == true || "$FLAG_NO_CACHE" == "1" ]]; then
+    CACHE_RESULT="disabled"
+elif [[ ${CACHE_HIT_COUNT:-0} -gt 0 && ${STEP_COUNT:-0} -gt 0 ]]; then
+    CACHE_RESULT="partial"
+elif [[ ${STEP_COUNT:-0} -eq 0 ]]; then
+    CACHE_RESULT="unknown"
+fi
+
+PODMAN_VERSION="$("$PODMAN" version --format '{{.Version}}' 2>/dev/null || echo "unknown")"
+
+# Generate a deterministic event_id from source hash + timestamp
+CACHED_EVENT_ID="$(echo "${CURRENT_HASH}-${TS}" | sha256sum 2>/dev/null | cut -c1-16 || echo "unknown")"
+
+echo "{\
+\"timestamp\": \"$TS\", \
+\"event_type\": \"image.built\", \
+\"actor\": \"build-image.sh\", \
+\"spec_trace\": \"plan:forge-build-telemetry-2026-06-20\", \
+\"image_name\": \"${IMAGE_LABEL_PREFIX}\", \
+\"image_tag\": \"${IMAGE_TAG}\", \
+\"build_duration_seconds\": ${BUILD_DURATION}.0, \
+\"build_status\": \"success\", \
+\"builder\": \"podman-build\", \
+\"image_size_bytes\": ${IMAGE_SIZE:-0}, \
+\"schema_version\": 1, \
+\"event_id\": \"${CACHED_EVENT_ID}\", \
+\"source_digest\": \"${CURRENT_HASH}\", \
+\"canonical_tag\": \"${IMAGE_CANONICAL_TAG}\", \
+\"version_alias\": \"${IMAGE_VERSION_TAG}\", \
+\"latest_alias\": \"${IMAGE_LATEST_TAG}\", \
+\"decision\": \"${BUILD_DECISION}\", \
+\"reason\": \"${BUILD_REASON}\", \
+\"cache_policy\": \"auto\", \
+\"cache_result\": \"${CACHE_RESULT}\", \
+\"bytes_downloaded\": ${BYTES_DOWNLOADED:-0}, \
+\"duration_ms\": $((BUILD_DURATION * 1000)), \
+\"exit_code\": 0, \
+\"podman_version\": \"${PODMAN_VERSION}\", \
+\"host_platform\": \"linux\"\
+}" >> "$CANONICAL_METRICS_FILE"
 
 # Generate simple dashboard if it doesn't exist or update it
 DASHBOARD_FILE="$ROOT/plan/metrics-dashboard.md"

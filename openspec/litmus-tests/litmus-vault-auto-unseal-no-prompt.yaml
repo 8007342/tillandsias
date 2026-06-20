@@ -37,7 +37,7 @@ critical_path:
 
   - step: "vault is sealed=false within 5s of container start"
     phase: runtime
-    command: "bash -lc 'T_CONTAINER_START=$(cargo run -p tillandsias-host-shell --example replay-audit-log -- --grep \"container=tillandsias-vault.*started\" --format ts); T_UNSEAL=$(cargo run -p tillandsias-host-shell --example vm-exec -- vault status -format=json 2>/dev/null | python3 -c \"import sys,json,time; d=json.load(sys.stdin); print(int(time.time())) if not d.get(\\\"sealed\\\", True) else sys.exit(1)\"); DELTA=$((T_UNSEAL-T_CONTAINER_START)); [[ $DELTA -le 5 ]] && echo \"OK: unseal in ${DELTA}s\" || (echo \"FAIL: unseal took ${DELTA}s > 5s\"; exit 1)'"
+    command: "bash -lc 'T_CONTAINER_START=$(cargo run -p tillandsias-host-shell --example replay-audit-log -- --grep \"container=tillandsias-vault.*started\" --format ts); T_UNSEAL=$(cargo run -p tillandsias-host-shell --example vm-exec -- vault status -format=json 2>/dev/null | cargo run --quiet -p tillandsias-policy -- vault-unsealed-epoch); DELTA=$((T_UNSEAL-T_CONTAINER_START)); [[ $DELTA -le 5 ]] && echo \"OK: unseal in ${DELTA}s\" || (echo \"FAIL: unseal took ${DELTA}s > 5s\"; exit 1)'"
     timeout_ms: 15000
     expected_behavior: "succeeds; delta <= 5s"
 

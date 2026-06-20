@@ -4150,8 +4150,8 @@ plan_index:
 
     - id: nanoclawv2-orchestration
       order: 56
-      title: NanoClawV2 orchestration engine and launcher leaf
-      status: claimed
+      title: ZeroClaw orchestration engine and launcher leaf (Supersedes NanoClawV2)
+      status: superseded_migrating_to_zeroclaw
       owner_host: linux
       deliverable: plan/issues/nanoclawv2-orchestration.md
       audit_origin: plan/issues/nanoclawv2-orchestration.md
@@ -4162,8 +4162,8 @@ plan_index:
         - podman-orchestration
         - mcp-on-demand
       exit_criteria:
-        - "🦞 NanoClawV2 launches for a project and remains branch-aware."
-        - "Only approved orchestration actions are reachable from NanoClawV2."
+        - "🦞 ZeroClaw launches for a project and remains branch-aware (superseding NanoClawV2)."
+        - "Only approved orchestration actions are reachable from ZeroClaw."
         - "Smoke coverage proves launch and one approved action."
       tasks:
         - id: nanoclawv2/spec-and-plan
@@ -4182,14 +4182,14 @@ plan_index:
           status: claimed
           owner_host: linux
           estimated_hours: 4
-          capability_tags: [rust, podman, orchestration, nanoclaw]
+          capability_tags: [rust, podman, orchestration, zeroclaw]
           depends_on: [nanoclawv2/spec-and-plan]
           owned_files:
-            - crates/tillandsias-headless/src/nanoclaw.rs
-            - images/nanoclaw/Containerfile
-            - scripts/build-nanoclaw.sh
+            - crates/tillandsias-headless/src/zeroclaw.rs
+            - images/zeroclaw/Containerfile
+            - scripts/build-zeroclaw.sh
           next_action: >
-            Wire the launcher leaf, broker surface, and smoke hooks.
+            HALT NanoClaw work. Migrate all existing NanoClawV2 implementation files to ZeroClaw. Update Containerfile to use fedora:44 base and compile ZeroClaw Rust binary. Wire the launcher leaf, broker surface, and smoke hooks for ZeroClaw.
           events:
             - type: claim
               ts: "2026-06-17T22:07:00Z"
@@ -4267,3 +4267,55 @@ plan_index:
                 transient gh helper container ran `gh auth login` and could not
                 connect to `api.github.com`. The helper launch attached only to
                 `--network tillandsias-enclave`.
+
+    - id: future-intentions-drain
+      order: 58
+      title: Drain future intentions into planned tasks
+      status: in_progress
+      deliverable: plan/steps/58-future-intentions-drain.md
+      depends_on: []
+      outcome: >
+        All future intentions are broken down into active planned issues, and discussions 
+        on architectural decisions with The Tlatoāni are initiated.
+      tasks:
+        - id: future-intentions-drain/drain-tasks
+          status: completed
+          depends_on: []
+          owned_files:
+            - plan.yaml
+            - plan/index.yaml
+            - plan/steps/58-future-intentions-drain.md
+            - plan/issues/
+        - id: future-intentions-drain/containerfile-dnf-migration
+          status: completed
+          depends_on: [future-intentions-drain/drain-tasks]
+          owned_files:
+            - plan/issues/containerfile-dnf-migration-2026-06-20.md
+            - images/default/Containerfile.base
+            - images/inference/Containerfile
+            - scripts/build-image.sh
+        - id: future-intentions-drain/forge-continuous-enhancement
+          status: completed
+          depends_on: [future-intentions-drain/drain-tasks]
+          owned_files:
+            - plan/issues/forge-continuous-enhancement-automation-2026-06-20.md
+            - .opencode/skills/forge-continuous-enhancement/SKILL.md
+            - methodology.yaml
+          events:
+            - type: completed
+              ts: "2026-06-20T05:51:00Z"
+              agent_id: "linux-tlatoani-opus-meta1-20260620T0551Z"
+              host: linux
+              note: >
+                Decision: option 2 (keep as-is). The outer /diagnose-forge pipeline
+                via big_pickle_template already covers forge improvement. E2E gates
+                exercise FCE as side effect of build/install/reset cycles. No code
+                change needed.
+        - id: future-intentions-drain/windows-macos-feature-parity
+          status: ready
+          depends_on: [future-intentions-drain/drain-tasks]
+          owned_files:
+            - plan/issues/windows-macos-feature-parity-2026-06-12.md
+            - plan/issues/ACTIVE.md
+            - plan/issues/osx-next-work-queue-2026-05-25.md
+            - plan/issues/windows-next-work-queue-2026-05-25.md

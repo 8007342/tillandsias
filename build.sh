@@ -542,7 +542,9 @@ if [[ "$FLAG_INSTALL" == true ]]; then
     "$SCRIPT_DIR/scripts/bump-version.sh" --bump-build 2>/dev/null || true
     "$SCRIPT_DIR/scripts/generate-traces.sh" 2>/dev/null || true
 
-    _run cargo build --workspace --release --target x86_64-unknown-linux-musl --features tray --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1
+    # Build only the Linux launcher here. macOS and Windows tray binaries share
+    # the `tillandsias-tray` bin name and have platform-specific release paths.
+    _run cargo build --package tillandsias-headless --bin tillandsias --release --target x86_64-unknown-linux-musl --features tray --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1
 
     # Validate musl-static headless launcher
     RELEASE_BIN="$SCRIPT_DIR/target/x86_64-unknown-linux-musl/release/tillandsias"

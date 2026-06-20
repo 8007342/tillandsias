@@ -26,7 +26,7 @@ critical_path:
 
   - step: "issue a forge-policy-scoped token"
     phase: setup
-    command: "bash -lc 'FORGE_TOKEN=$(cargo run -p tillandsias-host-shell --example vm-exec -- vault token create -policy=forge-policy -ttl=300s -format=json | python3 -c \"import sys,json; print(json.load(sys.stdin)[\\\"auth\\\"][\\\"client_token\\\"])\"); echo \"$FORGE_TOKEN\" > /tmp/litmus-forge-token'"
+    command: "bash -lc 'FORGE_TOKEN=$(cargo run -p tillandsias-host-shell --example vm-exec -- vault token create -policy=forge-policy -ttl=300s -format=json | cargo run --quiet -p tillandsias-policy -- json-get-string auth.client_token); echo \"$FORGE_TOKEN\" > /tmp/litmus-forge-token'"
     timeout_ms: 10000
     expected_behavior: "succeeds; /tmp/litmus-forge-token contains a valid forge-policy token"
 

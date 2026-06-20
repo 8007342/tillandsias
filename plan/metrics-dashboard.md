@@ -22,4 +22,24 @@ xychart-beta
     bar [0]
 ```
 
-*Metrics are extracted from `/tmp/tmp.MK0RTupXDG/home/.cache/tillandsias/telemetry/build-metrics.jsonl` via semantic distillation.*
+## Download Size Over Time
+
+```mermaid
+xychart-beta
+    title "Forge Build Download Size (MB)"
+    x-axis "Builds" 1 -> 1
+    y-axis "MB"
+    bar [0]
+```
+
+## Latest Build Summary
+
+| Metric | Value |
+|---|---|
+| Duration | s |
+| Image Size | 0 MB |
+| Bytes Downloaded | 0 MB |
+| Cache Hits (steps) |  |
+
+*Metrics are extracted from the build metrics input via semantic distillation. \
+New in this version: download-size tracking, cache-hit tracking, and canonical ImageBuildEvent sink (`$XDG_STATE_HOME/tillandsias/image-build-events.jsonl`).*

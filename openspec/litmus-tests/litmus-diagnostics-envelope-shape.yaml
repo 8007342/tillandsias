@@ -51,18 +51,18 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "fn select_diagnostics_agent_kind"
 
-  - step: "bash distill consumer: greps the event tag line"
-    command: "grep -F \"grep -E '^event:diagnostics_envelope '\" scripts/distill-forge-diagnostics.sh"
+  - step: "bash distill consumer: delegates to the Rust-backed diagnostics packager"
+    command: "grep -F 'target/debug/tillandsias-policy' scripts/distill-forge-diagnostics.sh && grep -F 'distill-forge-diagnostics --repo-root' scripts/distill-forge-diagnostics.sh"
     timeout_ms: 5000
-    expected_behavior: "^event:diagnostics_envelope"
+    expected_behavior: "distill-forge-diagnostics --repo-root"
 
   - step: "bash distill consumer: extracts all four envelope fields"
-    command: "grep -F \"grep -oE 'timestamp=[^ ]+'\" scripts/distill-forge-diagnostics.sh && grep -F \"grep -oE 'tillandsias_version=[^ ]+'\" scripts/distill-forge-diagnostics.sh && grep -F \"grep -oE 'host_platform=[^ ]+'\" scripts/distill-forge-diagnostics.sh && grep -F \"grep -oE 'agent=[^ ]+'\" scripts/distill-forge-diagnostics.sh"
+    command: "grep -F 'rfind(|l| l.starts_with(\"event:diagnostics_envelope \"))?' crates/tillandsias-policy/src/main.rs && grep -F 'event:diagnostics_envelope ' crates/tillandsias-headless/src/main.rs"
     timeout_ms: 5000
-    expected_behavior: "tillandsias_version="
+    expected_behavior: "event:diagnostics_envelope "
 
   - step: "summary template gains Host platform + Agent fields"
-    command: "grep -F 'Host platform**: ${envelope_host_platform}' scripts/distill-forge-diagnostics.sh && grep -F 'Agent**: ${envelope_agent}' scripts/distill-forge-diagnostics.sh"
+    command: "grep -F -- '- **Host platform**: {envelope_host_platform}' crates/tillandsias-policy/src/main.rs && grep -F -- '- **Agent**: {envelope_agent}' crates/tillandsias-policy/src/main.rs"
     timeout_ms: 5000
     expected_behavior: "envelope_host_platform"
 

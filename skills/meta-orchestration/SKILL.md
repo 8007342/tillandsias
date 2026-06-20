@@ -20,10 +20,13 @@ Local state is volatile. Before a successful exit, every meaningful result must
 be committed and pushed to the correct remote branch.
 
 - No uncommitted tracked changes.
+- All temporary local artifacts are considered disposable and MUST be discarded. You must leave a completely clean work state.
+- Ensure any `tillandsias` background binaries or test processes are fully terminated.
 - No local-only commits.
 - No completed work without a `plan/` event or finding.
 - No e2e pass/fail without a dated plan report.
 - No blocked state without a blocker, owner if known, and smallest next action.
+- Explicitly log things that make you slower (e.g., repeated steps, invalidated caches, uncoordinated scripts) into `plan/issues/`.
 
 If a push fails after three fetch/rebase retries, mark the active plan item
 `blocked` or `failed-retryable`, include the failed push output, and stop.
@@ -52,15 +55,15 @@ All `plan/`, `methodology/`, `openspec/`, and `cheatsheets/` writes go to
 1. Record UTC time, host kind, current branch, worktree path, and sibling heads.
 2. `git fetch origin --prune`.
 3. If the worktree is dirty at startup, classify it:
-   - tracked changes: commit a checkpoint or block before doing new work;
-   - untracked generated artifacts: ignore only if covered by `.gitignore`;
+   - tracked changes: you have a one-off chance to commit a checkpoint or clean up before doing new work. Start clean.
+   - untracked generated artifacts: discard them if not covered by `.gitignore` (update `.gitignore` if necessary). Ensure you start with a clean state.
    - unknown user work: do not overwrite it; record a blocker.
 4. Update the active local branch from remote with fast-forward or an explicit
    merge from `origin/linux-next` into the platform branch when appropriate.
 
 ## Worker Drain
 
-Run `/advance-work-from-plan` in fresh cycles until one of these is true:
+When choosing the builder role, run `/advance-work-from-plan` repeatedly in a `./plan` friendly way in fresh cycles until one of these is true:
 
 - no eligible ready work remains for this host;
 - every eligible item is blocked;

@@ -2,6 +2,65 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
+## 2026-06-20T04:51Z — meta-orch cycle 2 (macOS): merge + drain, no eligible work
+
+Fetched origin; fast-forwarded `osx-next` to `origin/linux-next` (`a3c8b23d`).
+Startup hygiene finding: untracked user artifacts remain unchanged —
+`build-osx-tray.sh`, `plan/issues/macos-windows-tray-ux-parity-audit-2026-06-13.md`,
+`research/`, `src-tauri/`. Not overwritten. Worker drain: NO eligible autonomous
+macOS work — `enclave/macos-vault-unreachable-via-publish-aarch64` still `ready`,
+owner=linux; `macos-tray/github-login-route-to-orchestrated-flow` CLAIMED+blocked
+on vault fix; step 49d user-attended. E2E skipped — no macOS runtime delta.
+Next: re-check after linux vault fix lands; untracked user work unchanged.
+
+## 2026-06-20T01:38Z — meta-orch cycle 1 (macOS): merge + drain, no eligible work
+
+Fetched origin; merged `origin/linux-next` (`b5c11dc7`) into osx-next
+(`fa70e30f`), resolving append-ledger conflicts in ACTIVE.md +
+linux-next-work-queue (kept both sides). Compile sanity PASS (host-shell +
+macos-tray). Worker drain: NO eligible macOS ready work — `macos-tray/
+github-login-route-to-orchestrated-flow` is blocked on the layer-5 packet
+`enclave/macos-vault-unreachable-via-publish-aarch64` (owner=linux, pinged);
+step 49d blocked on same; all other macOS items done. E2E: current (release
+v0.3.260618.2 smoke recent; macOS local build + m8 deep-dive this session; no
+macOS-runtime delta). Next: self-paced loop — re-check for the Linux vault fix /
+new sibling work. Cadence: ~3h while the cross-host blocker is pending.
+
+## 2026-06-20T01:34Z — F4 fully root-caused (5 layers); packets filed + claimed
+
+m8 49d round-3: F1/F2/F3/Quit PASS, F3 login-gated menu shipped (`8f3d87c1`) and
+operator-confirmed. F4 GitHub Login traced to 5 stacked layers via in-guest SSH
+debug — full writeup `plan/issues/macos-github-login-deep-dive-2026-06-18.md`.
+Two packets filed in ACTIVE.md:
+- `enclave/macos-vault-unreachable-via-publish-aarch64` (CRITICAL, owner=linux) —
+  pinged on linux-next queue with priority. THE blocker (in-VM Vault reachable
+  through the published port on aarch64).
+- `macos-tray/github-login-route-to-orchestrated-flow` (owner=macos) — CLAIMED
+  lease `ghlogin-route-orchestrated-20260620T0134Z`, status=blocked on the
+  layer-5 packet. Code (launch_spec → orchestrated `--github-login` + cloud-init
+  `loginctl enable-linger root`) is shaped but intentionally NOT shipped alone
+  (login still dies at Vault; a 60s hang is worse UX than instant-gray). Lands
+  WITH the layer-5 fix.
+
+## 2026-06-18T21:30Z — 49d results: partial — F2 fixed; F4 has independent root cause
+
+Operator completed the m8 interactive smoke at HEAD `e4ef0db0`.
+
+### Results
+- **Icon**: PASS (F1 fixed by `1ada1f28`)
+- **VM Ready**: PASS (status chip showed `Ready tillandsias-in-vm`; F2 closed by step 49b/c)
+- **Menu collapsed**: FAIL — menu showed "old messy UX" (F3 still open)
+- **GitHub Login**: FAIL — terminal opens and goes full gray immediately even with VM Ready (F4 UNEXPECTEDLY has an independent root cause, not resolved by step 49)
+- **Quit**: PASS
+
+### Key discovery
+F4 (`github-login-pty-hangs-gray`) previously marked as downstream of F2 is NOT
+resolved by step 49. The VM reaches Ready but GitHub Login PTY still hangs gray.
+Needs its own investigation — possible causes: forge container not started despite
+podman_ready, PTY attach wiring bug, or port/container not reachable.
+
+Full results: `plan/issues/macos-m8-interactive-smoke-results-2026-06-18.md`
+
 ## 2026-06-16T23:35Z — step 49 done (49a/b/c/e completed); 49d next (user-attended m8 smoke)
 
 ### Achieved this cycle:
@@ -991,6 +1050,17 @@ accessor.
 - linux-owned active items (not macOS-claimable): `nanoclawv2-orchestration`,
   `enclave/network-level-egress-deny`, `policy/no-python-runtime-scripts`
 - pushed osx-next checkpoint (commit 807f95f9) to origin
+
+### event: meta-orchestration cycle 2026-06-18T21:30Z — macOS (osx-next)
+
+- agent_id: `macos-big-pickle`
+- action: 49d user-attended m8 interactive smoke executed
+- step 49 status: 49a/b/c/e DONE; 49d PARTIAL (icon PASS, VM Ready PASS, menu FAIL, github-login FAIL)
+- key discovery: F4 (`github-login-pty-hangs-gray`) has an INDEPENDENT root cause
+  beyond the VM state — VM reaches Ready but PTY still goes gray immediately
+- F3 (`menu-not-collapsed-github-gated`) remains open (shared host-shell change)
+- results file: `plan/issues/macos-m8-interactive-smoke-results-2026-06-18.md`
+- untracked artifacts remain: `build-osx-tray.sh`, `research/`, `src-tauri/`
 
 <!-- Append events here when claiming/progressing items. Append-only. -->
 

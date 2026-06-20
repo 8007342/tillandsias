@@ -614,3 +614,67 @@ permanently stuck on hosts that aren't the annex producer.
 
 @trace plan/issues/forge-diagnostics-automation-2026-05-27.md
 @trace plan/diagnostics/forge-enhancements-curated-toolchain-backlog-2026-05-29.md (Update 2026-05-29T08:21Z)
+
+## agent_status_packet — claim 2026-06-20T07:31Z — no-python diagnostics litmus drift
+
+- host_id: linux-macuahuitl · platform: linux · branch: linux-next
+- packet: `forge-diagnostics/e2e-piggyback-orchestration` — CLAIMED for a
+  narrow drift-protection slice after the completed no-Python policy work.
+- claim:
+    ts: "2026-06-20T07:31:49Z"
+    agent_id: "linux-macuahuitl-codex-20260620T073149Z"
+    host: "linux"
+    lease_id: "forge-diagnostics-litmus-no-python-20260620T073149Z"
+    expires_at: "2026-06-20T11:31:49Z"
+- current plan: replace the `python3 -c` JSON validator embedded in
+  `openspec/litmus-tests/litmus-forge-diagnostics-e2e.yaml` with a Rust-backed
+  `tillandsias-policy` subcommand. The immediate target is the diagnostics E2E
+  litmus because it is in this packet's owned file scope and currently
+  contradicts the no-Python runtime/harness acceptance note.
+- expected files: `crates/tillandsias-policy/src/main.rs`,
+  `openspec/litmus-tests/litmus-forge-diagnostics-e2e.yaml`,
+  this packet ledger, and the Linux work queue/loop status at completion.
+- privacy/isolation: no runtime envelope change; this is host-side validation
+  plumbing only.
+- next checkpoint: commit and push the claim, implement the Rust validator,
+  run targeted policy tests plus YAML validation, then append completion
+  evidence.
+
+## agent_status_packet — completed 2026-06-20T07:38Z — no-python diagnostics litmus drift
+
+- host_id: linux-macuahuitl · platform: linux · branch: linux-next
+- packet: `forge-diagnostics/e2e-piggyback-orchestration` — COMPLETED the
+  no-Python diagnostics litmus drift slice.
+- claim_commit: `4c15fc72`
+- implementation_commit: this commit
+- lease_id: `forge-diagnostics-litmus-no-python-20260620T073149Z`
+- shipped:
+    - Added `tillandsias-policy validate-forge-diagnostics-json`.
+    - Reused the distiller's first-`{` through last-`}` diagnostics JSON
+      extraction so banner/fenced forge logs validate correctly.
+    - Replaced the inline `python3 -c` JSON validator in
+      `openspec/litmus-tests/litmus-forge-diagnostics-e2e.yaml` with the Rust
+      policy command.
+    - Tightened the diagnostics log selector to exclude `.stderr.log`
+      companions before validation.
+    - Carried two mechanical `cargo fmt` hunks in the NanoClawV2 image-order
+      tests so `cargo fmt --all -- --check` is green.
+- evidence:
+    - `cargo test -p tillandsias-policy` — PASS (10 tests).
+    - `cargo run --quiet -p tillandsias-policy -- validate-yaml
+      openspec/litmus-tests/litmus-forge-diagnostics-e2e.yaml` — PASS.
+    - `tillandsias-policy validate-forge-diagnostics-json` against
+      `target/forge-diagnostics/diagnostics_20260619T234257Z.log` — PASS
+      (banner + fenced JSON handled).
+    - `scripts/check-no-python-scripts.sh` — PASS.
+    - `cargo fmt --all -- --check` — PASS.
+    - `git diff --check` — PASS.
+    - `./build.sh --check` — PASS (workspace type-check passed; dev proxy start
+      warning remained non-fatal as in prior cycles).
+- follow_up: >
+    Broader litmus YAML Python drift remains outside this packet's owned scope.
+    Filed `plan/issues/no-python-litmus-drift-2026-06-20.md` with the remaining
+    inventory and a bounded next action.
+- blockers/errors: NONE.
+- privacy/isolation: no runtime envelope change.
+- lease: COMPLETE.

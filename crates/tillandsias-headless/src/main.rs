@@ -1076,6 +1076,7 @@ fn image_specs(root: &Path, image_name: &str) -> Result<(PathBuf, PathBuf), Stri
         "chromium-core" => "images/chromium",
         "chromium-framework" => "images/chromium",
         "vault" => "images/vault",
+        "nanoclawv2" => "images/nanoclawv2",
         other => {
             return Err(format!("Unknown image type: {other}"));
         }
@@ -1123,6 +1124,12 @@ fn image_build_inputs(
         let base = identities
             .get("forge-base")
             .ok_or_else(|| "forge identity requires forge-base identity".to_string())?;
+        build_args.insert("BASE_IMAGE".to_string(), base.canonical_tag.clone());
+        dependency_digests.insert("forge-base".to_string(), base.source_digest.clone());
+    } else if image_name == "nanoclawv2" {
+        let base = identities
+            .get("forge-base")
+            .ok_or_else(|| "nanoclawv2 identity requires forge-base identity".to_string())?;
         build_args.insert("BASE_IMAGE".to_string(), base.canonical_tag.clone());
         dependency_digests.insert("forge-base".to_string(), base.source_digest.clone());
     }
@@ -3007,6 +3014,7 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
         "chromium-framework",
         "forge-base",
         "forge",
+        "nanoclawv2",
         "web",
     ];
 
@@ -8850,6 +8858,12 @@ mod tests {
             image_specs(&root, "web").expect("web image specs should be resolvable");
         assert!(containerfile.ends_with("images/web/Containerfile"));
         assert!(context.ends_with("images/web"));
+
+        // Test nanoclawv2 image
+        let (containerfile, context) =
+            image_specs(&root, "nanoclawv2").expect("nanoclawv2 image specs should be resolvable");
+        assert!(containerfile.ends_with("images/nanoclawv2/Containerfile"));
+        assert!(context.ends_with("images/nanoclawv2"));
     }
 
     #[test]
@@ -9002,7 +9016,7 @@ mod tests {
 
         // The images array from run_init defines the build order:
         // proxy -> git -> inference -> router -> chromium-core -> chromium-framework
-        // -> forge-base -> forge -> web
+        // -> forge-base -> forge -> nanoclawv2 -> web
         let images = [
             "proxy",
             "git",
@@ -9012,6 +9026,7 @@ mod tests {
             "chromium-framework",
             "forge-base",
             "forge",
+            "nanoclawv2",
             "web",
         ];
 
@@ -9046,6 +9061,11 @@ mod tests {
         assert!(
             forge_base_idx < forge_idx,
             "forge-base must be built before forge"
+        );
+        let nanoclawv2_idx = images.iter().position(|&i| i == "nanoclawv2").unwrap();
+        assert!(
+            forge_base_idx < nanoclawv2_idx,
+            "forge-base must be built before nanoclawv2"
         );
     }
 

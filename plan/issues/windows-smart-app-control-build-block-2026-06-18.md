@@ -1,8 +1,26 @@
 # Windows Smart App Control blocks native local-build e2e - 2026-06-18
 
-Status: blocked (operator-attended)
+Status: RESOLVED 2026-06-19 — operator turned Smart App Control off
 Owner: windows host operator
 Cycle: 2026-06-18T10:23Z windows meta-orchestration
+
+## Resolution (2026-06-19T22:xxZ windows meta-orchestration)
+
+The operator set Smart App Control to **Off**
+(`HKLM:\SYSTEM\CurrentControlSet\Control\CI\Policy\VerifiedAndReputablePolicyState`
+now reads `0`). Native builds are unblocked, confirmed by the exact crate that
+previously failed: `cargo check -p tillandsias-policy` compiled and *ran*
+`serde`'s build-script (the os error 4551 site) and finished clean in 6.46s.
+
+The full Windows local-build e2e gate was then re-run end-to-end:
+`build-windows-tray.ps1` (release, exit 0) → install → `wsl --unregister
+tillandsias` → cold `--provision-once`. That run surfaced a separate
+provisioning defect (headless units enabled but not started), now fixed and
+verified — see
+`plan/issues/windows-cold-provision-headless-units-not-started-2026-06-19.md`
+and the dated smoke report
+`plan/issues/build-install-smoke-e2e-windows-2026-06-19.md`. This SAC packet is
+closed.
 
 ## Summary
 

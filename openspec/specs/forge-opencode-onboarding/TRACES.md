@@ -8,6 +8,6 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/entrypoint-forge-opencode.sh#L25](../../../images/default/entrypoint-forge-opencode.sh#L25)
 - [images/default/forge-welcome.sh#L8](../../../images/default/forge-welcome.sh#L8)
 - [images/default/forge-welcome.sh#L167](../../../images/default/forge-welcome.sh#L167)
-- [images/default/forge-welcome.sh#L178](../../../images/default/forge-welcome.sh#L178)
-- [images/default/forge-welcome.sh#L184](../../../images/default/forge-welcome.sh#L184)
+- [images/default/forge-welcome.sh#L179](../../../images/default/forge-welcome.sh#L179)
+- [images/default/forge-welcome.sh#L185](../../../images/default/forge-welcome.sh#L185)
 - [scripts/test-opencode-entrypoint-prompt.sh#L2](../../../scripts/test-opencode-entrypoint-prompt.sh#L2)

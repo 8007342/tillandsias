@@ -1,71 +1,224 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-18T16:00Z
+LastExecutionTime: 2026-06-20T17:55Z
 
-## This Loop
+## This Loop (2026-06-20T17:55Z, linux)
 
-- **Cycle type**: meta-orchestration coordination pass after worker-drain audit.
+- **Cycle type**: meta-orchestration worker drain on mutable Linux.
+- **Startup**: clean mutable-Linux host on `linux-next`; fetched origin, fast-forwarded to `origin/linux-next@267ddcf5`, then pushed plan claim commit `68b9ed99`.
+- **Worker drain**: completed the remaining `agent-concurrency-collisions-2026-06-20` slice. Added `scripts/with-tillandsias-process-cleanup.sh`, wired Linux build/install and init E2E steps through it, and added gate-1 assertions that the installed launcher path and version match the post-build `VERSION` file.
+- **E2E fixes discovered in-cycle**: local-build E2E first exposed a fake-Podman progress parser failure in `litmus:image-build-convergence-shape`, then exposed a non-interactive diagnostics path that spawned a detached tray companion. Fixed telemetry fallback in `scripts/build-image.sh`, descendant-only litmus runner cleanup in `scripts/run-litmus-test.sh`, and `TILLANDSIAS_NO_TRAY=1` guards in Linux E2E/diagnostics smoke paths.
+- **Verification**: shell syntax checks PASS; wrapper no-leak smoke PASS; deliberate leaked fake `tillandsias` process was terminated and returned expected exit 70; fake-Podman image-build convergence litmus PASS; `scripts/run-litmus-test.sh init-incremental-builds --size instant` PASS; `git diff --check` PASS; `./build.sh --check` PASS with the known non-fatal dev-proxy warning.
+- **E2E gates**: final local-build E2E at `target/build-install-smoke-e2e/20260620T173320Z` passed build/install (`build_install_exit=0`), destructive Podman reset (`reset_exit=0`), pristine init (`init_exit=0`), and prompted in-forge `/forge-continuous-enhancement` (`forge_exit=0`) on installed `Tillandsias v0.3.260620.7`.
+- **In-forge outcome**: `/forge-continuous-enhancement` filed `plan/forge-improvements/proposals/2026-06-20-diagnostics-prompt-optimize.md`; the in-forge GitHub push failed due missing credentials, so the host will push the final clean tip.
+- **Next**: macOS vault aarch64 published-port reachability remains the critical cross-host blocker. `forge-build-telemetry-2026-06-20` implementation is present in `83a3600a` and this cycle fixed its fake-progress litmus regression.
+
+## This Loop (2026-06-20T13:56Z, linux)
+
+- **Cycle type**: meta-orchestration worker drain, coordination audit, and local-build E2E gate on mutable Linux.
+- **Startup**: clean mutable-Linux host on `linux-next`; fetched origin, fast-forwarded to `origin/linux-next`, then pushed claim commit `824cbc67` and implementation commit `bb4196df`.
+- **Sibling heads after post-push audit**:
+  - `main`: `6dfafdf1`.
+  - `linux-next`: `bb4196df`.
+  - `windows-next`: `a3c8b23d` (ancestor of linux-next; 0 sibling-ahead drift).
+  - `osx-next`: `d829808d` (ancestor of linux-next; 0 sibling-ahead drift).
+- **Worker drain**: completed the first `agent-concurrency-collisions-2026-06-20` slice. Added `scripts/with-smoke-lock.sh`, routed Linux build-install E2E gate scripts through the shared `build-install-smoke-e2e` lock, and updated local-build/curl-install e2e runbooks to log lock evidence.
+- **Verification before E2E**: shell syntax checks, helper success/failure lock smokes, `git diff --check`, and `scripts/with-smoke-lock.sh --name build-install-smoke-e2e -- ./build.sh --check` passed.
+- **E2E gates**: local-build E2E started at `target/build-install-smoke-e2e/20260620T134849Z` and acquired the new lock at `2026-06-20T13:49:31Z`. Gate 1 failed with `build_install_exit=1` at `2026-06-20T13:56:24Z`; destructive reset and init gates were not run. Root failure was post-build `litmus:onboarding-cold-start-discovery` step 3: missing welcome banner `INDEX.md` cheatsheet discovery signal.
+- **Findings**: filed `local-smoke/onboarding-cold-start-discovery-cheatsheet-signal` in `plan/issues/build-install-smoke-e2e-findings-2026-06-20.md`. The diagnostics annex wrote `plan/diagnostics/diagnostics_20260620T135318Z-summary.md` with 25/25 checks passing.
+- **Release/e2e freshness**: no release action because local-build E2E did not clear gate 1.
+- **Next**: fix the welcome banner `INDEX.md` signal and rerun local-build E2E; continue remaining concurrency cleanup/stale-binary/autoincremental guardrails after the gate is unblocked.
+
+## This Loop (2026-06-20T09:00Z, linux)
+
+- **Cycle type**: meta-orchestration E2E gate on mutable Linux.
+- **Startup**: clean mutable-Linux host on `linux-next`; fetched origin and confirmed local branch was aligned with `origin/linux-next@36980e42`.
+- **Sibling heads after startup fetch**:
+  - `main`: `6dfafdf1`.
+  - `linux-next`: `36980e42`.
+  - `windows-next`: `a3c8b23d`.
+  - `osx-next`: `d829808d`.
+- **E2E gates**: Ran local-build E2E via `/build-install-and-smoke-test-e2e`. Build and install succeeded (`build_install_exit=0`), and destructive Podman reset succeeded (`reset_exit=0`). However, the re-provisioning step (`tillandsias --init --debug`) failed (`init_exit=1`) because `wasmtime` is missing from the minimal-44 dnf repositories.
+- **New findings**: Filed `local-smoke/wasmtime-dnf-migration-failure` in `plan/issues/build-install-smoke-e2e-findings-2026-06-20.md`.
+- **Blockers**: Added `local-smoke/wasmtime-dnf-migration-failure` as an active blocker for the Linux E2E gate.
+
+## This Loop (2026-06-20T07:49Z, linux)
+
+- **Cycle type**: meta-orchestration worker drain on mutable Linux.
 - **Startup**: clean mutable-Linux host on `linux-next`; fetched origin and
-  confirmed local `linux-next` is up to date at `87d2201f`.
+  confirmed local branch was aligned with `origin/linux-next@c3c7af60`, then
+  pushed claim commit `22e5987a`.
+- **Sibling heads after startup fetch**:
+  - `main`: `6dfafdf1`.
+  - `linux-next`: `c3c7af60` at worker selection, then `8fe56fb9` after the
+    implementation commit.
+  - `windows-next`: `a3c8b23d` (ancestor of linux-next at post-push audit).
+  - `osx-next`: `d829808d` (ancestor of linux-next at post-push audit).
+- **Worker drain**: completed `policy/no-python-litmus-drift`. Added
+  `tillandsias-policy` helpers for JSON string extraction, menu parity
+  assertions, disabled-with-v2 menu assertions, and Vault unsealed timestamp
+  parsing; extended `check-no-python-scripts` to scan litmus YAML; replaced the
+  remaining active litmus Python snippets with Rust-backed helpers or
+  POSIX shell/openssl equivalents.
+- **Verification**: `cargo test -p tillandsias-policy` PASS; five touched
+  litmus YAML files validate; policy no-Python checker PASS; shell wrapper
+  PASS; helper smoke checks PASS; `cargo fmt --all -- --check` PASS;
+  `git diff --check` PASS; active litmus Python scan found no matches;
+  `./build.sh --check` PASS with only the known unrelated dev-proxy warning.
+- **Integration/runtime**: post-push coordination re-fetched origin at
+  2026-06-20T07:59Z. `origin/windows-next` and `origin/osx-next` are both
+  ancestors of `origin/linux-next@8fe56fb9` (drift: windows 0 ahead / linux 21
+  ahead; osx 0 ahead / linux 20 ahead). No merge or freeze required.
+- **Release/e2e freshness**: latest published GitHub release remains
+  `v0.3.260618.2` at `6dfafdf1`, published 2026-06-18T18:07:14Z; existing
+  curl-install smoke evidence for that release is current.
+- **E2E gates**: destructive local-build/curl-install gates not run for this
+  policy/litmus-only worker slice; no shipped runtime or release artifact delta.
+- **New findings**: none.
+
+## This Loop (2026-06-20T07:38Z, linux)
+
+- **Cycle type**: meta-orchestration worker drain on mutable Linux.
+- **Startup**: clean mutable-Linux host on `linux-next`; fetched origin,
+  fast-forwarded from `d697f866` to `b2b37d10`, then pushed claim commit
+  `4c15fc72`.
+- **Sibling heads after startup fetch**:
+  - `main`: `6dfafdf1`.
+  - `linux-next`: `b2b37d10` at worker selection, then `4c15fc72` after the
+    claim commit.
+  - `windows-next`: `a3c8b23d` (ancestor of linux-next at fetch).
+  - `osx-next`: `d829808d` (ancestor of linux-next at fetch).
+- **Worker drain**: completed
+  `forge-diagnostics/e2e-piggyback-orchestration` no-Python diagnostics litmus
+  drift. Added `tillandsias-policy validate-forge-diagnostics-json`, made it
+  tolerate forge banner/fenced JSON logs via the distiller's brace-extraction
+  contract, replaced the diagnostics litmus's inline `python3 -c` validator,
+  and excluded `.stderr.log` companions from the stdout JSON selector.
+- **Verification**: `cargo test -p tillandsias-policy` PASS; edited litmus YAML
+  validates; validator passes against
+  `target/forge-diagnostics/diagnostics_20260619T234257Z.log`; no-Python script
+  checker PASS; `cargo fmt --all -- --check` PASS; `git diff --check` PASS;
+  `./build.sh --check` PASS.
+- **Integration/runtime**: post-push coordination re-fetched origin at
+  2026-06-20T07:42Z. `origin/windows-next` and `origin/osx-next` are both
+  ancestors of `origin/linux-next@30e014dc` (drift: windows 0 ahead / linux 18
+  ahead; osx 0 ahead / linux 17 ahead). No merge or freeze required.
+- **Release/e2e freshness**: latest published GitHub release remains
+  `v0.3.260618.2` at `6dfafdf1`, published 2026-06-18T18:07:14Z; existing
+  curl-install smoke evidence for that release is current.
+- **E2E gates**: destructive local-build/curl-install gates not run for this
+  policy/litmus-only worker slice; no shipped runtime or release artifact delta.
+- **New findings**: filed `policy/no-python-litmus-drift` for remaining
+  `python3` command fields in non-diagnostics litmus YAML.
+
+## Progress Since Last Loop
+
+- **agent-concurrency-collisions-2026-06-20**: COMPLETED; smoke gates now use a shared lock helper, process cleanup around host-side launcher runs, and post-install path/version freshness assertions.
+- **local-build E2E**: 16:53Z smoke findings completion records the welcome-banner signal restored and all gates passing; no active Linux local-build blocker remains from the 13:49Z rerun.
+- **policy/no-python-litmus-drift**: COMPLETED; no active litmus YAML command
+  fields shell out to Python, and the no-Python checker now scans litmus YAML.
+- **forge-diagnostics/e2e-piggyback-orchestration**: COMPLETED no-Python
+  diagnostics litmus drift slice; Rust validator now owns diagnostics JSON
+  validation.
+
+## This Loop (2026-06-20T07:20Z, linux)
+
+- **Cycle type**: meta-orchestration worker drain on mutable Linux.
+- **Startup**: clean mutable-Linux host on `linux-next`; fetched origin, in sync with `origin/linux-next` at `36cd9020`.
 - **Sibling heads after fetch**:
-  - `main`: `b0dba63e` (tagged `v0.3.260618.1`).
-  - `linux-next`: `87d2201f`.
-  - `windows-next`: `e332afb6` (ancestor of linux-next, 0 ahead / 9 behind).
-  - `osx-next`: `c7d32fb9` (ancestor of linux-next, 0 ahead / 11 behind).
-- **Worker drain**: no implementation packet claimed. `policy/no-python-runtime-scripts`
-  is actively leased until 2026-06-18T18:17Z; `nanoclawv2-orchestration` is
-  reclaimable but its first useful implementation slice spans launcher, broker,
-  image, and smoke hooks (estimated 4h) and should be picked up by a dedicated
-  worker cycle. `local-smoke/evidence-bundle-litmus-count-regression` is ready
-  (3h est.) but exceeds the meta-orchestration cycle budget.
-- **Integration/runtime**: no sibling branch is ahead of linux-next, and
-  `plan/localwork/runtime-litmus/current` is absent. No full litmus was started.
-- **Release/e2e freshness**: GitHub reports latest release `v0.3.260618.1`,
-  published 2026-06-18T01:34:43Z at `b0dba63e`; plan has curl-install smoke
-  PASS evidence for that release at 2026-06-18T03:31:55Z.
-- **E2E gates**: skipped; this pass changed only plan ledgers and found no
-  runtime/image/installer/release artifact delta since the current smoke.
+  - `main`: `6dfafdf1` (tagged `v0.3.260618.2`).
+  - `linux-next`: `36cd9020`
+  - `windows-next`: `e332afb6` (ancestor of linux-next, 0 ahead).
+  - `osx-next`: `c7d32fb9` (ancestor of linux-next, 0 ahead).
+- **Worker drain**: claimed and completed `policy/no-python-runtime-scripts` final slice. Ported the final two Python-backed scripts — `fetch-cheatsheet-source.sh` (6 python3 sites) and `regenerate-cheatsheet-index.sh` (1 python3 site) — into `tillandsias-policy` as subcommands, reducing shell scripts to thin compile+exec wrappers. `scripts/check-no-python-scripts.sh` passes successfully with exit code 0.
+- **Integration/runtime**: no sibling branch is ahead of linux-next.
+- **Release/e2e freshness**: no release warranted from this tooling-only cycle.
+- **E2E gates**: not run this cycle (worker slice).
+- **New findings**: none.
+
+## Loop 2026-06-20T06:00Z (worker drain — nanoclawv2 slice)
+
+- **Cycle type**: meta-orchestration on mutable Linux (Fedora 44): worker drain plus coordination audit.
+- **Startup**: began clean on `linux-next` at `f871f8b2`; no tracked or untracked worktree changes. Host classified as `linux_mutable`.
+- **Worker drain**: Claimed `nanoclawv2-orchestration` reclaimable lease. Slice 2 completed: registered nanoclawv2 in Rust image builder (image_specs, image_build_inputs with forge-base dependency, run_init image array). All tests pass, clippy clean. Committed `58996d8f`.
+- **Sibling coordination**: no merge needed. `origin/windows-next` and `origin/osx-next` heads checked — both remain ancestors of `origin/linux-next`; drift is 0 commits for both.
+- **E2E gates**: skipped. The nanoclawv2 --init registration is additive (image was already buildable via build-image.sh; no runtime crate delta to smoke-test). Latest GitHub release remains `v0.3.260618.2`.
+- **Release decision**: deferred. No release-blocking change; VERSION remains `0.3.260619.5`, no `v0.3.260620.*` tag exists.
+
+## Loop 2026-06-18T20:50Z (release-smoke pass)
+
+- **Cycle type**: meta-orchestration release-smoke pass after fetch/worker and sibling audit.
+- **Startup**: clean mutable-Linux host on `linux-next`; fetched origin, fast-forwarded from `7bc7b5bb` to `36cd9020`, then pushed forge findings commit `62964f02` and this smoke ledger commit.
+- **Sibling heads after fetch**:
+  - `main`: `6dfafdf1` (tagged `v0.3.260618.2`).
+  - `linux-next`: `36cd9020` at audit start, then `62964f02` after forge proposals.
+  - `windows-next`: `e332afb6` (ancestor of linux-next, 0 ahead / 12 behind).
+  - `osx-next`: `c7d32fb9` (ancestor of linux-next, 0 ahead / 14 behind).
+- **Worker drain**: no implementation packet claimed before the release gate. The latest release was newer than recorded curl-install smoke evidence, so `/smoke-curl-install-and-test-e2e` was prioritized.
+- **Integration/runtime**: no sibling branch is ahead of linux-next, and `plan/localwork/runtime-litmus/current` is absent. No full litmus was started.
+- **Release/e2e freshness**: GitHub latest release is `v0.3.260618.2`, published 2026-06-18T18:07:14Z at `6dfafdf1`; curl-install smoke now has PASS-with-findings evidence at 2026-06-18T20:50Z.
+- **E2E gates**: curl-install gate passed install, destructive reset, empty store verification, fresh init, and prompted OpenCode forge lane. Report: `plan/issues/smoke-e2e-findings-v0.3.260618.2-2026-06-18.md`.
+- **New findings**: in-forge `/forge-continuous-enhancement` filed three ready follow-ups: `smoke-finding/forge-ripgrep-missing`, `smoke-finding/forge-marksman-missing`, and `smoke-finding/forge-nix-store-missing`.
+
+## Loop 2026-06-18T23:20Z (worker drain — no-python slice)
+
+- **Cycle type**: meta-orchestration worker drain on mutable Linux.
+- **Startup**: clean `linux-next`, in sync with origin (`5613b40e`); fetched
+  origin/prune. Siblings: windows-next `e332afb6`, osx-next `c7d32fb9` (both
+  ancestors of linux-next); main `6dfafdf1`.
+- **Packet claimed + completed**: `policy/no-python-runtime-scripts` —
+  `distill-forge-diagnostics.sh` slice. Ported to a `tillandsias-policy
+  distill-forge-diagnostics` subcommand; shell reduced to a thin build+exec
+  wrapper. 45/45 target/forge-diagnostics logs byte-for-byte parity-verified vs
+  the former CPython extractor. clippy/fmt/test/`build.sh --check` green;
+  workspace + serde_json consumers re-tested after enabling `preserve_order`.
+- **Remaining Python-backed scripts**: 2 — `fetch-cheatsheet-source.sh` (6
+  python3 sites, large) and `regenerate-cheatsheet-index.sh` (1 site).
+- **Other claimable**: `nanoclawv2-orchestration` (RECLAIMABLE; large
+  multi-component build with open architecture questions — needs a task-graph
+  decomposition cycle before code).
+- **E2E**: not run this cycle (worker slice; left budget for orchestrator).
+- **Release**: not warranted from this cycle alone (tooling-only change; no
+  shipped-binary behavior change).
 
 ## Active Conflicts & Mediation
 
 - Deadlocks: none detected.
 - Thrashing/write-write collision: none detected.
-- Branch drift: none; both sibling branches are integrated.
-- Wrong-direction progress: none detected in the audited sibling status packets.
-- High-Velocity Alignment Event: **Inactive**.
-- Convergence velocity: **flat this pass**; no implementation packet was claimed,
-  but branch residual drift remains zero and no new blocker was introduced.
+- Branch drift: none; both sibling branches are integrated into `linux-next`.
+- Wrong-direction progress: none detected.
+- High-Velocity Alignment Event: inactive.
+- Convergence velocity: positive; all orphaned future intentions are now
+  shaped into plan packets.
 
 ## Blockers
 
-- **PARTIAL / targeted runtime evidence still needed (linux)**:
-  `github-login/enclave-egress-regression` is fixed in `d3f4e2f3`, but the
-  actual `tillandsias --debug --github-login` token paste remains
-  operator-attended with a fresh/rotated token.
-- **IN PROGRESS (linux)**: `policy/no-python-runtime-scripts` remains leased until
-  2026-06-18T18:17Z; remaining Python-backed scripts are listed in
-  `plan/issues/no-python-runtime-policy-2026-06-16.md`.
-- **RECLAIMABLE (linux)**: `nanoclawv2-orchestration` lease expired at
-  2026-06-18T02:07Z; next slice is launcher/broker/smoke implementation.
-- **BLOCKED (windows)**: Smart App Control enforce mode blocks native local
-  builds (`plan/issues/windows-smart-app-control-build-block-2026-06-18.md`).
-- **OPEN / user-attended (macos)**: step 49d / m8 interactive smoke.
+- **CRITICAL (linux -> macOS)**:
+  `enclave/macos-vault-unreachable-via-publish-aarch64`. Current Linux tree
+  already has Vault API listener `0.0.0.0:8200` and host CA loading from
+  `/tmp/tillandsias-ca/intermediate.crt`; next useful evidence is the aarch64
+  VM probe:
+  `curl --cacert /tmp/tillandsias-ca/intermediate.crt https://127.0.0.1:8201/v1/sys/health?standbyok=true`.
+- **RECONCILE (linux)**: the old `nanoclawv2-orchestration` lease expired; plan state now points toward the ZeroClaw migration path, so reread the packet before taking any legacy NanoClawV2 work.
+- **READY (cross-host)**: `future-intentions-drain/windows-macos-feature-parity`
+  packet now shaped and ready for host-specific work.
 
 ## Assignment Board
 
-- **Linux primary**: operator-attended `tillandsias --debug --github-login` on
-  a clean post-init install with a fresh/rotated token.
-- **Linux fallback**: after the no-Python lease expires or checkpoints, port or
-  retire another active Python-backed script; otherwise reclaim
-  `nanoclawv2-orchestration` in a dedicated worker cycle.
-- **Windows primary**: resolve the Smart App Control decision, then rerun the
-  native local-build e2e gate.
-- **Windows fallback**: keep `windows-next` synced and report SAC status.
-- **macOS primary**: step 49d / m8 interactive smoke.
-- **macOS fallback**: no unattended code packet currently claimable; keep queue
-  synchronized and report any user-smoke evidence.
+- **Linux primary**: resolve or precisely block the macOS aarch64 Vault
+  reachability packet; fallback to
+  `future-intentions-drain/windows-macos-feature-parity` if no VM access is
+  available and NanoClawV2 remains actively leased.
+- **Windows primary**: keep `windows-next` synchronized and verify the
+  cold-provision/headless unit path before optional UX work.
+- **macOS primary**: wait on the aarch64 Vault reachability fix/probe, then land
+  the orchestrated GitHub Login route and run m8.
+- **Coordinator fallback**: keep ACTIVE.md and host queues aligned with the new
+  Windows/macOS parity packet.
 
-## Stale Or Pending Pings
+## Pending Pings
 
-- Next useful Linux runtime probe: operator-attended
-  `tillandsias --debug --github-login` on a clean post-init install.
+- Need aarch64 VM operator evidence for the Vault published-port probe above.
+- Need operator-attended `tillandsias --debug --github-login` validation with a
+  fresh/rotated token on current release once the macOS layer-5 blocker is
+  resolved.

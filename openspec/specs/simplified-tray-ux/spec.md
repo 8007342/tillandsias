@@ -69,19 +69,16 @@ The version line (e.g., `v0.1.168.224`) and the signature `— by Tlatoāni` app
 
 @trace spec:simplified-tray-ux
 
-When authenticated, MUST show all local projects found in `~/.tillandsias/watch/` (or configured watch path), alphabetically sorted. Each project MUST display exactly 4 tools:
+When authenticated, MUST show all local projects found in `~/.tillandsias/watch/` (or configured watch path), alphabetically sorted. Each project MUST display exactly 7 tools:
 
-> **⚠ Implementation reality (as of 2026-05-30):** the deployed
+> **⚠ Implementation reality (as of 2026-06-18):** the deployed
 > `LeafAction` enum in `crates/tillandsias-headless/src/tray/mod.rs`
-> has **6 variants**, not the 4 the spec table below documents:
-> `Claude` (👾) / `Codex` (🏗️) / `OpenCode` (💻) / `OpenCodeWeb` (📐) /
-> `Observatorium` (🔭) / `Maintenance` (🔧). The two extra tools
-> (`Codex` + `Observatorium`) landed after the spec was written;
-> the emojis also differ (impl uses 👾📐, spec uses 👽🌐). Reconcile
-> by either updating this spec table to the 6-variant deployed set
-> OR collapsing the enum back to the 4 originally-specified tools.
-> The drift was discovered by `litmus:simplified-tray-ux-leaf-
-> action-shape` which pins what the code does today.
+> has **7 variants**: `Claude` (👾) / `Codex` (🏗️) / `OpenCode`
+> (💻) / `OpenCodeWeb` (📐) / `Observatorium` (🔭) / `Maintenance`
+> (🔧) / `NanoClawV2` (🦞). The new `NanoClawV2` leaf landed as part
+> of the orchestration engine work. Reconcile this table with the
+> deployed set so the tray contract and the implementation stay aligned.
+> The drift is pinned by `litmus:simplified-tray-ux-leaf-action-shape`.
 
 ```
 [<home> ~/src/ >
@@ -89,11 +86,17 @@ When authenticated, MUST show all local projects found in `~/.tillandsias/watch/
 │   ├── 💻 OpenCode (terminal-based IDE)
 │   ├── 🌐 OpenCode Web (browser-based IDE)
 │   ├── 👽 Claude (AI assistant)
+│   ├── 🏗️ Codex (orchestration assistant)
+│   ├── 🔭 Observatorium (observability console)
+│   ├── 🦞 NanoClawV2 (project-scoped orchestration engine)
 │   └── 🔧 Maintenance terminal (direct shell access)
 ├── <project-2> ▸
 │   ├── 💻 OpenCode (terminal-based IDE)
 │   ├── 🌐 OpenCode Web (browser-based IDE)
 │   ├── 👽 Claude (AI assistant)
+│   ├── 🏗️ Codex (orchestration assistant)
+│   ├── 🔭 Observatorium (observability console)
+│   ├── 🦞 NanoClawV2 (project-scoped orchestration engine)
 │   └── 🔧 Maintenance terminal (direct shell access)
 └── ...
 ```
@@ -102,6 +105,9 @@ When authenticated, MUST show all local projects found in `~/.tillandsias/watch/
 - **💻 OpenCode** — Terminal-based IDE. Opens an interactive session inside the forge container.
 - **🌐 OpenCode Web** — Browser-based IDE. Opens the web interface in the system's default browser.
 - **👽 Claude** — AI assistant. Launches Claude (host-side or in-container) for code assistance.
+- **🏗️ Codex** — Orchestration assistant. Launches Codex for plan-driven work execution.
+- **🔭 Observatorium** — Observability console. Opens the project's diagnostics and metrics surface.
+- **🦞 NanoClawV2** — Project-scoped orchestration engine. Launches the restricted NanoClawV2 container for the selected project.
 - **🔧 Maintenance terminal** — Direct shell access. Opens a terminal with `podman exec -it tillandsias-<project>-<genus> /bin/bash`.
 
 **Behavior:**

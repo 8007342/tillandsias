@@ -20,14 +20,17 @@ plan:
 
   current_state:
     last_completed_step: version-conflict-release (step 37)
-    next_step: none
-    next_graph_node: none
+    next_step: future-intentions-drain (step 58)
+    next_graph_node: future-intentions-drain/windows-macos-feature-parity
     frontier_note: >
-      All steps in the v0.3.0 implementation plan (steps 0-49) are fully completed,
-      verified, and integrated across Linux, macOS, and Windows. The final operator-gated
-      release step 37 (version-conflict-release) is completed; v0.3.260614.1 is successfully
-      tagged, built, and published as the latest release on GitHub. Sibling branches are
-      fully synchronized with linux-next.
+      The v0.3.0 implementation plan and release-conflict recovery are complete.
+      As of 2026-06-20T05:51Z all orphaned future_intentions have been drained
+      into structured plan packets. FCE automation decision completed (option 2,
+      keep as-is). Remaining ready frontier work includes the cross-host
+      Windows/macOS parity packet; the top external blocker remains the macOS
+      aarch64 Vault published-port probe recorded in plan/issues/ACTIVE.md
+      (listener binding and CA path already confirmed correct — remaining issue
+      is aarch64 podman port-publish forwarding).
     plan_index: plan/index.yaml
     step_directory: plan/steps
     checkpoint_branch: linux-next
@@ -67,14 +70,15 @@ plan:
       issue files to plan/archive/2026-06-05/; restored plan/steps/README.md;
       committed 9 untracked diagnostics summaries; removed the untracked
       pre-hardening root vault audit doc after distilling it into the audit report.
-    future_intentions: >
-      - Move CURL installers and manual TAR/GZ manipulation in Containerfile to DNF.
-      - Add telemetry to measure install times and download sizes during forge build; save output in dev environment for analysis.
-      - Enable iterative forge enhancement via the `/forge-continuous-enhancement` skill running inside the tillandsias repository.
-      - Ensure opencode and codex/claude permission files are highly permissive by default ("near full YOLO mode") for the forge safe environment.
-      - Implement a global `tellme` discoverability script: `tellme about [...]` for static cheatsheets, and `tellme howto [...]` using a <1B inference model ("forge-expert").
-      - Train "forge-expert" at launch time and retrain on commits to answer questions with no tool usage.
-      - Establish Windows and macOS feature parity with Linux headless/tray; address glitches and false claims of completion.
+    future_intentions: []
+    drained_items:
+      - "2026-06-20: Move CURL installers and manual TAR/GZ manipulation in Containerfile to DNF. → plan/issues/containerfile-dnf-migration-2026-06-20.md"
+      - "2026-06-20: Enable iterative forge enhancement via the /forge-continuous-enhancement skill. → plan/issues/forge-continuous-enhancement-automation-2026-06-20.md"
+      - "2026-06-20: Ensure opencode and codex/claude permission files are highly permissive by default (YOLO mode). → plan/issues/forge-permission-files-audit-2026-06-20.md"
+      - "2026-06-20: Add telemetry to measure install times and download sizes during forge build; save output in dev environment for analysis. → plan/issues/forge-build-telemetry-2026-06-20.md"
+      - "2026-06-20: Implement a global `tellme` discoverability script and forge-expert local inference model. → plan/issues/tellme-discoverability-and-forge-expert-2026-06-12.md"
+      - "2026-06-20: Train 'forge-expert' at launch time and retrain on commits to answer questions with no tool usage. → plan/issues/tellme-discoverability-and-forge-expert-2026-06-12.md"
+      - "2026-06-20: Establish Windows and macOS feature parity with Linux headless/tray; address glitches and false claims of completion. → plan/issues/windows-macos-feature-parity-2026-06-12.md"
 
   coordination:
     selection_model: dependency_graph
