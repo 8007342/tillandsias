@@ -61,8 +61,13 @@ LastExecutionTime: 2026-06-20T00:55Z
   fresh/rotated token after the earlier network fix.
 - **RECLAIMABLE (linux)**: `policy/no-python-runtime-scripts` and
   `nanoclawv2-orchestration`.
-- **BLOCKED (windows)**: Smart App Control enforce mode blocks native local
-  builds.
+- **RESOLVED (windows) 2026-06-20T01:01Z**: Smart App Control turned off by the
+  operator; native builds confirmed working. The Windows local-build e2e gate
+  was re-run (PASS) and surfaced + fixed a cold-provision hang
+  (`enable` → `enable --now` for the headless units, `wsl_lifecycle.rs`;
+  commits `6ea4004a`/`48e61c80` on windows-next). See
+  `plan/issues/build-install-smoke-e2e-windows-2026-06-19.md` and
+  `plan/issues/windows-cold-provision-headless-units-not-started-2026-06-19.md`.
 - **OPEN / user-attended (macos)**: step 49d / m8 interactive smoke; newest
   macOS evidence is now integrated.
 
@@ -74,9 +79,10 @@ LastExecutionTime: 2026-06-20T00:55Z
   `nanoclawv2-orchestration`).
 - **Linux fallback**: continue no-Python cleanup or reclaim
   `nanoclawv2-orchestration` if the login validation is not yet possible.
-- **Windows primary**: resolve Smart App Control decision, then rerun native
-  local-build e2e.
-- **Windows fallback**: keep `windows-next` synced and report SAC status.
+- **Windows primary**: SAC resolved + e2e gate green. Next: claim the next
+  Windows-eligible packet (step 36 Vault/HvSocket parity stays blocked on linux
+  step 32), or re-run the local-build e2e on new runtime deltas.
+- **Windows fallback**: keep `windows-next` synced and report e2e status.
 - **macOS primary**: continue step 49d / m8 interactive smoke follow-up for
   GitHub Login / local project enumeration.
 - **macOS fallback**: keep queue synchronized and report any user-smoke
