@@ -289,7 +289,7 @@ findings.
 ```bash
 TILLANDSIAS_SMOKE_LOCK_LOG="$LOG_DIR/00-smoke-lock.log" \
   scripts/with-smoke-lock.sh --name build-install-smoke-e2e -- \
-  tillandsias . --opencode \
+  env TILLANDSIAS_NO_TRAY=1 tillandsias . --opencode \
   --prompt "Use the /forge-continuous-enhancement skill" 2>&1 \
   | tee "$LOG_DIR/04-forge-continuous-enhancement.log"
 FORGE_RC=${PIPESTATUS[0]}; printf 'forge_exit=%s\n' "$FORGE_RC" | tee "$LOG_DIR/04-forge-exit.txt"

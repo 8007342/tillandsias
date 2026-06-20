@@ -176,7 +176,7 @@ halted at init and why.
 ```bash
 TILLANDSIAS_SMOKE_LOCK_LOG=target/smoke-e2e/00-smoke-lock.log \
   scripts/with-smoke-lock.sh --name release-smoke-e2e -- \
-  tillandsias . --opencode --prompt "Use the /forge-continuous-enhancement skill" 2>&1 \
+  env TILLANDSIAS_NO_TRAY=1 tillandsias . --opencode --prompt "Use the /forge-continuous-enhancement skill" 2>&1 \
   | tee target/smoke-e2e/04-opencode.log
 ```
 

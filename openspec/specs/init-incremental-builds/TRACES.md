@@ -21,5 +21,5 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [scripts/build-image.sh#L344](../../../scripts/build-image.sh#L344)
 - [scripts/build-image.sh#L364](../../../scripts/build-image.sh#L364)
 - [scripts/build-image.sh#L447](../../../scripts/build-image.sh#L447)
-- [scripts/build-image.sh#L560](../../../scripts/build-image.sh#L560)
+- [scripts/build-image.sh#L570](../../../scripts/build-image.sh#L570)
 - [scripts/test-image-build-convergence.sh#L2](../../../scripts/test-image-build-convergence.sh#L2)
