@@ -32,16 +32,29 @@
 set -eo pipefail
 
 # @trace spec:graceful-shutdown
-# Set pgid so we can signal the whole group on exit.
-# This ensures all children (like tillandsias-podman-cli) are killed.
+# Clean up descendant processes on exit without signaling the runner's own
+# process group. Some launchers make this script the process-group leader, and
+# `kill -TERM -$$` turns successful litmus runs into exit 143.
 if [[ "$(uname)" == "Linux" ]]; then
-    # Create new process group if we are the session leader or in a new shell
-    if [[ -t 0 ]]; then
-        # Only do this if running interactively or in a real TTY
-        # (prevents issues in some CI environments)
-        set -m
-    fi
-    trap 'kill -TERM -$$ 2>/dev/null || true' EXIT
+    _litmus_cleanup_descendants() {
+        local parent_pid="$1"
+        local child_pid
+        command -v pgrep >/dev/null 2>&1 || return 0
+        while IFS= read -r child_pid; do
+            [[ -n "$child_pid" ]] || continue
+            _litmus_cleanup_descendants "$child_pid"
+            kill -TERM "$child_pid" 2>/dev/null || true
+        done < <(pgrep -P "$parent_pid" 2>/dev/null || true)
+    }
+
+    _litmus_exit_cleanup() {
+        local rc=$?
+        trap - EXIT
+        _litmus_cleanup_descendants "$$"
+        exit "$rc"
+    }
+
+    trap _litmus_exit_cleanup EXIT
 fi
 
 # ============================================================================

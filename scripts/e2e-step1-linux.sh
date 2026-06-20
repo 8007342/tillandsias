@@ -5,7 +5,7 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 TILLANDSIAS_SMOKE_LOCK_LOG="$LOG_DIR/00-smoke-lock.log" \
   "$SCRIPT_DIR/with-smoke-lock.sh" --name build-install-smoke-e2e -- \
   "$SCRIPT_DIR/with-tillandsias-process-cleanup.sh" --log "$LOG_DIR/00-process-cleanup.log" -- \
-  ./build.sh --ci-full --install 2>&1 | tee "$LOG_DIR/01-build-install.log"
+  env TILLANDSIAS_NO_TRAY=1 ./build.sh --ci-full --install 2>&1 | tee "$LOG_DIR/01-build-install.log"
 BUILD_RC=${PIPESTATUS[0]}
 printf 'build_install_exit=%s\n' "$BUILD_RC" | tee "$LOG_DIR/01-build-install-exit.txt"
 test "$BUILD_RC" -eq 0

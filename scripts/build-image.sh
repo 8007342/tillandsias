@@ -606,10 +606,11 @@ _info "----------------------------------------------"
 # @trace plan:forge-build-telemetry-2026-06-20
 _extract_build_telemetry() {
     local progress_log="$1"
+    local parsed
     [[ -s "$progress_log" ]] || { echo "0|0|0"; return 0; }
     command -v jq &>/dev/null || { echo "0|0|0"; return 0; }
 
-    jq -r '
+    parsed="$(jq -r '
         if .progressDetail and .progressDetail.total and .id then
             "BYTES\t\(.id)\t\(.progressDetail.total)"
         elif .stream then
@@ -625,7 +626,8 @@ _extract_build_telemetry() {
     /^CACHE_HIT/ { hits++ }
     /^STEP/ { steps++ }
     END { print bytes "|" hits "|" steps }
-    '
+    ')" || { echo "0|0|0"; return 0; }
+    echo "${parsed:-0|0|0}"
 }
 
 # Telemetry tracking — shell path (legacy)
