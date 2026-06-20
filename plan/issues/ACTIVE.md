@@ -1,6 +1,22 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-20T04:51Z
+Last updated: 2026-06-20T05:47Z
+
+## This Cycle (2026-06-20T05:47Z, linux)
+
+- **Meta-orchestration sync**: Began clean on `linux-next` at `7fd83544`, fetched
+  origin, and pushed plan-drain checkpoint `584f2988`.
+- **Worker drain**: Drained the final `future_intentions` item. Expanded
+  `plan/issues/windows-macos-feature-parity-2026-06-12.md` into a structured
+  cross-host parity packet, cleared `plan.yaml.current_state.future_intentions`,
+  and updated `plan/index.yaml` so the parity packet is selectable.
+- **Coordination**: Sibling heads are already integrated:
+  windows-next `a3c8b23d` and osx-next `d829808d` are both ancestors of
+  linux-next `584f2988` with zero drift.
+- **E2E gates**: Skipped — this cycle changed only plan ledgers. GitHub latest
+  release is still `v0.3.260618.2`; no `v0.3.260620.*` tag exists.
+- **Next**: Prioritize the macOS aarch64 Vault published-port probe, then the
+  forge-continuous-enhancement automation decision or NanoClawV2 slice 2.
 
 ## This Cycle (2026-06-20T04:51Z, macos)
 
