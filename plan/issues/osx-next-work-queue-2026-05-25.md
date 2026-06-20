@@ -2,6 +2,22 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
+## 2026-06-20T01:34Z — F4 fully root-caused (5 layers); packets filed + claimed
+
+m8 49d round-3: F1/F2/F3/Quit PASS, F3 login-gated menu shipped (`8f3d87c1`) and
+operator-confirmed. F4 GitHub Login traced to 5 stacked layers via in-guest SSH
+debug — full writeup `plan/issues/macos-github-login-deep-dive-2026-06-18.md`.
+Two packets filed in ACTIVE.md:
+- `enclave/macos-vault-unreachable-via-publish-aarch64` (CRITICAL, owner=linux) —
+  pinged on linux-next queue with priority. THE blocker (in-VM Vault reachable
+  through the published port on aarch64).
+- `macos-tray/github-login-route-to-orchestrated-flow` (owner=macos) — CLAIMED
+  lease `ghlogin-route-orchestrated-20260620T0134Z`, status=blocked on the
+  layer-5 packet. Code (launch_spec → orchestrated `--github-login` + cloud-init
+  `loginctl enable-linger root`) is shaped but intentionally NOT shipped alone
+  (login still dies at Vault; a 60s hang is worse UX than instant-gray). Lands
+  WITH the layer-5 fix.
+
 ## 2026-06-18T21:30Z — 49d results: partial — F2 fixed; F4 has independent root cause
 
 Operator completed the m8 interactive smoke at HEAD `e4ef0db0`.

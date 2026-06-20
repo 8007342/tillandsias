@@ -1,12 +1,94 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-18T23:20Z
+Last updated: 2026-06-20T01:34Z
 
 This file is the first stop for agents inspecting `plan/issues/`. Historical
 issue reports remain in this directory for evidence and auditability, but only
 the items below are immediate work.
 
 ## Immediate
+
+### enclave/macos-vault-unreachable-via-publish-aarch64
+
+- status: ready
+- priority: CRITICAL — blocks the macOS m8 release-acceptance gate (step 49d /
+  F4 GitHub Login) and, downstream, all macOS project/attach features (F5).
+- owner_host: linux (enclave recipe + headless vault bootstrap; aarch64 in-VM)
+- source: `plan/issues/macos-github-login-deep-dive-2026-06-18.md` (layer 5)
+- discovered_by: macOS operator-attended m8 deep-dive 2026-06-18 (in-guest, by
+  SSH into the aarch64 Fedora VM and running `tillandsias-headless
+  --github-login --debug` directly).
+- problem: >
+    The orchestrated in-VM `--github-login` builds + launches `tillandsias-vault`
+    successfully, and Vault is healthy INSIDE the container (logs: "vault is
+    unsealed", "fully configured … approle+kv2+audit enabled"). But the
+    host-side health probe to the published `127.0.0.1:8201` (-> container 8200)
+    TIMES OUT, so `--github-login` aborts with "vault did not become healthy
+    within 60s". From the VM host: plain TCP to `:8201` is OPEN, but
+    `curl -k https://127.0.0.1:8201/v1/sys/health` times out (8s) and
+    `openssl s_client -connect 127.0.0.1:8201` gets no response — i.e. the port
+    publish accepts the SYN but no bytes reach Vault's API backend. Classic
+    podman publish-vs-backend mismatch on aarch64.
+- likely_root_cause: >
+    Vault's API `tcp` listener inside the container likely binds `127.0.0.1:8200`
+    (or otherwise not `0.0.0.0:8200`), so podman's published-port forward (which
+    reaches the container via its netns gateway, not loopback) cannot deliver.
+    Confirm the vault image / run config sets `listener "tcp" { address =
+    "0.0.0.0:8200" }`. NOTE the cluster listener already logs `[::]:8201` inside
+    the container — verify the API listener address specifically.
+- secondary_bug: >
+    The host-side health probe references `--cacert
+    /run/secrets/tillandsias-vault-tls-ca` — the IN-CONTAINER podman-secret mount
+    path, which does NOT exist on the VM host where the probe runs. The host CA
+    is at `/tmp/tillandsias-ca/intermediate.crt`. Even once connectivity is
+    fixed, the probe's CA path is wrong for host-side execution and TLS verify
+    will fail. Fix the probe to use a host-resident CA path.
+- next_action: >
+    (1) In the vault image/recipe, ensure the API listener binds `0.0.0.0:8200`.
+    (2) Fix the host-side health-probe CA path in `vault_bootstrap` to a
+    host-resident CA. (3) Verify in the aarch64 VM that
+    `curl --cacert /tmp/tillandsias-ca/intermediate.crt
+    https://127.0.0.1:8201/v1/sys/health?standbyok=true` returns 200, then that
+    `tillandsias-headless --github-login` proceeds past Vault. Ships to the VM
+    via a release (in-VM headless is fetched from releases/latest).
+- evidence_required:
+  - aarch64 VM host: vault health endpoint returns 200 through the published port
+  - `tillandsias-headless --github-login` advances past the Vault-healthy gate
+- blocks: `macos-tray/github-login-route-to-orchestrated-flow`, macOS m8 (F4/F5)
+- note_to_linux_worker: >
+    Distinct from `github-login/enclave-egress-regression` + `bug/github-login-failure`
+    (those are the Linux-host egress-network fix, already addressed). THIS is the
+    macOS/aarch64 IN-VM Vault-reachability layer surfaced only by the in-guest
+    deep-dive. Please prioritize: it is the sole remaining macOS m8 blocker.
+
+### macos-tray/github-login-route-to-orchestrated-flow
+
+- status: blocked (depends on enclave/macos-vault-unreachable-via-publish-aarch64)
+- owner_host: macos (+ shared host-shell; mirror Windows per parity)
+- source: `plan/issues/macos-github-login-deep-dive-2026-06-18.md` (layers 2-3)
+- depends_on: [enclave/macos-vault-unreachable-via-publish-aarch64]
+- claimed: lease `ghlogin-route-orchestrated-20260620T0134Z`
+  (macos-Tlatoanis-MacBook-Air-vz), claimed 2026-06-20T01:34Z — held pending the
+  layer-5 dependency; do NOT ship the code alone (login still dies at Vault and a
+  60s hang is worse UX than the current instant-gray).
+- problem: >
+    The macOS tray's `launch_spec(GithubLogin)` (host-shell/src/pty/mod.rs:142,161)
+    runs bare `gh auth login` on the bare VM, where `gh` is not installed (only
+    podman is). The correct path is the orchestrated `tillandsias-headless
+    --github-login` (already supported in the deployed v0.3.260618.2 headless).
+- planned_change: >
+    (layer 2) Change `launch_spec(GithubLogin)` argv to
+    `["tillandsias-headless","--github-login"]`. (layer 3) Add `XDG_RUNTIME_DIR`
+    (+ keep `TERM`) to the PtyOpenOpts.env so the in-VM `require_desktop_user_session`
+    guard passes, AND add `loginctl enable-linger root` to the cloud-init
+    (`vm-layer/src/vz.rs`) so `/run/user/0` persists for the service-spawned PTY
+    child (verified: guard fails without XDG_RUNTIME_DIR, passes with
+    `XDG_RUNTIME_DIR=/run/user/0`). Mirror on the Windows tray (shared host-shell
+    parity). Re-run m8 GitHub Login after layer 5 + this land together.
+- evidence_required:
+  - macОS GitHub Login opens a working interactive shell (gh device-code), not gray
+  - cargo test -p tillandsias-host-shell / -p tillandsias-macos-tray green
+  - m8 login → projects (F5) → attach works end-to-end on a fresh provision
 
 ### release/version-tag-sequence-mismatch
 
