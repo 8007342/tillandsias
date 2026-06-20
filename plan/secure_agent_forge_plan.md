@@ -1,6 +1,10 @@
 # Secure Agent Forge: Integration & Development Plan
 
-This plan details the integration of OneCLI and ZeroClaw into a secure, Rust-based, Fedora/Podman local enclave environment. Work is divided into well-defined "Packets" for automatic pickup by Linux host workers.
+This plan details the architectural shift from NanoClaw to ZeroClaw, integrating it alongside OneCLI into a secure, Rust-based, Fedora/Podman local enclave environment. Work is divided into well-defined "Packets" for automatic pickup by Linux host workers.
+
+## Architectural Decision: ZeroClaw vs NanoClaw
+*   **Language & Simplicity:** We strictly prefer Rust. NanoClaw's orchestrator is built in Node.js/TypeScript. By shifting to **ZeroClaw**—a pure, minimalist Rust implementation of the same architecture—we keep the hot path simple, secure, and entirely in Rust.
+*   **Licensing Strategy:** NanoClaw operates under the MIT license, which we avoid. ZeroClaw is dual-licensed (MIT and Apache 2.0), allowing us to consume it strictly under the **Apache 2.0** license. OneCLI is also licensed under Apache 2.0. This eliminates any MIT license concerns from our core dependencies.
 
 ## Meta-Orchestration Directive
 **Skill: `/meta-orchestration` (Reduction Engine)**
@@ -19,7 +23,7 @@ To ensure incredibly fast installation and development updates, the container im
 ## Work Packets
 
 ### Packet 1: Core Container Layering & Podman Migration
-**Objective:** Establish the Fedora 44 container pipeline and migrate to ZeroClaw.
+**Objective:** Establish the Fedora 44 container pipeline and migrate to the ZeroClaw Rust engine.
 *   **Task 1.1:** Create `Containerfile.base` using `fedora:44` and install base OS dependencies and networking tools.
 *   **Task 1.2:** Create `Containerfile.zeroclaw` (FROM the base image) that compiles and installs the ZeroClaw Rust binary.
 *   **Task 1.3:** Create `Containerfile.forge` (FROM the zeroclaw image) to set up the Forge specific environment and dependencies.
