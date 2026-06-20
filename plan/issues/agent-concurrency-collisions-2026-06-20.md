@@ -1,8 +1,11 @@
 # Agent Concurrency & Build Collisions on Shared Host
 
 - branch: linux-next
-- status: ready
+- status: claimed
 - owner_host: linux
+- lease_id: agent-concurrency-e2e-lock-20260620T134055Z
+- agent_id: linux-macuahuitl-codex-20260620T134055Z
+- expires_at: "2026-06-20T17:40:55Z"
 - source: meta-orchestration feedback
 - scope:
   - Investigate OOM or port-collision errors among concurrently running agents (OpenCode, Codex, Claude, Gemini).
@@ -19,3 +22,13 @@
     host: "linux"
     note: >
       Filing this optimization issue as mandated by the new meta-orchestration exit contract. Simultaneous agent execution on the shared host is a primary velocity bottleneck. We need a robust local lock to space out the agents.
+  - type: claim
+    ts: "2026-06-20T13:40:55Z"
+    agent_id: "linux-macuahuitl-codex-20260620T134055Z"
+    host: "linux"
+    lease_id: "agent-concurrency-e2e-lock-20260620T134055Z"
+    expires_at: "2026-06-20T17:40:55Z"
+    note: >
+      Claiming a narrow Linux slice: add a reusable smoke/e2e lock helper,
+      wire destructive Linux smoke scripts through it, and record targeted
+      validation evidence.
