@@ -1,6 +1,15 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-20T13:56Z
+LastExecutionTime: 2026-06-20T17:13Z
+
+## This Loop (2026-06-20T17:13Z, linux)
+
+- **Cycle type**: meta-orchestration worker drain on mutable Linux.
+- **Startup**: clean mutable-Linux host on `linux-next`; fetched origin, fast-forwarded to `origin/linux-next@267ddcf5`, then pushed plan claim commit `68b9ed99`.
+- **Worker drain**: completed the remaining `agent-concurrency-collisions-2026-06-20` slice. Added `scripts/with-tillandsias-process-cleanup.sh`, wired Linux build/install and init E2E steps through it, and added gate-1 assertions that the installed launcher path and version match the post-build `VERSION` file.
+- **Verification**: shell syntax checks PASS; wrapper no-leak smoke PASS; deliberate leaked fake `tillandsias` process was terminated and returned expected exit 70; `git diff --check` PASS; `./build.sh --check` PASS with the known non-fatal dev-proxy warning. Existing user tray process `/home/tlatoani/.local/bin/tillandsias --tray` remained running and untouched.
+- **Ledger hygiene**: the 16:53Z smoke findings completion records the welcome-banner `INDEX.md` signal restored and all local-build E2E gates passing; ACTIVE now marks that blocker done.
+- **Next**: macOS vault aarch64 published-port reachability remains the critical cross-host blocker. `forge-build-telemetry-2026-06-20` remains actively leased by `linux-big-pickle-20260620T170000Z` until 21:00Z.
 
 ## This Loop (2026-06-20T13:56Z, linux)
 
@@ -102,8 +111,8 @@ LastExecutionTime: 2026-06-20T13:56Z
 
 ## Progress Since Last Loop
 
-- **agent-concurrency-collisions-2026-06-20**: first slice completed; smoke gates now use a shared lock helper with durable wait/acquire/release logs.
-- **local-build E2E**: rerun under the new lock stopped at gate 1 with `local-smoke/onboarding-cold-start-discovery-cheatsheet-signal`; gates 2 and 3 were not run.
+- **agent-concurrency-collisions-2026-06-20**: COMPLETED; smoke gates now use a shared lock helper, process cleanup around host-side launcher runs, and post-install path/version freshness assertions.
+- **local-build E2E**: 16:53Z smoke findings completion records the welcome-banner signal restored and all gates passing; no active Linux local-build blocker remains from the 13:49Z rerun.
 - **policy/no-python-litmus-drift**: COMPLETED; no active litmus YAML command
   fields shell out to Python, and the no-Python checker now scans litmus YAML.
 - **forge-diagnostics/e2e-piggyback-orchestration**: COMPLETED no-Python
@@ -182,7 +191,6 @@ LastExecutionTime: 2026-06-20T13:56Z
 
 ## Blockers
 
-- **BLOCKER (linux)**: `local-smoke/onboarding-cold-start-discovery-cheatsheet-signal` blocks the local-build E2E gate before destructive reset because the welcome banner no longer includes the `INDEX.md` cheatsheet discovery signal required by `litmus:onboarding-cold-start-discovery`.
 - **CRITICAL (linux -> macOS)**:
   `enclave/macos-vault-unreachable-via-publish-aarch64`. Current Linux tree
   already has Vault API listener `0.0.0.0:8200` and host CA loading from

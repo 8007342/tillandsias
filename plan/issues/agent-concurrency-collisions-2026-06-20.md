@@ -1,7 +1,7 @@
 # Agent Concurrency & Build Collisions on Shared Host
 
 - branch: linux-next
-- status: claimed
+- status: done
 - owner_host: linux
 - source: meta-orchestration feedback
 - scope:
@@ -10,15 +10,14 @@
   - Enforce explicit termination of `tillandsias` background test processes after tests complete.
   - Integrate autoincremental build numbers for local builds to detect and discard stale binaries instantly.
 - current_progress: >
-    Slice 1 completed: `scripts/with-smoke-lock.sh` now provides a reusable
-    smoke/e2e lock with `flock` plus `mkdir` fallback, Linux build-install
-    e2e step scripts use the shared `build-install-smoke-e2e` lock, and the
-    local-build/curl-install e2e skill runbooks route Linux gates through the
-    same helper.
+    Completed. Slice 1 added `scripts/with-smoke-lock.sh` and routed Linux
+    smoke/e2e gates through the shared `build-install-smoke-e2e` lock. Slice 2
+    added host-side leaked-process cleanup around Linux build/install and init
+    smoke steps, plus installed launcher path/version freshness assertions after
+    the autoincremental build-number bump.
 - next_action: >
-    Analyze recent `smoke*.log` and `diag*.log` artifacts for explicit
-    process-leak, stale-binary, or port-collision failures; then implement the
-    remaining process-termination and autoincremental build-number guardrails.
+    None for this packet. Future collision findings should be filed as narrower
+    packets with the failing smoke log and shared resource named explicitly.
 - blocker: none
 - events:
   - type: finding
@@ -71,3 +70,24 @@
       Claiming a narrow Linux slice: analyze recent smoke/diagnostic artifacts
       for process leaks, stale installed binaries, or port collisions; then add
       focused process-cleanup and stale-binary guardrails with targeted evidence.
+  - type: completed
+    ts: "2026-06-20T17:12:54Z"
+    agent_id: "linux-macuahuitl-codex-20260620T170743Z"
+    host: "linux"
+    lease_id: "agent-concurrency-process-stale-20260620T170743Z"
+    implementation_commit: "this commit"
+    note: >
+      Added `scripts/with-tillandsias-process-cleanup.sh`, which snapshots
+      existing user-owned `tillandsias` PIDs, runs the smoke command, terminates
+      only new leaked launcher PIDs, and fails an otherwise successful command
+      if it leaked a host process. Wired it into Linux build/install and init
+      e2e steps. Added post-install assertions that `command -v tillandsias`
+      resolves to `$HOME/.local/bin/tillandsias` and that `tillandsias
+      --version` matches the post-build `VERSION` file.
+    evidence:
+      - "bash -n scripts/with-tillandsias-process-cleanup.sh scripts/e2e-step1-linux.sh scripts/e2e-step2-linux.sh scripts/e2e-step3-linux.sh scripts/with-smoke-lock.sh — PASS"
+      - "scripts/with-tillandsias-process-cleanup.sh -- true — PASS/no leak"
+      - "deliberately leaked fake `tillandsias` process — wrapper terminated it and returned expected exit 70"
+      - "pgrep after leak smoke shows only pre-existing user tray process `/home/tlatoani/.local/bin/tillandsias --tray`"
+      - "git diff --check — PASS"
+      - "./build.sh --check — PASS with known non-fatal dev-proxy warning"

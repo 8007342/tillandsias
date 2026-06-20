@@ -1,6 +1,14 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-20T13:56Z
+Last updated: 2026-06-20T17:13Z
+
+## This Cycle (2026-06-20T17:13Z, linux)
+
+- **Meta-orchestration sync**: Started clean on mutable-Linux `linux-next`, fetched origin, fast-forwarded to `origin/linux-next@267ddcf5`, then pushed plan claim commit `68b9ed99`.
+- **Worker drain**: Completed the remaining `agent-concurrency-collisions-2026-06-20` slice. Linux build/install and init E2E steps now run through a process-cleanup wrapper that terminates only newly leaked host-side `tillandsias` launcher PIDs and fails a successful smoke command that leaked a process.
+- **Stale-binary guardrail**: Gate 1 now verifies `command -v tillandsias` resolves to `$HOME/.local/bin/tillandsias` and `tillandsias --version` matches the post-build `VERSION` file after the local autoincremental build-number bump.
+- **Verification**: shell syntax checks, no-leak wrapper smoke, deliberate leaked fake `tillandsias` termination with expected exit 70, `git diff --check`, and `./build.sh --check` passed. The existing user tray process (`tillandsias --tray`) remained untouched.
+- **Ledger hygiene**: `local-smoke/onboarding-cold-start-discovery-cheatsheet-signal` is now reflected as done from the 16:53Z smoke findings completion event; the macOS aarch64 Vault published-port blocker remains the primary immediate item.
 
 ## This Cycle (2026-06-20T13:56Z, linux)
 
@@ -125,7 +133,7 @@ the items below are immediate work.
 
 ### local-smoke/onboarding-cold-start-discovery-cheatsheet-signal
 
-- status: ready
+- status: done
 - owner_host: linux
 - source: `plan/issues/build-install-smoke-e2e-findings-2026-06-20.md`
 - severity: high - blocks the local-build E2E gate before destructive reset.
@@ -142,10 +150,9 @@ the items below are immediate work.
   - `target/build-install-smoke-e2e/20260620T134849Z/01-build-install.log:2219`: `expected=cheatsheet discovery signal present`
   - `target/build-install-smoke-e2e/20260620T134849Z/00-smoke-lock.log`: lock acquired at `2026-06-20T13:49:31Z`, released at `2026-06-20T13:56:24Z` with `exit=1`.
 - next_action: >
-    Restore the `INDEX.md` cheatsheet discovery text in
-    `images/default/forge-welcome.sh`, verify the three required literals with
-    grep, then rerun `litmus:onboarding-cold-start-discovery` or full
-    local-build E2E.
+    None. The smoke findings ledger records a 2026-06-20T16:53Z completion
+    event restoring the welcome banner `Cheatsheets`/`TILLANDSIAS_CHEATSHEETS`/
+    `INDEX.md` signal and reporting all local-build E2E gates passing.
 - blocker: none
 
 ### enclave/macos-vault-unreachable-via-publish-aarch64
