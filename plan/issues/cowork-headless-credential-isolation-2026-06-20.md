@@ -196,7 +196,7 @@ committing unpushable work.
     feedback channel. Include both reference links. Record the submission
     reference as a `completed` event below.
 - id: runtime-guard
-  status: ready
+  status: completed
   depends_on: []
   owner_files:
     - skills/meta-orchestration/SKILL.md
@@ -217,3 +217,20 @@ committing unpushable work.
     (3de6de90..4f5fd488). Filed this packet for a Claude CLI worker to submit
     stellar, accurate feedback to Anthropic with the tillandsias reference
     implementation and reporter references attached.
+
+- type: completed
+  ts: "2026-06-20T19:15:00Z"
+  agent_id: "linux-macuahuitl-opus-cowork-20260620T1908Z"
+  host: "linux_mutable (Cowork)"
+  note: >
+    Completed the runtime-guard task. Added the start-of-cycle Credential
+    Channel Guard section to skills/meta-orchestration/SKILL.md (and a pointer in
+    Start Of Cycle step 2): after git fetch, the loop must confirm a usable
+    credential channel — .git/.gh-credentials non-empty, GH_TOKEN/GITHUB_TOKEN
+    set, or gh auth status green — before any committable work, else file a
+    no-credential-channel blocker and exit loud. Notes explicitly that anonymous
+    read success is not evidence of push capability. Dogfooded this cycle: the
+    repo-local credential store from the 18:55Z fix is still present, the guard
+    passed, and the push path is healthy. The file-feedback task remains ready —
+    it is a write-to-Anthropic submission for a Claude CLI /bug worker and is out
+    of scope for this unattended meta-orchestration loop.

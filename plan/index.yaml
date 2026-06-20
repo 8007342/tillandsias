@@ -4367,7 +4367,7 @@ plan_index:
             reporter LinkedIn). Record the submission reference (issue URL or
             /bug acknowledgement id) as a `completed` event in the issue file.
         - id: cowork-headless-credential-isolation/runtime-guard
-          status: ready
+          status: completed
           depends_on: []
           owned_files:
             - skills/meta-orchestration/SKILL.md
@@ -4386,3 +4386,17 @@ plan_index:
             scheduled-task runtime. Applied repo-local credential-store fix and
             drained the 17-commit backlog (3de6de90..4f5fd488). Packet left
             ready for a Claude CLI worker to submit feedback autonomously.
+        - type: completed
+          ts: "2026-06-20T19:15:00Z"
+          agent_id: "linux-macuahuitl-opus-cowork-20260620T1908Z"
+          host: linux_mutable
+          note: >
+            Drained subtask runtime-guard. Added the start-of-cycle Credential
+            Channel Guard to skills/meta-orchestration/SKILL.md: after git fetch
+            and before any committable work, require one of .git/.gh-credentials,
+            GH_TOKEN/GITHUB_TOKEN, or a reachable keyring; otherwise file a
+            no-credential-channel blocker and exit loud. Dogfooded this cycle —
+            .git/.gh-credentials present and credential.helper configured, so the
+            guard passed and push proceeded. Node stays `ready`: the file-feedback
+            subtask is a write-to-Anthropic action left for a Claude CLI /bug
+            worker and was not taken by this unattended loop.

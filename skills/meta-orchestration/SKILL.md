@@ -54,13 +54,40 @@ All `plan/`, `methodology/`, `openspec/`, and `cheatsheets/` writes go to
 ## Start Of Cycle
 
 1. Record UTC time, host kind, current branch, worktree path, and sibling heads.
-2. `git fetch origin --prune`.
+2. `git fetch origin --prune`, then run the Credential Channel Guard below
+   before any committable work.
 3. If the worktree is dirty at startup, classify it:
    - tracked changes: you have a one-off chance to commit a checkpoint or clean up before doing new work. Start clean.
    - untracked generated artifacts: discard them if not covered by `.gitignore` (update `.gitignore` if necessary). Ensure you start with a clean state.
    - unknown user work: do not overwrite it; record a blocker.
 4. Update the active local branch from remote with fast-forward or an explicit
    merge from `origin/linux-next` into the platform branch when appropriate.
+
+## Credential Channel Guard
+
+Run immediately after `git fetch` and before any worker drain or committable
+work. The Cowork scheduled-task runtime can inherit dangling session sockets
+(`DBUS_SESSION_BUS_ADDRESS`, `SSH_AUTH_SOCK` pointing into a non-existent
+`/run/user/<uid>`) so anonymous reads succeed while every `git push` silently
+fails for lack of a credential. See
+`plan/issues/cowork-headless-credential-isolation-2026-06-20.md`.
+
+A usable credential channel is present when ANY of these holds:
+
+- `.git/.gh-credentials` exists and is non-empty (repo-local store helper), or
+- `GH_TOKEN` or `GITHUB_TOKEN` is set in the environment, or
+- `gh auth status` succeeds (reachable, unlocked keyring).
+
+If none holds, do NOT proceed into worker drain or any committable work. Instead
+fail loud: file or update a blocker in `plan/issues/` recording
+`blocked: no-credential-channel`, the owner (operator), and the smallest next
+action (re-seed `.git/.gh-credentials` via the gh token, or inject `GH_TOKEN`
+into the task environment), then stop. Accreting local-only commits that cannot
+be pushed violates the Non-Negotiable Exit Contract and is the precise
+velocity-killer this guard prevents.
+
+Reads (`git fetch`/`git ls-remote`) succeeding is NOT evidence of a credential
+channel — public-repo reads are anonymous. Verify write capability explicitly.
 
 ## Worker Drain
 

@@ -1,6 +1,30 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-20T19:05Z
+Last updated: 2026-06-20T19:15Z
+
+## This Cycle (2026-06-20T19:15Z, linux — Cowork meta-orch)
+
+- **Startup recovery**: Entered with a dirty worktree (unpushed `9c8f3f9a` + a
+  staged concurrency note). A concurrent sibling agent had already committed
+  `b5484c59` and pushed; fetch synced HEAD clean to `origin/linux-next@b5484c59`,
+  not ahead. No data loss.
+- **Worker drain**: Drained the `runtime-guard` subtask of node
+  `cowork-headless-credential-isolation` (order 59). Added a **Credential Channel
+  Guard** to `skills/meta-orchestration/SKILL.md`: after `git fetch` and before
+  any committable work, require one of `.git/.gh-credentials`,
+  `GH_TOKEN`/`GITHUB_TOKEN`, or a reachable keyring; otherwise file a
+  `no-credential-channel` blocker and exit loud. Closes the silent-push-failure
+  velocity-killer that stranded 17 commits earlier today. Dogfooded — guard
+  passed this cycle. Node stays `ready`: `file-feedback` is a write-to-Anthropic
+  action reserved for a Claude CLI `/bug` worker, not taken by this loop.
+- **Coordinator check**: `origin/windows-next` and `origin/osx-next` both
+  ancestors of `linux-next` HEAD — no sibling merge, no release (no code delta).
+- **E2E gates**: Skipped — no podman user session in Cowork sandbox (no
+  `/run/user`). No runtime delta since v0.3.260620.7.
+- **Next**: (1) `file-feedback` submission via a Claude CLI `/bug`-capable worker.
+  (2) aarch64 macOS VM pasta/published-port probe for Vault reachability (critical
+  cross-host blocker, needs VM access). (3) Local-build e2e on a host with a
+  podman user session.
 
 ## This Cycle (2026-06-20T19:05Z, linux — Cowork meta-orch)
 
