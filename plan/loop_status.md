@@ -1,6 +1,19 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-20T07:59Z
+LastExecutionTime: 2026-06-20T09:00Z
+
+## This Loop (2026-06-20T09:00Z, linux)
+
+- **Cycle type**: meta-orchestration E2E gate on mutable Linux.
+- **Startup**: clean mutable-Linux host on `linux-next`; fetched origin and confirmed local branch was aligned with `origin/linux-next@36980e42`.
+- **Sibling heads after startup fetch**:
+  - `main`: `6dfafdf1`.
+  - `linux-next`: `36980e42`.
+  - `windows-next`: `a3c8b23d`.
+  - `osx-next`: `d829808d`.
+- **E2E gates**: Ran local-build E2E via `/build-install-and-smoke-test-e2e`. Build and install succeeded (`build_install_exit=0`), and destructive Podman reset succeeded (`reset_exit=0`). However, the re-provisioning step (`tillandsias --init --debug`) failed (`init_exit=1`) because `wasmtime` is missing from the minimal-44 dnf repositories.
+- **New findings**: Filed `local-smoke/wasmtime-dnf-migration-failure` in `plan/issues/build-install-smoke-e2e-findings-2026-06-20.md`.
+- **Blockers**: Added `local-smoke/wasmtime-dnf-migration-failure` as an active blocker for the Linux E2E gate.
 
 ## This Loop (2026-06-20T07:49Z, linux)
 
@@ -151,6 +164,7 @@ LastExecutionTime: 2026-06-20T07:59Z
 
 ## Blockers
 
+- **BLOCKER (linux)**: `local-smoke/wasmtime-dnf-migration-failure` blocks the E2E initialization gate on mutable Linux due to missing `wasmtime` package in Fedora minimal 44 repositories.
 - **CRITICAL (linux -> macOS)**:
   `enclave/macos-vault-unreachable-via-publish-aarch64`. Current Linux tree
   already has Vault API listener `0.0.0.0:8200` and host CA loading from

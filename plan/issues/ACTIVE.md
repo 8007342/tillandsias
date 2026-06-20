@@ -1,6 +1,14 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-20T07:59Z
+Last updated: 2026-06-20T09:00Z
+
+## This Cycle (2026-06-20T09:00Z, linux)
+
+- **Meta-orchestration sync**: Started clean on mutable-Linux `linux-next`, fetched origin, confirmed local branch was aligned with `origin/linux-next`.
+- **E2E gates**: Ran local-build E2E via `/build-install-and-smoke-test-e2e`. The build/install and destructive reset gates succeeded, but the init gate failed with `No match for argument: wasmtime`.
+- **New finding**: Filed `local-smoke/wasmtime-dnf-migration-failure` in `plan/issues/build-install-smoke-e2e-findings-2026-06-20.md` to track the failure.
+- **Coordination**: Sibling heads are ancestors of `linux-next`.
+- **Next**: Revert wasmtime migration to DNF or fix package availability, resolve macOS vault aarch64 blocker.
 
 ## This Cycle (2026-06-20T07:49Z, linux)
 
@@ -182,6 +190,21 @@ the items below are immediate work.
   - macОS GitHub Login opens a working interactive shell (gh device-code), not gray
   - cargo test -p tillandsias-host-shell / -p tillandsias-macos-tray green
   - m8 login → projects (F5) → attach works end-to-end on a fresh provision
+
+### local-smoke/wasmtime-dnf-migration-failure
+
+- status: ready
+- owner_host: linux
+- source: `plan/issues/build-install-smoke-e2e-findings-2026-06-20.md`
+- severity: high — blocks local-build E2E and therefore release confidence for integrated `linux-next`
+- next_action: Revert the wasmtime migration to DNF or identify a working repository providing wasmtime.
+- blocker: blocks local-build E2E gate 3 (re-provision/init)
+- discovered_evidence: >
+    Local-build E2E log `target/build-install-smoke-e2e/20260620T084136Z/03-init.log` fails with `No match for argument: wasmtime`.
+- evidence_required:
+  - `tillandsias --init --debug` completes successfully on a pristine store.
+  - `podman run --rm localhost/tillandsias-forge-base:latest wasmtime --version` returns a valid version.
+  - E2E gate 3 passes.
 
 ### local-smoke/linux-musl-tray-binary-name-collision
 
