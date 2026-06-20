@@ -42,6 +42,18 @@ Last updated: 2026-06-20T19:24Z
   ancestors of `linux-next` HEAD — no sibling merge, no release (no code delta).
 - **E2E gates**: Skipped — no podman user session in Cowork sandbox (no
   `/run/user`). No runtime delta since v0.3.260620.7.
+- **Reduction engine**: Encoded the capture → reduce → promote lifecycle in
+  `skills/meta-orchestration/SKILL.md` (new **Reduction Engine** section + a
+  Finalization capture-check + a rising-bar scan policy), per the user's
+  "Monotonic Reduction of Uncertainty Under Verifiable Constraints" framing.
+  Filed `plan/issues/meta-orch-enhancement-opportunities-2026-06-20.md` with four
+  observed opportunities and reduced each to a `ready` packet:
+  order 60 `e2e-eligibility-probe` (opt), 61 `credential-channel-check` (enh —
+  makes the 19:15Z prose guard verifiable), 62 `ledger-edit-claim-lease` (opt),
+  63 `cowork-nonpython-ledger-validation` (research). None implemented here:
+  1/2/4 need a build-capable host; shaping them into verifiable packets is the
+  reduction step for this sandbox. YAML validated with `ruby` (non-Python,
+  dogfooding order 63).
 - **Next**: (1) `file-feedback` submission via a Claude CLI `/bug`-capable worker.
   (2) aarch64 macOS VM pasta/published-port probe for Vault reachability (critical
   cross-host blocker, needs VM access). (3) Local-build e2e on a host with a

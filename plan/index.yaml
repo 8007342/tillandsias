@@ -4414,3 +4414,149 @@ plan_index:
             included. /bug was not used (interactive-only command, not a callable
             tool); the GitHub issue is the verifiable channel named in the task.
             Both subtasks now complete — node closed to status: done.
+
+    - id: e2e-eligibility-probe
+      order: 60
+      title: Host e2e-eligibility probe (stop re-deriving the podman-session skip)
+      status: ready
+      kind: optimization
+      deliverable: plan/issues/meta-orch-enhancement-opportunities-2026-06-20.md
+      depends_on: []
+      pickup_role: "Build-capable host (Rust toolchain) for the policy-subcommand path"
+      outcome: >
+        The meta-orchestration E2E Gates consult a structured host-eligibility
+        verdict (eligible | skip:<reason>) instead of every cycle re-deriving
+        "no /run/user => no podman user session => skip" in prose. Verdict is
+        recorded once per host run.
+      tasks:
+        - id: e2e-eligibility-probe/implement
+          status: ready
+          depends_on: []
+          owned_files:
+            - scripts/e2e-preflight.sh
+          checkpoint_required: true
+          handoff_note: >
+            Add a podman-user-session capability probe (extend
+            scripts/e2e-preflight.sh, or add a `tillandsias-policy e2e-eligibility`
+            subcommand dispatched by a thin script per the repo's
+            shell-dispatches-Rust convention). Emit `eligible` or `skip:<reason>`.
+            Wire the skill's E2E Gates to consult it. Verifiable closure: probe
+            returns the correct verdict on an eligible host AND in the Cowork
+            sandbox (no /run/user); bind a litmus test.
+      events:
+        - type: finding
+          ts: "2026-06-20T19:15:00Z"
+          agent_id: "linux-macuahuitl-opus-cowork-20260620T1908Z"
+          host: linux_mutable
+          note: >
+            Reduced from meta-orch-enhancement-opportunities-2026-06-20 candidate 1.
+            Cowork cycles 09:00Z/17:45Z/18:35Z/19:05Z/19:15Z all re-derived the
+            same e2e-skip verdict; e2e-preflight.sh has no session probe.
+
+    - id: credential-channel-check
+      order: 61
+      title: Make the credential channel guard a verifiable check, not prose
+      status: ready
+      kind: enhancement
+      deliverable: plan/issues/meta-orch-enhancement-opportunities-2026-06-20.md
+      depends_on: []
+      pickup_role: "Build-capable host (Rust toolchain)"
+      outcome: >
+        The start-of-cycle Credential Channel Guard is enforced by an executable
+        check returning a pass/fail exit code (not advisory prose), invoked by
+        the loop and bindable by CI, so a missing credential channel fails loud
+        on its own.
+      tasks:
+        - id: credential-channel-check/implement
+          status: ready
+          depends_on: []
+          owned_files:
+            - skills/meta-orchestration/SKILL.md
+          checkpoint_required: true
+          handoff_note: >
+            Implement `tillandsias-policy credential-channel` (dispatched by a thin
+            scripts/check-credential-channel.sh): exit 0 when .git/.gh-credentials
+            is non-empty OR GH_TOKEN/GITHUB_TOKEN is set OR `gh auth status` is
+            green; non-zero otherwise. Replace the prose check in the skill's
+            Credential Channel Guard with this invocation. Verifiable closure:
+            exits non-zero under a scrubbed-env fixture and zero with a seeded
+            credential store; bind a litmus test.
+      events:
+        - type: finding
+          ts: "2026-06-20T19:15:00Z"
+          agent_id: "linux-macuahuitl-opus-cowork-20260620T1908Z"
+          host: linux_mutable
+          note: >
+            Reduced from meta-orch-enhancement-opportunities-2026-06-20 candidate 2.
+            The guard added at 19:15Z is advisory prose; philosophy.yaml requires
+            falsifiable verification claims.
+
+    - id: ledger-edit-claim-lease
+      order: 62
+      title: Claim/lease marker for plan/index.yaml ledger-hygiene edits
+      status: ready
+      kind: optimization
+      deliverable: plan/issues/agent-concurrency-collisions-2026-06-20.md
+      depends_on: []
+      pickup_role: "Any host"
+      outcome: >
+        Concurrent cycles detect an in-flight node closure before re-deriving it,
+        eliminating duplicated ledger-hygiene work while preserving idempotent,
+        CRDT-friendly merges.
+      tasks:
+        - id: ledger-edit-claim-lease/design-and-implement
+          status: ready
+          depends_on: []
+          owned_files:
+            - plan/issues/agent-concurrency-collisions-2026-06-20.md
+          checkpoint_required: true
+          handoff_note: >
+            Extend the shared-lock discipline (today only e2e .lock) to a
+            lightweight in-flight node-closure claim for plan/index.yaml hygiene
+            edits, respecting stable-ID + idempotent-merge preconditions in
+            methodology/between-commits-work-discipline.yaml. Verifiable closure:
+            two concurrent simulated cycles claiming the same node produce exactly
+            one closure edit; bind a concurrency litmus.
+      events:
+        - type: finding
+          ts: "2026-06-20T19:15:00Z"
+          agent_id: "linux-macuahuitl-opus-cowork-20260620T1908Z"
+          host: linux_mutable
+          note: >
+            Reduced from meta-orch-enhancement-opportunities-2026-06-20 candidate 3
+            and the agent-concurrency-collisions-2026-06-20 mitigation idea.
+
+    - id: cowork-nonpython-ledger-validation
+      order: 63
+      title: Approved non-Python YAML/ledger validator for the Cowork runtime
+      status: ready
+      kind: research
+      deliverable: plan/issues/meta-orch-enhancement-opportunities-2026-06-20.md
+      depends_on: []
+      pickup_role: "Any host"
+      outcome: >
+        The exit contract's "validate touched YAML" step names a concrete,
+        non-Python validator that runs green in the Cowork sandbox, so cycles
+        never reach for the policy-forbidden python3 fallback.
+      tasks:
+        - id: cowork-nonpython-ledger-validation/decide-and-document
+          status: ready
+          depends_on: []
+          owned_files:
+            - skills/meta-orchestration/SKILL.md
+          checkpoint_required: true
+          handoff_note: >
+            Decide the approved path (build + cache `tillandsias-policy
+            validate-yaml`, or a sanctioned node/ruby one-liner as
+            interactive-only fallback) and name it in the skill's Finalization
+            step. Verifiable closure: named command runs green in Cowork and the
+            no-python checker stays clean.
+      events:
+        - type: finding
+          ts: "2026-06-20T19:15:00Z"
+          agent_id: "linux-macuahuitl-opus-cowork-20260620T1908Z"
+          host: linux_mutable
+          note: >
+            Reduced from meta-orch-enhancement-opportunities-2026-06-20 candidate 4.
+            tillandsias-policy not on PATH in Cowork; python forbidden for committed
+            automation; yq absent, ruby/node present.

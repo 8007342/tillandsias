@@ -89,6 +89,60 @@ velocity-killer this guard prevents.
 Reads (`git fetch`/`git ls-remote`) succeeding is NOT evidence of a credential
 channel — public-repo reads are anonymous. Verify write capability explicitly.
 
+## Reduction Engine
+
+The loop is a reduction engine, not just a worker. Its job is the project's core
+principle — **Monotonic Reduction of Uncertainty Under Verifiable Constraints**
+(`methodology/philosophy.yaml`). Every cycle must move the system toward a
+verifiable implementation of the spec by *reducing* open uncertainty, and must
+never let an observed problem evaporate.
+
+### Capture: nothing gets lost
+
+Any time a worker notices "welp, this isn't great" — an inefficiency, a rough
+edge, a fragile assumption, an advisory-only guard, a repeated manual step, a
+log warning, a deprecation notice — it MUST be filed before the cycle exits.
+This is mandatory, not optional (`methodology.yaml` →
+`cooperative_work_discipline`; Non-Negotiable Exit Contract → "Explicitly log
+things that make you slower"). File it as a dated issue in `plan/issues/`,
+classified as one of: `research/`, `exploration/`, `enhancement/`, or
+`optimization/`. An unfiled finding is a lost finding and a contract violation.
+
+### Reduce: smaller, simpler, verifiable packets
+
+Filing is only the intake half. Each recurring cycle then *reduces* open
+findings:
+
+1. Pick the highest-value open finding that fits this host's capability.
+2. Split it into the smallest packet that closes a slice of it under a
+   **verifiable constraint** — a litmus test, an executable check returning a
+   pass/fail exit code, or a parser/validator — never prose intent alone. A
+   guard only an attentive agent honors is a suggestion, not a constraint;
+   reduce it to something that fails loud on its own.
+3. Promote that packet into `plan/index.yaml` as a `ready` node with a named
+   verifiable closure, then drain it when a capable host can produce evidence.
+4. When the verifiable check passes, the slice is retired; re-derive the
+   remaining residual and repeat.
+
+Reduction is monotonic: each step must lower residual uncertainty or preserve it
+while increasing verification level (`convergence.yaml` → `drift_control`). A
+"reduction" that adds ambiguity or removes a validated invariant is drift and
+must be rejected. Shaping a finding into a well-formed `ready` packet *is* a
+valid reduction step when the current host cannot yet implement it.
+
+### Raise the bar as findings fall
+
+As terminal findings become rarer, the engine must look harder, not idle. When a
+cycle finds nothing newly broken at the current scan depth, escalate the scan:
+build/test/runtime logs for warnings, non-fatal errors, deprecation notices,
+flaky-test signals, slow steps, and stale caches — and file what surfaces. The
+bar rises monotonically so Tillandsias keeps self-improving autonomously instead
+of declaring premature convergence. Premature "all green" with an un-raised bar
+is itself an optimization finding worth filing.
+
+See `plan/issues/meta-orch-enhancement-opportunities-2026-06-20.md` for a worked
+example of capture → reduce → promote.
+
 ## Worker Drain
 
 When choosing the builder role, run `/advance-work-from-plan` repeatedly in a `./plan` friendly way in fresh cycles until one of these is true:
@@ -144,9 +198,16 @@ Only `linux_mutable` performs global coordination:
 
 Before exit:
 
-1. Refresh `plan/issues/ACTIVE.md` and `plan/loop_status.md` if this cycle
+1. Reduction-engine capture check: confirm every "this isn't great" observation
+   from this cycle is filed in `plan/issues/` (classified `research/`,
+   `exploration/`, `enhancement/`, or `optimization/`) and, where reduced,
+   promoted to a `plan/index.yaml` packet. An unfiled finding blocks exit.
+2. Refresh `plan/issues/ACTIVE.md` and `plan/loop_status.md` if this cycle
    changed active work, blockers, tested release, or host assignments.
-2. Validate touched YAML with a parser.
-3. Commit targeted files only.
-4. Push the relevant branch.
-5. Confirm `git status --short --branch` is clean and not ahead of upstream.
+3. Validate touched YAML with a parser. Use the approved non-Python validator
+   for the host (`tillandsias-policy validate-yaml` where built); Python is not
+   permitted for committed automation (see
+   `plan/issues/meta-orch-enhancement-opportunities-2026-06-20.md` order 63).
+4. Commit targeted files only.
+5. Push the relevant branch.
+6. Confirm `git status --short --branch` is clean and not ahead of upstream.
