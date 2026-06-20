@@ -41,5 +41,5 @@ xychart-beta
 | Bytes Downloaded | 0 MB |
 | Cache Hits (steps) |  |
 
-*Metrics are extracted from `/tmp/tmp.kGzJuxKcPv/home/.cache/tillandsias/telemetry/build-metrics.jsonl` via semantic distillation. \
+*Metrics are extracted from the build metrics input via semantic distillation. \
 New in this version: download-size tracking, cache-hit tracking, and canonical ImageBuildEvent sink (`$XDG_STATE_HOME/tillandsias/image-build-events.jsonl`).*

@@ -71,6 +71,6 @@ $MERMAID_BYTES
 | Bytes Downloaded | $(echo "$BYTES_DL_MB" | tail -1) MB |
 | Cache Hits (steps) | $(echo "$CACHE_HITS" | tail -1) |
 
-*Metrics are extracted from \`$METRICS_FILE\` via semantic distillation. \\
+*Metrics are extracted from the build metrics input via semantic distillation. \\
 New in this version: download-size tracking, cache-hit tracking, and canonical ImageBuildEvent sink (\`\$XDG_STATE_HOME/tillandsias/image-build-events.jsonl\`).*
 EOF
