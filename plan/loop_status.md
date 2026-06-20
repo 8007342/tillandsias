@@ -1,6 +1,25 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-20T18:35Z
+LastExecutionTime: 2026-06-20T19:05Z
+
+## This Loop (2026-06-20T19:05Z, linux)
+
+- **Cycle type**: meta-orchestration ledger-hygiene slice on mutable Linux (Cowork).
+- **Startup**: Branch `linux-next`, clean worktree. `git fetch origin --prune` (HTTPS)
+  succeeded; stale "ahead 18" resolved to in-sync with `origin/linux-next@4f5fd488`.
+  Earlier SSH/HTTPS push blocker is cleared.
+- **Coordinator check**: windows-next=a3c8b23d, osx-next=d829808d both ancestors of
+  linux-next HEAD. No sibling merge needed.
+- **Worker drain**: No runnable plan work. Closed stale step-58 `future-intentions-drain`
+  (parent + item-7 parity drain subtask) in `plan/index.yaml` to match the closed
+  step file (future_intentions=[]). Parity implementation remains under
+  `macos-in-vm-enclave-provisioning` and the aarch64 vault blocker.
+- **Ledger bug fixed**: removed duplicate `note:` key in step-65 github-login-egress
+  event (silent data loss); moved discovery note to the `discovered` event.
+  `tillandsias-policy validate-yaml plan/index.yaml` → `ok`.
+- **E2E gates**: Skipped — no podman user session in Cowork sandbox (no `/run/user`).
+  No runtime delta since v0.3.260620.7.
+- **Push state**: HTTPS push attempted at finalization (see below).
 
 ## This Loop (2026-06-20T18:35Z, linux)
 

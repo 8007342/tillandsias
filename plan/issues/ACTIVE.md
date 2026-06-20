@@ -1,6 +1,31 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-20T18:35Z
+Last updated: 2026-06-20T19:05Z
+
+## This Cycle (2026-06-20T19:05Z, linux — Cowork meta-orch)
+
+- **Meta-orchestration sync**: Startup on mutable Linux (Cowork) on `linux-next`.
+  `git fetch origin --prune` over HTTPS succeeded; the stale "ahead 18" tracking
+  resolved to in-sync with `origin/linux-next@4f5fd488` (the earlier SSH/HTTPS
+  push blocker is cleared — prior cycles' commits are on origin). Worktree clean.
+- **Coordinator check**: `origin/windows-next@a3c8b23d` and `origin/osx-next@d829808d`
+  are both ancestors of `linux-next` HEAD — no sibling merge needed.
+- **Worker drain**: No runnable plan work for this host. `plan.yaml` future_intentions
+  is `[]`. The only non-terminal index nodes were a stale ledger artifact:
+  step-58 `future-intentions-drain` showed `in_progress` with its item-7 (Win/macOS
+  parity) drain subtask `ready`, despite the step-58 file being closed `done`
+  (2026-06-20T11:04Z) and the item recorded under `drained_items`. Closed both to
+  match source of truth; the parity IMPLEMENTATION stays tracked under
+  `macos-in-vm-enclave-provisioning` + blocker `enclave/macos-vault-unreachable-via-publish-aarch64`.
+- **Ledger bug fixed**: `tillandsias-policy validate-yaml` flagged a duplicate `note:`
+  key in step-65's github-login-egress completed event (YAML last-wins was silently
+  dropping the fix note). Moved the misplaced discovery note onto the `discovered`
+  event; validator now returns `ok: plan/index.yaml`.
+- **E2E gates**: Skipped — podman user session unavailable in Cowork sandbox
+  (no `/run/user`). No runtime/release delta since v0.3.260620.7.
+- **Next**: (1) aarch64 macOS VM pasta/published-port probe for Vault reachability
+  (critical cross-host blocker, needs VM access). (2) Local-build e2e on a host
+  with a podman user session.
 
 ## This Cycle (2026-06-20T18:35Z, linux — Cowork meta-orch)
 
