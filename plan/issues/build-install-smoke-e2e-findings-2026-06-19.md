@@ -1,35 +1,35 @@
 # Build/install smoke E2E findings - 2026-06-19
 
-Status: failed-retryable
+Status: completed
 Owner: linux
 Discovered by: /build-install-and-smoke-test-e2e (linux)
 
 ## Summary
 
-Local-build E2E stopped at gate 1 (`./build.sh --ci-full --install`) before
-the destructive Podman reset. The pre-build CI checks passed after formatting
-the integrated Windows portable smoke test, but the musl install build failed
-because Cargo built two native tray binaries with the same output filename:
-`tillandsias-tray` from both `tillandsias-macos-tray` and
-`tillandsias-windows-tray`.
+Initial local-build E2E stopped at gate 1 (`./build.sh --ci-full --install`)
+before the destructive Podman reset because Cargo built two native tray
+binaries with the same output filename: `tillandsias-tray` from both
+`tillandsias-macos-tray` and `tillandsias-windows-tray`.
 
-No runtime substrate was destroyed in this run.
+The blocker is now closed. Commit `307ef0eb` narrowed the Linux install musl
+build to the `tillandsias-headless` package's `tillandsias` binary, avoiding
+the cross-platform tray binary collision. A fresh local-build E2E pass then
+installed `Tillandsias v0.3.260619.5`, destructively reset Podman, rebuilt the
+runtime from a clean store, completed `tillandsias --init --debug`, and ran the
+Linux `--opencode --prompt "Use the /forge-continuous-enhancement skill"` lane.
 
 ## Packet
 
 - id: `local-smoke/linux-musl-tray-binary-name-collision`
 - type: fix
 - owner_host: linux
-- status: in-progress
+- status: completed
 - capability_tags: [rust, build, release, testing]
 - severity: high
 - source: this smoke report
 - next_action: >
-    Make the Linux musl install build avoid cross-platform tray binary output
-    collisions. Prefer narrowing the musl release build to the Linux
-    `tillandsias` binary/package, or otherwise give macOS/Windows tray bins
-    unique target names during cross-platform release builds. Then rerun
-    `/build-install-and-smoke-test-e2e` from the build/install gate.
+    Closed. No worker action remains for this packet; future smoke failures
+    should be filed as new packets with their own evidence.
 - evidence_required:
     - `./build.sh --ci-full --install` exits 0 on Linux
     - no Cargo `output filename collision` warning for `tillandsias-tray`
@@ -71,8 +71,55 @@ No runtime substrate was destroyed in this run.
     - "./build.sh --ci-full --install -> pass; installed musl-static tillandsias 0.3.260619.4; post-build 6/6 and runtime 5/5 e2e litmus pass; evidence bundle target/convergence/evidence-bundle-20260619-233602.tar.gz"
   next_checkpoint: "Run the destructive local-build E2E skill from the reset/init/forge gate."
   lease_intent: "continue"
+- type: completed
+  ts: "2026-06-19T23:58:49Z"
+  agent_id: "linux-macuahuitl-codex-20260619T232553Z"
+  host: "linux"
+  lease_id: "lease-linux-musl-tray-collision-20260619T2325Z"
+  state: "completed"
+  completed_by_commit: "307ef0eb3d47d3229ad58cdd821e909bd7eeefbc"
+  files_touched:
+    - "build.sh"
+    - "openspec/litmus-tests/litmus-build-ci-dispatch-shape.yaml"
+    - "VERSION"
+    - "docs/convergence/centicolon-dashboard.md"
+    - "docs/convergence/centicolon-dashboard.json"
+    - "plan/diagnostics/diagnostics_20260619T233230Z-summary.md"
+    - "plan/diagnostics/diagnostics_20260619T234257Z-summary.md"
+  evidence:
+    - "target/build-install-smoke-e2e/20260619T233855Z/01-build-install-exit.txt: build_install_exit=0"
+    - "target/build-install-smoke-e2e/20260619T233855Z/01-installed-version.txt: Tillandsias v0.3.260619.5"
+    - "target/build-install-smoke-e2e/20260619T233855Z/02-reset-exit.txt: reset_exit=0"
+    - "target/build-install-smoke-e2e/20260619T233855Z/02-empty-store.txt: empty Podman store after reset"
+    - "target/build-install-smoke-e2e/20260619T233855Z/03-init-exit.txt: init_exit=0"
+    - "target/build-install-smoke-e2e/20260619T233855Z/04-forge-exit.txt: forge_exit=0"
+  notes:
+    - "No Cargo `output filename collision` warning recurred in the passing local-build E2E install log."
+    - "The prompted OpenCode lane exited 0, but the transcript did not run `/forge-continuous-enhancement`; filed `local-smoke/opencode-forge-continuous-enhancement-prompt-noop` as a separate follow-up."
 
 ## Evidence
+
+### Passing rerun
+
+- log_dir: `target/build-install-smoke-e2e/20260619T233855Z`
+- tested commit at preflight: `307ef0eb3d47d3229ad58cdd821e909bd7eeefbc`
+- installed version: `Tillandsias v0.3.260619.5`
+- build/install exit: `build_install_exit=0`
+- destructive reset exit: `reset_exit=0`
+- init exit: `init_exit=0`
+- forge exit: `forge_exit=0`
+- key evidence files:
+  - `01-build-install.log` — package-scoped Linux musl install build completed
+    without the prior `tillandsias-tray` filename collision.
+  - `02-empty-store.txt` — confirms Podman store was empty after
+    `podman system reset --force`.
+  - `03-init.log` — clean-store runtime image rebuild and Vault bootstrap
+    completed.
+  - `04-forge-continuous-enhancement.log` — Linux prompted OpenCode forge lane
+    ran and exited 0, but did not execute the requested in-forge skill; see
+    `plan/issues/opencode-forge-continuous-enhancement-prompt-noop-2026-06-19.md`.
+
+### Original failure
 
 - log_dir: `target/build-install-smoke-e2e/20260619T223047Z`
 - tested commit at preflight: `5b3058c428e91c3c35d6e588e2277618f4f08d7d`
