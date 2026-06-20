@@ -1,24 +1,26 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-20T03:24Z
+LastExecutionTime: 2026-06-20T04:13Z
 
 ## This Loop
 
 - **Cycle type**: meta-orchestration on mutable Linux (Fedora 44): worker drain
   (future-intentions step 58).
 - **Startup**: began clean on `linux-next` aligned with `origin/linux-next`
-  at `2197dc94`. No tracked changes, no untracked artifacts.
-- **Fetch**: no sibling branches advanced since last cycle.
-- **Sibling merge**: skipped — all branches already fully integrated.
+  at `f3403308`. No tracked changes, no untracked artifacts.
+- **Fetch**: `origin/windows-next` advanced; `origin/linux-next`, `origin/osx-next`,
+  `origin/main` unchanged.
+- **Sibling merge**: skipped — windows-next already integrated in prior cycle.
 - **Worker drain**: continued `future-intentions-drain` (step 58). Drained future
-  intention item 3: "Ensure opencode and codex/claude permission files are highly
-  permissive by default (YOLO mode)." Audited all agent entrypoints and configs;
-  confirmed all agents (opencode, codex, claude, gemini) already operate in fully
-  permissive mode via `"permission": "allow"` config and
-  `--dangerously-skip-permissions` / equivalent flags. No code changes needed.
-  Created `plan/issues/forge-permission-files-audit-2026-06-20.md`. Updated
-  `plan.yaml` (removed from future_intentions, added to drained_items) and
-  `plan/steps/58-future-intentions-drain.md`.
+  intention item 4: "Add telemetry to measure install times and download sizes
+  during forge build; save output in dev environment for analysis." Researched
+  existing build telemetry infrastructure (shell path in `scripts/build-image.sh`,
+  Rust path in `crates/tillandsias-logging/src/event_collector.rs`), identified
+  two-backend convergence gap, and created
+  `plan/issues/forge-build-telemetry-2026-06-20.md` with a three-slice
+  instrumentation plan. Updated `plan.yaml` (removed from future_intentions,
+  added to drained_items) and `plan/steps/58-future-intentions-drain.md`.
+  3 remaining future intentions: tellme, forge-expert training, Windows/macOS parity.
 - **E2E gates**: skipped — plan-only changes, no runtime/image/installer delta.
 - **Release decision**: deferred — no runtime change worth releasing; latest
   release tag `v0.3.260618.2` remains current. No open `linux-next → main` PR,
@@ -59,9 +61,10 @@ LastExecutionTime: 2026-06-20T03:24Z
 
 ## Assignment Board
 
-- **Linux primary**: continue `future-intentions-drain` (item 4: `tellme` discoverability
+- **Linux primary**: continue `future-intentions-drain` (item 5: `tellme` discoverability
   script), claim `future-intentions-drain/containerfile-dnf-migration` (Slice 1: replace
-  3 curl/tar tools with DNF), or claim `policy/no-python-runtime-scripts`/`nanoclawv2-orchestration`.
+  3 curl/tar tools with DNF), claim `forge-build-telemetry` (Slice 1: Podman JSON progress),
+  or claim `policy/no-python-runtime-scripts`/`nanoclawv2-orchestration`.
   Also: investigate `enclave/macos-vault-unreachable-via-publish-aarch64` with
   aarch64 access.
 - **Linux fallback**: operator-attended `--github-login` validation.
