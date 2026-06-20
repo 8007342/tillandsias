@@ -1,6 +1,40 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-20T07:42Z
+LastExecutionTime: 2026-06-20T07:59Z
+
+## This Loop (2026-06-20T07:49Z, linux)
+
+- **Cycle type**: meta-orchestration worker drain on mutable Linux.
+- **Startup**: clean mutable-Linux host on `linux-next`; fetched origin and
+  confirmed local branch was aligned with `origin/linux-next@c3c7af60`, then
+  pushed claim commit `22e5987a`.
+- **Sibling heads after startup fetch**:
+  - `main`: `6dfafdf1`.
+  - `linux-next`: `c3c7af60` at worker selection, then `8fe56fb9` after the
+    implementation commit.
+  - `windows-next`: `a3c8b23d` (ancestor of linux-next at post-push audit).
+  - `osx-next`: `d829808d` (ancestor of linux-next at post-push audit).
+- **Worker drain**: completed `policy/no-python-litmus-drift`. Added
+  `tillandsias-policy` helpers for JSON string extraction, menu parity
+  assertions, disabled-with-v2 menu assertions, and Vault unsealed timestamp
+  parsing; extended `check-no-python-scripts` to scan litmus YAML; replaced the
+  remaining active litmus Python snippets with Rust-backed helpers or
+  POSIX shell/openssl equivalents.
+- **Verification**: `cargo test -p tillandsias-policy` PASS; five touched
+  litmus YAML files validate; policy no-Python checker PASS; shell wrapper
+  PASS; helper smoke checks PASS; `cargo fmt --all -- --check` PASS;
+  `git diff --check` PASS; active litmus Python scan found no matches;
+  `./build.sh --check` PASS with only the known unrelated dev-proxy warning.
+- **Integration/runtime**: post-push coordination re-fetched origin at
+  2026-06-20T07:59Z. `origin/windows-next` and `origin/osx-next` are both
+  ancestors of `origin/linux-next@8fe56fb9` (drift: windows 0 ahead / linux 21
+  ahead; osx 0 ahead / linux 20 ahead). No merge or freeze required.
+- **Release/e2e freshness**: latest published GitHub release remains
+  `v0.3.260618.2` at `6dfafdf1`, published 2026-06-18T18:07:14Z; existing
+  curl-install smoke evidence for that release is current.
+- **E2E gates**: destructive local-build/curl-install gates not run for this
+  policy/litmus-only worker slice; no shipped runtime or release artifact delta.
+- **New findings**: none.
 
 ## This Loop (2026-06-20T07:38Z, linux)
 
@@ -39,11 +73,11 @@ LastExecutionTime: 2026-06-20T07:42Z
 
 ## Progress Since Last Loop
 
+- **policy/no-python-litmus-drift**: COMPLETED; no active litmus YAML command
+  fields shell out to Python, and the no-Python checker now scans litmus YAML.
 - **forge-diagnostics/e2e-piggyback-orchestration**: COMPLETED no-Python
   diagnostics litmus drift slice; Rust validator now owns diagnostics JSON
   validation.
-- **policy/no-python-litmus-drift**: NEW READY follow-up for remaining litmus
-  YAML Python command fields.
 
 ## This Loop (2026-06-20T07:20Z, linux)
 
@@ -125,16 +159,15 @@ LastExecutionTime: 2026-06-20T07:42Z
   `curl --cacert /tmp/tillandsias-ca/intermediate.crt https://127.0.0.1:8201/v1/sys/health?standbyok=true`.
 - **CLAIMED (linux)**: `nanoclawv2-orchestration` is actively leased by
   `linux-tlatoani-big-pickle-20260620T055600Z` until 2026-06-20T09:56Z.
-- **READY (any host)**: `policy/no-python-litmus-drift` follow-up now tracks
-  remaining Python command fields in non-diagnostics litmus YAML.
 - **READY (cross-host)**: `future-intentions-drain/windows-macos-feature-parity`
   packet now shaped and ready for host-specific work.
 
 ## Assignment Board
 
 - **Linux primary**: resolve or precisely block the macOS aarch64 Vault
-  reachability packet; fallback to `policy/no-python-litmus-drift` if no VM
-  access is available and NanoClawV2 remains actively leased.
+  reachability packet; fallback to
+  `future-intentions-drain/windows-macos-feature-parity` if no VM access is
+  available and NanoClawV2 remains actively leased.
 - **Windows primary**: keep `windows-next` synchronized and verify the
   cold-provision/headless unit path before optional UX work.
 - **macOS primary**: wait on the aarch64 Vault reachability fix/probe, then land

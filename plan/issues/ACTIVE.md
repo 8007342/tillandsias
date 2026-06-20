@@ -1,6 +1,39 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-20T07:42Z
+Last updated: 2026-06-20T07:59Z
+
+## This Cycle (2026-06-20T07:49Z, linux)
+
+- **Meta-orchestration sync**: Started clean on mutable-Linux `linux-next`,
+  fetched origin, confirmed local branch was aligned with `origin/linux-next`,
+  pushed claim commit `22e5987a`, then pushed implementation commit `8fe56fb9`.
+- **Worker drain**: Completed `policy/no-python-litmus-drift`. Added
+  `tillandsias-policy` helpers for JSON string extraction, menu parity
+  assertions, disabled-with-v2 menu assertions, and Vault unsealed timestamp
+  parsing; extended `check-no-python-scripts` to scan litmus YAML; replaced the
+  remaining active litmus Python snippets with Rust-backed helpers or
+  POSIX shell/openssl equivalents.
+- **Verification**: `cargo test -p tillandsias-policy`,
+  `tillandsias-policy validate-yaml` on all five touched litmus files,
+  `tillandsias-policy check-no-python-scripts`,
+  `scripts/check-no-python-scripts.sh`, helper smoke checks,
+  `cargo fmt --all -- --check`, `git diff --check`, active litmus Python scan
+  with no matches, and `./build.sh --check` all passed. The non-fatal
+  `Failed to start dev proxy container` warning remains the known unrelated
+  local dev-cache warning.
+- **Coordination**: post-push mutable-Linux audit confirmed
+  `origin/windows-next` and `origin/osx-next` are both ancestors of
+  `origin/linux-next@8fe56fb9`; sibling-ahead drift is 0 for both branches
+  (linux is 21 commits ahead of Windows and 20 ahead of macOS). No sibling
+  merge, runtime-litmus marker, release action, or destructive e2e gate was
+  required.
+- **Release/e2e freshness**: latest published GitHub release remains
+  `v0.3.260618.2` at `6dfafdf1`, published 2026-06-18T18:07:14Z, with existing
+  curl-install smoke evidence current. This slice was policy/litmus-only, so no
+  shipped runtime or release artifact delta warranted local-build or
+  curl-install e2e.
+- **Next**: macOS vault aarch64 layer-5 remains the critical cross-host blocker;
+  NanoClawV2 remains actively leased until 2026-06-20T09:56Z.
 
 ## This Cycle (2026-06-20T07:38Z, linux)
 
@@ -357,9 +390,9 @@ the items below are immediate work.
   - no harness, skill, litmus, or repeat path shells out to `python`/`python3`
 - follow_up: >
     2026-06-20 diagnostics slice removed the Python validator from
-    `litmus-forge-diagnostics-e2e.yaml` and filed
-    `plan/issues/no-python-litmus-drift-2026-06-20.md` for the remaining litmus
-    YAML command-field Python uses.
+    `litmus-forge-diagnostics-e2e.yaml`; follow-up
+    `plan/issues/no-python-litmus-drift-2026-06-20.md` is now complete and
+    `scripts/check-no-python-scripts.sh` covers litmus YAML command fields.
 
 ### local-smoke/forge-pty-stopped-before-container-start
 
