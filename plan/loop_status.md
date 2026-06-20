@@ -1,6 +1,40 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-20T08:33Z
+LastExecutionTime: 2026-06-20T08:42Z
+
+## This Loop (2026-06-20T08:42Z, linux)
+
+- **Cycle type**: meta-orchestration coordinator pass on mutable Linux (Cowork session).
+- **Startup**: Host `linux_mutable` (macuahuitl.ayahuitlcalpan.com). Branch
+  `linux-next`, already 2 commits ahead of `origin/linux-next` (push-blocked from
+  prior cycle at 08:33Z). Git fetch FAILED — SSH credentials unavailable in Cowork
+  session (same persistent constraint as all prior Cowork cycles). Untracked:
+  forge-improvement proposals + `codex-repeat` (ignored). Worktree tracked-clean.
+- **Sibling heads** (local cache, fetch unavailable): main=6dfafdf1,
+  windows-next=a3c8b23d, osx-next=d829808d — both siblings are ancestors of
+  local linux-next.
+- **Worker drain**: Cannot push; SSH blocked. Elected to perform coordinator
+  review for `future-intentions-drain/windows-macos-feature-parity` (status: ready,
+  coordinator: linux) rather than adding more Rust implementation commits to the
+  push-blocked backlog.
+  - Wave A (`enclave/macos-vault-unreachable-via-publish-aarch64`): code-inspected
+    vault_bootstrap.rs launch args. Identified root cause pattern: `--userns keep-id
+    -p 127.0.0.1:8201:8200 --network tillandsias-enclave` on aarch64 causes
+    rootlessport to accept SYN but fail to forward bytes through the bridge netns.
+    Potential workaround: replace bridge publish with `--network=pasta` (pasta
+    handles port forwarding without the bridge netns indirection). Documented in
+    issue file. No code change without aarch64 VM confirmation.
+  - Wave B / C / D: remain blocked on Wave A. No change.
+  - Windows: a3c8b23d, in sync. Step-36 blocked on linux step-32 (true-rekey).
+- **E2E gates**: Skipped — no runtime delta; push blocked; SSH not available.
+- **Release**: No action — latest published release v0.3.260618.2 unchanged.
+  Local linux-next has Slice 3 nanoclawv2 + plan packets not yet pushed.
+- **Push state**: BLOCKED — SSH credentials unavailable in Cowork session.
+  Local linux-next is now 3 commits ahead of origin after this coordinator commit.
+  Operator must run `git push origin linux-next` to unblock.
+- **Next**: (a) Operator push of linux-next to unblock; (b) aarch64 VM probe
+  for vault port-forwarding (test pasta workaround); (c) nanoclawv2 Slice 4
+  (smoke coverage) in a session with SSH access.
 
 ## This Loop (2026-06-20T08:22Z, linux)
 

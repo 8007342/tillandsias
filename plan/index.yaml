@@ -4312,10 +4312,24 @@ plan_index:
                 exercise FCE as side effect of build/install/reset cycles. No code
                 change needed.
         - id: future-intentions-drain/windows-macos-feature-parity
-          status: ready
+          status: claimed
+          owner_host: linux
           depends_on: [future-intentions-drain/drain-tasks]
           owned_files:
             - plan/issues/windows-macos-feature-parity-2026-06-12.md
             - plan/issues/ACTIVE.md
             - plan/issues/osx-next-work-queue-2026-05-25.md
             - plan/issues/windows-next-work-queue-2026-05-25.md
+          events:
+            - type: coordinator_review
+              ts: "2026-06-20T08:42Z"
+              agent_id: "linux-macuahuitl-claude-20260620T0842Z"
+              host: linux
+              lease_id: "windows-macos-parity-coord-20260620T0842Z"
+              expires_at: "2026-06-20T12:42Z"
+              note: >
+                Coordinator pass: sibling branches in sync (windows a3c8b23d, osx
+                d829808d, both ancestors of linux-next). Wave A vault aarch64
+                blocker code-inspected — no Linux-side fix possible without VM
+                probe. Potential aarch64 workaround documented (pasta netns).
+                Packet remains open; no implementation change this cycle.

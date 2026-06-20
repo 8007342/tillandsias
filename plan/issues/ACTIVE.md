@@ -1,6 +1,28 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-20T08:33Z
+Last updated: 2026-06-20T08:42Z
+
+## This Cycle (2026-06-20T08:42Z, linux)
+
+- **Meta-orchestration sync**: Startup on mutable Linux (Cowork session). Branch
+  `linux-next`, 2 commits ahead of `origin/linux-next` (nanoclawv2 Slice 3 +
+  plan packet from 08:33Z cycle). Git fetch FAILED — SSH unavailable in Cowork
+  session. Sibling heads from local cache: windows-next=a3c8b23d, osx-next=d829808d
+  (both ancestors of linux-next). Worktree tracked-clean; untracked proposals
+  and `codex-repeat` ignored (not new, persisted from prior cycles).
+- **Worker drain**: Coordinator review of `future-intentions-drain/windows-macos-feature-parity`.
+  Code-inspected vault_bootstrap.rs: vault launch uses `--userns keep-id
+  -p 127.0.0.1:8201:8200 --network tillandsias-enclave`. On aarch64, rootlessport
+  accepts SYN but bytes don't reach Vault's API (known podman aarch64 bridge+publish
+  issue). Documented potential workaround: `--network=pasta` bypasses rootlessport/bridge
+  netns indirection. No code change — aarch64 VM probe required to confirm.
+  Windows-next: a3c8b23d in sync; step-36 blocked on linux step-32.
+- **E2E gates**: Skipped — no runtime delta, push blocked.
+- **Push state**: BLOCKED — SSH unavailable in Cowork sandbox. Local linux-next
+  now 3 commits ahead of origin (Slice 3 impl + Slice 3 plan + this coordinator
+  packet). Operator action required: `git push origin linux-next`.
+- **Next**: (1) Operator push. (2) aarch64 VM: test `--network=pasta` for vault
+  health probe. (3) nanoclawv2 Slice 4 (smoke coverage) in a session with SSH.
 
 ## This Cycle (2026-06-20T08:22Z, linux)
 
