@@ -136,7 +136,45 @@ shared/default-branch cache is not evicted.
     `Post Nix Cache`/cache-save bytes drop substantially vs the first. Record
     before/after numbers as a completed event. Closure = a measured delta build.
 
+## Measured evidence (run 27881936382, v0.3.260620.8)
+
+- `Nix Cache` restore step: **0 s** (19:46:19 → 19:46:19) — nothing restored.
+- `Build musl-static binaries via Nix`: **~23 min** (19:46:19 → 20:09:19) — full,
+  non-incremental closure build despite flake.lock being unchanged.
+- `Post Nix Cache` save: only 18 s (20:09:43 → 20:10:01) — i.e. it did **not**
+  re-upload the 2.2 GB store. Because the GHA cache key
+  `nix-Linux-<flake.lock-hash>` already exists in the repo (saved under prior tag
+  refs), GHA refuses a duplicate-key save and cache-nix-action skips it. Net:
+  the store **can neither be restored (ref-scoped) nor re-saved (key collision)**
+  — every release rebuilds from scratch forever. The lock is effectively frozen.
+- **FlakeHub Login failure** in the `Install Nix` step:
+  `The process '/usr/local/bin/determinate-nixd' failed with exit code 1`. The
+  installer (v22, with `id-token: write` present) *attempts* FlakeHub Cache login
+  and fails because the repo is not enrolled on FlakeHub. So FlakeHub is
+  **half-wired and broken** — it produces the "magic/flakehub cache" log chatter
+  the operator saw while providing **no** caching. Current state is the worst of
+  both worlds.
+
+This sharpens the recommendation: option 1 (FlakeHub Cache) is *already
+partially in place* — completing it (enroll the repo / fix the login) is likely
+the smallest correct change and removes the failing-login noise too. If FlakeHub
+enrollment is undesirable, explicitly disable the installer's FlakeHub attempt
+AND adopt option 2 (warm-on-main) so something actually caches.
+
 ## Events
+
+- type: finding
+  ts: "2026-06-20T20:12:00Z"
+  agent_id: "linux-claude-opus48-20260620T2012Z"
+  host: "linux_mutable (interactive Claude Code CLI)"
+  note: >
+    Post-build measurement of run 27881936382: 0 s cache restore, 23 min full
+    build, 18 s no-op save (duplicate-key skip). Discovered the Determinate
+    installer is also failing FlakeHub login (determinate-nixd exit 1) — FlakeHub
+    is half-configured (id-token present, repo not enrolled), explaining the
+    operator's "magic cache" log chatter while delivering zero caching. Refined
+    the fix recommendation toward completing FlakeHub (smallest correct change)
+    or disabling it and warming the cache on main.
 
 - type: finding
   ts: "2026-06-20T19:55:00Z"
