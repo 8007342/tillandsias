@@ -4245,6 +4245,13 @@ plan_index:
               ts: "2026-06-18T00:36:11Z"
               agent_id: "linux-tlatoani-codex-20260618T003611Z"
               host: linux
+              note: >
+                Operator curl-installed release v0.3.260616.2 on immutable
+                Linux. Install and `--debug --init` succeeded, Vault was
+                running/unsealed, but `--debug --github-login` failed when the
+                transient gh helper container ran `gh auth login` and could not
+                connect to `api.github.com`. The helper launch attached only to
+                `--network tillandsias-enclave`.
             - type: claim
               ts: "2026-06-18T02:28:05Z"
               agent_id: "linux-bigpickle-20260618T0228Z"
@@ -4260,18 +4267,11 @@ plan_index:
                 Changed ENCLAVE_NET to ENCLAVE_EGRESS_NETS (dual-home gh-login helper
                 onto managed egress network). Added regression test
                 github_login_helper_dual_homes_onto_managed_egress_network.
-              note: >
-                Operator curl-installed release v0.3.260616.2 on immutable
-                Linux. Install and `--debug --init` succeeded, Vault was
-                running/unsealed, but `--debug --github-login` failed when the
-                transient gh helper container ran `gh auth login` and could not
-                connect to `api.github.com`. The helper launch attached only to
-                `--network tillandsias-enclave`.
 
     - id: future-intentions-drain
       order: 58
       title: Drain future intentions into planned tasks
-      status: in_progress
+      status: completed
       deliverable: plan/steps/58-future-intentions-drain.md
       depends_on: []
       outcome: >
@@ -4312,10 +4312,251 @@ plan_index:
                 exercise FCE as side effect of build/install/reset cycles. No code
                 change needed.
         - id: future-intentions-drain/windows-macos-feature-parity
-          status: ready
+          status: completed
           depends_on: [future-intentions-drain/drain-tasks]
           owned_files:
             - plan/issues/windows-macos-feature-parity-2026-06-12.md
             - plan/issues/ACTIVE.md
             - plan/issues/osx-next-work-queue-2026-05-25.md
             - plan/issues/windows-next-work-queue-2026-05-25.md
+          events:
+            - type: completed
+              ts: "2026-06-20T19:05:00Z"
+              agent_id: "linux-cowork-meta-orch-20260620T1905Z"
+              host: linux_mutable
+              note: >
+                Ledger hygiene. The drain of future-intention item 7 (Windows/macOS
+                feature parity) completed 2026-06-20T05:44Z — plan.yaml
+                future_intentions is [] and the item is recorded under
+                drained_items. Step-58 file was closed done at 2026-06-20T11:04Z,
+                but plan/index.yaml still showed this drain subtask as `ready` and
+                the parent step as `in_progress`, conflating the (done) drain with
+                the ongoing parity IMPLEMENTATION. The implementation work remains
+                tracked separately under node `macos-in-vm-enclave-provisioning`
+                and the active blocker `enclave/macos-vault-unreachable-via-publish-aarch64`
+                (blocked on aarch64 macOS VM access; not runnable on this Linux host).
+                Marked subtask + parent step completed to match the source-of-truth
+                step file.
+
+    - id: cowork-headless-credential-isolation
+      order: 59
+      title: Cowork headless runtime credential-isolation defect + feedback packet
+      status: done
+      deliverable: plan/issues/cowork-headless-credential-isolation-2026-06-20.md
+      depends_on: []
+      pickup_role: "Claude CLI client able to file feedback (/bug or GitHub issue)"
+      outcome: >
+        Anthropic receives a stellar, technically accurate feedback report on the
+        Cowork scheduled-task credential-isolation defect (headless runtime
+        inherits dangling /run/user session sockets, breaking keyring/SSH/HTTPS
+        auth and silently failing git push), with the Tillandsias reference
+        implementation and reporter references attached. The meta-orchestration
+        loop is hardened to fail loud when no credential channel exists.
+      resume_prompt: './claude "Use /advance-work-from-plan; claim cowork-headless-credential-isolation/file-feedback and submit the Feedback Submission Payload verbatim via /bug, then record the submission reference."'
+      tasks:
+        - id: cowork-headless-credential-isolation/file-feedback
+          status: completed
+          submission_ref: "https://github.com/anthropics/claude-code/issues/69776"
+          depends_on: []
+          owned_files:
+            - plan/issues/cowork-headless-credential-isolation-2026-06-20.md
+          checkpoint_required: true
+          handoff_note: >
+            Submit the "Feedback Submission Payload" section verbatim via `/bug`
+            (Claude Code) and/or a GitHub issue on the Cowork feedback channel.
+            Include both reference links (github.com/8007342/tillandsias and the
+            reporter LinkedIn). Record the submission reference (issue URL or
+            /bug acknowledgement id) as a `completed` event in the issue file.
+        - id: cowork-headless-credential-isolation/runtime-guard
+          status: completed
+          depends_on: []
+          owned_files:
+            - skills/meta-orchestration/SKILL.md
+          checkpoint_required: true
+          handoff_note: >
+            Add a start-of-cycle credential-channel guard so the loop never
+            silently spins on missing credentials again (see issue "Follow-on
+            hardening").
+      events:
+        - type: finding
+          ts: "2026-06-20T18:55:00Z"
+          agent_id: "linux-macuahuitl-opus-cowork-20260620T1855Z"
+          host: linux_mutable
+          note: >
+            Filed after diagnosing a ~2-day silent push outage in the Cowork
+            scheduled-task runtime. Applied repo-local credential-store fix and
+            drained the 17-commit backlog (3de6de90..4f5fd488). Packet left
+            ready for a Claude CLI worker to submit feedback autonomously.
+        - type: completed
+          ts: "2026-06-20T19:15:00Z"
+          agent_id: "linux-macuahuitl-opus-cowork-20260620T1908Z"
+          host: linux_mutable
+          note: >
+            Drained subtask runtime-guard. Added the start-of-cycle Credential
+            Channel Guard to skills/meta-orchestration/SKILL.md: after git fetch
+            and before any committable work, require one of .git/.gh-credentials,
+            GH_TOKEN/GITHUB_TOKEN, or a reachable keyring; otherwise file a
+            no-credential-channel blocker and exit loud. Dogfooded this cycle —
+            .git/.gh-credentials present and credential.helper configured, so the
+            guard passed and push proceeded. Node stays `ready`: the file-feedback
+            subtask is a write-to-Anthropic action left for a Claude CLI /bug
+            worker and was not taken by this unattended loop.
+        - type: completed
+          ts: "2026-06-20T19:24:18Z"
+          agent_id: "linux-claude-opus48-20260620T1924Z"
+          host: linux_mutable
+          note: >
+            Drained subtask file-feedback. Submitted the Feedback Submission
+            Payload verbatim to Anthropic as GitHub issue
+            https://github.com/anthropics/claude-code/issues/69776 (state OPEN,
+            author 8007342) on the canonical anthropics/claude-code feedback
+            channel, with the tillandsias reference link and reporter reference
+            included. /bug was not used (interactive-only command, not a callable
+            tool); the GitHub issue is the verifiable channel named in the task.
+            Both subtasks now complete — node closed to status: done.
+
+    - id: e2e-eligibility-probe
+      order: 60
+      title: Host e2e-eligibility probe (stop re-deriving the podman-session skip)
+      status: ready
+      kind: optimization
+      deliverable: plan/issues/meta-orch-enhancement-opportunities-2026-06-20.md
+      depends_on: []
+      pickup_role: "Build-capable host (Rust toolchain) for the policy-subcommand path"
+      outcome: >
+        The meta-orchestration E2E Gates consult a structured host-eligibility
+        verdict (eligible | skip:<reason>) instead of every cycle re-deriving
+        "no /run/user => no podman user session => skip" in prose. Verdict is
+        recorded once per host run.
+      tasks:
+        - id: e2e-eligibility-probe/implement
+          status: ready
+          depends_on: []
+          owned_files:
+            - scripts/e2e-preflight.sh
+          checkpoint_required: true
+          handoff_note: >
+            Add a podman-user-session capability probe (extend
+            scripts/e2e-preflight.sh, or add a `tillandsias-policy e2e-eligibility`
+            subcommand dispatched by a thin script per the repo's
+            shell-dispatches-Rust convention). Emit `eligible` or `skip:<reason>`.
+            Wire the skill's E2E Gates to consult it. Verifiable closure: probe
+            returns the correct verdict on an eligible host AND in the Cowork
+            sandbox (no /run/user); bind a litmus test.
+      events:
+        - type: finding
+          ts: "2026-06-20T19:15:00Z"
+          agent_id: "linux-macuahuitl-opus-cowork-20260620T1908Z"
+          host: linux_mutable
+          note: >
+            Reduced from meta-orch-enhancement-opportunities-2026-06-20 candidate 1.
+            Cowork cycles 09:00Z/17:45Z/18:35Z/19:05Z/19:15Z all re-derived the
+            same e2e-skip verdict; e2e-preflight.sh has no session probe.
+
+    - id: credential-channel-check
+      order: 61
+      title: Make the credential channel guard a verifiable check, not prose
+      status: ready
+      kind: enhancement
+      deliverable: plan/issues/meta-orch-enhancement-opportunities-2026-06-20.md
+      depends_on: []
+      pickup_role: "Build-capable host (Rust toolchain)"
+      outcome: >
+        The start-of-cycle Credential Channel Guard is enforced by an executable
+        check returning a pass/fail exit code (not advisory prose), invoked by
+        the loop and bindable by CI, so a missing credential channel fails loud
+        on its own.
+      tasks:
+        - id: credential-channel-check/implement
+          status: ready
+          depends_on: []
+          owned_files:
+            - skills/meta-orchestration/SKILL.md
+          checkpoint_required: true
+          handoff_note: >
+            Implement `tillandsias-policy credential-channel` (dispatched by a thin
+            scripts/check-credential-channel.sh): exit 0 when .git/.gh-credentials
+            is non-empty OR GH_TOKEN/GITHUB_TOKEN is set OR `gh auth status` is
+            green; non-zero otherwise. Replace the prose check in the skill's
+            Credential Channel Guard with this invocation. Verifiable closure:
+            exits non-zero under a scrubbed-env fixture and zero with a seeded
+            credential store; bind a litmus test.
+      events:
+        - type: finding
+          ts: "2026-06-20T19:15:00Z"
+          agent_id: "linux-macuahuitl-opus-cowork-20260620T1908Z"
+          host: linux_mutable
+          note: >
+            Reduced from meta-orch-enhancement-opportunities-2026-06-20 candidate 2.
+            The guard added at 19:15Z is advisory prose; philosophy.yaml requires
+            falsifiable verification claims.
+
+    - id: ledger-edit-claim-lease
+      order: 62
+      title: Claim/lease marker for plan/index.yaml ledger-hygiene edits
+      status: ready
+      kind: optimization
+      deliverable: plan/issues/agent-concurrency-collisions-2026-06-20.md
+      depends_on: []
+      pickup_role: "Any host"
+      outcome: >
+        Concurrent cycles detect an in-flight node closure before re-deriving it,
+        eliminating duplicated ledger-hygiene work while preserving idempotent,
+        CRDT-friendly merges.
+      tasks:
+        - id: ledger-edit-claim-lease/design-and-implement
+          status: ready
+          depends_on: []
+          owned_files:
+            - plan/issues/agent-concurrency-collisions-2026-06-20.md
+          checkpoint_required: true
+          handoff_note: >
+            Extend the shared-lock discipline (today only e2e .lock) to a
+            lightweight in-flight node-closure claim for plan/index.yaml hygiene
+            edits, respecting stable-ID + idempotent-merge preconditions in
+            methodology/between-commits-work-discipline.yaml. Verifiable closure:
+            two concurrent simulated cycles claiming the same node produce exactly
+            one closure edit; bind a concurrency litmus.
+      events:
+        - type: finding
+          ts: "2026-06-20T19:15:00Z"
+          agent_id: "linux-macuahuitl-opus-cowork-20260620T1908Z"
+          host: linux_mutable
+          note: >
+            Reduced from meta-orch-enhancement-opportunities-2026-06-20 candidate 3
+            and the agent-concurrency-collisions-2026-06-20 mitigation idea.
+
+    - id: cowork-nonpython-ledger-validation
+      order: 63
+      title: Approved non-Python YAML/ledger validator for the Cowork runtime
+      status: ready
+      kind: research
+      deliverable: plan/issues/meta-orch-enhancement-opportunities-2026-06-20.md
+      depends_on: []
+      pickup_role: "Any host"
+      outcome: >
+        The exit contract's "validate touched YAML" step names a concrete,
+        non-Python validator that runs green in the Cowork sandbox, so cycles
+        never reach for the policy-forbidden python3 fallback.
+      tasks:
+        - id: cowork-nonpython-ledger-validation/decide-and-document
+          status: ready
+          depends_on: []
+          owned_files:
+            - skills/meta-orchestration/SKILL.md
+          checkpoint_required: true
+          handoff_note: >
+            Decide the approved path (build + cache `tillandsias-policy
+            validate-yaml`, or a sanctioned node/ruby one-liner as
+            interactive-only fallback) and name it in the skill's Finalization
+            step. Verifiable closure: named command runs green in Cowork and the
+            no-python checker stays clean.
+      events:
+        - type: finding
+          ts: "2026-06-20T19:15:00Z"
+          agent_id: "linux-macuahuitl-opus-cowork-20260620T1908Z"
+          host: linux_mutable
+          note: >
+            Reduced from meta-orch-enhancement-opportunities-2026-06-20 candidate 4.
+            tillandsias-policy not on PATH in Cowork; python forbidden for committed
+            automation; yq absent, ruby/node present.

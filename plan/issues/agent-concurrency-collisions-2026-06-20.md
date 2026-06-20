@@ -91,3 +91,19 @@
       - "pgrep after leak smoke shows only pre-existing user tray process `/home/tlatoani/.local/bin/tillandsias --tray`"
       - "git diff --check — PASS"
       - "./build.sh --check — PASS with known non-fatal dev-proxy warning"
+
+## Observation 2026-06-20T19:05Z (Cowork meta-orch, linux_mutable)
+
+- collision: duplicate ledger work. This cycle independently edited
+  `plan/index.yaml` to (a) close step-58 `future-intentions-drain` + its item-7
+  parity drain subtask and (b) fix a duplicate `note:` key in the step-65
+  github-login-egress event. While the edits were in the shared working tree, a
+  concurrent agent committed the identical fixes as `1d6db6dd` (plus an order-59
+  packet). Result: this cycle's `git diff plan/index.yaml` was empty at commit
+  time; only the ledger files (ACTIVE.md, loop_status.md) carried in commit
+  `9c8f3f9a`. No conflict or data loss — net state correct — but two agents
+  spent effort on the same fix.
+- mitigation idea: a claim/lease marker on `plan/index.yaml` ledger-hygiene
+  edits (not just e2e gates) would let read-only meta-orch cycles detect that a
+  node closure is already in flight before re-deriving it. Low priority; the
+  collision was idempotent.

@@ -1,6 +1,128 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-20T17:55Z
+Last updated: 2026-06-20T19:40Z
+
+## This Cycle (2026-06-20T19:40Z, linux_mutable — Cowork meta-orch, Tlatoāni-directed)
+
+- **Governance decision (Tlatoāni)**: The reduction engine's scan bar is fixed
+  and the convergence point is "zero residual findings at the current approved
+  bar." Raising the bar is **not** autonomous — the loop may only *propose*
+  bar-raise candidates (research/exploration issues); enabling any bar-raise is a
+  one-off scope expansion The Tlatoāni must approve every time. Recorded as the
+  authoritative `bar_raise_governance` section in `methodology/convergence.yaml`;
+  rewrote the skill's "Raising the bar" subsection to match (propose-not-escalate,
+  stop at the current bar). Future automatable approvals possible but not yet
+  policy; absence of policy is not implicit approval.
+- This resolves the open design question from the prior cycle (an ever-rising bar
+  has no fixed point) by making each bar-raise an operator-owned discontinuity.
+
+## This Cycle (2026-06-20T19:24Z, linux_mutable — interactive Claude Code CLI meta-orch)
+
+- **Startup**: Pulled `origin/linux-next` (23 commits, `8f8887b2..66e1029f`),
+  worktree clean, in sync. Credential Channel Guard passed (`gh auth status`
+  green, repo+workflow scopes).
+- **Worker drain — file-feedback**: Submitted the Anthropic feedback packet
+  `cowork-headless-credential-isolation` to the canonical Claude Code feedback
+  channel as **https://github.com/anthropics/claude-code/issues/69776** (state
+  OPEN, author 8007342), payload verbatim with the tillandsias reference link and
+  reporter reference included. The `/bug` in-CLI path is interactive-only (not a
+  callable tool); the GitHub issue is the verifiable channel named in the task.
+  Node `cowork-headless-credential-isolation` is now **fully resolved** —
+  `file-feedback` + `runtime-guard` both completed.
+- **Coordinator check**: `origin/windows-next@a3c8b23d` and
+  `origin/osx-next@d829808d` both ancestors of `linux-next` HEAD — no sibling
+  merge, no release (no code delta this cycle; docs/ledger only).
+- **E2E gates**: Skipped — no runtime/code delta; this cycle only filed feedback
+  and updated the ledger.
+- **Next**: (1) aarch64 macOS VM pasta/published-port probe for Vault
+  reachability. (2) Local-build e2e on a host with a podman user session.
+
+## This Cycle (2026-06-20T19:15Z, linux — Cowork meta-orch)
+
+- **Startup recovery**: Entered with a dirty worktree (unpushed `9c8f3f9a` + a
+  staged concurrency note). A concurrent sibling agent had already committed
+  `b5484c59` and pushed; fetch synced HEAD clean to `origin/linux-next@b5484c59`,
+  not ahead. No data loss.
+- **Worker drain**: Drained the `runtime-guard` subtask of node
+  `cowork-headless-credential-isolation` (order 59). Added a **Credential Channel
+  Guard** to `skills/meta-orchestration/SKILL.md`: after `git fetch` and before
+  any committable work, require one of `.git/.gh-credentials`,
+  `GH_TOKEN`/`GITHUB_TOKEN`, or a reachable keyring; otherwise file a
+  `no-credential-channel` blocker and exit loud. Closes the silent-push-failure
+  velocity-killer that stranded 17 commits earlier today. Dogfooded — guard
+  passed this cycle. Node stays `ready`: `file-feedback` is a write-to-Anthropic
+  action reserved for a Claude CLI `/bug` worker, not taken by this loop.
+- **Coordinator check**: `origin/windows-next` and `origin/osx-next` both
+  ancestors of `linux-next` HEAD — no sibling merge, no release (no code delta).
+- **E2E gates**: Skipped — no podman user session in Cowork sandbox (no
+  `/run/user`). No runtime delta since v0.3.260620.7.
+- **Reduction engine**: Encoded the capture → reduce → promote lifecycle in
+  `skills/meta-orchestration/SKILL.md` (new **Reduction Engine** section + a
+  Finalization capture-check + a rising-bar scan policy), per the user's
+  "Monotonic Reduction of Uncertainty Under Verifiable Constraints" framing.
+  Filed `plan/issues/meta-orch-enhancement-opportunities-2026-06-20.md` with four
+  observed opportunities and reduced each to a `ready` packet:
+  order 60 `e2e-eligibility-probe` (opt), 61 `credential-channel-check` (enh —
+  makes the 19:15Z prose guard verifiable), 62 `ledger-edit-claim-lease` (opt),
+  63 `cowork-nonpython-ledger-validation` (research). None implemented here:
+  1/2/4 need a build-capable host; shaping them into verifiable packets is the
+  reduction step for this sandbox. YAML validated with `ruby` (non-Python,
+  dogfooding order 63).
+- **Next**: (1) `file-feedback` submission via a Claude CLI `/bug`-capable worker.
+  (2) aarch64 macOS VM pasta/published-port probe for Vault reachability (critical
+  cross-host blocker, needs VM access). (3) Local-build e2e on a host with a
+  podman user session.
+
+## This Cycle (2026-06-20T19:05Z, linux — Cowork meta-orch)
+
+- **Meta-orchestration sync**: Startup on mutable Linux (Cowork) on `linux-next`.
+  `git fetch origin --prune` over HTTPS succeeded; the stale "ahead 18" tracking
+  resolved to in-sync with `origin/linux-next@4f5fd488` (the earlier SSH/HTTPS
+  push blocker is cleared — prior cycles' commits are on origin). Worktree clean.
+- **Coordinator check**: `origin/windows-next@a3c8b23d` and `origin/osx-next@d829808d`
+  are both ancestors of `linux-next` HEAD — no sibling merge needed.
+- **Worker drain**: No runnable plan work for this host. `plan.yaml` future_intentions
+  is `[]`. The only non-terminal index nodes were a stale ledger artifact:
+  step-58 `future-intentions-drain` showed `in_progress` with its item-7 (Win/macOS
+  parity) drain subtask `ready`, despite the step-58 file being closed `done`
+  (2026-06-20T11:04Z) and the item recorded under `drained_items`. Closed both to
+  match source of truth; the parity IMPLEMENTATION stays tracked under
+  `macos-in-vm-enclave-provisioning` + blocker `enclave/macos-vault-unreachable-via-publish-aarch64`.
+- **Ledger bug fixed**: `tillandsias-policy validate-yaml` flagged a duplicate `note:`
+  key in step-65's github-login-egress completed event (YAML last-wins was silently
+  dropping the fix note). Moved the misplaced discovery note onto the `discovered`
+  event; validator now returns `ok: plan/index.yaml`.
+- **E2E gates**: Skipped — podman user session unavailable in Cowork sandbox
+  (no `/run/user`). No runtime/release delta since v0.3.260620.7.
+- **Next**: (1) aarch64 macOS VM pasta/published-port probe for Vault reachability
+  (critical cross-host blocker, needs VM access). (2) Local-build e2e on a host
+  with a podman user session.
+
+## This Cycle (2026-06-20T18:35Z, linux — Cowork meta-orch)
+
+- **Meta-orchestration sync**: Startup on mutable Linux (Cowork). Branch `linux-next`,
+  16 commits ahead of `origin/linux-next`. Git fetch FAILED — SSH still unavailable.
+  Concurrent agent merged `origin/linux-next@8f8887b2` (commit 4beb811a) and switched
+  remote to HTTPS; push still blocked (HTTPS auth requires credentials not present in sandbox).
+- **Worker drain**: No ready plan nodes. All steps completed/done/deferred.
+  Sibling branches (local cache): windows=a3c8b23d, osx=d829808d, both ancestors of
+  linux-next HEAD.
+- **Verification**: Litmus 107/107 PASS.
+- **E2E gates**: Skipped — podman user session unavailable in Cowork sandbox (no /run/user).
+  No runtime delta since v0.3.260620.7 (the 17:55Z cycle completed full local-build E2E).
+- **Push state**: BLOCKED — HTTPS auth credentials absent; SSH also unavailable.
+  linux-next 16 commits ahead of origin. Operator must: `git push origin linux-next`
+  (remote is now HTTPS; SSH key or HTTPS token required).
+- **Next**: (1) Operator push. (2) Local-build e2e (nanoclawv2 live container launch).
+  (3) aarch64 VM pasta probe for vault port-forwarding.
+
+## This Cycle (2026-06-20T17:45Z, linux — Cowork merge)
+
+- **Fix**: Switched git remote from SSH to HTTPS (`https://github.com/8007342/tillandsias.git`). SSH was unavailable in the Cowork sandbox; HTTPS auth works via host credential store. All prior cycles today were blocked by this; unblocked now.
+- **Merge**: Merged `origin/linux-next@8f8887b2` into local `linux-next` (was 15 ahead / 28 behind). Resolved conflicts in `plan/index.yaml`, `plan/issues/ACTIVE.md`, `plan/issues/nanoclawv2-orchestration.md`, `plan/loop_status.md`, `plan/metrics-dashboard.md` — all resolved by taking `origin/linux-next` (authoritative; stale SSH-blocked cycle records in HEAD were superseded).
+- **Worker drain**: None — upstream already fully drained by the 17:55Z cycle (E2E all green, forge improvements complete, v0.3.260620.7).
+- **Next**: Push merge commit to origin/linux-next.
+
 
 ## This Cycle (2026-06-20T17:55Z, linux)
 

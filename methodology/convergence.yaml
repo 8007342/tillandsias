@@ -381,3 +381,39 @@ finite_time_convergence_and_velocity_control:
           - forced_rebase_task: "Force-assign a 'Forced Branch Rebase & Integration' task as the sibling host's next primary action."
           - synchronous_integration_wave: "Trigger an immediate orchestrator-led merge loop to fold sibling commits into linux-next."
 
+bar_raise_governance:
+  description: >
+    The "scan bar" is the declared depth/criteria the reduction engine uses to
+    decide what counts as a finding. It must be fixed and explicit so the
+    convergence point is well defined. Reducing all open findings to zero at the
+    current bar is a legitimate fixed point of the refinement operator, not
+    premature convergence. The bar only rises by explicit operator decision.
+  authority: >
+    Raising the bar (treating a deeper signal class as findings — e.g. build,
+    test, or runtime warnings; non-fatal errors; deprecation notices; flaky-test
+    signals; slow steps; stale caches) is a one-off scope expansion that The
+    Tlatoāni MUST approve every time. Recurring automation (the meta-orchestration
+    loop) MUST NOT self-escalate the bar.
+  rules:
+    - convergence_point_is_the_current_bar: >
+        Zero residual findings at the current approved bar is a complete,
+        successful convergence state. The loop reports done at that bar rather
+        than inventing deeper work to stay busy.
+    - loop_may_propose_not_enable: >
+        As residual approaches zero, the loop SHOULD file bar-raise candidates as
+        research/ or exploration/ issues (the deeper scan that could be enabled),
+        but MUST stop at proposing. A proposal is not an enabled scan.
+    - enabling_requires_recorded_approval: >
+        A bar-raise becomes part of the loop's contract only after The Tlatoāni
+        approves it; record who, when, and the exact expanded scope before the
+        deeper scan is treated as findings.
+    - future_automatable_approvals: >
+        The Tlatoāni may later declare a policy that auto-approves specific
+        low-risk bar-raises. Until such a policy exists, every bar-raise is
+        manual. Absence of a policy is not implicit approval.
+  rationale: >
+    Much of the system is "build what works, then improve from there." Each
+    bar-raise is a deliberate scope decision the operator owns, keeping the
+    convergence point clear instead of letting an ever-rising bar make "done"
+    unreachable by construction.
+

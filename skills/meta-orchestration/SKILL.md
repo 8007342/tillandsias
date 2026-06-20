@@ -35,8 +35,9 @@ If a push fails after three fetch/rebase retries, mark the active plan item
 
 Detect host at the start of every cycle:
 
+- `forge`: Inside the Tillandsias developer forge container (typically detected by checking if `TILLANDSIAS_HOST_KIND` is set to `forge`).
 - `linux_immutable`: Linux with `/run/ostree-booted` present or `rpm-ostree` on PATH.
-- `linux_mutable`: Linux without the immutable marker.
+- `linux_mutable`: Linux without the immutable marker (and not inside the forge container).
 - `macos`: Darwin.
 - `windows`: Windows, MSYS, MINGW, or PowerShell host.
 
@@ -53,13 +54,113 @@ All `plan/`, `methodology/`, `openspec/`, and `cheatsheets/` writes go to
 ## Start Of Cycle
 
 1. Record UTC time, host kind, current branch, worktree path, and sibling heads.
-2. `git fetch origin --prune`.
+2. `git fetch origin --prune`, then run the Credential Channel Guard below
+   before any committable work.
 3. If the worktree is dirty at startup, classify it:
    - tracked changes: you have a one-off chance to commit a checkpoint or clean up before doing new work. Start clean.
    - untracked generated artifacts: discard them if not covered by `.gitignore` (update `.gitignore` if necessary). Ensure you start with a clean state.
    - unknown user work: do not overwrite it; record a blocker.
 4. Update the active local branch from remote with fast-forward or an explicit
    merge from `origin/linux-next` into the platform branch when appropriate.
+
+## Credential Channel Guard
+
+Run immediately after `git fetch` and before any worker drain or committable
+work. The Cowork scheduled-task runtime can inherit dangling session sockets
+(`DBUS_SESSION_BUS_ADDRESS`, `SSH_AUTH_SOCK` pointing into a non-existent
+`/run/user/<uid>`) so anonymous reads succeed while every `git push` silently
+fails for lack of a credential. See
+`plan/issues/cowork-headless-credential-isolation-2026-06-20.md`.
+
+A usable credential channel is present when ANY of these holds:
+
+- `.git/.gh-credentials` exists and is non-empty (repo-local store helper), or
+- `GH_TOKEN` or `GITHUB_TOKEN` is set in the environment, or
+- `gh auth status` succeeds (reachable, unlocked keyring).
+
+If none holds, do NOT proceed into worker drain or any committable work. Instead
+fail loud: file or update a blocker in `plan/issues/` recording
+`blocked: no-credential-channel`, the owner (operator), and the smallest next
+action (re-seed `.git/.gh-credentials` via the gh token, or inject `GH_TOKEN`
+into the task environment), then stop. Accreting local-only commits that cannot
+be pushed violates the Non-Negotiable Exit Contract and is the precise
+velocity-killer this guard prevents.
+
+Reads (`git fetch`/`git ls-remote`) succeeding is NOT evidence of a credential
+channel — public-repo reads are anonymous. Verify write capability explicitly.
+
+## Reduction Engine
+
+The loop is a reduction engine, not just a worker. Its job is the project's core
+principle — **Monotonic Reduction of Uncertainty Under Verifiable Constraints**
+(`methodology/philosophy.yaml`). Every cycle must move the system toward a
+verifiable implementation of the spec by *reducing* open uncertainty, and must
+never let an observed problem evaporate.
+
+### Capture: nothing gets lost
+
+Any time a worker notices "welp, this isn't great" — an inefficiency, a rough
+edge, a fragile assumption, an advisory-only guard, a repeated manual step, a
+log warning, a deprecation notice — it MUST be filed before the cycle exits.
+This is mandatory, not optional (`methodology.yaml` →
+`cooperative_work_discipline`; Non-Negotiable Exit Contract → "Explicitly log
+things that make you slower"). File it as a dated issue in `plan/issues/`,
+classified as one of: `research/`, `exploration/`, `enhancement/`, or
+`optimization/`. An unfiled finding is a lost finding and a contract violation.
+
+### Reduce: smaller, simpler, verifiable packets
+
+Filing is only the intake half. Each recurring cycle then *reduces* open
+findings:
+
+1. Pick the highest-value open finding that fits this host's capability.
+2. Split it into the smallest packet that closes a slice of it under a
+   **verifiable constraint** — a litmus test, an executable check returning a
+   pass/fail exit code, or a parser/validator — never prose intent alone. A
+   guard only an attentive agent honors is a suggestion, not a constraint;
+   reduce it to something that fails loud on its own.
+3. Promote that packet into `plan/index.yaml` as a `ready` node with a named
+   verifiable closure, then drain it when a capable host can produce evidence.
+4. When the verifiable check passes, the slice is retired; re-derive the
+   remaining residual and repeat.
+
+Reduction is monotonic: each step must lower residual uncertainty or preserve it
+while increasing verification level (`convergence.yaml` → `drift_control`). A
+"reduction" that adds ambiguity or removes a validated invariant is drift and
+must be rejected. Shaping a finding into a well-formed `ready` packet *is* a
+valid reduction step when the current host cannot yet implement it.
+
+### Raising the bar is Tlatoāni-gated (do not self-escalate)
+
+The scan bar is a fixed, declared depth. Reducing all open findings to zero **at
+the current bar is a legitimate, clear convergence point** — a fixed point of
+the refinement operator — not premature convergence. The loop MUST NOT raise the
+bar on its own. Autonomous bar-raising would make the convergence point
+undefined (the loop could never report "done"), which is exactly the failure
+this rule prevents. See `methodology/convergence.yaml` → `bar_raise_governance`.
+
+What the loop does as it approaches zero residual at the current bar:
+
+1. Keep reducing open findings at the current bar until none remain.
+2. Then *propose* bar-raise candidates — file them as `research/` or
+   `exploration/` issues describing the deeper scan that could be enabled (e.g.
+   treat build/test/runtime warnings, non-fatal errors, deprecation notices,
+   flaky-test signals, slow steps, or stale caches as findings). A proposal is a
+   candidate, not an enabled scan.
+3. STOP there. Enabling any bar-raise — actually treating a deeper signal class
+   as findings — is an explicit, one-off decision that **The Tlatoāni must
+   approve every time.** Record the approval (who/when/scope) before the deeper
+   scan becomes part of the loop's contract.
+
+Rationale: much of the system is "build what works, then improve from there," so
+each bar-raise is a deliberate scope expansion the operator owns, not an
+emergent behavior. Automatable approval of *some* low-risk bar-raises may come
+later; until The Tlatoāni declares such a policy, every bar-raise is manual.
+Reaching zero at the current bar and filing bar-raise candidates is a complete,
+successful cycle — not an excuse to escalate unprompted.
+
+See `plan/issues/meta-orch-enhancement-opportunities-2026-06-20.md` for a worked
+example of capture → reduce → promote.
 
 ## Worker Drain
 
@@ -69,7 +170,7 @@ When choosing the builder role, run `/advance-work-from-plan` repeatedly in a `.
 - every eligible item is blocked;
 - a terminal failure was filed;
 - the current cycle has already produced a coherent commit and the next packet
-  would exceed the recurring-loop budget.
+  would exceed the recurring-loop budget (note: if running inside a `forge` container under smoke tests, ignore this limit and drain as many ready forge tasks as possible in a single loop run to make progress in large batches).
 
 Each worker cycle must obey the non-negotiable exit contract above.
 
@@ -116,9 +217,16 @@ Only `linux_mutable` performs global coordination:
 
 Before exit:
 
-1. Refresh `plan/issues/ACTIVE.md` and `plan/loop_status.md` if this cycle
+1. Reduction-engine capture check: confirm every "this isn't great" observation
+   from this cycle is filed in `plan/issues/` (classified `research/`,
+   `exploration/`, `enhancement/`, or `optimization/`) and, where reduced,
+   promoted to a `plan/index.yaml` packet. An unfiled finding blocks exit.
+2. Refresh `plan/issues/ACTIVE.md` and `plan/loop_status.md` if this cycle
    changed active work, blockers, tested release, or host assignments.
-2. Validate touched YAML with a parser.
-3. Commit targeted files only.
-4. Push the relevant branch.
-5. Confirm `git status --short --branch` is clean and not ahead of upstream.
+3. Validate touched YAML with a parser. Use the approved non-Python validator
+   for the host (`tillandsias-policy validate-yaml` where built); Python is not
+   permitted for committed automation (see
+   `plan/issues/meta-orch-enhancement-opportunities-2026-06-20.md` order 63).
+4. Commit targeted files only.
+5. Push the relevant branch.
+6. Confirm `git status --short --branch` is clean and not ahead of upstream.

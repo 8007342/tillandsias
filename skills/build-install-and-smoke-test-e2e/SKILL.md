@@ -1,6 +1,6 @@
 ---
 name: build-install-and-smoke-test-e2e
-description: Build, install, and DESTRUCTIVELY smoke-test the current Tillandsias checkout on the host you are running on — Linux (Podman), macOS (Virtualization.framework VM), or Windows (WSL2). Detects the OS, builds + installs the locally built tray, irreversibly destroys the host's runtime substrate (Podman store / macOS VM dir / WSL2 distro), re-provisions from a pristine state, and — on Linux only — launches the forge with `/forge-continuous-enhancement`. Every issue observed is filed as a `plan/issues/` work packet.
+description: Build, install, and DESTRUCTIVELY smoke-test the current Tillandsias checkout on the host you are running on — Linux (Podman), macOS (Virtualization.framework VM), or Windows (WSL2). Detects the OS, builds + installs the locally built tray, irreversibly destroys the host's runtime substrate (Podman store / macOS VM dir / WSL2 distro), re-provisions from a pristine state, and — on Linux only — launches the forge with `/meta-orchestration`. Every issue observed is filed as a `plan/issues/` work packet.
 ---
 
 # Build, Install, and Smoke Test End-to-End (OS-aware)
@@ -290,8 +290,8 @@ findings.
 TILLANDSIAS_SMOKE_LOCK_LOG="$LOG_DIR/00-smoke-lock.log" \
   scripts/with-smoke-lock.sh --name build-install-smoke-e2e -- \
   env TILLANDSIAS_NO_TRAY=1 tillandsias . --opencode \
-  --prompt "Use the /forge-continuous-enhancement skill" 2>&1 \
-  | tee "$LOG_DIR/04-forge-continuous-enhancement.log"
+  --prompt "Use the /meta-orchestration skill" 2>&1 \
+  | tee "$LOG_DIR/04-meta-orchestration.log"
 FORGE_RC=${PIPESTATUS[0]}; printf 'forge_exit=%s\n' "$FORGE_RC" | tee "$LOG_DIR/04-forge-exit.txt"
 test "$FORGE_RC" -eq 0
 ```

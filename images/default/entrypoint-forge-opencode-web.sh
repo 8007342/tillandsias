@@ -25,6 +25,7 @@ fi
 # Agent attribution for git commit trailers.
 export TILLANDSIAS_AGENT_NAME="OpenCode"
 export TILLANDSIAS_GENERATED_BY="tool=opencode"
+export TILLANDSIAS_HOST_KIND="forge"
 
 # @trace spec:proxy-container
 # Trust the Tillandsias enclave CA chain for HTTPS proxy caching.

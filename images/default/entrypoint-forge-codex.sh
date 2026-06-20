@@ -19,6 +19,7 @@ fi
 # Agent attribution for git commit trailers.
 export TILLANDSIAS_AGENT_NAME="OpenAI Codex"
 export TILLANDSIAS_GENERATED_BY="tool=codex"
+export TILLANDSIAS_HOST_KIND="forge"
 
 # @trace spec:forge-hot-cold-split, spec:agent-cheatsheets
 # Populate tmpfs hot mount (/opt/cheatsheets) from image-baked lower layer.

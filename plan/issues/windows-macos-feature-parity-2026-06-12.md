@@ -95,3 +95,43 @@ note. Current evidence says the parity gap is concentrated in four surfaces:
     Drained the remaining plan.yaml future intention into this structured
     cross-host parity packet. Implementation remains split by host queue and by
     the active macOS Vault blocker.
+
+- type: coordinator_review
+  ts: "2026-06-20T08:42Z"
+  agent_id: "linux-macuahuitl-claude-20260620T0842Z"
+  host: linux
+  note: >
+    Coordinator pass (2026-06-20T08:42Z). Sibling state: windows-next at
+    a3c8b23d (ancestor of linux-next — in sync, 0 drift); osx-next at d829808d
+    (ancestor of linux-next — in sync, 0 drift). SSH unavailable in Cowork
+    session; fetch and push both fail. Local linux-next is 2 commits ahead
+    (nanoclawv2 Slice 3 + plan packet, push-blocked since 08:33Z cycle).
+
+    Wave A (vault aarch64 blocker): `enclave/macos-vault-unreachable-via-publish-aarch64`
+    remains OPEN. Code inspection confirms: (1) vault.hcl binds 0.0.0.0:8200 ✓;
+    (2) CA cert path /tmp/tillandsias-ca/intermediate.crt ✓; (3) vault_bootstrap.rs
+    launches with `--userns keep-id -p 127.0.0.1:8201:8200 --network tillandsias-enclave`.
+    Root cause is aarch64 rootlessport failing to forward bytes through the bridge
+    netns despite accepting the TCP SYN. Potential next steps for Linux worker (requires
+    aarch64 VM): (a) check `podman version` and `rootlessport` binary on the VM;
+    (b) try `--network=pasta` instead of bridge+publish to bypass rootlessport
+    entirely (pasta handles port forwarding in userspace without the bridge netns
+    indirection); (c) verify whether `slirp4netns:port_handler=slirp4netns` resolves
+    the issue as a fallback. No code change shipped — aarch64 VM probe required to
+    confirm before modifying vault launch args. Filed for next aarch64-capable session.
+
+    Wave B (github login route): blocked on Wave A. Lease `ghlogin-route-orchestrated-20260620T0134Z`
+    still held by macOS operator; code is shaped (launch_spec → orchestrated --github-login)
+    but intentionally not shipped alone. No change.
+
+    Wave C / D: blocked on Waves A + B. No change.
+
+    Windows sync: a3c8b23d is 21 commits behind linux-next. Step-36 Vault keychain
+    blocked on linux step-32 (true-rekey) — not yet landed. No Windows work eligible.
+
+    NanoClawV2 (adjacent): Slices 1-3 complete on local linux-next (push-blocked).
+    Slice 4 (smoke coverage) is the next packet; not started this cycle due to
+    push-blocked state and Cowork session SSH constraint.
+
+    Coordinator decision: no Wave A code action possible without aarch64 VM access.
+    Packet remains ready/in-progress awaiting operator aarch64 probe.
