@@ -1,6 +1,22 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-20T13:04Z
+Last updated: 2026-06-20T14:05Z
+
+## This Cycle (2026-06-20T14:05Z, linux)
+
+- **Meta-orchestration sync**: Startup on mutable Linux (Cowork session). Branch
+  `linux-next`, 10 commits ahead of `origin/linux-next` (push-blocked, persistent
+  SSH constraint). Git fetch FAILED — SSH unavailable. Saturday — full drain eligible.
+- **Worker drain**: No ready plan nodes for linux. All plan steps completed/done/deferred.
+  Sibling branches (local cache): windows=a3c8b23d and osx=d829808d are both ancestors
+  of linux-next HEAD — no merge needed.
+- **Verification**: Litmus 107/107 PASS. `./build.sh --check` PASS.
+- **E2E gates**: Skipped — podman user session unavailable in Cowork sandbox (same
+  constraint as all prior cycles today). Push blocked.
+- **Push state**: BLOCKED — SSH unavailable. linux-next 10 commits ahead of origin.
+  Operator must: `git push origin linux-next`.
+- **Next**: (1) Operator push. (2) Local-build e2e (nanoclawv2 live container launch).
+  (3) aarch64 VM pasta probe for vault port-forwarding.
 
 ## This Cycle (2026-06-20T13:04Z, linux)
 

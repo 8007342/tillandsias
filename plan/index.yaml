@@ -4267,7 +4267,6 @@ plan_index:
                 Changed ENCLAVE_NET to ENCLAVE_EGRESS_NETS (dual-home gh-login helper
                 onto managed egress network). Added regression test
                 github_login_helper_dual_homes_onto_managed_egress_network.
-              note: >
                 Operator curl-installed release v0.3.260616.2 on immutable
                 Linux. Install and `--debug --init` succeeded, Vault was
                 running/unsealed, but `--debug --github-login` failed when the
