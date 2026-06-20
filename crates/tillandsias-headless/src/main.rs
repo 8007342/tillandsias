@@ -2995,6 +2995,10 @@ fn auto_detect_and_configure_ipv6_workaround(debug: bool) {
     }
 }
 
+fn is_optional_image(image_name: &str) -> bool {
+    matches!(image_name, "forge-base" | "forge" | "nanoclawv2")
+}
+
 fn run_init(debug: bool, force: bool) -> Result<(), String> {
     require_desktop_user_session("tillandsias --init")?;
     report_runtime_lane("--init", debug);
@@ -3049,14 +3053,42 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
     let mut identities = HashMap::<String, ImageBuildIdentity>::new();
 
     for image in &images {
-        let (build_args, dependency_digests) = image_build_inputs(image, &identities)?;
-        let identity = runtime_assets::image_identity(
+        let (build_args, dependency_digests) = match image_build_inputs(image, &identities) {
+            Ok(val) => val,
+            Err(e) => {
+                if is_optional_image(image) {
+                    if debug {
+                        eprintln!("WARNING: Skipping optional image {} because dependency mapping failed: {}", image, e);
+                    }
+                    state.mark_failed(image);
+                    failed_images.push((image.to_string(), e));
+                    continue;
+                } else {
+                    return Err(e);
+                }
+            }
+        };
+        let identity = match runtime_assets::image_identity(
             &root,
             image,
             version,
             build_args.clone(),
             dependency_digests,
-        )?;
+        ) {
+            Ok(id) => id,
+            Err(e) => {
+                if is_optional_image(image) {
+                    if debug {
+                        eprintln!("WARNING: Skipping optional image {} because identity generation failed: {}", image, e);
+                    }
+                    state.mark_failed(image);
+                    failed_images.push((image.to_string(), e));
+                    continue;
+                } else {
+                    return Err(e);
+                }
+            }
+        };
         let (observation, observed_image_id) =
             rt.block_on(observe_image_build(&client, &identity, force));
         let decision = decide_image_build(identity.clone(), &observation);
@@ -3239,18 +3271,34 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
         cleanup_init_logs();
     }
 
-    // Return error if any images failed
-    if !failed_images.is_empty() {
+    // Return error if any required images failed
+    let required_failures: Vec<_> = failed_images
+        .iter()
+        .filter(|(name, _)| !is_optional_image(name))
+        .collect();
+
+    if !required_failures.is_empty() {
         return Err(format!(
-            "Failed to build {} image(s): {}",
-            failed_images.len(),
-            failed_images
+            "Failed to build {} required image(s): {}",
+            required_failures.len(),
+            required_failures
                 .iter()
-                .map(|(name, _)| name)
-                .cloned()
+                .map(|(name, _)| name.clone())
                 .collect::<Vec<_>>()
                 .join(", ")
         ));
+    }
+
+    if !failed_images.is_empty() {
+        let optional_failed: Vec<_> = failed_images
+            .iter()
+            .map(|(name, _)| name.clone())
+            .collect();
+        eprintln!(
+            "WARNING: Failed to build {} optional image(s): {}",
+            optional_failed.len(),
+            optional_failed.join(", ")
+        );
     }
 
     Ok(())
@@ -9067,6 +9115,20 @@ mod tests {
             forge_base_idx < nanoclawv2_idx,
             "forge-base must be built before nanoclawv2"
         );
+    }
+
+    #[test]
+    fn test_is_optional_image() {
+        assert!(is_optional_image("forge-base"));
+        assert!(is_optional_image("forge"));
+        assert!(is_optional_image("nanoclawv2"));
+        assert!(!is_optional_image("proxy"));
+        assert!(!is_optional_image("git"));
+        assert!(!is_optional_image("inference"));
+        assert!(!is_optional_image("router"));
+        assert!(!is_optional_image("chromium-core"));
+        assert!(!is_optional_image("chromium-framework"));
+        assert!(!is_optional_image("web"));
     }
 
     #[test]

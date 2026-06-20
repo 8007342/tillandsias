@@ -4923,7 +4923,7 @@ plan_index:
     - packet_id: smoke-finding/forge-base-pip-build-network-timeout
       order: 70
       title: "forge-base pip3 large-payload timeout in podman build network context"
-      status: ready
+      status: completed
       kind: bug
       deliverable: plan/issues/smoke-e2e-findings-v0.3.260620.8-2026-06-20.md
       depends_on: []
@@ -4934,7 +4934,7 @@ plan_index:
         on an immutable Linux host reaching init_exit=0.
       tasks:
         - id: smoke-finding/forge-base-pip-build-network-timeout/quick-fix
-          status: ready
+          status: completed
           depends_on: []
           owned_files:
             - images/default/Containerfile.base
@@ -4945,7 +4945,7 @@ plan_index:
             podman build on a fresh store on immutable Linux (or simulate the
             pasta network context).
         - id: smoke-finding/forge-base-pip-build-network-timeout/root-investigation
-          status: ready
+          status: completed
           depends_on: [smoke-finding/forge-base-pip-build-network-timeout/quick-fix]
           owned_files:
             - scripts/build-image.sh
@@ -4973,7 +4973,7 @@ plan_index:
     - packet_id: smoke-finding/init-all-or-nothing-forge-blocks-core
       order: 71
       title: "init all-or-nothing: forge-base failure prevents core enclave from starting"
-      status: ready
+      status: completed
       kind: enhancement
       deliverable: plan/issues/smoke-e2e-findings-v0.3.260620.8-2026-06-20.md
       depends_on: []
@@ -4984,7 +4984,7 @@ plan_index:
         and marks forge as unavailable rather than exiting 1 with no containers.
       tasks:
         - id: smoke-finding/init-all-or-nothing/optional-images
-          status: ready
+          status: completed
           depends_on: []
           owned_files:
             - crates/tillandsias-headless/src/init.rs

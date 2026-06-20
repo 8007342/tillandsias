@@ -30,7 +30,7 @@
 - id: `smoke-finding/forge-base-pip-build-network-timeout`
 - owner_host: linux
 - capability_tags: [podman, networking, images, containerfiles, forge]
-- status: ready
+- status: completed
 - discovered_by: `/smoke-curl-install-and-test-e2e` on release `v0.3.260620.8`
 - evidence:
   - `target/smoke-e2e/03-init.log:3505` — `WARNING: Attempting to resume incomplete download (0 bytes/6.1 MB, attempt 1)`
@@ -67,6 +67,11 @@
     ts: "2026-06-20T20:57Z"
     agent_id: "linux-claude-sonnet46-immutable-20260620T2034Z"
     host: linux_immutable
+  - type: resolved
+    ts: "2026-06-20T22:15Z"
+    agent_id: "linux-claude-sonnet46-immutable-20260620T2034Z"
+    host: linux_immutable
+    note: "Added --timeout 120 to pip3 install in Containerfile.base."
 
 ---
 
@@ -75,7 +80,7 @@
 - id: `smoke-finding/init-all-or-nothing-forge-blocks-core`
 - owner_host: linux
 - capability_tags: [init, podman, resilience, forge]
-- status: ready
+- status: completed
 - discovered_by: `/smoke-curl-install-and-test-e2e` on release `v0.3.260620.8`
 - evidence:
   - `target/smoke-e2e/03-init.log` (final lines) — `Error: Failed to build 3 image(s): forge-base, forge, nanoclawv2`; `exit=1`
@@ -109,6 +114,11 @@
     ts: "2026-06-20T20:57Z"
     agent_id: "linux-claude-sonnet46-immutable-20260620T2034Z"
     host: linux_immutable
+  - type: resolved
+    ts: "2026-06-20T22:15Z"
+    agent_id: "linux-claude-sonnet46-immutable-20260620T2034Z"
+    host: linux_immutable
+    note: "Implemented is_optional_image helper and optional image handling in run_init. Added unit test."
 
 ---
 
