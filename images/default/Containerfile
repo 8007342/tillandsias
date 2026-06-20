@@ -99,10 +99,12 @@ RUN mkdir -p /opt/agents/tillandsias-cli/bin
 COPY cli/tillandsias-inventory /opt/agents/tillandsias-cli/bin/tillandsias-inventory
 COPY cli/tillandsias-services /opt/agents/tillandsias-cli/bin/tillandsias-services
 COPY cli/tillandsias-models /opt/agents/tillandsias-cli/bin/tillandsias-models
+COPY cli/tellme /opt/agents/tillandsias-cli/bin/tellme
 RUN chmod +x /opt/agents/tillandsias-cli/bin/* \
     && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-inventory /usr/local/bin/tillandsias-inventory \
     && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-services /usr/local/bin/tillandsias-services \
-    && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-models /usr/local/bin/tillandsias-models
+    && ln -sf /opt/agents/tillandsias-cli/bin/tillandsias-models /usr/local/bin/tillandsias-models \
+    && ln -sf /opt/agents/tillandsias-cli/bin/tellme /usr/local/bin/tellme
 
 # ── Skills mapping ─────────────────────────────────────────────
 # @trace spec:forge-skills-mapping

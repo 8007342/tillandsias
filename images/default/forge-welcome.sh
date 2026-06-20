@@ -170,23 +170,23 @@ echo ""
 printf "  ${B_WHITE}Languages${RST}    ${DIM}rust, go, java 25, python 3.13, node 22, dart 3 (flutter)${RST}\n"
 printf "  ${B_WHITE}Build${RST}        ${DIM}cargo, maven, gradle, npm/yarn/pnpm, nix, make, cmake, ninja${RST}\n"
 printf "  ${B_WHITE}Test${RST}         ${DIM}pytest, junit, cargo-test, chromium-headless, firefox, drivers${RST}\n"
-printf "  ${B_WHITE}Inventory${RST}    ${DIM}run ${B_CYAN}tillandsias-inventory${RST}${DIM} for the full list${RST}\n"
-printf "  ${B_WHITE}Services${RST}     ${DIM}run ${B_CYAN}tillandsias-services${RST}${DIM} for enclave endpoints${RST}\n"
-printf "  ${B_WHITE}Models${RST}       ${DIM}run ${B_CYAN}tillandsias-models${RST}${DIM} for inference tiers${RST}\n"
-echo ""
-
-# @trace spec:agent-cheatsheets, spec:forge-opencode-onboarding
-# Surface the cheatsheets path on every attach so agents and humans both see it before guessing tool flags.
-if [ -d "${TILLANDSIAS_CHEATSHEETS:-/opt/cheatsheets}" ]; then
-    printf "  📚 ${B_WHITE}Cheatsheets${RST} ${DIM}cat${RST} ${B_CYAN}%s/INDEX.md${RST} ${DIM}| rg <topic>${RST}\n" \
-        "${TILLANDSIAS_CHEATSHEETS:-/opt/cheatsheets}"
-    echo ""
-    # @trace spec:forge-opencode-onboarding, gap:forge-welcome-cheatsheet-pointer
-    # Agent discovery: explicitly point to the welcome/ cheatsheet entry point
-    _AGENT_ONBOARDING="${L_AGENT_ONBOARDING:-🤖 Agent onboarding}"
-    _AGENT_ONBOARDING_HINT="${L_AGENT_ONBOARDING_HINT:-cat \$TILLANDSIAS_CHEATSHEETS/welcome/readme-discipline.md for first-turn guide}"
-    printf "  ${B_YELLOW}%s${RST} ${DIM}%s${RST}\n" "$_AGENT_ONBOARDING" "$_AGENT_ONBOARDING_HINT"
-    echo ""
-fi
+  printf "  ${B_WHITE}Inventory${RST}    ${DIM}run ${B_CYAN}tillandsias-inventory${RST}${DIM} for the full list${RST}\n"
+  printf "  ${B_WHITE}Services${RST}     ${DIM}run ${B_CYAN}tillandsias-services${RST}${DIM} for enclave endpoints${RST}\n"
+  printf "  ${B_WHITE}Models${RST}       ${DIM}run ${B_CYAN}tillandsias-models${RST}${DIM} for inference tiers${RST}\n"
+  printf "  ${B_WHITE}Cheatsheets${RST}  ${DIM}run ${B_CYAN}tellme about <topic>${RST}${DIM} to query documentation${RST}\n"
+  echo ""
+  
+  # @trace spec:agent-cheatsheets, spec:forge-opencode-onboarding
+  # Surface the cheatsheets path on every attach so agents and humans both see it before guessing tool flags.
+  if [ -d "${TILLANDSIAS_CHEATSHEETS:-/opt/cheatsheets}" ]; then
+      printf "  📚 ${B_WHITE}Cheatsheets${RST} ${DIM}run ${B_CYAN}tellme about <topic>${RST} ${DIM}or${RST} ${B_CYAN}tellme about <topic> --full${RST}\n"
+      echo ""
+      # @trace spec:forge-opencode-onboarding, gap:forge-welcome-cheatsheet-pointer
+      # Agent discovery: explicitly point to the welcome/ cheatsheet entry point
+      _AGENT_ONBOARDING="${L_AGENT_ONBOARDING:-🤖 Agent onboarding}"
+      _AGENT_ONBOARDING_HINT="${L_AGENT_ONBOARDING_HINT:-tellme about readme-discipline --full for first-turn guide}"
+      printf "  ${B_YELLOW}%s${RST} ${DIM}%s${RST}\n" "$_AGENT_ONBOARDING" "$_AGENT_ONBOARDING_HINT"
+      echo ""
+  fi
 printf "  💡 %b\n" "$tip"
 echo ""

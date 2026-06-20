@@ -36,29 +36,29 @@ preconditions:
   - shell utilities (grep) are available in PATH
 
 critical_path:
-  - step: "Req trace: all 3 CLIs carry @trace spec:forge-environment-discoverability"
-    # Spec § Requirements 1/2/3 each mandate one CLI; all 3 CLIs
+  - step: "Req trace: all 4 CLIs carry @trace spec:forge-environment-discoverability"
+    # Spec § Requirements 1/2/3 each mandate one CLI; all 4 CLIs
     # need the trace annotation for the canonical graph. Substring
     # match handles comma-list trace form.
-    command: "for c in tillandsias-inventory tillandsias-services tillandsias-models; do grep -Fq 'spec:forge-environment-discoverability' images/default/cli/$c || { echo \"FAIL: $c missing @trace\"; exit 1; }; done && echo \"ok: 3 CLIs traced\""
+    command: "for c in tillandsias-inventory tillandsias-services tillandsias-models tellme; do grep -Fq 'spec:forge-environment-discoverability' images/default/cli/$c || { echo \"FAIL: $c missing @trace\"; exit 1; }; done && echo \"ok: 4 CLIs traced\""
     timeout_ms: 3000
     expected_behavior: "ok:"
 
-  - step: "Req 1+2+3 install: Containerfile COPYs all 3 CLIs into /opt/agents/tillandsias-cli/bin/"
+  - step: "Req 1+2+3+tellme install: Containerfile COPYs all 4 CLIs into /opt/agents/tillandsias-cli/bin/"
     # Spec § Reqs mandate the CLIs are available as commands. The
     # canonical install path mirrors other agents (`/opt/agents/
-    # tillandsias-cli/bin/`). Pin all 3 COPY directives so a
+    # tillandsias-cli/bin/`). Pin all 4 COPY directives so a
     # refactor dropping any one surfaces.
-    command: "for c in tillandsias-inventory tillandsias-services tillandsias-models; do grep -Fq \"COPY cli/$c /opt/agents/tillandsias-cli/bin/$c\" images/default/Containerfile || { echo \"FAIL: $c COPY directive missing\"; exit 1; }; done && echo \"ok: 3 COPYs intact\""
+    command: "for c in tillandsias-inventory tillandsias-services tillandsias-models tellme; do grep -Fq \"COPY cli/$c /opt/agents/tillandsias-cli/bin/$c\" images/default/Containerfile || { echo \"FAIL: $c COPY directive missing\"; exit 1; }; done && echo \"ok: 4 COPYs intact\""
     timeout_ms: 3000
     expected_behavior: "ok:"
 
-  - step: "Req 1+2+3 PATH discovery: Containerfile symlinks all 3 CLIs into /usr/local/bin/"
+  - step: "Req 1+2+3+tellme PATH discovery: Containerfile symlinks all 4 CLIs into /usr/local/bin/"
     # The COPY puts them under /opt/agents/...; the symlinks expose
     # them on the user PATH. A regression dropping the symlinks
     # would silently break interactive discovery while keeping the
     # files installed (a previous-failure-mode hybrid).
-    command: "for c in tillandsias-inventory tillandsias-services tillandsias-models; do grep -Fq \"ln -sf /opt/agents/tillandsias-cli/bin/$c /usr/local/bin/$c\" images/default/Containerfile || { echo \"FAIL: $c symlink missing\"; exit 1; }; done && echo \"ok: 3 symlinks intact\""
+    command: "for c in tillandsias-inventory tillandsias-services tillandsias-models tellme; do grep -Fq \"ln -sf /opt/agents/tillandsias-cli/bin/$c /usr/local/bin/$c\" images/default/Containerfile || { echo \"FAIL: $c symlink missing\"; exit 1; }; done && echo \"ok: 4 symlinks intact\""
     timeout_ms: 3000
     expected_behavior: "ok:"
 
@@ -88,24 +88,23 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "ok:"
 
-  - step: "Req 4 welcome banner: advertises all 3 CLIs by name"
-    # Spec § Req 4 mandates the welcome banner mentions the 3
-    # discovery commands. The forge-welcome.sh `Inventory/Services/
-    # Models` rows are the impl; pin all 3 advertisements (these
+  - step: "Req 4 welcome banner: advertises all 4 CLIs by name"
+    # Spec § Req 4 mandates the welcome banner mentions the discovery
+    # commands. Pin all 4 advertisements (these
     # are what regressed — banner advertised commands that the
     # earlier unwiring made invalid).
-    command: "for c in tillandsias-inventory tillandsias-services tillandsias-models; do grep -Fq \"$c\" images/default/forge-welcome.sh || { echo \"FAIL: welcome banner doesn't advertise $c\"; exit 1; }; done && echo \"ok: banner advertises 3 CLIs\""
+    command: "for c in tillandsias-inventory tillandsias-services tillandsias-models tellme; do grep -Fq \"$c\" images/default/forge-welcome.sh || { echo \"FAIL: welcome banner doesn't advertise $c\"; exit 1; }; done && echo \"ok: banner advertises 4 CLIs\""
     timeout_ms: 3000
     expected_behavior: "ok:"
 
 observability:
   traces:
     - "@trace spec:forge-environment-discoverability"
-  expected_log: "3 discovery CLIs (inventory + services + models) installed via COPY+symlink, advertised by welcome banner, with category-floor/canonical-port/tier-mapping invariants pinned"
+  expected_log: "4 discovery CLIs (inventory + services + models + tellme) installed via COPY+symlink, advertised by welcome banner, with category-floor/canonical-port/tier-mapping invariants pinned"
   log_fields:
     spec: "forge-environment-discoverability"
     test: "forge-environment-discoverability-install-shape"
-    artifact: "images/default/{Containerfile,cli/tillandsias-*,forge-welcome.sh}"
+    artifact: "images/default/{Containerfile,cli/tillandsias-*,cli/tellme,forge-welcome.sh}"
 
 rollback:
   on_failure: >
