@@ -4150,8 +4150,8 @@ plan_index:
 
     - id: nanoclawv2-orchestration
       order: 56
-      title: NanoClawV2 orchestration engine and launcher leaf
-      status: claimed
+      title: ZeroClaw orchestration engine and launcher leaf (Supersedes NanoClawV2)
+      status: superseded_migrating_to_zeroclaw
       owner_host: linux
       deliverable: plan/issues/nanoclawv2-orchestration.md
       audit_origin: plan/issues/nanoclawv2-orchestration.md
@@ -4162,8 +4162,8 @@ plan_index:
         - podman-orchestration
         - mcp-on-demand
       exit_criteria:
-        - "🦞 NanoClawV2 launches for a project and remains branch-aware."
-        - "Only approved orchestration actions are reachable from NanoClawV2."
+        - "🦞 ZeroClaw launches for a project and remains branch-aware (superseding NanoClawV2)."
+        - "Only approved orchestration actions are reachable from ZeroClaw."
         - "Smoke coverage proves launch and one approved action."
       tasks:
         - id: nanoclawv2/spec-and-plan
@@ -4182,14 +4182,14 @@ plan_index:
           status: claimed
           owner_host: linux
           estimated_hours: 4
-          capability_tags: [rust, podman, orchestration, nanoclaw]
+          capability_tags: [rust, podman, orchestration, zeroclaw]
           depends_on: [nanoclawv2/spec-and-plan]
           owned_files:
-            - crates/tillandsias-headless/src/nanoclaw.rs
-            - images/nanoclaw/Containerfile
-            - scripts/build-nanoclaw.sh
+            - crates/tillandsias-headless/src/zeroclaw.rs
+            - images/zeroclaw/Containerfile
+            - scripts/build-zeroclaw.sh
           next_action: >
-            Wire the launcher leaf, broker surface, and smoke hooks.
+            HALT NanoClaw work. Migrate all existing NanoClawV2 implementation files to ZeroClaw. Update Containerfile to use fedora:44 base and compile ZeroClaw Rust binary. Wire the launcher leaf, broker surface, and smoke hooks for ZeroClaw.
           events:
             - type: claim
               ts: "2026-06-17T22:07:00Z"

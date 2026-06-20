@@ -1,20 +1,16 @@
 # NanoClawV2 orchestration engine and launcher leaf
 
 - branch: linux-next
-- status: claimed
+- status: superseded (migrating to ZeroClaw)
 - owner_host: linux
 - source: `openspec/changes/nanoclawv2-orchestration/`
 - scope:
-  - add a `🦞 NanoClawV2` per-project launch leaf
-  - add a baked NanoClawV2 container image
+  - add a `🦞 ZeroClaw` per-project launch leaf (supersedes NanoClawV2)
+  - add a baked ZeroClaw container image (based on fedora:44, entirely in Rust)
   - add a narrow host control surface for approved orchestration actions
   - add smoke coverage for launch + one approved action
-- current_progress: proposal, design, tasks, and spec scaffolded. Slice 1
-  (image infrastructure) completed: images/nanoclawv2/Containerfile created,
-  config overlay with orchestration instructions, entrypoint, build-image.sh
-  registration added, build verification passed, and committed. Slice 2 (tray launcher leaf) completed: image builder registration and allowlisted launch path done.
-- next_action: register nanoclawv2 in Rust image builder (image_specs, run_init,
-  image_build_inputs), then verify build and update tasks.
+- current_progress: SUPERSEDED BY ZEROCLAW. Slice 1 & 2 completed for NanoClawV2, but must now be migrated. NanoClaw uses Node.js and MIT licensing; ZeroClaw is a pure Rust port with an Apache 2.0 license. 
+- next_action: HALT NanoClawV2 work. Migrate the existing implementation to ZeroClaw. Update `images/nanoclawv2/Containerfile` to point to a Fedora 44 base compiling the ZeroClaw Rust binary. Rename directories and scripts from `nanoclaw` to `zeroclaw`. See `plan/secure_agent_forge_plan.md` for full context on this architectural shift.
 - events:
   - type: claim
     ts: "2026-06-20T05:56:00Z"
