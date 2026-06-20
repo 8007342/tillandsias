@@ -16,8 +16,13 @@ The `plan.yaml` file currently contains several "future intentions" that have no
 
 ## Tasks
 
-- [ ] Drain one item at a time from the `future_intentions` list in `plan.yaml`.
+- [x] Item 1 drained: "Move CURL installers and manual TAR/GZ manipulation in Containerfile to DNF." → `plan/issues/containerfile-dnf-migration-2026-06-20.md` (ready)
+- [ ] Drain next item from `future_intentions` in `plan.yaml`.
 - [ ] Convert each drained item into its own issue (e.g., inside `plan/issues/`) and its corresponding step in `plan/index.yaml` and `plan/steps/`.
 - [ ] Elaborate on the issue, expanding on what needs to be done.
 - [ ] **Important**: Where architectural decisions are required, formalize these as requirements to have discussions with "The Tlatoāni" for approval. Much of the work is self-evident to create tasks from it, but architecture choices need approval.
 - [ ] Remove the drained item from `future_intentions` once it has been fully formalized into the `./plan`.
+
+## Progress
+
+- 2026-06-20T01:45Z (linux-macuahuitl-big-pickle): Drained item 1 — created `plan/issues/containerfile-dnf-migration-2026-06-20.md` with full audit, feasibility analysis, and implementation plan. Removed from `future_intentions`.

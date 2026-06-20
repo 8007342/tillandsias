@@ -1,98 +1,89 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-20T00:55Z
+LastExecutionTime: 2026-06-20T01:45Z
 
 ## This Loop
 
-- **Cycle type**: meta-orchestration on mutable Linux: worker drain,
-  forge-continuous-enhancement symlink fix, release/e2e decision.
+- **Cycle type**: meta-orchestration on mutable Linux (Fedora 44): coordinator
+  duties (merge siblings → push) → worker drain (future-intentions step 58).
 - **Startup**: began clean on `linux-next` aligned with `origin/linux-next`
-  at `197ce0fb`. No tracked changes, no untracked artifacts.
-- **Sibling heads after fetch**:
-  - `main`: `6dfafdf1` (latest release tag `v0.3.260618.2`).
-  - `linux-next`: `197ce0fb` at cycle start; now `89eebe49` after fix.
-  - `windows-next`: `e332afb6` (ancestor of linux-next, 0 drift).
-  - `osx-next`: `f75c74cb` (ancestor of linux-next, 0 drift).
-- **Worker drain**: claimed and completed
-  `local-smoke/opencode-forge-continuous-enhancement-prompt-noop` — the
-  previous cycle's finding where the prompted forge lane exited 0 without
-  executing `/forge-continuous-enhancement`.
-- **Root cause**: `skills/forge-continuous-enhancement/` existed but the
-  required `.opencode/skills/forge-continuous-enhancement` symlink was
-  missing. OpenCode's `skill` tool looked at
-  `.opencode/skills/forge-continuous-enhancement/SKILL.md`, found nothing,
-  and the forge agent fell through to a clarification response.
-- **Implementation**: added symlink
-  `.opencode/skills/forge-continuous-enhancement` →
-  `../../skills/forge-continuous-enhancement` in commit `89eebe49`.
-- **Verification**: `cargo test -p tillandsias-headless` PASS;
-  `scripts/test-opencode-entrypoint-prompt.sh` PASS.
-- **E2E gates**: skipped — symlink-only change does not touch runtime,
-  image, installer, or release artifact. Full E2E is appropriate for the
-  next cycle after a rebuild image includes this fix, or when a new release
-  is published.
-- **Coordination audit**: `origin/windows-next` and `origin/osx-next` are
-  both ancestors of `origin/linux-next` with 0 ahead drift. No
-  `plan/localwork/runtime-litmus/current` marker exists.
-- **Release decision**: no open `linux-next → main` PR, no release workflow
-  in flight, latest release tag `v0.3.260618.2`. Release deferred: the
-  symlink fix is image-embedded and a new release before the next rebuild
-  would not change behaviour. Defer to the next cycle that has a runtime
-  delta worth releasing.
+  at `b5c11dc7`. No tracked changes, no untracked artifacts.
+- **Fetch**: `origin/osx-next` advanced (`f75c74cb`→`61b8a9d7`, 3 commits);
+  `origin/windows-next` advanced (`e332afb6`→`3978582a`, 3 commits);
+  `origin/main` and `origin/linux-next` unchanged.
+- **Sibling merge**: Fast-forward merged `origin/osx-next` (plan-only: macOS
+  meta-orch cycle + F4 github-login fix packets + linux-next merge into osx-next).
+  Merged `origin/windows-next` with conflict resolution in `plan/issues/ACTIVE.md`
+  (timestamp line; kept HEAD at 01:37Z). Windows brought: SAC resolution + e2e
+  pass + cold-provision headless units `enable --now` fix + new plan issue files.
+- **Worker drain**: claimed `future-intentions-drain` (step 58). Drained future
+  intention item 1: "Move CURL installers and manual TAR/GZ manipulation in
+  Containerfile to DNF." → created `plan/issues/containerfile-dnf-migration-2026-06-20.md`
+  with full Containerfile audit (11 Containerfiles scanned), feasibility analysis
+  (3 immediate DNF candidates: buf, wasmtime, ollama; 3 keep-as-is: marksman,
+  cargo-nextest, dart). Updated `plan.yaml` (removed from future_intentions, added
+  drained_items), `plan/steps/58-future-intentions-drain.md`, and `plan/index.yaml`
+  (step 58 → in_progress; subtask created).
+- **E2E gates**: skipped — plan-only changes, no runtime/image/installer delta.
+- **Release decision**: deferred — no runtime change worth releasing; latest
+  release tag `v0.3.260618.2` remains current. No open `linux-next → main` PR,
+  no release workflow in flight.
 
 ## Active Conflicts & Mediation
 
 - Deadlocks: none detected.
 - Thrashing/write-write collision: none detected.
-- Branch drift: osx-next and windows-next are both ancestors of linux-next
-  (0 ahead / no merge required).
+- Branch drift: osx-next and windows-next merged into linux-next at `83d7e787`;
+  both are fully integrated (0 ahead/behind linux-next after push).
 - Wrong-direction progress: none detected.
 - High-Velocity Alignment Event: inactive.
-- Convergence velocity: positive; the forge-prompt semantic no-op is closed.
+- Convergence velocity: positive; step 58 progress and sibling integration landed.
 
 ## Blockers
 
 - **CLEARED (linux)**: `local-smoke/opencode-forge-continuous-enhancement-prompt-noop`
-  fixed in `89eebe49` — missing `.opencode/skills/` symlink created.
+  fixed in `89eebe49` from prior cycle.
 - **CLEARED (linux)**: `local-smoke/linux-musl-tray-binary-name-collision`
-  fixed in `307ef0eb` and verified by local-build E2E evidence.
+  fixed in `307ef0eb`.
+- **NEW (linux)**: `enclave/macos-vault-unreachable-via-publish-aarch64` — ready,
+  CRITICAL, linux-owned. Blocks macOS m8. Root cause analysis found vault.hcl
+  listener already at `0.0.0.0:8200` and health-probe CA path already host-resident
+  (`/tmp/tillandsias-ca/intermediate.crt` via `ensure_ca_bundle`). The actual
+  aarch64 failure may be podman networking or TLS SNI mismatch on that platform;
+  needs aarch64 VM access to diagnose.
 - **PARTIAL / operator-attended (linux)**:
   `tillandsias --debug --github-login` still needs live validation with a
-  fresh/rotated token after the earlier network fix.
+  fresh/rotated token.
 - **RECLAIMABLE (linux)**: `policy/no-python-runtime-scripts` and
   `nanoclawv2-orchestration`.
-- **RESOLVED (windows) 2026-06-20T01:01Z**: Smart App Control turned off by the
-  operator; native builds confirmed working. The Windows local-build e2e gate
-  was re-run (PASS) and surfaced + fixed a cold-provision hang
-  (`enable` → `enable --now` for the headless units, `wsl_lifecycle.rs`;
-  commits `6ea4004a`/`48e61c80` on windows-next). See
-  `plan/issues/build-install-smoke-e2e-windows-2026-06-19.md` and
-  `plan/issues/windows-cold-provision-headless-units-not-started-2026-06-19.md`.
-- **OPEN / user-attended (macos)**: step 49d / m8 interactive smoke; newest
-  macOS evidence is now integrated.
+- **RESOLVED (windows) 2026-06-20T01:01Z**: Smart App Control turned off; native
+  builds working. Cold-provision fix (`enable --now`) merged into linux-next.
+- **OPEN / user-attended (macos)**: step 49d / m8 interactive smoke + the new
+  `enclave/macos-vault-unreachable-via-publish-aarch64` packet (critical, linux
+  to fix first).
 
 ## Assignment Board
 
-- **Linux primary**: operator-attended
-  `tillandsias --debug --github-login` runtime validation, or next available
-  reclaimed packet (`policy/no-python-runtime-scripts` or
-  `nanoclawv2-orchestration`).
-- **Linux fallback**: continue no-Python cleanup or reclaim
-  `nanoclawv2-orchestration` if the login validation is not yet possible.
-- **Windows primary**: SAC resolved + e2e gate green. Next: claim the next
-  Windows-eligible packet (step 36 Vault/HvSocket parity stays blocked on linux
-  step 32), or re-run the local-build e2e on new runtime deltas.
-- **Windows fallback**: keep `windows-next` synced and report e2e status.
-- **macOS primary**: continue step 49d / m8 interactive smoke follow-up for
-  GitHub Login / local project enumeration.
-- **macOS fallback**: keep queue synchronized and report any user-smoke
-  evidence.
+- **Linux primary**: pick up `future-intentions-drain` next item, or claim
+  `policy/no-python-runtime-scripts`/`nanoclawv2-orchestration`.
+  Also: investigate `enclave/macos-vault-unreachable-via-publish-aarch64` with
+  aarch64 access.
+- **Linux fallback**: operator-attended `--github-login` validation.
+- **Windows primary**: SAC cleared + e2e green; claim next Windows-eligible
+  packet or keep synced.
+- **Windows fallback**: report e2e status.
+- **macOS primary**: wait on `enclave/macos-vault-unreachable-via-publish-aarch64`
+  fix from linux; step 49d m8 smoke after Vault is reachable.
+- **macOS fallback**: keep queue synchronized.
 
 ## Stale Or Pending Pings
 
 - Next useful Linux runtime probe: operator-attended
   `tillandsias --debug --github-login` on a clean post-init install with a
   fresh/rotated token.
-- Next rebuild triggered by a non-symlink runtime change will include the
-  `.opencode/skills/forge-continuous-enhancement` symlink, resolving the
-  semantic no-op in future E2E gates.
+- `enclave/macos-vault-unreachable-via-publish-aarch64` needs aarch64 VM
+  operator to run `curl --cacert /tmp/tillandsias-ca/intermediate.crt
+  https://127.0.0.1:8201/v1/sys/health?standbyok=true` on the VM host and
+  report the result.
+- `plan/issues/containerfile-dnf-migration-2026-06-20.md` is ready for a
+  builder to implement (3 DNF candidates: buf, wasmtime, ollama).

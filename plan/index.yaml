@@ -4271,7 +4271,7 @@ plan_index:
     - id: future-intentions-drain
       order: 58
       title: Drain future intentions into planned tasks
-      status: ready
+      status: in_progress
       deliverable: plan/steps/58-future-intentions-drain.md
       depends_on: []
       outcome: >
@@ -4279,10 +4279,18 @@ plan_index:
         on architectural decisions with The Tlatoāni are initiated.
       tasks:
         - id: future-intentions-drain/drain-tasks
-          status: ready
+          status: in_progress
           depends_on: []
           owned_files:
             - plan.yaml
             - plan/index.yaml
             - plan/steps/58-future-intentions-drain.md
             - plan/issues/
+        - id: future-intentions-drain/containerfile-dnf-migration
+          status: ready
+          depends_on: [future-intentions-drain/drain-tasks]
+          owned_files:
+            - plan/issues/containerfile-dnf-migration-2026-06-20.md
+            - images/default/Containerfile.base
+            - images/inference/Containerfile
+            - scripts/build-image.sh
