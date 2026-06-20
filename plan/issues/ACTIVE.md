@@ -1,6 +1,25 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-20T10:04Z
+Last updated: 2026-06-20T11:04Z
+
+## This Cycle (2026-06-20T11:04Z, linux)
+
+- **Meta-orchestration sync**: Startup on mutable Linux (Cowork session). Branch
+  `linux-next`, 6 commits ahead of `origin/linux-next` (push-blocked, persistent
+  SSH constraint across all Cowork sessions today). Git fetch FAILED — SSH
+  unavailable. Sibling heads (local cache): windows=a3c8b23d, osx=d829808d,
+  main=6dfafdf1. Saturday — full drain eligible.
+- **Worker drain**: Closed `future-intentions-drain` (step 58). All 7 future
+  intentions drained as of prior cycles; parent step was still `in_progress`
+  despite all sub-tasks complete. Marked step `done`, released
+  `windows-macos-feature-parity` claim (drain outcome achieved; implementation
+  tracking lives in parity issue file + macos-in-vm-enclave-provisioning step).
+  No ready plan work remains eligible for linux without SSH or aarch64 VM.
+- **E2E gates**: Skipped — push blocked, no runtime delta since v0.3.260618.2.
+- **Push state**: BLOCKED — SSH unavailable in Cowork session. linux-next now 7
+  commits ahead of origin. Operator must: `git push origin linux-next`.
+- **Next**: (1) Operator push to unblock. (2) Local-build e2e gate (nanoclawv2
+  live container launch). (3) aarch64 VM pasta probe for vault port-forwarding.
 
 ## This Cycle (2026-06-20T10:04Z, linux)
 

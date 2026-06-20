@@ -4278,7 +4278,7 @@ plan_index:
     - id: future-intentions-drain
       order: 58
       title: Drain future intentions into planned tasks
-      status: in_progress
+      status: done
       deliverable: plan/steps/58-future-intentions-drain.md
       depends_on: []
       outcome: >
@@ -4319,7 +4319,7 @@ plan_index:
                 exercise FCE as side effect of build/install/reset cycles. No code
                 change needed.
         - id: future-intentions-drain/windows-macos-feature-parity
-          status: claimed
+          status: completed
           owner_host: linux
           depends_on: [future-intentions-drain/drain-tasks]
           owned_files:
@@ -4340,3 +4340,13 @@ plan_index:
                 blocker code-inspected — no Linux-side fix possible without VM
                 probe. Potential aarch64 workaround documented (pasta netns).
                 Packet remains open; no implementation change this cycle.
+            - type: completed
+              ts: "2026-06-20T11:04Z"
+              agent_id: "linux-macuahuitl-claude-20260620T1104Z"
+              host: linux
+              note: >
+                Drain sub-task closed. The drain outcome (creating the structured
+                parity issue + plan step) is complete. Ongoing parity coordinator
+                work (Wave A–D implementation, aarch64 pasta probe) is tracked in
+                plan/issues/windows-macos-feature-parity-2026-06-12.md and the
+                macos-in-vm-enclave-provisioning step. Releasing drain claim.
