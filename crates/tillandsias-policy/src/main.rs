@@ -12,6 +12,7 @@ fn main() {
         Some("audit-cheatsheet-sources") => audit_cheatsheet_sources(&args[2..]),
         Some("check-no-python-scripts") => check_no_python_scripts(),
         Some("distill-forge-diagnostics") => distill_forge_diagnostics(&args[2..]),
+        Some("validate-forge-diagnostics-json") => validate_forge_diagnostics_json(&args[2..]),
         Some("regenerate-cheatsheet-index") => regenerate_cheatsheet_index(&args[2..]),
         Some("fetch-cheatsheet-source") => fetch_cheatsheet_source(&args[2..]),
         Some("validate-yaml") => validate_yaml(&args[2..]),
@@ -36,6 +37,7 @@ fn usage() {
     eprintln!(
         "  tillandsias-policy distill-forge-diagnostics [--repo-root <path>] [--latest <path>] [--all]"
     );
+    eprintln!("  tillandsias-policy validate-forge-diagnostics-json <diagnostics-log>");
     eprintln!("  tillandsias-policy regenerate-cheatsheet-index [--repo-root <path>] [--check]");
     eprintln!(
         "  tillandsias-policy fetch-cheatsheet-source [--repo-root <path>] <URL> [--cite <path>] [--manual-review] [--force]"
@@ -1463,6 +1465,89 @@ fn is_diagnostics_log(path: &Path) -> bool {
     name.starts_with("diagnostics_") && name.ends_with(".log") && !name.ends_with(".stderr.log")
 }
 
+fn validate_forge_diagnostics_json(args: &[String]) {
+    if args.len() != 1 {
+        eprintln!("Usage: validate-forge-diagnostics-json <diagnostics-log>");
+        process::exit(2);
+    }
+
+    let path = Path::new(&args[0]);
+    let content = fs::read_to_string(path).unwrap_or_else(|err| {
+        eprintln!("{}: {err}", path.display());
+        process::exit(1);
+    });
+
+    let (to_parse, _) = diagnostics_json_candidate(&content);
+    let data: serde_json::Value = serde_json::from_str(to_parse).unwrap_or_else(|err| {
+        eprintln!("{}: invalid JSON: {err}", path.display());
+        process::exit(1);
+    });
+    let Some(obj) = data.as_object() else {
+        eprintln!("{}: diagnostics root must be a JSON object", path.display());
+        process::exit(1);
+    };
+
+    let timestamp = obj
+        .get("diagnostics_timestamp")
+        .unwrap_or_else(|| fail_json_shape(path, "missing diagnostics_timestamp"));
+    let caps = obj
+        .get("capabilities")
+        .and_then(|v| v.as_object())
+        .unwrap_or_else(|| fail_json_shape(path, "missing capabilities object"));
+    if !caps.contains_key("agent_available") {
+        fail_json_shape(path, "missing capabilities.agent_available");
+    }
+
+    let missing_tools = required_array(obj, path, "missing_tools");
+    let proposed_enhancements = required_array(obj, path, "proposed_enhancements");
+    let isolation_risks = required_array(obj, path, "isolation_or_privacy_risks");
+
+    println!("PASS: forge diagnostics JSON valid");
+    println!("  timestamp: {}", json_scalar_str(timestamp));
+    for (section, values) in caps {
+        if let Some(map) = values.as_object() {
+            for (key, val) in map {
+                let status = if json_value_is_missing_for_litmus(val) {
+                    "MISSING"
+                } else {
+                    "OK"
+                };
+                println!("  [{status}] {section}.{key} = {}", json_scalar_str(val));
+            }
+        } else {
+            println!("  [INFO] {section} = {}", json_scalar_str(values));
+        }
+    }
+    println!(
+        "  missing_tools: {}; proposed_enhancements: {}; isolation_risks: {}",
+        missing_tools.len(),
+        proposed_enhancements.len(),
+        isolation_risks.len()
+    );
+}
+
+fn fail_json_shape(path: &Path, message: &str) -> ! {
+    eprintln!("{}: {message}", path.display());
+    process::exit(1);
+}
+
+fn required_array<'a>(
+    obj: &'a serde_json::Map<String, serde_json::Value>,
+    path: &Path,
+    field: &str,
+) -> &'a Vec<serde_json::Value> {
+    obj.get(field)
+        .and_then(|v| v.as_array())
+        .unwrap_or_else(|| fail_json_shape(path, &format!("{field} must be an array")))
+}
+
+fn diagnostics_json_candidate(content: &str) -> (&str, bool) {
+    match (content.find('{'), content.rfind('}')) {
+        (Some(a), Some(b)) if b >= a => (&content[a..=b], false),
+        _ => (content, true),
+    }
+}
+
 /// Flattened capability entry from the diagnostics JSON.
 struct FlattenedDiagnostics {
     /// Ordered `section.key=STATUS` / `section=value` lines plus DIAGNOSTIC:,
@@ -1482,14 +1567,7 @@ fn flatten_diagnostics_json(content: &str) -> FlattenedDiagnostics {
     //   match = re.search(r'\{.*\}', content, re.DOTALL)
     //   data  = json.loads(match.group(0)) if match else json.loads(content)
     // re.search with DOTALL finds the FIRST '{' through the LAST '}' (greedy).
-    let brace_match = match (content.find('{'), content.rfind('}')) {
-        (Some(a), Some(b)) if b >= a => Some(&content[a..=b]),
-        _ => None,
-    };
-    let (to_parse, no_brace) = match brace_match {
-        Some(slice) => (slice, false),
-        None => (content, true),
-    };
+    let (to_parse, no_brace) = diagnostics_json_candidate(content);
 
     let data: serde_json::Value = match serde_json::from_str(to_parse) {
         Ok(v) => v,
@@ -1668,6 +1746,13 @@ fn json_value_is_missing(val: &serde_json::Value) -> bool {
     } else {
         false
     }
+}
+
+fn json_value_is_missing_for_litmus(val: &serde_json::Value) -> bool {
+    matches!(
+        val.as_str(),
+        Some("unset" | "N/A" | "BLOCKED" | "NOT_FOUND" | "NONE")
+    )
 }
 
 /// Render a JSON value the way Python's f-string `{val}` / `str(val)` would.
@@ -2432,7 +2517,10 @@ fn fetch_cheatsheet_source(args: &[String]) {
         Ok(v) if !v.is_empty() => PathBuf::from(v),
         _ => repo_root.join("cheatsheet-sources"),
     };
-    let allowlist = if repo_root.join("cheatsheets/license-allowlist.toml").is_file() {
+    let allowlist = if repo_root
+        .join("cheatsheets/license-allowlist.toml")
+        .is_file()
+    {
         repo_root.join("cheatsheets/license-allowlist.toml")
     } else {
         repo_root.join("cheatsheet-sources/license-allowlist.toml")
@@ -2475,7 +2563,9 @@ fn fetch_cheatsheet_source(args: &[String]) {
         eprintln!(
             "usage: fetch-cheatsheet-source.sh <URL> [--cite cheatsheets/<path>] [--manual-review] [--force]"
         );
-        eprintln!("   or: fetch-cheatsheet-source.sh --tier=bundled [--max-age-days N] [--dry-run]");
+        eprintln!(
+            "   or: fetch-cheatsheet-source.sh --tier=bundled [--max-age-days N] [--dry-run]"
+        );
         process::exit(2);
     }
 
@@ -2589,7 +2679,9 @@ fn fetch_extract_source_urls(text: &str) -> Vec<String> {
             .map(|s| s.to_string())
             .collect();
     }
-    urls.into_iter().filter(|u| u.starts_with("https://")).collect()
+    urls.into_iter()
+        .filter(|u| u.starts_with("https://"))
+        .collect()
 }
 
 /// Compute the bundled-tier cache key:
@@ -2684,7 +2776,10 @@ fn fetch_bundled_tier_main(cfg: &FetchConfig, max_age_days: &str, dry_run: bool)
         return;
     }
 
-    fetch_info(&format!("found {} bundled cheatsheet(s)", bundled_files.len()));
+    fetch_info(&format!(
+        "found {} bundled cheatsheet(s)",
+        bundled_files.len()
+    ));
 
     // Union of source URLs across all bundled cheatsheets (in file order).
     let mut all_urls: Vec<String> = Vec::new();
@@ -2794,8 +2889,10 @@ fn fetch_bundled_tier_main(cfg: &FetchConfig, max_age_days: &str, dry_run: bool)
                     let ctype = fs::read_to_string(&sidecar)
                         .ok()
                         .and_then(|s| {
-                            s.lines()
-                                .find_map(|l| l.strip_prefix("content_type:").map(|v| v.trim().to_string()))
+                            s.lines().find_map(|l| {
+                                l.strip_prefix("content_type:")
+                                    .map(|v| v.trim().to_string())
+                            })
                         })
                         .unwrap_or_default();
                     let fp = fetch_structural_drift_fingerprint(&produced, &ctype);
@@ -2820,27 +2917,26 @@ fn fetch_bundled_tier_main(cfg: &FetchConfig, max_age_days: &str, dry_run: bool)
 /// Non-HTML → "n/a". Mirrors the htmlq-or-Python fallback (we always use the
 /// internal heading extractor, which matches the Python html.parser path).
 fn fetch_structural_drift_fingerprint(file: &Path, content_type: &str) -> String {
-    let is_html = if content_type.starts_with("text/html")
-        || content_type.starts_with("application/xhtml")
-    {
-        true
-    } else if content_type.is_empty() {
-        // Sniff first 8192 bytes for an opening html/body/h1/h2/h3 tag.
-        match fs::read(file) {
-            Ok(bytes) => {
-                let head = &bytes[..bytes.len().min(8192)];
-                let lower = String::from_utf8_lossy(head).to_ascii_lowercase();
-                lower.contains("<html")
-                    || lower.contains("<body")
-                    || lower.contains("<h1")
-                    || lower.contains("<h2")
-                    || lower.contains("<h3")
+    let is_html =
+        if content_type.starts_with("text/html") || content_type.starts_with("application/xhtml") {
+            true
+        } else if content_type.is_empty() {
+            // Sniff first 8192 bytes for an opening html/body/h1/h2/h3 tag.
+            match fs::read(file) {
+                Ok(bytes) => {
+                    let head = &bytes[..bytes.len().min(8192)];
+                    let lower = String::from_utf8_lossy(head).to_ascii_lowercase();
+                    lower.contains("<html")
+                        || lower.contains("<body")
+                        || lower.contains("<h1")
+                        || lower.contains("<h2")
+                        || lower.contains("<h3")
+                }
+                Err(_) => false,
             }
-            Err(_) => false,
-        }
-    } else {
-        false
-    };
+        } else {
+            false
+        };
     if !is_html {
         return "n/a".to_string();
     }
@@ -2905,7 +3001,10 @@ fn find_heading_open(lower: &str) -> Option<usize> {
             && (bytes[i + 2] == b'1' || bytes[i + 2] == b'2' || bytes[i + 2] == b'3')
         {
             let after = bytes.get(i + 3).copied();
-            if matches!(after, Some(b'>') | Some(b' ') | Some(b'\t') | Some(b'\n') | Some(b'\r') | Some(b'/')) {
+            if matches!(
+                after,
+                Some(b'>') | Some(b' ') | Some(b'\t') | Some(b'\n') | Some(b'\r') | Some(b'/')
+            ) {
                 return Some(i);
             }
         }
@@ -3095,7 +3194,10 @@ fn fetch_single_url(
 
     // Allowlist lookup.
     if !cfg.allowlist.is_file() {
-        fetch_die(&format!("allowlist not found at {}", cfg.allowlist.display()));
+        fetch_die(&format!(
+            "allowlist not found at {}",
+            cfg.allowlist.display()
+        ));
     }
     let allowlist_content = fs::read_to_string(&cfg.allowlist).unwrap_or_default();
 
@@ -3115,7 +3217,11 @@ fn fetch_single_url(
         let mut candidate = raw_host.clone();
         if depth > 0 && !url_path.is_empty() {
             let trimmed = url_path.trim_start_matches('/');
-            let segs: Vec<&str> = trimmed.split('/').filter(|s| !s.is_empty()).take(depth).collect();
+            let segs: Vec<&str> = trimmed
+                .split('/')
+                .filter(|s| !s.is_empty())
+                .take(depth)
+                .collect();
             if !segs.is_empty() {
                 candidate = format!("{raw_host}/{}", segs.join("/"));
             }
@@ -3167,10 +3273,8 @@ fn fetch_single_url(
     if !skip_fetch {
         println!("fetching: {url}");
         let candidates = fetch_build_url_candidates(&url, &raw_host);
-        let tmp_body = env::temp_dir().join(format!(
-            "tillandsias-fetch-body-{}",
-            std::process::id()
-        ));
+        let tmp_body =
+            env::temp_dir().join(format!("tillandsias-fetch-body-{}", std::process::id()));
         let mut tried: Vec<String> = Vec::new();
         let mut got = false;
         for candidate_url in &candidates {
@@ -3220,11 +3324,15 @@ fn fetch_single_url(
                 content_type = ctype.to_string();
                 fetch_url = candidate_url.clone();
                 final_url = effective.to_string();
-                fetch_info(&format!("fetched {http_status}: {final_url} ({body_len} bytes)"));
+                fetch_info(&format!(
+                    "fetched {http_status}: {final_url} ({body_len} bytes)"
+                ));
                 got = true;
                 break;
             } else {
-                fetch_info(&format!("  → HTTP {http_status} or empty body; trying next"));
+                fetch_info(&format!(
+                    "  → HTTP {http_status} or empty body; trying next"
+                ));
             }
         }
         if !got {
@@ -3263,7 +3371,10 @@ fn fetch_single_url(
                 .unwrap_or_else(|| "200".to_string());
             content_type = content
                 .lines()
-                .find_map(|l| l.strip_prefix("content_type:").map(|v| v.trim().to_string()))
+                .find_map(|l| {
+                    l.strip_prefix("content_type:")
+                        .map(|v| v.trim().to_string())
+                })
                 .unwrap_or_default();
         } else {
             http_status = "200".to_string();
@@ -3347,10 +3458,7 @@ fn fetch_single_url(
                     fetch_insert_local_line(&content, &source_url, &original_url, &local_cite_path);
                 let _ = fs::write(&cheatsheet_abs, &new_content);
                 if inserted {
-                    eprintln!(
-                        "  → inserted local: line into {}",
-                        cheatsheet_abs.display()
-                    );
+                    eprintln!("  → inserted local: line into {}", cheatsheet_abs.display());
                 } else {
                     eprintln!(
                         "  warning: could not find insertion point in {}; please add manually:",
@@ -3825,9 +3933,14 @@ fn regen_build_verify_lookup(
             lookup.insert(rel, String::new());
             continue;
         }
-        let fetched: Vec<&serde_json::Value> =
-            urls.iter().filter_map(|u| url_to_entry.get(u).copied()).collect();
-        let unfetched_count = urls.iter().filter(|u| !url_to_entry.contains_key(*u)).count();
+        let fetched: Vec<&serde_json::Value> = urls
+            .iter()
+            .filter_map(|u| url_to_entry.get(u).copied())
+            .collect();
+        let unfetched_count = urls
+            .iter()
+            .filter(|u| !url_to_entry.contains_key(*u))
+            .count();
         if fetched.is_empty() {
             lookup.insert(rel, String::new());
             continue;
@@ -4227,10 +4340,7 @@ fn regen_render_index(
     });
 
     for category in &categories {
-        let category_name = category
-            .file_name()
-            .and_then(|n| n.to_str())
-            .unwrap_or("");
+        let category_name = category.file_name().and_then(|n| n.to_str()).unwrap_or("");
         let mut rows: Vec<RegenRow> = Vec::new();
 
         // Files directly under cheatsheets/<category>/, sorted by path.
@@ -4385,6 +4495,23 @@ mod tests {
     }
 
     #[test]
+    fn diagnostics_litmus_missing_status_matches_legacy_inline_validator() {
+        use serde_json::json;
+        assert!(json_value_is_missing_for_litmus(&json!("unset")));
+        assert!(json_value_is_missing_for_litmus(&json!("N/A")));
+        assert!(json_value_is_missing_for_litmus(&json!("BLOCKED")));
+        assert!(json_value_is_missing_for_litmus(&json!("NOT_FOUND")));
+        assert!(json_value_is_missing_for_litmus(&json!("NONE")));
+        assert!(!json_value_is_missing_for_litmus(&json!("")));
+        assert!(!json_value_is_missing_for_litmus(&json!(null)));
+        assert!(!json_value_is_missing_for_litmus(&json!(false)));
+        assert!(!json_value_is_missing_for_litmus(&json!(0)));
+        assert!(!json_value_is_missing_for_litmus(&json!(
+            "/usr/bin/opencode"
+        )));
+    }
+
+    #[test]
     fn flattens_capabilities_and_metadata() {
         let raw = r#"prefix junk
 {"diagnostics_timestamp":"2026-06-16T07:28:47Z","forge_version":"0.3.0",
@@ -4420,6 +4547,14 @@ trailing"#;
         let flat = flatten_diagnostics_json("no json here at all");
         assert!(flat.parse_error.is_some());
         assert_eq!(flat.timestamp, "unknown");
+    }
+
+    #[test]
+    fn diagnostics_json_candidate_ignores_forge_banner_and_fence() {
+        let raw = "[forge] banner\n```json\n{\"diagnostics_timestamp\":\"t\"}\n```\n";
+        let (candidate, no_brace) = diagnostics_json_candidate(raw);
+        assert!(!no_brace);
+        assert_eq!(candidate, "{\"diagnostics_timestamp\":\"t\"}");
     }
 
     #[test]
@@ -4470,12 +4605,12 @@ trailing"#;
 
 #[cfg(unix)]
 fn run_in_pty_cmd(args: &[String]) {
-    use nix::pty::{forkpty, ForkptyResult};
+    use nix::pty::{ForkptyResult, forkpty};
     use nix::unistd::execvp;
     use std::ffi::CString;
+    use std::io::{self, Read, Write};
     use std::os::unix::io::AsRawFd;
     use std::os::unix::io::FromRawFd;
-    use std::io::{self, Read, Write};
 
     if args.is_empty() {
         eprintln!("error: run-in-pty requires a command");
@@ -4494,7 +4629,7 @@ fn run_in_pty_cmd(args: &[String]) {
             let mut master_file = unsafe { std::fs::File::from_raw_fd(master_fd) };
             let mut stdout = io::stdout();
             let mut buf = [0u8; 4096];
-            
+
             loop {
                 match master_file.read(&mut buf) {
                     Ok(0) => break, // EOF
@@ -4509,7 +4644,7 @@ fn run_in_pty_cmd(args: &[String]) {
                     Err(_) => break, // EIO on child exit
                 }
             }
-            
+
             use nix::sys::wait::waitpid;
             match waitpid(child, None) {
                 Ok(nix::sys::wait::WaitStatus::Exited(_, code)) => {

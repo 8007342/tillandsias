@@ -8860,8 +8860,8 @@ mod tests {
         assert!(context.ends_with("images/web"));
 
         // Test nanoclawv2 image
-        let (containerfile, context) = image_specs(&root, "nanoclawv2")
-            .expect("nanoclawv2 image specs should be resolvable");
+        let (containerfile, context) =
+            image_specs(&root, "nanoclawv2").expect("nanoclawv2 image specs should be resolvable");
         assert!(containerfile.ends_with("images/nanoclawv2/Containerfile"));
         assert!(context.ends_with("images/nanoclawv2"));
     }
@@ -9062,10 +9062,7 @@ mod tests {
             forge_base_idx < forge_idx,
             "forge-base must be built before forge"
         );
-        let nanoclawv2_idx = images
-            .iter()
-            .position(|&i| i == "nanoclawv2")
-            .unwrap();
+        let nanoclawv2_idx = images.iter().position(|&i| i == "nanoclawv2").unwrap();
         assert!(
             forge_base_idx < nanoclawv2_idx,
             "forge-base must be built before nanoclawv2"

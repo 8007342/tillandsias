@@ -45,7 +45,7 @@ critical_path:
     timeout_ms: 600000
 
   - step: "validate output is parseable JSON with diagnostics_timestamp field"
-    command: "LOG=$(ls -t target/forge-diagnostics/diagnostics_*.log 2>/dev/null | head -1) && [ -n \"$LOG\" ] && python3 -c \"import json, sys; data = json.load(sys.stdin); assert 'diagnostics_timestamp' in data, 'missing diagnostics_timestamp'; assert 'capabilities' in data, 'missing capabilities'; caps = data['capabilities']; assert 'agent_available' in caps, 'missing agent_available'; [ [sys.stderr.write(f'error: {f} not in data\n'), sys.exit(1)] for f in ('missing_tools', 'proposed_enhancements', 'isolation_or_privacy_risks') if f not in data or not isinstance(data[f], list) ]; print('PASS: forge diagnostics JSON valid'); print(f'  timestamp: {data[\\\"diagnostics_timestamp\\\"]}'); [ [print(f'  [{\\\"OK\\\" if val not in (\\\"unset\\\", \\\"N/A\\\", \\\"BLOCKED\\\", \\\"NOT_FOUND\\\", \\\"NONE\\\") else \\\"MISSING\\\"}] {sec}.{key} = {val}') for key, val in vals.items()] if isinstance(vals, dict) else print(f'  [INFO] {sec} = {vals}') for sec, vals in caps.items() ]; print(f'  missing_tools: {len(data[\\\"missing_tools\\\"])}; proposed_enhancements: {len(data[\\\"proposed_enhancements\\\"])}; isolation_risks: {len(data[\\\"isolation_or_privacy_risks\\\"])}')\" < \"$LOG\""
+    command: "LOG=$(ls -t target/forge-diagnostics/diagnostics_*.log 2>/dev/null | grep -v '\\.stderr\\.log$' | head -1) && [ -n \"$LOG\" ] && cargo run --quiet -p tillandsias-policy -- validate-forge-diagnostics-json \"$LOG\""
     timeout_ms: 15000
 
   - step: "container-start health: the idiomatic layer emitted at least one running event"

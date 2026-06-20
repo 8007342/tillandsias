@@ -639,3 +639,42 @@ permanently stuck on hosts that aren't the annex producer.
 - next checkpoint: commit and push the claim, implement the Rust validator,
   run targeted policy tests plus YAML validation, then append completion
   evidence.
+
+## agent_status_packet — completed 2026-06-20T07:38Z — no-python diagnostics litmus drift
+
+- host_id: linux-macuahuitl · platform: linux · branch: linux-next
+- packet: `forge-diagnostics/e2e-piggyback-orchestration` — COMPLETED the
+  no-Python diagnostics litmus drift slice.
+- claim_commit: `4c15fc72`
+- implementation_commit: this commit
+- lease_id: `forge-diagnostics-litmus-no-python-20260620T073149Z`
+- shipped:
+    - Added `tillandsias-policy validate-forge-diagnostics-json`.
+    - Reused the distiller's first-`{` through last-`}` diagnostics JSON
+      extraction so banner/fenced forge logs validate correctly.
+    - Replaced the inline `python3 -c` JSON validator in
+      `openspec/litmus-tests/litmus-forge-diagnostics-e2e.yaml` with the Rust
+      policy command.
+    - Tightened the diagnostics log selector to exclude `.stderr.log`
+      companions before validation.
+    - Carried two mechanical `cargo fmt` hunks in the NanoClawV2 image-order
+      tests so `cargo fmt --all -- --check` is green.
+- evidence:
+    - `cargo test -p tillandsias-policy` — PASS (10 tests).
+    - `cargo run --quiet -p tillandsias-policy -- validate-yaml
+      openspec/litmus-tests/litmus-forge-diagnostics-e2e.yaml` — PASS.
+    - `tillandsias-policy validate-forge-diagnostics-json` against
+      `target/forge-diagnostics/diagnostics_20260619T234257Z.log` — PASS
+      (banner + fenced JSON handled).
+    - `scripts/check-no-python-scripts.sh` — PASS.
+    - `cargo fmt --all -- --check` — PASS.
+    - `git diff --check` — PASS.
+    - `./build.sh --check` — PASS (workspace type-check passed; dev proxy start
+      warning remained non-fatal as in prior cycles).
+- follow_up: >
+    Broader litmus YAML Python drift remains outside this packet's owned scope.
+    Filed `plan/issues/no-python-litmus-drift-2026-06-20.md` with the remaining
+    inventory and a bounded next action.
+- blockers/errors: NONE.
+- privacy/isolation: no runtime envelope change.
+- lease: COMPLETE.

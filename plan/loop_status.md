@@ -1,6 +1,44 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-20T07:20Z
+LastExecutionTime: 2026-06-20T07:38Z
+
+## This Loop (2026-06-20T07:38Z, linux)
+
+- **Cycle type**: meta-orchestration worker drain on mutable Linux.
+- **Startup**: clean mutable-Linux host on `linux-next`; fetched origin,
+  fast-forwarded from `d697f866` to `b2b37d10`, then pushed claim commit
+  `4c15fc72`.
+- **Sibling heads after fetch**:
+  - `main`: `6dfafdf1`.
+  - `linux-next`: `b2b37d10` at worker selection, then `4c15fc72` after the
+    claim commit.
+  - `windows-next`: `a3c8b23d` (ancestor of linux-next at fetch).
+  - `osx-next`: `d829808d` (ancestor of linux-next at fetch).
+- **Worker drain**: completed
+  `forge-diagnostics/e2e-piggyback-orchestration` no-Python diagnostics litmus
+  drift. Added `tillandsias-policy validate-forge-diagnostics-json`, made it
+  tolerate forge banner/fenced JSON logs via the distiller's brace-extraction
+  contract, replaced the diagnostics litmus's inline `python3 -c` validator,
+  and excluded `.stderr.log` companions from the stdout JSON selector.
+- **Verification**: `cargo test -p tillandsias-policy` PASS; edited litmus YAML
+  validates; validator passes against
+  `target/forge-diagnostics/diagnostics_20260619T234257Z.log`; no-Python script
+  checker PASS; `cargo fmt --all -- --check` PASS; `git diff --check` PASS;
+  `./build.sh --check` PASS.
+- **Integration/runtime**: no sibling merge attempted before this worker commit;
+  follow-up coordination should re-fetch after this implementation lands.
+- **E2E gates**: destructive local-build/curl-install gates not run for this
+  policy/litmus-only worker slice; no shipped runtime or release artifact delta.
+- **New findings**: filed `policy/no-python-litmus-drift` for remaining
+  `python3` command fields in non-diagnostics litmus YAML.
+
+## Progress Since Last Loop
+
+- **forge-diagnostics/e2e-piggyback-orchestration**: COMPLETED no-Python
+  diagnostics litmus drift slice; Rust validator now owns diagnostics JSON
+  validation.
+- **policy/no-python-litmus-drift**: NEW READY follow-up for remaining litmus
+  YAML Python command fields.
 
 ## This Loop (2026-06-20T07:20Z, linux)
 
@@ -16,10 +54,6 @@ LastExecutionTime: 2026-06-20T07:20Z
 - **Release/e2e freshness**: no release warranted from this tooling-only cycle.
 - **E2E gates**: not run this cycle (worker slice).
 - **New findings**: none.
-
-## Progress Since Last Loop
-
-- **policy/no-python-runtime-scripts**: COMPLETED — All scripts rewritten in Rust or retired to tombstones. Check-no-python-scripts passes cleanly.
 
 ## Loop 2026-06-20T06:00Z (worker drain — nanoclawv2 slice)
 
@@ -84,18 +118,18 @@ LastExecutionTime: 2026-06-20T07:20Z
   `/tmp/tillandsias-ca/intermediate.crt`; next useful evidence is the aarch64
   VM probe:
   `curl --cacert /tmp/tillandsias-ca/intermediate.crt https://127.0.0.1:8201/v1/sys/health?standbyok=true`.
-- **RECLAIMABLE (linux)**: `nanoclawv2-orchestration` slice 2. Last lease
-  expired 2026-06-20T01:34Z.
-- **READY (linux)**: `future-intentions-drain/forge-continuous-enhancement`
-  automation decision packet.
+- **CLAIMED (linux)**: `nanoclawv2-orchestration` is actively leased by
+  `linux-tlatoani-big-pickle-20260620T055600Z` until 2026-06-20T09:56Z.
+- **READY (any host)**: `policy/no-python-litmus-drift` follow-up now tracks
+  remaining Python command fields in non-diagnostics litmus YAML.
 - **READY (cross-host)**: `future-intentions-drain/windows-macos-feature-parity`
   packet now shaped and ready for host-specific work.
 
 ## Assignment Board
 
 - **Linux primary**: resolve or precisely block the macOS aarch64 Vault
-  reachability packet; fallback to the forge-continuous-enhancement automation
-  decision or reclaim NanoClawV2 slice 2.
+  reachability packet; fallback to `policy/no-python-litmus-drift` if no VM
+  access is available and NanoClawV2 remains actively leased.
 - **Windows primary**: keep `windows-next` synchronized and verify the
   cold-provision/headless unit path before optional UX work.
 - **macOS primary**: wait on the aarch64 Vault reachability fix/probe, then land

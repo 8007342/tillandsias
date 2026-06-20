@@ -1,6 +1,28 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-20T07:20Z
+Last updated: 2026-06-20T07:38Z
+
+## This Cycle (2026-06-20T07:38Z, linux)
+
+- **Meta-orchestration sync**: Started clean on mutable-Linux `linux-next`,
+  fetched origin, fast-forwarded to `origin/linux-next`, and pushed claim commit
+  `4c15fc72` before implementation.
+- **Worker drain**: Claimed and completed a narrow
+  `forge-diagnostics/e2e-piggyback-orchestration` no-Python litmus drift slice.
+  Added `tillandsias-policy validate-forge-diagnostics-json`, replaced the
+  diagnostics E2E litmus's inline `python3 -c` validator, and fixed its stdout
+  log selector so `.stderr.log` companions are not validated as JSON.
+- **Verification**: `cargo test -p tillandsias-policy`,
+  `tillandsias-policy validate-yaml` on the edited litmus,
+  `tillandsias-policy validate-forge-diagnostics-json` on
+  `target/forge-diagnostics/diagnostics_20260619T234257Z.log`,
+  `scripts/check-no-python-scripts.sh`, `cargo fmt --all -- --check`,
+  `git diff --check`, and `./build.sh --check` all passed.
+- **New finding**: filed `policy/no-python-litmus-drift` in
+  `plan/issues/no-python-litmus-drift-2026-06-20.md` for remaining Python use in
+  other litmus YAML command fields.
+- **Next**: macOS vault aarch64 layer-5 remains the critical cross-host blocker;
+  NanoClawV2 remains actively leased until 2026-06-20T09:56Z.
 
 ## This Cycle (2026-06-20T07:20Z, linux)
 
@@ -328,6 +350,11 @@ the items below are immediate work.
   - `scripts/check-no-python-scripts.sh` exits 0
   - no `*.py` executable scripts remain under `scripts/`
   - no harness, skill, litmus, or repeat path shells out to `python`/`python3`
+- follow_up: >
+    2026-06-20 diagnostics slice removed the Python validator from
+    `litmus-forge-diagnostics-e2e.yaml` and filed
+    `plan/issues/no-python-litmus-drift-2026-06-20.md` for the remaining litmus
+    YAML command-field Python uses.
 
 ### local-smoke/forge-pty-stopped-before-container-start
 
