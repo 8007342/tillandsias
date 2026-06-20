@@ -1,6 +1,6 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-20T04:51Z
+LastExecutionTime: 2026-06-20T05:12Z
 
 ## This Loop (2026-06-20T04:51Z, macos)
 
@@ -17,6 +17,24 @@ LastExecutionTime: 2026-06-20T04:51Z
   Step 49d user-attended.
 - **E2E gates**: Skipped — no macOS runtime delta.
 - **Next**: Re-check after Linux vault fix; untracked user work unchanged.
+
+## This Loop (2026-06-20T05:10Z, linux)
+
+- **Cycle type**: meta-orchestration on mutable Linux (Fedora 44): implement
+  drained item 1 (containerfile-dnf-migration slice 1) + coordination.
+- **Startup**: began clean on `linux-next` at `a3c8b23d`. No tracked changes.
+- **Worker drain**: Claimed and completed `containerfile-dnf-migration` slice 1:
+  migrated wasmtime from curl+tar.xz to `microdnf install wasmtime` in
+  Containerfile.base. Removed WASMTIME_VERSION and WASMTIME_SHA256 ARGs, removed
+  curl+tar block, removed `/tmp/wasmtime.tar.xz` cleanup. Scope correction: buf
+  already absent from Containerfile (removed in earlier refactor), Ollama
+  intentionally avoids DNF (dnf install ollama would pull ~1.8GB of GPU runner
+  libraries unused in CPU-only inference). Verified: `./build.sh --check` PASS.
+- **Sibling merge**: Merged `origin/osx-next` (`d829808d` — macOS cycle 2) into
+  `linux-next`. Clean merge, no conflicts.
+- **E2E gates**: Skipped — Containerfile-only change, no runtime delta beyond
+  wasmtime installation source. Latest release `v0.3.260618.2` remains current.
+- **Release decision**: Deferred — no runtime change worth releasing.
 
 ## This Loop (2026-06-20T04:13Z, linux)
 
@@ -78,9 +96,9 @@ LastExecutionTime: 2026-06-20T04:51Z
 ## Assignment Board
 
 - **Linux primary**: continue `future-intentions-drain` (item 5: `tellme` discoverability
-  script), claim `future-intentions-drain/containerfile-dnf-migration` (Slice 1: replace
-  3 curl/tar tools with DNF), claim `forge-build-telemetry` (Slice 1: Podman JSON progress),
+  script), claim `forge-build-telemetry` (Slice 1: Podman JSON progress),
   or claim `policy/no-python-runtime-scripts`/`nanoclawv2-orchestration`.
+  `containerfile-dnf-migration` slice 1 completed in `7293c902`.
   Also: investigate `enclave/macos-vault-unreachable-via-publish-aarch64` with
   aarch64 access.
 - **Linux fallback**: operator-attended `--github-login` validation.
@@ -100,7 +118,7 @@ LastExecutionTime: 2026-06-20T04:51Z
   operator to run `curl --cacert /tmp/tillandsias-ca/intermediate.crt
   https://127.0.0.1:8201/v1/sys/health?standbyok=true` on the VM host and
   report the result.
-- `plan/issues/containerfile-dnf-migration-2026-06-20.md` is ready for a
-  builder to implement (3 DNF candidates: buf, wasmtime, ollama).
+- `plan/issues/containerfile-dnf-migration-2026-06-20.md` is **done** — wasmtime
+  migrated to DNF. buf was already absent; ollama intentionally avoids DNF.
 - `plan/issues/forge-continuous-enhancement-automation-2026-06-20.md` is ready
   for assignment (option 1: add lightweight FCE probe to meta-orch loop).
