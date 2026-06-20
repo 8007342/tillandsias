@@ -20,6 +20,10 @@ Last updated: 2026-06-20T08:33Z
   `cargo fmt --all -- --check` PASS; `./build.sh --check` PASS.
 - **Coordination**: sibling audit post-implementation confirms windows-next and
   osx-next remain ancestors of linux-next; no merge needed.
+- **Push state**: BLOCKED — commit db79d2ad staged locally on linux-next; SSH
+  credentials unavailable in sandbox (no keys in /etc/ssh / agent). Same
+  constraint as all prior Cowork-session cycles. Push requires operator
+  `git push origin linux-next` or a subsequent session with credentials.
 - **Next**: nanoclawv2-orchestration Slice 4 (smoke: launch + one broker action
   + release extension), or macOS vault aarch64 probe if VM access available.
 
