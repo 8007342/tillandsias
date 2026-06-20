@@ -125,7 +125,7 @@ the items below are immediate work.
 
 ### local-smoke/onboarding-cold-start-discovery-cheatsheet-signal
 
-- status: done (fixed in <commit-sha> on linux-next)
+- status: done (fixed in ca4c351a on linux-next)
 - owner_host: linux
 - source: `plan/issues/build-install-smoke-e2e-findings-2026-06-20.md`
 - severity: high - blocks the local-build E2E gate before destructive reset.
