@@ -1581,24 +1581,93 @@ fn launch_project_action(
             };
             super::launch_forge_agent(&project.name, &project.path, mode, debug)
         }
-        LaunchKind::NanoClawV2 => {
-            let image = format!("localhost/tillandsias-nanoclawv2:v{}", _version);
-            let spec = build_launch_spec(&project, LaunchKind::NanoClawV2, &image);
-            let podman_args = spec.build_run_argv();
-            let mut shell_args = vec![
-                "-c".to_string(),
-                "podman \"$@\"; echo; echo \"[nanoclawv2] Finished — press Enter to close\"; read"
-                    .to_string(),
-                "nanoclawv2-shell".to_string(),
-            ];
-            shell_args.extend(podman_args);
-            launch_in_terminal(
-                &format!("Tillandsias — {} — NanoClawV2", project.name),
-                "bash",
-                &shell_args,
-            )
-        }
+        LaunchKind::NanoClawV2 => launch_nanoclawv2(&project, &_version),
     }
+}
+
+/// Launch a NanoClawV2 container for `project`.
+///
+/// Steps:
+/// 1. Derive a per-project Unix socket path under `$XDG_RUNTIME_DIR`.
+/// 2. Spawn `tillandsias-nanoclawv2-mcp --project-path <path> --socket <sock>`
+///    as a background host process (dies when this tray process exits).
+/// 3. Bind-mount the socket read-write into the container at the well-known
+///    in-container path `/run/host/tillandsias/nanoclaw.sock`.
+/// 4. Pass `TILLANDSIAS_NANOCLAW_SOCKET` so the bridge script finds it.
+/// 5. Open a terminal window running `podman run …`.
+///
+/// @trace spec:nanoclawv2-orchestration
+fn launch_nanoclawv2(project: &ProjectEntry, version: &str) -> Result<(), String> {
+    let project_name = &project.name;
+    let project_path = project
+        .path
+        .canonicalize()
+        .unwrap_or_else(|_| project.path.clone());
+
+    // Derive a stable per-project socket path.
+    let runtime_dir = env::var_os("XDG_RUNTIME_DIR")
+        .map(PathBuf::from)
+        .unwrap_or_else(|| PathBuf::from(format!("/run/user/{}", unsafe { libc::getuid() })));
+    let socket_host = runtime_dir.join(format!("tillandsias/nanoclaw-{project_name}.sock"));
+    if let Some(parent) = socket_host.parent() {
+        let _ = fs::create_dir_all(parent);
+    }
+
+    // Spawn the host-side MCP server. It exits when the connection closes
+    // (container exit / socat hangup). Stdout/stderr go to a log file so the
+    // tray doesn't inherit them.
+    let log_path = runtime_dir.join(format!("tillandsias/nanoclaw-{project_name}.log"));
+    let log_file = fs::OpenOptions::new()
+        .create(true)
+        .append(true)
+        .open(&log_path)
+        .map_err(|e| format!("failed to open nanoclaw log: {e}"))?;
+    let log_copy = log_file.try_clone().map_err(|e| e.to_string())?;
+    Command::new("tillandsias-nanoclawv2-mcp")
+        .arg("--project-path")
+        .arg(&project_path)
+        .arg("--socket")
+        .arg(&socket_host)
+        .stdout(Stdio::from(log_file))
+        .stderr(Stdio::from(log_copy))
+        .spawn()
+        .map_err(|e| format!("failed to spawn tillandsias-nanoclawv2-mcp: {e}"))?;
+
+    // Wait briefly for the socket to appear (the server binds synchronously
+    // before accepting, but there's a tiny startup window).
+    for _ in 0..20 {
+        if socket_host.exists() {
+            break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
+    }
+
+    // Container path where the socket is bind-mounted.
+    const CONTAINER_SOCK: &str = "/run/host/tillandsias/nanoclaw.sock";
+
+    let image = format!("localhost/tillandsias-nanoclawv2:v{version}");
+    let spec = build_launch_spec(project, LaunchKind::NanoClawV2, &image)
+        .bind_mount(socket_host.display().to_string(), CONTAINER_SOCK, false)
+        .env("TILLANDSIAS_NANOCLAW_SOCKET", CONTAINER_SOCK)
+        .env(
+            "TILLANDSIAS_PROJECT_PATH",
+            project_path.display().to_string(),
+        )
+        .env("TILLANDSIAS_PROJECT_BRANCH", "linux-next");
+
+    let podman_args = spec.build_run_argv();
+    let mut shell_args = vec![
+        "-c".to_string(),
+        "podman \"$@\"; echo; echo \"[nanoclawv2] Finished — press Enter to close\"; read"
+            .to_string(),
+        "nanoclawv2-shell".to_string(),
+    ];
+    shell_args.extend(podman_args);
+    launch_in_terminal(
+        &format!("Tillandsias — {project_name} — NanoClawV2"),
+        "bash",
+        &shell_args,
+    )
 }
 
 #[allow(dead_code)]

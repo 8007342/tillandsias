@@ -9,11 +9,19 @@ RUN useradd -u 1000 -m -s /bin/bash forge
 RUN mkdir -p /home/forge/src \
     && mkdir -p /home/forge/.cache/tillandsias \
     && mkdir -p /home/forge/.config/opencode/instructions \
+    && mkdir -p /home/forge/.config-overlay/mcp \
     && mkdir -p /opt/skills
 
 # ── NanoClawV2 instructions overlay ────────────────────────────
 # Only approved orchestration instructions — no forge tooling docs.
 COPY config-overlay/opencode/instructions/ /home/forge/.config/opencode/instructions/
+
+# ── OpenCode config (MCP server wiring, model, approved skills only) ─────
+COPY config-overlay/opencode/config.json /home/forge/.config/opencode/config.json
+
+# ── Host MCP bridge script ──────────────────────────────────────
+COPY config-overlay/mcp/nanoclaw-host.sh /home/forge/.config-overlay/mcp/nanoclaw-host.sh
+RUN chmod +x /home/forge/.config-overlay/mcp/nanoclaw-host.sh
 
 # ── Skills mapping ─────────────────────────────────────────────
 COPY skills/ /opt/skills/

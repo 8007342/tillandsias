@@ -21,10 +21,15 @@
 
 ## 3. Host orchestration surface
 
-- [ ] 3.1 Add the smallest host control surface needed for approved NanoClawV2
-  actions.
-- [ ] 3.2 Seed only the approved skills and MCP servers.
-- [ ] 3.3 Keep credentials and raw Podman access on the host side.
+- [x] 3.1 Add the smallest host control surface needed for approved NanoClawV2
+  actions. (2026-06-20: crates/tillandsias-nanoclawv2-mcp — Unix-socket MCP
+  server, 5-tool allowlist, project-scope enforcement, tray launch wiring.)
+- [x] 3.2 Seed only the approved skills and MCP servers. (2026-06-20:
+  images/nanoclawv2/config-overlay/opencode/config.json — nanoclaw-host MCP
+  only, locked instructions; nanoclaw-host.sh socat bridge.)
+- [x] 3.3 Keep credentials and raw Podman access on the host side. (2026-06-20:
+  by design — nanoclaw-mcp tools run as host subprocesses; no Vault token or
+  Podman socket is passed into the container.)
 
 ## 4. Smoke and verification
 

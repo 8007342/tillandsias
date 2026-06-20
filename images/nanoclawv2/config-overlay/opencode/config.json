@@ -1,0 +1,19 @@
+{
+  "$schema": "https://opencode.ai/config.json",
+  "autoupdate": false,
+  "default_agent": "build",
+  "permission": "allow",
+  "model": "opencode/big-pickle",
+  "small_model": "opencode/gpt-5-nano",
+  "instructions": [
+    "/home/forge/.config/opencode/instructions/nanoclawv2-discipline.md",
+    "/home/forge/.config/opencode/instructions/cache-discipline.md"
+  ],
+  "mcp": {
+    "nanoclaw-host": {
+      "type": "local",
+      "command": ["/home/forge/.config-overlay/mcp/nanoclaw-host.sh"],
+      "enabled": true
+    }
+  }
+}

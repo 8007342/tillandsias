@@ -1,6 +1,27 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-20T07:59Z
+Last updated: 2026-06-20T08:33Z
+
+## This Cycle (2026-06-20T08:22Z, linux)
+
+- **Meta-orchestration sync**: Pulled latest linux-next (88d0a4a7). Sibling
+  windows-next and osx-next at 0 drift. Stash cleared pre-existing untracked
+  proposals; worktree clean at start.
+- **Worker drain**: Completed `nanoclawv2-orchestration` Slice 3. New crate
+  `crates/tillandsias-nanoclawv2-mcp` implements the host control surface:
+  Unix-socket MCP server (`src/main.rs` listener, `src/server.rs` JSON-RPC
+  dispatch, `src/allowlist.rs` 5-tool project-locked allowlist). Config overlay
+  `images/nanoclawv2/config-overlay/opencode/config.json` wires the MCP-only
+  surface; `nanoclaw-host.sh` socat bridge passes stdio through the host socket.
+  Tray `launch_nanoclawv2()` spawns `tillandsias-nanoclawv2-mcp` before the
+  container, derives per-project socket path, bind-mounts it, sets
+  `TILLANDSIAS_NANOCLAW_SOCKET`. Containerfile updated to COPY overlay.
+- **Verification**: `cargo test -p tillandsias-nanoclawv2-mcp` 9/9 PASS;
+  `cargo fmt --all -- --check` PASS; `./build.sh --check` PASS.
+- **Coordination**: sibling audit post-implementation confirms windows-next and
+  osx-next remain ancestors of linux-next; no merge needed.
+- **Next**: nanoclawv2-orchestration Slice 4 (smoke: launch + one broker action
+  + release extension), or macOS vault aarch64 probe if VM access available.
 
 ## This Cycle (2026-06-20T07:49Z, linux)
 

@@ -9,12 +9,18 @@
   - add a baked NanoClawV2 container image
   - add a narrow host control surface for approved orchestration actions
   - add smoke coverage for launch + one approved action
-- current_progress: proposal, design, tasks, and spec scaffolded. Slice 1
-  (image infrastructure) completed: images/nanoclawv2/Containerfile created,
-  config overlay with orchestration instructions, entrypoint, build-image.sh
-  registration added, build verification passed, and committed. Slice 2 (tray launcher leaf) completed: image builder registration and allowlisted launch path done.
-- next_action: register nanoclawv2 in Rust image builder (image_specs, run_init,
-  image_build_inputs), then verify build and update tasks.
+- current_progress: >
+    Slice 1 (image infra), Slice 2 (tray launcher leaf), and Slice 3 (host
+    orchestration surface) complete. New crate `tillandsias-nanoclawv2-mcp`
+    implements the Unix-socket MCP server with a 5-tool allowlist
+    (advance_work, build, service_launch, forge_delegate, status) and
+    project-scope enforcement. Tray `launch_nanoclawv2` spawns the server,
+    derives a per-project socket, bind-mounts it into the container, and
+    passes `TILLANDSIAS_NANOCLAW_SOCKET`. Config overlay wired with
+    `nanoclaw-host.sh` socat bridge and locked OpenCode config.
+    9/9 allowlist unit tests pass; `./build.sh --check` PASS.
+- next_action: Slice 4 — smoke coverage (launch smoke + broker smoke for one
+  approved action + published-release extension).
 - events:
   - type: claim
     ts: "2026-06-20T05:56:00Z"
@@ -65,7 +71,25 @@
   - launcher path is branch-aware and allowlisted
   - smoke coverage proves launch on supported hosts
 - open_questions:
-  - exact host transport mix for the broker: MCP only vs MCP + HTTPS
-  - final allowlist for approved orchestration actions in v1
   - whether the image should be named `nanoclaw` or `nanoclawv2` in the
     Containerfile tree while keeping the user-facing label `🦞 NanoClawV2`
+  - Slice 4 smoke coverage still needed before the feature is release-ready
+  - type: progress
+    ts: "2026-06-20T08:33Z"
+    agent_id: "linux-macuahuitl-claude-20260620T0822Z"
+    host: "linux"
+    lease_id: "nanoclawv2-orchestration-20260620T055600"
+    note: >
+      Slice 3 complete: added crates/tillandsias-nanoclawv2-mcp with
+      allowlist.rs (5-tool project-locked allowlist, 9 unit tests),
+      server.rs (JSON-RPC dispatch over UnixStream), main.rs (Unix socket
+      listener, --project-path arg). Wired tray launch_nanoclawv2() to
+      spawn the MCP server process, derive per-project socket under
+      $XDG_RUNTIME_DIR, bind-mount into container, set
+      TILLANDSIAS_NANOCLAW_SOCKET. Added config-overlay/opencode/config.json
+      (MCP-only, no forge tooling) and config-overlay/mcp/nanoclaw-host.sh
+      (socat bridge). Updated Containerfile to COPY new overlay. Workspace
+      Cargo.toml updated. cargo test -p tillandsias-nanoclawv2-mcp: 9/9 PASS.
+      cargo fmt --all -- --check: PASS. ./build.sh --check: PASS. Transport
+      decision: MCP-only via Unix socket (same pattern as browser-mcp). Open
+      question on image naming deferred to Slice 4 review.

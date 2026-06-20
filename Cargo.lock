@@ -3076,6 +3076,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "tillandsias-nanoclawv2-mcp"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tillandsias-browser-mcp",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "tillandsias-otp"
 version = "0.1.170"
 dependencies = [
