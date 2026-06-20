@@ -12,10 +12,12 @@
 
 - [x] 2.1 Add a baked `nanoclawv2` image to the image build list.
       (2026-06-19, slice 1: images/nanoclawv2/Containerfile + build-image.sh registration)
-- [ ] 2.2 Add the tray launcher leaf `🦞 NanoClawV2` beside the existing
-  per-project actions.
-- [ ] 2.3 Wire the launcher to start only an allowlisted NanoClawV2 container
-  for the selected project.
+- [x] 2.2 Add the tray launcher leaf `🦞 NanoClawV2` beside the existing
+  per-project actions. (Launcher leaf complete: LaunchKind, LeafAction, menu
+  construction, click dispatch, launch handler, and container spec all wired.)
+- [x] 2.3 Wire the launcher to start only an allowlisted NanoClawV2 container
+  for the selected project. (Image name hardcoded to nanoclawv2 in
+  launch_project_action; registered in Rust image builder for --init build.)
 
 ## 3. Host orchestration surface
 

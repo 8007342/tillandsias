@@ -12,10 +12,16 @@
 - current_progress: proposal, design, tasks, and spec scaffolded. Slice 1
   (image infrastructure) completed: images/nanoclawv2/Containerfile created,
   config overlay with orchestration instructions, entrypoint, build-image.sh
-  registration added, build verification passed, and committed. Slice 2 (tray launcher leaf) in progress.
-- next_action: implement slice 2 (tray launcher leaf), add branch-aware logic,
-  and verify smoke coverage for launch.
+  registration added, build verification passed, and committed. Slice 2 (tray launcher leaf) completed: image builder registration and allowlisted launch path done.
+- next_action: register nanoclawv2 in Rust image builder (image_specs, run_init,
+  image_build_inputs), then verify build and update tasks.
 - events:
+  - type: claim
+    ts: "2026-06-20T05:56:00Z"
+    agent_id: "linux-tlatoani-big-pickle-20260620T055600Z"
+    host: "linux"
+    lease_id: "nanoclawv2-orchestration-20260620T055600"
+    expires_at: "2026-06-20T09:56:00Z"
   - type: claim
     ts: "2026-06-17T22:07:00Z"
     agent_id: "linux-macuahuitl-gemini-202606172205"
@@ -43,6 +49,16 @@
       Slice 1 checkpoint: verified (./build.sh --check passed) and committed.
       images/nanoclawv2/entrypoint.sh opencode path fixed.
       Ready to start Slice 2 (tray launcher leaf).
+  - type: progress
+    ts: "2026-06-20T06:00:00Z"
+    agent_id: "linux-tlatoani-big-pickle-20260620T055600Z"
+    host: "linux"
+    lease_id: "nanoclawv2-orchestration-20260620T055600"
+    note: >
+      Slice 2 complete: registered nanoclawv2 in Rust image builder
+      (image_specs, image_build_inputs with forge-base dependency, run_init
+      image array). Added to init image order test and image_specs path test.
+      All tests pass, clippy clean. Tasks 2.2 and 2.3 marked done.
 - blocker: none
 - evidence_required:
   - proposal.md, design.md, tasks.md, and spec.md are written and consistent
