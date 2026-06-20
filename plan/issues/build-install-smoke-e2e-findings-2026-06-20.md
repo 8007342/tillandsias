@@ -38,7 +38,7 @@ The wasmtime blocker is fixed, but the 2026-06-20T13:49Z local-build E2E rerun s
 - id: `local-smoke/onboarding-cold-start-discovery-cheatsheet-signal`
 - type: fix
 - owner_host: linux
-- status: ready
+- status: done
 - capability_tags: [forge, onboarding, litmus, docs, testing]
 - severity: high
 - source: this smoke report
@@ -54,6 +54,27 @@ The wasmtime blocker is fixed, but the 2026-06-20T13:49Z local-build E2E rerun s
     - Local-build E2E advances past gate 1.
 
 ## Events
+
+- type: claim
+  ts: "2026-06-20T16:25:00Z"
+  agent_id: "linux-tlatoani-gemini-20260620T162500Z"
+  host: linux
+  lease_id: "nanoclawv2-reprovision-fix-20260620T162500Z"
+  expires_at: "2026-06-20T17:25:00Z"
+
+- type: complete
+  ts: "2026-06-20T16:53:00Z"
+  agent_id: "linux-tlatoani-gemini-20260620T162500Z"
+  host: linux
+  lease_id: "nanoclawv2-reprovision-fix-20260620T162500Z"
+  evidence:
+    - "target/convergence/evidence-bundle-20260620-163726.tar.gz"
+  notes:
+    - "Registered nanoclawv2 as a valid image type in crates/tillandsias-headless/src/runtime_assets.rs."
+    - "Added skills/ embedding under images/nanoclawv2/skills in crates/tillandsias-headless/build.rs."
+    - "Copied skills/ to images/nanoclawv2/skills in scripts/build-image.sh."
+    - "Restored onboarding welcome banner Cheatsheets/INDEX.md discovery signal in images/default/forge-welcome.sh."
+    - "All E2E gates (1 to 4) now pass 100% cleanly on mutable Linux."
 
 - type: claim
   ts: "2026-06-20T10:14:00Z"
