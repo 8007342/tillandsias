@@ -21,14 +21,16 @@ plan:
   current_state:
     last_completed_step: version-conflict-release (step 37)
     next_step: future-intentions-drain (step 58)
-    next_graph_node: future-intentions-drain/forge-continuous-enhancement
+    next_graph_node: future-intentions-drain/windows-macos-feature-parity
     frontier_note: >
       The v0.3.0 implementation plan and release-conflict recovery are complete.
-      As of 2026-06-20T05:44Z all orphaned future_intentions have been drained
-      into structured plan packets. Remaining ready frontier work includes the
-      forge-continuous-enhancement automation decision and the cross-host
+      As of 2026-06-20T05:51Z all orphaned future_intentions have been drained
+      into structured plan packets. FCE automation decision completed (option 2,
+      keep as-is). Remaining ready frontier work includes the cross-host
       Windows/macOS parity packet; the top external blocker remains the macOS
-      aarch64 Vault published-port probe recorded in plan/issues/ACTIVE.md.
+      aarch64 Vault published-port probe recorded in plan/issues/ACTIVE.md
+      (listener binding and CA path already confirmed correct — remaining issue
+      is aarch64 podman port-publish forwarding).
     plan_index: plan/index.yaml
     step_directory: plan/steps
     checkpoint_branch: linux-next

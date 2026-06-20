@@ -38,7 +38,15 @@ The `/forge-continuous-enhancement` skill is an **inner-forge** skill: it runs *
 1. (Small) Add a lightweight FCE-only probe to the meta-orchestration worker drain: after a local-build e2e pass, launch `tillandsias . --opencode --prompt "Use the /forge-continuous-enhancement skill"` with a 10-min timeout and capture findings.
 2. (Keep as-is) Since `big_pickle_template` already runs `/diagnose-forge` periodically, the outer improvement loop covers the same ground without an extra forge launch.
 
-**Status**: ready for assignment
+**Decision (2026-06-20T05:51Z)**: **Option 2** — keep as-is. Rationale:
+- The outer improvement pipeline (`/diagnose-forge` → `/advance-work-from-plan`) already covers forge improvement via `big_pickle_template` in `plan.yaml`.
+- E2E gates execute FCE as a side effect of build/install/reset cycles.
+- Adding a lightweight FCE-only probe after every local-build e2e would duplicate effort without expanding coverage, since the full build chain is needed anyway.
+- The meta-orchestration loop should focus on worker drain, coordination, and release gates; forge-specific iteration is delegated to the dedicated `/diagnose-forge` pipeline.
+- If forge iteration velocity is insufficient, revisit option 1.
+
+**Status**: done
 **Owner**: linux
 **Capability tags**: [forge, opencode, containers, automation]
 **Estimated effort**: 1h for option 1 (add probe), or mark superseded
+**Completed**: 2026-06-20T05:51Z — decision recorded, option 2 selected.

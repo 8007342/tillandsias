@@ -2,21 +2,27 @@
 
 Last updated: 2026-06-20T05:47Z
 
-## This Cycle (2026-06-20T05:47Z, linux)
+## This Cycle (2026-06-20T05:51Z, linux)
 
-- **Meta-orchestration sync**: Began clean on `linux-next` at `7fd83544`, fetched
-  origin, and pushed plan-drain checkpoint `584f2988`.
-- **Worker drain**: Drained the final `future_intentions` item. Expanded
-  `plan/issues/windows-macos-feature-parity-2026-06-12.md` into a structured
-  cross-host parity packet, cleared `plan.yaml.current_state.future_intentions`,
-  and updated `plan/index.yaml` so the parity packet is selectable.
-- **Coordination**: Sibling heads are already integrated:
-  windows-next `a3c8b23d` and osx-next `d829808d` are both ancestors of
-  linux-next `584f2988` with zero drift.
-- **E2E gates**: Skipped — this cycle changed only plan ledgers. GitHub latest
-  release is still `v0.3.260618.2`; no `v0.3.260620.*` tag exists.
-- **Next**: Prioritize the macOS aarch64 Vault published-port probe, then the
-  forge-continuous-enhancement automation decision or NanoClawV2 slice 2.
+- **Meta-orchestration sync**: Began clean on `linux-next` at `584f2988`, fetched
+  origin (clean, no new commits), confirmed worktree clean.
+- **Worker drain**:
+  - **macOS vault aarch64 (layer 5)**: Investigated and CONFIRMED: Vault
+    `listener "tcp"` already binds `0.0.0.0:8200` (`images/vault/vault.hcl:17`)
+    and the host-side health probe already reads `/tmp/tillandsias-ca/intermediate.crt`
+    (`vault_bootstrap.rs:322-328`). Root cause is an aarch64 podman
+    port-publish/netns forwarding issue (SYN accepted, no data). Updated the
+    deep-dive issue to reflect that items (1) and (2) are already in code.
+  - **forge-continuous-enhancement automation**: Decision recorded (option 2:
+    keep as-is — the outer `/diagnose-forge` pipeline already covers forge
+    improvement). Packet marked done.
+- **Sibling audit**: `origin/windows-next` and `origin/osx-next` heads checked —
+  both remain ancestors of `linux-next`; zero drift.
+- **E2E gates**: Skipped — no crate/image/release delta since prior cycle. GitHub
+  latest release is still `v0.3.260618.2`.
+- **Next**: macOS vault aarch64 layer-5 investigation (requires aarch64 VM
+  testing), policy/no-python-runtime-scripts (reclaimable), or
+  nanoclawv2-orchestration (reclaimable).
 
 ## This Cycle (2026-06-20T04:51Z, macos)
 
@@ -40,7 +46,7 @@ the items below are immediate work.
 
 ### enclave/macos-vault-unreachable-via-publish-aarch64
 
-- status: ready
+- status: ready (items 1–2 confirmed in code; remaining: aarch64 VM testing)
 - priority: CRITICAL — blocks the macOS m8 release-acceptance gate (step 49d /
   F4 GitHub Login) and, downstream, all macOS project/attach features (F5).
 - owner_host: linux (enclave recipe + headless vault bootstrap; aarch64 in-VM)
@@ -59,28 +65,23 @@ the items below are immediate work.
     `openssl s_client -connect 127.0.0.1:8201` gets no response — i.e. the port
     publish accepts the SYN but no bytes reach Vault's API backend. Classic
     podman publish-vs-backend mismatch on aarch64.
-- likely_root_cause: >
-    Vault's API `tcp` listener inside the container likely binds `127.0.0.1:8200`
-    (or otherwise not `0.0.0.0:8200`), so podman's published-port forward (which
-    reaches the container via its netns gateway, not loopback) cannot deliver.
-    Confirm the vault image / run config sets `listener "tcp" { address =
-    "0.0.0.0:8200" }`. NOTE the cluster listener already logs `[::]:8201` inside
-    the container — verify the API listener address specifically.
-- secondary_bug: >
-    The host-side health probe references `--cacert
-    /run/secrets/tillandsias-vault-tls-ca` — the IN-CONTAINER podman-secret mount
-    path, which does NOT exist on the VM host where the probe runs. The host CA
-    is at `/tmp/tillandsias-ca/intermediate.crt`. Even once connectivity is
-    fixed, the probe's CA path is wrong for host-side execution and TLS verify
-    will fail. Fix the probe to use a host-resident CA path.
+- confirmed findings (2026-06-20T05:51Z):
+    - Item (1) is already correct: `images/vault/vault.hcl:17` binds
+      `address = "0.0.0.0:8200"` — confirmed by code inspection.
+    - Item (2) is already correct: `vault_bootstrap.rs:322-328` reads CA from
+      `certs_dir.join("intermediate.crt")` which resolves to
+      `/tmp/tillandsias-ca/intermediate.crt` via `ensure_ca_bundle`.
+    - The root cause is NOT listener binding or CA path. It is an aarch64
+      podman port-publish/netns forwarding issue where SYN is accepted but
+      no bytes reach Vault's API backend.
 - next_action: >
-    (1) In the vault image/recipe, ensure the API listener binds `0.0.0.0:8200`.
-    (2) Fix the host-side health-probe CA path in `vault_bootstrap` to a
-    host-resident CA. (3) Verify in the aarch64 VM that
+    (3) Investigate the aarch64 podman port-publish forwarding issue in the
+    aarch64 Fedora VM. Check: podman version, rootlessport on aarch64,
+    `podman inspect tillandsias-vault` for network settings, and whether
     `curl --cacert /tmp/tillandsias-ca/intermediate.crt
-    https://127.0.0.1:8201/v1/sys/health?standbyok=true` returns 200, then that
-    `tillandsias-headless --github-login` proceeds past Vault. Ships to the VM
-    via a release (in-VM headless is fetched from releases/latest).
+    https://127.0.0.1:8201/v1/sys/health?standbyok=true` returns 200.
+    Ships to the VM via a release (in-VM headless is fetched from
+    releases/latest).
 - evidence_required:
   - aarch64 VM host: vault health endpoint returns 200 through the published port
   - `tillandsias-headless --github-login` advances past the Vault-healthy gate

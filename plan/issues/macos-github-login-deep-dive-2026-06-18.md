@@ -94,11 +94,14 @@ the probe's CA path looks wrong for host-side execution.)
 ## Fix plan (land together; do NOT ship 2–3 alone — login still dies at 5)
 
 - **Layer 5 (BLOCKER, cross-host — headless/enclave/recipe, `linux-next`):**
-  make the in-VM Vault API reachable through the published port on aarch64
-  (check Vault's `tcp` API `address` binds `0.0.0.0:8200` not `127.0.0.1`, and/or
-  the podman publish/netns path), and fix the host-side health-probe CA path to a
-  host-resident CA (`/tmp/tillandsias-ca/intermediate.crt`) instead of the
-  in-container `/run/secrets/...`. Verify `curl --cacert <host-ca>
+  make the in-VM Vault API reachable through the published port on aarch64.
+  CONFIRMED: Vault's API `tcp` listener already binds `0.0.0.0:8200`
+  (`images/vault/vault.hcl:17`). CONFIRMED: host-side health-probe CA path
+  already reads `/tmp/tillandsias-ca/intermediate.crt` via `ensure_ca_bundle`
+  (`vault_bootstrap.rs:322-328`). The root cause is NOT listener binding or
+  CA path — it is an aarch64 podman port-publish/netns forwarding issue
+  (SYN accepted but no data delivered). Requires aarch64 VM investigation.
+  Verify `curl --cacert /tmp/tillandsias-ca/intermediate.crt
   https://127.0.0.1:8201/v1/sys/health` returns 200 from the VM host.
 - **Layer 2/3 (macOS + shared host-shell, `osx-next`):** point
   `launch_spec(GithubLogin)` at `["tillandsias-headless","--github-login"]` with

@@ -1,21 +1,20 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-20T05:47Z
+LastExecutionTime: 2026-06-20T05:51Z
 
-## This Loop (2026-06-20T05:47Z, linux)
+## This Loop (2026-06-20T05:51Z, linux)
 
 - **Cycle type**: meta-orchestration on mutable Linux (Fedora 44): worker drain
   plus coordination audit.
-- **Startup**: began clean on `linux-next` at `7fd83544`; no tracked or
+- **Startup**: began clean on `linux-next` at `584f2988`; no tracked or
   untracked worktree changes. Host classified as `linux_mutable`.
-- **Worker drain**: drained the final `future_intentions` item: Windows/macOS
-  feature parity. Expanded
-  `plan/issues/windows-macos-feature-parity-2026-06-12.md` into a structured
-  cross-host packet and cleared `plan.yaml.current_state.future_intentions`.
-  Pushed checkpoint `584f2988`.
-- **Sibling coordination**: no merge needed. `origin/windows-next` (`a3c8b23d`)
-  and `origin/osx-next` (`d829808d`) are both ancestors of
-  `origin/linux-next` (`584f2988`); drift is 0 commits for both.
+- **Worker drain**: Investigated macOS vault aarch64 layer-5 — confirmed both
+  sub-fixes (listener binding and CA path) are already in code. Completed FCE
+  automation decision (option 2: keep as-is). Updated vault deep-dive issue,
+  FCE issue, ACTIVE.md, plan.yaml, and plan/index.yaml.
+- **Sibling coordination**: no merge needed. `origin/windows-next` and
+  `origin/osx-next` heads checked — both remain ancestors of
+  `origin/linux-next`; drift is 0 commits for both.
 - **E2E gates**: skipped. This cycle changed only plan ledgers. Latest
   GitHub release remains `v0.3.260618.2` (published 2026-06-18T18:07:14Z);
   the latest recorded curl-install smoke is for that release.

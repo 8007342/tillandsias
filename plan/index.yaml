@@ -4295,12 +4295,22 @@ plan_index:
             - images/inference/Containerfile
             - scripts/build-image.sh
         - id: future-intentions-drain/forge-continuous-enhancement
-          status: ready
+          status: completed
           depends_on: [future-intentions-drain/drain-tasks]
           owned_files:
             - plan/issues/forge-continuous-enhancement-automation-2026-06-20.md
             - .opencode/skills/forge-continuous-enhancement/SKILL.md
             - methodology.yaml
+          events:
+            - type: completed
+              ts: "2026-06-20T05:51:00Z"
+              agent_id: "linux-tlatoani-opus-meta1-20260620T0551Z"
+              host: linux
+              note: >
+                Decision: option 2 (keep as-is). The outer /diagnose-forge pipeline
+                via big_pickle_template already covers forge improvement. E2E gates
+                exercise FCE as side effect of build/install/reset cycles. No code
+                change needed.
         - id: future-intentions-drain/windows-macos-feature-parity
           status: ready
           depends_on: [future-intentions-drain/drain-tasks]
