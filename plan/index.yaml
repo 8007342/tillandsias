@@ -4708,3 +4708,214 @@ plan_index:
             watches release build performance. Adds a lightweight performance gate
             (job-summary timings + unchanged-lock cache-miss tripwire + ledger
             duration trend) so the next silent slowdown surfaces.
+
+    - packet_id: forge-push-credential-channel
+      order: 66
+      title: "Forge push credential channel — wire git remote to git mirror"
+      status: ready
+      kind: enhancement
+      deliverable: plan/issues/forge-push-credential-channel-2026-06-20.md
+      depends_on: []
+      pickup_role: "Linux mutable host with forge and git-mirror running"
+      outcome: >
+        A forge agent running inside the enclave can `git push origin <branch>`
+        and have the commit relay through the git mirror to GitHub, without any
+        additional operator setup after the initial --github-login. Enables
+        unattended opencode/claude/codex cycles to push their findings.
+      tasks:
+        - id: forge-push/wire-git-remote
+          status: ready
+          depends_on: []
+          owned_files:
+            - crates/tillandsias-core/src/launcher.rs
+            - crates/tillandsias-headless/src/forge_launcher.rs
+          checkpoint_required: true
+          handoff_note: >
+            At forge container launch, rewrite the project's .git/config origin
+            remote URL to point at http://tillandsias-git/<repo>.git so forge
+            git operations route through the mirror.
+        - id: forge-push/git-mirror-clone-support
+          status: ready
+          depends_on: [forge-push/wire-git-remote]
+          owned_files:
+            - images/git/entrypoint.sh
+          checkpoint_required: true
+          handoff_note: >
+            Ensure the git mirror serves HTTP smart protocol for all locally
+            cloned projects (not just the Tillandsias repo).
+        - id: forge-push/post-receive-verify
+          status: ready
+          depends_on: [forge-push/git-mirror-clone-support]
+          owned_files: []
+          checkpoint_required: true
+          handoff_note: >
+            Smoke-test: forge agent commits + pushes → git mirror post-receive
+            fires → GitHub remote advances. Verify with git ls-remote.
+      events:
+        - type: finding
+          ts: "2026-06-20T20:30Z"
+          agent_id: "linux-claude-sonnet46-20260620T2030Z"
+          host: linux_mutable
+          note: >
+            opencode meta-orch cycles commit findings but cannot push — no
+            credential channel from forge to origin. Root fix is wiring the
+            forge git remote to the local git mirror which already has the
+            post-receive relay to GitHub.
+
+    - packet_id: opencode-prompt-e2e-smoke
+      order: 67
+      title: "OpenCode-prompt E2E smoke — verify agent commits and pushes findings"
+      status: ready
+      kind: e2e-smoke
+      deliverable: plan/issues/opencode-prompt-e2e-smoke-2026-06-20.md
+      depends_on: [forge-push-credential-channel]
+      pickup_role: "Linux mutable host with Podman user session"
+      outcome: >
+        `tillandsias . --opencode --prompt "Use the ./skills/meta-orchestration
+        skill and push your progress and findings."` is a verifiable e2e smoke:
+        forge starts, agent runs the skill, commits findings, pushes to remote,
+        and a litmus test asserts all four gates passed.
+      tasks:
+        - id: opencode-prompt-e2e/litmus
+          status: ready
+          depends_on: [forge-push/post-receive-verify]
+          owned_files:
+            - openspec/litmus-tests/litmus-opencode-prompt-e2e-shape.yaml
+          checkpoint_required: true
+          handoff_note: >
+            Write litmus:opencode-prompt-e2e-shape asserting forge_exit=0, new
+            commit since smoke start, loop_status.md advanced, and remote branch
+            HEAD advanced via git ls-remote.
+        - id: opencode-prompt-e2e/findings-reduce
+          status: ready
+          depends_on: [opencode-prompt-e2e/litmus]
+          owned_files:
+            - skills/meta-orchestration/SKILL.md
+          checkpoint_required: false
+          handoff_note: >
+            Ensure the standard meta-orchestration prompt instructs the agent to
+            file findings to plan/issues/ and reduce to plan/index.yaml before
+            pushing, so every unattended run is self-documenting.
+      events:
+        - type: finding
+          ts: "2026-06-20T20:30Z"
+          agent_id: "linux-claude-sonnet46-20260620T2030Z"
+          host: linux_mutable
+          note: >
+            The opencode --prompt e2e case currently has no pass/fail criteria
+            or push verification. Filing as a first-class smoke gate so the
+            case can be run and its results validated unattended.
+
+    - packet_id: github-e2e-lifecycle-interactive
+      order: 68
+      title: "GitHub E2E lifecycle — interactive operator run to enumerate UX glitches"
+      status: ready
+      kind: interactive-investigation
+      deliverable: plan/issues/github-e2e-lifecycle-interactive-2026-06-20.md
+      depends_on: []
+      pickup_role: "Operator-attended mutable Linux host (big-pickle)"
+      outcome: >
+        A full operator-attended GitHub lifecycle run (login → list projects →
+        clone → commit → push) on a mutable Linux host produces a concrete list
+        of UX glitches, each shaped into a discrete fix packet and reduced to
+        plan/index.yaml for implementation.
+      tasks:
+        - id: github-e2e/interactive-run
+          status: ready
+          depends_on: []
+          owned_files: []
+          checkpoint_required: false
+          handoff_note: >
+            Run the lifecycle protocol in plan/issues/github-e2e-lifecycle-
+            interactive-2026-06-20.md on big-pickle. Capture exact error
+            messages, timing, credential prompts, and missing tools.
+        - id: github-e2e/glitch-reduction
+          status: ready
+          depends_on: [github-e2e/interactive-run]
+          owned_files:
+            - plan/index.yaml
+            - plan/issues/github-e2e-lifecycle-interactive-2026-06-20.md
+          checkpoint_required: true
+          handoff_note: >
+            For each observed glitch, file a sub-packet (id: github-e2e/<slug>)
+            with a concrete fix and reduce it to plan/index.yaml orders.
+        - id: github-e2e/push-from-host
+          status: ready
+          depends_on: []
+          owned_files:
+            - crates/tillandsias-headless/src/github_login.rs
+          checkpoint_required: true
+          handoff_note: >
+            Ensure `git push origin` works from the host working tree after
+            --github-login by calling `gh auth setup-git` as part of the login
+            flow. The gh OAuth token (gho_) must be wired as a git credential.
+      events:
+        - type: finding
+          ts: "2026-06-20T20:30Z"
+          agent_id: "linux-claude-sonnet46-20260620T2030Z"
+          host: linux_mutable
+          note: >
+            Operator noted login and list-projects work, checkout has glitches,
+            push-to-remote has been unreliable. Need an attended run to enumerate
+            and pin the exact failure modes before implementing fixes.
+
+    - packet_id: git-mirror-architecture-verification
+      order: 69
+      title: "Git mirror architecture verification — real server vs filesystem hacks"
+      status: ready
+      kind: investigation
+      deliverable: plan/issues/git-mirror-architecture-verification-2026-06-20.md
+      depends_on: []
+      pickup_role: "Linux mutable host with forge and git-mirror running"
+      outcome: >
+        Confirmed (or refuted) that tillandsias-git runs a real HTTPS/SSH git
+        server using certs from the pre-seeded Tillandsias CA — not a filesystem
+        shortcut, bind mount, or insteadOf file:// redirect. All red-flag checks
+        pass, and a successful forge→mirror→GitHub push relay is witnessed.
+      tasks:
+        - id: git-mirror-verify/protocol-probe
+          status: ready
+          depends_on: []
+          owned_files: []
+          checkpoint_required: false
+          handoff_note: >
+            Probe the git mirror container's served protocol: HTTP smart protocol,
+            SSH, or both. Confirm the URL scheme used by the forge's git remote.
+        - id: git-mirror-verify/ca-cert-check
+          status: ready
+          depends_on: []
+          owned_files: []
+          checkpoint_required: false
+          handoff_note: >
+            Verify the TLS certificate presented by tillandsias-git is signed by
+            the Tillandsias intermediate CA (not self-signed or absent). Use
+            openssl s_client against the container's published port.
+        - id: git-mirror-verify/forge-remote-check
+          status: ready
+          depends_on: [git-mirror-verify/protocol-probe]
+          owned_files: []
+          checkpoint_required: false
+          handoff_note: >
+            Inside a running forge shell, run `git remote -v` and confirm the
+            origin URL is a network endpoint (https:// or ssh://), not file://.
+            If it IS file://, that is the hack to fix.
+        - id: git-mirror-verify/findings
+          status: ready
+          depends_on: [git-mirror-verify/protocol-probe, git-mirror-verify/ca-cert-check, git-mirror-verify/forge-remote-check]
+          owned_files:
+            - plan/issues/git-mirror-architecture-verification-2026-06-20.md
+            - plan/index.yaml
+          checkpoint_required: true
+          handoff_note: >
+            File all findings to the deliverable doc. If red flags are found,
+            add fix sub-packets to plan/index.yaml immediately.
+      events:
+        - type: finding
+          ts: "2026-06-20T20:30Z"
+          agent_id: "linux-claude-sonnet46-20260620T2030Z"
+          host: linux_mutable
+          note: >
+            Operator requested verification that the git mirror is a real HTTPS/SSH
+            server using pre-seeded CAs, not a filesystem shortcut. Past sessions
+            have used file:// insteadOf hacks that appeared to work but bypassed
+            the post-receive relay to GitHub entirely.
