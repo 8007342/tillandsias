@@ -1,28 +1,22 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-20T05:47Z
+Last updated: 2026-06-20T06:00Z
 
-## This Cycle (2026-06-20T05:51Z, linux)
+## This Cycle (2026-06-20T06:00Z, linux)
 
-- **Meta-orchestration sync**: Began clean on `linux-next` at `584f2988`, fetched
+- **Meta-orchestration sync**: Began clean on `linux-next` at `f871f8b2`, fetched
   origin (clean, no new commits), confirmed worktree clean.
-- **Worker drain**:
-  - **macOS vault aarch64 (layer 5)**: Investigated and CONFIRMED: Vault
-    `listener "tcp"` already binds `0.0.0.0:8200` (`images/vault/vault.hcl:17`)
-    and the host-side health probe already reads `/tmp/tillandsias-ca/intermediate.crt`
-    (`vault_bootstrap.rs:322-328`). Root cause is an aarch64 podman
-    port-publish/netns forwarding issue (SYN accepted, no data). Updated the
-    deep-dive issue to reflect that items (1) and (2) are already in code.
-  - **forge-continuous-enhancement automation**: Decision recorded (option 2:
-    keep as-is — the outer `/diagnose-forge` pipeline already covers forge
-    improvement). Packet marked done.
+- **Worker drain**: Claimed `nanoclawv2-orchestration` (reclaimable, lease expired
+  2026-06-20T01:34Z). Slice 2: registered nanoclawv2 in Rust image builder
+  (`image_specs`, `image_build_inputs` with forge-base dependency, `run_init`
+  image array). Updated init image order and image_specs path tests. All tests
+  pass, clippy clean. Committed `58996d8f`.
 - **Sibling audit**: `origin/windows-next` and `origin/osx-next` heads checked —
   both remain ancestors of `linux-next`; zero drift.
-- **E2E gates**: Skipped — no crate/image/release delta since prior cycle. GitHub
-  latest release is still `v0.3.260618.2`.
-- **Next**: macOS vault aarch64 layer-5 investigation (requires aarch64 VM
-  testing), policy/no-python-runtime-scripts (reclaimable), or
-  nanoclawv2-orchestration (reclaimable).
+- **E2E gates**: Skipped — implementation change is Rust-only, no runtime crate
+  delta (nanoclawv2 was already buildable via build-image.sh; --init inclusion is
+  additive). Latest release remains `v0.3.260618.2`.
+- **Next**: macOS vault aarch64 layer-5 (blocked on VM access), or nanoclawv2-orchestration slice 3 (host orchestration surface).
 
 ## This Cycle (2026-06-20T04:51Z, macos)
 

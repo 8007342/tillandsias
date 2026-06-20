@@ -1,25 +1,25 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-20T05:51Z
+LastExecutionTime: 2026-06-20T06:00Z
 
-## This Loop (2026-06-20T05:51Z, linux)
+## This Loop (2026-06-20T06:00Z, linux)
 
 - **Cycle type**: meta-orchestration on mutable Linux (Fedora 44): worker drain
   plus coordination audit.
-- **Startup**: began clean on `linux-next` at `584f2988`; no tracked or
+- **Startup**: began clean on `linux-next` at `f871f8b2`; no tracked or
   untracked worktree changes. Host classified as `linux_mutable`.
-- **Worker drain**: Investigated macOS vault aarch64 layer-5 — confirmed both
-  sub-fixes (listener binding and CA path) are already in code. Completed FCE
-  automation decision (option 2: keep as-is). Updated vault deep-dive issue,
-  FCE issue, ACTIVE.md, plan.yaml, and plan/index.yaml.
+- **Worker drain**: Claimed `nanoclawv2-orchestration` reclaimable lease. Slice 2
+  completed: registered nanoclawv2 in Rust image builder (image_specs,
+  image_build_inputs with forge-base dependency, run_init image array). All tests
+  pass, clippy clean. Committed `58996d8f`.
 - **Sibling coordination**: no merge needed. `origin/windows-next` and
   `origin/osx-next` heads checked — both remain ancestors of
   `origin/linux-next`; drift is 0 commits for both.
-- **E2E gates**: skipped. This cycle changed only plan ledgers. Latest
-  GitHub release remains `v0.3.260618.2` (published 2026-06-18T18:07:14Z);
-  the latest recorded curl-install smoke is for that release.
-- **Release decision**: deferred. No new runtime/code delta landed in this
-  cycle, no `v0.3.260620.*` tag exists, and no release is in flight.
+- **E2E gates**: skipped. The nanoclawv2 --init registration is additive (image
+  was already buildable via build-image.sh); no runtime crate delta to smoke-test.
+  Latest GitHub release remains `v0.3.260618.2`.
+- **Release decision**: deferred. No release-blocking change; VERSION remains
+  `0.3.260619.5`, no `v0.3.260620.*` tag exists.
 
 ## Active Conflicts & Mediation
 
