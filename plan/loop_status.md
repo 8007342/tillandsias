@@ -1,6 +1,6 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-20T07:38Z
+LastExecutionTime: 2026-06-20T07:42Z
 
 ## This Loop (2026-06-20T07:38Z, linux)
 
@@ -8,7 +8,7 @@ LastExecutionTime: 2026-06-20T07:38Z
 - **Startup**: clean mutable-Linux host on `linux-next`; fetched origin,
   fast-forwarded from `d697f866` to `b2b37d10`, then pushed claim commit
   `4c15fc72`.
-- **Sibling heads after fetch**:
+- **Sibling heads after startup fetch**:
   - `main`: `6dfafdf1`.
   - `linux-next`: `b2b37d10` at worker selection, then `4c15fc72` after the
     claim commit.
@@ -25,8 +25,13 @@ LastExecutionTime: 2026-06-20T07:38Z
   `target/forge-diagnostics/diagnostics_20260619T234257Z.log`; no-Python script
   checker PASS; `cargo fmt --all -- --check` PASS; `git diff --check` PASS;
   `./build.sh --check` PASS.
-- **Integration/runtime**: no sibling merge attempted before this worker commit;
-  follow-up coordination should re-fetch after this implementation lands.
+- **Integration/runtime**: post-push coordination re-fetched origin at
+  2026-06-20T07:42Z. `origin/windows-next` and `origin/osx-next` are both
+  ancestors of `origin/linux-next@30e014dc` (drift: windows 0 ahead / linux 18
+  ahead; osx 0 ahead / linux 17 ahead). No merge or freeze required.
+- **Release/e2e freshness**: latest published GitHub release remains
+  `v0.3.260618.2` at `6dfafdf1`, published 2026-06-18T18:07:14Z; existing
+  curl-install smoke evidence for that release is current.
 - **E2E gates**: destructive local-build/curl-install gates not run for this
   policy/litmus-only worker slice; no shipped runtime or release artifact delta.
 - **New findings**: filed `policy/no-python-litmus-drift` for remaining

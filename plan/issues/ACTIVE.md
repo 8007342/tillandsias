@@ -1,6 +1,6 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-20T07:38Z
+Last updated: 2026-06-20T07:42Z
 
 ## This Cycle (2026-06-20T07:38Z, linux)
 
@@ -18,6 +18,11 @@ Last updated: 2026-06-20T07:38Z
   `target/forge-diagnostics/diagnostics_20260619T234257Z.log`,
   `scripts/check-no-python-scripts.sh`, `cargo fmt --all -- --check`,
   `git diff --check`, and `./build.sh --check` all passed.
+- **Coordination**: post-push audit confirms `origin/windows-next` and
+  `origin/osx-next` are both ancestors of `origin/linux-next@30e014dc`; no
+  sibling merge or runtime-litmus marker is active. Latest published release is
+  still `v0.3.260618.2` (2026-06-18T18:07:14Z), with existing curl-install
+  smoke evidence current.
 - **New finding**: filed `policy/no-python-litmus-drift` in
   `plan/issues/no-python-litmus-drift-2026-06-20.md` for remaining Python use in
   other litmus YAML command fields.
