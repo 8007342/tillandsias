@@ -193,17 +193,20 @@ the items below are immediate work.
 
 ### local-smoke/wasmtime-dnf-migration-failure
 
-- status: claimed
+- status: done
 - lease_id: "wasmtime-revert-20260620T101400Z"
 - agent_id: "linux-tlatoani-gemini-20260620T101400Z"
 - expires_at: "2026-06-20T14:14:00Z"
 - owner_host: linux
 - source: `plan/issues/build-install-smoke-e2e-findings-2026-06-20.md`
 - severity: high — blocks local-build E2E and therefore release confidence for integrated `linux-next`
-- next_action: Revert the wasmtime migration to DNF or identify a working repository providing wasmtime.
-- blocker: blocks local-build E2E gate 3 (re-provision/init)
-- discovered_evidence: >
-    Local-build E2E log `target/build-install-smoke-e2e/20260620T084136Z/03-init.log` fails with `No match for argument: wasmtime`.
+- next_action: none — fix landed and E2E verified.
+- blocker: none
+- completed_evidence: >
+    Reverted the wasmtime DNF installation migration to restoration of direct archive fetch with SHA256 checksum verification.
+    Updated the default-image litmus test (litmus-default-image-containerfile-shape.yaml) to expect 5 checksum-verification sites.
+    Ran `./build.sh --ci-full --install`, which successfully completed all pre-build litmus tests, built, installed, and passed all runtime E2E residual checks.
+    Evidence bundle: target/convergence/evidence-bundle-20260620-102600.tar.gz.
 - evidence_required:
   - `tillandsias --init --debug` completes successfully on a pristine store.
   - `podman run --rm localhost/tillandsias-forge-base:latest wasmtime --version` returns a valid version.

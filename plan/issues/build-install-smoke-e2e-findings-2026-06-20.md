@@ -15,7 +15,7 @@ Initial local-build E2E stopped at gate 3 (`tillandsias --init --debug`) after a
 - id: `local-smoke/wasmtime-dnf-migration-failure`
 - type: fix
 - owner_host: linux
-- status: claimed
+- status: done
 - capability_tags: [containerfiles, dnf, images, testing]
 - severity: high
 - source: this smoke report
@@ -39,6 +39,18 @@ Initial local-build E2E stopped at gate 3 (`tillandsias --init --debug`) after a
   host: linux
   lease_id: "wasmtime-revert-20260620T101400Z"
   expires_at: "2026-06-20T14:14:00Z"
+
+- type: complete
+  ts: "2026-06-20T10:27:00Z"
+  agent_id: "linux-tlatoani-gemini-20260620T101400Z"
+  host: linux
+  lease_id: "wasmtime-revert-20260620T101400Z"
+  evidence:
+    - "target/convergence/evidence-bundle-20260620-102600.tar.gz"
+  notes:
+    - "Reverted wasmtime DNF migration to direct curl+tar installation with SHA256 validation."
+    - "Updated the default-image litmus test (litmus-default-image-containerfile-shape.yaml) to expect 5 checksum-verification sites."
+    - "Ran build.sh --ci-full --install successfully, confirming all E2E litmus tests, builds, and runtime residual checks pass."
 
 - type: progress
   ts: "2026-06-20T08:59:38Z"
