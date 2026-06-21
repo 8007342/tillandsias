@@ -5149,3 +5149,67 @@ plan_index:
             independent of forge-base. On immutable Linux the forge is not the
             primary use case; blocking vault and git-mirror on a forge build
             failure is disproportionate.
+
+    - packet_id: enforce-fmt-on-commit
+      order: 72
+      title: "Enforce cargo fmt --check in build.sh --check gate"
+      status: completed
+      kind: enhancement
+      deliverable: plan/issues/ci-blockers-fmt-drift-and-litmus-concurrency-2026-06-21.md
+      depends_on: []
+      pickup_role: "Any host that edits Rust code"
+      outcome: >
+        Added `cargo fmt --check --all` to the `build.sh --check` path before the
+        type-check step, so rustfmt drift is caught before any commit reaches a
+        shared branch. Closes the --check vs --ci-full fmt gap.
+      tasks:
+        - id: enforce-fmt-on-commit/update-build-sh
+          status: completed
+          depends_on: []
+          owned_files:
+            - build.sh
+          checkpoint_required: true
+          handoff_note: >
+            Inserted formatting check block before the type-check block in build.sh.
+            Errors with a clear message: "Rust code not formatted: run 'cargo fmt --all'".
+      events:
+        - type: finding
+          ts: "2026-06-21T06:18Z"
+          agent_id: "linux-claude-opus48-loop-20260621T0618Z"
+          host: linux_mutable
+          note: >
+            e2e step1 build failed local-ci on linux-next HEAD due to committed
+            rustfmt drift — the --check path did not run cargo fmt.
+        - type: completed
+          ts: "2026-06-21T06:37Z"
+          agent_id: "linux-tlatoani-big-pickle-20260621T0637Z"
+          host: linux_mutable
+          evidence:
+            - "build.sh --check passes with fmt check included"
+            - "cargo fmt --check --all --manifest-path Cargo.toml exits 0"
+
+    - packet_id: source-edit-vs-smoke-lock
+      order: 73
+      title: "Document that source-mutating migrations must acquire the smoke lock"
+      status: ready
+      kind: enhancement
+      deliverable: plan/issues/ci-blockers-fmt-drift-and-litmus-concurrency-2026-06-21.md
+      depends_on: []
+      pickup_role: "Any coordinator host"
+      outcome: >
+        File-moving migrations (e.g. ZeroClaw) must acquire the
+        build-install-smoke-e2e lock so concurrent e2e gates do not read a
+        half-migrated tree. Decision recorded in the CI blocker findings file.
+      tasks:
+        - id: source-edit-vs-smoke-lock/decide-and-document
+          status: ready
+          depends_on: []
+          owned_files:
+            - plan/issues/ci-blockers-fmt-drift-and-litmus-concurrency-2026-06-21.md
+            - skills/advance-work-from-plan/SKILL.md
+          checkpoint_required: true
+          handoff_note: >
+            Document a lightweight rule: file-moving or source-mutating migrations
+            acquire the build-install-smoke-e2e lock (or a source-edit lease) so
+            concurrent e2e gates don't read a half-migrated tree. Folds into
+            agent-concurrency-collisions-2026-06-20.

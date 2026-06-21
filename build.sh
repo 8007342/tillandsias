@@ -648,6 +648,13 @@ fi
 
 # Type-check only
 if [[ "$FLAG_CHECK" == true ]]; then
+    _step "Checking Rust formatting..."
+    if ! _run cargo fmt --check --all --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1; then
+        _error "Rust code not formatted: run 'cargo fmt --all'"
+        exit 1
+    fi
+    _info "Formatting check passed"
+
     _step "Type-checking workspace..."
     _run cargo check --workspace --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1
     _info "Type-check passed"

@@ -41,15 +41,15 @@ locked build read the tree. This is an agent-concurrency collision
 ([[agent-concurrency-collisions-2026-06-20]]): the smoke-lock serializes e2e gates
 against each other, but not against an unrelated sibling's source edits.
 
-## Prevention follow-ups (ready)
+## Prevention follow-ups
 
-- id: enforce-fmt-on-commit
-  status: ready
-  action: >
-    Close the --check vs --ci-full fmt gap: add `cargo fmt --all --check` to the
-    fast pre-commit/pre-push gate (or the cheap --check path) so rustfmt drift can
-    never be committed to a shared branch. Relates to the no-silent-breakage
-    principle in [[release-build-monitoring-2026-06-20]].
+### enforce-fmt-on-commit (COMPLETED)
+
+Added `cargo fmt --check --all` to `build.sh --check` before the type-check step.
+Now any agent running `./build.sh --check` will catch fmt drift before committing.
+Closed by order 72 in plan/index.yaml. Verified: `build.sh --check` passes with fmt
+check included.
+
 - id: source-edit-vs-smoke-lock
   status: ready
   action: >
@@ -57,7 +57,8 @@ against each other, but not against an unrelated sibling's source edits.
     the smoke-lock (or a source-edit lease) so concurrent e2e gates don't read a
     half-migrated tree. Likely lightweight: document that file-moving migrations
     acquire the build-install-smoke-e2e lock. Folds into
-    [[agent-concurrency-collisions-2026-06-20]].
+    [[agent-concurrency-collisions-2026-06-20]]. Promoted to order 73 in
+    plan/index.yaml.
 
 ## Events
 
@@ -72,3 +73,12 @@ against each other, but not against an unrelated sibling's source edits.
     14 immediately after) attributable to a concurrent ZeroClaw migration moving
     files during the locked build. Discarded the build's generated TRACES/dashboard
     churn; committed only the fmt fix. Filed two prevention follow-ups.
+- type: completed
+  ts: "2026-06-21T06:37:00Z"
+  agent_id: "linux-tlatoani-big-pickle-20260621T0637Z"
+  host: linux_mutable
+  note: >
+    enforce-fmt-on-commit implemented: added cargo fmt --check --all to build.sh
+    --check before the type-check step. Verified build.sh --check passes with the
+    new fmt gate. Promoted both follow-ups to plan/index.yaml as orders 72
+    (completed) and 73 (ready).

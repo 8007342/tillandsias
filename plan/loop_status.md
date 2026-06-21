@@ -1,6 +1,18 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-21T04:42Z
+LastExecutionTime: 2026-06-21T06:37Z
+
+## This Loop (2026-06-21T06:37Z, linux_mutable — big-pickle enforce-fmt-on-commit)
+
+- **Cycle type**: meta-orchestration worker drain on mutable Linux (big-pickle).
+- **Startup**: `linux-next @ 6b0c1eab`, clean worktree. Credential Channel Guard passed (`ok:gh-keyring`). Siblings fetched: windows-next a3c8b23d, osx-next d273daff, main 31b01c32 (all ancestors).
+- **Worker drain**: No `ready` plan-index packet implementable on this host — Orders 64/66–68 require CI releases, forge runtime, or operator attendance. Reduced the CI blocker finding from `plan/issues/ci-blockers-fmt-drift-and-litmus-concurrency-2026-06-21.md` into two plan packets:
+  - **Order 72 (completed)**: Added `cargo fmt --check --all` to `build.sh --check` before the type-check step, closing the --check vs --ci-full fmt gap.
+  - **Order 73 (ready)**: Document that source-mutating migrations acquire the smoke-lock.
+- **Verification**: `build.sh --check` passes with fmt gate. `ruby -ryaml` validates `plan/index.yaml`. `bash -n build.sh` passes.
+- **Coordinator**: windows-next + osx-next both ancestors of HEAD. No merge needed.
+- **E2E gates**: Not run — fmt-gate tooling change, no runtime delta.
+- **Push state**: will push `linux-next` to origin over HTTPS (gh auth keyring).
 
 ## This Loop (2026-06-21T04:42Z, linux_mutable — big-pickle git-mirror-arch-verification)
 
