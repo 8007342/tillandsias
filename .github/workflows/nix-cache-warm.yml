@@ -1,0 +1,49 @@
+name: Nix Cache Warm
+
+on:
+  push:
+    branches:
+      - main
+      - linux-next
+    paths:
+      - 'flake.nix'
+      - 'flake.lock'
+      - '.github/workflows/nix-cache-warm.yml'
+  schedule:
+    # Run weekly to ensure the cache stays active and doesn't expire
+    - cron: '0 4 * * 0'
+  workflow_dispatch:
+
+jobs:
+  warm-cache:
+    name: Warm Nix Cache
+    runs-on: ubuntu-22.04
+    permissions:
+      contents: read
+      actions: write
+    steps:
+      - name: Checkout
+        uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - name: Install Nix
+        uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
+        with:
+          flakehub: false
+
+      - name: Nix Cache
+        uses: nix-community/cache-nix-action@v7
+        with:
+          primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.lock') }}
+          restore-prefixes-first-match: |
+            nix-${{ runner.os }}-
+          purge: true
+          purge-prefixes: |
+            nix-Linux-
+          purge-created-offset: 86400000
+          gc-max-store-size: 8000000000
+
+      - name: Build Nix targets
+        run: |
+          nix build -L .#tillandsias-x86_64-musl           --no-link
+          nix build -L .#tillandsias-headless-x86_64-musl  --no-link
+          nix build -L .#tillandsias-headless-aarch64-musl --no-link

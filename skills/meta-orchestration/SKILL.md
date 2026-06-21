@@ -72,13 +72,24 @@ work. The Cowork scheduled-task runtime can inherit dangling session sockets
 fails for lack of a credential. See
 `plan/issues/cowork-headless-credential-isolation-2026-06-20.md`.
 
-A usable credential channel is present when ANY of these holds:
+Run the executable guard instead of re-deriving the check in prose:
 
-- `.git/.gh-credentials` exists and is non-empty (repo-local store helper), or
+```bash
+scripts/check-credential-channel.sh
+```
+
+It prints exactly one line matching the falsifiable grammar
+`^(ok:[a-z0-9-]+|missing:no-credential-channel)$` and exits `0` when a usable
+git-push credential channel is present, non-zero when it is absent. A usable
+channel is present when ANY of these holds (the script checks them in order):
+
+- `<git-dir>/.gh-credentials` exists and is non-empty (repo-local store helper), or
 - `GH_TOKEN` or `GITHUB_TOKEN` is set in the environment, or
 - `gh auth status` succeeds (reachable, unlocked keyring).
 
-If none holds, do NOT proceed into worker drain or any committable work. Instead
+Pinned by `litmus:credential-channel-check-shape`. A non-zero exit (verdict
+`missing:no-credential-channel`) fails the cycle on its own; do NOT proceed into
+worker drain or any committable work. Instead
 fail loud: file or update a blocker in `plan/issues/` recording
 `blocked: no-credential-channel`, the owner (operator), and the smallest next
 action (re-seed `.git/.gh-credentials` via the gh token, or inject `GH_TOKEN`
@@ -174,6 +185,30 @@ When choosing the builder role, run `/advance-work-from-plan` repeatedly in a `.
 
 Each worker cycle must obey the non-negotiable exit contract above.
 
+### Node-Closure Claim (avoid duplicated ledger-hygiene work)
+
+Before re-deriving and closing or hygiene-editing a `plan/index.yaml` node,
+claim it so a concurrent cycle does not independently produce the identical edit
+(the idempotent-but-wasteful collision recorded in
+`plan/issues/agent-concurrency-collisions-2026-06-20.md`). Run the executable
+claim instead of eyeballing the ledger:
+
+```bash
+scripts/claim-ledger-node.sh claim <node-id>   # e.g. release-nix-cache-ref-scoping/choose-approach
+```
+
+It emits exactly one line matching
+`^(claimed|reclaimed|in-flight|released|free):[a-z0-9._/-]+$` and exits `0` when
+this cycle owns the node (`claimed:`/`reclaimed:`) or non-zero (`in-flight:`)
+when a live lease is held elsewhere — in which case skip that node and pick the
+next eligible one. The lease is an advisory, CRDT-friendly reservation, not a
+mutex on the file: it respects the stable-ID + idempotent-merge preconditions in
+`methodology/between-commits-work-discipline.yaml`, so a missed or expired lease
+never corrupts state (at worst two cycles converge on the same safe edit).
+Release with `scripts/claim-ledger-node.sh release <node-id>` after the closure
+is committed; expired leases (default TTL 4h) are auto-reclaimed. Pinned by
+`litmus:ledger-node-claim-shape`.
+
 ## E2E Gates
 
 Run eligible e2e gates after worker drain:
@@ -184,6 +219,15 @@ Run eligible e2e gates after worker drain:
 | linux_mutable | yes | yes |
 | macos | yes | yes |
 | windows | yes | yes |
+
+Before running any local-build e2e gate, consult the structured host-eligibility
+verdict instead of re-deriving the skip reason in prose: run
+`scripts/e2e-preflight.sh eligibility`, which prints exactly one line matching
+`^(eligible|skip:[a-z0-9-]+)$`. Proceed with the local-build gate only on
+`eligible`; on any `skip:<reason>` (e.g. `skip:no-podman-user-session` in the
+Cowork sandbox, which has no `/run/user/<uid>`) record the verdict once and skip
+the local-build gate without re-litigating it. Pinned by
+`litmus:e2e-eligibility-probe-shape`.
 
 Rules:
 
@@ -223,9 +267,10 @@ Before exit:
    promoted to a `plan/index.yaml` packet. An unfiled finding blocks exit.
 2. Refresh `plan/issues/ACTIVE.md` and `plan/loop_status.md` if this cycle
    changed active work, blockers, tested release, or host assignments.
-3. Validate touched YAML with a parser. Use the approved non-Python validator
-   for the host (`tillandsias-policy validate-yaml` where built); Python is not
-   permitted for committed automation (see
+3. Validate touched YAML with a parser. The approved validator is
+   `tillandsias-policy validate-yaml <files>` where built, with
+   `ruby -ryaml -e "YAML.load_file('<file>')"` as the sanctioned fallback.
+   Python is not permitted for committed automation (see
    `plan/issues/meta-orch-enhancement-opportunities-2026-06-20.md` order 63).
 4. Commit targeted files only.
 5. Push the relevant branch.

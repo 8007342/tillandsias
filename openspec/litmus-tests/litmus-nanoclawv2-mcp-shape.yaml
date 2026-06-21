@@ -23,10 +23,10 @@ critical_path:
     failure_pattern: "FAILED|error\\[E"
 
   - step: "verify allowlist enforces 5 approved tools"
-    command: "grep -c 'nanoclaw\\.' crates/tillandsias-nanoclawv2-mcp/src/allowlist.rs"
+    command: "test $(grep -cF 'nanoclaw.' crates/tillandsias-nanoclawv2-mcp/src/allowlist.rs) -ge 5 && echo allowlist-enforced"
     timeout_ms: 5000
-    success_pattern: "^[5-9]$|^[1-9][0-9]"
-    expected_behavior: "at least 5 nanoclaw. tool entries in allowlist source"
+    success_pattern: "allowlist-enforced"
+    expected_behavior: "allowlist-enforced"
 
   - step: "verify MCP server binary entry point exists"
     command: "test -f crates/tillandsias-nanoclawv2-mcp/src/main.rs && echo OK"

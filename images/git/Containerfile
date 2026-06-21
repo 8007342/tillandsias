@@ -40,6 +40,7 @@ RUN apk add --no-cache \
         github-cli \
         curl \
         jq \
+        lighttpd \
     && adduser -D -u 1000 -s /bin/bash git \
     && mkdir -p /srv/git /var/log/git-service /strategic \
     && chown -R git:git /srv/git /var/log/git-service /strategic
@@ -51,6 +52,7 @@ COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 # @trace spec:git-mirror-service, spec:podman-orchestration
 # Copy git post-receive hook (for push notifications to remote)
 COPY post-receive-hook.sh /usr/local/share/git-service/post-receive-hook.sh
+COPY lighttpd.conf /usr/local/share/git-service/lighttpd.conf
 
 COPY vault-cli.sh /usr/local/bin/vault-cli.sh
 RUN ln -s /usr/local/bin/vault-cli.sh /usr/local/bin/vault-cli
@@ -71,7 +73,7 @@ RUN chmod +x /usr/local/bin/entrypoint.sh \
 
 USER git
 
-EXPOSE 9418
+EXPOSE 9418 8080
 
 # @trace spec:git-mirror-service, spec:socket-container-orchestration
 HEALTHCHECK --interval=2s --timeout=5s --start-period=3s --retries=10 \

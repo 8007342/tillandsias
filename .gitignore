@@ -69,6 +69,9 @@ cheatsheet-sources/
 /build-proxy.log
 /build-*-progress.jsonl
 
+# Local runtime configuration (per-machine)
+/.tillandsias/
+
 # Session-local cron scheduler runtime state (not source)
 .claude/scheduled_tasks.lock
 .claude/scheduled_tasks.json

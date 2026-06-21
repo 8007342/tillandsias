@@ -29,8 +29,11 @@ jobs:
 
       - name: Install Nix
         uses: DeterminateSystems/nix-installer-action@ef8a148080ab6020fd15196c2084a2eea5ff2d25 # v22
+        with:
+          flakehub: false
 
       - name: Nix Cache
+        id: nix-cache
         # Caches the nix store across runs via the GitHub Actions cache backend.
         # Critical for cost: the aarch64 cross-GCC is built from source by
         # pkgsCross (not in cache.nixos.org), so without this every release run
@@ -40,6 +43,7 @@ jobs:
           primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.lock') }}
           restore-prefixes-first-match: |
             nix-${{ runner.os }}-
+          save: false
 
       - name: Resolve and validate version
         env:
@@ -63,6 +67,9 @@ jobs:
       - name: Verify version monotonicity
         run: bash scripts/verify-version-monotonic.sh
 
+      - name: Record Nix Build Start Time
+        run: echo "NIX_BUILD_START_TIME=$(date +%s)" >> "$GITHUB_ENV"
+
       - name: Build musl-static binaries via Nix (host + in-VM agents, both arches)
         run: |
           # Hermetic crane + pkgsCross builds (flake.nix). Replaces the prior
@@ -73,6 +80,44 @@ jobs:
           nix build -L .#tillandsias-x86_64-musl           --out-link result-host
           nix build -L .#tillandsias-headless-x86_64-musl  --out-link result-hx
           nix build -L .#tillandsias-headless-aarch64-musl --out-link result-ha
+
+      - name: Record Nix Build Duration and Assert Cache Performance
+        if: always()
+        run: |
+          NIX_BUILD_END_TIME=$(date +%s)
+          DURATION=$((NIX_BUILD_END_TIME - NIX_BUILD_START_TIME))
+          echo "NIX_BUILD_DURATION_SECS=$DURATION" >> "$GITHUB_ENV"
+
+          MINUTES=$((DURATION / 60))
+          SECONDS=$((DURATION % 60))
+          DURATION_STR="${MINUTES}m ${SECONDS}s"
+
+          CACHE_HIT="${{ steps.nix-cache.outputs.hit }}"
+
+          echo "### Release Nix Build Performance" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Metric | Value |" >> "$GITHUB_STEP_SUMMARY"
+          echo "|---|---|" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Nix Cache Hit | ${CACHE_HIT:-false} |" >> "$GITHUB_STEP_SUMMARY"
+          echo "| Nix Build Duration | ${DURATION_STR} (${DURATION}s) |" >> "$GITHUB_STEP_SUMMARY"
+
+          echo "{\"cache_hit\": \"${CACHE_HIT:-false}\", \"nix_build_duration_seconds\": $DURATION}" > build-timings.json
+
+          if [ "${CACHE_HIT}" != "true" ]; then
+            echo "::warning::Nix Cache Miss: rebuild took ${DURATION_STR}. If flake.lock is unchanged, this is a cache regression!"
+            if [ $DURATION -gt 1200 ]; then # > 20 minutes
+              echo "::warning::Nix Build exceeded 20 minutes ($DURATION_STR) with a cache miss."
+            fi
+          else
+            echo "Nix Cache Hit verified. Build completed in ${DURATION_STR}."
+          fi
+
+      - name: Upload Build Timings Artifact
+        if: always()
+        uses: actions/upload-artifact@4cec3d8aa04e39d1a68397de0c4cd6fb9dce8ec1 # v4
+        with:
+          name: build-timings
+          path: build-timings.json
+          retention-days: 14
 
       - name: Collect + validate release artifacts
         run: |

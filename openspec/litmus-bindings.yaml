@@ -468,6 +468,14 @@ specs:
   - litmus:methodology-accountability-shape
   coverage_ratio: 100
   last_verified: '2026-05-15'
+- spec_id: meta-orchestration
+  status: active
+  litmus_tests:
+  - litmus:e2e-eligibility-probe-shape
+  - litmus:credential-channel-check-shape
+  - litmus:ledger-node-claim-shape
+  coverage_ratio: 100
+  last_verified: '2026-06-21'
 - spec_id: logging-levels
   status: obsolete
   litmus_tests: []

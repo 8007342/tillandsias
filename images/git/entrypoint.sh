@@ -67,6 +67,8 @@ if [ -n "$PROJECT" ]; then
         git -C "$PROJECT_REPO" config receive.denyNonFastforwards false
         git -C "$PROJECT_REPO" config receive.denyDeletes false
     fi
+    # Always ensure http.receivepack is enabled so we can push via HTTP
+    git -C "$PROJECT_REPO" config http.receivepack true
     if [ -n "$TILLANDSIAS_PROJECT_REMOTE_URL" ]; then
         # Redact any embedded credentials in the URL we log (defense in depth;
         # the launcher should pass a clean URL).
@@ -153,12 +155,24 @@ done
 
 echo "$(date -Is) [git-service] daemon ready" >> "$SLOG"
 
-# Run git daemon as PID 1 so it receives signals properly.
-exec git daemon \
+# Propagate shutdown signals (SIGTERM, SIGINT) to child processes
+trap 'echo "[git-service] shutting down..."; kill -TERM "$LIGHTTPD_PID" "$GIT_DAEMON_PID" 2>/dev/null; exit 0' SIGTERM SIGINT
+
+# Start lighttpd for git HTTP smart protocol support.
+echo "[git-service] starting lighttpd on port 8080"
+lighttpd -D -f /usr/local/share/git-service/lighttpd.conf &
+LIGHTTPD_PID=$!
+
+# Run git daemon on port 9418 in background.
+git daemon \
     --reuseaddr \
     --export-all \
     --enable=receive-pack \
     --base-path=/srv/git \
     --listen=0.0.0.0 \
     --port=9418 \
-    --verbose
+    --verbose &
+GIT_DAEMON_PID=$!
+
+# Wait for background services to complete
+wait "$LIGHTTPD_PID" "$GIT_DAEMON_PID"

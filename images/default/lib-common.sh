@@ -298,7 +298,7 @@ rewrite_origin_for_enclave_push() {
         return 0
     fi
 
-    local mirror_url="git://git-service/${TILLANDSIAS_PROJECT}"
+    local mirror_url="http://tillandsias-git:8080/${TILLANDSIAS_PROJECT}.git"
 
     # Stash the original under tillandsias.* in the GLOBAL config (ephemeral
     # ~/.gitconfig inside the forge — NOT the bind-mounted .git/config).
@@ -323,7 +323,7 @@ rewrite_origin_for_enclave_push() {
     fi
 
     trace_lifecycle "git-mirror" "host-mount origin rewrite: ${original} -> ${mirror_url}"
-    echo "[forge] git push origin <branch> routes to the enclave mirror (git-service:9418); upstream is ${original}."
+    echo "[forge] git push origin <branch> routes to the enclave mirror (tillandsias-git:8080); upstream is ${original}."
 }
 
 # @trace spec:cross-platform, spec:windows-wsl-runtime, spec:git-mirror-service, spec:forge-offline
@@ -433,13 +433,13 @@ clone_project_from_mirror() {
 
     # Network transport (Linux/podman).
     if [[ -n "${TILLANDSIAS_GIT_SERVICE:-}" ]]; then
-        trace_lifecycle "git-mirror" "cloning from ${TILLANDSIAS_GIT_SERVICE}"
+        trace_lifecycle "git-mirror" "cloning from http://tillandsias-git:8080"
         local max_retries=5
         for i in $(seq 1 $max_retries); do
-            if git clone "git://${TILLANDSIAS_GIT_SERVICE}/${TILLANDSIAS_PROJECT}" "$clone_dir" 2>&1; then
+            if git clone "http://tillandsias-git:8080/${TILLANDSIAS_PROJECT}.git" "$clone_dir" 2>&1; then
                 trace_lifecycle "git-mirror" "clone successful"
                 cd "$clone_dir" || return 1
-                git remote set-url --push origin "git://${TILLANDSIAS_GIT_SERVICE}/${TILLANDSIAS_PROJECT}" 2>/dev/null || \
+                git remote set-url --push origin "http://tillandsias-git:8080/${TILLANDSIAS_PROJECT}.git" 2>/dev/null || \
                     echo "[entrypoint] WARNING: Failed to set push URL — git push may not work" >&2
                 configure_git_identity
                 echo "[forge] All changes must be committed to persist. Uncommitted work is lost on stop."
@@ -452,7 +452,7 @@ clone_project_from_mirror() {
                 trace_lifecycle "git-mirror" "clone failed after $max_retries attempts"
             fi
         done
-        echo "[forge] FATAL: git clone failed from git://${TILLANDSIAS_GIT_SERVICE}/${TILLANDSIAS_PROJECT}" >&2
+        echo "[forge] FATAL: git clone failed from http://tillandsias-git:8080/${TILLANDSIAS_PROJECT}.git" >&2
         echo "[forge] The git mirror service is unreachable or has not finished initialising." >&2
         exit 1
     fi

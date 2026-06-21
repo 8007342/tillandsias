@@ -1836,6 +1836,8 @@ fn build_git_run_args(
         sanitize_hostname(&format!("git-{project_name}")),
         "--network-alias".into(),
         "git-service".into(),
+        "--network-alias".into(),
+        "tillandsias-git".into(),
         "--network".into(),
         ENCLAVE_EGRESS_NETS.into(),
         "--cap-drop=ALL".into(),
@@ -2995,6 +2997,10 @@ fn auto_detect_and_configure_ipv6_workaround(debug: bool) {
     }
 }
 
+fn is_optional_image(image_name: &str) -> bool {
+    matches!(image_name, "forge-base" | "forge" | "nanoclawv2")
+}
+
 fn run_init(debug: bool, force: bool) -> Result<(), String> {
     require_desktop_user_session("tillandsias --init")?;
     report_runtime_lane("--init", debug);
@@ -3049,14 +3055,48 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
     let mut identities = HashMap::<String, ImageBuildIdentity>::new();
 
     for image in &images {
-        let (build_args, dependency_digests) = image_build_inputs(image, &identities)?;
-        let identity = runtime_assets::image_identity(
+        let (build_args, dependency_digests) = match image_build_inputs(image, &identities) {
+            Ok(val) => val,
+            Err(e) => {
+                if is_optional_image(image) {
+                    if debug {
+                        eprintln!(
+                            "WARNING: Skipping optional image {} because dependency mapping failed: {}",
+                            image, e
+                        );
+                    }
+                    state.mark_failed(image);
+                    failed_images.push((image.to_string(), e));
+                    continue;
+                } else {
+                    return Err(e);
+                }
+            }
+        };
+        let identity = match runtime_assets::image_identity(
             &root,
             image,
             version,
             build_args.clone(),
             dependency_digests,
-        )?;
+        ) {
+            Ok(id) => id,
+            Err(e) => {
+                if is_optional_image(image) {
+                    if debug {
+                        eprintln!(
+                            "WARNING: Skipping optional image {} because identity generation failed: {}",
+                            image, e
+                        );
+                    }
+                    state.mark_failed(image);
+                    failed_images.push((image.to_string(), e));
+                    continue;
+                } else {
+                    return Err(e);
+                }
+            }
+        };
         let (observation, observed_image_id) =
             rt.block_on(observe_image_build(&client, &identity, force));
         let decision = decide_image_build(identity.clone(), &observation);
@@ -3239,18 +3279,31 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
         cleanup_init_logs();
     }
 
-    // Return error if any images failed
-    if !failed_images.is_empty() {
+    // Return error if any required images failed
+    let required_failures: Vec<_> = failed_images
+        .iter()
+        .filter(|(name, _)| !is_optional_image(name))
+        .collect();
+
+    if !required_failures.is_empty() {
         return Err(format!(
-            "Failed to build {} image(s): {}",
-            failed_images.len(),
-            failed_images
+            "Failed to build {} required image(s): {}",
+            required_failures.len(),
+            required_failures
                 .iter()
-                .map(|(name, _)| name)
-                .cloned()
+                .map(|(name, _)| name.clone())
                 .collect::<Vec<_>>()
                 .join(", ")
         ));
+    }
+
+    if !failed_images.is_empty() {
+        let optional_failed: Vec<_> = failed_images.iter().map(|(name, _)| name.clone()).collect();
+        eprintln!(
+            "WARNING: Failed to build {} optional image(s): {}",
+            optional_failed.len(),
+            optional_failed.join(", ")
+        );
     }
 
     Ok(())
@@ -4009,6 +4062,56 @@ fn run_github_login(debug: bool) -> Result<(), String> {
             operation = "gh_auth_vault_write",
             secret_name = "tillandsias-github-token",
             "GitHub token stored in Vault at secret/github/token"
+        );
+
+        // Configure git credential helper on the host so `git push origin`
+        // works from the host working tree after --github-login.
+        let mut get_token = podman_command();
+        get_token.args([
+            "exec",
+            &container,
+            "gh",
+            "auth",
+            "token",
+            "--hostname",
+            "github.com",
+        ]);
+        let token = command_output(get_token, debug)?;
+
+        let mut host_login = Command::new("gh");
+        host_login.args([
+            "auth",
+            "login",
+            "--hostname",
+            "github.com",
+            "--git-protocol",
+            "https",
+            "--with-token",
+        ]);
+        host_login.stdin(Stdio::piped());
+        let mut child = host_login
+            .spawn()
+            .map_err(|e| format!("Failed to spawn host gh auth login: {e}"))?;
+        if let Some(mut stdin) = child.stdin.take() {
+            stdin
+                .write_all(token.as_bytes())
+                .map_err(|e| format!("Failed to pipe token to host gh auth login: {e}"))?;
+        }
+        let status = child
+            .wait()
+            .map_err(|e| format!("Failed to wait for host gh auth login: {e}"))?;
+        if !status.success() {
+            return Err("Host gh auth login failed".to_string());
+        }
+
+        let mut setup_git = Command::new("gh");
+        setup_git.args(["auth", "setup-git"]);
+        run_command(setup_git, debug)?;
+
+        info!(
+            category = "secrets",
+            operation = "gh_auth_setup_git",
+            "Git credential helper configured on host"
         );
     }
     #[cfg(not(feature = "vault"))]
@@ -9067,6 +9170,20 @@ mod tests {
             forge_base_idx < nanoclawv2_idx,
             "forge-base must be built before nanoclawv2"
         );
+    }
+
+    #[test]
+    fn test_is_optional_image() {
+        assert!(is_optional_image("forge-base"));
+        assert!(is_optional_image("forge"));
+        assert!(is_optional_image("nanoclawv2"));
+        assert!(!is_optional_image("proxy"));
+        assert!(!is_optional_image("git"));
+        assert!(!is_optional_image("inference"));
+        assert!(!is_optional_image("router"));
+        assert!(!is_optional_image("chromium-core"));
+        assert!(!is_optional_image("chromium-framework"));
+        assert!(!is_optional_image("web"));
     }
 
     #[test]

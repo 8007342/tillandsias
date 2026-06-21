@@ -1,6 +1,122 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-20T19:40Z
+Last updated: 2026-06-21T07:11Z
+
+
+## This Cycle (2026-06-21T07:11Z, linux_mutable — Gemini-Antigravity worker)
+
+- **Worker drain**: Completed Order 73 `source-edit-vs-smoke-lock/decide-and-document`.
+  - Added a new rule under §5 Hard Rules in `skills/advance-work-from-plan/SKILL.md` requiring destructive, file-moving, or source-mutating directory migrations to acquire the shared `build-install-smoke-e2e` lock.
+  - Updated `plan/issues/ci-blockers-fmt-drift-and-litmus-concurrency-2026-06-21.md` and `plan/index.yaml` to mark the follow-up task and parent node as completed.
+- **Verification**: Validated `plan/index.yaml` using ruby YAML parser.
+- **Next**: push `linux-next` to origin.
+
+## This Cycle (2026-06-21T04:42Z, linux_mutable — big-pickle git-mirror-arch-verification)
+
+
+- **Worker drain**: Completed Order 69 `git-mirror-architecture-verification`. Investigation-only. Key findings:
+  - Protocol: `git daemon` serves `git://` (native git protocol on port 9418), NOT HTTPS/SSH
+  - CA certs: `/etc/tillandsias/ca.crt` is for **outbound** HTTPS (Vault API + GitHub push relay), not for server TLS
+  - Linux forge remote: either `git://git-service/<project>` or uses `git config url.<mirror>.insteadOf` → `git://git-service/<project>` — no `file://` on Linux
+  - Windows/WSL: uses path-based `url.<path>.insteadOf` redirect (functionally `file://`), intentional for WSL
+  - Corrected packet outcome from "real HTTPS/SSH git server" to "real git daemon (git://) with Vault-backed HTTPS relay"
+- **Deliverable**: `plan/issues/git-mirror-architecture-verification-2026-06-20.md`
+- **Next**: push `linux-next` to origin.
+
+## This Cycle (2026-06-21T04:12Z, linux_mutable — Gemini-Antigravity worker)
+
+- **Startup**: `linux-next @ 0bef958b`, clean worktree. Credential Channel Guard passed (`ok:gh-keyring`).
+- **Worker drain**: Resolved both pre-flight litmus failures. Updated the `default-image` litmus test to expect 5 checksum-verification sites (reversion of `wasmtime` to curl+tar). Added missing `zoxide` to `images/default/Containerfile.base` microdnf install to complete all 10 mandated terminal tools. Updated `openspec/specs/forge-shell-tools/spec.md` to remove the divergence block. Updated `litmus:forge-shell-tools-implementation-shape` to verify all 10 terminal tools and git utilities (`git-delta`, `git-lfs`) are present in `Containerfile.base`.
+- **Verification**: `run-litmus-test.sh --size instant --phase pre-build` → **110/110 PASS (100%)**. YAML validated with `ruby -ryaml`.
+- **Coordinator**: windows-next/osx-next both ancestors of HEAD — no sibling merge. No release.
+- **Next**: push `linux-next` to origin.
+
+## This Cycle (2026-06-21T03:04Z, linux_mutable — Claude Opus 4.8 Cowork meta-orch)
+
+- **Startup**: `linux-next @ 19f17b3a`, clean worktree, in sync (0/0). Credential Channel Guard `ok:gh-credentials-store`.
+- **No implementable packet at the current bar**: Order 64 `verify-incremental` (two release runs), Orders 66/69 (forge+git-mirror), Order 67 (Podman session, `skip:no-podman-user-session`), Order 68 (operator-attended). Chose a verifiable static-review reduction instead of bare ledger-hygiene.
+- **Reduction**: Static review of Gemini's Order 64 cache fix (`d273daff`). Confirmed the warm-on-main architecture, `save:false`, `hit` output, and key parity are correct. Found a real gap: the mandated purge of stale per-tag caches never landed; with the repo cache already over the 10 GB LRU cap, the warmed cache can evict before `verify-incremental`. Filed `plan/issues/enhancement-release-cache-purge-missing-2026-06-20.md`, promoted ready packet `purge-stale-caches`, and gated `verify-incremental` behind it.
+- **Verification**: litmus 3/3 PASS; `plan/index.yaml` `ruby -ryaml` clean.
+- **Coordinator**: windows-next/osx-next both ancestors of HEAD — no merge, no release.
+- **Next**: `purge-stale-caches` then `verify-incremental` need a build/CI host; Orders 66/69 need forge+git-mirror; 67 a Podman session; 68 an operator.
+
+## This Cycle (2026-06-21T02:04Z, linux_mutable — Claude Opus 4.8 Cowork meta-orch)
+
+- **Startup**: `linux-next`, fast-forwarded `6af5eddc..d273daff` to `origin/linux-next` (picked up Gemini's Order 64/65 release-nix-cache fix + build monitoring). Clean worktree. Credential Channel Guard passed (`ok:gh-credentials-store`, HTTPS).
+- **Worker drain**: No implementable `ready` packet remains for this host's capability at the current bar. Remaining ready packets — Order 64 `verify-incremental` (needs two consecutive release runs), Orders 66/69 (forge + git-mirror running), Order 67 (Podman user session), Order 68 (operator-attended big-pickle) — are all out of reach in the Cowork sandbox (e2e verdict `skip:no-podman-user-session`). Loop-tooling backlog (orders 60–63) fully drained.
+- **Reduction (ledger hygiene)**: Closed the stale `meta-orch-enhancement-opportunities-2026-06-20.md` header — it still read "Candidate 4 completed, candidates 1-3 ready" though orders 60–63 are all completed in `plan/index.yaml`. Changed status to `resolved` and filed a dated completion event. Claimed via `scripts/claim-ledger-node.sh` (single-winner lease) to avoid concurrent duplication.
+- **Verification**: `run-litmus-test.sh meta-orchestration --phase pre-build --size instant` → **3/3 PASS** (credential-channel-check 5/5 steps, ledger-node-claim 6/6 steps). No YAML touched (markdown-only edit); no parser run needed.
+- **Coordinator**: `origin/windows-next@a3c8b23d` and `origin/osx-next@d829808d` both ancestors of HEAD — no sibling merge. No release (docs/ledger-hygiene delta only, no runtime change).
+- **Bar-raise**: At zero implementable residual for this host at the current bar. Per Tlatoāni-gated governance, loop does NOT self-escalate. No new bar-raise candidate filed (existing proposals already on record).
+- **Next**: Orders 64/66–69 need a release/CI host, forge+git-mirror host, Podman-session host, or operator-attended big-pickle run.
+
+## This Cycle (2026-06-21T01:04Z, linux_mutable — Claude Opus 4.8 Cowork meta-orch)
+
+- **Startup**: `linux-next @ bd615934`, clean worktree, in sync with `origin/linux-next` (0/0). Credential Channel Guard passed (`ok:gh-credentials-store`, HTTPS).
+- **Worker drain (Order 62, `ledger-edit-claim-lease`)**: Implemented `scripts/claim-ledger-node.sh` — a lightweight `mkdir(2)`-atomic claim/lease for `plan/index.yaml` node-closure (ledger-hygiene) edits, so concurrent same-host cycles detect an in-flight closure and skip re-deriving it. Subcommands `claim`/`release`/`status`; verdict grammar `^(claimed|reclaimed|in-flight|released|free):[a-z0-9._/-]+$` with 0/non-zero exit; advisory + CRDT-friendly (respects stable-ID + idempotent-merge preconditions). Wired into the skill's Worker Drain. Script-only closure, mirroring Order 60/61.
+- **Correctness fix during build**: a loser must treat a *missing holder* as LIVE (not stale), else it destroys the winner's lease during the `mkdir`→`write_holder` window; orphans reclaimed via dir mtime past TTL. 20/20 concurrency trials (8 racers/node) → exactly one winner.
+- **Verification**: Added `litmus:ledger-node-claim-shape` (`openspec/litmus-tests/`), registered under `meta-orchestration` in `litmus-bindings.yaml`. `run-litmus-test.sh meta-orchestration --phase pre-build --size instant` → **3/3 PASS** (6/6 steps for the new test). YAML validated with `ruby -ryaml`.
+- **Capture**: Filed `plan/issues/optimization-ledger-claim-cross-host-scope-2026-06-21.md` — lease is same-host-only; cross-host duplication still possible (deferred, needs git-backed lease + Order 66).
+- **Coordinator**: `origin/windows-next@a3c8b23d` and `origin/osx-next@d829808d` both ancestors of HEAD — no sibling merge. No release (loop-tooling + ledger delta only, no runtime change). E2E local-build gate `skip:no-podman-user-session` (Cowork sandbox, no `/run/user`).
+- **Next**: Order 64/65 (release nix-cache + build monitoring, build/CI host), Orders 66–69 (forge push channel / opencode e2e / GitHub lifecycle / git-mirror verification — need forge+git-mirror or operator-attended host).
+
+## This Cycle (2026-06-21T00:04Z, linux_mutable — Claude Opus 4.8 Cowork meta-orch)
+
+- **Startup**: `linux-next`, fast-forwarded `90e43066..1973d414` to `origin/linux-next`. Found one untracked file at startup — `scripts/check-credential-channel.sh` — classified as a *ready-but-uncommitted deliverable* (the implementation of Order 61), not disposable artifact; adopted it rather than discarding.
+- **Credential Channel Guard**: passed via `.git/.gh-credentials` non-empty (`ok:gh-credentials-store`).
+- **Worker drain (Order 61, `credential-channel-check`)**: Made the script executable, verified all three branches live (cred-store present → `ok:gh-credentials-store`/exit 0; scrubbed env → `missing:no-credential-channel`/exit 1; seeded `GH_TOKEN` → `ok:gh-token-env`/exit 0). Wired the meta-orchestration Credential Channel Guard to invoke `scripts/check-credential-channel.sh` instead of re-deriving the check in prose. Outcome satisfied script-only, mirroring Order-60 `e2e-preflight.sh`.
+- **Verification**: Added `litmus:credential-channel-check-shape` (`openspec/litmus-tests/litmus-credential-channel-check-shape.yaml`), registered under the `meta-orchestration` spec in `litmus-bindings.yaml`. All 5 critical-path steps pass. YAML validated with `ruby -ryaml`.
+- **Capture**: Filed `plan/issues/optimization-credential-channel-policy-parity-2026-06-21.md` — deferred optional `tillandsias-policy credential-channel` Rust parity (not a correctness gap; low ROI until other guards co-migrate).
+- **Coordinator**: `origin/windows-next@a3c8b23d` and `origin/osx-next@d829808d` both ancestors of `linux-next` HEAD — no sibling merge. No release (loop-tooling + ledger delta only, no runtime change). E2E local-build gate: `linux_mutable` but Cowork sandbox has no `/run/user/<uid>` → `skip:no-podman-user-session` (per Order-60 probe), so no e2e this cycle.
+- **Next**: Order 70 (Containerfile.base pip timeout — unblocks immutable curl-install e2e), Order 64/65 (release nix-cache + build monitoring, build/CI-capable host).
+
+## This Cycle (2026-06-20T20:34Z, linux_immutable — Claude Sonnet 4.6 curl-install e2e)
+
+- **Host**: linux_immutable (Fedora 44 Workstation), `linux-next @ a08eb971`, no eligible worker packets.
+- **Curl-install e2e**: Tested release `v0.3.260620.8` (published 20:09Z today).
+  - Install: **PASS** — `v0.3.260620.8` downloaded (17 MB/s), SHA256 verified.
+  - Substrate reset: **PASS** — `podman system reset --force` clean.
+  - `--init`: **FAIL** — `forge-base` pip3 install of `pyright==1.1.410` (6.1 MB) timed out (0 bytes received) in `podman build` network context on both first attempt and retry. Root cause: pasta build-network TCP stream issue vs runtime network. Core images (proxy, git, inference, router, chromium, web) built successfully. No containers started.
+  - Forge opencode run: **SKIPPED** (forge not built).
+- **New findings** (orders 70–71):
+  - Order 70 `smoke-finding/forge-base-pip-build-network-timeout`: pip3 large-payload download fails in `podman build` but not `podman run` — pasta MTU/network difference. Quick fix: `PIP_DEFAULT_TIMEOUT=120` in Containerfile.base.
+  - Order 71 `smoke-finding/init-all-or-nothing-forge-blocks-core`: init exits 1 and starts zero containers when any image fails, even forge-independent ones. Fix: make forge/forge-base/nanoclawv2 optional in init dependency graph.
+- **Next**: Order 70 (quick fix: Containerfile.base pip timeout) should unblock curl-install e2e on immutable Linux. Assign to linux_mutable host with forge build capability.
+
+## This Cycle (2026-06-20T20:12Z, linux_mutable — Claude Opus 4.8 Cowork meta-orch)
+
+- **Startup**: Clean worktree on `linux-next`, fast-forwarded `d3974cdf..cfc475db` to `origin/linux-next`. Credential Channel Guard passed (`.git/.gh-credentials` non-empty + `credential.helper=store` over HTTPS; `gh auth status` keyring-empty, which the guard correctly tolerates).
+- **Worker drain**: Claimed and completed `e2e-eligibility-probe/implement` (Order 60). Added `e2e_eligibility_verdict()` + an `eligibility` standalone mode to `scripts/e2e-preflight.sh` emitting one line `^(eligible|skip:[a-z0-9-]+)$` (reasons: `no-podman-binary`, `no-podman-user-session`, `podman-not-functional`); recorded once per run to `LOG_DIR/00-e2e-eligibility.txt`. Wired the skill's E2E Gates to consult it. The recurring prose re-derivation of the podman-session skip is retired.
+- **Verification**: Bound `litmus:e2e-eligibility-probe-shape` and registered the `meta-orchestration` spec in `openspec/litmus-bindings.yaml`. `run-litmus-test.sh meta-orchestration --phase pre-build --size instant` → **4/4 OK, PASS**. Live sandbox verdict `skip:no-podman-user-session` (no `/run/user/1000`); `podman-not-functional` + well-formed-grammar branches also exercised live. YAML validated with `ruby -ryaml`.
+- **Coordinator**: `origin/windows-next@a3c8b23d` and `origin/osx-next@d829808d` both ancestors of `linux-next` HEAD — no sibling merge, no release (loop-tooling + ledger delta only, no runtime change).
+- **Next**: Order 61 `credential-channel-check` (executable guard, needs Rust path), Order 64 `release-nix-cache-ref-scoping` + Order 65 `release-build-monitoring` (build/CI-capable host).
+
+## This Cycle (2026-06-20T20:00Z, linux_mutable — Gemini-Antigravity worker)
+
+- **Meta-orchestration sync**: Started clean on `linux-next`. Fast-forwarded to `origin/linux-next@9411b549`. Dogfooded startup credential check (which passed successfully via `gh auth status` keyring).
+- **Worker drain**: Claimed and completed `cowork-nonpython-ledger-validation/decide-and-document` (Order 63). Documented the approved fallback YAML validator `ruby -ryaml -e "YAML.load_file('<file>')"` in the Finalization section of `skills/meta-orchestration/SKILL.md` for environments where `tillandsias-policy` is not pre-built, eliminating the discouraged Python fallback. Updated `plan/index.yaml` and `plan/issues/meta-orch-enhancement-opportunities-2026-06-20.md` to reflect task closure.
+- **Verification**: Validated `plan/index.yaml` with both `tillandsias-policy validate-yaml` and the fallback Ruby one-liner.
+- **Next**: (1) Fix release Nix store cache ref-scoping (Order 64) and implement release build monitoring (Order 65).
+
+## This Cycle (2026-06-20T19:56Z, linux_mutable — interactive Claude Code CLI, release + cache diagnosis)
+
+
+- **Release**: Cut v0.3.260620.8 — merged PR #37 (linux-next→main, 26 commits),
+  bumped VERSION on main (`31b01c32`), tagged, triggered workflow_dispatch run
+  27881936382 (in progress; ~45 min build).
+- **Root-caused the slow release (operator-flagged silent issue)**: every release
+  rebuilds the full Nix closure + re-uploads a 2.2 GB store cache (~10 min) because
+  the GHA cache is **ref-scoped** and releases dispatch on fresh tags — the Nix
+  store cache is saved once per tag ref with an identical key and never on `main`,
+  so no release can ever restore another's cache. Repo cache also over the 10 GB
+  limit (LRU eviction). The workflow uses `cache-nix-action`, **not** Magic Nix
+  Cache as assumed. Web-verified correct fix: FlakeHub Cache (binary cache, not
+  ref-scoped) or warm the cache on the `main` default branch.
+- **Filed two ordered packets**: order 64 `release-nix-cache-ref-scoping` (the fix,
+  with options + verification) and order 65 `release-build-monitoring` (perf gate
+  so the next silent slowdown fails loud). Both `ready`.
+- **Next**: pick fix approach (FlakeHub vs warm-on-main) on a build/CI-capable
+  host; surface v0.3.260620.8 artifact when the build completes.
 
 ## This Cycle (2026-06-20T19:40Z, linux_mutable — Cowork meta-orch, Tlatoāni-directed)
 
