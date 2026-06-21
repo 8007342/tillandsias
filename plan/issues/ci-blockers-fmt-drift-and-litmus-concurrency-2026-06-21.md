@@ -51,14 +51,14 @@ Closed by order 72 in plan/index.yaml. Verified: `build.sh --check` passes with 
 check included.
 
 - id: source-edit-vs-smoke-lock
-  status: ready
+  status: completed
   action: >
-    Decide whether destructive/source-mutating migrations (e.g. ZeroClaw) must take
-    the smoke-lock (or a source-edit lease) so concurrent e2e gates don't read a
-    half-migrated tree. Likely lightweight: document that file-moving migrations
-    acquire the build-install-smoke-e2e lock. Folds into
-    [[agent-concurrency-collisions-2026-06-20]]. Promoted to order 73 in
-    plan/index.yaml.
+    Decided that destructive/source-mutating migrations (e.g. ZeroClaw) must acquire
+    the build-install-smoke-e2e lock (e.g., using `scripts/with-smoke-lock.sh`)
+    when executing file-moving or directory-restructuring migrations, so that concurrent
+    e2e/smoke gates do not read a half-migrated tree. Added this rule under §5
+    Hard Rules in `skills/advance-work-from-plan/SKILL.md`. Folds into
+    [[agent-concurrency-collisions-2026-06-20]].
 
 ## Events
 

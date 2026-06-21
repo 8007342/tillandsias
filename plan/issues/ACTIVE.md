@@ -1,8 +1,18 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-21T04:42Z
+Last updated: 2026-06-21T07:11Z
+
+
+## This Cycle (2026-06-21T07:11Z, linux_mutable — Gemini-Antigravity worker)
+
+- **Worker drain**: Completed Order 73 `source-edit-vs-smoke-lock/decide-and-document`.
+  - Added a new rule under §5 Hard Rules in `skills/advance-work-from-plan/SKILL.md` requiring destructive, file-moving, or source-mutating directory migrations to acquire the shared `build-install-smoke-e2e` lock.
+  - Updated `plan/issues/ci-blockers-fmt-drift-and-litmus-concurrency-2026-06-21.md` and `plan/index.yaml` to mark the follow-up task and parent node as completed.
+- **Verification**: Validated `plan/index.yaml` using ruby YAML parser.
+- **Next**: push `linux-next` to origin.
 
 ## This Cycle (2026-06-21T04:42Z, linux_mutable — big-pickle git-mirror-arch-verification)
+
 
 - **Worker drain**: Completed Order 69 `git-mirror-architecture-verification`. Investigation-only. Key findings:
   - Protocol: `git daemon` serves `git://` (native git protocol on port 9418), NOT HTTPS/SSH

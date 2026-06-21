@@ -5191,18 +5191,18 @@ plan_index:
     - packet_id: source-edit-vs-smoke-lock
       order: 73
       title: "Document that source-mutating migrations must acquire the smoke lock"
-      status: ready
+      status: completed
       kind: enhancement
       deliverable: plan/issues/ci-blockers-fmt-drift-and-litmus-concurrency-2026-06-21.md
       depends_on: []
       pickup_role: "Any coordinator host"
       outcome: >
         File-moving migrations (e.g. ZeroClaw) must acquire the
-        build-install-smoke-e2e lock so concurrent e2e gates do not read a
+        build-install-smoke-e2e lock so concurrent e2e gates don't read a
         half-migrated tree. Decision recorded in the CI blocker findings file.
       tasks:
         - id: source-edit-vs-smoke-lock/decide-and-document
-          status: ready
+          status: completed
           depends_on: []
           owned_files:
             - plan/issues/ci-blockers-fmt-drift-and-litmus-concurrency-2026-06-21.md
@@ -5213,3 +5213,16 @@ plan_index:
             acquire the build-install-smoke-e2e lock (or a source-edit lease) so
             concurrent e2e gates don't read a half-migrated tree. Folds into
             agent-concurrency-collisions-2026-06-20.
+      events:
+        - type: claim
+          ts: "2026-06-21T07:11:08Z"
+          agent_id: "gemini-antigravity-worker-20260621T0710Z"
+          host: linux_mutable
+          lease_id: "source-edit-vs-smoke-lock/decide-and-document"
+        - type: completed
+          ts: "2026-06-21T07:12:00Z"
+          agent_id: "gemini-antigravity-worker-20260621T0710Z"
+          host: linux_mutable
+          evidence:
+            - "Added a rule to §5 Hard Rules in skills/advance-work-from-plan/SKILL.md requiring file-moving and source-mutating migrations to acquire the build-install-smoke-e2e lock."
+            - "Updated status of source-edit-vs-smoke-lock/decide-and-document task and parent node to completed."

@@ -1,8 +1,22 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-21T06:37Z
+LastExecutionTime: 2026-06-21T07:11Z
+
+
+## This Loop (2026-06-21T07:11Z, linux_mutable — Gemini-Antigravity worker)
+
+- **Cycle type**: meta-orchestration worker drain on mutable Linux (Gemini).
+- **Startup**: `linux-next @ 6b0c1eab`, clean worktree. Credential Channel Guard passed (`ok:gh-keyring`). Siblings fetched: windows-next a3c8b23d, osx-next d273daff (both ancestors).
+- **Worker drain**: Completed Order 73 `source-edit-vs-smoke-lock/decide-and-document`.
+  - Added a new rule under §5 Hard Rules in `skills/advance-work-from-plan/SKILL.md` requiring destructive, file-moving, or source-mutating directory migrations to acquire the shared `build-install-smoke-e2e` lock (or source-edit lease).
+  - Updated `plan/issues/ci-blockers-fmt-drift-and-litmus-concurrency-2026-06-21.md` and `plan/index.yaml` to mark the follow-up task and parent node as completed.
+- **Verification**: Validated `plan/index.yaml` using ruby YAML parser.
+- **Coordinator**: windows-next + osx-next both ancestors of HEAD. No merge needed.
+- **E2E gates**: Not run — documentation-only change, no runtime delta.
+- **Push state**: will push `linux-next` to origin over HTTPS.
 
 ## This Loop (2026-06-21T06:37Z, linux_mutable — big-pickle enforce-fmt-on-commit)
+
 
 - **Cycle type**: meta-orchestration worker drain on mutable Linux (big-pickle).
 - **Startup**: `linux-next @ 6b0c1eab`, clean worktree. Credential Channel Guard passed (`ok:gh-keyring`). Siblings fetched: windows-next a3c8b23d, osx-next d273daff, main 31b01c32 (all ancestors).
