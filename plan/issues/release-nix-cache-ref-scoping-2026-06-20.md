@@ -220,3 +220,48 @@ Coordinator verification of the implemented fix (commit d273daff):
   is warmed) is the real before/after datapoint — its `nix build` step should
   restore the cross-GCC + crate closure and drop substantially vs v0.3.260621.1.
   Capture the timing per order 65 monitoring.
+
+## verify-incremental RESULT: FAIL — fix ineffective (2026-06-21T12:26 PDT / 19:26Z)
+
+v0.3.260621.2 was the first release after the warm-cache fix, with flake.lock
+unchanged since the 07:42Z warm run. Measured from run 27913696580:
+- `Nix Cache` restore: **0 s** (nothing restored).
+- `Build musl-static binaries via Nix`: **~38 min** (18:35:37 → 19:13:24Z) — no
+  improvement vs v0.3.260621.1 (~23 min); if anything slower.
+- `Post Nix Cache`: 0 s no-op (save:false on release, as designed).
+
+**Root cause — the warm-on-main job never persists a main-scoped store cache:**
+`gh api .../actions/caches` shows the 2.2 GB `nix-Linux-<flake.lock-hash>` store
+cache exists **only under tag refs** (`refs/tags/v0.3.260620.7`, `…620.8`). There
+is **no `nix-Linux-*` cache under `refs/heads/main`** — only a 43 MB
+`determinatesystem-nix-installer` cache landed on main from the warm run. Two
+compounding defects in `.github/workflows/nix-cache-warm.yml`:
+
+1. **Save collision on an existing key.** cache-nix-action skips saving when the
+   `primary-key` already exists, and the identical key is occupied by the old
+   tag-scoped caches. Its `purge: true` with `purge-created-offset: 86400000`
+   (24 h) did NOT clear them — at the 07:42Z warm run the v0.3.260620.7/.8 caches
+   were only ~13 h old. So the key stays occupied → the main-scoped save is
+   skipped → releases (which restore only from main's default-branch scope) find
+   nothing.
+2. **Trigger gap.** The warm job fires only on `flake.nix`/`flake.lock`/workflow
+   changes (+ weekly cron). Routine main pushes (VERSION bumps) don't touch flake
+   files, so it ran essentially once (at workflow introduction) and won't refresh
+   per release.
+
+### Fix direction (reopen implement-cache-fix)
+
+- Make the warm job purge the colliding **non-main** `nix-Linux-*` caches before
+  build+save (e.g. `purge-created-offset: 0` or purge by ref!=main), so the
+  primary-key is free and the main-scoped save actually persists. Old tag-scoped
+  store caches are unrestorable cross-tag anyway — safe to purge.
+- Confirm cache-nix-action `save` is enabled on the warm job (no `save:false`).
+- Consider triggering the warm job on every main push (or post-release) so the
+  default-branch cache stays fresh, not just on flake.lock changes.
+- Re-verify: after a warm run that leaves a `nix-Linux-*` cache under
+  `refs/heads/main`, the NEXT release's `Nix Cache` restore should be non-zero
+  and `nix build` should drop substantially.
+
+Note: the FlakeHub-login failure still appears in release logs despite
+`flakehub: false` on the installer — cosmetic (no caching impact) but worth
+suppressing to cut the noise.
