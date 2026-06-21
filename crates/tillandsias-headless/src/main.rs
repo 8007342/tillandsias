@@ -3060,7 +3060,10 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
             Err(e) => {
                 if is_optional_image(image) {
                     if debug {
-                        eprintln!("WARNING: Skipping optional image {} because dependency mapping failed: {}", image, e);
+                        eprintln!(
+                            "WARNING: Skipping optional image {} because dependency mapping failed: {}",
+                            image, e
+                        );
                     }
                     state.mark_failed(image);
                     failed_images.push((image.to_string(), e));
@@ -3081,7 +3084,10 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
             Err(e) => {
                 if is_optional_image(image) {
                     if debug {
-                        eprintln!("WARNING: Skipping optional image {} because identity generation failed: {}", image, e);
+                        eprintln!(
+                            "WARNING: Skipping optional image {} because identity generation failed: {}",
+                            image, e
+                        );
                     }
                     state.mark_failed(image);
                     failed_images.push((image.to_string(), e));
@@ -3292,10 +3298,7 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
     }
 
     if !failed_images.is_empty() {
-        let optional_failed: Vec<_> = failed_images
-            .iter()
-            .map(|(name, _)| name.clone())
-            .collect();
+        let optional_failed: Vec<_> = failed_images.iter().map(|(name, _)| name.clone()).collect();
         eprintln!(
             "WARNING: Failed to build {} optional image(s): {}",
             optional_failed.len(),
@@ -4086,17 +4089,17 @@ fn run_github_login(debug: bool) -> Result<(), String> {
             "--with-token",
         ]);
         host_login.stdin(Stdio::piped());
-        let mut child = host_login.spawn().map_err(|e| {
-            format!("Failed to spawn host gh auth login: {e}")
-        })?;
+        let mut child = host_login
+            .spawn()
+            .map_err(|e| format!("Failed to spawn host gh auth login: {e}"))?;
         if let Some(mut stdin) = child.stdin.take() {
-            stdin.write_all(token.as_bytes()).map_err(|e| {
-                format!("Failed to pipe token to host gh auth login: {e}")
-            })?;
+            stdin
+                .write_all(token.as_bytes())
+                .map_err(|e| format!("Failed to pipe token to host gh auth login: {e}"))?;
         }
-        let status = child.wait().map_err(|e| {
-            format!("Failed to wait for host gh auth login: {e}")
-        })?;
+        let status = child
+            .wait()
+            .map_err(|e| format!("Failed to wait for host gh auth login: {e}"))?;
         if !status.success() {
             return Err("Host gh auth login failed".to_string());
         }
