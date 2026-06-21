@@ -389,7 +389,7 @@ pub fn terminal_profile() -> ContainerProfile {
             },
             ProfileEnvVar {
                 name: "NO_PROXY",
-                value: EnvValue::Literal("localhost,127.0.0.1,git-service"),
+                value: EnvValue::Literal("localhost,127.0.0.1,git-service,tillandsias-git"),
             },
             ProfileEnvVar {
                 name: "http_proxy",
@@ -401,7 +401,7 @@ pub fn terminal_profile() -> ContainerProfile {
             },
             ProfileEnvVar {
                 name: "no_proxy",
-                value: EnvValue::Literal("localhost,127.0.0.1,git-service"),
+                value: EnvValue::Literal("localhost,127.0.0.1,git-service,tillandsias-git"),
             },
             ProfileEnvVar {
                 name: "TILLANDSIAS_CHEATSHEETS",
@@ -673,7 +673,7 @@ fn common_forge_env() -> Vec<ProfileEnvVar> {
         },
         ProfileEnvVar {
             name: "NO_PROXY",
-            value: EnvValue::Literal("localhost,127.0.0.1,git-service"),
+            value: EnvValue::Literal("localhost,127.0.0.1,git-service,tillandsias-git"),
         },
         // Lowercase — required by libcurl, Go net/http, some Python libs.
         ProfileEnvVar {
@@ -686,7 +686,7 @@ fn common_forge_env() -> Vec<ProfileEnvVar> {
         },
         ProfileEnvVar {
             name: "no_proxy",
-            value: EnvValue::Literal("localhost,127.0.0.1,git-service"),
+            value: EnvValue::Literal("localhost,127.0.0.1,git-service,tillandsias-git"),
         },
         ProfileEnvVar {
             name: "TILLANDSIAS_CHEATSHEETS",

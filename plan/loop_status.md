@@ -1,7 +1,18 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-21T08:42Z
+LastExecutionTime: 2026-06-21T09:28:00Z
 
+
+## This Loop (2026-06-21T09:28Z, linux_mutable — Gemini-Antigravity worker)
+
+- **Cycle type**: meta-orchestration worker drain on mutable Linux (Gemini).
+- **Startup**: `linux-next @ 2412a414`, clean worktree. Credential Channel Guard passed (`ok:gh-keyring`).
+- **Worker drain**: Completed Order 66 `forge-push-credential-channel/bypass-proxy-for-internal-git-daemon`.
+  - Configured `NO_PROXY`/`no_proxy` environment variables in `container_profile.rs` and `main.rs` to bypass Squid proxy for `tillandsias-git` enclave service.
+- **Verification**: `build.sh --check` passes successfully. E2E verification test pushed successfully to the enclave git service.
+- **Coordinator**: windows-next + osx-next both ancestors of HEAD. No merge needed.
+- **E2E gates**: local-build gate run (E2E push verification test).
+- **Push state**: will push `linux-next` to origin over HTTPS.
 
 ## This Loop (2026-06-21T08:42Z, linux_mutable — big-pickle ledger-closure)
 

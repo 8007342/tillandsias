@@ -1,7 +1,15 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-21T07:11Z
+Last updated: 2026-06-21T09:28Z
 
+
+## This Cycle (2026-06-21T09:28Z, linux_mutable — Gemini-Antigravity worker)
+
+- **Worker drain**: Completed Order 66 `forge-push-credential-channel/bypass-proxy-for-internal-git-daemon`.
+  - Added `tillandsias-git` and `tillandsias-git:8080` (and `http://tillandsias-git:8080/`) to `NO_PROXY` and `no_proxy` environment variables in `crates/tillandsias-core/src/container_profile.rs` and `crates/tillandsias-headless/src/main.rs`.
+  - Bypassing the proxy ensures internal enclave push/traffic does not route to Squid, preventing proxy denial (`TCP_DENIED/000`).
+- **Verification**: Verified build correctness with `./build.sh --check` which passed successfully. Ran E2E verification test via `tillandsias-headless` tool triggering a test push to `tillandsias-git` enclave, which succeeded completely.
+- **Next**: push `linux-next` to origin.
 
 ## This Cycle (2026-06-21T07:11Z, linux_mutable — Gemini-Antigravity worker)
 

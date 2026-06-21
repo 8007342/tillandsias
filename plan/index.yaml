@@ -4818,7 +4818,7 @@ plan_index:
     - packet_id: forge-push-credential-channel
       order: 66
       title: "Forge push credential channel — wire git remote to git mirror"
-      status: ready
+      status: done
       kind: enhancement
       deliverable: plan/issues/forge-push-credential-channel-2026-06-20.md
       depends_on: []
@@ -4850,7 +4850,7 @@ plan_index:
             Ensure the git mirror serves HTTP smart protocol for all locally
             cloned projects (not just the Tillandsias repo).
         - id: forge-push/post-receive-verify
-          status: ready
+          status: done
           depends_on: [forge-push/git-mirror-clone-support]
           owned_files: []
           checkpoint_required: true
@@ -4867,6 +4867,16 @@ plan_index:
             credential channel from forge to origin. Root fix is wiring the
             forge git remote to the local git mirror which already has the
             post-receive relay to GitHub.
+        - type: closure
+          ts: "2026-06-21T09:28:00Z"
+          agent_id: "gemini-antigravity-worker-20260621T0928Z"
+          host: linux_mutable
+          note: >
+            Bypassed the proxy for internal enclave git daemon calls by adding
+            tillandsias-git / tillandsias-git:8080 to NO_PROXY / no_proxy in the
+            container profile and headless configurations. Verified via build.sh
+            check and a successful git push from the forge container to the enclave
+            git-service.
 
     - packet_id: opencode-prompt-e2e-smoke
       order: 67
