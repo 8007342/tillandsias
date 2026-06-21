@@ -4881,7 +4881,7 @@ plan_index:
     - packet_id: opencode-prompt-e2e-smoke
       order: 67
       title: "OpenCode-prompt E2E smoke — verify agent commits and pushes findings"
-      status: ready
+      status: completed
       kind: e2e-smoke
       deliverable: plan/issues/opencode-prompt-e2e-smoke-2026-06-20.md
       depends_on: [forge-push-credential-channel]
@@ -4893,34 +4893,55 @@ plan_index:
         and a litmus test asserts all four gates passed.
       tasks:
         - id: opencode-prompt-e2e/litmus
-          status: ready
+          status: done
           depends_on: [forge-push/post-receive-verify]
           owned_files:
             - openspec/litmus-tests/litmus-opencode-prompt-e2e-shape.yaml
           checkpoint_required: true
           handoff_note: >
-            Write litmus:opencode-prompt-e2e-shape asserting forge_exit=0, new
-            commit since smoke start, loop_status.md advanced, and remote branch
-            HEAD advanced via git ls-remote.
+            Litmus test created at
+            openspec/litmus-tests/litmus-opencode-prompt-e2e-shape.yaml.
+            Written asserting forge_exit=0, HEAD advanced, loop_status.md
+            changed, and remote HEAD advanced.
         - id: opencode-prompt-e2e/findings-reduce
-          status: ready
+          status: done
           depends_on: [opencode-prompt-e2e/litmus]
           owned_files:
             - skills/meta-orchestration/SKILL.md
           checkpoint_required: false
           handoff_note: >
-            Ensure the standard meta-orchestration prompt instructs the agent to
-            file findings to plan/issues/ and reduce to plan/index.yaml before
-            pushing, so every unattended run is self-documenting.
+            The meta-orchestration skill already has a Reduction Engine section
+            (§Filing, §Reduce, §Promote) and a Finalization capture check.
+            Verified: findings must be filed and reduced before push. No skill
+            edit needed.
       events:
         - type: finding
           ts: "2026-06-20T20:30Z"
           agent_id: "linux-claude-sonnet46-20260620T2030Z"
           host: linux_mutable
-          note: >
-            The opencode --prompt e2e case currently has no pass/fail criteria
-            or push verification. Filing as a first-class smoke gate so the
-            case can be run and its results validated unattended.
+          note: "The opencode --prompt e2e case currently has no pass/fail criteria or push verification. Filing as a first-class smoke gate so the case can be run and its results validated unattended."
+        - type: claim
+          ts: "2026-06-21T10:44:59Z"
+          agent_id: "linux-big-pickle-20260621T1045Z"
+          host: linux_mutable
+          lease_id: "lease-linux-opencode-prompt-e2e-litmus-20260621T1045"
+          expires_at: "2026-06-21T14:44:59Z"
+        - type: completed
+          ts: "2026-06-21T10:50:00Z"
+          agent_id: "linux-big-pickle-20260621T1045Z"
+          host: linux_mutable
+          summary: >
+            Created litmus:opencode-prompt-e2e-shape as
+            openspec/litmus-tests/litmus-opencode-prompt-e2e-shape.yaml
+            with 7-step critical path (pre-head, remote-head, forge launch,
+            HEAD-advance, loop_status check, remote-HEAD advance, cleanup).
+            Registered binding in openspec/litmus-bindings.yaml under
+            spec_id: meta-orchestration. Verified findings-reduce is already
+            covered by the meta-orchestration skill's Reduction Engine section.
+          commits: []
+          evidence:
+            - "openspec/litmus-tests/litmus-opencode-prompt-e2e-shape.yaml created"
+            - "openspec/litmus-bindings.yaml updated with litmus:opencode-prompt-e2e-shape"
 
     - packet_id: github-e2e-lifecycle-interactive
       order: 68

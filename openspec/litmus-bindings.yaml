@@ -474,6 +474,7 @@ specs:
   - litmus:e2e-eligibility-probe-shape
   - litmus:credential-channel-check-shape
   - litmus:ledger-node-claim-shape
+  - litmus:opencode-prompt-e2e-shape
   coverage_ratio: 100
   last_verified: '2026-06-21'
 - spec_id: logging-levels

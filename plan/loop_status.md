@@ -1,7 +1,21 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-21T09:28:00Z
+LastExecutionTime: 2026-06-21T10:50:00Z
 
+
+## This Loop (2026-06-21T10:50Z, linux_mutable — big-pickle opencode-prompt-e2e-smoke)
+
+- **Cycle type**: meta-orchestration worker drain on mutable Linux (big-pickle).
+- **Startup**: `linux-next @ 70239dc6`, clean worktree. Credential Channel Guard passed (`ok:gh-keyring`). Siblings fetched: windows-next a3c8b23d, osx-next d273daff (both ancestors); main 77de76ba (release merge, not ancestor — expected).
+- **Worker drain**: Completed Order 67 `opencode-prompt-e2e-smoke` (both subtasks).
+  - Created `openspec/litmus-tests/litmus-opencode-prompt-e2e-shape.yaml` with 7-step critical path asserting forge_exit=0, HEAD advanced, loop_status.md changed, remote HEAD advanced, and cleanup.
+  - Registered `litmus:opencode-prompt-e2e-shape` in `openspec/litmus-bindings.yaml` under `spec_id: meta-orchestration`.
+  - Verified `opencode-prompt-e2e/findings-reduce` is already covered by the meta-orchestration skill's Reduction Engine section (no skill edit needed).
+  - Updated `plan/issues/opencode-prompt-e2e-smoke-2026-06-20.md` with completion summary.
+- **Verification**: `plan/index.yaml`, `openspec/litmus-bindings.yaml`, and `litmus-opencode-prompt-e2e-shape.yaml` all validated with `ruby -ryaml`. `build.sh --check` passes.
+- **Coordinator**: windows-next + osx-next both ancestors of HEAD. No merge needed.
+- **E2E gates**: Not run — litmus-only change, no runtime delta.
+- **Push state**: will push `linux-next` to origin over HTTPS.
 
 ## This Loop (2026-06-21T09:28Z, linux_mutable — Gemini-Antigravity worker)
 
