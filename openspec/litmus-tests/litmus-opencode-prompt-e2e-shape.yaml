@@ -34,7 +34,7 @@ critical_path:
     expected_behavior: "ok:"
 
   - step: "launch forge with meta-orchestration prompt and one cycle"
-    command: "./repeat --repeat 1 --prompt \"Use the /meta-orchestration skill\" 2>&1; echo FORGE_EXIT=$?"
+    command: "./repeat --times 1 --agent opencode --prompt \"Use the /meta-orchestration skill\" 2>&1; echo FORGE_EXIT=$?"
     timeout_ms: 600000
     expected_behavior: "FORGE_EXIT=0"
 
