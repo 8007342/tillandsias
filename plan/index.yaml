@@ -4983,7 +4983,7 @@ plan_index:
     - packet_id: git-mirror-architecture-verification
       order: 69
       title: "Git mirror architecture verification — real server vs filesystem hacks"
-      status: claimed
+      status: done
       kind: investigation
       deliverable: plan/issues/git-mirror-architecture-verification-2026-06-20.md
       depends_on: []
@@ -5049,7 +5049,7 @@ plan_index:
           agent_id: "linux-big-pickle-20260621T0432Z"
           host: linux_mutable
           lease_id: "lease-linux-git-mirror-arch-verify-20260621T0432Z"
-        - type: completion
+        - type: completed
           ts: "2026-06-21T04:42:00Z"
           agent_id: "linux-big-pickle-20260621T0432Z"
           host: linux_mutable
@@ -5060,6 +5060,14 @@ plan_index:
             filesystem transport uses path-based insteadOf (functionally file://).
             Outcome field corrected for accuracy. Deliverable filed at
             plan/issues/git-mirror-architecture-verification-2026-06-20.md.
+        - type: completed
+          ts: "2026-06-21T08:42:06Z"
+          agent_id: "linux-tlatoani-big-pickle-20260621T0842Z"
+          host: linux_mutable
+          note: >
+            Final closure: node status changed from claimed to done. Investigation
+            work was already completed and filed; this cycle formally closes the
+            node and updates the plan ledger.
 
     - packet_id: smoke-finding/forge-base-pip-build-network-timeout
       order: 70
