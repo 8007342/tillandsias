@@ -1,7 +1,56 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-21T07:11Z
+LastExecutionTime: 2026-06-21T12:49:07Z
 
+
+## This Loop (2026-06-21T12:49Z, linux_mutable — big-pickle reduction: critical-path-honor-success-pattern)
+
+- **Cycle type**: meta-orchestration worker drain + reduction on mutable Linux.
+- **Startup**: `linux-next @ 022dd16f`, clean worktree. Credential Channel Guard passed (`ok:gh-keyring`). Siblings fetched: windows-next a3c8b23d, osx-next d273daff (all at same commit).
+- **Worker drain**: No `ready` packet implementable on this host — order 64 `release-nix-cache-ref-scoping/verify-incremental` needs CI releases; order 68 `github-e2e-lifecycle-interactive` needs operator attendance.
+- **Reduction**: Reduced `litmus-critical-path-eval-gap` finding (first durable fix) into **order 74**:
+  - Added `success_pattern`/`failure_pattern` parsing to critical_path YAML section in `scripts/run-litmus-test.sh`
+  - Steps declaring `success_pattern` now route through `check_signal()` for authoritative regex matching instead of always falling through to the `expected_behavior` heuristic
+  - 112/112 instant-size litmus tests pass (0 regressions)
+- **Verification**: `bash -n scripts/run-litmus-test.sh` passes. `ruby -ryaml` validates `plan/index.yaml`. Litmus `--size instant` 112/112 PASS.
+- **Coordinator**: windows-next + osx-next both ancestors of HEAD. No merge needed.
+- **E2E gates**: Described above, but litmus-only change.
+- **Push state**: will push `linux-next` to origin over HTTPS.
+
+## This Loop (2026-06-21T10:50Z, linux_mutable — big-pickle opencode-prompt-e2e-smoke)
+
+- **Cycle type**: meta-orchestration worker drain on mutable Linux (big-pickle).
+- **Startup**: `linux-next @ 70239dc6`, clean worktree. Credential Channel Guard passed (`ok:gh-keyring`). Siblings fetched: windows-next a3c8b23d, osx-next d273daff (both ancestors); main 77de76ba (release merge, not ancestor — expected).
+- **Worker drain**: Completed Order 67 `opencode-prompt-e2e-smoke` (both subtasks).
+  - Created `openspec/litmus-tests/litmus-opencode-prompt-e2e-shape.yaml` with 7-step critical path asserting forge_exit=0, HEAD advanced, loop_status.md changed, remote HEAD advanced, and cleanup.
+  - Registered `litmus:opencode-prompt-e2e-shape` in `openspec/litmus-bindings.yaml` under `spec_id: meta-orchestration`.
+  - Verified `opencode-prompt-e2e/findings-reduce` is already covered by the meta-orchestration skill's Reduction Engine section (no skill edit needed).
+  - Updated `plan/issues/opencode-prompt-e2e-smoke-2026-06-20.md` with completion summary.
+- **Verification**: `plan/index.yaml`, `openspec/litmus-bindings.yaml`, and `litmus-opencode-prompt-e2e-shape.yaml` all validated with `ruby -ryaml`. `build.sh --check` passes.
+- **Coordinator**: windows-next + osx-next both ancestors of HEAD. No merge needed.
+- **E2E gates**: Not run — litmus-only change, no runtime delta.
+- **Push state**: will push `linux-next` to origin over HTTPS.
+
+## This Loop (2026-06-21T09:28Z, linux_mutable — Gemini-Antigravity worker)
+
+- **Cycle type**: meta-orchestration worker drain on mutable Linux (Gemini).
+- **Startup**: `linux-next @ 2412a414`, clean worktree. Credential Channel Guard passed (`ok:gh-keyring`).
+- **Worker drain**: Completed Order 66 `forge-push-credential-channel/bypass-proxy-for-internal-git-daemon`.
+  - Configured `NO_PROXY`/`no_proxy` environment variables in `container_profile.rs` and `main.rs` to bypass Squid proxy for `tillandsias-git` enclave service.
+- **Verification**: `build.sh --check` passes successfully. E2E verification test pushed successfully to the enclave git service.
+- **Coordinator**: windows-next + osx-next both ancestors of HEAD. No merge needed.
+- **E2E gates**: local-build gate run (E2E push verification test).
+- **Push state**: will push `linux-next` to origin over HTTPS.
+
+## This Loop (2026-06-21T08:42Z, linux_mutable — big-pickle ledger-closure)
+
+- **Cycle type**: meta-orchestration worker drain on mutable Linux (big-pickle).
+- **Startup**: `linux-next @ 758ae45c`, clean worktree. Credential Channel Guard passed (`ok:gh-keyring`). Siblings: windows-next a3c8b23d, osx-next d273daff (both ancestors); main 77de76ba (release merge, not ancestor — expected).
+- **Worker drain**: No `ready` packets implementable on this host — orders 64/66–68 require release runs, forge runtime, or operator attendance. Closed out **order 69** `git-mirror-architecture-verification` which had `status: claimed` but was already completed (findings filed, deliverable present). Fixed event type `completion` → `completed`, flipped status to `done`, released lease.
+- **Verification**: `plan/index.yaml` validated with `ruby -ryaml`.
+- **Coordinator**: windows-next + osx-next both ancestors of HEAD. main diverges after release PR #38 merge (expected — main carries VERSION bump). No merge needed.
+- **E2E gates**: Not run — ledger-only change, no runtime delta.
+- **Push state**: will push `linux-next` to origin over HTTPS.
 
 ## This Loop (2026-06-21T07:11Z, linux_mutable — Gemini-Antigravity worker)
 

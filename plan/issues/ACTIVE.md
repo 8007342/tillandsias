@@ -1,7 +1,48 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-21T07:11Z
+Last updated: 2026-06-21T15:27Z
 
+## This Cycle (2026-06-21T15:27Z, forge — big-pickle meta-orch)
+
+- **Startup**: `linux-next @ 6d25a37f`, clean worktree, in sync with origin.
+- **Credential Channel Guard**: FAILED — `missing:no-credential-channel`.
+  - No `.git/.gh-credentials`, no `GH_TOKEN`/`GITHUB_TOKEN`, `gh auth status`
+    not logged in.
+  - Git mirror (`tillandsias-git:8080`) unreachable (Connection reset).
+  - Vault (`https://vault:8200`) unreachable.
+- **Blocker filed**: `plan/issues/forge-credential-channel-blocked-2026-06-21.md`.
+- **Stopped**: Per meta-orchestration exit contract, no committable work was
+  started. Cycle halts until operator re-seeds the credential channel or the
+  git mirror becomes reachable.
+
+
+## This Cycle (2026-06-21T14:55Z, linux_mutable — big-pickle interactive)
+
+- **Startup**: `linux-next @ 7dfa585a`, clean worktree, in sync with `origin/linux-next`.
+  Credential Channel Guard passed (`ok:gh-keyring`).
+- **Worker drain**: Claimed and ran `github-e2e-lifecycle-interactive/interactive-run` (order 68).
+  Tests 1-2 (list-cloud-projects, bash) PASS. Test 3 (opencode) FAILED — confusing
+  forge-base-missing error UX. Filed 2 glitches (G1: duplicate vault bootstrap, G2:
+  forge-base-missing UX). Full report at
+  `plan/issues/github-e2e-findings-interactive-run-2026-06-21.md`. Inside-forge git
+  operations deferred to follow-up run after forge-base is available.
+- **Verification**: `plan/index.yaml` ruby YAML validation clean. E2E eligibility probe:
+  `eligible` (skipped this cycle — already produced a coherent commit).
+- **Coordination**: Sibling branches unchanged:
+  `origin/windows-next@a3c8b23d`, `origin/osx-next@d273daff` — both ancestors of HEAD.
+  No merge, no release.
+- **Reduction**: Captured 2 UX glitches from the interactive lifecycle; both recorded
+  as pending sub-packets under github-e2e/glitch-reduction.
+- **Next**: Promote G1/G2 glitch fixes to `plan/index.yaml` orders. Run follow-up
+  inside-forge git ops test. Local-build e2e is eligible on this host when warranted.
+
+## This Cycle (2026-06-21T09:28Z, linux_mutable — Gemini-Antigravity worker)
+
+- **Worker drain**: Completed Order 66 `forge-push-credential-channel/bypass-proxy-for-internal-git-daemon`.
+  - Added `tillandsias-git` and `tillandsias-git:8080` (and `http://tillandsias-git:8080/`) to `NO_PROXY` and `no_proxy` environment variables in `crates/tillandsias-core/src/container_profile.rs` and `crates/tillandsias-headless/src/main.rs`.
+  - Bypassing the proxy ensures internal enclave push/traffic does not route to Squid, preventing proxy denial (`TCP_DENIED/000`).
+- **Verification**: Verified build correctness with `./build.sh --check` which passed successfully. Ran E2E verification test via `tillandsias-headless` tool triggering a test push to `tillandsias-git` enclave, which succeeded completely.
+- **Next**: push `linux-next` to origin.
 
 ## This Cycle (2026-06-21T07:11Z, linux_mutable — Gemini-Antigravity worker)
 

@@ -200,3 +200,23 @@ AND adopt option 2 (warm-on-main) so something actually caches.
     by adding flakehub: false. Set save: false on release.yml Nix Cache to keep the release job
     from saving tag-scoped caches. Corrected the cache-nix-action output name from cache-hit to hit
     to allow duration assertions. Ready for verify-incremental step.
+
+## Verify-incremental datapoint (2026-06-21T04:26 PDT / 11:26Z, meta-orch loop)
+
+Coordinator verification of the implemented fix (commit d273daff):
+- `release.yml`: `nix-installer-action` now `flakehub: false` (kills the failing
+  FlakeHub-login noise) and the `Nix Cache` step has `save: false` — releases
+  only RESTORE.
+- New `.github/workflows/nix-cache-warm.yml` ("Warm Nix Cache") warms the cache
+  on main pushes and saves it under the `refs/heads/main` default-branch scope,
+  which tag-dispatched releases CAN restore (the core ref-scoping fix).
+- The warm job **ran green on main at 2026-06-21T07:42:06Z** (triggered by the
+  v0.3.260621.1 VERSION-bump push 77de76ba).
+- **v0.3.260621.1 was the first post-fix release but ran concurrently with / just
+  before the warm job finished, so it still paid the full ~no-restore cost**
+  (build ~23min, FlakeHub-login noise now gone). This is expected, not a fix
+  failure: the warm cache only became available at 07:42Z.
+- **Next action for verify-incremental:** the NEXT release (now that main's cache
+  is warmed) is the real before/after datapoint — its `nix build` step should
+  restore the cross-GCC + crate closure and drop substantially vs v0.3.260621.1.
+  Capture the timing per order 65 monitoring.

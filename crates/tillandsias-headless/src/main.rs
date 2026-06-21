@@ -722,7 +722,7 @@ const EGRESS_NET: &str = "tillandsias-egress";
 /// (proxy, git-service): enclave leg for in-enclave DNS + the egress leg for NAT.
 const ENCLAVE_EGRESS_NETS: &str = "tillandsias-enclave,tillandsias-egress";
 const ENCLAVE_NO_PROXY: &str =
-    "localhost,127.0.0.1,0.0.0.0,::1,inference,proxy,git-service,10.0.42.0/24";
+    "localhost,127.0.0.1,0.0.0.0,::1,inference,proxy,git-service,tillandsias-git,10.0.42.0/24";
 const CA_DIR: &str = "/tmp/tillandsias-ca";
 
 // @trace spec:init-incremental-builds

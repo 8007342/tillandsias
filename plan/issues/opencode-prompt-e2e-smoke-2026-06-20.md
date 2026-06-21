@@ -43,12 +43,14 @@ tillandsias . --opencode --prompt "..." runs to completion
 Requires `forge-push/wire-git-remote` (order 66) to be resolved first so the push
 path inside the forge is functional.
 
-## Action Items
+## Action Items (completed 2026-06-21)
 
-- `opencode-prompt-e2e/litmus`: write `opencode/litmus-opencode-prompt-e2e-shape.yaml`
-  verifying the structural output (exit, new commit, new loop_status entry)
-- `opencode-prompt-e2e/push-assert`: extend the smoke to assert remote branch advanced
-  (requires order 66 forge push channel)
-- `opencode-prompt-e2e/findings-reduce`: ensure the prompt instructs the agent to file
-  findings to `plan/issues/` and reduce them to `plan/index.yaml` before pushing, so
-  the run is self-contained and useful even from a cold forge
+- ✅ `opencode-prompt-e2e/litmus`: created `openspec/litmus-tests/litmus-opencode-prompt-e2e-shape.yaml`
+  verifying forge_exit=0, new commit, loop_status change, and remote HEAD advance.
+  Registered in `openspec/litmus-bindings.yaml` under `spec_id: meta-orchestration`.
+- ✅ `opencode-prompt-e2e/push-assert`: included as steps 2 and 6 of the litmus test
+  (pre-smoke remote HEAD record + post-smoke remote HEAD advance check).
+  Order 66 (forge-push-credential-channel) completed.
+- ✅ `opencode-prompt-e2e/findings-reduce`: verified that the meta-orchestration skill
+  already has a Reduction Engine section requiring filing and reduction before push.
+  No skill edit needed.

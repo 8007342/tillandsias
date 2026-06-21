@@ -9,7 +9,7 @@ xychart-beta
     title "Forge Build Duration (seconds)"
     x-axis "Builds" 1 -> 1
     y-axis "Seconds"
-    line [10]
+    line []
 ```
 
 ## Image Size Over Time
@@ -19,7 +19,7 @@ xychart-beta
     title "Forge Image Size (MB)"
     x-axis "Builds" 1 -> 1
     y-axis "MB"
-    bar [6053]
+    bar [0]
 ```
 
 ## Download Size Over Time
@@ -36,10 +36,10 @@ xychart-beta
 
 | Metric | Value |
 |---|---|
-| Duration | 10s |
-| Image Size | 6053 MB |
+| Duration | s |
+| Image Size | 0 MB |
 | Bytes Downloaded | 0 MB |
-| Cache Hits (steps) | 0 |
+| Cache Hits (steps) |  |
 
 *Metrics are extracted from the build metrics input via semantic distillation. \
 New in this version: download-size tracking, cache-hit tracking, and canonical ImageBuildEvent sink (`$XDG_STATE_HOME/tillandsias/image-build-events.jsonl`).*

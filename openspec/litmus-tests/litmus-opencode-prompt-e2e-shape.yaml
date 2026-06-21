@@ -1,0 +1,80 @@
+# @trace spec:meta-orchestration, spec:forge-push-credential-channel
+# OpenCode-prompt E2E smoke — verify agent commits and pushes findings.
+#
+# Asserts forge_exit=0, new commit since smoke start, loop_status.md
+# advanced, and remote branch HEAD advanced via git ls-remote.
+#
+# NOTE: Requires forge image built, tillandsias on PATH, and git-mirror
+# running (forge-push-credential-channel post-receive relay). Gating points
+# assert the full commit+push lifecycle, not just launch.
+name: litmus:opencode-prompt-e2e-shape
+spec: meta-orchestration
+phase: post-build
+description: >
+  Launch the forge with `./repeat --prompt "Use the /meta-orchestration
+  skill"`, let the agent run one cycle, and verify it committed and pushed
+  findings. Failures indicate a break in the unattended commit+push path.
+severity: high
+size: e2e
+
+preconditions:
+  - tillandsias binary is installed and on PATH
+  - forge image is built and available locally
+  - git remote origin is reachable and credential channel is active
+
+critical_path:
+  - step: "record pre-smoke HEAD for delta comparison"
+    command: "git rev-parse HEAD > /tmp/opencode-e2e-head-before && echo \"ok: recorded $(cat /tmp/opencode-e2e-head-before)\""
+    timeout_ms: 5000
+    expected_behavior: "ok:"
+
+  - step: "record pre-smoke remote HEAD for push verification"
+    command: "git ls-remote origin HEAD | awk '{print $1}' > /tmp/opencode-e2e-remote-head-before && echo 'ok: remote HEAD recorded'"
+    timeout_ms: 15000
+    expected_behavior: "ok:"
+
+  - step: "launch forge with meta-orchestration prompt and one cycle"
+    command: "./repeat --times 1 --agent opencode --prompt \"Use the /meta-orchestration skill\" 2>&1; echo FORGE_EXIT=$?"
+    timeout_ms: 600000
+    expected_behavior: "FORGE_EXIT=0"
+
+  - step: "verify local HEAD advanced since smoke start"
+    command: "HEAD_AFTER=$(git rev-parse HEAD) && HEAD_BEFORE=$(cat /tmp/opencode-e2e-head-before) && [ \"$HEAD_AFTER\" != \"$HEAD_BEFORE\" ] && echo \"ok: HEAD advanced $HEAD_BEFORE -> $HEAD_AFTER\" || { echo \"FAIL: HEAD unchanged ($HEAD_BEFORE)\"; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: HEAD advanced"
+
+  - step: "verify loop_status.md was updated (new entry present)"
+    command: "HEAD_AFTER=$(git rev-parse HEAD) && git diff --name-only \"$HEAD_BEFORE..$HEAD_AFTER\" 2>/dev/null | grep -q 'plan/loop_status.md' && echo \"ok: loop_status.md changed\" || { echo \"FAIL: loop_status.md not modified in new commit(s)\"; git diff --name-only \"$HEAD_BEFORE..$HEAD_AFTER\" 2>/dev/null || echo '(no diff)'; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: loop_status.md changed"
+
+  - step: "verify remote branch HEAD advanced"
+    command: "REMOTE_AFTER=$(git ls-remote origin HEAD | awk '{print $1}') && REMOTE_BEFORE=$(cat /tmp/opencode-e2e-remote-head-before) && [ \"$REMOTE_AFTER\" != \"$REMOTE_BEFORE\" ] && echo \"ok: remote HEAD advanced $REMOTE_BEFORE -> $REMOTE_AFTER\" || { echo \"FAIL: remote HEAD unchanged ($REMOTE_BEFORE)\"; exit 1; }"
+    timeout_ms: 15000
+    expected_behavior: "ok: remote HEAD advanced"
+
+  - step: "cleanup temp files"
+    command: "rm -f /tmp/opencode-e2e-head-before /tmp/opencode-e2e-remote-head-before && echo \"ok: cleaned up\""
+    timeout_ms: 3000
+    expected_behavior: "ok:"
+
+observability:
+  traces:
+    - "@trace spec:meta-orchestration"
+    - "@trace spec:forge-push-credential-channel"
+  expected_log: >
+    OpenCode-prompt E2E smoke: forge launched (exit=0), HEAD advanced
+    with new commit, loop_status.md updated, and remote HEAD advanced
+    via git push relay through git-mirror.
+  log_fields:
+    spec: "meta-orchestration"
+    test: "opencode-prompt-e2e-shape"
+    artifact: "forge output in test log"
+
+rollback:
+  on_failure: >
+    Ensure tillandsias binary is on PATH, forge image is built
+    (scripts/build-image.sh forge), git remote origin is reachable,
+    and the credential channel is active (scripts/check-credential-channel.sh).
+    If the binary is stale, rebuild with ./build.sh --release --install.
+  command: "git log --oneline -5 && echo '---remote---' && git ls-remote origin HEAD && echo '---credential---' && scripts/check-credential-channel.sh"

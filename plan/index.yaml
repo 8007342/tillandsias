@@ -4818,7 +4818,7 @@ plan_index:
     - packet_id: forge-push-credential-channel
       order: 66
       title: "Forge push credential channel — wire git remote to git mirror"
-      status: ready
+      status: done
       kind: enhancement
       deliverable: plan/issues/forge-push-credential-channel-2026-06-20.md
       depends_on: []
@@ -4850,7 +4850,7 @@ plan_index:
             Ensure the git mirror serves HTTP smart protocol for all locally
             cloned projects (not just the Tillandsias repo).
         - id: forge-push/post-receive-verify
-          status: ready
+          status: done
           depends_on: [forge-push/git-mirror-clone-support]
           owned_files: []
           checkpoint_required: true
@@ -4867,11 +4867,21 @@ plan_index:
             credential channel from forge to origin. Root fix is wiring the
             forge git remote to the local git mirror which already has the
             post-receive relay to GitHub.
+        - type: closure
+          ts: "2026-06-21T09:28:00Z"
+          agent_id: "gemini-antigravity-worker-20260621T0928Z"
+          host: linux_mutable
+          note: >
+            Bypassed the proxy for internal enclave git daemon calls by adding
+            tillandsias-git / tillandsias-git:8080 to NO_PROXY / no_proxy in the
+            container profile and headless configurations. Verified via build.sh
+            check and a successful git push from the forge container to the enclave
+            git-service.
 
     - packet_id: opencode-prompt-e2e-smoke
       order: 67
       title: "OpenCode-prompt E2E smoke — verify agent commits and pushes findings"
-      status: ready
+      status: completed
       kind: e2e-smoke
       deliverable: plan/issues/opencode-prompt-e2e-smoke-2026-06-20.md
       depends_on: [forge-push-credential-channel]
@@ -4883,34 +4893,55 @@ plan_index:
         and a litmus test asserts all four gates passed.
       tasks:
         - id: opencode-prompt-e2e/litmus
-          status: ready
+          status: done
           depends_on: [forge-push/post-receive-verify]
           owned_files:
             - openspec/litmus-tests/litmus-opencode-prompt-e2e-shape.yaml
           checkpoint_required: true
           handoff_note: >
-            Write litmus:opencode-prompt-e2e-shape asserting forge_exit=0, new
-            commit since smoke start, loop_status.md advanced, and remote branch
-            HEAD advanced via git ls-remote.
+            Litmus test created at
+            openspec/litmus-tests/litmus-opencode-prompt-e2e-shape.yaml.
+            Written asserting forge_exit=0, HEAD advanced, loop_status.md
+            changed, and remote HEAD advanced.
         - id: opencode-prompt-e2e/findings-reduce
-          status: ready
+          status: done
           depends_on: [opencode-prompt-e2e/litmus]
           owned_files:
             - skills/meta-orchestration/SKILL.md
           checkpoint_required: false
           handoff_note: >
-            Ensure the standard meta-orchestration prompt instructs the agent to
-            file findings to plan/issues/ and reduce to plan/index.yaml before
-            pushing, so every unattended run is self-documenting.
+            The meta-orchestration skill already has a Reduction Engine section
+            (§Filing, §Reduce, §Promote) and a Finalization capture check.
+            Verified: findings must be filed and reduced before push. No skill
+            edit needed.
       events:
         - type: finding
           ts: "2026-06-20T20:30Z"
           agent_id: "linux-claude-sonnet46-20260620T2030Z"
           host: linux_mutable
-          note: >
-            The opencode --prompt e2e case currently has no pass/fail criteria
-            or push verification. Filing as a first-class smoke gate so the
-            case can be run and its results validated unattended.
+          note: "The opencode --prompt e2e case currently has no pass/fail criteria or push verification. Filing as a first-class smoke gate so the case can be run and its results validated unattended."
+        - type: claim
+          ts: "2026-06-21T10:44:59Z"
+          agent_id: "linux-big-pickle-20260621T1045Z"
+          host: linux_mutable
+          lease_id: "lease-linux-opencode-prompt-e2e-litmus-20260621T1045"
+          expires_at: "2026-06-21T14:44:59Z"
+        - type: completed
+          ts: "2026-06-21T10:50:00Z"
+          agent_id: "linux-big-pickle-20260621T1045Z"
+          host: linux_mutable
+          summary: >
+            Created litmus:opencode-prompt-e2e-shape as
+            openspec/litmus-tests/litmus-opencode-prompt-e2e-shape.yaml
+            with 7-step critical path (pre-head, remote-head, forge launch,
+            HEAD-advance, loop_status check, remote-HEAD advance, cleanup).
+            Registered binding in openspec/litmus-bindings.yaml under
+            spec_id: meta-orchestration. Verified findings-reduce is already
+            covered by the meta-orchestration skill's Reduction Engine section.
+          commits: []
+          evidence:
+            - "openspec/litmus-tests/litmus-opencode-prompt-e2e-shape.yaml created"
+            - "openspec/litmus-bindings.yaml updated with litmus:opencode-prompt-e2e-shape"
 
     - packet_id: github-e2e-lifecycle-interactive
       order: 68
@@ -4927,16 +4958,23 @@ plan_index:
         plan/index.yaml for implementation.
       tasks:
         - id: github-e2e/interactive-run
-          status: ready
+          status: done
           depends_on: []
-          owned_files: []
+          owned_files:
+            - plan/issues/github-e2e-findings-interactive-run-2026-06-21.md
           checkpoint_required: false
           handoff_note: >
             Run the lifecycle protocol in plan/issues/github-e2e-lifecycle-
             interactive-2026-06-20.md on big-pickle. Capture exact error
             messages, timing, credential prompts, and missing tools.
+          evidence_summary: >
+            Tests 1-2 (list-cloud-projects, bash) PASS. Test 3 (opencode)
+            FAILED with confusing forge-base-missing error. Found 2 glitches:
+            G1 duplicate vault provisioning, G2 forge-base missing UX.
+            Full report at plan/issues/github-e2e-findings-interactive-run-2026-06-21.md.
+            Inside-forge git ops deferred to follow-up run.
         - id: github-e2e/glitch-reduction
-          status: ready
+          status: claimed
           depends_on: [github-e2e/interactive-run]
           owned_files:
             - plan/index.yaml
@@ -4945,6 +4983,35 @@ plan_index:
           handoff_note: >
             For each observed glitch, file a sub-packet (id: github-e2e/<slug>)
             with a concrete fix and reduce it to plan/index.yaml orders.
+          glitches_filed:
+            - id: github-e2e/redundant-vault-bootstrap
+              severity: low
+              description: >
+                Vault policy-writing and AppRole-provisioning runs 3-4 times per
+                headless command (--list-cloud-projects). Optimize to skip when
+                already provisioned.
+              fix: >
+                Check if AppRole role exists before provisioning; skip vault
+                bootstrap if vault is already running and configured.
+              evidence_source: plan/issues/github-e2e-findings-interactive-run-2026-06-21.md
+            - id: github-e2e/forge-base-missing-ux
+              severity: medium
+              description: >
+                When forge-base image is missing, forge launch attempts to pull
+                from localhost:80 registry and fails with "connection refused"
+                instead of giving an actionable error.
+              fix: >
+                In the forge build path, detect when forge-base is absent and
+                either build it as a dependency or emit an actionable error
+                ("run tillandsias --init").
+              evidence_source: plan/issues/github-e2e-findings-interactive-run-2026-06-21.md
+          events:
+            - type: claim
+              ts: "2026-06-21T15:44:19Z"
+              agent_id: "linux-macuahuitl-big-pickle-20260621T154419Z"
+              host: linux_mutable
+              lease_id: "lease-linux-github-e2e-glitch-reduction-20260621T1544"
+              expires_at: "2026-06-21T19:44:19Z"
         - id: github-e2e/push-from-host
           status: completed
           depends_on: []
@@ -4979,11 +5046,27 @@ plan_index:
             Operator noted login and list-projects work, checkout has glitches,
             push-to-remote has been unreliable. Need an attended run to enumerate
             and pin the exact failure modes before implementing fixes.
+        - type: claim
+          ts: "2026-06-21T14:55:00Z"
+          agent_id: "linux-tlatoani-big-pickle-20260621T1455Z"
+          host: linux_mutable
+          lease_id: "lease-linux-github-e2e-interactive-20260621T1455"
+          expires_at: "2026-06-21T18:55:00Z"
+        - type: completed
+          ts: "2026-06-21T15:15:00Z"
+          agent_id: "linux-tlatoani-big-pickle-20260621T1455Z"
+          host: linux_mutable
+          summary: >
+            Interactive lifecycle run completed: tests 1-2 PASS, test 3 FAILED
+            with forge-base-missing UX. Filed 2 glitches (G1 redundant vault
+            bootstrap, G2 forge-base-missing UX) and recorded findings at
+            plan/issues/github-e2e-findings-interactive-run-2026-06-21.md.
+            Inside-forge git ops deferred to follow-up after forge-base exists.
 
     - packet_id: git-mirror-architecture-verification
       order: 69
       title: "Git mirror architecture verification — real server vs filesystem hacks"
-      status: claimed
+      status: done
       kind: investigation
       deliverable: plan/issues/git-mirror-architecture-verification-2026-06-20.md
       depends_on: []
@@ -5049,7 +5132,7 @@ plan_index:
           agent_id: "linux-big-pickle-20260621T0432Z"
           host: linux_mutable
           lease_id: "lease-linux-git-mirror-arch-verify-20260621T0432Z"
-        - type: completion
+        - type: completed
           ts: "2026-06-21T04:42:00Z"
           agent_id: "linux-big-pickle-20260621T0432Z"
           host: linux_mutable
@@ -5060,6 +5143,14 @@ plan_index:
             filesystem transport uses path-based insteadOf (functionally file://).
             Outcome field corrected for accuracy. Deliverable filed at
             plan/issues/git-mirror-architecture-verification-2026-06-20.md.
+        - type: completed
+          ts: "2026-06-21T08:42:06Z"
+          agent_id: "linux-tlatoani-big-pickle-20260621T0842Z"
+          host: linux_mutable
+          note: >
+            Final closure: node status changed from claimed to done. Investigation
+            work was already completed and filed; this cycle formally closes the
+            node and updates the plan ledger.
 
     - packet_id: smoke-finding/forge-base-pip-build-network-timeout
       order: 70
@@ -5226,3 +5317,56 @@ plan_index:
           evidence:
             - "Added a rule to §5 Hard Rules in skills/advance-work-from-plan/SKILL.md requiring file-moving and source-mutating migrations to acquire the build-install-smoke-e2e lock."
             - "Updated status of source-edit-vs-smoke-lock/decide-and-document task and parent node to completed."
+
+    - packet_id: critical-path-honor-success-pattern
+      order: 74
+      title: "Make critical_path steps honor declared success_pattern instead of ignoring it"
+      status: completed
+      kind: enhancement
+      deliverable: plan/issues/litmus-critical-path-eval-gap-2026-06-21.md
+      depends_on: []
+      pickup_role: "Any host that edits bash"
+      outcome: >
+        Added success_pattern/failure_pattern parsing to the critical_path YAML
+        section in scripts/run-litmus-test.sh. Steps declaring success_pattern now
+        route through check_signal() for authoritative regex-based pass/fail;
+        steps without one fall back to the expected_behavior heuristic. All 112
+        instant-size litmus tests pass (0 regressions). Closes the first slice
+        of litmus-critical-path-eval-gap.
+      tasks:
+        - id: critical-path-honor-success-pattern/implement
+          status: completed
+          depends_on: []
+          owned_files:
+            - scripts/run-litmus-test.sh
+            - plan/issues/litmus-critical-path-eval-gap-2026-06-21.md
+          checkpoint_required: true
+          handoff_note: >
+            Added success_pattern/failure_pattern to the critical_path YAML parser
+            variables, arrays, and append_step; reset them in every step boundary.
+            In the scoring loop, if success_pattern is non-empty, call check_signal()
+            before falling through to behavior_matches_output. 112/112 instant
+            litmus tests pass.
+      events:
+        - type: finding
+          ts: "2026-06-21T06:32:00Z"
+          agent_id: "linux-claude-opus48-loop-20260621T0632Z"
+          host: linux_mutable
+          note: >
+            Root-caused the --ci-full pre-build litmus block to harness eval gap:
+            critical_path steps score via expected_behavior heuristic and ignore
+            success_pattern entirely.
+        - type: claim
+          ts: "2026-06-21T12:49:07Z"
+          agent_id: "linux-macuahuitl-big-pickle-20260621T124907Z"
+          host: linux_mutable
+          lease_id: "critical-path-honor-success-pattern/implement"
+        - type: completed
+          ts: "2026-06-21T12:49:07Z"
+          agent_id: "linux-macuahuitl-big-pickle-20260621T124907Z"
+          host: linux_mutable
+          evidence:
+            - "scripts/run-litmus-test.sh parses success_pattern/failure_pattern from critical_path YAML steps"
+            - "Steps with success_pattern route through check_signal() for authoritative regex matching"
+            - "112/112 instant-size litmus tests pass --size instant (0 failures)"
+            - "build.sh --check passes cleanly"
