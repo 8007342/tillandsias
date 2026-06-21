@@ -4673,7 +4673,7 @@ plan_index:
             Implement the chosen approach in release.yml; add purge of unreusable
             per-tag Nix caches to stay under the 10 GB GHA limit.
         - id: release-nix-cache-ref-scoping/purge-stale-caches
-          status: ready
+          status: done
           depends_on: [release-nix-cache-ref-scoping/implement-cache-fix]
           owned_files:
             - .github/workflows/nix-cache-warm.yml
@@ -4690,6 +4690,24 @@ plan_index:
             for purging). Verify a warm run reports purged entries and repo cache
             footprint drops under 10 GB (gh actions-cache list). Land before
             verify-incremental. See deliverable for the full static review.
+          events:
+            - type: claim
+              ts: "2026-06-21T03:30:11Z"
+              agent_id: "linux-big-pickle-20260621T0330Z"
+              host: linux
+              lease_id: "lease-linux-purge-stale-caches-20260621T0330"
+              expires_at: "2026-06-21T07:30:00Z"
+            - type: completed
+              ts: "2026-06-21T03:32:00Z"
+              agent_id: "linux-big-pickle-20260621T0330Z"
+              host: linux
+              summary: >
+                Added purge configuration to nix-cache-warm.yml: purge: true,
+                purge-prefixes: nix-Linux-, purge-created-offset: 86400000 (24h),
+                gc-max-store-size: 8000000000 (~8 GB), and permissions: actions: write.
+                Repo cache was 11.1 GB over the 10 GB LRU limit — purge will reclaim
+                stale per-tag caches so the warmed main-scoped cache survives for
+                verify-incremental. Land before verify-incremental per the dependency.
         - id: release-nix-cache-ref-scoping/verify-incremental
           status: ready
           depends_on: [release-nix-cache-ref-scoping/implement-cache-fix, release-nix-cache-ref-scoping/purge-stale-caches]
