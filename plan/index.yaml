@@ -4958,7 +4958,7 @@ plan_index:
         plan/index.yaml for implementation.
       tasks:
         - id: github-e2e/interactive-run
-          status: ready
+          status: claimed
           depends_on: []
           owned_files: []
           checkpoint_required: false
@@ -5010,6 +5010,12 @@ plan_index:
             Operator noted login and list-projects work, checkout has glitches,
             push-to-remote has been unreliable. Need an attended run to enumerate
             and pin the exact failure modes before implementing fixes.
+        - type: claim
+          ts: "2026-06-21T14:55:00Z"
+          agent_id: "linux-tlatoani-big-pickle-20260621T1455Z"
+          host: linux_mutable
+          lease_id: "lease-linux-github-e2e-interactive-20260621T1455"
+          expires_at: "2026-06-21T18:55:00Z"
 
     - packet_id: git-mirror-architecture-verification
       order: 69
