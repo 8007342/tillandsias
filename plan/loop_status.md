@@ -1,6 +1,18 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-21T02:05Z
+LastExecutionTime: 2026-06-21T03:21Z
+
+## This Loop (2026-06-21T03:04Z, linux_mutable — meta-orch static-review reduction)
+
+- **Cycle type**: meta-orchestration on mutable Linux (Claude Opus 4.8, Cowork). Off-peak (Sat 20:04 PT). No implementable `ready` packet at the current bar — chose a verifiable static-review reduction over bare ledger-hygiene.
+- **Startup**: `linux-next @ 19f17b3a`, clean worktree, in sync with `origin/linux-next` (0/0). Credential Channel Guard passed (`ok:gh-credentials-store`, HTTPS).
+- **Worker drain**: All remaining ready packets out of reach here — Order 64 `verify-incremental` (needs two release runs), Orders 66/69 (forge+git-mirror running), Order 67 (Podman user session, `skip:no-podman-user-session`), Order 68 (operator-attended). Orders 70/71 already completed.
+- **Reduction (static review of d273daff, Order 64)**: Reviewed Gemini's warm-cache-on-main implementation without needing a release host. Confirmed correct: cron-on-default-branch warming defeats GHA ref-scoping, `save:false` on release, `hit` output name, runner.os/primary-key parity. **Gap found**: the `implement-cache-fix` handoff required purging stale per-tag caches to stay under the 10 GB GHA limit, but no purge step landed and the repo cache was already over 10 GB (LRU active) → the warmed cache can evict before verification. Web-confirmed `cache-nix-action@v7` purge API (`purge`/`purge-prefixes`/`gc-max-store-size` + `actions: write`).
+- **Capture + promote**: Filed `plan/issues/enhancement-release-cache-purge-missing-2026-06-20.md`; promoted ready packet `release-nix-cache-ref-scoping/purge-stale-caches` and made `verify-incremental` depend on it (so measurement releases run against a clean cache). Finding event added to Order 64.
+- **Verification**: `run-litmus-test.sh meta-orchestration --phase pre-build --size instant` → **3/3 PASS**. `plan/index.yaml` validated with `ruby -ryaml`.
+- **E2E**: local-build gate `skip:no-podman-user-session`. No runtime change → no release. Coordinator: windows-next/osx-next both ancestors of HEAD, no merge.
+- **Bar-raise**: not self-escalated (Tlatoāni-gated).
+- **Push state**: pushing `linux-next` to origin over HTTPS (`.git/.gh-credentials`).
 
 ## This Loop (2026-06-21T02:04Z, linux_mutable — meta-orch ledger-hygiene)
 

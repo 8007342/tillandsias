@@ -1,6 +1,15 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-21T02:05Z
+Last updated: 2026-06-21T03:21Z
+
+## This Cycle (2026-06-21T03:04Z, linux_mutable — Claude Opus 4.8 Cowork meta-orch)
+
+- **Startup**: `linux-next @ 19f17b3a`, clean worktree, in sync (0/0). Credential Channel Guard `ok:gh-credentials-store`.
+- **No implementable packet at the current bar**: Order 64 `verify-incremental` (two release runs), Orders 66/69 (forge+git-mirror), Order 67 (Podman session, `skip:no-podman-user-session`), Order 68 (operator-attended). Chose a verifiable static-review reduction instead of bare ledger-hygiene.
+- **Reduction**: Static review of Gemini's Order 64 cache fix (`d273daff`). Confirmed the warm-on-main architecture, `save:false`, `hit` output, and key parity are correct. Found a real gap: the mandated purge of stale per-tag caches never landed; with the repo cache already over the 10 GB LRU cap, the warmed cache can evict before `verify-incremental`. Filed `plan/issues/enhancement-release-cache-purge-missing-2026-06-20.md`, promoted ready packet `purge-stale-caches`, and gated `verify-incremental` behind it.
+- **Verification**: litmus 3/3 PASS; `plan/index.yaml` `ruby -ryaml` clean.
+- **Coordinator**: windows-next/osx-next both ancestors of HEAD — no merge, no release.
+- **Next**: `purge-stale-caches` then `verify-incremental` need a build/CI host; Orders 66/69 need forge+git-mirror; 67 a Podman session; 68 an operator.
 
 ## This Cycle (2026-06-21T02:04Z, linux_mutable — Claude Opus 4.8 Cowork meta-orch)
 

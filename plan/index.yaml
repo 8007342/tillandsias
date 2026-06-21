@@ -4672,9 +4672,27 @@ plan_index:
           handoff_note: >
             Implement the chosen approach in release.yml; add purge of unreusable
             per-tag Nix caches to stay under the 10 GB GHA limit.
-        - id: release-nix-cache-ref-scoping/verify-incremental
+        - id: release-nix-cache-ref-scoping/purge-stale-caches
           status: ready
           depends_on: [release-nix-cache-ref-scoping/implement-cache-fix]
+          owned_files:
+            - .github/workflows/nix-cache-warm.yml
+            - plan/issues/enhancement-release-cache-purge-missing-2026-06-20.md
+          checkpoint_required: true
+          handoff_note: >
+            The handoff for implement-cache-fix required purging unreusable
+            per-tag Nix caches to stay under the 10 GB GHA limit, but no purge
+            step landed (verified by grep). Repo cache was already over 10 GB
+            (LRU active), so stale per-tag caches can evict the freshly-warmed
+            main-scoped cache before verify-incremental runs. Add to the warm
+            workflow: purge: true, purge-prefixes: nix-Linux-, a purge-created
+            window, gc-max-store-size, and permissions: actions: write (required
+            for purging). Verify a warm run reports purged entries and repo cache
+            footprint drops under 10 GB (gh actions-cache list). Land before
+            verify-incremental. See deliverable for the full static review.
+        - id: release-nix-cache-ref-scoping/verify-incremental
+          status: ready
+          depends_on: [release-nix-cache-ref-scoping/implement-cache-fix, release-nix-cache-ref-scoping/purge-stale-caches]
           owned_files:
             - plan/issues/release-nix-cache-ref-scoping-2026-06-20.md
           checkpoint_required: true
@@ -4702,6 +4720,22 @@ plan_index:
             workflow configured to run on pushes to main/linux-next. Disabled FlakeHub
             login. Added save: false to release.yml. Corrected the cache-nix-action
             output name from cache-hit to hit. Ready for verification releases.
+        - type: finding
+          ts: "2026-06-21T03:20:00Z"
+          agent_id: "linux-claude-opus48-cowork-20260621T0304Z"
+          host: linux_mutable
+          note: >
+            Static review of d273daff (host cannot run releases). Confirmed
+            correct: warm-on-main + weekly cron defeats ref-scoping (cron runs on
+            default branch -> main-scoped cache restorable by tag refs);
+            save:false on release; hit output name; runner.os/primary-key parity
+            (both ubuntu-22.04 -> exact restore on unchanged flake.lock). Gap
+            found: implement-cache-fix handoff required purging unreusable
+            per-tag caches to stay under 10 GB, but no purge step landed and repo
+            cache was already over 10 GB (LRU active) -> warmed cache can be
+            evicted before verify-incremental. Filed
+            enhancement-release-cache-purge-missing-2026-06-20.md and promoted
+            ready packet purge-stale-caches (blocks verify-incremental).
 
     - id: release-build-monitoring
       order: 65
