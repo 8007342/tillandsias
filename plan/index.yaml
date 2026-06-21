@@ -4958,14 +4958,21 @@ plan_index:
         plan/index.yaml for implementation.
       tasks:
         - id: github-e2e/interactive-run
-          status: claimed
+          status: done
           depends_on: []
-          owned_files: []
+          owned_files:
+            - plan/issues/github-e2e-findings-interactive-run-2026-06-21.md
           checkpoint_required: false
           handoff_note: >
             Run the lifecycle protocol in plan/issues/github-e2e-lifecycle-
             interactive-2026-06-20.md on big-pickle. Capture exact error
             messages, timing, credential prompts, and missing tools.
+          evidence_summary: >
+            Tests 1-2 (list-cloud-projects, bash) PASS. Test 3 (opencode)
+            FAILED with confusing forge-base-missing error. Found 2 glitches:
+            G1 duplicate vault provisioning, G2 forge-base missing UX.
+            Full report at plan/issues/github-e2e-findings-interactive-run-2026-06-21.md.
+            Inside-forge git ops deferred to follow-up run.
         - id: github-e2e/glitch-reduction
           status: ready
           depends_on: [github-e2e/interactive-run]
@@ -4976,6 +4983,28 @@ plan_index:
           handoff_note: >
             For each observed glitch, file a sub-packet (id: github-e2e/<slug>)
             with a concrete fix and reduce it to plan/index.yaml orders.
+          glitches_filed:
+            - id: github-e2e/redundant-vault-bootstrap
+              severity: low
+              description: >
+                Vault policy-writing and AppRole-provisioning runs 3-4 times per
+                headless command (--list-cloud-projects). Optimize to skip when
+                already provisioned.
+              fix: >
+                Check if AppRole role exists before provisioning; skip vault
+                bootstrap if vault is already running and configured.
+              evidence_source: plan/issues/github-e2e-findings-interactive-run-2026-06-21.md
+            - id: github-e2e/forge-base-missing-ux
+              severity: medium
+              description: >
+                When forge-base image is missing, forge launch attempts to pull
+                from localhost:80 registry and fails with "connection refused"
+                instead of giving an actionable error.
+              fix: >
+                In the forge build path, detect when forge-base is absent and
+                either build it as a dependency or emit an actionable error
+                ("run tillandsias --init").
+              evidence_source: plan/issues/github-e2e-findings-interactive-run-2026-06-21.md
         - id: github-e2e/push-from-host
           status: completed
           depends_on: []
@@ -5016,6 +5045,16 @@ plan_index:
           host: linux_mutable
           lease_id: "lease-linux-github-e2e-interactive-20260621T1455"
           expires_at: "2026-06-21T18:55:00Z"
+        - type: completed
+          ts: "2026-06-21T15:15:00Z"
+          agent_id: "linux-tlatoani-big-pickle-20260621T1455Z"
+          host: linux_mutable
+          summary: >
+            Interactive lifecycle run completed: tests 1-2 PASS, test 3 FAILED
+            with forge-base-missing UX. Filed 2 glitches (G1 redundant vault
+            bootstrap, G2 forge-base-missing UX) and recorded findings at
+            plan/issues/github-e2e-findings-interactive-run-2026-06-21.md.
+            Inside-forge git ops deferred to follow-up after forge-base exists.
 
     - packet_id: git-mirror-architecture-verification
       order: 69
