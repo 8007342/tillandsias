@@ -4974,7 +4974,7 @@ plan_index:
             Full report at plan/issues/github-e2e-findings-interactive-run-2026-06-21.md.
             Inside-forge git ops deferred to follow-up run.
         - id: github-e2e/glitch-reduction
-          status: ready
+          status: claimed
           depends_on: [github-e2e/interactive-run]
           owned_files:
             - plan/index.yaml
@@ -5005,6 +5005,13 @@ plan_index:
                 either build it as a dependency or emit an actionable error
                 ("run tillandsias --init").
               evidence_source: plan/issues/github-e2e-findings-interactive-run-2026-06-21.md
+          events:
+            - type: claim
+              ts: "2026-06-21T15:44:19Z"
+              agent_id: "linux-macuahuitl-big-pickle-20260621T154419Z"
+              host: linux_mutable
+              lease_id: "lease-linux-github-e2e-glitch-reduction-20260621T1544"
+              expires_at: "2026-06-21T19:44:19Z"
         - id: github-e2e/push-from-host
           status: completed
           depends_on: []
