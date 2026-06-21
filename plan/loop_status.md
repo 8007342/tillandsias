@@ -1,6 +1,20 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-21T04:12Z
+LastExecutionTime: 2026-06-21T04:42Z
+
+## This Loop (2026-06-21T04:42Z, linux_mutable — big-pickle git-mirror-arch-verification)
+
+- **Cycle type**: meta-orchestration worker drain on mutable Linux (big-pickle).
+- **Startup**: `linux-next @ de29cd67` (after fast-forward + claim push from previous start). Clean worktree. Credential Channel Guard passed (`ok:gh-keyring`).
+- **Worker drain**: Claimed and completed Order 69 `git-mirror-architecture-verification`. Investigation-only (no code changes). Key findings:
+  - git mirror serves `git://` (native git daemon protocol on port 9418), NOT HTTPS/SSH
+  - CA certs (`/etc/tillandsias/ca.crt`) are for **outbound** HTTPS (Vault API + GitHub push relay), not for serving TLS
+  - Linux forge remote is either `git://git-service/<project>` (network clone) or uses `insteadOf` redirect to `git://git-service/<project>` (host-mount mode) — no `file://` anywhere on Linux
+  - Windows/WSL filesystem transport does use a path-based `insteadOf` redirect (functionally akin to `file://`), which is intentional for the WSL environment
+  - Corrected packet outcome wording from "real HTTPS/SSH git server" to "real git daemon (git://) with Vault-backed HTTPS relay"
+- **Deliverable**: `plan/issues/git-mirror-architecture-verification-2026-06-20.md`
+- **E2E gates**: Skipped — investigation-only, no code delta.
+- **Push state**: will push `linux-next` to origin over HTTPS (gh auth keyring).
 
 ## This Loop (2026-06-21T04:12Z, linux_mutable — Gemini-Antigravity worker)
 

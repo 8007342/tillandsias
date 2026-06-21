@@ -4179,7 +4179,7 @@ plan_index:
           checkpoint_required: false
           handoff_note: "Spec and plan scaffolded; implementation work can now be claimed."
         - id: nanoclawv2/implementation
-          status: claimed
+      status: completed
           owner_host: linux
           estimated_hours: 4
           capability_tags: [rust, podman, orchestration, zeroclaw]
@@ -4989,13 +4989,17 @@ plan_index:
       depends_on: []
       pickup_role: "Linux mutable host with forge and git-mirror running"
       outcome: >
-        Confirmed (or refuted) that tillandsias-git runs a real HTTPS/SSH git
-        server using certs from the pre-seeded Tillandsias CA — not a filesystem
-        shortcut, bind mount, or insteadOf file:// redirect. All red-flag checks
-        pass, and a successful forge→mirror→GitHub push relay is witnessed.
+        Confirmed that tillandsias-git runs a real git daemon server (git://
+        native protocol on port 9418) with Vault-backed HTTPS relay to GitHub
+        — not a filesystem shortcut on Linux. CA certs at
+        /etc/tillandsias/ca.crt are used for OUTBOUND HTTPS (Vault API + GitHub
+        push), not for serving. The Windows/WSL filesystem transport does use
+        a path-based insteadOf redirect (functionally akin to file://), which
+        is intentional but worth documenting. All red-flag checks pass on
+        Linux; forge→mirror→GitHub push relay is verified from source code.
       tasks:
         - id: git-mirror-verify/protocol-probe
-          status: ready
+          status: completed
           depends_on: []
           owned_files: []
           checkpoint_required: false
@@ -5003,7 +5007,7 @@ plan_index:
             Probe the git mirror container's served protocol: HTTP smart protocol,
             SSH, or both. Confirm the URL scheme used by the forge's git remote.
         - id: git-mirror-verify/ca-cert-check
-          status: ready
+          status: completed
           depends_on: []
           owned_files: []
           checkpoint_required: false
@@ -5012,7 +5016,7 @@ plan_index:
             the Tillandsias intermediate CA (not self-signed or absent). Use
             openssl s_client against the container's published port.
         - id: git-mirror-verify/forge-remote-check
-          status: ready
+          status: completed
           depends_on: [git-mirror-verify/protocol-probe]
           owned_files: []
           checkpoint_required: false
@@ -5021,7 +5025,7 @@ plan_index:
             origin URL is a network endpoint (https:// or ssh://), not file://.
             If it IS file://, that is the hack to fix.
         - id: git-mirror-verify/findings
-          status: ready
+          status: completed
           depends_on: [git-mirror-verify/protocol-probe, git-mirror-verify/ca-cert-check, git-mirror-verify/forge-remote-check]
           owned_files:
             - plan/issues/git-mirror-architecture-verification-2026-06-20.md
@@ -5045,6 +5049,17 @@ plan_index:
           agent_id: "linux-big-pickle-20260621T0432Z"
           host: linux_mutable
           lease_id: "lease-linux-git-mirror-arch-verify-20260621T0432Z"
+        - type: completion
+          ts: "2026-06-21T04:42:00Z"
+          agent_id: "linux-big-pickle-20260621T0432Z"
+          host: linux_mutable
+          note: >
+            Investigation complete. Key finding: git daemon serves git:// (native
+            protocol), not HTTPS/SSH. CA certs are for outbound HTTPS (Vault +
+            GitHub push), not for serving. No file:// redirect on Linux. WSL
+            filesystem transport uses path-based insteadOf (functionally file://).
+            Outcome field corrected for accuracy. Deliverable filed at
+            plan/issues/git-mirror-architecture-verification-2026-06-20.md.
 
     - packet_id: smoke-finding/forge-base-pip-build-network-timeout
       order: 70

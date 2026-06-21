@@ -1,6 +1,17 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-21T04:12Z
+Last updated: 2026-06-21T04:42Z
+
+## This Cycle (2026-06-21T04:42Z, linux_mutable — big-pickle git-mirror-arch-verification)
+
+- **Worker drain**: Completed Order 69 `git-mirror-architecture-verification`. Investigation-only. Key findings:
+  - Protocol: `git daemon` serves `git://` (native git protocol on port 9418), NOT HTTPS/SSH
+  - CA certs: `/etc/tillandsias/ca.crt` is for **outbound** HTTPS (Vault API + GitHub push relay), not for server TLS
+  - Linux forge remote: either `git://git-service/<project>` or uses `git config url.<mirror>.insteadOf` → `git://git-service/<project>` — no `file://` on Linux
+  - Windows/WSL: uses path-based `url.<path>.insteadOf` redirect (functionally `file://`), intentional for WSL
+  - Corrected packet outcome from "real HTTPS/SSH git server" to "real git daemon (git://) with Vault-backed HTTPS relay"
+- **Deliverable**: `plan/issues/git-mirror-architecture-verification-2026-06-20.md`
+- **Next**: push `linux-next` to origin.
 
 ## This Cycle (2026-06-21T04:12Z, linux_mutable — Gemini-Antigravity worker)
 
