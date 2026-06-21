@@ -1,6 +1,16 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-20T21:00Z
+LastExecutionTime: 2026-06-21T00:10Z
+
+## This Loop (2026-06-21T00:04Z, linux_mutable — meta-orch worker-drain)
+
+- **Cycle type**: meta-orchestration worker-drain slice on mutable Linux (Claude Opus 4.8, Cowork). Off-peak (Sat 17:04 PT) — lightweight loop-tooling packet.
+- **Startup**: `linux-next`, fast-forwarded `90e43066..1973d414` to `origin/linux-next`. One untracked file at startup (`scripts/check-credential-channel.sh`) classified as a ready-but-uncommitted Order-61 deliverable and adopted, not discarded. Credential Channel Guard passed (`ok:gh-credentials-store`).
+- **Worker drain**: Completed Order 61 `credential-channel-check`. Made the guard script executable, verified all three branches (cred-store/scrubbed/token), and wired the skill's Credential Channel Guard to invoke it — retiring the advisory-prose check. Script-only closure mirrors Order-60 `e2e-preflight.sh`.
+- **Verification**: `litmus:credential-channel-check-shape` bound + registered under `meta-orchestration` in `litmus-bindings.yaml`; 5/5 critical-path steps pass. YAML validated with `ruby -ryaml`.
+- **E2E**: local-build gate skipped — sandbox has no `/run/user/<uid>` → `skip:no-podman-user-session` (Order-60 probe). No runtime change → no release.
+- **Capture**: `plan/issues/optimization-credential-channel-policy-parity-2026-06-21.md` (deferred Rust-subcommand parity).
+- **Push state**: pushing `linux-next` to origin over HTTPS (`.git/.gh-credentials`).
 
 ## This Loop (2026-06-20T20:34Z, linux_immutable — curl-install e2e)
 

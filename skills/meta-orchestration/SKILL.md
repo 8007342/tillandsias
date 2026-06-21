@@ -72,13 +72,24 @@ work. The Cowork scheduled-task runtime can inherit dangling session sockets
 fails for lack of a credential. See
 `plan/issues/cowork-headless-credential-isolation-2026-06-20.md`.
 
-A usable credential channel is present when ANY of these holds:
+Run the executable guard instead of re-deriving the check in prose:
 
-- `.git/.gh-credentials` exists and is non-empty (repo-local store helper), or
+```bash
+scripts/check-credential-channel.sh
+```
+
+It prints exactly one line matching the falsifiable grammar
+`^(ok:[a-z0-9-]+|missing:no-credential-channel)$` and exits `0` when a usable
+git-push credential channel is present, non-zero when it is absent. A usable
+channel is present when ANY of these holds (the script checks them in order):
+
+- `<git-dir>/.gh-credentials` exists and is non-empty (repo-local store helper), or
 - `GH_TOKEN` or `GITHUB_TOKEN` is set in the environment, or
 - `gh auth status` succeeds (reachable, unlocked keyring).
 
-If none holds, do NOT proceed into worker drain or any committable work. Instead
+Pinned by `litmus:credential-channel-check-shape`. A non-zero exit (verdict
+`missing:no-credential-channel`) fails the cycle on its own; do NOT proceed into
+worker drain or any committable work. Instead
 fail loud: file or update a blocker in `plan/issues/` recording
 `blocked: no-credential-channel`, the owner (operator), and the smallest next
 action (re-seed `.git/.gh-credentials` via the gh token, or inject `GH_TOKEN`

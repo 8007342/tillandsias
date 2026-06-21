@@ -1,6 +1,16 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-20T21:00Z
+Last updated: 2026-06-21T00:10Z
+
+## This Cycle (2026-06-21T00:04Z, linux_mutable — Claude Opus 4.8 Cowork meta-orch)
+
+- **Startup**: `linux-next`, fast-forwarded `90e43066..1973d414` to `origin/linux-next`. Found one untracked file at startup — `scripts/check-credential-channel.sh` — classified as a *ready-but-uncommitted deliverable* (the implementation of Order 61), not disposable artifact; adopted it rather than discarding.
+- **Credential Channel Guard**: passed via `.git/.gh-credentials` non-empty (`ok:gh-credentials-store`).
+- **Worker drain (Order 61, `credential-channel-check`)**: Made the script executable, verified all three branches live (cred-store present → `ok:gh-credentials-store`/exit 0; scrubbed env → `missing:no-credential-channel`/exit 1; seeded `GH_TOKEN` → `ok:gh-token-env`/exit 0). Wired the meta-orchestration Credential Channel Guard to invoke `scripts/check-credential-channel.sh` instead of re-deriving the check in prose. Outcome satisfied script-only, mirroring Order-60 `e2e-preflight.sh`.
+- **Verification**: Added `litmus:credential-channel-check-shape` (`openspec/litmus-tests/litmus-credential-channel-check-shape.yaml`), registered under the `meta-orchestration` spec in `litmus-bindings.yaml`. All 5 critical-path steps pass. YAML validated with `ruby -ryaml`.
+- **Capture**: Filed `plan/issues/optimization-credential-channel-policy-parity-2026-06-21.md` — deferred optional `tillandsias-policy credential-channel` Rust parity (not a correctness gap; low ROI until other guards co-migrate).
+- **Coordinator**: `origin/windows-next@a3c8b23d` and `origin/osx-next@d829808d` both ancestors of `linux-next` HEAD — no sibling merge. No release (loop-tooling + ledger delta only, no runtime change). E2E local-build gate: `linux_mutable` but Cowork sandbox has no `/run/user/<uid>` → `skip:no-podman-user-session` (per Order-60 probe), so no e2e this cycle.
+- **Next**: Order 70 (Containerfile.base pip timeout — unblocks immutable curl-install e2e), Order 64/65 (release nix-cache + build monitoring, build/CI-capable host).
 
 ## This Cycle (2026-06-20T20:34Z, linux_immutable — Claude Sonnet 4.6 curl-install e2e)
 

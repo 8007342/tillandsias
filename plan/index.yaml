@@ -4477,7 +4477,7 @@ plan_index:
     - id: credential-channel-check
       order: 61
       title: Make the credential channel guard a verifiable check, not prose
-      status: ready
+      status: done
       kind: enhancement
       deliverable: plan/issues/meta-orch-enhancement-opportunities-2026-06-20.md
       depends_on: []
@@ -4489,7 +4489,7 @@ plan_index:
         on its own.
       tasks:
         - id: credential-channel-check/implement
-          status: ready
+          status: done
           depends_on: []
           owned_files:
             - skills/meta-orchestration/SKILL.md
@@ -4511,6 +4511,27 @@ plan_index:
             Reduced from meta-orch-enhancement-opportunities-2026-06-20 candidate 2.
             The guard added at 19:15Z is advisory prose; philosophy.yaml requires
             falsifiable verification claims.
+        - type: closure
+          ts: "2026-06-21T00:10:00Z"
+          agent_id: "linux-mutable-opus-cowork-20260621T0004Z"
+          host: linux_mutable
+          note: >
+            Adopted the prior cycle's uncommitted scripts/check-credential-channel.sh
+            (a ready-but-unpushed deliverable), made it executable, and wired the
+            meta-orchestration Credential Channel Guard to invoke it instead of
+            re-deriving the check in prose. The probe emits exactly one line
+            matching ^(ok:[a-z0-9-]+|missing:no-credential-channel)$ and exits
+            0/non-zero. Verifiable closure bound by
+            litmus:credential-channel-check-shape (openspec/litmus-tests/
+            litmus-credential-channel-check-shape.yaml, registered in
+            litmus-bindings.yaml under meta-orchestration): all 5 critical-path
+            steps pass — scrubbed-env fixture yields missing:no-credential-channel
+            + exit 1, seeded GH_TOKEN yields ok:gh-token-env + exit 0. Outcome
+            (executable pass/fail check, CI-bindable, fails loud) satisfied by the
+            standalone script, mirroring the order-60 e2e-preflight.sh pattern
+            (also script-only, no policy binary). Optional Rust-subcommand parity
+            (`tillandsias-policy credential-channel`) deferred and filed as an
+            optimization finding so nothing is lost.
 
     - id: ledger-edit-claim-lease
       order: 62
