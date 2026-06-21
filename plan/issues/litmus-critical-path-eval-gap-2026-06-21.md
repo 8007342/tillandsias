@@ -53,16 +53,22 @@ expected_behavior: "allowlist-enforced"
 `grep -cF` (fixed-string, no backslash) + the `≥5` check in-command + a sentinel
 `allowlist-enforced` that the substring fallback matches. All 7 steps now PASS.
 
-## Recommended durable fixes (ready)
+## Recommended durable fixes
 
 - id: critical-path-honor-success-pattern
-  status: ready
+  status: completed
+  order: 74
   action: >
     Route critical_path command steps through `check_signal()` (or the Rust
     `tillandsias-litmus-rust` runner, which parses success_pattern) so the
     declared `success_pattern`/`failure_pattern` are authoritative and numeric
     thresholds are expressible. Today the expected_behavior heuristic silently
     overrides them.
+  outcome: >
+    Implemented in scripts/run-litmus-test.sh. The critical_path YAML parser
+    now extracts success_pattern and failure_pattern per step; the scoring loop
+    uses check_signal() when success_pattern is declared, falling back to the
+    expected_behavior heuristic otherwise. 112/112 instant litmus tests pass.
 - id: provision-yq-on-build-hosts
   status: ready
   action: >
@@ -86,3 +92,13 @@ expected_behavior: "allowlist-enforced"
     and backslash command patterns mangle to 0 in the exec path; yq was also
     absent (installed v4.53.3 to ~/.local/bin). Fixed the step with a backslash-
     free, self-validating sentinel; all 7 steps pass. Filed durable harness fixes.
+- type: completed
+  ts: "2026-06-21T12:49:07Z"
+  agent_id: "linux-macuahuitl-big-pickle-20260621T124907Z"
+  host: linux_mutable
+  note: >
+    First durable fix (critical-path-honor-success-pattern) completed as order
+    74. The critical_path YAML parser now extracts success_pattern/failure_pattern;
+    steps with a declared success_pattern route through check_signal() instead of
+    the expected_behavior heuristic. 112/112 instant litmus tests pass.
+    Second fix (provision-yq-on-build-hosts) remains ready for pickup.

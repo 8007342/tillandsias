@@ -1,7 +1,21 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-21T10:50:00Z
+LastExecutionTime: 2026-06-21T12:49:07Z
 
+
+## This Loop (2026-06-21T12:49Z, linux_mutable — big-pickle reduction: critical-path-honor-success-pattern)
+
+- **Cycle type**: meta-orchestration worker drain + reduction on mutable Linux.
+- **Startup**: `linux-next @ 022dd16f`, clean worktree. Credential Channel Guard passed (`ok:gh-keyring`). Siblings fetched: windows-next a3c8b23d, osx-next d273daff (all at same commit).
+- **Worker drain**: No `ready` packet implementable on this host — order 64 `release-nix-cache-ref-scoping/verify-incremental` needs CI releases; order 68 `github-e2e-lifecycle-interactive` needs operator attendance.
+- **Reduction**: Reduced `litmus-critical-path-eval-gap` finding (first durable fix) into **order 74**:
+  - Added `success_pattern`/`failure_pattern` parsing to critical_path YAML section in `scripts/run-litmus-test.sh`
+  - Steps declaring `success_pattern` now route through `check_signal()` for authoritative regex matching instead of always falling through to the `expected_behavior` heuristic
+  - 112/112 instant-size litmus tests pass (0 regressions)
+- **Verification**: `bash -n scripts/run-litmus-test.sh` passes. `ruby -ryaml` validates `plan/index.yaml`. Litmus `--size instant` 112/112 PASS.
+- **Coordinator**: windows-next + osx-next both ancestors of HEAD. No merge needed.
+- **E2E gates**: Described above, but litmus-only change.
+- **Push state**: will push `linux-next` to origin over HTTPS.
 
 ## This Loop (2026-06-21T10:50Z, linux_mutable — big-pickle opencode-prompt-e2e-smoke)
 

@@ -593,10 +593,14 @@ run_litmus_test_file() {
     local current_step_command=""
     local current_step_timeout=30000
     local current_step_expected=""
+    local current_step_success_pattern=""
+    local current_step_failure_pattern=""
     local -a step_names=()
     local -a step_commands=()
     local -a step_timeouts=()
     local -a step_expecteds=()
+    local -a step_success_patterns=()
+    local -a step_failure_patterns=()
     local success_criteria=()
     local failure_criteria=()
 
@@ -606,6 +610,8 @@ run_litmus_test_file() {
         step_commands+=("$current_step_command")
         step_timeouts+=("$current_step_timeout")
         step_expecteds+=("$current_step_expected")
+        step_success_patterns+=("$current_step_success_pattern")
+        step_failure_patterns+=("$current_step_failure_pattern")
     }
 
     while IFS= read -r line; do
@@ -621,6 +627,8 @@ run_litmus_test_file() {
             current_step_command=""
             current_step_timeout=30000
             current_step_expected=""
+            current_step_success_pattern=""
+            current_step_failure_pattern=""
             in_critical_path=0
             in_gating_points=1
             continue
@@ -632,6 +640,8 @@ run_litmus_test_file() {
             current_step_command=""
             current_step_timeout=30000
             current_step_expected=""
+            current_step_success_pattern=""
+            current_step_failure_pattern=""
             in_critical_path=0
             in_gating_points=0
         fi
@@ -643,6 +653,8 @@ run_litmus_test_file() {
                 current_step_command=""
                 current_step_timeout=30000
                 current_step_expected=""
+                current_step_success_pattern=""
+                current_step_failure_pattern=""
             elif [[ "$line" =~ command:\ \"(.+)\" ]]; then
                 # YAML escapes \" as a double-quote inside a double-quoted
                 # string. The bash regex above captures the raw bytes between
@@ -660,6 +672,10 @@ run_litmus_test_file() {
                 current_step_expected="${BASH_REMATCH[1]}"
             elif [[ "$line" =~ expected_behavior:\ (.+)$ ]]; then
                 current_step_expected="${BASH_REMATCH[1]}"
+            elif [[ "$line" =~ success_pattern:\ \"(.+)\" ]]; then
+                current_step_success_pattern="${BASH_REMATCH[1]}"
+            elif [[ "$line" =~ failure_pattern:\ \"(.+)\" ]]; then
+                current_step_failure_pattern="${BASH_REMATCH[1]}"
             fi
         fi
 
@@ -686,6 +702,8 @@ run_litmus_test_file() {
         local step_command="${step_commands[$idx]}"
         local step_timeout_ms="${step_timeouts[$idx]}"
         local step_expected="${step_expecteds[$idx]}"
+        local step_success_pattern="${step_success_patterns[$idx]}"
+        local step_failure_pattern="${step_failure_patterns[$idx]}"
         local step_output=""
         local exit_code=0
 
@@ -706,7 +724,19 @@ run_litmus_test_file() {
             return 1
         fi
 
-        if ! behavior_matches_output "$step_output" "$step_expected"; then
+        # If success_pattern is declared, use check_signal() which is
+        # authoritative for regex-based pass/fail. Otherwise fall back to the
+        # expected_behavior heuristic for backward compatibility with steps
+        # that rely on its keyword-matching logic.
+        if [[ -n "$step_success_pattern" ]]; then
+            if ! check_signal "$step_output" "$step_success_pattern" "$step_failure_pattern"; then
+                printf ' %b[FAIL]%b\n' "${RED}" "${NC}" >&2
+                printf '%s\n' "         success_pattern=${step_success_pattern}" >&2
+                [[ -n "$step_failure_pattern" ]] && printf '%s\n' "         failure_pattern=${step_failure_pattern}" >&2
+                printf '%s\n' "         output=${step_output}" >&2
+                return 1
+            fi
+        elif ! behavior_matches_output "$step_output" "$step_expected"; then
             printf ' %b[FAIL]%b\n' "${RED}" "${NC}" >&2
             printf '%s\n' "         expected=${step_expected}" >&2
             printf '%s\n' "         output=${step_output}" >&2

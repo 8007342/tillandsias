@@ -5265,3 +5265,56 @@ plan_index:
           evidence:
             - "Added a rule to §5 Hard Rules in skills/advance-work-from-plan/SKILL.md requiring file-moving and source-mutating migrations to acquire the build-install-smoke-e2e lock."
             - "Updated status of source-edit-vs-smoke-lock/decide-and-document task and parent node to completed."
+
+    - packet_id: critical-path-honor-success-pattern
+      order: 74
+      title: "Make critical_path steps honor declared success_pattern instead of ignoring it"
+      status: completed
+      kind: enhancement
+      deliverable: plan/issues/litmus-critical-path-eval-gap-2026-06-21.md
+      depends_on: []
+      pickup_role: "Any host that edits bash"
+      outcome: >
+        Added success_pattern/failure_pattern parsing to the critical_path YAML
+        section in scripts/run-litmus-test.sh. Steps declaring success_pattern now
+        route through check_signal() for authoritative regex-based pass/fail;
+        steps without one fall back to the expected_behavior heuristic. All 112
+        instant-size litmus tests pass (0 regressions). Closes the first slice
+        of litmus-critical-path-eval-gap.
+      tasks:
+        - id: critical-path-honor-success-pattern/implement
+          status: completed
+          depends_on: []
+          owned_files:
+            - scripts/run-litmus-test.sh
+            - plan/issues/litmus-critical-path-eval-gap-2026-06-21.md
+          checkpoint_required: true
+          handoff_note: >
+            Added success_pattern/failure_pattern to the critical_path YAML parser
+            variables, arrays, and append_step; reset them in every step boundary.
+            In the scoring loop, if success_pattern is non-empty, call check_signal()
+            before falling through to behavior_matches_output. 112/112 instant
+            litmus tests pass.
+      events:
+        - type: finding
+          ts: "2026-06-21T06:32:00Z"
+          agent_id: "linux-claude-opus48-loop-20260621T0632Z"
+          host: linux_mutable
+          note: >
+            Root-caused the --ci-full pre-build litmus block to harness eval gap:
+            critical_path steps score via expected_behavior heuristic and ignore
+            success_pattern entirely.
+        - type: claim
+          ts: "2026-06-21T12:49:07Z"
+          agent_id: "linux-macuahuitl-big-pickle-20260621T124907Z"
+          host: linux_mutable
+          lease_id: "critical-path-honor-success-pattern/implement"
+        - type: completed
+          ts: "2026-06-21T12:49:07Z"
+          agent_id: "linux-macuahuitl-big-pickle-20260621T124907Z"
+          host: linux_mutable
+          evidence:
+            - "scripts/run-litmus-test.sh parses success_pattern/failure_pattern from critical_path YAML steps"
+            - "Steps with success_pattern route through check_signal() for authoritative regex matching"
+            - "112/112 instant-size litmus tests pass --size instant (0 failures)"
+            - "build.sh --check passes cleanly"
