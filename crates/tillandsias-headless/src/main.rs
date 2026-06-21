@@ -4058,6 +4058,56 @@ fn run_github_login(debug: bool) -> Result<(), String> {
             secret_name = "tillandsias-github-token",
             "GitHub token stored in Vault at secret/github/token"
         );
+
+        // Configure git credential helper on the host so `git push origin`
+        // works from the host working tree after --github-login.
+        let mut get_token = podman_command();
+        get_token.args([
+            "exec",
+            &container,
+            "gh",
+            "auth",
+            "token",
+            "--hostname",
+            "github.com",
+        ]);
+        let token = command_output(get_token, debug)?;
+
+        let mut host_login = Command::new("gh");
+        host_login.args([
+            "auth",
+            "login",
+            "--hostname",
+            "github.com",
+            "--git-protocol",
+            "https",
+            "--with-token",
+        ]);
+        host_login.stdin(Stdio::piped());
+        let mut child = host_login.spawn().map_err(|e| {
+            format!("Failed to spawn host gh auth login: {e}")
+        })?;
+        if let Some(mut stdin) = child.stdin.take() {
+            stdin.write_all(token.as_bytes()).map_err(|e| {
+                format!("Failed to pipe token to host gh auth login: {e}")
+            })?;
+        }
+        let status = child.wait().map_err(|e| {
+            format!("Failed to wait for host gh auth login: {e}")
+        })?;
+        if !status.success() {
+            return Err("Host gh auth login failed".to_string());
+        }
+
+        let mut setup_git = Command::new("gh");
+        setup_git.args(["auth", "setup-git"]);
+        run_command(setup_git, debug)?;
+
+        info!(
+            category = "secrets",
+            operation = "gh_auth_setup_git",
+            "Git credential helper configured on host"
+        );
     }
     #[cfg(not(feature = "vault"))]
     {

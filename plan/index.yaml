@@ -4946,15 +4946,30 @@ plan_index:
             For each observed glitch, file a sub-packet (id: github-e2e/<slug>)
             with a concrete fix and reduce it to plan/index.yaml orders.
         - id: github-e2e/push-from-host
-          status: ready
+          status: completed
           depends_on: []
           owned_files:
-            - crates/tillandsias-headless/src/github_login.rs
+            - crates/tillandsias-headless/src/main.rs
+          deliverable: plan/issues/github-e2e-push-from-host-2026-06-21.md
           checkpoint_required: true
           handoff_note: >
             Ensure `git push origin` works from the host working tree after
             --github-login by calling `gh auth setup-git` as part of the login
             flow. The gh OAuth token (gho_) must be wired as a git credential.
+          events:
+            - type: completed
+              ts: "2026-06-21T03:55:06Z"
+              agent_id: "linux-big-pickle-20260621T0355Z"
+              host: linux_mutable
+              summary: >
+                Added host-side `gh auth login --with-token` + `gh auth setup-git`
+                to the end of `run_github_login` in main.rs, inside the vault block.
+                After the containerized gh auth and Vault write succeed, the token
+                is retrieved from the container via `podman exec gh auth token` and
+                piped into host `gh auth login`, then `gh auth setup-git` configures
+                git's credential.helper. This enables `git push origin` from the host
+                working tree after `tillandsias --github-login`. All 86 headless
+                unit tests and full workspace tests pass.
       events:
         - type: finding
           ts: "2026-06-20T20:30Z"

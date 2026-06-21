@@ -1,16 +1,17 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-21T03:43Z
+LastExecutionTime: 2026-06-21T03:55Z
 
-## This Loop (2026-06-21T03:43Z, linux_mutable — meta-orch worker drain, no ready work)
+## This Loop (2026-06-21T03:55Z, linux_mutable — big-pickle implements push-from-host)
 
-- **Cycle type**: meta-orchestration on mutable Linux (big-pickle). Off-peak (Sat 20:43 PT). Podman user session available.
-- **Startup**: `linux-next @ cc7b811d` (in sync with `origin/linux-next`). Clean worktree. Credential Channel Guard passed (`ok:gh-keyring`). Siblings fetched: windows-next a3c8b23d, osx-next d273daff, main 31b01c32 (all ancestors).
-- **Worker drain**: All remaining ready packets require a release-run host (Order 64 verify-incremental), forge/git-mirror running (Orders 66, 69), or operator attendance (Order 68). No implementable work at current bar for this host.
-- **Reduction**: At convergence point at current bar — zero implementable residual. Does not self-escalate (Tlatoāni-gated).
+- **Cycle type**: meta-orchestration worker drain on mutable Linux (big-pickle). Off-peak (Sat 20:55 PT). Podman user session available.
+- **Startup**: `linux-next @ 6a7d4d2f` (in sync with `origin/linux-next`). Clean worktree. Credential Channel Guard passed (`ok:gh-keyring`). Siblings fetched: windows-next a3c8b23d, osx-next d273daff, main 31b01c32 (all ancestors).
+- **Worker drain**: Completed Order 68 `github-e2e/push-from-host`. Added host-side `gh auth login --with-token` + `gh auth setup-git` to `run_github_login` in `main.rs` so `git push origin` works from the host after `--github-login`. Token retrieved from the login container via `podman exec gh auth token` and piped to host gh, then git credential helper configured.
+- **Verification**: 86/86 headless unit tests pass, full workspace tests pass, `ruby -ryaml` validates plan YAML, 3/3 meta-orchestration litmus tests pass.
+- **Capture**: Updated `owned_files` from non-existent `github_login.rs` to `main.rs`. Deliverable filed at `plan/issues/github-e2e-push-from-host-2026-06-21.md`.
 - **Coordinator**: windows-next + osx-next both ancestors of HEAD (0 ahead). No merge needed.
-- **E2E gates**: local-build gate eligible but not run — no runtime code delta since last e2e. curl-install gate deferred (latest release v0.3.260620.8 already tested).
-- **Push state**: in sync with origin. No local commits.
+- **E2E gates**: local-build gate eligible but not run — code delta is runtime (not infra-only) but no forge rebuild needed for this slice. curl-install gate deferred.
+- **Push state**: will push `linux-next` to origin.
 
 ## This Loop (2026-06-21T03:30Z, linux_mutable — big-pickle purge-stale-caches)
 
