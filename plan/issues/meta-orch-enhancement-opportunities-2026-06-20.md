@@ -1,7 +1,7 @@
 # Meta-Orchestration Enhancement Opportunities — 2026-06-20
 
 - branch: linux-next
-- status: in_progress (Candidate 4 completed, candidates 1-3 ready)
+- status: resolved (all four candidates completed — orders 60–63, see Triage Outcome 2026-06-21)
 - owner_host: any (each candidate names its capability requirement)
 - source: meta-orchestration field observations, Cowork scheduled-task runtime,
   cycles 2026-06-20T19:05Z and 2026-06-20T19:15Z (linux_mutable)
@@ -146,4 +146,23 @@ host — the findings are now durable plan state and cannot be lost.
     Completed Candidate 4. Documented Ruby's standard YAML library fallback
     `ruby -ryaml -e "YAML.load_file('<file>')"` in the Finalization section of
     skills/meta-orchestration/SKILL.md.
+- type: completed
+  ts: "2026-06-21T02:05:00Z"
+  agent_id: "linux-claude-opus48-cowork-20260621T0204Z"
+  host: "linux_mutable (Cowork)"
+  note: >
+    Ledger-hygiene closure: confirmed all four candidates are completed in
+    plan/index.yaml — order 60 e2e-eligibility-probe, order 61
+    credential-channel-check, order 62 ledger-edit-claim-lease (all script+litmus
+    closures), order 63 cowork-nonpython-ledger-validation. Header status changed
+    from stale "Candidate 4 completed, candidates 1-3 ready" to "resolved". This
+    document's intake/reduce lifecycle is therefore closed. Verification:
+    `run-litmus-test.sh meta-orchestration --phase pre-build --size instant`
+    → 3/3 PASS (litmus:e2e-eligibility-probe-shape via earlier suite,
+    credential-channel-check-shape 5/5 steps, ledger-node-claim-shape 6/6 steps).
+    No implementable ready packet remains for this host's capability at the
+    current bar (orders 64, 66–69 require a release/CI host, a running
+    forge+git-mirror, a Podman user session, or operator attendance — all absent
+    in the Cowork sandbox; e2e verdict `skip:no-podman-user-session`). Per the
+    Tlatoāni-gated bar-raise rule, the loop stops here rather than self-escalating.
 
