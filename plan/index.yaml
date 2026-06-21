@@ -4179,7 +4179,7 @@ plan_index:
           checkpoint_required: false
           handoff_note: "Spec and plan scaffolded; implementation work can now be claimed."
         - id: nanoclawv2/implementation
-      status: completed
+          status: completed
           owner_host: linux
           estimated_hours: 4
           capability_tags: [rust, podman, orchestration, zeroclaw]
