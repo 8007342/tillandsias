@@ -4536,7 +4536,7 @@ plan_index:
     - id: ledger-edit-claim-lease
       order: 62
       title: Claim/lease marker for plan/index.yaml ledger-hygiene edits
-      status: ready
+      status: completed
       kind: optimization
       deliverable: plan/issues/agent-concurrency-collisions-2026-06-20.md
       depends_on: []
@@ -4547,7 +4547,7 @@ plan_index:
         CRDT-friendly merges.
       tasks:
         - id: ledger-edit-claim-lease/design-and-implement
-          status: ready
+          status: completed
           depends_on: []
           owned_files:
             - plan/issues/agent-concurrency-collisions-2026-06-20.md
@@ -4567,6 +4567,23 @@ plan_index:
           note: >
             Reduced from meta-orch-enhancement-opportunities-2026-06-20 candidate 3
             and the agent-concurrency-collisions-2026-06-20 mitigation idea.
+        - type: completed
+          ts: "2026-06-21T01:10:00Z"
+          agent_id: "linux-macuahuitl-opus-cowork-20260621T0104Z"
+          host: linux_mutable
+          evidence:
+            - "scripts/claim-ledger-node.sh: mkdir(2) atomic single-winner claim/release/status; verdict grammar ^(claimed|reclaimed|in-flight|released|free):[a-z0-9._/-]+$ with 0/non-zero exit"
+            - "20/20 concurrency trials of 8 racing claimants on one node yielded exactly one claimed + 7 in-flight (single-winner guarantee holds)"
+            - "litmus:ledger-node-claim-shape bound under meta-orchestration in litmus-bindings.yaml; run-litmus-test.sh meta-orchestration --phase pre-build --size instant → 3/3 PASS (6/6 steps for this test)"
+            - "skill Worker Drain wired to consult scripts/claim-ledger-node.sh before any node closure"
+          note: >
+            Verifiable closure satisfied script-only, mirroring order-60
+            e2e-preflight.sh and order-61 check-credential-channel.sh. Key
+            correctness fix during implementation: a loser must treat a missing
+            holder as LIVE (not stale) to avoid destroying the winner's lease
+            during its mkdir→write_holder window; orphaned dirs are still
+            reclaimed via dir mtime once aged past TTL. Filed the corresponding
+            race-window hazard as an optimization finding so nothing is lost.
 
     - id: cowork-nonpython-ledger-validation
       order: 63

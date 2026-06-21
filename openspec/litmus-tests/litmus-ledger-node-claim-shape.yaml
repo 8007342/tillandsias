@@ -1,0 +1,80 @@
+# @trace spec:meta-orchestration
+#
+# Pins the lightweight ledger node-closure claim/lease (plan order 62). Read-only
+# meta-orch cycles that close or hygiene-edit a plan/index.yaml node must be able
+# to atomically reserve the node ID before re-deriving its closure, so two
+# concurrent cycles on the same node produce exactly one closure (the other is
+# told the work is in flight and skips it) — eliminating the duplicated
+# ledger-hygiene effort recorded in
+# plan/issues/agent-concurrency-collisions-2026-06-20.md. This test falsifies
+# drift in the claim's single-winner guarantee, its verdict grammar, the
+# release/reclaim branches, and the skill's wiring to it.
+name: litmus:ledger-node-claim-shape
+spec: meta-orchestration
+phase: pre-build
+description: >
+  Pin scripts/claim-ledger-node.sh: the atomic single-winner claim under
+  concurrency (N racing claimants on one node yield exactly one claimed and N-1
+  in-flight), the falsifiable verdict grammar
+  ^(claimed|reclaimed|in-flight|released|free):[a-z0-9._/-]+$, the release and
+  expired-lease reclaim branches, and the meta-orchestration skill's
+  consultation of the probe before a node closure.
+severity: high
+size: instant
+
+preconditions:
+  - workspace contains scripts/claim-ledger-node.sh
+  - workspace contains skills/meta-orchestration/SKILL.md
+  - shell utilities (grep, bash, env, mktemp, seq, stat) are available in PATH
+
+critical_path:
+  - step: "probe defines cmd_claim and is executable"
+    command: "grep -q 'cmd_claim()' scripts/claim-ledger-node.sh && test -x scripts/claim-ledger-node.sh && echo 'ok: probe-defined'"
+    timeout_ms: 3000
+    expected_behavior: "ok: probe-defined"
+
+  - step: "8 concurrent claimants on the same node produce exactly one winner and 7 in-flight"
+    command: "r=$(mktemp -d)/leases; out=$(for i in $(seq 1 8); do TILLANDSIAS_LEDGER_LEASE_ROOT=\"$r\" bash scripts/claim-ledger-node.sh claim shared/node & done; wait); c=$(printf '%s\\n' \"$out\" | grep -c '^claimed:'); f=$(printf '%s\\n' \"$out\" | grep -c '^in-flight:'); rr=$(printf '%s\\n' \"$out\" | grep -c '^reclaimed:'); [ \"$c\" = 1 ] && [ \"$f\" = 7 ] && [ \"$rr\" = 0 ] && echo 'ok: single-winner' || { echo \"FAIL: claimed=$c in-flight=$f reclaimed=$rr\"; exit 1; }"
+    timeout_ms: 8000
+    expected_behavior: "ok: single-winner"
+
+  - step: "a held node reports in-flight on status, and release frees it"
+    command: "r=$(mktemp -d)/leases; export TILLANDSIAS_LEDGER_LEASE_ROOT=\"$r\"; bash scripts/claim-ledger-node.sh claim n/x >/dev/null; s1=$(bash scripts/claim-ledger-node.sh status n/x); bash scripts/claim-ledger-node.sh release n/x >/dev/null; s2=$(bash scripts/claim-ledger-node.sh status n/x); rc=$?; [ \"$s1\" = 'in-flight:n/x' ] && [ \"$s2\" = 'free:n/x' ] && [ \"$rc\" = 1 ] && echo 'ok: status-and-release' || { echo \"FAIL: s1=$s1 s2=$s2 rc=$rc\"; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: status-and-release"
+
+  - step: "an expired lease is reclaimed by the next claimant (exit 0)"
+    command: "r=$(mktemp -d)/leases; export TILLANDSIAS_LEDGER_LEASE_ROOT=\"$r\"; TILLANDSIAS_LEDGER_LEASE_TTL_SECS=0 bash scripts/claim-ledger-node.sh claim n >/dev/null; sleep 1; out=$(bash scripts/claim-ledger-node.sh claim n); rc=$?; [ \"$out\" = 'reclaimed:n' ] && [ \"$rc\" = 0 ] && echo 'ok: expired-reclaimed' || { echo \"FAIL: out=$out rc=$rc\"; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: expired-reclaimed"
+
+  - step: "every verdict line is well-formed against the grammar"
+    command: "r=$(mktemp -d)/leases; export TILLANDSIAS_LEDGER_LEASE_ROOT=\"$r\"; { bash scripts/claim-ledger-node.sh claim a/b; bash scripts/claim-ledger-node.sh claim a/b; bash scripts/claim-ledger-node.sh status a/b; bash scripts/claim-ledger-node.sh release a/b; bash scripts/claim-ledger-node.sh status a/b; } > out.txt 2>/dev/null; tot=$(grep -c . out.txt); good=$(grep -cE '^(claimed|reclaimed|in-flight|released|free):[a-z0-9._/-]+$' out.txt); rm -f out.txt; [ \"$tot\" = 5 ] && [ \"$good\" = 5 ] && echo \"ok: grammar ($good/$tot)\" || { echo \"FAIL: $good/$tot well-formed\"; exit 1; }"
+    timeout_ms: 5000
+    expected_behavior: "ok: grammar"
+
+  - step: "the meta-orchestration skill consults the claim probe before node closure"
+    command: "grep -q 'claim-ledger-node.sh' skills/meta-orchestration/SKILL.md && echo 'ok: skill-consults-probe'"
+    timeout_ms: 3000
+    expected_behavior: "ok: skill-consults-probe"
+
+observability:
+  traces:
+    - "@trace spec:meta-orchestration"
+  expected_log: "ledger node-claim probe pinned (single-winner concurrency + grammar + release/reclaim + skill wiring)"
+  log_fields:
+    spec: "meta-orchestration"
+    test: "ledger-node-claim-shape"
+    artifact: "scripts/claim-ledger-node.sh + skills/meta-orchestration/SKILL.md"
+
+rollback:
+  on_failure: >
+    The ledger node-claim probe drifted. Restore cmd_claim() in
+    scripts/claim-ledger-node.sh using mkdir(2) as the atomic single-winner
+    primitive, treat a missing holder as live (never reclaim during the
+    write window), emit exactly one line matching
+    ^(claimed|reclaimed|in-flight|released|free):[a-z0-9._/-]+$ with the
+    documented exit codes, keep the file executable, and restore the skill's
+    consultation of `scripts/claim-ledger-node.sh` in
+    skills/meta-orchestration/SKILL.md.
+  command: "grep -nE 'cmd_claim|claimed:|in-flight:|reclaimed:|released:|free:' scripts/claim-ledger-node.sh | head -20"

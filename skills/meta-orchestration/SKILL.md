@@ -185,6 +185,30 @@ When choosing the builder role, run `/advance-work-from-plan` repeatedly in a `.
 
 Each worker cycle must obey the non-negotiable exit contract above.
 
+### Node-Closure Claim (avoid duplicated ledger-hygiene work)
+
+Before re-deriving and closing or hygiene-editing a `plan/index.yaml` node,
+claim it so a concurrent cycle does not independently produce the identical edit
+(the idempotent-but-wasteful collision recorded in
+`plan/issues/agent-concurrency-collisions-2026-06-20.md`). Run the executable
+claim instead of eyeballing the ledger:
+
+```bash
+scripts/claim-ledger-node.sh claim <node-id>   # e.g. release-nix-cache-ref-scoping/choose-approach
+```
+
+It emits exactly one line matching
+`^(claimed|reclaimed|in-flight|released|free):[a-z0-9._/-]+$` and exits `0` when
+this cycle owns the node (`claimed:`/`reclaimed:`) or non-zero (`in-flight:`)
+when a live lease is held elsewhere — in which case skip that node and pick the
+next eligible one. The lease is an advisory, CRDT-friendly reservation, not a
+mutex on the file: it respects the stable-ID + idempotent-merge preconditions in
+`methodology/between-commits-work-discipline.yaml`, so a missed or expired lease
+never corrupts state (at worst two cycles converge on the same safe edit).
+Release with `scripts/claim-ledger-node.sh release <node-id>` after the closure
+is committed; expired leases (default TTL 4h) are auto-reclaimed. Pinned by
+`litmus:ledger-node-claim-shape`.
+
 ## E2E Gates
 
 Run eligible e2e gates after worker drain:

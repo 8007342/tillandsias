@@ -473,8 +473,9 @@ specs:
   litmus_tests:
   - litmus:e2e-eligibility-probe-shape
   - litmus:credential-channel-check-shape
+  - litmus:ledger-node-claim-shape
   coverage_ratio: 100
-  last_verified: '2026-06-20'
+  last_verified: '2026-06-21'
 - spec_id: logging-levels
   status: obsolete
   litmus_tests: []

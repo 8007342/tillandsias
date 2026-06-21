@@ -1,6 +1,16 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-21T00:10Z
+LastExecutionTime: 2026-06-21T01:10Z
+
+## This Loop (2026-06-21T01:04Z, linux_mutable — meta-orch worker-drain)
+
+- **Cycle type**: meta-orchestration worker-drain slice on mutable Linux (Claude Opus 4.8, Cowork). Off-peak (Sat 18:04 PT) — lightweight loop-tooling packet.
+- **Startup**: `linux-next @ bd615934`, clean worktree, in sync with remote. Credential Channel Guard passed (`ok:gh-credentials-store`).
+- **Worker drain**: Completed Order 62 `ledger-edit-claim-lease`. Added `scripts/claim-ledger-node.sh` (mkdir-atomic single-winner claim/lease for plan node closures), wired into the skill Worker Drain — reducing duplicated ledger-hygiene work from `agent-concurrency-collisions-2026-06-20.md`. Script-only closure mirroring Orders 60/61.
+- **Verification**: `litmus:ledger-node-claim-shape` bound + registered under `meta-orchestration`; 6/6 steps pass, suite 3/3 PASS. 20/20 concurrency trials single-winner. YAML validated with `ruby -ryaml`.
+- **E2E**: local-build gate skipped — `skip:no-podman-user-session` (Cowork sandbox). No runtime change → no release.
+- **Capture**: `plan/issues/optimization-ledger-claim-cross-host-scope-2026-06-21.md` (lease same-host-only; cross-host deferred).
+- **Push state**: pushing `linux-next` to origin over HTTPS (`.git/.gh-credentials`).
 
 ## This Loop (2026-06-21T00:04Z, linux_mutable — meta-orch worker-drain)
 

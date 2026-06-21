@@ -1,6 +1,16 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-21T00:10Z
+Last updated: 2026-06-21T01:10Z
+
+## This Cycle (2026-06-21T01:04Z, linux_mutable — Claude Opus 4.8 Cowork meta-orch)
+
+- **Startup**: `linux-next @ bd615934`, clean worktree, in sync with `origin/linux-next` (0/0). Credential Channel Guard passed (`ok:gh-credentials-store`, HTTPS).
+- **Worker drain (Order 62, `ledger-edit-claim-lease`)**: Implemented `scripts/claim-ledger-node.sh` — a lightweight `mkdir(2)`-atomic claim/lease for `plan/index.yaml` node-closure (ledger-hygiene) edits, so concurrent same-host cycles detect an in-flight closure and skip re-deriving it. Subcommands `claim`/`release`/`status`; verdict grammar `^(claimed|reclaimed|in-flight|released|free):[a-z0-9._/-]+$` with 0/non-zero exit; advisory + CRDT-friendly (respects stable-ID + idempotent-merge preconditions). Wired into the skill's Worker Drain. Script-only closure, mirroring Order 60/61.
+- **Correctness fix during build**: a loser must treat a *missing holder* as LIVE (not stale), else it destroys the winner's lease during the `mkdir`→`write_holder` window; orphans reclaimed via dir mtime past TTL. 20/20 concurrency trials (8 racers/node) → exactly one winner.
+- **Verification**: Added `litmus:ledger-node-claim-shape` (`openspec/litmus-tests/`), registered under `meta-orchestration` in `litmus-bindings.yaml`. `run-litmus-test.sh meta-orchestration --phase pre-build --size instant` → **3/3 PASS** (6/6 steps for the new test). YAML validated with `ruby -ryaml`.
+- **Capture**: Filed `plan/issues/optimization-ledger-claim-cross-host-scope-2026-06-21.md` — lease is same-host-only; cross-host duplication still possible (deferred, needs git-backed lease + Order 66).
+- **Coordinator**: `origin/windows-next@a3c8b23d` and `origin/osx-next@d829808d` both ancestors of HEAD — no sibling merge. No release (loop-tooling + ledger delta only, no runtime change). E2E local-build gate `skip:no-podman-user-session` (Cowork sandbox, no `/run/user`).
+- **Next**: Order 64/65 (release nix-cache + build monitoring, build/CI host), Orders 66–69 (forge push channel / opencode e2e / GitHub lifecycle / git-mirror verification — need forge+git-mirror or operator-attended host).
 
 ## This Cycle (2026-06-21T00:04Z, linux_mutable — Claude Opus 4.8 Cowork meta-orch)
 
