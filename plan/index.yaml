@@ -5459,7 +5459,7 @@ plan_index:
     - packet_id: github-e2e/forge-base-missing-ux
       order: 76
       title: "Detect missing forge-base image and emit actionable error instead of cryptic registry pull failure"
-      status: ready
+      status: success
       kind: enhancement
       deliverable: plan/issues/github-e2e-findings-interactive-run-2026-06-21.md
       depends_on: []
@@ -5471,7 +5471,16 @@ plan_index:
         "connection refused" from the localhost registry pull.
       tasks:
         - id: github-e2e/forge-base-missing-ux/implement
-          status: ready
+          status: success
+          closed_at: "2026-06-21T23:13:00Z"
+          ts: "2026-06-21T23:13:00Z"
+          agent_id: "linux-antigravity-20260621T2313Z"
+          host: linux_mutable
+          evidence:
+            - "Modified ensure_image_exists to check for and build missing base images (forge-base, chromium-core) on demand."
+            - "Updated forge and nanoclawv2 build args in ensure_image_exists to pass the correct BASE_IMAGE build-arg when building from Containerfiles using it."
+            - "Verified that all 86 unit and integration tests in tillandsias-headless pass cleanly."
+            - "Ran cargo clippy to ensure no new warnings or lints are introduced."
           depends_on: []
           owned_files:
             - crates/tillandsias-headless/src/main.rs
