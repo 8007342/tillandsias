@@ -1,7 +1,8 @@
 # Release build monitoring — surface duration / cache-hit regressions instead of letting them run silently
 
 - branch: linux-next
-- status: ready
+- status: completed
+- Completed At: 2026-06-21T01:13:00Z
 - owner_host: any (CI/workflow + ledger automation)
 - source: operator report (Tlatoāni) 2026-06-20 — a ~10 min wasted-cache regression
   ran unnoticed across many releases
@@ -27,7 +28,7 @@ not. This packet adds one so the class of "silently slow release" bug surfaces.
 ## Tasks
 
 - id: capture-release-timings
-  status: ready
+  status: completed
   owned_files: [.github/workflows/release.yml]
   action: >
     Emit per-step durations for the expensive release steps (at minimum
@@ -36,7 +37,7 @@ not. This packet adds one so the class of "silently slow release" bug surfaces.
     Capture cache hit/miss (cache-nix-action exposes a `hit`/`primary-key`
     output; or grep the Nix build log for "building '/nix/store…cross…gcc").
 - id: assert-cache-hit
-  status: ready
+  status: completed
   depends_on: [capture-release-timings]
   owned_files: [.github/workflows/release.yml]
   action: >
@@ -45,7 +46,7 @@ not. This packet adds one so the class of "silently slow release" bug surfaces.
     exceeding a threshold, e.g. >20 min) emits a `::warning::` (escalate to
     `::error::` once the fix is proven stable). This is the regression tripwire.
 - id: ledger-release-timings
-  status: ready
+  status: completed
   owned_files:
     - skills/merge-to-main-and-release/SKILL.md
     - plan/issues/linux-next-work-queue-2026-05-25.md
@@ -73,3 +74,12 @@ not. This packet adds one so the class of "silently slow release" bug surfaces.
     Filed alongside the ref-scoping fix packet. The fix removes the current waste;
     this packet ensures the next silent slowdown is caught by a performance gate
     instead of an operator noticing log spam months later.
+
+- type: completed
+  ts: "2026-06-21T01:13:00Z"
+  agent_id: "gemini-antigravity-worker-20260621T0113Z"
+  host: "linux_mutable"
+  note: >
+    All tasks completed. Release build duration timing capture and cache performance assertion
+    implemented in release.yml. Merge and release skill documentation updated to record build timings
+    in the ledger.

@@ -4654,7 +4654,7 @@ plan_index:
         measured delta build across two consecutive releases.
       tasks:
         - id: release-nix-cache-ref-scoping/choose-approach
-          status: ready
+          status: completed
           depends_on: []
           owned_files:
             - plan/issues/release-nix-cache-ref-scoping-2026-06-20.md
@@ -4664,7 +4664,7 @@ plan_index:
             rationale in the packet. Default: opt 1 if FlakeHub public-repo free
             tier is adequate, else opt 2.
         - id: release-nix-cache-ref-scoping/implement-cache-fix
-          status: ready
+          status: completed
           depends_on: [release-nix-cache-ref-scoping/choose-approach]
           owned_files:
             - .github/workflows/release.yml
@@ -4693,11 +4693,20 @@ plan_index:
             it (GHA ref isolation); repo cache already over the 10 GB limit.
             Web-verified the correct approach (FlakeHub Cache, or default-branch
             cache warming for the GHA-cache path).
+        - type: completed
+          ts: "2026-06-21T01:13:00Z"
+          agent_id: "gemini-antigravity-worker-20260621T0113Z"
+          host: linux_mutable
+          note: >
+            Option 2 (warm-cache-on-main) chosen and implemented. Nix store cache warming
+            workflow configured to run on pushes to main/linux-next. Disabled FlakeHub
+            login. Added save: false to release.yml. Corrected the cache-nix-action
+            output name from cache-hit to hit. Ready for verification releases.
 
     - id: release-build-monitoring
       order: 65
       title: Release build monitoring — catch silent duration/cache-hit regressions
-      status: ready
+      status: completed
       kind: enhancement
       deliverable: plan/issues/release-build-monitoring-2026-06-20.md
       depends_on: []
@@ -4709,7 +4718,7 @@ plan_index:
         fails loud instead of surviving for months.
       tasks:
         - id: release-build-monitoring/capture-release-timings
-          status: ready
+          status: completed
           depends_on: []
           owned_files:
             - .github/workflows/release.yml
@@ -4718,7 +4727,7 @@ plan_index:
             Emit nix build + cache-save durations to the job summary and a small
             JSON artifact; capture cache hit/miss.
         - id: release-build-monitoring/assert-cache-hit
-          status: ready
+          status: completed
           depends_on: [release-build-monitoring/capture-release-timings, release-nix-cache-ref-scoping/implement-cache-fix]
           owned_files:
             - .github/workflows/release.yml
@@ -4727,7 +4736,7 @@ plan_index:
             Soft gate: unchanged flake.lock + full cross-GCC rebuild (or nix build
             > ~20 min) emits ::warning:: (escalate to ::error:: once fix is proven).
         - id: release-build-monitoring/ledger-release-timings
-          status: ready
+          status: completed
           depends_on: []
           owned_files:
             - skills/merge-to-main-and-release/SKILL.md
@@ -4746,6 +4755,13 @@ plan_index:
             watches release build performance. Adds a lightweight performance gate
             (job-summary timings + unchanged-lock cache-miss tripwire + ledger
             duration trend) so the next silent slowdown surfaces.
+        - type: completed
+          ts: "2026-06-21T01:13:00Z"
+          agent_id: "gemini-antigravity-worker-20260621T0113Z"
+          host: linux_mutable
+          note: >
+            All tasks completed. Timing capture and assertions implemented in release.yml.
+            Merge and release skill documentation updated.
 
     - packet_id: forge-push-credential-channel
       order: 66

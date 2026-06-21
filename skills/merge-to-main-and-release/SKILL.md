@@ -180,7 +180,7 @@ The Linux Silverblue smoke-test artifact is the `tillandsias-linux-x86_64` musl 
 Append a one-line entry to `plan/issues/linux-next-work-queue-2026-05-25.md`:
 
 ```
-- <UTC>  `<merge_sha>`  Release ${new_tag} — merged PR #${existing_pr} to main, tagged, workflow_dispatch triggered. Linux artifact: <browser_download_url>.
+- <UTC>  `<merge_sha>`  Release ${new_tag} — merged PR #${existing_pr} to main, tagged, workflow_dispatch triggered. Linux build: <nix_build_duration> (Nix cache: <hit|miss>), total run: <total_run_time>. Linux artifact: <browser_download_url>.
 ```
 
 Push the ledger update to `linux-next` so other hosts and the next work-loop see the release happened.

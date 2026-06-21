@@ -114,14 +114,14 @@ shared/default-branch cache is not evicted.
 ## Tasks
 
 - id: choose-approach
-  status: ready
+  status: completed
   action: >
     Decide between FlakeHub Cache (opt 1) and warm-cache-on-main (opt 2). This is
     a cost/dependency decision (FlakeHub account vs redundant main build) — record
     the choice and rationale here. Default recommendation: opt 1 if the FlakeHub
     public-repo free tier is confirmed adequate, else opt 2.
 - id: implement-cache-fix
-  status: ready
+  status: completed
   depends_on: [choose-approach]
   owned_files: [.github/workflows/release.yml]
   action: >
@@ -189,3 +189,14 @@ AND adopt option 2 (warm-on-main) so something actually caches.
     correct approach (FlakeHub Cache, or default-branch cache warming for the
     GHA-cache path). Filed fix options; paired with the release-build-monitoring
     packet so the regression cannot go silent again.
+
+- type: completed
+  ts: "2026-06-21T01:13:00Z"
+  agent_id: "gemini-antigravity-worker-20260621T0113Z"
+  host: "linux_mutable"
+  note: >
+    Option 2 (warm-cache-on-main) chosen and implemented. Dispatched Nix cache warming on
+    main/linux-next default branch. Disabled FlakeHub login attempts in the Determinate installer
+    by adding flakehub: false. Set save: false on release.yml Nix Cache to keep the release job
+    from saving tag-scoped caches. Corrected the cache-nix-action output name from cache-hit to hit
+    to allow duration assertions. Ready for verify-incremental step.
