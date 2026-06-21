@@ -1836,6 +1836,8 @@ fn build_git_run_args(
         sanitize_hostname(&format!("git-{project_name}")),
         "--network-alias".into(),
         "git-service".into(),
+        "--network-alias".into(),
+        "tillandsias-git".into(),
         "--network".into(),
         ENCLAVE_EGRESS_NETS.into(),
         "--cap-drop=ALL".into(),

@@ -4830,7 +4830,7 @@ plan_index:
         unattended opencode/claude/codex cycles to push their findings.
       tasks:
         - id: forge-push/wire-git-remote
-          status: ready
+          status: completed
           depends_on: []
           owned_files:
             - crates/tillandsias-core/src/launcher.rs
@@ -4841,7 +4841,7 @@ plan_index:
             remote URL to point at http://tillandsias-git/<repo>.git so forge
             git operations route through the mirror.
         - id: forge-push/git-mirror-clone-support
-          status: ready
+          status: completed
           depends_on: [forge-push/wire-git-remote]
           owned_files:
             - images/git/entrypoint.sh
