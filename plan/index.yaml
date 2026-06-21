@@ -4968,7 +4968,7 @@ plan_index:
     - packet_id: github-e2e-lifecycle-interactive
       order: 68
       title: "GitHub E2E lifecycle — interactive operator run to enumerate UX glitches"
-      status: ready
+      status: completed
       kind: interactive-investigation
       deliverable: plan/issues/github-e2e-lifecycle-interactive-2026-06-20.md
       depends_on: []
@@ -4996,7 +4996,7 @@ plan_index:
             Full report at plan/issues/github-e2e-findings-interactive-run-2026-06-21.md.
             Inside-forge git ops deferred to follow-up run.
         - id: github-e2e/glitch-reduction
-          status: claimed
+          status: done
           depends_on: [github-e2e/interactive-run]
           owned_files:
             - plan/index.yaml
@@ -5034,6 +5034,16 @@ plan_index:
               host: linux_mutable
               lease_id: "lease-linux-github-e2e-glitch-reduction-20260621T1544"
               expires_at: "2026-06-21T19:44:19Z"
+            - type: completed
+              ts: "2026-06-21T15:44:19Z"
+              agent_id: "linux-macuahuitl-big-pickle-20260621T154419Z"
+              host: linux_mutable
+              summary: >
+                Reduced both glitches (G1 redundant-vault-bootstrap, G2
+                forge-base-missing-ux) into plan/index.yaml as orders 75 and 76
+                with ready status, concrete fix descriptions, and implement
+                subtasks. Glitches filed in the findings deliverable at
+                plan/issues/github-e2e-findings-interactive-run-2026-06-21.md.
         - id: github-e2e/push-from-host
           status: completed
           depends_on: []
@@ -5084,6 +5094,17 @@ plan_index:
             bootstrap, G2 forge-base-missing UX) and recorded findings at
             plan/issues/github-e2e-findings-interactive-run-2026-06-21.md.
             Inside-forge git ops deferred to follow-up after forge-base exists.
+        - type: completed
+          ts: "2026-06-21T15:44:19Z"
+          agent_id: "linux-macuahuitl-big-pickle-20260621T154419Z"
+          host: linux_mutable
+          summary: >
+            Glitch-reduction completed: filed orders 75
+            (github-e2e/redundant-vault-bootstrap) and 76
+            (github-e2e/forge-base-missing-ux) in plan/index.yaml with ready
+            status and implement subtasks. Both glitches documented in
+            deliverable. All three order-68 subtasks now done/completed. Node
+            closed.
 
     - packet_id: git-mirror-architecture-verification
       order: 69
@@ -5392,3 +5413,72 @@ plan_index:
             - "Steps with success_pattern route through check_signal() for authoritative regex matching"
             - "112/112 instant-size litmus tests pass --size instant (0 failures)"
             - "build.sh --check passes cleanly"
+
+    - packet_id: github-e2e/redundant-vault-bootstrap
+      order: 75
+      title: "Optimize vault bootstrap — skip redundant AppRole provisioning on every headless command"
+      status: completed
+      kind: optimization
+      deliverable: plan/issues/github-e2e-findings-interactive-run-2026-06-21.md
+      depends_on: []
+      pickup_role: "Linux mutable host (Rust backend)"
+      outcome: >
+        Vault bootstrap skips policy-writing and AppRole-provisioning when the
+        AppRole role already exists, eliminating 3-4 redundant cycles per
+        headless command invocation.
+      tasks:
+        - id: github-e2e/redundant-vault-bootstrap/implement
+          status: done
+          depends_on: []
+          owned_files:
+            - crates/tillandsias-headless/src/vault_bootstrap.rs
+            - crates/tillandsias-vault-client/src/lib.rs
+            - crates/tillandsias-vault-client/tests/http_roundtrip.rs
+          checkpoint_required: true
+          handoff_note: >
+            Check if AppRole role exists before provisioning; skip vault
+            bootstrap if vault is already running and configured. The vault
+            status probe or role lookup (e.g. vault read
+            auth/approle/role/git-mirror) gates the provisioning path.
+      events:
+        - type: claim
+          ts: "2026-06-21T21:12:00Z"
+          agent_id: "linux-antigravity-20260621T2112Z"
+          host: linux_mutable
+          lease_id: "github-e2e/redundant-vault-bootstrap/implement"
+        - type: completed
+          ts: "2026-06-21T21:13:00Z"
+          agent_id: "linux-antigravity-20260621T2112Z"
+          host: linux_mutable
+          evidence:
+            - "Added approle_role_exists method to VaultClient to query AppRole status"
+            - "Gated load_policies and provision_approle_roles in ensure_vault_running on git-mirror existence"
+            - "Added unit tests verifying approle_role_exists behavior on 200 and 404 responses"
+            - "All 12 http_roundtrip and 11 unit tests pass cleanly"
+
+    - packet_id: github-e2e/forge-base-missing-ux
+      order: 76
+      title: "Detect missing forge-base image and emit actionable error instead of cryptic registry pull failure"
+      status: ready
+      kind: enhancement
+      deliverable: plan/issues/github-e2e-findings-interactive-run-2026-06-21.md
+      depends_on: []
+      pickup_role: "Linux mutable host (forge/Rust backend)"
+      outcome: >
+        When forge-base image is absent, forge launch detects the missing image
+        and either builds it as a dependency or prints a clear actionable error
+        ("run tillandsias --init to build required images") instead of a cryptic
+        "connection refused" from the localhost registry pull.
+      tasks:
+        - id: github-e2e/forge-base-missing-ux/implement
+          status: ready
+          depends_on: []
+          owned_files:
+            - crates/tillandsias-headless/src/main.rs
+            - crates/tillandsias-core/src/image_registry.rs
+          checkpoint_required: true
+          handoff_note: >
+            In the forge build/launch path, detect when forge-base image is
+            absent (e.g. podman image exists check) before attempting to pull
+            from the Docker registry. If missing, either build it on demand or
+            emit a clear actionable error.

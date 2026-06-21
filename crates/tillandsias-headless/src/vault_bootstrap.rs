@@ -351,8 +351,19 @@ pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
                 }
                 let root_token = read_and_handover_root_token(debug)?;
                 let client = vault_client(&base_url, &root_token, debug)?;
-                rt.block_on(load_policies(&client, debug))?;
-                rt.block_on(provision_approle_roles(&client, debug))?;
+                if rt
+                    .block_on(client.approle_role_exists("git-mirror"))
+                    .unwrap_or(false)
+                {
+                    if debug {
+                        eprintln!(
+                            "[tillandsias-vault] AppRole 'git-mirror' already exists; skipping policy and role provisioning"
+                        );
+                    }
+                } else {
+                    rt.block_on(load_policies(&client, debug))?;
+                    rt.block_on(provision_approle_roles(&client, debug))?;
+                }
                 return Ok(());
             }
             other => {

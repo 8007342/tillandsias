@@ -237,6 +237,26 @@ impl VaultClient {
         Ok(out)
     }
 
+    /// Check if a given AppRole exists.
+    pub async fn approle_role_exists(&self, role: &str) -> Result<bool, VaultError> {
+        let url = self.url(&format!("auth/approle/role/{role}/role-id"));
+        let resp = self
+            .client
+            .get(&url)
+            .header("X-Vault-Token", &self.token)
+            .send()
+            .await?;
+        let status = resp.status();
+        if status.is_success() {
+            Ok(true)
+        } else if status == StatusCode::NOT_FOUND {
+            Ok(false)
+        } else {
+            let body = resp.text().await.unwrap_or_default();
+            Err(Self::map_status(status, body))
+        }
+    }
+
     /// Write an HCL policy at the given name. Idempotent — Vault overwrites
     /// the policy body on every call. Used by the tray's vault bootstrap
     /// path to load each `Policy::hcl()` body without shelling out to the
