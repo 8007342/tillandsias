@@ -1,6 +1,16 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-21T03:21Z
+LastExecutionTime: 2026-06-21T03:33Z
+
+## This Loop (2026-06-21T03:30Z, linux_mutable — big-pickle purge-stale-caches)
+
+- **Cycle type**: meta-orchestration worker drain on mutable Linux (big-pickle). Off-peak (Sat 20:30 PT). Podman user session available for the first time in Cowork-free cycle.
+- **Startup**: `linux-next @ a08eb971` (after fast-forward `..51d20063..38015e2f`). Clean worktree. Credential Channel Guard passed (`gh auth status` via keyring). Podman 5.8.2 with `/run/user/1000`. Siblings fetched: windows-next a3c8b23d, osx-next d273daff (both ancestors).
+- **Worker drain**: Completed Order 64 `release-nix-cache-ref-scoping/purge-stale-caches`. Added `purge: true`, `purge-prefixes: nix-Linux-`, `purge-created-offset: 86400000`, `gc-max-store-size: 8000000000`, and `permissions: actions: write` to `.github/workflows/nix-cache-warm.yml`. Repo cache was 11.1 GB over 10 GB LRU limit — purge prevents LRU eviction of warmed main-scoped cache before verify-incremental runs.
+- **Verification**: `ruby -ryaml` validates both `plan/index.yaml` and `.github/workflows/nix-cache-warm.yml`. `git diff --check` passes. VERSION unchanged (0.3.260620.7).
+- **Coordinator**: windows-next + osx-next both ancestors of HEAD (0 ahead). No merge needed.
+- **E2E gates**: local-build gate available (eligible, podman session active) but not run this cycle — CI-only config change doesn't need substrate rebuild. curl-install gate deferred (latest release v0.3.260620.8 already tested by immutable cycle at 20:34Z).
+- **Push state**: pushed `linux-next` to origin over HTTPS (gh auth keyring).
 
 ## This Loop (2026-06-21T03:04Z, linux_mutable — meta-orch static-review reduction)
 

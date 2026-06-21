@@ -73,3 +73,11 @@ saving). Verifiable closure: a warm run reports purged entries and the repo
 cache footprint drops back under 10 GB, observable via `gh actions-cache list`.
 This should land before `verify-incremental` so the two measurement releases run
 against a clean, non-evicting cache.
+
+## Completed
+
+Implemented 2026-06-21T03:32Z (linux big-pickle). Added `purge: true`,
+`purge-prefixes: nix-Linux-`, `purge-created-offset: 86400000` (24h window),
+`gc-max-store-size: 8000000000` (~8 GB), and `permissions: actions: write`
+to `.github/workflows/nix-cache-warm.yml`. Sub-packet status flipped to `done`
+in plan/index.yaml. Commit `38015e2f` on `linux-next`.
