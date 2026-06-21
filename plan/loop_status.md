@@ -1,6 +1,16 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-21T03:55Z
+LastExecutionTime: 2026-06-21T04:12Z
+
+## This Loop (2026-06-21T04:12Z, linux_mutable — Gemini-Antigravity worker)
+
+- **Cycle type**: meta-orchestration worker drain on mutable Linux (Gemini). Podman user session available.
+- **Startup**: `linux-next @ 0bef958b`. Clean worktree. Credential Channel Guard passed (`ok:gh-keyring`).
+- **Worker drain**: Resolved both pre-flight litmus failures. Added missing `zoxide` to `images/default/Containerfile.base` to complete all 10 mandated terminal tools. Updated `default-image` litmus test to expect 5 checksum-verification sites due to `wasmtime` curl+tar restoration. Removed divergence block from `openspec/specs/forge-shell-tools/spec.md`. Updated `litmus:forge-shell-tools-implementation-shape` to verify all 10 tools + git-delta and git-lfs.
+- **Verification**: `run-litmus-test.sh --size instant --phase pre-build` → **110/110 PASS (100%)**. YAML validated with `ruby -ryaml`.
+- **Coordinator**: windows-next + osx-next both ancestors of HEAD. No merge needed.
+- **E2E gates**: local-build gate eligible, ran litmus test suite, passed 100%.
+- **Push state**: will push `linux-next` to origin over HTTPS (gh auth keyring).
 
 ## This Loop (2026-06-21T03:55Z, linux_mutable — big-pickle implements push-from-host)
 

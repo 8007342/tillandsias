@@ -1,6 +1,14 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-21T03:55Z
+Last updated: 2026-06-21T04:12Z
+
+## This Cycle (2026-06-21T04:12Z, linux_mutable — Gemini-Antigravity worker)
+
+- **Startup**: `linux-next @ 0bef958b`, clean worktree. Credential Channel Guard passed (`ok:gh-keyring`).
+- **Worker drain**: Resolved both pre-flight litmus failures. Updated the `default-image` litmus test to expect 5 checksum-verification sites (reversion of `wasmtime` to curl+tar). Added missing `zoxide` to `images/default/Containerfile.base` microdnf install to complete all 10 mandated terminal tools. Updated `openspec/specs/forge-shell-tools/spec.md` to remove the divergence block. Updated `litmus:forge-shell-tools-implementation-shape` to verify all 10 terminal tools and git utilities (`git-delta`, `git-lfs`) are present in `Containerfile.base`.
+- **Verification**: `run-litmus-test.sh --size instant --phase pre-build` → **110/110 PASS (100%)**. YAML validated with `ruby -ryaml`.
+- **Coordinator**: windows-next/osx-next both ancestors of HEAD — no sibling merge. No release.
+- **Next**: push `linux-next` to origin.
 
 ## This Cycle (2026-06-21T03:04Z, linux_mutable — Claude Opus 4.8 Cowork meta-orch)
 
