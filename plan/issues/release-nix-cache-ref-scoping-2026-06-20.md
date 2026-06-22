@@ -265,3 +265,27 @@ compounding defects in `.github/workflows/nix-cache-warm.yml`:
 Note: the FlakeHub-login failure still appears in release logs despite
 `flakehub: false` on the installer — cosmetic (no caching impact) but worth
 suppressing to cut the noise.
+
+## verify-incremental RESULT: PASS — Nix cache fix confirmed working (2026-06-22T03:22Z)
+
+### Before (v0.3.260622.1, run 27925910315) — cache miss (expected)
+- Nix Cache restore step: **Cache miss** — warm job (27925897490) started 24s before release dispatch, completed at 03:10Z, but save finished ~6min *after* release started building.
+- `Build musl-static binaries via Nix`: **~37m 50s** (02:32:29Z → 03:10:19Z) — full closure rebuild.
+- No `Nix Cache` save step (release.yml has `save: false`, as designed).
+
+### After (v0.3.260622.2, run 27927279842) — cache HIT (87% faster)
+- **Warm cache available**: warm job on main (27925897490) completed at 03:10Z, saving `nix-Linux-18507b83…` under `refs/heads/main` (2.2 GB).
+- `Nix Cache` restore step: **Cache hit** — `nix-Linux-18507b83…` restored from `refs/heads/main` scope (04:37 restore + extract).
+- `Build musl-static binaries via Nix`: **~4m 40s** (03:17:20Z → 03:22:00Z) — delta build only.
+- Total Linux job duration: **6m 22s** vs 38m 47s before = **~84% faster wall-clock**.
+- Assertion: `Nix Cache Hit verified. Build completed in 4m 40s.` — no `Nix Build exceeded 20 minutes` warning.
+
+### Root cause summary
+The fix package (merged PR #40, incorporating `purge-primary-key:never` and `purge-created:86400` parameter name correction in `nix-cache-warm.yml`) fully resolves the order-64 defect:
+
+1. `purge-primary-key:never` — prevents the warm workflow's Post step from purging the just-saved primary key.
+2. `purge-created:86400` — correctly scoped parameter name (was `purge-created-offset`, silently ignored); now limits purge to caches older than 24h, keeping the fresh warm cache and deleting stale tag-scoped duplicates.
+3. Trigger on main pushes ensures the warm cache is regenerated per release cycle.
+4. `save: false` on release.yml prevents tag-scoped saves from re-colliding with the main-scoped cache.
+
+**Result**: from 37–45 min full rebuild per release to ~5 min restore + delta build. Order 64 CLOSED.

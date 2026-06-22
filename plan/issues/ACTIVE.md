@@ -1,6 +1,6 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-22T03:25Z
+Last updated: 2026-06-22T04:00Z
 
 ## This Cycle (2026-06-22T03:25Z, linux_mutable — claude-opus48 meta-orch loop)
 
@@ -11,9 +11,12 @@ Last updated: 2026-06-22T03:25Z
 - **osx-next**: 7 commits merged total (pty PATH fix, vsock exec, --exec-guest,
   --github-login, HOME fix, XDG_RUNTIME_DIR fix, token-at-rest audit filed).
 - **Work queue**: No `ready` tasks remain in plan/index.yaml (85 steps, 0 ready).
+- **Merged**: `origin/osx-next` (1 commit: `1bbf769c` — plan finding file: macOS Vault-bootstrap 60s timeout).
+  windows-next remains ancestor of HEAD.
 - **Next actions**:
   - `provision-yq-on-build-hosts` in litmus issue (not yet a formal plan order)
   - Curl-install e2e smoke of v0.3.260622.2 on immutable Linux
+  - macOS guest-side Vault timeout investigation (new finding filed on osx-next)
   - Sibling hosts can pick up any new work they generate
 
 ## This Cycle (2026-06-22T01:11Z, linux_mutable — Gemini-Antigravity worker)
