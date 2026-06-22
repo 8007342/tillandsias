@@ -5626,3 +5626,52 @@ plan_index:
             60s`. Self-unseal is machine-id-derived (not a host credential-handover
             gap), so it is cold-start slowness or a real Vault failure. Guest-side,
             released binary, shared with Linux native / forge / WSL2 vault bring-up.
+
+    - packet_id: vault-unseal-secret-rootful-podman
+      order: 78
+      title: "macOS Vault crash: unseal podman secret unreadable in container under rootful podman + --userns keep-id (order-77 120s fix does NOT fix macOS)"
+      status: ready
+      kind: bug
+      deliverable: plan/issues/macos-github-login-vault-bootstrap-timeout-2026-06-22.md
+      depends_on: []
+      pickup_role: "Linux/guest team (shared vault_bootstrap.rs); MUST verify on macOS VZ guest"
+      outcome: >
+        The tillandsias-vault container reads its unseal secret at
+        /run/secrets/tillandsias-vault-unseal and stays up under the macOS VZ
+        guest's ROOTFUL podman, so --github-login completes the Vault write on
+        macOS. Verified on the macOS VZ guest (the only place it reproduces).
+      tasks:
+        - id: vault-unseal-secret-rootful-podman/fix-secret-mount
+          status: ready
+          depends_on: []
+          owned_files:
+            - crates/tillandsias-headless/src/vault_bootstrap.rs
+            - images/vault/Containerfile
+          checkpoint_required: true
+          handoff_note: >
+            ROOT CAUSE (diagnosed on macOS, see deliverable): the vault container
+            entrypoint FATALs "/run/secrets/tillandsias-vault-unseal not present
+            after 30s" -> crash -> -d --rm removes it -> 60s health probe sees
+            connection-refused -> "did not become healthy". The podman secret
+            EXISTS; it is mounted mode=0400,uid=100,gid=1000 with --userns
+            keep-id. The in-VM headless runs as ROOT (rootful podman) on the VZ
+            guest, vs ROOTLESS on native Linux/forge -- under rootful, keep-id +
+            secret uid=100 leaves the 0400 secret unreadable by the entrypoint
+            (uid 100). Candidate fixes: drop the uid=/gid= secret opts and chown
+            in the entrypoint; detect rootful and adjust the userns/uid mapping;
+            or deliver the unseal key by a path independent of keep-id+secret-uid.
+            wait_for_vault_ready's 120s deadline (order 77) is unrelated. machine-id
+            is stable across VZ boots (verified), so self-unseal is fine once the
+            secret is readable.
+      events:
+        - type: finding
+          ts: "2026-06-22T07:35Z"
+          agent_id: "macos-claude-opus48-osx-next-20260622"
+          host: macos
+          note: >
+            Full macOS diagnostic supersedes the order-77 cold-start-timing
+            assumption: vault crash-on-boot because the unseal secret is not
+            readable inside the container under rootful podman + --userns keep-id.
+            Diagnosed via headless --exec-guest (health probe = connection
+            refused; podman events = container died; foreground entrypoint =
+            FATAL waiting on /run/secrets/...; podman secret ls = secret exists).
