@@ -353,6 +353,40 @@ impl VzRuntime {
         crate::transport_macos::VsockStream::from_vsock_fd(fd).map_err(OpenVsockError::Stream)
     }
 
+    /// Like [`Self::open_vsock_stream`] but performs the VZ connect on the
+    /// CALLING thread (no `spawn_blocking`). Use ONLY from the process main
+    /// thread.
+    ///
+    /// VZ delivers `connectToPort:` completion on the **main dispatch queue**,
+    /// which is serviced only while the main thread pumps the CFRunLoop.
+    /// `connect_to_vm_vsock` pumps it internally, so a *main-thread* caller
+    /// drives its own completion. `open_vsock_stream` offloads the connect to a
+    /// `spawn_blocking` worker — correct for the tray (NSApp pumps the main
+    /// runloop) but it hangs for a headless caller that parks the main thread in
+    /// `block_on` (e.g. `--exec-guest`): the worker pumps its own runloop, the
+    /// main-queue completion never fires, and the connect times out. Established
+    /// socket I/O is reactor-driven (kqueue) and needs no further pumping.
+    ///
+    /// @trace plan/issues/optimization-macos-vz-idiomatic-exec-layer-2026-06-21.md
+    #[cfg(target_os = "macos")]
+    pub async fn open_vsock_stream_current_thread(
+        &self,
+        port: u32,
+        timeout: std::time::Duration,
+    ) -> Result<crate::transport_macos::VsockStream, OpenVsockError> {
+        let handle = {
+            let slot = self
+                .vm
+                .lock()
+                .map_err(|e| OpenVsockError::LockPoisoned(e.to_string()))?;
+            let h = slot.as_ref().ok_or(OpenVsockError::VmNotStarted)?;
+            vm_handle::VmHandle(h.0.clone())
+        };
+        let fd = crate::transport_macos::connect_to_vm_vsock(&handle.0, port, timeout)
+            .map_err(OpenVsockError::Connect)?;
+        crate::transport_macos::VsockStream::from_vsock_fd(fd).map_err(OpenVsockError::Stream)
+    }
+
     /// Generate a `cidata.iso` image using `hdiutil makehybrid`.
     #[cfg(target_os = "macos")]
     fn generate_cidata_iso(&self, dest: &Path) -> Result<(), String> {
