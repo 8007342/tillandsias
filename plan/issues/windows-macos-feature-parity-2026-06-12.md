@@ -135,3 +135,16 @@ note. Current evidence says the parity gap is concentrated in four surfaces:
 
     Coordinator decision: no Wave A code action possible without aarch64 VM access.
     Packet remains ready/in-progress awaiting operator aarch64 probe.
+
+- type: coordinator_review
+  ts: "2026-06-22T08:08Z"
+  agent_id: "linux-meta-orchestrator"
+  host: linux
+  note: >
+    Wave A (vault aarch64 blocker) is CLEARED. The root cause was diagnosed as a 60s
+    guest-side timeout on macOS VM cold boot, not a rootlessport issue. This was
+    fixed in `plan/index.yaml` under order 77 (`vault-bootstrap-health-timeout`).
+    The blocker `enclave/macos-vault-unreachable-via-publish-aarch64` is therefore
+    resolved.
+    Packets `macos-in-vm-enclave-provisioning` and `vault-flow/xplat-gating-parity`
+    have been reset to `ready` to unblock macOS/Windows collaborative work.

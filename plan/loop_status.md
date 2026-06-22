@@ -1,7 +1,16 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-22T06:58Z
+LastExecutionTime: 2026-06-22T08:08Z
 
+
+## This Loop (2026-06-22T08:08Z, linux_mutable — Gemini-Antigravity meta-orch)
+
+- **Cycle type**: meta-orchestration collaborative unblock.
+- **Worker drain**: Identified that `enclave/macos-vault-unreachable-via-publish-aarch64` was already resolved via order 77 (`vault-bootstrap-health-timeout`), which was shipped to the macOS branch.
+  - Reclaimed the expired lease on `macos-in-vm-enclave-provisioning` and reset status to `ready`.
+  - Reset `vault-flow/xplat-gating-parity` status to `ready`.
+  - Closed Wave A in `plan/issues/windows-macos-feature-parity-2026-06-12.md`.
+- **Coordinator**: `macos-in-vm-enclave-provisioning` and `vault-flow/xplat-gating-parity` are unblocked and ready for the macOS/Windows team to take up.
 
 ## This Loop (2026-06-22T06:57Z, linux_mutable — big-pickle meta-orch)
 
@@ -613,14 +622,9 @@ LastExecutionTime: 2026-06-22T06:58Z
 
 ## Assignment Board
 
-- **Linux primary**: resolve or precisely block the macOS aarch64 Vault
-  reachability packet; fallback to
-  `future-intentions-drain/windows-macos-feature-parity` if no VM access is
-  available and NanoClawV2 remains actively leased.
-- **Windows primary**: keep `windows-next` synchronized and verify the
-  cold-provision/headless unit path before optional UX work.
-- **macOS primary**: wait on the aarch64 Vault reachability fix/probe, then land
-  the orchestrated GitHub Login route and run m8.
+- **Linux primary**: Move to next independent ready packet in the plan.
+- **Windows primary**: Claim and execute Windows slice of `vault-flow/xplat-gating-parity`.
+- **macOS primary**: Claim and execute `macos-in-vm-enclave-provisioning` and the orchestrated GitHub Login route (m8).
 - **Coordinator fallback**: keep ACTIVE.md and host queues aligned with the new
   Windows/macOS parity packet.
 

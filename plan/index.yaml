@@ -3031,7 +3031,7 @@ plan_index:
               known_repo_wide_failures:
                 - "./build.sh --ci --spec tillandsias-vault still fails pre-existing gates: VERSION behind v0.3.260608.2+, repo-wide fmt drift, unrelated clippy::type_complexity in main.rs:1043, and pre-existing signal_handling timeout."
         - id: vault-flow/xplat-gating-parity
-          status: done
+          status: ready
           owner_host: macos+windows
           depends_on: [vault-flow/tray-gate-on-vault]
           unblocked_note: "Original blockers cleared: step 32 (vault-hardening-true-rekey) DONE, step 36 (xplat-vault/windows + /macos) DONE, and 42a (vault-flow/tray-gate-on-vault) completed and merged to windows-next. Windows slice is now in progress."
@@ -4061,7 +4061,7 @@ plan_index:
     - id: macos-in-vm-enclave-provisioning
       order: 55
       title: macOS in-VM enclave provisioning (keystone unblocking all macOS tray interaction)
-      status: claimed
+      status: ready
       owner_host: macos
       deliverable: plan/steps/49-macos-in-vm-enclave.md
       audit_origin: plan/issues/macos-m8-interactive-smoke-failures-2026-06-16.md
@@ -4147,6 +4147,12 @@ plan_index:
           host: "macos"
           lease_id: "step49-macos-vm-enclave-20260616T231619Z"
           expires_at: "2026-06-17T03:16:19Z"
+        - type: lease-reclaimed
+          ts: "2026-06-22T08:08:00Z"
+          agent_id: "linux-meta-orchestrator"
+          host: "linux"
+          reclaimed_lease_id: "step49-macos-vm-enclave-20260616T231619Z"
+          note: "Lease expired. The vault timeout blocker has been resolved via order 77. Reclaiming and resetting to ready to resume macOS-side interaction tests."
 
     - id: nanoclawv2-orchestration
       order: 56
