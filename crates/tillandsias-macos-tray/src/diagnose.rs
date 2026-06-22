@@ -521,11 +521,18 @@ pub fn github_login_main() -> i32 {
             &[
                 "/bin/bash",
                 "-lc",
-                // The guest `--github-login` requires a desktop-user-session lane
-                // with a writable XDG_RUNTIME_DIR; the control-wire exec env is
-                // cleared, so seed one (root can create /run/user/0). This
-                // satisfies require_desktop_user_session for the in-VM invocation.
-                "export XDG_RUNTIME_DIR=/run/user/0; mkdir -p \"$XDG_RUNTIME_DIR\" 2>/dev/null; \
+                // The control-wire exec env is cleared (no host-env leak), but
+                // the guest `--github-login` needs:
+                //   - HOME: prompt_and_store_git_identity writes the managed
+                //     git identity (name/email — not the token) under $HOME.
+                //   - XDG_RUNTIME_DIR (+writable): require_desktop_user_session
+                //     gate on the DesktopUserSession lane.
+                // The GitHub token itself is handled by the released flow inside
+                // an ephemeral `--rm` git container (piped to `gh auth login
+                // --with-token`, written to Vault, container destroyed on exit),
+                // so nothing unencrypted is left at rest here.
+                "export HOME=/root; export XDG_RUNTIME_DIR=/run/user/0; \
+                 mkdir -p \"$XDG_RUNTIME_DIR\" 2>/dev/null; \
                  exec /usr/local/bin/tillandsias-headless --github-login",
             ],
             expects,
