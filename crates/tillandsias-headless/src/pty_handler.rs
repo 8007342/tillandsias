@@ -123,7 +123,7 @@ impl PtySessionStore {
             cmd.args(&argv[1..]);
         }
         cmd.env_clear();
-        for (k, v) in &env {
+        for (k, v) in child_env(&env) {
             cmd.env(k, v);
         }
         if let Some(dir) = cwd {
@@ -143,7 +143,12 @@ impl PtySessionStore {
                         return Err(std::io::Error::last_os_error());
                     }
                 }
-                if libc::ioctl(slave_raw, libc::TIOCSCTTY, 0) < 0 {
+                // `ioctl`'s request arg is `c_ulong` on BSD/macOS but the
+                // `TIOCSCTTY` constant is `c_int`/`u32` there; cast so the
+                // guest handler also compiles on a macOS dev host (lets the
+                // sole macOS worker run these unit tests). Value is identical
+                // on Linux, where the request type already matches.
+                if libc::ioctl(slave_raw, libc::TIOCSCTTY as _, 0) < 0 {
                     return Err(std::io::Error::last_os_error());
                 }
                 Ok(())
@@ -338,6 +343,33 @@ impl std::fmt::Display for PtyOpenError {
 
 impl std::error::Error for PtyOpenError {}
 
+/// Default `PATH` seeded into a PTY child when the caller supplied none.
+/// Standard Fedora/Linux system path; covers `/usr/local/bin` (gh, vault-cli,
+/// tillandsias-headless) and `/usr/bin` (podman, bash, coreutils).
+const DEFAULT_CHILD_PATH: &str = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/bin:/sbin:/bin";
+
+/// Build the PTY child's environment. The caller's `env` REPLACES the inherited
+/// environment (`env_clear` precedes this — no host-env leak), but a sane
+/// default `PATH` is injected when the caller did not supply one.
+///
+/// Rationale: a cleared environment has no `PATH`, so a bare-name `argv[0]`
+/// (`gh`, `podman`, `tillandsias-headless`, …) cannot be resolved and the spawn
+/// fails with `ENOENT` — which on the tray attach path surfaced as a blank
+/// terminal with no error. Seeding `PATH` keeps the no-host-env-leak intent
+/// while making bare-name commands resolvable, so callers no longer must pass
+/// absolute paths or wrap every command in a login shell.
+///
+/// @trace plan/issues/macos-tray-github-login-blank-terminal-2026-06-21.md,
+///        plan/issues/optimization-macos-vz-idiomatic-exec-layer-2026-06-21.md
+fn child_env(provided: &[(String, String)]) -> Vec<(String, String)> {
+    let mut out: Vec<(String, String)> = Vec::with_capacity(provided.len() + 1);
+    if !provided.iter().any(|(k, _)| k == "PATH") {
+        out.push(("PATH".to_string(), DEFAULT_CHILD_PATH.to_string()));
+    }
+    out.extend(provided.iter().cloned());
+    out
+}
+
 struct OpenptyOwned {
     master: OwnedFd,
     slave: OwnedFd,
@@ -516,6 +548,42 @@ mod tests {
     fn store() -> (PtySessionStore, mpsc::UnboundedReceiver<ControlEnvelope>) {
         let (tx, rx) = unbounded_channel();
         (PtySessionStore::new(tx), rx)
+    }
+
+    /// A cleared env with no caller PATH gets the sane default seeded, so
+    /// bare-name argv[0] resolves instead of failing ENOENT (blank-terminal bug).
+    #[test]
+    fn child_env_seeds_default_path_when_absent() {
+        let out = child_env(&[("TERM".to_string(), "dumb".to_string())]);
+        let path = out
+            .iter()
+            .find(|(k, _)| k == "PATH")
+            .map(|(_, v)| v.as_str());
+        assert_eq!(path, Some(DEFAULT_CHILD_PATH));
+        // Caller-provided vars are preserved.
+        assert!(out.iter().any(|(k, v)| k == "TERM" && v == "dumb"));
+    }
+
+    /// A caller-supplied PATH is honored verbatim (no default override).
+    #[test]
+    fn child_env_preserves_caller_path() {
+        let out = child_env(&[("PATH".to_string(), "/custom/bin".to_string())]);
+        let paths: Vec<&str> = out
+            .iter()
+            .filter(|(k, _)| k == "PATH")
+            .map(|(_, v)| v.as_str())
+            .collect();
+        assert_eq!(paths, vec!["/custom/bin"], "exactly one, caller's PATH");
+    }
+
+    /// Empty env still yields a usable PATH.
+    #[test]
+    fn child_env_empty_input_gets_path() {
+        let out = child_env(&[]);
+        assert_eq!(
+            out,
+            vec![("PATH".to_string(), DEFAULT_CHILD_PATH.to_string())]
+        );
     }
 
     /// End-to-end smoke: open a PTY for `echo hi`, observe the `hi\r\n`

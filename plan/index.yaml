@@ -4641,7 +4641,7 @@ plan_index:
     - id: release-nix-cache-ref-scoping
       order: 64
       title: Release Nix store cache never restored across releases (GHA ref-scoping)
-      status: ready
+      status: in_progress
       kind: bug
       deliverable: plan/issues/release-nix-cache-ref-scoping-2026-06-20.md
       depends_on: []
@@ -4718,7 +4718,7 @@ plan_index:
                 stale per-tag caches so the warmed main-scoped cache survives for
                 verify-incremental. Land before verify-incremental per the dependency.
         - id: release-nix-cache-ref-scoping/verify-incremental
-          status: ready
+          status: claimed
           depends_on: [release-nix-cache-ref-scoping/implement-cache-fix, release-nix-cache-ref-scoping/purge-stale-caches]
           owned_files:
             - plan/issues/release-nix-cache-ref-scoping-2026-06-20.md
@@ -4726,6 +4726,13 @@ plan_index:
           handoff_note: >
             Cut two consecutive releases; assert the second's nix build time and
             cache-save bytes drop substantially. Record before/after as completed.
+          events:
+            - type: claim
+              ts: "2026-06-22T02:33:37Z"
+              agent_id: "linux-big-pickle-20260622T023337Z"
+              host: linux_mutable
+              lease_id: "release-nix-cache-ref-scoping/verify-incremental"
+              expires_at: "2026-06-22T06:33:37Z"
       events:
         - type: completed
           ts: "2026-06-22T02:23:00Z"

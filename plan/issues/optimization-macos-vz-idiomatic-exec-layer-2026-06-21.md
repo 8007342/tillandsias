@@ -94,16 +94,87 @@ calls the macOS-only `VzRuntime::open_vsock_stream` directly, builds a host
   `stdout=="HELLO\n"` + exit 0, non-zero exit propagation, empty-argv reject)
   against an in-memory duplex fake guest — `cargo test -p tillandsias-vm-layer`
   18/18 PASS, no real VM needed. Mirrors `WslRuntime::exec` for parity.
-- `macos-vz/impl-exec-integration` (optimization, NEXT) — exercise
-  `VzRuntime::exec` against a **booted** VM: `start()` → `exec(["/bin/echo","HELLO"])`
-  → assert stdout/exit. This is the real-path proof (uses absolute argv to dodge
-  the guest `pty_handler` no-PATH defect). Closure: a gated integration test or
-  a smoke step on a macOS host with a provisioned VM.
-- `macos-vz/impl-attach` (optimization) — implement the interactive attach via
-  the chosen mechanism; rewire the tray's GitHub-login / Open-Shell / agent
-  intents to use it. Closure: AX smoke (`scripts/macos-tray-ax-smoke.sh`) shows
-  a usable, non-self-terminating shell/login prompt; GitHub login reaches the
-  paste-token prompt and the status poll flips to LoggedIn.
+- `macos-vz/impl-exec-integration` (optimization) — **DONE, 2026-06-22.**
+  Real-path proof on a booted VM via a new headless `--exec-guest <argv...>`
+  tray mode (`diagnose::exec_guest_main`): boots the VM, waits ready, runs the
+  command in the guest over the control wire, prints output + exit, stops.
+  Result: `tillandsias-tray --exec-guest /bin/echo HELLO-FROM-GUEST` →
+  `HELLO-FROM-GUEST` + `{"status":"ok","exit_code":0,"signal":null,
+  "stdout_bytes":18}`. **Confirms the whole control-wire + guest `pty_handler`
+  path works end-to-end on macOS** (Hello→PtyOpen→PtyData→PtyClose, guest spawns
+  + runs + returns output/exit).
+  - **Defect found + fixed in the same slice (`macos-vz/headless-vsock-connect`):**
+    the first attempts timed out at the exec vsock connect (30s) on BOTH cold and
+    warm boots. Root cause: VZ delivers `connectToPort:` completion on the **main
+    dispatch queue**, serviced only while the main thread pumps the CFRunLoop.
+    `open_vsock_stream` offloads the connect to `spawn_blocking` — fine for the
+    tray (NSApp pumps the main runloop) but it hangs a headless caller that parks
+    the main thread in `block_on`. Added `VzRuntime::open_vsock_stream_current_thread`
+    (connect on the calling/main thread; established socket I/O stays
+    reactor-driven) and used it in `--exec-guest`. `wait_ready` already connected
+    on the main thread, which is why it passed while the worker-thread connect
+    timed out — the diagnostic that pinpointed the cause.
+  - Closure MET: live real-VM run returns the guest's stdout + exit 0.
+  - Follow-up (optional): wire `--exec-guest /bin/echo` as a post-provision step
+    in the macOS `/build-install-and-smoke-test-e2e` gate for a standing
+    real-path regression check.
+- `macos-vz/exec-stdin` (optimization) — **DONE, 2026-06-22.** Added
+  `vsock_exec::exec_over_stream_with_input` (delivers a fixed `input` to the
+  guest child's stdin + `/dev/tty` via `PtyData{ToGuest}` after `PtyOpen`, then
+  drains output). `--exec-guest` forwards piped host stdin. **Decision: NO
+  ssh-over-vsock** — the proven control-wire exec path covers one-shot exec and
+  near-interactive (single-value) flows like the github-login token paste.
+  Closure MET: unit test `exec_over_stream_with_input_delivers_stdin` +
+  **real-VM proof** `printf 'PINGPONG-SECRET\n' | tillandsias-tray --exec-guest
+  /bin/bash -lc 'read -r X; echo "GOT:[$X]"'` → `GOT:[PINGPONG-SECRET]`, exit 0.
+  This is the EXACT pattern `run_github_login`'s `read -rs TOKEN < /dev/tty`
+  uses — the token-paste keystone, proven, with the token never in argv.
+- `macos-vz/finalize-github-login` (optimization, NEXT — needs operator PAT) —
+  add a NON-interactive guest login entry (token from stdin; git identity from
+  env/existing config — `run_github_login` currently reads name+email via stdin
+  prompts then the token via /dev/tty, brittle to feed blind), and a headless
+  `tillandsias-tray --github-login` that boots the VM and drives it via
+  `exec_over_stream_with_input` with the PAT. Cannot be verified without a real
+  GitHub PAT + network (and must not auth the operator's account unprompted), so
+  the final step is operator-attended. Closure: `printf '<PAT>\n' |
+  tillandsias-tray --github-login` writes the token to the guest Vault and the
+  tray status poll flips logged-out → logged-in.
+- `macos-vz/finalize-github-login` — **IN PROGRESS (operator-attended).** Built
+  headless `tillandsias-tray --github-login`: prompts each end user for THEIR
+  OWN git name/email/PAT (token echo suppressed via `stty -echo`; nothing
+  defaulted from the operator's host config), boots the VM, and drives the
+  released guest `--github-login` via `exec_over_stream_expect`. First live run
+  (operator) surfaced two concrete defects, both fixed:
+  - **desktop-session gate**: guest `--github-login` errored
+    `requires a real desktop user session with a writable XDG_RUNTIME_DIR`. The
+    control-wire exec env is cleared, so the lane is `DesktopUserSession` but
+    `XDG_RUNTIME_DIR` is unset. Fix: the login wrapper now
+    `export XDG_RUNTIME_DIR=/run/user/0; mkdir -p` before exec.
+  - **terminal escape spill** (`^[[37;1R`, `+q6E616D65`): the guest serial getty
+    probes the terminal (DSR/XTGETTCAP); `vz.rs` routed guest serial to host
+    **stderr** (`serial_writer_fd: None` → dup STDERR), so those queries reached
+    the operator's Terminal, which replied with CPR that then spilled into zsh
+    after exit. Fix: `VzRuntime::set_serial_to_log(true)` routes guest serial to
+    `console.log` for the headless CLI modes (tray unchanged). Filed as the
+    terminal-management defect the operator flagged.
+  - NEXT live run: re-run `--github-login`; expect to clear the gate and reach
+    the git-identity/token prompts. Watch whether `XDG_RUNTIME_DIR=/run/user/0`
+    affects the in-guest podman step.
+- `macos-vz/impl-attach-interactive` (optimization) — a LIVE bidirectional shell
+  (Open Shell) still needs a terminal bridge (the one-shot exec+input path does
+  not stream interactive I/O). Lower priority than login. Closure: a usable,
+  non-self-terminating interactive shell in Terminal.app.
+- `macos-vz/guest-no-path-fix` (optimization) — **DONE, 2026-06-22.** Fixed the
+  foundational guest defect: `pty_handler` `env_clear()`'d the child with no
+  `PATH`, so bare-name argv (`gh`, `podman`, `tillandsias-headless`) failed
+  ENOENT (the blank-terminal root cause). Added `child_env()` which seeds a sane
+  default `PATH` (`/usr/local/sbin:…:/bin`) when the caller supplies none, while
+  preserving the no-host-env-leak intent. Also made the `TIOCSCTTY` ioctl cast
+  portable so the guest handler compiles + unit-tests on a macOS dev host (the
+  sole macOS worker can now verify guest logic locally). Closure MET: 3
+  `child_env` unit tests + full `pty_handler` suite green on macOS (5 passed, 0
+  failed, 2 pre-existing ignores). This unblocks BOTH `exec` and the interactive
+  attach to actually resolve commands in the guest.
 - `macos-vz/retire-hacks` (optimization) — once attach is idiomatic, remove the
   host `UnixPtyMaster`+`screen` bridge and the `pump_io` EIO grace hack if no
   longer needed; fix the `pty_handler` no-PATH defect or make it moot. Closure:

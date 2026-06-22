@@ -47,6 +47,12 @@ pub struct VzRuntime {
     /// can coordinate on the same VZVirtualMachine.
     #[cfg(target_os = "macos")]
     vm: std::sync::Mutex<Option<vm_handle::VmHandle>>,
+    /// When true, `start()` routes the guest serial console (early-boot getty +
+    /// kernel) to `console.log` instead of the host process stderr. Headless CLI
+    /// modes (`--exec-guest`, `--github-login`) set this so the getty's terminal
+    /// probe escapes don't spill onto the user's terminal; the tray leaves it
+    /// false (serial on stderr for live diagnostics).
+    serial_to_log: std::sync::atomic::AtomicBool,
 }
 
 #[cfg(target_os = "macos")]
@@ -106,7 +112,16 @@ impl VzRuntime {
             image_root,
             #[cfg(target_os = "macos")]
             vm: std::sync::Mutex::new(None),
+            serial_to_log: std::sync::atomic::AtomicBool::new(false),
         }
+    }
+
+    /// Route the guest serial console to `console.log` instead of host stderr on
+    /// the next `start()`. Used by headless CLI modes to keep the user's
+    /// terminal free of the guest getty's terminal-probe escape sequences.
+    pub fn set_serial_to_log(&self, enabled: bool) {
+        self.serial_to_log
+            .store(enabled, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Path of the raw root disk image written during provisioning.
@@ -350,6 +365,40 @@ impl VzRuntime {
         .map_err(|e| OpenVsockError::Join(e.to_string()))?
         .map_err(OpenVsockError::Connect)?;
 
+        crate::transport_macos::VsockStream::from_vsock_fd(fd).map_err(OpenVsockError::Stream)
+    }
+
+    /// Like [`Self::open_vsock_stream`] but performs the VZ connect on the
+    /// CALLING thread (no `spawn_blocking`). Use ONLY from the process main
+    /// thread.
+    ///
+    /// VZ delivers `connectToPort:` completion on the **main dispatch queue**,
+    /// which is serviced only while the main thread pumps the CFRunLoop.
+    /// `connect_to_vm_vsock` pumps it internally, so a *main-thread* caller
+    /// drives its own completion. `open_vsock_stream` offloads the connect to a
+    /// `spawn_blocking` worker — correct for the tray (NSApp pumps the main
+    /// runloop) but it hangs for a headless caller that parks the main thread in
+    /// `block_on` (e.g. `--exec-guest`): the worker pumps its own runloop, the
+    /// main-queue completion never fires, and the connect times out. Established
+    /// socket I/O is reactor-driven (kqueue) and needs no further pumping.
+    ///
+    /// @trace plan/issues/optimization-macos-vz-idiomatic-exec-layer-2026-06-21.md
+    #[cfg(target_os = "macos")]
+    pub async fn open_vsock_stream_current_thread(
+        &self,
+        port: u32,
+        timeout: std::time::Duration,
+    ) -> Result<crate::transport_macos::VsockStream, OpenVsockError> {
+        let handle = {
+            let slot = self
+                .vm
+                .lock()
+                .map_err(|e| OpenVsockError::LockPoisoned(e.to_string()))?;
+            let h = slot.as_ref().ok_or(OpenVsockError::VmNotStarted)?;
+            vm_handle::VmHandle(h.0.clone())
+        };
+        let fd = crate::transport_macos::connect_to_vm_vsock(&handle.0, port, timeout)
+            .map_err(OpenVsockError::Connect)?;
         crate::transport_macos::VsockStream::from_vsock_fd(fd).map_err(OpenVsockError::Stream)
     }
 
@@ -1146,6 +1195,26 @@ impl VmRuntime for VzRuntime {
         let cidata_iso_path = self.image_root.join("cidata.iso");
         self.generate_cidata_iso(&cidata_iso_path)?;
 
+        // Route guest serial to console.log (headless modes) or host stderr
+        // (tray, default). Opening console.log and handing its raw fd to the VZ
+        // attachment keeps the getty's terminal-probe escapes off the user's
+        // terminal. The fd is intentionally leaked — it lives for the VM's
+        // lifetime; on open failure we fall back to stderr (None).
+        let serial_writer_fd = if self
+            .serial_to_log
+            .load(std::sync::atomic::Ordering::Relaxed)
+        {
+            use std::os::fd::IntoRawFd;
+            std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(self.console_log_path())
+                .ok()
+                .map(|f| f.into_raw_fd())
+        } else {
+            None
+        };
+
         let spec = boot::VzBootConfig {
             cpu_count: std::thread::available_parallelism()
                 .map(|n| n.get().min(4))
@@ -1154,7 +1223,7 @@ impl VmRuntime for VzRuntime {
             root_disk: Some(rootfs),
             cidata_iso: Some(cidata_iso_path),
             nvram: Some(self.image_root.join("nvram.bin")),
-            serial_writer_fd: None,
+            serial_writer_fd,
         };
 
         let cfg = boot::build_vm_configuration(&spec)?;
