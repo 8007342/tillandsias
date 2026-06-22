@@ -1,7 +1,154 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-22T03:26:00Z
+LastExecutionTime: 2026-06-22T14:23Z
 
+
+## This Loop (2026-06-22T14:23Z, linux_mutable — big-pickle meta-orch)
+
+- **Cycle type**: meta-orchestration convergence check — zero residual at current bar.
+- **Startup**: `linux-next @ b3804d57`, clean worktree, 0 ahead / 0 behind. Credential Channel Guard passed (`ok:gh-keyring`).
+- **Worker drain**: No linux-ready plan/index.yaml nodes. Two `ready` nodes exist (`vault-flow/xplat-gating-parity` owner macos+windows, `macos-in-vm-enclave-provisioning` owner macos) — neither eligible on Linux. Zero residual at current bar.
+- **Coordinator**: `origin/osx-next` (`61acff26`) is an ancestor of HEAD. `origin/windows-next` (`a3c8b23d`) is an ancestor of HEAD. No merge needed.
+- **Release**: Latest is v0.3.260622.3 (smoke-tested PASS). No new release work.
+- **Verification**: `./build.sh --check` passes (with the known non-fatal dev-proxy warning). Litmus `--size instant` 110/110 PASS.
+- **Reduction engine**: Zero residual at current bar. No new findings this cycle.
+- **Push state**: Recording this check-in and pushing `linux-next`.
+
+## This Loop (2026-06-22T13:15Z, linux_mutable — Gemini-Antigravity meta-orch)
+
+- **Cycle type**: meta-orchestration convergence check — zero residual at current bar.
+- **Startup**: `linux-next @ 259ef1dc`, clean worktree, 0 ahead / 0 behind. Credential Channel Guard passed (`ok:gh-keyring`).
+- **Worker drain**: No linux-ready plan/index.yaml nodes. Two `ready` nodes exist (`vault-flow/xplat-gating-parity` owner macos+windows, `macos-in-vm-enclave-provisioning` owner macos) — neither eligible on Linux. Zero residual at current bar.
+- **Coordinator**: `origin/osx-next` (`61acff26`) is an ancestor of HEAD. `origin/windows-next` (`a3c8b23d`) is an ancestor of HEAD. No merge needed.
+- **Release**: Latest is v0.3.260622.3 (smoke-tested PASS). No new release work.
+- **Verification**: `./build.sh --check` passes (with the known non-fatal dev-proxy warning). `cargo test --workspace` passes. Litmus `--size instant` 110/110 PASS.
+- **Reduction engine**: Zero residual at current bar. No new findings this cycle.
+- **Push state**: Recording this check-in and pushing `linux-next`.
+
+## This Loop (2026-06-22T12:22Z, linux_mutable — big-pickle meta-orch)
+
+- **Cycle type**: meta-orchestration convergence check — zero residual at current bar.
+- **Startup**: `linux-next @ 6e85eb76`, clean worktree, 0 ahead / 0 behind. Credential Channel Guard passed (`ok:gh-keyring`).
+- **Worker drain**: No linux-ready plan/index.yaml nodes. Two `ready` nodes exist (`vault-flow/xplat-gating-parity` owner macos+windows, `macos-in-vm-enclave-provisioning` owner macos) — neither eligible on Linux. Zero residual at current bar.
+- **Coordinator**: `origin/osx-next` (`61acff26`) is an ancestor of HEAD. `origin/windows-next` (`a3c8b23d`) is an ancestor of HEAD. No merge needed.
+- **Release**: Latest is v0.3.260622.3 (smoke-tested PASS). No new release work.
+- **Reduction engine**: Zero residual at current bar. No new findings this cycle.
+- **Push state**: Recording this check-in and pushing `linux-next`.
+
+## This Loop (2026-06-22T10:21Z, linux_mutable — big-pickle meta-orch)
+
+- **Cycle type**: meta-orchestration convergence check — zero residual at current bar.
+- **Startup**: `linux-next @ c6b998d9`, clean worktree, 0 ahead / 0 behind. Credential Channel Guard passed (`ok:gh-keyring`).
+- **Worker drain**: No linux-ready plan/index.yaml nodes. Two `ready` nodes exist (`vault-flow/xplat-gating-parity` owner macos+windows, `macos-in-vm-enclave-provisioning` owner macos) — neither eligible on Linux. Zero residual at current bar.
+- **Coordinator**: `origin/osx-next` (`61acff26`) is an ancestor of HEAD. `origin/windows-next` (`a3c8b23d`) is an ancestor of HEAD. No merge needed.
+- **Release**: Latest is v0.3.260622.3 (smoke-tested PASS). No new release work.
+- **Reduction engine**: Zero residual at current bar. Bar-raise proposals filed at `plan/issues/bar-raise-proposals-2026-06-22.md` — Tlatoāni-gated, not self-escalated.
+- **Push state**: Recording this check-in and pushing `linux-next`.
+
+## This Loop (2026-06-22T08:30Z, linux_mutable — big-pickle meta-orch)
+
+- **Cycle type**: meta-orchestration worker drain — macOS vault unseal secret fix.
+- **Startup**: `linux-next @ 7dfa84c0`, clean worktree, 0 ahead / 0 behind. Credential Channel Guard passed (`ok:gh-keyring`).
+- **Worker drain**: Claimed and completed **order 78** (`vault-unseal-secret-rootful-podman`).
+  - Root cause: rootful podman (macOS VZ guest) + `--userns keep-id` + secret `uid=100,gid=1000,mode=0400` leaves unseal secret unreadable by vault entrypoint.
+  - Fix: removed uid/gid from all four vault podman secret mount options in `launch_vault_container` (`vault_bootstrap.rs`). Default podman secret mount (mode=0444,uid=0) is world-readable regardless of user namespace mapping.
+  - Build check: format + type-check PASS. Tests: 8/8 vault-related tests PASS.
+  - Commits: `db616e06` (fix), `5029ba53` (plan completion).
+  - **Outcome**: macOS VZ guest verification still required to close the loop.
+- **Coordinator**: `origin/osx-next` (`61acff26`) is an ancestor of `origin/linux-next`. `origin/windows-next` (`a3c8b23d`) unchanged, also ancestor. No merge needed.
+- **Release**: Latest is v0.3.260622.3 (smoke-tested PASS). No new release work.
+- **Reduction engine**: Zero residual at current bar. No bar-raise self-escalation.
+- **Push state**: All commits pushed to `origin/linux-next`.
+
+## This Loop (2026-06-22T08:19Z, linux_mutable — big-pickle meta-orch)
+
+- **Cycle type**: meta-orchestration coordination merge.
+- **Startup**: `linux-next @ 7dfa84c0`, clean worktree, 0 ahead / 0 behind. Credential Channel Guard passed (`ok:gh-keyring`).
+- **Worker drain**: Zero residual at current bar — no linux-ready plan/index.yaml nodes.
+- **Coordinator**: `origin/osx-next` (`61acff26`) diverged from `linux-next` by 1 plan-only commit (order 78 macOS Vault root-cause analysis). Merged cleanly into linux-next at `63a6a4d3`. `origin/windows-next` (`a3c8b23d`) is an ancestor of `linux-next`. No other merge required.
+- **Release**: Latest is v0.3.260622.3 (smoke-tested PASS). No new work since release.
+- **Verification**: Merge was plan-only (no implementation code changed). Build/format/litmus not re-run — prior cycles confirmed clean.
+- **Push state**: Merged osx-next into linux-next. Recording this check-in and pushing.
+
+## This Loop (2026-06-22T08:08Z, linux_mutable — Gemini-Antigravity meta-orch)
+
+- **Cycle type**: meta-orchestration collaborative unblock.
+- **Worker drain**: Identified that `enclave/macos-vault-unreachable-via-publish-aarch64` was already resolved via order 77 (`vault-bootstrap-health-timeout`), which was shipped to the macOS branch.
+  - Reclaimed the expired lease on `macos-in-vm-enclave-provisioning` and reset status to `ready`.
+  - Reset `vault-flow/xplat-gating-parity` status to `ready`.
+  - Closed Wave A in `plan/issues/windows-macos-feature-parity-2026-06-12.md`.
+- **Coordinator**: `macos-in-vm-enclave-provisioning` and `vault-flow/xplat-gating-parity` are unblocked and ready for the macOS/Windows team to take up.
+
+## This Loop (2026-06-22T06:57Z, linux_mutable — big-pickle meta-orch)
+
+- **Cycle type**: meta-orchestration with macOS unblock.
+- **Startup**: `linux-next @ ff896a6b`, clean worktree, 0 ahead / 0 behind. Credential Channel Guard passed (`ok:gh-keyring`).
+- **Worker drain**: Zero residual at current bar — all plan/index.yaml nodes completed.
+  Noted that `origin/osx-next` (`4d6e8066`) was behind `origin/linux-next` and missing
+  the vault 60s→120s timeout fix (order 77). **Fast-forwarded `osx-next`** to
+  `origin/linux-next@ff896a6b` and pushed, shipping the vault timeout fix and all
+  intervening linux-next work to the macOS branch.
+- **Coordinator**: `origin/osx-next` now at `ff896a6b` (fast-forwarded). `origin/windows-next`
+  (`a3c8b23d`) unchanged — both are ancestors of `linux-next`. No merge required.
+- **Release**: Latest is v0.3.260622.3 (smoke-tested PASS in prior cycle). No new work since release.
+- **Reduction engine**: Zero residual at current bar. Machine-id stability concern
+  remains open for macOS-side verification
+  (`plan/issues/macos-github-login-vault-bootstrap-timeout-2026-06-22.md`).
+- **Push state**: `origin/osx-next` pushed (fast-forward). Recording this check-in and pushing `linux-next`.
+
+## This Loop (2026-06-22T06:35Z, linux_mutable — claude-sonnet46 meta-orch)
+
+- **Cycle type**: meta-orchestration check/sync (no-op convergence point).
+- **Startup**: `linux-next @ 46281cd2`, clean worktree, 0 ahead / 0 behind. Credential Channel Guard passed (`ok:gh-keyring`).
+- **Worker drain**: No ready tasks in `plan/index.yaml`. All nodes completed.
+- **Coordinator**: Siblings `origin/windows-next` (`a3c8b23d`) and `origin/osx-next` (`4d6e8066`) are ancestors of `linux-next`. No merge required.
+- **Verification**: Build check PASS (fmt + typecheck). Litmus instant PASS (110/110, 100% pass rate). No open PRs.
+- **Release**: Latest is v0.3.260622.3 (smoke-tested PASS in prior cycle). No new work since release.
+- **Reduction engine**: Zero open findings at current bar. No bar-raise self-escalation (Tlatoāni-gated). Forge credential blocker remains open (`plan/issues/forge-credential-channel-blocked-2026-06-21.md`) — operator action required to re-seed `.git/.gh-credentials` or inject `GH_TOKEN`.
+- **Push state**: Recording this check-in and pushing.
+
+## This Loop (2026-06-22T05:13Z, linux_mutable — Gemini-Antigravity worker)
+
+- **Cycle type**: meta-orchestration check/sync.
+- **Startup**: `linux-next @ 0ac8b282`, clean worktree, 0 ahead / 0 behind. Credential Channel Guard passed (`ok:gh-keyring`).
+- **Worker drain**: Checked `plan/index.yaml` and active files; all ready tasks are completed. Sibling heads `origin/windows-next` (`a3c8b23d`) and `origin/osx-next` (`4d6e8066`) are already fully merged into `linux-next`. No ready tasks to drain.
+- **Verification**: Clean state. Formatting and types check passed. Cargo workspace unit tests passed (30 tests, 0 failures). Litmus instant-size tests passed (112 tests, 0 failures, 100% pass rate).
+- **Coordinator**: No branch drift. Siblings `origin/windows-next` and `origin/osx-next` are ancestors of `linux-next` HEAD. No merge required.
+- **Push state**: Workspace clean. No new commits to push.
+
+## This Loop (2026-06-22T04:56Z, forge — big-pickle meta-orch)
+
+- **Cycle type**: meta-orchestration start-of-cycle (forge container).
+- **Startup**: `linux-next @ aa4050f8`, clean worktree, 0 ahead / 0 behind.
+- **Credential Channel Guard**: FAILED (`missing:no-credential-channel`).
+  - No `.git/.gh-credentials`, no `GH_TOKEN`/`GITHUB_TOKEN`, `gh auth status`
+    not logged in.
+  - Git mirror (`http://tillandsias-git:8080`) returns 403 Forbidden.
+- **Blocker**: Updated `plan/issues/forge-credential-channel-blocked-2026-06-21.md`
+  with re-check entry. Same root cause — no credential path to push.
+- **Worker drain**: NOT STARTED — credential channel missing per exit contract.
+- **E2E gates**: SKIPPED (no committable work).
+- **Coordinator**: linux-next 0 ahead; siblings not checked (no push possible).
+- **Release**: Not applicable.
+- **Push state**: BLOCKED — no credential channel. Cycle halted.
+
+## This Loop (2026-06-22T04:22Z, linux_mutable — claude-sonnet46 meta-orch loop)
+
+- **Cycle type**: merge-to-main-and-release for v0.3.260622.3 + smoke e2e gate.
+- **Startup**: Resumed from context summary; PR #43 was pending merge after sync
+  commit `6ae0ef73` resolved criss-cross merge base. Credential channel: `ok:gh-keyring`.
+- **Worker drain**: No new packets; order 77 was already completed in prior context.
+- **Coordinator**: Merged PR #43 (linux-next→main). Bumped VERSION→0.3.260622.3 on
+  main in release worktree. Tagged `v0.3.260622.3`. Triggered release.yml run 27929545235.
+  Release SUCCEEDED (4m46s Nix build, cache HIT — third consecutive).
+  Synced main→linux-next (ff) + ledger commit. Pushed linux-next.
+- **Sibling heads**: linux-next `aa4050f8`, main `fdd51e2e`, osx-next `4d6e8066`,
+  windows-next `a3c8b23d`.
+- **Smoke e2e v0.3.260622.3**: PASS — install OK, podman reset clean, `--init` clean
+  (Vault init+unseal < 120s on native Linux), forge exit 0. No new findings vs v0.3.260622.2.
+  Forge credential channel still 403 (same known blocker). Report:
+  `plan/issues/smoke-e2e-findings-v0.3.260622.3-2026-06-22.md`.
+- **Push state**: pushed linux-next with ledger + smoke report.
 
 ## This Loop (2026-06-22T03:26Z, linux_mutable — Gemini-Antigravity worker)
 
@@ -542,14 +689,9 @@ LastExecutionTime: 2026-06-22T03:26:00Z
 
 ## Assignment Board
 
-- **Linux primary**: resolve or precisely block the macOS aarch64 Vault
-  reachability packet; fallback to
-  `future-intentions-drain/windows-macos-feature-parity` if no VM access is
-  available and NanoClawV2 remains actively leased.
-- **Windows primary**: keep `windows-next` synchronized and verify the
-  cold-provision/headless unit path before optional UX work.
-- **macOS primary**: wait on the aarch64 Vault reachability fix/probe, then land
-  the orchestrated GitHub Login route and run m8.
+- **Linux primary**: Move to next independent ready packet in the plan.
+- **Windows primary**: Claim and execute Windows slice of `vault-flow/xplat-gating-parity`.
+- **macOS primary**: Claim and execute `macos-in-vm-enclave-provisioning` and the orchestrated GitHub Login route (m8).
 - **Coordinator fallback**: keep ACTIVE.md and host queues aligned with the new
   Windows/macOS parity packet.
 

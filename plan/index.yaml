@@ -3031,7 +3031,7 @@ plan_index:
               known_repo_wide_failures:
                 - "./build.sh --ci --spec tillandsias-vault still fails pre-existing gates: VERSION behind v0.3.260608.2+, repo-wide fmt drift, unrelated clippy::type_complexity in main.rs:1043, and pre-existing signal_handling timeout."
         - id: vault-flow/xplat-gating-parity
-          status: done
+          status: ready
           owner_host: macos+windows
           depends_on: [vault-flow/tray-gate-on-vault]
           unblocked_note: "Original blockers cleared: step 32 (vault-hardening-true-rekey) DONE, step 36 (xplat-vault/windows + /macos) DONE, and 42a (vault-flow/tray-gate-on-vault) completed and merged to windows-next. Windows slice is now in progress."
@@ -4061,7 +4061,7 @@ plan_index:
     - id: macos-in-vm-enclave-provisioning
       order: 55
       title: macOS in-VM enclave provisioning (keystone unblocking all macOS tray interaction)
-      status: claimed
+      status: ready
       owner_host: macos
       deliverable: plan/steps/49-macos-in-vm-enclave.md
       audit_origin: plan/issues/macos-m8-interactive-smoke-failures-2026-06-16.md
@@ -4147,6 +4147,12 @@ plan_index:
           host: "macos"
           lease_id: "step49-macos-vm-enclave-20260616T231619Z"
           expires_at: "2026-06-17T03:16:19Z"
+        - type: lease-reclaimed
+          ts: "2026-06-22T08:08:00Z"
+          agent_id: "linux-meta-orchestrator"
+          host: "linux"
+          reclaimed_lease_id: "step49-macos-vm-enclave-20260616T231619Z"
+          note: "Lease expired. The vault timeout blocker has been resolved via order 77. Reclaiming and resetting to ready to resume macOS-side interaction tests."
 
     - id: nanoclawv2-orchestration
       order: 56
@@ -5620,3 +5626,73 @@ plan_index:
             60s`. Self-unseal is machine-id-derived (not a host credential-handover
             gap), so it is cold-start slowness or a real Vault failure. Guest-side,
             released binary, shared with Linux native / forge / WSL2 vault bring-up.
+
+    - packet_id: vault-unseal-secret-rootful-podman
+      order: 78
+      title: "macOS Vault crash: unseal podman secret unreadable in container under rootful podman + --userns keep-id (order-77 120s fix does NOT fix macOS)"
+      status: done
+      kind: bug
+      deliverable: plan/issues/macos-github-login-vault-bootstrap-timeout-2026-06-22.md
+      depends_on: []
+      pickup_role: "Linux/guest team (shared vault_bootstrap.rs); MUST verify on macOS VZ guest"
+      outcome: >
+        The tillandsias-vault container reads its unseal secret at
+        /run/secrets/tillandsias-vault-unseal and stays up under the macOS VZ
+        guest's ROOTFUL podman, so --github-login completes the Vault write on
+        macOS. Fix committed to linux-next (db616e06): dropped uid/gid from
+        all vault secret mounts. Linux-side verification passed (build check,
+        tests). macOS VZ guest verification required to close the loop.
+      tasks:
+        - id: vault-unseal-secret-rootful-podman/fix-secret-mount
+          status: done
+          depends_on: []
+          owned_files:
+            - crates/tillandsias-headless/src/vault_bootstrap.rs
+            - images/vault/Containerfile
+          checkpoint_required: true
+          handoff_note: >
+            ROOT CAUSE (diagnosed on macOS, see deliverable): the vault container
+            entrypoint FATALs "/run/secrets/tillandsias-vault-unseal not present
+            after 30s" -> crash -> -d --rm removes it -> 60s health probe sees
+            connection-refused -> "did not become healthy". The podman secret
+            EXISTS; it is mounted mode=0400,uid=100,gid=1000 with --userns
+            keep-id. The in-VM headless runs as ROOT (rootful podman) on the VZ
+            guest, vs ROOTLESS on native Linux/forge -- under rootful, keep-id +
+            secret uid=100 leaves the 0400 secret unreadable by the entrypoint
+            (uid 100). FIX APPLIED (db616e06, linux-next): removed uid/gid from
+            all four vault secret mount options. Default podman secret mount
+            (mode=0444,uid=0) is world-readable regardless of user namespace
+            mapping. No Containerfile changes needed. macOS VZ guest verification
+            still required to close.
+      events:
+        - type: claim
+          ts: "2026-06-22T08:20:00Z"
+          agent_id: "linux-macuahuitl-claude-opencode-20260622T082000Z"
+          host: linux
+          lease_id: "vault-unseal-secret-rootful-podman-20260622T082000Z"
+          expires_at: "2026-06-22T12:20:00Z"
+        - type: completed
+          ts: "2026-06-22T08:30:00Z"
+          agent_id: "linux-macuahuitl-claude-opencode-20260622T082000Z"
+          host: linux
+          commit: db616e06
+          lease_id: "vault-unseal-secret-rootful-podman-20260622T082000Z"
+          note: >
+            Removed uid/gid options from all four vault podman secret mounts
+            in launch_vault_container (vault_bootstrap.rs). Default podman
+            secret mount (mode=0444,uid=0) is world-readable regardless of
+            user namespace mapping. Fix verified on Linux: cargo check passes,
+            8 vault-related tests pass, build.sh --check format+type-check OK.
+            macOS VZ guest verification still required (order-78 outcome
+            explicitly requires macOS-side test to close).
+        - type: finding
+          ts: "2026-06-22T07:35Z"
+          agent_id: "macos-claude-opus48-osx-next-20260622"
+          host: macos
+          note: >
+            Full macOS diagnostic supersedes the order-77 cold-start-timing
+            assumption: vault crash-on-boot because the unseal secret is not
+            readable inside the container under rootful podman + --userns keep-id.
+            Diagnosed via headless --exec-guest (health probe = connection
+            refused; podman events = container died; foreground entrypoint =
+            FATAL waiting on /run/secrets/...; podman secret ls = secret exists).

@@ -1,6 +1,75 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-22T04:00Z
+Last updated: 2026-06-22T14:23Z
+
+## This Cycle (2026-06-22T14:23Z, linux_mutable — big-pickle meta-orch)
+
+- **Cycle type**: meta-orchestration convergence check.
+- **Startup**: `linux-next @ b3804d57`, clean worktree. Credential Channel Guard passed (`ok:gh-keyring`).
+- **Worker drain**: Zero residual at current bar — no linux-ready plan/index.yaml nodes. Two ready nodes (`vault-flow/xplat-gating-parity`, `macos-in-vm-enclave-provisioning`) are macOS/Windows-only.
+- **Coordinator**: Sibling branches `origin/osx-next` and `origin/windows-next` both ancestors of HEAD. No merge needed.
+- **E2E gates**: No new release to test. v0.3.260622.3 smoke-tested PASS in prior cycles.
+- **Reduction engine**: Zero residual at current bar. No new findings.
+
+## This Cycle (2026-06-22T13:15Z, linux_mutable — Gemini-Antigravity meta-orch)
+
+- **Cycle type**: meta-orchestration convergence check.
+- **Startup**: `linux-next @ 259ef1dc`, clean worktree. Credential Channel Guard passed (`ok:gh-keyring`).
+- **Worker drain**: Zero residual at current bar — no linux-ready plan/index.yaml nodes. Two ready nodes (`vault-flow/xplat-gating-parity`, `macos-in-vm-enclave-provisioning`) are macOS/Windows-only.
+- **Coordinator**: Sibling branches `origin/osx-next` and `origin/windows-next` both ancestors of HEAD. No merge needed.
+- **E2E gates**: No new release to test. v0.3.260622.3 smoke-tested PASS in prior cycles.
+- **Reduction engine**: Zero residual at current bar. No new findings.
+
+## This Cycle (2026-06-22T12:22Z, linux_mutable — big-pickle meta-orch)
+
+- **Cycle type**: meta-orchestration convergence check.
+- **Startup**: `linux-next @ 6e85eb76`, clean worktree. Credential Channel Guard passed (`ok:gh-keyring`).
+- **Worker drain**: Zero residual at current bar — no linux-ready plan/index.yaml nodes. Two ready nodes (`vault-flow/xplat-gating-parity`, `macos-in-vm-enclave-provisioning`) are macOS/Windows-only.
+- **Coordinator**: Sibling branches `origin/osx-next` and `origin/windows-next` both ancestors of HEAD. No merge needed.
+- **E2E gates**: No new release to test. v0.3.260622.3 smoke-tested PASS in prior cycles.
+- **Reduction engine**: Zero residual at current bar. No new findings.
+
+## This Cycle (2026-06-22T10:21Z, linux_mutable — big-pickle meta-orch)
+
+- **Cycle type**: meta-orchestration convergence check.
+- **Startup**: `linux-next @ c6b998d9`, clean worktree. Credential Channel Guard passed (`ok:gh-keyring`).
+- **Worker drain**: Zero residual at current bar — no linux-ready plan/index.yaml nodes. Two ready nodes (`vault-flow/xplat-gating-parity`, `macos-in-vm-enclave-provisioning`) are macOS/Windows-only.
+- **Coordinator**: Sibling branches `origin/osx-next` and `origin/windows-next` both ancestors of HEAD. No merge needed.
+- **E2E gates**: No new release to test. v0.3.260622.3 smoke-tested PASS in prior cycles.
+- **Forge credential blocker**: Still open — operator action required (`plan/issues/forge-credential-channel-blocked-2026-06-21.md`).
+- **Bar-raise proposals**: Filed and waiting Tlatoāni decision.
+
+## This Cycle (2026-06-22T06:57Z, linux_mutable — big-pickle meta-orch)
+
+- **Worker drain**: Zero residual at current bar — all plan/index.yaml nodes completed.
+  Re-checked sibling branches; `origin/osx-next@4d6e8066` is an ancestor of `linux-next`.
+  Vault 60s→120s timeout fix (order 77) was on `linux-next` but not on `osx-next`.
+  **Fast-forwarded `osx-next`** to `origin/linux-next@ff896a6b` to ship the vault
+  timeout fix and all intervening linux-next work to the macOS branch. Pushed.
+  Machine-id stability concern remains open — filed in
+  `plan/issues/macos-github-login-vault-bootstrap-timeout-2026-06-22.md` for macOS
+  host verification (cannot test VZ guest `/etc/machine-id` persistence from Linux).
+- **Coordinator**: `origin/osx-next` now at `ff896a6b` (fast-forwarded). `origin/windows-next`
+  unchanged (`a3c8b23d`). No merge required — both are ancestors of `linux-next`.
+- **E2E gates**: No new release to test. v0.3.260622.3 smoke-tested PASS in prior cycle.
+- **Forge credential blocker**: Still open — operator action required
+  (`plan/issues/forge-credential-channel-blocked-2026-06-21.md`).
+
+## This Cycle (2026-06-22T04:22Z, linux_mutable — claude-sonnet46 meta-orch loop)
+
+- **Release v0.3.260622.3 SHIPPED**: PR #43 merged (MERGEABLE/CLEAN after sync merge),
+  VERSION bumped on main (`fdd51e2e`), tagged, run 27929545235 → SUCCESS.
+  Ships: vault wait_for_vault_ready 60s→120s (order 77), osx-next github-login
+  fixes (HOME for VZ guest, XDG_RUNTIME_DIR gate, token-at-rest audit), smoke e2e
+  PASS report.
+- **Nix Cache HIT confirmed**: 4m46s (286s) — third consecutive cache hit; order-64
+  fix confirmed stable across releases.
+- **ORDER 77 CLOSED**: vault-bootstrap-health-timeout increase shipped.
+- **Work queue**: No `ready` tasks in plan/index.yaml. Order 55 (macOS in-VM)
+  claimed (macOS team). Smoke e2e v0.3.260622.3 pending (this session may run it).
+- **macOS coord note**: machine-id stability in VZ guest still open — if machine-id
+  is unstable across reboots, Vault stays sealed permanently regardless of timeout.
+  Filed in plan/issues/macos-github-login-vault-bootstrap-timeout-2026-06-22.md.
 
 ## This Cycle (2026-06-22T03:25Z, linux_mutable — claude-opus48 meta-orch loop)
 
@@ -44,6 +113,20 @@ Last updated: 2026-06-22T04:00Z
 - **Verification**: Verified build correctness with `cargo check` and successfully ran integration tests of `tillandsias-vault-client` with all tests passing. Validated YAML edits using the approved Ruby YAML validator fallback.
 - **Next**: commit and push progress to origin.
 
+## This Cycle (2026-06-22T04:56Z, forge — big-pickle meta-orch)
+
+- **Startup**: `linux-next @ aa4050f8`, clean worktree, 0 ahead / 0 behind.
+- **Credential Channel Guard**: FAILED — `missing:no-credential-channel`.
+  - No `.git/.gh-credentials`, no `GH_TOKEN`/`GITHUB_TOKEN`, `gh auth status`
+    not logged in.
+  - Git mirror (`tillandsias-git:8080`) returns 403 Forbidden (was Connection
+    reset previously — may indicate the service restarted but auth is wrong).
+- **Blocker updated**: `plan/issues/forge-credential-channel-blocked-2026-06-21.md`
+  re-check entry at 2026-06-22T04:57Z.
+- **Stopped**: Per meta-orchestration exit contract, no committable work was
+  started. Cycle halts until operator re-seeds the credential channel or the
+  git mirror becomes reachable.
+
 ## This Cycle (2026-06-21T15:27Z, forge — big-pickle meta-orch)
 
 - **Startup**: `linux-next @ 6d25a37f`, clean worktree, in sync with origin.
@@ -56,7 +139,6 @@ Last updated: 2026-06-22T04:00Z
 - **Stopped**: Per meta-orchestration exit contract, no committable work was
   started. Cycle halts until operator re-seeds the credential channel or the
   git mirror becomes reachable.
-
 
 ## This Cycle (2026-06-21T14:55Z, linux_mutable — big-pickle interactive)
 
