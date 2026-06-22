@@ -9,6 +9,31 @@
 [[github-login-token-at-rest-audit-2026-06-22]],
 [[optimization-macos-vz-idiomatic-exec-layer-2026-06-21]]
 
+## FIX CONFIRMED + macOS VALIDATION PENDING A RELEASE (2026-06-22, later)
+
+The Linux/guest team shipped order 78 (`db616e06 fix(vault): drop uid/gid from
+podman secret mounts for rootful+keep-id compat`). Code-reviewed on macOS: it
+**exactly matches the diagnosis below** — all four `--secret` args
+(`secret_arg`/`tls_cert_arg`/`tls_key_arg`/`tls_ca_arg`) drop the
+`,mode=0400,uid=100,gid=1000` suffix (now just `VAULT_UNSEAL_SECRET.to_string()`,
+etc.), so the secrets mount with default ownership readable by the vault user
+under the VZ guest's **rootful** podman. `VAULT_USER_UID`/`VAULT_GROUP_GID`
+constants removed.
+
+**BLOCKER for macOS end-to-end validation: the fix is not in any RELEASE yet.**
+Latest release `v0.3.260622.3` (2026-06-21 21:26 PDT) predates the fix (committed
+2026-06-22 01:21 PDT). The macOS VM fetches the guest headless from
+`releases/latest`, so `--github-login` Vault will keep failing until a release
+contains `db616e06`. A local cross-compile to inject the fixed headless is not
+feasible on this host (Homebrew rust, no rustup → no aarch64-musl target std).
+
+**Next action (Linux coordinator / release cadence):** cut a release that
+includes `db616e06`; then the macOS team re-runs
+`tillandsias-tray --github-login` and expects Vault to come up
+(`bootstrap complete`) and the login to complete (token → Vault). machine-id
+stability + all other blockers already verified, so this should close the macOS
+`--github-login` loop.
+
 ## ROOT CAUSE FOUND (2026-06-22, macOS diagnostic) — NOT a timeout
 
 **The 60s→120s fix (order 77) does NOT fix macOS.** The macOS Vault failure is a
