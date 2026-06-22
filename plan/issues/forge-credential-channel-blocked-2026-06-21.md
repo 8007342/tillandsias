@@ -42,6 +42,18 @@ Re-seed the credential channel by one of:
   from the forge enclave (longer-term fix, see
   `forge-push-credential-channel-2026-06-20.md`).
 
+## Re-check 2026-06-22T04:57Z
+
+Same verdict: `missing:no-credential-channel`. All channels checked:
+
+1. `.git/.gh-credentials` — file does not exist
+2. `GH_TOKEN` / `GITHUB_TOKEN` — not set
+3. `gh auth status` — not logged in
+4. Git mirror (`http://tillandsias-git:8080`) — returns 403 Forbidden
+5. Branch `linux-next` @ `aa4050f8` — clean, 0 ahead / 0 behind
+
+Cycle cannot proceed until a credential channel is available.
+
 ## Relation to Existing Issues
 
 - `forge-push-credential-channel-2026-06-20.md` — architecture for wiring forge
