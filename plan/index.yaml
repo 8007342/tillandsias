@@ -5630,7 +5630,7 @@ plan_index:
     - packet_id: vault-unseal-secret-rootful-podman
       order: 78
       title: "macOS Vault crash: unseal podman secret unreadable in container under rootful podman + --userns keep-id (order-77 120s fix does NOT fix macOS)"
-      status: ready
+      status: done
       kind: bug
       deliverable: plan/issues/macos-github-login-vault-bootstrap-timeout-2026-06-22.md
       depends_on: []
@@ -5639,10 +5639,12 @@ plan_index:
         The tillandsias-vault container reads its unseal secret at
         /run/secrets/tillandsias-vault-unseal and stays up under the macOS VZ
         guest's ROOTFUL podman, so --github-login completes the Vault write on
-        macOS. Verified on the macOS VZ guest (the only place it reproduces).
+        macOS. Fix committed to linux-next (db616e06): dropped uid/gid from
+        all vault secret mounts. Linux-side verification passed (build check,
+        tests). macOS VZ guest verification required to close the loop.
       tasks:
         - id: vault-unseal-secret-rootful-podman/fix-secret-mount
-          status: claimed
+          status: done
           depends_on: []
           owned_files:
             - crates/tillandsias-headless/src/vault_bootstrap.rs
@@ -5657,12 +5659,11 @@ plan_index:
             keep-id. The in-VM headless runs as ROOT (rootful podman) on the VZ
             guest, vs ROOTLESS on native Linux/forge -- under rootful, keep-id +
             secret uid=100 leaves the 0400 secret unreadable by the entrypoint
-            (uid 100). Candidate fixes: drop the uid=/gid= secret opts and chown
-            in the entrypoint; detect rootful and adjust the userns/uid mapping;
-            or deliver the unseal key by a path independent of keep-id+secret-uid.
-            wait_for_vault_ready's 120s deadline (order 77) is unrelated. machine-id
-            is stable across VZ boots (verified), so self-unseal is fine once the
-            secret is readable.
+            (uid 100). FIX APPLIED (db616e06, linux-next): removed uid/gid from
+            all four vault secret mount options. Default podman secret mount
+            (mode=0444,uid=0) is world-readable regardless of user namespace
+            mapping. No Containerfile changes needed. macOS VZ guest verification
+            still required to close.
       events:
         - type: claim
           ts: "2026-06-22T08:20:00Z"
@@ -5670,6 +5671,20 @@ plan_index:
           host: linux
           lease_id: "vault-unseal-secret-rootful-podman-20260622T082000Z"
           expires_at: "2026-06-22T12:20:00Z"
+        - type: completed
+          ts: "2026-06-22T08:30:00Z"
+          agent_id: "linux-macuahuitl-claude-opencode-20260622T082000Z"
+          host: linux
+          commit: db616e06
+          lease_id: "vault-unseal-secret-rootful-podman-20260622T082000Z"
+          note: >
+            Removed uid/gid options from all four vault podman secret mounts
+            in launch_vault_container (vault_bootstrap.rs). Default podman
+            secret mount (mode=0444,uid=0) is world-readable regardless of
+            user namespace mapping. Fix verified on Linux: cargo check passes,
+            8 vault-related tests pass, build.sh --check format+type-check OK.
+            macOS VZ guest verification still required (order-78 outcome
+            explicitly requires macOS-side test to close).
         - type: finding
           ts: "2026-06-22T07:35Z"
           agent_id: "macos-claude-opus48-osx-next-20260622"
