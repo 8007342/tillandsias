@@ -296,6 +296,7 @@ pub fn exec_guest_main(argv: Vec<String>) -> i32 {
         return 2;
     }
     let vz = tillandsias_vm_layer::vz::VzRuntime::new(3, image_root());
+    vz.set_serial_to_log(true); // keep guest serial getty noise off the user terminal
     if !vz.is_provisioned() {
         eprintln!("{{\"error\":\"not provisioned; run --provision first\"}}");
         return 1;
@@ -452,6 +453,7 @@ pub fn github_login_main() -> i32 {
     );
 
     let vz = tillandsias_vm_layer::vz::VzRuntime::new(3, image_root());
+    vz.set_serial_to_log(true); // keep guest serial getty noise off the user terminal
     if !vz.is_provisioned() {
         eprintln!(
             "{{\"error\":\"not provisioned; run --provision or launch the tray once first\"}}"
@@ -519,7 +521,12 @@ pub fn github_login_main() -> i32 {
             &[
                 "/bin/bash",
                 "-lc",
-                "exec /usr/local/bin/tillandsias-headless --github-login",
+                // The guest `--github-login` requires a desktop-user-session lane
+                // with a writable XDG_RUNTIME_DIR; the control-wire exec env is
+                // cleared, so seed one (root can create /run/user/0). This
+                // satisfies require_desktop_user_session for the in-VM invocation.
+                "export XDG_RUNTIME_DIR=/run/user/0; mkdir -p \"$XDG_RUNTIME_DIR\" 2>/dev/null; \
+                 exec /usr/local/bin/tillandsias-headless --github-login",
             ],
             expects,
             |ev| eprintln!("[github-login] {ev}"),
