@@ -139,7 +139,31 @@ pub fn launch_spec(intent: &PtyIntent, project: Option<&str>, rows: u16, cols: u
     let inner: Vec<String> = match intent {
         PtyIntent::Shell => vec!["/bin/bash".to_string(), "-l".to_string()],
         PtyIntent::GithubLogin => {
-            vec!["gh".to_string(), "auth".to_string(), "login".to_string()]
+            // Run the orchestrated subcommand through a LOGIN shell, NOT bare
+            // `gh auth login`. Two defects made the old form render a blank
+            // terminal on macOS/Windows:
+            //   1. `gh` is absent from the bare VM rootfs (it ships in the
+            //      container images), and
+            //   2. the in-VM PTY handler (`tillandsias-headless::pty_handler`)
+            //      `env_clear()`s the child and only re-adds `TERM`, so there
+            //      is no `PATH` — any bare-name argv[0] fails to spawn, and the
+            //      spawn error is not surfaced to the host PTY (silent blank).
+            // `/bin/bash -lc` mirrors the working `Shell` intent: `/bin/bash`
+            // is an absolute path (no PATH lookup), and `-l` rebuilds `PATH`
+            // from the VM login profile so `tillandsias-headless` resolves.
+            // `tillandsias-headless --github-login` is the SAME orchestrated
+            // flow the Linux native tray runs
+            // (`tillandsias-headless::tray::handle_github_login` ->
+            // `run_github_login`): `gh auth login --with-token` inside the git
+            // service container + Vault write at secret/github/token.
+            // Guest binary name is `tillandsias-headless` (see
+            // tillandsias-vm-layer vz.rs / wsl.rs), not `tillandsias`.
+            // See plan/issues/macos-tray-github-login-blank-terminal-2026-06-21.md.
+            vec![
+                "/bin/bash".to_string(),
+                "-lc".to_string(),
+                "exec tillandsias-headless --github-login".to_string(),
+            ]
         }
         PtyIntent::Agent(agent) => {
             vec!["tillandsias".to_string(), agent_flag(*agent).to_string()]
@@ -386,6 +410,19 @@ pub trait PtyMaster: Send + 'static {
     fn split(self) -> (Self::Reader, Self::Writer);
 }
 
+/// Pre-attach EIO tolerance window. On macOS a PTY master read/write returns
+/// `EIO` while no slave is open; `master.split()` closes the retained slave and
+/// the terminal (`screen`) re-opens it only after the attach handoff, so the
+/// host briefly sees `EIO` with zero slaves. `pump_io` treats such errors as
+/// transient until the first successful read/write, bounded by this window,
+/// rather than tearing the session down (which SIGHUP'd the guest child and
+/// made every macOS tray PTY attach flash-and-die). Linux blocks pre-attach and
+/// never hits this path, so behavior there is unchanged.
+/// @trace plan/issues/macos-tray-github-login-blank-terminal-2026-06-21.md
+const ATTACH_GRACE: std::time::Duration = std::time::Duration::from_secs(10);
+/// Backoff between pre-attach EIO retries inside [`ATTACH_GRACE`].
+const EIO_BACKOFF: std::time::Duration = std::time::Duration::from_millis(50);
+
 /// Bridge a host PTY `master` to a `session` over vsock (§3.4):
 /// - local terminal input (master reader) → `PtyData{ToGuest}` frames;
 /// - inbound `PtyData{ToHost}` / `PtyClose` → master writer (terminal output).
@@ -394,6 +431,9 @@ pub trait PtyMaster: Send + 'static {
 /// completes when the session closes (guest `PtyClose`) or the connection
 /// drops, at which point the input task is aborted.
 pub fn pump_io<M: PtyMaster>(session: PtySession, master: M) -> tokio::task::JoinHandle<()> {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
     let (mut reader, mut writer) = master.split();
     let PtySession {
         session_id,
@@ -401,32 +441,72 @@ pub fn pump_io<M: PtyMaster>(session: PtySession, master: M) -> tokio::task::Joi
         mut inbound,
     } = session;
 
+    // Shared "a slave has attached at least once" flag. Set on the first
+    // successful read OR write. Before it is set, a read/write error is treated
+    // as the transient pre-attach EIO (see ATTACH_GRACE); after it is set, an
+    // error is a real terminal close and tears the session down immediately.
+    let attached = Arc::new(AtomicBool::new(false));
+
     // Input task: local keystrokes → guest stdin (chunked at MAX_PTY_FRAME_BYTES).
+    let in_attached = attached.clone();
     let input_task = tokio::spawn(async move {
         let mut buf = vec![0u8; MAX_PTY_FRAME_BYTES];
+        let start = std::time::Instant::now();
         loop {
             match reader.read(&mut buf).await {
-                Ok(0) | Err(_) => break, // EOF / closed terminal
+                Ok(0) => break, // clean EOF
                 Ok(n) => {
+                    in_attached.store(true, Ordering::Relaxed);
                     for body in chunk_to_guest(session_id, &buf[..n]) {
                         if transport.send(body).is_err() {
                             return;
                         }
                     }
                 }
+                Err(_) => {
+                    // macOS: a PTY master read returns EIO while no slave is
+                    // open. `master.split()` closed the retained slave, and the
+                    // terminal (`screen`) re-opens it only after the attach
+                    // handoff completes — so we briefly see EIO with no slave.
+                    // Tolerate it until the first attach, bounded by the grace
+                    // window; afterwards (or once attached) it is a real close.
+                    if !in_attached.load(Ordering::Relaxed) && start.elapsed() < ATTACH_GRACE {
+                        tokio::time::sleep(EIO_BACKOFF).await;
+                        continue;
+                    }
+                    break;
+                }
             }
         }
     });
 
     // Output task: guest output → local terminal; terminal close ends both.
+    let out_attached = attached;
     tokio::spawn(async move {
-        while let Some(ev) = inbound.recv().await {
+        let start = std::time::Instant::now();
+        'pump: while let Some(ev) = inbound.recv().await {
             match ev {
-                SessionEvent::Data(bytes) => {
-                    if writer.write_all(&bytes).await.is_err() {
-                        break;
+                SessionEvent::Data(bytes) => loop {
+                    match writer.write_all(&bytes).await {
+                        Ok(()) => {
+                            out_attached.store(true, Ordering::Relaxed);
+                            break;
+                        }
+                        Err(_) => {
+                            // Same pre-attach EIO tolerance as the input task:
+                            // guest output (e.g. the shell prompt) can arrive
+                            // before the terminal opens the slave. Retry the
+                            // write until attach, bounded by the grace window.
+                            if !out_attached.load(Ordering::Relaxed)
+                                && start.elapsed() < ATTACH_GRACE
+                            {
+                                tokio::time::sleep(EIO_BACKOFF).await;
+                                continue;
+                            }
+                            break 'pump;
+                        }
                     }
-                }
+                },
                 SessionEvent::Closed(_) => break,
             }
         }
@@ -605,9 +685,14 @@ mod tests {
             launch_spec(&PtyIntent::Shell, None, 24, 80).argv,
             vec!["/bin/bash", "-l"]
         );
+        // GitHub login runs the orchestrated subcommand (git/vault-container
+        // flow + Vault write) through a LOGIN shell so PATH is rebuilt and the
+        // guest `tillandsias-headless` binary resolves — NOT bare
+        // `gh auth login`, which had no `gh` in the VM rootfs and rendered a
+        // blank attach surface on macOS/Windows.
         assert_eq!(
             launch_spec(&PtyIntent::GithubLogin, None, 24, 80).argv,
-            vec!["gh", "auth", "login"]
+            vec!["/bin/bash", "-lc", "exec tillandsias-headless --github-login"]
         );
         assert_eq!(
             launch_spec(&PtyIntent::Agent(SelectedAgent::OpenCode), None, 24, 80).argv,
@@ -846,5 +931,75 @@ mod tests {
         .unwrap();
         let joined = tokio::time::timeout(Duration::from_secs(2), handle).await;
         assert!(joined.is_ok(), "pump output task should finish after close");
+    }
+
+    /// Regression: the input task must tolerate the macOS pre-attach `EIO`
+    /// (master read errors while no slave is open yet) instead of tearing the
+    /// session down. A master that returns `EIO` a few times before yielding a
+    /// byte must still forward that byte to the guest.
+    /// @trace plan/issues/macos-tray-github-login-blank-terminal-2026-06-21.md
+    #[tokio::test]
+    async fn pump_input_tolerates_pre_attach_eio() {
+        use std::pin::Pin;
+        use std::task::{Context, Poll};
+        use tokio::io::ReadBuf;
+
+        /// Returns `EIO` `eio_left` times, then one chunk of `data`, then EOF.
+        struct EioThenData {
+            eio_left: usize,
+            data: Option<Vec<u8>>,
+        }
+        impl tokio::io::AsyncRead for EioThenData {
+            fn poll_read(
+                mut self: Pin<&mut Self>,
+                _cx: &mut Context<'_>,
+                buf: &mut ReadBuf<'_>,
+            ) -> Poll<std::io::Result<()>> {
+                if self.eio_left > 0 {
+                    self.eio_left -= 1;
+                    return Poll::Ready(Err(std::io::Error::from_raw_os_error(5))); // EIO
+                }
+                if let Some(d) = self.data.take() {
+                    buf.put_slice(&d);
+                    return Poll::Ready(Ok(()));
+                }
+                Poll::Ready(Ok(())) // EOF
+            }
+        }
+        struct EioMaster {
+            reader: EioThenData,
+        }
+        impl PtyMaster for EioMaster {
+            type Reader = EioThenData;
+            type Writer = tokio::io::Sink;
+            fn split(self) -> (Self::Reader, Self::Writer) {
+                (self.reader, tokio::io::sink())
+            }
+        }
+
+        let t = Arc::new(FakeTransport::default());
+        let r = PtyRouter::new();
+        let a = SessionIdAllocator::new();
+        let session = PtySession::open(t.clone(), &a, &r, &opts("/bin/bash")).unwrap();
+        let sid = session.session_id;
+        let master = EioMaster {
+            reader: EioThenData {
+                eio_left: 3,
+                data: Some(b"x".to_vec()),
+            },
+        };
+        let _handle = pump_io(session, master);
+
+        // 3 pre-attach EIOs at EIO_BACKOFF each (~150ms) then the byte; well
+        // under ATTACH_GRACE, so the pump must NOT tear down.
+        tokio::time::sleep(std::time::Duration::from_millis(500)).await;
+        assert!(
+            t.sent.lock().unwrap().iter().any(|m| matches!(
+                m,
+                ControlMessage::PtyData { session_id, direction: PtyDirection::ToGuest, bytes }
+                    if *session_id == sid && bytes == b"x"
+            )),
+            "input task must tolerate pre-attach EIO and forward the eventual byte"
+        );
     }
 }
