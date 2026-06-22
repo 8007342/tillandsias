@@ -1,6 +1,17 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-22T04:47Z
+Last updated: 2026-06-22T06:46Z
+
+## This Cycle (2026-06-22T06:46Z, linux_mutable — big-pickle meta-orch)
+
+- **Zero residual at current bar**: All plan/index.yaml nodes completed.
+- **Bar-raise proposals filed**: 3 candidates (clippy lint gate, dev-proxy warning,
+  cache size signal) in `plan/issues/bar-raise-proposals-2026-06-22.md` — Tlatoāni-gated.
+- **Coordinator**: Sibling branches `origin/windows-next` and `origin/osx-next`
+  are ancestors of `linux-next`. No merge needed.
+- **E2E gates**: No new release to test. Latest v0.3.260622.3 already smoke-tested PASS.
+- **Forge credential blocker**: Still open — operator must re-seed `.git/.gh-credentials`
+  or inject `GH_TOKEN` (`plan/issues/forge-credential-channel-blocked-2026-06-21.md`).
 
 ## This Cycle (2026-06-22T04:22Z, linux_mutable — claude-sonnet46 meta-orch loop)
 
