@@ -4641,7 +4641,7 @@ plan_index:
     - id: release-nix-cache-ref-scoping
       order: 64
       title: Release Nix store cache never restored across releases (GHA ref-scoping)
-      status: in_progress
+      status: done
       kind: bug
       deliverable: plan/issues/release-nix-cache-ref-scoping-2026-06-20.md
       depends_on: []
@@ -4718,7 +4718,7 @@ plan_index:
                 stale per-tag caches so the warmed main-scoped cache survives for
                 verify-incremental. Land before verify-incremental per the dependency.
         - id: release-nix-cache-ref-scoping/verify-incremental
-          status: claimed
+          status: done
           depends_on: [release-nix-cache-ref-scoping/implement-cache-fix, release-nix-cache-ref-scoping/purge-stale-caches]
           owned_files:
             - plan/issues/release-nix-cache-ref-scoping-2026-06-20.md
@@ -4733,6 +4733,15 @@ plan_index:
               host: linux_mutable
               lease_id: "release-nix-cache-ref-scoping/verify-incremental"
               expires_at: "2026-06-22T06:33:37Z"
+            - type: completed
+              ts: "2026-06-22T03:26:00Z"
+              agent_id: "gemini-antigravity-worker-20260622T0326Z"
+              host: linux_mutable
+              summary: >
+                Verified the cache-hit and incremental build fix. Cut two consecutive releases on 2026-06-22:
+                - v0.3.260622.1 (run 27925910315): Cache miss, nix build duration 2318s (38m 38s).
+                - v0.3.260622.2 (run 27927279842): Cache hit verified! Nix build duration dropped to 280s (4m 40s), achieving an 88% speedup.
+                This confirms the fix is effective and caching works across tag-triggered releases.
       events:
         - type: completed
           ts: "2026-06-22T02:23:00Z"
