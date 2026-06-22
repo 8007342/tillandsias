@@ -1275,12 +1275,29 @@ impl VmRuntime for VzRuntime {
         stop_res
     }
 
-    async fn exec(&self, _argv: &[&str]) -> Result<ExitStatus, VmError> {
-        // Phase 5 work (gated on control-wire-pty-attach merging). Returns
-        // a clear error so callers don't silently swallow the gap.
-        Err("VzRuntime::exec: deferred to Phase 5 (gated on \
-             control-wire-pty-attach merging). See plan/steps/20-macos-tray-v0_0_1.md."
-            .into())
+    async fn exec(&self, argv: &[&str]) -> Result<ExitStatus, VmError> {
+        // Non-interactive guest exec over the control wire, mirroring
+        // WslRuntime::exec (`wsl --exec`) for cross-platform VmRuntime parity.
+        // The PTY session machinery lives in tillandsias-host-shell, which
+        // depends on THIS crate, so we cannot reuse it (cycle); instead we
+        // speak the control wire directly via the self-contained vsock_exec
+        // client. See plan/issues/optimization-macos-vz-idiomatic-exec-layer-2026-06-21.md.
+        use std::os::unix::process::ExitStatusExt;
+        use tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
+
+        let stream = self
+            .open_vsock_stream(CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(30))
+            .await
+            .map_err(|e| format!("VzRuntime::exec: vsock connect: {e}"))?;
+        let out = crate::vsock_exec::exec_over_stream(stream, argv).await?;
+
+        // Synthesize a Unix ExitStatus from the guest waitpid-style result:
+        // signal in the low 7 bits, else exit code in the high byte (WEXITSTATUS).
+        let raw = match out.exit.signal {
+            Some(sig) => sig & 0x7f,
+            None => (out.exit.code & 0xff) << 8,
+        };
+        Ok(ExitStatus::from_raw(raw))
     }
 
     async fn wait_ready(&self, timeout: Duration) -> Result<(), VmError> {
@@ -1547,16 +1564,24 @@ mod tests {
     /// silently panic.
     ///
     /// @trace spec:vm-idiomatic-layer
+    /// `VzRuntime::exec` is now implemented over the control wire (see
+    /// `vsock_exec`). Without a started VM it must fail at the vsock-connect
+    /// step with a clear "VM not started" error — NOT silently succeed and NOT
+    /// the old Phase-5 deferral stub. The happy-path protocol is unit-tested in
+    /// `vsock_exec::tests` against an in-memory peer (no real VM).
     #[cfg(target_os = "macos")]
     #[tokio::test]
-    async fn vz_exec_returns_phase5_deferral() {
+    async fn vz_exec_without_started_vm_fails_at_connect() {
         let tmp = tempfile::tempdir().unwrap();
         let rt = VzRuntime::new(42, tmp.path().to_path_buf());
         let err = rt
             .exec(&["/bin/true"])
             .await
-            .expect_err("exec should not silently succeed in Phase 1");
-        assert!(err.contains("Phase 5"), "unexpected exec error: {err}");
+            .expect_err("exec without a started VM must fail");
+        assert!(
+            err.contains("vsock connect") && err.contains("not started"),
+            "unexpected exec error: {err}"
+        );
     }
 
     /// `VzRuntime::start` must surface a clear error when rootfs.img is

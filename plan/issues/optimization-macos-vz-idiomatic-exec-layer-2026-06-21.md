@@ -83,9 +83,22 @@ calls the macOS-only `VzRuntime::open_vsock_stream` directly, builds a host
   <externalPTY>` self-terminates on macOS; rank simpler launch mechanisms
   (Terminal `do script "ssh …"`, vsock ProxyCommand via socat, an attach
   client). Closure: a decision record with the chosen mechanism + rationale.
-- `macos-vz/impl-exec` (optimization) — implement `VzRuntime::exec` over vsock
-  (non-TTY). Closure: a litmus that runs `echo HELLO` in the guest via the trait
-  and asserts stdout + exit code.
+- `macos-vz/impl-exec` (optimization) — **DONE (protocol slice), 2026-06-22.**
+  Implemented `VzRuntime::exec` over the control wire via a new self-contained
+  client `crates/tillandsias-vm-layer/src/vsock_exec.rs` (`exec_over_stream`):
+  `Hello`/`HelloAck` → `PtyOpen(argv)` → drain `PtyData{ToHost}` → `PtyClose`
+  exit. Self-contained because `host-shell` depends on `vm-layer` (no reuse of
+  the host-shell PTY bridge without a cycle). macOS `VzRuntime::exec` wires
+  `open_vsock_stream` → `exec_over_stream` → `ExitStatus` (unix `from_raw`).
+  Closure MET at the protocol level: 3 unit tests (happy path asserts
+  `stdout=="HELLO\n"` + exit 0, non-zero exit propagation, empty-argv reject)
+  against an in-memory duplex fake guest — `cargo test -p tillandsias-vm-layer`
+  18/18 PASS, no real VM needed. Mirrors `WslRuntime::exec` for parity.
+- `macos-vz/impl-exec-integration` (optimization, NEXT) — exercise
+  `VzRuntime::exec` against a **booted** VM: `start()` → `exec(["/bin/echo","HELLO"])`
+  → assert stdout/exit. This is the real-path proof (uses absolute argv to dodge
+  the guest `pty_handler` no-PATH defect). Closure: a gated integration test or
+  a smoke step on a macOS host with a provisioned VM.
 - `macos-vz/impl-attach` (optimization) — implement the interactive attach via
   the chosen mechanism; rewire the tray's GitHub-login / Open-Shell / agent
   intents to use it. Closure: AX smoke (`scripts/macos-tray-ax-smoke.sh`) shows
