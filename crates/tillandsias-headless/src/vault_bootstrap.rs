@@ -1171,7 +1171,9 @@ fn wait_for_vault_ready(
     base_url: &str,
     debug: bool,
 ) -> Result<String, String> {
-    let deadline = Instant::now() + Duration::from_secs(60);
+    // 120s: native Linux resolves in ~1s; VM guests (macOS VZ 4 GiB, WSL2) need
+    // more headroom for cold first-init under resource pressure (order 77).
+    let deadline = Instant::now() + Duration::from_secs(120);
     let client = vault_client(base_url, "", debug)?; // health doesn't need a token
     loop {
         match rt.block_on(client.health()) {

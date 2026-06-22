@@ -1,7 +1,20 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-22T02:25:00Z
+LastExecutionTime: 2026-06-22T03:26:00Z
 
+
+## This Loop (2026-06-22T03:26Z, linux_mutable — Gemini-Antigravity worker)
+
+- **Cycle type**: Verification and completion of `release-nix-cache-ref-scoping/verify-incremental`.
+- **Startup**: `linux-next @ 67288c7f`, clean worktree. Credential Channel Guard passed (`ok:gh-keyring`).
+- **Worker drain**:
+  - Claimed and completed `release-nix-cache-ref-scoping/verify-incremental` node lease.
+  - Verified cache-hit and incremental build fix. Cut two consecutive releases on 2026-06-22:
+    - v0.3.260622.1 (run 27925910315): Cache miss, nix build took 2318s (38m 38s).
+    - v0.3.260622.2 (run 27927279842): Cache hit verified! Nix build took 280s (4m 40s), achieving an 88% speedup.
+  - Updated issue document `plan/issues/release-nix-cache-ref-scoping-2026-06-20.md` with completion event.
+- **Coordinator**: Merged `main` into `linux-next`. Clean workspace.
+- **Push state**: Will push `linux-next` to origin.
 
 ## This Loop (2026-06-22T02:25Z, linux_mutable — claude-opus48 meta-orch loop)
 
