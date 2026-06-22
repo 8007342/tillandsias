@@ -394,6 +394,167 @@ pub fn exec_guest_main(argv: Vec<String>) -> i32 {
     })
 }
 
+/// Prompt the user on the host terminal and read a single line. When `hidden`,
+/// terminal echo is disabled via `stty -echo` for the duration (no extra crate
+/// dep) so secrets like the PAT are not shown. Returns the trimmed line.
+fn prompt_line(label: &str, hidden: bool) -> String {
+    use std::io::Write;
+    print!("{label}: ");
+    let _ = std::io::stdout().flush();
+    if hidden {
+        let _ = std::process::Command::new("stty").arg("-echo").status();
+    }
+    let mut line = String::new();
+    let _ = std::io::stdin().read_line(&mut line);
+    if hidden {
+        let _ = std::process::Command::new("stty").arg("echo").status();
+        println!(); // newline the suppressed Enter would have produced
+    }
+    line.trim().to_string()
+}
+
+/// `--github-login`: boot the VM and drive the *released* guest
+/// `tillandsias-headless --github-login` over the control wire. Each end user is
+/// **prompted on the host terminal for their OWN** git author name, git author
+/// email, and GitHub PAT — nothing is defaulted from the operator's host git
+/// config. The token echo is suppressed (`stty -echo`) and the values are fed to
+/// the guest's prompts via the proven expect-style PTY input path, so the token
+/// lands on the guest `/dev/tty` and never appears in `argv`. (The host process
+/// does hold the token transiently in memory while delivering it; it is never
+/// logged or written to argv.)
+///
+/// Operator usage: run in a terminal and answer the prompts —
+///   tillandsias-tray --github-login
+///
+/// @trace spec:gh-auth-script, plan/issues/optimization-macos-vz-idiomatic-exec-layer-2026-06-21.md
+pub fn github_login_main() -> i32 {
+    use tillandsias_vm_layer::VmRuntime;
+
+    eprintln!(
+        "[github-login] Enter the GitHub identity + token for THIS account \
+         (each user supplies their own):"
+    );
+    let name = prompt_line("Git author name", false);
+    let email = prompt_line("Git author email", false);
+    let pat = prompt_line("GitHub Personal Access Token (hidden)", true);
+
+    if name.is_empty() || email.is_empty() {
+        eprintln!("--github-login: git author name and email are both required");
+        return 2;
+    }
+    if pat.is_empty() {
+        eprintln!("--github-login: a GitHub token is required");
+        return 2;
+    }
+    eprintln!(
+        "[github-login] identity: {name} <{email}>; token: {} chars",
+        pat.len()
+    );
+
+    let vz = tillandsias_vm_layer::vz::VzRuntime::new(3, image_root());
+    if !vz.is_provisioned() {
+        eprintln!(
+            "{{\"error\":\"not provisioned; run --provision or launch the tray once first\"}}"
+        );
+        return 1;
+    }
+    let rt = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("{{\"error\":\"tokio runtime: {e}\"}}");
+            return 1;
+        }
+    };
+
+    rt.block_on(async move {
+        use std::time::Duration;
+        use tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
+        use tillandsias_vm_layer::vsock_exec::{Expect, exec_over_stream_expect};
+
+        eprintln!("[github-login] starting VM…");
+        if let Err(e) = vz.start().await {
+            eprintln!("{{\"error\":\"start: {e}\"}}");
+            return 1;
+        }
+        eprintln!("[github-login] waiting for control wire…");
+        if let Err(e) = vz.wait_ready(Duration::from_secs(90)).await {
+            eprintln!("{{\"error\":\"wait_ready: {e}\"}}");
+            let _ = vz.stop(Duration::from_secs(10)).await;
+            return 1;
+        }
+        let stream = match vz
+            .open_vsock_stream_current_thread(CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(30))
+            .await
+        {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("{{\"error\":\"vsock connect: {e}\"}}");
+                let _ = vz.stop(Duration::from_secs(10)).await;
+                return 1;
+            }
+        };
+        let expects = vec![
+            Expect {
+                needle: b"author name".to_vec(),
+                response: format!("{name}\n").into_bytes(),
+                label: "git author name".to_string(),
+            },
+            Expect {
+                needle: b"author email".to_vec(),
+                response: format!("{email}\n").into_bytes(),
+                label: "git author email".to_string(),
+            },
+            Expect {
+                needle: b"authentication token".to_vec(),
+                response: format!("{pat}\n").into_bytes(),
+                label: "github token".to_string(),
+            },
+        ];
+        eprintln!("[github-login] driving guest login (git name -> email -> token)…");
+        let result = exec_over_stream_expect(
+            stream,
+            &[
+                "/bin/bash",
+                "-lc",
+                "exec /usr/local/bin/tillandsias-headless --github-login",
+            ],
+            expects,
+            |ev| eprintln!("[github-login] {ev}"),
+        )
+        .await;
+        let _ = vz.stop(Duration::from_secs(10)).await;
+
+        match result {
+            Ok(out) => {
+                // Guest output is safe to print: name/email are not secret and
+                // the token prompt is `read -rs` (never echoed to the PTY).
+                use std::io::Write;
+                let _ = std::io::stdout().write_all(&out.stdout);
+                let _ = std::io::stdout().flush();
+                println!();
+                println!(
+                    "{{\"status\":\"login-finished\",\"exit_code\":{}}}",
+                    out.exit.code
+                );
+                if out.exit.code == 0 {
+                    eprintln!(
+                        "[github-login] SUCCESS — the token is in the guest Vault. \
+                         Click the tray; the menu should reveal the project submenus."
+                    );
+                }
+                out.exit.code
+            }
+            Err(e) => {
+                eprintln!("{{\"error\":\"login: {e}\"}}");
+                1
+            }
+        }
+    })
+}
+
 /// Extract the first 12-char SHA-256 prefix for `aarch64.qcow2` from a
 /// manifest.toml body. Pure, testable — both the quoted-key form
 /// (`"aarch64.qcow2" = "<sha>"`, the actual file) and the bare-key

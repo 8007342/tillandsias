@@ -210,6 +210,147 @@ where
     }
 }
 
+/// One scripted prompt→response step for [`exec_over_stream_expect`].
+#[derive(Clone)]
+pub struct Expect {
+    /// Substring to wait for in the guest's output before responding.
+    pub needle: Vec<u8>,
+    /// Bytes to send to the guest (as `PtyData{ToGuest}`) once `needle` is seen.
+    pub response: Vec<u8>,
+    /// Human label for logs; `response` is never logged (may be secret).
+    pub label: String,
+}
+
+fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
+    if needle.is_empty() || haystack.len() < needle.len() {
+        return None;
+    }
+    haystack
+        .windows(needle.len())
+        .position(|w| w == needle)
+        .map(|p| p + needle.len())
+}
+
+/// Run `argv` and drive a sequential, expect-style conversation: wait for each
+/// `expects[i].needle` to appear in the guest output, then send
+/// `expects[i].response` (as PTY input). Steps are consumed in order. Used to
+/// drive the released guest `tillandsias-headless --github-login` (which prompts
+/// for git name, git email, then the token) without changing the guest binary.
+///
+/// The token is sent ONLY after its prompt, so the guest's earlier `read_line`s
+/// don't buffer-steal it before the container's `read -rs TOKEN < /dev/tty`.
+///
+/// `on_event(&str)` receives non-secret progress labels (e.g. "matched: git
+/// author name") so the caller can show progress without leaking responses.
+pub async fn exec_over_stream_expect<S>(
+    mut stream: S,
+    argv: &[&str],
+    expects: Vec<Expect>,
+    mut on_event: impl FnMut(&str),
+) -> Result<ExecOutput, String>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    if argv.is_empty() {
+        return Err("vsock_exec: empty argv".to_string());
+    }
+    let session_id: u32 = 1;
+    let mut seq: u64 = 1;
+
+    // Handshake (seq 1) + PtyOpen (seq 2) — same as exec_over_stream_with_input.
+    write_envelope(
+        &mut stream,
+        &ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq,
+            body: ControlMessage::Hello {
+                from: "tillandsias-vm-layer::vsock_exec".to_string(),
+                capabilities: vec!["pty.attach@v1".to_string()],
+            },
+        },
+    )
+    .await?;
+    match read_envelope(&mut stream).await?.body {
+        ControlMessage::HelloAck { wire_version, .. } if wire_version == WIRE_VERSION => {}
+        ControlMessage::HelloAck { wire_version, .. } => {
+            return Err(format!(
+                "vsock_exec: wire_version mismatch (peer {wire_version}, self {WIRE_VERSION})"
+            ));
+        }
+        other => {
+            return Err(format!(
+                "vsock_exec: expected HelloAck, got {}",
+                other.kind()
+            ));
+        }
+    }
+    seq += 1;
+    write_envelope(
+        &mut stream,
+        &ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq,
+            body: ControlMessage::PtyOpen {
+                session_id,
+                rows: 24,
+                cols: 80,
+                argv: argv.iter().map(|s| s.to_string()).collect(),
+                env: vec![("TERM".to_string(), "dumb".to_string())],
+                cwd: None,
+            },
+        },
+    )
+    .await?;
+
+    let mut stdout = Vec::new();
+    let mut search_start = 0usize;
+    let mut pending = expects.into_iter();
+    let mut current = pending.next();
+
+    loop {
+        let env = read_envelope(&mut stream).await?;
+        match env.body {
+            ControlMessage::PtyData {
+                session_id: sid,
+                direction: PtyDirection::ToHost,
+                bytes,
+            } if sid == session_id => {
+                stdout.extend_from_slice(&bytes);
+                // Satisfy as many sequential expects as the new output allows.
+                while let Some(exp) = &current {
+                    if let Some(end) = find_subslice(&stdout[search_start..], &exp.needle) {
+                        on_event(&format!("matched: {}", exp.label));
+                        search_start += end;
+                        seq += 1;
+                        let response = exp.response.clone();
+                        write_envelope(
+                            &mut stream,
+                            &ControlEnvelope {
+                                wire_version: WIRE_VERSION,
+                                seq,
+                                body: ControlMessage::PtyData {
+                                    session_id,
+                                    direction: PtyDirection::ToGuest,
+                                    bytes: response,
+                                },
+                            },
+                        )
+                        .await?;
+                        current = pending.next();
+                    } else {
+                        break;
+                    }
+                }
+            }
+            ControlMessage::PtyClose {
+                session_id: sid,
+                exit,
+            } if sid == session_id => return Ok(ExecOutput { exit, stdout }),
+            _ => {}
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -431,5 +572,118 @@ mod tests {
         let (client, _guest) = tokio::io::duplex(64);
         let err = exec_over_stream(client, &[]).await.unwrap_err();
         assert!(err.contains("empty argv"), "got: {err}");
+    }
+
+    /// `exec_over_stream_expect` drives a sequential prompt→response script —
+    /// the mechanism that drives the released guest `--github-login` (git name,
+    /// git email, then token). The fake guest emits three prompts in order and
+    /// must receive the three scripted responses, token last.
+    #[tokio::test]
+    async fn exec_over_stream_expect_drives_sequential_prompts() {
+        let (client, mut guest) = tokio::io::duplex(8192);
+        let guest_task = tokio::spawn(async move {
+            let _ = read_envelope(&mut guest).await.unwrap(); // Hello
+            write_envelope(
+                &mut guest,
+                &ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: 1,
+                    body: ControlMessage::HelloAck {
+                        wire_version: WIRE_VERSION,
+                        server_caps: vec![],
+                    },
+                },
+            )
+            .await
+            .unwrap();
+            let _ = read_envelope(&mut guest).await.unwrap(); // PtyOpen
+
+            // Helper: emit a ToHost prompt, then expect the next ToGuest response.
+            async fn step(
+                guest: &mut tokio::io::DuplexStream,
+                seq: u64,
+                prompt: &[u8],
+                expected_response: &[u8],
+            ) {
+                write_envelope(
+                    guest,
+                    &ControlEnvelope {
+                        wire_version: WIRE_VERSION,
+                        seq,
+                        body: ControlMessage::PtyData {
+                            session_id: 1,
+                            direction: PtyDirection::ToHost,
+                            bytes: prompt.to_vec(),
+                        },
+                    },
+                )
+                .await
+                .unwrap();
+                let resp = read_envelope(guest).await.unwrap();
+                match resp.body {
+                    ControlMessage::PtyData {
+                        direction: PtyDirection::ToGuest,
+                        bytes,
+                        ..
+                    } => assert_eq!(bytes, expected_response),
+                    other => panic!("expected ToGuest response, got {}", other.kind()),
+                }
+            }
+
+            step(&mut guest, 3, b"Git author name [x]: ", b"Test User\n").await;
+            step(&mut guest, 4, b"Git author email: ", b"t@example.com\n").await;
+            step(
+                &mut guest,
+                5,
+                b"Paste your GitHub authentication token (input hidden): ",
+                b"ghp_FAKE\n",
+            )
+            .await;
+
+            write_envelope(
+                &mut guest,
+                &ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: 6,
+                    body: ControlMessage::PtyClose {
+                        session_id: 1,
+                        exit: PtyExit {
+                            code: 0,
+                            signal: None,
+                        },
+                    },
+                },
+            )
+            .await
+            .unwrap();
+        });
+
+        let expects = vec![
+            Expect {
+                needle: b"author name".to_vec(),
+                response: b"Test User\n".to_vec(),
+                label: "git author name".to_string(),
+            },
+            Expect {
+                needle: b"author email".to_vec(),
+                response: b"t@example.com\n".to_vec(),
+                label: "git author email".to_string(),
+            },
+            Expect {
+                needle: b"authentication token".to_vec(),
+                response: b"ghp_FAKE\n".to_vec(),
+                label: "github token".to_string(),
+            },
+        ];
+        let out = exec_over_stream_expect(
+            client,
+            &["tillandsias-headless", "--github-login"],
+            expects,
+            |_| {},
+        )
+        .await
+        .expect("expect-driven exec should succeed");
+        assert_eq!(out.exit.code, 0);
+        guest_task.await.unwrap();
     }
 }

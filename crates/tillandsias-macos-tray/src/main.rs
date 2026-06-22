@@ -70,6 +70,8 @@ fn main() {
              --provision   Provision the VM disk from the manifest, then exit\n    \
              --exec-guest <cmd...>  Boot the VM, run a command in the guest over\n                  \
              the control wire, print its output + exit, then stop\n    \
+             --github-login  Boot the VM and log in to GitHub in the guest;\n                  \
+             prompts for your git name, email, and PAT (token hidden)\n    \
              --diagnose    Print a static health report, then exit\n    \
              --json        With --diagnose, emit JSON instead of human text\n    \
              -V, --version Print version and exit\n    \
@@ -91,6 +93,14 @@ fn main() {
     if let Some(idx) = args.iter().position(|a| a == "--exec-guest") {
         let guest_argv: Vec<String> = args[idx + 1..].to_vec();
         std::process::exit(diagnose::exec_guest_main(guest_argv));
+    }
+    // Headless GitHub login: boot the VM and drive the guest --github-login over
+    // the control wire. Prompts the user on the host terminal for THEIR own git
+    // name, email, and PAT (token echo suppressed) and feeds the guest prompts
+    // via the proven expect-style PTY input path; token never enters argv/logs.
+    //   tillandsias-tray --github-login
+    if args.iter().any(|a| a == "--github-login") {
+        std::process::exit(diagnose::github_login_main());
     }
     if args.iter().any(|a| a == "--diagnose") {
         let format = if args.iter().any(|a| a == "--json") {
