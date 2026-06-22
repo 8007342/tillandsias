@@ -276,6 +276,105 @@ pub fn provision_main() -> i32 {
     }
 }
 
+/// `--exec-guest <argv...>`: boot the provisioned VM, run `argv` in the guest
+/// over the control wire (the same `vsock_exec` path `VzRuntime::exec` uses),
+/// print the guest's output + exit, then stop the VM. The real-path proof for
+/// the idiomatic exec layer and a reusable headless smoke tool.
+///
+/// MUST run on the process main thread: Vz `start()`/`stop()` dispatch their VZ
+/// completion handlers to the main dispatch queue and pump the CFRunLoop from
+/// the calling thread, so the whole flow runs on a **current-thread** runtime on
+/// the main thread (mirrors the `vz-spike` headless boot, not the tray's
+/// NSApp-on-main + worker model).
+///
+/// @trace plan/issues/optimization-macos-vz-idiomatic-exec-layer-2026-06-21.md
+pub fn exec_guest_main(argv: Vec<String>) -> i32 {
+    use tillandsias_vm_layer::VmRuntime;
+
+    if argv.is_empty() {
+        eprintln!("--exec-guest requires a command, e.g. --exec-guest /bin/echo HELLO");
+        return 2;
+    }
+    let vz = tillandsias_vm_layer::vz::VzRuntime::new(3, image_root());
+    if !vz.is_provisioned() {
+        eprintln!("{{\"error\":\"not provisioned; run --provision first\"}}");
+        return 1;
+    }
+
+    let rt = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("{{\"error\":\"tokio runtime: {e}\"}}");
+            return 1;
+        }
+    };
+
+    let argv_ref: Vec<&str> = argv.iter().map(|s| s.as_str()).collect();
+
+    rt.block_on(async move {
+        use std::time::Duration;
+        use tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
+
+        eprintln!("[exec-guest] starting VM…");
+        if let Err(e) = vz.start().await {
+            eprintln!("{{\"error\":\"start: {e}\"}}");
+            return 1;
+        }
+        eprintln!("[exec-guest] waiting for control wire…");
+        if let Err(e) = vz.wait_ready(Duration::from_secs(90)).await {
+            eprintln!("{{\"error\":\"wait_ready: {e}\"}}");
+            let _ = vz.stop(Duration::from_secs(10)).await;
+            return 1;
+        }
+        eprintln!("[exec-guest] running: {argv_ref:?}");
+        // Connect on THIS (main) thread, not via spawn_blocking: VZ delivers
+        // the connect completion on the main dispatch queue, which is only
+        // serviced while the main thread pumps the CFRunLoop. open_vsock_stream
+        // (spawn_blocking) hangs headless; the current-thread variant pumps it.
+        let stream = match vz
+            .open_vsock_stream_current_thread(CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(30))
+            .await
+        {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("{{\"error\":\"vsock connect: {e}\"}}");
+                let _ = vz.stop(Duration::from_secs(10)).await;
+                return 1;
+            }
+        };
+        let result = tillandsias_vm_layer::vsock_exec::exec_over_stream(stream, &argv_ref).await;
+        let _ = vz.stop(Duration::from_secs(10)).await;
+
+        match result {
+            Ok(out) => {
+                use std::io::Write;
+                let _ = std::io::stdout().write_all(&out.stdout);
+                let _ = std::io::stdout().flush();
+                println!();
+                let signal = out
+                    .exit
+                    .signal
+                    .map(|s| s.to_string())
+                    .unwrap_or_else(|| "null".to_string());
+                println!(
+                    "{{\"status\":\"ok\",\"exit_code\":{},\"signal\":{},\"stdout_bytes\":{}}}",
+                    out.exit.code,
+                    signal,
+                    out.stdout.len()
+                );
+                out.exit.code
+            }
+            Err(e) => {
+                eprintln!("{{\"error\":\"exec: {e}\"}}");
+                1
+            }
+        }
+    })
+}
+
 /// Extract the first 12-char SHA-256 prefix for `aarch64.qcow2` from a
 /// manifest.toml body. Pure, testable — both the quoted-key form
 /// (`"aarch64.qcow2" = "<sha>"`, the actual file) and the bare-key

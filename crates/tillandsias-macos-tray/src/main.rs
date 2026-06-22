@@ -68,6 +68,8 @@ fn main() {
              FLAGS:\n    \
              (no flags)    Launch the menu-bar tray and auto-boot the VM\n    \
              --provision   Provision the VM disk from the manifest, then exit\n    \
+             --exec-guest <cmd...>  Boot the VM, run a command in the guest over\n                  \
+             the control wire, print its output + exit, then stop\n    \
              --diagnose    Print a static health report, then exit\n    \
              --json        With --diagnose, emit JSON instead of human text\n    \
              -V, --version Print version and exit\n    \
@@ -78,6 +80,17 @@ fn main() {
     }
     if args.iter().any(|a| a == "--provision") {
         std::process::exit(diagnose::provision_main());
+    }
+    // Headless guest-exec smoke: boot the provisioned VM, run a command in the
+    // guest over the control wire (VzRuntime::exec path), print its output +
+    // exit, then stop. Real-path proof for the idiomatic exec layer and a
+    // reusable smoke tool. MUST run on the main thread (Vz start() pumps the
+    // main dispatch queue from its calling thread) — exec_guest_main uses a
+    // current-thread runtime for exactly that. See
+    // plan/issues/optimization-macos-vz-idiomatic-exec-layer-2026-06-21.md.
+    if let Some(idx) = args.iter().position(|a| a == "--exec-guest") {
+        let guest_argv: Vec<String> = args[idx + 1..].to_vec();
+        std::process::exit(diagnose::exec_guest_main(guest_argv));
     }
     if args.iter().any(|a| a == "--diagnose") {
         let format = if args.iter().any(|a| a == "--json") {
