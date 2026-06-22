@@ -4668,10 +4668,19 @@ plan_index:
           depends_on: [release-nix-cache-ref-scoping/choose-approach]
           owned_files:
             - .github/workflows/release.yml
+            - .github/workflows/nix-cache-warm.yml
           checkpoint_required: true
           handoff_note: >
-            Implement the chosen approach in release.yml; add purge of unreusable
-            per-tag Nix caches to stay under the 10 GB GHA limit.
+            REOPENED — verify-incremental proved the warm-on-main fix ineffective
+            (v0.3.260621.2 still did a full 38min nix build, 0s restore). Root
+            cause: the warm job never persists a main-scoped nix-Linux-* store
+            cache because the identical primary-key is occupied by old tag-scoped
+            caches and purge-created-offset:86400000 (24h) didn't clear them (they
+            were ~13h old at warm time). Fix: purge colliding non-main nix-Linux-*
+            caches with purge-created-offset:0 (or by ref!=main) BEFORE save so the
+            key frees and the main save persists; ensure save enabled; trigger warm
+            on main pushes. Re-verify a non-zero restore on the next release. See
+            deliverable "verify-incremental RESULT: FAIL" section for full evidence.
         - id: release-nix-cache-ref-scoping/purge-stale-caches
           status: done
           depends_on: [release-nix-cache-ref-scoping/implement-cache-fix]
@@ -4718,6 +4727,33 @@ plan_index:
             Cut two consecutive releases; assert the second's nix build time and
             cache-save bytes drop substantially. Record before/after as completed.
       events:
+        - type: completed
+          ts: "2026-06-22T02:23:00Z"
+          agent_id: "linux-claude-opus48-loop-20260622T0223Z"
+          host: linux_mutable
+          note: >
+            implement-cache-fix verified: GHA warm run 27917409949 on linux-next
+            completed successfully (35m42s). Post step shows "Finished purging
+            cache(s)" and cache list confirms a 2196MB nix-Linux-* entry saved
+            under refs/heads/linux-next. The purge-primary-key:never fix (commit
+            6a84b478) is the root cause — previously the Post step was purging
+            its own primary key. Also fixed param name purge-created-offset →
+            purge-created (was silently ignored, now applies 86400s/24h age
+            filter). Next: merge to main and trigger a release; that release
+            will be the verify-incremental PASS datapoint.
+        - type: verify-failed
+          ts: "2026-06-21T19:26:00Z"
+          agent_id: "linux-claude-opus48-loop-20260621T1926Z"
+          host: linux_mutable
+          note: >
+            verify-incremental FAILED. v0.3.260621.2 (first release post warm-fix,
+            flake.lock unchanged) still did a full ~38min nix build with 0s cache
+            restore (run 27913696580). Actions caches API shows NO nix-Linux-* store
+            cache under refs/heads/main — only a 43MB installer cache; the 2.2GB
+            store cache exists only under old tag refs. The warm job's save collides
+            with the existing primary-key (occupied by tag caches) and its 24h purge
+            offset didn't clear them (~13h old at warm time). Reopened
+            implement-cache-fix with the precise fix. Full evidence in deliverable.
         - type: finding
           ts: "2026-06-20T19:55:00Z"
           agent_id: "linux-claude-opus48-20260620T1955Z"
@@ -4946,7 +4982,7 @@ plan_index:
     - packet_id: github-e2e-lifecycle-interactive
       order: 68
       title: "GitHub E2E lifecycle — interactive operator run to enumerate UX glitches"
-      status: ready
+      status: completed
       kind: interactive-investigation
       deliverable: plan/issues/github-e2e-lifecycle-interactive-2026-06-20.md
       depends_on: []
@@ -4974,7 +5010,7 @@ plan_index:
             Full report at plan/issues/github-e2e-findings-interactive-run-2026-06-21.md.
             Inside-forge git ops deferred to follow-up run.
         - id: github-e2e/glitch-reduction
-          status: claimed
+          status: done
           depends_on: [github-e2e/interactive-run]
           owned_files:
             - plan/index.yaml
@@ -5012,6 +5048,16 @@ plan_index:
               host: linux_mutable
               lease_id: "lease-linux-github-e2e-glitch-reduction-20260621T1544"
               expires_at: "2026-06-21T19:44:19Z"
+            - type: completed
+              ts: "2026-06-21T15:44:19Z"
+              agent_id: "linux-macuahuitl-big-pickle-20260621T154419Z"
+              host: linux_mutable
+              summary: >
+                Reduced both glitches (G1 redundant-vault-bootstrap, G2
+                forge-base-missing-ux) into plan/index.yaml as orders 75 and 76
+                with ready status, concrete fix descriptions, and implement
+                subtasks. Glitches filed in the findings deliverable at
+                plan/issues/github-e2e-findings-interactive-run-2026-06-21.md.
         - id: github-e2e/push-from-host
           status: completed
           depends_on: []
@@ -5062,6 +5108,17 @@ plan_index:
             bootstrap, G2 forge-base-missing UX) and recorded findings at
             plan/issues/github-e2e-findings-interactive-run-2026-06-21.md.
             Inside-forge git ops deferred to follow-up after forge-base exists.
+        - type: completed
+          ts: "2026-06-21T15:44:19Z"
+          agent_id: "linux-macuahuitl-big-pickle-20260621T154419Z"
+          host: linux_mutable
+          summary: >
+            Glitch-reduction completed: filed orders 75
+            (github-e2e/redundant-vault-bootstrap) and 76
+            (github-e2e/forge-base-missing-ux) in plan/index.yaml with ready
+            status and implement subtasks. Both glitches documented in
+            deliverable. All three order-68 subtasks now done/completed. Node
+            closed.
 
     - packet_id: git-mirror-architecture-verification
       order: 69
@@ -5370,3 +5427,81 @@ plan_index:
             - "Steps with success_pattern route through check_signal() for authoritative regex matching"
             - "112/112 instant-size litmus tests pass --size instant (0 failures)"
             - "build.sh --check passes cleanly"
+
+    - packet_id: github-e2e/redundant-vault-bootstrap
+      order: 75
+      title: "Optimize vault bootstrap — skip redundant AppRole provisioning on every headless command"
+      status: completed
+      kind: optimization
+      deliverable: plan/issues/github-e2e-findings-interactive-run-2026-06-21.md
+      depends_on: []
+      pickup_role: "Linux mutable host (Rust backend)"
+      outcome: >
+        Vault bootstrap skips policy-writing and AppRole-provisioning when the
+        AppRole role already exists, eliminating 3-4 redundant cycles per
+        headless command invocation.
+      tasks:
+        - id: github-e2e/redundant-vault-bootstrap/implement
+          status: done
+          depends_on: []
+          owned_files:
+            - crates/tillandsias-headless/src/vault_bootstrap.rs
+            - crates/tillandsias-vault-client/src/lib.rs
+            - crates/tillandsias-vault-client/tests/http_roundtrip.rs
+          checkpoint_required: true
+          handoff_note: >
+            Check if AppRole role exists before provisioning; skip vault
+            bootstrap if vault is already running and configured. The vault
+            status probe or role lookup (e.g. vault read
+            auth/approle/role/git-mirror) gates the provisioning path.
+      events:
+        - type: claim
+          ts: "2026-06-21T21:12:00Z"
+          agent_id: "linux-antigravity-20260621T2112Z"
+          host: linux_mutable
+          lease_id: "github-e2e/redundant-vault-bootstrap/implement"
+        - type: completed
+          ts: "2026-06-21T21:13:00Z"
+          agent_id: "linux-antigravity-20260621T2112Z"
+          host: linux_mutable
+          evidence:
+            - "Added approle_role_exists method to VaultClient to query AppRole status"
+            - "Gated load_policies and provision_approle_roles in ensure_vault_running on git-mirror existence"
+            - "Added unit tests verifying approle_role_exists behavior on 200 and 404 responses"
+            - "All 12 http_roundtrip and 11 unit tests pass cleanly"
+
+    - packet_id: github-e2e/forge-base-missing-ux
+      order: 76
+      title: "Detect missing forge-base image and emit actionable error instead of cryptic registry pull failure"
+      status: success
+      kind: enhancement
+      deliverable: plan/issues/github-e2e-findings-interactive-run-2026-06-21.md
+      depends_on: []
+      pickup_role: "Linux mutable host (forge/Rust backend)"
+      outcome: >
+        When forge-base image is absent, forge launch detects the missing image
+        and either builds it as a dependency or prints a clear actionable error
+        ("run tillandsias --init to build required images") instead of a cryptic
+        "connection refused" from the localhost registry pull.
+      tasks:
+        - id: github-e2e/forge-base-missing-ux/implement
+          status: success
+          closed_at: "2026-06-21T23:13:00Z"
+          ts: "2026-06-21T23:13:00Z"
+          agent_id: "linux-antigravity-20260621T2313Z"
+          host: linux_mutable
+          evidence:
+            - "Modified ensure_image_exists to check for and build missing base images (forge-base, chromium-core) on demand."
+            - "Updated forge and nanoclawv2 build args in ensure_image_exists to pass the correct BASE_IMAGE build-arg when building from Containerfiles using it."
+            - "Verified that all 86 unit and integration tests in tillandsias-headless pass cleanly."
+            - "Ran cargo clippy to ensure no new warnings or lints are introduced."
+          depends_on: []
+          owned_files:
+            - crates/tillandsias-headless/src/main.rs
+            - crates/tillandsias-core/src/image_registry.rs
+          checkpoint_required: true
+          handoff_note: >
+            In the forge build/launch path, detect when forge-base image is
+            absent (e.g. podman image exists check) before attempting to pull
+            from the Docker registry. If missing, either build it on demand or
+            emit a clear actionable error.

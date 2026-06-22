@@ -230,3 +230,39 @@ async fn health_reports_sealed_state() {
     assert!(!h.sealed);
     assert_eq!(h.version, "1.18.1");
 }
+
+#[tokio::test]
+async fn approle_role_exists_returns_true_when_exists() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/auth/approle/role/git-mirror/role-id"))
+        .respond_with(ResponseTemplate::new(200).set_body_json(json!({
+            "data": { "role_id": "rid-abc" }
+        })))
+        .mount(&server)
+        .await;
+
+    let client = VaultClient::new(server.uri(), "tray-root");
+    let exists = client
+        .approle_role_exists("git-mirror")
+        .await
+        .expect("exists check should succeed");
+    assert!(exists);
+}
+
+#[tokio::test]
+async fn approle_role_exists_returns_false_when_not_found() {
+    let server = MockServer::start().await;
+    Mock::given(method("GET"))
+        .and(path("/v1/auth/approle/role/git-mirror/role-id"))
+        .respond_with(ResponseTemplate::new(404).set_body_string("{\"errors\":[]}"))
+        .mount(&server)
+        .await;
+
+    let client = VaultClient::new(server.uri(), "tray-root");
+    let exists = client
+        .approle_role_exists("git-mirror")
+        .await
+        .expect("exists check should succeed");
+    assert!(!exists);
+}

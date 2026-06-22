@@ -1372,18 +1372,49 @@ fn ensure_image_exists(
     let (containerfile, context_dir) = image_specs(root, image_name)?;
     let rt = podman_runtime()?;
     let client = PodmanClient::new();
+
+    let version = image_tag
+        .split(':')
+        .next_back()
+        .unwrap_or("latest")
+        .trim_start_matches('v');
+
+    if image_name == "chromium-framework" {
+        let core_tag = versioned_image_tag("chromium-core", version);
+        if !rt.block_on(client.image_exists(&core_tag)) {
+            ensure_image_exists(root, "chromium-core", &core_tag, debug).map_err(|e| {
+                format!(
+                    "Required base image '{}' is absent and failed to build on demand: {}.\n\
+                     Please ensure the base image is built by running: tillandsias --init",
+                    core_tag, e
+                )
+            })?;
+        }
+    } else if matches!(image_name, "forge" | "nanoclawv2") {
+        let base_tag = versioned_image_tag("forge-base", version);
+        if !rt.block_on(client.image_exists(&base_tag)) {
+            ensure_image_exists(root, "forge-base", &base_tag, debug).map_err(|e| {
+                format!(
+                    "Required base image '{}' is absent and failed to build on demand: {}.\n\
+                     Please ensure the base image is built by running: tillandsias --init",
+                    base_tag, e
+                )
+            })?;
+        }
+    }
+
     let build_args = if image_name == "chromium-framework" {
-        let version = image_tag
-            .split(':')
-            .next_back()
-            .unwrap_or("latest")
-            .trim_start_matches('v');
         vec![
             "--build-arg".to_string(),
             format!(
                 "CHROMIUM_CORE_IMAGE={}",
                 versioned_image_tag("chromium-core", version)
             ),
+        ]
+    } else if matches!(image_name, "forge" | "nanoclawv2") {
+        vec![
+            "--build-arg".to_string(),
+            format!("BASE_IMAGE={}", versioned_image_tag("forge-base", version)),
         ]
     } else {
         Vec::new()

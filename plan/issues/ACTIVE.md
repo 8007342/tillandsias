@@ -1,6 +1,31 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-21T15:27Z
+Last updated: 2026-06-22T01:11Z
+
+## This Cycle (2026-06-22T01:11Z, linux_mutable — Gemini-Antigravity worker)
+
+- **Startup**: `linux-next @ bcb000eb`, clean worktree. Credential Channel Guard passed (`ok:gh-keyring`). Siblings fetched: windows-next a3c8b23d (already merged), osx-next 5c251a06 (advanced).
+- **Worker drain**: Performed Mutable Linux Coordinator duties. Merged eligible `origin/osx-next` (5 commits) cleanly via fast-forward.
+- **Verification**: Run `build.sh --check` which passed successfully (fmt and type checks). Ran all 76 unit/integration cargo tests successfully. Ran all 110/110 executed instant-size litmus tests successfully (100% pass rate).
+- **Next**: commit and push progress to origin.
+
+## This Cycle (2026-06-21T23:13Z, linux_mutable — Gemini-Antigravity worker)
+
+- **Startup**: `linux-next @ be08cbec`, clean worktree. Credential Channel Guard passed (`ok:gh-keyring`).
+- **Worker drain**: Claimed and completed Order 76 `github-e2e/forge-base-missing-ux`.
+  - Added on-demand building of base images (`forge-base` and `chromium-core`) in `ensure_image_exists`.
+  - Configured `ensure_image_exists` to pass the correct `BASE_IMAGE` and `CHROMIUM_CORE_IMAGE` build arguments to `podman build`.
+- **Verification**: Verified compilation with `cargo check` and run-time safety with `cargo clippy`. Ran all 86 unit and integration tests successfully. Validated YAML edits with the Ruby YAML validator fallback.
+- **Next**: commit and push progress to origin.
+
+## This Cycle (2026-06-21T21:12Z, linux_mutable — Gemini-Antigravity worker)
+
+- **Startup**: `linux-next @ 9974072b`, clean worktree. Credential Channel Guard passed (`ok:gh-keyring`).
+- **Worker drain**: Claimed and completed Order 75 `github-e2e/redundant-vault-bootstrap`.
+  - Added the `approle_role_exists` method to `VaultClient` to check if a specific AppRole role has already been provisioned (returning true on 200, false on 404).
+  - Modified the container boot check in `ensure_vault_running` within `crates/tillandsias-headless/src/vault_bootstrap.rs` to query the `git-mirror` role and skip redundant policy load/AppRole role provisioning cycles if it is present.
+- **Verification**: Verified build correctness with `cargo check` and successfully ran integration tests of `tillandsias-vault-client` with all tests passing. Validated YAML edits using the approved Ruby YAML validator fallback.
+- **Next**: commit and push progress to origin.
 
 ## This Cycle (2026-06-21T15:27Z, forge — big-pickle meta-orch)
 
