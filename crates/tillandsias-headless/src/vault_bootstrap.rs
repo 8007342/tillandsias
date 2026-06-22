@@ -141,9 +141,6 @@ pub fn is_running_in_vm() -> bool {
     false
 }
 
-const VAULT_USER_UID: u32 = 100;
-const VAULT_GROUP_GID: u32 = 1000;
-
 /// Default token TTL for per-container AppRole tokens (1h).
 pub const APPROLE_TOKEN_TTL_SECS: u64 = 3_600;
 /// Hard upper bound on a renewed AppRole token (24h).
@@ -1088,22 +1085,10 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
         );
     }
 
-    let secret_arg = format!(
-        "{},mode=0400,uid={},gid={}",
-        VAULT_UNSEAL_SECRET, VAULT_USER_UID, VAULT_GROUP_GID
-    );
-    let tls_cert_arg = format!(
-        "{},mode=0400,uid={},gid={}",
-        VAULT_TLS_CERT_SECRET, VAULT_USER_UID, VAULT_GROUP_GID
-    );
-    let tls_key_arg = format!(
-        "{},mode=0400,uid={},gid={}",
-        VAULT_TLS_KEY_SECRET, VAULT_USER_UID, VAULT_GROUP_GID
-    );
-    let tls_ca_arg = format!(
-        "{},mode=0400,uid={},gid={}",
-        VAULT_TLS_CA_SECRET, VAULT_USER_UID, VAULT_GROUP_GID
-    );
+    let secret_arg = VAULT_UNSEAL_SECRET.to_string();
+    let tls_cert_arg = VAULT_TLS_CERT_SECRET.to_string();
+    let tls_key_arg = VAULT_TLS_KEY_SECRET.to_string();
+    let tls_ca_arg = VAULT_TLS_CA_SECRET.to_string();
     // `:U` makes podman recursively chown the named volume to the container
     // process's mapped uid/gid (the image's `vault` user) on every launch.
     // Without it, a userns mapping shift between launches — which Fedora
