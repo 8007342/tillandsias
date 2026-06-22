@@ -9,7 +9,7 @@ RUN microdnf install -y --setopt=install_weak_deps=0 \
         bash coreutils findutils grep sed gawk tar gzip xz \
         procps-ng shadow-utils ca-certificates ncurses ncurses-term \
         fish zsh \
-        git gh curl wget jq ripgrep fd-find bat fzf eza htop mc tree nano vim-minimal git-delta git-lfs httpie yq \
+        git gh curl wget jq ripgrep fd-find bat fzf eza htop mc tree nano vim-minimal zoxide git-delta git-lfs httpie yq \
         nodejs npm \
         java-25-openjdk-headless maven \
         golang gopls \

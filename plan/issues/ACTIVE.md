@@ -1,6 +1,104 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-21T01:10Z
+Last updated: 2026-06-21T21:12Z
+
+## This Cycle (2026-06-21T21:12Z, linux_mutable — Gemini-Antigravity worker)
+
+- **Startup**: `linux-next @ 9974072b`, clean worktree. Credential Channel Guard passed (`ok:gh-keyring`).
+- **Worker drain**: Claimed and completed Order 75 `github-e2e/redundant-vault-bootstrap`.
+  - Added the `approle_role_exists` method to `VaultClient` to check if a specific AppRole role has already been provisioned (returning true on 200, false on 404).
+  - Modified the container boot check in `ensure_vault_running` within `crates/tillandsias-headless/src/vault_bootstrap.rs` to query the `git-mirror` role and skip redundant policy load/AppRole role provisioning cycles if it is present.
+- **Verification**: Verified build correctness with `cargo check` and successfully ran integration tests of `tillandsias-vault-client` with all tests passing. Validated YAML edits using the approved Ruby YAML validator fallback.
+- **Next**: commit and push progress to origin.
+
+## This Cycle (2026-06-21T15:27Z, forge — big-pickle meta-orch)
+
+- **Startup**: `linux-next @ 6d25a37f`, clean worktree, in sync with origin.
+- **Credential Channel Guard**: FAILED — `missing:no-credential-channel`.
+  - No `.git/.gh-credentials`, no `GH_TOKEN`/`GITHUB_TOKEN`, `gh auth status`
+    not logged in.
+  - Git mirror (`tillandsias-git:8080`) unreachable (Connection reset).
+  - Vault (`https://vault:8200`) unreachable.
+- **Blocker filed**: `plan/issues/forge-credential-channel-blocked-2026-06-21.md`.
+- **Stopped**: Per meta-orchestration exit contract, no committable work was
+  started. Cycle halts until operator re-seeds the credential channel or the
+  git mirror becomes reachable.
+
+
+## This Cycle (2026-06-21T14:55Z, linux_mutable — big-pickle interactive)
+
+- **Startup**: `linux-next @ 7dfa585a`, clean worktree, in sync with `origin/linux-next`.
+  Credential Channel Guard passed (`ok:gh-keyring`).
+- **Worker drain**: Claimed and ran `github-e2e-lifecycle-interactive/interactive-run` (order 68).
+  Tests 1-2 (list-cloud-projects, bash) PASS. Test 3 (opencode) FAILED — confusing
+  forge-base-missing error UX. Filed 2 glitches (G1: duplicate vault bootstrap, G2:
+  forge-base-missing UX). Full report at
+  `plan/issues/github-e2e-findings-interactive-run-2026-06-21.md`. Inside-forge git
+  operations deferred to follow-up run after forge-base is available.
+- **Verification**: `plan/index.yaml` ruby YAML validation clean. E2E eligibility probe:
+  `eligible` (skipped this cycle — already produced a coherent commit).
+- **Coordination**: Sibling branches unchanged:
+  `origin/windows-next@a3c8b23d`, `origin/osx-next@d273daff` — both ancestors of HEAD.
+  No merge, no release.
+- **Reduction**: Captured 2 UX glitches from the interactive lifecycle; both recorded
+  as pending sub-packets under github-e2e/glitch-reduction.
+- **Next**: Promote G1/G2 glitch fixes to `plan/index.yaml` orders. Run follow-up
+  inside-forge git ops test. Local-build e2e is eligible on this host when warranted.
+
+## This Cycle (2026-06-21T09:28Z, linux_mutable — Gemini-Antigravity worker)
+
+- **Worker drain**: Completed Order 66 `forge-push-credential-channel/bypass-proxy-for-internal-git-daemon`.
+  - Added `tillandsias-git` and `tillandsias-git:8080` (and `http://tillandsias-git:8080/`) to `NO_PROXY` and `no_proxy` environment variables in `crates/tillandsias-core/src/container_profile.rs` and `crates/tillandsias-headless/src/main.rs`.
+  - Bypassing the proxy ensures internal enclave push/traffic does not route to Squid, preventing proxy denial (`TCP_DENIED/000`).
+- **Verification**: Verified build correctness with `./build.sh --check` which passed successfully. Ran E2E verification test via `tillandsias-headless` tool triggering a test push to `tillandsias-git` enclave, which succeeded completely.
+- **Next**: push `linux-next` to origin.
+
+## This Cycle (2026-06-21T07:11Z, linux_mutable — Gemini-Antigravity worker)
+
+- **Worker drain**: Completed Order 73 `source-edit-vs-smoke-lock/decide-and-document`.
+  - Added a new rule under §5 Hard Rules in `skills/advance-work-from-plan/SKILL.md` requiring destructive, file-moving, or source-mutating directory migrations to acquire the shared `build-install-smoke-e2e` lock.
+  - Updated `plan/issues/ci-blockers-fmt-drift-and-litmus-concurrency-2026-06-21.md` and `plan/index.yaml` to mark the follow-up task and parent node as completed.
+- **Verification**: Validated `plan/index.yaml` using ruby YAML parser.
+- **Next**: push `linux-next` to origin.
+
+## This Cycle (2026-06-21T04:42Z, linux_mutable — big-pickle git-mirror-arch-verification)
+
+
+- **Worker drain**: Completed Order 69 `git-mirror-architecture-verification`. Investigation-only. Key findings:
+  - Protocol: `git daemon` serves `git://` (native git protocol on port 9418), NOT HTTPS/SSH
+  - CA certs: `/etc/tillandsias/ca.crt` is for **outbound** HTTPS (Vault API + GitHub push relay), not for server TLS
+  - Linux forge remote: either `git://git-service/<project>` or uses `git config url.<mirror>.insteadOf` → `git://git-service/<project>` — no `file://` on Linux
+  - Windows/WSL: uses path-based `url.<path>.insteadOf` redirect (functionally `file://`), intentional for WSL
+  - Corrected packet outcome from "real HTTPS/SSH git server" to "real git daemon (git://) with Vault-backed HTTPS relay"
+- **Deliverable**: `plan/issues/git-mirror-architecture-verification-2026-06-20.md`
+- **Next**: push `linux-next` to origin.
+
+## This Cycle (2026-06-21T04:12Z, linux_mutable — Gemini-Antigravity worker)
+
+- **Startup**: `linux-next @ 0bef958b`, clean worktree. Credential Channel Guard passed (`ok:gh-keyring`).
+- **Worker drain**: Resolved both pre-flight litmus failures. Updated the `default-image` litmus test to expect 5 checksum-verification sites (reversion of `wasmtime` to curl+tar). Added missing `zoxide` to `images/default/Containerfile.base` microdnf install to complete all 10 mandated terminal tools. Updated `openspec/specs/forge-shell-tools/spec.md` to remove the divergence block. Updated `litmus:forge-shell-tools-implementation-shape` to verify all 10 terminal tools and git utilities (`git-delta`, `git-lfs`) are present in `Containerfile.base`.
+- **Verification**: `run-litmus-test.sh --size instant --phase pre-build` → **110/110 PASS (100%)**. YAML validated with `ruby -ryaml`.
+- **Coordinator**: windows-next/osx-next both ancestors of HEAD — no sibling merge. No release.
+- **Next**: push `linux-next` to origin.
+
+## This Cycle (2026-06-21T03:04Z, linux_mutable — Claude Opus 4.8 Cowork meta-orch)
+
+- **Startup**: `linux-next @ 19f17b3a`, clean worktree, in sync (0/0). Credential Channel Guard `ok:gh-credentials-store`.
+- **No implementable packet at the current bar**: Order 64 `verify-incremental` (two release runs), Orders 66/69 (forge+git-mirror), Order 67 (Podman session, `skip:no-podman-user-session`), Order 68 (operator-attended). Chose a verifiable static-review reduction instead of bare ledger-hygiene.
+- **Reduction**: Static review of Gemini's Order 64 cache fix (`d273daff`). Confirmed the warm-on-main architecture, `save:false`, `hit` output, and key parity are correct. Found a real gap: the mandated purge of stale per-tag caches never landed; with the repo cache already over the 10 GB LRU cap, the warmed cache can evict before `verify-incremental`. Filed `plan/issues/enhancement-release-cache-purge-missing-2026-06-20.md`, promoted ready packet `purge-stale-caches`, and gated `verify-incremental` behind it.
+- **Verification**: litmus 3/3 PASS; `plan/index.yaml` `ruby -ryaml` clean.
+- **Coordinator**: windows-next/osx-next both ancestors of HEAD — no merge, no release.
+- **Next**: `purge-stale-caches` then `verify-incremental` need a build/CI host; Orders 66/69 need forge+git-mirror; 67 a Podman session; 68 an operator.
+
+## This Cycle (2026-06-21T02:04Z, linux_mutable — Claude Opus 4.8 Cowork meta-orch)
+
+- **Startup**: `linux-next`, fast-forwarded `6af5eddc..d273daff` to `origin/linux-next` (picked up Gemini's Order 64/65 release-nix-cache fix + build monitoring). Clean worktree. Credential Channel Guard passed (`ok:gh-credentials-store`, HTTPS).
+- **Worker drain**: No implementable `ready` packet remains for this host's capability at the current bar. Remaining ready packets — Order 64 `verify-incremental` (needs two consecutive release runs), Orders 66/69 (forge + git-mirror running), Order 67 (Podman user session), Order 68 (operator-attended big-pickle) — are all out of reach in the Cowork sandbox (e2e verdict `skip:no-podman-user-session`). Loop-tooling backlog (orders 60–63) fully drained.
+- **Reduction (ledger hygiene)**: Closed the stale `meta-orch-enhancement-opportunities-2026-06-20.md` header — it still read "Candidate 4 completed, candidates 1-3 ready" though orders 60–63 are all completed in `plan/index.yaml`. Changed status to `resolved` and filed a dated completion event. Claimed via `scripts/claim-ledger-node.sh` (single-winner lease) to avoid concurrent duplication.
+- **Verification**: `run-litmus-test.sh meta-orchestration --phase pre-build --size instant` → **3/3 PASS** (credential-channel-check 5/5 steps, ledger-node-claim 6/6 steps). No YAML touched (markdown-only edit); no parser run needed.
+- **Coordinator**: `origin/windows-next@a3c8b23d` and `origin/osx-next@d829808d` both ancestors of HEAD — no sibling merge. No release (docs/ledger-hygiene delta only, no runtime change).
+- **Bar-raise**: At zero implementable residual for this host at the current bar. Per Tlatoāni-gated governance, loop does NOT self-escalate. No new bar-raise candidate filed (existing proposals already on record).
+- **Next**: Orders 64/66–69 need a release/CI host, forge+git-mirror host, Podman-session host, or operator-attended big-pickle run.
 
 ## This Cycle (2026-06-21T01:04Z, linux_mutable — Claude Opus 4.8 Cowork meta-orch)
 

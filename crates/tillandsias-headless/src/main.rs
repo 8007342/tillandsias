@@ -722,7 +722,7 @@ const EGRESS_NET: &str = "tillandsias-egress";
 /// (proxy, git-service): enclave leg for in-enclave DNS + the egress leg for NAT.
 const ENCLAVE_EGRESS_NETS: &str = "tillandsias-enclave,tillandsias-egress";
 const ENCLAVE_NO_PROXY: &str =
-    "localhost,127.0.0.1,0.0.0.0,::1,inference,proxy,git-service,10.0.42.0/24";
+    "localhost,127.0.0.1,0.0.0.0,::1,inference,proxy,git-service,tillandsias-git,10.0.42.0/24";
 const CA_DIR: &str = "/tmp/tillandsias-ca";
 
 // @trace spec:init-incremental-builds
@@ -1372,18 +1372,49 @@ fn ensure_image_exists(
     let (containerfile, context_dir) = image_specs(root, image_name)?;
     let rt = podman_runtime()?;
     let client = PodmanClient::new();
+
+    let version = image_tag
+        .split(':')
+        .next_back()
+        .unwrap_or("latest")
+        .trim_start_matches('v');
+
+    if image_name == "chromium-framework" {
+        let core_tag = versioned_image_tag("chromium-core", version);
+        if !rt.block_on(client.image_exists(&core_tag)) {
+            ensure_image_exists(root, "chromium-core", &core_tag, debug).map_err(|e| {
+                format!(
+                    "Required base image '{}' is absent and failed to build on demand: {}.\n\
+                     Please ensure the base image is built by running: tillandsias --init",
+                    core_tag, e
+                )
+            })?;
+        }
+    } else if matches!(image_name, "forge" | "nanoclawv2") {
+        let base_tag = versioned_image_tag("forge-base", version);
+        if !rt.block_on(client.image_exists(&base_tag)) {
+            ensure_image_exists(root, "forge-base", &base_tag, debug).map_err(|e| {
+                format!(
+                    "Required base image '{}' is absent and failed to build on demand: {}.\n\
+                     Please ensure the base image is built by running: tillandsias --init",
+                    base_tag, e
+                )
+            })?;
+        }
+    }
+
     let build_args = if image_name == "chromium-framework" {
-        let version = image_tag
-            .split(':')
-            .next_back()
-            .unwrap_or("latest")
-            .trim_start_matches('v');
         vec![
             "--build-arg".to_string(),
             format!(
                 "CHROMIUM_CORE_IMAGE={}",
                 versioned_image_tag("chromium-core", version)
             ),
+        ]
+    } else if matches!(image_name, "forge" | "nanoclawv2") {
+        vec![
+            "--build-arg".to_string(),
+            format!("BASE_IMAGE={}", versioned_image_tag("forge-base", version)),
         ]
     } else {
         Vec::new()
@@ -1836,6 +1867,8 @@ fn build_git_run_args(
         sanitize_hostname(&format!("git-{project_name}")),
         "--network-alias".into(),
         "git-service".into(),
+        "--network-alias".into(),
+        "tillandsias-git".into(),
         "--network".into(),
         ENCLAVE_EGRESS_NETS.into(),
         "--cap-drop=ALL".into(),
@@ -3058,7 +3091,10 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
             Err(e) => {
                 if is_optional_image(image) {
                     if debug {
-                        eprintln!("WARNING: Skipping optional image {} because dependency mapping failed: {}", image, e);
+                        eprintln!(
+                            "WARNING: Skipping optional image {} because dependency mapping failed: {}",
+                            image, e
+                        );
                     }
                     state.mark_failed(image);
                     failed_images.push((image.to_string(), e));
@@ -3079,7 +3115,10 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
             Err(e) => {
                 if is_optional_image(image) {
                     if debug {
-                        eprintln!("WARNING: Skipping optional image {} because identity generation failed: {}", image, e);
+                        eprintln!(
+                            "WARNING: Skipping optional image {} because identity generation failed: {}",
+                            image, e
+                        );
                     }
                     state.mark_failed(image);
                     failed_images.push((image.to_string(), e));
@@ -3290,10 +3329,7 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
     }
 
     if !failed_images.is_empty() {
-        let optional_failed: Vec<_> = failed_images
-            .iter()
-            .map(|(name, _)| name.clone())
-            .collect();
+        let optional_failed: Vec<_> = failed_images.iter().map(|(name, _)| name.clone()).collect();
         eprintln!(
             "WARNING: Failed to build {} optional image(s): {}",
             optional_failed.len(),
@@ -4057,6 +4093,56 @@ fn run_github_login(debug: bool) -> Result<(), String> {
             operation = "gh_auth_vault_write",
             secret_name = "tillandsias-github-token",
             "GitHub token stored in Vault at secret/github/token"
+        );
+
+        // Configure git credential helper on the host so `git push origin`
+        // works from the host working tree after --github-login.
+        let mut get_token = podman_command();
+        get_token.args([
+            "exec",
+            &container,
+            "gh",
+            "auth",
+            "token",
+            "--hostname",
+            "github.com",
+        ]);
+        let token = command_output(get_token, debug)?;
+
+        let mut host_login = Command::new("gh");
+        host_login.args([
+            "auth",
+            "login",
+            "--hostname",
+            "github.com",
+            "--git-protocol",
+            "https",
+            "--with-token",
+        ]);
+        host_login.stdin(Stdio::piped());
+        let mut child = host_login
+            .spawn()
+            .map_err(|e| format!("Failed to spawn host gh auth login: {e}"))?;
+        if let Some(mut stdin) = child.stdin.take() {
+            stdin
+                .write_all(token.as_bytes())
+                .map_err(|e| format!("Failed to pipe token to host gh auth login: {e}"))?;
+        }
+        let status = child
+            .wait()
+            .map_err(|e| format!("Failed to wait for host gh auth login: {e}"))?;
+        if !status.success() {
+            return Err("Host gh auth login failed".to_string());
+        }
+
+        let mut setup_git = Command::new("gh");
+        setup_git.args(["auth", "setup-git"]);
+        run_command(setup_git, debug)?;
+
+        info!(
+            category = "secrets",
+            operation = "gh_auth_setup_git",
+            "Git credential helper configured on host"
         );
     }
     #[cfg(not(feature = "vault"))]

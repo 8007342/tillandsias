@@ -20,6 +20,7 @@ jobs:
     runs-on: ubuntu-22.04
     permissions:
       contents: read
+      actions: write
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -35,6 +36,12 @@ jobs:
           primary-key: nix-${{ runner.os }}-${{ hashFiles('flake.lock') }}
           restore-prefixes-first-match: |
             nix-${{ runner.os }}-
+          purge: true
+          purge-primary-key: never
+          purge-prefixes: |
+            nix-Linux-
+          purge-created-offset: 86400000
+          gc-max-store-size: 8000000000
 
       - name: Build Nix targets
         run: |

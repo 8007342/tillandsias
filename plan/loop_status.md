@@ -1,6 +1,173 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-21T01:10Z
+LastExecutionTime: 2026-06-21T23:13:00Z
+
+
+## This Loop (2026-06-21T23:13Z, linux_mutable — Gemini-Antigravity worker)
+
+- **Cycle type**: meta-orchestration worker drain on mutable Linux.
+- **Startup**: `linux-next @ be08cbec`, clean worktree. Credential Channel Guard passed (`ok:gh-keyring`).
+- **Worker drain**: Claimed and completed Order 76 `github-e2e/forge-base-missing-ux`.
+  - Added on-demand building of base images (`forge-base` and `chromium-core`) in `ensure_image_exists`.
+  - Configured `ensure_image_exists` to pass the correct `BASE_IMAGE` and `CHROMIUM_CORE_IMAGE` build arguments to `podman build`.
+- **Verification**: Verified compilation with `cargo check` and run-time safety with `cargo clippy`. Ran all 86 unit and integration tests successfully. Validated YAML edits with the Ruby YAML validator fallback.
+- **Coordinator**: windows-next + osx-next both ancestors of HEAD. No merge needed.
+- **E2E gates**: Not run — code changes are well covered by local tests, no full e2e environment needed for this slice.
+- **Push state**: will push `linux-next` to origin over HTTPS.
+
+## This Loop (2026-06-21T21:12Z, linux_mutable — Gemini-Antigravity worker)
+
+- **Cycle type**: meta-orchestration worker drain on mutable Linux.
+- **Startup**: `linux-next @ 9974072b`, clean worktree. Credential Channel Guard passed (`ok:gh-keyring`). Siblings fetched: windows-next a3c8b23d, osx-next d273daff (all at same commit).
+- **Worker drain**: Claimed and completed Order 75 `github-e2e/redundant-vault-bootstrap`.
+  - Added the `approle_role_exists` method to `VaultClient` to check if a specific AppRole role has already been provisioned (returning true on 200, false on 404).
+  - Modified the container boot check in `ensure_vault_running` within `crates/tillandsias-headless/src/vault_bootstrap.rs` to query the `git-mirror` role and skip redundant policy load/AppRole role provisioning cycles if it is present.
+- **Verification**: Verified build correctness with `cargo check` and successfully ran integration tests of `tillandsias-vault-client` with all tests passing. Validated YAML edits using the approved Ruby YAML validator fallback.
+- **Coordinator**: windows-next + osx-next both ancestors of HEAD. No merge needed.
+- **E2E gates**: Not run — code delta is runtime, but no forge rebuild needed for this slice.
+- **Push state**: will push `linux-next` to origin over HTTPS.
+
+## This Loop (2026-06-21T12:49Z, linux_mutable — big-pickle reduction: critical-path-honor-success-pattern)
+
+- **Cycle type**: meta-orchestration worker drain + reduction on mutable Linux.
+- **Startup**: `linux-next @ 022dd16f`, clean worktree. Credential Channel Guard passed (`ok:gh-keyring`). Siblings fetched: windows-next a3c8b23d, osx-next d273daff (all at same commit).
+- **Worker drain**: No `ready` packet implementable on this host — order 64 `release-nix-cache-ref-scoping/verify-incremental` needs CI releases; order 68 `github-e2e-lifecycle-interactive` needs operator attendance.
+- **Reduction**: Reduced `litmus-critical-path-eval-gap` finding (first durable fix) into **order 74**:
+  - Added `success_pattern`/`failure_pattern` parsing to critical_path YAML section in `scripts/run-litmus-test.sh`
+  - Steps declaring `success_pattern` now route through `check_signal()` for authoritative regex matching instead of always falling through to the `expected_behavior` heuristic
+  - 112/112 instant-size litmus tests pass (0 regressions)
+- **Verification**: `bash -n scripts/run-litmus-test.sh` passes. `ruby -ryaml` validates `plan/index.yaml`. Litmus `--size instant` 112/112 PASS.
+- **Coordinator**: windows-next + osx-next both ancestors of HEAD. No merge needed.
+- **E2E gates**: Described above, but litmus-only change.
+- **Push state**: will push `linux-next` to origin over HTTPS.
+
+## This Loop (2026-06-21T10:50Z, linux_mutable — big-pickle opencode-prompt-e2e-smoke)
+
+- **Cycle type**: meta-orchestration worker drain on mutable Linux (big-pickle).
+- **Startup**: `linux-next @ 70239dc6`, clean worktree. Credential Channel Guard passed (`ok:gh-keyring`). Siblings fetched: windows-next a3c8b23d, osx-next d273daff (both ancestors); main 77de76ba (release merge, not ancestor — expected).
+- **Worker drain**: Completed Order 67 `opencode-prompt-e2e-smoke` (both subtasks).
+  - Created `openspec/litmus-tests/litmus-opencode-prompt-e2e-shape.yaml` with 7-step critical path asserting forge_exit=0, HEAD advanced, loop_status.md changed, remote HEAD advanced, and cleanup.
+  - Registered `litmus:opencode-prompt-e2e-shape` in `openspec/litmus-bindings.yaml` under `spec_id: meta-orchestration`.
+  - Verified `opencode-prompt-e2e/findings-reduce` is already covered by the meta-orchestration skill's Reduction Engine section (no skill edit needed).
+  - Updated `plan/issues/opencode-prompt-e2e-smoke-2026-06-20.md` with completion summary.
+- **Verification**: `plan/index.yaml`, `openspec/litmus-bindings.yaml`, and `litmus-opencode-prompt-e2e-shape.yaml` all validated with `ruby -ryaml`. `build.sh --check` passes.
+- **Coordinator**: windows-next + osx-next both ancestors of HEAD. No merge needed.
+- **E2E gates**: Not run — litmus-only change, no runtime delta.
+- **Push state**: will push `linux-next` to origin over HTTPS.
+
+## This Loop (2026-06-21T09:28Z, linux_mutable — Gemini-Antigravity worker)
+
+- **Cycle type**: meta-orchestration worker drain on mutable Linux (Gemini).
+- **Startup**: `linux-next @ 2412a414`, clean worktree. Credential Channel Guard passed (`ok:gh-keyring`).
+- **Worker drain**: Completed Order 66 `forge-push-credential-channel/bypass-proxy-for-internal-git-daemon`.
+  - Configured `NO_PROXY`/`no_proxy` environment variables in `container_profile.rs` and `main.rs` to bypass Squid proxy for `tillandsias-git` enclave service.
+- **Verification**: `build.sh --check` passes successfully. E2E verification test pushed successfully to the enclave git service.
+- **Coordinator**: windows-next + osx-next both ancestors of HEAD. No merge needed.
+- **E2E gates**: local-build gate run (E2E push verification test).
+- **Push state**: will push `linux-next` to origin over HTTPS.
+
+## This Loop (2026-06-21T08:42Z, linux_mutable — big-pickle ledger-closure)
+
+- **Cycle type**: meta-orchestration worker drain on mutable Linux (big-pickle).
+- **Startup**: `linux-next @ 758ae45c`, clean worktree. Credential Channel Guard passed (`ok:gh-keyring`). Siblings: windows-next a3c8b23d, osx-next d273daff (both ancestors); main 77de76ba (release merge, not ancestor — expected).
+- **Worker drain**: No `ready` packets implementable on this host — orders 64/66–68 require release runs, forge runtime, or operator attendance. Closed out **order 69** `git-mirror-architecture-verification` which had `status: claimed` but was already completed (findings filed, deliverable present). Fixed event type `completion` → `completed`, flipped status to `done`, released lease.
+- **Verification**: `plan/index.yaml` validated with `ruby -ryaml`.
+- **Coordinator**: windows-next + osx-next both ancestors of HEAD. main diverges after release PR #38 merge (expected — main carries VERSION bump). No merge needed.
+- **E2E gates**: Not run — ledger-only change, no runtime delta.
+- **Push state**: will push `linux-next` to origin over HTTPS.
+
+## This Loop (2026-06-21T07:11Z, linux_mutable — Gemini-Antigravity worker)
+
+- **Cycle type**: meta-orchestration worker drain on mutable Linux (Gemini).
+- **Startup**: `linux-next @ 6b0c1eab`, clean worktree. Credential Channel Guard passed (`ok:gh-keyring`). Siblings fetched: windows-next a3c8b23d, osx-next d273daff (both ancestors).
+- **Worker drain**: Completed Order 73 `source-edit-vs-smoke-lock/decide-and-document`.
+  - Added a new rule under §5 Hard Rules in `skills/advance-work-from-plan/SKILL.md` requiring destructive, file-moving, or source-mutating directory migrations to acquire the shared `build-install-smoke-e2e` lock (or source-edit lease).
+  - Updated `plan/issues/ci-blockers-fmt-drift-and-litmus-concurrency-2026-06-21.md` and `plan/index.yaml` to mark the follow-up task and parent node as completed.
+- **Verification**: Validated `plan/index.yaml` using ruby YAML parser.
+- **Coordinator**: windows-next + osx-next both ancestors of HEAD. No merge needed.
+- **E2E gates**: Not run — documentation-only change, no runtime delta.
+- **Push state**: will push `linux-next` to origin over HTTPS.
+
+## This Loop (2026-06-21T06:37Z, linux_mutable — big-pickle enforce-fmt-on-commit)
+
+
+- **Cycle type**: meta-orchestration worker drain on mutable Linux (big-pickle).
+- **Startup**: `linux-next @ 6b0c1eab`, clean worktree. Credential Channel Guard passed (`ok:gh-keyring`). Siblings fetched: windows-next a3c8b23d, osx-next d273daff, main 31b01c32 (all ancestors).
+- **Worker drain**: No `ready` plan-index packet implementable on this host — Orders 64/66–68 require CI releases, forge runtime, or operator attendance. Reduced the CI blocker finding from `plan/issues/ci-blockers-fmt-drift-and-litmus-concurrency-2026-06-21.md` into two plan packets:
+  - **Order 72 (completed)**: Added `cargo fmt --check --all` to `build.sh --check` before the type-check step, closing the --check vs --ci-full fmt gap.
+  - **Order 73 (ready)**: Document that source-mutating migrations acquire the smoke-lock.
+- **Verification**: `build.sh --check` passes with fmt gate. `ruby -ryaml` validates `plan/index.yaml`. `bash -n build.sh` passes.
+- **Coordinator**: windows-next + osx-next both ancestors of HEAD. No merge needed.
+- **E2E gates**: Not run — fmt-gate tooling change, no runtime delta.
+- **Push state**: will push `linux-next` to origin over HTTPS (gh auth keyring).
+
+## This Loop (2026-06-21T04:42Z, linux_mutable — big-pickle git-mirror-arch-verification)
+
+- **Cycle type**: meta-orchestration worker drain on mutable Linux (big-pickle).
+- **Startup**: `linux-next @ de29cd67` (after fast-forward + claim push from previous start). Clean worktree. Credential Channel Guard passed (`ok:gh-keyring`).
+- **Worker drain**: Claimed and completed Order 69 `git-mirror-architecture-verification`. Investigation-only (no code changes). Key findings:
+  - git mirror serves `git://` (native git daemon protocol on port 9418), NOT HTTPS/SSH
+  - CA certs (`/etc/tillandsias/ca.crt`) are for **outbound** HTTPS (Vault API + GitHub push relay), not for serving TLS
+  - Linux forge remote is either `git://git-service/<project>` (network clone) or uses `insteadOf` redirect to `git://git-service/<project>` (host-mount mode) — no `file://` anywhere on Linux
+  - Windows/WSL filesystem transport does use a path-based `insteadOf` redirect (functionally akin to `file://`), which is intentional for the WSL environment
+  - Corrected packet outcome wording from "real HTTPS/SSH git server" to "real git daemon (git://) with Vault-backed HTTPS relay"
+- **Deliverable**: `plan/issues/git-mirror-architecture-verification-2026-06-20.md`
+- **E2E gates**: Skipped — investigation-only, no code delta.
+- **Push state**: will push `linux-next` to origin over HTTPS (gh auth keyring).
+
+## This Loop (2026-06-21T04:12Z, linux_mutable — Gemini-Antigravity worker)
+
+- **Cycle type**: meta-orchestration worker drain on mutable Linux (Gemini). Podman user session available.
+- **Startup**: `linux-next @ 0bef958b`. Clean worktree. Credential Channel Guard passed (`ok:gh-keyring`).
+- **Worker drain**: Resolved both pre-flight litmus failures. Added missing `zoxide` to `images/default/Containerfile.base` to complete all 10 mandated terminal tools. Updated `default-image` litmus test to expect 5 checksum-verification sites due to `wasmtime` curl+tar restoration. Removed divergence block from `openspec/specs/forge-shell-tools/spec.md`. Updated `litmus:forge-shell-tools-implementation-shape` to verify all 10 tools + git-delta and git-lfs.
+- **Verification**: `run-litmus-test.sh --size instant --phase pre-build` → **110/110 PASS (100%)**. YAML validated with `ruby -ryaml`.
+- **Coordinator**: windows-next + osx-next both ancestors of HEAD. No merge needed.
+- **E2E gates**: local-build gate eligible, ran litmus test suite, passed 100%.
+- **Push state**: will push `linux-next` to origin over HTTPS (gh auth keyring).
+
+## This Loop (2026-06-21T03:55Z, linux_mutable — big-pickle implements push-from-host)
+
+- **Cycle type**: meta-orchestration worker drain on mutable Linux (big-pickle). Off-peak (Sat 20:55 PT). Podman user session available.
+- **Startup**: `linux-next @ 6a7d4d2f` (in sync with `origin/linux-next`). Clean worktree. Credential Channel Guard passed (`ok:gh-keyring`). Siblings fetched: windows-next a3c8b23d, osx-next d273daff, main 31b01c32 (all ancestors).
+- **Worker drain**: Completed Order 68 `github-e2e/push-from-host`. Added host-side `gh auth login --with-token` + `gh auth setup-git` to `run_github_login` in `main.rs` so `git push origin` works from the host after `--github-login`. Token retrieved from the login container via `podman exec gh auth token` and piped to host gh, then git credential helper configured.
+- **Verification**: 86/86 headless unit tests pass, full workspace tests pass, `ruby -ryaml` validates plan YAML, 3/3 meta-orchestration litmus tests pass.
+- **Capture**: Updated `owned_files` from non-existent `github_login.rs` to `main.rs`. Deliverable filed at `plan/issues/github-e2e-push-from-host-2026-06-21.md`.
+- **Coordinator**: windows-next + osx-next both ancestors of HEAD (0 ahead). No merge needed.
+- **E2E gates**: local-build gate eligible but not run — code delta is runtime (not infra-only) but no forge rebuild needed for this slice. curl-install gate deferred.
+- **Push state**: will push `linux-next` to origin.
+
+## This Loop (2026-06-21T03:30Z, linux_mutable — big-pickle purge-stale-caches)
+
+- **Cycle type**: meta-orchestration worker drain on mutable Linux (big-pickle). Off-peak (Sat 20:30 PT). Podman user session available for the first time in Cowork-free cycle.
+- **Startup**: `linux-next @ a08eb971` (after fast-forward `..51d20063..38015e2f`). Clean worktree. Credential Channel Guard passed (`gh auth status` via keyring). Podman 5.8.2 with `/run/user/1000`. Siblings fetched: windows-next a3c8b23d, osx-next d273daff (both ancestors).
+- **Worker drain**: Completed Order 64 `release-nix-cache-ref-scoping/purge-stale-caches`. Added `purge: true`, `purge-prefixes: nix-Linux-`, `purge-created-offset: 86400000`, `gc-max-store-size: 8000000000`, and `permissions: actions: write` to `.github/workflows/nix-cache-warm.yml`. Repo cache was 11.1 GB over 10 GB LRU limit — purge prevents LRU eviction of warmed main-scoped cache before verify-incremental runs.
+- **Verification**: `ruby -ryaml` validates both `plan/index.yaml` and `.github/workflows/nix-cache-warm.yml`. `git diff --check` passes. VERSION unchanged (0.3.260620.7).
+- **Coordinator**: windows-next + osx-next both ancestors of HEAD (0 ahead). No merge needed.
+- **E2E gates**: local-build gate available (eligible, podman session active) but not run this cycle — CI-only config change doesn't need substrate rebuild. curl-install gate deferred (latest release v0.3.260620.8 already tested by immutable cycle at 20:34Z).
+- **Push state**: pushed `linux-next` to origin over HTTPS (gh auth keyring).
+
+## This Loop (2026-06-21T03:04Z, linux_mutable — meta-orch static-review reduction)
+
+- **Cycle type**: meta-orchestration on mutable Linux (Claude Opus 4.8, Cowork). Off-peak (Sat 20:04 PT). No implementable `ready` packet at the current bar — chose a verifiable static-review reduction over bare ledger-hygiene.
+- **Startup**: `linux-next @ 19f17b3a`, clean worktree, in sync with `origin/linux-next` (0/0). Credential Channel Guard passed (`ok:gh-credentials-store`, HTTPS).
+- **Worker drain**: All remaining ready packets out of reach here — Order 64 `verify-incremental` (needs two release runs), Orders 66/69 (forge+git-mirror running), Order 67 (Podman user session, `skip:no-podman-user-session`), Order 68 (operator-attended). Orders 70/71 already completed.
+- **Reduction (static review of d273daff, Order 64)**: Reviewed Gemini's warm-cache-on-main implementation without needing a release host. Confirmed correct: cron-on-default-branch warming defeats GHA ref-scoping, `save:false` on release, `hit` output name, runner.os/primary-key parity. **Gap found**: the `implement-cache-fix` handoff required purging stale per-tag caches to stay under the 10 GB GHA limit, but no purge step landed and the repo cache was already over 10 GB (LRU active) → the warmed cache can evict before verification. Web-confirmed `cache-nix-action@v7` purge API (`purge`/`purge-prefixes`/`gc-max-store-size` + `actions: write`).
+- **Capture + promote**: Filed `plan/issues/enhancement-release-cache-purge-missing-2026-06-20.md`; promoted ready packet `release-nix-cache-ref-scoping/purge-stale-caches` and made `verify-incremental` depend on it (so measurement releases run against a clean cache). Finding event added to Order 64.
+- **Verification**: `run-litmus-test.sh meta-orchestration --phase pre-build --size instant` → **3/3 PASS**. `plan/index.yaml` validated with `ruby -ryaml`.
+- **E2E**: local-build gate `skip:no-podman-user-session`. No runtime change → no release. Coordinator: windows-next/osx-next both ancestors of HEAD, no merge.
+- **Bar-raise**: not self-escalated (Tlatoāni-gated).
+- **Push state**: pushing `linux-next` to origin over HTTPS (`.git/.gh-credentials`).
+
+## This Loop (2026-06-21T02:04Z, linux_mutable — meta-orch ledger-hygiene)
+
+- **Cycle type**: meta-orchestration on mutable Linux (Claude Opus 4.8, Cowork). Off-peak (Sat 19:04 PT) — implementable backlog drained, ledger-hygiene reduction.
+- **Startup**: fast-forwarded `6af5eddc..d273daff` to `origin/linux-next` (Gemini's Order 64/65 release-cache + monitoring landed). Clean worktree. Credential Channel Guard passed (`ok:gh-credentials-store`).
+- **Worker drain**: No `ready` packet implementable on this host at the current bar — Orders 64/66–69 require a release/CI host, forge+git-mirror, Podman user session, or operator attendance (e2e `skip:no-podman-user-session`). Loop-tooling orders 60–63 fully drained.
+- **Reduction**: Ledger-hygiene closure of `meta-orch-enhancement-opportunities-2026-06-20.md` — stale header ("Candidate 4 completed, candidates 1-3 ready") corrected to `resolved`; dated completion event filed. Node claimed via `claim-ledger-node.sh` to avoid concurrent duplication.
+- **Verification**: `run-litmus-test.sh meta-orchestration --phase pre-build --size instant` → 3/3 PASS. Markdown-only edit, no YAML parser needed.
+- **E2E**: local-build gate `skip:no-podman-user-session`. No runtime change → no release. Coordinator: windows/osx-next both ancestors of HEAD, no merge.
+- **Bar-raise**: zero implementable residual at current bar; loop does not self-escalate (Tlatoāni-gated).
+- **Push state**: pushing `linux-next` to origin over HTTPS (`.git/.gh-credentials`).
 
 ## This Loop (2026-06-21T01:04Z, linux_mutable — meta-orch worker-drain)
 

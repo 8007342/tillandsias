@@ -200,3 +200,68 @@ AND adopt option 2 (warm-on-main) so something actually caches.
     by adding flakehub: false. Set save: false on release.yml Nix Cache to keep the release job
     from saving tag-scoped caches. Corrected the cache-nix-action output name from cache-hit to hit
     to allow duration assertions. Ready for verify-incremental step.
+
+## Verify-incremental datapoint (2026-06-21T04:26 PDT / 11:26Z, meta-orch loop)
+
+Coordinator verification of the implemented fix (commit d273daff):
+- `release.yml`: `nix-installer-action` now `flakehub: false` (kills the failing
+  FlakeHub-login noise) and the `Nix Cache` step has `save: false` — releases
+  only RESTORE.
+- New `.github/workflows/nix-cache-warm.yml` ("Warm Nix Cache") warms the cache
+  on main pushes and saves it under the `refs/heads/main` default-branch scope,
+  which tag-dispatched releases CAN restore (the core ref-scoping fix).
+- The warm job **ran green on main at 2026-06-21T07:42:06Z** (triggered by the
+  v0.3.260621.1 VERSION-bump push 77de76ba).
+- **v0.3.260621.1 was the first post-fix release but ran concurrently with / just
+  before the warm job finished, so it still paid the full ~no-restore cost**
+  (build ~23min, FlakeHub-login noise now gone). This is expected, not a fix
+  failure: the warm cache only became available at 07:42Z.
+- **Next action for verify-incremental:** the NEXT release (now that main's cache
+  is warmed) is the real before/after datapoint — its `nix build` step should
+  restore the cross-GCC + crate closure and drop substantially vs v0.3.260621.1.
+  Capture the timing per order 65 monitoring.
+
+## verify-incremental RESULT: FAIL — fix ineffective (2026-06-21T12:26 PDT / 19:26Z)
+
+v0.3.260621.2 was the first release after the warm-cache fix, with flake.lock
+unchanged since the 07:42Z warm run. Measured from run 27913696580:
+- `Nix Cache` restore: **0 s** (nothing restored).
+- `Build musl-static binaries via Nix`: **~38 min** (18:35:37 → 19:13:24Z) — no
+  improvement vs v0.3.260621.1 (~23 min); if anything slower.
+- `Post Nix Cache`: 0 s no-op (save:false on release, as designed).
+
+**Root cause — the warm-on-main job never persists a main-scoped store cache:**
+`gh api .../actions/caches` shows the 2.2 GB `nix-Linux-<flake.lock-hash>` store
+cache exists **only under tag refs** (`refs/tags/v0.3.260620.7`, `…620.8`). There
+is **no `nix-Linux-*` cache under `refs/heads/main`** — only a 43 MB
+`determinatesystem-nix-installer` cache landed on main from the warm run. Two
+compounding defects in `.github/workflows/nix-cache-warm.yml`:
+
+1. **Save collision on an existing key.** cache-nix-action skips saving when the
+   `primary-key` already exists, and the identical key is occupied by the old
+   tag-scoped caches. Its `purge: true` with `purge-created-offset: 86400000`
+   (24 h) did NOT clear them — at the 07:42Z warm run the v0.3.260620.7/.8 caches
+   were only ~13 h old. So the key stays occupied → the main-scoped save is
+   skipped → releases (which restore only from main's default-branch scope) find
+   nothing.
+2. **Trigger gap.** The warm job fires only on `flake.nix`/`flake.lock`/workflow
+   changes (+ weekly cron). Routine main pushes (VERSION bumps) don't touch flake
+   files, so it ran essentially once (at workflow introduction) and won't refresh
+   per release.
+
+### Fix direction (reopen implement-cache-fix)
+
+- Make the warm job purge the colliding **non-main** `nix-Linux-*` caches before
+  build+save (e.g. `purge-created-offset: 0` or purge by ref!=main), so the
+  primary-key is free and the main-scoped save actually persists. Old tag-scoped
+  store caches are unrestorable cross-tag anyway — safe to purge.
+- Confirm cache-nix-action `save` is enabled on the warm job (no `save:false`).
+- Consider triggering the warm job on every main push (or post-release) so the
+  default-branch cache stays fresh, not just on flake.lock changes.
+- Re-verify: after a warm run that leaves a `nix-Linux-*` cache under
+  `refs/heads/main`, the NEXT release's `Nix Cache` restore should be non-zero
+  and `nix build` should drop substantially.
+
+Note: the FlakeHub-login failure still appears in release logs despite
+`flakehub: false` on the installer — cosmetic (no caching impact) but worth
+suppressing to cut the noise.

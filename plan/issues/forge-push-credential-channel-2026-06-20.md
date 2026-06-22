@@ -60,3 +60,18 @@ git-mirror architecture and adds no new secret-surface inside the enclave.
   commits + pushes → git mirror → GitHub; verify the commit appears on the remote branch
 - `forge-push/opencode-prompt-e2e`: wire the `tillandsias . --opencode --prompt "..."` 
   e2e smoke to verify pushed findings (see order 67)
+
+## Verification and Evidence
+
+### Completed Tasks
+1. **`forge-push/wire-git-remote`**:
+   - Updated the git container run arguments in [main.rs](file:///home/tlatoani/4src/tillandsias/crates/tillandsias-headless/src/main.rs) to include `--network-alias tillandsias-git`.
+   - Modified `clone_project_from_mirror` and `rewrite_origin_for_enclave_push` in [lib-common.sh](file:///home/tlatoani/4src/tillandsias/images/default/lib-common.sh) to use `http://tillandsias-git:8080/${TILLANDSIAS_PROJECT}.git` for cloning, pushing, and redirection (using ephemeral `insteadOf` global config overrides for host-mounted setups to preserve pristine host repositories).
+
+2. **`forge-push/git-mirror-clone-support`**:
+   - Installed `lighttpd` in [Containerfile](file:///home/tlatoani/4src/tillandsias/images/git/Containerfile) to handle HTTP smart-protocol traffic on port `8080`.
+   - Configured `lighttpd` to map `/` to `git-http-backend` and exposed both `9418` (git daemon) and `8080` (HTTP).
+   - Created [lighttpd.conf](file:///home/tlatoani/4src/tillandsias/images/git/lighttpd.conf) and set up `entrypoint.sh` to run both services simultaneously under unprivileged execution and trap termination signals.
+   - Enforced `http.receivepack true` on initialization of bare repositories in the mirror.
+
+All cargo tests compile and pass successfully, and the git container builds correctly.
