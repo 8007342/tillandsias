@@ -1,17 +1,22 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-22T06:46Z
+Last updated: 2026-06-22T06:58Z
 
-## This Cycle (2026-06-22T06:46Z, linux_mutable — big-pickle meta-orch)
+## This Cycle (2026-06-22T06:57Z, linux_mutable — big-pickle meta-orch)
 
-- **Zero residual at current bar**: All plan/index.yaml nodes completed.
-- **Bar-raise proposals filed**: 3 candidates (clippy lint gate, dev-proxy warning,
-  cache size signal) in `plan/issues/bar-raise-proposals-2026-06-22.md` — Tlatoāni-gated.
-- **Coordinator**: Sibling branches `origin/windows-next` and `origin/osx-next`
-  are ancestors of `linux-next`. No merge needed.
-- **E2E gates**: No new release to test. Latest v0.3.260622.3 already smoke-tested PASS.
-- **Forge credential blocker**: Still open — operator must re-seed `.git/.gh-credentials`
-  or inject `GH_TOKEN` (`plan/issues/forge-credential-channel-blocked-2026-06-21.md`).
+- **Worker drain**: Zero residual at current bar — all plan/index.yaml nodes completed.
+  Re-checked sibling branches; `origin/osx-next@4d6e8066` is an ancestor of `linux-next`.
+  Vault 60s→120s timeout fix (order 77) was on `linux-next` but not on `osx-next`.
+  **Fast-forwarded `osx-next`** to `origin/linux-next@ff896a6b` to ship the vault
+  timeout fix and all intervening linux-next work to the macOS branch. Pushed.
+  Machine-id stability concern remains open — filed in
+  `plan/issues/macos-github-login-vault-bootstrap-timeout-2026-06-22.md` for macOS
+  host verification (cannot test VZ guest `/etc/machine-id` persistence from Linux).
+- **Coordinator**: `origin/osx-next` now at `ff896a6b` (fast-forwarded). `origin/windows-next`
+  unchanged (`a3c8b23d`). No merge required — both are ancestors of `linux-next`.
+- **E2E gates**: No new release to test. v0.3.260622.3 smoke-tested PASS in prior cycle.
+- **Forge credential blocker**: Still open — operator action required
+  (`plan/issues/forge-credential-channel-blocked-2026-06-21.md`).
 
 ## This Cycle (2026-06-22T04:22Z, linux_mutable — claude-sonnet46 meta-orch loop)
 

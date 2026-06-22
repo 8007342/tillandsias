@@ -1,18 +1,24 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-22T06:46Z
+LastExecutionTime: 2026-06-22T06:58Z
 
 
-## This Loop (2026-06-22T06:46Z, linux_mutable — big-pickle meta-orch)
+## This Loop (2026-06-22T06:57Z, linux_mutable — big-pickle meta-orch)
 
-- **Cycle type**: meta-orchestration check/sync (zero-residual convergence point).
-- **Startup**: `linux-next @ de05b9db`, clean worktree, 0 ahead / 0 behind. Credential Channel Guard passed (`ok:gh-keyring`).
-- **Worker drain**: No ready tasks in `plan/index.yaml`. All nodes completed.
-- **Coordinator**: Siblings `origin/windows-next` (`a3c8b23d`) and `origin/osx-next` (`4d6e8066`) are ancestors of `linux-next`. No merge required.
-- **Verification**: Build check PASS (fmt + typecheck). Litmus instant PASS (110/110, 100%). Clippy (`--all-targets -D warnings`) has 1 pre-existing issue (`items_after_test_module` in `main.rs`) — not a blocker at current bar.
+- **Cycle type**: meta-orchestration with macOS unblock.
+- **Startup**: `linux-next @ ff896a6b`, clean worktree, 0 ahead / 0 behind. Credential Channel Guard passed (`ok:gh-keyring`).
+- **Worker drain**: Zero residual at current bar — all plan/index.yaml nodes completed.
+  Noted that `origin/osx-next` (`4d6e8066`) was behind `origin/linux-next` and missing
+  the vault 60s→120s timeout fix (order 77). **Fast-forwarded `osx-next`** to
+  `origin/linux-next@ff896a6b` and pushed, shipping the vault timeout fix and all
+  intervening linux-next work to the macOS branch.
+- **Coordinator**: `origin/osx-next` now at `ff896a6b` (fast-forwarded). `origin/windows-next`
+  (`a3c8b23d`) unchanged — both are ancestors of `linux-next`. No merge required.
 - **Release**: Latest is v0.3.260622.3 (smoke-tested PASS in prior cycle). No new work since release.
-- **Reduction engine**: Zero residual at current bar. Filed bar-raise candidates A (clippy lint gate), B (dev-proxy warning), and C (cache size signal) in `plan/issues/bar-raise-proposals-2026-06-22.md`. Proposals only — Tlatoāni-gated, not self-escalated.
-- **Push state**: Recording this check-in and pushing `linux-next`.
+- **Reduction engine**: Zero residual at current bar. Machine-id stability concern
+  remains open for macOS-side verification
+  (`plan/issues/macos-github-login-vault-bootstrap-timeout-2026-06-22.md`).
+- **Push state**: `origin/osx-next` pushed (fast-forward). Recording this check-in and pushing `linux-next`.
 
 ## This Loop (2026-06-22T06:35Z, linux_mutable — claude-sonnet46 meta-orch)
 
