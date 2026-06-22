@@ -118,11 +118,31 @@ calls the macOS-only `VzRuntime::open_vsock_stream` directly, builds a host
   - Follow-up (optional): wire `--exec-guest /bin/echo` as a post-provision step
     in the macOS `/build-install-and-smoke-test-e2e` gate for a standing
     real-path regression check.
-- `macos-vz/impl-attach` (optimization) — implement the interactive attach via
-  the chosen mechanism; rewire the tray's GitHub-login / Open-Shell / agent
-  intents to use it. Closure: AX smoke (`scripts/macos-tray-ax-smoke.sh`) shows
-  a usable, non-self-terminating shell/login prompt; GitHub login reaches the
-  paste-token prompt and the status poll flips to LoggedIn.
+- `macos-vz/exec-stdin` (optimization) — **DONE, 2026-06-22.** Added
+  `vsock_exec::exec_over_stream_with_input` (delivers a fixed `input` to the
+  guest child's stdin + `/dev/tty` via `PtyData{ToGuest}` after `PtyOpen`, then
+  drains output). `--exec-guest` forwards piped host stdin. **Decision: NO
+  ssh-over-vsock** — the proven control-wire exec path covers one-shot exec and
+  near-interactive (single-value) flows like the github-login token paste.
+  Closure MET: unit test `exec_over_stream_with_input_delivers_stdin` +
+  **real-VM proof** `printf 'PINGPONG-SECRET\n' | tillandsias-tray --exec-guest
+  /bin/bash -lc 'read -r X; echo "GOT:[$X]"'` → `GOT:[PINGPONG-SECRET]`, exit 0.
+  This is the EXACT pattern `run_github_login`'s `read -rs TOKEN < /dev/tty`
+  uses — the token-paste keystone, proven, with the token never in argv.
+- `macos-vz/finalize-github-login` (optimization, NEXT — needs operator PAT) —
+  add a NON-interactive guest login entry (token from stdin; git identity from
+  env/existing config — `run_github_login` currently reads name+email via stdin
+  prompts then the token via /dev/tty, brittle to feed blind), and a headless
+  `tillandsias-tray --github-login` that boots the VM and drives it via
+  `exec_over_stream_with_input` with the PAT. Cannot be verified without a real
+  GitHub PAT + network (and must not auth the operator's account unprompted), so
+  the final step is operator-attended. Closure: `printf '<PAT>\n' |
+  tillandsias-tray --github-login` writes the token to the guest Vault and the
+  tray status poll flips logged-out → logged-in.
+- `macos-vz/impl-attach-interactive` (optimization) — a LIVE bidirectional shell
+  (Open Shell) still needs a terminal bridge (the one-shot exec+input path does
+  not stream interactive I/O). Lower priority than login. Closure: a usable,
+  non-self-terminating interactive shell in Terminal.app.
 - `macos-vz/guest-no-path-fix` (optimization) — **DONE, 2026-06-22.** Fixed the
   foundational guest defect: `pty_handler` `env_clear()`'d the child with no
   `PATH`, so bare-name argv (`gh`, `podman`, `tillandsias-headless`) failed

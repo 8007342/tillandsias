@@ -314,6 +314,20 @@ pub fn exec_guest_main(argv: Vec<String>) -> i32 {
 
     let argv_ref: Vec<&str> = argv.iter().map(|s| s.as_str()).collect();
 
+    // Forward piped host stdin to the guest (delivered on the child's stdin +
+    // /dev/tty), so e.g. `printf 'tok\n' | --exec-guest <login-cmd>` works. Skip
+    // when stdin is a TTY (no piped input) to avoid blocking on read_to_end.
+    let stdin_bytes: Vec<u8> = {
+        use std::io::{IsTerminal, Read};
+        if std::io::stdin().is_terminal() {
+            Vec::new()
+        } else {
+            let mut buf = Vec::new();
+            let _ = std::io::stdin().read_to_end(&mut buf);
+            buf
+        }
+    };
+
     rt.block_on(async move {
         use std::time::Duration;
         use tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
@@ -345,7 +359,12 @@ pub fn exec_guest_main(argv: Vec<String>) -> i32 {
                 return 1;
             }
         };
-        let result = tillandsias_vm_layer::vsock_exec::exec_over_stream(stream, &argv_ref).await;
+        let result = tillandsias_vm_layer::vsock_exec::exec_over_stream_with_input(
+            stream,
+            &argv_ref,
+            &stdin_bytes,
+        )
+        .await;
         let _ = vz.stop(Duration::from_secs(10)).await;
 
         match result {
