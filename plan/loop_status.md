@@ -1,7 +1,22 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-22T08:19Z
+LastExecutionTime: 2026-06-22T08:30Z
 
+
+## This Loop (2026-06-22T08:30Z, linux_mutable — big-pickle meta-orch)
+
+- **Cycle type**: meta-orchestration worker drain — macOS vault unseal secret fix.
+- **Startup**: `linux-next @ 7dfa84c0`, clean worktree, 0 ahead / 0 behind. Credential Channel Guard passed (`ok:gh-keyring`).
+- **Worker drain**: Claimed and completed **order 78** (`vault-unseal-secret-rootful-podman`).
+  - Root cause: rootful podman (macOS VZ guest) + `--userns keep-id` + secret `uid=100,gid=1000,mode=0400` leaves unseal secret unreadable by vault entrypoint.
+  - Fix: removed uid/gid from all four vault podman secret mount options in `launch_vault_container` (`vault_bootstrap.rs`). Default podman secret mount (mode=0444,uid=0) is world-readable regardless of user namespace mapping.
+  - Build check: format + type-check PASS. Tests: 8/8 vault-related tests PASS.
+  - Commits: `db616e06` (fix), `5029ba53` (plan completion).
+  - **Outcome**: macOS VZ guest verification still required to close the loop.
+- **Coordinator**: `origin/osx-next` (`61acff26`) is an ancestor of `origin/linux-next`. `origin/windows-next` (`a3c8b23d`) unchanged, also ancestor. No merge needed.
+- **Release**: Latest is v0.3.260622.3 (smoke-tested PASS). No new release work.
+- **Reduction engine**: Zero residual at current bar. No bar-raise self-escalation.
+- **Push state**: All commits pushed to `origin/linux-next`.
 
 ## This Loop (2026-06-22T08:19Z, linux_mutable — big-pickle meta-orch)
 
