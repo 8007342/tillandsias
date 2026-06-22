@@ -5535,3 +5535,47 @@ plan_index:
             absent (e.g. podman image exists check) before attempting to pull
             from the Docker registry. If missing, either build it on demand or
             emit a clear actionable error.
+
+    - packet_id: vault-bootstrap-health-timeout
+      order: 77
+      title: "Vault bootstrap 60s health timeout blocks --github-login (guest-side, shared all hosts)"
+      status: ready
+      kind: bug
+      deliverable: plan/issues/macos-github-login-vault-bootstrap-timeout-2026-06-22.md
+      depends_on: []
+      pickup_role: "Linux mutable host (native vault container logs + guest rebuild)"
+      outcome: >
+        `tillandsias-headless` Vault bootstrap reaches `initialized && !sealed`
+        inside wait_for_vault_ready (or the deadline/retry is corrected), so
+        `--github-login` completes the Vault write on all hosts. Verified by
+        guest vault container logs showing the unseal succeed.
+      tasks:
+        - id: vault-bootstrap-health-timeout/diagnose
+          status: ready
+          depends_on: []
+          owned_files:
+            - crates/tillandsias-headless/src/vault_bootstrap.rs
+          checkpoint_required: false
+          handoff_note: >
+            On a Linux host with native podman, trigger the vault bootstrap with
+            --debug and capture `podman logs <vault-container>` + `vault status`
+            to classify sealed-vs-connrefused-vs-OOM. Check /etc/machine-id
+            stability across boots (it is the HKDF unseal-key source via
+            ensure_unseal_key; an unstable machine-id would keep Vault sealed).
+            If it is genuinely slow cold-start, widen/retry the 60s deadline in
+            wait_for_vault_ready. See
+            plan/issues/macos-github-login-vault-bootstrap-timeout-2026-06-22.md
+            and plan/issues/github-login-token-at-rest-audit-2026-06-22.md.
+      events:
+        - type: finding
+          ts: "2026-06-22T03:00Z"
+          agent_id: "macos-claude-opus48-osx-next-20260622"
+          host: macos
+          note: >
+            Surfaced finalizing macOS --github-login over the proven control-wire
+            exec path. The flow drives the released guest through 5 cleared
+            blockers (desktop-session gate, serial spam, identity prompts, HOME,
+            networks/vault-pull) then fails `vault did not become healthy within
+            60s`. Self-unseal is machine-id-derived (not a host credential-handover
+            gap), so it is cold-start slowness or a real Vault failure. Guest-side,
+            released binary, shared with Linux native / forge / WSL2 vault bring-up.
