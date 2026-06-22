@@ -9,6 +9,50 @@
 [[github-login-token-at-rest-audit-2026-06-22]],
 [[optimization-macos-vz-idiomatic-exec-layer-2026-06-21]]
 
+## ROOT CAUSE FOUND (2026-06-22, macOS diagnostic) — NOT a timeout
+
+**The 60s→120s fix (order 77) does NOT fix macOS.** The macOS Vault failure is a
+**container crash-on-boot**, not slowness. Full diagnostic chain (via headless
+`--exec-guest` on the VZ guest):
+
+1. `--debug` health probe: `vault network error: error sending request for url
+   (https://127.0.0.1:8201/...)` repeated for the **entire 60s** — connection
+   refused, not `sealed`/`initialized` (so more time cannot help).
+2. `podman ps -a` empty after 45s; `podman events` shows the `tillandsias-vault`
+   container repeatedly **`died`** (image 0.3.260622.3, Vault 1.18.5). It runs
+   `-d --rm` (`vault_bootstrap.rs:1120,1144`), so it crash-removes — hiding logs.
+3. Foreground run of the vault image reveals the entrypoint:
+   `[vault-entrypoint] FATAL: /run/secrets/tillandsias-vault-unseal not present
+   after 30s` → the container waits 30s for the unseal secret, doesn't see it,
+   FATALs, dies.
+4. `podman secret ls` / `inspect`: the podman secret **`tillandsias-vault-unseal`
+   EXISTS** on the guest. So the secret is created fine — but it is **not
+   readable inside the container** at `/run/secrets/tillandsias-vault-unseal`.
+
+**Root cause:** the launch mounts `--secret tillandsias-vault-unseal,mode=0400,
+uid=100,gid=1000` together with `--userns keep-id` (`vault_bootstrap.rs:1091-1094,
+1132-1133,1144,1153-1154`; `VAULT_USER_UID=100`, `VAULT_GROUP_GID=1000`). On the
+macOS VZ guest the in-VM headless runs **as root (rootful podman)**, whereas
+native Linux / the forge run **rootless** podman. Under rootful podman,
+`--userns keep-id` + a secret owned `uid=100` does not map to a uid the vault
+entrypoint (uid 100) can read, so the `mode=0400` secret file is effectively
+unreadable → entrypoint reports "not present" → FATAL. This is why it works on
+Linux (rootless) and fails on macOS (rootful).
+
+**Recommended fix (shared guest code — coordinate with Linux/guest team):** make
+the unseal-secret mount work under rootful podman — e.g. drop the `uid=/gid=`
+secret options and chown inside the entrypoint, detect rootful and adjust the
+mapping, or deliver the unseal key by a path that doesn't depend on
+keep-id+secret-uid. Must be **verified on the macOS VZ guest** (the only place it
+reproduces). `wait_for_vault_ready`'s 120s deadline (order 77) is unrelated.
+
+## machine-id verification (macOS-team task from order 77) — PASS
+
+`/etc/machine-id` is **stable across VM boots** (`b4057c44300542b29d0ca9194b5152a4`
+on two fresh boots; persisted 33-byte file on rootfs.img). So the HKDF unseal key
+is stable — Vault would NOT stay sealed across boots. Rules out that failure mode;
+the crash above is the actual cause.
+
 ## Where it stops
 
 The headless macOS `tillandsias-tray --github-login` now drives the released
