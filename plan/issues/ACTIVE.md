@@ -1,6 +1,16 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-22T06:58Z
+Last updated: 2026-06-22T10:21Z
+
+## This Cycle (2026-06-22T10:21Z, linux_mutable — big-pickle meta-orch)
+
+- **Cycle type**: meta-orchestration convergence check.
+- **Startup**: `linux-next @ c6b998d9`, clean worktree. Credential Channel Guard passed (`ok:gh-keyring`).
+- **Worker drain**: Zero residual at current bar — no linux-ready plan/index.yaml nodes. Two ready nodes (`vault-flow/xplat-gating-parity`, `macos-in-vm-enclave-provisioning`) are macOS/Windows-only.
+- **Coordinator**: Sibling branches `origin/osx-next` and `origin/windows-next` both ancestors of HEAD. No merge needed.
+- **E2E gates**: No new release to test. v0.3.260622.3 smoke-tested PASS in prior cycles.
+- **Forge credential blocker**: Still open — operator action required (`plan/issues/forge-credential-channel-blocked-2026-06-21.md`).
+- **Bar-raise proposals**: Filed and waiting Tlatoāni decision.
 
 ## This Cycle (2026-06-22T06:57Z, linux_mutable — big-pickle meta-orch)
 
