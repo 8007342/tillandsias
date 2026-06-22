@@ -104,6 +104,17 @@ calls the macOS-only `VzRuntime::open_vsock_stream` directly, builds a host
   intents to use it. Closure: AX smoke (`scripts/macos-tray-ax-smoke.sh`) shows
   a usable, non-self-terminating shell/login prompt; GitHub login reaches the
   paste-token prompt and the status poll flips to LoggedIn.
+- `macos-vz/guest-no-path-fix` (optimization) — **DONE, 2026-06-22.** Fixed the
+  foundational guest defect: `pty_handler` `env_clear()`'d the child with no
+  `PATH`, so bare-name argv (`gh`, `podman`, `tillandsias-headless`) failed
+  ENOENT (the blank-terminal root cause). Added `child_env()` which seeds a sane
+  default `PATH` (`/usr/local/sbin:…:/bin`) when the caller supplies none, while
+  preserving the no-host-env-leak intent. Also made the `TIOCSCTTY` ioctl cast
+  portable so the guest handler compiles + unit-tests on a macOS dev host (the
+  sole macOS worker can now verify guest logic locally). Closure MET: 3
+  `child_env` unit tests + full `pty_handler` suite green on macOS (5 passed, 0
+  failed, 2 pre-existing ignores). This unblocks BOTH `exec` and the interactive
+  attach to actually resolve commands in the guest.
 - `macos-vz/retire-hacks` (optimization) — once attach is idiomatic, remove the
   host `UnixPtyMaster`+`screen` bridge and the `pump_io` EIO grace hack if no
   longer needed; fix the `pty_handler` no-PATH defect or make it moot. Closure:
