@@ -5642,7 +5642,7 @@ plan_index:
         macOS. Verified on the macOS VZ guest (the only place it reproduces).
       tasks:
         - id: vault-unseal-secret-rootful-podman/fix-secret-mount
-          status: ready
+          status: claimed
           depends_on: []
           owned_files:
             - crates/tillandsias-headless/src/vault_bootstrap.rs
@@ -5664,6 +5664,12 @@ plan_index:
             is stable across VZ boots (verified), so self-unseal is fine once the
             secret is readable.
       events:
+        - type: claim
+          ts: "2026-06-22T08:20:00Z"
+          agent_id: "linux-macuahuitl-claude-opencode-20260622T082000Z"
+          host: linux
+          lease_id: "vault-unseal-secret-rootful-podman-20260622T082000Z"
+          expires_at: "2026-06-22T12:20:00Z"
         - type: finding
           ts: "2026-06-22T07:35Z"
           agent_id: "macos-claude-opus48-osx-next-20260622"
