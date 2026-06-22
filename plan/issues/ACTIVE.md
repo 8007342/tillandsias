@@ -1,6 +1,22 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-22T04:00Z
+Last updated: 2026-06-22T04:47Z
+
+## This Cycle (2026-06-22T04:22Z, linux_mutable — claude-sonnet46 meta-orch loop)
+
+- **Release v0.3.260622.3 SHIPPED**: PR #43 merged (MERGEABLE/CLEAN after sync merge),
+  VERSION bumped on main (`fdd51e2e`), tagged, run 27929545235 → SUCCESS.
+  Ships: vault wait_for_vault_ready 60s→120s (order 77), osx-next github-login
+  fixes (HOME for VZ guest, XDG_RUNTIME_DIR gate, token-at-rest audit), smoke e2e
+  PASS report.
+- **Nix Cache HIT confirmed**: 4m46s (286s) — third consecutive cache hit; order-64
+  fix confirmed stable across releases.
+- **ORDER 77 CLOSED**: vault-bootstrap-health-timeout increase shipped.
+- **Work queue**: No `ready` tasks in plan/index.yaml. Order 55 (macOS in-VM)
+  claimed (macOS team). Smoke e2e v0.3.260622.3 pending (this session may run it).
+- **macOS coord note**: machine-id stability in VZ guest still open — if machine-id
+  is unstable across reboots, Vault stays sealed permanently regardless of timeout.
+  Filed in plan/issues/macos-github-login-vault-bootstrap-timeout-2026-06-22.md.
 
 ## This Cycle (2026-06-22T03:25Z, linux_mutable — claude-opus48 meta-orch loop)
 

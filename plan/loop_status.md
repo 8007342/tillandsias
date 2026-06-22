@@ -1,7 +1,21 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-22T03:26:00Z
+LastExecutionTime: 2026-06-22T04:47Z
 
+
+## This Loop (2026-06-22T04:22Z, linux_mutable — claude-sonnet46 meta-orch loop)
+
+- **Cycle type**: merge-to-main-and-release for v0.3.260622.3.
+- **Startup**: Resumed from context summary; PR #43 was pending merge after sync
+  commit `6ae0ef73` resolved criss-cross merge base. Credential channel: `ok:gh-keyring`.
+- **Worker drain**: No new packets; order 77 was already completed in prior context.
+- **Coordinator**: Merged PR #43 (linux-next→main). Bumped VERSION→0.3.260622.3 on
+  main in release worktree. Tagged `v0.3.260622.3`. Triggered release.yml run 27929545235.
+  Release SUCCEEDED (4m46s Nix build, cache HIT — third consecutive).
+  Synced main→linux-next (ff) + ledger commit. Pushed linux-next.
+- **Sibling heads**: linux-next `ee1b8143`, main `fdd51e2e`, osx-next `4d6e8066`,
+  windows-next `a3c8b23d`. osx-next hasn't advanced since prior cycle (macOS team).
+- **Next**: Smoke e2e gate for v0.3.260622.3, then assess work queue.
 
 ## This Loop (2026-06-22T03:26Z, linux_mutable — Gemini-Antigravity worker)
 
