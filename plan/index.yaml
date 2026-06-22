@@ -4641,7 +4641,7 @@ plan_index:
     - id: release-nix-cache-ref-scoping
       order: 64
       title: Release Nix store cache never restored across releases (GHA ref-scoping)
-      status: in_progress
+      status: completed
       kind: bug
       deliverable: plan/issues/release-nix-cache-ref-scoping-2026-06-20.md
       depends_on: []
@@ -4718,7 +4718,7 @@ plan_index:
                 stale per-tag caches so the warmed main-scoped cache survives for
                 verify-incremental. Land before verify-incremental per the dependency.
         - id: release-nix-cache-ref-scoping/verify-incremental
-          status: claimed
+          status: completed
           depends_on: [release-nix-cache-ref-scoping/implement-cache-fix, release-nix-cache-ref-scoping/purge-stale-caches]
           owned_files:
             - plan/issues/release-nix-cache-ref-scoping-2026-06-20.md
@@ -4727,6 +4727,20 @@ plan_index:
             Cut two consecutive releases; assert the second's nix build time and
             cache-save bytes drop substantially. Record before/after as completed.
           events:
+            - type: completed
+              ts: "2026-06-22T03:22:30Z"
+              agent_id: "linux-claude-opus48-loop-20260622T0322Z"
+              host: linux_mutable
+              note: >
+                PASS. v0.3.260622.2 Linux job completed in 6m22s total.
+                Nix build: 03:17:20Z→03:22:00Z = ~4m40s (vs 37m50s before = 87% faster).
+                No "Nix Build exceeded 20 minutes" annotation. Cache hit confirmed —
+                warm job on main (27925897490, completed 03:10Z) saved the
+                refs/heads/main nix-Linux-* cache which the release restored.
+                purge-primary-key:never fix (commit 6a84b478) + purge-created:86400
+                (param name fix) fully resolves the order-64 defect.
+                Before: 37-45 min full rebuild every release.
+                After: ~5 min restore + delta build. Order 64 CLOSED.
             - type: claim
               ts: "2026-06-22T02:33:37Z"
               agent_id: "linux-big-pickle-20260622T023337Z"
