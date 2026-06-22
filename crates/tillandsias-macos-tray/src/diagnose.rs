@@ -296,6 +296,7 @@ pub fn exec_guest_main(argv: Vec<String>) -> i32 {
         return 2;
     }
     let vz = tillandsias_vm_layer::vz::VzRuntime::new(3, image_root());
+    vz.set_serial_to_log(true); // keep guest serial getty noise off the user terminal
     if !vz.is_provisioned() {
         eprintln!("{{\"error\":\"not provisioned; run --provision first\"}}");
         return 1;
@@ -452,6 +453,7 @@ pub fn github_login_main() -> i32 {
     );
 
     let vz = tillandsias_vm_layer::vz::VzRuntime::new(3, image_root());
+    vz.set_serial_to_log(true); // keep guest serial getty noise off the user terminal
     if !vz.is_provisioned() {
         eprintln!(
             "{{\"error\":\"not provisioned; run --provision or launch the tray once first\"}}"
@@ -519,7 +521,19 @@ pub fn github_login_main() -> i32 {
             &[
                 "/bin/bash",
                 "-lc",
-                "exec /usr/local/bin/tillandsias-headless --github-login",
+                // The control-wire exec env is cleared (no host-env leak), but
+                // the guest `--github-login` needs:
+                //   - HOME: prompt_and_store_git_identity writes the managed
+                //     git identity (name/email — not the token) under $HOME.
+                //   - XDG_RUNTIME_DIR (+writable): require_desktop_user_session
+                //     gate on the DesktopUserSession lane.
+                // The GitHub token itself is handled by the released flow inside
+                // an ephemeral `--rm` git container (piped to `gh auth login
+                // --with-token`, written to Vault, container destroyed on exit),
+                // so nothing unencrypted is left at rest here.
+                "export HOME=/root; export XDG_RUNTIME_DIR=/run/user/0; \
+                 mkdir -p \"$XDG_RUNTIME_DIR\" 2>/dev/null; \
+                 exec /usr/local/bin/tillandsias-headless --github-login",
             ],
             expects,
             |ev| eprintln!("[github-login] {ev}"),

@@ -139,6 +139,27 @@ calls the macOS-only `VzRuntime::open_vsock_stream` directly, builds a host
   the final step is operator-attended. Closure: `printf '<PAT>\n' |
   tillandsias-tray --github-login` writes the token to the guest Vault and the
   tray status poll flips logged-out → logged-in.
+- `macos-vz/finalize-github-login` — **IN PROGRESS (operator-attended).** Built
+  headless `tillandsias-tray --github-login`: prompts each end user for THEIR
+  OWN git name/email/PAT (token echo suppressed via `stty -echo`; nothing
+  defaulted from the operator's host config), boots the VM, and drives the
+  released guest `--github-login` via `exec_over_stream_expect`. First live run
+  (operator) surfaced two concrete defects, both fixed:
+  - **desktop-session gate**: guest `--github-login` errored
+    `requires a real desktop user session with a writable XDG_RUNTIME_DIR`. The
+    control-wire exec env is cleared, so the lane is `DesktopUserSession` but
+    `XDG_RUNTIME_DIR` is unset. Fix: the login wrapper now
+    `export XDG_RUNTIME_DIR=/run/user/0; mkdir -p` before exec.
+  - **terminal escape spill** (`^[[37;1R`, `+q6E616D65`): the guest serial getty
+    probes the terminal (DSR/XTGETTCAP); `vz.rs` routed guest serial to host
+    **stderr** (`serial_writer_fd: None` → dup STDERR), so those queries reached
+    the operator's Terminal, which replied with CPR that then spilled into zsh
+    after exit. Fix: `VzRuntime::set_serial_to_log(true)` routes guest serial to
+    `console.log` for the headless CLI modes (tray unchanged). Filed as the
+    terminal-management defect the operator flagged.
+  - NEXT live run: re-run `--github-login`; expect to clear the gate and reach
+    the git-identity/token prompts. Watch whether `XDG_RUNTIME_DIR=/run/user/0`
+    affects the in-guest podman step.
 - `macos-vz/impl-attach-interactive` (optimization) — a LIVE bidirectional shell
   (Open Shell) still needs a terminal bridge (the one-shot exec+input path does
   not stream interactive I/O). Lower priority than login. Closure: a usable,

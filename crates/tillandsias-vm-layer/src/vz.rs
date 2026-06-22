@@ -47,6 +47,12 @@ pub struct VzRuntime {
     /// can coordinate on the same VZVirtualMachine.
     #[cfg(target_os = "macos")]
     vm: std::sync::Mutex<Option<vm_handle::VmHandle>>,
+    /// When true, `start()` routes the guest serial console (early-boot getty +
+    /// kernel) to `console.log` instead of the host process stderr. Headless CLI
+    /// modes (`--exec-guest`, `--github-login`) set this so the getty's terminal
+    /// probe escapes don't spill onto the user's terminal; the tray leaves it
+    /// false (serial on stderr for live diagnostics).
+    serial_to_log: std::sync::atomic::AtomicBool,
 }
 
 #[cfg(target_os = "macos")]
@@ -106,7 +112,16 @@ impl VzRuntime {
             image_root,
             #[cfg(target_os = "macos")]
             vm: std::sync::Mutex::new(None),
+            serial_to_log: std::sync::atomic::AtomicBool::new(false),
         }
+    }
+
+    /// Route the guest serial console to `console.log` instead of host stderr on
+    /// the next `start()`. Used by headless CLI modes to keep the user's
+    /// terminal free of the guest getty's terminal-probe escape sequences.
+    pub fn set_serial_to_log(&self, enabled: bool) {
+        self.serial_to_log
+            .store(enabled, std::sync::atomic::Ordering::Relaxed);
     }
 
     /// Path of the raw root disk image written during provisioning.
@@ -1180,6 +1195,26 @@ impl VmRuntime for VzRuntime {
         let cidata_iso_path = self.image_root.join("cidata.iso");
         self.generate_cidata_iso(&cidata_iso_path)?;
 
+        // Route guest serial to console.log (headless modes) or host stderr
+        // (tray, default). Opening console.log and handing its raw fd to the VZ
+        // attachment keeps the getty's terminal-probe escapes off the user's
+        // terminal. The fd is intentionally leaked — it lives for the VM's
+        // lifetime; on open failure we fall back to stderr (None).
+        let serial_writer_fd = if self
+            .serial_to_log
+            .load(std::sync::atomic::Ordering::Relaxed)
+        {
+            use std::os::fd::IntoRawFd;
+            std::fs::OpenOptions::new()
+                .create(true)
+                .append(true)
+                .open(self.console_log_path())
+                .ok()
+                .map(|f| f.into_raw_fd())
+        } else {
+            None
+        };
+
         let spec = boot::VzBootConfig {
             cpu_count: std::thread::available_parallelism()
                 .map(|n| n.get().min(4))
@@ -1188,7 +1223,7 @@ impl VmRuntime for VzRuntime {
             root_disk: Some(rootfs),
             cidata_iso: Some(cidata_iso_path),
             nvram: Some(self.image_root.join("nvram.bin")),
-            serial_writer_fd: None,
+            serial_writer_fd,
         };
 
         let cfg = boot::build_vm_configuration(&spec)?;
