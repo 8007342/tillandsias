@@ -157,9 +157,20 @@ calls the macOS-only `VzRuntime::open_vsock_stream` directly, builds a host
     after exit. Fix: `VzRuntime::set_serial_to_log(true)` routes guest serial to
     `console.log` for the headless CLI modes (tray unchanged). Filed as the
     terminal-management defect the operator flagged.
-  - NEXT live run: re-run `--github-login`; expect to clear the gate and reach
-    the git-identity/token prompts. Watch whether `XDG_RUNTIME_DIR=/run/user/0`
-    affects the in-guest podman step.
+  - **HOME gate**: next run failed `HOME is not set` (git-identity write needs
+    $HOME). Wrapper now also `export HOME=/root`. Confirmed working —
+    `Git identity saved: /root/.cache/tillandsias/secrets/git/.gitconfig`.
+  - **Now blocked at Vault bootstrap**: the flow reaches `[tillandsias-vault]
+    bootstrap starting`, pulls the vault image, then `Error: vault did not become
+    healthy within 60s`. This is a **guest-side** issue (`wait_for_vault_ready`,
+    released binary, shared with Linux/forge) — NOT a macOS-driving bug. Tracked
+    separately in [[macos-github-login-vault-bootstrap-timeout-2026-06-22]].
+  - **Progress**: `--github-login` now drives the released guest flow correctly
+    through 5 cleared blockers (gate → serial → identity prompts → HOME →
+    networks/vault-pull). The macOS exec/expect/serial/env plumbing is proven;
+    the remaining blocker is guest Vault bring-up.
+  - Token-at-rest: handled by the released `--rm` ephemeral container; cross-host
+    verification filed as [[github-login-token-at-rest-audit-2026-06-22]].
 - `macos-vz/impl-attach-interactive` (optimization) — a LIVE bidirectional shell
   (Open Shell) still needs a terminal bridge (the one-shot exec+input path does
   not stream interactive I/O). Lower priority than login. Closure: a usable,
