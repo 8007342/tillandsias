@@ -40,7 +40,7 @@ jobs:
           purge-primary-key: never
           purge-prefixes: |
             nix-Linux-
-          purge-created-offset: 86400000
+          purge-created: 86400
           gc-max-store-size: 8000000000
 
       - name: Build Nix targets

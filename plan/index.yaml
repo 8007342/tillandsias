@@ -4664,7 +4664,7 @@ plan_index:
             rationale in the packet. Default: opt 1 if FlakeHub public-repo free
             tier is adequate, else opt 2.
         - id: release-nix-cache-ref-scoping/implement-cache-fix
-          status: ready
+          status: completed
           depends_on: [release-nix-cache-ref-scoping/choose-approach]
           owned_files:
             - .github/workflows/release.yml
@@ -4727,6 +4727,20 @@ plan_index:
             Cut two consecutive releases; assert the second's nix build time and
             cache-save bytes drop substantially. Record before/after as completed.
       events:
+        - type: completed
+          ts: "2026-06-22T02:23:00Z"
+          agent_id: "linux-claude-opus48-loop-20260622T0223Z"
+          host: linux_mutable
+          note: >
+            implement-cache-fix verified: GHA warm run 27917409949 on linux-next
+            completed successfully (35m42s). Post step shows "Finished purging
+            cache(s)" and cache list confirms a 2196MB nix-Linux-* entry saved
+            under refs/heads/linux-next. The purge-primary-key:never fix (commit
+            6a84b478) is the root cause — previously the Post step was purging
+            its own primary key. Also fixed param name purge-created-offset →
+            purge-created (was silently ignored, now applies 86400s/24h age
+            filter). Next: merge to main and trigger a release; that release
+            will be the verify-incremental PASS datapoint.
         - type: verify-failed
           ts: "2026-06-21T19:26:00Z"
           agent_id: "linux-claude-opus48-loop-20260621T1926Z"
