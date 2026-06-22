@@ -1,7 +1,23 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-22T01:11:37Z
+LastExecutionTime: 2026-06-22T02:25:00Z
 
+
+## This Loop (2026-06-22T02:25Z, linux_mutable — claude-opus48 meta-orch loop)
+
+- **Cycle type**: Order-64 verify + release + osx-next coordination merge.
+- **Startup**: `linux-next @ 94ba2875`, clean worktree. Credential Channel Guard passed.
+- **Verification (order 64)**: Confirmed warm run 27917409949 saved 2196MB nix-Linux-* cache
+  under refs/heads/linux-next. Fix (`purge-primary-key: never`, commit 6a84b478) verified.
+  Also fixed `purge-created-offset` → `purge-created: 86400` (was silently ignored as invalid
+  param; renamed and set 24h value in seconds). Marked implement-cache-fix completed.
+- **Release**: Merged PR #40 (linux-next → main). Bumped VERSION to 0.3.260622.1, tagged
+  v0.3.260622.1, dispatched release.yml run 27925910315. Build in progress (expected full
+  build: warm job on main started 24s before release, too close for cache restore).
+  Verify-incremental PASS deferred to next release (after warm job on main ~03:06Z).
+- **Coordinator**: Merged osx-next (5 commits: pty PATH fix, --exec-guest, vsock exec,
+  --github-login, merge commit). No fmt drift. Pushed linux-next.
+- **Next**: Record release outcome and cut verify-incremental release after 03:10Z UTC.
 
 ## This Loop (2026-06-22T01:11Z, linux_mutable — Gemini-Antigravity worker)
 
