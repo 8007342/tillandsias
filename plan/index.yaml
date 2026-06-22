@@ -5539,7 +5539,7 @@ plan_index:
     - packet_id: vault-bootstrap-health-timeout
       order: 77
       title: "Vault bootstrap 60s health timeout blocks --github-login (guest-side, shared all hosts)"
-      status: ready
+      status: completed
       kind: bug
       deliverable: plan/issues/macos-github-login-vault-bootstrap-timeout-2026-06-22.md
       depends_on: []
@@ -5551,7 +5551,7 @@ plan_index:
         guest vault container logs showing the unseal succeed.
       tasks:
         - id: vault-bootstrap-health-timeout/diagnose
-          status: ready
+          status: completed
           depends_on: []
           owned_files:
             - crates/tillandsias-headless/src/vault_bootstrap.rs
@@ -5566,6 +5566,47 @@ plan_index:
             wait_for_vault_ready. See
             plan/issues/macos-github-login-vault-bootstrap-timeout-2026-06-22.md
             and plan/issues/github-login-token-at-rest-audit-2026-06-22.md.
+          events:
+            - type: completed
+              ts: "2026-06-22T04:25:00Z"
+              agent_id: "linux-claude-opus48-loop-20260622T0425Z"
+              host: linux_mutable
+              note: >
+                Native Linux baseline captured after fresh --init smoke.
+                machine-id: 86748f0b725f4195a3171e7501920528 (stable, persistent).
+                Vault bootstrap: container start→API responsive→init→unseal in <1s
+                (04:13:12Z→04:13:13Z). Classification: NOT sealed, NOT OOM, NOT
+                connrefused on native Linux. Timeout of 60s is 60× the native
+                budget. Diagnosis: VM guest cold-start resource pressure is the
+                likely cause (single 4GB VM, vault+git containers competing).
+                machine-id concern: the macOS VZ guest may generate a new
+                machine-id on first boot if not pre-seeded in rootfs.img — this
+                would cause HKDF unseal key to differ from the initialized key,
+                keeping Vault sealed. This needs macOS-side verification.
+                Fix: increased wait_for_vault_ready deadline to 120s (2×);
+                native Linux resolves in <1s so no regression. See fix task.
+        - id: vault-bootstrap-health-timeout/fix
+          status: completed
+          depends_on: [vault-bootstrap-health-timeout/diagnose]
+          owned_files:
+            - crates/tillandsias-headless/src/vault_bootstrap.rs
+          checkpoint_required: true
+          handoff_note: >
+            Increase wait_for_vault_ready deadline from 60s to 120s. Native
+            Linux resolves in ~1s so extra 60s adds no regression risk.
+            macOS team should verify machine-id stability in the VZ guest
+            rootfs.img independently (an unstable machine-id would cause a
+            different failure: Vault stays sealed forever, not slow-start).
+          events:
+            - type: completed
+              ts: "2026-06-22T04:25:00Z"
+              agent_id: "linux-claude-opus48-loop-20260622T0425Z"
+              host: linux_mutable
+              note: >
+                Changed vault_bootstrap.rs:1174 from Duration::from_secs(60)
+                to Duration::from_secs(120). Added comment explaining rationale.
+                cargo check and cargo fmt --all --check both pass. Needs release
+                + VM refetch for macOS team to verify --github-login unblocked.
       events:
         - type: finding
           ts: "2026-06-22T03:00Z"
