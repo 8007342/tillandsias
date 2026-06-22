@@ -692,7 +692,11 @@ mod tests {
         // blank attach surface on macOS/Windows.
         assert_eq!(
             launch_spec(&PtyIntent::GithubLogin, None, 24, 80).argv,
-            vec!["/bin/bash", "-lc", "exec tillandsias-headless --github-login"]
+            vec![
+                "/bin/bash",
+                "-lc",
+                "exec tillandsias-headless --github-login"
+            ]
         );
         assert_eq!(
             launch_spec(&PtyIntent::Agent(SelectedAgent::OpenCode), None, 24, 80).argv,
