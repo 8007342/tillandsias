@@ -5,10 +5,10 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [images/default/entrypoint-forge-claude.sh#L55](../../../images/default/entrypoint-forge-claude.sh#L55)
-- [images/default/entrypoint-forge-codex.sh#L54](../../../images/default/entrypoint-forge-codex.sh#L54)
-- [images/default/entrypoint-forge-opencode.sh#L56](../../../images/default/entrypoint-forge-opencode.sh#L56)
-- [images/default/entrypoint-terminal.sh#L64](../../../images/default/entrypoint-terminal.sh#L64)
+- [images/default/entrypoint-forge-claude.sh#L56](../../../images/default/entrypoint-forge-claude.sh#L56)
+- [images/default/entrypoint-forge-codex.sh#L55](../../../images/default/entrypoint-forge-codex.sh#L55)
+- [images/default/entrypoint-forge-opencode.sh#L57](../../../images/default/entrypoint-forge-opencode.sh#L57)
+- [images/default/entrypoint-terminal.sh#L65](../../../images/default/entrypoint-terminal.sh#L65)
 - [images/default/forge-welcome.sh#L8](../../../images/default/forge-welcome.sh#L8)
 - [images/default/locales/ar.sh#L4](../../../images/default/locales/ar.sh#L4)
 - [images/default/locales/hi.sh#L4](../../../images/default/locales/hi.sh#L4)

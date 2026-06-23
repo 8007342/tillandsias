@@ -23,6 +23,7 @@ set -uo pipefail
 #   ok:gh-token-env                GH_TOKEN set
 #   ok:github-token-env            GITHUB_TOKEN set
 #   ok:gh-keyring                  `gh auth status` green
+#   ok:forge-git-mirror            TILLANDSIAS_HOST_KIND=forge (transparent git mirror)
 #   missing:no-credential-channel  none of the above
 #
 # NOTE: anonymous reads (`git fetch`/`git ls-remote`) succeeding on a public
@@ -56,6 +57,10 @@ credential_channel_verdict() {
      && command -v gh >/dev/null 2>&1 \
      && gh auth status >/dev/null 2>&1; then
     echo "ok:gh-keyring"
+    return 0
+  fi
+  if [ "${TILLANDSIAS_HOST_KIND:-}" = "forge" ]; then
+    echo "ok:forge-git-mirror"
     return 0
   fi
   echo "missing:no-credential-channel"

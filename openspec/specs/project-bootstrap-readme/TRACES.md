@@ -5,7 +5,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 ## Annotated locations
 
-- [images/default/entrypoint-forge-opencode.sh#L124](../../../images/default/entrypoint-forge-opencode.sh#L124)
+- [images/default/entrypoint-forge-opencode.sh#L125](../../../images/default/entrypoint-forge-opencode.sh#L125)
 - [scripts/check-readme-discipline.sh#L2](../../../scripts/check-readme-discipline.sh#L2)
 - [scripts/install-readme-pre-push-hook.sh#L2](../../../scripts/install-readme-pre-push-hook.sh#L2)
 - [scripts/install-readme-pre-push-hook.sh#L27](../../../scripts/install-readme-pre-push-hook.sh#L27)

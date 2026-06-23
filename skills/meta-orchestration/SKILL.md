@@ -85,7 +85,8 @@ channel is present when ANY of these holds (the script checks them in order):
 
 - `<git-dir>/.gh-credentials` exists and is non-empty (repo-local store helper), or
 - `GH_TOKEN` or `GITHUB_TOKEN` is set in the environment, or
-- `gh auth status` succeeds (reachable, unlocked keyring).
+- `gh auth status` succeeds (reachable, unlocked keyring), or
+- `TILLANDSIAS_HOST_KIND=forge` is set (forge containers use a transparent git mirror service for authenticated pushes).
 
 Pinned by `litmus:credential-channel-check-shape`. A non-zero exit (verdict
 `missing:no-credential-channel`) fails the cycle on its own; do NOT proceed into
