@@ -5983,3 +5983,137 @@ plan_index:
           agent_id: "linux-sonnet46-meta-orch-20260623"
           host: linux
           note: "Tlatoāni-requested 2026-06-23. Implemented on linux-next."
+
+    - packet_id: per-project-dynamic-path-verification
+      order: 86
+      title: "Verify all mirror/checkout paths use $PROJECT dynamically (per-project isolation)"
+      status: ready
+      kind: enhancement
+      deliverable: source audit
+      depends_on: []
+      pickup_role: linux
+      outcome: >
+        All code paths that reference the project name in mirror paths,
+        checkout paths, container names, volume names, and git config use
+        $PROJECT, $TILLANDSIAS_PROJECT, or a <project> placeholder. No
+        hardcoded "tillandsias" strings remain in infrastructure code that
+        would break if a different GitHub project is loaded through the forge.
+      tasks:
+        - id: per-project-dynamic-path-verification/audit-lib-common
+          status: ready
+          owned_files:
+            - images/default/lib-common.sh
+          checkpoint_required: false
+          handoff_note: >
+            Audit lib-common.sh for any remaining hardcoded path segments
+            that reference a specific project name.
+        - id: per-project-dynamic-path-verification/audit-entrypoints
+          status: ready
+          owned_files:
+            - images/default/entrypoint-forge-claude.sh
+            - images/default/entrypoint-forge-opencode.sh
+            - images/default/entrypoint-forge-opencode-web.sh
+          checkpoint_required: false
+          handoff_note: >
+            Verify all entrypoints use dynamic variables for project paths.
+        - id: per-project-dynamic-path-verification/audit-docs
+          status: ready
+          owned_files:
+            - docs/cheatsheets/
+            - cheatsheets/runtime/
+          checkpoint_required: false
+          handoff_note: >
+            Verify all documentation uses <PROJECT> or <repo> placeholders
+            rather than hardcoded project names in path examples.
+        - id: per-project-dynamic-path-verification/update-spec
+          status: ready
+          owned_files:
+            - openspec/specs/git-mirror-service/spec.md
+          checkpoint_required: false
+          handoff_note: >
+            The spec already has a per-project transparency requirement
+            (added 2026-06-23). Verify it covers all path types.
+
+    - packet_id: forge-transparency-cheatsheet
+      order: 87
+      title: "Create forge transparency cheatsheet documenting transparent infrastructure"
+      status: ready
+      kind: documentation
+      deliverable: cheatsheets/runtime/forge-transparency.md
+      depends_on:
+        - per-project-dynamic-path-verification
+      pickup_role: linux
+      outcome: >
+        A bundled cheatsheet at cheatsheets/runtime/forge-transparency.md
+        (and its image-baked copy at
+        images/default/cheatsheets/runtime/forge-transparency.md) documents
+        that git mirror, HTTPS proxy, inference endpoint, and Vault secrets
+        are transparent for agents. Agents know they never need to configure
+        git, tokens, or proxies, and understand the per-project isolation
+        model.
+      tasks:
+        - id: forge-transparency-cheatsheet/write-main
+          status: ready
+          owned_files:
+            - cheatsheets/runtime/forge-transparency.md
+          checkpoint_required: false
+          handoff_note: >
+            Cheatsheet exists (created 2026-06-23). Verify Do/DON'T sections
+            are accurate and complete.
+        - id: forge-transparency-cheatsheet/write-image-copy
+          status: ready
+          owned_files:
+            - images/default/cheatsheets/runtime/forge-transparency.md
+          checkpoint_required: false
+          handoff_note: >
+            Image-baked copy exists (created 2026-06-23). Verify it stays
+            in sync with the main copy.
+        - id: forge-transparency-cheatsheet/verify-bundled
+          status: ready
+          owned_files: []
+          checkpoint_required: false
+          handoff_note: >
+            Verify the cheatsheet is picked up by populate_hot_paths and
+            accessible at /opt/cheatsheets/runtime/forge-transparency.md
+            inside the forge container.
+
+    - packet_id: forge-harness-bootstrap-context
+      order: 88
+      title: "Add forge startup context injection for agents"
+      status: ready
+      kind: enhancement
+      deliverable: harness mechanism
+      depends_on:
+        - forge-transparency-cheatsheet
+      pickup_role: linux
+      outcome: >
+        The forge entrypoint injects a startup-context file into the
+        workspace (e.g., .forge-startup-context.md) that tells the agent:
+        (a) which project is loaded, (b) that git/proxy/inference/vault
+        are transparent, (c) the plan entry point for picking up work,
+        (d) the version/branch they're on, and (e) any known limitations.
+        Agents read this at the start of every session instead of guessing.
+      tasks:
+        - id: forge-harness-bootstrap-context/design
+          status: ready
+          owned_files: []
+          checkpoint_required: false
+          handoff_note: >
+            Design the startup context format: what env vars, git state,
+            plan state, and transparency notes should be injected. See
+            entrypoint-forge-opencode.sh for where the injection point
+            would go (after clone, before exec).
+        - id: forge-harness-bootstrap-context/implement
+          status: ready
+          owned_files:
+            - images/default/entrypoint-forge-opencode.sh
+            - images/default/entrypoint-forge-claude.sh
+            - images/default/entrypoint-forge-opencode-web.sh
+          checkpoint_required: true
+          handoff_note: >
+            Add a write_startup_context function to lib-common.sh that
+            writes .forge-startup-context.md to the project root. Call it
+            from each entrypoint after clone_project_from_mirror and before
+            the agent exec. Include: project name, current branch/sha,
+            plan status pointer, transparency summary, and the forge
+            limitation note (no podman, no e2e).

@@ -428,14 +428,14 @@ $ git push origin HEAD:main
 3. **Rewrite:** `https://github.com/user/repo.git` → `git://git-service/<PROJECT>`
 4. **DNS:** Enclave DNS resolves `git-service` to the git container's IP (10.0.42.x, network alias `git-service`)
 5. **TCP:** Connect to `10.0.42.x:9418` (git daemon on the git container)
-6. **Git protocol:** Send `git-upload-pack /tillandsias` → daemon expands `--base-path=/srv/git` → serves `/srv/git/tillandsias`
+6. **Git protocol:** Send `git-upload-pack /<PROJECT>` → daemon expands `--base-path=/srv/git` → serves `/srv/git/<PROJECT>`
 
 **Push flow:**
 ```
 forge:$ git push origin main
-→ rewritten to: git://git-service/tillandsias
+→ rewritten to: git://git-service/<PROJECT>
 → git daemon on git container receives push
-→ updates refs in /srv/git/tillandsias
+→ updates refs in /srv/git/<PROJECT>
 → post-receive hook fires
 ```
 
@@ -725,10 +725,10 @@ was removed in v0.3. The token now lives exclusively in Vault at
 **Reason:** Audit was conducted at rest; no forge session active.
 
 **To reproduce running push:**
-1. `cd /home/tlatoani/src/tillandsias`
+1. `cd ~/src/<PROJECT>` (or `cd $TILLANDSIAS_PROJECT_PATH`)
 2. `tillandsias --claude . --debug`
 3. Inside forge: `git push origin <branch>`
-4. Monitor: `podman logs tillandsias-git-tillandsias --follow`
+4. Monitor: `podman logs tillandsias-git-<PROJECT> --follow`
 
 ### Volume Inspection
 
@@ -740,7 +740,7 @@ was removed in v0.3. The token now lives exclusively in Vault at
 
 **To inspect after push:**
 ```bash
-podman run --rm -v tillandsias-mirror-tillandsias:/srv/git \
+podman run --rm -v tillandsias-mirror-<PROJECT>:/srv/git \
   alpine sh -c 'find /srv/git -type f -name "*.git" | wc -l'
 ```
 
@@ -832,14 +832,14 @@ podman secret list
 ### Smoke Test: Full Push Lifecycle
 
 **Prerequisites:**
-1. Tillandsias binary built: `/home/tlatoani/src/tillandsias/target/release/tillandsias`
+1. Tillandsias binary built: `~/src/<PROJECT>/target/release/tillandsias` (or `$TILLANDSIAS_PROJECT_PATH`)
 2. GitHub token stored in Vault from previous `tillandsias --github-login`
-3. Project path: `/home/tlatoani/src/tillandsias` (self-push to verify)
+3. Project path: `~/src/<PROJECT>` (any GitHub project the user has cloned)
 
 **Commands:**
 ```bash
 # Terminal 1: Launch forge in Claude mode
-cd /home/tlatoani/src/tillandsias
+cd ~/src/<PROJECT>
 tillandsias --claude . --debug
 
 # Terminal 2: Monitor git container

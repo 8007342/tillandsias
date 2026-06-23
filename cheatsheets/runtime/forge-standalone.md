@@ -30,13 +30,13 @@ an interactive bash shell for troubleshooting or in-container development.
 ## Example
 
 ```bash
-./run-forge-standalone.sh --src ~/src/tillandsias
+./run-forge-standalone.sh --src ~/src/<PROJECT>
 ```
 
 Inside the container, the project appears at:
 
 ```bash
-/home/forge/src/tillandsias
+/home/forge/src/<PROJECT>
 ```
 
 ## Why this exists

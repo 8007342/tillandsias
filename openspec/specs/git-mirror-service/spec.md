@@ -278,6 +278,33 @@ event" and "gone container".
   synced state
 
 
+### Requirement: Per-project transparency — no hardcoded project names
+
+All code paths that reference the project's name in mirror paths, checkout
+paths, container names, volume names, or git config SHALL use a dynamic
+variable (`$PROJECT`, `$TILLANDSIAS_PROJECT`, or `<project>` placeholder)
+rather than a hardcoded string. The system SHALL work identically for any
+GitHub project the host user has cloned, without source changes.
+
+@trace spec:git-mirror-service
+
+#### Scenario: Any GitHub project works without code changes
+- **WHEN** a user clones `https://github.com/<user>/<repo>` and launches
+  the forge for that project
+- **THEN** the git service SHALL create `/srv/git/<repo>` (not
+  `/srv/git/tillandsias` or any other hardcoded name)
+- **AND** the forge's `insteadOf` rule SHALL include `<repo>` in the mirror URL
+- **AND** the post-receive hook SHALL forward pushes to
+  `https://github.com/<user>/<repo>` (the project's actual remote)
+
+#### Scenario: Forge transparency — agents never configure git
+- **WHEN** an agent runs inside the forge
+- **THEN** `git push`, `git fetch`, and `git clone` SHALL work with zero
+  agent-side configuration
+- **AND** the agent SHALL see the original GitHub URL in `git remote -v`
+- **AND** the agent SHALL NOT need to know about the mirror, Vault tokens,
+  or the proxy
+
 ## Litmus Tests
 
 Bind to tests in `openspec/litmus-bindings.yaml`:

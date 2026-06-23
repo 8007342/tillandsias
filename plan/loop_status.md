@@ -1,6 +1,18 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-23T20:11Z
+LastExecutionTime: 2026-06-23T20:45Z
+
+## This Loop (2026-06-23T20:20Z, forge — big-pickle meta-orch — per-project transparency)
+
+- **Cycle type**: meta-orchestration start-of-cycle (forge container).
+- **Startup**: `linux-next @ 226d2723`, clean worktree, 0 ahead / 0 behind. Credential Channel Guard: `ok:forge-git-mirror`. Siblings: `windows-next@a3c8b23d`, `osx-next@85e69f14` — both ancestors.
+- **Hardcoded-project-name audit**: Scanned codebase for hardcoded "tillandsias" project names in mirror/checkout paths. Source already dynamic via `$PROJECT`/`$TILLANDSIAS_PROJECT`. Fixed 8 hardcoded paths in docs (4 in `docs/cheatsheets/git-mirror-lifecycle-audit.md`, 2 each in `cheatsheets/runtime/forge-standalone.md` + image-baked copy) — replaced with `<PROJECT>` placeholders.
+- **Forge transparency cheatsheet**: Created `cheatsheets/runtime/forge-transparency.md` + image-baked copy documenting that git mirror, HTTPS proxy, inference, and Vault are transparent for agents. Agents never need to configure git, tokens, or proxies. Includes per-project isolation table.
+- **Spec update**: Added per-project transparency requirement to `openspec/specs/git-mirror-service/spec.md` (two scenarios: "any GitHub project works without code changes" and "agents never configure git").
+- **Plan packets filed**: Order 86 `per-project-dynamic-path-verification`, Order 87 `forge-transparency-cheatsheet`, Order 88 `forge-harness-bootstrap-context` — all ready, gated for forge host pickup.
+- **Worker drain**: Zero forge-eligible ready tasks besides newly filed orders 86-88.
+- **E2E gates**: `skip:no-podman-binary` (forge container).
+- **Push state**: Will push `linux-next` with spec update + docs fix + cheatsheets + plan packets.
 
 ## This Loop (2026-06-23T20:03Z, forge — big-pickle meta-orch — git-mirror fix)
 

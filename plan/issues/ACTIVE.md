@@ -1,17 +1,20 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-23T20:11Z
+Last updated: 2026-06-23T20:45Z
 
-## This Cycle (2026-06-23T20:03Z, forge — big-pickle meta-orch — git-mirror fix + zero residual)
+## This Cycle (2026-06-23T20:20Z, forge — big-pickle meta-orch — per-project transparency)
 
-- **Startup**: `linux-next @ 67fa3cd9`, clean, 0 ahead/0 behind. Credential Channel Guard: `ok:forge-git-mirror`.
-- **Git-mirror HTTP 403**: `git fetch` failed because `images/default/lib-common.sh` configured `rewrite_origin_for_enclave_push` with `http://tillandsias-git:8080/<project>.git` (returns 403). Root cause: lighttpd + git-http-backend CGI misconfiguration on port 8080. **Fix**: Changed to `git://tillandsias-git/<project>` (git daemon on port 9418 works correctly). Source fix committed to `images/default/lib-common.sh`. Running container's git config patched. Push to mirror verified: post-receive hook forwarded to GitHub.
-- **Findings filed**: `plan/issues/git-mirror-http-403-lighttpd-cgi-2026-06-23.md` (HTTP port 8080 broken, workaround via git://).
-- **Blocker updated**: `plan/issues/forge-credential-channel-blocked-2026-06-21.md` — re-check 2026-06-23T20:10Z — credential channel now functional via git daemon.
-- **Worker drain**: Zero forge-eligible ready tasks at current bar. All ready nodes are macOS-owned (order 79 tray icon, order 81 vault unseal, `macos-in-vm-enclave-provisioning`, `vault-flow/xplat-gating-parity`).
-- **E2E eligibility**: `skip:no-podman-binary` (forge container has no podman).
-- **Reduction**: Captured git-mirror HTTP misconfiguration as filed finding.
-- **Next**: Other hosts can continue — macOS/Windows ready nodes await their owners.
+- **Startup**: `linux-next @ 226d2723`, clean, Committed+ pushed from prior cycle. Credential Channel Guard: `ok:forge-git-mirror`.
+- **Hardcoded-project-name audit**: Audited codebase for hardcoded "tillandsias" project names in infrastructure paths. Source code is already dynamic (`$PROJECT`/`$TILLANDSIAS_PROJECT`). Docs had 4 hardcoded paths in `docs/cheatsheets/git-mirror-lifecycle-audit.md` and 2 each in `cheatsheets/runtime/forge-standalone.md` + `images/default/cheatsheets/runtime/forge-standalone.md` — all fixed to `<PROJECT>` placeholder.
+- **Forge transparency cheatsheet**: Created `cheatsheets/runtime/forge-transparency.md` + `images/default/.../forge-transparency.md` documenting that git mirror, HTTPS proxy, inference, and Vault are transparent for agents. Agents never need to configure git, tokens, or proxies. Includes per-project isolation table.
+- **Spec update**: Added per-project transparency requirement to `openspec/specs/git-mirror-service/spec.md` (two scenarios: "any GitHub project works without code changes" and "agents never configure git").
+- **Plan packets filed**:
+  - Order 86 `per-project-dynamic-path-verification` (audit all paths, ready)
+  - Order 87 `forge-transparency-cheatsheet` (verify bundled docs, depends on 86)
+  - Order 88 `forge-harness-bootstrap-context` (inject startup context for agents, depends on 87)
+- **Worker drain**: Zero forge-eligible ready tasks besides the newly filed plan packets.
+- **E2E eligibility**: `skip:no-podman-binary`.
+- **Next**: Other hosts claim orders 86-88 as they become ready.
 
 ## This Cycle (2026-06-23T09:30Z, linux_mutable — Sonnet 4.6 meta-orch — bar-raises + e2e)
 
