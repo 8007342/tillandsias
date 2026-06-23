@@ -35,10 +35,10 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "enum LeafAction"
 
-  - step: "Req Home Menu: 7 LeafAction variants (Claude/Codex/OpenCode/OpenCodeWeb/Observatorium/Maintenance/NanoClawV2)"
+  - step: "Req Home Menu: 7 LeafAction variants (Claude/Codex/OpenCode/OpenCodeWeb/Observatorium/Maintenance/ZeroClaw)"
     # Pin all 7 variant names so a refactor dropping any deployed
     # menu leaf surfaces fast.
-    command: "for v in Claude Codex OpenCode OpenCodeWeb Observatorium Maintenance NanoClawV2; do grep -Eq \"^    $v,\" crates/tillandsias-headless/src/tray/mod.rs || { echo \"FAIL: LeafAction::$v variant missing\"; exit 1; }; done && echo \"ok: 7 LeafAction variants\""
+    command: "for v in Claude Codex OpenCode OpenCodeWeb Observatorium Maintenance ZeroClaw; do grep -Eq \"^    $v,\" crates/tillandsias-headless/src/tray/mod.rs || { echo \"FAIL: LeafAction::$v variant missing\"; exit 1; }; done && echo \"ok: 7 LeafAction variants\""
     timeout_ms: 3000
     expected_behavior: "ok:"
 
@@ -68,14 +68,14 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "id=31"
 
-  - step: "Req Home Menu: docblock pins LeafAction offset layout (+0 Claude → +6 NanoClawV2)"
+  - step: "Req Home Menu: docblock pins LeafAction offset layout (+0 Claude → +6 ZeroClaw)"
     # The offset-table docblock at lines 2015-2023 maps each
     # LeafAction variant to its position offset. A regression to
     # the offset values would silently break the
     # `project_action_from_id` dispatch helper.
-    command: "grep -F '| +0     | Claude' crates/tillandsias-headless/src/tray/mod.rs && grep -F '| +6     | NanoClawV2' crates/tillandsias-headless/src/tray/mod.rs"
+    command: "grep -F '| +0     | Claude' crates/tillandsias-headless/src/tray/mod.rs && grep -F '| +6     | ZeroClaw' crates/tillandsias-headless/src/tray/mod.rs"
     timeout_ms: 3000
-    expected_behavior: "+6     | NanoClawV2"
+    expected_behavior: "+6     | ZeroClaw"
 
 observability:
   traces:
@@ -91,9 +91,9 @@ rollback:
   on_failure: >
     A `spec:simplified-tray-ux` surface drifted. Restore `enum
     LeafAction` with the 7 variants {Claude, Codex, OpenCode,
-    OpenCodeWeb, Observatorium, Maintenance, NanoClawV2}; the
+    OpenCodeWeb, Observatorium, Maintenance, ZeroClaw}; the
     `const ALL: [LeafAction; 7]` constant; the `By Tlatoāni`
     attribution literal; the docblock pinning Version + Quit
     Tillandsias menu IDs (30 + 31); the LeafAction offset table
-    (+0 Claude through +6 NanoClawV2).
-  command: "grep -nE 'enum LeafAction|LeafAction::(Claude|Codex|OpenCode|OpenCodeWeb|Observatorium|Maintenance|NanoClawV2)|const ALL: \\[LeafAction|By Tlatoāni|id=3[01]|\\| \\+[0-9]+' crates/tillandsias-headless/src/tray/mod.rs | head -25"
+    (+0 Claude through +6 ZeroClaw).
+  command: "grep -nE 'enum LeafAction|LeafAction::(Claude|Codex|OpenCode|OpenCodeWeb|Observatorium|Maintenance|ZeroClaw)|const ALL: \\[LeafAction|By Tlatoāni|id=3[01]|\\| \\+[0-9]+' crates/tillandsias-headless/src/tray/mod.rs | head -25"

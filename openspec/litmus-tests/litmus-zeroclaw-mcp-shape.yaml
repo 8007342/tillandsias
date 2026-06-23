@@ -1,0 +1,76 @@
+# @trace spec:zeroclaw-orchestration
+name: litmus:zeroclaw-mcp-shape
+spec: zeroclaw-orchestration
+phase: pre-build
+description: >
+  Verify the ZeroClaw MCP broker surface (allowlist, server, launch wiring)
+  remains intact. Runs the full unit + integration test suite (launch smoke +
+  broker smoke) and checks that all structural anchors are present in the
+  relevant source files and config overlays.
+severity: high
+size: quick
+
+preconditions:
+  - workspace contains crates/tillandsias-zeroclaw
+  - workspace contains images/zeroclaw
+  - cargo is available in PATH
+
+critical_path:
+  - step: "run zeroclaw-mcp unit and integration tests (12 tests: 9 allowlist + 3 smoke)"
+    command: "cargo test -p tillandsias-zeroclaw 2>&1 | tee /dev/stderr | grep -E 'test result|FAILED'"
+    timeout_ms: 120000
+    success_pattern: "test result: ok"
+    failure_pattern: "FAILED|error\\[E"
+
+  - step: "verify allowlist enforces 5 approved tools"
+    command: "test $(grep -cF 'zeroclaw.' crates/tillandsias-zeroclaw/src/allowlist.rs) -ge 5 && echo allowlist-enforced"
+    timeout_ms: 5000
+    success_pattern: "allowlist-enforced"
+    expected_behavior: "allowlist-enforced"
+
+  - step: "verify MCP server binary entry point exists"
+    command: "test -f crates/tillandsias-zeroclaw/src/main.rs && echo OK"
+    timeout_ms: 3000
+    success_pattern: "OK"
+
+  - step: "verify zeroclaw-host.sh socat bridge is present in config overlay"
+    command: "test -f images/zeroclaw/config-overlay/mcp/zeroclaw-host.sh && echo OK"
+    timeout_ms: 3000
+    success_pattern: "OK"
+
+  - step: "verify OpenCode config overlay locks MCP to zeroclaw surface"
+    command: "grep -q 'zeroclaw' images/zeroclaw/config-overlay/opencode/config.json && echo 'zeroclaw-config-present'"
+    timeout_ms: 5000
+    success_pattern: "zeroclaw-config-present"
+
+  - step: "verify tray launch_zeroclaw wiring and MCP binary spawn"
+    command: "grep -q 'launch_zeroclaw' crates/tillandsias-headless/src/tray/mod.rs && grep -q 'tillandsias-zeroclaw' crates/tillandsias-headless/src/tray/mod.rs && echo 'tray-wiring-present'"
+    timeout_ms: 5000
+    success_pattern: "tray-wiring-present"
+
+  - step: "verify zeroclaw image is registered in the image build list"
+    command: "grep -q 'zeroclaw' crates/tillandsias-headless/src/main.rs && echo 'image-registered'"
+    timeout_ms: 5000
+    success_pattern: "image-registered"
+
+observability:
+  traces:
+    - "@trace spec:zeroclaw-orchestration"
+  expected_log: >
+    All 12 tests pass (9 allowlist unit + 3 integration smoke). Structural
+    anchors present: allowlist.rs, server/main.rs, config overlay, socat bridge,
+    tray wiring, image registration.
+  log_fields:
+    spec: zeroclaw-orchestration
+    test: zeroclaw-mcp-shape
+
+rollback:
+  on_failure: >
+    Inspect crates/tillandsias-zeroclaw/src/ for allowlist or server
+    regressions. Check images/zeroclaw/config-overlay/ for missing overlay
+    files. Verify tray/mod.rs launch_zeroclaw and MCP binary spawn are intact.
+  command: >
+    cargo test -p tillandsias-zeroclaw 2>&1 | tail -20 &&
+    ls crates/tillandsias-zeroclaw/src/ &&
+    ls images/zeroclaw/config-overlay/mcp/ &&
+    grep -n 'zeroclaw' crates/tillandsias-headless/src/tray/mod.rs | head -10

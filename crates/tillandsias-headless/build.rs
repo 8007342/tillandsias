@@ -46,7 +46,7 @@ fn main() {
         &repo_root.join("skills"),
         &repo_root.join("skills"),
         repo_root,
-        "images/nanoclawv2/skills",
+        "images/zeroclaw/skills",
         &mut assets,
     );
 

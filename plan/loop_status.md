@@ -1,6 +1,21 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-23T21:42Z
+LastExecutionTime: 2026-06-23T22:47Z
+
+## This Loop (2026-06-23T22:47Z, linux_mutable — Sonnet 4.6 meta-orch cycle 3 — orders 92-97 ZeroClaw migration complete)
+
+- **Cycle type**: checkpoint uncommitted agent work + close orders 92-97 + order 56.
+- **Startup**: `linux-next @ 004e1720`, dirty — uncommitted work from prior agent completing ZeroClaw migration chain.
+- **Assessed**: build.sh --check PASS, tests PASS. All deliverables verified:
+  - Order 92: images/zeroclaw/Containerfile + entrypoint + config overlay ✓
+  - Order 93: LaunchKind::ZeroClaw, launch_zeroclaw(), zeroclaw socket paths in tray/mod.rs ✓
+  - Order 94: runtime_assets.rs + main.rs fully renamed to zeroclaw ✓
+  - Order 95: litmus-zeroclaw-mcp-shape.yaml, litmus-bindings.yaml updated ✓
+  - Order 96: crates/tillandsias-nanoclawv2-mcp/ deleted, images/nanoclawv2/ renamed, Cargo.toml cleaned ✓
+  - Order 97 + order 56: plan ledger closed — this commit.
+- **ZeroClaw migration fully complete** — NanoClawV2 is gone, ZeroClaw is live.
+- **Coordinator**: Siblings unchanged — osx-next@85e69f14, windows-next@a3c8b23d.
+- **Next**: No linux-ready nodes at current bar. Bar fully drained.
 
 ## This Loop (2026-06-23T21:42Z, linux_mutable — Sonnet 4.6 meta-orch cycle 2 — order 91 ZeroClaw crate)
 

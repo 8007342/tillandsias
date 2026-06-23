@@ -7,9 +7,9 @@ Run `./scripts/generate-traces.sh` to regenerate.
 
 - [crates/tillandsias-host-shell/src/menu_action.rs#L12](../../../crates/tillandsias-host-shell/src/menu_action.rs#L12)
 - [crates/tillandsias-host-shell/src/menu_state.rs#L21](../../../crates/tillandsias-host-shell/src/menu_state.rs#L21)
-- [crates/tillandsias-host-shell/src/menu_state.rs#L344](../../../crates/tillandsias-host-shell/src/menu_state.rs#L344)
-- [crates/tillandsias-host-shell/src/menu_state.rs#L513](../../../crates/tillandsias-host-shell/src/menu_state.rs#L513)
-- [crates/tillandsias-host-shell/src/menu_state.rs#L691](../../../crates/tillandsias-host-shell/src/menu_state.rs#L691)
+- [crates/tillandsias-host-shell/src/menu_state.rs#L350](../../../crates/tillandsias-host-shell/src/menu_state.rs#L350)
+- [crates/tillandsias-host-shell/src/menu_state.rs#L527](../../../crates/tillandsias-host-shell/src/menu_state.rs#L527)
+- [crates/tillandsias-host-shell/src/menu_state.rs#L739](../../../crates/tillandsias-host-shell/src/menu_state.rs#L739)
 - [crates/tillandsias-host-shell/src/pty/windows.rs#L15](../../../crates/tillandsias-host-shell/src/pty/windows.rs#L15)
 - [crates/tillandsias-vm-layer/src/wsl.rs#L9](../../../crates/tillandsias-vm-layer/src/wsl.rs#L9)
 - [crates/tillandsias-windows-tray/build.rs#L18](../../../crates/tillandsias-windows-tray/build.rs#L18)
@@ -26,4 +26,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [crates/tillandsias-windows-tray/src/wsl_lifecycle.rs#L11](../../../crates/tillandsias-windows-tray/src/wsl_lifecycle.rs#L11)
 - [crates/tillandsias-windows-tray/tests/cli_integration.rs#L19](../../../crates/tillandsias-windows-tray/tests/cli_integration.rs#L19)
 - [crates/tillandsias-windows-tray/tests/portable_smoke.rs#L13](../../../crates/tillandsias-windows-tray/tests/portable_smoke.rs#L13)
-- [crates/tillandsias-windows-tray/tests/portable_smoke.rs#L138](../../../crates/tillandsias-windows-tray/tests/portable_smoke.rs#L138)
+- [crates/tillandsias-windows-tray/tests/portable_smoke.rs#L139](../../../crates/tillandsias-windows-tray/tests/portable_smoke.rs#L139)

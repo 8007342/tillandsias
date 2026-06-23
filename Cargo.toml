@@ -1,7 +1,6 @@
 [workspace]
 members = [
     "crates/tillandsias-browser-mcp",
-    "crates/tillandsias-nanoclawv2-mcp",
     "crates/tillandsias-zeroclaw",
     "crates/tillandsias-control-wire",
     "crates/tillandsias-core",
@@ -87,7 +86,6 @@ xz2 = "0.1"
 
 # Internal crates
 tillandsias-browser-mcp = { path = "crates/tillandsias-browser-mcp" }
-tillandsias-nanoclawv2-mcp = { path = "crates/tillandsias-nanoclawv2-mcp" }
 tillandsias-zeroclaw = { path = "crates/tillandsias-zeroclaw" }
 tillandsias-control-wire = { path = "crates/tillandsias-control-wire" }
 tillandsias-core = { path = "crates/tillandsias-core" }

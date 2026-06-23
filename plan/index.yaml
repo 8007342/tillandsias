@@ -4157,7 +4157,14 @@ plan_index:
     - id: nanoclawv2-orchestration
       order: 56
       title: ZeroClaw orchestration engine and launcher leaf (Supersedes NanoClawV2)
-      status: superseded_migrating_to_zeroclaw
+      status: done
+      closed_at: "2026-06-23T22:47Z"
+      closed_by: "linux-sonnet46-meta-orch-20260623T2247Z"
+      outcome: >
+        ZeroClaw migration complete. crates/tillandsias-zeroclaw/ (Apache-2.0,
+        orders 91-96) replaces tillandsias-nanoclawv2-mcp. Tray wired to
+        launch_zeroclaw(), litmus renamed to zeroclaw-mcp-shape, legacy files
+        removed. Full chain: orders 91-97 done.
       owner_host: linux
       deliverable: plan/issues/nanoclawv2-orchestration.md
       audit_origin: plan/issues/nanoclawv2-orchestration.md
@@ -6236,87 +6243,116 @@ plan_index:
     - id: zeroclaw-containerfile
       order: 92
       title: "ZeroClaw Packet B: Create ZeroClaw Containerfile and image"
-      status: ready
+      status: done
       owner_host: linux
-      deliverable: plan/issues/zeroclaw-progress.md
+      deliverable: images/zeroclaw/Containerfile
       depends_on: [zeroclaw-crate-scaffold]
       pickup_role: linux
       estimated_hours: 1
+      closed_at: "2026-06-23T22:47Z"
+      closed_by: "linux-sonnet46-meta-orch-20260623T2247Z"
       exit_criteria:
         - "images/zeroclaw/Containerfile uses fedora:44 base"
         - "images/zeroclaw/entrypoint.sh ported from nanoclawv2"
         - "Config overlay and MCP bridge present"
-      next_action: "Write Containerfile, port entrypoint and config overlay from nanoclawv2."
+      outcome: >
+        images/zeroclaw/Containerfile created (ported from nanoclawv2).
+        images/zeroclaw/entrypoint.sh, config-overlay/mcp/zeroclaw-host.sh,
+        config-overlay/opencode/ all present.
 
     - id: zeroclaw-tray-launcher
       order: 93
       title: "ZeroClaw Packet C: Update tray launcher — rename NanoClawV2 → ZeroClaw"
-      status: ready
+      status: done
       owner_host: linux
-      deliverable: plan/issues/zeroclaw-progress.md
+      deliverable: crates/tillandsias-headless/src/tray/mod.rs
       depends_on: [zeroclaw-containerfile]
       pickup_role: linux
       estimated_hours: 1
+      closed_at: "2026-06-23T22:47Z"
+      closed_by: "linux-sonnet46-meta-orch-20260623T2247Z"
       exit_criteria:
         - "LeafAction::NanoClawV2 renamed to LeafAction::ZeroClaw"
         - "launch_nanoclawv2() renamed to launch_zeroclaw()"
         - "Socket paths and container names updated"
-      next_action: "Rename tray launcher references in tray/mod.rs."
+      outcome: >
+        LaunchKind::ZeroClaw, launch_zeroclaw(), socket path
+        tillandsias/zeroclaw-<project>.sock, image
+        tillandsias-zeroclaw:v<version> — all confirmed in tray/mod.rs.
 
     - id: zeroclaw-image-registration
       order: 94
       title: "ZeroClaw Packet D: Update image registration — rename NanoClawV2 → ZeroClaw"
-      status: ready
+      status: done
       owner_host: linux
-      deliverable: plan/issues/zeroclaw-progress.md
+      deliverable: crates/tillandsias-headless/src/runtime_assets.rs
       depends_on: [zeroclaw-tray-launcher]
       pickup_role: linux
       estimated_hours: 1
+      closed_at: "2026-06-23T22:47Z"
+      closed_by: "linux-sonnet46-meta-orch-20260623T2247Z"
       exit_criteria:
         - "All nanoclawv2 strings in main.rs replaced with zeroclaw"
         - "All nanoclawv2 strings in runtime_assets.rs replaced with zeroclaw"
-      next_action: "Replace nanoclawv2 references in main.rs and runtime_assets.rs."
+      outcome: >
+        runtime_assets.rs line 264: "zeroclaw" => Ok("images/zeroclaw").
+        build_inputs line 351: images/zeroclaw/Containerfile registered.
+        main.rs updated. build.sh --check + tests PASS.
 
     - id: zeroclaw-litmus-update
       order: 95
       title: "ZeroClaw Packet E: Update litmus tests — rename NanoClawV2 → ZeroClaw"
-      status: ready
+      status: done
       owner_host: linux
-      deliverable: plan/issues/zeroclaw-progress.md
+      deliverable: openspec/litmus-tests/litmus-zeroclaw-mcp-shape.yaml
       depends_on: [zeroclaw-image-registration]
       pickup_role: linux
       estimated_hours: 1
+      closed_at: "2026-06-23T22:47Z"
+      closed_by: "linux-sonnet46-meta-orch-20260623T2247Z"
       exit_criteria:
         - "litmus:zeroclaw-mcp-shape exists (renamed from nanoclawv2)"
         - "litmus-simplified-tray-ux-leaf-action-shape.yaml references updated"
         - "litmus-bindings.yaml binding updated"
-      next_action: "Rename and update all litmus test references."
+      outcome: >
+        litmus-nanoclawv2-mcp-shape.yaml renamed to litmus-zeroclaw-mcp-shape.yaml.
+        litmus-bindings.yaml: spec_id zeroclaw-orchestration, litmus:zeroclaw-mcp-shape.
+        litmus-simplified-tray-ux-leaf-action-shape.yaml updated.
 
     - id: zeroclaw-legacy-cleanup
       order: 96
       title: "ZeroClaw Packet F: Remove NanoClawV2 legacy files"
-      status: ready
+      status: done
       owner_host: linux
-      deliverable: plan/issues/zeroclaw-progress.md
+      deliverable: "(crates/tillandsias-nanoclawv2-mcp/ removed)"
       depends_on: [zeroclaw-litmus-update]
       pickup_role: linux
       estimated_hours: 0.5
+      closed_at: "2026-06-23T22:47Z"
+      closed_by: "linux-sonnet46-meta-orch-20260623T2247Z"
       exit_criteria:
         - "crates/tillandsias-nanoclawv2-mcp/ removed or archived"
         - "images/nanoclawv2/ removed or archived"
         - "Workspace Cargo.toml updated"
-      next_action: "Delete legacy NanoClawV2 crate and image dirs."
+      outcome: >
+        crates/tillandsias-nanoclawv2-mcp/ deleted. images/nanoclawv2/ renamed
+        to images/zeroclaw/. Cargo.toml workspace members and deps updated
+        to remove tillandsias-nanoclawv2-mcp.
 
     - id: zeroclaw-plan-update
       order: 97
       title: "ZeroClaw Packet G: Update plan ledger — close order 56, finalize ZeroClaw"
-      status: ready
+      status: done
       owner_host: linux
-      deliverable: plan/issues/zeroclaw-progress.md
+      deliverable: plan/index.yaml
       depends_on: [zeroclaw-legacy-cleanup]
       pickup_role: linux
       estimated_hours: 0.5
+      closed_at: "2026-06-23T22:47Z"
+      closed_by: "linux-sonnet46-meta-orch-20260623T2247Z"
       exit_criteria:
         - "Order 56 (nanoclawv2-orchestration) marked completed"
         - "Zeroclaw orchestration packets closed or updated"
-      next_action: "Finalize plan ledger entries for ZeroClaw migration."
+      outcome: >
+        Orders 92-97 all closed. Order 56 (nanoclawv2-orchestration) status
+        updated to completed. ZeroClaw migration chain fully done.

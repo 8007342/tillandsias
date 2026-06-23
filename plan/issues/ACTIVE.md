@@ -1,6 +1,14 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-23T21:42Z
+Last updated: 2026-06-23T22:47Z
+
+## This Cycle (2026-06-23T22:47Z, linux_mutable — Sonnet 4.6 meta-orch cycle 3 — ZeroClaw migration done)
+
+- **Orders 92-97 closed**: Full ZeroClaw migration chain complete. NanoClawV2 removed.
+- **Order 56 closed**: nanoclawv2-orchestration marked done.
+- **Build**: --check PASS, tests PASS.
+- **Bar**: No linux-ready nodes at current bar. Fully drained again.
+- **Next**: Awaiting bar-raise approval or macOS work merging in.
 
 ## This Cycle (2026-06-23T21:42Z, linux_mutable — Sonnet 4.6 meta-orch cycle 2 — order 91)
 
