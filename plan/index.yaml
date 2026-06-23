@@ -5770,3 +5770,48 @@ plan_index:
           note: >
             Operator directive: do not show GitHub Login until the login flow CAN
             run (init + containers). Per-platform readiness defined in deliverable.
+
+    - packet_id: vault-unseal-fails-macos-after-db616e06
+      order: 81
+      title: "macOS Vault still fails init/unseal after db616e06 (unseal API HTTP 400 / never-unsealed) — order-78 necessary but not sufficient"
+      status: ready
+      kind: bug
+      deliverable: plan/issues/macos-github-login-vault-bootstrap-timeout-2026-06-22.md
+      depends_on: []
+      pickup_role: "Linux/guest team (vault_bootstrap.rs + images/vault entrypoint); reproduces only on macOS VZ guest"
+      outcome: >
+        Vault reaches initialized && !sealed on the macOS VZ guest so
+        wait_for_vault_ready succeeds and --github-login completes the Vault write.
+      tasks:
+        - id: vault-unseal-fails-macos-after-db616e06/fix-unseal
+          status: ready
+          depends_on: []
+          owned_files:
+            - crates/tillandsias-headless/src/vault_bootstrap.rs
+            - images/vault/Containerfile
+            - images/vault/entrypoint.sh
+          checkpoint_required: true
+          handoff_note: >
+            VALIDATED on released v0.3.260622.4 (db616e06 present): db616e06 fixed
+            the secret-readability crash (foreground run shows "unseal key
+            material loaded (32 bytes)", vault server starts, "vault API
+            responsive"), but the entrypoint's UNSEAL step fails — "subsequent
+            boot: using unseal key" -> curl /v1/sys/unseal returns HTTP 400; and a
+            FRESH volume still times out "did not become healthy within 60s"
+            (vault stays sealed). So db616e06 is necessary but not sufficient on
+            the macOS VZ guest (rootful podman, Vault 1.18.5). Investigate the
+            entrypoint auto-unseal flow / the unseal API request format under this
+            setup. Reproduces only on macOS; diagnose via the tray --exec-guest +
+            a foreground `podman run` of the vault image (no -d --rm) — see
+            deliverable for the exact replication command + evidence.
+      events:
+        - type: finding
+          ts: "2026-06-23T00:30Z"
+          agent_id: "macos-claude-opus48-osx-next-20260623"
+          host: macos
+          note: >
+            Surfaced during the macOS curl-install e2e of the released
+            v0.3.260622.4 (which DID ship db616e06). Unattended install→provision→
+            boot→exec all validated; Vault is the only remaining blocker for
+            --github-login. db616e06 advanced the failure from "secret unreadable
+            crash-loop" to "starts but unseal returns 400 / stays sealed".

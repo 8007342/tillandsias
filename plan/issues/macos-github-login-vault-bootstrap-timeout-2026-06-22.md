@@ -9,6 +9,47 @@
 [[github-login-token-at-rest-audit-2026-06-22]],
 [[optimization-macos-vz-idiomatic-exec-layer-2026-06-21]]
 
+## db616e06 NECESSARY BUT NOT SUFFICIENT — Vault unseal still fails on macOS (2026-06-23, released-binary e2e)
+
+Validated against the **released** `v0.3.260622.4` headless (confirmed in the VM:
+`--version` = `v0.3.260622.4`; the `mode=0400,uid=` strings are **gone** from the
+binary, so db616e06 is present).
+
+**db616e06 DID fix the original crash.** Foreground run of the real vault image
+with the fixed args (no uid/gid on the secrets) — the container no longer
+crash-loops on the secret; it gets much further:
+
+```
+[vault-entrypoint] starting Tillandsias Vault entrypoint
+[vault-entrypoint] unseal key material loaded (32 bytes)   # secret READABLE now (db616e06 worked)
+[vault-entrypoint] launching vault server
+==> Vault server started! ... Listener 1: tcp 0.0.0.0:8200 tls: enabled
+[vault-entrypoint] vault API responsive
+[vault-entrypoint] subsequent boot: using unseal key from secret
+[vault-entrypoint] unsealing vault
+curl: (22) The requested URL returned error: 400           # UNSEAL API rejects the request
+```
+
+**But Vault still never becomes `initialized && !sealed`**, so the headless
+`wait_for_vault_ready` times out:
+- Volume with prior data ("subsequent boot"): unseal API call returns **HTTP 400**.
+- **Fresh** volume (wiped `tillandsias-vault-data` + secrets, valid identity):
+  still `Error: vault did not become healthy within 60s` — so it is NOT merely a
+  dirty-volume artifact; a clean init also fails to reach unsealed.
+
+### Net
+
+Order 78 (`db616e06`) was **necessary** — it fixed the "secret unreadable →
+container crash-loop" failure — but **not sufficient** on the macOS VZ guest. A
+**remaining Vault init/unseal failure** (entrypoint unseal returns 400 / vault
+stays sealed) still blocks `--github-login`. Likely in the auto-unseal flow /
+the entrypoint's unseal API call under this rootful-podman + Vault 1.18.5 setup —
+deep vault-entrypoint / `vault_bootstrap.rs` territory, shared guest code,
+reproducible only on the macOS VZ guest. Tracked as order 81. Everything UPSTREAM
+of Vault is validated end-to-end on the released build (curl-install → unattended
+provision → boot → control wire → guest exec → identity → networks → vault image
++ container start + unseal-key load).
+
 ## FIX CONFIRMED + macOS VALIDATION PENDING A RELEASE (2026-06-22, later)
 
 The Linux/guest team shipped order 78 (`db616e06 fix(vault): drop uid/gid from
