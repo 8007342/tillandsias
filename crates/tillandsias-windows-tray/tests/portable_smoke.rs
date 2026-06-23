@@ -22,10 +22,11 @@ use tillandsias_host_shell::menu_state::{
 /// project/agent/browser body with no `github-login` row (mutually exclusive).
 #[test]
 fn portable_menu_build_is_invokable_from_windows_tray_path() {
-    // Logged-out: collapsed short list.
+    // Logged-out, runtime ready: collapsed short list.
     let out = MenuState {
         target: TargetSurface::WindowsTray,
         gui_passthrough_available: true,
+        login_runtime_ready: true,
         ..MenuState::initial()
     };
     match build(&out) {

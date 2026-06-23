@@ -5737,7 +5737,7 @@ plan_index:
     - packet_id: github-login-menu-readiness-gate
       order: 80
       title: "Gate the GitHub Login menu item on login-runtime readiness (init + required containers up), cross-platform"
-      status: ready
+      status: completed
       kind: enhancement
       deliverable: plan/issues/github-login-menu-readiness-gate-2026-06-22.md
       depends_on: []
@@ -5748,7 +5748,7 @@ plan_index:
         on all three platforms via the single shared build_menu rule.
       tasks:
         - id: github-login-menu-readiness-gate/add-readiness-condition
-          status: ready
+          status: completed
           depends_on: []
           owned_files:
             - crates/tillandsias-host-shell/src/menu_state.rs
@@ -5770,6 +5770,22 @@ plan_index:
           note: >
             Operator directive: do not show GitHub Login until the login flow CAN
             run (init + containers). Per-platform readiness defined in deliverable.
+        - type: claim
+          ts: "2026-06-23T09:08:27Z"
+          agent_id: "linux-macuahuitl.ayahuitlcalpan.com-20260623T090920Z"
+          host: linux
+          lease_id: "github-login-menu-readiness-gate/add-readiness-condition-20260623"
+          expires_at: "2026-06-23T13:08:27Z"
+        - type: completed
+          ts: "2026-06-23T09:25:00Z"
+          agent_id: "linux-macuahuitl.ayahuitlcalpan.com-20260623T090920Z"
+          host: linux
+          note: >
+            Implemented: added `login_runtime_ready: bool` field to MenuState;
+            when false and logged-out, the GitHub Login item is replaced by a
+            disabled "Setting up…" entry. Updated all test constructions and added
+            a dedicated test for the not-ready case. All 10 menu_state tests + 1
+            portable_smoke test pass. build.sh --check passes clean.
 
     - packet_id: vault-unseal-fails-macos-after-db616e06
       order: 81

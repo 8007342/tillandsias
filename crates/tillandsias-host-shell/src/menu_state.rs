@@ -218,6 +218,11 @@ pub struct MenuState {
     /// actions (`Attach Here` etc.) so the user is not asked to start a
     /// forge before the VM is healthy.
     pub podman_ready: bool,
+    /// True when the runtime is ready to execute GitHub Login (init complete
+    /// plus Vault/git/egress containers up). When false and logged out, replaces
+    /// the GitHub Login item with a disabled "Setting up\u{2026}" entry so the
+    /// user does not attempt login before the runtime is healthy.
+    pub login_runtime_ready: bool,
     /// Target UI backend. Drives macOS's "(v2)" defer markers.
     pub target: TargetSurface,
 }
@@ -235,6 +240,7 @@ impl MenuState {
             selected_agent: SelectedAgent::Claude,
             gui_passthrough_available: false,
             podman_ready: false,
+            login_runtime_ready: false,
             target: TargetSurface::WindowsTray,
         }
     }
@@ -357,7 +363,15 @@ pub fn build(state: &MenuState) -> MenuStructure {
     //     both, so the logged-out menu collapses to a single login leaf.
     match &state.login {
         GithubLoginState::LoggedOut => {
-            items.push(MenuItem::leaf(ids::GITHUB_LOGIN, "\u{1F511} GitHub Login"));
+            if state.login_runtime_ready {
+                items.push(MenuItem::leaf(ids::GITHUB_LOGIN, "\u{1F511} GitHub Login"));
+            } else {
+                items.push(MenuItem::disabled(
+                    ids::GITHUB_LOGIN,
+                    "\u{1F4CB} Setting up\u{2026}",
+                    "login runtime not ready",
+                ));
+            }
         }
         GithubLoginState::LoggedIn { .. } => {
             // Local projects — submenu.
@@ -548,6 +562,7 @@ mod tests {
             selected_agent: SelectedAgent::Claude,
             gui_passthrough_available: true,
             podman_ready: true,
+            login_runtime_ready: true,
             target: TargetSurface::WindowsTray,
         };
 
@@ -629,6 +644,7 @@ mod tests {
     fn logged_out_menu_collapses_to_login_leaf() {
         let state = MenuState {
             login: GithubLoginState::LoggedOut,
+            login_runtime_ready: true,
             // Projects present but must NOT surface while logged out.
             local_projects: vec![ProjectEntry {
                 name: "secret".into(),
@@ -658,6 +674,38 @@ mod tests {
                 "{gated} must be hidden while logged out",
             );
         }
+    }
+
+    /// @trace spec:host-shell-architecture
+    ///
+    /// When the login runtime is not ready and the user is logged out, the
+    /// GitHub Login item must be replaced by a disabled "Setting up…" entry
+    /// so the user does not attempt login before the runtime is healthy.
+    #[test]
+    fn logged_out_menu_shows_setting_up_when_runtime_not_ready() {
+        let state = MenuState {
+            login: GithubLoginState::LoggedOut,
+            login_runtime_ready: false,
+            ..MenuState::initial()
+        };
+        let items = match build(&state) {
+            MenuStructure::Ready { items } => items,
+            other => panic!("expected Ready, got {other:?}"),
+        };
+        let ids_seen: Vec<&str> = items.iter().map(|i| i.id.as_str()).collect();
+        assert_eq!(
+            ids_seen,
+            vec![ids::STATUS, ids::GITHUB_LOGIN, ids::VERSION, ids::QUIT],
+            "logged-out menu must still collapse to the short list",
+        );
+        // The login item is disabled while runtime is not ready.
+        let login = &items[1];
+        assert!(!login.enabled);
+        assert_eq!(
+            login.disabled_reason.as_deref(),
+            Some("login runtime not ready")
+        );
+        assert!(login.label.contains("Setting up"));
     }
 
     /// @trace spec:macos-native-tray.ui.menu-parity@v1
