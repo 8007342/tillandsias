@@ -43,7 +43,7 @@ critical_path:
     failure_pattern: "VERSION_NOT_FOUND|No such file"
 
   - step: "verify cache_version is non-empty and contains valid semantic version"
-    command: "CACHED_VER=$(cat $HOME/.cache/tillandsias/cache_version 2>/dev/null || echo ''); if [[ -n \"$CACHED_VER\" && \"$CACHED_VER\" =~ ^[0-9]+\\.[0-9]+\\.[0-9]+\\.[0-9]+$ ]]; then echo \"VERSION_VALID:$CACHED_VER\"; else echo \"VERSION_INVALID:$CACHED_VER\"; exit 1; fi"
+    command: "CACHED_VER=$(cat $HOME/.cache/tillandsias/cache_version 2>/dev/null || echo ''); if printf '%s' \"$CACHED_VER\" | grep -Eq '^[0-9]+[.][0-9]+[.][0-9]+[.][0-9]+$'; then echo \"VERSION_VALID:$CACHED_VER\"; else echo \"VERSION_INVALID:$CACHED_VER\"; exit 1; fi"
     timeout_ms: 2000
     success_pattern: "VERSION_VALID"
     failure_pattern: "VERSION_INVALID"

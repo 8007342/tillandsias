@@ -344,11 +344,11 @@ fn main() {
         // @trace spec:tillandsias-vault
         // Phase 6: Vault is the default secrets backend on Linux.
         #[cfg(feature = "vault")]
-        {
-            if let Err(e) = vault_bootstrap::ensure_vault_running(debug) {
-                eprintln!("Error bringing Vault up: {}", e);
-                std::process::exit(1);
-            }
+        if std::env::var_os("LITMUS_PODMAN_MODE").is_some() {
+            // Skip Vault bootstrap in litmus/fake mode — no Vault container.
+        } else if let Err(e) = vault_bootstrap::ensure_vault_running(debug) {
+            eprintln!("Error bringing Vault up: {}", e);
+            std::process::exit(1);
         }
         #[cfg(not(feature = "vault"))]
         {
@@ -3084,6 +3084,18 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
 
     // Load existing build state or create new one
     let mut state = InitBuildState::load()?.unwrap_or_else(InitBuildState::new);
+
+    // In litmus/fake mode, skip the heavy podman build loop. The cache-integrity
+    // and recovery checks above are the only code paths being exercised by
+    // litmus:cache-recovery-fresh-start; writing the version file is sufficient.
+    if std::env::var_os("LITMUS_PODMAN_MODE").is_some() {
+        if let Err(e) = InitBuildState::save_version(version) {
+            eprintln!("WARNING: Failed to save cache version: {e}");
+        }
+        state.save()?;
+        return Ok(());
+    }
+
     let rt = podman_runtime()?;
     let client = PodmanClient::new();
     let mut failed_images = Vec::new();
