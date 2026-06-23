@@ -1,6 +1,21 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-23T09:30Z
+LastExecutionTime: 2026-06-23T20:11Z
+
+## This Loop (2026-06-23T20:03Z, forge — big-pickle meta-orch — git-mirror fix)
+
+- **Cycle type**: meta-orchestration start-of-cycle (forge container).
+- **Startup**: `linux-next @ 67fa3cd9`, clean worktree, 0 ahead / 0 behind.
+- **Credential Channel Guard**: passed (`ok:forge-git-mirror`), but `git fetch` via HTTP returned 403.
+  - Diagnosed: lighttpd on port 8080 returns 403 for all requests (git-http-backend CGI misconfig).
+  - Git daemon on port 9418 works correctly. Post-receive hook forwards pushes to GitHub.
+- **Fix applied (running container)**: Changed global `insteadOf` from `http://tillandsias-git:8080/tillandsias.git` to `git://tillandsias-git/tillandsias`. Push verified: `remote: [git-mirror] Push to origin (https://github.com/8007342/tillandsias.git): success`.
+- **Fix committed (source)**: `images/default/lib-common.sh` — `rewrite_origin_for_enclave_push` and `clone_project_from_mirror` updated to use `git://tillandsias-git/<project>` per spec (`openspec/specs/git-mirror-service/spec.md` line 51).
+- **Worker drain**: No forge-eligible `ready` tasks in `plan/index.yaml`. All remaining ready nodes are macOS/Windows-owned.
+- **E2E gates**: `skip:no-podman-binary` (forge container, no podman available).
+- **Findings filed**: `plan/issues/git-mirror-http-403-lighttpd-cgi-2026-06-23.md`.
+- **Coordinator**: Sibling branches unchanged — `origin/windows-next@a3c8b23d`, `origin/osx-next@85e69f14` — both ancestors of `linux-next`.
+- **Push state**: Pushing `linux-next` with source fix + plan updates.
 
 
 ## This Loop (2026-06-23T09:30Z, linux_mutable — Sonnet 4.6 meta-orch — bar-raises + e2e)

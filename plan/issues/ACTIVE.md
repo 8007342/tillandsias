@@ -1,6 +1,17 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-23T09:30Z
+Last updated: 2026-06-23T20:11Z
+
+## This Cycle (2026-06-23T20:03Z, forge — big-pickle meta-orch — git-mirror fix + zero residual)
+
+- **Startup**: `linux-next @ 67fa3cd9`, clean, 0 ahead/0 behind. Credential Channel Guard: `ok:forge-git-mirror`.
+- **Git-mirror HTTP 403**: `git fetch` failed because `images/default/lib-common.sh` configured `rewrite_origin_for_enclave_push` with `http://tillandsias-git:8080/<project>.git` (returns 403). Root cause: lighttpd + git-http-backend CGI misconfiguration on port 8080. **Fix**: Changed to `git://tillandsias-git/<project>` (git daemon on port 9418 works correctly). Source fix committed to `images/default/lib-common.sh`. Running container's git config patched. Push to mirror verified: post-receive hook forwarded to GitHub.
+- **Findings filed**: `plan/issues/git-mirror-http-403-lighttpd-cgi-2026-06-23.md` (HTTP port 8080 broken, workaround via git://).
+- **Blocker updated**: `plan/issues/forge-credential-channel-blocked-2026-06-21.md` — re-check 2026-06-23T20:10Z — credential channel now functional via git daemon.
+- **Worker drain**: Zero forge-eligible ready tasks at current bar. All ready nodes are macOS-owned (order 79 tray icon, order 81 vault unseal, `macos-in-vm-enclave-provisioning`, `vault-flow/xplat-gating-parity`).
+- **E2E eligibility**: `skip:no-podman-binary` (forge container has no podman).
+- **Reduction**: Captured git-mirror HTTP misconfiguration as filed finding.
+- **Next**: Other hosts can continue — macOS/Windows ready nodes await their owners.
 
 ## This Cycle (2026-06-23T09:30Z, linux_mutable — Sonnet 4.6 meta-orch — bar-raises + e2e)
 

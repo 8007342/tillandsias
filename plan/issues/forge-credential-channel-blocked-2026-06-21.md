@@ -78,3 +78,17 @@ e2e gates skipped per meta-orchestration policy.
 ## Resolution (2026-06-23)
 
 The check script `scripts/check-credential-channel.sh` was overly restrictive and did not account for the `TILLANDSIAS_HOST_KIND=forge` environment, where git mirror handles the credentials transparently. The script and `skills/meta-orchestration/SKILL.md` have been updated to explicitly recognize the forge environment as `ok:forge-git-mirror` and allow the cycle to proceed.
+
+## Re-check 2026-06-23T20:10Z
+
+**Status changed: FORGE CAN NOW PUSH.** Root cause identified and fixed:
+
+- **Root cause**: `rewrite_origin_for_enclave_push` and `clone_project_from_mirror` in `images/default/lib-common.sh` both used `http://tillandsias-git:8080/<project>.git` as the mirror URL. Lighttpd on port 8080 returns 403 for all requests (git-http-backend misconfiguration). However, the git daemon on port 9418 (`git://` protocol) works correctly.
+
+- **Fix (running container)**: Changed the global `insteadOf` from `http://tillandsias-git:8080/tillandsias.git` to `git://tillandsias-git/tillandsias`. Push to the git daemon succeeded and the post-receive hook forwarded it to GitHub.
+
+- **Fix (source)**: Updated `images/default/lib-common.sh` line 301 (`rewrite_origin_for_enclave_push`) and lines 436-458 (`clone_project_from_mirror` network transport) to use `git://tillandsias-git/${TILLANDSIAS_PROJECT}` instead of HTTP port 8080. This matches the spec (`openspec/specs/git-mirror-service/spec.md` line 51): *"Forge containers SHALL clone from `git://git-service/<project>`"*.
+
+- **Remaining**: Lighttpd port 8080 still returns 403 for all requests — the `cgi.assign` + mod_alias config may be miswired (filed separately). For now all git operations route through the working git daemon on port 9418.
+
+- **Branch**: `linux-next @ 67fa3cd9` — clean worktree, now with source fix staged. `<F9>`
