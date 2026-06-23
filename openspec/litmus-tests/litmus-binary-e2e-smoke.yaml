@@ -24,7 +24,7 @@ critical_path:
     failure_pattern: "cannot access"
 
   - step: "run --status-check (init path, fake podman)"
-    command: "LITMUS_PODMAN_MODE=fake \"${TILLANDSIAS_STATUS_CHECK_BIN:-$HOME/.local/bin/tillandsias}\" --headless --status-check /tmp/litmus-e2e-project 2>&1"
+    command: "LITMUS_PODMAN_MODE=fake \"${TILLANDSIAS_STATUS_CHECK_BIN:-$HOME/.local/bin/tillandsias}\" --headless --init --status-check /tmp/litmus-e2e-project 2>&1"
     timeout_ms: 120000
     success_pattern: "app.stopped|shutdown|completed"
     failure_pattern: "error|panic|failed"

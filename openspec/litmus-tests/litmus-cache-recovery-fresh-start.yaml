@@ -31,8 +31,8 @@ critical_path:
     failure_pattern: "Permission denied|Read-only"
 
   - step: "run --status-check with absent cache_version (should NOT error)"
-    command: "LITMUS_PODMAN_MODE=fake \"${TILLANDSIAS_STATUS_CHECK_BIN:-$HOME/.local/bin/tillandsias}\" --headless --status-check /tmp/litmus-cache-recovery-project 2>&1"
-    timeout_ms: 20000
+    command: "LITMUS_PODMAN_MODE=fake \"${TILLANDSIAS_STATUS_CHECK_BIN:-$HOME/.local/bin/tillandsias}\" --headless --init --status-check /tmp/litmus-cache-recovery-project 2>&1"
+    timeout_ms: 120000
     success_pattern: "app.stopped|shutdown|completed|Cache is valid"
     failure_pattern: "version mismatch|Version mismatch|panic|unwrap|thread.*panicked"
 

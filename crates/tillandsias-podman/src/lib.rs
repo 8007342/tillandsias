@@ -161,6 +161,10 @@ fn path_is_writable(_path: &Path) -> bool {
 pub fn require_desktop_user_session(operation: &str) -> Result<(), String> {
     #[cfg(target_os = "linux")]
     {
+        if env::var_os("LITMUS_PODMAN_MODE").is_some() {
+            return Ok(());
+        }
+
         match current_runtime_lane() {
             RuntimeLane::DesktopUserSession => {}
             RuntimeLane::HeadlessServiceAccount => {

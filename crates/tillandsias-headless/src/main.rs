@@ -357,9 +357,12 @@ fn main() {
             }
         }
 
-        if status_check && let Err(e) = run_status_check(debug) {
-            eprintln!("Error: {}", e);
-            std::process::exit(1);
+        if status_check {
+            if let Err(e) = run_status_check(debug) {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+            println!("status-check completed");
         }
         if !opencode {
             return;
@@ -384,6 +387,7 @@ fn main() {
             eprintln!("Error: {}", e);
             std::process::exit(1);
         }
+        println!("status-check completed");
         return;
     }
 
