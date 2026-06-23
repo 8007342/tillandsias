@@ -9,6 +9,72 @@
 [[github-login-token-at-rest-audit-2026-06-22]],
 [[optimization-macos-vz-idiomatic-exec-layer-2026-06-21]]
 
+## db616e06 NECESSARY BUT NOT SUFFICIENT — Vault unseal still fails on macOS (2026-06-23, released-binary e2e)
+
+Validated against the **released** `v0.3.260622.4` headless (confirmed in the VM:
+`--version` = `v0.3.260622.4`; the `mode=0400,uid=` strings are **gone** from the
+binary, so db616e06 is present).
+
+**db616e06 DID fix the original crash.** Foreground run of the real vault image
+with the fixed args (no uid/gid on the secrets) — the container no longer
+crash-loops on the secret; it gets much further:
+
+```
+[vault-entrypoint] starting Tillandsias Vault entrypoint
+[vault-entrypoint] unseal key material loaded (32 bytes)   # secret READABLE now (db616e06 worked)
+[vault-entrypoint] launching vault server
+==> Vault server started! ... Listener 1: tcp 0.0.0.0:8200 tls: enabled
+[vault-entrypoint] vault API responsive
+[vault-entrypoint] subsequent boot: using unseal key from secret
+[vault-entrypoint] unsealing vault
+curl: (22) The requested URL returned error: 400           # UNSEAL API rejects the request
+```
+
+**But Vault still never becomes `initialized && !sealed`**, so the headless
+`wait_for_vault_ready` times out:
+- Volume with prior data ("subsequent boot"): unseal API call returns **HTTP 400**.
+- **Fresh** volume (wiped `tillandsias-vault-data` + secrets, valid identity):
+  still `Error: vault did not become healthy within 60s` — so it is NOT merely a
+  dirty-volume artifact; a clean init also fails to reach unsealed.
+
+### Net
+
+Order 78 (`db616e06`) was **necessary** — it fixed the "secret unreadable →
+container crash-loop" failure — but **not sufficient** on the macOS VZ guest. A
+**remaining Vault init/unseal failure** (entrypoint unseal returns 400 / vault
+stays sealed) still blocks `--github-login`. Likely in the auto-unseal flow /
+the entrypoint's unseal API call under this rootful-podman + Vault 1.18.5 setup —
+deep vault-entrypoint / `vault_bootstrap.rs` territory, shared guest code,
+reproducible only on the macOS VZ guest. Tracked as order 81. Everything UPSTREAM
+of Vault is validated end-to-end on the released build (curl-install → unattended
+provision → boot → control wire → guest exec → identity → networks → vault image
++ container start + unseal-key load).
+
+## FIX CONFIRMED + macOS VALIDATION PENDING A RELEASE (2026-06-22, later)
+
+The Linux/guest team shipped order 78 (`db616e06 fix(vault): drop uid/gid from
+podman secret mounts for rootful+keep-id compat`). Code-reviewed on macOS: it
+**exactly matches the diagnosis below** — all four `--secret` args
+(`secret_arg`/`tls_cert_arg`/`tls_key_arg`/`tls_ca_arg`) drop the
+`,mode=0400,uid=100,gid=1000` suffix (now just `VAULT_UNSEAL_SECRET.to_string()`,
+etc.), so the secrets mount with default ownership readable by the vault user
+under the VZ guest's **rootful** podman. `VAULT_USER_UID`/`VAULT_GROUP_GID`
+constants removed.
+
+**BLOCKER for macOS end-to-end validation: the fix is not in any RELEASE yet.**
+Latest release `v0.3.260622.3` (2026-06-21 21:26 PDT) predates the fix (committed
+2026-06-22 01:21 PDT). The macOS VM fetches the guest headless from
+`releases/latest`, so `--github-login` Vault will keep failing until a release
+contains `db616e06`. A local cross-compile to inject the fixed headless is not
+feasible on this host (Homebrew rust, no rustup → no aarch64-musl target std).
+
+**Next action (Linux coordinator / release cadence):** cut a release that
+includes `db616e06`; then the macOS team re-runs
+`tillandsias-tray --github-login` and expects Vault to come up
+(`bootstrap complete`) and the login to complete (token → Vault). machine-id
+stability + all other blockers already verified, so this should close the macOS
+`--github-login` loop.
+
 ## ROOT CAUSE FOUND (2026-06-22, macOS diagnostic) — NOT a timeout
 
 **The 60s→120s fix (order 77) does NOT fix macOS.** The macOS Vault failure is a

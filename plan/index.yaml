@@ -5696,3 +5696,122 @@ plan_index:
             Diagnosed via headless --exec-guest (health probe = connection
             refused; podman events = container died; foreground entrypoint =
             FATAL waiting on /run/secrets/...; podman secret ls = secret exists).
+
+    - packet_id: macos-tray-icon-missing-T-fallback
+      order: 79
+      title: "macOS tray status item shows fallback letter 'T' — tray-icon.png fails to load (151-byte placeholder + verify CI bundling)"
+      status: ready
+      kind: bug
+      deliverable: plan/issues/macos-tray-icon-missing-T-fallback-2026-06-22.md
+      depends_on: []
+      pickup_role: "macOS host (visual/AX verify) + CI release-bundling check"
+      outcome: >
+        The macOS tray menu-bar status item renders the Tillandsias glyph (a
+        template image), not the bare letter "T". Verified by a launched bundle +
+        AX/screencapture smoke asserting a non-text status item.
+      tasks:
+        - id: macos-tray-icon-missing-T-fallback/fix-icon
+          status: ready
+          depends_on: []
+          owned_files:
+            - crates/tillandsias-macos-tray/assets/tray-icon.png
+            - crates/tillandsias-macos-tray/src/status_item.rs
+            - .github/workflows/release.yml
+          checkpoint_required: true
+          handoff_note: >
+            load_status_icon_image (status_item.rs:185) returns None when
+            tray-icon.png fails to decode → setTitle("T") fallback. The bundled
+            assets/tray-icon.png is only 151 bytes (icon.png is 960) — likely a
+            broken placeholder. Replace with a valid menu-bar template glyph;
+            ensure the CI macos-release job bundles it into Contents/Resources/;
+            optionally fail the build if tray-icon.png is below a sane size.
+      events:
+        - type: finding
+          ts: "2026-06-22T23:40Z"
+          agent_id: "macos-claude-opus48-osx-next-20260622"
+          host: macos
+          note: >
+            Operator saw a bare "T" in the menu bar on the curl-installed
+            v0.3.260622.4 tray; menu items otherwise correct.
+
+    - packet_id: github-login-menu-readiness-gate
+      order: 80
+      title: "Gate the GitHub Login menu item on login-runtime readiness (init + required containers up), cross-platform"
+      status: ready
+      kind: enhancement
+      deliverable: plan/issues/github-login-menu-readiness-gate-2026-06-22.md
+      depends_on: []
+      pickup_role: "shared menu_state (host-shell); verify on linux + macos + windows"
+      outcome: >
+        The GitHub Login menu item appears only when (logged-out AND the runtime
+        can execute the login: --init complete + Vault/git/egress containers up),
+        on all three platforms via the single shared build_menu rule.
+      tasks:
+        - id: github-login-menu-readiness-gate/add-readiness-condition
+          status: ready
+          depends_on: []
+          owned_files:
+            - crates/tillandsias-host-shell/src/menu_state.rs
+            - crates/tillandsias-headless/src/tray/mod.rs
+          checkpoint_required: true
+          handoff_note: >
+            build_menu (menu_state.rs ~322-360) is auth-gated only; add a
+            login_runtime_ready signal (init complete + login-required containers
+            present, sourced from the control-wire status / podman_ready) and emit
+            the github-login leaf only when logged-out AND ready, else a
+            provisioning/"Setting up…" line. Keep it one shared rule so
+            macOS/Windows/Linux stay parity-aligned. Unit-test the item sets +
+            macOS AX smoke (login item absent before init, present after).
+      events:
+        - type: finding
+          ts: "2026-06-22T23:40Z"
+          agent_id: "macos-claude-opus48-osx-next-20260622"
+          host: macos
+          note: >
+            Operator directive: do not show GitHub Login until the login flow CAN
+            run (init + containers). Per-platform readiness defined in deliverable.
+
+    - packet_id: vault-unseal-fails-macos-after-db616e06
+      order: 81
+      title: "macOS Vault still fails init/unseal after db616e06 (unseal API HTTP 400 / never-unsealed) — order-78 necessary but not sufficient"
+      status: ready
+      kind: bug
+      deliverable: plan/issues/macos-github-login-vault-bootstrap-timeout-2026-06-22.md
+      depends_on: []
+      pickup_role: "Linux/guest team (vault_bootstrap.rs + images/vault entrypoint); reproduces only on macOS VZ guest"
+      outcome: >
+        Vault reaches initialized && !sealed on the macOS VZ guest so
+        wait_for_vault_ready succeeds and --github-login completes the Vault write.
+      tasks:
+        - id: vault-unseal-fails-macos-after-db616e06/fix-unseal
+          status: ready
+          depends_on: []
+          owned_files:
+            - crates/tillandsias-headless/src/vault_bootstrap.rs
+            - images/vault/Containerfile
+            - images/vault/entrypoint.sh
+          checkpoint_required: true
+          handoff_note: >
+            VALIDATED on released v0.3.260622.4 (db616e06 present): db616e06 fixed
+            the secret-readability crash (foreground run shows "unseal key
+            material loaded (32 bytes)", vault server starts, "vault API
+            responsive"), but the entrypoint's UNSEAL step fails — "subsequent
+            boot: using unseal key" -> curl /v1/sys/unseal returns HTTP 400; and a
+            FRESH volume still times out "did not become healthy within 60s"
+            (vault stays sealed). So db616e06 is necessary but not sufficient on
+            the macOS VZ guest (rootful podman, Vault 1.18.5). Investigate the
+            entrypoint auto-unseal flow / the unseal API request format under this
+            setup. Reproduces only on macOS; diagnose via the tray --exec-guest +
+            a foreground `podman run` of the vault image (no -d --rm) — see
+            deliverable for the exact replication command + evidence.
+      events:
+        - type: finding
+          ts: "2026-06-23T00:30Z"
+          agent_id: "macos-claude-opus48-osx-next-20260623"
+          host: macos
+          note: >
+            Surfaced during the macOS curl-install e2e of the released
+            v0.3.260622.4 (which DID ship db616e06). Unattended install→provision→
+            boot→exec all validated; Vault is the only remaining blocker for
+            --github-login. db616e06 advanced the failure from "secret unreadable
+            crash-loop" to "starts but unseal returns 400 / stays sealed".
