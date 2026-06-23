@@ -1,7 +1,19 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-23T07:05Z
+LastExecutionTime: 2026-06-23T09:25Z
 
+
+## This Loop (2026-06-23T09:25Z, linux_mutable — big-pickle meta-orch)
+
+- **Cycle type**: worker drain (order 80 — shared menu_state layer).
+- **Startup**: `linux-next @ 6cdaa8ac`, dirty (uncommitted LITMUS_PODMAN_MODE + VERSION bump). Checkpoint committed as `c5d97860`, pushed.
+- **Credential Channel Guard**: passed (`ok:gh-keyring`).
+- **Worker drain**: Claimed and completed `github-login-menu-readiness-gate/add-readiness-condition` (order 80). Added `login_runtime_ready` field to `MenuState`; when `false` and logged-out, the GitHub Login item is replaced by a disabled "Setting up…" entry. Shared portable menu only — macOS AX smoke still needs macOS host. Commit `1d6574b4`.
+- **Build check**: `./build.sh --check` passes. 10/10 menu_state tests + 1 portable_smoke test pass.
+- **E2E gates**: Skipped — plan-only Rust change, no runtime/image delta.
+- **Coordinator**: Siblings unchanged — `origin/windows-next` and `origin/osx-next` are both ancestors of `origin/linux-next @ 1d6574b4`. No merge needed.
+- **Release**: Latest is v0.3.260622.4. No new release work.
+- **Push state**: Pushed `linux-next` with order 80 completion.
 
 ## This Loop (2026-06-23T07:05Z, linux_mutable — Sonnet 4.6 meta-orch)
 
