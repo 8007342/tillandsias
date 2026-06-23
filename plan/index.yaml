@@ -6125,22 +6125,30 @@ plan_index:
     - id: vault-persistence-research
       order: 89
       title: Investigate and implement vault persistence across container recreation
-      status: ready
+      status: claimed
       owner_host: linux
       deliverable: plan/issues/vault-persistence-research.md
       audit_origin: plan/issues/vault-persistence-research.md
       depends_on: []
+      pickup_role: linux
       exit_criteria:
         - "Vault data survives container recreation."
         - "Host keyring unseal key successfully unlocks preserved vault."
       tasks:
         - id: vault-persistence/research-and-implement
-          status: ready
+          status: claimed
           owner_host: linux
           estimated_hours: 2
           owned_files:
             - plan/issues/vault-persistence-research.md
           next_action: "Investigate vault container mount options and implement persistence."
+      events:
+        - type: claim
+          ts: "2026-06-23T20:42:00Z"
+          agent_id: "linux-big-pickle-20260623T2042Z"
+          host: linux_mutable
+          lease_id: "vault-persistence-research-20260623T2042Z"
+          expires_at: "2026-06-24T00:42:00Z"
 
     - id: zeroclaw-progress
       order: 90
