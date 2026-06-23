@@ -1,7 +1,21 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-23T06:15Z
+LastExecutionTime: 2026-06-23T07:05Z
 
+
+## This Loop (2026-06-23T07:05Z, linux_mutable — Sonnet 4.6 meta-orch)
+
+- **Cycle type**: worker drain + coordinator duties.
+- **Startup**: `linux-next @ 4af42998`, clean. Credential Channel Guard passed (`ok:gh-keyring`).
+- **Litmus fix committed**: `4af42998` — add `--init` to litmus status-check steps, `LITMUS_PODMAN_MODE` bypass for `require_desktop_user_session`.
+- **Pull/rebase**: rebased onto `7bceae3b` (forge transparent git mirror fix, v0.3.260622.4 release record).
+- **Merge coordinator**: Merged `origin/osx-next` (5 plan-only commits: orders 79-81, install-macos diag-pin bug `49324fe6`, unified curl-install parity `5345a3e9`). `origin/windows-next` is still ancestor.
+- **Worker drain**: Implemented order 81 (vault unseal macOS GetVaultHandover race fix + 120s→180s timeout). Commit `8e6f25b1`.
+- **Orders 79-80**: macOS-owner tasks (tray icon PNG fix + GitHub Login readiness gate). Not actionable on Linux without macOS visual verify.
+- **E2E gates**: No new release yet. Vault fix (order 81) should trigger a release for macOS to re-test.
+- **Release**: Needs Tlatoāni trigger or linux merge-to-main skill for v0.3.260623.x.
+- **Litmus**: 110/110 PASS after all changes.
+- **Push state**: Pushing linux-next with litmus fix + osx-next merge + order 81.
 
 ## This Loop (2026-06-23T06:15Z, forge — big-pickle meta-orch)
 

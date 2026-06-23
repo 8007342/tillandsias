@@ -5774,7 +5774,7 @@ plan_index:
     - packet_id: vault-unseal-fails-macos-after-db616e06
       order: 81
       title: "macOS Vault still fails init/unseal after db616e06 (unseal API HTTP 400 / never-unsealed) — order-78 necessary but not sufficient"
-      status: ready
+      status: in_progress
       kind: bug
       deliverable: plan/issues/macos-github-login-vault-bootstrap-timeout-2026-06-22.md
       depends_on: []
@@ -5784,7 +5784,7 @@ plan_index:
         wait_for_vault_ready succeeds and --github-login completes the Vault write.
       tasks:
         - id: vault-unseal-fails-macos-after-db616e06/fix-unseal
-          status: ready
+          status: in_progress
           depends_on: []
           owned_files:
             - crates/tillandsias-headless/src/vault_bootstrap.rs
@@ -5815,3 +5815,23 @@ plan_index:
             boot→exec all validated; Vault is the only remaining blocker for
             --github-login. db616e06 advanced the failure from "secret unreadable
             crash-loop" to "starts but unseal returns 400 / stays sealed".
+        - type: progress
+          ts: "2026-06-23T07:00Z"
+          agent_id: "linux-sonnet46-meta-orch-20260623T0700Z"
+          host: linux
+          lease_id: "vault-unseal-fails-macos-after-db616e06/fix-unseal"
+          commits: ["8e6f25b1"]
+          note: >
+            Root-caused the HTTP 400 subsequent-boot failure as a GetVaultHandover
+            race: the macOS tray queries GetVaultHandover before vault operator init
+            completes, gets None, skips keychain write → subsequent boot sends
+            unseal_share_b64=None → ensure_unseal_key falls back to HKDF dummy key
+            (≠ vault's random Shamir key) → HTTP 400. Fix: vsock_server.rs
+            GetVaultHandover handler now polls PENDING_HANDOVER up to 8s before
+            returning None. Also raised wait_for_vault_ready timeout 120s→180s for
+            macOS cold-start headroom (order-77 120s still insufficient), and fixed
+            the stale "60s" error message. Shipped as commit 8e6f25b1 on linux-next.
+            Pending: macOS verification that this resolves the unseal failure on
+            --github-login. If subsequent boot still fails after this fix, investigate
+            the FRESH volume timeout — may need even longer timeout or VM resource
+            investigation.

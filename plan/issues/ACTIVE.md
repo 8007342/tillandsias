@@ -1,6 +1,19 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-23T06:15Z
+Last updated: 2026-06-23T07:05Z
+
+## This Cycle (2026-06-23T07:05Z, linux_mutable — Sonnet 4.6 meta-orch)
+
+- **Startup**: `linux-next @ 4af42998`, clean after push. Credential Channel Guard passed (`ok:gh-keyring`).
+- **Commit first**: Committed locally-staged litmus/LITMUS_PODMAN_MODE fix as `4af42998`.
+- **Pull/rebase**: `git pull --rebase origin linux-next` → clean rebase onto `7bceae3b`.
+- **Coordination**: Merged `origin/osx-next` (5 new plan-only commits: orders 79-81, install-macos diag-pin bug, unified curl-install parity gap). Merge commit added to linux-next.
+- **Worker drain**: 3 new ready nodes visible after merge (orders 79, 80, 81). Claimed and implemented order 81 (vault unseal macOS):
+  - **Root cause**: `GetVaultHandover` vsock handler returned `None` immediately if queried before vault operator init completed → macOS tray skipped keychain write → subsequent boot sent wrong unseal key → HTTP 400.
+  - **Fix**: Added 8s poll in `GetVaultHandover` handler (vsock_server.rs) + raised `wait_for_vault_ready` 120s→180s + fixed stale "60s" error message (vault_bootstrap.rs). Commit `8e6f25b1`.
+- **Pending macOS verification**: Orders 79 (tray icon PNG), 80 (GitHub Login readiness gate), and the macOS e2e re-smoke of order 81 require macOS host.
+- **Release**: v0.3.260622.4 is current. Order 81 fix warrants a new release for macOS to test.
+- **Push state**: Pushing linux-next with litmus fix + osx-next merge + order 81 vault fix.
 
 ## This Cycle (2026-06-23T06:15Z, forge — big-pickle meta-orch)
 
