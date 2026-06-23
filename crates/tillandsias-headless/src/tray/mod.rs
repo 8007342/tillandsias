@@ -3136,7 +3136,14 @@ impl DbusMenuIface {
                         // stores the token in Vault, never in host gh, so the
                         // host keyring is the wrong source of truth.
                         let debug = service_for_task.snapshot().debug;
-                        let authed = crate::vault_bootstrap::is_github_logged_in(debug);
+                        let mut authed = false;
+                        for _ in 0..120 {
+                            authed = crate::vault_bootstrap::is_github_logged_in(debug);
+                            if authed {
+                                break;
+                            }
+                            std::thread::sleep(std::time::Duration::from_secs(1));
+                        }
                         service_for_task.with_state(|state| {
                             state.is_authenticated = authed;
                             state.bump_revision();

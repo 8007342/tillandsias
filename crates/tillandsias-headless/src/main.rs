@@ -4183,6 +4183,9 @@ fn run_github_login(debug: bool) -> Result<(), String> {
     if let Some(username) = username.filter(|value| !value.is_empty()) {
         println!("[tillandsias] GitHub authentication complete for {username}");
     }
+    
+    // Add a 5 second delay so the user can see the success message before the popup terminal closes
+    std::thread::sleep(std::time::Duration::from_secs(5));
 
     Ok(())
 }
