@@ -6214,17 +6214,24 @@ plan_index:
     - id: zeroclaw-crate-scaffold
       order: 91
       title: "ZeroClaw Packet A: Create Zeroclaw Rust crate (port NanoClawV2 MCP)"
-      status: ready
+      status: done
       owner_host: linux
-      deliverable: plan/issues/zeroclaw-progress.md
+      deliverable: crates/tillandsias-zeroclaw/
       depends_on: []
       pickup_role: linux
       estimated_hours: 2
+      closed_at: "2026-06-23T21:42Z"
+      closed_by: "linux-sonnet46-meta-orch-20260623T2142Z"
       exit_criteria:
         - "crates/tillandsias-zeroclaw/ exists with Cargo.toml and src/main.rs"
         - "MCP broker code (allowlist, Unix socket server, project-scope enforcement) ported from NanoClawV2"
         - "cargo test -p tillandsias-zeroclaw passes (all allowlist + smoke tests)"
-      next_action: "Scaffold crate, port NanoClawV2 MCP code, verify tests pass."
+      outcome: >
+        crates/tillandsias-zeroclaw/ created with Cargo.toml (Apache-2.0),
+        src/main.rs, src/lib.rs, src/allowlist.rs, src/server.rs. All tool
+        names renamed nanoclaw.* → zeroclaw.*. 12/12 tests pass (9 allowlist
+        unit tests + 3 integration smoke tests). Added to workspace members
+        and workspace deps. build.sh --check PASS.
 
     - id: zeroclaw-containerfile
       order: 92

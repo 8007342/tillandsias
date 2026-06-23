@@ -3240,6 +3240,20 @@ dependencies = [
 ]
 
 [[package]]
+name = "tillandsias-zeroclaw"
+version = "0.1.0"
+dependencies = [
+ "libc",
+ "serde_json",
+ "tempfile",
+ "thiserror",
+ "tillandsias-browser-mcp",
+ "tokio",
+ "tracing",
+ "tracing-subscriber",
+]
+
+[[package]]
 name = "time"
 version = "0.3.47"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -1,6 +1,14 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-23T20:36Z
+Last updated: 2026-06-23T21:42Z
+
+## This Cycle (2026-06-23T21:42Z, linux_mutable — Sonnet 4.6 meta-orch cycle 2 — order 91)
+
+- **Startup**: `linux-next @ a41d2344`, clean. Credential channel: `ok:gh-keyring`.
+- **Order 91 done**: `crates/tillandsias-zeroclaw/` created. Apache-2.0. Full NanoClawV2 MCP port with zeroclaw.* tool names. 12/12 tests pass. build.sh --check PASS.
+- **Orders 92-97**: Ready, sequential dependency chain. Next: order 92 (Containerfile).
+- **Siblings**: both ancestors — no merge needed.
+- **Release**: v0.3.260623.3 on main (landed by other agent). Needs `gh workflow run release.yml --ref v0.3.260623.3`.
 
 ## This Cycle (2026-06-23T20:36Z, linux_mutable — Sonnet 4.6 meta-orch — orders 86/87/88)
 

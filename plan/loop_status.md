@@ -1,6 +1,15 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-23T20:56Z
+LastExecutionTime: 2026-06-23T21:42Z
+
+## This Loop (2026-06-23T21:42Z, linux_mutable — Sonnet 4.6 meta-orch cycle 2 — order 91 ZeroClaw crate)
+
+- **Cycle type**: worker drain — order 91 ZeroClaw crate scaffold.
+- **Startup**: `linux-next @ a41d2344`, clean. Credential channel: `ok:gh-keyring`. Siblings: `osx-next@85e69f14`, `windows-next@a3c8b23d` — both ancestors.
+- **Pulled**: another agent landed orders 89/90 + v0.3.260623.3 release bump. Orders 91-97 (ZeroClaw migration chain) filed as ready.
+- **Order 91** (zeroclaw-crate-scaffold): Created `crates/tillandsias-zeroclaw/` — Apache-2.0, full port of NanoClawV2 MCP with nanoclaw.* → zeroclaw.* renames. Added to workspace. 12/12 tests pass. build.sh --check PASS.
+- **Coordinator**: Siblings unchanged — no merge needed.
+- **Next**: Orders 92-97 remain (Containerfile, tray wiring, image registration, litmus rename, remove legacy, plan ledger).
 
 ## This Loop (2026-06-23T20:42Z, linux_mutable — big-pickle meta-orch — orders 89/90)
 

@@ -1,0 +1,27 @@
+[package]
+name = "tillandsias-zeroclaw"
+version = "0.1.0"
+edition = "2024"
+license = "Apache-2.0"
+authors = ["Tlatoani"]
+publish = false
+description = "Host-resident MCP server for ZeroClaw project-scoped orchestration."
+
+[[bin]]
+name = "tillandsias-zeroclaw"
+path = "src/main.rs"
+
+[dependencies]
+serde_json = "1"
+libc = "0.2"
+thiserror = { workspace = true }
+tokio = { workspace = true, features = ["net", "io-util", "rt-multi-thread", "process", "sync", "time", "macros"] }
+tracing = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# Reuse the JSON-RPC framing from the browser-mcp crate.
+tillandsias-browser-mcp = { workspace = true }
+
+[dev-dependencies]
+tempfile = "3"
+tokio = { workspace = true, features = ["full"] }
