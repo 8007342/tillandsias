@@ -1156,9 +1156,10 @@ fn wait_for_vault_ready(
     base_url: &str,
     debug: bool,
 ) -> Result<String, String> {
-    // 120s: native Linux resolves in ~1s; VM guests (macOS VZ 4 GiB, WSL2) need
-    // more headroom for cold first-init under resource pressure (order 77).
-    let deadline = Instant::now() + Duration::from_secs(120);
+    // 180s: native Linux resolves in ~1s; macOS VZ 4 GiB guests under cold
+    // first-init resource pressure (concurrent forge image pulls + vault init)
+    // can exceed 120s (order 81). WSL2 also benefits from extra headroom.
+    let deadline = Instant::now() + Duration::from_secs(180);
     let client = vault_client(base_url, "", debug)?; // health doesn't need a token
     loop {
         match rt.block_on(client.health()) {
@@ -1179,7 +1180,7 @@ fn wait_for_vault_ready(
             _ => {}
         }
         if Instant::now() > deadline {
-            return Err("vault did not become healthy within 60s".to_string());
+            return Err("vault did not become healthy within 180s".to_string());
         }
         std::thread::sleep(Duration::from_secs(2));
     }

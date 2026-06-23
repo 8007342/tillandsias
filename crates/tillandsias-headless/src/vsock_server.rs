@@ -584,7 +584,24 @@ async fn handle_connection(
                 }
             }
             ControlMessage::GetVaultHandover { seq } => {
-                let (unseal_share_b64, root_token) = crate::vault_bootstrap::get_pending_handover();
+                // Poll up to ~8s for the handover to arrive. On first boot, the tray
+                // may call GetVaultHandover slightly before vault operator init has
+                // completed and written the handover to PENDING_HANDOVER. Returning None
+                // immediately would cause the tray to skip saving the Shamir key to the
+                // keychain, leaving subsequent boots unable to unseal (HTTP 400).
+                let (unseal_share_b64, root_token) = {
+                    let mut result = crate::vault_bootstrap::get_pending_handover();
+                    if result.0.is_none() {
+                        for _ in 0..8u8 {
+                            tokio::time::sleep(std::time::Duration::from_secs(1)).await;
+                            result = crate::vault_bootstrap::get_pending_handover();
+                            if result.0.is_some() {
+                                break;
+                            }
+                        }
+                    }
+                    result
+                };
                 crate::vault_bootstrap::clear_pending_handover();
 
                 let reply = ControlEnvelope {
