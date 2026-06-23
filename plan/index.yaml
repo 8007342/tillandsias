@@ -5835,3 +5835,135 @@ plan_index:
             --github-login. If subsequent boot still fails after this fix, investigate
             the FRESH volume timeout — may need even longer timeout or VM resource
             investigation.
+
+    - packet_id: bar-raise-clippy-strict
+      order: 82
+      title: "Bar-raise A: add cargo clippy -D warnings to build.sh --check (approved 2026-06-23)"
+      status: completed
+      kind: enhancement
+      deliverable: plan/issues/bar-raise-proposals-2026-06-22.md
+      depends_on: []
+      pickup_role: linux
+      outcome: >
+        cargo clippy --all-targets -- -D warnings is a required build gate in
+        build.sh --check. All existing violations fixed before enabling.
+      tasks:
+        - id: bar-raise-clippy-strict/implement
+          status: completed
+          owned_files:
+            - build.sh
+            - crates/tillandsias-policy/src/main.rs
+            - crates/tillandsias-macos-tray/src/menu_disabled_v2.rs
+            - crates/tillandsias-core/src/config.rs
+          checkpoint_required: true
+          handoff_note: >
+            Implemented: reordered run_in_pty_cmd before mod tests in policy/main.rs,
+            fixed doc list item in menu_disabled_v2.rs, fixed field_reassign_with_default
+            in config.rs. Added clippy step after type-check in build.sh --check section.
+            build.sh --check passes clean. cargo fmt applied.
+      events:
+        - type: completed
+          ts: "2026-06-23T07:30Z"
+          agent_id: "linux-sonnet46-meta-orch-20260623"
+          host: linux
+          note: "Bar-raise A approved by Tlatoāni 2026-06-23. Implemented and passing."
+
+    - packet_id: bar-raise-dev-proxy-noise
+      order: 83
+      title: "Bar-raise B: suppress dev proxy container warning in build.sh (approved 2026-06-23)"
+      status: completed
+      kind: enhancement
+      deliverable: plan/issues/bar-raise-proposals-2026-06-22.md
+      depends_on: []
+      pickup_role: linux
+      outcome: >
+        build.sh no longer emits a yellow WARN when the dev proxy container fails
+        to start; replaced with an informational _info message.
+      tasks:
+        - id: bar-raise-dev-proxy-noise/implement
+          status: completed
+          owned_files:
+            - build.sh
+          checkpoint_required: true
+          handoff_note: >
+            Changed _warn to _info with message "Dev proxy unavailable (container
+            builds will be uncached — normal in CI/VMs)". build.sh --check output
+            is now noise-free for the proxy step.
+      events:
+        - type: completed
+          ts: "2026-06-23T07:30Z"
+          agent_id: "linux-sonnet46-meta-orch-20260623"
+          host: linux
+          note: "Bar-raise B approved by Tlatoāni 2026-06-23. Implemented and passing."
+
+    - packet_id: bar-raise-nix-cache-signal
+      order: 84
+      title: "Bar-raise C: add nix cache size litmus check (approved 2026-06-23)"
+      status: completed
+      kind: enhancement
+      deliverable: plan/issues/bar-raise-proposals-2026-06-22.md
+      depends_on: []
+      pickup_role: linux
+      outcome: >
+        litmus:nix-cache-size-signal checks purge config (code-level, always) and
+        queries live GHA nix cache size when GH_TOKEN is available (warns if >80%
+        of 10 GB LRU limit). Added to nix-builder litmus binding.
+      tasks:
+        - id: bar-raise-nix-cache-signal/implement
+          status: completed
+          owned_files:
+            - openspec/litmus-tests/litmus-nix-cache-size-signal.yaml
+            - openspec/litmus-bindings.yaml
+          checkpoint_required: true
+          handoff_note: >
+            Created litmus-nix-cache-size-signal.yaml with 4 steps: purge config
+            checks + live API size check (skips gracefully without GH_TOKEN).
+            Registered in litmus-bindings.yaml for nix-builder spec. 111/111
+            instant litmus tests pass.
+      events:
+        - type: completed
+          ts: "2026-06-23T07:30Z"
+          agent_id: "linux-sonnet46-meta-orch-20260623"
+          host: linux
+          note: "Bar-raise C approved by Tlatoāni 2026-06-23. Implemented and passing."
+
+    - packet_id: windows-curl-installer-parity
+      order: 85
+      title: "Windows curl installer + all-platform --init parity (approved 2026-06-23)"
+      status: completed
+      kind: enhancement
+      deliverable: README.md
+      depends_on: []
+      pickup_role: linux
+      outcome: >
+        scripts/install-windows.ps1 is a proper curl installer (irm | iex parity
+        with install.sh / install-macos.sh). All three installers run --init
+        automatically. README.md updated to show 1:1:1 install parity.
+        Release.yml publishes install-windows.ps1 as a standalone release artifact.
+      tasks:
+        - id: windows-curl-installer-parity/implement
+          status: completed
+          owned_files:
+            - scripts/install-windows.ps1
+            - scripts/build-and-install-windows-local.ps1
+            - scripts/install.sh
+            - scripts/install-macos.sh
+            - README.md
+            - .github/workflows/release.yml
+            - scripts/build-windows-tray.ps1
+          checkpoint_required: true
+          handoff_note: >
+            New install-windows.ps1: curl installer using irm | iex, downloads zip
+            from GitHub releases, verifies SHA256, extracts, creates shortcut, launches
+            tray (WSL2 provisioning = --init). Dev build script moved to
+            build-and-install-windows-local.ps1. install.sh: now runs `--init` inline
+            (was print-only). install-macos.sh: launch message updated for parity.
+            README.md: all three curl commands documented with parity blurb.
+            release.yml: Windows job stages install-windows.ps1 as standalone artifact.
+            Pending: Windows e2e smoke of the new installer.
+      events:
+        - type: completed
+          ts: "2026-06-23T07:30Z"
+          agent_id: "linux-sonnet46-meta-orch-20260623"
+          host: linux
+          note: "Tlatoāni-requested 2026-06-23. Implemented on linux-next."

@@ -506,8 +506,9 @@ specs:
   status: active
   litmus_tests:
   - litmus:nix-builder-shape
+  - litmus:nix-cache-size-signal
   coverage_ratio: 100
-  last_verified: '2026-05-13'
+  last_verified: '2026-06-23'
 - spec_id: no-terminal-flicker
   status: active
   litmus_tests:

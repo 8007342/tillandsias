@@ -191,5 +191,7 @@ else
     die "$TRAY_BIN missing or not executable; tarball extracted but binary is broken"
 fi
 
-say "launching $DEST"
+say "Launching Tillandsias (--init / VM provisioning runs automatically on first launch)..."
 open -a "$DEST" || say "warning: open returned non-zero — try the right-click Open above"
+say "Tray started. Look for the Tillandsias icon in the menu bar."
+say "(Provisioning runs in the background on first launch — no extra step needed.)"

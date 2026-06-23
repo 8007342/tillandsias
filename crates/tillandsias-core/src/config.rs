@@ -1013,9 +1013,11 @@ hot_path_inflation = 6
         // A user might raise inflation to 8 (large working trees) and
         // lower the ceiling to 2048 (constrained host RAM). Both knobs
         // must compose with the clamp logic.
-        let mut config = ForgeConfig::default();
-        config.hot_path_inflation = 8;
-        config.hot_path_max_mb = 2048;
+        let config = ForgeConfig {
+            hot_path_inflation: 8,
+            hot_path_max_mb: 2048,
+            ..ForgeConfig::default()
+        };
 
         // 100 MiB × 8 = 800 MiB (within [256, 2048]).
         let mid = compute_hot_budget(100 * 1024, &config);

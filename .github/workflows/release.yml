@@ -429,6 +429,15 @@ jobs:
             echo "::endgroup::"
           done
 
+      - name: Stage install-windows.ps1 as standalone curl installer
+        shell: pwsh
+        run: |
+          # Publish install-windows.ps1 as a top-level release artifact so users
+          # can curl-install without downloading the zip first (parity with
+          # install.sh on Linux and install-macos.sh on macOS).
+          Copy-Item scripts\install-windows.ps1 release-artifacts\install-windows.ps1
+          Write-Host "Staged install-windows.ps1 as standalone release artifact"
+
       - name: Upload Windows assets to release
         shell: bash
         env:

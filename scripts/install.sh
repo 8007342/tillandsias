@@ -242,11 +242,14 @@ else
 fi
 
 echo ""
-say "Run now: $INSTALL_PATH --init --debug"
-say "Then: $INSTALL_PATH --debug --tray"
+say "Running tillandsias --init (sets up local runtime — may take a minute)..."
+"$INSTALL_PATH" --init
+echo ""
+say "Init complete. Launch the tray with:"
 if path_has_dir "$INSTALL_DIR"; then
-    say "Command name is available now: tillandsias --init --debug"
+    say "  tillandsias --tray"
 else
-    say "After opening a new shell: tillandsias --init --debug"
+    say "  $INSTALL_PATH --tray"
+    say "  (open a new shell first to get 'tillandsias' on PATH)"
 fi
 echo ""

@@ -305,7 +305,7 @@ ensure_dev_cache() {
             --volume "$ca_cert:/etc/squid/certs/intermediate.crt:ro,Z" \
             --volume "$ca_key:/etc/squid/certs/intermediate.key:ro,Z" \
             "$proxy_image" >/dev/null 2>&1; then
-            _warn "Failed to start dev proxy container"
+            _info "Dev proxy unavailable (container builds will be uncached — normal in CI/VMs)"
             return 0
         fi
 
@@ -658,6 +658,10 @@ if [[ "$FLAG_CHECK" == true ]]; then
     _step "Type-checking workspace..."
     _run cargo check --workspace --manifest-path "$SCRIPT_DIR/Cargo.toml" 2>&1
     _info "Type-check passed"
+
+    _step "Running clippy (strict)..."
+    _run cargo clippy --all-targets --manifest-path "$SCRIPT_DIR/Cargo.toml" -- -D warnings 2>&1
+    _info "Clippy passed"
 
     # If --check is the only remaining flag, exit
     if [[ "$FLAG_RELEASE$FLAG_TEST$FLAG_CLEAN$FLAG_INSTALL$FLAG_CI$FLAG_CI_FULL$FLAG_REMOVE$FLAG_WIPE" == "falsefalsefalsefalsefalsefalsefalsefalse" ]]; then

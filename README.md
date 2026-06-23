@@ -8,6 +8,9 @@ A portable Linux binary that makes software appear — safely, locally, reproduc
 
 ## Install
 
+All three installers download the binary, verify SHA-256, and run
+`tillandsias --init` automatically — no extra step required.
+
 **Linux (Fedora Silverblue, Ubuntu, Debian, etc.)**
 ```bash
 curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install.sh | bash
@@ -18,26 +21,26 @@ curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/insta
 curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install-macos.sh | bash
 ```
 
-**Windows (10/11 with WSL2)**
-Download the latest [`tillandsias-tray-windows-x64.zip`](https://github.com/8007342/tillandsias/releases/latest) and run:
+**Windows 10/11 (WSL2 required — run in PowerShell or Windows Terminal)**
 ```powershell
-scripts\install-windows.ps1 -Provision -Launch
+irm https://github.com/8007342/tillandsias/releases/latest/download/install-windows.ps1 | iex
 ```
 
-The installer downloads the musl-static binary for your platform. On macOS and Windows, it provisions a lightweight Fedora-based utility VM to host the Linux-native enclave. Podman is the only runtime dependency (auto-installed in the VM on macOS/Windows; required on the host for Linux).
+Each installer provisions the local runtime on first run:
+- **Linux**: runs `tillandsias --init` inline in your terminal.
+- **macOS**: launches the tray, which provisions a Fedora VM automatically.
+- **Windows**: launches the tray, which provisions a Fedora WSL2 distro automatically.
+
+Podman is the only host dependency on Linux (auto-detected). macOS and Windows
+provision a lightweight Fedora-based utility VM; no host Podman required.
 
 ## Run
 
-Initialize the local runtime after installing:
-
-```bash
-tillandsias --init --debug
-```
-
 **Desktop (Tray Mode):**
-Simply launch the application. A tray icon appears in your system menu/taskbar. Click to view projects and container status.
+The installer launches the tray automatically. A tray icon appears in your
+system menu bar / notification area. Click it to view projects and container status.
 
-**Headless (CLI/Automation):**
+**Headless (CLI/Automation — Linux only):**
 ```bash
 tillandsias --headless /path/to/project
 ```

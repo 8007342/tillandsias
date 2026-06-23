@@ -203,7 +203,7 @@ mod tests {
     /// @trace spec:macos-native-tray.ui.menu-parity@v1
     ///
     /// Drift-protection for gap-2 (`plan/issues/macos-tray-ux-gaps-2026-05-29.md`)
-    /// + F3 (`plan/issues/macos-m8-interactive-smoke-failures-2026-06-16.md`):
+    /// and F3 (`plan/issues/macos-m8-interactive-smoke-failures-2026-06-16.md`):
     /// when authenticated, the macOS Ready menu MUST surface exactly the 8
     /// login-gated top-level items in parity-contract order — no macOS-only
     /// extras, no reordering, no missing rows, and crucially NO `github-login`

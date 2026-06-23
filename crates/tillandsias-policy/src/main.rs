@@ -4625,6 +4625,92 @@ fn regen_canonicalize(text: &str) -> String {
     result
 }
 
+#[cfg(unix)]
+fn run_in_pty_cmd(args: &[String]) {
+    use nix::pty::{ForkptyResult, forkpty};
+    use nix::unistd::execvp;
+    use std::ffi::CString;
+    use std::io::{self, Read, Write};
+    use std::os::unix::io::AsRawFd;
+    use std::os::unix::io::FromRawFd;
+
+    if args.is_empty() {
+        eprintln!("error: run-in-pty requires a command");
+        process::exit(2);
+    }
+
+    let program = CString::new(args[0].as_bytes()).unwrap();
+    let c_args: Vec<CString> = args
+        .iter()
+        .map(|s| CString::new(s.as_bytes()).unwrap())
+        .collect();
+
+    match unsafe { forkpty(None, None) } {
+        Ok(ForkptyResult::Parent { child, master }) => {
+            let master_fd = master.as_raw_fd();
+            let mut master_file = unsafe { std::fs::File::from_raw_fd(master_fd) };
+            let mut stdout = io::stdout();
+            let mut buf = [0u8; 4096];
+
+            loop {
+                match master_file.read(&mut buf) {
+                    Ok(0) => break, // EOF
+                    Ok(n) => {
+                        let _ = stdout.write_all(&buf[..n]);
+                        let _ = stdout.flush();
+                    }
+                    Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
+                        std::thread::sleep(std::time::Duration::from_millis(10));
+                    }
+                    Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
+                    Err(_) => break, // EIO on child exit
+                }
+            }
+
+            use nix::sys::wait::waitpid;
+            match waitpid(child, None) {
+                Ok(nix::sys::wait::WaitStatus::Exited(_, code)) => {
+                    process::exit(code);
+                }
+                Ok(nix::sys::wait::WaitStatus::Signaled(_, sig, _)) => {
+                    process::exit(128 + sig as i32);
+                }
+                _ => {
+                    process::exit(1);
+                }
+            }
+        }
+        Ok(ForkptyResult::Child) => {
+            let err = execvp(&program, &c_args);
+            eprintln!("failed to exec: {err:?}");
+            process::exit(1);
+        }
+        Err(err) => {
+            eprintln!("forkpty failed: {err:?}");
+            process::exit(1);
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn run_in_pty_cmd(args: &[String]) {
+    if args.is_empty() {
+        eprintln!("error: run-in-pty requires a command");
+        process::exit(2);
+    }
+    let mut cmd = process::Command::new(&args[0]);
+    cmd.args(&args[1..]);
+    match cmd.status() {
+        Ok(status) => {
+            process::exit(status.code().unwrap_or(1));
+        }
+        Err(err) => {
+            eprintln!("failed to run command: {err:?}");
+            process::exit(1);
+        }
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -4813,91 +4899,5 @@ trailing"#;
         // Digits without a trailing % do not match the grep pattern.
         assert_eq!(parse_completeness_pct("Completeness: 9 / 12"), None);
         assert_eq!(parse_completeness_pct("no completeness here"), None);
-    }
-}
-
-#[cfg(unix)]
-fn run_in_pty_cmd(args: &[String]) {
-    use nix::pty::{ForkptyResult, forkpty};
-    use nix::unistd::execvp;
-    use std::ffi::CString;
-    use std::io::{self, Read, Write};
-    use std::os::unix::io::AsRawFd;
-    use std::os::unix::io::FromRawFd;
-
-    if args.is_empty() {
-        eprintln!("error: run-in-pty requires a command");
-        process::exit(2);
-    }
-
-    let program = CString::new(args[0].as_bytes()).unwrap();
-    let c_args: Vec<CString> = args
-        .iter()
-        .map(|s| CString::new(s.as_bytes()).unwrap())
-        .collect();
-
-    match unsafe { forkpty(None, None) } {
-        Ok(ForkptyResult::Parent { child, master }) => {
-            let master_fd = master.as_raw_fd();
-            let mut master_file = unsafe { std::fs::File::from_raw_fd(master_fd) };
-            let mut stdout = io::stdout();
-            let mut buf = [0u8; 4096];
-
-            loop {
-                match master_file.read(&mut buf) {
-                    Ok(0) => break, // EOF
-                    Ok(n) => {
-                        let _ = stdout.write_all(&buf[..n]);
-                        let _ = stdout.flush();
-                    }
-                    Err(e) if e.kind() == io::ErrorKind::WouldBlock => {
-                        std::thread::sleep(std::time::Duration::from_millis(10));
-                    }
-                    Err(e) if e.kind() == io::ErrorKind::Interrupted => continue,
-                    Err(_) => break, // EIO on child exit
-                }
-            }
-
-            use nix::sys::wait::waitpid;
-            match waitpid(child, None) {
-                Ok(nix::sys::wait::WaitStatus::Exited(_, code)) => {
-                    process::exit(code);
-                }
-                Ok(nix::sys::wait::WaitStatus::Signaled(_, sig, _)) => {
-                    process::exit(128 + sig as i32);
-                }
-                _ => {
-                    process::exit(1);
-                }
-            }
-        }
-        Ok(ForkptyResult::Child) => {
-            let err = execvp(&program, &c_args);
-            eprintln!("failed to exec: {err:?}");
-            process::exit(1);
-        }
-        Err(err) => {
-            eprintln!("forkpty failed: {err:?}");
-            process::exit(1);
-        }
-    }
-}
-
-#[cfg(not(unix))]
-fn run_in_pty_cmd(args: &[String]) {
-    if args.is_empty() {
-        eprintln!("error: run-in-pty requires a command");
-        process::exit(2);
-    }
-    let mut cmd = process::Command::new(&args[0]);
-    cmd.args(&args[1..]);
-    match cmd.status() {
-        Ok(status) => {
-            process::exit(status.code().unwrap_or(1));
-        }
-        Err(err) => {
-            eprintln!("failed to run command: {err:?}");
-            process::exit(1);
-        }
     }
 }

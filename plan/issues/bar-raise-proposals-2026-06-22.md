@@ -69,5 +69,12 @@ during release cycles.
 
 ## Decision
 
-Each candidate above is independent. Enable any subset via explicit Tlatoāni
-approval (who/when/scope). Until then, the loop stays at the current bar.
+**ALL THREE CANDIDATES APPROVED** — Tlatoāni (bulloncito@gmail.com), 2026-06-23.
+
+Scope: All three bar-raises are enabled immediately and promoted to `ready`
+plan packets for the current linux_mutable host. The loop now treats:
+- A: `cargo clippy --all-targets -- -D warnings` failures as build-blocking findings
+- B: `[build] Failed to start dev proxy container` as a finding requiring fix or suppression
+- C: nix cache exceeding 80% of 10 GB LRU limit as an actionable finding
+
+See plan/index.yaml packets: bar-raise-clippy-strict, bar-raise-dev-proxy-noise, bar-raise-nix-cache-signal.

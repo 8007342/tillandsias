@@ -121,7 +121,7 @@ Copy-Item $exe (Join-Path $stage 'tillandsias-tray.exe')
 # is best-effort: a missing source path is non-fatal so the build still
 # packages the core binary + installer.
 $bundledScripts = @(
-    'install-windows.ps1', # installer with full -Launch / -Provision / -Uninstall / -Purge lifecycle
+    'install-windows.ps1', # curl installer (parity with install.sh / install-macos.sh)
     'tray-diagnose.ps1',   # live-runtime health check (consumes --diagnose --json)
     'diagnose-windows.ps1' # pre-tray host-facts diagnostic
 )
