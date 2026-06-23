@@ -1,6 +1,17 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-23T20:36Z
+LastExecutionTime: 2026-06-23T20:56Z
+
+## This Loop (2026-06-23T20:42Z, linux_mutable — big-pickle meta-orch — orders 89/90)
+
+- **Cycle type**: worker drain — completed orders 89, 90, filed orders 91-97.
+- **Startup**: `linux-next @ 8148a6c7`, clean worktree, rebased local version bump atop origin. Credential channel: `ok:gh-keyring`. Siblings: `osx-next@85e69f14`, `windows-next@a3c8b23d` — both ancestors.
+- **Order 89** (vault-persistence-research): Investigated vault persistence chain (volume mount, unseal key lifecycle, entrypoint flow). Verdict: vault persistence is already correctly implemented end-to-end. Named podman volume `tillandsias-vault-data:/vault/data:U` persists across container recreation; `:U` flag handles userns mapping drift; unseal key survives in host keychain with file fallback. No code changes needed. Deliverable filed.
+- **Order 90** (zeroclaw-progress): Audited NanoClawV2 vs ZeroClaw state. NanoClawV2 is fully built but ZeroClaw migration was never executed — ZeroClaw target files (zeroclaw.rs, images/zeroclaw/, build-zeroclaw.sh) do not exist. Broken down into 7 sequential packets (orders 91-97): crate scaffold, Containerfile, tray rename, image registration, litmus update, legacy cleanup, plan update. Deliverable filed at plan/issues/zeroclaw-progress.md.
+- **Coordinator**: Siblings unchanged — both ancestors of HEAD. No merge needed.
+- **E2E**: Plan-only changes (no code/runtime delta). Skipping local-build e2e.
+- **Release**: Latest is v0.3.260623.3 on main; release workflow needs manual trigger.
+- **Next**: Orders 91-97 (ZeroClaw migration) ready for Linux pickup. Remaining macOS-owner orders (79, 80 AX smoke, 81 vault re-smoke).
 
 ## This Loop (2026-06-23T20:36Z, linux_mutable — Sonnet 4.6 meta-orch — orders 86/87/88)
 
