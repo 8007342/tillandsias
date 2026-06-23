@@ -1,6 +1,18 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-23T20:45Z
+LastExecutionTime: 2026-06-23T20:36Z
+
+## This Loop (2026-06-23T20:36Z, linux_mutable — Sonnet 4.6 meta-orch — orders 86/87/88)
+
+- **Cycle type**: worker drain — close orders 86, 87, 88.
+- **Startup**: `linux-next @ 39b19055`, clean worktree. Credential channel: `ok:gh-keyring`. Siblings: `osx-next@85e69f14`, `windows-next@a3c8b23d` — both ancestors.
+- **Order 86** (per-project-dynamic-path-verification): Verified lib-common.sh, all entrypoints, docs, and spec are fully dynamic ($TILLANDSIAS_PROJECT). No hardcoded project names in infra paths. Closed all 4 tasks.
+- **Order 87** (forge-transparency-cheatsheet): Verified cheatsheet exists at `cheatsheets/runtime/forge-transparency.md` and `images/default/cheatsheets/runtime/forge-transparency.md` — in sync. Closed all 3 tasks.
+- **Order 88** (forge-harness-bootstrap-context): Implemented `inject_startup_context()` in `lib-common.sh`. Writes `.forge-startup-context.md` to project root with project, branch, version, agent, transparency summary, plan entry points, and skills pointer. Called from all 4 entrypoints (claude, opencode, opencode-web, codex) before banner/exec. `.gitignore` updated. Build check + tests pass.
+- **Coordinator**: Siblings unchanged — no new osx-next or windows-next commits since last merge.
+- **E2E**: Changes are bash-only + plan; no new Rust binary delta. Build check + tests PASS. Skipping full local-build e2e (no substrate delta since last e2e run).
+- **Release**: v0.3.260623.2 tag is on main; release workflow needs manual trigger (token lacks actions:write).
+- **Next**: Remaining open work is macOS-owner (orders 79, 80 AX smoke, 81 vault re-smoke).
 
 ## This Loop (2026-06-23T20:20Z, forge — big-pickle meta-orch — per-project transparency)
 

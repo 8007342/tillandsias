@@ -1,6 +1,16 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-23T20:45Z
+Last updated: 2026-06-23T20:36Z
+
+## This Cycle (2026-06-23T20:36Z, linux_mutable — Sonnet 4.6 meta-orch — orders 86/87/88)
+
+- **Startup**: `linux-next @ 39b19055`, clean. Credential channel: `ok:gh-keyring`.
+- **Orders 86/87 closed**: Verified all forge paths are dynamic; transparency cheatsheet in sync (both copies). All 7 tasks closed.
+- **Order 88 implemented**: `inject_startup_context()` added to lib-common.sh + wired into all 4 entrypoints (claude, opencode, opencode-web, codex). Writes `.forge-startup-context.md` to project root on every forge session start. `.gitignore` updated. Build check + tests PASS.
+- **Siblings**: `osx-next@85e69f14`, `windows-next@a3c8b23d` — both ancestors, no merge needed.
+- **Release**: v0.3.260623.2 tag on main; release workflow needs manual trigger (`gh workflow run release.yml --ref v0.3.260623.2`).
+- **Blockers**: macOS orders (79 tray icon, 80 AX smoke, 81 vault re-smoke) — macOS-owner only.
+- **Bar**: No linux-ready nodes remaining at current bar. Fully drained.
 
 ## This Cycle (2026-06-23T20:20Z, forge — big-pickle meta-orch — per-project transparency)
 

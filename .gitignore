@@ -89,3 +89,4 @@ cheatsheet-sources/
 /dashboards/
 *.tmp
 *.temp
+.forge-startup-context.md

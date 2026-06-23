@@ -1319,6 +1319,67 @@ export_ssh_env() {
     return 1
 }
 
+# ── Forge startup context injection ─────────────────────────
+# @trace spec:project-bootstrap-readme, spec:forge-environment-discoverability
+# Writes .forge-startup-context.md into the project workspace so agents know
+# which project is loaded, what infrastructure is transparent, where the plan
+# lives, and what the current branch/version are. Written fresh every launch
+# (ephemeral) — the file is gitignored and not committed.
+inject_startup_context() {
+    local project_dir="${1:-$PROJECT_DIR}"
+    [[ -n "$project_dir" ]] || return 0
+    [[ -d "$project_dir" ]] || return 0
+
+    local ctx_file="$project_dir/.forge-startup-context.md"
+    local branch version agent_name
+    branch="$(git -C "$project_dir" rev-parse --abbrev-ref HEAD 2>/dev/null || echo "unknown")"
+    version="$(cat "$project_dir/VERSION" 2>/dev/null | tr -d '[:space:]' || echo "unknown")"
+    agent_name="${TILLANDSIAS_AGENT_NAME:-forge}"
+    local project_name
+    project_name="${TILLANDSIAS_PROJECT:-$(basename "$project_dir")}"
+
+    cat > "$ctx_file" <<CONTEXT_EOF
+# Forge Startup Context
+
+**Project**: ${project_name}
+**Branch**: ${branch}
+**Version**: ${version}
+**Agent**: ${agent_name}
+**Generated**: $(date -u +%Y-%m-%dT%H:%MZ)
+
+## Infrastructure (all transparent — zero configuration needed)
+
+- **Git**: push/fetch route through the enclave git mirror; GitHub token is handled automatically.
+- **HTTPS proxy**: outbound traffic is cached; CA is trusted at startup.
+- **Inference**: available at \`http://inference:11434\` (Ollama); may still be starting up.
+- **Vault**: secrets are available at \`http://vault:8200\`; token is injected automatically.
+
+You never need to configure git remotes, tokens, SSH keys, proxy settings, or CA certs.
+
+## Plan entry points
+
+- **Active work queue**: \`plan/issues/ACTIVE.md\`
+- **Full plan index**: \`plan/index.yaml\`
+- **Loop status**: \`plan/loop_status.md\`
+
+Pick up work using the \`/meta-orchestration\` skill or \`/advance-work-from-plan\`.
+
+## Skills
+
+Available skills are under \`.claude/skills/\` (Claude Code) or \`.opencode/skills/\` (OpenCode).
+Key skills: \`meta-orchestration\`, \`advance-work-from-plan\`, \`merge-to-main-and-release\`.
+CONTEXT_EOF
+
+    # Ensure the file is gitignored (idempotent append).
+    local gitignore="$project_dir/.gitignore"
+    if [[ -f "$gitignore" ]] && ! grep -qxF '.forge-startup-context.md' "$gitignore"; then
+        echo '.forge-startup-context.md' >> "$gitignore"
+    fi
+
+    export FORGE_STARTUP_CONTEXT_FILE="$ctx_file"
+    trace_lifecycle "startup-context" "written to $ctx_file (branch=${branch}, version=${version})"
+}
+
 # ── Banner ──────────────────────────────────────────────────
 show_banner() {
     local agent_name="${1:-terminal}"

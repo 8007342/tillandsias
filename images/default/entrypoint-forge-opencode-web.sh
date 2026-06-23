@@ -106,6 +106,10 @@ if [ -x "$OS_BIN" ] && [ -n "$PROJECT_DIR" ]; then
     fi
 fi
 
+# ── Startup context injection ───────────────────────────────
+# @trace spec:project-bootstrap-readme
+inject_startup_context "$PROJECT_DIR"
+
 # ── Launch OpenCode Web Server ──────────────────────────────
 # @trace spec:browser-isolation-tray-integration, spec:default-image
 # OpenCode serves on loopback :4097. The local SSE/theme proxy owns :4096,
