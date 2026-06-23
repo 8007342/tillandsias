@@ -1,7 +1,21 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-23T09:25Z
+LastExecutionTime: 2026-06-23T09:30Z
 
+
+## This Loop (2026-06-23T09:30Z, linux_mutable — Sonnet 4.6 meta-orch — bar-raises + e2e)
+
+- **Cycle type**: worker drain + e2e gates + coordinator duties.
+- **Startup**: `linux-next @ 5d5d5a54`, clean (forge already pushed order 80 + plan). Credential channel: `ok:gh-keyring`.
+- **Litmus fix**: cache-recovery-fresh-start was hanging (--init + LITMUS_PODMAN_MODE not bypassing run_init podman ops + vault bootstrap). Fixed run_init to return early in fake mode; vault bootstrap skipped in fake mode; step-5 regex changed from `\\.` to `[.]` to avoid YAML raw-byte escaping. Committed in `c5d97860`.
+- **Worker drain (this session)**: Orders 79, 80 completed (79 in osx, 80 by forge). Remaining macOS work (tray icon AX verify, vault unseal macOS re-smoke) = macOS-owner.
+- **Build gate**: `build.sh --ci-full --install` — pre-build 134/134 PASS. Post-build 2 failures: (1) inference model pull permission denied (env issue, filed), (2) opencode-prompt-e2e-shape loop_status.md not updated (filed).
+- **E2E step 2**: Podman reset `--force` succeeded — store empty.
+- **E2E step 3**: `tillandsias --init` running (cold rebuild, background task bzerw0ohe).
+- **E2E step 4**: Forge ran as opencode-prompt-e2e-shape. Completed order 80.
+- **Coordinator**: Siblings unchanged — no new osx-next or windows-next commits since last merge.
+- **Release**: Pending — awaiting --init completion + merge-to-main-and-release skill.
+- **Findings**: Inference model pull permission (optimization), loop_status.md gate (enhancement) — filed in build-install-smoke-e2e-findings-2026-06-23.md.
 
 ## This Loop (2026-06-23T09:25Z, linux_mutable — big-pickle meta-orch)
 

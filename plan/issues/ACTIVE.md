@@ -1,6 +1,25 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-23T07:05Z
+Last updated: 2026-06-23T09:30Z
+
+## This Cycle (2026-06-23T09:30Z, linux_mutable — Sonnet 4.6 meta-orch — bar-raises + e2e)
+
+- **Startup**: `linux-next @ 5d5d5a54`, clean. Credential Channel Guard: `ok:gh-keyring`.
+- **From previous session (bar-raises)**: Orders 82 (clippy strict), 83 (dev proxy noise), 84 (nix cache signal), 85 (Windows curl installer) — all completed in `6cdaa8ac`.
+- **Litmus regression fix**: `litmus:cache-recovery-fresh-start` was timing out because `--init` with `LITMUS_PODMAN_MODE=fake` reached `podman_runtime()`. Fixed by:
+  - `run_init`: early return in fake mode after cache checks + version write
+  - Vault bootstrap: skipped with `LITMUS_PODMAN_MODE=fake`  
+  - Litmus step 5 regex: `[.][0-9]` instead of `\\.` (YAML raw-byte escaping)
+  - Committed in `c5d97860` (version 0.3.260623.2)
+- **Order 80 (GitHub Login readiness gate)**: Forge completed shared `menu_state.rs` changes. `login_runtime_ready` field added; logged-out menu shows "Setting up…" when false. Commits `1d6574b4`, `5d5d5a54`.
+- **E2E step 2**: Podman store reset (empty confirmed).
+- **E2E step 3**: `tillandsias --init` running (cold rebuild).
+- **Blockers**:
+  - Inference model pull permission denied (env issue, filed as optimization finding)
+  - macOS tray icon PNG (order 79) — macOS-owner
+  - macOS vault unseal re-smoke (order 81) — macOS-owner
+  - macOS AX smoke for GitHub Login readiness gate (order 80) — macOS-owner
+- **Next**: Await `--init` completion → push release
 
 ## This Cycle (2026-06-23T07:05Z, linux_mutable — Sonnet 4.6 meta-orch)
 
