@@ -3031,7 +3031,7 @@ plan_index:
               known_repo_wide_failures:
                 - "./build.sh --ci --spec tillandsias-vault still fails pre-existing gates: VERSION behind v0.3.260608.2+, repo-wide fmt drift, unrelated clippy::type_complexity in main.rs:1043, and pre-existing signal_handling timeout."
         - id: vault-flow/xplat-gating-parity
-          status: ready
+          status: completed
           owner_host: macos+windows
           depends_on: [vault-flow/tray-gate-on-vault]
           unblocked_note: "Original blockers cleared: step 32 (vault-hardening-true-rekey) DONE, step 36 (xplat-vault/windows + /macos) DONE, and 42a (vault-flow/tray-gate-on-vault) completed and merged to windows-next. Windows slice is now in progress."
@@ -3101,6 +3101,16 @@ plan_index:
                 by the in-VM headless control wire dispatcher.
               evidence_refs:
                 - "cargo test -p tillandsias-macos-tray: 20/20 PASS"
+            - type: completed
+              ts: "2026-06-24T07:00:00Z"
+              agent_id: "linux-big-pickle-meta-orch-20260624T0700Z"
+              host: "linux"
+              note: >
+                Ledger hygiene: xplat-gating-parity was already completed by all
+                three platform slices (Windows 2026-06-14, Linux 2af7c7eb,
+                macOS 2026-06-14T22:18Z) but the parent task status remained
+                stale at 'ready' after the orchestrator's lease reclaim re-set
+                it. Status corrected to 'completed'.
         - id: vault-flow/tray-popup-terminal
           status: done
           depends_on: [vault-flow/login-in-container]

@@ -1,6 +1,16 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-24T04:58Z
+LastExecutionTime: 2026-06-24T07:00Z
+
+## This Loop (2026-06-24T07:00Z, linux_mutable — big-pickle ledger hygiene — order-42 stale-status fix)
+
+- **Cycle type**: meta-orchestration ledger hygiene + convergence check.
+- **Startup**: `linux-next @ ba8fe4ad`, clean. Credential channel: `ok:gh-keyring`.
+- **Worker drain**: No Linux-eligible ready implementation nodes. Fixed stale `vault-flow/xplat-gating-parity` (order 42 subtask): `status: ready` → `status: completed` — all 3 slices done since 2026-06-14.
+- **Coordination**: `origin/windows-next@a3c8b23d`, `origin/osx-next@85e69f14` — both ancestors of HEAD. No merge needed.
+- **E2E**: eligible (local-build) but deferred. Latest release v0.3.260622.4; curl-install e2e warranted but deferred to conserve budget.
+- **Remaining ready**: order 55 (macOS), order 79 (macOS), order 81 (in_progress, fix shipped 8e6f25b1, pending macOS re-smoke).
+- **Reduction**: 1 stale-status finding corrected. Zero residual at current bar for Linux.
 
 ## This Loop (2026-06-24T04:58Z, linux_mutable — big-pickle meta-orch — convergence check)
 

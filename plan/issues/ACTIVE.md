@@ -1,6 +1,16 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-24T04:58Z
+Last updated: 2026-06-24T07:00Z
+
+## This Cycle (2026-06-24T07:00Z, linux_mutable — big-pickle ledger hygiene — order-42 stale status)
+
+- **Cycle type**: meta-orchestration ledger hygiene + convergence check.
+- **Startup**: `linux-next @ ba8fe4ad`, clean. Credential channel: `ok:gh-keyring`. Fetched origin — siblings unchanged (linux-next in sync).
+- **Worker drain**: 0 linux-ready implementation nodes. Fixed stale `vault-flow/xplat-gating-parity` (order 42 subtask): status was `ready` but all 3 platform slices completed 2026-06-14 (Windows, Linux commit 2af7c7eb, macOS). Corrected to `completed` + completion event.
+- **Siblings**: `origin/windows-next@a3c8b23d`, `origin/osx-next@85e69f14` — both ancestors of HEAD. No merge needed.
+- **E2E**: eligible but deferred — latest release v0.3.260622.4 pre-dates latest tested release evidence. No Linux-eligible work to ship. curl-install e2e warranted but deferred to conserve cycle budget.
+- **Remaining ready**: `macos-in-vm-enclave-provisioning` (order 55, macOS), `macos-tray-icon-missing-T-fallback` (order 79, macOS), `vault-unseal-fails-macos-after-db616e06` (order 81, in_progress Linux+macOS — fix shipped 8e6f25b1, pending macOS re-smoke).
+- **Zero residual** at current bar for Linux. 1 stale-status finding corrected.
 
 ## This Cycle (2026-06-24T04:58Z, linux_mutable — big-pickle meta-orch — convergence check)
 
