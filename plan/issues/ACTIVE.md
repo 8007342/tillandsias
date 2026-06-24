@@ -1,6 +1,15 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-24T02:20Z
+Last updated: 2026-06-24T02:22Z
+
+## This Cycle (2026-06-24T02:22Z, linux_mutable — Sonnet 4.6 meta-orch cycle 6 of 6 — e2e PASS)
+
+- **E2E**: Build-install smoke PASS. Binary v0.3.260624.1 installed OK. Podman reset clean. `--init` clean (Vault v1.18.5, 5 AppRoles). Forge meta-orch exit 0.
+- **Finding**: Post-build litmus false negatives on fresh host — pre-existing optimization, filed in `plan/issues/build-install-smoke-e2e-findings-2026-06-24.md`.
+- **Zero residual** at current bar. 111/111 litmus PASS.
+- **Loop series**: 6/6 cycles complete. No further wakeups scheduled.
+- **Blocker (release)**: v0.3.260623.3 tagged on main; `gh workflow run release.yml --ref v0.3.260623.3` needed from a token with `actions:write`.
+- **Pending macOS**: orders 79 (tray icon), 80 (AX smoke), 81 (vault re-smoke) — macOS-owner only.
 
 ## This Cycle (2026-06-24T02:20Z, forge — big-pickle meta-orch — convergence check)
 

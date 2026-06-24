@@ -16,6 +16,7 @@ This file is the cross-host advertisement — terse, dated, SHA-anchored.
 
 ## Recent entries (reverse chronological)
 
+- 2026-06-24T02:22Z  20260624T020110Z  Build-install smoke e2e v0.3.260624.1 — PASS (with finding). Binary built + installed OK. Podman reset clean. --init clean (Vault v1.18.5, 5 AppRoles, all images cold-built). Forge meta-orch exit 0. Finding: post-build litmus false negatives on fresh host (inference-deferred-model-pulls, opencode-prompt-e2e-shape) — pre-existing, not a regression. Report: plan/issues/build-install-smoke-e2e-findings-2026-06-24.md
 - 2026-06-23T09:34Z  `f0805d74`  Release v0.3.260623.2 — linux-next fast-forward merged to main, tagged v0.3.260623.2 pushed. workflow_dispatch blocked (token lacks actions:write); manual trigger required: `gh workflow run release.yml --ref v0.3.260623.2`.
 - 2026-06-23T09:25Z  `this commit`  (advance-work github-login-menu-readiness-gate) Added `login_runtime_ready` field to MenuState; gates GitHub Login behind runtime readiness (disabled "Setting up…" while provisioning). Order 80 completed.
 - 2026-06-21T15:15Z  `this commit`  (meta-orch interactive lifecycle run) Claimed and ran order 68 `github-e2e-lifecycle-interactive`. Tests 1-2 PASS, 1 FAIL (forge-base UX). Filed 2 glitches (G1/G2). report: `plan/issues/github-e2e-findings-interactive-run-2026-06-21.md`.
