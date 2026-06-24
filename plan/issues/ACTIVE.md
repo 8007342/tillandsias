@@ -9,6 +9,13 @@ Last updated: 2026-06-24T00:55Z
 - **Release**: v0.3.260623.3 tagged on main; needs operator dispatch (`actions:write`).
 - **Pending macOS/Windows**: vault-flow/xplat-gating-parity, macos-in-vm-enclave-provisioning, macos-tray-icon-missing-T-fallback — all macOS/Windows-owned.
 
+## This Cycle (2026-06-24T00:54Z, linux_mutable — Sonnet 4.6 meta-orch cycle 5 — convergence check)
+
+- **Zero residual** at current bar. No linux-ready nodes. 111/111 litmus PASS.
+- **Siblings**: osx-next@85e69f14, windows-next@a3c8b23d — both ancestors, no merge needed.
+- **Blocker (release)**: v0.3.260623.3 tagged on main; `gh workflow run release.yml --ref v0.3.260623.3` needed from a token with `actions:write`.
+- **Pending macOS**: orders 79 (tray icon), 80 (AX smoke), 81 (vault re-smoke) — macOS-owner only.
+
 ## This Cycle (2026-06-23T23:50Z, linux_mutable — Sonnet 4.6 meta-orch cycle 4 — convergence check)
 
 - **Zero residual** at current bar. No linux-ready nodes. 111/111 litmus PASS.
