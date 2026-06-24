@@ -1,6 +1,13 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-24T02:22Z
+Last updated: 2026-06-24T02:56Z
+
+## This Cycle (2026-06-24T02:56Z, linux_mutable — big-pickle meta-orch — convergence check)
+
+- **Zero residual** at current bar. No linux-ready nodes.
+- **Siblings**: osx-next@85e69f14, windows-next@a3c8b23d — both ancestors. No merge needed.
+- **Release**: v0.3.260623.3 tagged on main; needs operator dispatch (`actions:write`).
+- **Pending macOS/Windows**: vault-flow/xplat-gating-parity, macos-in-vm-enclave-provisioning, macos-tray-icon-missing-T-fallback — all macOS/Windows-owned.
 
 ## This Cycle (2026-06-24T02:22Z, linux_mutable — Sonnet 4.6 meta-orch cycle 6 of 6 — e2e PASS)
 
