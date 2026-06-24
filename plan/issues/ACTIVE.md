@@ -1,6 +1,12 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-24T02:07Z
+Last updated: 2026-06-24T02:20Z
+
+## This Cycle (2026-06-24T02:20Z, forge — big-pickle meta-orch — convergence check)
+
+- **Zero residual** at current bar. No linux-ready nodes.
+- **Git mirror**: freshly provisioned (no remote refs). Pushing to re-establish.
+- **Pending macOS/Windows**: vault-flow/xplat-gating-parity, macos-in-vm-enclave-provisioning, macos-tray-icon-missing-T-fallback, vault-unseal-fails-macos — all macOS/Windows-owned.
 
 ## This Cycle (2026-06-24T02:07Z, linux_mutable — big-pickle meta-orch — convergence check)
 
