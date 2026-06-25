@@ -9,6 +9,22 @@
 [[github-login-token-at-rest-audit-2026-06-22]],
 [[optimization-macos-vz-idiomatic-exec-layer-2026-06-21]]
 
+## 2026-06-25 operator correction: timeout bumps are HACKY STOPGAPS
+
+The 60s -> 120s -> 180s Vault readiness increases preserved evidence and made
+some failures less opaque, but they are not the desired architecture. Treat
+those timeout changes as **HACKY STOPGAPS** until the shared Podman layer owns
+container health and lifecycle.
+
+The durable requirement is: auth flows such as `--github-login` must not ask
+for git identity, PATs, or future provider credentials (Cloudflare, AWS,
+GoogleDrive, etc.) until the VM/control wire and every required container report
+UP and HEALTHY through an idiomatic Tillandsias health contract. Do not add
+more per-flow sleeps, private polling loops, or larger readiness constants as
+the primary fix. The proper follow-up is tracked as
+`podman/health-lifecycle-facade` in
+`plan/issues/smoke-curl-install-e2e-macos-v0.3.260625.1-2026-06-25.md`.
+
 ## db616e06 NECESSARY BUT NOT SUFFICIENT — Vault unseal still fails on macOS (2026-06-23, released-binary e2e)
 
 Validated against the **released** `v0.3.260622.4` headless (confirmed in the VM:

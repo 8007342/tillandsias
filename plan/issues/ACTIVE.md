@@ -1,6 +1,16 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-25T00:44Z
+Last updated: 2026-06-25T21:19Z
+
+## This Cycle (2026-06-25T21:19Z, macos — curl-install smoke v0.3.260625.1)
+
+- **Cycle type**: `/smoke-curl-install-and-test-e2e` on macOS published release.
+- **Startup**: `osx-next @ 5cf56716`, credential channel `ok:gh-keyring`; pre-existing untracked paths left untouched (`build-osx-tray.sh`, `research/`, `src-tauri/`).
+- **Release under test**: `v0.3.260625.1` (`main` `3ee4c2ae`, published 2026-06-25T07:53:23Z).
+- **Install/provision**: curl installer downloaded and extracted the app; known `DIAG_PIN` post-verify bug reproduced. Clean app-support/cache reset, fresh `--provision` PASS, static diagnose PASS, normal tray readiness PASS (`phase=Ready podman_ready=true` at ~38s).
+- **Failure**: `--exec-guest` and `--github-login` both fail `VzRuntime::wait_ready` stage 2: vsock listener never came up at port 42420. `--github-login` also prompts for name/email/PAT before starting the VM.
+- **Plan filed**: `plan/issues/smoke-curl-install-e2e-macos-v0.3.260625.1-2026-06-25.md`; new ready nodes orders 98-100 (`macos-exec-guest-control-wire-timeout`, `github-login-readiness-before-credentials`, `podman-health-lifecycle-facade`).
+- **Operator requirement captured**: credential flows must prove VM/control-wire and required containers UP+HEALTHY before prompting; recent timeout bumps are hacky stopgaps pending an idiomatic Podman health/lifecycle layer.
 
 ## This Cycle (2026-06-25T00:44Z, linux_mutable — big-pickle meta-orch — convergence check)
 

@@ -3637,3 +3637,23 @@ Ready, step-32-independent packet for this host: **keyring persistent-backend ve
   - `origin/osx-next` at `a97ee0be` — local osx-next even with origin, zero drift
 - **Drift**: Dmax=5 satisfied (0 commits ahead of merge-base)
 - **Next action**: user-attended m8 interactive smoke (step 49d) remains the macOS acceptance gate. No new autonomous code packets claimable. Linux runs bridge-fix e2e + merge-to-main for v0.3.260618.1 release.
+
+## 2026-06-25T21:19Z — curl-install smoke v0.3.260625.1 (macOS)
+
+- **Agent**: `macos-codex-20260625T2111Z`
+- **Release**: `v0.3.260625.1` (`main` `3ee4c2ae`)
+- **Install/provision**: curl install extracted `/Applications/Tillandsias.app`
+  (known `DIAG_PIN` post-verify bug); destructive app-support/cache reset;
+  fresh `--provision` PASS; `--diagnose --json` reports `rootfs_present=true`
+  and `provisioned=true`; normal tray readiness reached
+  `phase=Ready podman_ready=true` at ~38s.
+- **Blocking regression**: headless `--exec-guest` and `--github-login` both
+  fail `VzRuntime::wait_ready` stage 2 because the vsock listener never comes up
+  at port 42420. Console log reaches Fedora login prompt only.
+- **Ordering requirement**: `--github-login` prompts for Git author
+  name/email/PAT before `[github-login] starting VM...`; this must be inverted.
+  All auth flows must rely on a shared UP+HEALTHY container-stack preflight
+  before asking for credentials.
+- **Plan**: filed
+  `plan/issues/smoke-curl-install-e2e-macos-v0.3.260625.1-2026-06-25.md`
+  and promoted ready orders 98-100 in `plan/index.yaml`.
