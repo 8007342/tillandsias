@@ -6370,24 +6370,29 @@ plan_index:
     - id: macos-exec-guest-control-wire-timeout
       order: 98
       title: "macOS curl smoke: --exec-guest and --github-login timeout waiting for control-wire vsock"
-      status: in_progress
+      status: done
       owner_host: macos
       deliverable: plan/issues/smoke-curl-install-e2e-macos-v0.3.260625.1-2026-06-25.md
       audit_origin: plan/issues/smoke-curl-install-e2e-macos-v0.3.260625.1-2026-06-25.md
       depends_on: []
       pickup_role: macos
+      closed_at: "2026-06-25T22:07:50Z"
+      closed_by: "macos-Tlatoanis-MacBook-Air-codex-20260625T213235Z"
       outcome: >
-        A fresh curl-installed macOS release can run
-        `tillandsias-tray --exec-guest /bin/bash -lc 'echo control-wire-ok'`
-        and receive guest output over the control wire. `--github-login` no
-        longer fails before guest execution with
-        `stage 2 timeout after 90s`.
+        Fixed on osx-next by making the macOS cloud-init headless fetch unit an
+        idempotent systemd oneshot rather than a condition-skipped dependency,
+        and by adding a guest preflight that verifies the headless binary and
+        vsock device while recording Podman socket state. A locally built,
+        signed, installed Tillandsias.app fresh-provisioned the VM and
+        `--exec-guest` succeeded on both first boot and second boot. A closed
+        stdin `--github-login` ordering probe reached the control wire and the
+        guest prompt path instead of timing out on vsock port 42420.
       exit_criteria:
         - "`--exec-guest /bin/bash -lc 'echo control-wire-ok'` prints `control-wire-ok` on a clean provisioned VM."
         - "`--github-login` reaches the guest auth preflight rather than timing out waiting for vsock port 42420."
       tasks:
         - id: macos-exec-guest-control-wire-timeout/diagnose-and-fix
-          status: in_progress
+          status: done
           owner_host: macos
           estimated_hours: 2
           owned_files:
@@ -6396,13 +6401,18 @@ plan_index:
             - images/vm/
           checkpoint_required: true
           handoff_note: >
-            Fresh curl smoke for v0.3.260625.1: normal tray readiness reached
-            `phase=Ready podman_ready=true` at ~38s, but both `--exec-guest`
-            and `--github-login` timed out in `VzRuntime::wait_ready` stage 2
-            because the vsock listener never came up at port 42420. Console log
-            shows the VM reached the Fedora login prompt. Compare the normal
-            tray path with the headless exec/login path and fix the missing
-            control-wire service/liveness behavior.
+            DONE at local osx-next build 715449d2-dirty. Root cause: the
+            `tillandsias-headless.service` required
+            `tillandsias-headless-fetch.service`, but the fetch service had
+            `ConditionPathExists=!/usr/local/bin/tillandsias-headless`; after
+            first install, later boots skipped the required oneshot and could
+            skip headless startup. Fix: remove the condition, keep the fetch
+            script idempotent, add `headless-preflight.sh`, and wire
+            `podman.socket` as a wanted/ordered readiness input. Evidence:
+            `target/smoke-e2e/local-03-exec-guest.log`,
+            `target/smoke-e2e/local-04-exec-guest-second-boot.log`,
+            `target/smoke-e2e/local-05-guest-systemd-health.log`,
+            `target/smoke-e2e/local-06-github-login-empty-stdin.log`.
       events:
         - type: claim
           ts: "2026-06-25T21:32:35Z"
@@ -6410,6 +6420,20 @@ plan_index:
           host: macos
           lease_id: "macos-exec-guest-control-wire-timeout-20260625T213235Z"
           expires_at: "2026-06-26T01:32:35Z"
+        - type: completed
+          ts: "2026-06-25T22:07:50Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260625T213235Z"
+          host: macos
+          lease_id: "macos-exec-guest-control-wire-timeout-20260625T213235Z"
+          note: >
+            Local signed app fresh-provisioned successfully. First-boot
+            `--exec-guest /bin/bash -lc 'echo control-wire-ok'` returned
+            `control-wire-ok`; second-boot exec returned
+            `control-wire-second-boot-ok`. In-guest systemd status reported
+            `tillandsias-headless-fetch.service`, `tillandsias-headless.service`,
+            and `podman.socket` active with `/run/podman/podman.sock` present.
+            Empty-stdin `--github-login` logged VM start, control-wire readiness,
+            then matched the guest author-name prompt; no vsock timeout.
 
     - id: github-login-readiness-before-credentials
       order: 99
@@ -6450,6 +6474,20 @@ plan_index:
             guest also prompts/stores git identity before ensuring the image,
             networks, Vault, and login helper container. Build a reusable auth
             preflight instead of adding per-provider sleeps/timeouts.
+      events:
+        - type: progress
+          ts: "2026-06-25T22:07:50Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260625T213235Z"
+          host: macos
+          note: >
+            macOS slice implemented on osx-next: `github_login_main` now starts
+            the VM, waits for the control wire, opens the vsock stream, and
+            uses lazy expect responses so host prompts are displayed only after
+            the guest emits each prompt. Guest `run_github_login` now ensures
+            the git image, managed networks, Vault, and login helper container
+            before `prompt_and_store_git_identity()`. Regression tests added.
+            Remaining work: the provider-neutral UP+HEALTHY shared preflight
+            still depends on order 100's Podman health/lifecycle facade.
 
     - id: podman-health-lifecycle-facade
       order: 100

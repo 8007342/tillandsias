@@ -876,6 +876,28 @@ LastExecutionTime: 2026-06-25T00:52Z
 - **E2E gates**: skipped. The nanoclawv2 --init registration is additive (image was already buildable via build-image.sh; no runtime crate delta to smoke-test). Latest GitHub release remains `v0.3.260618.2`.
 - **Release decision**: deferred. No release-blocking change; VERSION remains `0.3.260619.5`, no `v0.3.260620.*` tag exists.
 
+## Loop 2026-06-25T22:07Z (macOS worker drain — control-wire fix)
+
+- **Cycle type**: `/advance-work-from-plan` on macOS `osx-next`.
+- **Startup**: claimed order 98
+  `macos-exec-guest-control-wire-timeout` after the v0.3.260625.1 curl smoke
+  found `--exec-guest` and `--github-login` timing out on vsock port 42420.
+- **Fix**: macOS VZ cloud-init no longer condition-skips the required
+  headless-fetch oneshot when `/usr/local/bin/tillandsias-headless` already
+  exists. The fetch script remains idempotent, `headless-preflight.sh` verifies
+  the binary and vsock device, and `podman.socket` is wanted/ordered while
+  remaining non-fatal for the diagnostic control wire.
+- **Credential ordering**: macOS `--github-login` now prompts lazily after VM
+  and control-wire readiness; guest `run_github_login` now prompts for git
+  identity after git image, networks, Vault, and helper container startup.
+- **Verification**: local signed app fresh-provisioned; first-boot
+  `--exec-guest` returned `control-wire-ok`; second-boot `--exec-guest`
+  returned `control-wire-second-boot-ok`; guest status showed fetch/headless
+  services and `podman.socket` active with `/run/podman/podman.sock` present.
+- **Residual**: full provider-neutral auth preflight still depends on the
+  linux/shared `podman-health-lifecycle-facade` packet. Recent Vault timeout
+  bumps remain hacky stopgaps until the typed Podman lifecycle layer exists.
+
 ## Loop 2026-06-18T20:50Z (release-smoke pass)
 
 - **Cycle type**: meta-orchestration release-smoke pass after fetch/worker and sibling audit.

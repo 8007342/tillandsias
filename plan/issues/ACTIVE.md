@@ -1,6 +1,37 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-25T21:19Z
+Last updated: 2026-06-25T22:07Z
+
+## This Cycle (2026-06-25T22:07Z, macos — advance-work-from-plan follow-up)
+
+- **Claim**: order 98 `macos-exec-guest-control-wire-timeout`, lease
+  `macos-exec-guest-control-wire-timeout-20260625T213235Z`.
+- **Fix landed locally**: macOS VZ cloud-init now keeps
+  `tillandsias-headless-fetch.service` as an idempotent oneshot with no
+  `ConditionPathExists` skip; `tillandsias-headless.service` has a
+  `headless-preflight.sh` `ExecStartPre` that verifies the binary and vsock
+  device and records Podman socket state. `podman.socket` is wanted/ordered but
+  not a hard diagnostic dependency.
+- **Credential ordering progress**: macOS `--github-login` now starts the VM,
+  waits for the control wire, opens the vsock stream, and uses lazy expect
+  responses so host prompts are displayed only after guest prompts. Guest
+  `run_github_login` now prompts for git identity only after git image,
+  networks, Vault, and helper-container startup.
+- **Verification**: `cargo test -p tillandsias-vm-layer` PASS (23/23);
+  `cargo test -p tillandsias-macos-tray` PASS (51/51, 1 ignored);
+  targeted headless ordering test PASS. Full `cargo test -p tillandsias-headless`
+  had all unit tests PASS but one integration test failed on this macOS host
+  because no local Podman socket is active.
+- **Local e2e**: signed local `/Applications/Tillandsias.app` fresh provision
+  PASS; `--exec-guest` first boot printed `control-wire-ok`; second boot
+  printed `control-wire-second-boot-ok`; in-guest `systemctl is-active`
+  reported fetch/headless/podman.socket active and `/run/podman/podman.sock`
+  present; closed-stdin `--github-login` reached control-wire readiness before
+  the first prompt and did not hit the old vsock timeout.
+- **Status**: order 98 done on osx-next. Order 99 is partial: macOS/guest
+  ordering improved, but the full provider-neutral "required containers
+  UP+HEALTHY before credentials" contract remains blocked on order 100,
+  `podman-health-lifecycle-facade` (linux/shared runtime owner).
 
 ## This Cycle (2026-06-25T21:19Z, macos — curl-install smoke v0.3.260625.1)
 

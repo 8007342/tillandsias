@@ -21,6 +21,50 @@
 | `--exec-guest` control-wire probe | FAIL: stage 2 timeout waiting for vsock listener on port 42420 |
 | `--github-login` dummy ordering probe | FAIL: host prompts for name/email/PAT before VM start, then same control-wire timeout |
 
+## Remediation on osx-next
+
+2026-06-25T22:07Z, agent
+`macos-Tlatoanis-MacBook-Air-codex-20260625T213235Z`:
+
+- Root cause: macOS cloud-init made `tillandsias-headless.service` require
+  `tillandsias-headless-fetch.service`, while the fetch oneshot used
+  `ConditionPathExists=!/usr/local/bin/tillandsias-headless`. Once the binary
+  existed, later boots could skip the required oneshot and leave the vsock
+  control-wire service absent.
+- Fix: removed the condition and kept the fetch script idempotent; added
+  `/usr/local/lib/tillandsias/headless-preflight.sh` to verify the headless
+  binary and `/dev/vsock` while recording `podman.socket` and
+  `/run/podman/podman.sock`; ordered/wanted `podman.socket` without making it a
+  hard dependency for the diagnostic control wire.
+- Credential ordering: macOS `github_login_main` now starts the VM, waits for
+  control wire readiness, opens the vsock stream, and uses lazy expect
+  responses so the host prompts only when the guest emits each prompt. Guest
+  `run_github_login` now ensures the git image, networks, Vault, and login
+  helper container before `prompt_and_store_git_identity()`.
+- Local verification from signed `/Applications/Tillandsias.app` built from
+  osx-next:
+  - `target/smoke-e2e/local-01-provision.log`: fresh provision PASS.
+  - `target/smoke-e2e/local-02-diagnose.json`: `provisioned=true`.
+  - `target/smoke-e2e/local-03-exec-guest.log`: first boot exec printed
+    `control-wire-ok`.
+  - `target/smoke-e2e/local-04-exec-guest-second-boot.log`: second boot exec
+    printed `control-wire-second-boot-ok`, proving the already-installed
+    headless binary path.
+  - `target/smoke-e2e/local-05-guest-systemd-health.log`: fetch, headless, and
+    `podman.socket` all active; `/run/podman/podman.sock` present; preflight
+    logged `headless_binary=ok`, `vsock_device=present`,
+    `podman_socket=present`, `podman_socket_unit=active`.
+  - `target/smoke-e2e/local-06-github-login-empty-stdin.log`: closed-stdin
+    login probe logged VM start, control-wire readiness, and only then matched
+    the guest author-name prompt; no vsock timeout.
+
+Remaining architecture work: the full provider-neutral "required containers
+UP+HEALTHY before credentials" contract still depends on the linux/shared
+`podman-health-lifecycle-facade` packet. The macOS branch now consumes the
+control-wire and guest-login ordering pieces, but Vault timeout increases remain
+HACKY STOPGAPS until the shared Podman layer exposes first-class
+`ping`/`keep_alive`/`restart`/`terminate`/`is_healthy`/`diagnose`.
+
 ## Headline
 
 The clean curl-installed macOS release can install, provision, and reach the
@@ -82,7 +126,7 @@ an idiomatic Tillandsias Podman health/lifecycle layer with operations such as
 - id: `smoke-finding/macos-exec-guest-control-wire-timeout`
 - owner_host: macos
 - capability_tags: [macos, virtualization, control-wire, release, testing]
-- status: ready
+- status: done on osx-next; pending published release
 - discovered_by: `/smoke-curl-install-and-test-e2e` on release `v0.3.260625.1`
 - evidence:
   - `target/smoke-e2e/04-exec-guest-probe.log:3` -- `wait_ready: stage 2 timeout after 90s (vsock listener never came up at port 42420)`
@@ -99,13 +143,20 @@ an idiomatic Tillandsias Podman health/lifecycle layer with operations such as
     ts: "2026-06-25T21:19:44Z"
     agent_id: "macos-codex-20260625T2111Z"
     host: macos
+  - type: completed
+    ts: "2026-06-25T22:07:50Z"
+    agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260625T213235Z"
+    host: macos
+    note: >
+      Fixed in macOS VZ cloud-init/systemd ordering and verified with fresh
+      local provision plus first-boot and second-boot `--exec-guest` success.
 
 ## Work Packet: github-login/readiness-before-credentials
 
 - id: `github-login/readiness-before-credentials`
 - owner_host: any
 - capability_tags: [rust, macos, windows, linux, github-login, podman, vault]
-- status: ready
+- status: partial on osx-next; shared health facade pending
 - discovered_by: `/smoke-curl-install-and-test-e2e` on release `v0.3.260625.1`
 - evidence:
   - `target/smoke-e2e/04-github-login-dummy.log:1-6` -- host prompts for Git author name, Git author email, and PAT before `[github-login] starting VM...`.
@@ -124,6 +175,15 @@ an idiomatic Tillandsias Podman health/lifecycle layer with operations such as
     ts: "2026-06-25T21:19:44Z"
     agent_id: "macos-codex-20260625T2111Z"
     host: macos
+  - type: progress
+    ts: "2026-06-25T22:07:50Z"
+    agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260625T213235Z"
+    host: macos
+    note: >
+      macOS host prompts now happen lazily after VM/control-wire readiness and
+      guest prompts; guest git identity prompt moved behind image/network/Vault
+      and helper-container startup. Remaining provider-neutral UP+HEALTHY
+      preflight belongs to the shared Podman health facade.
 
 ## Work Packet: podman/health-lifecycle-facade
 
