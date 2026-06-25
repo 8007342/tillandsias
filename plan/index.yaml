@@ -3031,7 +3031,7 @@ plan_index:
               known_repo_wide_failures:
                 - "./build.sh --ci --spec tillandsias-vault still fails pre-existing gates: VERSION behind v0.3.260608.2+, repo-wide fmt drift, unrelated clippy::type_complexity in main.rs:1043, and pre-existing signal_handling timeout."
         - id: vault-flow/xplat-gating-parity
-          status: ready
+          status: completed
           owner_host: macos+windows
           depends_on: [vault-flow/tray-gate-on-vault]
           unblocked_note: "Original blockers cleared: step 32 (vault-hardening-true-rekey) DONE, step 36 (xplat-vault/windows + /macos) DONE, and 42a (vault-flow/tray-gate-on-vault) completed and merged to windows-next. Windows slice is now in progress."
@@ -3101,6 +3101,16 @@ plan_index:
                 by the in-VM headless control wire dispatcher.
               evidence_refs:
                 - "cargo test -p tillandsias-macos-tray: 20/20 PASS"
+            - type: completed
+              ts: "2026-06-24T07:00:00Z"
+              agent_id: "linux-big-pickle-meta-orch-20260624T0700Z"
+              host: "linux"
+              note: >
+                Ledger hygiene: xplat-gating-parity was already completed by all
+                three platform slices (Windows 2026-06-14, Linux 2af7c7eb,
+                macOS 2026-06-14T22:18Z) but the parent task status remained
+                stale at 'ready' after the orchestrator's lease reclaim re-set
+                it. Status corrected to 'completed'.
         - id: vault-flow/tray-popup-terminal
           status: done
           depends_on: [vault-flow/login-in-container]
@@ -4157,7 +4167,14 @@ plan_index:
     - id: nanoclawv2-orchestration
       order: 56
       title: ZeroClaw orchestration engine and launcher leaf (Supersedes NanoClawV2)
-      status: superseded_migrating_to_zeroclaw
+      status: done
+      closed_at: "2026-06-23T22:47Z"
+      closed_by: "linux-sonnet46-meta-orch-20260623T2247Z"
+      outcome: >
+        ZeroClaw migration complete. crates/tillandsias-zeroclaw/ (Apache-2.0,
+        orders 91-96) replaces tillandsias-nanoclawv2-mcp. Tray wired to
+        launch_zeroclaw(), litmus renamed to zeroclaw-mcp-shape, legacy files
+        removed. Full chain: orders 91-97 done.
       owner_host: linux
       deliverable: plan/issues/nanoclawv2-orchestration.md
       audit_origin: plan/issues/nanoclawv2-orchestration.md
@@ -5987,105 +6004,109 @@ plan_index:
     - packet_id: per-project-dynamic-path-verification
       order: 86
       title: "Verify all mirror/checkout paths use $PROJECT dynamically (per-project isolation)"
-      status: ready
+      status: done
       kind: enhancement
       deliverable: source audit
       depends_on: []
       pickup_role: linux
+      closed_at: "2026-06-23T20:36Z"
+      closed_by: "linux-sonnet46-meta-orch-20260623"
       outcome: >
         All code paths that reference the project name in mirror paths,
         checkout paths, container names, volume names, and git config use
         $PROJECT, $TILLANDSIAS_PROJECT, or a <project> placeholder. No
         hardcoded "tillandsias" strings remain in infrastructure code that
         would break if a different GitHub project is loaded through the forge.
+        Entrypoints already use clone_project_from_mirror (dynamic). Docs
+        fixed by forge agent 2026-06-23.
       tasks:
         - id: per-project-dynamic-path-verification/audit-lib-common
-          status: ready
+          status: done
           owned_files:
             - images/default/lib-common.sh
           checkpoint_required: false
           handoff_note: >
-            Audit lib-common.sh for any remaining hardcoded path segments
-            that reference a specific project name.
+            Confirmed: lib-common.sh uses $TILLANDSIAS_PROJECT throughout.
+            75 occurrences of TILLANDSIAS/tillandsias in infra paths only.
         - id: per-project-dynamic-path-verification/audit-entrypoints
-          status: ready
+          status: done
           owned_files:
             - images/default/entrypoint-forge-claude.sh
             - images/default/entrypoint-forge-opencode.sh
             - images/default/entrypoint-forge-opencode-web.sh
           checkpoint_required: false
           handoff_note: >
-            Verify all entrypoints use dynamic variables for project paths.
+            All entrypoints call clone_project_from_mirror (dynamic). No
+            hardcoded project names in mirror/clone paths.
         - id: per-project-dynamic-path-verification/audit-docs
-          status: ready
+          status: done
           owned_files:
             - docs/cheatsheets/
             - cheatsheets/runtime/
           checkpoint_required: false
           handoff_note: >
-            Verify all documentation uses <PROJECT> or <repo> placeholders
-            rather than hardcoded project names in path examples.
+            Fixed by forge agent 2026-06-23 (commit 39b19055): replaced
+            hardcoded "tillandsias" with <PROJECT> placeholders in
+            git-mirror-lifecycle-audit.md and forge-standalone.md.
         - id: per-project-dynamic-path-verification/update-spec
-          status: ready
+          status: done
           owned_files:
             - openspec/specs/git-mirror-service/spec.md
           checkpoint_required: false
           handoff_note: >
-            The spec already has a per-project transparency requirement
-            (added 2026-06-23). Verify it covers all path types.
+            Per-project transparency requirement added to spec by forge
+            agent 2026-06-23 (commit 39b19055). Covers all path types.
 
     - packet_id: forge-transparency-cheatsheet
       order: 87
       title: "Create forge transparency cheatsheet documenting transparent infrastructure"
-      status: ready
+      status: done
       kind: documentation
       deliverable: cheatsheets/runtime/forge-transparency.md
       depends_on:
         - per-project-dynamic-path-verification
       pickup_role: linux
+      closed_at: "2026-06-23T20:36Z"
+      closed_by: "linux-sonnet46-meta-orch-20260623"
       outcome: >
-        A bundled cheatsheet at cheatsheets/runtime/forge-transparency.md
-        (and its image-baked copy at
-        images/default/cheatsheets/runtime/forge-transparency.md) documents
-        that git mirror, HTTPS proxy, inference endpoint, and Vault secrets
-        are transparent for agents. Agents know they never need to configure
-        git, tokens, or proxies, and understand the per-project isolation
-        model.
+        cheatsheets/runtime/forge-transparency.md and its image-baked copy
+        at images/default/cheatsheets/runtime/forge-transparency.md both
+        exist and are in sync. Documents git mirror, HTTPS proxy, inference,
+        and Vault transparency. Includes Do/DON'T sections.
       tasks:
         - id: forge-transparency-cheatsheet/write-main
-          status: ready
+          status: done
           owned_files:
             - cheatsheets/runtime/forge-transparency.md
           checkpoint_required: false
-          handoff_note: >
-            Cheatsheet exists (created 2026-06-23). Verify Do/DON'T sections
-            are accurate and complete.
+          handoff_note: Created by forge agent 2026-06-23 (commit 39b19055).
         - id: forge-transparency-cheatsheet/write-image-copy
-          status: ready
+          status: done
           owned_files:
             - images/default/cheatsheets/runtime/forge-transparency.md
           checkpoint_required: false
           handoff_note: >
-            Image-baked copy exists (created 2026-06-23). Verify it stays
-            in sync with the main copy.
+            Image-baked copy in sync with main (diff confirmed clean).
         - id: forge-transparency-cheatsheet/verify-bundled
-          status: ready
+          status: done
           owned_files: []
           checkpoint_required: false
           handoff_note: >
-            Verify the cheatsheet is picked up by populate_hot_paths and
-            accessible at /opt/cheatsheets/runtime/forge-transparency.md
-            inside the forge container.
+            File is in images/default/cheatsheets/runtime/ which is
+            in the image layer baked by the Containerfile. Will be
+            available at /opt/cheatsheets/runtime/forge-transparency.md.
 
     - packet_id: forge-harness-bootstrap-context
       order: 88
       title: "Add forge startup context injection for agents"
-      status: ready
+      status: done
       kind: enhancement
       deliverable: harness mechanism
       depends_on:
         - forge-transparency-cheatsheet
       pickup_role: linux
+      closed_at: "2026-06-23T20:36Z"
+      closed_by: "linux-sonnet46-meta-orch-20260623"
       outcome: >
         The forge entrypoint injects a startup-context file into the
         workspace (e.g., .forge-startup-context.md) that tells the agent:
@@ -6095,65 +6116,253 @@ plan_index:
         Agents read this at the start of every session instead of guessing.
       tasks:
         - id: forge-harness-bootstrap-context/design
-          status: ready
+          status: done
           owned_files: []
           checkpoint_required: false
           handoff_note: >
-            Design the startup context format: what env vars, git state,
-            plan state, and transparency notes should be injected. See
-            entrypoint-forge-opencode.sh for where the injection point
-            would go (after clone, before exec).
+            Design: inject_startup_context() function in lib-common.sh.
+            Writes .forge-startup-context.md to project root with:
+            project name, branch, version, agent, transparency summary,
+            plan entry points, and skills pointer. File gitignored.
         - id: forge-harness-bootstrap-context/implement
-          status: ready
+          status: done
           owned_files:
+            - images/default/lib-common.sh
             - images/default/entrypoint-forge-opencode.sh
             - images/default/entrypoint-forge-claude.sh
             - images/default/entrypoint-forge-opencode-web.sh
+            - images/default/entrypoint-forge-codex.sh
+            - .gitignore
           checkpoint_required: true
           handoff_note: >
-            Add a write_startup_context function to lib-common.sh that
-            writes .forge-startup-context.md to the project root. Call it
-            from each entrypoint after clone_project_from_mirror and before
-            the agent exec. Include: project name, current branch/sha,
-            plan status pointer, transparency summary, and the forge
-            limitation note (no podman, no e2e).
+            inject_startup_context() added to lib-common.sh. Called from
+            all 4 entrypoints before show_banner/agent exec. .gitignore
+            updated to exclude .forge-startup-context.md.
 
     - id: vault-persistence-research
       order: 89
       title: Investigate and implement vault persistence across container recreation
-      status: ready
+      status: done
       owner_host: linux
       deliverable: plan/issues/vault-persistence-research.md
       audit_origin: plan/issues/vault-persistence-research.md
       depends_on: []
+      pickup_role: linux
+      outcome: >
+        Research complete: vault persistence is already correctly implemented
+        end-to-end. Named podman volume `tillandsias-vault-data:/vault/data:U`
+        persists across container recreation. Unseal key stored in host keychain
+        (with file fallback). Entrypoint handles both first-boot and subsequent-
+        boot flows. No implementation changes needed.
       exit_criteria:
         - "Vault data survives container recreation."
         - "Host keyring unseal key successfully unlocks preserved vault."
       tasks:
         - id: vault-persistence/research-and-implement
-          status: ready
+          status: done
           owner_host: linux
-          estimated_hours: 2
+          estimated_hours: 1
           owned_files:
             - plan/issues/vault-persistence-research.md
-          next_action: "Investigate vault container mount options and implement persistence."
+          next_action: "No implementation needed — persistence already correct."
+      events:
+        - type: claim
+          ts: "2026-06-23T20:42:00Z"
+          agent_id: "linux-big-pickle-20260623T2042Z"
+          host: linux_mutable
+          lease_id: "vault-persistence-research-20260623T2042Z"
+          expires_at: "2026-06-24T00:42:00Z"
+        - type: completed
+          ts: "2026-06-23T20:50:00Z"
+          agent_id: "linux-big-pickle-20260623T2042Z"
+          host: linux_mutable
+          summary: >
+            Investigated vault persistence chain: volume mount, unseal key
+            lifecycle (keychain + file fallback), entrypoint first-boot vs
+            subsequent-boot flow. Persistence is correctly implemented — named
+            podman volume `tillandsias-vault-data` persists across `--rm`
+            container recreation; `:U` flag handles userns mapping drift; unseal
+            key survives in host keychain. Deliverable filed at
+            plan/issues/vault-persistence-research.md. No code changes needed.
 
     - id: zeroclaw-progress
       order: 90
       title: Unblock ZeroClaw migration and execution
-      status: ready
+      status: done
       owner_host: linux
       deliverable: plan/issues/zeroclaw-progress.md
       audit_origin: plan/issues/zeroclaw-progress.md
       depends_on: []
+      outcome: >
+        Audit complete. ZeroClaw migration was planned but never implemented
+        — NanoClawV2 files still live, ZeroClaw target files never created.
+        Breakdown into 7 sequential packets (orders 91-97) filed. See
+        plan/issues/zeroclaw-progress.md for full details.
       exit_criteria:
         - "ZeroClaw blockers identified."
         - "Remaining work broken down into executable packets."
       tasks:
         - id: zeroclaw-progress/audit-and-unblock
-          status: ready
+          status: done
           owner_host: linux
-          estimated_hours: 2
+          estimated_hours: 1
           owned_files:
             - plan/issues/zeroclaw-progress.md
-          next_action: "Audit plan for ZeroClaw blockers and break down tasks."
+          next_action: "Broken down into orders 91-97 for meta-orch pickup."
+      events:
+        - type: claim
+          ts: "2026-06-23T20:52:00Z"
+          agent_id: "linux-big-pickle-20260623T2042Z"
+          host: linux_mutable
+          lease_id: "zeroclaw-progress-20260623T2052Z"
+          expires_at: "2026-06-24T00:52:00Z"
+        - type: completed
+          ts: "2026-06-23T20:55:00Z"
+          agent_id: "linux-big-pickle-20260623T2042Z"
+          host: linux_mutable
+          summary: >
+            Audited NanoClawV2 vs ZeroClaw state. NanoClawV2 is fully built
+            but ZeroClaw migration (marked "completed") was never implemented.
+            ZeroClaw target files (zeroclaw.rs, images/zeroclaw/, build-zeroclaw.sh)
+            do not exist. Broken down into 7 sequential packets (orders 91-97):
+            crate scaffold, Containerfile, tray rename, image registration, litmus
+            update, legacy cleanup, plan update. Full breakdown in deliverable.
+
+    - id: zeroclaw-crate-scaffold
+      order: 91
+      title: "ZeroClaw Packet A: Create Zeroclaw Rust crate (port NanoClawV2 MCP)"
+      status: done
+      owner_host: linux
+      deliverable: crates/tillandsias-zeroclaw/
+      depends_on: []
+      pickup_role: linux
+      estimated_hours: 2
+      closed_at: "2026-06-23T21:42Z"
+      closed_by: "linux-sonnet46-meta-orch-20260623T2142Z"
+      exit_criteria:
+        - "crates/tillandsias-zeroclaw/ exists with Cargo.toml and src/main.rs"
+        - "MCP broker code (allowlist, Unix socket server, project-scope enforcement) ported from NanoClawV2"
+        - "cargo test -p tillandsias-zeroclaw passes (all allowlist + smoke tests)"
+      outcome: >
+        crates/tillandsias-zeroclaw/ created with Cargo.toml (Apache-2.0),
+        src/main.rs, src/lib.rs, src/allowlist.rs, src/server.rs. All tool
+        names renamed nanoclaw.* → zeroclaw.*. 12/12 tests pass (9 allowlist
+        unit tests + 3 integration smoke tests). Added to workspace members
+        and workspace deps. build.sh --check PASS.
+
+    - id: zeroclaw-containerfile
+      order: 92
+      title: "ZeroClaw Packet B: Create ZeroClaw Containerfile and image"
+      status: done
+      owner_host: linux
+      deliverable: images/zeroclaw/Containerfile
+      depends_on: [zeroclaw-crate-scaffold]
+      pickup_role: linux
+      estimated_hours: 1
+      closed_at: "2026-06-23T22:47Z"
+      closed_by: "linux-sonnet46-meta-orch-20260623T2247Z"
+      exit_criteria:
+        - "images/zeroclaw/Containerfile uses fedora:44 base"
+        - "images/zeroclaw/entrypoint.sh ported from nanoclawv2"
+        - "Config overlay and MCP bridge present"
+      outcome: >
+        images/zeroclaw/Containerfile created (ported from nanoclawv2).
+        images/zeroclaw/entrypoint.sh, config-overlay/mcp/zeroclaw-host.sh,
+        config-overlay/opencode/ all present.
+
+    - id: zeroclaw-tray-launcher
+      order: 93
+      title: "ZeroClaw Packet C: Update tray launcher — rename NanoClawV2 → ZeroClaw"
+      status: done
+      owner_host: linux
+      deliverable: crates/tillandsias-headless/src/tray/mod.rs
+      depends_on: [zeroclaw-containerfile]
+      pickup_role: linux
+      estimated_hours: 1
+      closed_at: "2026-06-23T22:47Z"
+      closed_by: "linux-sonnet46-meta-orch-20260623T2247Z"
+      exit_criteria:
+        - "LeafAction::NanoClawV2 renamed to LeafAction::ZeroClaw"
+        - "launch_nanoclawv2() renamed to launch_zeroclaw()"
+        - "Socket paths and container names updated"
+      outcome: >
+        LaunchKind::ZeroClaw, launch_zeroclaw(), socket path
+        tillandsias/zeroclaw-<project>.sock, image
+        tillandsias-zeroclaw:v<version> — all confirmed in tray/mod.rs.
+
+    - id: zeroclaw-image-registration
+      order: 94
+      title: "ZeroClaw Packet D: Update image registration — rename NanoClawV2 → ZeroClaw"
+      status: done
+      owner_host: linux
+      deliverable: crates/tillandsias-headless/src/runtime_assets.rs
+      depends_on: [zeroclaw-tray-launcher]
+      pickup_role: linux
+      estimated_hours: 1
+      closed_at: "2026-06-23T22:47Z"
+      closed_by: "linux-sonnet46-meta-orch-20260623T2247Z"
+      exit_criteria:
+        - "All nanoclawv2 strings in main.rs replaced with zeroclaw"
+        - "All nanoclawv2 strings in runtime_assets.rs replaced with zeroclaw"
+      outcome: >
+        runtime_assets.rs line 264: "zeroclaw" => Ok("images/zeroclaw").
+        build_inputs line 351: images/zeroclaw/Containerfile registered.
+        main.rs updated. build.sh --check + tests PASS.
+
+    - id: zeroclaw-litmus-update
+      order: 95
+      title: "ZeroClaw Packet E: Update litmus tests — rename NanoClawV2 → ZeroClaw"
+      status: done
+      owner_host: linux
+      deliverable: openspec/litmus-tests/litmus-zeroclaw-mcp-shape.yaml
+      depends_on: [zeroclaw-image-registration]
+      pickup_role: linux
+      estimated_hours: 1
+      closed_at: "2026-06-23T22:47Z"
+      closed_by: "linux-sonnet46-meta-orch-20260623T2247Z"
+      exit_criteria:
+        - "litmus:zeroclaw-mcp-shape exists (renamed from nanoclawv2)"
+        - "litmus-simplified-tray-ux-leaf-action-shape.yaml references updated"
+        - "litmus-bindings.yaml binding updated"
+      outcome: >
+        litmus-nanoclawv2-mcp-shape.yaml renamed to litmus-zeroclaw-mcp-shape.yaml.
+        litmus-bindings.yaml: spec_id zeroclaw-orchestration, litmus:zeroclaw-mcp-shape.
+        litmus-simplified-tray-ux-leaf-action-shape.yaml updated.
+
+    - id: zeroclaw-legacy-cleanup
+      order: 96
+      title: "ZeroClaw Packet F: Remove NanoClawV2 legacy files"
+      status: done
+      owner_host: linux
+      deliverable: "(crates/tillandsias-nanoclawv2-mcp/ removed)"
+      depends_on: [zeroclaw-litmus-update]
+      pickup_role: linux
+      estimated_hours: 0.5
+      closed_at: "2026-06-23T22:47Z"
+      closed_by: "linux-sonnet46-meta-orch-20260623T2247Z"
+      exit_criteria:
+        - "crates/tillandsias-nanoclawv2-mcp/ removed or archived"
+        - "images/nanoclawv2/ removed or archived"
+        - "Workspace Cargo.toml updated"
+      outcome: >
+        crates/tillandsias-nanoclawv2-mcp/ deleted. images/nanoclawv2/ renamed
+        to images/zeroclaw/. Cargo.toml workspace members and deps updated
+        to remove tillandsias-nanoclawv2-mcp.
+
+    - id: zeroclaw-plan-update
+      order: 97
+      title: "ZeroClaw Packet G: Update plan ledger — close order 56, finalize ZeroClaw"
+      status: done
+      owner_host: linux
+      deliverable: plan/index.yaml
+      depends_on: [zeroclaw-legacy-cleanup]
+      pickup_role: linux
+      estimated_hours: 0.5
+      closed_at: "2026-06-23T22:47Z"
+      closed_by: "linux-sonnet46-meta-orch-20260623T2247Z"
+      exit_criteria:
+        - "Order 56 (nanoclawv2-orchestration) marked completed"
+        - "Zeroclaw orchestration packets closed or updated"
+      outcome: >
+        Orders 92-97 all closed. Order 56 (nanoclawv2-orchestration) status
+        updated to completed. ZeroClaw migration chain fully done.

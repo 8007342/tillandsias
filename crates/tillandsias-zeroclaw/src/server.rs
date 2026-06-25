@@ -1,11 +1,11 @@
-//! NanoClawV2 MCP server — JSON-RPC dispatch for the five approved tools.
+//! ZeroClaw MCP server — JSON-RPC dispatch for the five approved tools.
 //!
 //! Handles one connection at a time (one container per project launch). Uses
 //! the same JSON-RPC framing as the browser-mcp crate.
 //!
-//! @trace spec:nanoclawv2-orchestration
+//! @trace spec:zeroclaw-orchestration
 
-use crate::allowlist::{ApprovedAction, NanoClawAllowlist};
+use crate::allowlist::{ApprovedAction, ZeroClawAllowlist};
 use serde_json::json;
 use std::path::Path;
 use std::process::Stdio;
@@ -17,29 +17,24 @@ use tokio::process::Command;
 use tracing::{debug, info, warn};
 
 /// Run the MCP server over an established `UnixStream` connection.
-///
-/// Reads newline-delimited JSON-RPC requests, dispatches them through the
-/// allowlist, executes the approved action, and writes the response.
-/// Returns when the connection closes (container exited / socat terminated).
-pub async fn serve_connection(stream: UnixStream, allowlist: &NanoClawAllowlist) {
+pub async fn serve_connection(stream: UnixStream, allowlist: &ZeroClawAllowlist) {
     let (reader, mut writer) = stream.into_split();
     let mut lines = BufReader::new(reader).lines();
 
     info!(
         project = %allowlist.project().display(),
-        "nanoclaw-mcp: connection accepted"
+        "zeroclaw-mcp: connection accepted"
     );
 
     while let Ok(Some(line)) = lines.next_line().await {
         if line.trim().is_empty() {
             continue;
         }
-        debug!(line = %line, "nanoclaw-mcp: rx");
+        debug!(line = %line, "zeroclaw-mcp: rx");
 
         let response = match RpcRequest::from_line(&line) {
             Err(e) => {
-                warn!(err = %e, "nanoclaw-mcp: framing error");
-                // No id available; skip sending a response for framing errors.
+                warn!(err = %e, "zeroclaw-mcp: framing error");
                 continue;
             }
             Ok(req) => dispatch(req, allowlist).await,
@@ -51,25 +46,23 @@ pub async fn serve_connection(stream: UnixStream, allowlist: &NanoClawAllowlist)
                 Ok(mut s) => {
                     s.push('\n');
                     if let Err(e) = writer.write_all(s.as_bytes()).await {
-                        warn!(err = %e, "nanoclaw-mcp: write error");
+                        warn!(err = %e, "zeroclaw-mcp: write error");
                         break;
                     }
-                    debug!("nanoclaw-mcp: tx ok");
+                    debug!("zeroclaw-mcp: tx ok");
                 }
-                Err(e) => warn!(err = %e, "nanoclaw-mcp: serialize error"),
+                Err(e) => warn!(err = %e, "zeroclaw-mcp: serialize error"),
             },
         }
     }
 
-    info!("nanoclaw-mcp: connection closed");
+    info!("zeroclaw-mcp: connection closed");
 }
 
-/// Dispatch one RPC request.
-async fn dispatch(req: RpcRequest, allowlist: &NanoClawAllowlist) -> RpcResponse {
+async fn dispatch(req: RpcRequest, allowlist: &ZeroClawAllowlist) -> RpcResponse {
     let id = match req.id {
         Some(id) => id,
         None => {
-            // Notification — consume silently.
             if req.method == "notifications/initialized" {
                 return RpcResponse::Notification;
             }
@@ -100,7 +93,7 @@ fn handle_initialize(id: u64) -> RpcResponse {
             "protocolVersion": "2024-11-05",
             "capabilities": { "tools": {} },
             "serverInfo": {
-                "name": "tillandsias-nanoclawv2-mcp",
+                "name": "tillandsias-zeroclaw",
                 "version": env!("CARGO_PKG_VERSION")
             }
         }),
@@ -113,7 +106,7 @@ fn handle_tools_list(id: u64) -> RpcResponse {
         result: json!({
             "tools": [
                 {
-                    "name": "nanoclaw.advance_work",
+                    "name": "zeroclaw.advance_work",
                     "description": "Advance the next ready work item from the project plan on the host.",
                     "inputSchema": {
                         "type": "object",
@@ -126,7 +119,7 @@ fn handle_tools_list(id: u64) -> RpcResponse {
                     }
                 },
                 {
-                    "name": "nanoclaw.build",
+                    "name": "zeroclaw.build",
                     "description": "Run the project build check (./build.sh --check). Pass full_test=true for --test.",
                     "inputSchema": {
                         "type": "object",
@@ -137,7 +130,7 @@ fn handle_tools_list(id: u64) -> RpcResponse {
                     }
                 },
                 {
-                    "name": "nanoclaw.service_launch",
+                    "name": "zeroclaw.service_launch",
                     "description": "Start an approved local service (dev-proxy, inference, vault, router).",
                     "inputSchema": {
                         "type": "object",
@@ -149,7 +142,7 @@ fn handle_tools_list(id: u64) -> RpcResponse {
                     }
                 },
                 {
-                    "name": "nanoclaw.forge_delegate",
+                    "name": "zeroclaw.forge_delegate",
                     "description": "Launch a forge container for the locked project with the given prompt.",
                     "inputSchema": {
                         "type": "object",
@@ -161,7 +154,7 @@ fn handle_tools_list(id: u64) -> RpcResponse {
                     }
                 },
                 {
-                    "name": "nanoclaw.status",
+                    "name": "zeroclaw.status",
                     "description": "Return current plan/loop status for the locked project.",
                     "inputSchema": {
                         "type": "object",
@@ -178,7 +171,7 @@ fn handle_tools_list(id: u64) -> RpcResponse {
 async fn handle_tools_call(
     id: u64,
     params: &serde_json::Value,
-    allowlist: &NanoClawAllowlist,
+    allowlist: &ZeroClawAllowlist,
 ) -> RpcResponse {
     let tool_name = match params.get("name").and_then(|v| v.as_str()) {
         Some(n) => n,
@@ -193,21 +186,20 @@ async fn handle_tools_call(
 
     match allowlist.check(tool_name, &args) {
         Err(deny) => {
-            warn!(tool = tool_name, reason = %deny, "nanoclaw-mcp: DENIED");
+            warn!(tool = tool_name, reason = %deny, "zeroclaw-mcp: DENIED");
             RpcResponse::Success {
                 id,
                 result: tool_error_result(format!("DENIED: {deny}")),
             }
         }
         Ok(action) => {
-            info!(tool = tool_name, "nanoclaw-mcp: executing approved action");
+            info!(tool = tool_name, "zeroclaw-mcp: executing approved action");
             let result = execute_action(action, allowlist.project()).await;
             RpcResponse::Success { id, result }
         }
     }
 }
 
-/// Execute an approved action and return the MCP tool result value.
 async fn execute_action(action: ApprovedAction, project: &Path) -> serde_json::Value {
     match action {
         ApprovedAction::AdvanceWork => {
@@ -235,8 +227,6 @@ async fn execute_action(action: ApprovedAction, project: &Path) -> serde_json::V
         }
 
         ApprovedAction::ServiceLaunch { service_name } => {
-            // Services are managed by systemd or podman; we start a detached
-            // named container using the existing tillandsias tooling.
             run_in_project(
                 project,
                 "bash",
@@ -250,8 +240,6 @@ async fn execute_action(action: ApprovedAction, project: &Path) -> serde_json::V
         }
 
         ApprovedAction::ForgeDelegate { prompt } => {
-            // Launch a one-shot forge (OpenCode) container for this project.
-            // We invoke the same codex wrapper the operator uses, non-interactively.
             let cmd = format!(
                 "tillandsias --forge-opencode --project . --prompt {prompt:?} 2>&1 | tail -40"
             );
@@ -259,7 +247,6 @@ async fn execute_action(action: ApprovedAction, project: &Path) -> serde_json::V
         }
 
         ApprovedAction::Status => {
-            // Read the first 60 lines of loop_status.md from the project tree.
             run_in_project(
                 project,
                 "bash",
@@ -274,7 +261,6 @@ async fn execute_action(action: ApprovedAction, project: &Path) -> serde_json::V
     }
 }
 
-/// Run a subprocess in `cwd`, capture stdout+stderr, and return a tool result.
 async fn run_in_project(
     cwd: &Path,
     program: &str,

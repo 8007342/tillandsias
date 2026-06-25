@@ -888,10 +888,10 @@ specs:
   - litmus:reverse-proxy-internal-shape
   coverage_ratio: 75
   last_verified: '2026-05-30'
-- spec_id: nanoclawv2-orchestration
+- spec_id: zeroclaw-orchestration
   status: active
   litmus_tests:
-  - litmus:nanoclawv2-mcp-shape
+  - litmus:zeroclaw-mcp-shape
   coverage_ratio: 80
   last_verified: '2026-06-20'
   note: >

@@ -1,14 +1,14 @@
 [package]
-name = "tillandsias-nanoclawv2-mcp"
+name = "tillandsias-zeroclaw"
 version = "0.1.0"
 edition = "2024"
-license = "GPL-3.0-or-later"
+license = "Apache-2.0"
 authors = ["Tlatoani"]
 publish = false
-description = "Host-resident MCP server for NanoClawV2 project-scoped orchestration."
+description = "Host-resident MCP server for ZeroClaw project-scoped orchestration."
 
 [[bin]]
-name = "tillandsias-nanoclawv2-mcp"
+name = "tillandsias-zeroclaw"
 path = "src/main.rs"
 
 [dependencies]

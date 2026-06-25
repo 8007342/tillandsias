@@ -1080,7 +1080,7 @@ fn image_specs(root: &Path, image_name: &str) -> Result<(PathBuf, PathBuf), Stri
         "chromium-core" => "images/chromium",
         "chromium-framework" => "images/chromium",
         "vault" => "images/vault",
-        "nanoclawv2" => "images/nanoclawv2",
+        "zeroclaw" => "images/zeroclaw",
         other => {
             return Err(format!("Unknown image type: {other}"));
         }
@@ -1130,10 +1130,10 @@ fn image_build_inputs(
             .ok_or_else(|| "forge identity requires forge-base identity".to_string())?;
         build_args.insert("BASE_IMAGE".to_string(), base.canonical_tag.clone());
         dependency_digests.insert("forge-base".to_string(), base.source_digest.clone());
-    } else if image_name == "nanoclawv2" {
+    } else if image_name == "zeroclaw" {
         let base = identities
             .get("forge-base")
-            .ok_or_else(|| "nanoclawv2 identity requires forge-base identity".to_string())?;
+            .ok_or_else(|| "zeroclaw identity requires forge-base identity".to_string())?;
         build_args.insert("BASE_IMAGE".to_string(), base.canonical_tag.clone());
         dependency_digests.insert("forge-base".to_string(), base.source_digest.clone());
     }
@@ -1394,7 +1394,7 @@ fn ensure_image_exists(
                 )
             })?;
         }
-    } else if matches!(image_name, "forge" | "nanoclawv2") {
+    } else if matches!(image_name, "forge" | "zeroclaw") {
         let base_tag = versioned_image_tag("forge-base", version);
         if !rt.block_on(client.image_exists(&base_tag)) {
             ensure_image_exists(root, "forge-base", &base_tag, debug).map_err(|e| {
@@ -1415,7 +1415,7 @@ fn ensure_image_exists(
                 versioned_image_tag("chromium-core", version)
             ),
         ]
-    } else if matches!(image_name, "forge" | "nanoclawv2") {
+    } else if matches!(image_name, "forge" | "zeroclaw") {
         vec![
             "--build-arg".to_string(),
             format!("BASE_IMAGE={}", versioned_image_tag("forge-base", version)),
@@ -3033,7 +3033,7 @@ fn auto_detect_and_configure_ipv6_workaround(debug: bool) {
 }
 
 fn is_optional_image(image_name: &str) -> bool {
-    matches!(image_name, "forge-base" | "forge" | "nanoclawv2")
+    matches!(image_name, "forge-base" | "forge" | "zeroclaw")
 }
 
 fn run_init(debug: bool, force: bool) -> Result<(), String> {
@@ -3055,7 +3055,7 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
         "chromium-framework",
         "forge-base",
         "forge",
-        "nanoclawv2",
+        "zeroclaw",
         "web",
     ];
 
@@ -4183,7 +4183,7 @@ fn run_github_login(debug: bool) -> Result<(), String> {
     if let Some(username) = username.filter(|value| !value.is_empty()) {
         println!("[tillandsias] GitHub authentication complete for {username}");
     }
-    
+
     // Add a 5 second delay so the user can see the success message before the popup terminal closes
     std::thread::sleep(std::time::Duration::from_secs(5));
 
@@ -9012,11 +9012,11 @@ mod tests {
         assert!(containerfile.ends_with("images/web/Containerfile"));
         assert!(context.ends_with("images/web"));
 
-        // Test nanoclawv2 image
+        // Test zeroclaw image
         let (containerfile, context) =
-            image_specs(&root, "nanoclawv2").expect("nanoclawv2 image specs should be resolvable");
-        assert!(containerfile.ends_with("images/nanoclawv2/Containerfile"));
-        assert!(context.ends_with("images/nanoclawv2"));
+            image_specs(&root, "zeroclaw").expect("zeroclaw image specs should be resolvable");
+        assert!(containerfile.ends_with("images/zeroclaw/Containerfile"));
+        assert!(context.ends_with("images/zeroclaw"));
     }
 
     #[test]
@@ -9169,7 +9169,7 @@ mod tests {
 
         // The images array from run_init defines the build order:
         // proxy -> git -> inference -> router -> chromium-core -> chromium-framework
-        // -> forge-base -> forge -> nanoclawv2 -> web
+        // -> forge-base -> forge -> zeroclaw -> web
         let images = [
             "proxy",
             "git",
@@ -9179,7 +9179,7 @@ mod tests {
             "chromium-framework",
             "forge-base",
             "forge",
-            "nanoclawv2",
+            "zeroclaw",
             "web",
         ];
 
@@ -9215,10 +9215,10 @@ mod tests {
             forge_base_idx < forge_idx,
             "forge-base must be built before forge"
         );
-        let nanoclawv2_idx = images.iter().position(|&i| i == "nanoclawv2").unwrap();
+        let zeroclaw_idx = images.iter().position(|&i| i == "zeroclaw").unwrap();
         assert!(
-            forge_base_idx < nanoclawv2_idx,
-            "forge-base must be built before nanoclawv2"
+            forge_base_idx < zeroclaw_idx,
+            "forge-base must be built before zeroclaw"
         );
     }
 
@@ -9226,7 +9226,7 @@ mod tests {
     fn test_is_optional_image() {
         assert!(is_optional_image("forge-base"));
         assert!(is_optional_image("forge"));
-        assert!(is_optional_image("nanoclawv2"));
+        assert!(is_optional_image("zeroclaw"));
         assert!(!is_optional_image("proxy"));
         assert!(!is_optional_image("git"));
         assert!(!is_optional_image("inference"));

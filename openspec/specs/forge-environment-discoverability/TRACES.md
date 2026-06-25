@@ -6,8 +6,8 @@ Run `./scripts/generate-traces.sh` to regenerate.
 ## Annotated locations
 
 - [crates/tillandsias-core/tests/project_discovery.rs#L2](../../../crates/tillandsias-core/tests/project_discovery.rs#L2)
-- [crates/tillandsias-headless/src/main.rs#L6871](../../../crates/tillandsias-headless/src/main.rs#L6871)
-- [crates/tillandsias-headless/src/main.rs#L7413](../../../crates/tillandsias-headless/src/main.rs#L7413)
+- [crates/tillandsias-headless/src/main.rs#L6874](../../../crates/tillandsias-headless/src/main.rs#L6874)
+- [crates/tillandsias-headless/src/main.rs#L7416](../../../crates/tillandsias-headless/src/main.rs#L7416)
 - [flake.nix#L268](../../../flake.nix#L268)
 - [flake.nix#L279](../../../flake.nix#L279)
 - [images/default/config-overlay/mcp/dependency-resolver.sh#L3](../../../images/default/config-overlay/mcp/dependency-resolver.sh#L3)
@@ -35,3 +35,4 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/entrypoint-terminal.sh#L90](../../../images/default/entrypoint-terminal.sh#L90)
 - [images/default/forge-welcome.sh#L167](../../../images/default/forge-welcome.sh#L167)
 - [images/default/lib-common.sh#L1109](../../../images/default/lib-common.sh#L1109)
+- [images/default/lib-common.sh#L1323](../../../images/default/lib-common.sh#L1323)

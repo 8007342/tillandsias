@@ -1,9 +1,9 @@
-//! `tillandsias-nanoclawv2-mcp` binary entry point.
+//! `tillandsias-zeroclaw` binary entry point.
 //!
 //! Usage:
-//!   tillandsias-nanoclawv2-mcp \
+//!   tillandsias-zeroclaw \
 //!       --project-path /home/user/src/myproject \
-//!       [--socket /run/user/1000/tillandsias/nanoclaw-myproject.sock]
+//!       [--socket /run/user/1000/tillandsias/zeroclaw-myproject.sock]
 //!
 //! The server binds a Unix socket, then accepts one connection per container
 //! launch. When the connection closes (container exits / socat terminates),
@@ -12,14 +12,14 @@
 //! Credentials (Vault token, Podman socket) are never exposed through this
 //! surface — all tool calls run as the host user in the project directory.
 //!
-//! @trace spec:nanoclawv2-orchestration
+//! @trace spec:zeroclaw-orchestration
 
 use std::env;
 use std::fs;
 use std::path::PathBuf;
 use std::sync::Arc;
 
-use tillandsias_nanoclawv2_mcp::{NanoClawAllowlist, SOCKET_ENV};
+use tillandsias_zeroclaw::{SOCKET_ENV, ZeroClawAllowlist};
 use tokio::net::UnixListener;
 use tracing::{error, info};
 
@@ -28,14 +28,14 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     tracing_subscriber::fmt()
         .with_env_filter(
             tracing_subscriber::EnvFilter::from_default_env()
-                .add_directive("tillandsias_nanoclawv2_mcp=info".parse()?),
+                .add_directive("tillandsias_zeroclaw=info".parse()?),
         )
         .init();
 
     let args: Vec<String> = env::args().collect();
     let (project_path, socket_path) = parse_args(&args)?;
 
-    let allowlist = Arc::new(NanoClawAllowlist::new(&project_path));
+    let allowlist = Arc::new(ZeroClawAllowlist::new(&project_path));
 
     // Remove stale socket if it exists (previous crash / unclean exit).
     if socket_path.exists() {
@@ -50,20 +50,17 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     info!(
         socket = %socket_path.display(),
         project = %project_path.display(),
-        "nanoclaw-mcp: listening"
+        "zeroclaw-mcp: listening"
     );
 
     // Accept connections sequentially (one container per launch).
-    // Each accepted connection is served to completion before we wait
-    // for the next; since the tray launches one container per project
-    // click, there is no need for concurrency here.
     loop {
         match listener.accept().await {
             Ok((stream, _addr)) => {
-                tillandsias_nanoclawv2_mcp::serve_connection(stream, &allowlist).await;
+                tillandsias_zeroclaw::serve_connection(stream, &allowlist).await;
             }
             Err(e) => {
-                error!(err = %e, "nanoclaw-mcp: accept error");
+                error!(err = %e, "zeroclaw-mcp: accept error");
                 break;
             }
         }
@@ -74,9 +71,6 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
 }
 
 /// Parse `--project-path <path>` and optional `--socket <path>` from argv.
-///
-/// Falls back to `TILLANDSIAS_NANOCLAW_SOCKET` for the socket path, then
-/// to a per-project default under `$XDG_RUNTIME_DIR`.
 fn parse_args(args: &[String]) -> Result<(PathBuf, PathBuf), String> {
     let mut project_path: Option<PathBuf> = None;
     let mut socket_path: Option<PathBuf> = None;
@@ -106,7 +100,6 @@ fn parse_args(args: &[String]) -> Result<(PathBuf, PathBuf), String> {
     let socket_path = socket_path
         .or_else(|| env::var_os(SOCKET_ENV).map(PathBuf::from))
         .unwrap_or_else(|| {
-            // Derive a stable per-project socket path from the project name.
             let project_name = project_path
                 .file_name()
                 .and_then(|n| n.to_str())
@@ -120,7 +113,7 @@ fn parse_args(args: &[String]) -> Result<(PathBuf, PathBuf), String> {
                         unsafe { libc::getuid() }
                     ))
                 });
-            runtime_dir.join(format!("tillandsias/nanoclaw-{project_name}.sock"))
+            runtime_dir.join(format!("tillandsias/zeroclaw-{project_name}.sock"))
         });
 
     Ok((project_path, socket_path))

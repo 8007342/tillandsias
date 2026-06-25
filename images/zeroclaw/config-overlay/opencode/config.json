@@ -6,13 +6,13 @@
   "model": "opencode/big-pickle",
   "small_model": "opencode/gpt-5-nano",
   "instructions": [
-    "/home/forge/.config/opencode/instructions/nanoclawv2-discipline.md",
+    "/home/forge/.config/opencode/instructions/zeroclaw-discipline.md",
     "/home/forge/.config/opencode/instructions/cache-discipline.md"
   ],
   "mcp": {
-    "nanoclaw-host": {
+    "zeroclaw-host": {
       "type": "local",
-      "command": ["/home/forge/.config-overlay/mcp/nanoclaw-host.sh"],
+      "command": ["/home/forge/.config-overlay/mcp/zeroclaw-host.sh"],
       "enabled": true
     }
   }

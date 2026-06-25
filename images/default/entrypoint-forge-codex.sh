@@ -72,6 +72,10 @@ find_project_dir
 configure_git_identity
 trace_lifecycle "project" "dir=${PROJECT_DIR:-<none>}"
 
+# ── Startup context injection ───────────────────────────────
+# @trace spec:project-bootstrap-readme
+inject_startup_context "$PROJECT_DIR"
+
 # ── Banner ──────────────────────────────────────────────────
 show_banner "codex"
 

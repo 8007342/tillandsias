@@ -1,9 +1,9 @@
-//! Action allowlist for the NanoClawV2 host control surface.
+//! Action allowlist for the ZeroClaw host control surface.
 //!
 //! Enforces that every tool call targets the project the server was locked to
 //! at startup, and that the requested action is one of the five approved verbs.
 //!
-//! @trace spec:nanoclawv2-orchestration
+//! @trace spec:zeroclaw-orchestration
 
 use std::path::{Path, PathBuf};
 use thiserror::Error;
@@ -46,12 +46,11 @@ pub enum AllowlistDeny {
 ///
 /// Created once at server startup with the locked project path. All incoming
 /// tool calls must pass `check` before being dispatched.
-pub struct NanoClawAllowlist {
-    /// Canonical locked project path (passed via `--project-path` at startup).
+pub struct ZeroClawAllowlist {
     locked_project: PathBuf,
 }
 
-impl NanoClawAllowlist {
+impl ZeroClawAllowlist {
     /// Create a new allowlist locked to `project_path`.
     pub fn new(project_path: impl Into<PathBuf>) -> Self {
         Self {
@@ -65,17 +64,11 @@ impl NanoClawAllowlist {
     }
 
     /// Validate a tool call and return the parsed `ApprovedAction`, or a denial.
-    ///
-    /// `tool_name` is the MCP tool name (e.g. `"nanoclaw.advance_work"`).
-    /// `params` is the JSON params object from the RPC request.
     pub fn check(
         &self,
         tool_name: &str,
         params: &serde_json::Value,
     ) -> Result<ApprovedAction, AllowlistDeny> {
-        // Optional project guard: if the caller passes a project_path, it must
-        // match the locked project. Callers may omit it (server always uses the
-        // locked path).
         if let Some(requested) = params.get("project_path").and_then(|v| v.as_str()) {
             let requested_canon = PathBuf::from(requested)
                 .canonicalize()
@@ -93,9 +86,9 @@ impl NanoClawAllowlist {
         }
 
         match tool_name {
-            "nanoclaw.advance_work" => Ok(ApprovedAction::AdvanceWork),
+            "zeroclaw.advance_work" => Ok(ApprovedAction::AdvanceWork),
 
-            "nanoclaw.build" => {
+            "zeroclaw.build" => {
                 let full_test = params
                     .get("full_test")
                     .and_then(|v| v.as_bool())
@@ -103,7 +96,7 @@ impl NanoClawAllowlist {
                 Ok(ApprovedAction::Build { full_test })
             }
 
-            "nanoclaw.service_launch" => {
+            "zeroclaw.service_launch" => {
                 let service_name = params
                     .get("service_name")
                     .and_then(|v| v.as_str())
@@ -115,7 +108,7 @@ impl NanoClawAllowlist {
                 Ok(ApprovedAction::ServiceLaunch { service_name })
             }
 
-            "nanoclaw.forge_delegate" => {
+            "zeroclaw.forge_delegate" => {
                 let prompt = params
                     .get("prompt")
                     .and_then(|v| v.as_str())
@@ -124,7 +117,7 @@ impl NanoClawAllowlist {
                 Ok(ApprovedAction::ForgeDelegate { prompt })
             }
 
-            "nanoclaw.status" => Ok(ApprovedAction::Status),
+            "zeroclaw.status" => Ok(ApprovedAction::Status),
 
             other => Err(AllowlistDeny::UnknownTool(other.to_string())),
         }
@@ -136,32 +129,32 @@ mod tests {
     use super::*;
     use serde_json::json;
 
-    fn list() -> NanoClawAllowlist {
-        NanoClawAllowlist::new("/home/forge/src/myproject")
+    fn list() -> ZeroClawAllowlist {
+        ZeroClawAllowlist::new("/home/forge/src/myproject")
     }
 
     #[test]
     fn approved_advance_work() {
-        let a = list().check("nanoclaw.advance_work", &json!({}));
+        let a = list().check("zeroclaw.advance_work", &json!({}));
         assert_eq!(a.unwrap(), ApprovedAction::AdvanceWork);
     }
 
     #[test]
     fn approved_build_default() {
-        let a = list().check("nanoclaw.build", &json!({}));
+        let a = list().check("zeroclaw.build", &json!({}));
         assert_eq!(a.unwrap(), ApprovedAction::Build { full_test: false });
     }
 
     #[test]
     fn approved_build_full() {
-        let a = list().check("nanoclaw.build", &json!({ "full_test": true }));
+        let a = list().check("zeroclaw.build", &json!({ "full_test": true }));
         assert_eq!(a.unwrap(), ApprovedAction::Build { full_test: true });
     }
 
     #[test]
     fn approved_service_launch() {
         let a = list().check(
-            "nanoclaw.service_launch",
+            "zeroclaw.service_launch",
             &json!({ "service_name": "vault" }),
         );
         assert_eq!(
@@ -175,7 +168,7 @@ mod tests {
     #[test]
     fn denied_unapproved_service() {
         let a = list().check(
-            "nanoclaw.service_launch",
+            "zeroclaw.service_launch",
             &json!({ "service_name": "postgres" }),
         );
         assert!(matches!(a, Err(AllowlistDeny::ServiceNotApproved(_))));
@@ -190,7 +183,7 @@ mod tests {
     #[test]
     fn denied_project_mismatch() {
         let a = list().check(
-            "nanoclaw.advance_work",
+            "zeroclaw.advance_work",
             &json!({ "project_path": "/home/forge/src/otherproject" }),
         );
         assert!(matches!(a, Err(AllowlistDeny::ProjectMismatch { .. })));
@@ -199,7 +192,7 @@ mod tests {
     #[test]
     fn approved_forge_delegate() {
         let a = list().check(
-            "nanoclaw.forge_delegate",
+            "zeroclaw.forge_delegate",
             &json!({ "prompt": "Use /advance-work-from-plan" }),
         );
         assert!(matches!(a, Ok(ApprovedAction::ForgeDelegate { .. })));
@@ -207,7 +200,7 @@ mod tests {
 
     #[test]
     fn approved_status() {
-        let a = list().check("nanoclaw.status", &json!({}));
+        let a = list().check("zeroclaw.status", &json!({}));
         assert_eq!(a.unwrap(), ApprovedAction::Status);
     }
 }

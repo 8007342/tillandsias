@@ -1,6 +1,113 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-23T20:45Z
+Last updated: 2026-06-25T00:44Z
+
+## This Cycle (2026-06-25T00:44Z, linux_mutable — big-pickle meta-orch — convergence check)
+
+- **Cycle type**: meta-orchestration convergence check — zero residual at current bar.
+- **Startup**: `linux-next @ 8bda1897`, dirty (uncommitted version bumps + dashboard from prior forge diagnostics run). Checkpointed as `e181a72e`, clean. Credential channel: `ok:gh-keyring`.
+- **Worker drain**: 0 linux-ready nodes. All remaining ready/in-progress nodes are macOS/Windows-owned (macos-in-vm-enclave-provisioning [order 55], macos-tray-icon-missing-T-fallback [order 79], vault-unseal-fails-macos-after-db616e06 [order 81]).
+- **Coordination**: `origin/windows-next@a3c8b23d`, `origin/osx-next@85e69f14` — both ancestors of HEAD. No merge needed.
+- **E2E**: eligible but deferred — latest release v0.3.260622.4 already tested; no linux-ready work to ship.
+- **Reduction engine**: Zero residual at current bar. No new findings this cycle.
+- **Next**: Await macOS/Windows hosts to drain their ready packets; no linux-ready work at current bar.
+
+## This Cycle (2026-06-24T07:00Z, linux_mutable — big-pickle ledger hygiene — order-42 stale status)
+
+- **Cycle type**: meta-orchestration ledger hygiene + convergence check.
+- **Startup**: `linux-next @ ba8fe4ad`, clean. Credential channel: `ok:gh-keyring`. Fetched origin — siblings unchanged (linux-next in sync).
+- **Worker drain**: 0 linux-ready implementation nodes. Fixed stale `vault-flow/xplat-gating-parity` (order 42 subtask): status was `ready` but all 3 platform slices completed 2026-06-14 (Windows, Linux commit 2af7c7eb, macOS). Corrected to `completed` + completion event.
+- **Siblings**: `origin/windows-next@a3c8b23d`, `origin/osx-next@85e69f14` — both ancestors of HEAD. No merge needed.
+- **E2E**: eligible but deferred — latest release v0.3.260622.4 pre-dates latest tested release evidence. No Linux-eligible work to ship. curl-install e2e warranted but deferred to conserve cycle budget.
+- **Remaining ready**: `macos-in-vm-enclave-provisioning` (order 55, macOS), `macos-tray-icon-missing-T-fallback` (order 79, macOS), `vault-unseal-fails-macos-after-db616e06` (order 81, in_progress Linux+macOS — fix shipped 8e6f25b1, pending macOS re-smoke).
+- **Zero residual** at current bar for Linux. 1 stale-status finding corrected.
+
+## This Cycle (2026-06-24T04:58Z, linux_mutable — big-pickle meta-orch — convergence check)
+
+- **Cycle type**: meta-orchestration convergence check — zero residual at current bar.
+- **Startup**: `linux-next @ 3bc55732`, clean. Credential channel: `ok:gh-keyring`. Fetched origin — siblings unchanged.
+- **Worker drain**: 0 linux-ready nodes. All remaining ready nodes are macOS/Windows-owned (vault-flow/xplat-gating-parity, macos-in-vm-enclave-provisioning, macos-tray-icon-missing-T-fallback).
+- **Coordination**: `origin/windows-next@a3c8b23d`, `origin/osx-next@85e69f14` — both ancestors of HEAD. No merge needed.
+- **E2E preflight**: eligible but skipped — no new release to test since last e2e PASS (v0.3.260624.1, ~2h ago). Latest v0.3.260623.3 on main (needs operator `actions:write` dispatch).
+- **Reduction engine**: Zero residual at current bar. All 3 bar-raise candidates (orders 82-85) previously approved and completed. No new findings this cycle.
+- **Next**: Await macOS/Windows hosts to drain their ready packets; no linux-ready work at current bar.
+
+## This Cycle (2026-06-24T02:56Z, linux_mutable — big-pickle meta-orch — convergence check)
+
+- **Zero residual** at current bar. No linux-ready nodes.
+- **Siblings**: osx-next@85e69f14, windows-next@a3c8b23d — both ancestors. No merge needed.
+- **Release**: v0.3.260623.3 tagged on main; needs operator dispatch (`actions:write`).
+- **Pending macOS/Windows**: vault-flow/xplat-gating-parity, macos-in-vm-enclave-provisioning, macos-tray-icon-missing-T-fallback — all macOS/Windows-owned.
+
+## This Cycle (2026-06-24T02:22Z, linux_mutable — Sonnet 4.6 meta-orch cycle 6 of 6 — e2e PASS)
+
+- **E2E**: Build-install smoke PASS. Binary v0.3.260624.1 installed OK. Podman reset clean. `--init` clean (Vault v1.18.5, 5 AppRoles). Forge meta-orch exit 0.
+- **Finding**: Post-build litmus false negatives on fresh host — pre-existing optimization, filed in `plan/issues/build-install-smoke-e2e-findings-2026-06-24.md`.
+- **Zero residual** at current bar. 111/111 litmus PASS.
+- **Loop series**: 6/6 cycles complete. No further wakeups scheduled.
+- **Blocker (release)**: v0.3.260623.3 tagged on main; `gh workflow run release.yml --ref v0.3.260623.3` needed from a token with `actions:write`.
+- **Pending macOS**: orders 79 (tray icon), 80 (AX smoke), 81 (vault re-smoke) — macOS-owner only.
+
+## This Cycle (2026-06-24T02:20Z, forge — big-pickle meta-orch — convergence check)
+
+- **Zero residual** at current bar. No linux-ready nodes.
+- **Git mirror**: freshly provisioned (no remote refs). Pushing to re-establish.
+- **Pending macOS/Windows**: vault-flow/xplat-gating-parity, macos-in-vm-enclave-provisioning, macos-tray-icon-missing-T-fallback, vault-unseal-fails-macos — all macOS/Windows-owned.
+
+## This Cycle (2026-06-24T02:07Z, linux_mutable — big-pickle meta-orch — convergence check)
+
+- **Zero residual** at current bar. No linux-ready nodes.
+- **Siblings**: osx-next@85e69f14, windows-next@a3c8b23d — both ancestors. No merge needed.
+- **Release**: v0.3.260623.3 tagged on main; needs operator dispatch (`actions:write`).
+- **Pending macOS/Windows**: vault-flow/xplat-gating-parity, macos-in-vm-enclave-provisioning, macos-tray-icon-missing-T-fallback, vault-unseal-fails-macos — all macOS/Windows-owned.
+
+## This Cycle (2026-06-24T00:55Z, linux_mutable — big-pickle meta-orch — convergence check)
+
+- **Zero residual** at current bar. No linux-ready nodes.
+- **Siblings**: osx-next@85e69f14, windows-next@a3c8b23d — both ancestors. No merge needed.
+- **Release**: v0.3.260623.3 tagged on main; needs operator dispatch (`actions:write`).
+- **Pending macOS/Windows**: vault-flow/xplat-gating-parity, macos-in-vm-enclave-provisioning, macos-tray-icon-missing-T-fallback — all macOS/Windows-owned.
+
+## This Cycle (2026-06-24T00:54Z, linux_mutable — Sonnet 4.6 meta-orch cycle 5 — convergence check)
+
+- **Zero residual** at current bar. No linux-ready nodes. 111/111 litmus PASS.
+- **Siblings**: osx-next@85e69f14, windows-next@a3c8b23d — both ancestors, no merge needed.
+- **Blocker (release)**: v0.3.260623.3 tagged on main; `gh workflow run release.yml --ref v0.3.260623.3` needed from a token with `actions:write`.
+- **Pending macOS**: orders 79 (tray icon), 80 (AX smoke), 81 (vault re-smoke) — macOS-owner only.
+
+## This Cycle (2026-06-23T23:50Z, linux_mutable — Sonnet 4.6 meta-orch cycle 4 — convergence check)
+
+- **Zero residual** at current bar. No linux-ready nodes. 111/111 litmus PASS.
+- **ZeroClaw litmus** (zeroclaw-orchestration spec): 7/7 steps PASS.
+- **Siblings**: osx-next and windows-next unchanged — no merge needed.
+- **Blocker (release)**: v0.3.260623.3 tagged on main; `gh workflow run release.yml --ref v0.3.260623.3` needed from a token with `actions:write`.
+- **Pending macOS**: orders 79 (tray icon), 80 (AX smoke), 81 (vault re-smoke) — macOS-owner only.
+
+## This Cycle (2026-06-23T22:47Z, linux_mutable — Sonnet 4.6 meta-orch cycle 3 — ZeroClaw migration done)
+
+- **Orders 92-97 closed**: Full ZeroClaw migration chain complete. NanoClawV2 removed.
+- **Order 56 closed**: nanoclawv2-orchestration marked done.
+- **Build**: --check PASS, tests PASS.
+- **Bar**: No linux-ready nodes at current bar. Fully drained again.
+- **Next**: Awaiting bar-raise approval or macOS work merging in.
+
+## This Cycle (2026-06-23T21:42Z, linux_mutable — Sonnet 4.6 meta-orch cycle 2 — order 91)
+
+- **Startup**: `linux-next @ a41d2344`, clean. Credential channel: `ok:gh-keyring`.
+- **Order 91 done**: `crates/tillandsias-zeroclaw/` created. Apache-2.0. Full NanoClawV2 MCP port with zeroclaw.* tool names. 12/12 tests pass. build.sh --check PASS.
+- **Orders 92-97**: Ready, sequential dependency chain. Next: order 92 (Containerfile).
+- **Siblings**: both ancestors — no merge needed.
+- **Release**: v0.3.260623.3 on main (landed by other agent). Needs `gh workflow run release.yml --ref v0.3.260623.3`.
+
+## This Cycle (2026-06-23T20:36Z, linux_mutable — Sonnet 4.6 meta-orch — orders 86/87/88)
+
+- **Startup**: `linux-next @ 39b19055`, clean. Credential channel: `ok:gh-keyring`.
+- **Orders 86/87 closed**: Verified all forge paths are dynamic; transparency cheatsheet in sync (both copies). All 7 tasks closed.
+- **Order 88 implemented**: `inject_startup_context()` added to lib-common.sh + wired into all 4 entrypoints (claude, opencode, opencode-web, codex). Writes `.forge-startup-context.md` to project root on every forge session start. `.gitignore` updated. Build check + tests PASS.
+- **Siblings**: `osx-next@85e69f14`, `windows-next@a3c8b23d` — both ancestors, no merge needed.
+- **Release**: v0.3.260623.2 tag on main; release workflow needs manual trigger (`gh workflow run release.yml --ref v0.3.260623.2`).
+- **Blockers**: macOS orders (79 tray icon, 80 AX smoke, 81 vault re-smoke) — macOS-owner only.
+- **Bar**: No linux-ready nodes remaining at current bar. Fully drained.
 
 ## This Cycle (2026-06-23T20:20Z, forge — big-pickle meta-orch — per-project transparency)
 

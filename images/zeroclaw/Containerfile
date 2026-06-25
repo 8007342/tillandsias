@@ -1,5 +1,5 @@
-# Tillandsias NanoClawV2 — Project-scoped orchestration container
-# @trace spec:nanoclawv2-orchestration, spec:default-image
+# Tillandsias ZeroClaw — Project-scoped orchestration container
+# @trace spec:zeroclaw-orchestration, spec:default-image
 ARG BASE_IMAGE=localhost/tillandsias-forge-base
 FROM ${BASE_IMAGE}
 
@@ -12,7 +12,7 @@ RUN mkdir -p /home/forge/src \
     && mkdir -p /home/forge/.config-overlay/mcp \
     && mkdir -p /opt/skills
 
-# ── NanoClawV2 instructions overlay ────────────────────────────
+# ── ZeroClaw instructions overlay ────────────────────────────
 # Only approved orchestration instructions — no forge tooling docs.
 COPY config-overlay/opencode/instructions/ /home/forge/.config/opencode/instructions/
 
@@ -20,19 +20,19 @@ COPY config-overlay/opencode/instructions/ /home/forge/.config/opencode/instruct
 COPY config-overlay/opencode/config.json /home/forge/.config/opencode/config.json
 
 # ── Host MCP bridge script ──────────────────────────────────────
-COPY config-overlay/mcp/nanoclaw-host.sh /home/forge/.config-overlay/mcp/nanoclaw-host.sh
-RUN chmod +x /home/forge/.config-overlay/mcp/nanoclaw-host.sh
+COPY config-overlay/mcp/zeroclaw-host.sh /home/forge/.config-overlay/mcp/zeroclaw-host.sh
+RUN chmod +x /home/forge/.config-overlay/mcp/zeroclaw-host.sh
 
 # ── Skills mapping ─────────────────────────────────────────────
 COPY skills/ /opt/skills/
 
 # ── Entrypoint ─────────────────────────────────────────────────
-COPY entrypoint.sh /usr/local/bin/entrypoint-nanoclawv2.sh
-RUN chmod +x /usr/local/bin/entrypoint-nanoclawv2.sh
+COPY entrypoint.sh /usr/local/bin/entrypoint-zeroclaw.sh
+RUN chmod +x /usr/local/bin/entrypoint-zeroclaw.sh
 
 RUN chown -R 1000:1000 /home/forge /opt
 
 USER 1000:1000
 WORKDIR /home/forge/src
-ENTRYPOINT ["/usr/local/bin/entrypoint-nanoclawv2.sh"]
+ENTRYPOINT ["/usr/local/bin/entrypoint-zeroclaw.sh"]
 ENV HOME=/home/forge USER=forge

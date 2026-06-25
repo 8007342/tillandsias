@@ -118,6 +118,10 @@ if [ -x "$OS_BIN" ] && [ -n "$PROJECT_DIR" ]; then
     fi
 fi
 
+# ── Startup context injection ───────────────────────────────
+# @trace spec:project-bootstrap-readme
+inject_startup_context "$PROJECT_DIR"
+
 # ── Banner ──────────────────────────────────────────────────
 show_banner "opencode"
 
