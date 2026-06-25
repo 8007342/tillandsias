@@ -6370,7 +6370,7 @@ plan_index:
     - id: macos-exec-guest-control-wire-timeout
       order: 98
       title: "macOS curl smoke: --exec-guest and --github-login timeout waiting for control-wire vsock"
-      status: ready
+      status: in_progress
       owner_host: macos
       deliverable: plan/issues/smoke-curl-install-e2e-macos-v0.3.260625.1-2026-06-25.md
       audit_origin: plan/issues/smoke-curl-install-e2e-macos-v0.3.260625.1-2026-06-25.md
@@ -6387,7 +6387,7 @@ plan_index:
         - "`--github-login` reaches the guest auth preflight rather than timing out waiting for vsock port 42420."
       tasks:
         - id: macos-exec-guest-control-wire-timeout/diagnose-and-fix
-          status: ready
+          status: in_progress
           owner_host: macos
           estimated_hours: 2
           owned_files:
@@ -6403,6 +6403,13 @@ plan_index:
             shows the VM reached the Fedora login prompt. Compare the normal
             tray path with the headless exec/login path and fix the missing
             control-wire service/liveness behavior.
+      events:
+        - type: claim
+          ts: "2026-06-25T21:32:35Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260625T213235Z"
+          host: macos
+          lease_id: "macos-exec-guest-control-wire-timeout-20260625T213235Z"
+          expires_at: "2026-06-26T01:32:35Z"
 
     - id: github-login-readiness-before-credentials
       order: 99
