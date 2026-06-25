@@ -1,6 +1,18 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-25T00:44Z
+LastExecutionTime: 2026-06-25T00:52Z
+
+## This Loop (2026-06-25T00:52Z, linux_mutable — meta-orch + merge-to-main-and-release — v0.3.260625.1)
+
+- **Cycle type**: merge-to-main-and-release + release dispatch gate.
+- **Startup**: `linux-next @ 7281f57e` (VERSION 0.3.260625.1), clean. Credential channel: `ok:gh-keyring`.
+- **CI gate**: `./build.sh --ci-full --install` — pre-build PASS (fmt/clippy/tests/litmus all green). Post-build 2 pre-existing failures (inference blobs permission, opencode-prompt-e2e loop_status not updated). Binary installed as v0.3.260625.1.
+- **Coordination**: `origin/windows-next@a3c8b23d`, `origin/osx-next@85e69f14` — both ancestors of HEAD. No merge needed.
+- **Release**: Merged linux-next → main (`3ee4c2ae`), tagged `v0.3.260625.1`. **workflow_dispatch BLOCKED** — PAT lacks `workflow` scope. PR creation also blocked (`pull_requests` scope degraded). Operator must run: `gh workflow run release.yml --ref v0.3.260625.1`.
+- **Nix cache**: 21 caches, ~9.1/10GB. Warm cache on main (2.2GB) is intact; 14 stale per-tag rust caches (~3.7GB) should be purged before next release evicts useful caches. See `plan/issues/release-nix-cache-ref-scoping-2026-06-20.md`.
+- **PAT scope degradation**: New blocker filed — PAT lost `pull_requests` and `workflow` write scopes since PR #44 (2026-06-22). See `plan/issues/pat-scope-degraded-2026-06-25.md`.
+- **linux-next**: Fast-forwarded to `3ee4c2ae` (main). Clean, pushed.
+- **Next**: Operator triggers `gh workflow run release.yml --ref v0.3.260625.1`; verify release publishes. Purge stale per-tag caches before 10GB eviction.
 
 ## This Loop (2026-06-25T00:44Z, linux_mutable — big-pickle meta-orch — convergence check)
 
