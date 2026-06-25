@@ -58,12 +58,25 @@
     login probe logged VM start, control-wire readiness, and only then matched
     the guest author-name prompt; no vsock timeout.
 
+2026-06-25T23:13Z follow-up: an operator-attended `--github-login` run advanced
+past Git author name/email and then hung before the token prompt. Live guest
+diagnostics showed `tillandsias-vault` was healthy in-container and reachable at
+`https://10.0.42.2:8200`, while the loopback publish
+`127.0.0.1:8201 -> tillandsias-vault:8200` accepted TCP but stalled during TLS.
+osx-next now gives Vault a singleton enclave API address with a TLS SAN
+(`10.0.42.2`), has macOS VZ cloud-init export
+`TILLANDSIAS_VAULT_API_BASE_URL=https://10.0.42.2:8200`, and replaces the
+Vault bootstrap HTTP sleep loop with `PodmanClient::wait_healthy()` followed by
+a single Vault API verification. Interactive sign-in retest is pending a
+published release or local aarch64 guest binary containing the headless half of
+this fix; the current VM fetches the older published headless asset.
+
 Remaining architecture work: the full provider-neutral "required containers
 UP+HEALTHY before credentials" contract still depends on the linux/shared
 `podman-health-lifecycle-facade` packet. The macOS branch now consumes the
-control-wire and guest-login ordering pieces, but Vault timeout increases remain
-HACKY STOPGAPS until the shared Podman layer exposes first-class
-`ping`/`keep_alive`/`restart`/`terminate`/`is_healthy`/`diagnose`.
+control-wire and guest-login ordering pieces and removes the concrete Vault
+loopback-publish hang, but the broader shared Podman layer still needs
+first-class `ping`/`keep_alive`/`restart`/`terminate`/`is_healthy`/`diagnose`.
 
 ## Headline
 
@@ -184,6 +197,16 @@ an idiomatic Tillandsias Podman health/lifecycle layer with operations such as
       guest prompts; guest git identity prompt moved behind image/network/Vault
       and helper-container startup. Remaining provider-neutral UP+HEALTHY
       preflight belongs to the shared Podman health facade.
+  - type: progress
+    ts: "2026-06-25T23:13:41Z"
+    agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260625T231341Z"
+    host: macos
+    note: >
+      Interactive login reached the post-email Vault preflight and hung because
+      the macOS VZ guest's loopback-published Vault port accepted TCP but
+      stalled during TLS. osx-next now routes guest Vault API calls to the
+      healthy enclave address via `TILLANDSIAS_VAULT_API_BASE_URL` and a
+      matching Vault TLS SAN.
 
 ## Work Packet: podman/health-lifecycle-facade
 
@@ -209,3 +232,13 @@ an idiomatic Tillandsias Podman health/lifecycle layer with operations such as
     ts: "2026-06-25T21:19:44Z"
     agent_id: "macos-codex-20260625T2111Z"
     host: macos
+  - type: progress
+    ts: "2026-06-25T23:13:41Z"
+    agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260625T231341Z"
+    host: macos
+    note: >
+      Narrow Vault bootstrap slice now uses OCI health through
+      `PodmanClient::wait_healthy()` / `podman wait --condition=healthy`
+      instead of the local HTTP polling loop and timeout escalation. The
+      generalized health/lifecycle facade remains ready for the Linux/shared
+      runtime owner.

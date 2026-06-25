@@ -1,6 +1,38 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-25T22:07Z
+Last updated: 2026-06-25T23:13Z
+
+## This Cycle (2026-06-25T23:13Z, macos — Vault health follow-up)
+
+- **Live hang reproduced**: operator-attended
+  `/Applications/Tillandsias.app/Contents/MacOS/tillandsias-tray --github-login`
+  advanced past Git author name/email and then hung before the token prompt.
+- **Root cause**: inside the macOS VZ guest, `tillandsias-vault` was healthy
+  in-container and reachable on the enclave network (`https://10.0.42.2:8200`),
+  but the host-published loopback mapping
+  `127.0.0.1:8201 -> tillandsias-vault:8200` accepted TCP and then stalled
+  during TLS. The guest login process was blocked in Vault readiness before it
+  could prompt for the token.
+- **Fix in progress on osx-next**: Vault now owns a stable singleton enclave
+  API address (`10.0.42.2`) with a matching TLS SAN; macOS VZ cloud-init exports
+  `TILLANDSIAS_VAULT_API_BASE_URL=https://10.0.42.2:8200` for the headless
+  service and its spawned control-wire commands. New Vault bootstrap waits on
+  `PodmanClient::wait_healthy()` (`podman wait --condition=healthy`) before a
+  single Vault API verification, replacing the local `wait_for_vault_ready`
+  sleep loop.
+- **Verification**: `cargo test -p tillandsias-headless vault_` PASS (Vault
+  source/unit filters); `cargo test -p tillandsias-vm-layer` PASS (23/23).
+  Full `cargo test -p tillandsias-headless` still has the pre-existing macOS
+  local-Podman integration failure in `test_missing_image_error_handling`
+  (`podman.sock` absent); all unit/source tests passed before that.
+- **Interactive retest blocker**: the installed macOS VM fetches the published
+  `tillandsias-headless-aarch64-unknown-linux-musl` release asset, which
+  predates this fix. This host currently has no `nix` or `rustup` cross target
+  available to produce a patched aarch64 guest binary for manual copy-in.
+- **Residual**: the full provider-neutral auth preflight still needs order 100's
+  shared lifecycle facade (`ping`, `keep_alive`, `restart`, `terminate`,
+  `is_healthy`, `diagnose`). The macOS Vault hang no longer depends on bigger
+  timeouts, but the broader stack-health inventory remains open.
 
 ## This Cycle (2026-06-25T22:07Z, macos — advance-work-from-plan follow-up)
 

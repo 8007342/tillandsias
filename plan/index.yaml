@@ -6488,6 +6488,21 @@ plan_index:
             before `prompt_and_store_git_identity()`. Regression tests added.
             Remaining work: the provider-neutral UP+HEALTHY shared preflight
             still depends on order 100's Podman health/lifecycle facade.
+        - type: progress
+          ts: "2026-06-25T23:13:41Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260625T231341Z"
+          host: macos
+          note: >
+            Operator-attended `--github-login` advanced past Git author
+            name/email, then hung before token prompt because Vault readiness
+            depended on the macOS VZ guest's loopback publish
+            `127.0.0.1:8201`, which accepted TCP but stalled during TLS while
+            the Vault container was healthy and reachable on the enclave
+            address `10.0.42.2:8200`. osx-next now makes the VZ headless
+            service export `TILLANDSIAS_VAULT_API_BASE_URL=https://10.0.42.2:8200`
+            and gives the Vault TLS leaf a matching IP SAN. This fixes the
+            concrete macOS Vault pre-token hang; full provider-neutral
+            UP+HEALTHY preflight still depends on order 100.
 
     - id: podman-health-lifecycle-facade
       order: 100
@@ -6524,4 +6539,24 @@ plan_index:
             managed container health: keep-alive/ping/restart/terminate/
             is_healthy/diagnose. Polling and bigger timeouts are not the
             desired architecture; bounded waits may remain only as fail-loud
-            guards around event/health-driven readiness.
+            guards around event/health-driven readiness. 2026-06-25 macOS
+            follow-up: Vault bootstrap now uses the existing
+            `PodmanClient::wait_healthy()` primitive for new Vault launches and
+            no longer carries the `wait_for_vault_ready` 180s sleep loop. The
+            remaining work is the generalized typed facade/inventory that all
+            auth flows can share, including diagnose/restart semantics and
+            required-service health aggregation.
+      events:
+        - type: progress
+          ts: "2026-06-25T23:13:41Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260625T231341Z"
+          host: macos
+          note: >
+            Narrow macOS/Vault slice landed on osx-next: `tillandsias-vault`
+            keeps its OCI HEALTHCHECK, and headless Vault bootstrap now waits
+            through `PodmanClient::wait_healthy()` / `podman wait
+            --condition=healthy` instead of polling the Vault HTTP endpoint
+            with larger timeout constants. This does not complete the packet:
+            the shared facade still needs typed `ping`, `keep_alive`,
+            `restart`, `terminate`, `is_healthy`, and `diagnose`, plus service
+            inventory and auth-flow aggregation.

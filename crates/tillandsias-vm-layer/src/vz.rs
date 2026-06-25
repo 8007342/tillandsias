@@ -505,6 +505,7 @@ Requires=tillandsias-headless-fetch.service
 [Service]
 Type=exec
 ExecStartPre=/usr/local/lib/tillandsias/headless-preflight.sh
+Environment=TILLANDSIAS_VAULT_API_BASE_URL=https://10.0.42.2:8200
 ExecStart=/usr/local/bin/tillandsias-headless --listen-vsock 42420
 Restart=on-failure
 RestartSec=2s
@@ -1675,6 +1676,10 @@ mod tests {
         assert!(headless_unit.contains("Wants=network-online.target podman.socket"));
         assert!(
             headless_unit.contains("ExecStartPre=/usr/local/lib/tillandsias/headless-preflight.sh")
+        );
+        assert!(
+            headless_unit
+                .contains("Environment=TILLANDSIAS_VAULT_API_BASE_URL=https://10.0.42.2:8200")
         );
         assert!(
             !headless_unit.contains("Requires=podman.socket"),

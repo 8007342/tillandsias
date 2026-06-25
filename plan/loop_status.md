@@ -1,6 +1,32 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-25T00:52Z
+LastExecutionTime: 2026-06-25T23:13Z
+
+## This Loop (2026-06-25T23:13Z, macos — Vault health follow-up)
+
+- **Cycle type**: `/advance-work-from-plan` follow-up during operator-attended
+  GitHub login smoke.
+- **Live finding**: `--github-login` advanced past Git author name/email, then
+  hung before the token prompt. In the guest, Vault was healthy inside the
+  container and reachable at `https://10.0.42.2:8200`; the loopback publish
+  `127.0.0.1:8201` accepted TCP but stalled during TLS.
+- **Fix**: Vault now owns a singleton enclave API address (`10.0.42.2`) with a
+  matching TLS SAN. macOS VZ cloud-init exports
+  `TILLANDSIAS_VAULT_API_BASE_URL=https://10.0.42.2:8200` for the headless
+  service/control-wire commands. New Vault bootstrap uses
+  `PodmanClient::wait_healthy()` / `podman wait --condition=healthy` before a
+  single Vault API verification, replacing the local 180s HTTP polling loop.
+- **Verification**: `cargo test -p tillandsias-headless vault_` PASS;
+  `cargo test -p tillandsias-vm-layer` PASS (23/23). Full
+  `cargo test -p tillandsias-headless` still fails only at the pre-existing
+  macOS local-Podman integration case `test_missing_image_error_handling`
+  because no local `podman.sock` is active.
+- **Interactive retest blocker**: the current VM fetches the published
+  aarch64 headless release asset, which predates this fix; this Mac has no
+  `nix` or `rustup` cross target available to build a patched aarch64 guest
+  binary for copy-in.
+- **Residual**: order 100 remains open for the generalized Podman
+  health/lifecycle facade and provider-neutral auth preflight aggregation.
 
 ## This Loop (2026-06-25T00:52Z, linux_mutable — meta-orch + merge-to-main-and-release — v0.3.260625.1)
 
