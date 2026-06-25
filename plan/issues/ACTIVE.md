@@ -1,6 +1,16 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-25T21:46Z
+Last updated: 2026-06-25T22:00Z
+
+## This Cycle (2026-06-25T22:00Z, linux_mutable — big-pickle meta-orch — convergence check)
+
+- **Cycle type**: meta-orchestration convergence check — zero residual at current bar.
+- **Startup**: `linux-next @ 117a6e39` (VERSION 0.3.260625.1), clean. Credential channel: `ok:gh-keyring`.
+- **Worker drain**: 0 linux-ready nodes. All remaining ready/in-progress nodes are macOS-owned (macos-in-vm-enclave-provisioning [order 55], macos-tray-icon-missing-T-fallback [order 79], vault-unseal-fails-macos-after-db616e06 [order 81]).
+- **Coordination**: `origin/windows-next@a3c8b23d` — ancestor of HEAD. `origin/osx-next@715449d2` — 2 ahead (test record + claimed `macos exec control-wire fix`). macOS work in progress; no merge yet.
+- **E2E**: eligible but deferred — no linux-ready work to ship.
+- **Reduction engine**: Zero residual at current bar. No new findings this cycle.
+- **Next**: Await macOS sibling to complete their claimed work (macos exec control-wire fix); then merge osx-next → linux-next, merge to main, and release.
 
 ## This Cycle (2026-06-25T21:46Z, forge — big-pickle meta-orch — convergence check)
 
