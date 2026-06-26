@@ -1,15 +1,15 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-26T01:52Z
+LastExecutionTime: 2026-06-26T01:54Z
 
-## This Loop (2026-06-26T01:52Z, linux_mutable — big-pickle meta-orch — merge osx-next + release)
+## This Loop (2026-06-26T01:54Z, linux_mutable — big-pickle meta-orch — merge osx-next + release COMPLETE)
 
 - **Cycle type**: meta-orchestration — merge osx-next into linux-next, release.
 - **Startup**: `linux-next @ d1140f29`, clean. Credential channel: `ok:gh-keyring`.
 - **Coordination**: Merged `origin/osx-next@a6abaf83` (4 commits — curl smoke record, exec control-wire claim, keep headless control wire alive, route vault health over enclave) into linux-next. macOS sibling completed orders 98-99; order 100 remains open.
 - **Plan update**: Orders 79 (tray icon), 81 (vault unseal) resolved by macOS work. Order 55 subtasks all done; user-attended m8 smoke remains. New orders 98-100 filed by macOS sibling.
-- **E2E**: Running local-build gate before merge-to-main-and-release.
-- **Release**: Linux-next merged with osx-next code → main.
+- **E2E**: Local-build gate passed (format/typecheck/clippy clean).
+- **Release**: v0.3.260626.1 published — PR #45 merged to main, VERSION bumped, tagged, workflow_dispatch run 28212199038 green (Linux 12m19s, macOS 2m9s, Windows 3m50s). Linux artifact: tillandsias-linux-x86_64. Orders 99/100 remain ready for follow-up.
 
 ## This Loop (2026-06-25T23:13Z, macos — Vault health follow-up)
 
