@@ -3972,6 +3972,34 @@ fn run_github_login(debug: bool) -> Result<(), String> {
     #[cfg(feature = "vault")]
     vault_bootstrap::ensure_vault_running(debug)?;
 
+    // Verify required services are healthy using the shared health facade.
+    // This is provider-neutral — future auth flows (Cloudflare, AWS, etc.)
+    // should reuse this preflight rather than adding per-provider sleeps.
+    if debug {
+        eprintln!("[tillandsias] running auth preflight health check");
+    }
+    let health_facade = tillandsias_podman::ContainerHealthFacade::new(
+        tillandsias_podman::PodmanClient::new(),
+    );
+    let required = ["tillandsias-vault", "tillandsias-git"];
+    let results = tokio::runtime::Runtime::new()
+        .map_err(|e| format!("create tokio runtime for health check: {e}"))?
+        .block_on(health_facade.check_required_services(&required));
+    for svc in &results {
+        if debug {
+            eprintln!(
+                "[tillandsias] preflight {} running={} health={:?} error={:?}",
+                svc.name, svc.running, svc.health, svc.error
+            );
+        }
+        if !svc.running {
+            return Err(format!(
+                "auth preflight failed: {} is not running ({:?})",
+                svc.name, svc.error
+            ));
+        }
+    }
+
     let container = format!("tillandsias-gh-login-{}", std::process::id());
     let cleanup = LoginContainerCleanup {
         name: container.clone(),
