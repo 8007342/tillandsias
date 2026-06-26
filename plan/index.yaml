@@ -6606,3 +6606,58 @@ plan_index:
             - "146/146 podman tests passing"
             - "HealthStatus enum, ServiceHealth struct added"
             - "diagnostics_snapshot enhanced with health info"
+
+    - id: vault-image-build-docker-format-healthcheck
+      order: 101
+      title: "Rust image builder must preserve Dockerfile HEALTHCHECK metadata"
+      status: done
+      owner_host: linux
+      deliverable: plan/issues/build-install-smoke-e2e-findings-2026-06-26.md
+      audit_origin: plan/issues/build-install-smoke-e2e-findings-2026-06-26.md
+      depends_on:
+        - podman-health-lifecycle-facade
+      pickup_role: "Linux/shared runtime owner"
+      closed_at: "2026-06-26T04:14Z"
+      closed_by: "linux-tlatoani-codex-20260626T0414Z"
+      outcome: >
+        The Rust `build_image_with_logging` path now passes `podman build
+        --format docker`, matching the shell/shared builder path and preserving
+        Dockerfile HEALTHCHECK metadata required by
+        `PodmanClient::wait_healthy()`.
+      exit_criteria:
+        - "Vault image builds preserve the Containerfile HEALTHCHECK metadata."
+        - "A unit test fails if the runtime image build argv omits `--format docker`."
+      tasks:
+        - id: vault-image-build-docker-format-healthcheck/fix-runtime-builder
+          status: completed
+          owner_host: linux
+          estimated_hours: 0.5
+          owned_files:
+            - crates/tillandsias-headless/src/main.rs
+            - plan/issues/build-install-smoke-e2e-findings-2026-06-26.md
+          checkpoint_required: true
+          handoff_note: >
+            Fixed in the runtime builder path; rerun the local-build smoke gate
+            to verify the Vault healthcheck error no longer appears.
+      events:
+        - type: discovered
+          ts: "2026-06-26T04:10:39Z"
+          agent_id: "linux-tlatoani-codex-20260626T035811Z"
+          host: linux
+          evidence:
+            - "target/build-install-smoke-e2e/20260626T035811Z/01-build-install.log:2243"
+            - "target/build-install-smoke-e2e/20260626T035811Z/01-build-install.log:2244"
+          note: >
+            Local-build smoke hit `podman wait --condition=healthy
+            tillandsias-vault`, but Podman reported the launched
+            `tillandsias-vault` container had no healthcheck despite
+            `images/vault/Containerfile` declaring one.
+        - type: completed
+          ts: "2026-06-26T04:14:00Z"
+          agent_id: "linux-tlatoani-codex-20260626T0414Z"
+          host: linux
+          evidence:
+            - "cargo test -p tillandsias-headless image_build_argv_uses_docker_format_for_healthchecks"
+          note: >
+            `build_image_with_logging` now uses a testable argv helper that
+            includes `--format docker`.

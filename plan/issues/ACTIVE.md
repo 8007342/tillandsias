@@ -1,6 +1,20 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-26T03:08Z
+Last updated: 2026-06-26T04:14Z
+
+## This Cycle (2026-06-26T04:14Z, linux_mutable — meta-orch — local-build smoke regression fix)
+
+- **Cycle type**: meta-orchestration — local-build smoke gate follow-up.
+- **Startup**: `linux-next @ 481f58c5`, clean. Credential channel already verified earlier this cycle as `ok:gh-keyring`.
+- **Worker drain**: Order 100 is closed. New order 101 (`vault-image-build-docker-format-healthcheck`) was discovered during local-build smoke and fixed in this cycle.
+- **Build gate evidence**:
+  - First local-build attempt failed on rustfmt; fixed and pushed `8a707b3a`.
+  - Second local-build attempt passed pre-build CI and installed the portable launcher, but exited 1 in post-build smoke before reset/init.
+  - New Vault issue: runtime image builder produced a `tillandsias-vault` image without HEALTHCHECK metadata; fixed by adding `podman build --format docker` to `build_image_with_logging`.
+  - Known recurring false positives still present: `litmus:inference-deferred-model-pulls` and `litmus:opencode-prompt-e2e-shape` before reset/init.
+- **Verification**: `cargo test -p tillandsias-headless image_build_argv_uses_docker_format_for_healthchecks` PASS.
+- **Release**: Hold until the local-build smoke gate is rerun after this fix, or explicitly accept the known post-build false positives as non-blocking.
+- **Next**: Commit/push order 101, rerun local-build smoke, then run merge-to-main-and-release if green enough for release.
 
 ## This Cycle (2026-06-26T02:57Z, linux_mutable — big-pickle meta-orch — drain order 100, unblock 99)
 

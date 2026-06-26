@@ -1,6 +1,17 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-26T04:07Z
+LastExecutionTime: 2026-06-26T04:14Z
+
+## This Loop (2026-06-26T04:14Z, linux_mutable — meta-orch — fix Vault image healthcheck metadata)
+
+- **Cycle type**: meta-orchestration — local-build smoke follow-up.
+- **Startup**: `linux-next @ 481f58c5`, clean after in-forge plan/version commits. Credential channel: `ok:gh-keyring`.
+- **Worker drain**: Closed order 100 is integrated. Filed and completed order 101 (`vault-image-build-docker-format-healthcheck`) after local-build smoke exposed a Vault healthcheck metadata regression.
+- **Siblings**: osx-next@a6abaf83, windows-next@a3c8b23d — both ancestors, no new sibling merge needed.
+- **Build gate**: Local-build smoke attempt `target/build-install-smoke-e2e/20260626T035811Z` passed pre-build CI and installed v0.3.260626.1, then exited 1 in post-build smoke before reset/init.
+- **Finding fixed**: Rust `build_image_with_logging` omitted `--format docker`; Podman built Vault without HEALTHCHECK metadata, so `podman wait --condition=healthy tillandsias-vault` failed. The builder now includes `--format docker`; focused unit test PASS.
+- **Known recurring post-build blockers**: `litmus:inference-deferred-model-pulls` model-cache permission and `litmus:opencode-prompt-e2e-shape` loop_status delta remain the same false-positive class recorded on 2026-06-24.
+- **Next**: Commit/push this fix and rerun local-build smoke. If only the known post-build false positives recur and the Vault healthcheck error is gone, decide whether to proceed with release under the existing waiver pattern.
 
 ## This Loop (2026-06-26T04:07Z, linux_mutable — big-pickle meta-orch — close order 100 + convergence check)
 

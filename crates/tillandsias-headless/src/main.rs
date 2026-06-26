@@ -3382,26 +3382,8 @@ pub(crate) fn build_image_with_logging(
     let (containerfile, context_dir) = image_specs(root, image_name)?;
 
     let mut command = podman_command();
-    command.args(["build", "-t", &identity.canonical_tag]);
-    for (label, value) in &identity.labels {
-        command.arg("--label").arg(format!("{label}={value}"));
-    }
-    command.arg("-f");
-    command.arg(
-        containerfile
-            .to_str()
-            .ok_or_else(|| "Containerfile path contains invalid UTF-8".to_string())?,
-    );
-
-    for (name, value) in build_args {
-        command.arg("--build-arg").arg(format!("{name}={value}"));
-    }
-
-    command.arg(
-        context_dir
-            .to_str()
-            .ok_or_else(|| "Context path contains invalid UTF-8".to_string())?,
-    );
+    let argv = podman_build_argv(&containerfile, &context_dir, identity, build_args)?;
+    command.args(&argv);
 
     // @trace gap:ON-005 — capture stdout/stderr for progress parsing
     command.stdout(Stdio::piped());
@@ -3512,6 +3494,45 @@ pub(crate) fn build_image_with_logging(
     } else {
         Err(format!("Build exited with status {}", status))
     }
+}
+
+fn podman_build_argv(
+    containerfile: &Path,
+    context_dir: &Path,
+    identity: &ImageBuildIdentity,
+    build_args: &BTreeMap<String, String>,
+) -> Result<Vec<String>, String> {
+    let mut argv = vec![
+        "build".to_string(),
+        "--format".to_string(),
+        "docker".to_string(),
+        "-t".to_string(),
+        identity.canonical_tag.clone(),
+    ];
+    for (label, value) in &identity.labels {
+        argv.push("--label".to_string());
+        argv.push(format!("{label}={value}"));
+    }
+    argv.push("-f".to_string());
+    argv.push(
+        containerfile
+            .to_str()
+            .ok_or_else(|| "Containerfile path contains invalid UTF-8".to_string())?
+            .to_string(),
+    );
+
+    for (name, value) in build_args {
+        argv.push("--build-arg".to_string());
+        argv.push(format!("{name}={value}"));
+    }
+
+    argv.push(
+        context_dir
+            .to_str()
+            .ok_or_else(|| "Context path contains invalid UTF-8".to_string())?
+            .to_string(),
+    );
+    Ok(argv)
 }
 
 fn cleanup_init_logs() {
@@ -9360,6 +9381,33 @@ mod tests {
                 "Progress bar should have 10 total characters"
             );
         }
+    }
+
+    #[test]
+    fn image_build_argv_uses_docker_format_for_healthchecks() {
+        let identity = ImageBuildIdentity {
+            source_digest: "abc123".to_string(),
+            canonical_tag:
+                "localhost/tillandsias-vault:sha256-0123456789abcdef0123456789abcdef0123456789abcdef0123456789abcdef"
+                    .to_string(),
+            version_alias: "localhost/tillandsias-vault:v0.3.260626.1".to_string(),
+            latest_alias: "localhost/tillandsias-vault:latest".to_string(),
+            labels: BTreeMap::new(),
+        };
+
+        let argv = podman_build_argv(
+            Path::new("/repo/images/vault/Containerfile"),
+            Path::new("/repo/images/vault"),
+            &identity,
+            &BTreeMap::new(),
+        )
+        .expect("podman build argv");
+
+        assert_eq!(
+            &argv[0..3],
+            ["build", "--format", "docker"],
+            "Rust image builds must preserve Dockerfile HEALTHCHECK metadata"
+        );
     }
 
     // ─────────────────────────────────────────────────────────
