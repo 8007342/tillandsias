@@ -6708,7 +6708,7 @@ plan_index:
           note: >
             The nested opencode prompt e2e started another local-build smoke
             while the parent post-build smoke still held the same lock.
-          - type: completed
+        - type: completed
           ts: "2026-06-26T04:40:00Z"
           agent_id: "linux-tlatoani-codex-20260626T0440Z"
           host: linux
@@ -6799,7 +6799,7 @@ plan_index:
     - id: hardcoded-ip-eradication
       order: 104
       title: "Replace all hardcoded enclave IPs with DNS-based service discovery"
-      status: pending
+      status: in_progress
       owner_host: linux
       deliverable: plan/issues/build-install-smoke-e2e-findings-2026-06-25.md
       audit_origin: plan/issues/build-install-smoke-e2e-findings-2026-06-25.md
@@ -6817,7 +6817,7 @@ plan_index:
         - "Port publish (`-p`) is only used for diagnostic endpoints, not for production service access."
       tasks:
         - id: hardcoded-ip/inventory
-          status: pending
+          status: in_progress
           owner_host: linux
           owned_files:
             - plan/issues/build-install-smoke-e2e-findings-2026-06-25.md
@@ -6866,3 +6866,15 @@ plan_index:
             Move the hardcoded `ENCLAVE_SUBNET = "10.0.42.0/24"` to a
             configurable constant with a default; allow override via env var
             or config file for multi-instance scenarios.
+      events:
+        - type: claim
+          ts: "2026-06-26T09:25:21Z"
+          agent_id: "linux-macuahuitl-codex-20260626T092521Z"
+          host: linux
+          lease_id: "hardcoded-ip/inventory-20260626T092521Z"
+          expires_at: "2026-06-26T13:25:21Z"
+          note: >
+            Claimed the inventory slice for order 104. Next action: inventory
+            all bare `10.0.42.` source occurrences under crates/ and append the
+            result to the build-install smoke findings deliverable before
+            promoting dependent code-removal slices.
