@@ -12,8 +12,32 @@ set -e
 # Verdict grammar (falsifiable): ^(eligible|skip:[a-z0-9-]+)$
 #   skip:no-podman-binary       podman not on PATH
 #   skip:no-podman-user-session no rootless runtime dir (XDG_RUNTIME_DIR / /run/user/<uid>)
+#   skip:smoke-lock-held        another local-build smoke owns the host lock
 #   skip:podman-not-functional  runtime dir present but `podman info` fails
 #   eligible                    rootless podman is usable for local-build e2e
+smoke_lock_is_held() {
+  local runtime lock_root lock_name lock_file lock_dir fd
+  runtime="$1"
+  lock_root="${TILLANDSIAS_SMOKE_LOCK_ROOT:-$runtime/tillandsias-locks}"
+  lock_name="${TILLANDSIAS_SMOKE_LOCK_NAME:-build-install-smoke-e2e}"
+  lock_file="$lock_root/$lock_name.lock"
+  lock_dir="$lock_root/$lock_name.lockdir"
+
+  mkdir -p "$lock_root"
+  if command -v flock >/dev/null 2>&1; then
+    exec {fd}>"$lock_file"
+    if ! flock -n "$fd"; then
+      eval "exec ${fd}>&-"
+      return 0
+    fi
+    flock -u "$fd"
+    eval "exec ${fd}>&-"
+    return 1
+  fi
+
+  [ -d "$lock_dir" ]
+}
+
 e2e_eligibility_verdict() {
   if ! command -v podman >/dev/null 2>&1; then
     echo "skip:no-podman-binary"
@@ -24,6 +48,10 @@ e2e_eligibility_verdict() {
   runtime="${XDG_RUNTIME_DIR:-/run/user/$uid}"
   if [ ! -d "$runtime" ]; then
     echo "skip:no-podman-user-session"
+    return 0
+  fi
+  if smoke_lock_is_held "$runtime"; then
+    echo "skip:smoke-lock-held"
     return 0
   fi
   if ! podman info >/dev/null 2>&1; then

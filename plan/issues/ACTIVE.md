@@ -1,6 +1,74 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-26T01:52Z
+Last updated: 2026-06-26T05:03Z
+
+## This Cycle (2026-06-26T05:03Z, linux_mutable — meta-orch — smoke rerun after nested-lock guard)
+
+- **Cycle type**: meta-orchestration — local-build smoke rerun after order 102.
+- **Startup**: `linux-next @ 7f4c7f7c`, clean. Nested meta-orchestration advanced and pushed `e9e5a877`.
+- **Build gate evidence**:
+  - Rerun `target/build-install-smoke-e2e/20260626T043812Z` passed pre-build CI, installed the portable launcher, and completed Vault bootstrap.
+  - Vault missing-HEALTHCHECK failure did not recur.
+  - Nested `opencode-prompt-e2e-shape` no longer timed out; the nested cycle recorded `skip:smoke-lock-held` and pushed e9e5a877.
+  - Remaining failures are the already-filed post-build false-positive class: inference model-cache `models/blobs: permission denied`, and loop_status delta assertion.
+- **Release**: Proceeding to merge-to-main-and-release under the existing post-build false-positive waiver pattern; no new macOS/Linux blocker remains at the current bar.
+
+## This Cycle (2026-06-26T04:59Z, linux_mutable — big-pickle meta-orch — no-op: lock held, no ready work)
+
+- **Cycle type**: meta-orchestration — worker drain, coordination audit.
+- **Startup**: `linux-next @ 7f4c7f7c`, clean. Credential channel: `ok:gh-keyring`.
+- **Worker drain**: No Linux-ready nodes. All remaining open nodes are macOS-owned or require macOS VZ access to verify.
+  - `macos-tray-icon-missing-T-fallback/fix-icon` (ready) — macOS-only files.
+  - `vault-unseal-fails-macos-after-db616e06/fix-unseal` (in_progress, expired lease) — fix shipped `8e6f25b1`, pending macOS retest.
+  - `github-login-readiness-before-credentials/preflight-and-ordering` (ready, owner any) — remaining work is macOS VZ-side wiring; Linux guest side already done.
+- **Siblings**: osx-next@a6abaf83, windows-next@a3c8b23d — both ancestors of HEAD.
+- **E2E gates**: `skip:smoke-lock-held` — concurrent Codex-invoked local-build smoke PID 245649 holds the lock.
+- **Reduction**: Zero residual at current bar. No new findings.
+- **Next**: Await lock release or a subsequent cycle to run local-build e2e.
+
+## This Cycle (2026-06-26T04:40Z, linux_mutable — meta-orch — local-build smoke nested-lock guard)
+
+- **Cycle type**: meta-orchestration — local-build smoke gate rerun and follow-up fix.
+- **Startup**: `linux-next @ 72e1fb8f`, clean. Local-build smoke generated checkpoint `08a7a3cc` for VERSION/traces (`0.3.260626.2`).
+- **Worker drain**: Order 101 verified fixed: Vault bootstrap completed and the launched Vault container retained HEALTHCHECK metadata. New order 102 (`local-build-smoke-lock-preflight-skip`) was discovered and fixed in this cycle.
+- **Build gate evidence**:
+  - Rerun `target/build-install-smoke-e2e/20260626T041632Z` passed pre-build CI and installed v0.3.260626.2.
+  - Vault `no healthcheck` failure did not recur.
+  - `litmus:inference-deferred-model-pulls` still fails on `/home/ollama/.ollama/models/blobs: permission denied`.
+  - `litmus:opencode-prompt-e2e-shape` timed out because the nested meta-orchestration child started another local-build smoke and waited on the parent-held `build-install-smoke-e2e` lock.
+- **Fix**: `scripts/e2e-preflight.sh eligibility` now returns `skip:smoke-lock-held` when the build-install smoke lock is already held; meta-orchestration guidance records/skips that verdict, and the e2e-eligibility litmus pins the branch.
+- **Verification**: `bash -n scripts/e2e-preflight.sh` PASS; live verdict `eligible`; simulated held-lock verdict `skip:smoke-lock-held`; `scripts/run-litmus-test.sh meta-orchestration --phase pre-build --size instant` PASS (3/3 executed).
+- **Release**: Hold until the guard is verified and the local-build smoke is rerun or explicitly accepted with only known post-build false positives remaining.
+
+## This Cycle (2026-06-26T04:14Z, linux_mutable — meta-orch — local-build smoke regression fix)
+
+- **Cycle type**: meta-orchestration — local-build smoke gate follow-up.
+- **Startup**: `linux-next @ 481f58c5`, clean. Credential channel already verified earlier this cycle as `ok:gh-keyring`.
+- **Worker drain**: Order 100 is closed. New order 101 (`vault-image-build-docker-format-healthcheck`) was discovered during local-build smoke and fixed in this cycle.
+- **Build gate evidence**:
+  - First local-build attempt failed on rustfmt; fixed and pushed `8a707b3a`.
+  - Second local-build attempt passed pre-build CI and installed the portable launcher, but exited 1 in post-build smoke before reset/init.
+  - New Vault issue: runtime image builder produced a `tillandsias-vault` image without HEALTHCHECK metadata; fixed by adding `podman build --format docker` to `build_image_with_logging`.
+  - Known recurring false positives still present: `litmus:inference-deferred-model-pulls` and `litmus:opencode-prompt-e2e-shape` before reset/init.
+- **Verification**: `cargo test -p tillandsias-headless image_build_argv_uses_docker_format_for_healthchecks` PASS.
+- **Release**: Hold until the local-build smoke gate is rerun after this fix, or explicitly accept the known post-build false positives as non-blocking.
+- **Next**: Commit/push order 101, rerun local-build smoke, then run merge-to-main-and-release if green enough for release.
+
+## This Cycle (2026-06-26T02:57Z, linux_mutable — big-pickle meta-orch — drain order 100, unblock 99)
+
+- **Cycle type**: meta-orchestration — advance work from plan.
+- **Startup**: `linux-next @ b7790f5b`, clean. Credential channel: `ok:gh-keyring`.
+- **Siblings**: `origin/osx-next@a6abaf83` (no change), `origin/windows-next@a3c8b23d` (no change). Both ancestors of HEAD.
+- **Worker drain**: Claimed and implemented order 100 (podman-health-lifecycle-facade):
+  - `ContainerHealthFacade` with typed `ping`, `keep_alive`, `restart`, `terminate`, `is_healthy`, `diagnose`, `check_required_services`
+  - `HealthStatus` enum and `ServiceHealth` struct
+  - Enhanced `diagnostics_snapshot()` to populate health from `podman inspect`
+  - Wired `check_required_services` into `run_github_login` as auth preflight before credential prompts
+  - All 146 tillandsias-podman tests passing
+  - Order 99 unblocked
+- **E2E**: Not yet run — pending build verification before gate.
+- **Release**: Previous release v0.3.260626.1 already done. New order 100 changes on linux-next warrant a follow-up build-verify before release decision.
+- **Next**: Run e2e gate, then decide merge-to-main-and-release.
 
 ## This Cycle (2026-06-26T01:52Z, linux_mutable — big-pickle meta-orch — merge + release)
 
