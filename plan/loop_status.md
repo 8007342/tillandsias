@@ -1,6 +1,13 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-26T09:55Z
+LastExecutionTime: 2026-06-26T10:00Z
+
+## This Loop (2026-06-26T10:00Z, linux_mutable — order 104 dependency correction)
+
+- **Cycle type**: advance-work blocker triage for `hardcoded-ip/remove-port-publish`.
+- **Finding**: removing the Vault loopback publish is blocked until a non-published access path exists. With proxy bypass forced, direct host access to `https://10.0.42.2:8200` timed out and `https://vault:8200` did not resolve.
+- **Plan update**: `hardcoded-ip/remove-port-publish` is now blocked on `hardcoded-ip/dns-migration`; `hardcoded-ip/dns-migration` is the next ready Linux slice.
+- **Release decision**: continue to hold merge-to-main/release for post-order-104 work. Latest successful published release remains v0.3.260626.3 / tag `vv0.3.260626.3` on main.
 
 ## This Loop (2026-06-26T09:55Z, linux_mutable — meta-orch e2e checkpoint after order 104)
 

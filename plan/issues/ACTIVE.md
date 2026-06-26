@@ -1,6 +1,13 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-26T09:55Z
+Last updated: 2026-06-26T10:00Z
+
+## This Cycle (2026-06-26T10:00Z, linux_mutable — order 104 dependency correction)
+
+- **Cycle type**: advance-work blocker triage for `hardcoded-ip/remove-port-publish`.
+- **Finding**: removing the Vault loopback publish is not safe as the next slice. With proxy bypass forced, `https://10.0.42.2:8200` timed out from the host, and `https://vault:8200` did not resolve.
+- **Plan update**: `hardcoded-ip/remove-port-publish` is blocked on the missing non-published host-to-enclave access path. `hardcoded-ip/dns-migration` is now the next ready order-104 slice.
+- **Release**: still held for post-order-104 work. Latest successful published release remains v0.3.260626.3 / tag `vv0.3.260626.3` on main.
 
 ## This Cycle (2026-06-26T09:55Z, linux_mutable — e2e checkpoint after order 104)
 

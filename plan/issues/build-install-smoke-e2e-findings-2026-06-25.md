@@ -114,6 +114,14 @@ static `ENCLAVE_NO_PROXY` constant. Verification:
 `scripts/run-litmus-test.sh inference-container --phase pre-build --size instant --compact`,
 and `./build.sh --check` all passed.
 
+**Transport probe 2026-06-26T10:00Z**: attempted the
+`hardcoded-ip/remove-port-publish` follow-up and found it is blocked until the
+non-published access path lands. With proxy bypass forced, direct host access to
+`https://10.0.42.2:8200/v1/sys/health` timed out after 8s, and
+`https://vault:8200/v1/sys/health` failed DNS resolution from the host. The plan
+graph now runs `hardcoded-ip/dns-migration` before removing
+`-p 127.0.0.1:8201:8200`.
+
 **Required approach**:
 - VM host processes should resolve `vault` via podman's aardvark-dns (running on bridge gateway)
 - Configure systemd-resolved or resolv.conf to forward enclave DNS queries

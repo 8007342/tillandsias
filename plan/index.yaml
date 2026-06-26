@@ -6826,10 +6826,10 @@ plan_index:
             Use `grep -rn '10\.0\.42\.' crates/` to inventory every occurrence.
             See the findings file for the already-known locations.
         - id: hardcoded-ip/remove-port-publish
-          status: ready
+          status: blocked
           owner_host: linux
           depends_on:
-            - hardcoded-ip/inventory
+            - hardcoded-ip/dns-migration
           owned_files:
             - crates/tillandsias-headless/src/vault_bootstrap.rs
             - crates/tillandsias-headless/src/main.rs
@@ -6839,14 +6839,16 @@ plan_index:
             vault_bootstrap.rs. Ensure VM host processes can reach vault via
             vsock control wire or podman exec instead. The only remaining
             published port should be for the vsock exec PTY (diagnostic).
-            Inventory found this cannot be a standalone deletion while
-            `host_base_url()` still defaults to `https://127.0.0.1:8201`;
-            bundle it with a Linux-safe base URL or DNS migration.
+            Live Linux probe on 2026-06-26 confirmed this cannot be a standalone
+            deletion: with proxy bypassed, `https://10.0.42.2:8200` timed out
+            from the host and `https://vault:8200` did not resolve. Complete
+            DNS/vsock/podman-exec transport migration first, then remove the
+            publish flag and the loopback default together.
         - id: hardcoded-ip/dns-migration
-          status: pending
+          status: ready
           owner_host: linux
           depends_on:
-            - hardcoded-ip/remove-port-publish
+            - hardcoded-ip/inventory
           owned_files:
             - crates/tillandsias-vm-layer/src/vz.rs
             - crates/tillandsias-macos-tray/src/diagnose.rs
@@ -6857,6 +6859,10 @@ plan_index:
             Configure systemd-resolved or resolv.conf in the VM to forward
             `10.0.42.0/24` DNS queries to aardvark-dns. Update the macOS
             side's `TILLANDSIAS_VAULT_API_BASE_URL` to use `https://vault:8200`.
+            This is now the unblocker for removing the loopback Vault publish:
+            local Linux probe showed direct host access to `10.0.42.2:8200`
+            times out when proxy bypass is forced, and `vault` is not
+            host-resolvable yet.
         - id: hardcoded-ip/subnet-constant
           status: completed
           owner_host: linux
@@ -6920,3 +6926,18 @@ plan_index:
             subnet, and container launch paths derive NO_PROXY/no_proxy from
             the same helper. Updated inference spec/litmus wording from the
             removed static ENCLAVE_NO_PROXY constant to `enclave_no_proxy()`.
+        - type: blocked
+          ts: "2026-06-26T10:00:21Z"
+          agent_id: "linux-macuahuitl-codex-20260626T100021Z"
+          host: linux
+          lease_id: "hardcoded-ip/remove-port-publish-20260626T100021Z"
+          evidence:
+            - "NO_PROXY='*' no_proxy='*' timeout 8 curl --noproxy '*' -kS https://10.0.42.2:8200/v1/sys/health"
+            - "NO_PROXY='*' no_proxy='*' timeout 8 curl --noproxy '*' -kS https://vault:8200/v1/sys/health"
+          note: >
+            Removing the Vault loopback publish is blocked until a non-published
+            host-to-enclave access path exists. On the mutable Linux host,
+            proxy-bypassed direct access to `10.0.42.2:8200` timed out and the
+            `vault` DNS name did not resolve from the host. Reordered order 104
+            so `hardcoded-ip/dns-migration` is ready first and this publish
+            removal depends on that transport migration.

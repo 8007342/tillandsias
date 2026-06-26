@@ -21,7 +21,7 @@ plan:
   current_state:
     last_completed_step: released-headless-stale-auth-preflight (order 103)
     next_step: hardcoded-ip-eradication (order 104)
-    next_graph_node: hardcoded-ip/remove-port-publish
+    next_graph_node: hardcoded-ip/dns-migration
     frontier_note: >
       Order 103 (released-headless-stale-auth-preflight) completed: PR #47
       merged, v0.3.260626.3 released with stale-auth fix + macOS vault fixes.
@@ -29,10 +29,12 @@ plan:
       (hardcoded-ip-eradication) inventory and subnet configurability completed
       on 2026-06-26. The enclave subnet now has a
       TILLANDSIAS_ENCLAVE_SUBNET override with default 10.0.42.0/24, and
-      NO_PROXY/no_proxy derives from the same helper. Next Linux slice is
-      hardcoded-ip/remove-port-publish, but it must be bundled with a
-      Linux-safe Vault base URL or DNS migration because Linux still defaults
-      to https://127.0.0.1:8201.
+      NO_PROXY/no_proxy derives from the same helper. A live Linux probe showed
+      hardcoded-ip/remove-port-publish is blocked until there is a non-published
+      Vault access path: proxy-bypassed `https://10.0.42.2:8200` timed out and
+      `vault` is not host-resolvable. Next Linux slice is
+      hardcoded-ip/dns-migration; after that, remove the `127.0.0.1:8201`
+      publish and loopback default together.
     plan_index: plan/index.yaml
     step_directory: plan/steps
     checkpoint_branch: linux-next
