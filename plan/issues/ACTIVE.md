@@ -1,6 +1,20 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-25T23:13Z
+Last updated: 2026-06-26T06:22Z
+
+## This Cycle (2026-06-26T06:22Z, macos — build-install-smoke e2e + findings)
+
+- **Build**: Signed local `Tillandsias.app` matches HEAD `a6abaf83`. Fresh provision PASS.
+- **Fix confirmed — env var through vsock exec**: Added `export TILLANDSIAS_VAULT_API_BASE_URL=https://10.0.42.2:8200` to `diagnose.rs:544`. Vault bootstrap now probes the correct enclave IP.
+- **Fix confirmed — stale volume cleanup**: Added `podman volume rm -f tillandsias-vault-data` to `launch_vault_container()`. `Stdio::null()` replaced with `Stdio::piped()`.
+- **Fixed Stdio::null() pattern** in `vault_bootstrap.rs:1098-1111` — container rm and volume rm cleanup commands now use `.stdout(Stdio::piped()).stderr(Stdio::piped()).output()`.
+- **BLOCKER — released headless auth preflight**: `auth preflight failed: tillandsias-git is not running (None)` in released binary. Current source has no such check. Filed order 101.
+- **Three plan work packets filed for linux builders**:
+  - Order 101 `released-headless-stale-auth-preflight` — verify source + cut new release
+  - Order 102 `hardcoded-ip-eradication` — replace `10.0.42.x` with DNS+vsock
+  - Observability debt (Stdio::null() patterns) — scoped for separate order
+- **Detailed findings**: `plan/issues/build-install-smoke-e2e-findings-2026-06-25.md`
+- **Next**: Linux builders pick up order 101 → cut new release → macOS re-smokes `--github-login`
 
 ## This Cycle (2026-06-25T23:13Z, macos — Vault health follow-up)
 
