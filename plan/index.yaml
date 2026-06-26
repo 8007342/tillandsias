@@ -6721,7 +6721,7 @@ plan_index:
     - id: released-headless-stale-auth-preflight
       order: 103
       title: "Remove stale auth preflight requiring tillandsias-git from released headless"
-      status: in_progress
+      status: done
       owner_host: linux
       deliverable: plan/issues/build-install-smoke-e2e-findings-2026-06-25.md
       audit_origin: plan/issues/build-install-smoke-e2e-findings-2026-06-25.md
@@ -6753,15 +6753,16 @@ plan_index:
             returned zero results. Source tree is already clean. The stale preflight
             only exists in the published release binary predating the fix.
         - id: released-headless-stale-auth-preflight/cut-new-release
-          status: in_progress
+          status: completed
           owner_host: linux
           depends_on:
             - released-headless-stale-auth-preflight/verify-current-source
           checkpoint_required: true
           handoff_note: >
-            After confirming the source fix (or implementing it), bump VERSION,
-            tag, trigger release workflow. The macOS host will then re-provision
-            and pick up the new binary from the GitHub release.
+            Completed: merged PR #47 linux-next→main, bumped VERSION to
+            0.3.260626.3, tagged v0.3.260626.3, triggered release workflow
+            which successfully published the Linux musl release. macOS host
+            can now re-provision and fetch the updated headless binary.
       events:
         - type: claim
           ts: "2026-06-26T06:30:30Z"
@@ -6776,6 +6777,24 @@ plan_index:
           note: >
             verify-current-source confirmed clean. Moving to cut-new-release:
             bump VERSION, tag, trigger release workflow.
+        - type: completed
+          ts: "2026-06-26T06:46:55Z"
+          agent_id: "linux-tlatoani-meta-orch-20260626T064655Z"
+          host: linux
+          commits:
+            - "c0cde245"
+            - "2f87f389"
+            - "877e6558"
+          evidence:
+            - "PR #47 linux-next→main merged"
+            - "VERSION bumped to 0.3.260626.3"
+            - "Tagged v0.3.260626.3"
+            - "Release workflow completed: Linux musl release published (12m29s)"
+          note: >
+            Order 103 complete. The released headless binary now incorporates
+            the stale-auth-preflight fix (already in source) plus the macOS
+            vault fixes merged from osx-next@7441cfad. macOS sibling can
+            re-provision and re-smoke --github-login with v0.3.260626.3.
 
     - id: hardcoded-ip-eradication
       order: 104

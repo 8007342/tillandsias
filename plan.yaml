@@ -20,15 +20,14 @@ plan:
 
   current_state:
     last_completed_step: released-headless-stale-auth-preflight (order 103)
-    next_step: released-headless-stale-auth-preflight/cut-new-release (order 103)
-    next_graph_node: released-headless-stale-auth-preflight/cut-new-release
+    next_step: hardcoded-ip-eradication (order 104)
+    next_graph_node: hardcoded-ip-eradication/inventory
     frontier_note: >
-      Merged origin/osx-next@7441cfad (macos e2e findings + work packets) into
-      linux-next. Resolved plan conflicts — macOS orders renumbered 101→103,
-      102→104 to avoid collision with existing linux orders. Verified source
-      already clean of stale auth preflight (order 103/task 1 done). Proceeding
-      to cut new release (bump VERSION, tag, release workflow) so macOS can
-      pick up the updated headless binary and re-smoke --github-login.
+      Order 103 (released-headless-stale-auth-preflight) completed: PR #47
+      merged, v0.3.260626.3 released with stale-auth fix + macOS vault fixes.
+      macOS can now re-provision and re-smoke --github-login. Order 104
+      (hardcoded-ip-eradication) remains pending — linux builder to inventory
+      all hardcoded 10.0.42.x IPs and migrate to DNS-based discovery.
     plan_index: plan/index.yaml
     step_directory: plan/steps
     checkpoint_branch: linux-next

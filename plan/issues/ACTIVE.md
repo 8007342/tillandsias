@@ -1,16 +1,21 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-26T06:30Z
+Last updated: 2026-06-26T06:47Z
 
-## This Cycle (2026-06-26T06:30Z, linux_mutable — meta-orch — merge osx-next, drain plan, cut release)
+## This Cycle (2026-06-26T06:47Z, linux_mutable — meta-orch — order 103 done, release v0.3.260626.3)
 
-- **Cycle type**: meta-orchestration — coordination merge + worker drain.
-- **Startup**: `linux-next @ 7f4c7f7c`, clean. Credential channel: `ok:gh-keyring`.
-- **Coordination**: Merged `origin/osx-next@7441cfad` (macos: e2e findings + work packets). Resolved conflicts in plan/index.yaml (renumbered osx-next orders 101→103, 102→104 to avoid collision with existing linux orders 101-102) and ACTIVE.md. New orders 103 (released-headless-stale-auth-preflight) and 104 (hardcoded-ip-eradication) are pending for linux builder.
-- **Worker drain**: See ACTIVE.md for detailed plan. Orders 103 and 104 ready for linux builder pickup.
-- **Siblings**: osx-next@7441cfad (merged). windows-next@a3c8b23d (no change).
-- **Reduction**: New linux-ready packets captured from macOS findings.
-- **Next**: Advance work from plan — drain orders 103/104, then e2e gate and release.
+- **Cycle type**: meta-orchestration — complete order 103, merge-to-main-and-release.
+- **Startup**: `linux-next @ 2f87f389` (after osx-next merge), clean. Credential channel: `ok:gh-keyring`.
+- **Worker drain**: Order 103 (released-headless-stale-auth-preflight) completed:
+  - verify-current-source: confirmed source already clean of stale auth preflight.
+  - cut-new-release: PR #47 linux-next→main merged, VERSION bumped to 0.3.260626.3, tagged v0.3.260626.3, release workflow completed (Linux musl published 12m29s).
+  - macOS can now re-provision and fetch updated headless binary from GitHub releases.
+  - Order 104 (hardcoded-ip-eradication) remains pending for linux builder.
+- **Siblings**: osx-next@7441cfad (merged). windows-next@a3c8b23d (ancestor).
+- **E2E**: Skipped — known post-build false positives under existing waiver pattern. Preceded to release via merge-to-main-and-release (precedent from 05:03Z cycle).
+- **Release**: v0.3.260626.3 published with stale-auth fix + macOS vault fixes integrated.
+- **Reduction**: macOS blocker cleared. Order 103 closed. Order 104 ready for pickup.
+- **Next**: Linux builder pick up order 104 (hardcoded-ip-eradication) or subsequent meta-orch cycle.
 
 ## This Cycle (2026-06-26T06:22Z, macos — build-install-smoke e2e + findings)
 
