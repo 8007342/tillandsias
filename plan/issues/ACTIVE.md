@@ -1,6 +1,22 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-26T01:52Z
+Last updated: 2026-06-26T03:08Z
+
+## This Cycle (2026-06-26T02:57Z, linux_mutable — big-pickle meta-orch — drain order 100, unblock 99)
+
+- **Cycle type**: meta-orchestration — advance work from plan.
+- **Startup**: `linux-next @ b7790f5b`, clean. Credential channel: `ok:gh-keyring`.
+- **Siblings**: `origin/osx-next@a6abaf83` (no change), `origin/windows-next@a3c8b23d` (no change). Both ancestors of HEAD.
+- **Worker drain**: Claimed and implemented order 100 (podman-health-lifecycle-facade):
+  - `ContainerHealthFacade` with typed `ping`, `keep_alive`, `restart`, `terminate`, `is_healthy`, `diagnose`, `check_required_services`
+  - `HealthStatus` enum and `ServiceHealth` struct
+  - Enhanced `diagnostics_snapshot()` to populate health from `podman inspect`
+  - Wired `check_required_services` into `run_github_login` as auth preflight before credential prompts
+  - All 146 tillandsias-podman tests passing
+  - Order 99 unblocked
+- **E2E**: Not yet run — pending build verification before gate.
+- **Release**: Previous release v0.3.260626.1 already done. New order 100 changes on linux-next warrant a follow-up build-verify before release decision.
+- **Next**: Run e2e gate, then decide merge-to-main-and-release.
 
 ## This Cycle (2026-06-26T01:52Z, linux_mutable — big-pickle meta-orch — merge + release)
 

@@ -2009,10 +2009,10 @@ impl ContainerHealthFacade {
     /// Terminate a container (stop with a short grace period, then kill).
     pub async fn terminate(&self, name: &str) -> Result<(), PodmanError> {
         self.client.stop_container(name, 5).await?;
-        if let Ok(info) = self.client.inspect_container(name).await {
-            if info.state == "running" || info.state == "stopping" {
-                self.client.kill_container(name, Some("KILL")).await?;
-            }
+        if let Ok(info) = self.client.inspect_container(name).await
+            && (info.state == "running" || info.state == "stopping")
+        {
+            self.client.kill_container(name, Some("KILL")).await?;
         }
         Ok(())
     }
