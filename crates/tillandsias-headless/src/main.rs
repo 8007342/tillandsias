@@ -4107,32 +4107,7 @@ fn run_github_login(debug: bool) -> Result<(), String> {
     #[cfg(feature = "vault")]
     vault_bootstrap::ensure_vault_running(debug)?;
 
-    // Verify required services are healthy using the shared health facade.
-    // This is provider-neutral — future auth flows (Cloudflare, AWS, etc.)
-    // should reuse this preflight rather than adding per-provider sleeps.
-    if debug {
-        eprintln!("[tillandsias] running auth preflight health check");
-    }
-    let health_facade =
-        tillandsias_podman::ContainerHealthFacade::new(tillandsias_podman::PodmanClient::new());
-    let required = ["tillandsias-vault", "tillandsias-git"];
-    let results = tokio::runtime::Runtime::new()
-        .map_err(|e| format!("create tokio runtime for health check: {e}"))?
-        .block_on(health_facade.check_required_services(&required));
-    for svc in &results {
-        if debug {
-            eprintln!(
-                "[tillandsias] preflight {} running={} health={:?} error={:?}",
-                svc.name, svc.running, svc.health, svc.error
-            );
-        }
-        if !svc.running {
-            return Err(format!(
-                "auth preflight failed: {} is not running ({:?})",
-                svc.name, svc.error
-            ));
-        }
-    }
+    check_auth_required_services(&["tillandsias-vault"], debug)?;
 
     let container = format!("tillandsias-gh-login-{}", std::process::id());
     let cleanup = LoginContainerCleanup {
@@ -4196,6 +4171,9 @@ fn run_github_login(debug: bool) -> Result<(), String> {
         ]);
         run_command_silent(run, debug)?;
     }
+
+    let required = ["tillandsias-vault", container.as_str()];
+    check_auth_required_services(&required, debug)?;
 
     // Prompt only after the non-secret infrastructure preflight has succeeded:
     // image present, managed networks present, Vault reachable, and the login
@@ -4353,6 +4331,35 @@ fn run_github_login(debug: bool) -> Result<(), String> {
     // Add a 5 second delay so the user can see the success message before the popup terminal closes
     std::thread::sleep(std::time::Duration::from_secs(5));
 
+    Ok(())
+}
+
+fn check_auth_required_services(required: &[&str], debug: bool) -> Result<(), String> {
+    // Verify required services are running using the shared health facade.
+    // This is provider-neutral — future auth flows (Cloudflare, AWS, etc.)
+    // should reuse this preflight rather than adding per-provider sleeps.
+    if debug {
+        eprintln!("[tillandsias] running auth preflight health check");
+    }
+    let health_facade =
+        tillandsias_podman::ContainerHealthFacade::new(tillandsias_podman::PodmanClient::new());
+    let results = tokio::runtime::Runtime::new()
+        .map_err(|e| format!("create tokio runtime for health check: {e}"))?
+        .block_on(health_facade.check_required_services(required));
+    for svc in &results {
+        if debug {
+            eprintln!(
+                "[tillandsias] preflight {} running={} health={:?} error={:?}",
+                svc.name, svc.running, svc.health, svc.error
+            );
+        }
+        if !svc.running {
+            return Err(format!(
+                "auth preflight failed: {} is not running ({:?})",
+                svc.name, svc.error
+            ));
+        }
+    }
     Ok(())
 }
 
@@ -8299,6 +8306,12 @@ mod tests {
         let helper_idx = login_window
             .find("run_command_silent(run, debug)?;")
             .expect("github login must start the helper container before prompts");
+        let helper_preflight_idx = login_window
+            .find("let required = [\"tillandsias-vault\", container.as_str()]")
+            .expect("github login must preflight the actual helper container");
+        let helper_health_idx = login_window
+            .find("check_auth_required_services(&required, debug)?")
+            .expect("github login must run provider-neutral health preflight");
         let prompt_idx = login_window
             .find("prompt_and_store_git_identity()?")
             .expect("github login must prompt for git identity");
@@ -8311,6 +8324,7 @@ mod tests {
             ("network", network_idx),
             ("vault", vault_idx),
             ("helper", helper_idx),
+            ("helper health", helper_health_idx),
         ] {
             assert!(
                 idx < prompt_idx,
@@ -8318,8 +8332,27 @@ mod tests {
             );
         }
         assert!(
+            helper_idx < helper_preflight_idx && helper_preflight_idx < helper_health_idx,
+            "the health preflight must target the helper container after it starts: {login_window}"
+        );
+        assert!(
             prompt_idx < token_idx,
             "git identity prompt should still precede token entry: {login_window}"
+        );
+    }
+
+    #[test]
+    fn github_login_preflight_does_not_require_project_git_container() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let login_window = source_window(source, "fn run_github_login(debug: bool)");
+
+        assert!(
+            !login_window.contains("\"tillandsias-git\""),
+            "github login must not require a pre-existing project git mirror container: {login_window}"
+        );
+        assert!(
+            login_window.contains("container.as_str()"),
+            "github login health preflight must target the ephemeral login helper container"
         );
     }
 

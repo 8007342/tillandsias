@@ -19,7 +19,7 @@ plan:
     verification: methodology/verification.yaml
 
   current_state:
-    last_completed_step: hardcoded-ip/dns-migration (order 104 slice)
+    last_completed_step: github-login-readiness-before-credentials (order 99) and hardcoded-ip/dns-migration (order 104 slice)
     next_step: hardcoded-ip-eradication (order 104)
     next_graph_node: hardcoded-ip/remove-port-publish (blocked)
     frontier_note: >
@@ -33,10 +33,14 @@ plan:
       at 2026-06-26T10:55Z: Vault launch, TLS identity, macOS VM cloud-init,
       and macOS control-wire GitHub-login now use `https://vault:8200`, and
       rootful VM guests route the single-label `vault` query through the Podman
-      network gateway discovered from `podman network inspect`. The remaining
-      Linux blocker is hardcoded-ip/remove-port-publish: native Linux still
-      defaults to `https://127.0.0.1:8201`, so removing the publish requires a
-      non-published host access path such as vsock or podman-exec first.
+      network gateway discovered from `podman network inspect`. Order 99 also
+      closed: guest `--github-login` now checks Vault, starts the ephemeral
+      login helper, then verifies Vault plus that helper through the shared
+      health facade before any credential prompt; the stale `tillandsias-git`
+      project-container prerequisite is removed. The remaining Linux blocker is
+      hardcoded-ip/remove-port-publish: native Linux still defaults to
+      `https://127.0.0.1:8201`, so removing the publish requires a non-published
+      host access path such as vsock or podman-exec first.
     plan_index: plan/index.yaml
     step_directory: plan/steps
     checkpoint_branch: linux-next
