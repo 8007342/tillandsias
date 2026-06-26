@@ -128,6 +128,22 @@ graph now runs `hardcoded-ip/dns-migration` before removing
 - Remove `-p` port publish for non-diagnostic use — all host-to-enclave communication should use vsock or podman exec
 - Standardize on podman `--network-alias` for service discovery across all containers
 
+**Progress 2026-06-26T10:55Z**: completed `hardcoded-ip/dns-migration`.
+Vault service identity now uses the `vault` DNS name: the Vault container no
+longer passes a singleton `--ip`, the TLS leaf SAN is `DNS:vault`,
+`TILLANDSIAS_VAULT_API_BASE_URL` in the macOS VM unit and control-wire login
+driver is `https://vault:8200`, and rootful VM guests write a
+systemd-resolved drop-in that routes the single-label `vault` name to the
+Podman network gateway discovered from `podman network inspect`. Verification:
+`cargo test -p tillandsias-headless enclave_`,
+`cargo test -p tillandsias-headless vault_`,
+`cargo test -p tillandsias-vm-layer vz_cloud_init_headless_service_has_control_wire_preflight`,
+`cargo check -p tillandsias-macos-tray`, and `./build.sh --check` all passed.
+Source scan `rg -n "10\.0\.42\.2|VAULT_ENCLAVE_IP|https://10\.0\.42\.2|IP:\{VAULT" crates/**/*.rs`
+returned no matches. The Linux loopback publish remains intentionally in place:
+native Linux still needs a non-published host access path (vsock or podman-exec)
+before `hardcoded-ip/remove-port-publish` can be safely completed.
+
 **Status**: filed as optimization work packet
 
 ---

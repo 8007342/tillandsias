@@ -1,6 +1,16 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-26T10:00Z
+LastExecutionTime: 2026-06-26T10:55Z
+
+## This Loop (2026-06-26T10:55Z, linux_mutable — hardcoded-ip DNS migration)
+
+- **Cycle type**: `/advance-work-from-plan` implementation for `hardcoded-ip/dns-migration`.
+- **Startup**: `linux-next @ d77166f5`, clean. Credential channel: `ok:gh-keyring`.
+- **Siblings**: `origin/osx-next@7441cfad` and `origin/windows-next@a3c8b23d` are both ancestors of `origin/linux-next`; no sibling merge was pending at cycle start.
+- **Implementation**: Replaced the Vault singleton-IP contract with the `vault` service DNS name. Vault launch no longer passes `--ip`, TLS leaf generation pins `DNS:vault`, macOS VM cloud-init and control-wire GitHub-login export `TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200`, and rootful VM guests install a systemd-resolved route for `vault` using the Podman network gateway discovered from `podman network inspect`.
+- **Verification**: `cargo test -p tillandsias-headless enclave_` PASS; `cargo test -p tillandsias-headless vault_` PASS; `cargo test -p tillandsias-vm-layer vz_cloud_init_headless_service_has_control_wire_preflight` PASS; `cargo check -p tillandsias-macos-tray` PASS; stale Vault-IP Rust source scan returned no matches; `./build.sh --check` PASS after fixing one clippy needless-borrow.
+- **Residual blocker**: `hardcoded-ip/remove-port-publish` remains blocked because native Linux still defaults to `https://127.0.0.1:8201`; removing the publish requires a non-published native host access path such as vsock or podman-exec.
+- **Release decision**: hold merge-to-main/release until the current local-build smoke failure class is fixed or explicitly waived. Latest successful published release remains v0.3.260626.3 / tag `vv0.3.260626.3` on main.
 
 ## This Loop (2026-06-26T10:00Z, linux_mutable — order 104 dependency correction)
 

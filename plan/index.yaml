@@ -6842,27 +6842,29 @@ plan_index:
             Live Linux probe on 2026-06-26 confirmed this cannot be a standalone
             deletion: with proxy bypassed, `https://10.0.42.2:8200` timed out
             from the host and `https://vault:8200` did not resolve. Complete
-            DNS/vsock/podman-exec transport migration first, then remove the
-            publish flag and the loopback default together.
+            the remaining native-Linux vsock/podman-exec transport migration
+            first, then remove the publish flag and the loopback default together.
         - id: hardcoded-ip/dns-migration
-          status: ready
+          status: completed
           owner_host: linux
           depends_on:
             - hardcoded-ip/inventory
           owned_files:
             - crates/tillandsias-vm-layer/src/vz.rs
             - crates/tillandsias-macos-tray/src/diagnose.rs
+            - crates/tillandsias-headless/src/main.rs
             - crates/tillandsias-headless/src/vault_bootstrap.rs
           checkpoint_required: true
           handoff_note: >
-            Replace `VAULT_ENCLAVE_IP = "10.0.42.2"` with DNS name `vault`.
-            Configure systemd-resolved or resolv.conf in the VM to forward
-            `10.0.42.0/24` DNS queries to aardvark-dns. Update the macOS
-            side's `TILLANDSIAS_VAULT_API_BASE_URL` to use `https://vault:8200`.
-            This is now the unblocker for removing the loopback Vault publish:
-            local Linux probe showed direct host access to `10.0.42.2:8200`
-            times out when proxy bypass is forced, and `vault` is not
-            host-resolvable yet.
+            Completed 2026-06-26T10:55Z: Vault launch no longer pins a
+            singleton enclave IP, the TLS leaf covers `DNS:vault`, the macOS
+            cloud-init unit and control-wire GitHub-login driver export
+            `TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200`, and rootful VM
+            guests install a systemd-resolved route for the single-label
+            `vault` name by reading the Podman network gateway dynamically.
+            Native Linux still defaults to the loopback publish, so
+            `hardcoded-ip/remove-port-publish` remains blocked on replacing
+            that host access path with vsock or podman-exec.
         - id: hardcoded-ip/subnet-constant
           status: completed
           owner_host: linux
@@ -6941,3 +6943,36 @@ plan_index:
             `vault` DNS name did not resolve from the host. Reordered order 104
             so `hardcoded-ip/dns-migration` is ready first and this publish
             removal depends on that transport migration.
+        - type: claim
+          ts: "2026-06-26T10:48:48Z"
+          agent_id: "linux-macuahuitl-codex-20260626T104848Z"
+          host: linux
+          lease_id: "hardcoded-ip/dns-migration-20260626T104848Z"
+          expires_at: "2026-06-26T14:48:48Z"
+          note: >
+            Claimed the DNS migration slice after the publish-removal probe
+            showed that `vault` was not host-resolvable. Next action: move the
+            VM/macOS Vault base URL and TLS/container identity to the `vault`
+            service name and add a VM resolver route without removing the Linux
+            loopback publish yet.
+        - type: completed
+          ts: "2026-06-26T10:55:28Z"
+          agent_id: "linux-macuahuitl-codex-20260626T104848Z"
+          host: linux
+          lease_id: "hardcoded-ip/dns-migration-20260626T104848Z"
+          evidence:
+            - "rg -n \"10\\.0\\.42\\.2|VAULT_ENCLAVE_IP|https://10\\.0\\.42\\.2|IP:\\{VAULT\" crates/**/*.rs (no matches)"
+            - "cargo test -p tillandsias-headless enclave_"
+            - "cargo test -p tillandsias-headless vault_"
+            - "cargo test -p tillandsias-vm-layer vz_cloud_init_headless_service_has_control_wire_preflight"
+            - "cargo check -p tillandsias-macos-tray"
+            - "./build.sh --check"
+          note: >
+            Replaced the Vault singleton IP contract with `vault` service DNS:
+            Vault launches with the `vault` network alias and no `--ip`, cert
+            SAN generation/refresh pins `DNS:vault`, VM cloud-init and macOS
+            control-wire login export `https://vault:8200`, and rootful VM
+            guests dynamically route the single-label `vault` query to the
+            Podman network gateway via systemd-resolved. The Linux loopback
+            publish is intentionally retained for the still-blocked native
+            host transport slice.

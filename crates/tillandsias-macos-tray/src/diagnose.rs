@@ -534,14 +534,14 @@ pub fn github_login_main() -> i32 {
                 //   - XDG_RUNTIME_DIR (+writable): require_desktop_user_session
                 //     gate on the DesktopUserSession lane.
                 //   - TILLANDSIAS_VAULT_API_BASE_URL: the guest vault bootstrap
-                //     probes the enclave IP (10.0.42.2:8200), not the default
-                //     loopback publish (127.0.0.1:8201) which is Linux-only.
+                //     probes the enclave service DNS name, not the default
+                //     loopback publish which is Linux-only.
                 // The GitHub token itself is handled by the released flow inside
                 // an ephemeral `--rm` git container (piped to `gh auth login
                 // --with-token`, written to Vault, container destroyed on exit),
                 // so nothing unencrypted is left at rest here.
                 "export HOME=/root; export XDG_RUNTIME_DIR=/run/user/0; \
-                 export TILLANDSIAS_VAULT_API_BASE_URL=https://10.0.42.2:8200; \
+                 export TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200; \
                  mkdir -p \"$XDG_RUNTIME_DIR\" 2>/dev/null; \
                  exec /usr/local/bin/tillandsias-headless --github-login",
             ],
