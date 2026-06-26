@@ -50,7 +50,7 @@ an `--opencode` or equivalent CLI flag.
 - id: `smoke-finding/headless-host-gh-spawn-non-fatal`
 - owner_host: any
 - capability_tags: [rust, headless, github-login, reliability]
-- status: ready
+- status: done
 - discovered_by: `/smoke-curl-install-and-test-e2e` on release `v0.3.260626.4`
 - evidence:
   - `target/smoke-e2e/04-github-login.log` — `Error: Failed to spawn host gh auth login: No such file or directory (os error 2)`
@@ -69,13 +69,22 @@ an `--opencode` or equivalent CLI flag.
     ts: "2026-06-26T20:47:00Z"
     agent_id: "macos-smoke-20260626T2000Z"
     host: macos
+  - type: completed
+    ts: "2026-06-26T22:30:00Z"
+    agent_id: "macos-advance-20260626T2230Z"
+    host: macos
+    note: >
+      Removed the entire bare-guest gh block (old lines 4118-4166 in main.rs)
+      as part of arch/macos-github-login-must-be-fully-containerized fix.
+      The Vault write succeeds inside the container; no bare-guest gh is needed.
+      Change pending new headless release by Linux worker.
 
 ### Work Packet: smoke-finding/macos-tray-no-opencode-cli
 
 - id: `smoke-finding/macos-tray-no-opencode-cli`
 - owner_host: macos
 - capability_tags: [rust, macos, forge, opencode, ux]
-- status: ready
+- status: done
 - discovered_by: `/smoke-curl-install-and-test-e2e` on release `v0.3.260626.4`
 - evidence:
   - `"/Applications/Tillandsias.app/Contents/MacOS/tillandsias-tray" --help` — only flags: `--provision`, `--exec-guest`, `--github-login`, `--diagnose [--json]`, `-V`, `-h`
@@ -96,13 +105,22 @@ an `--opencode` or equivalent CLI flag.
     ts: "2026-06-26T21:00:00Z"
     agent_id: "macos-smoke-20260626T2000Z"
     host: macos
+  - type: completed
+    ts: "2026-06-26T22:30:00Z"
+    agent_id: "macos-advance-20260626T2230Z"
+    host: macos
+    note: >
+      Implemented: added `exec_over_stream_with_input_streaming` to vsock_exec.rs,
+      `opencode_main` to diagnose.rs, and `--opencode <path> [--prompt <text>]`
+      dispatch to main.rs. Built and verified with `cargo build --release -p
+      tillandsias-macos-tray`. Pending test of live forge run after new headless release.
 
 ### Work Packet: smoke-finding/vault-keyring-warning-noise-in-guest
 
 - id: `smoke-finding/vault-keyring-warning-noise-in-guest`
 - owner_host: any
 - capability_tags: [rust, headless, vault, ux]
-- status: ready
+- status: done
 - discovered_by: `/smoke-curl-install-and-test-e2e` on release `v0.3.260626.4`
 - evidence:
   - `target/smoke-e2e/04-github-login.log` — `[tillandsias-vault] WARNING: failed to write vault-root-token-v1 to OS keyring (Platform secure storage failure: no secret service provider or dbus session found); writing to fallback file`
@@ -120,13 +138,21 @@ an `--opencode` or equivalent CLI flag.
     ts: "2026-06-26T21:00:00Z"
     agent_id: "macos-smoke-20260626T2000Z"
     host: macos
+  - type: completed
+    ts: "2026-06-26T22:30:00Z"
+    agent_id: "macos-advance-20260626T2230Z"
+    host: macos
+    note: >
+      Fixed: vault_bootstrap.rs line ~1265 changed from WARNING to "note" level
+      with "(expected in VM guest and headless environments)" suffix.
+      Pending new headless release by Linux worker.
 
 ### Work Packet: arch/macos-github-login-must-be-fully-containerized
 
 - id: `arch/macos-github-login-must-be-fully-containerized`
 - owner_host: any
 - capability_tags: [rust, macos, headless, podman, github-login, architecture]
-- status: ready
+- status: done
 - discovered_by: operator review of `/smoke-curl-install-and-test-e2e` on release `v0.3.260626.4`
 - evidence:
   - `crates/tillandsias-headless/src/main.rs:4132-4160` — after the in-container vault write, `run_github_login` spawns `Command::new("gh")` and `Command::new("gh") auth setup-git` **directly on the bare Fedora guest** (not inside a Podman container). This violates the invariant that only `tillandsias-headless` and `podman` (plus their direct helpers) execute on the bare guest; all business logic must run inside Podman containers.
@@ -166,3 +192,13 @@ an `--opencode` or equivalent CLI flag.
       vsock pass-through; business logic lives in Podman containers inside
       the VM. The current `run_github_login` violates this by running `gh`
       and `gh auth setup-git` on the bare Fedora guest after the vault write.
+  - type: completed
+    ts: "2026-06-26T22:30:00Z"
+    agent_id: "macos-advance-20260626T2230Z"
+    host: macos
+    note: >
+      Implemented: removed the entire bare-guest gh block (~lines 4118-4166 in
+      crates/tillandsias-headless/src/main.rs). The vault write + container
+      gh auth login + container gh auth status all remain inside Podman.
+      After removal the only Tillandsias binaries on the bare guest are
+      tillandsias-headless and podman. Pending new headless release by Linux worker.

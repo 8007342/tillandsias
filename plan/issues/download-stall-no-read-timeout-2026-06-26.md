@@ -74,7 +74,7 @@ both macOS (VzRuntime) and Windows (WslRuntime) since they share this module.
 - id: `smoke-finding/download-no-read-timeout`
 - owner_host: any
 - capability_tags: [rust, networking, provisioning, macos, windows, reliability]
-- status: ready
+- status: done
 - discovered_by: `/smoke-curl-install-and-test-e2e` on release `v0.3.260626.4`
 - evidence:
   - `crates/tillandsias-vm-layer/src/fetch.rs:176-220` — `connect_timeout` only; `resp.chunk().await` has no timeout wrapper and no retry loop
@@ -93,3 +93,17 @@ both macOS (VzRuntime) and Windows (WslRuntime) since they share this module.
     ts: "2026-06-26T20:47:29Z"
     agent_id: "macos-smoke-20260626T2000Z"
     host: macos
+  - type: completed
+    ts: "2026-06-26T22:30:00Z"
+    agent_id: "macos-advance-20260626T2230Z"
+    host: macos
+    note: >
+      Implemented: rewrote `download_verified` in
+      `crates/tillandsias-vm-layer/src/fetch.rs` with a `'retry: loop` outer
+      loop, `tokio::time::timeout(30s, resp.chunk().await)` per chunk, and
+      5-attempt exponential backoff (1s, 2s, 4s, 8s, 16s). On idle-timeout or
+      chunk error: drop file handle, sleep backoff, `continue 'retry`.
+      On retry: sends `Range: bytes=<downloaded>-`; if server returns 200
+      instead of 206 discards partial and restarts from 0. On EOF: flush,
+      break. Tests pass (`cargo test -p tillandsias-vm-layer`).
+      Pending release.

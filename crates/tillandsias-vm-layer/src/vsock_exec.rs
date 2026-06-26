@@ -210,6 +210,114 @@ where
     }
 }
 
+/// Like [`exec_over_stream_with_input`] but emits each PTY output chunk to
+/// `on_output` immediately rather than accumulating the full buffer. Use this
+/// for long-running guest commands (e.g. `--opencode`) where real-time output
+/// matters; the caller receives `ExecOutput { exit, stdout: vec![] }` on
+/// success (`stdout` is always empty — the caller owns the output via callback).
+pub async fn exec_over_stream_with_input_streaming<S, F>(
+    mut stream: S,
+    argv: &[&str],
+    input: &[u8],
+    on_output: F,
+) -> Result<ExecOutput, String>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+    F: Fn(&[u8]),
+{
+    if argv.is_empty() {
+        return Err("vsock_exec: empty argv".to_string());
+    }
+    let session_id: u32 = 1;
+    let mut seq: u64 = 1;
+
+    write_envelope(
+        &mut stream,
+        &ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq,
+            body: ControlMessage::Hello {
+                from: "tillandsias-vm-layer::vsock_exec::streaming".to_string(),
+                capabilities: vec!["pty.attach@v1".to_string()],
+            },
+        },
+    )
+    .await?;
+    let ack = read_envelope(&mut stream).await?;
+    match ack.body {
+        ControlMessage::HelloAck { wire_version, .. } => {
+            if wire_version != WIRE_VERSION {
+                return Err(format!(
+                    "vsock_exec: wire_version mismatch (peer {wire_version}, self {WIRE_VERSION})"
+                ));
+            }
+        }
+        other => {
+            return Err(format!(
+                "vsock_exec: expected HelloAck, got {}",
+                other.kind()
+            ));
+        }
+    }
+
+    seq += 1;
+    let argv_owned: Vec<String> = argv.iter().map(|s| s.to_string()).collect();
+    write_envelope(
+        &mut stream,
+        &ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq,
+            body: ControlMessage::PtyOpen {
+                session_id,
+                rows: 24,
+                cols: 80,
+                argv: argv_owned,
+                env: vec![("TERM".to_string(), "dumb".to_string())],
+                cwd: None,
+            },
+        },
+    )
+    .await?;
+
+    for chunk in input.chunks(MAX_PTY_FRAME_BYTES) {
+        seq += 1;
+        write_envelope(
+            &mut stream,
+            &ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq,
+                body: ControlMessage::PtyData {
+                    session_id,
+                    direction: PtyDirection::ToGuest,
+                    bytes: chunk.to_vec(),
+                },
+            },
+        )
+        .await?;
+    }
+
+    loop {
+        let env = read_envelope(&mut stream).await?;
+        match env.body {
+            ControlMessage::PtyData {
+                session_id: sid,
+                direction: PtyDirection::ToHost,
+                bytes,
+            } if sid == session_id => on_output(&bytes),
+            ControlMessage::PtyClose {
+                session_id: sid,
+                exit,
+            } if sid == session_id => {
+                return Ok(ExecOutput {
+                    exit,
+                    stdout: vec![],
+                });
+            }
+            _ => {}
+        }
+    }
+}
+
 /// One scripted prompt→response step for [`exec_over_stream_expect`].
 #[derive(Clone)]
 pub struct Expect {
