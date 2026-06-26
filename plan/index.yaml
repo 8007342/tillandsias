@@ -6463,7 +6463,12 @@ plan_index:
         - id: github-login-readiness-before-credentials/preflight-and-ordering
           status: ready
           owner_host: any
-          estimated_hours: 3
+          estimated_hours: 1
+          handoff_note: >
+            ContainerHealthFacade now provides provider-neutral
+            check_required_services. On linux, run_github_login uses it as
+            auth preflight before prompting. macOS VZ side may need additional
+            wiring to use the same facade before VZ start / control-wire wait.
           owned_files:
             - crates/tillandsias-macos-tray/src/diagnose.rs
             - crates/tillandsias-headless/src/main.rs
@@ -6575,10 +6580,19 @@ plan_index:
           agent_id: "linux-tlatoani-big-pickle-20260626T025757Z"
           host: linux
           note: >
-            Implemented ContainerHealthFacade with typed ping, keep_alive,
-            restart, terminate, is_healthy, diagnose, and check_required_services
-            methods on PodmanClient. Enhanced diagnostics_snapshot to populate
-            health info from podman inspect. Added HealthStatus enum,
-            ServiceHealth struct, and unit tests. All 146 tillandsias-podman
-            tests passing. Remaining: wire check_required_services into
-            GitHub-login preflight in main.rs.
+            Slice 1: Implemented ContainerHealthFacade with typed ping,
+            keep_alive, restart, terminate, is_healthy, diagnose, and
+            check_required_services methods on PodmanClient. Enhanced
+            diagnostics_snapshot to populate health info. Added HealthStatus
+            enum, ServiceHealth struct, and unit tests. 146/146 podman tests.
+        - type: progress
+          ts: "2026-06-26T03:05Z"
+          agent_id: "linux-tlatoani-big-pickle-20260626T0305Z"
+          host: linux
+          commits: ["e0bdfc94"]
+          note: >
+            Slice 2: Wired ContainerHealthFacade::check_required_services into
+            run_github_login as auth preflight before credential prompts.
+            Re-exported new types from tillandsias_podman crate. All tests
+            passing. Order 99 is now unblocked — remaining work: macOS VZ
+            side wiring if needed.
