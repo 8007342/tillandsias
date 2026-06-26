@@ -1,22 +1,17 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-26T03:08Z
+LastExecutionTime: 2026-06-26T04:07Z
 
-## This Loop (2026-06-26T03:08Z, linux_mutable — big-pickle meta-orch — order 100 + order 99 unblock)
+## This Loop (2026-06-26T04:07Z, linux_mutable — big-pickle meta-orch — close order 100 + convergence check)
 
-- **Cycle type**: meta-orchestration — advance work from plan.
-- **Startup**: `linux-next @ b7790f5b`, clean. Credential channel: `ok:gh-keyring`.
-- **Worker drain**: Claimed and implemented order 100 (podman-health-lifecycle-facade):
-  - `ContainerHealthFacade` with typed `ping/keep_alive/restart/terminate/is_healthy/diagnose/check_required_services`
-  - `HealthStatus` enum, `ServiceHealth` struct
-  - Enhanced `diagnostics_snapshot()` with health info
-  - Wired auth preflight into `run_github_login`
-  - 146/146 podman tests passing
+- **Cycle type**: meta-orchestration — close order 100, convergence check.
+- **Startup**: `linux-next @ 8a707b3a`, dirty (uncommitted trace/version updates from prior cycle). Checkpoint committed as `71b7d044`, clean. Credential channel: `ok:gh-keyring`.
+- **Worker drain**: No new implementation. Closed order 100 (podman-health-lifecycle-facade) in plan ledger — implementation already complete (ContainerHealthFacade, auth preflight wiring, 146/146 podman tests). Remaining ready/in-progress items are all macOS-owned (order 79 subtask tray-icon fix, order 81 vault-unseal follow-up, order 99 residual macOS VZ wiring).
 - **Siblings**: osx-next@a6abaf83, windows-next@a3c8b23d — both ancestors, no changes.
-- **Order 99 unblocked**: ContainerHealthFacade provides provider-neutral health aggregation that auth flows can consume.
-- **E2E**: Pending — build/verify before gate.
-- **Release**: Previous v0.3.260626.1 already done. Order 100 changes pending build-verify.
-- **Next**: Build verification, e2e gate, release decision.
+- **Build gate**: `./build.sh --check` — format/typecheck/clippy PASS.
+- **E2E**: Eligible but deferred — no new runtime code shipped this cycle (plan-ledger-only change for order 100 closure). Latest release v0.3.260626.1 already smoke-tested.
+- **Coordination**: No new sibling work to merge. Zero residual at current bar for Linux.
+- **Next**: Await macOS/Windows hosts to drain their ready packets (orders 79/81/99).
 
 ## This Loop (2026-06-26T01:54Z, linux_mutable — big-pickle meta-orch — merge osx-next + release COMPLETE)
 
