@@ -1,6 +1,18 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-26T09:33Z
+Last updated: 2026-06-26T09:55Z
+
+## This Cycle (2026-06-26T09:55Z, linux_mutable — e2e checkpoint after order 104)
+
+- **Cycle type**: meta-orchestration E2E gate checkpoint and release decision.
+- **Current head**: `linux-next @ e0046f6e` (`feat(headless): make enclave subnet configurable`).
+- **Build/install smoke**: `target/build-install-smoke-e2e/20260626T093601Z` passed preflight and pre-build CI, installed the portable launcher, then failed post-build status smoke with `build_install_exit=1`.
+- **Evidence**:
+  - recurring inference model-cache permission: `models/blobs: permission denied`.
+  - recurring `opencode-prompt-e2e-shape` timeout in step 3 while launching the forge meta-orchestration prompt.
+  - diagnostics annex `plan/diagnostics/diagnostics_20260626T094012Z-summary.md`: Forge version 0.3.260626.3, 25/25 checks passed, no failed container launch states.
+- **Release**: Not run for the order 104 subnet commit. The prior v0.3.260626.3 release remains the latest successful release; e0046f6e needs a green or explicitly waived local-build smoke before merge-to-main/release.
+- **Next**: `hardcoded-ip/remove-port-publish` remains ready but must be bundled with a Linux-safe Vault base URL or DNS migration because native Linux still defaults to `https://127.0.0.1:8201`.
 
 ## This Cycle (2026-06-26T09:33Z, linux_mutable — meta-orch + advance-work — order 104 inventory/subnet drain)
 

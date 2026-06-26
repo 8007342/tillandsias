@@ -1,6 +1,16 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-26T09:33Z
+LastExecutionTime: 2026-06-26T09:55Z
+
+## This Loop (2026-06-26T09:55Z, linux_mutable — meta-orch e2e checkpoint after order 104)
+
+- **Cycle type**: meta-orchestration E2E gate checkpoint and release decision.
+- **Startup**: `linux-next @ e0046f6e`, clean before local-build smoke. Credential channel previously verified as `ok:gh-keyring`.
+- **Build/install smoke**: `target/build-install-smoke-e2e/20260626T093601Z` passed preflight and pre-build CI, installed the portable launcher, then exited 1 in post-build status smoke before destructive reset.
+- **Failures**: recurring inference model-cache permission (`models/blobs: permission denied`) plus a recurring `opencode-prompt-e2e-shape` timeout in step 3.
+- **Diagnostics annex**: `plan/diagnostics/diagnostics_20260626T094012Z-summary.md` reports Forge version 0.3.260626.3 with 25/25 checks passed and no failed container launch states.
+- **Release decision**: hold merge-to-main/release for the order 104 subnet commit until the local-build smoke timeout is fixed or explicitly waived. The prior published release v0.3.260626.3 remains the latest successful release.
+- **Next**: `hardcoded-ip/remove-port-publish` remains ready, but it is coupled with a Linux-safe Vault base URL or DNS migration because native Linux still defaults to `https://127.0.0.1:8201`.
 
 ## This Loop (2026-06-26T09:33Z, linux_mutable — meta-orch + advance-work — order 104 inventory/subnet drain)
 
