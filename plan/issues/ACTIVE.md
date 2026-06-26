@@ -1,6 +1,23 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-26T06:22Z
+Last updated: 2026-06-26T15:35Z
+
+## This Cycle (2026-06-26T15:35Z, macos — github-login recheck after cold provision)
+
+- **Recheck**: Reused the freshly installed `~/Applications/Tillandsias.app`
+  from `osx-next` HEAD `7441cfad` after a cold provision. `--github-login`
+  now prints `starting VM`, `waiting for control wire`, and `control wire
+  ready; guest auth preflight runs before credential prompts`, so the old
+  vsock/control-wire timeout is gone.
+- **Blocker reproduced**: After Vault bootstrap completes, the released
+  headless still aborts with `Error: auth preflight failed: tillandsias-git is
+  not running (Some("container not found"))` from
+  `target/build-install-smoke-e2e/20260626T153311Z/04-github-login.log:1-15`.
+- **Progress**: This is the same order-101 blocker already filed in
+  `plan/index.yaml`; no new product issue beyond the existing released-headless
+  stale preflight packet.
+- **Next**: Linux/shared owner cuts a new headless release, then macOS
+  re-smokes `--github-login`.
 
 ## This Cycle (2026-06-26T06:22Z, macos — build-install-smoke e2e + findings)
 

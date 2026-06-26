@@ -1,6 +1,27 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-25T23:13Z
+LastExecutionTime: 2026-06-26T15:35Z
+
+## This Loop (2026-06-26T15:35Z, macos — github-login recheck)
+
+- **Cycle type**: macOS build/install/provision smoke plus a targeted
+  `--github-login` verification.
+- **Startup**: `osx-next @ 7441cfad`, clean relative to `origin/osx-next`,
+  with the same pre-existing untracked files noted in
+  `plan/issues/ACTIVE.md`.
+- **Build/install**: `scripts/build-macos-tray.sh` PASS; freshness gate matched
+  HEAD.
+- **Destructive reset**: removed `~/Library/Application Support/tillandsias`
+  and `~/Library/Caches/tillandsias`; cold `--provision` redownloaded the
+  Fedora Cloud image and recreated `rootfs.img`.
+- **GitHub login**: control wire and guest auth preflight now run before
+  credential prompts, but the released headless still fails at
+  `auth preflight failed: tillandsias-git is not running
+  (Some("container not found"))`.
+- **Residual**: order 101 / released-headless stale auth preflight remains open
+  until Linux/shared cuts a new release. The macOS side now has the current
+  repro and evidence log at
+  `target/build-install-smoke-e2e/20260626T153311Z/`.
 
 ## This Loop (2026-06-25T23:13Z, macos — Vault health follow-up)
 
