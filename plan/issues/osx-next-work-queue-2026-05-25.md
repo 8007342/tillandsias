@@ -2,6 +2,16 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
+## 2026-06-26T22:30Z — smoke v0.3.260626.4 packets exhausted; 5 fixes committed to osx-next
+
+- `smoke-finding/download-no-read-timeout` → DONE: `fetch.rs` 30s idle timeout + 5-retry exponential backoff loop
+- `smoke-finding/vault-keyring-warning-noise-in-guest` → DONE: `vault_bootstrap.rs` downgraded WARNING to "note"
+- `smoke-finding/headless-host-gh-spawn-non-fatal` → DONE (included in arch fix)
+- `arch/macos-github-login-must-be-fully-containerized` → DONE: removed bare-guest `gh` block (~48 lines) from `main.rs`
+- `smoke-finding/macos-tray-no-opencode-cli` → DONE: added `exec_over_stream_with_input_streaming`, `opencode_main`, `--opencode` dispatch
+- Release request filed: `plan/issues/release-request-headless-containerized-login-2026-06-26.md`
+- Next: Linux worker releases new headless; then test `--github-login` (expect exit_code:0) and `--opencode . --prompt "..."` live
+
 ## 2026-06-20T04:51Z — meta-orch cycle 2 (macOS): merge + drain, no eligible work
 
 Fetched origin; fast-forwarded `osx-next` to `origin/linux-next` (`a3c8b23d`).

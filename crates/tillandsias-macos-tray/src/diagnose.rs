@@ -579,6 +579,114 @@ pub fn github_login_main() -> i32 {
     })
 }
 
+/// `--opencode <path> [--prompt <text>]`: boot the VM and run the in-guest
+/// `tillandsias-headless --opencode <path>` over the control wire, streaming
+/// PTY output to the host terminal in real-time. When `--prompt` is given the
+/// forge runs non-interactively (one shot + exit); without it the session is
+/// open-ended until the user exits.
+///
+/// @trace plan/issues/smoke-curl-install-e2e-macos-v0.3.260626.4-2026-06-26.md
+pub fn opencode_main(path: String, prompt: Option<String>) -> i32 {
+    use tillandsias_vm_layer::VmRuntime;
+
+    let vz = tillandsias_vm_layer::vz::VzRuntime::new(3, image_root());
+    vz.set_serial_to_log(true);
+    if !vz.is_provisioned() {
+        eprintln!(
+            "{{\"error\":\"not provisioned; run --provision or launch the tray once first\"}}"
+        );
+        return 1;
+    }
+
+    let rt = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("{{\"error\":\"tokio runtime: {e}\"}}");
+            return 1;
+        }
+    };
+
+    rt.block_on(async move {
+        use std::time::Duration;
+        use tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
+        use tillandsias_vm_layer::vsock_exec::exec_over_stream_with_input_streaming;
+
+        eprintln!("[opencode] starting VM…");
+        if let Err(e) = vz.start().await {
+            eprintln!("{{\"error\":\"start: {e}\"}}");
+            return 1;
+        }
+        eprintln!("[opencode] waiting for control wire…");
+        if let Err(e) = vz.wait_ready(Duration::from_secs(90)).await {
+            eprintln!("{{\"error\":\"wait_ready: {e}\"}}");
+            let _ = vz.stop(Duration::from_secs(10)).await;
+            return 1;
+        }
+        let stream = match vz
+            .open_vsock_stream_current_thread(CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(30))
+            .await
+        {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("{{\"error\":\"vsock connect: {e}\"}}");
+                let _ = vz.stop(Duration::from_secs(10)).await;
+                return 1;
+            }
+        };
+        eprintln!("[opencode] control wire ready; launching forge in guest…");
+
+        // Build the shell command for the guest: set required env vars and
+        // exec the headless binary with --opencode and optional --prompt.
+        let mut headless_cmd = format!(
+            "export HOME=/root; \
+             export XDG_RUNTIME_DIR=/run/user/0; \
+             export TILLANDSIAS_VAULT_API_BASE_URL=https://10.0.42.2:8200; \
+             mkdir -p \"$XDG_RUNTIME_DIR\" 2>/dev/null; \
+             exec /usr/local/bin/tillandsias-headless --opencode {path}"
+        );
+        if let Some(ref p) = prompt {
+            // Shell-quote the prompt so spaces/special chars are safe.
+            let escaped: String = p
+                .chars()
+                .flat_map(|c| {
+                    if c == '\'' {
+                        vec!['\'', '\\', '\'', '\'']
+                    } else {
+                        vec![c]
+                    }
+                })
+                .collect();
+            headless_cmd.push_str(&format!(" --prompt '{escaped}'"));
+        }
+
+        let argv: &[&str] = &["/bin/bash", "-lc", &headless_cmd];
+        let result = exec_over_stream_with_input_streaming(stream, argv, &[], |chunk| {
+            use std::io::Write;
+            let _ = std::io::stdout().write_all(chunk);
+            let _ = std::io::stdout().flush();
+        })
+        .await;
+        let _ = vz.stop(Duration::from_secs(10)).await;
+
+        match result {
+            Ok(out) => {
+                eprintln!(
+                    "{{\"status\":\"opencode-finished\",\"exit_code\":{}}}",
+                    out.exit.code
+                );
+                out.exit.code
+            }
+            Err(e) => {
+                eprintln!("{{\"error\":\"opencode: {e}\"}}");
+                1
+            }
+        }
+    })
+}
+
 /// Extract the first 12-char SHA-256 prefix for `aarch64.qcow2` from a
 /// manifest.toml body. Pure, testable — both the quoted-key form
 /// (`"aarch64.qcow2" = "<sha>"`, the actual file) and the bare-key
