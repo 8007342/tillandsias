@@ -6858,7 +6858,7 @@ plan_index:
             `10.0.42.0/24` DNS queries to aardvark-dns. Update the macOS
             side's `TILLANDSIAS_VAULT_API_BASE_URL` to use `https://vault:8200`.
         - id: hardcoded-ip/subnet-constant
-          status: ready
+          status: in_progress
           owner_host: linux
           depends_on:
             - hardcoded-ip/inventory
@@ -6895,3 +6895,13 @@ plan_index:
             comments. Promoted the subnet-constant and port-publish follow-on
             slices; noted that port-publish removal is coupled to a Linux-safe
             Vault base URL or DNS migration.
+        - type: claim
+          ts: "2026-06-26T09:28:33Z"
+          agent_id: "linux-macuahuitl-codex-20260626T092833Z"
+          host: linux
+          lease_id: "hardcoded-ip/subnet-constant-20260626T092833Z"
+          expires_at: "2026-06-26T13:28:33Z"
+          note: >
+            Claimed the independent subnet configurability slice. Next action:
+            replace the hardcoded enclave subnet/no_proxy CIDR with a defaulted
+            env override while keeping the current `10.0.42.0/24` default.
