@@ -1005,7 +1005,11 @@ impl PodmanClient {
             .await
         {
             let h = output.stdout.trim().to_string();
-            if h.is_empty() || h == "none" { None } else { Some(h) }
+            if h.is_empty() || h == "none" {
+                None
+            } else {
+                Some(h)
+            }
         } else {
             None
         };

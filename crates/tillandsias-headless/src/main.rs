@@ -3978,9 +3978,8 @@ fn run_github_login(debug: bool) -> Result<(), String> {
     if debug {
         eprintln!("[tillandsias] running auth preflight health check");
     }
-    let health_facade = tillandsias_podman::ContainerHealthFacade::new(
-        tillandsias_podman::PodmanClient::new(),
-    );
+    let health_facade =
+        tillandsias_podman::ContainerHealthFacade::new(tillandsias_podman::PodmanClient::new());
     let required = ["tillandsias-vault", "tillandsias-git"];
     let results = tokio::runtime::Runtime::new()
         .map_err(|e| format!("create tokio runtime for health check: {e}"))?
