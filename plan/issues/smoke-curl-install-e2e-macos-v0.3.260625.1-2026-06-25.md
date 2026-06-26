@@ -169,7 +169,7 @@ an idiomatic Tillandsias Podman health/lifecycle layer with operations such as
 - id: `github-login/readiness-before-credentials`
 - owner_host: any
 - capability_tags: [rust, macos, windows, linux, github-login, podman, vault]
-- status: partial on osx-next; shared health facade pending
+- status: completed
 - discovered_by: `/smoke-curl-install-and-test-e2e` on release `v0.3.260625.1`
 - evidence:
   - `target/smoke-e2e/04-github-login-dummy.log:1-6` -- host prompts for Git author name, Git author email, and PAT before `[github-login] starting VM...`.
@@ -207,13 +207,25 @@ an idiomatic Tillandsias Podman health/lifecycle layer with operations such as
       stalled during TLS. osx-next now routes guest Vault API calls to the
       healthy enclave address via `TILLANDSIAS_VAULT_API_BASE_URL` and a
       matching Vault TLS SAN.
+  - type: completed
+    ts: "2026-06-26T11:03:25Z"
+    agent_id: "linux-macuahuitl-codex-20260626T110003Z"
+    host: linux
+    note: >
+      Closed by order 99 + order 100 integration. The macOS host wrapper starts
+      the VM, waits for the control wire, and supplies prompts lazily only after
+      guest output. Guest `run_github_login` now brings up Vault, starts the
+      ephemeral `tillandsias-gh-login-*` helper, then verifies Vault plus that
+      helper container with the shared health facade before asking for git
+      identity or token input. Regression: `cargo test -p tillandsias-headless
+      github_login`; workspace check: `./build.sh --check`.
 
 ## Work Packet: podman/health-lifecycle-facade
 
 - id: `podman/health-lifecycle-facade`
 - owner_host: linux
 - capability_tags: [rust, podman, health, diagnostics, runtime]
-- status: ready
+- status: completed
 - discovered_by: `/smoke-curl-install-and-test-e2e` on release `v0.3.260625.1`
 - evidence:
   - `plan/issues/macos-github-login-vault-bootstrap-timeout-2026-06-22.md` -- Vault readiness has been stretched with successive timeout bumps.
@@ -242,3 +254,11 @@ an idiomatic Tillandsias Podman health/lifecycle layer with operations such as
       instead of the local HTTP polling loop and timeout escalation. The
       generalized health/lifecycle facade remains ready for the Linux/shared
       runtime owner.
+  - type: completed
+    ts: "2026-06-26T04:07Z"
+    agent_id: "linux-tlatoani-big-pickle-20260626T0407Z"
+    host: linux
+    note: >
+      Closed by order 100: ContainerHealthFacade provides typed
+      ping/keep_alive/restart/terminate/is_healthy/diagnose/check_required_services
+      and is wired into auth preflight.

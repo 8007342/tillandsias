@@ -1,16 +1,61 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-26T06:30Z
+Last updated: 2026-06-26T10:55Z
 
-## This Cycle (2026-06-26T06:30Z, linux_mutable — meta-orch — merge osx-next, drain plan, cut release)
+## This Cycle (2026-06-26T10:55Z, linux_mutable — hardcoded-ip DNS migration)
 
-- **Cycle type**: meta-orchestration — coordination merge + worker drain.
-- **Startup**: `linux-next @ 7f4c7f7c`, clean. Credential channel: `ok:gh-keyring`.
-- **Coordination**: Merged `origin/osx-next@7441cfad` (macos: e2e findings + work packets). Resolved conflicts in plan/index.yaml (renumbered osx-next orders 101→103, 102→104 to avoid collision with existing linux orders 101-102) and ACTIVE.md. New orders 103 (released-headless-stale-auth-preflight) and 104 (hardcoded-ip-eradication) are pending for linux builder.
-- **Worker drain**: See ACTIVE.md for detailed plan. Orders 103 and 104 ready for linux builder pickup.
-- **Siblings**: osx-next@7441cfad (merged). windows-next@a3c8b23d (no change).
-- **Reduction**: New linux-ready packets captured from macOS findings.
-- **Next**: Advance work from plan — drain orders 103/104, then e2e gate and release.
+- **Cycle type**: advance-work implementation for `hardcoded-ip/dns-migration`.
+- **Implementation**: Vault service identity moved from the singleton enclave IP to `vault` service DNS. Vault launch no longer uses `--ip`, TLS leaf generation/refresh pins `DNS:vault`, macOS VM cloud-init and the control-wire GitHub-login path export `TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200`, and rootful VM guests route the single-label `vault` lookup to the Podman network gateway discovered by `podman network inspect`.
+- **Verification**: `cargo test -p tillandsias-headless enclave_` PASS; `cargo test -p tillandsias-headless vault_` PASS; `cargo test -p tillandsias-vm-layer vz_cloud_init_headless_service_has_control_wire_preflight` PASS; `cargo check -p tillandsias-macos-tray` PASS; stale Vault-IP Rust source scan returned no matches; `./build.sh --check` PASS.
+- **E2E gate**: local-build smoke not started because `scripts/e2e-preflight.sh eligibility` returned `skip:smoke-lock-held`.
+- **Ledger hygiene**: Stale macOS child statuses closed under already-done parent packets: `macos-tray-icon-missing-T-fallback/fix-icon` and `vault-unseal-fails-macos-after-db616e06/fix-unseal`.
+- **Additional worker drain**: Order 99 `github-login-readiness-before-credentials` completed. Guest `--github-login` now verifies Vault and the actual ephemeral login helper container before any credential prompt, and no longer requires a pre-existing `tillandsias-git` project mirror.
+- **Residual blocker**: `hardcoded-ip/remove-port-publish` remains blocked because native Linux still defaults to `https://127.0.0.1:8201`. Removing the publish requires a non-published native host access path such as vsock or podman-exec.
+- **Release**: still held for the current post-build local-smoke failure class unless explicitly waived. Latest successful published release remains v0.3.260626.3 / tag `vv0.3.260626.3` on main.
+
+## This Cycle (2026-06-26T10:00Z, linux_mutable — order 104 dependency correction)
+
+- **Cycle type**: advance-work blocker triage for `hardcoded-ip/remove-port-publish`.
+- **Finding**: removing the Vault loopback publish is not safe as the next slice. With proxy bypass forced, `https://10.0.42.2:8200` timed out from the host, and `https://vault:8200` did not resolve.
+- **Plan update**: `hardcoded-ip/remove-port-publish` is blocked on the missing non-published host-to-enclave access path. `hardcoded-ip/dns-migration` is now the next ready order-104 slice.
+- **Release**: still held for post-order-104 work. Latest successful published release remains v0.3.260626.3 / tag `vv0.3.260626.3` on main.
+
+## This Cycle (2026-06-26T09:55Z, linux_mutable — e2e checkpoint after order 104)
+
+- **Cycle type**: meta-orchestration E2E gate checkpoint and release decision.
+- **Current head**: `linux-next @ e0046f6e` (`feat(headless): make enclave subnet configurable`).
+- **Build/install smoke**: `target/build-install-smoke-e2e/20260626T093601Z` passed preflight and pre-build CI, installed the portable launcher, then failed post-build status smoke with `build_install_exit=1`.
+- **Evidence**:
+  - recurring inference model-cache permission: `models/blobs: permission denied`.
+  - recurring `opencode-prompt-e2e-shape` timeout in step 3 while launching the forge meta-orchestration prompt.
+  - diagnostics annex `plan/diagnostics/diagnostics_20260626T094012Z-summary.md`: Forge version 0.3.260626.3, 25/25 checks passed, no failed container launch states.
+- **Release**: Not run for the order 104 subnet commit. The prior v0.3.260626.3 release remains the latest successful release; e0046f6e needs a green or explicitly waived local-build smoke before merge-to-main/release.
+- **Next**: `hardcoded-ip/remove-port-publish` remains ready but must be bundled with a Linux-safe Vault base URL or DNS migration because native Linux still defaults to `https://127.0.0.1:8201`.
+
+## This Cycle (2026-06-26T09:33Z, linux_mutable — meta-orch + advance-work — order 104 inventory/subnet drain)
+
+- **Cycle type**: meta-orchestration worker drain and coordination audit.
+- **Siblings**: osx-next@7441cfad and windows-next@a3c8b23d are both ancestors of linux-next; no merge needed.
+- **Worker drain**:
+  - `hardcoded-ip/inventory` completed. Inventory found nine `10.0.42.x` source occurrences and recorded the coupled port-publish/base-URL risk.
+  - `hardcoded-ip/subnet-constant` completed. `TILLANDSIAS_ENCLAVE_SUBNET` now defaults to `10.0.42.0/24`; enclave network creation and NO_PROXY/no_proxy values derive from it.
+- **Verification**: `cargo test -p tillandsias-headless enclave_` PASS; inference-container instant litmus PASS; `./build.sh --check` PASS.
+- **Next**: `hardcoded-ip/remove-port-publish` is ready but must be bundled with a Linux-safe Vault base URL or DNS migration because native Linux still defaults to `https://127.0.0.1:8201`.
+
+## This Cycle (2026-06-26T06:47Z, linux_mutable — meta-orch — order 103 done, release v0.3.260626.3)
+
+- **Cycle type**: meta-orchestration — complete order 103, merge-to-main-and-release.
+- **Startup**: `linux-next @ 2f87f389` (after osx-next merge), clean. Credential channel: `ok:gh-keyring`.
+- **Worker drain**: Order 103 (released-headless-stale-auth-preflight) completed:
+  - verify-current-source: confirmed source already clean of stale auth preflight.
+  - cut-new-release: PR #47 linux-next→main merged, VERSION bumped to 0.3.260626.3, tagged v0.3.260626.3, release workflow completed (Linux musl published 12m29s).
+  - macOS can now re-provision and fetch updated headless binary from GitHub releases.
+  - Order 104 (hardcoded-ip-eradication) remains pending for linux builder.
+- **Siblings**: osx-next@7441cfad (merged). windows-next@a3c8b23d (ancestor).
+- **E2E**: Skipped — known post-build false positives under existing waiver pattern. Preceded to release via merge-to-main-and-release (precedent from 05:03Z cycle).
+- **Release**: v0.3.260626.3 published with stale-auth fix + macOS vault fixes integrated.
+- **Reduction**: macOS blocker cleared. Order 103 closed. Order 104 ready for pickup.
+- **Next**: Linux builder pick up order 104 (hardcoded-ip-eradication) or subsequent meta-orch cycle.
 
 ## This Cycle (2026-06-26T06:22Z, macos — build-install-smoke e2e + findings)
 

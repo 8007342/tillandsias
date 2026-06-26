@@ -713,7 +713,10 @@ fn run_command_silent(mut command: Command, debug: bool) -> Result<(), String> {
 }
 
 const ENCLAVE_NET: &str = "tillandsias-enclave";
-const ENCLAVE_SUBNET: &str = "10.0.42.0/24";
+const DEFAULT_ENCLAVE_SUBNET: &str = "10.0.42.0/24";
+const ENCLAVE_SUBNET_ENV: &str = "TILLANDSIAS_ENCLAVE_SUBNET";
+const VAULT_DNS_NAME: &str = "vault";
+const ENCLAVE_RESOLVED_CONF: &str = "/etc/systemd/resolved.conf.d/tillandsias-enclave.conf";
 /// Managed egress network. The enclave network is `--internal` (no NAT egress),
 /// so the proxy and git-service are dual-homed onto this network to retain a
 /// single allowlisted/direct egress leg. Self-contained on purpose: Podman's
@@ -725,9 +728,21 @@ const EGRESS_NET: &str = "tillandsias-egress";
 /// The dual-homed network spec attached to egress-capable enclave containers
 /// (proxy, git-service): enclave leg for in-enclave DNS + the egress leg for NAT.
 const ENCLAVE_EGRESS_NETS: &str = "tillandsias-enclave,tillandsias-egress";
-const ENCLAVE_NO_PROXY: &str =
-    "localhost,127.0.0.1,0.0.0.0,::1,inference,proxy,git-service,tillandsias-git,10.0.42.0/24";
+const ENCLAVE_NO_PROXY_BASE: &str =
+    "localhost,127.0.0.1,0.0.0.0,::1,inference,proxy,git-service,tillandsias-git";
 const CA_DIR: &str = "/tmp/tillandsias-ca";
+
+fn enclave_subnet() -> String {
+    std::env::var(ENCLAVE_SUBNET_ENV)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| DEFAULT_ENCLAVE_SUBNET.to_string())
+}
+
+pub(crate) fn enclave_no_proxy() -> String {
+    format!("{},{}", ENCLAVE_NO_PROXY_BASE, enclave_subnet())
+}
 
 // @trace spec:init-incremental-builds
 /// Build state tracking for incremental initialization.
@@ -1470,22 +1485,118 @@ fn ensure_enclave_network(debug: bool) -> Result<(), String> {
     // network already exists (early return below would otherwise skip it).
     ensure_egress_network(debug)?;
 
-    if tillandsias_podman::network_exists_sync(ENCLAVE_NET) {
+    if !tillandsias_podman::network_exists_sync(ENCLAVE_NET) {
+        let subnet = enclave_subnet();
+        let mut command = podman_command();
+        command.args([
+            "network",
+            "create",
+            "--internal",
+            "--driver",
+            "bridge",
+            "--subnet",
+            subnet.as_str(),
+            ENCLAVE_NET,
+        ]);
+        run_command(command, debug)?;
+    }
+
+    ensure_enclave_host_dns(debug)
+}
+
+fn ensure_enclave_host_dns(debug: bool) -> Result<(), String> {
+    if !running_as_root() {
+        if debug {
+            eprintln!("[tillandsias] skipping host resolver update for {VAULT_DNS_NAME}: not root");
+        }
+        return Ok(());
+    }
+    if !systemd_resolved_active() {
+        if debug {
+            eprintln!(
+                "[tillandsias] skipping host resolver update for {VAULT_DNS_NAME}: systemd-resolved inactive"
+            );
+        }
         return Ok(());
     }
 
-    let mut command = podman_command();
-    command.args([
-        "network",
-        "create",
-        "--internal",
-        "--driver",
-        "bridge",
-        "--subnet",
-        ENCLAVE_SUBNET,
-        ENCLAVE_NET,
-    ]);
+    let gateway = enclave_gateway_from_podman_network(debug)?;
+    let rendered = render_enclave_resolved_config(&gateway);
+    let path = Path::new(ENCLAVE_RESOLVED_CONF);
+    if fs::read_to_string(path).ok().as_deref() == Some(rendered.as_str()) {
+        return Ok(());
+    }
+
+    if let Some(parent) = path.parent() {
+        fs::create_dir_all(parent)
+            .map_err(|e| format!("create systemd-resolved drop-in dir: {e}"))?;
+    }
+    fs::write(path, rendered).map_err(|e| format!("write {ENCLAVE_RESOLVED_CONF}: {e}"))?;
+
+    let mut command = Command::new("systemctl");
+    command.args(["reload-or-restart", "systemd-resolved"]);
     run_command(command, debug)
+}
+
+#[cfg(unix)]
+fn running_as_root() -> bool {
+    unsafe { libc::geteuid() == 0 }
+}
+
+#[cfg(not(unix))]
+fn running_as_root() -> bool {
+    false
+}
+
+fn systemd_resolved_active() -> bool {
+    Command::new("systemctl")
+        .args(["is-active", "--quiet", "systemd-resolved"])
+        .status()
+        .map(|status| status.success())
+        .unwrap_or(false)
+}
+
+fn enclave_gateway_from_podman_network(debug: bool) -> Result<String, String> {
+    let mut command = podman_command();
+    command.args(["network", "inspect", ENCLAVE_NET]);
+    let inspect = command_output(command, debug)?;
+    parse_enclave_gateway(&inspect)
+}
+
+fn parse_enclave_gateway(inspect_json: &str) -> Result<String, String> {
+    let value: serde_json::Value = serde_json::from_str(inspect_json)
+        .map_err(|e| format!("parse Podman network inspect JSON: {e}"))?;
+    let network = value
+        .as_array()
+        .and_then(|items| items.first())
+        .unwrap_or(&value);
+    let subnets = network
+        .get("subnets")
+        .or_else(|| network.get("Subnets"))
+        .and_then(serde_json::Value::as_array)
+        .ok_or_else(|| "Podman network inspect output has no subnets array".to_string())?;
+    for subnet in subnets {
+        if let Some(gateway) = subnet
+            .get("gateway")
+            .or_else(|| subnet.get("Gateway"))
+            .and_then(serde_json::Value::as_str)
+            .map(str::trim)
+            .filter(|gateway| !gateway.is_empty())
+        {
+            return Ok(gateway.to_string());
+        }
+    }
+    Err("Podman network inspect output has no subnet gateway".to_string())
+}
+
+fn render_enclave_resolved_config(gateway: &str) -> String {
+    format!(
+        "# Generated by Tillandsias. Routes the enclave service DNS name through Podman's network DNS.\n\
+         [Resolve]\n\
+         DNS={gateway}\n\
+         Domains=~{VAULT_DNS_NAME}\n\
+         ResolveUnicastSingleLabel=yes\n"
+    )
 }
 
 /// Create the managed egress network used to dual-home the proxy and
@@ -1679,6 +1790,7 @@ fn build_stack_common_args(
     project_name: &str,
     project_path: &Path,
 ) -> Vec<String> {
+    let no_proxy = enclave_no_proxy();
     let mut args = vec![
         "--name".into(),
         container_name.into(),
@@ -1700,9 +1812,9 @@ fn build_stack_common_args(
         "--env".into(),
         "HTTPS_PROXY=http://proxy:3128".into(),
         "--env".into(),
-        format!("no_proxy={ENCLAVE_NO_PROXY}"),
+        format!("no_proxy={no_proxy}"),
         "--env".into(),
-        format!("NO_PROXY={ENCLAVE_NO_PROXY}"),
+        format!("NO_PROXY={no_proxy}"),
         "--env".into(),
         "PATH=/usr/local/bin:/usr/bin".into(),
         "--env".into(),
@@ -1937,6 +2049,7 @@ fn build_inference_run_args(
     let model_cache_dir = Path::new(&home_dir).join(".cache/tillandsias/models");
     let _ = std::fs::create_dir_all(&model_cache_dir);
 
+    let no_proxy = enclave_no_proxy();
     let mut args = vec![
         "--detach".into(),
         "--rm".into(),
@@ -1966,9 +2079,9 @@ fn build_inference_run_args(
         "--env".into(),
         "https_proxy=http://proxy:3128".into(),
         "--env".into(),
-        format!("NO_PROXY={ENCLAVE_NO_PROXY}"),
+        format!("NO_PROXY={no_proxy}"),
         "--env".into(),
-        format!("no_proxy={ENCLAVE_NO_PROXY}"),
+        format!("no_proxy={no_proxy}"),
         "-v".into(),
         format!(
             "{}:/home/ollama/.ollama/models:rw",
@@ -2675,6 +2788,7 @@ fn build_opencode_forge_args(
     // (the way a tray launch or background script ends up) makes podman
     // refuse with "input device is not a TTY" before any container start
     // event fires.
+    let no_proxy = enclave_no_proxy();
     let mut args = vec![
         "--rm".into(),
         "--name".into(),
@@ -2716,9 +2830,9 @@ fn build_opencode_forge_args(
         "--env".into(),
         "HTTPS_PROXY=http://proxy:3128".into(),
         "--env".into(),
-        format!("no_proxy={ENCLAVE_NO_PROXY}"),
+        format!("no_proxy={no_proxy}"),
         "--env".into(),
-        format!("NO_PROXY={ENCLAVE_NO_PROXY}"),
+        format!("NO_PROXY={no_proxy}"),
         "--env".into(),
         "PATH=/usr/local/bin:/usr/bin".into(),
         "--env".into(),
@@ -3993,32 +4107,7 @@ fn run_github_login(debug: bool) -> Result<(), String> {
     #[cfg(feature = "vault")]
     vault_bootstrap::ensure_vault_running(debug)?;
 
-    // Verify required services are healthy using the shared health facade.
-    // This is provider-neutral — future auth flows (Cloudflare, AWS, etc.)
-    // should reuse this preflight rather than adding per-provider sleeps.
-    if debug {
-        eprintln!("[tillandsias] running auth preflight health check");
-    }
-    let health_facade =
-        tillandsias_podman::ContainerHealthFacade::new(tillandsias_podman::PodmanClient::new());
-    let required = ["tillandsias-vault", "tillandsias-git"];
-    let results = tokio::runtime::Runtime::new()
-        .map_err(|e| format!("create tokio runtime for health check: {e}"))?
-        .block_on(health_facade.check_required_services(&required));
-    for svc in &results {
-        if debug {
-            eprintln!(
-                "[tillandsias] preflight {} running={} health={:?} error={:?}",
-                svc.name, svc.running, svc.health, svc.error
-            );
-        }
-        if !svc.running {
-            return Err(format!(
-                "auth preflight failed: {} is not running ({:?})",
-                svc.name, svc.error
-            ));
-        }
-    }
+    check_auth_required_services(&["tillandsias-vault"], debug)?;
 
     let container = format!("tillandsias-gh-login-{}", std::process::id());
     let cleanup = LoginContainerCleanup {
@@ -4082,6 +4171,9 @@ fn run_github_login(debug: bool) -> Result<(), String> {
         ]);
         run_command_silent(run, debug)?;
     }
+
+    let required = ["tillandsias-vault", container.as_str()];
+    check_auth_required_services(&required, debug)?;
 
     // Prompt only after the non-secret infrastructure preflight has succeeded:
     // image present, managed networks present, Vault reachable, and the login
@@ -4239,6 +4331,35 @@ fn run_github_login(debug: bool) -> Result<(), String> {
     // Add a 5 second delay so the user can see the success message before the popup terminal closes
     std::thread::sleep(std::time::Duration::from_secs(5));
 
+    Ok(())
+}
+
+fn check_auth_required_services(required: &[&str], debug: bool) -> Result<(), String> {
+    // Verify required services are running using the shared health facade.
+    // This is provider-neutral — future auth flows (Cloudflare, AWS, etc.)
+    // should reuse this preflight rather than adding per-provider sleeps.
+    if debug {
+        eprintln!("[tillandsias] running auth preflight health check");
+    }
+    let health_facade =
+        tillandsias_podman::ContainerHealthFacade::new(tillandsias_podman::PodmanClient::new());
+    let results = tokio::runtime::Runtime::new()
+        .map_err(|e| format!("create tokio runtime for health check: {e}"))?
+        .block_on(health_facade.check_required_services(required));
+    for svc in &results {
+        if debug {
+            eprintln!(
+                "[tillandsias] preflight {} running={} health={:?} error={:?}",
+                svc.name, svc.running, svc.health, svc.error
+            );
+        }
+        if !svc.running {
+            return Err(format!(
+                "auth preflight failed: {} is not running ({:?})",
+                svc.name, svc.error
+            ));
+        }
+    }
     Ok(())
 }
 
@@ -6495,6 +6616,7 @@ pub(crate) fn build_forge_agent_run_args(
     debug: bool,
 ) -> Vec<String> {
     let image = forge_image_tag(version);
+    let no_proxy = enclave_no_proxy();
     let mut spec = ContainerSpec::new(image)
         .name(forge_container_name(project_name))
         .hostname(forge_hostname(project_name))
@@ -6514,8 +6636,8 @@ pub(crate) fn build_forge_agent_run_args(
         .env("https_proxy", "http://proxy:3128")
         .env("HTTP_PROXY", "http://proxy:3128")
         .env("HTTPS_PROXY", "http://proxy:3128")
-        .env("no_proxy", ENCLAVE_NO_PROXY)
-        .env("NO_PROXY", ENCLAVE_NO_PROXY)
+        .env("no_proxy", no_proxy.clone())
+        .env("NO_PROXY", no_proxy)
         .env("PATH", "/usr/local/bin:/usr/bin")
         .env("HOME", "/home/forge")
         .env("USER", "forge")
@@ -7840,6 +7962,59 @@ mod tests {
         ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
     }
 
+    #[test]
+    fn enclave_subnet_defaults_to_current_cidr() {
+        let _guard = env_lock();
+        unsafe {
+            std::env::remove_var(ENCLAVE_SUBNET_ENV);
+        }
+        assert_eq!(enclave_subnet(), DEFAULT_ENCLAVE_SUBNET);
+        assert!(enclave_no_proxy().ends_with(DEFAULT_ENCLAVE_SUBNET));
+    }
+
+    #[test]
+    fn enclave_no_proxy_uses_subnet_override() {
+        let _guard = env_lock();
+        unsafe {
+            std::env::set_var(ENCLAVE_SUBNET_ENV, " 10.77.0.0/24 ");
+        }
+        assert_eq!(enclave_subnet(), "10.77.0.0/24");
+        let no_proxy = enclave_no_proxy();
+        assert!(no_proxy.contains("tillandsias-git"));
+        assert!(no_proxy.ends_with("10.77.0.0/24"));
+        unsafe {
+            std::env::remove_var(ENCLAVE_SUBNET_ENV);
+        }
+    }
+
+    #[test]
+    fn parse_enclave_gateway_accepts_podman_network_inspect_shape() {
+        let inspect = r#"
+        [
+          {
+            "name": "tillandsias-enclave",
+            "subnets": [
+              {
+                "subnet": "172.30.0.0/24",
+                "gateway": "172.30.0.1"
+              }
+            ]
+          }
+        ]
+        "#;
+
+        assert_eq!(parse_enclave_gateway(inspect).unwrap(), "172.30.0.1");
+    }
+
+    #[test]
+    fn enclave_resolved_config_routes_vault_single_label() {
+        let config = render_enclave_resolved_config("172.30.0.1");
+
+        assert!(config.contains("DNS=172.30.0.1"));
+        assert!(config.contains("Domains=~vault"));
+        assert!(config.contains("ResolveUnicastSingleLabel=yes"));
+    }
+
     // ─────────────────────────────────────────────────────────
     // Forge agent launch tests (Claude/Codex/OpenCode/Maintenance)
     // @trace spec:browser-isolation-tray-integration, spec:tray-ux
@@ -8131,6 +8306,12 @@ mod tests {
         let helper_idx = login_window
             .find("run_command_silent(run, debug)?;")
             .expect("github login must start the helper container before prompts");
+        let helper_preflight_idx = login_window
+            .find("let required = [\"tillandsias-vault\", container.as_str()]")
+            .expect("github login must preflight the actual helper container");
+        let helper_health_idx = login_window
+            .find("check_auth_required_services(&required, debug)?")
+            .expect("github login must run provider-neutral health preflight");
         let prompt_idx = login_window
             .find("prompt_and_store_git_identity()?")
             .expect("github login must prompt for git identity");
@@ -8143,6 +8324,7 @@ mod tests {
             ("network", network_idx),
             ("vault", vault_idx),
             ("helper", helper_idx),
+            ("helper health", helper_health_idx),
         ] {
             assert!(
                 idx < prompt_idx,
@@ -8150,8 +8332,27 @@ mod tests {
             );
         }
         assert!(
+            helper_idx < helper_preflight_idx && helper_preflight_idx < helper_health_idx,
+            "the health preflight must target the helper container after it starts: {login_window}"
+        );
+        assert!(
             prompt_idx < token_idx,
             "git identity prompt should still precede token entry: {login_window}"
+        );
+    }
+
+    #[test]
+    fn github_login_preflight_does_not_require_project_git_container() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let login_window = source_window(source, "fn run_github_login(debug: bool)");
+
+        assert!(
+            !login_window.contains("\"tillandsias-git\""),
+            "github login must not require a pre-existing project git mirror container: {login_window}"
+        );
+        assert!(
+            login_window.contains("container.as_str()"),
+            "github login health preflight must target the ephemeral login helper container"
         );
     }
 
@@ -8165,12 +8366,12 @@ mod tests {
         let ensure_idx = window
             .find("ensure_egress_network(debug)?")
             .expect("ensure_enclave_network must call ensure_egress_network");
-        let early_return_idx = window
-            .find("return Ok(());")
-            .expect("ensure_enclave_network has an early return");
+        let dns_idx = window
+            .find("ensure_enclave_host_dns(debug)")
+            .expect("ensure_enclave_network must update host DNS after ensuring the network");
         assert!(
-            ensure_idx < early_return_idx,
-            "ensure_egress_network must run before the enclave-exists early return"
+            ensure_idx < dns_idx,
+            "ensure_egress_network must run before the host DNS route is installed"
         );
     }
 

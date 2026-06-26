@@ -19,16 +19,28 @@ plan:
     verification: methodology/verification.yaml
 
   current_state:
-    last_completed_step: released-headless-stale-auth-preflight (order 103)
-    next_step: released-headless-stale-auth-preflight/cut-new-release (order 103)
-    next_graph_node: released-headless-stale-auth-preflight/cut-new-release
+    last_completed_step: github-login-readiness-before-credentials (order 99) and hardcoded-ip/dns-migration (order 104 slice)
+    next_step: hardcoded-ip-eradication (order 104)
+    next_graph_node: hardcoded-ip/remove-port-publish (blocked)
     frontier_note: >
-      Merged origin/osx-next@7441cfad (macos e2e findings + work packets) into
-      linux-next. Resolved plan conflicts — macOS orders renumbered 101→103,
-      102→104 to avoid collision with existing linux orders. Verified source
-      already clean of stale auth preflight (order 103/task 1 done). Proceeding
-      to cut new release (bump VERSION, tag, release workflow) so macOS can
-      pick up the updated headless binary and re-smoke --github-login.
+      Order 103 (released-headless-stale-auth-preflight) completed: PR #47
+      merged, v0.3.260626.3 released with stale-auth fix + macOS vault fixes.
+      macOS can now re-provision and re-smoke --github-login. Order 104
+      (hardcoded-ip-eradication) inventory and subnet configurability completed
+      on 2026-06-26. The enclave subnet now has a
+      TILLANDSIAS_ENCLAVE_SUBNET override with default 10.0.42.0/24, and
+      NO_PROXY/no_proxy derives from the same helper. DNS migration completed
+      at 2026-06-26T10:55Z: Vault launch, TLS identity, macOS VM cloud-init,
+      and macOS control-wire GitHub-login now use `https://vault:8200`, and
+      rootful VM guests route the single-label `vault` query through the Podman
+      network gateway discovered from `podman network inspect`. Order 99 also
+      closed: guest `--github-login` now checks Vault, starts the ephemeral
+      login helper, then verifies Vault plus that helper through the shared
+      health facade before any credential prompt; the stale `tillandsias-git`
+      project-container prerequisite is removed. The remaining Linux blocker is
+      hardcoded-ip/remove-port-publish: native Linux still defaults to
+      `https://127.0.0.1:8201`, so removing the publish requires a non-published
+      host access path such as vsock or podman-exec first.
     plan_index: plan/index.yaml
     step_directory: plan/steps
     checkpoint_branch: linux-next

@@ -76,10 +76,11 @@ proxy and fail with `TCP_DENIED/403`, causing model load stalls.
 > ✅ Resolved 2026-05-31: `build_inference_run_args` now sets
 > `HTTP_PROXY=http://proxy:3128`, `HTTPS_PROXY=http://proxy:3128`
 > (lowercase variants too), `NO_PROXY`, and `no_proxy` using the
-> same `ENCLAVE_NO_PROXY` constant (`localhost,127.0.0.1,0.0.0.0,
-> ::1,inference,proxy,git-service,10.0.42.0/24`) that the forge
-> containers use. Ollama model pulls now route through the Squid
-> proxy with SSL-bump. The `inference_profile()` env_vars in
+> same derived `enclave_no_proxy()` helper that the forge containers
+> use (`localhost,127.0.0.1,0.0.0.0,::1,inference,proxy,git-service`
+> plus the configured enclave subnet; default `10.0.42.0/24`).
+> Ollama model pulls now route through the Squid proxy with SSL-bump.
+> The `inference_profile()` env_vars in
 > `container_profile.rs` remain declared but unconsumed by the
 > launch path — the args-based encoding in `build_inference_run_args`
 > is the canonical path.

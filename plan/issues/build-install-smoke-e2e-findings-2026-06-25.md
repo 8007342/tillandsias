@@ -79,18 +79,70 @@ The `launch_vault_container()` function removes the old container but NOT the st
 **Severity**: architecture  
 **Reference**: user feedback during smoke test
 
-**Issues identified**:
-- `crates/tillandsias-vm-layer/src/vz.rs:508` — `Environment=TILLANDSIAS_VAULT_API_BASE_URL=https://10.0.42.2:8200` (VM host references enclave IP directly)
-- `crates/tillandsias-headless/src/vault_bootstrap.rs:37` — `const VAULT_ENCLAVE_IP: &str = "10.0.42.2"` (static IP constant)
-- `crates/tillandsias-headless/src/vault_bootstrap.rs:1173-1174` — `-p 127.0.0.1:8201:8200` publish (Linux-only, should not be default)
-- `crates/tillandsias-macos-tray/src/diagnose.rs:544` — `export TILLANDSIAS_VAULT_API_BASE_URL=https://10.0.42.2:8200` (our fix, still IP-based)
-- `crates/tillandsias-headless/src/main.rs:8` — `ENCLAVE_SUBNET = "10.0.42.0/24"` (hardcoded subnet)
+**Inventory completed 2026-06-26T09:27Z**:
+
+Command: `rg -n "10\\.0\\.42\\." crates`
+
+Production URLs / service discovery:
+- `crates/tillandsias-macos-tray/src/diagnose.rs:544` — exports `TILLANDSIAS_VAULT_API_BASE_URL=https://10.0.42.2:8200` for guest `--github-login`.
+- `crates/tillandsias-vm-layer/src/vz.rs:508` — systemd unit sets `TILLANDSIAS_VAULT_API_BASE_URL=https://10.0.42.2:8200`.
+- `crates/tillandsias-headless/src/vault_bootstrap.rs:37` — `VAULT_ENCLAVE_IP = "10.0.42.2"` feeds the Vault `--ip`, TLS SAN, and enclave API base URL.
+
+Network shape / proxy bypass:
+- `crates/tillandsias-headless/src/main.rs:716` — `ENCLAVE_SUBNET = "10.0.42.0/24"` hardcodes the bridge subnet at network creation.
+- `crates/tillandsias-headless/src/main.rs:729` — `ENCLAVE_NO_PROXY` embeds `10.0.42.0/24`.
+
+Tests / comments:
+- `crates/tillandsias-vm-layer/src/vz.rs:1682` — unit test pins the current systemd env line.
+- `crates/tillandsias-headless/src/main.rs:8067` — test asserts git login args do not include `10.0.42.2`.
+- `crates/tillandsias-headless/tests/cache_peer_routing.rs:194` — comment documents a wrong `cache_peer 10.0.42.x` shape.
+- `crates/tillandsias-macos-tray/src/diagnose.rs:537` — comment documents why the env override targets the enclave IP today.
+
+Coupled sequencing note: the Vault port publish cannot be removed safely as a
+standalone first step because Linux's default `host_base_url()` still points to
+`https://127.0.0.1:8201`. The removal slice must either happen with the DNS/base
+URL migration or first introduce a Linux-safe non-published access path.
+
+**Progress 2026-06-26T09:33Z**: completed `hardcoded-ip/subnet-constant`.
+`crates/tillandsias-headless/src/main.rs` now reads
+`TILLANDSIAS_ENCLAVE_SUBNET`, defaults to `10.0.42.0/24`, uses that value for
+`podman network create --subnet`, and derives `NO_PROXY`/`no_proxy` for forge,
+inference, stack, and tray launch paths from the same helper. Updated the
+inference-container spec/litmuses to pin `enclave_no_proxy()` instead of the old
+static `ENCLAVE_NO_PROXY` constant. Verification:
+`cargo test -p tillandsias-headless enclave_`,
+`scripts/run-litmus-test.sh inference-container --phase pre-build --size instant --compact`,
+and `./build.sh --check` all passed.
+
+**Transport probe 2026-06-26T10:00Z**: attempted the
+`hardcoded-ip/remove-port-publish` follow-up and found it is blocked until the
+non-published access path lands. With proxy bypass forced, direct host access to
+`https://10.0.42.2:8200/v1/sys/health` timed out after 8s, and
+`https://vault:8200/v1/sys/health` failed DNS resolution from the host. The plan
+graph now runs `hardcoded-ip/dns-migration` before removing
+`-p 127.0.0.1:8201:8200`.
 
 **Required approach**:
 - VM host processes should resolve `vault` via podman's aardvark-dns (running on bridge gateway)
 - Configure systemd-resolved or resolv.conf to forward enclave DNS queries
 - Remove `-p` port publish for non-diagnostic use — all host-to-enclave communication should use vsock or podman exec
 - Standardize on podman `--network-alias` for service discovery across all containers
+
+**Progress 2026-06-26T10:55Z**: completed `hardcoded-ip/dns-migration`.
+Vault service identity now uses the `vault` DNS name: the Vault container no
+longer passes a singleton `--ip`, the TLS leaf SAN is `DNS:vault`,
+`TILLANDSIAS_VAULT_API_BASE_URL` in the macOS VM unit and control-wire login
+driver is `https://vault:8200`, and rootful VM guests write a
+systemd-resolved drop-in that routes the single-label `vault` name to the
+Podman network gateway discovered from `podman network inspect`. Verification:
+`cargo test -p tillandsias-headless enclave_`,
+`cargo test -p tillandsias-headless vault_`,
+`cargo test -p tillandsias-vm-layer vz_cloud_init_headless_service_has_control_wire_preflight`,
+`cargo check -p tillandsias-macos-tray`, and `./build.sh --check` all passed.
+Source scan `rg -n "10\.0\.42\.2|VAULT_ENCLAVE_IP|https://10\.0\.42\.2|IP:\{VAULT" crates/**/*.rs`
+returned no matches. The Linux loopback publish remains intentionally in place:
+native Linux still needs a non-published host access path (vsock or podman-exec)
+before `hardcoded-ip/remove-port-publish` can be safely completed.
 
 **Status**: filed as optimization work packet
 

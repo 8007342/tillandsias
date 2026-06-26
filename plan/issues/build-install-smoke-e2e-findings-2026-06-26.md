@@ -194,3 +194,44 @@ The new nested-smoke-lock guard is effective. The remaining post-build failures
 match the already-filed false-positive class from 2026-06-24/2026-06-23:
 inference model-cache permissions and the loop_status delta assertion. This
 rerun is not a new release blocker beyond that known class.
+
+---
+
+## Rerun: 20260626T093601Z
+
+**Commit tested**: e0046f6e (linux-next, order 104 subnet configurability)
+**Installed version**: Tillandsias v0.3.260626.3 during the smoke install
+**Log dir**: target/build-install-smoke-e2e/20260626T093601Z/
+
+| Gate | Result | Notes |
+|------|--------|-------|
+| §0 Preflight | PASS | branch=linux-next, clean at start |
+| §1 Build + install | FAIL | Pre-build CI passed; portable launcher installed; post-build status smoke failed |
+| §2 Podman reset | NOT REACHED | Build/install gate exited 1 before destructive reset |
+| §3 `tillandsias --init` | NOT REACHED | Build/install gate exited 1 |
+| §4 Forge meta-orch | NOT REACHED | Build/install gate exited 1 |
+
+Evidence:
+
+- `target/build-install-smoke-e2e/20260626T093601Z/01-build-install-exit.txt:1`
+  records `build_install_exit=1`.
+- `target/build-install-smoke-e2e/20260626T093601Z/01-build-install.log:2246`
+  shows the failure occurred during post-build status smoke after the install.
+- `target/build-install-smoke-e2e/20260626T093601Z/01-build-install.log:2301`
+  shows the recurring inference model cache failure:
+  `Error: open /home/ollama/.ollama/models/blobs: permission denied`.
+- `target/build-install-smoke-e2e/20260626T093601Z/01-build-install.log:2310`
+  shows `opencode-prompt-e2e-shape` timed out in step 3 while launching the
+  forge meta-orchestration prompt.
+- `plan/diagnostics/diagnostics_20260626T094012Z-summary.md` records the
+  diagnostics annex from the run: Forge version 0.3.260626.3, 25/25 checks
+  passed, and no failed container launch states.
+
+Conclusion:
+
+The order 104 subnet slice passed its focused unit/litmus/build-check gates,
+but the local-build E2E gate is not green for commit e0046f6e. The inference
+cache permission failure remains the recurring post-build false-positive class,
+and the `opencode-prompt-e2e-shape` timeout recurred in this run. No destructive
+Podman reset, pristine `--init`, forge E2E, merge-to-main, or release gate was
+run after this checkpoint.

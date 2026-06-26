@@ -34,7 +34,6 @@ const VAULT_TLS_CERT_SECRET: &str = "tillandsias-vault-tls-cert";
 const VAULT_TLS_KEY_SECRET: &str = "tillandsias-vault-tls-key";
 const VAULT_TLS_CA_SECRET: &str = "tillandsias-vault-tls-ca";
 const VAULT_NETWORK_ALIAS: &str = "vault";
-const VAULT_ENCLAVE_IP: &str = "10.0.42.2";
 const VAULT_API_BASE_URL_ENV: &str = "TILLANDSIAS_VAULT_API_BASE_URL";
 // Loopback port we publish for the host-process to reach vault during the
 // POC (Linux host == VM). In Phase 4/5 the host shell will use vsock
@@ -163,8 +162,8 @@ pub fn host_base_url() -> String {
 }
 
 #[cfg(test)]
-fn vault_enclave_base_url() -> String {
-    format!("https://{VAULT_ENCLAVE_IP}:8200")
+fn vault_service_base_url() -> String {
+    format!("https://{VAULT_NETWORK_ALIAS}:8200")
 }
 
 fn vault_api_base_url() -> String {
@@ -187,7 +186,7 @@ fn vault_tls_key(certs_dir: &std::path::Path) -> PathBuf {
     certs_dir.join("vault.key")
 }
 
-fn vault_tls_leaf_has_enclave_ip(cert: &std::path::Path) -> bool {
+fn vault_tls_leaf_has_service_identity(cert: &std::path::Path) -> bool {
     match Command::new("openssl")
         .args(["x509", "-noout", "-ext", "subjectAltName", "-in"])
         .arg(cert)
@@ -195,7 +194,7 @@ fn vault_tls_leaf_has_enclave_ip(cert: &std::path::Path) -> bool {
     {
         Ok(output) if output.status.success() => {
             let stdout = String::from_utf8_lossy(&output.stdout);
-            stdout.contains(&format!("IP Address:{VAULT_ENCLAVE_IP}"))
+            stdout.contains("DNS:vault") && stdout.contains("IP Address:127.0.0.1")
         }
         _ => false,
     }
@@ -215,7 +214,7 @@ fn vault_tls_leaf_needs_refresh(
     {
         return true;
     }
-    if !vault_tls_leaf_has_enclave_ip(cert) {
+    if !vault_tls_leaf_has_service_identity(cert) {
         return true;
     }
     match Command::new("openssl")
@@ -275,8 +274,7 @@ fn ensure_vault_tls_leaf(certs_dir: &std::path::Path, debug: bool) -> Result<(),
     let csr = certs_dir.join(format!("vault.csr.{unique}.tmp"));
     let tmp_cert = certs_dir.join(format!("vault.crt.{unique}.tmp"));
     let tmp_key = certs_dir.join(format!("vault.key.{unique}.tmp"));
-    let vault_san =
-        format!("subjectAltName=DNS:vault,DNS:localhost,IP:127.0.0.1,IP:{VAULT_ENCLAVE_IP}");
+    let vault_san = "subjectAltName=DNS:vault,DNS:localhost,IP:127.0.0.1";
     if debug {
         eprintln!(
             "[tillandsias-vault] refreshing Vault TLS leaf certificate at {}",
@@ -291,7 +289,7 @@ fn ensure_vault_tls_leaf(certs_dir: &std::path::Path, debug: bool) -> Result<(),
         .arg(&csr)
         .args(["-subj", "/C=US/ST=Privacy/L=Local/O=Tillandsias/CN=vault"])
         .arg("-addext")
-        .arg(&vault_san)
+        .arg(vault_san)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
@@ -1121,7 +1119,7 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
 
     if debug {
         eprintln!(
-            "[tillandsias-vault] launching container {VAULT_CONTAINER_NAME} (enclave {VAULT_ENCLAVE_IP}:8200, publish 127.0.0.1:{VAULT_HOST_PORT}:8200)"
+            "[tillandsias-vault] launching container {VAULT_CONTAINER_NAME} (alias {VAULT_NETWORK_ALIAS}:8200, publish 127.0.0.1:{VAULT_HOST_PORT}:8200)"
         );
     }
 
@@ -1152,8 +1150,6 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
             // launch_vault_container preamble). Must precede --network-alias.
             "--network",
             crate::ENCLAVE_NET,
-            "--ip",
-            VAULT_ENCLAVE_IP,
             "--network-alias",
             VAULT_NETWORK_ALIAS,
             "--secret",
@@ -1510,32 +1506,32 @@ mod tests {
     fn vault_api_base_url_honors_env_override() {
         let _guard = ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
         unsafe {
-            std::env::set_var(VAULT_API_BASE_URL_ENV, vault_enclave_base_url());
+            std::env::set_var(VAULT_API_BASE_URL_ENV, vault_service_base_url());
         }
-        assert_eq!(vault_api_base_url(), vault_enclave_base_url());
+        assert_eq!(vault_api_base_url(), vault_service_base_url());
         unsafe {
             std::env::remove_var(VAULT_API_BASE_URL_ENV);
         }
     }
 
     #[test]
-    fn vault_tls_leaf_san_includes_enclave_ip() {
+    fn vault_tls_leaf_san_includes_service_dns() {
         let source = include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/src/vault_bootstrap.rs"
         ));
         assert!(
-            source.contains("IP:{VAULT_ENCLAVE_IP}"),
-            "Vault TLS leaf must cover the macOS VZ enclave API address"
+            source.contains("DNS:vault"),
+            "Vault TLS leaf must cover the Podman service DNS name"
         );
         assert!(
-            source.contains("vault_tls_leaf_has_enclave_ip"),
-            "existing Vault certs without the enclave IP SAN must be refreshed"
+            source.contains("vault_tls_leaf_has_service_identity"),
+            "existing Vault certs without the service DNS SAN must be refreshed"
         );
     }
 
     #[test]
-    fn vault_launch_pins_singleton_enclave_ip() {
+    fn vault_launch_uses_network_alias_without_singleton_ip() {
         let source = include_str!(concat!(
             env!("CARGO_MANIFEST_DIR"),
             "/src/vault_bootstrap.rs"
@@ -1545,8 +1541,12 @@ mod tests {
             .nth(1)
             .expect("launch_vault_container source");
         assert!(
-            window.contains("\"--ip\"") && window.contains("VAULT_ENCLAVE_IP"),
-            "Vault is the singleton enclave infrastructure service and must own a stable TLS API address"
+            window.contains("\"--network-alias\"") && window.contains("VAULT_NETWORK_ALIAS"),
+            "Vault must publish the service-discovery alias on the enclave network"
+        );
+        assert!(
+            !window.contains("\"--ip\""),
+            "Vault service discovery should not depend on a singleton enclave IP"
         );
     }
 

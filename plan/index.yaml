@@ -5730,7 +5730,7 @@ plan_index:
         AX/screencapture smoke asserting a non-text status item.
       tasks:
         - id: macos-tray-icon-missing-T-fallback/fix-icon
-          status: ready
+          status: completed
           depends_on: []
           owned_files:
             - crates/tillandsias-macos-tray/assets/tray-icon.png
@@ -5752,6 +5752,17 @@ plan_index:
           note: >
             Operator saw a bare "T" in the menu bar on the curl-installed
             v0.3.260622.4 tray; menu items otherwise correct.
+        - type: completed
+          ts: "2026-06-26T11:00:03Z"
+          agent_id: "linux-macuahuitl-codex-20260626T110003Z"
+          host: linux
+          lease_id: "macos-tray-icon-missing-T-fallback/fix-icon-ledger-hygiene-20260626T110003Z"
+          evidence:
+            - "parent packet macos-tray-icon-missing-T-fallback status done closed_at 2026-06-26T01:52Z"
+          note: >
+            Ledger hygiene: parent packet is already closed as done, but the
+            only child task still read `ready`. Marked the child completed so
+            macOS workers do not reclaim a closed packet.
 
     - packet_id: github-login-menu-readiness-gate
       order: 80
@@ -5821,7 +5832,7 @@ plan_index:
         wait_for_vault_ready succeeds and --github-login completes the Vault write.
       tasks:
         - id: vault-unseal-fails-macos-after-db616e06/fix-unseal
-          status: in_progress
+          status: completed
           depends_on: []
           owned_files:
             - crates/tillandsias-headless/src/vault_bootstrap.rs
@@ -5872,6 +5883,19 @@ plan_index:
             --github-login. If subsequent boot still fails after this fix, investigate
             the FRESH volume timeout — may need even longer timeout or VM resource
             investigation.
+        - type: completed
+          ts: "2026-06-26T11:00:03Z"
+          agent_id: "linux-macuahuitl-codex-20260626T110003Z"
+          host: linux
+          lease_id: "vault-unseal-fails-macos-after-db616e06/fix-unseal-ledger-hygiene-20260626T110003Z"
+          evidence:
+            - "parent packet vault-unseal-fails-macos-after-db616e06 status done closed_at 2026-06-26T01:52Z"
+            - "linux-next work queue release v0.3.260626.1 entry records orders 79/81 marked done"
+          note: >
+            Ledger hygiene: parent packet is already closed as done after the
+            osx-next integration/release cycle, but the child task still read
+            `in_progress`. Marked the child completed so workers do not treat
+            the stale task status as active macOS work.
 
     - packet_id: bar-raise-clippy-strict
       order: 82
@@ -6442,7 +6466,9 @@ plan_index:
     - id: github-login-readiness-before-credentials
       order: 99
       title: "Credential flows must prove VM and required containers UP+HEALTHY before prompting"
-      status: ready
+      status: completed
+      closed_at: "2026-06-26T11:03:25Z"
+      closed_by: "linux-macuahuitl-codex-20260626T110325Z"
       owner_host: any
       deliverable: plan/issues/smoke-curl-install-e2e-macos-v0.3.260625.1-2026-06-25.md
       audit_origin: plan/issues/smoke-curl-install-e2e-macos-v0.3.260625.1-2026-06-25.md
@@ -6461,7 +6487,7 @@ plan_index:
         - "The shared preflight is provider-neutral so Cloudflare, AWS, GoogleDrive, and later auth flows can reuse it."
       tasks:
         - id: github-login-readiness-before-credentials/preflight-and-ordering
-          status: ready
+          status: completed
           owner_host: any
           estimated_hours: 1
           handoff_note: >
@@ -6512,6 +6538,35 @@ plan_index:
             and gives the Vault TLS leaf a matching IP SAN. This fixes the
             concrete macOS Vault pre-token hang; full provider-neutral
             UP+HEALTHY preflight still depends on order 100.
+        - type: claim
+          ts: "2026-06-26T11:00:03Z"
+          agent_id: "linux-macuahuitl-codex-20260626T110003Z"
+          host: linux
+          lease_id: "github-login-readiness-before-credentials/preflight-and-ordering-20260626T110003Z"
+          expires_at: "2026-06-26T15:00:03Z"
+          note: >
+            Claimed after stale-ready audit found the order 99 code path still
+            checked for a pre-existing `tillandsias-git` project mirror
+            container before prompting. Next action: make the provider-neutral
+            health preflight target Vault plus the ephemeral login helper
+            container that this flow actually starts.
+        - type: completed
+          ts: "2026-06-26T11:03:25Z"
+          agent_id: "linux-macuahuitl-codex-20260626T110003Z"
+          host: linux
+          lease_id: "github-login-readiness-before-credentials/preflight-and-ordering-20260626T110003Z"
+          evidence:
+            - "cargo test -p tillandsias-headless github_login"
+            - "./build.sh --check"
+          note: >
+            Completed the remaining shared preflight closure. The macOS host
+            wrapper already starts the VM, waits for control-wire readiness, and
+            lazily prompts only after guest output. The guest path now uses a
+            shared `check_auth_required_services` helper: it checks Vault after
+            startup, starts the ephemeral `tillandsias-gh-login-*` helper, then
+            verifies Vault plus that helper container before prompting for git
+            identity or the token. Added a regression test that rejects the
+            stale `tillandsias-git` prerequisite.
 
     - id: podman-health-lifecycle-facade
       order: 100
@@ -6708,7 +6763,7 @@ plan_index:
           note: >
             The nested opencode prompt e2e started another local-build smoke
             while the parent post-build smoke still held the same lock.
-          - type: completed
+        - type: completed
           ts: "2026-06-26T04:40:00Z"
           agent_id: "linux-tlatoani-codex-20260626T0440Z"
           host: linux
@@ -6721,7 +6776,7 @@ plan_index:
     - id: released-headless-stale-auth-preflight
       order: 103
       title: "Remove stale auth preflight requiring tillandsias-git from released headless"
-      status: in_progress
+      status: done
       owner_host: linux
       deliverable: plan/issues/build-install-smoke-e2e-findings-2026-06-25.md
       audit_origin: plan/issues/build-install-smoke-e2e-findings-2026-06-25.md
@@ -6753,15 +6808,16 @@ plan_index:
             returned zero results. Source tree is already clean. The stale preflight
             only exists in the published release binary predating the fix.
         - id: released-headless-stale-auth-preflight/cut-new-release
-          status: in_progress
+          status: completed
           owner_host: linux
           depends_on:
             - released-headless-stale-auth-preflight/verify-current-source
           checkpoint_required: true
           handoff_note: >
-            After confirming the source fix (or implementing it), bump VERSION,
-            tag, trigger release workflow. The macOS host will then re-provision
-            and pick up the new binary from the GitHub release.
+            Completed: merged PR #47 linux-next→main, bumped VERSION to
+            0.3.260626.3, tagged v0.3.260626.3, triggered release workflow
+            which successfully published the Linux musl release. macOS host
+            can now re-provision and fetch the updated headless binary.
       events:
         - type: claim
           ts: "2026-06-26T06:30:30Z"
@@ -6776,11 +6832,29 @@ plan_index:
           note: >
             verify-current-source confirmed clean. Moving to cut-new-release:
             bump VERSION, tag, trigger release workflow.
+        - type: completed
+          ts: "2026-06-26T06:46:55Z"
+          agent_id: "linux-tlatoani-meta-orch-20260626T064655Z"
+          host: linux
+          commits:
+            - "c0cde245"
+            - "2f87f389"
+            - "877e6558"
+          evidence:
+            - "PR #47 linux-next→main merged"
+            - "VERSION bumped to 0.3.260626.3"
+            - "Tagged v0.3.260626.3"
+            - "Release workflow completed: Linux musl release published (12m29s)"
+          note: >
+            Order 103 complete. The released headless binary now incorporates
+            the stale-auth-preflight fix (already in source) plus the macOS
+            vault fixes merged from osx-next@7441cfad. macOS sibling can
+            re-provision and re-smoke --github-login with v0.3.260626.3.
 
     - id: hardcoded-ip-eradication
       order: 104
       title: "Replace all hardcoded enclave IPs with DNS-based service discovery"
-      status: pending
+      status: in_progress
       owner_host: linux
       deliverable: plan/issues/build-install-smoke-e2e-findings-2026-06-25.md
       audit_origin: plan/issues/build-install-smoke-e2e-findings-2026-06-25.md
@@ -6798,7 +6872,7 @@ plan_index:
         - "Port publish (`-p`) is only used for diagnostic endpoints, not for production service access."
       tasks:
         - id: hardcoded-ip/inventory
-          status: pending
+          status: completed
           owner_host: linux
           owned_files:
             - plan/issues/build-install-smoke-e2e-findings-2026-06-25.md
@@ -6807,10 +6881,10 @@ plan_index:
             Use `grep -rn '10\.0\.42\.' crates/` to inventory every occurrence.
             See the findings file for the already-known locations.
         - id: hardcoded-ip/remove-port-publish
-          status: pending
+          status: blocked
           owner_host: linux
           depends_on:
-            - hardcoded-ip/inventory
+            - hardcoded-ip/dns-migration
           owned_files:
             - crates/tillandsias-headless/src/vault_bootstrap.rs
             - crates/tillandsias-headless/src/main.rs
@@ -6820,23 +6894,34 @@ plan_index:
             vault_bootstrap.rs. Ensure VM host processes can reach vault via
             vsock control wire or podman exec instead. The only remaining
             published port should be for the vsock exec PTY (diagnostic).
+            Live Linux probe on 2026-06-26 confirmed this cannot be a standalone
+            deletion: with proxy bypassed, `https://10.0.42.2:8200` timed out
+            from the host and `https://vault:8200` did not resolve. Complete
+            the remaining native-Linux vsock/podman-exec transport migration
+            first, then remove the publish flag and the loopback default together.
         - id: hardcoded-ip/dns-migration
-          status: pending
+          status: completed
           owner_host: linux
           depends_on:
-            - hardcoded-ip/remove-port-publish
+            - hardcoded-ip/inventory
           owned_files:
             - crates/tillandsias-vm-layer/src/vz.rs
             - crates/tillandsias-macos-tray/src/diagnose.rs
+            - crates/tillandsias-headless/src/main.rs
             - crates/tillandsias-headless/src/vault_bootstrap.rs
           checkpoint_required: true
           handoff_note: >
-            Replace `VAULT_ENCLAVE_IP = "10.0.42.2"` with DNS name `vault`.
-            Configure systemd-resolved or resolv.conf in the VM to forward
-            `10.0.42.0/24` DNS queries to aardvark-dns. Update the macOS
-            side's `TILLANDSIAS_VAULT_API_BASE_URL` to use `https://vault:8200`.
+            Completed 2026-06-26T10:55Z: Vault launch no longer pins a
+            singleton enclave IP, the TLS leaf covers `DNS:vault`, the macOS
+            cloud-init unit and control-wire GitHub-login driver export
+            `TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200`, and rootful VM
+            guests install a systemd-resolved route for the single-label
+            `vault` name by reading the Podman network gateway dynamically.
+            Native Linux still defaults to the loopback publish, so
+            `hardcoded-ip/remove-port-publish` remains blocked on replacing
+            that host access path with vsock or podman-exec.
         - id: hardcoded-ip/subnet-constant
-          status: pending
+          status: completed
           owner_host: linux
           depends_on:
             - hardcoded-ip/inventory
@@ -6847,3 +6932,102 @@ plan_index:
             Move the hardcoded `ENCLAVE_SUBNET = "10.0.42.0/24"` to a
             configurable constant with a default; allow override via env var
             or config file for multi-instance scenarios.
+      events:
+        - type: claim
+          ts: "2026-06-26T09:25:21Z"
+          agent_id: "linux-macuahuitl-codex-20260626T092521Z"
+          host: linux
+          lease_id: "hardcoded-ip/inventory-20260626T092521Z"
+          expires_at: "2026-06-26T13:25:21Z"
+          note: >
+            Claimed the inventory slice for order 104. Next action: inventory
+            all bare `10.0.42.` source occurrences under crates/ and append the
+            result to the build-install smoke findings deliverable before
+            promoting dependent code-removal slices.
+        - type: completed
+          ts: "2026-06-26T09:27:00Z"
+          agent_id: "linux-macuahuitl-codex-20260626T092521Z"
+          host: linux
+          lease_id: "hardcoded-ip/inventory-20260626T092521Z"
+          evidence:
+            - "rg -n \"10\\.0\\.42\\.\" crates"
+            - "plan/issues/build-install-smoke-e2e-findings-2026-06-25.md Finding 4 inventory"
+          note: >
+            Inventory found nine source occurrences: three production Vault
+            API URL/IP sites, two network/proxy constants, two tests, and two
+            comments. Promoted the subnet-constant and port-publish follow-on
+            slices; noted that port-publish removal is coupled to a Linux-safe
+            Vault base URL or DNS migration.
+        - type: claim
+          ts: "2026-06-26T09:28:33Z"
+          agent_id: "linux-macuahuitl-codex-20260626T092833Z"
+          host: linux
+          lease_id: "hardcoded-ip/subnet-constant-20260626T092833Z"
+          expires_at: "2026-06-26T13:28:33Z"
+          note: >
+            Claimed the independent subnet configurability slice. Next action:
+            replace the hardcoded enclave subnet/no_proxy CIDR with a defaulted
+            env override while keeping the current `10.0.42.0/24` default.
+        - type: completed
+          ts: "2026-06-26T09:33:04Z"
+          agent_id: "linux-macuahuitl-codex-20260626T092833Z"
+          host: linux
+          lease_id: "hardcoded-ip/subnet-constant-20260626T092833Z"
+          evidence:
+            - "cargo test -p tillandsias-headless enclave_"
+            - "scripts/run-litmus-test.sh inference-container --phase pre-build --size instant --compact"
+            - "./build.sh --check"
+          note: >
+            Added `TILLANDSIAS_ENCLAVE_SUBNET` with default
+            `10.0.42.0/24`; `ensure_enclave_network` now uses the configured
+            subnet, and container launch paths derive NO_PROXY/no_proxy from
+            the same helper. Updated inference spec/litmus wording from the
+            removed static ENCLAVE_NO_PROXY constant to `enclave_no_proxy()`.
+        - type: blocked
+          ts: "2026-06-26T10:00:21Z"
+          agent_id: "linux-macuahuitl-codex-20260626T100021Z"
+          host: linux
+          lease_id: "hardcoded-ip/remove-port-publish-20260626T100021Z"
+          evidence:
+            - "NO_PROXY='*' no_proxy='*' timeout 8 curl --noproxy '*' -kS https://10.0.42.2:8200/v1/sys/health"
+            - "NO_PROXY='*' no_proxy='*' timeout 8 curl --noproxy '*' -kS https://vault:8200/v1/sys/health"
+          note: >
+            Removing the Vault loopback publish is blocked until a non-published
+            host-to-enclave access path exists. On the mutable Linux host,
+            proxy-bypassed direct access to `10.0.42.2:8200` timed out and the
+            `vault` DNS name did not resolve from the host. Reordered order 104
+            so `hardcoded-ip/dns-migration` is ready first and this publish
+            removal depends on that transport migration.
+        - type: claim
+          ts: "2026-06-26T10:48:48Z"
+          agent_id: "linux-macuahuitl-codex-20260626T104848Z"
+          host: linux
+          lease_id: "hardcoded-ip/dns-migration-20260626T104848Z"
+          expires_at: "2026-06-26T14:48:48Z"
+          note: >
+            Claimed the DNS migration slice after the publish-removal probe
+            showed that `vault` was not host-resolvable. Next action: move the
+            VM/macOS Vault base URL and TLS/container identity to the `vault`
+            service name and add a VM resolver route without removing the Linux
+            loopback publish yet.
+        - type: completed
+          ts: "2026-06-26T10:55:28Z"
+          agent_id: "linux-macuahuitl-codex-20260626T104848Z"
+          host: linux
+          lease_id: "hardcoded-ip/dns-migration-20260626T104848Z"
+          evidence:
+            - "rg -n \"10\\.0\\.42\\.2|VAULT_ENCLAVE_IP|https://10\\.0\\.42\\.2|IP:\\{VAULT\" crates/**/*.rs (no matches)"
+            - "cargo test -p tillandsias-headless enclave_"
+            - "cargo test -p tillandsias-headless vault_"
+            - "cargo test -p tillandsias-vm-layer vz_cloud_init_headless_service_has_control_wire_preflight"
+            - "cargo check -p tillandsias-macos-tray"
+            - "./build.sh --check"
+          note: >
+            Replaced the Vault singleton IP contract with `vault` service DNS:
+            Vault launches with the `vault` network alias and no `--ip`, cert
+            SAN generation/refresh pins `DNS:vault`, VM cloud-init and macOS
+            control-wire login export `https://vault:8200`, and rootful VM
+            guests dynamically route the single-label `vault` query to the
+            Podman network gateway via systemd-resolved. The Linux loopback
+            publish is intentionally retained for the still-blocked native
+            host transport slice.
