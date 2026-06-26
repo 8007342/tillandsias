@@ -1,6 +1,19 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-26T04:40Z
+Last updated: 2026-06-26T04:59Z
+
+## This Cycle (2026-06-26T04:59Z, linux_mutable — big-pickle meta-orch — no-op: lock held, no ready work)
+
+- **Cycle type**: meta-orchestration — worker drain, coordination audit.
+- **Startup**: `linux-next @ 7f4c7f7c`, clean. Credential channel: `ok:gh-keyring`.
+- **Worker drain**: No Linux-ready nodes. All remaining open nodes are macOS-owned or require macOS VZ access to verify.
+  - `macos-tray-icon-missing-T-fallback/fix-icon` (ready) — macOS-only files.
+  - `vault-unseal-fails-macos-after-db616e06/fix-unseal` (in_progress, expired lease) — fix shipped `8e6f25b1`, pending macOS retest.
+  - `github-login-readiness-before-credentials/preflight-and-ordering` (ready, owner any) — remaining work is macOS VZ-side wiring; Linux guest side already done.
+- **Siblings**: osx-next@a6abaf83, windows-next@a3c8b23d — both ancestors of HEAD.
+- **E2E gates**: `skip:smoke-lock-held` — concurrent Codex-invoked local-build smoke PID 245649 holds the lock.
+- **Reduction**: Zero residual at current bar. No new findings.
+- **Next**: Await lock release or a subsequent cycle to run local-build e2e.
 
 ## This Cycle (2026-06-26T04:40Z, linux_mutable — meta-orch — local-build smoke nested-lock guard)
 
