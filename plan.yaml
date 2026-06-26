@@ -21,13 +21,16 @@ plan:
   current_state:
     last_completed_step: released-headless-stale-auth-preflight (order 103)
     next_step: hardcoded-ip-eradication (order 104)
-    next_graph_node: hardcoded-ip-eradication/inventory
+    next_graph_node: hardcoded-ip/subnet-constant
     frontier_note: >
       Order 103 (released-headless-stale-auth-preflight) completed: PR #47
       merged, v0.3.260626.3 released with stale-auth fix + macOS vault fixes.
       macOS can now re-provision and re-smoke --github-login. Order 104
-      (hardcoded-ip-eradication) remains pending — linux builder to inventory
-      all hardcoded 10.0.42.x IPs and migrate to DNS-based discovery.
+      (hardcoded-ip-eradication) inventory completed on 2026-06-26: nine
+      source occurrences remain. Next safe Linux slice is
+      hardcoded-ip/subnet-constant; port-publish removal is coupled to the
+      DNS/base-URL migration because Linux still defaults to
+      https://127.0.0.1:8201.
     plan_index: plan/index.yaml
     step_directory: plan/steps
     checkpoint_branch: linux-next

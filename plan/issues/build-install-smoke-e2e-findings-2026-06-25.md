@@ -79,12 +79,29 @@ The `launch_vault_container()` function removes the old container but NOT the st
 **Severity**: architecture  
 **Reference**: user feedback during smoke test
 
-**Issues identified**:
-- `crates/tillandsias-vm-layer/src/vz.rs:508` — `Environment=TILLANDSIAS_VAULT_API_BASE_URL=https://10.0.42.2:8200` (VM host references enclave IP directly)
-- `crates/tillandsias-headless/src/vault_bootstrap.rs:37` — `const VAULT_ENCLAVE_IP: &str = "10.0.42.2"` (static IP constant)
-- `crates/tillandsias-headless/src/vault_bootstrap.rs:1173-1174` — `-p 127.0.0.1:8201:8200` publish (Linux-only, should not be default)
-- `crates/tillandsias-macos-tray/src/diagnose.rs:544` — `export TILLANDSIAS_VAULT_API_BASE_URL=https://10.0.42.2:8200` (our fix, still IP-based)
-- `crates/tillandsias-headless/src/main.rs:8` — `ENCLAVE_SUBNET = "10.0.42.0/24"` (hardcoded subnet)
+**Inventory completed 2026-06-26T09:27Z**:
+
+Command: `rg -n "10\\.0\\.42\\." crates`
+
+Production URLs / service discovery:
+- `crates/tillandsias-macos-tray/src/diagnose.rs:544` — exports `TILLANDSIAS_VAULT_API_BASE_URL=https://10.0.42.2:8200` for guest `--github-login`.
+- `crates/tillandsias-vm-layer/src/vz.rs:508` — systemd unit sets `TILLANDSIAS_VAULT_API_BASE_URL=https://10.0.42.2:8200`.
+- `crates/tillandsias-headless/src/vault_bootstrap.rs:37` — `VAULT_ENCLAVE_IP = "10.0.42.2"` feeds the Vault `--ip`, TLS SAN, and enclave API base URL.
+
+Network shape / proxy bypass:
+- `crates/tillandsias-headless/src/main.rs:716` — `ENCLAVE_SUBNET = "10.0.42.0/24"` hardcodes the bridge subnet at network creation.
+- `crates/tillandsias-headless/src/main.rs:729` — `ENCLAVE_NO_PROXY` embeds `10.0.42.0/24`.
+
+Tests / comments:
+- `crates/tillandsias-vm-layer/src/vz.rs:1682` — unit test pins the current systemd env line.
+- `crates/tillandsias-headless/src/main.rs:8067` — test asserts git login args do not include `10.0.42.2`.
+- `crates/tillandsias-headless/tests/cache_peer_routing.rs:194` — comment documents a wrong `cache_peer 10.0.42.x` shape.
+- `crates/tillandsias-macos-tray/src/diagnose.rs:537` — comment documents why the env override targets the enclave IP today.
+
+Coupled sequencing note: the Vault port publish cannot be removed safely as a
+standalone first step because Linux's default `host_base_url()` still points to
+`https://127.0.0.1:8201`. The removal slice must either happen with the DNS/base
+URL migration or first introduce a Linux-safe non-published access path.
 
 **Required approach**:
 - VM host processes should resolve `vault` via podman's aardvark-dns (running on bridge gateway)

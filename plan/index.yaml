@@ -6817,7 +6817,7 @@ plan_index:
         - "Port publish (`-p`) is only used for diagnostic endpoints, not for production service access."
       tasks:
         - id: hardcoded-ip/inventory
-          status: in_progress
+          status: completed
           owner_host: linux
           owned_files:
             - plan/issues/build-install-smoke-e2e-findings-2026-06-25.md
@@ -6826,7 +6826,7 @@ plan_index:
             Use `grep -rn '10\.0\.42\.' crates/` to inventory every occurrence.
             See the findings file for the already-known locations.
         - id: hardcoded-ip/remove-port-publish
-          status: pending
+          status: ready
           owner_host: linux
           depends_on:
             - hardcoded-ip/inventory
@@ -6839,6 +6839,9 @@ plan_index:
             vault_bootstrap.rs. Ensure VM host processes can reach vault via
             vsock control wire or podman exec instead. The only remaining
             published port should be for the vsock exec PTY (diagnostic).
+            Inventory found this cannot be a standalone deletion while
+            `host_base_url()` still defaults to `https://127.0.0.1:8201`;
+            bundle it with a Linux-safe base URL or DNS migration.
         - id: hardcoded-ip/dns-migration
           status: pending
           owner_host: linux
@@ -6855,7 +6858,7 @@ plan_index:
             `10.0.42.0/24` DNS queries to aardvark-dns. Update the macOS
             side's `TILLANDSIAS_VAULT_API_BASE_URL` to use `https://vault:8200`.
         - id: hardcoded-ip/subnet-constant
-          status: pending
+          status: ready
           owner_host: linux
           depends_on:
             - hardcoded-ip/inventory
@@ -6878,3 +6881,17 @@ plan_index:
             all bare `10.0.42.` source occurrences under crates/ and append the
             result to the build-install smoke findings deliverable before
             promoting dependent code-removal slices.
+        - type: completed
+          ts: "2026-06-26T09:27:00Z"
+          agent_id: "linux-macuahuitl-codex-20260626T092521Z"
+          host: linux
+          lease_id: "hardcoded-ip/inventory-20260626T092521Z"
+          evidence:
+            - "rg -n \"10\\.0\\.42\\.\" crates"
+            - "plan/issues/build-install-smoke-e2e-findings-2026-06-25.md Finding 4 inventory"
+          note: >
+            Inventory found nine source occurrences: three production Vault
+            API URL/IP sites, two network/proxy constants, two tests, and two
+            comments. Promoted the subnet-constant and port-publish follow-on
+            slices; noted that port-publish removal is coupled to a Linux-safe
+            Vault base URL or DNS migration.
