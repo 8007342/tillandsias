@@ -4,15 +4,16 @@
 # E2E Gates must consult a structured verdict (`eligible` | `skip:<reason>`)
 # emitted once per host run instead of re-deriving "no /run/user => no podman
 # user session => skip" in prose every cycle. This test falsifies drift in the
-# probe's grammar, its no-session branch, and the skill's wiring to it.
+# probe's grammar, its no-session/smoke-lock branches, and the skill's wiring.
 name: litmus:e2e-eligibility-probe-shape
 spec: meta-orchestration
 phase: pre-build
 description: >
   Pin scripts/e2e-preflight.sh's e2e_eligibility_verdict probe: the
   `eligibility` standalone mode, the falsifiable verdict grammar
-  ^(eligible|skip:[a-z0-9-]+)$, the deterministic no-user-session branch, and
-  the meta-orchestration skill's consultation of the probe in its E2E Gates.
+  ^(eligible|skip:[a-z0-9-]+)$, the deterministic no-user-session and
+  smoke-lock-held branches, and the meta-orchestration skill's consultation of
+  the probe in its E2E Gates.
 severity: medium
 size: instant
 
@@ -33,6 +34,11 @@ critical_path:
     timeout_ms: 5000
     expected_behavior: "skip:no-podman-user-session"
 
+  - step: "a held build-install smoke lock yields a deterministic lock skip verdict"
+    command: "tmp=$(mktemp -d) && mkdir -p \"$tmp/tillandsias-locks\" && { exec 9>\"$tmp/tillandsias-locks/build-install-smoke-e2e.lock\"; flock -n 9; XDG_RUNTIME_DIR=\"$tmp\" bash scripts/e2e-preflight.sh eligibility; rc=$?; rm -rf \"$tmp\"; exit \"$rc\"; }"
+    timeout_ms: 5000
+    expected_behavior: "skip:smoke-lock-held"
+
   - step: "the probe emits exactly one well-formed verdict line"
     command: "n=$(bash scripts/e2e-preflight.sh eligibility | grep -cE '^(eligible|skip:[a-z0-9-]+)$'); [ \"$n\" = \"1\" ] && echo \"ok: well-formed verdict ($n line)\" || { echo \"FAIL: $n lines\"; exit 1; }"
     timeout_ms: 5000
@@ -46,7 +52,7 @@ critical_path:
 observability:
   traces:
     - "@trace spec:meta-orchestration"
-  expected_log: "e2e-eligibility verdict probe pinned (grammar + no-session branch + skill wiring)"
+  expected_log: "e2e-eligibility verdict probe pinned (grammar + no-session branch + smoke-lock branch + skill wiring)"
   log_fields:
     spec: "meta-orchestration"
     test: "e2e-eligibility-probe-shape"
@@ -57,7 +63,7 @@ rollback:
     The e2e-eligibility probe drifted. Restore e2e_eligibility_verdict() in
     scripts/e2e-preflight.sh emitting exactly one line matching
     ^(eligible|skip:[a-z0-9-]+)$ (reasons: no-podman-binary,
-    no-podman-user-session, podman-not-functional), the `eligibility` standalone
-    mode, and the E2E Gates consultation of `scripts/e2e-preflight.sh eligibility`
-    in skills/meta-orchestration/SKILL.md.
-  command: "grep -nE 'e2e_eligibility_verdict|eligibility|skip:(no-podman-binary|no-podman-user-session|podman-not-functional)' scripts/e2e-preflight.sh | head -20"
+    no-podman-user-session, smoke-lock-held, podman-not-functional), the
+    `eligibility` standalone mode, and the E2E Gates consultation of
+    `scripts/e2e-preflight.sh eligibility` in skills/meta-orchestration/SKILL.md.
+  command: "grep -nE 'e2e_eligibility_verdict|eligibility|skip:(no-podman-binary|no-podman-user-session|smoke-lock-held|podman-not-functional)' scripts/e2e-preflight.sh | head -20"

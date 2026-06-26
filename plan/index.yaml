@@ -6661,3 +6661,59 @@ plan_index:
           note: >
             `build_image_with_logging` now uses a testable argv helper that
             includes `--format docker`.
+
+    - id: local-build-smoke-lock-preflight-skip
+      order: 102
+      title: "Nested meta-orchestration must skip local-build e2e when smoke lock is held"
+      status: done
+      owner_host: linux
+      deliverable: plan/issues/build-install-smoke-e2e-findings-2026-06-26.md
+      audit_origin: plan/issues/build-install-smoke-e2e-findings-2026-06-26.md
+      depends_on:
+        - vault-image-build-docker-format-healthcheck
+      pickup_role: "Linux/shared runtime owner"
+      closed_at: "2026-06-26T04:40Z"
+      closed_by: "linux-tlatoani-codex-20260626T0440Z"
+      outcome: >
+        The structured e2e preflight now returns `skip:smoke-lock-held` when a
+        parent or sibling local-build smoke already owns the
+        `build-install-smoke-e2e` lock, so nested meta-orchestration cycles do
+        not wait behind their own parent smoke.
+      exit_criteria:
+        - "The eligibility probe detects an already-held build-install smoke lock without blocking."
+        - "The meta-orchestration E2E gate records and skips the lock-held verdict."
+        - "The e2e-eligibility litmus pins the smoke-lock-held branch."
+      tasks:
+        - id: local-build-smoke-lock-preflight-skip/implement
+          status: completed
+          owner_host: linux
+          estimated_hours: 0.5
+          owned_files:
+            - scripts/e2e-preflight.sh
+            - skills/meta-orchestration/SKILL.md
+            - openspec/litmus-tests/litmus-e2e-eligibility-probe-shape.yaml
+            - plan/issues/build-install-smoke-e2e-findings-2026-06-26.md
+          checkpoint_required: true
+          handoff_note: >
+            Rerun local-build smoke; the nested forge prompt should skip its
+            own local-build gate with `skip:smoke-lock-held`.
+      events:
+        - type: discovered
+          ts: "2026-06-26T04:32:58Z"
+          agent_id: "linux-tlatoani-codex-20260626T041632Z"
+          host: linux
+          evidence:
+            - "target/build-install-smoke-e2e/20260626T041632Z/01-build-install.log:2313"
+            - "target/build-install-smoke-e2e/20260626T042455Z/00-smoke-lock.log:1"
+          note: >
+            The nested opencode prompt e2e started another local-build smoke
+            while the parent post-build smoke still held the same lock.
+        - type: completed
+          ts: "2026-06-26T04:40:00Z"
+          agent_id: "linux-tlatoani-codex-20260626T0440Z"
+          host: linux
+          evidence:
+            - "bash -n scripts/e2e-preflight.sh"
+            - "scripts/run-litmus-test.sh meta-orchestration --phase pre-build --size instant"
+          note: >
+            Added and pinned the `skip:smoke-lock-held` verdict.

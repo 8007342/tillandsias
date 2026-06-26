@@ -1,6 +1,17 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-26T04:14Z
+LastExecutionTime: 2026-06-26T04:40Z
+
+## This Loop (2026-06-26T04:40Z, linux_mutable — meta-orch — nested smoke-lock preflight)
+
+- **Cycle type**: meta-orchestration — local-build smoke rerun and concurrency guard.
+- **Startup**: `linux-next @ 72e1fb8f`, clean. Local-build rerun checkpointed VERSION/traces as `08a7a3cc` (`0.3.260626.2`).
+- **Siblings**: osx-next@a6abaf83, windows-next@a3c8b23d — both ancestors, no new sibling merge needed.
+- **Build gate**: `target/build-install-smoke-e2e/20260626T041632Z` passed pre-build CI and installed the portable launcher. Vault bootstrap completed; the missing-HEALTHCHECK regression from order 101 did not recur.
+- **Remaining blocker**: Post-build smoke still exits 1 before reset/init. The inference model-cache permission failure recurred, and `opencode-prompt-e2e-shape` timed out because its nested meta-orchestration child attempted another local-build smoke while the parent smoke lock was held.
+- **Fix**: Added `skip:smoke-lock-held` to `scripts/e2e-preflight.sh eligibility`, wired the meta-orchestration E2E guidance to record/skip it, and pinned the branch in `litmus:e2e-eligibility-probe-shape` (order 102).
+- **Verification**: `bash -n scripts/e2e-preflight.sh` PASS; live verdict `eligible`; simulated held-lock verdict `skip:smoke-lock-held`; `scripts/run-litmus-test.sh meta-orchestration --phase pre-build --size instant` PASS (3/3 executed).
+- **Next**: Commit/push order 102, rerun the local-build smoke. If the nested-lock timeout is gone and only the already-filed inference false positive remains, decide release eligibility.
 
 ## This Loop (2026-06-26T04:14Z, linux_mutable — meta-orch — fix Vault image healthcheck metadata)
 

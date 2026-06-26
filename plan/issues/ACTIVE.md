@@ -1,6 +1,20 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-26T04:14Z
+Last updated: 2026-06-26T04:40Z
+
+## This Cycle (2026-06-26T04:40Z, linux_mutable — meta-orch — local-build smoke nested-lock guard)
+
+- **Cycle type**: meta-orchestration — local-build smoke gate rerun and follow-up fix.
+- **Startup**: `linux-next @ 72e1fb8f`, clean. Local-build smoke generated checkpoint `08a7a3cc` for VERSION/traces (`0.3.260626.2`).
+- **Worker drain**: Order 101 verified fixed: Vault bootstrap completed and the launched Vault container retained HEALTHCHECK metadata. New order 102 (`local-build-smoke-lock-preflight-skip`) was discovered and fixed in this cycle.
+- **Build gate evidence**:
+  - Rerun `target/build-install-smoke-e2e/20260626T041632Z` passed pre-build CI and installed v0.3.260626.2.
+  - Vault `no healthcheck` failure did not recur.
+  - `litmus:inference-deferred-model-pulls` still fails on `/home/ollama/.ollama/models/blobs: permission denied`.
+  - `litmus:opencode-prompt-e2e-shape` timed out because the nested meta-orchestration child started another local-build smoke and waited on the parent-held `build-install-smoke-e2e` lock.
+- **Fix**: `scripts/e2e-preflight.sh eligibility` now returns `skip:smoke-lock-held` when the build-install smoke lock is already held; meta-orchestration guidance records/skips that verdict, and the e2e-eligibility litmus pins the branch.
+- **Verification**: `bash -n scripts/e2e-preflight.sh` PASS; live verdict `eligible`; simulated held-lock verdict `skip:smoke-lock-held`; `scripts/run-litmus-test.sh meta-orchestration --phase pre-build --size instant` PASS (3/3 executed).
+- **Release**: Hold until the guard is verified and the local-build smoke is rerun or explicitly accepted with only known post-build false positives remaining.
 
 ## This Cycle (2026-06-26T04:14Z, linux_mutable — meta-orch — local-build smoke regression fix)
 
