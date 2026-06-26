@@ -19,18 +19,16 @@ plan:
     verification: methodology/verification.yaml
 
   current_state:
-    last_completed_step: released-headless-stale-auth-preflight (step 101)
-    next_step: released-headless-stale-auth-preflight (step 101)
-    next_graph_node: released-headless-stale-auth-preflight/verify-current-source
+    last_completed_step: released-headless-stale-auth-preflight (order 103)
+    next_step: released-headless-stale-auth-preflight/cut-new-release (order 103)
+    next_graph_node: released-headless-stale-auth-preflight/cut-new-release
     frontier_note: >
-      The v0.3.0 implementation plan and release-conflict recovery are complete.
-      As of 2026-06-26T06:22Z the macOS build-install-smoke e2e confirmed two
-      fixes (env var vsock passthrough, stale vault volume cleanup) and filed
-      three blocking findings. The top blocker is order 101: the released
-      `tillandsias-headless` binary has a stale auth preflight requiring
-      `tillandsias-git` to be running before `--github-login` proceeds. Current
-      source tree has already removed this check — linux-next needs to cut a
-      new release to produce an updated binary for the macOS VZ VM.
+      Merged origin/osx-next@7441cfad (macos e2e findings + work packets) into
+      linux-next. Resolved plan conflicts — macOS orders renumbered 101→103,
+      102→104 to avoid collision with existing linux orders. Verified source
+      already clean of stale auth preflight (order 103/task 1 done). Proceeding
+      to cut new release (bump VERSION, tag, release workflow) so macOS can
+      pick up the updated headless binary and re-smoke --github-login.
     plan_index: plan/index.yaml
     step_directory: plan/steps
     checkpoint_branch: linux-next

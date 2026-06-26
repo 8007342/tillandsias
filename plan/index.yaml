@@ -6721,7 +6721,7 @@ plan_index:
     - id: released-headless-stale-auth-preflight
       order: 103
       title: "Remove stale auth preflight requiring tillandsias-git from released headless"
-      status: pending
+      status: in_progress
       owner_host: linux
       deliverable: plan/issues/build-install-smoke-e2e-findings-2026-06-25.md
       audit_origin: plan/issues/build-install-smoke-e2e-findings-2026-06-25.md
@@ -6742,19 +6742,18 @@ plan_index:
         - "macOS host can verify: fresh provision + `--github-login` proceeds past preflight to the token prompt."
       tasks:
         - id: released-headless-stale-auth-preflight/verify-current-source
-          status: pending
+          status: completed
           owner_host: linux
           owned_files:
             - crates/tillandsias-headless/src/main.rs
             - crates/tillandsias-headless/src/vsock_server.rs
           checkpoint_required: false
           handoff_note: >
-            Confirm the current source tree no longer has the `tillandsias-git`
-            container-running preflight check. Check `grep -rn 'auth_preflight\|container_running.*git' crates/tillandsias-headless/src/`.
-            The macOS SESSION found the "auth preflight failed: tillandsias-git is not running (None)"
-            error in a released binary. If the source still has it, remove it.
+            Confirmed: grep -rn 'auth_preflight\|container_running.*git' crates/tillandsias-headless/src/
+            returned zero results. Source tree is already clean. The stale preflight
+            only exists in the published release binary predating the fix.
         - id: released-headless-stale-auth-preflight/cut-new-release
-          status: pending
+          status: in_progress
           owner_host: linux
           depends_on:
             - released-headless-stale-auth-preflight/verify-current-source
@@ -6763,6 +6762,20 @@ plan_index:
             After confirming the source fix (or implementing it), bump VERSION,
             tag, trigger release workflow. The macOS host will then re-provision
             and pick up the new binary from the GitHub release.
+      events:
+        - type: claim
+          ts: "2026-06-26T06:30:30Z"
+          agent_id: "linux-tlatoani-meta-orch-20260626T063030Z"
+          host: linux
+          lease_id: "released-headless-stale-auth-preflight/claim-20260626T063030Z"
+          expires_at: "2026-06-26T10:30:30Z"
+        - type: progress
+          ts: "2026-06-26T06:30:30Z"
+          agent_id: "linux-tlatoani-meta-orch-20260626T063030Z"
+          host: linux
+          note: >
+            verify-current-source confirmed clean. Moving to cut-new-release:
+            bump VERSION, tag, trigger release workflow.
 
     - id: hardcoded-ip-eradication
       order: 104
