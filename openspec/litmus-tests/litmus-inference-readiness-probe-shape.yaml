@@ -32,9 +32,9 @@ critical_path:
     expected_behavior: "ENCLAVE_NO_PROXY"
 
   - step: "assert tray launcher shares the same inference proxy bypass"
-    command: "grep -F 'ENCLAVE_NO_PROXY' crates/tillandsias-headless/src/tray/mod.rs && grep -F '.env(\"NO_PROXY\", ENCLAVE_NO_PROXY)' crates/tillandsias-headless/src/tray/mod.rs"
+    command: "grep -F 'enclave_no_proxy' crates/tillandsias-headless/src/tray/mod.rs && grep -F '.env(\"NO_PROXY\", no_proxy)' crates/tillandsias-headless/src/tray/mod.rs"
     timeout_ms: 2000
-    expected_behavior: "ENCLAVE_NO_PROXY"
+    expected_behavior: "enclave_no_proxy"
 
   - step: "assert inference cache mounts at the ollama home path"
     command: "grep -F '/home/ollama/.ollama/models:rw' scripts/orchestrate-enclave.sh && grep -F '/home/ollama/.ollama/models:rw' scripts/test-inference.sh"

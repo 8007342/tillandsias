@@ -6858,7 +6858,7 @@ plan_index:
             `10.0.42.0/24` DNS queries to aardvark-dns. Update the macOS
             side's `TILLANDSIAS_VAULT_API_BASE_URL` to use `https://vault:8200`.
         - id: hardcoded-ip/subnet-constant
-          status: in_progress
+          status: completed
           owner_host: linux
           depends_on:
             - hardcoded-ip/inventory
@@ -6905,3 +6905,18 @@ plan_index:
             Claimed the independent subnet configurability slice. Next action:
             replace the hardcoded enclave subnet/no_proxy CIDR with a defaulted
             env override while keeping the current `10.0.42.0/24` default.
+        - type: completed
+          ts: "2026-06-26T09:33:04Z"
+          agent_id: "linux-macuahuitl-codex-20260626T092833Z"
+          host: linux
+          lease_id: "hardcoded-ip/subnet-constant-20260626T092833Z"
+          evidence:
+            - "cargo test -p tillandsias-headless enclave_"
+            - "scripts/run-litmus-test.sh inference-container --phase pre-build --size instant --compact"
+            - "./build.sh --check"
+          note: >
+            Added `TILLANDSIAS_ENCLAVE_SUBNET` with default
+            `10.0.42.0/24`; `ensure_enclave_network` now uses the configured
+            subnet, and container launch paths derive NO_PROXY/no_proxy from
+            the same helper. Updated inference spec/litmus wording from the
+            removed static ENCLAVE_NO_PROXY constant to `enclave_no_proxy()`.

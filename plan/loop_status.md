@@ -1,6 +1,16 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-26T05:03Z
+LastExecutionTime: 2026-06-26T09:33Z
+
+## This Loop (2026-06-26T09:33Z, linux_mutable — meta-orch + advance-work — order 104 inventory/subnet drain)
+
+- **Cycle type**: meta-orchestration worker drain and coordination audit.
+- **Startup**: `linux-next @ d7ddd23c`, clean. Credential channel: `ok:gh-keyring`.
+- **Siblings**: `origin/osx-next@7441cfad` and `origin/windows-next@a3c8b23d` are both ancestors of `origin/linux-next`; no merge needed.
+- **Worker drain**: Claimed and completed `hardcoded-ip/inventory`; promoted follow-ons. Claimed and completed `hardcoded-ip/subnet-constant`.
+- **Implementation**: Added `TILLANDSIAS_ENCLAVE_SUBNET` defaulting to `10.0.42.0/24`; enclave network creation and forge/inference/stack/tray NO_PROXY/no_proxy values now derive from the same helper.
+- **Verification**: `cargo test -p tillandsias-headless enclave_` PASS; `scripts/run-litmus-test.sh inference-container --phase pre-build --size instant --compact` PASS; `./build.sh --check` PASS.
+- **Next**: `hardcoded-ip/remove-port-publish` remains ready, but must be bundled with a Linux-safe Vault base URL or DNS migration because native Linux still defaults to `https://127.0.0.1:8201`.
 
 ## This Loop (2026-06-26T05:03Z, linux_mutable — meta-orch — smoke rerun after nested-lock guard)
 

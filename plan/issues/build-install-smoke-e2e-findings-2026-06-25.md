@@ -103,6 +103,17 @@ standalone first step because Linux's default `host_base_url()` still points to
 `https://127.0.0.1:8201`. The removal slice must either happen with the DNS/base
 URL migration or first introduce a Linux-safe non-published access path.
 
+**Progress 2026-06-26T09:33Z**: completed `hardcoded-ip/subnet-constant`.
+`crates/tillandsias-headless/src/main.rs` now reads
+`TILLANDSIAS_ENCLAVE_SUBNET`, defaults to `10.0.42.0/24`, uses that value for
+`podman network create --subnet`, and derives `NO_PROXY`/`no_proxy` for forge,
+inference, stack, and tray launch paths from the same helper. Updated the
+inference-container spec/litmuses to pin `enclave_no_proxy()` instead of the old
+static `ENCLAVE_NO_PROXY` constant. Verification:
+`cargo test -p tillandsias-headless enclave_`,
+`scripts/run-litmus-test.sh inference-container --phase pre-build --size instant --compact`,
+and `./build.sh --check` all passed.
+
 **Required approach**:
 - VM host processes should resolve `vault` via podman's aardvark-dns (running on bridge gateway)
 - Configure systemd-resolved or resolv.conf to forward enclave DNS queries

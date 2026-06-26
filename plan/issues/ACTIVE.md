@@ -1,6 +1,16 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-26T06:47Z
+Last updated: 2026-06-26T09:33Z
+
+## This Cycle (2026-06-26T09:33Z, linux_mutable — meta-orch + advance-work — order 104 inventory/subnet drain)
+
+- **Cycle type**: meta-orchestration worker drain and coordination audit.
+- **Siblings**: osx-next@7441cfad and windows-next@a3c8b23d are both ancestors of linux-next; no merge needed.
+- **Worker drain**:
+  - `hardcoded-ip/inventory` completed. Inventory found nine `10.0.42.x` source occurrences and recorded the coupled port-publish/base-URL risk.
+  - `hardcoded-ip/subnet-constant` completed. `TILLANDSIAS_ENCLAVE_SUBNET` now defaults to `10.0.42.0/24`; enclave network creation and NO_PROXY/no_proxy values derive from it.
+- **Verification**: `cargo test -p tillandsias-headless enclave_` PASS; inference-container instant litmus PASS; `./build.sh --check` PASS.
+- **Next**: `hardcoded-ip/remove-port-publish` is ready but must be bundled with a Linux-safe Vault base URL or DNS migration because native Linux still defaults to `https://127.0.0.1:8201`.
 
 ## This Cycle (2026-06-26T06:47Z, linux_mutable — meta-orch — order 103 done, release v0.3.260626.3)
 

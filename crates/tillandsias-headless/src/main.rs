@@ -713,7 +713,8 @@ fn run_command_silent(mut command: Command, debug: bool) -> Result<(), String> {
 }
 
 const ENCLAVE_NET: &str = "tillandsias-enclave";
-const ENCLAVE_SUBNET: &str = "10.0.42.0/24";
+const DEFAULT_ENCLAVE_SUBNET: &str = "10.0.42.0/24";
+const ENCLAVE_SUBNET_ENV: &str = "TILLANDSIAS_ENCLAVE_SUBNET";
 /// Managed egress network. The enclave network is `--internal` (no NAT egress),
 /// so the proxy and git-service are dual-homed onto this network to retain a
 /// single allowlisted/direct egress leg. Self-contained on purpose: Podman's
@@ -725,9 +726,21 @@ const EGRESS_NET: &str = "tillandsias-egress";
 /// The dual-homed network spec attached to egress-capable enclave containers
 /// (proxy, git-service): enclave leg for in-enclave DNS + the egress leg for NAT.
 const ENCLAVE_EGRESS_NETS: &str = "tillandsias-enclave,tillandsias-egress";
-const ENCLAVE_NO_PROXY: &str =
-    "localhost,127.0.0.1,0.0.0.0,::1,inference,proxy,git-service,tillandsias-git,10.0.42.0/24";
+const ENCLAVE_NO_PROXY_BASE: &str =
+    "localhost,127.0.0.1,0.0.0.0,::1,inference,proxy,git-service,tillandsias-git";
 const CA_DIR: &str = "/tmp/tillandsias-ca";
+
+fn enclave_subnet() -> String {
+    std::env::var(ENCLAVE_SUBNET_ENV)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(|| DEFAULT_ENCLAVE_SUBNET.to_string())
+}
+
+pub(crate) fn enclave_no_proxy() -> String {
+    format!("{},{}", ENCLAVE_NO_PROXY_BASE, enclave_subnet())
+}
 
 // @trace spec:init-incremental-builds
 /// Build state tracking for incremental initialization.
@@ -1474,6 +1487,7 @@ fn ensure_enclave_network(debug: bool) -> Result<(), String> {
         return Ok(());
     }
 
+    let subnet = enclave_subnet();
     let mut command = podman_command();
     command.args([
         "network",
@@ -1482,7 +1496,7 @@ fn ensure_enclave_network(debug: bool) -> Result<(), String> {
         "--driver",
         "bridge",
         "--subnet",
-        ENCLAVE_SUBNET,
+        subnet.as_str(),
         ENCLAVE_NET,
     ]);
     run_command(command, debug)
@@ -1679,6 +1693,7 @@ fn build_stack_common_args(
     project_name: &str,
     project_path: &Path,
 ) -> Vec<String> {
+    let no_proxy = enclave_no_proxy();
     let mut args = vec![
         "--name".into(),
         container_name.into(),
@@ -1700,9 +1715,9 @@ fn build_stack_common_args(
         "--env".into(),
         "HTTPS_PROXY=http://proxy:3128".into(),
         "--env".into(),
-        format!("no_proxy={ENCLAVE_NO_PROXY}"),
+        format!("no_proxy={no_proxy}"),
         "--env".into(),
-        format!("NO_PROXY={ENCLAVE_NO_PROXY}"),
+        format!("NO_PROXY={no_proxy}"),
         "--env".into(),
         "PATH=/usr/local/bin:/usr/bin".into(),
         "--env".into(),
@@ -1937,6 +1952,7 @@ fn build_inference_run_args(
     let model_cache_dir = Path::new(&home_dir).join(".cache/tillandsias/models");
     let _ = std::fs::create_dir_all(&model_cache_dir);
 
+    let no_proxy = enclave_no_proxy();
     let mut args = vec![
         "--detach".into(),
         "--rm".into(),
@@ -1966,9 +1982,9 @@ fn build_inference_run_args(
         "--env".into(),
         "https_proxy=http://proxy:3128".into(),
         "--env".into(),
-        format!("NO_PROXY={ENCLAVE_NO_PROXY}"),
+        format!("NO_PROXY={no_proxy}"),
         "--env".into(),
-        format!("no_proxy={ENCLAVE_NO_PROXY}"),
+        format!("no_proxy={no_proxy}"),
         "-v".into(),
         format!(
             "{}:/home/ollama/.ollama/models:rw",
@@ -2675,6 +2691,7 @@ fn build_opencode_forge_args(
     // (the way a tray launch or background script ends up) makes podman
     // refuse with "input device is not a TTY" before any container start
     // event fires.
+    let no_proxy = enclave_no_proxy();
     let mut args = vec![
         "--rm".into(),
         "--name".into(),
@@ -2716,9 +2733,9 @@ fn build_opencode_forge_args(
         "--env".into(),
         "HTTPS_PROXY=http://proxy:3128".into(),
         "--env".into(),
-        format!("no_proxy={ENCLAVE_NO_PROXY}"),
+        format!("no_proxy={no_proxy}"),
         "--env".into(),
-        format!("NO_PROXY={ENCLAVE_NO_PROXY}"),
+        format!("NO_PROXY={no_proxy}"),
         "--env".into(),
         "PATH=/usr/local/bin:/usr/bin".into(),
         "--env".into(),
@@ -6495,6 +6512,7 @@ pub(crate) fn build_forge_agent_run_args(
     debug: bool,
 ) -> Vec<String> {
     let image = forge_image_tag(version);
+    let no_proxy = enclave_no_proxy();
     let mut spec = ContainerSpec::new(image)
         .name(forge_container_name(project_name))
         .hostname(forge_hostname(project_name))
@@ -6514,8 +6532,8 @@ pub(crate) fn build_forge_agent_run_args(
         .env("https_proxy", "http://proxy:3128")
         .env("HTTP_PROXY", "http://proxy:3128")
         .env("HTTPS_PROXY", "http://proxy:3128")
-        .env("no_proxy", ENCLAVE_NO_PROXY)
-        .env("NO_PROXY", ENCLAVE_NO_PROXY)
+        .env("no_proxy", no_proxy.clone())
+        .env("NO_PROXY", no_proxy)
         .env("PATH", "/usr/local/bin:/usr/bin")
         .env("HOME", "/home/forge")
         .env("USER", "forge")
@@ -7838,6 +7856,31 @@ mod tests {
     fn env_lock() -> std::sync::MutexGuard<'static, ()> {
         static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
         ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap()
+    }
+
+    #[test]
+    fn enclave_subnet_defaults_to_current_cidr() {
+        let _guard = env_lock();
+        unsafe {
+            std::env::remove_var(ENCLAVE_SUBNET_ENV);
+        }
+        assert_eq!(enclave_subnet(), DEFAULT_ENCLAVE_SUBNET);
+        assert!(enclave_no_proxy().ends_with(DEFAULT_ENCLAVE_SUBNET));
+    }
+
+    #[test]
+    fn enclave_no_proxy_uses_subnet_override() {
+        let _guard = env_lock();
+        unsafe {
+            std::env::set_var(ENCLAVE_SUBNET_ENV, " 10.77.0.0/24 ");
+        }
+        assert_eq!(enclave_subnet(), "10.77.0.0/24");
+        let no_proxy = enclave_no_proxy();
+        assert!(no_proxy.contains("tillandsias-git"));
+        assert!(no_proxy.ends_with("10.77.0.0/24"));
+        unsafe {
+            std::env::remove_var(ENCLAVE_SUBNET_ENV);
+        }
     }
 
     // ─────────────────────────────────────────────────────────

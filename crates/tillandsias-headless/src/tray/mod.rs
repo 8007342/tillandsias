@@ -28,7 +28,7 @@ use zbus::object_server::SignalContext;
 use zbus::{Connection, ConnectionBuilder, fdo, interface};
 use zvariant::{OwnedObjectPath, OwnedValue, Value};
 
-use crate::ENCLAVE_NO_PROXY;
+use crate::enclave_no_proxy;
 use crate::remote_projects;
 use tillandsias_control_wire::{
     ControlEnvelope, ControlMessage, ErrorCode, MAX_MESSAGE_BYTES, WIRE_VERSION, decode, encode,
@@ -1401,6 +1401,7 @@ fn build_launch_spec(project: &ProjectEntry, kind: LaunchKind, image: &str) -> C
         .canonicalize()
         .unwrap_or_else(|_| project.path.clone());
     let ca_cert = PathBuf::from("/tmp/tillandsias-ca/intermediate.crt");
+    let no_proxy = enclave_no_proxy();
 
     let mut spec = ContainerSpec::new(image.to_string())
         .name(format!(
@@ -1423,8 +1424,8 @@ fn build_launch_spec(project: &ProjectEntry, kind: LaunchKind, image: &str) -> C
         .env("https_proxy", "http://proxy:3128")
         .env("HTTP_PROXY", "http://proxy:3128")
         .env("HTTPS_PROXY", "http://proxy:3128")
-        .env("no_proxy", ENCLAVE_NO_PROXY)
-        .env("NO_PROXY", ENCLAVE_NO_PROXY)
+        .env("no_proxy", no_proxy.clone())
+        .env("NO_PROXY", no_proxy)
         .env("PATH", "/usr/local/bin:/usr/bin");
 
     if ca_cert.exists() {
