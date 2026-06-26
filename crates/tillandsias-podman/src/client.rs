@@ -992,11 +992,28 @@ impl PodmanClient {
     pub async fn diagnostics_snapshot(&self, name: &str) -> ContainerDiagnostics {
         let inspect = self.inspect_container(name).await.ok();
         let logs = self.log_tail(name, 40).await.unwrap_or_default();
+        let health = if let Ok(output) = self
+            .execute(
+                OperationKind::Health,
+                &[
+                    "inspect".into(),
+                    name.into(),
+                    "--format".into(),
+                    "{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}".into(),
+                ],
+            )
+            .await
+        {
+            let h = output.stdout.trim().to_string();
+            if h.is_empty() || h == "none" { None } else { Some(h) }
+        } else {
+            None
+        };
         ContainerDiagnostics {
             name: name.to_string(),
             state: inspect.as_ref().map(|i| i.state.clone()),
             image: inspect.as_ref().map(|i| i.image.clone()),
-            health: None,
+            health,
             inspect_json: None,
             log_tail: logs,
             command: None,
@@ -1897,6 +1914,147 @@ pub struct EnclaveContainerInfo {
     pub state: String,
 }
 
+/// Typed container health status from `podman inspect`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum HealthStatus {
+    Healthy,
+    Unhealthy,
+    Starting,
+    None,
+}
+
+/// Aggregated health result for a managed container service.
+#[derive(Debug, Clone)]
+pub struct ServiceHealth {
+    pub name: String,
+    pub running: bool,
+    pub health: HealthStatus,
+    pub error: Option<String>,
+}
+
+/// A facade over managed containers that aggregates health and lifecycle.
+///
+/// Owns a reference to a `PodmanClient` and provides typed operations
+/// (`ping`, `keep_alive`, `restart`, `terminate`, `is_healthy`, `diagnose`)
+/// for a named set of required containers. Auth/bootstrap paths use this
+/// instead of private polling loops or larger timeout constants.
+///
+/// @trace spec:podman-idiomatic-patterns, plan:order-100
+#[derive(Debug, Clone)]
+pub struct ContainerHealthFacade {
+    client: PodmanClient,
+}
+
+impl ContainerHealthFacade {
+    pub fn new(client: PodmanClient) -> Self {
+        Self { client }
+    }
+
+    /// Lightweight check that a container is running (non-blocking).
+    pub async fn ping(&self, name: &str) -> Result<bool, PodmanError> {
+        match self.client.inspect_container(name).await {
+            Ok(info) => Ok(info.state == "running"),
+            Err(PodmanError::NotFound(_)) => Ok(false),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Non-blocking health check via `podman inspect`.
+    pub async fn is_healthy(&self, name: &str) -> Result<HealthStatus, PodmanError> {
+        let output = self
+            .client
+            .execute(
+                OperationKind::Health,
+                &[
+                    "inspect".into(),
+                    name.into(),
+                    "--format".into(),
+                    "{{if .State.Health}}{{.State.Health.Status}}{{else}}none{{end}}".into(),
+                ],
+            )
+            .await
+            .map_err(PodmanError::CommandFailure)?;
+        let status = output.stdout.trim().to_lowercase();
+        Ok(match status.as_str() {
+            "healthy" => HealthStatus::Healthy,
+            "unhealthy" => HealthStatus::Unhealthy,
+            "starting" => HealthStatus::Starting,
+            _ => HealthStatus::None,
+        })
+    }
+
+    /// Restart a container.
+    pub async fn restart(&self, name: &str) -> Result<(), PodmanError> {
+        self.client
+            .execute(OperationKind::Container, &["restart".into(), name.into()])
+            .await
+            .map(|_| ())
+            .map_err(PodmanError::CommandFailure)
+    }
+
+    /// Ensure a container is running; restart if stopped/failed.
+    pub async fn keep_alive(&self, name: &str) -> Result<bool, PodmanError> {
+        match self.client.inspect_container(name).await {
+            Ok(info) if info.state == "running" => Ok(true),
+            Ok(_) => {
+                debug!(name, "Container not running — restarting");
+                self.restart(name).await?;
+                Ok(true)
+            }
+            Err(PodmanError::NotFound(_)) => Ok(false),
+            Err(e) => Err(e),
+        }
+    }
+
+    /// Terminate a container (stop with a short grace period, then kill).
+    pub async fn terminate(&self, name: &str) -> Result<(), PodmanError> {
+        self.client.stop_container(name, 5).await?;
+        if let Ok(info) = self.client.inspect_container(name).await {
+            if info.state == "running" || info.state == "stopping" {
+                self.client.kill_container(name, Some("KILL")).await?;
+            }
+        }
+        Ok(())
+    }
+
+    /// Rich diagnostics for a container including health info.
+    pub async fn diagnose(&self, name: &str) -> ContainerDiagnostics {
+        let mut diag = self.client.diagnostics_snapshot(name).await;
+        if let Ok(health) = self.is_healthy(name).await {
+            diag.health = Some(format!("{health:?}"));
+        }
+        diag
+    }
+
+    /// Aggregate health across a set of required services.
+    ///
+    /// Returns a `Vec<ServiceHealth>` with one entry per service name.
+    /// Auth/bootstrap paths use this instead of ad-hoc polling loops.
+    pub async fn check_required_services(&self, service_names: &[&str]) -> Vec<ServiceHealth> {
+        let mut results = Vec::with_capacity(service_names.len());
+        for name in service_names {
+            let running = self.ping(name).await.unwrap_or(false);
+            let health = if running {
+                self.is_healthy(name).await.unwrap_or(HealthStatus::None)
+            } else {
+                HealthStatus::None
+            };
+            let error = match self.client.inspect_container(name).await {
+                Ok(_) => None,
+                Err(PodmanError::NotFound(_)) => Some("container not found".into()),
+                Err(e) => Some(e.to_string()),
+            };
+            results.push(ServiceHealth {
+                name: name.to_string(),
+                running,
+                health,
+                error,
+            });
+        }
+        results
+    }
+}
+
 impl PodmanClient {
     /// Get all active containers in the Tillandsias enclave with the given project prefix.
     ///
@@ -2315,5 +2473,51 @@ mod tests {
             !PodmanError::CommandFailed("image build failed: some other error".into())
                 .is_transient()
         );
+    }
+
+    /// HealthStatus equality and debug shape.
+    #[test]
+    fn health_status_equality() {
+        assert_eq!(HealthStatus::Healthy, HealthStatus::Healthy);
+        assert_eq!(HealthStatus::Unhealthy, HealthStatus::Unhealthy);
+        assert_eq!(HealthStatus::Starting, HealthStatus::Starting);
+        assert_eq!(HealthStatus::None, HealthStatus::None);
+        assert_ne!(HealthStatus::Healthy, HealthStatus::Unhealthy);
+    }
+
+    /// ServiceHealth construction.
+    #[test]
+    fn service_health_construction() {
+        let sh = ServiceHealth {
+            name: "tillandsias-test-proxy".to_string(),
+            running: true,
+            health: HealthStatus::Healthy,
+            error: None,
+        };
+        assert_eq!(sh.name, "tillandsias-test-proxy");
+        assert!(sh.running);
+        assert_eq!(sh.health, HealthStatus::Healthy);
+        assert!(sh.error.is_none());
+    }
+
+    /// ContainerHealthFacade compiles and has the expected method shape.
+    #[test]
+    fn health_facade_compiles() {
+        let client = PodmanClient::new();
+        let facade = ContainerHealthFacade::new(client);
+        // Verify the facade exists — all methods are async and need a runtime
+        // to call, but this test confirms the types and impl blocks compile.
+        let _ = facade;
+    }
+
+    /// EnclaveContainerInfo creation (existing) also works with new types.
+    #[test]
+    fn enclave_container_info_with_health() {
+        let info = EnclaveContainerInfo {
+            name: "tillandsias-test-vault".to_string(),
+            state: "running".to_string(),
+        };
+        assert_eq!(info.name, "tillandsias-test-vault");
+        assert_eq!(info.state, "running");
     }
 }

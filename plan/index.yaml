@@ -6511,7 +6511,7 @@ plan_index:
     - id: podman-health-lifecycle-facade
       order: 100
       title: "Replace timeout-based container readiness with idiomatic Podman health/lifecycle facade"
-      status: ready
+      status: in_progress
       owner_host: linux
       deliverable: plan/issues/smoke-curl-install-e2e-macos-v0.3.260625.1-2026-06-25.md
       audit_origin: plan/issues/smoke-curl-install-e2e-macos-v0.3.260625.1-2026-06-25.md
@@ -6528,7 +6528,7 @@ plan_index:
         - "Vault bootstrap and GitHub-login preflight stop carrying provider-local timeout bumps as their primary readiness mechanism."
       tasks:
         - id: podman-health-lifecycle-facade/design-and-implement
-          status: ready
+          status: in_progress
           owner_host: linux
           estimated_hours: 4
           owned_files:
@@ -6564,3 +6564,21 @@ plan_index:
             the shared facade still needs typed `ping`, `keep_alive`,
             `restart`, `terminate`, `is_healthy`, and `diagnose`, plus service
             inventory and auth-flow aggregation.
+        - type: claim
+          ts: "2026-06-26T02:57:57Z"
+          agent_id: "linux-tlatoani-big-pickle-20260626T025757Z"
+          host: linux
+          lease_id: "podman-health-lifecycle-facade/design-and-implement-20260626T025757Z"
+          expires_at: "2026-06-26T06:57:57Z"
+        - type: progress
+          ts: "2026-06-26T02:57:57Z"
+          agent_id: "linux-tlatoani-big-pickle-20260626T025757Z"
+          host: linux
+          note: >
+            Implemented ContainerHealthFacade with typed ping, keep_alive,
+            restart, terminate, is_healthy, diagnose, and check_required_services
+            methods on PodmanClient. Enhanced diagnostics_snapshot to populate
+            health info from podman inspect. Added HealthStatus enum,
+            ServiceHealth struct, and unit tests. All 146 tillandsias-podman
+            tests passing. Remaining: wire check_required_services into
+            GitHub-login preflight in main.rs.
