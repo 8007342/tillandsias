@@ -182,3 +182,20 @@ before `hardcoded-ip/remove-port-publish` can be safely completed.
 **Workaround**: Use `podman create` (succeeds) followed by the headless's internal container management. For manual testing, `podman create` + `podman start -a` doesn't work because `podman start` without `-a` doesn't exist on podman 5.8.
 
 **Status**: filed as infrastructure work packet
+
+---
+
+## Re-verification Addendum: 2026-06-26 macOS recheck
+
+The same blocker was rechecked on commit `7441cfad` with log dir
+`target/build-install-smoke-e2e/20260626T153311Z/`.
+
+- `04-github-login.log:1-4` shows the fixed ordering: VM start, control-wire
+  wait, control-wire ready, then guest auth preflight before credential
+  prompts.
+- `04-github-login.log:5-15` shows the remaining blocker: Vault bootstrap
+  succeeds, then the released headless aborts with `auth preflight failed:
+  tillandsias-git is not running (Some("container not found"))`.
+
+This is the existing order-101 packet in `plan/index.yaml`; no new issue was
+filed.

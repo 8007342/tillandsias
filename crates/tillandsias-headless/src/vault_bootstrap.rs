@@ -1258,7 +1258,8 @@ fn keychain_set_blocking(user: &str, value: &str) -> Result<(), String> {
         Ok(()) => Ok(()),
         Err(e) => {
             eprintln!(
-                "[tillandsias-vault] WARNING: failed to write {user} to OS keyring ({e}); writing to fallback file"
+                "[tillandsias-vault] note: OS keyring unavailable for {user} ({e}); \
+                 using fallback file (expected in VM guest and headless environments)"
             );
             let cache_dir =
                 crate::init_cache_dir().map_err(|err| format!("init cache dir: {err}"))?;

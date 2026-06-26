@@ -1,6 +1,6 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-26T10:55Z
+LastExecutionTime: 2026-06-26T15:35Z
 
 ## This Loop (2026-06-26T10:55Z, linux_mutable — hardcoded-ip DNS migration)
 
@@ -102,6 +102,27 @@ LastExecutionTime: 2026-06-26T10:55Z
 - **Plan update**: Orders 79 (tray icon), 81 (vault unseal) resolved by macOS work. Order 55 subtasks all done; user-attended m8 smoke remains. New orders 98-100 filed by macOS sibling.
 - **E2E**: Local-build gate passed (format/typecheck/clippy clean).
 - **Release**: v0.3.260626.1 published — PR #45 merged to main, VERSION bumped, tagged, workflow_dispatch run 28212199038 green (Linux 12m19s, macOS 2m9s, Windows 3m50s). Linux artifact: tillandsias-linux-x86_64. Orders 99/100 remain ready for follow-up.
+
+## This Loop (2026-06-26T15:35Z, macos — github-login recheck)
+
+- **Cycle type**: macOS build/install/provision smoke plus a targeted
+  `--github-login` verification.
+- **Startup**: `osx-next @ 7441cfad`, clean relative to `origin/osx-next`,
+  with the same pre-existing untracked files noted in
+  `plan/issues/ACTIVE.md`.
+- **Build/install**: `scripts/build-macos-tray.sh` PASS; freshness gate matched
+  HEAD.
+- **Destructive reset**: removed `~/Library/Application Support/tillandsias`
+  and `~/Library/Caches/tillandsias`; cold `--provision` redownloaded the
+  Fedora Cloud image and recreated `rootfs.img`.
+- **GitHub login**: control wire and guest auth preflight now run before
+  credential prompts, but the released headless still fails at
+  `auth preflight failed: tillandsias-git is not running
+  (Some("container not found"))`.
+- **Residual**: order 101 / released-headless stale auth preflight remains open
+  until Linux/shared cuts a new release. The macOS side now has the current
+  repro and evidence log at
+  `target/build-install-smoke-e2e/20260626T153311Z/`.
 
 ## This Loop (2026-06-25T23:13Z, macos — Vault health follow-up)
 
