@@ -1,6 +1,78 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-25T22:00Z
+Last updated: 2026-06-26T01:52Z
+
+## This Cycle (2026-06-26T01:52Z, linux_mutable — big-pickle meta-orch — merge + release)
+
+- **Cycle type**: meta-orchestration — merge osx-next into linux-next, release.
+- **Startup**: `linux-next @ d1140f29`, clean. Credential channel: `ok:gh-keyring`.
+- **Coordination**: Merged `origin/osx-next@a6abaf83` (4 commits: curl smoke record, exec control-wire claim, keep headless control wire alive, route vault health over enclave) into linux-next. macOS sibling completed orders 98-99 (exec-guest control-wire timeout, vault health routing); order 100 remains open (podman-health-lifecycle-facade, linux/shared runtime owner).
+- **Worker drain**: Updated plan — orders 79 (tray icon), 81 (vault unseal) resolved by macOS work. Order 55 (macos-in-vm-enclave) subtasks all done; user-attended m8 smoke remains. New orders 98-100 filed by macOS sibling.
+- **E2E**: Running local-build gate — pending verification before merge-to-main-and-release.
+- **Release**: Merging linux-next → main with osx-next code integrated.
+
+## This Cycle (2026-06-25T23:13Z, macos — Vault health follow-up)
+
+- **Live hang reproduced**: operator-attended
+  `/Applications/Tillandsias.app/Contents/MacOS/tillandsias-tray --github-login`
+  advanced past Git author name/email and then hung before the token prompt.
+- **Root cause**: inside the macOS VZ guest, `tillandsias-vault` was healthy
+  in-container and reachable on the enclave network (`https://10.0.42.2:8200`),
+  but the host-published loopback mapping
+  `127.0.0.1:8201 -> tillandsias-vault:8200` accepted TCP and then stalled
+  during TLS. The guest login process was blocked in Vault readiness before it
+  could prompt for the token.
+- **Fix in progress on osx-next**: Vault now owns a stable singleton enclave
+  API address (`10.0.42.2`) with a matching TLS SAN; macOS VZ cloud-init exports
+  `TILLANDSIAS_VAULT_API_BASE_URL=https://10.0.42.2:8200` for the headless
+  service and its spawned control-wire commands. New Vault bootstrap waits on
+  `PodmanClient::wait_healthy()` (`podman wait --condition=healthy`) before a
+  single Vault API verification, replacing the local `wait_for_vault_ready`
+  sleep loop.
+- **Verification**: `cargo test -p tillandsias-headless vault_` PASS (Vault
+  source/unit filters); `cargo test -p tillandsias-vm-layer` PASS (23/23).
+  Full `cargo test -p tillandsias-headless` still has the pre-existing macOS
+  local-Podman integration failure in `test_missing_image_error_handling`
+  (`podman.sock` absent); all unit/source tests passed before that.
+- **Interactive retest blocker**: the installed macOS VM fetches the published
+  `tillandsias-headless-aarch64-unknown-linux-musl` release asset, which
+  predates this fix. This host currently has no `nix` or `rustup` cross target
+  available to produce a patched aarch64 guest binary for manual copy-in.
+- **Residual**: the full provider-neutral auth preflight still needs order 100's
+  shared lifecycle facade (`ping`, `keep_alive`, `restart`, `terminate`,
+  `is_healthy`, `diagnose`). The macOS Vault hang no longer depends on bigger
+  timeouts, but the broader stack-health inventory remains open.
+
+## This Cycle (2026-06-25T22:07Z, macos — advance-work-from-plan follow-up)
+
+- **Claim**: order 98 `macos-exec-guest-control-wire-timeout`, lease
+  `macos-exec-guest-control-wire-timeout-20260625T213235Z`.
+- **Fix landed locally**: macOS VZ cloud-init now keeps
+  `tillandsias-headless-fetch.service` as an idempotent oneshot with no
+  `ConditionPathExists` skip; `tillandsias-headless.service` has a
+  `headless-preflight.sh` `ExecStartPre` that verifies the binary and vsock
+  device and records Podman socket state. `podman.socket` is wanted/ordered but
+  not a hard diagnostic dependency.
+- **Credential ordering progress**: macOS `--github-login` now starts the VM,
+  waits for the control wire, opens the vsock stream, and uses lazy expect
+  responses so host prompts are displayed only after guest prompts. Guest
+  `run_github_login` now prompts for git identity only after git image,
+  networks, Vault, and helper-container startup.
+- **Verification**: `cargo test -p tillandsias-vm-layer` PASS (23/23);
+  `cargo test -p tillandsias-macos-tray` PASS (51/51, 1 ignored);
+  targeted headless ordering test PASS. Full `cargo test -p tillandsias-headless`
+  had all unit tests PASS but one integration test failed on this macOS host
+  because no local Podman socket is active.
+- **Local e2e**: signed local `/Applications/Tillandsias.app` fresh provision
+  PASS; `--exec-guest` first boot printed `control-wire-ok`; second boot
+  printed `control-wire-second-boot-ok`; in-guest `systemctl is-active`
+  reported fetch/headless/podman.socket active and `/run/podman/podman.sock`
+  present; closed-stdin `--github-login` reached control-wire readiness before
+  the first prompt and did not hit the old vsock timeout.
+- **Status**: order 98 done on osx-next. Order 99 is partial: macOS/guest
+  ordering improved, but the full provider-neutral "required containers
+  UP+HEALTHY before credentials" contract remains blocked on order 100,
+  `podman-health-lifecycle-facade` (linux/shared runtime owner).
 
 ## This Cycle (2026-06-25T22:00Z, linux_mutable — big-pickle meta-orch — convergence check)
 
@@ -24,6 +96,16 @@ Last updated: 2026-06-25T22:00Z
 - **Reduction engine**: Zero residual at current bar. No new findings.
   `forge-diagnostics-prompt-cleanup` already filed 2026-06-25.
 - **Next**: Await macOS/Windows hosts to drain ready packets.
+
+## This Cycle (2026-06-25T21:19Z, macos — curl-install smoke v0.3.260625.1)
+
+- **Cycle type**: `/smoke-curl-install-and-test-e2e` on macOS published release.
+- **Startup**: `osx-next @ 5cf56716`, credential channel `ok:gh-keyring`; pre-existing untracked paths left untouched (`build-osx-tray.sh`, `research/`, `src-tauri/`).
+- **Release under test**: `v0.3.260625.1` (`main` `3ee4c2ae`, published 2026-06-25T07:53:23Z).
+- **Install/provision**: curl installer downloaded and extracted the app; known `DIAG_PIN` post-verify bug reproduced. Clean app-support/cache reset, fresh `--provision` PASS, static diagnose PASS, normal tray readiness PASS (`phase=Ready podman_ready=true` at ~38s).
+- **Failure**: `--exec-guest` and `--github-login` both fail `VzRuntime::wait_ready` stage 2: vsock listener never came up at port 42420. `--github-login` also prompts for name/email/PAT before starting the VM.
+- **Plan filed**: `plan/issues/smoke-curl-install-e2e-macos-v0.3.260625.1-2026-06-25.md`; new ready nodes orders 98-100 (`macos-exec-guest-control-wire-timeout`, `github-login-readiness-before-credentials`, `podman-health-lifecycle-facade`).
+- **Operator requirement captured**: credential flows must prove VM/control-wire and required containers UP+HEALTHY before prompting; recent timeout bumps are hacky stopgaps pending an idiomatic Podman health/lifecycle layer.
 
 ## This Cycle (2026-06-25T00:44Z, linux_mutable — big-pickle meta-orch — convergence check)
 

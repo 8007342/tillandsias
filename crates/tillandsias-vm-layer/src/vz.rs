@@ -449,14 +449,41 @@ chmod 0755 "$DEST"
 EOF
 chmod 0755 /usr/local/lib/tillandsias/fetch-headless.sh
 
+# Write headless-preflight.sh
+cat > /usr/local/lib/tillandsias/headless-preflight.sh << 'EOF'
+#!/usr/bin/env bash
+set -euo pipefail
+DEST="/usr/local/bin/tillandsias-headless"
+if [[ ! -x "$DEST" ]]; then
+  echo "[tillandsias-preflight] headless_binary=missing"
+  exit 1
+fi
+echo "[tillandsias-preflight] headless_binary=ok"
+if [[ ! -e /dev/vsock ]]; then
+  echo "[tillandsias-preflight] vsock_device=missing"
+  exit 1
+fi
+echo "[tillandsias-preflight] vsock_device=present"
+if [[ -S /run/podman/podman.sock ]]; then
+  echo "[tillandsias-preflight] podman_socket=present"
+else
+  echo "[tillandsias-preflight] podman_socket=missing"
+fi
+if systemctl is-active --quiet podman.socket; then
+  echo "[tillandsias-preflight] podman_socket_unit=active"
+else
+  echo "[tillandsias-preflight] podman_socket_unit=inactive"
+fi
+EOF
+chmod 0755 /usr/local/lib/tillandsias/headless-preflight.sh
+
 # Write tillandsias-headless-fetch.service
 cat > /etc/systemd/system/tillandsias-headless-fetch.service << 'EOF'
 [Unit]
-Description=Fetch tillandsias-headless on first boot
+Description=Ensure tillandsias-headless is present
 After=network-online.target
 Wants=network-online.target
 Before=tillandsias-headless.service
-ConditionPathExists=!/usr/local/bin/tillandsias-headless
 [Service]
 Type=oneshot
 RemainAfterExit=yes
@@ -472,10 +499,13 @@ EOF
 cat > /etc/systemd/system/tillandsias-headless.service << 'EOF'
 [Unit]
 Description=Tillandsias headless (in-VM vsock control wire)
-After=network-online.target tillandsias-headless-fetch.service
+After=network-online.target podman.socket tillandsias-headless-fetch.service
+Wants=network-online.target podman.socket
 Requires=tillandsias-headless-fetch.service
 [Service]
 Type=exec
+ExecStartPre=/usr/local/lib/tillandsias/headless-preflight.sh
+Environment=TILLANDSIAS_VAULT_API_BASE_URL=https://10.0.42.2:8200
 ExecStart=/usr/local/bin/tillandsias-headless --listen-vsock 42420
 Restart=on-failure
 RestartSec=2s
@@ -1597,6 +1627,64 @@ mod tests {
     fn vz_runtime_is_send_and_sync() {
         fn assert_send_sync<T: Send + Sync>() {}
         assert_send_sync::<VzRuntime>();
+    }
+
+    /// The fetch unit must remain an idempotent oneshot. If systemd skips it
+    /// with `ConditionPathExists=...`, the dependent headless service can be
+    /// skipped on reboot even though the binary is already installed.
+    ///
+    /// @trace spec:vm-idiomatic-layer
+    #[test]
+    fn vz_cloud_init_headless_fetch_unit_is_idempotent() {
+        let source = include_str!("vz.rs");
+        let fetch_unit = source
+            .split("# Write tillandsias-headless-fetch.service")
+            .nth(1)
+            .and_then(|tail| tail.split("# Write tillandsias-headless.service").next())
+            .expect("fetch unit window");
+
+        assert!(
+            source.contains("if [[ -x \"$DEST\" ]]; then exit 0; fi"),
+            "fetch script must be safe to run when the binary already exists"
+        );
+        assert!(fetch_unit.contains("Type=oneshot"));
+        assert!(fetch_unit.contains("RemainAfterExit=yes"));
+        assert!(
+            !fetch_unit.contains("ConditionPathExists=!/usr/local/bin/tillandsias-headless"),
+            "systemd must run the idempotent oneshot instead of skipping it"
+        );
+    }
+
+    /// The guest service should fail early for missing control-wire primitives
+    /// while only recording Podman socket state. Podman readiness is reported
+    /// over the control wire; making it a hard ExecStartPre dependency would
+    /// remove the diagnostic channel we need when the stack is degraded.
+    ///
+    /// @trace spec:vm-idiomatic-layer
+    #[test]
+    fn vz_cloud_init_headless_service_has_control_wire_preflight() {
+        let source = include_str!("vz.rs");
+        let headless_unit = source
+            .split("# Write tillandsias-headless.service")
+            .nth(1)
+            .and_then(|tail| tail.split("# Reload and enable services").next())
+            .expect("headless unit window");
+
+        assert!(source.contains("cat > /usr/local/lib/tillandsias/headless-preflight.sh"));
+        assert!(source.contains("vsock_device=missing"));
+        assert!(source.contains("podman_socket_unit=inactive"));
+        assert!(headless_unit.contains("Wants=network-online.target podman.socket"));
+        assert!(
+            headless_unit.contains("ExecStartPre=/usr/local/lib/tillandsias/headless-preflight.sh")
+        );
+        assert!(
+            headless_unit
+                .contains("Environment=TILLANDSIAS_VAULT_API_BASE_URL=https://10.0.42.2:8200")
+        );
+        assert!(
+            !headless_unit.contains("Requires=podman.socket"),
+            "podman.socket is a wanted readiness input, not a hard dependency for diagnostics"
+        );
     }
 
     /// `VzRuntime::stop` and `wait_ready` must surface a clear error when

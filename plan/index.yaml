@@ -4071,8 +4071,9 @@ plan_index:
     - id: macos-in-vm-enclave-provisioning
       order: 55
       title: macOS in-VM enclave provisioning (keystone unblocking all macOS tray interaction)
-      status: ready
+      status: done
       owner_host: macos
+      closed_at: "2026-06-26T01:52Z"
       deliverable: plan/steps/49-macos-in-vm-enclave.md
       audit_origin: plan/issues/macos-m8-interactive-smoke-failures-2026-06-16.md
       depends_on: []
@@ -5717,7 +5718,8 @@ plan_index:
     - packet_id: macos-tray-icon-missing-T-fallback
       order: 79
       title: "macOS tray status item shows fallback letter 'T' — tray-icon.png fails to load (151-byte placeholder + verify CI bundling)"
-      status: ready
+      status: done
+      closed_at: "2026-06-26T01:52Z"
       kind: bug
       deliverable: plan/issues/macos-tray-icon-missing-T-fallback-2026-06-22.md
       depends_on: []
@@ -5807,7 +5809,9 @@ plan_index:
     - packet_id: vault-unseal-fails-macos-after-db616e06
       order: 81
       title: "macOS Vault still fails init/unseal after db616e06 (unseal API HTTP 400 / never-unsealed) — order-78 necessary but not sufficient"
-      status: in_progress
+      status: done
+      closed_at: "2026-06-26T01:52Z"
+      closed_by: "linux-meta-orch-merge-20260626T0152Z"
       kind: bug
       deliverable: plan/issues/macos-github-login-vault-bootstrap-timeout-2026-06-22.md
       depends_on: []
@@ -6366,3 +6370,197 @@ plan_index:
       outcome: >
         Orders 92-97 all closed. Order 56 (nanoclawv2-orchestration) status
         updated to completed. ZeroClaw migration chain fully done.
+
+    - id: macos-exec-guest-control-wire-timeout
+      order: 98
+      title: "macOS curl smoke: --exec-guest and --github-login timeout waiting for control-wire vsock"
+      status: done
+      owner_host: macos
+      deliverable: plan/issues/smoke-curl-install-e2e-macos-v0.3.260625.1-2026-06-25.md
+      audit_origin: plan/issues/smoke-curl-install-e2e-macos-v0.3.260625.1-2026-06-25.md
+      depends_on: []
+      pickup_role: macos
+      closed_at: "2026-06-25T22:07:50Z"
+      closed_by: "macos-Tlatoanis-MacBook-Air-codex-20260625T213235Z"
+      outcome: >
+        Fixed on osx-next by making the macOS cloud-init headless fetch unit an
+        idempotent systemd oneshot rather than a condition-skipped dependency,
+        and by adding a guest preflight that verifies the headless binary and
+        vsock device while recording Podman socket state. A locally built,
+        signed, installed Tillandsias.app fresh-provisioned the VM and
+        `--exec-guest` succeeded on both first boot and second boot. A closed
+        stdin `--github-login` ordering probe reached the control wire and the
+        guest prompt path instead of timing out on vsock port 42420.
+      exit_criteria:
+        - "`--exec-guest /bin/bash -lc 'echo control-wire-ok'` prints `control-wire-ok` on a clean provisioned VM."
+        - "`--github-login` reaches the guest auth preflight rather than timing out waiting for vsock port 42420."
+      tasks:
+        - id: macos-exec-guest-control-wire-timeout/diagnose-and-fix
+          status: done
+          owner_host: macos
+          estimated_hours: 2
+          owned_files:
+            - crates/tillandsias-vm-layer/src/vz.rs
+            - crates/tillandsias-macos-tray/src/diagnose.rs
+            - images/vm/
+          checkpoint_required: true
+          handoff_note: >
+            DONE at local osx-next build 715449d2-dirty. Root cause: the
+            `tillandsias-headless.service` required
+            `tillandsias-headless-fetch.service`, but the fetch service had
+            `ConditionPathExists=!/usr/local/bin/tillandsias-headless`; after
+            first install, later boots skipped the required oneshot and could
+            skip headless startup. Fix: remove the condition, keep the fetch
+            script idempotent, add `headless-preflight.sh`, and wire
+            `podman.socket` as a wanted/ordered readiness input. Evidence:
+            `target/smoke-e2e/local-03-exec-guest.log`,
+            `target/smoke-e2e/local-04-exec-guest-second-boot.log`,
+            `target/smoke-e2e/local-05-guest-systemd-health.log`,
+            `target/smoke-e2e/local-06-github-login-empty-stdin.log`.
+      events:
+        - type: claim
+          ts: "2026-06-25T21:32:35Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260625T213235Z"
+          host: macos
+          lease_id: "macos-exec-guest-control-wire-timeout-20260625T213235Z"
+          expires_at: "2026-06-26T01:32:35Z"
+        - type: completed
+          ts: "2026-06-25T22:07:50Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260625T213235Z"
+          host: macos
+          lease_id: "macos-exec-guest-control-wire-timeout-20260625T213235Z"
+          note: >
+            Local signed app fresh-provisioned successfully. First-boot
+            `--exec-guest /bin/bash -lc 'echo control-wire-ok'` returned
+            `control-wire-ok`; second-boot exec returned
+            `control-wire-second-boot-ok`. In-guest systemd status reported
+            `tillandsias-headless-fetch.service`, `tillandsias-headless.service`,
+            and `podman.socket` active with `/run/podman/podman.sock` present.
+            Empty-stdin `--github-login` logged VM start, control-wire readiness,
+            then matched the guest author-name prompt; no vsock timeout.
+
+    - id: github-login-readiness-before-credentials
+      order: 99
+      title: "Credential flows must prove VM and required containers UP+HEALTHY before prompting"
+      status: ready
+      owner_host: any
+      deliverable: plan/issues/smoke-curl-install-e2e-macos-v0.3.260625.1-2026-06-25.md
+      audit_origin: plan/issues/smoke-curl-install-e2e-macos-v0.3.260625.1-2026-06-25.md
+      depends_on:
+        - macos-exec-guest-control-wire-timeout
+        - podman-health-lifecycle-facade
+      pickup_role: "shared auth flow; macOS/Windows host wrappers plus Linux/headless guest"
+      outcome: >
+        `--github-login` and future auth flows never prompt for git identity,
+        PATs, or provider credentials until the VM/control wire is reachable
+        and the required Podman stack reports UP and HEALTHY through the shared
+        health layer.
+      exit_criteria:
+        - "A regression test fails if macOS `github_login_main` prompts before `vz.start()`/`wait_ready()` and auth preflight success."
+        - "A regression test fails if guest `run_github_login` calls `prompt_and_store_git_identity()` before image, network, Vault, and login-helper health checks."
+        - "The shared preflight is provider-neutral so Cloudflare, AWS, GoogleDrive, and later auth flows can reuse it."
+      tasks:
+        - id: github-login-readiness-before-credentials/preflight-and-ordering
+          status: ready
+          owner_host: any
+          estimated_hours: 3
+          owned_files:
+            - crates/tillandsias-macos-tray/src/diagnose.rs
+            - crates/tillandsias-headless/src/main.rs
+            - crates/tillandsias-host-shell/src/
+            - crates/tillandsias-vm-layer/src/
+          checkpoint_required: true
+          handoff_note: >
+            Operator requirement: `--github-login` MUST ensure all required
+            containers are UP and HEALTHY before prompting for credentials.
+            The v0.3.260625.1 macOS release prompts for name/email/PAT before
+            starting the VM, then times out waiting for the control wire. The
+            guest also prompts/stores git identity before ensuring the image,
+            networks, Vault, and login helper container. Build a reusable auth
+            preflight instead of adding per-provider sleeps/timeouts.
+      events:
+        - type: progress
+          ts: "2026-06-25T22:07:50Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260625T213235Z"
+          host: macos
+          note: >
+            macOS slice implemented on osx-next: `github_login_main` now starts
+            the VM, waits for the control wire, opens the vsock stream, and
+            uses lazy expect responses so host prompts are displayed only after
+            the guest emits each prompt. Guest `run_github_login` now ensures
+            the git image, managed networks, Vault, and login helper container
+            before `prompt_and_store_git_identity()`. Regression tests added.
+            Remaining work: the provider-neutral UP+HEALTHY shared preflight
+            still depends on order 100's Podman health/lifecycle facade.
+        - type: progress
+          ts: "2026-06-25T23:13:41Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260625T231341Z"
+          host: macos
+          note: >
+            Operator-attended `--github-login` advanced past Git author
+            name/email, then hung before token prompt because Vault readiness
+            depended on the macOS VZ guest's loopback publish
+            `127.0.0.1:8201`, which accepted TCP but stalled during TLS while
+            the Vault container was healthy and reachable on the enclave
+            address `10.0.42.2:8200`. osx-next now makes the VZ headless
+            service export `TILLANDSIAS_VAULT_API_BASE_URL=https://10.0.42.2:8200`
+            and gives the Vault TLS leaf a matching IP SAN. This fixes the
+            concrete macOS Vault pre-token hang; full provider-neutral
+            UP+HEALTHY preflight still depends on order 100.
+
+    - id: podman-health-lifecycle-facade
+      order: 100
+      title: "Replace timeout-based container readiness with idiomatic Podman health/lifecycle facade"
+      status: ready
+      owner_host: linux
+      deliverable: plan/issues/smoke-curl-install-e2e-macos-v0.3.260625.1-2026-06-25.md
+      audit_origin: plan/issues/smoke-curl-install-e2e-macos-v0.3.260625.1-2026-06-25.md
+      depends_on: []
+      pickup_role: "Linux/shared runtime owner"
+      outcome: >
+        Tillandsias has a typed Podman health/lifecycle layer that exposes
+        `ping`, `keep_alive`, `restart`, `terminate`, `is_healthy`, and
+        `diagnose`, and auth/bootstrap paths use it instead of private polling
+        loops or larger timeout constants.
+      exit_criteria:
+        - "The runtime API exposes typed health and lifecycle operations for managed containers."
+        - "The implementation consumes Podman health/status/events where possible and emits actionable diagnostics on unhealthy/exited/missing containers."
+        - "Vault bootstrap and GitHub-login preflight stop carrying provider-local timeout bumps as their primary readiness mechanism."
+      tasks:
+        - id: podman-health-lifecycle-facade/design-and-implement
+          status: ready
+          owner_host: linux
+          estimated_hours: 4
+          owned_files:
+            - crates/tillandsias-podman/src/
+            - crates/tillandsias-podman-cli/src/
+            - crates/tillandsias-headless/src/
+            - scripts/
+          checkpoint_required: true
+          handoff_note: >
+            Mark recent Vault timeout bumps (60s -> 120s -> 180s) as HACKY
+            STOPGAPS. The proper design is a shared, idiomatic Podman layer for
+            managed container health: keep-alive/ping/restart/terminate/
+            is_healthy/diagnose. Polling and bigger timeouts are not the
+            desired architecture; bounded waits may remain only as fail-loud
+            guards around event/health-driven readiness. 2026-06-25 macOS
+            follow-up: Vault bootstrap now uses the existing
+            `PodmanClient::wait_healthy()` primitive for new Vault launches and
+            no longer carries the `wait_for_vault_ready` 180s sleep loop. The
+            remaining work is the generalized typed facade/inventory that all
+            auth flows can share, including diagnose/restart semantics and
+            required-service health aggregation.
+      events:
+        - type: progress
+          ts: "2026-06-25T23:13:41Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260625T231341Z"
+          host: macos
+          note: >
+            Narrow macOS/Vault slice landed on osx-next: `tillandsias-vault`
+            keeps its OCI HEALTHCHECK, and headless Vault bootstrap now waits
+            through `PodmanClient::wait_healthy()` / `podman wait
+            --condition=healthy` instead of polling the Vault HTTP endpoint
+            with larger timeout constants. This does not complete the packet:
+            the shared facade still needs typed `ping`, `keep_alive`,
+            `restart`, `terminate`, `is_healthy`, and `diagnose`, plus service
+            inventory and auth-flow aggregation.

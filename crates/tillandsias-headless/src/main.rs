@@ -3957,8 +3957,6 @@ fn run_github_login(debug: bool) -> Result<(), String> {
     let root = resolve_runtime_asset_root(version, debug)?;
     let image = versioned_image_tag("git", version);
 
-    prompt_and_store_git_identity()?;
-
     ensure_image_exists(&root, "git", &image, debug)?;
 
     // The helper dual-homes onto `tillandsias-egress` (see the run args below)
@@ -4036,6 +4034,12 @@ fn run_github_login(debug: bool) -> Result<(), String> {
         ]);
         run_command_silent(run, debug)?;
     }
+
+    // Prompt only after the non-secret infrastructure preflight has succeeded:
+    // image present, managed networks present, Vault reachable, and the login
+    // helper container running. Future auth providers should reuse this shape
+    // rather than adding their own sleeps around credential entry.
+    prompt_and_store_git_identity()?;
 
     // Token entry runs inside the container via a robust `read` + `--with-token`
     // pipe (see GH_LOGIN_TOKEN_SCRIPT) rather than gh's raw-mode masked prompt,
@@ -8060,6 +8064,46 @@ mod tests {
         assert!(
             login_window.contains("ensure_enclave_network(debug)?"),
             "run_github_login must ensure the enclave+egress networks before launching the helper: {login_window}"
+        );
+    }
+
+    #[test]
+    fn github_login_prompts_after_infrastructure_preflight() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
+        let login_window = source_window(source, "fn run_github_login(debug: bool)");
+        let image_idx = login_window
+            .find("ensure_image_exists(&root, \"git\", &image, debug)?")
+            .expect("github login must preflight the git image");
+        let network_idx = login_window
+            .find("ensure_enclave_network(debug)?")
+            .expect("github login must preflight the managed networks");
+        let vault_idx = login_window
+            .find("vault_bootstrap::ensure_vault_running(debug)?")
+            .expect("github login must preflight Vault");
+        let helper_idx = login_window
+            .find("run_command_silent(run, debug)?;")
+            .expect("github login must start the helper container before prompts");
+        let prompt_idx = login_window
+            .find("prompt_and_store_git_identity()?")
+            .expect("github login must prompt for git identity");
+        let token_idx = login_window
+            .find("GH_LOGIN_TOKEN_SCRIPT")
+            .expect("github login must prompt for token through the helper");
+
+        for (label, idx) in [
+            ("image", image_idx),
+            ("network", network_idx),
+            ("vault", vault_idx),
+            ("helper", helper_idx),
+        ] {
+            assert!(
+                idx < prompt_idx,
+                "{label} preflight must happen before credential prompts: {login_window}"
+            );
+        }
+        assert!(
+            prompt_idx < token_idx,
+            "git identity prompt should still precede token entry: {login_window}"
         );
     }
 
