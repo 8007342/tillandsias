@@ -1,6 +1,30 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-26T05:03Z
+Last updated: 2026-06-26T06:30Z
+
+## This Cycle (2026-06-26T06:30Z, linux_mutable — meta-orch — merge osx-next, drain plan, cut release)
+
+- **Cycle type**: meta-orchestration — coordination merge + worker drain.
+- **Startup**: `linux-next @ 7f4c7f7c`, clean. Credential channel: `ok:gh-keyring`.
+- **Coordination**: Merged `origin/osx-next@7441cfad` (macos: e2e findings + work packets). Resolved conflicts in plan/index.yaml (renumbered osx-next orders 101→103, 102→104 to avoid collision with existing linux orders 101-102) and ACTIVE.md. New orders 103 (released-headless-stale-auth-preflight) and 104 (hardcoded-ip-eradication) are pending for linux builder.
+- **Worker drain**: See ACTIVE.md for detailed plan. Orders 103 and 104 ready for linux builder pickup.
+- **Siblings**: osx-next@7441cfad (merged). windows-next@a3c8b23d (no change).
+- **Reduction**: New linux-ready packets captured from macOS findings.
+- **Next**: Advance work from plan — drain orders 103/104, then e2e gate and release.
+
+## This Cycle (2026-06-26T06:22Z, macos — build-install-smoke e2e + findings)
+
+- **Build**: Signed local `Tillandsias.app` matches HEAD `a6abaf83`. Fresh provision PASS.
+- **Fix confirmed — env var through vsock exec**: Added `export TILLANDSIAS_VAULT_API_BASE_URL=https://10.0.42.2:8200` to `diagnose.rs:544`. Vault bootstrap now probes the correct enclave IP.
+- **Fix confirmed — stale volume cleanup**: Added `podman volume rm -f tillandsias-vault-data` to `launch_vault_container()`. `Stdio::null()` replaced with `Stdio::piped()`.
+- **Fixed Stdio::null() pattern** in `vault_bootstrap.rs:1098-1111` — container rm and volume rm cleanup commands now use `.stdout(Stdio::piped()).stderr(Stdio::piped()).output()`.
+- **BLOCKER — released headless auth preflight**: `auth preflight failed: tillandsias-git is not running (None)` in released binary. Current source has no such check. Filed order 103.
+- **Three plan work packets filed for linux builders**:
+  - Order 103 `released-headless-stale-auth-preflight` — verify source + cut new release
+  - Order 104 `hardcoded-ip-eradication` — replace `10.0.42.x` with DNS+vsock
+  - Observability debt (Stdio::null() patterns) — scoped for separate order
+- **Detailed findings**: `plan/issues/build-install-smoke-e2e-findings-2026-06-25.md`
+- **Next**: Linux builders pick up order 103 → cut new release → macOS re-smokes `--github-login`
 
 ## This Cycle (2026-06-26T05:03Z, linux_mutable — meta-orch — smoke rerun after nested-lock guard)
 
@@ -39,45 +63,6 @@ Last updated: 2026-06-26T05:03Z
 - **Fix**: `scripts/e2e-preflight.sh eligibility` now returns `skip:smoke-lock-held` when the build-install smoke lock is already held; meta-orchestration guidance records/skips that verdict, and the e2e-eligibility litmus pins the branch.
 - **Verification**: `bash -n scripts/e2e-preflight.sh` PASS; live verdict `eligible`; simulated held-lock verdict `skip:smoke-lock-held`; `scripts/run-litmus-test.sh meta-orchestration --phase pre-build --size instant` PASS (3/3 executed).
 - **Release**: Hold until the guard is verified and the local-build smoke is rerun or explicitly accepted with only known post-build false positives remaining.
-
-## This Cycle (2026-06-26T04:14Z, linux_mutable — meta-orch — local-build smoke regression fix)
-
-- **Cycle type**: meta-orchestration — local-build smoke gate follow-up.
-- **Startup**: `linux-next @ 481f58c5`, clean. Credential channel already verified earlier this cycle as `ok:gh-keyring`.
-- **Worker drain**: Order 100 is closed. New order 101 (`vault-image-build-docker-format-healthcheck`) was discovered during local-build smoke and fixed in this cycle.
-- **Build gate evidence**:
-  - First local-build attempt failed on rustfmt; fixed and pushed `8a707b3a`.
-  - Second local-build attempt passed pre-build CI and installed the portable launcher, but exited 1 in post-build smoke before reset/init.
-  - New Vault issue: runtime image builder produced a `tillandsias-vault` image without HEALTHCHECK metadata; fixed by adding `podman build --format docker` to `build_image_with_logging`.
-  - Known recurring false positives still present: `litmus:inference-deferred-model-pulls` and `litmus:opencode-prompt-e2e-shape` before reset/init.
-- **Verification**: `cargo test -p tillandsias-headless image_build_argv_uses_docker_format_for_healthchecks` PASS.
-- **Release**: Hold until the local-build smoke gate is rerun after this fix, or explicitly accept the known post-build false positives as non-blocking.
-- **Next**: Commit/push order 101, rerun local-build smoke, then run merge-to-main-and-release if green enough for release.
-
-## This Cycle (2026-06-26T02:57Z, linux_mutable — big-pickle meta-orch — drain order 100, unblock 99)
-
-- **Cycle type**: meta-orchestration — advance work from plan.
-- **Startup**: `linux-next @ b7790f5b`, clean. Credential channel: `ok:gh-keyring`.
-- **Siblings**: `origin/osx-next@a6abaf83` (no change), `origin/windows-next@a3c8b23d` (no change). Both ancestors of HEAD.
-- **Worker drain**: Claimed and implemented order 100 (podman-health-lifecycle-facade):
-  - `ContainerHealthFacade` with typed `ping`, `keep_alive`, `restart`, `terminate`, `is_healthy`, `diagnose`, `check_required_services`
-  - `HealthStatus` enum and `ServiceHealth` struct
-  - Enhanced `diagnostics_snapshot()` to populate health from `podman inspect`
-  - Wired `check_required_services` into `run_github_login` as auth preflight before credential prompts
-  - All 146 tillandsias-podman tests passing
-  - Order 99 unblocked
-- **E2E**: Not yet run — pending build verification before gate.
-- **Release**: Previous release v0.3.260626.1 already done. New order 100 changes on linux-next warrant a follow-up build-verify before release decision.
-- **Next**: Run e2e gate, then decide merge-to-main-and-release.
-
-## This Cycle (2026-06-26T01:52Z, linux_mutable — big-pickle meta-orch — merge + release)
-
-- **Cycle type**: meta-orchestration — merge osx-next into linux-next, release.
-- **Startup**: `linux-next @ d1140f29`, clean. Credential channel: `ok:gh-keyring`.
-- **Coordination**: Merged `origin/osx-next@a6abaf83` (4 commits: curl smoke record, exec control-wire claim, keep headless control wire alive, route vault health over enclave) into linux-next. macOS sibling completed orders 98-99 (exec-guest control-wire timeout, vault health routing); order 100 remains open (podman-health-lifecycle-facade, linux/shared runtime owner).
-- **Worker drain**: Updated plan — orders 79 (tray icon), 81 (vault unseal) resolved by macOS work. Order 55 (macos-in-vm-enclave) subtasks all done; user-attended m8 smoke remains. New orders 98-100 filed by macOS sibling.
-- **E2E**: Running local-build gate — pending verification before merge-to-main-and-release.
-- **Release**: Merging linux-next → main with osx-next code integrated.
 
 ## This Cycle (2026-06-25T23:13Z, macos — Vault health follow-up)
 

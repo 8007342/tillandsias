@@ -19,18 +19,16 @@ plan:
     verification: methodology/verification.yaml
 
   current_state:
-    last_completed_step: version-conflict-release (step 37)
-    next_step: future-intentions-drain (step 58)
-    next_graph_node: future-intentions-drain/windows-macos-feature-parity
+    last_completed_step: released-headless-stale-auth-preflight (order 103)
+    next_step: released-headless-stale-auth-preflight/cut-new-release (order 103)
+    next_graph_node: released-headless-stale-auth-preflight/cut-new-release
     frontier_note: >
-      The v0.3.0 implementation plan and release-conflict recovery are complete.
-      As of 2026-06-20T05:51Z all orphaned future_intentions have been drained
-      into structured plan packets. FCE automation decision completed (option 2,
-      keep as-is). Remaining ready frontier work includes the cross-host
-      Windows/macOS parity packet; the top external blocker remains the macOS
-      aarch64 Vault published-port probe recorded in plan/issues/ACTIVE.md
-      (listener binding and CA path already confirmed correct — remaining issue
-      is aarch64 podman port-publish forwarding).
+      Merged origin/osx-next@7441cfad (macos e2e findings + work packets) into
+      linux-next. Resolved plan conflicts — macOS orders renumbered 101→103,
+      102→104 to avoid collision with existing linux orders. Verified source
+      already clean of stale auth preflight (order 103/task 1 done). Proceeding
+      to cut new release (bump VERSION, tag, release workflow) so macOS can
+      pick up the updated headless binary and re-smoke --github-login.
     plan_index: plan/index.yaml
     step_directory: plan/steps
     checkpoint_branch: linux-next
