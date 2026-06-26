@@ -7,7 +7,7 @@ Drained from `plan.yaml` `future_intentions` item (post-item-3):
 
 Trace: plan.yaml, plan/steps/58-future-intentions-drain.md
 
-Status: claimed
+Status: done
 Owner host: linux
 Capability tags: [build, telemetry, containerfiles, shell]
 Dependencies: none
@@ -32,6 +32,17 @@ events:
     evidence_refs:
       - "scripts/build-image.sh — --progress json on podman builds, _extract_build_telemetry, canonical ImageBuildEvent sink"
       - "scripts/generate-dashboard.sh — download-size Mermaid chart, latest build summary table"
+  - type: complete
+    ts: "2026-06-25T22:00:00Z"
+    agent_id: "forge-continuous-enhancement-skill-20260625"
+    host: linux
+    note: >
+      Verified all telemetry implementation: --progress json on 4 podman build paths,
+      _extract_build_telemetry for per-step timing/bytes_downloaded/cache_hits,
+      canonical ImageBuildEvent sink at $XDG_STATE_HOME/tillandsias/image-build-events.jsonl,
+      dashboard extended with download-size Mermaid chart and summary table.
+      Legacy backward-compat path preserved. All three slices (1=per-step, 2=convergence,
+      3=dashboard) confirmed present. Closing as done.
 
 ## Current State
 
