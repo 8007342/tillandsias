@@ -7,6 +7,7 @@ Last updated: 2026-06-26T10:55Z
 - **Cycle type**: advance-work implementation for `hardcoded-ip/dns-migration`.
 - **Implementation**: Vault service identity moved from the singleton enclave IP to `vault` service DNS. Vault launch no longer uses `--ip`, TLS leaf generation/refresh pins `DNS:vault`, macOS VM cloud-init and the control-wire GitHub-login path export `TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200`, and rootful VM guests route the single-label `vault` lookup to the Podman network gateway discovered by `podman network inspect`.
 - **Verification**: `cargo test -p tillandsias-headless enclave_` PASS; `cargo test -p tillandsias-headless vault_` PASS; `cargo test -p tillandsias-vm-layer vz_cloud_init_headless_service_has_control_wire_preflight` PASS; `cargo check -p tillandsias-macos-tray` PASS; stale Vault-IP Rust source scan returned no matches; `./build.sh --check` PASS.
+- **E2E gate**: local-build smoke not started because `scripts/e2e-preflight.sh eligibility` returned `skip:smoke-lock-held`.
 - **Residual blocker**: `hardcoded-ip/remove-port-publish` remains blocked because native Linux still defaults to `https://127.0.0.1:8201`. Removing the publish requires a non-published native host access path such as vsock or podman-exec.
 - **Release**: still held for the current post-build local-smoke failure class unless explicitly waived. Latest successful published release remains v0.3.260626.3 / tag `vv0.3.260626.3` on main.
 
