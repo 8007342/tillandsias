@@ -1097,9 +1097,18 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     // Tear down any previous container with the same name (idempotent).
     let _ = podman_cmd_sync()
         .args(["rm", "-f", VAULT_CONTAINER_NAME])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output();
+
+    // Remove stale vault data volume so a partially-initialized vault from a
+    // previous failed bootstrap doesn't leave us with a wrong unseal key on
+    // the next attempt (the handover key was never captured).
+    let _ = podman_cmd_sync()
+        .args(["volume", "rm", "-f", VAULT_VOLUME])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output();
 
     // Vault must join the enclave bridge network so (a) `--network-alias vault`
     // is valid — rootless podman's DEFAULT network is pasta/slirp4netns, not

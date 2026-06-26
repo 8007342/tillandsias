@@ -19,18 +19,18 @@ plan:
     verification: methodology/verification.yaml
 
   current_state:
-    last_completed_step: version-conflict-release (step 37)
-    next_step: future-intentions-drain (step 58)
-    next_graph_node: future-intentions-drain/windows-macos-feature-parity
+    last_completed_step: released-headless-stale-auth-preflight (step 101)
+    next_step: released-headless-stale-auth-preflight (step 101)
+    next_graph_node: released-headless-stale-auth-preflight/verify-current-source
     frontier_note: >
       The v0.3.0 implementation plan and release-conflict recovery are complete.
-      As of 2026-06-20T05:51Z all orphaned future_intentions have been drained
-      into structured plan packets. FCE automation decision completed (option 2,
-      keep as-is). Remaining ready frontier work includes the cross-host
-      Windows/macOS parity packet; the top external blocker remains the macOS
-      aarch64 Vault published-port probe recorded in plan/issues/ACTIVE.md
-      (listener binding and CA path already confirmed correct — remaining issue
-      is aarch64 podman port-publish forwarding).
+      As of 2026-06-26T06:22Z the macOS build-install-smoke e2e confirmed two
+      fixes (env var vsock passthrough, stale vault volume cleanup) and filed
+      three blocking findings. The top blocker is order 101: the released
+      `tillandsias-headless` binary has a stale auth preflight requiring
+      `tillandsias-git` to be running before `--github-login` proceeds. Current
+      source tree has already removed this check — linux-next needs to cut a
+      new release to produce an updated binary for the macOS VZ VM.
     plan_index: plan/index.yaml
     step_directory: plan/steps
     checkpoint_branch: linux-next

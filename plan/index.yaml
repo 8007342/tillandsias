@@ -6708,7 +6708,7 @@ plan_index:
           note: >
             The nested opencode prompt e2e started another local-build smoke
             while the parent post-build smoke still held the same lock.
-        - type: completed
+          - type: completed
           ts: "2026-06-26T04:40:00Z"
           agent_id: "linux-tlatoani-codex-20260626T0440Z"
           host: linux
@@ -6717,3 +6717,120 @@ plan_index:
             - "scripts/run-litmus-test.sh meta-orchestration --phase pre-build --size instant"
           note: >
             Added and pinned the `skip:smoke-lock-held` verdict.
+
+    - id: released-headless-stale-auth-preflight
+      order: 103
+      title: "Remove stale auth preflight requiring tillandsias-git from released headless"
+      status: pending
+      owner_host: linux
+      deliverable: plan/issues/build-install-smoke-e2e-findings-2026-06-25.md
+      audit_origin: plan/issues/build-install-smoke-e2e-findings-2026-06-25.md
+      depends_on:
+        - podman-health-lifecycle-facade
+      pickup_role: "Linux/shared runtime owner — must implement code fix + cut release"
+      outcome: >
+        The released `tillandsias-headless-aarch64-unknown-linux-musl` binary
+        includes a stale "auth preflight" check that requires the
+        `tillandsias-git` container to be running before `--github-login`
+        proceeds. This blocks macOS VZ VM `--github-login` end-to-end because
+        the git container is not started by any existing bootstrap code. The
+        current source tree on osx-next/linux-next has already removed this
+        check, but the released binary (fetched by cloud-init
+        `fetch-headless.sh` from GitHub releases) predates the fix.
+      exit_criteria:
+        - "Released headless binary no longer blocks `--github-login` on `tillandsias-git` absence."
+        - "macOS host can verify: fresh provision + `--github-login` proceeds past preflight to the token prompt."
+      tasks:
+        - id: released-headless-stale-auth-preflight/verify-current-source
+          status: pending
+          owner_host: linux
+          owned_files:
+            - crates/tillandsias-headless/src/main.rs
+            - crates/tillandsias-headless/src/vsock_server.rs
+          checkpoint_required: false
+          handoff_note: >
+            Confirm the current source tree no longer has the `tillandsias-git`
+            container-running preflight check. Check `grep -rn 'auth_preflight\|container_running.*git' crates/tillandsias-headless/src/`.
+            The macOS SESSION found the "auth preflight failed: tillandsias-git is not running (None)"
+            error in a released binary. If the source still has it, remove it.
+        - id: released-headless-stale-auth-preflight/cut-new-release
+          status: pending
+          owner_host: linux
+          depends_on:
+            - released-headless-stale-auth-preflight/verify-current-source
+          checkpoint_required: true
+          handoff_note: >
+            After confirming the source fix (or implementing it), bump VERSION,
+            tag, trigger release workflow. The macOS host will then re-provision
+            and pick up the new binary from the GitHub release.
+
+    - id: hardcoded-ip-eradication
+      order: 104
+      title: "Replace all hardcoded enclave IPs with DNS-based service discovery"
+      status: pending
+      owner_host: linux
+      deliverable: plan/issues/build-install-smoke-e2e-findings-2026-06-25.md
+      audit_origin: plan/issues/build-install-smoke-e2e-findings-2026-06-25.md
+      depends_on:
+        - podman-health-lifecycle-facade
+      pickup_role: "Linux/shared runtime owner — controls podman network + aardvark-dns"
+      outcome: >
+        All hardcoded `10.0.42.x` IP addresses across the codebase are replaced
+        with DNS names resolved by podman's built-in aardvark-dns (running on
+        the enclave bridge gateway). VM host processes use vsock or podman exec
+        instead of loopback port publishes (`-p 127.0.0.1:8201:8200`).
+      exit_criteria:
+        - "No bare `10.0.42.` IP address remains in any `.rs` source file."
+        - "All host-to-enclave communication uses vsock, podman exec, or DNS hostnames via aardvark-dns."
+        - "Port publish (`-p`) is only used for diagnostic endpoints, not for production service access."
+      tasks:
+        - id: hardcoded-ip/inventory
+          status: pending
+          owner_host: linux
+          owned_files:
+            - plan/issues/build-install-smoke-e2e-findings-2026-06-25.md
+          checkpoint_required: false
+          handoff_note: >
+            Use `grep -rn '10\.0\.42\.' crates/` to inventory every occurrence.
+            See the findings file for the already-known locations.
+        - id: hardcoded-ip/remove-port-publish
+          status: pending
+          owner_host: linux
+          depends_on:
+            - hardcoded-ip/inventory
+          owned_files:
+            - crates/tillandsias-headless/src/vault_bootstrap.rs
+            - crates/tillandsias-headless/src/main.rs
+          checkpoint_required: true
+          handoff_note: >
+            Remove `-p 127.0.0.1:8201:8200` from vault container launch in
+            vault_bootstrap.rs. Ensure VM host processes can reach vault via
+            vsock control wire or podman exec instead. The only remaining
+            published port should be for the vsock exec PTY (diagnostic).
+        - id: hardcoded-ip/dns-migration
+          status: pending
+          owner_host: linux
+          depends_on:
+            - hardcoded-ip/remove-port-publish
+          owned_files:
+            - crates/tillandsias-vm-layer/src/vz.rs
+            - crates/tillandsias-macos-tray/src/diagnose.rs
+            - crates/tillandsias-headless/src/vault_bootstrap.rs
+          checkpoint_required: true
+          handoff_note: >
+            Replace `VAULT_ENCLAVE_IP = "10.0.42.2"` with DNS name `vault`.
+            Configure systemd-resolved or resolv.conf in the VM to forward
+            `10.0.42.0/24` DNS queries to aardvark-dns. Update the macOS
+            side's `TILLANDSIAS_VAULT_API_BASE_URL` to use `https://vault:8200`.
+        - id: hardcoded-ip/subnet-constant
+          status: pending
+          owner_host: linux
+          depends_on:
+            - hardcoded-ip/inventory
+          owned_files:
+            - crates/tillandsias-headless/src/main.rs
+          checkpoint_required: true
+          handoff_note: >
+            Move the hardcoded `ENCLAVE_SUBNET = "10.0.42.0/24"` to a
+            configurable constant with a default; allow override via env var
+            or config file for multi-instance scenarios.
