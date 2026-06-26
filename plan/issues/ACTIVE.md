@@ -1,6 +1,17 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-26T04:59Z
+Last updated: 2026-06-26T05:03Z
+
+## This Cycle (2026-06-26T05:03Z, linux_mutable — meta-orch — smoke rerun after nested-lock guard)
+
+- **Cycle type**: meta-orchestration — local-build smoke rerun after order 102.
+- **Startup**: `linux-next @ 7f4c7f7c`, clean. Nested meta-orchestration advanced and pushed `e9e5a877`.
+- **Build gate evidence**:
+  - Rerun `target/build-install-smoke-e2e/20260626T043812Z` passed pre-build CI, installed the portable launcher, and completed Vault bootstrap.
+  - Vault missing-HEALTHCHECK failure did not recur.
+  - Nested `opencode-prompt-e2e-shape` no longer timed out; the nested cycle recorded `skip:smoke-lock-held` and pushed e9e5a877.
+  - Remaining failures are the already-filed post-build false-positive class: inference model-cache `models/blobs: permission denied`, and loop_status delta assertion.
+- **Release**: Proceeding to merge-to-main-and-release under the existing post-build false-positive waiver pattern; no new macOS/Linux blocker remains at the current bar.
 
 ## This Cycle (2026-06-26T04:59Z, linux_mutable — big-pickle meta-orch — no-op: lock held, no ready work)
 

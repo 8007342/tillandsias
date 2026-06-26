@@ -1,6 +1,15 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-26T04:59Z
+LastExecutionTime: 2026-06-26T05:03Z
+
+## This Loop (2026-06-26T05:03Z, linux_mutable — meta-orch — smoke rerun after nested-lock guard)
+
+- **Cycle type**: meta-orchestration — local-build smoke rerun after order 102.
+- **Startup**: `linux-next @ 7f4c7f7c`, clean. Nested cycle pushed `e9e5a877`.
+- **Build gate**: `target/build-install-smoke-e2e/20260626T043812Z` passed pre-build CI and installed the portable launcher. Vault bootstrap completed; the missing-HEALTHCHECK regression did not recur.
+- **Nested-lock verification**: `opencode-prompt-e2e-shape` no longer timed out. The nested meta-orchestration run skipped local-build e2e with `skip:smoke-lock-held` and pushed a plan-only cycle commit.
+- **Remaining post-build failures**: Only the known false-positive class remains — inference model-cache permission (`models/blobs: permission denied`) and loop_status delta assertion.
+- **Release decision**: Proceed to merge-to-main-and-release. Sibling branches are integrated and no new blocker remains beyond the already-filed post-build false positives.
 
 ## This Loop (2026-06-26T04:59Z, linux_mutable — big-pickle meta-orch — no-op: lock held, no ready work)
 

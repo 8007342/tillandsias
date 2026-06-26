@@ -155,3 +155,42 @@ Evidence:
     note: >
       Added a structured `skip:smoke-lock-held` preflight verdict and pinned it
       with the existing e2e-eligibility litmus.
+
+---
+
+## Rerun: 20260626T043812Z
+
+**Commit tested**: 7f4c7f7c plus nested plan checkpoint e9e5a877
+**Installed version**: Tillandsias v0.3.260626.3 during the smoke install
+**Log dir**: target/build-install-smoke-e2e/20260626T043812Z/
+
+| Gate | Result | Notes |
+|------|--------|-------|
+| §0 Preflight | PASS | branch=linux-next, clean at start |
+| §1 Build + install | FAIL | Pre-build CI passed; portable launcher installed; post-build smoke failed on known false-positive class |
+| §2 Podman reset | NOT REACHED | Build/install gate exited 1 before destructive reset |
+| §3 `tillandsias --init` | NOT REACHED | Build/install gate exited 1 |
+| §4 Forge meta-orch | NOT REACHED | Build/install gate exited 1 |
+
+Evidence:
+
+- `target/build-install-smoke-e2e/20260626T043812Z/01-build-install.log:2238`
+  shows `tillandsias-vault` bootstrap completed. The Vault missing-HEALTHCHECK
+  error did not recur.
+- `target/build-install-smoke-e2e/20260626T043812Z/01-build-install.log:2297`
+  shows the recurring inference model cache failure:
+  `Error: open /home/ollama/.ollama/models/blobs: permission denied`.
+- `target/build-install-smoke-e2e/20260626T043812Z/01-build-install.log:2307`
+  shows `opencode-prompt-e2e-shape` reached step 5 and failed only because
+  `plan/loop_status.md` was not modified in the new commit(s).
+- The previous `opencode-prompt-e2e-shape` timeout did not recur. A process
+  check during the nested run showed no nested `with-smoke-lock` or nested
+  `./build.sh --ci-full --install`; the nested meta-orchestration cycle pushed
+  e9e5a877 documenting `skip:smoke-lock-held`.
+
+Conclusion:
+
+The new nested-smoke-lock guard is effective. The remaining post-build failures
+match the already-filed false-positive class from 2026-06-24/2026-06-23:
+inference model-cache permissions and the loop_status delta assertion. This
+rerun is not a new release blocker beyond that known class.
