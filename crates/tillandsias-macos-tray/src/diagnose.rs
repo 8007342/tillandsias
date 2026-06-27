@@ -360,30 +360,35 @@ pub fn exec_guest_main(argv: Vec<String>) -> i32 {
                 return 1;
             }
         };
-        let result = tillandsias_vm_layer::vsock_exec::exec_over_stream_with_input(
-            stream,
-            &argv_ref,
-            &stdin_bytes,
-        )
-        .await;
+        // Stream output chunk-by-chunk so long-running commands (curl, --init,
+        // forge) show progress live instead of buffering until exit.
+        let result = {
+            use std::io::Write;
+            let stdout = std::io::stdout();
+            tillandsias_vm_layer::vsock_exec::exec_over_stream_with_input_streaming(
+                stream,
+                &argv_ref,
+                &stdin_bytes,
+                |chunk| {
+                    let mut out = stdout.lock();
+                    let _ = out.write_all(chunk);
+                    let _ = out.flush();
+                },
+            )
+            .await
+        };
         let _ = vz.stop(Duration::from_secs(10)).await;
 
         match result {
             Ok(out) => {
-                use std::io::Write;
-                let _ = std::io::stdout().write_all(&out.stdout);
-                let _ = std::io::stdout().flush();
-                println!();
                 let signal = out
                     .exit
                     .signal
                     .map(|s| s.to_string())
                     .unwrap_or_else(|| "null".to_string());
-                println!(
-                    "{{\"status\":\"ok\",\"exit_code\":{},\"signal\":{},\"stdout_bytes\":{}}}",
-                    out.exit.code,
-                    signal,
-                    out.stdout.len()
+                eprintln!(
+                    "{{\"status\":\"ok\",\"exit_code\":{},\"signal\":{}}}",
+                    out.exit.code, signal,
                 );
                 out.exit.code
             }

@@ -191,10 +191,24 @@ where
         .await?;
     }
 
-    // 4) Drain until PtyClose for our session.
+    // 4) Drain until PtyClose for our session. 5-minute idle timeout per frame.
+    const IDLE_TIMEOUT_SECS: u64 = 300;
     let mut stdout = Vec::new();
     loop {
-        let env = read_envelope(&mut stream).await?;
+        let env = match tokio::time::timeout(
+            std::time::Duration::from_secs(IDLE_TIMEOUT_SECS),
+            read_envelope(&mut stream),
+        )
+        .await
+        {
+            Ok(Ok(e)) => e,
+            Ok(Err(e)) => return Err(e),
+            Err(_) => {
+                return Err(format!(
+                    "vsock_exec: no data from guest for {IDLE_TIMEOUT_SECS}s — connection stale"
+                ));
+            }
+        };
         match env.body {
             ControlMessage::PtyData {
                 session_id: sid,
@@ -296,8 +310,27 @@ where
         .await?;
     }
 
+    // 5-minute idle timeout per frame: if the guest sends nothing for this
+    // long the vsock connection is considered stale (e.g. WiFi drop without
+    // RST, or a hung guest process). Long-running commands like `--init` or
+    // forge sessions regularly go quiet for minutes, so the window is generous.
+    const IDLE_TIMEOUT_SECS: u64 = 300;
+
     loop {
-        let env = read_envelope(&mut stream).await?;
+        let env = match tokio::time::timeout(
+            std::time::Duration::from_secs(IDLE_TIMEOUT_SECS),
+            read_envelope(&mut stream),
+        )
+        .await
+        {
+            Ok(Ok(e)) => e,
+            Ok(Err(e)) => return Err(e),
+            Err(_) => {
+                return Err(format!(
+                    "vsock_exec: no data from guest for {IDLE_TIMEOUT_SECS}s — connection stale"
+                ));
+            }
+        };
         match env.body {
             ControlMessage::PtyData {
                 session_id: sid,
@@ -455,9 +488,23 @@ where
     let mut search_start = 0usize;
     let mut pending = expects.into_iter();
     let mut current = pending.next();
+    const IDLE_TIMEOUT_SECS: u64 = 300;
 
     loop {
-        let env = read_envelope(&mut stream).await?;
+        let env = match tokio::time::timeout(
+            std::time::Duration::from_secs(IDLE_TIMEOUT_SECS),
+            read_envelope(&mut stream),
+        )
+        .await
+        {
+            Ok(Ok(e)) => e,
+            Ok(Err(e)) => return Err(e),
+            Err(_) => {
+                return Err(format!(
+                    "vsock_exec: no data from guest for {IDLE_TIMEOUT_SECS}s — connection stale"
+                ));
+            }
+        };
         match env.body {
             ControlMessage::PtyData {
                 session_id: sid,
