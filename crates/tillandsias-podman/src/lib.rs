@@ -68,9 +68,12 @@ pub use backend::{
     BackendRef, CommandFailure, CommandOutput, FakeBackend, OperationKind, PodmanBackend,
     RealBackend, ReplayBackend, RetryClass,
 };
+pub use client::ContainerHealthFacade;
 pub use client::EnclaveContainerInfo;
+pub use client::HealthStatus;
 pub use client::PodmanClient;
 pub use client::RunOutput;
+pub use client::ServiceHealth;
 pub use client::container_exists_sync;
 pub use client::image_exists_sync;
 pub use client::network_exists_sync;

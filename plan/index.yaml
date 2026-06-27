@@ -3031,7 +3031,7 @@ plan_index:
               known_repo_wide_failures:
                 - "./build.sh --ci --spec tillandsias-vault still fails pre-existing gates: VERSION behind v0.3.260608.2+, repo-wide fmt drift, unrelated clippy::type_complexity in main.rs:1043, and pre-existing signal_handling timeout."
         - id: vault-flow/xplat-gating-parity
-          status: ready
+          status: completed
           owner_host: macos+windows
           depends_on: [vault-flow/tray-gate-on-vault]
           unblocked_note: "Original blockers cleared: step 32 (vault-hardening-true-rekey) DONE, step 36 (xplat-vault/windows + /macos) DONE, and 42a (vault-flow/tray-gate-on-vault) completed and merged to windows-next. Windows slice is now in progress."
@@ -3101,6 +3101,16 @@ plan_index:
                 by the in-VM headless control wire dispatcher.
               evidence_refs:
                 - "cargo test -p tillandsias-macos-tray: 20/20 PASS"
+            - type: completed
+              ts: "2026-06-24T07:00:00Z"
+              agent_id: "linux-big-pickle-meta-orch-20260624T0700Z"
+              host: "linux"
+              note: >
+                Ledger hygiene: xplat-gating-parity was already completed by all
+                three platform slices (Windows 2026-06-14, Linux 2af7c7eb,
+                macOS 2026-06-14T22:18Z) but the parent task status remained
+                stale at 'ready' after the orchestrator's lease reclaim re-set
+                it. Status corrected to 'completed'.
         - id: vault-flow/tray-popup-terminal
           status: done
           depends_on: [vault-flow/login-in-container]
@@ -4061,8 +4071,9 @@ plan_index:
     - id: macos-in-vm-enclave-provisioning
       order: 55
       title: macOS in-VM enclave provisioning (keystone unblocking all macOS tray interaction)
-      status: ready
+      status: done
       owner_host: macos
+      closed_at: "2026-06-26T01:52Z"
       deliverable: plan/steps/49-macos-in-vm-enclave.md
       audit_origin: plan/issues/macos-m8-interactive-smoke-failures-2026-06-16.md
       depends_on: []
@@ -5707,7 +5718,8 @@ plan_index:
     - packet_id: macos-tray-icon-missing-T-fallback
       order: 79
       title: "macOS tray status item shows fallback letter 'T' — tray-icon.png fails to load (151-byte placeholder + verify CI bundling)"
-      status: ready
+      status: done
+      closed_at: "2026-06-26T01:52Z"
       kind: bug
       deliverable: plan/issues/macos-tray-icon-missing-T-fallback-2026-06-22.md
       depends_on: []
@@ -5718,7 +5730,7 @@ plan_index:
         AX/screencapture smoke asserting a non-text status item.
       tasks:
         - id: macos-tray-icon-missing-T-fallback/fix-icon
-          status: ready
+          status: completed
           depends_on: []
           owned_files:
             - crates/tillandsias-macos-tray/assets/tray-icon.png
@@ -5740,6 +5752,17 @@ plan_index:
           note: >
             Operator saw a bare "T" in the menu bar on the curl-installed
             v0.3.260622.4 tray; menu items otherwise correct.
+        - type: completed
+          ts: "2026-06-26T11:00:03Z"
+          agent_id: "linux-macuahuitl-codex-20260626T110003Z"
+          host: linux
+          lease_id: "macos-tray-icon-missing-T-fallback/fix-icon-ledger-hygiene-20260626T110003Z"
+          evidence:
+            - "parent packet macos-tray-icon-missing-T-fallback status done closed_at 2026-06-26T01:52Z"
+          note: >
+            Ledger hygiene: parent packet is already closed as done, but the
+            only child task still read `ready`. Marked the child completed so
+            macOS workers do not reclaim a closed packet.
 
     - packet_id: github-login-menu-readiness-gate
       order: 80
@@ -5797,7 +5820,9 @@ plan_index:
     - packet_id: vault-unseal-fails-macos-after-db616e06
       order: 81
       title: "macOS Vault still fails init/unseal after db616e06 (unseal API HTTP 400 / never-unsealed) — order-78 necessary but not sufficient"
-      status: in_progress
+      status: done
+      closed_at: "2026-06-26T01:52Z"
+      closed_by: "linux-meta-orch-merge-20260626T0152Z"
       kind: bug
       deliverable: plan/issues/macos-github-login-vault-bootstrap-timeout-2026-06-22.md
       depends_on: []
@@ -5807,7 +5832,7 @@ plan_index:
         wait_for_vault_ready succeeds and --github-login completes the Vault write.
       tasks:
         - id: vault-unseal-fails-macos-after-db616e06/fix-unseal
-          status: in_progress
+          status: completed
           depends_on: []
           owned_files:
             - crates/tillandsias-headless/src/vault_bootstrap.rs
@@ -5858,6 +5883,19 @@ plan_index:
             --github-login. If subsequent boot still fails after this fix, investigate
             the FRESH volume timeout — may need even longer timeout or VM resource
             investigation.
+        - type: completed
+          ts: "2026-06-26T11:00:03Z"
+          agent_id: "linux-macuahuitl-codex-20260626T110003Z"
+          host: linux
+          lease_id: "vault-unseal-fails-macos-after-db616e06/fix-unseal-ledger-hygiene-20260626T110003Z"
+          evidence:
+            - "parent packet vault-unseal-fails-macos-after-db616e06 status done closed_at 2026-06-26T01:52Z"
+            - "linux-next work queue release v0.3.260626.1 entry records orders 79/81 marked done"
+          note: >
+            Ledger hygiene: parent packet is already closed as done after the
+            osx-next integration/release cycle, but the child task still read
+            `in_progress`. Marked the child completed so workers do not treat
+            the stale task status as active macOS work.
 
     - packet_id: bar-raise-clippy-strict
       order: 82
@@ -6357,28 +6395,665 @@ plan_index:
         Orders 92-97 all closed. Order 56 (nanoclawv2-orchestration) status
         updated to completed. ZeroClaw migration chain fully done.
 
-    - packet_id: enclave-proxy-patterns-cheatsheet
+    - id: macos-exec-guest-control-wire-timeout
       order: 98
+      title: "macOS curl smoke: --exec-guest and --github-login timeout waiting for control-wire vsock"
+      status: done
+      owner_host: macos
+      deliverable: plan/issues/smoke-curl-install-e2e-macos-v0.3.260625.1-2026-06-25.md
+      audit_origin: plan/issues/smoke-curl-install-e2e-macos-v0.3.260625.1-2026-06-25.md
+      depends_on: []
+      pickup_role: macos
+      closed_at: "2026-06-25T22:07:50Z"
+      closed_by: "macos-Tlatoanis-MacBook-Air-codex-20260625T213235Z"
+      outcome: >
+        Fixed on osx-next by making the macOS cloud-init headless fetch unit an
+        idempotent systemd oneshot rather than a condition-skipped dependency,
+        and by adding a guest preflight that verifies the headless binary and
+        vsock device while recording Podman socket state. A locally built,
+        signed, installed Tillandsias.app fresh-provisioned the VM and
+        `--exec-guest` succeeded on both first boot and second boot. A closed
+        stdin `--github-login` ordering probe reached the control wire and the
+        guest prompt path instead of timing out on vsock port 42420.
+      exit_criteria:
+        - "`--exec-guest /bin/bash -lc 'echo control-wire-ok'` prints `control-wire-ok` on a clean provisioned VM."
+        - "`--github-login` reaches the guest auth preflight rather than timing out waiting for vsock port 42420."
+      tasks:
+        - id: macos-exec-guest-control-wire-timeout/diagnose-and-fix
+          status: done
+          owner_host: macos
+          estimated_hours: 2
+          owned_files:
+            - crates/tillandsias-vm-layer/src/vz.rs
+            - crates/tillandsias-macos-tray/src/diagnose.rs
+            - images/vm/
+          checkpoint_required: true
+          handoff_note: >
+            DONE at local osx-next build 715449d2-dirty. Root cause: the
+            `tillandsias-headless.service` required
+            `tillandsias-headless-fetch.service`, but the fetch service had
+            `ConditionPathExists=!/usr/local/bin/tillandsias-headless`; after
+            first install, later boots skipped the required oneshot and could
+            skip headless startup. Fix: remove the condition, keep the fetch
+            script idempotent, add `headless-preflight.sh`, and wire
+            `podman.socket` as a wanted/ordered readiness input. Evidence:
+            `target/smoke-e2e/local-03-exec-guest.log`,
+            `target/smoke-e2e/local-04-exec-guest-second-boot.log`,
+            `target/smoke-e2e/local-05-guest-systemd-health.log`,
+            `target/smoke-e2e/local-06-github-login-empty-stdin.log`.
+      events:
+        - type: claim
+          ts: "2026-06-25T21:32:35Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260625T213235Z"
+          host: macos
+          lease_id: "macos-exec-guest-control-wire-timeout-20260625T213235Z"
+          expires_at: "2026-06-26T01:32:35Z"
+        - type: completed
+          ts: "2026-06-25T22:07:50Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260625T213235Z"
+          host: macos
+          lease_id: "macos-exec-guest-control-wire-timeout-20260625T213235Z"
+          note: >
+            Local signed app fresh-provisioned successfully. First-boot
+            `--exec-guest /bin/bash -lc 'echo control-wire-ok'` returned
+            `control-wire-ok`; second-boot exec returned
+            `control-wire-second-boot-ok`. In-guest systemd status reported
+            `tillandsias-headless-fetch.service`, `tillandsias-headless.service`,
+            and `podman.socket` active with `/run/podman/podman.sock` present.
+            Empty-stdin `--github-login` logged VM start, control-wire readiness,
+            then matched the guest author-name prompt; no vsock timeout.
+
+    - id: github-login-readiness-before-credentials
+      order: 99
+      title: "Credential flows must prove VM and required containers UP+HEALTHY before prompting"
+      status: completed
+      closed_at: "2026-06-26T11:03:25Z"
+      closed_by: "linux-macuahuitl-codex-20260626T110325Z"
+      owner_host: any
+      deliverable: plan/issues/smoke-curl-install-e2e-macos-v0.3.260625.1-2026-06-25.md
+      audit_origin: plan/issues/smoke-curl-install-e2e-macos-v0.3.260625.1-2026-06-25.md
+      depends_on:
+        - macos-exec-guest-control-wire-timeout
+        - podman-health-lifecycle-facade
+      pickup_role: "shared auth flow; macOS/Windows host wrappers plus Linux/headless guest"
+      outcome: >
+        `--github-login` and future auth flows never prompt for git identity,
+        PATs, or provider credentials until the VM/control wire is reachable
+        and the required Podman stack reports UP and HEALTHY through the shared
+        health layer.
+      exit_criteria:
+        - "A regression test fails if macOS `github_login_main` prompts before `vz.start()`/`wait_ready()` and auth preflight success."
+        - "A regression test fails if guest `run_github_login` calls `prompt_and_store_git_identity()` before image, network, Vault, and login-helper health checks."
+        - "The shared preflight is provider-neutral so Cloudflare, AWS, GoogleDrive, and later auth flows can reuse it."
+      tasks:
+        - id: github-login-readiness-before-credentials/preflight-and-ordering
+          status: completed
+          owner_host: any
+          estimated_hours: 1
+          handoff_note: >
+            ContainerHealthFacade now provides provider-neutral
+            check_required_services. On linux, run_github_login uses it as
+            auth preflight before prompting. macOS VZ side may need additional
+            wiring to use the same facade before VZ start / control-wire wait.
+          owned_files:
+            - crates/tillandsias-macos-tray/src/diagnose.rs
+            - crates/tillandsias-headless/src/main.rs
+            - crates/tillandsias-host-shell/src/
+            - crates/tillandsias-vm-layer/src/
+          checkpoint_required: true
+          handoff_note: >
+            Operator requirement: `--github-login` MUST ensure all required
+            containers are UP and HEALTHY before prompting for credentials.
+            The v0.3.260625.1 macOS release prompts for name/email/PAT before
+            starting the VM, then times out waiting for the control wire. The
+            guest also prompts/stores git identity before ensuring the image,
+            networks, Vault, and login helper container. Build a reusable auth
+            preflight instead of adding per-provider sleeps/timeouts.
+      events:
+        - type: progress
+          ts: "2026-06-25T22:07:50Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260625T213235Z"
+          host: macos
+          note: >
+            macOS slice implemented on osx-next: `github_login_main` now starts
+            the VM, waits for the control wire, opens the vsock stream, and
+            uses lazy expect responses so host prompts are displayed only after
+            the guest emits each prompt. Guest `run_github_login` now ensures
+            the git image, managed networks, Vault, and login helper container
+            before `prompt_and_store_git_identity()`. Regression tests added.
+            Remaining work: the provider-neutral UP+HEALTHY shared preflight
+            still depends on order 100's Podman health/lifecycle facade.
+        - type: progress
+          ts: "2026-06-25T23:13:41Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260625T231341Z"
+          host: macos
+          note: >
+            Operator-attended `--github-login` advanced past Git author
+            name/email, then hung before token prompt because Vault readiness
+            depended on the macOS VZ guest's loopback publish
+            `127.0.0.1:8201`, which accepted TCP but stalled during TLS while
+            the Vault container was healthy and reachable on the enclave
+            address `10.0.42.2:8200`. osx-next now makes the VZ headless
+            service export `TILLANDSIAS_VAULT_API_BASE_URL=https://10.0.42.2:8200`
+            and gives the Vault TLS leaf a matching IP SAN. This fixes the
+            concrete macOS Vault pre-token hang; full provider-neutral
+            UP+HEALTHY preflight still depends on order 100.
+        - type: claim
+          ts: "2026-06-26T11:00:03Z"
+          agent_id: "linux-macuahuitl-codex-20260626T110003Z"
+          host: linux
+          lease_id: "github-login-readiness-before-credentials/preflight-and-ordering-20260626T110003Z"
+          expires_at: "2026-06-26T15:00:03Z"
+          note: >
+            Claimed after stale-ready audit found the order 99 code path still
+            checked for a pre-existing `tillandsias-git` project mirror
+            container before prompting. Next action: make the provider-neutral
+            health preflight target Vault plus the ephemeral login helper
+            container that this flow actually starts.
+        - type: completed
+          ts: "2026-06-26T11:03:25Z"
+          agent_id: "linux-macuahuitl-codex-20260626T110003Z"
+          host: linux
+          lease_id: "github-login-readiness-before-credentials/preflight-and-ordering-20260626T110003Z"
+          evidence:
+            - "cargo test -p tillandsias-headless github_login"
+            - "./build.sh --check"
+          note: >
+            Completed the remaining shared preflight closure. The macOS host
+            wrapper already starts the VM, waits for control-wire readiness, and
+            lazily prompts only after guest output. The guest path now uses a
+            shared `check_auth_required_services` helper: it checks Vault after
+            startup, starts the ephemeral `tillandsias-gh-login-*` helper, then
+            verifies Vault plus that helper container before prompting for git
+            identity or the token. Added a regression test that rejects the
+            stale `tillandsias-git` prerequisite.
+
+    - id: podman-health-lifecycle-facade
+      order: 100
+      title: "Replace timeout-based container readiness with idiomatic Podman health/lifecycle facade"
+      status: completed
+      closed_at: "2026-06-26T04:07Z"
+      closed_by: "linux-meta-orch-20260626T0407Z"
+      owner_host: linux
+      deliverable: plan/issues/smoke-curl-install-e2e-macos-v0.3.260625.1-2026-06-25.md
+      audit_origin: plan/issues/smoke-curl-install-e2e-macos-v0.3.260625.1-2026-06-25.md
+      depends_on: []
+      pickup_role: "Linux/shared runtime owner"
+      outcome: >
+        Tillandsias has a typed Podman health/lifecycle layer that exposes
+        `ping`, `keep_alive`, `restart`, `terminate`, `is_healthy`, and
+        `diagnose`, and auth/bootstrap paths use it instead of private polling
+        loops or larger timeout constants.
+      exit_criteria:
+        - "The runtime API exposes typed health and lifecycle operations for managed containers."
+        - "The implementation consumes Podman health/status/events where possible and emits actionable diagnostics on unhealthy/exited/missing containers."
+        - "Vault bootstrap and GitHub-login preflight stop carrying provider-local timeout bumps as their primary readiness mechanism."
+      tasks:
+        - id: podman-health-lifecycle-facade/design-and-implement
+          status: completed
+          owner_host: linux
+          estimated_hours: 4
+          owned_files:
+            - crates/tillandsias-podman/src/
+            - crates/tillandsias-podman-cli/src/
+            - crates/tillandsias-headless/src/
+            - scripts/
+          checkpoint_required: true
+          handoff_note: >
+            Implementation complete. ContainerHealthFacade with typed ping,
+            keep_alive, restart, terminate, is_healthy, diagnose, and
+            check_required_services. Wired into run_github_login as auth
+            preflight. 146/146 podman tests passing.
+      events:
+        - type: progress
+          ts: "2026-06-25T23:13:41Z"
+          agent_id: "macos-Tlatoanis-MacBook-Air-codex-20260625T231341Z"
+          host: macos
+          note: >
+            Narrow macOS/Vault slice landed on osx-next: `tillandsias-vault`
+            keeps its OCI HEALTHCHECK, and headless Vault bootstrap now waits
+            through `PodmanClient::wait_healthy()` / `podman wait
+            --condition=healthy` instead of polling the Vault HTTP endpoint
+            with larger timeout constants. This does not complete the packet:
+            the shared facade still needs typed `ping`, `keep_alive`,
+            `restart`, `terminate`, `is_healthy`, and `diagnose`, plus service
+            inventory and auth-flow aggregation.
+        - type: claim
+          ts: "2026-06-26T02:57:57Z"
+          agent_id: "linux-tlatoani-big-pickle-20260626T025757Z"
+          host: linux
+          lease_id: "podman-health-lifecycle-facade/design-and-implement-20260626T025757Z"
+          expires_at: "2026-06-26T06:57:57Z"
+        - type: progress
+          ts: "2026-06-26T02:57:57Z"
+          agent_id: "linux-tlatoani-big-pickle-20260626T025757Z"
+          host: linux
+          note: >
+            Slice 1: Implemented ContainerHealthFacade with typed ping,
+            keep_alive, restart, terminate, is_healthy, diagnose, and
+            check_required_services methods on PodmanClient. Enhanced
+            diagnostics_snapshot to populate health info. Added HealthStatus
+            enum, ServiceHealth struct, and unit tests. 146/146 podman tests.
+        - type: progress
+          ts: "2026-06-26T03:05Z"
+          agent_id: "linux-tlatoani-big-pickle-20260626T0305Z"
+          host: linux
+          commits: ["e0bdfc94"]
+          note: >
+            Slice 2: Wired ContainerHealthFacade::check_required_services into
+            run_github_login as auth preflight before credential prompts.
+            Re-exported new types from tillandsias_podman crate. All tests
+            passing. Order 99 is now unblocked — remaining work: macOS VZ
+            side wiring if needed.
+        - type: completed
+          ts: "2026-06-26T04:07Z"
+          agent_id: "linux-tlatoani-big-pickle-20260626T0407Z"
+          host: linux
+          commits:
+            - "e0bdfc94"
+            - "e6c2a14b"
+            - "65783c4c"
+            - "d48f7d70"
+            - "8a707b3a"
+          evidence:
+            - "ContainerHealthFacade implemented with typed ping/keep_alive/restart/terminate/is_healthy/diagnose/check_required_services"
+            - "Wired into run_github_login as auth preflight"
+            - "146/146 podman tests passing"
+            - "HealthStatus enum, ServiceHealth struct added"
+            - "diagnostics_snapshot enhanced with health info"
+
+    - id: vault-image-build-docker-format-healthcheck
+      order: 101
+      title: "Rust image builder must preserve Dockerfile HEALTHCHECK metadata"
+      status: done
+      owner_host: linux
+      deliverable: plan/issues/build-install-smoke-e2e-findings-2026-06-26.md
+      audit_origin: plan/issues/build-install-smoke-e2e-findings-2026-06-26.md
+      depends_on:
+        - podman-health-lifecycle-facade
+      pickup_role: "Linux/shared runtime owner"
+      closed_at: "2026-06-26T04:14Z"
+      closed_by: "linux-tlatoani-codex-20260626T0414Z"
+      outcome: >
+        The Rust `build_image_with_logging` path now passes `podman build
+        --format docker`, matching the shell/shared builder path and preserving
+        Dockerfile HEALTHCHECK metadata required by
+        `PodmanClient::wait_healthy()`.
+      exit_criteria:
+        - "Vault image builds preserve the Containerfile HEALTHCHECK metadata."
+        - "A unit test fails if the runtime image build argv omits `--format docker`."
+      tasks:
+        - id: vault-image-build-docker-format-healthcheck/fix-runtime-builder
+          status: completed
+          owner_host: linux
+          estimated_hours: 0.5
+          owned_files:
+            - crates/tillandsias-headless/src/main.rs
+            - plan/issues/build-install-smoke-e2e-findings-2026-06-26.md
+          checkpoint_required: true
+          handoff_note: >
+            Fixed in the runtime builder path; rerun the local-build smoke gate
+            to verify the Vault healthcheck error no longer appears.
+      events:
+        - type: discovered
+          ts: "2026-06-26T04:10:39Z"
+          agent_id: "linux-tlatoani-codex-20260626T035811Z"
+          host: linux
+          evidence:
+            - "target/build-install-smoke-e2e/20260626T035811Z/01-build-install.log:2243"
+            - "target/build-install-smoke-e2e/20260626T035811Z/01-build-install.log:2244"
+          note: >
+            Local-build smoke hit `podman wait --condition=healthy
+            tillandsias-vault`, but Podman reported the launched
+            `tillandsias-vault` container had no healthcheck despite
+            `images/vault/Containerfile` declaring one.
+        - type: completed
+          ts: "2026-06-26T04:14:00Z"
+          agent_id: "linux-tlatoani-codex-20260626T0414Z"
+          host: linux
+          evidence:
+            - "cargo test -p tillandsias-headless image_build_argv_uses_docker_format_for_healthchecks"
+          note: >
+            `build_image_with_logging` now uses a testable argv helper that
+            includes `--format docker`.
+
+    - id: local-build-smoke-lock-preflight-skip
+      order: 102
+      title: "Nested meta-orchestration must skip local-build e2e when smoke lock is held"
+      status: done
+      owner_host: linux
+      deliverable: plan/issues/build-install-smoke-e2e-findings-2026-06-26.md
+      audit_origin: plan/issues/build-install-smoke-e2e-findings-2026-06-26.md
+      depends_on:
+        - vault-image-build-docker-format-healthcheck
+      pickup_role: "Linux/shared runtime owner"
+      closed_at: "2026-06-26T04:40Z"
+      closed_by: "linux-tlatoani-codex-20260626T0440Z"
+      outcome: >
+        The structured e2e preflight now returns `skip:smoke-lock-held` when a
+        parent or sibling local-build smoke already owns the
+        `build-install-smoke-e2e` lock, so nested meta-orchestration cycles do
+        not wait behind their own parent smoke.
+      exit_criteria:
+        - "The eligibility probe detects an already-held build-install smoke lock without blocking."
+        - "The meta-orchestration E2E gate records and skips the lock-held verdict."
+        - "The e2e-eligibility litmus pins the smoke-lock-held branch."
+      tasks:
+        - id: local-build-smoke-lock-preflight-skip/implement
+          status: completed
+          owner_host: linux
+          estimated_hours: 0.5
+          owned_files:
+            - scripts/e2e-preflight.sh
+            - skills/meta-orchestration/SKILL.md
+            - openspec/litmus-tests/litmus-e2e-eligibility-probe-shape.yaml
+            - plan/issues/build-install-smoke-e2e-findings-2026-06-26.md
+          checkpoint_required: true
+          handoff_note: >
+            Rerun local-build smoke; the nested forge prompt should skip its
+            own local-build gate with `skip:smoke-lock-held`.
+      events:
+        - type: discovered
+          ts: "2026-06-26T04:32:58Z"
+          agent_id: "linux-tlatoani-codex-20260626T041632Z"
+          host: linux
+          evidence:
+            - "target/build-install-smoke-e2e/20260626T041632Z/01-build-install.log:2313"
+            - "target/build-install-smoke-e2e/20260626T042455Z/00-smoke-lock.log:1"
+          note: >
+            The nested opencode prompt e2e started another local-build smoke
+            while the parent post-build smoke still held the same lock.
+        - type: completed
+          ts: "2026-06-26T04:40:00Z"
+          agent_id: "linux-tlatoani-codex-20260626T0440Z"
+          host: linux
+          evidence:
+            - "bash -n scripts/e2e-preflight.sh"
+            - "scripts/run-litmus-test.sh meta-orchestration --phase pre-build --size instant"
+          note: >
+            Added and pinned the `skip:smoke-lock-held` verdict.
+
+    - id: released-headless-stale-auth-preflight
+      order: 103
+      title: "Remove stale auth preflight requiring tillandsias-git from released headless"
+      status: done
+      owner_host: linux
+      deliverable: plan/issues/build-install-smoke-e2e-findings-2026-06-25.md
+      audit_origin: plan/issues/build-install-smoke-e2e-findings-2026-06-25.md
+      depends_on:
+        - podman-health-lifecycle-facade
+      pickup_role: "Linux/shared runtime owner — must implement code fix + cut release"
+      outcome: >
+        The released `tillandsias-headless-aarch64-unknown-linux-musl` binary
+        includes a stale "auth preflight" check that requires the
+        `tillandsias-git` container to be running before `--github-login`
+        proceeds. This blocks macOS VZ VM `--github-login` end-to-end because
+        the git container is not started by any existing bootstrap code. The
+        current source tree on osx-next/linux-next has already removed this
+        check, but the released binary (fetched by cloud-init
+        `fetch-headless.sh` from GitHub releases) predates the fix.
+      exit_criteria:
+        - "Released headless binary no longer blocks `--github-login` on `tillandsias-git` absence."
+        - "macOS host can verify: fresh provision + `--github-login` proceeds past preflight to the token prompt."
+      tasks:
+        - id: released-headless-stale-auth-preflight/verify-current-source
+          status: completed
+          owner_host: linux
+          owned_files:
+            - crates/tillandsias-headless/src/main.rs
+            - crates/tillandsias-headless/src/vsock_server.rs
+          checkpoint_required: false
+          handoff_note: >
+            Confirmed: grep -rn 'auth_preflight\|container_running.*git' crates/tillandsias-headless/src/
+            returned zero results. Source tree is already clean. The stale preflight
+            only exists in the published release binary predating the fix.
+        - id: released-headless-stale-auth-preflight/cut-new-release
+          status: completed
+          owner_host: linux
+          depends_on:
+            - released-headless-stale-auth-preflight/verify-current-source
+          checkpoint_required: true
+          handoff_note: >
+            Completed: merged PR #47 linux-next→main, bumped VERSION to
+            0.3.260626.3, tagged v0.3.260626.3, triggered release workflow
+            which successfully published the Linux musl release. macOS host
+            can now re-provision and fetch the updated headless binary.
+      events:
+        - type: claim
+          ts: "2026-06-26T06:30:30Z"
+          agent_id: "linux-tlatoani-meta-orch-20260626T063030Z"
+          host: linux
+          lease_id: "released-headless-stale-auth-preflight/claim-20260626T063030Z"
+          expires_at: "2026-06-26T10:30:30Z"
+        - type: progress
+          ts: "2026-06-26T06:30:30Z"
+          agent_id: "linux-tlatoani-meta-orch-20260626T063030Z"
+          host: linux
+          note: >
+            verify-current-source confirmed clean. Moving to cut-new-release:
+            bump VERSION, tag, trigger release workflow.
+        - type: completed
+          ts: "2026-06-26T06:46:55Z"
+          agent_id: "linux-tlatoani-meta-orch-20260626T064655Z"
+          host: linux
+          commits:
+            - "c0cde245"
+            - "2f87f389"
+            - "877e6558"
+          evidence:
+            - "PR #47 linux-next→main merged"
+            - "VERSION bumped to 0.3.260626.3"
+            - "Tagged v0.3.260626.3"
+            - "Release workflow completed: Linux musl release published (12m29s)"
+          note: >
+            Order 103 complete. The released headless binary now incorporates
+            the stale-auth-preflight fix (already in source) plus the macOS
+            vault fixes merged from osx-next@7441cfad. macOS sibling can
+            re-provision and re-smoke --github-login with v0.3.260626.3.
+
+    - id: hardcoded-ip-eradication
+      order: 104
+      title: "Replace all hardcoded enclave IPs with DNS-based service discovery"
+      status: in_progress
+      owner_host: linux
+      deliverable: plan/issues/build-install-smoke-e2e-findings-2026-06-25.md
+      audit_origin: plan/issues/build-install-smoke-e2e-findings-2026-06-25.md
+      depends_on:
+        - podman-health-lifecycle-facade
+      pickup_role: "Linux/shared runtime owner — controls podman network + aardvark-dns"
+      outcome: >
+        All hardcoded `10.0.42.x` IP addresses across the codebase are replaced
+        with DNS names resolved by podman's built-in aardvark-dns (running on
+        the enclave bridge gateway). VM host processes use vsock or podman exec
+        instead of loopback port publishes (`-p 127.0.0.1:8201:8200`).
+      exit_criteria:
+        - "No bare `10.0.42.` IP address remains in any `.rs` source file."
+        - "All host-to-enclave communication uses vsock, podman exec, or DNS hostnames via aardvark-dns."
+        - "Port publish (`-p`) is only used for diagnostic endpoints, not for production service access."
+      tasks:
+        - id: hardcoded-ip/inventory
+          status: completed
+          owner_host: linux
+          owned_files:
+            - plan/issues/build-install-smoke-e2e-findings-2026-06-25.md
+          checkpoint_required: false
+          handoff_note: >
+            Use `grep -rn '10\.0\.42\.' crates/` to inventory every occurrence.
+            See the findings file for the already-known locations.
+        - id: hardcoded-ip/remove-port-publish
+          status: blocked
+          owner_host: linux
+          depends_on:
+            - hardcoded-ip/dns-migration
+          owned_files:
+            - crates/tillandsias-headless/src/vault_bootstrap.rs
+            - crates/tillandsias-headless/src/main.rs
+          checkpoint_required: true
+          handoff_note: >
+            Remove `-p 127.0.0.1:8201:8200` from vault container launch in
+            vault_bootstrap.rs. Ensure VM host processes can reach vault via
+            vsock control wire or podman exec instead. The only remaining
+            published port should be for the vsock exec PTY (diagnostic).
+            Live Linux probe on 2026-06-26 confirmed this cannot be a standalone
+            deletion: with proxy bypassed, `https://10.0.42.2:8200` timed out
+            from the host and `https://vault:8200` did not resolve. Complete
+            the remaining native-Linux vsock/podman-exec transport migration
+            first, then remove the publish flag and the loopback default together.
+        - id: hardcoded-ip/dns-migration
+          status: completed
+          owner_host: linux
+          depends_on:
+            - hardcoded-ip/inventory
+          owned_files:
+            - crates/tillandsias-vm-layer/src/vz.rs
+            - crates/tillandsias-macos-tray/src/diagnose.rs
+            - crates/tillandsias-headless/src/main.rs
+            - crates/tillandsias-headless/src/vault_bootstrap.rs
+          checkpoint_required: true
+          handoff_note: >
+            Completed 2026-06-26T10:55Z: Vault launch no longer pins a
+            singleton enclave IP, the TLS leaf covers `DNS:vault`, the macOS
+            cloud-init unit and control-wire GitHub-login driver export
+            `TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200`, and rootful VM
+            guests install a systemd-resolved route for the single-label
+            `vault` name by reading the Podman network gateway dynamically.
+            Native Linux still defaults to the loopback publish, so
+            `hardcoded-ip/remove-port-publish` remains blocked on replacing
+            that host access path with vsock or podman-exec.
+        - id: hardcoded-ip/subnet-constant
+          status: completed
+          owner_host: linux
+          depends_on:
+            - hardcoded-ip/inventory
+          owned_files:
+            - crates/tillandsias-headless/src/main.rs
+          checkpoint_required: true
+          handoff_note: >
+            Move the hardcoded `ENCLAVE_SUBNET = "10.0.42.0/24"` to a
+            configurable constant with a default; allow override via env var
+            or config file for multi-instance scenarios.
+      events:
+        - type: claim
+          ts: "2026-06-26T09:25:21Z"
+          agent_id: "linux-macuahuitl-codex-20260626T092521Z"
+          host: linux
+          lease_id: "hardcoded-ip/inventory-20260626T092521Z"
+          expires_at: "2026-06-26T13:25:21Z"
+          note: >
+            Claimed the inventory slice for order 104. Next action: inventory
+            all bare `10.0.42.` source occurrences under crates/ and append the
+            result to the build-install smoke findings deliverable before
+            promoting dependent code-removal slices.
+        - type: completed
+          ts: "2026-06-26T09:27:00Z"
+          agent_id: "linux-macuahuitl-codex-20260626T092521Z"
+          host: linux
+          lease_id: "hardcoded-ip/inventory-20260626T092521Z"
+          evidence:
+            - "rg -n \"10\\.0\\.42\\.\" crates"
+            - "plan/issues/build-install-smoke-e2e-findings-2026-06-25.md Finding 4 inventory"
+          note: >
+            Inventory found nine source occurrences: three production Vault
+            API URL/IP sites, two network/proxy constants, two tests, and two
+            comments. Promoted the subnet-constant and port-publish follow-on
+            slices; noted that port-publish removal is coupled to a Linux-safe
+            Vault base URL or DNS migration.
+        - type: claim
+          ts: "2026-06-26T09:28:33Z"
+          agent_id: "linux-macuahuitl-codex-20260626T092833Z"
+          host: linux
+          lease_id: "hardcoded-ip/subnet-constant-20260626T092833Z"
+          expires_at: "2026-06-26T13:28:33Z"
+          note: >
+            Claimed the independent subnet configurability slice. Next action:
+            replace the hardcoded enclave subnet/no_proxy CIDR with a defaulted
+            env override while keeping the current `10.0.42.0/24` default.
+        - type: completed
+          ts: "2026-06-26T09:33:04Z"
+          agent_id: "linux-macuahuitl-codex-20260626T092833Z"
+          host: linux
+          lease_id: "hardcoded-ip/subnet-constant-20260626T092833Z"
+          evidence:
+            - "cargo test -p tillandsias-headless enclave_"
+            - "scripts/run-litmus-test.sh inference-container --phase pre-build --size instant --compact"
+            - "./build.sh --check"
+          note: >
+            Added `TILLANDSIAS_ENCLAVE_SUBNET` with default
+            `10.0.42.0/24`; `ensure_enclave_network` now uses the configured
+            subnet, and container launch paths derive NO_PROXY/no_proxy from
+            the same helper. Updated inference spec/litmus wording from the
+            removed static ENCLAVE_NO_PROXY constant to `enclave_no_proxy()`.
+        - type: blocked
+          ts: "2026-06-26T10:00:21Z"
+          agent_id: "linux-macuahuitl-codex-20260626T100021Z"
+          host: linux
+          lease_id: "hardcoded-ip/remove-port-publish-20260626T100021Z"
+          evidence:
+            - "NO_PROXY='*' no_proxy='*' timeout 8 curl --noproxy '*' -kS https://10.0.42.2:8200/v1/sys/health"
+            - "NO_PROXY='*' no_proxy='*' timeout 8 curl --noproxy '*' -kS https://vault:8200/v1/sys/health"
+          note: >
+            Removing the Vault loopback publish is blocked until a non-published
+            host-to-enclave access path exists. On the mutable Linux host,
+            proxy-bypassed direct access to `10.0.42.2:8200` timed out and the
+            `vault` DNS name did not resolve from the host. Reordered order 104
+            so `hardcoded-ip/dns-migration` is ready first and this publish
+            removal depends on that transport migration.
+        - type: claim
+          ts: "2026-06-26T10:48:48Z"
+          agent_id: "linux-macuahuitl-codex-20260626T104848Z"
+          host: linux
+          lease_id: "hardcoded-ip/dns-migration-20260626T104848Z"
+          expires_at: "2026-06-26T14:48:48Z"
+          note: >
+            Claimed the DNS migration slice after the publish-removal probe
+            showed that `vault` was not host-resolvable. Next action: move the
+            VM/macOS Vault base URL and TLS/container identity to the `vault`
+            service name and add a VM resolver route without removing the Linux
+            loopback publish yet.
+        - type: completed
+          ts: "2026-06-26T10:55:28Z"
+          agent_id: "linux-macuahuitl-codex-20260626T104848Z"
+          host: linux
+          lease_id: "hardcoded-ip/dns-migration-20260626T104848Z"
+          evidence:
+            - "rg -n \"10\\.0\\.42\\.2|VAULT_ENCLAVE_IP|https://10\\.0\\.42\\.2|IP:\\{VAULT\" crates/**/*.rs (no matches)"
+            - "cargo test -p tillandsias-headless enclave_"
+            - "cargo test -p tillandsias-headless vault_"
+            - "cargo test -p tillandsias-vm-layer vz_cloud_init_headless_service_has_control_wire_preflight"
+            - "cargo check -p tillandsias-macos-tray"
+            - "./build.sh --check"
+          note: >
+            Replaced the Vault singleton IP contract with `vault` service DNS:
+            Vault launches with the `vault` network alias and no `--ip`, cert
+            SAN generation/refresh pins `DNS:vault`, VM cloud-init and macOS
+            control-wire login export `https://vault:8200`, and rootful VM
+            guests dynamically route the single-label `vault` query to the
+            Podman network gateway via systemd-resolved. The Linux loopback
+            publish is intentionally retained for the still-blocked native
+            host transport slice.
+
+    - packet_id: enclave-proxy-patterns-cheatsheet
+      order: 105
       title: "Enclave proxy patterns cheatsheet — Unix justification for proxy env var usage"
       status: done
       kind: cheatsheet
       deliverable: cheatsheets/runtime/enclave-proxy-patterns.md
       depends_on: []
       pickup_role: linux
-      outcome: >
-        Cheatsheet written at cheatsheets/runtime/enclave-proxy-patterns.md
-        covering: explicit forward proxy vs containers.conf injection vs iptables
-        TPROXY; when HTTP_PROXY env vars are the correct Unix approach and when
-        they are a maintenance anti-pattern; the build_stack_common_args
-        single-injection-point rule; Squid intercept-mode config; iptables
-        PREROUTING rules and rootless-Podman feasibility notes; common pitfalls
-        including NO_PROXY drift. Closes the "justify every env var or fix the
-        service" requirement from operator feedback.
       closed_at: "2026-06-26T00:00Z"
       closed_by: "linux-sonnet46-20260626"
+      outcome: >
+        Cheatsheet at cheatsheets/runtime/enclave-proxy-patterns.md covers:
+        explicit forward proxy vs containers.conf injection vs iptables TPROXY;
+        when HTTP_PROXY env vars are the correct Unix approach vs when they are
+        an O(N) maintenance anti-pattern; the build_stack_common_args
+        single-injection-point rule; Squid intercept-mode config; iptables
+        PREROUTING rules and rootless-Podman feasibility notes; NO_PROXY drift
+        pitfall. Closes the "justify every env var or fix the service"
+        requirement from operator feedback on commit c8f59e24.
 
     - packet_id: enclave-transparent-proxy-feasibility
-      order: 99
+      order: 106
       title: "Research: iptables TPROXY feasibility in rootless Podman enclave"
       status: ready
       kind: research
@@ -6389,14 +7064,14 @@ plan_index:
       outcome: >
         Verdict on whether iptables TPROXY intercept mode is achievable in our
         rootless Podman / netavark / Fedora Silverblue setup, or whether
-        containers.conf injection is the correct next step. Unlocks order 100.
+        containers.conf injection is the correct next step. Unlocks order 107.
       exit_criteria:
         - "Written verdict in plan/issues/enclave-transparent-proxy-feasibility-2026-06-26.md under ## Verdict"
         - "If feasible: minimal proof-of-concept iptables rule set + Squid config change demonstrated"
         - "If not feasible: clear recommendation for containers.conf injection with rationale"
 
     - packet_id: enclave-proxy-centralize-injection
-      order: 100
+      order: 107
       title: "Enhancement: centralize proxy injection — eliminate per-container env var pollution"
       status: pending
       kind: enhancement
@@ -6413,11 +7088,11 @@ plan_index:
       exit_criteria:
         - "cargo test git_run_args passes"
         - "litmus:git-mirror-safe-refspec-push passes"
-        - "grep -c 'HTTP_PROXY' main.rs reduced to 1 injection site"
-        - "NO_PROXY lists across all containers are identical"
+        - "grep for HTTP_PROXY in main.rs shows only build_stack_common_args"
+        - "NO_PROXY lists across all containers are identical (ENCLAVE_NO_PROXY everywhere)"
 
     - packet_id: vault-credential-persistence
-      order: 101
+      order: 108
       title: "Research + fix: Vault credential persistence across container rebuilds"
       status: ready
       kind: research+enhancement
@@ -6428,8 +7103,8 @@ plan_index:
       outcome: >
         Vault unseal key persists in host keyring; encrypted secret store
         survives full container rebuilds; on next launch Vault unseals
-        automatically without re-authentication; GitHub login state is not
-        re-requested when credentials are already present in Vault.
+        automatically without re-authentication; GitHub login is not
+        re-prompted when credentials are already present in Vault.
       exit_criteria:
         - "Vault data volume is named and mounted correctly so it survives container recreation"
         - "Unseal key round-trips: stored in host keyring at init, read at next launch"

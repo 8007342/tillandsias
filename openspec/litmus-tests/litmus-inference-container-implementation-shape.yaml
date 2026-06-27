@@ -19,7 +19,7 @@
 # 7th SPEC/IMPL DIVERGENCE was resolved 2026-05-31: build_
 # inference_run_args now sets HTTP_PROXY/HTTPS_PROXY/http_proxy/
 # https_proxy pointing at the Squid proxy + NO_PROXY/no_proxy
-# using the same ENCLAVE_NO_PROXY constant forge containers use.
+# using the same enclave_no_proxy() helper forge containers use.
 # The inference_profile() env_vars in container_profile.rs remain
 # declared but unconsumed (the args path is canonical).
 name: litmus:inference-container-implementation-shape
@@ -133,8 +133,8 @@ rollback:
     4-tier ladder (T2/T3/T4/T5 branches with the spec § Req 5
     RAM/VRAM thresholds); >=2 pull-FAILED non-fatal sites (T0 +
     T1); HTTP_PROXY/http_proxy/HTTPS_PROXY/https_proxy env vars
-    pointing at proxy:3128 + NO_PROXY/no_proxy using ENCLAVE_NO_PROXY
-    constant. NEVER drop the proxy env vars without also keeping
+    pointing at proxy:3128 + NO_PROXY/no_proxy using the derived
+    enclave_no_proxy() helper. NEVER drop the proxy env vars without also keeping
     NO_PROXY (ollama loopback probes would otherwise hairpin
     through Squid and stall model loads).
   command: "grep -nE 'fn build_inference_run_args|tier=|TIER=|inference_profile|HTTP_PROXY|NO_PROXY' crates/tillandsias-headless/src/main.rs crates/tillandsias-core/src/container_profile.rs images/inference/entrypoint.sh 2>/dev/null | head -20"

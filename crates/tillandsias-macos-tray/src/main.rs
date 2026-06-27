@@ -72,6 +72,9 @@ fn main() {
              the control wire, print its output + exit, then stop\n    \
              --github-login  Boot the VM and log in to GitHub in the guest;\n                  \
              prompts for your git name, email, and PAT (token hidden)\n    \
+             --opencode <path> [--prompt <text>]  Boot the VM and launch the\n                  \
+             OpenCode forge on <path> inside the guest; streams forge output\n                  \
+             to this terminal. With --prompt runs non-interactively (one shot).\n    \
              --diagnose    Print a static health report, then exit\n    \
              --json        With --diagnose, emit JSON instead of human text\n    \
              -V, --version Print version and exit\n    \
@@ -101,6 +104,19 @@ fn main() {
     //   tillandsias-tray --github-login
     if args.iter().any(|a| a == "--github-login") {
         std::process::exit(diagnose::github_login_main());
+    }
+    // `--opencode <path> [--prompt <text>]`: boot VM and launch forge in guest.
+    if let Some(oc_idx) = args.iter().position(|a| a == "--opencode") {
+        let path = args
+            .get(oc_idx + 1)
+            .cloned()
+            .unwrap_or_else(|| ".".to_string());
+        let prompt = args
+            .iter()
+            .position(|a| a == "--prompt")
+            .and_then(|i| args.get(i + 1))
+            .cloned();
+        std::process::exit(diagnose::opencode_main(path, prompt));
     }
     if args.iter().any(|a| a == "--diagnose") {
         let format = if args.iter().any(|a| a == "--json") {

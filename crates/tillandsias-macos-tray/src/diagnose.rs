@@ -431,27 +431,6 @@ fn prompt_line(label: &str, hidden: bool) -> String {
 pub fn github_login_main() -> i32 {
     use tillandsias_vm_layer::VmRuntime;
 
-    eprintln!(
-        "[github-login] Enter the GitHub identity + token for THIS account \
-         (each user supplies their own):"
-    );
-    let name = prompt_line("Git author name", false);
-    let email = prompt_line("Git author email", false);
-    let pat = prompt_line("GitHub Personal Access Token (hidden)", true);
-
-    if name.is_empty() || email.is_empty() {
-        eprintln!("--github-login: git author name and email are both required");
-        return 2;
-    }
-    if pat.is_empty() {
-        eprintln!("--github-login: a GitHub token is required");
-        return 2;
-    }
-    eprintln!(
-        "[github-login] identity: {name} <{email}>; token: {} chars",
-        pat.len()
-    );
-
     let vz = tillandsias_vm_layer::vz::VzRuntime::new(3, image_root());
     vz.set_serial_to_log(true); // keep guest serial getty noise off the user terminal
     if !vz.is_provisioned() {
@@ -474,7 +453,7 @@ pub fn github_login_main() -> i32 {
     rt.block_on(async move {
         use std::time::Duration;
         use tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
-        use tillandsias_vm_layer::vsock_exec::{Expect, exec_over_stream_expect};
+        use tillandsias_vm_layer::vsock_exec::{DynamicExpect, exec_over_stream_expect_dynamic};
 
         eprintln!("[github-login] starting VM…");
         if let Err(e) = vz.start().await {
@@ -498,25 +477,52 @@ pub fn github_login_main() -> i32 {
                 return 1;
             }
         };
+        eprintln!(
+            "[github-login] control wire ready; guest auth preflight runs before credential prompts"
+        );
         let expects = vec![
-            Expect {
+            DynamicExpect {
                 needle: b"author name".to_vec(),
-                response: format!("{name}\n").into_bytes(),
                 label: "git author name".to_string(),
+                response: Box::new(|| {
+                    let name = prompt_line("Git author name", false);
+                    if name.is_empty() {
+                        return Err(
+                            "--github-login: git author name and email are both required"
+                                .to_string(),
+                        );
+                    }
+                    Ok(format!("{name}\n").into_bytes())
+                }),
             },
-            Expect {
+            DynamicExpect {
                 needle: b"author email".to_vec(),
-                response: format!("{email}\n").into_bytes(),
                 label: "git author email".to_string(),
+                response: Box::new(|| {
+                    let email = prompt_line("Git author email", false);
+                    if email.is_empty() {
+                        return Err(
+                            "--github-login: git author name and email are both required"
+                                .to_string(),
+                        );
+                    }
+                    Ok(format!("{email}\n").into_bytes())
+                }),
             },
-            Expect {
+            DynamicExpect {
                 needle: b"authentication token".to_vec(),
-                response: format!("{pat}\n").into_bytes(),
                 label: "github token".to_string(),
+                response: Box::new(|| {
+                    let pat = prompt_line("GitHub Personal Access Token (hidden)", true);
+                    if pat.is_empty() {
+                        return Err("--github-login: a GitHub token is required".to_string());
+                    }
+                    Ok(format!("{pat}\n").into_bytes())
+                }),
             },
         ];
         eprintln!("[github-login] driving guest login (git name -> email -> token)…");
-        let result = exec_over_stream_expect(
+        let result = exec_over_stream_expect_dynamic(
             stream,
             &[
                 "/bin/bash",
@@ -527,11 +533,15 @@ pub fn github_login_main() -> i32 {
                 //     git identity (name/email — not the token) under $HOME.
                 //   - XDG_RUNTIME_DIR (+writable): require_desktop_user_session
                 //     gate on the DesktopUserSession lane.
+                //   - TILLANDSIAS_VAULT_API_BASE_URL: the guest vault bootstrap
+                //     probes the enclave service DNS name, not the default
+                //     loopback publish which is Linux-only.
                 // The GitHub token itself is handled by the released flow inside
                 // an ephemeral `--rm` git container (piped to `gh auth login
                 // --with-token`, written to Vault, container destroyed on exit),
                 // so nothing unencrypted is left at rest here.
                 "export HOME=/root; export XDG_RUNTIME_DIR=/run/user/0; \
+                 export TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200; \
                  mkdir -p \"$XDG_RUNTIME_DIR\" 2>/dev/null; \
                  exec /usr/local/bin/tillandsias-headless --github-login",
             ],
@@ -563,6 +573,114 @@ pub fn github_login_main() -> i32 {
             }
             Err(e) => {
                 eprintln!("{{\"error\":\"login: {e}\"}}");
+                1
+            }
+        }
+    })
+}
+
+/// `--opencode <path> [--prompt <text>]`: boot the VM and run the in-guest
+/// `tillandsias-headless --opencode <path>` over the control wire, streaming
+/// PTY output to the host terminal in real-time. When `--prompt` is given the
+/// forge runs non-interactively (one shot + exit); without it the session is
+/// open-ended until the user exits.
+///
+/// @trace plan/issues/smoke-curl-install-e2e-macos-v0.3.260626.4-2026-06-26.md
+pub fn opencode_main(path: String, prompt: Option<String>) -> i32 {
+    use tillandsias_vm_layer::VmRuntime;
+
+    let vz = tillandsias_vm_layer::vz::VzRuntime::new(3, image_root());
+    vz.set_serial_to_log(true);
+    if !vz.is_provisioned() {
+        eprintln!(
+            "{{\"error\":\"not provisioned; run --provision or launch the tray once first\"}}"
+        );
+        return 1;
+    }
+
+    let rt = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("{{\"error\":\"tokio runtime: {e}\"}}");
+            return 1;
+        }
+    };
+
+    rt.block_on(async move {
+        use std::time::Duration;
+        use tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
+        use tillandsias_vm_layer::vsock_exec::exec_over_stream_with_input_streaming;
+
+        eprintln!("[opencode] starting VM…");
+        if let Err(e) = vz.start().await {
+            eprintln!("{{\"error\":\"start: {e}\"}}");
+            return 1;
+        }
+        eprintln!("[opencode] waiting for control wire…");
+        if let Err(e) = vz.wait_ready(Duration::from_secs(90)).await {
+            eprintln!("{{\"error\":\"wait_ready: {e}\"}}");
+            let _ = vz.stop(Duration::from_secs(10)).await;
+            return 1;
+        }
+        let stream = match vz
+            .open_vsock_stream_current_thread(CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(30))
+            .await
+        {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("{{\"error\":\"vsock connect: {e}\"}}");
+                let _ = vz.stop(Duration::from_secs(10)).await;
+                return 1;
+            }
+        };
+        eprintln!("[opencode] control wire ready; launching forge in guest…");
+
+        // Build the shell command for the guest: set required env vars and
+        // exec the headless binary with --opencode and optional --prompt.
+        let mut headless_cmd = format!(
+            "export HOME=/root; \
+             export XDG_RUNTIME_DIR=/run/user/0; \
+             export TILLANDSIAS_VAULT_API_BASE_URL=https://10.0.42.2:8200; \
+             mkdir -p \"$XDG_RUNTIME_DIR\" 2>/dev/null; \
+             exec /usr/local/bin/tillandsias-headless --opencode {path}"
+        );
+        if let Some(ref p) = prompt {
+            // Shell-quote the prompt so spaces/special chars are safe.
+            let escaped: String = p
+                .chars()
+                .flat_map(|c| {
+                    if c == '\'' {
+                        vec!['\'', '\\', '\'', '\'']
+                    } else {
+                        vec![c]
+                    }
+                })
+                .collect();
+            headless_cmd.push_str(&format!(" --prompt '{escaped}'"));
+        }
+
+        let argv: &[&str] = &["/bin/bash", "-lc", &headless_cmd];
+        let result = exec_over_stream_with_input_streaming(stream, argv, &[], |chunk| {
+            use std::io::Write;
+            let _ = std::io::stdout().write_all(chunk);
+            let _ = std::io::stdout().flush();
+        })
+        .await;
+        let _ = vz.stop(Duration::from_secs(10)).await;
+
+        match result {
+            Ok(out) => {
+                eprintln!(
+                    "{{\"status\":\"opencode-finished\",\"exit_code\":{}}}",
+                    out.exit.code
+                );
+                out.exit.code
+            }
+            Err(e) => {
+                eprintln!("{{\"error\":\"opencode: {e}\"}}");
                 1
             }
         }
@@ -631,6 +749,47 @@ mod tests {
     fn refuses_placeholder_pending_ci() {
         let manifest = r#""aarch64.qcow2" = "pending-ci""#;
         assert_eq!(parse_aarch64_qcow2_sha(manifest), None);
+    }
+
+    fn source_window<'a>(source: &'a str, signature: &str) -> &'a str {
+        let start = source
+            .find(signature)
+            .unwrap_or_else(|| panic!("missing signature: {signature}"));
+        let tail = &source[start..];
+        let end = tail.find("\n/// Extract").unwrap_or(tail.len());
+        &tail[..end]
+    }
+
+    #[test]
+    fn github_login_host_prompts_after_control_wire_ready() {
+        let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/diagnose.rs"));
+        let window = source_window(source, "pub fn github_login_main() -> i32");
+        let start_idx = window
+            .find("vz.start().await")
+            .expect("github login must start the VM");
+        let wait_idx = window
+            .find("vz.wait_ready(Duration::from_secs(90)).await")
+            .expect("github login must wait for the control wire");
+        let stream_idx = window
+            .find("open_vsock_stream_current_thread")
+            .expect("github login must open the control-wire stream");
+        let prompt_idx = window
+            .find("prompt_line(\"Git author name\"")
+            .expect("github login must prompt for git identity");
+        let dynamic_idx = window
+            .find("let result = exec_over_stream_expect_dynamic")
+            .expect("github login must use lazy prompt responses");
+
+        assert!(start_idx < wait_idx);
+        assert!(wait_idx < stream_idx);
+        assert!(
+            stream_idx < prompt_idx,
+            "host prompts must not be reachable before VM/control-wire readiness: {window}"
+        );
+        assert!(
+            prompt_idx < dynamic_idx,
+            "prompts should be supplied lazily through the dynamic expect path"
+        );
     }
 
     // ────────────────────────────────────────────────────────────────

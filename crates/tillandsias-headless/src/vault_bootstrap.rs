@@ -18,12 +18,12 @@ use std::io::{Read, Write};
 use std::path::PathBuf;
 use std::process::{Command, Stdio};
 use std::sync::{Mutex, OnceLock};
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 #[cfg(feature = "vault")]
 use keyring::Entry;
 
-use tillandsias_podman::podman_cmd_sync;
+use tillandsias_podman::{PodmanClient, podman_cmd_sync};
 use tillandsias_vault_client::{Policy, VaultClient, auto_unseal};
 use zeroize::Zeroize;
 
@@ -34,6 +34,7 @@ const VAULT_TLS_CERT_SECRET: &str = "tillandsias-vault-tls-cert";
 const VAULT_TLS_KEY_SECRET: &str = "tillandsias-vault-tls-key";
 const VAULT_TLS_CA_SECRET: &str = "tillandsias-vault-tls-ca";
 const VAULT_NETWORK_ALIAS: &str = "vault";
+const VAULT_API_BASE_URL_ENV: &str = "TILLANDSIAS_VAULT_API_BASE_URL";
 // Loopback port we publish for the host-process to reach vault during the
 // POC (Linux host == VM). In Phase 4/5 the host shell will use vsock
 // instead of publishing a port.
@@ -160,6 +161,19 @@ pub fn host_base_url() -> String {
     format!("https://127.0.0.1:{VAULT_HOST_PORT}")
 }
 
+#[cfg(test)]
+fn vault_service_base_url() -> String {
+    format!("https://{VAULT_NETWORK_ALIAS}:8200")
+}
+
+fn vault_api_base_url() -> String {
+    std::env::var(VAULT_API_BASE_URL_ENV)
+        .ok()
+        .map(|value| value.trim().to_string())
+        .filter(|value| !value.is_empty())
+        .unwrap_or_else(host_base_url)
+}
+
 fn tls_material_dir(debug: bool) -> Result<PathBuf, String> {
     crate::ensure_ca_bundle(debug)
 }
@@ -170,6 +184,20 @@ fn vault_tls_cert(certs_dir: &std::path::Path) -> PathBuf {
 
 fn vault_tls_key(certs_dir: &std::path::Path) -> PathBuf {
     certs_dir.join("vault.key")
+}
+
+fn vault_tls_leaf_has_service_identity(cert: &std::path::Path) -> bool {
+    match Command::new("openssl")
+        .args(["x509", "-noout", "-ext", "subjectAltName", "-in"])
+        .arg(cert)
+        .output()
+    {
+        Ok(output) if output.status.success() => {
+            let stdout = String::from_utf8_lossy(&output.stdout);
+            stdout.contains("DNS:vault") && stdout.contains("IP Address:127.0.0.1")
+        }
+        _ => false,
+    }
 }
 
 fn vault_tls_leaf_needs_refresh(
@@ -184,6 +212,9 @@ fn vault_tls_leaf_needs_refresh(
         && let (Ok(ca_modified), Ok(cert_modified)) = (ca_meta.modified(), cert_meta.modified())
         && ca_modified > cert_modified
     {
+        return true;
+    }
+    if !vault_tls_leaf_has_service_identity(cert) {
         return true;
     }
     match Command::new("openssl")
@@ -243,6 +274,7 @@ fn ensure_vault_tls_leaf(certs_dir: &std::path::Path, debug: bool) -> Result<(),
     let csr = certs_dir.join(format!("vault.csr.{unique}.tmp"));
     let tmp_cert = certs_dir.join(format!("vault.crt.{unique}.tmp"));
     let tmp_key = certs_dir.join(format!("vault.key.{unique}.tmp"));
+    let vault_san = "subjectAltName=DNS:vault,DNS:localhost,IP:127.0.0.1";
     if debug {
         eprintln!(
             "[tillandsias-vault] refreshing Vault TLS leaf certificate at {}",
@@ -255,12 +287,9 @@ fn ensure_vault_tls_leaf(certs_dir: &std::path::Path, debug: bool) -> Result<(),
         .arg(&tmp_key)
         .arg("-out")
         .arg(&csr)
-        .args([
-            "-subj",
-            "/C=US/ST=Privacy/L=Local/O=Tillandsias/CN=vault",
-            "-addext",
-            "subjectAltName=DNS:vault,DNS:localhost,IP:127.0.0.1",
-        ])
+        .args(["-subj", "/C=US/ST=Privacy/L=Local/O=Tillandsias/CN=vault"])
+        .arg("-addext")
+        .arg(vault_san)
         .stdout(Stdio::null())
         .stderr(Stdio::null())
         .status()
@@ -336,7 +365,7 @@ pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
     if container_running(VAULT_CONTAINER_NAME) {
         // Already up. Probe health to make sure it's serving.
         let rt = tokio_runtime()?;
-        let base_url = host_base_url();
+        let base_url = vault_api_base_url();
         let client = vault_client(&base_url, "", debug)?;
         match rt.block_on(client.health()) {
             Ok(h) if h.initialized && !h.sealed => {
@@ -387,7 +416,7 @@ pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
     launch_vault_container(&vault_image_tag, debug)?;
 
     let rt = tokio_runtime()?;
-    let base_url = host_base_url();
+    let base_url = vault_api_base_url();
     let root_token = wait_for_vault_ready(&rt, &base_url, debug)?;
     let client = vault_client(&base_url, &root_token, debug)?;
 
@@ -432,7 +461,7 @@ pub fn write_github_token_to_vault(token: &str, debug: bool) -> Result<(), Strin
             .map_err(|e| format!("could not bring Vault up to store the GitHub token: {e}"))?;
     }
     let rt = tokio_runtime()?;
-    let base_url = host_base_url();
+    let base_url = vault_api_base_url();
     let root_token = read_and_handover_root_token(debug)?;
     let client = vault_client(&base_url, &root_token, debug)?;
 
@@ -508,7 +537,7 @@ pub(crate) fn read_github_token_from_vault(debug: bool) -> Result<String, String
         return Err("vault container is not running".into());
     }
     let rt = tokio_runtime()?;
-    let base_url = host_base_url();
+    let base_url = vault_api_base_url();
     let root_token = read_and_handover_root_token(debug)?;
     let client = vault_client(&base_url, &root_token, debug)?;
     let data = rt
@@ -543,7 +572,7 @@ pub async fn mint_approle_token_for_container(
     if !container_running(VAULT_CONTAINER_NAME) {
         return Err("Vault container is not running".into());
     }
-    let base_url = host_base_url();
+    let base_url = vault_api_base_url();
     let root_token = read_and_handover_root_token(debug)?;
     let client = vault_client(&base_url, &root_token, debug)?;
     let token = client
@@ -619,7 +648,7 @@ pub async fn revoke_pending_container_tokens(debug: bool) {
     if entries.is_empty() {
         return;
     }
-    let base_url = host_base_url();
+    let base_url = vault_api_base_url();
     let root_token = match read_and_handover_root_token(debug) {
         Ok(t) => t,
         Err(e) => {
@@ -1066,9 +1095,18 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     // Tear down any previous container with the same name (idempotent).
     let _ = podman_cmd_sync()
         .args(["rm", "-f", VAULT_CONTAINER_NAME])
-        .stdout(Stdio::null())
-        .stderr(Stdio::null())
-        .status();
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output();
+
+    // Remove stale vault data volume so a partially-initialized vault from a
+    // previous failed bootstrap doesn't leave us with a wrong unseal key on
+    // the next attempt (the handover key was never captured).
+    let _ = podman_cmd_sync()
+        .args(["volume", "rm", "-f", VAULT_VOLUME])
+        .stdout(Stdio::piped())
+        .stderr(Stdio::piped())
+        .output();
 
     // Vault must join the enclave bridge network so (a) `--network-alias vault`
     // is valid — rootless podman's DEFAULT network is pasta/slirp4netns, not
@@ -1081,7 +1119,7 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
 
     if debug {
         eprintln!(
-            "[tillandsias-vault] launching container {VAULT_CONTAINER_NAME} (publish 127.0.0.1:{VAULT_HOST_PORT}:8200)"
+            "[tillandsias-vault] launching container {VAULT_CONTAINER_NAME} (alias {VAULT_NETWORK_ALIAS}:8200, publish 127.0.0.1:{VAULT_HOST_PORT}:8200)"
         );
     }
 
@@ -1156,33 +1194,33 @@ fn wait_for_vault_ready(
     base_url: &str,
     debug: bool,
 ) -> Result<String, String> {
-    // 180s: native Linux resolves in ~1s; macOS VZ 4 GiB guests under cold
-    // first-init resource pressure (concurrent forge image pulls + vault init)
-    // can exceed 120s (order 81). WSL2 also benefits from extra headroom.
-    let deadline = Instant::now() + Duration::from_secs(180);
+    if debug {
+        eprintln!("[tillandsias-vault] waiting for podman health status=healthy");
+    }
+    rt.block_on(PodmanClient::new().wait_healthy(VAULT_CONTAINER_NAME))
+        .map_err(|e| format!("vault container did not report healthy: {e}"))?;
+
     let client = vault_client(base_url, "", debug)?; // health doesn't need a token
-    loop {
-        match rt.block_on(client.health()) {
-            Ok(h) if h.initialized && !h.sealed => {
-                if debug {
-                    eprintln!(
-                        "[tillandsias-vault] vault healthy (initialized={} sealed={} v={})",
-                        h.initialized, h.sealed, h.version
-                    );
-                }
-                break;
+    match rt.block_on(client.health()) {
+        Ok(h) if h.initialized && !h.sealed => {
+            if debug {
+                eprintln!(
+                    "[tillandsias-vault] vault healthy (initialized={} sealed={} v={})",
+                    h.initialized, h.sealed, h.version
+                );
             }
-            Ok(h) if debug => eprintln!(
-                "[tillandsias-vault] waiting (initialized={} sealed={})",
+        }
+        Ok(h) => {
+            return Err(format!(
+                "vault podman health is healthy but API reports initialized={} sealed={}",
                 h.initialized, h.sealed
-            ),
-            Err(e) if debug => eprintln!("[tillandsias-vault] health probe error: {e}"),
-            _ => {}
+            ));
         }
-        if Instant::now() > deadline {
-            return Err("vault did not become healthy within 180s".to_string());
+        Err(e) => {
+            return Err(format!(
+                "vault podman health is healthy but API probe failed: {e}"
+            ));
         }
-        std::thread::sleep(Duration::from_secs(2));
     }
     read_and_handover_root_token(debug)
 }
@@ -1220,7 +1258,8 @@ fn keychain_set_blocking(user: &str, value: &str) -> Result<(), String> {
         Ok(()) => Ok(()),
         Err(e) => {
             eprintln!(
-                "[tillandsias-vault] WARNING: failed to write {user} to OS keyring ({e}); writing to fallback file"
+                "[tillandsias-vault] note: OS keyring unavailable for {user} ({e}); \
+                 using fallback file (expected in VM guest and headless environments)"
             );
             let cache_dir =
                 crate::init_cache_dir().map_err(|err| format!("init cache dir: {err}"))?;
@@ -1446,6 +1485,8 @@ pub fn policy_role_name(policy: &Policy) -> &'static str {
 mod tests {
     use super::*;
 
+    static ENV_LOCK: OnceLock<Mutex<()>> = OnceLock::new();
+
     #[test]
     fn policy_role_names_match_spec() {
         assert_eq!(policy_role_name(&Policy::GitMirror), "git-mirror");
@@ -1460,6 +1501,74 @@ mod tests {
         let url = host_base_url();
         assert!(url.starts_with("https://127.0.0.1:"), "got {url}");
         assert!(url.ends_with(&VAULT_HOST_PORT.to_string()));
+    }
+
+    #[test]
+    fn vault_api_base_url_honors_env_override() {
+        let _guard = ENV_LOCK.get_or_init(|| Mutex::new(())).lock().unwrap();
+        unsafe {
+            std::env::set_var(VAULT_API_BASE_URL_ENV, vault_service_base_url());
+        }
+        assert_eq!(vault_api_base_url(), vault_service_base_url());
+        unsafe {
+            std::env::remove_var(VAULT_API_BASE_URL_ENV);
+        }
+    }
+
+    #[test]
+    fn vault_tls_leaf_san_includes_service_dns() {
+        let source = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/vault_bootstrap.rs"
+        ));
+        assert!(
+            source.contains("DNS:vault"),
+            "Vault TLS leaf must cover the Podman service DNS name"
+        );
+        assert!(
+            source.contains("vault_tls_leaf_has_service_identity"),
+            "existing Vault certs without the service DNS SAN must be refreshed"
+        );
+    }
+
+    #[test]
+    fn vault_launch_uses_network_alias_without_singleton_ip() {
+        let source = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/vault_bootstrap.rs"
+        ));
+        let window = source
+            .split("fn launch_vault_container(")
+            .nth(1)
+            .expect("launch_vault_container source");
+        assert!(
+            window.contains("\"--network-alias\"") && window.contains("VAULT_NETWORK_ALIAS"),
+            "Vault must publish the service-discovery alias on the enclave network"
+        );
+        assert!(
+            !window.contains("\"--ip\""),
+            "Vault service discovery should not depend on a singleton enclave IP"
+        );
+    }
+
+    #[test]
+    fn vault_ready_wait_uses_podman_health() {
+        let source = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/vault_bootstrap.rs"
+        ));
+        let window = source
+            .split("fn wait_for_vault_ready(")
+            .nth(1)
+            .expect("wait_for_vault_ready source");
+        assert!(
+            window.contains("PodmanClient::new().wait_healthy(VAULT_CONTAINER_NAME)"),
+            "Vault readiness must use the idiomatic podman health layer"
+        );
+        assert!(
+            !window.contains("thread::sleep"),
+            "Vault readiness must not use a local polling sleep loop"
+        );
     }
 
     #[test]

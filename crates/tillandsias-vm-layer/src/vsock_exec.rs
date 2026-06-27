@@ -210,6 +210,114 @@ where
     }
 }
 
+/// Like [`exec_over_stream_with_input`] but emits each PTY output chunk to
+/// `on_output` immediately rather than accumulating the full buffer. Use this
+/// for long-running guest commands (e.g. `--opencode`) where real-time output
+/// matters; the caller receives `ExecOutput { exit, stdout: vec![] }` on
+/// success (`stdout` is always empty — the caller owns the output via callback).
+pub async fn exec_over_stream_with_input_streaming<S, F>(
+    mut stream: S,
+    argv: &[&str],
+    input: &[u8],
+    on_output: F,
+) -> Result<ExecOutput, String>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+    F: Fn(&[u8]),
+{
+    if argv.is_empty() {
+        return Err("vsock_exec: empty argv".to_string());
+    }
+    let session_id: u32 = 1;
+    let mut seq: u64 = 1;
+
+    write_envelope(
+        &mut stream,
+        &ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq,
+            body: ControlMessage::Hello {
+                from: "tillandsias-vm-layer::vsock_exec::streaming".to_string(),
+                capabilities: vec!["pty.attach@v1".to_string()],
+            },
+        },
+    )
+    .await?;
+    let ack = read_envelope(&mut stream).await?;
+    match ack.body {
+        ControlMessage::HelloAck { wire_version, .. } => {
+            if wire_version != WIRE_VERSION {
+                return Err(format!(
+                    "vsock_exec: wire_version mismatch (peer {wire_version}, self {WIRE_VERSION})"
+                ));
+            }
+        }
+        other => {
+            return Err(format!(
+                "vsock_exec: expected HelloAck, got {}",
+                other.kind()
+            ));
+        }
+    }
+
+    seq += 1;
+    let argv_owned: Vec<String> = argv.iter().map(|s| s.to_string()).collect();
+    write_envelope(
+        &mut stream,
+        &ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq,
+            body: ControlMessage::PtyOpen {
+                session_id,
+                rows: 24,
+                cols: 80,
+                argv: argv_owned,
+                env: vec![("TERM".to_string(), "dumb".to_string())],
+                cwd: None,
+            },
+        },
+    )
+    .await?;
+
+    for chunk in input.chunks(MAX_PTY_FRAME_BYTES) {
+        seq += 1;
+        write_envelope(
+            &mut stream,
+            &ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq,
+                body: ControlMessage::PtyData {
+                    session_id,
+                    direction: PtyDirection::ToGuest,
+                    bytes: chunk.to_vec(),
+                },
+            },
+        )
+        .await?;
+    }
+
+    loop {
+        let env = read_envelope(&mut stream).await?;
+        match env.body {
+            ControlMessage::PtyData {
+                session_id: sid,
+                direction: PtyDirection::ToHost,
+                bytes,
+            } if sid == session_id => on_output(&bytes),
+            ControlMessage::PtyClose {
+                session_id: sid,
+                exit,
+            } if sid == session_id => {
+                return Ok(ExecOutput {
+                    exit,
+                    stdout: vec![],
+                });
+            }
+            _ => {}
+        }
+    }
+}
+
 /// One scripted prompt→response step for [`exec_over_stream_expect`].
 #[derive(Clone)]
 pub struct Expect {
@@ -217,6 +325,18 @@ pub struct Expect {
     pub needle: Vec<u8>,
     /// Bytes to send to the guest (as `PtyData{ToGuest}`) once `needle` is seen.
     pub response: Vec<u8>,
+    /// Human label for logs; `response` is never logged (may be secret).
+    pub label: String,
+}
+
+/// One prompt step whose response is produced only after the guest emits the
+/// matching prompt. This lets host wrappers defer credential prompts until the
+/// guest has completed its own infrastructure preflight.
+pub struct DynamicExpect {
+    /// Substring to wait for in the guest's output before responding.
+    pub needle: Vec<u8>,
+    /// Produce bytes to send to the guest once `needle` is seen.
+    pub response: Box<dyn FnMut() -> Result<Vec<u8>, String> + Send>,
     /// Human label for logs; `response` is never logged (may be secret).
     pub label: String,
 }
@@ -243,9 +363,38 @@ fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
 /// `on_event(&str)` receives non-secret progress labels (e.g. "matched: git
 /// author name") so the caller can show progress without leaking responses.
 pub async fn exec_over_stream_expect<S>(
-    mut stream: S,
+    stream: S,
     argv: &[&str],
     expects: Vec<Expect>,
+    on_event: impl FnMut(&str),
+) -> Result<ExecOutput, String>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    let expects = expects
+        .into_iter()
+        .map(|expect| {
+            let mut response = Some(expect.response);
+            DynamicExpect {
+                needle: expect.needle,
+                label: expect.label,
+                response: Box::new(move || {
+                    response
+                        .take()
+                        .ok_or_else(|| "static expect response consumed more than once".to_string())
+                }),
+            }
+        })
+        .collect();
+    exec_over_stream_expect_dynamic(stream, argv, expects, on_event).await
+}
+
+/// Like [`exec_over_stream_expect`], but each response is produced lazily after
+/// its prompt is observed.
+pub async fn exec_over_stream_expect_dynamic<S>(
+    mut stream: S,
+    argv: &[&str],
+    expects: Vec<DynamicExpect>,
     mut on_event: impl FnMut(&str),
 ) -> Result<ExecOutput, String>
 where
@@ -317,12 +466,17 @@ where
             } if sid == session_id => {
                 stdout.extend_from_slice(&bytes);
                 // Satisfy as many sequential expects as the new output allows.
-                while let Some(exp) = &current {
-                    if let Some(end) = find_subslice(&stdout[search_start..], &exp.needle) {
+                while current.is_some() {
+                    let end = {
+                        let exp = current.as_ref().expect("current expect exists");
+                        find_subslice(&stdout[search_start..], &exp.needle)
+                    };
+                    if let Some(end) = end {
+                        let exp = current.as_mut().expect("current expect exists");
                         on_event(&format!("matched: {}", exp.label));
                         search_start += end;
                         seq += 1;
-                        let response = exp.response.clone();
+                        let response = (exp.response)()?;
                         write_envelope(
                             &mut stream,
                             &ControlEnvelope {
@@ -684,6 +838,115 @@ mod tests {
         .await
         .expect("expect-driven exec should succeed");
         assert_eq!(out.exit.code, 0);
+        guest_task.await.unwrap();
+    }
+
+    /// Dynamic expects produce the response only after the matching guest
+    /// prompt arrives. Host credential wrappers use this to avoid asking the
+    /// operator for secrets while the guest is still doing infrastructure
+    /// preflight.
+    #[tokio::test]
+    async fn exec_over_stream_expect_dynamic_defers_response_until_prompt() {
+        let (client, mut guest) = tokio::io::duplex(8192);
+        let callback_called = std::sync::Arc::new(std::sync::atomic::AtomicBool::new(false));
+        let guest_observer = callback_called.clone();
+
+        let guest_task = tokio::spawn(async move {
+            let _ = read_envelope(&mut guest).await.unwrap(); // Hello
+            write_envelope(
+                &mut guest,
+                &ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: 1,
+                    body: ControlMessage::HelloAck {
+                        wire_version: WIRE_VERSION,
+                        server_caps: vec![],
+                    },
+                },
+            )
+            .await
+            .unwrap();
+            let _ = read_envelope(&mut guest).await.unwrap(); // PtyOpen
+            assert!(!guest_observer.load(std::sync::atomic::Ordering::SeqCst));
+
+            write_envelope(
+                &mut guest,
+                &ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: 3,
+                    body: ControlMessage::PtyData {
+                        session_id: 1,
+                        direction: PtyDirection::ToHost,
+                        bytes: b"preflight ok\n".to_vec(),
+                    },
+                },
+            )
+            .await
+            .unwrap();
+            tokio::task::yield_now().await;
+            assert!(!guest_observer.load(std::sync::atomic::Ordering::SeqCst));
+
+            write_envelope(
+                &mut guest,
+                &ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: 4,
+                    body: ControlMessage::PtyData {
+                        session_id: 1,
+                        direction: PtyDirection::ToHost,
+                        bytes: b"Git author name: ".to_vec(),
+                    },
+                },
+            )
+            .await
+            .unwrap();
+            let resp = read_envelope(&mut guest).await.unwrap();
+            match resp.body {
+                ControlMessage::PtyData {
+                    direction: PtyDirection::ToGuest,
+                    bytes,
+                    ..
+                } => assert_eq!(bytes, b"Late User\n"),
+                other => panic!("expected ToGuest response, got {}", other.kind()),
+            }
+
+            write_envelope(
+                &mut guest,
+                &ControlEnvelope {
+                    wire_version: WIRE_VERSION,
+                    seq: 5,
+                    body: ControlMessage::PtyClose {
+                        session_id: 1,
+                        exit: PtyExit {
+                            code: 0,
+                            signal: None,
+                        },
+                    },
+                },
+            )
+            .await
+            .unwrap();
+        });
+
+        let callback_flag = callback_called.clone();
+        let expects = vec![DynamicExpect {
+            needle: b"author name".to_vec(),
+            label: "git author name".to_string(),
+            response: Box::new(move || {
+                callback_flag.store(true, std::sync::atomic::Ordering::SeqCst);
+                Ok(b"Late User\n".to_vec())
+            }),
+        }];
+        let out = exec_over_stream_expect_dynamic(
+            client,
+            &["tillandsias-headless", "--github-login"],
+            expects,
+            |_| {},
+        )
+        .await
+        .expect("dynamic expect-driven exec should succeed");
+        assert_eq!(out.exit.code, 0);
+        assert!(callback_called.load(std::sync::atomic::Ordering::SeqCst));
         guest_task.await.unwrap();
     }
 }

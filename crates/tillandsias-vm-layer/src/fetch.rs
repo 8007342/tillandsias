@@ -173,63 +173,118 @@ pub async fn download_verified(
         }
     }
 
-    let client = reqwest::Client::builder()
-        .connect_timeout(std::time::Duration::from_secs(10))
-        // Do not set a total request timeout here: large VM images can take
-        // minutes on slow links, and retry/resume handles interrupted bodies.
-        .build()
-        .map_err(|e| format!("build http client: {e}"))?;
-    let mut req = client.get(&artifact.url);
-    if have > 0 {
-        req = req.header(reqwest::header::RANGE, format!("bytes={have}-"));
-    }
-    let resp = req
-        .send()
-        .await
-        .map_err(|e| format!("GET {}: {e}", artifact.url))?;
-    let status = resp.status();
+    // Per-chunk idle timeout: if no bytes arrive within this window the
+    // download is considered stalled (e.g. WiFi dropped without RST). The
+    // retry loop reconnects with Range: bytes=<downloaded>- so the partial
+    // file accumulates across attempts.
+    const CHUNK_IDLE_SECS: u64 = 30;
+    const MAX_RETRIES: u32 = 5;
 
-    // If we asked for a range but the server ignored it (200 not 206), the
-    // body is the whole file again — discard the partial and restart clean.
-    if have > 0 && status != reqwest::StatusCode::PARTIAL_CONTENT {
-        hasher = Sha256::new();
-        have = 0;
-        let _ = tokio::fs::remove_file(&part).await;
-    }
-    if !status.is_success() {
-        return Err(format!("GET {} -> HTTP {}", artifact.url, status));
-    }
-
-    let total = resp.content_length().map(|c| c + have);
-
-    let mut file = tokio::fs::OpenOptions::new()
-        .create(true)
-        .write(true)
-        .append(have > 0)
-        .truncate(have == 0)
-        .open(&part)
-        .await
-        .map_err(|e| format!("open {} for write: {e}", part.display()))?;
-
-    let mut resp = resp;
     let mut downloaded = have;
-    on_progress(downloaded, total);
-    while let Some(chunk) = resp
-        .chunk()
-        .await
-        .map_err(|e| format!("download chunk from {}: {e}", artifact.url))?
-    {
-        file.write_all(&chunk)
+    let mut attempt = 0u32;
+
+    'retry: loop {
+        let client = reqwest::Client::builder()
+            .connect_timeout(std::time::Duration::from_secs(10))
+            .build()
+            .map_err(|e| format!("build http client: {e}"))?;
+        let mut req = client.get(&artifact.url);
+        if downloaded > 0 {
+            req = req.header(reqwest::header::RANGE, format!("bytes={downloaded}-"));
+        }
+        let resp = req
+            .send()
             .await
-            .map_err(|e| format!("write {}: {e}", part.display()))?;
-        hasher.update(&chunk);
-        downloaded += chunk.len() as u64;
+            .map_err(|e| format!("GET {}: {e}", artifact.url))?;
+        let status = resp.status();
+
+        // Server ignored our Range (200 instead of 206): discard partial and restart.
+        if downloaded > 0 && status != reqwest::StatusCode::PARTIAL_CONTENT {
+            hasher = Sha256::new();
+            downloaded = 0;
+            let _ = tokio::fs::remove_file(&part).await;
+        }
+        if !status.is_success() {
+            return Err(format!("GET {} -> HTTP {}", artifact.url, status));
+        }
+
+        let total = resp.content_length().map(|c| c + downloaded);
+
+        let mut file = tokio::fs::OpenOptions::new()
+            .create(true)
+            .write(true)
+            .append(downloaded > 0)
+            .truncate(downloaded == 0)
+            .open(&part)
+            .await
+            .map_err(|e| format!("open {} for write: {e}", part.display()))?;
+
         on_progress(downloaded, total);
+        let mut resp = resp;
+        loop {
+            match tokio::time::timeout(
+                std::time::Duration::from_secs(CHUNK_IDLE_SECS),
+                resp.chunk(),
+            )
+            .await
+            {
+                Ok(Ok(None)) => {
+                    // Clean EOF — all bytes received.
+                    file.flush()
+                        .await
+                        .map_err(|e| format!("flush {}: {e}", part.display()))?;
+                    drop(file);
+                    break 'retry;
+                }
+                Ok(Ok(Some(chunk))) => {
+                    file.write_all(&chunk)
+                        .await
+                        .map_err(|e| format!("write {}: {e}", part.display()))?;
+                    hasher.update(&chunk);
+                    downloaded += chunk.len() as u64;
+                    on_progress(downloaded, total);
+                }
+                Ok(Err(e)) => {
+                    drop(file);
+                    attempt += 1;
+                    if attempt > MAX_RETRIES {
+                        return Err(format!(
+                            "download chunk from {}: {e} (gave up after {MAX_RETRIES} retries)",
+                            artifact.url
+                        ));
+                    }
+                    let delay = std::time::Duration::from_secs(1u64 << (attempt - 1).min(4));
+                    eprintln!(
+                        "[tillandsias] download error at {downloaded} bytes: {e}; \
+                         retry {attempt}/{MAX_RETRIES} in {}s",
+                        delay.as_secs()
+                    );
+                    tokio::time::sleep(delay).await;
+                    continue 'retry;
+                }
+                Err(_) => {
+                    // Idle timeout: no bytes for CHUNK_IDLE_SECS.
+                    drop(file);
+                    attempt += 1;
+                    if attempt > MAX_RETRIES {
+                        return Err(format!(
+                            "download stalled from {} (no data for {CHUNK_IDLE_SECS}s; \
+                             gave up after {MAX_RETRIES} retries)",
+                            artifact.url
+                        ));
+                    }
+                    let delay = std::time::Duration::from_secs(1u64 << (attempt - 1).min(4));
+                    eprintln!(
+                        "[tillandsias] download stalled at {downloaded} bytes \
+                         (no data for {CHUNK_IDLE_SECS}s); retry {attempt}/{MAX_RETRIES} in {}s",
+                        delay.as_secs()
+                    );
+                    tokio::time::sleep(delay).await;
+                    continue 'retry;
+                }
+            }
+        }
     }
-    file.flush()
-        .await
-        .map_err(|e| format!("flush {}: {e}", part.display()))?;
-    drop(file);
 
     let got = hex_lower(&hasher.finalize());
     if got != expected {

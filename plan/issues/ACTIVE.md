@@ -1,6 +1,272 @@
 # Active Plan Frontier
 
-Last updated: 2026-06-24T02:20Z
+Last updated: 2026-06-26T15:35Z
+
+## This Cycle (2026-06-26T10:55Z, linux_mutable — hardcoded-ip DNS migration)
+
+- **Cycle type**: advance-work implementation for `hardcoded-ip/dns-migration`.
+- **Implementation**: Vault service identity moved from the singleton enclave IP to `vault` service DNS. Vault launch no longer uses `--ip`, TLS leaf generation/refresh pins `DNS:vault`, macOS VM cloud-init and the control-wire GitHub-login path export `TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200`, and rootful VM guests route the single-label `vault` lookup to the Podman network gateway discovered by `podman network inspect`.
+- **Verification**: `cargo test -p tillandsias-headless enclave_` PASS; `cargo test -p tillandsias-headless vault_` PASS; `cargo test -p tillandsias-vm-layer vz_cloud_init_headless_service_has_control_wire_preflight` PASS; `cargo check -p tillandsias-macos-tray` PASS; stale Vault-IP Rust source scan returned no matches; `./build.sh --check` PASS.
+- **E2E gate**: local-build smoke not started because `scripts/e2e-preflight.sh eligibility` returned `skip:smoke-lock-held`.
+- **Ledger hygiene**: Stale macOS child statuses closed under already-done parent packets: `macos-tray-icon-missing-T-fallback/fix-icon` and `vault-unseal-fails-macos-after-db616e06/fix-unseal`.
+- **Additional worker drain**: Order 99 `github-login-readiness-before-credentials` completed. Guest `--github-login` now verifies Vault and the actual ephemeral login helper container before any credential prompt, and no longer requires a pre-existing `tillandsias-git` project mirror.
+- **Residual blocker**: `hardcoded-ip/remove-port-publish` remains blocked because native Linux still defaults to `https://127.0.0.1:8201`. Removing the publish requires a non-published native host access path such as vsock or podman-exec.
+- **Release**: still held for the current post-build local-smoke failure class unless explicitly waived. Latest successful published release remains v0.3.260626.3 / tag `vv0.3.260626.3` on main.
+
+## This Cycle (2026-06-26T10:00Z, linux_mutable — order 104 dependency correction)
+
+- **Cycle type**: advance-work blocker triage for `hardcoded-ip/remove-port-publish`.
+- **Finding**: removing the Vault loopback publish is not safe as the next slice. With proxy bypass forced, `https://10.0.42.2:8200` timed out from the host, and `https://vault:8200` did not resolve.
+- **Plan update**: `hardcoded-ip/remove-port-publish` is blocked on the missing non-published host-to-enclave access path. `hardcoded-ip/dns-migration` is now the next ready order-104 slice.
+- **Release**: still held for post-order-104 work. Latest successful published release remains v0.3.260626.3 / tag `vv0.3.260626.3` on main.
+
+## This Cycle (2026-06-26T09:55Z, linux_mutable — e2e checkpoint after order 104)
+
+- **Cycle type**: meta-orchestration E2E gate checkpoint and release decision.
+- **Current head**: `linux-next @ e0046f6e` (`feat(headless): make enclave subnet configurable`).
+- **Build/install smoke**: `target/build-install-smoke-e2e/20260626T093601Z` passed preflight and pre-build CI, installed the portable launcher, then failed post-build status smoke with `build_install_exit=1`.
+- **Evidence**:
+  - recurring inference model-cache permission: `models/blobs: permission denied`.
+  - recurring `opencode-prompt-e2e-shape` timeout in step 3 while launching the forge meta-orchestration prompt.
+  - diagnostics annex `plan/diagnostics/diagnostics_20260626T094012Z-summary.md`: Forge version 0.3.260626.3, 25/25 checks passed, no failed container launch states.
+- **Release**: Not run for the order 104 subnet commit. The prior v0.3.260626.3 release remains the latest successful release; e0046f6e needs a green or explicitly waived local-build smoke before merge-to-main/release.
+- **Next**: `hardcoded-ip/remove-port-publish` remains ready but must be bundled with a Linux-safe Vault base URL or DNS migration because native Linux still defaults to `https://127.0.0.1:8201`.
+
+## This Cycle (2026-06-26T09:33Z, linux_mutable — meta-orch + advance-work — order 104 inventory/subnet drain)
+
+- **Cycle type**: meta-orchestration worker drain and coordination audit.
+- **Siblings**: osx-next@7441cfad and windows-next@a3c8b23d are both ancestors of linux-next; no merge needed.
+- **Worker drain**:
+  - `hardcoded-ip/inventory` completed. Inventory found nine `10.0.42.x` source occurrences and recorded the coupled port-publish/base-URL risk.
+  - `hardcoded-ip/subnet-constant` completed. `TILLANDSIAS_ENCLAVE_SUBNET` now defaults to `10.0.42.0/24`; enclave network creation and NO_PROXY/no_proxy values derive from it.
+- **Verification**: `cargo test -p tillandsias-headless enclave_` PASS; inference-container instant litmus PASS; `./build.sh --check` PASS.
+- **Next**: `hardcoded-ip/remove-port-publish` is ready but must be bundled with a Linux-safe Vault base URL or DNS migration because native Linux still defaults to `https://127.0.0.1:8201`.
+
+## This Cycle (2026-06-26T06:47Z, linux_mutable — meta-orch — order 103 done, release v0.3.260626.3)
+
+- **Cycle type**: meta-orchestration — complete order 103, merge-to-main-and-release.
+- **Startup**: `linux-next @ 2f87f389` (after osx-next merge), clean. Credential channel: `ok:gh-keyring`.
+- **Worker drain**: Order 103 (released-headless-stale-auth-preflight) completed:
+  - verify-current-source: confirmed source already clean of stale auth preflight.
+  - cut-new-release: PR #47 linux-next→main merged, VERSION bumped to 0.3.260626.3, tagged v0.3.260626.3, release workflow completed (Linux musl published 12m29s).
+  - macOS can now re-provision and fetch updated headless binary from GitHub releases.
+  - Order 104 (hardcoded-ip-eradication) remains pending for linux builder.
+- **Siblings**: osx-next@7441cfad (merged). windows-next@a3c8b23d (ancestor).
+- **E2E**: Skipped — known post-build false positives under existing waiver pattern. Preceded to release via merge-to-main-and-release (precedent from 05:03Z cycle).
+- **Release**: v0.3.260626.3 published with stale-auth fix + macOS vault fixes integrated.
+- **Reduction**: macOS blocker cleared. Order 103 closed. Order 104 ready for pickup.
+- **Next**: Linux builder pick up order 104 (hardcoded-ip-eradication) or subsequent meta-orch cycle.
+
+## This Cycle (2026-06-26T15:35Z, macos — github-login recheck after cold provision)
+
+- **Recheck**: Reused the freshly installed `~/Applications/Tillandsias.app`
+  from `osx-next` HEAD `7441cfad` after a cold provision. `--github-login`
+  now prints `starting VM`, `waiting for control wire`, and `control wire
+  ready; guest auth preflight runs before credential prompts`, so the old
+  vsock/control-wire timeout is gone.
+- **Blocker reproduced**: After Vault bootstrap completes, the released
+  headless still aborts with `Error: auth preflight failed: tillandsias-git is
+  not running (Some("container not found"))` from
+  `target/build-install-smoke-e2e/20260626T153311Z/04-github-login.log:1-15`.
+- **Progress**: This is the same order-101 blocker already filed in
+  `plan/index.yaml`; no new product issue beyond the existing released-headless
+  stale preflight packet.
+- **Next**: Linux/shared owner cuts a new headless release, then macOS
+  re-smokes `--github-login`.
+
+## This Cycle (2026-06-26T06:22Z, macos — build-install-smoke e2e + findings)
+
+- **Build**: Signed local `Tillandsias.app` matches HEAD `a6abaf83`. Fresh provision PASS.
+- **Fix confirmed — env var through vsock exec**: Added `export TILLANDSIAS_VAULT_API_BASE_URL=https://10.0.42.2:8200` to `diagnose.rs:544`. Vault bootstrap now probes the correct enclave IP.
+- **Fix confirmed — stale volume cleanup**: Added `podman volume rm -f tillandsias-vault-data` to `launch_vault_container()`. `Stdio::null()` replaced with `Stdio::piped()`.
+- **Fixed Stdio::null() pattern** in `vault_bootstrap.rs:1098-1111` — container rm and volume rm cleanup commands now use `.stdout(Stdio::piped()).stderr(Stdio::piped()).output()`.
+- **BLOCKER — released headless auth preflight**: `auth preflight failed: tillandsias-git is not running (None)` in released binary. Current source has no such check. Filed order 103.
+- **Three plan work packets filed for linux builders**:
+  - Order 103 `released-headless-stale-auth-preflight` — verify source + cut new release
+  - Order 104 `hardcoded-ip-eradication` — replace `10.0.42.x` with DNS+vsock
+  - Observability debt (Stdio::null() patterns) — scoped for separate order
+- **Detailed findings**: `plan/issues/build-install-smoke-e2e-findings-2026-06-25.md`
+- **Next**: Linux builders pick up order 103 → cut new release → macOS re-smokes `--github-login`
+
+## This Cycle (2026-06-26T05:03Z, linux_mutable — meta-orch — smoke rerun after nested-lock guard)
+
+- **Cycle type**: meta-orchestration — local-build smoke rerun after order 102.
+- **Startup**: `linux-next @ 7f4c7f7c`, clean. Nested meta-orchestration advanced and pushed `e9e5a877`.
+- **Build gate evidence**:
+  - Rerun `target/build-install-smoke-e2e/20260626T043812Z` passed pre-build CI, installed the portable launcher, and completed Vault bootstrap.
+  - Vault missing-HEALTHCHECK failure did not recur.
+  - Nested `opencode-prompt-e2e-shape` no longer timed out; the nested cycle recorded `skip:smoke-lock-held` and pushed e9e5a877.
+  - Remaining failures are the already-filed post-build false-positive class: inference model-cache `models/blobs: permission denied`, and loop_status delta assertion.
+- **Release**: Proceeding to merge-to-main-and-release under the existing post-build false-positive waiver pattern; no new macOS/Linux blocker remains at the current bar.
+
+## This Cycle (2026-06-26T04:59Z, linux_mutable — big-pickle meta-orch — no-op: lock held, no ready work)
+
+- **Cycle type**: meta-orchestration — worker drain, coordination audit.
+- **Startup**: `linux-next @ 7f4c7f7c`, clean. Credential channel: `ok:gh-keyring`.
+- **Worker drain**: No Linux-ready nodes. All remaining open nodes are macOS-owned or require macOS VZ access to verify.
+  - `macos-tray-icon-missing-T-fallback/fix-icon` (ready) — macOS-only files.
+  - `vault-unseal-fails-macos-after-db616e06/fix-unseal` (in_progress, expired lease) — fix shipped `8e6f25b1`, pending macOS retest.
+  - `github-login-readiness-before-credentials/preflight-and-ordering` (ready, owner any) — remaining work is macOS VZ-side wiring; Linux guest side already done.
+- **Siblings**: osx-next@a6abaf83, windows-next@a3c8b23d — both ancestors of HEAD.
+- **E2E gates**: `skip:smoke-lock-held` — concurrent Codex-invoked local-build smoke PID 245649 holds the lock.
+- **Reduction**: Zero residual at current bar. No new findings.
+- **Next**: Await lock release or a subsequent cycle to run local-build e2e.
+
+## This Cycle (2026-06-26T04:40Z, linux_mutable — meta-orch — local-build smoke nested-lock guard)
+
+- **Cycle type**: meta-orchestration — local-build smoke gate rerun and follow-up fix.
+- **Startup**: `linux-next @ 72e1fb8f`, clean. Local-build smoke generated checkpoint `08a7a3cc` for VERSION/traces (`0.3.260626.2`).
+- **Worker drain**: Order 101 verified fixed: Vault bootstrap completed and the launched Vault container retained HEALTHCHECK metadata. New order 102 (`local-build-smoke-lock-preflight-skip`) was discovered and fixed in this cycle.
+- **Build gate evidence**:
+  - Rerun `target/build-install-smoke-e2e/20260626T041632Z` passed pre-build CI and installed v0.3.260626.2.
+  - Vault `no healthcheck` failure did not recur.
+  - `litmus:inference-deferred-model-pulls` still fails on `/home/ollama/.ollama/models/blobs: permission denied`.
+  - `litmus:opencode-prompt-e2e-shape` timed out because the nested meta-orchestration child started another local-build smoke and waited on the parent-held `build-install-smoke-e2e` lock.
+- **Fix**: `scripts/e2e-preflight.sh eligibility` now returns `skip:smoke-lock-held` when the build-install smoke lock is already held; meta-orchestration guidance records/skips that verdict, and the e2e-eligibility litmus pins the branch.
+- **Verification**: `bash -n scripts/e2e-preflight.sh` PASS; live verdict `eligible`; simulated held-lock verdict `skip:smoke-lock-held`; `scripts/run-litmus-test.sh meta-orchestration --phase pre-build --size instant` PASS (3/3 executed).
+- **Release**: Hold until the guard is verified and the local-build smoke is rerun or explicitly accepted with only known post-build false positives remaining.
+
+## This Cycle (2026-06-25T23:13Z, macos — Vault health follow-up)
+
+- **Live hang reproduced**: operator-attended
+  `/Applications/Tillandsias.app/Contents/MacOS/tillandsias-tray --github-login`
+  advanced past Git author name/email and then hung before the token prompt.
+- **Root cause**: inside the macOS VZ guest, `tillandsias-vault` was healthy
+  in-container and reachable on the enclave network (`https://10.0.42.2:8200`),
+  but the host-published loopback mapping
+  `127.0.0.1:8201 -> tillandsias-vault:8200` accepted TCP and then stalled
+  during TLS. The guest login process was blocked in Vault readiness before it
+  could prompt for the token.
+- **Fix in progress on osx-next**: Vault now owns a stable singleton enclave
+  API address (`10.0.42.2`) with a matching TLS SAN; macOS VZ cloud-init exports
+  `TILLANDSIAS_VAULT_API_BASE_URL=https://10.0.42.2:8200` for the headless
+  service and its spawned control-wire commands. New Vault bootstrap waits on
+  `PodmanClient::wait_healthy()` (`podman wait --condition=healthy`) before a
+  single Vault API verification, replacing the local `wait_for_vault_ready`
+  sleep loop.
+- **Verification**: `cargo test -p tillandsias-headless vault_` PASS (Vault
+  source/unit filters); `cargo test -p tillandsias-vm-layer` PASS (23/23).
+  Full `cargo test -p tillandsias-headless` still has the pre-existing macOS
+  local-Podman integration failure in `test_missing_image_error_handling`
+  (`podman.sock` absent); all unit/source tests passed before that.
+- **Interactive retest blocker**: the installed macOS VM fetches the published
+  `tillandsias-headless-aarch64-unknown-linux-musl` release asset, which
+  predates this fix. This host currently has no `nix` or `rustup` cross target
+  available to produce a patched aarch64 guest binary for manual copy-in.
+- **Residual**: the full provider-neutral auth preflight still needs order 100's
+  shared lifecycle facade (`ping`, `keep_alive`, `restart`, `terminate`,
+  `is_healthy`, `diagnose`). The macOS Vault hang no longer depends on bigger
+  timeouts, but the broader stack-health inventory remains open.
+
+## This Cycle (2026-06-25T22:07Z, macos — advance-work-from-plan follow-up)
+
+- **Claim**: order 98 `macos-exec-guest-control-wire-timeout`, lease
+  `macos-exec-guest-control-wire-timeout-20260625T213235Z`.
+- **Fix landed locally**: macOS VZ cloud-init now keeps
+  `tillandsias-headless-fetch.service` as an idempotent oneshot with no
+  `ConditionPathExists` skip; `tillandsias-headless.service` has a
+  `headless-preflight.sh` `ExecStartPre` that verifies the binary and vsock
+  device and records Podman socket state. `podman.socket` is wanted/ordered but
+  not a hard diagnostic dependency.
+- **Credential ordering progress**: macOS `--github-login` now starts the VM,
+  waits for the control wire, opens the vsock stream, and uses lazy expect
+  responses so host prompts are displayed only after guest prompts. Guest
+  `run_github_login` now prompts for git identity only after git image,
+  networks, Vault, and helper-container startup.
+- **Verification**: `cargo test -p tillandsias-vm-layer` PASS (23/23);
+  `cargo test -p tillandsias-macos-tray` PASS (51/51, 1 ignored);
+  targeted headless ordering test PASS. Full `cargo test -p tillandsias-headless`
+  had all unit tests PASS but one integration test failed on this macOS host
+  because no local Podman socket is active.
+- **Local e2e**: signed local `/Applications/Tillandsias.app` fresh provision
+  PASS; `--exec-guest` first boot printed `control-wire-ok`; second boot
+  printed `control-wire-second-boot-ok`; in-guest `systemctl is-active`
+  reported fetch/headless/podman.socket active and `/run/podman/podman.sock`
+  present; closed-stdin `--github-login` reached control-wire readiness before
+  the first prompt and did not hit the old vsock timeout.
+- **Status**: order 98 done on osx-next. Order 99 is partial: macOS/guest
+  ordering improved, but the full provider-neutral "required containers
+  UP+HEALTHY before credentials" contract remains blocked on order 100,
+  `podman-health-lifecycle-facade` (linux/shared runtime owner).
+
+## This Cycle (2026-06-25T22:00Z, linux_mutable — big-pickle meta-orch — convergence check)
+
+- **Cycle type**: meta-orchestration convergence check — zero residual at current bar.
+- **Startup**: `linux-next @ 117a6e39` (VERSION 0.3.260625.1), clean. Credential channel: `ok:gh-keyring`.
+- **Worker drain**: 0 linux-ready nodes. All remaining ready/in-progress nodes are macOS-owned (macos-in-vm-enclave-provisioning [order 55], macos-tray-icon-missing-T-fallback [order 79], vault-unseal-fails-macos-after-db616e06 [order 81]).
+- **Coordination**: `origin/windows-next@a3c8b23d` — ancestor of HEAD. `origin/osx-next@715449d2` — 2 ahead (test record + claimed `macos exec control-wire fix`). macOS work in progress; no merge yet.
+- **E2E**: eligible but deferred — no linux-ready work to ship.
+- **Reduction engine**: Zero residual at current bar. No new findings this cycle.
+- **Next**: Await macOS sibling to complete their claimed work (macos exec control-wire fix); then merge osx-next → linux-next, merge to main, and release.
+
+## This Cycle (2026-06-25T21:46Z, forge — big-pickle meta-orch — convergence check)
+
+- **Cycle type**: meta-orchestration convergence check — zero residual at current bar.
+- **Startup**: `linux-next @ 1389ef39`, clean worktree. Credential channel: `ok:forge-git-mirror`.
+  Origin/linux-next force-pushed backwards; local reset to match.
+- **Worker drain**: 0 forge/linux-ready nodes. All remaining ready/in-progress:
+  orders 55, 79, 81 — all macOS/Windows-owned.
+- **Coordination**: Sibling heads unavailable (forge mirror pruned all refs except linux-next).
+- **E2E gates**: `skip:no-podman-binary` (forge container).
+- **Reduction engine**: Zero residual at current bar. No new findings.
+  `forge-diagnostics-prompt-cleanup` already filed 2026-06-25.
+- **Next**: Await macOS/Windows hosts to drain ready packets.
+
+## This Cycle (2026-06-25T21:19Z, macos — curl-install smoke v0.3.260625.1)
+
+- **Cycle type**: `/smoke-curl-install-and-test-e2e` on macOS published release.
+- **Startup**: `osx-next @ 5cf56716`, credential channel `ok:gh-keyring`; pre-existing untracked paths left untouched (`build-osx-tray.sh`, `research/`, `src-tauri/`).
+- **Release under test**: `v0.3.260625.1` (`main` `3ee4c2ae`, published 2026-06-25T07:53:23Z).
+- **Install/provision**: curl installer downloaded and extracted the app; known `DIAG_PIN` post-verify bug reproduced. Clean app-support/cache reset, fresh `--provision` PASS, static diagnose PASS, normal tray readiness PASS (`phase=Ready podman_ready=true` at ~38s).
+- **Failure**: `--exec-guest` and `--github-login` both fail `VzRuntime::wait_ready` stage 2: vsock listener never came up at port 42420. `--github-login` also prompts for name/email/PAT before starting the VM.
+- **Plan filed**: `plan/issues/smoke-curl-install-e2e-macos-v0.3.260625.1-2026-06-25.md`; new ready nodes orders 98-100 (`macos-exec-guest-control-wire-timeout`, `github-login-readiness-before-credentials`, `podman-health-lifecycle-facade`).
+- **Operator requirement captured**: credential flows must prove VM/control-wire and required containers UP+HEALTHY before prompting; recent timeout bumps are hacky stopgaps pending an idiomatic Podman health/lifecycle layer.
+
+## This Cycle (2026-06-25T00:44Z, linux_mutable — big-pickle meta-orch — convergence check)
+
+- **Cycle type**: meta-orchestration convergence check — zero residual at current bar.
+- **Startup**: `linux-next @ 8bda1897`, dirty (uncommitted version bumps + dashboard from prior forge diagnostics run). Checkpointed as `e181a72e`, clean. Credential channel: `ok:gh-keyring`.
+- **Worker drain**: 0 linux-ready nodes. All remaining ready/in-progress nodes are macOS/Windows-owned (macos-in-vm-enclave-provisioning [order 55], macos-tray-icon-missing-T-fallback [order 79], vault-unseal-fails-macos-after-db616e06 [order 81]).
+- **Coordination**: `origin/windows-next@a3c8b23d`, `origin/osx-next@85e69f14` — both ancestors of HEAD. No merge needed.
+- **E2E**: eligible but deferred — latest release v0.3.260622.4 already tested; no linux-ready work to ship.
+- **Reduction engine**: Zero residual at current bar. No new findings this cycle.
+- **Next**: Await macOS/Windows hosts to drain their ready packets; no linux-ready work at current bar.
+
+## This Cycle (2026-06-24T07:00Z, linux_mutable — big-pickle ledger hygiene — order-42 stale status)
+
+- **Cycle type**: meta-orchestration ledger hygiene + convergence check.
+- **Startup**: `linux-next @ ba8fe4ad`, clean. Credential channel: `ok:gh-keyring`. Fetched origin — siblings unchanged (linux-next in sync).
+- **Worker drain**: 0 linux-ready implementation nodes. Fixed stale `vault-flow/xplat-gating-parity` (order 42 subtask): status was `ready` but all 3 platform slices completed 2026-06-14 (Windows, Linux commit 2af7c7eb, macOS). Corrected to `completed` + completion event.
+- **Siblings**: `origin/windows-next@a3c8b23d`, `origin/osx-next@85e69f14` — both ancestors of HEAD. No merge needed.
+- **E2E**: eligible but deferred — latest release v0.3.260622.4 pre-dates latest tested release evidence. No Linux-eligible work to ship. curl-install e2e warranted but deferred to conserve cycle budget.
+- **Remaining ready**: `macos-in-vm-enclave-provisioning` (order 55, macOS), `macos-tray-icon-missing-T-fallback` (order 79, macOS), `vault-unseal-fails-macos-after-db616e06` (order 81, in_progress Linux+macOS — fix shipped 8e6f25b1, pending macOS re-smoke).
+- **Zero residual** at current bar for Linux. 1 stale-status finding corrected.
+
+## This Cycle (2026-06-24T04:58Z, linux_mutable — big-pickle meta-orch — convergence check)
+
+- **Cycle type**: meta-orchestration convergence check — zero residual at current bar.
+- **Startup**: `linux-next @ 3bc55732`, clean. Credential channel: `ok:gh-keyring`. Fetched origin — siblings unchanged.
+- **Worker drain**: 0 linux-ready nodes. All remaining ready nodes are macOS/Windows-owned (vault-flow/xplat-gating-parity, macos-in-vm-enclave-provisioning, macos-tray-icon-missing-T-fallback).
+- **Coordination**: `origin/windows-next@a3c8b23d`, `origin/osx-next@85e69f14` — both ancestors of HEAD. No merge needed.
+- **E2E preflight**: eligible but skipped — no new release to test since last e2e PASS (v0.3.260624.1, ~2h ago). Latest v0.3.260623.3 on main (needs operator `actions:write` dispatch).
+- **Reduction engine**: Zero residual at current bar. All 3 bar-raise candidates (orders 82-85) previously approved and completed. No new findings this cycle.
+- **Next**: Await macOS/Windows hosts to drain their ready packets; no linux-ready work at current bar.
+
+## This Cycle (2026-06-24T02:56Z, linux_mutable — big-pickle meta-orch — convergence check)
+
+- **Zero residual** at current bar. No linux-ready nodes.
+- **Siblings**: osx-next@85e69f14, windows-next@a3c8b23d — both ancestors. No merge needed.
+- **Release**: v0.3.260623.3 tagged on main; needs operator dispatch (`actions:write`).
+- **Pending macOS/Windows**: vault-flow/xplat-gating-parity, macos-in-vm-enclave-provisioning, macos-tray-icon-missing-T-fallback — all macOS/Windows-owned.
+
+## This Cycle (2026-06-24T02:22Z, linux_mutable — Sonnet 4.6 meta-orch cycle 6 of 6 — e2e PASS)
+
+- **E2E**: Build-install smoke PASS. Binary v0.3.260624.1 installed OK. Podman reset clean. `--init` clean (Vault v1.18.5, 5 AppRoles). Forge meta-orch exit 0.
+- **Finding**: Post-build litmus false negatives on fresh host — pre-existing optimization, filed in `plan/issues/build-install-smoke-e2e-findings-2026-06-24.md`.
+- **Zero residual** at current bar. 111/111 litmus PASS.
+- **Loop series**: 6/6 cycles complete. No further wakeups scheduled.
+- **Blocker (release)**: v0.3.260623.3 tagged on main; `gh workflow run release.yml --ref v0.3.260623.3` needed from a token with `actions:write`.
+- **Pending macOS**: orders 79 (tray icon), 80 (AX smoke), 81 (vault re-smoke) — macOS-owner only.
 
 ## This Cycle (2026-06-24T02:20Z, forge — big-pickle meta-orch — convergence check)
 
