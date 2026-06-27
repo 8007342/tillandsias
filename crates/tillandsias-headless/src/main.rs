@@ -3570,6 +3570,22 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
     Ok(())
 }
 
+/// Proxy environment variables that must be emptied for the build subprocess so
+/// image builds reach the network directly instead of routing through the
+/// runtime-only `proxy:3128` host (which is unresolvable during a build). An
+/// empty value present in the spawning process's environment overrides the
+/// `[engine] env` proxy that `--init` writes into containers.conf.
+///
+/// @trace plan/issues/init-proxy-poisons-build-2026-06-27.md
+pub(crate) const BUILD_PROXY_NEUTRALIZE_VARS: [&str; 6] = [
+    "http_proxy",
+    "https_proxy",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "all_proxy",
+    "ALL_PROXY",
+];
+
 /// Execute a single container image build via podman with optional logging.
 ///
 /// @trace spec:init-command, spec:init-incremental-builds
@@ -3598,6 +3614,22 @@ pub(crate) fn build_image_with_logging(
     let mut command = podman_command();
     let argv = podman_build_argv(&containerfile, &context_dir, identity, build_args)?;
     command.args(&argv);
+
+    // Image builds need DIRECT outbound network to fetch packages (apk, microdnf,
+    // npm, cargo). The squid proxy at `proxy:3128` only resolves at *runtime*
+    // inside the pod network via aardvark-dns; during a build there is no pod and
+    // no proxy container, so the proxy host is unresolvable. `--init` writes the
+    // proxy into the global containers.conf `[engine] env`, and Podman injects
+    // that env into every build RUN step — which makes apk/microdnf try to route
+    // through `http://proxy:3128` and fail with "Could not resolve proxy: proxy"
+    // / "DNS lookup error". Neutralize the proxy env for the build subprocess only
+    // (an empty value present in the spawning process's environment overrides the
+    // containers.conf `[engine] env` for that variable). Runtime container
+    // launches are unaffected and still route through the proxy.
+    // @trace spec:proxy-container, plan/issues/init-proxy-poisons-build-2026-06-27.md
+    for proxy_var in BUILD_PROXY_NEUTRALIZE_VARS {
+        command.env(proxy_var, "");
+    }
 
     // @trace gap:ON-005 — capture stdout/stderr for progress parsing
     command.stdout(Stdio::piped());
@@ -9318,6 +9350,21 @@ mod tests {
             image_specs(&root, "zeroclaw").expect("zeroclaw image specs should be resolvable");
         assert!(containerfile.ends_with("images/zeroclaw/Containerfile"));
         assert!(context.ends_with("images/zeroclaw"));
+    }
+
+    #[test]
+    fn build_proxy_neutralize_vars_cover_lower_and_upper_case() {
+        // Image builds must reach the network directly; the runtime proxy
+        // (proxy:3128) does not resolve during a build. Pin that both the
+        // lowercase and uppercase proxy variables are neutralized so a future
+        // edit cannot silently re-poison the build environment.
+        // @trace plan/issues/init-proxy-poisons-build-2026-06-27.md
+        for var in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"] {
+            assert!(
+                BUILD_PROXY_NEUTRALIZE_VARS.contains(&var),
+                "build must neutralize proxy var {var}"
+            );
+        }
     }
 
     #[test]
