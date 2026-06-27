@@ -7184,7 +7184,9 @@ plan_index:
     - packet_id: zeroclaw-release-packaging
       order: 111
       title: "Release: bundle tillandsias-zeroclaw binary in release artifacts"
-      status: ready
+      status: done
+      closed_at: "2026-06-27T04:00Z"
+      closed_by: "linux-macuahuitl-sonnet46-20260627T0312Z"
       kind: release
       deliverable: plan/issues/zeroclaw-binary-not-installed-2026-06-27.md
       depends_on: [zeroclaw-binary-path]
