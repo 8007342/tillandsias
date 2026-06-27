@@ -6711,6 +6711,21 @@ pub(crate) fn build_forge_agent_run_args(
         );
     }
 
+    // Inject provider API keys from Vault as env vars so forge agents can call
+    // LLM APIs without interactive auth inside the container.
+    // @trace plan/issues/forge-harness-auth-vault-proxy-2026-06-27.md
+    for provider in [
+        crate::vault_bootstrap::ProviderId::Anthropic,
+        crate::vault_bootstrap::ProviderId::Openai,
+        crate::vault_bootstrap::ProviderId::Gemini,
+    ] {
+        if let Ok(key) = crate::vault_bootstrap::read_provider_api_key(provider, debug)
+            && !key.is_empty()
+        {
+            spec = spec.env(provider.env_var(), key);
+        }
+    }
+
     spec.build_run_args()
 }
 

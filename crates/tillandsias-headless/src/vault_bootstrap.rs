@@ -546,6 +546,149 @@ pub(crate) fn read_github_token_from_vault(debug: bool) -> Result<String, String
     Ok(data["token"].as_str().unwrap_or("").to_string())
 }
 
+// ─── LLM provider API key storage ───────────────────────────────────────────
+// Vault secret schema:  secret/<provider>/api-key  { "key": "<api-key>" }
+// Supported providers: anthropic, openai, gemini
+// @trace plan/issues/forge-harness-auth-vault-proxy-2026-06-27.md
+
+/// LLM provider identifier for Vault key storage.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProviderId {
+    Anthropic,
+    Openai,
+    Gemini,
+}
+
+impl ProviderId {
+    /// Stable Vault path segment (`secret/<segment>/api-key`).
+    pub fn vault_segment(self) -> &'static str {
+        match self {
+            ProviderId::Anthropic => "anthropic",
+            ProviderId::Openai => "openai",
+            ProviderId::Gemini => "gemini",
+        }
+    }
+
+    /// Human-readable name for log messages.
+    pub fn display_name(self) -> &'static str {
+        match self {
+            ProviderId::Anthropic => "Anthropic",
+            ProviderId::Openai => "OpenAI",
+            ProviderId::Gemini => "Gemini",
+        }
+    }
+
+    /// The environment variable name that the provider's CLI reads.
+    pub fn env_var(self) -> &'static str {
+        match self {
+            ProviderId::Anthropic => "ANTHROPIC_API_KEY",
+            ProviderId::Openai => "OPENAI_API_KEY",
+            ProviderId::Gemini => "GEMINI_API_KEY",
+        }
+    }
+}
+
+fn provider_vault_path(provider: ProviderId) -> String {
+    format!("secret/{}/api-key", provider.vault_segment())
+}
+
+/// Write a provider API key to Vault. Idempotent — re-running with the same
+/// key is a no-op. Returns `Err` if Vault cannot be brought up or the write
+/// fails.
+#[allow(dead_code)]
+pub fn write_provider_api_key(provider: ProviderId, key: &str, debug: bool) -> Result<(), String> {
+    if key.is_empty() {
+        return Err(format!(
+            "{} API key must not be empty",
+            provider.display_name()
+        ));
+    }
+    if !container_running(VAULT_CONTAINER_NAME) {
+        if debug {
+            eprintln!(
+                "[tillandsias-vault] Vault not running; bringing up before {} key write",
+                provider.display_name()
+            );
+        }
+        ensure_vault_running(debug).map_err(|e| {
+            format!(
+                "could not bring Vault up to store {} API key: {e}",
+                provider.display_name()
+            )
+        })?;
+    }
+    let rt = tokio_runtime()?;
+    let base_url = vault_api_base_url();
+    let root_token = read_and_handover_root_token(debug)?;
+    let client = vault_client(&base_url, &root_token, debug)?;
+    let path = provider_vault_path(provider);
+
+    rt.block_on(client.write_secret(&path, serde_json::json!({ "key": key })))
+        .map_err(|e| format!("vault write_secret {} failed: {e}", path))?;
+
+    let read_back = rt
+        .block_on(client.read_secret(&path))
+        .map_err(|e| format!("vault read_secret verification for {} failed: {e}", path))?;
+    if read_back["key"].as_str() != Some(key) {
+        return Err(format!(
+            "vault read-back for {} did not match written key",
+            provider.display_name()
+        ));
+    }
+    if debug {
+        eprintln!(
+            "[tillandsias] {} API key stored in Vault at {}",
+            provider.display_name(),
+            path
+        );
+    }
+    Ok(())
+}
+
+/// Read a provider API key from Vault. Returns `Ok("")` if the key is absent;
+/// errs if Vault is not running or the read fails.
+#[allow(dead_code)]
+pub(crate) fn read_provider_api_key(provider: ProviderId, debug: bool) -> Result<String, String> {
+    if !container_running(VAULT_CONTAINER_NAME) {
+        return Ok(String::new());
+    }
+    let rt = tokio_runtime()?;
+    let base_url = vault_api_base_url();
+    let root_token = read_and_handover_root_token(debug)?;
+    let client = vault_client(&base_url, &root_token, debug)?;
+    let path = provider_vault_path(provider);
+    let data = rt
+        .block_on(client.read_secret(&path))
+        .unwrap_or(serde_json::Value::Null);
+    Ok(data["key"].as_str().unwrap_or("").to_string())
+}
+
+/// Returns `true` iff a non-empty API key for the given provider is stored in
+/// Vault. Returns `false` immediately (without Vault bring-up) when no data
+/// volume exists.
+#[allow(dead_code)]
+pub(crate) fn is_provider_logged_in(provider: ProviderId, debug: bool) -> bool {
+    if !vault_data_volume_exists() {
+        return false;
+    }
+    if !container_running(VAULT_CONTAINER_NAME)
+        && let Err(e) = ensure_vault_running(debug)
+    {
+        if debug {
+            eprintln!(
+                "[tillandsias] is_provider_logged_in({}): vault bring-up failed: {e}",
+                provider.display_name()
+            );
+        }
+        return false;
+    }
+    read_provider_api_key(provider, debug)
+        .map(|k| !k.is_empty())
+        .unwrap_or(false)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
+
 /// True iff the persistent Vault data volume exists. Cheap: a single
 /// `podman volume exists` with no Vault bring-up, so it can gate the more
 /// expensive on-demand launch in [`is_github_logged_in`].
