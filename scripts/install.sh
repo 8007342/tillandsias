@@ -243,7 +243,7 @@ fi
 
 echo ""
 say "Running tillandsias --init (sets up local runtime — may take a minute)..."
-"$INSTALL_PATH" --init
+"$INSTALL_PATH" --init --debug
 echo ""
 say "Init complete. Launch the tray with:"
 if path_has_dir "$INSTALL_DIR"; then
