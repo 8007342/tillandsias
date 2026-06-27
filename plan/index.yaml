@@ -7094,7 +7094,7 @@ plan_index:
     - packet_id: vault-credential-persistence
       order: 108
       title: "Research + fix: Vault credential persistence across container rebuilds"
-      status: ready
+      status: claimed
       kind: research+enhancement
       deliverable: plan/issues/vault-credential-persistence-2026-06-26.md
       depends_on: []
@@ -7111,3 +7111,15 @@ plan_index:
         - "On fresh launch with existing data volume and keyring entry, Vault unseals without operator input"
         - "GitHub login menu item is suppressed / shows 'already authenticated' when a valid token is in Vault"
         - "Research findings and implementation notes in plan/issues/vault-credential-persistence-2026-06-26.md"
+      events:
+        - type: claim
+          ts: "2026-06-27T02:05Z"
+          agent_id: "linux-macuahuitl-sonnet46-20260627T0205Z"
+          host: linux
+          lease_id: "vault-credential-persistence-20260627T0205Z"
+          expires_at: "2026-06-27T06:05Z"
+          note: >
+            Root cause identified: launch_vault_container unconditionally wipes
+            tillandsias-vault-data volume on every non-running launch. Fix:
+            only wipe when keyring has no Shamir share (partial-init scenario).
+            Implementing has_shamir_share_in_keyring() guard in vault_bootstrap.rs.
