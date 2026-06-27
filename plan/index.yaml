@@ -7389,3 +7389,39 @@ plan_index:
         - "No zeroclaw references in init image list / identity chain / build-args"
         - "image_specs + ordering tests updated and green"
         - "./build.sh --check and --test pass"
+
+    - packet_id: vault-exec-env-regression
+      order: 118
+      title: "P0: vault podman-exec reads missing env — headless+tray broken since HTTP→exec move"
+      status: completed
+      kind: bug+critical
+      deliverable: plan/issues/vault-exec-env-regression-2026-06-27.md
+      depends_on: [vault-credential-host-exposure]
+      pickup_role: linux
+      estimated_hours: 2
+      outcome: >
+        order 113 moved host-side Vault reads from the HTTP client to podman exec
+        but did not supply VAULT_ADDR/VAULT_TOKEN/VAULT_SKIP_VERIFY, which podman
+        exec does not inherit from the entrypoint. Every read failed (TLS unknown
+        authority, then missing token), so is_github_key_present always returned
+        false (tray stuck logged-out) and read_provider_api_key always errored
+        (no forge key injection). Fix: vault_exec_command helper sets the env;
+        token forwarded via name-only -e VAULT_TOKEN so it stays out of argv.
+      events:
+        - type: completed
+          ts: "2026-06-27T18:30Z"
+          agent_id: "linux-yoga-sonnet46-20260627T1730Z"
+          commits: []
+          summary: >
+            Diagnosed real exit code 2 (TLS + missing token) on the exec read path;
+            confirmed entrypoint env not inherited by podman exec. Added
+            vault_exec_command (VAULT_ADDR + VAULT_SKIP_VERIFY + name-only
+            VAULT_TOKEN), routed is_github_key_present and vault_kv_get_via_exec
+            through it, token sourced from read_and_handover_root_token. Verified
+            end-to-end (kv put/get round-trip exit 0, token lookup root). Unit test
+            vault_exec_command_sets_required_env_and_hides_token pins the contract.
+      exit_criteria:
+        - "vault_kv_get_via_exec and is_github_key_present set VAULT_ADDR/TOKEN/skip-verify — DONE"
+        - "Token forwarded name-only, never in argv — DONE (unit test)"
+        - "End-to-end kv get returns the value (exit 0) against live Vault — DONE"
+        - "./build.sh --check passes — DONE"
