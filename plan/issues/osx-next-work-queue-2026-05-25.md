@@ -2,6 +2,17 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
+## 2026-06-27T00:00Z — ff-pull linux-next→osx-next; vault cert finding filed; local build launched
+
+- Fast-forwarded osx-next db9e2d0d→370e2317 (20 new commits from linux-next)
+- Key changes absorbed: vault→DNS routing (f948defa), credential host-exposure
+  audit (4d910224), ProviderId/API-key injection (006f395d), zeroclaw removed,
+  vz.rs headless service env now uses `https://vault:8200`
+- Filed `smoke-finding/vault-cert-ip-not-valid-for-name` (done — fixed in ff)
+- Filed `smoke-finding/exec-guest-pty-output-not-captured-in-background` (ready)
+- Local macOS tray build started: `./build-osx-tray.sh --ci-full`
+- Next: install locally-built tray, update headless binary in VM, test github-login
+
 ## 2026-06-26T22:30Z — smoke v0.3.260626.4 packets exhausted; 5 fixes committed to osx-next
 
 - `smoke-finding/download-no-read-timeout` → DONE: `fetch.rs` 30s idle timeout + 5-retry exponential backoff loop
