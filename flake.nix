@@ -114,21 +114,6 @@
             HOST_CC = "${pkgs.stdenv.cc}/bin/cc";
           });
 
-        tillandsias-zeroclaw-x86_64-musl =
-          let
-            cargoArtifacts = craneLib.buildDepsOnly (commonCraneArgs // {
-              CARGO_BUILD_TARGET = "x86_64-unknown-linux-musl";
-              cargoExtraArgs = "-p tillandsias-zeroclaw --bin tillandsias-zeroclaw";
-            });
-          in
-          craneLib.buildPackage (commonCraneArgs // {
-            inherit cargoArtifacts;
-            pname = "tillandsias-zeroclaw";
-            version = "0.0.0";
-            CARGO_BUILD_TARGET = "x86_64-unknown-linux-musl";
-            cargoExtraArgs = "-p tillandsias-zeroclaw --bin tillandsias-zeroclaw";
-          });
-
         # Local files — changing these triggers rebuild
         forgeEntrypoint = ./images/default/entrypoint.sh;
         forgeLibCommon = ./images/default/lib-common.sh;
@@ -219,8 +204,7 @@
           # Hermetic musl-static release binaries (see let-bindings above).
           inherit tillandsias-x86_64-musl
                   tillandsias-headless-x86_64-musl
-                  tillandsias-headless-aarch64-musl
-                  tillandsias-zeroclaw-x86_64-musl;
+                  tillandsias-headless-aarch64-musl;
 
           forge-image = pkgs.dockerTools.buildLayeredImage {
             name = "tillandsias-forge";
