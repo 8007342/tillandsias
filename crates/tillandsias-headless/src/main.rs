@@ -744,6 +744,40 @@ pub(crate) fn enclave_no_proxy() -> String {
     format!("{},{}", ENCLAVE_NO_PROXY_BASE, enclave_subnet())
 }
 
+// Returns the canonical 6 proxy env-var args (http_proxy, https_proxy,
+// HTTP_PROXY, HTTPS_PROXY, no_proxy, NO_PROXY) ready to extend a
+// `podman run` Vec<String>. Single definition used by all container builders.
+// @trace cheatsheets/runtime/enclave-proxy-patterns.md, spec:proxy-container
+fn proxy_env_args() -> Vec<String> {
+    let no_proxy = enclave_no_proxy();
+    vec![
+        "--env".into(),
+        "http_proxy=http://proxy:3128".into(),
+        "--env".into(),
+        "https_proxy=http://proxy:3128".into(),
+        "--env".into(),
+        "HTTP_PROXY=http://proxy:3128".into(),
+        "--env".into(),
+        "HTTPS_PROXY=http://proxy:3128".into(),
+        "--env".into(),
+        format!("no_proxy={no_proxy}"),
+        "--env".into(),
+        format!("NO_PROXY={no_proxy}"),
+    ]
+}
+
+// Applies the canonical proxy env vars to a ContainerSpec builder.
+// @trace cheatsheets/runtime/enclave-proxy-patterns.md, spec:proxy-container
+fn apply_proxy_env(spec: ContainerSpec) -> ContainerSpec {
+    let no_proxy = enclave_no_proxy();
+    spec.env("http_proxy", "http://proxy:3128")
+        .env("https_proxy", "http://proxy:3128")
+        .env("HTTP_PROXY", "http://proxy:3128")
+        .env("HTTPS_PROXY", "http://proxy:3128")
+        .env("no_proxy", no_proxy.clone())
+        .env("NO_PROXY", no_proxy)
+}
+
 // @trace spec:init-incremental-builds
 /// Build state tracking for incremental initialization.
 ///
@@ -1790,7 +1824,6 @@ fn build_stack_common_args(
     project_name: &str,
     project_path: &Path,
 ) -> Vec<String> {
-    let no_proxy = enclave_no_proxy();
     let mut args = vec![
         "--name".into(),
         container_name.into(),
@@ -1803,18 +1836,9 @@ fn build_stack_common_args(
         "--security-opt=label=disable".into(),
         "--userns=keep-id".into(),
         "--pids-limit=512".into(),
-        "--env".into(),
-        "http_proxy=http://proxy:3128".into(),
-        "--env".into(),
-        "https_proxy=http://proxy:3128".into(),
-        "--env".into(),
-        "HTTP_PROXY=http://proxy:3128".into(),
-        "--env".into(),
-        "HTTPS_PROXY=http://proxy:3128".into(),
-        "--env".into(),
-        format!("no_proxy={no_proxy}"),
-        "--env".into(),
-        format!("NO_PROXY={no_proxy}"),
+    ];
+    args.extend(proxy_env_args());
+    args.extend([
         "--env".into(),
         "PATH=/usr/local/bin:/usr/bin".into(),
         "--env".into(),
@@ -1835,7 +1859,7 @@ fn build_stack_common_args(
             "type=bind,source={},target=/etc/tillandsias/ca.crt,readonly=true",
             certs_dir.join("intermediate.crt").display()
         ),
-    ];
+    ]);
     append_git_identity_env_args(&mut args);
     args
 }
@@ -1999,24 +2023,13 @@ fn build_git_run_args(
         format!("PROJECT={project_name}"),
         "--env".into(),
         "GIT_TRACE=1".into(),
-        // @trace spec:proxy-container, spec:git-mirror-service
-        // Pass proxy env vars so the post-receive hook's `git push` to GitHub
-        // (HTTPS) routes through the enclave proxy. Without these, the outbound
-        // push relies on transparent proxying, which breaks when the proxy
-        // container is reconfigured or the network changes.
-        "--env".into(),
-        "HTTP_PROXY=http://proxy:3128".into(),
-        "--env".into(),
-        "HTTPS_PROXY=http://proxy:3128".into(),
-        "--env".into(),
-        "NO_PROXY=localhost,127.0.0.1,git-service,tillandsias-git,vault,inference".into(),
-        "--env".into(),
-        "http_proxy=http://proxy:3128".into(),
-        "--env".into(),
-        "https_proxy=http://proxy:3128".into(),
-        "--env".into(),
-        "no_proxy=localhost,127.0.0.1,git-service,tillandsias-git,vault,inference".into(),
     ];
+    // @trace spec:proxy-container, spec:git-mirror-service
+    // Proxy env vars route post-receive hook's `git push` to GitHub through
+    // the enclave proxy. Uses enclave_no_proxy() — the canonical full NO_PROXY
+    // list — not a shorter hand-rolled one.
+    // See cheatsheets/runtime/enclave-proxy-patterns.md for justification.
+    args.extend(proxy_env_args());
     if let Some(url) = project_remote_url
         && !url.is_empty()
     {
@@ -2066,7 +2079,6 @@ fn build_inference_run_args(
     let model_cache_dir = Path::new(&home_dir).join(".cache/tillandsias/models");
     let _ = std::fs::create_dir_all(&model_cache_dir);
 
-    let no_proxy = enclave_no_proxy();
     let mut args = vec![
         "--detach".into(),
         "--rm".into(),
@@ -2087,18 +2099,9 @@ fn build_inference_run_args(
         "OLLAMA_DEBUG=1".into(),
         "--env".into(),
         "OLLAMA_KEEP_ALIVE=24h".into(),
-        "--env".into(),
-        "HTTP_PROXY=http://proxy:3128".into(),
-        "--env".into(),
-        "HTTPS_PROXY=http://proxy:3128".into(),
-        "--env".into(),
-        "http_proxy=http://proxy:3128".into(),
-        "--env".into(),
-        "https_proxy=http://proxy:3128".into(),
-        "--env".into(),
-        format!("NO_PROXY={no_proxy}"),
-        "--env".into(),
-        format!("no_proxy={no_proxy}"),
+    ];
+    args.extend(proxy_env_args());
+    args.extend([
         "-v".into(),
         format!(
             "{}:/home/ollama/.ollama/models:rw",
@@ -2112,7 +2115,7 @@ fn build_inference_run_args(
         image.into(),
         "/usr/bin/ollama".into(),
         "serve".into(),
-    ];
+    ]);
 
     if skip_runtime_pulls {
         args.insert(args.len() - 2, "--env".into());
@@ -2805,7 +2808,6 @@ fn build_opencode_forge_args(
     // (the way a tray launch or background script ends up) makes podman
     // refuse with "input device is not a TTY" before any container start
     // event fires.
-    let no_proxy = enclave_no_proxy();
     let mut args = vec![
         "--rm".into(),
         "--name".into(),
@@ -2837,19 +2839,8 @@ fn build_opencode_forge_args(
             args.push("--detach".into());
         }
     }
+    args.extend(proxy_env_args());
     args.extend([
-        "--env".into(),
-        "http_proxy=http://proxy:3128".into(),
-        "--env".into(),
-        "https_proxy=http://proxy:3128".into(),
-        "--env".into(),
-        "HTTP_PROXY=http://proxy:3128".into(),
-        "--env".into(),
-        "HTTPS_PROXY=http://proxy:3128".into(),
-        "--env".into(),
-        format!("no_proxy={no_proxy}"),
-        "--env".into(),
-        format!("NO_PROXY={no_proxy}"),
         "--env".into(),
         "PATH=/usr/local/bin:/usr/bin".into(),
         "--env".into(),
@@ -3140,6 +3131,53 @@ fn ensure_pasta_options_ipv4_only(path: &std::path::Path) -> Result<(), String> 
     Ok(())
 }
 
+// Idempotently writes the proxy env vars to containers.conf [engine] section.
+// Podman 4.0+ injects [engine] env into every container launched by this user,
+// so forge containers and other containers that bypass the Rust launcher also
+// get HTTP_PROXY / HTTPS_PROXY without per-container injection.
+// @trace cheatsheets/runtime/enclave-proxy-patterns.md, spec:proxy-container
+fn ensure_containers_conf_proxy_env(path: &std::path::Path) -> Result<(), String> {
+    let no_proxy = enclave_no_proxy();
+    let proxy_url = "http://proxy:3128";
+    let env_block = format!(
+        "[engine]\nenv = [\
+            \"http_proxy={proxy_url}\", \
+            \"https_proxy={proxy_url}\", \
+            \"HTTP_PROXY={proxy_url}\", \
+            \"HTTPS_PROXY={proxy_url}\", \
+            \"no_proxy={no_proxy}\", \
+            \"NO_PROXY={no_proxy}\"\
+        ]\n"
+    );
+
+    if !path.exists() {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|e| format!("failed to create config directory: {e}"))?;
+        }
+        fs::write(path, &env_block).map_err(|e| format!("failed to write containers.conf: {e}"))?;
+        return Ok(());
+    }
+
+    let content =
+        fs::read_to_string(path).map_err(|e| format!("failed to read containers.conf: {e}"))?;
+
+    // Already present — idempotent if the engine env section is there.
+    if content.contains("[engine]") && content.contains("HTTP_PROXY") {
+        return Ok(());
+    }
+
+    let mut new_content = content.clone();
+    if !new_content.ends_with('\n') {
+        new_content.push('\n');
+    }
+    new_content.push('\n');
+    new_content.push_str(&env_block);
+
+    fs::write(path, new_content).map_err(|e| format!("failed to update containers.conf: {e}"))?;
+    Ok(())
+}
+
 #[cfg(target_os = "linux")]
 fn auto_detect_and_configure_ipv6_workaround(debug: bool) {
     if let Some(conf_path) = get_user_containers_conf() {
@@ -3173,6 +3211,20 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
 
     #[cfg(target_os = "linux")]
     auto_detect_and_configure_ipv6_workaround(debug);
+
+    // Write proxy env to containers.conf so Podman injects it into every
+    // container on this host, including forge containers that bypass the Rust
+    // launcher. Idempotent — only writes when the [engine] env block is absent.
+    if let Some(conf_path) = get_user_containers_conf() {
+        if let Err(e) = ensure_containers_conf_proxy_env(&conf_path) {
+            eprintln!("[tillandsias] init: failed to configure proxy in containers.conf: {e}");
+        } else if debug {
+            eprintln!(
+                "[tillandsias] init: proxy env written to {}",
+                conf_path.display()
+            );
+        }
+    }
 
     let version = VERSION.trim();
     let root = resolve_runtime_asset_root(version, debug)?;
@@ -6584,8 +6636,7 @@ pub(crate) fn build_forge_agent_run_args(
     debug: bool,
 ) -> Vec<String> {
     let image = forge_image_tag(version);
-    let no_proxy = enclave_no_proxy();
-    let mut spec = ContainerSpec::new(image)
+    let spec = ContainerSpec::new(image)
         .name(forge_container_name(project_name))
         .hostname(forge_hostname(project_name))
         .network(ENCLAVE_NET)
@@ -6599,13 +6650,8 @@ pub(crate) fn build_forge_agent_run_args(
             project_path.display().to_string(),
             format!("/home/forge/src/{project_name}"),
             MountMode::ReadWrite,
-        )
-        .env("http_proxy", "http://proxy:3128")
-        .env("https_proxy", "http://proxy:3128")
-        .env("HTTP_PROXY", "http://proxy:3128")
-        .env("HTTPS_PROXY", "http://proxy:3128")
-        .env("no_proxy", no_proxy.clone())
-        .env("NO_PROXY", no_proxy)
+        );
+    let mut spec = apply_proxy_env(spec)
         .env("PATH", "/usr/local/bin:/usr/bin")
         .env("HOME", "/home/forge")
         .env("USER", "forge")

@@ -1,8 +1,9 @@
 # Enclave Proxy: Centralize Injection and Fix NO_PROXY Drift
 
-**Status:** `pending`
+**Status:** `completed`
 **Owner:** linux
 **Date:** 2026-06-26
+**Completed:** 2026-06-27T03:40Z
 **Trace:** `spec:proxy-container`, `spec:enclave-network`
 
 ## Problem

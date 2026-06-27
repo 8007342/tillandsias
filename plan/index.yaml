@@ -7075,7 +7075,9 @@ plan_index:
     - packet_id: enclave-proxy-centralize-injection
       order: 107
       title: "Enhancement: centralize proxy injection — eliminate per-container env var pollution"
-      status: ready
+      status: done
+      closed_at: "2026-06-27T03:40Z"
+      closed_by: "linux-macuahuitl-sonnet46-20260627T0312Z"
       kind: enhancement
       deliverable: plan/issues/enclave-proxy-centralize-and-dedup-2026-06-26.md
       depends_on: [enclave-transparent-proxy-feasibility]
