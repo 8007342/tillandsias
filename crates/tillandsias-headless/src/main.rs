@@ -728,8 +728,13 @@ const EGRESS_NET: &str = "tillandsias-egress";
 /// The dual-homed network spec attached to egress-capable enclave containers
 /// (proxy, git-service): enclave leg for in-enclave DNS + the egress leg for NAT.
 const ENCLAVE_EGRESS_NETS: &str = "tillandsias-enclave,tillandsias-egress";
-const ENCLAVE_NO_PROXY_BASE: &str =
-    "localhost,127.0.0.1,0.0.0.0,::1,inference,proxy,git-service,tillandsias-git";
+// `vault` + `tillandsias-vault` MUST be here: containers reach Vault by its
+// service DNS name (`https://vault:8200`) since the move off the locally-bound
+// `127.0.0.1` listener. Without these, vault-cli's curl routes the Vault request
+// through the enclave proxy and fails with "Could not resolve proxy: proxy",
+// breaking GitHub-login token storage and remote-project listing.
+// @trace spec:proxy-container, plan/issues/vault-service-dns-no-proxy-2026-06-27.md
+const ENCLAVE_NO_PROXY_BASE: &str = "localhost,127.0.0.1,0.0.0.0,::1,vault,tillandsias-vault,inference,proxy,git-service,tillandsias-git";
 const CA_DIR: &str = "/tmp/tillandsias-ca";
 
 fn enclave_subnet() -> String {
@@ -4271,6 +4276,13 @@ fn run_github_login(debug: bool) -> Result<(), String> {
             "--cap-drop=ALL",
             "--security-opt=no-new-privileges",
             "--userns=keep-id",
+        ]);
+        // Explicit proxy env so `vault` is in no_proxy and the in-container
+        // vault-cli write reaches https://vault:8200 directly (overrides any
+        // stale global containers.conf no_proxy on already-initialized hosts).
+        // @trace spec:proxy-container, plan/issues/vault-service-dns-no-proxy-2026-06-27.md
+        run.args(proxy_env_args());
+        run.args([
             "--entrypoint",
             "/bin/sh",
             &image,
@@ -8010,6 +8022,27 @@ mod tests {
         }
         assert_eq!(enclave_subnet(), DEFAULT_ENCLAVE_SUBNET);
         assert!(enclave_no_proxy().ends_with(DEFAULT_ENCLAVE_SUBNET));
+    }
+
+    #[test]
+    fn enclave_no_proxy_includes_vault_service_dns() {
+        // Containers reach Vault by its service DNS name (https://vault:8200)
+        // since the move off the locally-bound 127.0.0.1 listener. If `vault` is
+        // not in no_proxy, vault-cli's curl routes the Vault request through the
+        // enclave proxy and fails ("Could not resolve proxy: proxy"), breaking
+        // GitHub-login token storage and remote-project listing.
+        // @trace plan/issues/vault-service-dns-no-proxy-2026-06-27.md
+        let _guard = env_lock();
+        unsafe {
+            std::env::remove_var(ENCLAVE_SUBNET_ENV);
+        }
+        let no_proxy = enclave_no_proxy();
+        for entry in [",vault,", "tillandsias-vault"] {
+            assert!(
+                no_proxy.contains(entry),
+                "no_proxy must bypass Vault ({entry}); got {no_proxy}"
+            );
+        }
     }
 
     #[test]
