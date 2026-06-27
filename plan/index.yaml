@@ -7094,12 +7094,14 @@ plan_index:
     - packet_id: vault-credential-persistence
       order: 108
       title: "Research + fix: Vault credential persistence across container rebuilds"
-      status: claimed
+      status: done
       kind: research+enhancement
       deliverable: plan/issues/vault-credential-persistence-2026-06-26.md
       depends_on: []
       pickup_role: linux
       estimated_hours: 4
+      closed_at: "2026-06-27T02:20Z"
+      closed_by: "linux-macuahuitl-sonnet46-20260627T0220Z"
       outcome: >
         Vault unseal key persists in host keyring; encrypted secret store
         survives full container rebuilds; on next launch Vault unseals
@@ -7122,4 +7124,18 @@ plan_index:
             Root cause identified: launch_vault_container unconditionally wipes
             tillandsias-vault-data volume on every non-running launch. Fix:
             only wipe when keyring has no Shamir share (partial-init scenario).
-            Implementing has_shamir_share_in_keyring() guard in vault_bootstrap.rs.
+        - type: completed
+          ts: "2026-06-27T02:20Z"
+          agent_id: "linux-macuahuitl-sonnet46-20260627T0220Z"
+          host: linux
+          commits: []
+          evidence:
+            - "cargo check -p tillandsias-headless PASS"
+            - "cargo test -p tillandsias-headless vault PASS (1/1)"
+            - "./build.sh --check PASS (Clippy clean)"
+          note: >
+            Fixed: added has_shamir_share_in_keyring() helper and made the
+            volume wipe conditional on partial-init detection (volume exists
+            but no keychain share). All exit criteria satisfied. The GitHub
+            login race was a symptom of the same bug — fixing the wipe makes
+            is_github_logged_in return true on subsequent boots.

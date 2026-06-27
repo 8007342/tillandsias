@@ -558,6 +558,32 @@ fn vault_data_volume_exists() -> bool {
         .unwrap_or(false)
 }
 
+/// True iff the host keychain holds a valid (32-byte, base64-encoded) Shamir
+/// unseal share. Used to distinguish a subsequent-boot launch (data volume
+/// contains a fully-initialized Vault the host can re-unseal) from a
+/// partial-init failure (init started, process crashed before the host
+/// captured the handover, so the volume and the keyring are out of sync).
+#[cfg(feature = "vault")]
+fn has_shamir_share_in_keyring() -> bool {
+    use base64::Engine;
+    let Ok(entry) = Entry::new(KEYCHAIN_SERVICE, VAULT_SHAMIR_SHARE_V1) else {
+        return false;
+    };
+    let Ok(encoded) = with_keyring_timeout(move || entry.get_password()) else {
+        return false;
+    };
+    !encoded.is_empty()
+        && base64::engine::general_purpose::STANDARD
+            .decode(&encoded)
+            .map(|v| v.len() == 32)
+            .unwrap_or(false)
+}
+
+#[cfg(not(feature = "vault"))]
+fn has_shamir_share_in_keyring() -> bool {
+    false
+}
+
 /// Mint a fresh AppRole token for a container of the given `role` (e.g.
 /// `"git-mirror"`). The returned `(token, secret_name)` is registered in
 /// the in-process revocation registry so shutdown can revoke it. The
@@ -1099,14 +1125,36 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
         .stderr(Stdio::piped())
         .output();
 
-    // Remove stale vault data volume so a partially-initialized vault from a
-    // previous failed bootstrap doesn't leave us with a wrong unseal key on
-    // the next attempt (the handover key was never captured).
-    let _ = podman_cmd_sync()
-        .args(["volume", "rm", "-f", VAULT_VOLUME])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output();
+    // Only wipe the data volume in the partial-init scenario: the volume
+    // exists but the host keychain has no Shamir unseal share, meaning a
+    // prior bootstrap started Vault's `operator init` but crashed before
+    // the host captured the handover. In that state the volume holds a Vault
+    // initialized with an unknown key, so wiping and re-initializing is the
+    // only safe recovery.
+    //
+    // When the keychain already has the Shamir share the volume contains a
+    // fully-initialized Vault we can re-unseal on the next launch.
+    // Wiping it would destroy the stored GitHub token and all other secrets,
+    // forcing the operator to re-authenticate — which is exactly the bug this
+    // guard fixes. @trace spec:tillandsias-vault
+    let is_partial_init = vault_data_volume_exists() && !has_shamir_share_in_keyring();
+    if is_partial_init {
+        if debug {
+            eprintln!(
+                "[tillandsias-vault] removing stale partial-init data volume \
+                 (volume exists but no Shamir share in keychain)"
+            );
+        }
+        let _ = podman_cmd_sync()
+            .args(["volume", "rm", "-f", VAULT_VOLUME])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output();
+    } else if debug && vault_data_volume_exists() {
+        eprintln!(
+            "[tillandsias-vault] preserving existing data volume (Shamir share present in keychain)"
+        );
+    }
 
     // Vault must join the enclave bridge network so (a) `--network-alias vault`
     // is valid — rootless podman's DEFAULT network is pasta/slirp4netns, not
