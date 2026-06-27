@@ -1523,19 +1523,50 @@ fn ensure_enclave_host_dns(debug: bool) -> Result<(), String> {
     let gateway = enclave_gateway_from_podman_network(debug)?;
     let rendered = render_enclave_resolved_config(&gateway);
     let path = Path::new(ENCLAVE_RESOLVED_CONF);
-    if fs::read_to_string(path).ok().as_deref() == Some(rendered.as_str()) {
-        return Ok(());
+    
+    let mut changed = false;
+    if fs::read_to_string(path).ok().as_deref() != Some(rendered.as_str()) {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|e| format!("create systemd-resolved drop-in dir: {e}"))?;
+        }
+        fs::write(path, rendered).map_err(|e| format!("write {ENCLAVE_RESOLVED_CONF}: {e}"))?;
+        changed = true;
     }
 
-    if let Some(parent) = path.parent() {
-        fs::create_dir_all(parent)
-            .map_err(|e| format!("create systemd-resolved drop-in dir: {e}"))?;
+    if changed {
+        let mut command = Command::new("systemctl");
+        command.args(["reload-or-restart", "systemd-resolved"]);
+        run_command(command, debug)?;
     }
-    fs::write(path, rendered).map_err(|e| format!("write {ENCLAVE_RESOLVED_CONF}: {e}"))?;
 
-    let mut command = Command::new("systemctl");
-    command.args(["reload-or-restart", "systemd-resolved"]);
-    run_command(command, debug)
+    // Always run WSL link-specific DNS setup to ensure persistence across reboots.
+    if Path::new("/run/WSL").exists() {
+        if let Ok(resolv_content) = fs::read_to_string("/etc/resolv.conf") {
+            let mut nameserver = None;
+            for line in resolv_content.lines() {
+                let parts: Vec<&str> = line.split_whitespace().collect();
+                if parts.len() >= 2 && parts[0] == "nameserver" {
+                    nameserver = Some(parts[1].to_string());
+                    break;
+                }
+            }
+            if let Some(ns) = nameserver {
+                if debug {
+                    eprintln!("[tillandsias] WSL detected, configuring eth0 DNS to {ns}");
+                }
+                let mut cmd1 = Command::new("resolvectl");
+                cmd1.args(["dns", "eth0", &ns]);
+                let _ = run_command(cmd1, debug);
+
+                let mut cmd2 = Command::new("resolvectl");
+                cmd2.args(["domain", "eth0", "~."]);
+                let _ = run_command(cmd2, debug);
+            }
+        }
+    }
+
+    Ok(())
 }
 
 #[cfg(unix)]
