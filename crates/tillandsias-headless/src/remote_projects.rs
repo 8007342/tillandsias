@@ -299,13 +299,30 @@ fn run_git_image_shell(script: &str, extra_args: &[&str], debug: bool) -> Result
         "CURL_CA_BUNDLE=/etc/tillandsias/ca.crt",
         "--volume",
         "/tmp/tillandsias-ca/intermediate.crt:/etc/tillandsias/ca.crt:ro",
-        "--entrypoint",
-        "/bin/sh",
-        &image,
-        "-ceu",
-        script,
-        "gh",
     ]);
+    // Pass the proxy env explicitly so `vault` is in no_proxy and vault-cli's
+    // curl reaches https://vault:8200 directly. The global containers.conf
+    // `[engine] env` on already-initialized hosts may carry a stale no_proxy
+    // (written before the move to Vault service DNS) that omits `vault`; the
+    // per-container --env overrides it. Without this, the Vault read fails with
+    // "Could not resolve proxy: proxy".
+    // @trace spec:proxy-container, plan/issues/vault-service-dns-no-proxy-2026-06-27.md
+    let no_proxy = crate::enclave_no_proxy();
+    command.args([
+        "--env",
+        "http_proxy=http://proxy:3128",
+        "--env",
+        "https_proxy=http://proxy:3128",
+        "--env",
+        "HTTP_PROXY=http://proxy:3128",
+        "--env",
+        "HTTPS_PROXY=http://proxy:3128",
+        "--env",
+        &format!("no_proxy={no_proxy}"),
+        "--env",
+        &format!("NO_PROXY={no_proxy}"),
+    ]);
+    command.args(["--entrypoint", "/bin/sh", &image, "-ceu", script, "gh"]);
     command.args(extra_args);
 
     let output = run_command_with_timeout(command, GH_INVOCATION_TIMEOUT)?;
