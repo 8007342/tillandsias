@@ -6356,3 +6356,83 @@ plan_index:
       outcome: >
         Orders 92-97 all closed. Order 56 (nanoclawv2-orchestration) status
         updated to completed. ZeroClaw migration chain fully done.
+
+    - packet_id: enclave-proxy-patterns-cheatsheet
+      order: 98
+      title: "Enclave proxy patterns cheatsheet — Unix justification for proxy env var usage"
+      status: done
+      kind: cheatsheet
+      deliverable: cheatsheets/runtime/enclave-proxy-patterns.md
+      depends_on: []
+      pickup_role: linux
+      outcome: >
+        Cheatsheet written at cheatsheets/runtime/enclave-proxy-patterns.md
+        covering: explicit forward proxy vs containers.conf injection vs iptables
+        TPROXY; when HTTP_PROXY env vars are the correct Unix approach and when
+        they are a maintenance anti-pattern; the build_stack_common_args
+        single-injection-point rule; Squid intercept-mode config; iptables
+        PREROUTING rules and rootless-Podman feasibility notes; common pitfalls
+        including NO_PROXY drift. Closes the "justify every env var or fix the
+        service" requirement from operator feedback.
+      closed_at: "2026-06-26T00:00Z"
+      closed_by: "linux-sonnet46-20260626"
+
+    - packet_id: enclave-transparent-proxy-feasibility
+      order: 99
+      title: "Research: iptables TPROXY feasibility in rootless Podman enclave"
+      status: ready
+      kind: research
+      deliverable: plan/issues/enclave-transparent-proxy-feasibility-2026-06-26.md
+      depends_on: []
+      pickup_role: linux
+      estimated_hours: 2
+      outcome: >
+        Verdict on whether iptables TPROXY intercept mode is achievable in our
+        rootless Podman / netavark / Fedora Silverblue setup, or whether
+        containers.conf injection is the correct next step. Unlocks order 100.
+      exit_criteria:
+        - "Written verdict in plan/issues/enclave-transparent-proxy-feasibility-2026-06-26.md under ## Verdict"
+        - "If feasible: minimal proof-of-concept iptables rule set + Squid config change demonstrated"
+        - "If not feasible: clear recommendation for containers.conf injection with rationale"
+
+    - packet_id: enclave-proxy-centralize-injection
+      order: 100
+      title: "Enhancement: centralize proxy injection — eliminate per-container env var pollution"
+      status: pending
+      kind: enhancement
+      deliverable: plan/issues/enclave-proxy-centralize-and-dedup-2026-06-26.md
+      depends_on: [enclave-transparent-proxy-feasibility]
+      pickup_role: linux
+      estimated_hours: 3
+      outcome: >
+        Exactly one location in the codebase injects proxy env vars into
+        containers. NO_PROXY list defined and used from a single source.
+        Redundant injections in build_git_run_args, build_inference_run_args,
+        build_forge_common_args, and build_forge_agent_run_args removed.
+        Comment at injection point cites enclave-proxy-patterns cheatsheet.
+      exit_criteria:
+        - "cargo test git_run_args passes"
+        - "litmus:git-mirror-safe-refspec-push passes"
+        - "grep -c 'HTTP_PROXY' main.rs reduced to 1 injection site"
+        - "NO_PROXY lists across all containers are identical"
+
+    - packet_id: vault-credential-persistence
+      order: 101
+      title: "Research + fix: Vault credential persistence across container rebuilds"
+      status: ready
+      kind: research+enhancement
+      deliverable: plan/issues/vault-credential-persistence-2026-06-26.md
+      depends_on: []
+      pickup_role: linux
+      estimated_hours: 4
+      outcome: >
+        Vault unseal key persists in host keyring; encrypted secret store
+        survives full container rebuilds; on next launch Vault unseals
+        automatically without re-authentication; GitHub login state is not
+        re-requested when credentials are already present in Vault.
+      exit_criteria:
+        - "Vault data volume is named and mounted correctly so it survives container recreation"
+        - "Unseal key round-trips: stored in host keyring at init, read at next launch"
+        - "On fresh launch with existing data volume and keyring entry, Vault unseals without operator input"
+        - "GitHub login menu item is suppressed / shows 'already authenticated' when a valid token is in Vault"
+        - "Research findings and implementation notes in plan/issues/vault-credential-persistence-2026-06-26.md"
