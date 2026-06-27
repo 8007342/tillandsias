@@ -7425,3 +7425,37 @@ plan_index:
         - "Token forwarded name-only, never in argv — DONE (unit test)"
         - "End-to-end kv get returns the value (exit 0) against live Vault — DONE"
         - "./build.sh --check passes — DONE"
+
+    - packet_id: vault-service-dns-no-proxy
+      order: 119
+      title: "P0: vault service DNS missing from no_proxy — github login + remote projects broken"
+      status: completed
+      kind: bug+critical
+      deliverable: plan/issues/vault-service-dns-no-proxy-2026-06-27.md
+      depends_on: [vault-exec-env-regression]
+      pickup_role: linux
+      estimated_hours: 2
+      outcome: >
+        Containers reach Vault by service DNS (https://vault:8200) since the move off
+        the 127.0.0.1 listener, but `vault` was not in no_proxy, so vault-cli's curl
+        routed Vault reads/writes through the enclave proxy and failed with "Could
+        not resolve proxy: proxy". GitHub-login token storage and remote-project
+        listing both broke. Fix: add vault + tillandsias-vault to ENCLAVE_NO_PROXY_BASE
+        and pass proxy env explicitly on the git-login and run_git_image_shell
+        containers so already-initialized hosts (stale global containers.conf) are
+        also fixed.
+      events:
+        - type: completed
+          ts: "2026-06-27T20:00Z"
+          agent_id: "linux-yoga-sonnet46-20260627T1900Z"
+          commits: []
+          summary: >
+            Reproduced via --list-cloud-projects --debug (curl (5) Could not resolve
+            proxy: proxy on vault-cli read). A/B proved no_proxy with vault eliminates
+            the error. Added vault,tillandsias-vault to no_proxy base; explicit proxy
+            env on both git containers. Unit test enclave_no_proxy_includes_vault_service_dns.
+      exit_criteria:
+        - "vault + tillandsias-vault in ENCLAVE_NO_PROXY_BASE — DONE"
+        - "run_git_image_shell + --github-login pass proxy env explicitly — DONE"
+        - "A/B + real diagnostic show proxy error gone on vault read — DONE"
+        - "./build.sh --check passes — DONE"
