@@ -1146,3 +1146,24 @@ LastExecutionTime: 2026-06-26T15:35Z
 - Need operator-attended `tillandsias --debug --github-login` validation with a
   fresh/rotated token on current release once the macOS layer-5 blocker is
   resolved.
+
+## This Loop (2026-06-27T03:12Z, linux_mutable — meta-orch + worker drain)
+
+- **Cycle type**: meta-orchestration worker drain on mutable Linux.
+- **Startup**: clean mutable-Linux host on `linux-next` at `d4f754da`; credential channel ok:gh-keyring; e2e eligibility: eligible.
+- **Sibling heads at start**:
+  - `main`: `f8ed19d1`.
+  - `linux-next`: `d4f754da`.
+  - `windows-next`: `bb1d1f9c` (1 commit ahead — WSL2 parity fix).
+  - `osx-next`: `db9e2d0d` (ancestor of linux-next).
+- **Worker drain** (all linux, all committed+pushed):
+  - Order 106 (`enclave-transparent-proxy-feasibility`): DONE — verdict: TPROXY not feasible rootless; iptables blocked for uid 1000; containers.conf [engine] env is the correct alternative. Commit `bdb5bb02`.
+  - Order 107 (`enclave-proxy-centralize-injection`): DONE — extracted `proxy_env_args()` + `apply_proxy_env()` helpers; fixed build_git_run_args wrong NO_PROXY (active bug); fixed build_inference_run_args, build_opencode_forge_args, build_forge_agent_run_args; added `ensure_containers_conf_proxy_env()` called at `--init`. Commit `a3319504`.
+  - Order 111 (`zeroclaw-release-packaging`): DONE — flake.nix: zeroclaw-x86_64-musl build; release.yml: build + bundle + cosign; install.sh: download + install alongside tillandsias. Commit `8b5dd30d`.
+  - Windows merge: merged `origin/windows-next@bb1d1f9c` (WSL2 parity: podman.socket, VAULT_API_BASE_URL, DNS routing); clippy fix (collapsible_if). Commit `a105306e`.
+- **Ready work remaining**:
+  - Order 112 (`forge-harness-auth-device-flow`): ready but estimated 8h — too large for this cycle. Filed; carry forward.
+- **Integration/runtime**: `origin/osx-next` is ancestor of `origin/linux-next`. `origin/windows-next` now integrated via merge commit `a105306e`.
+- **E2E gates**: not run this cycle (worker slice; no runtime binary behavior changes; proxy refactor is structurally equivalent).
+- **Release**: no new release triggered; zeroclaw packaging changes require a new release build to take effect.
+- **New findings**: none.
