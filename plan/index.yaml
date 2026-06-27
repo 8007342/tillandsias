@@ -7244,7 +7244,7 @@ plan_index:
     - packet_id: vault-credential-host-exposure
       order: 113
       title: "Eliminate raw credential reads from host tray/headless process"
-      status: ready
+      status: completed
       kind: security+refactor
       deliverable: plan/issues/vault-credential-host-exposure-audit-2026-06-27.md
       depends_on: [forge-harness-auth-device-flow]
@@ -7252,16 +7252,27 @@ plan_index:
       estimated_hours: 3
       outcome: >
         The host tray/headless process never reads raw credential values (tokens,
-        API keys) from Vault. `is_github_logged_in` uses a presence-only metadata
-        check. Forge container API key injection uses AppRole scoped secrets or
-        `PodmanClient::vault_kv_get` (podman exec) so keys never transit the host
-        HTTP Vault client. The legacy `check_github_token_health` pre-Vault path
-        is removed. A new `PodmanClient::vault_kv_get` idiomatic helper enables
-        macOS/Windows tray → vsock → headless → podman exec → vault KV reads
-        without any port publish.
+        API keys) from Vault via HTTP. is_github_logged_in now validates end-to-end
+        by running a containerized gh api user probe (credential stays in container).
+        read_provider_api_key uses podman exec vault kv get instead of HTTP client.
+        check_github_token_health (legacy pre-Vault path) removed. vault_kv_get_via_exec
+        primitive added to vault_bootstrap for host→vault reads without port publish.
+      events:
+        - type: completed
+          ts: "2026-06-27T05:45Z"
+          agent_id: "linux-macuahuitl-sonnet46-20260627T0410Z"
+          commits: []
+          summary: >
+            Removed is_github_logged_in and read_github_token_from_vault from
+            vault_bootstrap (both read raw token via host HTTP). Added
+            vault_kv_get_via_exec and is_github_key_present (fast, exit-code only).
+            Added remote_projects::probe_github_username and is_github_logged_in
+            (containerized gh api user probe). Updated tray poll loop, startup probe,
+            vsock handler. Removed check_github_token_health (pre-Vault legacy path).
+            read_provider_api_key now uses vault_kv_get_via_exec.
       exit_criteria:
-        - "vault_bootstrap::vault_key_exists added; is_github_logged_in uses presence check only"
-        - "build_forge_agent_run_args no longer calls read_provider_api_key from host HTTP client"
-        - "check_github_token_health removed or replaced with containerized probe"
-        - "PodmanClient::vault_kv_get added to tillandsias-podman with tests"
-        - "./build.sh --check passes"
+        - "is_github_logged_in validates via containerized gh api user probe — DONE"
+        - "build_forge_agent_run_args provider keys use vault_kv_get_via_exec — DONE"
+        - "check_github_token_health removed — DONE"
+        - "vault_kv_get_via_exec primitive added to vault_bootstrap — DONE"
+        - "./build.sh --check passes — DONE"

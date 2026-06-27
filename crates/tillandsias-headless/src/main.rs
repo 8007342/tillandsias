@@ -4426,11 +4426,6 @@ fn run_list_cloud_projects(debug: bool) -> Result<(), String> {
     report_runtime_lane("--list-cloud-projects", debug);
 
     vault_bootstrap::ensure_vault_running(debug)?;
-    if !vault_bootstrap::is_github_logged_in(debug) {
-        return Err(
-            "no GitHub credential in Vault — run `tillandsias --github-login` first".to_string(),
-        );
-    }
 
     let start = std::time::Instant::now();
     let projects = remote_projects::discover_github_projects_result_with_debug(debug)?;
@@ -7100,10 +7095,6 @@ async fn run_headless_async(
     tokio::spawn(async move { run_disk_usage_check() });
 
     // Wave 21a Gap ON-009: Check and refresh GitHub token if expired
-    // @trace gap:ON-009, spec:secret-rotation
-    // Spawn as background task (don't await) to avoid blocking signal handling
-    tokio::spawn(check_github_token_health());
-
     // Wave 21b Gap ON-010: Check for missing project dependencies before forge launch
     // @trace gap:ON-010, spec:forge-environment-discoverability
     // run_dependency_check();
@@ -7590,49 +7581,6 @@ fn run_disk_usage_check() {
                 gap = "TR-006",
                 error = %e,
                 "failed to invoke disk usage check (non-blocking)"
-            );
-        }
-    }
-}
-
-/// Check GitHub token health and refresh if expired.
-///
-/// Wave 21a Gap ON-009: Auto-refresh GitHub token via Secret Service when it expires.
-/// This prevents authentication failures due to token expiry by checking token validity
-/// at application startup and attempting refresh if needed.
-///
-/// Non-blocking with 1-second timeout to prevent delaying startup signal handling.
-///
-/// @trace gap:ON-009, spec:secret-rotation, spec:native-secrets-store
-async fn check_github_token_health() {
-    use tillandsias_core::secrets;
-    use tokio::time::timeout;
-
-    let config = secrets::TokenRefreshConfig::default();
-
-    // Use a 1-second timeout to avoid blocking shutdown signal handling
-    match timeout(
-        Duration::from_secs(1),
-        secrets::check_and_refresh_github_token(&config),
-    )
-    .await
-    {
-        Ok(Ok(())) => {
-            debug!(gap = "ON-009", "GitHub token health check completed");
-        }
-        Ok(Err(e)) => {
-            // Non-critical error; don't fail startup
-            tracing::warn!(
-                gap = "ON-009",
-                spec = "secret-rotation",
-                error = %e,
-                "GitHub token health check failed (non-blocking)"
-            );
-        }
-        Err(_timeout) => {
-            debug!(
-                gap = "ON-009",
-                "GitHub token health check timed out; skipping"
             );
         }
     }

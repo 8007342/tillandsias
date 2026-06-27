@@ -326,6 +326,43 @@ fn run_git_image_shell(script: &str, extra_args: &[&str], debug: bool) -> Result
     Ok(String::from_utf8_lossy(&output.stdout).to_string())
 }
 
+/// Probe GitHub auth end-to-end inside a container. Returns the GitHub login
+/// name on success. Proves both that the token is present in Vault AND that it
+/// is accepted by the GitHub API — a key-existence check alone cannot do this.
+///
+/// Uses the same containerized pattern as `fetch_github_projects` but hits only
+/// `gh api user` (fast, ~1s) rather than the full repos endpoint.
+///
+/// @trace spec:tillandsias-vault, plan/issues/vault-credential-host-exposure-audit-2026-06-27.md
+pub fn probe_github_username(debug: bool) -> Option<String> {
+    let script = r#"
+set -eu
+vault-cli read -field=token secret/github/token | gh auth login --hostname github.com --with-token >/dev/null 2>&1
+gh api user --jq .login
+"#;
+    match run_git_image_shell(script, &[], debug) {
+        Ok(out) => {
+            let name = out.trim().to_string();
+            if name.is_empty() { None } else { Some(name) }
+        }
+        Err(e) => {
+            if debug {
+                eprintln!("[tillandsias] probe_github_username failed: {e}");
+            }
+            None
+        }
+    }
+}
+
+/// Definitive auth check: returns `true` iff the GitHub token in Vault is
+/// present and accepted by the GitHub API. Launches a short-lived container —
+/// use `vault_bootstrap::is_github_key_present` for high-frequency poll loops.
+///
+/// @trace spec:tillandsias-vault, spec:tray-minimal-ux
+pub fn is_github_logged_in(debug: bool) -> bool {
+    probe_github_username(debug).is_some()
+}
+
 fn fetch_github_projects(debug: bool) -> Result<Vec<GitHubProject>, String> {
     let script = r#"
 set -eu

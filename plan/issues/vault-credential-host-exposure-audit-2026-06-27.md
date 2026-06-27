@@ -1,6 +1,6 @@
 # Vault Credential Host-Exposure Audit + Remediation
 
-**Status:** `ready`
+**Status:** `completed`
 **Owner:** linux
 **Date:** 2026-06-27
 **Trace:** `spec:tillandsias-vault`, `spec:forge-as-only-runtime`
@@ -35,15 +35,27 @@ Two violations exist today plus one vestigial legacy path:
 
 This is the model everything else should follow.
 
-## Fix 1: `is_github_logged_in` — presence-only check
+## Fix 1: `is_github_logged_in` — validate by attempting a project list read (DONE)
 
-**Current**: reads full token value from `secret/github/token`, checks if non-empty.
+**Was**: reads full token value from `secret/github/token` via host HTTP Vault client, checks if non-empty.
+A key-existence check is insufficient: the key could be expired or revoked.
 
-**Fix**: Replace with a Vault metadata/existence check that does not return the token value.
-Option A — `podman exec tillandsias-vault vault kv get -field=token secret/github/token 2>/dev/null | wc -c` (non-zero = present)
-Option B — Add a `vault_key_exists(path)` helper that uses the Vault `metadata/read` API endpoint and only checks the HTTP status code (200 vs 404).
+**Implemented**:
+- `vault_bootstrap::is_github_key_present()` (new, private to crate) — fast `podman exec`
+  exit-code check (stdout discarded, no value read), used in the 120× 1s poll loop.
+- `remote_projects::probe_github_username(debug)` (new, pub) — runs `tillandsias-git --rm`
+  container, reads token via vault-cli inside the container (never in host process), calls
+  `gh api user --jq .login`. Returns `Some(login)` only if GitHub accepts the credential.
+- `remote_projects::is_github_logged_in(debug)` (new, pub) — `probe_github_username(debug).is_some()`.
+  Proves the credential is present AND accepted by GitHub API.
 
-Option B is cleaner: the KV v2 metadata endpoint is `GET /v1/secret/metadata/github/token` and returns 200 if the key exists, 404 if not. No secret data is transmitted. Implement as `vault_bootstrap::vault_key_exists(path: &str, debug: bool) -> bool` using the existing `VaultClient`.
+Call site changes:
+- Poll loop (`tray/mod.rs`) → `vault_bootstrap::is_github_key_present()` (fast, no container)
+- Tray startup probe (`tray/mod.rs`) → `remote_projects::is_github_logged_in()`
+- vsock `GithubLoginStatusRequest` — single call to `remote_projects::probe_github_username()`
+  replaces the two-step `is_github_logged_in` + `read_github_token_from_vault` + host `gh api user`
+- `--list-cloud-projects` pre-flight gate removed — `discover_github_projects_result_with_debug`
+  already fails with a clear error if credentials are absent or invalid
 
 ## Fix 2: Provider API key injection — delegate to AppRole container startup
 

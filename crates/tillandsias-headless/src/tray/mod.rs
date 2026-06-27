@@ -3151,7 +3151,8 @@ impl DbusMenuIface {
                         // Vault log noise during the 2-minute wait window.
                         // The login flow's own output is already on stderr.
                         for i in 0..120 {
-                            authed = crate::vault_bootstrap::is_github_logged_in(false);
+                            // Fast presence-only check (no container launch, no value read).
+                            authed = crate::vault_bootstrap::is_github_key_present();
                             if authed {
                                 break;
                             }
@@ -3453,7 +3454,7 @@ pub fn run_tray_mode_with_debug(config_path: Option<String>, debug: bool) -> Res
         if service
             .task_executor
             .spawn_task(move || {
-                if crate::vault_bootstrap::is_github_logged_in(debug) {
+                if crate::remote_projects::is_github_logged_in(debug) {
                     {
                         let mut state = state_handle.lock().expect("tray state lock");
                         if !state.is_authenticated {
