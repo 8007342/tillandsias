@@ -7205,7 +7205,7 @@ plan_index:
     - packet_id: forge-harness-auth-device-flow
       order: 112
       title: "Research + implement: forge harness auth via Vault + proxy header injection"
-      status: claimed
+      status: in_progress
       kind: research+enhancement
       events:
         - type: claim
@@ -7214,6 +7214,15 @@ plan_index:
           host: linux
           lease_id: "forge-harness-auth-20260627T0410Z"
           expires_at: "2026-06-27T08:10Z"
+        - type: progress
+          ts: "2026-06-27T05:00Z"
+          agent_id: "linux-macuahuitl-sonnet46-20260627T0410Z"
+          commits: ["006f395d"]
+          summary: >
+            Slice 1 complete: ProviderId enum + vault write/read/probe helpers +
+            forge container builder injects ANTHROPIC_API_KEY/OPENAI_API_KEY/GEMINI_API_KEY
+            from Vault at launch. Research verdict documented. Phase 2 (ICAP, --xxx-login
+            CLI subcommands) deferred to next packet.
       deliverable: plan/issues/forge-harness-auth-vault-proxy-2026-06-27.md
       depends_on: [vault-credential-persistence]
       pickup_role: linux
