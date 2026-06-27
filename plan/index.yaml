@@ -7240,3 +7240,28 @@ plan_index:
         - "Token rotation: proxy reads a fresh token on each request; supports TTL-scoped sub-tokens"
         - "All auth flows default to device code (out-of-band) — no browser event listening"
         - "Research verdict in plan/issues/forge-harness-auth-vault-proxy-2026-06-27.md"
+
+    - packet_id: vault-credential-host-exposure
+      order: 113
+      title: "Eliminate raw credential reads from host tray/headless process"
+      status: ready
+      kind: security+refactor
+      deliverable: plan/issues/vault-credential-host-exposure-audit-2026-06-27.md
+      depends_on: [forge-harness-auth-device-flow]
+      pickup_role: linux
+      estimated_hours: 3
+      outcome: >
+        The host tray/headless process never reads raw credential values (tokens,
+        API keys) from Vault. `is_github_logged_in` uses a presence-only metadata
+        check. Forge container API key injection uses AppRole scoped secrets or
+        `PodmanClient::vault_kv_get` (podman exec) so keys never transit the host
+        HTTP Vault client. The legacy `check_github_token_health` pre-Vault path
+        is removed. A new `PodmanClient::vault_kv_get` idiomatic helper enables
+        macOS/Windows tray → vsock → headless → podman exec → vault KV reads
+        without any port publish.
+      exit_criteria:
+        - "vault_bootstrap::vault_key_exists added; is_github_logged_in uses presence check only"
+        - "build_forge_agent_run_args no longer calls read_provider_api_key from host HTTP client"
+        - "check_github_token_health removed or replaced with containerized probe"
+        - "PodmanClient::vault_kv_get added to tillandsias-podman with tests"
+        - "./build.sh --check passes"
