@@ -7276,3 +7276,39 @@ plan_index:
         - "check_github_token_health removed — DONE"
         - "vault_kv_get_via_exec primitive added to vault_bootstrap — DONE"
         - "./build.sh --check passes — DONE"
+
+    - packet_id: zeroclaw-unauthorized-release-remediation
+      order: 114
+      title: "CRITICAL: Remove unauthorized tillandsias-zeroclaw binary from releases"
+      status: completed
+      kind: security+remediation
+      deliverable: plan/issues/zeroclaw-unauthorized-release-violation-2026-06-27.md
+      depends_on: [vault-credential-host-exposure]
+      pickup_role: linux
+      estimated_hours: 1
+      outcome: >
+        tillandsias-zeroclaw binary removed from all release surfaces: install.sh,
+        release.yml, flake.nix, Cargo.toml workspace, and crates/tillandsias-zeroclaw/
+        directory deleted. Local binary removed from ~/.local/bin/. Architecture
+        principle documented: any future MCP functionality must be built into the
+        tillandsias headless binary via --mcp <type> flag, never as a separate artifact.
+        Violation report filed in plan/issues/zeroclaw-unauthorized-release-violation-2026-06-27.md.
+      exit_criteria:
+        - "scripts/install.sh no longer downloads or installs tillandsias-zeroclaw — DONE"
+        - ".github/workflows/release.yml no longer builds or packages zeroclaw — DONE"
+        - "flake.nix tillandsias-zeroclaw-x86_64-musl build target removed — DONE"
+        - "Cargo.toml workspace member and dep removed — DONE"
+        - "crates/tillandsias-zeroclaw/ directory deleted — DONE"
+        - "./build.sh --check passes — DONE"
+        - "Violation report filed documenting 5 violations + prevention guidance — DONE"
+      events:
+        - type: completed
+          ts: "2026-06-27T06:30Z"
+          agent_id: "linux-macuahuitl-sonnet46-20260627T0600Z"
+          commits: []
+          summary: >
+            All zeroclaw removal steps applied. 5 violations documented: unauthorized
+            artifact, separate-binary architecture violation, naming-leaks-caller
+            architectural error, shell injection risk in forge_delegate, and host-resident
+            unauthenticated Unix socket surface. ./build.sh --check passed clean.
+            Release v0.3.260627.2 will follow without the zeroclaw binary.
