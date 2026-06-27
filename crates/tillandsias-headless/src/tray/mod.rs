@@ -1624,7 +1624,16 @@ fn launch_zeroclaw(project: &ProjectEntry, version: &str) -> Result<(), String> 
         .open(&log_path)
         .map_err(|e| format!("failed to open zeroclaw log: {e}"))?;
     let log_copy = log_file.try_clone().map_err(|e| e.to_string())?;
-    Command::new("tillandsias-zeroclaw")
+    // Resolve tillandsias-zeroclaw as a sibling of the running binary so it
+    // works from ~/.local/bin (installed release) and from the Cargo build
+    // output directory (dev builds) without requiring it to be in PATH.
+    let zeroclaw_bin = std::env::current_exe()
+        .ok()
+        .and_then(|exe| exe.parent().map(|d| d.join("tillandsias-zeroclaw")))
+        .filter(|p| p.is_file())
+        .map(|p| p.into_os_string())
+        .unwrap_or_else(|| std::ffi::OsString::from("tillandsias-zeroclaw"));
+    Command::new(&zeroclaw_bin)
         .arg("--project-path")
         .arg(&project_path)
         .arg("--socket")
@@ -3138,10 +3147,19 @@ impl DbusMenuIface {
                         // host keyring is the wrong source of truth.
                         let debug = service_for_task.snapshot().debug;
                         let mut authed = false;
-                        for _ in 0..120 {
-                            authed = crate::vault_bootstrap::is_github_logged_in(debug);
+                        // Poll silently — debug=false suppresses per-iteration
+                        // Vault log noise during the 2-minute wait window.
+                        // The login flow's own output is already on stderr.
+                        for i in 0..120 {
+                            authed = crate::vault_bootstrap::is_github_logged_in(false);
                             if authed {
                                 break;
+                            }
+                            if debug && i % 15 == 0 {
+                                eprintln!(
+                                    "[tillandsias] github-login: waiting for token in Vault ({}s elapsed)",
+                                    i
+                                );
                             }
                             std::thread::sleep(std::time::Duration::from_secs(1));
                         }

@@ -7139,3 +7139,82 @@ plan_index:
             but no keychain share). All exit criteria satisfied. The GitHub
             login race was a symptom of the same bug — fixing the wipe makes
             is_github_logged_in return true on subsequent boots.
+    - packet_id: zeroclaw-binary-path
+      order: 109
+      title: "Fix: ZeroClaw binary not found — resolve as sibling of current_exe"
+      status: done
+      kind: bugfix
+      deliverable: plan/issues/zeroclaw-binary-not-installed-2026-06-27.md
+      depends_on: []
+      pickup_role: linux
+      closed_at: "2026-06-27T03:00Z"
+      closed_by: "linux-macuahuitl-sonnet46-20260627T0300Z"
+      outcome: >
+        launch_zeroclaw now resolves tillandsias-zeroclaw as a sibling of
+        current_exe() before falling back to PATH. Works from ~/.local/bin
+        (release install) and target/debug (dev). Follow-on: release workflow
+        must bundle and install the zeroclaw binary alongside the main binary.
+      exit_criteria:
+        - "ZeroClaw launch no longer errors with 'No such file or directory' on dev builds"
+        - "cargo check -p tillandsias-headless passes"
+
+    - packet_id: auth-poll-verbosity
+      order: 110
+      title: "Fix: suppress per-iteration Vault debug noise during GitHub login poll"
+      status: done
+      kind: bugfix
+      deliverable: crates/tillandsias-headless/src/tray/mod.rs
+      depends_on: []
+      pickup_role: linux
+      closed_at: "2026-06-27T03:00Z"
+      closed_by: "linux-macuahuitl-sonnet46-20260627T0300Z"
+      outcome: >
+        The GitHub login click handler now calls is_github_logged_in(false)
+        during its 120s polling loop. Debug output is throttled to one line
+        every 15 seconds ("waiting for token in Vault (Ns elapsed)") instead
+        of 4-6 lines per second. Clean builds pass.
+      exit_criteria:
+        - "Polling loop does not emit Vault internals on every iteration"
+        - "./build.sh --check passes"
+
+    - packet_id: zeroclaw-release-packaging
+      order: 111
+      title: "Release: bundle tillandsias-zeroclaw binary in release artifacts"
+      status: ready
+      kind: release
+      deliverable: plan/issues/zeroclaw-binary-not-installed-2026-06-27.md
+      depends_on: [zeroclaw-binary-path]
+      pickup_role: linux
+      estimated_hours: 2
+      outcome: >
+        tillandsias-zeroclaw is built, cross-compiled (musl), included in the
+        GitHub release tarball, and installed alongside tillandsias by
+        scripts/install.sh. Users who install via curl can launch ZeroClaw.
+      exit_criteria:
+        - ".github/workflows/release.yml builds tillandsias-zeroclaw musl binary"
+        - "Release tarball includes tillandsias-zeroclaw alongside tillandsias"
+        - "scripts/install.sh installs tillandsias-zeroclaw to ~/.local/bin/"
+        - "scripts/smoke-test.sh verifies tillandsias-zeroclaw is present"
+
+    - packet_id: forge-harness-auth-device-flow
+      order: 112
+      title: "Research + implement: forge harness auth via Vault + proxy header injection"
+      status: ready
+      kind: research+enhancement
+      deliverable: plan/issues/forge-harness-auth-vault-proxy-2026-06-27.md
+      depends_on: [vault-credential-persistence]
+      pickup_role: linux
+      estimated_hours: 8
+      outcome: >
+        Claude Code, Codex, and future LLM harnesses authenticate once via
+        device code flow (URL + code shown in terminal, no browser forwarding
+        needed), token persisted to Vault, and the Squid proxy transparently
+        injects auth headers into outbound requests to the respective provider
+        APIs. Forge containers run credential-free by design.
+      exit_criteria:
+        - "tillandsias --anthropic-login shows device code URL, captures token to Vault"
+        - "A forge Claude Code session can call api.anthropic.com with no ANTHROPIC_API_KEY env var"
+        - "Proxy injects x-api-key / Authorization header from Vault-stored token"
+        - "Token rotation: proxy reads a fresh token on each request; supports TTL-scoped sub-tokens"
+        - "All auth flows default to device code (out-of-band) — no browser event listening"
+        - "Research verdict in plan/issues/forge-harness-auth-vault-proxy-2026-06-27.md"
