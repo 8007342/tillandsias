@@ -330,3 +330,4 @@ This file is the cross-host advertisement — terse, dated, SHA-anchored.
 - 2026-06-27T05:05Z  006f395d  order 112 slice 1: ProviderId enum + forge container API key injection from Vault
 - 2026-06-27T05:45Z  4d910224  order 113: eliminate raw credential reads from host tray process
 - 2026-06-27T04:43Z  `e469ff43`  Release v0.3.260627.1 — merged PR #50 to main, tagged, workflow_dispatch triggered. Linux+macOS+Windows build: success (17m). First release to include tillandsias-zeroclaw-linux-x86_64. Release: https://github.com/8007342/tillandsias/releases/tag/v0.3.260627.1
+- 2026-06-27T05:45Z  `12ba909f`  Release v0.3.260627.2 — merged PR #51 to main (security fix: removed unauthorized tillandsias-zeroclaw binary, 5 violations documented). All 3 jobs passed. No zeroclaw artifact in release. Linux artifact: https://github.com/8007342/tillandsias/releases/download/v0.3.260627.2/tillandsias-linux-x86_64
