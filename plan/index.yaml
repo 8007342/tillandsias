@@ -7312,3 +7312,25 @@ plan_index:
             architectural error, shell injection risk in forge_delegate, and host-resident
             unauthenticated Unix socket surface. ./build.sh --check passed clean.
             Release v0.3.260627.2 will follow without the zeroclaw binary.
+
+    - packet_id: init-dns-systemd-resolved
+      order: 115
+      title: "Bug: --init fails on systemd-resolved hosts (127.0.0.53 unreachable from build containers)"
+      status: ready
+      kind: bug+enhancement
+      deliverable: plan/issues/init-dns-systemd-resolved-2026-06-27.md
+      depends_on: []
+      pickup_role: linux
+      estimated_hours: 2
+      outcome: >
+        tillandsias --init detects when /etc/resolv.conf nameserver is a loopback
+        address (127.0.0.53 / systemd-resolved stub), extracts actual upstream DNS
+        from resolvectl, and writes dns_servers to ~/.config/containers/containers.conf
+        before starting any image builds. Init no longer fails with DNS errors on
+        Fedora Silverblue and other systemd-resolved hosts.
+      exit_criteria:
+        - "--init on systemd-resolved host writes dns_servers to containers.conf"
+        - "--init completes build-git image build without DNS errors"
+        - "Detection heuristic: nameserver 127. in /etc/resolv.conf"
+        - "Fallback to 1.1.1.1/8.8.8.8 when resolvectl unavailable"
+        - "./build.sh --check passes"
