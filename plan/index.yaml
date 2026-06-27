@@ -7205,8 +7205,15 @@ plan_index:
     - packet_id: forge-harness-auth-device-flow
       order: 112
       title: "Research + implement: forge harness auth via Vault + proxy header injection"
-      status: ready
+      status: claimed
       kind: research+enhancement
+      events:
+        - type: claim
+          ts: "2026-06-27T04:10Z"
+          agent_id: "linux-macuahuitl-sonnet46-20260627T0410Z"
+          host: linux
+          lease_id: "forge-harness-auth-20260627T0410Z"
+          expires_at: "2026-06-27T08:10Z"
       deliverable: plan/issues/forge-harness-auth-vault-proxy-2026-06-27.md
       depends_on: [vault-credential-persistence]
       pickup_role: linux
