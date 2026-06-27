@@ -1178,3 +1178,9 @@ LastExecutionTime: 2026-06-26T15:35Z
 - Committed order 113: vault_kv_get_via_exec + is_github_key_present + probe_github_username + remove check_github_token_health
 - Queue status: fully drained (no ready/pending packets remain)
 - Orders 112 and 113 both completed this session
+
+### Cycle 2026-06-27T04:43Z — release
+- Merged PR #50 (linux-next → main), tagged v0.3.260627.1
+- Release workflow: all three jobs success (17m) — Linux musl, macOS arm64, Windows x64
+- First release with tillandsias-zeroclaw-linux-x86_64
+- Latest tested release: v0.3.260627.1
