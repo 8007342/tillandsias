@@ -77,9 +77,10 @@ jobs:
           # failed in CI (musl.cc network timeout; cross 0.2.5's ancient-glibc
           # container choked on build.rs). The router sidecar + runtime assets
           # are git-tracked, so nix embeds them from the checked-out tree.
-          nix build -L .#tillandsias-x86_64-musl           --out-link result-host
-          nix build -L .#tillandsias-headless-x86_64-musl  --out-link result-hx
-          nix build -L .#tillandsias-headless-aarch64-musl --out-link result-ha
+          nix build -L .#tillandsias-x86_64-musl              --out-link result-host
+          nix build -L .#tillandsias-headless-x86_64-musl   --out-link result-hx
+          nix build -L .#tillandsias-headless-aarch64-musl  --out-link result-ha
+          nix build -L .#tillandsias-zeroclaw-x86_64-musl   --out-link result-zc
 
       - name: Record Nix Build Duration and Assert Cache Performance
         if: always()
@@ -122,9 +123,10 @@ jobs:
       - name: Collect + validate release artifacts
         run: |
           mkdir -p release-artifacts
-          install -m 0755 result-host/bin/tillandsias release-artifacts/tillandsias-linux-x86_64
-          install -m 0755 result-hx/bin/tillandsias   release-artifacts/tillandsias-headless-x86_64-unknown-linux-musl
-          install -m 0755 result-ha/bin/tillandsias   release-artifacts/tillandsias-headless-aarch64-unknown-linux-musl
+          install -m 0755 result-host/bin/tillandsias           release-artifacts/tillandsias-linux-x86_64
+          install -m 0755 result-hx/bin/tillandsias             release-artifacts/tillandsias-headless-x86_64-unknown-linux-musl
+          install -m 0755 result-ha/bin/tillandsias             release-artifacts/tillandsias-headless-aarch64-unknown-linux-musl
+          install -m 0755 result-zc/bin/tillandsias-zeroclaw    release-artifacts/tillandsias-zeroclaw-linux-x86_64
           install -m 0755 scripts/install.sh   release-artifacts/install.sh
           install -m 0755 scripts/uninstall.sh release-artifacts/uninstall.sh
           install -m 0755 scripts/verify.sh    release-artifacts/verify.sh
@@ -135,6 +137,7 @@ jobs:
           grep -F "x86-64" /tmp/f.txt
           file release-artifacts/tillandsias-headless-x86_64-unknown-linux-musl | grep -F "x86-64"
           file release-artifacts/tillandsias-headless-aarch64-unknown-linux-musl | grep -F "aarch64"
+          file release-artifacts/tillandsias-zeroclaw-linux-x86_64 | grep -F "statically linked"
 
           # Smoke the host binary's headless mode (runs on this x86_64 runner).
           release-artifacts/tillandsias-linux-x86_64 --version
@@ -176,6 +179,8 @@ jobs:
           cd release-artifacts
           test -f tillandsias-linux-x86_64
           test -f tillandsias-linux-x86_64.cosign.bundle
+          test -f tillandsias-zeroclaw-linux-x86_64
+          test -f tillandsias-zeroclaw-linux-x86_64.cosign.bundle
           test -f install.sh
           test -f install.sh.cosign.bundle
           test -f uninstall.sh

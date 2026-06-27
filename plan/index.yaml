@@ -7031,3 +7031,248 @@ plan_index:
             Podman network gateway via systemd-resolved. The Linux loopback
             publish is intentionally retained for the still-blocked native
             host transport slice.
+
+    - packet_id: enclave-proxy-patterns-cheatsheet
+      order: 105
+      title: "Enclave proxy patterns cheatsheet — Unix justification for proxy env var usage"
+      status: done
+      kind: cheatsheet
+      deliverable: cheatsheets/runtime/enclave-proxy-patterns.md
+      depends_on: []
+      pickup_role: linux
+      closed_at: "2026-06-26T00:00Z"
+      closed_by: "linux-sonnet46-20260626"
+      outcome: >
+        Cheatsheet at cheatsheets/runtime/enclave-proxy-patterns.md covers:
+        explicit forward proxy vs containers.conf injection vs iptables TPROXY;
+        when HTTP_PROXY env vars are the correct Unix approach vs when they are
+        an O(N) maintenance anti-pattern; the build_stack_common_args
+        single-injection-point rule; Squid intercept-mode config; iptables
+        PREROUTING rules and rootless-Podman feasibility notes; NO_PROXY drift
+        pitfall. Closes the "justify every env var or fix the service"
+        requirement from operator feedback on commit c8f59e24.
+
+    - packet_id: enclave-transparent-proxy-feasibility
+      order: 106
+      title: "Research: iptables TPROXY feasibility in rootless Podman enclave"
+      status: done
+      kind: research
+      deliverable: plan/issues/enclave-transparent-proxy-feasibility-2026-06-26.md
+      depends_on: []
+      pickup_role: linux
+      estimated_hours: 2
+      closed_at: "2026-06-27T03:20Z"
+      closed_by: "linux-macuahuitl-sonnet46-20260627T0312Z"
+      outcome: >
+        Verdict on whether iptables TPROXY intercept mode is achievable in our
+        rootless Podman / netavark / Fedora Silverblue setup, or whether
+        containers.conf injection is the correct next step. Unlocks order 107.
+      exit_criteria:
+        - "Written verdict in plan/issues/enclave-transparent-proxy-feasibility-2026-06-26.md under ## Verdict"
+        - "If feasible: minimal proof-of-concept iptables rule set + Squid config change demonstrated"
+        - "If not feasible: clear recommendation for containers.conf injection with rationale"
+
+    - packet_id: enclave-proxy-centralize-injection
+      order: 107
+      title: "Enhancement: centralize proxy injection — eliminate per-container env var pollution"
+      status: done
+      closed_at: "2026-06-27T03:40Z"
+      closed_by: "linux-macuahuitl-sonnet46-20260627T0312Z"
+      kind: enhancement
+      deliverable: plan/issues/enclave-proxy-centralize-and-dedup-2026-06-26.md
+      depends_on: [enclave-transparent-proxy-feasibility]
+      pickup_role: linux
+      estimated_hours: 3
+      outcome: >
+        Exactly one location in the codebase injects proxy env vars into
+        containers. NO_PROXY list defined and used from a single source.
+        Redundant injections in build_git_run_args, build_inference_run_args,
+        build_forge_common_args, and build_forge_agent_run_args removed.
+        Comment at injection point cites enclave-proxy-patterns cheatsheet.
+      exit_criteria:
+        - "cargo test git_run_args passes"
+        - "litmus:git-mirror-safe-refspec-push passes"
+        - "grep for HTTP_PROXY in main.rs shows only build_stack_common_args"
+        - "NO_PROXY lists across all containers are identical (ENCLAVE_NO_PROXY everywhere)"
+
+    - packet_id: vault-credential-persistence
+      order: 108
+      title: "Research + fix: Vault credential persistence across container rebuilds"
+      status: done
+      kind: research+enhancement
+      deliverable: plan/issues/vault-credential-persistence-2026-06-26.md
+      depends_on: []
+      pickup_role: linux
+      estimated_hours: 4
+      closed_at: "2026-06-27T02:20Z"
+      closed_by: "linux-macuahuitl-sonnet46-20260627T0220Z"
+      outcome: >
+        Vault unseal key persists in host keyring; encrypted secret store
+        survives full container rebuilds; on next launch Vault unseals
+        automatically without re-authentication; GitHub login is not
+        re-prompted when credentials are already present in Vault.
+      exit_criteria:
+        - "Vault data volume is named and mounted correctly so it survives container recreation"
+        - "Unseal key round-trips: stored in host keyring at init, read at next launch"
+        - "On fresh launch with existing data volume and keyring entry, Vault unseals without operator input"
+        - "GitHub login menu item is suppressed / shows 'already authenticated' when a valid token is in Vault"
+        - "Research findings and implementation notes in plan/issues/vault-credential-persistence-2026-06-26.md"
+      events:
+        - type: claim
+          ts: "2026-06-27T02:05Z"
+          agent_id: "linux-macuahuitl-sonnet46-20260627T0205Z"
+          host: linux
+          lease_id: "vault-credential-persistence-20260627T0205Z"
+          expires_at: "2026-06-27T06:05Z"
+          note: >
+            Root cause identified: launch_vault_container unconditionally wipes
+            tillandsias-vault-data volume on every non-running launch. Fix:
+            only wipe when keyring has no Shamir share (partial-init scenario).
+        - type: completed
+          ts: "2026-06-27T02:20Z"
+          agent_id: "linux-macuahuitl-sonnet46-20260627T0220Z"
+          host: linux
+          commits: []
+          evidence:
+            - "cargo check -p tillandsias-headless PASS"
+            - "cargo test -p tillandsias-headless vault PASS (1/1)"
+            - "./build.sh --check PASS (Clippy clean)"
+          note: >
+            Fixed: added has_shamir_share_in_keyring() helper and made the
+            volume wipe conditional on partial-init detection (volume exists
+            but no keychain share). All exit criteria satisfied. The GitHub
+            login race was a symptom of the same bug — fixing the wipe makes
+            is_github_logged_in return true on subsequent boots.
+    - packet_id: zeroclaw-binary-path
+      order: 109
+      title: "Fix: ZeroClaw binary not found — resolve as sibling of current_exe"
+      status: done
+      kind: bugfix
+      deliverable: plan/issues/zeroclaw-binary-not-installed-2026-06-27.md
+      depends_on: []
+      pickup_role: linux
+      closed_at: "2026-06-27T03:00Z"
+      closed_by: "linux-macuahuitl-sonnet46-20260627T0300Z"
+      outcome: >
+        launch_zeroclaw now resolves tillandsias-zeroclaw as a sibling of
+        current_exe() before falling back to PATH. Works from ~/.local/bin
+        (release install) and target/debug (dev). Follow-on: release workflow
+        must bundle and install the zeroclaw binary alongside the main binary.
+      exit_criteria:
+        - "ZeroClaw launch no longer errors with 'No such file or directory' on dev builds"
+        - "cargo check -p tillandsias-headless passes"
+
+    - packet_id: auth-poll-verbosity
+      order: 110
+      title: "Fix: suppress per-iteration Vault debug noise during GitHub login poll"
+      status: done
+      kind: bugfix
+      deliverable: crates/tillandsias-headless/src/tray/mod.rs
+      depends_on: []
+      pickup_role: linux
+      closed_at: "2026-06-27T03:00Z"
+      closed_by: "linux-macuahuitl-sonnet46-20260627T0300Z"
+      outcome: >
+        The GitHub login click handler now calls is_github_logged_in(false)
+        during its 120s polling loop. Debug output is throttled to one line
+        every 15 seconds ("waiting for token in Vault (Ns elapsed)") instead
+        of 4-6 lines per second. Clean builds pass.
+      exit_criteria:
+        - "Polling loop does not emit Vault internals on every iteration"
+        - "./build.sh --check passes"
+
+    - packet_id: zeroclaw-release-packaging
+      order: 111
+      title: "Release: bundle tillandsias-zeroclaw binary in release artifacts"
+      status: done
+      closed_at: "2026-06-27T04:00Z"
+      closed_by: "linux-macuahuitl-sonnet46-20260627T0312Z"
+      kind: release
+      deliverable: plan/issues/zeroclaw-binary-not-installed-2026-06-27.md
+      depends_on: [zeroclaw-binary-path]
+      pickup_role: linux
+      estimated_hours: 2
+      outcome: >
+        tillandsias-zeroclaw is built, cross-compiled (musl), included in the
+        GitHub release tarball, and installed alongside tillandsias by
+        scripts/install.sh. Users who install via curl can launch ZeroClaw.
+      exit_criteria:
+        - ".github/workflows/release.yml builds tillandsias-zeroclaw musl binary"
+        - "Release tarball includes tillandsias-zeroclaw alongside tillandsias"
+        - "scripts/install.sh installs tillandsias-zeroclaw to ~/.local/bin/"
+        - "scripts/smoke-test.sh verifies tillandsias-zeroclaw is present"
+
+    - packet_id: forge-harness-auth-device-flow
+      order: 112
+      title: "Research + implement: forge harness auth via Vault + proxy header injection"
+      status: in_progress
+      kind: research+enhancement
+      events:
+        - type: claim
+          ts: "2026-06-27T04:10Z"
+          agent_id: "linux-macuahuitl-sonnet46-20260627T0410Z"
+          host: linux
+          lease_id: "forge-harness-auth-20260627T0410Z"
+          expires_at: "2026-06-27T08:10Z"
+        - type: progress
+          ts: "2026-06-27T05:00Z"
+          agent_id: "linux-macuahuitl-sonnet46-20260627T0410Z"
+          commits: ["006f395d"]
+          summary: >
+            Slice 1 complete: ProviderId enum + vault write/read/probe helpers +
+            forge container builder injects ANTHROPIC_API_KEY/OPENAI_API_KEY/GEMINI_API_KEY
+            from Vault at launch. Research verdict documented. Phase 2 (ICAP, --xxx-login
+            CLI subcommands) deferred to next packet.
+      deliverable: plan/issues/forge-harness-auth-vault-proxy-2026-06-27.md
+      depends_on: [vault-credential-persistence]
+      pickup_role: linux
+      estimated_hours: 8
+      outcome: >
+        Claude Code, Codex, and future LLM harnesses authenticate once via
+        device code flow (URL + code shown in terminal, no browser forwarding
+        needed), token persisted to Vault, and the Squid proxy transparently
+        injects auth headers into outbound requests to the respective provider
+        APIs. Forge containers run credential-free by design.
+      exit_criteria:
+        - "tillandsias --anthropic-login shows device code URL, captures token to Vault"
+        - "A forge Claude Code session can call api.anthropic.com with no ANTHROPIC_API_KEY env var"
+        - "Proxy injects x-api-key / Authorization header from Vault-stored token"
+        - "Token rotation: proxy reads a fresh token on each request; supports TTL-scoped sub-tokens"
+        - "All auth flows default to device code (out-of-band) — no browser event listening"
+        - "Research verdict in plan/issues/forge-harness-auth-vault-proxy-2026-06-27.md"
+
+    - packet_id: vault-credential-host-exposure
+      order: 113
+      title: "Eliminate raw credential reads from host tray/headless process"
+      status: completed
+      kind: security+refactor
+      deliverable: plan/issues/vault-credential-host-exposure-audit-2026-06-27.md
+      depends_on: [forge-harness-auth-device-flow]
+      pickup_role: linux
+      estimated_hours: 3
+      outcome: >
+        The host tray/headless process never reads raw credential values (tokens,
+        API keys) from Vault via HTTP. is_github_logged_in now validates end-to-end
+        by running a containerized gh api user probe (credential stays in container).
+        read_provider_api_key uses podman exec vault kv get instead of HTTP client.
+        check_github_token_health (legacy pre-Vault path) removed. vault_kv_get_via_exec
+        primitive added to vault_bootstrap for host→vault reads without port publish.
+      events:
+        - type: completed
+          ts: "2026-06-27T05:45Z"
+          agent_id: "linux-macuahuitl-sonnet46-20260627T0410Z"
+          commits: []
+          summary: >
+            Removed is_github_logged_in and read_github_token_from_vault from
+            vault_bootstrap (both read raw token via host HTTP). Added
+            vault_kv_get_via_exec and is_github_key_present (fast, exit-code only).
+            Added remote_projects::probe_github_username and is_github_logged_in
+            (containerized gh api user probe). Updated tray poll loop, startup probe,
+            vsock handler. Removed check_github_token_health (pre-Vault legacy path).
+            read_provider_api_key now uses vault_kv_get_via_exec.
+      exit_criteria:
+        - "is_github_logged_in validates via containerized gh api user probe — DONE"
+        - "build_forge_agent_run_args provider keys use vault_kv_get_via_exec — DONE"
+        - "check_github_token_health removed — DONE"
+        - "vault_kv_get_via_exec primitive added to vault_bootstrap — DONE"
+        - "./build.sh --check passes — DONE"

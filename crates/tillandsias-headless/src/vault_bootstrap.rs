@@ -487,68 +487,247 @@ pub fn write_github_token_to_vault(token: &str, debug: bool) -> Result<(), Strin
     Ok(())
 }
 
-/// Tray-facing source of truth for "is the user logged in to GitHub?".
+/// Fast presence-only check: returns `true` iff `secret/github/token` exists
+/// in the running Vault container, without reading the token value.
 ///
-/// Returns `true` iff a non-empty token is currently retrievable from Vault
-/// at `secret/github/token`. This replaces the legacy host-side
-/// `gh auth status` probe, which read the host keyring rather than Vault and
-/// therefore diverged from where the login flow actually stores the token.
-///
-/// Honors the "no Vault running at launch" model: if the Vault data volume
-/// has never been created the user has never logged in, so we answer `false`
-/// immediately without paying to bring Vault up. Only when a prior login left
-/// a data volume behind do we ensure Vault is running on demand (idiomatic
-/// podman) and read the token back.
+/// Uses `podman exec` so no HTTP port to Vault is needed on the host. Intended
+/// for high-frequency poll loops (e.g. 120× at 1s intervals during login).
+/// For a definitive auth validation that proves the credential works, use
+/// `remote_projects::is_github_logged_in` instead.
 ///
 /// @trace spec:tillandsias-vault, spec:tray-minimal-ux
 #[allow(dead_code)]
-pub fn is_github_logged_in(debug: bool) -> bool {
+pub(crate) fn is_github_key_present() -> bool {
     if !vault_data_volume_exists() {
+        return false;
+    }
+    if !container_running(VAULT_CONTAINER_NAME) {
+        return false;
+    }
+    podman_cmd_sync()
+        .args([
+            "exec",
+            VAULT_CONTAINER_NAME,
+            "vault",
+            "kv",
+            "get",
+            "-field=token",
+            "secret/github/token",
+        ])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+/// Read a Vault KV secret field by exec-ing into the running Vault container.
+///
+/// Replaces all host-side HTTP Vault client reads for steady-state secret
+/// access. No port publish (`-p`) is required on the host — the host reaches
+/// Vault only through `podman exec`. The value is in host process memory
+/// transiently during injection; it never transits a network socket.
+///
+/// @trace spec:tillandsias-vault
+pub(crate) fn vault_kv_get_via_exec(
+    secret_path: &str,
+    field: &str,
+    debug: bool,
+) -> Result<String, String> {
+    if !container_running(VAULT_CONTAINER_NAME) {
+        return Err(format!("{VAULT_CONTAINER_NAME} is not running"));
+    }
+    let field_arg = format!("-field={field}");
+    let output = podman_cmd_sync()
+        .args([
+            "exec",
+            VAULT_CONTAINER_NAME,
+            "vault",
+            "kv",
+            "get",
+            &field_arg,
+            secret_path,
+        ])
+        .output()
+        .map_err(|e| format!("podman exec {VAULT_CONTAINER_NAME} vault kv get: {e}"))?;
+    if output.status.success() {
+        let val = String::from_utf8_lossy(&output.stdout).trim().to_string();
         if debug {
             eprintln!(
-                "[tillandsias-vault] is_logged_in: no `{VAULT_VOLUME}` volume; user has never logged in"
+                "[tillandsias] vault kv get {secret_path}: ok ({} bytes)",
+                val.len()
             );
         }
-        return false;
+        Ok(val)
+    } else {
+        let stderr = String::from_utf8_lossy(&output.stderr);
+        Err(format!("vault kv get {secret_path}: {}", stderr.trim()))
     }
-    if let Err(e) = ensure_vault_running(debug) {
-        if debug {
-            eprintln!("[tillandsias-vault] is_logged_in: ensure_vault_running failed: {e}");
+}
+
+// ─── LLM provider API key storage ───────────────────────────────────────────
+// Vault secret schema:  secret/<provider>/api-key  { "key": "<api-key>" }
+// Supported providers: anthropic, openai, gemini
+// @trace plan/issues/forge-harness-auth-vault-proxy-2026-06-27.md
+
+/// LLM provider identifier for Vault key storage.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ProviderId {
+    Anthropic,
+    Openai,
+    Gemini,
+}
+
+impl ProviderId {
+    /// Stable Vault path segment (`secret/<segment>/api-key`).
+    pub fn vault_segment(self) -> &'static str {
+        match self {
+            ProviderId::Anthropic => "anthropic",
+            ProviderId::Openai => "openai",
+            ProviderId::Gemini => "gemini",
         }
-        return false;
     }
-    match read_github_token_from_vault(debug) {
-        Ok(token) => !token.trim().is_empty(),
-        Err(e) => {
-            if debug {
-                eprintln!("[tillandsias-vault] is_logged_in: token read failed: {e}");
-            }
-            false
+
+    /// Human-readable name for log messages.
+    pub fn display_name(self) -> &'static str {
+        match self {
+            ProviderId::Anthropic => "Anthropic",
+            ProviderId::Openai => "OpenAI",
+            ProviderId::Gemini => "Gemini",
+        }
+    }
+
+    /// The environment variable name that the provider's CLI reads.
+    pub fn env_var(self) -> &'static str {
+        match self {
+            ProviderId::Anthropic => "ANTHROPIC_API_KEY",
+            ProviderId::Openai => "OPENAI_API_KEY",
+            ProviderId::Gemini => "GEMINI_API_KEY",
         }
     }
 }
 
-/// Read the GitHub token back from Vault at `secret/github/token`. Returns the
-/// raw token (empty string if the key is absent); errs if Vault is not running
-/// or the read fails. Mirrors the read-back in `write_github_token_to_vault`.
+fn provider_vault_path(provider: ProviderId) -> String {
+    format!("secret/{}/api-key", provider.vault_segment())
+}
+
+/// Write a provider API key to Vault. Idempotent — re-running with the same
+/// key is a no-op. Returns `Err` if Vault cannot be brought up or the write
+/// fails.
 #[allow(dead_code)]
-pub(crate) fn read_github_token_from_vault(debug: bool) -> Result<String, String> {
+pub fn write_provider_api_key(provider: ProviderId, key: &str, debug: bool) -> Result<(), String> {
+    if key.is_empty() {
+        return Err(format!(
+            "{} API key must not be empty",
+            provider.display_name()
+        ));
+    }
     if !container_running(VAULT_CONTAINER_NAME) {
-        return Err("vault container is not running".into());
+        if debug {
+            eprintln!(
+                "[tillandsias-vault] Vault not running; bringing up before {} key write",
+                provider.display_name()
+            );
+        }
+        ensure_vault_running(debug).map_err(|e| {
+            format!(
+                "could not bring Vault up to store {} API key: {e}",
+                provider.display_name()
+            )
+        })?;
     }
     let rt = tokio_runtime()?;
     let base_url = vault_api_base_url();
     let root_token = read_and_handover_root_token(debug)?;
     let client = vault_client(&base_url, &root_token, debug)?;
-    let data = rt
-        .block_on(client.read_secret("secret/github/token"))
-        .map_err(|e| format!("vault read_secret failed: {e}"))?;
-    Ok(data["token"].as_str().unwrap_or("").to_string())
+    let path = provider_vault_path(provider);
+
+    rt.block_on(client.write_secret(&path, serde_json::json!({ "key": key })))
+        .map_err(|e| format!("vault write_secret {} failed: {e}", path))?;
+
+    let read_back = rt
+        .block_on(client.read_secret(&path))
+        .map_err(|e| format!("vault read_secret verification for {} failed: {e}", path))?;
+    if read_back["key"].as_str() != Some(key) {
+        return Err(format!(
+            "vault read-back for {} did not match written key",
+            provider.display_name()
+        ));
+    }
+    if debug {
+        eprintln!(
+            "[tillandsias] {} API key stored in Vault at {}",
+            provider.display_name(),
+            path
+        );
+    }
+    Ok(())
 }
+
+/// Read a provider API key via `podman exec` into the Vault container.
+///
+/// Returns `Ok("")` if the key path exists but is empty; returns `Err` if
+/// Vault is not running or the exec fails. Does not use the host Vault HTTP
+/// client — no port publish needed.
+///
+/// @trace spec:tillandsias-vault, plan/issues/vault-credential-host-exposure-audit-2026-06-27.md
+#[allow(dead_code)]
+pub(crate) fn read_provider_api_key(provider: ProviderId, debug: bool) -> Result<String, String> {
+    if !container_running(VAULT_CONTAINER_NAME) {
+        return Ok(String::new());
+    }
+    let path = provider_vault_path(provider);
+    vault_kv_get_via_exec(&path, "key", debug).or_else(|e| {
+        if e.contains("No value found") || e.contains("secret not found") {
+            Ok(String::new())
+        } else {
+            Err(e)
+        }
+    })
+}
+
+/// Returns `true` iff a non-empty API key for the given provider is stored in
+/// Vault. Uses `podman exec` (exit-code only) — the key value is never read
+/// into the host process.
+#[allow(dead_code)]
+pub(crate) fn is_provider_logged_in(provider: ProviderId, debug: bool) -> bool {
+    if !vault_data_volume_exists() {
+        return false;
+    }
+    if !container_running(VAULT_CONTAINER_NAME)
+        && let Err(e) = ensure_vault_running(debug)
+    {
+        if debug {
+            eprintln!(
+                "[tillandsias] is_provider_logged_in({}): vault bring-up failed: {e}",
+                provider.display_name()
+            );
+        }
+        return false;
+    }
+    let path = provider_vault_path(provider);
+    podman_cmd_sync()
+        .args([
+            "exec",
+            VAULT_CONTAINER_NAME,
+            "vault",
+            "kv",
+            "get",
+            "-field=key",
+            &path,
+        ])
+        .stdout(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .status()
+        .map(|s| s.success())
+        .unwrap_or(false)
+}
+
+// ─────────────────────────────────────────────────────────────────────────────
 
 /// True iff the persistent Vault data volume exists. Cheap: a single
 /// `podman volume exists` with no Vault bring-up, so it can gate the more
-/// expensive on-demand launch in [`is_github_logged_in`].
+/// expensive on-demand launch in `is_github_key_present` and `ensure_vault_running`.
 #[allow(dead_code)]
 fn vault_data_volume_exists() -> bool {
     podman_cmd_sync()
@@ -556,6 +735,32 @@ fn vault_data_volume_exists() -> bool {
         .output()
         .map(|o| o.status.success())
         .unwrap_or(false)
+}
+
+/// True iff the host keychain holds a valid (32-byte, base64-encoded) Shamir
+/// unseal share. Used to distinguish a subsequent-boot launch (data volume
+/// contains a fully-initialized Vault the host can re-unseal) from a
+/// partial-init failure (init started, process crashed before the host
+/// captured the handover, so the volume and the keyring are out of sync).
+#[cfg(feature = "vault")]
+fn has_shamir_share_in_keyring() -> bool {
+    use base64::Engine;
+    let Ok(entry) = Entry::new(KEYCHAIN_SERVICE, VAULT_SHAMIR_SHARE_V1) else {
+        return false;
+    };
+    let Ok(encoded) = with_keyring_timeout(move || entry.get_password()) else {
+        return false;
+    };
+    !encoded.is_empty()
+        && base64::engine::general_purpose::STANDARD
+            .decode(&encoded)
+            .map(|v| v.len() == 32)
+            .unwrap_or(false)
+}
+
+#[cfg(not(feature = "vault"))]
+fn has_shamir_share_in_keyring() -> bool {
+    false
 }
 
 /// Mint a fresh AppRole token for a container of the given `role` (e.g.
@@ -1099,14 +1304,36 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
         .stderr(Stdio::piped())
         .output();
 
-    // Remove stale vault data volume so a partially-initialized vault from a
-    // previous failed bootstrap doesn't leave us with a wrong unseal key on
-    // the next attempt (the handover key was never captured).
-    let _ = podman_cmd_sync()
-        .args(["volume", "rm", "-f", VAULT_VOLUME])
-        .stdout(Stdio::piped())
-        .stderr(Stdio::piped())
-        .output();
+    // Only wipe the data volume in the partial-init scenario: the volume
+    // exists but the host keychain has no Shamir unseal share, meaning a
+    // prior bootstrap started Vault's `operator init` but crashed before
+    // the host captured the handover. In that state the volume holds a Vault
+    // initialized with an unknown key, so wiping and re-initializing is the
+    // only safe recovery.
+    //
+    // When the keychain already has the Shamir share the volume contains a
+    // fully-initialized Vault we can re-unseal on the next launch.
+    // Wiping it would destroy the stored GitHub token and all other secrets,
+    // forcing the operator to re-authenticate — which is exactly the bug this
+    // guard fixes. @trace spec:tillandsias-vault
+    let is_partial_init = vault_data_volume_exists() && !has_shamir_share_in_keyring();
+    if is_partial_init {
+        if debug {
+            eprintln!(
+                "[tillandsias-vault] removing stale partial-init data volume \
+                 (volume exists but no Shamir share in keychain)"
+            );
+        }
+        let _ = podman_cmd_sync()
+            .args(["volume", "rm", "-f", VAULT_VOLUME])
+            .stdout(Stdio::piped())
+            .stderr(Stdio::piped())
+            .output();
+    } else if debug && vault_data_volume_exists() {
+        eprintln!(
+            "[tillandsias-vault] preserving existing data volume (Shamir share present in keychain)"
+        );
+    }
 
     // Vault must join the enclave bridge network so (a) `--network-alias vault`
     // is valid — rootless podman's DEFAULT network is pasta/slirp4netns, not

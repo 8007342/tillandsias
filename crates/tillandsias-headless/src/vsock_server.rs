@@ -455,16 +455,10 @@ async fn handle_connection(
                 }
             }
             ControlMessage::GithubLoginStatusRequest { seq } => {
-                let logged_in = crate::vault_bootstrap::is_github_logged_in(false);
-                let handle = if logged_in {
-                    if let Ok(token) = crate::vault_bootstrap::read_github_token_from_vault(false) {
-                        crate::cloud_projects::fetch_github_username(Some(&token))
-                    } else {
-                        None
-                    }
-                } else {
-                    None
-                };
+                // Probe GitHub auth end-to-end inside a container — no raw
+                // token is read into the vsock server process.
+                let handle = crate::remote_projects::probe_github_username(false);
+                let logged_in = handle.is_some();
                 let reply = ControlEnvelope {
                     wire_version: WIRE_VERSION,
                     seq: env.seq,

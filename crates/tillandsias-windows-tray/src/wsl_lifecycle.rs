@@ -323,6 +323,7 @@ After=network-online.target tillandsias-headless-fetch.service
 Requires=tillandsias-headless-fetch.service
 [Service]
 Type=exec
+Environment=TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200
 ExecStart=/usr/local/bin/tillandsias-headless --listen-vsock 42420
 Restart=on-failure
 RestartSec=2s
@@ -348,7 +349,7 @@ WantedBy=multi-user.target
         // in `Connecting` until the budget expires.
         // @trace plan/issues/windows-cold-provision-headless-units-not-started-2026-06-19.md
         self.wsl_root_sh(
-            "systemctl enable --now tillandsias-headless-fetch.service tillandsias-headless.service",
+            "systemctl enable --now tillandsias-headless-fetch.service tillandsias-headless.service podman.socket",
         )
         .await?;
 
