@@ -7369,3 +7369,23 @@ plan_index:
         - "Real --init rebuilds the required git image with proxy env present — DONE (verified)"
         - "Unit test pins lower+upper case proxy var neutralization — DONE"
         - "./build.sh --check passes — DONE"
+
+    - packet_id: zeroclaw-image-orphan-cleanup
+      order: 117
+      title: "Cleanup: remove orphaned zeroclaw container image plumbing after binary removal"
+      status: ready
+      kind: cleanup
+      deliverable: plan/issues/zeroclaw-image-orphan-cleanup-2026-06-27.md
+      depends_on: [zeroclaw-unauthorized-release-remediation]
+      pickup_role: linux
+      estimated_hours: 2
+      outcome: >
+        The zeroclaw container image (images/zeroclaw/, init image-list entry,
+        identity chain, build-arg arms, ordering tests) is removed. The binary it
+        integrated with no longer exists; the image is optional/non-blocking but
+        orphaned. Run under the smoke lock (source-mutating migration).
+      exit_criteria:
+        - "images/zeroclaw/ removed"
+        - "No zeroclaw references in init image list / identity chain / build-args"
+        - "image_specs + ordering tests updated and green"
+        - "./build.sh --check and --test pass"
