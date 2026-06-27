@@ -487,8 +487,49 @@ pub fn write_github_token_to_vault(token: &str, debug: bool) -> Result<(), Strin
     Ok(())
 }
 
+/// In-container address of the Vault TLS listener. The Vault server listens on
+/// the container loopback at :8200; `podman exec` does NOT inherit the
+/// entrypoint's environment, so every exec'd `vault` CLI call must set this (and
+/// the token + skip-verify) explicitly or it fails with a TLS "unknown
+/// authority" error against the self-signed cert.
+const VAULT_EXEC_ADDR: &str = "https://127.0.0.1:8200";
+
+/// Build a `podman exec` Command that runs the in-container `vault` CLI with the
+/// environment the CLI needs but `podman exec` does not inherit:
+/// - `VAULT_ADDR`        — the loopback TLS listener (the entrypoint sets this; exec does not)
+/// - `VAULT_SKIP_VERIFY` — the cert is self-signed; the request never leaves the
+///   container loopback, so verification is moot here (not a network hop)
+/// - `VAULT_TOKEN`       — auth; forwarded via name-only `-e VAULT_TOKEN` so the
+///   token rides in the podman process's environment and never appears in the
+///   exec argv (i.e. not visible in `ps`)
+///
+/// Without these, `vault kv get` fails first with a TLS error and then a
+/// missing-client-token error — which silently broke every host-side credential
+/// read after the move from the HTTP Vault client to `podman exec`.
+///
+/// @trace spec:tillandsias-vault, plan/issues/vault-exec-env-regression-2026-06-27.md
+fn vault_exec_command(root_token: &str, vault_args: &[&str]) -> std::process::Command {
+    let mut cmd = podman_cmd_sync();
+    // Token in the podman process env → forwarded by name-only `-e VAULT_TOKEN`,
+    // so it stays out of argv.
+    cmd.env("VAULT_TOKEN", root_token);
+    cmd.args([
+        "exec",
+        "-e",
+        &format!("VAULT_ADDR={VAULT_EXEC_ADDR}"),
+        "-e",
+        "VAULT_SKIP_VERIFY=true",
+        "-e",
+        "VAULT_TOKEN",
+        VAULT_CONTAINER_NAME,
+        "vault",
+    ]);
+    cmd.args(vault_args);
+    cmd
+}
+
 /// Fast presence-only check: returns `true` iff `secret/github/token` exists
-/// in the running Vault container, without reading the token value.
+/// in the running Vault container, without surfacing the token value to the host.
 ///
 /// Uses `podman exec` so no HTTP port to Vault is needed on the host. Intended
 /// for high-frequency poll loops (e.g. 120× at 1s intervals during login).
@@ -504,21 +545,20 @@ pub(crate) fn is_github_key_present() -> bool {
     if !container_running(VAULT_CONTAINER_NAME) {
         return false;
     }
-    podman_cmd_sync()
-        .args([
-            "exec",
-            VAULT_CONTAINER_NAME,
-            "vault",
-            "kv",
-            "get",
-            "-field=token",
-            "secret/github/token",
-        ])
-        .stdout(std::process::Stdio::null())
-        .stderr(std::process::Stdio::null())
-        .status()
-        .map(|s| s.success())
-        .unwrap_or(false)
+    // The exec'd `vault` CLI needs VAULT_ADDR/TOKEN/skip-verify; without the root
+    // token the call always fails and the poll loop never observes the token.
+    let Ok(root_token) = read_and_handover_root_token(false) else {
+        return false;
+    };
+    vault_exec_command(
+        &root_token,
+        &["kv", "get", "-field=token", "secret/github/token"],
+    )
+    .stdout(std::process::Stdio::null())
+    .stderr(std::process::Stdio::null())
+    .status()
+    .map(|s| s.success())
+    .unwrap_or(false)
 }
 
 /// Read a Vault KV secret field by exec-ing into the running Vault container.
@@ -537,17 +577,11 @@ pub(crate) fn vault_kv_get_via_exec(
     if !container_running(VAULT_CONTAINER_NAME) {
         return Err(format!("{VAULT_CONTAINER_NAME} is not running"));
     }
+    // `podman exec` does not inherit the entrypoint env, so the `vault` CLI needs
+    // VAULT_ADDR/TOKEN/skip-verify supplied explicitly (see vault_exec_command).
+    let root_token = read_and_handover_root_token(debug)?;
     let field_arg = format!("-field={field}");
-    let output = podman_cmd_sync()
-        .args([
-            "exec",
-            VAULT_CONTAINER_NAME,
-            "vault",
-            "kv",
-            "get",
-            &field_arg,
-            secret_path,
-        ])
+    let output = vault_exec_command(&root_token, &["kv", "get", &field_arg, secret_path])
         .output()
         .map_err(|e| format!("podman exec {VAULT_CONTAINER_NAME} vault kv get: {e}"))?;
     if output.status.success() {
@@ -1721,6 +1755,50 @@ mod tests {
         assert_eq!(policy_role_name(&Policy::Tray), "tray");
         assert_eq!(policy_role_name(&Policy::Inference), "inference");
         assert_eq!(policy_role_name(&Policy::GithubLogin), "github-login");
+    }
+
+    #[test]
+    fn vault_exec_command_sets_required_env_and_hides_token() {
+        // `podman exec` does not inherit the entrypoint env, so the exec'd vault
+        // CLI must get VAULT_ADDR + VAULT_SKIP_VERIFY + VAULT_TOKEN or it fails
+        // with a self-signed-cert TLS error and then a missing-token error. The
+        // token must be forwarded by name only (-e VAULT_TOKEN) so it stays out
+        // of argv. Regression guard for the HTTP→podman-exec credential-read move.
+        // @trace plan/issues/vault-exec-env-regression-2026-06-27.md
+        let cmd = vault_exec_command("super-secret-root-token", &["kv", "get", "secret/x"]);
+
+        let args: Vec<String> = cmd
+            .get_args()
+            .map(|a| a.to_string_lossy().into_owned())
+            .collect();
+        assert!(
+            args.contains(&format!("VAULT_ADDR={VAULT_EXEC_ADDR}")),
+            "missing VAULT_ADDR; args={args:?}"
+        );
+        assert!(
+            args.contains(&"VAULT_SKIP_VERIFY=true".to_string()),
+            "missing VAULT_SKIP_VERIFY; args={args:?}"
+        );
+        // Name-only passthrough: the literal "VAULT_TOKEN" appears, but the token
+        // value must NOT be anywhere in argv.
+        assert!(
+            args.iter().any(|a| a == "VAULT_TOKEN"),
+            "missing name-only -e VAULT_TOKEN; args={args:?}"
+        );
+        assert!(
+            !args.iter().any(|a| a.contains("super-secret-root-token")),
+            "token leaked into argv (visible in ps); args={args:?}"
+        );
+
+        // The token rides in the podman process environment instead.
+        let token_in_env = cmd.get_envs().any(|(k, v)| {
+            k == std::ffi::OsStr::new("VAULT_TOKEN")
+                && v == Some(std::ffi::OsStr::new("super-secret-root-token"))
+        });
+        assert!(
+            token_in_env,
+            "token must be set in the process env, not argv"
+        );
     }
 
     #[test]
