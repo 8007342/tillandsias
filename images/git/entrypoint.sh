@@ -144,6 +144,17 @@ for mirror in /srv/git/*; do
     if [ -z "$REFSPECS" ]; then
         continue
     fi
+
+    # @trace spec:git-mirror-service
+    # Fetch upstream state before the retry push so we don't get rejected for
+    # non-fast-forward when the mirror was behind GitHub during the previous
+    # session's post-receive relay. A fetch failure is non-fatal — the push
+    # will fail visibly and the next forge commit will trigger a fresh relay.
+    FETCH_OUTPUT="$(git -C "$mirror" fetch origin 2>&1)" || retry_msg "[git-mirror] Startup retry-push fetch failed (non-fatal): $FETCH_OUTPUT"
+    if [ -n "$FETCH_OUTPUT" ]; then
+        retry_msg "[git-mirror] Startup retry-push fetch output: $FETCH_OUTPUT"
+    fi
+
     retry_msg "[git-mirror] Startup retry-push: $mirror -> $REMOTE (refspecs=$(echo "$REFSPECS" | wc -w))"
     # shellcheck disable=SC2086
     if OUTPUT="$(git -C "$mirror" push origin $REFSPECS 2>&1)"; then

@@ -1887,6 +1887,23 @@ fn build_git_run_args(
         format!("PROJECT={project_name}"),
         "--env".into(),
         "GIT_TRACE=1".into(),
+        // @trace spec:proxy-container, spec:git-mirror-service
+        // Pass proxy env vars so the post-receive hook's `git push` to GitHub
+        // (HTTPS) routes through the enclave proxy. Without these, the outbound
+        // push relies on transparent proxying, which breaks when the proxy
+        // container is reconfigured or the network changes.
+        "--env".into(),
+        "HTTP_PROXY=http://proxy:3128".into(),
+        "--env".into(),
+        "HTTPS_PROXY=http://proxy:3128".into(),
+        "--env".into(),
+        "NO_PROXY=localhost,127.0.0.1,git-service,tillandsias-git,vault,inference".into(),
+        "--env".into(),
+        "http_proxy=http://proxy:3128".into(),
+        "--env".into(),
+        "https_proxy=http://proxy:3128".into(),
+        "--env".into(),
+        "no_proxy=localhost,127.0.0.1,git-service,tillandsias-git,vault,inference".into(),
     ];
     if let Some(url) = project_remote_url
         && !url.is_empty()

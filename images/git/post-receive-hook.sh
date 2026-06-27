@@ -96,6 +96,21 @@ fi
 
 log_msg "[git-mirror] Forwarding $CREATE_UPDATE_COUNT update(s) and $DELETE_COUNT deletion(s) to upstream"
 
+# @trace spec:git-mirror-service
+# Fetch upstream state before pushing so the mirror's tracking refs reflect
+# what GitHub actually has. Without this, the subsequent push is rejected as
+# non-fast-forward when the mirror is stale (e.g. another host pushed to GitHub
+# while this mirror was offline or out of sync). The forge's push always lands
+# in the local bare repo (denyNonFastforwards=false), so we must reconcile
+# before relay.
+#
+# Failure to fetch is non-fatal — the push below will fail visibly instead of
+# silently diverging. We log the fetch error and continue.
+FETCH_OUTPUT="$(git fetch origin 2>&1)" || log_msg "[git-mirror] WARNING: fetch before push failed — upstream push may be rejected"
+if [ -n "$FETCH_OUTPUT" ]; then
+    log_msg "[git-mirror] Fetch output: $FETCH_OUTPUT"
+fi
+
 # @trace spec:tillandsias-vault, spec:secrets-management, spec:cross-platform, spec:git-mirror-service
 # Construct an EPHEMERAL auth URL by reading the GitHub token at push time.
 #
