@@ -7055,12 +7055,14 @@ plan_index:
     - packet_id: enclave-transparent-proxy-feasibility
       order: 106
       title: "Research: iptables TPROXY feasibility in rootless Podman enclave"
-      status: ready
+      status: done
       kind: research
       deliverable: plan/issues/enclave-transparent-proxy-feasibility-2026-06-26.md
       depends_on: []
       pickup_role: linux
       estimated_hours: 2
+      closed_at: "2026-06-27T03:20Z"
+      closed_by: "linux-macuahuitl-sonnet46-20260627T0312Z"
       outcome: >
         Verdict on whether iptables TPROXY intercept mode is achievable in our
         rootless Podman / netavark / Fedora Silverblue setup, or whether
@@ -7073,7 +7075,7 @@ plan_index:
     - packet_id: enclave-proxy-centralize-injection
       order: 107
       title: "Enhancement: centralize proxy injection — eliminate per-container env var pollution"
-      status: pending
+      status: ready
       kind: enhancement
       deliverable: plan/issues/enclave-proxy-centralize-and-dedup-2026-06-26.md
       depends_on: [enclave-transparent-proxy-feasibility]
