@@ -7754,3 +7754,93 @@ plan_index:
           host: "linux"
           lease_id: "tray-feature-parity-matrix-claim-1"
           expires_at: "2026-06-29T03:35:00Z"
+
+    - packet_id: agent-services-egress-allowlist-research
+      order: 129
+      title: "Research: exact egress allowlist for claude/codex/antigravity (no guessing)"
+      status: ready
+      kind: research
+      deliverable: plan/issues/agent-services-egress-allowlist-research-2026-06-28.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [podman, proxy, testing]
+      estimated_hours: 3
+      outcome: >
+        Claude/Codex/Antigravity fail to launch+connect. Model APIs are already
+        allowlisted (.anthropic.com/.openai.com/.googleapis.com), so the gaps are in
+        auth/sign-in/telemetry endpoints. Determine the exact denied FQDNs per agent
+        by harvesting TCP_DENIED from `podman logs tillandsias-proxy` (not guessing),
+        reduce to a minimal parent-domain delta (no Squid duplicate-subdomain FATALs),
+        and classify bump/no-bump. Also: antigravity has no entrypoint-forge-antigravity.sh
+        (not wired as an agent) — documented for the impl packet.
+      exit_criteria:
+        - "Per-agent confirmed TCP_DENIED domain list from proxy logs (evidence cited)"
+        - "Minimal allowlist delta (parent domains, no duplicate-subdomain FATALs)"
+        - "bump vs no-bump decision per new domain"
+        - "Antigravity agent-wiring gap documented"
+
+    - packet_id: agent-services-egress-allowlist-impl
+      order: 130
+      title: "Impl: apply agent egress allowlist delta + wire antigravity agent"
+      status: pending
+      kind: enhancement
+      deliverable: plan/issues/agent-services-egress-allowlist-impl-2026-06-28.md
+      depends_on: [agent-services-egress-allowlist-research]
+      pickup_role: linux
+      capability_tags: [podman, proxy]
+      estimated_hours: 3
+      outcome: >
+        Apply the research-confirmed allowlist delta to images/proxy/allowlist.txt +
+        squid.conf (bump/no-bump), add entrypoint-forge-antigravity.sh, and pin
+        litmus:agent-egress-allowlist-shape. Tray leaf for antigravity is operator-gated.
+      exit_criteria:
+        - "allowlist.txt + squid.conf updated with confirmed delta (no FATAL dupes)"
+        - "antigravity launchable as a forge agent (entrypoint present)"
+        - "zero TCP_DENIED for claude/codex/antigravity required endpoints"
+        - "litmus:agent-egress-allowlist-shape pinned + green; --check passes"
+
+    - packet_id: agent-login-flows-research
+      order: 131
+      title: "Research: --claude-login / --codex-login / --antigravity-login flows"
+      status: ready
+      kind: research
+      deliverable: plan/issues/agent-login-flows-research-2026-06-28.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [rust, vault, podman]
+      estimated_hours: 4
+      outcome: >
+        Prepare the three interactive login flows mirroring --github-login
+        (containerized, OOB, credential stored in Vault, host never sees it). Decide
+        per service: API-key (reuse secret/<provider>/api-key + ProviderId) vs
+        OAuth/device-code (new secret/<provider>/oauth schema + refresh). Define the
+        containerized boundary, required egress endpoints, and the shared
+        run_provider_login(ProviderId, AuthModel) shape.
+      exit_criteria:
+        - "Auth model decided per service (API-key vs OAuth) with operator sign-off"
+        - "Vault OAuth-token schema defined if any OAuth flow chosen"
+        - "Containerized login boundary + required egress endpoints per service"
+        - "Shared run_provider_login API shape sketched"
+
+    - packet_id: agent-login-flows-impl
+      order: 132
+      title: "Impl: --claude-login / --codex-login / --antigravity-login via run_provider_login"
+      status: pending
+      kind: enhancement
+      deliverable: plan/issues/agent-login-flows-impl-2026-06-28.md
+      depends_on: [agent-login-flows-research, agent-services-egress-allowlist-impl]
+      pickup_role: linux
+      capability_tags: [rust, vault, podman]
+      estimated_hours: 8
+      outcome: >
+        Implement the three flows as a parameterized run_provider_login mirroring
+        run_github_login: API-key flows first (slice 1, reuses ProviderId +
+        read/write_provider_api_key), then OAuth/device-code (slice 2) for Google/
+        Antigravity and any OAuth-default service, then operator-gated tray status
+        (slice 3). Credentials in Vault; host never holds raw values.
+      exit_criteria:
+        - "--claude-login/--codex-login/--antigravity-login implemented via shared run_provider_login"
+        - "Credentials stored in Vault per the research schema; host never sees raw values"
+        - "Each provider's forge session authenticates through the proxy (zero TCP_DENIED)"
+        - "./build.sh --check and --test pass"
+>>>>>>> 035647276baa533b0d6a37347ec0ebe56ff795ac
