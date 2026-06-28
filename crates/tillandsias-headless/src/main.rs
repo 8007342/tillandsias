@@ -67,6 +67,7 @@ use serde::{Deserialize, Serialize};
 
 #[cfg(any(feature = "tray", feature = "listen-vsock"))]
 mod cloud_projects;
+mod container_deps;
 mod control_dispatch;
 #[cfg(any(feature = "tray", feature = "listen-vsock"))]
 mod local_projects;

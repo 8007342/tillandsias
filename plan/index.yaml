@@ -7562,7 +7562,7 @@ plan_index:
     - packet_id: container-dependency-graph-impl
       order: 122
       title: "Implement: compile-time container dependency model"
-      status: ready
+      status: in_progress
       kind: enhancement
       deliverable: plan/issues/container-dependency-graph-impl-2026-06-27.md
       depends_on: [container-dependency-graph-research]
@@ -7574,8 +7574,25 @@ plan_index:
         litmus. Migrate github-login and list-cloud-projects as first consumers so
         the proxy/vault prerequisites can't be skipped without a compile error or
         pinned-litmus failure.
+      events:
+        - type: progress
+          ts: "2026-06-28T09:20Z"
+          agent_id: "linux-yoga-sonnet46-20260628T0756Z"
+          commits: []
+          summary: >
+            Slice 1 complete (additive, no behavior change): new container_deps module
+            with the Service node set, the const DEPS declaration (single source of
+            truth), deps()/topo_order() with cycle detection, and the verifiable-closure
+            tests dependency_graph_is_complete_and_acyclic +
+            gitlogin_brings_up_vault_and_proxy_before_itself + leaf_nodes_have_no_dependencies.
+            Remaining: slice 2 (ensure() topological bring-up wrapping
+            ensure_vault_running/ensure_proxy_running), slice 3 (typestate Up<S> launch
+            witnesses + trybuild compile-fail; migrate github-login/list-cloud-projects),
+            slice 4 (runtime liveness probe), slice 5 (gated-launch drift litmus).
       exit_criteria:
-        - "All launch paths route through the dependency model"
-        - "Skipping a prerequisite is a compile error or litmus failure"
-        - "acyclic-graph + bring-up-order + compile-fail tests green"
-        - "./build.sh --check and --test pass"
+        - "Slice 1: declarative graph + acyclic/completeness + topo-order tests — DONE"
+        - "Slice 2: ensure() topological bring-up replaces ad-hoc ensure_* — TODO"
+        - "All launch paths route through the dependency model — TODO"
+        - "Skipping a prerequisite is a compile error or litmus failure — TODO"
+        - "acyclic-graph + bring-up-order + compile-fail tests green — partial (graph+order DONE)"
+        - "./build.sh --check and --test pass — DONE"
