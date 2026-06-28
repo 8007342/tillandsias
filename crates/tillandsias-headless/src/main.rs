@@ -8274,6 +8274,27 @@ mod tests {
     }
 
     #[test]
+    fn enclave_no_proxy_includes_vault_service_dns() {
+        // Containers reach Vault by its service DNS name (https://vault:8200)
+        // since the move off the locally-bound 127.0.0.1 listener. If `vault` is
+        // not in no_proxy, vault-cli's curl routes the Vault request through the
+        // enclave proxy and fails ("Could not resolve proxy: proxy"), breaking
+        // GitHub-login token storage and remote-project listing.
+        // @trace plan/issues/vault-service-dns-no-proxy-2026-06-27.md
+        let _guard = env_lock();
+        unsafe {
+            std::env::remove_var(ENCLAVE_SUBNET_ENV);
+        }
+        let no_proxy = enclave_no_proxy();
+        for entry in [",vault,", "tillandsias-vault"] {
+            assert!(
+                no_proxy.contains(entry),
+                "no_proxy must bypass Vault ({entry}); got {no_proxy}"
+            );
+        }
+    }
+
+    #[test]
     fn enclave_no_proxy_uses_subnet_override() {
         let _guard = env_lock();
         unsafe {
@@ -9605,6 +9626,21 @@ mod tests {
             image_specs(&root, "web").expect("web image specs should be resolvable");
         assert!(containerfile.ends_with("images/web/Containerfile"));
         assert!(context.ends_with("images/web"));
+    }
+
+    #[test]
+    fn build_proxy_neutralize_vars_cover_lower_and_upper_case() {
+        // Image builds must reach the network directly; the runtime proxy
+        // (proxy:3128) does not resolve during a build. Pin that both the
+        // lowercase and uppercase proxy variables are neutralized so a future
+        // edit cannot silently re-poison the build environment.
+        // @trace plan/issues/init-proxy-poisons-build-2026-06-27.md
+        for var in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"] {
+            assert!(
+                BUILD_PROXY_NEUTRALIZE_VARS.contains(&var),
+                "build must neutralize proxy var {var}"
+            );
+        }
     }
 
     #[test]

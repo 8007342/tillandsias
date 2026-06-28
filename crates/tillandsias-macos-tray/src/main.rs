@@ -72,6 +72,8 @@ fn main() {
              the control wire, print its output + exit, then stop\n    \
              --github-login  Boot the VM and log in to GitHub in the guest;\n                  \
              prompts for your git name, email, and PAT (token hidden)\n    \
+             --list-cloud-projects  Boot the VM and list GitHub repos via the\n                  \
+             stored Vault token; streams the repo listing to stdout\n    \
              --opencode <path> [--prompt <text>]  Boot the VM and launch the\n                  \
              OpenCode forge on <path> inside the guest; streams forge output\n                  \
              to this terminal. With --prompt runs non-interactively (one shot).\n    \
@@ -94,7 +96,11 @@ fn main() {
     // current-thread runtime for exactly that. See
     // plan/issues/optimization-macos-vz-idiomatic-exec-layer-2026-06-21.md.
     if let Some(idx) = args.iter().position(|a| a == "--exec-guest") {
-        let guest_argv: Vec<String> = args[idx + 1..].to_vec();
+        // Join remaining args into a shell command string so the user can write
+        // --exec-guest "ls -la" or --exec-guest tillandsias --debug --init
+        // without needing to pre-split argv themselves.
+        let shell_cmd = args[idx + 1..].join(" ");
+        let guest_argv = vec!["/bin/sh".to_string(), "-c".to_string(), shell_cmd];
         std::process::exit(diagnose::exec_guest_main(guest_argv));
     }
     // Headless GitHub login: boot the VM and drive the guest --github-login over
@@ -104,6 +110,11 @@ fn main() {
     //   tillandsias-tray --github-login
     if args.iter().any(|a| a == "--github-login") {
         std::process::exit(diagnose::github_login_main());
+    }
+    // List GitHub cloud projects using the token stored in guest Vault.
+    // Mirrors the Linux `tillandsias --list-cloud-projects` CLI mode.
+    if args.iter().any(|a| a == "--list-cloud-projects") {
+        std::process::exit(diagnose::list_cloud_projects_main());
     }
     // `--opencode <path> [--prompt <text>]`: boot VM and launch forge in guest.
     if let Some(oc_idx) = args.iter().position(|a| a == "--opencode") {
