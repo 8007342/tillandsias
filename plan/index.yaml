@@ -7731,7 +7731,7 @@ plan_index:
     - packet_id: tray-feature-parity-matrix
       order: 128
       title: "Tray 1:1 feature & UX parity matrix (linux/macos/windows) + parity litmus"
-      status: ready
+      status: claimed
       kind: enhancement
       deliverable: plan/issues/tray-feature-parity-matrix-2026-06-28.md
       depends_on: []
@@ -7747,3 +7747,10 @@ plan_index:
         - "openspec/tray-parity-matrix.yaml enumerates every tray capability + per-platform cell"
         - "litmus:tray-parity-matrix-complete fails on any unmet required row"
         - "Each host audits its column and files gap packets for required misses"
+      events:
+        - type: claim
+          ts: "2026-06-28T23:35:00Z"
+          agent_id: "linux-antigravity-20260628T2335Z"
+          host: "linux"
+          lease_id: "tray-feature-parity-matrix-claim-1"
+          expires_at: "2026-06-29T03:35:00Z"
