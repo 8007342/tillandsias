@@ -124,6 +124,43 @@ fn visit(
     Ok(())
 }
 
+/// Brings a single [`Service`] up (idempotently). Implemented by the headless
+/// runtime in slice 3 (wrapping `ensure_enclave_network` / `ensure_vault_running`
+/// / `ensure_proxy_running` / `ensure_ca_bundle`); the driver below calls
+/// `satisfy` for each node in topological order.
+///
+/// Kept as a trait so the topological driver is unit-testable with a recording
+/// fake — the order-120 class of bug (a prerequisite simply never started) is
+/// then a graph property we can assert, not a runtime surprise.
+pub trait Satisfier {
+    /// Bring `service` up, or return why it could not. MUST be idempotent and
+    /// cheap when already satisfied.
+    fn satisfy(&mut self, service: Service) -> Result<(), String>;
+}
+
+/// Topologically satisfy `target` and all its prerequisites, dependencies first.
+///
+/// Returns the bring-up order actually executed. Stops at the first `satisfy`
+/// error (a prerequisite failing means the target cannot come up). This is the
+/// single entry point all launch paths will route through (slice 3), replacing
+/// the ad-hoc `ensure_*` call chains.
+pub fn ensure_with<S: Satisfier>(
+    target: Service,
+    satisfier: &mut S,
+) -> Result<Vec<Service>, String> {
+    let order = topo_order(target)?;
+    for &service in &order {
+        satisfier.satisfy(service).map_err(|e| {
+            format!(
+                "ensure {}: {} not satisfied: {e}",
+                target.name(),
+                service.name()
+            )
+        })?;
+    }
+    Ok(order)
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -195,5 +232,59 @@ mod tests {
             assert!(deps(s).is_empty(), "{} should be a leaf", s.name());
             assert_eq!(topo_order(s).unwrap(), vec![s]);
         }
+    }
+
+    /// Records every `satisfy` call so tests can assert bring-up order; can be
+    /// told to fail on a specific node to prove error propagation.
+    struct RecordingSatisfier {
+        calls: Vec<Service>,
+        fail_on: Option<Service>,
+    }
+    impl RecordingSatisfier {
+        fn new() -> Self {
+            Self {
+                calls: Vec::new(),
+                fail_on: None,
+            }
+        }
+    }
+    impl Satisfier for RecordingSatisfier {
+        fn satisfy(&mut self, service: Service) -> Result<(), String> {
+            self.calls.push(service);
+            if self.fail_on == Some(service) {
+                return Err("forced failure".to_string());
+            }
+            Ok(())
+        }
+    }
+
+    #[test]
+    fn ensure_with_satisfies_prerequisites_before_target() {
+        // The order-120 fix as an executable invariant: ensure(GitLogin) brings up
+        // its network/ca/vault/proxy prerequisites — in dependency order — before
+        // GitLogin itself.
+        let mut s = RecordingSatisfier::new();
+        let order = ensure_with(Service::GitLogin, &mut s).unwrap();
+        assert_eq!(order, s.calls, "ensure must satisfy in the returned order");
+        let pos = |x: Service| s.calls.iter().position(|c| *c == x).unwrap();
+        assert!(pos(Service::Vault) < pos(Service::GitLogin));
+        assert!(pos(Service::Proxy) < pos(Service::GitLogin));
+        assert_eq!(*s.calls.last().unwrap(), Service::GitLogin);
+    }
+
+    #[test]
+    fn ensure_with_stops_and_reports_on_unsatisfied_prerequisite() {
+        // If a prerequisite can't come up, the target must not be attempted.
+        let mut s = RecordingSatisfier::new();
+        s.fail_on = Some(Service::Proxy);
+        let err = ensure_with(Service::GitLogin, &mut s).unwrap_err();
+        assert!(
+            err.contains("tillandsias-proxy"),
+            "err names the failed node: {err}"
+        );
+        assert!(
+            !s.calls.contains(&Service::GitLogin),
+            "GitLogin must not be satisfied after a prerequisite failed"
+        );
     }
 }

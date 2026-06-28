@@ -7589,12 +7589,24 @@ plan_index:
             ensure_vault_running/ensure_proxy_running), slice 3 (typestate Up<S> launch
             witnesses + trybuild compile-fail; migrate github-login/list-cloud-projects),
             slice 4 (runtime liveness probe), slice 5 (gated-launch drift litmus).
+        - type: progress
+          ts: "2026-06-28T23:55Z"
+          agent_id: "linux-yoga-sonnet46-20260628T2247Z"
+          commits: []
+          summary: >
+            Slice 2 (driver, additive/testable): added the Satisfier trait + ensure_with
+            topological driver (satisfies prerequisites dependency-first, stops + reports
+            on the first unsatisfied node, returns the executed order). Unit tests with a
+            recording fake satisfier prove order-120 as an executable invariant
+            (ensure(GitLogin) brings up vault+proxy before GitLogin) and that a failed
+            prerequisite aborts before the target. No live-podman wiring yet (slice 3
+            connects a real Satisfier wrapping ensure_enclave_network/vault/proxy/ca).
       exit_criteria:
         - "Slice 1: declarative graph + acyclic/completeness + topo-order tests — DONE"
-        - "Slice 2: ensure() topological bring-up replaces ad-hoc ensure_* — TODO"
+        - "Slice 2: ensure_with topological driver + Satisfier trait + driver tests — DONE"
+        - "Slice 3: real Satisfier wraps ensure_* ; typestate Up<S> + trybuild; migrate callers — TODO"
         - "All launch paths route through the dependency model — TODO"
-        - "Skipping a prerequisite is a compile error or litmus failure — TODO"
-        - "acyclic-graph + bring-up-order + compile-fail tests green — partial (graph+order DONE)"
+        - "Skipping a prerequisite is a compile error or litmus failure — TODO (slice 3/5)"
         - "./build.sh --check and --test pass — DONE"
 
     - packet_id: host-guest-transport-normalization-research
