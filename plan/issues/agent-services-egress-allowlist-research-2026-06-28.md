@@ -1,6 +1,6 @@
 # Research: Agent-Services Egress Allowlist (claude / codex / antigravity)
 
-**Status:** `ready`
+**Status:** `done`
 **Owner:** linux
 **Date:** 2026-06-28
 **Kind:** research
@@ -76,3 +76,27 @@ no-bump/bump classification for each. Feeds the impl packet.
 - `agent-services-egress-allowlist-impl-2026-06-28.md`
 - `agent-login-flows-research-2026-06-28.md`
 - `images/proxy/allowlist.txt`, `images/proxy/squid.conf`, `images/proxy/external-logs.yaml`
+
+## Research Findings
+
+The research has been successfully completed by deploying the diagnostic proxy and launching the agents in interactive isolation.
+
+**Exact denied domains per agent from proxy logs:**
+- **Codex:** `chatgpt.com`, `github.com`, `api.github.com`
+- **Claude:** `platform.claude.com`, `raw.githubusercontent.com`
+- **Antigravity:** Not wired as an agent (no `entrypoint-forge-antigravity.sh` exists).
+
+**Minimal Allowlist Delta (No duplicate subdomains):**
+- `.chatgpt.com` (no-bump)
+- `.github.com` (no-bump)
+- `.githubusercontent.com` (no-bump)
+- `.claude.com` (no-bump)
+
+### Events
+- type: claim
+  ts: "2026-06-28T23:30:00Z"
+  agent_id: "linux-forge-antigravity-1"
+  host: "linux"
+- type: completed
+  ts: "2026-06-28T23:49:00Z"
+  evidence: "openspec/changes/egress-allowlist-research.yaml"
