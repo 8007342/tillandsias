@@ -112,3 +112,30 @@ needs visible output.
     ts: "2026-06-26T22:30:00Z"
     agent_id: "macos-smoke-20260626T1500Z"
     host: macos
+
+## Work Packet: smoke-finding/install-sh-rejects-aarch64-linux
+
+- id: `smoke-finding/install-sh-rejects-aarch64-linux`
+- owner_host: linux
+- capability_tags: [rust, release, install, aarch64]
+- status: ready
+- discovered_by: macOS exec-guest session 2026-06-27
+- evidence:
+  - Running `curl -fsSL .../install.sh | bash` inside the aarch64 Fedora VM
+    (Apple Silicon host, VZ native arm64 guest) printed:
+    `ERROR: unsupported architecture: aarch64. This installer ships x86_64 Linux only.`
+  - The `tillandsias-headless-aarch64-unknown-linux-musl` asset IS published
+    in every release; only `install.sh` hard-gates on x86_64.
+- repro:
+  - On any aarch64 Linux host (or inside the macOS VZ Fedora guest):
+    `curl -fsSL https://github.com/8007342/tillandsias/releases/latest/download/install.sh | bash`
+- next_action: >
+    In `scripts/install.sh`, detect `uname -m` == aarch64 and download
+    `tillandsias-headless-aarch64-unknown-linux-musl` instead of
+    the x86_64 variant. The fetch-headless.sh cloud-init script already
+    has the right pattern (`ARCH=$(uname -m)`).
+- events:
+  - type: discovered
+    ts: "2026-06-27T22:40:00Z"
+    agent_id: "macos-advance-20260627T2200Z"
+    host: macos
