@@ -7871,7 +7871,7 @@ plan_index:
     - packet_id: methodology-concurrent-integration-duplication
       order: 133
       title: "Methodology: fix concurrent-integration content duplication (skill + litmus)"
-      status: ready
+      status: claimed
       kind: analysis+enhancement
       deliverable: plan/issues/methodology-concurrent-integration-duplication-2026-06-28.md
       depends_on: []
@@ -7891,6 +7891,13 @@ plan_index:
         - "advance-work-from-plan + merge/multihost skills require post-integration --check before push"
         - "litmus:no-duplicate-rust-item-defs pinned + green"
         - "multi-host-development.yaml declares ONE integration strategy (rebase⨉merge ambiguity removed)"
+      events:
+        - type: claim
+          ts: "2026-06-28T23:50:00Z"
+          agent_id: "linux-antigravity-20260628T2350Z"
+          host: "linux"
+          lease_id: "methodology-concurrent-integration-duplication-claim-1"
+          expires_at: "2026-06-29T03:50:00Z"
 
     - packet_id: plan-ledger-archival
       order: 134
