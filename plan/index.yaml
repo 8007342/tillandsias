@@ -7596,3 +7596,128 @@ plan_index:
         - "Skipping a prerequisite is a compile error or litmus failure — TODO"
         - "acyclic-graph + bring-up-order + compile-fail tests green — partial (graph+order DONE)"
         - "./build.sh --check and --test pass — DONE"
+
+    - packet_id: host-guest-transport-normalization-research
+      order: 123
+      title: "Research: normalize host<->guest transport (vsock) across all platforms"
+      status: ready
+      kind: research
+      deliverable: plan/issues/host-guest-transport-normalization-research-2026-06-28.md
+      depends_on: []
+      pickup_role: linux
+      estimated_hours: 5
+      outcome: >
+        Operator-mandated normalization: all three platforms drifted into separate
+        host->guest connection implementations (control-wire Vsock Linux-only,
+        macOS VZVirtioSocket, Windows WSL/hvsock) with 5 overlapping exec_over_stream
+        variants and inconsistent nomenclature. Define the target: two canonical
+        primitives (InteractiveStream for PTY/attach, ExecOneShot for quick reads),
+        a single GuestTransport facade + GuestEndpoint addressing (callers never
+        cfg-select a backend), one wire protocol, and a nomenclature glossary.
+      exit_criteria:
+        - "Target-architecture verdict: facade trait + GuestEndpoint + two primitive signatures"
+        - "Backend matrix (Linux AF_VSOCK / macOS VZ virtio-vsock / Windows WSL-hvsock) + layer home decided"
+        - "Exec-consolidation map: 5 exec_over_stream* -> ExecOneShot, with call sites"
+        - "Nomenclature glossary (one term per concept) + parity definition"
+
+    - packet_id: host-guest-transport-normalization-spec
+      order: 124
+      title: "Normalization spec: host<->guest transport canon (protocol/facade/glossary)"
+      status: pending
+      kind: enhancement
+      deliverable: plan/issues/host-guest-transport-normalization-spec-2026-06-28.md
+      depends_on: [host-guest-transport-normalization-research]
+      pickup_role: linux
+      estimated_hours: 6
+      outcome: >
+        Author the enforced standard: openspec/specs/host-guest-transport/spec.md,
+        the GuestTransport facade (open_stream / exec / exec_streaming) + GuestEndpoint
+        + ExecRequest/ExecOutput, the single wire protocol (WIRE_VERSION, Hello/HelloAck,
+        version-skew), a nomenclature glossary, and a drift litmus that fails on any
+        cfg!(target_os) transport selection by a tray/headless caller.
+      exit_criteria:
+        - "openspec/specs/host-guest-transport/spec.md authored + bound"
+        - "Facade trait + GuestEndpoint + ExecRequest/ExecOutput compile on all targets"
+        - "Glossary committed; one canonical term per concept"
+        - "litmus:host-guest-no-cfg-transport-selection pinned and green; --check passes"
+
+    - packet_id: host-guest-transport-linux
+      order: 125
+      title: "Conform Linux backend to host<->guest facade; collapse 5 exec variants"
+      status: pending
+      kind: enhancement
+      deliverable: plan/issues/host-guest-transport-platforms-2026-06-28.md
+      depends_on: [host-guest-transport-normalization-spec]
+      pickup_role: linux
+      estimated_hours: 6
+      outcome: >
+        Linux reference backend (AF_VSOCK + Unix) conforms to the facade; the 5
+        exec_over_stream* variants collapse to ExecOneShot (exec + exec_streaming),
+        all call sites migrated; vsock_server + tray control-socket route through the
+        facade. WIRE_VERSION stable.
+      exit_criteria:
+        - "exec_over_stream* family reduced to facade methods (grep litmus)"
+        - "InteractiveStream + ExecOneShot round-trip unit tests green"
+        - "No cfg-selected transport in linux tray/headless callers"
+        - "./build.sh --check and --test pass"
+
+    - packet_id: host-guest-transport-macos
+      order: 126
+      title: "Conform macOS VZ virtio-vsock backend to host<->guest facade"
+      status: pending
+      kind: enhancement
+      deliverable: plan/issues/host-guest-transport-platforms-2026-06-28.md
+      depends_on: [host-guest-transport-normalization-spec]
+      pickup_role: macos
+      owner_host: macos
+      estimated_hours: 8
+      outcome: >
+        macOS VZVirtioSocketDevice backend implements the facade; bespoke per-call
+        connect/exec helpers replaced by open_stream/exec; supersedes the macOS
+        idiomatic-exec optimization and fixes the github-login blank-terminal class
+        via the shared InteractiveStream primitive. Owned by the osx terminal.
+      exit_criteria:
+        - "macOS facade backend over VZVirtioSocketDevice"
+        - "No cfg-selected transport in macOS tray callers"
+        - "Both primitives pass the shared conformance fixtures on Darwin"
+        - "macOS tray parity rows satisfied"
+
+    - packet_id: host-guest-transport-windows
+      order: 127
+      title: "Conform Windows WSL/hvsock backend to host<->guest facade"
+      status: pending
+      kind: enhancement
+      deliverable: plan/issues/host-guest-transport-platforms-2026-06-28.md
+      depends_on: [host-guest-transport-normalization-spec]
+      pickup_role: windows
+      owner_host: windows
+      estimated_hours: 8
+      outcome: >
+        Windows WSL/hvsock backend implements the facade; connect/exec unified;
+        resolves windows-next-architecture-decision in favor of the normalized
+        facade. Owned by the windows terminal.
+      exit_criteria:
+        - "Windows facade backend over WSL pipe/hvsock"
+        - "No cfg-selected transport in Windows tray callers"
+        - "Both primitives pass the shared conformance fixtures on Windows"
+        - "Windows tray parity rows satisfied"
+
+    - packet_id: tray-feature-parity-matrix
+      order: 128
+      title: "Tray 1:1 feature & UX parity matrix (linux/macos/windows) + parity litmus"
+      status: ready
+      kind: enhancement
+      deliverable: plan/issues/tray-feature-parity-matrix-2026-06-28.md
+      depends_on: []
+      pickup_role: linux
+      estimated_hours: 4
+      outcome: >
+        Convert prose parity into an enumerated machine-checkable matrix
+        (openspec/tray-parity-matrix.yaml) with per-platform cells and a
+        parity:required|platform-specific tag, plus litmus:tray-parity-matrix-complete
+        that fails when a required row is not done on all three platforms. Acceptance
+        gate proving the transport normalization delivered identical UX.
+      exit_criteria:
+        - "openspec/tray-parity-matrix.yaml enumerates every tray capability + per-platform cell"
+        - "litmus:tray-parity-matrix-complete fails on any unmet required row"
+        - "Each host audits its column and files gap packets for required misses"

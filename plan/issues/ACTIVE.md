@@ -22,10 +22,28 @@
 | osx-next macOS integration | rustfmt drift in osx-owned `vm-layer/src/vz.rs` fails shared `--check`; flagged in `coord-osx-vz-fmt-drift-2026-06-28.md` | osx terminal (run `cargo fmt`) |
 | hardcoded-ip/remove-port-publish | Vault init still uses HTTP port 8201 for unseal/root-token ops; steady-state reads use podman exec | linux |
 
+## Initiative: Host↔Guest Transport Normalization (orders 123–128)
+
+Operator-mandated: stop the per-platform drift on "connect host→guest". Normalize
+vsock to two primitives (InteractiveStream, ExecOneShot) behind one facade, one
+protocol, one nomenclature, with **1:1 tray feature/UX parity**. Coordination:
+`host-guest-normalization-coordination-2026-06-28.md`. **Release held until macOS
+completes current work.**
+
+| Order | Packet | Owner | Status |
+|---|---|---|---|
+| 123 | normalization research (verdict) | linux | ready |
+| 124 | normalization spec + facade | linux | pending (→123) |
+| 125 | Linux backend conform + collapse 5 exec variants | linux | pending (→124) |
+| 126 | macOS VZ virtio-vsock conform | **osx** | pending (→124) |
+| 127 | Windows WSL/hvsock conform | **windows** | pending (→124) |
+| 128 | tray parity matrix + litmus | linux | ready |
+
 ## Queue Summary
 
-Linux queue: **drained** of `ready` packets. Order 122 `in_progress` (slices 2–5 remain).
-Next work: order 122 slice 2 (ensure() topological bring-up wrapping ensure_vault_running/ensure_proxy_running).
+Linux `ready`: **order 123** (transport research) and **order 128** (parity matrix) —
+both authorable now and they unblock the rest. Order 122 `in_progress` (slices 2–5).
+macОС/Windows: orders 126/127 assigned, blocked on the order-124 facade.
 
 ## Recent Completions
 
