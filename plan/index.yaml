@@ -7867,4 +7867,71 @@ plan_index:
         - "Credentials stored in Vault per the research schema; host never sees raw values"
         - "Each provider's forge session authenticates through the proxy (zero TCP_DENIED)"
         - "./build.sh --check and --test pass"
->>>>>>> 035647276baa533b0d6a37347ec0ebe56ff795ac
+
+    - packet_id: methodology-concurrent-integration-duplication
+      order: 133
+      title: "Methodology: fix concurrent-integration content duplication (skill + litmus)"
+      status: ready
+      kind: analysis+enhancement
+      deliverable: plan/issues/methodology-concurrent-integration-duplication-2026-06-28.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [docs, testing, methodology]
+      estimated_hours: 4
+      outcome: >
+        origin/linux-next broke (E0428 duplicate test defs) because order-119 commit
+        cb9def48 re-entered as 6dbca259 (same content, new hash) via a cross-branch
+        merge, and the pushing agent skipped post-merge build verification. Root cause:
+        rebase (advance-work §6) mixed with cross-branch merges (merge/multihost skills)
+        re-applies rebased commits under new hashes; no post-integration build gate.
+        Fix: (A) require ./build.sh --check after every rebase/merge before push,
+        (B) litmus:no-duplicate-rust-item-defs, (C) one integration strategy in
+        methodology/multi-host-development.yaml. All agents run the SAME shared skills.
+      exit_criteria:
+        - "advance-work-from-plan + merge/multihost skills require post-integration --check before push"
+        - "litmus:no-duplicate-rust-item-defs pinned + green"
+        - "multi-host-development.yaml declares ONE integration strategy (rebase⨉merge ambiguity removed)"
+
+    - packet_id: plan-ledger-archival
+      order: 134
+      title: "Optimization: archive 129 closed packets out of plan/index.yaml (7870 lines)"
+      status: ready
+      kind: optimization
+      deliverable: plan/issues/plan-ledger-archival-2026-06-28.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [docs, plan]
+      estimated_hours: 3
+      outcome: >
+        plan/index.yaml is 7870 lines / ~92% closed (84 completed + 41 done + 4
+        obsoleted vs 11 active). Every advance-work cycle reads the whole index;
+        closed packets bury active ones, slow selection, and inflate the merge
+        surface. Move closed packets to plan/archive/ (date-partitioned, history
+        preserved) via scripts/archive-plan-packets.sh; keep index to active set.
+      exit_criteria:
+        - "plan/index.yaml reduced to ~active set (target < ~1500 lines); both YAMLs parse"
+        - "No packet lost (closed_before == archived + closed_remaining)"
+        - "scripts/archive-plan-packets.sh --check idempotent; advance-work still finds active packets"
+        - "Tombstone-not-delete; events history preserved in archive"
+
+    - packet_id: stale-reference-cleanup-audit
+      order: 135
+      title: "Optimization: stale-reference + superseded-work cleanup audit"
+      status: ready
+      kind: optimization
+      deliverable: plan/issues/stale-reference-cleanup-audit-2026-06-28.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [docs, plan]
+      estimated_hours: 4
+      outcome: >
+        References to removed/superseded work linger (zeroclaw in zeroclaw-progress.md,
+        nanoclawv2-orchestration.md, secure_agent_forge_plan.md, TRACES.md; 32 May-dated
+        issues; control-socket/macos-vz/tray-convergence/windows-arch superseded by the
+        orders 123-128 normalization). Audit -> classify -> tombstone/archive; strip dead
+        zeroclaw pointers from live docs; mark superseded specs obsolete in litmus-bindings.
+      exit_criteria:
+        - "Every plan/issues/*.md classified; superseded tombstoned -> archive"
+        - "litmus:no-dangling-removed-component-refs green (no live zeroclaw refs outside historical record)"
+        - "Superseded specs marked obsolete + tombstone in litmus-bindings"
+        - "plan/archive/README.md documents the archive layout"
