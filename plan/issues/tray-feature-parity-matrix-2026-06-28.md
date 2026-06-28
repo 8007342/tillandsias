@@ -60,3 +60,9 @@ required` is not `done` on all three platforms.
 
 - `host-guest-transport-normalization-research-2026-06-28.md`
 - `plan/issues/tray-convergence-coordination.md`
+
+## Implementation Evidence
+
+1. Created `openspec/tray-parity-matrix.yaml` with the seed capabilities and tags.
+2. Created `openspec/litmus-tests/litmus-tray-parity-matrix-complete.yaml` which parses the matrix using Ruby and verifies that all `required` capabilities are `done` on linux, macos, and windows.
+3. Registered the litmus test under the `tray-app` spec in `openspec/litmus-bindings.yaml`.

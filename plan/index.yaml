@@ -7731,7 +7731,7 @@ plan_index:
     - packet_id: tray-feature-parity-matrix
       order: 128
       title: "Tray 1:1 feature & UX parity matrix (linux/macos/windows) + parity litmus"
-      status: claimed
+      status: completed
       kind: enhancement
       deliverable: plan/issues/tray-feature-parity-matrix-2026-06-28.md
       depends_on: []
@@ -7754,6 +7754,11 @@ plan_index:
           host: "linux"
           lease_id: "tray-feature-parity-matrix-claim-1"
           expires_at: "2026-06-29T03:35:00Z"
+        - type: complete
+          ts: "2026-06-28T23:36:00Z"
+          agent_id: "linux-antigravity-20260628T2335Z"
+          commit_hash: "12400a5b"
+          evidence: "Created matrix, litmus test, and binding; verifies all required platforms."
 
     - packet_id: agent-services-egress-allowlist-research
       order: 129
