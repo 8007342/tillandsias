@@ -1,0 +1,42 @@
+# @trace spec:tray-app
+name: litmus:tray-parity-matrix-complete
+spec: tray-app
+phase: post-build
+description: Verify that all required tray features are done on linux, macos, and windows
+severity: high
+size: quick
+
+preconditions:
+  - workspace contains openspec/tray-parity-matrix.yaml
+  - ruby is available in PATH
+
+critical_path:
+  - step: "check that all required tray features are implemented on all platforms"
+    command: >-
+      ruby -ryaml -e "
+      data = YAML.load_file('openspec/tray-parity-matrix.yaml');
+      failed = false;
+      data['features'].each do |f|
+        next unless f['parity'] == 'required';
+        ['linux', 'macos', 'windows'].each do |platform|
+          if f[platform] != 'done'
+            puts %Q(Missing required feature '#{f['capability']}' on #{platform} (status: #{f[platform]}));
+            failed = true;
+          end
+        end
+      end;
+      exit 1 if failed
+      "
+    timeout_ms: 5000
+
+observability:
+  traces:
+    - "@trace spec:tray-app"
+  expected_log: "Tray parity matrix is complete across all platforms"
+  log_fields:
+    spec: "tray-app"
+    test: "tray-parity-matrix-complete"
+
+rollback:
+  on_failure: "check openspec/tray-parity-matrix.yaml for missing features"
+  command: "cat openspec/tray-parity-matrix.yaml"
