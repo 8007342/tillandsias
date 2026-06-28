@@ -338,9 +338,9 @@ pub fn exec_guest_main(argv: Vec<String>) -> i32 {
             eprintln!("{{\"error\":\"start: {e}\"}}");
             return 1;
         }
-        eprintln!("[exec-guest] waiting for control wire…");
-        if let Err(e) = vz.wait_ready(Duration::from_secs(90)).await {
-            eprintln!("{{\"error\":\"wait_ready: {e}\"}}");
+        eprintln!("[exec-guest] waiting for VM phase Ready…");
+        if let Err(e) = vz.wait_phase_ready(Duration::from_secs(300)).await {
+            eprintln!("{{\"error\":\"wait_phase_ready: {e}\"}}");
             let _ = vz.stop(Duration::from_secs(10)).await;
             return 1;
         }
@@ -465,9 +465,9 @@ pub fn github_login_main() -> i32 {
             eprintln!("{{\"error\":\"start: {e}\"}}");
             return 1;
         }
-        eprintln!("[github-login] waiting for control wire…");
-        if let Err(e) = vz.wait_ready(Duration::from_secs(90)).await {
-            eprintln!("{{\"error\":\"wait_ready: {e}\"}}");
+        eprintln!("[github-login] waiting for VM phase Ready…");
+        if let Err(e) = vz.wait_phase_ready(Duration::from_secs(300)).await {
+            eprintln!("{{\"error\":\"wait_phase_ready: {e}\"}}");
             let _ = vz.stop(Duration::from_secs(10)).await;
             return 1;
         }
@@ -624,9 +624,9 @@ pub fn opencode_main(path: String, prompt: Option<String>) -> i32 {
             eprintln!("{{\"error\":\"start: {e}\"}}");
             return 1;
         }
-        eprintln!("[opencode] waiting for control wire…");
-        if let Err(e) = vz.wait_ready(Duration::from_secs(90)).await {
-            eprintln!("{{\"error\":\"wait_ready: {e}\"}}");
+        eprintln!("[opencode] waiting for VM phase Ready…");
+        if let Err(e) = vz.wait_phase_ready(Duration::from_secs(300)).await {
+            eprintln!("{{\"error\":\"wait_phase_ready: {e}\"}}");
             let _ = vz.stop(Duration::from_secs(10)).await;
             return 1;
         }
@@ -773,8 +773,8 @@ mod tests {
             .find("vz.start().await")
             .expect("github login must start the VM");
         let wait_idx = window
-            .find("vz.wait_ready(Duration::from_secs(90)).await")
-            .expect("github login must wait for the control wire");
+            .find("vz.wait_phase_ready(Duration::from_secs(300)).await")
+            .expect("github login must wait for the VM phase Ready");
         let stream_idx = window
             .find("open_vsock_stream_current_thread")
             .expect("github login must open the control-wire stream");

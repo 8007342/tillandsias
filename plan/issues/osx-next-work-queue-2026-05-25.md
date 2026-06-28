@@ -3700,3 +3700,38 @@ Ready, step-32-independent packet for this host: **keyring persistent-backend ve
 - **Remaining**: order 99 still needs the linux/shared order 100 Podman
   health/lifecycle facade before the full provider-neutral UP+HEALTHY
   credential preflight is complete.
+
+---
+
+## 2026-06-27: wait_ready phase-signal improvement
+
+**Finding (Jun 27 session):** `VzRuntime::wait_ready` probes vsock port
+connectivity (stage 2) with a hardcoded 90s wall-clock timeout. The headless
+already maintains a `VmStateHandle` with `Starting → Ready → Failed` transitions
+(podman-up triggers Ready). The tray should wait on the *phase signal*, not a raw
+port probe.
+
+### Work Packet: macos-tray/wait-ready-phase-signal
+
+- id: `macos-tray/wait-ready-phase-signal`
+- owner_host: macos
+- capability_tags: [rust, macos, vsock, control-wire, ux]
+- status: ready
+- next_action: >
+    After stage-2 vsock connectivity, send a Hello/HelloAck handshake (or a new
+    VmStatusRequest message) to read the in-VM VmPhase from VmStateHandle. Loop
+    with backoff until phase == Ready (podman up) or phase == Failed (give up).
+    Remove the hardcoded 90s timeout from exec_guest_main / github_login_main;
+    replace with bounded retry against the phase signal. The headless
+    advance_to_ready_when_podman_up task already produces this signal — the tray
+    just needs to consume it over the wire instead of relying on wall-clock
+    assumptions.
+- events:
+  - type: discovered
+    ts: "2026-06-27T23:00:00Z"
+    agent_id: "macos-advance-20260627T2200Z"
+    host: macos
+    note: >
+      Hardcoded 90s timeout caused first-boot failures when cloud-init download
+      exceeded budget. Proper fix: wire VmPhase through Hello/HelloAck or a
+      dedicated VmStatusRequest, eliminate the timeout assumption.

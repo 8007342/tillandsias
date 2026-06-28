@@ -25,7 +25,7 @@
 
 use tillandsias_control_wire::{
     ControlEnvelope, ControlMessage, MAX_MESSAGE_BYTES, MAX_PTY_FRAME_BYTES, PtyDirection, PtyExit,
-    WIRE_VERSION, decode, encode,
+    VmPhase, WIRE_VERSION, decode, encode,
 };
 use tokio::io::{AsyncRead, AsyncReadExt, AsyncWrite, AsyncWriteExt};
 
@@ -375,6 +375,67 @@ pub struct DynamicExpect {
     pub response: Box<dyn FnMut() -> Result<Vec<u8>, String> + Send>,
     /// Human label for logs; `response` is never logged (may be secret).
     pub label: String,
+}
+
+/// Connect the Hello/HelloAck handshake then query `VmStatusRequest` and return
+/// the in-VM `VmPhase`. Consumes the stream; caller opens a fresh connection
+/// per probe. Used by `VzRuntime::wait_phase_ready` to poll until Ready.
+///
+/// @trace plan/issues/osx-next-work-queue-2026-05-25.md#macos-tray/wait-ready-phase-signal
+pub async fn probe_vm_phase<S>(mut stream: S) -> Result<VmPhase, String>
+where
+    S: AsyncRead + AsyncWrite + Unpin,
+{
+    // Hello / HelloAck (seq 1).
+    write_envelope(
+        &mut stream,
+        &ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 1,
+            body: ControlMessage::Hello {
+                from: "tillandsias-vm-layer::vsock_exec::probe_phase".to_string(),
+                capabilities: vec![],
+            },
+        },
+    )
+    .await?;
+    let ack = read_envelope(&mut stream).await?;
+    match ack.body {
+        ControlMessage::HelloAck { wire_version, .. } => {
+            if wire_version != WIRE_VERSION {
+                return Err(format!(
+                    "probe_vm_phase: wire_version mismatch (peer {wire_version}, self {WIRE_VERSION})"
+                ));
+            }
+        }
+        other => {
+            return Err(format!(
+                "probe_vm_phase: expected HelloAck, got {}",
+                other.kind()
+            ));
+        }
+    }
+    // VmStatusRequest (seq 2).
+    write_envelope(
+        &mut stream,
+        &ControlEnvelope {
+            wire_version: WIRE_VERSION,
+            seq: 2,
+            body: ControlMessage::VmStatusRequest { seq: 2 },
+        },
+    )
+    .await?;
+    let reply = read_envelope(&mut stream).await?;
+    match reply.body {
+        ControlMessage::VmStatusReply { phase, .. } => Ok(phase),
+        ControlMessage::Error { message, .. } => {
+            Err(format!("probe_vm_phase: guest error: {message}"))
+        }
+        other => Err(format!(
+            "probe_vm_phase: expected VmStatusReply, got {}",
+            other.kind()
+        )),
+    }
 }
 
 fn find_subslice(haystack: &[u8], needle: &[u8]) -> Option<usize> {
