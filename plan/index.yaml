@@ -7383,22 +7383,40 @@ plan_index:
     - packet_id: zeroclaw-image-orphan-cleanup
       order: 117
       title: "Cleanup: remove orphaned zeroclaw container image plumbing after binary removal"
-      status: ready
+      status: completed
       kind: cleanup
       deliverable: plan/issues/zeroclaw-image-orphan-cleanup-2026-06-27.md
       depends_on: [zeroclaw-unauthorized-release-remediation]
       pickup_role: linux
       estimated_hours: 2
       outcome: >
-        The zeroclaw container image (images/zeroclaw/, init image-list entry,
-        identity chain, build-arg arms, ordering tests) is removed. The binary it
-        integrated with no longer exists; the image is optional/non-blocking but
-        orphaned. Run under the smoke lock (source-mutating migration).
+        All zeroclaw plumbing removed: images/zeroclaw/ directory, main.rs
+        image_specs arm + identity-chain branch + build-arg arms + is_optional_image
+        + run_init image list + ordering/image-spec tests, runtime_assets.rs asset
+        maps, build.rs skills-collect entry, and the dead tray launch path
+        (LaunchKind::ZeroClaw + LeafAction::ZeroClaw + launch_zeroclaw, which spawned
+        the already-removed binary). Menu shrank 7→6 leaves (offsets + submenu node
+        updated). Pinned litmus simplified-tray-ux-leaf-action-shape and the
+        zeroclaw-orchestration litmus binding + litmus file updated/removed.
+      events:
+        - type: completed
+          ts: "2026-06-28T08:40Z"
+          agent_id: "linux-yoga-sonnet46-20260628T0756Z"
+          commits: []
+          summary: >
+            Removed images/zeroclaw, all main.rs/runtime_assets.rs/build.rs refs,
+            and the tray LaunchKind/LeafAction ZeroClaw paths. Updated PROJECT_LEAF_COUNT
+            and PROJECT_SUBMENU_OFFSET 7→6, the menu offset docblock, and the
+            six-leaf menu test. Updated the pinned leaf-action litmus (7→6 variants)
+            and removed the obsolete zeroclaw-mcp-shape litmus + binding. build --check,
+            --test, and litmus assertions all green; zero ZeroClaw refs remain in tray.
       exit_criteria:
-        - "images/zeroclaw/ removed"
-        - "No zeroclaw references in init image list / identity chain / build-args"
-        - "image_specs + ordering tests updated and green"
-        - "./build.sh --check and --test pass"
+        - "images/zeroclaw/ removed — DONE"
+        - "No zeroclaw refs in init image list / identity chain / build-args / asset maps — DONE"
+        - "Dead tray launch path (LaunchKind/LeafAction ZeroClaw) removed — DONE"
+        - "image_specs + ordering + menu tests updated and green — DONE"
+        - "Pinned leaf-action litmus updated (7→6); obsolete zeroclaw litmus removed — DONE"
+        - "./build.sh --check and --test pass — DONE"
 
     - packet_id: vault-exec-env-regression
       order: 118
@@ -7505,7 +7523,7 @@ plan_index:
     - packet_id: container-dependency-graph-research
       order: 121
       title: "Research: compile-time container dependency model (launch fails to compile if deps unmet)"
-      status: ready
+      status: completed
       kind: research
       deliverable: plan/issues/container-dependency-graph-research-2026-06-27.md
       depends_on: []
@@ -7516,18 +7534,35 @@ plan_index:
         launch whose dependencies (other services running, networks, ca-bundle,
         secrets/leases, proxy/direct egress, image-at-version, vault-unsealed)
         aren't satisfied fails at compile time, and new containers declare deps in
-        one place and inherit ordered bring-up transparently. Deliverable: A/B/C
-        design verdict + dependency taxonomy + launch API sketch + drift-test def.
+        one place and inherit ordered bring-up transparently. Verdict: Option C
+        (hybrid) — const dependency graph + typestate Up<S> launch witnesses +
+        runtime liveness probe. Full taxonomy, launch-API sketch, module location
+        (tillandsias-podman machinery + headless service impls), drift litmus, and
+        a 5-slice migration order recorded in the deliverable.
+      events:
+        - type: completed
+          ts: "2026-06-28T08:55Z"
+          agent_id: "linux-yoga-sonnet46-20260628T0756Z"
+          commits: []
+          summary: >
+            Design verdict appended to the research issue: Option C hybrid. Rejected
+            A-only (drifts) and B-only (can't-forget gap = exactly order 120). Chose
+            const graph (acyclic/completeness test + topo order) + typestate Up<S>
+            witnesses minted only by ensure::<S>() (omitting a witness = compile
+            error) + runtime liveness at mint. Defined 8 dependency kinds, the
+            worked gh-login example, module split (podman machinery / headless impls),
+            3 drift closures (acyclic test, trybuild compile-fail, gated-launch litmus),
+            and the migration slices feeding order 122.
       exit_criteria:
-        - "Design verdict (typestate vs const-graph vs hybrid) recorded with worked gh-login example"
-        - "Dependency-kind taxonomy enumerated"
-        - "Module location decided (no cycle with tillandsias-headless)"
-        - "Runtime-liveness contract + drift-protection test defined"
+        - "Design verdict (typestate vs const-graph vs hybrid) recorded with worked gh-login example — DONE"
+        - "Dependency-kind taxonomy enumerated — DONE (8 kinds)"
+        - "Module location decided (no cycle with tillandsias-headless) — DONE"
+        - "Runtime-liveness contract + drift-protection test defined — DONE"
 
     - packet_id: container-dependency-graph-impl
       order: 122
       title: "Implement: compile-time container dependency model"
-      status: pending
+      status: ready
       kind: enhancement
       deliverable: plan/issues/container-dependency-graph-impl-2026-06-27.md
       depends_on: [container-dependency-graph-research]
