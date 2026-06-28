@@ -94,7 +94,11 @@ fn main() {
     // current-thread runtime for exactly that. See
     // plan/issues/optimization-macos-vz-idiomatic-exec-layer-2026-06-21.md.
     if let Some(idx) = args.iter().position(|a| a == "--exec-guest") {
-        let guest_argv: Vec<String> = args[idx + 1..].to_vec();
+        // Join remaining args into a shell command string so the user can write
+        // --exec-guest "ls -la" or --exec-guest tillandsias --debug --init
+        // without needing to pre-split argv themselves.
+        let shell_cmd = args[idx + 1..].join(" ");
+        let guest_argv = vec!["/bin/sh".to_string(), "-c".to_string(), shell_cmd];
         std::process::exit(diagnose::exec_guest_main(guest_argv));
     }
     // Headless GitHub login: boot the VM and drive the guest --github-login over

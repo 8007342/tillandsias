@@ -346,6 +346,9 @@ where
                     stdout: vec![],
                 });
             }
+            ControlMessage::Error { message, .. } => {
+                return Err(format!("vsock_exec: guest error: {message}"));
+            }
             _ => {}
         }
     }
