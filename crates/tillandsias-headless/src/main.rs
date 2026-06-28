@@ -1807,7 +1807,7 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
                     format!("Failed to set cert permissions: {e}")
                 },
             )?;
-            std::fs::set_permissions(&tmp_key, std::fs::Permissions::from_mode(0o600)).map_err(
+            std::fs::set_permissions(&tmp_key, std::fs::Permissions::from_mode(0o640)).map_err(
                 |e| {
                     error!(
                         accountability = true,
@@ -1945,6 +1945,11 @@ fn ensure_proxy_running(debug: bool) -> Result<(), String> {
         }
         return Ok(());
     }
+    // Remove any stopped/exited container from a prior run so that `podman run
+    // --name tillandsias-proxy` does not fail with "name already in use".
+    let _ = podman_cmd_sync()
+        .args(["rm", "--ignore", "tillandsias-proxy"])
+        .output();
     let version = VERSION.trim();
     let root = resolve_runtime_asset_root(version, debug)?;
     ensure_enclave_network(debug)?;
