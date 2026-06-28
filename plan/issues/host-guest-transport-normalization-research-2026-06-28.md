@@ -1,6 +1,6 @@
 # Research: Host↔Guest Transport Normalization (vsock, all platforms)
 
-**Status:** `ready`
+**Status:** `completed`
 **Owner:** linux (research) — drives osx/windows implementation packets
 **Date:** 2026-06-28
 **Kind:** research
@@ -110,3 +110,90 @@ This feeds the normalization-spec packet and the three per-platform impl packets
 - `plan/issues/macos-tray-github-login-blank-terminal-2026-06-21.md`
 - `plan/issues/windows-next-architecture-decision-2026-05-24.md`
 - `container-dependency-graph` (orders 121/122) — same "make implicit architecture explicit" theme
+
+---
+
+## Design Verdict (2026-06-28)
+
+Concrete decisions for the normalization-spec packet (order 124) and the three
+per-platform conformance packets (125/126/127).
+
+### 1. Layer home (no cycle, no cfg in callers)
+- **`tillandsias-control-wire`** owns the **contract**: the `GuestTransport`
+  trait, the `GuestEndpoint` addressing type, and the `ExecRequest` / `ExecOutput`
+  value types — alongside the existing wire protocol (`encode/decode`,
+  `WIRE_VERSION`, `MAX_MESSAGE_BYTES`). It already has no `cfg`-divergent public
+  API and no dependency on `vm-layer`.
+- **Backends** implement the trait where the platform code lives:
+  - Linux AF_VSOCK + same-host Unix → in `control-wire` (it already has
+    `tokio-vsock`, gated by the `vsock` feature).
+  - macOS VZ virtio-vsock → in `vm-layer` (`transport_macos.rs`/`vz.rs`).
+  - Windows WSL/hvsock → in `vm-layer` (`wsl.rs`).
+- Callers hold a `Box<dyn GuestTransport>` resolved **once at the platform
+  boundary** and never branch on `cfg!(target_os)`. Enforced by
+  `litmus:host-guest-no-cfg-transport-selection`.
+
+### 2. Facade shape (object-safe via `async-trait`)
+```rust
+// control-wire::guest_transport
+pub enum GuestEndpoint {
+    Unix(PathBuf),                 // same-host headless
+    Vsock { cid: u32, port: u32 }, // Linux AF_VSOCK
+    MacVz { port: u32 },           // macOS VZ virtio-vsock (CID resolved by backend)
+    Wsl   { port: u32 },           // Windows WSL (pipe/hvsock resolved by backend)
+}
+
+pub struct ExecRequest { pub argv: Vec<String>, pub stdin: Option<Vec<u8>> }
+pub struct ExecOutput  { pub stdout: Vec<u8>, pub stderr: Vec<u8>, pub exit_code: i32 }
+
+#[async_trait::async_trait]
+pub trait GuestTransport: Send + Sync {
+    /// InteractiveStream — long-lived bidirectional byte stream (PTY/attach).
+    async fn open_stream(&self, ep: &GuestEndpoint)
+        -> io::Result<Box<dyn AsyncReadWrite + Unpin + Send>>;
+    /// ExecOneShot — run-to-completion command for quick reads / one-offs.
+    async fn exec(&self, ep: &GuestEndpoint, req: ExecRequest) -> io::Result<ExecOutput>;
+    /// ExecOneShot with incremental stdout/stderr delivery.
+    async fn exec_streaming(
+        &self, ep: &GuestEndpoint, req: ExecRequest,
+        on_chunk: &mut (dyn FnMut(ExecChunk) + Send),
+    ) -> io::Result<ExecOutput>;
+}
+```
+`open_stream` returns the same `AsyncReadWrite` the wire layer already frames, so
+the PTY/attach framing is unchanged. `exec*` use the existing `encode/decode` +
+`Hello/HelloAck` + `WIRE_VERSION` handshake — one protocol for both primitives.
+
+### 3. Exec consolidation (5 → 2)
+| Current `vsock_exec.rs` fn | New facade method |
+|---|---|
+| `exec_over_stream` | `exec` (no stdin) |
+| `exec_over_stream_with_input` | `exec` (with `stdin`) |
+| `exec_over_stream_with_input_streaming` | `exec_streaming` |
+| `exec_over_stream_expect` | `exec` + caller asserts (drop bespoke expect) |
+| `exec_over_stream_expect_dynamic` | `exec_streaming` + caller predicate |
+Order 125 migrates the call sites; the `exec_over_stream_*` symbols are retired
+(grep litmus).
+
+### 4. Nomenclature glossary (canonical term per concept)
+- **host / guest** — the two endpoints (never "VM side"/"native side").
+- **GuestEndpoint** — where/how to reach the guest (the addressing value).
+- **GuestTransport** — the backend that opens streams / runs exec.
+- **InteractiveStream** / **ExecOneShot** — the two primitives.
+- **CID / port** — vsock addressing fields.
+- `vsock` = the protocol family; **`virtio-vsock` / `hvsock` / `VZVirtioSocketDevice`
+  are backend implementation names only**, never used as the protocol's name in
+  public APIs, logs, or docs.
+
+### 5. Parity
+Enumerated separately in `tray-feature-parity-matrix` (order 128); the
+InteractiveStream/ExecOneShot rows there are the acceptance gate proving the
+backends deliver identical UX.
+
+### 6. Migration safety
+`WIRE_VERSION` stays 2 (additive only). Order 124 lands the contract + Linux
+reference backend + a stub for macOS/Windows backends (`unblock-noop`, marked
+`PLEASE REVIEW: osx|windows`) so 126/127 compile against a real interface and
+each backend lands independently behind the facade.
+
+**Status:** research complete → order 124 ready.

@@ -7600,7 +7600,7 @@ plan_index:
     - packet_id: host-guest-transport-normalization-research
       order: 123
       title: "Research: normalize host<->guest transport (vsock) across all platforms"
-      status: ready
+      status: completed
       kind: research
       deliverable: plan/issues/host-guest-transport-normalization-research-2026-06-28.md
       depends_on: []
@@ -7623,7 +7623,7 @@ plan_index:
     - packet_id: host-guest-transport-normalization-spec
       order: 124
       title: "Normalization spec: host<->guest transport canon (protocol/facade/glossary)"
-      status: pending
+      status: in_progress
       kind: enhancement
       deliverable: plan/issues/host-guest-transport-normalization-spec-2026-06-28.md
       depends_on: [host-guest-transport-normalization-research]
@@ -7635,11 +7635,25 @@ plan_index:
         + ExecRequest/ExecOutput, the single wire protocol (WIRE_VERSION, Hello/HelloAck,
         version-skew), a nomenclature glossary, and a drift litmus that fails on any
         cfg!(target_os) transport selection by a tray/headless caller.
+      events:
+        - type: progress
+          ts: "2026-06-28T23:30Z"
+          agent_id: "linux-yoga-sonnet46-20260628T2247Z"
+          commits: []
+          summary: >
+            Contract landed (unblocks 126/127): new control-wire guest_transport module
+            with GuestEndpoint, ExecRequest/ExecOutput/ExecChunk, and the object-safe
+            #[async_trait] GuestTransport trait (open_stream / exec / exec_streaming);
+            compiles on all targets; unit tests + object-safety check green. Authored
+            openspec/specs/host-guest-transport/spec.md (4 MUST requirements +
+            canonical glossary). Remaining: bind the spec in litmus-bindings, add the
+            no-cfg-selection drift litmus (gates after callers migrate in 125), and the
+            conformance fixture harness.
       exit_criteria:
-        - "openspec/specs/host-guest-transport/spec.md authored + bound"
-        - "Facade trait + GuestEndpoint + ExecRequest/ExecOutput compile on all targets"
-        - "Glossary committed; one canonical term per concept"
-        - "litmus:host-guest-no-cfg-transport-selection pinned and green; --check passes"
+        - "openspec/specs/host-guest-transport/spec.md authored — DONE (bind in litmus-bindings TODO)"
+        - "Facade trait + GuestEndpoint + ExecRequest/ExecOutput compile on all targets — DONE"
+        - "Glossary committed (spec Nomenclature section) — DONE"
+        - "litmus:host-guest-no-cfg-transport-selection pinned and green — TODO (lands with 125 caller migration)"
 
     - packet_id: host-guest-transport-linux
       order: 125
@@ -7664,7 +7678,13 @@ plan_index:
     - packet_id: host-guest-transport-macos
       order: 126
       title: "Conform macOS VZ virtio-vsock backend to host<->guest facade"
-      status: pending
+      status: ready
+      unblocked_note: >
+        The facade contract is landed in tillandsias-control-wire::guest_transport
+        (GuestTransport trait + GuestEndpoint::MacVz + ExecRequest/ExecOutput) and
+        openspec/specs/host-guest-transport. Implement a macOS GuestTransport backend
+        in vm-layer (transport_macos.rs/vz.rs) against that interface. WIRE_VERSION
+        unchanged. The osx vz.rs fmt blocker (coord-osx-vz-fmt-drift) must also clear.
       kind: enhancement
       deliverable: plan/issues/host-guest-transport-platforms-2026-06-28.md
       depends_on: [host-guest-transport-normalization-spec]
@@ -7685,7 +7705,13 @@ plan_index:
     - packet_id: host-guest-transport-windows
       order: 127
       title: "Conform Windows WSL/hvsock backend to host<->guest facade"
-      status: pending
+      status: ready
+      unblocked_note: >
+        The facade contract is landed in tillandsias-control-wire::guest_transport
+        (GuestTransport trait + GuestEndpoint::Wsl + ExecRequest/ExecOutput) and
+        openspec/specs/host-guest-transport. Implement a Windows GuestTransport backend
+        in vm-layer (wsl.rs) against that interface. First fast-forward windows-next
+        onto linux-next (it is stale at bb1d1f9c) to pick up the P0 fixes + the facade.
       kind: enhancement
       deliverable: plan/issues/host-guest-transport-platforms-2026-06-28.md
       depends_on: [host-guest-transport-normalization-spec]
