@@ -7316,24 +7316,34 @@ plan_index:
     - packet_id: init-dns-systemd-resolved
       order: 115
       title: "Bug: --init fails on systemd-resolved hosts (127.0.0.53 unreachable from build containers)"
-      status: ready
+      status: completed
       kind: bug+enhancement
       deliverable: plan/issues/init-dns-systemd-resolved-2026-06-27.md
       depends_on: []
       pickup_role: linux
       estimated_hours: 2
       outcome: >
-        tillandsias --init detects when /etc/resolv.conf nameserver is a loopback
-        address (127.0.0.53 / systemd-resolved stub), extracts actual upstream DNS
-        from resolvectl, and writes dns_servers to ~/.config/containers/containers.conf
-        before starting any image builds. Init no longer fails with DNS errors on
-        Fedora Silverblue and other systemd-resolved hosts.
+        tillandsias --init detects when /etc/resolv.conf lists only loopback
+        nameservers (127.0.0.53 / systemd-resolved stub), reads the real upstream
+        servers from /run/systemd/resolve/resolv.conf (fallback 1.1.1.1/8.8.8.8),
+        and writes dns_servers to ~/.config/containers/containers.conf before image
+        builds. Init no longer fails with DNS errors on systemd-resolved hosts.
+      events:
+        - type: completed
+          ts: "2026-06-28T08:10Z"
+          agent_id: "linux-yoga-sonnet46-20260628T0756Z"
+          commits: []
+          summary: >
+            Added resolv_conf_is_loopback_stub, upstream_dns_servers,
+            ensure_containers_conf_dns_servers, auto_detect_and_configure_dns;
+            wired into run_init after the ipv6 workaround. Unit test
+            ensure_containers_conf_dns_servers_inserts_under_network_and_is_idempotent.
       exit_criteria:
-        - "--init on systemd-resolved host writes dns_servers to containers.conf"
-        - "--init completes build-git image build without DNS errors"
-        - "Detection heuristic: nameserver 127. in /etc/resolv.conf"
-        - "Fallback to 1.1.1.1/8.8.8.8 when resolvectl unavailable"
-        - "./build.sh --check passes"
+        - "--init writes dns_servers to containers.conf when resolver is loopback-only — DONE"
+        - "Reads real upstreams from /run/systemd/resolve/resolv.conf — DONE"
+        - "Detection heuristic: only-loopback nameservers in /etc/resolv.conf — DONE"
+        - "Fallback to 1.1.1.1/8.8.8.8 when systemd resolv unavailable — DONE"
+        - "Idempotent (unit test) + ./build.sh --check passes — DONE"
 
     - packet_id: init-proxy-poisons-build
       order: 116

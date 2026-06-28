@@ -3213,6 +3213,137 @@ fn ensure_pasta_options_ipv4_only(path: &std::path::Path) -> Result<(), String> 
     Ok(())
 }
 
+/// True iff `/etc/resolv.conf` lists only loopback nameservers (e.g. the
+/// systemd-resolved stub `127.0.0.53`). Such an address is the *host's* loopback
+/// and is unreachable from inside a podman container, so image builds and
+/// containers can't resolve DNS unless we hand podman the real upstream servers.
+/// @trace plan/issues/init-dns-systemd-resolved-2026-06-27.md
+#[cfg(target_os = "linux")]
+fn resolv_conf_is_loopback_stub() -> bool {
+    let content = match fs::read_to_string("/etc/resolv.conf") {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+    let mut saw_nameserver = false;
+    for line in content.lines() {
+        if let Some(addr) = line.trim().strip_prefix("nameserver") {
+            saw_nameserver = true;
+            let addr = addr.trim();
+            // Any non-loopback nameserver means containers have a usable resolver.
+            if !addr.starts_with("127.") && addr != "::1" {
+                return false;
+            }
+        }
+    }
+    saw_nameserver
+}
+
+/// Resolve the real upstream DNS servers for containers when the host's
+/// `/etc/resolv.conf` only points at a loopback stub. Prefers systemd-resolved's
+/// actual upstream list (`/run/systemd/resolve/resolv.conf`); falls back to
+/// public resolvers if that is unavailable.
+/// @trace plan/issues/init-dns-systemd-resolved-2026-06-27.md
+#[cfg(target_os = "linux")]
+fn upstream_dns_servers() -> Vec<String> {
+    let mut servers = Vec::new();
+    if let Ok(content) = fs::read_to_string("/run/systemd/resolve/resolv.conf") {
+        for line in content.lines() {
+            if let Some(addr) = line.trim().strip_prefix("nameserver") {
+                let addr = addr.trim().to_string();
+                if !addr.is_empty() && !addr.starts_with("127.") && addr != "::1" {
+                    servers.push(addr);
+                }
+            }
+        }
+    }
+    if servers.is_empty() {
+        servers = vec!["1.1.1.1".to_string(), "8.8.8.8".to_string()];
+    }
+    servers
+}
+
+/// Idempotently add `dns_servers = [...]` to the `[network]` section of
+/// containers.conf so containers inherit a reachable resolver when the host uses
+/// a loopback resolver stub. No-op if `dns_servers` is already present.
+/// @trace plan/issues/init-dns-systemd-resolved-2026-06-27.md
+#[cfg(target_os = "linux")]
+fn ensure_containers_conf_dns_servers(
+    path: &std::path::Path,
+    servers: &[String],
+) -> Result<(), String> {
+    let quoted = servers
+        .iter()
+        .map(|s| format!("\"{s}\""))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let dns_line = format!("dns_servers = [{quoted}]\n");
+
+    if !path.exists() {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|e| format!("failed to create config directory: {e}"))?;
+        }
+        fs::write(path, format!("[network]\n{dns_line}"))
+            .map_err(|e| format!("failed to write containers.conf: {e}"))?;
+        return Ok(());
+    }
+
+    let content =
+        fs::read_to_string(path).map_err(|e| format!("failed to read containers.conf: {e}"))?;
+
+    if content.contains("dns_servers") {
+        return Ok(());
+    }
+
+    let mut new_content = String::new();
+    let mut network_found = false;
+    for line in content.lines() {
+        new_content.push_str(line);
+        new_content.push('\n');
+        if line.trim() == "[network]" {
+            new_content.push_str(&dns_line);
+            network_found = true;
+        }
+    }
+    if !network_found {
+        if !new_content.ends_with('\n') {
+            new_content.push('\n');
+        }
+        new_content.push_str(&format!("\n[network]\n{dns_line}"));
+    }
+
+    fs::write(path, new_content).map_err(|e| format!("failed to update containers.conf: {e}"))?;
+    Ok(())
+}
+
+/// Detect a loopback-only host resolver and configure podman with reachable
+/// upstream DNS servers so container builds/launches can resolve names. Mirrors
+/// `auto_detect_and_configure_ipv6_workaround`.
+/// @trace plan/issues/init-dns-systemd-resolved-2026-06-27.md
+#[cfg(target_os = "linux")]
+fn auto_detect_and_configure_dns(debug: bool) {
+    if !resolv_conf_is_loopback_stub() {
+        if debug {
+            eprintln!("[tillandsias] init: host resolver is container-reachable; no DNS override.");
+        }
+        return;
+    }
+    let Some(conf_path) = get_user_containers_conf() else {
+        return;
+    };
+    let servers = upstream_dns_servers();
+    if debug {
+        eprintln!(
+            "[tillandsias] init: host uses a loopback resolver stub; configuring containers.conf dns_servers = {servers:?}"
+        );
+    }
+    if let Err(e) = ensure_containers_conf_dns_servers(&conf_path, &servers)
+        && debug
+    {
+        eprintln!("[tillandsias] init: failed to configure dns_servers: {e}");
+    }
+}
+
 // Idempotently writes the proxy env vars to containers.conf [engine] section.
 // Podman 4.0+ injects [engine] env into every container launched by this user,
 // so forge containers and other containers that bypass the Rust launcher also
@@ -3293,6 +3424,11 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
 
     #[cfg(target_os = "linux")]
     auto_detect_and_configure_ipv6_workaround(debug);
+
+    // Hosts using a loopback resolver stub (systemd-resolved 127.0.0.53) leave
+    // containers unable to resolve DNS; hand podman the real upstream servers.
+    #[cfg(target_os = "linux")]
+    auto_detect_and_configure_dns(debug);
 
     // Write proxy env to containers.conf so Podman injects it into every
     // container on this host, including forge containers that bypass the Rust
@@ -8079,6 +8215,43 @@ mod tests {
         }
         assert_eq!(enclave_subnet(), DEFAULT_ENCLAVE_SUBNET);
         assert!(enclave_no_proxy().ends_with(DEFAULT_ENCLAVE_SUBNET));
+    }
+
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn ensure_containers_conf_dns_servers_inserts_under_network_and_is_idempotent() {
+        // Models a host with a loopback resolver stub: dns_servers must be added
+        // to the existing [network] section, and a second call is a no-op.
+        // @trace plan/issues/init-dns-systemd-resolved-2026-06-27.md
+        let dir = std::env::temp_dir().join(format!("till-dns-test-{}", std::process::id()));
+        let _ = fs::create_dir_all(&dir);
+        let path = dir.join("containers.conf");
+        fs::write(&path, "[network]\npasta_options = [\"--ipv4-only\"]\n").unwrap();
+
+        let servers = vec!["209.18.47.61".to_string(), "1.1.1.1".to_string()];
+        ensure_containers_conf_dns_servers(&path, &servers).unwrap();
+        let after = fs::read_to_string(&path).unwrap();
+        assert!(
+            after.contains("dns_servers = [\"209.18.47.61\", \"1.1.1.1\"]"),
+            "dns_servers not written: {after}"
+        );
+        assert!(
+            after.contains("pasta_options"),
+            "must preserve existing keys: {after}"
+        );
+        // exactly one [network] section
+        assert_eq!(
+            after.matches("[network]").count(),
+            1,
+            "duplicated [network]"
+        );
+
+        // Idempotent: second call leaves content unchanged.
+        ensure_containers_conf_dns_servers(&path, &servers).unwrap();
+        let after2 = fs::read_to_string(&path).unwrap();
+        assert_eq!(after, after2, "second call must be a no-op");
+
+        let _ = fs::remove_dir_all(&dir);
     }
 
     #[test]
