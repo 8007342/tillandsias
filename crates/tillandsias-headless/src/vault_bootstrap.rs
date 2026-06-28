@@ -1665,7 +1665,7 @@ fn read_and_handover_root_token(_debug: bool) -> Result<String, String> {
     Err("vault feature not compiled".into())
 }
 
-fn container_running(name: &str) -> bool {
+pub(crate) fn container_running(name: &str) -> bool {
     let out = podman_cmd_sync()
         .args(["inspect", "--format", "{{.State.Running}}", name])
         .output();

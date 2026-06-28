@@ -7459,3 +7459,78 @@ plan_index:
         - "run_git_image_shell + --github-login pass proxy env explicitly — DONE"
         - "A/B + real diagnostic show proxy error gone on vault read — DONE"
         - "./build.sh --check passes — DONE"
+
+    - packet_id: proxy-not-started-standalone-flows
+      order: 120
+      title: "P0: standalone github-login/list-projects don't start the enclave proxy"
+      status: completed
+      kind: bug+critical
+      deliverable: plan/issues/proxy-not-started-standalone-flows-2026-06-27.md
+      depends_on: [vault-service-dns-no-proxy]
+      pickup_role: linux
+      estimated_hours: 2
+      outcome: >
+        The enclave network is --internal; the squid proxy (tillandsias-proxy) is the
+        only egress path (DNS + fetch). Standalone --github-login and
+        --list-cloud-projects ensured Vault + networks but never started the proxy,
+        so containerized gh failed with "error connecting to proxy". Added
+        ensure_proxy_running (mirrors ensure_vault_running), called in both flows;
+        both now assert tillandsias-proxy in the auth preflight.
+      events:
+        - type: completed
+          ts: "2026-06-28T02:30Z"
+          agent_id: "linux-yoga-sonnet46-20260628T0130Z"
+          commits: []
+          summary: >
+            Reproduced via the real --github-login (error connecting to proxy) and
+            --list-cloud-projects diagnostic. Proved direct egress fails (DNS, exit 5)
+            so the proxy is mandatory. Added ensure_proxy_running; verified proxy
+            auto-starts and api.github.com returns http_code=200 through it.
+      exit_criteria:
+        - "ensure_proxy_running starts tillandsias-proxy idempotently — DONE"
+        - "github-login + list-cloud-projects call it after ensure_vault — DONE"
+        - "api.github.com reachable through the started proxy (200) — DONE (verified)"
+        - "./build.sh --check passes — DONE"
+
+    - packet_id: container-dependency-graph-research
+      order: 121
+      title: "Research: compile-time container dependency model (launch fails to compile if deps unmet)"
+      status: ready
+      kind: research
+      deliverable: plan/issues/container-dependency-graph-research-2026-06-27.md
+      depends_on: []
+      pickup_role: linux
+      estimated_hours: 4
+      outcome: >
+        Operator-requested design for a compiled container dependency model so a
+        launch whose dependencies (other services running, networks, ca-bundle,
+        secrets/leases, proxy/direct egress, image-at-version, vault-unsealed)
+        aren't satisfied fails at compile time, and new containers declare deps in
+        one place and inherit ordered bring-up transparently. Deliverable: A/B/C
+        design verdict + dependency taxonomy + launch API sketch + drift-test def.
+      exit_criteria:
+        - "Design verdict (typestate vs const-graph vs hybrid) recorded with worked gh-login example"
+        - "Dependency-kind taxonomy enumerated"
+        - "Module location decided (no cycle with tillandsias-headless)"
+        - "Runtime-liveness contract + drift-protection test defined"
+
+    - packet_id: container-dependency-graph-impl
+      order: 122
+      title: "Implement: compile-time container dependency model"
+      status: pending
+      kind: enhancement
+      deliverable: plan/issues/container-dependency-graph-impl-2026-06-27.md
+      depends_on: [container-dependency-graph-research]
+      pickup_role: linux
+      estimated_hours: 10
+      outcome: >
+        Implement the chosen model: dependency declarations + topological ensure()
+        bring-up + (if chosen) typestate launch tokens + runtime liveness + drift
+        litmus. Migrate github-login and list-cloud-projects as first consumers so
+        the proxy/vault prerequisites can't be skipped without a compile error or
+        pinned-litmus failure.
+      exit_criteria:
+        - "All launch paths route through the dependency model"
+        - "Skipping a prerequisite is a compile error or litmus failure"
+        - "acyclic-graph + bring-up-order + compile-fail tests green"
+        - "./build.sh --check and --test pass"

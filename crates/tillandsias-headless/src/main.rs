@@ -1930,6 +1930,52 @@ fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
     ]
 }
 
+/// Ensure the enclave egress proxy (squid) container is running.
+///
+/// The enclave network is `--internal`, so the proxy is the ONLY external
+/// egress path — it performs DNS resolution and the outbound fetch for every
+/// request leaving a container (gh api, package installs). A container set with
+/// `http_proxy=http://proxy:3128` but no running proxy fails with "error
+/// connecting to proxy" / curl exit 5 ("could not resolve host").
+///
+/// Standalone flows like `--github-login` and `--list-cloud-projects` bring up
+/// Vault but historically never started the proxy, so they failed the moment a
+/// containerized `gh` tried to reach GitHub. This mirrors `ensure_vault_running`
+/// and is idempotent — it returns early if the proxy is already up.
+///
+/// @trace spec:proxy-container, plan/issues/proxy-not-started-standalone-flows-2026-06-27.md
+fn ensure_proxy_running(debug: bool) -> Result<(), String> {
+    if crate::vault_bootstrap::container_running("tillandsias-proxy") {
+        if debug {
+            eprintln!("[tillandsias] enclave proxy already running");
+        }
+        return Ok(());
+    }
+    let version = VERSION.trim();
+    let root = resolve_runtime_asset_root(version, debug)?;
+    ensure_enclave_network(debug)?;
+    ensure_versioned_images(&root, &["proxy"], version, debug)?;
+    let proxy_image = versioned_image_tag("proxy", version);
+    let certs_dir = ensure_ca_bundle(debug)?;
+    let rt = podman_runtime()?;
+    let client = PodmanClient::new();
+    rt.block_on(async {
+        client
+            .run_container_observed(
+                "ensure-proxy",
+                "tillandsias-proxy",
+                &build_proxy_run_args(&certs_dir, &proxy_image),
+                debug,
+            )
+            .await
+            .map_err(|e| e.to_string())
+    })?;
+    if debug {
+        eprintln!("[tillandsias] enclave proxy started");
+    }
+    Ok(())
+}
+
 /// Read the host's `remote.origin.url` from a project's git config.
 ///
 /// Used by `build_git_run_args` to inform the enclave mirror about the
@@ -4244,7 +4290,13 @@ fn run_github_login(debug: bool) -> Result<(), String> {
     #[cfg(feature = "vault")]
     vault_bootstrap::ensure_vault_running(debug)?;
 
-    check_auth_required_services(&["tillandsias-vault"], debug)?;
+    // The login container reaches api.github.com (gh auth login --with-token)
+    // through the enclave proxy; the enclave network is --internal so the proxy
+    // is the only egress path. Start it now or gh fails with "error connecting
+    // to proxy". @trace plan/issues/proxy-not-started-standalone-flows-2026-06-27.md
+    ensure_proxy_running(debug)?;
+
+    check_auth_required_services(&["tillandsias-vault", "tillandsias-proxy"], debug)?;
 
     let container = format!("tillandsias-gh-login-{}", std::process::id());
     let cleanup = LoginContainerCleanup {
@@ -4470,6 +4522,11 @@ fn run_list_cloud_projects(debug: bool) -> Result<(), String> {
     report_runtime_lane("--list-cloud-projects", debug);
 
     vault_bootstrap::ensure_vault_running(debug)?;
+    // The containerized `gh` fetch reaches GitHub through the enclave proxy
+    // (only egress path on the --internal enclave network). Start it or the
+    // fetch fails with "error connecting to proxy".
+    // @trace plan/issues/proxy-not-started-standalone-flows-2026-06-27.md
+    ensure_proxy_running(debug)?;
 
     let start = std::time::Instant::now();
     let projects = remote_projects::discover_github_projects_result_with_debug(debug)?;
