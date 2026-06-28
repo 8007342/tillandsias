@@ -7763,7 +7763,7 @@ plan_index:
     - packet_id: agent-services-egress-allowlist-research
       order: 129
       title: "Research: exact egress allowlist for claude/codex/antigravity (no guessing)"
-      status: ready
+      status: claimed
       kind: research
       deliverable: plan/issues/agent-services-egress-allowlist-research-2026-06-28.md
       depends_on: []
@@ -7783,6 +7783,13 @@ plan_index:
         - "Minimal allowlist delta (parent domains, no duplicate-subdomain FATALs)"
         - "bump vs no-bump decision per new domain"
         - "Antigravity agent-wiring gap documented"
+      events:
+        - type: claim
+          ts: "2026-06-28T23:40:00Z"
+          agent_id: "linux-antigravity-20260628T2340Z"
+          host: "linux"
+          lease_id: "agent-services-egress-allowlist-research-claim-1"
+          expires_at: "2026-06-29T03:40:00Z"
 
     - packet_id: agent-services-egress-allowlist-impl
       order: 130
