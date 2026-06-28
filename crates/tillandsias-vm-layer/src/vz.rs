@@ -1598,10 +1598,7 @@ impl VzRuntime {
                 ));
             }
             let stream = self
-                .open_vsock_stream_current_thread(
-                    CONTROL_WIRE_VSOCK_PORT,
-                    Duration::from_secs(2),
-                )
+                .open_vsock_stream_current_thread(CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(2))
                 .await;
             let stream = match stream {
                 Ok(s) => s,
@@ -1616,9 +1613,7 @@ impl VzRuntime {
             match crate::vsock_exec::probe_vm_phase(stream).await {
                 Ok(VmPhase::Ready) => return Ok(()),
                 Ok(VmPhase::Failed) => {
-                    return Err(
-                        "VzRuntime::wait_phase_ready: VM phase is Failed".to_string(),
-                    );
+                    return Err("VzRuntime::wait_phase_ready: VM phase is Failed".to_string());
                 }
                 Ok(phase) => {
                     // Starting / Provisioning / Draining / Stopping — keep waiting.

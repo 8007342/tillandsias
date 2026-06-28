@@ -545,9 +545,29 @@ pub fn github_login_main() -> i32 {
                 // an ephemeral `--rm` git container (piped to `gh auth login
                 // --with-token`, written to Vault, container destroyed on exit),
                 // so nothing unencrypted is left at rest here.
+                //
+                // Pre-flight before handing off to headless:
+                //   1. Remove any exited proxy container from a prior attempt so
+                //      `ensure_proxy_running` can `podman run --name tillandsias-proxy`
+                //      without "name already in use".
+                //   2. Ensure the ephemeral CA key is group/world-readable (0o644)
+                //      so Squid (uid 1000) can read it. headless currently sets 0o600;
+                //      if the file already exists with correct perms the openssl block
+                //      is skipped (ca_bundle_needs_refresh returns false for fresh files).
+                // TODO(linux-next): remove once headless sets 0o640 and rm-on-reuse
+                // is fixed in ensure_proxy_running.
                 "export HOME=/root; export XDG_RUNTIME_DIR=/run/user/0; \
                  export TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200; \
                  mkdir -p \"$XDG_RUNTIME_DIR\" 2>/dev/null; \
+                 podman rm tillandsias-proxy 2>/dev/null || true; \
+                 if ! test -s /tmp/tillandsias-ca/intermediate.key 2>/dev/null; then \
+                   mkdir -p /tmp/tillandsias-ca && \
+                   openssl req -x509 -newkey rsa:2048 \
+                     -keyout /tmp/tillandsias-ca/intermediate.key \
+                     -out /tmp/tillandsias-ca/intermediate.crt \
+                     -days 25 -nodes -subj '/CN=Tillandsias CA' 2>/dev/null && \
+                   chmod 644 /tmp/tillandsias-ca/intermediate.key || true; \
+                 fi; \
                  exec /usr/local/bin/tillandsias-headless --github-login",
             ],
             expects,

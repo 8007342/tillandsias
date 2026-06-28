@@ -139,3 +139,103 @@ needs visible output.
     ts: "2026-06-27T22:40:00Z"
     agent_id: "macos-advance-20260627T2200Z"
     host: macos
+
+---
+
+## Session Progress: 2026-06-28 (phase-check + enclave init)
+
+**Agent:** `macos-advance-20260628T0000Z`
+**Headless in VM:** `v0.3.260628.1` (aarch64-unknown-linux-musl, from cloud-init fetch)
+
+### Completed this session
+
+1. **wait_phase_ready implemented** (`osx-next eced3b6f`):
+   - Added `probe_vm_phase()` to `vsock_exec.rs`: Hello/HelloAck +
+     `VmStatusRequest` round-trip returning `VmPhase` from in-VM headless.
+   - Added `wait_phase_ready(timeout)` to `VzRuntime` (macOS-only impl block):
+     stage 1 waits for VZ Running; stage 2 loops `probe_vm_phase` until
+     `VmPhase::Ready` (podman up) or `Failed`.
+   - Replaced all three `wait_ready(90s)` calls in `diagnose.rs` with
+     `wait_phase_ready(300s)`. The 300s is a safety cutoff; primary signal is
+     the phase.
+   - **Verified:** `--exec-guest 'echo hello'` passes wait_phase_ready cleanly
+     on fresh VM. `[exec-guest] waiting for VM phase Ready…` displayed.
+
+2. **Fresh re-provision** after binary corruption from prior session.
+   Cloud-init `fetch-headless.sh` (uses `uname -m` → aarch64) downloads
+   correct binary. Headless v0.3.260628.1 confirmed running.
+
+3. **Enclave init running** (`--exec-guest 'tillandsias-headless --debug --init'`):
+   All images building: proxy ✓, git ✓, inference ✓, router ✓,
+   chromium-core ✓, chromium-framework (in progress), forge-base (in progress).
+   After init completes, proxy image will be in rootfs.img for subsequent boots.
+
+4. **proxy-not-started already fixed** in v0.3.260628.1:
+   `ensure_proxy_running()` was added in `plan/issues/proxy-not-started-standalone-flows-2026-06-27.md`.
+   After init, `--github-login` should call `ensure_proxy_running` on next boot.
+
+### In Progress
+
+- `tillandsias-headless --debug --init` background exec-guest: building forge-base
+  (package 163/547 at last check). Will proceed to `--github-login` on completion.
+
+---
+
+## Session Progress: 2026-06-28 (proxy CA cert fix + github-login flow)
+
+**Agent:** `macos-advance-20260628T0800Z`
+**Headless in VM:** `v0.3.260628.1` (unchanged — bugs fixed on tray side and linux-next)
+
+### Root causes identified and fixed
+
+1. **CA cert key permissions (0o600 → squid uid 1000 can't read):**
+   - `ensure_ca_bundle` in headless set the private key to 0o600 (root-only).
+   - Squid (uid 1000 inside `tillandsias-proxy` container) reads the mounted key
+     at `/etc/squid/certs/intermediate.key` and fails:
+     `FATAL: No valid signing certificate configured`.
+   - **Fix (linux-next):** Changed `set_permissions` to `0o640`.
+   - **Workaround (osx-next, diagnose.rs):** `github_login_main` pre-creates
+     certs with `chmod 644` via guest bash before running headless, so the
+     released headless binary finds the key already present and fresh
+     (`ca_bundle_needs_refresh` returns false) and doesn't regenerate it.
+
+2. **Exited proxy container blocks `podman run --name tillandsias-proxy`:**
+   - After a failed proxy start, the container remains in Exited state.
+   - `ensure_proxy_running` checks `container_running` (Running state only),
+     sees false, calls `podman run --name tillandsias-proxy` → error: "name
+     already in use".
+   - **Fix (linux-next):** Added `podman rm --ignore tillandsias-proxy` before
+     `podman run` in `ensure_proxy_running`.
+   - **Workaround (osx-next, diagnose.rs):** `github_login_main` bash script
+     runs `podman rm tillandsias-proxy 2>/dev/null || true` before headless.
+
+3. **rustfmt drift in vz.rs blocked linux-next integration:**
+   - `cargo fmt -p tillandsias-vm-layer` applied; two line-wrap changes in
+     `wait_phase_ready`.
+
+### Verified this session
+
+- Exec-guest workaround run (single VM session) confirmed:
+  - CA cert pre-created with 0o644 key
+  - `tillandsias-proxy` started and stayed running (container_launch state=running)
+  - Vault bootstrapped successfully
+  - `tillandsias-gh-login-1098` container (git image) launched
+  - Auth preflight: vault=Healthy, proxy=Starting (not yet healthy, but running)
+  - Flow reached `prompt_and_store_git_identity()` — correct interactive prompt
+
+### Commits this session
+
+- osx-next: `diagnose.rs` CA cert workaround + proxy rm + vz.rs rustfmt fix
+- linux-next: headless 0o640 key + `podman rm --ignore` in ensure_proxy_running
+
+### Next: Run `--github-login` interactively
+
+Full tray build installed. Run in terminal:
+
+```bash
+! /Applications/Tillandsias.app/Contents/MacOS/tillandsias-tray --github-login
+```
+
+Enter git author name, email, then paste a GitHub PAT with `repo` scope.
+On success: `{"status":"login-finished","exit_code":0}` and the tray menu
+should reveal project submenus.
