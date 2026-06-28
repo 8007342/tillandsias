@@ -4661,6 +4661,11 @@ fn run_list_cloud_projects(debug: bool) -> Result<(), String> {
     // fetch fails with "error connecting to proxy".
     // @trace plan/issues/proxy-not-started-standalone-flows-2026-06-27.md
     ensure_proxy_running(debug)?;
+    // Squid's sslcrtd cert-generator child takes a few seconds to initialize
+    // after the container starts listening on :3128.  Without this check the
+    // containerized `gh` HTTPS handshake can race sslcrtd and hang for the
+    // full GH_INVOCATION_TIMEOUT (25s).
+    check_auth_required_services(&["tillandsias-proxy"], debug)?;
 
     let start = std::time::Instant::now();
     let projects = remote_projects::discover_github_projects_result_with_debug(debug)?;
