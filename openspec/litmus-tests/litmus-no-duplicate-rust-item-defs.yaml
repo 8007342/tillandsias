@@ -1,0 +1,33 @@
+# @trace spec:methodology-accountability
+name: litmus:no-duplicate-rust-item-defs
+spec: methodology-accountability
+description: >
+  Verifies that there are no duplicate Rust item definitions (E0428).
+  This prevents a rebase-after-merge workflow from creating silent
+  build failures where the same commit content is re-applied under
+  a new hash and thus escapes git merge detection.
+severity: high
+size: small
+phase: instant
+
+preconditions:
+  - cargo is available
+
+critical_path:
+  - step: "check for duplicate item definitions across workspace"
+    command: "cargo check --all-targets --workspace 2>&1"
+    timeout_ms: 60000
+    success_pattern: "Finished"
+    failure_pattern: "E0428"
+
+observability:
+  traces:
+    - "@trace spec:methodology-accountability"
+  expected_log: "Cargo check passes without E0428 errors"
+  log_fields:
+    spec: "methodology-accountability"
+    test: "no-duplicate-rust-item-defs"
+
+rollback:
+  on_failure: "inspect git history for accidental duplicate commit reapplications via rebase and revert them."
+  command: "git log --oneline -n 10"

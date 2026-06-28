@@ -7871,7 +7871,7 @@ plan_index:
     - packet_id: methodology-concurrent-integration-duplication
       order: 133
       title: "Methodology: fix concurrent-integration content duplication (skill + litmus)"
-      status: claimed
+      status: done
       kind: analysis+enhancement
       deliverable: plan/issues/methodology-concurrent-integration-duplication-2026-06-28.md
       depends_on: []
@@ -7898,6 +7898,11 @@ plan_index:
           host: "linux"
           lease_id: "methodology-concurrent-integration-duplication-claim-1"
           expires_at: "2026-06-29T03:50:00Z"
+        - type: completed
+          ts: "2026-06-28T23:53:00Z"
+          agent_id: "linux-antigravity-20260628T2350Z"
+          commit_hash: "PENDING"
+          evidence: "Added litmus:no-duplicate-rust-item-defs. Modified skills and methodology to enforce strict rebase over merge."
 
     - packet_id: plan-ledger-archival
       order: 134
