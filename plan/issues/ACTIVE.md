@@ -32,18 +32,32 @@ completes current work.**
 
 | Order | Packet | Owner | Status |
 |---|---|---|---|
-| 123 | normalization research (verdict) | linux | ready |
-| 124 | normalization spec + facade | linux | pending (→123) |
-| 125 | Linux backend conform + collapse 5 exec variants | linux | pending (→124) |
-| 126 | macOS VZ virtio-vsock conform | **osx** | pending (→124) |
-| 127 | Windows WSL/hvsock conform | **windows** | pending (→124) |
+| 123 | normalization research (verdict) | linux | ✅ completed |
+| 124 | normalization spec + facade | linux | in_progress (contract + spec landed) |
+| 125 | Linux backend conform + collapse 5 exec variants | linux | ready (facade exists) |
+| 126 | macOS VZ virtio-vsock conform | **osx** | **ready** (facade landed) |
+| 127 | Windows WSL/hvsock conform | **windows** | **ready** (facade landed) |
 | 128 | tray parity matrix + litmus | linux | ready |
+
+**Unblock delivered:** `tillandsias-control-wire::guest_transport` facade
+(`GuestTransport` trait + `GuestEndpoint` + `ExecRequest`/`ExecOutput`) + the
+`host-guest-transport` openspec spec are landed and compile on all targets, so
+126 (osx) and 127 (windows) have a concrete interface — both flipped to `ready`.
 
 ## Queue Summary
 
-Linux `ready`: **order 123** (transport research) and **order 128** (parity matrix) —
-both authorable now and they unblock the rest. Order 122 `in_progress` (slices 2–5).
-macОС/Windows: orders 126/127 assigned, blocked on the order-124 facade.
+Linux `ready`: **125** (Linux backend migration + collapse 5 exec→2), **128**
+(parity matrix). Order 124 `in_progress` (litmus + conformance harness remain).
+Order 122 `in_progress` (slices 2–5).
+macОС/Windows: 126/127 ready for their terminals.
+
+## osx integration (action required by osx terminal)
+
+osx-next (0604acff) has **diverged** — a coordinator merge now hits a main.rs
+conflict + 8 plan/index.yaml regions + add/add plan files. **Do not force.** osx
+must merge linux-next into osx-next first (linux authoritative for shared+ledger,
+osx for macos-owned files, `cargo fmt` in the same pass). Steps in
+`coord-osx-vz-fmt-drift-2026-06-28.md`. This also hands osx the facade for 126.
 
 ## Recent Completions
 
