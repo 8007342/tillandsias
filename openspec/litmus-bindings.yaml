@@ -888,13 +888,3 @@ specs:
   - litmus:reverse-proxy-internal-shape
   coverage_ratio: 75
   last_verified: '2026-05-30'
-- spec_id: zeroclaw-orchestration
-  status: active
-  litmus_tests:
-  - litmus:zeroclaw-mcp-shape
-  coverage_ratio: 80
-  last_verified: '2026-06-20'
-  note: >
-    80% coverage: allowlist + broker unit tests + launch/broker integration smoke
-    (3 integration tests in lib.rs). Gap: live container launch (requires runtime
-    podman + built image) — covered by local-build e2e gate at release time.

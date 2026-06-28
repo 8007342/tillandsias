@@ -299,7 +299,6 @@ enum LaunchKind {
     /// terminal. @trace spec:tray-ux
     Codex,
     Maintenance,
-    ZeroClaw,
 }
 
 // @trace spec:tray-minimal-ux
@@ -1336,7 +1335,6 @@ fn action_slug(kind: LaunchKind) -> &'static str {
         LaunchKind::Claude => "claude",
         LaunchKind::Codex => "codex",
         LaunchKind::Maintenance => "terminal",
-        LaunchKind::ZeroClaw => "zeroclaw",
     }
 }
 
@@ -1461,7 +1459,6 @@ fn build_launch_spec(project: &ProjectEntry, kind: LaunchKind, image: &str) -> C
             .interactive()
             .tty()
             .entrypoint("/usr/local/bin/entrypoint-terminal.sh"),
-        LaunchKind::ZeroClaw => spec.interactive().tty(),
     }
 }
 
@@ -1582,102 +1579,7 @@ fn launch_project_action(
             };
             super::launch_forge_agent(&project.name, &project.path, mode, debug)
         }
-        LaunchKind::ZeroClaw => launch_zeroclaw(&project, &_version),
     }
-}
-
-/// Launch a ZeroClaw container for `project`.
-///
-/// Steps:
-/// 1. Derive a per-project Unix socket path under `$XDG_RUNTIME_DIR`.
-/// 2. Spawn `tillandsias-zeroclaw --project-path <path> --socket <sock>`
-///    as a background host process (dies when this tray process exits).
-/// 3. Bind-mount the socket read-write into the container at the well-known
-///    in-container path `/run/host/tillandsias/zeroclaw.sock`.
-/// 4. Pass `TILLANDSIAS_ZEROCLAW_SOCKET` so the bridge script finds it.
-/// 5. Open a terminal window running `podman run …`.
-///
-/// @trace spec:zeroclaw-orchestration
-fn launch_zeroclaw(project: &ProjectEntry, version: &str) -> Result<(), String> {
-    let project_name = &project.name;
-    let project_path = project
-        .path
-        .canonicalize()
-        .unwrap_or_else(|_| project.path.clone());
-
-    // Derive a stable per-project socket path.
-    let runtime_dir = env::var_os("XDG_RUNTIME_DIR")
-        .map(PathBuf::from)
-        .unwrap_or_else(|| PathBuf::from(format!("/run/user/{}", unsafe { libc::getuid() })));
-    let socket_host = runtime_dir.join(format!("tillandsias/zeroclaw-{project_name}.sock"));
-    if let Some(parent) = socket_host.parent() {
-        let _ = fs::create_dir_all(parent);
-    }
-
-    // Spawn the host-side MCP server. It exits when the connection closes
-    // (container exit / socat hangup). Stdout/stderr go to a log file so the
-    // tray doesn't inherit them.
-    let log_path = runtime_dir.join(format!("tillandsias/zeroclaw-{project_name}.log"));
-    let log_file = fs::OpenOptions::new()
-        .create(true)
-        .append(true)
-        .open(&log_path)
-        .map_err(|e| format!("failed to open zeroclaw log: {e}"))?;
-    let log_copy = log_file.try_clone().map_err(|e| e.to_string())?;
-    // Resolve tillandsias-zeroclaw as a sibling of the running binary so it
-    // works from ~/.local/bin (installed release) and from the Cargo build
-    // output directory (dev builds) without requiring it to be in PATH.
-    let zeroclaw_bin = std::env::current_exe()
-        .ok()
-        .and_then(|exe| exe.parent().map(|d| d.join("tillandsias-zeroclaw")))
-        .filter(|p| p.is_file())
-        .map(|p| p.into_os_string())
-        .unwrap_or_else(|| std::ffi::OsString::from("tillandsias-zeroclaw"));
-    Command::new(&zeroclaw_bin)
-        .arg("--project-path")
-        .arg(&project_path)
-        .arg("--socket")
-        .arg(&socket_host)
-        .stdout(Stdio::from(log_file))
-        .stderr(Stdio::from(log_copy))
-        .spawn()
-        .map_err(|e| format!("failed to spawn tillandsias-zeroclaw: {e}"))?;
-
-    // Wait briefly for the socket to appear (the server binds synchronously
-    // before accepting, but there's a tiny startup window).
-    for _ in 0..20 {
-        if socket_host.exists() {
-            break;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(50));
-    }
-
-    // Container path where the socket is bind-mounted.
-    const CONTAINER_SOCK: &str = "/run/host/tillandsias/zeroclaw.sock";
-
-    let image = format!("localhost/tillandsias-zeroclaw:v{version}");
-    let spec = build_launch_spec(project, LaunchKind::ZeroClaw, &image)
-        .bind_mount(socket_host.display().to_string(), CONTAINER_SOCK, false)
-        .env("TILLANDSIAS_ZEROCLAW_SOCKET", CONTAINER_SOCK)
-        .env(
-            "TILLANDSIAS_PROJECT_PATH",
-            project_path.display().to_string(),
-        )
-        .env("TILLANDSIAS_PROJECT_BRANCH", "linux-next");
-
-    let podman_args = spec.build_run_argv();
-    let mut shell_args = vec![
-        "-c".to_string(),
-        "podman \"$@\"; echo; echo \"[zeroclaw] Finished — press Enter to close\"; read"
-            .to_string(),
-        "zeroclaw-shell".to_string(),
-    ];
-    shell_args.extend(podman_args);
-    launch_in_terminal(
-        &format!("Tillandsias — {project_name} — ZeroClaw"),
-        "bash",
-        &shell_args,
-    )
 }
 
 #[allow(dead_code)]
@@ -2205,8 +2107,7 @@ fn build_separator_item(id: i32) -> MenuNode {
 // | +3     | OpenCode Web    | 📐      |
 // | +4     | Observatorium   | 🔭      |
 // | +5     | Maintenance     | 🔧      |
-// | +6     | ZeroClaw        | 🦞      |
-// | +7     | (submenu node)  | —       |
+// | +6     | (submenu node)  | —       |
 //
 // Helpers: [`local_project_base`], [`cloud_project_base`], and
 // [`project_action_from_id`] are the only place this layout is encoded.
@@ -2218,18 +2119,16 @@ enum LeafAction {
     OpenCodeWeb,
     Observatorium,
     Maintenance,
-    ZeroClaw,
 }
 
 impl LeafAction {
-    const ALL: [LeafAction; 7] = [
+    const ALL: [LeafAction; 6] = [
         LeafAction::Claude,
         LeafAction::Codex,
         LeafAction::OpenCode,
         LeafAction::OpenCodeWeb,
         LeafAction::Observatorium,
         LeafAction::Maintenance,
-        LeafAction::ZeroClaw,
     ];
 
     fn offset(self) -> i32 {
@@ -2240,7 +2139,6 @@ impl LeafAction {
             LeafAction::OpenCodeWeb => 3,
             LeafAction::Observatorium => 4,
             LeafAction::Maintenance => 5,
-            LeafAction::ZeroClaw => 6,
         }
     }
 
@@ -2252,7 +2150,6 @@ impl LeafAction {
             LeafAction::OpenCodeWeb => "\u{1F4D0} OpenCode Web",
             LeafAction::Observatorium => "\u{1F52D} Observatorium",
             LeafAction::Maintenance => "\u{1F527} Maintenance",
-            LeafAction::ZeroClaw => "\u{1F99E} ZeroClaw",
         }
     }
 
@@ -2280,8 +2177,8 @@ const LOADING_CLOUD_ID: i32 = 0x7FFF_FFFE;
 /// `handle_cloud_overflow_click`); a future GtkWindow picker would replace
 /// that fallback in place. @trace spec:tray-ux
 const CLOUD_OVERFLOW_ID: i32 = 0x7FFF_FFFC;
-const PROJECT_LEAF_COUNT: i32 = 7;
-const PROJECT_SUBMENU_OFFSET: i32 = 7;
+const PROJECT_LEAF_COUNT: i32 = 6;
+const PROJECT_SUBMENU_OFFSET: i32 = 6;
 
 /// Maximum number of cloud projects rendered as top-level entries inside the
 /// `☁️ Cloud >` submenu before an overflow item replaces the tail.
@@ -3220,7 +3117,6 @@ impl DbusMenuIface {
                             LeafAction::Observatorium => LaunchKind::Observatorium,
                             LeafAction::Maintenance => LaunchKind::Maintenance,
                             LeafAction::Codex => LaunchKind::Codex,
-                            LeafAction::ZeroClaw => LaunchKind::ZeroClaw,
                         };
                         match scope {
                             ProjectScope::Local => {
@@ -4440,9 +4336,9 @@ mod tests {
     }
 
     #[test]
-    fn project_submenu_has_seven_leaves_in_order() {
-        // Per-project submenus are 7-leaf flat menus: Claude, Codex,
-        // OpenCode, OpenCode Web, Observatorium, Maintenance, ZeroClaw.
+    fn project_submenu_has_six_leaves_in_order() {
+        // Per-project submenus are 6-leaf flat menus: Claude, Codex,
+        // OpenCode, OpenCode Web, Observatorium, Maintenance.
         // Order is locked by `LeafAction::offset`.
         let project = ProjectEntry {
             name: "alpha".to_string(),
@@ -4457,11 +4353,11 @@ mod tests {
             .build();
         let submenu = build_project_submenu(&state, &project, ProjectScope::Local);
 
-        // Seven leaves, no sub-submenus.
-        assert_eq!(submenu.2.len(), 7);
+        // Six leaves, no sub-submenus.
+        assert_eq!(submenu.2.len(), 6);
         let leaf_labels = labels(&submenu);
         // labels() walks the layout depth-first; index 0 is the submenu
-        // container, indices 1..=7 are the leaves in offset order.
+        // container, indices 1..=6 are the leaves in offset order.
         assert_eq!(leaf_labels[0], "alpha");
         assert!(leaf_labels[1].contains("Claude"));
         assert!(leaf_labels[2].contains("Codex"));
@@ -4469,7 +4365,6 @@ mod tests {
         assert!(leaf_labels[4].contains("OpenCode Web"));
         assert!(leaf_labels[5].contains("Observatorium"));
         assert!(leaf_labels[6].contains("Maintenance"));
-        assert!(leaf_labels[7].contains("ZeroClaw"));
     }
 
     #[test]

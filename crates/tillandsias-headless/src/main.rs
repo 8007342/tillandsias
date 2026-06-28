@@ -1134,7 +1134,6 @@ fn image_specs(root: &Path, image_name: &str) -> Result<(PathBuf, PathBuf), Stri
         "chromium-core" => "images/chromium",
         "chromium-framework" => "images/chromium",
         "vault" => "images/vault",
-        "zeroclaw" => "images/zeroclaw",
         other => {
             return Err(format!("Unknown image type: {other}"));
         }
@@ -1182,12 +1181,6 @@ fn image_build_inputs(
         let base = identities
             .get("forge-base")
             .ok_or_else(|| "forge identity requires forge-base identity".to_string())?;
-        build_args.insert("BASE_IMAGE".to_string(), base.canonical_tag.clone());
-        dependency_digests.insert("forge-base".to_string(), base.source_digest.clone());
-    } else if image_name == "zeroclaw" {
-        let base = identities
-            .get("forge-base")
-            .ok_or_else(|| "zeroclaw identity requires forge-base identity".to_string())?;
         build_args.insert("BASE_IMAGE".to_string(), base.canonical_tag.clone());
         dependency_digests.insert("forge-base".to_string(), base.source_digest.clone());
     }
@@ -1448,7 +1441,7 @@ fn ensure_image_exists(
                 )
             })?;
         }
-    } else if matches!(image_name, "forge" | "zeroclaw") {
+    } else if image_name == "forge" {
         let base_tag = versioned_image_tag("forge-base", version);
         if !rt.block_on(client.image_exists(&base_tag)) {
             ensure_image_exists(root, "forge-base", &base_tag, debug).map_err(|e| {
@@ -1469,7 +1462,7 @@ fn ensure_image_exists(
                 versioned_image_tag("chromium-core", version)
             ),
         ]
-    } else if matches!(image_name, "forge" | "zeroclaw") {
+    } else if image_name == "forge" {
         vec![
             "--build-arg".to_string(),
             format!("BASE_IMAGE={}", versioned_image_tag("forge-base", version)),
@@ -3415,7 +3408,7 @@ fn auto_detect_and_configure_ipv6_workaround(debug: bool) {
 }
 
 fn is_optional_image(image_name: &str) -> bool {
-    matches!(image_name, "forge-base" | "forge" | "zeroclaw")
+    matches!(image_name, "forge-base" | "forge")
 }
 
 fn run_init(debug: bool, force: bool) -> Result<(), String> {
@@ -3456,7 +3449,6 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
         "chromium-framework",
         "forge-base",
         "forge",
-        "zeroclaw",
         "web",
     ];
 
@@ -9607,12 +9599,6 @@ mod tests {
             image_specs(&root, "web").expect("web image specs should be resolvable");
         assert!(containerfile.ends_with("images/web/Containerfile"));
         assert!(context.ends_with("images/web"));
-
-        // Test zeroclaw image
-        let (containerfile, context) =
-            image_specs(&root, "zeroclaw").expect("zeroclaw image specs should be resolvable");
-        assert!(containerfile.ends_with("images/zeroclaw/Containerfile"));
-        assert!(context.ends_with("images/zeroclaw"));
     }
 
     #[test]
@@ -9780,7 +9766,7 @@ mod tests {
 
         // The images array from run_init defines the build order:
         // proxy -> git -> inference -> router -> chromium-core -> chromium-framework
-        // -> forge-base -> forge -> zeroclaw -> web
+        // -> forge-base -> forge -> web
         let images = [
             "proxy",
             "git",
@@ -9790,7 +9776,6 @@ mod tests {
             "chromium-framework",
             "forge-base",
             "forge",
-            "zeroclaw",
             "web",
         ];
 
@@ -9826,18 +9811,12 @@ mod tests {
             forge_base_idx < forge_idx,
             "forge-base must be built before forge"
         );
-        let zeroclaw_idx = images.iter().position(|&i| i == "zeroclaw").unwrap();
-        assert!(
-            forge_base_idx < zeroclaw_idx,
-            "forge-base must be built before zeroclaw"
-        );
     }
 
     #[test]
     fn test_is_optional_image() {
         assert!(is_optional_image("forge-base"));
         assert!(is_optional_image("forge"));
-        assert!(is_optional_image("zeroclaw"));
         assert!(!is_optional_image("proxy"));
         assert!(!is_optional_image("git"));
         assert!(!is_optional_image("inference"));
