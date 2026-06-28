@@ -72,6 +72,8 @@ fn main() {
              the control wire, print its output + exit, then stop\n    \
              --github-login  Boot the VM and log in to GitHub in the guest;\n                  \
              prompts for your git name, email, and PAT (token hidden)\n    \
+             --list-cloud-projects  Boot the VM and list GitHub repos via the\n                  \
+             stored Vault token; streams the repo listing to stdout\n    \
              --opencode <path> [--prompt <text>]  Boot the VM and launch the\n                  \
              OpenCode forge on <path> inside the guest; streams forge output\n                  \
              to this terminal. With --prompt runs non-interactively (one shot).\n    \
@@ -108,6 +110,11 @@ fn main() {
     //   tillandsias-tray --github-login
     if args.iter().any(|a| a == "--github-login") {
         std::process::exit(diagnose::github_login_main());
+    }
+    // List GitHub cloud projects using the token stored in guest Vault.
+    // Mirrors the Linux `tillandsias --list-cloud-projects` CLI mode.
+    if args.iter().any(|a| a == "--list-cloud-projects") {
+        std::process::exit(diagnose::list_cloud_projects_main());
     }
     // `--opencode <path> [--prompt <text>]`: boot VM and launch forge in guest.
     if let Some(oc_idx) = args.iter().position(|a| a == "--opencode") {

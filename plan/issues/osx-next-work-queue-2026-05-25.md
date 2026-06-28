@@ -2,6 +2,23 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
+## 2026-06-28T23:05Z — GitHub login E2E VERIFIED; list-cloud-projects added; parity gaps filed
+
+- **MILESTONE:** GitHub login (--github-login) completed E2E on macOS Apple Silicon
+  - Vault bootstrapped ✓, proxy started ✓, git identity stored ✓, token in Vault ✓
+  - Root cause of prior failures: CA cert key 0o600 (squid uid 1000 can't read)
+  - Workaround: tray bash pre-flight creates certs with chmod 644 (8144c5db)
+  - Permanent fix: linux-next headless 0o640 + rm --ignore proxy (a08f9c3e)
+- Added `--list-cloud-projects` tray CLI mode (`list_cloud_projects_main`):
+  - Matches Linux `tillandsias --list-cloud-projects` parity (order 128 matrix)
+  - Uses exec_over_stream_with_input_streaming (streaming, not expect-style)
+  - Same CA cert / proxy workaround pre-flight as github_login_main
+- Fixed `opencode_main` vault URL: `10.0.42.2:8200` → `vault:8200` (TLS bug)
+- Fixed rustfmt drift in vz.rs (unblocked linux-next coordinator merge)
+- Filed `plan/issues/macos-tray-parity-gaps-2026-06-28.md` with macOS column for order 128 parity matrix
+- Build: `build-osx-tray.sh --ci-full --install` PASS; installed to /Applications/Tillandsias.app
+- Next: run `--list-cloud-projects` E2E; address cloud project submenus in tray menu
+
 ## 2026-06-27T00:00Z — ff-pull linux-next→osx-next; vault cert finding filed; local build launched
 
 - Fast-forwarded osx-next db9e2d0d→370e2317 (20 new commits from linux-next)

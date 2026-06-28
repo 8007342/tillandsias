@@ -604,6 +604,115 @@ pub fn github_login_main() -> i32 {
     })
 }
 
+/// `--list-cloud-projects`: boot the VM and run the in-guest
+/// `tillandsias-headless --list-cloud-projects` over the control wire, streaming
+/// the repo listing to stdout. Mirrors the Linux headless CLI mode for 1:1 tray
+/// parity (order 128 parity-matrix row `list-cloud-projects`).
+///
+/// Requires a prior `--github-login` run to have stored the GitHub token in Vault.
+/// Applies the same CA cert / exited-proxy workaround as `github_login_main`
+/// (TODO linux-next: remove once headless uses 0o640 + rm-on-reuse).
+///
+/// @trace spec:remote-projects, plan/issues/tray-feature-parity-matrix-2026-06-28.md
+pub fn list_cloud_projects_main() -> i32 {
+    use tillandsias_vm_layer::VmRuntime;
+
+    let vz = tillandsias_vm_layer::vz::VzRuntime::new(3, image_root());
+    vz.set_serial_to_log(true);
+    if !vz.is_provisioned() {
+        eprintln!(
+            "{{\"error\":\"not provisioned; run --provision or launch the tray once first\"}}"
+        );
+        return 1;
+    }
+
+    let rt = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("{{\"error\":\"tokio runtime: {e}\"}}");
+            return 1;
+        }
+    };
+
+    rt.block_on(async move {
+        use std::time::Duration;
+        use tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
+        use tillandsias_vm_layer::vsock_exec::exec_over_stream_with_input_streaming;
+
+        eprintln!("[list-cloud-projects] starting VM…");
+        if let Err(e) = vz.start().await {
+            eprintln!("{{\"error\":\"start: {e}\"}}");
+            return 1;
+        }
+        eprintln!("[list-cloud-projects] waiting for VM phase Ready…");
+        if let Err(e) = vz.wait_phase_ready(Duration::from_secs(300)).await {
+            eprintln!("{{\"error\":\"wait_phase_ready: {e}\"}}");
+            let _ = vz.stop(Duration::from_secs(10)).await;
+            return 1;
+        }
+        let stream = match vz
+            .open_vsock_stream_current_thread(CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(30))
+            .await
+        {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("{{\"error\":\"vsock connect: {e}\"}}");
+                let _ = vz.stop(Duration::from_secs(10)).await;
+                return 1;
+            }
+        };
+        eprintln!("[list-cloud-projects] control wire ready; fetching remote projects…");
+
+        // Same CA cert + exited-proxy workaround as github_login_main.
+        // ensure_proxy_running (called by headless --list-cloud-projects) needs
+        // a 0o644 key so squid (uid 1000) can read it, and no leftover exited
+        // container blocking `podman run --name tillandsias-proxy`.
+        let cmd = "export HOME=/root; export XDG_RUNTIME_DIR=/run/user/0; \
+                   export TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200; \
+                   mkdir -p \"$XDG_RUNTIME_DIR\" 2>/dev/null; \
+                   podman rm tillandsias-proxy 2>/dev/null || true; \
+                   if ! test -s /tmp/tillandsias-ca/intermediate.key 2>/dev/null; then \
+                     mkdir -p /tmp/tillandsias-ca && \
+                     openssl req -x509 -newkey rsa:2048 \
+                       -keyout /tmp/tillandsias-ca/intermediate.key \
+                       -out /tmp/tillandsias-ca/intermediate.crt \
+                       -days 25 -nodes -subj '/CN=Tillandsias CA' 2>/dev/null && \
+                     chmod 644 /tmp/tillandsias-ca/intermediate.key || true; \
+                   fi; \
+                   exec /usr/local/bin/tillandsias-headless --list-cloud-projects";
+
+        let result = exec_over_stream_with_input_streaming(
+            stream,
+            &["/bin/bash", "-lc", cmd],
+            &[],
+            |chunk| {
+                use std::io::Write;
+                let _ = std::io::stdout().write_all(chunk);
+                let _ = std::io::stdout().flush();
+            },
+        )
+        .await;
+        let _ = vz.stop(Duration::from_secs(10)).await;
+
+        match result {
+            Ok(out) => {
+                eprintln!(
+                    "{{\"status\":\"list-cloud-projects-finished\",\"exit_code\":{}}}",
+                    out.exit.code
+                );
+                out.exit.code
+            }
+            Err(e) => {
+                eprintln!("{{\"error\":\"list-cloud-projects: {e}\"}}");
+                1
+            }
+        }
+    })
+}
+
 /// `--opencode <path> [--prompt <text>]`: boot the VM and run the in-guest
 /// `tillandsias-headless --opencode <path>` over the control wire, streaming
 /// PTY output to the host terminal in real-time. When `--prompt` is given the
@@ -668,7 +777,7 @@ pub fn opencode_main(path: String, prompt: Option<String>) -> i32 {
         let mut headless_cmd = format!(
             "export HOME=/root; \
              export XDG_RUNTIME_DIR=/run/user/0; \
-             export TILLANDSIAS_VAULT_API_BASE_URL=https://10.0.42.2:8200; \
+             export TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200; \
              mkdir -p \"$XDG_RUNTIME_DIR\" 2>/dev/null; \
              exec /usr/local/bin/tillandsias-headless --opencode {path}"
         );
