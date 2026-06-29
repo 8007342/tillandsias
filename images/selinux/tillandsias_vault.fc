@@ -1,0 +1,9 @@
+# File contexts for tillandsias_vault policy module.
+# After semodule -i, apply with:
+#   semanage fcontext -a -t vault_data_t '/var/lib/tillandsias/vault-data(/.*)?' || \
+#   semanage fcontext -m -t vault_data_t '/var/lib/tillandsias/vault-data(/.*)?' || true
+#   restorecon -Rv /var/lib/tillandsias/vault-data/
+
+# Vault data volume — holds Vault's storage backend (raft), TLS certs, and config.
+# Managed by the rootless podman named volume via --volume vault-data:/vault/data:U,z
+/var/lib/tillandsias/vault-data(/.*)?   gen_context(system_u:object_r:vault_data_t,s0)

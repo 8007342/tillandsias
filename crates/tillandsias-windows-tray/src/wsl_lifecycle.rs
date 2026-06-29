@@ -36,6 +36,22 @@ const PROVISIONING_MANIFEST: &str = include_str!("../assets/provisioning-manifes
 /// the trust root.
 pub const RECIPE_MANIFEST: &str = include_str!("../../../images/vm/manifest.toml");
 
+/// SELinux policy sources for the tillandsias-headless domain and the Vault
+/// container domain. Embedded at build time so the installed, checkout-free
+/// tray can write them into the Fedora 44 VM during `inject_bootstrap_logic`.
+///
+/// Policy is compiled in-VM via `make -f /usr/share/selinux/devel/Makefile`
+/// (requires `selinux-policy-devel`, installed by `ensure_base_packages`).
+/// The installation step is conditional on `getenforce` returning Permissive
+/// or Enforcing — it is a no-op while SELinux remains Disabled.
+///
+/// @trace plan/issues/selinux-zero-trust-vsock-policy-design-2026-06-29.md (Phase 3d)
+const SELINUX_HEADLESS_TE: &str = include_str!("../../../images/selinux/tillandsias_headless.te");
+const SELINUX_HEADLESS_FC: &str = include_str!("../../../images/selinux/tillandsias_headless.fc");
+const SELINUX_HEADLESS_IF: &str = include_str!("../../../images/selinux/tillandsias_headless.if");
+const SELINUX_VAULT_TE: &str = include_str!("../../../images/selinux/tillandsias_vault.te");
+const SELINUX_VAULT_FC: &str = include_str!("../../../images/selinux/tillandsias_vault.fc");
+
 /// The single WSL2 distro the tray manages (see `tillandsias-vm-layer::wsl`,
 /// "one distro per host"). Also the `wsl.exe -d <name>` target the Open-Shell
 /// terminal attaches to.
@@ -404,6 +420,43 @@ WantedBy=multi-user.target
         // @trace plan/issues/windows-cold-provision-headless-units-not-started-2026-06-19.md
         self.wsl_root_sh(
             "systemctl daemon-reload && systemctl enable --now podman.socket tillandsias-headless-fetch.service tillandsias-headless.service",
+        )
+        .await?;
+
+        // Phase 3d: write SELinux policy files into the VM so they are present
+        // when SELinux is eventually enabled (Phase 6). The compilation and
+        // `semodule -i` step below is conditional: it is a no-op today (SELinux
+        // is Disabled in the Fedora 44 Container Base) and activates automatically
+        // once `selinux=1` is added to the WSL2 kernel command line.
+        //
+        // @trace plan/issues/selinux-zero-trust-vsock-policy-design-2026-06-29.md (Phase 3d)
+        // @trace plan/issues/vsock-postmortem-host-guest-design-audit-2026-06-29.md (H12)
+        let selinux_dir = "/usr/local/lib/tillandsias/selinux";
+        self.wsl_root_sh(&format!("mkdir -p {selinux_dir}")).await?;
+        for (filename, content) in [
+            ("tillandsias_headless.te", SELINUX_HEADLESS_TE),
+            ("tillandsias_headless.fc", SELINUX_HEADLESS_FC),
+            ("tillandsias_headless.if", SELINUX_HEADLESS_IF),
+            ("tillandsias_vault.te", SELINUX_VAULT_TE),
+            ("tillandsias_vault.fc", SELINUX_VAULT_FC),
+        ] {
+            self.wsl_root_write(&format!("{selinux_dir}/{filename}"), content, false)
+                .await?;
+        }
+        // Conditional: compile + install if SELinux is active (Permissive or Enforcing).
+        // On a Disabled system getenforce exits non-zero or prints "Disabled", so the
+        // `grep -qiE` fails and the block is skipped entirely.
+        self.wsl_root_sh(
+            r#"if getenforce 2>/dev/null | grep -qiE '^(Permissive|Enforcing)'; then
+    cd /usr/local/lib/tillandsias/selinux && \
+    make -f /usr/share/selinux/devel/Makefile tillandsias_headless.pp tillandsias_vault.pp && \
+    semodule -i tillandsias_headless.pp tillandsias_vault.pp && \
+    semanage permissive -a tillandsias_headless_t 2>/dev/null || true && \
+    semanage permissive -a vault_container_t 2>/dev/null || true && \
+    { semanage fcontext -a -t vault_data_t '/var/lib/tillandsias/vault-data(/.*)?' || \
+      semanage fcontext -m -t vault_data_t '/var/lib/tillandsias/vault-data(/.*)?'; } 2>/dev/null || true && \
+    restorecon -Rv /var/lib/tillandsias/vault-data/ 2>/dev/null || true
+fi"#,
         )
         .await?;
 

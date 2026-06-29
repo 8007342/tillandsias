@@ -1437,7 +1437,7 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
             "--security-opt",
             "no-new-privileges",
             "--security-opt",
-            "label=disable",
+            "label=type:vault_container_t",
             "--userns",
             "keep-id",
             "-p",

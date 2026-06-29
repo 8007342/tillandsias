@@ -1,0 +1,74 @@
+policy_module(tillandsias_vault, 1.0)
+
+########################################
+# Types
+########################################
+
+# vault_container_t: the domain the Vault container process runs in.
+# Set via podman --security-opt label=type:vault_container_t.
+type vault_container_t;
+
+# vault_data_t: type for the vault data volume (/var/lib/tillandsias/vault-data).
+# Labeled via: semanage fcontext -a -t vault_data_t '/var/lib/tillandsias/vault-data(/.*)?' && restorecon -Rv ...
+type vault_data_t;
+files_type(vault_data_t)
+
+########################################
+# Vault capabilities
+#
+# The container is launched with --cap-drop ALL --cap-add IPC_LOCK so that
+# Vault can mlock() its secret pages. No other capabilities are granted.
+########################################
+
+allow vault_container_t self:capability ipc_lock;
+
+########################################
+# Vault data volume access
+########################################
+
+manage_dirs_pattern(vault_container_t, vault_data_t, vault_data_t)
+manage_files_pattern(vault_container_t, vault_data_t, vault_data_t)
+
+########################################
+# Vault API server (TCP, port 8200)
+#
+# The Vault container binds 0.0.0.0:8200 inside its network namespace
+# (currently published to 127.0.0.1:8201 on the Fedora 44 host via -p).
+# In Phase 5, this TCP publish will be replaced by a vsock listener on
+# port 42430. Until then, TCP socket operations are required.
+########################################
+
+allow vault_container_t self:tcp_socket {
+    create setopt getopt getattr bind listen accept connect read write shutdown
+};
+allow vault_container_t self:netlink_route_socket {
+    create bind read nlmsg_read write getattr setattr
+};
+
+########################################
+# Handover tmpfs
+#
+# The vault bootstrap uses --tmpfs /run/vault-handover for the root-token
+# handover. tmpfs_t is the standard system type for tmpfs mounts.
+########################################
+
+allow vault_container_t tmpfs_t:dir { read write search add_name remove_name };
+allow vault_container_t tmpfs_t:file { read write create unlink };
+
+########################################
+# Isolation invariant: vault CANNOT connect to vsock
+#
+# Vault has no business opening vsock connections. The control wire (port 42420)
+# and future container-agent ports (42430–42499) must be unreachable from vault.
+# Enforced here at compile time with neverallow, and at runtime because
+# vault_container_t has no vsock_socket permissions granted above.
+########################################
+
+neverallow vault_container_t self:vsock_socket { bind connect listen };
+
+########################################
+# Rollout: start in permissive mode
+# Remove via: semanage permissive -d vault_container_t
+# after verifying ausearch -m avc shows no unexpected denials.
+########################################
+# (not set here — applied by semanage permissive -a in inject_bootstrap_logic)
