@@ -849,10 +849,9 @@ fn has_shamir_share_in_keyring() -> bool {
     // Primary: OS keychain
     if let Ok(entry) = Entry::new(KEYCHAIN_SERVICE, VAULT_SHAMIR_SHARE_V1)
         && let Ok(encoded) = with_keyring_timeout(move || entry.get_password())
+        && try_decode(&encoded)
     {
-        if try_decode(&encoded) {
-            return true;
-        }
+        return true;
     }
 
     // Fallback: file (populated by keychain_set_blocking when keyring unavailable,
