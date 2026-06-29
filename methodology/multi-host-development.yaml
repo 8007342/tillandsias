@@ -91,10 +91,7 @@ multi_host_development:
     before_long_verification: true
     before_checkpoint_push: true
     during_long_work: "at each meaningful checkpoint or before touching shared files"
-    merge_order:
-      - own_platform_branch_from_origin
-      - main
-      - sibling_platform_branches_that_touch_shared_files
+    integration_strategy: "strictly rebase onto origin/<branch> before push; cross-branch integration uses rebase, NOT git merge, to avoid duplicate commit hashes"
     conflict_policy:
       - "Spec, methodology, and plan conflicts block until explicitly reconciled."
       - "Platform crate conflicts stay on the owning platform branch unless a shared API contract changed."
@@ -165,7 +162,7 @@ multi_host_development:
       - "Edit target plan/methodology/openspec file using stable-ID-keyed semantic upsert."
       - "git add ONLY the intended files (never `git add -A` from a dirty tree)."
       - "git commit with `chore(plan): <subject>` or `docs(plan): <subject>`."
-      - "git push origin linux-next. On rejection: `git fetch && git rebase origin/linux-next` and retry up to 3 times."
+      - "git push origin linux-next. On rejection: `git fetch && git rebase origin/linux-next && ./build.sh --check` and retry up to 3 times."
       - "Switch back to your code branch (windows-next / osx-next) when done."
       - "Do not exit a skill successfully with local-only commits or uncommitted tracked changes."
       - "Incomplete but coherent work must be checkpoint-committed, pushed, and recorded in the owning plan item."

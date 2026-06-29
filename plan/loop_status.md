@@ -1,6 +1,20 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-06-26T15:35Z
+LastExecutionTime: 2026-06-28T09:20Z
+
+## This Loop (2026-06-28T07:56Z, linux_mutable — meta-orch + queue drain)
+
+- **Cycle type**: `/meta-orchestration` (coordinator) → `/advance-work-from-plan` drain.
+- **Startup**: `linux-next @ e794eb89`, clean. Credential channel: `ok:gh-keyring`.
+- **macOS coordination**: coordinator merge of `origin/osx-next` (18 ahead) is content-clean (P0 fixes reconcile via main) and brings the new macОС work (macos-tray diagnose/main, vm-layer vsock_exec/vz), but fails `--check` on rustfmt drift in osx-owned `vm-layer/src/vz.rs`. Per the sibling-fmt rule, flagged (not reformatted) in `plan/issues/coord-osx-vz-fmt-drift-2026-06-28.md`; integration resumes after osx `cargo fmt`.
+- **Worker drain (all ready packets)**:
+  - order 115 — `--init` auto-configures podman `dns_servers` on loopback-resolver (systemd-resolved 127.0.0.53) hosts. Unit test + build green.
+  - order 117 — removed all orphaned zeroclaw plumbing (image dir, main.rs/tray/runtime_assets/build.rs refs, dead `LaunchKind/LeafAction::ZeroClaw` launch path that spawned the deleted binary); menu 7→6 leaves; updated pinned leaf-action litmus + removed obsolete zeroclaw-mcp-shape litmus/binding. (A token-out left 2fc97e55 with only the file deletions; the code mods were re-committed as 8e7f5940.)
+  - order 121 — design verdict for the compile-time container dependency model (Option C hybrid).
+  - order 122 slice 1 — new `container_deps` module: Service nodes + const DEPS + topo_order + acyclic/completeness tests (additive, no behavior change). Slices 2–5 (ensure()/typestate/liveness/litmus) remain; packet `in_progress`.
+- **E2E gate**: a clean-wipe curl-install smoke was run earlier this session (v0.3.260627.6 → login stores token → 23 repos); PASS recorded in `plan/issues/smoke-curl-install-e2e-linux-v0.3.260628.1-2026-06-28.md`. No new destructive reset this cycle.
+- **Release**: latest published is **v0.3.260628.1**; no new release this drain cycle (worker slices; release after slice batch or on request).
+- **Queue status**: all `ready` packets drained; order 122 `in_progress` (slices 2–5 remain); macОС integration blocked on osx fmt.
 
 ## This Loop (2026-06-26T10:55Z, linux_mutable — hardcoded-ip DNS migration)
 
