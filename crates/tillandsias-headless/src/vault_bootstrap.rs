@@ -161,7 +161,12 @@ pub fn host_base_url() -> String {
     format!("https://127.0.0.1:{VAULT_HOST_PORT}")
 }
 
-#[cfg(test)]
+/// Direct URL for the in-VM headless to reach the Vault container via the
+/// enclave bridge network. Uses the network alias `vault` which netavark's
+/// aardvark-dns resolves via systemd-resolved. The vault TLS cert carries
+/// `DNS:vault` as a SAN so certificate verification succeeds without any
+/// skip-verify workaround. Bypasses host-side port forwarding (127.0.0.1:8201)
+/// which has a known TLS-hang issue with podman/netavark on Fedora WSL2.
 fn vault_service_base_url() -> String {
     format!("https://{VAULT_NETWORK_ALIAS}:8200")
 }
@@ -171,7 +176,20 @@ fn vault_api_base_url() -> String {
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
-        .unwrap_or_else(host_base_url)
+        .unwrap_or_else(|| {
+            // On Linux (the in-VM headless binary), use the direct enclave
+            // bridge URL. aardvark-dns resolves `vault` via systemd-resolved
+            // and the cert has DNS:vault as a SAN — TLS verifies cleanly.
+            // On macOS/Windows hosts, fall back to the port-forwarded loopback URL.
+            #[cfg(target_os = "linux")]
+            {
+                vault_service_base_url()
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                host_base_url()
+            }
+        })
 }
 
 fn tls_material_dir(debug: bool) -> Result<PathBuf, String> {
@@ -783,17 +801,32 @@ fn vault_data_volume_exists() -> bool {
 #[cfg(feature = "vault")]
 fn has_shamir_share_in_keyring() -> bool {
     use base64::Engine;
-    let Ok(entry) = Entry::new(KEYCHAIN_SERVICE, VAULT_SHAMIR_SHARE_V1) else {
-        return false;
+    let try_decode = |encoded: &str| {
+        !encoded.is_empty()
+            && base64::engine::general_purpose::STANDARD
+                .decode(encoded)
+                .map(|v| v.len() == 32)
+                .unwrap_or(false)
     };
-    let Ok(encoded) = with_keyring_timeout(move || entry.get_password()) else {
-        return false;
-    };
-    !encoded.is_empty()
-        && base64::engine::general_purpose::STANDARD
-            .decode(&encoded)
-            .map(|v| v.len() == 32)
-            .unwrap_or(false)
+
+    // Primary: OS keychain
+    if let Ok(entry) = Entry::new(KEYCHAIN_SERVICE, VAULT_SHAMIR_SHARE_V1) {
+        if let Ok(encoded) = with_keyring_timeout(move || entry.get_password()) {
+            if try_decode(&encoded) {
+                return true;
+            }
+        }
+    }
+
+    // Fallback: file (populated by keychain_set_blocking when keyring unavailable,
+    // e.g. in a VM guest or headless environment without D-Bus)
+    if let Ok(cache_dir) = crate::init_cache_dir() {
+        let fallback = cache_dir.join(format!("fallback_{}", VAULT_SHAMIR_SHARE_V1));
+        if let Ok(encoded) = fs::read_to_string(&fallback) {
+            return try_decode(encoded.trim());
+        }
+    }
+    false
 }
 
 #[cfg(not(feature = "vault"))]

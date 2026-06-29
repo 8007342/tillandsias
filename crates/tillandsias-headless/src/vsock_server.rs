@@ -37,6 +37,11 @@ use crate::pty_handler::PtySessionStore;
 
 const SERVER_NAME: &str = "tillandsias-in-vm";
 
+/// Guard so vault bootstrap runs at most once per process even if multiple
+/// tray connections deliver credentials concurrently.
+#[cfg(feature = "vault")]
+static VAULT_BOOTSTRAP_DONE: AtomicBool = AtomicBool::new(false);
+
 /// Env var that overrides the default in-VM project bind-mount root.
 /// macOS hosts mount the user's `~/src` via virtio-fs into the Linux VM;
 /// Windows hosts mount via `\\wsl$`. The convention is `/home/forge/src`
@@ -565,6 +570,17 @@ async fn handle_connection(
                     installation_uuid,
                     root_token,
                 );
+                #[cfg(feature = "vault")]
+                if VAULT_BOOTSTRAP_DONE
+                    .compare_exchange(false, true, Ordering::SeqCst, Ordering::SeqCst)
+                    .is_ok()
+                {
+                    tokio::task::spawn_blocking(|| {
+                        if let Err(e) = crate::vault_bootstrap::ensure_vault_running(false) {
+                            eprintln!("[vsock] vault bootstrap after DeliverCredentials failed: {e}");
+                        }
+                    });
+                }
                 let reply = ControlEnvelope {
                     wire_version: WIRE_VERSION,
                     seq: env.seq,
@@ -709,20 +725,45 @@ fn enumerate_local_projects() -> Vec<LocalProjectEntry> {
 const IN_VM_GITHUB_TOKEN_PATH: &str = "/run/secrets/tillandsias-github-token";
 
 /// Fetch the user's cloud (GitHub) projects from inside the VM. Reads
-/// the mounted token, then delegates the `gh` invocation + JSON parse
-/// to the shared `crate::cloud_projects::fetch_cloud_projects` helper.
+/// the mounted token file first; if absent, falls back to reading the
+/// token directly from Vault via `podman exec` (the vsock listener runs
+/// outside any container, so the secret mount at IN_VM_GITHUB_TOKEN_PATH
+/// is not available). Delegates the `gh` invocation + JSON parse to the
+/// shared `crate::cloud_projects::fetch_cloud_projects` helper.
 ///
 /// @trace spec:host-shell-architecture, spec:tillandsias-vault
 fn fetch_cloud_projects() -> Vec<CloudProjectEntry> {
+    // Primary: secret mount (populated when running inside a container).
     let token = match std::fs::read_to_string(IN_VM_GITHUB_TOKEN_PATH) {
         Ok(t) if !t.trim().is_empty() => t.trim().to_string(),
         _ => {
-            debug!(
-                spec = "host-shell-architecture",
-                path = IN_VM_GITHUB_TOKEN_PATH,
-                "CloudRefreshRequest (in-VM): no GitHub token mounted; returning empty cloud list"
-            );
-            return Vec::new();
+            // Fallback: read from Vault via podman exec (vsock listener mode).
+            #[cfg(feature = "vault")]
+            {
+                match crate::vault_bootstrap::vault_kv_get_via_exec(
+                    "secret/github/token",
+                    "token",
+                    false,
+                ) {
+                    Ok(t) if !t.trim().is_empty() => t.trim().to_string(),
+                    _ => {
+                        debug!(
+                            spec = "host-shell-architecture",
+                            "CloudRefreshRequest (in-VM): no GitHub token in mount or Vault; returning empty cloud list"
+                        );
+                        return Vec::new();
+                    }
+                }
+            }
+            #[cfg(not(feature = "vault"))]
+            {
+                debug!(
+                    spec = "host-shell-architecture",
+                    path = IN_VM_GITHUB_TOKEN_PATH,
+                    "CloudRefreshRequest (in-VM): no GitHub token mounted; returning empty cloud list"
+                );
+                return Vec::new();
+            }
         }
     };
     crate::cloud_projects::fetch_cloud_projects(Some(&token))

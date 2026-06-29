@@ -7276,3 +7276,41 @@ plan_index:
         - "check_github_token_health removed — DONE"
         - "vault_kv_get_via_exec primitive added to vault_bootstrap — DONE"
         - "./build.sh --check passes — DONE"
+
+    - packet_id: vsock-vault-bootstrap-e2e
+      order: 114
+      title: "vsock vault bootstrap + GitHub login and cloud project listing end-to-end"
+      status: in_progress
+      kind: feature+bugfix
+      deliverable: plan/steps/114-vsock-vault-bootstrap-e2e.md
+      depends_on: [vault-credential-host-exposure]
+      pickup_role: windows
+      estimated_hours: 4
+      outcome: >
+        The vsock listener (--listen-vsock mode) automatically bootstraps Vault after
+        DeliverCredentials arrives from the Windows tray. vault_api_base_url on Linux
+        uses https://vault:8200 (aardvark-dns bridge path, bypasses TLS-hanging
+        host port-forward at 127.0.0.1:8201). has_shamir_share_in_keyring checks the
+        file fallback (populated by keychain_set_blocking in WSL2 where D-Bus is absent).
+        CloudRefreshRequest falls back to vault_kv_get_via_exec when the secret mount
+        at /run/secrets/tillandsias-github-token is absent.
+      events:
+        - type: in_progress
+          ts: "2026-06-29T00:00Z"
+          agent_id: "windows-sonnet46-20260629"
+          summary: >
+            Three fixes applied to vault_bootstrap.rs and vsock_server.rs:
+            (1) vault_api_base_url uses https://vault:8200 on Linux to bypass TLS-hanging
+            conmon port-forward; (2) has_shamir_share_in_keyring checks file fallback for
+            WSL2 environments without D-Bus; (3) fetch_cloud_projects falls back to
+            vault_kv_get_via_exec when the secret mount file is absent.
+            VAULT_BOOTSTRAP_DONE AtomicBool gates single-run bootstrap after credentials.
+            Pending: CI build of new Linux musl binary, VM deployment, e2e test of
+            vsock → vault → GitHub token → cloud projects flow.
+      exit_criteria:
+        - "vault_api_base_url uses https://vault:8200 on Linux"
+        - "has_shamir_share_in_keyring checks ~/.cache/tillandsias/fallback_vault-shamir-share-v1"
+        - "fetch_cloud_projects falls back to vault_kv_get_via_exec when file absent"
+        - "DeliverCredentials handler triggers vault bootstrap via spawn_blocking"
+        - "CI (linux musl) build passes with new binary"
+        - "Windows tray → vsock → vault bootstraps → CloudRefreshRequest returns real projects"
