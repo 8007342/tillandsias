@@ -8,14 +8,15 @@
 # labels + MUST_NOT tombstones, but doesn't pin the LeafAction
 # enum or the "By Tlatoāni" attribution.
 #
-# The spec now follows the deployed 7-leaf set; this litmus keeps
-# the implementation pinned so a future regression back to 4 or 6
-# leaves is caught immediately.
+# The spec now follows the deployed 6-leaf set (the orphaned
+# ZeroClaw leaf was removed after the zeroclaw binary/crate/image
+# were retired); this litmus keeps the implementation pinned so a
+# future regression back to 4 or 5 leaves is caught immediately.
 name: litmus:simplified-tray-ux-leaf-action-shape
 spec: simplified-tray-ux
 phase: pre-build
 description: >
-  Pin the simplified-tray-ux LeafAction enum (7 variants), the
+  Pin the simplified-tray-ux LeafAction enum (6 variants), the
   LeafAction::ALL array constant, the "By Tlatoāni" attribution
   literal, and the static-pre-built-menu 4-element documentation
   (Status / Separator / Version / Quit per Req 1).
@@ -35,20 +36,20 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "enum LeafAction"
 
-  - step: "Req Home Menu: 7 LeafAction variants (Claude/Codex/OpenCode/OpenCodeWeb/Observatorium/Maintenance/ZeroClaw)"
-    # Pin all 7 variant names so a refactor dropping any deployed
+  - step: "Req Home Menu: 6 LeafAction variants (Claude/Codex/OpenCode/OpenCodeWeb/Observatorium/Maintenance)"
+    # Pin all 6 variant names so a refactor dropping any deployed
     # menu leaf surfaces fast.
-    command: "for v in Claude Codex OpenCode OpenCodeWeb Observatorium Maintenance ZeroClaw; do grep -Eq \"^    $v,\" crates/tillandsias-headless/src/tray/mod.rs || { echo \"FAIL: LeafAction::$v variant missing\"; exit 1; }; done && echo \"ok: 7 LeafAction variants\""
+    command: "for v in Claude Codex OpenCode OpenCodeWeb Observatorium Maintenance; do grep -Eq \"^    $v,\" crates/tillandsias-headless/src/tray/mod.rs || { echo \"FAIL: LeafAction::$v variant missing\"; exit 1; }; done && echo \"ok: 6 LeafAction variants\""
     timeout_ms: 3000
     expected_behavior: "ok:"
 
-  - step: "Req Home Menu: LeafAction::ALL constant lists all 7 variants in canonical offset order"
+  - step: "Req Home Menu: LeafAction::ALL constant lists all 6 variants in canonical offset order"
     # The ALL array is the static-pre-built-menu's iteration order.
-    # Pinning by `const ALL: [LeafAction; 7]` literal catches a
+    # Pinning by `const ALL: [LeafAction; 6]` literal catches a
     # regression that silently shrinks the array.
-    command: "grep -F 'const ALL: [LeafAction; 7]' crates/tillandsias-headless/src/tray/mod.rs"
+    command: "grep -F 'const ALL: [LeafAction; 6]' crates/tillandsias-headless/src/tray/mod.rs"
     timeout_ms: 3000
-    expected_behavior: "ALL: [LeafAction; 7]"
+    expected_behavior: "ALL: [LeafAction; 6]"
 
   - step: "Req Startup Menu: 'By Tlatoāni' attribution literal in menu construction"
     # Spec § Req 1 Menu element 3: `Version & Attribution` —
@@ -68,20 +69,19 @@ critical_path:
     timeout_ms: 3000
     expected_behavior: "id=31"
 
-  - step: "Req Home Menu: docblock pins LeafAction offset layout (+0 Claude → +6 ZeroClaw)"
-    # The offset-table docblock at lines 2015-2023 maps each
-    # LeafAction variant to its position offset. A regression to
-    # the offset values would silently break the
-    # `project_action_from_id` dispatch helper.
-    command: "grep -F '| +0     | Claude' crates/tillandsias-headless/src/tray/mod.rs && grep -F '| +6     | ZeroClaw' crates/tillandsias-headless/src/tray/mod.rs"
+  - step: "Req Home Menu: docblock pins LeafAction offset layout (+0 Claude → +5 Maintenance, +6 submenu node)"
+    # The offset-table docblock maps each LeafAction variant to its
+    # position offset. A regression to the offset values would
+    # silently break the `project_action_from_id` dispatch helper.
+    command: "grep -F '| +0     | Claude' crates/tillandsias-headless/src/tray/mod.rs && grep -F '| +5     | Maintenance' crates/tillandsias-headless/src/tray/mod.rs"
     timeout_ms: 3000
-    expected_behavior: "+6     | ZeroClaw"
+    expected_behavior: "+5     | Maintenance"
 
 observability:
   traces:
     - "@trace spec:simplified-tray-ux"
     - "@trace spec:tray-minimal-ux"
-  expected_log: "LeafAction enum + 7 variants + ALL constant + By Tlatoāni + Quit + offset table pinned"
+  expected_log: "LeafAction enum + 6 variants + ALL constant + By Tlatoāni + Quit + offset table pinned"
   log_fields:
     spec: "simplified-tray-ux"
     test: "simplified-tray-ux-leaf-action-shape"
@@ -90,10 +90,10 @@ observability:
 rollback:
   on_failure: >
     A `spec:simplified-tray-ux` surface drifted. Restore `enum
-    LeafAction` with the 7 variants {Claude, Codex, OpenCode,
-    OpenCodeWeb, Observatorium, Maintenance, ZeroClaw}; the
-    `const ALL: [LeafAction; 7]` constant; the `By Tlatoāni`
+    LeafAction` with the 6 variants {Claude, Codex, OpenCode,
+    OpenCodeWeb, Observatorium, Maintenance}; the
+    `const ALL: [LeafAction; 6]` constant; the `By Tlatoāni`
     attribution literal; the docblock pinning Version + Quit
     Tillandsias menu IDs (30 + 31); the LeafAction offset table
-    (+0 Claude through +6 ZeroClaw).
-  command: "grep -nE 'enum LeafAction|LeafAction::(Claude|Codex|OpenCode|OpenCodeWeb|Observatorium|Maintenance|ZeroClaw)|const ALL: \\[LeafAction|By Tlatoāni|id=3[01]|\\| \\+[0-9]+' crates/tillandsias-headless/src/tray/mod.rs | head -25"
+    (+0 Claude through +5 Maintenance, +6 submenu node).
+  command: "grep -nE 'enum LeafAction|LeafAction::(Claude|Codex|OpenCode|OpenCodeWeb|Observatorium|Maintenance)|const ALL: \\[LeafAction|By Tlatoāni|id=3[01]|\\| \\+[0-9]+' crates/tillandsias-headless/src/tray/mod.rs | head -25"

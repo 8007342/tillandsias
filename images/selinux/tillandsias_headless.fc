@@ -1,0 +1,11 @@
+# File contexts for tillandsias_headless policy module.
+# After semodule -i, run: restorecon -Rv /usr/local/bin/tillandsias-headless /var/lib/tillandsias /run/tillandsias
+
+# Binary exec path — triggers domain transition on exec by init_t / init_daemon_domain
+/usr/local/bin/tillandsias-headless     --  gen_context(system_u:object_r:tillandsias_headless_exec_t,s0)
+
+# State directory: installation UUID, credential cache, vault-data pointer
+/var/lib/tillandsias(/.*)?                  gen_context(system_u:object_r:tillandsias_headless_var_t,s0)
+
+# Runtime directory: vsock-local Unix sockets, PTY broker endpoints
+/run/tillandsias(/.*)?                      gen_context(system_u:object_r:tillandsias_headless_run_t,s0)

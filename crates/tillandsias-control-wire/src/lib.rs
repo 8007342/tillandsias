@@ -39,6 +39,7 @@ use serde::{Deserialize, Serialize};
 /// @trace spec:vsock-transport, spec:host-shell-architecture
 pub const WIRE_VERSION: u16 = 2;
 
+pub mod guest_transport;
 pub mod transport;
 
 /// Maximum permitted single-message length on the wire. Length prefixes

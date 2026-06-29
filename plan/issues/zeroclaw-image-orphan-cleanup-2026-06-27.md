@@ -1,6 +1,6 @@
 # Orphaned ZeroClaw Image Plumbing After Binary Removal
 
-**Status:** `ready`
+**Status:** `completed`
 **Owner:** linux
 **Date:** 2026-06-27
 **Kind:** cleanup / tech-debt

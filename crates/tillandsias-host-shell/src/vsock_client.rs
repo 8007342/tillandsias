@@ -29,6 +29,22 @@ use tillandsias_control_wire::{
 /// "within 2s of VM start" budget.
 pub const DEFAULT_HANDSHAKE_TIMEOUT: Duration = Duration::from_secs(2);
 
+/// Canonical capability set advertised by ALL host senders (Windows tray,
+/// macOS tray, host-shell test clients). Having a single source of truth
+/// ensures `Hello` messages from both tray implementations are identical and
+/// guarantees the headless sees `"pty.attach@v1"` (required by
+/// spec:vsock-transport before any `PtyOpen` variant may be accepted).
+///
+/// @trace plan/issues/vsock-postmortem-host-guest-design-audit-2026-06-29.md (H6)
+/// @trace openspec/changes/control-wire-pty-attach/specs/vsock-transport/spec.md
+pub const STANDARD_HOST_CAPABILITIES: &[&str] = &[
+    "VmStatusRequest",
+    "VmShutdownRequest",
+    "EnumerateLocalProjects",
+    "CloudRefreshRequest",
+    "pty.attach@v1",
+];
+
 /// Backoff schedule for the reconnect loop. Mirrors the spec's
 /// `250ms / 500ms / 1s / 2s / 4s` cap.
 pub const BACKOFF_SCHEDULE: &[Duration] = &[
@@ -104,12 +120,10 @@ impl Client {
             seq,
             body: ControlMessage::Hello {
                 from: "tillandsias-host-shell".to_string(),
-                capabilities: vec![
-                    "VmStatusRequest".to_string(),
-                    "VmShutdownRequest".to_string(),
-                    "EnumerateLocalProjects".to_string(),
-                    "CloudRefreshRequest".to_string(),
-                ],
+                capabilities: STANDARD_HOST_CAPABILITIES
+                    .iter()
+                    .map(|s| s.to_string())
+                    .collect(),
             },
         };
         self.send(&hello).await?;
@@ -202,6 +216,36 @@ pub async fn connect_with_handshake(transport: Transport, timeout: Duration) -> 
 // on Unix (production Windows/macOS use `Transport::Vsock`). Gate the module
 // on `unix` so `cargo test` compiles on the Windows host; Linux + macOS still
 // run them.
+#[cfg(test)]
+mod capability_tests {
+    use super::*;
+
+    /// Both tray implementations send `Hello` using `STANDARD_HOST_CAPABILITIES`.
+    /// This guards against drift (e.g. adding `"pty.attach@v1"` to one sender
+    /// but not the other, breaking PTY attach on one platform).
+    #[test]
+    fn standard_capabilities_include_pty_attach() {
+        assert!(
+            STANDARD_HOST_CAPABILITIES.contains(&"pty.attach@v1"),
+            "STANDARD_HOST_CAPABILITIES must include \"pty.attach@v1\" (required by spec:vsock-transport)"
+        );
+    }
+
+    #[test]
+    fn standard_capabilities_include_core_rpc_set() {
+        for cap in &[
+            "VmStatusRequest",
+            "VmShutdownRequest",
+            "EnumerateLocalProjects",
+        ] {
+            assert!(
+                STANDARD_HOST_CAPABILITIES.contains(cap),
+                "STANDARD_HOST_CAPABILITIES must include \"{cap}\""
+            );
+        }
+    }
+}
+
 #[cfg(all(test, unix))]
 mod tests {
     use super::*;

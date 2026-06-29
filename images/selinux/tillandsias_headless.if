@@ -1,0 +1,31 @@
+## <summary>Tillandsias in-VM control daemon (vsock boundary policy)</summary>
+## <desc>
+## <p>
+##   Policy for tillandsias-headless, the Rust daemon that binds AF_VSOCK
+##   port 42420 inside the Fedora 44 WSL2 instance and bridges the Windows
+##   host tray (via HvSocket) to in-VM podman containers.
+## </p>
+## <p>
+##   Use the interface below to grant container domains (vault, forge, etc.)
+##   permission to connect to headless vsock service ports (42430–42499)
+##   in Phase 5 (vsock-in-vsock). Do NOT grant connectto on the control-wire
+##   port (42420) to any container domain.
+## </p>
+## </desc>
+
+########################################
+## <summary>
+##   Allow a container domain to connect to a tillandsias-headless vsock port.
+##   Used in Phase 5 for container-agent back-channel vsock connections.
+## </summary>
+## <param name="domain">The container domain type (e.g. forge_container_t).</param>
+#
+interface(`tillandsias_headless_vsock_connect',`
+    gen_require(`
+        type tillandsias_headless_t;
+    ')
+    allow $1 self:vsock_socket {
+        create setopt getopt getattr connect read write recv_msg send_msg shutdown
+    };
+    allow $1 tillandsias_headless_t:vsock_socket connectto;
+')

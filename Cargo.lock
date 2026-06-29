@@ -2921,6 +2921,7 @@ dependencies = [
 name = "tillandsias-control-wire"
 version = "0.1.170"
 dependencies = [
+ "async-trait",
  "postcard",
  "serde",
  "tempfile",

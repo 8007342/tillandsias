@@ -1,0 +1,67 @@
+policy_module(tillandsias_headless, 1.0)
+
+########################################
+# Types
+########################################
+
+type tillandsias_headless_t;
+type tillandsias_headless_exec_t;
+
+# Domain transition: systemd executes the binary labeled tillandsias_headless_exec_t,
+# and the process automatically transitions into tillandsias_headless_t.
+init_daemon_domain(tillandsias_headless_t, tillandsias_headless_exec_t)
+
+# State directory (/var/lib/tillandsias/)
+type tillandsias_headless_var_t;
+files_type(tillandsias_headless_var_t)
+
+# Runtime directory (/run/tillandsias/) — sockets, PIDs, container pty endpoints
+type tillandsias_headless_run_t;
+files_type(tillandsias_headless_run_t)
+
+########################################
+# Boundary 1: HvSocket → AF_VSOCK (port 42420 control wire)
+########################################
+
+# Bind, listen, and accept on the control wire vsock socket.
+allow tillandsias_headless_t self:vsock_socket {
+    create setopt getopt getattr bind listen accept
+    read write recv_msg send_msg shutdown
+};
+
+# The HvSocket bridge presents incoming connections as kernel_t on Linux.
+# If audit logs show a different peer label on your kernel, adjust here.
+allow tillandsias_headless_t kernel_t:vsock_socket accept;
+
+########################################
+# Podman access (container lifecycle management)
+########################################
+
+# Execute binaries in standard system bin directories (podman, systemctl, etc.)
+can_exec(tillandsias_headless_t, bin_t)
+
+########################################
+# File system access
+########################################
+
+# Read/write own state directory
+manage_dirs_pattern(tillandsias_headless_t, tillandsias_headless_var_t, tillandsias_headless_var_t)
+manage_files_pattern(tillandsias_headless_t, tillandsias_headless_var_t, tillandsias_headless_var_t)
+
+# Read/write runtime directory (Unix sockets, pid files)
+manage_dirs_pattern(tillandsias_headless_t, tillandsias_headless_run_t, tillandsias_headless_run_t)
+manage_files_pattern(tillandsias_headless_t, tillandsias_headless_run_t, tillandsias_headless_run_t)
+manage_sock_files_pattern(tillandsias_headless_t, tillandsias_headless_run_t, tillandsias_headless_run_t)
+
+# Read /etc configuration files (headless reads /etc/tillandsias/ if present)
+files_read_etc_files(tillandsias_headless_t)
+
+# Write to the system journal
+logging_send_syslog_msg(tillandsias_headless_t)
+
+########################################
+# Rollout: start in permissive mode
+# Remove via: semanage permissive -d tillandsias_headless_t
+# after verifying ausearch -m avc shows no unexpected denials.
+########################################
+# (not set here — applied by semanage permissive -a in inject_bootstrap_logic)

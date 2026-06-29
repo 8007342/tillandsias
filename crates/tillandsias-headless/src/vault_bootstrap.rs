@@ -24,7 +24,7 @@ use std::time::Duration;
 use keyring::Entry;
 
 use tillandsias_podman::{PodmanClient, podman_cmd_sync};
-use tillandsias_vault_client::{Policy, VaultClient, auto_unseal};
+use tillandsias_vault_client::{HealthStatus, Policy, VaultClient, auto_unseal};
 use zeroize::Zeroize;
 
 const VAULT_CONTAINER_NAME: &str = "tillandsias-vault";
@@ -156,12 +156,20 @@ fn revocation_registry() -> &'static Mutex<HashMap<String, String>> {
     REG.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-/// Default base URL the Linux tray uses to talk to the local Vault container.
+/// Default base URL the macOS/Windows tray uses to talk to the local Vault
+/// container via the host-side port-forward. Not used on Linux where the
+/// in-VM headless reaches Vault directly over the enclave bridge network.
+#[cfg(not(target_os = "linux"))]
 pub fn host_base_url() -> String {
     format!("https://127.0.0.1:{VAULT_HOST_PORT}")
 }
 
-#[cfg(test)]
+/// Direct URL for the in-VM headless to reach the Vault container via the
+/// enclave bridge network. Uses the network alias `vault` which netavark's
+/// aardvark-dns resolves via systemd-resolved. The vault TLS cert carries
+/// `DNS:vault` as a SAN so certificate verification succeeds without any
+/// skip-verify workaround. Bypasses host-side port forwarding (127.0.0.1:8201)
+/// which has a known TLS-hang issue with podman/netavark on Fedora WSL2.
 fn vault_service_base_url() -> String {
     format!("https://{VAULT_NETWORK_ALIAS}:8200")
 }
@@ -171,7 +179,20 @@ fn vault_api_base_url() -> String {
         .ok()
         .map(|value| value.trim().to_string())
         .filter(|value| !value.is_empty())
-        .unwrap_or_else(host_base_url)
+        .unwrap_or_else(|| {
+            // On Linux (the in-VM headless binary), use the direct enclave
+            // bridge URL. aardvark-dns resolves `vault` via systemd-resolved
+            // and the cert has DNS:vault as a SAN — TLS verifies cleanly.
+            // On macOS/Windows hosts, fall back to the port-forwarded loopback URL.
+            #[cfg(target_os = "linux")]
+            {
+                vault_service_base_url()
+            }
+            #[cfg(not(target_os = "linux"))]
+            {
+                host_base_url()
+            }
+        })
 }
 
 fn tls_material_dir(debug: bool) -> Result<PathBuf, String> {
@@ -367,8 +388,8 @@ pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
         let rt = tokio_runtime()?;
         let base_url = vault_api_base_url();
         let client = vault_client(&base_url, "", debug)?;
-        match rt.block_on(client.health()) {
-            Ok(h) if h.initialized && !h.sealed => {
+        match wait_for_vault_api_ready(&rt, &client, debug) {
+            Ok(h) => {
                 if debug {
                     eprintln!(
                         "[tillandsias-vault] container already running and unsealed (v={})",
@@ -392,10 +413,10 @@ pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
                 }
                 return Ok(());
             }
-            other => {
+            Err(e) => {
                 if debug {
                     eprintln!(
-                        "[tillandsias-vault] container present but health probe returned {other:?}; relaunching"
+                        "[tillandsias-vault] container present but health probe returned {e}; relaunching"
                     );
                 }
             }
@@ -430,6 +451,44 @@ pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
     eprintln!("[tillandsias-vault]   policies : {:?}", Policy::all());
     eprintln!("[tillandsias-vault]   base_url : {base_url}");
     Ok(())
+}
+
+fn wait_for_vault_api_ready(
+    rt: &tokio::runtime::Runtime,
+    client: &VaultClient,
+    debug: bool,
+) -> Result<HealthStatus, String> {
+    let mut delay = Duration::from_millis(250);
+    let max_delay = Duration::from_secs(2);
+    let mut last_failure = "vault API probe did not run".to_string();
+    const MAX_API_PROBE_ATTEMPTS: usize = 8;
+
+    for attempt in 1..=MAX_API_PROBE_ATTEMPTS {
+        match rt.block_on(client.health()) {
+            Ok(h) if h.initialized && !h.sealed => return Ok(h),
+            Ok(h) => {
+                last_failure = format!(
+                    "vault API reports initialized={} sealed={}",
+                    h.initialized, h.sealed
+                );
+            }
+            Err(e) => {
+                last_failure = format!("vault API probe failed: {e}");
+            }
+        }
+        if attempt == MAX_API_PROBE_ATTEMPTS {
+            break;
+        }
+        if debug {
+            eprintln!(
+                "[tillandsias-vault] {last_failure}; retrying API probe ({attempt}/{MAX_API_PROBE_ATTEMPTS})"
+            );
+        }
+        rt.block_on(tokio::time::sleep(delay));
+        delay = std::cmp::min(delay.saturating_mul(2), max_delay);
+    }
+
+    Err(last_failure)
 }
 
 /// Compatibility shim retained for the deprecated `--with-vault` opt-in
@@ -779,17 +838,31 @@ fn vault_data_volume_exists() -> bool {
 #[cfg(feature = "vault")]
 fn has_shamir_share_in_keyring() -> bool {
     use base64::Engine;
-    let Ok(entry) = Entry::new(KEYCHAIN_SERVICE, VAULT_SHAMIR_SHARE_V1) else {
-        return false;
+    let try_decode = |encoded: &str| {
+        !encoded.is_empty()
+            && base64::engine::general_purpose::STANDARD
+                .decode(encoded)
+                .map(|v| v.len() == 32)
+                .unwrap_or(false)
     };
-    let Ok(encoded) = with_keyring_timeout(move || entry.get_password()) else {
-        return false;
-    };
-    !encoded.is_empty()
-        && base64::engine::general_purpose::STANDARD
-            .decode(&encoded)
-            .map(|v| v.len() == 32)
-            .unwrap_or(false)
+
+    // Primary: OS keychain
+    if let Ok(entry) = Entry::new(KEYCHAIN_SERVICE, VAULT_SHAMIR_SHARE_V1)
+        && let Ok(encoded) = with_keyring_timeout(move || entry.get_password())
+        && try_decode(&encoded)
+    {
+        return true;
+    }
+
+    // Fallback: file (populated by keychain_set_blocking when keyring unavailable,
+    // e.g. in a VM guest or headless environment without D-Bus)
+    if let Ok(cache_dir) = crate::init_cache_dir()
+        && let Ok(encoded) =
+            fs::read_to_string(cache_dir.join(format!("fallback_{}", VAULT_SHAMIR_SHARE_V1)))
+    {
+        return try_decode(encoded.trim());
+    }
+    false
 }
 
 #[cfg(not(feature = "vault"))]
@@ -1433,7 +1506,7 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
             "--security-opt",
             "no-new-privileges",
             "--security-opt",
-            "label=disable",
+            "label=type:vault_container_t",
             "--userns",
             "keep-id",
             "-p",
@@ -1462,28 +1535,18 @@ fn wait_for_vault_ready(
         .map_err(|e| format!("vault container did not report healthy: {e}"))?;
 
     let client = vault_client(base_url, "", debug)?; // health doesn't need a token
-    match rt.block_on(client.health()) {
-        Ok(h) if h.initialized && !h.sealed => {
+    match wait_for_vault_api_ready(rt, &client, debug) {
+        Ok(h) => {
             if debug {
                 eprintln!(
                     "[tillandsias-vault] vault healthy (initialized={} sealed={} v={})",
                     h.initialized, h.sealed, h.version
                 );
             }
+            read_and_handover_root_token(debug)
         }
-        Ok(h) => {
-            return Err(format!(
-                "vault podman health is healthy but API reports initialized={} sealed={}",
-                h.initialized, h.sealed
-            ));
-        }
-        Err(e) => {
-            return Err(format!(
-                "vault podman health is healthy but API probe failed: {e}"
-            ));
-        }
+        Err(e) => Err(format!("vault podman health is healthy but {e}")),
     }
-    read_and_handover_root_token(debug)
 }
 
 /// Read a single handover file from the running Vault container's tmpfs.
@@ -1802,6 +1865,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_os = "linux"))]
     fn host_base_url_targets_loopback() {
         let url = host_base_url();
         assert!(url.starts_with("https://127.0.0.1:"), "got {url}");

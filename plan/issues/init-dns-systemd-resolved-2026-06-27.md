@@ -1,6 +1,6 @@
 # Init Fails on systemd-resolved Hosts — DNS in Build Containers
 
-**Status:** `ready`
+**Status:** `completed`
 **Owner:** linux
 **Date:** 2026-06-27
 **Kind:** bug / enhancement

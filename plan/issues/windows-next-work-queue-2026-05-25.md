@@ -1457,3 +1457,17 @@ Ready, step-32-independent packet for this host: **keyring persistent-backend ve
 - **E2E gates**: Not run — loop_status designates Linux primary for e2e; Windows primary is "none; keep windows-next synced".
 - **Verification**: `git status --short` clean (except untracked `repeat.ps1`). `windows-next` at `76f90224`, 0 ahead of `origin/linux-next`.
 - **Pushed**: `origin/windows-next` advanced `38e6e972..76f90224`.
+
+## 2026-06-29T22:50Z — order 114 vsock vault bootstrap + GitHub token (in-progress)
+
+- **Agent**: `windows-sonnet46-20260629T2249Z`
+- **Scope**: order 114 — vsock-vault-bootstrap-e2e
+- `ace36998` fix(clippy): fully collapse OS-keychain if-let chain in has_shamir_share_in_keyring
+- `205867c9` chore(merge): union-resolve linux-next into windows-next (order 114 progress)
+- `448113e2` fix(clippy): gate host_base_url to non-linux; collapse nested if-lets
+- `5e6b49e7` fix(vsock): CloudRefreshRequest uses containerized gh path (order 114)
+- `02350f4f` feat(vsock): vault bootstrap + GitHub token fallback for vsock CloudRefresh
+- **VM state**: GitHub PAT written to vault at `secret/github/token` (v1, 2026-06-29T22:41Z). Vault at `10.0.42.11:8200`, unsealed. Fallback files updated.
+- **CI**: Run 28408139744 in_progress on `ace36998`; 2 prior CI runs failed on clippy (collapsible_if, dead_code). All issues now fixed.
+- **Blocked on**: CI pass → release workflow → new musl binary → VM deploy → e2e test.
+- **Next**: When CI green, trigger `release.yml --ref main` after PR #57 merges, or build musl locally via `./build.sh --ci-full --install` if linux host is available.

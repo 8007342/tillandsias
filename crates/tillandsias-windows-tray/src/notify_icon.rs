@@ -76,7 +76,7 @@ use tillandsias_host_shell::menu_state::{
     self, GithubLoginState, MenuItem, MenuState, MenuStructure, ProjectEntry, SelectedAgent,
 };
 use tillandsias_host_shell::provisioning::{ProvisionPhase, ProvisionProgress};
-use tillandsias_host_shell::pty::{intent_for_action, launch_spec};
+use tillandsias_host_shell::pty::{PtyIntent, intent_for_action, launch_spec};
 use tillandsias_host_shell::scanner::{ProjectEvent, watch_projects};
 
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
@@ -120,6 +120,24 @@ thread_local! {
 
 /// Shared state accessible from any thread.
 static MENU_STATE: Mutex<Option<MenuState>> = Mutex::new(None);
+
+/// Persistent control-wire client — one shared connection reused by all
+/// periodic refresh functions. Initialised lazily on first successful connect;
+/// cleared on request failure (triggers reconnect on the next call).
+///
+/// Using `tokio::sync::Mutex` (not std) because `Client` can only be used from
+/// within an async context; all callers already hold a tokio executor.
+/// `Client: Send` (all fields implement Send), so `Mutex<Option<Client>>: Sync`.
+///
+/// @trace plan/issues/vsock-postmortem-host-guest-design-audit-2026-06-29.md (H8, Phase 2b)
+static LIVE_CLIENT: std::sync::OnceLock<
+    tokio::sync::Mutex<Option<tillandsias_host_shell::vsock_client::Client>>,
+> = std::sync::OnceLock::new();
+
+fn live_client_mutex()
+-> &'static tokio::sync::Mutex<Option<tillandsias_host_shell::vsock_client::Client>> {
+    LIVE_CLIENT.get_or_init(|| tokio::sync::Mutex::new(None))
+}
 
 /// Progress sink the WSL provisioning pipeline writes to. Each report
 /// updates the cached `MenuState.status_text` and pokes the window so the
@@ -965,27 +983,54 @@ fn vm_phase_status_text(phase: tillandsias_control_wire::VmPhase, podman_ready: 
     }
 }
 
-/// Poll the in-VM `VmStatus` once over the control wire and reflect it in the
-/// shared `MenuState`: sets `podman_ready` (which gates per-project actions like
-/// "Attach Here" in `menu_state::build`) and refreshes the status line + tooltip
-/// from the live phase. Best-effort — a transient wire error leaves the last
-/// known state untouched (logged at debug). Reuses the proven handshake +
-/// `VmStatusRequest` path.
-async fn refresh_vm_status(hwnd: HWND) {
+/// Send a single control-wire request, reusing the persistent `LIVE_CLIENT` when
+/// healthy or opening a fresh connection (with handshake + credentials) when the
+/// live client is absent or stale. Returns `None` if the VM is unreachable.
+///
+/// `make_body(seq)` produces the request body using the sequence number allocated
+/// by the client — pass a closure like `|seq| ControlMessage::VmStatusRequest { seq }`.
+/// The closure must be `Clone` so it can be called twice on reconnect.
+///
+/// @trace plan/issues/vsock-postmortem-host-guest-design-audit-2026-06-29.md (H8, Phase 2b)
+async fn live_client_request(
+    ctx: &str,
+    make_body: impl Fn(u64) -> tillandsias_control_wire::ControlMessage + Clone,
+    hwnd: HWND,
+) -> Option<tillandsias_control_wire::ControlEnvelope> {
     use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
-    use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
+    use tillandsias_control_wire::{ControlEnvelope, WIRE_VERSION};
     use tillandsias_host_shell::vsock_client::Client;
 
-    // Open HvSocket (Windows realization of vsock-connect) + drive the standard
-    // host-shell Client — same shared Client + Hello/HelloAck + request path as
-    // the macOS poll_vm_status_once (slice 4, `80d9196e`), only the transport
-    // open differs per OS.
+    // Fast path: reuse existing live client.
+    {
+        let mut guard = live_client_mutex().lock().await;
+        if let Some(client) = guard.as_mut() {
+            let seq = client.allocate_seq();
+            let body = make_body(seq);
+            let env = ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq,
+                body,
+            };
+            match client.request(&env).await {
+                Ok(reply) => return Some(reply),
+                Err(err) => {
+                    tracing::debug!(%err, ctx, "live client failed; will reconnect");
+                    *guard = None;
+                    // Do NOT call mark_wire_unreachable here — the slow-path
+                    // reconnect below might succeed (no balloon needed).
+                }
+            }
+        }
+    } // lock released before reconnect — avoids holding it during spawn_blocking
+
+    // Slow path: open a new HvSocket connection.
     let stream = match crate::hvsocket::open_hvsocket_stream(CONTROL_WIRE_VSOCK_PORT).await {
-        Ok(stream) => stream,
+        Ok(s) => s,
         Err(err) => {
-            tracing::debug!(%err, "vm status poll: control wire unreachable");
+            tracing::debug!(%err, ctx, "control wire unreachable");
             mark_wire_unreachable(hwnd);
-            return;
+            return None;
         }
     };
     let mut client = Client::from_stream(
@@ -996,28 +1041,53 @@ async fn refresh_vm_status(hwnd: HWND) {
         },
     );
     if let Err(err) = client.handshake().await {
-        tracing::debug!(%err, "vm status poll: handshake failed");
+        tracing::debug!(%err, ctx, "handshake failed");
         mark_wire_unreachable(hwnd);
-        return;
+        return None;
     }
     if let Err(err) =
         crate::installation_uuid::deliver_credentials_and_check_handover(&mut client).await
     {
-        tracing::warn!(%err, "vm status poll: credentials delivery/handover failed");
+        tracing::warn!(%err, ctx, "credentials delivery/handover failed");
     }
     let seq = client.allocate_seq();
-    let envelope = ControlEnvelope {
+    let env = ControlEnvelope {
         wire_version: WIRE_VERSION,
         seq,
-        body: ControlMessage::VmStatusRequest { seq },
+        body: make_body(seq),
     };
-    let reply = match client.request(&envelope).await {
-        Ok(reply) => reply,
+    let reply = match client.request(&env).await {
+        Ok(r) => r,
         Err(err) => {
-            tracing::debug!(%err, "vm status poll: VmStatusRequest failed");
+            tracing::debug!(%err, ctx, "request failed on new connection");
             mark_wire_unreachable(hwnd);
-            return;
+            return None;
         }
+    };
+    // Store the working client — subsequent polls reuse it without reconnecting.
+    *live_client_mutex().lock().await = Some(client);
+    mark_wire_recovered(hwnd);
+    Some(reply)
+}
+
+/// Poll the in-VM `VmStatus` once over the control wire and reflect it in the
+/// shared `MenuState`: sets `podman_ready` (which gates per-project actions like
+/// "Attach Here" in `menu_state::build`) and refreshes the status line + tooltip
+/// from the live phase. Best-effort — a transient wire error leaves the last
+/// known state untouched (logged at debug). Uses `live_client_request` which
+/// reuses the persistent `LIVE_CLIENT` connection or reconnects transparently.
+async fn refresh_vm_status(hwnd: HWND) {
+    use tillandsias_control_wire::ControlMessage;
+
+    let reply = match live_client_request(
+        "vm status poll",
+        |seq| ControlMessage::VmStatusRequest { seq },
+        hwnd,
+    )
+    .await
+    {
+        Some(r) => r,
+        None => return,
     };
     match reply.body {
         ControlMessage::VmStatusReply {
@@ -1077,46 +1147,18 @@ fn local_entry_to_menu(entry: &tillandsias_control_wire::LocalProjectEntry) -> P
 ///
 /// Best-effort: a transient wire error / Error{Unsupported} leaves the
 /// last-known list untouched (logged at debug / warn respectively).
-async fn refresh_local_projects(_hwnd: HWND) {
-    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
-    use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
-    use tillandsias_host_shell::vsock_client::Client;
+async fn refresh_local_projects(hwnd: HWND) {
+    use tillandsias_control_wire::ControlMessage;
 
-    let stream = match crate::hvsocket::open_hvsocket_stream(CONTROL_WIRE_VSOCK_PORT).await {
-        Ok(stream) => stream,
-        Err(err) => {
-            tracing::debug!(%err, "local projects refresh: control wire unreachable");
-            return;
-        }
-    };
-    let mut client = Client::from_stream(
-        Box::new(stream),
-        Transport::Vsock {
-            cid: 0,
-            port: CONTROL_WIRE_VSOCK_PORT,
-        },
-    );
-    if let Err(err) = client.handshake().await {
-        tracing::debug!(%err, "local projects refresh: handshake failed");
-        return;
-    }
-    if let Err(err) =
-        crate::installation_uuid::deliver_credentials_and_check_handover(&mut client).await
+    let reply = match live_client_request(
+        "local projects refresh",
+        |seq| ControlMessage::EnumerateLocalProjects { seq },
+        hwnd,
+    )
+    .await
     {
-        tracing::warn!(%err, "local projects refresh: credentials delivery/handover failed");
-    }
-    let seq = client.allocate_seq();
-    let envelope = ControlEnvelope {
-        wire_version: WIRE_VERSION,
-        seq,
-        body: ControlMessage::EnumerateLocalProjects { seq },
-    };
-    let reply = match client.request(&envelope).await {
-        Ok(reply) => reply,
-        Err(err) => {
-            tracing::debug!(%err, "local projects refresh: request failed");
-            return;
-        }
+        Some(r) => r,
+        None => return,
     };
     match reply.body {
         ControlMessage::LocalProjectsReply { entries, .. } => {
@@ -1223,46 +1265,18 @@ fn cloud_entry_to_menu(entry: &tillandsias_control_wire::CloudProjectEntry) -> P
 /// `MenuState.cloud_projects` so the menu's cloud-projects submenu shows the
 /// logged-in user's repos. Best-effort: a transient wire error / unauthenticated
 /// gh leaves the last-known list untouched (logged at debug).
-async fn refresh_cloud_projects(_hwnd: HWND) {
-    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
-    use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
-    use tillandsias_host_shell::vsock_client::Client;
+async fn refresh_cloud_projects(hwnd: HWND) {
+    use tillandsias_control_wire::ControlMessage;
 
-    let stream = match crate::hvsocket::open_hvsocket_stream(CONTROL_WIRE_VSOCK_PORT).await {
-        Ok(stream) => stream,
-        Err(err) => {
-            tracing::debug!(%err, "cloud refresh: control wire unreachable");
-            return;
-        }
-    };
-    let mut client = Client::from_stream(
-        Box::new(stream),
-        Transport::Vsock {
-            cid: 0,
-            port: CONTROL_WIRE_VSOCK_PORT,
-        },
-    );
-    if let Err(err) = client.handshake().await {
-        tracing::debug!(%err, "cloud refresh: handshake failed");
-        return;
-    }
-    if let Err(err) =
-        crate::installation_uuid::deliver_credentials_and_check_handover(&mut client).await
+    let reply = match live_client_request(
+        "cloud refresh",
+        |seq| ControlMessage::CloudRefreshRequest { seq },
+        hwnd,
+    )
+    .await
     {
-        tracing::warn!(%err, "cloud refresh: credentials delivery/handover failed");
-    }
-    let seq = client.allocate_seq();
-    let envelope = ControlEnvelope {
-        wire_version: WIRE_VERSION,
-        seq,
-        body: ControlMessage::CloudRefreshRequest { seq },
-    };
-    let reply = match client.request(&envelope).await {
-        Ok(reply) => reply,
-        Err(err) => {
-            tracing::debug!(%err, "cloud refresh: request failed");
-            return;
-        }
+        Some(r) => r,
+        None => return,
     };
     match reply.body {
         ControlMessage::CloudRefreshReply { projects, .. } => {
@@ -1312,46 +1326,18 @@ fn github_login_state_from_reply(logged_in: bool, handle: Option<String>) -> Git
 /// `GithubLoginStatusRequest` handler it replies `Error { Unsupported }` (or
 /// rejects the unknown variant), and the last-known login state is left
 /// untouched. Mirrors the `refresh_cloud_projects` shape exactly.
-async fn refresh_github_login(_hwnd: HWND) {
-    use tillandsias_control_wire::transport::{CONTROL_WIRE_VSOCK_PORT, Transport};
-    use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
-    use tillandsias_host_shell::vsock_client::Client;
+async fn refresh_github_login(hwnd: HWND) {
+    use tillandsias_control_wire::ControlMessage;
 
-    let stream = match crate::hvsocket::open_hvsocket_stream(CONTROL_WIRE_VSOCK_PORT).await {
-        Ok(stream) => stream,
-        Err(err) => {
-            tracing::debug!(%err, "github login refresh: control wire unreachable");
-            return;
-        }
-    };
-    let mut client = Client::from_stream(
-        Box::new(stream),
-        Transport::Vsock {
-            cid: 0,
-            port: CONTROL_WIRE_VSOCK_PORT,
-        },
-    );
-    if let Err(err) = client.handshake().await {
-        tracing::debug!(%err, "github login refresh: handshake failed");
-        return;
-    }
-    if let Err(err) =
-        crate::installation_uuid::deliver_credentials_and_check_handover(&mut client).await
+    let reply = match live_client_request(
+        "github login refresh",
+        |seq| ControlMessage::GithubLoginStatusRequest { seq },
+        hwnd,
+    )
+    .await
     {
-        tracing::warn!(%err, "github login refresh: credentials delivery/handover failed");
-    }
-    let seq = client.allocate_seq();
-    let envelope = ControlEnvelope {
-        wire_version: WIRE_VERSION,
-        seq,
-        body: ControlMessage::GithubLoginStatusRequest { seq },
-    };
-    let reply = match client.request(&envelope).await {
-        Ok(reply) => reply,
-        Err(err) => {
-            tracing::debug!(%err, "github login refresh: request failed");
-            return;
-        }
+        Some(r) => r,
+        None => return,
     };
     match reply.body {
         ControlMessage::GithubLoginStatusReply {
@@ -2370,15 +2356,20 @@ fn launch_open_shell_terminal(action: &MenuAction) {
     // Default geometry until the tray owns a real terminal surface to size from.
     let spec = launch_spec(&intent, project.as_deref(), 24, 80);
     let distro = crate::wsl_lifecycle::DISTRO_NAME;
-    let title = match project.as_deref() {
-        Some(p) => format!("Tillandsias \u{2014} {p}"),
-        None => "Tillandsias shell".to_string(),
-    };
+    let title = terminal_title(&intent, project.as_deref());
     match spawn_wsl_terminal(distro, &title, &spec.argv) {
         Ok(()) => tracing::info!(?intent, project = ?project, argv = ?spec.argv,
             "opened in-VM PTY in a native terminal (wsl.exe)"),
         Err(err) => tracing::warn!(%err, ?intent, project = ?project,
             "failed to open terminal for in-VM PTY"),
+    }
+}
+
+fn terminal_title(intent: &PtyIntent, project: Option<&str>) -> String {
+    match (intent, project) {
+        (PtyIntent::GithubLogin, _) => "Tillandsias \u{2014} GitHub Login".to_string(),
+        (_, Some(p)) => format!("Tillandsias \u{2014} {p}"),
+        _ => "Tillandsias shell".to_string(),
     }
 }
 
@@ -3218,6 +3209,19 @@ mod tests {
     /// The Open-Shell terminal argv runs the resolved in-VM argv verbatim under
     /// `wsl.exe -d <distro> --` in a titled tab — the forge-wrapped command (the
     /// part that converges with the macOS Terminal.app path) is preserved intact.
+    #[test]
+    fn github_login_terminal_title_is_explicit() {
+        assert_eq!(
+            terminal_title(&PtyIntent::GithubLogin, None),
+            "Tillandsias \u{2014} GitHub Login"
+        );
+        assert_eq!(terminal_title(&PtyIntent::Shell, None), "Tillandsias shell");
+        assert_eq!(
+            terminal_title(&PtyIntent::Shell, Some("foo")),
+            "Tillandsias \u{2014} foo"
+        );
+    }
+
     #[test]
     fn wt_terminal_argv_wraps_in_vm_argv_under_wsl() {
         let in_vm = vec![

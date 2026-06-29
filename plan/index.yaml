@@ -7277,6 +7277,44 @@ plan_index:
         - "vault_kv_get_via_exec primitive added to vault_bootstrap — DONE"
         - "./build.sh --check passes — DONE"
 
+    - packet_id: vsock-vault-bootstrap-e2e
+      order: 114
+      title: "vsock vault bootstrap + GitHub login and cloud project listing end-to-end"
+      status: in_progress
+      kind: feature+bugfix
+      deliverable: plan/steps/114-vsock-vault-bootstrap-e2e.md
+      depends_on: [vault-credential-host-exposure]
+      pickup_role: windows
+      estimated_hours: 4
+      outcome: >
+        The vsock listener (--listen-vsock mode) automatically bootstraps Vault after
+        DeliverCredentials arrives from the Windows tray. vault_api_base_url on Linux
+        uses https://vault:8200 (aardvark-dns bridge path, bypasses TLS-hanging
+        host port-forward at 127.0.0.1:8201). has_shamir_share_in_keyring checks the
+        file fallback (populated by keychain_set_blocking in WSL2 where D-Bus is absent).
+        CloudRefreshRequest falls back to vault_kv_get_via_exec when the secret mount
+        at /run/secrets/tillandsias-github-token is absent.
+      events:
+        - type: in_progress
+          ts: "2026-06-29T00:00Z"
+          agent_id: "windows-sonnet46-20260629"
+          summary: >
+            Three fixes applied to vault_bootstrap.rs and vsock_server.rs:
+            (1) vault_api_base_url uses https://vault:8200 on Linux to bypass TLS-hanging
+            conmon port-forward; (2) has_shamir_share_in_keyring checks file fallback for
+            WSL2 environments without D-Bus; (3) fetch_cloud_projects falls back to
+            vault_kv_get_via_exec when the secret mount file is absent.
+            VAULT_BOOTSTRAP_DONE AtomicBool gates single-run bootstrap after credentials.
+            Pending: CI build of new Linux musl binary, VM deployment, e2e test of
+            vsock → vault → GitHub token → cloud projects flow.
+      exit_criteria:
+        - "vault_api_base_url uses https://vault:8200 on Linux"
+        - "has_shamir_share_in_keyring checks ~/.cache/tillandsias/fallback_vault-shamir-share-v1"
+        - "fetch_cloud_projects falls back to vault_kv_get_via_exec when file absent"
+        - "DeliverCredentials handler triggers vault bootstrap via spawn_blocking"
+        - "CI (linux musl) build passes with new binary"
+        - "Windows tray → vsock → vault bootstraps → CloudRefreshRequest returns real projects"
+
     - packet_id: zeroclaw-unauthorized-release-remediation
       order: 114
       title: "CRITICAL: Remove unauthorized tillandsias-zeroclaw binary from releases"
@@ -7316,24 +7354,34 @@ plan_index:
     - packet_id: init-dns-systemd-resolved
       order: 115
       title: "Bug: --init fails on systemd-resolved hosts (127.0.0.53 unreachable from build containers)"
-      status: ready
+      status: completed
       kind: bug+enhancement
       deliverable: plan/issues/init-dns-systemd-resolved-2026-06-27.md
       depends_on: []
       pickup_role: linux
       estimated_hours: 2
       outcome: >
-        tillandsias --init detects when /etc/resolv.conf nameserver is a loopback
-        address (127.0.0.53 / systemd-resolved stub), extracts actual upstream DNS
-        from resolvectl, and writes dns_servers to ~/.config/containers/containers.conf
-        before starting any image builds. Init no longer fails with DNS errors on
-        Fedora Silverblue and other systemd-resolved hosts.
+        tillandsias --init detects when /etc/resolv.conf lists only loopback
+        nameservers (127.0.0.53 / systemd-resolved stub), reads the real upstream
+        servers from /run/systemd/resolve/resolv.conf (fallback 1.1.1.1/8.8.8.8),
+        and writes dns_servers to ~/.config/containers/containers.conf before image
+        builds. Init no longer fails with DNS errors on systemd-resolved hosts.
+      events:
+        - type: completed
+          ts: "2026-06-28T08:10Z"
+          agent_id: "linux-yoga-sonnet46-20260628T0756Z"
+          commits: []
+          summary: >
+            Added resolv_conf_is_loopback_stub, upstream_dns_servers,
+            ensure_containers_conf_dns_servers, auto_detect_and_configure_dns;
+            wired into run_init after the ipv6 workaround. Unit test
+            ensure_containers_conf_dns_servers_inserts_under_network_and_is_idempotent.
       exit_criteria:
-        - "--init on systemd-resolved host writes dns_servers to containers.conf"
-        - "--init completes build-git image build without DNS errors"
-        - "Detection heuristic: nameserver 127. in /etc/resolv.conf"
-        - "Fallback to 1.1.1.1/8.8.8.8 when resolvectl unavailable"
-        - "./build.sh --check passes"
+        - "--init writes dns_servers to containers.conf when resolver is loopback-only — DONE"
+        - "Reads real upstreams from /run/systemd/resolve/resolv.conf — DONE"
+        - "Detection heuristic: only-loopback nameservers in /etc/resolv.conf — DONE"
+        - "Fallback to 1.1.1.1/8.8.8.8 when systemd resolv unavailable — DONE"
+        - "Idempotent (unit test) + ./build.sh --check passes — DONE"
 
     - packet_id: init-proxy-poisons-build
       order: 116
@@ -7373,22 +7421,40 @@ plan_index:
     - packet_id: zeroclaw-image-orphan-cleanup
       order: 117
       title: "Cleanup: remove orphaned zeroclaw container image plumbing after binary removal"
-      status: ready
+      status: completed
       kind: cleanup
       deliverable: plan/issues/zeroclaw-image-orphan-cleanup-2026-06-27.md
       depends_on: [zeroclaw-unauthorized-release-remediation]
       pickup_role: linux
       estimated_hours: 2
       outcome: >
-        The zeroclaw container image (images/zeroclaw/, init image-list entry,
-        identity chain, build-arg arms, ordering tests) is removed. The binary it
-        integrated with no longer exists; the image is optional/non-blocking but
-        orphaned. Run under the smoke lock (source-mutating migration).
+        All zeroclaw plumbing removed: images/zeroclaw/ directory, main.rs
+        image_specs arm + identity-chain branch + build-arg arms + is_optional_image
+        + run_init image list + ordering/image-spec tests, runtime_assets.rs asset
+        maps, build.rs skills-collect entry, and the dead tray launch path
+        (LaunchKind::ZeroClaw + LeafAction::ZeroClaw + launch_zeroclaw, which spawned
+        the already-removed binary). Menu shrank 7→6 leaves (offsets + submenu node
+        updated). Pinned litmus simplified-tray-ux-leaf-action-shape and the
+        zeroclaw-orchestration litmus binding + litmus file updated/removed.
+      events:
+        - type: completed
+          ts: "2026-06-28T08:40Z"
+          agent_id: "linux-yoga-sonnet46-20260628T0756Z"
+          commits: []
+          summary: >
+            Removed images/zeroclaw, all main.rs/runtime_assets.rs/build.rs refs,
+            and the tray LaunchKind/LeafAction ZeroClaw paths. Updated PROJECT_LEAF_COUNT
+            and PROJECT_SUBMENU_OFFSET 7→6, the menu offset docblock, and the
+            six-leaf menu test. Updated the pinned leaf-action litmus (7→6 variants)
+            and removed the obsolete zeroclaw-mcp-shape litmus + binding. build --check,
+            --test, and litmus assertions all green; zero ZeroClaw refs remain in tray.
       exit_criteria:
-        - "images/zeroclaw/ removed"
-        - "No zeroclaw references in init image list / identity chain / build-args"
-        - "image_specs + ordering tests updated and green"
-        - "./build.sh --check and --test pass"
+        - "images/zeroclaw/ removed — DONE"
+        - "No zeroclaw refs in init image list / identity chain / build-args / asset maps — DONE"
+        - "Dead tray launch path (LaunchKind/LeafAction ZeroClaw) removed — DONE"
+        - "image_specs + ordering + menu tests updated and green — DONE"
+        - "Pinned leaf-action litmus updated (7→6); obsolete zeroclaw litmus removed — DONE"
+        - "./build.sh --check and --test pass — DONE"
 
     - packet_id: vault-exec-env-regression
       order: 118
@@ -7495,7 +7561,7 @@ plan_index:
     - packet_id: container-dependency-graph-research
       order: 121
       title: "Research: compile-time container dependency model (launch fails to compile if deps unmet)"
-      status: ready
+      status: completed
       kind: research
       deliverable: plan/issues/container-dependency-graph-research-2026-06-27.md
       depends_on: []
@@ -7506,18 +7572,35 @@ plan_index:
         launch whose dependencies (other services running, networks, ca-bundle,
         secrets/leases, proxy/direct egress, image-at-version, vault-unsealed)
         aren't satisfied fails at compile time, and new containers declare deps in
-        one place and inherit ordered bring-up transparently. Deliverable: A/B/C
-        design verdict + dependency taxonomy + launch API sketch + drift-test def.
+        one place and inherit ordered bring-up transparently. Verdict: Option C
+        (hybrid) — const dependency graph + typestate Up<S> launch witnesses +
+        runtime liveness probe. Full taxonomy, launch-API sketch, module location
+        (tillandsias-podman machinery + headless service impls), drift litmus, and
+        a 5-slice migration order recorded in the deliverable.
+      events:
+        - type: completed
+          ts: "2026-06-28T08:55Z"
+          agent_id: "linux-yoga-sonnet46-20260628T0756Z"
+          commits: []
+          summary: >
+            Design verdict appended to the research issue: Option C hybrid. Rejected
+            A-only (drifts) and B-only (can't-forget gap = exactly order 120). Chose
+            const graph (acyclic/completeness test + topo order) + typestate Up<S>
+            witnesses minted only by ensure::<S>() (omitting a witness = compile
+            error) + runtime liveness at mint. Defined 8 dependency kinds, the
+            worked gh-login example, module split (podman machinery / headless impls),
+            3 drift closures (acyclic test, trybuild compile-fail, gated-launch litmus),
+            and the migration slices feeding order 122.
       exit_criteria:
-        - "Design verdict (typestate vs const-graph vs hybrid) recorded with worked gh-login example"
-        - "Dependency-kind taxonomy enumerated"
-        - "Module location decided (no cycle with tillandsias-headless)"
-        - "Runtime-liveness contract + drift-protection test defined"
+        - "Design verdict (typestate vs const-graph vs hybrid) recorded with worked gh-login example — DONE"
+        - "Dependency-kind taxonomy enumerated — DONE (8 kinds)"
+        - "Module location decided (no cycle with tillandsias-headless) — DONE"
+        - "Runtime-liveness contract + drift-protection test defined — DONE"
 
     - packet_id: container-dependency-graph-impl
       order: 122
       title: "Implement: compile-time container dependency model"
-      status: pending
+      status: in_progress
       kind: enhancement
       deliverable: plan/issues/container-dependency-graph-impl-2026-06-27.md
       depends_on: [container-dependency-graph-research]
@@ -7529,8 +7612,376 @@ plan_index:
         litmus. Migrate github-login and list-cloud-projects as first consumers so
         the proxy/vault prerequisites can't be skipped without a compile error or
         pinned-litmus failure.
+      events:
+        - type: progress
+          ts: "2026-06-28T09:20Z"
+          agent_id: "linux-yoga-sonnet46-20260628T0756Z"
+          commits: []
+          summary: >
+            Slice 1 complete (additive, no behavior change): new container_deps module
+            with the Service node set, the const DEPS declaration (single source of
+            truth), deps()/topo_order() with cycle detection, and the verifiable-closure
+            tests dependency_graph_is_complete_and_acyclic +
+            gitlogin_brings_up_vault_and_proxy_before_itself + leaf_nodes_have_no_dependencies.
+            Remaining: slice 2 (ensure() topological bring-up wrapping
+            ensure_vault_running/ensure_proxy_running), slice 3 (typestate Up<S> launch
+            witnesses + trybuild compile-fail; migrate github-login/list-cloud-projects),
+            slice 4 (runtime liveness probe), slice 5 (gated-launch drift litmus).
+        - type: progress
+          ts: "2026-06-28T23:55Z"
+          agent_id: "linux-yoga-sonnet46-20260628T2247Z"
+          commits: []
+          summary: >
+            Slice 2 (driver, additive/testable): added the Satisfier trait + ensure_with
+            topological driver (satisfies prerequisites dependency-first, stops + reports
+            on the first unsatisfied node, returns the executed order). Unit tests with a
+            recording fake satisfier prove order-120 as an executable invariant
+            (ensure(GitLogin) brings up vault+proxy before GitLogin) and that a failed
+            prerequisite aborts before the target. No live-podman wiring yet (slice 3
+            connects a real Satisfier wrapping ensure_enclave_network/vault/proxy/ca).
       exit_criteria:
-        - "All launch paths route through the dependency model"
-        - "Skipping a prerequisite is a compile error or litmus failure"
-        - "acyclic-graph + bring-up-order + compile-fail tests green"
+        - "Slice 1: declarative graph + acyclic/completeness + topo-order tests — DONE"
+        - "Slice 2: ensure_with topological driver + Satisfier trait + driver tests — DONE"
+        - "Slice 3: real Satisfier wraps ensure_* ; typestate Up<S> + trybuild; migrate callers — TODO"
+        - "All launch paths route through the dependency model — TODO"
+        - "Skipping a prerequisite is a compile error or litmus failure — TODO (slice 3/5)"
+        - "./build.sh --check and --test pass — DONE"
+
+    - packet_id: host-guest-transport-normalization-research
+      order: 123
+      title: "Research: normalize host<->guest transport (vsock) across all platforms"
+      status: completed
+      kind: research
+      deliverable: plan/issues/host-guest-transport-normalization-research-2026-06-28.md
+      depends_on: []
+      pickup_role: linux
+      estimated_hours: 5
+      outcome: >
+        Operator-mandated normalization: all three platforms drifted into separate
+        host->guest connection implementations (control-wire Vsock Linux-only,
+        macOS VZVirtioSocket, Windows WSL/hvsock) with 5 overlapping exec_over_stream
+        variants and inconsistent nomenclature. Define the target: two canonical
+        primitives (InteractiveStream for PTY/attach, ExecOneShot for quick reads),
+        a single GuestTransport facade + GuestEndpoint addressing (callers never
+        cfg-select a backend), one wire protocol, and a nomenclature glossary.
+      exit_criteria:
+        - "Target-architecture verdict: facade trait + GuestEndpoint + two primitive signatures"
+        - "Backend matrix (Linux AF_VSOCK / macOS VZ virtio-vsock / Windows WSL-hvsock) + layer home decided"
+        - "Exec-consolidation map: 5 exec_over_stream* -> ExecOneShot, with call sites"
+        - "Nomenclature glossary (one term per concept) + parity definition"
+
+    - packet_id: host-guest-transport-normalization-spec
+      order: 124
+      title: "Normalization spec: host<->guest transport canon (protocol/facade/glossary)"
+      status: in_progress
+      kind: enhancement
+      deliverable: plan/issues/host-guest-transport-normalization-spec-2026-06-28.md
+      depends_on: [host-guest-transport-normalization-research]
+      pickup_role: linux
+      estimated_hours: 6
+      outcome: >
+        Author the enforced standard: openspec/specs/host-guest-transport/spec.md,
+        the GuestTransport facade (open_stream / exec / exec_streaming) + GuestEndpoint
+        + ExecRequest/ExecOutput, the single wire protocol (WIRE_VERSION, Hello/HelloAck,
+        version-skew), a nomenclature glossary, and a drift litmus that fails on any
+        cfg!(target_os) transport selection by a tray/headless caller.
+      events:
+        - type: progress
+          ts: "2026-06-28T23:30Z"
+          agent_id: "linux-yoga-sonnet46-20260628T2247Z"
+          commits: []
+          summary: >
+            Contract landed (unblocks 126/127): new control-wire guest_transport module
+            with GuestEndpoint, ExecRequest/ExecOutput/ExecChunk, and the object-safe
+            #[async_trait] GuestTransport trait (open_stream / exec / exec_streaming);
+            compiles on all targets; unit tests + object-safety check green. Authored
+            openspec/specs/host-guest-transport/spec.md (4 MUST requirements +
+            canonical glossary). Remaining: bind the spec in litmus-bindings, add the
+            no-cfg-selection drift litmus (gates after callers migrate in 125), and the
+            conformance fixture harness.
+      exit_criteria:
+        - "openspec/specs/host-guest-transport/spec.md authored — DONE (bind in litmus-bindings TODO)"
+        - "Facade trait + GuestEndpoint + ExecRequest/ExecOutput compile on all targets — DONE"
+        - "Glossary committed (spec Nomenclature section) — DONE"
+        - "litmus:host-guest-no-cfg-transport-selection pinned and green — TODO (lands with 125 caller migration)"
+
+    - packet_id: host-guest-transport-linux
+      order: 125
+      title: "Conform Linux backend to host<->guest facade; collapse 5 exec variants"
+      status: pending
+      kind: enhancement
+      deliverable: plan/issues/host-guest-transport-platforms-2026-06-28.md
+      depends_on: [host-guest-transport-normalization-spec]
+      pickup_role: linux
+      estimated_hours: 6
+      outcome: >
+        Linux reference backend (AF_VSOCK + Unix) conforms to the facade; the 5
+        exec_over_stream* variants collapse to ExecOneShot (exec + exec_streaming),
+        all call sites migrated; vsock_server + tray control-socket route through the
+        facade. WIRE_VERSION stable.
+      exit_criteria:
+        - "exec_over_stream* family reduced to facade methods (grep litmus)"
+        - "InteractiveStream + ExecOneShot round-trip unit tests green"
+        - "No cfg-selected transport in linux tray/headless callers"
         - "./build.sh --check and --test pass"
+
+    - packet_id: host-guest-transport-macos
+      order: 126
+      title: "Conform macOS VZ virtio-vsock backend to host<->guest facade"
+      status: ready
+      unblocked_note: >
+        The facade contract is landed in tillandsias-control-wire::guest_transport
+        (GuestTransport trait + GuestEndpoint::MacVz + ExecRequest/ExecOutput) and
+        openspec/specs/host-guest-transport. Implement a macOS GuestTransport backend
+        in vm-layer (transport_macos.rs/vz.rs) against that interface. WIRE_VERSION
+        unchanged. The osx vz.rs fmt blocker (coord-osx-vz-fmt-drift) must also clear.
+      kind: enhancement
+      deliverable: plan/issues/host-guest-transport-platforms-2026-06-28.md
+      depends_on: [host-guest-transport-normalization-spec]
+      pickup_role: macos
+      owner_host: macos
+      estimated_hours: 8
+      outcome: >
+        macOS VZVirtioSocketDevice backend implements the facade; bespoke per-call
+        connect/exec helpers replaced by open_stream/exec; supersedes the macOS
+        idiomatic-exec optimization and fixes the github-login blank-terminal class
+        via the shared InteractiveStream primitive. Owned by the osx terminal.
+      exit_criteria:
+        - "macOS facade backend over VZVirtioSocketDevice"
+        - "No cfg-selected transport in macOS tray callers"
+        - "Both primitives pass the shared conformance fixtures on Darwin"
+        - "macOS tray parity rows satisfied"
+
+    - packet_id: host-guest-transport-windows
+      order: 127
+      title: "Conform Windows WSL/hvsock backend to host<->guest facade"
+      status: ready
+      unblocked_note: >
+        The facade contract is landed in tillandsias-control-wire::guest_transport
+        (GuestTransport trait + GuestEndpoint::Wsl + ExecRequest/ExecOutput) and
+        openspec/specs/host-guest-transport. Implement a Windows GuestTransport backend
+        in vm-layer (wsl.rs) against that interface. First fast-forward windows-next
+        onto linux-next (it is stale at bb1d1f9c) to pick up the P0 fixes + the facade.
+      kind: enhancement
+      deliverable: plan/issues/host-guest-transport-platforms-2026-06-28.md
+      depends_on: [host-guest-transport-normalization-spec]
+      pickup_role: windows
+      owner_host: windows
+      estimated_hours: 8
+      outcome: >
+        Windows WSL/hvsock backend implements the facade; connect/exec unified;
+        resolves windows-next-architecture-decision in favor of the normalized
+        facade. Owned by the windows terminal.
+      exit_criteria:
+        - "Windows facade backend over WSL pipe/hvsock"
+        - "No cfg-selected transport in Windows tray callers"
+        - "Both primitives pass the shared conformance fixtures on Windows"
+        - "Windows tray parity rows satisfied"
+
+    - packet_id: tray-feature-parity-matrix
+      order: 128
+      title: "Tray 1:1 feature & UX parity matrix (linux/macos/windows) + parity litmus"
+      status: completed
+      kind: enhancement
+      deliverable: plan/issues/tray-feature-parity-matrix-2026-06-28.md
+      depends_on: []
+      pickup_role: linux
+      estimated_hours: 4
+      outcome: >
+        Convert prose parity into an enumerated machine-checkable matrix
+        (openspec/tray-parity-matrix.yaml) with per-platform cells and a
+        parity:required|platform-specific tag, plus litmus:tray-parity-matrix-complete
+        that fails when a required row is not done on all three platforms. Acceptance
+        gate proving the transport normalization delivered identical UX.
+      exit_criteria:
+        - "openspec/tray-parity-matrix.yaml enumerates every tray capability + per-platform cell"
+        - "litmus:tray-parity-matrix-complete fails on any unmet required row"
+        - "Each host audits its column and files gap packets for required misses"
+      events:
+        - type: claim
+          ts: "2026-06-28T23:35:00Z"
+          agent_id: "linux-antigravity-20260628T2335Z"
+          host: "linux"
+          lease_id: "tray-feature-parity-matrix-claim-1"
+          expires_at: "2026-06-29T03:35:00Z"
+        - type: complete
+          ts: "2026-06-28T23:36:00Z"
+          agent_id: "linux-antigravity-20260628T2335Z"
+          commit_hash: "12400a5b"
+          evidence: "Created matrix, litmus test, and binding; verifies all required platforms."
+
+    - packet_id: agent-services-egress-allowlist-research
+      order: 129
+      title: "Research: exact egress allowlist for claude/codex/antigravity (no guessing)"
+      status: claimed
+      kind: research
+      deliverable: plan/issues/agent-services-egress-allowlist-research-2026-06-28.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [podman, proxy, testing]
+      estimated_hours: 3
+      outcome: >
+        Claude/Codex/Antigravity fail to launch+connect. Model APIs are already
+        allowlisted (.anthropic.com/.openai.com/.googleapis.com), so the gaps are in
+        auth/sign-in/telemetry endpoints. Determine the exact denied FQDNs per agent
+        by harvesting TCP_DENIED from `podman logs tillandsias-proxy` (not guessing),
+        reduce to a minimal parent-domain delta (no Squid duplicate-subdomain FATALs),
+        and classify bump/no-bump. Also: antigravity has no entrypoint-forge-antigravity.sh
+        (not wired as an agent) — documented for the impl packet.
+      exit_criteria:
+        - "Per-agent confirmed TCP_DENIED domain list from proxy logs (evidence cited)"
+        - "Minimal allowlist delta (parent domains, no duplicate-subdomain FATALs)"
+        - "bump vs no-bump decision per new domain"
+        - "Antigravity agent-wiring gap documented"
+      events:
+        - type: claim
+          ts: "2026-06-28T23:40:00Z"
+          agent_id: "linux-antigravity-20260628T2340Z"
+          host: "linux"
+          lease_id: "agent-services-egress-allowlist-research-claim-1"
+          expires_at: "2026-06-29T03:40:00Z"
+
+    - packet_id: agent-services-egress-allowlist-impl
+      order: 130
+      title: "Impl: apply agent egress allowlist delta + wire antigravity agent"
+      status: pending
+      kind: enhancement
+      deliverable: plan/issues/agent-services-egress-allowlist-impl-2026-06-28.md
+      depends_on: [agent-services-egress-allowlist-research]
+      pickup_role: linux
+      capability_tags: [podman, proxy]
+      estimated_hours: 3
+      outcome: >
+        Apply the research-confirmed allowlist delta to images/proxy/allowlist.txt +
+        squid.conf (bump/no-bump), add entrypoint-forge-antigravity.sh, and pin
+        litmus:agent-egress-allowlist-shape. Tray leaf for antigravity is operator-gated.
+      exit_criteria:
+        - "allowlist.txt + squid.conf updated with confirmed delta (no FATAL dupes)"
+        - "antigravity launchable as a forge agent (entrypoint present)"
+        - "zero TCP_DENIED for claude/codex/antigravity required endpoints"
+        - "litmus:agent-egress-allowlist-shape pinned + green; --check passes"
+
+    - packet_id: agent-login-flows-research
+      order: 131
+      title: "Research: --claude-login / --codex-login / --antigravity-login flows"
+      status: ready
+      kind: research
+      deliverable: plan/issues/agent-login-flows-research-2026-06-28.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [rust, vault, podman]
+      estimated_hours: 4
+      outcome: >
+        Prepare the three interactive login flows mirroring --github-login
+        (containerized, OOB, credential stored in Vault, host never sees it). Decide
+        per service: API-key (reuse secret/<provider>/api-key + ProviderId) vs
+        OAuth/device-code (new secret/<provider>/oauth schema + refresh). Define the
+        containerized boundary, required egress endpoints, and the shared
+        run_provider_login(ProviderId, AuthModel) shape.
+      exit_criteria:
+        - "Auth model decided per service (API-key vs OAuth) with operator sign-off"
+        - "Vault OAuth-token schema defined if any OAuth flow chosen"
+        - "Containerized login boundary + required egress endpoints per service"
+        - "Shared run_provider_login API shape sketched"
+
+    - packet_id: agent-login-flows-impl
+      order: 132
+      title: "Impl: --claude-login / --codex-login / --antigravity-login via run_provider_login"
+      status: pending
+      kind: enhancement
+      deliverable: plan/issues/agent-login-flows-impl-2026-06-28.md
+      depends_on: [agent-login-flows-research, agent-services-egress-allowlist-impl]
+      pickup_role: linux
+      capability_tags: [rust, vault, podman]
+      estimated_hours: 8
+      outcome: >
+        Implement the three flows as a parameterized run_provider_login mirroring
+        run_github_login: API-key flows first (slice 1, reuses ProviderId +
+        read/write_provider_api_key), then OAuth/device-code (slice 2) for Google/
+        Antigravity and any OAuth-default service, then operator-gated tray status
+        (slice 3). Credentials in Vault; host never holds raw values.
+      exit_criteria:
+        - "--claude-login/--codex-login/--antigravity-login implemented via shared run_provider_login"
+        - "Credentials stored in Vault per the research schema; host never sees raw values"
+        - "Each provider's forge session authenticates through the proxy (zero TCP_DENIED)"
+        - "./build.sh --check and --test pass"
+
+    - packet_id: methodology-concurrent-integration-duplication
+      order: 133
+      title: "Methodology: fix concurrent-integration content duplication (skill + litmus)"
+      status: done
+      kind: analysis+enhancement
+      deliverable: plan/issues/methodology-concurrent-integration-duplication-2026-06-28.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [docs, testing, methodology]
+      estimated_hours: 4
+      outcome: >
+        origin/linux-next broke (E0428 duplicate test defs) because order-119 commit
+        cb9def48 re-entered as 6dbca259 (same content, new hash) via a cross-branch
+        merge, and the pushing agent skipped post-merge build verification. Root cause:
+        rebase (advance-work §6) mixed with cross-branch merges (merge/multihost skills)
+        re-applies rebased commits under new hashes; no post-integration build gate.
+        Fix: (A) require ./build.sh --check after every rebase/merge before push,
+        (B) litmus:no-duplicate-rust-item-defs, (C) one integration strategy in
+        methodology/multi-host-development.yaml. All agents run the SAME shared skills.
+      exit_criteria:
+        - "advance-work-from-plan + merge/multihost skills require post-integration --check before push"
+        - "litmus:no-duplicate-rust-item-defs pinned + green"
+        - "multi-host-development.yaml declares ONE integration strategy (rebase⨉merge ambiguity removed)"
+      events:
+        - type: claim
+          ts: "2026-06-28T23:50:00Z"
+          agent_id: "linux-antigravity-20260628T2350Z"
+          host: "linux"
+          lease_id: "methodology-concurrent-integration-duplication-claim-1"
+          expires_at: "2026-06-29T03:50:00Z"
+        - type: completed
+          ts: "2026-06-28T23:53:00Z"
+          agent_id: "linux-antigravity-20260628T2350Z"
+          commit_hash: "PENDING"
+          evidence: "Added litmus:no-duplicate-rust-item-defs. Modified skills and methodology to enforce strict rebase over merge."
+
+    - packet_id: plan-ledger-archival
+      order: 134
+      title: "Optimization: archive 129 closed packets out of plan/index.yaml (7870 lines)"
+      status: ready
+      kind: optimization
+      deliverable: plan/issues/plan-ledger-archival-2026-06-28.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [docs, plan]
+      estimated_hours: 3
+      outcome: >
+        plan/index.yaml is 7870 lines / ~92% closed (84 completed + 41 done + 4
+        obsoleted vs 11 active). Every advance-work cycle reads the whole index;
+        closed packets bury active ones, slow selection, and inflate the merge
+        surface. Move closed packets to plan/archive/ (date-partitioned, history
+        preserved) via scripts/archive-plan-packets.sh; keep index to active set.
+      exit_criteria:
+        - "plan/index.yaml reduced to ~active set (target < ~1500 lines); both YAMLs parse"
+        - "No packet lost (closed_before == archived + closed_remaining)"
+        - "scripts/archive-plan-packets.sh --check idempotent; advance-work still finds active packets"
+        - "Tombstone-not-delete; events history preserved in archive"
+
+    - packet_id: stale-reference-cleanup-audit
+      order: 135
+      title: "Optimization: stale-reference + superseded-work cleanup audit"
+      status: ready
+      kind: optimization
+      deliverable: plan/issues/stale-reference-cleanup-audit-2026-06-28.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [docs, plan]
+      estimated_hours: 4
+      outcome: >
+        References to removed/superseded work linger (zeroclaw in zeroclaw-progress.md,
+        nanoclawv2-orchestration.md, secure_agent_forge_plan.md, TRACES.md; 32 May-dated
+        issues; control-socket/macos-vz/tray-convergence/windows-arch superseded by the
+        orders 123-128 normalization). Audit -> classify -> tombstone/archive; strip dead
+        zeroclaw pointers from live docs; mark superseded specs obsolete in litmus-bindings.
+      exit_criteria:
+        - "Every plan/issues/*.md classified; superseded tombstoned -> archive"
+        - "litmus:no-dangling-removed-component-refs green (no live zeroclaw refs outside historical record)"
+        - "Superseded specs marked obsolete + tombstone in litmus-bindings"
+        - "plan/archive/README.md documents the archive layout"
