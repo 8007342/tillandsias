@@ -720,53 +720,37 @@ fn enumerate_local_projects() -> Vec<LocalProjectEntry> {
     out
 }
 
-/// In-VM GitHub token mounted by the host shell on container launch. Stable
-/// name (podman secret / bind mount); see vault_bootstrap's token plumbing.
-const IN_VM_GITHUB_TOKEN_PATH: &str = "/run/secrets/tillandsias-github-token";
-
-/// Fetch the user's cloud (GitHub) projects from inside the VM. Reads
-/// the mounted token file first; if absent, falls back to reading the
-/// token directly from Vault via `podman exec` (the vsock listener runs
-/// outside any container, so the secret mount at IN_VM_GITHUB_TOKEN_PATH
-/// is not available). Delegates the `gh` invocation + JSON parse to the
-/// shared `crate::cloud_projects::fetch_cloud_projects` helper.
+/// Fetch the user's cloud (GitHub) projects from inside the VM.
+///
+/// Uses the same containerized `gh api user/repos` path as `--list-cloud-projects`:
+/// `vault-cli read -field=token secret/github/token | gh auth login ...` runs inside
+/// the git image so neither the raw token nor `gh` is needed in the VM rootfs.
+/// Results are cached with a 5-minute TTL via the remote_projects cache.
+///
+/// Converts `GitHubProject` → `CloudProjectEntry`; `default_branch` is left empty
+/// because the wire field is not used by the host tray menu renderer.
 ///
 /// @trace spec:host-shell-architecture, spec:tillandsias-vault
 fn fetch_cloud_projects() -> Vec<CloudProjectEntry> {
-    // Primary: secret mount (populated when running inside a container).
-    let token = match std::fs::read_to_string(IN_VM_GITHUB_TOKEN_PATH) {
-        Ok(t) if !t.trim().is_empty() => t.trim().to_string(),
-        _ => {
-            // Fallback: read from Vault via podman exec (vsock listener mode).
-            #[cfg(feature = "vault")]
-            {
-                match crate::vault_bootstrap::vault_kv_get_via_exec(
-                    "secret/github/token",
-                    "token",
-                    false,
-                ) {
-                    Ok(t) if !t.trim().is_empty() => t.trim().to_string(),
-                    _ => {
-                        debug!(
-                            spec = "host-shell-architecture",
-                            "CloudRefreshRequest (in-VM): no GitHub token in mount or Vault; returning empty cloud list"
-                        );
-                        return Vec::new();
-                    }
-                }
-            }
-            #[cfg(not(feature = "vault"))]
-            {
-                debug!(
-                    spec = "host-shell-architecture",
-                    path = IN_VM_GITHUB_TOKEN_PATH,
-                    "CloudRefreshRequest (in-VM): no GitHub token mounted; returning empty cloud list"
-                );
-                return Vec::new();
-            }
+    match crate::remote_projects::discover_github_projects_result_with_debug(false) {
+        Ok(projects) => projects
+            .into_iter()
+            .map(|p| CloudProjectEntry {
+                label: format!("{}/{}", p.owner, p.name),
+                owner: p.owner,
+                repo: p.name,
+                default_branch: String::new(),
+            })
+            .collect(),
+        Err(e) => {
+            debug!(
+                spec = "host-shell-architecture",
+                error = %e,
+                "CloudRefreshRequest (in-VM): containerized gh fetch failed; returning empty cloud list"
+            );
+            Vec::new()
         }
-    };
-    crate::cloud_projects::fetch_cloud_projects(Some(&token))
+    }
 }
 
 #[cfg(test)]
