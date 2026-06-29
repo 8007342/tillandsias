@@ -338,9 +338,9 @@ pub fn exec_guest_main(argv: Vec<String>) -> i32 {
             eprintln!("{{\"error\":\"start: {e}\"}}");
             return 1;
         }
-        eprintln!("[exec-guest] waiting for control wire…");
-        if let Err(e) = vz.wait_ready(Duration::from_secs(90)).await {
-            eprintln!("{{\"error\":\"wait_ready: {e}\"}}");
+        eprintln!("[exec-guest] waiting for VM phase Ready…");
+        if let Err(e) = vz.wait_phase_ready(Duration::from_secs(300)).await {
+            eprintln!("{{\"error\":\"wait_phase_ready: {e}\"}}");
             let _ = vz.stop(Duration::from_secs(10)).await;
             return 1;
         }
@@ -360,30 +360,35 @@ pub fn exec_guest_main(argv: Vec<String>) -> i32 {
                 return 1;
             }
         };
-        let result = tillandsias_vm_layer::vsock_exec::exec_over_stream_with_input(
-            stream,
-            &argv_ref,
-            &stdin_bytes,
-        )
-        .await;
+        // Stream output chunk-by-chunk so long-running commands (curl, --init,
+        // forge) show progress live instead of buffering until exit.
+        let result = {
+            use std::io::Write;
+            let stdout = std::io::stdout();
+            tillandsias_vm_layer::vsock_exec::exec_over_stream_with_input_streaming(
+                stream,
+                &argv_ref,
+                &stdin_bytes,
+                |chunk| {
+                    let mut out = stdout.lock();
+                    let _ = out.write_all(chunk);
+                    let _ = out.flush();
+                },
+            )
+            .await
+        };
         let _ = vz.stop(Duration::from_secs(10)).await;
 
         match result {
             Ok(out) => {
-                use std::io::Write;
-                let _ = std::io::stdout().write_all(&out.stdout);
-                let _ = std::io::stdout().flush();
-                println!();
                 let signal = out
                     .exit
                     .signal
                     .map(|s| s.to_string())
                     .unwrap_or_else(|| "null".to_string());
-                println!(
-                    "{{\"status\":\"ok\",\"exit_code\":{},\"signal\":{},\"stdout_bytes\":{}}}",
-                    out.exit.code,
-                    signal,
-                    out.stdout.len()
+                eprintln!(
+                    "{{\"status\":\"ok\",\"exit_code\":{},\"signal\":{}}}",
+                    out.exit.code, signal,
                 );
                 out.exit.code
             }
@@ -460,9 +465,9 @@ pub fn github_login_main() -> i32 {
             eprintln!("{{\"error\":\"start: {e}\"}}");
             return 1;
         }
-        eprintln!("[github-login] waiting for control wire…");
-        if let Err(e) = vz.wait_ready(Duration::from_secs(90)).await {
-            eprintln!("{{\"error\":\"wait_ready: {e}\"}}");
+        eprintln!("[github-login] waiting for VM phase Ready…");
+        if let Err(e) = vz.wait_phase_ready(Duration::from_secs(300)).await {
+            eprintln!("{{\"error\":\"wait_phase_ready: {e}\"}}");
             let _ = vz.stop(Duration::from_secs(10)).await;
             return 1;
         }
@@ -540,9 +545,29 @@ pub fn github_login_main() -> i32 {
                 // an ephemeral `--rm` git container (piped to `gh auth login
                 // --with-token`, written to Vault, container destroyed on exit),
                 // so nothing unencrypted is left at rest here.
+                //
+                // Pre-flight before handing off to headless:
+                //   1. Remove any exited proxy container from a prior attempt so
+                //      `ensure_proxy_running` can `podman run --name tillandsias-proxy`
+                //      without "name already in use".
+                //   2. Ensure the ephemeral CA key is group/world-readable (0o644)
+                //      so Squid (uid 1000) can read it. headless currently sets 0o600;
+                //      if the file already exists with correct perms the openssl block
+                //      is skipped (ca_bundle_needs_refresh returns false for fresh files).
+                // TODO(linux-next): remove once headless sets 0o640 and rm-on-reuse
+                // is fixed in ensure_proxy_running.
                 "export HOME=/root; export XDG_RUNTIME_DIR=/run/user/0; \
                  export TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200; \
-                 install -d -m 0700 \"$XDG_RUNTIME_DIR\"; \
+                 mkdir -p \"$XDG_RUNTIME_DIR\" 2>/dev/null; \
+                 podman rm tillandsias-proxy 2>/dev/null || true; \
+                 if ! test -s /tmp/tillandsias-ca/intermediate.key 2>/dev/null; then \
+                   mkdir -p /tmp/tillandsias-ca && \
+                   openssl req -x509 -newkey rsa:2048 \
+                     -keyout /tmp/tillandsias-ca/intermediate.key \
+                     -out /tmp/tillandsias-ca/intermediate.crt \
+                     -days 25 -nodes -subj '/CN=Tillandsias CA' 2>/dev/null && \
+                   chmod 644 /tmp/tillandsias-ca/intermediate.key || true; \
+                 fi; \
                  exec /usr/local/bin/tillandsias-headless --github-login",
             ],
             expects,
@@ -573,6 +598,115 @@ pub fn github_login_main() -> i32 {
             }
             Err(e) => {
                 eprintln!("{{\"error\":\"login: {e}\"}}");
+                1
+            }
+        }
+    })
+}
+
+/// `--list-cloud-projects`: boot the VM and run the in-guest
+/// `tillandsias-headless --list-cloud-projects` over the control wire, streaming
+/// the repo listing to stdout. Mirrors the Linux headless CLI mode for 1:1 tray
+/// parity (order 128 parity-matrix row `list-cloud-projects`).
+///
+/// Requires a prior `--github-login` run to have stored the GitHub token in Vault.
+/// Applies the same CA cert / exited-proxy workaround as `github_login_main`
+/// (TODO linux-next: remove once headless uses 0o640 + rm-on-reuse).
+///
+/// @trace spec:remote-projects, plan/issues/tray-feature-parity-matrix-2026-06-28.md
+pub fn list_cloud_projects_main() -> i32 {
+    use tillandsias_vm_layer::VmRuntime;
+
+    let vz = tillandsias_vm_layer::vz::VzRuntime::new(3, image_root());
+    vz.set_serial_to_log(true);
+    if !vz.is_provisioned() {
+        eprintln!(
+            "{{\"error\":\"not provisioned; run --provision or launch the tray once first\"}}"
+        );
+        return 1;
+    }
+
+    let rt = match tokio::runtime::Builder::new_current_thread()
+        .enable_all()
+        .build()
+    {
+        Ok(r) => r,
+        Err(e) => {
+            eprintln!("{{\"error\":\"tokio runtime: {e}\"}}");
+            return 1;
+        }
+    };
+
+    rt.block_on(async move {
+        use std::time::Duration;
+        use tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
+        use tillandsias_vm_layer::vsock_exec::exec_over_stream_with_input_streaming;
+
+        eprintln!("[list-cloud-projects] starting VM…");
+        if let Err(e) = vz.start().await {
+            eprintln!("{{\"error\":\"start: {e}\"}}");
+            return 1;
+        }
+        eprintln!("[list-cloud-projects] waiting for VM phase Ready…");
+        if let Err(e) = vz.wait_phase_ready(Duration::from_secs(300)).await {
+            eprintln!("{{\"error\":\"wait_phase_ready: {e}\"}}");
+            let _ = vz.stop(Duration::from_secs(10)).await;
+            return 1;
+        }
+        let stream = match vz
+            .open_vsock_stream_current_thread(CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(30))
+            .await
+        {
+            Ok(s) => s,
+            Err(e) => {
+                eprintln!("{{\"error\":\"vsock connect: {e}\"}}");
+                let _ = vz.stop(Duration::from_secs(10)).await;
+                return 1;
+            }
+        };
+        eprintln!("[list-cloud-projects] control wire ready; fetching remote projects…");
+
+        // Same CA cert + exited-proxy workaround as github_login_main.
+        // ensure_proxy_running (called by headless --list-cloud-projects) needs
+        // a 0o644 key so squid (uid 1000) can read it, and no leftover exited
+        // container blocking `podman run --name tillandsias-proxy`.
+        let cmd = "export HOME=/root; export XDG_RUNTIME_DIR=/run/user/0; \
+                   export TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200; \
+                   mkdir -p \"$XDG_RUNTIME_DIR\" 2>/dev/null; \
+                   podman rm tillandsias-proxy 2>/dev/null || true; \
+                   if ! test -s /tmp/tillandsias-ca/intermediate.key 2>/dev/null; then \
+                     mkdir -p /tmp/tillandsias-ca && \
+                     openssl req -x509 -newkey rsa:2048 \
+                       -keyout /tmp/tillandsias-ca/intermediate.key \
+                       -out /tmp/tillandsias-ca/intermediate.crt \
+                       -days 25 -nodes -subj '/CN=Tillandsias CA' 2>/dev/null && \
+                     chmod 644 /tmp/tillandsias-ca/intermediate.key || true; \
+                   fi; \
+                   exec /usr/local/bin/tillandsias-headless --list-cloud-projects";
+
+        let result = exec_over_stream_with_input_streaming(
+            stream,
+            &["/bin/bash", "-lc", cmd],
+            &[],
+            |chunk| {
+                use std::io::Write;
+                let _ = std::io::stdout().write_all(chunk);
+                let _ = std::io::stdout().flush();
+            },
+        )
+        .await;
+        let _ = vz.stop(Duration::from_secs(10)).await;
+
+        match result {
+            Ok(out) => {
+                eprintln!(
+                    "{{\"status\":\"list-cloud-projects-finished\",\"exit_code\":{}}}",
+                    out.exit.code
+                );
+                out.exit.code
+            }
+            Err(e) => {
+                eprintln!("{{\"error\":\"list-cloud-projects: {e}\"}}");
                 1
             }
         }
@@ -619,9 +753,9 @@ pub fn opencode_main(path: String, prompt: Option<String>) -> i32 {
             eprintln!("{{\"error\":\"start: {e}\"}}");
             return 1;
         }
-        eprintln!("[opencode] waiting for control wire…");
-        if let Err(e) = vz.wait_ready(Duration::from_secs(90)).await {
-            eprintln!("{{\"error\":\"wait_ready: {e}\"}}");
+        eprintln!("[opencode] waiting for VM phase Ready…");
+        if let Err(e) = vz.wait_phase_ready(Duration::from_secs(300)).await {
+            eprintln!("{{\"error\":\"wait_phase_ready: {e}\"}}");
             let _ = vz.stop(Duration::from_secs(10)).await;
             return 1;
         }
@@ -643,7 +777,7 @@ pub fn opencode_main(path: String, prompt: Option<String>) -> i32 {
         let mut headless_cmd = format!(
             "export HOME=/root; \
              export XDG_RUNTIME_DIR=/run/user/0; \
-             export TILLANDSIAS_VAULT_API_BASE_URL=https://10.0.42.2:8200; \
+             export TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200; \
              mkdir -p \"$XDG_RUNTIME_DIR\" 2>/dev/null; \
              exec /usr/local/bin/tillandsias-headless --opencode {path}"
         );
@@ -768,8 +902,8 @@ mod tests {
             .find("vz.start().await")
             .expect("github login must start the VM");
         let wait_idx = window
-            .find("vz.wait_ready(Duration::from_secs(90)).await")
-            .expect("github login must wait for the control wire");
+            .find("vz.wait_phase_ready(Duration::from_secs(300)).await")
+            .expect("github login must wait for the VM phase Ready");
         let stream_idx = window
             .find("open_vsock_stream_current_thread")
             .expect("github login must open the control-wire stream");

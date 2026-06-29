@@ -1523,6 +1523,116 @@ impl VmRuntime for VzRuntime {
     }
 }
 
+/// Semantic readiness: wait until the in-VM headless reports `VmPhase::Ready`.
+///
+/// Separate `impl` block (not part of the `VmRuntime` trait) so macOS-specific
+/// callers can use it directly on `VzRuntime` without touching the trait surface.
+///
+/// @trace plan/issues/osx-next-work-queue-2026-05-25.md#macos-tray/wait-ready-phase-signal
+#[cfg(target_os = "macos")]
+impl VzRuntime {
+    /// Wait until the in-VM headless reports `VmPhase::Ready` (podman up,
+    /// enclave network live) via a Hello/HelloAck + `VmStatusRequest` round-trip.
+    ///
+    /// Replaces raw-connect probe in `wait_ready` with an actual protocol check
+    /// — no arbitrary wall-clock guessing. Caller stays blocked until:
+    ///   - `VmPhase::Ready`  → `Ok(())`
+    ///   - `VmPhase::Failed` → `Err` (headless gave up)
+    ///   - `timeout` elapsed → `Err` (safety cutoff, not the primary mechanism)
+    ///
+    /// Requires a current-thread Tokio runtime on the macOS main thread
+    /// (same constraint as `open_vsock_stream_current_thread`).
+    pub async fn wait_phase_ready(&self, timeout: Duration) -> Result<(), VmError> {
+        use std::time::Instant;
+        use tillandsias_control_wire::VmPhase;
+        use tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
+
+        // Stage 1: wait until VZ kernel is Running (same as wait_ready stage 1).
+        let deadline = Instant::now() + timeout;
+        let backoff_ms = [250u64, 500, 1000, 2000, 4000];
+        let mut step = 0usize;
+        loop {
+            let state = {
+                let guard = self
+                    .vm
+                    .lock()
+                    .map_err(|e| format!("vm lock poisoned: {e}"))?;
+                let vm = match guard.as_ref() {
+                    Some(h) => &h.0,
+                    None => {
+                        return Err(
+                            "VzRuntime::wait_phase_ready: VM not running (start() first)".into(),
+                        );
+                    }
+                };
+                unsafe { vm.state() }.0
+            };
+            if state == 1 {
+                break;
+            }
+            if state == 3 {
+                return Err(format!(
+                    "VzRuntime::wait_phase_ready: VM state Error (={state})"
+                ));
+            }
+            if Instant::now() >= deadline {
+                return Err(format!(
+                    "VzRuntime::wait_phase_ready: stage 1 timeout after {}s; state={state}",
+                    timeout.as_secs()
+                ));
+            }
+            let wait_ms = backoff_ms[step.min(backoff_ms.len() - 1)];
+            step = step.saturating_add(1);
+            boot::pump_cf_loop_for(Duration::from_millis(wait_ms));
+        }
+
+        // Stage 2: probe VmPhase over the control wire until Ready.
+        // Connect → Hello/HelloAck → VmStatusRequest → VmStatusReply.
+        // Retry on Starting/Provisioning (headless up but enclave not yet live).
+        step = 0;
+        loop {
+            if Instant::now() >= deadline {
+                return Err(format!(
+                    "VzRuntime::wait_phase_ready: timeout after {}s (phase never reached Ready)",
+                    timeout.as_secs()
+                ));
+            }
+            let stream = self
+                .open_vsock_stream_current_thread(CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(2))
+                .await;
+            let stream = match stream {
+                Ok(s) => s,
+                Err(_) => {
+                    // headless not yet bound — back off and retry
+                    let wait_ms = backoff_ms[step.min(backoff_ms.len() - 1)];
+                    step = step.saturating_add(1);
+                    boot::pump_cf_loop_for(Duration::from_millis(wait_ms));
+                    continue;
+                }
+            };
+            match crate::vsock_exec::probe_vm_phase(stream).await {
+                Ok(VmPhase::Ready) => return Ok(()),
+                Ok(VmPhase::Failed) => {
+                    return Err("VzRuntime::wait_phase_ready: VM phase is Failed".to_string());
+                }
+                Ok(phase) => {
+                    // Starting / Provisioning / Draining / Stopping — keep waiting.
+                    let _ = phase; // phase is Debug but we don't want the dep here
+                    let wait_ms = backoff_ms[step.min(backoff_ms.len() - 1)];
+                    step = step.saturating_add(1);
+                    boot::pump_cf_loop_for(Duration::from_millis(wait_ms));
+                }
+                Err(_probe_err) => {
+                    // Wire error (headless just started, framing not ready) — retry.
+                    let wait_ms = backoff_ms[step.min(backoff_ms.len() - 1)];
+                    step = step.saturating_add(1);
+                    boot::pump_cf_loop_for(Duration::from_millis(wait_ms));
+                }
+            }
+        }
+    }
+}
+
 // ---------------------------------------------------------------------------
 // Non-macOS: cross-platform link stubs.
 // ---------------------------------------------------------------------------

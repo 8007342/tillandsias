@@ -67,6 +67,7 @@ use serde::{Deserialize, Serialize};
 
 #[cfg(any(feature = "tray", feature = "listen-vsock"))]
 mod cloud_projects;
+mod container_deps;
 mod control_dispatch;
 #[cfg(any(feature = "tray", feature = "listen-vsock"))]
 mod local_projects;
@@ -728,8 +729,13 @@ const EGRESS_NET: &str = "tillandsias-egress";
 /// The dual-homed network spec attached to egress-capable enclave containers
 /// (proxy, git-service): enclave leg for in-enclave DNS + the egress leg for NAT.
 const ENCLAVE_EGRESS_NETS: &str = "tillandsias-enclave,tillandsias-egress";
-const ENCLAVE_NO_PROXY_BASE: &str =
-    "localhost,127.0.0.1,0.0.0.0,::1,inference,proxy,git-service,tillandsias-git";
+// `vault` + `tillandsias-vault` MUST be here: containers reach Vault by its
+// service DNS name (`https://vault:8200`) since the move off the locally-bound
+// `127.0.0.1` listener. Without these, vault-cli's curl routes the Vault request
+// through the enclave proxy and fails with "Could not resolve proxy: proxy",
+// breaking GitHub-login token storage and remote-project listing.
+// @trace spec:proxy-container, plan/issues/vault-service-dns-no-proxy-2026-06-27.md
+const ENCLAVE_NO_PROXY_BASE: &str = "localhost,127.0.0.1,0.0.0.0,::1,vault,tillandsias-vault,inference,proxy,git-service,tillandsias-git";
 const CA_DIR: &str = "/tmp/tillandsias-ca";
 
 fn enclave_subnet() -> String {
@@ -1129,7 +1135,6 @@ fn image_specs(root: &Path, image_name: &str) -> Result<(PathBuf, PathBuf), Stri
         "chromium-core" => "images/chromium",
         "chromium-framework" => "images/chromium",
         "vault" => "images/vault",
-        "zeroclaw" => "images/zeroclaw",
         other => {
             return Err(format!("Unknown image type: {other}"));
         }
@@ -1177,12 +1182,6 @@ fn image_build_inputs(
         let base = identities
             .get("forge-base")
             .ok_or_else(|| "forge identity requires forge-base identity".to_string())?;
-        build_args.insert("BASE_IMAGE".to_string(), base.canonical_tag.clone());
-        dependency_digests.insert("forge-base".to_string(), base.source_digest.clone());
-    } else if image_name == "zeroclaw" {
-        let base = identities
-            .get("forge-base")
-            .ok_or_else(|| "zeroclaw identity requires forge-base identity".to_string())?;
         build_args.insert("BASE_IMAGE".to_string(), base.canonical_tag.clone());
         dependency_digests.insert("forge-base".to_string(), base.source_digest.clone());
     }
@@ -1443,7 +1442,7 @@ fn ensure_image_exists(
                 )
             })?;
         }
-    } else if matches!(image_name, "forge" | "zeroclaw") {
+    } else if image_name == "forge" {
         let base_tag = versioned_image_tag("forge-base", version);
         if !rt.block_on(client.image_exists(&base_tag)) {
             ensure_image_exists(root, "forge-base", &base_tag, debug).map_err(|e| {
@@ -1464,7 +1463,7 @@ fn ensure_image_exists(
                 versioned_image_tag("chromium-core", version)
             ),
         ]
-    } else if matches!(image_name, "forge" | "zeroclaw") {
+    } else if image_name == "forge" {
         vec![
             "--build-arg".to_string(),
             format!("BASE_IMAGE={}", versioned_image_tag("forge-base", version)),
@@ -1808,7 +1807,7 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
                     format!("Failed to set cert permissions: {e}")
                 },
             )?;
-            std::fs::set_permissions(&tmp_key, std::fs::Permissions::from_mode(0o600)).map_err(
+            std::fs::set_permissions(&tmp_key, std::fs::Permissions::from_mode(0o640)).map_err(
                 |e| {
                     error!(
                         accountability = true,
@@ -1923,6 +1922,57 @@ fn build_proxy_run_args(certs_dir: &Path, image: &str) -> Vec<String> {
         ),
         image.into(),
     ]
+}
+
+/// Ensure the enclave egress proxy (squid) container is running.
+///
+/// The enclave network is `--internal`, so the proxy is the ONLY external
+/// egress path — it performs DNS resolution and the outbound fetch for every
+/// request leaving a container (gh api, package installs). A container set with
+/// `http_proxy=http://proxy:3128` but no running proxy fails with "error
+/// connecting to proxy" / curl exit 5 ("could not resolve host").
+///
+/// Standalone flows like `--github-login` and `--list-cloud-projects` bring up
+/// Vault but historically never started the proxy, so they failed the moment a
+/// containerized `gh` tried to reach GitHub. This mirrors `ensure_vault_running`
+/// and is idempotent — it returns early if the proxy is already up.
+///
+/// @trace spec:proxy-container, plan/issues/proxy-not-started-standalone-flows-2026-06-27.md
+fn ensure_proxy_running(debug: bool) -> Result<(), String> {
+    if crate::vault_bootstrap::container_running("tillandsias-proxy") {
+        if debug {
+            eprintln!("[tillandsias] enclave proxy already running");
+        }
+        return Ok(());
+    }
+    // Remove any stopped/exited container from a prior run so that `podman run
+    // --name tillandsias-proxy` does not fail with "name already in use".
+    let _ = podman_cmd_sync()
+        .args(["rm", "--ignore", "tillandsias-proxy"])
+        .output();
+    let version = VERSION.trim();
+    let root = resolve_runtime_asset_root(version, debug)?;
+    ensure_enclave_network(debug)?;
+    ensure_versioned_images(&root, &["proxy"], version, debug)?;
+    let proxy_image = versioned_image_tag("proxy", version);
+    let certs_dir = ensure_ca_bundle(debug)?;
+    let rt = podman_runtime()?;
+    let client = PodmanClient::new();
+    rt.block_on(async {
+        client
+            .run_container_observed(
+                "ensure-proxy",
+                "tillandsias-proxy",
+                &build_proxy_run_args(&certs_dir, &proxy_image),
+                debug,
+            )
+            .await
+            .map_err(|e| e.to_string())
+    })?;
+    if debug {
+        eprintln!("[tillandsias] enclave proxy started");
+    }
+    Ok(())
 }
 
 /// Read the host's `remote.origin.url` from a project's git config.
@@ -3162,6 +3212,137 @@ fn ensure_pasta_options_ipv4_only(path: &std::path::Path) -> Result<(), String> 
     Ok(())
 }
 
+/// True iff `/etc/resolv.conf` lists only loopback nameservers (e.g. the
+/// systemd-resolved stub `127.0.0.53`). Such an address is the *host's* loopback
+/// and is unreachable from inside a podman container, so image builds and
+/// containers can't resolve DNS unless we hand podman the real upstream servers.
+/// @trace plan/issues/init-dns-systemd-resolved-2026-06-27.md
+#[cfg(target_os = "linux")]
+fn resolv_conf_is_loopback_stub() -> bool {
+    let content = match fs::read_to_string("/etc/resolv.conf") {
+        Ok(c) => c,
+        Err(_) => return false,
+    };
+    let mut saw_nameserver = false;
+    for line in content.lines() {
+        if let Some(addr) = line.trim().strip_prefix("nameserver") {
+            saw_nameserver = true;
+            let addr = addr.trim();
+            // Any non-loopback nameserver means containers have a usable resolver.
+            if !addr.starts_with("127.") && addr != "::1" {
+                return false;
+            }
+        }
+    }
+    saw_nameserver
+}
+
+/// Resolve the real upstream DNS servers for containers when the host's
+/// `/etc/resolv.conf` only points at a loopback stub. Prefers systemd-resolved's
+/// actual upstream list (`/run/systemd/resolve/resolv.conf`); falls back to
+/// public resolvers if that is unavailable.
+/// @trace plan/issues/init-dns-systemd-resolved-2026-06-27.md
+#[cfg(target_os = "linux")]
+fn upstream_dns_servers() -> Vec<String> {
+    let mut servers = Vec::new();
+    if let Ok(content) = fs::read_to_string("/run/systemd/resolve/resolv.conf") {
+        for line in content.lines() {
+            if let Some(addr) = line.trim().strip_prefix("nameserver") {
+                let addr = addr.trim().to_string();
+                if !addr.is_empty() && !addr.starts_with("127.") && addr != "::1" {
+                    servers.push(addr);
+                }
+            }
+        }
+    }
+    if servers.is_empty() {
+        servers = vec!["1.1.1.1".to_string(), "8.8.8.8".to_string()];
+    }
+    servers
+}
+
+/// Idempotently add `dns_servers = [...]` to the `[network]` section of
+/// containers.conf so containers inherit a reachable resolver when the host uses
+/// a loopback resolver stub. No-op if `dns_servers` is already present.
+/// @trace plan/issues/init-dns-systemd-resolved-2026-06-27.md
+#[cfg(target_os = "linux")]
+fn ensure_containers_conf_dns_servers(
+    path: &std::path::Path,
+    servers: &[String],
+) -> Result<(), String> {
+    let quoted = servers
+        .iter()
+        .map(|s| format!("\"{s}\""))
+        .collect::<Vec<_>>()
+        .join(", ");
+    let dns_line = format!("dns_servers = [{quoted}]\n");
+
+    if !path.exists() {
+        if let Some(parent) = path.parent() {
+            fs::create_dir_all(parent)
+                .map_err(|e| format!("failed to create config directory: {e}"))?;
+        }
+        fs::write(path, format!("[network]\n{dns_line}"))
+            .map_err(|e| format!("failed to write containers.conf: {e}"))?;
+        return Ok(());
+    }
+
+    let content =
+        fs::read_to_string(path).map_err(|e| format!("failed to read containers.conf: {e}"))?;
+
+    if content.contains("dns_servers") {
+        return Ok(());
+    }
+
+    let mut new_content = String::new();
+    let mut network_found = false;
+    for line in content.lines() {
+        new_content.push_str(line);
+        new_content.push('\n');
+        if line.trim() == "[network]" {
+            new_content.push_str(&dns_line);
+            network_found = true;
+        }
+    }
+    if !network_found {
+        if !new_content.ends_with('\n') {
+            new_content.push('\n');
+        }
+        new_content.push_str(&format!("\n[network]\n{dns_line}"));
+    }
+
+    fs::write(path, new_content).map_err(|e| format!("failed to update containers.conf: {e}"))?;
+    Ok(())
+}
+
+/// Detect a loopback-only host resolver and configure podman with reachable
+/// upstream DNS servers so container builds/launches can resolve names. Mirrors
+/// `auto_detect_and_configure_ipv6_workaround`.
+/// @trace plan/issues/init-dns-systemd-resolved-2026-06-27.md
+#[cfg(target_os = "linux")]
+fn auto_detect_and_configure_dns(debug: bool) {
+    if !resolv_conf_is_loopback_stub() {
+        if debug {
+            eprintln!("[tillandsias] init: host resolver is container-reachable; no DNS override.");
+        }
+        return;
+    }
+    let Some(conf_path) = get_user_containers_conf() else {
+        return;
+    };
+    let servers = upstream_dns_servers();
+    if debug {
+        eprintln!(
+            "[tillandsias] init: host uses a loopback resolver stub; configuring containers.conf dns_servers = {servers:?}"
+        );
+    }
+    if let Err(e) = ensure_containers_conf_dns_servers(&conf_path, &servers)
+        && debug
+    {
+        eprintln!("[tillandsias] init: failed to configure dns_servers: {e}");
+    }
+}
+
 // Idempotently writes the proxy env vars to containers.conf [engine] section.
 // Podman 4.0+ injects [engine] env into every container launched by this user,
 // so forge containers and other containers that bypass the Rust launcher also
@@ -3233,7 +3414,7 @@ fn auto_detect_and_configure_ipv6_workaround(debug: bool) {
 }
 
 fn is_optional_image(image_name: &str) -> bool {
-    matches!(image_name, "forge-base" | "forge" | "zeroclaw")
+    matches!(image_name, "forge-base" | "forge")
 }
 
 fn run_init(debug: bool, force: bool) -> Result<(), String> {
@@ -3242,6 +3423,11 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
 
     #[cfg(target_os = "linux")]
     auto_detect_and_configure_ipv6_workaround(debug);
+
+    // Hosts using a loopback resolver stub (systemd-resolved 127.0.0.53) leave
+    // containers unable to resolve DNS; hand podman the real upstream servers.
+    #[cfg(target_os = "linux")]
+    auto_detect_and_configure_dns(debug);
 
     // Write proxy env to containers.conf so Podman injects it into every
     // container on this host, including forge containers that bypass the Rust
@@ -3269,7 +3455,6 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
         "chromium-framework",
         "forge-base",
         "forge",
-        "zeroclaw",
         "web",
     ];
 
@@ -3570,6 +3755,22 @@ fn run_init(debug: bool, force: bool) -> Result<(), String> {
     Ok(())
 }
 
+/// Proxy environment variables that must be emptied for the build subprocess so
+/// image builds reach the network directly instead of routing through the
+/// runtime-only `proxy:3128` host (which is unresolvable during a build). An
+/// empty value present in the spawning process's environment overrides the
+/// `[engine] env` proxy that `--init` writes into containers.conf.
+///
+/// @trace plan/issues/init-proxy-poisons-build-2026-06-27.md
+pub(crate) const BUILD_PROXY_NEUTRALIZE_VARS: [&str; 6] = [
+    "http_proxy",
+    "https_proxy",
+    "HTTP_PROXY",
+    "HTTPS_PROXY",
+    "all_proxy",
+    "ALL_PROXY",
+];
+
 /// Execute a single container image build via podman with optional logging.
 ///
 /// @trace spec:init-command, spec:init-incremental-builds
@@ -3598,6 +3799,22 @@ pub(crate) fn build_image_with_logging(
     let mut command = podman_command();
     let argv = podman_build_argv(&containerfile, &context_dir, identity, build_args)?;
     command.args(&argv);
+
+    // Image builds need DIRECT outbound network to fetch packages (apk, microdnf,
+    // npm, cargo). The squid proxy at `proxy:3128` only resolves at *runtime*
+    // inside the pod network via aardvark-dns; during a build there is no pod and
+    // no proxy container, so the proxy host is unresolvable. `--init` writes the
+    // proxy into the global containers.conf `[engine] env`, and Podman injects
+    // that env into every build RUN step — which makes apk/microdnf try to route
+    // through `http://proxy:3128` and fail with "Could not resolve proxy: proxy"
+    // / "DNS lookup error". Neutralize the proxy env for the build subprocess only
+    // (an empty value present in the spawning process's environment overrides the
+    // containers.conf `[engine] env` for that variable). Runtime container
+    // launches are unaffected and still route through the proxy.
+    // @trace spec:proxy-container, plan/issues/init-proxy-poisons-build-2026-06-27.md
+    for proxy_var in BUILD_PROXY_NEUTRALIZE_VARS {
+        command.env(proxy_var, "");
+    }
 
     // @trace gap:ON-005 — capture stdout/stderr for progress parsing
     command.stdout(Stdio::piped());
@@ -4207,7 +4424,13 @@ fn run_github_login(debug: bool) -> Result<(), String> {
     #[cfg(feature = "vault")]
     vault_bootstrap::ensure_vault_running(debug)?;
 
-    check_auth_required_services(&["tillandsias-vault"], debug)?;
+    // The login container reaches api.github.com (gh auth login --with-token)
+    // through the enclave proxy; the enclave network is --internal so the proxy
+    // is the only egress path. Start it now or gh fails with "error connecting
+    // to proxy". @trace plan/issues/proxy-not-started-standalone-flows-2026-06-27.md
+    ensure_proxy_running(debug)?;
+
+    check_auth_required_services(&["tillandsias-vault", "tillandsias-proxy"], debug)?;
 
     let container = format!("tillandsias-gh-login-{}", std::process::id());
     let cleanup = LoginContainerCleanup {
@@ -4239,6 +4462,13 @@ fn run_github_login(debug: bool) -> Result<(), String> {
             "--cap-drop=ALL",
             "--security-opt=no-new-privileges",
             "--userns=keep-id",
+        ]);
+        // Explicit proxy env so `vault` is in no_proxy and the in-container
+        // vault-cli write reaches https://vault:8200 directly (overrides any
+        // stale global containers.conf no_proxy on already-initialized hosts).
+        // @trace spec:proxy-container, plan/issues/vault-service-dns-no-proxy-2026-06-27.md
+        run.args(proxy_env_args());
+        run.args([
             "--entrypoint",
             "/bin/sh",
             &image,
@@ -4426,6 +4656,16 @@ fn run_list_cloud_projects(debug: bool) -> Result<(), String> {
     report_runtime_lane("--list-cloud-projects", debug);
 
     vault_bootstrap::ensure_vault_running(debug)?;
+    // The containerized `gh` fetch reaches GitHub through the enclave proxy
+    // (only egress path on the --internal enclave network). Start it or the
+    // fetch fails with "error connecting to proxy".
+    // @trace plan/issues/proxy-not-started-standalone-flows-2026-06-27.md
+    ensure_proxy_running(debug)?;
+    // Squid's sslcrtd cert-generator child takes a few seconds to initialize
+    // after the container starts listening on :3128.  Without this check the
+    // containerized `gh` HTTPS handshake can race sslcrtd and hang for the
+    // full GH_INVOCATION_TIMEOUT (25s).
+    check_auth_required_services(&["tillandsias-proxy"], debug)?;
 
     let start = std::time::Instant::now();
     let projects = remote_projects::discover_github_projects_result_with_debug(debug)?;
@@ -7980,6 +8220,64 @@ mod tests {
         assert!(enclave_no_proxy().ends_with(DEFAULT_ENCLAVE_SUBNET));
     }
 
+    #[cfg(target_os = "linux")]
+    #[test]
+    fn ensure_containers_conf_dns_servers_inserts_under_network_and_is_idempotent() {
+        // Models a host with a loopback resolver stub: dns_servers must be added
+        // to the existing [network] section, and a second call is a no-op.
+        // @trace plan/issues/init-dns-systemd-resolved-2026-06-27.md
+        let dir = std::env::temp_dir().join(format!("till-dns-test-{}", std::process::id()));
+        let _ = fs::create_dir_all(&dir);
+        let path = dir.join("containers.conf");
+        fs::write(&path, "[network]\npasta_options = [\"--ipv4-only\"]\n").unwrap();
+
+        let servers = vec!["209.18.47.61".to_string(), "1.1.1.1".to_string()];
+        ensure_containers_conf_dns_servers(&path, &servers).unwrap();
+        let after = fs::read_to_string(&path).unwrap();
+        assert!(
+            after.contains("dns_servers = [\"209.18.47.61\", \"1.1.1.1\"]"),
+            "dns_servers not written: {after}"
+        );
+        assert!(
+            after.contains("pasta_options"),
+            "must preserve existing keys: {after}"
+        );
+        // exactly one [network] section
+        assert_eq!(
+            after.matches("[network]").count(),
+            1,
+            "duplicated [network]"
+        );
+
+        // Idempotent: second call leaves content unchanged.
+        ensure_containers_conf_dns_servers(&path, &servers).unwrap();
+        let after2 = fs::read_to_string(&path).unwrap();
+        assert_eq!(after, after2, "second call must be a no-op");
+
+        let _ = fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn enclave_no_proxy_includes_vault_service_dns() {
+        // Containers reach Vault by its service DNS name (https://vault:8200)
+        // since the move off the locally-bound 127.0.0.1 listener. If `vault` is
+        // not in no_proxy, vault-cli's curl routes the Vault request through the
+        // enclave proxy and fails ("Could not resolve proxy: proxy"), breaking
+        // GitHub-login token storage and remote-project listing.
+        // @trace plan/issues/vault-service-dns-no-proxy-2026-06-27.md
+        let _guard = env_lock();
+        unsafe {
+            std::env::remove_var(ENCLAVE_SUBNET_ENV);
+        }
+        let no_proxy = enclave_no_proxy();
+        for entry in [",vault,", "tillandsias-vault"] {
+            assert!(
+                no_proxy.contains(entry),
+                "no_proxy must bypass Vault ({entry}); got {no_proxy}"
+            );
+        }
+    }
+
     #[test]
     fn enclave_no_proxy_uses_subnet_override() {
         let _guard = env_lock();
@@ -9312,12 +9610,21 @@ mod tests {
             image_specs(&root, "web").expect("web image specs should be resolvable");
         assert!(containerfile.ends_with("images/web/Containerfile"));
         assert!(context.ends_with("images/web"));
+    }
 
-        // Test zeroclaw image
-        let (containerfile, context) =
-            image_specs(&root, "zeroclaw").expect("zeroclaw image specs should be resolvable");
-        assert!(containerfile.ends_with("images/zeroclaw/Containerfile"));
-        assert!(context.ends_with("images/zeroclaw"));
+    #[test]
+    fn build_proxy_neutralize_vars_cover_lower_and_upper_case() {
+        // Image builds must reach the network directly; the runtime proxy
+        // (proxy:3128) does not resolve during a build. Pin that both the
+        // lowercase and uppercase proxy variables are neutralized so a future
+        // edit cannot silently re-poison the build environment.
+        // @trace plan/issues/init-proxy-poisons-build-2026-06-27.md
+        for var in ["http_proxy", "https_proxy", "HTTP_PROXY", "HTTPS_PROXY"] {
+            assert!(
+                BUILD_PROXY_NEUTRALIZE_VARS.contains(&var),
+                "build must neutralize proxy var {var}"
+            );
+        }
     }
 
     #[test]
@@ -9470,7 +9777,7 @@ mod tests {
 
         // The images array from run_init defines the build order:
         // proxy -> git -> inference -> router -> chromium-core -> chromium-framework
-        // -> forge-base -> forge -> zeroclaw -> web
+        // -> forge-base -> forge -> web
         let images = [
             "proxy",
             "git",
@@ -9480,7 +9787,6 @@ mod tests {
             "chromium-framework",
             "forge-base",
             "forge",
-            "zeroclaw",
             "web",
         ];
 
@@ -9516,18 +9822,12 @@ mod tests {
             forge_base_idx < forge_idx,
             "forge-base must be built before forge"
         );
-        let zeroclaw_idx = images.iter().position(|&i| i == "zeroclaw").unwrap();
-        assert!(
-            forge_base_idx < zeroclaw_idx,
-            "forge-base must be built before zeroclaw"
-        );
     }
 
     #[test]
     fn test_is_optional_image() {
         assert!(is_optional_image("forge-base"));
         assert!(is_optional_image("forge"));
-        assert!(is_optional_image("zeroclaw"));
         assert!(!is_optional_image("proxy"));
         assert!(!is_optional_image("git"));
         assert!(!is_optional_image("inference"));

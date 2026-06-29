@@ -2,6 +2,34 @@
 
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/20-macos-tray-v0_0_1.md, plan/issues/tray-convergence-coordination.md, plan/issues/macos-recipe-convergence-response-2026-05-24.md, openspec/changes/control-wire-pty-attach/
 
+## 2026-06-28T23:05Z — GitHub login E2E VERIFIED; list-cloud-projects added; parity gaps filed
+
+- **MILESTONE:** GitHub login (--github-login) completed E2E on macOS Apple Silicon
+  - Vault bootstrapped ✓, proxy started ✓, git identity stored ✓, token in Vault ✓
+  - Root cause of prior failures: CA cert key 0o600 (squid uid 1000 can't read)
+  - Workaround: tray bash pre-flight creates certs with chmod 644 (8144c5db)
+  - Permanent fix: linux-next headless 0o640 + rm --ignore proxy (a08f9c3e)
+- Added `--list-cloud-projects` tray CLI mode (`list_cloud_projects_main`):
+  - Matches Linux `tillandsias --list-cloud-projects` parity (order 128 matrix)
+  - Uses exec_over_stream_with_input_streaming (streaming, not expect-style)
+  - Same CA cert / proxy workaround pre-flight as github_login_main
+- Fixed `opencode_main` vault URL: `10.0.42.2:8200` → `vault:8200` (TLS bug)
+- Fixed rustfmt drift in vz.rs (unblocked linux-next coordinator merge)
+- Filed `plan/issues/macos-tray-parity-gaps-2026-06-28.md` with macOS column for order 128 parity matrix
+- Build: `build-osx-tray.sh --ci-full --install` PASS; installed to /Applications/Tillandsias.app
+- Next: run `--list-cloud-projects` E2E; address cloud project submenus in tray menu
+
+## 2026-06-27T00:00Z — ff-pull linux-next→osx-next; vault cert finding filed; local build launched
+
+- Fast-forwarded osx-next db9e2d0d→370e2317 (20 new commits from linux-next)
+- Key changes absorbed: vault→DNS routing (f948defa), credential host-exposure
+  audit (4d910224), ProviderId/API-key injection (006f395d), zeroclaw removed,
+  vz.rs headless service env now uses `https://vault:8200`
+- Filed `smoke-finding/vault-cert-ip-not-valid-for-name` (done — fixed in ff)
+- Filed `smoke-finding/exec-guest-pty-output-not-captured-in-background` (ready)
+- Local macOS tray build started: `./build-osx-tray.sh --ci-full`
+- Next: install locally-built tray, update headless binary in VM, test github-login
+
 ## 2026-06-26T22:30Z — smoke v0.3.260626.4 packets exhausted; 5 fixes committed to osx-next
 
 - `smoke-finding/download-no-read-timeout` → DONE: `fetch.rs` 30s idle timeout + 5-retry exponential backoff loop
@@ -3689,3 +3717,38 @@ Ready, step-32-independent packet for this host: **keyring persistent-backend ve
 - **Remaining**: order 99 still needs the linux/shared order 100 Podman
   health/lifecycle facade before the full provider-neutral UP+HEALTHY
   credential preflight is complete.
+
+---
+
+## 2026-06-27: wait_ready phase-signal improvement
+
+**Finding (Jun 27 session):** `VzRuntime::wait_ready` probes vsock port
+connectivity (stage 2) with a hardcoded 90s wall-clock timeout. The headless
+already maintains a `VmStateHandle` with `Starting → Ready → Failed` transitions
+(podman-up triggers Ready). The tray should wait on the *phase signal*, not a raw
+port probe.
+
+### Work Packet: macos-tray/wait-ready-phase-signal
+
+- id: `macos-tray/wait-ready-phase-signal`
+- owner_host: macos
+- capability_tags: [rust, macos, vsock, control-wire, ux]
+- status: ready
+- next_action: >
+    After stage-2 vsock connectivity, send a Hello/HelloAck handshake (or a new
+    VmStatusRequest message) to read the in-VM VmPhase from VmStateHandle. Loop
+    with backoff until phase == Ready (podman up) or phase == Failed (give up).
+    Remove the hardcoded 90s timeout from exec_guest_main / github_login_main;
+    replace with bounded retry against the phase signal. The headless
+    advance_to_ready_when_podman_up task already produces this signal — the tray
+    just needs to consume it over the wire instead of relying on wall-clock
+    assumptions.
+- events:
+  - type: discovered
+    ts: "2026-06-27T23:00:00Z"
+    agent_id: "macos-advance-20260627T2200Z"
+    host: macos
+    note: >
+      Hardcoded 90s timeout caused first-boot failures when cloud-init download
+      exceeded budget. Proper fix: wire VmPhase through Hello/HelloAck or a
+      dedicated VmStatusRequest, eliminate the timeout assumption.

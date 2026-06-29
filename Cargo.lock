@@ -2921,6 +2921,7 @@ dependencies = [
 name = "tillandsias-control-wire"
 version = "0.1.170"
 dependencies = [
+ "async-trait",
  "postcard",
  "serde",
  "tempfile",
@@ -3223,20 +3224,6 @@ dependencies = [
  "tracing-subscriber",
  "uuid",
  "windows 0.58.0",
-]
-
-[[package]]
-name = "tillandsias-zeroclaw"
-version = "0.1.0"
-dependencies = [
- "libc",
- "serde_json",
- "tempfile",
- "thiserror",
- "tillandsias-browser-mcp",
- "tokio",
- "tracing",
- "tracing-subscriber",
 ]
 
 [[package]]

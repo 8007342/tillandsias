@@ -135,8 +135,8 @@ Hard rules:
     ```bash
     git add <specific-files>      # NEVER `git add -A` (cross-host churn)
     git commit -m "<slice-message>"   # cite trace + plan packet + any unblock-noop
+    # on rejection: git fetch && git rebase origin/<active-branch> && ./build.sh --check
     git push origin <active-branch>
-    # on non-ff: git fetch && git rebase origin/<active-branch> && push, ≤3x
     ```
 3.  **Durable Ledger Update**: Write a one-line outcome to your host's work-queue ledger (`plan/issues/<host>-next-work-queue-*.md`):
     ```

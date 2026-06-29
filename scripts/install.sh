@@ -6,7 +6,6 @@ set -euo pipefail
 
 REPO="8007342/tillandsias"
 ASSET="tillandsias-linux-x86_64"
-ZEROCLAW_ASSET="tillandsias-zeroclaw-linux-x86_64"
 RELEASE_BASE="https://github.com/${REPO}/releases/latest/download"
 PATH_MARKER_BEGIN="# >>> tillandsias PATH >>>"
 PATH_MARKER_END="# <<< tillandsias PATH <<<"
@@ -195,17 +194,6 @@ mkdir -p "$INSTALL_DIR"
 mv -f "$BINARY_TMP" "$INSTALL_PATH"
 say "Installed $INSTALL_PATH"
 
-ZEROCLAW_TMP="$TMPDIR_TILLANDSIAS/$ZEROCLAW_ASSET"
-ZEROCLAW_INSTALL_PATH="$INSTALL_DIR/tillandsias-zeroclaw"
-say "Downloading $ZEROCLAW_ASSET..."
-if curl -fL --retry 3 --retry-delay 2 -o "$ZEROCLAW_TMP" "$RELEASE_BASE/$ZEROCLAW_ASSET"; then
-    chmod 0755 "$ZEROCLAW_TMP"
-    mv -f "$ZEROCLAW_TMP" "$ZEROCLAW_INSTALL_PATH"
-    say "Installed $ZEROCLAW_INSTALL_PATH"
-else
-    say "WARNING: tillandsias-zeroclaw not available in this release; ZeroClaw will not work until a release includes it."
-fi
-
 rm -f "$INSTALL_DIR/tillandsias-uninstall" 2>/dev/null || true
 
 if [ -n "${XDG_CURRENT_DESKTOP:-}" ] || [ -n "${DESKTOP_SESSION:-}" ]; then
@@ -255,7 +243,7 @@ fi
 
 echo ""
 say "Running tillandsias --init (sets up local runtime — may take a minute)..."
-"$INSTALL_PATH" --init
+"$INSTALL_PATH" --init --debug
 echo ""
 say "Init complete. Launch the tray with:"
 if path_has_dir "$INSTALL_DIR"; then

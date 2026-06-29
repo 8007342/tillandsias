@@ -466,6 +466,7 @@ specs:
   status: active
   litmus_tests:
   - litmus:methodology-accountability-shape
+  - litmus:no-duplicate-rust-item-defs
   coverage_ratio: 100
   last_verified: '2026-05-15'
 - spec_id: meta-orchestration
@@ -693,6 +694,7 @@ specs:
   - litmus:agent-selection-menu
   - litmus:web-container-stop
   - litmus:binary-e2e-smoke
+  - litmus:tray-parity-matrix-complete
   coverage_ratio: 100
   last_verified: '2026-05-15'
 - spec_id: tray-cli-coexistence
@@ -888,13 +890,3 @@ specs:
   - litmus:reverse-proxy-internal-shape
   coverage_ratio: 75
   last_verified: '2026-05-30'
-- spec_id: zeroclaw-orchestration
-  status: active
-  litmus_tests:
-  - litmus:zeroclaw-mcp-shape
-  coverage_ratio: 80
-  last_verified: '2026-06-20'
-  note: >
-    80% coverage: allowlist + broker unit tests + launch/broker integration smoke
-    (3 integration tests in lib.rs). Gap: live container launch (requires runtime
-    podman + built image) — covered by local-build e2e gate at release time.

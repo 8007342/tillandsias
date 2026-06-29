@@ -1,0 +1,18 @@
+id: egress-allowlist-research
+title: "Determine Exact Denied FQDNs per Agent"
+description: >
+  Identified exact domains blocked by proxy at startup for Claude and Codex.
+status: research-complete
+findings:
+  codex:
+    denied_fqdns:
+      - chatgpt.com
+      - github.com
+      - api.github.com
+  claude:
+    denied_fqdns:
+      - platform.claude.com
+      - raw.githubusercontent.com
+  antigravity:
+    status: "not wired as an agent"
+    notes: "No entrypoint-forge-antigravity.sh exists."
