@@ -156,7 +156,10 @@ fn revocation_registry() -> &'static Mutex<HashMap<String, String>> {
     REG.get_or_init(|| Mutex::new(HashMap::new()))
 }
 
-/// Default base URL the Linux tray uses to talk to the local Vault container.
+/// Default base URL the macOS/Windows tray uses to talk to the local Vault
+/// container via the host-side port-forward. Not used on Linux where the
+/// in-VM headless reaches Vault directly over the enclave bridge network.
+#[cfg(not(target_os = "linux"))]
 pub fn host_base_url() -> String {
     format!("https://127.0.0.1:{VAULT_HOST_PORT}")
 }
@@ -810,21 +813,21 @@ fn has_shamir_share_in_keyring() -> bool {
     };
 
     // Primary: OS keychain
-    if let Ok(entry) = Entry::new(KEYCHAIN_SERVICE, VAULT_SHAMIR_SHARE_V1) {
-        if let Ok(encoded) = with_keyring_timeout(move || entry.get_password()) {
-            if try_decode(&encoded) {
-                return true;
-            }
+    if let Ok(entry) = Entry::new(KEYCHAIN_SERVICE, VAULT_SHAMIR_SHARE_V1)
+        && let Ok(encoded) = with_keyring_timeout(move || entry.get_password())
+    {
+        if try_decode(&encoded) {
+            return true;
         }
     }
 
     // Fallback: file (populated by keychain_set_blocking when keyring unavailable,
     // e.g. in a VM guest or headless environment without D-Bus)
-    if let Ok(cache_dir) = crate::init_cache_dir() {
-        let fallback = cache_dir.join(format!("fallback_{}", VAULT_SHAMIR_SHARE_V1));
-        if let Ok(encoded) = fs::read_to_string(&fallback) {
-            return try_decode(encoded.trim());
-        }
+    if let Ok(cache_dir) = crate::init_cache_dir()
+        && let Ok(encoded) =
+            fs::read_to_string(cache_dir.join(format!("fallback_{}", VAULT_SHAMIR_SHARE_V1)))
+    {
+        return try_decode(encoded.trim());
     }
     false
 }
@@ -1785,6 +1788,7 @@ mod tests {
     }
 
     #[test]
+    #[cfg(not(target_os = "linux"))]
     fn host_base_url_targets_loopback() {
         let url = host_base_url();
         assert!(url.starts_with("https://127.0.0.1:"), "got {url}");
