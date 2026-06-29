@@ -542,7 +542,7 @@ pub fn github_login_main() -> i32 {
                 // so nothing unencrypted is left at rest here.
                 "export HOME=/root; export XDG_RUNTIME_DIR=/run/user/0; \
                  export TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200; \
-                 mkdir -p \"$XDG_RUNTIME_DIR\" 2>/dev/null; \
+                 install -d -m 0700 \"$XDG_RUNTIME_DIR\"; \
                  exec /usr/local/bin/tillandsias-headless --github-login",
             ],
             expects,

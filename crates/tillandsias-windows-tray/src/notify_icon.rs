@@ -76,7 +76,7 @@ use tillandsias_host_shell::menu_state::{
     self, GithubLoginState, MenuItem, MenuState, MenuStructure, ProjectEntry, SelectedAgent,
 };
 use tillandsias_host_shell::provisioning::{ProvisionPhase, ProvisionProgress};
-use tillandsias_host_shell::pty::{intent_for_action, launch_spec};
+use tillandsias_host_shell::pty::{PtyIntent, intent_for_action, launch_spec};
 use tillandsias_host_shell::scanner::{ProjectEvent, watch_projects};
 
 use windows::Win32::Foundation::{HINSTANCE, HWND, LPARAM, LRESULT, POINT, WPARAM};
@@ -2370,15 +2370,20 @@ fn launch_open_shell_terminal(action: &MenuAction) {
     // Default geometry until the tray owns a real terminal surface to size from.
     let spec = launch_spec(&intent, project.as_deref(), 24, 80);
     let distro = crate::wsl_lifecycle::DISTRO_NAME;
-    let title = match project.as_deref() {
-        Some(p) => format!("Tillandsias \u{2014} {p}"),
-        None => "Tillandsias shell".to_string(),
-    };
+    let title = terminal_title(&intent, project.as_deref());
     match spawn_wsl_terminal(distro, &title, &spec.argv) {
         Ok(()) => tracing::info!(?intent, project = ?project, argv = ?spec.argv,
             "opened in-VM PTY in a native terminal (wsl.exe)"),
         Err(err) => tracing::warn!(%err, ?intent, project = ?project,
             "failed to open terminal for in-VM PTY"),
+    }
+}
+
+fn terminal_title(intent: &PtyIntent, project: Option<&str>) -> String {
+    match (intent, project) {
+        (PtyIntent::GithubLogin, _) => "Tillandsias \u{2014} GitHub Login".to_string(),
+        (_, Some(p)) => format!("Tillandsias \u{2014} {p}"),
+        _ => "Tillandsias shell".to_string(),
     }
 }
 
@@ -3218,6 +3223,19 @@ mod tests {
     /// The Open-Shell terminal argv runs the resolved in-VM argv verbatim under
     /// `wsl.exe -d <distro> --` in a titled tab — the forge-wrapped command (the
     /// part that converges with the macOS Terminal.app path) is preserved intact.
+    #[test]
+    fn github_login_terminal_title_is_explicit() {
+        assert_eq!(
+            terminal_title(&PtyIntent::GithubLogin, None),
+            "Tillandsias \u{2014} GitHub Login"
+        );
+        assert_eq!(terminal_title(&PtyIntent::Shell, None), "Tillandsias shell");
+        assert_eq!(
+            terminal_title(&PtyIntent::Shell, Some("foo")),
+            "Tillandsias \u{2014} foo"
+        );
+    }
+
     #[test]
     fn wt_terminal_argv_wraps_in_vm_argv_under_wsl() {
         let in_vm = vec![

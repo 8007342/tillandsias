@@ -24,7 +24,7 @@ use std::time::Duration;
 use keyring::Entry;
 
 use tillandsias_podman::{PodmanClient, podman_cmd_sync};
-use tillandsias_vault_client::{Policy, VaultClient, auto_unseal};
+use tillandsias_vault_client::{HealthStatus, Policy, VaultClient, auto_unseal};
 use zeroize::Zeroize;
 
 const VAULT_CONTAINER_NAME: &str = "tillandsias-vault";
@@ -367,8 +367,8 @@ pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
         let rt = tokio_runtime()?;
         let base_url = vault_api_base_url();
         let client = vault_client(&base_url, "", debug)?;
-        match rt.block_on(client.health()) {
-            Ok(h) if h.initialized && !h.sealed => {
+        match wait_for_vault_api_ready(&rt, &client, debug) {
+            Ok(h) => {
                 if debug {
                     eprintln!(
                         "[tillandsias-vault] container already running and unsealed (v={})",
@@ -392,10 +392,10 @@ pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
                 }
                 return Ok(());
             }
-            other => {
+            Err(e) => {
                 if debug {
                     eprintln!(
-                        "[tillandsias-vault] container present but health probe returned {other:?}; relaunching"
+                        "[tillandsias-vault] container present but health probe returned {e}; relaunching"
                     );
                 }
             }
@@ -430,6 +430,44 @@ pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
     eprintln!("[tillandsias-vault]   policies : {:?}", Policy::all());
     eprintln!("[tillandsias-vault]   base_url : {base_url}");
     Ok(())
+}
+
+fn wait_for_vault_api_ready(
+    rt: &tokio::runtime::Runtime,
+    client: &VaultClient,
+    debug: bool,
+) -> Result<HealthStatus, String> {
+    let mut delay = Duration::from_millis(250);
+    let max_delay = Duration::from_secs(2);
+    let mut last_failure = "vault API probe did not run".to_string();
+    const MAX_API_PROBE_ATTEMPTS: usize = 8;
+
+    for attempt in 1..=MAX_API_PROBE_ATTEMPTS {
+        match rt.block_on(client.health()) {
+            Ok(h) if h.initialized && !h.sealed => return Ok(h),
+            Ok(h) => {
+                last_failure = format!(
+                    "vault API reports initialized={} sealed={}",
+                    h.initialized, h.sealed
+                );
+            }
+            Err(e) => {
+                last_failure = format!("vault API probe failed: {e}");
+            }
+        }
+        if attempt == MAX_API_PROBE_ATTEMPTS {
+            break;
+        }
+        if debug {
+            eprintln!(
+                "[tillandsias-vault] {last_failure}; retrying API probe ({attempt}/{MAX_API_PROBE_ATTEMPTS})"
+            );
+        }
+        rt.block_on(tokio::time::sleep(delay));
+        delay = std::cmp::min(delay.saturating_mul(2), max_delay);
+    }
+
+    Err(last_failure)
 }
 
 /// Compatibility shim retained for the deprecated `--with-vault` opt-in
@@ -1428,28 +1466,18 @@ fn wait_for_vault_ready(
         .map_err(|e| format!("vault container did not report healthy: {e}"))?;
 
     let client = vault_client(base_url, "", debug)?; // health doesn't need a token
-    match rt.block_on(client.health()) {
-        Ok(h) if h.initialized && !h.sealed => {
+    match wait_for_vault_api_ready(rt, &client, debug) {
+        Ok(h) => {
             if debug {
                 eprintln!(
                     "[tillandsias-vault] vault healthy (initialized={} sealed={} v={})",
                     h.initialized, h.sealed, h.version
                 );
             }
+            read_and_handover_root_token(debug)
         }
-        Ok(h) => {
-            return Err(format!(
-                "vault podman health is healthy but API reports initialized={} sealed={}",
-                h.initialized, h.sealed
-            ));
-        }
-        Err(e) => {
-            return Err(format!(
-                "vault podman health is healthy but API probe failed: {e}"
-            ));
-        }
+        Err(e) => Err(format!("vault podman health is healthy but {e}")),
     }
-    read_and_handover_root_token(debug)
 }
 
 /// Read a single handover file from the running Vault container's tmpfs.
