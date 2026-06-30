@@ -7773,7 +7773,7 @@ plan_index:
     - packet_id: host-guest-transport-windows
       order: 127
       title: "Conform Windows WSL/hvsock backend to host<->guest facade"
-      status: ready
+      status: completed
       unblocked_note: >
         The facade contract is landed in tillandsias-control-wire::guest_transport
         (GuestTransport trait + GuestEndpoint::Wsl + ExecRequest/ExecOutput) and
@@ -7795,6 +7795,21 @@ plan_index:
         - "No cfg-selected transport in Windows tray callers"
         - "Both primitives pass the shared conformance fixtures on Windows"
         - "Windows tray parity rows satisfied"
+      events:
+        - type: claim
+          ts: "2026-06-29T05:00:00Z"
+          agent_id: "windows-claude-20260629T0500Z"
+          host: "windows"
+          lease_id: "host-guest-transport-windows-claim-1"
+          expires_at: "2026-06-29T07:00:00Z"
+        - type: complete
+          ts: "2026-06-30T00:00:00Z"
+          agent_id: "windows-claude-20260630T0000Z"
+          commit_hash: "85c1de70"
+          evidence: >
+            WslGuestTransport (GuestTransport impl) + all HvSocket primitives in
+            transport_windows.rs (vm-layer). Tray hvsocket.rs re-exports from vm-layer;
+            ~220 lines of duplicate code eliminated. cargo check clean on both crates.
 
     - packet_id: tray-feature-parity-matrix
       order: 128
