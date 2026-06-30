@@ -484,7 +484,7 @@ fn wait_for_vault_api_ready(
                 "[tillandsias-vault] {last_failure}; retrying API probe ({attempt}/{MAX_API_PROBE_ATTEMPTS})"
             );
         }
-        rt.block_on(tokio::time::sleep(delay));
+        std::thread::sleep(delay);
         delay = std::cmp::min(delay.saturating_mul(2), max_delay);
     }
 
@@ -1680,6 +1680,23 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
                 );
             }
             return Ok(token.clone());
+        }
+        // Host didn't deliver a root token. Try the local fallback file
+        // (written by the vault-init bootstrap on first run and by any
+        // explicit `--store-vault-root-token` path). This keeps the headless
+        // self-sufficient when the Windows tray's Credential Manager hasn't
+        // received the handover yet (e.g. after a GetVaultHandover failure).
+        let cache_dir = crate::init_cache_dir().map_err(|err| format!("init cache dir: {err}"))?;
+        let fallback_file = cache_dir.join("fallback_vault-root-token-v1");
+        if fallback_file.is_file() {
+            if let Ok(t) = fs::read_to_string(&fallback_file).map(|s| s.trim().to_string()) {
+                if !t.is_empty() {
+                    if debug {
+                        eprintln!("[tillandsias-vault] recovered root token from VM fallback file");
+                    }
+                    return Ok(t);
+                }
+            }
         }
         return Err("running in VM but no root token delivered from host".to_string());
     }
