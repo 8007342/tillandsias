@@ -1807,7 +1807,7 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
                     format!("Failed to set cert permissions: {e}")
                 },
             )?;
-            std::fs::set_permissions(&tmp_key, std::fs::Permissions::from_mode(0o640)).map_err(
+            std::fs::set_permissions(&tmp_key, std::fs::Permissions::from_mode(0o644)).map_err(
                 |e| {
                     error!(
                         accountability = true,
@@ -1842,6 +1842,16 @@ fn ensure_ca_bundle(debug: bool) -> Result<PathBuf, String> {
         if debug {
             eprintln!("[tillandsias] refreshed CA bundle at {}", crt.display());
         }
+    }
+
+    // Squid runs as a non-root user inside the container and needs read
+    // access to the key file mounted via bind-mount. Upgrade mode to 644
+    // every call so that keys generated before this fix (mode 640) are also
+    // healed without requiring a CA rotation.
+    #[cfg(unix)]
+    if key.is_file() {
+        use std::os::unix::fs::PermissionsExt;
+        let _ = std::fs::set_permissions(&key, std::fs::Permissions::from_mode(0o644));
     }
 
     Ok(certs_dir)
