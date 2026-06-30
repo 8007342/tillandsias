@@ -109,6 +109,28 @@ pub fn parse_guid(s: &str) -> Option<windows::core::GUID> {
     })
 }
 
+/// Winsock runtime — initialised exactly once per process via [`wsa_startup`].
+///
+/// Storing `Result<(), i32>` avoids a second `WSAStartup` call on every
+/// connection attempt. The `i32` is the raw `WSAStartup` return code on
+/// failure (non-zero errno-equivalent).
+#[cfg(target_os = "windows")]
+static WSA_INIT: std::sync::OnceLock<Result<(), i32>> = std::sync::OnceLock::new();
+
+/// Initialise the Winsock runtime (WSA 2.2) exactly once; idempotent thereafter.
+#[cfg(target_os = "windows")]
+fn wsa_startup() -> std::io::Result<()> {
+    use windows::Win32::Networking::WinSock::{WSADATA, WSAStartup};
+    let r = WSA_INIT.get_or_init(|| {
+        let mut data = WSADATA::default();
+        let rc = unsafe { WSAStartup(0x0202, &mut data) };
+        if rc != 0 { Err(rc) } else { Ok(()) }
+    });
+    r.as_ref()
+        .copied()
+        .map_err(|rc| std::io::Error::other(format!("WSAStartup failed: {rc}")))
+}
+
 /// Connect to the in-VM control wire over a **Hyper-V socket** (`AF_HYPERV`) —
 /// the Windows-host realization of "connect to the guest's AF_VSOCK listener"
 /// for WSL2. Resolves the WSL utility-VM GUID + the vsock-port service GUID,
@@ -117,18 +139,23 @@ pub fn parse_guid(s: &str) -> Option<windows::core::GUID> {
 /// (a thin wrapper over the OS `SOCKET`; stream read/write work regardless of
 /// address family) so the control-wire framing can run over it.
 ///
+/// **Blocking**: this function calls `std::process::Command` (hcsdiag) and the
+/// raw WSA `connect()` syscall. Always call it from inside
+/// `tokio::task::spawn_blocking`; never call it directly from an async context.
+///
 /// @trace plan/issues/tray-convergence-coordination.md (F2)
 #[cfg(target_os = "windows")]
 pub fn connect_control_wire(port: u32) -> std::io::Result<std::net::TcpStream> {
     use std::io::{Error, ErrorKind};
     use std::os::windows::io::FromRawSocket;
     use windows::Win32::Networking::WinSock::{
-        SOCK_STREAM, SOCKADDR, WSACleanup, WSADATA, WSAGetLastError, WSAStartup, closesocket,
-        connect, socket,
+        SOCK_STREAM, SOCKADDR, WSAGetLastError, closesocket, connect, setsockopt, socket,
     };
 
     const AF_HYPERV: u16 = 34;
     const HV_PROTOCOL_RAW: i32 = 1;
+    const SOL_SOCKET: i32 = 0xFFFF;
+    const SO_SNDTIMEO: i32 = 0x1005;
 
     /// `SOCKADDR_HV` (hvsocket.h): family + reserved + 16-byte VmId + 16-byte
     /// ServiceId GUIDs = 36 bytes.
@@ -146,18 +173,26 @@ pub fn connect_control_wire(port: u32) -> std::io::Result<std::net::TcpStream> {
     let svc_guid = parse_guid(&vsock_service_guid(port))
         .ok_or_else(|| Error::new(ErrorKind::InvalidData, "bad service GUID"))?;
 
+    wsa_startup()?;
     unsafe {
-        let mut wsadata = WSADATA::default();
-        if WSAStartup(0x0202, &mut wsadata) != 0 {
-            return Err(Error::other("WSAStartup failed"));
-        }
         let sock = match socket(AF_HYPERV as i32, SOCK_STREAM, HV_PROTOCOL_RAW) {
             Ok(s) => s,
-            Err(e) => {
-                WSACleanup();
-                return Err(Error::other(format!("AF_HYPERV socket() failed: {e}")));
-            }
+            Err(e) => return Err(Error::other(format!("AF_HYPERV socket() failed: {e}"))),
         };
+
+        // Best-effort 5 s send timeout — AF_HYPERV may not honour SO_SNDTIMEO,
+        // but the primary protection against hangs is spawn_blocking (see caller).
+        let timeout_ms: u32 = 5_000;
+        let _ = setsockopt(
+            sock,
+            SOL_SOCKET,
+            SO_SNDTIMEO,
+            Some(std::slice::from_raw_parts(
+                &timeout_ms as *const u32 as *const u8,
+                std::mem::size_of::<u32>(),
+            )),
+        );
+
         let addr = SockaddrHv {
             family: AF_HYPERV,
             reserved: 0,
@@ -181,13 +216,6 @@ pub fn connect_control_wire(port: u32) -> std::io::Result<std::net::TcpStream> {
     }
 }
 
-/// Connect over HvSocket and run the control-wire `Hello`/`HelloAck` handshake,
-/// returning the negotiated wire version. Proves the FULL Windows host→guest
-/// control wire end-to-end: transport (`AF_HYPERV`) + protocol (the
-/// `tillandsias-control-wire` envelope codec). The connected stream is returned
-/// for the caller to keep for the session.
-///
-/// @trace plan/issues/tray-convergence-coordination.md (F2), spec:vsock-transport
 /// Open an HvSocket connection to the in-VM AF_VSOCK port (via AF_HYPERV) and
 /// return it as a tokio TCP stream — a thin wrapper over the OS socket; stream
 /// I/O works regardless of address family. Does NOT perform the
@@ -197,10 +225,17 @@ pub fn connect_control_wire(port: u32) -> std::io::Result<std::net::TcpStream> {
 /// drives the same shared `Client` over its `VZVirtioSocketConnection` stream;
 /// slice 4 `80d9196e`).
 ///
+/// `connect_control_wire` is synchronous (WSA + subprocess); it runs in
+/// `spawn_blocking` so the tokio `current_thread` executor and the Win32 message
+/// pump sharing that thread remain alive while the connect is in flight.
+///
 /// @trace plan/issues/tray-convergence-coordination.md (F2), spec:vsock-transport
+/// @trace plan/issues/vsock-postmortem-host-guest-design-audit-2026-06-29.md (H1)
 #[cfg(target_os = "windows")]
 pub async fn open_hvsocket_stream(port: u32) -> std::io::Result<tokio::net::TcpStream> {
-    let std_stream = connect_control_wire(port)?;
+    let std_stream = tokio::task::spawn_blocking(move || connect_control_wire(port))
+        .await
+        .map_err(|e| std::io::Error::other(format!("spawn_blocking panicked: {e}")))??;
     std_stream.set_nonblocking(true)?;
     tokio::net::TcpStream::from_std(std_stream)
 }
@@ -220,10 +255,10 @@ pub async fn hvsocket_handshake(port: u32) -> std::io::Result<(tokio::net::TcpSt
         seq: 1,
         body: ControlMessage::Hello {
             from: "tillandsias-windows-tray".to_string(),
-            capabilities: vec![
-                "VmStatusRequest".to_string(),
-                "EnumerateLocalProjects".to_string(),
-            ],
+            capabilities: tillandsias_host_shell::vsock_client::STANDARD_HOST_CAPABILITIES
+                .iter()
+                .map(|s| s.to_string())
+                .collect(),
         },
     };
     let bytes = encode(&hello).map_err(|e| Error::new(ErrorKind::InvalidData, e))?;
@@ -398,6 +433,47 @@ mod tests {
     #[test]
     fn none_when_no_vm_running() {
         assert_eq!(parse_wsl_vm_id(""), None);
+    }
+
+    /// Regression guard for the hard-reset bug: `open_hvsocket_stream` must not
+    /// block the tokio `current_thread` executor even when AF_HYPERV `connect()`
+    /// stalls for a long time (the original hang scenario). The guard works by
+    /// spawning a concurrent task that sets a flag after a short sleep; if the
+    /// executor is blocked, the task never runs and the assertion fires.
+    ///
+    /// Port 42421 is not the control-wire port. AF_HYPERV connects to
+    /// non-listening ports may hang for many seconds — that is fine; we only care
+    /// that the executor stays alive (i.e., the connect runs in `spawn_blocking`).
+    #[cfg(target_os = "windows")]
+    #[tokio::test(flavor = "current_thread")]
+    async fn blocking_connect_does_not_hang_executor() {
+        use std::sync::Arc;
+        use std::sync::atomic::{AtomicBool, Ordering};
+        use std::time::Duration;
+
+        let executor_alive = Arc::new(AtomicBool::new(false));
+        let flag = executor_alive.clone();
+
+        // This task can only make progress when the executor is free. On a
+        // current_thread runtime it runs between await-yields of the main task.
+        // Without spawn_blocking, connect_control_wire blocks the executor
+        // thread and this task never runs.
+        let bg = tokio::spawn(async move {
+            tokio::time::sleep(Duration::from_millis(100)).await;
+            flag.store(true, Ordering::Relaxed);
+        });
+
+        // Bound the connect so the test does not run for minutes.
+        let _ = tokio::time::timeout(Duration::from_secs(5), open_hvsocket_stream(42421)).await;
+
+        // bg should have finished long ago; give it a short grace period.
+        let _ = tokio::time::timeout(Duration::from_millis(500), bg).await;
+
+        assert!(
+            executor_alive.load(Ordering::Relaxed),
+            "executor was blocked during open_hvsocket_stream — \
+             spawn_blocking wrapper is missing or broken"
+        );
     }
 
     /// Live round-trip proof (F2): with a running WSL distro whose

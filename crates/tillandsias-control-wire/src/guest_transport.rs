@@ -1,3 +1,4 @@
+// @trace spec:host-guest-transport
 //! Host↔guest transport facade (order 124).
 //!
 //! The single, platform-agnostic contract for reaching the guest from the host.

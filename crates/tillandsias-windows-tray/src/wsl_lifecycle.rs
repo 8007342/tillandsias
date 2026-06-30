@@ -36,6 +36,22 @@ const PROVISIONING_MANIFEST: &str = include_str!("../assets/provisioning-manifes
 /// the trust root.
 pub const RECIPE_MANIFEST: &str = include_str!("../../../images/vm/manifest.toml");
 
+/// SELinux policy sources for the tillandsias-headless domain and the Vault
+/// container domain. Embedded at build time so the installed, checkout-free
+/// tray can write them into the Fedora 44 VM during `inject_bootstrap_logic`.
+///
+/// Policy is compiled in-VM via `make -f /usr/share/selinux/devel/Makefile`
+/// (requires `selinux-policy-devel`, installed by `ensure_base_packages`).
+/// The installation step is conditional on `getenforce` returning Permissive
+/// or Enforcing — it is a no-op while SELinux remains Disabled.
+///
+/// @trace plan/issues/selinux-zero-trust-vsock-policy-design-2026-06-29.md (Phase 3d)
+const SELINUX_HEADLESS_TE: &str = include_str!("../../../images/selinux/tillandsias_headless.te");
+const SELINUX_HEADLESS_FC: &str = include_str!("../../../images/selinux/tillandsias_headless.fc");
+const SELINUX_HEADLESS_IF: &str = include_str!("../../../images/selinux/tillandsias_headless.if");
+const SELINUX_VAULT_TE: &str = include_str!("../../../images/selinux/tillandsias_vault.te");
+const SELINUX_VAULT_FC: &str = include_str!("../../../images/selinux/tillandsias_vault.fc");
+
 /// The single WSL2 distro the tray manages (see `tillandsias-vm-layer::wsl`,
 /// "one distro per host"). Also the `wsl.exe -d <name>` target the Open-Shell
 /// terminal attaches to.
@@ -266,12 +282,23 @@ impl WslLifecycle {
     /// @trace plan/issues/smoke-e2e-findings-v0.3.260614.1-2026-06-14.md
     ///   (smoke-finding/container-base-missing-systemd-podman)
     async fn ensure_base_packages(&self) -> Result<(), String> {
+        // Phase 3a: include SELinux packages so `inject_bootstrap_logic` can
+        // install the policy modules and `getenforce` becomes available.
+        // `socat` is added for Phase 5 vsock-in-vsock loopback tests.
         const SETUP: &str = r#"set -e
-rpm -q systemd podman dbus-broker libcap shadow-utils openssl >/dev/null 2>&1 || dnf install -y systemd podman dbus-broker libcap shadow-utils openssl
+rpm -q systemd podman dbus-broker libcap shadow-utils openssl \
+    selinux-policy-targeted policycoreutils selinux-policy-devel checkpolicy socat \
+    >/dev/null 2>&1 || \
+  dnf install -y systemd podman dbus-broker libcap shadow-utils openssl \
+    selinux-policy-targeted policycoreutils selinux-policy-devel checkpolicy socat
 for b in /usr/bin/newuidmap /usr/sbin/newuidmap; do [ -e "$b" ] && setcap cap_setuid+ep "$b" || true; done
 for b in /usr/bin/newgidmap /usr/sbin/newgidmap; do [ -e "$b" ] && setcap cap_setgid+ep "$b" || true; done
 "#;
-        self.wsl_root_sh(SETUP).await
+        tokio::time::timeout(Duration::from_secs(300), self.wsl_root_sh(SETUP))
+            .await
+            .map_err(|_| {
+                "Package installation timed out after 5 min — WSL2 DNS may be broken".to_string()
+            })?
     }
 
     /// Inject the `fetch-headless.sh` script and systemd units into the
@@ -294,18 +321,51 @@ chmod 0755 "$DEST"
         )
         .await?;
 
-        // 2. tillandsias-headless-fetch.service
+        // 2. headless-preflight.sh
+        let preflight_script = r#"#!/usr/bin/env bash
+set -euo pipefail
+DEST="/usr/local/bin/tillandsias-headless"
+if [[ ! -x "$DEST" ]]; then
+  echo "[tillandsias-preflight] headless_binary=missing"
+  exit 1
+fi
+echo "[tillandsias-preflight] headless_binary=ok"
+if [[ ! -e /dev/vsock ]]; then
+  echo "[tillandsias-preflight] vsock_device=missing"
+  exit 1
+fi
+echo "[tillandsias-preflight] vsock_device=present"
+if [[ -S /run/podman/podman.sock ]]; then
+  echo "[tillandsias-preflight] podman_socket=present"
+else
+  echo "[tillandsias-preflight] podman_socket=missing"
+fi
+if systemctl is-active --quiet podman.socket; then
+  echo "[tillandsias-preflight] podman_socket_unit=active"
+else
+  echo "[tillandsias-preflight] podman_socket_unit=inactive"
+fi
+"#;
+        self.wsl_root_write(
+            "/usr/local/lib/tillandsias/headless-preflight.sh",
+            preflight_script,
+            true,
+        )
+        .await?;
+
+        // 3. tillandsias-headless-fetch.service
         let fetch_unit = r#"[Unit]
-Description=Fetch tillandsias-headless on first boot
+Description=Ensure tillandsias-headless is present
 After=network-online.target
 Wants=network-online.target
 Before=tillandsias-headless.service
-ConditionPathExists=!/usr/local/bin/tillandsias-headless
 [Service]
 Type=oneshot
 RemainAfterExit=yes
 ExecStart=/usr/local/lib/tillandsias/fetch-headless.sh
 TimeoutStartSec=300s
+StandardOutput=journal+console
+StandardError=journal+console
 [Install]
 WantedBy=multi-user.target
 "#;
@@ -316,17 +376,27 @@ WantedBy=multi-user.target
         )
         .await?;
 
-        // 3. tillandsias-headless.service
+        // 4. tillandsias-headless.service
         let headless_unit = r#"[Unit]
 Description=Tillandsias headless (in-VM vsock control wire)
-After=network-online.target tillandsias-headless-fetch.service
+After=network-online.target podman.socket tillandsias-headless-fetch.service
+Wants=network-online.target podman.socket
 Requires=tillandsias-headless-fetch.service
 [Service]
 Type=exec
+NoNewPrivileges=yes
+CapabilityBoundingSet=CAP_NET_BIND_SERVICE
+ExecStartPre=/usr/bin/mkdir -p /run/user/0
+ExecStartPre=/usr/bin/chmod 0700 /run/user/0
+ExecStartPre=/usr/local/lib/tillandsias/headless-preflight.sh
+Environment=HOME=/root
+Environment=XDG_RUNTIME_DIR=/run/user/0
 Environment=TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200
 ExecStart=/usr/local/bin/tillandsias-headless --listen-vsock 42420
 Restart=on-failure
 RestartSec=2s
+StandardOutput=journal+console
+StandardError=journal+console
 [Install]
 WantedBy=multi-user.target
 "#;
@@ -349,7 +419,54 @@ WantedBy=multi-user.target
         // in `Connecting` until the budget expires.
         // @trace plan/issues/windows-cold-provision-headless-units-not-started-2026-06-19.md
         self.wsl_root_sh(
-            "systemctl enable --now tillandsias-headless-fetch.service tillandsias-headless.service podman.socket",
+            "systemctl daemon-reload && systemctl enable --now podman.socket tillandsias-headless-fetch.service tillandsias-headless.service",
+        )
+        .await?;
+
+        // Phase 3d: write SELinux policy files into the VM so they are present
+        // when SELinux is eventually enabled (Phase 6). The compilation and
+        // `semodule -i` step below is conditional: it is a no-op today (SELinux
+        // is Disabled in the Fedora 44 Container Base) and activates automatically
+        // once `selinux=1` is added to the WSL2 kernel command line.
+        //
+        // @trace plan/issues/selinux-zero-trust-vsock-policy-design-2026-06-29.md (Phase 3d)
+        // @trace plan/issues/vsock-postmortem-host-guest-design-audit-2026-06-29.md (H12)
+        let selinux_dir = "/usr/local/lib/tillandsias/selinux";
+        self.wsl_root_sh(&format!("mkdir -p {selinux_dir}")).await?;
+        for (filename, content) in [
+            ("tillandsias_headless.te", SELINUX_HEADLESS_TE),
+            ("tillandsias_headless.fc", SELINUX_HEADLESS_FC),
+            ("tillandsias_headless.if", SELINUX_HEADLESS_IF),
+            ("tillandsias_vault.te", SELINUX_VAULT_TE),
+            ("tillandsias_vault.fc", SELINUX_VAULT_FC),
+        ] {
+            self.wsl_root_write(&format!("{selinux_dir}/{filename}"), content, false)
+                .await?;
+        }
+        // Conditional: compile + install if SELinux is active (Permissive or Enforcing).
+        // On a Disabled system getenforce exits non-zero or prints "Disabled", so the
+        // `grep -qiE` fails and the block is skipped entirely.
+        self.wsl_root_sh(
+            r#"if getenforce 2>/dev/null | grep -qiE '^(Permissive|Enforcing)'; then
+    cd /usr/local/lib/tillandsias/selinux && \
+    make -f /usr/share/selinux/devel/Makefile tillandsias_headless.pp tillandsias_vault.pp && \
+    semodule -i tillandsias_headless.pp tillandsias_vault.pp && \
+    semanage permissive -a tillandsias_headless_t 2>/dev/null || true && \
+    semanage permissive -a vault_container_t 2>/dev/null || true && \
+    { semanage fcontext -a -t vault_data_t '/var/lib/tillandsias/vault-data(/.*)?' || \
+      semanage fcontext -m -t vault_data_t '/var/lib/tillandsias/vault-data(/.*)?'; } 2>/dev/null || true && \
+    restorecon -Rv /var/lib/tillandsias/vault-data/ 2>/dev/null || true
+fi"#,
+        )
+        .await?;
+
+        // Persist vsock_loopback so it survives WSL2 restarts.
+        // CONFIG_VSOCKETS_LOOPBACK=m (confirmed: WSL2 kernel 6.6.114.1).
+        // Required for Phase 5 (vsock-in-vsock container transport, CID 1).
+        // @trace plan/issues/vsock-kernel-probe-results-2026-06-29.md
+        self.wsl_root_sh(
+            "echo 'vsock_loopback' > /etc/modules-load.d/tillandsias-vsock.conf && \
+             modprobe vsock_loopback 2>/dev/null || true",
         )
         .await?;
 
@@ -422,49 +539,59 @@ WantedBy=multi-user.target
     /// During first boot the headless reports `Provisioning`/`Starting` while it
     /// self-installs; the caller retries until this returns `Ok`. (Request path
     /// proven E2E: `VmStatusReply { phase: Ready, podman_ready: true }`.)
+    ///
+    /// Each attempt is bounded by a 30 s `tokio::time::timeout`; if the HvSocket
+    /// connect or any RPC stalls (e.g., degraded HCS or half-open connection), the
+    /// timeout fires, the attempt returns `Err`, and the retry loop back-offs 5 s
+    /// before the next attempt — never hanging the tray indefinitely.
     async fn try_connect_until_ready(&self, port: u32, attempt: u32) -> Result<VmPhase, String> {
         use tillandsias_control_wire::transport::Transport;
         use tillandsias_control_wire::{ControlEnvelope, ControlMessage, WIRE_VERSION};
         use tillandsias_host_shell::vsock_client::Client;
 
-        // Open the HvSocket transport, then drive the standard host-shell Client
-        // (same Hello/HelloAck + request path the macOS tray uses over its
-        // VZVirtioSocketConnection stream — slice 4 `80d9196e`).
-        let stream = crate::hvsocket::open_hvsocket_stream(port)
-            .await
-            .map_err(|e| format!("hvsocket open: {e}"))?;
-        let mut client = Client::from_stream(Box::new(stream), Transport::Vsock { cid: 0, port });
-        let wire_version = client
-            .handshake()
-            .await
-            .map_err(|e| format!("handshake: {e}"))?;
-        crate::installation_uuid::deliver_credentials_and_check_handover(&mut client)
-            .await
-            .map_err(|e| format!("credentials delivery failed: {e}"))?;
-        let seq = client.allocate_seq();
-        let envelope = ControlEnvelope {
-            wire_version: WIRE_VERSION,
-            seq,
-            body: ControlMessage::VmStatusRequest { seq },
-        };
-        let reply = client
-            .request(&envelope)
-            .await
-            .map_err(|e| format!("VmStatusRequest: {e}"))?;
+        tokio::time::timeout(Duration::from_secs(30), async {
+            // Open the HvSocket transport, then drive the standard host-shell Client
+            // (same Hello/HelloAck + request path the macOS tray uses over its
+            // VZVirtioSocketConnection stream — slice 4 `80d9196e`).
+            let stream = crate::hvsocket::open_hvsocket_stream(port)
+                .await
+                .map_err(|e| format!("hvsocket open: {e}"))?;
+            let mut client =
+                Client::from_stream(Box::new(stream), Transport::Vsock { cid: 0, port });
+            let wire_version = client
+                .handshake()
+                .await
+                .map_err(|e| format!("handshake: {e}"))?;
+            crate::installation_uuid::deliver_credentials_and_check_handover(&mut client)
+                .await
+                .map_err(|e| format!("credentials delivery failed: {e}"))?;
+            let seq = client.allocate_seq();
+            let envelope = ControlEnvelope {
+                wire_version: WIRE_VERSION,
+                seq,
+                body: ControlMessage::VmStatusRequest { seq },
+            };
+            let reply = client
+                .request(&envelope)
+                .await
+                .map_err(|e| format!("VmStatusRequest: {e}"))?;
 
-        match reply.body {
-            ControlMessage::VmStatusReply { phase, .. } => {
-                tracing::info!(
-                    wire_version,
-                    attempt,
-                    "VM handshake success (phase={phase:?})"
-                );
-                // NOTE: `stream` is dropped here; holding it for the session +
-                // routing menu actions over it is the next w9 increment.
-                Ok(phase)
+            match reply.body {
+                ControlMessage::VmStatusReply { phase, .. } => {
+                    tracing::info!(
+                        wire_version,
+                        attempt,
+                        "VM handshake success (phase={phase:?})"
+                    );
+                    // NOTE: `client` is dropped here; promoting the live Client to a
+                    // process-wide LIVE_CLIENT for menu actions is Phase 2.
+                    Ok(phase)
+                }
+                other => Err(format!("unexpected reply to VmStatusRequest: {other:?}")),
             }
-            other => Err(format!("unexpected reply to VmStatusRequest: {other:?}")),
-        }
+        })
+        .await
+        .map_err(|_| format!("attempt {attempt}: connect+handshake timed out after 30s"))?
     }
 }
 
@@ -544,6 +671,55 @@ mod tests {
         assert_eq!(
             art.url,
             "https://download.fedoraproject.org/pub/fedora/linux/releases/44/Container/x86_64/images/Fedora-Container-Base-Generic-44-1.7.x86_64.oci.tar.xz"
+        );
+    }
+
+    #[test]
+    fn wsl_bootstrap_fetch_unit_is_idempotent() {
+        let source = include_str!("wsl_lifecycle.rs");
+        let fetch_unit = source
+            .split("// 3. tillandsias-headless-fetch.service")
+            .nth(1)
+            .and_then(|tail| tail.split("// 4. tillandsias-headless.service").next())
+            .expect("fetch unit window");
+
+        assert!(source.contains("if [[ -x \"$DEST\" ]]; then exit 0; fi"));
+        assert!(fetch_unit.contains("Type=oneshot"));
+        assert!(fetch_unit.contains("RemainAfterExit=yes"));
+        assert!(
+            !fetch_unit.contains("ConditionPathExists=!/usr/local/bin/tillandsias-headless"),
+            "systemd must run the idempotent fetch oneshot instead of skipping it"
+        );
+    }
+
+    #[test]
+    fn wsl_headless_service_prepares_runtime_env() {
+        let source = include_str!("wsl_lifecycle.rs");
+        let headless_unit = source
+            .split("// 4. tillandsias-headless.service")
+            .nth(1)
+            .and_then(|tail| tail.split("// Enable AND start the units now.").next())
+            .expect("headless unit window");
+
+        assert!(source.contains("cat > {path}"));
+        assert!(source.contains("/usr/local/lib/tillandsias/headless-preflight.sh"));
+        assert!(source.contains("vsock_device=missing"));
+        assert!(source.contains("podman_socket_unit=inactive"));
+        assert!(headless_unit.contains("After=network-online.target podman.socket"));
+        assert!(headless_unit.contains("Wants=network-online.target podman.socket"));
+        assert!(headless_unit.contains("ExecStartPre=/usr/bin/mkdir -p /run/user/0"));
+        assert!(headless_unit.contains("ExecStartPre=/usr/bin/chmod 0700 /run/user/0"));
+        assert!(
+            headless_unit.contains("ExecStartPre=/usr/local/lib/tillandsias/headless-preflight.sh")
+        );
+        assert!(headless_unit.contains("Environment=HOME=/root"));
+        assert!(headless_unit.contains("Environment=XDG_RUNTIME_DIR=/run/user/0"));
+        assert!(
+            headless_unit.contains("Environment=TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200")
+        );
+        assert!(
+            !headless_unit.contains("Requires=podman.socket"),
+            "podman.socket is a wanted readiness input, not a hard dependency for diagnostics"
         );
     }
 }

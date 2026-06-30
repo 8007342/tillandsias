@@ -162,7 +162,12 @@ pub fn launch_spec(intent: &PtyIntent, project: Option<&str>, rows: u16, cols: u
             vec![
                 "/bin/bash".to_string(),
                 "-lc".to_string(),
-                "exec tillandsias-headless --github-login".to_string(),
+                "export HOME=\"${HOME:-/root}\"; \
+                 export XDG_RUNTIME_DIR=\"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}\"; \
+                 install -d -m 0700 \"$XDG_RUNTIME_DIR\"; \
+                 export TILLANDSIAS_VAULT_API_BASE_URL=\"${TILLANDSIAS_VAULT_API_BASE_URL:-https://vault:8200}\"; \
+                 exec tillandsias-headless --github-login"
+                    .to_string(),
             ]
         }
         PtyIntent::Agent(agent) => {
@@ -695,9 +700,17 @@ mod tests {
             vec![
                 "/bin/bash",
                 "-lc",
-                "exec tillandsias-headless --github-login"
+                "export HOME=\"${HOME:-/root}\"; \
+                 export XDG_RUNTIME_DIR=\"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}\"; \
+                 install -d -m 0700 \"$XDG_RUNTIME_DIR\"; \
+                 export TILLANDSIAS_VAULT_API_BASE_URL=\"${TILLANDSIAS_VAULT_API_BASE_URL:-https://vault:8200}\"; \
+                 exec tillandsias-headless --github-login"
             ]
         );
+        let github_cmd = &launch_spec(&PtyIntent::GithubLogin, None, 24, 80).argv[2];
+        assert!(github_cmd.contains("install -d -m 0700 \"$XDG_RUNTIME_DIR\""));
+        assert!(github_cmd.contains("TILLANDSIAS_VAULT_API_BASE_URL"));
+        assert!(github_cmd.contains("https://vault:8200"));
         assert_eq!(
             launch_spec(&PtyIntent::Agent(SelectedAgent::OpenCode), None, 24, 80).argv,
             vec!["tillandsias", "--opencode"]

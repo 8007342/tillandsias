@@ -1,87 +1,70 @@
-# Research: Agent Login Flows (Claude, Codex, Antigravity)
+# Research: Agent Login Flows (--claude-login / --codex-login / --antigravity-login)
 
-## 1. Auth Model Decision
-**Decision:** Operator sign-off confirmed that we will strictly use **OAuth (Device Code / Interactive Sessions)** for Claude, Codex, and Antigravity. API keys will not be used because they are considered too expensive compared to interactive session tokens.
+**Status:** `ready`
+**Owner:** linux
+**Date:** 2026-06-28
+**Kind:** research
+**Trace:** `spec:tillandsias-vault`, `spec:secret-rotation`, `spec:forge-as-only-runtime`
 
-## 2. Vault OAuth-Token Schema
-Because we are using OAuth, we need a schema in Vault to store tokens and handle lifecycle events (like refresh).
-The secrets will be stored under `secret/data/<provider>/oauth`.
+## Goal
 
-**Schema structure (`AuthModel::OAuth`):**
-```json
-{
-  "access_token": "string",
-  "refresh_token": "string (optional)",
-  "expires_at": "number (Unix timestamp)",
-  "client_id": "string",
-  "scope": "string (optional)"
-}
-```
-*Note: Our vault schema uses `secret/data/...` for KV v2.*
+Prepare the three interactive login flows the operator named, mirroring the
+proven `--github-login` pattern: a containerized, out-of-band login that stores
+the credential **in Vault** (never on the host), so forge agents run
+credential-free and the host never sees the raw secret.
 
-## 3. Containerized Login Boundary & Egress Endpoints
-Like `--github-login`, the login flows must run entirely within a container (e.g., `tillandsias-agent-login-*`). The host will NOT see the token directly; the container will interact with the Vault container to inject the final OAuth tokens.
+## What already exists (build on this)
 
-**Required Egress Endpoints (via Squid Proxy):**
-1. **Claude (Anthropic)**: 
-   - `auth.anthropic.com:443` (for device authorization)
-   - `api.anthropic.com:443` (for token exchange)
-2. **Codex (OpenAI)**: 
-   - `auth0.openai.com:443` (or their specific device code authorization URL)
-   - `api.openai.com:443`
-3. **Antigravity**: 
-   - `auth.antigravity.dev:443` (placeholder for their identity provider)
-   - `api.antigravity.dev:443`
+- `--github-login` (`run_github_login` in `main.rs`): brings up Vault + proxy,
+  runs an ephemeral `tillandsias-git --rm` container with an AppRole lease, reads
+  the token via a robust `read`/`--with-token` pipe, writes it to Vault with the
+  in-container `vault-cli.sh`, verifies, and the host never touches the value.
+- `ProviderId` enum (order 112): `Anthropic` / `Openai` / `Gemini` with
+  `vault_segment()` → `secret/{anthropic,openai,gemini}/api-key`, `env_var()` →
+  `ANTHROPIC_API_KEY` / `OPENAI_API_KEY` / `GEMINI_API_KEY`, and
+  `read/write_provider_api_key`. `build_forge_agent_run_args` already injects
+  these env vars into forge containers.
 
-*The squid proxy whitelist (`/etc/squid/squid.conf.template`) will need these endpoints added.*
+## Questions to Resolve (deliverable)
 
-## 4. Shared `run_provider_login` API Shape
-We will abstract `run_github_login` into a generic `run_provider_login` function in `crates/tillandsias-headless/src/main.rs` (or a dedicated auth module).
+1. **Auth model per service** (the crux — decide API-key vs OAuth/subscription):
+   - **Claude Code**: API key (`secret/anthropic/api-key`, exists) **vs** Claude.ai
+     subscription OAuth (browser/device-code). Which does the operator want as the
+     default `--claude-login`? OAuth needs a redirect/device-code OOB flow.
+   - **Codex**: OpenAI API key (`secret/openai/api-key`) **vs** ChatGPT sign-in
+     (OAuth via chatgpt.com). Decide default.
+   - **Antigravity**: Google account OAuth (Gemini/Cloud Code) — almost certainly
+     OAuth/device-code, not a bare API key. Confirm the credential it persists.
+2. **OOB / device-code vs paste:** `--github-login` uses a hidden paste. For
+   API-key services, reuse the paste-into-container pattern. For OAuth services,
+   define the device-code (URL + code shown in terminal) flow — no browser
+   forwarding into the enclave (matches the order-112 "device code default" note).
+3. **Vault schema:** API-key flows reuse `secret/<provider>/api-key`. OAuth flows
+   need a token + refresh-token schema (`secret/<provider>/oauth` { access,
+   refresh, expiry }) and a refresh path. Define it.
+4. **Containerized boundary:** which `--rm` image runs each login (the forge image
+   has the agent CLIs; the git image does not). Confirm the CLI is present to
+   drive its own login inside the container, OR define a minimal login helper.
+5. **Egress:** each flow depends on the allowlist research — the login endpoints
+   (auth.openai.com, claude.ai, accounts.google.com, …) MUST be allowlisted first.
+6. **Tray surface:** how login status is shown per provider (mirrors the
+   github-login authenticated indicator) and whether re-login/rotation is offered.
 
-**Rust API Sketch:**
+## Deliverable
 
-```rust
-pub enum ProviderId {
-    GitHub,
-    Claude,
-    Codex,
-    Antigravity,
-}
+A verdict table: per service → {auth model chosen, Vault schema, container image,
+OOB vs paste, required egress endpoints, refresh policy}, plus the shared
+`run_provider_login(ProviderId, AuthModel)` shape the impl packet implements.
 
-impl ProviderId {
-    pub fn vault_path(&self) -> &'static str {
-        match self {
-            ProviderId::GitHub => "github/token", // legacy format
-            ProviderId::Claude => "claude/oauth",
-            ProviderId::Codex => "codex/oauth",
-            ProviderId::Antigravity => "antigravity/oauth",
-        }
-    }
-}
+## Exit Criteria
 
-pub enum AuthModel {
-    /// E.g. raw personal access token
-    Token, 
-    /// OAuth Device Code flow
-    OAuthDevice,
-}
+- Auth model decided per service (API-key vs OAuth) with operator sign-off noted
+- Vault schema for OAuth tokens defined (if any OAuth flow chosen)
+- Containerized login boundary + required egress endpoints listed per service
+- Shared `run_provider_login` API shape sketched for the impl packet
 
-pub struct ProviderLoginConfig {
-    pub provider: ProviderId,
-    pub auth_model: AuthModel,
-    /// Container image to use (e.g., "git" for GitHub, "curl" or custom for others)
-    pub image: &'static str,
-    /// The script to execute inside the container to perform the login
-    pub script: &'static str,
-}
+## Related
 
-pub fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), String> {
-    // 1. require_desktop_user_session
-    // 2. start vault + proxy
-    // 3. mint approle secret lease for the specific provider's vault_path
-    // 4. podman run --rm -it ... [script]
-    // 5. script orchestrates the OAuth device flow and uses `vault kv put` internally
-}
-```
-
-This ensures a uniform login architecture where the host remains isolated from the credentials and only the orchestrated container has access to them during the login flow.
+- `agent-login-flows-impl-2026-06-28.md`
+- `agent-services-egress-allowlist-research-2026-06-28.md` (egress prerequisite)
+- `plan/issues/forge-harness-auth-vault-proxy-2026-06-27.md` (order 112 — ProviderId + key injection)
