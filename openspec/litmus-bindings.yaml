@@ -600,6 +600,7 @@ specs:
   litmus_tests:
   - litmus:enclave-isolation
   - litmus:proxy-container-shape
+  - litmus:agent-egress-allowlist-shape
   coverage_ratio: 75
   last_verified: '2026-05-30'
 - spec_id: remote-projects

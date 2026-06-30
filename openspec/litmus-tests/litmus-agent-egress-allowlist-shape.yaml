@@ -1,0 +1,38 @@
+# @trace spec:proxy-container
+name: litmus:agent-egress-allowlist-shape
+spec: proxy-container
+phase: pre-build
+description: >
+  Verifies that required domains for agent auth and telemetry are allowlisted
+  and appropriately classified for bump/no-bump to prevent transparent interception failures.
+severity: medium
+size: instant
+
+preconditions:
+  - workspace contains images/proxy/allowlist.txt
+  - workspace contains images/proxy/squid.conf
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "Verify Claude and ChatGPT parent domains are allowlisted"
+    command: "grep -Fq '.chatgpt.com' images/proxy/allowlist.txt && grep -Fq '.claude.com' images/proxy/allowlist.txt && echo \"ok: allowlisted\""
+    timeout_ms: 3000
+    expected_behavior: "ok: allowlisted"
+
+  - step: "Verify domains are marked no-bump in squid.conf"
+    command: "grep -Fq 'no_bump_domains dstdomain' images/proxy/squid.conf && grep -Fq '.chatgpt.com' images/proxy/squid.conf && grep -Fq '.claude.com' images/proxy/squid.conf && echo \"ok: no-bump\""
+    timeout_ms: 3000
+    expected_behavior: "ok: no-bump"
+
+observability:
+  traces:
+    - "@trace spec:proxy-container"
+  expected_log: "agent egress allowlist shape verified"
+  log_fields:
+    spec: "proxy-container"
+    test: "agent-egress-allowlist-shape"
+    artifact: "images/proxy/{allowlist.txt,squid.conf}"
+
+rollback:
+  on_failure: "Restore .chatgpt.com and .claude.com to allowlist.txt and squid.conf no_bump_domains."
+  command: "echo rollback"
