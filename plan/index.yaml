@@ -7958,10 +7958,28 @@ plan_index:
         closed packets bury active ones, slow selection, and inflate the merge
         surface. Move closed packets to plan/archive/ (date-partitioned, history
         preserved) via scripts/archive-plan-packets.sh; keep index to active set.
+      events:
+        - type: progress
+          ts: "2026-06-30T14:30Z"
+          agent_id: "linux-yoga-sonnet46-20260630T1410Z"
+          summary: >
+            Tooling exists (scripts/archive-plan-packets.{rb,sh}, plan/archive/ with
+            packets-2026-05/06.yaml) but the BULK RUN is DEFERRED to a quiet window /
+            smoke lock per this packet's own coordination requirement: 33 commits
+            landed from concurrent agents while away, and a ~6000-line index rewrite
+            during active concurrency would near-certainly hit a massive rebase
+            conflict (the exact trunk-breakage the convergence work prevents). Two
+            blockers to fix FIRST: (1) archive-plan-packets.sh --check runs the REAL
+            archiver (side effects on plan/archive/*.yaml) then restores only index —
+            not a clean dry run; (2) its semantics are inverted — it reports "failed"
+            whenever there IS work to do, instead of verifying a SECOND run is a no-op.
+            Fix --check to a true idempotency probe (apply, then assert re-run is a
+            no-op) on isolated paths before the bulk run. Index still 7987 lines.
       exit_criteria:
+        - "FIRST: fix archive-plan-packets.sh --check (no side effects; verify re-run is a no-op)"
+        - "Run bulk archival under the smoke lock / integration lull (not during active concurrency)"
         - "plan/index.yaml reduced to ~active set (target < ~1500 lines); both YAMLs parse"
         - "No packet lost (closed_before == archived + closed_remaining)"
-        - "scripts/archive-plan-packets.sh --check idempotent; advance-work still finds active packets"
         - "Tombstone-not-delete; events history preserved in archive"
 
     - packet_id: stale-reference-cleanup-audit
