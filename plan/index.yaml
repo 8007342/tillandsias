@@ -311,7 +311,7 @@ plan_index:
     - packet_id: agent-services-egress-allowlist-research
       order: 129
       title: "Research: exact egress allowlist for claude/codex/antigravity (no guessing)"
-      status: claimed
+      status: done
       kind: research
       deliverable: plan/issues/agent-services-egress-allowlist-research-2026-06-28.md
       depends_on: []
@@ -333,16 +333,21 @@ plan_index:
         - "Antigravity agent-wiring gap documented"
       events:
         - type: claim
-          ts: "2026-06-28T23:40:00Z"
-          agent_id: "linux-antigravity-20260628T2340Z"
+          ts: "2026-06-30T17:51:23Z"
+          agent_id: "linux-antigravity-20260630T1751Z"
           host: "linux"
-          lease_id: "agent-services-egress-allowlist-research-claim-1"
-          expires_at: "2026-06-29T03:40:00Z"
+          lease_id: "agent-services-egress-allowlist-research-claim-2"
+          expires_at: "2026-06-30T21:51:23Z"
+        - type: completed
+          ts: "2026-06-30T17:51:55Z"
+          agent_id: "linux-antigravity-20260630T1751Z"
+          commit_hash: "PENDING"
+          evidence: "TCP_DENIED harvested from proxy logs (.chatgpt.com, .claude.com). Minimal delta generated with no-bump classification. Antigravity wiring gap documented."
 
     - packet_id: agent-services-egress-allowlist-impl
       order: 130
       title: "Impl: apply agent egress allowlist delta + wire antigravity agent"
-      status: pending
+      status: ready
       kind: enhancement
       deliverable: plan/issues/agent-services-egress-allowlist-impl-2026-06-28.md
       depends_on: [agent-services-egress-allowlist-research]
