@@ -233,11 +233,11 @@ pub async fn exec_over_stream_with_input_streaming<S, F>(
     mut stream: S,
     argv: &[&str],
     input: &[u8],
-    on_output: F,
+    mut on_output: F,
 ) -> Result<ExecOutput, String>
 where
     S: AsyncRead + AsyncWrite + Unpin,
-    F: Fn(&[u8]),
+    F: FnMut(&[u8]),
 {
     if argv.is_empty() {
         return Err("vsock_exec: empty argv".to_string());
