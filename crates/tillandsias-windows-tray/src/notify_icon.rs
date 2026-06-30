@@ -940,7 +940,9 @@ static WIRE_DEGRADED_NOTIFIED: std::sync::atomic::AtomicBool =
 /// while still degraded stay silent (the chip text already shows the state).
 fn mark_wire_unreachable(hwnd: HWND) {
     if let Ok(mut guard) = MENU_STATE.lock() {
-        guard.get_or_insert_with(MenuState::initial).podman_ready = false;
+        let state = guard.get_or_insert_with(MenuState::initial);
+        state.podman_ready = false;
+        state.login_runtime_ready = false;
     }
     update_status_text(WIRE_UNREACHABLE_CHIP_TEXT, hwnd);
     if !WIRE_DEGRADED_NOTIFIED.swap(true, std::sync::atomic::Ordering::SeqCst) {
@@ -1113,7 +1115,13 @@ async fn refresh_vm_status(hwnd: HWND) {
             ..
         } => {
             if let Ok(mut guard) = MENU_STATE.lock() {
-                guard.get_or_insert_with(MenuState::initial).podman_ready = podman_ready;
+                let state = guard.get_or_insert_with(MenuState::initial);
+                state.podman_ready = podman_ready;
+                // Gate GitHub Login behind phase=Ready + podman up. This is the
+                // signal that vault+egress containers have had a chance to start
+                // (the headless only flips to Ready after podman is reachable).
+                state.login_runtime_ready =
+                    matches!(phase, tillandsias_control_wire::VmPhase::Ready) && podman_ready;
             }
             // status_text + tooltip (own MENU_STATE lock inside). Appends the
             // headless's `last_event` when present so the chip reflects in-VM
