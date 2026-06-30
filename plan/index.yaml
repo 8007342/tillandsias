@@ -441,7 +441,7 @@ plan_index:
     - packet_id: stale-reference-cleanup-audit
       order: 135
       title: "Optimization: stale-reference + superseded-work cleanup audit"
-      status: ready
+      status: claimed
       kind: optimization
       deliverable: plan/issues/stale-reference-cleanup-audit-2026-06-28.md
       depends_on: []
@@ -459,3 +459,10 @@ plan_index:
         - "litmus:no-dangling-removed-component-refs green (no live zeroclaw refs outside historical record)"
         - "Superseded specs marked obsolete + tombstone in litmus-bindings"
         - "plan/archive/README.md documents the archive layout"
+      events:
+        - type: claim
+          ts: "2026-06-30T16:01:00Z"
+          agent_id: "linux-antigravity-20260630T1601Z"
+          host: "linux"
+          lease_id: "stale-reference-cleanup-audit-claim-1"
+          expires_at: "2026-06-30T20:01:00Z"
