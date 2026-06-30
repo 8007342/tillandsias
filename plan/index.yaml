@@ -7907,7 +7907,7 @@ plan_index:
     - packet_id: plan-ledger-archival
       order: 134
       title: "Optimization: archive 129 closed packets out of plan/index.yaml (7870 lines)"
-      status: ready
+      status: claimed
       kind: optimization
       deliverable: plan/issues/plan-ledger-archival-2026-06-28.md
       depends_on: []
@@ -7925,6 +7925,13 @@ plan_index:
         - "No packet lost (closed_before == archived + closed_remaining)"
         - "scripts/archive-plan-packets.sh --check idempotent; advance-work still finds active packets"
         - "Tombstone-not-delete; events history preserved in archive"
+      events:
+        - type: claim
+          ts: "2026-06-30T15:55:00Z"
+          agent_id: "linux-antigravity-20260630T1555Z"
+          host: "linux"
+          lease_id: "plan-ledger-archival-claim-1"
+          expires_at: "2026-06-30T19:55:00Z"
 
     - packet_id: stale-reference-cleanup-audit
       order: 135
