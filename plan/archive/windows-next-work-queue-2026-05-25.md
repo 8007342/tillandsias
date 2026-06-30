@@ -1,5 +1,23 @@
 # windows-next work queue — 2026-05-25
 
+## 2026-06-30T00:00Z — order 127 COMPLETED: WslGuestTransport + HvSocket consolidation
+
+- **Agent**: `windows-sonnet46-20260630T0000Z`
+- **Scope**: order 127 — host-guest-transport-windows
+- `85c1de70` refactor(tray): re-export HvSocket primitives from vm-layer (order 127)
+- `3a54cf77` chore(plan): order 127 complete
+- **What**: Created `crates/tillandsias-vm-layer/src/transport_windows.rs` with `WslGuestTransport`
+  implementing the `GuestTransport` facade (open_stream / exec / exec_streaming). All HvSocket
+  connection primitives (vsock_service_guid, parse_wsl_vm_id, parse_guid, wsl_utility_vm_id,
+  wsa_startup, connect_control_wire, open_hvsocket_stream) moved here from the tray's hvsocket.rs.
+  Tray re-exports them; ~220 lines of duplicate code eliminated. Also fixed vsock_exec
+  exec_over_stream_with_input_streaming to accept FnMut (was Fn). cargo check clean, 0 errors.
+- **Remaining (cleanup, not blocking)**: migrate notify_icon.rs + wsl_lifecycle.rs call sites
+  from `crate::hvsocket::open_hvsocket_stream` to `WslGuestTransport::open_stream`; add
+  no-cfg-selection drift litmus.
+- **Next Windows work**: order 132 (agent-login-flows-impl) pending linux completing 130+131.
+  Push windows-next to remote for CI visibility.
+
 trace: methodology/distributed-work.yaml, plan/issues/multi-agent-work-shaping-2026-05-25.md, plan/steps/windows-next-thin-tray.md, plan/issues/tray-convergence-coordination.md, plan/issues/control-socket-protocol-convergence-2026-05-25.md, openspec/changes/control-wire-pty-attach/
 
 ## 2026-06-05 — NEW WAVE queued (pre-Vault audit)
