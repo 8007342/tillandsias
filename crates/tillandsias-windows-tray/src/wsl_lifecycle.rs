@@ -154,12 +154,31 @@ impl WslLifecycle {
             .map_err(|e| format!("create install_root failed: {e}"))?;
 
         // Idempotent: if a prior run already imported the distro, skip the
-        // download + `wsl --import` and just (re)start it.
+        // download + `wsl --import` and just (re)start it, then connect to
+        // deliver credentials so the headless can bootstrap vault.
         if self.runtime.is_registered().await {
             progress.report_phase(ProvisionPhase::StartingVm);
             self.runtime.start().await?;
             progress.report_phase(ProvisionPhase::Connecting);
-            return Ok(());
+            const CW_PORT: u32 = tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
+            let _keepalive = self.spawn_keepalive().ok();
+            let mut last_err = String::from("(no attempt)");
+            for attempt in 1..=36u32 {
+                match self.try_connect_until_ready(CW_PORT, attempt).await {
+                    Ok(VmPhase::Ready) | Ok(VmPhase::Starting) => return Ok(()),
+                    Ok(other) => {
+                        last_err = format!("VM in phase {other:?}");
+                        tokio::time::sleep(Duration::from_secs(5)).await;
+                    }
+                    Err(e) => {
+                        last_err = e;
+                        tokio::time::sleep(Duration::from_secs(5)).await;
+                    }
+                }
+            }
+            return Err(format!(
+                "control-wire handshake did not succeed within budget: {last_err}"
+            ));
         }
 
         let manifest = Manifest::from_toml(RECIPE_MANIFEST)
