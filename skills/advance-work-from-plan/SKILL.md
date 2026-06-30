@@ -135,9 +135,44 @@ Hard rules:
     ```bash
     git add <specific-files>      # NEVER `git add -A` (cross-host churn)
     git commit -m "<slice-message>"   # cite trace + plan packet + any unblock-noop
-    # on rejection: git fetch && git rebase origin/<active-branch> && ./build.sh --check
     git push origin <active-branch>
     ```
+
+### Integration Verification Gate (run AFTER every rebase/merge, BEFORE every push)
+
+This gate is **non-negotiable**. The shared trunk has been broken twice by agents
+pushing an un-revalidated post-integration tree: a duplicate `#[test]` definition
+(E0428) and an orphan `>>>>>>>` conflict marker left inside `plan/index.yaml`.
+`./build.sh --check` alone does NOT catch the YAML class — `plan/`/`openspec/`
+files are data, not compiled. So a rebase/merge is only "done" when ALL of these
+pass on the merged tree:
+
+```bash
+# Strictly rebase (never merge) onto the trunk — see methodology/multi-host-development.yaml.
+git fetch origin && git rebase origin/<active-branch>     # ≤3 retries
+
+# 1. No conflict markers survived the resolution (the orphan-marker bug).
+#    Markers are EXACTLY 7 chars then space/EOL — do not match `=` separator lines:
+git grep -nE '^(<<<<<<<|=======|>>>>>>>)( |$)' && { echo "CONFLICT MARKER PRESENT"; exit 1; } || true
+
+# 2. Every touched YAML still parses (the broken-plan/index.yaml bug — `build
+#    --check` does NOT validate data files, so this step is what catches it):
+for y in $(git diff --name-only origin/<active-branch>..HEAD | grep -E '\.ya?ml$'); do
+  ruby -ryaml -e "YAML.load_file('$y')" || { echo "INVALID YAML: $y"; exit 1; }
+done
+
+# 3. Code still compiles — clippy + cargo catch the duplicate-item E0428 directly
+#    (also pinned by litmus:no-duplicate-rust-item-defs in the --ci-full suite):
+./build.sh --check
+
+# Only now:
+git push origin <active-branch>
+```
+
+If any step fails, FIX or abort the rebase — **never push a tree that failed this
+gate.** A push that breaks the trunk costs every other agent their next cycle; the
+gate is the price of concurrent convergence.
+
 3.  **Durable Ledger Update**: Write a one-line outcome to your host's work-queue ledger (`plan/issues/<host>-next-work-queue-*.md`):
     ```
     - 2026-MM-DDTHH:MMZ  <commit-sha>  <one-line summary>
