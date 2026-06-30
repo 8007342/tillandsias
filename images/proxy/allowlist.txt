@@ -82,6 +82,8 @@
 .huggingface.co
 .openai.com
 .anthropic.com
+.chatgpt.com
+.claude.com
 .together.ai
 .groq.com
 .fireworks.ai

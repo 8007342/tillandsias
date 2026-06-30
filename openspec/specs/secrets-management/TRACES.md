@@ -29,7 +29,7 @@ Run `./scripts/generate-traces.sh` to regenerate.
 - [images/default/lib-common.sh#L60](../../../images/default/lib-common.sh#L60)
 - [images/default/lib-common.sh#L180](../../../images/default/lib-common.sh#L180)
 - [images/git/Containerfile#L18](../../../images/git/Containerfile#L18)
-- [images/git/post-receive-hook.sh#L99](../../../images/git/post-receive-hook.sh#L99)
+- [images/git/post-receive-hook.sh#L114](../../../images/git/post-receive-hook.sh#L114)
 - [images/git/vault-cli.sh#L2](../../../images/git/vault-cli.sh#L2)
 - [scripts/cleanup-secrets.sh#L13](../../../scripts/cleanup-secrets.sh#L13)
 - [scripts/generate-repo-key.sh#L39](../../../scripts/generate-repo-key.sh#L39)

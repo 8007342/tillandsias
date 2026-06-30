@@ -37,6 +37,7 @@ COPY entrypoint-forge-opencode.sh /usr/local/bin/entrypoint-forge-opencode.sh
 COPY entrypoint-forge-opencode-web.sh /usr/local/bin/entrypoint-forge-opencode-web.sh
 COPY entrypoint-forge-claude.sh /usr/local/bin/entrypoint-forge-claude.sh
 COPY entrypoint-forge-codex.sh /usr/local/bin/entrypoint-forge-codex.sh
+COPY entrypoint-forge-antigravity.sh /usr/local/bin/entrypoint-forge-antigravity.sh
 COPY entrypoint-terminal.sh /usr/local/bin/entrypoint-terminal.sh
 COPY sse-keepalive-proxy.js /usr/local/bin/sse-keepalive-proxy.js
 RUN chmod +x /usr/local/bin/tillandsias-entrypoint.sh \
@@ -44,6 +45,7 @@ RUN chmod +x /usr/local/bin/tillandsias-entrypoint.sh \
              /usr/local/bin/entrypoint-forge-opencode-web.sh \
              /usr/local/bin/entrypoint-forge-claude.sh \
              /usr/local/bin/entrypoint-forge-codex.sh \
+             /usr/local/bin/entrypoint-forge-antigravity.sh \
              /usr/local/bin/entrypoint-terminal.sh \
              /usr/local/bin/sse-keepalive-proxy.js
 
