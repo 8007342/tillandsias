@@ -1069,7 +1069,30 @@ fn ensure_unseal_key(debug: bool) -> Result<[u8; 32], String> {
             key.copy_from_slice(&key_vec);
             return Ok(key);
         }
-        // 2. Not in host credentials (first boot). Return derived dummy key from delivered installation_uuid.
+        // Host didn't deliver a Shamir share. Try the local fallback file before
+        // deriving the dummy key — the fallback was written during the initial
+        // vault-init run and lets the headless self-recover when the Windows tray
+        // hasn't received the GetVaultHandover handover yet.
+        let cache_dir = crate::init_cache_dir().map_err(|err| format!("init cache dir: {err}"))?;
+        let fallback_file = cache_dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}"));
+        if fallback_file.is_file() {
+            if let Ok(encoded) = fs::read_to_string(&fallback_file).map(|s| s.trim().to_string()) {
+                if let Ok(key_vec) = base64::engine::general_purpose::STANDARD.decode(&encoded) {
+                    if key_vec.len() == 32 {
+                        if debug {
+                            eprintln!(
+                                "[tillandsias-vault] recovered Shamir share from VM fallback file"
+                            );
+                        }
+                        let mut key = [0u8; 32];
+                        key.copy_from_slice(&key_vec);
+                        return Ok(key);
+                    }
+                }
+            }
+        }
+        // No fallback share found — derive a first-boot dummy key. The vault
+        // container will generate the real share during init.
         if debug {
             eprintln!(
                 "[tillandsias-vault] Shamir share not present in host credentials; deriving first-boot dummy key K"
