@@ -384,6 +384,9 @@ pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
     ensure_vault_tls_leaf(&certs_dir, debug)?;
 
     if container_running(VAULT_CONTAINER_NAME) {
+        // Refresh /etc/hosts before any API probe — each podman restart can
+        // give the container a new IP from the enclave bridge IPAM.
+        update_etc_hosts_vault(debug);
         // Already up. Probe health to make sure it's serving.
         let rt = tokio_runtime()?;
         let base_url = vault_api_base_url();
@@ -1557,6 +1560,9 @@ fn wait_for_vault_ready(
     rt.block_on(PodmanClient::new().wait_healthy(VAULT_CONTAINER_NAME))
         .map_err(|e| format!("vault container did not report healthy: {e}"))?;
 
+    // Update /etc/hosts now that the container has a stable IP.
+    update_etc_hosts_vault(debug);
+
     let client = vault_client(base_url, "", debug)?; // health doesn't need a token
     match wait_for_vault_api_ready(rt, &client, debug) {
         Ok(h) => {
@@ -1569,6 +1575,65 @@ fn wait_for_vault_ready(
             read_and_handover_root_token(debug)
         }
         Err(e) => Err(format!("vault podman health is healthy but {e}")),
+    }
+}
+
+/// Resolve the current vault container IP and update /etc/hosts so the
+/// process-local hostname `vault` always points to it. The headless process
+/// is not inside any podman network so aardvark-dns doesn't reach it; only
+/// /etc/hosts does.
+#[cfg(feature = "vault")]
+fn update_etc_hosts_vault(debug: bool) {
+    let out = match podman_cmd_sync()
+        .args([
+            "inspect",
+            VAULT_CONTAINER_NAME,
+            "--format",
+            "{{range .NetworkSettings.Networks}}{{.IPAddress}}\n{{end}}",
+        ])
+        .output()
+    {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("[tillandsias-vault] /etc/hosts update skipped: podman inspect failed: {e}");
+            return;
+        }
+    };
+    if !out.status.success() {
+        eprintln!(
+            "[tillandsias-vault] /etc/hosts update skipped: podman inspect exit {}",
+            out.status
+        );
+        return;
+    }
+    let ip = match String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(str::trim)
+        .find(|l| !l.is_empty())
+        .map(str::to_owned)
+    {
+        Some(ip) => ip,
+        None => {
+            eprintln!("[tillandsias-vault] /etc/hosts update skipped: no IP from podman inspect");
+            return;
+        }
+    };
+    let hosts = fs::read_to_string("/etc/hosts").unwrap_or_default();
+    let mut new_content: String = hosts
+        .lines()
+        .filter(|l| !l.split_whitespace().any(|w| w == "vault"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    if !new_content.ends_with('\n') && !new_content.is_empty() {
+        new_content.push('\n');
+    }
+    new_content.push_str(&format!("{ip} vault\n"));
+    if let Err(e) = fs::write("/etc/hosts", &new_content) {
+        eprintln!("[tillandsias-vault] /etc/hosts update failed: {e}");
+        return;
+    }
+    if debug {
+        eprintln!("[tillandsias-vault] /etc/hosts: vault → {ip}");
     }
 }
 
