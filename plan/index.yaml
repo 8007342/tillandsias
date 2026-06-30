@@ -362,7 +362,7 @@ plan_index:
     - packet_id: agent-login-flows-research
       order: 131
       title: "Research: --claude-login / --codex-login / --antigravity-login flows"
-      status: ready
+      status: done
       kind: research
       deliverable: plan/issues/agent-login-flows-research-2026-06-28.md
       depends_on: []
@@ -381,6 +381,18 @@ plan_index:
         - "Vault OAuth-token schema defined if any OAuth flow chosen"
         - "Containerized login boundary + required egress endpoints per service"
         - "Shared run_provider_login API shape sketched"
+      events:
+        - type: claim
+          ts: "2026-06-30T16:08:48Z"
+          agent_id: "linux-antigravity-20260630T1601Z"
+          host: "linux"
+          lease_id: "agent-login-flows-research-claim-1"
+          expires_at: "2026-06-30T20:08:48Z"
+        - type: completed
+          ts: "2026-06-30T17:50:32Z"
+          agent_id: "linux-antigravity-20260630T1601Z"
+          commit_hash: "PENDING"
+          evidence: "Auth model confirmed as OAuth via interactive session. Vault OAuth schema, egress endpoints, and run_provider_login API shape documented in deliverable."
 
     - packet_id: agent-login-flows-impl
       order: 132
