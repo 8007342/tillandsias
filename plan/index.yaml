@@ -8036,5 +8036,5 @@ plan_index:
       exit_criteria:
         - "methodology integration_strategy states same-branch=rebase, cross-branch=merge — DONE"
         - "advance-work §6 gate clarifies same-branch vs cross-branch — DONE"
-        - "skills/multihost-orchestration sibling step says merge + cites strategy — TODO"
-        - "litmus:integration-strategy-consistency pinned + green — TODO"
+        - "skills/coordinate-multihost-work sibling step says merge + cites strategy — DONE"
+        - "litmus:integration-strategy-consistency pinned + green — TODO (last remaining item)"

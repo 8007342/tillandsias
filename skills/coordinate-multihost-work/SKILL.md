@@ -70,8 +70,14 @@ In every hourly pass, the orchestrator MUST actively analyze concurrent work and
     -   Trigger Alert if commit count > **$D_{max} = 5$ commits**.
 *   **Mediation**:
     -   Freeze the diverging sibling branch's write leases.
-    -   Force-assign a primary "Forced Branch Rebase & Sibling Integration" task to that host.
-    -   Trigger synchronous orchestrator merge and run the litmus suite.
+    -   Force-assign a primary "Sibling Integration" task to that host: it
+        **merges** `origin/linux-next` (and `origin/main`) **into** its own branch
+        and resolves there — never rebases/cherry-picks published commits across
+        branches (that remints hashes and re-creates duplication; see
+        `methodology/multi-host-development.yaml` `integration_strategy`).
+    -   Trigger the synchronous orchestrator **merge** of the converged sibling
+        branch into `linux-next` and run the litmus suite + Integration
+        Verification Gate before push.
 
 ---
 
