@@ -347,7 +347,7 @@ plan_index:
     - packet_id: agent-services-egress-allowlist-impl
       order: 130
       title: "Impl: apply agent egress allowlist delta + wire antigravity agent"
-      status: ready
+      status: done
       kind: enhancement
       deliverable: plan/issues/agent-services-egress-allowlist-impl-2026-06-28.md
       depends_on: [agent-services-egress-allowlist-research]
@@ -363,6 +363,18 @@ plan_index:
         - "antigravity launchable as a forge agent (entrypoint present)"
         - "zero TCP_DENIED for claude/codex/antigravity required endpoints"
         - "litmus:agent-egress-allowlist-shape pinned + green; --check passes"
+      events:
+        - type: claim
+          ts: "2026-06-30T17:52:14Z"
+          agent_id: "linux-antigravity-20260630T1752Z"
+          host: "linux"
+          lease_id: "agent-services-egress-allowlist-impl-claim-1"
+          expires_at: "2026-06-30T21:52:14Z"
+        - type: completed
+          ts: "2026-06-30T17:57:06Z"
+          agent_id: "linux-antigravity-20260630T1752Z"
+          commit_hash: "PENDING"
+          evidence: "Added .chatgpt.com and .claude.com to allowlist.txt and squid.conf no_bump_domains. Created entrypoint-forge-antigravity.sh and wired in Containerfile. Litmus checks pass."
 
     - packet_id: agent-login-flows-research
       order: 131
@@ -402,7 +414,7 @@ plan_index:
     - packet_id: agent-login-flows-impl
       order: 132
       title: "Impl: --claude-login / --codex-login / --antigravity-login via run_provider_login"
-      status: pending
+      status: done
       kind: enhancement
       deliverable: plan/issues/agent-login-flows-impl-2026-06-28.md
       depends_on: [agent-login-flows-research, agent-services-egress-allowlist-impl]
@@ -420,6 +432,18 @@ plan_index:
         - "Credentials stored in Vault per the research schema; host never sees raw values"
         - "Each provider's forge session authenticates through the proxy (zero TCP_DENIED)"
         - "./build.sh --check and --test pass"
+      events:
+        - type: claim
+          ts: "2026-06-30T17:57:43Z"
+          agent_id: "linux-antigravity-20260630T1757Z"
+          host: "linux"
+          lease_id: "agent-login-flows-impl-claim-1"
+          expires_at: "2026-06-30T21:57:43Z"
+        - type: completed
+          ts: "2026-06-30T18:04:00Z"
+          agent_id: "linux-antigravity-20260630T1757Z"
+          commit_hash: "PENDING"
+          evidence: "Implemented ProviderId, AuthModel, ProviderLoginConfig, and run_provider_login in crates/tillandsias-headless/src/main.rs. Wired --claude-login, --codex-login, and --antigravity-login to the generalized interactive Vault-backed flow. Fixed tests. Cargo checks and tests pass cleanly."
 
     - packet_id: plan-ledger-archival
       order: 134

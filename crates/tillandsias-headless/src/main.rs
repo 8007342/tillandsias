@@ -125,6 +125,9 @@ fn main() {
     let force = user_args.iter().any(|a| a == "--force");
     let status_check = user_args.iter().any(|a| a == "--status-check");
     let github_login = user_args.iter().any(|a| a == "--github-login");
+    let claude_login = user_args.iter().any(|a| a == "--claude-login");
+    let codex_login = user_args.iter().any(|a| a == "--codex-login");
+    let antigravity_login = user_args.iter().any(|a| a == "--antigravity-login");
     let list_cloud_projects = user_args.iter().any(|a| a == "--list-cloud-projects");
     let opencode = user_args.iter().any(|a| a == "--opencode");
     let codex = user_args.iter().any(|a| a == "--codex");
@@ -222,6 +225,9 @@ fn main() {
         "--init",
         "--status-check",
         "--github-login",
+        "--claude-login",
+        "--codex-login",
+        "--antigravity-login",
         "--list-cloud-projects",
         "--opencode",
         "--codex",
@@ -264,6 +270,9 @@ fn main() {
         || init
         || status_check
         || github_login
+        || claude_login
+        || codex_login
+        || antigravity_login
         || list_cloud_projects
         || cache_clear
         || cache_verify;
@@ -299,10 +308,46 @@ fn main() {
         Some(a.to_string())
     });
 
-    if github_login {
-        // @trace spec:tillandsias-vault
-        // Phase 6: the default flow stores the token in Vault.
-        if let Err(e) = run_github_login(debug) {
+    let login_provider = if github_login {
+        Some((
+            ProviderId::GitHub,
+            AuthModel::OAuthDevice,
+            "git",
+            GH_LOGIN_TOKEN_SCRIPT.to_string(),
+        ))
+    } else if claude_login {
+        Some((
+            ProviderId::Claude,
+            AuthModel::OAuthDevice,
+            "curl",
+            get_generic_login_token_script(&ProviderId::Claude),
+        ))
+    } else if codex_login {
+        Some((
+            ProviderId::Codex,
+            AuthModel::OAuthDevice,
+            "curl",
+            get_generic_login_token_script(&ProviderId::Codex),
+        ))
+    } else if antigravity_login {
+        Some((
+            ProviderId::Antigravity,
+            AuthModel::OAuthDevice,
+            "curl",
+            get_generic_login_token_script(&ProviderId::Antigravity),
+        ))
+    } else {
+        None
+    };
+
+    if let Some((provider, auth_model, image_name, token_script)) = login_provider {
+        let config = ProviderLoginConfig {
+            provider,
+            auth_model,
+            image_name,
+            token_script,
+        };
+        if let Err(e) = run_provider_login(&config, debug) {
             eprintln!("Error: {}", e);
             std::process::exit(1);
         }
@@ -579,6 +624,9 @@ fn print_usage(version: &str) {
     println!("       tillandsias --init [--force] [--debug]");
     println!("       tillandsias --status-check [--debug]");
     println!("       tillandsias --github-login [--debug]");
+    println!("       tillandsias --claude-login [--debug]");
+    println!("       tillandsias --codex-login [--debug]");
+    println!("       tillandsias --antigravity-login [--debug]");
     println!("       tillandsias --cache-verify [--debug]");
     println!("       tillandsias --cache-clear [--debug]");
     println!("       tillandsias --opencode <project> [--prompt <text>] [--debug|--diagnostics]");
@@ -610,6 +658,9 @@ fn print_usage(version: &str) {
     println!("  --cache-clear  Clear the initialization cache and build state");
     println!("  --status-check Verify services are online through a representative stack smoke");
     println!("  --github-login Authenticate GitHub and store the token in Vault");
+    println!("  --claude-login Authenticate Claude and store the token in Vault");
+    println!("  --codex-login Authenticate Codex and store the token in Vault");
+    println!("  --antigravity-login Authenticate Antigravity and store the token in Vault");
     println!(
         "  --list-cloud-projects  List remote GitHub repos via the saved Vault token (diagnostic)"
     );
@@ -4391,48 +4442,134 @@ printf '%s' "$TOKEN" | gh auth login --hostname github.com --git-protocol https 
 /// executes entirely inside the container.
 ///
 /// @trace spec:gh-auth-script, spec:podman-secrets-integration, spec:secret-rotation, spec:tillandsias-vault
-fn run_github_login(debug: bool) -> Result<(), String> {
-    require_desktop_user_session("tillandsias --github-login")?;
-    report_runtime_lane("--github-login", debug);
+fn get_generic_login_token_script(provider: &ProviderId) -> String {
+    let vault_path = provider.vault_path();
+    let secret_field = provider.secret_field();
+    format!(
+        r#"
+printf '\n\n' >&2
+printf 'Paste your {} Token and press Enter.\n' >&2
+printf '(The token will not echo to the screen)\n' >&2
+printf '\n' >&2
+printf 'Token: ' >&2
+read -r -s TOKEN
+if [ -z "$TOKEN" ]; then
+  printf '\n\n' >&2
+  printf 'No token entered; aborting login.\n' >&2
+  exit 1
+fi
+printf '\n\nSaving token to vault...\n' >&2
+TOKEN="$TOKEN" vault-cli.sh write {} "{}="\$TOKEN""
+"#,
+        provider.name(),
+        vault_path,
+        secret_field
+    )
+}
+
+pub enum ProviderId {
+    GitHub,
+    Claude,
+    Codex,
+    Antigravity,
+}
+
+impl ProviderId {
+    pub fn vault_path(&self) -> &'static str {
+        match self {
+            ProviderId::GitHub => "secret/github/token",
+            ProviderId::Claude => "secret/claude/oauth",
+            ProviderId::Codex => "secret/codex/oauth",
+            ProviderId::Antigravity => "secret/antigravity/oauth",
+        }
+    }
+
+    pub fn name(&self) -> &'static str {
+        match self {
+            ProviderId::GitHub => "GitHub",
+            ProviderId::Claude => "Claude",
+            ProviderId::Codex => "Codex",
+            ProviderId::Antigravity => "Antigravity",
+        }
+    }
+
+    pub fn id_str(&self) -> &'static str {
+        match self {
+            ProviderId::GitHub => "github",
+            ProviderId::Claude => "claude",
+            ProviderId::Codex => "codex",
+            ProviderId::Antigravity => "antigravity",
+        }
+    }
+
+    pub fn vault_secret_name(&self) -> &'static str {
+        match self {
+            ProviderId::GitHub => "tillandsias-github-token",
+            ProviderId::Claude => "tillandsias-claude-token",
+            ProviderId::Codex => "tillandsias-codex-token",
+            ProviderId::Antigravity => "tillandsias-antigravity-token",
+        }
+    }
+
+    pub fn secret_field(&self) -> &'static str {
+        match self {
+            ProviderId::GitHub => "token",
+            ProviderId::Claude => "access_token",
+            ProviderId::Codex => "access_token",
+            ProviderId::Antigravity => "access_token",
+        }
+    }
+}
+
+pub enum AuthModel {
+    Token,
+    OAuthDevice,
+}
+
+pub struct ProviderLoginConfig {
+    pub provider: ProviderId,
+    pub auth_model: AuthModel,
+    pub image_name: &'static str,
+    pub token_script: String,
+}
+
+fn run_provider_login(config: &ProviderLoginConfig, debug: bool) -> Result<(), String> {
+    let provider_name = config.provider.name();
+    let flag = format!("--{}-login", config.provider.id_str());
+
+    require_desktop_user_session(&format!("tillandsias {flag}"))?;
+    report_runtime_lane(&flag, debug);
 
     // @trace spec:secret-rotation
     info!(
         accountability = true,
         category = "secrets",
         spec = "secret-rotation",
-        operation = "gh_auth_start",
-        secret_name = "tillandsias-github-token",
-        "GitHub authentication and secret rotation starting"
+        operation = format!("{}_auth_start", config.provider.id_str()),
+        secret_name = config.provider.vault_secret_name(),
+        "{provider_name} authentication and secret rotation starting"
     );
 
     let version = VERSION.trim();
     let root = resolve_runtime_asset_root(version, debug)?;
-    let image = versioned_image_tag("git", version);
+    let image = versioned_image_tag(config.image_name, version);
 
-    ensure_image_exists(&root, "git", &image, debug)?;
+    ensure_image_exists(&root, config.image_name, &image, debug)?;
 
-    // The helper dual-homes onto `tillandsias-egress` (see the run args below)
-    // to reach api.github.com, since `tillandsias-enclave` is `--internal`.
-    // `--github-login` can run without a prior full `--init`, so the managed
-    // egress network may not exist yet — ensure both networks here, otherwise
-    // the dual-home leg fails to resolve. ensure_enclave_network ensures the
-    // egress network first.
     ensure_enclave_network(debug)?;
 
-    // Bring Vault online before the interactive paste so the user isn't
-    // left waiting after login.
     #[cfg(feature = "vault")]
     vault_bootstrap::ensure_vault_running(debug)?;
 
-    // The login container reaches api.github.com (gh auth login --with-token)
-    // through the enclave proxy; the enclave network is --internal so the proxy
-    // is the only egress path. Start it now or gh fails with "error connecting
-    // to proxy". @trace plan/issues/proxy-not-started-standalone-flows-2026-06-27.md
     ensure_proxy_running(debug)?;
 
     check_auth_required_services(&["tillandsias-vault", "tillandsias-proxy"], debug)?;
 
-    let container = format!("tillandsias-gh-login-{}", std::process::id());
+    let container = format!(
+        "tillandsias-{}-login-{}",
+        config.provider.id_str(),
+        std::process::id()
+    );
     let cleanup = LoginContainerCleanup {
         name: container.clone(),
         debug,
@@ -4443,8 +4580,11 @@ fn run_github_login(debug: bool) -> Result<(), String> {
 
     #[cfg(feature = "vault")]
     {
-        vault_lease =
-            vault_bootstrap::mint_approle_secret_lease("github-login", &container, debug)?;
+        vault_lease = vault_bootstrap::mint_approle_secret_lease(
+            &format!("{}-login", config.provider.id_str()),
+            &container,
+            debug,
+        )?;
         let mut run = podman_command();
         run.args([
             "run",
@@ -4463,10 +4603,6 @@ fn run_github_login(debug: bool) -> Result<(), String> {
             "--security-opt=no-new-privileges",
             "--userns=keep-id",
         ]);
-        // Explicit proxy env so `vault` is in no_proxy and the in-container
-        // vault-cli write reaches https://vault:8200 directly (overrides any
-        // stale global containers.conf no_proxy on already-initialized hosts).
-        // @trace spec:proxy-container, plan/issues/vault-service-dns-no-proxy-2026-06-27.md
         run.args(proxy_env_args());
         run.args([
             "--entrypoint",
@@ -4487,7 +4623,6 @@ fn run_github_login(debug: bool) -> Result<(), String> {
             "--rm",
             "--name",
             &container,
-            // Dual-home for api.github.com egress (see the vault branch above).
             "--network",
             ENCLAVE_EGRESS_NETS,
             "--cap-drop=ALL",
@@ -4505,15 +4640,10 @@ fn run_github_login(debug: bool) -> Result<(), String> {
     let required = ["tillandsias-vault", container.as_str()];
     check_auth_required_services(&required, debug)?;
 
-    // Prompt only after the non-secret infrastructure preflight has succeeded:
-    // image present, managed networks present, Vault reachable, and the login
-    // helper container running. Future auth providers should reuse this shape
-    // rather than adding their own sleeps around credential entry.
-    prompt_and_store_git_identity()?;
+    if matches!(config.provider, ProviderId::GitHub) {
+        prompt_and_store_git_identity()?;
+    }
 
-    // Token entry runs inside the container via a robust `read` + `--with-token`
-    // pipe (see GH_LOGIN_TOKEN_SCRIPT) rather than gh's raw-mode masked prompt,
-    // which corrupts pasted tokens over `podman exec -it`.
     let mut login = podman_command();
     login.args([
         "exec",
@@ -4522,47 +4652,49 @@ fn run_github_login(debug: bool) -> Result<(), String> {
         &container,
         "/bin/bash",
         "-c",
-        GH_LOGIN_TOKEN_SCRIPT,
+        &config.token_script,
     ]);
     run_command(login, debug)?;
 
-    let mut auth_status = podman_command();
-    auth_status.args([
-        "exec",
-        &container,
-        "gh",
-        "auth",
-        "status",
-        "--hostname",
-        "github.com",
-    ]);
-    run_command_silent(auth_status, debug).map_err(|e| {
-        format!("containerized gh authentication verification failed after login: {e}")
-    })?;
+    if matches!(config.provider, ProviderId::GitHub) {
+        let mut auth_status = podman_command();
+        auth_status.args([
+            "exec",
+            &container,
+            "gh",
+            "auth",
+            "status",
+            "--hostname",
+            "github.com",
+        ]);
+        run_command_silent(auth_status, debug).map_err(|e| {
+            format!(
+                "containerized {provider_name} authentication verification failed after login: {e}"
+            )
+        })?;
+    }
 
     info!(
         accountability = true,
         category = "secrets",
         spec = "secret-rotation",
-        operation = "gh_auth_success",
-        secret_name = "tillandsias-github-token",
-        "GitHub authentication succeeded; writing token to Vault from inside container"
+        operation = format!("{}_auth_success", config.provider.id_str()),
+        secret_name = config.provider.vault_secret_name(),
+        "{provider_name} authentication succeeded; writing token to Vault from inside container"
     );
 
-    // Write the token to Vault entirely inside the container — the token
-    // never leaves the container's memory space.
     #[cfg(feature = "vault")]
     {
-        let mut vault_write = podman_command();
-        vault_write.args([
-            "exec",
-            &container,
-            "/bin/sh",
-            "-c",
-            "TOKEN=$(gh auth token --hostname github.com); vault-cli.sh write secret/github/token \"token=$TOKEN\"",
-        ]);
-        run_command_silent(vault_write, debug)
-            .map_err(|e| format!("in-container vault write failed: {e}"))?;
+        if matches!(config.provider, ProviderId::GitHub) {
+            let vault_write_cmd = format!(
+                "TOKEN=$(gh auth token --hostname github.com); vault-cli.sh write {} \"token=$TOKEN\"",
+                config.provider.vault_path()
+            );
+            let mut vault_write = podman_command();
+            vault_write.args(["exec", &container, "/bin/sh", "-c", &vault_write_cmd]);
+            run_command_silent(vault_write, debug)
+                .map_err(|e| format!("in-container vault write failed: {e}"))?;
+        }
 
         let mut vault_verify = podman_command();
         vault_verify.args([
@@ -4570,8 +4702,8 @@ fn run_github_login(debug: bool) -> Result<(), String> {
             &container,
             "vault-cli.sh",
             "read",
-            "-field=token",
-            "secret/github/token",
+            &format!("-field={}", config.provider.secret_field()),
+            config.provider.vault_path(),
         ]);
         run_command_silent(vault_verify, debug)
             .map_err(|e| format!("in-container vault write verification failed: {e}"))?;
@@ -4580,20 +4712,25 @@ fn run_github_login(debug: bool) -> Result<(), String> {
             accountability = true,
             category = "secrets",
             spec = "tillandsias-vault",
-            operation = "gh_auth_vault_write",
-            secret_name = "tillandsias-github-token",
-            "GitHub token stored in Vault at secret/github/token; \
-             git containers read from Vault — no bare-guest gh setup required"
+            operation = format!("{}_auth_vault_write", config.provider.id_str()),
+            secret_name = config.provider.vault_secret_name(),
+            "{provider_name} token stored in Vault at {}; containers read from Vault",
+            config.provider.vault_path()
         );
     }
     #[cfg(not(feature = "vault"))]
     {
-        return Err("vault feature not compiled; cannot store GitHub token".to_string());
+        return Err(format!(
+            "vault feature not compiled; cannot store {provider_name} token"
+        ));
     }
 
-    let mut username_cmd = podman_command();
-    username_cmd.args(["exec", &container, "gh", "api", "user", "--jq", ".login"]);
-    let username = command_output(username_cmd, debug).ok();
+    let mut username: Option<String> = None;
+    if matches!(config.provider, ProviderId::GitHub) {
+        let mut username_cmd = podman_command();
+        username_cmd.args(["exec", &container, "gh", "api", "user", "--jq", ".login"]);
+        username = command_output(username_cmd, debug).ok();
+    }
 
     drop(cleanup);
 
@@ -4601,15 +4738,16 @@ fn run_github_login(debug: bool) -> Result<(), String> {
         accountability = true,
         category = "secrets",
         spec = "secret-rotation",
-        operation = "gh_auth_complete",
-        secret_name = "tillandsias-github-token",
-        "GitHub authentication and secret rotation completed successfully"
+        operation = format!("{}_auth_complete", config.provider.id_str()),
+        secret_name = config.provider.vault_secret_name(),
+        "{provider_name} authentication and secret rotation completed successfully"
     );
     if let Some(username) = username.filter(|value| !value.is_empty()) {
-        println!("[tillandsias] GitHub authentication complete for {username}");
+        println!("[tillandsias] {provider_name} authentication complete for {username}");
+    } else {
+        println!("[tillandsias] {provider_name} authentication complete");
     }
 
-    // Add a 5 second delay so the user can see the success message before the popup terminal closes
     std::thread::sleep(std::time::Duration::from_secs(5));
 
     Ok(())
@@ -8578,30 +8716,36 @@ mod tests {
     #[test]
     fn github_login_helper_dual_homes_onto_managed_egress_network() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
-        let login_window = source_window(source, "fn run_github_login(debug: bool)");
+        let login_window = source_window(
+            source,
+            "fn run_provider_login(config: &ProviderLoginConfig, debug: bool)",
+        );
         assert!(
             login_window.contains("ENCLAVE_EGRESS_NETS"),
-            "run_github_login must use ENCLAVE_EGRESS_NETS not ENCLAVE_NET: {login_window}"
+            "run_provider_login must use ENCLAVE_EGRESS_NETS not ENCLAVE_NET: {login_window}"
         );
         assert!(
             !login_window.contains("ENCLAVE_NET,"),
-            "run_github_login must not reference ENCLAVE_NET (no egress): {login_window}"
+            "run_provider_login must not reference ENCLAVE_NET (no egress): {login_window}"
         );
         // The dual-home leg only resolves if the managed egress network exists.
         // `--github-login` can run without a prior full `--init`, so the login
         // path must ensure the networks itself.
         assert!(
             login_window.contains("ensure_enclave_network(debug)?"),
-            "run_github_login must ensure the enclave+egress networks before launching the helper: {login_window}"
+            "run_provider_login must ensure the enclave+egress networks before launching the helper: {login_window}"
         );
     }
 
     #[test]
     fn github_login_prompts_after_infrastructure_preflight() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
-        let login_window = source_window(source, "fn run_github_login(debug: bool)");
+        let login_window = source_window(
+            source,
+            "fn run_provider_login(config: &ProviderLoginConfig, debug: bool)",
+        );
         let image_idx = login_window
-            .find("ensure_image_exists(&root, \"git\", &image, debug)?")
+            .find("ensure_image_exists(&root, config.image_name, &image, debug)?")
             .expect("github login must preflight the git image");
         let network_idx = login_window
             .find("ensure_enclave_network(debug)?")
@@ -8622,7 +8766,7 @@ mod tests {
             .find("prompt_and_store_git_identity()?")
             .expect("github login must prompt for git identity");
         let token_idx = login_window
-            .find("GH_LOGIN_TOKEN_SCRIPT")
+            .find("config.token_script")
             .expect("github login must prompt for token through the helper");
 
         for (label, idx) in [
@@ -8650,7 +8794,10 @@ mod tests {
     #[test]
     fn github_login_preflight_does_not_require_project_git_container() {
         let source = include_str!(concat!(env!("CARGO_MANIFEST_DIR"), "/src/main.rs"));
-        let login_window = source_window(source, "fn run_github_login(debug: bool)");
+        let login_window = source_window(
+            source,
+            "fn run_provider_login(config: &ProviderLoginConfig, debug: bool)",
+        );
 
         assert!(
             !login_window.contains("\"tillandsias-git\""),
@@ -9106,18 +9253,21 @@ mod tests {
             "run_status_check must route through the shared podman layer"
         );
 
-        let login_window = source_window(source, "fn run_github_login(debug: bool)");
+        let login_window = source_window(
+            source,
+            "fn run_provider_login(config: &ProviderLoginConfig, debug: bool)",
+        );
         assert!(
             login_window.contains("podman_command()"),
-            "run_github_login must use the shared podman command constructor"
+            "run_provider_login must use the shared podman command constructor"
         );
         assert!(
             login_window.contains("\"status\"") && login_window.contains("\"auth\""),
-            "run_github_login must verify the containerized gh session"
+            "run_provider_login must verify the containerized gh session"
         );
         assert!(
-            login_window.contains("vault-cli.sh write secret/github/token"),
-            "run_github_login must persist the token to Vault from inside the container"
+            login_window.contains("vault-cli.sh write {}"),
+            "run_provider_login must persist the token to Vault from inside the container"
         );
 
         let opencode_window = source_window(
