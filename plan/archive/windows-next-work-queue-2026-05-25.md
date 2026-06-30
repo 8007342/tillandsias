@@ -1,5 +1,16 @@
 # windows-next work queue — 2026-05-25
 
+## 2026-06-30T00:00Z — YIELD: no Windows-eligible ready work after order 127
+
+- **Agent**: `windows-sonnet46-20260630T0000Z`
+- **Status**: YIELD — no claimable Windows packets in queue.
+- **Blocking**: order 129 (egress allowlist research, `claimed` by linux) → 130 (impl, `pending`)
+  → 132 (agent-login-flows-impl, `pending`). Order 131 (login flows research) is `ready` but
+  `pickup_role: linux`.
+- **Next Windows action**: when orders 129+130+131 complete, claim order 132
+  (agent-login-flows-impl) which has Windows tray leaf work for --claude-login/--codex-login.
+- **Pushed**: `origin/windows-next` at `b5b1fffc`.
+
 ## 2026-06-30T00:00Z — order 127 COMPLETED: WslGuestTransport + HvSocket consolidation
 
 - **Agent**: `windows-sonnet46-20260630T0000Z`
