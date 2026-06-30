@@ -1471,3 +1471,15 @@ Ready, step-32-independent packet for this host: **keyring persistent-backend ve
 - **CI**: Run 28408139744 in_progress on `ace36998`; 2 prior CI runs failed on clippy (collapsible_if, dead_code). All issues now fixed.
 - **Blocked on**: CI pass → release workflow → new musl binary → VM deploy → e2e test.
 - **Next**: When CI green, trigger `release.yml --ref main` after PR #57 merges, or build musl locally via `./build.sh --ci-full --install` if linux host is available.
+
+## 2026-06-29T05:00Z — order 114 COMPLETED + 4 follow-up fixes shipped
+
+- **Agent**: `windows-sonnet46-20260629T0500Z`
+- **Scope**: post-order-114 hardening — vault reliability, tray liveness, credential delivery
+- **Order 114 EXIT CRITERIA MET**: 23 real GitHub repos listed via vsock-triggered vault bootstrap (validated prior session). Three vault_bootstrap.rs bugs fixed (sleep fix, root-token fallback, Shamir fallback), headless deployed to Fedora VM with `--features listen-vsock`.
+- `a033ee75` fix(vault): auto-update /etc/hosts with vault container IP on every start
+- `3d321ea0` fix(proxy): heal intermediate.key permissions so squid can read it (640→644 + heal on every ensure_ca_bundle call)
+- `b56a2064` fix(tray): SetTimer 100ms to drain tokio tasks without user interaction (eliminates spawn_local starvation when user is idle)
+- `ddf1f3b3` fix(tray): deliver credentials in already-registered VM fast-path (was returning Ok(()) after start() without handshake+credential delivery)
+- **All pushed to windows-next** (`29732cea`..`ddf1f3b3`)
+- **Pending**: CI musl build → release binary → VM redeploy with built-in /etc/hosts healing
