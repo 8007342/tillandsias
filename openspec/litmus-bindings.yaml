@@ -704,13 +704,8 @@ specs:
   last_verified: '2026-05-14'
   tombstone: obsolete:src-tauri-deferred
 - spec_id: tray-host-control-socket
-  status: active
-  litmus_tests:
-  - litmus:binary-e2e-smoke
-  - litmus:control-dispatch-shape
-  - litmus:tray-host-control-socket-unix-shape
-  coverage_ratio: 75
-  last_verified: '2026-05-29'
+  status: obsolete
+  tombstone: "Superseded by orders 123-128 normalization."
 - spec_id: tray-icon-lifecycle
   status: active
   litmus_tests:

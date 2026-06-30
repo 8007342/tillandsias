@@ -1,0 +1,13 @@
+command: bash
+args:
+  - -c
+  - |
+    # Assert no live 'zeroclaw' references outside of historical records
+    # Historical records are allowed (plan/archive, changelogs)
+    count=$(grep -ir "zeroclaw" --exclude-dir=".git" --exclude-dir="target" --exclude-dir="archive" --exclude="loop_status.md" --exclude="index.yaml" --exclude="stale-reference-cleanup-audit-*.md" --exclude="litmus-no-dangling-removed-component-refs.yaml" --exclude="litmus-simplified-tray-ux-leaf-action-shape.yaml" . | wc -l)
+    if [ "$count" -gt 0 ]; then
+      echo "Found live zeroclaw refs:"
+      grep -ir "zeroclaw" --exclude-dir=".git" --exclude-dir="target" --exclude-dir="archive" --exclude="loop_status.md" --exclude="index.yaml" --exclude="stale-reference-cleanup-audit-*.md" --exclude="litmus-no-dangling-removed-component-refs.yaml" --exclude="litmus-simplified-tray-ux-leaf-action-shape.yaml" .
+      exit 1
+    fi
+    exit 0
