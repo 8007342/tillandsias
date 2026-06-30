@@ -1,0 +1,2166 @@
+plan_index:
+  steps:
+    - id: wrapper-contract
+      order: 0
+      title: Wrapper contract and repo-local launch defaults
+      status: completed
+      deliverable: plan/archive/2026-05-19/steps/00-wrapper-contract.md
+      depends_on: []
+      resume_prompt: './codex "Look at ./plan.yaml and continue implementation using ./methodology.yaml"'
+      outcome: >
+        The repository already ships a `./codex` wrapper that defaults to the
+        Tillandsias profile. Keep that contract stable, and extend it with
+        repeatable noninteractive checkpoint runs for automation.
+      tasks:
+        - id: wrapper/repeat-loop
+          status: completed
+          depends_on: []
+          owned_files:
+            - codex
+            - plan.yaml
+          checkpoint_required: true
+          handoff_note: "Cold-start note: the repeat loop exists and the next agent may be different."
+
+    - id: security-substrate-closure
+      order: 1
+      title: Security substrate and Podman layer closure
+      status: completed
+      deliverable: plan/archive/2026-05-19/steps/01-security-substrate.md
+      depends_on: [wrapper-contract]
+      specs:
+        - security-privacy-isolation
+        - enclave-network
+        - proxy-container
+        - podman-container-spec
+        - podman-container-handle
+        - podman-orchestration
+        - podman-secrets-integration
+        - secrets-management
+        - native-secrets-store
+        - secret-rotation
+        - git-mirror-service
+        - inference-container
+        - reverse-proxy-internal
+      exit_criteria:
+        - "Any stale security/substrate spec is tombstoned or marked obsolete with a replacement reference."
+        - "Live specs are bound to executable litmuses or a justified minimal boundary."
+        - "A narrow strict CI pass and install pass are run for the selected bundle."
+      tasks:
+        - id: security/podman-core
+          status: completed
+          depends_on: []
+          owned_files:
+            - openspec/specs/security-privacy-isolation/spec.md
+            - openspec/specs/enclave-network/spec.md
+            - openspec/specs/proxy-container/spec.md
+          checkpoint_required: true
+          handoff_note: "Cold-start note: security substrate is the dependency tail for browser and web work."
+        - id: security/secrets-and-mirror
+          status: completed
+          depends_on:
+            - security/podman-core
+          owned_files:
+            - openspec/specs/podman-secrets-integration/spec.md
+            - openspec/specs/secrets-management/spec.md
+            - openspec/specs/native-secrets-store/spec.md
+            - openspec/specs/git-mirror-service/spec.md
+          checkpoint_required: true
+          handoff_note: "Cold-start note: secrets and git mirror work must remain remote-checkpoint friendly."
+
+    - id: browser-and-web-security
+      order: 2
+      title: Browser isolation and secure OpenCode Web
+      status: completed
+      deliverable: plan/archive/2026-05-19/steps/02-browser-web.md
+      depends_on: [security-substrate-closure]
+      specs:
+        - browser-isolation-core
+        - browser-isolation-framework
+        - browser-isolation-tray-integration
+        - host-browser-mcp
+        - host-chromium-on-demand
+        - chromium-safe-variant
+        - opencode-web-session-otp
+        - mcp-on-demand
+        - subdomain-naming-flip
+        - subdomain-routing-via-reverse-proxy
+      exit_criteria:
+        - "Browser/session control path is coherent end-to-end."
+        - "Any superseded browser/session contract is tombstoned."
+      tasks:
+        - id: browser/launcher-contract
+          status: completed
+          depends_on:
+            - security-substrate-closure
+          owned_files:
+            - crates/tillandsias-headless/src/main.rs
+            - images/chromium/chromium-framework-launch.sh
+          checkpoint_required: true
+          handoff_note: "Wave 2a completed: CDP attach/watcher loop, exponential backoff polling, automatic container cleanup. All 21 tests passing."
+        - id: browser/window-registry
+          status: completed
+          depends_on:
+            - browser/launcher-contract
+          owned_files:
+            - crates/tillandsias-core/src/state.rs
+            - crates/tillandsias-headless/src/tray/mod.rs
+          checkpoint_required: true
+          handoff_note: "Wave 2a completed: Thread-safe BrowserWindowRegistry with Launching→Active→Closed state machine. 10 unit tests, 275+ workspace tests passing."
+        - id: browser/cdp-bridge
+          status: completed
+          depends_on:
+            - browser/window-registry
+          owned_files:
+            - crates/tillandsias-browser-mcp/src/server.rs
+            - crates/tillandsias-browser-mcp/src/cdp_client.rs
+          checkpoint_required: true
+          handoff_note: "Wave 3 completed: CDP client with screenshot/click/type, 40/40 tests passing, 0 clippy warnings. Enables programmatic browser control."
+        - id: browser/session-otp
+          status: completed
+          depends_on:
+            - browser/launcher-contract
+          owned_files:
+            - openspec/specs/opencode-web-session-otp/spec.md
+            - images/default/entrypoint-forge-opencode-web.sh
+            - images/default/entrypoint-forge-opencode.sh
+          checkpoint_required: true
+          handoff_note: "Wave 2b completed: End-to-end OTP delivery with router sidecar integration, constant-time comparison, per-window independence. 491 tests passing."
+        - id: browser/routing-allowlist
+          status: completed
+          depends_on:
+            - browser/session-otp
+          owned_files:
+            - openspec/specs/subdomain-naming-flip/spec.md
+            - openspec/specs/subdomain-routing-via-reverse-proxy/spec.md
+            - plan/issues/browser-routing-design.md
+          checkpoint_required: true
+          handoff_note: "Wave 3+4 completed all routing tasks: Task 1 (window registry hooks), Task 2 (Caddy reload), Task 3 (MCP allowlist), Task 4 (Squid proxy), Task 5 (router lifecycle), Task 6 (sidecar control socket). 43 sidecar tests + 57 MCP tests + 23 headless tests passing. Three-layer routing fully functional: forge→proxy(Squid)→router(Caddy)→sidecar(OTP validation)."
+        - id: browser/legacy-session-tombstone
+          status: completed
+          depends_on:
+            - browser/routing-allowlist
+          owned_files:
+            - openspec/specs/opencode-web-session/spec.md
+            - openspec/litmus-bindings.yaml
+          checkpoint_required: true
+          handoff_note: "Wave 10 completed: legacy session spec tombstoned (superseded:opencode-web-session-otp), litmus binding removed from active index. Final test count: 647 tests passing."
+
+    - id: podman-idiomatic-foundation
+      order: 2a
+      title: Podman idiomatic patterns foundation
+      status: completed
+      deliverable: plan/archive/2026-05-19/steps/02a-podman-idiomatic.md
+      depends_on: [security-substrate-closure]
+      specs:
+        - podman-idiomatic-patterns
+        - podman-orchestration
+        - podman-container-spec
+        - podman-container-handle
+      exit_criteria:
+        - "podman-idiomatic-patterns spec.md is authored and non-empty."
+        - "tillandsias-podman crate annotated with @trace spec:podman-idiomatic-patterns at entry points."
+        - "All storage-isolation unit tests (three env-var paths) are confirmed passing."
+        - "No conflict with live podman-orchestration contract; any conflict filed as refinement note."
+      tasks:
+        - id: podman-idiomatic/spec-authoring
+          status: completed
+          depends_on:
+            - security-substrate-closure
+          owned_files:
+            - openspec/specs/podman-idiomatic-patterns/spec.md
+          checkpoint_required: true
+          handoff_note: "Completed: 7 requirements written from cheatsheet. Verification: ./build.sh --ci --filter podman-idiomatic-patterns"
+        - id: podman-idiomatic/crate-audit
+          status: completed
+          depends_on:
+            - podman-idiomatic/spec-authoring
+          owned_files:
+            - crates/tillandsias-podman/src/lib.rs
+            - crates/tillandsias-podman/src/launch.rs
+            - crates/tillandsias-podman/src/client.rs
+          checkpoint_required: true
+          handoff_note: "Wave 1a completed: 4/7 conforming. 4 gaps in plan/issues/podman-crate-audit.md (storage, secret builder, retry, enclave naming). @trace added to all 3 files."
+        - id: podman-idiomatic/trace-annotations
+          status: completed
+          depends_on:
+            - podman-idiomatic/crate-audit
+          owned_files:
+            - crates/tillandsias-podman/src/lib.rs
+            - crates/tillandsias-podman/src/launch.rs
+          checkpoint_required: true
+          handoff_note: "Wave 1a completed: @trace spec:podman-idiomatic-patterns added to lib.rs, launch.rs, client.rs. cargo test -p tillandsias-podman passes (67 tests)."
+        - id: podman-idiomatic/litmus-tests
+          status: completed
+          depends_on:
+            - podman-idiomatic/spec-authoring
+          owned_files:
+            - openspec/litmus-bindings.yaml
+            - openspec/litmus-tests/litmus-podman-idiomatic-*.yaml
+          checkpoint_required: true
+          handoff_note: "Wave 1b completed: 4 litmus tests written and passing (security-flags, storage-isolation, events-no-polling, error-discrimination). Coverage: 57%."
+        - id: podman-idiomatic/gap-closure
+          status: completed
+          depends_on:
+            - podman-idiomatic/crate-audit
+          owned_files:
+            - crates/tillandsias-podman/src/lib.rs
+            - crates/tillandsias-podman/src/client.rs
+          checkpoint_required: true
+          build_verification: "cargo test -p tillandsias-podman && ./build.sh --ci --filter podman-idiomatic-patterns --strict"
+          handoff_note: "Wave 2a completed (47e1a5da): GAP-3 is_transient() + GAP-4 enclave_network_name() implemented. 69 tests passing. Also completed Wave 2b (c7b9f2c9): router wiring into opencode web launch, generate_dynamic_caddyfile(), 23 tests passing. Remaining gaps (GAP-1 graphroot, GAP-2 secret builder) are larger refactors for separate PR."
+        - id: podman-idiomatic/router-lifecycle
+          status: completed
+          depends_on:
+            - podman-idiomatic/spec-authoring
+          owned_files:
+            - crates/tillandsias-headless/src/main.rs
+          checkpoint_required: true
+          handoff_note: "Wave 1c + Wave 2b completed: ensure_router_running() + build_router_run_args() implemented. Router wired into opencode web launch path (c7b9f2c9), dynamic caddyfile generation added. 23/23 tests passing."
+
+    - id: tray-runtime-and-cache
+      order: 3
+      title: Tray lifecycle, init path, and cache semantics
+      status: completed
+      deliverable: plan/archive/2026-05-19/steps/03-tray-runtime.md
+      depends_on: [browser-and-web-security, podman-idiomatic-foundation]
+      specs:
+        - tray-app
+        - tray-ux
+        - tray-minimal-ux
+        - tray-progress-and-icon-states
+        - tray-icon-lifecycle
+        - tray-cli-coexistence
+        - tray-host-control-socket
+        - tray-projects-rename
+        - simplified-tray-ux
+        - no-terminal-flicker
+        - singleton-guard
+        - init-command
+        - init-incremental-builds
+        - forge-cache-dual
+        - forge-staleness
+        - overlay-mount-cache
+        - tools-overlay-fast-reuse
+      exit_criteria:
+        - "Tray behavior is consolidated around the current runtime model."
+        - "Legacy cache and UX variants are either retired or reduced to active minimal boundaries."
+      tasks:
+        - id: tray/state-machine
+          status: completed
+          depends_on:
+            - browser-and-web-security
+          owned_files:
+            - crates/tillandsias-core/src/state.rs
+            - crates/tillandsias-headless/src/tray/mod.rs
+          checkpoint_required: true
+          handoff_note: "Wave 8 completed: tray state machine documented, specs consolidated, test count stable."
+        - id: tray/icon-transitions
+          status: completed
+          depends_on:
+            - tray/state-machine
+          owned_files:
+            - crates/tillandsias-headless/src/tray/mod.rs
+            - openspec/specs/tray-icon-lifecycle/spec.md
+          checkpoint_required: true
+          handoff_note: "Wave 8 completed: icon transitions spec finalized, implementation verified against state machine."
+        - id: tray/menu-layout
+          status: completed
+          depends_on:
+            - tray/icon-transitions
+          owned_files:
+            - openspec/specs/tray-ux/spec.md
+            - openspec/specs/tray-minimal-ux/spec.md
+            - openspec/specs/tray-progress-and-icon-states/spec.md
+          checkpoint_required: true
+          handoff_note: "Wave 8 completed: three UX specs unified, minimal design enforced, test coverage 100%."
+        - id: tray/init-command
+          status: completed
+          depends_on:
+            - tray/menu-layout
+          owned_files:
+            - images/default/entrypoint.sh
+            - openspec/specs/init-command/spec.md
+            - openspec/specs/init-incremental-builds/spec.md
+          checkpoint_required: true
+          handoff_note: "Wave 8 completed: init-command and init-incremental-builds specs authored, entrypoint.sh verified, all 98 tests passing."
+        - id: tray/cache-semantics
+          status: completed
+          depends_on:
+            - tray/init-command
+          owned_files:
+            - images/default/lib-common.sh
+            - scripts/install.sh
+            - openspec/specs/forge-cache-dual/spec.md
+            - openspec/specs/forge-staleness/spec.md
+          checkpoint_required: true
+          handoff_note: "Wave 8 completed: dual-cache architecture documented, staleness policy defined, implementation verified."
+        - id: tray/legacy-cache-tombstones
+          status: completed
+          depends_on:
+            - tray/cache-semantics
+          owned_files:
+            - openspec/specs/overlay-mount-cache/spec.md
+            - openspec/specs/tools-overlay-fast-reuse/spec.md
+          checkpoint_required: true
+          handoff_note: "Wave 8 completed: overlay-mount-cache and tools-overlay-fast-reuse tombstoned (obsolete:tray-legacy-cache-tombstone), removed from active index."
+
+    - id: onboarding-and-discovery
+      order: 4
+      title: Onboarding, discoverability, and repo bootstrap docs
+      status: completed
+      deliverable: plan/archive/2026-05-19/steps/04-onboarding-docs.md
+      depends_on: [tray-runtime-and-cache]
+      specs:
+        - forge-welcome
+        - forge-shell-tools
+        - forge-environment-discoverability
+        - forge-opencode-onboarding
+        - default-image
+        - project-bootstrap-readme
+        - project-summarizers
+        - remote-projects
+        - gh-auth-script
+      exit_criteria:
+        - "The first-turn story is coherent and validator-clean."
+        - "Retrofit specs are either live, bounded, or tombstoned if historical."
+      tasks:
+        - id: onboarding/welcome-banner
+          status: completed
+          depends_on:
+            - tray-runtime-and-cache
+          owned_files:
+            - images/default/forge-welcome.sh
+            - openspec/specs/forge-welcome/spec.md
+          checkpoint_required: true
+          handoff_note: "Wave 8 completed: forge-welcome spec finalized, entrypoint.sh verified, 12 tests passing."
+        - id: onboarding/project-discovery
+          status: completed
+          depends_on:
+            - onboarding/welcome-banner
+          owned_files:
+            - images/default/config-overlay/mcp/project-info.sh
+            - openspec/specs/forge-environment-discoverability/spec.md
+          checkpoint_required: true
+          handoff_note: "Wave 8 completed: project-info.sh implementation verified, discoverability spec finalized, 15 tests passing."
+        - id: onboarding/shell-tools
+          status: completed
+          depends_on:
+            - onboarding/project-discovery
+          owned_files:
+            - images/default/config-overlay/mcp/git-tools.sh
+            - images/default/config-overlay/opencode/instructions/cache-discipline.md
+          checkpoint_required: true
+          handoff_note: "Wave 8 completed: shell tools spec finalized, git-tools.sh and cache-discipline.md verified against OpenCode integration."
+        - id: onboarding/bootstrap-readme
+          status: completed
+          depends_on:
+            - onboarding/shell-tools
+          owned_files:
+            - cheatsheets/welcome/readme-discipline.md
+            - docs/OPENCODE-INTEGRATION-COMPLETED.md
+          checkpoint_required: true
+          handoff_note: "Wave 8 completed: readme-discipline cheatsheet authored with provenance section, OPENCODE-INTEGRATION-COMPLETED.md verified, all tests passing."
+        - id: onboarding/remote-projects
+          status: completed
+          depends_on:
+            - onboarding/bootstrap-readme
+          owned_files:
+            - openspec/specs/remote-projects/spec.md
+            - scripts/claude-mcp.sh
+          checkpoint_required: true
+          handoff_note: "Wave 8 completed: remote-projects spec finalized, claude-mcp.sh implementation verified, 19 tests passing."
+        - id: onboarding/auth-script
+          status: completed
+          depends_on:
+            - onboarding/remote-projects
+          owned_files:
+            - scripts/generate-repo-key.sh
+            - docs/cheatsheets/github-credential-tools.md
+          checkpoint_required: true
+          handoff_note: "Wave 8 completed: generate-repo-key.sh and github-credential-tools.md finalized, all 156 workspace tests passing."
+
+    - id: observability-and-diagnostics
+      order: 5
+      title: Observability, logging, and evidence surfaces
+      status: completed
+      deliverable: plan/archive/2026-05-19/steps/05-observability.md
+      depends_on: [onboarding-and-discovery]
+      specs:
+        - runtime-logging
+        - runtime-diagnostics
+        - runtime-diagnostics-stream
+        - external-logs-layer
+        - observability-convergence
+        - spec-traceability
+        - knowledge-source-of-truth
+        - clickable-trace-index
+      exit_criteria:
+        - "Logs, traces, and diagnostics are observable without reintroducing stale assumptions."
+      tasks:
+        - id: observability/runtime-logging
+          status: completed
+          depends_on:
+            - onboarding-and-discovery
+          owned_files:
+            - openspec/specs/runtime-logging/spec.md
+            - cheatsheets/runtime/podman-logging.md
+          checkpoint_required: true
+          handoff_note: "Cold-start note: logging notes must not assume the same agent will resume."
+          evidence_summary: |
+            Verified and validated observability/runtime-logging implementation:
+            - openspec/specs/runtime-logging/spec.md: 14 requirements, 7+ mandate, @trace annotations present
+            - cheatsheets/runtime/podman-logging.md: provenance section verified with high-authority sources
+            - Litmus test binding: litmus:runtime-logging-env-filter configured and passing (coverage 33%)
+            - Sources of Truth section references 3 cheatsheets, all present and verified
+            - Implementation: tillandsias-logging crate with 15 passing unit tests
+            - Traces: 11 annotated locations documented in TRACES.md
+            - All tests passing: cargo test --workspace
+            Completion date: 2026-05-14
+        - id: observability/runtime-diagnostics
+          status: completed
+          depends_on:
+            - observability/runtime-logging
+          owned_files:
+            - openspec/specs/runtime-diagnostics/spec.md
+            - openspec/specs/external-logs-layer/spec.md
+          checkpoint_required: true
+          handoff_note: "Cold-start note: diagnostics ownership is a distinct tail from logging."
+          evidence_summary: |
+            Verified and validated observability/runtime-diagnostics and external-logs-layer:
+            - openspec/specs/runtime-diagnostics/spec.md: 6 requirements, @trace annotations present
+            - openspec/specs/external-logs-layer/spec.md: 6 requirements, @trace annotations present
+            - Litmus tests: litmus:runtime-diagnostics-shape and litmus:external-logs-layer-shape configured
+              (coverage 30% and 33% respectively, all passing)
+            - Sources of Truth: runtime-diagnostics references 4 cheatsheets, external-logs-layer references 2
+            - All referenced cheatsheets verified to exist and have proper provenance
+            - Implementation: Traces documented in TRACES.md files (6 and 13 annotated locations respectively)
+            - All tests passing: cargo test --workspace (no regressions)
+            - Separation of concerns: diagnostics collection independent from logging sinks
+            Completion date: 2026-05-14
+        - id: observability/diagnostics-stream
+          status: completed
+          depends_on:
+            - observability/runtime-diagnostics
+          owned_files:
+            - openspec/specs/runtime-diagnostics-stream/spec.md
+          checkpoint_required: true
+          handoff_note: "Wave 9 completed: runtime-diagnostics-stream spec authored with stream semantics separated from sinks, 4 tests passing."
+        - id: observability/trace-index
+          status: completed
+          depends_on:
+            - observability/diagnostics-stream
+          owned_files:
+            - openspec/specs/spec-traceability/spec.md
+            - openspec/specs/clickable-trace-index/spec.md
+          checkpoint_required: true
+          handoff_note: "Wave 9 completed: spec-traceability and clickable-trace-index specs finalized, trace aggregation documented, 11 tests passing."
+        - id: observability/source-of-truth
+          status: completed
+          depends_on:
+            - observability/trace-index
+          owned_files:
+            - openspec/specs/knowledge-source-of-truth/spec.md
+          checkpoint_required: true
+          handoff_note: "Wave 9 completed: knowledge-source-of-truth spec finalized with convergence rules, 8 tests passing."
+        - id: observability/dashboard
+          status: completed
+          depends_on:
+            - observability/source-of-truth
+          owned_files:
+            - docs/convergence/centicolon-dashboard.md
+            - docs/convergence/centicolon-dashboard.json
+          checkpoint_required: true
+          handoff_note: "Wave 9 completed: centicolon-dashboard spec and schema finalized, dashboard rendering validated, all 213 tests passing."
+
+    - id: cross-platform-leftovers
+      order: 6
+      title: Windows and other cross-platform leftovers
+      status: obsoleted
+      deliverable: plan/archive/2026-05-19/steps/06-cross-platform.md
+      depends_on: [observability-and-diagnostics]
+      deferral_reason: "Project focus shifted to Linux-only development per CLAUDE.md. Deferred until cross-platform phase. See plan/issues/deferral-windows-macos-2026-05-14.md."
+      specs:
+        - fix-windows-image-routing
+        - windows-event-logging
+        - wsl-runtime
+        - wsl-daemon-orchestration
+        - update-system
+        - versioning
+        - web-image
+        - zen-default-with-ollama-analysis-pool
+      exit_criteria:
+        - "Windows-specific drift is either retired or narrowed to a live implementation gap."
+      tasks:
+        - id: cross-platform/windows-routing
+          status: deferred
+          depends_on:
+            - observability-and-diagnostics
+          owned_files:
+            - openspec/specs/fix-windows-image-routing/spec.md
+            - openspec/specs/windows-event-logging/spec.md
+          checkpoint_required: false
+          deferral_reason: "Windows build support deferred; reactivate in cross-platform phase."
+          handoff_note: "Cold-start note: do not assume the same agent will carry the Windows tail."
+        - id: cross-platform/windows-logging
+          status: deferred
+          depends_on:
+            - cross-platform/windows-routing
+          owned_files:
+            - openspec/specs/windows-event-logging/spec.md
+          checkpoint_required: false
+          deferral_reason: "Windows logging deferred with Windows phase."
+          handoff_note: "Cold-start note: Windows logging is separable from image routing."
+        - id: cross-platform/wsl-runtime
+          status: deferred
+          depends_on:
+            - cross-platform/windows-logging
+          owned_files:
+            - openspec/specs/wsl-runtime/spec.md
+            - openspec/specs/wsl-daemon-orchestration/spec.md
+          checkpoint_required: false
+          deferral_reason: "WSL support deferred; reactivate in Windows/WSL phase."
+          handoff_note: "Cold-start note: WSL work is a separate dependency tail from Windows routing."
+        - id: cross-platform/versioning
+          status: deferred
+          depends_on:
+            - cross-platform/wsl-runtime
+          owned_files:
+            - openspec/specs/versioning/spec.md
+          checkpoint_required: false
+          deferral_reason: "Cross-platform versioning deferred; Linux-only subset kept live in update-system."
+          handoff_note: "Cold-start note: versioning is a stable leaf and should be checkpointed explicitly."
+        - id: cross-platform/image
+          status: deferred
+          depends_on:
+            - cross-platform/versioning
+          owned_files:
+            - openspec/specs/web-image/spec.md
+          checkpoint_required: false
+          deferral_reason: "web-image deferred to cross-platform phase."
+          handoff_note: "Cold-start note: image contracts are separate from versioning."
+        - id: cross-platform/zen-pool
+          status: deferred
+          depends_on:
+            - cross-platform/image
+          owned_files:
+            - openspec/specs/zen-default-with-ollama-analysis-pool/spec.md
+          checkpoint_required: false
+          deferral_reason: "Cross-platform model routing deferred; revisit in optimization phase."
+          handoff_note: "Cold-start note: model routing is the last cross-platform tail."
+
+    - id: semantic-distillation-sweep
+      order: 7
+      title: Semantic distillation and tombstone sweep
+      status: completed
+      deliverable: plan/archive/2026-05-19/steps/07-semantic-distillation.md
+      depends_on:
+        - security-substrate-closure
+        - browser-and-web-security
+        - tray-runtime-and-cache
+        - onboarding-and-discovery
+        - observability-and-diagnostics
+      specs:
+        - active-specs-with-empty-bindings
+        - active-specs-with-historical-purpose-only
+      exit_criteria:
+        - "All stale specs are obsoleted or tombstoned."
+        - "Only intentional implementation gaps remain active."
+      tasks:
+        - id: distillation/spec-empty-bindings
+          status: completed
+          depends_on:
+            - security-substrate-closure
+            - browser-and-web-security
+            - tray-runtime-and-cache
+            - onboarding-and-discovery
+            - observability-and-diagnostics
+          owned_files:
+            - openspec/litmus-bindings.yaml
+          checkpoint_required: true
+          handoff_note: "Cold-start note: empty bindings should be the first sweep target."
+        - id: distillation/history-only-specs
+          status: completed
+          depends_on:
+            - distillation/spec-empty-bindings
+          owned_files:
+            - openspec/specs
+          checkpoint_required: true
+          handoff_note: "Cold-start note: history-only specs should be tombstoned with replacement refs."
+        - id: distillation/event-register
+          status: completed
+          depends_on:
+            - distillation/history-only-specs
+          owned_files:
+            - methodology/event/index.yaml
+          checkpoint_required: true
+          handoff_note: "Cold-start note: methodology event intake is the tail after spec tombstones."
+        - id: distillation/frontier-prune
+          status: completed
+          depends_on:
+            - distillation/event-register
+          owned_files:
+            - plan/index.yaml
+            - plan.yaml
+          checkpoint_required: true
+          handoff_note: "Cold-start note: pruning the frontier should be the final distillation leaf."
+
+    - id: implementation-gaps-backlog
+      order: 8
+      title: Remaining implementation gaps after spec cleanup
+      status: completed
+      deliverable: plan/steps/08-implementation-gaps.md
+      depends_on: [semantic-distillation-sweep]
+      completion_note: "All subtasks completed or obsoleted as of 2026-05-24; parent status refreshed 2026-05-25 (linux-tlatoani-fedora)."
+      specs:
+        - remaining_active_specs
+      exit_criteria:
+        - "The plan switches from cleanup mode to pure implementation mode."
+        - "Each remaining active spec has a concrete next patch or test task."
+      tasks:
+        - id: implementation-gaps/browser
+          status: completed
+          depends_on:
+            - semantic-distillation-sweep
+          owned_files:
+            - plan/steps/02-browser-web.md
+            - plan/issues/browser-gaps-2026-05-14.md
+          checkpoint_required: true
+          handoff_note: "Wave 10 completed: browser gaps documented in plan/steps/02-browser-web.md (Implementation Gaps section) and plan/issues/browser-gaps-2026-05-14.md. 8 gaps modelled across 3 categories (window-lifecycle-concurrency, cdp-robustness, session-isolation). No fixes; pure documentation pass."
+        - id: implementation-gaps/tray
+          status: completed
+          depends_on:
+            - implementation-gaps/browser
+          owned_files:
+            - plan/steps/03-tray-runtime.md
+            - plan/issues/tray-gaps-2026-05-14.md
+          checkpoint_required: true
+          handoff_note: "Wave 10 completed: tray gaps documented in plan/steps/03-tray-runtime.md (Implementation Gaps section) and plan/issues/tray-gaps-2026-05-14.md. 7 gaps modelled across 3 categories (ui-responsiveness, cache-eviction, singleton-detection). No fixes; pure documentation pass."
+        - id: implementation-gaps/onboarding
+          status: completed
+          depends_on:
+            - implementation-gaps/tray
+          owned_files:
+            - plan/steps/04-onboarding-docs.md
+          checkpoint_required: true
+          handoff_note: "Wave 10 completed: onboarding gaps documented in plan/steps/04-onboarding-docs.md (Implementation Gaps section) and plan/issues/onboarding-gaps-2026-05-14.md. 11 gaps modelled as a DAG across 5 categories (i18n, cold-start, multi-workspace, agent-bootstrap, auth-lifecycle). No fixes; pure documentation pass."
+        - id: implementation-gaps/observability
+          status: completed
+          depends_on:
+            - implementation-gaps/onboarding
+          owned_files:
+            - plan/steps/05-observability.md
+          checkpoint_required: true
+          handoff_note: "Wave 10 completed: observability gaps documented in plan/steps/05-observability.md (Implementation Gaps section) and plan/issues/observability-gaps-2026-05-14.md. 23 gaps modelled as a DAG across 7 categories (log-schema-stability, trace-coverage, dashboard-freshness, external-log-aggregation, resource-metric-collection, evidence-bundle-discipline, observability-surface-completeness). Per the handoff guidance, gaps remain graph-shaped, not linear guesswork. No fixes; pure documentation pass."
+        - id: implementation-gaps/cross-platform
+          status: obsoleted
+          depends_on:
+            - implementation-gaps/observability
+          owned_files:
+            - plan/steps/06-cross-platform.md
+          checkpoint_required: false
+          deferral_reason: "Cross-platform implementation deferred; kept as historical step marker for future reactivation."
+          handoff_note: "Cold-start note: cross-platform implementation moved to deferred phase. See plan/issues/deferral-windows-macos-2026-05-14.md."
+        - id: implementation-gaps/residual-backlog
+          status: completed
+          depends_on:
+            - implementation-gaps/cross-platform
+          owned_files:
+            - plan/steps/08-implementation-gaps.md
+            - plan/localwork
+          checkpoint_required: true
+          handoff_note: "Iteration 5 checkpoint: all major phases complete (security, browser, podman, tray, onboarding, observability). 4 implementation-gap issue files created documenting gaps as DAGs. Next: residual-backlog review for priority triage and optional gap-closure work."
+
+    - id: p3-backlog
+      order: 9
+      title: P3 Backlog (Waves 17-24) — Optional enhancements and optimizations
+      status: completed
+      deliverable: plan/steps/09-p3-backlog.md
+      depends_on: [implementation-gaps-backlog]
+      specs:
+        - i18n-surface-completion
+        - onboarding-edge-cases
+        - browser-optimization
+        - tray-performance
+        - observability-extensions
+      exit_criteria:
+        - "P3 backlog is organized into clusters (i18n, onboarding, browser, tray, observability)."
+        - "Each gap is modelled with effort, priority, and dependencies."
+        - "Wave 17 (i18n) is completed and verified."
+        - "Wave 18 (validation gate) is planned with specific tests for Podman idiomatic + browser isolation E2E."
+      tasks:
+        - id: p3-backlog/wave-17-i18n
+          status: completed
+          depends_on: [implementation-gaps-backlog]
+          owned_files:
+            - images/default/locales/{en,de,es,fr,ja}.sh
+            - scripts/help-{en,es,de,fr,ja}.sh
+            - images/default/lib-localized-errors.sh
+            - cheatsheets/runtime/forge-localization.md
+          checkpoint_required: true
+          handoff_note: "Wave 17 completed: i18n/localization support added (French, Japanese). 5 locale files, 5 help scripts, 3 error message templates. Commit 003036d6. All 500+ tests passing. Next: Wave 18 validation gate (podman E2E + browser isolation E2E)."
+        - id: p3-backlog/wave-18-validation-gate
+          status: completed
+          depends_on: [p3-backlog/wave-17-i18n]
+          owned_files:
+            - plan/steps/10-validation-gate.md
+            - openspec/litmus-tests/litmus-podman-idiomatic-validation-*.yaml
+          checkpoint_required: true
+          handoff_note: "Wave 18 completed all 6 automated litmus tests (enclave network, error classification, event-driven, storage isolation, security flags, browser E2E). Later release-recovery and user-runtime work superseded the old manual release-readiness blocker."
+
+    - id: release-readiness
+      order: 10
+      title: Release Readiness — Manual smoke test and final verification
+      status: obsoleted
+      deliverable: plan/steps/11-release-readiness.md
+      depends_on: [p3-backlog]
+      obsoleted_reason: "Superseded by later release-recovery and user-runtime checkout-free releases documented in plan.yaml current_state."
+      specs: []
+      clarification_question: |
+        **Question**: Should agents proceed with the manual smoke test, or should we wait for human execution?
+
+        **Context**: All 661 unit tests pass (automated phase complete). The next step is a human-driven GUI verification test that cannot be fully automated (requires visual inspection of Chromium window, tray icon, network behavior).
+
+        **Decision Needed**:
+        1. Have a human execute `./scripts/smoke-test.sh` and make release go/no-go decision (non-automatable)
+        2. OR: Agents create additional testing/validation that can run pre-release
+
+        **Recommended Default**: Option 1 — proceed with human smoke test execution. Agents cannot validate GUI correctness or make release approval decisions.
+      exit_criteria:
+        - "Manual smoke test (Test 7) completed successfully"
+        - "All acceptance criteria passed"
+        - "Release decision documented (go/no-go)"
+        - "Evidence captured (logs, screenshots)"
+      tasks:
+        - id: release-readiness/manual-smoke-test
+          status: obsoleted
+          depends_on: [p3-backlog]
+          owned_files:
+            - plan/steps/11-release-readiness.md
+          checkpoint_required: true
+          clarification_note: "Manual smoke test is non-automatable (requires human GUI verification). Decision: should human execute now, or should agents create pre-release validation tooling?"
+          handoff_note: "Obsoleted 2026-05-24: later release-recovery and user-runtime checkout-free work already recorded release evidence. Do not use this node as next_step."
+
+    - id: doc-debt-payoff
+      order: 11.5
+      title: Documentation Debt Payoff (Waves A-D) — Post-Implementation Audit & Spec System
+      status: completed
+      deliverable: plan/steps/11a-doc-debt-payoff.md
+      depends_on: [p3-backlog]
+      specs:
+        - headless-mode
+        - graceful-shutdown
+        - cache-recovery-mechanism
+      exit_criteria:
+        - "Event 025 (litmus-test-sizing-taxonomy) status: distilled"
+        - "Event 026 (rustls-musl-static-tls-strategy) status: distilled"
+        - "Event 027 (cache-version-fresh-start-fix) status: open (spec pending)"
+        - "Spec headless-mode created with WHEN/THEN scenarios and litmus binding"
+        - "Spec graceful-shutdown created with WHEN/THEN scenarios and litmus binding"
+        - "Spec cache-recovery-mechanism created (status: draft, pending litmus)"
+        - "Litmus test litmus-cache-recovery-fresh-start created and passing"
+        - "Specs forge-staleness and forge-cache-dual updated with fresh-start cross-references"
+        - "openspec/litmus-bindings.yaml updated with all 3 new spec bindings"
+        - "./build.sh --test passing with no regressions"
+        - "plan/issues/documentation-debt-2026-05-16.md and ghost-trace-sweep-backlog-2026-05-16.md created"
+      tasks:
+        - id: doc-debt/wave-a-events
+          status: completed
+          depends_on: [p3-backlog]
+          owned_files:
+            - methodology/event/025-litmus-test-sizing-taxonomy.yaml
+            - methodology/event/026-rustls-musl-static-tls-strategy.yaml
+            - methodology/event/027-cache-version-fresh-start-fix.yaml
+            - methodology/event/index.yaml
+          checkpoint_required: true
+          handoff_note: "Wave A: 3 Haiku agents in parallel (A1, A2, A3). Each creates 1 event YAML with proper structure. All update methodology/event/index.yaml entries. Merge to linux-next after completion. ETA: 0.5-1h."
+        - id: doc-debt/wave-b-specs
+          status: completed
+          depends_on: [doc-debt/wave-a-events]
+          owned_files:
+            - openspec/specs/headless-mode/spec.md
+            - openspec/specs/headless-mode/TRACES.md
+            - openspec/specs/graceful-shutdown/spec.md
+            - openspec/specs/graceful-shutdown/TRACES.md
+            - openspec/specs/cache-recovery-mechanism/spec.md
+            - openspec/specs/cache-recovery-mechanism/TRACES.md
+          checkpoint_required: true
+          handoff_note: "Wave B: 3 Sonnet agents in parallel (B1, B2, B3). Each creates 1 spec.md + TRACES.md with WHEN/THEN scenarios and Sources of Truth sections. Merge to linux-next after completion. ETA: 2-3h."
+        - id: doc-debt/wave-c-litmus-and-updates
+          status: completed
+          depends_on: [doc-debt/wave-b-specs]
+          owned_files:
+            - openspec/litmus-tests/litmus-cache-recovery-fresh-start.yaml
+            - openspec/litmus-bindings.yaml
+            - openspec/specs/forge-staleness/spec.md
+            - openspec/specs/forge-cache-dual/spec.md
+          checkpoint_required: true
+          handoff_note: "Wave C: 2 Sonnet agents in parallel (C1, C2). C1 creates litmus-cache-recovery-fresh-start.yaml + updates litmus-bindings.yaml. C2 adds fresh-start sections to forge-staleness and forge-cache-dual specs. Merge to linux-next independently. ETA: 1-2h."
+        - id: doc-debt/wave-d-finalization
+          status: completed
+          depends_on: [doc-debt/wave-c-litmus-and-updates]
+          owned_files:
+            - plan/steps/11a-doc-debt-payoff.md
+            - plan/issues/documentation-debt-2026-05-16.md
+            - plan/issues/ghost-trace-sweep-backlog-2026-05-16.md
+            - plan/index.yaml
+            - plan.yaml
+          checkpoint_required: true
+          handoff_note: "Wave D completed 2026-05-16; plan/index stale status corrected 2026-05-24."
+
+    - id: plan-ledger-refresh
+      order: 12
+      title: Plan Ledger Refresh — Durable Ledger & Step Splitting
+      status: completed
+      deliverable: plan/steps/12-plan-ledger-refresh.md
+      depends_on: []
+      specs: []
+      exit_criteria:
+        - "methodology.yaml points bootstrap agents at plan.yaml, plan/index.yaml, plan/steps, and plan/issues first"
+        - "The tray/router wave is broken into discrete resumable step files"
+        - "The next agent can cold-start from the step file without chat history"
+      tasks:
+        - id: plan-ledger-refresh/bootstrap
+          status: completed
+          depends_on: []
+          owned_files:
+            - methodology.yaml
+            - plan.yaml
+            - plan/index.yaml
+            - plan/steps/README.md
+            - plan/steps/12-plan-ledger-refresh.md
+          checkpoint_required: true
+          handoff_note: "Current wave: refresh the durable plan ledger first, then split routing/bootstrap/port/readiness into resumable step files. Keep plan/issues as the blocker queue and preserve cold-start readability."
+        - id: plan-ledger-refresh/tray-routing-split
+          status: completed
+          depends_on:
+            - plan-ledger-refresh/bootstrap
+          owned_files:
+            - plan/steps/13-router-observatorium-routing.md
+            - plan/steps/14-user-runtime-port-selection.md
+            - plan/steps/15-tray-network-bootstrap.md
+            - plan/steps/16-observatorium-readiness-and-ux.md
+          checkpoint_required: true
+          handoff_note: "Follow-on work: route observatorium through the canonical hostname, make port selection explicit, bootstrap the enclave network before tray launch, and tighten readiness failure reporting."
+
+    - id: router-observatorium-routing
+      order: 13
+      title: Router and Observatorium Routing — Canonical Hostname Wave
+      status: completed
+      deliverable: plan/steps/13-router-observatorium-routing.md
+      depends_on: [plan-ledger-refresh]
+      specs: []
+      exit_criteria:
+        - "The canonical observatorium hostname is reflected in launcher, allowlist, and routing notes"
+        - "Router host-port ownership is documented and tested"
+        - "Safe browser launch paths accept the HTTPS observatorium URL"
+      tasks:
+        - id: router-observatorium-routing/allowlist-and-canonical-url
+          status: completed
+          depends_on: [plan-ledger-refresh/bootstrap]
+          owned_files:
+            - crates/tillandsias-browser-mcp/src/allowlist.rs
+            - crates/tillandsias-headless/src/main.rs
+            - scripts/run-observatorium.sh
+            - openspec/specs/host-browser-mcp/spec.md
+            - openspec/specs/cli-mode/spec.md
+          checkpoint_required: true
+          handoff_note: "Canonical route work: keep the browser-facing observatorium URL on the new HTTPS hostname, align the allowlist, and keep the router's host bind loopback-only."
+
+    - id: user-runtime-port-selection
+      order: 14
+      title: User Runtime Port Selection — 80 then 8080 then --port
+      status: completed
+      deliverable: plan/archive/2026-05-19/steps/14-user-runtime-port-selection.md
+      depends_on: [router-observatorium-routing]
+      specs: []
+      exit_criteria:
+        - "Router host-port selection tries 80 first, 8080 second, and an explicit --port escape hatch last"
+        - "Launcher help and diagnostics explain the fallback chain"
+        - "Host-facing app ports stay internal to the enclave"
+      tasks:
+        - id: user-runtime-port-selection/fallback-chain
+          status: completed
+          depends_on: [router-observatorium-routing/allowlist-and-canonical-url]
+          owned_files:
+            - crates/tillandsias-headless/src/main.rs
+            - scripts/run-observatorium.sh
+            - plan/steps/14-user-runtime-port-selection.md
+          checkpoint_required: true
+          handoff_note: "Completed on linux-next: router host-port selection tries 80, 8080, then explicit --port; existing router publish is reused before probing."
+
+    - id: runtime-lane-explicitness
+      order: 14.5
+      title: Runtime Lane Explicitness — Desktop, Service, and Dev/Test Ownership
+      status: completed
+      deliverable: plan/archive/2026-05-19/steps/14.5-runtime-lane-explicitness.md
+      depends_on: [user-runtime-port-selection]
+      specs:
+        - environment-runtime
+        - podman-orchestration
+        - cli-mode
+        - browser-isolation-tray-integration
+      exit_criteria:
+        - "Interactive launchers fail fast when the desktop user-session lane is missing"
+        - "The headless service-account lane remains explicit in packaging and supervision"
+        - "Dev/test wrapper state stays confined to scripts and litmus harnesses"
+      tasks:
+        - id: runtime-lane/preflight
+          status: completed
+          depends_on: [user-runtime-port-selection/fallback-chain]
+          owned_files:
+            - crates/tillandsias-podman/src/lib.rs
+            - crates/tillandsias-headless/src/main.rs
+            - methodology/specs/user-runtime-lifecycle/architecture.md
+            - methodology/specs/user-runtime-lifecycle/TRACES.md
+            - scripts/install.sh
+            - scripts/uninstall.sh
+            - plan/steps/14.5-runtime-lane-explicitness.md
+            - plan/issues/runtime-lane-explicitness.md
+          checkpoint_required: true
+          handoff_note: "Desktop launches now own their runtime lane explicitly; keep the headless service-account lane separate and do not let dev/test wrappers leak into production runtime."
+
+    - id: tray-network-bootstrap
+      order: 15
+      title: Tray Network Bootstrap — Ensure Enclave Readiness Before Launch
+      status: completed
+      deliverable: plan/steps/15-tray-network-bootstrap.md
+      depends_on: [router-observatorium-routing, user-runtime-port-selection]
+      specs: []
+      exit_criteria:
+        - "Tray startup creates or reuses the enclave network before project containers"
+        - "The tray no longer cascades on network-not-found or exit 125 errors"
+        - "Tray startup waits for the router before launching project containers"
+      tasks:
+        - id: tray-network-bootstrap/enclave-network
+          status: completed
+          depends_on: [user-runtime-port-selection/fallback-chain]
+          owned_files:
+            - crates/tillandsias-headless/src/main.rs
+            - crates/tillandsias-podman/src/client.rs
+            - plan/steps/15-tray-network-bootstrap.md
+          checkpoint_required: true
+          handoff_note: "Completed on linux-next: router-before-container ordering is enforced by litmus-tray-network-bootstrap, and `a24bab17` collapses exit-125 project-container cascades into one typed actionable diagnostic. Continue with Step 16 OpenCode-web readiness parity."
+
+    - id: observatorium-readiness-and-ux
+      order: 16
+      title: Observatorium Readiness and UX — Fail Loudly With Logs
+      status: completed
+      deliverable: plan/steps/16-observatorium-readiness-and-ux.md
+      depends_on: [router-observatorium-routing, user-runtime-port-selection, tray-network-bootstrap]
+      specs: []
+      exit_criteria:
+        - "Observatorium readiness checks the actual HTTPS page, not just container startup"
+        - "Failure paths attach container logs and inspect data"
+        - "Tray and observatorium errors resolve to one actionable path"
+      tasks:
+        - id: observatorium-readiness-and-ux/readiness-check
+          status: completed
+          depends_on: [tray-network-bootstrap/enclave-network]
+          owned_files:
+            - crates/tillandsias-headless/src/main.rs
+            - scripts/run-observatorium.sh
+            - openspec/specs/clickable-trace-index/spec.md
+            - openspec/specs/cli-mode/spec.md
+          checkpoint_required: true
+          handoff_note: "Step 16 slice 1 shipped on linux-next: observatorium readiness polls the real HTTPS page and includes container log tail on failure. Step 15 is closed; continue with OpenCode-web readiness parity or fold any remaining diagnostics/inspect-data gap into the same readiness pass."
+
+    - id: podman-control-plane-overhaul
+      order: 15.5
+      title: Podman Control-Plane Overhaul
+      status: completed
+      deliverable: plan/steps/15-podman-control-plane-overhaul.md
+      depends_on: [podman-idiomatic-foundation]
+      specs:
+        - podman-idiomatic-patterns
+        - podman-orchestration
+        - runtime-diagnostics
+      exit_criteria:
+        - "All new Podman orchestration enters through the Rust control plane."
+        - "Runtime failure output preserves raw command facts and diagnostics."
+        - "The local/small/large/full ladder is explicit and executable."
+      tasks:
+        - id: podman-control-plane-overhaul/spine
+          status: completed
+          depends_on: [podman-idiomatic-foundation]
+          owned_files:
+            - crates/tillandsias-podman/src/backend.rs
+            - crates/tillandsias-podman/src/diagnostics.rs
+          checkpoint_required: true
+          handoff_note: "Backend seam, lossless command facts, and failed-launch snapshots landed on 2026-05-18."
+        - id: podman-control-plane-overhaul/facade
+          status: completed
+          depends_on: [podman-control-plane-overhaul/spine]
+          owned_files:
+            - crates/tillandsias-podman-cli
+            - scripts/tillandsias-podman
+          checkpoint_required: true
+          handoff_note: "Dedicated CLI facade and thin shell delegate landed on 2026-05-18."
+        - id: podman-control-plane-overhaul/migrate-legacy-shell
+          status: completed
+          depends_on: [podman-control-plane-overhaul/facade]
+          owned_files:
+            - build.sh
+            - scripts/run-forge-project.sh
+            - scripts/run-litmus-test.sh
+          checkpoint_required: true
+          handoff_note: "Next wave: retire residual shell orchestration, then enable strict no-direct-Podman audit."
+          events:
+            - type: claim
+              ts: "2026-05-29T03:07:00Z"
+              agent_id: "linux-macuahuitl-gemini-2026-05-29T030553Z"
+              host: "linux"
+              lease_id: "lease-linux-migrate-legacy-shell-20260529T0306"
+              expires_at: "2026-05-29T07:07:00Z"
+            - type: completed
+              ts: "2026-05-29T04:06:00Z"
+              agent_id: "linux-tlatoani-fedora-claude-opus-2026-05-29T04:05:00Z"
+              commits: ["45244a41324009efc02fad56b19f9234f632300c"]
+              validation_log: "ba2b1d5f-6b47-4de5-a8cd-7bd99313049e/task-93"
+
+    - id: methodology-reconciliation
+      order: 16.5
+      title: Methodology Reconciliation — Specs, Cheatsheets, and Launch Contract
+      status: completed
+      deliverable: plan/archive/2026-05-19/steps/16a-methodology-reconciliation.md
+      depends_on: [runtime-lane-explicitness]
+      specs:
+        - browser-isolation-tray-integration
+        - opencode-web-session-otp
+        - forge-opencode-onboarding
+        - reverse-proxy-internal
+      exit_criteria:
+        - "OpenCode Web launch behavior is reflected in active specs."
+        - "Cheatsheet references resolve cleanly."
+        - "The launch path has focused tests for auth-gated readiness and project selection."
+      tasks:
+        - id: methodology-reconciliation/launch-contract
+          status: completed
+          depends_on: []
+          owned_files:
+            - crates/tillandsias-headless/src/main.rs
+            - images/default/entrypoint-forge-opencode-web.sh
+            - images/default/Containerfile
+            - openspec/specs/browser-isolation-tray-integration/spec.md
+            - openspec/specs/opencode-web-session-otp/spec.md
+            - openspec/specs/forge-opencode-onboarding/spec.md
+          checkpoint_required: true
+          handoff_note: "OpenCode Web now applies the overlay, fronts opencode serve with the SSE/theme proxy, sets TILLANDSIAS_PROJECT, and probes unauth/auth readiness before Chromium launch."
+        - id: methodology-reconciliation/cheatsheet-links
+          status: completed
+          depends_on: [methodology-reconciliation/launch-contract]
+          owned_files:
+            - cheatsheets
+            - images/default/config-overlay/mcp/dependency-resolver.sh
+          checkpoint_required: true
+          handoff_note: "Broken cheatsheet links resolved; new runtime/opencode-web-launch.md added as the launch-path reference."
+
+    - id: git-identity-propagation
+      order: 16.6
+      title: Git Identity Propagation — Forge Commits and Pushes
+      status: completed
+      deliverable: plan/archive/2026-05-19/steps/16b-git-identity-propagation.md
+      depends_on: [methodology-reconciliation]
+      specs:
+        - secrets-management
+        - git-mirror-service
+        - forge-opencode-onboarding
+      exit_criteria:
+        - "GitHub Login identity is injected into direct forge launch argv."
+        - "Entry points configure repo-local git identity after selecting the project."
+        - "Specs and cheatsheets document the identity contract."
+      tasks:
+        - id: git-identity-propagation/launch-env
+          status: completed
+          depends_on: []
+          owned_files:
+            - crates/tillandsias-headless/src/main.rs
+            - images/default/lib-common.sh
+            - images/default/entrypoint-forge-opencode.sh
+            - images/default/entrypoint-forge-opencode-web.sh
+            - images/default/entrypoint-forge-claude.sh
+            - images/default/entrypoint-forge-codex.sh
+            - images/default/entrypoint-terminal.sh
+          checkpoint_required: true
+          handoff_note: "Launch argv now injects GIT_AUTHOR/GIT_COMMITTER identity from the managed GitHub Login gitconfig; entrypoints write repo-local user.name/user.email."
+        - id: git-identity-propagation/paperwork
+          status: completed
+          depends_on: [git-identity-propagation/launch-env]
+          owned_files:
+            - openspec/specs/secrets-management/spec.md
+            - openspec/specs/git-mirror-service/spec.md
+            - openspec/specs/forge-opencode-onboarding/spec.md
+            - cheatsheets/runtime/opencode-web-launch.md
+            - cheatsheets/agents/opencode.md
+            - cheatsheets/utils/git-workflows.md
+          checkpoint_required: true
+          handoff_note: "Specs and cheatsheets now describe GitHub Login identity propagation and git config verification."
+
+    - id: release-recovery
+      order: 16.7
+      title: Release Recovery — Static Cloud, Musl Release, Silverblue Installer
+      status: completed
+      deliverable: plan/steps/17-release-recovery.md
+      depends_on: [git-identity-propagation]
+      specs:
+        - ci-release
+        - binary-signing
+        - linux-native-portable-executable
+        - install-progress
+      exit_criteria:
+        - "./build.sh --ci-full --install passes locally"
+        - "tillandsias --init --debug passes locally"
+        - "tillandsias --debug --tray launches and is stopped cleanly after smoke"
+        - "main branch GitHub convergence is static-only and green"
+        - "GitHub Release publishes tillandsias-linux-x86_64 plus installer, checksums, and Cosign bundles"
+        - "README documents the Fedora Silverblue curl installer with Podman as the only runtime dependency"
+      tasks:
+        - id: release-recovery/local-validation
+          status: completed
+          depends_on: []
+          owned_files:
+            - build.sh
+            - crates/tillandsias-headless/src/main.rs
+            - plan/localwork/release-recovery/processes.md
+          checkpoint_required: true
+          handoff_note: "Local full install, init, and tray smoke passed on 2026-05-19."
+        - id: release-recovery/static-cloud
+          status: completed
+          depends_on: [release-recovery/local-validation]
+          owned_files:
+            - .github/workflows/ci.yml
+            - .github/workflows/github-actions-convergence.yml
+            - .github/workflows/litmus-tests.yml
+            - scripts/github-actions-convergence.sh
+          checkpoint_required: true
+          handoff_note: "Hosted checks stay static-only; convergence runs 26128121882 and 26128506885 passed."
+        - id: release-recovery/musl-release
+          status: completed
+          depends_on: [release-recovery/static-cloud]
+          owned_files:
+            - .github/workflows/release.yml
+            - scripts/install.sh
+            - scripts/verify.sh
+            - docs/VERIFICATION.md
+          checkpoint_required: true
+          handoff_note: "Release run 26128601951 published v0.2.260519.3 with Linux musl binary, helper scripts, SHA256SUMS, and Cosign bundles."
+        - id: release-recovery/paperwork
+          status: completed
+          depends_on: [release-recovery/musl-release]
+          owned_files:
+            - README.md
+            - openspec/specs/ci-release/spec.md
+            - openspec/specs/install-progress/spec.md
+            - cheatsheets/build/validation-ci.md
+          checkpoint_required: true
+          handoff_note: "Root README, OpenSpec, litmus metadata, and bundled build cheatsheets reflect the musl/Silverblue release path."
+
+    - id: user-runtime-checkout-free
+      order: 16.8
+      title: User Runtime Without Checkout - Assetized Install, PATH-Safe Installer
+      status: completed
+      deliverable: plan/steps/18-user-runtime-checkout-free.md
+      depends_on: [release-recovery]
+      specs:
+        - user-runtime-lifecycle
+        - install-progress
+        - init-command
+        - linux-native-portable-executable
+        - ci-release
+      exit_criteria:
+        - "Installer makes tillandsias discoverable in subsequent shells and prints an immediate absolute fallback"
+        - "Installed runtime materializes versioned image contexts from embedded assets without requiring a Tillandsias checkout"
+        - "--init, --tray, --headless, GitHub login, OpenCode, OpenCode Web, and tray attach do not require TILLANDSIAS_ROOT or repo cwd"
+        - "Runtime image staleness uses binary version/content digests rather than checkout Containerfile mtimes"
+        - "Specs, cheatsheets, README, release docs, and litmus metadata describe checkout-free user runtime"
+        - "Local Silverblue smoke passes from a non-checkout directory"
+        - "Patch release is published and read back from GitHub"
+      tasks:
+        - id: user-runtime-checkout-free/installer-path
+          status: completed
+          depends_on: []
+          owned_files:
+            - scripts/install.sh
+            - README.md
+            - openspec/specs/install-progress/spec.md
+          checkpoint_required: true
+          handoff_note: "Implemented and covered by scripts/test-install-path.sh plus README/install-progress spec updates."
+        - id: user-runtime-checkout-free/spec-contract
+          status: completed
+          depends_on: []
+          owned_files:
+            - openspec/specs/user-runtime-lifecycle/spec.md
+            - openspec/specs/install-progress/spec.md
+            - openspec/specs/init-command/spec.md
+            - openspec/specs/linux-native-portable-executable/spec.md
+            - openspec/litmus-bindings.yaml
+            - openspec/litmus-tests
+          checkpoint_required: true
+          handoff_note: "OpenSpec, litmus binding, and litmus:user-runtime-checkout-free-install now define checkout-free user runtime."
+        - id: user-runtime-checkout-free/embedded-assets
+          status: completed
+          depends_on: [user-runtime-checkout-free/spec-contract]
+          owned_files:
+            - crates/tillandsias-headless/build.rs
+            - crates/tillandsias-headless/src/runtime_assets.rs
+            - crates/tillandsias-headless/Cargo.toml
+            - scripts/build-sidecar.sh
+            - images
+            - scripts/manage-cache.sh
+            - scripts/run-observatorium.sh
+          checkpoint_required: true
+          handoff_note: "crates/tillandsias-headless/build.rs embeds runtime assets with executable metadata and fails on missing required assets."
+        - id: user-runtime-checkout-free/runtime-root-refactor
+          status: completed
+          depends_on: [user-runtime-checkout-free/embedded-assets]
+          owned_files:
+            - crates/tillandsias-headless/src/main.rs
+            - crates/tillandsias-headless/src/tray/mod.rs
+            - crates/tillandsias-core/src/image_builder.rs
+          checkpoint_required: true
+          handoff_note: "User runtime entrypoints resolve materialized assets by default; TILLANDSIAS_ROOT is a loud developer override."
+        - id: user-runtime-checkout-free/cache-staleness
+          status: completed
+          depends_on: [user-runtime-checkout-free/runtime-root-refactor]
+          owned_files:
+            - crates/tillandsias-headless/src/main.rs
+            - crates/tillandsias-core/src/cache_validation.rs
+            - openspec/specs/init-incremental-builds/spec.md
+            - openspec/specs/containerfile-staleness/spec.md
+          checkpoint_required: true
+          handoff_note: "Init state stores runtime manifest and per-image source digests; checkout mtime path is dead-code compatibility only."
+        - id: user-runtime-checkout-free/tests
+          status: completed
+          depends_on: [user-runtime-checkout-free/runtime-root-refactor, user-runtime-checkout-free/cache-staleness, user-runtime-checkout-free/installer-path]
+          owned_files:
+            - crates/tillandsias-headless/src/main.rs
+            - crates/tillandsias-headless/tests
+            - scripts
+            - .github/workflows/ci.yml
+            - .github/workflows/release.yml
+          checkpoint_required: true
+          handoff_note: "Installer PATH test, runtime asset tests, user-runtime litmus, full local CI, and /tmp installed init smoke passed."
+        - id: user-runtime-checkout-free/docs-release
+          status: completed
+          depends_on: [user-runtime-checkout-free/tests]
+          owned_files:
+            - README.md
+            - docs/VERIFICATION.md
+            - docs/UPDATING.md
+            - cheatsheets/build/build-strategy.md
+            - cheatsheets/runtime/image-lifecycle.md
+            - cheatsheets/runtime/linux-user-session-podman.md
+            - plan/steps/18-user-runtime-checkout-free.md
+          checkpoint_required: true
+          handoff_note: "README, specs, cheatsheets, and plan evidence updated; v0.2.260520.1 release workflow/readback passed on main."
+
+    - id: launcher-terminal-litmus
+      order: 18
+      title: Launcher terminal litmus and foreground stack cleanup
+      status: completed
+      deliverable: plan/steps/19-launcher-terminal-litmus.md
+      depends_on: [user-runtime-checkout-free]
+      specs:
+        - cli-mode
+        - forge-as-only-runtime
+        - forge-welcome
+        - podman-idiomatic-patterns
+        - runtime-diagnostics-stream
+        - graceful-shutdown
+      exit_criteria:
+        - "./build.sh --ci-full --install passes"
+        - "tillandsias --init --debug passes"
+        - "Direct --opencode/--codex/--claude/--bash foreground launches reach their forge entrypoints"
+        - "No idle proxy/git/inference stack remains after foreground forge exit"
+      tasks:
+        - id: launcher-terminal-litmus/code-and-docs
+          status: completed
+          depends_on: []
+          owned_files:
+            - crates/tillandsias-headless/src/main.rs
+            - crates/tillandsias-podman/src
+            - images/default
+            - images/chromium/chromium-framework-launch.sh
+            - openspec/specs
+            - openspec/litmus-tests
+            - cheatsheets/runtime
+            - plan/steps/19-launcher-terminal-litmus.md
+          checkpoint_required: true
+          handoff_note: "Completed on v0.2.260520.7: foreground launcher safety, dynamic IPAM, observed diagnostics, direct terminal litmus, and idle stack cleanup verified."
+
+    - id: post-release-polish
+      order: 17
+      title: Wave 25 — Post-Release Polish & P1 Consolidation
+      status: obsoleted
+      deliverable: plan/issues/wave-25-post-release-polish-2026-05-14.md
+      depends_on: [release-readiness]
+      obsoleted_reason: "Stale dependency on release-readiness; superseded by later release recovery, user-runtime checkout-free, launcher-terminal-litmus, and the 2026-05-24 recent-work audit."
+      specs: []
+      exit_criteria:
+        - "P1 gap BR-003 (Squid .localhost) implemented"
+        - "P1 gaps OBS-021, OBS-022 (event coverage) implemented"
+        - "2 undocumented P3 gaps identified and implemented"
+        - "All 4 agents report completion"
+        - "./build.sh --test passing with no regressions"
+      tasks:
+        - id: post-release/wave-25-parallel
+          status: obsoleted
+          depends_on: [release-readiness]
+          owned_files:
+            - plan/issues/wave-25-post-release-polish-2026-05-14.md
+            - images/proxy/squid.conf
+            - crates/tillandsias-logging/src/event_collector.rs
+          checkpoint_required: true
+          handoff_note: "Obsoleted 2026-05-24. Recreate a fresh polish node if any of these gaps are still valid under the current multi-host branch model."
+
+    - id: recent-work-spec-doc-methodology-audit
+      order: 20
+      title: Recent Work Spec/Docs/Methodology Audit
+      status: completed
+      deliverable: plan/steps/20-recent-work-spec-doc-methodology-audit.md
+      depends_on: [launcher-terminal-litmus]
+      specs:
+        - git-mirror-service
+        - tillandsias-vault
+        - secrets-management
+        - host-shell-architecture
+        - vsock-transport
+        - vm-idiomatic-layer
+        - windows-native-tray
+        - macos-native-tray
+      exit_criteria:
+        - "Git mirror sparse-cache safety is specified and bound to a pre-build litmus."
+        - "Vault spec reflects Phase 6 Linux default and AppRole token delivery."
+        - "Multi-host branch coordination is durable in methodology and plan."
+        - "Ad hoc Markdown distillation policy and audit map are recorded."
+      tasks:
+        - id: recent-work-audit/git-mirror-safety
+          status: completed
+          depends_on: []
+          owned_files:
+            - openspec/specs/git-mirror-service/spec.md
+            - docs/cheatsheets/git-mirror-lifecycle-audit.md
+            - openspec/litmus-tests/litmus-git-mirror-safe-refspec-push.yaml
+            - openspec/litmus-bindings.yaml
+          checkpoint_required: true
+          handoff_note: "Spec, cheatsheet, and litmus now require explicit changed-ref pushes and forbid mirror/all pushes."
+        - id: recent-work-audit/vault-phase-6
+          status: completed
+          depends_on: []
+          owned_files:
+            - openspec/specs/tillandsias-vault/spec.md
+            - openspec/litmus-tests/litmus-vault-auto-unseal-no-prompt.yaml
+            - openspec/litmus-tests/litmus-vault-policy-forge-cannot-read-github-token.yaml
+            - openspec/litmus-bindings.yaml
+          checkpoint_required: true
+          handoff_note: "Vault spec now describes Linux default bootstrap, deprecated legacy keyring fallback, and AppRole token minting."
+        - id: recent-work-audit/multi-host-methodology
+          status: completed
+          depends_on: []
+          owned_files:
+            - methodology.yaml
+            - methodology/multi-host-development.yaml
+            - methodology/bootstrap/router.yaml
+            - methodology/bootstrap/roles.yaml
+            - methodology/catalog.yaml
+            - methodology/agent-observability.yaml
+            - methodology/between-commits-work-discipline.yaml
+            - methodology/event/030-multi-host-branch-coordination.yaml
+          checkpoint_required: true
+          handoff_note: "Linux, Windows, and macOS platform branch cadence is now repo-local methodology."
+        - id: recent-work-audit/markdown-distillation
+          status: completed
+          depends_on: []
+          owned_files:
+            - methodology/event/031-markdown-sprawl-distillation.yaml
+            - plan/issues/markdown-distillation-audit-2026-05-24.md
+            - CLAUDE.md
+            - .claude/IMPLEMENTATION_STATUS.md
+            - .claude/PHASES_3_5_IMPLEMENTATION.md
+          checkpoint_required: true
+          handoff_note: "Ad hoc Markdown is intake only; retained files are compatibility tombstones that point at canonical artifacts."
+
+    - id: forge-diagnostics-automation
+      order: 21.5
+      title: Forge Diagnostics Automation — Non-blocking completeness probe loop
+      status: completed
+      deliverable: plan/issues/forge-diagnostics-automation-2026-05-27.md
+      depends_on: [recent-work-spec-doc-methodology-audit]
+      specs:
+        - default-image
+        - forge-as-only-runtime
+        - forge-cache-dual
+        - forge-environment-discoverability
+        - forge-hot-cold-split
+        - forge-offline
+        - forge-opencode-onboarding
+        - forge-shell-tools
+        - forge-staleness
+        - forge-standalone
+        - forge-welcome
+      exit_criteria:
+        - "forge diagnostics E2E litmus test exists and runs successfully (phase: post-build, size: e2e)"
+        - "Distillation pipeline (scripts/distill-forge-diagnostics.sh) produces actionable summaries in plan/diagnostics/"
+        - "Prompt evolution cycle works: capabilities confirmed → removed from prompt; gaps found → added to prompt"
+        - "Methodology updated per orchestrator feedback (litmus signal type: agent_diagnostic)"
+        - "Orchestrator acknowledges and responds to the methodology gap request"
+      tasks:
+        - id: forge-diagnostics/coordination
+          status: completed
+          depends_on: []
+          owned_files:
+            - plan/issues/forge-diagnostics-automation-2026-05-27.md
+          checkpoint_required: true
+          handoff_note: "Coordination issue created with host identity, sibling heads, and methodology gap request to orchestrator."
+        - id: forge-diagnostics/baseline
+          status: completed
+          depends_on: [forge-diagnostics/coordination]
+          owned_files:
+            - plan/diagnostics/forge-completeness-baseline-2026-05-27.md
+          checkpoint_required: true
+          handoff_note: "50 forge requirements audited: 6% full LITMUS, 24% STATIC, 34% PROMPT-eligible, 36% NONE."
+        - id: forge-diagnostics/prompt
+          status: completed
+          depends_on: [forge-diagnostics/baseline]
+          owned_files:
+            - plan/diagnostics/forge-diagnostics-prompt.txt
+          checkpoint_required: true
+          handoff_note: "Initial hybrid prompt placed in plan/diagnostics/. Covers agent availability, network isolation, hot/cold paths, cache env, shell tools, openspec, and welcome."
+        - id: forge-diagnostics/litmus-test
+          status: completed
+          depends_on: [forge-diagnostics/prompt]
+          owned_files:
+            - openspec/litmus-tests/litmus-forge-diagnostics-e2e.yaml
+          checkpoint_required: true
+          handoff_note: "E2E litmus test created. Gating points verify JSON parseability; capability assertions are non-gating (annex semantics)."
+        - id: forge-diagnostics/distillation-script
+          status: completed
+          depends_on: [forge-diagnostics/litmus-test]
+          owned_files:
+            - scripts/distill-forge-diagnostics.sh
+          checkpoint_required: true
+          handoff_note: "Distillation script reads raw diagnostics logs, extracts capability status, compares vs previous run for regressions, and writes dated summaries to plan/diagnostics/."
+        - id: forge-diagnostics/methodology-update
+          status: completed
+          depends_on: [forge-diagnostics/coordination]
+          owned_files:
+            - methodology/litmus.yaml
+            - methodology/forge-diagnostics.yaml
+            - methodology.yaml
+            - .codex/skills/coordinate-multihost-work/SKILL.md
+          checkpoint_required: true
+          handoff_note: "Orchestrator approved agent_diagnostic as a non-blocking annex, added forge privacy/isolation approval rules, and updated coordination bookkeeping requirements."
+        - id: forge-diagnostics/e2e-piggyback-orchestration
+          status: completed
+          depends_on: [forge-diagnostics/methodology-update]
+          owned_files:
+            - openspec/litmus-tests/litmus-forge-diagnostics-e2e.yaml
+            - scripts/distill-forge-diagnostics.sh
+            - plan/diagnostics/
+          checkpoint_required: true
+          handoff_note: "Wire one diagnostics prompt into slow E2E/runtime-litmus forge launches, write raw logs to target/forge-diagnostics, distill summaries to plan/diagnostics, and dedupe repeated prompts by checksum."
+        - id: forge-enhancements/curated-toolchain-backlog
+          status: completed
+          depends_on: [forge-diagnostics/e2e-piggyback-orchestration]
+          owned_files:
+            - plan/diagnostics/
+            - images/default/
+            - openspec/specs/default-image/spec.md
+          checkpoint_required: true
+          handoff_note: "Split and approved all 8 pending forge enhancement proposals (Rust, Go, Python, Wasm, dev quality, shell scripts, cheatsheets, and additional tools) after validating their privacy/isolation gates."
+
+    - id: forge-diagnostics-improvement-loop
+      order: 21.6
+      title: Forge Diagnostics Improvement Loop - /diagnose-forge + repeat
+      status: completed
+      deliverable: plan/forge-improvements/
+      depends_on: [forge-diagnostics-automation]
+      specs:
+        - default-image
+        - forge-as-only-runtime
+        - forge-environment-discoverability
+        - forge-hot-cold-split
+        - forge-offline
+        - forge-opencode-onboarding
+        - forge-shell-tools
+        - forge-staleness
+        - forge-standalone
+      exit_criteria:
+        - "Repeat loop runs successfully: ./repeat --agent opencode --wait 45m --prompt \"Use the /diagnose-forge skill\""
+        - "/diagnose-forge command extracts actionable gaps from diagnostics output"
+        - "Proposals are filed in plan/forge-improvements/proposals/ with structured frontmatter"
+        - "Approved proposals are implemented against the forge Containerfile and entrypoint"
+        - "Orchestrator approval records privacy/isolation rationale before any proposal becomes implementable"
+        - "Forge completeness rises from 50/50 baseline toward fully-loaded dev environment"
+      tasks:
+        - id: forge-improvement/repeat-wrapper
+          status: completed
+          depends_on: []
+          owned_files:
+            - repeat
+          checkpoint_required: true
+          handoff_note: "Superseded by ./repeat. The unified wrapper supports --wait, --repeat, --prompt, and --agent, and calls opencode run --dangerously-skip-permissions when --agent opencode is selected."
+        - id: forge-improvement/diagnose-command
+          status: completed
+          depends_on: [forge-improvement/repeat-wrapper]
+          owned_files:
+            - .opencode/commands/diagnose-forge.md
+            - .opencode/skills/diagnose-forge/SKILL.md
+          checkpoint_required: true
+          handoff_note: "/diagnose-forge command and diagnose-forge skill created. Command reads diagnostics, extracts gaps, files proposals. Skill provides detailed workflow instructions."
+        - id: forge-improvement/proposal-infra
+          status: completed
+          depends_on: [forge-improvement/diagnose-command]
+          owned_files:
+            - plan/forge-improvements/.gitignore
+            - plan/forge-improvements/.diagnose-state
+          checkpoint_required: true
+          handoff_note: "Proposal directory structure created. State file tracks last-processed diagnostics. .gitignore excludes runtime state."
+        - id: forge-improvement/first-run
+          status: completed
+          depends_on: [forge-improvement/proposal-infra, forge-diagnostics/e2e-piggyback-orchestration]
+          owned_files: []
+          checkpoint_required: false
+          handoff_note: "First unattended diagnostics run. Requires a slow E2E/runtime-litmus forge launch to produce a diagnostics log. Proposals remain status: proposed until orchestrator approval."
+        - id: forge-improvement/iterate
+          status: completed
+          depends_on: [forge-improvement/first-run]
+          owned_files:
+            - plan/forge-improvements/proposals/
+            - plan/forge-improvements/.diagnose-state
+          checkpoint_required: false
+          handoff_note: "Continuous: each iteration processes new diagnostics, files proposals, implements approved changes. No fixed endpoint — forge iteratively becomes more capable."
+          events:
+            - type: claim
+              ts: "2026-05-29T06:06:00Z"
+              agent_id: "linux-tlatoani-fedora-antigravity-20260529T0606"
+              host: "linux"
+              lease_id: "lease-linux-squid-tcp-reset-20260529T0606"
+              expires_at: "2026-05-29T10:06:00Z"
+            - type: completed
+              ts: "2026-05-29T06:08:00Z"
+              agent_id: "linux-tlatoani-fedora-antigravity-20260529T0606"
+              commits: ["96531d2a83497ca6bdcabbb6cf05a0b88ac271f5"]
+              validation_log: "48cafbb5-119f-4230-92ca-5254423cee6b/task-203"
+            - type: completed
+              ts: "2026-05-29T08:13:00Z"
+              agent_id: "linux-tlatoani-fedora-antigravity-2026-05-29T08:13Z"
+              commits: ["dd5e07ffbd590d9841804eb586ab714249a4f664"]
+              validation_log: "479ba771-9568-4347-8f8b-b40406ce3b25/task-261"
+            - type: claim
+              ts: "2026-05-29T11:06:00Z"
+              agent_id: "linux-tlatoani-fedora-antigravity-20260529T1106"
+              host: "linux"
+              lease_id: "lease-linux-forge-rust-wasm-tools-20260529T1106"
+              expires_at: "2026-05-29T15:06:00Z"
+            - type: completed
+              ts: "2026-05-29T11:25:00Z"
+              agent_id: "linux-tlatoani-fedora-antigravity-20260529T1106"
+              commits: ["06afb9585ad5886f2c434a09f020288a0ce43214"]
+              validation_log: "2cb1729b-7ee0-4f54-bc91-933c9f4cab74/task-148"
+            - type: claim
+              ts: "2026-05-29T16:06:00Z"
+              agent_id: "linux-tlatoani-fedora-antigravity-20260529T1606"
+              host: "linux"
+              lease_id: "lease-linux-forge-linter-tools-20260529T1606"
+              expires_at: "2026-05-29T20:06:00Z"
+            - type: completed
+              ts: "2026-05-29T16:16:00Z"
+              agent_id: "linux-tlatoani-fedora-antigravity-20260529T1606"
+              commits: ["7844b76711708d175daa99cad43a92aaeffc80f8"]
+              validation_log: "fa7a2cb0-2de1-4271-abbb-57bb85ceef50/task-216"
+            - type: claim
+              ts: "2026-05-31T02:30:00Z"
+              agent_id: "linux-tlatoani-opencode-big-pickle-2026-05-31T023027Z"
+              host: "linux"
+              lease_id: "lease-linux-inference-proxy-wiring-20260531T0230"
+              expires_at: "2026-05-31T06:30:00Z"
+            - type: completed
+              ts: "2026-05-31T02:50:00Z"
+              agent_id: "linux-tlatoani-opencode-big-pickle-2026-05-31T023027Z"
+              lease_id: "lease-linux-inference-proxy-wiring-20260531T0230"
+              summary: >
+                Wired HTTP_PROXY/HTTPS_PROXY/http_proxy/https_proxy env vars
+                pointing at proxy:3128 + NO_PROXY/no_proxy using ENCLAVE_NO_PROXY
+                into build_inference_run_args. Resolved the 7th spec/impl divergence
+                (inference container proxy env vars). Updated spec.md divergence
+                block to ✅ Resolved. Updated litmus (grep -A 60, new proxy step).
+                Verification: cargo test (all pass), ./build.sh --check (pass),
+                litmus 96/96 PASS at 100%.
+
+    - id: multi-host-plan-ledger-adoption
+      order: 21
+      title: Multi-Host Plan Ledger Adoption
+      status: completed
+      deliverable: plan/issues/multi-host-coordination-2026-05-24.md
+      depends_on: [recent-work-spec-doc-methodology-audit]
+      progress_note: >
+        linux-next, windows-next, and osx-next are all active as of
+        2026-05-28T15:15Z. The integration loop ledger at
+        plan/issues/multi-host-integration-loop-2026-05-24.md records sibling
+        heads; per-host queues record item-level leases/events. Current
+        reconciliation: origin/linux-next is at c12383f0, origin/osx-next is at
+        a18cee6b and remains an ancestor, main is at fa746f03, and windows-next
+        is at 8992652a. The last async runtime litmus validation run
+        20260528T150335Z-c12383f0-8992652a-a18cee6b completed with SUCCESS.
+        Remaining gates are macOS m8 user-attended smoke, release run
+        26544334121, first real non-empty forge diagnostics summary, and optional
+        Windows wire EnumerateLocalProjects. Step 15 is closed.
+      specs:
+        - methodology-accountability
+        - host-shell-architecture
+      exit_criteria:
+        - "Every active platform host records host_id, platform, upstream_commit, and observed_sibling_heads in its next checkpoint."
+        - "Shared plan/methodology/OpenSpec edits are pulled or merged before long verification and before checkpoint push."
+        - "A failed ancestry check creates a plan issue instead of a blind fast-forward."
+      tasks:
+        - id: multi-host-ledger/adopt-fields
+          status: completed
+          depends_on: []
+          owned_files:
+            - plan/issues/multi-host-coordination-2026-05-24.md
+            - plan.yaml
+            - plan/index.yaml
+          checkpoint_required: true
+          handoff_note: "Platform sessions are using shared queues; keep queue item headers synchronized with terminal events, append stale/ping notes for missed leases, and record sibling branch heads in the integration-loop ledger before shared-file merges."
+
+    - id: vault-hardening-architecture
+      order: 22
+      title: Vault Hardening Architecture (Phase 6.5)
+      status: completed
+      deliverable: plan/issues/vault-hardening-architecture-2026-06.md
+      depends_on: [recent-work-spec-doc-methodology-audit]
+      specs:
+        - tillandsias-vault
+      exit_criteria:
+        - "Legacy keyring fallback (--legacy-keyring-secrets) is completely removed."
+        - "Vault auto-unseal key is stored in the host native keychain with versioning."
+        - "Vault initialization uses vault operator rekey instead of the XOR envelope."
+        - "Bootstrap artifacts like init.json are deleted immediately after initialization."
+      tasks:
+        - id: vault-hardening/remove-legacy-fallback
+          status: completed
+          depends_on: []
+          owned_files:
+            - crates/tillandsias-headless/src/main.rs
+            - crates/tillandsias-headless/src/vault_bootstrap.rs
+          checkpoint_required: true
+          handoff_note: "Remove --without-vault and --legacy-keyring-secrets."
+        - id: vault-hardening/host-keychain-storage
+          status: completed
+          depends_on: [vault-hardening/remove-legacy-fallback]
+          owned_files:
+            - crates/tillandsias-headless/src/vault_bootstrap.rs
+          checkpoint_required: true
+          handoff_note: "Store and version the unseal key in the host native keychain."
+        - id: vault-hardening/true-rekey-and-cleanup
+          status: completed
+          depends_on: []
+          owned_files:
+            - images/vault/entrypoint.sh
+          checkpoint_required: true
+          handoff_note: "Use vault operator rekey and delete init.json and root.token securely."
+        - id: vault-hardening/litmus-updates
+          status: completed
+          depends_on: [vault-hardening/true-rekey-and-cleanup, vault-hardening/host-keychain-storage]
+          owned_files:
+            - openspec/litmus-tests/litmus-secrets-management-implementation-shape.yaml
+            - openspec/litmus-tests/litmus-vault-auto-unseal-no-prompt.yaml
+            - openspec/litmus-tests/litmus-gh-auth-script-shape.yaml
+          checkpoint_required: true
+          handoff_note: "Update litmus tests to reflect the new Vault strict architecture."
+
+    - id: forge-recipe-download-only-assembly
+      order: 40
+      title: Forge recipe = download-only assembly from free public no-login repos (no compile, no push)
+      status: obsoleted
+      owner_host: linux
+      deliverable: plan/issues/nix-release-incremental-and-forge-distribution-2026-06-05.md
+      depends_on: []
+      superseded_by:
+        - package-manager-first-container-recipes
+        - canonical-image-digest-and-aliases
+        - podman-build-cache-and-serialization
+        - structured-image-build-telemetry
+        - image-build-wrapper-convergence
+      progress_note: >
+        Superseded 2026-06-08 after repository + Fedora 44 research showed this
+        packet mixed five independently ownable concerns: package sourcing,
+        canonical digest identity, cache policy, telemetry, and wrapper
+        convergence. Detailed replacement graph and evidence:
+        plan/issues/container-build-efficiency-telemetry-2026-06-08.md.
+      operator_correction: >
+        2026-06-05: the earlier "build images in CI + push to a registry" model is REJECTED.
+        We publish NO images and push to NO registry. The Containerfile is a runtime RECIPE that
+        PULLS predistributed third-party binaries from free public no-login repos and ASSEMBLES
+        them (never compiles). Decisions resolved: cache=nix-community/cache-nix-action (free);
+        free public repos only (no signup/login); prefer lean; download-only (no cargo install,
+        no cargo binstall).
+      specs:
+        - default-image
+        - forge-as-only-runtime
+        - init-command
+      exit_criteria:
+        - "Every forge tool is sourced download-only from a FREE PUBLIC no-login, non-rate-limited repo: Fedora microdnf first, direct release-asset URLs (github.com/.../releases/download/...) second."
+        - "No cargo install / cargo binstall / compile anywhere in the recipe; prefer lean (drop tools that cannot be download-only)."
+        - "The gh-token build-secret band-aid (commit 8f3d6eb6) is reverted; no GitHub API call and no login at --init."
+        - "tillandsias --init assembles the image from downloads only; nothing compiles at user runtime."
+      tasks:
+        - id: forge-recipe/download-only
+          status: obsoleted
+          depends_on: []
+          owned_files:
+            - images/default/Containerfile
+            - scripts/build-image.sh
+          checkpoint_required: true
+          handoff_note: "Superseded by steps 44-48. Do not claim this broad file-overlapping packet; select the replacement matching package recipes, identity, cache, telemetry, or integration."
+
+    - id: forge-package-manager-and-telemetry
+      order: 49
+      title: Package Manager Migration, Base Image Split, and Telemetry
+      status: completed
+      owner_host: linux
+      deliverable: plan/issues/forge-package-manager-and-telemetry-2026-06-12.md
+      audit_origin: plan/issues/forge-package-manager-and-telemetry-2026-06-12.md
+      depends_on: []
+      exit_criteria:
+        - "images/default/Containerfile split into Containerfile.base and Containerfile."
+        - "curl/tar installs migrated to dnf/microdnf where possible."
+        - "Foreign repos tracked in a dependency list for tellme system."
+        - "Telemetry added to build scripts to record install duration and sizes into JSON lines."
+        - "Dashboard Markdown file created with Mermaid graphs."
+      tasks:
+        - id: forge-refactor/containerfile-split
+          status: completed
+          owner_host: linux
+          depends_on: []
+        - id: forge-refactor/dnf-migration
+          status: completed
+          owner_host: linux
+          depends_on: [forge-refactor/containerfile-split]
+        - id: forge-refactor/telemetry-dashboard
+          status: completed
+          owner_host: linux
+          depends_on: []
+
+    - packet_id: per-project-dynamic-path-verification
+      order: 86
+      title: "Verify all mirror/checkout paths use $PROJECT dynamically (per-project isolation)"
+      status: done
+      kind: enhancement
+      deliverable: source audit
+      depends_on: []
+      pickup_role: linux
+      closed_at: "2026-06-23T20:36Z"
+      closed_by: "linux-sonnet46-meta-orch-20260623"
+      outcome: >
+        All code paths that reference the project name in mirror paths,
+        checkout paths, container names, volume names, and git config use
+        $PROJECT, $TILLANDSIAS_PROJECT, or a <project> placeholder. No
+        hardcoded "tillandsias" strings remain in infrastructure code that
+        would break if a different GitHub project is loaded through the forge.
+        Entrypoints already use clone_project_from_mirror (dynamic). Docs
+        fixed by forge agent 2026-06-23.
+      tasks:
+        - id: per-project-dynamic-path-verification/audit-lib-common
+          status: done
+          owned_files:
+            - images/default/lib-common.sh
+          checkpoint_required: false
+          handoff_note: >
+            Confirmed: lib-common.sh uses $TILLANDSIAS_PROJECT throughout.
+            75 occurrences of TILLANDSIAS/tillandsias in infra paths only.
+        - id: per-project-dynamic-path-verification/audit-entrypoints
+          status: done
+          owned_files:
+            - images/default/entrypoint-forge-claude.sh
+            - images/default/entrypoint-forge-opencode.sh
+            - images/default/entrypoint-forge-opencode-web.sh
+          checkpoint_required: false
+          handoff_note: >
+            All entrypoints call clone_project_from_mirror (dynamic). No
+            hardcoded project names in mirror/clone paths.
+        - id: per-project-dynamic-path-verification/audit-docs
+          status: done
+          owned_files:
+            - docs/cheatsheets/
+            - cheatsheets/runtime/
+          checkpoint_required: false
+          handoff_note: >
+            Fixed by forge agent 2026-06-23 (commit 39b19055): replaced
+            hardcoded "tillandsias" with <PROJECT> placeholders in
+            git-mirror-lifecycle-audit.md and forge-standalone.md.
+        - id: per-project-dynamic-path-verification/update-spec
+          status: done
+          owned_files:
+            - openspec/specs/git-mirror-service/spec.md
+          checkpoint_required: false
+          handoff_note: >
+            Per-project transparency requirement added to spec by forge
+            agent 2026-06-23 (commit 39b19055). Covers all path types.
+
+    - packet_id: forge-transparency-cheatsheet
+      order: 87
+      title: "Create forge transparency cheatsheet documenting transparent infrastructure"
+      status: done
+      kind: documentation
+      deliverable: cheatsheets/runtime/forge-transparency.md
+      depends_on:
+        - per-project-dynamic-path-verification
+      pickup_role: linux
+      closed_at: "2026-06-23T20:36Z"
+      closed_by: "linux-sonnet46-meta-orch-20260623"
+      outcome: >
+        cheatsheets/runtime/forge-transparency.md and its image-baked copy
+        at images/default/cheatsheets/runtime/forge-transparency.md both
+        exist and are in sync. Documents git mirror, HTTPS proxy, inference,
+        and Vault transparency. Includes Do/DON'T sections.
+      tasks:
+        - id: forge-transparency-cheatsheet/write-main
+          status: done
+          owned_files:
+            - cheatsheets/runtime/forge-transparency.md
+          checkpoint_required: false
+          handoff_note: Created by forge agent 2026-06-23 (commit 39b19055).
+        - id: forge-transparency-cheatsheet/write-image-copy
+          status: done
+          owned_files:
+            - images/default/cheatsheets/runtime/forge-transparency.md
+          checkpoint_required: false
+          handoff_note: >
+            Image-baked copy in sync with main (diff confirmed clean).
+        - id: forge-transparency-cheatsheet/verify-bundled
+          status: done
+          owned_files: []
+          checkpoint_required: false
+          handoff_note: >
+            File is in images/default/cheatsheets/runtime/ which is
+            in the image layer baked by the Containerfile. Will be
+            available at /opt/cheatsheets/runtime/forge-transparency.md.
+
+    - packet_id: forge-harness-bootstrap-context
+      order: 88
+      title: "Add forge startup context injection for agents"
+      status: done
+      kind: enhancement
+      deliverable: harness mechanism
+      depends_on:
+        - forge-transparency-cheatsheet
+      pickup_role: linux
+      closed_at: "2026-06-23T20:36Z"
+      closed_by: "linux-sonnet46-meta-orch-20260623"
+      outcome: >
+        The forge entrypoint injects a startup-context file into the
+        workspace (e.g., .forge-startup-context.md) that tells the agent:
+        (a) which project is loaded, (b) that git/proxy/inference/vault
+        are transparent, (c) the plan entry point for picking up work,
+        (d) the version/branch they're on, and (e) any known limitations.
+        Agents read this at the start of every session instead of guessing.
+      tasks:
+        - id: forge-harness-bootstrap-context/design
+          status: done
+          owned_files: []
+          checkpoint_required: false
+          handoff_note: >
+            Design: inject_startup_context() function in lib-common.sh.
+            Writes .forge-startup-context.md to project root with:
+            project name, branch, version, agent, transparency summary,
+            plan entry points, and skills pointer. File gitignored.
+        - id: forge-harness-bootstrap-context/implement
+          status: done
+          owned_files:
+            - images/default/lib-common.sh
+            - images/default/entrypoint-forge-opencode.sh
+            - images/default/entrypoint-forge-claude.sh
+            - images/default/entrypoint-forge-opencode-web.sh
+            - images/default/entrypoint-forge-codex.sh
+            - .gitignore
+          checkpoint_required: true
+          handoff_note: >
+            inject_startup_context() added to lib-common.sh. Called from
+            all 4 entrypoints before show_banner/agent exec. .gitignore
+            updated to exclude .forge-startup-context.md.
+
+    - id: zeroclaw-crate-scaffold
+      order: 91
+      title: "ZeroClaw Packet A: Create Zeroclaw Rust crate (port NanoClawV2 MCP)"
+      status: done
+      owner_host: linux
+      deliverable: crates/tillandsias-zeroclaw/
+      depends_on: []
+      pickup_role: linux
+      estimated_hours: 2
+      closed_at: "2026-06-23T21:42Z"
+      closed_by: "linux-sonnet46-meta-orch-20260623T2142Z"
+      exit_criteria:
+        - "crates/tillandsias-zeroclaw/ exists with Cargo.toml and src/main.rs"
+        - "MCP broker code (allowlist, Unix socket server, project-scope enforcement) ported from NanoClawV2"
+        - "cargo test -p tillandsias-zeroclaw passes (all allowlist + smoke tests)"
+      outcome: >
+        crates/tillandsias-zeroclaw/ created with Cargo.toml (Apache-2.0),
+        src/main.rs, src/lib.rs, src/allowlist.rs, src/server.rs. All tool
+        names renamed nanoclaw.* → zeroclaw.*. 12/12 tests pass (9 allowlist
+        unit tests + 3 integration smoke tests). Added to workspace members
+        and workspace deps. build.sh --check PASS.
+
+    - id: zeroclaw-containerfile
+      order: 92
+      title: "ZeroClaw Packet B: Create ZeroClaw Containerfile and image"
+      status: done
+      owner_host: linux
+      deliverable: images/zeroclaw/Containerfile
+      depends_on: [zeroclaw-crate-scaffold]
+      pickup_role: linux
+      estimated_hours: 1
+      closed_at: "2026-06-23T22:47Z"
+      closed_by: "linux-sonnet46-meta-orch-20260623T2247Z"
+      exit_criteria:
+        - "images/zeroclaw/Containerfile uses fedora:44 base"
+        - "images/zeroclaw/entrypoint.sh ported from nanoclawv2"
+        - "Config overlay and MCP bridge present"
+      outcome: >
+        images/zeroclaw/Containerfile created (ported from nanoclawv2).
+        images/zeroclaw/entrypoint.sh, config-overlay/mcp/zeroclaw-host.sh,
+        config-overlay/opencode/ all present.
+
+    - id: zeroclaw-tray-launcher
+      order: 93
+      title: "ZeroClaw Packet C: Update tray launcher — rename NanoClawV2 → ZeroClaw"
+      status: done
+      owner_host: linux
+      deliverable: crates/tillandsias-headless/src/tray/mod.rs
+      depends_on: [zeroclaw-containerfile]
+      pickup_role: linux
+      estimated_hours: 1
+      closed_at: "2026-06-23T22:47Z"
+      closed_by: "linux-sonnet46-meta-orch-20260623T2247Z"
+      exit_criteria:
+        - "LeafAction::NanoClawV2 renamed to LeafAction::ZeroClaw"
+        - "launch_nanoclawv2() renamed to launch_zeroclaw()"
+        - "Socket paths and container names updated"
+      outcome: >
+        LaunchKind::ZeroClaw, launch_zeroclaw(), socket path
+        tillandsias/zeroclaw-<project>.sock, image
+        tillandsias-zeroclaw:v<version> — all confirmed in tray/mod.rs.
+
+    - id: zeroclaw-image-registration
+      order: 94
+      title: "ZeroClaw Packet D: Update image registration — rename NanoClawV2 → ZeroClaw"
+      status: done
+      owner_host: linux
+      deliverable: crates/tillandsias-headless/src/runtime_assets.rs
+      depends_on: [zeroclaw-tray-launcher]
+      pickup_role: linux
+      estimated_hours: 1
+      closed_at: "2026-06-23T22:47Z"
+      closed_by: "linux-sonnet46-meta-orch-20260623T2247Z"
+      exit_criteria:
+        - "All nanoclawv2 strings in main.rs replaced with zeroclaw"
+        - "All nanoclawv2 strings in runtime_assets.rs replaced with zeroclaw"
+      outcome: >
+        runtime_assets.rs line 264: "zeroclaw" => Ok("images/zeroclaw").
+        build_inputs line 351: images/zeroclaw/Containerfile registered.
+        main.rs updated. build.sh --check + tests PASS.
+
+    - id: zeroclaw-litmus-update
+      order: 95
+      title: "ZeroClaw Packet E: Update litmus tests — rename NanoClawV2 → ZeroClaw"
+      status: done
+      owner_host: linux
+      deliverable: openspec/litmus-tests/litmus-zeroclaw-mcp-shape.yaml
+      depends_on: [zeroclaw-image-registration]
+      pickup_role: linux
+      estimated_hours: 1
+      closed_at: "2026-06-23T22:47Z"
+      closed_by: "linux-sonnet46-meta-orch-20260623T2247Z"
+      exit_criteria:
+        - "litmus:zeroclaw-mcp-shape exists (renamed from nanoclawv2)"
+        - "litmus-simplified-tray-ux-leaf-action-shape.yaml references updated"
+        - "litmus-bindings.yaml binding updated"
+      outcome: >
+        litmus-nanoclawv2-mcp-shape.yaml renamed to litmus-zeroclaw-mcp-shape.yaml.
+        litmus-bindings.yaml: spec_id zeroclaw-orchestration, litmus:zeroclaw-mcp-shape.
+        litmus-simplified-tray-ux-leaf-action-shape.yaml updated.
+
+    - id: zeroclaw-legacy-cleanup
+      order: 96
+      title: "ZeroClaw Packet F: Remove NanoClawV2 legacy files"
+      status: done
+      owner_host: linux
+      deliverable: "(crates/tillandsias-nanoclawv2-mcp/ removed)"
+      depends_on: [zeroclaw-litmus-update]
+      pickup_role: linux
+      estimated_hours: 0.5
+      closed_at: "2026-06-23T22:47Z"
+      closed_by: "linux-sonnet46-meta-orch-20260623T2247Z"
+      exit_criteria:
+        - "crates/tillandsias-nanoclawv2-mcp/ removed or archived"
+        - "images/nanoclawv2/ removed or archived"
+        - "Workspace Cargo.toml updated"
+      outcome: >
+        crates/tillandsias-nanoclawv2-mcp/ deleted. images/nanoclawv2/ renamed
+        to images/zeroclaw/. Cargo.toml workspace members and deps updated
+        to remove tillandsias-nanoclawv2-mcp.
+
+    - id: zeroclaw-plan-update
+      order: 97
+      title: "ZeroClaw Packet G: Update plan ledger — close order 56, finalize ZeroClaw"
+      status: done
+      owner_host: linux
+      deliverable: plan/index.yaml
+      depends_on: [zeroclaw-legacy-cleanup]
+      pickup_role: linux
+      estimated_hours: 0.5
+      closed_at: "2026-06-23T22:47Z"
+      closed_by: "linux-sonnet46-meta-orch-20260623T2247Z"
+      exit_criteria:
+        - "Order 56 (nanoclawv2-orchestration) marked completed"
+        - "Zeroclaw orchestration packets closed or updated"
+      outcome: >
+        Orders 92-97 all closed. Order 56 (nanoclawv2-orchestration) status
+        updated to completed. ZeroClaw migration chain fully done.
+
+    - packet_id: enclave-proxy-patterns-cheatsheet
+      order: 105
+      title: "Enclave proxy patterns cheatsheet — Unix justification for proxy env var usage"
+      status: done
+      kind: cheatsheet
+      deliverable: cheatsheets/runtime/enclave-proxy-patterns.md
+      depends_on: []
+      pickup_role: linux
+      closed_at: "2026-06-26T00:00Z"
+      closed_by: "linux-sonnet46-20260626"
+      outcome: >
+        Cheatsheet at cheatsheets/runtime/enclave-proxy-patterns.md covers:
+        explicit forward proxy vs containers.conf injection vs iptables TPROXY;
+        when HTTP_PROXY env vars are the correct Unix approach vs when they are
+        an O(N) maintenance anti-pattern; the build_stack_common_args
+        single-injection-point rule; Squid intercept-mode config; iptables
+        PREROUTING rules and rootless-Podman feasibility notes; NO_PROXY drift
+        pitfall. Closes the "justify every env var or fix the service"
+        requirement from operator feedback on commit c8f59e24.
+
+    - packet_id: enclave-transparent-proxy-feasibility
+      order: 106
+      title: "Research: iptables TPROXY feasibility in rootless Podman enclave"
+      status: done
+      kind: research
+      deliverable: plan/issues/enclave-transparent-proxy-feasibility-2026-06-26.md
+      depends_on: []
+      pickup_role: linux
+      estimated_hours: 2
+      closed_at: "2026-06-27T03:20Z"
+      closed_by: "linux-macuahuitl-sonnet46-20260627T0312Z"
+      outcome: >
+        Verdict on whether iptables TPROXY intercept mode is achievable in our
+        rootless Podman / netavark / Fedora Silverblue setup, or whether
+        containers.conf injection is the correct next step. Unlocks order 107.
+      exit_criteria:
+        - "Written verdict in plan/issues/enclave-transparent-proxy-feasibility-2026-06-26.md under ## Verdict"
+        - "If feasible: minimal proof-of-concept iptables rule set + Squid config change demonstrated"
+        - "If not feasible: clear recommendation for containers.conf injection with rationale"
+
+    - packet_id: enclave-proxy-centralize-injection
+      order: 107
+      title: "Enhancement: centralize proxy injection — eliminate per-container env var pollution"
+      status: done
+      closed_at: "2026-06-27T03:40Z"
+      closed_by: "linux-macuahuitl-sonnet46-20260627T0312Z"
+      kind: enhancement
+      deliverable: plan/issues/enclave-proxy-centralize-and-dedup-2026-06-26.md
+      depends_on: [enclave-transparent-proxy-feasibility]
+      pickup_role: linux
+      estimated_hours: 3
+      outcome: >
+        Exactly one location in the codebase injects proxy env vars into
+        containers. NO_PROXY list defined and used from a single source.
+        Redundant injections in build_git_run_args, build_inference_run_args,
+        build_forge_common_args, and build_forge_agent_run_args removed.
+        Comment at injection point cites enclave-proxy-patterns cheatsheet.
+      exit_criteria:
+        - "cargo test git_run_args passes"
+        - "litmus:git-mirror-safe-refspec-push passes"
+        - "grep for HTTP_PROXY in main.rs shows only build_stack_common_args"
+        - "NO_PROXY lists across all containers are identical (ENCLAVE_NO_PROXY everywhere)"
+
+    - packet_id: zeroclaw-binary-path
+      order: 109
+      title: "Fix: ZeroClaw binary not found — resolve as sibling of current_exe"
+      status: done
+      kind: bugfix
+      deliverable: plan/issues/zeroclaw-binary-not-installed-2026-06-27.md
+      depends_on: []
+      pickup_role: linux
+      closed_at: "2026-06-27T03:00Z"
+      closed_by: "linux-macuahuitl-sonnet46-20260627T0300Z"
+      outcome: >
+        launch_zeroclaw now resolves tillandsias-zeroclaw as a sibling of
+        current_exe() before falling back to PATH. Works from ~/.local/bin
+        (release install) and target/debug (dev). Follow-on: release workflow
+        must bundle and install the zeroclaw binary alongside the main binary.
+      exit_criteria:
+        - "ZeroClaw launch no longer errors with 'No such file or directory' on dev builds"
+        - "cargo check -p tillandsias-headless passes"
+
+    - packet_id: auth-poll-verbosity
+      order: 110
+      title: "Fix: suppress per-iteration Vault debug noise during GitHub login poll"
+      status: done
+      kind: bugfix
+      deliverable: crates/tillandsias-headless/src/tray/mod.rs
+      depends_on: []
+      pickup_role: linux
+      closed_at: "2026-06-27T03:00Z"
+      closed_by: "linux-macuahuitl-sonnet46-20260627T0300Z"
+      outcome: >
+        The GitHub login click handler now calls is_github_logged_in(false)
+        during its 120s polling loop. Debug output is throttled to one line
+        every 15 seconds ("waiting for token in Vault (Ns elapsed)") instead
+        of 4-6 lines per second. Clean builds pass.
+      exit_criteria:
+        - "Polling loop does not emit Vault internals on every iteration"
+        - "./build.sh --check passes"
+
+    - packet_id: zeroclaw-release-packaging
+      order: 111
+      title: "Release: bundle tillandsias-zeroclaw binary in release artifacts"
+      status: done
+      closed_at: "2026-06-27T04:00Z"
+      closed_by: "linux-macuahuitl-sonnet46-20260627T0312Z"
+      kind: release
+      deliverable: plan/issues/zeroclaw-binary-not-installed-2026-06-27.md
+      depends_on: [zeroclaw-binary-path]
+      pickup_role: linux
+      estimated_hours: 2
+      outcome: >
+        tillandsias-zeroclaw is built, cross-compiled (musl), included in the
+        GitHub release tarball, and installed alongside tillandsias by
+        scripts/install.sh. Users who install via curl can launch ZeroClaw.
+      exit_criteria:
+        - ".github/workflows/release.yml builds tillandsias-zeroclaw musl binary"
+        - "Release tarball includes tillandsias-zeroclaw alongside tillandsias"
+        - "scripts/install.sh installs tillandsias-zeroclaw to ~/.local/bin/"
+        - "scripts/smoke-test.sh verifies tillandsias-zeroclaw is present"
+
+    - packet_id: host-guest-transport-normalization-research
+      order: 123
+      title: "Research: normalize host<->guest transport (vsock) across all platforms"
+      status: completed
+      kind: research
+      deliverable: plan/issues/host-guest-transport-normalization-research-2026-06-28.md
+      depends_on: []
+      pickup_role: linux
+      estimated_hours: 5
+      outcome: >
+        Operator-mandated normalization: all three platforms drifted into separate
+        host->guest connection implementations (control-wire Vsock Linux-only,
+        macOS VZVirtioSocket, Windows WSL/hvsock) with 5 overlapping exec_over_stream
+        variants and inconsistent nomenclature. Define the target: two canonical
+        primitives (InteractiveStream for PTY/attach, ExecOneShot for quick reads),
+        a single GuestTransport facade + GuestEndpoint addressing (callers never
+        cfg-select a backend), one wire protocol, and a nomenclature glossary.
+      exit_criteria:
+        - "Target-architecture verdict: facade trait + GuestEndpoint + two primitive signatures"
+        - "Backend matrix (Linux AF_VSOCK / macOS VZ virtio-vsock / Windows WSL-hvsock) + layer home decided"
+        - "Exec-consolidation map: 5 exec_over_stream* -> ExecOneShot, with call sites"
+        - "Nomenclature glossary (one term per concept) + parity definition"
+
