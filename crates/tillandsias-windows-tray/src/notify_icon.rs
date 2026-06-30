@@ -88,11 +88,11 @@ use windows::Win32::UI::Shell::{
 };
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu, DispatchMessageW,
-    GetCursorPos, GetMessageW, HMENU, IDI_APPLICATION, LoadIconW, MF_CHECKED, MF_DISABLED,
-    MF_GRAYED, MF_POPUP, MF_STRING, MSG, PostMessageW, PostQuitMessage, RegisterClassExW,
-    RegisterWindowMessageW, SetForegroundWindow, TPM_BOTTOMALIGN, TPM_LEFTALIGN, TPM_RIGHTBUTTON,
-    TrackPopupMenu, TranslateMessage, WM_APP, WM_COMMAND, WM_DESTROY, WM_LBUTTONUP, WM_RBUTTONUP,
-    WNDCLASSEXW, WS_EX_TOOLWINDOW,
+    GetCursorPos, GetMessageW, HMENU, IDI_APPLICATION, KillTimer, LoadIconW, MF_CHECKED,
+    MF_DISABLED, MF_GRAYED, MF_POPUP, MF_STRING, MSG, PostMessageW, PostQuitMessage,
+    RegisterClassExW, RegisterWindowMessageW, SetForegroundWindow, SetTimer, TPM_BOTTOMALIGN,
+    TPM_LEFTALIGN, TPM_RIGHTBUTTON, TrackPopupMenu, TranslateMessage, WM_APP, WM_COMMAND,
+    WM_DESTROY, WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSEXW, WS_EX_TOOLWINDOW,
 };
 use windows::core::{PCWSTR, w};
 
@@ -101,6 +101,10 @@ use crate::wsl_lifecycle::WslLifecycle;
 /// Our private window message; click on the tray icon routes here.
 /// `WM_APP + 1` is the conventional range for app-defined messages.
 pub const WM_TRAYICON: u32 = WM_APP + 1;
+
+/// Win32 timer ID used to periodically wake GetMessageW so tokio tasks
+/// spawned onto the LocalSet can drain even when the user is idle.
+const TOKIO_DRAIN_TIMER_ID: usize = 1;
 
 /// Unique ID assigned to the NotifyIcon — kept stable across the process
 /// lifetime so `NIM_MODIFY`/`NIM_DELETE` consistently address it.
@@ -338,6 +342,14 @@ pub fn run() -> ! {
             update_status_text("\u{26AA} Dev mode \u{2014} VM provisioning skipped", hwnd);
         }
 
+        // Fire a recurring 100ms timer so that GetMessageW returns even
+        // when the user is idle, giving tokio tasks on the LocalSet a chance
+        // to run. Without this, spawn_local tasks are starved until the
+        // next user-generated Win32 message arrives.
+        unsafe {
+            SetTimer(hwnd, TOKIO_DRAIN_TIMER_ID, 100, None);
+        }
+
         // Pump messages until WM_QUIT.
         let mut msg = MSG::default();
         loop {
@@ -357,6 +369,10 @@ pub fn run() -> ! {
             }
             // Cooperative tokio drain.
             tokio::task::yield_now().await;
+        }
+
+        unsafe {
+            let _ = KillTimer(hwnd, TOKIO_DRAIN_TIMER_ID);
         }
 
         // Clean up the tray icon first so Quit gives instant visual feedback.
