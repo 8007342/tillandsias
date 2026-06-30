@@ -148,7 +148,10 @@ files are data, not compiled. So a rebase/merge is only "done" when ALL of these
 pass on the merged tree:
 
 ```bash
-# Strictly rebase (never merge) onto the trunk — see methodology/multi-host-development.yaml.
+# SAME-branch catch-up only: rebase YOUR un-pushed commits onto origin/<active-branch>.
+# (CROSS-branch integration — sibling->trunk or main->branch — is MERGE-ONLY; never
+#  rebase/cherry-pick published commits across branches. See the integration_strategy
+#  in methodology/multi-host-development.yaml. The gate below runs for BOTH cases.)
 git fetch origin && git rebase origin/<active-branch>     # ≤3 retries
 
 # 1. No conflict markers survived the resolution (the orphan-marker bug).

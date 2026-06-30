@@ -8003,3 +8003,38 @@ plan_index:
         - "litmus:no-dangling-removed-component-refs green (no live zeroclaw refs outside historical record)"
         - "Superseded specs marked obsolete + tombstone in litmus-bindings"
         - "plan/archive/README.md documents the archive layout"
+
+    - packet_id: methodology-integration-strategy-contradiction
+      order: 136
+      title: "Methodology: correct integration_strategy (cross-branch is merge, not rebase) + reconcile skills"
+      status: in_progress
+      kind: analysis+enhancement
+      deliverable: plan/issues/methodology-integration-strategy-contradiction-2026-06-30.md
+      depends_on: [methodology-concurrent-integration-duplication]
+      pickup_role: linux
+      capability_tags: [docs, methodology, testing]
+      estimated_hours: 2
+      outcome: >
+        A /meta-orchestration soundness run found order-133's integration_strategy was
+        backwards: it said "cross-branch integration uses rebase, NOT git merge", which
+        contradicts the coordinator duty ("merge windows/osx into linux-next"), the
+        release skill (gh pr merge --merge), and actual history (all merge commits) —
+        and is self-defeating (cherry-picking published sibling commits remints hashes,
+        re-creating the cb9def24->6dbca259 duplication). Corrected the methodology to:
+        same-branch catch-up = rebase un-pushed local commits; cross-branch = merge-only
+        (preserves hashes, git dedupes via ancestry). advance-work §6 gate clarified.
+      events:
+        - type: progress
+          ts: "2026-06-30T21:45Z"
+          agent_id: "linux-yoga-sonnet46-20260630T2138Z"
+          summary: >
+            Corrected methodology/multi-host-development.yaml integration_strategy and
+            clarified advance-work §6 (rebase = same-branch only; cross-branch = merge).
+            Remaining: same fix in skills/multihost-orchestration; a
+            litmus:integration-strategy-consistency that fails if methodology or any
+            skill says "rebase" for cross-branch sibling/main integration.
+      exit_criteria:
+        - "methodology integration_strategy states same-branch=rebase, cross-branch=merge — DONE"
+        - "advance-work §6 gate clarifies same-branch vs cross-branch — DONE"
+        - "skills/multihost-orchestration sibling step says merge + cites strategy — TODO"
+        - "litmus:integration-strategy-consistency pinned + green — TODO"
