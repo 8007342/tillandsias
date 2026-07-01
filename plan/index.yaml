@@ -8038,3 +8038,77 @@ plan_index:
         - "advance-work §6 gate clarifies same-branch vs cross-branch — DONE"
         - "skills/coordinate-multihost-work sibling step says merge + cites strategy — DONE"
         - "litmus:integration-strategy-consistency pinned + green — TODO (last remaining item)"
+
+    - packet_id: vsock-exec-chain-authn-authz
+      order: 137
+      title: "Security P0: authenticate the vsock host->guest->podman-exec chain failure-closed"
+      status: ready
+      kind: security
+      deliverable: plan/issues/security-audit-zero-trust-2026-07-01.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [rust, podman, testing]
+      estimated_hours: 6
+      outcome: >
+        The vsock control wire (crates/tillandsias-headless/src/vsock_server.rs) binds
+        VMADDR_CID_ANY and accepts any peer; the only gate is a Hello frame whose `from`
+        is a self-reported, unvalidated string. On PtyOpen the guest execs the client's
+        argv verbatim and the host wraps it as `podman exec` in the DEEPEST forge
+        container (crates/tillandsias-host-shell/src/pty/mod.rs). This is the same
+        "any local peer runs host/container commands with no isolation" class as the
+        order-114 zeroclaw MCP violation, reintroduced on vsock. Add a failure-closed
+        peer-authn/authz step (e.g. a per-boot shared secret delivered over the same
+        provisioning channel that the credential handover already uses, checked before
+        HelloAck) and reject unauthenticated peers with the reserved `Unauthorized` code
+        (lib.rs:349) instead of leaving it "reserved for future use".
+      exit_criteria:
+        - "vsock listener rejects a peer that omits/forges the auth token, returning Unauthorized (not HelloAck)"
+        - "litmus:vsock-unauthenticated-peer-rejected pinned + green (asserts rejection, failure-closed)"
+        - "openspec/specs vsock-transport no longer sanctions unauthenticated 'accept from any CID' without an authz gate"
+        - "./build.sh --check and --test pass"
+
+    - packet_id: vault-handover-token-shred
+      order: 138
+      title: "Security P1: shred the first-boot Vault root-token handover from container tmpfs"
+      status: ready
+      kind: security
+      deliverable: plan/issues/security-audit-zero-trust-2026-07-01.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [rust, vault]
+      estimated_hours: 3
+      outcome: >
+        First-boot `operator init` writes $ROOT_TOKEN to /run/vault-handover/root.token
+        (images/vault/entrypoint.sh); the host reads it via `podman exec vault cat`
+        (vault_bootstrap.rs) but nothing shreds/unlinks it afterward. Chained with the
+        vsock-exec gap it is a full-privilege token readable by any host-CID peer that
+        execs into vault. Shred the handover file (overwrite + unlink) immediately after
+        the host consumes it; the XOR-envelope / durable root.token P0 is already fixed
+        (subsequent boots skip the path) — this is only the first-boot tmpfs residual.
+      exit_criteria:
+        - "handover file is unlinked (and overwritten) right after the host reads it"
+        - "litmus asserts no root.token remains in the vault tmpfs after handover"
+        - "subsequent-boot path unaffected (no regression in auto-unseal)"
+
+    - packet_id: vsock-exec-authz-spec-and-proxy-exemption-audit
+      order: 139
+      title: "Security P1/P2: govern the transparent-exec authz boundary + verify proxy-exemption on new vsock/exec paths"
+      status: ready
+      kind: security
+      deliverable: plan/issues/security-audit-zero-trust-2026-07-01.md
+      depends_on: [vsock-exec-chain-authn-authz]
+      pickup_role: linux
+      capability_tags: [rust, podman, docs]
+      estimated_hours: 4
+      outcome: >
+        (a) Write a governing spec for the transparent host->guest->container exec
+        authorization boundary (there is none today) and validate the project-name
+        interpolated into `tillandsias-{p}-forge` against an allowlist. (b) Confirm the
+        new vsock/exec code paths follow the established proxy-exemption pattern that the
+        orders 116/118/119 P0s established (every direct-to-enclave-service/build/exec
+        path must exempt the proxy). (c) Track the still-missing github-login->list e2e
+        gate as a named follow-up.
+      exit_criteria:
+        - "openspec spec covers the exec authz boundary; project-name allowlist-validated"
+        - "grep/litmus confirms new vsock+exec paths set the proxy exemption"
+        - "github-login->list e2e gate filed as a concrete ready packet"
