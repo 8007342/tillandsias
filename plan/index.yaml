@@ -8045,6 +8045,12 @@ plan_index:
       status: ready
       kind: security
       deliverable: plan/issues/security-audit-zero-trust-2026-07-01.md
+      superseded_by_note: >
+        Operator (2026-07-01) chose the full encrypted, version-bound channel as this
+        P0's closure. Design in encrypted-control-channel-research (order 140); impl in
+        encrypted-control-channel-impl (order 141), whose slice 4 delivers this packet's
+        vsock-unauthenticated-peer-rejected litmus. Implement via 140/141, not a separate
+        minimal auth token.
       depends_on: []
       pickup_role: linux
       capability_tags: [rust, podman, testing]
@@ -8112,3 +8118,62 @@ plan_index:
         - "openspec spec covers the exec authz boundary; project-name allowlist-validated"
         - "grep/litmus confirms new vsock+exec paths set the proxy exemption"
         - "github-login->list e2e gate filed as a concrete ready packet"
+
+    - packet_id: encrypted-control-channel-research
+      order: 140
+      title: "Security: design an encrypted, version-bound host<->guest<->container control channel"
+      status: ready
+      kind: research
+      deliverable: plan/issues/encrypted-control-channel-research-2026-07-01.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [rust, security, vsock]
+      estimated_hours: 4
+      outcome: >
+        Operator directive: encrypt the control channel from the host tray through the
+        guest tillandsias-headless (over vsock), with the SAME reusable primitive from
+        headless down to the deepest podman container. Bind host<->guest binary versions
+        by DERIVING the channel key from the build version (mismatched versions get
+        different keys and cannot complete the handshake), and combine with an argv
+        allowlist so only approved exec commands run in the innermost containers. This
+        is the design of order-137's closure. Recommendation: reusable EncryptedStream<S>
+        adapter wrapping any AsyncRead+AsyncWrite; Noise NNpsk0 via the `snow` crate
+        (PSK gate + X25519 forward secrecy + ChaCha20-Poly1305); PSK = HKDF-SHA256 over
+        release_root_secret + build_version + hop_id; failure-closed with the reserved
+        Unauthorized code; argv validated post-handshake at guest and container.
+      exit_criteria:
+        - "Crypto primitive + Noise pattern chosen with rationale (done in packet)"
+        - "Version-binding key derivation specified (HKDF over build_version + hop_id)"
+        - "Both-hops layering specified (single EncryptedStream<S> adapter)"
+        - "Allowlist gate integration + threat model specified"
+        - "Open decisions O1-O4 enumerated with recommended defaults for operator sign-off"
+
+    - packet_id: encrypted-control-channel-impl
+      order: 141
+      title: "Security: implement the encrypted, version-bound control channel + argv allowlist (both hops)"
+      status: pending
+      kind: enhancement
+      deliverable: plan/issues/encrypted-control-channel-impl-2026-07-01.md
+      depends_on: [encrypted-control-channel-research]
+      pickup_role: linux
+      capability_tags: [rust, security, vsock, podman]
+      estimated_hours: 16
+      supersedes_note: >
+        Closes vsock-exec-chain-authn-authz (order 137) and the argv-allowlist half of
+        vsock-exec-authz-spec-and-proxy-exemption-audit (order 139). Blocked on operator
+        sign-off of research Open Decisions O1 (root-secret source) - O4.
+      outcome: >
+        Land the EncryptedStream<S> primitive (Noise, snow) wrapping the vsock host<->guest
+        hop and the guest<->innermost-container hop; key derived from build_version so only
+        matching versions interoperate; post-handshake argv allowlist so only approved exec
+        commands reach the deepest container; failure-closed with Unauthorized. Slices:
+        (1) OpenSpec change + crate skeleton, (2) PSK derivation + version-binding proof,
+        (3) handshake + AEAD framing, (4) host<->guest integration, (5) argv allowlist gate,
+        (6) guest<->container reuse + revisit order-104 port-publish removal.
+      exit_criteria:
+        - "OpenSpec change encrypted-control-channel implemented, verified, archived"
+        - "litmus psk-differs-across-version proves cryptographic version binding"
+        - "litmus vsock-unauthenticated-peer-rejected proves failure-closed authz (order 137)"
+        - "litmus pty-open-argv-allowlisted proves the exec allowlist gate (order 139a)"
+        - "both hops use the same EncryptedStream<S>; terminal I/O + argv encrypted"
+        - "./build.sh --check and --test pass; e2e on an enforcing guest green"
