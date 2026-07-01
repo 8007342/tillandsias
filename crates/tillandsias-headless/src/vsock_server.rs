@@ -457,7 +457,11 @@ async fn handle_connection(
             ControlMessage::GithubLoginStatusRequest { seq } => {
                 // Probe GitHub auth end-to-end inside a container — no raw
                 // token is read into the vsock server process.
-                let handle = crate::remote_projects::probe_github_username(false);
+                let handle = tokio::task::spawn_blocking(|| {
+                    crate::remote_projects::probe_github_username(false)
+                })
+                .await
+                .unwrap_or(None);
                 let logged_in = handle.is_some();
                 let reply = ControlEnvelope {
                     wire_version: WIRE_VERSION,
