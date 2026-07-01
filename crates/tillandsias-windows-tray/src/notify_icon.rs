@@ -87,7 +87,7 @@ use windows::Win32::UI::Shell::{
 use windows::Win32::UI::WindowsAndMessaging::{
     AppendMenuW, CreatePopupMenu, CreateWindowExW, DefWindowProcW, DestroyMenu, DispatchMessageW,
     GetCursorPos, GetMessageW, HMENU, IDI_APPLICATION, KillTimer, LoadIconW, MF_CHECKED,
-    MF_DISABLED, MF_GRAYED, MF_POPUP, MF_STRING, MSG, PostMessageW, PostQuitMessage,
+    MF_DISABLED, MF_GRAYED, MF_POPUP, MF_SEPARATOR, MF_STRING, MSG, PostMessageW, PostQuitMessage,
     RegisterClassExW, RegisterWindowMessageW, SetForegroundWindow, SetTimer, TPM_BOTTOMALIGN,
     TPM_LEFTALIGN, TPM_RIGHTBUTTON, TrackPopupMenu, TranslateMessage, WM_APP, WM_COMMAND,
     WM_DESTROY, WM_LBUTTONUP, WM_RBUTTONUP, WNDCLASSEXW, WS_EX_TOOLWINDOW,
@@ -1910,6 +1910,7 @@ fn exit_code_from(r: &DiagnoseReport) -> i32 {
 /// Set by the `Retry` menu click (in the wndproc) and drained by the message
 /// loop, which spawns a fresh provisioning task in the LocalSet context.
 static RETRY_REQUESTED: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+static FAST_POLL_COUNT: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(5);
 
 /// True while a provisioning task is running or has succeeded (and is parked
 /// holding the VM keepalive). Guards `spawn_provisioning` so a `Retry` while
@@ -1961,7 +1962,9 @@ fn spawn_provisioning(hwnd: HWND) {
                             // walks are virtually free vs `gh repo list`, so
                             // run local first to keep the menu fresh fast.
                             // Order mirrors macOS slice 19 (`06088c41`).
-                            if tick.is_multiple_of(10) {
+                            let fast_poll =
+                                FAST_POLL_COUNT.load(std::sync::atomic::Ordering::SeqCst);
+                            if tick.is_multiple_of(10) || fast_poll > 0 {
                                 refresh_local_projects(hwnd).await;
                                 refresh_cloud_projects(hwnd).await;
                                 // Live GitHub login gate: the token lives in the
@@ -1971,6 +1974,11 @@ fn spawn_provisioning(hwnd: HWND) {
                                 // vault-flow/xplat-gating-parity). Slow cadence
                                 // — login changes rarely vs VM health.
                                 refresh_github_login(hwnd).await;
+
+                                if fast_poll > 0 {
+                                    FAST_POLL_COUNT
+                                        .store(fast_poll - 1, std::sync::atomic::Ordering::SeqCst);
+                                }
                             }
                             tick = tick.wrapping_add(1);
                             tokio::time::sleep(std::time::Duration::from_secs(30)).await;
@@ -2171,6 +2179,12 @@ unsafe fn append_item(
     next_id: &mut u16,
     table: &mut HashMap<u16, String>,
 ) -> windows::core::Result<()> {
+    // Separator — Win32 horizontal rule.
+    if item.is_separator() {
+        AppendMenuW(parent, MF_SEPARATOR, 0, PCWSTR::null())?;
+        return Ok(());
+    }
+
     let label = to_utf16(&item.label);
     let label_pcwstr = PCWSTR(label.as_ptr());
 
@@ -2298,7 +2312,10 @@ fn dispatch_action(hwnd: HWND, action: MenuAction) {
         // The remaining arms are resolved + handled honestly, but their real
         // effect needs plumbing that is not present on Windows yet. Each logs
         // a specific reason rather than faking behaviour (w2 work queue).
-        MenuAction::OpenObservatorium | MenuAction::OpenOpenCodeWeb => {
+        MenuAction::OpenObservatorium
+        | MenuAction::OpenOpenCodeWeb
+        | MenuAction::ProjectObservatorium { .. }
+        | MenuAction::ProjectOpenCodeWeb { .. } => {
             // ShellExecute to the observatorium / OpenCode-Web URL lands with
             // the router/VM (gui-passthrough); there is no URL until then.
             tracing::info!(
@@ -2325,6 +2342,9 @@ fn dispatch_action(hwnd: HWND, action: MenuAction) {
         // picks the `PtyIntent`; `launch_spec` produces the exact forge-wrapped in-VM
         // argv; then we open it in a native Windows terminal via `wsl.exe`.
         MenuAction::Attach { .. } | MenuAction::Maintain { .. } | MenuAction::GithubLogin => {
+            if matches!(action, MenuAction::GithubLogin) {
+                FAST_POLL_COUNT.store(5, std::sync::atomic::Ordering::SeqCst);
+            }
             launch_open_shell_terminal(&action);
         }
         MenuAction::CloudOverflow | MenuAction::Inert => {}

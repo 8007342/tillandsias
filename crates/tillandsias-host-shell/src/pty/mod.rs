@@ -105,14 +105,17 @@ fn agent_flag(agent: SelectedAgent) -> &'static str {
 /// plan/issues/tray-convergence-coordination.md.
 ///
 /// @trace openspec/changes/control-wire-pty-attach/proposal.md (§3, host launch mapping)
+/// `selected_agent` is retained for backward compatibility with existing call
+/// sites (macOS tray passes it); it is IGNORED when `action` is `Attach`
+/// since per-project actions now carry the agent explicitly.
 pub fn intent_for_action(
     action: &MenuAction,
-    selected_agent: SelectedAgent,
+    _selected_agent: SelectedAgent,
 ) -> Option<(PtyIntent, Option<String>)> {
     match action {
         MenuAction::GithubLogin => Some((PtyIntent::GithubLogin, None)),
-        MenuAction::Attach { name, .. } => {
-            Some((PtyIntent::Agent(selected_agent), Some(name.clone())))
+        MenuAction::Attach { name, agent, .. } => {
+            Some((PtyIntent::Agent(*agent), Some(name.clone())))
         }
         MenuAction::Maintain { name, .. } => Some((PtyIntent::Shell, Some(name.clone()))),
         _ => None,
@@ -785,21 +788,42 @@ mod tests {
             intent_for_action(&MenuAction::GithubLogin, SelectedAgent::Claude),
             Some((PtyIntent::GithubLogin, None))
         );
-        // Attach launches the *currently selected* agent in the clicked
-        // project's forge (project name threaded through).
+        // Attach uses the agent embedded in the action (per-project leaf).
         assert_eq!(
             intent_for_action(
                 &MenuAction::Attach {
                     scope: ProjectScope::Local,
                     name: "myapp".to_string(),
+                    agent: SelectedAgent::Codex,
                 },
-                SelectedAgent::Codex,
+                SelectedAgent::Claude, // _selected_agent is ignored
             ),
             Some((
                 PtyIntent::Agent(SelectedAgent::Codex),
                 Some("myapp".to_string())
             ))
         );
+        // Each per-project agent variant maps to the correct PtyIntent.
+        for (agent, intent) in [
+            (
+                SelectedAgent::Claude,
+                PtyIntent::Agent(SelectedAgent::Claude),
+            ),
+            (
+                SelectedAgent::OpenCode,
+                PtyIntent::Agent(SelectedAgent::OpenCode),
+            ),
+        ] {
+            let r = intent_for_action(
+                &MenuAction::Attach {
+                    scope: ProjectScope::Cloud,
+                    name: "repo".to_string(),
+                    agent,
+                },
+                SelectedAgent::Codex,
+            );
+            assert_eq!(r, Some((intent, Some("repo".to_string()))));
+        }
         // Maintenance opens a login shell in the clicked project's forge.
         assert_eq!(
             intent_for_action(
@@ -814,13 +838,6 @@ mod tests {
         // Non-terminal actions open no PTY.
         assert_eq!(
             intent_for_action(&MenuAction::Quit, SelectedAgent::Claude),
-            None
-        );
-        assert_eq!(
-            intent_for_action(
-                &MenuAction::SelectAgent(SelectedAgent::Codex),
-                SelectedAgent::Claude
-            ),
             None
         );
         assert_eq!(

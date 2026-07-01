@@ -117,10 +117,16 @@ mod tests {
     #[test]
     fn render_marks_observatorium_disabled_with_v2_tooltip_on_macos() {
         let specs = render(&macos_ready_menu());
-        let obs = specs
+        let local = specs
             .iter()
-            .find(|s| s.id == ids::OBSERVATORIUM)
-            .expect("Observatorium present");
+            .find(|s| s.id == ids::LOCAL_PROJECTS)
+            .expect("local-projects");
+        let proj = &local.children[0];
+        let obs = proj
+            .children
+            .iter()
+            .find(|l| l.id.ends_with(&format!(".{}", ids::VERB_OBSERVATORIUM)))
+            .expect("observatorium leaf present in project submenu");
         assert!(!obs.enabled, "Observatorium must be disabled on macOS v1");
         assert_eq!(obs.tooltip, ids::V2_DISABLED_REASON);
     }
@@ -129,11 +135,17 @@ mod tests {
     #[test]
     fn render_marks_opencode_web_disabled_with_v2_tooltip_on_macos() {
         let specs = render(&macos_ready_menu());
-        let web = specs
+        let local = specs
             .iter()
-            .find(|s| s.id == ids::OPENCODE_WEB)
-            .expect("OpenCode Web present");
-        assert!(!web.enabled);
+            .find(|s| s.id == ids::LOCAL_PROJECTS)
+            .expect("local-projects");
+        let proj = &local.children[0];
+        let web = proj
+            .children
+            .iter()
+            .find(|l| l.id.ends_with(&format!(".{}", ids::VERB_OPENCODE_WEB)))
+            .expect("opencode-web leaf present in project submenu");
+        assert!(!web.enabled, "OpenCode Web must be disabled on macOS v1");
         assert_eq!(web.tooltip, ids::V2_DISABLED_REASON);
     }
 
@@ -161,32 +173,38 @@ mod tests {
             .find(|s| s.id == ids::LOCAL_PROJECTS)
             .expect("local-projects present");
         assert_eq!(projects.children.len(), 1);
-        // Each project becomes a sub-menu with attach + maintenance children.
-        assert_eq!(projects.children[0].children.len(), 2);
+        // Linux parity: each project has 6 leaves.
+        assert_eq!(
+            projects.children[0].children.len(),
+            6,
+            "each project has 6 leaves (claude/codex/opencode/opencode-web/observatorium/maintenance)"
+        );
     }
 
     /// @trace spec:macos-native-tray.ui.menu-parity@v1
     #[test]
     fn render_propagates_checkmarks_for_agents() {
         let specs = render(&macos_ready_menu());
-        let agents = specs.iter().find(|s| s.id == ids::AGENTS).expect("agents");
-        assert_eq!(agents.children.len(), 3);
-        // Default selected agent is Claude in macos_ready_menu().
+        // No top-level agents picker (Linux parity).
         assert!(
-            agents
-                .children
-                .iter()
-                .find(|c| c.id == ids::AGENT_CLAUDE)
-                .unwrap()
-                .checked
+            specs.iter().all(|s| s.id != ids::AGENTS),
+            "top-level agents picker must be gone (Linux parity)"
         );
-        assert!(
-            !agents
-                .children
-                .iter()
-                .find(|c| c.id == ids::AGENT_CODEX)
-                .unwrap()
-                .checked
+        // Per-project leaves include claude/codex/opencode as first 3 entries.
+        let local = specs
+            .iter()
+            .find(|s| s.id == ids::LOCAL_PROJECTS)
+            .expect("local-projects");
+        let proj = &local.children[0];
+        let verbs: Vec<&str> = proj
+            .children
+            .iter()
+            .map(|l| l.id.rsplit('.').next().unwrap_or(""))
+            .take(3)
+            .collect();
+        assert_eq!(
+            verbs,
+            vec![ids::VERB_CLAUDE, ids::VERB_CODEX, ids::VERB_OPENCODE]
         );
     }
 
@@ -194,11 +212,17 @@ mod tests {
     #[test]
     fn render_propagates_disabled_reason_into_tooltip() {
         let specs = render(&macos_ready_menu());
-        let observ = specs
+        let local = specs
             .iter()
-            .find(|s| s.id == ids::OBSERVATORIUM)
-            .expect("present");
-        assert!(!observ.tooltip.is_empty(), "tooltip must carry v2 reason");
+            .find(|s| s.id == ids::LOCAL_PROJECTS)
+            .expect("local-projects");
+        let proj = &local.children[0];
+        let obs = proj
+            .children
+            .iter()
+            .find(|l| l.id.ends_with(&format!(".{}", ids::VERB_OBSERVATORIUM)))
+            .expect("observatorium leaf present");
+        assert!(!obs.tooltip.is_empty(), "tooltip must carry v2 reason");
     }
 
     /// @trace spec:macos-native-tray.ui.menu-parity@v1
@@ -224,24 +248,23 @@ mod tests {
                 ids::STATUS,
                 ids::LOCAL_PROJECTS,
                 ids::CLOUD_PROJECTS,
-                ids::AGENTS,
-                ids::OBSERVATORIUM,
-                ids::OPENCODE_WEB,
+                ids::SEPARATOR,
                 ids::VERSION,
                 ids::QUIT,
             ],
-            "macOS authed Ready menu must match the 8-item login-gated contract (gap-2/F3)"
+            "macOS authed Ready menu must match the 6-item Linux parity contract"
         );
         assert!(
             !top_ids.contains(&ids::GITHUB_LOGIN),
             "github-login must not appear alongside the project body (F3)"
         );
-        // The two GUI-passthrough rows stay disabled on the macOS v1 surface,
-        // so the parity menu never leaks an enabled Observatorium/OpenCode Web.
-        assert!(
-            !specs[4].enabled && !specs[5].enabled,
-            "Observatorium + OpenCode Web must be disabled on macOS v1 (gap-2)"
-        );
+        // Global browser/agent rows removed; they now live in per-project submenus.
+        for gone in [ids::AGENTS, ids::OBSERVATORIUM, ids::OPENCODE_WEB] {
+            assert!(
+                !top_ids.contains(&gone),
+                "{gone} must NOT appear at top level (Linux parity)"
+            );
+        }
     }
 
     /// @trace spec:macos-native-tray.ui.menu-parity@v1
@@ -261,7 +284,13 @@ mod tests {
         let top_ids: Vec<&str> = specs.iter().map(|s| s.id.as_str()).collect();
         assert_eq!(
             top_ids,
-            vec![ids::STATUS, ids::GITHUB_LOGIN, ids::VERSION, ids::QUIT],
+            vec![
+                ids::STATUS,
+                ids::GITHUB_LOGIN,
+                ids::SEPARATOR,
+                ids::VERSION,
+                ids::QUIT
+            ],
             "logged-out macOS menu must collapse to the login-gated short list (F3)"
         );
     }
