@@ -2031,8 +2031,9 @@ fn ensure_proxy_running(debug: bool) -> Result<(), String> {
             .map_err(|e| e.to_string())
     })?;
     if debug {
-        eprintln!("[tillandsias] enclave proxy started");
+        eprintln!("[tillandsias] enclave proxy started, waiting for initialization...");
     }
+    std::thread::sleep(std::time::Duration::from_secs(3));
     Ok(())
 }
 

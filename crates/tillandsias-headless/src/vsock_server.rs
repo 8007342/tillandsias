@@ -446,7 +446,9 @@ async fn handle_connection(
                 //
                 // @trace spec:host-shell-architecture, spec:tillandsias-vault,
                 //        plan/issues/control-socket-protocol-convergence-2026-05-25.md (Q4)
-                let projects = fetch_cloud_projects();
+                let projects = tokio::task::spawn_blocking(fetch_cloud_projects)
+                    .await
+                    .unwrap_or_default();
                 let reply = ControlEnvelope {
                     wire_version: WIRE_VERSION,
                     seq: env.seq,
@@ -462,7 +464,12 @@ async fn handle_connection(
             ControlMessage::GithubLoginStatusRequest { seq } => {
                 // Probe GitHub auth end-to-end inside a container — no raw
                 // token is read into the vsock server process.
-                let handle = crate::remote_projects::probe_github_username(false);
+                let handle = tokio::task::spawn_blocking(|| {
+                    crate::remote_projects::probe_github_username(false)
+                })
+                .await
+                .ok()
+                .flatten();
                 let logged_in = handle.is_some();
                 let reply = ControlEnvelope {
                     wire_version: WIRE_VERSION,
