@@ -91,7 +91,22 @@ multi_host_development:
     before_long_verification: true
     before_checkpoint_push: true
     during_long_work: "at each meaningful checkpoint or before touching shared files"
-    integration_strategy: "strictly rebase onto origin/<branch> before push; cross-branch integration uses rebase, NOT git merge, to avoid duplicate commit hashes"
+    integration_strategy: >
+      Two distinct cases, do not conflate them.
+      (1) SAME-branch catch-up (your own UN-PUSHED local commits vs
+      origin/<same-branch> on a non-ff push): rebase your local commits onto
+      origin/<same-branch>, then run the Integration Verification Gate
+      (advance-work-from-plan §6) before push. This rewrites only un-published
+      hashes, so it cannot duplicate anything on the trunk.
+      (2) CROSS-branch integration (sibling->trunk e.g. windows-next->linux-next,
+      and main->branch): MERGE-ONLY (`git merge` / `gh pr merge --merge`). Merges
+      PRESERVE commit hashes, so git dedupes already-present commits via ancestry.
+      NEVER rebase or cherry-pick PUBLISHED commits across branches: that mints a
+      SECOND hash for the same change, and a later merge then applies BOTH copies —
+      this is precisely the cb9def48->6dbca259 duplication that broke the trunk.
+      (Earlier guidance said "rebase, not merge, for cross-branch"; that was
+      backwards and self-defeating — corrected 2026-06-30, see
+      plan/issues/methodology-integration-strategy-contradiction-2026-06-30.md.)
     conflict_policy:
       - "Spec, methodology, and plan conflicts block until explicitly reconciled."
       - "Platform crate conflicts stay on the owning platform branch unless a shared API contract changed."

@@ -1,5 +1,32 @@
 # Multi-Host Coordination Loop Status
 
+LastExecutionTime: 2026-06-30T21:45Z
+
+## This Loop (2026-06-30T21:38Z, linux_mutable — /meta-orchestration SOUNDNESS VALIDATION)
+
+Operator asked to run a meta-orch cycle and report whether the updated process
+(the order-133 Integration Verification Gate + integration_strategy) is sound and
+complete. Verdict: the **Gate is sound**; the **integration_strategy was unsound**
+and is now corrected.
+
+- **Start-of-cycle guards: PASS** — credential guard `ok:gh-keyring`, clean tree,
+  in sync, sibling heads recorded (windows-next +19, osx-next converged to 0).
+- **Soundness flaw FOUND + FIXED**: order-133's `integration_strategy` said
+  "cross-branch integration uses rebase, NOT git merge" — which contradicts the
+  coordinator duty ("merge windows/osx into linux-next"), the release skill
+  (`gh pr merge --merge`), and all history (merge commits), AND is self-defeating
+  (cherry-picking published sibling commits remints hashes → re-creates the very
+  duplication 133 prevented). Corrected methodology + advance-work §6 +
+  coordinate-multihost-work to: same-branch=rebase un-pushed local; cross-branch=merge.
+- **Gate dogfooded**: every push this cycle ran the marker scan + YAML validation
+  before push; caught nothing (clean), behaved correctly.
+- **Completeness**: 3 of 4 reconciliation points closed; remaining =
+  `litmus:integration-strategy-consistency` (order 136 last item).
+- **Coordinator note**: windows-next is +19 (shared vault/proxy/tray fixes) ready to
+  MERGE into linux-next under the corrected strategy — deferred (large; do under a
+  quiet window per the same concurrency discipline).
+
+
 LastExecutionTime: 2026-06-28T09:20Z
 
 ## This Loop (2026-06-28T07:56Z, linux_mutable — meta-orch + queue drain)

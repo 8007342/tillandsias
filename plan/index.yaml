@@ -7991,10 +7991,28 @@ plan_index:
         closed packets bury active ones, slow selection, and inflate the merge
         surface. Move closed packets to plan/archive/ (date-partitioned, history
         preserved) via scripts/archive-plan-packets.sh; keep index to active set.
+      events:
+        - type: progress
+          ts: "2026-06-30T14:30Z"
+          agent_id: "linux-yoga-sonnet46-20260630T1410Z"
+          summary: >
+            Tooling exists (scripts/archive-plan-packets.{rb,sh}, plan/archive/ with
+            packets-2026-05/06.yaml) but the BULK RUN is DEFERRED to a quiet window /
+            smoke lock per this packet's own coordination requirement: 33 commits
+            landed from concurrent agents while away, and a ~6000-line index rewrite
+            during active concurrency would near-certainly hit a massive rebase
+            conflict (the exact trunk-breakage the convergence work prevents). Two
+            blockers to fix FIRST: (1) archive-plan-packets.sh --check runs the REAL
+            archiver (side effects on plan/archive/*.yaml) then restores only index —
+            not a clean dry run; (2) its semantics are inverted — it reports "failed"
+            whenever there IS work to do, instead of verifying a SECOND run is a no-op.
+            Fix --check to a true idempotency probe (apply, then assert re-run is a
+            no-op) on isolated paths before the bulk run. Index still 7987 lines.
       exit_criteria:
+        - "FIRST: fix archive-plan-packets.sh --check (no side effects; verify re-run is a no-op)"
+        - "Run bulk archival under the smoke lock / integration lull (not during active concurrency)"
         - "plan/index.yaml reduced to ~active set (target < ~1500 lines); both YAMLs parse"
         - "No packet lost (closed_before == archived + closed_remaining)"
-        - "scripts/archive-plan-packets.sh --check idempotent; advance-work still finds active packets"
         - "Tombstone-not-delete; events history preserved in archive"
 
     - packet_id: stale-reference-cleanup-audit
@@ -8050,8 +8068,43 @@ plan_index:
             no bare semicolons. All 19 pty tests pass. Tray rebuilt and relaunched
             as 0.3.260630.3.
 
-    - packet_id: transport-negligible-overhead-audit
+    - packet_id: methodology-integration-strategy-contradiction
       order: 137
+      title: "Methodology: correct integration_strategy (cross-branch is merge, not rebase) + reconcile skills"
+      status: in_progress
+      kind: analysis+enhancement
+      deliverable: plan/issues/methodology-integration-strategy-contradiction-2026-06-30.md
+      depends_on: [methodology-concurrent-integration-duplication]
+      pickup_role: linux
+      capability_tags: [docs, methodology, testing]
+      estimated_hours: 2
+      outcome: >
+        A /meta-orchestration soundness run found order-133's integration_strategy was
+        backwards: it said "cross-branch integration uses rebase, NOT git merge", which
+        contradicts the coordinator duty ("merge windows/osx into linux-next"), the
+        release skill (gh pr merge --merge), and actual history (all merge commits) —
+        and is self-defeating (cherry-picking published sibling commits remints hashes,
+        re-creating the cb9def24->6dbca259 duplication). Corrected the methodology to:
+        same-branch catch-up = rebase un-pushed local commits; cross-branch = merge-only
+        (preserves hashes, git dedupes via ancestry). advance-work §6 gate clarified.
+      events:
+        - type: progress
+          ts: "2026-06-30T21:45Z"
+          agent_id: "linux-yoga-sonnet46-20260630T2138Z"
+          summary: >
+            Corrected methodology/multi-host-development.yaml integration_strategy and
+            clarified advance-work §6 (rebase = same-branch only; cross-branch = merge).
+            Remaining: same fix in skills/multihost-orchestration; a
+            litmus:integration-strategy-consistency that fails if methodology or any
+            skill says "rebase" for cross-branch sibling/main integration.
+      exit_criteria:
+        - "methodology integration_strategy states same-branch=rebase, cross-branch=merge — DONE"
+        - "advance-work §6 gate clarifies same-branch vs cross-branch — DONE"
+        - "skills/coordinate-multihost-work sibling step says merge + cites strategy — DONE"
+        - "litmus:integration-strategy-consistency pinned + green — TODO (last remaining item)"
+
+    - packet_id: transport-negligible-overhead-audit
+      order: 138
       title: "Audit: transport layer must add negligible overhead (wire oscillation root cause)"
       status: ready
       kind: audit+enhancement
@@ -8075,7 +8128,7 @@ plan_index:
         - "Doc: transport overhead guarantee written to cheatsheets/transport-overhead.md"
 
     - packet_id: wire-oscillation-root-cause
-      order: 138
+      order: 139
       title: "Investigate: headless crash causing wire degraded/recovered oscillations"
       status: ready
       kind: investigation+bug-fix
@@ -8097,7 +8150,7 @@ plan_index:
         - "litmus:headless-keepalive added — vsock listener is long-lived"
 
     - packet_id: curated-status-messages
-      order: 139
+      order: 140
       title: "UX: curated status messages — 45-char hard cap, no stack spillage"
       status: completed
       kind: ux+bug-fix
@@ -8143,7 +8196,7 @@ plan_index:
             + litmus binding) deferred to order 145 (macos-tray-stream-refactor).
 
     - packet_id: post-login-cloud-refresh
-      order: 140
+      order: 141
       title: "Investigate: token storage + cloud refresh not triggering after GitHub Login"
       status: ready
       kind: investigation+enhancement
@@ -8171,7 +8224,7 @@ plan_index:
     # ─────────────────────────────────────────────────────────────────────────
 
     - packet_id: socket-audit-master
-      order: 141
+      order: 142
       title: "MASTER AUDIT: Observable streams at all transport boundaries (4-agent ratification)"
       status: ready
       kind: audit+refactor
@@ -8224,7 +8277,7 @@ plan_index:
         - "Vault watch: token change -> login state update in <1s"
 
     - packet_id: socket-protocol-push-variants
-      order: 142
+      order: 143
       title: "Protocol: add VmStatusPush + LoginStatePush + CloudProjectsPush + Subscribe to control wire"
       status: ready
       kind: protocol+implementation
@@ -8249,7 +8302,7 @@ plan_index:
         - "Wire version bumped; backward-compat: unrecognized variants = warn + skip"
 
     - packet_id: vm-headless-persistent-listener
-      order: 143
+      order: 144
       title: "VM Headless: persistent vsock listener + server-push event stream"
       status: ready
       kind: refactor+implementation
@@ -8278,7 +8331,7 @@ plan_index:
       verification_required: [claude-opus-highthink, opencode-bigpickle, antigravity-gemini, codex-gpt55-highthink]
 
     - packet_id: windows-tray-stream-refactor
-      order: 144
+      order: 145
       title: "Windows Tray: replace 30s polling loop with reader task + watch channels"
       status: ready
       kind: refactor
@@ -8306,7 +8359,7 @@ plan_index:
       verification_required: [claude-opus-highthink, opencode-bigpickle, antigravity-gemini, codex-gpt55-highthink]
 
     - packet_id: macos-tray-stream-refactor
-      order: 145
+      order: 146
       title: "macOS Tray: replace polling with reader task + watch channels (mirrors order 144)"
       status: ready
       kind: refactor
@@ -8330,7 +8383,7 @@ plan_index:
       verification_required: [claude-opus-highthink, opencode-bigpickle, antigravity-gemini, codex-gpt55-highthink]
 
     - packet_id: linux-native-stream-audit
-      order: 146
+      order: 147
       title: "Linux Native Tray/Host: audit and fix any polling in tillandsias-headless local path"
       status: ready
       kind: audit+refactor
@@ -8353,7 +8406,7 @@ plan_index:
       verification_required: [claude-opus-highthink, opencode-bigpickle, antigravity-gemini, codex-gpt55-highthink]
 
     - packet_id: headless-podman-unix-streams
-      order: 147
+      order: 148
       title: "Headless ↔ Podman: Unix socket async streams (replace podman exec + HTTP poll)"
       status: ready
       kind: refactor+implementation
@@ -8381,7 +8434,7 @@ plan_index:
       verification_required: [claude-opus-highthink, opencode-bigpickle, antigravity-gemini, codex-gpt55-highthink]
 
     - packet_id: vault-blocking-watch
-      order: 148
+      order: 149
       title: "Vault: replace periodic token poll with blocking-watch HTTP stream"
       status: ready
       kind: refactor
