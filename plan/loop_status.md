@@ -1,5 +1,47 @@
 # Multi-Host Coordination Loop Status
 
+LastExecutionTime: 2026-07-01T22:30Z
+
+## This Loop (2026-07-01T22:17Z, linux_mutable — /meta-orchestration: audit + macOS unblock + security audit)
+
+Operator asked for a state audit, to unblock the macOS builder's linux-side
+blocker, and a zero-trust security audit of the enclave.
+
+- **Start-of-cycle guards: PASS** — credential guard `ok:gh-keyring`, clean tree,
+  in sync. Sibling heads: osx-next was +6, windows-next +32.
+- **Coordinator merge (osx-next → linux-next)**: integrated the 6 new macOS
+  commits (PTY raw-mode + wire hardening, SELinux launch-spec fixes, the Phase 3d
+  packet, and the **critical base64-Python-injection violation record + removal**).
+  One conflict in `pty/mod.rs` resolved (kept linux HEAD's env-export GithubLogin
+  launch spec). Integration Verification Gate ran clean; pushed `537408fd`.
+  osx-next is now 0 ahead (fully integrated).
+- **macOS blocker RESOLVED (Phase 3d, `fe66b10d`)**: the linux-side blocker was
+  `vault_bootstrap.rs` setting `label=type:vault_container_t` (Phase 3c) while the
+  type was never loaded on the enforcing Fedora 44 VZ guest → crun EINVAL, exit
+  126, blocking `--github-login`/`--list-cloud-projects` on macOS. Fixed in-guest:
+  headless now loads a minimal `images/selinux/vault_container.cil` (base-refpolicy
+  only, typepermissive) via `ensure_vault_selinux_module()` before the labelled
+  run — idempotent, failure-open, fixes all guests (VZ/native/WSL) in one
+  linux-owned change. Supersedes the removed base64 stopgap. Litmus pinned.
+  **macOS builder: re-run `--github-login` on v-next to confirm exit 0.**
+- **Zero-trust security audit (`2a1b60b0`)**: full report in
+  `plan/issues/security-audit-zero-trust-2026-07-01.md`. Enclave NETWORK boundary
+  matches spec, but the NEW vsock host→guest→podman-exec chain is **unauthenticated
+  end to end** (verified in-tree: `vsock_server.rs` binds VMADDR_CID_ANY, accepts
+  any peer, gates only on a self-reported Hello.from; `Unauthorized` code unused).
+  Promoted P0/P1 packets **137** (authenticate vsock exec chain, failure-closed +
+  rejection litmus), **138** (shred first-boot Vault root-token tmpfs residual),
+  **139** (spec the exec authz boundary + proxy-exemption audit + missing e2e gate).
+  Removed the last dead `images/zeroclaw/` orphan dir.
+- **E2E gate**: `eligible` but NOT run — this host is SELinux-**Disabled**, so the
+  Phase 3d `label=type:` path is a podman no-op here; the fix's real validation is
+  the enforcing macOS guest. A destructive Linux local-build smoke would not
+  exercise the change. Deferred to the macOS builder's `--github-login` re-run.
+- **Release**: none this cycle (latest published remains v0.3.260630.1). Security
+  P0-137 should land before the next release given it's the top open risk.
+- **Coordinator note**: windows-next is +32 (large; shared vault/proxy/tray + facade
+  work) — cross-branch MERGE deferred to a quiet window per concurrency discipline.
+
 LastExecutionTime: 2026-06-30T21:45Z
 
 ## This Loop (2026-06-30T21:38Z, linux_mutable — /meta-orchestration SOUNDNESS VALIDATION)
