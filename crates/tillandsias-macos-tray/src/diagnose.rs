@@ -399,67 +399,6 @@ pub fn exec_guest_main(argv: Vec<String>) -> i32 {
         }
     })
 }
-pub fn exec_guest_interactive_main(argv: Vec<String>) -> i32 {
-    use tillandsias_vm_layer::VmRuntime;
-    if argv.is_empty() {
-        eprintln!("--exec-guest-interactive requires a command");
-        return 2;
-    }
-    let vz = tillandsias_vm_layer::vz::VzRuntime::new(3, image_root());
-    vz.set_serial_to_log(true);
-    if !vz.is_provisioned() {
-        eprintln!("{{\"error\":\"not provisioned; run --provision first\"}}");
-        return 1;
-    }
-    let rt = match tokio::runtime::Builder::new_current_thread()
-        .enable_all()
-        .build()
-    {
-        Ok(r) => r,
-        Err(e) => {
-            eprintln!("{{\"error\":\"tokio runtime: {e}\"}}");
-            return 1;
-        }
-    };
-    let argv_ref: Vec<&str> = argv.iter().map(|s| s.as_str()).collect();
-
-    let code = rt.block_on(async move {
-        use std::time::Duration;
-        use tillandsias_control_wire::transport::CONTROL_WIRE_VSOCK_PORT;
-
-        if let Err(e) = vz.start().await {
-            eprintln!("start: {e}");
-            return 1;
-        }
-        if let Err(e) = vz.wait_phase_ready(Duration::from_secs(300)).await {
-            eprintln!("wait_phase_ready: {e}");
-            let _ = vz.stop(Duration::from_secs(10)).await;
-            return 1;
-        }
-        let stream = match vz
-            .open_vsock_stream_current_thread(CONTROL_WIRE_VSOCK_PORT, Duration::from_secs(30))
-            .await
-        {
-            Ok(s) => s,
-            Err(e) => {
-                eprintln!("vsock connect: {e}");
-                let _ = vz.stop(Duration::from_secs(10)).await;
-                return 1;
-            }
-        };
-        let result = tillandsias_vm_layer::vsock_exec::exec_interactive(stream, &argv_ref).await;
-        let _ = vz.stop(Duration::from_secs(10)).await;
-        match result {
-            Ok(out) => out.exit.code,
-            Err(e) => {
-                eprintln!("vsock_exec: {e}");
-                1
-            }
-        }
-    });
-
-    std::process::exit(code);
-}
 
 /// Prompt the user on the host terminal and read a single line. When `hidden`,
 /// terminal echo is disabled via `stty -echo` for the duration (no extra crate
