@@ -76,6 +76,15 @@ pub enum PtyIntent {
     Agent(SelectedAgent),
 }
 
+/// Python3 podman shim (base64-encoded) that swaps
+/// `label=type:vault_container_t` → `label=disable` for vault containers.
+/// Fedora 44 enforcing SELinux rejects the undefined type with EINVAL.
+/// Headless reads TILLANDSIAS_PODMAN_BIN to find the wrapper.
+/// Identical to osx-next commit 1325bea9.
+/// TODO(selinux): remove once images/selinux/vault_container.cil is loaded (Phase 3d).
+#[rustfmt::skip]
+const PODMAN_SELINUX_WRAP_B64: &str = "IyEvdXNyL2Jpbi9lbnYgcHl0aG9uMwppbXBvcnQgc3lzLCBzdWJwcm9jZXNzCmFyZ3MgPSBzeXMuYXJndlsxOl0Kb3V0ID0gW10KaSA9IDAKd2hpbGUgaSA8IGxlbihhcmdzKToKICAgIGlmIGFyZ3NbaV0gPT0gJy0tc2VjdXJpdHktb3B0JyBhbmQgaSsxIDwgbGVuKGFyZ3MpIGFuZCBhcmdzW2krMV0gPT0gJ2xhYmVsPXR5cGU6dmF1bHRfY29udGFpbmVyX3QnOgogICAgICAgIG91dCArPSBbJy0tc2VjdXJpdHktb3B0JywgJ2xhYmVsPWRpc2FibGUnXQogICAgICAgIGkgKz0gMgogICAgZWxzZToKICAgICAgICBvdXQuYXBwZW5kKGFyZ3NbaV0pCiAgICAgICAgaSArPSAxCnN5cy5leGl0KHN1YnByb2Nlc3MuY2FsbChbJy91c3IvYmluL3BvZG1hbiddICsgb3V0KSkK";
+
 fn agent_flag(agent: SelectedAgent) -> &'static str {
     match agent {
         SelectedAgent::Claude => "--claude",
@@ -171,16 +180,25 @@ pub fn launch_spec(intent: &PtyIntent, project: Option<&str>, rows: u16, cols: u
             // `&&` is NOT a wt.exe separator and behaves identically here since
             // all exports/install succeed unconditionally.
             // See plan/issues/wt-github-login-semicolons-2026-06-30.md
-            vec![
-                "/bin/bash".to_string(),
-                "-lc".to_string(),
-                "export HOME=\"${HOME:-/root}\" \
-                 && export XDG_RUNTIME_DIR=\"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}\" \
-                 && install -d -m 0700 \"$XDG_RUNTIME_DIR\" \
-                 && export TILLANDSIAS_VAULT_API_BASE_URL=\"${TILLANDSIAS_VAULT_API_BASE_URL:-https://vault:8200}\" \
-                 && exec tillandsias-headless --github-login"
-                    .to_string(),
-            ]
+            //
+            // SELinux podman wrapper: Fedora 44 enforcing mode rejects
+            // label=type:vault_container_t (Phase 3d not yet complete). Install a
+            // Python3 shim via PODMAN_SELINUX_WRAP_B64, set TILLANDSIAS_PODMAN_BIN.
+            // Parity with osx-next commit 1325bea9.
+            // TODO(selinux): remove when vault_container.cil is semodule-loaded.
+            {
+                let script = String::from("echo ")
+                    + PODMAN_SELINUX_WRAP_B64
+                    + " | base64 -d > /tmp/podman-selinux-wrap"
+                    + " && chmod +x /tmp/podman-selinux-wrap"
+                    + " && export TILLANDSIAS_PODMAN_BIN=/tmp/podman-selinux-wrap"
+                    + " && export HOME=\"${HOME:-/root}\""
+                    + " && export XDG_RUNTIME_DIR=\"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}\""
+                    + " && install -d -m 0700 \"$XDG_RUNTIME_DIR\""
+                    + " && export TILLANDSIAS_VAULT_API_BASE_URL=\"${TILLANDSIAS_VAULT_API_BASE_URL:-https://vault:8200}\""
+                    + " && exec tillandsias-headless --github-login";
+                vec!["/bin/bash".to_string(), "-lc".to_string(), script]
+            }
         }
         PtyIntent::Agent(agent) => {
             vec!["tillandsias".to_string(), agent_flag(*agent).to_string()]
@@ -702,32 +720,31 @@ mod tests {
             launch_spec(&PtyIntent::Shell, None, 24, 80).argv,
             vec!["/bin/bash", "-l"]
         );
-        // GitHub login runs the orchestrated subcommand (git/vault-container
-        // flow + Vault write) through a LOGIN shell so PATH is rebuilt and the
-        // guest `tillandsias-headless` binary resolves — NOT bare
-        // `gh auth login`, which had no `gh` in the VM rootfs and rendered a
-        // blank attach surface on macOS/Windows.
-        assert_eq!(
-            launch_spec(&PtyIntent::GithubLogin, None, 24, 80).argv,
-            vec![
-                "/bin/bash",
-                "-lc",
-                "export HOME=\"${HOME:-/root}\" \
-                 && export XDG_RUNTIME_DIR=\"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}\" \
-                 && install -d -m 0700 \"$XDG_RUNTIME_DIR\" \
-                 && export TILLANDSIAS_VAULT_API_BASE_URL=\"${TILLANDSIAS_VAULT_API_BASE_URL:-https://vault:8200}\" \
-                 && exec tillandsias-headless --github-login"
-            ]
-        );
-        let github_cmd = &launch_spec(&PtyIntent::GithubLogin, None, 24, 80).argv[2];
+        // GitHub login runs the orchestrated subcommand through a LOGIN shell.
+        // Exact script is tested via invariants below (wrapper b64 makes the
+        // string too long for a readable literal assert_eq!).
+        let gl = launch_spec(&PtyIntent::GithubLogin, None, 24, 80);
+        assert_eq!(gl.argv[0], "/bin/bash");
+        assert_eq!(gl.argv[1], "-lc");
+        let github_cmd = &gl.argv[2];
         // No bare `;` — wt.exe uses `;` as its command separator; `&&` avoids the split.
         assert!(
             !github_cmd.contains(';'),
             "script must not contain `;` (wt.exe separator bug)"
         );
+        // SELinux wrapper is installed before exec (osx-next 1325bea9 parity).
+        assert!(
+            github_cmd.contains("podman-selinux-wrap"),
+            "script must install SELinux podman wrapper"
+        );
+        assert!(
+            github_cmd.contains("TILLANDSIAS_PODMAN_BIN=/tmp/podman-selinux-wrap"),
+            "script must export TILLANDSIAS_PODMAN_BIN"
+        );
         assert!(github_cmd.contains("install -d -m 0700 \"$XDG_RUNTIME_DIR\""));
         assert!(github_cmd.contains("TILLANDSIAS_VAULT_API_BASE_URL"));
         assert!(github_cmd.contains("https://vault:8200"));
+        assert!(github_cmd.contains("exec tillandsias-headless --github-login"));
         assert_eq!(
             launch_spec(&PtyIntent::Agent(SelectedAgent::OpenCode), None, 24, 80).argv,
             vec!["tillandsias", "--opencode"]
