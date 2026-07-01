@@ -8018,3 +8018,58 @@ plan_index:
         - "litmus:no-dangling-removed-component-refs green (no live zeroclaw refs outside historical record)"
         - "Superseded specs marked obsolete + tombstone in litmus-bindings"
         - "plan/archive/README.md documents the archive layout"
+
+    - packet_id: wt-github-login-semicolons-fix
+      order: 136
+      title: "Fix: wt.exe semicolon bug breaks GitHub Login terminal launch (0x80070002)"
+      status: completed
+      kind: bug-fix
+      deliverable: plan/issues/wt-github-login-semicolons-2026-06-30.md
+      depends_on: []
+      pickup_role: windows
+      capability_tags: [windows, tray, pty]
+      estimated_hours: 1
+      outcome: >
+        `wt.exe` uses `;` as its own command separator; the GitHub Login bash `-lc`
+        script's semicolons were being split by wt.exe, causing it to try to execute
+        `exec tillandsias-headless --github-login` as a Windows program → ERROR_FILE_NOT_FOUND
+        (0x80070002). Fix: replace `;` with `&&` in the PtyIntent::GithubLogin bash script
+        in tillandsias-host-shell::pty::launch_spec. `&&` is not a wt.exe separator.
+        Regression guard test added: `!github_cmd.contains(';')`.
+      exit_criteria:
+        - "GitHub Login opens a terminal and runs tillandsias-headless --github-login without 0x80070002"
+        - "test launch_spec_maps_intents_to_in_vm_argv asserts no bare semicolons in GithubLogin script"
+      events:
+        - type: completed
+          ts: "2026-06-30T00:00:00Z"
+          agent_id: "windows-claude-20260630T0000Z"
+          commit_hash: "pending"
+          evidence: >
+            Replaced `;` with `&&` in PtyIntent::GithubLogin bash script in
+            crates/tillandsias-host-shell/src/pty/mod.rs. Updated test to assert
+            no bare semicolons. All 19 pty tests pass. Tray rebuilt and relaunched
+            as 0.3.260630.3.
+
+    - packet_id: transport-negligible-overhead-audit
+      order: 137
+      title: "Audit: transport layer must add negligible overhead (wire oscillation root cause)"
+      status: ready
+      kind: audit+enhancement
+      deliverable: plan/issues/transport-negligible-overhead-2026-06-30.md
+      depends_on: []
+      pickup_role: any
+      capability_tags: [windows, linux, transport, performance, observability]
+      estimated_hours: 6
+      outcome: >
+        Guarantee that the HvSocket/vsock transport stack adds negligible overhead:
+        amortized O(0) connection setup (LIVE_CLIENT persists), O(1) framing per message
+        (postcard zero-copy), no tight-loop polling NOOPs. Separately: investigate and fix
+        the in-VM headless crash causing wire-degraded/recovered oscillations observed
+        2026-06-30 (root cause: headless crashes during Ready phase, likely Vault/podman
+        not yet stable). Add litmus:no-polling-noops to prevent future regression.
+      exit_criteria:
+        - "LIVE_CLIENT confirmed persistent — not reopened on every poll tick"
+        - "No tight-loop retries in refresh_vm_status or refresh_github_login"
+        - "Headless crash root cause identified and fixed (wire oscillations stop)"
+        - "litmus:no-polling-noops added and green"
+        - "Doc: transport overhead guarantee written to cheatsheets/transport-overhead.md"

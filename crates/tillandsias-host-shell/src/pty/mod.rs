@@ -159,14 +159,23 @@ pub fn launch_spec(intent: &PtyIntent, project: Option<&str>, rows: u16, cols: u
             // Guest binary name is `tillandsias-headless` (see
             // tillandsias-vm-layer vz.rs / wsl.rs), not `tillandsias`.
             // See plan/issues/macos-tray-github-login-blank-terminal-2026-06-21.md.
+            //
+            // IMPORTANT: Use `&&` NOT `;` as statement separator. Windows Terminal
+            // (wt.exe) uses `;` as its OWN command separator in argv parsing, so
+            // a bash script passed as a `-lc` arg that contains `;` is split by
+            // wt.exe into fragments, and the last fragment (` exec ...`) is tried
+            // as a Windows executable → ERROR_FILE_NOT_FOUND (0x80070002).
+            // `&&` is NOT a wt.exe separator and behaves identically here since
+            // all exports/install succeed unconditionally.
+            // See plan/issues/wt-github-login-semicolons-2026-06-30.md
             vec![
                 "/bin/bash".to_string(),
                 "-lc".to_string(),
-                "export HOME=\"${HOME:-/root}\"; \
-                 export XDG_RUNTIME_DIR=\"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}\"; \
-                 install -d -m 0700 \"$XDG_RUNTIME_DIR\"; \
-                 export TILLANDSIAS_VAULT_API_BASE_URL=\"${TILLANDSIAS_VAULT_API_BASE_URL:-https://vault:8200}\"; \
-                 exec tillandsias-headless --github-login"
+                "export HOME=\"${HOME:-/root}\" \
+                 && export XDG_RUNTIME_DIR=\"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}\" \
+                 && install -d -m 0700 \"$XDG_RUNTIME_DIR\" \
+                 && export TILLANDSIAS_VAULT_API_BASE_URL=\"${TILLANDSIAS_VAULT_API_BASE_URL:-https://vault:8200}\" \
+                 && exec tillandsias-headless --github-login"
                     .to_string(),
             ]
         }
@@ -700,14 +709,19 @@ mod tests {
             vec![
                 "/bin/bash",
                 "-lc",
-                "export HOME=\"${HOME:-/root}\"; \
-                 export XDG_RUNTIME_DIR=\"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}\"; \
-                 install -d -m 0700 \"$XDG_RUNTIME_DIR\"; \
-                 export TILLANDSIAS_VAULT_API_BASE_URL=\"${TILLANDSIAS_VAULT_API_BASE_URL:-https://vault:8200}\"; \
-                 exec tillandsias-headless --github-login"
+                "export HOME=\"${HOME:-/root}\" \
+                 && export XDG_RUNTIME_DIR=\"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}\" \
+                 && install -d -m 0700 \"$XDG_RUNTIME_DIR\" \
+                 && export TILLANDSIAS_VAULT_API_BASE_URL=\"${TILLANDSIAS_VAULT_API_BASE_URL:-https://vault:8200}\" \
+                 && exec tillandsias-headless --github-login"
             ]
         );
         let github_cmd = &launch_spec(&PtyIntent::GithubLogin, None, 24, 80).argv[2];
+        // No bare `;` — wt.exe uses `;` as its command separator; `&&` avoids the split.
+        assert!(
+            !github_cmd.contains(';'),
+            "script must not contain `;` (wt.exe separator bug)"
+        );
         assert!(github_cmd.contains("install -d -m 0700 \"$XDG_RUNTIME_DIR\""));
         assert!(github_cmd.contains("TILLANDSIAS_VAULT_API_BASE_URL"));
         assert!(github_cmd.contains("https://vault:8200"));
