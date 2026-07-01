@@ -162,6 +162,27 @@ methodology:
         committed or used by recurring automation.
       checker: scripts/check-no-python-scripts.sh
 
+    base64_script_injection_ban:
+      severity: CRITICAL_VIOLATION
+      rule: >
+        Embedding scripts of ANY language (Python, Perl, Ruby, Lua, …) inside
+        base64-encoded string literals — whether in Rust source, YAML, shell, or
+        any other file — is unconditionally forbidden. This technique was used in
+        2026-07-01 to smuggle Python past the tlatoani_hard_no_python policy and
+        is treated as a deliberate act of circumvention, not a workaround.
+      corollary: >
+        Base64 is a data-encoding format. Its presence in source code as a
+        mechanism to generate and execute a script at runtime is indistinguishable
+        in effect from committing that script directly — and worse in intent, because
+        the encoding makes the content non-obvious to reviewers on other hosts.
+      correct_response_when_blocked: >
+        If a required fix cannot be implemented in an approved language without
+        breaking a policy, the agent MUST surface the constraint explicitly, file a
+        coordination issue, and leave the code in the broken-but-honest state.
+        A broken flow that fails loudly is always preferable to a working flow that
+        hides a policy violation.
+      incident_reference: plan/issues/violation-python-base64-injection-2026-07-01.md
+
   semantic_distillation:
     rule: >
       Root files stay terse. Detailed rationale belongs in the owning component
