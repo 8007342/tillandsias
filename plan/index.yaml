@@ -7864,7 +7864,7 @@ plan_index:
     - packet_id: agent-login-flows-research
       order: 131
       title: "Research: --claude-login / --codex-login / --antigravity-login flows"
-      status: ready
+      status: done
       kind: research
       deliverable: plan/issues/agent-login-flows-research-2026-06-28.md
       depends_on: []
@@ -7878,6 +7878,32 @@ plan_index:
         OAuth/device-code (new secret/<provider>/oauth schema + refresh). Define the
         containerized boundary, required egress endpoints, and the shared
         run_provider_login(ProviderId, AuthModel) shape.
+      resolution: >
+        Operator decided 2026-07-01: support BOTH, on separate tracks. OAuth
+        (subscription) is the login-flow track and ships first — the three
+        --<provider>-login subcommands persist secret/<provider>/oauth
+        {access,refresh,expiry,scope} via a containerized device-code/OOB flow
+        (auth URL shown, operator authorizes on host browser, pastes code back
+        through the github-login paste pipe, CLI exchanges tokens in-container,
+        host never sees them). API keys are the AUTONOMOUS track (existing
+        secret/<provider>/api-key plumbing, order 112); a dedicated API-key ENTRY
+        flow is deferred to order 143. run_provider_login scoped to
+        AuthModel::OAuthDeviceCode; ApiKeyPaste added by 143. Full verdict +
+        Vault schema + egress + API shape in the deliverable.
+      events:
+        - type: claim
+          ts: "2026-07-01T23:35:00Z"
+          agent_id: "linux-yoga-fable5-20260701T2305Z"
+          host: "linux"
+          lease_id: "agent-login-flows-research-claim-1"
+          expires_at: "2026-07-02T03:35:00Z"
+        - type: completed
+          ts: "2026-07-01T23:38:00Z"
+          agent_id: "linux-yoga-fable5-20260701T2305Z"
+          summary: >
+            Operator auth-model decision recorded; OAuth-track verdict, Vault oauth
+            schema, OOB mechanism, egress deferral to order 129/130, and
+            run_provider_login shape all specified. API-key entry deferred to order 143.
       exit_criteria:
         - "Auth model decided per service (API-key vs OAuth) with operator sign-off"
         - "Vault OAuth-token schema defined if any OAuth flow chosen"
@@ -7886,7 +7912,7 @@ plan_index:
 
     - packet_id: agent-login-flows-impl
       order: 132
-      title: "Impl: --claude-login / --codex-login / --antigravity-login via run_provider_login"
+      title: "Impl: OAuth --claude-login / --codex-login / --antigravity-login via run_provider_login"
       status: pending
       kind: enhancement
       deliverable: plan/issues/agent-login-flows-impl-2026-06-28.md
@@ -7894,17 +7920,53 @@ plan_index:
       pickup_role: linux
       capability_tags: [rust, vault, podman]
       estimated_hours: 8
+      scope_note: >
+        RE-SCOPED 2026-07-01 to the OAuth track only (operator decision in order 131):
+        the three --<provider>-login subcommands are OAuth/subscription flows storing
+        secret/<provider>/oauth. The API-key ENTRY flow moved to order 143
+        (agent-api-key-login-flows). run_provider_login uses AuthModel::OAuthDeviceCode.
       outcome: >
-        Implement the three flows as a parameterized run_provider_login mirroring
-        run_github_login: API-key flows first (slice 1, reuses ProviderId +
-        read/write_provider_api_key), then OAuth/device-code (slice 2) for Google/
-        Antigravity and any OAuth-default service, then operator-gated tray status
-        (slice 3). Credentials in Vault; host never holds raw values.
+        Implement the three OAuth login flows as a parameterized run_provider_login
+        mirroring run_github_login: containerized --rm forge-image login drives the
+        agent CLI's OAuth, shows an auth URL/user-code on the PTY, operator authorizes
+        on the host browser and pastes the code back through the github-login paste
+        pipe, the CLI exchanges tokens in-container, and {access,refresh,expiry,scope}
+        are written to secret/<provider>/oauth; host never holds a token. Plus a
+        refresh_provider_oauth path and operator-gated per-provider tray status.
       exit_criteria:
-        - "--claude-login/--codex-login/--antigravity-login implemented via shared run_provider_login"
-        - "Credentials stored in Vault per the research schema; host never sees raw values"
+        - "--claude-login/--codex-login/--antigravity-login implemented via shared run_provider_login (OAuth)"
+        - "OAuth tokens stored at secret/<provider>/oauth per the research schema; host never sees raw values"
+        - "refresh_provider_oauth re-mints access tokens before a forge session near expiry"
         - "Each provider's forge session authenticates through the proxy (zero TCP_DENIED)"
         - "./build.sh --check and --test pass"
+
+    - packet_id: agent-api-key-login-flows
+      order: 143
+      title: "Impl (later): API-key entry flow for the autonomous track"
+      status: pending
+      kind: enhancement
+      deliverable: plan/issues/agent-api-key-login-flows-2026-07-01.md
+      depends_on: [agent-login-flows-impl, forge-harness-auth-device-flow]
+      pickup_role: linux
+      capability_tags: [rust, vault, podman]
+      estimated_hours: 5
+      deferred_note: >
+        Operator decision 2026-07-01: API keys are the AUTONOMOUS-work credential;
+        OAuth login flows (order 132) ship first. This adds the containerized API-key
+        ENTRY flow (AuthModel::ApiKeyPaste -> secret/<provider>/api-key), reusing the
+        github-login paste boundary. Storage/consumption already exist (order 112).
+        Do AFTER order 132.
+      outcome: >
+        Add AuthModel::ApiKeyPaste to run_provider_login: an operator-gated
+        containerized paste flow that validates the key in-container then writes
+        secret/<provider>/api-key (host never holds it); autonomous forges consume it
+        with no prompt (order 112 plumbing). Tray distinguishes api-key vs oauth
+        presence per provider.
+      exit_criteria:
+        - "API-key entry stores secret/<provider>/api-key via the containerized paste boundary"
+        - "in-container validation rejects a bad key before the Vault write"
+        - "autonomous forge run consumes the stored key with zero interactive prompt"
+        - "tray distinguishes api-key vs oauth presence per provider; --check + --test pass"
 
     - packet_id: methodology-concurrent-integration-duplication
       order: 133
