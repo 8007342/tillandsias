@@ -180,6 +180,12 @@ commands run innermost" a two-gate invariant.
     the host to seed the container secret. Combine with (a) by mixing both.
   - **Recommended default: (a) for the version-binding requirement, optionally
     mixed with (b) per-boot randomness for defense-in-depth.**
+  - **DECIDED 2026-07-01 (operator):** use **(a) build-embedded per-release
+    secret** for now — it satisfies the version-binding requirement with no
+    runtime provisioning. The (b) per-boot additional key derivation is deferred
+    to a later hardening optimization, tracked in
+    `plan/issues/encrypted-channel-perboot-key-hardening-2026-07-01.md`
+    (plan order 142). Impl (order 141) proceeds on (a) alone.
 - **O2 — new crate vs module.** Recommend a small `tillandsias-secure-channel`
   crate so host tray, guest headless, and the in-container agent share one impl
   and `snow` is not pulled into crates that don't need it. WIRE_VERSION stays in

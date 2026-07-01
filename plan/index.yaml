@@ -8177,3 +8177,32 @@ plan_index:
         - "litmus pty-open-argv-allowlisted proves the exec allowlist gate (order 139a)"
         - "both hops use the same EncryptedStream<S>; terminal I/O + argv encrypted"
         - "./build.sh --check and --test pass; e2e on an enforcing guest green"
+
+    - packet_id: encrypted-channel-perboot-key-hardening
+      order: 142
+      title: "Security hardening: mix a per-boot secret into the control-channel PSK derivation"
+      status: pending
+      kind: optimization
+      deliverable: plan/issues/encrypted-channel-perboot-key-hardening-2026-07-01.md
+      depends_on: [encrypted-control-channel-impl]
+      pickup_role: linux
+      capability_tags: [rust, security, vsock, podman]
+      estimated_hours: 6
+      deferred_note: >
+        Operator-approved LATER hardening (2026-07-01). The base channel (order 141)
+        uses the build-embedded per-release secret only (O1 option a). This mixes a
+        host-controlled per-boot secret (HKDF salt) delivered over the pre-vsock
+        provisioning channel, so a leaked release secret alone cannot attach across a
+        different VM boot. Do NOT start before order 141 lands.
+      outcome: >
+        Extend PSK = HKDF-SHA256(release_root_secret, build_version, hop_id) to mix a
+        per-boot secret as the HKDF salt (host injects fresh per VM boot via cloud-init/
+        kernel-cmdline; container hop via podman secret). Additive only — build_version
+        stays in info so version binding is preserved. Failure-closed in release mode if
+        the per-boot secret is missing; dev/--debug keeps a stable fallback.
+      exit_criteria:
+        - "PSK mixes a per-boot salt without dropping build_version from info"
+        - "unit proves per-boot binding AND preserved version binding (both hold)"
+        - "host injects per-boot secret pre-vsock; guest reads+zeroizes; container via podman secret"
+        - "release-mode missing per-boot secret refuses to serve (failure-closed litmus); dev fallback dev-only"
+        - "./build.sh --check and --test pass; e2e: two boots have distinct session-key spaces"

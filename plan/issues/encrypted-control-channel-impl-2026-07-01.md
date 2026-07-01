@@ -18,9 +18,15 @@ only approved exec commands reach the deepest container. Failure-closed.
 
 ## Preconditions
 
-- Operator has signed off Open Decisions O1 (root-secret source) and O2–O4 from
-  the research packet. Slice 1 must not start until O1 is decided (it determines
-  the key-derivation input).
+- **O1 DECIDED 2026-07-01 (operator): build-embedded per-release secret** — the
+  key-derivation input is a per-release secret compiled into every tillandsias
+  binary of the release (host tray, guest headless, in-container agent). No
+  per-boot provisioning in this impl; the per-boot additional derivation is a
+  deferred hardening (order 142,
+  `plan/issues/encrypted-channel-perboot-key-hardening-2026-07-01.md`). Slices
+  may now start. O2–O4 stand at their recommended defaults (new
+  `tillandsias-secure-channel` crate; WIRE_VERSION unchanged; dev seed for
+  `--debug`) unless the operator revisits them.
 - WIRE_VERSION unchanged (confirm in slice 1); the tunnel wraps the existing
   postcard codec without schema changes.
 
