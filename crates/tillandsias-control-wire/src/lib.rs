@@ -59,7 +59,7 @@ pub const MAX_MESSAGE_BYTES: usize = 65_536;
 /// always accepts a single full chunk.
 ///
 /// @trace openspec/changes/control-wire-pty-attach/proposal.md
-pub const MAX_PTY_FRAME_BYTES: usize = 65_536;
+pub const MAX_PTY_FRAME_BYTES: usize = 64_000;
 
 /// Capability advertised in `Hello.capabilities` when the peer implements
 /// the `control-wire-pty-attach` PTY-over-vsock multiplexing protocol.

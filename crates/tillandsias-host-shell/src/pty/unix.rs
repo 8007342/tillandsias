@@ -92,9 +92,8 @@ impl UnixPtyMaster {
             ws_ypixel: 0,
         };
         // openpty(amaster, aslave, name, termp, winp). NULL termios → kernel
-        // default (sane cooked-mode line discipline; the in-VM child gets
-        // raw bytes via the wire so this only affects local echo policy on
-        // the master fd, which we don't read interactively).
+        // default (cooked mode). We immediately switch to raw mode below —
+        // passing NULL here avoids an extra zeroed-termios init dance.
         let rc = unsafe {
             openpty(
                 &mut master_fd,
@@ -111,6 +110,41 @@ impl UnixPtyMaster {
         // to OwnedFd which will close them on Drop.
         let master_owned = unsafe { OwnedFd::from_raw_fd(master_fd) };
         let slave_owned = unsafe { OwnedFd::from_raw_fd(slave_fd) };
+
+        // Raw mode: disable all line-discipline processing on the host PTY.
+        //
+        // The host PTY bridges guest↔Terminal.app over vsock via pump_io.
+        // With cooked (default) termios the line discipline corrupts the
+        // stream in ways that crash TUI apps:
+        //
+        //   • ECHO: bytes pump_io writes to the master (guest output) are
+        //     echoed back, so pump_io reads its own writes and re-sends them
+        //     to the guest as keystrokes — a byte-level feedback loop.
+        //
+        //   • ISIG: byte 0x03 (ETX / Ctrl-C) in any guest output (common in
+        //     ANSI escape sequences and container init noise) triggers
+        //     SIGINT on the `screen` process → [screen is terminating].
+        //
+        //   • ONLCR / ICRNL: LF↔CR translation corrupts ncurses / TUI
+        //     cursor-movement sequences (Claude, OpenCode, Codex all need
+        //     exact CR/LF bytes).
+        //
+        //   • ICANON: line-buffers until '\n'; keystrokes aren't forwarded
+        //     to the guest until Enter, breaking single-keystroke apps.
+        //
+        // cfmakeraw clears all of the above flags and makes the PTY a
+        // transparent byte conduit. The in-VM guest manages its own line
+        // discipline; we must not double-process here.
+        unsafe {
+            // 128 bytes is an over-allocation for struct termios on both
+            // macOS aarch64 (≈72 bytes) and Linux aarch64 (≈60 bytes).
+            let mut t = [0u8; 128];
+            let t_ptr = t.as_mut_ptr() as *mut std::ffi::c_void;
+            if tcgetattr(slave_fd, t_ptr) == 0 {
+                cfmakeraw(t_ptr);
+                let _ = tcsetattr(slave_fd, TCSANOW, t_ptr);
+            }
+        }
 
         set_nonblocking(master_owned.as_raw_fd())?;
 
@@ -154,7 +188,7 @@ impl UnixPtyMaster {
 
 /// Read half handed out by `split()`. Wraps `Arc<AsyncFd>` so both halves
 /// share the same kqueue registration.
-pub struct UnixPtyReader(Arc<AsyncFd<FdHolder>>);
+pub struct UnixPtyReader(Arc<AsyncFd<FdHolder>>, Option<OwnedFd>);
 
 /// Write half handed out by `split()`.
 pub struct UnixPtyWriter(Arc<AsyncFd<FdHolder>>);
@@ -210,8 +244,6 @@ impl AsyncWrite for UnixPtyWriter {
         Poll::Ready(Ok(()))
     }
     fn poll_shutdown(self: Pin<&mut Self>, _cx: &mut Context<'_>) -> Poll<io::Result<()>> {
-        // Dropping the writer / master closes the fd. No half-shutdown for
-        // PTYs (the kernel doesn't expose one).
         Poll::Ready(Ok(()))
     }
 }
@@ -221,13 +253,8 @@ impl super::PtyMaster for UnixPtyMaster {
     type Writer = UnixPtyWriter;
 
     fn split(self) -> (UnixPtyReader, UnixPtyWriter) {
-        let r = UnixPtyReader(self.master.clone());
+        let r = UnixPtyReader(self.master.clone(), Some(self._slave));
         let w = UnixPtyWriter(self.master);
-        // self._slave drops here — the slave fd CLOSES. Callers who need
-        // the slave open for a child process should re-open `slave_path()`
-        // BEFORE calling `split()`. The macOS terminal wrapper opens the
-        // tty path itself, so this is fine.
-        let _ = self._slave;
         (r, w)
     }
 }
@@ -271,7 +298,16 @@ unsafe extern "C" {
 
     #[link_name = "ioctl"]
     fn ioctl_setwinsz(fd: c_int, request: u64, argp: *const WinSize) -> c_int;
+
+    // Terminal attribute manipulation used to put the host PTY into raw mode.
+    // All three are POSIX and present on macOS and Linux.
+    fn tcgetattr(fd: c_int, termios_p: *mut std::ffi::c_void) -> c_int;
+    fn tcsetattr(fd: c_int, optional_actions: c_int, termios_p: *const std::ffi::c_void) -> c_int;
+    fn cfmakeraw(termios_p: *mut std::ffi::c_void);
 }
+
+// TCSANOW = 0 on both macOS and Linux; apply termios changes immediately.
+const TCSANOW: c_int = 0;
 
 const F_GETFL: c_int = 3;
 const F_SETFL: c_int = 4;

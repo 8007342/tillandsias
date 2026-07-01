@@ -558,7 +558,7 @@ pub fn github_login_main() -> i32 {
                 // is fixed in ensure_proxy_running.
                 "export HOME=/root; export XDG_RUNTIME_DIR=/run/user/0; \
                  export TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200; \
-                 mkdir -p \"$XDG_RUNTIME_DIR\" 2>/dev/null; \
+                 install -d -m 0700 \"$XDG_RUNTIME_DIR\"; \
                  podman rm tillandsias-proxy 2>/dev/null || true; \
                  if ! test -s /tmp/tillandsias-ca/intermediate.key 2>/dev/null; then \
                    mkdir -p /tmp/tillandsias-ca && \
@@ -672,7 +672,7 @@ pub fn list_cloud_projects_main() -> i32 {
         // container blocking `podman run --name tillandsias-proxy`.
         let cmd = "export HOME=/root; export XDG_RUNTIME_DIR=/run/user/0; \
                    export TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200; \
-                   mkdir -p \"$XDG_RUNTIME_DIR\" 2>/dev/null; \
+                   install -d -m 0700 \"$XDG_RUNTIME_DIR\"; \
                    podman rm tillandsias-proxy 2>/dev/null || true; \
                    if ! test -s /tmp/tillandsias-ca/intermediate.key 2>/dev/null; then \
                      mkdir -p /tmp/tillandsias-ca && \
@@ -778,7 +778,7 @@ pub fn opencode_main(path: String, prompt: Option<String>) -> i32 {
             "export HOME=/root; \
              export XDG_RUNTIME_DIR=/run/user/0; \
              export TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200; \
-             mkdir -p \"$XDG_RUNTIME_DIR\" 2>/dev/null; \
+             install -d -m 0700 \"$XDG_RUNTIME_DIR\"; \
              exec /usr/local/bin/tillandsias-headless --opencode {path}"
         );
         if let Some(ref p) = prompt {
