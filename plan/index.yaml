@@ -8122,13 +8122,27 @@ plan_index:
     - packet_id: encrypted-control-channel-research
       order: 140
       title: "Security: design an encrypted, version-bound host<->guest<->container control channel"
-      status: ready
+      status: done
       kind: research
       deliverable: plan/issues/encrypted-control-channel-research-2026-07-01.md
       depends_on: []
       pickup_role: linux
       capability_tags: [rust, security, vsock]
       estimated_hours: 4
+      events:
+        - type: claim
+          ts: "2026-07-01T23:05:00Z"
+          agent_id: "linux-yoga-fable5-20260701T2305Z"
+          host: "linux"
+          lease_id: "encrypted-control-channel-research-claim-1"
+          expires_at: "2026-07-02T03:05:00Z"
+        - type: completed
+          ts: "2026-07-01T23:06:00Z"
+          agent_id: "linux-yoga-fable5-20260701T2305Z"
+          summary: >
+            Design/threat-model/alternatives/Open-Decisions filed in the deliverable;
+            operator signed off O1 = build-embedded per-release secret; all exit
+            criteria met. Impl proceeds under order 141.
       outcome: >
         Operator directive: encrypt the control channel from the host tray through the
         guest tillandsias-headless (over vsock), with the SAME reusable primitive from
@@ -8151,7 +8165,7 @@ plan_index:
     - packet_id: encrypted-control-channel-impl
       order: 141
       title: "Security: implement the encrypted, version-bound control channel + argv allowlist (both hops)"
-      status: pending
+      status: in_progress
       kind: enhancement
       deliverable: plan/issues/encrypted-control-channel-impl-2026-07-01.md
       depends_on: [encrypted-control-channel-research]
@@ -8160,8 +8174,29 @@ plan_index:
       estimated_hours: 16
       supersedes_note: >
         Closes vsock-exec-chain-authn-authz (order 137) and the argv-allowlist half of
-        vsock-exec-authz-spec-and-proxy-exemption-audit (order 139). Blocked on operator
-        sign-off of research Open Decisions O1 (root-secret source) - O4.
+        vsock-exec-authz-spec-and-proxy-exemption-audit (order 139). O1 signed off
+        (build-embedded per-release secret); slices 1-2 landed. Remaining: slices 3-6.
+      events:
+        - type: claim
+          ts: "2026-07-01T23:05:00Z"
+          agent_id: "linux-yoga-fable5-20260701T2305Z"
+          host: "linux"
+          lease_id: "encrypted-control-channel-impl-claim-1"
+          expires_at: "2026-07-02T03:05:00Z"
+        - type: progress
+          ts: "2026-07-01T23:10:00Z"
+          agent_id: "linux-yoga-fable5-20260701T2305Z"
+          summary: >
+            Slices 1-2 landed: new crate tillandsias-secure-channel with HopId,
+            derive_psk() (HKDF-SHA256 over release_root_secret + build_version +
+            wire_version + hop_id), release_root_secret() (option_env
+            TILLANDSIAS_RELEASE_SECRET, dev-seed fallback), channel_psk() convenience,
+            and 7 unit tests PROVING version binding by construction (psk differs across
+            build_version / wire_version / hop / root; deterministic for equal inputs).
+            EncryptedStream<S> handshake (snow, slice 3) is a documented placeholder.
+            No new external deps beyond vendored hkdf/sha2/zeroize. ./build.sh --check +
+            crate tests green. Remaining: slice 3 (Noise handshake+AEAD), 4 (vsock
+            integration + Unauthorized), 5 (argv allowlist), 6 (guest<->container reuse).
       outcome: >
         Land the EncryptedStream<S> primitive (Noise, snow) wrapping the vsock host<->guest
         hop and the guest<->innermost-container hop; key derived from build_version so only

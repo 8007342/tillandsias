@@ -3163,6 +3163,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "tillandsias-secure-channel"
+version = "0.1.0"
+dependencies = [
+ "hkdf",
+ "sha2",
+ "zeroize",
+]
+
+[[package]]
 name = "tillandsias-static-server"
 version = "0.1.0"
 
