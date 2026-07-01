@@ -76,14 +76,22 @@ pub enum PtyIntent {
     Agent(SelectedAgent),
 }
 
-/// Python3 podman shim (base64-encoded) that swaps
+/// Bash podman shim (base64-encoded) that swaps
 /// `label=type:vault_container_t` → `label=disable` for vault containers.
 /// Fedora 44 enforcing SELinux rejects the undefined type with EINVAL.
 /// Headless reads TILLANDSIAS_PODMAN_BIN to find the wrapper.
-/// Identical to osx-next commit 1325bea9.
+///
+/// Uses bash (not python3) because the bare Fedora 44 VM rootfs does not
+/// ship python3. Decoded script: `#!/bin/bash\nexec /usr/bin/podman
+/// "${@/label=type:vault_container_t/label=disable}"\n`
+/// Bash `${@/pat/rep}` applies the substitution to every positional arg,
+/// replacing the offending SELinux label in-place.
+///
+/// NOTE: the macOS path (osx-next 1325bea9) uses a python3 shim because
+/// macOS VZ guests have python3 available; the Windows/WSL2 Fedora guest
+/// does not, hence the bash variant here.
 /// TODO(selinux): remove once images/selinux/vault_container.cil is loaded (Phase 3d).
-#[rustfmt::skip]
-const PODMAN_SELINUX_WRAP_B64: &str = "IyEvdXNyL2Jpbi9lbnYgcHl0aG9uMwppbXBvcnQgc3lzLCBzdWJwcm9jZXNzCmFyZ3MgPSBzeXMuYXJndlsxOl0Kb3V0ID0gW10KaSA9IDAKd2hpbGUgaSA8IGxlbihhcmdzKToKICAgIGlmIGFyZ3NbaV0gPT0gJy0tc2VjdXJpdHktb3B0JyBhbmQgaSsxIDwgbGVuKGFyZ3MpIGFuZCBhcmdzW2krMV0gPT0gJ2xhYmVsPXR5cGU6dmF1bHRfY29udGFpbmVyX3QnOgogICAgICAgIG91dCArPSBbJy0tc2VjdXJpdHktb3B0JywgJ2xhYmVsPWRpc2FibGUnXQogICAgICAgIGkgKz0gMgogICAgZWxzZToKICAgICAgICBvdXQuYXBwZW5kKGFyZ3NbaV0pCiAgICAgICAgaSArPSAxCnN5cy5leGl0KHN1YnByb2Nlc3MuY2FsbChbJy91c3IvYmluL3BvZG1hbiddICsgb3V0KSkK";
+const PODMAN_SELINUX_WRAP_B64: &str = "IyEvYmluL2Jhc2gKZXhlYyAvdXNyL2Jpbi9wb2RtYW4gIiR7QC9sYWJlbD10eXBlOnZhdWx0X2NvbnRhaW5lcl90L2xhYmVsPWRpc2FibGV9Igo=";
 
 fn agent_flag(agent: SelectedAgent) -> &'static str {
     match agent {
