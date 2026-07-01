@@ -1401,6 +1401,97 @@ fn canonical_vault_launch_tag(image_tag: &str) -> Result<&str, String> {
     Ok(image_tag)
 }
 
+/// SELinux module name reported by `semodule -l` after the CIL below loads.
+#[cfg(feature = "vault")]
+const VAULT_SELINUX_MODULE: &str = "vault_container";
+
+/// Minimal CIL declaring `vault_container_t` so the podman `label=type:` on the
+/// vault launch is a valid type on an enforcing guest. See the asset header.
+#[cfg(feature = "vault")]
+const VAULT_SELINUX_CIL: &str = include_str!("../../../images/selinux/vault_container.cil");
+
+/// Phase 3d: idempotently load the `vault_container_t` policy module before the
+/// vault container is launched with `--security-opt label=type:vault_container_t`.
+///
+/// Failure-open by design: this only removes an EINVAL on enforcing guests. If
+/// SELinux is Disabled the label is silently ignored by podman anyway, and if
+/// the load fails we let the launch proceed and surface the real podman error
+/// rather than masking it. Best-effort, never returns Err.
+/// @trace plan/issues/selinux-vault-container-policy-phase3d-2026-06-30.md
+#[cfg(feature = "vault")]
+fn ensure_vault_selinux_module(debug: bool) {
+    // Only act when SELinux is Enforcing or Permissive. On Disabled systems
+    // `getenforce` prints "Disabled" (or is absent), and the label is a no-op.
+    let mode = Command::new("getenforce").output();
+    let active = match mode {
+        Ok(out) => {
+            let s = String::from_utf8_lossy(&out.stdout);
+            let s = s.trim();
+            s.eq_ignore_ascii_case("Enforcing") || s.eq_ignore_ascii_case("Permissive")
+        }
+        Err(_) => false, // no getenforce -> SELinux tooling absent -> nothing to do
+    };
+    if !active {
+        return;
+    }
+
+    // Idempotent: skip if already loaded (semodule -l is a stable, newline-
+    // separated list of module names).
+    if let Ok(out) = Command::new("semodule").arg("-l").output()
+        && out.status.success()
+        && String::from_utf8_lossy(&out.stdout)
+            .lines()
+            .any(|l| l.trim() == VAULT_SELINUX_MODULE)
+    {
+        if debug {
+            eprintln!("[tillandsias-vault] SELinux module {VAULT_SELINUX_MODULE} already loaded");
+        }
+        return;
+    }
+
+    // semodule -i requires the CIL to live in a file ending in `.cil`. Use a
+    // tmpfs path so it leaves nothing behind; the semodule -l guard above makes
+    // re-running across boots cheap.
+    let cil_path = std::path::Path::new("/run").join(format!("{VAULT_SELINUX_MODULE}.cil"));
+    if let Err(e) = fs::write(&cil_path, VAULT_SELINUX_CIL) {
+        if debug {
+            eprintln!(
+                "[tillandsias-vault] could not stage {} for semodule: {e} (continuing)",
+                cil_path.display()
+            );
+        }
+        return;
+    }
+    match Command::new("semodule").arg("-i").arg(&cil_path).status() {
+        Ok(s) if s.success() => {
+            if debug {
+                eprintln!(
+                    "[tillandsias-vault] loaded SELinux module {VAULT_SELINUX_MODULE} (permissive)"
+                );
+            }
+        }
+        Ok(s) => {
+            if debug {
+                eprintln!(
+                    "[tillandsias-vault] semodule -i {VAULT_SELINUX_MODULE} exited {s} (continuing; podman will surface any label error)"
+                );
+            }
+        }
+        Err(e) => {
+            if debug {
+                eprintln!(
+                    "[tillandsias-vault] semodule -i {VAULT_SELINUX_MODULE} failed to spawn: {e} (continuing)"
+                );
+            }
+        }
+    }
+    let _ = fs::remove_file(&cil_path);
+}
+
+/// Stub for builds without the `vault` feature so the call site compiles.
+#[cfg(not(feature = "vault"))]
+fn ensure_vault_selinux_module(_debug: bool) {}
+
 fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     let image_tag = canonical_vault_launch_tag(image_tag)?;
 
@@ -1450,6 +1541,16 @@ fn launch_vault_container(image_tag: &str, debug: bool) -> Result<(), String> {
     // circuits when the network already exists (it normally does, created
     // during `run_init`, but ensure here so the bootstrap is self-sufficient).
     crate::ensure_enclave_network(debug)?;
+
+    // Phase 3d: on an SELinux-enforcing guest, `--security-opt
+    // label=type:vault_container_t` (below) is only a valid label once the
+    // `vault_container_t` type exists in the loaded policy. Ensure the minimal
+    // module is loaded first so crun does not reject the launch with EINVAL on
+    // /proc/self/attr/keycreate (the blocker that broke `--github-login` and
+    // `--list-cloud-projects` on the enforcing Fedora 44 VZ guest). No-op on
+    // Disabled systems and idempotent when the module is already loaded.
+    // @trace plan/issues/selinux-vault-container-policy-phase3d-2026-06-30.md
+    ensure_vault_selinux_module(debug);
 
     if debug {
         eprintln!(
@@ -1917,6 +2018,44 @@ mod tests {
         assert!(
             !window.contains("\"--ip\""),
             "Vault service discovery should not depend on a singleton enclave IP"
+        );
+    }
+
+    #[test]
+    fn vault_launch_ensures_selinux_module_before_labelled_run() {
+        // Phase 3d: the enforcing-guest label `label=type:vault_container_t` is
+        // only valid once the type is loaded. The launch path must load it
+        // (ensure_vault_selinux_module) BEFORE the labelled `podman run`, or the
+        // container exits 126 on crun keycreate EINVAL.
+        // @trace plan/issues/selinux-vault-container-policy-phase3d-2026-06-30.md
+        let source = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/vault_bootstrap.rs"
+        ));
+        let window = source
+            .split("fn launch_vault_container(")
+            .nth(1)
+            .expect("launch_vault_container source");
+        let ensure_at = window
+            .find("ensure_vault_selinux_module(debug)")
+            .expect("launch must ensure the vault_container_t SELinux module");
+        let label_at = window
+            .find("\"label=type:vault_container_t\"")
+            .expect("launch must set the vault_container_t label");
+        assert!(
+            ensure_at < label_at,
+            "the SELinux module must be ensured before the labelled podman run"
+        );
+
+        // The embedded CIL must declare the type it labels with, or the load is
+        // a no-op and the EINVAL persists.
+        let cil = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/../../images/selinux/vault_container.cil"
+        ));
+        assert!(
+            cil.contains("(type vault_container_t)"),
+            "vault_container.cil must declare vault_container_t"
         );
     }
 
