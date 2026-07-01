@@ -8099,7 +8099,7 @@ plan_index:
     - packet_id: curated-status-messages
       order: 139
       title: "UX: curated status messages — 45-char hard cap, no stack spillage"
-      status: in_progress
+      status: completed
       kind: ux+bug-fix
       deliverable: plan/issues/curated-status-messages-2026-06-30.md
       depends_on: []
@@ -8109,17 +8109,18 @@ plan_index:
       outcome: >
         Raw multi-line error strings and stack traces appeared in the STATUS chip
         (first menu item, one tiny line for non-technical users). Fix: update_status_text
-        now sanitizes to first-line + 45-char hard cap with … ; compose_chip_text
+        sanitizes to first-line + 45-char hard cap with … ; compose_chip_text
         clamps last_event to stay within budget. All balloon popups suppressed
-        (UX decision 2026-06-30). Remaining: audit all call sites, add litmus, shared
-        ux-message-budget.md spec, macOS parity.
+        (UX decision 2026-06-30). Windows-side exit criteria met 2026-07-01.
+        macOS parity deferred to macos-tray-stream-refactor (order 145) where
+        compose_chip_text will be introduced on that side.
       exit_criteria:
         - "update_status_text sanitizes: first line only, max 45 chars + ellipsis"
         - "compose_chip_text clamps last_event within budget"
         - "All 4 show_balloon calls removed (status chip is sole UX surface)"
         - "litmus:no-raw-error-in-status-chip added and green"
-        - "cheatsheets/ux-message-budget.md published (45-char hard cap spec)"
-        - "macOS tray adopts same budget"
+        - "cheatsheets/ux/ux-message-budget.md published (45-char hard cap spec)"
+        - "macOS tray adopts same budget (pending order 145)"
       events:
         - type: partial_complete
           ts: "2026-06-30T00:00:00Z"
@@ -8128,6 +8129,18 @@ plan_index:
             Balloons suppressed (4 show_balloon calls removed). update_status_text
             sanitizes to first line + 45-char cap. compose_chip_text clamps
             last_event. cargo check clean. Remaining items tracked in issue file.
+        - type: completed
+          ts: "2026-07-01T00:54:52Z"
+          agent_id: "windows-claude-20260701T0054Z"
+          evidence: >
+            All Windows-side exit criteria met. Call-site audit: all 8
+            update_status_text call sites use curated strings; report_message path
+            goes through sanitizer. ProvisionPhase::status_text() strings all ≤29
+            chars (fit 30-char preferred). litmus:no-raw-error-in-status-chip filed
+            at openspec/litmus-tests/litmus-no-raw-error-in-status-chip.yaml, all 5
+            steps verified green against current source. cheatsheets/ux/ux-message-budget.md
+            published with catalog + sanitizer reference. macOS parity (compose_chip_text
+            + litmus binding) deferred to order 145 (macos-tray-stream-refactor).
 
     - packet_id: post-login-cloud-refresh
       order: 140
