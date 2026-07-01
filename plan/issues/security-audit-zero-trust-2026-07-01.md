@@ -101,9 +101,13 @@ no litmus asserting rejection of an unauthenticated peer, and the invariant that
   `$ROOT_TOKEN` to `/run/vault-handover/root.token` (tmpfs, dir mode 077).
 - `crates/tillandsias-headless/src/vault_bootstrap.rs:1556-1566`: the host reads
   it back via `podman exec vault cat /run/vault-handover/root.token`.
-- **No shred/unlink anywhere.** grep for `shred|rm .*handover|unlink` in the
-  entrypoint and `vault_bootstrap.rs` finds nothing. The file survives for the
-  container's lifetime (until the tmpfs is torn down on container stop/reboot).
+- **CORRECTION (2026-07-01, on fix):** the original claim "no shred/unlink
+  anywhere" was slightly wrong — `read_and_handover_root_token` DID `rm -f` the
+  handover files right after capture (in the fresh-init branch ~200 lines below
+  the read line cited above, which the initial grep window missed). The real
+  residual was the missing **overwrite**: `rm` returns tmpfs pages to the kernel
+  without zeroing them, so the plaintext token could linger in freed RAM
+  (forensic scrape / page-reuse race). Not "survives for the container lifetime."
 
 **Impact:** A root Vault token sits readable inside the vault container for as
 long as it runs. Anyone who can `podman exec` into `vault` (see P0-1) reads
@@ -120,6 +124,14 @@ send a control message (or have the entrypoint self-shred after a bounded
 handover window) to `shred -u /run/vault-handover/root.token
 /run/vault-handover/unseal.key`. Add a litmus asserting the handover files are
 absent within N seconds of a successful first-boot bootstrap.
+
+**RESOLVED 2026-07-01 (order 138, done).** The cleanup now shreds before unlink:
+an in-place zero-overwrite (`dd if=/dev/zero conv=notrunc`, sized by `wc -c`)
+then `rm`, both in a single `podman exec` so the files are never left
+truncated-but-present. Best-effort (never aborts a successful init); the
+subsequent-boot keychain path is untouched. Litmus
+`handover_token_is_shredded_before_unlink` pins the shred-before-unlink ordering.
+`vault_bootstrap.rs::read_and_handover_root_token`.
 
 ### P1-2 — No governing spec or litmus for the transparent exec authorization boundary
 

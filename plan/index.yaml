@@ -8076,7 +8076,7 @@ plan_index:
     - packet_id: vault-handover-token-shred
       order: 138
       title: "Security P1: shred the first-boot Vault root-token handover from container tmpfs"
-      status: ready
+      status: done
       kind: security
       deliverable: plan/issues/security-audit-zero-trust-2026-07-01.md
       depends_on: []
@@ -8091,10 +8091,32 @@ plan_index:
         execs into vault. Shred the handover file (overwrite + unlink) immediately after
         the host consumes it; the XOR-envelope / durable root.token P0 is already fixed
         (subsequent boots skip the path) — this is only the first-boot tmpfs residual.
+      audit_correction: >
+        The audit slightly overstated this: read_and_handover_root_token ALREADY
+        unlinked the files with `rm -f` (~200 lines after the read the audit cited).
+        The true residual was the missing OVERWRITE — `rm` frees tmpfs pages without
+        zeroing, so the token could linger in freed RAM. Fixed accordingly.
       exit_criteria:
         - "handover file is unlinked (and overwritten) right after the host reads it"
         - "litmus asserts no root.token remains in the vault tmpfs after handover"
         - "subsequent-boot path unaffected (no regression in auto-unseal)"
+      events:
+        - type: claim
+          ts: "2026-07-01T23:20:00Z"
+          agent_id: "linux-yoga-fable5-20260701T2305Z"
+          host: "linux"
+          lease_id: "vault-handover-token-shred-claim-1"
+          expires_at: "2026-07-02T03:20:00Z"
+        - type: completed
+          ts: "2026-07-01T23:22:00Z"
+          agent_id: "linux-yoga-fable5-20260701T2305Z"
+          summary: >
+            Replaced the `rm -f` handover cleanup with an in-place zero-overwrite
+            (dd if=/dev/zero conv=notrunc, sized by wc -c) THEN rm, in a single exec so
+            files are never left truncated-but-present. Best-effort (never aborts a
+            successful init); subsequent-boot keychain path untouched. Litmus
+            handover_token_is_shredded_before_unlink pins shred-before-unlink ordering.
+            ./build.sh --check + vault tests green.
 
     - packet_id: vsock-exec-authz-spec-and-proxy-exemption-audit
       order: 139

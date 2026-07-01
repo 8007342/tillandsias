@@ -1746,23 +1746,31 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
         }
 
         // @trace spec:tillandsias-vault — Secure Artifact Cleanup
-        // Delete the handover files from tmpfs immediately. Remove the files
-        // (not the mount dir) so the unprivileged exec user can't trip on the
-        // root-owned tmpfs mount point.
+        // @trace plan/issues/security-audit-zero-trust-2026-07-01.md (P1-1)
+        // SHRED, don't just unlink. `rm` alone returns the tmpfs pages to the
+        // kernel WITHOUT zeroing them, so the root token can linger in freed RAM
+        // (readable via a forensic memory scrape or a page-reuse race) after the
+        // host has consumed it. Overwrite each file in place with zeros of its
+        // own length FIRST, then unlink — both in a single exec so the files are
+        // never left truncated-but-present. Remove the files (not the mount dir)
+        // so the unprivileged exec user can't trip on the root-owned tmpfs mount
+        // point. Best-effort: a failure here must not abort a successful init.
         let _ = podman_cmd_sync()
             .args([
                 "exec",
                 VAULT_CONTAINER_NAME,
-                "rm",
-                "-f",
-                "/run/vault-handover/root.token",
-                "/run/vault-handover/unseal.key",
+                "sh",
+                "-c",
+                "for f in /run/vault-handover/root.token /run/vault-handover/unseal.key; do \
+                   [ -f \"$f\" ] && dd if=/dev/zero of=\"$f\" bs=1 count=\"$(wc -c < \"$f\")\" conv=notrunc 2>/dev/null; \
+                 done; \
+                 rm -f /run/vault-handover/root.token /run/vault-handover/unseal.key",
             ])
             .status();
 
         if debug {
             eprintln!(
-                "[tillandsias-vault] root token + Shamir share handover complete (deleted from tmpfs)"
+                "[tillandsias-vault] root token + Shamir share handover complete (shredded from tmpfs)"
             );
         }
         return Ok(token);
@@ -2018,6 +2026,37 @@ mod tests {
         assert!(
             !window.contains("\"--ip\""),
             "Vault service discovery should not depend on a singleton enclave IP"
+        );
+    }
+
+    #[test]
+    fn handover_token_is_shredded_before_unlink() {
+        // P1-1: the first-boot root-token handover must be OVERWRITTEN in tmpfs
+        // before it is unlinked — `rm` alone frees the RAM pages without zeroing,
+        // leaving the token recoverable. Assert the shred path zeros with dd
+        // (conv=notrunc, in place) and only then rm -f.
+        // @trace plan/issues/security-audit-zero-trust-2026-07-01.md (P1-1)
+        let source = include_str!(concat!(
+            env!("CARGO_MANIFEST_DIR"),
+            "/src/vault_bootstrap.rs"
+        ));
+        let window = source
+            .split("fn read_and_handover_root_token(")
+            .nth(1)
+            .expect("read_and_handover_root_token source");
+        let dd_at = window
+            .find("dd if=/dev/zero")
+            .expect("handover cleanup must overwrite the token with zeros (dd), not just unlink");
+        assert!(
+            window[dd_at..].contains("conv=notrunc"),
+            "the overwrite must be in place (conv=notrunc), not a truncation"
+        );
+        let rm_at = window
+            .find("rm -f /run/vault-handover/root.token")
+            .expect("handover cleanup must still unlink the files");
+        assert!(
+            dd_at < rm_at,
+            "the token must be overwritten (shredded) BEFORE it is unlinked"
         );
     }
 
