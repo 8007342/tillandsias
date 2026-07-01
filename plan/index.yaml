@@ -8073,3 +8073,81 @@ plan_index:
         - "Headless crash root cause identified and fixed (wire oscillations stop)"
         - "litmus:no-polling-noops added and green"
         - "Doc: transport overhead guarantee written to cheatsheets/transport-overhead.md"
+
+    - packet_id: wire-oscillation-root-cause
+      order: 138
+      title: "Investigate: headless crash causing wire degraded/recovered oscillations"
+      status: ready
+      kind: investigation+bug-fix
+      deliverable: plan/issues/wire-oscillation-root-cause-2026-06-30.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [linux, vm, headless, transport, observability]
+      estimated_hours: 4
+      outcome: >
+        After GitHub Login succeeds and VM is Ready+podman_up, the tray oscillates
+        between 🟢 Ready and 🔴 Wire unreachable every ~30-60s. Root cause is
+        the in-VM tillandsias-headless service crashing and restarting (each cycle =
+        one LIVE_CLIENT teardown + reconnect). Must identify the crash cause (Vault
+        race, XDG_RUNTIME_DIR missing in unit, one-shot vsock listener, panic in
+        request handler) and fix it so the wire stays stable.
+      exit_criteria:
+        - "Root cause identified via journalctl + systemctl status"
+        - "Wire stays at 🟢 Ready between 30s polls (no oscillation)"
+        - "litmus:headless-keepalive added — vsock listener is long-lived"
+
+    - packet_id: curated-status-messages
+      order: 139
+      title: "UX: curated status messages — 45-char hard cap, no stack spillage"
+      status: in_progress
+      kind: ux+bug-fix
+      deliverable: plan/issues/curated-status-messages-2026-06-30.md
+      depends_on: []
+      pickup_role: any
+      capability_tags: [windows, macos, tray, ux]
+      estimated_hours: 3
+      outcome: >
+        Raw multi-line error strings and stack traces appeared in the STATUS chip
+        (first menu item, one tiny line for non-technical users). Fix: update_status_text
+        now sanitizes to first-line + 45-char hard cap with … ; compose_chip_text
+        clamps last_event to stay within budget. All balloon popups suppressed
+        (UX decision 2026-06-30). Remaining: audit all call sites, add litmus, shared
+        ux-message-budget.md spec, macOS parity.
+      exit_criteria:
+        - "update_status_text sanitizes: first line only, max 45 chars + ellipsis"
+        - "compose_chip_text clamps last_event within budget"
+        - "All 4 show_balloon calls removed (status chip is sole UX surface)"
+        - "litmus:no-raw-error-in-status-chip added and green"
+        - "cheatsheets/ux-message-budget.md published (45-char hard cap spec)"
+        - "macOS tray adopts same budget"
+      events:
+        - type: partial_complete
+          ts: "2026-06-30T00:00:00Z"
+          agent_id: "windows-claude-20260630T0000Z"
+          evidence: >
+            Balloons suppressed (4 show_balloon calls removed). update_status_text
+            sanitizes to first line + 45-char cap. compose_chip_text clamps
+            last_event. cargo check clean. Remaining items tracked in issue file.
+
+    - packet_id: post-login-cloud-refresh
+      order: 140
+      title: "Investigate: token storage + cloud refresh not triggering after GitHub Login"
+      status: ready
+      kind: investigation+enhancement
+      deliverable: plan/issues/post-login-cloud-refresh-2026-06-30.md
+      depends_on: [wire-oscillation-root-cause]
+      pickup_role: linux
+      capability_tags: [linux, headless, vault, github, cloud]
+      estimated_hours: 5
+      outcome: >
+        GitHub Login terminal ran successfully but remote projects never appeared
+        in the menu and login state didn't update. Three root causes: (A) cloud
+        refresh only fires every 10 ticks (~5 min), (B) token may not be stored
+        in Vault if Vault was unhealthy, (C) GithubLoginStatusRequest handler may
+        not be wired in the current headless. Fix: verify Vault token storage,
+        ensure handlers are wired, trigger refresh sooner after login.
+      exit_criteria:
+        - "Vault kv get secret/github/token returns a valid token after login"
+        - "GithubLoginStatusReply logged_in:true seen in tray log within 60s of login"
+        - "Remote projects list populates within 60s of login"
+        - "Menu shows GitHub: @user handle after login"
