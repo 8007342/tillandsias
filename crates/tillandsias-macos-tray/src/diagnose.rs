@@ -617,14 +617,7 @@ pub fn github_login_main() -> i32 {
                 //      is skipped (ca_bundle_needs_refresh returns false for fresh files).
                 // TODO(linux-next): remove once headless sets 0o640 and rm-on-reuse
                 // is fixed in ensure_proxy_running.
-                // TODO(selinux): podman wrapper is a stopgap — vault_container_t
-                // policy not yet loaded in guest (Phase 3d incomplete). Remove once
-                // semodule installs the policy from images/selinux/ during provision.
-                // The wrapper replaces label=type:vault_container_t with label=disable
-                // and is picked up by headless via TILLANDSIAS_PODMAN_BIN.
-                "echo IyEvdXNyL2Jpbi9lbnYgcHl0aG9uMwppbXBvcnQgc3lzLCBzdWJwcm9jZXNzCmFyZ3MgPSBzeXMuYXJndlsxOl0Kb3V0ID0gW10KaSA9IDAKd2hpbGUgaSA8IGxlbihhcmdzKToKICAgIGlmIGFyZ3NbaV0gPT0gJy0tc2VjdXJpdHktb3B0JyBhbmQgaSsxIDwgbGVuKGFyZ3MpIGFuZCBhcmdzW2krMV0gPT0gJ2xhYmVsPXR5cGU6dmF1bHRfY29udGFpbmVyX3QnOgogICAgICAgIG91dCArPSBbJy0tc2VjdXJpdHktb3B0JywgJ2xhYmVsPWRpc2FibGUnXQogICAgICAgIGkgKz0gMgogICAgZWxzZToKICAgICAgICBvdXQuYXBwZW5kKGFyZ3NbaV0pCiAgICAgICAgaSArPSAxCnN5cy5leGl0KHN1YnByb2Nlc3MuY2FsbChbJy91c3IvYmluL3BvZG1hbiddICsgb3V0KSkK | base64 -d > /tmp/podman-selinux-wrap && chmod +x /tmp/podman-selinux-wrap; \
-                 export TILLANDSIAS_PODMAN_BIN=/tmp/podman-selinux-wrap; \
-                 export HOME=/root; export XDG_RUNTIME_DIR=/run/user/0; \
+                "export HOME=/root; export XDG_RUNTIME_DIR=/run/user/0; \
                  export TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200; \
                  install -d -m 0700 \"$XDG_RUNTIME_DIR\"; \
                  podman rm tillandsias-proxy 2>/dev/null || true; \
@@ -738,11 +731,7 @@ pub fn list_cloud_projects_main() -> i32 {
         // ensure_proxy_running (called by headless --list-cloud-projects) needs
         // a 0o644 key so squid (uid 1000) can read it, and no leftover exited
         // container blocking `podman run --name tillandsias-proxy`.
-        // TODO(selinux): podman wrapper is a stopgap — vault_container_t policy
-        // not yet loaded in guest (Phase 3d incomplete).
-        let cmd = "echo IyEvdXNyL2Jpbi9lbnYgcHl0aG9uMwppbXBvcnQgc3lzLCBzdWJwcm9jZXNzCmFyZ3MgPSBzeXMuYXJndlsxOl0Kb3V0ID0gW10KaSA9IDAKd2hpbGUgaSA8IGxlbihhcmdzKToKICAgIGlmIGFyZ3NbaV0gPT0gJy0tc2VjdXJpdHktb3B0JyBhbmQgaSsxIDwgbGVuKGFyZ3MpIGFuZCBhcmdzW2krMV0gPT0gJ2xhYmVsPXR5cGU6dmF1bHRfY29udGFpbmVyX3QnOgogICAgICAgIG91dCArPSBbJy0tc2VjdXJpdHktb3B0JywgJ2xhYmVsPWRpc2FibGUnXQogICAgICAgIGkgKz0gMgogICAgZWxzZToKICAgICAgICBvdXQuYXBwZW5kKGFyZ3NbaV0pCiAgICAgICAgaSArPSAxCnN5cy5leGl0KHN1YnByb2Nlc3MuY2FsbChbJy91c3IvYmluL3BvZG1hbiddICsgb3V0KSkK | base64 -d > /tmp/podman-selinux-wrap && chmod +x /tmp/podman-selinux-wrap; \
-                   export TILLANDSIAS_PODMAN_BIN=/tmp/podman-selinux-wrap; \
-                   export HOME=/root; export XDG_RUNTIME_DIR=/run/user/0; \
+        let cmd = "export HOME=/root; export XDG_RUNTIME_DIR=/run/user/0; \
                    export TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200; \
                    install -d -m 0700 \"$XDG_RUNTIME_DIR\"; \
                    podman rm tillandsias-proxy 2>/dev/null || true; \

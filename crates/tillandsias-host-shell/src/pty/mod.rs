@@ -159,28 +159,10 @@ pub fn launch_spec(intent: &PtyIntent, project: Option<&str>, rows: u16, cols: u
             // Guest binary name is `tillandsias-headless` (see
             // tillandsias-vm-layer vz.rs / wsl.rs), not `tillandsias`.
             // See plan/issues/macos-tray-github-login-blank-terminal-2026-06-21.md.
-            // TODO(selinux): podman wrapper is a stopgap — vault_container_t
-            // policy not yet loaded in guest (Phase 3d). Remove once the policy
-            // module is semodule-installed during provision.
             vec![
                 "/bin/bash".to_string(),
                 "-lc".to_string(),
-                "echo IyEvdXNyL2Jpbi9lbnYgcHl0aG9uMwppbXBvcnQgc3lzLCBzdWJwcm9jZXNzCmFyZ3MgPSBzeXMuYXJndlsxOl0Kb3V0ID0gW10KaSA9IDAKd2hpbGUgaSA8IGxlbihhcmdzKToKICAgIGlmIGFyZ3NbaV0gPT0gJy0tc2VjdXJpdHktb3B0JyBhbmQgaSsxIDwgbGVuKGFyZ3MpIGFuZCBhcmdzW2krMV0gPT0gJ2xhYmVsPXR5cGU6dmF1bHRfY29udGFpbmVyX3QnOgogICAgICAgIG91dCArPSBbJy0tc2VjdXJpdHktb3B0JywgJ2xhYmVsPWRpc2FibGUnXQogICAgICAgIGkgKz0gMgogICAgZWxzZToKICAgICAgICBvdXQuYXBwZW5kKGFyZ3NbaV0pCiAgICAgICAgaSArPSAxCnN5cy5leGl0KHN1YnByb2Nlc3MuY2FsbChbJy91c3IvYmluL3BvZG1hbiddICsgb3V0KSkK | base64 -d > /tmp/podman-selinux-wrap && chmod +x /tmp/podman-selinux-wrap; \
-                 export TILLANDSIAS_PODMAN_BIN=/tmp/podman-selinux-wrap; \
-                 export HOME=/root; export XDG_RUNTIME_DIR=/run/user/0; \
-                 export TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200; \
-                 install -d -m 0700 \"$XDG_RUNTIME_DIR\"; \
-                 podman rm tillandsias-proxy 2>/dev/null || true; \
-                 if ! test -s /tmp/tillandsias-ca/intermediate.key 2>/dev/null; then \
-                   mkdir -p /tmp/tillandsias-ca && \
-                   openssl req -x509 -newkey rsa:2048 \
-                     -keyout /tmp/tillandsias-ca/intermediate.key \
-                     -out /tmp/tillandsias-ca/intermediate.crt \
-                     -days 25 -nodes -subj '/CN=Tillandsias CA' 2>/dev/null && \
-                   chmod 644 /tmp/tillandsias-ca/intermediate.key || true; \
-                 fi; \
-                 stty sane 2>/dev/null || true; \
-                 exec /usr/local/bin/tillandsias-headless --github-login".to_string(),
+                "exec tillandsias-headless --github-login".to_string(),
             ]
         }
         PtyIntent::Agent(agent) => {
@@ -449,6 +431,9 @@ const EIO_BACKOFF: std::time::Duration = std::time::Duration::from_millis(50);
 /// completes when the session closes (guest `PtyClose`) or the connection
 /// drops, at which point the input task is aborted.
 pub fn pump_io<M: PtyMaster>(session: PtySession, master: M) -> tokio::task::JoinHandle<()> {
+    use std::sync::Arc;
+    use std::sync::atomic::{AtomicBool, Ordering};
+
     let (mut reader, mut writer) = master.split();
     let PtySession {
         session_id,
@@ -456,34 +441,39 @@ pub fn pump_io<M: PtyMaster>(session: PtySession, master: M) -> tokio::task::Joi
         mut inbound,
     } = session;
 
+    // Shared "a slave has attached at least once" flag. Set on the first
+    // successful read OR write. Before it is set, a read/write error is treated
+    // as the transient pre-attach EIO (see ATTACH_GRACE); after it is set, an
+    // error is a real terminal close and tears the session down immediately.
+    let attached = Arc::new(AtomicBool::new(false));
+
     // Input task: local keystrokes → guest stdin (chunked at MAX_PTY_FRAME_BYTES).
+    let in_attached = attached.clone();
     let input_task = tokio::spawn(async move {
         let mut buf = vec![0u8; MAX_PTY_FRAME_BYTES];
-        let mut has_read = false;
         let start = std::time::Instant::now();
         loop {
             match reader.read(&mut buf).await {
-                Ok(0) => {
-                    eprintln!("[pump_io] input_task: got clean EOF from master");
-                    break;
-                }
+                Ok(0) => break, // clean EOF
                 Ok(n) => {
-                    eprintln!("[pump_io] input_task: read {} bytes from master: {:?}", n, &buf[..n]);
-                    has_read = true;
+                    in_attached.store(true, Ordering::Relaxed);
                     for body in chunk_to_guest(session_id, &buf[..n]) {
                         if transport.send(body).is_err() {
-                            eprintln!("[pump_io] input_task: transport.send failed");
                             return;
                         }
                     }
                 }
-                Err(e) => {
-                    eprintln!("[pump_io] input_task: got error from master: {}", e);
-                    if !has_read && start.elapsed() < ATTACH_GRACE {
+                Err(_) => {
+                    // macOS: a PTY master read returns EIO while no slave is
+                    // open. `master.split()` closed the retained slave, and the
+                    // terminal (`screen`) re-opens it only after the attach
+                    // handoff completes — so we briefly see EIO with no slave.
+                    // Tolerate it until the first attach, bounded by the grace
+                    // window; afterwards (or once attached) it is a real close.
+                    if !in_attached.load(Ordering::Relaxed) && start.elapsed() < ATTACH_GRACE {
                         tokio::time::sleep(EIO_BACKOFF).await;
                         continue;
                     }
-                    eprintln!("[pump_io] input_task: aborting due to error after grace period or after attach");
                     break;
                 }
             }
@@ -491,32 +481,33 @@ pub fn pump_io<M: PtyMaster>(session: PtySession, master: M) -> tokio::task::Joi
     });
 
     // Output task: guest output → local terminal; terminal close ends both.
+    let out_attached = attached;
     tokio::spawn(async move {
-        let mut has_written = false;
         let start = std::time::Instant::now();
         'pump: while let Some(ev) = inbound.recv().await {
             match ev {
                 SessionEvent::Data(bytes) => loop {
                     match writer.write_all(&bytes).await {
                         Ok(()) => {
-                            has_written = true;
+                            out_attached.store(true, Ordering::Relaxed);
                             break;
                         }
-                        Err(e) => {
-                            eprintln!("[pump_io] output_task: write error: {}", e);
-                            if !has_written && start.elapsed() < ATTACH_GRACE {
+                        Err(_) => {
+                            // Same pre-attach EIO tolerance as the input task:
+                            // guest output (e.g. the shell prompt) can arrive
+                            // before the terminal opens the slave. Retry the
+                            // write until attach, bounded by the grace window.
+                            if !out_attached.load(Ordering::Relaxed)
+                                && start.elapsed() < ATTACH_GRACE
+                            {
                                 tokio::time::sleep(EIO_BACKOFF).await;
                                 continue;
                             }
-                            eprintln!("[pump_io] output_task: aborting due to write error");
                             break 'pump;
                         }
                     }
                 },
-                SessionEvent::Closed(_) => {
-                    eprintln!("[pump_io] output_task: got Closed event");
-                    break;
-                }
+                SessionEvent::Closed(_) => break,
             }
         }
         input_task.abort();
@@ -704,22 +695,7 @@ mod tests {
             vec![
                 "/bin/bash".to_string(),
                 "-lc".to_string(),
-                "echo IyEvdXNyL2Jpbi9lbnYgcHl0aG9uMwppbXBvcnQgc3lzLCBzdWJwcm9jZXNzCmFyZ3MgPSBzeXMuYXJndlsxOl0Kb3V0ID0gW10KaSA9IDAKd2hpbGUgaSA8IGxlbihhcmdzKToKICAgIGlmIGFyZ3NbaV0gPT0gJy0tc2VjdXJpdHktb3B0JyBhbmQgaSsxIDwgbGVuKGFyZ3MpIGFuZCBhcmdzW2krMV0gPT0gJ2xhYmVsPXR5cGU6dmF1bHRfY29udGFpbmVyX3QnOgogICAgICAgIG91dCArPSBbJy0tc2VjdXJpdHktb3B0JywgJ2xhYmVsPWRpc2FibGUnXQogICAgICAgIGkgKz0gMgogICAgZWxzZToKICAgICAgICBvdXQuYXBwZW5kKGFyZ3NbaV0pCiAgICAgICAgaSArPSAxCnN5cy5leGl0KHN1YnByb2Nlc3MuY2FsbChbJy91c3IvYmluL3BvZG1hbiddICsgb3V0KSkK | base64 -d > /tmp/podman-selinux-wrap && chmod +x /tmp/podman-selinux-wrap; \
-                 export TILLANDSIAS_PODMAN_BIN=/tmp/podman-selinux-wrap; \
-                 export HOME=/root; export XDG_RUNTIME_DIR=/run/user/0; \
-                 export TILLANDSIAS_VAULT_API_BASE_URL=https://vault:8200; \
-                 install -d -m 0700 \"$XDG_RUNTIME_DIR\"; \
-                 podman rm tillandsias-proxy 2>/dev/null || true; \
-                 if ! test -s /tmp/tillandsias-ca/intermediate.key 2>/dev/null; then \
-                   mkdir -p /tmp/tillandsias-ca && \
-                   openssl req -x509 -newkey rsa:2048 \
-                     -keyout /tmp/tillandsias-ca/intermediate.key \
-                     -out /tmp/tillandsias-ca/intermediate.crt \
-                     -days 25 -nodes -subj '/CN=Tillandsias CA' 2>/dev/null && \
-                   chmod 644 /tmp/tillandsias-ca/intermediate.key || true; \
-                 fi; \
-                 stty sane 2>/dev/null || true; \
-                 exec /usr/local/bin/tillandsias-headless --github-login".to_string(),
+                "exec tillandsias-headless --github-login".to_string(),
             ]
         );
         assert_eq!(
