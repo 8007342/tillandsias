@@ -8151,3 +8151,242 @@ plan_index:
         - "GithubLoginStatusReply logged_in:true seen in tray log within 60s of login"
         - "Remote projects list populates within 60s of login"
         - "Menu shows GitHub: @user handle after login"
+
+    # ── Observable Streams Refactor — Orders 141–147 ─────────────────────────
+    # All six transport boundaries must be refactored to push-not-poll.
+    # Completion requires 4-agent sign-off per observable-streams-contract.md.
+    # ─────────────────────────────────────────────────────────────────────────
+
+    - packet_id: socket-audit-master
+      order: 141
+      title: "MASTER AUDIT: Observable streams at all transport boundaries (4-agent ratification)"
+      status: ready
+      kind: audit+refactor
+      deliverable: plan/issues/socket-audit-master-2026-06-30.md
+      depends_on:
+        - socket-protocol-push-variants
+        - windows-tray-stream-refactor
+        - macos-tray-stream-refactor
+        - linux-native-stream-audit
+        - vm-headless-persistent-listener
+        - headless-podman-unix-streams
+        - vault-blocking-watch
+      pickup_role: any
+      capability_tags: [audit, transport, streams, performance, all-platforms]
+      estimated_hours: 20
+      outcome: >
+        All six transport boundaries (Windows tray↔VM, macOS tray↔VM, Linux tray,
+        VM headless listener, headless↔Podman, Vault watch) refactored to observable
+        async streams. No polling loops, no blocking I/O on async threads, bounded
+        channels everywhere, server-push for all state updates. Verified by 4 agents
+        (Claude Opus, OpenCode BigPickle, AntiGravity Gemini, Codex GPT5.5) against
+        15 machine-checkable criteria (SC-01–SC-15).
+      verification_required:
+        agents:
+          - id: claude-opus-highthink
+            model: claude-opus-4-8
+            mode: extended_thinking
+            criteria: [SC-01, SC-02, SC-03, SC-04, SC-05, SC-06, SC-07, SC-08, SC-09, SC-10, SC-11, SC-12, SC-13, SC-14, SC-15, SC-16, SC-17, SC-18]
+          - id: opencode-bigpickle
+            model: opencode-bigpickle
+            criteria: [SC-01, SC-02, SC-03, SC-04, SC-05, SC-06, SC-07, SC-12, SC-13, SC-16, SC-17, SC-18]
+          - id: antigravity-gemini
+            model: gemini-2-5-pro-high-effort
+            criteria: [SC-06, SC-07, SC-08, SC-09, SC-10, SC-11, SC-14, SC-15, SC-16, SC-17, SC-18]
+          - id: codex-gpt55-highthink
+            model: gpt-5-5
+            mode: high_thinking
+            criteria: [SC-01, SC-02, SC-03, SC-04, SC-05, SC-06, SC-07, SC-08, SC-09, SC-10, SC-11, SC-12, SC-13, SC-14, SC-15, SC-16, SC-17, SC-18]
+        completion_gate: >
+          ALL 4 agents must emit verified-by events with verdict=SOUND+COMPLETE+PERFORMANT
+          and all 15 SC-* criteria marked pass. Any disagreement between agents requires
+          code revision and full re-verification from scratch.
+      exit_criteria:
+        - "Orders 142-147 all completed"
+        - "4 verified-by events with all SC-* pass"
+        - "litmus:no-polling-sleep-in-transport green"
+        - "litmus:no-blocking-io-in-async green"
+        - "E2E: headless phase change -> tray update in <500ms"
+        - "Perf: idle tray CPU <0.1% over 5 min"
+        - "Vault watch: token change -> login state update in <1s"
+
+    - packet_id: socket-protocol-push-variants
+      order: 142
+      title: "Protocol: add VmStatusPush + LoginStatePush + CloudProjectsPush + Subscribe to control wire"
+      status: ready
+      kind: protocol+implementation
+      deliverable: crates/tillandsias-control-wire/src/lib.rs
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [protocol, control-wire, streams, all-platforms]
+      estimated_hours: 6
+      outcome: >
+        Add server-push ControlMessage variants to tillandsias-control-wire:
+        VmStatusPush, LoginStatePush, CloudProjectsPush (headless→host, no request),
+        Subscribe/SubscribeAck (host→headless, one-time after handshake).
+        These variants are additive and postcard-stable (new enum arms, existing
+        arms unchanged). All trays and the headless must handle unknown variants
+        gracefully (already required by the wire protocol).
+      exit_criteria:
+        - "VmStatusPush, LoginStatePush, CloudProjectsPush added to ControlMessage"
+        - "Subscribe { topics } and SubscribeAck added"
+        - "SubscriptionTopic enum: VmStatus, LoginState, CloudProjects"
+        - "Postcard serialization round-trip tests pass for all new variants"
+        - "Headless sends VmStatusPush within 500ms of VmPhase change (integration test)"
+        - "Wire version bumped; backward-compat: unrecognized variants = warn + skip"
+
+    - packet_id: vm-headless-persistent-listener
+      order: 143
+      title: "VM Headless: persistent vsock listener + server-push event stream"
+      status: ready
+      kind: refactor+implementation
+      deliverable: crates/tillandsias-headless/src/
+      depends_on: [socket-protocol-push-variants]
+      pickup_role: linux
+      capability_tags: [linux, headless, vsock, streams, transport]
+      estimated_hours: 10
+      outcome: >
+        The headless vsock listener currently closes the connection after each
+        response (one-shot). Refactor to: (1) keep connection alive until client
+        disconnect, (2) spawn a per-client reader task that dispatches inbound
+        messages by type, (3) maintain a broadcast channel per push topic so
+        internal state changes (VmPhase, login, cloud projects) are fanned out to
+        all connected clients immediately. Remove all request-response patterns for
+        status queries — replace with Subscribe + Push. PTY sessions remain
+        multiplexed on the same connection.
+      exit_criteria:
+        - "Connection persists after VmStatusRequest reply (SC-08)"
+        - "VmStatusPush sent to all clients on VmPhase change (SC-09, <500ms)"
+        - "LoginStatePush sent on Vault token change"
+        - "CloudProjectsPush sent when gh repo list result changes"
+        - "Per-client reader task uses select! over message type + shutdown signal"
+        - "All in-memory channels bounded; documented capacity in code"
+        - "Slow client (simulated 1000ms lag) does not affect fast client (SC-10)"
+      verification_required: [claude-opus-highthink, opencode-bigpickle, antigravity-gemini, codex-gpt55-highthink]
+
+    - packet_id: windows-tray-stream-refactor
+      order: 144
+      title: "Windows Tray: replace 30s polling loop with reader task + watch channels"
+      status: ready
+      kind: refactor
+      deliverable: crates/tillandsias-windows-tray/src/notify_icon.rs
+      depends_on: [vm-headless-persistent-listener]
+      pickup_role: windows
+      capability_tags: [windows, tray, transport, streams]
+      estimated_hours: 8
+      outcome: >
+        Replace the `loop { refresh_vm_status; sleep(30s); }` polling loop with:
+        (1) a persistent reader task that drains the LIVE_CLIENT stream continuously,
+        (2) tokio::sync::watch channels per topic (VmStatus, LoginState, CloudProjects),
+        (3) menu-state listeners that wake on watch::changed() instead of timers.
+        Send Subscribe{topics:[VmStatus,LoginState,CloudProjects]} once after handshake.
+        Eliminate VmStatusRequest, CloudRefreshRequest, GithubLoginStatusRequest from
+        the steady-state path — they become fallback-only (used only for initial sync
+        if Subscribe arrives before the headless has emitted its first push).
+      exit_criteria:
+        - "No tokio::time::sleep in notify_icon.rs transport path (SC-01, SC-02)"
+        - "LIVE_CLIENT reader task runs continuously, never re-created per request (SC-06)"
+        - "VmStatusRequest not sent after Subscribe handshake (SC-07)"
+        - "Menu updates within 500ms of headless VmPhase change"
+        - "Idle CPU <0.1% with healthy VM (SC-11)"
+        - "cargo test -p tillandsias-windows-tray all pass"
+      verification_required: [claude-opus-highthink, opencode-bigpickle, antigravity-gemini, codex-gpt55-highthink]
+
+    - packet_id: macos-tray-stream-refactor
+      order: 145
+      title: "macOS Tray: replace polling with reader task + watch channels (mirrors order 144)"
+      status: ready
+      kind: refactor
+      deliverable: crates/tillandsias-macos-tray/src/
+      depends_on: [vm-headless-persistent-listener]
+      pickup_role: macos
+      capability_tags: [macos, tray, transport, streams]
+      estimated_hours: 8
+      outcome: >
+        Same refactor as order 144 but for the macOS tray. The macOS tray uses
+        VZ framework / AF_VSOCK instead of AF_HYPERV; the reader task and watch
+        channel pattern is identical. Eliminate any polling loops in action_host.rs
+        or equivalent. The two trays MUST end up with equivalent stream architectures
+        (share a common reader-task implementation in tillandsias-host-shell if
+        possible to avoid divergence).
+      exit_criteria:
+        - "No tokio::time::sleep in macOS tray transport path (SC-01, SC-02)"
+        - "Reader task and watch channels identical in structure to order 144"
+        - "If macOS tray has action_host.rs polling, it is eliminated"
+        - "cargo test -p tillandsias-macos-tray all pass"
+      verification_required: [claude-opus-highthink, opencode-bigpickle, antigravity-gemini, codex-gpt55-highthink]
+
+    - packet_id: linux-native-stream-audit
+      order: 146
+      title: "Linux Native Tray/Host: audit and fix any polling in tillandsias-headless local path"
+      status: ready
+      kind: audit+refactor
+      deliverable: crates/tillandsias-headless/src/tray/
+      depends_on: [vm-headless-persistent-listener]
+      pickup_role: linux
+      capability_tags: [linux, tray, headless, streams]
+      estimated_hours: 6
+      outcome: >
+        The Linux native tray (if it exists as a binary) or the headless's own
+        tray-facing interface must use the same observable-stream contract. Audit
+        all polling patterns in the Linux tray / headless local interface.
+        If the Linux tray uses in-process calls rather than vsock, it must use
+        tokio::sync::watch channels driven by the headless's internal event bus.
+        No timer-based polls for status, login state, or cloud projects.
+      exit_criteria:
+        - "All SC-01–SC-15 criteria verified in Linux tray / headless local path"
+        - "No polling loops for VM status, login state, or cloud projects"
+        - "Event bus uses tokio::sync::broadcast or watch, not mpsc::unbounded"
+      verification_required: [claude-opus-highthink, opencode-bigpickle, antigravity-gemini, codex-gpt55-highthink]
+
+    - packet_id: headless-podman-unix-streams
+      order: 147
+      title: "Headless ↔ Podman: Unix socket async streams (replace podman exec + HTTP poll)"
+      status: ready
+      kind: refactor+implementation
+      deliverable: crates/tillandsias-headless/src/
+      depends_on: [vm-headless-persistent-listener]
+      pickup_role: linux
+      capability_tags: [linux, headless, podman, streams, transport]
+      estimated_hours: 12
+      outcome: >
+        Replace all `podman exec -it` in the data path with AF_UNIX socket streams
+        per container (forge, vault, inference, web). Each container runs a small
+        agent binary (tillandsias-container-agent, new crate) listening on
+        /run/tillandsias/containers/<name>/pty.sock. The headless opens a
+        tokio::net::UnixStream to the socket, sends a framed ContainerRequest
+        (postcard), and bridges PtyData frames bidirectionally. No process spawning
+        on the data path. Also replaces any HTTP polling to container ports with
+        long-lived HTTP/2 streams or AF_UNIX watch events.
+      exit_criteria:
+        - "No podman exec in the PTY data path (SC-12)"
+        - "No std::process::Command::output() in async fn without spawn_blocking (SC-13)"
+        - "tokio::net::UnixStream used for all headless-container comms"
+        - "Container agent binary builds and passes unit tests"
+        - "PTY session open/close roundtrip via Unix socket passes integration test"
+        - "Vault token watch uses blocking HTTP GET (wait=version), not periodic poll (SC-14)"
+      verification_required: [claude-opus-highthink, opencode-bigpickle, antigravity-gemini, codex-gpt55-highthink]
+
+    - packet_id: vault-blocking-watch
+      order: 148
+      title: "Vault: replace periodic token poll with blocking-watch HTTP stream"
+      status: ready
+      kind: refactor
+      deliverable: crates/tillandsias-headless/src/vault_bootstrap.rs
+      depends_on: [headless-podman-unix-streams]
+      pickup_role: linux
+      capability_tags: [linux, headless, vault, streams]
+      estimated_hours: 4
+      outcome: >
+        The headless currently polls Vault at intervals to check for token changes.
+        Replace with Vault's KV v2 blocking-watch: GET /v1/secret/data/KEY?wait=<cas>
+        blocks at the Vault server until the version changes, returning immediately
+        when a new token is stored. This makes GitHub Login token storage visible to
+        the headless (and all connected trays via LoginStatePush) within <1s of
+        the terminal writing it, with zero polling CPU cost.
+      exit_criteria:
+        - "Vault KV watch uses blocking GET with ?wait= parameter (SC-14)"
+        - "No tokio::time::sleep in Vault token check path (SC-01)"
+        - "LoginStatePush emitted within 1s of vault kv put secret/github/token"
+        - "Vault watch task reconnects on Vault restart (not a panic path)"
+      verification_required: [claude-opus-highthink, opencode-bigpickle, antigravity-gemini, codex-gpt55-highthink]
