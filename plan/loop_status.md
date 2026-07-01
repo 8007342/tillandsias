@@ -1,5 +1,47 @@
 # Multi-Host Coordination Loop Status
 
+LastExecutionTime: 2026-07-01T23:25Z
+
+## This Loop (2026-07-01T23:05Z, linux_mutable — /advance-work-from-plan queue drain)
+
+Operator asked to exhaust the ready Linux queue and push work + findings so the
+macOS/Windows builders unblock on these packet implementations.
+
+- **Startup**: pulled linux-next (picked up a macOS builder's push:
+  `macos-build-findings-2026-07-01.md` — the E0425 orphan `vsock_exec::exec_interactive`
+  in macos-tray diagnose.rs was fixed by osx in `81a0478c` and is already on
+  linux-next; macos-tray compiles). Credential channel `ok:gh-keyring`.
+- **Sibling state**: osx-next **0 ahead** (fully integrated); windows-next +32
+  (large cross-branch merge still deferred to a quiet window). The
+  host-guest-transport facade (order 124) is landed in control-wire::guest_transport
+  (GuestTransport/GuestEndpoint/ExecRequest/ExecOutput) — so orders 126 (macOS) and
+  127 (Windows) are genuinely READY for the sibling terminals to implement now.
+- **Drained**:
+  - **order 140 (encrypted-control-channel-research): DONE** — design filed,
+    operator signed off O1 = build-embedded per-release secret.
+  - **order 141 (encrypted-control-channel-impl): slices 1-2 landed** (`0a7afb2c`) —
+    new crate `tillandsias-secure-channel` with `derive_psk()` (HKDF-SHA256 over
+    release_root_secret + build_version + wire_version + hop_id) and 7 unit tests
+    PROVING version binding by construction. This is the shared crypto foundation
+    the macOS/Windows transport backends will wrap. No new external deps (vendored
+    hkdf/sha2/zeroize); the `snow` Noise handshake is slice 3 (own cycle). 141 now
+    in_progress; remaining slices 3-6.
+  - **order 138 (vault-handover-token-shred): DONE** (`63b31cee`) — shred the
+    first-boot root token (in-place zero-overwrite via dd conv=notrunc, then rm, one
+    exec) before unlink; litmus `handover_token_is_shredded_before_unlink`. Corrected
+    the audit (rm already existed; the residual was the missing overwrite).
+- **Not drained (with reason — a legitimate convergence point at this bar)**:
+  order 131 (agent-login-flows-research) is operator-gated (API-key vs OAuth per
+  provider needs sign-off); orders 134/135 (ledger archival + stale-ref sweep) are
+  self-flagged do-NOT-run-during-active-concurrency (siblings live); order 137
+  superseded by 140/141; order 139's spec half overlaps 141 slice 1 (best bundled
+  there). The next actionable implementation (141 slice 3, snow handshake) is a
+  large chunk warranting its own cycle.
+- **E2E**: not run (SELinux-Disabled host; the security changes are unit/litmus-
+  proven; the Phase 3d + channel behavior validate on the enforcing macOS guest).
+- **Release**: none (latest published v0.3.260630.1). Security 137/141 should land
+  before the next release.
+
 LastExecutionTime: 2026-07-01T22:30Z
 
 ## This Loop (2026-07-01T22:17Z, linux_mutable — /meta-orchestration: audit + macOS unblock + security audit)
