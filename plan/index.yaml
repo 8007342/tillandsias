@@ -6495,13 +6495,6 @@ plan_index:
             check_required_services. On linux, run_github_login uses it as
             auth preflight before prompting. macOS VZ side may need additional
             wiring to use the same facade before VZ start / control-wire wait.
-          owned_files:
-            - crates/tillandsias-macos-tray/src/diagnose.rs
-            - crates/tillandsias-headless/src/main.rs
-            - crates/tillandsias-host-shell/src/
-            - crates/tillandsias-vm-layer/src/
-          checkpoint_required: true
-          handoff_note: >
             Operator requirement: `--github-login` MUST ensure all required
             containers are UP and HEALTHY before prompting for credentials.
             The v0.3.260625.1 macOS release prompts for name/email/PAT before
@@ -6509,6 +6502,12 @@ plan_index:
             guest also prompts/stores git identity before ensuring the image,
             networks, Vault, and login helper container. Build a reusable auth
             preflight instead of adding per-provider sleeps/timeouts.
+          owned_files:
+            - crates/tillandsias-macos-tray/src/diagnose.rs
+            - crates/tillandsias-headless/src/main.rs
+            - crates/tillandsias-host-shell/src/
+            - crates/tillandsias-vm-layer/src/
+          checkpoint_required: true
       events:
         - type: progress
           ts: "2026-06-25T22:07:50Z"
