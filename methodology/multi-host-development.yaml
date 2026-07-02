@@ -111,6 +111,25 @@ multi_host_development:
       - "Spec, methodology, and plan conflicts block until explicitly reconciled."
       - "Platform crate conflicts stay on the owning platform branch unless a shared API contract changed."
       - "Never resolve conflicts by deleting another host's plan notes; tombstone, supersede, or merge by stable ID."
+    pre_push_gate:
+      rule: >
+        NON-linux-next branches (windows-next, osx-next, any shared non-trunk
+        branch) MUST `git fetch` and `git merge origin/linux-next` (merge-only,
+        integration_strategy case 2) and resolve all conflicts LOCALLY before
+        EVERY push to their remote branch. Pushing un-integrated platform work
+        exports the conflict to the linux-next coordinator, who then has to
+        resolve platform-side conflicts on the trunk — the wrong side, with the
+        least context. Operator directive 2026-07-02: this is the normal
+        workflow — platform hosts absorb the merge cost so remote linux workers
+        can merge platform branches back into linux-next cleanly.
+      applies_to: ["windows-next", "osx-next", "any non-linux-next shared branch"]
+      race_exception: >
+        If the coordinator is actively merging your already-pushed head (your
+        commits are in flight toward linux-next), do NOT race them with a second
+        divergent push: wait for their merge to land on origin/linux-next, merge
+        THAT into your branch, validate (packets/code survived, tests green),
+        then push. First applied 2026-07-02 (windows merge validation of
+        6feac841).
 
   plan_ledger:
     canonical_files:
