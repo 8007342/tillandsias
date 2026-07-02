@@ -43,6 +43,15 @@ pub mod vsock_exec;
 #[cfg(target_os = "macos")]
 pub mod transport_macos;
 
+// Windows host→guest transport backend (HvSocket / WSL2).
+// The file is itself `#![cfg(target_os = "windows")]` so it no-ops on
+// Linux/macOS builds. Exports `WslGuestTransport` (GuestTransport impl) +
+// the HvSocket primitives the tray re-exports from here.
+//
+// @trace spec:host-guest-transport, spec:vm-idiomatic-layer
+#[cfg(target_os = "windows")]
+pub mod transport_windows;
+
 #[cfg(all(target_os = "linux", feature = "fake"))]
 pub mod fake;
 

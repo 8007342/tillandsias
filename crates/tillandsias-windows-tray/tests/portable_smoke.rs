@@ -13,16 +13,16 @@
 //! @trace spec:windows-native-tray
 
 use tillandsias_host_shell::menu_state::{
-    GithubLoginState, MenuState, MenuStructure, ProjectEntry, SelectedAgent, TargetSurface, build,
+    GithubLoginState, MenuState, MenuStructure, ProjectEntry, TargetSurface, build,
 };
 
-/// The Windows tray paints the host-shell `MenuStructure` verbatim. The menu
-/// is login-gated (mirrors the Linux golden, F3): logged-out collapses to the
-/// short {status, github-login, version, quit} list; logged-in surfaces the
-/// project/agent/browser body with no `github-login` row (mutually exclusive).
+/// The Windows tray paints the host-shell `MenuStructure` verbatim, matching
+/// the Linux tray 1:1 (F3): logged-out collapses to
+/// {status, github-login, separator, version, quit}; logged-in shows
+/// {status, local-projects, cloud-projects, separator, version, quit}.
 #[test]
 fn portable_menu_build_is_invokable_from_windows_tray_path() {
-    // Logged-out, runtime ready: collapsed short list.
+    // Logged-out, runtime ready: collapsed short list with separator.
     let out = MenuState {
         target: TargetSurface::WindowsTray,
         gui_passthrough_available: true,
@@ -32,12 +32,16 @@ fn portable_menu_build_is_invokable_from_windows_tray_path() {
     match build(&out) {
         MenuStructure::Ready { items } => {
             let ids: Vec<&str> = items.iter().map(|i| i.id.as_str()).collect();
-            assert_eq!(ids, vec!["status", "github-login", "version", "quit"]);
+            assert_eq!(
+                ids,
+                vec!["status", "github-login", "---", "version", "quit"]
+            );
         }
         other => panic!("expected Ready, got {other:?}"),
     }
 
-    // Logged-in: full project/agent/browser body, no github-login row.
+    // Logged-in: projects + separator + footer; no github-login, no global
+    // agents/observatorium/opencode-web at top level (Linux parity).
     let logged_in = MenuState {
         target: TargetSurface::WindowsTray,
         gui_passthrough_available: true,
@@ -46,46 +50,77 @@ fn portable_menu_build_is_invokable_from_windows_tray_path() {
     };
     match build(&logged_in) {
         MenuStructure::Ready { items } => {
-            assert!(items.iter().any(|i| i.id == "status"));
-            assert!(items.iter().any(|i| i.id == "local-projects"));
-            assert!(items.iter().any(|i| i.id == "cloud-projects"));
-            assert!(items.iter().any(|i| i.id == "agents"));
-            assert!(items.iter().any(|i| i.id == "observatorium"));
-            assert!(items.iter().any(|i| i.id == "opencode-web"));
-            assert!(items.iter().any(|i| i.id == "quit"));
+            let ids: Vec<&str> = items.iter().map(|i| i.id.as_str()).collect();
+            assert_eq!(
+                ids,
+                vec![
+                    "status",
+                    "local-projects",
+                    "cloud-projects",
+                    "---",
+                    "version",
+                    "quit"
+                ]
+            );
             assert!(
                 !items.iter().any(|i| i.id == "github-login"),
                 "github-login is gated out when logged in (F3 mutual exclusivity)"
             );
+            // Global pickers removed — agent/browser choices live inside per-project submenus.
+            for gone in ["agents", "observatorium", "opencode-web"] {
+                assert!(
+                    !items.iter().any(|i| i.id == gone),
+                    "{gone} must NOT appear at top level (Linux parity)"
+                );
+            }
         }
         other => panic!("expected Ready, got {other:?}"),
     }
 }
 
-/// Agent picker contract: exactly Claude / Codex / OpenCode in that order.
+/// Agent actions live inside each per-project submenu (Linux parity).
+/// Each project has exactly 6 leaves: Claude/Codex/OpenCode/OpenCode Web/
+/// Observatorium/Maintenance.
 #[test]
 fn agent_picker_lists_three_agents_in_canonical_order() {
     let mut state = MenuState::initial();
-    state.selected_agent = SelectedAgent::Codex;
     state.target = TargetSurface::WindowsTray;
     state.gui_passthrough_available = true;
-    // Agents only surface once authenticated (login-gated body, F3).
+    state.podman_ready = true;
     state.login = GithubLoginState::LoggedIn { handle: "u".into() };
+    state.local_projects = vec![ProjectEntry {
+        name: "myapp".into(),
+        path: "/home/u/src/myapp".into(),
+        ready: false,
+    }];
     let menu = build(&state);
     let items = match menu {
         MenuStructure::Ready { items } => items,
         _ => panic!("expected Ready"),
     };
-    let agents = items
+    let local = items
         .iter()
-        .find(|i| i.id == "agents")
-        .expect("agents present");
-    let ids: Vec<&str> = agents.children.iter().map(|c| c.id.as_str()).collect();
-    assert_eq!(ids, vec!["agent.claude", "agent.codex", "agent.opencode"]);
-    // Codex selected → middle is checked.
-    assert!(!agents.children[0].checked);
-    assert!(agents.children[1].checked);
-    assert!(!agents.children[2].checked);
+        .find(|i| i.id == "local-projects")
+        .expect("local-projects present");
+    let proj = &local.children[0];
+    let verbs: Vec<&str> = proj
+        .children
+        .iter()
+        .map(|l| l.id.rsplit('.').next().unwrap_or(""))
+        .collect();
+    assert_eq!(
+        verbs,
+        vec![
+            "claude",
+            "codex",
+            "opencode",
+            "opencode-web",
+            "observatorium",
+            "maintenance"
+        ]
+    );
+    // All leaves enabled because podman_ready = true.
+    assert!(proj.children.iter().all(|l| l.enabled));
 }
 
 /// LoggedIn gates OUT the `github-login` row (mutually exclusive with the

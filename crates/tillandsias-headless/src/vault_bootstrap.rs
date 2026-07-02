@@ -384,6 +384,9 @@ pub fn ensure_vault_running(debug: bool) -> Result<(), String> {
     ensure_vault_tls_leaf(&certs_dir, debug)?;
 
     if container_running(VAULT_CONTAINER_NAME) {
+        // Refresh /etc/hosts before any API probe — each podman restart can
+        // give the container a new IP from the enclave bridge IPAM.
+        update_etc_hosts_vault(debug);
         // Already up. Probe health to make sure it's serving.
         let rt = tokio_runtime()?;
         let base_url = vault_api_base_url();
@@ -484,7 +487,7 @@ fn wait_for_vault_api_ready(
                 "[tillandsias-vault] {last_failure}; retrying API probe ({attempt}/{MAX_API_PROBE_ATTEMPTS})"
             );
         }
-        rt.block_on(tokio::time::sleep(delay));
+        std::thread::sleep(delay);
         delay = std::cmp::min(delay.saturating_mul(2), max_delay);
     }
 
@@ -1069,7 +1072,26 @@ fn ensure_unseal_key(debug: bool) -> Result<[u8; 32], String> {
             key.copy_from_slice(&key_vec);
             return Ok(key);
         }
-        // 2. Not in host credentials (first boot). Return derived dummy key from delivered installation_uuid.
+        // Host didn't deliver a Shamir share. Try the local fallback file before
+        // deriving the dummy key — the fallback was written during the initial
+        // vault-init run and lets the headless self-recover when the Windows tray
+        // hasn't received the GetVaultHandover handover yet.
+        let cache_dir = crate::init_cache_dir().map_err(|err| format!("init cache dir: {err}"))?;
+        let fallback_file = cache_dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}"));
+        if fallback_file.is_file()
+            && let Ok(encoded) = fs::read_to_string(&fallback_file).map(|s| s.trim().to_string())
+            && let Ok(key_vec) = base64::engine::general_purpose::STANDARD.decode(&encoded)
+            && key_vec.len() == 32
+        {
+            if debug {
+                eprintln!("[tillandsias-vault] recovered Shamir share from VM fallback file");
+            }
+            let mut key = [0u8; 32];
+            key.copy_from_slice(&key_vec);
+            return Ok(key);
+        }
+        // No fallback share found — derive a first-boot dummy key. The vault
+        // container will generate the real share during init.
         if debug {
             eprintln!(
                 "[tillandsias-vault] Shamir share not present in host credentials; deriving first-boot dummy key K"
@@ -1635,6 +1657,9 @@ fn wait_for_vault_ready(
     rt.block_on(PodmanClient::new().wait_healthy(VAULT_CONTAINER_NAME))
         .map_err(|e| format!("vault container did not report healthy: {e}"))?;
 
+    // Update /etc/hosts now that the container has a stable IP.
+    update_etc_hosts_vault(debug);
+
     let client = vault_client(base_url, "", debug)?; // health doesn't need a token
     match wait_for_vault_api_ready(rt, &client, debug) {
         Ok(h) => {
@@ -1647,6 +1672,65 @@ fn wait_for_vault_ready(
             read_and_handover_root_token(debug)
         }
         Err(e) => Err(format!("vault podman health is healthy but {e}")),
+    }
+}
+
+/// Resolve the current vault container IP and update /etc/hosts so the
+/// process-local hostname `vault` always points to it. The headless process
+/// is not inside any podman network so aardvark-dns doesn't reach it; only
+/// /etc/hosts does.
+#[cfg(feature = "vault")]
+fn update_etc_hosts_vault(debug: bool) {
+    let out = match podman_cmd_sync()
+        .args([
+            "inspect",
+            VAULT_CONTAINER_NAME,
+            "--format",
+            "{{range .NetworkSettings.Networks}}{{.IPAddress}}\n{{end}}",
+        ])
+        .output()
+    {
+        Ok(o) => o,
+        Err(e) => {
+            eprintln!("[tillandsias-vault] /etc/hosts update skipped: podman inspect failed: {e}");
+            return;
+        }
+    };
+    if !out.status.success() {
+        eprintln!(
+            "[tillandsias-vault] /etc/hosts update skipped: podman inspect exit {}",
+            out.status
+        );
+        return;
+    }
+    let ip = match String::from_utf8_lossy(&out.stdout)
+        .lines()
+        .map(str::trim)
+        .find(|l| !l.is_empty())
+        .map(str::to_owned)
+    {
+        Some(ip) => ip,
+        None => {
+            eprintln!("[tillandsias-vault] /etc/hosts update skipped: no IP from podman inspect");
+            return;
+        }
+    };
+    let hosts = fs::read_to_string("/etc/hosts").unwrap_or_default();
+    let mut new_content: String = hosts
+        .lines()
+        .filter(|l| !l.split_whitespace().any(|w| w == "vault"))
+        .collect::<Vec<_>>()
+        .join("\n");
+    if !new_content.ends_with('\n') && !new_content.is_empty() {
+        new_content.push('\n');
+    }
+    new_content.push_str(&format!("{ip} vault\n"));
+    if let Err(e) = fs::write("/etc/hosts", &new_content) {
+        eprintln!("[tillandsias-vault] /etc/hosts update failed: {e}");
+        return;
+    }
+    if debug {
+        eprintln!("[tillandsias-vault] /etc/hosts: vault → {ip}");
     }
 }
 
@@ -1789,6 +1873,22 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
                 );
             }
             return Ok(token.clone());
+        }
+        // Host didn't deliver a root token. Try the local fallback file
+        // (written by the vault-init bootstrap on first run and by any
+        // explicit `--store-vault-root-token` path). This keeps the headless
+        // self-sufficient when the Windows tray's Credential Manager hasn't
+        // received the handover yet (e.g. after a GetVaultHandover failure).
+        let cache_dir = crate::init_cache_dir().map_err(|err| format!("init cache dir: {err}"))?;
+        let fallback_file = cache_dir.join("fallback_vault-root-token-v1");
+        if fallback_file.is_file()
+            && let Ok(t) = fs::read_to_string(&fallback_file).map(|s| s.trim().to_string())
+            && !t.is_empty()
+        {
+            if debug {
+                eprintln!("[tillandsias-vault] recovered root token from VM fallback file");
+            }
+            return Ok(t);
         }
         return Err("running in VM but no root token delivered from host".to_string());
     }
