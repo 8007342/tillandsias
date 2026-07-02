@@ -8720,6 +8720,105 @@ plan_index:
         - "--debug / menu toggle shows a titled live debug console"
         - "macOS VZ path checked for analogous artifact"
 
+    # ── First interactive forge session findings — Orders 156-159 ────────────
+    # Source: in-forge agent meta-orchestration run 2026-07-02 (baseline:
+    # plan/diagnostics/diagnostics_2026-07-02-summary.md, commits 2858be6a +
+    # 8861f d1a authored INSIDE the forge — itself proof of the attach flow).
+    # ─────────────────────────────────────────────────────────────────────────
+
+    - packet_id: forge-agent-permission-defaults
+      order: 156
+      title: "Forge UX: pre-grant container-local filesystem to agents; enforce at the boundary"
+      status: ready
+      kind: research+ux
+      deliverable: plan/issues/forge-agent-permission-defaults-2026-07-02.md
+      depends_on: []
+      pickup_role: any
+      capability_tags: [forge, agents, security, ux]
+      estimated_hours: 4
+      outcome: >
+        First interactive forge session prompted the operator to allow /etc, /proc,
+        /tmp reads and /home/forge writes — theater inside an ephemeral, enclave-
+        contained container (real boundaries: proxy allowlist, podman isolation,
+        SELinux Phase 6, mirror-mediated credentials). Operator-ratified direction:
+        default-grant the container-local filesystem in the forge agent config
+        overlays; strengthen the boundary, not the prompts. Deliverable holds the
+        position + rationale for ratification.
+      exit_criteria:
+        - "Fresh forge session runs diagnostics with zero filesystem permission prompts"
+        - "Boundary-enforcement rationale written into the spec (why default-grant is safe)"
+
+    - packet_id: forge-git-ergonomics
+      order: 157
+      title: "Forge: fix git safe.directory + auto url.insteadOf + env gaps (LANG/JAVA_HOME/GOROOT/FLUTTER_ROOT)"
+      status: ready
+      kind: bug-fix+config
+      deliverable: images/default/
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [forge, git, images, linux]
+      estimated_hours: 4
+      outcome: >
+        In-forge git hit "dubious ownership" on the mounted project tree (uid
+        mismatch vs forge uid 1000 — safe.directory, NOT certs) and
+        rewrite_origin_for_enclave_push()'s url.insteadOf was not installed (agent
+        had to set it manually before the mirror push worked). Entrypoint should
+        git config safe.directory for /home/forge/src/* and install the insteadOf
+        rewrite unconditionally. Also close the baseline's env gaps: LANG unset,
+        JAVA_HOME unset (JRE present), GOROOT unset, FLUTTER_ROOT points at absent
+        SDK (install or drop). Baseline: plan/diagnostics/diagnostics_2026-07-02-summary.md.
+      exit_criteria:
+        - "Fresh forge: git status/commit/push on the mounted tree with no dubious-ownership and no manual git config"
+        - "url.insteadOf present on first shell (litmus)"
+        - "LANG set; JAVA_HOME/GOROOT set or documented-absent; FLUTTER_ROOT resolved (install or remove)"
+
+    - packet_id: git-mirror-upstream-forwarding
+      order: 158
+      title: "Git mirror: configure upstream remote so forge pushes reach GitHub (blocker for cloud projects)"
+      status: ready
+      kind: bug-fix
+      deliverable: plan/issues/git-mirror-no-upstream-remote-2026-07-02.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [git-mirror, headless, github, linux]
+      estimated_hours: 6
+      outcome: >
+        The forge pushes to the git mirror (git-service:9418) successfully, but the
+        mirror logs "[git-mirror] No remote configured, skipping push" — refs are
+        trapped on the mirror and never reach GitHub. For LOCAL projects the host
+        checkout shares the .git so nothing is lost; for CLOUD projects (mirror-
+        origin'd clones) this silently strands work. The mirror's post-receive
+        forward must get the upstream GitHub remote (from the project's origin URL,
+        token via the vault-mediated credential channel). Agent-filed blocker issue
+        (authored in-forge) is the deliverable; spec:git-mirror-service governs.
+      exit_criteria:
+        - "Cloud-project forge push lands on GitHub within one post-receive cycle"
+        - "Mirror logs the forward result; no-remote case is an ERROR not a silent skip"
+        - "E2E: mcp-test commit from the forge visible on github.com"
+
+    - packet_id: inference-container-startup-failure
+      order: 159
+      title: "Investigate: inference (Ollama) container dies ~30s after launch and self-removes"
+      status: ready
+      kind: investigation+bug-fix
+      deliverable: plan/issues/inference-container-startup-failure-2026-07-02.md
+      depends_on: []
+      pickup_role: any
+      capability_tags: [inference, podman, headless, observability]
+      estimated_hours: 4
+      outcome: >
+        During both forge launches (mcp-test, tillandsias) tillandsias-inference
+        started and died ~32s later; because it runs with --rm the logs vanish with
+        it, so the forge just sees inference:11434 unreachable (both agent
+        diagnostics flagged it). Likely candidates: Ollama OOM against the 7.3GB VM
+        (memory peak vs model preload), missing GPU/device, or entrypoint probe
+        exiting. Must capture the death reason (run without --rm or journal the
+        output), fix, and stop using --rm for services whose post-mortem matters.
+      exit_criteria:
+        - "Death cause captured and fixed; inference:11434 answers from the forge"
+        - "Service containers keep post-mortem logs (no bare --rm on long-lived services)"
+        - "Forge diagnostics show inference ✅ on a fresh launch"
+
     # NOTE (2026-07-01, windows merge): orders 137-142 below were assigned on
     # linux-next concurrently with the observable-streams block above (orders
     # 138-149, assigned on windows-next). Order numbers collide; packet_ids are
