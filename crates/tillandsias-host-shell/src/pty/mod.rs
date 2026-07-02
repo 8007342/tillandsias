@@ -76,44 +76,28 @@ pub enum PtyIntent {
     Agent(SelectedAgent),
 }
 
-/// Bash podman shim (base64-encoded) that swaps
-/// `label=type:vault_container_t` → `label=disable` for vault containers.
-/// Fedora 44 enforcing SELinux rejects the undefined type with EINVAL.
-/// Headless reads TILLANDSIAS_PODMAN_BIN to find the wrapper.
-///
-/// Uses bash (not python3) because the bare Fedora 44 VM rootfs does not
-/// ship python3. Decoded script: `#!/bin/bash\nexec /usr/bin/podman
-/// "${@/label=type:vault_container_t/label=disable}"\n`
-/// Bash `${@/pat/rep}` applies the substitution to every positional arg,
-/// replacing the offending SELinux label in-place.
-///
-/// NOTE: the macOS path (osx-next 1325bea9) uses a python3 shim because
-/// macOS VZ guests have python3 available; the Windows/WSL2 Fedora guest
-/// does not, hence the bash variant here.
-/// TODO(selinux): remove once images/selinux/vault_container.cil is loaded (Phase 3d).
-const PODMAN_SELINUX_WRAP_B64: &str = "IyEvYmluL2Jhc2gKZXhlYyAvdXNyL2Jpbi9wb2RtYW4gIiR7QC9sYWJlbD10eXBlOnZhdWx0X2NvbnRhaW5lcl90L2xhYmVsPWRpc2FibGV9Igo=";
-
 /// Compose the `/bin/bash -lc <script>` argv for an orchestrated in-VM
 /// headless subcommand (`--github-login`, `--cloud <nwo> --opencode`, ...).
 ///
 /// The preamble is shared by every orchestrated intent:
-///   * install the SELinux podman shim + export TILLANDSIAS_PODMAN_BIN
-///     (Fedora 44 enforcing rejects label=type:vault_container_t until
-///     Phase 3d lands — see PODMAN_SELINUX_WRAP_B64);
 ///   * rebuild HOME / XDG_RUNTIME_DIR so `require_desktop_user_session`
 ///     passes in a service-spawned PTY (no logind session in the VM);
 ///   * pin TILLANDSIAS_VAULT_API_BASE_URL to the aardvark-dns bridge name.
+///
+/// SELinux note: on an enforcing Fedora 44 guest the vault container is launched
+/// with `--security-opt label=type:vault_container_t`; that type is loaded by
+/// `tillandsias-headless` itself (`vault_bootstrap::ensure_vault_selinux_module`
+/// via `images/selinux/vault_container.cil`, Phase 3d) BEFORE the vault launch,
+/// so no host-side podman wrapper is needed. The former base64-encoded podman
+/// shim was removed 2026-07-02: it violated the methodology
+/// `base64_script_injection_ban` (embedding an executable script in a base64
+/// literal) AND was made redundant by Phase 3d.
 ///
 /// IMPORTANT: `&&` only, never bare `;` — Windows Terminal (wt.exe) treats
 /// `;` as ITS OWN argv separator and splits the script (0x80070002).
 /// See plan/issues/wt-github-login-semicolons-2026-06-30.md.
 fn vm_login_shell_argv(exec_tail: &str) -> Vec<String> {
-    let script = String::from("echo ")
-        + PODMAN_SELINUX_WRAP_B64
-        + " | base64 -d > /tmp/podman-selinux-wrap"
-        + " && chmod +x /tmp/podman-selinux-wrap"
-        + " && export TILLANDSIAS_PODMAN_BIN=/tmp/podman-selinux-wrap"
-        + " && export HOME=\"${HOME:-/root}\""
+    let script = String::from("export HOME=\"${HOME:-/root}\"")
         + " && export XDG_RUNTIME_DIR=\"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}\""
         + " && install -d -m 0700 \"$XDG_RUNTIME_DIR\""
         + " && export TILLANDSIAS_VAULT_API_BASE_URL=\"${TILLANDSIAS_VAULT_API_BASE_URL:-https://vault:8200}\""
@@ -221,11 +205,10 @@ pub fn launch_spec(intent: &PtyIntent, project: Option<&str>, rows: u16, cols: u
             // all exports/install succeed unconditionally.
             // See plan/issues/wt-github-login-semicolons-2026-06-30.md
             //
-            // SELinux podman wrapper: Fedora 44 enforcing mode rejects
-            // label=type:vault_container_t (Phase 3d not yet complete). Install a
-            // bash shim via PODMAN_SELINUX_WRAP_B64, set TILLANDSIAS_PODMAN_BIN.
-            // Parity with osx-next commit 1325bea9.
-            // TODO(selinux): remove when vault_container.cil is semodule-loaded.
+            // SELinux: the vault_container_t type is loaded in-guest by
+            // vault_bootstrap::ensure_vault_selinux_module (Phase 3d) before the
+            // vault launch, so no host-side podman wrapper is needed. The former
+            // base64 podman shim was removed 2026-07-02 (base64_script_injection_ban).
             vm_login_shell_argv("exec tillandsias-headless --github-login")
         }
         PtyIntent::Agent(agent) => {
@@ -769,14 +752,12 @@ mod tests {
             !github_cmd.contains(';'),
             "script must not contain `;` (wt.exe separator bug)"
         );
-        // SELinux wrapper is installed before exec (osx-next 1325bea9 parity).
+        // No base64-encoded podman shim: the vault_container_t SELinux type is
+        // loaded in-guest by Phase 3d (ensure_vault_selinux_module), so no
+        // host-side wrapper is embedded. Enforces base64_script_injection_ban.
         assert!(
-            github_cmd.contains("podman-selinux-wrap"),
-            "script must install SELinux podman wrapper"
-        );
-        assert!(
-            github_cmd.contains("TILLANDSIAS_PODMAN_BIN=/tmp/podman-selinux-wrap"),
-            "script must export TILLANDSIAS_PODMAN_BIN"
+            !github_cmd.contains("podman-selinux-wrap"),
+            "login script must not embed a base64 podman shim (Phase 3d makes it redundant)"
         );
         assert!(github_cmd.contains("install -d -m 0700 \"$XDG_RUNTIME_DIR\""));
         assert!(github_cmd.contains("TILLANDSIAS_VAULT_API_BASE_URL"));
@@ -856,7 +837,7 @@ mod tests {
             !script.contains(';'),
             "script must not contain `;` (wt.exe separator bug)"
         );
-        assert!(script.contains("TILLANDSIAS_PODMAN_BIN=/tmp/podman-selinux-wrap"));
+        assert!(!script.contains("podman-selinux-wrap"));
         assert!(script.contains("install -d -m 0700 \"$XDG_RUNTIME_DIR\""));
 
         // Maintenance shell on a cloud project takes the same path, --bash kind.

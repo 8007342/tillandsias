@@ -1403,3 +1403,23 @@ plan_index:
     # 138-149, assigned on windows-next). Order numbers collide; packet_ids are
     # unique and remain the authoritative key.
 
+
+    - packet_id: wire-policy-checkers-into-ci
+      order: 169
+      title: "Enforce base64/python bans in CI (wire policy checkers into --ci-full)"
+      status: ready
+      kind: enhancement
+      deliverable: plan/issues/base64-shim-reintroduction-removed-2026-07-02.md
+      depends_on: []
+      pickup_role: linux
+      capability_tags: [rust, testing, methodology]
+      estimated_hours: 2
+      outcome: >
+        check-no-python-scripts.sh and check-no-base64-script-injection.sh are declared
+        methodology checkers but run only on demand; neither fails the build. Wire both
+        into ./build.sh --ci-full (or the pre-build litmus phase) so the CRITICAL bans
+        (tlatoani_hard_no_python, base64_script_injection_ban) fail the gate automatically.
+      exit_criteria:
+        - "both policy checkers run in --ci-full and fail the build on violation"
+        - "a deliberately-injected base64 decode-to-executable makes --ci-full fail"
+        - "green on the current tree"
