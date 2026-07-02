@@ -5,7 +5,7 @@
 - owner: linux
 - status: open
 - scope: host↔VM (vsock) · VM↔guest · guest↔podman · container↔container (enclave) · enclave↔proxy↔internet · Vault access · transparent exec/pipe chain
-- trigger: post-`zeroclaw` / post-`vsock` / post-transparent-exec complexity growth; operator asked for "zero trust at every boundary, sound and complete for a fully isolated agent environment."
+- trigger: post-`legacy-claw` / post-`vsock` / post-transparent-exec complexity growth; operator asked for "zero trust at every boundary, sound and complete for a fully isolated agent environment."
 
 ## Cold-start summary
 
@@ -20,8 +20,8 @@ commands inside the deepest forge container and read a root Vault token. On a
 zero, is spec-sanctioned ("SHALL accept connections from any CID"), and does not
 survive any future multi-CID / nested-VM / shared-hypervisor topology.
 
-`zeroclaw` is **gone** (crate/image/binary removed after the order-114
-unauthorized-release violation); only an empty orphan `images/zeroclaw/skills/`
+`legacy-claw` is **gone** (crate/image/binary removed after the order-114
+unauthorized-release violation); only an empty orphan `images/legacy-claw/skills/`
 directory remains. The Vault XOR init.envelope is **gone** and root.token is no
 longer persisted to durable storage — but see P1-1 for a tmpfs residual.
 
@@ -63,7 +63,7 @@ longer persisted to durable storage — but see P1-1 for a tmpfs residual.
 run `/bin/bash` on the bare VM (the "debug escape hatch," `pty/mod.rs:139`), and
 (b) `podman exec` into any `tillandsias-<p>-forge` container. Chained with P1-1,
 it can read a Vault **root** token. This is the exact class of "any local process
-can invoke host-level commands with no isolation" that got the zeroclaw MCP
+can invoke host-level commands with no isolation" that got the legacy-claw MCP
 socket killed in the order-114 violation report — reintroduced on vsock.
 
 **Why bounded today / why it still matters:** VZ/WSL give the VM a single guest
@@ -182,10 +182,10 @@ for the github-login→list-cloud-projects chain** (memory: `enclave-proxy-exemp
 must be exempted. Verify each new path's inherited proxy env and add the missing
 e2e gate.
 
-### P2-2 — `images/zeroclaw/` orphan directory remains
+### P2-2 — `images/legacy-claw/` orphan directory remains
 
-`images/zeroclaw/skills/` is an empty orphan left after the order-114
-zeroclaw removal. The `litmus-no-dangling-removed-component-refs` litmus greps
+`images/legacy-claw/skills/` is an empty orphan left after the order-114
+legacy-claw removal. The `litmus-no-dangling-removed-component-refs` litmus greps
 file *contents*, so an empty dir slips through. Cosmetic drift, not a security
 hole. Remove the directory; consider extending the litmus to flag orphan
 component dirs.

@@ -885,4 +885,3 @@ specs:
   - litmus:enclave-isolation
   - litmus:reverse-proxy-internal-shape
   coverage_ratio: 75
-  last_verified: '2026-05-30'

@@ -8047,7 +8047,7 @@ plan_index:
     - packet_id: stale-reference-cleanup-audit
       order: 135
       title: "Optimization: stale-reference + superseded-work cleanup audit"
-      status: ready
+      status: done
       kind: optimization
       deliverable: plan/issues/stale-reference-cleanup-audit-2026-06-28.md
       depends_on: []
