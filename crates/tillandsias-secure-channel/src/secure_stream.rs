@@ -412,6 +412,30 @@ mod tests {
         );
     }
 
+    /// Failure-closed rejection (order 137): a peer that sends plaintext instead
+    /// of a Noise handshake — i.e. an unauthenticated/legacy client, or a probe —
+    /// is rejected; the responder never reaches a served state. This is the
+    /// primitive-level guarantee behind `litmus:vsock-unauthenticated-peer-rejected`
+    /// (the vsock-integration form lands with the coordinated cutover, slice 4).
+    #[tokio::test]
+    async fn plaintext_peer_is_rejected() {
+        let (mut client, server) = tokio::io::duplex(64 * 1024);
+        let k = psk("0.3.260701.1");
+        let server_task = tokio::spawn(async move { server_handshake(server, &k).await });
+
+        // A non-handshake peer: send a plausible-looking framed plaintext blob
+        // (what an old plaintext-Hello client would send) instead of a Noise msg.
+        client.write_all(&[0x00, 0x08]).await.unwrap();
+        client.write_all(b"HELLOxxx").await.unwrap();
+        client.flush().await.unwrap();
+
+        let res = server_task.await.unwrap();
+        assert!(
+            res.is_err(),
+            "the responder MUST reject a peer that does not complete the Noise handshake"
+        );
+    }
+
     /// A flipped ciphertext byte makes the AEAD open fail (integrity). Proven at
     /// the Noise transport level with a raw in-memory handshake so no custom
     /// async transport is needed; `EncryptedStream` seals/opens with these exact

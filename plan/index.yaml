@@ -651,6 +651,37 @@ plan_index:
         - "both hops use the same EncryptedStream<S>; terminal I/O + argv encrypted"
         - "./build.sh --check and --test pass; e2e on an enforcing guest green"
 
+    - packet_id: encrypted-channel-vsock-cutover
+      order: 145
+      title: "Security: coordinated vsock cutover to the encrypted channel (slice 4) + container hop (slice 6)"
+      status: ready
+      kind: enhancement
+      deliverable: plan/issues/encrypted-channel-vsock-cutover-2026-07-02.md
+      depends_on: [encrypted-control-channel-impl]
+      pickup_role: linux
+      owner_host: linux
+      capability_tags: [rust, security, vsock, podman]
+      estimated_hours: 8
+      coordination_note: >
+        ATOMIC CROSS-HOST CUTOVER — not solo-linux. The EncryptedStream primitive
+        (order 141 slices 1-3) is landed; this turns it ON for the vsock host<->guest
+        hop. The guest responder (vsock_server.rs, linux) and all three host
+        initiators (host-shell/vsock_client.rs shared; macos-tray/diagnose.rs osx;
+        windows-tray/hvsocket.rs windows) MUST flip together or the control wire
+        bricks on the hosts that didn't (dual plaintext+encrypted is a downgrade
+        vuln, so no half-measures). Needs host<->guest VM e2e per platform. See the
+        deliverable for the exact integration points + gated rollout plan. The
+        primitive-level failure-closed proof (litmus:vsock-unauthenticated-peer-rejected)
+        already lands in tillandsias-secure-channel (plaintext_peer_is_rejected).
+        osx/windows adopt their initiator half on their branches.
+      exit_criteria:
+        - "gate-off prep landed (no behavior change; all hosts build+connect)"
+        - "each host initiator wraps its stream with client_handshake behind the gate"
+        - "guest requires the handshake when gated ON; rejects plaintext/mismatch with Unauthorized"
+        - "each platform VM-smokes --github-login over the encrypted wire (evidence per host)"
+        - "atomic flip to ON + gate removed once all three are green"
+        - "slice 6 encrypts the guest<->container hop; order-104 port-publish removal revisited"
+
     - packet_id: encrypted-channel-perboot-key-hardening
       order: 142
       title: "Security hardening: mix a per-boot secret into the control-channel PSK derivation"
