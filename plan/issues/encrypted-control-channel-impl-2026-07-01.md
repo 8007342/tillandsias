@@ -30,6 +30,26 @@ only approved exec commands reach the deepest container. Failure-closed.
 - WIRE_VERSION unchanged (confirm in slice 1); the tunnel wraps the existing
   postcard codec without schema changes.
 
+## Progress
+
+- **Slices 1-2 DONE** (`0a7afb2c`): `tillandsias-secure-channel` crate;
+  `derive_psk()` version binding; 7 proof tests.
+- **Slice 3 DONE** (this cycle): `EncryptedStream<S>` in `secure_stream.rs` —
+  `NNpsk0` `client_handshake`/`server_handshake` over any `AsyncRead+AsyncWrite`,
+  then a full `AsyncRead+AsyncWrite` AEAD tunnel (2-byte-length ChaCha20-Poly1305
+  frames, 16 KiB plaintext chunks, poll-based read reassembly + write staging).
+  `snow` default-resolver (pure-Rust, musl-friendly). 11 tests: round-trip,
+  multi-frame, mismatched-PSK-handshake-fails, tampered-ciphertext-rejected.
+- **Slice 5 (argv allowlist) ALREADY LANDED via order 139** (`e0b30d18`,
+  `pty_handler.rs`): argv allowlist + `tillandsias-{project}-forge` name
+  validation + proxy exemption. Slice 4 will place the encrypted channel as gate
+  #1 in front of that existing gate #2.
+- **Remaining: slice 4** (wire the handshake into `vsock_server::handle_connection`
+  before `Hello`, failure-closed `Unauthorized`; host initiator side) and **slice
+  6** (guest↔container hop reuse + revisit order-104 port-publish removal).
+- **Residual to confirm at release:** the `snow` dep uses the pure-Rust
+  default-resolver, expected musl-static clean; verify under `--ci-full`/release.
+
 ## Slices (one coherent commit each; single-commit-per-cycle applies)
 
 ### Slice 1 — OpenSpec change + crate skeleton (no behavior change)

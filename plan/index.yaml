@@ -578,7 +578,7 @@ plan_index:
         - "./build.sh --check and --test pass"
 
     - packet_id: github-login-e2e-gate
-      order: 141
+      order: 144
       title: "Add e2e gate for github-login -> list flow"
       status: ready
       kind: implementation
@@ -603,8 +603,10 @@ plan_index:
       estimated_hours: 16
       supersedes_note: >
         Closes vsock-exec-chain-authn-authz (order 137) and the argv-allowlist half of
-        vsock-exec-authz-spec-and-proxy-exemption-audit (order 139). O1 signed off
-        (build-embedded per-release secret); slices 1-2 landed. Remaining: slices 3-6.
+        vsock-exec-authz-spec-and-proxy-exemption-audit (order 139 — the argv allowlist
+        + project-name validation + proxy-exemption ALREADY LANDED in pty_handler.rs by
+        139, so slice 5 is largely covered; slice 4 wires the encrypted channel as gate
+        #1 in front of it). O1 signed off. Slices 1-3 landed. Remaining: 4, 6.
       events:
         - type: claim
           ts: "2026-07-01T23:05:00Z"
@@ -616,16 +618,23 @@ plan_index:
           ts: "2026-07-01T23:10:00Z"
           agent_id: "linux-yoga-fable5-20260701T2305Z"
           summary: >
-            Slices 1-2 landed: new crate tillandsias-secure-channel with HopId,
-            derive_psk() (HKDF-SHA256 over release_root_secret + build_version +
-            wire_version + hop_id), release_root_secret() (option_env
-            TILLANDSIAS_RELEASE_SECRET, dev-seed fallback), channel_psk() convenience,
-            and 7 unit tests PROVING version binding by construction (psk differs across
-            build_version / wire_version / hop / root; deterministic for equal inputs).
-            EncryptedStream<S> handshake (snow, slice 3) is a documented placeholder.
-            No new external deps beyond vendored hkdf/sha2/zeroize. ./build.sh --check +
-            crate tests green. Remaining: slice 3 (Noise handshake+AEAD), 4 (vsock
-            integration + Unauthorized), 5 (argv allowlist), 6 (guest<->container reuse).
+            Slices 1-2 landed: crate tillandsias-secure-channel + derive_psk() version
+            binding + 7 proof tests.
+        - type: progress
+          ts: "2026-07-02T00:15:00Z"
+          agent_id: "linux-yoga-fable5-20260702T0010Z"
+          summary: >
+            Slice 3 landed: EncryptedStream<S> in secure_stream.rs — NNpsk0 handshake
+            (client_handshake/server_handshake) over any AsyncRead+AsyncWrite, then a
+            full AsyncRead+AsyncWrite AEAD tunnel (2-byte-length-framed ChaCha20-Poly1305
+            frames, 16KiB plaintext chunks, poll-based read reassembly + write staging).
+            snow default-resolver (pure-Rust RustCrypto, musl-friendly). 11 crate tests
+            green: round-trip, multi-frame (>3 frames), mismatched-PSK-handshake-FAILS
+            (version binding at the handshake), tampered-ciphertext-rejected (AEAD
+            integrity). ./build.sh --check green. Remaining: slice 4 (wire into
+            vsock_server::handle_connection before Hello, failure-closed Unauthorized;
+            host initiator side) and slice 6 (guest<->container hop reuse). Slice 5
+            (argv allowlist) already landed via order 139.
       outcome: >
         Land the EncryptedStream<S> primitive (Noise, snow) wrapping the vsock host<->guest
         hop and the guest<->innermost-container hop; key derived from build_version so only

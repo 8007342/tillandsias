@@ -80,6 +80,9 @@ tokio-vsock = "0.6"
 sha2 = "0.10"
 hkdf = "0.12"
 zeroize = "1"
+# Noise Protocol Framework (pure-Rust default-resolver: chacha20poly1305 +
+# x25519-dalek + blake2 via RustCrypto — musl-static friendly, no ring/C deps).
+snow = "0.9"
 embed-resource = "3"
 tempfile = "3"
 tar = "0.4"
