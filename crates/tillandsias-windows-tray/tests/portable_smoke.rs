@@ -13,7 +13,7 @@
 //! @trace spec:windows-native-tray
 
 use tillandsias_host_shell::menu_state::{
-    GithubLoginState, MenuState, MenuStructure, ProjectEntry, SelectedAgent, TargetSurface, build,
+    GithubLoginState, MenuState, MenuStructure, ProjectEntry, TargetSurface, build,
 };
 
 /// The Windows tray paints the host-shell `MenuStructure` verbatim, matching

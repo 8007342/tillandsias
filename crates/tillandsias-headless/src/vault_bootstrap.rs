@@ -1078,21 +1078,17 @@ fn ensure_unseal_key(debug: bool) -> Result<[u8; 32], String> {
         // hasn't received the GetVaultHandover handover yet.
         let cache_dir = crate::init_cache_dir().map_err(|err| format!("init cache dir: {err}"))?;
         let fallback_file = cache_dir.join(format!("fallback_{VAULT_SHAMIR_SHARE_V1}"));
-        if fallback_file.is_file() {
-            if let Ok(encoded) = fs::read_to_string(&fallback_file).map(|s| s.trim().to_string()) {
-                if let Ok(key_vec) = base64::engine::general_purpose::STANDARD.decode(&encoded) {
-                    if key_vec.len() == 32 {
-                        if debug {
-                            eprintln!(
-                                "[tillandsias-vault] recovered Shamir share from VM fallback file"
-                            );
-                        }
-                        let mut key = [0u8; 32];
-                        key.copy_from_slice(&key_vec);
-                        return Ok(key);
-                    }
-                }
+        if fallback_file.is_file()
+            && let Ok(encoded) = fs::read_to_string(&fallback_file).map(|s| s.trim().to_string())
+            && let Ok(key_vec) = base64::engine::general_purpose::STANDARD.decode(&encoded)
+            && key_vec.len() == 32
+        {
+            if debug {
+                eprintln!("[tillandsias-vault] recovered Shamir share from VM fallback file");
             }
+            let mut key = [0u8; 32];
+            key.copy_from_slice(&key_vec);
+            return Ok(key);
         }
         // No fallback share found — derive a first-boot dummy key. The vault
         // container will generate the real share during init.
@@ -1885,15 +1881,14 @@ fn read_and_handover_root_token(debug: bool) -> Result<String, String> {
         // received the handover yet (e.g. after a GetVaultHandover failure).
         let cache_dir = crate::init_cache_dir().map_err(|err| format!("init cache dir: {err}"))?;
         let fallback_file = cache_dir.join("fallback_vault-root-token-v1");
-        if fallback_file.is_file() {
-            if let Ok(t) = fs::read_to_string(&fallback_file).map(|s| s.trim().to_string()) {
-                if !t.is_empty() {
-                    if debug {
-                        eprintln!("[tillandsias-vault] recovered root token from VM fallback file");
-                    }
-                    return Ok(t);
-                }
+        if fallback_file.is_file()
+            && let Ok(t) = fs::read_to_string(&fallback_file).map(|s| s.trim().to_string())
+            && !t.is_empty()
+        {
+            if debug {
+                eprintln!("[tillandsias-vault] recovered root token from VM fallback file");
             }
+            return Ok(t);
         }
         return Err("running in VM but no root token delivered from host".to_string());
     }

@@ -113,16 +113,9 @@ pub fn channel_psk(build_version: &str, wire_version: u16, hop: HopId) -> Zeroiz
     derive_psk(release_root_secret(), build_version, wire_version, hop)
 }
 
-pub mod secure_stream {
-    //! Placeholder for the Noise handshake + AEAD stream wrapper (impl packet
-    //! slices 3+). Wrapping any `AsyncRead + AsyncWrite` stream is what lets the
-    //! same primitive secure both the vsock hop and the guest↔container hop.
-    //!
-    //! TODO(order 141 slice 3): `EncryptedStream<S>` over `snow` (Noise
-    //! `NNpsk0`, X25519 + ChaCha20-Poly1305), keyed by [`super::channel_psk`],
-    //! failure-closed with `ControlMessage::Error { code: Unauthorized }` before
-    //! any `Hello`.
-}
+pub mod secure_stream;
+
+pub use secure_stream::{EncryptedStream, client_handshake, server_handshake};
 
 #[cfg(test)]
 mod tests {

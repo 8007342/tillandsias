@@ -2825,6 +2825,7 @@ pub(crate) fn sanitize_hostname(raw: &str) -> String {
 ///   3. `$HOME/src` — Linux native fallback
 ///
 /// @trace spec:host-shell-architecture, spec:remote-projects
+#[cfg(any(feature = "tray", feature = "listen-vsock"))]
 fn projects_root() -> PathBuf {
     if let Ok(root) = std::env::var("TILLANDSIAS_IN_VM_PROJECT_ROOT") {
         return PathBuf::from(root);

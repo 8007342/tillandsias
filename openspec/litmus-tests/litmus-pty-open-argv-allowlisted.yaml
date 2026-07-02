@@ -1,0 +1,31 @@
+name: litmus:pty-open-argv-allowlisted
+spec: vsock-exec-authz
+phase: pre-build
+description: "Verify that the PtyOpen handler explicitly allowlists command executions and sets proxy-exemption variables."
+severity: critical
+size: instant
+
+preconditions:
+  - workspace contains crates/tillandsias-headless/src/pty_handler.rs
+  - shell utilities (grep) are available in PATH
+
+critical_path:
+  - step: "pty_handler.rs validates argv against an allowlist"
+    command: "grep -F 'let is_allowed = match argv[0].as_str()' crates/tillandsias-headless/src/pty_handler.rs"
+    expected_behavior: "let is_allowed = match argv[0].as_str()"
+    timeout_ms: 3000
+
+  - step: "pty_handler.rs restricts project names to alphanumeric + hyphens"
+    command: "grep -F 'project.chars().all(|c| c.is_ascii_alphanumeric() || c == '\\''-'\\'')' crates/tillandsias-headless/src/pty_handler.rs"
+    expected_behavior: "is_ascii_alphanumeric"
+    timeout_ms: 3000
+
+  - step: "child_env function in pty_handler.rs sets no_proxy"
+    command: "grep -F 'out.push((\"no_proxy\".to_string(), crate::enclave_no_proxy()));' crates/tillandsias-headless/src/pty_handler.rs"
+    expected_behavior: "out.push((\"no_proxy\".to_string(), crate::enclave_no_proxy()));"
+    timeout_ms: 3000
+
+  - step: "child_env function in pty_handler.rs sets NO_PROXY"
+    command: "grep -F 'out.push((\"NO_PROXY\".to_string(), crate::enclave_no_proxy()));' crates/tillandsias-headless/src/pty_handler.rs"
+    expected_behavior: "out.push((\"NO_PROXY\".to_string(), crate::enclave_no_proxy()));"
+    timeout_ms: 3000

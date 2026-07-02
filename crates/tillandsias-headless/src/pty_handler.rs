@@ -22,6 +22,7 @@
 //! pipe per the proposal's Task 3.3 (windows-tray w4).
 //!
 //! @trace openspec/changes/control-wire-pty-attach/proposal.md (Tasks 4.x),
+//! @trace spec:vsock-exec-authz
 //!        plan/issues/multi-host-integration-loop-2026-05-24.md (l3),
 //!        plan/issues/windows-next-work-queue-2026-05-25.md (w4)
 
@@ -109,6 +110,46 @@ impl PtySessionStore {
         }
         if argv.is_empty() {
             return Err(PtyOpenError::EmptyArgv);
+        }
+
+        let is_allowed = match argv[0].as_str() {
+            "/bin/bash" => argv.len() >= 2 && (argv[1] == "-l" || argv[1] == "-lc"),
+            "tillandsias" => argv.len() == 3 && argv[1] == "--agent",
+            "tillandsias-headless" => argv.len() >= 2 && argv[1] == "--github-login",
+            "podman" => {
+                if argv.len() >= 4 && argv[1] == "exec" && argv[2] == "-it" {
+                    let target = &argv[3];
+                    if target.starts_with("tillandsias-") && target.ends_with("-forge") {
+                        let project = &target["tillandsias-".len()..target.len() - "-forge".len()];
+                        let project_valid = !project.is_empty()
+                            && project
+                                .chars()
+                                .all(|c| c.is_ascii_alphanumeric() || c == '-');
+
+                        let subcmd = argv.get(4).map(|s| s.as_str());
+                        let subcmd_valid = match subcmd {
+                            Some("/bin/bash") => {
+                                argv.len() >= 6 && (argv[5] == "-l" || argv[5] == "-lc")
+                            }
+                            Some("tillandsias") => argv.len() == 7 && argv[5] == "--agent",
+                            Some(_) | None => false,
+                        };
+                        project_valid && subcmd_valid
+                    } else {
+                        false
+                    }
+                } else {
+                    false
+                }
+            }
+            _ => false,
+        };
+
+        if !is_allowed {
+            return Err(PtyOpenError::Spawn(std::io::Error::new(
+                std::io::ErrorKind::PermissionDenied,
+                format!("exec allowlist violation: {:?}", argv),
+            )));
         }
 
         // 1) Allocate the PTY pair.
@@ -362,11 +403,20 @@ const DEFAULT_CHILD_PATH: &str = "/usr/local/sbin:/usr/local/bin:/usr/sbin:/usr/
 /// @trace plan/issues/macos-tray-github-login-blank-terminal-2026-06-21.md,
 ///        plan/issues/optimization-macos-vz-idiomatic-exec-layer-2026-06-21.md
 fn child_env(provided: &[(String, String)]) -> Vec<(String, String)> {
-    let mut out: Vec<(String, String)> = Vec::with_capacity(provided.len() + 1);
+    let mut out: Vec<(String, String)> = Vec::with_capacity(provided.len() + 3);
     if !provided.iter().any(|(k, _)| k == "PATH") {
         out.push(("PATH".to_string(), DEFAULT_CHILD_PATH.to_string()));
     }
     out.extend(provided.iter().cloned());
+
+    // proxy-exemption pattern
+    if !provided.iter().any(|(k, _)| k == "no_proxy") {
+        out.push(("no_proxy".to_string(), crate::enclave_no_proxy()));
+    }
+    if !provided.iter().any(|(k, _)| k == "NO_PROXY") {
+        out.push(("NO_PROXY".to_string(), crate::enclave_no_proxy()));
+    }
+
     out
 }
 

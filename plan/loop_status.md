@@ -1,6 +1,49 @@
 # Multi-Host Coordination Loop Status
 
-LastExecutionTime: 2026-07-01T23:25Z
+LastExecutionTime: 2026-07-02T00:30Z
+
+## This Loop (2026-07-02T00:10Z, linux_mutable — /advance-work-from-plan, encrypted-channel slice 3)
+
+Operator asked to pull latest and complete the remaining encrypted-channel + auth
+packets.
+
+- **Pull**: fast-forwarded linux-next past 4 commits from other agents — packets
+  **134** (archived 129 closed packets; index much smaller), **135** (stale-ref
+  cleanup), **136** (integration strategy), and **139** (vsock exec authz) all done.
+  Note: a `zeroclaw`→`legacy-claw` terminology rename was applied elsewhere.
+- **Packet 139 already landed the argv allowlist** (`pty_handler.rs`: allowlist +
+  `tillandsias-{project}-forge` name validation + proxy exemption), so
+  encrypted-channel slice 5 is largely covered.
+- **Delivered — order 141 slice 3** (`7a62fabb`): `EncryptedStream<S>` in
+  `tillandsias-secure-channel/secure_stream.rs` — `NNpsk0`
+  client/server handshake over any `AsyncRead+AsyncWrite`, then a full
+  AEAD `AsyncRead+AsyncWrite` tunnel (2-byte-len ChaCha20-Poly1305 frames,
+  poll-based reassembly/staging). `snow` pure-Rust default-resolver (musl-safe).
+  11 crate tests: round-trip, multi-frame, mismatched-PSK-handshake-FAILS,
+  tampered-ciphertext-rejected. So slices 1-3 (the reusable crypto primitive both
+  sibling trays will wrap) are DONE.
+- **Delivered — order 145 filed + rejection litmus** (`1250228a`):
+  `plaintext_peer_is_rejected` proves failure-closed rejection at the primitive
+  (order 137's guarantee, VM-free). Filed order 145 (encrypted-channel-vsock-cutover)
+  as an explicit ATOMIC cross-host cutover: slice 4 (turn the channel ON for the
+  vsock hop) requires the guest responder + all THREE host initiators
+  (host-shell shared, macos diagnose.rs, windows hvsocket.rs) to flip together
+  (a half-flip bricks the others; dual-mode is a downgrade vuln) AND needs
+  host<->guest VM e2e per platform. osx/windows adopt their initiator half on
+  their branches per the deliverable's integration table.
+- **Not completable this cycle (dependency-blocked, not punted)**:
+  - **132 (OAuth login flows)** blocked on the egress-allowlist chain: it needs
+    order 130 (allowlist impl), which needs order 129 (proxy TCP_DENIED harvest).
+    129 is CLAIMED by another agent and has no confirmed-domain evidence yet;
+    building 132 against un-allowlisted auth endpoints would fail at runtime and
+    guessing domains is what 129 forbids. Root blocker = 129 (live-forge task).
+  - **141 slices 4/6** = order 145 (coordinated cutover, above).
+  - **142** (per-boot hardening) deferred behind 141; **143** (API-key entry)
+    deferred behind 132.
+- **Sibling state**: osx-next 0 ahead (integrated); windows-next +32 (large merge
+  still deferred). Order 145's table gives osx/windows their initiator sub-tasks.
+- **E2E/Release**: no VM here (SELinux-Disabled); crypto is unit/litmus-proven.
+  Latest published remains v0.3.260630.1.
 
 ## This Loop (2026-07-01T23:05Z, linux_mutable — /advance-work-from-plan queue drain)
 
