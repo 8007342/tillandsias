@@ -31,6 +31,12 @@ critical_path:
     success_pattern: "flakehub cache action present"
     failure_pattern: "grep: no match"
 
+  - step: "assert warm-cache workflow fails fast when FlakeHub auth is unavailable"
+    command: "grep -Fq 'nix store ping --store https://cache.flakehub.com' .github/workflows/nix-cache-warm.yml && echo 'flakehub auth probe present'"
+    timeout_ms: 5000
+    success_pattern: "flakehub auth probe present"
+    failure_pattern: "grep: no match"
+
   - step: "assert GitHub Actions nix cache backend is retired"
     command: "! grep -Fq 'nix-community/cache-nix-action' .github/workflows/nix-cache-warm.yml && echo 'gha nix cache retired'"
     timeout_ms: 5000

@@ -38,6 +38,9 @@ jobs:
         with:
           use-gha-cache: disabled
 
+      - name: Verify FlakeHub Cache authentication
+        run: nix store ping --store https://cache.flakehub.com
+
       - name: Resolve and validate version
         env:
           INPUT_VERSION: ${{ inputs.version }}
