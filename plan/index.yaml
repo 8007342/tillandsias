@@ -8521,7 +8521,7 @@ plan_index:
     - packet_id: wire-tray-cloud-attach
       order: 150
       title: "Wire trays: transparent cloud attach — clone into host ~/src + forge launch (Linux-tray 1:1)"
-      status: in_progress
+      status: completed
       kind: bug-fix+enhancement
       deliverable: plan/issues/wire-tray-cloud-attach-2026-07-01.md
       depends_on: []
@@ -8578,6 +8578,20 @@ plan_index:
             first-run forge/inference/router image builds in-VM (workaround: manual
             host-network no-proxy builds; proper fix filed as follow-up), then the
             forge TUI attach leg.
+        - type: completed
+          ts: "2026-07-02T19:35:00Z"
+          agent_id: "windows-claude-20260702T0530Z"
+          commit_hash: "fef437fa"
+          evidence: >
+            Full e2e VERIFIED on windows: tray click on ☁️ Cloud > 8007342/mcp-test
+            (never seen before) -> cloned to /home/forge/src/mcp-test (=
+            C:\Users\bullo\src\mcp-test via drvfs) -> enclave up from prebuilt
+            images in ~20s (vault healthy, router, proxy, git-mcp-test, inference,
+            tillandsias-mcp-test-forge all running) -> OpenCode TUI attached.
+            Write-through proven both hops: file touched INSIDE the forge appeared
+            on the Windows host instantly. Remaining exit criterion (macOS
+            virtio-fs half) stays a follow-up for the macos host; image-build
+            networking follow-up filed in the deliverable.
 
     # ── Race Safeguards — Orders 151-154 ─────────────────────────────────────
     # Operator directive 2026-07-02: users racing events (quit/relaunch,
