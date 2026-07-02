@@ -232,7 +232,10 @@
 
 ### Git Push Path
 - Direct HTTPS push to GitHub fails (no interactive terminal for credential prompt).
-- Forge uses git-service mirror (`git-service:9418`) for authenticated pushes. The `.gh-credentials` token is consumed by the mirror service, not by local git.
+- Forge uses git-service mirror (`tillandsias-git:9418`, also reachable as `git-service:9418`, IPs 10.0.42.15/10.0.42.25) for authenticated pushes. The `.gh-credentials` token is consumed by the mirror service, not by local git.
+- Push requires a `url.<mirror>.insteadOf <github>` rule in global git config to redirect pushes from HTTPS to `git://tillandsias-git/<project>`. This is normally installed by `rewrite_origin_for_enclave_push()` in lib-common.sh but was NOT present in this session — had to be manually set.
+- Push to mirror **SUCCEEDED** (the `windows-next` branch is confirmed on the mirror at commit `2858be6a58b9f4774a9f1d905824f2f78c93ea7e`).
+- **Critical gap**: Mirror logs show `[git-mirror] No remote configured, skipping push` — the mirror service has no upstream remote to GitHub configured, so it cannot auto-forward pushed refs. Mirrored pushes are trapped locally on the mirror.
 - `.git/config` has `email = bulloncito@gmail.com` and `name = bullo` for commit attribution.
 
 ### Service Health
