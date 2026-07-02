@@ -93,6 +93,35 @@ pub enum PtyIntent {
 /// TODO(selinux): remove once images/selinux/vault_container.cil is loaded (Phase 3d).
 const PODMAN_SELINUX_WRAP_B64: &str = "IyEvYmluL2Jhc2gKZXhlYyAvdXNyL2Jpbi9wb2RtYW4gIiR7QC9sYWJlbD10eXBlOnZhdWx0X2NvbnRhaW5lcl90L2xhYmVsPWRpc2FibGV9Igo=";
 
+/// Compose the `/bin/bash -lc <script>` argv for an orchestrated in-VM
+/// headless subcommand (`--github-login`, `--cloud <nwo> --opencode`, ...).
+///
+/// The preamble is shared by every orchestrated intent:
+///   * install the SELinux podman shim + export TILLANDSIAS_PODMAN_BIN
+///     (Fedora 44 enforcing rejects label=type:vault_container_t until
+///     Phase 3d lands — see PODMAN_SELINUX_WRAP_B64);
+///   * rebuild HOME / XDG_RUNTIME_DIR so `require_desktop_user_session`
+///     passes in a service-spawned PTY (no logind session in the VM);
+///   * pin TILLANDSIAS_VAULT_API_BASE_URL to the aardvark-dns bridge name.
+///
+/// IMPORTANT: `&&` only, never bare `;` — Windows Terminal (wt.exe) treats
+/// `;` as ITS OWN argv separator and splits the script (0x80070002).
+/// See plan/issues/wt-github-login-semicolons-2026-06-30.md.
+fn vm_login_shell_argv(exec_tail: &str) -> Vec<String> {
+    let script = String::from("echo ")
+        + PODMAN_SELINUX_WRAP_B64
+        + " | base64 -d > /tmp/podman-selinux-wrap"
+        + " && chmod +x /tmp/podman-selinux-wrap"
+        + " && export TILLANDSIAS_PODMAN_BIN=/tmp/podman-selinux-wrap"
+        + " && export HOME=\"${HOME:-/root}\""
+        + " && export XDG_RUNTIME_DIR=\"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}\""
+        + " && install -d -m 0700 \"$XDG_RUNTIME_DIR\""
+        + " && export TILLANDSIAS_VAULT_API_BASE_URL=\"${TILLANDSIAS_VAULT_API_BASE_URL:-https://vault:8200}\""
+        + " && "
+        + exec_tail;
+    vec!["/bin/bash".to_string(), "-lc".to_string(), script]
+}
+
 fn agent_flag(agent: SelectedAgent) -> &'static str {
     match agent {
         SelectedAgent::Claude => "--claude",
@@ -141,13 +170,16 @@ pub fn intent_for_action(
 
 /// Build the [`PtyOpenOpts`] for a tray PTY `intent` at the given terminal size.
 ///
-/// When `project` is `Some(p)`, the command is wrapped to run **inside that
-/// project's forge podman container** — `podman exec -it tillandsias-<p>-forge
-/// <cmd>` — the cross-host agreed target (2026-05-26): the user's files + dev
-/// tooling live in the forge, not on the bare VM rootfs. When `project` is
-/// `None` the bare command runs directly in the VM: for [`PtyIntent::Shell`]
-/// that's the deliberate VM-debug escape hatch, and `gh auth login` is
-/// user-level so it works pre-attach.
+/// When `project` is `Some(p)`, the command runs the **orchestrated in-VM
+/// launch flow** — `tillandsias-headless --cloud '<p>' --<agent>` — which
+/// resolves the project under the bind-mount root (cloning `owner/repo` on
+/// first use), brings the enclave up, and attaches the TUI inside the forge
+/// container. Same end state as the cross-host agreed target (2026-05-26:
+/// the user's files + dev tooling live in the forge, never the bare VM
+/// rootfs), but the forge is provisioned transparently instead of assumed
+/// running. When `project` is `None` the bare command runs directly in the
+/// VM: for [`PtyIntent::Shell`] that's the deliberate VM-debug escape hatch,
+/// and `gh auth login` is user-level so it works pre-attach.
 ///
 /// `env` carries only `TERM` (the in-VM handler `env_clear`s before applying it,
 /// so no host env leaks); the login shell + forge set `PATH` etc. `cwd` is left
@@ -191,39 +223,36 @@ pub fn launch_spec(intent: &PtyIntent, project: Option<&str>, rows: u16, cols: u
             //
             // SELinux podman wrapper: Fedora 44 enforcing mode rejects
             // label=type:vault_container_t (Phase 3d not yet complete). Install a
-            // Python3 shim via PODMAN_SELINUX_WRAP_B64, set TILLANDSIAS_PODMAN_BIN.
+            // bash shim via PODMAN_SELINUX_WRAP_B64, set TILLANDSIAS_PODMAN_BIN.
             // Parity with osx-next commit 1325bea9.
             // TODO(selinux): remove when vault_container.cil is semodule-loaded.
-            {
-                let script = String::from("echo ")
-                    + PODMAN_SELINUX_WRAP_B64
-                    + " | base64 -d > /tmp/podman-selinux-wrap"
-                    + " && chmod +x /tmp/podman-selinux-wrap"
-                    + " && export TILLANDSIAS_PODMAN_BIN=/tmp/podman-selinux-wrap"
-                    + " && export HOME=\"${HOME:-/root}\""
-                    + " && export XDG_RUNTIME_DIR=\"${XDG_RUNTIME_DIR:-/run/user/$(id -u)}\""
-                    + " && install -d -m 0700 \"$XDG_RUNTIME_DIR\""
-                    + " && export TILLANDSIAS_VAULT_API_BASE_URL=\"${TILLANDSIAS_VAULT_API_BASE_URL:-https://vault:8200}\""
-                    + " && exec tillandsias-headless --github-login";
-                vec!["/bin/bash".to_string(), "-lc".to_string(), script]
-            }
+            vm_login_shell_argv("exec tillandsias-headless --github-login")
         }
         PtyIntent::Agent(agent) => {
             vec!["tillandsias".to_string(), agent_flag(*agent).to_string()]
         }
     };
     let argv = match project {
-        Some(p) => {
-            // Run inside the project's forge container (cross-host agreed target).
-            let mut v = vec![
-                "podman".to_string(),
-                "exec".to_string(),
-                "-it".to_string(),
-                format!("tillandsias-{p}-forge"),
-            ];
-            v.extend(inner);
-            v
-        }
+        // Any project click runs the SAME orchestrated flow the Linux native
+        // tray runs (`tray::handle_launch_cloud_project` → launch pipeline):
+        // the in-VM headless resolves the project under the bind-mount root
+        // (cloning `owner/repo` on first use; a bare local name just
+        // resolves), brings the enclave up (proxy/git/inference/forge), and
+        // attaches the agent TUI inside the forge. A bare `podman exec` into
+        // `tillandsias-<p>-forge` is NEVER correct here: the wire trays have
+        // no forge running until this flow provisions one (e2e failure
+        // 2026-07-02: `no container with name or ID ... found`, exit 125),
+        // and cloud names (`owner/repo`) aren't even valid container names.
+        // @trace spec:remote-projects, spec:host-shell-architecture
+        Some(p) => match intent {
+            PtyIntent::Agent(agent) => vm_login_shell_argv(&format!(
+                "exec tillandsias-headless --cloud '{p}' {}",
+                agent_flag(*agent)
+            )),
+            // Maintenance shell on a project: same resolve-then-launch path,
+            // `--bash` kind (forge maintenance shell, not the bare VM).
+            _ => vm_login_shell_argv(&format!("exec tillandsias-headless --cloud '{p}' --bash")),
+        },
         // No project: bare VM (Shell = debug escape hatch; gh login = user-level).
         None => inner,
     };
@@ -773,36 +802,77 @@ mod tests {
     }
 
     #[test]
-    fn launch_spec_wraps_in_forge_podman_exec_when_project_given() {
-        // Cross-host agreed target: a project click runs inside the forge.
-        assert_eq!(
-            launch_spec(&PtyIntent::Shell, Some("myapp"), 24, 80).argv,
-            vec![
-                "podman",
-                "exec",
-                "-it",
-                "tillandsias-myapp-forge",
-                "/bin/bash",
-                "-l"
-            ]
+    fn launch_spec_routes_project_clicks_through_orchestrated_launch() {
+        // Cross-host agreed END STATE: a project click lands inside the forge.
+        // The wire trays reach it via the orchestrated headless flow (resolve/
+        // clone + enclave bring-up + attach) — never a bare `podman exec` into
+        // a forge that nothing provisioned (e2e failure 2026-07-02).
+        let sh = launch_spec(&PtyIntent::Shell, Some("myapp"), 24, 80);
+        assert_eq!(&sh.argv[0..2], &["/bin/bash", "-lc"]);
+        assert!(sh.argv[2].contains("exec tillandsias-headless --cloud 'myapp' --bash"));
+        let ag = launch_spec(
+            &PtyIntent::Agent(SelectedAgent::Claude),
+            Some("octo-repo"),
+            24,
+            80,
         );
-        assert_eq!(
-            launch_spec(
-                &PtyIntent::Agent(SelectedAgent::Claude),
-                Some("octo-repo"),
-                24,
-                80
-            )
-            .argv,
-            vec![
-                "podman",
-                "exec",
-                "-it",
-                "tillandsias-octo-repo-forge",
-                "tillandsias",
-                "--claude"
-            ]
+        assert_eq!(&ag.argv[0..2], &["/bin/bash", "-lc"]);
+        assert!(
+            ag.argv[2].contains("exec tillandsias-headless --cloud 'octo-repo' --claude"),
+            "agent attach must run the orchestrated flow: {}",
+            ag.argv[2]
         );
+        assert!(!ag.argv[2].contains("podman exec"));
+        // wt.exe invariant holds for every project script.
+        assert!(!ag.argv[2].contains(';') && !sh.argv[2].contains(';'));
+    }
+
+    /// Cloud attach (`owner/repo`) must NOT podman-exec into a forge — no
+    /// forge exists yet and `owner/repo` is not a valid container name
+    /// (`Error: no container with name or ID "tillandsias-o/r-forge"`).
+    /// Instead it runs the orchestrated headless clone-then-launch, exactly
+    /// like GithubLogin runs `--github-login`.
+    #[test]
+    fn launch_spec_cloud_project_uses_orchestrated_headless_flow() {
+        let spec = launch_spec(
+            &PtyIntent::Agent(SelectedAgent::OpenCode),
+            Some("8007342/visual-chess"),
+            24,
+            80,
+        );
+        assert_eq!(spec.argv[0], "/bin/bash");
+        assert_eq!(spec.argv[1], "-lc");
+        let script = &spec.argv[2];
+        assert!(
+            !script.contains("podman exec"),
+            "cloud attach must not assume a running forge"
+        );
+        assert!(
+            script.contains("exec tillandsias-headless --cloud '8007342/visual-chess' --opencode"),
+            "cloud attach must run the orchestrated clone-then-launch: {script}"
+        );
+        // Same wt.exe + session-lane invariants as the GithubLogin script.
+        assert!(
+            !script.contains(';'),
+            "script must not contain `;` (wt.exe separator bug)"
+        );
+        assert!(script.contains("TILLANDSIAS_PODMAN_BIN=/tmp/podman-selinux-wrap"));
+        assert!(script.contains("install -d -m 0700 \"$XDG_RUNTIME_DIR\""));
+
+        // Maintenance shell on a cloud project takes the same path, --bash kind.
+        let sh = launch_spec(&PtyIntent::Shell, Some("owner/repo"), 24, 80);
+        assert_eq!(sh.argv[1], "-lc");
+        assert!(sh.argv[2].contains("--cloud 'owner/repo' --bash"));
+
+        // Local names (no `/`) take the same orchestrated path — the headless
+        // resolves them under the bind-mount root without cloning.
+        let local = launch_spec(
+            &PtyIntent::Agent(SelectedAgent::OpenCode),
+            Some("myapp"),
+            24,
+            80,
+        );
+        assert!(local.argv[2].contains("--cloud 'myapp' --opencode"));
     }
 
     #[test]

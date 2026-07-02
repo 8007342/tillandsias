@@ -426,6 +426,46 @@ WantedBy=multi-user.target
         )
         .await?;
 
+        // 5. home-forge-src.mount — targeted drvfs mount of the HOST's
+        // `%USERPROFILE%\src` at the in-VM project bind-mount convention
+        // `/home/forge/src` (see tillandsias-headless
+        // `TILLANDSIAS_IN_VM_PROJECT_ROOT`, default `/home/forge/src`).
+        //
+        // This is the Windows half of the cross-host contract: macOS mounts
+        // the user's ~/src via virtio-fs; Windows mounts via drvfs (9p).
+        // Global automount stays DISABLED (`[automount] enabled=false` in
+        // wsl.conf, zero-trust posture) — only the src tree is exposed.
+        // Cloud checkouts (`tillandsias-headless --cloud owner/repo`) land
+        // here, i.e. directly in the host's ~/src, and the forge container
+        // volume-mounts the per-project subdir — host→VM→container, the same
+        // transparent chain as the Linux native tray's local ~/src.
+        //
+        // Unit name MUST be the systemd-escaped Where= path
+        // (/home/forge/src → home-forge-src.mount) or systemd refuses it.
+        // @trace spec:host-shell-architecture, spec:remote-projects
+        if let Ok(profile) = std::env::var("USERPROFILE") {
+            let host_src = format!("{}\\src", profile.trim_end_matches('\\'));
+            let mount_unit = format!(
+                "[Unit]\n\
+                 Description=Host ~/src (drvfs) at the in-VM project root convention\n\
+                 [Mount]\n\
+                 What={host_src}\n\
+                 Where=/home/forge/src\n\
+                 Type=drvfs\n\
+                 Options=rw,noatime,metadata\n\
+                 [Install]\n\
+                 WantedBy=multi-user.target\n"
+            );
+            self.wsl_root_write(
+                "/etc/systemd/system/home-forge-src.mount",
+                &mount_unit,
+                false,
+            )
+            .await?;
+        } else {
+            tracing::warn!("USERPROFILE not set; skipping home-forge-src.mount injection");
+        }
+
         // Enable AND start the units now. `inject_bootstrap_logic` runs after
         // `configure_recipe_distro` has already flipped wsl.conf to
         // systemd-as-PID1, so by this point systemd is up and multi-user.target
@@ -438,7 +478,8 @@ WantedBy=multi-user.target
         // in `Connecting` until the budget expires.
         // @trace plan/issues/windows-cold-provision-headless-units-not-started-2026-06-19.md
         self.wsl_root_sh(
-            "systemctl daemon-reload && systemctl enable --now podman.socket tillandsias-headless-fetch.service tillandsias-headless.service",
+            "systemctl daemon-reload && systemctl enable --now podman.socket tillandsias-headless-fetch.service tillandsias-headless.service && \
+             { systemctl enable --now home-forge-src.mount 2>/dev/null || true; }",
         )
         .await?;
 

@@ -8518,6 +8518,67 @@ plan_index:
         - "Vault watch task reconnects on Vault restart (not a panic path)"
       verification_required: [claude-opus-highthink, opencode-bigpickle, antigravity-gemini, codex-gpt55-highthink]
 
+    - packet_id: wire-tray-cloud-attach
+      order: 150
+      title: "Wire trays: transparent cloud attach — clone into host ~/src + forge launch (Linux-tray 1:1)"
+      status: in_progress
+      kind: bug-fix+enhancement
+      deliverable: plan/issues/wire-tray-cloud-attach-2026-07-01.md
+      depends_on: []
+      pickup_role: windows
+      capability_tags: [windows, macos, tray, pty, headless, cloud, github]
+      estimated_hours: 6
+      outcome: >
+        Clicking a ☁️ Cloud project on the Windows/macOS (vsock) trays failed with
+        `no container with name or ID "tillandsias-<owner>/<repo>-forge"` — the wire
+        PTY path bare-podman-exec'd into a forge that was never provisioned, under a
+        name podman cannot even accept. Operator-ratified design: replicate the Linux
+        tray 1:1 — checkout lands in the HOST's ~/src/<repo>, mounted host→VM→container.
+        Three pieces: (1) targeted drvfs systemd mount of %USERPROFILE%\src at the
+        pre-existing /home/forge/src in-VM convention (automount stays disabled);
+        (2) new `tillandsias-headless --cloud <owner/repo>` companion flag — clone via
+        containerized gh on first use, then normal full-enclave agent mode; (3)
+        launch_spec cloud branch (name contains '/') runs the orchestrated headless
+        flow through the shared login-shell preamble instead of podman exec.
+        Also fixes in-VM EnumerateLocalProjects count=0 on Windows (root now mounted).
+      exit_criteria:
+        - "launch_spec cloud branch: no podman exec, orchestrated --cloud script (unit test green)"
+        - "home-forge-src.mount injected + enabled at provisioning; /home/forge/src shows host src"
+        - "E2E: Cloud click clones into host ~/src/<repo> and attaches agent TUI in forge"
+        - "VM-side local projects enumerate host ~/src entries"
+        - "macOS: virtio-fs half verified on osx-next (follow-up for macos host)"
+      events:
+        - type: claim
+          ts: "2026-07-02T06:00:00Z"
+          agent_id: "windows-claude-20260702T0530Z"
+          host: "windows"
+          lease_id: "wire-tray-cloud-attach-claim-1"
+          expires_at: "2026-07-02T10:00:00Z"
+        - type: progress
+          ts: "2026-07-02T06:30:00Z"
+          agent_id: "windows-claude-20260702T0530Z"
+          summary: >
+            Host-shell launch_spec cloud branch + vm_login_shell_argv helper landed with
+            unit tests; headless --cloud flag + resolve_cloud_project_checkout landed;
+            home-forge-src.mount injection added to wsl_lifecycle. drvfs mount verified
+            manually. In-VM headless rebuild in progress (VERSION pinned 0.3.260701.1
+            to reuse the existing image set — see deliverable Deployment notes).
+        - type: progress
+          ts: "2026-07-02T14:00:00Z"
+          agent_id: "windows-claude-20260702T0530Z"
+          summary: >
+            Live e2e surfaced + fixed 4 more defects (deliverable "E2E debugging
+            findings"): clone missing the proxy-exemption env (vault-cli reset via
+            squid -> gh blocked on stdin forever), clone unbounded (now
+            CLONE_INVOCATION_TIMEOUT 600s), ensure_proxy_running now inside the gh
+            helpers AFTER the vault lease (vault churn tears proxy down; probe/list
+            self-heal a dead squid), local attach routed through the same
+            orchestrated --cloud resolve (bare podman exec removed). VERIFIED: clone
+            of 8007342/visual-chess landed in host ~/src via drvfs. Remaining:
+            first-run forge/inference/router image builds in-VM (workaround: manual
+            host-network no-proxy builds; proper fix filed as follow-up), then the
+            forge TUI attach leg.
+
     # NOTE (2026-07-01, windows merge): orders 137-142 below were assigned on
     # linux-next concurrently with the observable-streams block above (orders
     # 138-149, assigned on windows-next). Order numbers collide; packet_ids are

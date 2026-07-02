@@ -138,6 +138,25 @@ fn main() {
     let cache_clear = user_args.iter().any(|a| a == "--cache-clear");
     let cache_verify = user_args.iter().any(|a| a == "--cache-verify");
 
+    // @trace spec:remote-projects, spec:host-shell-architecture
+    // `--cloud <owner/repo | name>` — project-attach companion to the agent
+    // mode flags (`--opencode` / `--claude` / `--codex` / `--bash`). Resolves
+    // the project to a checkout under the project bind-mount root, cloning on
+    // first use via the containerized gh flow, so the wire trays get the same
+    // transparent clone-then-launch behaviour as the Linux native tray's
+    // `handle_launch_cloud_project`. A bare `name` that already exists under
+    // the root is a pure resolve (local-project attach path).
+    let cloud_repo: Option<String> = match user_args.iter().position(|a| a == "--cloud") {
+        Some(i) => match user_args.get(i + 1) {
+            Some(v) if !v.starts_with('-') && !v.is_empty() => Some(v.to_string()),
+            _ => {
+                eprintln!("Error: --cloud requires an <owner/repo> (or local project name) value");
+                std::process::exit(2);
+            }
+        },
+        None => None,
+    };
+
     let port_override = match user_args.iter().position(|a| a == "--port") {
         Some(i) => match user_args.get(i + 1).and_then(|p| p.parse::<u16>().ok()) {
             Some(port) => Some(port),
@@ -240,6 +259,7 @@ fn main() {
         "--cache-clear",
         "--cache-verify",
         "--listen-vsock",
+        "--cloud",
     ];
     if let Some(unsupported) = user_args
         .iter()
@@ -299,10 +319,9 @@ fn main() {
         if a.starts_with('-') {
             return None;
         }
-        if user_args
-            .get(i.saturating_sub(1))
-            .is_some_and(|prev| prev == "--prompt" || prev == "--port" || prev == "--listen-vsock")
-        {
+        if user_args.get(i.saturating_sub(1)).is_some_and(|prev| {
+            prev == "--prompt" || prev == "--port" || prev == "--listen-vsock" || prev == "--cloud"
+        }) {
             return None;
         }
         Some(a.to_string())
@@ -436,6 +455,22 @@ fn main() {
         println!("status-check completed");
         return;
     }
+
+    // Cloud attach: turn `--cloud owner/repo` into a concrete project path
+    // under the bind-mount root, cloning on first use. Must run before the
+    // agent-mode dispatch so all four kinds (--opencode/--claude/--codex/
+    // --bash) pick the resolved path up as their positional project arg.
+    // An explicit positional path wins over the derived one.
+    let config_path = match &cloud_repo {
+        Some(nwo) if config_path.is_none() => match resolve_cloud_project_checkout(nwo, debug) {
+            Ok(path) => Some(path),
+            Err(e) => {
+                eprintln!("Error: {}", e);
+                std::process::exit(1);
+            }
+        },
+        _ => config_path,
+    };
 
     if opencode {
         maybe_spawn_detached_tray_for_cli(tray, debug);
@@ -663,6 +698,10 @@ fn print_usage(version: &str) {
     println!("  --antigravity-login Authenticate Antigravity and store the token in Vault");
     println!(
         "  --list-cloud-projects  List remote GitHub repos via the saved Vault token (diagnostic)"
+    );
+    println!("  --cloud O/R    With an agent mode flag: resolve GitHub repo <owner>/<repo> to a");
+    println!(
+        "                 checkout under the project root (cloning on first use), then launch"
     );
     println!("  --debug        Show command-level diagnostics and capture build logs");
     println!(
@@ -2774,6 +2813,72 @@ pub(crate) fn sanitize_hostname(raw: &str) -> String {
         let prefix = &cleaned[..46];
         format!("{prefix}-{hash_str}")
     }
+}
+
+/// Root under which cloud checkouts land and local projects are enumerated.
+///
+/// Resolution order mirrors `vsock_server::in_vm_project_root` and the
+/// Linux tray's `~/src` convention:
+///   1. `TILLANDSIAS_IN_VM_PROJECT_ROOT` (operator override)
+///   2. `/home/forge/src` when it exists — the in-VM bind-mount convention
+///      (macOS virtio-fs / Windows drvfs mount of the host's `~/src`)
+///   3. `$HOME/src` — Linux native fallback
+///
+/// @trace spec:host-shell-architecture, spec:remote-projects
+fn projects_root() -> PathBuf {
+    if let Ok(root) = std::env::var("TILLANDSIAS_IN_VM_PROJECT_ROOT") {
+        return PathBuf::from(root);
+    }
+    let convention = PathBuf::from("/home/forge/src");
+    if convention.is_dir() {
+        return convention;
+    }
+    let home = std::env::var("HOME").unwrap_or_else(|_| "/root".to_string());
+    PathBuf::from(home).join("src")
+}
+
+/// Resolve `--cloud owner/repo` to an on-disk checkout under
+/// [`projects_root`], cloning through the containerized `gh` flow on first
+/// use. 1:1 with the Linux tray's `handle_launch_cloud_project`: idempotent
+/// clone, then the standard agent launch pipeline takes the path from here.
+///
+/// The VM rootfs deliberately ships no `git`, so the "refresh if present"
+/// step the Linux tray does (`git fetch`, best-effort) is skipped here; the
+/// forge's git mirror handles freshness once the container is up.
+///
+/// @trace spec:remote-projects, spec:host-shell-architecture
+#[cfg(any(feature = "tray", feature = "listen-vsock"))]
+fn resolve_cloud_project_checkout(nwo: &str, debug: bool) -> Result<String, String> {
+    let short_name = nwo
+        .rsplit('/')
+        .next()
+        .filter(|s| !s.is_empty())
+        .ok_or_else(|| format!("--cloud value has no repo name: {nwo}"))?;
+    let target = projects_root().join(short_name);
+    if !target.exists() {
+        eprintln!(
+            "[tillandsias] cloud: cloning {} into {} ...",
+            nwo,
+            target.display()
+        );
+        // Proxy bring-up lives INSIDE clone_project_from_github (after the
+        // Vault lease acquire — vault churn can tear the proxy down), so the
+        // clone works even right after a VM restart when only Vault has been
+        // auto-restarted. Observed 2026-07-02: `Could not resolve proxy`.
+        remote_projects::clone_project_from_github_with_debug(nwo, &target, debug)?;
+        eprintln!("[tillandsias] cloud: clone complete");
+    } else if debug {
+        eprintln!(
+            "[tillandsias] cloud: checkout already present at {}",
+            target.display()
+        );
+    }
+    Ok(target.to_string_lossy().into_owned())
+}
+
+#[cfg(not(any(feature = "tray", feature = "listen-vsock")))]
+fn resolve_cloud_project_checkout(_nwo: &str, _debug: bool) -> Result<String, String> {
+    Err("--cloud requires a build with the tray or listen-vsock feature".to_string())
 }
 
 fn forge_container_name(project_name: &str) -> String {

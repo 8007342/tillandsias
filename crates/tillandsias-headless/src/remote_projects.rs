@@ -24,6 +24,12 @@ use tracing::{debug, warn};
 /// @trace spec:remote-projects, spec:tray-ux
 const GH_INVOCATION_TIMEOUT: Duration = Duration::from_secs(25);
 
+/// Budget for `gh repo clone` — unlike the metadata calls above it moves the
+/// full repo pack, so it gets minutes, not seconds. Still bounded: a wedged
+/// clone container must never hang the cloud-attach launch path forever.
+/// @trace spec:remote-projects
+const CLONE_INVOCATION_TIMEOUT: Duration = Duration::from_secs(600);
+
 /// Cached GitHub project metadata.
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct GitHubProject {
@@ -274,6 +280,13 @@ fn run_git_image_shell(script: &str, extra_args: &[&str], debug: bool) -> Result
     let image = git_image_tag();
     let vault_lease = RemoteVaultLease::acquire(debug)?;
     let vault_mount = vault_lease.mount_arg();
+    // The gh call egresses through squid; self-heal a dead proxy (VM restart,
+    // squid segfault — Exited(139) observed 2026-07-02) instead of failing
+    // every probe/list until some other flow restarts it. Cheap fast-path
+    // when the proxy is already up. Placed AFTER the lease acquire because
+    // vault churn during acquire can tear the proxy down.
+    // @trace spec:proxy-container, plan/issues/wire-tray-cloud-attach-2026-07-01.md
+    crate::ensure_proxy_running(debug)?;
     if debug {
         debug_log_podman_invocation("run_git_image_shell", &image, true, script, extra_args);
     }
@@ -549,6 +562,13 @@ exec gh repo clone "$1" "$2"
     let vault_lease = RemoteVaultLease::acquire(debug)?;
     let vault_mount = vault_lease.mount_arg();
 
+    // AFTER the lease: acquiring it may rebuild/recreate the Vault container
+    // (image digest moved) which rotates the TLS secrets and tears the proxy
+    // down. The clone egresses through squid, so (re)ensure the proxy as the
+    // LAST step before the container runs. Idempotent fast-path when up.
+    // @trace spec:proxy-container, plan/issues/wire-tray-cloud-attach-2026-07-01.md
+    crate::ensure_proxy_running(debug)?;
+
     if debug {
         if nwo != repo_url {
             eprintln!("[tillandsias] gh: normalized repo identifier {repo_url:?} -> {nwo:?}");
@@ -565,39 +585,65 @@ exec gh repo clone "$1" "$2"
         );
     }
 
-    let output = tillandsias_podman::podman_cmd_sync()
-        .args([
-            "run",
-            "--rm",
-            "--secret",
-            &vault_mount,
-            "--network",
-            // Dual-homed egress leg — see run_git_image_shell above and
-            // main.rs ENCLAVE_EGRESS_NETS; `bridge` never resolved on clean rootless.
-            "tillandsias-enclave,tillandsias-egress",
-            "--cap-drop=ALL",
-            "--security-opt=no-new-privileges",
-            "--env",
-            "VAULT_ADDR=https://vault:8200",
-            "--env",
-            "CURL_CA_BUNDLE=/etc/tillandsias/ca.crt",
-            "--volume",
-            "/tmp/tillandsias-ca/intermediate.crt:/etc/tillandsias/ca.crt:ro",
-            "--security-opt=label=disable",
-            "--userns=keep-id",
-            "-v",
-            &bind_mount,
-            "--entrypoint",
-            "/bin/sh",
-            &image,
-            "-ceu",
-            script,
-            "gh",
-            &nwo,
-            &repo_dir,
-        ])
-        .output()
-        .map_err(|err| format!("git clone failed: {}", err))?;
+    let mut command = tillandsias_podman::podman_cmd_sync();
+    command.args([
+        "run",
+        "--rm",
+        "--secret",
+        &vault_mount,
+        "--network",
+        // Dual-homed egress leg — see run_git_image_shell above and
+        // main.rs ENCLAVE_EGRESS_NETS; `bridge` never resolved on clean rootless.
+        "tillandsias-enclave,tillandsias-egress",
+        "--cap-drop=ALL",
+        "--security-opt=no-new-privileges",
+        "--env",
+        "VAULT_ADDR=https://vault:8200",
+        "--env",
+        "CURL_CA_BUNDLE=/etc/tillandsias/ca.crt",
+        "--volume",
+        "/tmp/tillandsias-ca/intermediate.crt:/etc/tillandsias/ca.crt:ro",
+        "--security-opt=label=disable",
+        "--userns=keep-id",
+        "-v",
+        &bind_mount,
+    ]);
+    // Proxy-exemption pattern (orders 116/118/119): pass the proxy env
+    // explicitly so `vault` is in no_proxy — identical to run_git_image_shell
+    // above. Without it the global containers.conf proxy env routes vault-cli's
+    // https://vault:8200 through squid, which resets the CONNECT, vault-cli
+    // exits empty, and `gh auth login --with-token` blocks on stdin forever
+    // (the "cloning ... hangs" e2e failure, 2026-07-02).
+    // @trace spec:proxy-container, plan/issues/wire-tray-cloud-attach-2026-07-01.md
+    let no_proxy = crate::enclave_no_proxy();
+    command.args([
+        "--env",
+        "http_proxy=http://proxy:3128",
+        "--env",
+        "https_proxy=http://proxy:3128",
+        "--env",
+        "HTTP_PROXY=http://proxy:3128",
+        "--env",
+        "HTTPS_PROXY=http://proxy:3128",
+        "--env",
+        &format!("no_proxy={no_proxy}"),
+        "--env",
+        &format!("NO_PROXY={no_proxy}"),
+    ]);
+    command.args([
+        "--entrypoint",
+        "/bin/sh",
+        &image,
+        "-ceu",
+        script,
+        "gh",
+        &nwo,
+        &repo_dir,
+    ]);
+    // Bounded like every other containerized gh call — a wedged clone must
+    // never hang the launch path forever. Clones move real data, so the
+    // budget is larger than GH_INVOCATION_TIMEOUT.
+    let output = run_command_with_timeout(command, CLONE_INVOCATION_TIMEOUT)?;
 
     if debug {
         debug_log_podman_result("clone_project_from_github", &output.status, &output.stderr);
