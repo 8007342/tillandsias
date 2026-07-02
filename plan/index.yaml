@@ -8579,6 +8579,107 @@ plan_index:
             host-network no-proxy builds; proper fix filed as follow-up), then the
             forge TUI attach leg.
 
+    # ── Race Safeguards — Orders 151-154 ─────────────────────────────────────
+    # Operator directive 2026-07-02: users racing events (quit/relaunch,
+    # concurrent app launches, multiple container launches) is a valid use.
+    # Inventory + observed incidents: plan/issues/race-safeguards-research-2026-07-02.md
+    # ─────────────────────────────────────────────────────────────────────────
+
+    - packet_id: race-safeguards-research
+      order: 151
+      title: "Research: race-surface inventory + safeguard strategy (concurrent launches, lifecycle churn)"
+      status: ready
+      kind: research
+      deliverable: plan/issues/race-safeguards-research-2026-07-02.md
+      depends_on: []
+      pickup_role: any
+      capability_tags: [architecture, concurrency, all-platforms]
+      estimated_hours: 4
+      outcome: >
+        Turn the 2026-07-02 incident inventory (WSL E_UNEXPECTED on quit/relaunch race,
+        vault-recreate tearing down the proxy under a live flow, vault health-wait
+        "container is stopped" false-permanent, terminate killing in-flight builds,
+        squid corpse degrading the VM for 22h) into a ratified safeguard strategy:
+        advisory flocks per shared resource, refcount/supervisor ownership for shared
+        containers, phase-aware side effects, retry-with-backoff on every wait, atomic
+        fs ops, one provoking litmus per fixed race. Deliverable already contains the
+        inventory (R1-R9) and suggested vocabulary; this packet ratifies/amends it and
+        splits final implementation scope across orders 152-154.
+      exit_criteria:
+        - "R1-R9 each dispositioned: safeguard chosen or explicitly accepted-as-is with rationale"
+        - "Shared-container ownership model decided (refcount vs supervisor vs ensure-never-cleanup)"
+        - "Orders 152-154 scopes confirmed/amended against the decision"
+
+    - packet_id: host-lifecycle-race-safeguards
+      order: 152
+      title: "Windows/macOS host: quit/relaunch + concurrent-instance race safeguards"
+      status: ready
+      kind: bug-fix+enhancement
+      deliverable: crates/tillandsias-windows-tray/src/wsl_lifecycle.rs
+      depends_on: [race-safeguards-research]
+      pickup_role: windows
+      capability_tags: [windows, macos, tray, vm-layer, concurrency]
+      estimated_hours: 8
+      outcome: >
+        (R1) Start poke retries with backoff + WSL-service-sane preflight; drain is
+        observable (lock/marker) so a relaunch waits for teardown instead of racing it;
+        automatic or one-click recovery from WSL/Service/E_UNEXPECTED (guided
+        wsl --shutdown). (R2) Single-instance guard for the tray (mutex), matching the
+        headless SingletonGuard. (R3) Host-side serialization or safe queueing of
+        concurrent PTY launch clicks. macOS analog for the VZ lifecycle.
+      exit_criteria:
+        - "Quit then immediate relaunch converges to Ready without manual wsl --shutdown"
+        - "Second tray instance exits gracefully pointing at the first"
+        - "Double-click on a project does not produce two competing launch flows"
+        - "litmus: provoked quit/relaunch race passes N=10 iterations"
+
+    - packet_id: enclave-container-lifecycle-races
+      order: 153
+      title: "Headless: shared-container ownership + ensure_* concurrency safety"
+      status: ready
+      kind: refactor+bug-fix
+      deliverable: crates/tillandsias-headless/src/
+      depends_on: [race-safeguards-research]
+      pickup_role: linux
+      capability_tags: [linux, headless, podman, vault, concurrency]
+      estimated_hours: 12
+      outcome: >
+        (R4) ensure_proxy/vault/network/images become concurrency-safe (advisory flock
+        per resource across check+act). (R5) cleanup_stack_containers stops removing
+        SHARED containers (proxy, inference, router) — per-project containers only;
+        shared ones get ensure-only semantics owned by the vsock supervisor. (R6)
+        self-heal and every container-(re)creating side effect consults VmPhase and
+        refuses during Draining/Stopping. (R7) vault recreate is mutually exclusive
+        with lease holders (read/write lock) and the health wait tolerates the restart
+        window (bounded retry on "container is stopped").
+      exit_criteria:
+        - "Two parallel --cloud launches: both attach; shared containers survive both"
+        - "podman run name-conflict class eliminated (flock provoking litmus green)"
+        - "Vault recreate under a held lease: lease flow completes (no proxy teardown mid-flow)"
+        - "Health-wait retries transient 'container is stopped' (I3 regression litmus)"
+        - "No container creation during Draining (drain-vs-self-heal litmus)"
+
+    - packet_id: checkout-and-fetch-atomicity
+      order: 154
+      title: "Headless: atomic clone/checkout + binary fetch (temp+rename, target locks)"
+      status: ready
+      kind: bug-fix
+      deliverable: crates/tillandsias-headless/src/remote_projects.rs
+      depends_on: [race-safeguards-research]
+      pickup_role: linux
+      capability_tags: [linux, headless, github, concurrency]
+      estimated_hours: 4
+      outcome: >
+        (R8) Concurrent --cloud resolves of the same repo cannot double-clone into one
+        directory: clone into <root>/.tmp-<repo>-<nonce> then atomic rename, or flock
+        the target. Works on 9p/drvfs (rename within the same mount). (R9)
+        fetch-headless.sh downloads to a temp path and installs via rename, never
+        curling directly onto the live binary path.
+      exit_criteria:
+        - "Two parallel clones of one repo: one wins, other reuses; no corrupted .git"
+        - "Rename-based install proven on drvfs (9p) in the litmus"
+        - "fetch-headless.sh temp+rename verified in provisioning injection tests"
+
     # NOTE (2026-07-01, windows merge): orders 137-142 below were assigned on
     # linux-next concurrently with the observable-streams block above (orders
     # 138-149, assigned on windows-next). Order numbers collide; packet_ids are
